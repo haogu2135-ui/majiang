@@ -1,0 +1,35 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+
+config_version=5
+
+[application]
+
+config/name="云桌麻将 Godot"
+config/version="1.0.159-godot"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.6", "Mobile")
+config/icon="res://assets/tiles/tile_honor_east.png"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+
+[audio]
+
+general/text_to_speech=true
+driver/enable_input=true
+
+[internationalization]
+
+locale/translations_pot_files=PackedStringArray()
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true

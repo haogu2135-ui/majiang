@@ -1,0 +1,20 @@
+# Godot editor and import cache
+.godot/
+.import/
+
+# Build outputs and generated QA captures
+build/
+*.apk
+*.idsig
+
+# Local export/signing settings
+export_presets.cfg
+*.keystore
+*.jks
+
+# Generated/reference dumps and logs
+extension_api.json
+*.log
+
+# Local assistant/tool metadata
+.claude/
