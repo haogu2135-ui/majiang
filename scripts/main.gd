@@ -458,10 +458,10 @@ const TABLE_OUTER_TEXTURE_RECT := Rect2(Vector2(0.008, 0.012), Vector2(0.992, 0.
 const TABLE_INNER_RECT := Rect2(Vector2(0.045, 0.055), Vector2(0.955, 0.945))
 const TABLE_INNER_TEXTURE_RECT := Rect2(Vector2(0.012, 0.016), Vector2(0.988, 0.984))
 const SEAT_LAYOUTS := [
-	[2, Rect2(Vector2(0.365, 0.095), Vector2(0.635, 0.215)), "top"],
-	[3, Rect2(Vector2(0.018, 0.285), Vector2(0.195, 0.595)), "left"],
-	[1, Rect2(Vector2(0.805, 0.285), Vector2(0.982, 0.595)), "right"],
-	[0, Rect2(Vector2(0.018, 0.735), Vector2(0.155, 0.955)), "bottom"],
+	[2, Rect2(Vector2(0.375, 0.100), Vector2(0.625, 0.218)), "top"],
+	[3, Rect2(Vector2(0.018, 0.300), Vector2(0.188, 0.588)), "left"],
+	[1, Rect2(Vector2(0.812, 0.300), Vector2(0.982, 0.588)), "right"],
+	[0, Rect2(Vector2(0.018, 0.738), Vector2(0.190, 0.955)), "bottom"],
 ]
 const TABLE_ORNAMENT_EDGES := [
 	[Rect2(Vector2(0.055, 0.040), Vector2(0.945, 0.060)), Color(0.50, 0.42, 0.24, 0.36), Color(0.82, 0.76, 0.56, 0.12)],
@@ -491,6 +491,8 @@ const HAND_LAYOUT_CANDIDATES := [
 const ACTION_BUTTON_MAX_WIDTH := 86.0
 const ACTION_BUTTON_MIN_TOUCH_WIDTH := 64.0
 const ACTION_BUTTON_HEIGHT := 52.0
+const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.375, 0.655), Vector2(0.975, 0.748))
+const ACTION_BAR_RECT := Rect2(Vector2(0.392, 0.667), Vector2(0.965, 0.735))
 const TOP_HUD_BUTTON_SIZE := Vector2(68, 44)
 const SAFE_CONTENT_MIN_MARGIN := Vector4(12.0, 8.0, 12.0, 10.0)
 const SAFE_CONTENT_MAX_SIDE_FRACTION := 0.16
@@ -513,6 +515,11 @@ const SCORE_STRIP_CHIP_RECTS := [
 const SCORE_STRIP_ACCENT_RECT := Rect2(Vector2(0.0, 0.0), Vector2(0.035, 1.0))
 const SCORE_STRIP_NAME_RECT := Rect2(Vector2(0.065, 0.20), Vector2(0.405, 0.80))
 const SCORE_STRIP_SCORE_RECT := Rect2(Vector2(0.430, 0.08), Vector2(0.970, 0.92))
+const SEAT_STAT_RECTS := [
+	Rect2(Vector2(0.39, 0.38), Vector2(0.52, 0.58)),
+	Rect2(Vector2(0.535, 0.38), Vector2(0.655, 0.58)),
+	Rect2(Vector2(0.670, 0.38), Vector2(0.96, 0.58)),
+]
 const BGM_VOLUME_DB := 0.0
 const SFX_VOLUME_BOOST_DB := 2.5
 const VOICE_VOLUME_DB := -2.0
@@ -2936,7 +2943,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(status, TOP_HUD_STATUS_RECT)
 	configure_clipped_label(status)
 	draw_score_strip(hud, TOP_HUD_SCORE_STRIP_RECT)
-	var wall = make_label(hud, "余牌 %d  上张 %s" % [get_wall_count(), tile_label(get_last_discard()) if get_last_discard() != "" else "--"], 15, UI_TEXT_MUTED, false)
+	var wall = make_label(hud, top_hud_wall_text(), 14, UI_TEXT_MUTED, false)
 	apply_rect(wall, TOP_HUD_WALL_RECT)
 	configure_clipped_label(wall)
 	var settings = make_top_hud_button("设置", Color(0.22, 0.42, 0.54), func() -> void:
@@ -2958,6 +2965,10 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.add_child(update)
 	apply_rect(update, TOP_HUD_UPDATE_BUTTON_RECT)
 
+func top_hud_wall_text() -> String:
+	var last = get_last_discard()
+	return "余%d 上%s" % [get_wall_count(), tile_label(last) if last != "" else "--"]
+
 func draw_score_strip(parent: Control, rect: Rect2) -> void:
 	var strip = Control.new()
 	parent.add_child(strip)
@@ -2965,14 +2976,15 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 	for seat in range(4):
 		var active = get_current_seat() == seat
 		var player = get_player_info(seat)
-		var chip = make_panel(strip, SCORE_STRIP_CHIP_RECTS[seat], SCORE_STRIP_FILL, 10, Color(0.52, 0.44, 0.22, 0.50) if active else SCORE_STRIP_BORDER, 4)
+		var chip_fill = SCORE_STRIP_FILL.lightened(0.05) if active else SCORE_STRIP_FILL
+		var chip = make_panel(strip, SCORE_STRIP_CHIP_RECTS[seat], chip_fill, 10, Color(0.58, 0.48, 0.24, 0.56) if active else SCORE_STRIP_BORDER, 4)
 		chip.add_child(make_color_rect(SCORE_STRIP_ACCENT_RECT, SEAT_ACCENT_COLORS[seat]))
 		var name_text = "我" if seat == 0 else ai_profile_short_label(seat) if mode == "offline" else str(player.get("name", "玩家"))
 		var name = make_label(chip, name_text, 11, SCORE_STRIP_NAME_FILL, true)
 		name.add_theme_stylebox_override("normal", style(SEAT_NAME_BADGE_COLORS[seat].darkened(0.14), 8, Color(0.90, 0.80, 0.46, 0.12), 1))
 		apply_rect(name, SCORE_STRIP_NAME_RECT)
 		configure_clipped_label(name)
-		var score = make_label(chip, "%d" % int(player.get("score", 0)), 13, UI_TEXT_MAIN, true)
+		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 12, UI_TEXT_MAIN, true)
 		apply_rect(score, SCORE_STRIP_SCORE_RECT)
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(score)
@@ -3271,56 +3283,70 @@ func draw_melds(parent: Control) -> void:
 func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}) -> void:
 	var active = get_current_seat() == seat
 	var p = get_player_info(seat)
-	var panel = make_panel(parent, rect, Color(0.024, 0.034, 0.038, 0.90), 18, UI_GOLD_SOFT if active else SEAT_ACCENT_COLORS[seat].blend(Color(0.20, 0.22, 0.22, 1.0)))
+	var panel_fill = Color(0.030, 0.040, 0.042, 0.92) if active else Color(0.018, 0.026, 0.030, 0.88)
+	var panel = make_panel(parent, rect, panel_fill, 18, Color(0.62, 0.54, 0.32, 0.46) if active else SEAT_ACCENT_COLORS[seat].blend(Color(0.18, 0.20, 0.20, 1.0)))
 	panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.03, 1.0), SEAT_ACCENT_COLORS[seat].blend(Color(0.10, 0.12, 0.12, 1.0))))
 	panel.add_child(make_color_rect(rect_full(0.03, 0.00, 0.97, 0.03), Color(1.0, 1.0, 1.0, 0.025)))
-	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.20), SEAT_HEADER_COLORS[seat].darkened(0.20), 18, Color(1.0, 0.90, 0.52, 0.06))
-	make_panel(panel, rect_full(0.0, 0.80, 1.0, 1.0), Color(0.010, 0.016, 0.018, 0.14), 18, Color(0.14, 0.18, 0.18, 0.05))
+	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.19), SEAT_HEADER_COLORS[seat].darkened(0.16), 18, Color(1.0, 0.90, 0.52, 0.08))
+	make_panel(panel, rect_full(0.0, 0.78, 1.0, 1.0), Color(0.010, 0.016, 0.018, 0.20), 18, Color(0.14, 0.18, 0.18, 0.06))
 	var avatar = make_avatar_view(seat, active)
 	panel.add_child(avatar)
-	apply_rect(avatar, rect_full(0.04, 0.13, 0.36, 0.94))
+	apply_rect(avatar, rect_full(0.04, 0.14, 0.36, 0.92))
 	var threat_report = seat_threat_report_from_map(seat, seat_threat_reports)
 	var threat_badge_text = opponent_seat_threat_badge_text_from_report(threat_report)
 	var display_name = str(p.get("name", "玩家"))
 	if mode == "offline" and seat != 0:
 		display_name += " · " + ai_profile_short_label(seat)
-	var name = make_label(panel, display_name + ("  行牌" if active else ""), 16, UI_TEXT_MAIN, true)
-	apply_rect(name, rect_full(0.39, 0.10, 0.70 if threat_badge_text != "" else 0.96, 0.36))
+	var name = make_label(panel, display_name, 15, UI_TEXT_MAIN, true)
+	var name_right = 0.55 if threat_badge_text != "" else 0.75 if active else 0.96
+	apply_rect(name, rect_full(0.39, 0.10, name_right, 0.36))
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(name)
+	if active:
+		var turn_badge = make_label(panel, "行牌", 11, Color(0.13, 0.12, 0.08), true)
+		turn_badge.add_theme_stylebox_override("normal", style(Color(0.74, 0.62, 0.26, 0.90), 8, Color(1.0, 0.86, 0.44, 0.40), 1, 0))
+		apply_rect(turn_badge, rect_full(0.77, 0.11, 0.96, 0.32))
 	if threat_badge_text != "":
 		var threat_badge = make_label(panel, threat_badge_text, 12, Color(0.10, 0.11, 0.10), true)
 		configure_clipped_label(threat_badge)
 		threat_badge.add_theme_stylebox_override("normal", style(opponent_seat_threat_color_from_report(threat_report), 9, Color(1.0, 0.91, 0.48, 0.56), 1))
-		apply_rect(threat_badge, rect_full(0.72, 0.10, 0.96, 0.33))
+		apply_rect(threat_badge, rect_full(0.57, 0.11, 0.75, 0.32))
 	var package_text = package_preview(seat)
 	var threat_line = opponent_seat_threat_line_from_report(threat_report)
-	var info_text = "手牌 %d  花 %d  %d分%s%s" % [
-		int(p.get("hand_count", 0)),
-		int(p.get("flowers", 0)),
-		int(p.get("score", 0)),
-		"  庄" if seat == dealer_seat else "",
-		"  " + package_text if package_text != "" else "",
-	]
-	if threat_line != "":
-		info_text += "  " + threat_line
-	var info = make_label(panel, info_text, 13, UI_TEXT_SUB, false)
-	apply_rect(info, rect_full(0.39, 0.36, 0.96, 0.60))
-	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	configure_clipped_label(info)
+	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[0], "手", str(int(p.get("hand_count", 0))), SEAT_ACCENT_COLORS[seat])
+	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[1], "花", str(int(p.get("flowers", 0))), Color(0.54, 0.42, 0.26))
+	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[2], "分", compact_score_text(int(p.get("score", 0))), Color(0.30, 0.42, 0.44))
+	if package_text != "" or threat_line != "":
+		var info_text = package_text if package_text != "" else threat_line
+		var info = make_label(panel, info_text, 11, UI_TEXT_MUTED, false)
+		apply_rect(info, rect_full(0.39, 0.58, 0.96, 0.72))
+		info.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		configure_clipped_label(info)
 	var river_text = discard_preview(seat)
 	var flowers = flower_preview(seat)
 	var has_flower_tiles = draw_seat_flower_tiles(panel, seat)
 	if flowers != "" and not has_flower_tiles:
 		river_text = "花 " + flowers + ("\n" + river_text if river_text != "" else "")
 	var river = make_label(panel, river_text, 12, UI_TEXT_MUTED, false)
-	apply_rect(river, rect_full(0.39, 0.76 if has_flower_tiles else 0.60, 0.96, 0.92))
+	apply_rect(river, rect_full(0.39, 0.78 if has_flower_tiles else 0.63, 0.96, 0.92))
 	river.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(river)
 	if seat == dealer_seat:
 		var dealer = make_label(panel, "庄", 16, Color(0.96, 0.90, 0.72), true)
 		dealer.add_theme_stylebox_override("normal", style(Color(0.58, 0.12, 0.08, 0.90), 16, Color(1.0, 0.79, 0.34, 0.76), 2))
 		apply_rect(dealer, rect_full(0.27, 0.06, 0.38, 0.28))
+
+func draw_seat_stat_pill(parent: Control, rect: Rect2, label_text: String, value_text: String, accent: Color) -> void:
+	var pill = make_panel(parent, rect, Color(0.016, 0.024, 0.026, 0.88), 8, accent.blend(Color(0.16, 0.17, 0.15, 1.0)), 0)
+	pill.add_child(make_color_rect(rect_full(0.0, 0.0, 0.08, 1.0), accent.darkened(0.08)))
+	var label = make_label(pill, label_text, 9, Color(0.70, 0.72, 0.64, 0.92), false)
+	apply_rect(label, rect_full(0.12, 0.12, 0.45, 0.88))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(label)
+	var value = make_label(pill, value_text, 11, UI_TEXT_MAIN, true)
+	apply_rect(value, rect_full(0.32, 0.08, 0.94, 0.92))
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(value)
 
 func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 	if mode != "offline" or seat < 0 or seat >= players.size():
@@ -3332,7 +3358,7 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 	configure_passive_container(strip)
 	strip.alignment = BoxContainer.ALIGNMENT_BEGIN
 	strip.add_theme_constant_override("separation", 2)
-	apply_rect(strip, rect_full(0.39, 0.58, 0.96, 0.76))
+	apply_rect(strip, rect_full(0.39, 0.60, 0.96, 0.76))
 	parent.add_child(strip)
 	var visible_count = min(4, flowers.size())
 	for i in range(visible_count):
@@ -3343,12 +3369,13 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 	return true
 
 func draw_table_log(parent: Control) -> void:
-	var panel = make_panel(parent, rect_full(0.018, 0.605, 0.145, 0.725), Color(0.012, 0.028, 0.032, 0.88), 14, Color(0.34, 0.44, 0.40, 0.26))
-	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.12), Color(0.040, 0.052, 0.050, 0.68), 14, Color(1.0, 1.0, 1.0, 0.025))
-	var title = make_label(panel, "牌谱", 13, Color(0.84, 0.78, 0.60), true)
-	apply_rect(title, rect_full(0.06, 0.02, 0.94, 0.22))
-	var body = make_label(panel, join_tail_lines(table_logs, 4), 11, Color(0.74, 0.81, 0.75), false)
-	apply_rect(body, rect_full(0.06, 0.22, 0.94, 0.94))
+	var panel = make_panel(parent, rect_full(0.018, 0.605, 0.190, 0.725), Color(0.012, 0.028, 0.032, 0.88), 14, Color(0.34, 0.44, 0.40, 0.26))
+	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.24), Color(0.040, 0.052, 0.050, 0.68), 14, Color(1.0, 1.0, 1.0, 0.025))
+	var title = make_label(panel, "最近牌谱", 12, Color(0.84, 0.78, 0.60), true)
+	apply_rect(title, rect_full(0.06, 0.02, 0.94, 0.24))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var body = make_label(panel, join_tail_lines(table_logs, 2), 11, Color(0.74, 0.81, 0.75), false)
+	apply_rect(body, rect_full(0.06, 0.31, 0.94, 0.92))
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	configure_clipped_label(body)
@@ -3395,7 +3422,7 @@ func draw_round_summary(parent: Control) -> void:
 	lines.append("")
 	var rank = 1
 	for seat in ranked_seats_by_score():
-		lines.append("第%d  %s  %d分%s  花%d" % [rank, players[seat]["name"], int(players[seat].get("score", 0)), score_delta_text(seat), int(players[seat].get("flowers", 0))])
+		lines.append("第%d  %s  %s分%s  花%d" % [rank, players[seat]["name"], compact_score_text(int(players[seat].get("score", 0))), score_delta_text(seat), int(players[seat].get("flowers", 0))])
 		rank += 1
 	var package_lines = active_package_lines()
 	if not package_lines.is_empty():
@@ -3415,16 +3442,25 @@ func score_delta_text(seat: int) -> String:
 		return ""
 	var delta = int(last_score_deltas[seat])
 	if delta > 0:
-		return " +%d" % delta
+		return " +%s" % compact_score_text(delta)
 	if delta < 0:
-		return " %d" % delta
+		return " %s" % compact_score_text(delta)
 	return " +0"
 
+func compact_score_text(value: int) -> String:
+	var sign = "-" if value < 0 else ""
+	var amount = abs(value)
+	if amount >= 100000:
+		return "%s%d万" % [sign, int(round(float(amount) / 10000.0))]
+	if amount >= 10000:
+		return "%s%.1f万" % [sign, float(amount) / 10000.0]
+	return "%s%d" % [sign, amount]
+
 func draw_hand(parent: Control) -> void:
-	var tray = make_panel(parent, rect_full(0.150, 0.765, 0.990, 0.985), Color(0.024, 0.032, 0.034, 0.97), 20, Color(0.62, 0.54, 0.34, 0.52))
-	make_panel(tray, rect_full(0.012, 0.055, 0.988, 0.135), Color(0.066, 0.078, 0.076, 0.70), 12, Color(1.0, 0.88, 0.45, 0.12))
+	var tray = make_panel(parent, rect_full(0.180, 0.765, 0.990, 0.985), Color(0.024, 0.032, 0.034, 0.97), 20, Color(0.62, 0.54, 0.34, 0.52))
+	make_panel(tray, rect_full(0.012, 0.055, 0.988, 0.135), Color(0.078, 0.086, 0.074, 0.78), 12, Color(1.0, 0.88, 0.45, 0.16))
 	make_panel(tray, rect_full(0.012, 0.145, 0.988, 0.170), Color(0.014, 0.024, 0.026, 0.30), 10, Color(0.18, 0.20, 0.18, 0.06))
-	var tray_text = make_label(tray, hand_tray_text(), 13, Color(0.18, 0.21, 0.18), true)
+	var tray_text = make_label(tray, hand_tray_text(), 13, Color(0.90, 0.84, 0.62), true)
 	tray_text.clip_text = true
 	apply_rect(tray_text, rect_full(0.030, 0.040, 0.970, 0.145))
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3505,7 +3541,7 @@ func hand_group_gap_count(hand: Array) -> int:
 
 func hand_content_pixel_size() -> Vector2:
 	var content_size = safe_content_pixel_size()
-	return Vector2(content_size.x * 0.840 * 0.970, content_size.y * 0.220 * 0.810)
+	return Vector2(content_size.x * 0.810 * 0.970, content_size.y * 0.220 * 0.810)
 
 func hand_layout_required_width(hand: Array, metrics: Dictionary) -> float:
 	var tile_count = hand.size()
@@ -3603,7 +3639,7 @@ func draw_actions(parent: Control) -> void:
 	action_bar.alignment = BoxContainer.ALIGNMENT_END
 	configure_passive_container(action_bar)
 	action_bar.add_theme_constant_override("separation", 6)
-	apply_rect(action_bar, rect_full(0.305, 0.660, 0.975, 0.750))
+	apply_rect(action_bar, ACTION_BAR_RECT)
 	parent.add_child(action_bar)
 	if mode == "offline":
 		if offline_phase == "ended":
@@ -3617,6 +3653,7 @@ func draw_actions(parent: Control) -> void:
 			action_bar.add_child(make_action_button("菜单", Color(0.48, 0.54, 0.56), func() -> void:
 				show_menu()
 			))
+			draw_action_dock(parent)
 			finalize_action_bar_layout()
 			return
 		if offline_phase == "pending_claim":
@@ -3645,6 +3682,7 @@ func draw_actions(parent: Control) -> void:
 			action_bar.add_child(make_action_button(pass_claim_button_text(claim_recommendation), pass_claim_button_color(claim_recommendation), func() -> void:
 				human_claim("pass")
 			))
+			draw_action_dock(parent)
 			finalize_action_bar_layout()
 			return
 		if can_self_discard() and can_win_for_seat(0):
@@ -3740,7 +3778,23 @@ func draw_actions(parent: Control) -> void:
 		toggle_voice_chat()
 	)
 	action_bar.add_child(voice)
+	draw_action_dock(parent)
 	finalize_action_bar_layout()
+
+func draw_action_dock(parent: Control) -> void:
+	var count = action_bar_button_count()
+	if count <= 0:
+		return
+	var dock = make_panel(parent, action_dock_rect_for_count(count), Color(0.014, 0.021, 0.024, 0.76), 16, Color(0.46, 0.40, 0.24, 0.24), 2)
+	parent.move_child(dock, max(0, action_bar.get_index()))
+
+func action_dock_rect_for_count(count: int) -> Rect2:
+	var content_width = max(1.0, safe_content_pixel_size().x)
+	var separation = action_button_separation_for_count(count)
+	var width = action_button_width_for_count(count, separation)
+	var dock_pixels = float(count) * width + float(max(0, count - 1) * separation) + 36.0
+	var left = max(ACTION_BAR_DOCK_RECT.position.x, ACTION_BAR_RECT.size.x - dock_pixels / content_width)
+	return Rect2(Vector2(left, ACTION_BAR_DOCK_RECT.position.y), ACTION_BAR_DOCK_RECT.size)
 
 func finalize_action_bar_layout() -> void:
 	if action_bar == null:
@@ -3776,7 +3830,7 @@ func action_bar_buttons() -> Array[Button]:
 	return buttons
 
 func action_bar_pixel_width() -> float:
-	return safe_content_pixel_size().x * (0.975 - 0.305)
+	return safe_content_pixel_size().x * (ACTION_BAR_RECT.size.x - ACTION_BAR_RECT.position.x)
 
 func action_button_separation_for_count(count: int) -> int:
 	if count <= 5:
@@ -9540,7 +9594,7 @@ func tile_risk_color(risk: String) -> Color:
 func make_action_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 18)
-	apply_button_style(button, color, 14, 1, 0)
+	apply_button_style(button, color, 13, 2, 2)
 	return button
 
 func configure_action_button_size(button: Button, width: float, height: float, font_size: int) -> void:
@@ -10126,12 +10180,12 @@ func can_self_discard() -> bool:
 
 func current_status_text() -> String:
 	if mode == "offline":
-		if has_pending_danger_discard():
-			return pending_danger_discard_text()
 		if offline_phase == "ended":
 			if is_offline_match_finished():
 				return "全场结束"
 			return round_summary if round_summary != "" else "牌局结束"
+		if has_pending_danger_discard():
+			return pending_danger_discard_text()
 		if offline_phase == "pending_claim":
 			return "等待你响应%s" % tile_label(str(offline_pending_claim.get("tile", "")))
 		if wall.is_empty() and offline_turn_needs_draw:

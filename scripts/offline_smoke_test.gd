@@ -400,7 +400,9 @@ func run() -> void:
 	dice_parent.queue_free()
 	var previous_phase = scene.offline_phase
 	var previous_summary = scene.round_summary
+	var previous_hand_number = scene.offline_hand_number
 	scene.offline_phase = "ended"
+	scene.offline_hand_number = 1
 	scene.round_summary = "超长顶部状态文本用于验证HUD不会自动换行挤压分数和按钮区域"
 	var hud_parent = Control.new()
 	root.add_child(hud_parent)
@@ -408,10 +410,10 @@ func run() -> void:
 	var hud_panel = hud_parent.get_child(0) as Control if hud_parent.get_child_count() > 0 else null
 	check(control_anchor_rect_matches(hud_panel, scene.TOP_HUD_RECT), "top HUD root uses fixed geometry constants")
 	check(label_is_clipped(first_label_containing_text(hud_parent, "超长顶部状态文本")), "top HUD status clips long text instead of wrapping")
-	check(label_is_clipped(first_label_containing_text(hud_parent, "余牌")), "top HUD wall summary clips inside its slot")
+	check(label_is_clipped(first_label_containing_text(hud_parent, "余")), "top HUD wall summary clips inside its slot")
 	check(control_anchor_rect_matches(first_label_containing_text(hud_parent, "单机修炼场"), scene.TOP_HUD_TITLE_RECT), "top HUD title uses fixed geometry constants")
 	check(control_anchor_rect_matches(first_label_containing_text(hud_parent, "超长顶部状态文本"), scene.TOP_HUD_STATUS_RECT), "top HUD status uses fixed geometry constants")
-	check(control_anchor_rect_matches(first_label_containing_text(hud_parent, "余牌"), scene.TOP_HUD_WALL_RECT), "top HUD wall summary uses fixed geometry constants")
+	check(control_anchor_rect_matches(first_label_containing_text(hud_parent, "余"), scene.TOP_HUD_WALL_RECT), "top HUD wall summary uses fixed geometry constants")
 	var hud_settings_button = first_button_with_text(hud_parent, "设置")
 	check(hud_settings_button != null and hud_settings_button.custom_minimum_size == scene.TOP_HUD_BUTTON_SIZE, "rendered top HUD buttons use enlarged touch targets")
 	check(control_anchor_rect_matches(hud_settings_button, scene.TOP_HUD_SETTINGS_BUTTON_RECT), "top HUD settings button uses fixed geometry constants")
@@ -420,6 +422,7 @@ func run() -> void:
 	hud_parent.queue_free()
 	scene.offline_phase = previous_phase
 	scene.round_summary = previous_summary
+	scene.offline_hand_number = previous_hand_number
 	var avatar = scene.make_avatar_view(1, true)
 	check(has_label_text(avatar, "南") and has_label_text(avatar, "行牌"), "seat avatar renders active 2D identity")
 	check(not contains_subviewport(avatar), "seat avatar avoids expensive SubViewport rendering")
@@ -512,7 +515,7 @@ func run() -> void:
 	root.add_child(clipped_seat_parent)
 	scene.draw_seat(clipped_seat_parent, 1, scene.rect_full(0.0, 0.0, 1.0, 1.0), "right")
 	check(label_is_clipped(first_label_with_text_prefix(clipped_seat_parent, "超长在线昵称")), "seat name clips long names without wrapping over badges")
-	check(label_is_clipped(first_label_containing_text(clipped_seat_parent, "手牌")), "seat info clips long package/threat text")
+	check(label_is_clipped(first_label_containing_text(clipped_seat_parent, "手")) and label_is_clipped(first_label_containing_text(clipped_seat_parent, "花")) and label_is_clipped(first_label_containing_text(clipped_seat_parent, "分")), "seat stats render as clipped compact pills")
 	check(label_is_clipped(first_label_containing_text(clipped_seat_parent, "1万")), "seat discard preview clips recent river text")
 	clipped_seat_parent.queue_free()
 	var log_parent = Control.new()
@@ -1006,7 +1009,7 @@ func run() -> void:
 	var lazy_self_discard_pressure = scene.ai_pressure_context(0, lazy_self_discard_context)
 	var self_discarded_wait_report = scene.build_ai_discard_report(0, "P", tenpai_hand(), 0)
 	var lazy_self_discard_wait_report = scene.build_ai_discard_report(0, "P", tenpai_hand(), 0, scene.ai_context_visible_counts(lazy_self_discard_context), lazy_self_discard_pressure, lazy_self_discard_context)
-	check(float(self_discarded_wait_report.get("adjusted_remaining", 0.0)) < float(low_wait_report.get("adjusted_remaining", 0.0)), "self-discarded wait has lower weighted live tiles")
+	check(float(self_discarded_wait_report.get("wait_adjusted_remaining", 0.0)) < float(low_wait_report.get("wait_adjusted_remaining", 0.0)), "self-discarded wait has lower weighted live tiles")
 	check(float(self_discarded_wait_report.get("wait_value", 0.0)) < float(low_wait_report.get("wait_value", 0.0)), "self-discarded wait lowers tenpai value")
 	check(bool(lazy_self_discard_context.get("self_discard_lookup_ready", false)) and int(lazy_self_discard_wait_report.get("wait_total_remaining", 0)) == int(self_discarded_wait_report.get("wait_total_remaining", 0)), "tenpai AI reports lazily build self-discard lookup when scoring waits")
 	check(scene.wait_quality_text(self_discarded_wait_report).find("回头待东") >= 0, "wait quality text names self-discarded wait")
@@ -1775,6 +1778,7 @@ func run() -> void:
 	check(int(scene.last_score_deltas[0]) == -package_points and int(scene.last_score_deltas[1]) == package_points, "score deltas track package payment")
 	check(scene.score_delta_text(1).begins_with(" +"), "positive score delta is formatted")
 	check(scene.score_delta_text(0).find("-") >= 0, "negative score delta is formatted")
+	check(scene.compact_score_text(98860) == "9.9万" and scene.compact_score_text(-172000) == "-17万", "compact score text keeps large UI scores short")
 
 	scene.start_offline()
 	scene.record_claim_source(1, 0, "chi")
@@ -1793,6 +1797,9 @@ func run() -> void:
 	check(scene.round_summary.find("包三搭") == -1, "discard win summary does not mention package payout")
 
 	scene.start_offline()
+	scene.offline_hand_number = 1
+	scene.dealer_seat = 0
+	scene.offline_dealer_repeat = false
 	scene.players[1]["hand"] = winning_hand()
 	scene.players[1]["melds"] = []
 	scene.finish_offline_round(1, "E", false, 0)
