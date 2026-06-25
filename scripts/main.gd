@@ -247,6 +247,7 @@ var fast_mode_enabled = true
 var fx_enabled = true
 var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
+var reset_progress_confirming = false
 var mode = "menu"
 var screen_layer: Control
 var root_layer: Control
@@ -453,6 +454,14 @@ const CENTER_IDLE_WIND_COLOR := Color(0.52, 0.50, 0.34, 0.76)
 const CENTER_DICE_DOT_RADIUS := 0.018
 const CENTER_DICE_DOT_FILL := Color(0.60, 0.56, 0.42, 0.62)
 const CENTER_DICE_DOT_BORDER := Color(0.76, 0.72, 0.58, 0.26)
+const ROUND_SUMMARY_PANEL_RECT := Rect2(Vector2(0.300, 0.190), Vector2(0.700, 0.610))
+const ROUND_SUMMARY_HEADER_RECT := Rect2(Vector2(0.0, 0.0), Vector2(1.0, 0.16))
+const ROUND_SUMMARY_TITLE_RECT := Rect2(Vector2(0.06, 0.04), Vector2(0.94, 0.18))
+const ROUND_SUMMARY_TEXT_RECT := Rect2(Vector2(0.08, 0.190), Vector2(0.92, 0.335))
+const ROUND_SUMMARY_RANK_START_Y := 0.365
+const ROUND_SUMMARY_RANK_ROW_HEIGHT := 0.105
+const ROUND_SUMMARY_RANK_ROW_GAP := 0.018
+const ROUND_SUMMARY_NEXT_DEALER_RECT := Rect2(Vector2(0.08, 0.880), Vector2(0.92, 0.955))
 const TABLE_OUTER_RECT := Rect2(Vector2(0.145, 0.108), Vector2(0.855, 0.765))
 const TABLE_OUTER_TEXTURE_RECT := Rect2(Vector2(0.008, 0.012), Vector2(0.992, 0.988))
 const TABLE_INNER_RECT := Rect2(Vector2(0.045, 0.055), Vector2(0.955, 0.945))
@@ -482,6 +491,12 @@ const TABLE_CORNER_RECTS := [
 const HAND_TILE_MAX_WIDTH := 78.0
 const HAND_TILE_MIN_TOUCH_WIDTH := 48.0
 const HAND_TILE_ASPECT := 1.36
+const HAND_TRAY_RECT := Rect2(Vector2(0.180, 0.765), Vector2(0.990, 0.985))
+const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
+const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.145), Vector2(0.988, 0.170))
+const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
+const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.795, 0.040), Vector2(0.970, 0.145))
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.15), Vector2(0.985, 0.96))
 const HAND_LAYOUT_CANDIDATES := [
 	[12.0, 5],
 	[8.0, 3],
@@ -494,13 +509,14 @@ const ACTION_BUTTON_HEIGHT := 52.0
 const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.375, 0.655), Vector2(0.975, 0.748))
 const ACTION_BAR_RECT := Rect2(Vector2(0.392, 0.667), Vector2(0.965, 0.735))
 const TOP_HUD_BUTTON_SIZE := Vector2(68, 44)
+const TOP_HUD_MODE_BADGE_RECT := Rect2(Vector2(0.018, 0.14), Vector2(0.100, 0.44))
 const SAFE_CONTENT_MIN_MARGIN := Vector4(12.0, 8.0, 12.0, 10.0)
 const SAFE_CONTENT_MAX_SIDE_FRACTION := 0.16
 const SAFE_CONTENT_MAX_TOP_FRACTION := 0.16
 const SAFE_CONTENT_MAX_BOTTOM_FRACTION := 0.18
 const TOP_HUD_RECT := Rect2(Vector2(0.018, 0.018), Vector2(0.982, 0.094))
-const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.018, 0.08), Vector2(0.205, 0.92))
-const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.205, 0.08), Vector2(0.430, 0.92))
+const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.135, 0.08), Vector2(0.205, 0.92))
+const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.212, 0.10), Vector2(0.430, 0.90))
 const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.440, 0.13), Vector2(0.708, 0.87))
 const TOP_HUD_WALL_RECT := Rect2(Vector2(0.716, 0.12), Vector2(0.800, 0.88))
 const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.806, 0.10), Vector2(0.866, 0.90))
@@ -562,6 +578,16 @@ const SCORE_STRIP_BORDER := Color(0.14, 0.16, 0.16, 0.18)
 const SCORE_STRIP_NAME_FILL := Color(0.92, 0.88, 0.76, 0.92)
 const SETTINGS_PANEL_FILL := Color(0.009, 0.015, 0.018, 0.986)
 const SETTINGS_PANEL_BORDER := Color(0.12, 0.12, 0.08, 0.24)
+const SETTINGS_PANEL_RECT := Rect2(Vector2(0.290, 0.080), Vector2(0.710, 0.820))
+const SETTINGS_TITLE_RECT := Rect2(Vector2(0.06, 0.045), Vector2(0.42, 0.165))
+const SETTINGS_CLOSE_RECT := Rect2(Vector2(0.760, 0.055), Vector2(0.940, 0.165))
+const SETTINGS_AUDIO_SECTION_RECT := Rect2(Vector2(0.070, 0.165), Vector2(0.930, 0.470))
+const SETTINGS_PLAY_SECTION_RECT := Rect2(Vector2(0.070, 0.505), Vector2(0.930, 0.720))
+const SETTINGS_MAINT_SECTION_RECT := Rect2(Vector2(0.070, 0.755), Vector2(0.930, 0.925))
+const SETTINGS_SECTION_TITLE_RECT := Rect2(Vector2(0.035, 0.045), Vector2(0.300, 0.300))
+const SETTINGS_SECTION_GRID_RECT := Rect2(Vector2(0.035, 0.295), Vector2(0.965, 0.910))
+const SETTINGS_ROW_STATUS_RECT := Rect2(Vector2(0.045, 0.145), Vector2(0.510, 0.855))
+const SETTINGS_ROW_BUTTON_RECT := Rect2(Vector2(0.565, 0.145), Vector2(0.955, 0.855))
 const UI_BACKGROUND_TINT := Color(0.004, 0.006, 0.008, 0.996)
 # 动画 / 特效层参数。特效节点全部挂在持久化的 fx_layer 上，整桌每次 render_game
 # 调用 clear_screen 时 fx_layer 不被释放，因此补间动画可以跨整桌重绘连续播放。
@@ -1000,6 +1026,7 @@ func reset_offline_progress() -> void:
 	var dir = DirAccess.open("user://")
 	if dir != null and dir.file_exists("offline_progress.cfg"):
 		dir.remove("offline_progress.cfg")
+	reset_progress_confirming = false
 	set_status("进度已重置")
 
 func apply_audio_settings() -> void:
@@ -1887,10 +1914,12 @@ func show_diagnostic_dialog(lines: Array) -> void:
 
 func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
+	reset_progress_confirming = false
 	refresh_current_screen()
 
 func close_settings_panel() -> void:
 	settings_panel_open = false
+	reset_progress_confirming = false
 	refresh_current_screen()
 
 func refresh_current_screen() -> void:
@@ -1988,27 +2017,51 @@ func show_menu() -> void:
 	clear_fx_overlays()
 	recover_audio_after_screen_change()
 	clear_screen()
-	var header = make_panel(root_layer, rect_full(0.03, 0.04, 0.97, 0.16), Color(0.018, 0.040, 0.046, 0.94), 16, Color(0.56, 0.48, 0.28, 0.56))
-	var title = make_label(header, "云桌麻将", 34, Color(0.90, 0.84, 0.56), true)
-	apply_rect(title, rect_full(0.025, 0.06, 0.50, 0.58))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var version = make_label(header, "版本 v%s" % app_version(), 15, Color(0.80, 0.82, 0.72), false)
-	apply_rect(version, rect_full(0.025, 0.55, 0.50, 0.90))
-	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var server = make_label(header, "Godot 4.6 开源引擎 · 横屏游戏桌 · 真实牌面素材", 19, Color(0.72, 0.82, 0.78), false)
-	apply_rect(server, rect_full(0.52, 0.08, 0.98, 0.92))
-	server.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
+	# 增强的背景效果
+	add_background(root_layer)
+
+	# 主标题区域 - 增大高度，更好的视觉层次
+	var header = make_panel(root_layer, rect_full(0.02, 0.03, 0.98, 0.22), Color(0.012, 0.032, 0.040, 0.96), 20, Color(0.62, 0.52, 0.32, 0.62))
+	# 左侧金色装饰条
+	header.add_child(make_color_rect(rect_full(0.008, 0.04, 0.018, 0.96), Color(0.92, 0.78, 0.38, 0.88)))
+	# 顶部高光线
+	header.add_child(make_color_rect(rect_full(0.018, 0.015, 0.982, 0.035), Color(1.0, 1.0, 1.0, 0.06)))
+	# 底部分隔线
+	header.add_child(make_color_rect(rect_full(0.018, 0.92, 0.982, 0.96), Color(0.56, 0.48, 0.28, 0.28)))
+
+	# 游戏标题 - 更大更突出
+	var title = make_label(header, "云桌麻将", 42, Color(0.96, 0.88, 0.52), true)
+	apply_rect(title, rect_full(0.04, 0.08, 0.42, 0.55))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 副标题
+	var subtitle = make_label(header, "Godot 4.6 开源引擎 · 横屏牌桌 · 真实牌面素材", 16, Color(0.74, 0.84, 0.80), false)
+	apply_rect(subtitle, rect_full(0.04, 0.56, 0.56, 0.82))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 版本徽章
+	var version = make_badge(header, rect_full(0.04, 0.82, 0.14, 0.95), "v%s" % app_version(), 12, Color(0.020, 0.044, 0.052, 0.94), Color(0.48, 0.40, 0.22, 0.48), Color(0.84, 0.86, 0.78))
+	version.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# 右侧功能徽章组 - 重新布局，更紧凑
+	var hero_badge_a = make_badge(header, rect_full(0.72, 0.12, 0.82, 0.36), "单机模式", 14, Color(0.14, 0.38, 0.34, 0.92), Color(0.26, 0.62, 0.54, 0.42), Color(0.94, 0.96, 0.92))
+	hero_badge_a.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var hero_badge_b = make_badge(header, rect_full(0.84, 0.12, 0.94, 0.36), "联机对战", 14, Color(0.14, 0.32, 0.42, 0.92), Color(0.30, 0.56, 0.74, 0.42), Color(0.94, 0.96, 0.92))
+	hero_badge_b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# 主菜单卡片区域 - 居中，增大间距
 	var row = HBoxContainer.new()
 	configure_passive_container(row)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 28)
+	row.add_theme_constant_override("separation", 32)
 	row.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 0)
-	row.custom_minimum_size = Vector2(980, 210)
+	row.custom_minimum_size = Vector2(1040, 240)
 	root_layer.add_child(row)
 	var content_size = safe_content_pixel_size()
-	row.position = Vector2(max(0.0, (content_size.x - 980.0) * 0.5), max(0.0, (content_size.y - 210.0) * 0.5))
+	row.position = Vector2(max(0.0, (content_size.x - 1040.0) * 0.5), max(0.0, (content_size.y - 240.0) * 0.5))
 
+	# 三个主功能卡片 - 更大更醒目
 	row.add_child(make_menu_card("单机人机\nAI 自动打牌", Color(0.58, 0.50, 0.32), func() -> void:
 		start_offline()
 	))
@@ -2019,34 +2072,55 @@ func show_menu() -> void:
 		start_update_download()
 	))
 
-	var note = make_panel(root_layer, rect_full(0.33, 0.84, 0.67, 0.91), Color(0.020, 0.044, 0.050, 0.82), 16, Color(0.52, 0.42, 0.24, 0.34))
-	make_label(note, "当前版本 v%s · Android APK 已签名导出。" % app_version(), 18, Color(0.80, 0.78, 0.66), true)
-	var settings = make_small_button("设置", Color(0.28, 0.42, 0.56), func() -> void:
+	# 底部信息栏
+	var footer = make_panel(root_layer, rect_full(0.02, 0.82, 0.98, 0.97), Color(0.014, 0.028, 0.036, 0.88), 16, Color(0.42, 0.36, 0.22, 0.32))
+	footer.add_child(make_color_rect(rect_full(0.008, 0.04, 0.018, 0.96), Color(0.88, 0.74, 0.34, 0.56)))
+
+	var footer_text = make_label(footer, "当前版本 v%s · Android APK 已签名导出 · 开源免费" % app_version(), 15, Color(0.78, 0.76, 0.66), true)
+	apply_rect(footer_text, rect_full(0.04, 0.25, 0.65, 0.75))
+	footer_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 设置按钮 - 更大的触摸目标
+	var settings = make_small_button("设置", Color(0.26, 0.44, 0.58), func() -> void:
 		toggle_settings_panel()
 	)
-	root_layer.add_child(settings)
-	apply_rect(settings, rect_full(0.69, 0.84, 0.78, 0.91))
+	settings.custom_minimum_size = Vector2(100, 52)
+	footer.add_child(settings)
+	apply_rect(settings, rect_full(0.70, 0.20, 0.80, 0.80))
+
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 
 func make_menu_card(text: String, color: Color, callback: Callable) -> Button:
 	var button = Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(284, 176)
+	button.text = ""
+	button.custom_minimum_size = Vector2(310, 210)
 	configure_touch_button(button)
-	button.add_theme_font_size_override("font_size", 21)
-	button.add_theme_color_override("font_color", Color(0.88, 0.86, 0.78))
-	button.add_theme_color_override("font_pressed_color", Color(0.88, 0.86, 0.78))
-	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.58))
-	button.add_theme_constant_override("shadow_offset_x", 1)
-	button.add_theme_constant_override("shadow_offset_y", 1)
 	var muted = soften_menu_color(color)
-	button.add_theme_stylebox_override("normal", style(Color(0.024, 0.038, 0.042, 0.95), 18, muted.darkened(0.86), 1, 0))
-	button.add_theme_stylebox_override("hover", style(Color(0.030, 0.045, 0.048, 0.97), 18, muted.darkened(0.78), 1, 0))
-	button.add_theme_stylebox_override("pressed", style(Color(0.020, 0.032, 0.035, 0.99), 18, muted.darkened(0.84), 1, 0))
-	button.add_child(make_color_rect(rect_full(0.03, 0.12, 0.055, 0.88), Color(color.r, color.g, color.b, 0.050)))
-	button.add_child(make_color_rect(rect_full(0.065, 0.10, 0.94, 0.145), Color(1.0, 1.0, 1.0, 0.010)))
-	button.add_child(make_color_rect(rect_full(0.06, 0.84, 0.94, 0.885), Color(0.0, 0.0, 0.0, 0.030)))
+	# 增强的卡片样式 - 更大的圆角，更显眼的边框高亮
+	button.add_theme_stylebox_override("normal", style(Color(0.018, 0.032, 0.038, 0.97), 20, muted.darkened(0.78), 2, 6))
+	button.add_theme_stylebox_override("hover", style(Color(0.026, 0.042, 0.048, 0.98), 20, muted.darkened(0.60), 2, 4))
+	button.add_theme_stylebox_override("pressed", style(Color(0.014, 0.026, 0.032, 0.99), 20, muted.darkened(0.72), 2, 2))
+	# 左侧彩色条纹装饰 - 更宽更醒目
+	button.add_child(make_color_rect(rect_full(0.02, 0.08, 0.055, 0.92), Color(color.r, color.g, color.b, 0.24)))
+	# 顶部高光
+	button.add_child(make_color_rect(rect_full(0.055, 0.04, 0.945, 0.11), Color(1.0, 1.0, 1.0, 0.025)))
+	# 底部渐变
+	button.add_child(make_color_rect(rect_full(0.055, 0.86, 0.945, 0.92), Color(0.0, 0.0, 0.0, 0.045)))
+	var parts = text.split("\n", false, 2)
+	var title_text = parts[0] if parts.size() > 0 else text
+	var subtitle_text = parts[1] if parts.size() > 1 else ""
+	var title = make_label(button, title_text, 26, Color(0.94, 0.92, 0.84), true)
+	apply_rect(title, rect_full(0.10, 0.14, 0.92, 0.52))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	configure_clipped_label(title)
+	if subtitle_text != "":
+		var subtitle = make_label(button, subtitle_text, 14, Color(0.74, 0.84, 0.78), false)
+		apply_rect(subtitle, rect_full(0.10, 0.52, 0.92, 0.82))
+		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		configure_clipped_label(subtitle)
 	if callback.is_valid():
 		connect_immediate_button_action(button, callback)
 	return button
@@ -2055,65 +2129,101 @@ func show_online_lobby() -> void:
 	mode = "online_lobby"
 	recover_audio_after_screen_change()
 	clear_screen()
-	var panel = make_panel(root_layer, rect_full(0.06, 0.08, 0.94, 0.88), Color(0.024, 0.078, 0.086, 0.92), 16, Color(0.66, 0.54, 0.24, 0.64))
-	var title = make_label(panel, "联机大厅", 30, Color(0.92, 0.83, 0.46), true)
-	title.anchor_bottom = 0.13
-	title.offset_bottom = 0
-	var form_panel = make_panel(panel, rect_full(0.05, 0.16, 0.47, 0.82), Color(0.016, 0.044, 0.050, 0.90), 14, Color(0.34, 0.40, 0.38, 0.24))
-	var form_title = make_label(form_panel, "房间设置", 18, Color(0.88, 0.83, 0.60), true)
-	apply_rect(form_title, rect_full(0.06, 0.05, 0.48, 0.15))
+
+	# 主面板 - 统一的全屏面板
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.012, 0.032, 0.040, 0.96), 20, Color(0.62, 0.52, 0.30, 0.52))
+	# 左侧金色装饰
+	panel.add_child(make_color_rect(rect_full(0.006, 0.03, 0.016, 0.97), Color(0.92, 0.78, 0.38, 0.84)))
+	# 顶部分隔线
+	panel.add_child(make_color_rect(rect_full(0.016, 0.012, 0.984, 0.03), Color(1.0, 1.0, 1.0, 0.05)))
+
+	# 标题区域
+	var title = make_label(panel, "联机大厅", 32, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.04, 0.028, 0.28, 0.10))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var subtitle = make_label(panel, "连接本机或局域网房间，创建后等待玩家进入。", 15, Color(0.70, 0.82, 0.76), false)
+	apply_rect(subtitle, rect_full(0.04, 0.095, 0.48, 0.14))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 服务器和状态徽章
+	var server_badge = make_badge(panel, rect_full(0.68, 0.040, 0.84, 0.105), "%s:%d" % [DEFAULT_HOST, DEFAULT_PORT], 12, Color(0.020, 0.046, 0.054, 0.94), Color(0.34, 0.52, 0.48, 0.36), Color(0.82, 0.90, 0.82))
+	server_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var state_badge = make_badge(panel, rect_full(0.86, 0.040, 0.96, 0.105), lobby_connection_state_text(), 12, Color(0.18, 0.28, 0.26, 0.94), Color(0.36, 0.56, 0.46, 0.36), Color(0.90, 0.94, 0.84))
+	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# 表单面板 - 连接与房间设置
+	var form_panel = make_panel(panel, rect_full(0.035, 0.17, 0.475, 0.87), Color(0.010, 0.026, 0.034, 0.95), 16, Color(0.38, 0.44, 0.40, 0.28))
+	# 表单标题栏装饰
+	form_panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.016, 0.98), Color(0.84, 0.72, 0.38, 0.52)))
+	form_panel.add_child(make_color_rect(rect_full(0.02, 0.065, 0.98, 0.08), Color(0.84, 0.74, 0.42, 0.10)))
+	var form_title = make_label(form_panel, "连接与房间", 20, Color(0.90, 0.86, 0.60), true)
+	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	var form = VBoxContainer.new()
 	configure_passive_container(form)
 	form.anchor_left = 0.06
-	form.anchor_top = 0.16
+	form.anchor_top = 0.15
 	form.anchor_right = 0.94
-	form.anchor_bottom = 0.82
-	form.add_theme_constant_override("separation", 12)
+	form.anchor_bottom = 0.68
+	form.add_theme_constant_override("separation", 14)
 	form_panel.add_child(form)
 	online_name_edit = add_line_edit(form, "昵称", "云桌道友")
 	online_host_edit = add_line_edit(form, "服务器 IP/域名", DEFAULT_HOST)
 	online_room_edit = add_line_edit(form, "房间号", selected_room)
 
+	# 操作按钮组 - 连接/创建/加入
 	var button_row = HBoxContainer.new()
 	configure_passive_container(button_row)
 	button_row.add_theme_constant_override("separation", 10)
-	form.add_child(button_row)
-	button_row.add_child(make_small_button("连接", Color(0.20, 0.48, 0.66), func() -> void:
+	apply_rect(button_row, rect_full(0.06, 0.72, 0.94, 0.81))
+	form_panel.add_child(button_row)
+	button_row.add_child(make_lobby_action_button("连接", Color(0.20, 0.48, 0.66), func() -> void:
 		connect_online()
 	))
-	button_row.add_child(make_small_button("创建房间", Color(0.22, 0.54, 0.42), func() -> void:
+	button_row.add_child(make_lobby_action_button("创建", Color(0.22, 0.54, 0.42), func() -> void:
 		send_online_action({"type": "createRoom", "name": online_name_edit.text}, "创建房间")
 	))
-	button_row.add_child(make_small_button("加入", Color(0.72, 0.48, 0.24), func() -> void:
+	button_row.add_child(make_lobby_action_button("加入", Color(0.72, 0.48, 0.24), func() -> void:
 		selected_room = online_room_edit.text
 		send_online_action({"type": "joinRoom", "roomCode": online_room_edit.text, "name": online_name_edit.text}, "加入房间")
 	))
 
+	# 底部按钮 - 开始/返回
 	var start_row = HBoxContainer.new()
 	configure_passive_container(start_row)
 	start_row.add_theme_constant_override("separation", 10)
-	form.add_child(start_row)
-	start_row.add_child(make_small_button("开始", Color(0.62, 0.30, 0.24), func() -> void:
+	apply_rect(start_row, rect_full(0.06, 0.84, 0.94, 0.93))
+	form_panel.add_child(start_row)
+	start_row.add_child(make_lobby_action_button("开始游戏", Color(0.56, 0.28, 0.22), func() -> void:
 		send_online_action({"type": "startGame"}, "开始游戏")
 	))
-	start_row.add_child(make_small_button("返回", Color(0.28, 0.34, 0.36), func() -> void:
+	start_row.add_child(make_lobby_action_button("返回菜单", Color(0.28, 0.34, 0.36), func() -> void:
 		show_menu()
 	))
 
-	status_label = make_label(form_panel, "未连接。服务器默认 %s:%d" % [DEFAULT_HOST, DEFAULT_PORT], 17, Color(0.83, 0.96, 0.87), false)
-	apply_rect(status_label, rect_full(0.06, 0.84, 0.94, 0.94))
+	# 状态栏
+	status_label = make_label(panel, "未连接。服务器默认 %s:%d" % [DEFAULT_HOST, DEFAULT_PORT], 15, Color(0.82, 0.94, 0.86), false)
+	apply_rect(status_label, rect_full(0.04, 0.885, 0.50, 0.945))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(status_label)
 
-	var log_panel = make_panel(panel, rect_full(0.52, 0.16, 0.95, 0.82), Color(0.014, 0.038, 0.044, 0.90), 14, Color(0.34, 0.44, 0.40, 0.24))
-	var log_title = make_label(log_panel, "房间日志", 18, Color(0.84, 0.87, 0.74), true)
-	apply_rect(log_title, rect_full(0.06, 0.05, 0.48, 0.15))
+	# 房间状态面板
+	var log_panel = make_panel(panel, rect_full(0.505, 0.17, 0.965, 0.87), Color(0.010, 0.026, 0.032, 0.95), 16, Color(0.34, 0.44, 0.38, 0.28))
+	log_panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.016, 0.98), Color(0.84, 0.72, 0.38, 0.42)))
+	log_panel.add_child(make_color_rect(rect_full(0.02, 0.13, 0.98, 0.15), Color(1.0, 1.0, 1.0, 0.028)))
+	var log_title = make_label(log_panel, "房间状态", 20, Color(0.84, 0.87, 0.74), true)
+	apply_rect(log_title, rect_full(0.05, 0.020, 0.48, 0.095))
 	log_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	logs_label = make_label(log_panel, "房间日志会显示在这里。", 18, Color(0.86, 0.89, 0.78), false)
-	apply_rect(logs_label, rect_full(0.06, 0.18, 0.94, 0.80))
+	var room_badge_text = "房间号 " + (selected_room if selected_room != "" else "--")
+	var room_badge = make_badge(log_panel, rect_full(0.68, 0.030, 0.94, 0.100), room_badge_text, 12, Color(0.020, 0.044, 0.050, 0.94), Color(0.46, 0.52, 0.34, 0.30), Color(0.82, 0.87, 0.72))
+	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logs_label = make_label(log_panel, "", 15, Color(0.84, 0.87, 0.76), false)
+	apply_rect(logs_label, rect_full(0.05, 0.16, 0.95, 0.94))
 	logs_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	logs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	render_room_log()
 	ensure_update_dialog()
 
 func add_line_edit(parent: Control, label_text: String, value: String) -> LineEdit:
@@ -2138,6 +2248,22 @@ func add_line_edit(parent: Control, label_text: String, value: String) -> LineEd
 	edit.add_theme_color_override("caret_color", Color(0.94, 0.86, 0.54))
 	parent.add_child(edit)
 	return edit
+
+func make_lobby_action_button(text: String, color: Color, callback: Callable) -> Button:
+	var button = make_small_button(text, color, callback)
+	button.custom_minimum_size = Vector2(130, 50)
+	button.add_theme_font_size_override("font_size", 17)
+	return button
+
+func lobby_connection_state_text() -> String:
+	match tcp.get_status():
+		StreamPeerTCP.STATUS_CONNECTED:
+			return "已连接"
+		StreamPeerTCP.STATUS_CONNECTING:
+			return "连接中"
+		StreamPeerTCP.STATUS_ERROR:
+			return "异常"
+	return "未连接"
 
 func connect_online() -> void:
 	tcp.disconnect_from_host()
@@ -2712,11 +2838,25 @@ func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary
 func render_room_log() -> void:
 	if logs_label == null:
 		return
-	var text = "房间号：" + str(online_room.get("code", "--")) + "\n\n"
-	for player in online_room.get("players", []):
-		text += "%d号位  %s%s\n" % [int(player.get("seat", 0)) + 1, str(player.get("name", "空位")), "  AI" if bool(player.get("bot", false)) else ""]
-	text += "\n"
-	for log_item in online_room.get("logs", []):
+	var room_code = str(first_present(online_room, ["code", "roomCode", "room_code"], selected_room))
+	if room_code == "":
+		room_code = "--"
+	var text = "房间号：" + room_code + "\n\n"
+	var players = online_room.get("players", [])
+	if typeof(players) == TYPE_ARRAY and not players.is_empty():
+		for player in players:
+			if typeof(player) != TYPE_DICTIONARY:
+				continue
+			text += "%d号位  %s%s\n" % [int(player.get("seat", 0)) + 1, str(player.get("name", "空位")), "  AI" if bool(player.get("bot", false)) else ""]
+	else:
+		text += "等待房间状态同步。\n"
+	text += "\n房间日志\n"
+	var logs = online_room.get("logs", [])
+	if typeof(logs) != TYPE_ARRAY:
+		logs = []
+	if logs.is_empty():
+		text += "暂无日志。\n"
+	for log_item in logs:
 		if typeof(log_item) == TYPE_DICTIONARY:
 			text += str(log_item.get("text", "")) + "\n"
 		else:
@@ -2933,25 +3073,47 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	pass
 
 func draw_game_top_hud(parent: Control) -> void:
-	var hud = make_panel(parent, TOP_HUD_RECT, TOP_HUD_FILL, 18, TOP_HUD_BORDER, 6)
+	# 顶部HUD面板 - 增强视觉效果
+	var hud = make_panel(parent, TOP_HUD_RECT, Color(0.010, 0.018, 0.022, 0.98), 20, Color(0.52, 0.44, 0.26, 0.58), 6)
+	# 左侧金色装饰
+	hud.add_child(make_color_rect(rect_full(0.008, 0.08, 0.015, 0.92), Color(0.90, 0.76, 0.36, 0.82)))
+	# 顶部高光线
+	hud.add_child(make_color_rect(rect_full(0.015, 0.04, 0.985, 0.12), Color(1.0, 1.0, 1.0, 0.04)))
+
+	# 模式徽章
+	var mode_text = "单机" if mode == "offline" else "联机"
+	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 12, Color(0.018, 0.042, 0.048, 0.94), SEAT_ACCENT_COLORS[0], Color(0.92, 0.94, 0.88))
+	mode_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# 标题
 	var title_text = "单机修炼场 第%d局" % [offline_hand_number] if mode == "offline" else "联机房间 " + str(online_game.get("roomCode", selected_room))
-	var title = make_label(hud, title_text, 21, UI_TEXT_MAIN, true)
+	var title = make_label(hud, title_text, 22, Color(0.96, 0.90, 0.60), true)
 	apply_rect(title, TOP_HUD_TITLE_RECT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
-	var status = make_label(hud, current_status_text(), 20, UI_TEXT_SUB, true)
+
+	# 状态
+	var status = make_label(hud, current_status_text(), 17, UI_TEXT_SUB, true)
 	apply_rect(status, TOP_HUD_STATUS_RECT)
 	configure_clipped_label(status)
+
+	# 分数条
 	draw_score_strip(hud, TOP_HUD_SCORE_STRIP_RECT)
-	var wall = make_label(hud, top_hud_wall_text(), 14, UI_TEXT_MUTED, false)
+
+	# 余牌信息
+	var wall = make_label(hud, top_hud_wall_text(), 12, Color(0.74, 0.78, 0.72), true)
+	wall.add_theme_stylebox_override("normal", style(Color(0.016, 0.024, 0.028, 0.94), 10, Color(0.24, 0.28, 0.26, 0.36), 1, 0))
 	apply_rect(wall, TOP_HUD_WALL_RECT)
 	configure_clipped_label(wall)
-	var settings = make_top_hud_button("设置", Color(0.22, 0.42, 0.54), func() -> void:
+
+	# 操作按钮组
+	var settings = make_top_hud_button("设置", Color(0.22, 0.44, 0.56), func() -> void:
 		toggle_settings_panel()
 	)
 	hud.add_child(settings)
 	apply_rect(settings, TOP_HUD_SETTINGS_BUTTON_RECT)
-	var back = make_top_hud_button("返回", Color(0.34, 0.38, 0.38), func() -> void:
+
+	var back = make_top_hud_button("返回", Color(0.36, 0.40, 0.40), func() -> void:
 		if mode == "offline":
 			show_menu()
 		else:
@@ -2959,7 +3121,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	)
 	hud.add_child(back)
 	apply_rect(back, TOP_HUD_BACK_BUTTON_RECT)
-	var update = make_top_hud_button("更新", Color(0.37, 0.46, 0.72), func() -> void:
+
+	var update = make_top_hud_button("更新", Color(0.38, 0.48, 0.74), func() -> void:
 		start_update_download()
 	)
 	hud.add_child(update)
@@ -2976,15 +3139,19 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 	for seat in range(4):
 		var active = get_current_seat() == seat
 		var player = get_player_info(seat)
-		var chip_fill = SCORE_STRIP_FILL.lightened(0.05) if active else SCORE_STRIP_FILL
-		var chip = make_panel(strip, SCORE_STRIP_CHIP_RECTS[seat], chip_fill, 10, Color(0.58, 0.48, 0.24, 0.56) if active else SCORE_STRIP_BORDER, 4)
+		var chip_fill = Color(0.008, 0.016, 0.018, 0.96) if active else Color(0.006, 0.014, 0.016, 0.92)
+		var chip_border = Color(0.56, 0.46, 0.22, 0.72) if active else Color(0.28, 0.32, 0.30, 0.28)
+		var chip = make_panel(strip, SCORE_STRIP_CHIP_RECTS[seat], chip_fill, 12, chip_border, 3)
+		# 座位颜色标识
 		chip.add_child(make_color_rect(SCORE_STRIP_ACCENT_RECT, SEAT_ACCENT_COLORS[seat]))
+		# 玩家名称
 		var name_text = "我" if seat == 0 else ai_profile_short_label(seat) if mode == "offline" else str(player.get("name", "玩家"))
-		var name = make_label(chip, name_text, 11, SCORE_STRIP_NAME_FILL, true)
-		name.add_theme_stylebox_override("normal", style(SEAT_NAME_BADGE_COLORS[seat].darkened(0.14), 8, Color(0.90, 0.80, 0.46, 0.12), 1))
+		var name = make_label(chip, name_text, 11, Color(0.94, 0.90, 0.78), true)
+		name.add_theme_stylebox_override("normal", style(SEAT_NAME_BADGE_COLORS[seat].darkened(0.12), 8, Color(0.88, 0.78, 0.44, 0.14), 1, 0))
 		apply_rect(name, SCORE_STRIP_NAME_RECT)
 		configure_clipped_label(name)
-		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 12, UI_TEXT_MAIN, true)
+		# 分数
+		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 13, Color(0.96, 0.94, 0.88), true)
 		apply_rect(score, SCORE_STRIP_SCORE_RECT)
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(score)
@@ -2996,72 +3163,118 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
-	var panel = make_panel(overlay, rect_full(0.342, 0.160, 0.658, 0.575), SETTINGS_PANEL_FILL, 18, SETTINGS_PANEL_BORDER, 6)
-	var title = make_label(panel, "设置", 22, Color(0.90, 0.80, 0.42), true)
-	apply_rect(title, rect_full(0.06, 0.06, 0.42, 0.22))
+
+	# 设置面板 - 更精致的样式
+	var panel = make_panel(overlay, SETTINGS_PANEL_RECT, Color(0.008, 0.014, 0.016, 0.99), 20, Color(0.14, 0.12, 0.08, 0.36), 5)
+	# 标题栏
+	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.16), Color(0.040, 0.052, 0.048, 0.76), 20, Color(1.0, 1.0, 1.0, 0.030))
+	# 左侧金色装饰
+	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
+
+	var title = make_label(panel, "设置", 24, Color(0.94, 0.82, 0.42), true)
+	apply_rect(title, SETTINGS_TITLE_RECT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var close = make_small_button("关闭", Color(0.28, 0.32, 0.34), func() -> void:
+
+	var close = make_small_button("关闭", Color(0.30, 0.34, 0.36), func() -> void:
 		close_settings_panel()
 	)
+	close.custom_minimum_size = Vector2(88, 42)
 	panel.add_child(close)
-	apply_rect(close, rect_full(0.74, 0.06, 0.94, 0.22))
-	var grid = GridContainer.new()
-	configure_passive_container(grid)
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 14)
-	grid.add_theme_constant_override("v_separation", 12)
-	panel.add_child(grid)
-	apply_rect(grid, rect_full(0.08, 0.28, 0.92, 0.90))
-	grid.add_child(make_setting_button("音乐", music_enabled, func() -> void:
+	apply_rect(close, SETTINGS_CLOSE_RECT)
+
+	# 声音设置
+	var audio_grid = make_settings_section(panel, SETTINGS_AUDIO_SECTION_RECT, "声音")
+	audio_grid.columns = 1
+	make_setting_row(audio_grid, "背景音乐", "当前: %s" % ("开启" if music_enabled else "关闭"), make_setting_button("音乐", music_enabled, func() -> void:
 		toggle_music_setting()
 	))
-	grid.add_child(make_setting_button("音效", sfx_enabled, func() -> void:
+	make_setting_row(audio_grid, "音效反馈", "当前: %s" % ("开启" if sfx_enabled else "关闭"), make_setting_button("音效", sfx_enabled, func() -> void:
 		toggle_sfx_setting()
 	))
-	grid.add_child(make_setting_button("报牌", tts_enabled, func() -> void:
+	make_setting_row(audio_grid, "语音报牌", "当前: %s" % ("开启" if tts_enabled else "关闭"), make_setting_button("报牌", tts_enabled, func() -> void:
 		toggle_tts_setting()
 	))
-	grid.add_child(make_setting_button("快速", fast_mode_enabled, func() -> void:
-		toggle_fast_mode_setting()
-	))
-	grid.add_child(make_setting_button("特效", fx_enabled, func() -> void:
-		toggle_fx_setting()
-	))
-	grid.add_child(make_audio_test_button(func() -> void:
+	make_setting_row(audio_grid, "播放测试", "试听当前音效音量", make_audio_test_button(func() -> void:
 		test_audio_setting()
 	))
-	grid.add_child(make_bgm_switch_button(func() -> void:
+
+	# 体验设置
+	var play_grid = make_settings_section(panel, SETTINGS_PLAY_SECTION_RECT, "体验")
+	play_grid.columns = 1
+	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_button("快速", fast_mode_enabled, func() -> void:
+		toggle_fast_mode_setting()
+	))
+	make_setting_row(play_grid, "桌面特效", "当前: %s" % ("开启" if fx_enabled else "关闭"), make_setting_button("特效", fx_enabled, func() -> void:
+		toggle_fx_setting()
+	))
+	make_setting_row(play_grid, "播放曲目", str(BGM_TRACKS[current_bgm_index].get("name", "默认曲目")), make_bgm_switch_button(func() -> void:
 		switch_bgm_track()
 	))
-	grid.add_child(make_reset_progress_button(func() -> void:
+
+	# 维护设置
+	var maint_grid = make_settings_section(panel, SETTINGS_MAINT_SECTION_RECT, "维护")
+	maint_grid.columns = 1
+	make_setting_row(maint_grid, "本地进度", "清空统计、偏好和离线记录", make_reset_progress_button(func() -> void:
 		reset_offline_progress()
 		close_settings_panel()
 	))
 
+func make_settings_section(parent: Control, rect: Rect2, title_text: String) -> GridContainer:
+	var section = make_panel(parent, rect, Color(0.010, 0.018, 0.022, 0.88), 14, Color(0.30, 0.34, 0.30, 0.26), 0)
+	# 左侧彩色装饰条
+	section.add_child(make_color_rect(rect_full(0.004, 0.02, 0.012, 0.98), Color(0.86, 0.74, 0.38, 0.52)))
+	var section_title = make_label(section, title_text, 14, Color(0.90, 0.84, 0.60), true)
+	apply_rect(section_title, SETTINGS_SECTION_TITLE_RECT)
+	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var grid = GridContainer.new()
+	configure_passive_container(grid)
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 12)
+	section.add_child(grid)
+	apply_rect(grid, SETTINGS_SECTION_GRID_RECT)
+	return grid
+
+func make_setting_row(parent: Control, title: String, status: String, button: Button) -> void:
+	var row = Panel.new()
+	configure_passive_container(row)
+	row.custom_minimum_size = Vector2(0, 42)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_stylebox_override("panel", style(Color(0.018, 0.028, 0.032, 0.88), 10, Color(0.28, 0.34, 0.30, 0.42), 1, 0))
+	parent.add_child(row)
+	var label = make_label(row, "%s\n%s" % [title, status], 12, Color(0.82, 0.84, 0.78), false)
+	apply_rect(label, SETTINGS_ROW_STATUS_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	configure_clipped_label(label)
+	button.custom_minimum_size = Vector2(0, 0)
+	apply_rect(button, SETTINGS_ROW_BUTTON_RECT)
+	row.add_child(button)
+
 func make_setting_button(label: String, enabled: bool, callback: Callable) -> Button:
-	var color = Color(0.24, 0.50, 0.40) if enabled else Color(0.42, 0.30, 0.28)
+	var color = Color(0.22, 0.52, 0.42) if enabled else Color(0.44, 0.32, 0.28)
 	var button = make_small_button("%s%s" % [label, "开" if enabled else "关"], color, callback)
-	button.custom_minimum_size = Vector2(132, 46)
+	button.custom_minimum_size = Vector2(140, 48)
 	button.add_theme_font_size_override("font_size", 18)
 	return button
 
 func make_audio_test_button(callback: Callable) -> Button:
-	var button = make_small_button("试音", Color(0.26, 0.40, 0.54), callback)
-	button.custom_minimum_size = Vector2(132, 46)
+	var button = make_small_button("试音", Color(0.28, 0.42, 0.56), callback)
+	button.custom_minimum_size = Vector2(140, 48)
 	button.add_theme_font_size_override("font_size", 18)
 	return button
 
 func make_bgm_switch_button(callback: Callable) -> Button:
 	# v1.0.157: 切换BGM按钮
 	var track_name = BGM_TRACKS[current_bgm_index]["name"]
-	var button = make_small_button("切歌:" + track_name, Color(0.36, 0.38, 0.54), callback)
-	button.custom_minimum_size = Vector2(132, 46)
-	button.add_theme_font_size_override("font_size", 18)
+	var button = make_small_button("切歌:" + track_name, Color(0.38, 0.40, 0.56), callback)
+	button.custom_minimum_size = Vector2(140, 48)
+	button.add_theme_font_size_override("font_size", 16)
 	return button
 
 func make_reset_progress_button(callback: Callable) -> Button:
-	var button = make_small_button("重置进度", Color(0.54, 0.34, 0.30), callback)
-	button.custom_minimum_size = Vector2(132, 46)
+	var button = make_small_button("重置进度", Color(0.56, 0.36, 0.30), callback)
+	button.custom_minimum_size = Vector2(140, 48)
 	button.add_theme_font_size_override("font_size", 18)
 	return button
 
@@ -3240,27 +3453,39 @@ func safe_content_pixel_size_for_margins(viewport_size: Vector2, margins: Vector
 	return Vector2(max(1.0, viewport_size.x - margins.x - margins.z), max(1.0, viewport_size.y - margins.y - margins.w))
 
 func draw_center(parent: Control) -> void:
-	var center = make_panel(parent, CENTER_PANEL_RECT, UI_DARK_SOFT, 28, UI_GOLD_SOFT)
-	make_panel(center, CENTER_INNER_RECT, CENTER_INNER_FILL.darkened(0.05), 60, CENTER_INNER_BORDER.darkened(0.10), 0)
-	var status = make_label(center, current_status_text(), 15, UI_TEXT_MAIN, true)
+	# 中心区域面板 - 增强视觉效果
+	var center = make_panel(parent, CENTER_PANEL_RECT, Color(0.006, 0.014, 0.016, 0.96), 30, Color(0.48, 0.42, 0.24, 0.52), 4)
+	# 内部装饰框
+	make_panel(center, CENTER_INNER_RECT, Color(0.004, 0.036, 0.036, 0.98), 62, Color(0.28, 0.26, 0.18, 0.42), 0)
+
+	# 状态文本
+	var status = make_label(center, current_status_text(), 16, Color(0.92, 0.90, 0.82), true)
 	apply_rect(status, CENTER_STATUS_RECT)
-	var wall_label = make_label(center, "余牌", 12, UI_TEXT_MUTED, false)
+
+	# 余牌信息
+	var wall_label = make_label(center, "余牌", 13, Color(0.72, 0.76, 0.70), false)
 	apply_rect(wall_label, CENTER_WALL_LABEL_RECT)
-	var wall_text = make_label(center, "%d" % get_wall_count(), 27, CENTER_WALL_COUNT_COLOR, true)
+	var wall_text = make_label(center, "%d" % get_wall_count(), 28, Color(0.66, 0.74, 0.70, 0.94), true)
 	apply_rect(wall_text, CENTER_WALL_COUNT_RECT)
+
+	# 上张牌
 	var last = get_last_discard()
 	if last != "":
-		var last_label = make_label(center, "上张", 12, UI_TEXT_MUTED, false)
+		var last_label = make_label(center, "上张", 13, Color(0.72, 0.76, 0.70), false)
 		apply_rect(last_label, CENTER_LAST_LABEL_RECT)
 		var tile = make_tile_view(last, CENTER_LAST_TILE_SIZE, false, Callable(), true)
 		center.add_child(tile)
 		apply_rect(tile, CENTER_LAST_TILE_RECT)
+
+	# 风位标签
 	for i in range(4):
-		var wind_color = CENTER_ACTIVE_WIND_COLOR if i == get_current_seat() else CENTER_IDLE_WIND_COLOR
-		var wind = make_label(center, str(CENTER_WIND_LABELS[i]), 18, wind_color, true)
+		var wind_color = Color(0.70, 0.70, 0.46, 0.94) if i == get_current_seat() else Color(0.50, 0.48, 0.32, 0.76)
+		var wind = make_label(center, str(CENTER_WIND_LABELS[i]), 19, wind_color, true)
 		apply_rect(wind, CENTER_WIND_RECTS[i])
+
+	# 骰子点装饰
 	for dot_rect in CENTER_DICE_DOT_RECTS:
-		make_panel(center, dot_rect, CENTER_DICE_DOT_FILL, 20, CENTER_DICE_DOT_BORDER, 0)
+		make_panel(center, dot_rect, Color(0.58, 0.54, 0.40, 0.64), 22, Color(0.74, 0.70, 0.56, 0.28), 0)
 
 func draw_dice_dot(parent: Control, x: float, y: float) -> void:
 	make_panel(parent, rect_full(x - CENTER_DICE_DOT_RADIUS, y - CENTER_DICE_DOT_RADIUS, x + CENTER_DICE_DOT_RADIUS, y + CENTER_DICE_DOT_RADIUS), CENTER_DICE_DOT_FILL, 20, CENTER_DICE_DOT_BORDER, 0)
@@ -3283,45 +3508,56 @@ func draw_melds(parent: Control) -> void:
 func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}) -> void:
 	var active = get_current_seat() == seat
 	var p = get_player_info(seat)
-	var panel_fill = Color(0.030, 0.040, 0.042, 0.92) if active else Color(0.018, 0.026, 0.030, 0.88)
-	var panel = make_panel(parent, rect, panel_fill, 18, Color(0.62, 0.54, 0.32, 0.46) if active else SEAT_ACCENT_COLORS[seat].blend(Color(0.18, 0.20, 0.20, 1.0)))
-	panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.03, 1.0), SEAT_ACCENT_COLORS[seat].blend(Color(0.10, 0.12, 0.12, 1.0))))
-	panel.add_child(make_color_rect(rect_full(0.03, 0.00, 0.97, 0.03), Color(1.0, 1.0, 1.0, 0.025)))
-	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.19), SEAT_HEADER_COLORS[seat].darkened(0.16), 18, Color(1.0, 0.90, 0.52, 0.08))
-	make_panel(panel, rect_full(0.0, 0.78, 1.0, 1.0), Color(0.010, 0.016, 0.018, 0.20), 18, Color(0.14, 0.18, 0.18, 0.06))
+	# 座位面板 - 增强的视觉区分
+	var panel_fill = Color(0.016, 0.028, 0.032, 0.94) if active else Color(0.012, 0.020, 0.024, 0.90)
+	var panel_border = Color(0.60, 0.52, 0.30, 0.56) if active else Color(0.32, 0.36, 0.34, 0.28)
+	var panel = make_panel(parent, rect, panel_fill, 18, panel_border, 3)
+	# 左侧座位颜色条
+	panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.025, 1.0), SEAT_ACCENT_COLORS[seat].blend(Color(0.12, 0.14, 0.14, 1.0))))
+	# 顶部高光
+	panel.add_child(make_color_rect(rect_full(0.025, 0.015, 0.975, 0.05), Color(1.0, 1.0, 1.0, 0.03)))
+	# 头部区域
+	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.19), SEAT_HEADER_COLORS[seat].darkened(0.14), 18, Color(1.0, 0.90, 0.52, 0.06))
+	# 底部区域
+	make_panel(panel, rect_full(0.0, 0.78, 1.0, 1.0), Color(0.008, 0.014, 0.016, 0.24), 18, Color(0.14, 0.18, 0.18, 0.05))
+
+	# 头像
 	var avatar = make_avatar_view(seat, active)
 	panel.add_child(avatar)
 	apply_rect(avatar, rect_full(0.04, 0.14, 0.36, 0.92))
+
 	var threat_report = seat_threat_report_from_map(seat, seat_threat_reports)
 	var threat_badge_text = opponent_seat_threat_badge_text_from_report(threat_report)
 	var display_name = str(p.get("name", "玩家"))
 	if mode == "offline" and seat != 0:
 		display_name += " · " + ai_profile_short_label(seat)
-	var name = make_label(panel, display_name, 15, UI_TEXT_MAIN, true)
+	var name = make_label(panel, display_name, 15, Color(0.94, 0.90, 0.80), true)
 	var name_right = 0.55 if threat_badge_text != "" else 0.75 if active else 0.96
 	apply_rect(name, rect_full(0.39, 0.10, name_right, 0.36))
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(name)
+
 	if active:
-		var turn_badge = make_label(panel, "行牌", 11, Color(0.13, 0.12, 0.08), true)
-		turn_badge.add_theme_stylebox_override("normal", style(Color(0.74, 0.62, 0.26, 0.90), 8, Color(1.0, 0.86, 0.44, 0.40), 1, 0))
-		apply_rect(turn_badge, rect_full(0.77, 0.11, 0.96, 0.32))
+		var turn_badge = make_badge(panel, rect_full(0.77, 0.11, 0.96, 0.32), "行牌", 11, Color(0.72, 0.60, 0.24, 0.92), Color(1.0, 0.86, 0.44, 0.42), Color(0.13, 0.12, 0.08))
+		turn_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if threat_badge_text != "":
-		var threat_badge = make_label(panel, threat_badge_text, 12, Color(0.10, 0.11, 0.10), true)
-		configure_clipped_label(threat_badge)
-		threat_badge.add_theme_stylebox_override("normal", style(opponent_seat_threat_color_from_report(threat_report), 9, Color(1.0, 0.91, 0.48, 0.56), 1))
-		apply_rect(threat_badge, rect_full(0.57, 0.11, 0.75, 0.32))
+		var threat_badge = make_badge(panel, rect_full(0.57, 0.11, 0.75, 0.32), threat_badge_text, 12, opponent_seat_threat_color_from_report(threat_report), Color(1.0, 0.91, 0.48, 0.56), Color(0.10, 0.11, 0.10))
+		threat_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	var package_text = package_preview(seat)
 	var threat_line = opponent_seat_threat_line_from_report(threat_report)
+	# 统计信息 - 增强的视觉效果
 	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[0], "手", str(int(p.get("hand_count", 0))), SEAT_ACCENT_COLORS[seat])
-	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[1], "花", str(int(p.get("flowers", 0))), Color(0.54, 0.42, 0.26))
-	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[2], "分", compact_score_text(int(p.get("score", 0))), Color(0.30, 0.42, 0.44))
+	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[1], "花", str(int(p.get("flowers", 0))), Color(0.56, 0.44, 0.28))
+	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[2], "分", compact_score_text(int(p.get("score", 0))), Color(0.32, 0.44, 0.46))
+
 	if package_text != "" or threat_line != "":
 		var info_text = package_text if package_text != "" else threat_line
-		var info = make_label(panel, info_text, 11, UI_TEXT_MUTED, false)
+		var info = make_label(panel, info_text, 11, Color(0.70, 0.74, 0.68), false)
 		apply_rect(info, rect_full(0.39, 0.58, 0.96, 0.72))
 		info.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(info)
+
 	var river_text = discard_preview(seat)
 	var flowers = flower_preview(seat)
 	var has_flower_tiles = draw_seat_flower_tiles(panel, seat)
@@ -3332,19 +3568,19 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	river.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(river)
 	if seat == dealer_seat:
-		var dealer = make_label(panel, "庄", 16, Color(0.96, 0.90, 0.72), true)
-		dealer.add_theme_stylebox_override("normal", style(Color(0.58, 0.12, 0.08, 0.90), 16, Color(1.0, 0.79, 0.34, 0.76), 2))
-		apply_rect(dealer, rect_full(0.27, 0.06, 0.38, 0.28))
+		var dealer = make_badge(panel, rect_full(0.27, 0.06, 0.38, 0.28), "庄", 16, Color(0.58, 0.12, 0.08, 0.90), Color(1.0, 0.79, 0.34, 0.76), Color(0.96, 0.90, 0.72))
+		dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func draw_seat_stat_pill(parent: Control, rect: Rect2, label_text: String, value_text: String, accent: Color) -> void:
-	var pill = make_panel(parent, rect, Color(0.016, 0.024, 0.026, 0.88), 8, accent.blend(Color(0.16, 0.17, 0.15, 1.0)), 0)
-	pill.add_child(make_color_rect(rect_full(0.0, 0.0, 0.08, 1.0), accent.darkened(0.08)))
-	var label = make_label(pill, label_text, 9, Color(0.70, 0.72, 0.64, 0.92), false)
-	apply_rect(label, rect_full(0.12, 0.12, 0.45, 0.88))
+	var pill = make_panel(parent, rect, Color(0.010, 0.018, 0.022, 0.92), 10, accent.blend(Color(0.18, 0.19, 0.17, 1.0)), 0)
+	# 左侧强调色条
+	pill.add_child(make_color_rect(rect_full(0.0, 0.0, 0.06, 1.0), accent.darkened(0.06)))
+	var label = make_label(pill, label_text, 9, Color(0.72, 0.74, 0.66, 0.94), false)
+	apply_rect(label, rect_full(0.10, 0.12, 0.42, 0.88))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(label)
-	var value = make_label(pill, value_text, 11, UI_TEXT_MAIN, true)
-	apply_rect(value, rect_full(0.32, 0.08, 0.94, 0.92))
+	var value = make_label(pill, value_text, 12, Color(0.96, 0.94, 0.88), true)
+	apply_rect(value, rect_full(0.34, 0.06, 0.94, 0.94))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(value)
 
@@ -3369,30 +3605,211 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 	return true
 
 func draw_table_log(parent: Control) -> void:
-	var panel = make_panel(parent, rect_full(0.018, 0.605, 0.190, 0.725), Color(0.012, 0.028, 0.032, 0.88), 14, Color(0.34, 0.44, 0.40, 0.26))
+	var panel = make_panel(parent, rect_full(0.018, 0.585, 0.205, 0.755), Color(0.012, 0.028, 0.032, 0.90), 14, Color(0.34, 0.44, 0.40, 0.26))
 	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.24), Color(0.040, 0.052, 0.050, 0.68), 14, Color(1.0, 1.0, 1.0, 0.025))
-	var title = make_label(panel, "最近牌谱", 12, Color(0.84, 0.78, 0.60), true)
-	apply_rect(title, rect_full(0.06, 0.02, 0.94, 0.24))
+	var title = make_label(panel, "行动流", 12, Color(0.84, 0.78, 0.60), true)
+	apply_rect(title, rect_full(0.06, 0.02, 0.45, 0.24))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var body = make_label(panel, join_tail_lines(table_logs, 2), 11, Color(0.74, 0.81, 0.75), false)
-	apply_rect(body, rect_full(0.06, 0.31, 0.94, 0.92))
+	var count = make_label(panel, "%d条" % table_logs.size(), 10, Color(0.54, 0.66, 0.62), false)
+	apply_rect(count, rect_full(0.52, 0.03, 0.94, 0.24))
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var recent = table_log_tail(3)
+	if recent.is_empty():
+		var empty = make_label(panel, "等待开局", 11, Color(0.62, 0.72, 0.68), false)
+		apply_rect(empty, rect_full(0.06, 0.36, 0.94, 0.72))
+		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		configure_clipped_label(empty)
+		return
+	for i in range(recent.size()):
+		draw_table_log_row(panel, i, str(recent[i]))
+
+func table_log_tail(limit: int) -> Array[String]:
+	var result: Array[String] = []
+	var start = max(0, table_logs.size() - limit)
+	for i in range(start, table_logs.size()):
+		result.append(str(table_logs[i]))
+	return result
+
+func draw_table_log_row(parent: Control, index: int, text: String) -> void:
+	var top = 0.30 + float(index) * 0.215
+	var row = make_panel(parent, rect_full(0.045, top, 0.955, top + 0.175), Color(0.026, 0.044, 0.044, 0.76), 8, Color(1.0, 1.0, 1.0, 0.030), 0)
+	var tag = table_log_tag(text)
+	var tag_color = table_log_tag_color(tag)
+	var badge = make_panel(row, rect_full(0.035, 0.22, 0.205, 0.78), tag_color.darkened(0.16), 6, tag_color, 0)
+	var badge_text = make_label(badge, tag, 10, Color(0.98, 0.96, 0.86), true)
+	apply_rect(badge_text, rect_full(0.0, 0.0, 1.0, 1.0))
+	var body = make_label(row, table_log_display_text(text), 11, Color(0.76, 0.84, 0.78), false)
+	apply_rect(body, rect_full(0.24, 0.10, 0.96, 0.90))
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	configure_clipped_label(body)
+
+func table_log_tag(text: String) -> String:
+	if text.find("胡") >= 0 or text.find("自摸") >= 0:
+		return "胡"
+	if text.find("杠") >= 0:
+		return "杠"
+	if text.find("碰") >= 0:
+		return "碰"
+	if text.find("吃") >= 0:
+		return "吃"
+	if text.find("可响应") >= 0:
+		return "应"
+	if text.find("打出") >= 0:
+		return "打"
+	if text.find("摸到") >= 0 or text.find("补花") >= 0:
+		return "摸"
+	if text.find("开始") >= 0 or text.find("坐庄") >= 0 or text.find("连庄") >= 0:
+		return "局"
+	return "记"
+
+func table_log_tag_color(tag: String) -> Color:
+	match tag:
+		"胡":
+			return Color(0.94, 0.42, 0.30, 0.96)
+		"杠":
+			return Color(0.62, 0.54, 0.88, 0.96)
+		"碰", "吃":
+			return Color(0.38, 0.66, 0.82, 0.96)
+		"应":
+			return Color(0.88, 0.62, 0.22, 0.96)
+		"打":
+			return Color(0.22, 0.58, 0.48, 0.96)
+		"摸":
+			return Color(0.42, 0.62, 0.52, 0.96)
+		"局":
+			return Color(0.74, 0.62, 0.34, 0.96)
+	return Color(0.44, 0.54, 0.54, 0.92)
+
+func table_log_display_text(text: String) -> String:
+	return text.replace("。", "")
 
 func draw_advisor_panel(parent: Control) -> void:
 	if mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled():
 		return
-	var panel = make_panel(parent, rect_full(0.155, 0.640, 0.545, 0.750), Color(0.014, 0.034, 0.040, 0.90), 14, Color(0.42, 0.36, 0.22, 0.34))
+	var panel = make_panel(parent, rect_full(0.155, 0.625, 0.545, 0.755), Color(0.014, 0.034, 0.040, 0.90), 14, Color(0.42, 0.36, 0.22, 0.34))
 	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.14), Color(0.044, 0.056, 0.058, 0.72), 14, Color(1.0, 1.0, 1.0, 0.025))
 	var title = make_label(panel, "牌势", 13, Color(0.86, 0.78, 0.56), true)
-	apply_rect(title, rect_full(0.03, 0.08, 0.16, 0.42))
+	apply_rect(title, rect_full(0.03, 0.04, 0.16, 0.22))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var body_text = advisor_panel_text()
-	var body = make_label(panel, body_text, 12, Color(0.75, 0.84, 0.78), false)
-	apply_rect(body, rect_full(0.17, 0.07, 0.97, 0.92))
-	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	body.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var context = make_label(panel, advisor_context_line(), 11, Color(0.62, 0.72, 0.68), false)
+	apply_rect(context, rect_full(0.17, 0.04, 0.97, 0.22))
+	context.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(context)
+	if offline_phase == "pending_claim":
+		draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "响应", "%s · %s" % [
+			tile_label(str(offline_pending_claim.get("tile", ""))),
+			claim_options_text(offline_pending_claim),
+		], human_claim_hint_text(), Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "牌局", advisor_turn_line(), current_status_text(), Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+		return
+	if can_self_discard():
+		var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
+		if reports.is_empty():
+			draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "推荐", "整理手牌", "等待可执行出牌", Color(0.86, 0.78, 0.56))
+			draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "收益", score_strategy_text(0), advisor_turn_line(), Color(0.62, 0.78, 0.82))
+			draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+			return
+		var best: Dictionary = reports[0]
+		draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "推荐", advisor_primary_text(best), advisor_options_text(reports, 3), Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "收益", advisor_value_text(best), advisor_shape_text(best), Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0, best), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+		return
+	draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "牌局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
+	draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "进程", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
+	draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+
+func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_text: String, sub_text: String, accent: Color) -> void:
+	var card = make_panel(parent, rect, Color(0.028, 0.048, 0.050, 0.78), 10, accent.darkened(0.28), 0)
+	var label = make_label(card, heading, 10, accent, true)
+	apply_rect(label, rect_full(0.07, 0.07, 0.93, 0.26))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(label)
+	var primary = make_label(card, main_text if main_text != "" else "--", 12, Color(0.86, 0.91, 0.84), true)
+	apply_rect(primary, rect_full(0.07, 0.30, 0.93, 0.56))
+	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(primary)
+	var secondary = make_label(card, sub_text if sub_text != "" else "暂无", 10, Color(0.66, 0.74, 0.70), false)
+	apply_rect(secondary, rect_full(0.07, 0.58, 0.93, 0.92))
+	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	secondary.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	secondary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	secondary.clip_text = true
+
+func advisor_context_line() -> String:
+	if offline_phase == "pending_claim":
+		return "响应窗口 · %s" % advisor_turn_line()
+	if can_self_discard():
+		return "我方决策 · %s" % advisor_turn_line()
+	return "观测中 · %s" % advisor_turn_line()
+
+func advisor_turn_line() -> String:
+	if current_seat >= 0 and current_seat < players.size():
+		return "%s行牌 · 余牌%d" % [players[current_seat]["name"], get_wall_count()]
+	return "余牌%d" % get_wall_count()
+
+func advisor_primary_text(report: Dictionary) -> String:
+	return "打%s · %s/%d" % [
+		tile_label(str(report.get("tile", ""))),
+		shanten_label(int(report.get("shanten", 8))),
+		int(report.get("ukeire", 0)),
+	]
+
+func advisor_options_text(reports: Array, limit: int = 3) -> String:
+	var options: Array[String] = []
+	for i in range(min(limit, reports.size())):
+		var report: Dictionary = reports[i]
+		var reason = str(report.get("reason_label", ""))
+		options.append("%s %s/%d%s" % [
+			tile_label(str(report.get("tile", ""))),
+			shanten_label(int(report.get("shanten", 8))),
+			int(report.get("ukeire", 0)),
+			" " + reason if reason != "" else "",
+		])
+	return "备选 " + "  ".join(options) if not options.is_empty() else "暂无备选"
+
+func advisor_value_text(report: Dictionary) -> String:
+	var parts: Array[String] = []
+	var plan_hint = hand_plan_text(report)
+	if plan_hint != "":
+		parts.append(plan_hint)
+	var tile_hint = effective_tile_text(report, 5)
+	if tile_hint != "":
+		parts.append(tile_hint)
+	var value_hint = wait_value_text(report)
+	if value_hint != "":
+		parts.append(value_hint)
+	return " · ".join(parts) if not parts.is_empty() else "保持牌型"
+
+func advisor_shape_text(report: Dictionary) -> String:
+	var parts: Array[String] = []
+	var reason_hint = str(report.get("reason_label", ""))
+	if reason_hint != "":
+		parts.append(reason_hint)
+	var shape_hint = str(report.get("shape_label", ""))
+	if shape_hint != "":
+		parts.append(shape_hint)
+	var quality_hint = wait_quality_text(report)
+	if quality_hint != "":
+		parts.append(quality_hint)
+	var score_text = score_strategy_text(0)
+	if score_text != "":
+		parts.append(score_text)
+	return " · ".join(parts)
+
+func advisor_defense_text(seat: int, best: Dictionary = {}) -> String:
+	var parts: Array[String] = []
+	if not best.is_empty():
+		parts.append(discard_safety_text(best))
+		var safest_hint = safest_discard_hint_text(best, safest_discard_report())
+		if safest_hint != "":
+			parts.append(safest_hint)
+	var threat = opponent_threat_summary(seat)
+	if threat != "":
+		parts.append(threat)
+	if get_last_discard() != "":
+		parts.append("上张 " + tile_label(get_last_discard()))
+	return " · ".join(parts) if not parts.is_empty() else "无明显压力"
 
 func advisor_panel_text() -> String:
 	if offline_phase == "pending_claim":
@@ -3414,28 +3831,75 @@ func advisor_panel_text() -> String:
 func draw_round_summary(parent: Control) -> void:
 	if mode != "offline" or offline_phase != "ended":
 		return
-	var panel = make_panel(parent, rect_full(0.315, 0.220, 0.685, 0.555), Color(0.014, 0.034, 0.040, 0.95), 18, Color(0.50, 0.40, 0.24, 0.50))
-	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.15), Color(0.048, 0.060, 0.058, 0.76), 18, Color(1.0, 1.0, 1.0, 0.025))
+	var panel = make_panel(parent, ROUND_SUMMARY_PANEL_RECT, Color(0.014, 0.034, 0.040, 0.95), 18, Color(0.50, 0.40, 0.24, 0.50))
+	make_panel(panel, ROUND_SUMMARY_HEADER_RECT, Color(0.048, 0.060, 0.058, 0.76), 18, Color(1.0, 1.0, 1.0, 0.025))
 	var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 24, Color(0.88, 0.80, 0.56), true)
-	apply_rect(title, rect_full(0.06, 0.05, 0.94, 0.20))
+	apply_rect(title, ROUND_SUMMARY_TITLE_RECT)
 	var lines: Array[String] = [round_summary]
-	lines.append("")
-	var rank = 1
-	for seat in ranked_seats_by_score():
-		lines.append("第%d  %s  %s分%s  花%d" % [rank, players[seat]["name"], compact_score_text(int(players[seat].get("score", 0))), score_delta_text(seat), int(players[seat].get("flowers", 0))])
-		rank += 1
 	var package_lines = active_package_lines()
 	if not package_lines.is_empty():
 		lines.append("")
 		lines.append_array(package_lines)
-	if not is_offline_match_finished():
-		var next_dealer = dealer_seat if offline_dealer_repeat else (dealer_seat + 1) % 4
-		lines.append("")
-		lines.append("下一局庄家：%s" % players[next_dealer]["name"])
-	var body = make_label(panel, "\n".join(lines), 16, Color(0.76, 0.86, 0.80), false)
-	apply_rect(body, rect_full(0.08, 0.23, 0.92, 0.92))
+	var body = make_label(panel, "\n".join(lines), 14, Color(0.76, 0.86, 0.80), false)
+	apply_rect(body, ROUND_SUMMARY_TEXT_RECT)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	configure_clipped_label(body)
+	var rank = 1
+	for seat in ranked_seats_by_score():
+		draw_round_summary_rank_row(panel, seat, rank)
+		rank += 1
+	if not is_offline_match_finished():
+		var next_dealer = dealer_seat if offline_dealer_repeat else (dealer_seat + 1) % 4
+		var next = make_badge(panel, ROUND_SUMMARY_NEXT_DEALER_RECT, "下一局庄家  %s" % players[next_dealer]["name"], 13, Color(0.030, 0.046, 0.048, 0.90), Color(0.46, 0.40, 0.24, 0.36), Color(0.82, 0.86, 0.76))
+		next.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
+	var top = ROUND_SUMMARY_RANK_START_Y + float(rank - 1) * (ROUND_SUMMARY_RANK_ROW_HEIGHT + ROUND_SUMMARY_RANK_ROW_GAP)
+	var row_rect = Rect2(Vector2(0.08, top), Vector2(0.92, top + ROUND_SUMMARY_RANK_ROW_HEIGHT))
+	var delta = round_summary_score_delta(seat)
+	var accent = round_summary_delta_color(delta, rank)
+	var row = make_panel(parent, row_rect, Color(0.016, 0.026, 0.030, 0.92), 11, accent.darkened(0.10), 0)
+	row.add_child(make_color_rect(rect_full(0.0, 0.0, 0.026, 1.0), accent))
+	var rank_badge = make_badge(row, rect_full(0.045, 0.18, 0.155, 0.82), "第%d" % rank, 12, accent.darkened(0.12), accent.lightened(0.10), Color(0.96, 0.94, 0.84))
+	rank_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var name = make_label(row, str(players[seat]["name"]), 14, UI_TEXT_MAIN, true)
+	apply_rect(name, rect_full(0.185, 0.12, 0.500, 0.88))
+	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(name)
+	var score = make_label(row, compact_score_text(int(players[seat].get("score", 0))), 14, UI_TEXT_MAIN, true)
+	apply_rect(score, rect_full(0.500, 0.12, 0.675, 0.88))
+	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(score)
+	var delta_label = make_label(row, round_summary_delta_text(delta), 13, accent.lightened(0.28), true)
+	apply_rect(delta_label, rect_full(0.700, 0.12, 0.835, 0.88))
+	delta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(delta_label)
+	var flowers = make_label(row, "花%d" % int(players[seat].get("flowers", 0)), 12, UI_TEXT_MUTED, false)
+	apply_rect(flowers, rect_full(0.860, 0.12, 0.970, 0.88))
+	flowers.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(flowers)
+
+func round_summary_score_delta(seat: int) -> int:
+	if seat < 0 or seat >= last_score_deltas.size():
+		return 0
+	return int(last_score_deltas[seat])
+
+func round_summary_delta_text(delta: int) -> String:
+	if delta > 0:
+		return "+%s" % compact_score_text(delta)
+	if delta < 0:
+		return compact_score_text(delta)
+	return "+0"
+
+func round_summary_delta_color(delta: int, rank: int) -> Color:
+	if delta > 0:
+		return Color(0.30, 0.64, 0.46, 0.92)
+	if delta < 0:
+		return Color(0.64, 0.34, 0.30, 0.88)
+	if rank == 1:
+		return Color(0.70, 0.58, 0.28, 0.90)
+	return Color(0.34, 0.42, 0.44, 0.84)
 
 func score_delta_text(seat: int) -> String:
 	if seat < 0 or seat >= last_score_deltas.size():
@@ -3457,21 +3921,33 @@ func compact_score_text(value: int) -> String:
 	return "%s%d" % [sign, amount]
 
 func draw_hand(parent: Control) -> void:
-	var tray = make_panel(parent, rect_full(0.180, 0.765, 0.990, 0.985), Color(0.024, 0.032, 0.034, 0.97), 20, Color(0.62, 0.54, 0.34, 0.52))
-	make_panel(tray, rect_full(0.012, 0.055, 0.988, 0.135), Color(0.078, 0.086, 0.074, 0.78), 12, Color(1.0, 0.88, 0.45, 0.16))
-	make_panel(tray, rect_full(0.012, 0.145, 0.988, 0.170), Color(0.014, 0.024, 0.026, 0.30), 10, Color(0.18, 0.20, 0.18, 0.06))
-	var tray_text = make_label(tray, hand_tray_text(), 13, Color(0.90, 0.84, 0.62), true)
+	# 手牌托盘 - 增强视觉效果
+	var tray = make_panel(parent, HAND_TRAY_RECT, Color(0.014, 0.022, 0.024, 0.98), 22, Color(0.62, 0.54, 0.34, 0.56), 4)
+	# 顶部栏
+	make_panel(tray, HAND_TRAY_TOP_RAIL_RECT, Color(0.062, 0.070, 0.058, 0.82), 14, Color(1.0, 0.88, 0.45, 0.20))
+	# 分隔线
+	make_panel(tray, HAND_TRAY_DIVIDER_RECT, Color(0.010, 0.018, 0.020, 0.36), 12, Color(0.16, 0.18, 0.16, 0.08))
+
+	# 状态文本
+	var tray_text = make_label(tray, hand_tray_text(), 14, Color(0.92, 0.86, 0.62), true)
 	tray_text.clip_text = true
-	apply_rect(tray_text, rect_full(0.030, 0.040, 0.970, 0.145))
+	apply_rect(tray_text, HAND_TRAY_TEXT_RECT)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(tray_text)
+
+	# 状态徽章
+	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_tray_state_text(), 12, hand_tray_state_fill(), hand_tray_state_border(), Color(0.92, 0.92, 0.84))
+	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	var hand = get_self_hand()
 	var hand_layout = hand_layout_metrics(hand)
 	var hand_box = HBoxContainer.new()
 	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	configure_passive_container(hand_box)
 	hand_box.add_theme_constant_override("separation", int(hand_layout.get("separation", 5)))
-	apply_rect(hand_box, rect_full(0.015, 0.15, 0.985, 0.96))
+	apply_rect(hand_box, HAND_TRAY_TILES_RECT)
 	tray.add_child(hand_box)
+
 	var assist_enabled = player_ai_assist_enabled()
 	var suggested_tile = suggest_human_discard() if assist_enabled else ""
 	var hand_reports = discard_report_map_for_hand() if assist_enabled else {}
@@ -3633,6 +4109,38 @@ func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> Str
 	if safe_hint != "":
 		parts.append(safe_hint)
 	return " · ".join(parts)
+
+func hand_tray_state_text() -> String:
+	if mode == "offline":
+		if offline_phase == "ended":
+			return "结算"
+		if offline_phase == "pending_claim":
+			return "响应"
+		if can_self_discard():
+			return "出牌"
+		return "等待"
+	if mode == "online_game":
+		var pending = online_game.get("pending", null)
+		if typeof(pending) == TYPE_DICTIONARY and pending.get("options", []).size() > 0:
+			return "响应"
+		return "出牌" if can_self_discard() else "等待"
+	return "准备"
+
+func hand_tray_state_fill() -> Color:
+	match hand_tray_state_text():
+		"出牌":
+			return Color(0.20, 0.48, 0.42, 0.94)
+		"响应":
+			return Color(0.62, 0.38, 0.22, 0.94)
+		"结算":
+			return Color(0.42, 0.32, 0.54, 0.94)
+		"等待":
+			return Color(0.24, 0.30, 0.34, 0.92)
+	return Color(0.26, 0.34, 0.42, 0.92)
+
+func hand_tray_state_border() -> Color:
+	var fill = hand_tray_state_fill()
+	return Color(fill.r + 0.18, fill.g + 0.16, fill.b + 0.12, 0.42)
 
 func draw_actions(parent: Control) -> void:
 	action_bar = HBoxContainer.new()
@@ -9593,8 +10101,8 @@ func tile_risk_color(risk: String) -> Color:
 
 func make_action_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
-	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 18)
-	apply_button_style(button, color, 13, 2, 2)
+	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
+	apply_button_style(button, color, 14, 2, 3)
 	return button
 
 func configure_action_button_size(button: Button, width: float, height: float, font_size: int) -> void:
@@ -9719,6 +10227,15 @@ func make_label(parent: Control, text: String, font_size: int, color: Color, bol
 		label.add_theme_constant_override("shadow_offset_y", 1)
 	parent.add_child(label)
 	return label
+
+func make_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color) -> Control:
+	var badge = make_panel(parent, rect, fill, 9, border, 0)
+	var label = make_label(badge, text, font_size, text_color, true)
+	apply_rect(label, rect_full(0.08, 0.04, 0.92, 0.96))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	configure_clipped_label(label)
+	return badge
 
 func configure_clipped_label(label: Label) -> void:
 	label.clip_text = true

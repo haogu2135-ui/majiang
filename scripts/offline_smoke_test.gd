@@ -527,7 +527,9 @@ func run() -> void:
 	scene.table_logs.append("这是一条很长的补花和包赔牌谱记录四")
 	scene.draw_table_log(log_parent)
 	check(label_is_clipped(first_label_containing_text(log_parent, "补花")), "table log clips long rows inside compact panel")
-	check(count_label_nodes(log_parent) == 2, "table log reuses one body label for visible rows")
+	check(count_label_nodes(log_parent) == 8, "table log renders title, count, and three structured action rows")
+	check(count_labels_with_exact_text(log_parent, "摸") == 3, "table log tags recent draw and flower events")
+	check(has_label_text(log_parent, "4条"), "table log shows total event count")
 	log_parent.queue_free()
 	scene.players[0]["flower_tiles"] = ["H1", "H2"]
 	var flower_strip_parent = Control.new()
@@ -1890,6 +1892,14 @@ func count_label_nodes(node: Node) -> int:
 	var total = 1 if node is Label else 0
 	for child in node.get_children():
 		total += count_label_nodes(child)
+	return total
+
+func count_labels_with_exact_text(node: Node, text: String) -> int:
+	var total = 0
+	if node is Label and str((node as Label).text) == text:
+		total += 1
+	for child in node.get_children():
+		total += count_labels_with_exact_text(child, text)
 	return total
 
 func labels_ignore_mouse(node: Node) -> bool:
