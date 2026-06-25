@@ -50,6 +50,8 @@ const UPDATE_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.159-go
 const UPDATE_FILE_PATH := "user://updates/YunzhuoMahjongGodot-v1.0.159-godot.apk"
 const SETTINGS_PATH := "user://settings.cfg"
 const PROGRESS_PATH := "user://offline_progress.cfg"
+const STATS_PATH := "user://game_stats.cfg"
+const TUTORIAL_PATH := "user://tutorial.cfg"
 const AUDIO_DEFAULTS_VERSION := "1.0.159-godot"
 const BGM_STREAM_PATH := "res://assets/audio/bgm_guofeng2.mp3"
 # v1.0.159: 默认BGM改为《胡笳十八拍》，支持多个BGM切换
@@ -248,6 +250,16 @@ var fx_enabled = true
 var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
 var reset_progress_confirming = false
+var tutorial_step = 0  # 新手教程步骤：0=未开始，1-5=各步骤，-1=已完成
+var tutorial_panel: Control = null
+var game_stats = {
+	"games_played": 0,
+	"games_won": 0,
+	"total_score": 0,
+	"best_score": 0,
+	"win_rate": 0.0,
+	"total_hands": 0,
+}
 var mode = "menu"
 var screen_layer: Control
 var root_layer: Control
@@ -606,6 +618,8 @@ func _ready() -> void:
 	load_assets()
 	verify_audio_assets()
 	load_settings()
+	load_game_stats()
+	load_tutorial_state()
 	setup_audio()
 	ensure_fx_layer()
 	setup_update_downloader()
@@ -971,6 +985,7 @@ func load_settings() -> void:
 	tts_enabled = bool(config.get_value("audio", "tts_enabled", tts_enabled))
 	fast_mode_enabled = bool(config.get_value("gameplay", "fast_mode_enabled", fast_mode_enabled))
 	fx_enabled = bool(config.get_value("gameplay", "fx_enabled", fx_enabled))
+	current_bgm_index = int(config.get_value("gameplay", "current_bgm_index", 0))
 	if str(config.get_value("audio", "defaults_version", "")) != AUDIO_DEFAULTS_VERSION:
 		music_enabled = true
 		sfx_enabled = true
@@ -985,7 +1000,63 @@ func save_settings() -> void:
 	config.set_value("audio", "defaults_version", AUDIO_DEFAULTS_VERSION)
 	config.set_value("gameplay", "fast_mode_enabled", fast_mode_enabled)
 	config.set_value("gameplay", "fx_enabled", fx_enabled)
+	config.set_value("gameplay", "current_bgm_index", current_bgm_index)
 	config.save(SETTINGS_PATH)
+
+func load_game_stats() -> void:
+	var config = ConfigFile.new()
+	if config.load(STATS_PATH) != OK:
+		game_stats = {
+			"games_played": 0,
+			"games_won": 0,
+			"total_score": 0,
+			"best_score": 0,
+			"win_rate": 0.0,
+			"total_hands": 0,
+		}
+		return
+	game_stats = {
+		"games_played": int(config.get_value("stats", "games_played", 0)),
+		"games_won": int(config.get_value("stats", "games_won", 0)),
+		"total_score": int(config.get_value("stats", "total_score", 0)),
+		"best_score": int(config.get_value("stats", "best_score", 0)),
+		"win_rate": float(config.get_value("stats", "win_rate", 0.0)),
+		"total_hands": int(config.get_value("stats", "total_hands", 0)),
+	}
+
+func save_game_stats() -> void:
+	var config = ConfigFile.new()
+	config.set_value("stats", "games_played", game_stats.get("games_played", 0))
+	config.set_value("stats", "games_won", game_stats.get("games_won", 0))
+	config.set_value("stats", "total_score", game_stats.get("total_score", 0))
+	config.set_value("stats", "best_score", game_stats.get("best_score", 0))
+	config.set_value("stats", "win_rate", game_stats.get("win_rate", 0.0))
+	config.set_value("stats", "total_hands", game_stats.get("total_hands", 0))
+	config.save(STATS_PATH)
+
+func load_tutorial_state() -> void:
+	var config = ConfigFile.new()
+	if config.load(TUTORIAL_PATH) == OK:
+		tutorial_step = int(config.get_value("tutorial", "step", 0))
+	else:
+		tutorial_step = 0
+
+func save_tutorial_state() -> void:
+	var config = ConfigFile.new()
+	config.set_value("tutorial", "step", tutorial_step)
+	config.save(TUTORIAL_PATH)
+
+func record_game_result(won: bool, score: int, hands_played: int) -> void:
+	game_stats["games_played"] = int(game_stats.get("games_played", 0)) + 1
+	game_stats["total_hands"] = int(game_stats.get("total_hands", 0)) + hands_played
+	game_stats["total_score"] = int(game_stats.get("total_score", 0)) + score
+	if won:
+		game_stats["games_won"] = int(game_stats.get("games_won", 0)) + 1
+	if score > int(game_stats.get("best_score", 0)):
+		game_stats["best_score"] = score
+	var played = int(game_stats.get("games_played", 0))
+	game_stats["win_rate"] = float(game_stats.get("games_won", 0)) / float(max(1, played))
+	save_game_stats()
 
 func load_offline_progress() -> bool:
 	var config = ConfigFile.new()
@@ -2076,9 +2147,25 @@ func show_menu() -> void:
 	var footer = make_panel(root_layer, rect_full(0.02, 0.82, 0.98, 0.97), Color(0.014, 0.028, 0.036, 0.88), 16, Color(0.42, 0.36, 0.22, 0.32))
 	footer.add_child(make_color_rect(rect_full(0.008, 0.04, 0.018, 0.96), Color(0.88, 0.74, 0.34, 0.56)))
 
-	var footer_text = make_label(footer, "当前版本 v%s · Android APK 已签名导出 · 开源免费" % app_version(), 15, Color(0.78, 0.76, 0.66), true)
-	apply_rect(footer_text, rect_full(0.04, 0.25, 0.65, 0.75))
+	var footer_text = make_label(footer, "当前版本 v%s · 开源免费" % app_version(), 15, Color(0.78, 0.76, 0.66), true)
+	apply_rect(footer_text, rect_full(0.04, 0.25, 0.52, 0.75))
 	footer_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 统计概览 - 显示胜率等信息
+	var stats_text = "已玩%d局 · 胜率%d%%" % [
+		int(game_stats.get("games_played", 0)),
+		int(float(game_stats.get("win_rate", 0.0)) * 100.0)
+	]
+	var stats_badge = make_badge(footer, rect_full(0.36, 0.20, 0.52, 0.80), stats_text, 12, Color(0.024, 0.046, 0.052, 0.92), Color(0.34, 0.50, 0.46, 0.30), Color(0.80, 0.86, 0.76))
+	stats_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# 规则按钮
+	var rules = make_small_button("规则", Color(0.32, 0.46, 0.40), func() -> void:
+		show_rules_screen()
+	)
+	rules.custom_minimum_size = Vector2(88, 48)
+	footer.add_child(rules)
+	apply_rect(rules, rect_full(0.56, 0.20, 0.65, 0.80))
 
 	# 设置按钮 - 更大的触摸目标
 	var settings = make_small_button("设置", Color(0.26, 0.44, 0.58), func() -> void:
@@ -2086,7 +2173,12 @@ func show_menu() -> void:
 	)
 	settings.custom_minimum_size = Vector2(100, 52)
 	footer.add_child(settings)
-	apply_rect(settings, rect_full(0.70, 0.20, 0.80, 0.80))
+	apply_rect(settings, rect_full(0.68, 0.20, 0.78, 0.80))
+
+	# 首次游戏提示
+	if tutorial_step == 0:
+		var tutorial_hint = make_badge(root_layer, rect_full(0.35, 0.70, 0.65, 0.78), "新玩家？点击查看规则", 15, Color(0.18, 0.40, 0.36, 0.92), Color(0.30, 0.62, 0.52, 0.48), Color(0.94, 0.96, 0.92))
+		tutorial_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
@@ -5597,6 +5689,12 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	last_score_deltas = []
 	for seat in range(players.size()):
 		last_score_deltas.append(int(players[seat].get("score", 0)) - int(before_scores[seat]))
+
+	# 记录游戏统计
+	var player_score_delta = int(last_score_deltas[0])
+	var player_won = winner == 0
+	record_game_result(player_won, player_score_delta, offline_hand_number)
+
 	offline_phase = "ended"
 	offline_turn_needs_draw = false
 	offline_pending_claim.clear()
@@ -10930,3 +11028,138 @@ func claim_color(claim: String) -> Color:
 		"chi":
 			return Color(0.28, 0.58, 0.46)
 	return Color(0.40, 0.44, 0.45)
+
+func show_rules_screen() -> void:
+	"""显示麻将规则和玩法说明"""
+	mode = "rules"
+	clear_screen()
+
+	# 主面板
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
+	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
+	panel.add_child(make_color_rect(rect_full(0.014, 0.012, 0.986, 0.028), Color(1.0, 1.0, 1.0, 0.045)))
+
+	# 标题
+	var title = make_label(panel, "麻将玩法指南", 30, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 返回按钮
+	var back = make_small_button("返回", Color(0.32, 0.38, 0.40), func() -> void:
+		show_menu()
+	)
+	back.custom_minimum_size = Vector2(100, 48)
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+
+	# 内容区域
+	var content = VBoxContainer.new()
+	content.anchor_left = 0.05
+	content.anchor_top = 0.12
+	content.anchor_right = 0.95
+	content.anchor_bottom = 0.95
+	content.add_theme_constant_override("separation", 16)
+	panel.add_child(content)
+
+	# 基础规则
+	add_rule_section(content, "🎯 游戏目标", [
+		"组成4组面子（顺子或刻子）+ 1对将牌即可胡牌",
+		"通过摸牌、打牌、吃碰杠来组合手牌",
+		"可以自摸胡牌，也可以点炮胡牌",
+	])
+
+	# 牌型说明
+	add_rule_section(content, "🀄 牌型介绍", [
+		"顺子：同花色连续3张牌（如 123万）",
+		"刻子：相同3张牌（如 111万）",
+		"杠子：相同4张牌（杠牌专用）",
+		"将牌：任意一对相同的牌",
+	])
+
+	# 特殊牌型
+	add_rule_section(content, "⭐ 特殊牌型", [
+		"七对：7对将牌即可胡牌",
+		"十三幺：13种幺九牌各一张 + 其中任意一对",
+		"清一色：全部是同一花色的牌",
+	])
+
+	# 操作说明
+	add_rule_section(content, "🎮 游戏操作", [
+		"点击手牌打出该张牌",
+		"出现吃、碰、杠、胡按钮时点击操作",
+		"点击'重开'可重新开始本局",
+	])
+
+	# 记录已查看教程
+	tutorial_step = -1
+	save_tutorial_state()
+
+func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array) -> void:
+	var section = make_panel(parent, rect_full(0.0, 0.0, 1.0, 0.22), Color(0.012, 0.022, 0.028, 0.92), 14, Color(0.34, 0.38, 0.36, 0.28), 0)
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section.custom_minimum_size.y = 0
+
+	var vbox = VBoxContainer.new()
+	vbox.anchor_left = 0.04
+	vbox.anchor_top = 0.08
+	vbox.anchor_right = 0.96
+	vbox.anchor_bottom = 0.92
+	section.add_child(vbox)
+
+	var title_label = make_label(vbox, title_text, 18, Color(0.90, 0.82, 0.50), true)
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	for line in lines:
+		var line_label = make_label(vbox, "  " + str(line), 14, Color(0.80, 0.84, 0.76), false)
+		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		line_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+func show_stats_screen() -> void:
+	"""显示详细游戏统计"""
+	mode = "stats"
+	clear_screen()
+
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
+	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
+
+	var title = make_label(panel, "游戏统计", 30, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	var back = make_small_button("返回", Color(0.32, 0.38, 0.40), func() -> void:
+		show_menu()
+	)
+	back.custom_minimum_size = Vector2(100, 48)
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+
+	# 统计数据
+	var content = VBoxContainer.new()
+	content.anchor_left = 0.08
+	content.anchor_top = 0.15
+	content.anchor_right = 0.92
+	content.anchor_bottom = 0.92
+	content.add_theme_constant_override("separation", 20)
+	panel.add_child(content)
+
+	add_stat_row(content, "总场次", "%d 局" % int(game_stats.get("games_played", 0)))
+	add_stat_row(content, "胜场", "%d 局" % int(game_stats.get("games_won", 0)))
+	add_stat_row(content, "胜率", "%.1f%%" % (float(game_stats.get("win_rate", 0.0)) * 100.0))
+	add_stat_row(content, "累计分数", "%s 分" % compact_score_text(int(game_stats.get("total_score", 0))))
+	add_stat_row(content, "最高得分", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))))
+	add_stat_row(content, "总手牌数", "%d 局" % int(game_stats.get("total_hands", 0)))
+
+func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String) -> void:
+	var row = Panel.new()
+	row.custom_minimum_size = Vector2(0, 52)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_stylebox_override("panel", style(Color(0.014, 0.024, 0.030, 0.92), 12, Color(0.30, 0.34, 0.32, 0.32), 0))
+	parent.add_child(row)
+
+	var label = make_label(row, label_text, 18, Color(0.82, 0.84, 0.78), true)
+	apply_rect(label, rect_full(0.06, 0.15, 0.45, 0.85))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	var value = make_label(row, value_text, 20, Color(0.94, 0.90, 0.68), true)
+	apply_rect(value, rect_full(0.52, 0.12, 0.94, 0.88))
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
