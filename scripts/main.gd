@@ -1996,6 +1996,10 @@ func close_settings_panel() -> void:
 func refresh_current_screen() -> void:
 	if mode == "menu":
 		show_menu()
+	elif mode == "rules":
+		show_rules_screen()
+	elif mode == "stats":
+		show_stats_screen()
 	elif mode == "online_lobby":
 		show_online_lobby()
 	elif mode == "offline" or mode == "online_game":
@@ -3923,10 +3927,15 @@ func advisor_panel_text() -> String:
 func draw_round_summary(parent: Control) -> void:
 	if mode != "offline" or offline_phase != "ended":
 		return
-	var panel = make_panel(parent, ROUND_SUMMARY_PANEL_RECT, Color(0.014, 0.034, 0.040, 0.95), 18, Color(0.50, 0.40, 0.24, 0.50))
-	make_panel(panel, ROUND_SUMMARY_HEADER_RECT, Color(0.048, 0.060, 0.058, 0.76), 18, Color(1.0, 1.0, 1.0, 0.025))
-	var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 24, Color(0.88, 0.80, 0.56), true)
+	var panel = make_panel(parent, ROUND_SUMMARY_PANEL_RECT, Color(0.010, 0.026, 0.032, 0.97), 22, Color(0.54, 0.44, 0.26, 0.54), 5)
+	# 标题栏
+	make_panel(panel, ROUND_SUMMARY_HEADER_RECT, Color(0.042, 0.054, 0.052, 0.82), 22, Color(1.0, 1.0, 1.0, 0.032))
+	# 左侧金色装饰
+	panel.add_child(make_color_rect(rect_full(0.006, 0.04, 0.012, 0.96), Color(0.90, 0.76, 0.36, 0.68)))
+
+	var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 26, Color(0.94, 0.86, 0.48), true)
 	apply_rect(title, ROUND_SUMMARY_TITLE_RECT)
+
 	var lines: Array[String] = [round_summary]
 	var package_lines = active_package_lines()
 	if not package_lines.is_empty():

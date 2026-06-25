@@ -20,7 +20,7 @@ func run() -> void:
 	check(bool(ProjectSettings.get_setting("audio/driver/enable_input", false)), "audio input is enabled for voice features")
 	var copied_profile = scene.ai_profile(1)
 	copied_profile["attack"] = 9.99
-	check(is_equal_approx(scene.ai_profile_value(1, "attack"), 1.02) and scene.ai_profile_label(1) == "守门清" and scene.ai_profile_short_label(2) == "速", "AI profile reads use canonical profiles while public profile copies stay isolated")
+	check(is_equal_approx(scene.ai_profile_value(1, "attack"), 0.92) and scene.ai_profile_label(1) == "防守型" and scene.ai_profile_short_label(2) == "攻", "AI profile reads use canonical profiles while public profile copies stay isolated")
 	scene.start_offline()
 	check(scene.mode == "offline", "starts offline mode")
 	check(scene.can_self_discard(), "human can discard after deal")
