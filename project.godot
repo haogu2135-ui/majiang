@@ -7,7 +7,7 @@ config_version=5
 [application]
 
 config/name="云桌麻将 Godot"
-config/version="1.0.159-godot"
+config/version="1.0.162-godot"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.6", "Mobile")
 config/icon="res://assets/tiles/tile_honor_east.png"

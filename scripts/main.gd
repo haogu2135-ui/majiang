@@ -44,16 +44,22 @@ class WallBackStrip:
 
 const DEFAULT_HOST := "129.146.180.88"
 const DEFAULT_PORT := 23333
-const APP_VERSION := "1.0.159-godot"
+const APP_VERSION := "1.0.162-godot"
 const UPDATE_MANIFEST_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json"
-const UPDATE_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.159-godot.apk"
-const UPDATE_FILE_PATH := "user://updates/YunzhuoMahjongGodot-v1.0.159-godot.apk"
+const UPDATE_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.162-godot.apk"
+const UPDATE_FILE_PATH := "user://updates/YunzhuoMahjongGodot-v1.0.162-godot.apk"
 const SETTINGS_PATH := "user://settings.cfg"
 const PROGRESS_PATH := "user://offline_progress.cfg"
 const STATS_PATH := "user://game_stats.cfg"
 const TUTORIAL_PATH := "user://tutorial.cfg"
+const ACHIEVEMENTS_PATH := "user://achievements.cfg"
+const LOGIN_PATH := "user://login.cfg"
 const AUDIO_DEFAULTS_VERSION := "1.0.159-godot"
 const BGM_STREAM_PATH := "res://assets/audio/bgm_guofeng2.mp3"
+const ANIMATION_ASSET_PATHS := {
+	"coin_spin": "res://assets/animations/coin_spin.json",
+	"victory_sparkle": "res://assets/animations/victory_sparkle.json",
+}
 # v1.0.159: 默认BGM改为《胡笳十八拍》，支持多个BGM切换
 const BGM_TRACKS := [
 	{"name": "胡笳十八拍", "path": "res://assets/audio/bgm_guofeng2.mp3"},
@@ -216,8 +222,29 @@ const SCORE_TABLE := {
 	7: 12800,
 	8: 25600,
 }
+const SEASON_RANKS := ["青铜", "白银", "黄金", "铂金", "钻石", "大师"]
+const SEASON_RANK_POINTS := [0, 100, 300, 600, 1000, 1500]
+const SEASON_PATH := "user://season.cfg"
+const TASKS_PATH := "user://tasks.cfg"
+const INVENTORY_PATH := "user://inventory.cfg"
+const CURRENCY_PATH := "user://currency.cfg"
+const DAILY_TASKS := [
+	{"id": "win_3", "desc": "胡牌3次", "target": 3, "reward_coins": 50},
+	{"id": "peng_3", "desc": "使用碰3次", "target": 3, "reward_coins": 30},
+	{"id": "gang_1", "desc": "使用杠1次", "target": 1, "reward_coins": 40},
+	{"id": "play_5", "desc": "完成5局游戏", "target": 5, "reward_coins": 60},
+	{"id": "score_plus", "desc": "单局正分", "target": 1, "reward_coins": 25},
+]
+const ITEM_TYPES := {
+	"swap_card": {"name": "换牌卡", "desc": "重新摸一张牌", "icon": "🔄", "cost_gems": 5},
+	"peek_card": {"name": "偷看卡", "desc": "查看对手一张手牌", "icon": "👁", "cost_gems": 8},
+	"lucky_charm": {"name": "幸运符", "desc": "本局胡牌概率显示+10%", "icon": "🍀", "cost_gems": 10},
+	"double_coins": {"name": "双倍金币卡", "desc": "本局金币奖励翻倍", "icon": "💰", "cost_gems": 15},
+}
 
 var tile_textures: Dictionary = {}
+var icon_textures: Dictionary = {}
+var animation_specs: Dictionary = {}
 var tile_back: Texture2D
 var felt_texture: Texture2D
 var wood_texture: Texture2D
@@ -250,8 +277,12 @@ var fx_enabled = true
 var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
 var reset_progress_confirming = false
+var exit_confirm_panel: Control = null
 var tutorial_step = 0  # 新手教程步骤：0=未开始，1-5=各步骤，-1=已完成
 var tutorial_panel: Control = null
+var show_hand_hint = true  # 是否显示手牌操作提示
+var interactive_guide_active = false  # 交互式引导是否激活
+var interactive_guide_type = ""  # 当前引导类型：discard/claim/self_win
 var game_stats = {
 	"games_played": 0,
 	"games_won": 0,
@@ -259,6 +290,46 @@ var game_stats = {
 	"best_score": 0,
 	"win_rate": 0.0,
 	"total_hands": 0,
+}
+var achievements = {
+	"first_win": false,  # 首次胡牌
+	"seven_pairs": false,  # 七对
+	"thirteen_orphans": false,  # 十三幺
+	"pure_one_suit": false,  # 清一色
+	"mixed_one_suit": false,  # 混一色
+	"big_three_dragons": false,  # 大三元
+	"small_three_dragons": false,  # 小三元
+	"big_four_winds": false,  # 大四喜
+	"small_four_winds": false,  # 小四喜
+	"all_honors": false,  # 字一色
+	"all_triplets": false,  # 碰碰胡
+	"full_straight": false,  # 一条龙
+	"concealed_hand": false,  # 门清胡牌
+	"self_draw": false,  # 自摸胡牌
+	"rob_gang": false,  # 抢杠胡
+	"five_wins": false,  # 累计5胜
+	"ten_wins": false,  # 累计10胜
+}
+var last_login_date = ""  # 上次登录日期 YYYY-MM-DD
+var consecutive_login_days = 0  # 连续登录天数
+# 赛季系统
+var season_data = {
+	"season_id": "",
+	"points": 0,
+	"highest_rank": 0,
+	"wins": 0,
+	"games": 0,
+}
+# 任务系统
+var daily_tasks = []  # 当日任务列表
+var task_progress = {}  # 任务进度
+var last_task_reset_date = ""  # 上次任务重置日期
+# 道具系统
+var inventory = {}  # 道具库存 {"swap_card": 2, "peek_card": 1, ...}
+# 虚拟货币
+var currency = {
+	"coins": 0,
+	"gems": 0,
 }
 var mode = "menu"
 var screen_layer: Control
@@ -303,6 +374,7 @@ var offline_last_draw: Dictionary = {}
 var offline_ai_active = false
 var round_summary = ""
 var last_score_deltas: Array[int] = []
+var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
 var current_human_advice: Array = []
 var tile_order: Dictionary = {}
 var tile_sort_order: Dictionary = {}
@@ -386,6 +458,24 @@ var fx_burst_tween: Tween
 var fx_ripple_root: Control
 var fx_ripple_rings: Array[Panel] = []
 var fx_ripple_tween: Tween
+var transition_overlay: ColorRect
+var transition_tween: Tween
+var transition_pending_callback: Callable
+var transition_active := false
+var toast_container: Control
+var toast_tween: Tween
+var toast_current: Control
+
+# 牌面动画系统变量 / Tile Animation System Variables
+var tile_flip_animations: Dictionary = {}  # 进行中的翻转动画
+var tile_fly_animations: Array = []         # 进行中的飞行动画
+
+# 环境氛围动画变量 / Environmental Animation Variables
+var ambient_layer: Control
+var ambient_petals: Array[Control] = []
+var ambient_clouds: Array[Control] = []
+var ambient_particles: Array[Control] = []
+var ambient_tween: Tween
 
 const TILE_FACE_LABELS := ["E", "S", "N", "R", "Z", "F", "P"]
 const NUMBER_SUIT_STARTS := [0, 9, 18]
@@ -601,6 +691,58 @@ const SETTINGS_SECTION_GRID_RECT := Rect2(Vector2(0.035, 0.295), Vector2(0.965, 
 const SETTINGS_ROW_STATUS_RECT := Rect2(Vector2(0.045, 0.145), Vector2(0.510, 0.855))
 const SETTINGS_ROW_BUTTON_RECT := Rect2(Vector2(0.565, 0.145), Vector2(0.955, 0.855))
 const UI_BACKGROUND_TINT := Color(0.004, 0.006, 0.008, 0.996)
+
+# ============================================================
+# 国风雅韵主题色彩系统 / Guofeng Theme Color System
+# ============================================================
+
+# 水墨色系 / Ink Wash Colors
+const INK_BLACK := Color(0.02, 0.02, 0.03, 1.0)           # 墨黑
+const INK_DARK := Color(0.06, 0.06, 0.08, 1.0)            # 浓墨
+const INK_MEDIUM := Color(0.12, 0.11, 0.14, 1.0)          # 淡墨
+const INK_LIGHT := Color(0.22, 0.20, 0.24, 1.0)           # 极淡墨
+const INK_WASH := Color(0.35, 0.32, 0.36, 0.85)           # 水墨晕染
+
+# 朱红系 / Cinnabar Red System
+const CINNABAR := Color(0.82, 0.18, 0.12, 1.0)            # 朱砂红
+const VERMILION := Color(0.88, 0.28, 0.18, 1.0)           # 朱红
+const ROUGE := Color(0.72, 0.22, 0.24, 1.0)               # 胭脂
+const SCARLET_GLOW := Color(0.94, 0.42, 0.32, 0.92)       # 丹霞光
+
+# 金色系 / Gold System
+const GOLD_DARK := Color(0.62, 0.48, 0.18, 1.0)           # 暗金
+const GOLD_PRIMARY := Color(0.88, 0.72, 0.28, 1.0)        # 正金
+const GOLD_BRIGHT := Color(0.96, 0.84, 0.42, 1.0)         # 明金
+const GOLD_LIGHT := Color(0.98, 0.92, 0.68, 1.0)          # 淡金
+const GOLD_GLOW := Color(1.0, 0.90, 0.55, 0.85)           # 金辉
+
+# 玉色系 / Jade System
+const JADE_DARK := Color(0.12, 0.32, 0.28, 1.0)           # 墨玉
+const JADE_PRIMARY := Color(0.28, 0.56, 0.48, 1.0)        # 青玉
+const JADE_LIGHT := Color(0.42, 0.72, 0.62, 1.0)          # 白玉
+const JADE_GLOW := Color(0.52, 0.82, 0.72, 0.88)          # 玉润
+
+# 青花系 / Blue & White Porcelain
+const PORCELAIN := Color(0.96, 0.98, 0.98, 1.0)           # 瓷白
+const CELADON := Color(0.72, 0.84, 0.80, 1.0)             # 青瓷
+const AZURE := Color(0.22, 0.48, 0.72, 1.0)               # 青花蓝
+const AZURE_LIGHT := Color(0.42, 0.64, 0.88, 1.0)         # 淡青
+
+# 宣纸系 / Rice Paper System
+const PAPER_WARM := Color(0.98, 0.96, 0.90, 1.0)          # 宣纸暖
+const PAPER_COOL := Color(0.95, 0.96, 0.94, 1.0)          # 宣纸冷
+const PAPER_AGED := Color(0.94, 0.90, 0.82, 1.0)          # 古宣纸
+
+# 祥云装饰色 / Auspicious Cloud Colors
+const CLOUD_WHITE := Color(1.0, 1.0, 1.0, 0.72)           # 白云
+const CLOUD_GOLD := Color(0.96, 0.88, 0.52, 0.62)         # 金云
+const CLOUD_MIST := Color(0.88, 0.90, 0.92, 0.42)         # 烟云
+
+# 国风主题面板色 / Guofeng Theme Panel Colors
+const GUOFENG_PANEL_FILL := Color(0.018, 0.022, 0.028, 0.96)
+const GUOFENG_PANEL_BORDER := Color(0.32, 0.28, 0.22, 0.48)
+const GUOFENG_PANEL_GOLD_LINE := Color(0.76, 0.62, 0.28, 0.62)
+
 # 动画 / 特效层参数。特效节点全部挂在持久化的 fx_layer 上，整桌每次 render_game
 # 调用 clear_screen 时 fx_layer 不被释放，因此补间动画可以跨整桌重绘连续播放。
 const FX_WIN_BURST_DURATION_MSEC := 1400
@@ -609,6 +751,30 @@ const FX_TURN_PULSE_PERIOD_MSEC := 1700
 const FX_WIN_RING_COUNT := 3
 const FX_BURST_LABEL_FONT_SIZE := 58
 const FX_LAYER_Z_INDEX := 16
+const TRANSITION_DURATION_MSEC := 280
+const HAND_SLIDE_IN_DURATION_MSEC := 220
+const TOAST_DEFAULT_DURATION_MSEC := 1800
+const TOAST_SLIDE_DURATION_MSEC := 220
+const FX_TILE_FLIP_DURATION_MSEC := 180
+const FX_SCORE_CHANGE_DURATION_MSEC := 320
+const FX_CLAIM_FLY_DURATION_MSEC := 280
+
+# 牌面动画参数 / Tile Animation Parameters
+const FX_TILE_FLY_CURVE := Tween.TRANS_QUAD
+const FX_TILE_FLY_EASE := Tween.EASE_OUT
+const FX_TILE_CLAIM_BURST_DURATION_MSEC := 280
+
+# 增强胜利特效参数 / Enhanced Victory Effect Parameters
+const FX_WIN_PARTICLE_COUNT := 48
+const FX_WIN_SPARK_COUNT := 24
+const FX_WIN_DURATION_ENHANCED_MSEC := 2200
+const FX_WIN_SHAKE_AMPLITUDE := 4.0
+const FX_WIN_SHAKE_FREQUENCY := 12.0
+
+# 界面过渡动画参数 / Interface Transition Parameters
+const TRANSITION_SLIDE_DURATION_MSEC := 350
+const TRANSITION_CARD_FLIP_DURATION_MSEC := 280
+const TRANSITION_STAGGER_DELAY_MSEC := 40
 
 func _ready() -> void:
 	randomize()
@@ -620,6 +786,12 @@ func _ready() -> void:
 	load_settings()
 	load_game_stats()
 	load_tutorial_state()
+	load_achievements()
+	load_login_state()
+	load_season_data()
+	load_tasks()
+	load_inventory()
+	load_currency()
 	setup_audio()
 	ensure_fx_layer()
 	setup_update_downloader()
@@ -628,9 +800,77 @@ func _ready() -> void:
 
 func _finish_startup() -> void:
 	if OS.get_cmdline_user_args().has("--offline-preview"):
-		start_offline()
+		start_offline(true)
 	else:
-		show_menu()
+		# 检查每日签到
+		var login_result = check_and_update_login()
+		if login_result.get("show_reward", false):
+			show_daily_login_panel(login_result)
+		else:
+			show_menu(true)
+
+func show_daily_login_panel(login_result: Dictionary) -> void:
+	"""显示每日登录签到面板"""
+	mode = "daily_login"
+	clear_screen()
+
+	# 主面板
+	var panel = make_panel(root_layer, rect_full(0.18, 0.18, 0.82, 0.82), Color(0.008, 0.020, 0.024, 0.98), 24, Color(0.62, 0.52, 0.32, 0.56), 5)
+	panel.add_child(make_color_rect(rect_full(0.006, 0.03, 0.014, 0.97), Color(0.92, 0.78, 0.38, 0.76)))
+
+	# 标题
+	var title = make_label(panel, "📅 每日签到", 32, Color(0.96, 0.88, 0.52), true)
+	apply_rect(title, rect_full(0.08, 0.08, 0.92, 0.20))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 连续签到天数
+	var days = int(login_result.get("consecutive_days", 1))
+	var days_text = "已连续签到 %d 天" % days
+	var days_label = make_label(panel, days_text, 24, Color(0.94, 0.94, 0.88), true)
+	apply_rect(days_label, rect_full(0.10, 0.28, 0.90, 0.42))
+	days_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 奖励说明
+	var reward_text = "今日奖励："
+	if days % 7 == 0:
+		reward_text += "🎁 双倍分数加成卡 ×1"
+	else:
+		reward_text += "金币 +100"
+	var reward_label = make_label(panel, reward_text, 20, Color(0.86, 0.90, 0.84), false)
+	apply_rect(reward_label, rect_full(0.12, 0.48, 0.88, 0.60))
+	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 签到进度条
+	var progress = days % 7
+	if progress == 0:
+		progress = 7
+	var progress_panel = make_panel(panel, rect_full(0.14, 0.62, 0.86, 0.78), Color(0.018, 0.030, 0.034, 0.92), 12, Color(0.38, 0.42, 0.40, 0.36), 0)
+	var progress_fill = ColorRect.new()
+	progress_fill.color = Color(0.40, 0.72, 0.56, 0.88)
+	progress_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	progress_panel.add_child(progress_fill)
+	apply_rect(progress_fill, rect_full(0.0, 0.0, float(progress) / 7.0, 1.0))
+	var progress_text = make_label(progress_panel, "%d/7 天" % progress, 14, Color(0.96, 0.96, 0.92), true)
+	apply_rect(progress_text, rect_full(0.0, 0.15, 1.0, 0.85))
+	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 确认按钮
+	var confirm_btn = make_small_button("领取奖励", Color(0.32, 0.62, 0.52), func() -> void:
+		show_toast("签到成功！%s" % reward_text.replace("今日奖励：", ""), 2500)
+		show_menu(true)
+	)
+	confirm_btn.custom_minimum_size = Vector2(200, 56)
+	panel.add_child(confirm_btn)
+	apply_rect(confirm_btn, rect_full(0.35, 0.82, 0.65, 0.96))
+
+	# 面板弹出动画
+	if fx_enabled_effective():
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.scale = Vector2(0.85, 0.85)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
+		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.85, 0.85)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 func show_loading_screen() -> void:
 	clear_screen()
@@ -1045,6 +1285,261 @@ func save_tutorial_state() -> void:
 	var config = ConfigFile.new()
 	config.set_value("tutorial", "step", tutorial_step)
 	config.save(TUTORIAL_PATH)
+
+func load_achievements() -> void:
+	var config = ConfigFile.new()
+	if config.load(ACHIEVEMENTS_PATH) == OK:
+		for key in achievements.keys():
+			achievements[key] = bool(config.get_value("achievements", key, false))
+	else:
+		# 初始化默认成就状态
+		for key in achievements.keys():
+			achievements[key] = false
+
+func save_achievements() -> void:
+	var config = ConfigFile.new()
+	for key in achievements.keys():
+		config.set_value("achievements", key, achievements[key])
+	config.save(ACHIEVEMENTS_PATH)
+
+func unlock_achievement(key: String) -> bool:
+	if not achievements.has(key):
+		return false
+	if achievements[key]:
+		return false  # 已解锁
+	achievements[key] = true
+	save_achievements()
+	return true
+
+func load_login_state() -> void:
+	var config = ConfigFile.new()
+	if config.load(LOGIN_PATH) == OK:
+		last_login_date = str(config.get_value("login", "last_date", ""))
+		consecutive_login_days = int(config.get_value("login", "consecutive_days", 0))
+	else:
+		last_login_date = ""
+		consecutive_login_days = 0
+
+func save_login_state() -> void:
+	var config = ConfigFile.new()
+	config.set_value("login", "last_date", last_login_date)
+	config.set_value("login", "consecutive_days", consecutive_login_days)
+	config.save(LOGIN_PATH)
+
+func check_and_update_login() -> Dictionary:
+	var today = Time.get_date_string_from_system()
+	var result = {
+		"is_first_login_today": false,
+		"consecutive_days": consecutive_login_days,
+		"show_reward": false,
+	}
+
+	if last_login_date != today:
+		# 今天首次登录
+		result.is_first_login_today = true
+		var yesterday = Time.get_date_string_from_unix_time(Time.get_unix_time_from_system() - 86400)
+		if last_login_date == yesterday:
+			# 连续登录
+			consecutive_login_days += 1
+		else:
+			# 中断了，重新计数
+			consecutive_login_days = 1
+		last_login_date = today
+		save_login_state()
+		result.consecutive_days = consecutive_login_days
+		result.show_reward = true
+		# 重置每日任务
+		reset_daily_tasks()
+
+	return result
+
+# ============================================================
+# 赛季系统
+# ============================================================
+
+func load_season_data() -> void:
+	var config = ConfigFile.new()
+	if config.load(SEASON_PATH) == OK:
+		season_data = {
+			"season_id": str(config.get_value("season", "season_id", "")),
+			"points": int(config.get_value("season", "points", 0)),
+			"highest_rank": int(config.get_value("season", "highest_rank", 0)),
+			"wins": int(config.get_value("season", "wins", 0)),
+			"games": int(config.get_value("season", "games", 0)),
+		}
+	else:
+		season_data = {
+			"season_id": Time.get_date_string_from_system().substr(0, 7),  # YYYY-MM
+			"points": 0,
+			"highest_rank": 0,
+			"wins": 0,
+			"games": 0,
+		}
+
+func save_season_data() -> void:
+	var config = ConfigFile.new()
+	config.set_value("season", "season_id", season_data.get("season_id", ""))
+	config.set_value("season", "points", season_data.get("points", 0))
+	config.set_value("season", "highest_rank", season_data.get("highest_rank", 0))
+	config.set_value("season", "wins", season_data.get("wins", 0))
+	config.set_value("season", "games", season_data.get("games", 0))
+	config.save(SEASON_PATH)
+
+func get_current_rank() -> int:
+	var points = int(season_data.get("points", 0))
+	for i in range(SEASON_RANK_POINTS.size() - 1, -1, -1):
+		if points >= SEASON_RANK_POINTS[i]:
+			return i
+	return 0
+
+func get_rank_name(rank: int = -1) -> String:
+	var r = rank if rank >= 0 else get_current_rank()
+	return SEASON_RANKS[r] if r >= 0 and r < SEASON_RANKS.size() else "青铜"
+
+func add_season_points(points: int, won: bool) -> void:
+	season_data["points"] = int(season_data.get("points", 0)) + points
+	season_data["games"] = int(season_data.get("games", 0)) + 1
+	if won:
+		season_data["wins"] = int(season_data.get("wins", 0)) + 1
+	var current = get_current_rank()
+	if current > int(season_data.get("highest_rank", 0)):
+		season_data["highest_rank"] = current
+	save_season_data()
+
+# ============================================================
+# 任务系统
+# ============================================================
+
+func load_tasks() -> void:
+	var config = ConfigFile.new()
+	if config.load(TASKS_PATH) == OK:
+		last_task_reset_date = str(config.get_value("tasks", "last_reset", ""))
+		var progress = config.get_value("tasks", "progress", {})
+		if typeof(progress) == TYPE_DICTIONARY:
+			task_progress = progress.duplicate()
+	else:
+		task_progress = {}
+		last_task_reset_date = ""
+	reset_daily_tasks()
+
+func save_tasks() -> void:
+	var config = ConfigFile.new()
+	config.set_value("tasks", "last_reset", last_task_reset_date)
+	config.set_value("tasks", "progress", task_progress)
+	config.save(TASKS_PATH)
+
+func reset_daily_tasks() -> void:
+	var today = Time.get_date_string_from_system()
+	if last_task_reset_date != today:
+		last_task_reset_date = today
+		task_progress.clear()
+		for task in DAILY_TASKS:
+			task_progress[task.id] = 0
+		daily_tasks = DAILY_TASKS.duplicate()
+		save_tasks()
+
+func update_task_progress(task_id: String, amount: int = 1) -> void:
+	if not task_progress.has(task_id):
+		return
+	task_progress[task_id] = int(task_progress.get(task_id, 0)) + amount
+	# 检查任务完成
+	for task in DAILY_TASKS:
+		if task.id == task_id:
+			var target = int(task.get("target", 1))
+			if int(task_progress.get(task_id, 0)) >= target:
+				claim_task_reward(task)
+			break
+	save_tasks()
+
+func claim_task_reward(task: Dictionary) -> void:
+	var reward = int(task.get("reward_coins", 0))
+	currency["coins"] = int(currency.get("coins", 0)) + reward
+	save_currency()
+	show_toast("任务完成！+%d金币" % reward, 2500)
+
+func get_task_status(task_id: String) -> Dictionary:
+	for task in DAILY_TASKS:
+		if task.id == task_id:
+			var progress = int(task_progress.get(task_id, 0))
+			var target = int(task.get("target", 1))
+			return {
+				"desc": task.get("desc", ""),
+				"progress": progress,
+				"target": target,
+				"reward": int(task.get("reward_coins", 0)),
+				"completed": progress >= target,
+			}
+	return {}
+
+# ============================================================
+# 道具系统
+# ============================================================
+
+func load_inventory() -> void:
+	var config = ConfigFile.new()
+	if config.load(INVENTORY_PATH) == OK:
+		var inv = config.get_value("inventory", "items", {})
+		if typeof(inv) == TYPE_DICTIONARY:
+			inventory = inv.duplicate()
+	else:
+		inventory = {}
+
+func save_inventory() -> void:
+	var config = ConfigFile.new()
+	config.set_value("inventory", "items", inventory)
+	config.save(INVENTORY_PATH)
+
+func add_item(item_id: String, count: int = 1) -> void:
+	inventory[item_id] = int(inventory.get(item_id, 0)) + count
+	save_inventory()
+
+func use_item(item_id: String) -> bool:
+	if int(inventory.get(item_id, 0)) <= 0:
+		return false
+	inventory[item_id] = int(inventory.get(item_id, 0)) - 1
+	save_inventory()
+	return true
+
+func get_item_count(item_id: String) -> int:
+	return int(inventory.get(item_id, 0))
+
+# ============================================================
+# 虚拟货币系统
+# ============================================================
+
+func load_currency() -> void:
+	var config = ConfigFile.new()
+	if config.load(CURRENCY_PATH) == OK:
+		currency = {
+			"coins": int(config.get_value("currency", "coins", 0)),
+			"gems": int(config.get_value("currency", "gems", 0)),
+		}
+	else:
+		currency = {"coins": 500, "gems": 10}  # 初始货币
+
+func save_currency() -> void:
+	var config = ConfigFile.new()
+	config.set_value("currency", "coins", currency.get("coins", 0))
+	config.set_value("currency", "gems", currency.get("gems", 0))
+	config.save(CURRENCY_PATH)
+
+func add_coins(amount: int) -> void:
+	currency["coins"] = int(currency.get("coins", 0)) + amount
+	save_currency()
+
+func add_gems(amount: int) -> void:
+	currency["gems"] = int(currency.get("gems", 0)) + amount
+	save_currency()
+
+func can_afford_gems(amount: int) -> bool:
+	return int(currency.get("gems", 0)) >= amount
+
+func spend_gems(amount: int) -> bool:
+	if not can_afford_gems(amount):
+		return false
+	currency["gems"] = int(currency.get("gems", 0)) - amount
+	save_currency()
+	return true
 
 func record_game_result(won: bool, score: int, hands_played: int) -> void:
 	game_stats["games_played"] = int(game_stats.get("games_played", 0)) + 1
@@ -1993,15 +2488,86 @@ func close_settings_panel() -> void:
 	reset_progress_confirming = false
 	refresh_current_screen()
 
+func show_exit_confirm() -> void:
+	"""显示退出确认对话框"""
+	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
+		return
+	var overlay = Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.modulate = Color(1, 1, 1, 0)
+	root_layer.add_child(overlay)
+	exit_confirm_panel = overlay
+
+	# 遮罩层
+	var mask = ColorRect.new()
+	mask.color = Color(0, 0, 0, 0.65)
+	mask.set_anchors_preset(Control.PRESET_FULL_RECT)
+	mask.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(mask)
+
+	# 对话框面板
+	var dialog = make_panel(overlay, rect_full(0.28, 0.35, 0.72, 0.65), Color(0.012, 0.026, 0.032, 0.98), 20, Color(0.48, 0.40, 0.24, 0.52), 5)
+	dialog.add_child(make_color_rect(rect_full(0.006, 0.04, 0.012, 0.96), Color(0.90, 0.76, 0.36, 0.72)))
+
+	# 标题
+	var title = make_label(dialog, "确认退出", 24, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.08, 0.12, 0.92, 0.32))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 提示文本
+	var message = "是否退出当前游戏？\n进度将自动保存。"
+	var msg_label = make_label(dialog, message, 16, Color(0.80, 0.84, 0.78), false)
+	apply_rect(msg_label, rect_full(0.10, 0.38, 0.90, 0.62))
+	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	# 按钮行
+	var button_row = HBoxContainer.new()
+	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_row.add_theme_constant_override("separation", 16)
+	apply_rect(button_row, rect_full(0.12, 0.70, 0.88, 0.90))
+	dialog.add_child(button_row)
+
+	# 继续游戏按钮
+	var continue_btn = make_small_button("继续游戏", Color(0.28, 0.52, 0.44), func() -> void:
+		hide_exit_confirm()
+	)
+	continue_btn.custom_minimum_size = Vector2(140, 52)
+	button_row.add_child(continue_btn)
+
+	# 退出按钮
+	var exit_btn = make_small_button("退出游戏", Color(0.56, 0.36, 0.30), func() -> void:
+		hide_exit_confirm()
+		save_offline_progress()
+		show_menu()
+	)
+	exit_btn.custom_minimum_size = Vector2(140, 52)
+	button_row.add_child(exit_btn)
+
+	# 淡入动画
+	var tween = create_tween()
+	tween.tween_property(overlay, "modulate", Color(1, 1, 1, 1), 0.2)
+
+func hide_exit_confirm() -> void:
+	"""隐藏退出确认对话框"""
+	if exit_confirm_panel == null or not is_instance_valid(exit_confirm_panel):
+		return
+	var panel = exit_confirm_panel
+	exit_confirm_panel = null
+	var tween = create_tween()
+	tween.tween_property(panel, "modulate", Color(1, 1, 1, 0), 0.15)
+	tween.tween_callback(func(): panel.queue_free())
+
 func refresh_current_screen() -> void:
 	if mode == "menu":
-		show_menu()
+		show_menu(true)
 	elif mode == "rules":
-		show_rules_screen()
+		show_rules_screen(true)
 	elif mode == "stats":
-		show_stats_screen()
+		show_stats_screen(true)
 	elif mode == "online_lobby":
-		show_online_lobby()
+		show_online_lobby(true)
 	elif mode == "offline" or mode == "online_game":
 		request_game_render()
 
@@ -2085,44 +2651,60 @@ func clear_screen() -> void:
 	apply_safe_area_offsets(root_layer)
 	screen_layer.add_child(root_layer)
 
-func show_menu() -> void:
+func show_menu(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	var _build_menu = func() -> void:
+		_show_menu_impl()
+	if instant or not fx_enabled_effective():
+		_build_menu.call()
+	else:
+		play_screen_transition(_build_menu)
+
+func _show_menu_impl() -> void:
 	if voice_enabled:
 		stop_voice_chat(false)
 	mode = "menu"
 	clear_fx_overlays()
+	# 停止环境动画
+	stop_ambient_animation()
 	recover_audio_after_screen_change()
 	clear_screen()
 
 	# 增强的背景效果
 	add_background(root_layer)
 
-	# 主标题区域 - 增大高度，更好的视觉层次
-	var header = make_panel(root_layer, rect_full(0.02, 0.03, 0.98, 0.22), Color(0.012, 0.032, 0.040, 0.96), 20, Color(0.62, 0.52, 0.32, 0.62))
-	# 左侧金色装饰条
-	header.add_child(make_color_rect(rect_full(0.008, 0.04, 0.018, 0.96), Color(0.92, 0.78, 0.38, 0.88)))
-	# 顶部高光线
-	header.add_child(make_color_rect(rect_full(0.018, 0.015, 0.982, 0.035), Color(1.0, 1.0, 1.0, 0.06)))
-	# 底部分隔线
-	header.add_child(make_color_rect(rect_full(0.018, 0.92, 0.982, 0.96), Color(0.56, 0.48, 0.28, 0.28)))
+	# 添加国风装饰元素 - 水墨边框装饰
+	make_ink_border(root_layer, rect_full(0.015, 0.025, 0.985, 0.225), 3.0)
 
-	# 游戏标题 - 更大更突出
-	var title = make_label(header, "云桌麻将", 42, Color(0.96, 0.88, 0.52), true)
+	# 主标题区域 - 增大高度，更好的视觉层次
+	var header = make_panel(root_layer, rect_full(0.02, 0.03, 0.98, 0.22), GUOFENG_PANEL_FILL, 22, GUOFENG_PANEL_BORDER)
+	# 左侧金色装饰条
+	header.add_child(make_color_rect(rect_full(0.006, 0.04, 0.016, 0.96), GOLD_GLOW))
+	# 顶部高光线 - 更柔和
+	header.add_child(make_color_rect(rect_full(0.016, 0.012, 0.984, 0.028), Color(1.0, 1.0, 1.0, 0.05)))
+	# 底部分隔线 - 金色
+	header.add_child(make_color_rect(rect_full(0.016, 0.88, 0.984, 0.92), GUOFENG_PANEL_GOLD_LINE))
+	draw_menu_hero_illustration(header)
+
+	# 游戏标题 - 更大更突出，使用国风金色
+	var title = make_label(header, "云桌麻将", 44, GOLD_BRIGHT, true)
 	apply_rect(title, rect_full(0.04, 0.08, 0.42, 0.55))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
-	# 副标题
-	var subtitle = make_label(header, "Godot 4.6 开源引擎 · 横屏牌桌 · 真实牌面素材", 16, Color(0.74, 0.84, 0.80), false)
-	apply_rect(subtitle, rect_full(0.04, 0.56, 0.56, 0.82))
+	# 副标题 - 更柔和的颜色
+	var subtitle = make_label(header, "Godot 4.6 · 国风雅韵 · 真实牌面", 15, Color(0.68, 0.80, 0.76), false)
+	apply_rect(subtitle, rect_full(0.04, 0.54, 0.56, 0.82))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
-	# 版本徽章
-	var version = make_badge(header, rect_full(0.04, 0.82, 0.14, 0.95), "v%s" % app_version(), 12, Color(0.020, 0.044, 0.052, 0.94), Color(0.48, 0.40, 0.22, 0.48), Color(0.84, 0.86, 0.78))
+	# 版本徽章 - 使用国风配色
+	var version = make_badge(header, rect_full(0.04, 0.82, 0.14, 0.95), "v%s" % app_version(), 12, INK_DARK, GOLD_DARK, Color(0.84, 0.86, 0.78))
 	version.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# 右侧功能徽章组 - 重新布局，更紧凑
-	var hero_badge_a = make_badge(header, rect_full(0.72, 0.12, 0.82, 0.36), "单机模式", 14, Color(0.14, 0.38, 0.34, 0.92), Color(0.26, 0.62, 0.54, 0.42), Color(0.94, 0.96, 0.92))
+	# 右侧功能徽章组 - 使用国风配色
+	var hero_badge_a = make_badge(header, rect_full(0.72, 0.12, 0.82, 0.36), "单机模式", 14, JADE_DARK, JADE_PRIMARY, PAPER_WARM)
 	hero_badge_a.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var hero_badge_b = make_badge(header, rect_full(0.84, 0.12, 0.94, 0.36), "联机对战", 14, Color(0.14, 0.32, 0.42, 0.92), Color(0.30, 0.56, 0.74, 0.42), Color(0.94, 0.96, 0.92))
+	var hero_badge_b = make_badge(header, rect_full(0.84, 0.12, 0.94, 0.36), "联机对战", 14, AZURE.darkened(0.3), AZURE_LIGHT, PAPER_WARM)
 	hero_badge_b.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# 主菜单卡片区域 - 居中，增大间距
@@ -2136,48 +2718,60 @@ func show_menu() -> void:
 	var content_size = safe_content_pixel_size()
 	row.position = Vector2(max(0.0, (content_size.x - 1040.0) * 0.5), max(0.0, (content_size.y - 240.0) * 0.5))
 
-	# 三个主功能卡片 - 更大更醒目
-	row.add_child(make_menu_card("单机人机\nAI 自动打牌", Color(0.58, 0.50, 0.32), func() -> void:
-		start_offline()
-	))
-	row.add_child(make_menu_card("联机房间\n连接本机服务器", Color(0.24, 0.48, 0.44), func() -> void:
-		show_online_lobby()
-	))
-	row.add_child(make_menu_card("检查更新\n游戏内下载", Color(0.30, 0.42, 0.58), func() -> void:
-		start_update_download()
-	))
+	# 三个主功能卡片 - 更大更醒目，使用国风配色
+	var cards: Array = []
+	var card1 = make_menu_card("单机人机\nAI 自动打牌", JADE_PRIMARY, func() -> void: start_offline(), "play")
+	row.add_child(card1)
+	cards.append(card1)
 
-	# 底部信息栏
-	var footer = make_panel(root_layer, rect_full(0.02, 0.82, 0.98, 0.97), Color(0.014, 0.028, 0.036, 0.88), 16, Color(0.42, 0.36, 0.22, 0.32))
-	footer.add_child(make_color_rect(rect_full(0.008, 0.04, 0.018, 0.96), Color(0.88, 0.74, 0.34, 0.56)))
+	var card2 = make_menu_card("联机房间\n连接本机服务器", AZURE, func() -> void: show_online_lobby(), "users")
+	row.add_child(card2)
+	cards.append(card2)
 
-	var footer_text = make_label(footer, "当前版本 v%s · 开源免费" % app_version(), 15, Color(0.78, 0.76, 0.66), true)
-	apply_rect(footer_text, rect_full(0.04, 0.25, 0.52, 0.75))
+	var card3 = make_menu_card("商店\n道具和货币", VERMILION, func() -> void: show_shop_screen(), "gift")
+	row.add_child(card3)
+	cards.append(card3)
+
+	# 添加卡片进场动画
+	play_card_flip_animation(row, cards, true)
+
+	# 底部信息栏 - 使用国风配色
+	var footer = make_panel(root_layer, rect_full(0.02, 0.82, 0.98, 0.97), INK_MEDIUM, 18, GOLD_DARK)
+	footer.add_child(make_color_rect(rect_full(0.006, 0.04, 0.016, 0.96), GOLD_PRIMARY))
+
+	var footer_text = make_label(footer, "当前版本 v%s" % app_version(), 15, Color(0.80, 0.78, 0.70), true)
+	apply_rect(footer_text, rect_full(0.04, 0.25, 0.28, 0.75))
 	footer_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 货币显示 - 使用国风配色
+	var coins_text = "💰%d" % int(currency.get("coins", 0))
+	var gems_text = "💎%d" % int(currency.get("gems", 0))
+	var currency_badge = make_badge(footer, rect_full(0.30, 0.20, 0.50, 0.80), "%s  %s" % [coins_text, gems_text], 12, INK_DARK, GOLD_DARK, GOLD_LIGHT)
+	currency_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_animation_preview(footer, rect_full(0.270, 0.22, 0.315, 0.78), "coin_spin")
+
+	# 赛季段位
+	var rank_name = get_rank_name()
+	var rank_badge = make_badge(footer, rect_full(0.52, 0.20, 0.66, 0.80), rank_name, 12, Color(0.024, 0.046, 0.052, 0.92), Color(0.44, 0.50, 0.46, 0.30), Color(0.80, 0.86, 0.76))
+	rank_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# 统计概览 - 显示胜率等信息
 	var stats_text = "已玩%d局 · 胜率%d%%" % [
 		int(game_stats.get("games_played", 0)),
 		int(float(game_stats.get("win_rate", 0.0)) * 100.0)
 	]
-	var stats_badge = make_badge(footer, rect_full(0.36, 0.20, 0.52, 0.80), stats_text, 12, Color(0.024, 0.046, 0.052, 0.92), Color(0.34, 0.50, 0.46, 0.30), Color(0.80, 0.86, 0.76))
+	var stats_badge = make_badge(footer, rect_full(0.68, 0.20, 0.84, 0.80), stats_text, 12, Color(0.024, 0.046, 0.052, 0.92), Color(0.34, 0.50, 0.46, 0.30), Color(0.80, 0.86, 0.76))
 	stats_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	# 规则按钮
-	var rules = make_small_button("规则", Color(0.32, 0.46, 0.40), func() -> void:
-		show_rules_screen()
-	)
-	rules.custom_minimum_size = Vector2(88, 48)
-	footer.add_child(rules)
-	apply_rect(rules, rect_full(0.56, 0.20, 0.65, 0.80))
 
 	# 设置按钮 - 更大的触摸目标
 	var settings = make_small_button("设置", Color(0.26, 0.44, 0.58), func() -> void:
 		toggle_settings_panel()
 	)
-	settings.custom_minimum_size = Vector2(100, 52)
+	settings.custom_minimum_size = Vector2(88, 48)
 	footer.add_child(settings)
-	apply_rect(settings, rect_full(0.68, 0.20, 0.78, 0.80))
+	apply_rect(settings, rect_full(0.86, 0.18, 0.96, 0.82))
+
+	add_lucide_icon(settings, "settings", rect_full(0.09, 0.22, 0.31, 0.78), Color(0.92, 0.94, 0.88, 0.92))
 
 	# 首次游戏提示
 	if tutorial_step == 0:
@@ -2187,7 +2781,7 @@ func show_menu() -> void:
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 
-func make_menu_card(text: String, color: Color, callback: Callable) -> Button:
+func make_menu_card(text: String, color: Color, callback: Callable, icon_name: String = "") -> Button:
 	var button = Button.new()
 	button.text = ""
 	button.custom_minimum_size = Vector2(310, 210)
@@ -2203,11 +2797,15 @@ func make_menu_card(text: String, color: Color, callback: Callable) -> Button:
 	button.add_child(make_color_rect(rect_full(0.055, 0.04, 0.945, 0.11), Color(1.0, 1.0, 1.0, 0.025)))
 	# 底部渐变
 	button.add_child(make_color_rect(rect_full(0.055, 0.86, 0.945, 0.92), Color(0.0, 0.0, 0.0, 0.045)))
+	if icon_name != "":
+		var icon_back = make_panel(button, rect_full(0.70, 0.13, 0.90, 0.43), Color(color.r, color.g, color.b, 0.12), 14, Color(color.r, color.g, color.b, 0.30), 0)
+		icon_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_lucide_icon(button, icon_name, rect_full(0.735, 0.165, 0.865, 0.395), Color(0.92, 0.88, 0.68, 0.88))
 	var parts = text.split("\n", false, 2)
 	var title_text = parts[0] if parts.size() > 0 else text
 	var subtitle_text = parts[1] if parts.size() > 1 else ""
 	var title = make_label(button, title_text, 26, Color(0.94, 0.92, 0.84), true)
-	apply_rect(title, rect_full(0.10, 0.14, 0.92, 0.52))
+	apply_rect(title, rect_full(0.10, 0.14, 0.68 if icon_name != "" else 0.92, 0.52))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	configure_clipped_label(title)
@@ -2217,11 +2815,34 @@ func make_menu_card(text: String, color: Color, callback: Callable) -> Button:
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		configure_clipped_label(subtitle)
+	# 菜单卡hover缩放动画
+	button.mouse_entered.connect(func() -> void:
+		if not is_instance_valid(button):
+			return
+		var tw := button.create_tween()
+		tw.tween_property(button, "scale", Vector2(1.02, 1.02), 0.15).from(Vector2(1.0, 1.0)).set_ease(Tween.EASE_OUT)
+	)
+	button.mouse_exited.connect(func() -> void:
+		if not is_instance_valid(button):
+			return
+		var tw := button.create_tween()
+		tw.tween_property(button, "scale", Vector2(1.0, 1.0), 0.15).from(Vector2(1.02, 1.02)).set_ease(Tween.EASE_OUT)
+	)
 	if callback.is_valid():
 		connect_immediate_button_action(button, callback)
 	return button
 
-func show_online_lobby() -> void:
+func show_online_lobby(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_online_lobby_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build)
+
+func _show_online_lobby_impl() -> void:
 	mode = "online_lobby"
 	recover_audio_after_screen_change()
 	clear_screen()
@@ -2959,7 +3580,17 @@ func render_room_log() -> void:
 			text += str(log_item) + "\n"
 	logs_label.text = text
 
-func start_offline() -> void:
+func start_offline(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_start_offline_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build)
+
+func _start_offline_impl() -> void:
 	if voice_enabled:
 		stop_voice_chat(false)
 	mode = "offline"
@@ -3004,6 +3635,8 @@ func start_offline() -> void:
 				"bot": players.size() != 0,
 			})
 	deal_offline_hand()
+	# 启动环境氛围动画
+	start_ambient_animation("default")
 
 func deal_offline_hand() -> void:
 	mode = "offline"
@@ -3103,6 +3736,7 @@ func render_game() -> void:
 
 	var table = make_panel(outer, TABLE_INNER_RECT, UI_FELT, 26, UI_FELT_LINE)
 	add_texture(table, felt_texture, TABLE_INNER_TEXTURE_RECT, 0.88)
+	draw_table_atmosphere_frame(table)
 	draw_walls(table)
 	draw_discards(table)
 	draw_center(table)
@@ -3211,7 +3845,7 @@ func draw_game_top_hud(parent: Control) -> void:
 
 	var back = make_top_hud_button("返回", Color(0.36, 0.40, 0.40), func() -> void:
 		if mode == "offline":
-			show_menu()
+			show_exit_confirm()
 		else:
 			show_online_lobby()
 	)
@@ -3270,6 +3904,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	var title = make_label(panel, "设置", 24, Color(0.94, 0.82, 0.42), true)
 	apply_rect(title, SETTINGS_TITLE_RECT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	add_lucide_icon(panel, "settings", rect_full(0.035, 0.050, 0.068, 0.125), Color(0.96, 0.84, 0.46, 0.86))
 
 	var close = make_small_button("关闭", Color(0.30, 0.34, 0.36), func() -> void:
 		close_settings_panel()
@@ -3553,6 +4188,7 @@ func draw_center(parent: Control) -> void:
 	var center = make_panel(parent, CENTER_PANEL_RECT, Color(0.006, 0.014, 0.016, 0.96), 30, Color(0.48, 0.42, 0.24, 0.52), 4)
 	# 内部装饰框
 	make_panel(center, CENTER_INNER_RECT, Color(0.004, 0.036, 0.036, 0.98), 62, Color(0.28, 0.26, 0.18, 0.42), 0)
+	draw_center_wind_compass(center)
 
 	# 状态文本
 	var status = make_label(center, current_status_text(), 16, Color(0.92, 0.90, 0.82), true)
@@ -3817,20 +4453,52 @@ func draw_advisor_panel(parent: Control) -> void:
 
 func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_text: String, sub_text: String, accent: Color) -> void:
 	var card = make_panel(parent, rect, Color(0.028, 0.048, 0.050, 0.78), 10, accent.darkened(0.28), 0)
+	card.name = "AdvisorInfoCard_%s" % heading
+	draw_advisor_signal_strip(card, heading, accent)
 	var label = make_label(card, heading, 10, accent, true)
-	apply_rect(label, rect_full(0.07, 0.07, 0.93, 0.26))
+	apply_rect(label, rect_full(0.13, 0.07, 0.93, 0.26))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(label)
 	var primary = make_label(card, main_text if main_text != "" else "--", 12, Color(0.86, 0.91, 0.84), true)
-	apply_rect(primary, rect_full(0.07, 0.30, 0.93, 0.56))
+	apply_rect(primary, rect_full(0.13, 0.30, 0.93, 0.56))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
 	var secondary = make_label(card, sub_text if sub_text != "" else "暂无", 10, Color(0.66, 0.74, 0.70), false)
-	apply_rect(secondary, rect_full(0.07, 0.58, 0.93, 0.92))
+	apply_rect(secondary, rect_full(0.13, 0.58, 0.93, 0.92))
 	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	secondary.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	secondary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	secondary.clip_text = true
+
+func draw_advisor_signal_strip(parent: Control, heading: String, accent: Color) -> Control:
+	var strip = make_panel(parent, rect_full(0.035, 0.13, 0.080, 0.88), accent.blend(Color(0.08, 0.10, 0.09, 1.0)), 8, accent.lightened(0.12), 0)
+	strip.name = "AdvisorSignalStrip_%s" % heading
+	var pulse = make_panel(strip, rect_full(0.18, 0.07, 0.82, 0.22), accent.lightened(0.20), 8, Color(1.0, 0.96, 0.78, 0.22), 0)
+	pulse.name = "AdvisorSignalPulse_%s" % heading
+	make_panel(strip, rect_full(0.28, 0.36, 0.72, 0.64), accent.darkened(0.10), 8, Color(1.0, 1.0, 1.0, 0.04), 0)
+	var icon_text = advisor_signal_icon_text(heading)
+	var icon = make_label(strip, icon_text, 8, Color(0.09, 0.12, 0.10), true)
+	icon.name = "AdvisorSignalIcon_%s" % heading
+	apply_rect(icon, rect_full(0.04, 0.72, 0.96, 0.96))
+	icon.clip_text = true
+	if fx_enabled_effective():
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(pulse, "modulate:a", 0.38, 0.72).from(0.92)
+		tw.tween_property(pulse, "modulate:a", 0.92, 0.72)
+	return strip
+
+func advisor_signal_icon_text(heading: String) -> String:
+	match heading:
+		"推荐", "响应":
+			return "先"
+		"收益", "进程":
+			return "势"
+		"防守":
+			return "守"
+		"牌局":
+			return "局"
+	return heading.substr(0, 1) if heading != "" else "牌"
 
 func advisor_context_line() -> String:
 	if offline_phase == "pending_claim":
@@ -3933,8 +4601,23 @@ func draw_round_summary(parent: Control) -> void:
 	# 左侧金色装饰
 	panel.add_child(make_color_rect(rect_full(0.006, 0.04, 0.012, 0.96), Color(0.90, 0.76, 0.36, 0.68)))
 
-	var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 26, Color(0.94, 0.86, 0.48), true)
-	apply_rect(title, ROUND_SUMMARY_TITLE_RECT)
+	# 结算面板弹出动画
+	if fx_enabled_effective():
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.scale = Vector2(0.88, 0.88)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0)
+		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.22).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+		var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 26, Color(0.94, 0.86, 0.48), true)
+		apply_rect(title, ROUND_SUMMARY_TITLE_RECT)
+		draw_summary_victory_ribbon(panel)
+		draw_animation_preview(panel, rect_full(0.705, 0.035, 0.785, 0.145), "victory_sparkle")
+
+	# 胡牌详情展示（如果有）
+	if not last_win_score.is_empty() and int(last_win_score.get("fan", 0)) > 0:
+		draw_win_detail_section(panel, last_win_score)
 
 	var lines: Array[String] = [round_summary]
 	var package_lines = active_package_lines()
@@ -3954,6 +4637,90 @@ func draw_round_summary(parent: Control) -> void:
 		var next_dealer = dealer_seat if offline_dealer_repeat else (dealer_seat + 1) % 4
 		var next = make_badge(panel, ROUND_SUMMARY_NEXT_DEALER_RECT, "下一局庄家  %s" % players[next_dealer]["name"], 13, Color(0.030, 0.046, 0.048, 0.90), Color(0.46, 0.40, 0.24, 0.36), Color(0.82, 0.86, 0.76))
 		next.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
+	"""绘制胡牌详情区域 - 增强版：番种徽章化展示"""
+	var winner = int(score_data.get("winner", -1))
+	if winner < 0 or winner >= players.size():
+		return
+
+	var fan = int(score_data.get("fan", 0))
+	var points = int(score_data.get("points", 0))
+	var reasons: Array = score_data.get("reasons", [])
+	var win_tile = str(score_data.get("win_tile", ""))
+	var self_draw = bool(score_data.get("self_draw", false))
+
+	# 详情面板 - 增大高度以容纳徽章
+	var detail_rect = Rect2(Vector2(0.04, 0.18), Vector2(0.96, 0.50))
+	var detail_panel = make_panel(parent, detail_rect, Color(0.012, 0.024, 0.030, 0.94), 14, Color(0.38, 0.42, 0.40, 0.28), 0)
+	detail_panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.015, 1.0), Color(0.84, 0.72, 0.38, 0.48)))
+
+	# 胡牌者信息行
+	var winner_text = "%s %s" % [players[winner]["name"], "自摸" if self_draw else "胡"]
+	if win_tile != "":
+		winner_text += " %s" % tile_label(win_tile)
+	var winner_label = make_label(detail_panel, winner_text, 18, Color(0.94, 0.88, 0.58), true)
+	apply_rect(winner_label, rect_full(0.04, 0.06, 0.60, 0.22))
+	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 番数和分数 - 更醒目
+	var score_text = "%d番  %d分" % [fan, points]
+	var score_label = make_label(detail_panel, score_text, 22, Color(0.96, 0.88, 0.52), true)
+	apply_rect(score_label, rect_full(0.62, 0.06, 0.96, 0.22))
+	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	# 番种徽章列表 - 每个番种独立展示（依次弹出动画）
+	if reasons.size() > 0:
+		var badge_container = HBoxContainer.new()
+		badge_container.alignment = BoxContainer.ALIGNMENT_BEGIN
+		badge_container.add_theme_constant_override("separation", 6)
+		apply_rect(badge_container, rect_full(0.04, 0.28, 0.96, 0.56))
+		detail_panel.add_child(badge_container)
+
+		for i in range(reasons.size()):
+			var reason_str = str(reasons[i])
+			# 根据番种类型选择不同颜色
+			var badge_color = fan_badge_color(reason_str)
+			var badge_border = badge_color.lightened(0.16)
+			var badge = make_badge(badge_container, Rect2(Vector2.ZERO, Vector2.ZERO), reason_str, 13, badge_color.darkened(0.18), badge_border, Color(0.96, 0.94, 0.88))
+			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			# 徽章依次弹出动画
+			if fx_enabled_effective():
+				badge.modulate = Color(1, 1, 1, 0)
+				badge.scale = Vector2(0.6, 0.6)
+				var delay = 0.16 + float(i) * 0.06
+				var tw := create_tween()
+				tw.set_parallel(true)
+				tw.tween_property(badge, "modulate:a", 1.0, 0.18).from(0.0).set_delay(delay)
+				tw.tween_property(badge, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.6, 0.6)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK).set_delay(delay)
+
+	# 特殊标记
+	var limit_name = str(score_data.get("limit_name", ""))
+	if limit_name != "":
+		var limit_badge = make_badge(detail_panel, rect_full(0.70, 0.70, 0.96, 0.92), limit_name, 12, Color(0.72, 0.32, 0.28, 0.92), Color(0.96, 0.66, 0.42, 0.48), Color(0.96, 0.94, 0.88))
+		limit_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func fan_badge_color(reason: String) -> Color:
+	# 高番型 - 金色
+	if reason == "十三幺" or reason == "大四喜" or reason == "字一色":
+		return Color(0.92, 0.76, 0.28)
+	# 中等番型 - 紫色
+	if reason == "大三元" or reason == "小四喜" or reason == "清一色" or reason == "七对":
+		return Color(0.58, 0.42, 0.82)
+	# 低番型 - 青色
+	if reason == "小三元" or reason == "混一色" or reason == "碰碰胡" or reason == "一条龙":
+		return Color(0.32, 0.56, 0.72)
+	# 基础番型 - 绿色
+	if reason == "平胡" or reason == "自摸" or reason == "门清" or reason == "断幺九" or reason == "庄家" or reason == "花牌":
+		return Color(0.28, 0.58, 0.42)
+	# 特殊操作 - 橙色
+	if reason == "杠" or reason == "杠上开花" or reason == "海底捞月" or reason == "抢杠胡" or reason == "大吊车":
+		return Color(0.82, 0.56, 0.28)
+	# 封顶 - 红色
+	if reason == "封顶":
+		return Color(0.88, 0.28, 0.22)
+	# 默认
+	return Color(0.40, 0.46, 0.50)
 
 func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	var top = ROUND_SUMMARY_RANK_START_Y + float(rank - 1) * (ROUND_SUMMARY_RANK_ROW_HEIGHT + ROUND_SUMMARY_RANK_ROW_GAP)
@@ -4040,6 +4807,23 @@ func draw_hand(parent: Control) -> void:
 	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_tray_state_text(), 12, hand_tray_state_fill(), hand_tray_state_border(), Color(0.92, 0.92, 0.84))
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	# 新手提示：首次出牌时显示
+	if show_hand_hint and tutorial_step == 0 and can_self_discard():
+		var hint_panel = make_panel(tray, rect_full(0.02, 0.50, 0.98, 0.92), Color(0.020, 0.042, 0.048, 0.94), 12, Color(0.30, 0.58, 0.48, 0.42), 0)
+		hint_panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.015, 1.0), Color(0.30, 0.62, 0.52, 0.56)))
+		var hint_text = "💡 点击手牌即可打出 · 出牌后等待对手响应"
+		var hint_label = make_label(hint_panel, hint_text, 14, Color(0.94, 0.96, 0.92), false)
+		apply_rect(hint_label, rect_full(0.04, 0.15, 0.96, 0.85))
+		hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		# 首次出牌后关闭提示
+		var close_hint = func() -> void:
+			show_hand_hint = false
+		if not tray.is_connected("tree_exiting", close_hint):
+			tray.connect("tree_exiting", close_hint)
+		# 激活交互式引导
+		interactive_guide_active = true
+		interactive_guide_type = "discard"
+
 	var hand = get_self_hand()
 	var hand_layout = hand_layout_metrics(hand)
 	var hand_box = HBoxContainer.new()
@@ -4048,6 +4832,16 @@ func draw_hand(parent: Control) -> void:
 	hand_box.add_theme_constant_override("separation", int(hand_layout.get("separation", 5)))
 	apply_rect(hand_box, HAND_TRAY_TILES_RECT)
 	tray.add_child(hand_box)
+
+	# 手牌滑入动画
+	if fx_enabled_effective():
+		tray.modulate = Color(1, 1, 1, 0)
+		tray.offset_top = 24.0
+		var tw := create_tween()
+		var slide_dur := float(HAND_SLIDE_IN_DURATION_MSEC) / 1000.0
+		tw.set_parallel(true)
+		tw.tween_property(tray, "modulate:a", 1.0, slide_dur).from(0.0)
+		tw.tween_property(tray, "offset_top", 0.0, slide_dur).from(24.0)
 
 	var assist_enabled = player_ai_assist_enabled()
 	var suggested_tile = suggest_human_discard() if assist_enabled else ""
@@ -4060,13 +4854,20 @@ func draw_hand(parent: Control) -> void:
 		var index = i
 		var tile = str(hand[i])
 		if should_insert_hand_group_gap(hand, i):
-			hand_box.add_child(make_hand_group_spacer(tile_height, group_gap_width))
+			hand_box.add_child(make_hand_group_spacer(tile_height, group_gap_width, hand_group_label(tile)))
 		var clickable = can_self_discard()
-		var highlighted = clickable and ((suggested_tile != "" and tile == suggested_tile) or (pending_tile != "" and tile == pending_tile))
+		# 新手引导高亮：可点击时添加视觉提示
+		var should_highlight = clickable and ((suggested_tile != "" and tile == suggested_tile) or (pending_tile != "" and tile == pending_tile))
+		var guide_highlight = interactive_guide_active and interactive_guide_type == "discard" and clickable
+		var highlighted = should_highlight or guide_highlight
 		var report: Dictionary = hand_reports.get(tile, {})
 		var risk = str(report.get("safety_label", report.get("risk_label", ""))) if assist_enabled and clickable else ""
 		var hint_badge = hand_tile_hint_badge(tile, suggested_tile, pending_tile) if assist_enabled and clickable else ""
 		var callback = func() -> void:
+			# 玩家执行操作时关闭引导
+			if interactive_guide_active:
+				interactive_guide_active = false
+				interactive_guide_type = ""
 			if mode == "offline":
 				human_discard(index)
 			else:
@@ -4150,8 +4951,9 @@ func hand_group_index(tile: String) -> int:
 		return 4
 	return 5
 
-func make_hand_group_spacer(height: float, width: float = 12.0) -> Control:
+func make_hand_group_spacer(height: float, width: float = 12.0, label_text: String = "") -> Control:
 	var spacer = Control.new()
+	spacer.name = "HandGroupDivider"
 	spacer.custom_minimum_size = Vector2(width, height)
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var line = ColorRect.new()
@@ -4159,7 +4961,29 @@ func make_hand_group_spacer(height: float, width: float = 12.0) -> Control:
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(line, rect_full(0.44, 0.12, 0.56, 0.88))
 	spacer.add_child(line)
+	var cap = make_panel(spacer, rect_full(0.18, 0.04, 0.82, 0.11), Color(0.96, 0.78, 0.34, 0.58), 4, Color(1.0, 0.92, 0.62, 0.18), 0)
+	cap.name = "HandGroupDividerCap"
+	if label_text != "" and width >= 8.0:
+		var label = make_label(spacer, label_text, 8, Color(0.98, 0.88, 0.58, 0.92), true)
+		label.name = "HandGroupDividerLabel_%s" % label_text
+		apply_rect(label, rect_full(0.0, 0.78, 1.0, 0.99))
+		configure_clipped_label(label)
 	return spacer
+
+func hand_group_label(tile: String) -> String:
+	var group_index = hand_group_index(tile)
+	match group_index:
+		0:
+			return "万"
+		1:
+			return "条"
+		2:
+			return "筒"
+		3:
+			return "字"
+		4:
+			return "花"
+	return ""
 
 func discard_report_map_for_hand() -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard():
@@ -4250,6 +5074,13 @@ func draw_actions(parent: Control) -> void:
 	action_bar.add_theme_constant_override("separation", 6)
 	apply_rect(action_bar, ACTION_BAR_RECT)
 	parent.add_child(action_bar)
+
+	# 操作按钮淡入动画
+	if fx_enabled_effective():
+		action_bar.modulate = Color(1, 1, 1, 0)
+		var tw := create_tween()
+		tw.tween_property(action_bar, "modulate:a", 1.0, 0.18).from(0.0)
+
 	if mode == "offline":
 		if offline_phase == "ended":
 			if not is_offline_match_finished():
@@ -4266,6 +5097,9 @@ func draw_actions(parent: Control) -> void:
 			finalize_action_bar_layout()
 			return
 		if offline_phase == "pending_claim":
+			# 新手引导：吃碰杠提示
+			if interactive_guide_active and interactive_guide_type == "claim":
+				show_toast("💡 对手打出了一张牌，你可以选择吃/碰/杠/胡或过")
 			var claim_recommendation = recommended_claim_report() if player_ai_assist_enabled() else {}
 			for claim in offline_pending_claim.get("options", []):
 				var claim_name = str(claim)
@@ -4395,7 +5229,83 @@ func draw_action_dock(parent: Control) -> void:
 	if count <= 0:
 		return
 	var dock = make_panel(parent, action_dock_rect_for_count(count), Color(0.014, 0.021, 0.024, 0.76), 16, Color(0.46, 0.40, 0.24, 0.24), 2)
+	dock.name = "ActionButtonDock"
 	parent.move_child(dock, max(0, action_bar.get_index()))
+	draw_action_intent_dock(parent, count)
+
+func draw_action_intent_dock(parent: Control, count: int) -> Control:
+	var intent = make_panel(parent, action_intent_rect_for_count(count), Color(0.020, 0.036, 0.038, 0.88), 13, action_intent_color().darkened(0.18), 0)
+	intent.name = "ActionIntentDock"
+	var color = action_intent_color()
+	var rail = make_panel(intent, rect_full(0.012, 0.18, 0.028, 0.82), color, 8, color.lightened(0.18), 0)
+	rail.name = "ActionIntentRail"
+	var icon_name = action_intent_icon_name()
+	if add_lucide_icon(intent, icon_name, rect_full(0.045, 0.18, 0.118, 0.82), color.lightened(0.22)) == null:
+		var fallback = make_label(intent, action_intent_fallback_icon_text(), 12, color.lightened(0.22), true)
+		fallback.name = "ActionIntentFallbackIcon"
+		apply_rect(fallback, rect_full(0.045, 0.16, 0.118, 0.84))
+	var text = make_label(intent, action_intent_text(count), 11, Color(0.84, 0.90, 0.84), true)
+	text.name = "ActionIntentText"
+	apply_rect(text, rect_full(0.130, 0.10, 0.845, 0.90))
+	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(text)
+	var count_badge = make_badge(intent, rect_full(0.858, 0.18, 0.982, 0.82), "%d项" % count, 10, color.darkened(0.20), color.lightened(0.12), Color(0.96, 0.95, 0.84))
+	count_badge.name = "ActionIntentCount"
+	if fx_enabled_effective():
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(rail, "modulate:a", 0.42, 0.64).from(0.92)
+		tw.tween_property(rail, "modulate:a", 0.92, 0.64)
+	return intent
+
+func action_intent_rect_for_count(count: int) -> Rect2:
+	var dock_rect = action_dock_rect_for_count(count)
+	var left = max(0.580, dock_rect.position.x)
+	return Rect2(Vector2(left, 0.604), Vector2(0.975, 0.650))
+
+func action_intent_text(count: int) -> String:
+	if mode == "offline" and offline_phase == "pending_claim":
+		return "响应窗口 · 选择吃碰杠胡或过"
+	if mode == "offline" and offline_phase == "ended":
+		return "本局结束 · 继续下一局或重开"
+	if mode == "offline" and has_pending_danger_discard():
+		return "风险确认 · 可改打更安全牌"
+	if mode == "offline" and can_self_discard():
+		return "我方行动 · 点击手牌或采用推荐"
+	if mode == "online_game":
+		return "在线操作 · 等待或提交响应" if count <= 1 else "在线操作 · 处理当前响应"
+	return "可用操作 · %d项" % count
+
+func action_intent_color() -> Color:
+	if mode == "offline" and offline_phase == "pending_claim":
+		return Color(0.86, 0.62, 0.32)
+	if mode == "offline" and has_pending_danger_discard():
+		return Color(0.92, 0.46, 0.34)
+	if mode == "offline" and can_self_discard():
+		return Color(0.34, 0.68, 0.54)
+	if mode == "online_game":
+		return Color(0.34, 0.58, 0.78)
+	return Color(0.66, 0.58, 0.38)
+
+func action_intent_icon_name() -> String:
+	if mode == "offline" and has_pending_danger_discard():
+		return "alert-triangle"
+	if mode == "offline" and can_self_discard():
+		return "zap"
+	if mode == "offline" and offline_phase == "pending_claim":
+		return "sparkles"
+	if mode == "online_game":
+		return "users"
+	return "info"
+
+func action_intent_fallback_icon_text() -> String:
+	if mode == "offline" and has_pending_danger_discard():
+		return "!"
+	if mode == "offline" and can_self_discard():
+		return "行"
+	if mode == "offline" and offline_phase == "pending_claim":
+		return "应"
+	return "i"
 
 func action_dock_rect_for_count(count: int) -> Rect2:
 	var content_width = max(1.0, safe_content_pixel_size().x)
@@ -5104,6 +6014,12 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 			}
 			offline_phase = "pending_claim"
 			add_log("你可响应%s。" % tile_label(tile))
+			# 新手引导：首次吃碰杠时显示提示
+			if tutorial_step >= 0 and tutorial_step < 5:
+				interactive_guide_active = true
+				interactive_guide_type = "claim"
+				tutorial_step = 5
+				save_tutorial_state()
 			render_game()
 			return
 	resolve_ai_or_advance(from_seat, tile, ai_claim)
@@ -5561,6 +6477,7 @@ func perform_concealed_gang(seat: int, tile: String) -> void:
 	play_sfx("gang", -2.0)
 	speak_action_call("暗杠", tile)
 	add_log("%s暗杠%s。" % [players[seat]["name"], tile_label(tile)])
+	play_fx_gang_burst("concealed", seat)
 	sort_hand(hand)
 	draw_after_gang(seat)
 
@@ -5585,6 +6502,7 @@ func complete_added_gang(seat: int, tile: String) -> void:
 	play_sfx("gang", -2.0)
 	speak_action_call("补杠", tile)
 	add_log("%s补杠%s。" % [players[seat]["name"], tile_label(tile)])
+	play_fx_gang_burst("added", seat)
 	sort_hand(hand)
 	draw_after_gang(seat)
 
@@ -5663,17 +6581,21 @@ func finish_wall_draw() -> void:
 	last_score_deltas = [0, 0, 0, 0]
 	round_summary = "荒庄，牌墙已空。%s连庄。" % players[dealer_seat]["name"]
 	add_log(round_summary)
-	play_fx_win_burst("荒庄", Color(0.80, 0.80, 0.74, 1.0))
+	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
 	save_offline_progress()
 	render_game()
 
 func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> void:
 	play_sfx("win", -1.0)
 	speak_action_call("自摸" if self_draw else "胡", win_tile)
-	var fx_burst_text = ("自摸" if self_draw else "胡") + ("" if winner == 0 else " " + str(players[winner].get("name", "")))
-	var fx_burst_color = UI_GOLD_SOFT if winner == 0 else Color(0.88, 0.42, 0.32, 1.0)
-	play_fx_win_burst(fx_burst_text, fx_burst_color)
 	var score_data = calculate_win_score(winner, win_tile, self_draw, win_context)
+	var fx_burst_text = ("自摸" if self_draw else "胡") + ("" if winner == 0 else " " + str(players[winner].get("name", "")))
+	var fx_burst_color = GOLD_PRIMARY if winner == 0 else VERMILION
+	# 判断胜利类型
+	var win_type = "self_draw" if self_draw else "normal"
+	if score_data.get("points", 0) >= 6:  # 高番数使用special效果
+		win_type = "special"
+	play_fx_win_burst_enhanced(fx_burst_text, fx_burst_color, win_type)
 	var points = int(score_data.get("points", 0))
 	var package_payer = package_payer_for(winner)
 	var before_scores: Array[int] = []
@@ -5704,6 +6626,46 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var player_won = winner == 0
 	record_game_result(player_won, player_score_delta, offline_hand_number)
 
+	# 解锁成就
+	if player_won:
+		unlock_achievement("first_win")
+		if self_draw:
+			unlock_achievement("self_draw")
+		if win_context == "rob_gang":
+			unlock_achievement("rob_gang")
+		# 检查特殊牌型成就
+		var reasons: Array = score_data.get("reasons", [])
+		if reasons.has("七对"):
+			unlock_achievement("seven_pairs")
+		if reasons.has("十三幺"):
+			unlock_achievement("thirteen_orphans")
+		if reasons.has("清一色"):
+			unlock_achievement("pure_one_suit")
+		if reasons.has("混一色"):
+			unlock_achievement("mixed_one_suit")
+		if reasons.has("大三元"):
+			unlock_achievement("big_three_dragons")
+		if reasons.has("小三元"):
+			unlock_achievement("small_three_dragons")
+		if reasons.has("大四喜"):
+			unlock_achievement("big_four_winds")
+		if reasons.has("小四喜"):
+			unlock_achievement("small_four_winds")
+		if reasons.has("字一色"):
+			unlock_achievement("all_honors")
+		if reasons.has("碰碰胡"):
+			unlock_achievement("all_triplets")
+		if reasons.has("一条龙"):
+			unlock_achievement("full_straight")
+		if reasons.has("门清"):
+			unlock_achievement("concealed_hand")
+		# 检查累计胜场成就
+		var total_wins = int(game_stats.get("games_won", 0))
+		if total_wins >= 5:
+			unlock_achievement("five_wins")
+		if total_wins >= 10:
+			unlock_achievement("ten_wins")
+
 	offline_phase = "ended"
 	offline_turn_needs_draw = false
 	offline_pending_claim.clear()
@@ -5725,6 +6687,13 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		round_summary += " 包三搭：%s包赔。" % players[package_payer]["name"]
 	if is_offline_match_finished():
 		round_summary += " 全场结束。"
+
+	# 保存详细得分数据用于结算页
+	last_win_score = score_data.duplicate()
+	last_win_score["winner"] = winner
+	last_win_score["win_tile"] = win_tile
+	last_win_score["self_draw"] = self_draw
+
 	add_log(round_summary)
 	save_offline_progress()
 	render_game()
@@ -10044,30 +11013,43 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 	if frame != null:
 		frame.add_child(tile_body)
 		apply_centered_rect(tile_body, Vector2(0.5, 0.5), size)
+	# 优化的牌面边框和颜色 - 使用国风配色
 	var risk_text = risk_badge_text(risk)
-	var border = tile_risk_color(risk) if risk_text != "" else Color(0.55, 0.48, 0.30, 0.90)
+	var border = tile_risk_color(risk) if risk_text != "" else GOLD_DARK
 	if highlighted:
-		border = Color(0.80, 0.64, 0.26, 0.90)
-	var face = Color(0.98, 0.96, 0.88, 1.0) if not highlighted else Color(0.99, 0.96, 0.84, 1.0)
+		border = GOLD_BRIGHT
+	var face = PORCELAIN if not highlighted else Color(1.0, 0.98, 0.92, 1.0)
 	if button != null:
-		button.add_theme_stylebox_override("normal", style(face, 8, border, 2 if not highlighted else 2))
-		button.add_theme_stylebox_override("hover", style(Color(0.93, 0.91, 0.80), 8, Color(0.74, 0.60, 0.22), 2))
-		button.add_theme_stylebox_override("pressed", style(Color(0.78, 0.74, 0.60), 8, Color(0.46, 0.40, 0.24), 2))
-		button.add_theme_stylebox_override("disabled", style(face.darkened(0.14), 8, border.darkened(0.16), 1 if not highlighted else 2))
+		# 可点击牌面的增强样式
+		button.add_theme_stylebox_override("normal", style(face, 8, border, 2, 6))
+		button.add_theme_stylebox_override("hover", style(Color(0.98, 0.96, 0.90), 8, GOLD_PRIMARY, 3, 8))
+		button.add_theme_stylebox_override("pressed", style(Color(0.96, 0.94, 0.88), 8, GOLD_DARK, 2, 4))
+		button.add_theme_stylebox_override("disabled", style(face.darkened(0.08), 8, border.darkened(0.12), 1, 3))
 	else:
-		(tile_body as Panel).add_theme_stylebox_override("panel", style(face, 8, border, 2 if not highlighted else 2, static_tile_shadow_size(size)))
+		(tile_body as Panel).add_theme_stylebox_override("panel", style(face, 8, border, 2 if not highlighted else 3, static_tile_shadow_size(size)))
 	var tile_texture = tile_textures.get(tile, null)
 	if tile_texture != null:
 		if not lightweight_static_tile:
+			# 优化的牌面阴影效果 - 更柔和的视觉层次
 			var shade = ColorRect.new()
-			shade.color = Color(0.66, 0.60, 0.42, 0.24)
+			shade.color = Color(0.50, 0.45, 0.35, 0.18)
 			shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-			shade.offset_left = size.x * 0.78
-			shade.offset_top = size.y * 0.06
+			shade.offset_left = size.x * 0.76
+			shade.offset_top = size.y * 0.05
 			shade.offset_right = -2
 			shade.offset_bottom = -2
 			tile_body.add_child(shade)
+			# 添加内部高光效果
+			var highlight = ColorRect.new()
+			highlight.color = Color(1.0, 1.0, 0.98, 0.08)
+			highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			highlight.set_anchors_preset(Control.PRESET_FULL_RECT)
+			highlight.offset_left = 3
+			highlight.offset_top = 3
+			highlight.offset_right = -size.x * 0.7
+			highlight.offset_bottom = -size.y * 0.5
+			tile_body.add_child(highlight)
 		var texture = TextureRect.new()
 		texture.texture = tile_texture
 		texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -10234,6 +11216,29 @@ func make_avatar_view(seat: int, active: bool) -> Control:
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	avatar.add_child(cap)
 	apply_rect(cap, rect_full(0.0, 0.22, 1.0, 0.26))
+
+	# 为不同座位添加独特的装饰元素
+	match seat:
+		0:  # 玩家 - 东风
+			var decoration = make_label(avatar, "☀", 16, Color(0.96, 0.84, 0.52, 0.72), true)
+			decoration.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			apply_rect(decoration, rect_full(0.72, 0.04, 0.96, 0.26))
+		1:  # 青竹道人 - 南风 - 竹叶装饰
+			var bamboo1 = make_label(avatar, "竹", 10, Color(0.38, 0.62, 0.42, 0.58), true)
+			bamboo1.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			apply_rect(bamboo1, rect_full(0.76, 0.04, 0.94, 0.20))
+			var bamboo2 = make_label(avatar, "竹", 8, Color(0.42, 0.66, 0.46, 0.48), true)
+			bamboo2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			apply_rect(bamboo2, rect_full(0.68, 0.10, 0.82, 0.24))
+		2:  # 南山客 - 西风 - 山峰装饰
+			var mountain = make_label(avatar, "⛰", 12, Color(0.56, 0.52, 0.48, 0.62), true)
+			mountain.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			apply_rect(mountain, rect_full(0.70, 0.06, 0.96, 0.24))
+		3:  # 扶摇散人 - 北风 - 云朵装饰
+			var cloud = make_label(avatar, "☁", 11, Color(0.72, 0.76, 0.82, 0.56), true)
+			cloud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			apply_rect(cloud, rect_full(0.68, 0.06, 0.94, 0.22))
+
 	var seat_mark = make_label(avatar, seat_wind_label(seat), 33, Color(0.88, 0.82, 0.66), true)
 	seat_mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(seat_mark, rect_full(0.10, 0.22, 0.90, 0.70))
@@ -10353,7 +11358,7 @@ func make_small_button(text: String, color: Color, callback: Callable) -> Button
 	var button = make_base_button(text, callback)
 	button.custom_minimum_size = Vector2(104, 44)
 	button.add_theme_font_size_override("font_size", 18)
-	apply_button_style(button, color, 11, 2, 3)
+	apply_button_style(button, color, 12, 2, 4)
 	return button
 
 func make_top_hud_button(text: String, color: Color, callback: Callable) -> Button:
@@ -10362,17 +11367,21 @@ func make_top_hud_button(text: String, color: Color, callback: Callable) -> Butt
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.add_theme_font_size_override("font_size", 15)
-	apply_button_style(button, color, 10, 2, 2)
+	apply_button_style(button, color, 11, 2, 3)
+	var icon_name = icon_name_for_button_text(text)
+	if icon_name != "":
+		add_lucide_icon(button, icon_name, rect_full(0.08, 0.22, 0.30, 0.78), Color(0.92, 0.94, 0.88, 0.86))
 	return button
 
 func make_base_button(text: String, callback: Callable) -> Button:
 	var button = Button.new()
 	button.text = text
 	configure_touch_button(button)
-	button.add_theme_color_override("font_color", Color(0.94, 0.91, 0.80))
-	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.45))
+	button.add_theme_color_override("font_color", Color(0.95, 0.93, 0.82))
+	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.50))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.92))
 	button.add_theme_constant_override("shadow_offset_x", 1)
-	button.add_theme_constant_override("shadow_offset_y", 1)
+	button.add_theme_constant_override("shadow_offset_y", 2)
 	if callback.is_valid():
 		connect_immediate_button_action(button, callback)
 	return button
@@ -10380,7 +11389,25 @@ func make_base_button(text: String, callback: Callable) -> Button:
 func configure_touch_button(button: Button) -> void:
 	button.focus_mode = Control.FOCUS_NONE
 	button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
-	# v1.0.152: 移除音频唤醒连接，改为全局_input处理，减少按钮延迟
+	# 增强的触摸反馈动画
+	button.button_down.connect(func() -> void:
+		if not is_instance_valid(button):
+			return
+		var tw := button.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(button, "scale", Vector2(0.96, 0.96), 0.08).from(Vector2(1.0, 1.0)).set_ease(Tween.EASE_OUT)
+		# 添加轻微的暗化效果
+		tw.tween_property(button, "modulate", Color(0.92, 0.92, 0.92, 1.0), 0.08).from(Color(1, 1, 1, 1))
+	)
+	button.button_up.connect(func() -> void:
+		if not is_instance_valid(button):
+			return
+		var tw := button.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(button, "scale", Vector2(1.0, 1.0), 0.12).from(Vector2(0.96, 0.96)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		# 恢复亮度
+		tw.tween_property(button, "modulate", Color(1, 1, 1, 1), 0.12).from(Color(0.92, 0.92, 0.92, 1.0))
+	)
 
 func connect_immediate_button_action(button: Button, callback: Callable) -> void:
 	if button == null or not callback.is_valid():
@@ -10392,6 +11419,20 @@ func apply_button_style(button: Button, color: Color, radius: int, border_width:
 	button.add_theme_stylebox_override("normal", style_set["normal"])
 	button.add_theme_stylebox_override("hover", style_set["hover"])
 	button.add_theme_stylebox_override("pressed", style_set["pressed"])
+
+func icon_name_for_button_text(text: String) -> String:
+	match text:
+		"设置":
+			return "settings"
+		"返回":
+			return "chevron-left"
+		"更新":
+			return "refresh-cw"
+		"关闭":
+			return "x"
+		"试音":
+			return "volume-2"
+	return ""
 
 func button_style_set(color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> Dictionary:
 	var key = button_style_set_cache_key(color, radius, border_width, shadow_size)
@@ -10538,6 +11579,8 @@ func ensure_fx_layer() -> void:
 	_build_fx_turn_pulse()
 	_build_fx_burst()
 	_build_fx_ripple()
+	_build_fx_transition()
+	_build_fx_toast()
 
 func _build_fx_turn_pulse() -> void:
 	fx_turn_pulse = Control.new()
@@ -10739,6 +11782,174 @@ func clear_fx_overlays() -> void:
 		fx_ripple_root.visible = false
 	if fx_turn_pulse != null and is_instance_valid(fx_turn_pulse):
 		fx_turn_pulse.visible = false
+	if transition_tween != null and is_instance_valid(transition_tween):
+		transition_tween.kill()
+	if transition_overlay != null and is_instance_valid(transition_overlay):
+		transition_overlay.visible = false
+	transition_active = false
+
+# ============================================================
+# 屏幕过渡动画系统
+# ============================================================
+
+func _build_fx_transition() -> void:
+	transition_overlay = ColorRect.new()
+	transition_overlay.name = "ScreenTransition"
+	transition_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	transition_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	transition_overlay.color = Color(0.004, 0.006, 0.008, 0.0)
+	transition_overlay.visible = false
+	fx_layer.add_child(transition_overlay)
+
+func play_screen_transition(callback: Callable, instant: bool = false) -> void:
+	"""屏幕过渡动画：淡出 → 执行callback → 淡入"""
+	if instant or not fx_enabled_effective():
+		callback.call()
+		return
+	if transition_overlay == null or not is_instance_valid(transition_overlay):
+		ensure_fx_layer()
+	if transition_active:
+		if transition_tween != null and is_instance_valid(transition_tween):
+			transition_tween.kill()
+		transition_active = false
+	transition_overlay.visible = true
+	transition_overlay.color = Color(0.004, 0.006, 0.008, 0.0)
+	var half_dur := float(TRANSITION_DURATION_MSEC) / 2000.0
+	var tw := create_tween()
+	transition_tween = tw
+	transition_active = true
+	tw.tween_property(transition_overlay, "color:a", 0.92, half_dur).from(0.0)
+	tw.tween_callback(func() -> void:
+		callback.call()
+	)
+	tw.tween_property(transition_overlay, "color:a", 0.0, half_dur).from(0.92)
+	tw.tween_callback(func() -> void:
+		transition_active = false
+		if transition_overlay != null and is_instance_valid(transition_overlay):
+			transition_overlay.visible = false
+	)
+
+# ============================================================
+# 杠牌特写动画
+# ============================================================
+
+func play_fx_gang_burst(gang_type: String, seat: int) -> void:
+	"""杠牌特写动画：暗杠/补杠独立动画效果"""
+	if not fx_enabled_effective() or fx_burst_root == null or not is_instance_valid(fx_burst_root):
+		return
+	if fx_burst_tween != null and is_instance_valid(fx_burst_tween):
+		fx_burst_tween.kill()
+	apply_rect(fx_burst_root, rect_full(0.18, 0.24, 0.82, 0.76))
+	var accent := Color(0.50, 0.42, 0.72, 1.0)
+	var label_text := "杠"
+	match gang_type:
+		"concealed":
+			accent = Color(0.50, 0.42, 0.72)
+			label_text = "暗杠"
+		"added":
+			accent = Color(0.66, 0.58, 0.92)
+			label_text = "补杠"
+		_:
+			accent = Color(0.62, 0.54, 0.88)
+			label_text = "杠"
+	fx_burst_flash.color = Color(accent.r, accent.g, accent.b, 0.0)
+	for ring in fx_burst_rings:
+		ring.modulate.a = 0.0
+		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 60, accent.darkened(0.18), 3, 0))
+		ring.offset_left = -42.0
+		ring.offset_top = -42.0
+		ring.offset_right = 42.0
+		ring.offset_bottom = 42.0
+	fx_burst_label.text = label_text
+	fx_burst_label.add_theme_color_override("font_color", accent.lightened(0.30))
+	fx_burst_label.modulate.a = 0.0
+	fx_burst_label.offset_top = 28.0
+	fx_burst_label.offset_bottom = 28.0
+	fx_burst_root.visible = true
+	var half := 0.70
+	var tw := create_tween()
+	fx_burst_tween = tw
+	tw.set_parallel(true)
+	tw.tween_property(fx_burst_flash, "color:a", 0.12, 0.16).from(0.0)
+	tw.tween_property(fx_burst_flash, "color:a", 0.0, 0.40).set_delay(max(0.0, half - 0.40))
+	tw.tween_property(fx_burst_label, "modulate:a", 1.0, 0.18).from(0.0)
+	tw.tween_property(fx_burst_label, "modulate:a", 0.0, 0.35).set_delay(max(0.0, half - 0.35))
+	tw.tween_property(fx_burst_label, "offset_top", -16.0, half).from(28.0)
+	tw.tween_property(fx_burst_label, "offset_bottom", -16.0, half).from(28.0)
+	for i in range(fx_burst_rings.size()):
+		var ring = fx_burst_rings[i]
+		var delay = float(i) * 0.08
+		var span = max(0.22, half - delay)
+		tw.tween_property(ring, "modulate:a", 0.0, span).from(0.62).set_delay(delay)
+		tw.tween_property(ring, "offset_left", -145.0, span).from(-42.0).set_delay(delay)
+		tw.tween_property(ring, "offset_top", -145.0, span).from(-42.0).set_delay(delay)
+		tw.tween_property(ring, "offset_right", 145.0, span).from(42.0).set_delay(delay)
+		tw.tween_property(ring, "offset_bottom", 145.0, span).from(42.0).set_delay(delay)
+	tw.tween_callback(_hide_fx_burst).set_delay(half + 0.05)
+
+# ============================================================
+# Toast提示系统
+# ============================================================
+
+func _build_fx_toast() -> void:
+	toast_container = Control.new()
+	toast_container.name = "ToastContainer"
+	toast_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	toast_container.visible = false
+	fx_layer.add_child(toast_container)
+
+func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) -> void:
+	"""显示临时Toast提示"""
+	if fx_layer == null or not is_instance_valid(fx_layer):
+		return
+	if toast_container == null or not is_instance_valid(toast_container):
+		_build_fx_toast()
+	# 清除旧toast
+	if toast_current != null and is_instance_valid(toast_current):
+		toast_current.queue_free()
+		toast_current = null
+	if toast_tween != null and is_instance_valid(toast_tween):
+		toast_tween.kill()
+	# 创建toast节点
+	var toast_bg = Panel.new()
+	toast_bg.name = "Toast"
+	toast_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_bg.anchor_left = 0.18
+	toast_bg.anchor_right = 0.82
+	toast_bg.anchor_top = 0.06
+	toast_bg.anchor_bottom = 0.12
+	toast_bg.offset_left = 0
+	toast_bg.offset_top = 0
+	toast_bg.offset_right = 0
+	toast_bg.offset_bottom = 0
+	toast_bg.add_theme_stylebox_override("panel", style(Color(0.020, 0.042, 0.048, 0.96), 16, Color(0.50, 0.64, 0.56, 0.62), 2, 6))
+	toast_bg.add_child(make_color_rect(rect_full(0.0, 0.0, 0.018, 1.0), Color(0.40, 0.72, 0.58, 0.72)))
+	var label = make_label(toast_bg, text, 16, Color(0.96, 0.96, 0.92), true)
+	apply_rect(label, rect_full(0.06, 0.04, 0.94, 0.96))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_bg.modulate = Color(1, 1, 1, 0)
+	toast_bg.offset_top = -28.0
+	toast_container.add_child(toast_bg)
+	toast_container.visible = true
+	toast_current = toast_bg
+	# 动画：滑入 → 停留 → 淡出
+	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
+	var stay_dur := float(duration_msec) / 1000.0
+	var fade_dur := 0.28
+	var tw := create_tween()
+	toast_tween = tw
+	tw.tween_property(toast_bg, "modulate:a", 1.0, slide_dur).from(0.0)
+	tw.parallel().tween_property(toast_bg, "offset_top", 0.0, slide_dur).from(-28.0)
+	tw.tween_property(toast_bg, "modulate:a", 0.0, fade_dur).set_delay(stay_dur)
+	tw.tween_callback(func() -> void:
+		if toast_bg != null and is_instance_valid(toast_bg):
+			toast_bg.queue_free()
+		if toast_container != null and is_instance_valid(toast_container):
+			toast_container.visible = false
+		if toast_current == toast_bg:
+			toast_current = null
+	).set_delay(stay_dur + fade_dur + 0.02)
 
 func get_self_hand() -> Array:
 	if mode == "offline":
@@ -11038,8 +12249,18 @@ func claim_color(claim: String) -> Color:
 			return Color(0.28, 0.58, 0.46)
 	return Color(0.40, 0.44, 0.45)
 
-func show_rules_screen() -> void:
+func show_rules_screen(instant: bool = false) -> void:
 	"""显示麻将规则和玩法说明"""
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_rules_screen_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build)
+
+func _show_rules_screen_impl() -> void:
 	mode = "rules"
 	clear_screen()
 
@@ -11123,8 +12344,18 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array) -
 		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		line_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-func show_stats_screen() -> void:
+func show_stats_screen(instant: bool = false) -> void:
 	"""显示详细游戏统计"""
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_stats_screen_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build)
+
+func _show_stats_screen_impl() -> void:
 	mode = "stats"
 	clear_screen()
 
@@ -11172,3 +12403,1328 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String)
 	var value = make_label(row, value_text, 20, Color(0.94, 0.90, 0.68), true)
 	apply_rect(value, rect_full(0.52, 0.12, 0.94, 0.88))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+# ============================================================
+# 商店系统
+# ============================================================
+
+func show_shop_screen(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_shop_screen_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build)
+
+func _show_shop_screen_impl() -> void:
+	mode = "shop"
+	clear_screen()
+
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
+	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
+
+	var title = make_label(panel, "商店", 30, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 货币显示
+	var currency_text = "💰 %d  💎 %d" % [int(currency.get("coins", 0)), int(currency.get("gems", 0))]
+	var currency_label = make_label(panel, currency_text, 18, Color(0.86, 0.88, 0.80), true)
+	apply_rect(currency_label, rect_full(0.60, 0.040, 0.96, 0.105))
+	currency_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	var back = make_small_button("返回", Color(0.32, 0.38, 0.40), func() -> void:
+		show_menu()
+	)
+	back.custom_minimum_size = Vector2(100, 48)
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+
+	# 道具列表
+	var content = VBoxContainer.new()
+	content.anchor_left = 0.06
+	content.anchor_top = 0.15
+	content.anchor_right = 0.94
+	content.anchor_bottom = 0.92
+	content.add_theme_constant_override("separation", 14)
+	panel.add_child(content)
+
+	for item_id in ITEM_TYPES.keys():
+		var item_info = ITEM_TYPES[item_id]
+		var row = Panel.new()
+		row.custom_minimum_size = Vector2(0, 60)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_theme_stylebox_override("panel", style(Color(0.018, 0.030, 0.034, 0.92), 12, Color(0.34, 0.38, 0.36, 0.32), 0))
+		content.add_child(row)
+
+		# 道具图标和名称
+		var icon_label = make_label(row, str(item_info.get("icon", "📦")), 24, Color(1, 1, 1), true)
+		apply_rect(icon_label, rect_full(0.04, 0.12, 0.14, 0.88))
+
+		var name_label = make_label(row, str(item_info.get("name", item_id)), 18, Color(0.94, 0.92, 0.86), true)
+		apply_rect(name_label, rect_full(0.16, 0.10, 0.55, 0.50))
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+		var desc_label = make_label(row, str(item_info.get("desc", "")), 12, Color(0.68, 0.74, 0.70), false)
+		apply_rect(desc_label, rect_full(0.16, 0.52, 0.55, 0.90))
+		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+		# 拥有数量
+		var count = get_item_count(item_id)
+		var count_label = make_label(row, "拥有: %d" % count, 14, Color(0.76, 0.80, 0.74), true)
+		apply_rect(count_label, rect_full(0.56, 0.30, 0.72, 0.70))
+
+		# 购买按钮
+		var cost = int(item_info.get("cost_gems", 10))
+		var buy_btn = make_small_button("💎%d" % cost, Color(0.42, 0.38, 0.58), func() -> void:
+			if spend_gems(cost):
+				add_item(item_id, 1)
+				show_toast("购买成功！获得%s" % item_info.get("name", item_id), 2000)
+			# 刷新显示
+				_show_shop_screen_impl()
+			else:
+				show_toast("钻石不足", 1800)
+		)
+		buy_btn.custom_minimum_size = Vector2(100, 44)
+		row.add_child(buy_btn)
+		apply_rect(buy_btn, rect_full(0.80, 0.15, 0.96, 0.85))
+
+# ============================================================
+# 房间聊天功能
+# ============================================================
+
+var chat_messages: Array = []
+var chat_input: LineEdit = null
+
+func show_chat_panel() -> void:
+	if chat_messages.is_empty():
+		return
+	var chat_panel = make_panel(root_layer, rect_full(0.02, 0.38, 0.28, 0.72), Color(0.008, 0.018, 0.022, 0.95), 14, Color(0.38, 0.42, 0.40, 0.36), 0)
+	var chat_text = "\n".join(chat_messages.slice(-8))
+	var chat_label = make_label(chat_panel, chat_text, 12, Color(0.82, 0.86, 0.80), false)
+	apply_rect(chat_label, rect_full(0.06, 0.08, 0.94, 0.92))
+	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+func add_chat_message(text: String) -> void:
+	chat_messages.append(text)
+	if chat_messages.size() > 50:
+		chat_messages = chat_messages.slice(-30)
+
+func send_quick_chat(message: String) -> void:
+	if mode != "online_lobby" and mode != "online_game":
+		return
+	add_chat_message("你: %s" % message)
+	send_online_action({"type": "chat", "message": message}, "发送消息")
+	show_toast("已发送: %s" % message, 1500)# 牌面动画系统、增强胜利特效、国风装饰元素等新增函数
+# 这些代码将被追加到 scripts/main.gd 文件末尾
+
+# ============================================================
+# 牌面动画系统 / Tile Animation System
+# ============================================================
+
+func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_msec: int = FX_TILE_FLIP_DURATION_MSEC) -> void:
+	"""牌面翻转动画 - 2D缩放模拟3D翻转效果"""
+	if not fx_enabled_effective() or tile_view == null or not is_instance_valid(tile_view):
+		return
+
+	var anim_id = tile_view.get_instance_id()
+	if tile_flip_animations.has(anim_id):
+		var existing_tween: Tween = tile_flip_animations[anim_id]
+		if is_instance_valid(existing_tween):
+			existing_tween.kill()
+
+	var duration := float(duration_msec) / 1000.0
+	var half_dur := duration * 0.5
+
+	var tw := create_tween()
+	tile_flip_animations[anim_id] = tw
+
+	# 第一阶段：正面缩放到0（模拟翻转到侧面）
+	tw.tween_property(tile_view, "scale:x", 0.0, half_dur).from(1.0).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+
+	# 在中点切换可见性
+	tw.tween_callback(func() -> void:
+		if tile_view == null or not is_instance_valid(tile_view):
+			return
+		tile_view.modulate = tile_view.modulate.darkened(0.1)
+	)
+
+	# 第二阶段：从0缩放到1
+	tw.tween_property(tile_view, "scale:x", 1.0, half_dur).from(0.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	# 恢复颜色
+	tw.tween_callback(func() -> void:
+		if tile_view == null or not is_instance_valid(tile_view):
+			return
+		tile_view.modulate = Color(1, 1, 1, tile_view.modulate.a)
+		tile_flip_animations.erase(anim_id)
+	)
+
+func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, duration_msec: int = FX_CLAIM_FLY_DURATION_MSEC, arc_height: float = 80.0, callback: Callable = Callable()) -> void:
+	"""牌面飞行动画 - 带抛物线弧度"""
+	if not fx_enabled_effective():
+		if callback.is_valid():
+			callback.call()
+		return
+
+	ensure_fx_layer()
+
+	# 创建飞行中的牌面
+	var flying_tile = make_tile_view(tile, Vector2(56, 76), false, Callable())
+	flying_tile.z_index = FX_LAYER_Z_INDEX + 2
+	flying_tile.modulate = Color(1, 1, 1, 0.95)
+	flying_tile.position = from_pos
+	flying_tile.scale = Vector2(0.9, 0.9)
+	fx_layer.add_child(flying_tile)
+
+	var duration := float(duration_msec) / 1000.0
+
+	# 使用 Tween 的 parallel 模式同时控制位置和弧线
+	var tw := create_tween()
+	tile_fly_animations.append({"tween": tw, "tile": flying_tile})
+
+	tw.set_parallel(true)
+
+	# X轴移动
+	tw.tween_property(flying_tile, "position:x", to_pos.x, duration).from(from_pos.x).set_trans(FX_TILE_FLY_CURVE).set_ease(FX_TILE_FLY_EASE)
+
+	# Y轴移动（带弧线）- 使用两段动画模拟抛物线
+	var mid_pos_y = min(from_pos.y, to_pos.y) - arc_height
+
+	# 上升阶段
+	var tw_rise := create_tween()
+	tw_rise.tween_property(flying_tile, "position:y", mid_pos_y, duration * 0.5).from(from_pos.y).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	# 下降阶段
+	var tw_fall := create_tween()
+	tw_fall.tween_property(flying_tile, "position:y", to_pos.y, duration * 0.5).from(mid_pos_y).set_delay(duration * 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+	# 缩放动画
+	tw.tween_property(flying_tile, "scale", Vector2(1.0, 1.0), duration * 0.3).from(Vector2(0.9, 0.9))
+	tw.tween_property(flying_tile, "scale", Vector2(0.85, 0.85), duration * 0.3).set_delay(duration * 0.7)
+
+	# 完成回调
+	tw.tween_callback(func() -> void:
+		if flying_tile != null and is_instance_valid(flying_tile):
+			flying_tile.queue_free()
+		tile_fly_animations.erase({"tween": tw, "tile": flying_tile})
+		if callback.is_valid():
+			callback.call()
+	)
+
+func play_claim_animation(claim: String, tile: String, from_seat: int, to_seat: int, callback: Callable = Callable()) -> void:
+	"""碰/杠/吃动画 - 组合飞行动画"""
+	if not fx_enabled_effective():
+		if callback.is_valid():
+			callback.call()
+		return
+
+	var from_rect = seat_discard_rect(from_seat)
+	var to_rect = seat_meld_rect(to_seat)
+
+	var from_pos = rect_center_screen_position(from_rect)
+	var to_pos = rect_center_screen_position(to_rect)
+
+	# 根据操作类型调整动画参数
+	var duration := FX_CLAIM_FLY_DURATION_MSEC
+	var arc := 60.0
+	var color := GOLD_PRIMARY
+
+	match claim:
+		"peng":
+			arc = 80.0
+			color = VERMILION
+		"gang":
+			arc = 120.0
+			duration = int(duration * 1.3)
+			color = AZURE
+		"chi":
+			arc = 50.0
+			color = JADE_PRIMARY
+
+	# 先播放缩放爆发效果
+	play_tile_claim_burst(from_pos, color)
+
+	# 然后播放飞行动画
+	play_tile_fly_animation(tile, from_pos, to_pos, duration, arc, callback)
+
+func play_tile_claim_burst(position: Vector2, color: Color) -> void:
+	"""牌面操作时的爆发特效"""
+	if not fx_enabled_effective():
+		return
+
+	ensure_fx_layer()
+
+	var burst_root = Control.new()
+	burst_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	burst_root.position = position
+	fx_layer.add_child(burst_root)
+
+	# 创建多个扩散圆环
+	var ring_count := 3
+	var rings: Array[Panel] = []
+
+	for i in range(ring_count):
+		var ring = Panel.new()
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ring.modulate = Color(color.r, color.g, color.b, 0.0)
+		ring.set_anchors_preset(Control.PRESET_CENTER)
+		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 40, color, 2, 0))
+		burst_root.add_child(ring)
+		rings.append(ring)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+
+	for i in range(ring_count):
+		var ring = rings[i]
+		var delay = float(i) * 0.06
+		tw.tween_property(ring, "modulate:a", 0.0, 0.25).from(0.65).set_delay(delay)
+		tw.tween_property(ring, "offset_left", -55.0, 0.25).from(-18.0).set_delay(delay)
+		tw.tween_property(ring, "offset_top", -55.0, 0.25).from(-18.0).set_delay(delay)
+		tw.tween_property(ring, "offset_right", 55.0, 0.25).from(18.0).set_delay(delay)
+		tw.tween_property(ring, "offset_bottom", 55.0, 0.25).from(18.0).set_delay(delay)
+
+	tw.tween_callback(func() -> void:
+		if burst_root != null and is_instance_valid(burst_root):
+			burst_root.queue_free()
+	).set_delay(0.35)
+
+func seat_discard_rect(seat: int) -> Rect2:
+	"""获取座位弃牌区矩形"""
+	for zone in DISCARD_ZONES:
+		if int(zone[0]) == seat:
+			return zone[1]
+	return Rect2(Vector2(0.4, 0.4), Vector2(0.2, 0.2))
+
+func seat_meld_rect(seat: int) -> Rect2:
+	"""获取座位明牌区矩形"""
+	# 根据 SEAT_LAYOUTS 查找对应座位的明牌区
+	match seat:
+		0: return Rect2(Vector2(0.08, 0.58), Vector2(0.25, 0.15))
+		1: return Rect2(Vector2(0.08, 0.22), Vector2(0.25, 0.15))
+		2: return Rect2(Vector2(0.67, 0.22), Vector2(0.25, 0.15))
+		3: return Rect2(Vector2(0.67, 0.58), Vector2(0.25, 0.15))
+		_: return Rect2(Vector2(0.4, 0.4), Vector2(0.2, 0.2))
+
+func rect_center_screen_position(rect: Rect2) -> Vector2:
+	"""将anchor矩形转换为屏幕中心坐标"""
+	var screen_rect = root_layer_rect_to_screen_rect(rect)
+	return Vector2(
+		screen_rect.position.x + screen_rect.size.x * 0.5,
+		screen_rect.position.y + screen_rect.size.y * 0.5
+	)
+
+# ============================================================
+# 增强胜利特效 / Enhanced Victory Effect
+# ============================================================
+
+func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "normal") -> void:
+	"""增强版胜利特效 - 带粒子、光效、震动"""
+	if not fx_enabled_effective() or fx_burst_root == null or not is_instance_valid(fx_burst_root):
+		return
+
+	if fx_burst_tween != null and is_instance_valid(fx_burst_tween):
+		fx_burst_tween.kill()
+
+	apply_rect(fx_burst_root, rect_full(0.18, 0.24, 0.82, 0.76))
+
+	# 根据胜利类型调整效果参数
+	var particle_count := FX_WIN_PARTICLE_COUNT
+	var duration := FX_WIN_DURATION_ENHANCED_MSEC
+	var flash_intensity := 0.12
+
+	match win_type:
+		"self_draw":
+			particle_count = int(particle_count * 1.5)
+			duration = int(duration * 1.3)
+			flash_intensity = 0.18
+		"special":
+			particle_count = int(particle_count * 2.2)
+			duration = int(duration * 1.6)
+			flash_intensity = 0.25
+
+	# 背景闪烁
+	fx_burst_flash.color = Color(color.r, color.g, color.b, 0.0)
+
+	# 创建粒子系统（使用Control节点模拟）
+	var particles_root = Control.new()
+	particles_root.name = "WinParticles"
+	particles_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	particles_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_burst_root.add_child(particles_root)
+
+	# 生成粒子
+	var particles: Array[Control] = []
+	for i in range(particle_count):
+		var particle = _create_win_particle(color, i, particle_count)
+		particles_root.add_child(particle)
+		particles.append(particle)
+
+	# 配置原有圆环 - 增强扩散效果
+	for ring in fx_burst_rings:
+		ring.modulate.a = 0.0
+		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 60, color, 4, 0))
+		ring.offset_left = -42.0
+		ring.offset_top = -42.0
+		ring.offset_right = 42.0
+		ring.offset_bottom = 42.0
+
+	# 设置标签 - 增强文字效果
+	fx_burst_label.text = text
+	fx_burst_label.add_theme_color_override("font_color", color.lightened(0.30))
+	fx_burst_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	fx_burst_label.modulate.a = 0.0
+	fx_burst_label.offset_top = 28.0
+	fx_burst_label.offset_bottom = 28.0
+
+	# 添加印章装饰 - 增强印章效果
+	var seal_text = "胡" if win_type != "self_draw" else "摸"
+	var seal = make_seal_stamp(fx_burst_root, rect_full(0.42, 0.62, 0.58, 0.82), seal_text, "square")
+	seal.modulate.a = 0.0
+	seal.scale = Vector2(0.4, 0.4)
+
+	fx_burst_root.visible = true
+
+	var half := float(duration) / 2000.0
+
+	# 创建主动画
+	var tw := create_tween()
+	fx_burst_tween = tw
+	tw.set_parallel(true)
+
+	# 背景闪烁动画
+	tw.tween_property(fx_burst_flash, "color:a", flash_intensity, 0.18).from(0.0)
+	tw.tween_property(fx_burst_flash, "color:a", 0.0, 0.65).set_delay(max(0.0, half - 0.65))
+
+	# 标签动画
+	tw.tween_property(fx_burst_label, "modulate:a", 1.0, 0.22).from(0.0)
+	tw.tween_property(fx_burst_label, "modulate:a", 0.0, 0.55).set_delay(max(0.0, half - 0.55))
+	tw.tween_property(fx_burst_label, "offset_top", -16.0, half).from(28.0)
+	tw.tween_property(fx_burst_label, "offset_bottom", -16.0, half).from(28.0)
+
+	# 印章动画 - 更强的弹出效果
+	tw.tween_property(seal, "modulate:a", 1.0, 0.32).from(0.0).set_delay(0.12)
+	tw.tween_property(seal, "scale", Vector2(1.15, 1.15), 0.32).from(Vector2(0.4, 0.4)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK).set_delay(0.12)
+	tw.tween_property(seal, "scale", Vector2(1.0, 1.0), 0.15).from(Vector2(1.15, 1.15)).set_delay(0.44)
+	tw.tween_property(seal, "modulate:a", 0.0, 0.40).set_delay(half - 0.15)
+
+	# 圆环扩散动画 - 更大的扩散范围和更强的效果
+	for i in range(fx_burst_rings.size()):
+		var ring = fx_burst_rings[i]
+		var delay = float(i) * 0.08
+		var span = max(0.35, half - delay)
+		tw.tween_property(ring, "modulate:a", 0.0, span).from(0.85).set_delay(delay)
+		tw.tween_property(ring, "offset_left", -280.0, span).from(-42.0).set_delay(delay)
+		tw.tween_property(ring, "offset_top", -280.0, span).from(-42.0).set_delay(delay)
+		tw.tween_property(ring, "offset_right", 280.0, span).from(42.0).set_delay(delay)
+		tw.tween_property(ring, "offset_bottom", 280.0, span).from(42.0).set_delay(delay)
+
+	# 粒子动画
+	for i in range(particles.size()):
+		var particle = particles[i]
+		var delay = fmod(float(i) * 0.015, 0.4)
+		_animate_win_particle(particle, tw, delay, half)
+
+	# 屏幕震动效果
+	_play_screen_shake(FX_WIN_SHAKE_AMPLITUDE, FX_WIN_SHAKE_FREQUENCY, 0.25)
+
+	# 结束清理
+	tw.tween_callback(func() -> void:
+		_hide_fx_burst()
+		if particles_root != null and is_instance_valid(particles_root):
+			particles_root.queue_free()
+		if seal != null and is_instance_valid(seal):
+			seal.queue_free()
+	).set_delay(half + 0.05)
+
+func _create_win_particle(base_color: Color, index: int, total: int) -> Control:
+	"""创建单个胜利粒子"""
+	var particle = Control.new()
+	particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	particle.set_anchors_preset(Control.PRESET_CENTER)
+
+	# 随机位置和大小
+	var angle = randf() * PI * 2.0
+	var radius = randf_range(50.0, 180.0)
+	particle.position = Vector2(cos(angle) * radius * 0.3, sin(angle) * radius * 0.3)
+
+	# 粒子核心
+	var core = Panel.new()
+	core.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var core_size = randf_range(6.0, 14.0)
+	core.custom_minimum_size = Vector2(core_size, core_size)
+
+	var particle_style = StyleBoxFlat.new()
+	var particle_color = base_color.lightened(randf_range(-0.2, 0.4))
+	particle_style.bg_color = Color(particle_color.r, particle_color.g, particle_color.b, randf_range(0.6, 0.95))
+	particle_style.set_corner_radius_all(int(core_size * 0.5))
+	core.add_theme_stylebox_override("panel", particle_style)
+
+	core.offset_left = -core_size * 0.5
+	core.offset_top = -core_size * 0.5
+	core.offset_right = core_size * 0.5
+	core.offset_bottom = core_size * 0.5
+
+	particle.add_child(core)
+	particle.modulate.a = 0.0
+
+	# 存储动画参数
+	particle.set_meta("target_x", cos(angle) * radius)
+	particle.set_meta("target_y", sin(angle) * radius - randf_range(30.0, 80.0))
+	particle.set_meta("rotation_speed", randf_range(-3.0, 3.0))
+	particle.set_meta("scale_target", randf_range(0.3, 0.7))
+
+	return particle
+
+func _animate_win_particle(particle: Control, tw: Tween, delay: float, duration: float) -> void:
+	"""动画化单个胜利粒子"""
+	var target_x: float = particle.get_meta("target_x", 100.0)
+	var target_y: float = particle.get_meta("target_y", -100.0)
+	var rot_speed: float = particle.get_meta("rotation_speed", 1.0)
+	var scale_target: float = particle.get_meta("scale_target", 0.5)
+
+	tw.tween_property(particle, "modulate:a", 0.0, duration * 0.7).from(0.0).set_delay(delay)
+	tw.parallel().tween_property(particle, "position:x", target_x, duration * 0.8).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(particle, "position:y", target_y, duration * 0.8).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(particle, "rotation", rot_speed, duration * 0.6).from(0.0).set_delay(delay)
+	tw.parallel().tween_property(particle, "scale", Vector2(scale_target, scale_target), duration * 0.5).from(Vector2(1.0, 1.0)).set_delay(delay + duration * 0.3)
+
+func _play_screen_shake(amplitude: float, frequency: float, duration: float) -> void:
+	"""屏幕震动效果"""
+	if not fx_enabled_effective():
+		return
+
+	var shake_count = int(duration * frequency)
+	var tw := create_tween()
+
+	for i in range(shake_count):
+		var progress = float(i) / float(shake_count)
+		var decay = 1.0 - progress
+		var current_amplitude = amplitude * decay
+
+		var offset = Vector2(
+			randf_range(-current_amplitude, current_amplitude),
+			randf_range(-current_amplitude, current_amplitude)
+		)
+
+		tw.tween_property(root_layer, "position", offset, 1.0 / frequency).from(root_layer.position)
+
+	tw.tween_property(root_layer, "position", Vector2.ZERO, 0.05)
+
+	# ============================================================
+# 国风装饰元素工厂 / Guofeng Decorative Element Factory
+# ============================================================
+
+func draw_menu_hero_illustration(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "MenuHeroIllustration"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.57, 0.14, 0.96, 0.84))
+	parent.add_child(art)
+	make_cloud_decoration(art, rect_full(0.02, 0.00, 0.42, 0.42), "mist", false).name = "MenuHeroMistCloud"
+	make_cloud_decoration(art, rect_full(0.58, 0.50, 1.00, 0.98), "gold", false).name = "MenuHeroGoldCloud"
+	var table_disc = make_panel(art, rect_full(0.15, 0.42, 0.86, 0.93), Color(0.012, 0.060, 0.052, 0.86), 999, Color(0.68, 0.56, 0.28, 0.42), 0)
+	table_disc.name = "MenuHeroRoundTable"
+	make_panel(table_disc, rect_full(0.12, 0.14, 0.88, 0.86), Color(0.018, 0.092, 0.078, 0.78), 999, Color(0.86, 0.74, 0.38, 0.26), 0)
+	var tiles := ["E", "Z", "5W"]
+	for i in range(tiles.size()):
+		var tile = make_tile_view(str(tiles[i]), Vector2(36, 50), false, Callable(), true)
+		tile.name = "MenuHeroTile_%s" % str(tiles[i])
+		table_disc.add_child(tile)
+		apply_rect(tile, rect_full(0.28 + float(i) * 0.15, 0.18, 0.43 + float(i) * 0.15, 0.78))
+	var seal = make_seal_stamp(art, rect_full(0.72, 0.08, 0.92, 0.40), "云", "round")
+	seal.name = "MenuHeroSeal"
+	add_lucide_icon(art, "sparkles", rect_full(0.05, 0.56, 0.18, 0.86), Color(0.96, 0.84, 0.44, 0.48))
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := art.create_tween()
+		tw.set_loops()
+		tw.tween_property(art, "modulate:a", 0.78, 2.2).from(1.0)
+		tw.tween_property(art, "modulate:a", 1.0, 2.2).from(0.78)
+	return art
+
+func draw_table_atmosphere_frame(parent: Control) -> Control:
+	var frame = Control.new()
+	frame.name = "TableAtmosphereFrame"
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(frame)
+	make_cloud_decoration(frame, rect_full(0.030, 0.030, 0.250, 0.155), "mist", false).name = "TableMistCloudNW"
+	make_cloud_decoration(frame, rect_full(0.740, 0.815, 0.970, 0.965), "mist", false).name = "TableMistCloudSE"
+	make_bamboo_decoration(frame, rect_full(0.018, 0.235, 0.045, 0.585), 4).name = "TableBambooLeft"
+	make_bamboo_decoration(frame, rect_full(0.955, 0.415, 0.982, 0.765), 4).name = "TableBambooRight"
+	for item in [
+		[rect_full(0.300, 0.040, 0.700, 0.052), Color(0.92, 0.78, 0.36, 0.18)],
+		[rect_full(0.300, 0.948, 0.700, 0.960), Color(0.92, 0.78, 0.36, 0.14)],
+		[rect_full(0.040, 0.300, 0.052, 0.700), Color(0.92, 0.78, 0.36, 0.12)],
+		[rect_full(0.948, 0.300, 0.960, 0.700), Color(0.92, 0.78, 0.36, 0.12)],
+	]:
+		var line = make_color_rect(item[0], item[1])
+		line.name = "TableAtmosphereGoldLine"
+		frame.add_child(line)
+	return frame
+
+func draw_center_wind_compass(parent: Control) -> Control:
+	var compass = Control.new()
+	compass.name = "CenterWindCompass"
+	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(compass, rect_full(0.08, 0.08, 0.92, 0.92))
+	parent.add_child(compass)
+	make_panel(compass, rect_full(0.22, 0.22, 0.78, 0.78), Color(0.010, 0.050, 0.046, 0.18), 999, Color(0.88, 0.76, 0.42, 0.20), 0)
+	make_panel(compass, rect_full(0.34, 0.34, 0.66, 0.66), Color(0.66, 0.54, 0.24, 0.12), 999, Color(0.96, 0.82, 0.44, 0.22), 0)
+	var current = get_current_seat()
+	var wind_marks := [
+		[rect_full(0.45, 0.00, 0.55, 0.15), "东", 0],
+		[rect_full(0.85, 0.45, 1.00, 0.55), "南", 1],
+		[rect_full(0.45, 0.85, 0.55, 1.00), "西", 2],
+		[rect_full(0.00, 0.45, 0.15, 0.55), "北", 3],
+	]
+	for mark in wind_marks:
+		var active = int(mark[2]) == current
+		var badge = make_panel(compass, mark[0], Color(0.52, 0.42, 0.16, 0.36 if active else 0.16), 999, Color(0.96, 0.82, 0.42, 0.46 if active else 0.18), 0)
+		badge.name = "CenterWindCompass_%s" % str(mark[1])
+		var label = make_label(badge, str(mark[1]), 12, GOLD_LIGHT if active else Color(0.64, 0.62, 0.46, 0.72), true)
+		apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
+	return compass
+
+func draw_summary_victory_ribbon(parent: Control) -> Control:
+	var ribbon = Control.new()
+	ribbon.name = "SummaryVictoryRibbon"
+	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(ribbon, rect_full(0.105, 0.055, 0.305, 0.145))
+	parent.add_child(ribbon)
+	make_panel(ribbon, rect_full(0.08, 0.20, 0.92, 0.80), Color(0.58, 0.12, 0.08, 0.58), 4, Color(1.0, 0.78, 0.34, 0.42), 0)
+	var left_tail = make_color_rect(rect_full(0.00, 0.30, 0.16, 0.70), Color(0.42, 0.08, 0.06, 0.54))
+	left_tail.name = "SummaryRibbonLeftTail"
+	ribbon.add_child(left_tail)
+	var right_tail = make_color_rect(rect_full(0.84, 0.30, 1.00, 0.70), Color(0.42, 0.08, 0.06, 0.54))
+	right_tail.name = "SummaryRibbonRightTail"
+	ribbon.add_child(right_tail)
+	add_lucide_icon(ribbon, "trophy", rect_full(0.44, 0.08, 0.56, 0.92), Color(0.98, 0.86, 0.46, 0.86))
+	return ribbon
+
+func make_ink_border(parent: Control, rect: Rect2, thickness: float = 2.0) -> Control:
+	"""创建水墨笔触边框 - 模拟毛笔绘制效果"""
+	var container = Control.new()
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(container, rect)
+
+	# 外框 - 粗笔触
+	var outer = make_color_rect(rect_full(0.0, 0.0, 1.0, thickness / rect.size.y), INK_DARK)
+	container.add_child(outer)
+
+	# 内框 - 细笔触
+	var inner = make_color_rect(rect_full(0.0, 0.0, 1.0, (thickness * 0.5) / rect.size.y), INK_MEDIUM)
+	inner.offset_top = thickness / rect.size.y
+	container.add_child(inner)
+
+	# 添加随机噪点模拟墨迹
+	var noise_count = int(rect.size.x * 0.3)
+	for i in range(noise_count):
+		var x = randf()
+		var noise_alpha = randf_range(0.1, 0.3)
+		var noise = make_color_rect(
+			rect_full(x - 0.002, 0.0, x + 0.002, 0.02),
+			Color(INK_DARK.r, INK_DARK.g, INK_DARK.b, noise_alpha)
+		)
+		container.add_child(noise)
+
+	parent.add_child(container)
+	return container
+
+func make_cloud_decoration(parent: Control, rect: Rect2, style: String = "auspicious", animated: bool = false) -> Control:
+	"""创建祥云装饰元素"""
+	var cloud = Control.new()
+	cloud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(cloud, rect)
+
+	var cloud_color: Color
+	match style:
+		"auspicious":
+			cloud_color = CLOUD_WHITE
+		"mist":
+			cloud_color = CLOUD_MIST
+		"gold":
+			cloud_color = CLOUD_GOLD
+		_:
+			cloud_color = CLOUD_WHITE
+
+	# 使用多个椭圆组合成祥云形状
+	var puffs := [
+		{"x": 0.15, "y": 0.55, "rx": 0.18, "ry": 0.28},
+		{"x": 0.35, "y": 0.42, "rx": 0.22, "ry": 0.32},
+		{"x": 0.58, "y": 0.48, "rx": 0.20, "ry": 0.30},
+		{"x": 0.78, "y": 0.58, "rx": 0.16, "ry": 0.24},
+		{"x": 0.25, "y": 0.68, "rx": 0.15, "ry": 0.22},
+		{"x": 0.50, "y": 0.72, "rx": 0.18, "ry": 0.26},
+		{"x": 0.72, "y": 0.76, "rx": 0.14, "ry": 0.20},
+	]
+
+	for puff in puffs:
+		var ellipse = Panel.new()
+		ellipse.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ellipse.modulate = cloud_color
+		var style_box = StyleBoxFlat.new()
+		style_box.bg_color = Color(cloud_color.r, cloud_color.g, cloud_color.b, cloud_color.a * 0.6)
+		style_box.set_corner_radius_all(50)
+		ellipse.add_theme_stylebox_override("panel", style_box)
+		apply_rect(ellipse, rect_full(
+			puff["x"] - puff["rx"],
+			puff["y"] - puff["ry"],
+			puff["x"] + puff["rx"],
+			puff["y"] + puff["ry"]
+		))
+		cloud.add_child(ellipse)
+
+	if animated and fx_enabled_effective():
+		var tw := create_tween()
+		tw.set_loops()
+		tw.tween_property(cloud, "modulate:a", cloud_color.a * 0.7, 2.5).from(cloud_color.a)
+		tw.tween_property(cloud, "modulate:a", cloud_color.a, 2.5).from(cloud_color.a * 0.7)
+		tw.tween_property(cloud, "offset_left", 8.0, 4.0).from(0.0)
+		tw.tween_property(cloud, "offset_left", 0.0, 4.0).from(8.0)
+
+	parent.add_child(cloud)
+	return cloud
+
+func make_chinese_corner(parent: Control, rect: Rect2, style: String = "simple") -> Control:
+	"""创建中式角落装饰 - 回纹或如意纹"""
+	var corner = Control.new()
+	corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(corner, rect)
+
+	var line_color = GOLD_PRIMARY
+	var line_width = max(1.0, rect.size.x * 0.08)
+
+	# 绘制回纹图案 (使用ColorRect模拟)
+	# 水平线
+	var h1 = make_color_rect(rect_full(0.0, 0.0, 1.0, line_width / rect.size.y), line_color)
+	corner.add_child(h1)
+
+	# 垂直线
+	var v1 = make_color_rect(rect_full(0.0, 0.0, line_width / rect.size.x, 1.0), line_color)
+	corner.add_child(v1)
+
+	# 内部回纹
+	if style == "elaborate":
+		var margin = 0.15
+		var h2 = make_color_rect(
+			rect_full(margin, margin, 1.0 - margin, margin + line_width / rect.size.y),
+			line_color
+		)
+		h2.modulate.a = 0.7
+		corner.add_child(h2)
+
+		var v2 = make_color_rect(
+			rect_full(margin, margin, margin + line_width / rect.size.x, 1.0 - margin),
+			line_color
+		)
+		v2.modulate.a = 0.7
+		corner.add_child(v2)
+
+	parent.add_child(corner)
+	return corner
+
+func make_seal_stamp(parent: Control, rect: Rect2, text: String = "胡", style: String = "square") -> Control:
+	"""创建印章装饰效果"""
+	var seal = Control.new()
+	seal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(seal, rect)
+
+	# 印章底色
+	var stamp = Panel.new()
+	stamp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stamp.modulate = CINNABAR
+
+	var stamp_style = StyleBoxFlat.new()
+	stamp_style.bg_color = Color(CINNABAR.r, CINNABAR.g, CINNABAR.b, 0.85)
+	stamp_style.set_border_width_all(2)
+	stamp_style.border_color = CINNABAR.darkened(0.2)
+	if style == "round":
+		stamp_style.set_corner_radius_all(int(min(rect.size.x, rect.size.y) * 0.5))
+	else:
+		stamp_style.set_corner_radius_all(4)
+	stamp.add_theme_stylebox_override("panel", stamp_style)
+	stamp.set_anchors_preset(Control.PRESET_FULL_RECT)
+	seal.add_child(stamp)
+
+	# 印章文字
+	var label = make_label(seal, text, max(12, int(min(rect.size.x, rect.size.y) * 0.6)), PAPER_WARM, true)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.3))
+
+	# 添加磨损效果
+	var wear_count = 3
+	for i in range(wear_count):
+		var wear = make_color_rect(
+			rect_full(randf() * 0.6, randf() * 0.6, randf() * 0.4 + 0.5, randf() * 0.4 + 0.5),
+			Color(PAPER_WARM.r, PAPER_WARM.g, PAPER_WARM.b, randf_range(0.05, 0.15))
+		)
+		seal.add_child(wear)
+
+	parent.add_child(seal)
+	return seal
+
+func make_bamboo_decoration(parent: Control, rect: Rect2, segments: int = 3) -> Control:
+	"""创建竹节装饰"""
+	var bamboo = Control.new()
+	bamboo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(bamboo, rect)
+
+	var segment_height = 1.0 / float(segments)
+
+	for i in range(segments):
+		var y_start = i * segment_height
+		var y_end = (i + 1) * segment_height
+
+		# 竹节主体
+		var segment = make_color_rect(
+			rect_full(0.2, y_start + segment_height * 0.1, 0.8, y_end - segment_height * 0.1),
+			JADE_DARK.darkened(0.1 + float(i) * 0.05)
+		)
+		bamboo.add_child(segment)
+
+		# 竹节环
+		if i < segments - 1:
+			var ring = make_color_rect(
+				rect_full(0.15, y_end - segment_height * 0.15, 0.85, y_end + segment_height * 0.05),
+				JADE_DARK.darkened(0.2)
+			)
+			bamboo.add_child(ring)
+
+	parent.add_child(bamboo)
+	return bamboo
+
+# ============================================================
+# 界面过渡动画 / Interface Transition Animation
+# ============================================================
+
+func play_menu_transition(from_menu: Control, to_menu: Callable, style: String = "slide_left") -> void:
+	"""菜单切换动画"""
+	if not fx_enabled_effective():
+		to_menu.call()
+		return
+
+	var duration := float(TRANSITION_SLIDE_DURATION_MSEC) / 1000.0
+	var viewport_size = get_viewport().size
+
+	match style:
+		"slide_left":
+			# 当前菜单滑出
+			var tw_out := create_tween()
+			tw_out.tween_property(from_menu, "position:x", -viewport_size.x, duration).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			tw_out.parallel().tween_property(from_menu, "modulate:a", 0.5, duration).from(1.0)
+
+			# 新菜单从右侧滑入
+			tw_out.tween_callback(func() -> void:
+				from_menu.queue_free()
+				to_menu.call()
+				root_layer.position.x = viewport_size.x
+
+				var tw_in := create_tween()
+				tw_in.tween_property(root_layer, "position:x", 0.0, duration).from(viewport_size.x).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+				tw_in.parallel().tween_property(root_layer, "modulate:a", 1.0, duration).from(0.5)
+			)
+
+		"slide_right":
+			var tw_out := create_tween()
+			tw_out.tween_property(from_menu, "position:x", viewport_size.x, duration).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			tw_out.parallel().tween_property(from_menu, "modulate:a", 0.5, duration).from(1.0)
+
+			tw_out.tween_callback(func() -> void:
+				from_menu.queue_free()
+				to_menu.call()
+				root_layer.position.x = -viewport_size.x
+
+				var tw_in := create_tween()
+				tw_in.tween_property(root_layer, "position:x", 0.0, duration).from(-viewport_size.x).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+				tw_in.parallel().tween_property(root_layer, "modulate:a", 1.0, duration).from(0.5)
+			)
+
+		"fade":
+			var tw := create_tween()
+			tw.tween_property(from_menu, "modulate:a", 0.0, duration * 0.5)
+			tw.tween_callback(func() -> void:
+				from_menu.queue_free()
+				to_menu.call()
+				root_layer.modulate.a = 0.0
+			)
+			tw.tween_property(root_layer, "modulate:a", 1.0, duration * 0.5)
+
+		"zoom":
+			var tw := create_tween()
+			tw.set_parallel(true)
+			tw.tween_property(from_menu, "scale", Vector2(0.8, 0.8), duration * 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			tw.tween_property(from_menu, "modulate:a", 0.0, duration * 0.5)
+
+			tw.tween_callback(func() -> void:
+				from_menu.queue_free()
+				to_menu.call()
+				root_layer.scale = Vector2(1.1, 1.1)
+				root_layer.modulate.a = 0.0
+			).set_delay(duration * 0.5)
+
+			tw.tween_property(root_layer, "scale", Vector2(1.0, 1.0), duration * 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_delay(duration * 0.5)
+			tw.tween_property(root_layer, "modulate:a", 1.0, duration * 0.5).set_delay(duration * 0.5)
+
+func play_card_flip_animation(container: Control, cards: Array, stagger: bool = true) -> void:
+	"""卡片翻转进场动画（用于菜单卡片等）"""
+	if not fx_enabled_effective() or cards.is_empty():
+		return
+
+	var duration := float(TRANSITION_CARD_FLIP_DURATION_MSEC) / 1000.0
+	var stagger_delay := float(TRANSITION_STAGGER_DELAY_MSEC) / 1000.0
+
+	for i in range(cards.size()):
+		var card = cards[i]
+		card.scale = Vector2(0.0, 1.0)
+		card.modulate.a = 0.0
+
+		var delay = 0.0
+		if stagger:
+			delay = float(i) * stagger_delay
+
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(card, "scale:x", 1.0, duration).from(0.0).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(card, "modulate:a", 1.0, duration * 0.6).from(0.0).set_delay(delay)
+
+func play_button_press_animation(button: Button, scale_amount: float = 0.92) -> void:
+	"""按钮按下动画"""
+	if not fx_enabled_effective():
+		return
+
+	var tw := create_tween()
+	tw.tween_property(button, "scale", Vector2(scale_amount, scale_amount), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(button, "scale", Vector2(1.0, 1.0), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+# ============================================================
+# 环境氛围动画系统 / Environmental Atmosphere Animation
+# ============================================================
+
+func start_ambient_animation(theme: String = "default") -> void:
+	"""启动环境氛围动画"""
+	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+		return
+
+	stop_ambient_animation()
+
+	ambient_layer = Control.new()
+	ambient_layer.name = "AmbientLayer"
+	ambient_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ambient_layer.z_index = -1
+	ambient_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(ambient_layer)
+
+	match theme:
+		"spring":
+			_start_petal_fall()
+		"autumn":
+			_start_leaf_fall()
+		"festival":
+			_start_firework_particles()
+		_:
+			_start_default_ambient()
+
+func stop_ambient_animation() -> void:
+	"""停止环境氛围动画"""
+	if ambient_tween != null and is_instance_valid(ambient_tween):
+		ambient_tween.kill()
+
+	for petal in ambient_petals:
+		if petal != null and is_instance_valid(petal):
+			petal.queue_free()
+	ambient_petals.clear()
+
+	for cloud in ambient_clouds:
+		if cloud != null and is_instance_valid(cloud):
+			cloud.queue_free()
+	ambient_clouds.clear()
+
+	for particle in ambient_particles:
+		if particle != null and is_instance_valid(particle):
+			particle.queue_free()
+	ambient_particles.clear()
+
+	if ambient_layer != null and is_instance_valid(ambient_layer):
+		ambient_layer.queue_free()
+	ambient_layer = null
+
+func _start_petal_fall() -> void:
+	"""启动花瓣飘落动画"""
+	var petal_count := 12
+
+	for i in range(petal_count):
+		var petal = _create_petal()
+		ambient_layer.add_child(petal)
+		ambient_petals.append(petal)
+		_animate_petal_fall(petal, float(i) * 0.4)
+
+func _create_petal() -> Control:
+	"""创建花瓣粒子"""
+	var petal = Control.new()
+	petal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# 花瓣形状（使用Panel模拟椭圆）
+	var shape = Panel.new()
+	shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.88, 0.92, randf_range(0.3, 0.6))
+	style.set_corner_radius_all(50)
+	shape.add_theme_stylebox_override("panel", style)
+	shape.custom_minimum_size = Vector2(randf_range(8, 14), randf_range(12, 20))
+	shape.rotation = randf() * PI * 0.5
+	petal.add_child(shape)
+
+	# 随机起始位置
+	petal.position = Vector2(randf_range(0.0, 1.0) * get_viewport().size.x, -20.0)
+
+	return petal
+
+func _animate_petal_fall(petal: Control, delay: float) -> void:
+	"""花瓣飘落动画"""
+	var viewport_size = get_viewport().size
+	var fall_duration = randf_range(8.0, 15.0)
+	var sway_amplitude = randf_range(30.0, 80.0)
+	var sway_frequency = randf_range(0.5, 1.5)
+
+	var tw := create_tween()
+	tw.set_loops()
+
+	# 垂直下落
+	tw.tween_property(petal, "position:y", viewport_size.y + 30.0, fall_duration).from(-20.0).set_delay(delay)
+
+	# 水平摇摆
+	var sway_tw := create_tween()
+	sway_tw.set_loops()
+	sway_tw.tween_property(petal, "position:x", petal.position.x + sway_amplitude, 1.0 / sway_frequency).set_delay(delay)
+	sway_tw.tween_property(petal, "position:x", petal.position.x - sway_amplitude, 1.0 / sway_frequency)
+
+	# 旋转
+	var rot_tw := create_tween()
+	rot_tw.set_loops()
+	rot_tw.tween_property(petal, "rotation", PI * 0.3, fall_duration * 0.3).from(0.0).set_delay(delay)
+	rot_tw.tween_property(petal, "rotation", -PI * 0.3, fall_duration * 0.3).set_delay(delay)
+
+func _start_default_ambient() -> void:
+	"""启动默认氛围动画（祥云流动）"""
+	var cloud_count := 4
+
+	for i in range(cloud_count):
+		var cloud = make_cloud_decoration(
+			ambient_layer,
+			rect_full(randf() * 0.6 - 0.3, randf() * 0.5 + 0.1, randf() * 0.3 + 0.15, randf() * 0.15 + 0.05),
+			"mist",
+			true
+		)
+		cloud.scale = Vector2(randf_range(0.6, 1.2), randf_range(0.6, 1.2))
+		ambient_clouds.append(cloud)
+		_animate_cloud_drift(cloud, float(i) * 1.5)
+
+func _animate_cloud_drift(cloud: Control, delay: float) -> void:
+	"""云朵漂移动画"""
+	var drift_duration = randf_range(20.0, 35.0)
+	var viewport_size = get_viewport().size
+
+	cloud.position.x = -cloud.size.x
+
+	var tw := create_tween()
+	tw.set_loops()
+	tw.tween_property(cloud, "position:x", viewport_size.x + cloud.size.x, drift_duration).set_delay(delay)
+
+func _start_leaf_fall() -> void:
+	"""启动落叶飘落动画"""
+	var leaf_count := 10
+
+	for i in range(leaf_count):
+		var leaf = _create_leaf()
+		ambient_layer.add_child(leaf)
+		ambient_particles.append(leaf)
+		_animate_leaf_fall(leaf, float(i) * 0.5)
+
+func _create_leaf() -> Control:
+	"""创建落叶粒子"""
+	var leaf = Control.new()
+	leaf.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var shape = Panel.new()
+	shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(randf_range(0.6, 0.9), randf_range(0.3, 0.5), randf_range(0.1, 0.2), randf_range(0.4, 0.7))
+	style.set_corner_radius_all(40)
+	shape.add_theme_stylebox_override("panel", style)
+	shape.custom_minimum_size = Vector2(randf_range(10, 18), randf_range(8, 14))
+	shape.rotation = randf() * PI
+	leaf.add_child(shape)
+
+	leaf.position = Vector2(randf_range(0.0, 1.0) * get_viewport().size.x, -20.0)
+
+	return leaf
+
+func _animate_leaf_fall(leaf: Control, delay: float) -> void:
+	"""落叶飘落动画"""
+	var viewport_size = get_viewport().size
+	var fall_duration = randf_range(10.0, 18.0)
+
+	var tw := create_tween()
+	tw.set_loops()
+	tw.tween_property(leaf, "position:y", viewport_size.y + 30.0, fall_duration).from(-20.0).set_delay(delay)
+
+	var sway_tw := create_tween()
+	sway_tw.set_loops()
+	sway_tw.tween_property(leaf, "position:x", leaf.position.x + randf_range(40.0, 100.0), randf_range(1.0, 2.0)).set_delay(delay)
+	sway_tw.tween_property(leaf, "position:x", leaf.position.x - randf_range(40.0, 100.0), randf_range(1.0, 2.0))
+
+func _start_firework_particles() -> void:
+	"""启动节日烟花粒子动画"""
+	# 简化版本：创建闪烁的光点
+	var particle_count := 20
+
+	for i in range(particle_count):
+		var particle = Control.new()
+		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		var core = Panel.new()
+		core.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style = StyleBoxFlat.new()
+		style.bg_color = Color(randf_range(0.8, 1.0), randf_range(0.6, 1.0), randf_range(0.2, 0.8), 0.8)
+		style.set_corner_radius_all(50)
+		core.add_theme_stylebox_override("panel", style)
+		core.custom_minimum_size = Vector2(randf_range(3, 6), randf_range(3, 6))
+		particle.add_child(core)
+
+		particle.position = Vector2(randf() * get_viewport().size.x, randf() * get_viewport().size.y)
+		ambient_layer.add_child(particle)
+		ambient_particles.append(particle)
+
+		# 闪烁动画
+		var tw := create_tween()
+		tw.set_loops()
+		tw.tween_property(particle, "modulate:a", 0.2, randf_range(0.5, 1.5)).from(1.0)
+		tw.tween_property(particle, "modulate:a", 1.0, randf_range(0.5, 1.5)).from(0.2)
+
+# ============================================================
+# 图标系统 / Icon System
+# ============================================================
+
+const ICON_CODES := {
+	# Navigation
+	"menu": "☰",
+	"back": "←",
+	"forward": "→",
+	"up": "↑",
+	"down": "↓",
+
+	# Actions
+	"play": "▶",
+	"pause": "❚❚",
+	"stop": "■",
+	"refresh": "↻",
+	"settings": "⚙",
+
+	# Game specific
+	"coin": "●",
+	"gem": "◆",
+	"star": "★",
+	"heart": "♥",
+	"trophy": "🏆",
+	"fire": "🔥",
+
+	# Status
+	"check": "✓",
+	"cross": "✗",
+	"warning": "⚠",
+	"info": "ℹ",
+	"help": "?",
+
+	# Chinese style decorations
+	"cloud": "☁",
+	"sun": "☀",
+	"moon": "☾",
+	"bamboo": "🎋",
+	"flower": "❀",
+	"dragon": "🐉",
+}
+
+func make_icon_label(parent: Control, icon_name: String, size: int, color: Color) -> Label:
+	"""创建图标Label"""
+	var icon_code = ICON_CODES.get(icon_name, "")
+	var label = make_label(parent, icon_code, size, color, true)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return label
+
+func make_icon_button(icon_name: String, color: Color, size: int = 24, callback: Callable = Callable()) -> Button:
+	"""创建图标按钮"""
+	var button = Button.new()
+	button.text = ICON_CODES.get(icon_name, "")
+	button.custom_minimum_size = Vector2(size * 1.8, size * 1.8)
+	configure_touch_button(button)
+	button.add_theme_font_size_override("font_size", size)
+	button.add_theme_color_override("font_color", color)
+	button.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.4))
+
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.02, 0.03, 0.04, 0.85)
+	btn_style.set_corner_radius_all(size * 0.4)
+	btn_style.set_border_width_all(1)
+	btn_style.border_color = color.darkened(0.3)
+	button.add_theme_stylebox_override("normal", btn_style)
+
+	var hover_style = btn_style.duplicate()
+	hover_style.bg_color = Color(0.04, 0.05, 0.06, 0.92)
+	hover_style.border_color = color
+	button.add_theme_stylebox_override("hover", hover_style)
+
+	var pressed_style = btn_style.duplicate()
+	pressed_style.bg_color = color.darkened(0.4)
+	button.add_theme_stylebox_override("pressed", pressed_style)
+
+	if callback.is_valid():
+		connect_immediate_button_action(button, callback)
+
+	return button
+
+func make_icon_badge(parent: Control, rect: Rect2, icon_name: String, bg_color: Color, icon_color: Color) -> Control:
+	"""创建图标徽章"""
+	var badge = make_panel(parent, rect, bg_color, 10, bg_color.lightened(0.2), 0)
+	var icon = make_icon_label(badge, icon_name, max(12, int(rect.size.y * 0.5)), icon_color)
+	apply_rect(icon, rect_full(0.1, 0.1, 0.9, 0.9))
+	return badge
+
+func draw_icon_in_panel(parent: Control, icon_name: String, rect: Rect2, color: Color) -> void:
+	"""在面板中绘制图标"""
+	var container = Control.new()
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(container, rect)
+
+	var icon_code = ICON_CODES.get(icon_name, "")
+	var label = make_label(container, icon_code, int(min(rect.size.x, rect.size.y) * 0.6), color, true)
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	parent.add_child(container)
+
+func lucide_icon_path(icon_name: String) -> String:
+	return "res://assets/icons/lucide/%s.svg" % icon_name
+
+func lucide_icon_texture(icon_name: String) -> Texture2D:
+	if icon_name == "":
+		return null
+	if icon_textures.has(icon_name):
+		return icon_textures[icon_name]
+	var path = lucide_icon_path(icon_name)
+	if not ResourceLoader.exists(path):
+		icon_textures[icon_name] = null
+		return null
+	var texture = load(path) as Texture2D
+	icon_textures[icon_name] = texture
+	return texture
+
+func add_lucide_icon(parent: Control, icon_name: String, rect: Rect2, tint: Color = Color.WHITE) -> TextureRect:
+	var texture = lucide_icon_texture(icon_name)
+	if texture == null:
+		return null
+	var icon = TextureRect.new()
+	icon.name = "Icon_%s" % icon_name
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.texture = texture
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.modulate = tint
+	apply_rect(icon, rect)
+	parent.add_child(icon)
+	return icon
+
+func animation_asset_spec(animation_name: String) -> Dictionary:
+	if animation_name == "":
+		return {}
+	if animation_specs.has(animation_name):
+		return animation_specs[animation_name]
+	var path = str(ANIMATION_ASSET_PATHS.get(animation_name, ""))
+	if path == "" or not FileAccess.file_exists(path):
+		animation_specs[animation_name] = {}
+		return {}
+	var file = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		animation_specs[animation_name] = {}
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		animation_specs[animation_name] = {}
+		return {}
+	var source: Dictionary = parsed
+	var spec := {
+		"name": str(source.get("nm", animation_name)),
+		"frame_rate": int(source.get("fr", 60)),
+		"in_point": int(source.get("ip", 0)),
+		"out_point": int(source.get("op", 0)),
+		"width": int(source.get("w", 0)),
+		"height": int(source.get("h", 0)),
+		"layer_count": numeric_count(source.get("layers", []), 0),
+	}
+	animation_specs[animation_name] = spec
+	return spec
+
+func animation_duration_seconds(animation_name: String) -> float:
+	var spec = animation_asset_spec(animation_name)
+	var frame_rate = max(1, int(spec.get("frame_rate", 60)))
+	var frame_count = max(1, int(spec.get("out_point", 0)) - int(spec.get("in_point", 0)))
+	return float(frame_count) / float(frame_rate)
+
+func draw_animation_preview(parent: Control, rect: Rect2, animation_name: String) -> Control:
+	var spec = animation_asset_spec(animation_name)
+	if spec.is_empty():
+		return null
+	var preview = Control.new()
+	preview.name = "AnimationPreview_%s" % animation_name
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(preview, rect)
+	parent.add_child(preview)
+	match animation_name:
+		"coin_spin":
+			draw_coin_spin_preview(preview)
+		"victory_sparkle":
+			draw_victory_sparkle_preview(preview)
+		_:
+			make_icon_badge(preview, rect_full(0.08, 0.08, 0.92, 0.92), "sparkle", Color(0.20, 0.24, 0.24, 0.72), GOLD_LIGHT)
+	animate_animation_preview(preview, animation_name)
+	return preview
+
+func draw_coin_spin_preview(parent: Control) -> void:
+	var glow = make_panel(parent, rect_full(0.04, 0.04, 0.96, 0.96), Color(0.34, 0.26, 0.08, 0.36), 999, Color(0.96, 0.78, 0.32, 0.30), 0)
+	glow.name = "CoinSpinGlow"
+	var coin = make_panel(parent, rect_full(0.18, 0.18, 0.82, 0.82), Color(0.88, 0.68, 0.18, 0.94), 999, Color(1.0, 0.90, 0.48, 0.82), 0)
+	coin.name = "CoinSpinCoin"
+	add_lucide_icon(coin, "coin", rect_full(0.20, 0.20, 0.80, 0.80), Color(0.22, 0.13, 0.04, 0.72))
+
+func draw_victory_sparkle_preview(parent: Control) -> void:
+	var ring = make_panel(parent, rect_full(0.14, 0.14, 0.86, 0.86), Color(0, 0, 0, 0), 999, Color(0.96, 0.76, 0.28, 0.55), 0)
+	ring.name = "VictorySparkleRing"
+	var left = make_label(parent, "✦", 18, GOLD_BRIGHT, true)
+	left.name = "VictorySparkleStar"
+	apply_rect(left, rect_full(0.02, 0.18, 0.42, 0.60))
+	var right = make_label(parent, "✧", 14, SCARLET_GLOW, true)
+	right.name = "VictorySparkleStar"
+	apply_rect(right, rect_full(0.58, 0.08, 0.98, 0.50))
+	add_lucide_icon(parent, "sparkles", rect_full(0.28, 0.28, 0.72, 0.72), Color(0.96, 0.86, 0.42, 0.88))
+
+func animate_animation_preview(preview: Control, animation_name: String) -> void:
+	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+		return
+	var duration = clamp(animation_duration_seconds(animation_name), 0.6, 2.4)
+	var tw := preview.create_tween()
+	tw.set_loops()
+	match animation_name:
+		"coin_spin":
+			tw.tween_property(preview, "rotation", TAU, duration).from(0.0).set_trans(Tween.TRANS_LINEAR)
+			tw.parallel().tween_property(preview, "scale", Vector2(1.08, 1.08), duration * 0.5).from(Vector2.ONE).set_ease(Tween.EASE_OUT)
+			tw.tween_property(preview, "scale", Vector2.ONE, duration * 0.5).set_ease(Tween.EASE_IN)
+		"victory_sparkle":
+			tw.tween_property(preview, "modulate:a", 0.62, duration * 0.35).from(1.0)
+			tw.tween_property(preview, "modulate:a", 1.0, duration * 0.35).from(0.62)
+			tw.parallel().tween_property(preview, "rotation", 0.12, duration * 0.5).from(-0.12)
+			tw.tween_property(preview, "rotation", -0.12, duration * 0.5).from(0.12)

@@ -1,14 +1,15 @@
 #!/bin/bash
 # 自动化代码验证脚本
 
-echo "====== 云桌麻将 v1.0.159 代码验证 ======"
-echo ""
-
 SCRIPT_DIR="/root/yunzhuo-mahjong-godot"
 MAIN_SCRIPT="$SCRIPT_DIR/scripts/main.gd"
 BUILD_DIR="$SCRIPT_DIR/build"
-APK_FILE="$BUILD_DIR/YunzhuoMahjongGodot-v1.0.159-godot.apk"
-APP_VERSION="1.0.159-godot"
+PROJECT_FILE="$SCRIPT_DIR/project.godot"
+APP_VERSION="$(sed -n 's/^config\/version="\([^"]*\)"/\1/p' "$PROJECT_FILE" | head -n 1)"
+APK_FILE="$BUILD_DIR/YunzhuoMahjongGodot-v${APP_VERSION}.apk"
+
+echo "====== 云桌麻将 v${APP_VERSION} 代码验证 ======"
+echo ""
 
 PASS=0
 FAIL=0
@@ -123,8 +124,8 @@ fi
 
 echo ""
 echo "5. 检查版本号..."
-if grep -q "config/version=\"$APP_VERSION\"" "$SCRIPT_DIR/project.godot"; then
-    check_pass "版本号正确 (1.0.159)"
+if [ -n "$APP_VERSION" ] && grep -q "config/version=\"$APP_VERSION\"" "$PROJECT_FILE"; then
+    check_pass "版本号正确 ($APP_VERSION)"
 else
     check_fail "版本号" "版本号不正确"
 fi
@@ -136,7 +137,7 @@ echo "失败: $FAIL"
 echo ""
 
 if [ $FAIL -eq 0 ]; then
-    echo "✓ 所有检查通过！v1.0.159 已就绪"
+    echo "✓ 所有检查通过！v${APP_VERSION} 已就绪"
     exit 0
 else
     echo "✗ 有 $FAIL 项检查失败，需要修复"

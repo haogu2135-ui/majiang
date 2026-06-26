@@ -9,12 +9,25 @@ func run() -> void:
 	var scene = load("res://Main.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
-	scene.start_offline()
+	scene.start_offline(true)
 	seed_preview_discards(scene)
 	scene.render_game()
 	await process_frame
 	await process_frame
-	var image = root.get_texture().get_image()
+	if DisplayServer.get_name().to_lower() == "headless":
+		print("skipped preview capture: screenshots require a non-headless display driver")
+		quit(0)
+		return
+	var viewport_texture = root.get_texture()
+	if viewport_texture == null:
+		printerr("failed to save preview: viewport texture is unavailable in this display driver")
+		quit(1)
+		return
+	var image = viewport_texture.get_image()
+	if image == null:
+		printerr("failed to save preview: viewport image is unavailable in this display driver")
+		quit(1)
+		return
 	var output_dir = ProjectSettings.globalize_path("res://build/qa")
 	DirAccess.make_dir_recursive_absolute(output_dir)
 	var output_path = ProjectSettings.globalize_path(OUTPUT_PATH)

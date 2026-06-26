@@ -2,7 +2,7 @@
 
 Godot 4.6.3 迁移版 Android 客户端。目标是替代原生 Android Canvas UI，使用开源游戏引擎做横屏牌桌、真实麻将牌图、轻量牌桌 UI 和后续动画/特效。
 
-当前版本：`v1.0.159-godot`
+当前版本：`v1.0.162-godot`
 
 ## 当前功能
 
@@ -23,7 +23,7 @@ Godot 4.6.3 迁移版 Android 客户端。目标是替代原生 Android Canvas U
 - 实时语音：联机牌桌内可开关麦克风，客户端以 `voiceMessage` 发送 PCM16/base64 音频分片并播放收到的语音。
 - 更新模式：先读取 Godot APK 更新 manifest，版本较新时下载对应版本固定 APK 直链，并在下载完成后校验 SHA-256；manifest 不可用时回退当前版本固定 APK 直链。
 - 轻量头像：牌桌座位使用 2D 玩家标识和行牌高亮，避免手机端每次重绘创建 3D `SubViewport` 造成卡顿。
-- 牌势面板：牌桌顶栏显示四家比分和 AI 风格短标，中心盘集中显示余牌、上张、风位和当前状态；座位卡直接显示活动高亮、威胁徽标和 AI 性格。面板展示推荐出牌、具体听牌/进张候选及每张剩余张数、待牌薄厚、回头待提示、听牌价值番分、切孤张/保路线/防守/保好形等弃牌理由、两面/坎张/边张/对子形状质量、清一色/混一色/碰碰胡/字一色主路线、整场分势策略、攻守模式、风险、全现物/主威胁现物/熟张/筋线/壁牌安全性和当前最明显的防守威胁；AI 会结合弃牌数、副露数、余牌和牌路集中度估算对手快进/近听/疑听压力，并影响放铳风险与防守权重；对手座位会直接显示高/危威胁、疑听/近听徽标和偏向门类，便于扫桌读牌；高压局面行动区会直接提供“最安牌”一键出牌，手牌托盘、提示和牌势面板也会显示最安全弃牌；行动区提供“推荐牌”和低风险“备选牌”一键出牌按钮，“提示”会解释推荐原因、备选牌、防守重点和高危弃牌主要来源；高危弃牌确认时行动区会给出可直接点击的安全改打按钮；响应吃碰杠胡时会给出建议动作和理由，并在行动区标出建议吃碰杠胡或建议放弃；手牌按万/条/筒/字/花视觉分组，但牌面本体保持纯图片显示；结算面板显示每位玩家本局分数变化。
+- 牌势面板：牌桌顶栏显示四家比分和 AI 风格短标，中心盘集中显示余牌、上张、风位和当前状态；座位卡直接显示活动高亮、威胁徽标和 AI 性格。面板展示推荐出牌、具体听牌/进张候选及每张剩余张数、待牌薄厚、回头待提示、听牌价值番分、切孤张/保路线/防守/保好形等弃牌理由、两面/坎张/边张/对子形状质量、清一色/混一色/碰碰胡/字一色主路线、整场分势策略、攻守模式、风险、全现物/主威胁现物/熟张/筋线/壁牌安全性和当前最明显的防守威胁；AI 会结合弃牌数、副露数、余牌和牌路集中度估算对手快进/近听/疑听压力，并影响放铳风险与防守权重；对手座位会直接显示高/危威胁、疑听/近听徽标和偏向门类，便于扫桌读牌；高压局面行动区会直接提供“最安牌”一键出牌，手牌托盘、提示和牌势面板也会显示最安全弃牌；行动区提供“推荐牌”和低风险“备选牌”一键出牌按钮，“提示”会解释推荐原因、备选牌、防守重点和高危弃牌主要来源；高危弃牌确认时行动区会给出可直接点击的安全改打按钮；响应吃碰杠胡时会给出建议动作和理由，并在行动区标出建议吃碰杠胡或建议放弃；行动区新增当前意图提示条，手牌分组间隔显示万/条/筒/字/花标记，牌势卡片使用信号条强化推荐、收益和防守层级；结算面板显示每位玩家本局分数变化。
 - AI 防喂牌：出牌评估加入公开信息喂牌风险，结合下家可吃、中张、生张、对手副露和弃牌偏向估算“喂吃/喂碰”压力；提示和高危确认会直接显示“喂某家吃/碰”等来源。
 - 特殊牌型：七对、十三幺、一条龙、断幺九、大小三元和大小四喜纳入胡牌、向听、有效进张、计分与 AI 路线提示；六对重手会显示“路线七对”并优先保留对子切孤张，也会拒绝破坏闭门七对路线的低收益吃碰杠；十三幺高密度手牌会显示“路线十三幺”，一条龙高进度手牌会显示“路线一条龙”，断幺九高进度手牌会显示“路线断幺九”，三元/四喜重手会显示对应路线，AI 会优先保留目标路线牌并切非路线牌。
 - Android APK 导出：release 已签名。
@@ -32,7 +32,7 @@ Godot 4.6.3 迁移版 Android 客户端。目标是替代原生 Android Canvas U
 
 ```bash
 cd /root/yunzhuo-mahjong-godot
-GODOT_SILENCE_ROOT_WARNING=1 godot --headless --path . --export-release Android build/YunzhuoMahjongGodot-v1.0.159-godot.apk
+GODOT_SILENCE_ROOT_WARNING=1 godot --headless --path . --export-release Android build/YunzhuoMahjongGodot-v1.0.162-godot.apk
 ```
 
 Godot Android 设置：
@@ -45,7 +45,7 @@ Godot Android 设置：
 
 当前 APK:
 
-- `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot-v1.0.159-godot.apk`
+- `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot-v1.0.162-godot.apk`
 - `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot-release.apk`，通用 release 兼容文件名，文件内容已覆盖为当前最新 APK
 - `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot.apk`，保留为更新下载的 latest 兼容文件名
 - `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjong.apk`
@@ -54,8 +54,8 @@ Godot Android 设置：
 
 APK 校验信息：
 
-- Size: `35476700`
-- SHA-256: `ef63850c3a2fd9de9b78f69fc4755be187105e85795ee50519c2cd09a7728ed6`
+- Size: `88889771`
+- SHA-256: `f16fcdab7fa02a5c5f65eb4a03e7cee6f61d13eaaab7601f5d5be1b4ddb2d9e7`
 
 HTTP 服务：
 
@@ -66,7 +66,7 @@ python3 -m http.server 18081 --bind 0.0.0.0 --directory /root/yunzhuo-mahjong-go
 下载地址：
 
 ```text
-http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.159-godot.apk
+http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.162-godot.apk
 http://129.146.180.88:18081/YunzhuoMahjongGodot-release.apk
 http://129.146.180.88:18081/YunzhuoMahjongGodot.apk
 http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json

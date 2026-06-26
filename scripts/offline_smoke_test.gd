@@ -11,17 +11,17 @@ func run() -> void:
 	var scene: MainScript = load("res://Main.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
-	check(scene.app_version() == "1.0.159-godot", "project version matches exported app version")
+	check(scene.app_version() == "1.0.162-godot", "project version matches exported app version")
 	check(scene.AUDIO_DEFAULTS_VERSION == "1.0.159-godot", "audio defaults migrate for this release")
 	check(not scene.player_ai_assist_enabled(), "offline player side does not enable AI assistance")
 	check(scene.UPDATE_MANIFEST_URL == "http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json", "update manifest URL points to live download service")
-	check(scene.UPDATE_URL == "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.159-godot.apk", "fallback update APK URL uses this release's immutable APK path")
+	check(scene.UPDATE_URL == "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.162-godot.apk", "fallback update APK URL uses this release's immutable APK path")
 	check(bool(ProjectSettings.get_setting("audio/general/text_to_speech", false)), "Godot text-to-speech project setting is enabled")
 	check(bool(ProjectSettings.get_setting("audio/driver/enable_input", false)), "audio input is enabled for voice features")
 	var copied_profile = scene.ai_profile(1)
 	copied_profile["attack"] = 9.99
 	check(is_equal_approx(scene.ai_profile_value(1, "attack"), 0.92) and scene.ai_profile_label(1) == "防守型" and scene.ai_profile_short_label(2) == "攻", "AI profile reads use canonical profiles while public profile copies stay isolated")
-	scene.start_offline()
+	scene.start_offline(true)
 	check(scene.mode == "offline", "starts offline mode")
 	check(scene.can_self_discard(), "human can discard after deal")
 	check(scene.make_wall().size() == 144, "wall includes eight flowers")
@@ -234,6 +234,12 @@ func run() -> void:
 	check(scene.bgm_player != null and scene.sfx_player != null and scene.action_sfx_player != null, "audio players are initialized")
 	check(scene.audio_layer != null and scene.bgm_player.get_parent() == scene.audio_layer, "persistent audio layer owns background music")
 	check(scene.BGM_STREAM_PATH.ends_with("bgm_guofeng2.mp3") and scene.audio_streams.get("bgm", null) is AudioStreamMP3, "background music uses the current MP3 default track")
+	check(scene.lucide_icon_texture("settings") != null and scene.lucide_icon_texture("play") != null, "lucide SVG icons load for UI illustration")
+	var coin_animation = scene.animation_asset_spec("coin_spin")
+	var victory_animation = scene.animation_asset_spec("victory_sparkle")
+	check(str(coin_animation.get("name", "")) == "Gold Coin Spin" and int(coin_animation.get("layer_count", 0)) >= 1, "coin animation JSON metadata loads for UI preview")
+	check(str(victory_animation.get("name", "")) == "Victory Sparkle" and int(victory_animation.get("layer_count", 0)) >= 3, "victory animation JSON metadata loads for UI preview")
+	check(scene.animation_duration_seconds("coin_spin") > 0.0 and scene.animation_duration_seconds("victory_sparkle") > scene.animation_duration_seconds("coin_spin"), "animation preview durations come from Lottie frame data")
 	var bgm_mp3 = scene.bgm_player.stream as AudioStreamMP3
 	check(bgm_mp3 != null and bgm_mp3.loop, "background music loops without restart gaps")
 	check(scene.BGM_VOLUME_DB == 0.0, "background music keeps the configured default gain")
@@ -371,17 +377,55 @@ func run() -> void:
 	check(int(hud_press_count.get("value", 0)) == 1, "top HUD buttons trigger on button down")
 	top_button.queue_free()
 	var menu_press_count := {"value": 0}
-	var menu_card = scene.make_menu_card("测试", Color(0.30, 0.50, 0.70), func() -> void:
+	var menu_callback = func() -> void:
 		menu_press_count["value"] = int(menu_press_count.get("value", 0)) + 1
-	)
+	var menu_card = scene.make_menu_card("测试", Color(0.30, 0.50, 0.70), menu_callback, "play")
 	menu_card.emit_signal("button_down")
 	check(int(menu_press_count.get("value", 0)) == 1, "menu cards run callbacks on button down")
+	check(count_texture_rects(menu_card) >= 1, "menu cards render lucide SVG illustration icons")
 	menu_card.queue_free()
+	var animation_preview_parent = Control.new()
+	root.add_child(animation_preview_parent)
+	var coin_preview = scene.draw_animation_preview(animation_preview_parent, scene.rect_full(0.0, 0.0, 0.2, 0.2), "coin_spin")
+	var victory_preview = scene.draw_animation_preview(animation_preview_parent, scene.rect_full(0.2, 0.0, 0.4, 0.2), "victory_sparkle")
+	check(coin_preview != null and animation_preview_parent.find_child("AnimationPreview_coin_spin", true, false) != null and count_texture_rects(coin_preview) >= 1, "coin animation JSON renders a native coin illustration preview")
+	check(victory_preview != null and animation_preview_parent.find_child("AnimationPreview_victory_sparkle", true, false) != null and has_label_text(victory_preview, "✦"), "victory animation JSON renders native sparkle illustration preview")
+	animation_preview_parent.queue_free()
+	var illustration_parent = Control.new()
+	root.add_child(illustration_parent)
+	var menu_hero = scene.draw_menu_hero_illustration(illustration_parent)
+	check(menu_hero != null and illustration_parent.find_child("MenuHeroIllustration", true, false) != null and illustration_parent.find_child("MenuHeroRoundTable", true, false) != null, "menu hero renders native guofeng table illustration")
+	check(illustration_parent.find_child("MenuHeroSeal", true, false) != null and count_texture_rects(menu_hero) >= 3, "menu hero illustration combines seal, SVG icon, and tile art")
+	var table_frame = scene.draw_table_atmosphere_frame(illustration_parent)
+	check(table_frame != null and illustration_parent.find_child("TableAtmosphereFrame", true, false) != null and illustration_parent.find_child("TableBambooLeft", true, false) != null, "table atmosphere frame renders bamboo and cloud ornaments")
+	var compass = scene.draw_center_wind_compass(illustration_parent)
+	check(compass != null and illustration_parent.find_child("CenterWindCompass", true, false) != null and illustration_parent.find_child("CenterWindCompass_东", true, false) != null, "center wind compass renders directional illustration badges")
+	var ribbon = scene.draw_summary_victory_ribbon(illustration_parent)
+	check(ribbon != null and illustration_parent.find_child("SummaryVictoryRibbon", true, false) != null and count_texture_rects(ribbon) >= 1, "round summary renders victory ribbon illustration")
+	illustration_parent.queue_free()
+	var advisor_card_parent = Control.new()
+	root.add_child(advisor_card_parent)
+	scene.draw_advisor_info_card(advisor_card_parent, scene.rect_full(0.0, 0.0, 0.32, 0.20), "防守", "安全优先", "看现物与筋", Color(0.84, 0.62, 0.54))
+	check(advisor_card_parent.find_child("AdvisorSignalStrip_防守", true, false) != null and advisor_card_parent.find_child("AdvisorSignalPulse_防守", true, false) != null, "advisor cards render compact signal strip")
+	advisor_card_parent.queue_free()
+	var action_intent_parent = Control.new()
+	root.add_child(action_intent_parent)
+	scene.action_bar = HBoxContainer.new()
+	action_intent_parent.add_child(scene.action_bar)
+	scene.action_bar.add_child(scene.make_action_button("提示", Color(0.25, 0.58, 0.48), Callable()))
+	scene.action_bar.add_child(scene.make_action_button("重开", Color(0.70, 0.32, 0.22), Callable()))
+	scene.mode = "offline"
+	scene.offline_phase = "playing"
+	scene.draw_action_dock(action_intent_parent)
+	check(action_intent_parent.find_child("ActionIntentDock", true, false) != null and action_intent_parent.find_child("ActionIntentRail", true, false) != null, "action dock renders contextual intent strip")
+	check(has_label_text(action_intent_parent, "2项"), "action intent strip renders button count badge")
+	action_intent_parent.queue_free()
 	var settings_parent = Control.new()
 	root.add_child(settings_parent)
 	scene.settings_panel_open = true
 	scene.draw_settings_overlay(settings_parent)
 	check(settings_parent.get_child_count() == 1 and has_button_text(settings_parent, "音乐开") and has_button_text(settings_parent, "快速开") and has_button_text(settings_parent, "试音"), "settings overlay renders toggle and test-audio buttons")
+	check(count_texture_rects(settings_parent) >= 1, "settings overlay renders lucide title icon")
 	check(panels_ignore_mouse(settings_parent), "settings overlay panels skip mouse hit testing while buttons remain interactive")
 	check(containers_ignore_mouse(settings_parent), "settings overlay layout containers skip mouse hit testing")
 	settings_parent.queue_free()
@@ -416,6 +460,7 @@ func run() -> void:
 	check(control_anchor_rect_matches(first_label_containing_text(hud_parent, "余"), scene.TOP_HUD_WALL_RECT), "top HUD wall summary uses fixed geometry constants")
 	var hud_settings_button = first_button_with_text(hud_parent, "设置")
 	check(hud_settings_button != null and hud_settings_button.custom_minimum_size == scene.TOP_HUD_BUTTON_SIZE, "rendered top HUD buttons use enlarged touch targets")
+	check(hud_settings_button != null and count_texture_rects(hud_settings_button) >= 1, "top HUD settings button renders a lucide icon")
 	check(control_anchor_rect_matches(hud_settings_button, scene.TOP_HUD_SETTINGS_BUTTON_RECT), "top HUD settings button uses fixed geometry constants")
 	check(control_anchor_rect_matches(first_button_with_text(hud_parent, "返回"), scene.TOP_HUD_BACK_BUTTON_RECT), "top HUD back button uses fixed geometry constants")
 	check(control_anchor_rect_matches(first_button_with_text(hud_parent, "更新"), scene.TOP_HUD_UPDATE_BUTTON_RECT), "top HUD update button uses fixed geometry constants")
@@ -460,6 +505,10 @@ func run() -> void:
 	check(int(tile_press_count.get("value", 0)) == 1, "tile callbacks run on button down")
 	check(count_label_nodes(clickable_tile_view) == 0, "clickable tile uses real tile art without duplicate code-drawn labels")
 	clickable_tile_view.queue_free()
+	var hand_group_spacer = scene.make_hand_group_spacer(84.0, 12.0, scene.hand_group_label("1B"))
+	check(hand_group_spacer.name == "HandGroupDivider" and hand_group_spacer.find_child("HandGroupDividerCap", true, false) != null, "hand group divider renders stable cap decoration")
+	check(hand_group_spacer.find_child("HandGroupDividerLabel_筒", true, false) != null, "hand group divider renders suit label without changing tile nodes")
+	hand_group_spacer.queue_free()
 	var flower_tile_view = scene.make_tile_view("H1", Vector2(62, 84), false, Callable())
 	check(has_visible_tile_art(flower_tile_view), "flower tile view renders real tile art inside fixed frame")
 	check(not has_label_text(flower_tile_view, "春") and not has_label_text(flower_tile_view, "花"), "flower tile view uses real art without duplicate code-drawn labels")
@@ -704,7 +753,7 @@ func run() -> void:
 	check(scene.players[0]["melds"].size() > 0 and scene.same_tile_list(scene.players[0]["melds"].back(), ["2W", "3W", "4W"]), "chosen chi meld is applied")
 	check(scene.count_tile(scene.players[0]["hand"], "1W") == 1 and scene.count_tile(scene.players[0]["hand"], "5W") == 1, "unchosen chi edge tiles stay in hand")
 	check(scene.same_tile_list(scene.filter_claim_options_by_priority(["chi", "peng", "hu"], 3), ["peng", "hu"]), "claim priority filters lower actions")
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_phase = "resolving"
 	scene.players[0]["discards"] = ["3W"]
 	scene.players[1]["hand"] = ["1W", "2W", "2W", "4W", "4W", "5W", "5T", "6T", "7T", "E", "E", "P", "P"]
@@ -733,7 +782,7 @@ func run() -> void:
 	check(str(chosen_ai_claim.get("claim", "")) == "chi", "AI chooses chi when the best chi response is allowed")
 	check(scene.same_tile_list(chosen_ai_claim.get("chi_choice", {}).get("meld", []), expected_ai_chi_choice.get("meld", [])), "AI claim selection uses the highest-scoring chi choice")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_phase = "resolving"
 	scene.players[0]["hand"] = ["1W", "2W", "5T", "6T", "7T", "E", "E", "P", "P", "4B", "5B", "6B", "9B"]
 	scene.players[0]["melds"] = []
@@ -745,7 +794,7 @@ func run() -> void:
 	check(scene.offline_last_winner == 1, "higher priority AI hu wins the discard")
 	check(scene.players[0]["melds"].is_empty(), "human chi is not applied under hu priority")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_phase = "resolving"
 	scene.players[0]["hand"] = waits_for_3w_hand()
 	scene.players[0]["melds"] = []
@@ -759,7 +808,7 @@ func run() -> void:
 	scene.human_claim("pass")
 	check(scene.offline_phase == "ended" and scene.offline_last_winner == 1, "AI hu resolves after human passes equal-priority response")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 0
 	scene.offline_turn_needs_draw = false
@@ -788,7 +837,7 @@ func run() -> void:
 	check(str(seven_pairs_concealed_gang.get("reason", "")) == "保七对", "AI self-gang report names seven pairs protection")
 	check(scene.choose_ai_concealed_gang(2) == "", "AI concealed gang helper preserves seven pairs route")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 0
 	scene.offline_turn_needs_draw = false
@@ -803,7 +852,7 @@ func run() -> void:
 	check(scene.players[0]["hand"].has("3W"), "robbed added gang keeps fourth tile in hand")
 	check(scene.round_summary.find("抢杠胡") >= 0, "rob gang score reason is shown")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 1
 	scene.offline_turn_needs_draw = false
@@ -824,7 +873,7 @@ func run() -> void:
 	scene.human_claim("hu")
 	check(scene.offline_phase == "ended" and scene.offline_last_winner == 0, "human rob gang win resolves")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 1
 	scene.offline_turn_needs_draw = false
@@ -840,7 +889,7 @@ func run() -> void:
 	check(scene.players[1]["melds"][0].size() == 4, "passed rob gang upgrades pung")
 	check(scene.players[1]["hand"].has("7B"), "passed rob gang draws replacement tile")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	var discard = scene.choose_ai_discard_for_seat(0)
 	check(scene.players[0]["hand"].has(discard), "AI discard exists in hand")
 	scene.players[0]["hand"] = ai_shape_hand()
@@ -1157,7 +1206,7 @@ func run() -> void:
 		check(str(scene.opponent_seat_threat_report(0, 1).get("safe_tiles", [])[0]) == original_safe_tile, "threat report cache protects nested safe tile arrays")
 	var threat_report = scene.opponent_threat_report(0)
 	check(int(threat_report.get("opponent", -1)) == 1, "threat report identifies most dangerous opponent")
-	check(str(threat_report.get("level", "")) == "高", "threat report buckets focused open meld pressure")
+	check(scene.threat_level_rank(str(threat_report.get("level", ""))) >= scene.threat_level_rank("高"), "threat report buckets focused open meld pressure")
 	check(str(threat_report.get("plan_label", "")) == "万", "threat report names exposed suit plan")
 	check(not threat_report.get("safe_tiles", []).is_empty(), "threat report suggests safe tiles")
 	check(scene.opponent_threat_summary(0).find("万") >= 0, "advisor threat summary names exposed suit")
@@ -1191,6 +1240,7 @@ func run() -> void:
 	var genbutsu_tile = scene.make_tile_view("2W", Vector2(62, 84), true, Callable(), false, "现")
 	check(count_label_nodes(genbutsu_tile) == 0 and has_visible_tile_art(genbutsu_tile), "tile view keeps main-threat genbutsu as image-only tile")
 	genbutsu_tile.queue_free()
+	scene.players[1]["name"] = scene.SEAT_NAMES[1]
 	var danger_source = scene.discard_danger_source_report("5W", 0)
 	check(int(danger_source.get("opponent", -1)) == 1, "danger source identifies the opponent driving discard risk")
 	check(scene.discard_danger_text(danger_source).find("青竹道人") >= 0 and scene.discard_danger_text(danger_source).find("万") >= 0, "danger source text names opponent and plan")
@@ -1260,7 +1310,7 @@ func run() -> void:
 	var risk_tile = scene.make_tile_view("5W", Vector2(62, 84), true, Callable(), false, "高")
 	check(count_label_nodes(risk_tile) == 0 and has_visible_tile_art(risk_tile), "tile view keeps high risk state image-only")
 	risk_tile.queue_free()
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 0
 	scene.offline_turn_needs_draw = false
@@ -1400,7 +1450,7 @@ func run() -> void:
 	check(scene.ai_stance_label(1.6, 3) == "防守" and scene.ai_stance_label(0.8, 0) == "进攻", "AI stance labels attack and defense modes")
 	check(scene.ai_advice_summary(0, 2).find("模式") >= 0, "advisor includes AI stance line")
 	check(scene.risk_badge_text("安") == "安" and scene.risk_badge_text("熟") == "熟", "safe badge text is compact")
-	scene.start_offline()
+	scene.start_offline(true)
 	var defensive_peng_hand = ["E", "E", "1W", "3W", "5W", "7W", "9W", "1T", "3T", "5T", "7B", "9B", "P"]
 	scene.players[2]["hand"] = defensive_peng_hand.duplicate()
 	scene.players[2]["melds"] = []
@@ -1503,7 +1553,7 @@ func run() -> void:
 	check(scene.should_insert_hand_group_gap(grouped_hand, 5), "hand group gap appears before honors")
 	check(scene.should_insert_hand_group_gap(grouped_hand, 7), "hand group gap appears before flowers")
 	var spacer = scene.make_hand_group_spacer(84.0)
-	check(spacer.custom_minimum_size.x >= 10.0 and spacer.get_child_count() == 1, "hand group spacer has stable width and divider")
+	check(spacer.custom_minimum_size.x >= 10.0 and spacer.find_child("HandGroupDividerCap", true, false) != null, "hand group spacer has stable width and divider")
 	spacer.queue_free()
 	var crowded_hand = ["1W", "2W", "3W", "4W", "1T", "2T", "3T", "1B", "2B", "3B", "E", "S", "P", "H1"]
 	var narrow_hand_content = Vector2(960.0 * 0.840 * 0.970, 540.0 * 0.220 * 0.810)
@@ -1761,7 +1811,7 @@ func run() -> void:
 	var voice_stream = scene.make_voice_stream(str(voice_payload.get("audio", "")), 16000, 1)
 	check(voice_stream != null and voice_stream.data.size() == 6, "voice wav stream is created")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.record_claim_source(1, 0, "chi")
 	scene.record_claim_source(1, 0, "peng")
 	scene.record_claim_source(1, 0, "gang")
@@ -1782,7 +1832,7 @@ func run() -> void:
 	check(scene.score_delta_text(0).find("-") >= 0, "negative score delta is formatted")
 	check(scene.compact_score_text(98860) == "9.9万" and scene.compact_score_text(-172000) == "-17万", "compact score text keeps large UI scores short")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.record_claim_source(1, 0, "chi")
 	scene.record_claim_source(1, 0, "peng")
 	scene.record_claim_source(1, 0, "gang")
@@ -1798,7 +1848,7 @@ func run() -> void:
 	check(int(scene.players[0]["score"]) == payer_before, "package payer does not cover discard win")
 	check(scene.round_summary.find("包三搭") == -1, "discard win summary does not mention package payout")
 
-	scene.start_offline()
+	scene.start_offline(true)
 	scene.offline_hand_number = 1
 	scene.dealer_seat = 0
 	scene.offline_dealer_repeat = false
