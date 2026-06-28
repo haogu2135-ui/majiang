@@ -1,780 +1,4 @@
-extends Control
-
-class WallBackStrip:
-	extends Control
-
-	var tile_count := 0
-	var horizontal := true
-	var tile_size := Vector2.ZERO
-	var tile_style: StyleBoxFlat
-	var shade_color := Color(0.53, 0.45, 0.28, 0.16)
-
-	func configure(count: int, is_horizontal: bool, requested_tile_size: Vector2, fill_color: Color, border_color: Color) -> void:
-		tile_count = count
-		horizontal = is_horizontal
-		tile_size = requested_tile_size
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if tile_style == null:
-			tile_style = StyleBoxFlat.new()
-		tile_style.bg_color = fill_color
-		tile_style.border_color = border_color
-		tile_style.set_border_width_all(1)
-		tile_style.set_corner_radius_all(7)
-		queue_redraw()
-
-	func _notification(what: int) -> void:
-		if what == NOTIFICATION_RESIZED:
-			queue_redraw()
-
-	func _draw() -> void:
-		if tile_count <= 0 or tile_size.x <= 0.0 or tile_size.y <= 0.0 or tile_style == null:
-			return
-		for tile_number in range(tile_count):
-			var center = Vector2(
-				(float(tile_number) + 0.5) * size.x / float(tile_count) if horizontal else size.x * 0.5,
-				size.y * 0.5 if horizontal else (float(tile_number) + 0.5) * size.y / float(tile_count)
-			)
-			var tile_rect = Rect2(center - tile_size * 0.5, tile_size)
-			draw_style_box(tile_style, tile_rect)
-			var shade_rect = Rect2(
-				Vector2(tile_rect.position.x + tile_rect.size.x * 0.76, tile_rect.position.y + 2.0),
-				Vector2(max(1.0, tile_rect.size.x * 0.16), max(1.0, tile_rect.size.y - 4.0))
-			)
-			draw_rect(shade_rect, shade_color, true)
-
-const DEFAULT_HOST := "129.146.180.88"
-const DEFAULT_PORT := 23333
-const APP_VERSION := "1.0.162-godot"
-const UPDATE_MANIFEST_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json"
-const UPDATE_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.162-godot.apk"
-const UPDATE_FILE_PATH := "user://updates/YunzhuoMahjongGodot-v1.0.162-godot.apk"
-const SETTINGS_PATH := "user://settings.cfg"
-const PROGRESS_PATH := "user://offline_progress.cfg"
-const STATS_PATH := "user://game_stats.cfg"
-const TUTORIAL_PATH := "user://tutorial.cfg"
-const ACHIEVEMENTS_PATH := "user://achievements.cfg"
-const LOGIN_PATH := "user://login.cfg"
-const AUDIO_DEFAULTS_VERSION := "1.0.159-godot"
-const BGM_STREAM_PATH := "res://assets/audio/bgm_guofeng2.mp3"
-const ANIMATION_ASSET_PATHS := {
-	"coin_spin": "res://assets/animations/coin_spin.json",
-	"victory_sparkle": "res://assets/animations/victory_sparkle.json",
-}
-# v1.0.159: 默认BGM改为《胡笳十八拍》，支持多个BGM切换
-const BGM_TRACKS := [
-	{"name": "胡笳十八拍", "path": "res://assets/audio/bgm_guofeng2.mp3"},
-	{"name": "梅花三弄", "path": "res://assets/audio/bgm_guofeng1.mp3"},
-	{"name": "汉宫秋月", "path": "res://assets/audio/bgm_guofeng3.mp3"},
-	{"name": "原版", "path": "res://assets/audio/bgm_loop.mp3"}
-]
-const PLAYER_AI_ASSIST_ENABLED := false
-const TILE_TEXT_OVERLAYS_ENABLED := false
-const SEAT_NAMES := ["你", "青竹道人", "南山客", "扶摇散人"]
-const SEAT_COLORS := [
-	Color(0.24, 0.40, 0.54),
-	Color(0.26, 0.45, 0.37),
-	Color(0.44, 0.36, 0.52),
-	Color(0.56, 0.38, 0.30),
-]
-const SEAT_ACCENT_COLORS := [
-	Color(0.20, 0.28, 0.36),
-	Color(0.22, 0.34, 0.28),
-	Color(0.34, 0.28, 0.38),
-	Color(0.38, 0.28, 0.20),
-]
-const SEAT_NAME_BADGE_COLORS := [
-	Color(0.24, 0.32, 0.42),
-	Color(0.26, 0.42, 0.34),
-	Color(0.42, 0.34, 0.48),
-	Color(0.48, 0.34, 0.26),
-]
-const SEAT_HEADER_COLORS := [
-	Color(0.10, 0.13, 0.16),
-	Color(0.10, 0.15, 0.13),
-	Color(0.13, 0.12, 0.15),
-	Color(0.15, 0.12, 0.10),
-]
-const SEAT_AVATAR_BORDER_COLORS := [
-	Color(0.20, 0.32, 0.44),
-	Color(0.22, 0.38, 0.32),
-	Color(0.38, 0.30, 0.46),
-	Color(0.44, 0.32, 0.26),
-]
-const SEAT_AVATAR_BAND_COLORS := [
-	Color(0.16, 0.26, 0.40),
-	Color(0.18, 0.34, 0.26),
-	Color(0.30, 0.22, 0.38),
-	Color(0.38, 0.22, 0.18),
-]
-const AI_PROFILES := [
-	{
-		"label": "均衡",
-		"short": "均",
-		"attack": 1.0,
-		"defense": 1.0,
-		"claim": 1.0,
-		"risk": 1.0,
-		"route": 1.0,
-		"gang": 1.0,
-		"wait": 1.0,
-		"pressure": 1.0,
-	},
-	{
-		"label": "防守型",
-		"short": "守",
-		"attack": 0.92,
-		"defense": 1.32,
-		"claim": 0.78,
-		"risk": 1.42,
-		"route": 1.08,
-		"gang": 0.82,
-		"wait": 1.12,
-		"pressure": 0.88,
-	},
-	{
-		"label": "进攻型",
-		"short": "攻",
-		"attack": 1.28,
-		"defense": 0.88,
-		"claim": 1.38,
-		"risk": 0.82,
-		"route": 0.96,
-		"gang": 1.24,
-		"wait": 1.02,
-		"pressure": 1.32,
-	},
-	{
-		"label": "大牌型",
-		"short": "大",
-		"attack": 1.08,
-		"defense": 1.02,
-		"claim": 1.12,
-		"risk": 1.08,
-		"route": 1.48,
-		"gang": 1.18,
-		"wait": 1.38,
-		"pressure": 1.14,
-	},
-]
-const TILE_CODES := [
-	"1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W",
-	"1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T", "9T",
-	"1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B",
-	"E", "S", "N", "R", "Z", "F", "P"
-]
-const EMPTY_TILE_COUNTS_TEMPLATE := [
-	0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0
-]
-const EMPTY_SUIT_RANK_MASKS := [0, 0, 0]
-const FLOWER_CODES := ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8"]
-const TILE_RANK_SPEECH_LABELS := ["一", "二", "三", "四", "五", "六", "七", "八", "九"]
-const FLOWER_LABELS := ["春", "夏", "秋", "冬", "梅", "兰", "竹", "菊"]
-const THIRTEEN_ORPHANS_CODES := ["1W", "9W", "1T", "9T", "1B", "9B", "E", "S", "N", "R", "Z", "F", "P"]
-const WIND_CODES := ["E", "S", "N", "R"]
-const DRAGON_CODES := ["Z", "F", "P"]
-const RISK_BADGE_TEXT := {
-	"安": "安",
-	"现": "现",
-	"熟": "熟",
-	"筋": "筋",
-	"壁": "壁",
-	"高": "高危",
-	"中": "中",
-	"低": "低",
-}
-const RISK_BADGE_COLORS := {
-	"安": Color(0.14, 0.72, 0.52, 0.96),
-	"现": Color(0.12, 0.68, 0.60, 0.96),
-	"熟": Color(0.18, 0.62, 0.72, 0.94),
-	"筋": Color(0.24, 0.58, 0.82, 0.94),
-	"壁": Color(0.22, 0.66, 0.76, 0.94),
-	"高": Color(0.92, 0.22, 0.18, 0.98),
-	"中": Color(0.96, 0.66, 0.22, 0.96),
-	"低": Color(0.20, 0.68, 0.42, 0.92),
-}
-const DEFAULT_RISK_BADGE_COLOR := Color(0.65, 0.58, 0.40, 0.92)
-const HINT_BADGE_COLORS := {
-	"荐": Color(1.0, 0.86, 0.32, 0.98),
-	"确认": Color(0.96, 0.38, 0.28, 0.98),
-}
-const DEFAULT_HINT_BADGE_COLOR := Color(0.96, 0.82, 0.38, 0.96)
-const MATCH_START_SCORE := 25000
-const MATCH_MAX_HANDS := 8
-const VOICE_BUS_NAME := "VoiceCapture"
-const VOICE_CHUNK_FRAMES := 2048
-const AI_DRAW_DELAY_SECONDS := 0.35
-const AI_DISCARD_DELAY_SECONDS := 0.35
-const AI_ACTION_GAP_SECONDS := 0.35
-const HUMAN_DISCARD_RESPONSE_GAP_SECONDS := 0.01
-const AI_RETURN_TO_HUMAN_GAP_SECONDS := 0.08
-const HUMAN_DRAW_DELAY_SECONDS := 0.006
-const SCORE_LIMIT_FAN := 8
-const SCORE_TABLE := {
-	1: 200,
-	2: 400,
-	3: 800,
-	4: 1600,
-	5: 3200,
-	6: 6400,
-	7: 12800,
-	8: 25600,
-}
-const SEASON_RANKS := ["青铜", "白银", "黄金", "铂金", "钻石", "大师"]
-const SEASON_RANK_POINTS := [0, 100, 300, 600, 1000, 1500]
-const SEASON_PATH := "user://season.cfg"
-const TASKS_PATH := "user://tasks.cfg"
-const INVENTORY_PATH := "user://inventory.cfg"
-const CURRENCY_PATH := "user://currency.cfg"
-const DAILY_TASKS := [
-	{"id": "win_3", "desc": "胡牌3次", "target": 3, "reward_coins": 50},
-	{"id": "peng_3", "desc": "使用碰3次", "target": 3, "reward_coins": 30},
-	{"id": "gang_1", "desc": "使用杠1次", "target": 1, "reward_coins": 40},
-	{"id": "play_5", "desc": "完成5局游戏", "target": 5, "reward_coins": 60},
-	{"id": "score_plus", "desc": "单局正分", "target": 1, "reward_coins": 25},
-]
-const ITEM_TYPES := {
-	"swap_card": {"name": "换牌卡", "desc": "重新摸一张牌", "icon": "🔄", "cost_gems": 5},
-	"peek_card": {"name": "偷看卡", "desc": "查看对手一张手牌", "icon": "👁", "cost_gems": 8},
-	"lucky_charm": {"name": "幸运符", "desc": "本局胡牌概率显示+10%", "icon": "🍀", "cost_gems": 10},
-	"double_coins": {"name": "双倍金币卡", "desc": "本局金币奖励翻倍", "icon": "💰", "cost_gems": 15},
-}
-
-var tile_textures: Dictionary = {}
-var icon_textures: Dictionary = {}
-var animation_specs: Dictionary = {}
-var tile_back: Texture2D
-var felt_texture: Texture2D
-var wood_texture: Texture2D
-var audio_streams: Dictionary = {}
-var voice_streams: Dictionary = {}
-var audio_layer: Node
-var bgm_player: AudioStreamPlayer
-var sfx_player: AudioStreamPlayer
-var action_sfx_player: AudioStreamPlayer
-var android_tts
-var android_tts_requested = false
-var android_tts_requested_msec = 0
-var android_tts_started_msec = 0
-var android_tts_retry_after_msec = 0
-var android_tts_language_configured = false
-var tts_voice_id = ""
-var tts_utterance_id = 1
-var next_bgm_retry_msec = 0
-var audio_touch_unlocked = false
-var audio_health_check_counter = 0
-var last_bgm_health_check = 0
-var speech_queue: Array = []
-var speech_queue_active = false
-var speech_queue_generation = 0
-var music_enabled = true
-var sfx_enabled = true
-var tts_enabled = true
-var fast_mode_enabled = true
-var fx_enabled = true
-var current_bgm_index = 0  # v1.0.157: 当前BGM索引
-var settings_panel_open = false
-var reset_progress_confirming = false
-var exit_confirm_panel: Control = null
-var tutorial_step = 0  # 新手教程步骤：0=未开始，1-5=各步骤，-1=已完成
-var tutorial_panel: Control = null
-var show_hand_hint = true  # 是否显示手牌操作提示
-var interactive_guide_active = false  # 交互式引导是否激活
-var interactive_guide_type = ""  # 当前引导类型：discard/claim/self_win
-var game_stats = {
-	"games_played": 0,
-	"games_won": 0,
-	"total_score": 0,
-	"best_score": 0,
-	"win_rate": 0.0,
-	"total_hands": 0,
-}
-var achievements = {
-	"first_win": false,  # 首次胡牌
-	"seven_pairs": false,  # 七对
-	"thirteen_orphans": false,  # 十三幺
-	"pure_one_suit": false,  # 清一色
-	"mixed_one_suit": false,  # 混一色
-	"big_three_dragons": false,  # 大三元
-	"small_three_dragons": false,  # 小三元
-	"big_four_winds": false,  # 大四喜
-	"small_four_winds": false,  # 小四喜
-	"all_honors": false,  # 字一色
-	"all_triplets": false,  # 碰碰胡
-	"full_straight": false,  # 一条龙
-	"concealed_hand": false,  # 门清胡牌
-	"self_draw": false,  # 自摸胡牌
-	"rob_gang": false,  # 抢杠胡
-	"five_wins": false,  # 累计5胜
-	"ten_wins": false,  # 累计10胜
-}
-var last_login_date = ""  # 上次登录日期 YYYY-MM-DD
-var consecutive_login_days = 0  # 连续登录天数
-# 赛季系统
-var season_data = {
-	"season_id": "",
-	"points": 0,
-	"highest_rank": 0,
-	"wins": 0,
-	"games": 0,
-}
-# 任务系统
-var daily_tasks = []  # 当日任务列表
-var task_progress = {}  # 任务进度
-var last_task_reset_date = ""  # 上次任务重置日期
-# 道具系统
-var inventory = {}  # 道具库存 {"swap_card": 2, "peek_card": 1, ...}
-# 虚拟货币
-var currency = {
-	"coins": 0,
-	"gems": 0,
-}
-var mode = "menu"
-var screen_layer: Control
-var root_layer: Control
-var status_label: Label
-var logs_label: Label
-var action_bar: HBoxContainer
-var update_request: HTTPRequest
-var update_dialog: Control
-var update_status_label: Label
-var update_progress_label: Label
-var update_progress: ProgressBar
-var update_primary_button: Button
-var update_secondary_button: Button
-var update_state = "idle"
-var update_request_mode = "idle"
-var update_message = ""
-var update_download_url = UPDATE_URL
-var update_remote_version = APP_VERSION
-var update_release_notes = ""
-var update_remote_sha256 = ""
-var update_remote_size = 0
-var update_file_path = UPDATE_FILE_PATH
-var update_downloaded_bytes = 0
-var update_total_bytes = 0
-var players: Array = []
-var wall: Array[String] = []
-var current_seat = 0
-var dealer_seat = 0
-var offline_hand_number = 1
-var offline_last_winner = -1
-var offline_dealer_repeat = false
-var last_discard = ""
-var last_discard_seat = -1
-var table_logs: Array[String] = []
-var offline_phase = "idle"
-var offline_turn_needs_draw = false
-var offline_pending_claim: Dictionary = {}
-var offline_claim_counts: Dictionary = {}
-var offline_package_liability: Dictionary = {}
-var offline_last_draw: Dictionary = {}
-var offline_ai_active = false
-var round_summary = ""
-var last_score_deltas: Array[int] = []
-var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
-var current_human_advice: Array = []
-var tile_order: Dictionary = {}
-var tile_sort_order: Dictionary = {}
-var tile_metadata_ready = false
-var tile_suit_cache: Dictionary = {}
-var tile_number_cache: Dictionary = {}
-var tile_flower_cache: Dictionary = {}
-var tile_honor_cache: Dictionary = {}
-var tile_terminal_or_honor_cache: Dictionary = {}
-var tile_simple_number_cache: Dictionary = {}
-var tile_thirteen_orphans_cache: Dictionary = {}
-var thirteen_orphans_indices: Array[int] = []
-var tile_label_cache: Dictionary = {}
-var tile_speech_label_cache: Dictionary = {}
-var tile_face_main_cache: Dictionary = {}
-var tile_face_sub_cache: Dictionary = {}
-var tile_corner_cache: Dictionary = {}
-var tile_accent_cache: Dictionary = {}
-var style_cache: Dictionary = {}
-var style_cache_order: Array[String] = []
-var button_style_set_cache: Dictionary = {}
-var button_style_set_cache_order: Array[String] = []
-var input_style_set_cache: Dictionary = {}
-var input_style_set_cache_order: Array[String] = []
-var shanten_cache: Dictionary = {}
-var shanten_cache_order: Array[String] = []
-var shanten_cache_hits = 0
-var shanten_cache_misses = 0
-var ai_report_cache: Dictionary = {}
-var ai_report_cache_order: Array[String] = []
-var ai_report_cache_hits = 0
-var ai_report_cache_misses = 0
-var threat_report_cache: Dictionary = {}
-var threat_report_cache_order: Array[String] = []
-var effective_tiles_cache: Dictionary = {}
-var effective_tiles_cache_order: Array[String] = []
-var effective_tiles_cache_hits = 0
-var effective_tiles_cache_misses = 0
-var perf_render_count = 0
-var perf_render_total_ms = 0.0
-var perf_ai_decision_count = 0
-var perf_ai_decision_total_ms = 0.0
-var pending_danger_discard_index = -1
-var pending_danger_discard_tile = ""
-var pending_danger_discard_report: Dictionary = {}
-var selected_room = ""
-var online_host_edit: LineEdit
-var online_room_edit: LineEdit
-var online_name_edit: LineEdit
-var tcp = StreamPeerTCP.new()
-var tcp_status = StreamPeerTCP.STATUS_NONE
-var tcp_buffer = ""
-var online_room: Dictionary = {}
-var online_game: Dictionary = {}
-var online_feedback = ""
-var online_waiting_for_server = false
-var online_last_sent_action = ""
-var online_last_sent_msec = 0
-var online_announced_discard_key = ""
-var online_pending_local_discard_identity = ""
-var sent_hello = false
-var voice_capture_effect: AudioEffectCapture
-var voice_mic_player: AudioStreamPlayer
-var voice_enabled = false
-var voice_sequence = 0
-var voice_peak = 0.0
-var game_render_queued = false
-var last_game_render_msec = 0
-var next_online_poll_msec = 0
-var next_update_progress_msec = 0
-var safe_area_margins := Vector4(0.0, 0.0, 0.0, 0.0)
-var fx_layer: Control
-var fx_turn_pulse: Control
-var fx_turn_glow: Panel
-var fx_turn_pulse_tween: Tween
-var fx_burst_root: Control
-var fx_burst_label: Label
-var fx_burst_rings: Array[Panel] = []
-var fx_burst_flash: ColorRect
-var fx_burst_tween: Tween
-var fx_ripple_root: Control
-var fx_ripple_rings: Array[Panel] = []
-var fx_ripple_tween: Tween
-var transition_overlay: ColorRect
-var transition_tween: Tween
-var transition_pending_callback: Callable
-var transition_active := false
-var toast_container: Control
-var toast_tween: Tween
-var toast_current: Control
-
-# 牌面动画系统变量 / Tile Animation System Variables
-var tile_flip_animations: Dictionary = {}  # 进行中的翻转动画
-var tile_fly_animations: Array = []         # 进行中的飞行动画
-
-# 环境氛围动画变量 / Environmental Animation Variables
-var ambient_layer: Control
-var ambient_petals: Array[Control] = []
-var ambient_clouds: Array[Control] = []
-var ambient_particles: Array[Control] = []
-var ambient_tween: Tween
-
-const TILE_FACE_LABELS := ["E", "S", "N", "R", "Z", "F", "P"]
-const NUMBER_SUIT_STARTS := [0, 9, 18]
-const TILE_BASE_VALUES := [
-	4.0, 6.0, 8.0, 8.0, 8.0, 8.0, 8.0, 6.0, 4.0,
-	4.0, 6.0, 8.0, 8.0, 8.0, 8.0, 8.0, 6.0, 4.0,
-	4.0, 6.0, 8.0, 8.0, 8.0, 8.0, 8.0, 6.0, 4.0,
-	5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0,
-]
-const EMPTY_WAIT_VALUE_METRICS_TEMPLATE := {
-	"score": 0.0,
-	"best_tile": "",
-	"best_fan": 0,
-	"best_points": 0,
-	"average_points": 0.0,
-	"total_remaining": 0,
-	"adjusted_remaining": 0.0,
-	"self_discarded": [],
-	"quality_penalty": 0.0,
-	"quality_text": "",
-}
-const SHAPE_NEIGHBOR_DELTAS := [-2, -1, 1, 2]
-const WALL_BACK_TILE_SIZE := Vector2(22, 30)
-const DISCARD_TILE_MAX_SIZE := Vector2(38, 52)
-const DISCARD_TILE_MIN_SIZE := Vector2(22, 30)
-const DISCARD_TILE_ASPECT := 52.0 / 38.0
-const DISCARD_GRID_SEPARATION := 2
-const WALL_LAYOUTS := [
-	[Vector2(0.22, 0.055), Vector2(0.78, 0.135), 16, true],
-	[Vector2(0.22, 0.865), Vector2(0.78, 0.945), 16, true],
-	[Vector2(0.045, 0.205), Vector2(0.130, 0.795), 12, false],
-	[Vector2(0.870, 0.205), Vector2(0.955, 0.795), 12, false],
-]
-const DISCARD_ZONES := [
-	[0, Rect2(Vector2(0.285, 0.585), Vector2(0.715, 0.825)), 10],
-	[2, Rect2(Vector2(0.285, 0.175), Vector2(0.715, 0.415)), 10],
-	[3, Rect2(Vector2(0.135, 0.315), Vector2(0.300, 0.705)), 4],
-	[1, Rect2(Vector2(0.700, 0.315), Vector2(0.865, 0.705)), 4],
-]
-const MELD_LAYOUTS := [
-	[0, Rect2(Vector2(0.14, 0.78), Vector2(0.39, 0.93))],
-	[1, Rect2(Vector2(0.72, 0.72), Vector2(0.94, 0.86))],
-	[2, Rect2(Vector2(0.61, 0.08), Vector2(0.86, 0.21))],
-	[3, Rect2(Vector2(0.06, 0.72), Vector2(0.28, 0.86))],
-]
-const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
-const CENTER_PANEL_RECT := Rect2(Vector2(0.392, 0.348), Vector2(0.608, 0.660))
-const CENTER_INNER_RECT := Rect2(Vector2(0.17, 0.14), Vector2(0.83, 0.78))
-const CENTER_STATUS_RECT := Rect2(Vector2(0.15, 0.13), Vector2(0.85, 0.27))
-const CENTER_WALL_LABEL_RECT := Rect2(Vector2(0.38, 0.30), Vector2(0.62, 0.42))
-const CENTER_WALL_COUNT_RECT := Rect2(Vector2(0.35, 0.39), Vector2(0.65, 0.58))
-const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.38, 0.60), Vector2(0.62, 0.69))
-const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.39, 0.68), Vector2(0.61, 0.97))
-const CENTER_LAST_TILE_SIZE := Vector2(56, 76)
-const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.05), Vector2(0.57, 0.22)),
-	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
-	Rect2(Vector2(0.43, 0.79), Vector2(0.57, 0.94)),
-	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
-]
-const CENTER_DICE_DOT_POINTS := [
-	Vector2(0.35, 0.32),
-	Vector2(0.65, 0.32),
-	Vector2(0.35, 0.60),
-	Vector2(0.65, 0.60),
-]
-const CENTER_DICE_DOT_RECTS := [
-	Rect2(Vector2(0.332, 0.302), Vector2(0.368, 0.338)),
-	Rect2(Vector2(0.632, 0.302), Vector2(0.668, 0.338)),
-	Rect2(Vector2(0.332, 0.582), Vector2(0.368, 0.618)),
-	Rect2(Vector2(0.632, 0.582), Vector2(0.668, 0.618)),
-]
-const CENTER_INNER_FILL := Color(0.004, 0.040, 0.040, 0.97)
-const CENTER_INNER_BORDER := Color(0.30, 0.28, 0.20, 0.38)
-const CENTER_WALL_COUNT_COLOR := Color(0.68, 0.76, 0.72, 0.90)
-const CENTER_ACTIVE_WIND_COLOR := Color(0.72, 0.72, 0.48, 0.90)
-const CENTER_IDLE_WIND_COLOR := Color(0.52, 0.50, 0.34, 0.76)
-const CENTER_DICE_DOT_RADIUS := 0.018
-const CENTER_DICE_DOT_FILL := Color(0.60, 0.56, 0.42, 0.62)
-const CENTER_DICE_DOT_BORDER := Color(0.76, 0.72, 0.58, 0.26)
-const ROUND_SUMMARY_PANEL_RECT := Rect2(Vector2(0.300, 0.190), Vector2(0.700, 0.610))
-const ROUND_SUMMARY_HEADER_RECT := Rect2(Vector2(0.0, 0.0), Vector2(1.0, 0.16))
-const ROUND_SUMMARY_TITLE_RECT := Rect2(Vector2(0.06, 0.04), Vector2(0.94, 0.18))
-const ROUND_SUMMARY_TEXT_RECT := Rect2(Vector2(0.08, 0.190), Vector2(0.92, 0.335))
-const ROUND_SUMMARY_RANK_START_Y := 0.365
-const ROUND_SUMMARY_RANK_ROW_HEIGHT := 0.105
-const ROUND_SUMMARY_RANK_ROW_GAP := 0.018
-const ROUND_SUMMARY_NEXT_DEALER_RECT := Rect2(Vector2(0.08, 0.880), Vector2(0.92, 0.955))
-const TABLE_OUTER_RECT := Rect2(Vector2(0.145, 0.108), Vector2(0.855, 0.765))
-const TABLE_OUTER_TEXTURE_RECT := Rect2(Vector2(0.008, 0.012), Vector2(0.992, 0.988))
-const TABLE_INNER_RECT := Rect2(Vector2(0.045, 0.055), Vector2(0.955, 0.945))
-const TABLE_INNER_TEXTURE_RECT := Rect2(Vector2(0.012, 0.016), Vector2(0.988, 0.984))
-const SEAT_LAYOUTS := [
-	[2, Rect2(Vector2(0.375, 0.100), Vector2(0.625, 0.218)), "top"],
-	[3, Rect2(Vector2(0.018, 0.300), Vector2(0.188, 0.588)), "left"],
-	[1, Rect2(Vector2(0.812, 0.300), Vector2(0.982, 0.588)), "right"],
-	[0, Rect2(Vector2(0.018, 0.738), Vector2(0.190, 0.955)), "bottom"],
-]
-const TABLE_ORNAMENT_EDGES := [
-	[Rect2(Vector2(0.055, 0.040), Vector2(0.945, 0.060)), Color(0.50, 0.42, 0.24, 0.36), Color(0.82, 0.76, 0.56, 0.12)],
-	[Rect2(Vector2(0.055, 0.940), Vector2(0.945, 0.960)), Color(0.48, 0.40, 0.22, 0.32), Color(0.82, 0.76, 0.56, 0.12)],
-	[Rect2(Vector2(0.030, 0.090), Vector2(0.048, 0.910)), Color(0.48, 0.40, 0.22, 0.28), Color(0.82, 0.76, 0.56, 0.10)],
-	[Rect2(Vector2(0.952, 0.090), Vector2(0.970, 0.910)), Color(0.48, 0.40, 0.22, 0.28), Color(0.82, 0.76, 0.56, 0.10)],
-]
-const TABLE_CORNER_FILL := Color(0.22, 0.20, 0.15, 0.40)
-const TABLE_CORNER_BORDER := Color(0.40, 0.38, 0.30, 0.10)
-const TABLE_CORNER_VERTICAL_FILL := Color(0.22, 0.20, 0.15, 0.36)
-const TABLE_CORNER_VERTICAL_BORDER := Color(0.40, 0.38, 0.30, 0.09)
-const TABLE_CORNER_RECTS := [
-	[Rect2(Vector2(0.045, 0.070), Vector2(0.100, 0.088)), Rect2(Vector2(0.045, 0.070), Vector2(0.059, 0.142))],
-	[Rect2(Vector2(0.905, 0.070), Vector2(0.960, 0.088)), Rect2(Vector2(0.950, 0.070), Vector2(0.964, 0.142))],
-	[Rect2(Vector2(0.045, 0.875), Vector2(0.100, 0.893)), Rect2(Vector2(0.045, 0.875), Vector2(0.059, 0.947))],
-	[Rect2(Vector2(0.905, 0.875), Vector2(0.960, 0.893)), Rect2(Vector2(0.950, 0.875), Vector2(0.964, 0.947))],
-]
-const HAND_TILE_MAX_WIDTH := 78.0
-const HAND_TILE_MIN_TOUCH_WIDTH := 48.0
-const HAND_TILE_ASPECT := 1.36
-const HAND_TRAY_RECT := Rect2(Vector2(0.180, 0.765), Vector2(0.990, 0.985))
-const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
-const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.145), Vector2(0.988, 0.170))
-const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
-const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.795, 0.040), Vector2(0.970, 0.145))
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.15), Vector2(0.985, 0.96))
-const HAND_LAYOUT_CANDIDATES := [
-	[12.0, 5],
-	[8.0, 3],
-	[5.0, 2],
-	[0.0, 1],
-]
-const ACTION_BUTTON_MAX_WIDTH := 86.0
-const ACTION_BUTTON_MIN_TOUCH_WIDTH := 64.0
-const ACTION_BUTTON_HEIGHT := 52.0
-const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.375, 0.655), Vector2(0.975, 0.748))
-const ACTION_BAR_RECT := Rect2(Vector2(0.392, 0.667), Vector2(0.965, 0.735))
-const TOP_HUD_BUTTON_SIZE := Vector2(68, 44)
-const TOP_HUD_MODE_BADGE_RECT := Rect2(Vector2(0.018, 0.14), Vector2(0.100, 0.44))
-const SAFE_CONTENT_MIN_MARGIN := Vector4(12.0, 8.0, 12.0, 10.0)
-const SAFE_CONTENT_MAX_SIDE_FRACTION := 0.16
-const SAFE_CONTENT_MAX_TOP_FRACTION := 0.16
-const SAFE_CONTENT_MAX_BOTTOM_FRACTION := 0.18
-const TOP_HUD_RECT := Rect2(Vector2(0.018, 0.018), Vector2(0.982, 0.094))
-const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.135, 0.08), Vector2(0.205, 0.92))
-const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.212, 0.10), Vector2(0.430, 0.90))
-const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.440, 0.13), Vector2(0.708, 0.87))
-const TOP_HUD_WALL_RECT := Rect2(Vector2(0.716, 0.12), Vector2(0.800, 0.88))
-const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.806, 0.10), Vector2(0.866, 0.90))
-const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.872, 0.10), Vector2(0.932, 0.90))
-const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.938, 0.10), Vector2(0.998, 0.90))
-const SCORE_STRIP_CHIP_RECTS := [
-	Rect2(Vector2(0.006, 0.0), Vector2(0.244, 1.0)),
-	Rect2(Vector2(0.256, 0.0), Vector2(0.494, 1.0)),
-	Rect2(Vector2(0.506, 0.0), Vector2(0.744, 1.0)),
-	Rect2(Vector2(0.756, 0.0), Vector2(0.994, 1.0)),
-]
-const SCORE_STRIP_ACCENT_RECT := Rect2(Vector2(0.0, 0.0), Vector2(0.035, 1.0))
-const SCORE_STRIP_NAME_RECT := Rect2(Vector2(0.065, 0.20), Vector2(0.405, 0.80))
-const SCORE_STRIP_SCORE_RECT := Rect2(Vector2(0.430, 0.08), Vector2(0.970, 0.92))
-const SEAT_STAT_RECTS := [
-	Rect2(Vector2(0.39, 0.38), Vector2(0.52, 0.58)),
-	Rect2(Vector2(0.535, 0.38), Vector2(0.655, 0.58)),
-	Rect2(Vector2(0.670, 0.38), Vector2(0.96, 0.58)),
-]
-const BGM_VOLUME_DB := 0.0
-const SFX_VOLUME_BOOST_DB := 2.5
-const VOICE_VOLUME_DB := -2.0
-const UI_RENDER_MIN_INTERVAL_MSEC := 16
-const ONLINE_POLL_INTERVAL_MSEC := 33
-const UPDATE_PROGRESS_INTERVAL_MSEC := 120
-const ANDROID_TTS_WARMUP_MSEC := 900
-const ANDROID_TTS_FALLBACK_MSEC := 4200
-const UPDATE_NOTES_PREVIEW_CHARS := 28
-const ANDROID_TTS_RETRY_MSEC := 1400
-const SPEECH_READY_RETRY_SECONDS := 0.16
-const SPEECH_TILE_DELAY_SECONDS := 0.12
-const SPEECH_ACTION_DELAY_SECONDS := 0.10
-const SPEECH_MAX_READY_WAIT_MSEC := 7200
-const SPEECH_CLIP_GAP_SECONDS := 0.34
-const SPEECH_CLIP_TAIL_SECONDS := 0.12
-const SHANTEN_CACHE_LIMIT := 4096
-const AI_REPORT_CACHE_LIMIT := 256
-const THREAT_REPORT_CACHE_LIMIT := 192
-const EFFECTIVE_TILES_CACHE_LIMIT := 512
-const STYLE_CACHE_LIMIT := 256
-const BUTTON_STYLE_SET_CACHE_LIMIT := 96
-const INPUT_STYLE_SET_CACHE_LIMIT := 32
-const UI_GOLD := Color(0.034, 0.036, 0.034, 0.18)
-const UI_GOLD_SOFT := Color(0.050, 0.052, 0.049, 0.08)
-const UI_DARK := Color(0.007, 0.009, 0.010, 0.992)
-const UI_DARK_SOFT := Color(0.014, 0.017, 0.019, 0.930)
-const UI_FELT := Color(0.010, 0.020, 0.020, 0.988)
-const UI_FELT_LINE := Color(0.034, 0.046, 0.044, 0.16)
-const UI_TEXT_MAIN := Color(0.94, 0.92, 0.84, 1.0)
-const UI_TEXT_SUB := Color(0.86, 0.88, 0.81, 0.98)
-const UI_TEXT_MUTED := Color(0.77, 0.78, 0.71, 0.94)
-const UI_PANEL_FILL := Color(0.012, 0.015, 0.018, 0.996)
-const UI_PANEL_BORDER := Color(0.072, 0.074, 0.070, 0.12)
-const UI_PANEL_SHADOW := Color(0.0, 0.0, 0.0, 0.075)
-const TOP_HUD_FILL := Color(0.013, 0.018, 0.021, 0.982)
-const TOP_HUD_BORDER := Color(0.14, 0.15, 0.13, 0.24)
-const SCORE_STRIP_FILL := Color(0.012, 0.021, 0.023, 0.92)
-const SCORE_STRIP_BORDER := Color(0.14, 0.16, 0.16, 0.18)
-const SCORE_STRIP_NAME_FILL := Color(0.92, 0.88, 0.76, 0.92)
-const SETTINGS_PANEL_FILL := Color(0.009, 0.015, 0.018, 0.986)
-const SETTINGS_PANEL_BORDER := Color(0.12, 0.12, 0.08, 0.24)
-const SETTINGS_PANEL_RECT := Rect2(Vector2(0.290, 0.080), Vector2(0.710, 0.820))
-const SETTINGS_TITLE_RECT := Rect2(Vector2(0.06, 0.045), Vector2(0.42, 0.165))
-const SETTINGS_CLOSE_RECT := Rect2(Vector2(0.760, 0.055), Vector2(0.940, 0.165))
-const SETTINGS_AUDIO_SECTION_RECT := Rect2(Vector2(0.070, 0.165), Vector2(0.930, 0.470))
-const SETTINGS_PLAY_SECTION_RECT := Rect2(Vector2(0.070, 0.505), Vector2(0.930, 0.720))
-const SETTINGS_MAINT_SECTION_RECT := Rect2(Vector2(0.070, 0.755), Vector2(0.930, 0.925))
-const SETTINGS_SECTION_TITLE_RECT := Rect2(Vector2(0.035, 0.045), Vector2(0.300, 0.300))
-const SETTINGS_SECTION_GRID_RECT := Rect2(Vector2(0.035, 0.295), Vector2(0.965, 0.910))
-const SETTINGS_ROW_STATUS_RECT := Rect2(Vector2(0.045, 0.145), Vector2(0.510, 0.855))
-const SETTINGS_ROW_BUTTON_RECT := Rect2(Vector2(0.565, 0.145), Vector2(0.955, 0.855))
-const UI_BACKGROUND_TINT := Color(0.004, 0.006, 0.008, 0.996)
-
-# ============================================================
-# 国风雅韵主题色彩系统 / Guofeng Theme Color System
-# ============================================================
-
-# 水墨色系 / Ink Wash Colors
-const INK_BLACK := Color(0.02, 0.02, 0.03, 1.0)           # 墨黑
-const INK_DARK := Color(0.06, 0.06, 0.08, 1.0)            # 浓墨
-const INK_MEDIUM := Color(0.12, 0.11, 0.14, 1.0)          # 淡墨
-const INK_LIGHT := Color(0.22, 0.20, 0.24, 1.0)           # 极淡墨
-const INK_WASH := Color(0.35, 0.32, 0.36, 0.85)           # 水墨晕染
-
-# 朱红系 / Cinnabar Red System
-const CINNABAR := Color(0.82, 0.18, 0.12, 1.0)            # 朱砂红
-const VERMILION := Color(0.88, 0.28, 0.18, 1.0)           # 朱红
-const ROUGE := Color(0.72, 0.22, 0.24, 1.0)               # 胭脂
-const SCARLET_GLOW := Color(0.94, 0.42, 0.32, 0.92)       # 丹霞光
-
-# 金色系 / Gold System
-const GOLD_DARK := Color(0.62, 0.48, 0.18, 1.0)           # 暗金
-const GOLD_PRIMARY := Color(0.88, 0.72, 0.28, 1.0)        # 正金
-const GOLD_BRIGHT := Color(0.96, 0.84, 0.42, 1.0)         # 明金
-const GOLD_LIGHT := Color(0.98, 0.92, 0.68, 1.0)          # 淡金
-const GOLD_GLOW := Color(1.0, 0.90, 0.55, 0.85)           # 金辉
-
-# 玉色系 / Jade System
-const JADE_DARK := Color(0.12, 0.32, 0.28, 1.0)           # 墨玉
-const JADE_PRIMARY := Color(0.28, 0.56, 0.48, 1.0)        # 青玉
-const JADE_LIGHT := Color(0.42, 0.72, 0.62, 1.0)          # 白玉
-const JADE_GLOW := Color(0.52, 0.82, 0.72, 0.88)          # 玉润
-
-# 青花系 / Blue & White Porcelain
-const PORCELAIN := Color(0.96, 0.98, 0.98, 1.0)           # 瓷白
-const CELADON := Color(0.72, 0.84, 0.80, 1.0)             # 青瓷
-const AZURE := Color(0.22, 0.48, 0.72, 1.0)               # 青花蓝
-const AZURE_LIGHT := Color(0.42, 0.64, 0.88, 1.0)         # 淡青
-
-# 宣纸系 / Rice Paper System
-const PAPER_WARM := Color(0.98, 0.96, 0.90, 1.0)          # 宣纸暖
-const PAPER_COOL := Color(0.95, 0.96, 0.94, 1.0)          # 宣纸冷
-const PAPER_AGED := Color(0.94, 0.90, 0.82, 1.0)          # 古宣纸
-
-# 祥云装饰色 / Auspicious Cloud Colors
-const CLOUD_WHITE := Color(1.0, 1.0, 1.0, 0.72)           # 白云
-const CLOUD_GOLD := Color(0.96, 0.88, 0.52, 0.62)         # 金云
-const CLOUD_MIST := Color(0.88, 0.90, 0.92, 0.42)         # 烟云
-
-# 国风主题面板色 / Guofeng Theme Panel Colors
-const GUOFENG_PANEL_FILL := Color(0.018, 0.022, 0.028, 0.96)
-const GUOFENG_PANEL_BORDER := Color(0.32, 0.28, 0.22, 0.48)
-const GUOFENG_PANEL_GOLD_LINE := Color(0.76, 0.62, 0.28, 0.62)
-
-# 动画 / 特效层参数。特效节点全部挂在持久化的 fx_layer 上，整桌每次 render_game
-# 调用 clear_screen 时 fx_layer 不被释放，因此补间动画可以跨整桌重绘连续播放。
-const FX_WIN_BURST_DURATION_MSEC := 1400
-const FX_DISCARD_RIPPLE_DURATION_MSEC := 460
-const FX_TURN_PULSE_PERIOD_MSEC := 1700
-const FX_WIN_RING_COUNT := 3
-const FX_BURST_LABEL_FONT_SIZE := 58
-const FX_LAYER_Z_INDEX := 16
-const TRANSITION_DURATION_MSEC := 280
-const HAND_SLIDE_IN_DURATION_MSEC := 220
-const TOAST_DEFAULT_DURATION_MSEC := 1800
-const TOAST_SLIDE_DURATION_MSEC := 220
-const FX_TILE_FLIP_DURATION_MSEC := 180
-const FX_SCORE_CHANGE_DURATION_MSEC := 320
-const FX_CLAIM_FLY_DURATION_MSEC := 280
-
-# 牌面动画参数 / Tile Animation Parameters
-const FX_TILE_FLY_CURVE := Tween.TRANS_QUAD
-const FX_TILE_FLY_EASE := Tween.EASE_OUT
-const FX_TILE_CLAIM_BURST_DURATION_MSEC := 280
-
-# 增强胜利特效参数 / Enhanced Victory Effect Parameters
-const FX_WIN_PARTICLE_COUNT := 48
-const FX_WIN_SPARK_COUNT := 24
-const FX_WIN_DURATION_ENHANCED_MSEC := 2200
-const FX_WIN_SHAKE_AMPLITUDE := 4.0
-const FX_WIN_SHAKE_FREQUENCY := 12.0
-
-# 界面过渡动画参数 / Interface Transition Parameters
-const TRANSITION_SLIDE_DURATION_MSEC := 350
-const TRANSITION_CARD_FLIP_DURATION_MSEC := 280
-const TRANSITION_STAGGER_DELAY_MSEC := 40
+extends "res://scripts/main_base.gd"
 
 func _ready() -> void:
 	randomize()
@@ -810,58 +34,170 @@ func _finish_startup() -> void:
 			show_menu(true)
 
 func show_daily_login_panel(login_result: Dictionary) -> void:
-	"""显示每日登录签到面板"""
+	"""显示每日登录签到面板 - 增强版"""
 	mode = "daily_login"
 	clear_screen()
 
+	# 背景装饰 - 远山与云纹
+	make_mountain_silhouette(root_layer, rect_full(0.0, 0.60, 1.0, 1.0), 2, INK_WASH).name = "DailyLoginMountain"
+	make_cloud_decoration(root_layer, rect_full(0.02, 0.05, 0.30, 0.30), "mist", false)
+	make_cloud_decoration(root_layer, rect_full(0.70, 0.70, 0.98, 0.95), "gold", false)
+
+	# 灯笼装饰 - 两侧对称
+	make_lantern(root_layer, rect_full(0.06, 0.04, 0.14, 0.22), CINNABAR, true).name = "DailyLoginLanternLeft"
+	make_lantern(root_layer, rect_full(0.86, 0.04, 0.94, 0.22), CINNABAR, true).name = "DailyLoginLanternRight"
+
+	# 梅花点缀 - 右下角
+	make_plum_blossom(root_layer, rect_full(0.78, 0.62, 0.98, 0.92), 2, ROUGE, true).name = "DailyLoginPlumBlossom"
+
 	# 主面板
-	var panel = make_panel(root_layer, rect_full(0.18, 0.18, 0.82, 0.82), Color(0.008, 0.020, 0.024, 0.98), 24, Color(0.62, 0.52, 0.32, 0.56), 5)
-	panel.add_child(make_color_rect(rect_full(0.006, 0.03, 0.014, 0.97), Color(0.92, 0.78, 0.38, 0.76)))
+	var panel = make_panel(root_layer, rect_full(0.18, 0.10, 0.82, 0.90), Color(0.008, 0.020, 0.024, 0.98), 24, Color(0.62, 0.52, 0.32, 0.56), 5)
+	panel.add_child(make_color_rect(rect_full(0.006, 0.03, 0.014, 0.97), GOLD_PRIMARY.darkened(0.2)))
 
-	# 标题
-	var title = make_label(panel, "📅 每日签到", 32, Color(0.96, 0.88, 0.52), true)
-	apply_rect(title, rect_full(0.08, 0.08, 0.92, 0.20))
+	# 顶部金色装饰线
+	panel.add_child(make_color_rect(rect_full(0.02, 0.06, 0.98, 0.08), Color(0.92, 0.78, 0.38, 0.18)))
+
+	# 标题 - 使用Lucide图标
+	var title = make_label(panel, "每日签到", 32, Color(0.96, 0.88, 0.52), true)
+	apply_rect(title, rect_full(0.15, 0.06, 0.85, 0.16))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_lucide_icon(panel, "gift", rect_full(0.08, 0.07, 0.14, 0.15), GOLD_BRIGHT)
 
-	# 连续签到天数
+	# 连续签到天数 - 更醒目
 	var days = int(login_result.get("consecutive_days", 1))
 	var days_text = "已连续签到 %d 天" % days
-	var days_label = make_label(panel, days_text, 24, Color(0.94, 0.94, 0.88), true)
-	apply_rect(days_label, rect_full(0.10, 0.28, 0.90, 0.42))
+	var days_label = make_label(panel, days_text, 26, Color(0.94, 0.94, 0.88), true)
+	apply_rect(days_label, rect_full(0.10, 0.18, 0.90, 0.28))
 	days_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	# 奖励说明
+	# 7天签到指示器 - 每天一个小圆圈
+	var day_indicators_container = Control.new()
+	day_indicators_container.name = "DailyLoginDayIndicators"
+	day_indicators_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(day_indicators_container, rect_full(0.10, 0.30, 0.90, 0.42))
+	panel.add_child(day_indicators_container)
+
+	var current_day_in_cycle = days % 7
+	if current_day_in_cycle == 0:
+		current_day_in_cycle = 7
+
+	for i in range(7):
+		var day_num = i + 1
+		var is_claimed = day_num < current_day_in_cycle
+		var is_current = day_num == current_day_in_cycle
+		var is_milestone = day_num == 7
+
+		# 计算位置 - 均匀分布
+		var x_pos = 0.06 + float(i) * 0.13
+		var indicator_rect = rect_full(x_pos, 0.10, x_pos + 0.10, 0.90)
+
+		# 选择颜色
+		var fill_color: Color
+		var border_color: Color
+		var text_color: Color
+		if is_claimed:
+			fill_color = Color(0.28, 0.56, 0.48, 0.92)
+			border_color = Color(0.42, 0.72, 0.62, 0.88)
+			text_color = Color(0.96, 0.96, 0.92)
+		elif is_current:
+			fill_color = Color(0.88, 0.72, 0.28, 0.92)
+			border_color = GOLD_BRIGHT
+			text_color = Color(0.12, 0.10, 0.08)
+		else:
+			fill_color = Color(0.08, 0.12, 0.14, 0.88)
+			border_color = Color(0.28, 0.32, 0.30, 0.42)
+			text_color = Color(0.52, 0.54, 0.50)
+
+		# 里程碑天数特殊样式
+		var radius = 16 if is_milestone else 12
+		var indicator = make_panel(day_indicators_container, indicator_rect, fill_color, radius, border_color, 0)
+		indicator.name = "DailyLoginDayNode_%d" % day_num
+
+		# 天数标签
+		var day_label = make_label(indicator, str(day_num), 14, text_color, true)
+		apply_rect(day_label, rect_full(0.0, 0.0, 1.0, 0.65))
+
+		# 奖励图标
+		var reward_icon = "×2" if is_milestone else "+"
+		var icon_label = make_label(indicator, reward_icon, 10, text_color.darkened(0.2), false)
+		apply_rect(icon_label, rect_full(0.0, 0.55, 1.0, 0.95))
+
+		# 已签到的天数添加对勾
+		if is_claimed:
+			add_lucide_icon(indicator, "check", rect_full(0.25, 0.15, 0.75, 0.65), text_color)
+
+		# 当前天数脉冲动画
+		if is_current and fx_enabled_effective():
+			var pulse_tween := create_tween()
+			pulse_tween.set_loops(3600)
+			pulse_tween.tween_property(indicator, "modulate:a", 0.6, 0.8).from(1.0)
+			pulse_tween.tween_property(indicator, "modulate:a", 1.0, 0.8).from(0.6)
+	draw_daily_login_streak_art(panel, days, current_day_in_cycle)
+
+	# 奖励说明 - 增强视觉效果
 	var reward_text = "今日奖励："
+	var reward_icon_name = "gift"
 	if days % 7 == 0:
-		reward_text += "🎁 双倍分数加成卡 ×1"
+		reward_text += "双倍分数加成卡 ×1"
+		reward_icon_name = "sparkles"
 	else:
 		reward_text += "金币 +100"
-	var reward_label = make_label(panel, reward_text, 20, Color(0.86, 0.90, 0.84), false)
-	apply_rect(reward_label, rect_full(0.12, 0.48, 0.88, 0.60))
-	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		reward_icon_name = "coin"
 
-	# 签到进度条
+	var reward_panel = make_panel(panel, rect_full(0.14, 0.44, 0.86, 0.56), Color(0.018, 0.030, 0.034, 0.92), 14, Color(0.46, 0.52, 0.42, 0.36), 0)
+	reward_panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.012, 1.0), GOLD_PRIMARY.darkened(0.2)))
+
+	var reward_label = make_label(reward_panel, reward_text, 20, Color(0.96, 0.92, 0.68), true)
+	apply_rect(reward_label, rect_full(0.12, 0.15, 0.88, 0.85))
+	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_lucide_icon(reward_panel, reward_icon_name, rect_full(0.04, 0.20, 0.12, 0.80), GOLD_PRIMARY)
+
+	# 签到进度条 - 增强版
 	var progress = days % 7
 	if progress == 0:
 		progress = 7
-	var progress_panel = make_panel(panel, rect_full(0.14, 0.62, 0.86, 0.78), Color(0.018, 0.030, 0.034, 0.92), 12, Color(0.38, 0.42, 0.40, 0.36), 0)
+	var progress_panel = make_panel(panel, rect_full(0.14, 0.58, 0.86, 0.68), Color(0.018, 0.030, 0.034, 0.92), 12, Color(0.38, 0.42, 0.40, 0.36), 0)
+
+	# 进度条背景
+	var progress_bg = make_panel(progress_panel, rect_full(0.04, 0.20, 0.96, 0.80), Color(0.06, 0.10, 0.12, 0.92), 8, Color(0.24, 0.28, 0.26, 0.36), 0)
+
+	# 进度条填充 - 带动画
 	var progress_fill = ColorRect.new()
 	progress_fill.color = Color(0.40, 0.72, 0.56, 0.88)
 	progress_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	progress_panel.add_child(progress_fill)
-	apply_rect(progress_fill, rect_full(0.0, 0.0, float(progress) / 7.0, 1.0))
+	progress_bg.add_child(progress_fill)
+
+	# 动画填充进度条
+	var target_width = float(progress) / 7.0
+	if fx_enabled_effective():
+		apply_rect(progress_fill, rect_full(0.0, 0.0, 0.0, 1.0))
+		var fill_tween := create_tween()
+		fill_tween.tween_property(progress_fill, "anchor_right", target_width, 0.8).from(0.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	else:
+		apply_rect(progress_fill, rect_full(0.0, 0.0, target_width, 1.0))
+
+	# 进度文字
 	var progress_text = make_label(progress_panel, "%d/7 天" % progress, 14, Color(0.96, 0.96, 0.92), true)
-	apply_rect(progress_text, rect_full(0.0, 0.15, 1.0, 0.85))
+	apply_rect(progress_text, rect_full(0.0, 0.0, 1.0, 1.0))
 	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	# 确认按钮
+	# 确认按钮 - 增强样式
 	var confirm_btn = make_small_button("领取奖励", Color(0.32, 0.62, 0.52), func() -> void:
+		# 领取奖励动画
+		if fx_enabled_effective():
+			_play_reward_claim_animation(panel, reward_text)
 		show_toast("签到成功！%s" % reward_text.replace("今日奖励：", ""), 2500)
 		show_menu(true)
 	)
-	confirm_btn.custom_minimum_size = Vector2(200, 56)
+	confirm_btn.custom_minimum_size = Vector2(220, 58)
 	panel.add_child(confirm_btn)
-	apply_rect(confirm_btn, rect_full(0.35, 0.82, 0.65, 0.96))
+	apply_rect(confirm_btn, rect_full(0.30, 0.72, 0.70, 0.84))
+	add_lucide_icon(confirm_btn, "check", rect_full(0.08, 0.22, 0.22, 0.78), Color(0.96, 0.96, 0.92))
+
+	# 底部提示
+	var tip_label = make_label(panel, "连续签到7天可获得双倍分数加成卡", 12, Color(0.62, 0.66, 0.60, 0.78), false)
+	apply_rect(tip_label, rect_full(0.15, 0.86, 0.85, 0.94))
+	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 面板弹出动画
 	if fx_enabled_effective():
@@ -869,14 +205,211 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		panel.scale = Vector2(0.85, 0.85)
 		var tw := create_tween()
 		tw.set_parallel(true)
-		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
-		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.85, 0.85)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.3).from(0.0)
+		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.3).from(Vector2(0.85, 0.85)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+func draw_daily_login_streak_art(parent: Control, days: int, current_day_in_cycle: int) -> Control:
+	var art = Control.new()
+	art.name = "DailyLoginStreakArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.145, 0.395, 0.855, 0.465))
+	parent.add_child(art)
+	var rail = make_color_rect(rect_full(0.035, 0.470, 0.965, 0.540), Color(0.82, 0.70, 0.36, 0.20))
+	rail.name = "DailyLoginStreakRail"
+	art.add_child(rail)
+	var filled = clamp(float(current_day_in_cycle) / 7.0, 0.0, 1.0)
+	var fill = make_color_rect(rect_full(0.035, 0.480, 0.035 + 0.930 * filled, 0.530), Color(0.42, 0.74, 0.58, 0.42))
+	fill.name = "DailyLoginStreakFill"
+	art.add_child(fill)
+	for i in range(7):
+		var day_num = i + 1
+		var center = 0.055 + float(i) * 0.148
+		var active = day_num <= current_day_in_cycle
+		var node_color = Color(0.88, 0.72, 0.34, 0.50) if active else Color(0.28, 0.34, 0.34, 0.34)
+		var node = make_panel(art, rect_full(center - 0.018, 0.285, center + 0.018, 0.725), node_color, 999, Color(1.0, 0.88, 0.48, 0.18 if active else 0.08), 0)
+		node.name = "DailyLoginStreakNode_%d" % day_num
+		if day_num == current_day_in_cycle:
+			var halo = make_panel(art, rect_full(center - 0.030, 0.160, center + 0.030, 0.850), Color(0.96, 0.78, 0.34, 0.14), 999, Color(1.0, 0.88, 0.48, 0.24), 0)
+			halo.name = "DailyLoginCurrentHalo"
+	var gate = make_panel(art, rect_full(0.925, 0.120, 0.995, 0.900), Color(0.72, 0.34, 0.24, 0.24), 999, Color(1.0, 0.82, 0.42, 0.28), 0)
+	gate.name = "DailyLoginSevenDayGate"
+	var gate_label = make_label(gate, "7", 10, Color(0.98, 0.92, 0.68, 0.92), true)
+	gate_label.name = "DailyLoginSevenDayGlyph"
+	apply_rect(gate_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	if days >= 7 and days % 7 == 0:
+		var glow = make_panel(art, rect_full(0.900, 0.020, 1.020, 0.980), Color(0.96, 0.72, 0.30, 0.12), 999, Color(1.0, 0.88, 0.48, 0.22), 0)
+		glow.name = "DailyLoginMilestoneGlow"
+	return art
+
+func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
+	"""播放奖励领取动画 - 闪光和粒子效果"""
+	# 闪光效果
+	var flash = ColorRect.new()
+	flash.color = Color(1.0, 0.92, 0.55, 0.0)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.add_child(flash)
+
+	var flash_tween := create_tween()
+	flash_tween.tween_property(flash, "color:a", 0.3, 0.15)
+	flash_tween.tween_property(flash, "color:a", 0.0, 0.3)
+	flash_tween.tween_callback(flash.queue_free)
+
+	# 创建粒子效果
+	for i in range(12):
+		var particle = Control.new()
+		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(particle)
+
+		var shape = Panel.new()
+		shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style_box = StyleBoxFlat.new()
+		style_box.bg_color = GOLD_PRIMARY.lightened(0.3)
+		style_box.set_corner_radius_all(50)
+		shape.add_theme_stylebox_override("panel", style_box)
+		shape.custom_minimum_size = Vector2(randf_range(6, 12), randf_range(6, 12))
+		particle.add_child(shape)
+
+		# 从中心向外扩散
+		particle.position = Vector2(panel.size.x * 0.5, panel.size.y * 0.5)
+		var angle = randf() * PI * 2
+		var distance = randf_range(80, 200)
+		var target_pos = particle.position + Vector2(cos(angle), sin(angle)) * distance
+
+		var particle_tween := create_tween()
+		particle_tween.set_parallel(true)
+		particle_tween.tween_property(particle, "position", target_pos, 0.6).set_ease(Tween.EASE_OUT)
+		particle_tween.tween_property(particle, "modulate:a", 0.0, 0.6).from(1.0)
+		particle_tween.tween_property(shape, "scale", Vector2(0.3, 0.3), 0.6).from(Vector2(1.0, 1.0))
+		particle_tween.tween_callback(particle.queue_free).set_delay(0.65)
 
 func show_loading_screen() -> void:
 	clear_screen()
-	var loading = make_label(root_layer, "正在加载...", 32, Color(1.0, 0.90, 0.48), true)
-	apply_rect(loading, rect_full(0.3, 0.4, 0.7, 0.6))
-	loading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 背景面板 - 水墨风格 + 远山意境
+	var bg = make_panel(root_layer, rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.018, 0.024, 1.0), 0, Color(0.0, 0.0, 0.0, 0.0), 0)
+
+	# 远山层叠 - 增加远景深度
+	make_mountain_silhouette(bg, rect_full(0.0, 0.40, 1.0, 0.95), 3, INK_WASH).name = "LoadingFarMountain"
+
+	# 装饰性云纹背景
+	make_cloud_decoration(bg, rect_full(0.02, 0.05, 0.35, 0.35), "mist", false)
+	make_cloud_decoration(bg, rect_full(0.65, 0.65, 0.98, 0.95), "gold", false)
+
+	# 月亮装饰 - 右上
+	make_moon_or_sun(bg, rect_full(0.78, 0.02, 1.02, 0.22), "full_moon").name = "LoadingMoon"
+
+	# 中央装饰面板
+	var center_panel = make_panel(bg, rect_full(0.25, 0.20, 0.75, 0.80), Color(0.018, 0.028, 0.036, 0.92), 24, Color(0.62, 0.52, 0.28, 0.42), 8)
+	center_panel.add_child(make_color_rect(rect_full(0.008, 0.02, 0.015, 0.98), GOLD_PRIMARY.darkened(0.2)))
+
+	# 顶部金色装饰线
+	center_panel.add_child(make_color_rect(rect_full(0.02, 0.06, 0.98, 0.08), Color(0.92, 0.78, 0.38, 0.18)))
+	# 底部金色装饰线
+	center_panel.add_child(make_color_rect(rect_full(0.02, 0.92, 0.98, 0.94), Color(0.92, 0.78, 0.38, 0.18)))
+
+	# 游戏标题
+	var title = make_label(center_panel, "云桌麻将", 52, GOLD_BRIGHT, true)
+	apply_rect(title, rect_full(0.10, 0.15, 0.90, 0.38))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 副标题
+	var subtitle = make_label(center_panel, "国风雅韵 · 智慧博弈", 18, Color(0.78, 0.82, 0.74, 0.88), false)
+	apply_rect(subtitle, rect_full(0.15, 0.38, 0.85, 0.48))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	draw_loading_shuffle_art(center_panel)
+
+	# 加载动画区域
+	var loading_area = Control.new()
+	loading_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(loading_area, rect_full(0.30, 0.55, 0.70, 0.72))
+	center_panel.add_child(loading_area)
+
+	# 加载文字
+	var loading_text = make_label(loading_area, "正在加载", 20, Color(0.88, 0.86, 0.78, 0.92), true)
+	apply_rect(loading_text, rect_full(0.0, 0.0, 0.6, 1.0))
+	loading_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	# 动态加载点动画
+	var dots_container = Control.new()
+	dots_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(dots_container, rect_full(0.62, 0.20, 0.90, 0.80))
+	loading_area.add_child(dots_container)
+
+	var dots: Array[Label] = []
+	for i in range(3):
+		var dot = make_label(dots_container, "·", 28, GOLD_PRIMARY, true)
+		apply_rect(dot, rect_full(float(i) * 0.30, 0.0, float(i + 1) * 0.30, 1.0))
+		dots.append(dot)
+
+	# 加载点动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var dots_tween := create_tween()
+		dots_tween.set_loops(10)
+		for i in range(3):
+			var dot_label = dots[i]
+			dots_tween.tween_property(dot_label, "modulate:a", 1.0, 0.3).set_delay(float(i) * 0.2)
+			dots_tween.tween_property(dot_label, "modulate:a", 0.3, 0.3)
+
+	# 底部游戏提示
+	var tips := [
+		"提示：合理利用吃碰杠，加速听牌",
+		"提示：注意观察对手弃牌，判断危险牌",
+		"提示：听牌时优先选择多面听",
+		"提示：保持手牌灵活性，避免过早定型",
+	]
+	var tip_text = tips[randi() % tips.size()]
+	var tip_label = make_label(center_panel, tip_text, 14, Color(0.68, 0.72, 0.66, 0.78), false)
+	apply_rect(tip_label, rect_full(0.10, 0.78, 0.90, 0.88))
+	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 版本信息
+	var version_label = make_label(center_panel, "v%s" % app_version(), 12, Color(0.52, 0.54, 0.50, 0.62), false)
+	apply_rect(version_label, rect_full(0.35, 0.90, 0.65, 0.97))
+	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 底部水面装饰
+	make_water_ripple(bg, rect_full(0.05, 0.88, 0.95, 0.98), "still", true).name = "LoadingWater"
+
+	# 整体淡入动画
+	if fx_enabled_effective():
+		center_panel.modulate.a = 0.0
+		var fade_tween := create_tween()
+		fade_tween.tween_property(center_panel, "modulate:a", 1.0, 0.5).set_ease(Tween.EASE_OUT)
+
+func draw_loading_shuffle_art(parent: Control) -> Control:
+	var art = make_panel(parent, rect_full(0.160, 0.500, 0.840, 0.625), Color(0.010, 0.022, 0.026, 0.66), 14, Color(0.56, 0.48, 0.26, 0.24), 0)
+	art.name = "LoadingShuffleArt"
+	var rail = make_panel(art, rect_full(0.065, 0.570, 0.935, 0.700), Color(0.70, 0.56, 0.28, 0.18), 999, Color(0.92, 0.78, 0.42, 0.12), 0)
+	rail.name = "LoadingShuffleRail"
+	var seal = make_panel(art, rect_full(0.455, 0.155, 0.545, 0.845), Color(0.64, 0.48, 0.24, 0.34), 999, Color(0.96, 0.78, 0.38, 0.26), 0)
+	seal.name = "LoadingShuffleSeal"
+	var seal_label = make_label(seal, "云", 13, Color(0.96, 0.86, 0.58), true)
+	apply_rect(seal_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	for i in range(5):
+		var left = 0.145 + float(i) * 0.175
+		var tile = make_wall_back_tile(Vector2(24, 34), true)
+		tile.name = "LoadingShuffleTile_%d" % i
+		art.add_child(tile)
+		apply_rect(tile, rect_full(left, 0.170 + float(i % 2) * 0.080, left + 0.070, 0.740 + float(i % 2) * 0.080))
+	# 墨迹晕染进度条 - 从左到右渐变展宽
+	var glow = make_panel(art, rect_full(0.085, 0.500, 0.165, 0.780), Color(0.92, 0.72, 0.34, 0.20), 999, Color(1.0, 0.84, 0.46, 0.14), 0)
+	glow.name = "LoadingShuffleGlow"
+	var progress = make_panel(rail, rect_full(0.030, 0.300, 0.420, 0.700), Color(0.78, 0.64, 0.30, 0.48), 999, Color(0.96, 0.78, 0.38, 0.16), 0)
+	progress.name = "LoadingShuffleProgress"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(8)
+		tw.tween_property(glow, "anchor_left", 0.840, 1.10).from(0.085)
+		tw.parallel().tween_property(glow, "anchor_right", 0.920, 1.10).from(0.165)
+		tw.tween_property(glow, "modulate:a", 0.42, 0.18).from(0.92)
+		tw.tween_property(glow, "modulate:a", 0.92, 0.18).from(0.42)
+		# 印章旋转出现
+		var seal_tw := create_tween()
+		seal_tw.tween_property(seal, "scale", Vector2(1.0, 1.0), 0.6).from(Vector2(0.3, 0.3)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		seal_tw.parallel().tween_property(seal, "modulate:a", 1.0, 0.5).from(0.0)
+	return art
+
 
 func _process(_delta: float) -> void:
 	var now = Time.get_ticks_msec()
@@ -909,234 +442,11 @@ func _input(event: InputEvent) -> void:
 		pressed = event.pressed
 	if pressed:
 		wake_audio_from_interaction()
-
-func setup_tile_order() -> void:
-	if tile_metadata_ready:
-		return
-	tile_order.clear()
-	tile_sort_order.clear()
-	tile_suit_cache.clear()
-	tile_number_cache.clear()
-	tile_flower_cache.clear()
-	tile_honor_cache.clear()
-	tile_terminal_or_honor_cache.clear()
-	tile_simple_number_cache.clear()
-	tile_thirteen_orphans_cache.clear()
-	thirteen_orphans_indices.clear()
-	tile_label_cache.clear()
-	tile_speech_label_cache.clear()
-	tile_face_main_cache.clear()
-	tile_face_sub_cache.clear()
-	tile_corner_cache.clear()
-	tile_accent_cache.clear()
-	var orphan_lookup: Dictionary = {}
-	for orphan_code in THIRTEEN_ORPHANS_CODES:
-		orphan_lookup[str(orphan_code)] = true
-	for i in range(TILE_CODES.size()):
-		var code = str(TILE_CODES[i])
-		var is_orphan = orphan_lookup.has(code)
-		tile_order[code] = i
-		tile_sort_order[code] = i
-		tile_flower_cache[code] = false
-		tile_honor_cache[code] = i >= 27
-		tile_thirteen_orphans_cache[code] = is_orphan
-		if is_orphan:
-			thirteen_orphans_indices.append(i)
-		if i < 27:
-			var suit = int(i / 9)
-			var rank = i % 9 + 1
-			var rank_text = str(rank)
-			var suit_text = suit_label(suit_code(suit))
-			tile_suit_cache[code] = suit
-			tile_number_cache[code] = true
-			tile_terminal_or_honor_cache[code] = rank == 1 or rank == 9
-			tile_simple_number_cache[code] = rank >= 2 and rank <= 8
-			tile_label_cache[code] = rank_text + suit_text
-			tile_speech_label_cache[code] = str(TILE_RANK_SPEECH_LABELS[rank - 1]) + suit_text
-			tile_face_main_cache[code] = rank_text
-			tile_face_sub_cache[code] = suit_text
-			tile_corner_cache[code] = rank_text
-			match suit:
-				0:
-					tile_accent_cache[code] = Color(0.70, 0.12, 0.12)
-				1:
-					tile_accent_cache[code] = Color(0.06, 0.46, 0.25)
-				2:
-					tile_accent_cache[code] = Color(0.08, 0.25, 0.68)
-		else:
-			var label = ""
-			var speech_label = ""
-			var sub = ""
-			var accent = Color(0.12, 0.15, 0.15)
-			match code:
-				"E":
-					label = "东"
-					speech_label = "东风"
-					sub = "风"
-				"S":
-					label = "南"
-					speech_label = "南风"
-					sub = "风"
-				"N":
-					label = "西"
-					speech_label = "西风"
-					sub = "风"
-				"R":
-					label = "北"
-					speech_label = "北风"
-					sub = "风"
-				"Z":
-					label = "中"
-					speech_label = "红中"
-					sub = "箭"
-					accent = Color(0.70, 0.12, 0.12)
-				"F":
-					label = "发"
-					speech_label = "发财"
-					sub = "箭"
-					accent = Color(0.06, 0.46, 0.25)
-				"P":
-					label = "白"
-					speech_label = "白板"
-					sub = "箭"
-			tile_suit_cache[code] = -1
-			tile_number_cache[code] = false
-			tile_terminal_or_honor_cache[code] = true
-			tile_simple_number_cache[code] = false
-			tile_label_cache[code] = label
-			tile_speech_label_cache[code] = speech_label
-			tile_face_main_cache[code] = label
-			tile_face_sub_cache[code] = sub
-			tile_corner_cache[code] = label
-			tile_accent_cache[code] = accent
-	for i in range(FLOWER_CODES.size()):
-		var flower_code = str(FLOWER_CODES[i])
-		var flower_label = str(FLOWER_LABELS[i])
-		tile_sort_order[flower_code] = TILE_CODES.size() + i
-		tile_suit_cache[flower_code] = -1
-		tile_number_cache[flower_code] = false
-		tile_flower_cache[flower_code] = true
-		tile_honor_cache[flower_code] = false
-		tile_terminal_or_honor_cache[flower_code] = false
-		tile_simple_number_cache[flower_code] = false
-		tile_thirteen_orphans_cache[flower_code] = false
-		tile_label_cache[flower_code] = flower_label
-		tile_speech_label_cache[flower_code] = flower_label
-		tile_face_main_cache[flower_code] = flower_label
-		tile_face_sub_cache[flower_code] = "花"
-		tile_corner_cache[flower_code] = "花"
-		tile_accent_cache[flower_code] = Color(0.68, 0.32, 0.08)
-	tile_metadata_ready = true
-
-func load_assets() -> void:
-	# 优先加载关键资源
-	felt_texture = load("res://assets/table/table_felt_green.jpg")
-	wood_texture = load("res://assets/table/table_dark_wood.jpg")
-	tile_back = load("res://assets/tiles/tile_back.png")
-
-	# 音频资源立即加载
-	audio_streams = {
-		"bgm": load(BGM_STREAM_PATH),
-		"bird": load("res://assets/audio/bird.mp3"),
-		"discard": load("res://assets/audio/discard.mp3"),
-		"draw": load("res://assets/audio/draw.mp3"),
-		"gang": load("res://assets/audio/kong.mp3"),
-		"peng": load("res://assets/audio/pong.mp3"),
-		"win": load("res://assets/audio/win.mp3"),
-	}
-	if audio_streams.get("bgm") == null:
-		print("BGM: 警告 - BGM文件加载失败！")
-	else:
-		print("BGM: BGM文件加载成功，类型:", audio_streams.get("bgm").get_class())
-
-	# 麻将牌纹理延迟加载（在空闲时间加载）
-	call_deferred("_load_tile_textures")
-
-	# 语音资源延迟加载
-	call_deferred("load_voice_assets")
-
-func _load_tile_textures() -> void:
-	for code in TILE_CODES:
-		tile_textures[code] = load(tile_path(code))
-	for code in FLOWER_CODES:
-		tile_textures[code] = load(tile_path(code))
-
-func verify_audio_assets() -> void:
-	# 验证所有音频资源已正确加载
-	print("AudioVerify: Starting audio asset verification...")
-	var all_ok = true
-	var required_audio = ["bgm", "discard", "draw", "peng", "gang", "win"]
-
-	for audio_key in required_audio:
-		var stream = audio_streams.get(audio_key)
-		if stream == null:
-			print("AudioVerify: ERROR - Missing audio: ", audio_key)
-			all_ok = false
-		else:
-			print("AudioVerify: OK - ", audio_key, " (", stream.get_class(), ")")
-
-	if all_ok:
-		print("AudioVerify: All audio assets verified successfully")
-	else:
-		print("AudioVerify: WARNING - Some audio assets failed to load")
-		# 尝试重新加载失败的资源
-		for audio_key in required_audio:
-			if audio_streams.get(audio_key) == null:
-				print("AudioVerify: Attempting to reload ", audio_key)
-				match audio_key:
-					"bgm":
-						audio_streams["bgm"] = load(BGM_STREAM_PATH)
-					"discard":
-						audio_streams["discard"] = load("res://assets/audio/discard.mp3")
-					"draw":
-						audio_streams["draw"] = load("res://assets/audio/draw.mp3")
-					"peng":
-						audio_streams["peng"] = load("res://assets/audio/pong.mp3")
-					"gang":
-						audio_streams["gang"] = load("res://assets/audio/kong.mp3")
-					"win":
-						audio_streams["win"] = load("res://assets/audio/win.mp3")
-	print("麻将牌纹理加载完成")
-
-func load_voice_assets() -> void:
-	voice_streams.clear()
-	for code in TILE_CODES + FLOWER_CODES:
-		load_voice_stream(voice_clip_key_for_tile(str(code)))
-	for key in ["action_chi", "action_peng", "action_gang", "action_hidden_gang", "action_added_gang", "action_hu", "action_zimo"]:
-		load_voice_stream(key)
-
-func load_voice_stream(key: String) -> void:
-	if key == "":
-		return
-	var path = "res://assets/audio/voice/%s.mp3" % key
-	if not ResourceLoader.exists(path):
-		return
-	var stream = load(path)
-	if stream != null:
-		voice_streams[key] = stream
-
-func voice_clip_key_for_tile(tile: String) -> String:
-	if tile == "":
-		return ""
-	return "tile_" + tile
-
-func voice_clip_key_for_action(action: String) -> String:
-	match action:
-		"吃":
-			return "action_chi"
-		"碰":
-			return "action_peng"
-		"杠":
-			return "action_gang"
-		"暗杠":
-			return "action_hidden_gang"
-		"补杠":
-			return "action_added_gang"
-		"胡":
-			return "action_hu"
-		"自摸":
-			return "action_zimo"
-	return ""
+	# 主菜单视差 - 鼠标/触摸移动驱动层次位移
+	if menu_parallax_enabled and event is InputEventMouseMotion:
+		update_menu_parallax(get_global_mouse_position())
+	elif menu_parallax_enabled and event is InputEventScreenDrag:
+		update_menu_parallax(event.position)
 
 func setup_audio() -> void:
 	print("AudioSetup: Starting audio system initialization")
@@ -1189,118 +499,7 @@ func setup_audio() -> void:
 func _exit_tree() -> void:
 	shutdown_android_tts()
 
-func ensure_master_audio_bus() -> void:
-	var master_index = AudioServer.get_bus_index("Master")
-	if master_index >= 0:
-		AudioServer.set_bus_mute(master_index, false)
-		AudioServer.set_bus_volume_db(master_index, 0.0)
 
-func ensure_audio_layer() -> Node:
-	if audio_layer != null and is_instance_valid(audio_layer):
-		return audio_layer
-	audio_layer = get_node_or_null("PersistentAudio")
-	if audio_layer == null:
-		audio_layer = Node.new()
-		audio_layer.name = "PersistentAudio"
-		audio_layer.process_mode = Node.PROCESS_MODE_ALWAYS
-		add_child(audio_layer)
-	return audio_layer
-
-func attach_audio_node(node: Node) -> void:
-	if node == null:
-		return
-	var layer = ensure_audio_layer()
-	if node.get_parent() == layer:
-		return
-	if node.get_parent() != null:
-		node.get_parent().remove_child(node)
-	layer.add_child(node)
-
-func load_settings() -> void:
-	var config = ConfigFile.new()
-	if config.load(SETTINGS_PATH) != OK:
-		return
-	music_enabled = bool(config.get_value("audio", "music_enabled", music_enabled))
-	sfx_enabled = bool(config.get_value("audio", "sfx_enabled", sfx_enabled))
-	tts_enabled = bool(config.get_value("audio", "tts_enabled", tts_enabled))
-	fast_mode_enabled = bool(config.get_value("gameplay", "fast_mode_enabled", fast_mode_enabled))
-	fx_enabled = bool(config.get_value("gameplay", "fx_enabled", fx_enabled))
-	current_bgm_index = int(config.get_value("gameplay", "current_bgm_index", 0))
-	if str(config.get_value("audio", "defaults_version", "")) != AUDIO_DEFAULTS_VERSION:
-		music_enabled = true
-		sfx_enabled = true
-		tts_enabled = true
-		save_settings()
-
-func save_settings() -> void:
-	var config = ConfigFile.new()
-	config.set_value("audio", "music_enabled", music_enabled)
-	config.set_value("audio", "sfx_enabled", sfx_enabled)
-	config.set_value("audio", "tts_enabled", tts_enabled)
-	config.set_value("audio", "defaults_version", AUDIO_DEFAULTS_VERSION)
-	config.set_value("gameplay", "fast_mode_enabled", fast_mode_enabled)
-	config.set_value("gameplay", "fx_enabled", fx_enabled)
-	config.set_value("gameplay", "current_bgm_index", current_bgm_index)
-	config.save(SETTINGS_PATH)
-
-func load_game_stats() -> void:
-	var config = ConfigFile.new()
-	if config.load(STATS_PATH) != OK:
-		game_stats = {
-			"games_played": 0,
-			"games_won": 0,
-			"total_score": 0,
-			"best_score": 0,
-			"win_rate": 0.0,
-			"total_hands": 0,
-		}
-		return
-	game_stats = {
-		"games_played": int(config.get_value("stats", "games_played", 0)),
-		"games_won": int(config.get_value("stats", "games_won", 0)),
-		"total_score": int(config.get_value("stats", "total_score", 0)),
-		"best_score": int(config.get_value("stats", "best_score", 0)),
-		"win_rate": float(config.get_value("stats", "win_rate", 0.0)),
-		"total_hands": int(config.get_value("stats", "total_hands", 0)),
-	}
-
-func save_game_stats() -> void:
-	var config = ConfigFile.new()
-	config.set_value("stats", "games_played", game_stats.get("games_played", 0))
-	config.set_value("stats", "games_won", game_stats.get("games_won", 0))
-	config.set_value("stats", "total_score", game_stats.get("total_score", 0))
-	config.set_value("stats", "best_score", game_stats.get("best_score", 0))
-	config.set_value("stats", "win_rate", game_stats.get("win_rate", 0.0))
-	config.set_value("stats", "total_hands", game_stats.get("total_hands", 0))
-	config.save(STATS_PATH)
-
-func load_tutorial_state() -> void:
-	var config = ConfigFile.new()
-	if config.load(TUTORIAL_PATH) == OK:
-		tutorial_step = int(config.get_value("tutorial", "step", 0))
-	else:
-		tutorial_step = 0
-
-func save_tutorial_state() -> void:
-	var config = ConfigFile.new()
-	config.set_value("tutorial", "step", tutorial_step)
-	config.save(TUTORIAL_PATH)
-
-func load_achievements() -> void:
-	var config = ConfigFile.new()
-	if config.load(ACHIEVEMENTS_PATH) == OK:
-		for key in achievements.keys():
-			achievements[key] = bool(config.get_value("achievements", key, false))
-	else:
-		# 初始化默认成就状态
-		for key in achievements.keys():
-			achievements[key] = false
-
-func save_achievements() -> void:
-	var config = ConfigFile.new()
-	for key in achievements.keys():
-		config.set_value("achievements", key, achievements[key])
-	config.save(ACHIEVEMENTS_PATH)
 
 func unlock_achievement(key: String) -> bool:
 	if not achievements.has(key):
@@ -1309,134 +508,8 @@ func unlock_achievement(key: String) -> bool:
 		return false  # 已解锁
 	achievements[key] = true
 	save_achievements()
+	show_toast("成就解锁：%s" % achievement_display_name(key), 2800)
 	return true
-
-func load_login_state() -> void:
-	var config = ConfigFile.new()
-	if config.load(LOGIN_PATH) == OK:
-		last_login_date = str(config.get_value("login", "last_date", ""))
-		consecutive_login_days = int(config.get_value("login", "consecutive_days", 0))
-	else:
-		last_login_date = ""
-		consecutive_login_days = 0
-
-func save_login_state() -> void:
-	var config = ConfigFile.new()
-	config.set_value("login", "last_date", last_login_date)
-	config.set_value("login", "consecutive_days", consecutive_login_days)
-	config.save(LOGIN_PATH)
-
-func check_and_update_login() -> Dictionary:
-	var today = Time.get_date_string_from_system()
-	var result = {
-		"is_first_login_today": false,
-		"consecutive_days": consecutive_login_days,
-		"show_reward": false,
-	}
-
-	if last_login_date != today:
-		# 今天首次登录
-		result.is_first_login_today = true
-		var yesterday = Time.get_date_string_from_unix_time(Time.get_unix_time_from_system() - 86400)
-		if last_login_date == yesterday:
-			# 连续登录
-			consecutive_login_days += 1
-		else:
-			# 中断了，重新计数
-			consecutive_login_days = 1
-		last_login_date = today
-		save_login_state()
-		result.consecutive_days = consecutive_login_days
-		result.show_reward = true
-		# 重置每日任务
-		reset_daily_tasks()
-
-	return result
-
-# ============================================================
-# 赛季系统
-# ============================================================
-
-func load_season_data() -> void:
-	var config = ConfigFile.new()
-	if config.load(SEASON_PATH) == OK:
-		season_data = {
-			"season_id": str(config.get_value("season", "season_id", "")),
-			"points": int(config.get_value("season", "points", 0)),
-			"highest_rank": int(config.get_value("season", "highest_rank", 0)),
-			"wins": int(config.get_value("season", "wins", 0)),
-			"games": int(config.get_value("season", "games", 0)),
-		}
-	else:
-		season_data = {
-			"season_id": Time.get_date_string_from_system().substr(0, 7),  # YYYY-MM
-			"points": 0,
-			"highest_rank": 0,
-			"wins": 0,
-			"games": 0,
-		}
-
-func save_season_data() -> void:
-	var config = ConfigFile.new()
-	config.set_value("season", "season_id", season_data.get("season_id", ""))
-	config.set_value("season", "points", season_data.get("points", 0))
-	config.set_value("season", "highest_rank", season_data.get("highest_rank", 0))
-	config.set_value("season", "wins", season_data.get("wins", 0))
-	config.set_value("season", "games", season_data.get("games", 0))
-	config.save(SEASON_PATH)
-
-func get_current_rank() -> int:
-	var points = int(season_data.get("points", 0))
-	for i in range(SEASON_RANK_POINTS.size() - 1, -1, -1):
-		if points >= SEASON_RANK_POINTS[i]:
-			return i
-	return 0
-
-func get_rank_name(rank: int = -1) -> String:
-	var r = rank if rank >= 0 else get_current_rank()
-	return SEASON_RANKS[r] if r >= 0 and r < SEASON_RANKS.size() else "青铜"
-
-func add_season_points(points: int, won: bool) -> void:
-	season_data["points"] = int(season_data.get("points", 0)) + points
-	season_data["games"] = int(season_data.get("games", 0)) + 1
-	if won:
-		season_data["wins"] = int(season_data.get("wins", 0)) + 1
-	var current = get_current_rank()
-	if current > int(season_data.get("highest_rank", 0)):
-		season_data["highest_rank"] = current
-	save_season_data()
-
-# ============================================================
-# 任务系统
-# ============================================================
-
-func load_tasks() -> void:
-	var config = ConfigFile.new()
-	if config.load(TASKS_PATH) == OK:
-		last_task_reset_date = str(config.get_value("tasks", "last_reset", ""))
-		var progress = config.get_value("tasks", "progress", {})
-		if typeof(progress) == TYPE_DICTIONARY:
-			task_progress = progress.duplicate()
-	else:
-		task_progress = {}
-		last_task_reset_date = ""
-	reset_daily_tasks()
-
-func save_tasks() -> void:
-	var config = ConfigFile.new()
-	config.set_value("tasks", "last_reset", last_task_reset_date)
-	config.set_value("tasks", "progress", task_progress)
-	config.save(TASKS_PATH)
-
-func reset_daily_tasks() -> void:
-	var today = Time.get_date_string_from_system()
-	if last_task_reset_date != today:
-		last_task_reset_date = today
-		task_progress.clear()
-		for task in DAILY_TASKS:
-			task_progress[task.id] = 0
-		daily_tasks = DAILY_TASKS.duplicate()
-		save_tasks()
 
 func update_task_progress(task_id: String, amount: int = 1) -> void:
 	if not task_progress.has(task_id):
@@ -1457,143 +530,29 @@ func claim_task_reward(task: Dictionary) -> void:
 	save_currency()
 	show_toast("任务完成！+%d金币" % reward, 2500)
 
-func get_task_status(task_id: String) -> Dictionary:
-	for task in DAILY_TASKS:
-		if task.id == task_id:
-			var progress = int(task_progress.get(task_id, 0))
-			var target = int(task.get("target", 1))
-			return {
-				"desc": task.get("desc", ""),
-				"progress": progress,
-				"target": target,
-				"reward": int(task.get("reward_coins", 0)),
-				"completed": progress >= target,
-			}
-	return {}
-
-# ============================================================
-# 道具系统
-# ============================================================
-
-func load_inventory() -> void:
-	var config = ConfigFile.new()
-	if config.load(INVENTORY_PATH) == OK:
-		var inv = config.get_value("inventory", "items", {})
-		if typeof(inv) == TYPE_DICTIONARY:
-			inventory = inv.duplicate()
-	else:
-		inventory = {}
-
-func save_inventory() -> void:
-	var config = ConfigFile.new()
-	config.set_value("inventory", "items", inventory)
-	config.save(INVENTORY_PATH)
-
-func add_item(item_id: String, count: int = 1) -> void:
-	inventory[item_id] = int(inventory.get(item_id, 0)) + count
-	save_inventory()
 
 func use_item(item_id: String) -> bool:
 	if int(inventory.get(item_id, 0)) <= 0:
 		return false
 	inventory[item_id] = int(inventory.get(item_id, 0)) - 1
 	save_inventory()
+	show_toast("使用道具：%s" % item_display_name(item_id), 1800)
 	return true
 
-func get_item_count(item_id: String) -> int:
-	return int(inventory.get(item_id, 0))
-
-# ============================================================
-# 虚拟货币系统
-# ============================================================
-
-func load_currency() -> void:
-	var config = ConfigFile.new()
-	if config.load(CURRENCY_PATH) == OK:
-		currency = {
-			"coins": int(config.get_value("currency", "coins", 0)),
-			"gems": int(config.get_value("currency", "gems", 0)),
-		}
-	else:
-		currency = {"coins": 500, "gems": 10}  # 初始货币
-
-func save_currency() -> void:
-	var config = ConfigFile.new()
-	config.set_value("currency", "coins", currency.get("coins", 0))
-	config.set_value("currency", "gems", currency.get("gems", 0))
-	config.save(CURRENCY_PATH)
 
 func add_coins(amount: int) -> void:
 	currency["coins"] = int(currency.get("coins", 0)) + amount
 	save_currency()
+	# 金币变化toast提示
+	if amount > 0 and mode == "menu":
+		show_toast("💰 +%d 金币" % amount)
 
 func add_gems(amount: int) -> void:
 	currency["gems"] = int(currency.get("gems", 0)) + amount
 	save_currency()
+	if amount > 0 and mode == "menu":
+		show_toast("💎 +%d 宝石" % amount)
 
-func can_afford_gems(amount: int) -> bool:
-	return int(currency.get("gems", 0)) >= amount
-
-func spend_gems(amount: int) -> bool:
-	if not can_afford_gems(amount):
-		return false
-	currency["gems"] = int(currency.get("gems", 0)) - amount
-	save_currency()
-	return true
-
-func record_game_result(won: bool, score: int, hands_played: int) -> void:
-	game_stats["games_played"] = int(game_stats.get("games_played", 0)) + 1
-	game_stats["total_hands"] = int(game_stats.get("total_hands", 0)) + hands_played
-	game_stats["total_score"] = int(game_stats.get("total_score", 0)) + score
-	if won:
-		game_stats["games_won"] = int(game_stats.get("games_won", 0)) + 1
-	if score > int(game_stats.get("best_score", 0)):
-		game_stats["best_score"] = score
-	var played = int(game_stats.get("games_played", 0))
-	game_stats["win_rate"] = float(game_stats.get("games_won", 0)) / float(max(1, played))
-	save_game_stats()
-
-func load_offline_progress() -> bool:
-	var config = ConfigFile.new()
-	if config.load(PROGRESS_PATH) != OK:
-		return false
-	dealer_seat = int(config.get_value("progress", "dealer_seat", 0))
-	offline_hand_number = int(config.get_value("progress", "hand_number", 1))
-	players.clear()
-	for i in range(4):
-		var section = "player_%d" % i
-		players.append({
-			"name": str(config.get_value(section, "name", SEAT_NAMES[i])) if config.has_section(section) else SEAT_NAMES[i],
-			"hand": [],
-			"discards": [],
-			"melds": [],
-			"flowers": 0,
-			"flower_tiles": [],
-			"score": int(config.get_value(section, "score", MATCH_START_SCORE)) if config.has_section(section) else MATCH_START_SCORE,
-			"bot": i != 0,
-		})
-	return true
-
-func save_offline_progress() -> void:
-	if mode != "offline":
-		return
-	var config = ConfigFile.new()
-	config.set_value("progress", "dealer_seat", dealer_seat)
-	config.set_value("progress", "hand_number", offline_hand_number)
-	config.set_value("progress", "saved_time", Time.get_unix_time_from_system())
-	for i in range(4):
-		var section = "player_%d" % i
-		config.set_value(section, "name", players[i].get("name", SEAT_NAMES[i]))
-		config.set_value(section, "score", players[i].get("score", MATCH_START_SCORE))
-	config.save(PROGRESS_PATH)
-	set_status("进度已保存 (第%d局)" % offline_hand_number)
-
-func reset_offline_progress() -> void:
-	var dir = DirAccess.open("user://")
-	if dir != null and dir.file_exists("offline_progress.cfg"):
-		dir.remove("offline_progress.cfg")
-	reset_progress_confirming = false
-	set_status("进度已重置")
 
 func apply_audio_settings() -> void:
 	if bgm_player == null or not is_instance_valid(bgm_player):
@@ -2508,25 +1467,28 @@ func show_exit_confirm() -> void:
 
 	# 对话框面板
 	var dialog = make_panel(overlay, rect_full(0.28, 0.35, 0.72, 0.65), Color(0.012, 0.026, 0.032, 0.98), 20, Color(0.48, 0.40, 0.24, 0.52), 5)
+	dialog.name = "ExitConfirmDialog"
 	dialog.add_child(make_color_rect(rect_full(0.006, 0.04, 0.012, 0.96), Color(0.90, 0.76, 0.36, 0.72)))
+	draw_exit_confirm_art(dialog)
 
 	# 标题
 	var title = make_label(dialog, "确认退出", 24, Color(0.94, 0.86, 0.48), true)
-	apply_rect(title, rect_full(0.08, 0.12, 0.92, 0.32))
+	apply_rect(title, rect_full(0.08, 0.08, 0.92, 0.25))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 提示文本
 	var message = "是否退出当前游戏？\n进度将自动保存。"
 	var msg_label = make_label(dialog, message, 16, Color(0.80, 0.84, 0.78), false)
-	apply_rect(msg_label, rect_full(0.10, 0.38, 0.90, 0.62))
+	apply_rect(msg_label, rect_full(0.10, 0.47, 0.90, 0.64))
 	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	draw_exit_confirm_choice_art(dialog)
 
 	# 按钮行
 	var button_row = HBoxContainer.new()
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	button_row.add_theme_constant_override("separation", 16)
-	apply_rect(button_row, rect_full(0.12, 0.70, 0.88, 0.90))
+	apply_rect(button_row, rect_full(0.12, 0.72, 0.88, 0.92))
 	dialog.add_child(button_row)
 
 	# 继续游戏按钮
@@ -2549,15 +1511,79 @@ func show_exit_confirm() -> void:
 	var tween = create_tween()
 	tween.tween_property(overlay, "modulate", Color(1, 1, 1, 1), 0.2)
 
+func draw_exit_confirm_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "ExitConfirmArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.150, 0.255, 0.850, 0.455))
+	parent.add_child(art)
+	var rail = make_panel(art, rect_full(0.120, 0.450, 0.880, 0.570), Color(0.48, 0.64, 0.54, 0.18), 999, Color(0.80, 0.88, 0.62, 0.14), 0)
+	rail.name = "ExitConfirmSaveRail"
+	var table_node = make_panel(art, rect_full(0.060, 0.180, 0.210, 0.840), Color(0.24, 0.48, 0.42, 0.46), 16, Color(0.48, 0.78, 0.64, 0.30), 0)
+	table_node.name = "ExitConfirmTableNode"
+	add_lucide_icon(table_node, "home", rect_full(0.22, 0.20, 0.78, 0.76), Color(0.88, 0.94, 0.78, 0.82))
+	var save_node = make_panel(art, rect_full(0.425, 0.130, 0.575, 0.870), Color(0.70, 0.56, 0.28, 0.36), 999, Color(0.96, 0.78, 0.38, 0.28), 0)
+	save_node.name = "ExitConfirmSaveNode"
+	add_lucide_icon(save_node, "check", rect_full(0.26, 0.22, 0.74, 0.74), Color(0.98, 0.92, 0.66, 0.86))
+	var exit_node = make_panel(art, rect_full(0.790, 0.180, 0.940, 0.840), Color(0.54, 0.40, 0.34, 0.34), 16, Color(0.82, 0.62, 0.46, 0.24), 0)
+	exit_node.name = "ExitConfirmLeaveNode"
+	add_lucide_icon(exit_node, "chevron-right", rect_full(0.24, 0.22, 0.76, 0.76), Color(0.96, 0.84, 0.68, 0.80))
+	for i in range(3):
+		var left = 0.270 + float(i) * 0.145
+		var pip = make_panel(art, rect_full(left, 0.385, left + 0.040, 0.635), Color(0.88, 0.72, 0.34, 0.42), 999, Color(1.0, 0.86, 0.46, 0.16), 0)
+		pip.name = "ExitConfirmSavePip_%d" % i
+	var glow = make_panel(art, rect_full(0.400, 0.070, 0.600, 0.930), Color(0.92, 0.76, 0.34, 0.14), 999, Color(1.0, 0.86, 0.46, 0.14), 0)
+	glow.name = "ExitConfirmSaveGlow"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(glow, "modulate:a", 0.38, 0.85).from(0.88)
+		tw.tween_property(glow, "modulate:a", 0.88, 0.85).from(0.38)
+	return art
+
+func draw_exit_confirm_choice_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "ExitConfirmChoiceArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.120, 0.675, 0.880, 0.945))
+	parent.add_child(art)
+	var keep_rail = make_panel(art, rect_full(0.020, 0.180, 0.455, 0.820), Color(0.34, 0.68, 0.54, 0.10), 14, Color(0.54, 0.86, 0.66, 0.10), 0)
+	keep_rail.name = "ExitConfirmKeepChoiceRail"
+	var leave_rail = make_panel(art, rect_full(0.545, 0.180, 0.980, 0.820), Color(0.78, 0.52, 0.34, 0.10), 14, Color(0.92, 0.70, 0.48, 0.10), 0)
+	leave_rail.name = "ExitConfirmLeaveChoiceRail"
+	var keep_dot = make_panel(art, rect_full(0.055, 0.375, 0.105, 0.625), Color(0.48, 0.82, 0.62, 0.34), 999, Color(0.76, 0.94, 0.72, 0.16), 0)
+	keep_dot.name = "ExitConfirmKeepChoiceDot"
+	var leave_dot = make_panel(art, rect_full(0.895, 0.375, 0.945, 0.625), Color(0.88, 0.66, 0.38, 0.34), 999, Color(0.98, 0.82, 0.48, 0.16), 0)
+	leave_dot.name = "ExitConfirmLeaveChoiceDot"
+	var stamp = make_panel(art, rect_full(0.455, 0.260, 0.545, 0.740), Color(0.92, 0.74, 0.34, 0.18), 999, Color(1.0, 0.86, 0.46, 0.16), 0)
+	stamp.name = "ExitConfirmSaveStamp"
+	add_lucide_icon(stamp, "save", rect_full(0.250, 0.220, 0.750, 0.780), Color(0.98, 0.90, 0.62, 0.78))
+	for i in range(2):
+		var keep_spark = make_panel(art, rect_full(0.150 + float(i) * 0.145, 0.430, 0.178 + float(i) * 0.145, 0.570), Color(0.54, 0.86, 0.66, 0.22), 999, Color(0.78, 0.96, 0.74, 0.10), 0)
+		keep_spark.name = "ExitConfirmKeepSpark_%d" % i
+		var leave_spark = make_panel(art, rect_full(0.675 + float(i) * 0.145, 0.430, 0.703 + float(i) * 0.145, 0.570), Color(0.92, 0.70, 0.42, 0.22), 999, Color(1.0, 0.86, 0.50, 0.10), 0)
+		leave_spark.name = "ExitConfirmLeaveSpark_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(stamp, "modulate:a", 0.48, 1.0).from(1.0)
+		tw.tween_property(stamp, "modulate:a", 1.0, 1.0).from(0.48)
+	return art
+
 func hide_exit_confirm() -> void:
 	"""隐藏退出确认对话框"""
 	if exit_confirm_panel == null or not is_instance_valid(exit_confirm_panel):
 		return
 	var panel = exit_confirm_panel
 	exit_confirm_panel = null
+	var panel_id = panel.get_instance_id()
 	var tween = create_tween()
 	tween.tween_property(panel, "modulate", Color(1, 1, 1, 0), 0.15)
-	tween.tween_callback(func(): panel.queue_free())
+	tween.tween_callback(func() -> void:
+		var target = instance_from_id(panel_id)
+		if target != null and is_instance_valid(target):
+			(target as Node).queue_free()
+	)
 
 func refresh_current_screen() -> void:
 	if mode == "menu":
@@ -2590,31 +1616,6 @@ func flush_game_render() -> void:
 func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
-func tile_path(code: String) -> String:
-	if is_flower_tile(code):
-		return "res://assets/tiles/tile_flower_%s.png" % code.to_lower()
-	if code.ends_with("W"):
-		return "res://assets/tiles/tile_man%s.png" % code.left(code.length() - 1)
-	if code.ends_with("T"):
-		return "res://assets/tiles/tile_sou%s.png" % code.left(code.length() - 1)
-	if code.ends_with("B"):
-		return "res://assets/tiles/tile_pin%s.png" % code.left(code.length() - 1)
-	match code:
-		"E":
-			return "res://assets/tiles/tile_honor_east.png"
-		"S":
-			return "res://assets/tiles/tile_honor_south.png"
-		"N":
-			return "res://assets/tiles/tile_honor_west.png"
-		"R":
-			return "res://assets/tiles/tile_honor_north.png"
-		"Z":
-			return "res://assets/tiles/tile_honor_red.png"
-		"F":
-			return "res://assets/tiles/tile_honor_green.png"
-		"P":
-			return "res://assets/tiles/tile_honor_white.png"
-	return "res://assets/tiles/tile_back.png"
 
 func clear_screen() -> void:
 	for child in get_children():
@@ -2637,6 +1638,8 @@ func clear_screen() -> void:
 	update_status_label = null
 	update_progress_label = null
 	update_progress = null
+	update_art_fill = null
+	update_art_status_light = null
 	update_primary_button = null
 	update_secondary_button = null
 	safe_area_margins = current_safe_area_margins()
@@ -2654,6 +1657,7 @@ func clear_screen() -> void:
 func show_menu(instant: bool = false) -> void:
 	if transition_active and not instant:
 		return
+	menu_parallax_enabled = false
 	var _build_menu = func() -> void:
 		_show_menu_impl()
 	if instant or not fx_enabled_effective():
@@ -2685,7 +1689,8 @@ func _show_menu_impl() -> void:
 	header.add_child(make_color_rect(rect_full(0.016, 0.012, 0.984, 0.028), Color(1.0, 1.0, 1.0, 0.05)))
 	# 底部分隔线 - 金色
 	header.add_child(make_color_rect(rect_full(0.016, 0.88, 0.984, 0.92), GUOFENG_PANEL_GOLD_LINE))
-	draw_menu_hero_illustration(header)
+	menu_hero_art = draw_menu_hero_illustration(header)
+	menu_parallax_enabled = true
 
 	# 游戏标题 - 更大更突出，使用国风金色
 	var title = make_label(header, "云桌麻将", 44, GOLD_BRIGHT, true)
@@ -2754,6 +1759,7 @@ func _show_menu_impl() -> void:
 	var rank_name = get_rank_name()
 	var rank_badge = make_badge(footer, rect_full(0.52, 0.20, 0.66, 0.80), rank_name, 12, Color(0.024, 0.046, 0.052, 0.92), Color(0.44, 0.50, 0.46, 0.30), Color(0.80, 0.86, 0.76))
 	rank_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_menu_season_progress_art(footer)
 
 	# 统计概览 - 显示胜率等信息
 	var stats_text = "已玩%d局 · 胜率%d%%" % [
@@ -2762,6 +1768,7 @@ func _show_menu_impl() -> void:
 	]
 	var stats_badge = make_badge(footer, rect_full(0.68, 0.20, 0.84, 0.80), stats_text, 12, Color(0.024, 0.046, 0.052, 0.92), Color(0.34, 0.50, 0.46, 0.30), Color(0.80, 0.86, 0.76))
 	stats_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_menu_daily_task_art(footer)
 
 	# 设置按钮 - 更大的触摸目标
 	var settings = make_small_button("设置", Color(0.26, 0.44, 0.58), func() -> void:
@@ -2773,13 +1780,146 @@ func _show_menu_impl() -> void:
 
 	add_lucide_icon(settings, "settings", rect_full(0.09, 0.22, 0.31, 0.78), Color(0.92, 0.94, 0.88, 0.92))
 
-	# 首次游戏提示
+	# 首次游戏提示 - 可点击
 	if tutorial_step == 0:
 		var tutorial_hint = make_badge(root_layer, rect_full(0.35, 0.70, 0.65, 0.78), "新玩家？点击查看规则", 15, Color(0.18, 0.40, 0.36, 0.92), Color(0.30, 0.62, 0.52, 0.48), Color(0.94, 0.96, 0.92))
-		tutorial_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tutorial_hint.mouse_filter = Control.MOUSE_FILTER_STOP
+		# 添加脉冲动画吸引注意力
+		if fx_enabled_effective():
+			var pulse_tween := create_tween()
+			pulse_tween.set_loops(3600)
+			pulse_tween.tween_property(tutorial_hint, "modulate:a", 0.6, 1.0).from(1.0)
+			pulse_tween.tween_property(tutorial_hint, "modulate:a", 1.0, 1.0).from(0.6)
+		# 连接点击事件
+		tutorial_hint.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+				show_rules_screen()
+		)
 
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
+
+	# 菜单入场动画 - 标题区和底栏交错出现
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		if header != null:
+			header.modulate.a = 0.0
+			header.offset_top = 12.0
+			var h_tw := create_tween()
+			h_tw.tween_property(header, "modulate:a", 1.0, 0.22).from(0.0).set_ease(Tween.EASE_OUT)
+			h_tw.parallel().tween_property(header, "offset_top", 0.0, 0.22).from(12.0).set_ease(Tween.EASE_OUT)
+		if footer != null:
+			footer.modulate.a = 0.0
+			footer.offset_top = 8.0
+			var f_tw := create_tween()
+			f_tw.tween_property(footer, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
+			f_tw.parallel().tween_property(footer, "offset_top", 0.0, 0.22).from(8.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
+
+func draw_menu_season_progress_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "MenuSeasonProgressArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.520, 0.150, 0.660, 0.880))
+	parent.add_child(art)
+	var points = int(season_data.get("points", 0))
+	var rank = get_current_rank()
+	var next_index = min(rank + 1, SEASON_RANK_POINTS.size() - 1)
+	var current_points = int(SEASON_RANK_POINTS[rank])
+	var next_points = int(SEASON_RANK_POINTS[next_index])
+	var progress = 1.0 if next_index == rank else clamp(float(points - current_points) / float(max(1, next_points - current_points)), 0.0, 1.0)
+	var rail = make_panel(art, rect_full(0.080, 0.760, 0.920, 0.900), Color(0.028, 0.046, 0.048, 0.78), 999, Color(0.64, 0.56, 0.34, 0.22), 0)
+	rail.name = "MenuSeasonProgressRail"
+	var fill = make_panel(rail, rect_full(0.030, 0.280, 0.030 + 0.940 * progress, 0.720), Color(0.78, 0.64, 0.30, 0.64), 999, Color(0.92, 0.78, 0.42, 0.20), 0)
+	fill.name = "MenuSeasonProgressFill"
+	for i in range(SEASON_RANKS.size()):
+		var center = 0.08 + float(i) * (0.84 / float(max(1, SEASON_RANKS.size() - 1)))
+		var active = i <= rank
+		var node = make_panel(art, rect_full(center - 0.025, 0.690, center + 0.025, 0.970), Color(0.86, 0.70, 0.34, 0.72 if active else 0.20), 999, Color(1.0, 0.84, 0.46, 0.32 if active else 0.10), 0)
+		node.name = "MenuSeasonRankNode_%d" % i
+	var current_center = 0.08 + float(rank) * (0.84 / float(max(1, SEASON_RANKS.size() - 1)))
+	var rank_halo = make_panel(art, rect_full(current_center - 0.040, 0.620, current_center + 0.040, 1.000), Color(0.92, 0.74, 0.34, 0.16), 999, Color(1.0, 0.86, 0.46, 0.16), 0)
+	rank_halo.name = "MenuSeasonCurrentRankHalo"
+	if next_index != rank:
+		var next_center = 0.08 + float(next_index) * (0.84 / float(max(1, SEASON_RANKS.size() - 1)))
+		var arrow_left = min(current_center, next_center) + 0.030
+		var arrow_right = max(current_center, next_center) - 0.030
+		var arrow = make_color_rect(rect_full(arrow_left, 0.595, arrow_right, 0.635), Color(0.92, 0.78, 0.42, 0.22))
+		arrow.name = "MenuSeasonNextRankArrow"
+		art.add_child(arrow)
+	for i in range(3):
+		var left = 0.125 + float(i) * 0.055
+		var spark = make_panel(art, rect_full(left, 0.160 + float(i % 2) * 0.085, left + 0.022, 0.300 + float(i % 2) * 0.085), Color(0.92, 0.76, 0.34, 0.30), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+		spark.name = "MenuSeasonPointSpark_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.52, 0.90).from(0.96)
+		tw.tween_property(fill, "modulate:a", 0.96, 0.90).from(0.52)
+		var halo_tw := create_tween()
+		halo_tw.set_loops(3600)
+		halo_tw.tween_property(rank_halo, "modulate:a", 0.42, 1.0).from(1.0)
+		halo_tw.tween_property(rank_halo, "modulate:a", 1.0, 1.0).from(0.42)
+	return art
+
+func draw_menu_daily_task_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "MenuDailyTaskArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.040, 0.760, 0.840, 0.965))
+	parent.add_child(art)
+	var task_count = max(1, DAILY_TASKS.size())
+	var completed = 0
+	var best_index = 0
+	var best_fraction = -1.0
+	for i in range(DAILY_TASKS.size()):
+		var task: Dictionary = DAILY_TASKS[i]
+		var progress = int(task_progress.get(str(task.get("id", "")), 0))
+		var target = max(1, int(task.get("target", 1)))
+		var fraction = clamp(float(progress) / float(target), 0.0, 1.0)
+		if fraction >= 1.0:
+			completed += 1
+		if fraction > best_fraction and fraction < 1.0:
+			best_fraction = fraction
+			best_index = i
+	if completed >= DAILY_TASKS.size() and DAILY_TASKS.size() > 0:
+		best_index = DAILY_TASKS.size() - 1
+	var rail = make_panel(art, rect_full(0.160, 0.420, 0.980, 0.620), Color(0.026, 0.044, 0.042, 0.74), 999, Color(0.42, 0.58, 0.48, 0.16), 0)
+	rail.name = "MenuDailyTaskRail"
+	var fill_fraction = clamp(float(completed) / float(task_count), 0.035, 1.0)
+	var fill = make_panel(rail, rect_full(0.020, 0.280, 0.020 + 0.960 * fill_fraction, 0.720), Color(0.42, 0.74, 0.56, 0.58), 999, Color(0.72, 0.92, 0.62, 0.18), 0)
+	fill.name = "MenuDailyTaskFill"
+	var label = make_label(art, "每日任务 %d/%d" % [completed, DAILY_TASKS.size()], 10, Color(0.78, 0.88, 0.76), true)
+	apply_rect(label, rect_full(0.000, 0.060, 0.150, 0.920))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	for i in range(DAILY_TASKS.size()):
+		var center = 0.175 + float(i) * (0.780 / float(max(1, DAILY_TASKS.size() - 1)))
+		var task: Dictionary = DAILY_TASKS[i]
+		var progress = int(task_progress.get(str(task.get("id", "")), 0))
+		var target = max(1, int(task.get("target", 1)))
+		var done = progress >= target
+		var node_color = Color(0.56, 0.84, 0.60, 0.70) if done else Color(0.78, 0.66, 0.34, 0.30)
+		var node = make_panel(art, rect_full(center - 0.012, 0.300, center + 0.012, 0.740), node_color, 999, Color(node_color.r, node_color.g, node_color.b, 0.24), 0)
+		node.name = "MenuDailyTaskNode_%d" % i
+		if done:
+			var claim = make_panel(art, rect_full(center - 0.020, 0.080, center + 0.020, 0.260), Color(0.62, 0.88, 0.58, 0.34), 999, Color(0.82, 0.96, 0.70, 0.14), 0)
+			claim.name = "MenuDailyTaskClaimMark_%d" % i
+	var focus_center = 0.175 + float(best_index) * (0.780 / float(max(1, DAILY_TASKS.size() - 1)))
+	var focus = make_panel(art, rect_full(focus_center - 0.020, 0.200, focus_center + 0.020, 0.840), Color(0.92, 0.76, 0.34, 0.22), 999, Color(1.0, 0.86, 0.46, 0.18), 0)
+	focus.name = "MenuDailyTaskFocusGlow"
+	var focus_pulse = make_panel(art, rect_full(focus_center - 0.034, 0.135, focus_center + 0.034, 0.905), Color(0.92, 0.76, 0.34, 0.10), 999, Color(1.0, 0.86, 0.46, 0.10), 0)
+	focus_pulse.name = "MenuDailyTaskFocusPulse"
+	for i in range(3):
+		var progress_pip = make_panel(art, rect_full(0.055 + float(i) * 0.032, 0.690, 0.075 + float(i) * 0.032, 0.815), Color(0.48, 0.78, 0.58, 0.26), 999, Color(0.74, 0.92, 0.66, 0.10), 0)
+		progress_pip.name = "MenuDailyTaskProgressPip_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(focus, "modulate:a", 0.40, 0.90).from(0.92)
+		tw.tween_property(focus, "modulate:a", 0.92, 0.90).from(0.40)
+		var pulse_tw := create_tween()
+		pulse_tw.set_loops(3600)
+		pulse_tw.tween_property(focus_pulse, "modulate:a", 0.30, 0.90).from(0.90)
+		pulse_tw.tween_property(focus_pulse, "modulate:a", 0.90, 0.90).from(0.30)
+	return art
 
 func make_menu_card(text: String, color: Color, callback: Callable, icon_name: String = "") -> Button:
 	var button = Button.new()
@@ -2846,6 +1986,9 @@ func _show_online_lobby_impl() -> void:
 	mode = "online_lobby"
 	recover_audio_after_screen_change()
 	clear_screen()
+
+	# 装饰 - 远山背景
+	make_mountain_silhouette(root_layer, rect_full(0.0, 0.50, 1.0, 1.0), 2, INK_WASH)
 
 	# 主面板 - 统一的全屏面板
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.012, 0.032, 0.040, 0.96), 20, Color(0.62, 0.52, 0.30, 0.52))
@@ -2935,13 +2078,59 @@ func _show_online_lobby_impl() -> void:
 	var room_badge_text = "房间号 " + (selected_room if selected_room != "" else "--")
 	var room_badge = make_badge(log_panel, rect_full(0.68, 0.030, 0.94, 0.100), room_badge_text, 12, Color(0.020, 0.044, 0.050, 0.94), Color(0.46, 0.52, 0.34, 0.30), Color(0.82, 0.87, 0.72))
 	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_online_lobby_room_art(log_panel)
 	logs_label = make_label(log_panel, "", 15, Color(0.84, 0.87, 0.76), false)
-	apply_rect(logs_label, rect_full(0.05, 0.16, 0.95, 0.94))
+	apply_rect(logs_label, rect_full(0.05, 0.31, 0.95, 0.94))
 	logs_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	logs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	render_room_log()
 	ensure_update_dialog()
+
+func draw_online_lobby_room_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "OnlineLobbyRoomArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.050, 0.160, 0.950, 0.285))
+	parent.add_child(art)
+	var player_count = 0
+	var players_value = online_room.get("players", [])
+	if typeof(players_value) == TYPE_ARRAY:
+		player_count = (players_value as Array).size()
+	var logs_value = online_room.get("logs", [])
+	var log_count = (logs_value as Array).size() if typeof(logs_value) == TYPE_ARRAY else 0
+	var rail = make_panel(art, rect_full(0.055, 0.440, 0.945, 0.560), Color(0.42, 0.58, 0.52, 0.18), 999, Color(0.66, 0.78, 0.58, 0.16), 0)
+	rail.name = "OnlineLobbyRoomRail"
+	var ready_rail = make_color_rect(rect_full(0.080, 0.790, 0.920, 0.835), Color(0.78, 0.68, 0.36, 0.18))
+	ready_rail.name = "OnlineLobbyReadyRail"
+	art.add_child(ready_rail)
+	var room_node = make_panel(art, rect_full(0.420, 0.140, 0.580, 0.860), Color(0.050, 0.040, 0.026, 0.58), 18, Color(0.86, 0.70, 0.34, 0.32), 0)
+	room_node.name = "OnlineLobbyRoomNode"
+	add_lucide_icon(room_node, "users", rect_full(0.25, 0.22, 0.75, 0.78), GOLD_BRIGHT)
+	for i in range(3):
+		var wave = make_panel(art, rect_full(0.385 - float(i) * 0.018, 0.085 - float(i) * 0.035, 0.615 + float(i) * 0.018, 0.915 + float(i) * 0.035), Color(0.86, 0.72, 0.34, 0.050 - float(i) * 0.010), 999, Color(0.96, 0.82, 0.42, 0.055 - float(i) * 0.012), 0)
+		wave.name = "OnlineLobbyConnectionWave_%d" % i
+	for i in range(4):
+		var center = 0.110 + float(i) * 0.255
+		var active = i < player_count
+		var slot = make_panel(art, rect_full(center - 0.028, 0.270, center + 0.028, 0.730), Color(0.38, 0.70, 0.56, 0.62 if active else 0.18), 999, Color(0.72, 0.90, 0.70, 0.28 if active else 0.08), 0)
+		slot.name = "OnlineLobbyPlayerSlot_%d" % i
+		var seat_signal = make_panel(art, rect_full(center - 0.020, 0.790, center + 0.020, 0.910), Color(0.78, 0.68, 0.36, 0.42 if active else 0.14), 999, Color(0.96, 0.82, 0.42, 0.22 if active else 0.08), 0)
+		seat_signal.name = "OnlineLobbySeatSignal_%d" % i
+		if active:
+			var glow = make_panel(art, rect_full(center - 0.048, 0.225, center + 0.048, 0.775), Color(0.60, 0.86, 0.62, 0.11), 999, Color(0.78, 0.96, 0.72, 0.10), 0)
+			glow.name = "OnlineLobbySeatReadyGlow_%d" % i
+	var pulse_count = min(3, max(1, log_count))
+	for i in range(pulse_count):
+		var left = 0.735 + float(i) * 0.060
+		var pulse = make_panel(art, rect_full(left, 0.150, left + 0.030, 0.390), Color(0.84, 0.68, 0.30, 0.46), 999, Color(1.0, 0.84, 0.46, 0.18), 0)
+		pulse.name = "OnlineLobbyLogPulse_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(ready_rail, "modulate:a", 0.44, 1.0).from(1.0)
+		tw.tween_property(ready_rail, "modulate:a", 1.0, 1.0).from(0.44)
+	return art
 
 func add_line_edit(parent: Control, label_text: String, value: String) -> LineEdit:
 	var caption = Label.new()
@@ -3467,12 +2656,6 @@ func normalize_online_players(value) -> Array:
 		result.append(player)
 	return result
 
-func numeric_count(value, fallback: int = 0) -> int:
-	if value == null:
-		return fallback
-	if typeof(value) == TYPE_ARRAY:
-		return value.size()
-	return int(value)
 
 func normalize_online_melds(value) -> Array:
 	var melds: Array = []
@@ -3588,7 +2771,7 @@ func start_offline(instant: bool = false) -> void:
 	if instant or not fx_enabled_effective():
 		_build.call()
 	else:
-		play_screen_transition(_build)
+		play_screen_transition(_build, false, "ink_wash")
 
 func _start_offline_impl() -> void:
 	if voice_enabled:
@@ -3652,6 +2835,8 @@ func deal_offline_hand() -> void:
 	last_score_deltas.clear()
 	offline_last_winner = -1
 	offline_dealer_repeat = false
+	offline_draw_serial = 0
+	fx_last_animated_draw_serial = -1
 	current_seat = dealer_seat
 	last_discard = ""
 	last_discard_seat = -1
@@ -3671,6 +2856,8 @@ func deal_offline_hand() -> void:
 		sort_hand(players[seat]["hand"])
 	add_log("第%d局开始，%s坐庄。" % [offline_hand_number, players[dealer_seat]["name"]])
 	render_game()
+	play_fx_deal_start(dealer_seat)
+	play_fx_deal_cascade(dealer_seat)
 
 func start_next_offline_hand(auto_run_ai: bool = true) -> void:
 	if mode != "offline":
@@ -3705,15 +2892,19 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 			if announce:
 				add_log("%s补花%s。" % [players[seat]["name"], tile_label(tile)])
 				play_sfx("draw", -7.0)
+				play_fx_flower_bloom(seat, tile)
 			continue
 		players[seat]["hand"].append(tile)
 		if announce:
 			play_sfx("draw", -8.0)
+		offline_draw_serial += 1
 		offline_last_draw = {
 			"seat": seat,
 			"tile": tile,
 			"source": source,
 			"wall_empty": wall.is_empty(),
+			"announce": announce,
+			"serial": offline_draw_serial,
 		}
 		return tile
 	return ""
@@ -3738,6 +2929,7 @@ func render_game() -> void:
 	add_texture(table, felt_texture, TABLE_INNER_TEXTURE_RECT, 0.88)
 	draw_table_atmosphere_frame(table)
 	draw_walls(table)
+	draw_table_living_illustration(table)
 	draw_discards(table)
 	draw_center(table)
 	draw_melds(table)
@@ -3813,7 +3005,9 @@ func draw_game_top_hud(parent: Control) -> void:
 	# 模式徽章
 	var mode_text = "单机" if mode == "offline" else "联机"
 	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 12, Color(0.018, 0.042, 0.048, 0.94), SEAT_ACCENT_COLORS[0], Color(0.92, 0.94, 0.88))
+	mode_badge.name = "TopHudModeBadge"
 	mode_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_top_hud_status_art(hud)
 
 	# 标题
 	var title_text = "单机修炼场 第%d局" % [offline_hand_number] if mode == "offline" else "联机房间 " + str(online_game.get("roomCode", selected_room))
@@ -3826,6 +3020,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	var status = make_label(hud, current_status_text(), 17, UI_TEXT_SUB, true)
 	apply_rect(status, TOP_HUD_STATUS_RECT)
 	configure_clipped_label(status)
+	draw_top_hud_hand_progress(hud)
 
 	# 分数条
 	draw_score_strip(hud, TOP_HUD_SCORE_STRIP_RECT)
@@ -3835,6 +3030,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	wall.add_theme_stylebox_override("normal", style(Color(0.016, 0.024, 0.028, 0.94), 10, Color(0.24, 0.28, 0.26, 0.36), 1, 0))
 	apply_rect(wall, TOP_HUD_WALL_RECT)
 	configure_clipped_label(wall)
+	draw_top_hud_wall_meter(hud)
 
 	# 操作按钮组
 	var settings = make_top_hud_button("设置", Color(0.22, 0.44, 0.56), func() -> void:
@@ -3862,8 +3058,109 @@ func top_hud_wall_text() -> String:
 	var last = get_last_discard()
 	return "余%d 上%s" % [get_wall_count(), tile_label(last) if last != "" else "--"]
 
+func draw_top_hud_hand_progress(parent: Control) -> Control:
+	var progress = Control.new()
+	progress.name = "TopHudHandProgress"
+	progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(progress, TOP_HUD_HAND_PROGRESS_RECT)
+	parent.add_child(progress)
+	var fill = Color(0.012, 0.024, 0.026, 0.72)
+	var accent = SEAT_ACCENT_COLORS[dealer_seat] if dealer_seat >= 0 and dealer_seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var rail_panel = make_panel(progress, rect_full(0.010, 0.160, 0.990, 0.840), fill, 999, Color(accent.r, accent.g, accent.b, 0.20), 0)
+	rail_panel.name = "HandProgressRail"
+	var hand_count = MATCH_MAX_HANDS if mode == "offline" else 4
+	var current_hand = clamp(offline_hand_number if mode == "offline" else 1, 1, hand_count)
+	for i in range(hand_count):
+		var center = 0.070 + float(i) * (0.700 / float(max(1, hand_count - 1)))
+		var reached = i < current_hand
+		var active = i == current_hand - 1
+		var pip_color = Color(accent.r, accent.g, accent.b, 0.74 if reached else 0.20)
+		var pip_border = Color(0.98, 0.86, 0.46, 0.42 if active else 0.16)
+		var pip = make_panel(progress, rect_full(center - 0.015, 0.310, center + 0.015, 0.690), pip_color, 999, pip_border, 0)
+		pip.name = "HandProgressPip_%d" % (i + 1)
+		if active:
+			var glow = make_panel(progress, rect_full(center - 0.029, 0.150, center + 0.029, 0.850), Color(accent.r, accent.g, accent.b, 0.14), 999, Color(1.0, 0.86, 0.42, 0.24), 0)
+			glow.name = "HandProgressActiveGlow"
+			progress.move_child(glow, max(0, pip.get_index()))
+	var label = make_label(progress, "%d/%d局" % [current_hand, hand_count], 10, Color(0.90, 0.88, 0.74), true)
+	label.name = "HandProgressLabel"
+	apply_rect(label, rect_full(0.785, 0.100, 0.920, 0.900))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var dealer_badge = make_badge(progress, rect_full(0.925, 0.160, 0.995, 0.840), CENTER_WIND_LABELS[dealer_seat] if dealer_seat >= 0 and dealer_seat < CENTER_WIND_LABELS.size() else "庄", 9, Color(accent.r, accent.g, accent.b, 0.42), Color(0.96, 0.78, 0.38, 0.28), Color(0.98, 0.92, 0.72))
+	dealer_badge.name = "HandProgressDealerBadge"
+	dealer_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if mode == "offline" and offline_dealer_repeat:
+		var repeat_badge = make_badge(progress, rect_full(0.805, -0.160, 0.930, 0.300), "连庄", 8, Color(0.50, 0.12, 0.08, 0.94), Color(0.96, 0.62, 0.34, 0.32), Color(0.98, 0.90, 0.72))
+		repeat_badge.name = "HandProgressRepeatBadge"
+		repeat_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(rail_panel, "modulate:a", 0.58, 0.72).from(0.94)
+		tw.tween_property(rail_panel, "modulate:a", 0.94, 0.72).from(0.58)
+	return progress
+
+func draw_top_hud_status_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "TopHudStatusArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.104, 0.120, 0.132, 0.880))
+	parent.add_child(art)
+	var color = center_phase_color(center_phase_key())
+	var icon_back = make_panel(art, rect_full(0.08, 0.18, 0.92, 0.82), Color(color.r, color.g, color.b, 0.18), 999, Color(color.r, color.g, color.b, 0.36), 0)
+	icon_back.name = "TopHudStatusIconBack"
+	var icon_name = top_hud_status_icon_name()
+	if icon_name != "":
+		add_lucide_icon(art, icon_name, rect_full(0.24, 0.30, 0.76, 0.70), Color(0.96, 0.92, 0.76, 0.86))
+	var pulse = make_panel(art, rect_full(0.010, 0.080, 0.990, 0.920), Color(color.r, color.g, color.b, 0.08), 999, Color(color.r, color.g, color.b, 0.18), 0)
+	pulse.name = "TopHudStatusPulse"
+	art.move_child(pulse, 0)
+	var rail = make_panel(parent, rect_full(0.106, 0.820, 0.425, 0.870), Color(color.r, color.g, color.b, 0.16), 999, Color(color.r, color.g, color.b, 0.12), 0)
+	rail.name = "TopHudStatusRail"
+	for i in range(3):
+		var left = 0.118 + float(i) * 0.018
+		var pip = make_panel(parent, rect_full(left, 0.180, left + 0.008, 0.300), Color(color.r, color.g, color.b, 0.38), 999, Color(1.0, 0.90, 0.56, 0.12), 0)
+		pip.name = "TopHudStatusPip_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(pulse, "modulate:a", 0.24, 0.70).from(0.86)
+		tw.tween_property(pulse, "modulate:a", 0.86, 0.70).from(0.24)
+	return art
+
+func top_hud_status_icon_name() -> String:
+	if mode == "online_game" or mode == "online_lobby":
+		return "users"
+	match center_phase_key():
+		"discard":
+			return "zap"
+		"claim":
+			return "sparkles"
+		"ended":
+			return "trophy"
+		"wait":
+			return "pause"
+	return "info"
+
+func draw_top_hud_wall_meter(parent: Control) -> Control:
+	var meter = Control.new()
+	meter.name = "TopHudWallMeter"
+	meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(meter, TOP_HUD_WALL_RECT)
+	parent.add_child(meter)
+	var progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var color = wall_meter_color(progress)
+	var rail = make_panel(meter, rect_full(0.08, 0.76, 0.92, 0.90), Color(0.006, 0.012, 0.014, 0.76), 999, Color(color.r, color.g, color.b, 0.18), 0)
+	rail.name = "TopHudWallMeterRail"
+	var fill = make_panel(meter, rect_full(0.08, 0.76, 0.08 + 0.84 * progress, 0.90), Color(color.r, color.g, color.b, 0.70), 999, Color(color.r, color.g, color.b, 0.22), 0)
+	fill.name = "TopHudWallMeterFill"
+	var dot = make_panel(meter, rect_full(0.060, 0.170, 0.190, 0.430), Color(color.r, color.g, color.b, 0.72), 999, Color(1.0, 0.90, 0.56, 0.28), 0)
+	dot.name = "TopHudWallStatusDot"
+	return meter
+
 func draw_score_strip(parent: Control, rect: Rect2) -> void:
 	var strip = Control.new()
+	strip.name = "ScoreStrip"
 	parent.add_child(strip)
 	apply_rect(strip, rect)
 	for seat in range(4):
@@ -3872,8 +3169,10 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		var chip_fill = Color(0.008, 0.016, 0.018, 0.96) if active else Color(0.006, 0.014, 0.016, 0.92)
 		var chip_border = Color(0.56, 0.46, 0.22, 0.72) if active else Color(0.28, 0.32, 0.30, 0.28)
 		var chip = make_panel(strip, SCORE_STRIP_CHIP_RECTS[seat], chip_fill, 12, chip_border, 3)
+		chip.name = "ScoreStripChip_%d" % seat
 		# 座位颜色标识
 		chip.add_child(make_color_rect(SCORE_STRIP_ACCENT_RECT, SEAT_ACCENT_COLORS[seat]))
+		draw_score_strip_chip_art(chip, seat, int(player.get("score", 0)), active)
 		# 玩家名称
 		var name_text = "我" if seat == 0 else ai_profile_short_label(seat) if mode == "offline" else str(player.get("name", "玩家"))
 		var name = make_label(chip, name_text, 11, Color(0.94, 0.90, 0.78), true)
@@ -3885,6 +3184,38 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		apply_rect(score, SCORE_STRIP_SCORE_RECT)
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(score)
+
+func draw_score_strip_chip_art(parent: Control, seat: int, score: int, active: bool) -> Control:
+	var art = Control.new()
+	art.name = "ScoreStripChipArt_%d" % seat
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var seal = make_panel(art, rect_full(0.045, 0.165, 0.170, 0.835), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.30), 0)
+	seal.name = "ScoreStripSeatSeal_%d" % seat
+	var wind = make_label(seal, seat_wind_label(seat), 9, Color(0.96, 0.88, 0.62, 0.86), true)
+	apply_rect(wind, rect_full(0.0, 0.0, 1.0, 1.0))
+	var baseline = MATCH_START_SCORE
+	var delta = score - baseline
+	var momentum = clamp(abs(float(delta)) / float(max(1, baseline)), 0.08, 1.0)
+	var positive = delta >= 0
+	var fill_color = Color(0.34, 0.68, 0.48, 0.52) if positive else Color(0.72, 0.36, 0.30, 0.52)
+	var rail = make_panel(art, rect_full(0.205, 0.760, 0.940, 0.875), Color(0.006, 0.014, 0.016, 0.54), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	rail.name = "ScoreStripMomentumRail_%d" % seat
+	var fill_right = 0.205 + 0.735 * momentum
+	var fill = make_panel(art, rect_full(0.205, 0.760, fill_right, 0.875), fill_color, 999, fill_color.lightened(0.12), 0)
+	fill.name = "ScoreStripMomentumFill_%d" % seat
+	if active:
+		var pulse = make_panel(art, rect_full(0.010, 0.060, 0.990, 0.940), Color(accent.r, accent.g, accent.b, 0.07), 12, Color(0.96, 0.78, 0.34, 0.18), 0)
+		pulse.name = "ScoreStripActivePulse"
+		art.move_child(pulse, 0)
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var tw := create_tween()
+			tw.set_loops(12)
+			tw.tween_property(pulse, "modulate:a", 0.25, 0.70).from(0.82)
+			tw.tween_property(pulse, "modulate:a", 0.82, 0.70).from(0.25)
+	return art
 
 func draw_settings_overlay(parent: Control) -> void:
 	if not settings_panel_open:
@@ -3954,6 +3285,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String) -> 
 	var section = make_panel(parent, rect, Color(0.010, 0.018, 0.022, 0.88), 14, Color(0.30, 0.34, 0.30, 0.26), 0)
 	# 左侧彩色装饰条
 	section.add_child(make_color_rect(rect_full(0.004, 0.02, 0.012, 0.98), Color(0.86, 0.74, 0.38, 0.52)))
+	draw_settings_section_signal(section, title_text)
 	var section_title = make_label(section, title_text, 14, Color(0.90, 0.84, 0.60), true)
 	apply_rect(section_title, SETTINGS_SECTION_TITLE_RECT)
 	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3965,6 +3297,46 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String) -> 
 	section.add_child(grid)
 	apply_rect(grid, SETTINGS_SECTION_GRID_RECT)
 	return grid
+
+func draw_settings_section_signal(parent: Control, title_text: String) -> Control:
+	var art = Control.new()
+	art.name = "SettingsSectionSignal_%s" % title_text
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.585, 0.035, 0.965, 0.155))
+	parent.add_child(art)
+	var accent = settings_section_color(title_text)
+	var rail = make_panel(art, rect_full(0.080, 0.430, 0.920, 0.570), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	rail.name = "SettingsSectionSignalRail_%s" % title_text
+	var icon = make_panel(art, rect_full(0.000, 0.155, 0.115, 0.845), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(accent.r, accent.g, accent.b, 0.28), 0)
+	icon.name = "SettingsSectionSignalIcon_%s" % title_text
+	var icon_name = settings_section_icon(title_text)
+	if icon_name != "":
+		add_lucide_icon(icon, icon_name, rect_full(0.22, 0.22, 0.78, 0.78), Color(0.96, 0.90, 0.64, 0.82))
+	for i in range(3):
+		var left = 0.270 + float(i) * 0.185
+		var pulse = make_panel(art, rect_full(left, 0.270, left + 0.050, 0.730), Color(accent.r, accent.g, accent.b, 0.38), 999, Color(1.0, 0.90, 0.54, 0.12), 0)
+		pulse.name = "SettingsSectionSignalPulse_%s_%d" % [title_text, i]
+	return art
+
+func settings_section_color(title_text: String) -> Color:
+	match title_text:
+		"声音":
+			return Color(0.34, 0.58, 0.72)
+		"体验":
+			return Color(0.34, 0.62, 0.46)
+		"维护":
+			return Color(0.70, 0.48, 0.34)
+	return Color(0.62, 0.54, 0.34)
+
+func settings_section_icon(title_text: String) -> String:
+	match title_text:
+		"声音":
+			return "volume-2"
+		"体验":
+			return "sparkles"
+		"维护":
+			return "wrench"
+	return "settings"
 
 func make_setting_row(parent: Control, title: String, status: String, button: Button) -> void:
 	var row = Panel.new()
@@ -3987,7 +3359,46 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 	var button = make_small_button("%s%s" % [label, "开" if enabled else "关"], color, callback)
 	button.custom_minimum_size = Vector2(140, 48)
 	button.add_theme_font_size_override("font_size", 18)
+	draw_setting_switch_art(button, enabled)
 	return button
+
+func draw_setting_switch_art(parent: Control, enabled: bool) -> Control:
+	var art = Control.new()
+	art.name = "SettingSwitchArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.690, 0.230, 0.960, 0.770))
+	parent.add_child(art)
+	var rail_color = Color(0.16, 0.36, 0.30, 0.86) if enabled else Color(0.30, 0.22, 0.20, 0.82)
+	var rail_border = Color(0.48, 0.78, 0.60, 0.42) if enabled else Color(0.66, 0.46, 0.38, 0.30)
+	var rail = make_panel(art, rect_full(0.04, 0.20, 0.96, 0.80), rail_color, 999, rail_border, 0)
+	rail.name = "SettingSwitchRail"
+	var energy_rail = make_panel(art, rect_full(0.115, 0.405, 0.885, 0.595), Color(0.010, 0.020, 0.022, 0.54), 999, Color(rail_border.r, rail_border.g, rail_border.b, 0.14), 0)
+	energy_rail.name = "SettingSwitchEnergyRail"
+	var energy_right = 0.115 + 0.770 * (0.88 if enabled else 0.18)
+	var energy_fill = make_panel(art, rect_full(0.115, 0.430, energy_right, 0.570), Color(0.54, 0.86, 0.62, 0.48) if enabled else Color(0.74, 0.48, 0.40, 0.22), 999, Color(0.78, 0.96, 0.70, 0.12), 0)
+	energy_fill.name = "SettingSwitchEnergyFill"
+	var knob_left = 0.58 if enabled else 0.10
+	var knob = make_panel(art, rect_full(knob_left, 0.08, knob_left + 0.32, 0.92), Color(0.92, 0.88, 0.72, 0.96), 999, Color(1.0, 0.94, 0.64, 0.42), 0)
+	knob.name = "SettingSwitchKnobOn" if enabled else "SettingSwitchKnobOff"
+	for i in range(2):
+		var spark_left = (0.210 + float(i) * 0.150) if enabled else (0.620 + float(i) * 0.120)
+		var spark = make_panel(art, rect_full(spark_left, 0.065, spark_left + 0.038, 0.210), Color(0.74, 0.94, 0.66, 0.32) if enabled else Color(0.82, 0.54, 0.44, 0.18), 999, Color(0.86, 0.98, 0.70, 0.10), 0)
+		spark.name = "SettingSwitchStateSpark_%d" % i
+	# 滑钮入场滑动动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var start_left = 0.10 if enabled else 0.58
+		knob.anchor_left = start_left
+		knob.anchor_right = start_left + 0.32
+		var slide_tw := create_tween()
+		slide_tw.tween_property(knob, "anchor_left", knob_left, 0.22).from(start_left).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		slide_tw.parallel().tween_property(knob, "anchor_right", knob_left + 0.32, 0.22).from(start_left + 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if enabled:
+		var shine = make_panel(art, rect_full(0.18, 0.34, 0.36, 0.66), Color(0.72, 0.94, 0.70, 0.38), 999, Color(0, 0, 0, 0), 0)
+		shine.name = "SettingSwitchOnLight"
+	else:
+		var off_lock = make_panel(art, rect_full(0.660, 0.285, 0.840, 0.715), Color(0.82, 0.54, 0.44, 0.20), 999, Color(0.92, 0.64, 0.54, 0.12), 0)
+		off_lock.name = "SettingSwitchOffLock"
+	return art
 
 func make_audio_test_button(callback: Callable) -> Button:
 	var button = make_small_button("试音", Color(0.28, 0.42, 0.56), callback)
@@ -4028,10 +3439,6 @@ func draw_walls(parent: Control) -> void:
 		strip.anchor_bottom = item[1].y
 		parent.add_child(strip)
 
-func make_wall_back_strip(count: int, horizontal: bool) -> Control:
-	var strip = WallBackStrip.new()
-	strip.configure(count, horizontal, WALL_BACK_TILE_SIZE, Color(0.73, 0.69, 0.56, 0.98), Color(0.34, 0.29, 0.18, 0.82))
-	return strip
 
 func make_wall_back_tile(size: Vector2 = WALL_BACK_TILE_SIZE, detailed: bool = true) -> Control:
 	var panel = Panel.new()
@@ -4077,10 +3484,106 @@ func draw_discards(parent: Control) -> void:
 		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, grid.columns, visible_rows, table_size)
 		var visible_start = tail_window_start(discards.size(), grid.columns * visible_rows)
 		var visible_count = discards.size() - visible_start
+		draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count)
 		for i in range(visible_count):
 			var source_index = visible_start + i
 			var highlighted = seat == get_last_discard_seat() and i == visible_count - 1
 			grid.add_child(make_tile_view(str(discards[source_index]), tile_size, false, Callable(), highlighted))
+		if seat == get_last_discard_seat() and visible_count > 0:
+			draw_last_discard_focus_marker(parent, seat, table_size)
+
+func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int) -> Control:
+	var art = Control.new()
+	art.name = "DiscardRiverArt_%d" % seat
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, zone_rect)
+	parent.add_child(art)
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var wash = make_color_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.006, 0.014, 0.016, 0.10))
+	wash.name = "DiscardRiverWash_%d" % seat
+	art.add_child(wash)
+	var rail = make_color_rect(rect_full(0.020, 0.050, 0.980, 0.075), Color(accent.r, accent.g, accent.b, 0.24))
+	rail.name = "DiscardRiverSeatRail_%d" % seat
+	art.add_child(rail)
+	var flow = make_color_rect(rect_full(0.060, 0.900, 0.940, 0.930), Color(0.86, 0.74, 0.42, 0.12))
+	flow.name = "DiscardRiverFlowLine_%d" % seat
+	art.add_child(flow)
+	var bead_count = min(5, max(1, visible_count))
+	for i in range(bead_count):
+		var center = 0.110 + float(i) * (0.780 / float(max(1, bead_count - 1)))
+		var bead = make_panel(art, rect_full(center - 0.014, 0.855, center + 0.014, 0.970), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(1.0, 0.88, 0.48, 0.10), 0)
+		bead.name = "DiscardRiverWindowBead_%d_%d" % [seat, i]
+	if visible_start > 0:
+		var overflow = make_panel(art, rect_full(0.018, 0.780, 0.092, 0.960), Color(0.72, 0.54, 0.26, 0.20), 999, Color(0.96, 0.82, 0.46, 0.16), 0)
+		overflow.name = "DiscardRiverOverflow_%d" % seat
+	if seat == get_last_discard_seat() and discard_count > 0:
+		var focus = make_color_rect(rect_full(0.015, 0.120, 0.985, 0.160), Color(0.96, 0.78, 0.34, 0.20))
+		focus.name = "DiscardRiverLastSource_%d" % seat
+		art.add_child(focus)
+	return art
+
+func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vector2 = Vector2.ZERO) -> Control:
+	var marker_rect = last_discard_focus_marker_rect_for_seat(seat, table_size)
+	if marker_rect.size == Vector2.ZERO:
+		return null
+	var tile = get_last_discard()
+	var marker = Control.new()
+	marker.name = "LastDiscardFocusMarker"
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(marker, marker_rect)
+	parent.add_child(marker)
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var glow = make_panel(marker, rect_full(0.04, 0.04, 0.96, 0.96), Color(accent.r, accent.g, accent.b, 0.10), 12, Color(0.96, 0.78, 0.34, 0.58), 0)
+	glow.name = "LastDiscardFocusGlow"
+	var badge = make_badge(marker, rect_full(-0.32, -0.34, 1.32, 0.20), "%s 刚打 %s" % [pending_claim_source_badge_text(seat), tile_label(tile)], 9, Color(0.018, 0.036, 0.038, 0.94), Color(0.88, 0.68, 0.32, 0.42), Color(0.96, 0.92, 0.76))
+	badge.name = "LastDiscardFocusBadge"
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_lucide_icon(marker, "sparkles", rect_full(0.68, -0.28, 1.10, 0.22), Color(0.98, 0.86, 0.42, 0.72))
+	if fx_enabled_effective():
+		marker.modulate = Color(1, 1, 1, 0)
+		marker.scale = Vector2(0.92, 0.92)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(marker, "modulate:a", 1.0, 0.16).from(0.0)
+		tw.tween_property(marker, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.92, 0.92)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	return marker
+
+func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Vector2.ZERO) -> Rect2:
+	var discards = get_discards(seat)
+	if discards.is_empty() or seat != get_last_discard_seat():
+		return Rect2()
+	var resolved_table_size = table_size if table_size.x > 0.0 and table_size.y > 0.0 else game_table_pixel_size()
+	for zone in DISCARD_ZONES:
+		if int(zone[0]) != seat:
+			continue
+		var zone_rect: Rect2 = zone[1]
+		var columns = int(zone[2])
+		var visible_rows = discard_zone_visible_rows_for_table_size(zone_rect, columns, resolved_table_size)
+		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, columns, visible_rows, resolved_table_size)
+		var visible_start = tail_window_start(discards.size(), columns * visible_rows)
+		var visible_index = discards.size() - 1 - visible_start
+		if visible_index < 0:
+			return Rect2()
+		var col = visible_index % max(1, columns)
+		var row = visible_index / max(1, columns)
+		var left_px = float(col) * (tile_size.x + float(DISCARD_GRID_SEPARATION))
+		var top_px = float(row) * (tile_size.y + float(DISCARD_GRID_SEPARATION))
+		var zone_width_px = max(1.0, (zone_rect.size.x - zone_rect.position.x) * resolved_table_size.x)
+		var zone_height_px = max(1.0, (zone_rect.size.y - zone_rect.position.y) * resolved_table_size.y)
+		var left = zone_rect.position.x + left_px / resolved_table_size.x
+		var top = zone_rect.position.y + top_px / resolved_table_size.y
+		var right = left + tile_size.x / resolved_table_size.x
+		var bottom = top + tile_size.y / resolved_table_size.y
+		var pad_x = min(0.014, (zone_rect.size.x - zone_rect.position.x) * 0.08)
+		var pad_y = min(0.020, (zone_rect.size.y - zone_rect.position.y) * 0.08)
+		left = clamp(left - pad_x, zone_rect.position.x, zone_rect.size.x)
+		top = clamp(top - pad_y, zone_rect.position.y, zone_rect.size.y)
+		right = clamp(right + pad_x, zone_rect.position.x, zone_rect.size.x)
+		bottom = clamp(bottom + pad_y, zone_rect.position.y, zone_rect.size.y)
+		if right <= left or bottom <= top or zone_width_px <= 0.0 or zone_height_px <= 0.0:
+			return Rect2()
+		return Rect2(Vector2(left, top), Vector2(right, bottom))
+	return Rect2()
 
 func discard_zone_visible_rows(zone_rect: Rect2, columns: int) -> int:
 	return discard_zone_visible_rows_for_table_size(zone_rect, columns, game_table_pixel_size())
@@ -4189,6 +3692,7 @@ func draw_center(parent: Control) -> void:
 	# 内部装饰框
 	make_panel(center, CENTER_INNER_RECT, Color(0.004, 0.036, 0.036, 0.98), 62, Color(0.28, 0.26, 0.18, 0.42), 0)
 	draw_center_wind_compass(center)
+	draw_center_phase_ribbon(center)
 
 	# 状态文本
 	var status = make_label(center, current_status_text(), 16, Color(0.92, 0.90, 0.82), true)
@@ -4199,6 +3703,7 @@ func draw_center(parent: Control) -> void:
 	apply_rect(wall_label, CENTER_WALL_LABEL_RECT)
 	var wall_text = make_label(center, "%d" % get_wall_count(), 28, Color(0.66, 0.74, 0.70, 0.94), true)
 	apply_rect(wall_text, CENTER_WALL_COUNT_RECT)
+	draw_center_wall_meter(center, get_wall_count())
 
 	# 上张牌
 	var last = get_last_discard()
@@ -4219,6 +3724,118 @@ func draw_center(parent: Control) -> void:
 	for dot_rect in CENTER_DICE_DOT_RECTS:
 		make_panel(center, dot_rect, Color(0.58, 0.54, 0.40, 0.64), 22, Color(0.74, 0.70, 0.56, 0.28), 0)
 
+func draw_center_phase_ribbon(parent: Control) -> Control:
+	var phase_key = center_phase_key()
+	var accent = center_phase_color(phase_key)
+	var ribbon = make_panel(parent, CENTER_PHASE_RIBBON_RECT, Color(accent.r * 0.18, accent.g * 0.18, accent.b * 0.18, 0.88), 999, Color(accent.r, accent.g, accent.b, 0.44), 0)
+	ribbon.name = "CenterPhaseRibbon"
+	ribbon.add_child(make_color_rect(rect_full(0.06, 0.46, 0.94, 0.54), Color(accent.r, accent.g, accent.b, 0.26)))
+	var left_seal = make_panel(ribbon, rect_full(0.035, 0.18, 0.125, 0.82), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(accent.r, accent.g, accent.b, 0.52), 0)
+	left_seal.name = "CenterPhaseSeal"
+	var pulse = make_panel(ribbon, rect_full(0.865, 0.28, 0.935, 0.72), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(accent.r, accent.g, accent.b, 0.40), 0)
+	pulse.name = "CenterPhasePulse"
+	var label = make_label(ribbon, center_phase_label(phase_key), 11, Color(0.96, 0.94, 0.82), true)
+	label.name = "CenterPhaseLabel"
+	apply_rect(label, rect_full(0.14, 0.05, 0.85, 0.95))
+	configure_clipped_label(label)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(pulse, "modulate:a", 0.30, 0.58).from(0.95)
+		tw.tween_property(pulse, "modulate:a", 0.95, 0.58).from(0.30)
+	return ribbon
+
+func center_phase_key() -> String:
+	if mode == "offline":
+		if offline_phase == "ended":
+			return "ended"
+		if offline_phase == "pending_claim":
+			return "claim"
+		if can_self_discard():
+			return "discard"
+		return "wait"
+	if mode == "online_game":
+		if str(online_game.get("phase", "")) == "ended":
+			return "ended"
+		if typeof(online_game.get("pending", null)) == TYPE_DICTIONARY or str(online_game.get("phase", "")) == "pendingClaim":
+			return "claim"
+		if can_self_discard():
+			return "discard"
+		return "wait"
+	return "ready"
+
+func center_phase_label(phase_key: String) -> String:
+	match phase_key:
+		"discard":
+			return "我方出牌"
+		"claim":
+			return "响应窗口"
+		"ended":
+			return "结算"
+		"wait":
+			return "对手行牌"
+	return "准备"
+
+func center_phase_color(phase_key: String) -> Color:
+	match phase_key:
+		"discard":
+			return Color(0.38, 0.72, 0.58, 1.0)
+		"claim":
+			return Color(0.88, 0.58, 0.28, 1.0)
+		"ended":
+			return Color(0.88, 0.72, 0.34, 1.0)
+		"wait":
+			return Color(0.42, 0.58, 0.72, 1.0)
+	return Color(0.62, 0.64, 0.58, 1.0)
+
+func draw_center_wall_meter(parent: Control, wall_count: int) -> void:
+	var progress = clamp(float(wall_count) / 144.0, 0.0, 1.0)
+	var meter_color = wall_meter_color(progress)
+	var meter = Control.new()
+	meter.name = "CenterWallMeter"
+	meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(meter, rect_full(0.23, 0.30, 0.77, 0.74))
+	parent.add_child(meter)
+	var segments := [
+		[rect_full(0.18, 0.00, 0.82, 0.035), 0.00],
+		[rect_full(0.965, 0.17, 1.00, 0.83), 0.25],
+		[rect_full(0.18, 0.965, 0.82, 1.00), 0.50],
+		[rect_full(0.00, 0.17, 0.035, 0.83), 0.75],
+	]
+	for segment in segments:
+		var lit = progress >= float(segment[1])
+		var fill = Color(meter_color.r, meter_color.g, meter_color.b, 0.50 if lit else 0.10)
+		var border = Color(meter_color.r, meter_color.g, meter_color.b, 0.38 if lit else 0.12)
+		var bar = make_panel(meter, segment[0], fill, 18, border, 0)
+		bar.name = "CenterWallMeterSegment"
+	if progress <= 0.18:
+		draw_center_low_wall_warning(meter, wall_count, meter_color)
+
+func draw_center_low_wall_warning(parent: Control, wall_count: int, meter_color: Color) -> Control:
+	var warning = make_panel(parent, rect_full(0.28, 0.34, 0.72, 0.66), Color(0.16, 0.040, 0.026, 0.30), 999, Color(meter_color.r, meter_color.g, meter_color.b, 0.42), 0)
+	warning.name = "CenterWallLowWarning"
+	var badge_text = "荒庄临近" if wall_count <= 18 else "余牌偏低"
+	var badge = make_badge(warning, rect_full(0.10, 0.26, 0.90, 0.74), badge_text, 9, Color(0.20, 0.058, 0.038, 0.94), Color(0.96, 0.54, 0.32, 0.42), Color(0.98, 0.84, 0.64))
+	badge.name = "CenterWallLowWarningBadge"
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in range(5):
+		var left = 0.12 + float(i) * 0.19
+		var spark = make_panel(parent, rect_full(left, 0.08, left + 0.038, 0.15), Color(0.96, 0.62, 0.28, 0.56), 999, Color(1.0, 0.84, 0.42, 0.24), 0)
+		spark.name = "CenterWallLowSpark"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(warning, "modulate:a", 0.35, 0.45).from(0.85)
+		tw.tween_property(warning, "modulate:a", 0.85, 0.45).from(0.35)
+	return warning
+
+func wall_meter_color(progress: float) -> Color:
+	if progress <= 0.18:
+		return Color(0.88, 0.36, 0.22, 1.0)
+	if progress <= 0.42:
+		return Color(0.82, 0.62, 0.28, 1.0)
+	return Color(0.42, 0.70, 0.58, 1.0)
+
 func draw_dice_dot(parent: Control, x: float, y: float) -> void:
 	make_panel(parent, rect_full(x - CENTER_DICE_DOT_RADIUS, y - CENTER_DICE_DOT_RADIUS, x + CENTER_DICE_DOT_RADIUS, y + CENTER_DICE_DOT_RADIUS), CENTER_DICE_DOT_FILL, 20, CENTER_DICE_DOT_BORDER, 0)
 
@@ -4234,8 +3851,80 @@ func draw_melds(parent: Control) -> void:
 		apply_rect(area, layout[1])
 		parent.add_child(area)
 		for meld in meld_list:
-			for tile in meld:
-				area.add_child(make_tile_view(str(tile), Vector2(34, 46), false, Callable()))
+			if typeof(meld) == TYPE_ARRAY:
+				area.add_child(make_meld_group_view(meld as Array, seat))
+
+func make_meld_group_view(meld: Array, seat: int) -> Control:
+	var group = Panel.new()
+	var kind = meld_kind_label(meld)
+	group.name = "MeldGroup_%s" % kind
+	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	group.custom_minimum_size = Vector2(max(40.0, float(meld.size()) * 28.0 + 18.0), 54.0)
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	group.add_theme_stylebox_override("panel", style(Color(0.010, 0.022, 0.024, 0.88), 9, Color(accent.r, accent.g, accent.b, 0.34), 1, 2))
+	group.add_child(make_color_rect(rect_full(0.0, 0.0, 0.035, 1.0), Color(accent.r, accent.g, accent.b, 0.52)))
+	draw_meld_group_art(group, kind, accent, meld.size())
+	if kind == "杠":
+		var gang_rail = make_panel(group, rect_full(0.070, 0.075, 0.960, 0.145), Color(0.88, 0.70, 0.30, 0.34), 999, Color(1.0, 0.88, 0.48, 0.24), 0)
+		gang_rail.name = "MeldGangGoldRail"
+		var seal = make_seal_stamp(group, rect_full(0.040, 0.520, 0.180, 0.930), "杠", "round")
+		seal.name = "MeldGangSeal"
+	var label = make_label(group, kind, 10, Color(0.92, 0.84, 0.58), true)
+	apply_rect(label, rect_full(0.05, 0.04, 0.28, 0.32))
+	var tiles = HBoxContainer.new()
+	configure_passive_container(tiles)
+	tiles.alignment = BoxContainer.ALIGNMENT_BEGIN
+	tiles.add_theme_constant_override("separation", 1)
+	apply_rect(tiles, rect_full(0.145 if kind == "杠" else 0.06, 0.24, 0.96, 0.96))
+	group.add_child(tiles)
+	for i in range(meld.size()):
+		var tile_view = make_tile_view(str(meld[i]), Vector2(26, 36), false, Callable())
+		if kind == "杠" and i == meld.size() - 1:
+			tile_view.name = "MeldGangRaisedTile"
+			tile_view.position.y = -5.0
+			tile_view.modulate = Color(1.10, 1.08, 1.0, 1.0)
+		tiles.add_child(tile_view)
+	return group
+
+func draw_meld_group_art(parent: Control, kind: String, accent: Color, meld_size: int) -> Control:
+	var art = Control.new()
+	art.name = "MeldGroupArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.035, 0.040, 0.985, 0.965))
+	parent.add_child(art)
+	var rail = make_color_rect(rect_full(0.025, 0.760, 0.975, 0.820), Color(accent.r, accent.g, accent.b, 0.22))
+	rail.name = "MeldKindRail"
+	art.add_child(rail)
+	var seal = make_panel(art, rect_full(0.760, 0.060, 0.930, 0.360), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(0.96, 0.82, 0.46, 0.18), 0)
+	seal.name = "MeldKindSeal"
+	for i in range(max(2, min(4, meld_size))):
+		var left = 0.110 + float(i) * 0.145
+		var bead = make_panel(art, rect_full(left, 0.700, left + 0.040, 0.880), Color(accent.r, accent.g, accent.b, 0.38), 999, Color(1.0, 0.88, 0.48, 0.14), 0)
+		bead.name = "MeldFlowBead_%d" % i
+	match kind:
+		"吃":
+			var bridge = make_color_rect(rect_full(0.190, 0.395, 0.720, 0.455), Color(0.42, 0.70, 0.58, 0.28))
+			bridge.name = "MeldChiBridge"
+			art.add_child(bridge)
+		"碰":
+			for i in range(2):
+				var center = 0.300 + float(i) * 0.180
+				var pulse = make_panel(art, rect_full(center - 0.060, 0.270, center + 0.060, 0.590), Color(accent.r, accent.g, accent.b, 0.10), 999, Color(accent.r, accent.g, accent.b, 0.22), 0)
+				pulse.name = "MeldPengPulse_%d" % i
+		"杠":
+			var crown = make_panel(art, rect_full(0.570, 0.085, 0.720, 0.300), Color(0.92, 0.72, 0.30, 0.22), 999, Color(1.0, 0.88, 0.48, 0.18), 0)
+			crown.name = "MeldGangCrownGlow"
+	return art
+
+func meld_kind_label(meld: Array) -> String:
+	if meld.size() >= 4:
+		return "杠"
+	if meld.size() == 3:
+		var first = str(meld[0])
+		if str(meld[1]) == first and str(meld[2]) == first:
+			return "碰"
+		return "吃"
+	return "副"
 
 func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}) -> void:
 	var active = get_current_seat() == seat
@@ -4282,11 +3971,12 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[0], "手", str(int(p.get("hand_count", 0))), SEAT_ACCENT_COLORS[seat])
 	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[1], "花", str(int(p.get("flowers", 0))), Color(0.56, 0.44, 0.28))
 	draw_seat_stat_pill(panel, SEAT_STAT_RECTS[2], "分", compact_score_text(int(p.get("score", 0))), Color(0.32, 0.44, 0.46))
+	var has_score_ribbon = draw_seat_score_momentum_ribbon(panel, seat)
 
 	if package_text != "" or threat_line != "":
 		var info_text = package_text if package_text != "" else threat_line
 		var info = make_label(panel, info_text, 11, Color(0.70, 0.74, 0.68), false)
-		apply_rect(info, rect_full(0.39, 0.58, 0.96, 0.72))
+		apply_rect(info, rect_full(0.39, 0.69 if has_score_ribbon else 0.58, 0.96, 0.77 if has_score_ribbon else 0.72))
 		info.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(info)
 
@@ -4302,6 +3992,44 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	if seat == dealer_seat:
 		var dealer = make_badge(panel, rect_full(0.27, 0.06, 0.38, 0.28), "庄", 16, Color(0.58, 0.12, 0.08, 0.90), Color(1.0, 0.79, 0.34, 0.76), Color(0.96, 0.90, 0.72))
 		dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func draw_seat_score_momentum_ribbon(parent: Control, seat: int) -> bool:
+	var report = score_context_report(seat)
+	if report.is_empty():
+		return false
+	var accent = score_momentum_color(report)
+	var ribbon = make_panel(parent, rect_full(0.39, 0.600, 0.96, 0.705), Color(accent.r * 0.16, accent.g * 0.16, accent.b * 0.16, 0.84), 999, Color(accent.r, accent.g, accent.b, 0.36), 0)
+	ribbon.name = "SeatScoreMomentumRibbon"
+	ribbon.add_child(make_color_rect(rect_full(0.08, 0.46, 0.92, 0.54), Color(accent.r, accent.g, accent.b, 0.22)))
+	var seal = make_panel(ribbon, rect_full(0.025, 0.18, 0.118, 0.82), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(accent.r, accent.g, accent.b, 0.50), 0)
+	seal.name = "SeatScoreMomentumSeal"
+	var pulse = make_panel(ribbon, rect_full(0.885, 0.28, 0.948, 0.72), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(accent.r, accent.g, accent.b, 0.42), 0)
+	pulse.name = "SeatScoreMomentumPulse"
+	var label = make_label(ribbon, score_momentum_label(report), 10, Color(0.96, 0.94, 0.84), true)
+	label.name = "SeatScoreMomentumLabel"
+	apply_rect(label, rect_full(0.135, 0.06, 0.875, 0.94))
+	configure_clipped_label(label)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(pulse, "modulate:a", 0.30, 0.72).from(0.90)
+		tw.tween_property(pulse, "modulate:a", 0.90, 0.72).from(0.30)
+	return true
+
+func score_momentum_label(report: Dictionary) -> String:
+	var rank = int(report.get("rank", 0))
+	var strategy = str(report.get("strategy", "均衡"))
+	if rank <= 0:
+		return "分势"
+	return "第%d %s" % [rank, strategy]
+
+func score_momentum_color(report: Dictionary) -> Color:
+	match str(report.get("strategy", "均衡")):
+		"守成":
+			return Color(0.38, 0.64, 0.52, 1.0)
+		"追分":
+			return Color(0.86, 0.50, 0.26, 1.0)
+	return Color(0.62, 0.58, 0.34, 1.0)
 
 func draw_seat_stat_pill(parent: Control, rect: Rect2, label_text: String, value_text: String, accent: Color) -> void:
 	var pill = make_panel(parent, rect, Color(0.010, 0.018, 0.022, 0.92), 10, accent.blend(Color(0.18, 0.19, 0.17, 1.0)), 0)
@@ -4322,18 +4050,37 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 	var flowers: Array = players[seat].get("flower_tiles", [])
 	if flowers.is_empty():
 		return false
+	var art = make_panel(parent, rect_full(0.390, 0.585, 0.960, 0.765), Color(0.030, 0.030, 0.020, 0.52), 10, Color(0.76, 0.58, 0.28, 0.20), 0)
+	art.name = "SeatFlowerTileArt"
+	var rail = make_panel(art, rect_full(0.030, 0.720, 0.970, 0.850), Color(0.78, 0.58, 0.28, 0.18), 999, Color(0.96, 0.78, 0.38, 0.14), 0)
+	rail.name = "SeatFlowerTileRail"
+	var seal = make_panel(art, rect_full(0.020, 0.160, 0.130, 0.660), Color(0.68, 0.42, 0.18, 0.26), 999, Color(0.96, 0.72, 0.36, 0.24), 0)
+	seal.name = "SeatFlowerTileSeal"
+	var seal_label = make_label(seal, "花", 10, Color(0.96, 0.86, 0.58), true)
+	apply_rect(seal_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var glow = make_panel(art, rect_full(0.875, 0.180, 0.945, 0.620), Color(0.92, 0.70, 0.34, 0.18), 999, Color(1.0, 0.84, 0.46, 0.16), 0)
+	glow.name = "SeatFlowerTileGlow"
 	var strip = HBoxContainer.new()
+	strip.name = "SeatFlowerTileStrip"
 	configure_passive_container(strip)
 	strip.alignment = BoxContainer.ALIGNMENT_BEGIN
 	strip.add_theme_constant_override("separation", 2)
-	apply_rect(strip, rect_full(0.39, 0.60, 0.96, 0.76))
-	parent.add_child(strip)
+	apply_rect(strip, rect_full(0.155, 0.105, 0.835, 0.790))
+	art.add_child(strip)
 	var visible_count = min(4, flowers.size())
 	for i in range(visible_count):
-		strip.add_child(make_tile_view(str(flowers[i]), Vector2(22, 31), false, Callable()))
+		var tile_view = make_tile_view(str(flowers[i]), Vector2(22, 31), false, Callable())
+		tile_view.name = "SeatFlowerTile_%d" % i
+		strip.add_child(tile_view)
 	if flowers.size() > visible_count:
 		var more = make_label(strip, "+%d" % (flowers.size() - visible_count), 11, Color(0.96, 0.86, 0.58), true)
+		more.name = "SeatFlowerMoreBadge"
 		more.custom_minimum_size = Vector2(24, 31)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(10)
+		tw.tween_property(glow, "modulate:a", 0.35, 0.80).from(0.88)
+		tw.tween_property(glow, "modulate:a", 0.88, 0.80).from(0.35)
 	return true
 
 func draw_table_log(parent: Control) -> void:
@@ -4352,8 +4099,15 @@ func draw_table_log(parent: Control) -> void:
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		configure_clipped_label(empty)
 		return
+	draw_table_log_timeline(panel, recent.size())
 	for i in range(recent.size()):
 		draw_table_log_row(panel, i, str(recent[i]))
+
+func draw_table_log_timeline(parent: Control, row_count: int) -> Control:
+	var rail_bottom = 0.340 + float(max(0, row_count - 1)) * 0.215
+	var rail = make_panel(parent, rect_full(0.092, 0.342, 0.112, rail_bottom + 0.085), Color(0.78, 0.66, 0.34, 0.16), 999, Color(0.88, 0.76, 0.44, 0.16), 0)
+	rail.name = "TableLogTimelineRail"
+	return rail
 
 func table_log_tail(limit: int) -> Array[String]:
 	var result: Array[String] = []
@@ -4367,6 +4121,14 @@ func draw_table_log_row(parent: Control, index: int, text: String) -> void:
 	var row = make_panel(parent, rect_full(0.045, top, 0.955, top + 0.175), Color(0.026, 0.044, 0.044, 0.76), 8, Color(1.0, 1.0, 1.0, 0.030), 0)
 	var tag = table_log_tag(text)
 	var tag_color = table_log_tag_color(tag)
+	var node = make_panel(row, rect_full(0.006, 0.34, 0.034, 0.66), Color(tag_color.r, tag_color.g, tag_color.b, 0.30), 999, Color(tag_color.r, tag_color.g, tag_color.b, 0.56), 0)
+	node.name = "TableLogTimelineNode"
+	var connector = make_color_rect(rect_full(0.034, 0.49, 0.058, 0.54), Color(tag_color.r, tag_color.g, tag_color.b, 0.22))
+	connector.name = "TableLogTimelineConnector"
+	row.add_child(connector)
+	if index == 2:
+		var glow = make_panel(row, rect_full(0.000, 0.26, 0.044, 0.74), Color(tag_color.r, tag_color.g, tag_color.b, 0.12), 999, Color(tag_color.r, tag_color.g, tag_color.b, 0.32), 0)
+		glow.name = "TableLogLatestGlow"
 	var badge = make_panel(row, rect_full(0.035, 0.22, 0.205, 0.78), tag_color.darkened(0.16), 6, tag_color, 0)
 	var badge_text = make_label(badge, tag, 10, Color(0.98, 0.96, 0.86), true)
 	apply_rect(badge_text, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -4600,6 +4362,15 @@ func draw_round_summary(parent: Control) -> void:
 	make_panel(panel, ROUND_SUMMARY_HEADER_RECT, Color(0.042, 0.054, 0.052, 0.82), 22, Color(1.0, 1.0, 1.0, 0.032))
 	# 左侧金色装饰
 	panel.add_child(make_color_rect(rect_full(0.006, 0.04, 0.012, 0.96), Color(0.90, 0.76, 0.36, 0.68)))
+	draw_round_summary_ambience(panel)
+
+	# 标题 - 始终显示
+	var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 26, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, ROUND_SUMMARY_TITLE_RECT)
+
+	# 胜利丝带和星光 - 始终显示
+	draw_summary_victory_ribbon(panel)
+	draw_animation_preview(panel, rect_full(0.705, 0.035, 0.785, 0.145), "victory_sparkle")
 
 	# 结算面板弹出动画
 	if fx_enabled_effective():
@@ -4609,11 +4380,6 @@ func draw_round_summary(parent: Control) -> void:
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.22).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-
-		var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 26, Color(0.94, 0.86, 0.48), true)
-		apply_rect(title, ROUND_SUMMARY_TITLE_RECT)
-		draw_summary_victory_ribbon(panel)
-		draw_animation_preview(panel, rect_full(0.705, 0.035, 0.785, 0.145), "victory_sparkle")
 
 	# 胡牌详情展示（如果有）
 	if not last_win_score.is_empty() and int(last_win_score.get("fan", 0)) > 0:
@@ -4637,6 +4403,52 @@ func draw_round_summary(parent: Control) -> void:
 		var next_dealer = dealer_seat if offline_dealer_repeat else (dealer_seat + 1) % 4
 		var next = make_badge(panel, ROUND_SUMMARY_NEXT_DEALER_RECT, "下一局庄家  %s" % players[next_dealer]["name"], 13, Color(0.030, 0.046, 0.048, 0.90), Color(0.46, 0.40, 0.24, 0.36), Color(0.82, 0.86, 0.76))
 		next.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func draw_round_summary_ambience(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "RoundSummaryAmbience"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.0, 0.0, 1.0, 1.0))
+	parent.add_child(art)
+	var wash = make_color_rect(rect_full(0.018, 0.170, 0.982, 0.960), Color(0.82, 0.66, 0.30, 0.032))
+	wash.name = "RoundSummaryAmbienceWash"
+	art.add_child(wash)
+	var orbit = make_panel(art, rect_full(0.070, 0.720, 0.930, 0.755), Color(0.82, 0.70, 0.36, 0.13), 999, Color(0.96, 0.82, 0.46, 0.10), 0)
+	orbit.name = "RoundSummaryScoreOrbit"
+	var ranked = ranked_seats_by_score()
+	var spark_index = 0
+	for i in range(ranked.size()):
+		var seat = int(ranked[i])
+		var center = 0.095 + float(i) * 0.270
+		var delta = round_summary_score_delta(seat)
+		var accent = round_summary_delta_color(delta, i + 1)
+		var node = make_panel(art, rect_full(center - 0.020, 0.688, center + 0.020, 0.788), Color(accent.r, accent.g, accent.b, 0.42), 999, Color(accent.r, accent.g, accent.b, 0.34), 0)
+		node.name = "RoundSummaryScoreNode_%d" % seat
+		if delta != 0:
+			var spark = make_panel(art, rect_full(center - 0.034, 0.662, center + 0.034, 0.814), Color(accent.r, accent.g, accent.b, 0.10), 999, Color(accent.r, accent.g, accent.b, 0.20), 0)
+			spark.name = "RoundSummaryDeltaSpark_%d" % spark_index
+			spark_index += 1
+	if offline_last_winner >= 0 and offline_last_winner < players.size():
+		var winner_accent = SEAT_ACCENT_COLORS[offline_last_winner]
+		var beacon = make_panel(art, rect_full(0.790, 0.035, 0.965, 0.160), Color(winner_accent.r, winner_accent.g, winner_accent.b, 0.22), 999, Color(1.0, 0.86, 0.46, 0.26), 0)
+		beacon.name = "RoundSummaryWinnerBeacon"
+		var seal = make_seal_stamp(beacon, rect_full(0.070, 0.180, 0.300, 0.820), "胜", "round")
+		seal.name = "RoundSummaryWinnerBeaconSeal"
+		var ray = make_color_rect(rect_full(0.320, 0.470, 0.900, 0.530), Color(0.96, 0.82, 0.42, 0.24))
+		ray.name = "RoundSummaryWinnerBeaconRay"
+		beacon.add_child(ray)
+	if not is_offline_match_finished():
+		var gate = make_panel(art, rect_full(0.700, 0.880, 0.940, 0.950), Color(0.020, 0.040, 0.040, 0.56), 999, Color(0.74, 0.66, 0.36, 0.22), 0)
+		gate.name = "RoundSummaryNextHandGate"
+		for i in range(3):
+			var left = 0.060 + float(i) * 0.300
+			var pip = make_panel(gate, rect_full(left, 0.310, left + 0.070, 0.690), Color(0.90, 0.76, 0.34, 0.46), 999, Color(1.0, 0.88, 0.48, 0.18), 0)
+			pip.name = "RoundSummaryNextHandPip_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.tween_property(orbit, "modulate:a", 0.52, 0.72).from(1.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(orbit, "modulate:a", 1.0, 0.72).from(0.52).set_ease(Tween.EASE_IN)
+	return art
 
 func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	"""绘制胡牌详情区域 - 增强版：番种徽章化展示"""
@@ -4668,13 +4480,15 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var score_label = make_label(detail_panel, score_text, 22, Color(0.96, 0.88, 0.52), true)
 	apply_rect(score_label, rect_full(0.62, 0.06, 0.96, 0.22))
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	draw_win_detail_showcase(detail_panel, win_tile, self_draw, fan, points)
 
 	# 番种徽章列表 - 每个番种独立展示（依次弹出动画）
 	if reasons.size() > 0:
+		draw_win_detail_yaku_track(detail_panel, reasons)
 		var badge_container = HBoxContainer.new()
 		badge_container.alignment = BoxContainer.ALIGNMENT_BEGIN
 		badge_container.add_theme_constant_override("separation", 6)
-		apply_rect(badge_container, rect_full(0.04, 0.28, 0.96, 0.56))
+		apply_rect(badge_container, rect_full(0.04, 0.28, 0.70, 0.56))
 		detail_panel.add_child(badge_container)
 
 		for i in range(reasons.size()):
@@ -4699,6 +4513,61 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	if limit_name != "":
 		var limit_badge = make_badge(detail_panel, rect_full(0.70, 0.70, 0.96, 0.92), limit_name, 12, Color(0.72, 0.32, 0.28, 0.92), Color(0.96, 0.66, 0.42, 0.48), Color(0.96, 0.94, 0.88))
 		limit_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func draw_win_detail_yaku_track(parent: Control, reasons: Array) -> Control:
+	var track = Control.new()
+	track.name = "WinDetailYakuTrack"
+	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(track, rect_full(0.04, 0.595, 0.70, 0.700))
+	parent.add_child(track)
+	var count = min(5, max(1, reasons.size()))
+	var rail = make_panel(track, rect_full(0.04, 0.44, 0.96, 0.56), Color(0.82, 0.70, 0.36, 0.18), 999, Color(0.92, 0.80, 0.46, 0.18), 0)
+	rail.name = "WinDetailYakuRail"
+	for i in range(count):
+		var reason = str(reasons[i])
+		var accent = fan_badge_color(reason)
+		var center = 0.10 + float(i) * (0.80 / float(max(1, count - 1))) if count > 1 else 0.50
+		var node = make_panel(track, rect_full(center - 0.030, 0.24, center + 0.030, 0.76), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(accent.r, accent.g, accent.b, 0.56), 0)
+		node.name = "WinDetailYakuNode_%d" % i
+		if i == 0:
+			var glow = make_panel(track, rect_full(center - 0.046, 0.12, center + 0.046, 0.88), Color(accent.r, accent.g, accent.b, 0.12), 999, Color(accent.r, accent.g, accent.b, 0.26), 0)
+			glow.name = "WinDetailYakuLeadGlow"
+	return track
+
+func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool, fan: int, points: int) -> Control:
+	var showcase = Control.new()
+	showcase.name = "WinDetailShowcase"
+	showcase.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(showcase, rect_full(0.72, 0.27, 0.96, 0.68))
+	parent.add_child(showcase)
+	make_cloud_decoration(showcase, rect_full(-0.08, 0.06, 0.56, 0.82), "gold", false)
+	make_panel(showcase, rect_full(0.16, 0.08, 0.90, 0.92), Color(0.018, 0.036, 0.038, 0.72), 18, Color(0.88, 0.72, 0.32, 0.30), 0)
+	if win_tile != "":
+		var tile = make_tile_view(win_tile, Vector2(52, 72), false, Callable(), true)
+		tile.name = "WinDetailTile"
+		showcase.add_child(tile)
+		apply_rect(tile, rect_full(0.10, 0.10, 0.48, 0.88))
+	else:
+		add_lucide_icon(showcase, "trophy", rect_full(0.12, 0.22, 0.44, 0.78), GOLD_BRIGHT)
+	var seal_text = "摸" if self_draw else "胡"
+	var seal = make_seal_stamp(showcase, rect_full(0.52, 0.06, 0.88, 0.52), seal_text, "round")
+	seal.name = "WinDetailSeal"
+	var fan_label = make_label(showcase, "%d番" % fan, 15, Color(0.96, 0.88, 0.58), true)
+	apply_rect(fan_label, rect_full(0.52, 0.50, 0.92, 0.72))
+	var point_label = make_label(showcase, compact_score_text(points), 13, Color(0.74, 0.84, 0.76), true)
+	apply_rect(point_label, rect_full(0.52, 0.70, 0.92, 0.90))
+	var pip_count = min(6, max(1, fan))
+	for i in range(pip_count):
+		var left = 0.08 + float(i) * 0.045
+		make_panel(showcase, rect_full(left, 0.02, left + 0.030, 0.08), Color(0.96, 0.80, 0.34, 0.70), 999, Color(1.0, 0.92, 0.56, 0.30), 0)
+	if fx_enabled_effective():
+		showcase.modulate = Color(1, 1, 1, 0)
+		showcase.scale = Vector2(0.92, 0.92)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(showcase, "modulate:a", 1.0, 0.24).from(0.0).set_delay(0.08)
+		tw.tween_property(showcase, "scale", Vector2(1.0, 1.0), 0.24).from(Vector2(0.92, 0.92)).set_delay(0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	return showcase
 
 func fan_badge_color(reason: String) -> Color:
 	# 高番型 - 金色
@@ -4728,9 +4597,13 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	var delta = round_summary_score_delta(seat)
 	var accent = round_summary_delta_color(delta, rank)
 	var row = make_panel(parent, row_rect, Color(0.016, 0.026, 0.030, 0.92), 11, accent.darkened(0.10), 0)
+	row.name = "RoundSummaryRankRow_%d" % seat
 	row.add_child(make_color_rect(rect_full(0.0, 0.0, 0.026, 1.0), accent))
 	var rank_badge = make_badge(row, rect_full(0.045, 0.18, 0.155, 0.82), "第%d" % rank, 12, accent.darkened(0.12), accent.lightened(0.10), Color(0.96, 0.94, 0.84))
 	rank_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if seat == offline_last_winner:
+		var winner_seal = make_seal_stamp(row, rect_full(0.020, 0.080, 0.060, 0.480), "胜", "round")
+		winner_seal.name = "RoundSummaryWinnerSeal"
 	var name = make_label(row, str(players[seat]["name"]), 14, UI_TEXT_MAIN, true)
 	apply_rect(name, rect_full(0.185, 0.12, 0.500, 0.88))
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -4747,6 +4620,46 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	apply_rect(flowers, rect_full(0.860, 0.12, 0.970, 0.88))
 	flowers.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(flowers)
+	draw_round_summary_delta_bar(row, delta)
+	if fx_enabled_effective():
+		row.modulate = Color(1, 1, 1, 0)
+		row.offset_left = -10.0
+		row.offset_right = -10.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		var delay = 0.14 + float(rank - 1) * 0.072
+		tw.tween_property(row, "modulate:a", 1.0, 0.22).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
+		tw.tween_property(row, "offset_left", 0.0, 0.22).from(-18.0).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(row, "offset_right", 0.0, 0.22).from(-18.0).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		# 分数变化从右侧飞入 / Score delta fly-in
+		var delta_bar = row.get_node_or_null("RoundSummaryDeltaBar")
+		if delta_bar != null and is_instance_valid(delta_bar):
+			delta_bar.modulate.a = 0.0
+			var d_tw := create_tween()
+			d_tw.tween_property(delta_bar, "modulate:a", 1.0, 0.18).from(0.0).set_delay(delay + 0.12).set_ease(Tween.EASE_OUT)
+
+func draw_round_summary_delta_bar(row: Control, delta: int) -> Control:
+	var bar_root = Control.new()
+	bar_root.name = "RoundSummaryDeltaBar"
+	bar_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(bar_root, rect_full(0.185, 0.785, 0.970, 0.910))
+	row.add_child(bar_root)
+	make_panel(bar_root, rect_full(0.0, 0.22, 1.0, 0.78), Color(0.006, 0.014, 0.016, 0.72), 999, Color(0.88, 0.78, 0.52, 0.10), 0)
+	var fraction = round_summary_delta_bar_fraction(delta)
+	var center = 0.5
+	var accent = Color(0.30, 0.64, 0.46, 0.78) if delta >= 0 else Color(0.68, 0.34, 0.30, 0.78)
+	var left = center if delta >= 0 else center - fraction * 0.48
+	var right = center + fraction * 0.48 if delta >= 0 else center
+	var fill = make_panel(bar_root, rect_full(left, 0.18, right, 0.82), accent, 999, accent.lightened(0.18), 0)
+	fill.name = "RoundSummaryDeltaBarFill"
+	make_panel(bar_root, rect_full(0.492, 0.02, 0.508, 0.98), Color(0.88, 0.78, 0.50, 0.34), 999, Color(0, 0, 0, 0), 0)
+	return bar_root
+
+func round_summary_delta_bar_fraction(delta: int) -> float:
+	var max_delta = 1
+	for value in last_score_deltas:
+		max_delta = max(max_delta, abs(int(value)))
+	return clamp(float(abs(delta)) / float(max_delta), 0.0, 1.0)
 
 func round_summary_score_delta(seat: int) -> int:
 	if seat < 0 or seat >= last_score_deltas.size():
@@ -4791,6 +4704,7 @@ func compact_score_text(value: int) -> String:
 func draw_hand(parent: Control) -> void:
 	# 手牌托盘 - 增强视觉效果
 	var tray = make_panel(parent, HAND_TRAY_RECT, Color(0.014, 0.022, 0.024, 0.98), 22, Color(0.62, 0.54, 0.34, 0.56), 4)
+	tray.name = "HandTray"
 	# 顶部栏
 	make_panel(tray, HAND_TRAY_TOP_RAIL_RECT, Color(0.062, 0.070, 0.058, 0.82), 14, Color(1.0, 0.88, 0.45, 0.20))
 	# 分隔线
@@ -4805,7 +4719,9 @@ func draw_hand(parent: Control) -> void:
 
 	# 状态徽章
 	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_tray_state_text(), 12, hand_tray_state_fill(), hand_tray_state_border(), Color(0.92, 0.92, 0.84))
+	state_badge.name = "HandTrayStateBadge"
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_hand_tray_state_art(tray)
 
 	# 新手提示：首次出牌时显示
 	if show_hand_hint and tutorial_step == 0 and can_self_discard():
@@ -4825,6 +4741,8 @@ func draw_hand(parent: Control) -> void:
 		interactive_guide_type = "discard"
 
 	var hand = get_self_hand()
+	draw_hand_tray_suit_flow(tray, hand)
+	draw_hand_tray_momentum_art(tray, hand)
 	var hand_layout = hand_layout_metrics(hand)
 	var hand_box = HBoxContainer.new()
 	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -4850,6 +4768,10 @@ func draw_hand(parent: Control) -> void:
 	var tile_width = float(hand_layout.get("tile_width", HAND_TILE_MAX_WIDTH))
 	var tile_height = float(hand_layout.get("tile_height", tile_width * HAND_TILE_ASPECT))
 	var group_gap_width = float(hand_layout.get("group_gap_width", 12.0))
+	var drawn_tile = str(offline_last_draw.get("tile", ""))
+	var drawn_serial = int(offline_last_draw.get("serial", -1))
+	var should_animate_drawn_tile = mode == "offline" and fx_enabled_effective() and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
+	var draw_animation_applied := false
 	for i in range(hand.size()):
 		var index = i
 		var tile = str(hand[i])
@@ -4872,7 +4794,135 @@ func draw_hand(parent: Control) -> void:
 				human_discard(index)
 			else:
 				send_online_action({"type": "discard", "tile": tile}, "打出%s" % tile_label(tile))
-		hand_box.add_child(make_tile_view(tile, Vector2(tile_width, tile_height), clickable, callback, highlighted, risk, hint_badge))
+		var tile_node = make_tile_view(tile, Vector2(tile_width, tile_height), clickable, callback, highlighted, risk, hint_badge)
+		hand_box.add_child(tile_node)
+		if should_animate_drawn_tile and not draw_animation_applied and tile == drawn_tile:
+			draw_animation_applied = true
+			fx_last_animated_draw_serial = drawn_serial
+			play_hand_draw_tile_animation(tile_node, str(offline_last_draw.get("source", "normal")))
+
+func draw_hand_tray_state_art(parent: Control) -> Control:
+	var state = hand_tray_state_text()
+	var accent = hand_tray_state_fill()
+	var art = Control.new()
+	art.name = "HandTrayStateArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.760, 0.030, 0.985, 0.150))
+	parent.add_child(art)
+	var rail = make_panel(art, rect_full(0.02, 0.70, 0.98, 0.88), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+	rail.name = "HandTrayStateRail"
+	var pulse = make_panel(art, rect_full(0.030, 0.180, 0.120, 0.620), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(accent.r, accent.g, accent.b, 0.36), 0)
+	pulse.name = "HandTrayStatePulse"
+	var icon_name = hand_tray_state_icon_name(state)
+	if icon_name != "":
+		add_lucide_icon(art, icon_name, rect_full(0.040, 0.210, 0.105, 0.590), Color(0.96, 0.92, 0.76, 0.82))
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(pulse, "modulate:a", 0.36, 0.64).from(0.92)
+		tw.tween_property(pulse, "modulate:a", 0.92, 0.64).from(0.36)
+	return art
+
+func hand_tray_state_icon_name(state: String) -> String:
+	match state:
+		"出牌":
+			return "zap"
+		"响应":
+			return "sparkles"
+		"结算":
+			return "trophy"
+		"等待":
+			return "pause"
+	return "info"
+
+func draw_hand_tray_suit_flow(parent: Control, hand: Array) -> Control:
+	var flow = Control.new()
+	flow.name = "HandTraySuitFlow"
+	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(flow, rect_full(0.020, 0.855, 0.235, 0.960))
+	parent.add_child(flow)
+	var counts := hand_group_counts(hand)
+	var max_count = 1
+	for value in counts:
+		max_count = max(max_count, int(value))
+	var labels := ["万", "条", "筒", "字", "花"]
+	var colors := [
+		Color(0.74, 0.46, 0.34),
+		Color(0.34, 0.62, 0.46),
+		Color(0.34, 0.52, 0.72),
+		Color(0.66, 0.56, 0.34),
+		Color(0.70, 0.42, 0.62),
+	]
+	var rail = make_panel(flow, rect_full(0.020, 0.440, 0.980, 0.570), Color(0.88, 0.74, 0.42, 0.10), 999, Color(0.96, 0.82, 0.46, 0.10), 0)
+	rail.name = "HandTraySuitRail"
+	for i in range(labels.size()):
+		var count = int(counts[i])
+		var center = 0.085 + float(i) * 0.205
+		var height = 0.22 + 0.52 * float(count) / float(max_count)
+		var color: Color = colors[i]
+		var node = make_panel(flow, rect_full(center - 0.035, 0.500 - height * 0.5, center + 0.035, 0.500 + height * 0.5), Color(color.r, color.g, color.b, 0.54 if count > 0 else 0.18), 999, Color(color.r, color.g, color.b, 0.34), 0)
+		node.name = "HandTraySuitNode_%s" % labels[i]
+		var label = make_label(flow, labels[i], 8, Color(0.96, 0.88, 0.62, 0.88 if count > 0 else 0.42), true)
+		label.name = "HandTraySuitLabel_%s" % labels[i]
+		apply_rect(label, rect_full(center - 0.055, 0.680, center + 0.055, 0.980))
+		configure_clipped_label(label)
+	if has_pending_danger_discard():
+		var danger = make_panel(flow, rect_full(0.000, 0.000, 1.000, 1.000), Color(0.92, 0.34, 0.24, 0.08), 999, Color(1.0, 0.58, 0.36, 0.18), 0)
+		danger.name = "HandTraySuitDangerGlow"
+	return flow
+
+func draw_hand_tray_momentum_art(parent: Control, hand: Array) -> Control:
+	var art = Control.new()
+	art.name = "HandTrayMomentumArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.250, 0.835, 0.745, 0.965))
+	parent.add_child(art)
+	var accent = hand_tray_state_fill()
+	var active = can_self_discard()
+	var rail = make_color_rect(rect_full(0.020, 0.420, 0.980, 0.580), Color(accent.r, accent.g, accent.b, 0.20 if active else 0.10))
+	rail.name = "HandTrayMomentumRail"
+	art.add_child(rail)
+	var track = make_color_rect(rect_full(0.060, 0.480, 0.940, 0.520), Color(0.96, 0.86, 0.52, 0.22 if active else 0.08))
+	track.name = "HandTrayMomentumTrack"
+	art.add_child(track)
+	var count = max(1, hand.size())
+	var visible_pips = min(6, max(3, int(ceil(float(count) / 3.0))))
+	for i in range(visible_pips):
+		var center = 0.090 + (0.820 * float(i) / float(max(1, visible_pips - 1)))
+		var pip = make_panel(art, rect_full(center - 0.014, 0.305, center + 0.014, 0.695), Color(accent.r, accent.g, accent.b, 0.48 if active else 0.18), 999, Color(1.0, 0.88, 0.54, 0.18), 0)
+		pip.name = "HandTrayMomentumPip_%d" % i
+	var focus_left = 0.790 if active else 0.060
+	var focus = make_panel(art, rect_full(focus_left, 0.145, focus_left + 0.085, 0.855), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.88, 0.54, 0.30), 0)
+	focus.name = "HandTrayMomentumFocus"
+	var drawn_tile = str(offline_last_draw.get("tile", ""))
+	if mode == "offline" and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "":
+		var draw_badge = make_panel(art, rect_full(0.865, 0.050, 0.990, 0.930), Color(0.030, 0.044, 0.040, 0.80), 10, Color(0.92, 0.76, 0.34, 0.30), 0)
+		draw_badge.name = "HandTrayLastDrawBadge"
+		var badge_label = "杠" if str(offline_last_draw.get("source", "")) == "gang" else "摸"
+		var draw_label = make_label(draw_badge, badge_label, 11, Color(0.96, 0.86, 0.56, 0.92), true)
+		draw_label.name = "HandTrayLastDrawLabel"
+		draw_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		draw_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		apply_rect(draw_label, rect_full(0.0, 0.08, 1.0, 0.92))
+		configure_clipped_label(draw_label)
+	if has_pending_danger_discard():
+		var warning = make_color_rect(rect_full(0.010, 0.120, 0.024, 0.880), Color(0.96, 0.36, 0.24, 0.46))
+		warning.name = "HandTrayMomentumWarning"
+		art.add_child(warning)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(10)
+		tw.tween_property(focus, "modulate:a", 0.46, 0.55).from(1.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(focus, "modulate:a", 1.0, 0.55).from(0.46).set_ease(Tween.EASE_IN)
+	return art
+
+func hand_group_counts(hand: Array) -> Array[int]:
+	var counts: Array[int] = [0, 0, 0, 0, 0]
+	for tile in hand:
+		var group = hand_group_index(str(tile))
+		if group >= 0 and group < counts.size():
+			counts[group] += 1
+	return counts
 
 func hand_layout_metrics(hand: Array) -> Dictionary:
 	return hand_layout_metrics_for_content(hand, hand_content_pixel_size())
@@ -5100,6 +5150,7 @@ func draw_actions(parent: Control) -> void:
 			# 新手引导：吃碰杠提示
 			if interactive_guide_active and interactive_guide_type == "claim":
 				show_toast("💡 对手打出了一张牌，你可以选择吃/碰/杠/胡或过")
+			draw_pending_claim_illustration(parent)
 			var claim_recommendation = recommended_claim_report() if player_ai_assist_enabled() else {}
 			for claim in offline_pending_claim.get("options", []):
 				var claim_name = str(claim)
@@ -5220,9 +5271,172 @@ func draw_actions(parent: Control) -> void:
 	var voice = make_action_button("闭麦" if voice_enabled else "语音", Color(0.74, 0.24, 0.24) if voice_enabled else Color(0.24, 0.52, 0.72), func() -> void:
 		toggle_voice_chat()
 	)
+	voice.name = "VoiceActionButton"
+	draw_voice_button_art(voice, voice_enabled, voice_peak)
 	action_bar.add_child(voice)
 	draw_action_dock(parent)
 	finalize_action_bar_layout()
+
+func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> Control:
+	var art = Control.new()
+	art.name = "VoiceButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.650, 0.150, 0.965, 0.850))
+	button.add_child(art)
+	var accent = Color(0.42, 0.86, 0.64) if active else Color(0.70, 0.42, 0.42)
+	var base = make_panel(art, rect_full(0.020, 0.120, 0.300, 0.880), Color(accent.r, accent.g, accent.b, 0.26 if active else 0.18), 999, Color(accent.r, accent.g, accent.b, 0.32), 0)
+	base.name = "VoiceButtonStatusDot"
+	var pulse_alpha = clamp(0.18 + peak * 0.36, 0.18, 0.54) if active else 0.10
+	var pulse = make_panel(art, rect_full(0.000, 0.060, 0.340, 0.940), Color(accent.r, accent.g, accent.b, pulse_alpha), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	pulse.name = "VoiceButtonPulse"
+	var listen_ring = make_panel(art, rect_full(0.000, 0.000, 0.360, 1.000), Color(accent.r, accent.g, accent.b, 0.070 if active else 0.030), 999, Color(accent.r, accent.g, accent.b, 0.090 if active else 0.040), 0)
+	listen_ring.name = "VoiceButtonListenRing"
+	var meter = make_panel(art, rect_full(0.405, 0.815, 0.930, 0.900), Color(0.020, 0.036, 0.038, 0.68), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	meter.name = "VoiceButtonPeakMeter"
+	var meter_fill_right = 0.045 + 0.910 * (clamp(peak, 0.0, 1.0) if active else 0.10)
+	var meter_fill = make_panel(meter, rect_full(0.045, 0.260, meter_fill_right, 0.740), Color(accent.r, accent.g, accent.b, 0.54 if active else 0.18), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	meter_fill.name = "VoiceButtonPeakFill"
+	for i in range(3):
+		var height = (0.24 + float(i) * 0.15) * (0.72 + peak * 0.38 if active else 1.0)
+		var top = 0.50 - height * 0.5
+		var left = 0.430 + float(i) * 0.155
+		var wave = make_panel(art, rect_full(left, top, left + 0.080, top + height), Color(accent.r, accent.g, accent.b, 0.68 if active else 0.28), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+		wave.name = "VoiceButtonWave_%d" % i
+		var tick = make_panel(art, rect_full(left + 0.018, 0.080, left + 0.062, 0.155), Color(accent.r, accent.g, accent.b, 0.30 if active else 0.12), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+		tick.name = "VoiceButtonPeakTick_%d" % i
+	if not active:
+		var slash = make_panel(art, rect_full(0.385, 0.410, 0.930, 0.570), Color(0.90, 0.72, 0.62, 0.48), 999, Color(0.96, 0.78, 0.66, 0.20), 0)
+		slash.name = "VoiceButtonMutedSlash"
+		slash.rotation = -0.42
+		var lock = make_panel(art, rect_full(0.040, 0.680, 0.245, 0.920), Color(0.78, 0.48, 0.42, 0.22), 999, Color(0.92, 0.64, 0.56, 0.12), 0)
+		lock.name = "VoiceButtonMutedLock"
+	if active and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(pulse, "modulate:a", 0.38, 0.72).from(0.92)
+		tw.tween_property(pulse, "modulate:a", 0.92, 0.72).from(0.38)
+		var ring_tw := create_tween()
+		ring_tw.set_loops(3600)
+		ring_tw.tween_property(listen_ring, "modulate:a", 0.34, 0.90).from(0.90)
+		ring_tw.tween_property(listen_ring, "modulate:a", 0.90, 0.90).from(0.34)
+	return art
+
+func draw_pending_claim_illustration(parent: Control) -> void:
+	if mode != "offline" or offline_phase != "pending_claim":
+		return
+	var tile = str(offline_pending_claim.get("tile", ""))
+	if tile == "":
+		return
+	var panel = make_panel(parent, rect_full(0.500, 0.724, 0.982, 0.842), Color(0.014, 0.030, 0.034, 0.96), 16, Color(0.76, 0.58, 0.30, 0.44), 4)
+	panel.name = "PendingClaimIllustration"
+	panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.012, 1.0), Color(0.92, 0.70, 0.32, 0.64)))
+	panel.add_child(make_color_rect(rect_full(0.020, 0.080, 0.982, 0.105), Color(1.0, 0.86, 0.45, 0.12)))
+	make_cloud_decoration(panel, rect_full(0.64, -0.14, 1.04, 0.64), "mist", false).name = "PendingClaimMistCloud"
+	var source_seat = int(offline_pending_claim.get("from_seat", -1))
+	var source_name = str(players[source_seat]["name"]) if source_seat >= 0 and source_seat < players.size() else "对手"
+	var source_badge = make_badge(panel, rect_full(0.035, 0.155, 0.162, 0.485), pending_claim_source_badge_text(source_seat), 11, Color(0.18, 0.32, 0.36, 0.92), Color(0.40, 0.68, 0.64, 0.42), Color(0.94, 0.96, 0.90))
+	source_badge.name = "PendingClaimSourceBadge"
+	source_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_pending_claim_flow_art(panel, source_seat)
+	var title = make_label(panel, "%s 打出" % source_name, 12, Color(0.72, 0.78, 0.72), true)
+	apply_rect(title, rect_full(0.175, 0.105, 0.405, 0.345))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var tile_view = make_tile_view(tile, Vector2(42, 58), false, Callable(), true)
+	tile_view.name = "PendingClaimTile"
+	panel.add_child(tile_view)
+	apply_rect(tile_view, rect_full(0.300, 0.155, 0.405, 0.900))
+	var tile_glow = make_panel(panel, rect_full(0.286, 0.118, 0.418, 0.938), Color(0.96, 0.72, 0.30, 0.08), 14, Color(1.0, 0.84, 0.42, 0.28), 0)
+	tile_glow.name = "PendingClaimTileGlow"
+	panel.move_child(tile_glow, max(0, tile_view.get_index()))
+	var tile_name = make_label(panel, tile_label(tile), 18, Color(0.96, 0.88, 0.58), true)
+	apply_rect(tile_name, rect_full(0.425, 0.105, 0.585, 0.350))
+	tile_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var focus = make_label(panel, pending_claim_focus_text(), 12, Color(0.92, 0.88, 0.66), true)
+	focus.name = "PendingClaimFocusText"
+	apply_rect(focus, rect_full(0.425, 0.375, 0.960, 0.565))
+	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(focus)
+	var hint = make_label(panel, claim_options_text(offline_pending_claim), 11, Color(0.76, 0.84, 0.78), false)
+	apply_rect(hint, rect_full(0.425, 0.610, 0.650, 0.850))
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(hint)
+	var rail = make_panel(panel, rect_full(0.662, 0.555, 0.970, 0.870), Color(0.010, 0.022, 0.024, 0.62), 12, Color(0.88, 0.68, 0.32, 0.22), 0)
+	rail.name = "PendingClaimOptionRail"
+	var options: Array = offline_pending_claim.get("options", [])
+	var left = 0.030
+	for i in range(min(4, options.size())):
+		var claim_name = str(options[i])
+		var chip_color = claim_color(claim_name)
+		var chip = make_badge(rail, rect_full(left + float(i) * 0.190, 0.180, left + float(i) * 0.190 + 0.155, 0.820), claim_label(claim_name), 11, chip_color.darkened(0.18), chip_color.lightened(0.12), Color(0.98, 0.94, 0.84))
+		chip.name = "PendingClaimOption_%s" % claim_name
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		draw_pending_claim_option_spark(rail, left + float(i) * 0.190, chip_color, i)
+	var pass_chip = make_badge(rail, rect_full(0.805, 0.180, 0.970, 0.820), "过", 11, Color(0.20, 0.26, 0.28, 0.94), Color(0.46, 0.50, 0.48, 0.32), Color(0.86, 0.88, 0.82))
+	pass_chip.name = "PendingClaimPassChip"
+	pass_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if fx_enabled_effective():
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_top = 10.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.18).from(0.0)
+		tw.tween_property(panel, "offset_top", 0.0, 0.18).from(10.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(tile_view, "scale", Vector2(1.0, 1.0), 0.20).from(Vector2(0.88, 0.88)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(tile_glow, "modulate:a", 0.34, 0.28).from(0.84)
+
+func draw_pending_claim_flow_art(parent: Control, source_seat: int) -> Control:
+	var flow = Control.new()
+	flow.name = "PendingClaimFlowArt"
+	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(flow, rect_full(0.150, 0.438, 0.316, 0.690))
+	parent.add_child(flow)
+	var accent = SEAT_ACCENT_COLORS[source_seat] if source_seat >= 0 and source_seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	for i in range(3):
+		var left = 0.020 + float(i) * 0.260
+		var dash = make_panel(flow, rect_full(left, 0.430, left + 0.150, 0.570), Color(accent.r, accent.g, accent.b, 0.36), 999, Color(0.96, 0.78, 0.38, 0.18), 0)
+		dash.name = "PendingClaimFlowDash_%d" % i
+	var arrow = make_label(flow, ">", 16, Color(0.96, 0.82, 0.44, 0.82), true)
+	arrow.name = "PendingClaimFlowArrow"
+	apply_rect(arrow, rect_full(0.780, 0.080, 0.980, 0.920))
+	if fx_enabled_effective():
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(arrow, "offset_left", 3.0, 0.42).from(0.0)
+		tw.parallel().tween_property(arrow, "modulate:a", 0.46, 0.42).from(0.92)
+		tw.tween_property(arrow, "offset_left", 0.0, 0.42).from(3.0)
+		tw.parallel().tween_property(arrow, "modulate:a", 0.92, 0.42).from(0.46)
+	return flow
+
+func draw_pending_claim_option_spark(parent: Control, left: float, color: Color, index: int) -> Control:
+	var spark = make_panel(parent, rect_full(left + 0.060, 0.030, left + 0.095, 0.170), Color(color.r, color.g, color.b, 0.28), 999, Color(1.0, 0.90, 0.54, 0.18), 0)
+	spark.name = "PendingClaimOptionSpark_%d" % index
+	if fx_enabled_effective():
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(spark, "modulate:a", 0.26, 0.58).from(0.88).set_delay(float(index) * 0.08)
+		tw.tween_property(spark, "modulate:a", 0.88, 0.58).from(0.26)
+	return spark
+
+func pending_claim_source_badge_text(source_seat: int) -> String:
+	if source_seat >= 0 and source_seat < CENTER_WIND_LABELS.size():
+		return CENTER_WIND_LABELS[source_seat] + "家"
+	return "对手"
+
+func pending_claim_focus_text() -> String:
+	if bool(offline_pending_claim.get("rob_gang", false)):
+		return "抢杠窗口 · 优先确认胡牌"
+	var options: Array = offline_pending_claim.get("options", [])
+	if options.has("hu"):
+		return "胡牌机会 · 可选择胡或过"
+	if options.has("gang"):
+		return "杠牌机会 · 注意后续补牌"
+	if options.has("peng") and options.has("chi"):
+		return "吃碰选择 · 比较进张与安全"
+	if options.has("peng"):
+		return "碰牌机会 · 确认是否加速成型"
+	if options.has("chi"):
+		return "吃牌机会 · 选择顺子组合"
+	return "响应窗口 · 可操作或过"
 
 func draw_action_dock(parent: Control) -> void:
 	var count = action_bar_button_count()
@@ -5230,6 +5444,17 @@ func draw_action_dock(parent: Control) -> void:
 		return
 	var dock = make_panel(parent, action_dock_rect_for_count(count), Color(0.014, 0.021, 0.024, 0.76), 16, Color(0.46, 0.40, 0.24, 0.24), 2)
 	dock.name = "ActionButtonDock"
+	var left_tail = make_color_rect(rect_full(0.010, 0.180, 0.020, 0.820), Color(0.92, 0.72, 0.34, 0.32))
+	left_tail.name = "ActionDockLeftTail"
+	dock.add_child(left_tail)
+	var right_tail = make_color_rect(rect_full(0.980, 0.180, 0.990, 0.820), Color(0.92, 0.72, 0.34, 0.26))
+	right_tail.name = "ActionDockRightTail"
+	dock.add_child(right_tail)
+	for i in range(min(8, count)):
+		var left = 0.065 + float(i) * 0.050
+		var dot = make_color_rect(rect_full(left, 0.830, left + 0.014, 0.870), Color(0.88, 0.70, 0.34, 0.28))
+		dot.name = "ActionDockRhythmDot_%d" % i
+		dock.add_child(dot)
 	parent.move_child(dock, max(0, action_bar.get_index()))
 	draw_action_intent_dock(parent, count)
 
@@ -5587,6 +5812,7 @@ func ensure_update_dialog() -> void:
 	var panel = make_panel(update_dialog, rect_full(0.325, 0.275, 0.675, 0.640), Color(0.016, 0.050, 0.058, 0.98), 18, Color(0.66, 0.54, 0.24, 0.62))
 	var title = make_label(panel, "游戏更新", 22, Color(0.90, 0.82, 0.46), true)
 	apply_rect(title, rect_full(0.06, 0.06, 0.94, 0.22))
+	draw_update_dialog_art(panel)
 	update_status_label = make_label(panel, "", 18, Color(0.84, 1.0, 0.90), false)
 	apply_rect(update_status_label, rect_full(0.08, 0.25, 0.92, 0.42))
 	update_progress = ProgressBar.new()
@@ -5619,6 +5845,54 @@ func ensure_update_dialog() -> void:
 	row.add_child(update_secondary_button)
 	refresh_update_dialog()
 
+func draw_update_dialog_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "UpdateDialogArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.070, 0.420, 0.930, 0.585))
+	parent.add_child(art)
+	var rail = make_panel(art, rect_full(0.045, 0.380, 0.955, 0.620), Color(0.014, 0.034, 0.038, 0.90), 999, Color(0.28, 0.38, 0.36, 0.46), 0)
+	rail.name = "UpdateDialogArtRail"
+	update_art_fill = make_panel(rail, rect_full(0.018, 0.260, 0.018, 0.740), Color(0.28, 0.68, 0.50, 0.58), 999, Color(0.64, 0.86, 0.62, 0.24), 0)
+	update_art_fill.name = "UpdateDialogArtFill"
+	var pack = make_panel(art, rect_full(0.012, 0.170, 0.120, 0.830), Color(0.050, 0.040, 0.026, 0.72), 12, Color(0.88, 0.72, 0.34, 0.32), 0)
+	pack.name = "UpdateDialogPackageIcon"
+	add_lucide_icon(pack, "download", rect_full(0.24, 0.22, 0.76, 0.78), GOLD_BRIGHT)
+	update_art_status_light = make_panel(art, rect_full(0.890, 0.240, 0.956, 0.760), Color(0.42, 0.58, 0.52, 0.36), 999, Color(0.72, 0.86, 0.70, 0.24), 0)
+	update_art_status_light.name = "UpdateDialogStatusLight"
+	for i in range(4):
+		var left = 0.170 + float(i) * 0.160
+		var pip = make_panel(art, rect_full(left, 0.240, left + 0.050, 0.760), Color(0.70, 0.60, 0.34, 0.20), 999, Color(0.90, 0.78, 0.44, 0.12), 0)
+		pip.name = "UpdateDialogPacketPip_%d" % i
+	draw_update_dialog_stage_map(parent)
+	return art
+
+func draw_update_dialog_stage_map(parent: Control) -> Control:
+	var map = Control.new()
+	map.name = "UpdateDialogStageMap"
+	map.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(map, rect_full(0.120, 0.720, 0.880, 0.815))
+	parent.add_child(map)
+	var rail = make_color_rect(rect_full(0.040, 0.480, 0.960, 0.540), Color(0.82, 0.72, 0.42, 0.16))
+	rail.name = "UpdateDialogStageRail"
+	map.add_child(rail)
+	var stages := [
+		["checking", "查"],
+		["downloading", "下"],
+		["ready", "验"],
+		["install", "装"],
+	]
+	for i in range(stages.size()):
+		var stage_id = str(stages[i][0])
+		var label_text = str(stages[i][1])
+		var center = 0.080 + float(i) * 0.280
+		var node = make_panel(map, rect_full(center - 0.035, 0.180, center + 0.035, 0.820), Color(0.26, 0.36, 0.36, 0.42), 999, Color(0.54, 0.62, 0.54, 0.20), 0)
+		node.name = "UpdateDialogStageNode_%s" % stage_id
+		var label = make_label(node, label_text, 9, Color(0.92, 0.88, 0.70, 0.82), true)
+		label.name = "UpdateDialogStageGlyph_%s" % stage_id
+		apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
+	return map
+
 func refresh_update_dialog() -> void:
 	if update_state == "idle":
 		if update_dialog != null and is_instance_valid(update_dialog):
@@ -5636,11 +5910,62 @@ func refresh_update_dialog() -> void:
 			update_progress.value = 0.0
 	if update_progress_label != null and is_instance_valid(update_progress_label):
 		update_progress_label.text = update_progress_text()
+	refresh_update_dialog_art()
 	if update_primary_button != null and is_instance_valid(update_primary_button):
 		update_primary_button.visible = update_state != "checking" and update_state != "downloading" and update_state != "current"
 		update_primary_button.text = "安装" if update_state == "ready" else "重试"
 	if update_secondary_button != null and is_instance_valid(update_secondary_button):
 		update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else "关闭"
+
+func refresh_update_dialog_art() -> void:
+	if update_art_fill != null and is_instance_valid(update_art_fill):
+		var progress = 0.0
+		if update_total_bytes > 0:
+			progress = clamp(float(update_downloaded_bytes) / float(update_total_bytes), 0.0, 1.0)
+		elif update_state == "ready" or update_state == "current":
+			progress = 1.0
+		apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
+	if update_art_status_light != null and is_instance_valid(update_art_status_light):
+		var color = update_state_color()
+		update_art_status_light.add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, 0.34), 999, Color(color.r, color.g, color.b, 0.42), 1, 0))
+	refresh_update_dialog_stage_map()
+
+func refresh_update_dialog_stage_map() -> void:
+	if update_dialog == null or not is_instance_valid(update_dialog):
+		return
+	var active_index = update_stage_index()
+	var stages := ["checking", "downloading", "ready", "install"]
+	for i in range(stages.size()):
+		var stage_id = stages[i]
+		var node = update_dialog.find_child("UpdateDialogStageNode_%s" % stage_id, true, false)
+		if node is Panel:
+			var color = update_state_color() if i <= active_index else Color(0.26, 0.36, 0.36, 1.0)
+			var alpha = 0.52 if i == active_index else 0.32 if i < active_index else 0.18
+			(node as Panel).add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, alpha), 999, Color(color.r, color.g, color.b, alpha * 0.82), 1, 0))
+
+func update_stage_index() -> int:
+	match update_state:
+		"checking":
+			return 0
+		"downloading":
+			return 1
+		"ready", "current":
+			return 2
+		"error":
+			return 1
+	return 3
+
+func update_state_color() -> Color:
+	match update_state:
+		"downloading":
+			return Color(0.34, 0.72, 0.54, 1.0)
+		"ready":
+			return Color(0.86, 0.70, 0.30, 1.0)
+		"error":
+			return Color(0.86, 0.34, 0.26, 1.0)
+		"current":
+			return Color(0.42, 0.62, 0.76, 1.0)
+	return Color(0.60, 0.66, 0.58, 1.0)
 
 func update_progress_text() -> String:
 	if update_state == "checking":
@@ -5823,6 +6148,7 @@ func human_discard(index: int) -> void:
 		render_game()
 		return
 	clear_pending_danger_discard()
+	play_human_discard_fly_animation(tile, index, hand.size())
 	tile = discard_tile_by_index(0, index)
 	render_game()
 	await get_tree().process_frame
@@ -5993,7 +6319,7 @@ func commit_discard(seat: int, tile: String) -> void:
 	offline_phase = "resolving"
 	offline_turn_needs_draw = false
 	play_sfx("discard", -2.5)
-	play_fx_discard_ripple()
+	play_fx_discard_ripple(seat)
 	speak_tile_call(tile)
 	add_log("%s打出%s。" % [players[seat]["name"], tile_label(tile)])
 
@@ -6408,6 +6734,7 @@ func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String,
 			play_sfx("gang", -2.0)
 			speak_action_call("杠", tile)
 			add_log("%s杠%s。" % [players[seat]["name"], tile_label(tile)])
+			play_fx_gang_burst("open", seat)
 		"chi":
 			var choice = chi_choice if not chi_choice.is_empty() else best_chi_choice(hand, tile)
 			if choice.is_empty():
@@ -6426,6 +6753,7 @@ func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String,
 			return
 	players[seat]["melds"].append(meld)
 	record_claim_source(seat, from_seat, claim)
+	play_claim_animation(claim, tile, from_seat, seat)
 	sort_hand(hand)
 	last_discard = ""
 	last_discard_seat = -1
@@ -6435,12 +6763,14 @@ func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String,
 	offline_pending_claim.clear()
 	if claim == "gang":
 		draw_after_gang(seat)
+	play_fx_turn_switch_slide(seat)
 
 func pass_discard_to_next(from_seat: int) -> void:
 	current_seat = (from_seat + 1) % 4
 	offline_turn_needs_draw = true
 	offline_phase = "await_discard"
 	offline_pending_claim.clear()
+	play_fx_turn_switch_slide(current_seat)
 
 func record_claim_source(claimer: int, from_seat: int, claim: String) -> void:
 	if claimer < 0 or from_seat < 0 or claimer == from_seat:
@@ -10180,15 +10510,6 @@ func tile_suit_index(tile: String) -> int:
 		return -1
 	return int(index / 9)
 
-func suit_code(suit: int) -> String:
-	match suit:
-		0:
-			return "W"
-		1:
-			return "T"
-		2:
-			return "B"
-	return ""
 
 func should_ai_gang_claim(seat: int, tile: String) -> bool:
 	return bool(build_ai_claim_report(seat, "gang", tile).get("allow", false))
@@ -10467,72 +10788,7 @@ func compact_tile_run_label(tiles: Array) -> String:
 		labels.append(tile_label(str(tile)))
 	return "".join(labels)
 
-func is_number_tile(tile: String) -> bool:
-	if not tile_metadata_ready:
-		setup_tile_order()
-	if tile_number_cache.has(tile):
-		return bool(tile_number_cache[tile])
-	return tile.ends_with("W") or tile.ends_with("T") or tile.ends_with("B")
 
-func suit_label(suit: String) -> String:
-	match suit:
-		"W":
-			return "万"
-		"T":
-			return "条"
-		"B":
-			return "筒"
-	return suit
-
-func tile_counts(tiles: Array) -> Array:
-	var counts = make_empty_tile_counts()
-	for tile in tiles:
-		var index = tile_index(str(tile))
-		if index >= 0:
-			counts[index] = int(counts[index]) + 1
-	return counts
-
-func make_empty_tile_counts() -> Array:
-	return EMPTY_TILE_COUNTS_TEMPLATE.duplicate(false)
-
-func tile_count_from_counts(tile: String, counts: Array) -> int:
-	var index = tile_index(tile)
-	if index < 0 or index >= counts.size():
-		return 0
-	return int(counts[index])
-
-func tile_presence_set(tiles: Array) -> Dictionary:
-	var result: Dictionary = {}
-	for tile in tiles:
-		var code = str(tile)
-		if code != "":
-			result[code] = true
-	return result
-
-func tile_index(tile: String) -> int:
-	if not tile_metadata_ready:
-		setup_tile_order()
-	return int(tile_order.get(tile, -1))
-
-func tile_sort_index(tile: String) -> int:
-	if not tile_metadata_ready:
-		setup_tile_order()
-	if tile_sort_order.has(tile):
-		return int(tile_sort_order[tile])
-	var flower_index = FLOWER_CODES.find(tile)
-	if flower_index >= 0:
-		return TILE_CODES.size() + flower_index
-	var index = tile_index(tile)
-	if index >= 0:
-		return index
-	return TILE_CODES.size() + FLOWER_CODES.size() + 1
-
-func is_flower_tile(tile: String) -> bool:
-	if not tile_metadata_ready:
-		setup_tile_order()
-	if tile_flower_cache.has(tile):
-		return bool(tile_flower_cache[tile])
-	return FLOWER_CODES.has(tile)
 
 func tile_base_value(index: int) -> float:
 	if index < 0 or index >= TILE_BASE_VALUES.size():
@@ -10793,180 +11049,6 @@ func count_gang_melds(seat: int) -> int:
 			amount += 1
 	return amount
 
-func has_tile_list(hand: Array, tiles: Array) -> bool:
-	var copy = hand.duplicate()
-	return remove_tile_list(copy, tiles)
-
-func consume_tile_count(counts: Array, tile: String, amount: int) -> bool:
-	var index = tile_index(tile)
-	if index < 0 or index >= counts.size() or amount <= 0:
-		return false
-	if int(counts[index]) < amount:
-		return false
-	counts[index] = int(counts[index]) - amount
-	return true
-
-func consume_tile_list_counts(counts: Array, tiles: Array) -> bool:
-	var tile_size = tiles.size()
-	if tile_size == 0:
-		return true
-	if tile_size == 1:
-		return consume_tile_count(counts, str(tiles[0]), 1)
-	if tile_size == 2:
-		var first_index = tile_index(str(tiles[0]))
-		var second_index = tile_index(str(tiles[1]))
-		if first_index < 0 or second_index < 0 or first_index >= counts.size() or second_index >= counts.size():
-			return false
-		if first_index == second_index:
-			if int(counts[first_index]) < 2:
-				return false
-			counts[first_index] = int(counts[first_index]) - 2
-			return true
-		if int(counts[first_index]) <= 0 or int(counts[second_index]) <= 0:
-			return false
-		counts[first_index] = int(counts[first_index]) - 1
-		counts[second_index] = int(counts[second_index]) - 1
-		return true
-	var required: Dictionary = {}
-	for tile in tiles:
-		var index = tile_index(str(tile))
-		if index < 0 or index >= counts.size():
-			return false
-		required[index] = int(required.get(index, 0)) + 1
-	for index in required.keys():
-		if int(counts[int(index)]) < int(required[index]):
-			return false
-	for index in required.keys():
-		counts[int(index)] = int(counts[int(index)]) - int(required[index])
-	return true
-
-func restore_tile_list_counts(counts: Array, tiles: Array) -> void:
-	for tile in tiles:
-		var index = tile_index(str(tile))
-		if index >= 0 and index < counts.size():
-			counts[index] = int(counts[index]) + 1
-
-func has_tile_list_counts(counts: Array, tiles: Array) -> bool:
-	var tile_size = tiles.size()
-	if tile_size == 0:
-		return true
-	if tile_size == 1:
-		var single_index = tile_index(str(tiles[0]))
-		return single_index >= 0 and single_index < counts.size() and int(counts[single_index]) > 0
-	if tile_size == 2:
-		var first_index = tile_index(str(tiles[0]))
-		var second_index = tile_index(str(tiles[1]))
-		if first_index < 0 or second_index < 0 or first_index >= counts.size() or second_index >= counts.size():
-			return false
-		if first_index == second_index:
-			return int(counts[first_index]) >= 2
-		return int(counts[first_index]) > 0 and int(counts[second_index]) > 0
-	var required: Dictionary = {}
-	for tile in tiles:
-		var index = tile_index(str(tile))
-		if index < 0 or index >= counts.size():
-			return false
-		required[index] = int(required.get(index, 0)) + 1
-	for index in required.keys():
-		if int(counts[int(index)]) < int(required[index]):
-			return false
-	return true
-
-func remove_known_tile_list(hand: Array, tiles: Array) -> bool:
-	for tile in tiles:
-		var index = find_tile_in_hand(hand, str(tile))
-		if index < 0:
-			return false
-		hand.remove_at(index)
-	return true
-
-func remove_known_tiles(hand: Array, tile: String, amount: int) -> bool:
-	if amount <= 0:
-		return false
-	for n in range(amount):
-		var index = find_tile_in_hand(hand, tile)
-		if index < 0:
-			return false
-		hand.remove_at(index)
-	return true
-
-func remove_tile_list(hand: Array, tiles: Array) -> bool:
-	for tile in tiles:
-		if count_tile(hand, str(tile)) <= 0:
-			return false
-	for tile in tiles:
-		var index = find_tile_in_hand(hand, str(tile))
-		if index >= 0:
-			hand.remove_at(index)
-	return true
-
-func remove_tiles(hand: Array, tile: String, amount: int) -> bool:
-	if count_tile(hand, tile) < amount:
-		return false
-	for n in range(amount):
-		var index = find_tile_in_hand(hand, tile)
-		if index >= 0:
-			hand.remove_at(index)
-	return true
-
-func find_tile_in_hand(hand: Array, tile: String) -> int:
-	for i in range(hand.size()):
-		if str(hand[i]) == tile:
-			return i
-	return -1
-
-func count_tile(hand: Array, tile: String) -> int:
-	var count = 0
-	for item in hand:
-		if str(item) == tile:
-			count += 1
-	return count
-
-func add_log(text: String) -> void:
-	table_logs.append(text)
-	while table_logs.size() > 10:
-		table_logs.pop_front()
-
-func log_performance_stats() -> void:
-	# 输出性能统计信息
-	var stats_lines: Array[String] = []
-
-	if perf_render_count > 0:
-		var avg_render = perf_render_total_ms / float(perf_render_count)
-		stats_lines.append("渲染: %d次, 平均%.1fms" % [perf_render_count, avg_render])
-
-	if perf_ai_decision_count > 0:
-		var avg_ai = perf_ai_decision_total_ms / float(perf_ai_decision_count)
-		stats_lines.append("AI决策: %d次, 平均%.1fms" % [perf_ai_decision_count, avg_ai])
-
-	# 缓存统计
-	var total_shanten = shanten_cache_hits + shanten_cache_misses
-	if total_shanten > 0:
-		var shanten_hit_rate = float(shanten_cache_hits) / float(total_shanten) * 100.0
-		stats_lines.append("向听缓存: %.1f%% (%d/%d)" % [shanten_hit_rate, shanten_cache_hits, total_shanten])
-
-	var total_effective = effective_tiles_cache_hits + effective_tiles_cache_misses
-	if total_effective > 0:
-		var effective_hit_rate = float(effective_tiles_cache_hits) / float(total_effective) * 100.0
-		stats_lines.append("进张缓存: %.1f%% (%d/%d)" % [effective_hit_rate, effective_tiles_cache_hits, total_effective])
-
-	var total_ai_report = ai_report_cache_hits + ai_report_cache_misses
-	if total_ai_report > 0:
-		var ai_report_hit_rate = float(ai_report_cache_hits) / float(total_ai_report) * 100.0
-		stats_lines.append("AI报告缓存: %.1f%% (%d/%d)" % [ai_report_hit_rate, ai_report_cache_hits, total_ai_report])
-
-	if not stats_lines.is_empty():
-		print("=== 性能统计 ===")
-		for line in stats_lines:
-			print(line)
-		print("===============")
-
-func reset_performance_stats() -> void:
-	# 重置性能统计
-	perf_render_count = 0
-	perf_render_total_ms = 0.0
-	perf_ai_decision_count = 0
-	perf_ai_decision_total_ms = 0.0
 
 func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Callable, highlighted: bool = false, risk: String = "", hint_badge: String = "") -> Control:
 	var lightweight_static_tile = should_use_lightweight_static_tile(clickable, size)
@@ -11025,6 +11107,32 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		button.add_theme_stylebox_override("hover", style(Color(0.98, 0.96, 0.90), 8, GOLD_PRIMARY, 3, 8))
 		button.add_theme_stylebox_override("pressed", style(Color(0.96, 0.94, 0.88), 8, GOLD_DARK, 2, 4))
 		button.add_theme_stylebox_override("disabled", style(face.darkened(0.08), 8, border.darkened(0.12), 1, 3))
+		# 手牌hover发光效果 - 可点击牌专用 / Hand tile hover glow
+		button.mouse_entered.connect(func() -> void:
+			if not is_instance_valid(button):
+				return
+			var glow_rect = ColorRect.new()
+			glow_rect.name = "TileHoverGlow"
+			glow_rect.color = Color(GOLD_GLOW.r, GOLD_GLOW.g, GOLD_GLOW.b, 0.0)
+			glow_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			glow_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+			button.add_child(glow_rect)
+			button.move_child(glow_rect, 0)
+			var g_tw := button.create_tween()
+			g_tw.tween_property(glow_rect, "color:a", 0.14, 0.18).from(0.0).set_ease(Tween.EASE_OUT)
+		)
+		button.mouse_exited.connect(func() -> void:
+			if not is_instance_valid(button):
+				return
+			var glow_rect = button.get_node_or_null("TileHoverGlow")
+			if glow_rect != null and is_instance_valid(glow_rect):
+				var g_tw := button.create_tween()
+				g_tw.tween_property(glow_rect, "color:a", 0.0, 0.14).from(glow_rect.color.a).set_ease(Tween.EASE_IN)
+				g_tw.tween_callback(func() -> void:
+					if glow_rect != null and is_instance_valid(glow_rect):
+						glow_rect.queue_free()
+				)
+		)
 	else:
 		(tile_body as Panel).add_theme_stylebox_override("panel", style(face, 8, border, 2 if not highlighted else 3, static_tile_shadow_size(size)))
 	var tile_texture = tile_textures.get(tile, null)
@@ -11093,9 +11201,51 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		hint.add_theme_stylebox_override("normal", style(hint_color, 8, hint_color.lightened(0.16), 1))
 		var left = 0.50 if hint_badge.length() > 1 else 0.62
 		apply_rect(hint, rect_full(left, 0.04, 0.92, 0.23))
+	if button != null:
+		add_clickable_tile_press_art(button, size, highlighted)
 	if button != null and callback.is_valid():
 		connect_immediate_button_action(button, callback)
 	return tile_body if lightweight_static_tile else frame
+
+func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bool) -> void:
+	var focus_glow = Panel.new()
+	focus_glow.name = "ClickableTileFocusGlow"
+	focus_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	focus_glow.add_theme_stylebox_override("panel", style(Color(1.0, 0.92, 0.58, 0.0), 8, GOLD_BRIGHT, 2, 0))
+	focus_glow.modulate = Color(1.0, 1.0, 1.0, 0.48 if highlighted else 0.0)
+	button.add_child(focus_glow)
+	apply_rect(focus_glow, rect_full(0.035, 0.035, 0.965, 0.965))
+
+	var sheen = ColorRect.new()
+	sheen.name = "ClickableTilePressSheen"
+	sheen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sheen.color = Color(1.0, 0.93, 0.60, 0.0)
+	button.add_child(sheen)
+	apply_rect(sheen, rect_full(0.12, 0.07, 0.88, 0.16))
+
+	var tap_dot = Panel.new()
+	tap_dot.name = "ClickableTileTapDot"
+	tap_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tap_dot.add_theme_stylebox_override("panel", style(Color(1.0, 0.92, 0.48, 0.30), max(6, int(size.x * 0.16)), Color(1.0, 0.96, 0.78, 0.42), 1, 0))
+	tap_dot.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	tap_dot.scale = Vector2(0.58, 0.58)
+	button.add_child(tap_dot)
+	apply_rect(tap_dot, rect_full(0.37, 0.40, 0.63, 0.60))
+
+	button.button_down.connect(func() -> void:
+		if not is_instance_valid(button) or not is_instance_valid(sheen) or not is_instance_valid(tap_dot):
+			return
+		var tw := button.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(sheen, "color:a", 0.28, 0.05).from(0.0)
+		tw.tween_property(sheen, "color:a", 0.0, 0.16).set_delay(0.05)
+		tw.tween_property(tap_dot, "modulate:a", 0.62, 0.05).from(0.0)
+		tw.tween_property(tap_dot, "modulate:a", 0.0, 0.18).set_delay(0.05)
+		tw.tween_property(tap_dot, "scale", Vector2(1.12, 1.12), 0.18).from(Vector2(0.58, 0.58)).set_ease(Tween.EASE_OUT)
+		if is_instance_valid(focus_glow) and not highlighted:
+			tw.tween_property(focus_glow, "modulate:a", 0.35, 0.05).from(0.0)
+			tw.tween_property(focus_glow, "modulate:a", 0.0, 0.18).set_delay(0.05)
+	)
 
 func tile_hint_badge_color(hint_badge: String) -> Color:
 	return HINT_BADGE_COLORS.get(hint_badge, DEFAULT_HINT_BADGE_COLOR)
@@ -11192,7 +11342,118 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var button = make_base_button(text, callback)
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
 	apply_button_style(button, color, 14, 2, 3)
+	draw_action_button_art(button, text, color)
 	return button
+
+func draw_action_button_art(button: Button, text: String, color: Color) -> Control:
+	var art = Control.new()
+	art.name = "ActionButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.030, 0.120, 0.245, 0.880))
+	button.add_child(art)
+	var role = action_button_visual_role(text)
+	var role_rail = make_color_rect(rect_full(0.000, 0.120, 0.018, 0.880), Color(color.r, color.g, color.b, 0.74))
+	role_rail.name = "ActionButtonRoleRail"
+	button.add_child(role_rail)
+	for i in range(3):
+		var dot = make_color_rect(rect_full(0.730 + float(i) * 0.070, 0.800, 0.760 + float(i) * 0.070, 0.850), Color(color.r, color.g, color.b, 0.44 - float(i) * 0.08))
+		dot.name = "ActionButtonEnergyDot_%d" % i
+		button.add_child(dot)
+	var icon_back = make_panel(art, rect_full(0.040, 0.080, 0.700, 0.920), Color(color.r, color.g, color.b, 0.20), 999, Color(color.r, color.g, color.b, 0.32), 0)
+	icon_back.name = "ActionButtonIconBack"
+	var icon_name = action_button_icon_name(role)
+	var icon_color = Color(0.96, 0.94, 0.82, 0.88)
+	if icon_name != "":
+		add_lucide_icon(art, icon_name, rect_full(0.160, 0.235, 0.580, 0.765), icon_color)
+	else:
+		var fallback = make_label(art, action_button_fallback_icon_text(role, text), 10, icon_color, true)
+		fallback.name = "ActionButtonFallbackIcon"
+		apply_rect(fallback, rect_full(0.100, 0.150, 0.640, 0.850))
+	var sheen = make_panel(button, rect_full(0.060, 0.075, 0.940, 0.155), Color(1.0, 1.0, 1.0, 0.030), 999, Color(1.0, 1.0, 1.0, 0.0), 0)
+	sheen.name = "ActionButtonSheen"
+	if role in ["win", "gang", "safe", "advice", "pass"]:
+		var seal = make_label(button, action_button_priority_mark(role), 10, Color(0.98, 0.90, 0.62, 0.78), true)
+		seal.name = "ActionButtonPrioritySeal"
+		apply_rect(seal, rect_full(0.740, 0.145, 0.940, 0.455))
+	if action_button_should_pulse(role) and fx_enabled_effective():
+		var pulse = make_panel(button, rect_full(0.012, 0.090, 0.988, 0.910), Color(color.r, color.g, color.b, 0.06), 14, Color(color.r, color.g, color.b, 0.20), 0)
+		pulse.name = "ActionButtonPulse"
+		button.move_child(pulse, 0)
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(pulse, "modulate:a", 0.25, 0.64).from(0.84)
+		tw.tween_property(pulse, "modulate:a", 0.84, 0.64).from(0.25)
+	return art
+
+func action_button_visual_role(text: String) -> String:
+	if text.contains("过") or text.contains("取消"):
+		return "pass"
+	if text.contains("胡") or text.contains("自摸"):
+		return "win"
+	if text.contains("杠"):
+		return "gang"
+	if text.contains("碰"):
+		return "peng"
+	if text.contains("吃"):
+		return "chi"
+	if text.contains("改打") or text.contains("安全"):
+		return "safe"
+	if text.contains("打") or text.contains("荐") or text.contains("提示"):
+		return "advice"
+	if text.contains("语音") or text.contains("闭麦"):
+		return "voice"
+	if text.contains("菜单"):
+		return "menu"
+	if text.contains("下一") or text.contains("新赛") or text.contains("重开"):
+		return "refresh"
+	return "action"
+
+func action_button_icon_name(role: String) -> String:
+	match role:
+		"pass":
+			return "x"
+		"win":
+			return "trophy"
+		"gang":
+			return "crown"
+		"safe":
+			return "check"
+		"advice":
+			return "sparkles"
+		"voice":
+			return "volume-2"
+		"menu":
+			return "menu"
+		"refresh":
+			return "refresh-cw"
+	return ""
+
+func action_button_fallback_icon_text(role: String, text: String) -> String:
+	match role:
+		"chi":
+			return "吃"
+		"peng":
+			return "碰"
+		"action":
+			return text.substr(0, 1) if text != "" else "行"
+	return role.substr(0, 1) if role != "" else "行"
+
+func action_button_priority_mark(role: String) -> String:
+	match role:
+		"win":
+			return "胡"
+		"gang":
+			return "杠"
+		"safe":
+			return "安"
+		"advice":
+			return "荐"
+		"pass":
+			return "过"
+	return ""
+
+func action_button_should_pulse(role: String) -> bool:
+	return role in ["win", "gang", "safe", "advice"]
 
 func configure_action_button_size(button: Button, width: float, height: float, font_size: int) -> void:
 	button.custom_minimum_size = Vector2(width, height)
@@ -11216,6 +11477,7 @@ func make_avatar_view(seat: int, active: bool) -> Control:
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	avatar.add_child(cap)
 	apply_rect(cap, rect_full(0.0, 0.22, 1.0, 0.26))
+	draw_avatar_figure(avatar, seat, active)
 
 	# 为不同座位添加独特的装饰元素
 	match seat:
@@ -11252,6 +11514,19 @@ func make_avatar_view(seat: int, active: bool) -> Control:
 		apply_rect(active_badge, rect_full(0.18, 0.06, 0.82, 0.25))
 	return avatar
 
+func draw_avatar_figure(parent: Control, seat: int, active: bool) -> void:
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	if active:
+		var halo = make_panel(parent, rect_full(0.18, 0.24, 0.82, 0.72), Color(accent.r, accent.g, accent.b, 0.10), 999, Color(0.96, 0.82, 0.42, 0.32), 0)
+		halo.name = "SeatAvatarActiveHalo"
+	var shoulders = make_panel(parent, rect_full(0.25, 0.52, 0.75, 0.90), Color(accent.r * 0.55, accent.g * 0.55, accent.b * 0.55, 0.56), 999, Color(accent.r, accent.g, accent.b, 0.20), 0)
+	shoulders.name = "SeatAvatarShoulders"
+	var head = make_panel(parent, rect_full(0.34, 0.28, 0.66, 0.58), Color(0.78, 0.68, 0.50, 0.58), 999, Color(0.92, 0.82, 0.58, 0.22), 0)
+	head.name = "SeatAvatarHead"
+	var seal_text = seat_wind_label(seat)
+	var seal = make_seal_stamp(parent, rect_full(0.05, 0.06, 0.27, 0.30), seal_text, "round")
+	seal.name = "SeatAvatarWindSeal"
+
 func seat_wind_label(seat: int) -> String:
 	match seat:
 		0:
@@ -11270,297 +11545,6 @@ func seat_short_name(seat: int) -> String:
 			return "你"
 		return SEAT_NAMES[seat].substr(0, 2)
 	return "玩家"
-
-func add_background(parent: Control) -> void:
-	var bg = TextureRect.new()
-	bg.texture = wood_texture
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	parent.add_child(bg)
-	var tint = ColorRect.new()
-	tint.color = Color(0.010, 0.013, 0.015, 0.988)
-	tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tint.set_anchors_preset(Control.PRESET_FULL_RECT)
-	parent.add_child(tint)
-	parent.add_child(make_color_rect(rect_full(0.0, 0.0, 1.0, 0.08), Color(0.0, 0.0, 0.0, 0.006)))
-	parent.add_child(make_color_rect(rect_full(0.0, 0.90, 1.0, 1.0), Color(0.0, 0.0, 0.0, 0.028)))
-	parent.add_child(make_color_rect(rect_full(0.0, 0.0, 0.03, 1.0), Color(0.0, 0.0, 0.0, 0.006)))
-	parent.add_child(make_color_rect(rect_full(0.97, 0.0, 1.0, 1.0), Color(0.0, 0.0, 0.0, 0.006)))
-	parent.add_child(make_color_rect(rect_full(0.10, 0.08, 0.90, 0.92), Color(0.010, 0.016, 0.018, 0.002)))
-	parent.add_child(make_color_rect(rect_full(0.21, 0.16, 0.79, 0.84), Color(0.014, 0.022, 0.024, 0.001)))
-	parent.add_child(make_color_rect(rect_full(0.02, 0.02, 0.98, 0.03), Color(0.62, 0.56, 0.42, 0.002)))
-	parent.add_child(make_color_rect(rect_full(0.02, 0.97, 0.98, 0.98), Color(0.03, 0.03, 0.04, 0.036)))
-	parent.add_child(make_color_rect(rect_full(0.02, 0.03, 0.03, 0.97), Color(0.03, 0.03, 0.04, 0.036)))
-	parent.add_child(make_color_rect(rect_full(0.97, 0.03, 0.98, 0.97), Color(0.03, 0.03, 0.04, 0.036)))
-
-func add_texture(parent: Control, texture: Texture2D, rect: Rect2, alpha: float) -> TextureRect:
-	var tex = TextureRect.new()
-	tex.texture = texture
-	tex.modulate = Color(1, 1, 1, alpha)
-	tex.stretch_mode = TextureRect.STRETCH_SCALE
-	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(tex, rect)
-	parent.add_child(tex)
-	return tex
-
-func make_color_rect(rect: Rect2, color: Color) -> ColorRect:
-	var color_rect = ColorRect.new()
-	color_rect.color = color
-	color_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(color_rect, rect)
-	return color_rect
-
-func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border: Color, shadow_size: int = 7) -> Panel:
-	var panel = Panel.new()
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(panel, rect)
-	var fill_color = soften_panel_color(color)
-	panel.add_theme_stylebox_override("panel", style(fill_color, radius, border.blend(UI_PANEL_BORDER).darkened(0.10), 1, max(0, shadow_size - 3)))
-	parent.add_child(panel)
-	return panel
-
-func configure_passive_container(container: Control) -> void:
-	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-func make_label(parent: Control, text: String, font_size: int, color: Color, bold: bool) -> Label:
-	var label = Label.new()
-	label.text = text
-	label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
-	if bold:
-		label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-		label.add_theme_constant_override("shadow_offset_x", 1)
-		label.add_theme_constant_override("shadow_offset_y", 1)
-	parent.add_child(label)
-	return label
-
-func make_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color) -> Control:
-	var badge = make_panel(parent, rect, fill, 9, border, 0)
-	var label = make_label(badge, text, font_size, text_color, true)
-	apply_rect(label, rect_full(0.08, 0.04, 0.92, 0.96))
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	configure_clipped_label(label)
-	return badge
-
-func configure_clipped_label(label: Label) -> void:
-	label.clip_text = true
-	label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-
-func make_small_button(text: String, color: Color, callback: Callable) -> Button:
-	var button = make_base_button(text, callback)
-	button.custom_minimum_size = Vector2(104, 44)
-	button.add_theme_font_size_override("font_size", 18)
-	apply_button_style(button, color, 12, 2, 4)
-	return button
-
-func make_top_hud_button(text: String, color: Color, callback: Callable) -> Button:
-	var button = make_base_button(text, callback)
-	button.custom_minimum_size = TOP_HUD_BUTTON_SIZE
-	button.clip_text = true
-	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.add_theme_font_size_override("font_size", 15)
-	apply_button_style(button, color, 11, 2, 3)
-	var icon_name = icon_name_for_button_text(text)
-	if icon_name != "":
-		add_lucide_icon(button, icon_name, rect_full(0.08, 0.22, 0.30, 0.78), Color(0.92, 0.94, 0.88, 0.86))
-	return button
-
-func make_base_button(text: String, callback: Callable) -> Button:
-	var button = Button.new()
-	button.text = text
-	configure_touch_button(button)
-	button.add_theme_color_override("font_color", Color(0.95, 0.93, 0.82))
-	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.50))
-	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.92))
-	button.add_theme_constant_override("shadow_offset_x", 1)
-	button.add_theme_constant_override("shadow_offset_y", 2)
-	if callback.is_valid():
-		connect_immediate_button_action(button, callback)
-	return button
-
-func configure_touch_button(button: Button) -> void:
-	button.focus_mode = Control.FOCUS_NONE
-	button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
-	# 增强的触摸反馈动画
-	button.button_down.connect(func() -> void:
-		if not is_instance_valid(button):
-			return
-		var tw := button.create_tween()
-		tw.set_parallel(true)
-		tw.tween_property(button, "scale", Vector2(0.96, 0.96), 0.08).from(Vector2(1.0, 1.0)).set_ease(Tween.EASE_OUT)
-		# 添加轻微的暗化效果
-		tw.tween_property(button, "modulate", Color(0.92, 0.92, 0.92, 1.0), 0.08).from(Color(1, 1, 1, 1))
-	)
-	button.button_up.connect(func() -> void:
-		if not is_instance_valid(button):
-			return
-		var tw := button.create_tween()
-		tw.set_parallel(true)
-		tw.tween_property(button, "scale", Vector2(1.0, 1.0), 0.12).from(Vector2(0.96, 0.96)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		# 恢复亮度
-		tw.tween_property(button, "modulate", Color(1, 1, 1, 1), 0.12).from(Color(0.92, 0.92, 0.92, 1.0))
-	)
-
-func connect_immediate_button_action(button: Button, callback: Callable) -> void:
-	if button == null or not callback.is_valid():
-		return
-	button.button_down.connect(callback)
-
-func apply_button_style(button: Button, color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> void:
-	var style_set = button_style_set(color, radius, border_width, shadow_size)
-	button.add_theme_stylebox_override("normal", style_set["normal"])
-	button.add_theme_stylebox_override("hover", style_set["hover"])
-	button.add_theme_stylebox_override("pressed", style_set["pressed"])
-
-func icon_name_for_button_text(text: String) -> String:
-	match text:
-		"设置":
-			return "settings"
-		"返回":
-			return "chevron-left"
-		"更新":
-			return "refresh-cw"
-		"关闭":
-			return "x"
-		"试音":
-			return "volume-2"
-	return ""
-
-func button_style_set(color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> Dictionary:
-	var key = button_style_set_cache_key(color, radius, border_width, shadow_size)
-	if button_style_set_cache.has(key):
-		return button_style_set_cache[key]
-	var fill = soften_button_color(color)
-	var cached_set = {
-		"normal": style(fill.darkened(0.26), radius, fill.darkened(0.15), border_width, shadow_size),
-		"hover": style(fill.darkened(0.21), radius, fill.darkened(0.11), border_width, shadow_size + 1),
-		"pressed": style(fill.darkened(0.29), radius, fill.darkened(0.17), border_width, max(0, shadow_size - 1)),
-	}
-	store_button_style_set_cache(key, cached_set)
-	return cached_set
-
-func input_style_set() -> Dictionary:
-	var key = "default"
-	if input_style_set_cache.has(key):
-		return input_style_set_cache[key]
-	var cached_set = {
-		"normal": style(Color(0.032, 0.040, 0.044, 0.96), 10, Color(0.30, 0.36, 0.34, 0.28), 1, 0),
-		"focus": style(Color(0.040, 0.052, 0.056, 0.98), 10, Color(0.56, 0.52, 0.30, 0.56), 1, 0),
-		"read_only": style(Color(0.026, 0.032, 0.036, 0.94), 10, Color(0.18, 0.22, 0.22, 0.20), 1, 0),
-	}
-	store_input_style_set_cache(key, cached_set)
-	return cached_set
-
-func button_style_set_cache_key(color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> String:
-	return "%s:%d:%d:%d" % [color.to_html(true), radius, border_width, shadow_size]
-
-func store_button_style_set_cache(key: String, cached_set: Dictionary) -> void:
-	if key == "" or cached_set.is_empty():
-		return
-	if not button_style_set_cache.has(key):
-		button_style_set_cache_order.append(key)
-	button_style_set_cache[key] = cached_set
-	while button_style_set_cache_order.size() > BUTTON_STYLE_SET_CACHE_LIMIT:
-		var oldest = button_style_set_cache_order.pop_front()
-		button_style_set_cache.erase(oldest)
-
-func store_input_style_set_cache(key: String, cached_set: Dictionary) -> void:
-	if key == "" or cached_set.is_empty():
-		return
-	if not input_style_set_cache.has(key):
-		input_style_set_cache_order.append(key)
-	input_style_set_cache[key] = cached_set
-	while input_style_set_cache_order.size() > INPUT_STYLE_SET_CACHE_LIMIT:
-		var oldest = input_style_set_cache_order.pop_front()
-		input_style_set_cache.erase(oldest)
-
-func style(color: Color, radius: int, border: Color, border_width: int, shadow_size: int = 8) -> StyleBoxFlat:
-	var key = style_cache_key(color, radius, border, border_width, shadow_size)
-	if style_cache.has(key):
-		return style_cache[key]
-	var box = StyleBoxFlat.new()
-	box.bg_color = color
-	box.set_corner_radius_all(radius)
-	box.set_border_width_all(border_width)
-	box.border_color = border
-	box.shadow_color = UI_PANEL_SHADOW
-	box.shadow_size = shadow_size
-	if shadow_size > 0:
-		box.shadow_offset = Vector2(0, 1)
-	store_style_cache(key, box)
-	return box
-
-func soften_panel_color(color: Color) -> Color:
-	return Color(
-		color.r * 0.15 + UI_PANEL_FILL.r * 0.85,
-		color.g * 0.15 + UI_PANEL_FILL.g * 0.85,
-		color.b * 0.15 + UI_PANEL_FILL.b * 0.85,
-		min(1.0, color.a)
-	)
-
-func soften_button_color(color: Color) -> Color:
-	return Color(
-		color.r * 0.18 + UI_PANEL_FILL.r * 0.82,
-		color.g * 0.18 + UI_PANEL_FILL.g * 0.82,
-		color.b * 0.18 + UI_PANEL_FILL.b * 0.82,
-		min(1.0, color.a)
-	)
-
-func soften_menu_color(color: Color) -> Color:
-	return Color(
-		color.r * 0.14 + UI_PANEL_FILL.r * 0.86,
-		color.g * 0.14 + UI_PANEL_FILL.g * 0.86,
-		color.b * 0.14 + UI_PANEL_FILL.b * 0.86,
-		min(1.0, color.a)
-	)
-
-func style_cache_key(color: Color, radius: int, border: Color, border_width: int, shadow_size: int = 8) -> String:
-	return "%s:%d:%s:%d:%d" % [color.to_html(true), radius, border.to_html(true), border_width, shadow_size]
-
-func store_style_cache(key: String, box: StyleBoxFlat) -> void:
-	if key == "" or box == null:
-		return
-	if not style_cache.has(key):
-		style_cache_order.append(key)
-	style_cache[key] = box
-	while style_cache_order.size() > STYLE_CACHE_LIMIT:
-		var oldest = style_cache_order.pop_front()
-		style_cache.erase(oldest)
-
-func rect_full(left: float, top: float, right: float, bottom: float) -> Rect2:
-	return Rect2(Vector2(left, top), Vector2(right, bottom))
-
-func apply_rect(control: Control, rect: Rect2) -> void:
-	control.anchor_left = rect.position.x
-	control.anchor_top = rect.position.y
-	control.anchor_right = rect.size.x
-	control.anchor_bottom = rect.size.y
-	control.offset_left = 0
-	control.offset_top = 0
-	control.offset_right = 0
-	control.offset_bottom = 0
-
-func apply_centered_rect(control: Control, center: Vector2, size: Vector2) -> void:
-	control.anchor_left = center.x
-	control.anchor_top = center.y
-	control.anchor_right = center.x
-	control.anchor_bottom = center.y
-	control.offset_left = -size.x * 0.5
-	control.offset_top = -size.y * 0.5
-	control.offset_right = size.x * 0.5
-	control.offset_bottom = size.y * 0.5
-
-func set_status(text: String) -> void:
-	if status_label:
-		status_label.text = text
 
 # ===== 动画 / 特效 (FX) =====
 # fx_layer 是 self 的直接子节点，覆盖整个视口并在 clear_screen 中被保留。
@@ -11595,7 +11579,7 @@ func _build_fx_turn_pulse() -> void:
 	fx_turn_glow.modulate.a = 0.0
 	fx_turn_pulse.add_child(fx_turn_glow)
 	fx_turn_pulse_tween = create_tween()
-	fx_turn_pulse_tween.set_loops()
+	fx_turn_pulse_tween.set_loops(3600)
 	var half_pulse := float(FX_TURN_PULSE_PERIOD_MSEC) / 2000.0
 	fx_turn_pulse_tween.tween_property(fx_turn_glow, "modulate:a", 0.95, half_pulse).from(0.40)
 	fx_turn_pulse_tween.tween_property(fx_turn_glow, "modulate:a", 0.40, half_pulse).from(0.95)
@@ -11649,8 +11633,6 @@ func _build_fx_ripple() -> void:
 		fx_ripple_root.add_child(ring)
 		fx_ripple_rings.append(ring)
 
-func fx_enabled_effective() -> bool:
-	return fx_enabled and fx_layer != null and is_instance_valid(fx_layer)
 
 # 把 root_layer（已扣除安全区）相对的归一化锚点矩形换算成覆盖整个视口的归一化锚点矩形，
 # 这样挂在全视口 fx_layer 上的特效节点可以对齐到座位等牌桌元素。
@@ -11738,12 +11720,171 @@ func _hide_fx_burst() -> void:
 	if fx_burst_root != null and is_instance_valid(fx_burst_root):
 		fx_burst_root.visible = false
 
-func play_fx_discard_ripple() -> void:
+func play_fx_deal_start(dealer: int) -> void:
+	if not fx_enabled_effective():
+		return
+	var root = Control.new()
+	root.name = "DealStartFx"
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.add_child(root)
+	var center_rect = root_layer_rect_to_screen_rect(CENTER_PANEL_RECT)
+	var center = (center_rect.position + center_rect.size) * 0.5
+	var accent = SEAT_ACCENT_COLORS[dealer] if dealer >= 0 and dealer < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	for i in range(4):
+		var seat = (dealer + i) % 4
+		var seat_rect = fx_seat_screen_rect(seat)
+		var target = (seat_rect.position + seat_rect.size) * 0.5
+		var tile = make_wall_back_tile(Vector2(24, 34), true)
+		tile.name = "DealStartTile_%d" % seat
+		tile.modulate = Color(1, 1, 1, 0.0)
+		tile.scale = Vector2(0.55, 0.55)
+		root.add_child(tile)
+		var viewport_size = effective_viewport_size()
+		tile.position = Vector2(center.x * viewport_size.x - 12.0, center.y * viewport_size.y - 17.0)
+		var target_position = Vector2(target.x * viewport_size.x - 12.0, target.y * viewport_size.y - 17.0)
+		var delay = float(i) * 0.055
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(tile, "modulate:a", 0.80, 0.12).from(0.0).set_delay(delay)
+		tw.tween_property(tile, "position", target_position, 0.46).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(tile, "scale", Vector2(0.88, 0.88), 0.28).from(Vector2(0.55, 0.55)).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(tile, "modulate:a", 0.0, 0.18).set_delay(delay + 0.34)
+	var ring_root = Control.new()
+	ring_root.name = "DealStartRing"
+	ring_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(ring_root, center_rect)
+	root.add_child(ring_root)
+	for i in range(3):
+		var ring = Panel.new()
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ring.set_anchors_preset(Control.PRESET_CENTER)
+		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 48, Color(accent.r, accent.g, accent.b, 0.38), 2, 0))
+		ring_root.add_child(ring)
+		var delay = float(i) * 0.08
+		var tw_ring := create_tween()
+		tw_ring.set_parallel(true)
+		tw_ring.tween_property(ring, "modulate:a", 0.0, 0.42).from(0.62).set_delay(delay)
+		tw_ring.tween_property(ring, "offset_left", -72.0, 0.42).from(-16.0).set_delay(delay)
+		tw_ring.tween_property(ring, "offset_top", -72.0, 0.42).from(-16.0).set_delay(delay)
+		tw_ring.tween_property(ring, "offset_right", 72.0, 0.42).from(16.0).set_delay(delay)
+		tw_ring.tween_property(ring, "offset_bottom", 72.0, 0.42).from(16.0).set_delay(delay)
+	var cleanup := create_tween()
+	cleanup.tween_callback(func() -> void:
+		if root != null and is_instance_valid(root):
+			root.queue_free()
+	).set_delay(0.72)
+
+# 进局发牌级联动画 - 中心牌堆向四家分发连串牌背 / Deal Cascade Animation
+func play_fx_deal_cascade(dealer: int) -> void:
+	if not fx_enabled_effective():
+		return
+	var root = Control.new()
+	root.name = "DealCascadeFx"
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.add_child(root)
+	var viewport_size = effective_viewport_size()
+	var center_rect = root_layer_rect_to_screen_rect(CENTER_PANEL_RECT)
+	var center = (center_rect.position + center_rect.size) * 0.5
+	var accent = SEAT_ACCENT_COLORS[dealer] if dealer >= 0 and dealer < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var span := float(FX_DEAL_CASCADE_DURATION_MSEC) / 1000.0
+	# 向每个座位分发一批牌背，模拟连发手感
+	for i in range(4):
+		var seat = (dealer + i) % 4
+		var seat_rect = fx_seat_screen_rect(seat)
+		var target = (seat_rect.position + seat_rect.size) * 0.5
+		var target_pos = Vector2(target.x * viewport_size.x, target.y * viewport_size.y)
+		var seat_delay = float(i) * 0.05
+		for j in range(FX_DEAL_CASCADE_TILE_COUNT):
+			var tile = make_wall_back_tile(Vector2(20, 28), true)
+			tile.name = "DealCascadeTile_%d_%d" % [seat, j]
+			tile.modulate = Color(1, 1, 1, 0.0)
+			tile.scale = Vector2(0.5, 0.5)
+			tile.position = Vector2(center.x * viewport_size.x, center.y * viewport_size.y)
+			root.add_child(tile)
+			# 散射偏移：每张落点略错开，模拟真实码牌
+			var jitter_x: float = (float(j) - float(FX_DEAL_CASCADE_TILE_COUNT) * 0.5) * 3.0
+			var jitter_y: float = (float(j) - float(FX_DEAL_CASCADE_TILE_COUNT) * 0.5) * 2.0
+			var land_pos = Vector2(target_pos.x + jitter_x, target_pos.y + jitter_y)
+			var step_delay = seat_delay + float(j) * 0.022
+			var tw := create_tween()
+			tw.set_parallel(true)
+			tw.tween_property(tile, "modulate:a", 0.82, 0.10).from(0.0).set_delay(step_delay)
+			tw.tween_property(tile, "position", land_pos, 0.30).set_delay(step_delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			tw.tween_property(tile, "scale", Vector2(0.78, 0.78), 0.22).from(Vector2(0.5, 0.5)).set_delay(step_delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			tw.tween_property(tile, "modulate:a", 0.0, 0.14).set_delay(step_delay + 0.22)
+	# 中心扩散光圈 - 收束感
+	var ring_root = Control.new()
+	ring_root.name = "DealCascadeRing"
+	ring_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(ring_root, center_rect)
+	root.add_child(ring_root)
+	for i in range(4):
+		var ring = Panel.new()
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ring.set_anchors_preset(Control.PRESET_CENTER)
+		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 56, Color(accent.r, accent.g, accent.b, 0.30), 2, 0))
+		ring_root.add_child(ring)
+		var delay = float(i) * 0.10
+		var tw_ring := create_tween()
+		tw_ring.set_parallel(true)
+		tw_ring.tween_property(ring, "modulate:a", 0.0, 0.50).from(0.55).set_delay(delay)
+		tw_ring.tween_property(ring, "offset_left", -90.0, 0.50).from(-16.0).set_delay(delay)
+		tw_ring.tween_property(ring, "offset_top", -90.0, 0.50).from(-16.0).set_delay(delay)
+		tw_ring.tween_property(ring, "offset_right", 90.0, 0.50).from(16.0).set_delay(delay)
+		tw_ring.tween_property(ring, "offset_bottom", 90.0, 0.50).from(16.0).set_delay(delay)
+	var cleanup := create_tween()
+	cleanup.tween_callback(func() -> void:
+		if root != null and is_instance_valid(root):
+			root.queue_free()
+	).set_delay(span + 0.45)
+
+# 换手时中心面板轻滑反馈 / Turn-Start Slide Feedback
+func play_fx_turn_switch_slide(seat: int) -> void:
+	if not fx_enabled_effective() or seat < 0 or seat >= 4:
+		return
+	if mode != "offline" and mode != "online_game":
+		return
+	var center_node = screen_layer.get_node_or_null("SafeContent")
+	if center_node == null:
+		return
+	# 找到中心面板节点 - 由 draw_center 创建，无独立name，定位SafeContent下Table层级较深
+	# 改为对整个 root_layer 做极轻微的偏移脉冲，避免依赖具体节点名
+	var target = root_layer
+	if target == null or not is_instance_valid(target):
+		return
+	var accent = SEAT_ACCENT_COLORS[seat] if seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	# 极轻微的缩放呼吸 + 偏色高光，不打扰阅读
+	var dur := float(FX_TURN_SWITCH_SLIDE_MSEC) / 1000.0
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(target, "scale", Vector2(1.004, 1.004), dur * 0.5).from(Vector2(0.998, 0.998)).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_property(target, "scale", Vector2(1.0, 1.0), dur * 0.5).set_ease(Tween.EASE_IN_OUT)
+	# 中心罗盘高光闪
+	var compass_halo := make_color_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(accent.r, accent.g, accent.b, 0.0))
+	compass_halo.name = "TurnSwitchHalo"
+	compass_halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if fx_layer != null and is_instance_valid(fx_layer):
+		fx_layer.add_child(compass_halo)
+		var halo_tw := create_tween()
+		halo_tw.tween_property(compass_halo, "color:a", 0.10, dur * 0.4).from(0.0)
+		halo_tw.tween_property(compass_halo, "color:a", 0.0, dur * 0.6).from(0.10)
+		halo_tw.tween_callback(func() -> void:
+			if compass_halo != null and is_instance_valid(compass_halo):
+				compass_halo.queue_free()
+		)
+	target.pivot_offset = target.size * 0.5
+
+func play_fx_discard_ripple(seat: int = -1) -> void:
 	if not fx_enabled_effective() or fx_ripple_root == null or not is_instance_valid(fx_ripple_root):
 		return
 	if fx_ripple_tween != null and is_instance_valid(fx_ripple_tween):
 		fx_ripple_tween.kill()
-	apply_rect(fx_ripple_root, root_layer_rect_to_screen_rect(CENTER_PANEL_RECT))
+	var ripple_rect = root_layer_rect_to_screen_rect(CENTER_PANEL_RECT)
+	if seat >= 0:
+		ripple_rect = discard_ripple_rect_for_seat(seat)
+	apply_rect(fx_ripple_root, ripple_rect)
 	for ring in fx_ripple_rings:
 		ring.modulate.a = 0.0
 		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 36, Color(0.74, 0.58, 0.22, 0.34), 1, 0))
@@ -11767,9 +11908,138 @@ func play_fx_discard_ripple() -> void:
 		tw.tween_property(ring, "offset_bottom", 52.0, dur).from(16.0).set_delay(delay)
 	tw.tween_callback(_hide_fx_ripple).set_delay(span + 0.05)
 
+func discard_ripple_rect_for_seat(seat: int) -> Rect2:
+	var base_rect = root_layer_rect_to_screen_rect(CENTER_PANEL_RECT)
+	for zone in DISCARD_ZONES:
+		if int(zone[0]) == seat:
+			var screen_rect = root_layer_rect_to_screen_rect(zone[1])
+			var zone_size = screen_rect.size - screen_rect.position
+			var center = (screen_rect.position + screen_rect.size) * 0.5
+			var size = Vector2(
+				clamp(zone_size.x * 0.46, 0.08, 0.18),
+				clamp(zone_size.y * 0.70, 0.08, 0.18)
+			)
+			return Rect2(center - size * 0.5, center + size * 0.5)
+	return base_rect
+
 func _hide_fx_ripple() -> void:
 	if fx_ripple_root != null and is_instance_valid(fx_ripple_root):
 		fx_ripple_root.visible = false
+
+func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal") -> void:
+	if not fx_enabled_effective() or tile_node == null or not is_instance_valid(tile_node):
+		return
+	var rest_y = tile_node.position.y
+	var accent = Color(0.66, 0.58, 0.92) if source == "gang" else GOLD_PRIMARY
+	var glow = Panel.new()
+	glow.name = "DrawTileGlow"
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	glow.modulate = Color(accent.r, accent.g, accent.b, 0.0)
+	glow.add_theme_stylebox_override("panel", style(Color(accent.r, accent.g, accent.b, 0.08), 10, Color(accent.r, accent.g, accent.b, 0.42), 2, 0))
+	tile_node.add_child(glow)
+	tile_node.move_child(glow, 0)
+	tile_node.pivot_offset = tile_node.custom_minimum_size * 0.5
+	tile_node.position.y = rest_y - 18.0
+	tile_node.scale = Vector2(0.92, 0.92)
+	tile_node.modulate = Color(1.0, 1.0, 1.0, 0.78)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(tile_node, "position:y", rest_y, 0.22).from(rest_y - 18.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(tile_node, "scale", Vector2(1.0, 1.0), 0.24).from(Vector2(0.92, 0.92)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(tile_node, "modulate:a", 1.0, 0.16).from(0.78)
+	tw.tween_property(glow, "modulate:a", 1.0, 0.12).from(0.0)
+	tw.tween_property(glow, "modulate:a", 0.0, 0.28).set_delay(0.14)
+	tw.tween_callback(func() -> void:
+		if glow != null and is_instance_valid(glow):
+			glow.queue_free()
+	).set_delay(0.46)
+
+func flower_bloom_text(tile: String) -> String:
+	var label = tile_label(tile)
+	return "补花" + (label if label != "" else "")
+
+func play_fx_flower_bloom(seat: int, tile: String) -> void:
+	if not fx_enabled_effective():
+		return
+	ensure_fx_layer()
+	var seat_rect = fx_seat_screen_rect(seat)
+	var viewport_size = effective_viewport_size()
+	var center = (seat_rect.position + seat_rect.size) * 0.5
+	var root = Control.new()
+	root.name = "FlowerBloomFx"
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.position = Vector2(center.x * viewport_size.x, center.y * viewport_size.y)
+	root.z_index = FX_LAYER_Z_INDEX + 2
+	fx_layer.add_child(root)
+	var accent = tile_accent(tile).lightened(0.18)
+	var tile_view = make_tile_view(tile, Vector2(42, 58), false, Callable(), true)
+	tile_view.name = "FlowerBloomTile"
+	tile_view.position = Vector2(-21.0, -34.0)
+	tile_view.scale = Vector2(0.72, 0.72)
+	tile_view.modulate.a = 0.0
+	root.add_child(tile_view)
+	var label = make_label(root, flower_bloom_text(tile), 18, Color(0.96, 0.86, 0.52), true)
+	label.name = "FlowerBloomLabel"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.76))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+	label.offset_left = -66.0
+	label.offset_top = 22.0
+	label.offset_right = 66.0
+	label.offset_bottom = 54.0
+	label.modulate.a = 0.0
+	for i in range(8):
+		var petal = Panel.new()
+		petal.name = "FlowerBloomPetal"
+		petal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var petal_style = StyleBoxFlat.new()
+		petal_style.bg_color = Color(0.96, 0.58 + randf() * 0.18, 0.42 + randf() * 0.20, 0.78)
+		petal_style.set_corner_radius_all(999)
+		petal.add_theme_stylebox_override("panel", petal_style)
+		petal.offset_left = -4.0
+		petal.offset_top = -6.0
+		petal.offset_right = 4.0
+		petal.offset_bottom = 6.0
+		petal.rotation = randf_range(-0.7, 0.7)
+		petal.modulate.a = 0.0
+		root.add_child(petal)
+		var angle = -PI * 0.85 + float(i) * PI * 1.70 / 7.0
+		var distance = randf_range(34.0, 70.0)
+		var target = Vector2(cos(angle), sin(angle)) * distance
+		var petal_tw := create_tween()
+		petal_tw.set_parallel(true)
+		var delay = float(i) * 0.018
+		petal_tw.tween_property(petal, "modulate:a", 0.92, 0.08).from(0.0).set_delay(delay)
+		petal_tw.tween_property(petal, "position", target, 0.46).from(Vector2.ZERO).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		petal_tw.tween_property(petal, "rotation", petal.rotation + randf_range(-1.6, 1.6), 0.46).set_delay(delay)
+		petal_tw.tween_property(petal, "modulate:a", 0.0, 0.24).set_delay(delay + 0.28)
+	var ring = Panel.new()
+	ring.name = "FlowerBloomRing"
+	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ring.set_anchors_preset(Control.PRESET_CENTER)
+	ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 999, Color(accent.r, accent.g, accent.b, 0.50), 2, 0))
+	root.add_child(ring)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(tile_view, "modulate:a", 1.0, 0.14).from(0.0)
+	tw.tween_property(tile_view, "scale", Vector2(1.0, 1.0), 0.22).from(Vector2(0.72, 0.72)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(tile_view, "position:y", -46.0, 0.42).from(-34.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(tile_view, "modulate:a", 0.0, 0.20).set_delay(0.50)
+	tw.tween_property(label, "modulate:a", 1.0, 0.12).from(0.0).set_delay(0.06)
+	tw.tween_property(label, "modulate:a", 0.0, 0.22).set_delay(0.46)
+	tw.tween_property(label, "position:y", -10.0, 0.48).from(0.0).set_delay(0.06)
+	tw.tween_property(ring, "modulate:a", 0.0, 0.44).from(0.75)
+	tw.tween_property(ring, "offset_left", -58.0, 0.44).from(-16.0)
+	tw.tween_property(ring, "offset_top", -58.0, 0.44).from(-16.0)
+	tw.tween_property(ring, "offset_right", 58.0, 0.44).from(16.0)
+	tw.tween_property(ring, "offset_bottom", 58.0, 0.44).from(16.0)
+	tw.tween_callback(func() -> void:
+		if root != null and is_instance_valid(root):
+			root.queue_free()
+	).set_delay(0.78)
 
 func clear_fx_overlays() -> void:
 	if fx_burst_tween != null and is_instance_valid(fx_burst_tween):
@@ -11801,8 +12071,8 @@ func _build_fx_transition() -> void:
 	transition_overlay.visible = false
 	fx_layer.add_child(transition_overlay)
 
-func play_screen_transition(callback: Callable, instant: bool = false) -> void:
-	"""屏幕过渡动画：淡出 → 执行callback → 淡入"""
+func play_screen_transition(callback: Callable, instant: bool = false, style: String = "fade") -> void:
+	"""屏幕过渡动画：支持渐隐/水墨/珠帘风格"""
 	if instant or not fx_enabled_effective():
 		callback.call()
 		return
@@ -11815,19 +12085,85 @@ func play_screen_transition(callback: Callable, instant: bool = false) -> void:
 	transition_overlay.visible = true
 	transition_overlay.color = Color(0.004, 0.006, 0.008, 0.0)
 	var half_dur := float(TRANSITION_DURATION_MSEC) / 2000.0
-	var tw := create_tween()
-	transition_tween = tw
-	transition_active = true
-	tw.tween_property(transition_overlay, "color:a", 0.92, half_dur).from(0.0)
-	tw.tween_callback(func() -> void:
-		callback.call()
-	)
-	tw.tween_property(transition_overlay, "color:a", 0.0, half_dur).from(0.92)
-	tw.tween_callback(func() -> void:
-		transition_active = false
-		if transition_overlay != null and is_instance_valid(transition_overlay):
-			transition_overlay.visible = false
-	)
+	match style:
+		"ink_wash":
+			# 水墨过渡 - 墨色从右侧扩散覆盖
+			transition_overlay.color = Color(0.02, 0.02, 0.03, 0.0)
+			var ink_dur := 0.22
+			var tw := create_tween()
+			transition_tween = tw
+			transition_active = true
+			tw.set_parallel(true)
+			tw.tween_property(transition_overlay, "color:a", 0.96, ink_dur).from(0.0).set_ease(Tween.EASE_IN)
+			tw.tween_property(transition_overlay, "anchor_left", 0.0, ink_dur).from(1.0).set_trans(Tween.TRANS_QUAD)
+			tw.set_parallel(false)
+			tw.tween_callback(func() -> void:
+				callback.call()
+				transition_overlay.anchor_left = 0.0
+			)
+			tw.tween_property(transition_overlay, "color:a", 0.0, ink_dur).from(0.96).set_ease(Tween.EASE_OUT)
+			tw.tween_callback(func() -> void:
+				transition_active = false
+				if transition_overlay != null and is_instance_valid(transition_overlay):
+					transition_overlay.visible = false
+					transition_overlay.anchor_left = 0.0
+			)
+		"curtain":
+			# 珠帘过渡 - 多列竖线依次落下
+			transition_overlay.color = Color(0.01, 0.01, 0.02, 0.0)
+			var curtain_strips := 6
+			var strip_container = Control.new()
+			strip_container.name = "CurtainStrips"
+			strip_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			strip_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+			fx_layer.add_child(strip_container)
+			for i in range(curtain_strips):
+				var strip = ColorRect.new()
+				strip.color = Color(0.02, 0.02, 0.03, 0.94)
+				strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				var left_frac = float(i) / float(curtain_strips)
+				var right_frac = float(i + 1) / float(curtain_strips)
+				strip.anchor_left = left_frac
+				strip.anchor_right = right_frac
+				strip.anchor_top = -1.0
+				strip.anchor_bottom = -1.0
+				strip_container.add_child(strip)
+				var s_tw := create_tween()
+				s_tw.tween_property(strip, "anchor_top", 0.0, 0.25).from(-1.0).set_delay(float(i) * 0.04).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+				s_tw.parallel().tween_property(strip, "anchor_bottom", 1.0, 0.25).from(-0.5).set_delay(float(i) * 0.04)
+			var tw := create_tween()
+			transition_tween = tw
+			transition_active = true
+			tw.tween_callback(func() -> void:
+				callback.call()
+			).set_delay(0.28)
+			tw.tween_callback(func() -> void:
+				for child in strip_container.get_children():
+					var c_tw := create_tween()
+					c_tw.tween_property(child, "anchor_top", -1.0, 0.20).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+					c_tw.parallel().tween_property(child, "anchor_bottom", -0.5, 0.20).from(1.0)
+			).set_delay(0.35)
+			tw.tween_callback(func() -> void:
+				transition_active = false
+				strip_container.queue_free()
+				if transition_overlay != null and is_instance_valid(transition_overlay):
+					transition_overlay.visible = false
+			).set_delay(0.60)
+		_:
+			# 默认渐隐过渡
+			var tw := create_tween()
+			transition_tween = tw
+			transition_active = true
+			tw.tween_property(transition_overlay, "color:a", 0.92, half_dur).from(0.0)
+			tw.tween_callback(func() -> void:
+				callback.call()
+			)
+			tw.tween_property(transition_overlay, "color:a", 0.0, half_dur).from(0.92)
+			tw.tween_callback(func() -> void:
+				transition_active = false
+				if transition_overlay != null and is_instance_valid(transition_overlay):
+					transition_overlay.visible = false
+			)
 
 # ============================================================
 # 杠牌特写动画
@@ -11925,23 +12261,28 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_bg.offset_bottom = 0
 	toast_bg.add_theme_stylebox_override("panel", style(Color(0.020, 0.042, 0.048, 0.96), 16, Color(0.50, 0.64, 0.56, 0.62), 2, 6))
 	toast_bg.add_child(make_color_rect(rect_full(0.0, 0.0, 0.018, 1.0), Color(0.40, 0.72, 0.58, 0.72)))
+	draw_toast_illustration(toast_bg, text)
 	var label = make_label(toast_bg, text, 16, Color(0.96, 0.96, 0.92), true)
-	apply_rect(label, rect_full(0.06, 0.04, 0.94, 0.96))
+	apply_rect(label, rect_full(0.12, 0.04, 0.94, 0.96))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_bg.modulate = Color(1, 1, 1, 0)
 	toast_bg.offset_top = -28.0
 	toast_container.add_child(toast_bg)
 	toast_container.visible = true
 	toast_current = toast_bg
-	# 动画：滑入 → 停留 → 淡出
+	# 动画：弹跳滑入 → 停留 → 下滑淡出
 	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
 	var stay_dur := float(duration_msec) / 1000.0
 	var fade_dur := 0.28
 	var tw := create_tween()
 	toast_tween = tw
+	# 入场 - 从上方弹出 + 缩放弹跳
 	tw.tween_property(toast_bg, "modulate:a", 1.0, slide_dur).from(0.0)
-	tw.parallel().tween_property(toast_bg, "offset_top", 0.0, slide_dur).from(-28.0)
+	tw.parallel().tween_property(toast_bg, "offset_top", 0.0, slide_dur).from(-28.0).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(toast_bg, "scale", Vector2(1.0, 1.0), slide_dur).from(Vector2(0.90, 0.90)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(toast_bg, "modulate:a", 0.0, fade_dur).set_delay(stay_dur)
+	# 退出 - 下滑
+	tw.parallel().tween_property(toast_bg, "offset_top", 14.0, fade_dur).set_delay(stay_dur)
 	tw.tween_callback(func() -> void:
 		if toast_bg != null and is_instance_valid(toast_bg):
 			toast_bg.queue_free()
@@ -11951,67 +12292,91 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 			toast_current = null
 	).set_delay(stay_dur + fade_dur + 0.02)
 
-func get_self_hand() -> Array:
-	if mode == "offline":
-		return players[0]["hand"]
-	return online_game.get("hand", [])
+func draw_toast_illustration(toast_bg: Control, text: String) -> void:
+	var accent = toast_accent_color(text)
+	var seal = make_panel(toast_bg, rect_full(0.035, 0.18, 0.095, 0.82), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(accent.r, accent.g, accent.b, 0.52), 0)
+	seal.name = "ToastIconSeal"
+	var icon_name = toast_icon_name(text)
+	if icon_name != "":
+		add_lucide_icon(seal, icon_name, rect_full(0.24, 0.24, 0.76, 0.76), Color(0.96, 0.92, 0.72, 0.92))
+	var sheen = make_color_rect(rect_full(0.115, 0.18, 0.910, 0.28), Color(1.0, 0.90, 0.48, 0.12))
+	sheen.name = "ToastSheen"
+	toast_bg.add_child(sheen)
+	var spark_count = 3 if text.find("成功") >= 0 or text.find("完成") >= 0 else 2
+	for i in range(spark_count):
+		var left = 0.900 + float(i) * 0.026
+		var spark = make_panel(toast_bg, rect_full(left, 0.26 + float(i % 2) * 0.22, left + 0.014, 0.40 + float(i % 2) * 0.22), Color(accent.r, accent.g, accent.b, 0.48), 999, Color(1.0, 0.92, 0.56, 0.18), 0)
+		spark.name = "ToastSpark_%d" % i
+	if text.find("成就") >= 0:
+		draw_achievement_toast_art(toast_bg, accent)
+	var item_key = toast_item_key_for_text(text)
+	if item_key != "":
+		draw_item_toast_art(toast_bg, item_key, accent)
 
-func get_discards(seat: int) -> Array:
-	if mode == "offline":
-		return players[seat]["discards"]
-	var result = []
-	for p in online_game.get("players", []):
-		if int(p.get("seat", -1)) == seat:
-			result = p.get("discards", [])
-	return result
+func draw_achievement_toast_art(toast_bg: Control, accent: Color) -> void:
+	var medal = make_panel(toast_bg, rect_full(0.100, 0.185, 0.142, 0.815), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(accent.r, accent.g, accent.b, 0.42), 0)
+	medal.name = "ToastAchievementMedal"
+	var core = make_panel(medal, rect_full(0.260, 0.250, 0.740, 0.750), Color(0.96, 0.82, 0.36, 0.52), 999, Color(1.0, 0.90, 0.50, 0.28), 0)
+	core.name = "ToastAchievementMedalCore"
+	for i in range(4):
+		var left = 0.150 + float(i) * 0.025
+		var ray = make_panel(toast_bg, rect_full(left, 0.300 + float(i % 2) * 0.240, left + 0.012, 0.430 + float(i % 2) * 0.240), Color(1.0, 0.86, 0.42, 0.34), 999, Color(1.0, 0.92, 0.56, 0.14), 0)
+		ray.name = "ToastAchievementRay_%d" % i
 
-func get_melds(seat: int) -> Array:
-	if mode == "offline":
-		return players[seat]["melds"]
-	for p in online_game.get("players", []):
-		if int(p.get("seat", -1)) == seat:
-			return p.get("melds", [])
-	return []
+func draw_item_toast_art(toast_bg: Control, item_id: String, accent: Color) -> void:
+	var badge = make_panel(toast_bg, rect_full(0.820, 0.185, 0.870, 0.815), Color(accent.r, accent.g, accent.b, 0.22), 12, Color(accent.r, accent.g, accent.b, 0.38), 0)
+	badge.name = "ToastItemBadge"
+	var core = make_panel(badge, rect_full(0.220, 0.220, 0.780, 0.780), Color(accent.r, accent.g, accent.b, 0.40), 999, Color(1.0, 0.92, 0.62, 0.22), 0)
+	core.name = "ToastItemCore"
+	var item_mark = make_label(core, item_short_mark(item_id), 10, Color(0.98, 0.94, 0.78), true)
+	apply_rect(item_mark, rect_full(0.0, 0.0, 1.0, 1.0))
+	for i in range(3):
+		var top = 0.255 + float(i) * 0.165
+		var pip = make_panel(toast_bg, rect_full(0.878, top, 0.892, top + 0.070), Color(accent.r, accent.g, accent.b, 0.44), 999, Color(1.0, 0.92, 0.56, 0.16), 0)
+		pip.name = "ToastItemPip_%d" % i
 
-func get_player_info(seat: int) -> Dictionary:
-	if mode == "offline":
-		return {
-			"name": players[seat]["name"],
-			"hand_count": players[seat]["hand"].size(),
-			"flowers": players[seat]["flowers"],
-			"flower_tiles": players[seat].get("flower_tiles", []),
-			"score": players[seat].get("score", 0),
-		}
-	for p in online_game.get("players", []):
-		if int(p.get("seat", -1)) == seat:
-			return {
-				"name": str(p.get("name", "玩家")),
-				"hand_count": int(p.get("handCount", 0)),
-				"flowers": int(p.get("flowerCount", 0)),
-				"score": int(p.get("score", 0)),
-			}
-	return {"name": "空位", "hand_count": 0, "flowers": 0, "score": 0}
+func toast_item_key_for_text(text: String) -> String:
+	for item_id in ITEM_TYPES.keys():
+		if text.find(item_display_name(str(item_id))) >= 0:
+			return str(item_id)
+	return ""
 
-func get_current_seat() -> int:
-	return current_seat if mode == "offline" else int(online_game.get("currentSeat", 0))
+func item_short_mark(item_id: String) -> String:
+	match item_id:
+		"swap_card":
+			return "换"
+		"peek_card":
+			return "看"
+		"lucky_charm":
+			return "运"
+		"double_coins":
+			return "倍"
+	return "具"
 
-func get_wall_count() -> int:
-	return wall.size() if mode == "offline" else int(online_game.get("wallCount", 0))
+func toast_icon_name(text: String) -> String:
+	if text.find("成就") >= 0:
+		return "sparkles"
+	if toast_item_key_for_text(text) != "":
+		return "gift"
+	if text.find("成功") >= 0 or text.find("完成") >= 0:
+		return "sparkles"
+	if text.find("不足") >= 0 or text.find("失败") >= 0:
+		return "triangle-alert"
+	if text.find("更新") >= 0 or text.find("下载") >= 0:
+		return "download"
+	return "info"
 
-func get_last_discard() -> String:
-	if mode == "offline":
-		return last_discard
-	return str(online_game.get("lastDiscard", ""))
+func toast_accent_color(text: String) -> Color:
+	if text.find("不足") >= 0 or text.find("失败") >= 0:
+		return Color(0.86, 0.36, 0.26, 1.0)
+	if text.find("成就") >= 0:
+		return Color(0.92, 0.70, 0.30, 1.0)
+	if toast_item_key_for_text(text) != "":
+		return Color(0.62, 0.54, 0.86, 1.0)
+	if text.find("成功") >= 0 or text.find("完成") >= 0:
+		return Color(0.84, 0.68, 0.30, 1.0)
+	return Color(0.40, 0.72, 0.58, 1.0)
 
-func get_last_discard_seat() -> int:
-	if mode == "offline":
-		return last_discard_seat
-	return int(online_game.get("lastDiscardSeat", -1))
-
-func can_self_discard() -> bool:
-	if mode == "offline":
-		return offline_phase == "await_discard" and current_seat == 0 and not offline_turn_needs_draw
-	return str(online_game.get("phase", "")) == "awaitDiscard" and int(online_game.get("currentSeat", -1)) == int(online_game.get("youSeat", -2))
 
 func current_status_text() -> String:
 	if mode == "offline":
@@ -12037,217 +12402,6 @@ func current_status_text() -> String:
 		return "等待吃碰杠胡响应"
 	return "轮到你出牌" if can_self_discard() else "等待对家行牌"
 
-func discard_preview(seat: int) -> String:
-	var discards = get_discards(seat)
-	return join_tile_labels(discards, tail_window_start(discards.size(), 8))
-
-func tail_window_start(total: int, limit: int) -> int:
-	return max(0, total - max(0, limit))
-
-func join_tail_lines(items: Array, limit: int) -> String:
-	var start := tail_window_start(items.size(), limit)
-	var output := ""
-	for i in range(start, items.size()):
-		if output != "":
-			output += "\n"
-		output += str(items[i])
-	return output
-
-func join_tile_labels(tiles: Array, start_index: int = 0, max_count: int = -1) -> String:
-	var start: int = min(max(0, start_index), tiles.size())
-	var end: int = tiles.size()
-	if max_count >= 0:
-		end = min(end, start + max_count)
-	var output := ""
-	for i in range(start, end):
-		if output != "":
-			output += " "
-		output += tile_label(str(tiles[i]))
-	return output
-
-func join_limited_strings(values: Array, separator: String, max_count: int) -> String:
-	var end: int = min(values.size(), max(0, max_count))
-	var output := ""
-	for i in range(end):
-		if output != "":
-			output += separator
-		output += str(values[i])
-	return output
-
-func flower_preview(seat: int) -> String:
-	if mode != "offline" or seat < 0 or seat >= players.size():
-		return ""
-	return join_tile_labels(players[seat].get("flower_tiles", []))
-
-func package_preview(seat: int) -> String:
-	if mode != "offline":
-		return ""
-	if offline_package_liability.has(seat):
-		var payer = int(offline_package_liability[seat])
-		return "%s包" % players[payer]["name"]
-	var targets: Array[String] = []
-	for key in offline_package_liability.keys():
-		if int(offline_package_liability[key]) == seat:
-			targets.append(str(players[int(key)]["name"]))
-	if not targets.is_empty():
-		return "包%s" % "、".join(targets)
-	return ""
-
-func active_package_lines() -> Array[String]:
-	var lines: Array[String] = []
-	for key in offline_package_liability.keys():
-		var winner = int(key)
-		var payer = int(offline_package_liability[key])
-		lines.append("包三搭：%s包赔%s" % [players[payer]["name"], players[winner]["name"]])
-	return lines
-
-func tile_label(tile: String) -> String:
-	if not tile_metadata_ready:
-		setup_tile_order()
-	if tile_label_cache.has(tile):
-		return str(tile_label_cache[tile])
-	if is_flower_tile(tile):
-		match tile:
-			"H1":
-				return "春"
-			"H2":
-				return "夏"
-			"H3":
-				return "秋"
-			"H4":
-				return "冬"
-			"H5":
-				return "梅"
-			"H6":
-				return "兰"
-			"H7":
-				return "竹"
-			"H8":
-				return "菊"
-	if tile.ends_with("W"):
-		return tile.left(tile.length() - 1) + "万"
-	if tile.ends_with("T"):
-		return tile.left(tile.length() - 1) + "条"
-	if tile.ends_with("B"):
-		return tile.left(tile.length() - 1) + "筒"
-	match tile:
-		"E":
-			return "东"
-		"S":
-			return "南"
-		"N":
-			return "西"
-		"R":
-			return "北"
-		"Z":
-			return "中"
-		"F":
-			return "发"
-		"P":
-			return "白"
-	return tile
-
-func tile_speech_label(tile: String) -> String:
-	if not tile_metadata_ready:
-		setup_tile_order()
-	if tile_speech_label_cache.has(tile):
-		return str(tile_speech_label_cache[tile])
-	if is_flower_tile(tile):
-		return tile_label(tile)
-	if tile.ends_with("W"):
-		return chinese_rank(tile.left(tile.length() - 1)) + "万"
-	if tile.ends_with("T"):
-		return chinese_rank(tile.left(tile.length() - 1)) + "条"
-	if tile.ends_with("B"):
-		return chinese_rank(tile.left(tile.length() - 1)) + "筒"
-	match tile:
-		"E":
-			return "东风"
-		"S":
-			return "南风"
-		"N":
-			return "西风"
-		"R":
-			return "北风"
-		"Z":
-			return "红中"
-		"F":
-			return "发财"
-		"P":
-			return "白板"
-	return tile_label(tile)
-
-func chinese_rank(text: String) -> String:
-	match text:
-		"1":
-			return "一"
-		"2":
-			return "二"
-		"3":
-			return "三"
-		"4":
-			return "四"
-		"5":
-			return "五"
-		"6":
-			return "六"
-		"7":
-			return "七"
-		"8":
-			return "八"
-		"9":
-			return "九"
-	return text
-
-func tile_corner(tile: String) -> String:
-	if not tile_metadata_ready:
-		setup_tile_order()
-	if tile_corner_cache.has(tile):
-		return str(tile_corner_cache[tile])
-	if is_flower_tile(tile):
-		return "花"
-	if tile.ends_with("W") or tile.ends_with("T") or tile.ends_with("B"):
-		return tile.left(tile.length() - 1)
-	return tile_label(tile)
-
-func tile_accent(tile: String) -> Color:
-	if not tile_metadata_ready:
-		setup_tile_order()
-	if tile_accent_cache.has(tile):
-		return tile_accent_cache[tile]
-	if is_flower_tile(tile):
-		return Color(0.60, 0.34, 0.12)
-	if tile.ends_with("W") or tile == "Z":
-		return Color(0.66, 0.16, 0.16)
-	if tile.ends_with("T") or tile == "F":
-		return Color(0.10, 0.42, 0.28)
-	if tile.ends_with("B"):
-		return Color(0.14, 0.28, 0.62)
-	return Color(0.14, 0.16, 0.16)
-
-func claim_label(claim: String) -> String:
-	match claim:
-		"chi":
-			return "吃"
-		"peng":
-			return "碰"
-		"gang":
-			return "杠"
-		"hu":
-			return "胡"
-	return claim
-
-func claim_color(claim: String) -> Color:
-	match claim:
-		"hu":
-			return Color(0.72, 0.26, 0.22)
-		"gang":
-			return Color(0.50, 0.42, 0.72)
-		"peng":
-			return Color(0.80, 0.56, 0.28)
-		"chi":
-			return Color(0.28, 0.58, 0.46)
-	return Color(0.40, 0.44, 0.45)
 
 func show_rules_screen(instant: bool = false) -> void:
 	"""显示麻将规则和玩法说明"""
@@ -12258,7 +12412,7 @@ func show_rules_screen(instant: bool = false) -> void:
 	if instant or not fx_enabled_effective():
 		_build.call()
 	else:
-		play_screen_transition(_build)
+		play_screen_transition(_build, false, "curtain")
 
 func _show_rules_screen_impl() -> void:
 	mode = "rules"
@@ -12268,11 +12422,21 @@ func _show_rules_screen_impl() -> void:
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
 	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
 	panel.add_child(make_color_rect(rect_full(0.014, 0.012, 0.986, 0.028), Color(1.0, 1.0, 1.0, 0.045)))
+	# 书架式滑入动画 / Shelf-slide entrance
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_right = -22.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "offset_right", 0.0, 0.26).from(-22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 标题
 	var title = make_label(panel, "麻将玩法指南", 30, Color(0.94, 0.86, 0.48), true)
 	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	draw_rules_guide_art(panel)
 
 	# 返回按钮
 	var back = make_small_button("返回", Color(0.32, 0.38, 0.40), func() -> void:
@@ -12285,7 +12449,7 @@ func _show_rules_screen_impl() -> void:
 	# 内容区域
 	var content = VBoxContainer.new()
 	content.anchor_left = 0.05
-	content.anchor_top = 0.12
+	content.anchor_top = 0.25
 	content.anchor_right = 0.95
 	content.anchor_bottom = 0.95
 	content.add_theme_constant_override("separation", 16)
@@ -12296,7 +12460,7 @@ func _show_rules_screen_impl() -> void:
 		"组成4组面子（顺子或刻子）+ 1对将牌即可胡牌",
 		"通过摸牌、打牌、吃碰杠来组合手牌",
 		"可以自摸胡牌，也可以点炮胡牌",
-	])
+	], 0)
 
 	# 牌型说明
 	add_rule_section(content, "🀄 牌型介绍", [
@@ -12304,35 +12468,105 @@ func _show_rules_screen_impl() -> void:
 		"刻子：相同3张牌（如 111万）",
 		"杠子：相同4张牌（杠牌专用）",
 		"将牌：任意一对相同的牌",
-	])
+	], 1)
 
 	# 特殊牌型
 	add_rule_section(content, "⭐ 特殊牌型", [
 		"七对：7对将牌即可胡牌",
 		"十三幺：13种幺九牌各一张 + 其中任意一对",
 		"清一色：全部是同一花色的牌",
-	])
+	], 2)
 
 	# 操作说明
 	add_rule_section(content, "🎮 游戏操作", [
 		"点击手牌打出该张牌",
 		"出现吃、碰、杠、胡按钮时点击操作",
 		"点击'重开'可重新开始本局",
-	])
+	], 3)
 
 	# 记录已查看教程
 	tutorial_step = -1
 	save_tutorial_state()
 
-func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array) -> void:
+func draw_rules_guide_art(parent: Control) -> Control:
+	var art = make_panel(parent, rect_full(0.05, 0.115, 0.95, 0.225), Color(0.016, 0.036, 0.040, 0.86), 16, Color(0.44, 0.40, 0.24, 0.36), 0)
+	art.name = "RulesGuideArt"
+	# 水墨画框装饰
+	make_ink_border(art, rect_full(0.0, 0.0, 1.0, 0.08), 2.0)
+	make_ink_border(art, rect_full(0.0, 0.92, 1.0, 1.0), 2.0)
+	var rail = make_panel(art, rect_full(0.060, 0.480, 0.940, 0.560), Color(0.58, 0.50, 0.28, 0.22), 999, Color(0.82, 0.72, 0.38, 0.18), 0)
+	rail.name = "RulesGuideRail"
+	var steps = [
+		{"label": "目标", "icon": "target", "color": Color(0.78, 0.54, 0.30)},
+		{"label": "组牌", "icon": "layers", "color": Color(0.36, 0.66, 0.54)},
+		{"label": "听牌", "icon": "ear", "color": Color(0.48, 0.58, 0.78)},
+		{"label": "胡牌", "icon": "sparkles", "color": Color(0.88, 0.70, 0.34)},
+	]
+	for i in range(steps.size()):
+		var step = steps[i]
+		var center_x = 0.105 + float(i) * 0.265
+		var col: Color = step.get("color", Color(0.62, 0.62, 0.42))
+		var node = make_panel(art, rect_full(center_x - 0.042, 0.170, center_x + 0.042, 0.830), Color(col.r, col.g, col.b, 0.30), 999, Color(col.r, col.g, col.b, 0.34), 0)
+		node.name = "RulesGuideStep_%d" % i
+		add_lucide_icon(node, str(step.get("icon", "circle")), rect_full(0.25, 0.16, 0.75, 0.56), col.lightened(0.36))
+		var label = make_label(node, str(step.get("label", "")), 12, Color(0.94, 0.92, 0.78), true)
+		apply_rect(label, rect_full(0.06, 0.58, 0.94, 0.94))
+		if i < steps.size() - 1:
+			var connector = make_panel(art, rect_full(center_x + 0.055, 0.435, center_x + 0.205, 0.605), Color(col.r, col.g, col.b, 0.18), 999, Color(col.r, col.g, col.b, 0.10), 0)
+			connector.name = "RulesGuideConnector_%d" % i
+	var lead_glow = make_panel(art, rect_full(0.035, 0.180, 0.135, 0.820), Color(0.90, 0.72, 0.34, 0.16), 999, Color(1.0, 0.84, 0.42, 0.18), 0)
+	lead_glow.name = "RulesGuideLeadGlow"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(lead_glow, "modulate:a", 0.42, 1.0).from(0.92)
+		tw.tween_property(lead_glow, "modulate:a", 0.92, 1.0).from(0.42)
+	return art
+
+func draw_rule_section_path_art(section: Control, section_index: int, title_text: String) -> void:
+	var colors = [
+		Color(0.86, 0.62, 0.34),
+		Color(0.38, 0.70, 0.58),
+		Color(0.62, 0.56, 0.86),
+		Color(0.86, 0.72, 0.38),
+	]
+	var icons = ["target", "layers", "sparkles", "mouse-pointer-click"]
+	var accent: Color = colors[clamp(section_index, 0, colors.size() - 1)]
+	var icon_name = str(icons[clamp(section_index, 0, icons.size() - 1)])
+	var strip = make_panel(section, rect_full(0.740, 0.160, 0.970, 0.840), Color(accent.r, accent.g, accent.b, 0.065), 14, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	strip.name = "RuleSectionArtStrip_%d" % section_index
+	var rail = make_color_rect(rect_full(0.120, 0.470, 0.880, 0.530), Color(accent.r, accent.g, accent.b, 0.26))
+	rail.name = "RuleSectionPathRail_%d" % section_index
+	strip.add_child(rail)
+	for i in range(3):
+		var x = 0.160 + float(i) * 0.340
+		var node = make_panel(strip, rect_full(x - 0.055, 0.300, x + 0.055, 0.700), Color(accent.r, accent.g, accent.b, 0.22 + float(i) * 0.035), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+		node.name = "RuleSectionPathNode_%d_%d" % [section_index, i]
+	var badge = make_panel(strip, rect_full(0.040, 0.120, 0.250, 0.420), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.20), 0)
+	badge.name = "RuleSectionCategoryBadge_%d" % section_index
+	add_lucide_icon(badge, icon_name, rect_full(0.220, 0.180, 0.780, 0.820), accent.lightened(0.32))
+	var glyph = make_label(strip, title_text.substr(0, 1), 20, Color(0.96, 0.90, 0.62, 0.50), true)
+	glyph.name = "RuleSectionPathGlyph_%d" % section_index
+	apply_rect(glyph, rect_full(0.705, 0.120, 0.920, 0.470))
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(strip, "modulate:a", 0.72, 1.2).from(1.0)
+		tw.tween_property(strip, "modulate:a", 1.0, 1.2).from(0.72)
+
+func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, section_index: int = -1) -> void:
 	var section = make_panel(parent, rect_full(0.0, 0.0, 1.0, 0.22), Color(0.012, 0.022, 0.028, 0.92), 14, Color(0.34, 0.38, 0.36, 0.28), 0)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	section.custom_minimum_size.y = 0
+	section.custom_minimum_size.y = 86
+	var marker = make_panel(section, rect_full(0.020, 0.170, 0.034, 0.830), Color(0.82, 0.66, 0.32, 0.42), 999, Color(0.96, 0.78, 0.38, 0.18), 0)
+	marker.name = "RuleSectionMarker"
+	if section_index >= 0:
+		draw_rule_section_path_art(section, section_index, title_text)
 
 	var vbox = VBoxContainer.new()
-	vbox.anchor_left = 0.04
+	vbox.anchor_left = 0.055
 	vbox.anchor_top = 0.08
-	vbox.anchor_right = 0.96
+	vbox.anchor_right = 0.72 if section_index >= 0 else 0.96
 	vbox.anchor_bottom = 0.92
 	section.add_child(vbox)
 
@@ -12353,7 +12587,7 @@ func show_stats_screen(instant: bool = false) -> void:
 	if instant or not fx_enabled_effective():
 		_build.call()
 	else:
-		play_screen_transition(_build)
+		play_screen_transition(_build, false, "curtain")
 
 func _show_stats_screen_impl() -> void:
 	mode = "stats"
@@ -12361,6 +12595,14 @@ func _show_stats_screen_impl() -> void:
 
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
 	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
+	# 书架式滑入动画 / Shelf-slide entrance
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_top = 18.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "offset_top", 0.0, 0.26).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	var title = make_label(panel, "游戏统计", 30, Color(0.94, 0.86, 0.48), true)
 	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
@@ -12372,14 +12614,15 @@ func _show_stats_screen_impl() -> void:
 	back.custom_minimum_size = Vector2(100, 48)
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+	draw_stats_dashboard_art(panel)
 
 	# 统计数据
 	var content = VBoxContainer.new()
 	content.anchor_left = 0.08
-	content.anchor_top = 0.15
+	content.anchor_top = 0.34
 	content.anchor_right = 0.92
 	content.anchor_bottom = 0.92
-	content.add_theme_constant_override("separation", 20)
+	content.add_theme_constant_override("separation", 12)
 	panel.add_child(content)
 
 	add_stat_row(content, "总场次", "%d 局" % int(game_stats.get("games_played", 0)))
@@ -12388,6 +12631,85 @@ func _show_stats_screen_impl() -> void:
 	add_stat_row(content, "累计分数", "%s 分" % compact_score_text(int(game_stats.get("total_score", 0))))
 	add_stat_row(content, "最高得分", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))))
 	add_stat_row(content, "总手牌数", "%d 局" % int(game_stats.get("total_hands", 0)))
+
+func draw_stats_dashboard_art(parent: Control) -> Control:
+	var dash = make_panel(parent, rect_full(0.08, 0.120, 0.92, 0.300), Color(0.014, 0.034, 0.040, 0.88), 16, Color(0.42, 0.36, 0.22, 0.34), 0)
+	dash.name = "StatsDashboardArt"
+	# 水墨框装饰
+	make_ink_border(dash, rect_full(0.0, 0.0, 1.0, 0.06), 2.0)
+	make_ink_border(dash, rect_full(0.0, 0.94, 1.0, 1.0), 2.0)
+	var win_rate = clamp(float(game_stats.get("win_rate", 0.0)), 0.0, 1.0)
+	var games = int(game_stats.get("games_played", 0))
+	var best_score = int(game_stats.get("best_score", 0))
+	var accent = Color(0.42, 0.70, 0.58, 1.0)
+	var ring = Control.new()
+	ring.name = "StatsWinRateRing"
+	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(ring, rect_full(0.035, 0.14, 0.185, 0.86))
+	dash.add_child(ring)
+	make_panel(ring, rect_full(0.05, 0.05, 0.95, 0.95), Color(0.018, 0.030, 0.034, 0.92), 999, Color(accent.r, accent.g, accent.b, 0.20), 0)
+	var lit_segments = clamp(int(ceil(win_rate * 8.0)), 0, 8)
+	for i in range(8):
+		var col = i % 4
+		var row = int(i / 4)
+		var left = 0.18 + float(col) * 0.17
+		var top = 0.12 + float(row) * 0.58
+		var lit = i < lit_segments
+		var seg = make_panel(ring, rect_full(left, top, left + 0.10, top + 0.18), Color(accent.r, accent.g, accent.b, 0.66 if lit else 0.12), 999, Color(accent.r, accent.g, accent.b, 0.26 if lit else 0.08), 0)
+		seg.name = "StatsWinRateSegment_%d" % i
+	var games_track = make_panel(dash, rect_full(0.235, 0.26, 0.600, 0.74), Color(0.020, 0.036, 0.040, 0.70), 999, Color(0.72, 0.62, 0.34, 0.20), 0)
+	games_track.name = "StatsGamesTrack"
+	var games_fill = clamp(float(games) / 20.0, 0.05, 1.0)
+	var games_bar = make_panel(games_track, rect_full(0.035, 0.35, 0.035 + 0.90 * games_fill, 0.65), Color(0.78, 0.64, 0.30, 0.58), 999, Color(0.92, 0.78, 0.42, 0.22), 0)
+	games_bar.name = "StatsGamesTrackFill"
+	var trend = Control.new()
+	trend.name = "StatsTrendLineArt"
+	trend.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(trend, rect_full(0.245, 0.720, 0.595, 0.900))
+	dash.add_child(trend)
+	var trend_base = make_color_rect(rect_full(0.020, 0.720, 0.980, 0.775), Color(0.82, 0.72, 0.42, 0.14))
+	trend_base.name = "StatsTrendBaseLine"
+	trend.add_child(trend_base)
+	var trend_points = [
+		Vector2(0.080, 0.660),
+		Vector2(0.260, 0.520 - win_rate * 0.16),
+		Vector2(0.450, 0.610 - games_fill * 0.18),
+		Vector2(0.660, 0.380 - win_rate * 0.14),
+		Vector2(0.860, 0.300 - min(float(best_score) / 12000.0, 1.0) * 0.12),
+	]
+	for i in range(trend_points.size()):
+		var point = trend_points[i]
+		var node = make_panel(trend, rect_full(point.x - 0.028, point.y - 0.090, point.x + 0.028, point.y + 0.090), Color(0.46, 0.74, 0.62, 0.46), 999, Color(0.76, 0.92, 0.70, 0.20), 0)
+		node.name = "StatsTrendNode_%d" % i
+		if i < trend_points.size() - 1:
+			var next_point: Vector2 = trend_points[i + 1]
+			var left = min(point.x, next_point.x) + 0.030
+			var right = max(point.x, next_point.x) - 0.030
+			var mid_y = (point.y + next_point.y) * 0.5
+			var connector = make_color_rect(rect_full(left, mid_y - 0.025, right, mid_y + 0.025), Color(0.46, 0.74, 0.62, 0.24))
+			connector.name = "StatsTrendConnector_%d" % i
+			trend.add_child(connector)
+	var score_medal = make_panel(dash, rect_full(0.665, 0.18, 0.925, 0.82), Color(0.050, 0.040, 0.026, 0.62), 18, Color(0.92, 0.72, 0.34, 0.30), 0)
+	score_medal.name = "StatsBestScoreMedal"
+	var medal_glow = make_panel(score_medal, rect_full(0.08, 0.16, 0.30, 0.84), Color(0.92, 0.72, 0.34, 0.24 if best_score != 0 else 0.10), 999, Color(1.0, 0.86, 0.46, 0.26), 0)
+	medal_glow.name = "StatsBestScoreGlow"
+	add_lucide_icon(score_medal, "trophy", rect_full(0.10, 0.24, 0.28, 0.76), GOLD_BRIGHT)
+	var milestone_count = 0
+	for threshold in [3000, 6000, 9000]:
+		var unlocked = best_score >= int(threshold)
+		var left = 0.360 + float(milestone_count) * 0.145
+		var milestone = make_panel(score_medal, rect_full(left, 0.690, left + 0.080, 0.860), Color(0.92, 0.72, 0.34, 0.40 if unlocked else 0.12), 999, Color(1.0, 0.86, 0.46, 0.20 if unlocked else 0.06), 0)
+		milestone.name = "StatsBestScoreMilestone_%d" % milestone_count
+		milestone_count += 1
+	var rate_label = make_label(dash, "胜率 %d%%" % int(round(win_rate * 100.0)), 14, Color(0.86, 0.92, 0.80), true)
+	apply_rect(rate_label, rect_full(0.035, 0.02, 0.210, 0.18))
+	var games_label = make_label(dash, "历练 %d局" % games, 14, Color(0.92, 0.86, 0.62), true)
+	apply_rect(games_label, rect_full(0.255, 0.04, 0.580, 0.24))
+	games_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var best_label = make_label(score_medal, "最高 %s" % compact_score_text(best_score), 14, Color(0.96, 0.88, 0.58), true)
+	apply_rect(best_label, rect_full(0.33, 0.16, 0.94, 0.84))
+	best_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	return dash
 
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String) -> void:
 	var row = Panel.new()
@@ -12416,80 +12738,294 @@ func show_shop_screen(instant: bool = false) -> void:
 	if instant or not fx_enabled_effective():
 		_build.call()
 	else:
-		play_screen_transition(_build)
+		play_screen_transition(_build, false, "curtain")
 
 func _show_shop_screen_impl() -> void:
 	mode = "shop"
 	clear_screen()
 
-	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
-	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
+	# 背景装饰 - 祥云与灯笼
+	make_cloud_decoration(root_layer, rect_full(0.02, 0.75, 0.25, 0.95), "mist", false)
+	make_cloud_decoration(root_layer, rect_full(0.75, 0.04, 0.98, 0.18), "gold", false)
+	make_lantern(root_layer, rect_full(0.03, 0.04, 0.09, 0.18), CINNABAR, true)
 
+	# 主面板
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
+	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), GOLD_PRIMARY.darkened(0.2)))
+	# 书架式滑入动画 / Shelf-slide entrance
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_left = 22.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "offset_left", 0.0, 0.26).from(22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	# 顶部金色装饰线
+	panel.add_child(make_color_rect(rect_full(0.015, 0.06, 0.985, 0.08), Color(0.92, 0.78, 0.38, 0.18)))
+
+	# 标题 - 带图标
+	add_lucide_icon(panel, "shopping-bag", rect_full(0.03, 0.030, 0.06, 0.090), GOLD_BRIGHT)
 	var title = make_label(panel, "商店", 30, Color(0.94, 0.86, 0.48), true)
-	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	apply_rect(title, rect_full(0.07, 0.028, 0.40, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
-	# 货币显示
-	var currency_text = "💰 %d  💎 %d" % [int(currency.get("coins", 0)), int(currency.get("gems", 0))]
-	var currency_label = make_label(panel, currency_text, 18, Color(0.86, 0.88, 0.80), true)
-	apply_rect(currency_label, rect_full(0.60, 0.040, 0.96, 0.105))
-	currency_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	# 货币显示 - 增强样式
+	var coins_panel = make_panel(panel, rect_full(0.50, 0.035, 0.72, 0.090), Color(0.020, 0.036, 0.042, 0.92), 12, Color(0.46, 0.52, 0.42, 0.36), 0)
+	add_lucide_icon(coins_panel, "coin", rect_full(0.06, 0.15, 0.22, 0.85), GOLD_PRIMARY)
+	var coins_label = make_label(coins_panel, str(int(currency.get("coins", 0))), 16, Color(0.96, 0.92, 0.68), true)
+	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
+	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
+	var gems_panel = make_panel(panel, rect_full(0.73, 0.035, 0.84, 0.090), Color(0.020, 0.036, 0.042, 0.92), 12, Color(0.42, 0.38, 0.56, 0.36), 0)
+	add_lucide_icon(gems_panel, "diamond", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.62, 0.52, 0.82))
+	var gems_label = make_label(gems_panel, str(int(currency.get("gems", 0))), 16, Color(0.96, 0.92, 0.68), true)
+	apply_rect(gems_label, rect_full(0.25, 0.10, 0.95, 0.90))
+	gems_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 返回按钮
 	var back = make_small_button("返回", Color(0.32, 0.38, 0.40), func() -> void:
 		show_menu()
 	)
 	back.custom_minimum_size = Vector2(100, 48)
 	panel.add_child(back)
-	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+	apply_rect(back, rect_full(0.86, 0.030, 0.96, 0.090))
+	add_lucide_icon(back, "chevron-left", rect_full(0.08, 0.22, 0.30, 0.78), Color(0.92, 0.94, 0.88, 0.86))
 
-	# 道具列表
+	# 道具列表 - 带滚动支持
+	var scroll = ScrollContainer.new()
+	scroll.anchor_left = 0.04
+	scroll.anchor_top = 0.12
+	scroll.anchor_right = 0.96
+	scroll.anchor_bottom = 0.95
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(scroll)
+
 	var content = VBoxContainer.new()
-	content.anchor_left = 0.06
-	content.anchor_top = 0.15
-	content.anchor_right = 0.94
-	content.anchor_bottom = 0.92
-	content.add_theme_constant_override("separation", 14)
-	panel.add_child(content)
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 12)
+	scroll.add_child(content)
+
+	# 道具图标映射
+	var item_icon_map := {
+		"swap_card": "refresh-cw",
+		"peek_card": "info",
+		"lucky_charm": "leaf",
+		"double_coins": "coin",
+	}
+	# 道具颜色映射
+	var item_color_map := {
+		"swap_card": Color(0.22, 0.48, 0.72),
+		"peek_card": Color(0.62, 0.38, 0.72),
+		"lucky_charm": Color(0.28, 0.56, 0.42),
+		"double_coins": Color(0.72, 0.52, 0.22),
+	}
 
 	for item_id in ITEM_TYPES.keys():
 		var item_info = ITEM_TYPES[item_id]
+		var count = get_item_count(item_id)
+		var cost = int(item_info.get("cost_gems", 10))
+		var item_color = item_color_map.get(item_id, Color(0.42, 0.48, 0.44))
+		var icon_name = item_icon_map.get(item_id, "gift")
+
+		# 道具行面板
 		var row = Panel.new()
-		row.custom_minimum_size = Vector2(0, 60)
+		row.name = "ShopItemRow_%s" % item_id
+		row.custom_minimum_size = Vector2(0, 72)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_theme_stylebox_override("panel", style(Color(0.018, 0.030, 0.034, 0.92), 12, Color(0.34, 0.38, 0.36, 0.32), 0))
+		var row_style = style(Color(0.018, 0.030, 0.034, 0.92), 14, Color(0.34, 0.38, 0.36, 0.32), 0)
+		row.add_theme_stylebox_override("panel", row_style)
 		content.add_child(row)
+		# 道具行交错入场 / Staggered item entrance
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var item_index = int(ITEM_TYPES.keys().find(item_id))
+			row.modulate = Color(1, 1, 1, 0)
+			row.offset_left = 14.0
+			var r_tw := create_tween()
+			r_tw.set_parallel(true)
+			r_tw.tween_property(row, "modulate:a", 1.0, 0.22).from(0.0).set_delay(float(item_index) * 0.06).set_ease(Tween.EASE_OUT)
+			r_tw.tween_property(row, "offset_left", 0.0, 0.22).from(14.0).set_delay(float(item_index) * 0.06).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
-		# 道具图标和名称
-		var icon_label = make_label(row, str(item_info.get("icon", "📦")), 24, Color(1, 1, 1), true)
-		apply_rect(icon_label, rect_full(0.04, 0.12, 0.14, 0.88))
+		# 左侧彩色装饰条
+		row.add_child(make_color_rect(rect_full(0.0, 0.0, 0.008, 1.0), item_color.darkened(0.2)))
+		draw_shop_item_row_art(row, item_color, count, item_id)
 
+		# 道具图标背景
+		var icon_bg = make_panel(row, rect_full(0.02, 0.10, 0.10, 0.90), item_color.darkened(0.6), 12, item_color.darkened(0.3), 0)
+		icon_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_lucide_icon(row, icon_name, rect_full(0.035, 0.18, 0.085, 0.82), item_color.lightened(0.3))
+
+		# 道具名称
 		var name_label = make_label(row, str(item_info.get("name", item_id)), 18, Color(0.94, 0.92, 0.86), true)
-		apply_rect(name_label, rect_full(0.16, 0.10, 0.55, 0.50))
+		apply_rect(name_label, rect_full(0.12, 0.10, 0.50, 0.48))
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
+		# 道具描述
 		var desc_label = make_label(row, str(item_info.get("desc", "")), 12, Color(0.68, 0.74, 0.70), false)
-		apply_rect(desc_label, rect_full(0.16, 0.52, 0.55, 0.90))
+		apply_rect(desc_label, rect_full(0.12, 0.52, 0.55, 0.90))
 		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
-		# 拥有数量
-		var count = get_item_count(item_id)
-		var count_label = make_label(row, "拥有: %d" % count, 14, Color(0.76, 0.80, 0.74), true)
-		apply_rect(count_label, rect_full(0.56, 0.30, 0.72, 0.70))
+		# 拥有数量 - 带徽章样式
+		var count_badge_color = Color(0.28, 0.56, 0.48) if count > 0 else Color(0.38, 0.42, 0.40)
+		var count_badge = make_badge(row, rect_full(0.56, 0.20, 0.70, 0.80), "拥有 %d" % count, 13, count_badge_color.darkened(0.2), count_badge_color.lightened(0.2), Color(0.96, 0.96, 0.92))
+		count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-		# 购买按钮
-		var cost = int(item_info.get("cost_gems", 10))
-		var buy_btn = make_small_button("💎%d" % cost, Color(0.42, 0.38, 0.58), func() -> void:
+		# 购买按钮 - 增强样式
+		var buy_btn = make_small_button("", Color(0.42, 0.38, 0.58), func() -> void:
 			if spend_gems(cost):
 				add_item(item_id, 1)
 				show_toast("购买成功！获得%s" % item_info.get("name", item_id), 2000)
-			# 刷新显示
+				# 播放购买成功动画
+				if fx_enabled_effective():
+					_play_purchase_success_animation(row, item_color)
+				# 刷新显示
 				_show_shop_screen_impl()
 			else:
 				show_toast("钻石不足", 1800)
 		)
-		buy_btn.custom_minimum_size = Vector2(100, 44)
+		buy_btn.custom_minimum_size = Vector2(100, 48)
 		row.add_child(buy_btn)
-		apply_rect(buy_btn, rect_full(0.80, 0.15, 0.96, 0.85))
+		apply_rect(buy_btn, rect_full(0.78, 0.15, 0.97, 0.85))
+		draw_shop_buy_button_art(buy_btn, cost, int(currency.get("gems", 0)) >= cost)
+
+		# 按钮内容 - 图标和价格
+		add_lucide_icon(buy_btn, "diamond", rect_full(0.10, 0.22, 0.30, 0.78), Color(0.72, 0.62, 0.88))
+		var price_label = make_label(buy_btn, str(cost), 16, Color(0.96, 0.94, 0.88), true)
+		apply_rect(price_label, rect_full(0.32, 0.10, 0.92, 0.90))
+		price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+		# 按钮悬停效果
+		buy_btn.mouse_entered.connect(func() -> void:
+			if is_instance_valid(buy_btn):
+				var tw := buy_btn.create_tween()
+				tw.tween_property(buy_btn, "scale", Vector2(1.05, 1.05), 0.15).set_ease(Tween.EASE_OUT)
+		)
+		buy_btn.mouse_exited.connect(func() -> void:
+			if is_instance_valid(buy_btn):
+				var tw := buy_btn.create_tween()
+				tw.tween_property(buy_btn, "scale", Vector2(1.0, 1.0), 0.15).set_ease(Tween.EASE_OUT)
+		)
+
+	# 面板弹出动画
+	if fx_enabled_effective():
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.scale = Vector2(0.95, 0.95)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
+		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.95, 0.95)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+func draw_shop_buy_button_art(button: Control, cost: int, affordable: bool) -> Control:
+	var art = Control.new()
+	art.name = "ShopBuyButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var accent = Color(0.62, 0.52, 0.86) if affordable else Color(0.74, 0.44, 0.38)
+	var rail = make_panel(art, rect_full(0.075, 0.760, 0.925, 0.875), Color(0.010, 0.018, 0.022, 0.54), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	rail.name = "ShopBuyButtonAffordRail"
+	var fill_fraction = 0.86 if affordable else 0.28
+	var fill = make_panel(art, rect_full(0.080, 0.782, 0.080 + 0.840 * fill_fraction, 0.852), Color(accent.r, accent.g, accent.b, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	fill.name = "ShopBuyButtonAffordFill"
+	var seal = make_panel(art, rect_full(0.705, 0.135, 0.905, 0.600), Color(accent.r, accent.g, accent.b, 0.14), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	seal.name = "ShopBuyButtonPriceSeal"
+	for i in range(2):
+		var top = 0.185 + float(i) * 0.190
+		var spark = make_panel(art, rect_full(0.622 + float(i) * 0.044, top, 0.648 + float(i) * 0.044, top + 0.110), Color(accent.r, accent.g, accent.b, 0.28 if affordable else 0.14), 999, Color(1.0, 0.92, 0.60, 0.10), 0)
+		spark.name = "ShopBuyButtonSpark_%d" % i
+	if not affordable:
+		var lock = make_panel(art, rect_full(0.050, 0.155, 0.215, 0.575), Color(0.82, 0.46, 0.40, 0.22), 999, Color(0.94, 0.64, 0.56, 0.12), 0)
+		lock.name = "ShopBuyButtonInsufficientLock"
+	if affordable and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(seal, "modulate:a", 0.50, 0.90).from(1.0)
+		tw.tween_property(seal, "modulate:a", 1.0, 0.90).from(0.50)
+	return art
+
+func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id: String = "") -> void:
+	var shelf = make_panel(row, rect_full(0.110, 0.820, 0.735, 0.885), Color(item_color.r, item_color.g, item_color.b, 0.16), 999, Color(item_color.r, item_color.g, item_color.b, 0.20), 0)
+	shelf.name = "ShopItemShelfRail"
+	var energy = make_panel(row, rect_full(0.120, 0.060, 0.535, 0.105), Color(item_color.r, item_color.g, item_color.b, 0.12), 999, Color(item_color.r, item_color.g, item_color.b, 0.16), 0)
+	energy.name = "ShopItemEnergyRail"
+	var fill_right = 0.120 + 0.415 * clamp(float(count) / 3.0, 0.08, 1.0)
+	var fill = make_color_rect(rect_full(0.120, 0.068, fill_right, 0.097), Color(item_color.r, item_color.g, item_color.b, 0.34 if count > 0 else 0.16))
+	fill.name = "ShopItemEnergyFill"
+	row.add_child(fill)
+	var mark = make_panel(row, rect_full(0.705, 0.190, 0.755, 0.810), Color(item_color.r, item_color.g, item_color.b, 0.18), 999, Color(item_color.r, item_color.g, item_color.b, 0.30), 0)
+	mark.name = "ShopItemTypeMark_%s" % (item_id if item_id != "" else "generic")
+	var mark_label = make_label(mark, item_short_mark(item_id), 9, Color(0.98, 0.94, 0.78, 0.88), true)
+	mark_label.name = "ShopItemTypeGlyph"
+	apply_rect(mark_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	mark_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mark_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var stock = Control.new()
+	stock.name = "ShopItemStockPips"
+	stock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(stock, rect_full(0.565, 0.075, 0.700, 0.180))
+	row.add_child(stock)
+	var pip_count = min(4, max(1, count))
+	for i in range(pip_count):
+		var left = 0.02 + float(i) * 0.235
+		var alpha = 0.72 if count > 0 else 0.22
+		var pip = make_panel(stock, rect_full(left, 0.18, left + 0.145, 0.82), Color(item_color.r, item_color.g, item_color.b, alpha), 999, Color(item_color.r, item_color.g, item_color.b, 0.34), 0)
+		pip.name = "ShopItemStockPip_%d" % i
+	var price_aura = make_panel(row, rect_full(0.755, 0.120, 0.988, 0.880), Color(0.62, 0.52, 0.82, 0.08), 14, Color(0.72, 0.62, 0.88, 0.18), 0)
+	price_aura.name = "ShopItemPriceAura"
+	for i in range(2):
+		var shine = make_panel(row, rect_full(0.772 + float(i) * 0.035, 0.185, 0.792 + float(i) * 0.035, 0.315), Color(0.82, 0.70, 0.96, 0.24), 999, Color(1.0, 0.92, 0.56, 0.10), 0)
+		shine.name = "ShopItemPriceSpark_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(price_aura, "modulate:a", 0.42, 0.90).from(0.88)
+		tw.tween_property(price_aura, "modulate:a", 0.88, 0.90).from(0.42)
+
+func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
+	"""播放购买成功动画 - 增强版：物品闪光 + 金币粒子飞溅"""
+	# 闪光效果
+	var flash = ColorRect.new()
+	flash.color = Color(item_color.r, item_color.g, item_color.b, 0.0)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.add_child(flash)
+
+	var flash_tween := create_tween()
+	flash_tween.tween_property(flash, "color:a", 0.3, 0.15)
+	flash_tween.tween_property(flash, "color:a", 0.0, 0.3)
+	flash_tween.tween_callback(flash.queue_free)
+
+	# 边框高亮 - 增强为更明显的发光
+	var highlight_tween := create_tween()
+	highlight_tween.tween_property(row, "modulate", Color(1.25, 1.22, 1.18, 1.0), 0.15)
+	highlight_tween.tween_property(row, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.3)
+
+	# 金币粒子飞溅 - 从行中心向四周散开
+	if fx_enabled_effective() and is_instance_valid(row):
+		var row_size = row.size
+		var center = Vector2(row_size.x * 0.5, row_size.y * 0.5)
+		for i in range(10):
+			var particle = Panel.new()
+			particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var p_style = StyleBoxFlat.new()
+			var gold_tone = GOLD_PRIMARY if i % 2 == 0 else GOLD_BRIGHT
+			p_style.bg_color = Color(gold_tone.r, gold_tone.g, gold_tone.b, 0.92)
+			p_style.set_corner_radius_all(50)
+			particle.add_theme_stylebox_override("panel", p_style)
+			var psize = 4.0 + randf() * 5.0
+			particle.size = Vector2(psize, psize)
+			particle.position = center - Vector2(psize * 0.5, psize * 0.5)
+			row.add_child(particle)
+			var angle := float(i) * TAU / 10.0 + randf() * 0.3
+			var dist := 40.0 + randf() * 50.0
+			var target_pos: Vector2 = center + Vector2(cos(angle), sin(angle)) * dist - Vector2(psize * 0.5, psize * 0.5)
+			var p_tw := create_tween()
+			p_tw.set_parallel(true)
+			p_tw.tween_property(particle, "position", target_pos, 0.6).set_ease(Tween.EASE_OUT)
+			p_tw.tween_property(particle, "modulate:a", 0.0, 0.6).set_ease(Tween.EASE_IN)
+			p_tw.tween_property(particle, "scale", Vector2(0.3, 0.3), 0.6).set_ease(Tween.EASE_IN)
+			p_tw.tween_callback(particle.queue_free).set_delay(0.65)
+
 
 # ============================================================
 # 房间聊天功能
@@ -12502,11 +13038,69 @@ func show_chat_panel() -> void:
 	if chat_messages.is_empty():
 		return
 	var chat_panel = make_panel(root_layer, rect_full(0.02, 0.38, 0.28, 0.72), Color(0.008, 0.018, 0.022, 0.95), 14, Color(0.38, 0.42, 0.40, 0.36), 0)
+	chat_panel.name = "ChatPanel"
+	draw_chat_panel_art(chat_panel)
 	var chat_text = "\n".join(chat_messages.slice(-8))
 	var chat_label = make_label(chat_panel, chat_text, 12, Color(0.82, 0.86, 0.80), false)
-	apply_rect(chat_label, rect_full(0.06, 0.08, 0.94, 0.92))
+	apply_rect(chat_label, rect_full(0.075, 0.260, 0.940, 0.910))
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	chat_label.clip_text = true
+
+func draw_chat_panel_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "ChatPanelArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.0, 0.0, 1.0, 1.0))
+	# 笔触分隔线
+	make_brush_stroke_divider(art, rect_full(0.10, 0.12, 0.90, 0.15))
+	parent.add_child(art)
+	art.add_child(make_color_rect(rect_full(0.0, 0.0, 0.014, 1.0), Color(0.38, 0.70, 0.62, 0.50)))
+	art.add_child(make_color_rect(rect_full(0.045, 0.205, 0.955, 0.220), Color(0.86, 0.74, 0.42, 0.12)))
+	var header = make_panel(art, rect_full(0.055, 0.055, 0.945, 0.190), Color(0.020, 0.044, 0.050, 0.78), 999, Color(0.48, 0.68, 0.58, 0.22), 0)
+	header.name = "ChatPanelHeader"
+	add_lucide_icon(header, "users", rect_full(0.035, 0.190, 0.155, 0.810), Color(0.76, 0.88, 0.72, 0.86))
+	var title = make_label(header, "房间消息", 12, Color(0.88, 0.92, 0.80), true)
+	apply_rect(title, rect_full(0.170, 0.080, 0.575, 0.920))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var count_badge = make_badge(header, rect_full(0.620, 0.170, 0.925, 0.830), "%d条" % min(99, chat_messages.size()), 10, Color(0.22, 0.40, 0.38, 0.92), Color(0.48, 0.72, 0.62, 0.34), Color(0.94, 0.96, 0.88))
+	count_badge.name = "ChatPanelCountBadge"
+	count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rail = make_panel(art, rect_full(0.058, 0.285, 0.070, 0.900), Color(0.60, 0.76, 0.64, 0.20), 999, Color(0.80, 0.92, 0.72, 0.12), 0)
+	rail.name = "ChatPanelActivityRail"
+	var visible_count = min(5, chat_messages.size())
+	for i in range(visible_count):
+		var top = 0.320 + float(i) * 0.112
+		var message_text = str(chat_messages[chat_messages.size() - visible_count + i])
+		var is_self_message = message_text.begins_with("你:")
+		var node = make_panel(art, rect_full(0.044, top, 0.084, top + 0.048), Color(0.48, 0.78, 0.64, 0.46), 999, Color(0.80, 0.92, 0.70, 0.22), 0)
+		node.name = "ChatPanelMessageNode_%d" % i
+		var sender_chip = make_panel(art, rect_full(0.100, top - 0.008, 0.158, top + 0.056), Color(0.76, 0.62, 0.34, 0.36 if is_self_message else 0.18), 999, Color(0.96, 0.82, 0.42, 0.18 if is_self_message else 0.08), 0)
+		sender_chip.name = "ChatPanelSenderChip_%d" % i
+		if is_self_message:
+			var ribbon = make_color_rect(rect_full(0.168, top + 0.018, 0.305, top + 0.034), Color(0.86, 0.72, 0.36, 0.28))
+			ribbon.name = "ChatPanelOutgoingRibbon_%d" % i
+			art.add_child(ribbon)
+		var bead = make_panel(art, rect_full(0.895, top - 0.002, 0.915, top + 0.046), Color(0.42, 0.74, 0.62, 0.38), 999, Color(0.78, 0.92, 0.72, 0.14), 0)
+		bead.name = "ChatPanelUnreadBead_%d" % i
+	var latest_glow = make_panel(art, rect_full(0.036, 0.300, 0.092, 0.368), Color(0.92, 0.76, 0.34, 0.20), 999, Color(1.0, 0.86, 0.46, 0.18), 0)
+	latest_glow.name = "ChatPanelLatestGlow"
+	var input_pulse = make_panel(art, rect_full(0.760, 0.825, 0.940, 0.905), Color(0.42, 0.72, 0.62, 0.10), 999, Color(0.74, 0.92, 0.72, 0.10), 0)
+	input_pulse.name = "ChatPanelInputPulse"
+	for i in range(3):
+		var wave = make_panel(art, rect_full(0.790 + float(i) * 0.045, 0.850 - float(i % 2) * 0.020, 0.815 + float(i) * 0.045, 0.890), Color(0.62, 0.84, 0.70, 0.36 - float(i) * 0.06), 999, Color(0.82, 0.96, 0.76, 0.12), 0)
+		wave.name = "ChatPanelTypingWave_%d" % i
+	add_lucide_icon(art, "sparkles", rect_full(0.835, 0.058, 0.930, 0.176), Color(0.94, 0.82, 0.46, 0.50))
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(latest_glow, "modulate:a", 0.36, 0.90).from(0.90)
+		tw.tween_property(latest_glow, "modulate:a", 0.90, 0.90).from(0.36)
+		var input_tw := create_tween()
+		input_tw.set_loops(3600)
+		input_tw.tween_property(input_pulse, "modulate:a", 0.44, 0.80).from(1.0)
+		input_tw.tween_property(input_pulse, "modulate:a", 1.0, 0.80).from(0.44)
+	return art
 
 func add_chat_message(text: String) -> void:
 	chat_messages.append(text)
@@ -12518,7 +13112,9 @@ func send_quick_chat(message: String) -> void:
 		return
 	add_chat_message("你: %s" % message)
 	send_online_action({"type": "chat", "message": message}, "发送消息")
-	show_toast("已发送: %s" % message, 1500)# 牌面动画系统、增强胜利特效、国风装饰元素等新增函数
+	show_toast("已发送: %s" % message, 1500)
+
+# 牌面动画系统、增强胜利特效、国风装饰元素等新增函数
 # 这些代码将被追加到 scripts/main.gd 文件末尾
 
 # ============================================================
@@ -12574,6 +13170,7 @@ func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, d
 
 	# 创建飞行中的牌面
 	var flying_tile = make_tile_view(tile, Vector2(56, 76), false, Callable())
+	flying_tile.name = "FlyingTile_%s" % tile
 	flying_tile.z_index = FX_LAYER_Z_INDEX + 2
 	flying_tile.modulate = Color(1, 1, 1, 0.95)
 	flying_tile.position = from_pos
@@ -12581,39 +13178,56 @@ func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, d
 	fx_layer.add_child(flying_tile)
 
 	var duration := float(duration_msec) / 1000.0
-
-	# 使用 Tween 的 parallel 模式同时控制位置和弧线
 	var tw := create_tween()
 	tile_fly_animations.append({"tween": tw, "tile": flying_tile})
-
-	tw.set_parallel(true)
-
-	# X轴移动
-	tw.tween_property(flying_tile, "position:x", to_pos.x, duration).from(from_pos.x).set_trans(FX_TILE_FLY_CURVE).set_ease(FX_TILE_FLY_EASE)
-
-	# Y轴移动（带弧线）- 使用两段动画模拟抛物线
-	var mid_pos_y = min(from_pos.y, to_pos.y) - arc_height
-
-	# 上升阶段
-	var tw_rise := create_tween()
-	tw_rise.tween_property(flying_tile, "position:y", mid_pos_y, duration * 0.5).from(from_pos.y).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
-	# 下降阶段
-	var tw_fall := create_tween()
-	tw_fall.tween_property(flying_tile, "position:y", to_pos.y, duration * 0.5).from(mid_pos_y).set_delay(duration * 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-
-	# 缩放动画
-	tw.tween_property(flying_tile, "scale", Vector2(1.0, 1.0), duration * 0.3).from(Vector2(0.9, 0.9))
-	tw.tween_property(flying_tile, "scale", Vector2(0.85, 0.85), duration * 0.3).set_delay(duration * 0.7)
-
-	# 完成回调
+	tw.tween_method(func(progress: float) -> void:
+		if flying_tile == null or not is_instance_valid(flying_tile):
+			return
+		var eased = ease(progress, -1.8)
+		var base_pos = from_pos.lerp(to_pos, eased)
+		var arc_offset = sin(progress * PI) * arc_height
+		flying_tile.position = Vector2(base_pos.x, base_pos.y - arc_offset)
+		var scale_value = lerp(0.90, 1.04, sin(progress * PI))
+		flying_tile.scale = Vector2(scale_value, scale_value)
+		flying_tile.rotation = lerp(-0.08, 0.08, progress)
+		flying_tile.modulate.a = lerp(0.95, 0.78, max(0.0, progress - 0.78) / 0.22)
+	, 0.0, 1.0, duration).set_trans(FX_TILE_FLY_CURVE).set_ease(FX_TILE_FLY_EASE)
 	tw.tween_callback(func() -> void:
 		if flying_tile != null and is_instance_valid(flying_tile):
 			flying_tile.queue_free()
-		tile_fly_animations.erase({"tween": tw, "tile": flying_tile})
+		for i in range(tile_fly_animations.size() - 1, -1, -1):
+			var item: Dictionary = tile_fly_animations[i]
+			if item.get("tween") == tw:
+				tile_fly_animations.remove_at(i)
 		if callback.is_valid():
 			callback.call()
 	)
+
+func human_discard_fly_start_position(index: int, hand_size: int) -> Vector2:
+	var screen_rect = root_layer_rect_to_screen_rect(HAND_TRAY_RECT)
+	var viewport_size = effective_viewport_size()
+	var left = screen_rect.position.x * viewport_size.x
+	var top = screen_rect.position.y * viewport_size.y
+	var width = (screen_rect.size.x - screen_rect.position.x) * viewport_size.x
+	var height = (screen_rect.size.y - screen_rect.position.y) * viewport_size.y
+	var safe_count = max(1, hand_size)
+	var slot = clamp(index, 0, safe_count - 1)
+	var x = left + width * (0.10 + 0.80 * (float(slot) + 0.5) / float(safe_count))
+	var y = top + height * 0.64
+	return Vector2(x, y)
+
+func human_discard_fly_target_position() -> Vector2:
+	return rect_center_screen_position(seat_discard_rect(0))
+
+func play_human_discard_fly_animation(tile: String, index: int, hand_size: int) -> void:
+	if not fx_enabled_effective() or tile == "":
+		return
+	var from_pos = human_discard_fly_start_position(index, hand_size)
+	var to_pos = human_discard_fly_target_position()
+	play_tile_claim_burst(from_pos, Color(0.82, 0.64, 0.30), "打")
+	play_tile_fly_animation(tile, from_pos, to_pos, 260, 52.0)
+	# 弃牌落水溅射 - 落点处水花扩散 / Discard splash on landing
+	call_deferred("play_discard_splash", to_pos, tile)
 
 func play_claim_animation(claim: String, tile: String, from_seat: int, to_seat: int, callback: Callable = Callable()) -> void:
 	"""碰/杠/吃动画 - 组合飞行动画"""
@@ -12646,12 +13260,66 @@ func play_claim_animation(claim: String, tile: String, from_seat: int, to_seat: 
 			color = JADE_PRIMARY
 
 	# 先播放缩放爆发效果
-	play_tile_claim_burst(from_pos, color)
+	play_tile_claim_burst(from_pos, color, claim_display_label(claim))
 
 	# 然后播放飞行动画
 	play_tile_fly_animation(tile, from_pos, to_pos, duration, arc, callback)
+	# 碰杠吃飞行尾迹粒子 - 沿弧线撒落金粉 / Claim fly trailing particles
+	play_claim_trail_particles(from_pos, to_pos, arc, color)
 
-func play_tile_claim_burst(position: Vector2, color: Color) -> void:
+func play_claim_trail_particles(from_pos: Vector2, to_pos: Vector2, arc: float, color: Color) -> void:
+	"""沿碰杠吃飞行弧线撒落尾迹粒子"""
+	if not fx_enabled_effective():
+		return
+	ensure_fx_layer()
+	var trail_root = Control.new()
+	trail_root.name = "ClaimTrailFx"
+	trail_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trail_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.add_child(trail_root)
+	var spark_count := 8
+	var fly_dur := float(FX_CLAIM_FLY_DURATION_MSEC) / 1000.0
+	for i in range(spark_count):
+		var spark = Panel.new()
+		spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var s_style = StyleBoxFlat.new()
+		s_style.bg_color = Color(color.r, color.g, color.b, 0.0)
+		s_style.set_corner_radius_all(50)
+		spark.add_theme_stylebox_override("panel", s_style)
+		var ssize := randf_range(2.0, 4.5)
+		spark.custom_minimum_size = Vector2(ssize, ssize)
+		trail_root.add_child(spark)
+		var step = float(i) / float(spark_count - 1)
+		# 弧线中点位置 + 随机散射
+		var eased = ease(step, -1.8)
+		var base = from_pos.lerp(to_pos, eased)
+		var arc_offset = sin(step * PI) * arc
+		spark.position = Vector2(base.x + randf_range(-6.0, 6.0), base.y - arc_offset + randf_range(-6.0, 6.0))
+		var delay = step * fly_dur
+		var tw := create_tween()
+		tw.tween_property(spark, "modulate:a", 0.9, 0.12).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(spark, "scale", Vector2(1.3, 1.3), 0.18).from(Vector2(0.5, 0.5)).set_delay(delay)
+		tw.tween_property(spark, "modulate:a", 0.0, 0.40).from(0.9).set_delay(delay + 0.18)
+		tw.parallel().tween_property(spark, "position:y", spark.position.y + randf_range(18.0, 38.0), 0.40).set_delay(delay + 0.18).set_trans(Tween.TRANS_QUAD)
+	var cleanup := create_tween()
+	cleanup.tween_callback(func() -> void:
+		if trail_root != null and is_instance_valid(trail_root):
+			trail_root.queue_free()
+	).set_delay(fly_dur + 0.6)
+
+func claim_display_label(claim: String) -> String:
+	match claim:
+		"peng":
+			return "碰"
+		"gang":
+			return "杠"
+		"chi":
+			return "吃"
+		"hu":
+			return "胡"
+	return ""
+
+func play_tile_claim_burst(position: Vector2, color: Color, label_text: String = "") -> void:
 	"""牌面操作时的爆发特效"""
 	if not fx_enabled_effective():
 		return
@@ -12676,6 +13344,22 @@ func play_tile_claim_burst(position: Vector2, color: Color) -> void:
 		burst_root.add_child(ring)
 		rings.append(ring)
 
+	var label: Label = null
+	if label_text != "":
+		label = make_label(burst_root, label_text, 26, color.lightened(0.30), true)
+		label.name = "ClaimBurstLabel_%s" % label_text
+		label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
+		label.add_theme_constant_override("shadow_offset_x", 1)
+		label.add_theme_constant_override("shadow_offset_y", 2)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.offset_left = -30.0
+		label.offset_top = -42.0
+		label.offset_right = 30.0
+		label.offset_bottom = 12.0
+		label.modulate.a = 0.0
+		label.scale = Vector2(0.72, 0.72)
+
 	var tw := create_tween()
 	tw.set_parallel(true)
 
@@ -12687,6 +13371,11 @@ func play_tile_claim_burst(position: Vector2, color: Color) -> void:
 		tw.tween_property(ring, "offset_top", -55.0, 0.25).from(-18.0).set_delay(delay)
 		tw.tween_property(ring, "offset_right", 55.0, 0.25).from(18.0).set_delay(delay)
 		tw.tween_property(ring, "offset_bottom", 55.0, 0.25).from(18.0).set_delay(delay)
+	if label != null:
+		tw.tween_property(label, "modulate:a", 1.0, 0.10).from(0.0)
+		tw.tween_property(label, "modulate:a", 0.0, 0.22).set_delay(0.18)
+		tw.tween_property(label, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.72, 0.72)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(label, "position:y", -16.0, 0.32).from(0.0)
 
 	tw.tween_callback(func() -> void:
 		if burst_root != null and is_instance_valid(burst_root):
@@ -12699,6 +13388,67 @@ func seat_discard_rect(seat: int) -> Rect2:
 		if int(zone[0]) == seat:
 			return zone[1]
 	return Rect2(Vector2(0.4, 0.4), Vector2(0.2, 0.2))
+
+# 弃牌落水溅射动画 / Discard Splash Animation
+func play_discard_splash(target_pos: Vector2, tile: String) -> void:
+	"""弃牌落入河中水花溅射效果"""
+	if not fx_enabled_effective():
+		return
+	ensure_fx_layer()
+	var splash_root = Control.new()
+	splash_root.name = "DiscardSplashFx"
+	splash_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	splash_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.add_child(splash_root)
+	var accent = tile_accent(tile) if tile != "" else GOLD_PRIMARY
+	# 水花环 - 从落点扩散
+	var ring_count := 3
+	for i in range(ring_count):
+		var ring = Panel.new()
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ring.set_anchors_preset(Control.PRESET_CENTER)
+		var r_style = StyleBoxFlat.new()
+		r_style.bg_color = Color(0, 0, 0, 0)
+		r_style.set_corner_radius_all(40)
+		r_style.border_color = Color(accent.r * 0.6 + 0.4, accent.g * 0.6 + 0.4, accent.b * 0.6 + 0.3, 0.38)
+		r_style.set_border_width_all(1)
+		ring.add_theme_stylebox_override("panel", r_style)
+		ring.custom_minimum_size = Vector2(18, 18)
+		ring.position = target_pos - Vector2(9.0, 9.0)
+		splash_root.add_child(ring)
+		var delay = float(i) * 0.07
+		var tw := create_tween()
+		tw.tween_property(ring, "offset_left", -42.0, 0.32).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(ring, "offset_top", -42.0, 0.32).from(0.0).set_delay(delay)
+		tw.parallel().tween_property(ring, "offset_right", 42.0, 0.32).from(0.0).set_delay(delay)
+		tw.parallel().tween_property(ring, "offset_bottom", 42.0, 0.32).from(0.0).set_delay(delay)
+		tw.parallel().tween_property(ring, "modulate:a", 0.0, 0.32).from(0.72).set_delay(delay)
+	# 散射小水滴
+	var droplet_count := 6
+	for i in range(droplet_count):
+		var drop = Panel.new()
+		drop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var d_style = StyleBoxFlat.new()
+		d_style.bg_color = Color(0.60, 0.76, 0.72, 0.72)
+		d_style.set_corner_radius_all(50)
+		drop.add_theme_stylebox_override("panel", d_style)
+		drop.custom_minimum_size = Vector2(randf_range(2, 4), randf_range(2, 4))
+		drop.position = target_pos + Vector2(randf_range(-3, 3), randf_range(-3, 3))
+		splash_root.add_child(drop)
+		var angle := float(i) * TAU / float(droplet_count)
+		var dist := randf_range(16.0, 32.0)
+		var dx: float = cos(angle) * dist
+		var dy: float = sin(angle) * dist
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(drop, "position:x", drop.position.x + dx, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(drop, "position:y", drop.position.y + dy, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(drop, "modulate:a", 0.0, 0.34).from(0.72)
+	var cleanup := create_tween()
+	cleanup.tween_callback(func() -> void:
+		if splash_root != null and is_instance_valid(splash_root):
+			splash_root.queue_free()
+	).set_delay(0.42)
 
 func seat_meld_rect(seat: int) -> Rect2:
 	"""获取座位明牌区矩形"""
@@ -12713,9 +13463,10 @@ func seat_meld_rect(seat: int) -> Rect2:
 func rect_center_screen_position(rect: Rect2) -> Vector2:
 	"""将anchor矩形转换为屏幕中心坐标"""
 	var screen_rect = root_layer_rect_to_screen_rect(rect)
+	var viewport_size = effective_viewport_size()
 	return Vector2(
-		screen_rect.position.x + screen_rect.size.x * 0.5,
-		screen_rect.position.y + screen_rect.size.y * 0.5
+		(screen_rect.position.x + screen_rect.size.x * 0.5) * viewport_size.x,
+		(screen_rect.position.y + screen_rect.size.y * 0.5) * viewport_size.y
 	)
 
 # ============================================================
@@ -12729,6 +13480,7 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 
 	if fx_burst_tween != null and is_instance_valid(fx_burst_tween):
 		fx_burst_tween.kill()
+	clear_win_burst_dynamic_art()
 
 	apply_rect(fx_burst_root, rect_full(0.18, 0.24, 0.82, 0.76))
 
@@ -12784,8 +13536,10 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 	# 添加印章装饰 - 增强印章效果
 	var seal_text = "胡" if win_type != "self_draw" else "摸"
 	var seal = make_seal_stamp(fx_burst_root, rect_full(0.42, 0.62, 0.58, 0.82), seal_text, "square")
+	seal.name = "WinCelebrationSeal"
 	seal.modulate.a = 0.0
 	seal.scale = Vector2(0.4, 0.4)
+	var celebration_art = draw_win_celebration_art(fx_burst_root, color, win_type)
 
 	fx_burst_root.visible = true
 
@@ -12839,7 +13593,57 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 			particles_root.queue_free()
 		if seal != null and is_instance_valid(seal):
 			seal.queue_free()
+		if celebration_art != null and is_instance_valid(celebration_art):
+			celebration_art.queue_free()
 	).set_delay(half + 0.05)
+
+func clear_win_burst_dynamic_art() -> void:
+	if fx_burst_root == null or not is_instance_valid(fx_burst_root):
+		return
+	var dynamic_names := ["WinParticles", "WinCelebrationArt", "WinCelebrationSeal"]
+	for child in fx_burst_root.get_children():
+		if dynamic_names.has(str(child.name)):
+			child.queue_free()
+
+func draw_win_celebration_art(parent: Control, color: Color, win_type: String) -> Control:
+	var art = Control.new()
+	art.name = "WinCelebrationArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var track = make_panel(art, rect_full(0.220, 0.535, 0.780, 0.575), Color(color.r, color.g, color.b, 0.16), 999, Color(1.0, 0.86, 0.46, 0.16), 0)
+	track.name = "WinCelebrationTrack"
+	var medal = make_panel(art, rect_full(0.455, 0.185, 0.545, 0.355), Color(color.r, color.g, color.b, 0.26), 999, Color(1.0, 0.86, 0.46, 0.34), 0)
+	medal.name = "WinCelebrationMedal"
+	add_lucide_icon(medal, "trophy", rect_full(0.22, 0.22, 0.78, 0.78), Color(0.98, 0.88, 0.50, 0.86))
+	var star_count = 10 if win_type == "special" else 8 if win_type == "self_draw" else 6
+	for i in range(star_count):
+		var angle = -PI * 0.92 + float(i) * PI * 1.84 / float(max(1, star_count - 1))
+		var radius_x = 0.255
+		var radius_y = 0.255
+		var cx = 0.5 + cos(angle) * radius_x
+		var cy = 0.505 + sin(angle) * radius_y
+		var star = make_panel(art, rect_full(cx - 0.010, cy - 0.018, cx + 0.010, cy + 0.018), Color(color.r, color.g, color.b, 0.48), 999, Color(1.0, 0.92, 0.58, 0.18), 0)
+		star.name = "WinCelebrationStar_%d" % i
+	match win_type:
+		"self_draw":
+			var orbit = make_panel(art, rect_full(0.380, 0.145, 0.620, 0.395), Color(0.0, 0.0, 0.0, 0.0), 999, Color(color.r, color.g, color.b, 0.28), 0)
+			orbit.name = "WinCelebrationSelfDrawOrbit"
+		"special":
+			var crown = make_panel(art, rect_full(0.405, 0.105, 0.595, 0.220), Color(0.92, 0.62, 0.22, 0.22), 999, Color(1.0, 0.86, 0.46, 0.30), 0)
+			crown.name = "WinCelebrationSpecialCrown"
+		_:
+			var ribbon = make_color_rect(rect_full(0.350, 0.370, 0.650, 0.405), Color(color.r, color.g, color.b, 0.24))
+			ribbon.name = "WinCelebrationRibbon"
+			art.add_child(ribbon)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		art.modulate.a = 0.0
+		medal.scale = Vector2(0.72, 0.72)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(art, "modulate:a", 1.0, 0.18).from(0.0)
+		tw.tween_property(medal, "scale", Vector2(1.0, 1.0), 0.26).from(Vector2(0.72, 0.72)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	return art
 
 func _create_win_particle(base_color: Color, index: int, total: int) -> Control:
 	"""创建单个胜利粒子"""
@@ -12887,7 +13691,8 @@ func _animate_win_particle(particle: Control, tw: Tween, delay: float, duration:
 	var rot_speed: float = particle.get_meta("rotation_speed", 1.0)
 	var scale_target: float = particle.get_meta("scale_target", 0.5)
 
-	tw.tween_property(particle, "modulate:a", 0.0, duration * 0.7).from(0.0).set_delay(delay)
+	tw.tween_property(particle, "modulate:a", 1.0, duration * 0.18).from(0.0).set_delay(delay)
+	tw.parallel().tween_property(particle, "modulate:a", 0.0, duration * 0.52).set_delay(delay + duration * 0.22)
 	tw.parallel().tween_property(particle, "position:x", target_x, duration * 0.8).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tw.parallel().tween_property(particle, "position:y", target_y, duration * 0.8).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tw.parallel().tween_property(particle, "rotation", rot_speed, duration * 0.6).from(0.0).set_delay(delay)
@@ -12919,31 +13724,185 @@ func _play_screen_shake(amplitude: float, frequency: float, duration: float) -> 
 # 国风装饰元素工厂 / Guofeng Decorative Element Factory
 # ============================================================
 
+func update_menu_parallax(mouse_pos: Vector2) -> void:
+	"""根据鼠标位置驱动主菜单Hero插画的视差位移 - 远近层不同幅度"""
+	if menu_hero_art == null or not is_instance_valid(menu_hero_art):
+		return
+	var viewport_size = get_viewport().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+	# 鼠标相对视口中心的归一化偏移 [-1, 1]
+	var nx: float = clamp((mouse_pos.x / viewport_size.x) * 2.0 - 1.0, -1.0, 1.0)
+	var ny: float = clamp((mouse_pos.y / viewport_size.y) * 2.0 - 1.0, -1.0, 1.0)
+	# 视差层：远景小幅度、中景中等、近景大幅度（营造纵深）
+	var layers := [
+		["MenuHeroFarMountain", -2.0, -1.2],     # 远山：最小位移
+		["MenuHeroMoon", -3.0, -2.0],            # 月亮：略大
+		["MenuHeroMistCloud1", -4.0, -1.6],
+		["MenuHeroMistCloud2", -3.6, -1.4],
+		["MenuHeroGoldCloud", 4.0, 1.6],
+		["MenuHeroWater", -5.0, -2.4],           # 水面：中等
+		["MenuHeroPineLeft", 6.0, 3.0],          # 松枝：较大
+		["MenuHeroBambooRight", -6.0, 3.0],      # 竹子：较大
+		["MenuHeroPlumBlossom", 7.0, 3.6],       # 梅花：近景
+		["MenuHeroRoundTable", 9.0, 4.4],        # 牌桌：近景
+		["MenuHeroSeal", -8.0, -4.0],            # 印章：近景反向
+	]
+	for entry in layers:
+		var node = menu_hero_art.get_node_or_null(str(entry[0]))
+		if node == null or not is_instance_valid(node):
+			continue
+		var dx: float = float(entry[1]) * nx
+		var dy: float = float(entry[2]) * ny
+		# 用offset而非直接改position，避免与布局冲突，平滑跟随
+		node.offset_left = lerp(node.offset_left, -dx, 0.18)
+		node.offset_top = lerp(node.offset_top, -dy, 0.18)
+		node.offset_right = lerp(node.offset_right, dx, 0.18)
+		node.offset_bottom = lerp(node.offset_bottom, dy, 0.18)
+
 func draw_menu_hero_illustration(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "MenuHeroIllustration"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.57, 0.14, 0.96, 0.84))
+	apply_rect(art, rect_full(0.55, 0.12, 0.97, 0.86))
 	parent.add_child(art)
-	make_cloud_decoration(art, rect_full(0.02, 0.00, 0.42, 0.42), "mist", false).name = "MenuHeroMistCloud"
-	make_cloud_decoration(art, rect_full(0.58, 0.50, 1.00, 0.98), "gold", false).name = "MenuHeroGoldCloud"
-	var table_disc = make_panel(art, rect_full(0.15, 0.42, 0.86, 0.93), Color(0.012, 0.060, 0.052, 0.86), 999, Color(0.68, 0.56, 0.28, 0.42), 0)
+
+	# 远景层 - 层叠远山剪影
+	make_mountain_silhouette(art, rect_full(0.0, 0.0, 1.0, 0.60), 3, INK_WASH).name = "MenuHeroFarMountain"
+	# 中景层 - 水面波纹
+	make_water_ripple(art, rect_full(0.05, 0.58, 0.95, 0.82), "lake", true).name = "MenuHeroWater"
+
+	# 月亮 - 右上角满月辉光
+	make_moon_or_sun(art, rect_full(0.72, -0.05, 1.05, 0.28), "full_moon").name = "MenuHeroMoon"
+
+	# 背景装饰层 - 云纹
+	make_cloud_decoration(art, rect_full(-0.05, -0.05, 0.30, 0.28), "mist", false).name = "MenuHeroMistCloud1"
+	make_cloud_decoration(art, rect_full(0.60, 0.55, 1.05, 1.05), "gold", false).name = "MenuHeroGoldCloud"
+	make_cloud_decoration(art, rect_full(0.30, -0.08, 0.60, 0.18), "mist", false).name = "MenuHeroMistCloud2"
+
+	# 松枝装饰 - 左侧
+	make_pine_branch(art, rect_full(-0.02, 0.05, 0.14, 0.40), "left").name = "MenuHeroPineLeft"
+	# 竹子装饰 - 右侧
+	make_bamboo_decoration(art, rect_full(0.88, 0.25, 0.96, 0.75), 3).name = "MenuHeroBambooRight"
+
+	# 梅花装饰 - 左下枝头
+	make_plum_blossom(art, rect_full(0.02, 0.50, 0.28, 0.95), 2, ROUGE, true).name = "MenuHeroPlumBlossom"
+
+	# 金色装饰线 - 画框边
+	for item in [
+		[rect_full(0.08, 0.08, 0.92, 0.10), Color(0.92, 0.78, 0.36, 0.22)],
+		[rect_full(0.08, 0.90, 0.92, 0.92), Color(0.92, 0.78, 0.36, 0.18)],
+		[rect_full(0.06, 0.10, 0.08, 0.90), Color(0.92, 0.78, 0.36, 0.15)],
+		[rect_full(0.92, 0.10, 0.94, 0.90), Color(0.92, 0.78, 0.36, 0.15)],
+	]:
+		art.add_child(make_color_rect(item[0], item[1]))
+
+	# 圆形牌桌 - 置于水面之上
+	var table_disc = make_panel(art, rect_full(0.18, 0.42, 0.82, 0.96), Color(0.012, 0.060, 0.052, 0.86), 999, Color(0.68, 0.56, 0.28, 0.42), 0)
 	table_disc.name = "MenuHeroRoundTable"
-	make_panel(table_disc, rect_full(0.12, 0.14, 0.88, 0.86), Color(0.018, 0.092, 0.078, 0.78), 999, Color(0.86, 0.74, 0.38, 0.26), 0)
+	var inner_table = make_panel(table_disc, rect_full(0.12, 0.14, 0.88, 0.86), Color(0.018, 0.092, 0.078, 0.78), 999, Color(0.86, 0.74, 0.38, 0.26), 0)
+	inner_table.name = "MenuHeroInnerTable"
+
+	# 桌面纹理装饰 - 同心圆
+	make_panel(table_disc, rect_full(0.25, 0.25, 0.75, 0.75), Color(0.015, 0.080, 0.070, 0.35), 999, Color(0.86, 0.74, 0.38, 0.12), 0)
+	make_panel(table_disc, rect_full(0.35, 0.35, 0.65, 0.65), Color(0.015, 0.080, 0.070, 0.25), 999, Color(0.86, 0.74, 0.38, 0.08), 0)
+
+	# 水面锦鲤 - 两尾
+	make_koi_fish(art, rect_full(0.22, 0.72, 0.38, 0.86), GOLD_PRIMARY, "right").name = "MenuHeroKoiGold"
+	make_koi_fish(art, rect_full(0.58, 0.76, 0.74, 0.90), JADE_PRIMARY, "left").name = "MenuHeroKoiJade"
+
+	# 麻将牌展示 - 三张牌形成视觉焦点
 	var tiles := ["E", "Z", "5W"]
 	for i in range(tiles.size()):
-		var tile = make_tile_view(str(tiles[i]), Vector2(36, 50), false, Callable(), true)
+		var tile = make_tile_view(str(tiles[i]), Vector2(38, 52), false, Callable(), true)
 		tile.name = "MenuHeroTile_%s" % str(tiles[i])
 		table_disc.add_child(tile)
-		apply_rect(tile, rect_full(0.28 + float(i) * 0.15, 0.18, 0.43 + float(i) * 0.15, 0.78))
-	var seal = make_seal_stamp(art, rect_full(0.72, 0.08, 0.92, 0.40), "云", "round")
+		apply_rect(tile, rect_full(0.26 + float(i) * 0.16, 0.15, 0.42 + float(i) * 0.16, 0.80))
+
+	# 印章装饰 - 调整至月亮旁更佳构图位置
+	var seal = make_seal_stamp(art, rect_full(0.62, 0.04, 0.80, 0.28), "云", "round")
 	seal.name = "MenuHeroSeal"
-	add_lucide_icon(art, "sparkles", rect_full(0.05, 0.56, 0.18, 0.86), Color(0.96, 0.84, 0.44, 0.48))
+
+		# 装饰性图标
+	add_lucide_icon(art, "sparkles", rect_full(0.04, 0.44, 0.15, 0.68), Color(0.96, 0.84, 0.44, 0.42))
+	add_lucide_icon(art, "star", rect_full(0.85, 0.42, 0.95, 0.58), Color(0.96, 0.84, 0.44, 0.38))
+
+	# 金粉飘浮粒子 - 增强插画氛围感 / Gold dust shimmer particles
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := art.create_tween()
-		tw.set_loops()
-		tw.tween_property(art, "modulate:a", 0.78, 2.2).from(1.0)
-		tw.tween_property(art, "modulate:a", 1.0, 2.2).from(0.78)
+		var dust_layer = Control.new()
+		dust_layer.name = "MenuHeroDustLayer"
+		dust_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dust_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+		art.add_child(dust_layer)
+		art.move_child(dust_layer, 0)  # 置于最底层，不遮挡牌面
+		var dust_count := 14
+		for i in range(dust_count):
+			var dust = Panel.new()
+			dust.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var d_style = StyleBoxFlat.new()
+			d_style.bg_color = Color(0.98, 0.90, 0.55, randf_range(0.28, 0.58))
+			d_style.set_corner_radius_all(50)
+			dust.add_theme_stylebox_override("panel", d_style)
+			var dsize = randf_range(2.0, 5.0)
+			dust.custom_minimum_size = Vector2(dsize, dsize)
+			dust_layer.add_child(dust)
+			var art_size = art.size
+			if art_size.x <= 0.0:
+				art_size = Vector2(420.0, 320.0)
+			dust.position = Vector2(randf() * art_size.x, randf() * art_size.y)
+			# 缓慢上浮 + 横向漂移 + 透明度呼吸
+			var rise_dur = randf_range(6.0, 11.0)
+			var d_tw := dust.create_tween()
+			d_tw.set_loops(3600)
+			d_tw.tween_property(dust, "position:y", dust.position.y - randf_range(40.0, 90.0), rise_dur).set_delay(float(i) * 0.3)
+			d_tw.parallel().tween_property(dust, "modulate:a", 0.0, rise_dur).from(randf_range(0.4, 0.9))
+			var d_sw := dust.create_tween()
+			d_sw.set_loops(3600)
+			d_sw.tween_property(dust, "position:x", dust.position.x + randf_range(-18.0, 18.0), randf_range(2.5, 4.5)).set_delay(float(i) * 0.3)
+			d_sw.tween_property(dust, "position:x", dust.position.x, randf_range(2.5, 4.5))
+
+	# 画意动画 - 多层次动效
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		# 整体呼吸 - 更柔和的节奏
+		var breath_tween := art.create_tween()
+		breath_tween.set_loops(3600)
+		breath_tween.tween_property(art, "modulate:a", 0.88, 3.0).from(1.0)
+		breath_tween.tween_property(art, "modulate:a", 1.0, 3.0).from(0.88)
+
+		# 牌面柔和闪光 - 交替shimmer
+		for i in range(tiles.size()):
+			var tile_node = table_disc.get_node_or_null("MenuHeroTile_%s" % str(tiles[i]))
+			if tile_node != null:
+				var sparkle_tween := art.create_tween()
+				sparkle_tween.set_loops(3600)
+				sparkle_tween.tween_property(tile_node, "modulate", Color(1.08, 1.10, 1.06, 1.0), 2.0).set_delay(float(i) * 0.7)
+				sparkle_tween.tween_property(tile_node, "modulate", Color(1.0, 1.0, 1.0, 1.0), 2.0)
+
+		# 印章脉冲 - 更有节奏感
+		if seal != null:
+			var seal_tween := create_tween()
+			seal_tween.set_loops(3600)
+			seal_tween.tween_property(seal, "modulate:a", 0.65, 2.0).from(1.0)
+			seal_tween.tween_property(seal, "modulate:a", 1.0, 2.0).from(0.65)
+
+		# 锦鲤游动 - 轻微位移
+		var koi_gold = art.get_node_or_null("MenuHeroKoiGold")
+		if koi_gold != null:
+			var koi_tw := create_tween()
+			koi_tw.set_loops(3600)
+			koi_tw.tween_property(koi_gold, "offset_left", 6.0, 4.0).from(0.0)
+			koi_tw.parallel().tween_property(koi_gold, "offset_top", -3.0, 4.0).from(0.0)
+			koi_tw.tween_property(koi_gold, "offset_left", 0.0, 4.0).from(6.0)
+			koi_tw.parallel().tween_property(koi_gold, "offset_top", 0.0, 4.0).from(-3.0)
+		var koi_jade = art.get_node_or_null("MenuHeroKoiJade")
+		if koi_jade != null:
+			var koi_tw2 := create_tween()
+			koi_tw2.set_loops(3600)
+			koi_tw2.tween_property(koi_jade, "offset_left", -5.0, 3.5).from(0.0)
+			koi_tw2.parallel().tween_property(koi_jade, "offset_top", -2.0, 3.5).from(0.0)
+			koi_tw2.tween_property(koi_jade, "offset_left", 0.0, 3.5).from(-5.0)
+			koi_tw2.parallel().tween_property(koi_jade, "offset_top", 0.0, 3.5).from(-2.0)
+
 	return art
 
 func draw_table_atmosphere_frame(parent: Control) -> Control:
@@ -12952,13 +13911,21 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(frame)
+	# 角落装饰 - 回纹式
+	make_chinese_corner(frame, rect_full(0.010, 0.010, 0.080, 0.080), "elaborate").name = "TableCornerTL"
+	make_chinese_corner(frame, rect_full(0.920, 0.010, 0.990, 0.080), "elaborate").name = "TableCornerTR"
+	make_chinese_corner(frame, rect_full(0.010, 0.920, 0.080, 0.990), "elaborate").name = "TableCornerBL"
+	make_chinese_corner(frame, rect_full(0.920, 0.920, 0.990, 0.990), "elaborate").name = "TableCornerBR"
 	make_cloud_decoration(frame, rect_full(0.030, 0.030, 0.250, 0.155), "mist", false).name = "TableMistCloudNW"
 	make_cloud_decoration(frame, rect_full(0.740, 0.815, 0.970, 0.965), "mist", false).name = "TableMistCloudSE"
-	make_bamboo_decoration(frame, rect_full(0.018, 0.235, 0.045, 0.585), 4).name = "TableBambooLeft"
-	make_bamboo_decoration(frame, rect_full(0.955, 0.415, 0.982, 0.765), 4).name = "TableBambooRight"
+	# 竹子装饰 - 增加segments
+	make_bamboo_decoration(frame, rect_full(0.018, 0.235, 0.045, 0.585), 5).name = "TableBambooLeft"
+	make_bamboo_decoration(frame, rect_full(0.955, 0.415, 0.982, 0.765), 5).name = "TableBambooRight"
+	# 笔触分隔线替换单色金线
+	make_brush_stroke_divider(frame, rect_full(0.300, 0.040, 0.700, 0.050)).name = "TableTopDiv"
+	make_brush_stroke_divider(frame, rect_full(0.300, 0.950, 0.700, 0.960)).name = "TableBottomDiv"
+	# 侧面保留简单金线
 	for item in [
-		[rect_full(0.300, 0.040, 0.700, 0.052), Color(0.92, 0.78, 0.36, 0.18)],
-		[rect_full(0.300, 0.948, 0.700, 0.960), Color(0.92, 0.78, 0.36, 0.14)],
 		[rect_full(0.040, 0.300, 0.052, 0.700), Color(0.92, 0.78, 0.36, 0.12)],
 		[rect_full(0.948, 0.300, 0.960, 0.700), Color(0.92, 0.78, 0.36, 0.12)],
 	]:
@@ -12967,15 +13934,125 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 		frame.add_child(line)
 	return frame
 
+func draw_table_living_illustration(parent: Control) -> Control:
+	var layer = Control.new()
+	layer.name = "TableLivingIllustration"
+	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(layer)
+	draw_table_wall_lanterns(layer)
+	draw_table_turn_flow(layer)
+	draw_table_last_discard_ripple(layer)
+	draw_table_center_starlight(layer)
+	return layer
+
+func draw_table_wall_lanterns(parent: Control) -> void:
+	var wall_progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var lantern_positions := [
+		Vector2(0.500, 0.075),
+		Vector2(0.912, 0.505),
+		Vector2(0.500, 0.905),
+		Vector2(0.088, 0.505),
+	]
+	for i in range(lantern_positions.size()):
+		var pos: Vector2 = lantern_positions[i]
+		var active_alpha = 0.20 + wall_progress * 0.34
+		var lantern = make_panel(parent, rect_full(pos.x - 0.030, pos.y - 0.030, pos.x + 0.030, pos.y + 0.030), Color(0.72, 0.42, 0.16, active_alpha), 999, Color(0.96, 0.78, 0.34, 0.24 + wall_progress * 0.18), 0)
+		lantern.name = "TableWallLantern_%d" % i
+		var core = make_panel(lantern, rect_full(0.30, 0.24, 0.70, 0.76), Color(0.96, 0.76, 0.30, 0.40 + wall_progress * 0.30), 999, Color(1.0, 0.90, 0.52, 0.18), 0)
+		core.name = "TableWallLanternCore_%d" % i
+		if get_wall_count() <= 24:
+			var warning = make_panel(lantern, rect_full(0.08, 0.08, 0.92, 0.92), Color(0.86, 0.28, 0.16, 0.18), 999, Color(1.0, 0.58, 0.28, 0.38), 0)
+			warning.name = "TableWallLanternLowWarning_%d" % i
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var tw := create_tween()
+			tw.set_loops(3600)
+			tw.tween_property(core, "modulate:a", 0.42, 0.80).from(1.0).set_delay(float(i) * 0.10)
+			tw.tween_property(core, "modulate:a", 1.0, 0.80).from(0.42)
+
+func draw_table_turn_flow(parent: Control) -> void:
+	var positions := [
+		Vector2(0.500, 0.815),
+		Vector2(0.812, 0.505),
+		Vector2(0.500, 0.205),
+		Vector2(0.188, 0.505),
+	]
+	var seat = clamp(get_current_seat(), 0, 3)
+	var pos: Vector2 = positions[seat]
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var halo = make_panel(parent, rect_full(pos.x - 0.060, pos.y - 0.060, pos.x + 0.060, pos.y + 0.060), Color(accent.r, accent.g, accent.b, 0.10), 999, Color(0.96, 0.78, 0.34, 0.22), 0)
+	halo.name = "TableTurnFlowHalo"
+	var seal = make_panel(parent, rect_full(pos.x - 0.030, pos.y - 0.030, pos.x + 0.030, pos.y + 0.030), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(0.96, 0.82, 0.42, 0.46), 0)
+	seal.name = "TableTurnFlowSeal"
+	var label = make_label(seal, CENTER_WIND_LABELS[seat], 13, Color(0.96, 0.90, 0.66), true)
+	apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var flow = make_panel(parent, rect_full(0.380, 0.482, 0.620, 0.518), Color(accent.r, accent.g, accent.b, 0.11), 999, Color(accent.r, accent.g, accent.b, 0.11), 0)
+	flow.name = "TableTurnFlowRibbon"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(halo, "scale", Vector2(1.12, 1.12), 1.0).from(Vector2(0.92, 0.92)).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(halo, "modulate:a", 0.0, 1.0).from(0.82)
+		tw.tween_property(halo, "scale", Vector2(0.92, 0.92), 0.05)
+		tw.parallel().tween_property(halo, "modulate:a", 0.82, 0.05)
+
+func draw_table_last_discard_ripple(parent: Control) -> void:
+	var seat = get_last_discard_seat()
+	if seat < 0 or get_last_discard() == "":
+		return
+	var ripple_rect = last_discard_focus_marker_rect_for_seat(seat)
+	if ripple_rect.size == Vector2.ZERO:
+		return
+	var ripple = Control.new()
+	ripple.name = "TableLastDiscardRipple"
+	ripple.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(ripple, ripple_rect)
+	parent.add_child(ripple)
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	for i in range(3):
+		var pad = 0.04 + float(i) * 0.12
+		var ring = make_panel(ripple, rect_full(-pad, -pad, 1.0 + pad, 1.0 + pad), Color(accent.r, accent.g, accent.b, 0.03), 999, Color(0.96, 0.78, 0.34, 0.20 - float(i) * 0.04), 0)
+		ring.name = "TableLastDiscardRippleRing_%d" % i
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var tw := create_tween()
+			tw.set_loops(3600)
+			tw.tween_property(ring, "scale", Vector2(1.08, 1.08), 0.90).from(Vector2(0.88, 0.88)).set_delay(float(i) * 0.14)
+			tw.parallel().tween_property(ring, "modulate:a", 0.0, 0.90).from(0.78)
+
+func draw_table_center_starlight(parent: Control) -> void:
+	var star = Control.new()
+	star.name = "TableCenterStarlight"
+	star.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(star, rect_full(0.392, 0.348, 0.608, 0.660))
+	parent.add_child(star)
+	for i in range(8):
+		var angle = float(i) * TAU / 8.0
+		var radius = 0.34 if i % 2 == 0 else 0.24
+		var center = Vector2(0.5 + cos(angle) * radius, 0.5 + sin(angle) * radius)
+		var spark = make_panel(star, rect_full(center.x - 0.015, center.y - 0.015, center.x + 0.015, center.y + 0.015), Color(0.96, 0.78, 0.34, 0.24), 999, Color(1.0, 0.90, 0.52, 0.22), 0)
+		spark.name = "TableCenterStarlightSpark_%d" % i
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var tw := create_tween()
+			tw.set_loops(3600)
+			tw.tween_property(spark, "modulate:a", 0.18, 0.72).from(0.82).set_delay(float(i) * 0.08)
+			tw.tween_property(spark, "modulate:a", 0.82, 0.72).from(0.18)
+
+
 func draw_center_wind_compass(parent: Control) -> Control:
 	var compass = Control.new()
 	compass.name = "CenterWindCompass"
 	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(compass, rect_full(0.08, 0.08, 0.92, 0.92))
 	parent.add_child(compass)
+	# 精致同心环底盘
 	make_panel(compass, rect_full(0.22, 0.22, 0.78, 0.78), Color(0.010, 0.050, 0.046, 0.18), 999, Color(0.88, 0.76, 0.42, 0.20), 0)
+	make_panel(compass, rect_full(0.28, 0.28, 0.72, 0.72), Color(0.012, 0.046, 0.042, 0.14), 999, Color(0.86, 0.72, 0.38, 0.16), 0)
 	make_panel(compass, rect_full(0.34, 0.34, 0.66, 0.66), Color(0.66, 0.54, 0.24, 0.12), 999, Color(0.96, 0.82, 0.44, 0.22), 0)
 	var current = get_current_seat()
+	var next = (current + 1) % 4
+	var turn_track = make_panel(compass, rect_full(0.405, 0.405, 0.595, 0.595), Color(0, 0, 0, 0), 999, Color(0.88, 0.72, 0.34, 0.22), 1)
+	turn_track.name = "CenterWindTurnTrack"
+	draw_center_wind_direction_beads(compass, current)
 	var wind_marks := [
 		[rect_full(0.45, 0.00, 0.55, 0.15), "东", 0],
 		[rect_full(0.85, 0.45, 1.00, 0.55), "南", 1],
@@ -12983,12 +14060,69 @@ func draw_center_wind_compass(parent: Control) -> Control:
 		[rect_full(0.00, 0.45, 0.15, 0.55), "北", 3],
 	]
 	for mark in wind_marks:
-		var active = int(mark[2]) == current
+		var seat = int(mark[2])
+		var active = seat == current
+		var upcoming = seat == next
 		var badge = make_panel(compass, mark[0], Color(0.52, 0.42, 0.16, 0.36 if active else 0.16), 999, Color(0.96, 0.82, 0.42, 0.46 if active else 0.18), 0)
 		badge.name = "CenterWindCompass_%s" % str(mark[1])
+		if active:
+			# 双层脉冲光圈
+			var halo = make_panel(badge, rect_full(-0.18, -0.18, 1.18, 1.18), Color(0.96, 0.80, 0.34, 0.12), 999, Color(1.0, 0.86, 0.42, 0.46), 0)
+			halo.name = "CenterWindActiveHalo"
+			var halo_outer = make_panel(badge, rect_full(-0.32, -0.32, 1.32, 1.32), Color(0.96, 0.80, 0.34, 0.06), 999, Color(1.0, 0.86, 0.42, 0.0), 0)
+			halo_outer.name = "CenterWindActiveHaloOuter"
+			var pointer = make_panel(badge, rect_full(0.360, -0.430, 0.640, -0.150), Color(0.96, 0.78, 0.32, 0.62), 999, Color(1.0, 0.90, 0.52, 0.30), 0)
+			pointer.name = "CenterWindCurrentPointer"
+			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				var tw := create_tween()
+				tw.set_loops(3600)
+				tw.tween_property(halo, "modulate:a", 0.40, 0.72).from(0.88)
+				tw.tween_property(halo, "modulate:a", 0.88, 0.72).from(0.40)
+				var tw2 := create_tween()
+				tw2.set_loops(3600)
+				tw2.tween_property(halo_outer, "scale", Vector2(1.15, 1.15), 1.2).from(Vector2(0.85, 0.85)).set_ease(Tween.EASE_OUT)
+				tw2.parallel().tween_property(halo_outer, "modulate:a", 0.0, 1.2).from(0.6)
+				var pointer_tw := create_tween()
+				pointer_tw.set_loops(3600)
+				pointer_tw.tween_property(pointer, "offset_top", -2.0, 0.48).from(0.0).set_ease(Tween.EASE_OUT)
+				pointer_tw.tween_property(pointer, "offset_top", 0.0, 0.48).from(-2.0).set_ease(Tween.EASE_IN)
+		if seat == dealer_seat:
+			var dealer_badge = make_badge(badge, rect_full(-0.20, 0.76, 0.48, 1.22), "庄", 8, Color(0.52, 0.12, 0.08, 0.94), Color(0.96, 0.62, 0.34, 0.42), Color(0.98, 0.90, 0.72))
+			dealer_badge.name = "CenterWindDealerBadge"
+			dealer_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if upcoming:
+			var next_badge = make_badge(badge, rect_full(0.62, -0.20, 1.22, 0.24), "次", 8, Color(0.028, 0.048, 0.050, 0.94), Color(0.78, 0.66, 0.34, 0.34), Color(0.90, 0.86, 0.66))
+			next_badge.name = "CenterWindNextBadge"
+			next_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			# 指向箭头脉冲
+			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				var arrow_tw := create_tween()
+				arrow_tw.set_loops(3600)
+				arrow_tw.tween_property(next_badge, "offset_top", -2.0, 0.6).from(0.0).set_ease(Tween.EASE_OUT)
+				arrow_tw.tween_property(next_badge, "offset_top", 0.0, 0.6).from(-2.0).set_ease(Tween.EASE_IN)
 		var label = make_label(badge, str(mark[1]), 12, GOLD_LIGHT if active else Color(0.64, 0.62, 0.46, 0.72), true)
 		apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
 	return compass
+
+func draw_center_wind_direction_beads(parent: Control, current: int) -> void:
+	var bead_positions := [
+		Vector2(0.50, 0.205),
+		Vector2(0.795, 0.50),
+		Vector2(0.50, 0.795),
+		Vector2(0.205, 0.50),
+	]
+	for i in range(bead_positions.size()):
+		var turn_distance = (i - current + 4) % 4
+		var pos: Vector2 = bead_positions[i]
+		var alpha = 0.58 if turn_distance == 0 else 0.34 if turn_distance == 1 else 0.18
+		var bead = make_panel(parent, rect_full(pos.x - 0.018, pos.y - 0.018, pos.x + 0.018, pos.y + 0.018), Color(0.88, 0.72, 0.34, alpha), 999, Color(1.0, 0.86, 0.46, alpha * 0.54), 0)
+		bead.name = "CenterWindDirectionBead_%d" % i
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var tw := create_tween()
+			tw.set_loops(3600)
+			tw.tween_property(bead, "modulate:a", max(0.18, alpha * 0.55), 0.60).from(alpha).set_delay(float(turn_distance) * 0.10)
+			tw.tween_property(bead, "modulate:a", alpha, 0.60).from(max(0.18, alpha * 0.55))
+
 
 func draw_summary_victory_ribbon(parent: Control) -> Control:
 	var ribbon = Control.new()
@@ -13081,7 +14215,7 @@ func make_cloud_decoration(parent: Control, rect: Rect2, style: String = "auspic
 
 	if animated and fx_enabled_effective():
 		var tw := create_tween()
-		tw.set_loops()
+		tw.set_loops(3600)
 		tw.tween_property(cloud, "modulate:a", cloud_color.a * 0.7, 2.5).from(cloud_color.a)
 		tw.tween_property(cloud, "modulate:a", cloud_color.a, 2.5).from(cloud_color.a * 0.7)
 		tw.tween_property(cloud, "offset_left", 8.0, 4.0).from(0.0)
@@ -13200,6 +14334,415 @@ func make_bamboo_decoration(parent: Control, rect: Rect2, segments: int = 3) -> 
 	return bamboo
 
 # ============================================================
+# 国风雅韵扩展装饰图元 / Guofeng Extended Decoration Primitives
+# ============================================================
+
+func make_mountain_silhouette(parent: Control, rect: Rect2, layers: int = 3, base_color: Color = INK_WASH) -> Control:
+	"""创建层叠远山剪影 - 水墨山水远景点缀"""
+	var mountain = Control.new()
+	mountain.name = "MountainSilhouette"
+	mountain.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(mountain, rect)
+	for layer_i in range(layers):
+		var layer_alpha = 0.25 + 0.20 * float(layer_i) / float(max(1, layers - 1))
+		var layer_color = Color(base_color.r, base_color.g, base_color.b, layer_alpha)
+		var peaks := 3 + layer_i % 2
+		var base_y := 0.80 - float(layer_i) * 0.12
+		var peak_spread := 0.90 / float(peaks)
+		for p in range(peaks):
+			var peak_x := 0.05 + float(p) * peak_spread + (0.05 * float(layer_i % 3))
+			var peak_height := 0.28 + 0.14 * sin(float(p + layer_i) * 1.7)
+			var peak_width := peak_spread * 0.55
+			var peak = Panel.new()
+			peak.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var peak_style = StyleBoxFlat.new()
+			peak_style.bg_color = layer_color
+			peak_style.set_corner_radius_all(4)
+			peak.add_theme_stylebox_override("panel", peak_style)
+			mountain.add_child(peak)
+			apply_rect(peak, rect_full(peak_x - peak_width * 0.5, base_y - peak_height, peak_x + peak_width * 0.5, base_y + 0.06))
+		var base_strip = Panel.new()
+		base_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var strip_style = StyleBoxFlat.new()
+		strip_style.bg_color = layer_color
+		strip_style.set_corner_radius_all(0)
+		base_strip.add_theme_stylebox_override("panel", strip_style)
+		mountain.add_child(base_strip)
+		apply_rect(base_strip, rect_full(0.0, base_y, 1.0, base_y + 0.10))
+	parent.add_child(mountain)
+	return mountain
+
+func make_water_ripple(parent: Control, rect: Rect2, style: String = "still", animated: bool = false) -> Control:
+	"""创建水面波纹装饰 - 静水/流水/湖面效果"""
+	var water = Control.new()
+	water.name = "WaterRipple"
+	water.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(water, rect)
+	var wave_color := Color(0.28, 0.48, 0.52, 0.18) if style == "lake" else Color(0.22, 0.42, 0.46, 0.14)
+	var wave_count := 5 if style == "flowing" else 3
+	var base_alpha := 0.18 if style == "still" else (0.14 if style == "flowing" else 0.22)
+	for w in range(wave_count):
+		var wave = Panel.new()
+		wave.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var wave_style = StyleBoxFlat.new()
+		wave_style.bg_color = Color(wave_color.r, wave_color.g, wave_color.b, base_alpha * (1.0 - float(w) * 0.25))
+		wave_style.set_corner_radius_all(50)
+		wave.add_theme_stylebox_override("panel", wave_style)
+		water.add_child(wave)
+		var y_pos := 0.20 + float(w) * (0.60 / float(max(1, wave_count - 1)))
+		var x_shrink := float(w) * 0.08
+		apply_rect(wave, rect_full(0.02 + x_shrink, y_pos - 0.04, 0.98 - x_shrink, y_pos + 0.04))
+		if style == "flowing":
+			wave.rotation = 0.01 * float(w % 2 * 2 - 1)
+	if animated and fx_enabled_effective():
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(water, "modulate:a", 0.70, 3.0).from(1.0)
+		tw.tween_property(water, "modulate:a", 1.0, 3.0).from(0.70)
+		if style == "flowing":
+			var tw2 := create_tween()
+			tw2.set_loops(3600)
+			tw2.tween_property(water, "offset_left", 4.0, 2.0).from(0.0)
+			tw2.tween_property(water, "offset_left", 0.0, 2.0).from(4.0)
+	parent.add_child(water)
+	return water
+
+func make_moon_or_sun(parent: Control, rect: Rect2, phase: String = "full_moon") -> Control:
+	"""创建月亮/太阳装饰 - 满月/新月/旭日"""
+	var moon = Control.new()
+	moon.name = "MoonOrSun"
+	moon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(moon, rect)
+	var body_color: Color
+	var glow_color: Color
+	match phase:
+		"full_moon":
+			body_color = Color(0.96, 0.94, 0.86, 0.92)
+			glow_color = Color(0.98, 0.96, 0.82, 0.28)
+		"crescent":
+			body_color = Color(0.94, 0.92, 0.84, 0.88)
+			glow_color = Color(0.96, 0.94, 0.80, 0.22)
+		"rising_sun":
+			body_color = Color(0.96, 0.68, 0.32, 0.94)
+			glow_color = Color(1.0, 0.78, 0.42, 0.35)
+		_:
+			body_color = Color(0.96, 0.94, 0.86, 0.92)
+			glow_color = Color(0.98, 0.96, 0.82, 0.28)
+	# Outer glow layers
+	for g in range(3):
+		var glow = Panel.new()
+		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var glow_style = StyleBoxFlat.new()
+		glow_style.bg_color = Color(glow_color.r, glow_color.g, glow_color.b, glow_color.a * (0.30 - float(g) * 0.08))
+		glow_style.set_corner_radius_all(50)
+		glow.add_theme_stylebox_override("panel", glow_style)
+		moon.add_child(glow)
+		var expand := 0.08 * float(g + 1)
+		apply_rect(glow, rect_full(0.50 - 0.24 - expand, 0.50 - 0.24 - expand, 0.50 + 0.24 + expand, 0.50 + 0.24 + expand))
+	# Moon body
+	var body = Panel.new()
+	body.name = "MoonBody"
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var body_style = StyleBoxFlat.new()
+	body_style.bg_color = body_color
+	body_style.set_corner_radius_all(50)
+	if phase == "rising_sun":
+		body_style.border_color = Color(1.0, 0.58, 0.28, 0.42)
+		body_style.set_border_width_all(2)
+	body.add_theme_stylebox_override("panel", body_style)
+	moon.add_child(body)
+	apply_rect(body, rect_full(0.26, 0.26, 0.74, 0.74))
+	# Crescent shadow
+	if phase == "crescent":
+		var shadow = Panel.new()
+		shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var shadow_style = StyleBoxFlat.new()
+		shadow_style.bg_color = Color(0.02, 0.02, 0.03, 0.92)
+		shadow_style.set_corner_radius_all(50)
+		shadow.add_theme_stylebox_override("panel", shadow_style)
+		moon.add_child(shadow)
+		apply_rect(shadow, rect_full(0.34, 0.18, 0.82, 0.82))
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(moon, "modulate:a", 0.72, 4.0).from(1.0)
+		tw.tween_property(moon, "modulate:a", 1.0, 4.0).from(0.72)
+	parent.add_child(moon)
+	return moon
+
+func make_plum_blossom(parent: Control, rect: Rect2, count: int = 3, petal_color: Color = ROUGE, animated: bool = false) -> Control:
+	"""创建梅花装饰 - 五瓣梅花 + 花蕊 + 短枝"""
+	var blossom = Control.new()
+	blossom.name = "PlumBlossom"
+	blossom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(blossom, rect)
+	# Branch lines
+	var branch_color = Color(0.36, 0.26, 0.22, 0.72)
+	var branch_segments := [
+		rect_full(0.42, 0.80, 0.48, 0.95),
+		rect_full(0.48, 0.55, 0.52, 0.82),
+		rect_full(0.30, 0.30, 0.50, 0.56),
+		rect_full(0.52, 0.40, 0.68, 0.56),
+	]
+	for seg in branch_segments:
+		var branch = Panel.new()
+		branch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var b_style = StyleBoxFlat.new()
+		b_style.bg_color = branch_color
+		b_style.set_corner_radius_all(50)
+		branch.add_theme_stylebox_override("panel", b_style)
+		blossom.add_child(branch)
+		apply_rect(branch, seg)
+	# Flowers
+	for f_idx in range(count):
+		var flower = Control.new()
+		flower.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var positions := [Vector2(0.32, 0.28), Vector2(0.62, 0.42), Vector2(0.48, 0.16), Vector2(0.72, 0.28), Vector2(0.25, 0.48)]
+		var fpos = positions[f_idx % positions.size()]
+		var fsize := 0.08 + 0.03 * float(f_idx % 3)
+		# Five petals
+		for p in range(5):
+			var angle := float(p) * TAU / 5.0
+			var petal = Panel.new()
+			petal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var petal_style = StyleBoxFlat.new()
+			petal_style.bg_color = Color(petal_color.r, petal_color.g, petal_color.b, 0.78 - 0.08 * float(f_idx))
+			petal_style.set_corner_radius_all(50)
+			petal.add_theme_stylebox_override("panel", petal_style)
+			flower.add_child(petal)
+			var px: float = fpos.x + cos(angle) * fsize * 0.5
+			var py: float = fpos.y + sin(angle) * fsize * 0.5
+			apply_rect(petal, rect_full(px - fsize * 0.32, py - fsize * 0.32, px + fsize * 0.32, py + fsize * 0.32))
+		# Stamen
+		var stamen = Panel.new()
+		stamen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var stamen_style = StyleBoxFlat.new()
+		stamen_style.bg_color = Color(GOLD_BRIGHT.r, GOLD_BRIGHT.g, GOLD_BRIGHT.b, 0.86)
+		stamen_style.set_corner_radius_all(50)
+		stamen.add_theme_stylebox_override("panel", stamen_style)
+		flower.add_child(stamen)
+		var stamen_size := fsize * 0.22
+		apply_rect(stamen, rect_full(fpos.x - stamen_size, fpos.y - stamen_size, fpos.x + stamen_size, fpos.y + stamen_size))
+		blossom.add_child(flower)
+	if animated and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(blossom, "rotation", 0.012, 3.0).from(-0.012)
+		tw.tween_property(blossom, "rotation", -0.012, 3.0).from(0.012)
+	parent.add_child(blossom)
+	return blossom
+
+func make_pine_branch(parent: Control, rect: Rect2, direction: String = "left") -> Control:
+	"""创建松枝装饰 - 斜向枝干 + 针叶簇"""
+	var pine = Control.new()
+	pine.name = "PineBranch"
+	pine.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(pine, rect)
+	var bark_color := Color(0.32, 0.24, 0.18, 0.82)
+	var needle_color := Color(0.18, 0.38, 0.28, 0.78)
+	var flip_x := -1.0 if direction == "right" else 1.0
+	# Main branch
+	var branch_angle := 0.22 * flip_x
+	var main_branch = Panel.new()
+	main_branch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_branch.rotation = branch_angle
+	var mb_style = StyleBoxFlat.new()
+	mb_style.bg_color = bark_color
+	mb_style.set_corner_radius_all(50)
+	main_branch.add_theme_stylebox_override("panel", mb_style)
+	pine.add_child(main_branch)
+	apply_rect(main_branch, rect_full(0.15, 0.42, 0.85, 0.58))
+	# Needle clusters
+	var clusters := [
+		Vector2(0.28, 0.30), Vector2(0.48, 0.26), Vector2(0.68, 0.32),
+		Vector2(0.38, 0.56), Vector2(0.58, 0.60), Vector2(0.78, 0.58),
+	]
+	for cluster_pos in clusters:
+		var cluster = Panel.new()
+		cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var cl_style = StyleBoxFlat.new()
+		cl_style.bg_color = Color(needle_color.r, needle_color.g, needle_color.b, 0.62 + 0.14 * randf())
+		cl_style.set_corner_radius_all(50)
+		cluster.add_theme_stylebox_override("panel", cl_style)
+		pine.add_child(cluster)
+		apply_rect(cluster, rect_full(cluster_pos.x - 0.10, cluster_pos.y - 0.10, cluster_pos.x + 0.10, cluster_pos.y + 0.10))
+	parent.add_child(pine)
+	return pine
+
+func make_koi_fish(parent: Control, rect: Rect2, fish_color: Color = GOLD_PRIMARY, direction: String = "right") -> Control:
+	"""创建简化锦鲤装饰 - 椭圆鱼身 + 尾 + 眼"""
+	var koi = Control.new()
+	koi.name = "KoiFish"
+	koi.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(koi, rect)
+	var flip := -1.0 if direction == "left" else 1.0
+	# Body
+	var body = Panel.new()
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var body_style = StyleBoxFlat.new()
+	body_style.bg_color = Color(fish_color.r, fish_color.g, fish_color.b, 0.82)
+	body_style.set_corner_radius_all(50)
+	body.add_theme_stylebox_override("panel", body_style)
+	koi.add_child(body)
+	apply_rect(body, rect_full(0.22, 0.30, 0.72, 0.70))
+	# Tail
+	var tail = Panel.new()
+	tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tail.rotation = 0.28 * flip
+	var tail_style = StyleBoxFlat.new()
+	tail_style.bg_color = Color(fish_color.r, fish_color.g, fish_color.b, 0.68)
+	tail_style.set_corner_radius_all(50)
+	tail.add_theme_stylebox_override("panel", tail_style)
+	koi.add_child(tail)
+	if direction == "right":
+		apply_rect(tail, rect_full(0.04, 0.22, 0.28, 0.50))
+	else:
+		apply_rect(tail, rect_full(0.72, 0.22, 0.96, 0.50))
+	# Eye
+	var eye = Panel.new()
+	eye.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var eye_style = StyleBoxFlat.new()
+	eye_style.bg_color = Color(0.04, 0.04, 0.06, 0.92)
+	eye_style.set_corner_radius_all(50)
+	eye.add_theme_stylebox_override("panel", eye_style)
+	koi.add_child(eye)
+	var eye_x := 0.62 if direction == "right" else 0.32
+	apply_rect(eye, rect_full(eye_x - 0.04, 0.38, eye_x + 0.04, 0.46))
+	# Dorsal fin
+	var fin = Panel.new()
+	fin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fin_style = StyleBoxFlat.new()
+	fin_style.bg_color = Color(fish_color.r * 0.82, fish_color.g * 0.82, fish_color.b * 0.82, 0.58)
+	fin_style.set_corner_radius_all(50)
+	fin.add_theme_stylebox_override("panel", fin_style)
+	koi.add_child(fin)
+	apply_rect(fin, rect_full(0.38, 0.18, 0.58, 0.34))
+	parent.add_child(koi)
+	return koi
+
+func make_brush_stroke_divider(parent: Control, rect: Rect2, thickness: float = 2.5) -> Control:
+	"""创建毛笔笔触分隔线 - 中粗端细的流线造型"""
+	var stroke = Control.new()
+	stroke.name = "BrushStrokeDivider"
+	stroke.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(stroke, rect)
+	var ink_color := INK_MEDIUM
+	var ink_alpha := 0.52
+	# Main body - wider center
+	var main = Panel.new()
+	main.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var main_style = StyleBoxFlat.new()
+	main_style.bg_color = Color(ink_color.r, ink_color.g, ink_color.b, ink_alpha)
+	main_style.set_corner_radius_all(50)
+	main.add_theme_stylebox_override("panel", main_style)
+	stroke.add_child(main)
+	apply_rect(main, rect_full(0.12, 0.28, 0.88, 0.72))
+	# Start dot (brush press - thicker start)
+	var start_dot = Panel.new()
+	start_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var s_style = StyleBoxFlat.new()
+	s_style.bg_color = Color(ink_color.r, ink_color.g, ink_color.b, ink_alpha * 1.3)
+	s_style.set_corner_radius_all(50)
+	start_dot.add_theme_stylebox_override("panel", s_style)
+	stroke.add_child(start_dot)
+	apply_rect(start_dot, rect_full(0.06, 0.20, 0.14, 0.80))
+	# Taper ends
+	var taper_r = Panel.new()
+	taper_r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tr_style = StyleBoxFlat.new()
+	tr_style.bg_color = Color(ink_color.r, ink_color.g, ink_color.b, ink_alpha * 0.5)
+	tr_style.set_corner_radius_all(50)
+	taper_r.add_theme_stylebox_override("panel", tr_style)
+	stroke.add_child(taper_r)
+	apply_rect(taper_r, rect_full(0.86, 0.32, 0.96, 0.68))
+	# Splatter dots (ink spray)
+	for _i in range(3):
+		var dot = Panel.new()
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var d_style = StyleBoxFlat.new()
+		d_style.bg_color = Color(ink_color.r, ink_color.g, ink_color.b, 0.18 + randf() * 0.12)
+		d_style.set_corner_radius_all(50)
+		dot.add_theme_stylebox_override("panel", d_style)
+		stroke.add_child(dot)
+		var dx := 0.88 + randf() * 0.10
+		var dy := 0.30 + randf() * 0.40
+		apply_rect(dot, rect_full(dx - 0.02, dy - 0.02, dx + 0.02, dy + 0.02))
+	parent.add_child(stroke)
+	return stroke
+
+func make_lantern(parent: Control, rect: Rect2, color: Color = CINNABAR, lit: bool = true) -> Control:
+	"""创建灯笼装饰 - 灯体 + 金环 + 穗子"""
+	var lantern = Control.new()
+	lantern.name = "Lantern"
+	lantern.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(lantern, rect)
+	# Top cap
+	var top_cap = Panel.new()
+	top_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tc_style = StyleBoxFlat.new()
+	tc_style.bg_color = GOLD_DARK
+	tc_style.set_corner_radius_all(3)
+	top_cap.add_theme_stylebox_override("panel", tc_style)
+	lantern.add_child(top_cap)
+	apply_rect(top_cap, rect_full(0.32, 0.04, 0.68, 0.10))
+	# Hanging string
+	var hstring = Panel.new()
+	hstring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var hs_style = StyleBoxFlat.new()
+	hs_style.bg_color = GOLD_DARK
+	hs_style.set_corner_radius_all(1)
+	hstring.add_theme_stylebox_override("panel", hs_style)
+	lantern.add_child(hstring)
+	apply_rect(hstring, rect_full(0.46, 0.0, 0.54, 0.06))
+	# Main body
+	var body = Panel.new()
+	body.name = "LanternBody"
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var body_style = StyleBoxFlat.new()
+	body_style.bg_color = color
+	body_style.border_color = Color(color.r * 0.72, color.g * 0.72, color.b * 0.72, 0.52)
+	body_style.set_border_width_all(1)
+	body_style.set_corner_radius_all(12)
+	body.add_theme_stylebox_override("panel", body_style)
+	lantern.add_child(body)
+	apply_rect(body, rect_full(0.12, 0.10, 0.88, 0.76))
+	# Bottom cap
+	var bottom_cap = Panel.new()
+	bottom_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bc_style = StyleBoxFlat.new()
+	bc_style.bg_color = GOLD_DARK
+	bc_style.set_corner_radius_all(3)
+	bottom_cap.add_theme_stylebox_override("panel", bc_style)
+	lantern.add_child(bottom_cap)
+	apply_rect(bottom_cap, rect_full(0.32, 0.76, 0.68, 0.82))
+	# Tassel
+	var tassel = Panel.new()
+	tassel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tl_style = StyleBoxFlat.new()
+	tl_style.bg_color = Color(color.r * 0.88, color.g * 0.72, color.b * 0.42, 0.78)
+	tl_style.set_corner_radius_all(2)
+	tassel.add_theme_stylebox_override("panel", tl_style)
+	lantern.add_child(tassel)
+	apply_rect(tassel, rect_full(0.42, 0.82, 0.58, 0.96))
+	# Inner glow when lit
+	if lit:
+		var glow = Panel.new()
+		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var gl_style = StyleBoxFlat.new()
+		gl_style.bg_color = Color(1.0, 0.92, 0.62, 0.18)
+		gl_style.set_corner_radius_all(50)
+		glow.add_theme_stylebox_override("panel", gl_style)
+		lantern.add_child(glow)
+		apply_rect(glow, rect_full(0.18, 0.16, 0.82, 0.72))
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var tw := create_tween()
+			tw.set_loops(3600)
+			tw.tween_property(glow, "modulate:a", 0.62, 1.8).from(1.0)
+			tw.tween_property(glow, "modulate:a", 1.0, 1.8).from(0.62)
+	parent.add_child(lantern)
+	return lantern
+
+# ============================================================
 # 界面过渡动画 / Interface Transition Animation
 # ============================================================
 
@@ -13307,7 +14850,7 @@ func play_button_press_animation(button: Button, scale_amount: float = 0.92) -> 
 # ============================================================
 
 func start_ambient_animation(theme: String = "default") -> void:
-	"""启动环境氛围动画"""
+	"""启动环境氛围动画 - 支持四季自动主题"""
 	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
 		return
 
@@ -13320,13 +14863,33 @@ func start_ambient_animation(theme: String = "default") -> void:
 	ambient_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(ambient_layer)
 
-	match theme:
+	# 四季自动主题 - 根据月份选择
+	var resolved_theme: String = theme
+	if theme == "default":
+		var month: int = int(Time.get_datetime_dict_from_system().get("month", 1))
+		match month:
+			3, 4, 5:
+				resolved_theme = "spring"
+			6, 7, 8:
+				resolved_theme = "summer"
+			9, 10, 11:
+				resolved_theme = "autumn"
+			12, 1, 2:
+				resolved_theme = "winter"
+			_:
+				resolved_theme = "default"
+
+	match resolved_theme:
 		"spring":
 			_start_petal_fall()
+		"summer":
+			_start_firefly_particles()
 		"autumn":
 			_start_leaf_fall()
 		"festival":
 			_start_firework_particles()
+		"winter":
+			_start_snow_fall()
 		_:
 			_start_default_ambient()
 
@@ -13354,66 +14917,102 @@ func stop_ambient_animation() -> void:
 		ambient_layer.queue_free()
 	ambient_layer = null
 
-func _start_petal_fall() -> void:
-	"""启动花瓣飘落动画"""
-	var petal_count := 12
+# 氛围粒子调色板 / Ambient Particle Color Palettes
+const PETAL_COLORS := [
+	Color(1.00, 0.88, 0.92),  # 樱粉
+	Color(1.00, 0.78, 0.86),  # 桃红
+	Color(1.00, 0.92, 0.96),  # 浅粉白
+	Color(0.96, 0.70, 0.74),  # 胭脂
+	Color(1.00, 0.94, 0.90),  # 暖白
+]
+const LEAF_COLORS := [
+	Color(0.86, 0.40, 0.18),  # 赭石
+	Color(0.92, 0.58, 0.22),  # 橙黄
+	Color(0.74, 0.30, 0.16),  # 枫红
+	Color(0.62, 0.46, 0.18),  # 暗金
+	Color(0.80, 0.36, 0.40),  # 暗红
+]
+const FIREWORK_COLORS := [
+	Color(1.00, 0.84, 0.32),  # 金黄
+	Color(0.96, 0.28, 0.30),  # 朱红
+	Color(0.42, 0.72, 0.96),  # 青蓝
+	Color(0.58, 0.88, 0.62),  # 翠绿
+	Color(0.86, 0.52, 0.96),  # 紫霞
+]
 
+func _start_petal_fall() -> void:
+	"""启动花瓣飘落动画 - 多色五瓣樱花"""
+	var petal_count := 16
 	for i in range(petal_count):
 		var petal = _create_petal()
 		ambient_layer.add_child(petal)
 		ambient_petals.append(petal)
-		_animate_petal_fall(petal, float(i) * 0.4)
+		_animate_petal_fall(petal, float(i) * 0.35)
 
 func _create_petal() -> Control:
-	"""创建花瓣粒子"""
+	"""创建花瓣粒子 - 五瓣樱花造型 + 微光"""
 	var petal = Control.new()
 	petal.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	# 花瓣形状（使用Panel模拟椭圆）
-	var shape = Panel.new()
-	shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(1.0, 0.88, 0.92, randf_range(0.3, 0.6))
-	style.set_corner_radius_all(50)
-	shape.add_theme_stylebox_override("panel", style)
-	shape.custom_minimum_size = Vector2(randf_range(8, 14), randf_range(12, 20))
-	shape.rotation = randf() * PI * 0.5
-	petal.add_child(shape)
-
-	# 随机起始位置
-	petal.position = Vector2(randf_range(0.0, 1.0) * get_viewport().size.x, -20.0)
-
+	var base_color: Color = PETAL_COLORS[randi() % PETAL_COLORS.size()]
+	var alpha := randf_range(0.42, 0.78)
+	# 五瓣花形 - 围绕中心五个椭圆
+	var flower_root = Control.new()
+	flower_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flower_root.set_anchors_preset(Control.PRESET_CENTER)
+	var petal_size := randf_range(7.0, 13.0)
+	for p in range(5):
+		var angle := float(p) * TAU / 5.0
+		var shape = Panel.new()
+		shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var p_style = StyleBoxFlat.new()
+		p_style.bg_color = Color(base_color.r, base_color.g, base_color.b, alpha)
+		p_style.set_corner_radius_all(50)
+		shape.add_theme_stylebox_override("panel", p_style)
+		shape.custom_minimum_size = Vector2(petal_size, petal_size * 1.6)
+		shape.rotation = angle
+		shape.position = Vector2(cos(angle) * petal_size * 0.5 - petal_size * 0.5, sin(angle) * petal_size * 0.5 - petal_size * 0.8)
+		flower_root.add_child(shape)
+	# 花蕊金点
+	var stamen = Panel.new()
+	stamen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var s_style = StyleBoxFlat.new()
+	s_style.bg_color = Color(1.0, 0.90, 0.50, alpha)
+	s_style.set_corner_radius_all(50)
+	stamen.add_theme_stylebox_override("panel", s_style)
+	stamen.custom_minimum_size = Vector2(petal_size * 0.4, petal_size * 0.4)
+	stamen.position = Vector2(-petal_size * 0.2, -petal_size * 0.2)
+	flower_root.add_child(stamen)
+	petal.add_child(flower_root)
+	flower_root.position = Vector2(-petal_size, -petal_size)
+	petal.rotation = randf() * PI * 0.5
+	var vp_x = get_viewport().size.x
+	petal.position = Vector2(randf_range(0.0, 1.0) * vp_x, -30.0)
 	return petal
 
 func _animate_petal_fall(petal: Control, delay: float) -> void:
-	"""花瓣飘落动画"""
+	"""花瓣飘落动画 - 自然飘摇 + 自旋"""
 	var viewport_size = get_viewport().size
-	var fall_duration = randf_range(8.0, 15.0)
-	var sway_amplitude = randf_range(30.0, 80.0)
-	var sway_frequency = randf_range(0.5, 1.5)
-
-	var tw := create_tween()
-	tw.set_loops()
-
+	var fall_duration = randf_range(9.0, 16.0)
+	var sway_amplitude = randf_range(40.0, 110.0)
+	var sway_frequency = randf_range(0.4, 1.2)
 	# 垂直下落
-	tw.tween_property(petal, "position:y", viewport_size.y + 30.0, fall_duration).from(-20.0).set_delay(delay)
-
-	# 水平摇摆
+	var tw := create_tween()
+	tw.set_loops(3600)
+	tw.tween_property(petal, "position:y", viewport_size.y + 40.0, fall_duration).from(-30.0).set_delay(delay)
+	# 水平摇摆（正弦感）
 	var sway_tw := create_tween()
-	sway_tw.set_loops()
-	sway_tw.tween_property(petal, "position:x", petal.position.x + sway_amplitude, 1.0 / sway_frequency).set_delay(delay)
-	sway_tw.tween_property(petal, "position:x", petal.position.x - sway_amplitude, 1.0 / sway_frequency)
-
+	sway_tw.set_loops(3600)
+	sway_tw.tween_property(petal, "position:x", petal.position.x + sway_amplitude, 1.0 / sway_frequency).set_delay(delay).set_trans(Tween.TRANS_SINE)
+	sway_tw.tween_property(petal, "position:x", petal.position.x - sway_amplitude, 1.0 / sway_frequency).set_trans(Tween.TRANS_SINE)
 	# 旋转
 	var rot_tw := create_tween()
-	rot_tw.set_loops()
-	rot_tw.tween_property(petal, "rotation", PI * 0.3, fall_duration * 0.3).from(0.0).set_delay(delay)
-	rot_tw.tween_property(petal, "rotation", -PI * 0.3, fall_duration * 0.3).set_delay(delay)
+	rot_tw.set_loops(3600)
+	rot_tw.tween_property(petal, "rotation", PI * 0.5, fall_duration * 0.5).from(0.0).set_delay(delay)
+	rot_tw.tween_property(petal, "rotation", -PI * 0.5, fall_duration * 0.5).set_delay(delay)
 
 func _start_default_ambient() -> void:
 	"""启动默认氛围动画（祥云流动）"""
-	var cloud_count := 4
-
+	var cloud_count := 5
 	for i in range(cloud_count):
 		var cloud = make_cloud_decoration(
 			ambient_layer,
@@ -13429,302 +15028,216 @@ func _animate_cloud_drift(cloud: Control, delay: float) -> void:
 	"""云朵漂移动画"""
 	var drift_duration = randf_range(20.0, 35.0)
 	var viewport_size = get_viewport().size
-
 	cloud.position.x = -cloud.size.x
-
 	var tw := create_tween()
-	tw.set_loops()
+	tw.set_loops(3600)
 	tw.tween_property(cloud, "position:x", viewport_size.x + cloud.size.x, drift_duration).set_delay(delay)
 
 func _start_leaf_fall() -> void:
-	"""启动落叶飘落动画"""
-	var leaf_count := 10
-
+	"""启动落叶飘落动画 - 多色枫叶"""
+	var leaf_count := 14
 	for i in range(leaf_count):
 		var leaf = _create_leaf()
 		ambient_layer.add_child(leaf)
 		ambient_particles.append(leaf)
-		_animate_leaf_fall(leaf, float(i) * 0.5)
+		_animate_leaf_fall(leaf, float(i) * 0.4)
 
 func _create_leaf() -> Control:
-	"""创建落叶粒子"""
+	"""创建落叶粒子 - 多色 + 渐变质感"""
 	var leaf = Control.new()
 	leaf.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
+	var base_color: Color = LEAF_COLORS[randi() % LEAF_COLORS.size()]
+	var alpha := randf_range(0.5, 0.85)
+	# 叶身 - 带尖角的椭圆
 	var shape = Panel.new()
 	shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style = StyleBoxFlat.new()
-	style.bg_color = Color(randf_range(0.6, 0.9), randf_range(0.3, 0.5), randf_range(0.1, 0.2), randf_range(0.4, 0.7))
-	style.set_corner_radius_all(40)
+	style.bg_color = Color(base_color.r, base_color.g, base_color.b, alpha)
+	style.set_corner_radius_all(30)
 	shape.add_theme_stylebox_override("panel", style)
-	shape.custom_minimum_size = Vector2(randf_range(10, 18), randf_range(8, 14))
+	var lw := randf_range(10.0, 18.0)
+	var lh := randf_range(8.0, 14.0)
+	shape.custom_minimum_size = Vector2(lw, lh)
 	shape.rotation = randf() * PI
 	leaf.add_child(shape)
-
-	leaf.position = Vector2(randf_range(0.0, 1.0) * get_viewport().size.x, -20.0)
-
+	# 叶脉 - 暗色中线
+	var vein = Panel.new()
+	vein.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var v_style = StyleBoxFlat.new()
+	v_style.bg_color = Color(base_color.r * 0.6, base_color.g * 0.6, base_color.b * 0.6, alpha * 0.7)
+	v_style.set_corner_radius_all(50)
+	vein.add_theme_stylebox_override("panel", v_style)
+	vein.custom_minimum_size = Vector2(lw * 0.7, 1.5)
+	vein.position = Vector2(lw * 0.15, lh * 0.5 - 0.75)
+	vein.rotation = 0.0
+	leaf.add_child(vein)
+	leaf.position = Vector2(randf_range(0.0, 1.0) * get_viewport().size.x, -30.0)
 	return leaf
 
 func _animate_leaf_fall(leaf: Control, delay: float) -> void:
-	"""落叶飘落动画"""
+	"""落叶飘落动画 - 飘摇 + 翻转"""
 	var viewport_size = get_viewport().size
-	var fall_duration = randf_range(10.0, 18.0)
-
+	var fall_duration = randf_range(11.0, 19.0)
 	var tw := create_tween()
-	tw.set_loops()
-	tw.tween_property(leaf, "position:y", viewport_size.y + 30.0, fall_duration).from(-20.0).set_delay(delay)
-
+	tw.set_loops(3600)
+	tw.tween_property(leaf, "position:y", viewport_size.y + 40.0, fall_duration).from(-30.0).set_delay(delay).set_trans(Tween.TRANS_QUAD)
 	var sway_tw := create_tween()
-	sway_tw.set_loops()
-	sway_tw.tween_property(leaf, "position:x", leaf.position.x + randf_range(40.0, 100.0), randf_range(1.0, 2.0)).set_delay(delay)
-	sway_tw.tween_property(leaf, "position:x", leaf.position.x - randf_range(40.0, 100.0), randf_range(1.0, 2.0))
+	sway_tw.set_loops(3600)
+	var amp := randf_range(40.0, 100.0)
+	sway_tw.tween_property(leaf, "position:x", leaf.position.x + amp, randf_range(1.2, 2.4)).set_delay(delay).set_trans(Tween.TRANS_SINE)
+	sway_tw.tween_property(leaf, "position:x", leaf.position.x - amp, randf_range(1.2, 2.4)).set_trans(Tween.TRANS_SINE)
+	# 翻转 - 落叶特有
+	var flip_tw := create_tween()
+	flip_tw.set_loops(3600)
+	flip_tw.tween_property(leaf, "rotation", PI * 1.2, fall_duration * 0.6).from(0.0).set_delay(delay)
+	flip_tw.tween_property(leaf, "rotation", 0.0, fall_duration * 0.4).from(PI * 1.2).set_delay(delay + fall_duration * 0.6)
 
 func _start_firework_particles() -> void:
-	"""启动节日烟花粒子动画"""
-	# 简化版本：创建闪烁的光点
-	var particle_count := 20
-
+	"""启动节日烟花粒子动画 - 多色绽放 + 辉光"""
+	var particle_count := 22
+	var viewport_size = get_viewport().size
 	for i in range(particle_count):
 		var particle = Control.new()
 		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
+		var base_color: Color = FIREWORK_COLORS[randi() % FIREWORK_COLORS.size()]
 		var core = Panel.new()
 		core.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var style = StyleBoxFlat.new()
-		style.bg_color = Color(randf_range(0.8, 1.0), randf_range(0.6, 1.0), randf_range(0.2, 0.8), 0.8)
+		style.bg_color = Color(base_color.r, base_color.g, base_color.b, 0.92)
 		style.set_corner_radius_all(50)
 		core.add_theme_stylebox_override("panel", style)
 		core.custom_minimum_size = Vector2(randf_range(3, 6), randf_range(3, 6))
+		# 辉光层
+		var glow = Panel.new()
+		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var gl_style = StyleBoxFlat.new()
+		gl_style.bg_color = Color(base_color.r, base_color.g, base_color.b, 0.32)
+		gl_style.set_corner_radius_all(50)
+		glow.add_theme_stylebox_override("panel", gl_style)
+		var gsize := randf_range(10, 18)
+		glow.custom_minimum_size = Vector2(gsize, gsize)
+		glow.position = Vector2(-(gsize - core.custom_minimum_size.x) * 0.5, -(gsize - core.custom_minimum_size.y) * 0.5)
+		core.add_child(glow)
 		particle.add_child(core)
-
-		particle.position = Vector2(randf() * get_viewport().size.x, randf() * get_viewport().size.y)
+		var cx: float = randf() * viewport_size.x
+		var cy: float = randf_range(0.10, 0.72) * viewport_size.y
+		particle.position = Vector2(cx, cy)
 		ambient_layer.add_child(particle)
 		ambient_particles.append(particle)
-
-		# 闪烁动画
+		# 闪烁 + 微扩散
 		var tw := create_tween()
-		tw.set_loops()
-		tw.tween_property(particle, "modulate:a", 0.2, randf_range(0.5, 1.5)).from(1.0)
-		tw.tween_property(particle, "modulate:a", 1.0, randf_range(0.5, 1.5)).from(0.2)
+		tw.set_loops(3600)
+		tw.tween_property(particle, "modulate:a", 1.0, randf_range(0.18, 0.42)).from(0.0).set_delay(float(i) * 0.12)
+		tw.parallel().tween_property(particle, "scale", Vector2(1.4, 1.4), randf_range(0.4, 0.9)).from(Vector2(0.6, 0.6)).set_delay(float(i) * 0.12).set_ease(Tween.EASE_OUT)
+		tw.tween_property(particle, "modulate:a", 0.0, randf_range(0.6, 1.4)).from(1.0)
+		tw.tween_property(particle, "scale", Vector2(0.8, 0.8), randf_range(0.6, 1.2))
+		# 漂浮回落
+		var fall_tw := create_tween()
+		fall_tw.set_loops(3600)
+		fall_tw.tween_property(particle, "position:y", cy + randf_range(20.0, 50.0), randf_range(2.0, 3.5)).set_delay(float(i) * 0.12)
+		fall_tw.tween_property(particle, "position:y", cy, randf_range(2.0, 3.5))
 
-# ============================================================
-# 图标系统 / Icon System
-# ============================================================
+func _start_firefly_particles() -> void:
+	"""启动夏日萤火虫粒子动画 - 漂移+呼吸闪烁+辉光"""
+	var particle_count := 22
+	var viewport_size = get_viewport().size
+	for i in range(particle_count):
+		var particle = Control.new()
+		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var core = Panel.new()
+		core.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style = StyleBoxFlat.new()
+		style.bg_color = Color(randf_range(0.72, 0.95), randf_range(0.88, 1.0), randf_range(0.32, 0.52), 0.0)
+		style.set_corner_radius_all(50)
+		core.add_theme_stylebox_override("panel", style)
+		var csize := randf_range(3, 6)
+		core.custom_minimum_size = Vector2(csize, csize)
+		# 萤火虫辉光 - 双层
+		var glow = Panel.new()
+		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var gl_style = StyleBoxFlat.new()
+		gl_style.bg_color = Color(0.85, 0.95, 0.45, 0.0)
+		gl_style.set_corner_radius_all(50)
+		glow.add_theme_stylebox_override("panel", gl_style)
+		glow.custom_minimum_size = Vector2(14, 14)
+		glow.position = Vector2(-4, -4)
+		core.add_child(glow)
+		var glow2 = Panel.new()
+		glow2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var gl2_style = StyleBoxFlat.new()
+		gl2_style.bg_color = Color(1.0, 1.0, 0.62, 0.0)
+		gl2_style.set_corner_radius_all(50)
+		glow2.add_theme_stylebox_override("panel", gl2_style)
+		glow2.custom_minimum_size = Vector2(26, 26)
+		glow2.position = Vector2(-10, -10)
+		core.add_child(glow2)
+		particle.add_child(core)
+		var px: float = randf() * viewport_size.x
+		var py: float = randf_range(0.15, 0.85) * viewport_size.y
+		particle.position = Vector2(px, py)
+		ambient_layer.add_child(particle)
+		ambient_particles.append(particle)
+		# 呼吸闪烁 - core与glow同步
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(core, "modulate:a", 1.0, randf_range(0.9, 2.0)).from(0.0).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(core, "modulate:a", 0.0, randf_range(0.9, 2.0)).from(1.0).set_ease(Tween.EASE_IN_OUT)
+		var glow_tw := create_tween()
+		glow_tw.set_loops(3600)
+		glow_tw.tween_property(glow, "modulate:a", 0.8, randf_range(0.9, 2.0)).from(0.0)
+		glow_tw.tween_property(glow, "modulate:a", 0.0, randf_range(0.9, 2.0)).from(0.8)
+		# 漂移 - 8字形漫游
+		var drift_tw := create_tween()
+		drift_tw.set_loops(3600)
+		drift_tw.tween_property(particle, "position:x", px + randf_range(25.0, 65.0), randf_range(2.5, 4.5)).set_trans(Tween.TRANS_SINE)
+		drift_tw.parallel().tween_property(particle, "position:y", py + randf_range(-30.0, 30.0), randf_range(2.5, 4.5)).set_trans(Tween.TRANS_SINE)
+		drift_tw.tween_property(particle, "position:x", px, randf_range(2.5, 4.5)).set_trans(Tween.TRANS_SINE)
+		drift_tw.parallel().tween_property(particle, "position:y", py, randf_range(2.5, 4.5)).set_trans(Tween.TRANS_SINE)
 
-const ICON_CODES := {
-	# Navigation
-	"menu": "☰",
-	"back": "←",
-	"forward": "→",
-	"up": "↑",
-	"down": "↓",
-
-	# Actions
-	"play": "▶",
-	"pause": "❚❚",
-	"stop": "■",
-	"refresh": "↻",
-	"settings": "⚙",
-
-	# Game specific
-	"coin": "●",
-	"gem": "◆",
-	"star": "★",
-	"heart": "♥",
-	"trophy": "🏆",
-	"fire": "🔥",
-
-	# Status
-	"check": "✓",
-	"cross": "✗",
-	"warning": "⚠",
-	"info": "ℹ",
-	"help": "?",
-
-	# Chinese style decorations
-	"cloud": "☁",
-	"sun": "☀",
-	"moon": "☾",
-	"bamboo": "🎋",
-	"flower": "❀",
-	"dragon": "🐉",
-}
-
-func make_icon_label(parent: Control, icon_name: String, size: int, color: Color) -> Label:
-	"""创建图标Label"""
-	var icon_code = ICON_CODES.get(icon_name, "")
-	var label = make_label(parent, icon_code, size, color, true)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	return label
-
-func make_icon_button(icon_name: String, color: Color, size: int = 24, callback: Callable = Callable()) -> Button:
-	"""创建图标按钮"""
-	var button = Button.new()
-	button.text = ICON_CODES.get(icon_name, "")
-	button.custom_minimum_size = Vector2(size * 1.8, size * 1.8)
-	configure_touch_button(button)
-	button.add_theme_font_size_override("font_size", size)
-	button.add_theme_color_override("font_color", color)
-	button.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.4))
-
-	var btn_style = StyleBoxFlat.new()
-	btn_style.bg_color = Color(0.02, 0.03, 0.04, 0.85)
-	btn_style.set_corner_radius_all(size * 0.4)
-	btn_style.set_border_width_all(1)
-	btn_style.border_color = color.darkened(0.3)
-	button.add_theme_stylebox_override("normal", btn_style)
-
-	var hover_style = btn_style.duplicate()
-	hover_style.bg_color = Color(0.04, 0.05, 0.06, 0.92)
-	hover_style.border_color = color
-	button.add_theme_stylebox_override("hover", hover_style)
-
-	var pressed_style = btn_style.duplicate()
-	pressed_style.bg_color = color.darkened(0.4)
-	button.add_theme_stylebox_override("pressed", pressed_style)
-
-	if callback.is_valid():
-		connect_immediate_button_action(button, callback)
-
-	return button
-
-func make_icon_badge(parent: Control, rect: Rect2, icon_name: String, bg_color: Color, icon_color: Color) -> Control:
-	"""创建图标徽章"""
-	var badge = make_panel(parent, rect, bg_color, 10, bg_color.lightened(0.2), 0)
-	var icon = make_icon_label(badge, icon_name, max(12, int(rect.size.y * 0.5)), icon_color)
-	apply_rect(icon, rect_full(0.1, 0.1, 0.9, 0.9))
-	return badge
-
-func draw_icon_in_panel(parent: Control, icon_name: String, rect: Rect2, color: Color) -> void:
-	"""在面板中绘制图标"""
-	var container = Control.new()
-	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(container, rect)
-
-	var icon_code = ICON_CODES.get(icon_name, "")
-	var label = make_label(container, icon_code, int(min(rect.size.x, rect.size.y) * 0.6), color, true)
-	label.set_anchors_preset(Control.PRESET_FULL_RECT)
-
-	parent.add_child(container)
-
-func lucide_icon_path(icon_name: String) -> String:
-	return "res://assets/icons/lucide/%s.svg" % icon_name
-
-func lucide_icon_texture(icon_name: String) -> Texture2D:
-	if icon_name == "":
-		return null
-	if icon_textures.has(icon_name):
-		return icon_textures[icon_name]
-	var path = lucide_icon_path(icon_name)
-	if not ResourceLoader.exists(path):
-		icon_textures[icon_name] = null
-		return null
-	var texture = load(path) as Texture2D
-	icon_textures[icon_name] = texture
-	return texture
-
-func add_lucide_icon(parent: Control, icon_name: String, rect: Rect2, tint: Color = Color.WHITE) -> TextureRect:
-	var texture = lucide_icon_texture(icon_name)
-	if texture == null:
-		return null
-	var icon = TextureRect.new()
-	icon.name = "Icon_%s" % icon_name
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon.texture = texture
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.modulate = tint
-	apply_rect(icon, rect)
-	parent.add_child(icon)
-	return icon
-
-func animation_asset_spec(animation_name: String) -> Dictionary:
-	if animation_name == "":
-		return {}
-	if animation_specs.has(animation_name):
-		return animation_specs[animation_name]
-	var path = str(ANIMATION_ASSET_PATHS.get(animation_name, ""))
-	if path == "" or not FileAccess.file_exists(path):
-		animation_specs[animation_name] = {}
-		return {}
-	var file = FileAccess.open(path, FileAccess.READ)
-	if file == null:
-		animation_specs[animation_name] = {}
-		return {}
-	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY:
-		animation_specs[animation_name] = {}
-		return {}
-	var source: Dictionary = parsed
-	var spec := {
-		"name": str(source.get("nm", animation_name)),
-		"frame_rate": int(source.get("fr", 60)),
-		"in_point": int(source.get("ip", 0)),
-		"out_point": int(source.get("op", 0)),
-		"width": int(source.get("w", 0)),
-		"height": int(source.get("h", 0)),
-		"layer_count": numeric_count(source.get("layers", []), 0),
-	}
-	animation_specs[animation_name] = spec
-	return spec
-
-func animation_duration_seconds(animation_name: String) -> float:
-	var spec = animation_asset_spec(animation_name)
-	var frame_rate = max(1, int(spec.get("frame_rate", 60)))
-	var frame_count = max(1, int(spec.get("out_point", 0)) - int(spec.get("in_point", 0)))
-	return float(frame_count) / float(frame_rate)
-
-func draw_animation_preview(parent: Control, rect: Rect2, animation_name: String) -> Control:
-	var spec = animation_asset_spec(animation_name)
-	if spec.is_empty():
-		return null
-	var preview = Control.new()
-	preview.name = "AnimationPreview_%s" % animation_name
-	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(preview, rect)
-	parent.add_child(preview)
-	match animation_name:
-		"coin_spin":
-			draw_coin_spin_preview(preview)
-		"victory_sparkle":
-			draw_victory_sparkle_preview(preview)
-		_:
-			make_icon_badge(preview, rect_full(0.08, 0.08, 0.92, 0.92), "sparkle", Color(0.20, 0.24, 0.24, 0.72), GOLD_LIGHT)
-	animate_animation_preview(preview, animation_name)
-	return preview
-
-func draw_coin_spin_preview(parent: Control) -> void:
-	var glow = make_panel(parent, rect_full(0.04, 0.04, 0.96, 0.96), Color(0.34, 0.26, 0.08, 0.36), 999, Color(0.96, 0.78, 0.32, 0.30), 0)
-	glow.name = "CoinSpinGlow"
-	var coin = make_panel(parent, rect_full(0.18, 0.18, 0.82, 0.82), Color(0.88, 0.68, 0.18, 0.94), 999, Color(1.0, 0.90, 0.48, 0.82), 0)
-	coin.name = "CoinSpinCoin"
-	add_lucide_icon(coin, "coin", rect_full(0.20, 0.20, 0.80, 0.80), Color(0.22, 0.13, 0.04, 0.72))
-
-func draw_victory_sparkle_preview(parent: Control) -> void:
-	var ring = make_panel(parent, rect_full(0.14, 0.14, 0.86, 0.86), Color(0, 0, 0, 0), 999, Color(0.96, 0.76, 0.28, 0.55), 0)
-	ring.name = "VictorySparkleRing"
-	var left = make_label(parent, "✦", 18, GOLD_BRIGHT, true)
-	left.name = "VictorySparkleStar"
-	apply_rect(left, rect_full(0.02, 0.18, 0.42, 0.60))
-	var right = make_label(parent, "✧", 14, SCARLET_GLOW, true)
-	right.name = "VictorySparkleStar"
-	apply_rect(right, rect_full(0.58, 0.08, 0.98, 0.50))
-	add_lucide_icon(parent, "sparkles", rect_full(0.28, 0.28, 0.72, 0.72), Color(0.96, 0.86, 0.42, 0.88))
-
-func animate_animation_preview(preview: Control, animation_name: String) -> void:
-	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
-		return
-	var duration = clamp(animation_duration_seconds(animation_name), 0.6, 2.4)
-	var tw := preview.create_tween()
-	tw.set_loops()
-	match animation_name:
-		"coin_spin":
-			tw.tween_property(preview, "rotation", TAU, duration).from(0.0).set_trans(Tween.TRANS_LINEAR)
-			tw.parallel().tween_property(preview, "scale", Vector2(1.08, 1.08), duration * 0.5).from(Vector2.ONE).set_ease(Tween.EASE_OUT)
-			tw.tween_property(preview, "scale", Vector2.ONE, duration * 0.5).set_ease(Tween.EASE_IN)
-		"victory_sparkle":
-			tw.tween_property(preview, "modulate:a", 0.62, duration * 0.35).from(1.0)
-			tw.tween_property(preview, "modulate:a", 1.0, duration * 0.35).from(0.62)
-			tw.parallel().tween_property(preview, "rotation", 0.12, duration * 0.5).from(-0.12)
-			tw.tween_property(preview, "rotation", -0.12, duration * 0.5).from(0.12)
+func _start_snow_fall() -> void:
+	"""启动冬日雪花飘落动画 - 六角晶体感 + 辉光"""
+	var flake_count := 30
+	var viewport_size = get_viewport().size
+	for i in range(flake_count):
+		var flake = Control.new()
+		flake.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var fsize := randf_range(3.0, 8.0)
+		# 雪花核心
+		var core = Panel.new()
+		core.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style = StyleBoxFlat.new()
+		style.bg_color = Color(0.97, 0.99, 1.0, randf_range(0.5, 0.92))
+		style.set_corner_radius_all(50)
+		core.add_theme_stylebox_override("panel", style)
+		core.custom_minimum_size = Vector2(fsize, fsize)
+		flake.add_child(core)
+		# 柔光层 - 冰晶泛蓝白
+		var halo = Panel.new()
+		halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var h_style = StyleBoxFlat.new()
+		h_style.bg_color = Color(0.80, 0.92, 1.0, randf_range(0.10, 0.22))
+		h_style.set_corner_radius_all(50)
+		halo.add_theme_stylebox_override("panel", h_style)
+		var hsize := fsize * 2.6
+		halo.custom_minimum_size = Vector2(hsize, hsize)
+		halo.position = Vector2(-(hsize - fsize) * 0.5, -(hsize - fsize) * 0.5)
+		core.add_child(halo)
+		var px: float = randf() * viewport_size.x
+		var py: float = randf_range(-1.0, 1.0) * viewport_size.y
+		flake.position = Vector2(px, py)
+		ambient_layer.add_child(flake)
+		ambient_particles.append(flake)
+		# 下落
+		var fall_tw := create_tween()
+		fall_tw.set_loops(3600)
+		var fall_dur = randf_range(9.0, 17.0)
+		fall_tw.tween_property(flake, "position:y", viewport_size.y + 30.0, fall_dur).from(py - viewport_size.y).set_delay(float(i) * 0.25).set_trans(Tween.TRANS_LINEAR)
+		# 随风飘 + 自旋
+		var sway_tw := create_tween()
+		sway_tw.set_loops(3600)
+		var amp := randf_range(30.0, 80.0)
+		sway_tw.tween_property(flake, "position:x", px + amp, randf_range(1.5, 3.5)).set_delay(float(i) * 0.25).set_trans(Tween.TRANS_SINE)
+		sway_tw.tween_property(flake, "position:x", px - amp, randf_range(1.5, 3.5)).set_trans(Tween.TRANS_SINE)
+		var rot_tw := create_tween()
+		rot_tw.set_loops(3600)
+		rot_tw.tween_property(flake, "rotation", PI, randf_range(3.0, 6.0)).from(0.0).set_delay(float(i) * 0.25)

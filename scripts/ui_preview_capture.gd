@@ -11,6 +11,7 @@ func run() -> void:
 	await process_frame
 	scene.start_offline(true)
 	seed_preview_discards(scene)
+	seed_preview_pending_claim(scene)
 	scene.render_game()
 	await process_frame
 	await process_frame
@@ -54,3 +55,14 @@ func seed_preview_discards(scene: Node) -> void:
 	scene.offline_phase = "await_discard"
 	scene.table_logs.clear()
 	scene.add_log("预览：弃牌区使用真实牌面贴图。")
+
+func seed_preview_pending_claim(scene: Node) -> void:
+	scene.offline_phase = "pending_claim"
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "3W", "4W", "5W", "5T", "6T", "7T", "E", "E", "P", "P"]
+	scene.offline_pending_claim = {
+		"from_seat": 3,
+		"tile": "3W",
+		"options": ["chi", "peng"],
+		"chi_choices": scene.get_chi_choices(scene.players[0]["hand"], "3W"),
+	}
+	scene.add_log("预览：响应插画展示吃碰选择。")
