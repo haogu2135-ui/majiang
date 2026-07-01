@@ -9054,6 +9054,15 @@ func ensure_update_dialog() -> void:
 	update_dialog.add_child(dim)
 
 	var panel = make_panel(update_dialog, rect_full(0.325, 0.275, 0.675, 0.640), Color(0.016, 0.050, 0.058, 0.98), 18, Color(0.66, 0.54, 0.24, 0.62))
+	# Entry animation: fade overlay + scale panel
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		update_dialog.modulate.a = 0.0
+		panel.pivot_offset = panel.size * 0.5
+		panel.scale = Vector2(0.8, 0.8)
+		var entry_tw := create_tween()
+		entry_tw.set_parallel(true)
+		entry_tw.tween_property(update_dialog, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
+		entry_tw.tween_property(panel, "scale", Vector2.ONE, 0.3).from(Vector2(0.8, 0.8)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	var package_texture = add_illustration_texture(panel, "update_package", rect_full(0.055, 0.165, 0.945, 0.430), 0.18, false)
 	if package_texture != null:
 		package_texture.name = "UpdatePackageTexture"
@@ -9259,6 +9268,11 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	return map
 
 func refresh_update_dialog() -> void:
+	# Smooth progress bar animation
+	if update_progress != null and is_instance_valid(update_progress):
+		var target = update_progress.value
+		if target > 0:
+			AnimationEffects.animate_progress_bar(update_progress, target, 0.3)
 	if update_state == "idle":
 		if update_dialog != null and is_instance_valid(update_dialog):
 			update_dialog.queue_free()
