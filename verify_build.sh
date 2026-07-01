@@ -3,6 +3,7 @@
 
 SCRIPT_DIR="/root/yunzhuo-mahjong-godot"
 MAIN_SCRIPT="$SCRIPT_DIR/scripts/main.gd"
+BASE_SCRIPT="$SCRIPT_DIR/scripts/main_base.gd"
 BUILD_DIR="$SCRIPT_DIR/build"
 PROJECT_FILE="$SCRIPT_DIR/project.godot"
 APP_VERSION="$(sed -n 's/^config\/version="\([^"]*\)"/\1/p' "$PROJECT_FILE" | head -n 1)"
@@ -99,7 +100,7 @@ else
 fi
 
 # 检查资源延迟加载
-if grep -q "_load_tile_textures" "$MAIN_SCRIPT"; then
+if grep -q "_load_tile_textures" "$MAIN_SCRIPT" "$BASE_SCRIPT"; then
     check_pass "麻将牌纹理延迟加载逻辑存在"
 else
     check_fail "麻将牌纹理延迟加载" "代码缺失"

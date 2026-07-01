@@ -1,9 +1,15 @@
 extends "res://scripts/main_base.gd"
 
+const UIEnhancements = preload("res://scripts/ui_enhancements.gd")
+const AnimationEffects = preload("res://scripts/animation_effects.gd")
+
+var ui_enhancements: UIEnhancements
+
 func _ready() -> void:
 	randomize()
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_LANDSCAPE)
 	setup_tile_order()
+	init_ui_enhancements()
 	show_loading_screen()
 	load_assets()
 	verify_audio_assets()
@@ -21,6 +27,11 @@ func _ready() -> void:
 	setup_update_downloader()
 	# v1.0.149: 移除立即播放，恢复用户交互触发
 	call_deferred("_finish_startup")
+
+func init_ui_enhancements() -> void:
+	ui_enhancements = UIEnhancements.new()
+	ui_enhancements.name = "UIEnhancements"
+	add_child(ui_enhancements)
 
 func _finish_startup() -> void:
 	if OS.get_cmdline_user_args().has("--offline-preview"):
@@ -52,6 +63,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 	# 主面板
 	var panel = make_panel(root_layer, rect_full(0.18, 0.10, 0.82, 0.90), Color(0.008, 0.020, 0.024, 0.98), 24, Color(0.62, 0.52, 0.32, 0.56), 5)
+	draw_secondary_screen_texture(panel, "daily_calendar", "DailyLoginCalendarTexture", 0.15)
 	panel.add_child(make_color_rect(rect_full(0.006, 0.03, 0.014, 0.97), GOLD_PRIMARY.darkened(0.2)))
 
 	# 顶部金色装饰线
@@ -62,6 +74,19 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	apply_rect(title, rect_full(0.15, 0.06, 0.85, 0.16))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_lucide_icon(panel, "gift", rect_full(0.08, 0.07, 0.14, 0.15), GOLD_BRIGHT)
+	# Add glow bloom to gift icon for emphasis
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and shader_materials.has("glow_bloom"):
+		var gift_glow = ColorRect.new()
+		gift_glow.name = "DailyLoginGiftGlow"
+		gift_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gift_glow.color = Color(1.0, 0.88, 0.55, 0.0)
+		gift_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+		gift_glow.offset_left = -6.0
+		gift_glow.offset_top = -6.0
+		gift_glow.offset_right = 6.0
+		gift_glow.offset_bottom = 6.0
+		apply_glow_shader(gift_glow, Color(1.0, 0.88, 0.55, 0.6), 0.5, 1.2)
+		panel.add_child(gift_glow)
 
 	# 连续签到天数 - 更醒目
 	var days = int(login_result.get("consecutive_days", 1))
@@ -145,24 +170,29 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		reward_icon_name = "coin"
 
 	var reward_panel = make_panel(panel, rect_full(0.14, 0.44, 0.86, 0.56), Color(0.018, 0.030, 0.034, 0.92), 14, Color(0.46, 0.52, 0.42, 0.36), 0)
+	reward_panel.name = "DailyLoginRewardPanel"
 	reward_panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.012, 1.0), GOLD_PRIMARY.darkened(0.2)))
 
 	var reward_label = make_label(reward_panel, reward_text, 20, Color(0.96, 0.92, 0.68), true)
 	apply_rect(reward_label, rect_full(0.12, 0.15, 0.88, 0.85))
 	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_lucide_icon(reward_panel, reward_icon_name, rect_full(0.04, 0.20, 0.12, 0.80), GOLD_PRIMARY)
+	draw_daily_login_reward_art(reward_panel, days)
 
 	# 签到进度条 - 增强版
 	var progress = days % 7
 	if progress == 0:
 		progress = 7
 	var progress_panel = make_panel(panel, rect_full(0.14, 0.58, 0.86, 0.68), Color(0.018, 0.030, 0.034, 0.92), 12, Color(0.38, 0.42, 0.40, 0.36), 0)
+	progress_panel.name = "DailyLoginProgressPanel"
 
 	# 进度条背景
 	var progress_bg = make_panel(progress_panel, rect_full(0.04, 0.20, 0.96, 0.80), Color(0.06, 0.10, 0.12, 0.92), 8, Color(0.24, 0.28, 0.26, 0.36), 0)
+	progress_bg.name = "DailyLoginProgressRail"
 
 	# 进度条填充 - 带动画
 	var progress_fill = ColorRect.new()
+	progress_fill.name = "DailyLoginProgressFill"
 	progress_fill.color = Color(0.40, 0.72, 0.56, 0.88)
 	progress_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	progress_bg.add_child(progress_fill)
@@ -180,6 +210,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var progress_text = make_label(progress_panel, "%d/7 天" % progress, 14, Color(0.96, 0.96, 0.92), true)
 	apply_rect(progress_text, rect_full(0.0, 0.0, 1.0, 1.0))
 	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	draw_daily_login_progress_confirm_art(panel, progress)
 
 	# 确认按钮 - 增强样式
 	var confirm_btn = make_small_button("领取奖励", Color(0.32, 0.62, 0.52), func() -> void:
@@ -190,9 +221,14 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		show_menu(true)
 	)
 	confirm_btn.custom_minimum_size = Vector2(220, 58)
+	confirm_btn.name = "DailyLoginClaimButton"
+	draw_daily_login_claim_button_art(confirm_btn)
 	panel.add_child(confirm_btn)
 	apply_rect(confirm_btn, rect_full(0.30, 0.72, 0.70, 0.84))
 	add_lucide_icon(confirm_btn, "check", rect_full(0.08, 0.22, 0.22, 0.78), Color(0.96, 0.96, 0.92))
+	# Pulse animation on claim button to draw attention
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		AnimationEffects.pulse(confirm_btn, 1.05, 0.8)
 
 	# 底部提示
 	var tip_label = make_label(panel, "连续签到7天可获得双倍分数加成卡", 12, Color(0.62, 0.66, 0.60, 0.78), false)
@@ -207,6 +243,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.3).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.3).from(Vector2(0.85, 0.85)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		# UIEnhancements: starlight sparkles on daily login panel
+		if ui_enhancements != null and DisplayServer.get_name().to_lower() != "headless":
+			ui_enhancements.create_enhanced_starlight(panel, Rect2(Vector2.ZERO, Vector2(panel.size.x if panel.size.x > 0 else 480, panel.size.y if panel.size.y > 0 else 600)), 8)
 
 func draw_daily_login_streak_art(parent: Control, days: int, current_day_in_cycle: int) -> Control:
 	var art = Control.new()
@@ -239,6 +278,104 @@ func draw_daily_login_streak_art(parent: Control, days: int, current_day_in_cycl
 	if days >= 7 and days % 7 == 0:
 		var glow = make_panel(art, rect_full(0.900, 0.020, 1.020, 0.980), Color(0.96, 0.72, 0.30, 0.12), 999, Color(1.0, 0.88, 0.48, 0.22), 0)
 		glow.name = "DailyLoginMilestoneGlow"
+	return art
+
+func draw_daily_login_reward_art(parent: Control, days: int) -> Control:
+	var art = Control.new()
+	art.name = "DailyLoginRewardArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var milestone = days > 0 and days % 7 == 0
+	var accent = Color(0.92, 0.70, 0.34) if milestone else Color(0.48, 0.78, 0.56)
+	var route = make_color_rect(rect_full(0.170, 0.720, 0.890, 0.805), Color(0.006, 0.016, 0.018, 0.50))
+	route.name = "DailyLoginRewardRoute"
+	art.add_child(route)
+	var route_fill = make_color_rect(rect_full(0.025, 0.260, 0.900 if milestone else 0.660, 0.740), Color(accent.r, accent.g, accent.b, 0.34))
+	route_fill.name = "DailyLoginRewardRouteFill"
+	route.add_child(route_fill)
+	var seal = make_color_rect(rect_full(0.050, 0.245, 0.105, 0.755), Color(accent.r, accent.g, accent.b, 0.30))
+	seal.name = "DailyLoginRewardSeal"
+	art.add_child(seal)
+	for i in range(3):
+		var left = 0.630 + float(i) * 0.055
+		var tick = make_color_rect(rect_full(left, 0.205, left + 0.020, 0.360), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.045))
+		tick.name = "DailyLoginRewardTick_%d" % i
+		art.add_child(tick)
+	for i in range(2):
+		var left = 0.820 + float(i) * 0.055
+		var node = make_color_rect(rect_full(left, 0.360, left + 0.032, 0.660), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.050))
+		node.name = "DailyLoginRewardNode_%d" % i
+		art.add_child(node)
+	if milestone:
+		var burst = make_color_rect(rect_full(0.905, 0.120, 0.945, 0.880), Color(0.96, 0.78, 0.34, 0.26))
+		burst.name = "DailyLoginRewardMilestoneBurst"
+		art.add_child(burst)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(route_fill, "modulate:a", 0.42, 0.82).from(0.96)
+		tw.tween_property(route_fill, "modulate:a", 0.96, 0.82).from(0.42)
+	return art
+
+func draw_daily_login_claim_button_art(button: Control) -> Control:
+	var art = Control.new()
+	art.name = "DailyLoginClaimButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var rail = make_color_rect(rect_full(0.165, 0.755, 0.875, 0.840), Color(0.006, 0.016, 0.018, 0.50))
+	rail.name = "DailyLoginClaimRail"
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.030, 0.260, 0.880, 0.740), Color(0.46, 0.78, 0.58, 0.34))
+	fill.name = "DailyLoginClaimFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.805, 0.225, 0.850, 0.600), Color(0.84, 0.70, 0.34, 0.30))
+	gate.name = "DailyLoginClaimGate"
+	art.add_child(gate)
+	for i in range(3):
+		var left = 0.600 + float(i) * 0.055
+		var tick = make_color_rect(rect_full(left, 0.205, left + 0.018, 0.355), Color(0.46, 0.78, 0.58, 0.26 - float(i) * 0.045))
+		tick.name = "DailyLoginClaimTick_%d" % i
+		art.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.80).from(0.96)
+		tw.tween_property(fill, "modulate:a", 0.96, 0.80).from(0.42)
+	return art
+
+func draw_daily_login_progress_confirm_art(parent: Control, progress: int) -> Control:
+	var art = Control.new()
+	art.name = "DailyLoginProgressConfirmArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.235, 0.665, 0.765, 0.735))
+	parent.add_child(art)
+	var progress_ratio = clamp(float(progress) / 7.0, 0.0, 1.0)
+	var route = make_color_rect(rect_full(0.060, 0.385, 0.940, 0.465), Color(0.006, 0.016, 0.018, 0.48))
+	route.name = "DailyLoginProgressConfirmRoute"
+	art.add_child(route)
+	var fill = make_color_rect(rect_full(0.060, 0.395, 0.060 + 0.880 * progress_ratio, 0.455), Color(0.46, 0.78, 0.58, 0.32))
+	fill.name = "DailyLoginProgressConfirmFill"
+	art.add_child(fill)
+	var gate = make_color_rect(rect_full(0.902, 0.220, 0.948, 0.640), Color(0.84, 0.70, 0.34, 0.26 if progress >= 7 else 0.16))
+	gate.name = "DailyLoginProgressConfirmGate"
+	art.add_child(gate)
+	for i in range(3):
+		var left = 0.255 + float(i) * 0.145
+		var active = progress_ratio >= (float(i) + 1.0) / 4.0
+		var tick = make_color_rect(rect_full(left, 0.245, left + 0.020, 0.620), Color(0.46, 0.78, 0.58, 0.26 if active else 0.10))
+		tick.name = "DailyLoginProgressConfirmTick_%d" % i
+		art.add_child(tick)
+	if progress >= 7:
+		var ready = make_color_rect(rect_full(0.928, 0.115, 0.980, 0.760), Color(0.96, 0.78, 0.34, 0.20))
+		ready.name = "DailyLoginProgressReadySeal"
+		art.add_child(ready)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.82).from(0.96)
+		tw.tween_property(fill, "modulate:a", 0.96, 0.82).from(0.42)
 	return art
 
 func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
@@ -282,12 +419,29 @@ func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 		particle_tween.tween_property(particle, "modulate:a", 0.0, 0.6).from(1.0)
 		particle_tween.tween_property(shape, "scale", Vector2(0.3, 0.3), 0.6).from(Vector2(1.0, 1.0))
 		particle_tween.tween_callback(particle.queue_free).set_delay(0.65)
+	# AnimationEffects particle trail from button to center
+	var btn = panel.find_child("DailyLoginClaimButton", true, false)
+	if btn != null and is_instance_valid(btn):
+		var start = btn.global_position + btn.size * 0.5 - panel.global_position
+		var center = Vector2(panel.size.x * 0.5, panel.size.y * 0.3)
+		AnimationEffects.create_particle_trail(panel, start, center, 8, 0.5)
 
 func show_loading_screen() -> void:
 	clear_screen()
 
 	# 背景面板 - 水墨风格 + 远山意境
 	var bg = make_panel(root_layer, rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.018, 0.024, 1.0), 0, Color(0.0, 0.0, 0.0, 0.0), 0)
+	var loading_texture = add_illustration_texture(bg, "loading_gate", rect_full(0.0, 0.0, 1.0, 1.0), 0.20, false)
+	if loading_texture != null:
+		loading_texture.name = "LoadingGateTexture"
+		bg.move_child(loading_texture, 0)
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var loading_texture_tw := create_tween()
+			loading_texture_tw.set_loops(3600)
+			loading_texture_tw.tween_property(loading_texture, "modulate:a", 0.12, 3.8).from(0.20)
+			loading_texture_tw.parallel().tween_property(loading_texture, "scale", Vector2(1.010, 1.010), 3.8).from(Vector2.ONE)
+			loading_texture_tw.tween_property(loading_texture, "modulate:a", 0.20, 3.8).from(0.12)
+			loading_texture_tw.parallel().tween_property(loading_texture, "scale", Vector2.ONE, 3.8).from(Vector2(1.010, 1.010))
 
 	# 远山层叠 - 增加远景深度
 	make_mountain_silhouette(bg, rect_full(0.0, 0.40, 1.0, 0.95), 3, INK_WASH).name = "LoadingFarMountain"
@@ -362,6 +516,7 @@ func show_loading_screen() -> void:
 	var tip_label = make_label(center_panel, tip_text, 14, Color(0.68, 0.72, 0.66, 0.78), false)
 	apply_rect(tip_label, rect_full(0.10, 0.78, 0.90, 0.88))
 	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	draw_loading_tip_art(center_panel)
 
 	# 版本信息
 	var version_label = make_label(center_panel, "v%s" % app_version(), 12, Color(0.52, 0.54, 0.50, 0.62), false)
@@ -371,8 +526,35 @@ func show_loading_screen() -> void:
 	# 底部水面装饰
 	make_water_ripple(bg, rect_full(0.05, 0.88, 0.95, 0.98), "still", true).name = "LoadingWater"
 
-	# 整体淡入动画
-	if fx_enabled_effective():
+	# 整体分层淡入动画 - 各元素交错入场
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		# 背景先入
+		bg.modulate.a = 0.0
+		var bg_tw := create_tween()
+		bg_tw.tween_property(bg, "modulate:a", 1.0, 0.4).set_ease(Tween.EASE_OUT)
+
+		# 中央面板延迟缩放入场
+		center_panel.modulate.a = 0.0
+		center_panel.scale = Vector2(0.92, 0.92)
+		center_panel.pivot_offset = center_panel.size * 0.5
+		var panel_tw := create_tween()
+		panel_tw.set_parallel(true)
+		panel_tw.tween_property(center_panel, "modulate:a", 1.0, 0.45).set_delay(0.15).set_ease(Tween.EASE_OUT)
+		panel_tw.tween_property(center_panel, "scale", Vector2.ONE, 0.5).set_delay(0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+		# 标题从上方滑入
+		title.modulate.a = 0.0
+		title.position.y -= 12.0
+		var title_tw := create_tween()
+		title_tw.set_parallel(true)
+		title_tw.tween_property(title, "modulate:a", 1.0, 0.35).set_delay(0.35)
+		title_tw.tween_property(title, "position:y", title.position.y + 12.0, 0.4).set_delay(0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+		# 副标题淡入
+		subtitle.modulate.a = 0.0
+		var sub_tw := create_tween()
+		sub_tw.tween_property(subtitle, "modulate:a", 1.0, 0.3).set_delay(0.5)
+	elif fx_enabled_effective():
 		center_panel.modulate.a = 0.0
 		var fade_tween := create_tween()
 		fade_tween.tween_property(center_panel, "modulate:a", 1.0, 0.5).set_ease(Tween.EASE_OUT)
@@ -395,6 +577,20 @@ func draw_loading_shuffle_art(parent: Control) -> Control:
 	# 墨迹晕染进度条 - 从左到右渐变展宽
 	var glow = make_panel(art, rect_full(0.085, 0.500, 0.165, 0.780), Color(0.92, 0.72, 0.34, 0.20), 999, Color(1.0, 0.84, 0.46, 0.14), 0)
 	glow.name = "LoadingShuffleGlow"
+	var sync_route = make_color_rect(rect_full(0.230, 0.780, 0.770, 0.835), Color(0.006, 0.016, 0.018, 0.42))
+	sync_route.name = "LoadingShuffleSyncRoute"
+	art.add_child(sync_route)
+	var sync_fill = make_color_rect(rect_full(0.230, 0.790, 0.620, 0.825), Color(0.78, 0.64, 0.30, 0.30))
+	sync_fill.name = "LoadingShuffleSyncFill"
+	art.add_child(sync_fill)
+	var sync_gate = make_color_rect(rect_full(0.745, 0.720, 0.790, 0.875), Color(0.96, 0.78, 0.38, 0.24))
+	sync_gate.name = "LoadingShuffleSyncGate"
+	art.add_child(sync_gate)
+	for i in range(3):
+		var tick_left = 0.340 + float(i) * 0.090
+		var sync_tick = make_color_rect(rect_full(tick_left, 0.735, tick_left + 0.020, 0.875), Color(0.78, 0.64, 0.30, 0.24 - float(i) * 0.040))
+		sync_tick.name = "LoadingShuffleSyncTick_%d" % i
+		art.add_child(sync_tick)
 	var progress = make_panel(rail, rect_full(0.030, 0.300, 0.420, 0.700), Color(0.78, 0.64, 0.30, 0.48), 999, Color(0.96, 0.78, 0.38, 0.16), 0)
 	progress.name = "LoadingShuffleProgress"
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -408,6 +604,54 @@ func draw_loading_shuffle_art(parent: Control) -> Control:
 		var seal_tw := create_tween()
 		seal_tw.tween_property(seal, "scale", Vector2(1.0, 1.0), 0.6).from(Vector2(0.3, 0.3)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		seal_tw.parallel().tween_property(seal, "modulate:a", 1.0, 0.5).from(0.0)
+		# 牌面依次翻转级联动画 - 模拟洗牌
+		for i in range(5):
+			var tile_node = art.get_node_or_null("LoadingShuffleTile_%d" % i)
+			if tile_node != null:
+				tile_node.modulate.a = 0.0
+				tile_node.scale = Vector2(0.6, 0.6)
+				var tile_tw := create_tween()
+				var delay := float(i) * 0.12
+				tile_tw.tween_property(tile_node, "modulate:a", 1.0, 0.25).from(0.0).set_delay(delay)
+				tile_tw.parallel().tween_property(tile_node, "scale", Vector2(1.0, 1.0), 0.3).from(Vector2(0.6, 0.6)).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+				tile_tw.parallel().tween_property(tile_node, "position:y", tile_node.position.y, 0.3).from(tile_node.position.y + 12.0).set_delay(delay)
+				# 翻转循环
+				var flip_tw := create_tween()
+				flip_tw.set_loops(6)
+				flip_tw.tween_property(tile_node, "scale:x", 0.0, 0.2).from(1.0).set_delay(delay + 1.2 + float(i) * 0.4)
+				flip_tw.tween_property(tile_node, "scale:x", 1.0, 0.2).from(0.0)
+		# 进度条填充动画
+		var prog_tw := create_tween()
+		prog_tw.set_loops(4)
+		prog_tw.tween_property(progress, "anchor_right", 0.970, 2.5).from(0.420).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		prog_tw.tween_property(progress, "anchor_right", 0.420, 0.01)
+	return art
+
+func draw_loading_tip_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "LoadingTipArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.120, 0.765, 0.880, 0.900))
+	parent.add_child(art)
+	var rail = make_color_rect(rect_full(0.055, 0.650, 0.945, 0.720), Color(0.82, 0.70, 0.36, 0.18))
+	rail.name = "LoadingTipRail"
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.055, 0.660, 0.625, 0.710), Color(0.42, 0.70, 0.58, 0.32))
+	fill.name = "LoadingTipFill"
+	art.add_child(fill)
+	var seal = make_color_rect(rect_full(0.020, 0.340, 0.055, 0.760), Color(0.78, 0.66, 0.34, 0.28))
+	seal.name = "LoadingTipSeal"
+	art.add_child(seal)
+	for i in range(3):
+		var left = 0.735 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left, 0.315, left + 0.020, 0.455), Color(0.62, 0.78, 0.58, 0.26 - float(i) * 0.045))
+		tick.name = "LoadingTipTick_%d" % i
+		art.add_child(tick)
+	for i in range(2):
+		var left = 0.125 + float(i) * 0.055
+		var node = make_color_rect(rect_full(left, 0.365, left + 0.026, 0.595), Color(0.82, 0.70, 0.36, 0.22 - float(i) * 0.040))
+		node.name = "LoadingTipNode_%d" % i
+		art.add_child(node)
 	return art
 
 
@@ -1398,18 +1642,22 @@ func show_diagnostic_dialog(lines: Array) -> void:
 
 	# 创建半透明背景
 	var bg = ColorRect.new()
+	bg.name = "DiagnosticDismissOverlay"
 	bg.color = Color(0, 0, 0, 0.72)
 	root_layer.add_child(bg)
 	apply_rect(bg, rect_full(0, 0, 1, 1))
+	draw_diagnostic_dismiss_art(bg)
 
 	# 创建诊断信息面板
 	var panel = make_panel(root_layer, rect_full(0.1, 0.15, 0.9, 0.85), Color(0.026, 0.058, 0.060, 0.95), 10, Color(0.66, 0.55, 0.28, 0.62))
+	panel.name = "DiagnosticDialogPanel"
+	draw_diagnostic_dialog_art(panel, lines)
 
 	# 创建文本容器
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
-	apply_rect(vbox, rect_full(0.05, 0.05, 0.95, 0.95))
+	apply_rect(vbox, rect_full(0.05, 0.205, 0.95, 0.95))
 
 	# 添加每一行文本
 	for line in lines:
@@ -1430,12 +1678,139 @@ func show_diagnostic_dialog(lines: Array) -> void:
 			label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.91))
 		vbox.add_child(label)
 
+	# 面板入场动画 - 滑入 + 淡入
+	if fx_enabled_effective():
+		bg.modulate = Color(1, 1, 1, 0)
+		panel.offset_top = 20.0
+		panel.modulate = Color(1, 1, 1, 0)
+		var bg_tw := create_tween()
+		bg_tw.tween_property(bg, "modulate:a", 1.0, 0.18).from(0.0)
+		var p_tw := create_tween()
+		p_tw.set_parallel(true)
+		p_tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.06)
+		p_tw.tween_property(panel, "offset_top", 0.0, 0.22).from(20.0).set_delay(0.06).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		# Stagger labels in
+		var label_nodes: Array[Node] = []
+		for child in vbox.get_children():
+			if child is Label:
+				label_nodes.append(child)
+		if not label_nodes.is_empty():
+			for i in range(label_nodes.size()):
+				var lbl = label_nodes[i]
+				lbl.modulate.a = 0.0
+				var l_tw := create_tween()
+				l_tw.tween_property(lbl, "modulate:a", 1.0, 0.15).from(0.0).set_delay(0.12 + float(i) * 0.04).set_ease(Tween.EASE_OUT)
+
 	# 添加点击关闭功能
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	bg.gui_input.connect(func(event):
 		if event is InputEventScreenTouch and event.pressed:
 			refresh_current_screen()
 	)
+
+func draw_diagnostic_dismiss_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "DiagnosticDismissArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.310, 0.875, 0.690, 0.955))
+	parent.add_child(art)
+	var accent = Color(0.78, 0.70, 0.46)
+	var route = make_color_rect(rect_full(0.065, 0.600, 0.935, 0.700), Color(accent.r, accent.g, accent.b, 0.18))
+	route.name = "DiagnosticDismissRoute"
+	art.add_child(route)
+	var fill = make_color_rect(rect_full(0.030, 0.260, 0.720, 0.740), Color(0.42, 0.72, 0.58, 0.26))
+	fill.name = "DiagnosticDismissFill"
+	route.add_child(fill)
+	var tap = make_color_rect(rect_full(0.455, 0.170, 0.545, 0.500), Color(accent.r, accent.g, accent.b, 0.26))
+	tap.name = "DiagnosticDismissTapSeal"
+	art.add_child(tap)
+	for i in range(3):
+		var left = 0.670 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left, 0.275, left + 0.020, 0.430), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.045))
+		tick.name = "DiagnosticDismissTick_%d" % i
+		art.add_child(tick)
+	return art
+
+func draw_diagnostic_dialog_art(parent: Control, lines: Array) -> Control:
+	var art = Control.new()
+	art.name = "DiagnosticDialogArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.045, 0.035, 0.955, 0.175))
+	parent.add_child(art)
+	var diagnostic_texture = add_illustration_texture(art, "diagnostic_wave", rect_full(-0.012, -0.360, 1.012, 1.360), 0.13, false)
+	if diagnostic_texture != null:
+		diagnostic_texture.name = "DiagnosticWaveTexture"
+	var ok_count := 0
+	var error_count := 0
+	var hint_count := 0
+	for line in lines:
+		var text = str(line)
+		if text.begins_with("✓"):
+			ok_count += 1
+		elif text.begins_with("✗"):
+			error_count += 1
+		elif text.begins_with("•") or text.find("→") >= 0:
+			hint_count += 1
+	var total = max(1, ok_count + error_count + hint_count)
+	var health = clamp(float(ok_count) / float(total), 0.0, 1.0)
+	var accent = Color(0.42, 0.82, 0.56) if error_count == 0 else Color(0.86, 0.46, 0.34)
+	var rail = make_panel(art, rect_full(0.015, 0.455, 0.985, 0.585), Color(0.010, 0.024, 0.026, 0.72), 999, Color(0.84, 0.72, 0.40, 0.14), 0)
+	rail.name = "DiagnosticHealthRail"
+	var fill = make_panel(rail, rect_full(0.012, 0.230, 0.012 + 0.976 * max(0.08, health), 0.770), Color(accent.r, accent.g, accent.b, 0.54), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+	fill.name = "DiagnosticHealthFill"
+	var seal = make_panel(art, rect_full(0.016, 0.100, 0.078, 0.900), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(accent.r, accent.g, accent.b, 0.36), 0)
+	seal.name = "DiagnosticStatusSeal"
+	var seal_label = make_label(seal, "!" if error_count > 0 else "✓", 12, Color(0.98, 0.92, 0.72, 0.94), true)
+	seal_label.name = "DiagnosticStatusGlyph"
+	apply_rect(seal_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var groups := [
+		{"id": "ok", "value": ok_count, "color": Color(0.34, 0.74, 0.48), "label": "OK"},
+		{"id": "err", "value": error_count, "color": Color(0.86, 0.42, 0.34), "label": "ERR"},
+		{"id": "hint", "value": hint_count, "color": Color(0.42, 0.58, 0.82), "label": "TIP"},
+	]
+	for i in range(groups.size()):
+		var group: Dictionary = groups[i]
+		var color: Color = group.get("color", GOLD_PRIMARY)
+		var left = 0.135 + float(i) * 0.182
+		var active = int(group.get("value", 0)) > 0
+		var node = make_panel(art, rect_full(left, 0.130, left + 0.092, 0.870), Color(color.r, color.g, color.b, 0.34 if active else 0.12), 999, Color(color.r, color.g, color.b, 0.26 if active else 0.08), 0)
+		node.name = "DiagnosticStatusNode_%s" % str(group.get("id", i))
+		var value_label = make_label(node, str(group.get("value", 0)), 10, Color(0.98, 0.92, 0.74, 0.92 if active else 0.46), true)
+		value_label.name = "DiagnosticStatusValue_%s" % str(group.get("id", i))
+		apply_rect(value_label, rect_full(0.0, 0.040, 1.0, 0.620))
+		var caption = make_label(node, str(group.get("label", "")), 6, Color(0.80, 0.84, 0.78, 0.72 if active else 0.38), true)
+		caption.name = "DiagnosticStatusCaption_%s" % str(group.get("id", i))
+		apply_rect(caption, rect_full(0.0, 0.560, 1.0, 0.980))
+	var trace = make_panel(art, rect_full(0.720, 0.180, 0.970, 0.820), Color(0.030, 0.048, 0.050, 0.62), 12, Color(0.72, 0.78, 0.60, 0.12), 0)
+	trace.name = "DiagnosticTracePanel"
+	for i in range(4):
+		var left = 0.075 + float(i) * 0.225
+		var pulse = make_panel(trace, rect_full(left, 0.300, left + 0.060, 0.700), Color(accent.r, accent.g, accent.b, 0.34 - float(i) * 0.035), 999, Color(0.96, 0.84, 0.48, 0.10), 0)
+		pulse.name = "DiagnosticTracePulse_%d" % i
+	var trace_lane = make_panel(art, rect_full(0.535, 0.225, 0.690, 0.775), Color(0.016, 0.032, 0.036, 0.44), 10, Color(0.60, 0.68, 0.58, 0.10), 0)
+	trace_lane.name = "DiagnosticLineTrace"
+	var visual_line_count = min(5, lines.size())
+	for i in range(visual_line_count):
+		var line_text = str(lines[i])
+		var line_color = Color(0.58, 0.66, 0.66)
+		if line_text.begins_with("✓"):
+			line_color = Color(0.34, 0.74, 0.48)
+		elif line_text.begins_with("✗"):
+			line_color = Color(0.86, 0.42, 0.34)
+		elif line_text.begins_with("•") or line_text.find("→") >= 0:
+			line_color = Color(0.42, 0.58, 0.82)
+		var top = 0.105 + float(i) * 0.165
+		var lane = make_color_rect(rect_full(0.185, top + 0.055, 0.820, top + 0.085), Color(line_color.r, line_color.g, line_color.b, 0.12))
+		lane.name = "DiagnosticLineLane_%d" % i
+		trace_lane.add_child(lane)
+		var node = make_panel(trace_lane, rect_full(0.070, top, 0.150, top + 0.140), Color(line_color.r, line_color.g, line_color.b, 0.28), 999, Color(line_color.r, line_color.g, line_color.b, 0.12), 0)
+		node.name = "DiagnosticLineNode_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.60).from(0.94)
+		tw.tween_property(fill, "modulate:a", 0.94, 0.60).from(0.42)
+	return art
 
 func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
@@ -1496,6 +1871,7 @@ func show_exit_confirm() -> void:
 		hide_exit_confirm()
 	)
 	continue_btn.custom_minimum_size = Vector2(140, 52)
+	draw_exit_confirm_button_art(continue_btn, "keep", Color(0.28, 0.52, 0.44))
 	button_row.add_child(continue_btn)
 
 	# 退出按钮
@@ -1505,11 +1881,50 @@ func show_exit_confirm() -> void:
 		show_menu()
 	)
 	exit_btn.custom_minimum_size = Vector2(140, 52)
+	draw_exit_confirm_button_art(exit_btn, "leave", Color(0.56, 0.36, 0.30))
 	button_row.add_child(exit_btn)
 
-	# 淡入动画
-	var tween = create_tween()
-	tween.tween_property(overlay, "modulate", Color(1, 1, 1, 1), 0.2)
+	# 弹窗入场动画 - 使用AnimationEffects增强
+	if fx_enabled_effective():
+		overlay.modulate = Color(1, 1, 1, 0)
+		dialog.scale = Vector2(0.7, 0.7)
+		dialog.pivot_offset = dialog.size * 0.5 if dialog.size.length() > 0 else Vector2(200, 100)
+		var overlay_tw := create_tween()
+		overlay_tw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0)
+		var dialog_tw := create_tween()
+		dialog_tw.set_parallel(true)
+		dialog_tw.tween_property(dialog, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.7, 0.7)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		dialog_tw.tween_property(dialog, "modulate:a", 1.0, 0.2).from(0.0)
+		# 抖动"退出游戏"按钮吸引注意
+		var exit_btn_node = dialog.get_node_or_null("ExitConfirmDialog/ExitConfirmButtonArt_leave")
+		if exit_btn_node != null:
+			AnimationEffects.shake_popup(exit_btn_node, 6.0, 0.5)
+	else:
+		overlay.modulate = Color(1, 1, 1, 1)
+
+func draw_exit_confirm_button_art(button: Control, route_id: String, color: Color) -> Control:
+	var art = Control.new()
+	art.name = "ExitConfirmButtonArt_%s" % route_id
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var rail = make_color_rect(rect_full(0.115, 0.755, 0.885, 0.840), Color(0.006, 0.016, 0.018, 0.50))
+	rail.name = "ExitConfirmButtonRail_%s" % route_id
+	art.add_child(rail)
+	var fill_right = 0.710 if route_id == "keep" else 0.900
+	var fill = make_color_rect(rect_full(0.035, 0.260, fill_right, 0.740), Color(color.r, color.g, color.b, 0.34))
+	fill.name = "ExitConfirmButtonFill_%s" % route_id
+	rail.add_child(fill)
+	var gate_left = 0.120 if route_id == "keep" else 0.805
+	var gate = make_color_rect(rect_full(gate_left, 0.230, gate_left + 0.050, 0.590), Color(color.r, color.g, color.b, 0.28))
+	gate.name = "ExitConfirmButtonGate_%s" % route_id
+	art.add_child(gate)
+	for i in range(2):
+		var left = 0.610 + float(i) * 0.055 if route_id == "keep" else 0.705 + float(i) * 0.055
+		var tick = make_color_rect(rect_full(left, 0.205, left + 0.020, 0.345), Color(color.r, color.g, color.b, 0.26 - float(i) * 0.055))
+		tick.name = "ExitConfirmButtonTick_%s_%d" % [route_id, i]
+		art.add_child(tick)
+	return art
 
 func draw_exit_confirm_art(parent: Control) -> Control:
 	var art = Control.new()
@@ -1517,6 +1932,9 @@ func draw_exit_confirm_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.150, 0.255, 0.850, 0.455))
 	parent.add_child(art)
+	var exit_texture = add_illustration_texture(art, "exit_gate", rect_full(-0.055, -0.780, 1.055, 1.780), 0.16, false)
+	if exit_texture != null:
+		exit_texture.name = "ExitGateTexture"
 	var rail = make_panel(art, rect_full(0.120, 0.450, 0.880, 0.570), Color(0.48, 0.64, 0.54, 0.18), 999, Color(0.80, 0.88, 0.62, 0.14), 0)
 	rail.name = "ExitConfirmSaveRail"
 	var table_node = make_panel(art, rect_full(0.060, 0.180, 0.210, 0.840), Color(0.24, 0.48, 0.42, 0.46), 16, Color(0.48, 0.78, 0.64, 0.30), 0)
@@ -1534,6 +1952,20 @@ func draw_exit_confirm_art(parent: Control) -> Control:
 		pip.name = "ExitConfirmSavePip_%d" % i
 	var glow = make_panel(art, rect_full(0.400, 0.070, 0.600, 0.930), Color(0.92, 0.76, 0.34, 0.14), 999, Color(1.0, 0.86, 0.46, 0.14), 0)
 	glow.name = "ExitConfirmSaveGlow"
+	var autosave_route = make_color_rect(rect_full(0.548, 0.705, 0.858, 0.765), Color(0.006, 0.016, 0.018, 0.42))
+	autosave_route.name = "ExitConfirmAutosaveRoute"
+	art.add_child(autosave_route)
+	var autosave_fill = make_color_rect(rect_full(0.035, 0.260, 0.820, 0.740), Color(0.42, 0.74, 0.60, 0.26))
+	autosave_fill.name = "ExitConfirmAutosaveFill"
+	autosave_route.add_child(autosave_fill)
+	var autosave_gate = make_color_rect(rect_full(0.835, 0.630, 0.872, 0.820), Color(0.92, 0.76, 0.34, 0.24))
+	autosave_gate.name = "ExitConfirmAutosaveGate"
+	art.add_child(autosave_gate)
+	for i in range(3):
+		var tick_left = 0.600 + float(i) * 0.062
+		var tick = make_color_rect(rect_full(tick_left, 0.620, tick_left + 0.018, 0.765), Color(0.42, 0.74, 0.60, 0.24 - float(i) * 0.040))
+		tick.name = "ExitConfirmAutosaveTick_%d" % i
+		art.add_child(tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
@@ -1551,6 +1983,10 @@ func draw_exit_confirm_choice_art(parent: Control) -> Control:
 	keep_rail.name = "ExitConfirmKeepChoiceRail"
 	var leave_rail = make_panel(art, rect_full(0.545, 0.180, 0.980, 0.820), Color(0.78, 0.52, 0.34, 0.10), 14, Color(0.92, 0.70, 0.48, 0.10), 0)
 	leave_rail.name = "ExitConfirmLeaveChoiceRail"
+	var keep_fill = make_panel(keep_rail, rect_full(0.080, 0.700, 0.780, 0.820), Color(0.48, 0.82, 0.62, 0.24), 999, Color(0.76, 0.94, 0.72, 0.08), 0)
+	keep_fill.name = "ExitConfirmKeepChoiceFill"
+	var leave_fill = make_panel(leave_rail, rect_full(0.220, 0.700, 0.920, 0.820), Color(0.92, 0.70, 0.42, 0.22), 999, Color(1.0, 0.86, 0.50, 0.08), 0)
+	leave_fill.name = "ExitConfirmLeaveChoiceFill"
 	var keep_dot = make_panel(art, rect_full(0.055, 0.375, 0.105, 0.625), Color(0.48, 0.82, 0.62, 0.34), 999, Color(0.76, 0.94, 0.72, 0.16), 0)
 	keep_dot.name = "ExitConfirmKeepChoiceDot"
 	var leave_dot = make_panel(art, rect_full(0.895, 0.375, 0.945, 0.625), Color(0.88, 0.66, 0.38, 0.34), 999, Color(0.98, 0.82, 0.48, 0.16), 0)
@@ -1558,11 +1994,35 @@ func draw_exit_confirm_choice_art(parent: Control) -> Control:
 	var stamp = make_panel(art, rect_full(0.455, 0.260, 0.545, 0.740), Color(0.92, 0.74, 0.34, 0.18), 999, Color(1.0, 0.86, 0.46, 0.16), 0)
 	stamp.name = "ExitConfirmSaveStamp"
 	add_lucide_icon(stamp, "save", rect_full(0.250, 0.220, 0.750, 0.780), Color(0.98, 0.90, 0.62, 0.78))
+	var bridge = make_color_rect(rect_full(0.180, 0.505, 0.820, 0.555), Color(0.006, 0.016, 0.018, 0.40))
+	bridge.name = "ExitConfirmChoiceBridge"
+	art.add_child(bridge)
+	var keep_bridge = make_color_rect(rect_full(0.185, 0.515, 0.455, 0.545), Color(0.54, 0.86, 0.66, 0.22))
+	keep_bridge.name = "ExitConfirmChoiceBridgeKeepFill"
+	art.add_child(keep_bridge)
+	var leave_bridge = make_color_rect(rect_full(0.545, 0.515, 0.815, 0.545), Color(0.92, 0.70, 0.42, 0.22))
+	leave_bridge.name = "ExitConfirmChoiceBridgeLeaveFill"
+	art.add_child(leave_bridge)
+	var bridge_gate = make_color_rect(rect_full(0.490, 0.440, 0.510, 0.620), Color(0.96, 0.82, 0.42, 0.24))
+	bridge_gate.name = "ExitConfirmChoiceBridgeGate"
+	art.add_child(bridge_gate)
+	for i in range(2):
+		var keep_tick = make_color_rect(rect_full(0.310 + float(i) * 0.055, 0.455, 0.326 + float(i) * 0.055, 0.620), Color(0.54, 0.86, 0.66, 0.22 - float(i) * 0.040))
+		keep_tick.name = "ExitConfirmChoiceBridgeKeepTick_%d" % i
+		art.add_child(keep_tick)
+		var leave_tick = make_color_rect(rect_full(0.675 + float(i) * 0.055, 0.455, 0.691 + float(i) * 0.055, 0.620), Color(0.92, 0.70, 0.42, 0.22 - float(i) * 0.040))
+		leave_tick.name = "ExitConfirmChoiceBridgeLeaveTick_%d" % i
+		art.add_child(leave_tick)
 	for i in range(2):
 		var keep_spark = make_panel(art, rect_full(0.150 + float(i) * 0.145, 0.430, 0.178 + float(i) * 0.145, 0.570), Color(0.54, 0.86, 0.66, 0.22), 999, Color(0.78, 0.96, 0.74, 0.10), 0)
 		keep_spark.name = "ExitConfirmKeepSpark_%d" % i
 		var leave_spark = make_panel(art, rect_full(0.675 + float(i) * 0.145, 0.430, 0.703 + float(i) * 0.145, 0.570), Color(0.92, 0.70, 0.42, 0.22), 999, Color(1.0, 0.86, 0.50, 0.10), 0)
 		leave_spark.name = "ExitConfirmLeaveSpark_%d" % i
+	for i in range(3):
+		var keep_node = make_panel(art, rect_full(0.150 + float(i) * 0.080, 0.255, 0.176 + float(i) * 0.080, 0.385), Color(0.54, 0.86, 0.66, 0.20), 999, Color(0.78, 0.96, 0.74, 0.08), 0)
+		keep_node.name = "ExitConfirmKeepChoiceNode_%d" % i
+		var leave_node = make_panel(art, rect_full(0.748 + float(i) * 0.080, 0.255, 0.774 + float(i) * 0.080, 0.385), Color(0.92, 0.70, 0.42, 0.19), 999, Color(1.0, 0.86, 0.50, 0.08), 0)
+		leave_node.name = "ExitConfirmLeaveChoiceNode_%d" % i
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
@@ -1577,8 +2037,14 @@ func hide_exit_confirm() -> void:
 	var panel = exit_confirm_panel
 	exit_confirm_panel = null
 	var panel_id = panel.get_instance_id()
+	var dialog = panel.find_child("ExitConfirmDialog", true, false)
+	if fx_enabled_effective() and dialog != null and is_instance_valid(dialog):
+		var d_tw := create_tween()
+		d_tw.set_parallel(true)
+		d_tw.tween_property(dialog, "scale", Vector2(0.8, 0.8), 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		d_tw.tween_property(dialog, "modulate:a", 0.0, 0.12)
 	var tween = create_tween()
-	tween.tween_property(panel, "modulate", Color(1, 1, 1, 0), 0.15)
+	tween.tween_property(panel, "modulate:a", 0.0, 0.15)
 	tween.tween_callback(func() -> void:
 		var target = instance_from_id(panel_id)
 		if target != null and is_instance_valid(target):
@@ -1640,6 +2106,8 @@ func clear_screen() -> void:
 	update_progress = null
 	update_art_fill = null
 	update_art_status_light = null
+	update_release_notes_art = null
+	update_release_notes_label = null
 	update_primary_button = null
 	update_secondary_button = null
 	safe_area_margins = current_safe_area_margins()
@@ -1663,7 +2131,7 @@ func show_menu(instant: bool = false) -> void:
 	if instant or not fx_enabled_effective():
 		_build_menu.call()
 	else:
-		play_screen_transition(_build_menu)
+		play_screen_transition(_build_menu, false, "ink_dissolve")
 
 func _show_menu_impl() -> void:
 	if voice_enabled:
@@ -1681,6 +2149,13 @@ func _show_menu_impl() -> void:
 	# 添加国风装饰元素 - 水墨边框装饰
 	make_ink_border(root_layer, rect_full(0.015, 0.025, 0.985, 0.225), 3.0)
 
+	# Add floating ambient spirits to menu background
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null:
+		ui_enhancements.create_floating_spirit(root_layer, Rect2(
+			Vector2(0, 0),
+			Vector2(safe_content_pixel_size().x, safe_content_pixel_size().y)
+		), 5)
+
 	# 主标题区域 - 增大高度，更好的视觉层次
 	var header = make_panel(root_layer, rect_full(0.02, 0.03, 0.98, 0.22), GUOFENG_PANEL_FILL, 22, GUOFENG_PANEL_BORDER)
 	# 左侧金色装饰条
@@ -1691,11 +2166,33 @@ func _show_menu_impl() -> void:
 	header.add_child(make_color_rect(rect_full(0.016, 0.88, 0.984, 0.92), GUOFENG_PANEL_GOLD_LINE))
 	menu_hero_art = draw_menu_hero_illustration(header)
 	menu_parallax_enabled = true
+	# Add gold dust float effect to menu hero area
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null:
+		ui_enhancements.create_gold_dust(root_layer, Rect2(
+			Vector2(safe_content_pixel_size().x * 0.50, 0),
+			Vector2(safe_content_pixel_size().x * 0.48, safe_content_pixel_size().y * 0.25)
+		), 4)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		header.modulate = Color(1, 1, 1, 0)
+		header.offset_top = -14.0
+		var h_tw := create_tween()
+		h_tw.set_parallel(true)
+		h_tw.tween_property(header, "modulate:a", 1.0, 0.30).from(0.0).set_ease(Tween.EASE_OUT)
+		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 游戏标题 - 更大更突出，使用国风金色
 	var title = make_label(header, "云桌麻将", 44, GOLD_BRIGHT, true)
 	apply_rect(title, rect_full(0.04, 0.08, 0.42, 0.55))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	# Add gold foil shimmer to title for premium feel
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and shader_materials.has("gold_foil_shimmer"):
+		var title_gold = ColorRect.new()
+		title_gold.name = "MenuTitleGoldFoil"
+		title_gold.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title_gold.color = Color(0.92, 0.78, 0.38, 0.18)
+		title_gold.set_anchors_preset(Control.PRESET_FULL_RECT)
+		apply_gold_foil_shader(title_gold, 0.5, 0.3)
+		title.add_child(title_gold)
 
 	# 副标题 - 更柔和的颜色
 	var subtitle = make_label(header, "Godot 4.6 · 国风雅韵 · 真实牌面", 15, Color(0.68, 0.80, 0.76), false)
@@ -1739,10 +2236,26 @@ func _show_menu_impl() -> void:
 
 	# 添加卡片进场动画
 	play_card_flip_animation(row, cards, true)
+	# 单机模式卡片弹跳强调
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and cards.size() > 0:
+		AnimationEffects.bounce(cards[0], 8.0, 0.6)
+	# UIEnhancements: 菜单区竹影摇曳装饰
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null:
+		ui_enhancements.create_bamboo_sway(root_layer, Rect2(Vector2(0, 0), Vector2(safe_content_pixel_size().x * 0.12, safe_content_pixel_size().y * 0.6)), 4)
+		ui_enhancements.create_falling_plum_blossoms(root_layer, Rect2(Vector2(safe_content_pixel_size().x * 0.7, 0), Vector2(safe_content_pixel_size().x * 0.3, safe_content_pixel_size().y * 0.7)), 4)
+	var quick_rail = draw_menu_quick_action_rail(root_layer)
 
 	# 底部信息栏 - 使用国风配色
 	var footer = make_panel(root_layer, rect_full(0.02, 0.82, 0.98, 0.97), INK_MEDIUM, 18, GOLD_DARK)
 	footer.add_child(make_color_rect(rect_full(0.006, 0.04, 0.016, 0.96), GOLD_PRIMARY))
+	# 底栏滑入动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		footer.modulate = Color(1, 1, 1, 0)
+		footer.offset_top = 12.0
+		var footer_tw := create_tween()
+		footer_tw.set_parallel(true)
+		footer_tw.tween_property(footer, "modulate:a", 1.0, 0.28).from(0.0).set_delay(0.18).set_ease(Tween.EASE_OUT)
+		footer_tw.tween_property(footer, "offset_top", 0.0, 0.28).from(12.0).set_delay(0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	var footer_text = make_label(footer, "当前版本 v%s" % app_version(), 15, Color(0.80, 0.78, 0.70), true)
 	apply_rect(footer_text, rect_full(0.04, 0.25, 0.28, 0.75))
@@ -1752,7 +2265,9 @@ func _show_menu_impl() -> void:
 	var coins_text = "💰%d" % int(currency.get("coins", 0))
 	var gems_text = "💎%d" % int(currency.get("gems", 0))
 	var currency_badge = make_badge(footer, rect_full(0.30, 0.20, 0.50, 0.80), "%s  %s" % [coins_text, gems_text], 12, INK_DARK, GOLD_DARK, GOLD_LIGHT)
+	currency_badge.name = "MenuCurrencyBadge"
 	currency_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_menu_currency_badge_art(currency_badge)
 	draw_animation_preview(footer, rect_full(0.270, 0.22, 0.315, 0.78), "coin_spin")
 
 	# 赛季段位
@@ -1767,7 +2282,9 @@ func _show_menu_impl() -> void:
 		int(float(game_stats.get("win_rate", 0.0)) * 100.0)
 	]
 	var stats_badge = make_badge(footer, rect_full(0.68, 0.20, 0.84, 0.80), stats_text, 12, Color(0.024, 0.046, 0.052, 0.92), Color(0.34, 0.50, 0.46, 0.30), Color(0.80, 0.86, 0.76))
+	stats_badge.name = "MenuStatsBadge"
 	stats_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_menu_stats_badge_art(stats_badge)
 	draw_menu_daily_task_art(footer)
 
 	# 设置按钮 - 更大的触摸目标
@@ -1775,26 +2292,22 @@ func _show_menu_impl() -> void:
 		toggle_settings_panel()
 	)
 	settings.custom_minimum_size = Vector2(88, 48)
+	settings.name = "MenuSettingsButton"
+	draw_menu_settings_button_art(settings)
 	footer.add_child(settings)
 	apply_rect(settings, rect_full(0.86, 0.18, 0.96, 0.82))
 
 	add_lucide_icon(settings, "settings", rect_full(0.09, 0.22, 0.31, 0.78), Color(0.92, 0.94, 0.88, 0.92))
 
-	# 首次游戏提示 - 可点击
+	# 首次游戏提示 - 高亮常驻规则入口
 	if tutorial_step == 0:
-		var tutorial_hint = make_badge(root_layer, rect_full(0.35, 0.70, 0.65, 0.78), "新玩家？点击查看规则", 15, Color(0.18, 0.40, 0.36, 0.92), Color(0.30, 0.62, 0.52, 0.48), Color(0.94, 0.96, 0.92))
-		tutorial_hint.mouse_filter = Control.MOUSE_FILTER_STOP
-		# 添加脉冲动画吸引注意力
-		if fx_enabled_effective():
+		draw_menu_tutorial_hint_art(root_layer)
+		var tutorial_hint = quick_rail.find_child("MenuQuickRulesButton", true, false) if quick_rail != null else null
+		if tutorial_hint != null and is_instance_valid(tutorial_hint) and fx_enabled_effective():
 			var pulse_tween := create_tween()
 			pulse_tween.set_loops(3600)
 			pulse_tween.tween_property(tutorial_hint, "modulate:a", 0.6, 1.0).from(1.0)
 			pulse_tween.tween_property(tutorial_hint, "modulate:a", 1.0, 1.0).from(0.6)
-		# 连接点击事件
-		tutorial_hint.gui_input.connect(func(event: InputEvent) -> void:
-			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-				show_rules_screen()
-		)
 
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
@@ -1814,12 +2327,231 @@ func _show_menu_impl() -> void:
 			f_tw.tween_property(footer, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
 			f_tw.parallel().tween_property(footer, "offset_top", 0.0, 0.22).from(8.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
 
+func draw_menu_currency_badge_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "MenuCurrencyBadgeArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	parent.move_child(art, 0)
+	var currency_texture = add_illustration_texture(art, "menu_currency_brocade", rect_full(-0.045, -0.110, 1.045, 1.110), 0.15, false)
+	if currency_texture != null:
+		currency_texture.name = "MenuCurrencyBrocadeTexture"
+		art.move_child(currency_texture, 0)
+	var rail = make_color_rect(rect_full(0.090, 0.760, 0.910, 0.840), Color(0.96, 0.78, 0.34, 0.18))
+	rail.name = "MenuCurrencyBadgeRail"
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.030, 0.260, 0.740, 0.740), Color(0.44, 0.78, 0.58, 0.26))
+	fill.name = "MenuCurrencyBadgeFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.840, 0.205, 0.875, 0.530), Color(0.96, 0.78, 0.34, 0.22))
+	gate.name = "MenuCurrencyBadgeGate"
+	art.add_child(gate)
+	for i in range(2):
+		var left = 0.105 + float(i) * 0.080
+		var node = make_color_rect(rect_full(left, 0.210, left + 0.040, 0.520), Color(0.96, 0.78, 0.34, 0.24 - float(i) * 0.035))
+		node.name = "MenuCurrencyBadgeNode_%d" % i
+		art.add_child(node)
+	for i in range(3):
+		var left = 0.725 + float(i) * 0.050
+		var tick = make_color_rect(rect_full(left, 0.275, left + 0.018, 0.430), Color(0.44, 0.78, 0.58, 0.22 - float(i) * 0.040))
+		tick.name = "MenuCurrencyBadgeTick_%d" % i
+		art.add_child(tick)
+	for i in range(2):
+		var left = 0.790 + float(i) * 0.042
+		var tick = make_color_rect(rect_full(left, 0.560, left + 0.014, 0.670), Color(0.96, 0.78, 0.34, 0.20 - float(i) * 0.035))
+		tick.name = "MenuCurrencyBadgeGateTick_%d" % i
+		art.add_child(tick)
+	return art
+
+func draw_menu_stats_badge_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "MenuStatsBadgeArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	parent.move_child(art, 0)
+	var rail = make_color_rect(rect_full(0.085, 0.760, 0.915, 0.840), Color(0.42, 0.72, 0.66, 0.16))
+	rail.name = "MenuStatsBadgeRail"
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.030, 0.260, 0.620, 0.740), Color(0.42, 0.72, 0.66, 0.24))
+	fill.name = "MenuStatsBadgeFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.835, 0.220, 0.875, 0.550), Color(0.42, 0.72, 0.66, 0.22))
+	gate.name = "MenuStatsBadgeGate"
+	art.add_child(gate)
+	for i in range(3):
+		var left = 0.155 + float(i) * 0.105
+		var top = 0.505 - float(i % 2) * 0.120
+		var node = make_color_rect(rect_full(left, top, left + 0.034, top + 0.180), Color(0.42, 0.72, 0.66, 0.24))
+		node.name = "MenuStatsBadgeTrendNode_%d" % i
+		art.add_child(node)
+	for i in range(2):
+		var left = 0.620 + float(i) * 0.065
+		var pip = make_color_rect(rect_full(left, 0.255, left + 0.024, 0.405), Color(0.88, 0.72, 0.42, 0.22 - float(i) * 0.040))
+		pip.name = "MenuStatsBadgePip_%d" % i
+		art.add_child(pip)
+	for i in range(2):
+		var left = 0.760 + float(i) * 0.050
+		var tick = make_color_rect(rect_full(left, 0.555, left + 0.014, 0.670), Color(0.42, 0.72, 0.66, 0.20 - float(i) * 0.035))
+		tick.name = "MenuStatsBadgeGateTick_%d" % i
+		art.add_child(tick)
+	return art
+
+func draw_menu_tutorial_hint_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "MenuTutorialHintArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var rail = make_color_rect(rect_full(0.075, 0.760, 0.925, 0.840), Color(0.006, 0.018, 0.020, 0.46))
+	rail.name = "MenuTutorialHintRail"
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.025, 0.240, 0.760, 0.760), Color(0.46, 0.78, 0.60, 0.34))
+	fill.name = "MenuTutorialHintFill"
+	rail.add_child(fill)
+	var seal = make_color_rect(rect_full(0.060, 0.210, 0.105, 0.590), Color(0.72, 0.86, 0.58, 0.28))
+	seal.name = "MenuTutorialHintSeal"
+	art.add_child(seal)
+	var entry_bridge = make_color_rect(rect_full(0.180, 0.385, 0.610, 0.455), Color(0.006, 0.018, 0.020, 0.34))
+	entry_bridge.name = "MenuTutorialHintEntryBridge"
+	art.add_child(entry_bridge)
+	var entry_fill = make_color_rect(rect_full(0.000, 0.000, 0.720, 1.000), Color(0.46, 0.78, 0.60, 0.22))
+	entry_fill.name = "MenuTutorialHintEntryFill"
+	entry_bridge.add_child(entry_fill)
+	var entry_gate = make_color_rect(rect_full(0.585, 0.325, 0.620, 0.545), Color(0.72, 0.86, 0.58, 0.22))
+	entry_gate.name = "MenuTutorialHintEntryGate"
+	art.add_child(entry_gate)
+	if add_lucide_icon(art, "book-open", rect_full(0.075, 0.275, 0.135, 0.680), Color(0.94, 0.96, 0.80, 0.80)) == null:
+		var glyph = make_label(art, "规", 9, Color(0.94, 0.96, 0.80, 0.80), true)
+		glyph.name = "MenuTutorialHintGlyph"
+		apply_rect(glyph, rect_full(0.075, 0.245, 0.135, 0.690))
+	for i in range(2):
+		var left = 0.300 + float(i) * 0.060
+		var entry_tick = make_color_rect(rect_full(left, 0.500, left + 0.016, 0.620), Color(0.46, 0.78, 0.60, 0.20 - float(i) * 0.035))
+		entry_tick.name = "MenuTutorialHintEntryTick_%d" % i
+		art.add_child(entry_tick)
+	for i in range(3):
+		var left = 0.690 + float(i) * 0.055
+		var tick = make_color_rect(rect_full(left, 0.210, left + 0.018, 0.355), Color(0.62, 0.86, 0.66, 0.26 - float(i) * 0.045))
+		tick.name = "MenuTutorialHintTick_%d" % i
+		art.add_child(tick)
+	for i in range(2):
+		var left = 0.845 + float(i) * 0.045
+		var node = make_color_rect(rect_full(left, 0.425, left + 0.028, 0.650), Color(0.72, 0.86, 0.58, 0.24 - float(i) * 0.040))
+		node.name = "MenuTutorialHintNode_%d" % i
+		art.add_child(node)
+	var target_route = make_color_rect(rect_full(0.145, 0.235, 0.345, 0.300), Color(0.006, 0.018, 0.020, 0.38))
+	target_route.name = "MenuTutorialTargetRoute"
+	art.add_child(target_route)
+	var target_fill = make_color_rect(rect_full(0.035, 0.250, 0.820, 0.750), Color(0.72, 0.86, 0.58, 0.24))
+	target_fill.name = "MenuTutorialTargetFill"
+	target_route.add_child(target_fill)
+	var target_gate = make_color_rect(rect_full(0.320, 0.175, 0.365, 0.365), Color(0.96, 0.82, 0.42, 0.24))
+	target_gate.name = "MenuTutorialTargetGate"
+	art.add_child(target_gate)
+	for i in range(3):
+		var target_left = 0.182 + float(i) * 0.042
+		var target_tick = make_color_rect(rect_full(target_left, 0.150, target_left + 0.014, 0.285), Color(0.72, 0.86, 0.58, 0.22 - float(i) * 0.035))
+		target_tick.name = "MenuTutorialTargetTick_%d" % i
+		art.add_child(target_tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.80).from(0.96)
+		tw.tween_property(fill, "modulate:a", 0.96, 0.80).from(0.42)
+	return art
+
+func draw_menu_quick_action_rail(parent: Control) -> Control:
+	var rail = make_panel(parent, rect_full(0.285, 0.690, 0.715, 0.795), Color(0.010, 0.024, 0.028, 0.86), 16, Color(0.58, 0.52, 0.34, 0.32), 0)
+	rail.name = "MenuQuickActionRail"
+	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var texture = add_illustration_texture(rail, "secondary_back_path", rect_full(-0.020, -0.250, 1.020, 1.250), 0.10, false)
+	if texture != null:
+		texture.name = "MenuQuickActionPathTexture"
+		rail.move_child(texture, 0)
+	var route = make_color_rect(rect_full(0.055, 0.720, 0.945, 0.790), Color(0.006, 0.016, 0.018, 0.46))
+	route.name = "MenuQuickActionRoute"
+	rail.add_child(route)
+	var fill = make_color_rect(rect_full(0.025, 0.250, 0.780, 0.750), Color(0.82, 0.70, 0.36, 0.26))
+	fill.name = "MenuQuickActionRouteFill"
+	route.add_child(fill)
+	var gate = make_color_rect(rect_full(0.895, 0.660, 0.930, 0.870), Color(0.92, 0.78, 0.38, 0.22))
+	gate.name = "MenuQuickActionGate"
+	rail.add_child(gate)
+	var items := [
+		["rules", "规则", "help-circle", Color(0.30, 0.58, 0.50), Callable(self, "show_rules_screen")],
+		["stats", "战绩", "trophy", Color(0.56, 0.46, 0.72), Callable(self, "show_stats_screen")],
+		["shop", "商店", "gift", Color(0.62, 0.38, 0.30), Callable(self, "show_shop_screen")],
+	]
+	for i in range(items.size()):
+		var item: Array = items[i]
+		var button = make_small_button(str(item[1]), item[3], item[4])
+		button.name = "MenuQuick%sButton" % str(item[0]).capitalize()
+		button.custom_minimum_size = Vector2(118, 42)
+		rail.add_child(button)
+		apply_rect(button, rect_full(0.075 + float(i) * 0.305, 0.160, 0.290 + float(i) * 0.305, 0.640))
+		var art = Control.new()
+		art.name = "MenuQuickButtonArt_%s" % str(item[0])
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art.set_anchors_preset(Control.PRESET_FULL_RECT)
+		button.add_child(art)
+		button.move_child(art, 0)
+		var chip = make_color_rect(rect_full(0.070, 0.690, 0.890, 0.790), Color(item[3].r, item[3].g, item[3].b, 0.28))
+		chip.name = "MenuQuickButtonChip_%s" % str(item[0])
+		art.add_child(chip)
+		var node = make_panel(art, rect_full(0.070, 0.170, 0.245, 0.610), Color(item[3].r, item[3].g, item[3].b, 0.18), 999, Color(0.96, 0.84, 0.48, 0.16), 0)
+		node.name = "MenuQuickButtonNode_%s" % str(item[0])
+		add_lucide_icon(button, str(item[2]), rect_full(0.100, 0.255, 0.225, 0.575), Color(0.94, 0.92, 0.76, 0.88))
+		for tick_index in range(2):
+			var tick = make_color_rect(rect_full(0.690 + float(tick_index) * 0.060, 0.230, 0.708 + float(tick_index) * 0.060, 0.390), Color(item[3].r, item[3].g, item[3].b, 0.22 - float(tick_index) * 0.040))
+			tick.name = "MenuQuickButtonTick_%s_%d" % [str(item[0]), tick_index]
+			art.add_child(tick)
+	for i in range(4):
+		var tick = make_color_rect(rect_full(0.245 + float(i) * 0.135, 0.810, 0.260 + float(i) * 0.135, 0.925), Color(0.82, 0.70, 0.36, 0.20 - float(i) * 0.028))
+		tick.name = "MenuQuickActionTick_%d" % i
+		rail.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 1.0).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.92, 1.0).from(0.42)
+	return rail
+
+func draw_menu_settings_button_art(button: Control) -> Control:
+	var art = Control.new()
+	art.name = "MenuSettingsButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var settings_texture = add_illustration_texture(art, "menu_settings_gear", rect_full(-0.060, -0.150, 1.060, 1.150), 0.16, false)
+	if settings_texture != null:
+		settings_texture.name = "MenuSettingsGearTexture"
+		art.move_child(settings_texture, 0)
+	var rail = make_color_rect(rect_full(0.320, 0.750, 0.890, 0.840), Color(0.006, 0.016, 0.018, 0.48))
+	rail.name = "MenuSettingsButtonRail"
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.045, 0.260, 0.700, 0.740), Color(0.36, 0.58, 0.72, 0.34))
+	fill.name = "MenuSettingsButtonFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.120, 0.235, 0.170, 0.620), Color(0.58, 0.74, 0.82, 0.24))
+	gate.name = "MenuSettingsButtonGate"
+	art.add_child(gate)
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.665 + float(i) * 0.060, 0.215, 0.685 + float(i) * 0.060, 0.355), Color(0.48, 0.68, 0.82, 0.26 - float(i) * 0.050))
+		tick.name = "MenuSettingsButtonTick_%d" % i
+		art.add_child(tick)
+	return art
+
 func draw_menu_season_progress_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "MenuSeasonProgressArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.520, 0.150, 0.660, 0.880))
 	parent.add_child(art)
+	var season_texture = add_illustration_texture(art, "menu_season_scroll", rect_full(-0.080, -0.045, 1.080, 1.045), 0.12, false)
+	if season_texture != null:
+		season_texture.name = "MenuSeasonScrollTexture"
 	var points = int(season_data.get("points", 0))
 	var rank = get_current_rank()
 	var next_index = min(rank + 1, SEASON_RANK_POINTS.size() - 1)
@@ -1830,6 +2562,21 @@ func draw_menu_season_progress_art(parent: Control) -> Control:
 	rail.name = "MenuSeasonProgressRail"
 	var fill = make_panel(rail, rect_full(0.030, 0.280, 0.030 + 0.940 * progress, 0.720), Color(0.78, 0.64, 0.30, 0.64), 999, Color(0.92, 0.78, 0.42, 0.20), 0)
 	fill.name = "MenuSeasonProgressFill"
+	if progress > 0.0 and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		fill.anchor_right = 0.030
+		var fill_tw := create_tween()
+		fill_tw.tween_property(fill, "anchor_right", 0.030 + 0.940 * progress, 0.5).set_delay(0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var route = make_panel(art, rect_full(0.105, 0.505, 0.880, 0.605), Color(0.010, 0.020, 0.022, 0.48), 999, Color(0.92, 0.78, 0.42, 0.10), 0)
+	route.name = "MenuSeasonRouteRail"
+	var route_fill = make_panel(route, rect_full(0.025, 0.260, 0.025 + 0.950 * progress, 0.740), Color(0.92, 0.74, 0.34, 0.30), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	route_fill.name = "MenuSeasonRouteFill"
+	if progress > 0.0 and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		route_fill.anchor_right = 0.025
+		var rf_tw := create_tween()
+		rf_tw.tween_property(route_fill, "anchor_right", 0.025 + 0.950 * progress, 0.5).set_delay(0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var route_gate_left = 0.105 + 0.775 * progress
+	var route_gate = make_panel(art, rect_full(route_gate_left - 0.018, 0.455, route_gate_left + 0.018, 0.655), Color(0.92, 0.74, 0.34, 0.20), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	route_gate.name = "MenuSeasonRouteGate"
 	for i in range(SEASON_RANKS.size()):
 		var center = 0.08 + float(i) * (0.84 / float(max(1, SEASON_RANKS.size() - 1)))
 		var active = i <= rank
@@ -1845,15 +2592,39 @@ func draw_menu_season_progress_art(parent: Control) -> Control:
 		var arrow = make_color_rect(rect_full(arrow_left, 0.595, arrow_right, 0.635), Color(0.92, 0.78, 0.42, 0.22))
 		arrow.name = "MenuSeasonNextRankArrow"
 		art.add_child(arrow)
+		var bridge = make_color_rect(rect_full(arrow_left, 0.365, arrow_right, 0.415), Color(0.006, 0.016, 0.018, 0.32))
+		bridge.name = "MenuSeasonNextRankBridge"
+		art.add_child(bridge)
+		var bridge_fill = make_color_rect(rect_full(0.000, 0.000, max(0.120, progress), 1.000), Color(0.92, 0.74, 0.34, 0.22))
+		bridge_fill.name = "MenuSeasonNextRankBridgeFill"
+		bridge.add_child(bridge_fill)
+		var bridge_gate = make_color_rect(rect_full(arrow_right - 0.012, 0.330, arrow_right + 0.012, 0.470), Color(0.92, 0.74, 0.34, 0.20))
+		bridge_gate.name = "MenuSeasonNextRankBridgeGate"
+		art.add_child(bridge_gate)
+	for i in range(2):
+		var node_left = 0.465 + float(i) * 0.090
+		var route_node = make_panel(art, rect_full(node_left, 0.425, node_left + 0.045, 0.675), Color(0.92, 0.74, 0.34, 0.22), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		route_node.name = "MenuSeasonRouteNode_%d" % i
 	for i in range(3):
 		var left = 0.125 + float(i) * 0.055
 		var spark = make_panel(art, rect_full(left, 0.160 + float(i % 2) * 0.085, left + 0.022, 0.300 + float(i % 2) * 0.085), Color(0.92, 0.76, 0.34, 0.30), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
 		spark.name = "MenuSeasonPointSpark_%d" % i
+	for i in range(3):
+		var tick = make_panel(art, rect_full(0.720 + float(i) * 0.045, 0.315, 0.742 + float(i) * 0.045, 0.450), Color(0.92, 0.76, 0.34, 0.24 - float(i) * 0.035), 999, Color(1.0, 0.88, 0.52, 0.05), 0)
+		tick.name = "MenuSeasonEnergyTick_%d" % i
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.520 + float(i) * 0.060, 0.325, 0.536 + float(i) * 0.060, 0.425), Color(0.92, 0.76, 0.34, 0.20 - float(i) * 0.035))
+		tick.name = "MenuSeasonBridgeTick_%d" % i
+		art.add_child(tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
 		tw.tween_property(fill, "modulate:a", 0.52, 0.90).from(0.96)
 		tw.tween_property(fill, "modulate:a", 0.96, 0.90).from(0.52)
+		var route_tw := create_tween()
+		route_tw.set_loops(3600)
+		route_tw.tween_property(route_fill, "modulate:a", 0.40, 0.86).from(0.88)
+		route_tw.tween_property(route_fill, "modulate:a", 0.88, 0.86).from(0.40)
 		var halo_tw := create_tween()
 		halo_tw.set_loops(3600)
 		halo_tw.tween_property(rank_halo, "modulate:a", 0.42, 1.0).from(1.0)
@@ -1866,6 +2637,9 @@ func draw_menu_daily_task_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.040, 0.760, 0.840, 0.965))
 	parent.add_child(art)
+	var daily_texture = add_illustration_texture(art, "menu_daily_ledger", rect_full(-0.020, -0.200, 1.020, 1.200), 0.11, false)
+	if daily_texture != null:
+		daily_texture.name = "MenuDailyLedgerTexture"
 	var task_count = max(1, DAILY_TASKS.size())
 	var completed = 0
 	var best_index = 0
@@ -1907,9 +2681,32 @@ func draw_menu_daily_task_art(parent: Control) -> Control:
 	focus.name = "MenuDailyTaskFocusGlow"
 	var focus_pulse = make_panel(art, rect_full(focus_center - 0.034, 0.135, focus_center + 0.034, 0.905), Color(0.92, 0.76, 0.34, 0.10), 999, Color(1.0, 0.86, 0.46, 0.10), 0)
 	focus_pulse.name = "MenuDailyTaskFocusPulse"
+	var reward_rail = make_panel(art, rect_full(0.665, 0.700, 0.980, 0.815), Color(0.006, 0.018, 0.020, 0.46), 999, Color(0.58, 0.82, 0.48, 0.10), 0)
+	reward_rail.name = "MenuDailyTaskRewardRail"
+	var reward_fill = make_panel(reward_rail, rect_full(0.030, 0.260, 0.030 + 0.940 * fill_fraction, 0.740), Color(0.58, 0.82, 0.48, 0.28), 999, Color(0.86, 0.96, 0.62, 0.08), 0)
+	reward_fill.name = "MenuDailyTaskRewardFill"
+	for i in range(2):
+		var reward_node = make_panel(art, rect_full(0.690 + float(i) * 0.075, 0.595, 0.730 + float(i) * 0.075, 0.900), Color(0.58, 0.82, 0.48, 0.24), 999, Color(0.86, 0.96, 0.62, 0.08), 0)
+		reward_node.name = "MenuDailyTaskRewardNode_%d" % i
+	for i in range(3):
+		var reward_tick = make_panel(art, rect_full(0.870 + float(i) * 0.032, 0.565, 0.890 + float(i) * 0.032, 0.690), Color(0.58, 0.82, 0.48, 0.24 - float(i) * 0.035), 999, Color(0.86, 0.96, 0.62, 0.05), 0)
+		reward_tick.name = "MenuDailyTaskRewardTick_%d" % i
 	for i in range(3):
 		var progress_pip = make_panel(art, rect_full(0.055 + float(i) * 0.032, 0.690, 0.075 + float(i) * 0.032, 0.815), Color(0.48, 0.78, 0.58, 0.26), 999, Color(0.74, 0.92, 0.66, 0.10), 0)
 		progress_pip.name = "MenuDailyTaskProgressPip_%d" % i
+	var completion_route = make_color_rect(rect_full(0.410, 0.705, 0.665, 0.765), Color(0.006, 0.018, 0.020, 0.42))
+	completion_route.name = "MenuDailyTaskCompletionRoute"
+	art.add_child(completion_route)
+	var completion_fill = make_color_rect(rect_full(0.410, 0.716, 0.410 + 0.255 * fill_fraction, 0.754), Color(0.58, 0.82, 0.48, 0.26))
+	completion_fill.name = "MenuDailyTaskCompletionFill"
+	art.add_child(completion_fill)
+	var completion_gate = make_color_rect(rect_full(0.642, 0.640, 0.675, 0.815), Color(0.86, 0.96, 0.62, 0.20 + 0.10 * fill_fraction))
+	completion_gate.name = "MenuDailyTaskCompletionGate"
+	art.add_child(completion_gate)
+	for i in range(2):
+		var completion_tick = make_color_rect(rect_full(0.485 + float(i) * 0.058, 0.655, 0.503 + float(i) * 0.058, 0.815), Color(0.58, 0.82, 0.48, 0.24 - float(i) * 0.045))
+		completion_tick.name = "MenuDailyTaskCompletionTick_%d" % i
+		art.add_child(completion_tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
@@ -1919,6 +2716,10 @@ func draw_menu_daily_task_art(parent: Control) -> Control:
 		pulse_tw.set_loops(3600)
 		pulse_tw.tween_property(focus_pulse, "modulate:a", 0.30, 0.90).from(0.90)
 		pulse_tw.tween_property(focus_pulse, "modulate:a", 0.90, 0.90).from(0.30)
+		var reward_tw := create_tween()
+		reward_tw.set_loops(3600)
+		reward_tw.tween_property(reward_fill, "modulate:a", 0.40, 0.82).from(0.88)
+		reward_tw.tween_property(reward_fill, "modulate:a", 0.88, 0.82).from(0.40)
 	return art
 
 func make_menu_card(text: String, color: Color, callback: Callable, icon_name: String = "") -> Button:
@@ -1933,6 +2734,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	button.add_theme_stylebox_override("pressed", style(Color(0.014, 0.026, 0.032, 0.99), 20, muted.darkened(0.72), 2, 2))
 	# 左侧彩色条纹装饰 - 更宽更醒目
 	button.add_child(make_color_rect(rect_full(0.02, 0.08, 0.055, 0.92), Color(color.r, color.g, color.b, 0.24)))
+	draw_menu_card_entry_art(button, color, icon_name)
 	# 顶部高光
 	button.add_child(make_color_rect(rect_full(0.055, 0.04, 0.945, 0.11), Color(1.0, 1.0, 1.0, 0.025)))
 	# 底部渐变
@@ -1955,22 +2757,78 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		configure_clipped_label(subtitle)
+	# 卡片呼吸阴影 + 微光效果
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		_add_card_breathing_shadow(button, color)
+		_add_card_shimmer(button, color)
 	# 菜单卡hover缩放动画
 	button.mouse_entered.connect(func() -> void:
 		if not is_instance_valid(button):
 			return
 		var tw := button.create_tween()
-		tw.tween_property(button, "scale", Vector2(1.02, 1.02), 0.15).from(Vector2(1.0, 1.0)).set_ease(Tween.EASE_OUT)
+		tw.tween_property(button, "scale", Vector2(1.03, 1.03), 0.18).from(Vector2(1.0, 1.0)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	)
 	button.mouse_exited.connect(func() -> void:
 		if not is_instance_valid(button):
 			return
 		var tw := button.create_tween()
-		tw.tween_property(button, "scale", Vector2(1.0, 1.0), 0.15).from(Vector2(1.02, 1.02)).set_ease(Tween.EASE_OUT)
+		tw.tween_property(button, "scale", Vector2(1.0, 1.0), 0.15).from(Vector2(1.03, 1.03)).set_ease(Tween.EASE_OUT)
 	)
 	if callback.is_valid():
 		connect_immediate_button_action(button, callback)
 	return button
+
+func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String = "") -> Control:
+	var art = Control.new()
+	art.name = "MenuCardEntryArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var rail = make_panel(art, rect_full(0.105, 0.810, 0.905, 0.875), Color(0.008, 0.018, 0.020, 0.58), 999, Color(color.r, color.g, color.b, 0.14), 0)
+	rail.name = "MenuCardEntryRail"
+	var fill = make_panel(rail, rect_full(0.025, 0.260, 0.760, 0.740), Color(color.r, color.g, color.b, 0.44), 999, Color(color.r, color.g, color.b, 0.14), 0)
+	fill.name = "MenuCardEntryFill"
+	for i in range(3):
+		var center = 0.145 + float(i) * 0.235
+		var node = make_panel(art, rect_full(center - 0.018, 0.765, center + 0.018, 0.920), Color(color.r, color.g, color.b, 0.44), 999, Color(1.0, 0.90, 0.58, 0.16), 0)
+		node.name = "MenuCardEntryNode_%d" % i
+	var focus = make_panel(art, rect_full(0.805, 0.735, 0.910, 0.940), Color(color.r, color.g, color.b, 0.24), 999, Color(color.r, color.g, color.b, 0.28), 0)
+	focus.name = "MenuCardEntryFocus"
+	if add_lucide_icon(focus, "chevron-right", rect_full(0.250, 0.250, 0.750, 0.750), Color(0.96, 0.90, 0.66, 0.86)) == null:
+		var arrow = make_label(focus, ">", 11, Color(0.96, 0.90, 0.66, 0.86), true)
+		arrow.name = "MenuCardEntryArrow"
+		apply_rect(arrow, rect_full(0.0, 0.0, 1.0, 1.0))
+	var confirm_route = make_color_rect(rect_full(0.565, 0.620, 0.890, 0.675), Color(0.006, 0.016, 0.018, 0.40))
+	confirm_route.name = "MenuCardEntryConfirmRoute"
+	art.add_child(confirm_route)
+	var confirm_fill = make_color_rect(rect_full(0.040, 0.250, 0.760, 0.750), Color(color.r, color.g, color.b, 0.26))
+	confirm_fill.name = "MenuCardEntryConfirmFill"
+	confirm_route.add_child(confirm_fill)
+	var confirm_gate = make_color_rect(rect_full(0.870, 0.575, 0.915, 0.715), Color(color.r, color.g, color.b, 0.22))
+	confirm_gate.name = "MenuCardEntryConfirmGate"
+	art.add_child(confirm_gate)
+	for i in range(2):
+		var confirm_tick = make_color_rect(rect_full(0.650 + float(i) * 0.070, 0.545, 0.668 + float(i) * 0.070, 0.710), Color(color.r, color.g, color.b, 0.22 - float(i) * 0.045))
+		confirm_tick.name = "MenuCardEntryConfirmTick_%d" % i
+		art.add_child(confirm_tick)
+	var icon_echo_left = 0.695 if icon_name != "" else 0.775
+	var echo = make_panel(art, rect_full(icon_echo_left, 0.115, icon_echo_left + 0.220, 0.455), Color(color.r, color.g, color.b, 0.055), 18, Color(color.r, color.g, color.b, 0.12), 0)
+	echo.name = "MenuCardIconEcho"
+	for i in range(3):
+		var spark = make_panel(art, rect_full(0.105 + float(i) * 0.036, 0.115 + float(i % 2) * 0.070, 0.124 + float(i) * 0.036, 0.205 + float(i % 2) * 0.070), Color(color.r, color.g, color.b, 0.28), 999, Color(1.0, 0.92, 0.62, 0.10), 0)
+		spark.name = "MenuCardEntrySpark_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.44, 0.88).from(0.94)
+		tw.tween_property(fill, "modulate:a", 0.94, 0.88).from(0.44)
+		var focus_tw := create_tween()
+		focus_tw.set_loops(3600)
+		focus_tw.tween_property(focus, "offset_left", 4.0, 0.62).from(0.0)
+		focus_tw.parallel().tween_property(focus, "modulate:a", 0.50, 0.62).from(1.0)
+		focus_tw.tween_property(focus, "offset_left", 0.0, 0.62).from(4.0)
+		focus_tw.parallel().tween_property(focus, "modulate:a", 1.0, 0.62).from(0.50)
+	return art
 
 func show_online_lobby(instant: bool = false) -> void:
 	if transition_active and not instant:
@@ -1980,7 +2838,7 @@ func show_online_lobby(instant: bool = false) -> void:
 	if instant or not fx_enabled_effective():
 		_build.call()
 	else:
-		play_screen_transition(_build)
+		play_screen_transition(_build, false, "ink_wash")
 
 func _show_online_lobby_impl() -> void:
 	mode = "online_lobby"
@@ -1992,6 +2850,7 @@ func _show_online_lobby_impl() -> void:
 
 	# 主面板 - 统一的全屏面板
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.012, 0.032, 0.040, 0.96), 20, Color(0.62, 0.52, 0.30, 0.52))
+	draw_secondary_screen_texture(panel, "online_network", "OnlineLobbyNetworkTexture", 0.16)
 	# 左侧金色装饰
 	panel.add_child(make_color_rect(rect_full(0.006, 0.03, 0.016, 0.97), Color(0.92, 0.78, 0.38, 0.84)))
 	# 顶部分隔线
@@ -2067,9 +2926,27 @@ func _show_online_lobby_impl() -> void:
 	apply_rect(status_label, rect_full(0.04, 0.885, 0.50, 0.945))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(status_label)
+	draw_online_feedback_art(panel)
+
+	# 表单面板入场动画 - 左侧滑入
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		form_panel.modulate = Color(1, 1, 1, 0)
+		form_panel.offset_left = -16.0
+		var ftw := create_tween()
+		ftw.set_parallel(true)
+		ftw.tween_property(form_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT)
+		ftw.tween_property(form_panel, "offset_left", 0.0, 0.28).from(-16.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 房间状态面板
 	var log_panel = make_panel(panel, rect_full(0.505, 0.17, 0.965, 0.87), Color(0.010, 0.026, 0.032, 0.95), 16, Color(0.34, 0.44, 0.38, 0.28))
+	# 右侧面板滑入动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		log_panel.modulate = Color(1, 1, 1, 0)
+		log_panel.offset_left = 18.0
+		var tw_log := create_tween()
+		tw_log.set_parallel(true)
+		tw_log.tween_property(log_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT).set_delay(0.12)
+		tw_log.tween_property(log_panel, "offset_left", 0.0, 0.28).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD).set_delay(0.12)
 	log_panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.016, 0.98), Color(0.84, 0.72, 0.38, 0.42)))
 	log_panel.add_child(make_color_rect(rect_full(0.02, 0.13, 0.98, 0.15), Color(1.0, 1.0, 1.0, 0.028)))
 	var log_title = make_label(log_panel, "房间状态", 20, Color(0.84, 0.87, 0.74), true)
@@ -2079,13 +2956,214 @@ func _show_online_lobby_impl() -> void:
 	var room_badge = make_badge(log_panel, rect_full(0.68, 0.030, 0.94, 0.100), room_badge_text, 12, Color(0.020, 0.044, 0.050, 0.94), Color(0.46, 0.52, 0.34, 0.30), Color(0.82, 0.87, 0.72))
 	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	draw_online_lobby_room_art(log_panel)
+	draw_online_lobby_log_stream_art(log_panel)
 	logs_label = make_label(log_panel, "", 15, Color(0.84, 0.87, 0.76), false)
 	apply_rect(logs_label, rect_full(0.05, 0.31, 0.95, 0.94))
 	logs_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	logs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	render_room_log()
+	draw_online_lobby_connection_route(panel)
 	ensure_update_dialog()
+
+func draw_online_lobby_connection_route(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "OnlineLobbyConnectionRouteArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.465, 0.180, 0.515, 0.860))
+	parent.add_child(art)
+	var players_value = online_room.get("players", [])
+	var player_count = (players_value as Array).size() if typeof(players_value) == TYPE_ARRAY else 0
+	var accent = Color(0.40, 0.68, 0.78) if online_waiting_for_server else Color(0.54, 0.72, 0.52)
+	if player_count <= 0:
+		accent = Color(0.74, 0.60, 0.34)
+	var route = make_panel(art, rect_full(0.360, 0.040, 0.640, 0.960), Color(0.006, 0.018, 0.020, 0.56), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	route.name = "OnlineLobbyConnectionRoute"
+	var fill_height = clamp(float(max(1, player_count)) / 4.0, 0.22, 1.0)
+	var fill = make_panel(route, rect_full(0.250, 0.030, 0.750, 0.030 + 0.940 * fill_height), Color(accent.r, accent.g, accent.b, 0.38), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	fill.name = "OnlineLobbyConnectionFill"
+	var gate = make_panel(art, rect_full(0.255, 0.430, 0.745, 0.570), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(0.98, 0.86, 0.48, 0.12), 0)
+	gate.name = "OnlineLobbyConnectionGate"
+	var handshake = make_color_rect(rect_full(0.060, 0.490, 0.940, 0.510), Color(0.006, 0.016, 0.018, 0.36))
+	handshake.name = "OnlineLobbyHandshakeRoute"
+	art.add_child(handshake)
+	var handshake_fill = make_color_rect(rect_full(0.040, 0.200, 0.760 if online_waiting_for_server else 0.940, 0.800), Color(accent.r, accent.g, accent.b, 0.24))
+	handshake_fill.name = "OnlineLobbyHandshakeFill"
+	handshake.add_child(handshake_fill)
+	var handshake_gate = make_panel(art, rect_full(0.690, 0.455, 0.840, 0.545), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(0.98, 0.86, 0.48, 0.10), 0)
+	handshake_gate.name = "OnlineLobbyHandshakeGate"
+	var handshake_steps := ["connect", "room", "start"]
+	for i in range(handshake_steps.size()):
+		var x = 0.145 + float(i) * 0.355
+		var active = i == 0 or (i == 1 and player_count > 0) or (i == 2 and player_count >= 4)
+		var step = make_panel(art, rect_full(x - 0.055, 0.430, x + 0.055, 0.570), Color(accent.r, accent.g, accent.b, 0.24 if active else 0.09), 999, Color(0.98, 0.86, 0.48, 0.14 if active else 0.04), 0)
+		step.name = "OnlineLobbyHandshakeStep_%s" % handshake_steps[i]
+		var glyph = make_label(step, str(i + 1), 7, Color(0.96, 0.92, 0.72, 0.86 if active else 0.42), true)
+		glyph.name = "OnlineLobbyHandshakeGlyph_%s" % handshake_steps[i]
+		apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+	for i in range(2):
+		var top = 0.140 + float(i) * 0.650
+		var node = make_panel(art, rect_full(0.190, top, 0.810, top + 0.085), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(accent.r, accent.g, accent.b, 0.13), 0)
+		node.name = "OnlineLobbyConnectionNode_%d" % i
+	for i in range(3):
+		var top = 0.240 + float(i) * 0.190
+		var tick = make_color_rect(rect_full(0.160, top, 0.315, top + 0.030), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.040))
+		tick.name = "OnlineLobbyConnectionTick_%d" % i
+		art.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.86).from(0.96)
+		tw.tween_property(fill, "modulate:a", 0.96, 0.86).from(0.42)
+		var handshake_tw := create_tween()
+		handshake_tw.set_loops(3600)
+		handshake_tw.tween_property(handshake_fill, "modulate:a", 0.38, 0.80).from(0.92)
+		handshake_tw.tween_property(handshake_fill, "modulate:a", 0.92, 0.80).from(0.38)
+	return art
+
+func draw_online_lobby_log_stream_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "OnlineLobbyLogStreamArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.045, 0.315, 0.955, 0.930))
+	parent.add_child(art)
+	var logs_value = online_room.get("logs", [])
+	var log_count = (logs_value as Array).size() if typeof(logs_value) == TYPE_ARRAY else 0
+	var players_value = online_room.get("players", [])
+	var player_count = (players_value as Array).size() if typeof(players_value) == TYPE_ARRAY else 0
+	var accent = Color(0.46, 0.70, 0.58) if player_count > 0 else Color(0.70, 0.58, 0.36)
+	var spine = make_panel(art, rect_full(0.025, 0.040, 0.040, 0.955), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	spine.name = "OnlineLobbyLogSpine"
+	var stream = make_panel(art, rect_full(0.085, 0.875, 0.955, 0.940), Color(0.006, 0.018, 0.020, 0.50), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	stream.name = "OnlineLobbyLogStreamRail"
+	var fill_width = clamp(float(max(1, log_count)) / 6.0, 0.16, 1.0)
+	var fill = make_panel(stream, rect_full(0.020, 0.240, 0.020 + 0.940 * fill_width, 0.760), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	fill.name = "OnlineLobbyLogStreamFill"
+	if log_count == 0:
+		var empty_route = make_color_rect(rect_full(0.135, 0.245, 0.705, 0.292), Color(0.006, 0.018, 0.020, 0.44))
+		empty_route.name = "OnlineLobbyEmptyLogRoute"
+		art.add_child(empty_route)
+		var empty_fill = make_color_rect(rect_full(0.025, 0.250, 0.380, 0.750), Color(0.70, 0.58, 0.36, 0.24))
+		empty_fill.name = "OnlineLobbyEmptyLogFill"
+		empty_route.add_child(empty_fill)
+		var empty_gate = make_panel(art, rect_full(0.700, 0.185, 0.762, 0.360), Color(0.70, 0.58, 0.36, 0.20), 999, Color(0.96, 0.82, 0.42, 0.16), 0)
+		empty_gate.name = "OnlineLobbyEmptyLogGate"
+		var empty_glyph = make_label(empty_gate, "候", 9, Color(0.96, 0.90, 0.64, 0.82), true)
+		empty_glyph.name = "OnlineLobbyEmptyLogGlyph"
+		apply_rect(empty_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+		for i in range(3):
+			var wait_left = 0.245 + float(i) * 0.105
+			var wait_tick = make_panel(art, rect_full(wait_left, 0.340, wait_left + 0.026, 0.455), Color(0.70, 0.58, 0.36, 0.24 - float(i) * 0.035), 999, Color(1.0, 0.90, 0.54, 0.06), 0)
+			wait_tick.name = "OnlineLobbyEmptyLogTick_%d" % i
+	var visible_logs = min(4, max(1, log_count))
+	for i in range(visible_logs):
+		var top = 0.100 + float(i) * 0.175
+		var node = make_panel(art, rect_full(0.002, top, 0.064, top + 0.092), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(0.96, 0.84, 0.48, 0.10), 0)
+		node.name = "OnlineLobbyLogNode_%d" % i
+		var lane = make_color_rect(rect_full(0.090, top + 0.035, 0.920, top + 0.055), Color(accent.r, accent.g, accent.b, 0.10))
+		lane.name = "OnlineLobbyLogLane_%d" % i
+		art.add_child(lane)
+	for i in range(3):
+		var left = 0.710 + float(i) * 0.070
+		var tick = make_panel(art, rect_full(left, 0.785, left + 0.030, 0.885), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.035), 999, Color(1.0, 0.90, 0.54, 0.06), 0)
+		tick.name = "OnlineLobbyLogStreamTick_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.38, 0.78).from(0.90)
+		tw.tween_property(fill, "modulate:a", 0.90, 0.78).from(0.38)
+	return art
+
+func draw_online_feedback_art(parent: Control) -> Control:
+	if online_feedback.strip_edges() == "" and not online_waiting_for_server:
+		return null
+	var art = make_panel(parent, rect_full(0.505, 0.885, 0.965, 0.945), Color(0.012, 0.030, 0.034, 0.88), 14, online_feedback_accent().darkened(0.18), 0)
+	art.name = "OnlineFeedbackArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var accent = online_feedback_accent()
+	var seal = make_panel(art, rect_full(0.025, 0.165, 0.090, 0.835), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(accent.r, accent.g, accent.b, 0.36), 0)
+	seal.name = "OnlineFeedbackStatusSeal"
+	var icon_name = online_feedback_icon_name()
+	if add_lucide_icon(seal, icon_name, rect_full(0.220, 0.220, 0.780, 0.780), Color(0.96, 0.94, 0.78, 0.90)) == null:
+		var fallback = make_label(seal, online_feedback_fallback_glyph(), 10, Color(0.96, 0.94, 0.78, 0.90), true)
+		fallback.name = "OnlineFeedbackStatusGlyph"
+		apply_rect(fallback, rect_full(0.0, 0.0, 1.0, 1.0))
+	var response_route = make_color_rect(rect_full(0.094, 0.360, 0.300, 0.405), Color(0.006, 0.018, 0.020, 0.46))
+	response_route.name = "OnlineFeedbackResponseRoute"
+	art.add_child(response_route)
+	var response_fill = make_color_rect(rect_full(0.094, 0.368, 0.248 if online_waiting_for_server else 0.300, 0.397), Color(accent.r, accent.g, accent.b, 0.36))
+	response_fill.name = "OnlineFeedbackResponseFill"
+	art.add_child(response_fill)
+	var response_gate = make_color_rect(rect_full(0.282, 0.315, 0.315, 0.455), Color(accent.r, accent.g, accent.b, 0.24))
+	response_gate.name = "OnlineFeedbackResponseGate"
+	art.add_child(response_gate)
+	var result_node = make_panel(art, rect_full(0.315, 0.238, 0.362, 0.515), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(0.96, 0.84, 0.48, 0.12), 0)
+	result_node.name = "OnlineFeedbackResultNode"
+	var rail = make_panel(art, rect_full(0.112, 0.690, 0.955, 0.820), Color(0.006, 0.018, 0.020, 0.62), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	rail.name = "OnlineFeedbackRail"
+	var fill_right = 0.740 if online_waiting_for_server else 0.960
+	var fill = make_panel(rail, rect_full(0.018, 0.250, fill_right, 0.750), Color(accent.r, accent.g, accent.b, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	fill.name = "OnlineFeedbackFill"
+	var message = online_feedback.strip_edges()
+	if message == "":
+		message = "等待服务器确认"
+	var label = make_label(art, message, 11, Color(0.84, 0.92, 0.84), true)
+	label.name = "OnlineFeedbackText"
+	apply_rect(label, rect_full(0.120, 0.060, 0.770, 0.640))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(label)
+	var lane = make_panel(art, rect_full(0.790, 0.155, 0.955, 0.580), Color(accent.r, accent.g, accent.b, 0.11), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	lane.name = "OnlineFeedbackMessageLane"
+	for i in range(3):
+		var left = 0.130 + float(i) * 0.245
+		var pulse = make_panel(lane, rect_full(left, 0.270, left + 0.070, 0.730), Color(accent.r, accent.g, accent.b, 0.42 if online_waiting_for_server or i == 0 else 0.20), 999, Color(1.0, 0.92, 0.62, 0.10), 0)
+		pulse.name = "OnlineFeedbackPulse_%d" % i
+	for i in range(2):
+		var tick_left = 0.142 + float(i) * 0.072
+		var response_tick = make_color_rect(rect_full(tick_left, 0.328, tick_left + 0.016, 0.435), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.045))
+		response_tick.name = "OnlineFeedbackResponseTick_%d" % i
+		art.add_child(response_tick)
+	for i in range(2):
+		var result_tick_left = 0.376 + float(i) * 0.052
+		var result_tick = make_color_rect(rect_full(result_tick_left, 0.302, result_tick_left + 0.016, 0.460), Color(accent.r, accent.g, accent.b, 0.23 - float(i) * 0.040))
+		result_tick.name = "OnlineFeedbackResultTick_%d" % i
+		art.add_child(result_tick)
+	if online_waiting_for_server:
+		var pending = make_panel(art, rect_full(0.900, 0.115, 0.960, 0.625), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+		pending.name = "OnlineFeedbackPendingHalo"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.72).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.72).from(0.42)
+	return art
+
+func online_feedback_accent() -> Color:
+	if online_waiting_for_server:
+		return Color(0.42, 0.64, 0.88)
+	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
+		return Color(0.86, 0.42, 0.34)
+	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
+		return Color(0.38, 0.76, 0.56)
+	return Color(0.78, 0.62, 0.34)
+
+func online_feedback_icon_name() -> String:
+	if online_waiting_for_server:
+		return "loader"
+	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
+		return "triangle-alert"
+	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
+		return "check"
+	return "message-circle"
+
+func online_feedback_fallback_glyph() -> String:
+	if online_waiting_for_server:
+		return "..."
+	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
+		return "!"
+	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
+		return "✓"
+	return "i"
 
 func draw_online_lobby_room_art(parent: Control) -> Control:
 	var art = Control.new()
@@ -2107,6 +3185,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	var room_node = make_panel(art, rect_full(0.420, 0.140, 0.580, 0.860), Color(0.050, 0.040, 0.026, 0.58), 18, Color(0.86, 0.70, 0.34, 0.32), 0)
 	room_node.name = "OnlineLobbyRoomNode"
 	add_lucide_icon(room_node, "users", rect_full(0.25, 0.22, 0.75, 0.78), GOLD_BRIGHT)
+	draw_online_lobby_sync_gate(art, player_count, log_count)
 	for i in range(3):
 		var wave = make_panel(art, rect_full(0.385 - float(i) * 0.018, 0.085 - float(i) * 0.035, 0.615 + float(i) * 0.018, 0.915 + float(i) * 0.035), Color(0.86, 0.72, 0.34, 0.050 - float(i) * 0.010), 999, Color(0.96, 0.82, 0.42, 0.055 - float(i) * 0.012), 0)
 		wave.name = "OnlineLobbyConnectionWave_%d" % i
@@ -2132,6 +3211,44 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 		tw.tween_property(ready_rail, "modulate:a", 1.0, 1.0).from(0.44)
 	return art
 
+func draw_online_lobby_sync_gate(parent: Control, player_count: int, log_count: int) -> Control:
+	var gate = Control.new()
+	gate.name = "OnlineLobbySyncGate"
+	gate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(gate, rect_full(0.205, 0.045, 0.795, 0.955))
+	parent.add_child(gate)
+	var readiness = clamp(float(player_count) / 4.0, 0.0, 1.0)
+	var gate_back = make_panel(gate, rect_full(0.245, 0.680, 0.755, 0.825), Color(0.020, 0.040, 0.042, 0.62), 999, Color(0.82, 0.70, 0.38, 0.18), 0)
+	gate_back.name = "OnlineLobbyStartGateBack"
+	var fill = make_panel(gate_back, rect_full(0.030, 0.260, 0.030 + 0.940 * max(0.08, readiness), 0.740), Color(0.52, 0.78, 0.60, 0.42), 999, Color(0.82, 0.96, 0.68, 0.14), 0)
+	fill.name = "OnlineLobbyStartGateFill"
+	var seal = make_panel(gate, rect_full(0.460, 0.560, 0.540, 0.930), Color(0.68, 0.54, 0.26, 0.30), 999, Color(0.96, 0.82, 0.42, 0.26), 0)
+	seal.name = "OnlineLobbyStartGateSeal"
+	var seal_label = make_label(seal, "%d" % player_count, 9, Color(0.98, 0.90, 0.62, 0.94), true)
+	seal_label.name = "OnlineLobbyStartGateGlyph"
+	apply_rect(seal_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var sync = make_panel(gate, rect_full(0.770, 0.155, 0.970, 0.470), Color(0.030, 0.052, 0.052, 0.58), 12, Color(0.62, 0.76, 0.58, 0.16), 0)
+	sync.name = "OnlineLobbySyncTimeline"
+	for i in range(3):
+		var left = 0.120 + float(i) * 0.305
+		var active = i < min(3, max(1, log_count))
+		var bead = make_panel(sync, rect_full(left, 0.315, left + 0.105, 0.685), Color(0.70, 0.86, 0.60, 0.46 if active else 0.16), 999, Color(0.90, 1.0, 0.74, 0.18 if active else 0.06), 0)
+		bead.name = "OnlineLobbySyncBead_%d" % i
+	var wait = make_panel(gate, rect_full(0.030, 0.155, 0.220, 0.470), Color(0.44, 0.64, 0.58, 0.18), 999, Color(0.74, 0.92, 0.74, 0.14), 0)
+	wait.name = "OnlineLobbyWaitingSeal"
+	var wait_label = make_label(wait, "候", 10, Color(0.92, 0.96, 0.78, 0.88), true)
+	wait_label.name = "OnlineLobbyWaitingGlyph"
+	apply_rect(wait_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	if readiness >= 1.0:
+		var ready = make_panel(gate, rect_full(0.392, 0.030, 0.608, 0.345), Color(0.76, 0.60, 0.28, 0.24), 999, Color(1.0, 0.84, 0.42, 0.24), 0)
+		ready.name = "OnlineLobbyAllReadyHalo"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(seal, "modulate:a", 0.48, 0.82).from(1.0)
+		tw.tween_property(seal, "modulate:a", 1.0, 0.82).from(0.48)
+	return gate
+
 func add_line_edit(parent: Control, label_text: String, value: String) -> LineEdit:
 	var caption = Label.new()
 	caption.text = label_text
@@ -2152,14 +3269,159 @@ func add_line_edit(parent: Control, label_text: String, value: String) -> LineEd
 	edit.add_theme_color_override("font_selected_color", Color(0.10, 0.12, 0.10))
 	edit.add_theme_color_override("selection_color", Color(0.56, 0.70, 0.48, 0.72))
 	edit.add_theme_color_override("caret_color", Color(0.94, 0.86, 0.54))
+	draw_line_edit_input_art(edit, label_text)
 	parent.add_child(edit)
 	return edit
+
+func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
+	var art_id = line_edit_art_id(label_text)
+	var art = Control.new()
+	art.name = "LineEditInputArt_%s" % art_id
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	edit.add_child(art)
+	var accent = line_edit_accent(label_text)
+	var rail = make_panel(art, rect_full(0.035, 0.780, 0.965, 0.900), Color(0.006, 0.018, 0.020, 0.58), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	rail.name = "LineEditInputRail_%s" % art_id
+	var fill = make_panel(rail, rect_full(0.018, 0.260, 0.640, 0.740), Color(accent.r, accent.g, accent.b, 0.40), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	fill.name = "LineEditInputFill_%s" % art_id
+	var value_route = make_color_rect(rect_full(0.185, 0.365, 0.575, 0.440), Color(0.006, 0.018, 0.020, 0.34))
+	value_route.name = "LineEditInputValueRoute_%s" % art_id
+	art.add_child(value_route)
+	var value_fill = make_color_rect(rect_full(0.000, 0.000, 0.700, 1.000), Color(accent.r, accent.g, accent.b, 0.20))
+	value_fill.name = "LineEditInputValueFill_%s" % art_id
+	value_route.add_child(value_fill)
+	var value_gate = make_color_rect(rect_full(0.545, 0.300, 0.575, 0.515), Color(accent.r, accent.g, accent.b, 0.20))
+	value_gate.name = "LineEditInputValueGate_%s" % art_id
+	art.add_child(value_gate)
+	var target_route = make_color_rect(rect_full(0.635, 0.205, 0.925, 0.290), Color(0.006, 0.018, 0.020, 0.42))
+	target_route.name = "LineEditInputTargetRoute_%s" % art_id
+	art.add_child(target_route)
+	var target_fill = make_color_rect(rect_full(0.035, 0.260, 0.760, 0.740), Color(accent.r, accent.g, accent.b, 0.24))
+	target_fill.name = "LineEditInputTargetFill_%s" % art_id
+	target_route.add_child(target_fill)
+	var node = make_panel(art, rect_full(0.885, 0.220, 0.945, 0.660), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(accent.r, accent.g, accent.b, 0.22), 0)
+	node.name = "LineEditInputFocusNode_%s" % art_id
+	var gate = make_color_rect(rect_full(0.930, 0.360, 0.955, 0.600), Color(accent.r, accent.g, accent.b, 0.22))
+	gate.name = "LineEditInputTargetGate_%s" % art_id
+	art.add_child(gate)
+	for i in range(2):
+		var pulse = make_panel(art, rect_full(0.055 + float(i) * 0.060, 0.240 + float(i) * 0.135, 0.085 + float(i) * 0.060, 0.360 + float(i) * 0.135), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.92, 0.62, 0.08), 0)
+		pulse.name = "LineEditInputPulse_%s_%d" % [art_id, i]
+	for i in range(2):
+		var left = 0.245 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left, 0.485, left + 0.016, 0.610), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
+		tick.name = "LineEditInputValueTick_%s_%d" % [art_id, i]
+		art.add_child(tick)
+	for i in range(2):
+		var left = 0.690 + float(i) * 0.055
+		var tick = make_color_rect(rect_full(left, 0.415, left + 0.018, 0.550), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040))
+		tick.name = "LineEditInputTargetTick_%s_%d" % [art_id, i]
+		art.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.80).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.80).from(0.42)
+	return art
+
+func line_edit_art_id(label_text: String) -> String:
+	if label_text.find("服务器") >= 0:
+		return "server"
+	if label_text.find("房间") >= 0:
+		return "room"
+	if label_text.find("昵称") >= 0:
+		return "name"
+	return "generic"
+
+func line_edit_accent(label_text: String) -> Color:
+	if label_text.find("服务器") >= 0:
+		return Color(0.34, 0.58, 0.78)
+	if label_text.find("房间") >= 0:
+		return Color(0.74, 0.56, 0.34)
+	if label_text.find("昵称") >= 0:
+		return Color(0.42, 0.72, 0.58)
+	return Color(0.62, 0.58, 0.42)
 
 func make_lobby_action_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_small_button(text, color, callback)
 	button.custom_minimum_size = Vector2(130, 50)
 	button.add_theme_font_size_override("font_size", 17)
+	draw_lobby_action_button_art(button, text, color)
 	return button
+
+func draw_lobby_action_button_art(button: Button, text: String, color: Color) -> Control:
+	var art = Control.new()
+	art.name = "LobbyActionButtonArt_%s" % text
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var action_texture = add_illustration_texture(art, "lobby_action_token", rect_full(-0.055, -0.150, 1.055, 1.150), 0.15, false)
+	if action_texture != null:
+		action_texture.name = "LobbyActionTokenTexture_%s" % text
+		art.move_child(action_texture, 0)
+	var route = make_color_rect(rect_full(0.095, 0.740, 0.905, 0.830), Color(0.006, 0.016, 0.018, 0.48))
+	route.name = "LobbyActionButtonRoute_%s" % text
+	art.add_child(route)
+	var route_fill = make_color_rect(rect_full(0.035, 0.250, lobby_action_route_fill(text), 0.750), Color(color.r, color.g, color.b, 0.34))
+	route_fill.name = "LobbyActionButtonFill_%s" % text
+	route.add_child(route_fill)
+	var node_left = 0.770 if text.contains("返回") else 0.820
+	var node = make_color_rect(rect_full(node_left, 0.220, node_left + 0.055, 0.590), Color(color.r, color.g, color.b, 0.30))
+	node.name = "LobbyActionButtonNode_%s" % text
+	art.add_child(node)
+	var command_route = make_color_rect(rect_full(0.280, 0.300, 0.735, 0.370), Color(0.006, 0.016, 0.018, 0.34))
+	command_route.name = "LobbyActionCommandRoute_%s" % text
+	art.add_child(command_route)
+	var command_fill = make_color_rect(rect_full(0.000, 0.000, 0.720, 1.000), Color(color.r, color.g, color.b, 0.20))
+	command_fill.name = "LobbyActionCommandFill_%s" % text
+	command_route.add_child(command_fill)
+	var command_gate = make_color_rect(rect_full(0.708, 0.250, 0.740, 0.500), Color(color.r, color.g, color.b, 0.22))
+	command_gate.name = "LobbyActionCommandGate_%s" % text
+	art.add_child(command_gate)
+	var seal = make_label(art, lobby_action_glyph(text), 10, Color(0.98, 0.92, 0.66, 0.74), true)
+	seal.name = "LobbyActionButtonGlyph_%s" % text
+	apply_rect(seal, rect_full(0.070, 0.160, 0.250, 0.520))
+	for i in range(2):
+		var left = 0.355 + float(i) * 0.070
+		var tick = make_color_rect(rect_full(left, 0.435, left + 0.018, 0.565), Color(color.r, color.g, color.b, 0.20 - float(i) * 0.035))
+		tick.name = "LobbyActionCommandTick_%s_%d" % [text, i]
+		art.add_child(tick)
+	for i in range(3):
+		var left = 0.530 + float(i) * 0.065
+		var tick = make_color_rect(rect_full(left, 0.205, left + 0.020, 0.340), Color(color.r, color.g, color.b, 0.26 - float(i) * 0.045))
+		tick.name = "LobbyActionButtonTick_%s_%d" % [text, i]
+		art.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(route_fill, "modulate:a", 0.42, 0.84).from(0.96)
+		tw.tween_property(route_fill, "modulate:a", 0.96, 0.84).from(0.42)
+	return art
+
+func lobby_action_route_fill(text: String) -> float:
+	if text.contains("连接"):
+		return 0.520
+	if text.contains("创建"):
+		return 0.680
+	if text.contains("加入"):
+		return 0.760
+	if text.contains("开始"):
+		return 0.900
+	return 0.440
+
+func lobby_action_glyph(text: String) -> String:
+	if text.contains("连接"):
+		return "连"
+	if text.contains("创建"):
+		return "建"
+	if text.contains("加入"):
+		return "入"
+	if text.contains("开始"):
+		return "启"
+	if text.contains("返回"):
+		return "返"
+	return text.substr(0, 1) if text != "" else "行"
 
 func lobby_connection_state_text() -> String:
 	match tcp.get_status():
@@ -2820,6 +4082,9 @@ func _start_offline_impl() -> void:
 	deal_offline_hand()
 	# 启动环境氛围动画
 	start_ambient_animation("default")
+	# Add floating ambient spirits to table scene
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null and is_instance_valid(ui_enhancements) and ambient_layer != null and is_instance_valid(ambient_layer):
+		ui_enhancements.create_floating_spirit(ambient_layer, ambient_layer.get_rect() if ambient_layer.get_rect().size.x > 0 else Rect2(Vector2.ZERO, get_viewport().size), 4)
 
 func deal_offline_hand() -> void:
 	mode = "offline"
@@ -2926,7 +4191,12 @@ func render_game() -> void:
 	draw_table_ornaments(outer)
 
 	var table = make_panel(outer, TABLE_INNER_RECT, UI_FELT, 26, UI_FELT_LINE)
-	add_texture(table, felt_texture, TABLE_INNER_TEXTURE_RECT, 0.88)
+	var felt_tex_rect = add_texture(table, felt_texture, TABLE_INNER_TEXTURE_RECT, 0.88)
+	if felt_tex_rect != null and shader_materials.has("ink_wash_bg"):
+		var ink_wash_mat = apply_ink_wash_shader(felt_tex_rect, 0.03, 0.25, 0.04)
+		# Enable animated grain drift during gameplay for atmosphere
+		if ink_wash_mat != null and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			ink_wash_mat.set_shader_parameter("time_scale", 0.4)
 	draw_table_atmosphere_frame(table)
 	draw_walls(table)
 	draw_table_living_illustration(table)
@@ -3070,6 +4340,9 @@ func draw_top_hud_hand_progress(parent: Control) -> Control:
 	rail_panel.name = "HandProgressRail"
 	var hand_count = MATCH_MAX_HANDS if mode == "offline" else 4
 	var current_hand = clamp(offline_hand_number if mode == "offline" else 1, 1, hand_count)
+	var progress_ratio = clamp(float(current_hand) / float(max(1, hand_count)), 0.08, 1.0)
+	var route_fill = make_panel(progress, rect_full(0.038, 0.675, 0.038 + 0.720 * progress_ratio, 0.760), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(1.0, 0.86, 0.48, 0.06), 0)
+	route_fill.name = "HandProgressRouteFill"
 	for i in range(hand_count):
 		var center = 0.070 + float(i) * (0.700 / float(max(1, hand_count - 1)))
 		var reached = i < current_hand
@@ -3082,10 +4355,30 @@ func draw_top_hud_hand_progress(parent: Control) -> Control:
 			var glow = make_panel(progress, rect_full(center - 0.029, 0.150, center + 0.029, 0.850), Color(accent.r, accent.g, accent.b, 0.14), 999, Color(1.0, 0.86, 0.42, 0.24), 0)
 			glow.name = "HandProgressActiveGlow"
 			progress.move_child(glow, max(0, pip.get_index()))
+			var cursor = make_panel(progress, rect_full(center - 0.040, 0.070, center + 0.040, 0.930), Color(accent.r, accent.g, accent.b, 0.080), 999, Color(1.0, 0.86, 0.42, 0.14), 0)
+			cursor.name = "HandProgressCurrentCursor"
+			progress.move_child(cursor, max(0, glow.get_index()))
+	for i in range(3):
+		var tick_left = 0.650 + float(i) * 0.038
+		var tick = make_panel(progress, rect_full(tick_left, 0.250, tick_left + 0.016, 0.410), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040), 999, Color(1.0, 0.88, 0.52, 0.06), 0)
+		tick.name = "HandProgressRhythmTick_%d" % i
 	var label = make_label(progress, "%d/%d局" % [current_hand, hand_count], 10, Color(0.90, 0.88, 0.74), true)
 	label.name = "HandProgressLabel"
 	apply_rect(label, rect_full(0.785, 0.100, 0.920, 0.900))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var dealer_route = make_color_rect(rect_full(0.735, 0.585, 0.930, 0.645), Color(0.006, 0.016, 0.018, 0.42))
+	dealer_route.name = "HandProgressDealerRoute"
+	progress.add_child(dealer_route)
+	var dealer_route_fill = make_color_rect(rect_full(0.735, 0.596, 0.735 + 0.195 * progress_ratio, 0.634), Color(accent.r, accent.g, accent.b, 0.26))
+	dealer_route_fill.name = "HandProgressDealerRouteFill"
+	progress.add_child(dealer_route_fill)
+	var dealer_route_gate = make_color_rect(rect_full(0.905, 0.510, 0.935, 0.690), Color(0.96, 0.78, 0.38, 0.22))
+	dealer_route_gate.name = "HandProgressDealerRouteGate"
+	progress.add_child(dealer_route_gate)
+	for i in range(2):
+		var dealer_tick = make_color_rect(rect_full(0.805 + float(i) * 0.040, 0.520, 0.819 + float(i) * 0.040, 0.690), Color(accent.r, accent.g, accent.b, 0.23 - float(i) * 0.045))
+		dealer_tick.name = "HandProgressDealerRouteTick_%d" % i
+		progress.add_child(dealer_tick)
 	var dealer_badge = make_badge(progress, rect_full(0.925, 0.160, 0.995, 0.840), CENTER_WIND_LABELS[dealer_seat] if dealer_seat >= 0 and dealer_seat < CENTER_WIND_LABELS.size() else "庄", 9, Color(accent.r, accent.g, accent.b, 0.42), Color(0.96, 0.78, 0.38, 0.28), Color(0.98, 0.92, 0.72))
 	dealer_badge.name = "HandProgressDealerBadge"
 	dealer_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3098,9 +4391,22 @@ func draw_top_hud_hand_progress(parent: Control) -> Control:
 		tw.set_loops(12)
 		tw.tween_property(rail_panel, "modulate:a", 0.58, 0.72).from(0.94)
 		tw.tween_property(rail_panel, "modulate:a", 0.94, 0.72).from(0.58)
+		var route_tw := create_tween()
+		route_tw.set_loops(12)
+		route_tw.tween_property(route_fill, "modulate:a", 0.38, 0.76).from(0.88)
+		route_tw.tween_property(route_fill, "modulate:a", 0.88, 0.76).from(0.38)
 	return progress
 
 func draw_top_hud_status_art(parent: Control) -> Control:
+	var hud_texture = add_illustration_texture(parent, "hud_status_banner", rect_full(0.090, 0.055, 0.445, 0.930), 0.115, false)
+	if hud_texture != null:
+		hud_texture.name = "TopHudBannerTexture"
+		parent.move_child(hud_texture, 0)
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var hud_texture_tw := create_tween()
+			hud_texture_tw.set_loops(3600)
+			hud_texture_tw.tween_property(hud_texture, "modulate:a", 0.070, 1.80).from(0.115)
+			hud_texture_tw.tween_property(hud_texture, "modulate:a", 0.115, 1.80).from(0.070)
 	var art = Control.new()
 	art.name = "TopHudStatusArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3117,15 +4423,35 @@ func draw_top_hud_status_art(parent: Control) -> Control:
 	art.move_child(pulse, 0)
 	var rail = make_panel(parent, rect_full(0.106, 0.820, 0.425, 0.870), Color(color.r, color.g, color.b, 0.16), 999, Color(color.r, color.g, color.b, 0.12), 0)
 	rail.name = "TopHudStatusRail"
+	var route = make_color_rect(rect_full(0.138, 0.690, 0.425, 0.735), Color(0.006, 0.016, 0.018, 0.42))
+	route.name = "TopHudStatusRoute"
+	parent.add_child(route)
+	var route_fill = make_color_rect(rect_full(0.030, 0.260, 0.760, 0.740), Color(color.r, color.g, color.b, 0.26))
+	route_fill.name = "TopHudStatusRouteFill"
+	route.add_child(route_fill)
+	var gate = make_color_rect(rect_full(0.404, 0.635, 0.428, 0.785), Color(0.96, 0.82, 0.42, 0.20))
+	gate.name = "TopHudStatusRouteGate"
+	parent.add_child(gate)
 	for i in range(3):
 		var left = 0.118 + float(i) * 0.018
 		var pip = make_panel(parent, rect_full(left, 0.180, left + 0.008, 0.300), Color(color.r, color.g, color.b, 0.38), 999, Color(1.0, 0.90, 0.56, 0.12), 0)
 		pip.name = "TopHudStatusPip_%d" % i
+	for i in range(3):
+		var tick_left = 0.210 + float(i) * 0.052
+		var tick = make_color_rect(rect_full(tick_left, 0.625, tick_left + 0.010, 0.790), Color(color.r, color.g, color.b, 0.23 - float(i) * 0.035))
+		tick.name = "TopHudStatusRouteTick_%d" % i
+		parent.add_child(tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(12)
 		tw.tween_property(pulse, "modulate:a", 0.24, 0.70).from(0.86)
 		tw.tween_property(pulse, "modulate:a", 0.86, 0.70).from(0.24)
+		var route_tw := create_tween()
+		route_tw.set_loops(12)
+		route_tw.tween_property(route_fill, "modulate:a", 0.40, 0.74).from(0.92)
+		route_tw.parallel().tween_property(gate, "modulate:a", 0.52, 0.74).from(0.90)
+		route_tw.tween_property(route_fill, "modulate:a", 0.92, 0.74).from(0.40)
+		route_tw.parallel().tween_property(gate, "modulate:a", 0.90, 0.74).from(0.52)
 	return art
 
 func top_hud_status_icon_name() -> String:
@@ -3156,6 +4482,48 @@ func draw_top_hud_wall_meter(parent: Control) -> Control:
 	fill.name = "TopHudWallMeterFill"
 	var dot = make_panel(meter, rect_full(0.060, 0.170, 0.190, 0.430), Color(color.r, color.g, color.b, 0.72), 999, Color(1.0, 0.90, 0.56, 0.28), 0)
 	dot.name = "TopHudWallStatusDot"
+	var stack = make_panel(meter, rect_full(0.220, 0.185, 0.525, 0.450), Color(0.006, 0.016, 0.018, 0.42), 8, Color(color.r, color.g, color.b, 0.12), 0)
+	stack.name = "TopHudWallStack"
+	for i in range(3):
+		var layer = make_panel(stack, rect_full(0.090 + float(i) * 0.070, 0.220 + float(i) * 0.085, 0.720 + float(i) * 0.070, 0.405 + float(i) * 0.085), Color(color.r, color.g, color.b, 0.18 - float(i) * 0.030), 4, Color(1.0, 0.86, 0.48, 0.04), 0)
+		layer.name = "TopHudWallStackLayer_%d" % i
+	var stack_bridge = make_color_rect(rect_full(0.500, 0.205, 0.585, 0.260), Color(0.006, 0.016, 0.018, 0.34))
+	stack_bridge.name = "TopHudWallStackBridge"
+	meter.add_child(stack_bridge)
+	var stack_bridge_fill = make_color_rect(rect_full(0.000, 0.000, max(0.120, progress), 1.000), Color(color.r, color.g, color.b, 0.22))
+	stack_bridge_fill.name = "TopHudWallStackBridgeFill"
+	stack_bridge.add_child(stack_bridge_fill)
+	var stack_bridge_gate = make_color_rect(rect_full(0.572, 0.175, 0.600, 0.295), Color(color.r, color.g, color.b, 0.20))
+	stack_bridge_gate.name = "TopHudWallStackBridgeGate"
+	meter.add_child(stack_bridge_gate)
+	var last = get_last_discard()
+	var last_node = make_panel(meter, rect_full(0.565, 0.150, 0.700, 0.470), Color(color.r, color.g, color.b, 0.18), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	last_node.name = "TopHudWallLastNode"
+	if last != "":
+		var last_label = make_label(last_node, tile_face_main(last), 8, tile_accent(last), true)
+		last_label.name = "TopHudWallLastGlyph"
+		apply_rect(last_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var route = make_panel(meter, rect_full(0.520, 0.292, 0.665, 0.325), Color(0.006, 0.016, 0.018, 0.44), 999, Color(color.r, color.g, color.b, 0.12), 0)
+	route.name = "TopHudWallStatusRoute"
+	var route_fill = make_panel(meter, rect_full(0.535, 0.302, 0.640, 0.315), Color(color.r, color.g, color.b, 0.34), 999, Color(1.0, 0.86, 0.48, 0.06), 0)
+	route_fill.name = "TopHudWallStatusFill"
+	var route_gate = make_panel(meter, rect_full(0.645, 0.258, 0.695, 0.360), Color(0.006, 0.014, 0.016, 0.64), 999, Color(color.r, color.g, color.b, 0.26), 0)
+	route_gate.name = "TopHudWallStatusGate"
+	for i in range(2):
+		var route_tick = make_panel(meter, rect_full(0.555 + float(i) * 0.048, 0.242, 0.570 + float(i) * 0.048, 0.375), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.030), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+		route_tick.name = "TopHudWallStatusTick_%d" % i
+	for i in range(2):
+		var bridge_tick = make_color_rect(rect_full(0.515 + float(i) * 0.030, 0.278, 0.526 + float(i) * 0.030, 0.360), Color(color.r, color.g, color.b, 0.20 - float(i) * 0.035))
+		bridge_tick.name = "TopHudWallStackBridgeTick_%d" % i
+		meter.add_child(bridge_tick)
+	for i in range(3):
+		var tick = make_panel(meter, rect_full(0.742 + float(i) * 0.045, 0.250, 0.762 + float(i) * 0.045, 0.400), Color(color.r, color.g, color.b, 0.26 - float(i) * 0.040), 999, Color(1.0, 0.86, 0.48, 0.06), 0)
+		tick.name = "TopHudWallRhythmTick_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.72).from(0.90)
+		tw.tween_property(fill, "modulate:a", 0.90, 0.72).from(0.42)
 	return meter
 
 func draw_score_strip(parent: Control, rect: Rect2) -> void:
@@ -3206,16 +4574,61 @@ func draw_score_strip_chip_art(parent: Control, seat: int, score: int, active: b
 	var fill_right = 0.205 + 0.735 * momentum
 	var fill = make_panel(art, rect_full(0.205, 0.760, fill_right, 0.875), fill_color, 999, fill_color.lightened(0.12), 0)
 	fill.name = "ScoreStripMomentumFill_%d" % seat
+	var rank = score_strip_rank_for_score(score)
+	var route = make_panel(art, rect_full(0.235, 0.610, 0.835, 0.690), Color(0.006, 0.014, 0.016, 0.38), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	route.name = "ScoreStripRankRoute_%d" % seat
+	var route_fill = make_panel(route, rect_full(0.020, 0.260, 0.020 + 0.940 * clamp((5.0 - float(rank)) / 4.0, 0.18, 1.0), 0.740), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.86, 0.48, 0.06), 0)
+	route_fill.name = "ScoreStripRankRouteFill_%d" % seat
+	var rank_node = make_panel(art, rect_full(0.855, 0.520, 0.925, 0.770), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	rank_node.name = "ScoreStripRankNode_%d" % seat
+	var rank_label = make_label(rank_node, "%d" % rank, 7, Color(0.98, 0.92, 0.72, 0.88), true)
+	rank_label.name = "ScoreStripRankLabel_%d" % seat
+	apply_rect(rank_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	for i in range(2):
+		var tick = make_panel(art, rect_full(0.650 + float(i) * 0.052, 0.455, 0.672 + float(i) * 0.052, 0.570), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.045), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+		tick.name = "ScoreStripRankTick_%d_%d" % [seat, i]
+	if rank == 1:
+		var leader_route = make_color_rect(rect_full(0.310, 0.205, 0.760, 0.260), Color(0.006, 0.014, 0.016, 0.42))
+		leader_route.name = "ScoreStripLeaderRoute_%d" % seat
+		art.add_child(leader_route)
+		var leader_fill = make_color_rect(rect_full(0.035, 0.250, 0.780, 0.750), Color(0.92, 0.72, 0.34, 0.26))
+		leader_fill.name = "ScoreStripLeaderFill_%d" % seat
+		leader_route.add_child(leader_fill)
+		var leader_gate = make_color_rect(rect_full(0.745, 0.170, 0.785, 0.340), Color(0.96, 0.82, 0.42, 0.24))
+		leader_gate.name = "ScoreStripLeaderGate_%d" % seat
+		art.add_child(leader_gate)
+		for i in range(2):
+			var leader_tick = make_color_rect(rect_full(0.485 + float(i) * 0.075, 0.145, 0.502 + float(i) * 0.075, 0.355), Color(0.92, 0.72, 0.34, 0.22 - float(i) * 0.045))
+			leader_tick.name = "ScoreStripLeaderTick_%d_%d" % [seat, i]
+			art.add_child(leader_tick)
 	if active:
 		var pulse = make_panel(art, rect_full(0.010, 0.060, 0.990, 0.940), Color(accent.r, accent.g, accent.b, 0.07), 12, Color(0.96, 0.78, 0.34, 0.18), 0)
 		pulse.name = "ScoreStripActivePulse"
 		art.move_child(pulse, 0)
+		var active_route = make_panel(art, rect_full(0.170, 0.285, 0.820, 0.335), Color(0.006, 0.016, 0.018, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+		active_route.name = "ScoreStripActiveRoute"
+		var active_fill = make_panel(art, rect_full(0.190, 0.300, 0.735, 0.320), Color(accent.r, accent.g, accent.b, 0.34), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+		active_fill.name = "ScoreStripActiveRouteFill"
+		var active_gate = make_panel(art, rect_full(0.790, 0.235, 0.860, 0.390), Color(0.006, 0.014, 0.016, 0.64), 999, Color(accent.r, accent.g, accent.b, 0.28), 0)
+		active_gate.name = "ScoreStripActiveRouteGate"
+		for i in range(3):
+			var active_tick = make_panel(art, rect_full(0.355 + float(i) * 0.105, 0.228, 0.377 + float(i) * 0.105, 0.397), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.040), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+			active_tick.name = "ScoreStripActiveRouteTick_%d" % i
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			var tw := create_tween()
 			tw.set_loops(12)
 			tw.tween_property(pulse, "modulate:a", 0.25, 0.70).from(0.82)
 			tw.tween_property(pulse, "modulate:a", 0.82, 0.70).from(0.25)
 	return art
+
+func score_strip_rank_for_score(score: int) -> int:
+	var rank = 1
+	for player in players:
+		if typeof(player) != TYPE_DICTIONARY:
+			continue
+		if int(player.get("score", 0)) > score:
+			rank += 1
+	return clamp(rank, 1, 4)
 
 func draw_settings_overlay(parent: Control) -> void:
 	if not settings_panel_open:
@@ -3227,21 +4640,37 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 设置面板 - 更精致的样式
 	var panel = make_panel(overlay, SETTINGS_PANEL_RECT, Color(0.008, 0.014, 0.016, 0.99), 20, Color(0.14, 0.12, 0.08, 0.36), 5)
+	var settings_texture = add_illustration_texture(panel, "settings_compass", rect_full(0.025, 0.015, 0.975, 0.215), 0.13, false)
+	if settings_texture != null:
+		settings_texture.name = "SettingsCompassTexture"
 	# 标题栏
 	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.16), Color(0.040, 0.052, 0.048, 0.76), 20, Color(1.0, 1.0, 1.0, 0.030))
 	# 左侧金色装饰
 	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
+	# 设置面板滑入动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		overlay.modulate = Color(1, 1, 1, 0)
+		panel.offset_right = 20.0
+		var stw := create_tween()
+		stw.set_parallel(true)
+		stw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
+		stw.tween_property(panel, "offset_right", 0.0, 0.2).from(20.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	var title = make_label(panel, "设置", 24, Color(0.94, 0.82, 0.42), true)
 	apply_rect(title, SETTINGS_TITLE_RECT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	add_lucide_icon(panel, "settings", rect_full(0.035, 0.050, 0.068, 0.125), Color(0.96, 0.84, 0.46, 0.86))
+	draw_settings_overview_art(panel)
 
 	var close = make_small_button("关闭", Color(0.30, 0.34, 0.36), func() -> void:
 		close_settings_panel()
 	)
 	close.custom_minimum_size = Vector2(88, 42)
+	close.name = "SettingsCloseButton"
+	draw_settings_close_button_art(close)
 	panel.add_child(close)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		AnimationEffects.flash(close, 0.5, 1.0, 0.8)
 	apply_rect(close, SETTINGS_CLOSE_RECT)
 
 	# 声音设置
@@ -3280,6 +4709,86 @@ func draw_settings_overlay(parent: Control) -> void:
 		reset_offline_progress()
 		close_settings_panel()
 	))
+
+func draw_settings_overview_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "SettingsOverviewArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.420, 0.048, 0.735, 0.145))
+	parent.add_child(art)
+	var enabled_audio = int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
+	var enabled_play = int(fast_mode_enabled) + int(fx_enabled)
+	var total_enabled = enabled_audio + enabled_play
+	var rail = make_panel(art, rect_full(0.030, 0.430, 0.970, 0.570), Color(0.82, 0.70, 0.36, 0.16), 999, Color(0.96, 0.82, 0.46, 0.10), 0)
+	rail.name = "SettingsOverviewRail"
+	var fill = make_panel(art, rect_full(0.035, 0.462, 0.035 + 0.930 * clamp(float(total_enabled) / 5.0, 0.08, 1.0), 0.538), Color(0.48, 0.76, 0.58, 0.36), 999, Color(0.78, 0.96, 0.70, 0.10), 0)
+	fill.name = "SettingsOverviewFill"
+	var groups := [
+		{"id": "audio", "value": enabled_audio, "max": 3, "color": Color(0.34, 0.58, 0.72)},
+		{"id": "play", "value": enabled_play, "max": 2, "color": Color(0.34, 0.62, 0.46)},
+		{"id": "maint", "value": 1, "max": 1, "color": Color(0.70, 0.48, 0.34)},
+	]
+	for i in range(groups.size()):
+		var group: Dictionary = groups[i]
+		var center = 0.145 + float(i) * 0.350
+		var color: Color = group.get("color", GOLD_PRIMARY)
+		var amount = int(group.get("value", 0))
+		var max_amount = int(group.get("max", 1))
+		var active = amount > 0
+		var node = make_panel(art, rect_full(center - 0.038, 0.145, center + 0.038, 0.855), Color(color.r, color.g, color.b, 0.36 if active else 0.14), 999, Color(color.r, color.g, color.b, 0.30 if active else 0.08), 0)
+		node.name = "SettingsOverviewNode_%s" % str(group.get("id", i))
+		var label = make_label(node, "%d/%d" % [amount, max_amount], 8, Color(0.96, 0.92, 0.76, 0.88 if active else 0.46), true)
+		label.name = "SettingsOverviewGlyph_%s" % str(group.get("id", i))
+		apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var status = make_panel(art, rect_full(0.865, 0.235, 0.965, 0.765), Color(0.58, 0.74, 0.48, 0.22), 999, Color(0.84, 0.96, 0.64, 0.16), 0)
+	status.name = "SettingsOverviewStatusLight"
+	var bus = make_color_rect(rect_full(0.140, 0.245, 0.875, 0.315), Color(0.006, 0.016, 0.018, 0.42))
+	bus.name = "SettingsOverviewSystemBus"
+	art.add_child(bus)
+	var bus_fill = make_color_rect(rect_full(0.030, 0.240, 0.030 + 0.900 * clamp(float(total_enabled) / 5.0, 0.08, 1.0), 0.760), Color(0.72, 0.86, 0.58, 0.24))
+	bus_fill.name = "SettingsOverviewSystemBusFill"
+	bus.add_child(bus_fill)
+	var bus_gate = make_color_rect(rect_full(0.820, 0.175, 0.875, 0.385), Color(0.92, 0.78, 0.42, 0.22))
+	bus_gate.name = "SettingsOverviewSystemBusGate"
+	art.add_child(bus_gate)
+	for i in range(3):
+		var tick = make_color_rect(rect_full(0.295 + float(i) * 0.170, 0.185, 0.312 + float(i) * 0.170, 0.400), Color(0.72, 0.86, 0.58, 0.20 - float(i) * 0.035))
+		tick.name = "SettingsOverviewSystemBusTick_%d" % i
+		art.add_child(tick)
+	for i in range(3):
+		var pulse = make_panel(art, rect_full(0.110 + float(i) * 0.350, 0.055, 0.155 + float(i) * 0.350, 0.245), Color(0.92, 0.78, 0.42, 0.16), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		pulse.name = "SettingsOverviewBusPulse_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(status, "modulate:a", 0.42, 0.82).from(1.0)
+		tw.tween_property(status, "modulate:a", 1.0, 0.82).from(0.42)
+		var bus_tw := create_tween()
+		bus_tw.set_loops(3600)
+		bus_tw.tween_property(bus_fill, "modulate:a", 0.38, 0.86).from(0.92)
+		bus_tw.tween_property(bus_fill, "modulate:a", 0.92, 0.86).from(0.38)
+	return art
+
+func draw_settings_close_button_art(button: Control) -> Control:
+	var art = Control.new()
+	art.name = "SettingsCloseButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var rail = make_color_rect(rect_full(0.205, 0.740, 0.875, 0.835), Color(0.006, 0.016, 0.018, 0.50))
+	rail.name = "SettingsCloseRail"
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.040, 0.260, 0.620, 0.740), Color(0.44, 0.52, 0.50, 0.34))
+	fill.name = "SettingsCloseFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.105, 0.235, 0.155, 0.610), Color(0.66, 0.76, 0.70, 0.24))
+	gate.name = "SettingsCloseGate"
+	art.add_child(gate)
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.625 + float(i) * 0.060, 0.215, 0.645 + float(i) * 0.060, 0.355), Color(0.50, 0.60, 0.56, 0.26 - float(i) * 0.050))
+		tick.name = "SettingsCloseTick_%d" % i
+		art.add_child(tick)
+	return art
 
 func make_settings_section(parent: Control, rect: Rect2, title_text: String) -> GridContainer:
 	var section = make_panel(parent, rect, Color(0.010, 0.018, 0.022, 0.88), 14, Color(0.30, 0.34, 0.30, 0.26), 0)
@@ -3345,6 +4854,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_stylebox_override("panel", style(Color(0.018, 0.028, 0.032, 0.88), 10, Color(0.28, 0.34, 0.30, 0.42), 1, 0))
 	parent.add_child(row)
+	draw_setting_row_status_art(row, title, status)
 	var label = make_label(row, "%s\n%s" % [title, status], 12, Color(0.82, 0.84, 0.78), false)
 	apply_rect(label, SETTINGS_ROW_STATUS_RECT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3353,6 +4863,34 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.custom_minimum_size = Vector2(0, 0)
 	apply_rect(button, SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)
+
+func draw_setting_row_status_art(row: Control, title: String, status: String) -> Control:
+	var art = Control.new()
+	art.name = "SettingRowStatusArt_%s" % title
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.add_child(art)
+	var enabled = status.find("开启") >= 0 or status.find("快速") >= 0 or status.find("试听") >= 0
+	var accent = Color(0.42, 0.70, 0.54) if enabled else Color(0.62, 0.48, 0.36)
+	if title.find("播放") >= 0:
+		accent = Color(0.50, 0.58, 0.78)
+	elif title.find("进度") >= 0:
+		accent = Color(0.78, 0.42, 0.34)
+	var rail = make_panel(art, rect_full(0.040, 0.760, 0.620, 0.850), Color(0.006, 0.014, 0.016, 0.42), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	rail.name = "SettingRowStatusRail_%s" % title
+	var fill_width = 0.820 if enabled else 0.320
+	var fill = make_panel(rail, rect_full(0.020, 0.260, 0.020 + 0.940 * fill_width, 0.740), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	fill.name = "SettingRowStatusFill_%s" % title
+	for i in range(3):
+		var left = 0.660 + float(i) * 0.045
+		var dot = make_panel(art, rect_full(left, 0.225, left + 0.022, 0.405), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.035), 999, Color(1.0, 0.90, 0.54, 0.06), 0)
+		dot.name = "SettingRowStatusDot_%s_%d" % [title, i]
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.38, 0.74).from(0.86)
+		tw.tween_property(fill, "modulate:a", 0.86, 0.74).from(0.38)
+	return art
 
 func make_setting_button(label: String, enabled: bool, callback: Callable) -> Button:
 	var color = Color(0.22, 0.52, 0.42) if enabled else Color(0.44, 0.32, 0.28)
@@ -3377,6 +4915,18 @@ func draw_setting_switch_art(parent: Control, enabled: bool) -> Control:
 	var energy_right = 0.115 + 0.770 * (0.88 if enabled else 0.18)
 	var energy_fill = make_panel(art, rect_full(0.115, 0.430, energy_right, 0.570), Color(0.54, 0.86, 0.62, 0.48) if enabled else Color(0.74, 0.48, 0.40, 0.22), 999, Color(0.78, 0.96, 0.70, 0.12), 0)
 	energy_fill.name = "SettingSwitchEnergyFill"
+	var route = make_color_rect(rect_full(0.155, 0.820, 0.845, 0.900), Color(0.010, 0.020, 0.022, 0.40))
+	route.name = "SettingSwitchDirectionRoute"
+	art.add_child(route)
+	var route_fill_left = 0.300 if enabled else 0.055
+	var route_fill_right = 0.945 if enabled else 0.690
+	var route_fill = make_color_rect(rect_full(route_fill_left, 0.260, route_fill_right, 0.740), Color(0.54, 0.86, 0.62, 0.26) if enabled else Color(0.82, 0.54, 0.44, 0.20))
+	route_fill.name = "SettingSwitchDirectionFill"
+	route.add_child(route_fill)
+	var gate_left = 0.790 if enabled else 0.150
+	var gate = make_color_rect(rect_full(gate_left, 0.130, gate_left + 0.055, 0.320), Color(0.92, 0.78, 0.42, 0.24) if enabled else Color(0.86, 0.52, 0.42, 0.20))
+	gate.name = "SettingSwitchDirectionGate"
+	art.add_child(gate)
 	var knob_left = 0.58 if enabled else 0.10
 	var knob = make_panel(art, rect_full(knob_left, 0.08, knob_left + 0.32, 0.92), Color(0.92, 0.88, 0.72, 0.96), 999, Color(1.0, 0.94, 0.64, 0.42), 0)
 	knob.name = "SettingSwitchKnobOn" if enabled else "SettingSwitchKnobOff"
@@ -3384,6 +4934,28 @@ func draw_setting_switch_art(parent: Control, enabled: bool) -> Control:
 		var spark_left = (0.210 + float(i) * 0.150) if enabled else (0.620 + float(i) * 0.120)
 		var spark = make_panel(art, rect_full(spark_left, 0.065, spark_left + 0.038, 0.210), Color(0.74, 0.94, 0.66, 0.32) if enabled else Color(0.82, 0.54, 0.44, 0.18), 999, Color(0.86, 0.98, 0.70, 0.10), 0)
 		spark.name = "SettingSwitchStateSpark_%d" % i
+	for i in range(2):
+		var tick_left = (0.515 + float(i) * 0.075) if enabled else (0.330 - float(i) * 0.075)
+		var tick = make_color_rect(rect_full(tick_left, 0.670, tick_left + 0.030, 0.760), Color(0.54, 0.86, 0.62, 0.24 - float(i) * 0.050) if enabled else Color(0.82, 0.54, 0.44, 0.20 - float(i) * 0.040))
+		tick.name = "SettingSwitchDirectionTick_%d" % i
+		art.add_child(tick)
+	var state_route = make_color_rect(rect_full(0.215, 0.085, 0.785, 0.155), Color(0.010, 0.020, 0.022, 0.34))
+	state_route.name = "SettingSwitchStateRoute"
+	art.add_child(state_route)
+	var state_fill_left = 0.360 if enabled else 0.045
+	var state_fill_right = 0.960 if enabled else 0.640
+	var state_fill = make_color_rect(rect_full(state_fill_left, 0.220, state_fill_right, 0.780), Color(0.54, 0.86, 0.62, 0.22) if enabled else Color(0.82, 0.54, 0.44, 0.18))
+	state_fill.name = "SettingSwitchStateFill"
+	state_route.add_child(state_fill)
+	var state_gate_left = 0.770 if enabled else 0.215
+	var state_gate = make_color_rect(rect_full(state_gate_left, 0.055, state_gate_left + 0.045, 0.245), Color(0.92, 0.78, 0.42, 0.22) if enabled else Color(0.86, 0.52, 0.42, 0.18))
+	state_gate.name = "SettingSwitchStateGate"
+	art.add_child(state_gate)
+	for i in range(2):
+		var state_tick_left = (0.585 + float(i) * 0.070) if enabled else (0.405 - float(i) * 0.070)
+		var state_tick = make_color_rect(rect_full(state_tick_left, 0.245, state_tick_left + 0.020, 0.340), Color(0.54, 0.86, 0.62, 0.20 - float(i) * 0.035) if enabled else Color(0.82, 0.54, 0.44, 0.18 - float(i) * 0.030))
+		state_tick.name = "SettingSwitchStateTick_%d" % i
+		art.add_child(state_tick)
 	# 滑钮入场滑动动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var start_left = 0.10 if enabled else 0.58
@@ -3404,6 +4976,7 @@ func make_audio_test_button(callback: Callable) -> Button:
 	var button = make_small_button("试音", Color(0.28, 0.42, 0.56), callback)
 	button.custom_minimum_size = Vector2(140, 48)
 	button.add_theme_font_size_override("font_size", 18)
+	draw_audio_test_button_art(button)
 	return button
 
 func make_bgm_switch_button(callback: Callable) -> Button:
@@ -3412,13 +4985,193 @@ func make_bgm_switch_button(callback: Callable) -> Button:
 	var button = make_small_button("切歌:" + track_name, Color(0.38, 0.40, 0.56), callback)
 	button.custom_minimum_size = Vector2(140, 48)
 	button.add_theme_font_size_override("font_size", 16)
+	draw_bgm_switch_button_art(button)
 	return button
+
+func draw_audio_test_button_art(button: Control) -> Control:
+	var art = Control.new()
+	art.name = "AudioTestButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var audio_texture = add_illustration_texture(art, "settings_audio_wave", rect_full(-0.050, -0.160, 1.050, 1.160), 0.18, false)
+	if audio_texture != null:
+		audio_texture.name = "AudioTestTexture"
+		art.move_child(audio_texture, 0)
+	var accent = Color(0.42, 0.68, 0.86)
+	var rail = make_panel(art, rect_full(0.090, 0.760, 0.920, 0.880), Color(0.006, 0.018, 0.022, 0.58), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+	rail.name = "AudioTestWaveRail"
+	var fill = make_panel(rail, rect_full(0.030, 0.260, 0.820, 0.740), Color(accent.r, accent.g, accent.b, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	fill.name = "AudioTestWaveFill"
+	var command_route = make_color_rect(rect_full(0.265, 0.255, 0.905, 0.335), Color(0.006, 0.018, 0.022, 0.46))
+	command_route.name = "AudioTestCommandRoute"
+	art.add_child(command_route)
+	var command_fill = make_color_rect(rect_full(0.030, 0.240, 0.740, 0.760), Color(accent.r, accent.g, accent.b, 0.28))
+	command_fill.name = "AudioTestCommandFill"
+	command_route.add_child(command_fill)
+	var command_gate = make_color_rect(rect_full(0.835, 0.210, 0.880, 0.540), Color(0.96, 0.82, 0.42, 0.26))
+	command_gate.name = "AudioTestCommandGate"
+	art.add_child(command_gate)
+	var playback_route = make_color_rect(rect_full(0.225, 0.475, 0.565, 0.535), Color(0.006, 0.018, 0.022, 0.42))
+	playback_route.name = "AudioTestPlaybackRoute"
+	art.add_child(playback_route)
+	var playback_fill = make_color_rect(rect_full(0.225, 0.486, 0.500, 0.524), Color(accent.r, accent.g, accent.b, 0.26))
+	playback_fill.name = "AudioTestPlaybackFill"
+	art.add_child(playback_fill)
+	var playback_gate = make_color_rect(rect_full(0.540, 0.405, 0.575, 0.575), Color(0.96, 0.82, 0.42, 0.22))
+	playback_gate.name = "AudioTestPlaybackGate"
+	art.add_child(playback_gate)
+	for i in range(3):
+		var playback_tick = make_color_rect(rect_full(0.315 + float(i) * 0.055, 0.420, 0.331 + float(i) * 0.055, 0.585), Color(accent.r, accent.g, accent.b, 0.23 - float(i) * 0.040))
+		playback_tick.name = "AudioTestPlaybackTick_%d" % i
+		art.add_child(playback_tick)
+	for i in range(2):
+		var tick_left = 0.690 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(tick_left, 0.405, tick_left + 0.020, 0.560), Color(accent.r, accent.g, accent.b, 0.25 - float(i) * 0.050))
+		tick.name = "AudioTestCommandTick_%d" % i
+		art.add_child(tick)
+	for i in range(4):
+		var height = 0.170 + float((i % 3) + 1) * 0.095
+		var left = 0.585 + float(i) * 0.060
+		var bar = make_panel(art, rect_full(left, 0.500 - height * 0.5, left + 0.032, 0.500 + height * 0.5), Color(accent.r, accent.g, accent.b, 0.42), 999, Color(1.0, 0.92, 0.62, 0.10), 0)
+		bar.name = "AudioTestWaveBar_%d" % i
+	var speaker = make_panel(art, rect_full(0.070, 0.205, 0.225, 0.610), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.20), 0)
+	speaker.name = "AudioTestSpeakerSeal"
+	if add_lucide_icon(speaker, "volume-2", rect_full(0.220, 0.220, 0.780, 0.780), Color(0.96, 0.92, 0.72, 0.88)) == null:
+		var glyph = make_label(speaker, "音", 9, Color(0.96, 0.92, 0.72, 0.88), true)
+		glyph.name = "AudioTestSpeakerGlyph"
+		apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.70).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.70).from(0.42)
+	return art
+
+func draw_bgm_switch_button_art(button: Control) -> Control:
+	var art = Control.new()
+	art.name = "BgmSwitchButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var music_texture = add_illustration_texture(art, "settings_music_disc", rect_full(-0.050, -0.160, 1.050, 1.160), 0.18, false)
+	if music_texture != null:
+		music_texture.name = "BgmSwitchTexture"
+		art.move_child(music_texture, 0)
+	var accent = Color(0.62, 0.58, 0.86)
+	var disc = make_panel(art, rect_full(0.065, 0.165, 0.235, 0.625), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.26), 0)
+	disc.name = "BgmSwitchDisc"
+	var core = make_panel(disc, rect_full(0.360, 0.360, 0.640, 0.640), Color(0.94, 0.82, 0.42, 0.32), 999, Color(1.0, 0.90, 0.56, 0.14), 0)
+	core.name = "BgmSwitchDiscCore"
+	var track = make_panel(art, rect_full(0.285, 0.760, 0.925, 0.880), Color(0.006, 0.018, 0.022, 0.58), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+	track.name = "BgmSwitchTrackRail"
+	var fill = make_panel(track, rect_full(0.030, 0.260, 0.680, 0.740), Color(accent.r, accent.g, accent.b, 0.42), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	fill.name = "BgmSwitchTrackFill"
+	var route = make_color_rect(rect_full(0.290, 0.245, 0.895, 0.325), Color(0.006, 0.018, 0.022, 0.44))
+	route.name = "BgmSwitchCommandRoute"
+	art.add_child(route)
+	var route_fill = make_color_rect(rect_full(0.035, 0.250, 0.700, 0.750), Color(accent.r, accent.g, accent.b, 0.26))
+	route_fill.name = "BgmSwitchCommandFill"
+	route.add_child(route_fill)
+	var gate = make_color_rect(rect_full(0.805, 0.385, 0.855, 0.615), Color(0.94, 0.82, 0.42, 0.26))
+	gate.name = "BgmSwitchCommandGate"
+	art.add_child(gate)
+	var playback_route = make_color_rect(rect_full(0.235, 0.475, 0.610, 0.535), Color(0.006, 0.018, 0.022, 0.42))
+	playback_route.name = "BgmSwitchPlaybackRoute"
+	art.add_child(playback_route)
+	var playback_fill = make_color_rect(rect_full(0.235, 0.486, 0.545, 0.524), Color(accent.r, accent.g, accent.b, 0.25))
+	playback_fill.name = "BgmSwitchPlaybackFill"
+	art.add_child(playback_fill)
+	var playback_gate = make_color_rect(rect_full(0.585, 0.405, 0.620, 0.575), Color(0.94, 0.82, 0.42, 0.22))
+	playback_gate.name = "BgmSwitchPlaybackGate"
+	art.add_child(playback_gate)
+	for i in range(3):
+		var playback_tick = make_color_rect(rect_full(0.340 + float(i) * 0.055, 0.420, 0.356 + float(i) * 0.055, 0.585), Color(accent.r, accent.g, accent.b, 0.23 - float(i) * 0.040))
+		playback_tick.name = "BgmSwitchPlaybackTick_%d" % i
+		art.add_child(playback_tick)
+	for i in range(2):
+		var tick_left = 0.700 + float(i) * 0.055
+		var tick = make_color_rect(rect_full(tick_left, 0.435, tick_left + 0.020, 0.575), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.050))
+		tick.name = "BgmSwitchCommandTick_%d" % i
+		art.add_child(tick)
+	for i in range(3):
+		var note = make_panel(art, rect_full(0.610 + float(i) * 0.070, 0.205 + float(i % 2) * 0.125, 0.640 + float(i) * 0.070, 0.335 + float(i % 2) * 0.125), Color(accent.r, accent.g, accent.b, 0.34), 999, Color(1.0, 0.92, 0.62, 0.10), 0)
+		note.name = "BgmSwitchNote_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(disc, "rotation", 0.10, 1.2).from(-0.10)
+		tw.tween_property(disc, "rotation", -0.10, 1.2).from(0.10)
+	return art
 
 func make_reset_progress_button(callback: Callable) -> Button:
 	var button = make_small_button("重置进度", Color(0.56, 0.36, 0.30), callback)
 	button.custom_minimum_size = Vector2(140, 48)
 	button.add_theme_font_size_override("font_size", 18)
+	draw_reset_progress_button_art(button)
 	return button
+
+func draw_reset_progress_button_art(button: Control) -> Control:
+	var art = Control.new()
+	art.name = "ResetProgressButtonArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var reset_texture = add_illustration_texture(art, "reset_danger_seal", rect_full(-0.050, -0.150, 1.050, 1.150), 0.17, false)
+	if reset_texture != null:
+		reset_texture.name = "ResetDangerSealTexture"
+		art.move_child(reset_texture, 0)
+	var accent = Color(0.86, 0.42, 0.34)
+	var rail = make_panel(art, rect_full(0.075, 0.760, 0.925, 0.880), Color(0.016, 0.018, 0.020, 0.58), 999, Color(accent.r, accent.g, accent.b, 0.20), 0)
+	rail.name = "ResetProgressDangerRail"
+	var fill = make_panel(rail, rect_full(0.030, 0.260, 0.720, 0.740), Color(accent.r, accent.g, accent.b, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	fill.name = "ResetProgressDangerFill"
+	var hold_route = make_color_rect(rect_full(0.275, 0.245, 0.905, 0.325), Color(0.016, 0.018, 0.020, 0.48))
+	hold_route.name = "ResetProgressHoldRoute"
+	art.add_child(hold_route)
+	var hold_fill = make_color_rect(rect_full(0.030, 0.245, 0.560, 0.755), Color(accent.r, accent.g, accent.b, 0.25))
+	hold_fill.name = "ResetProgressHoldFill"
+	hold_route.add_child(hold_fill)
+	var hold_gate = make_color_rect(rect_full(0.815, 0.375, 0.865, 0.620), Color(0.96, 0.62, 0.38, 0.26))
+	hold_gate.name = "ResetProgressHoldGate"
+	art.add_child(hold_gate)
+	for i in range(2):
+		var tick_left = 0.675 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(tick_left, 0.430, tick_left + 0.020, 0.575), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.050))
+		tick.name = "ResetProgressHoldTick_%d" % i
+		art.add_child(tick)
+	var seal = make_panel(art, rect_full(0.060, 0.165, 0.235, 0.585), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(accent.r, accent.g, accent.b, 0.24), 0)
+	seal.name = "ResetProgressLockSeal"
+	if add_lucide_icon(seal, "lock-keyhole", rect_full(0.220, 0.220, 0.780, 0.780), Color(0.98, 0.90, 0.72, 0.88)) == null:
+		var lock = make_label(seal, "!", 10, Color(0.98, 0.90, 0.72, 0.88), true)
+		lock.name = "ResetProgressLockGlyph"
+		apply_rect(lock, rect_full(0.0, 0.0, 1.0, 1.0))
+	var lock_route = make_color_rect(rect_full(0.225, 0.520, 0.520, 0.580), Color(0.016, 0.018, 0.020, 0.46))
+	lock_route.name = "ResetProgressLockRoute"
+	art.add_child(lock_route)
+	var lock_fill = make_color_rect(rect_full(0.225, 0.532, 0.455, 0.568), Color(accent.r, accent.g, accent.b, 0.25))
+	lock_fill.name = "ResetProgressLockFill"
+	art.add_child(lock_fill)
+	var lock_gate = make_color_rect(rect_full(0.498, 0.455, 0.535, 0.635), Color(0.96, 0.62, 0.38, 0.22))
+	lock_gate.name = "ResetProgressLockGate"
+	art.add_child(lock_gate)
+	for i in range(3):
+		var lock_tick = make_color_rect(rect_full(0.310 + float(i) * 0.050, 0.465, 0.326 + float(i) * 0.050, 0.640), Color(accent.r, accent.g, accent.b, 0.23 - float(i) * 0.040))
+		lock_tick.name = "ResetProgressLockTick_%d" % i
+		art.add_child(lock_tick)
+	for i in range(3):
+		var left = 0.570 + float(i) * 0.075
+		var node = make_panel(art, rect_full(left, 0.195, left + 0.040, 0.550), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.78, 0.58, 0.12), 0)
+		node.name = "ResetProgressDangerNode_%d" % i
+	for i in range(2):
+		var spark = make_panel(art, rect_full(0.825 + float(i) * 0.045, 0.250 + float(i) * 0.135, 0.850 + float(i) * 0.045, 0.360 + float(i) * 0.135), Color(0.96, 0.58, 0.38, 0.30), 999, Color(1.0, 0.86, 0.58, 0.10), 0)
+		spark.name = "ResetProgressWarningSpark_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.40, 0.70).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.70).from(0.40)
+	return art
 
 func draw_table_ornaments(parent: Control) -> void:
 	for item in TABLE_ORNAMENT_EDGES:
@@ -3498,6 +5251,9 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, zone_rect)
 	parent.add_child(art)
+	var river_texture = add_illustration_texture(art, "discard_river_wash", rect_full(-0.015, -0.060, 1.015, 1.060), 0.105, false)
+	if river_texture != null:
+		river_texture.name = "DiscardRiverWashTexture_%d" % seat
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
 	var wash = make_color_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.006, 0.014, 0.016, 0.10))
 	wash.name = "DiscardRiverWash_%d" % seat
@@ -3508,14 +5264,42 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 	var flow = make_color_rect(rect_full(0.060, 0.900, 0.940, 0.930), Color(0.86, 0.74, 0.42, 0.12))
 	flow.name = "DiscardRiverFlowLine_%d" % seat
 	art.add_child(flow)
+	var window_progress = 0.0
+	if discard_count > 0:
+		window_progress = clamp(float(visible_start + max(1, visible_count)) / float(discard_count), 0.0, 1.0)
+	var window_fill = make_color_rect(rect_full(0.000, 0.000, max(0.080, window_progress), 1.000), Color(accent.r, accent.g, accent.b, 0.22))
+	window_fill.name = "DiscardRiverWindowFill_%d" % seat
+	flow.add_child(window_fill)
+	var gate_left = 0.060 + 0.880 * window_progress
+	var window_gate = make_color_rect(rect_full(gate_left - 0.012, 0.845, gate_left + 0.012, 0.985), Color(accent.r, accent.g, accent.b, 0.22))
+	window_gate.name = "DiscardRiverWindowGate_%d" % seat
+	art.add_child(window_gate)
 	var bead_count = min(5, max(1, visible_count))
 	for i in range(bead_count):
 		var center = 0.110 + float(i) * (0.780 / float(max(1, bead_count - 1)))
 		var bead = make_panel(art, rect_full(center - 0.014, 0.855, center + 0.014, 0.970), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(1.0, 0.88, 0.48, 0.10), 0)
 		bead.name = "DiscardRiverWindowBead_%d_%d" % [seat, i]
+	for i in range(2):
+		var left = 0.220 + float(i) * 0.080
+		var tick = make_color_rect(rect_full(left, 0.805, left + 0.014, 0.885), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
+		tick.name = "DiscardRiverWindowTick_%d_%d" % [seat, i]
+		art.add_child(tick)
 	if visible_start > 0:
 		var overflow = make_panel(art, rect_full(0.018, 0.780, 0.092, 0.960), Color(0.72, 0.54, 0.26, 0.20), 999, Color(0.96, 0.82, 0.46, 0.16), 0)
 		overflow.name = "DiscardRiverOverflow_%d" % seat
+		var overflow_route = make_color_rect(rect_full(0.090, 0.815, 0.260, 0.875), Color(0.006, 0.016, 0.018, 0.42))
+		overflow_route.name = "DiscardRiverOverflowRoute_%d" % seat
+		art.add_child(overflow_route)
+		var overflow_fill = make_color_rect(rect_full(0.040, 0.250, 0.660, 0.750), Color(0.86, 0.70, 0.38, 0.24))
+		overflow_fill.name = "DiscardRiverOverflowFill_%d" % seat
+		overflow_route.add_child(overflow_fill)
+		var overflow_gate = make_color_rect(rect_full(0.248, 0.780, 0.278, 0.925), Color(0.96, 0.82, 0.46, 0.20))
+		overflow_gate.name = "DiscardRiverOverflowGate_%d" % seat
+		art.add_child(overflow_gate)
+		for i in range(2):
+			var overflow_tick = make_color_rect(rect_full(0.132 + float(i) * 0.052, 0.770, 0.146 + float(i) * 0.052, 0.920), Color(0.86, 0.70, 0.38, 0.20 - float(i) * 0.040))
+			overflow_tick.name = "DiscardRiverOverflowTick_%d_%d" % [seat, i]
+			art.add_child(overflow_tick)
 	if seat == get_last_discard_seat() and discard_count > 0:
 		var focus = make_color_rect(rect_full(0.015, 0.120, 0.985, 0.160), Color(0.96, 0.78, 0.34, 0.20))
 		focus.name = "DiscardRiverLastSource_%d" % seat
@@ -3532,9 +5316,30 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(marker, marker_rect)
 	parent.add_child(marker)
+	var aura_texture = add_illustration_texture(marker, "last_discard_aura", rect_full(-0.170, -0.220, 1.170, 1.170), 0.18, false)
+	if aura_texture != null:
+		aura_texture.name = "LastDiscardAuraTexture"
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var aura_texture_tw := create_tween()
+			aura_texture_tw.set_loops(6)
+			aura_texture_tw.tween_property(aura_texture, "modulate:a", 0.06, 0.42).from(0.18)
+			aura_texture_tw.parallel().tween_property(aura_texture, "scale", Vector2(1.06, 1.06), 0.42).from(Vector2(0.96, 0.96))
+			aura_texture_tw.tween_property(aura_texture, "modulate:a", 0.18, 0.42).from(0.06)
+			aura_texture_tw.parallel().tween_property(aura_texture, "scale", Vector2(0.96, 0.96), 0.42).from(Vector2(1.06, 1.06))
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
 	var glow = make_panel(marker, rect_full(0.04, 0.04, 0.96, 0.96), Color(accent.r, accent.g, accent.b, 0.10), 12, Color(0.96, 0.78, 0.34, 0.58), 0)
 	glow.name = "LastDiscardFocusGlow"
+	var route = make_panel(marker, rect_full(0.150, 0.765, 0.850, 0.875), Color(0.006, 0.016, 0.018, 0.50), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	route.name = "LastDiscardFocusRoute"
+	var route_fill = make_panel(route, rect_full(0.030, 0.260, 0.780, 0.740), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+	route_fill.name = "LastDiscardFocusRouteFill"
+	var source_dot = make_panel(marker, rect_full(0.070, 0.690, 0.170, 0.940), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	source_dot.name = "LastDiscardFocusSourceDot"
+	for i in range(3):
+		var inset = 0.055 + float(i) * 0.045
+		var ripple = make_panel(marker, rect_full(inset, inset, 1.0 - inset, 1.0 - inset), Color(accent.r, accent.g, accent.b, 0.020), 12, Color(0.96, 0.78, 0.34, 0.18 - float(i) * 0.035), 0)
+		ripple.name = "LastDiscardFocusRipple_%d" % i
+		marker.move_child(ripple, max(0, glow.get_index()))
 	var badge = make_badge(marker, rect_full(-0.32, -0.34, 1.32, 0.20), "%s 刚打 %s" % [pending_claim_source_badge_text(seat), tile_label(tile)], 9, Color(0.018, 0.036, 0.038, 0.94), Color(0.88, 0.68, 0.32, 0.42), Color(0.96, 0.92, 0.76))
 	badge.name = "LastDiscardFocusBadge"
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3546,6 +5351,7 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 		tw.set_parallel(true)
 		tw.tween_property(marker, "modulate:a", 1.0, 0.16).from(0.0)
 		tw.tween_property(marker, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.92, 0.92)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(route_fill, "modulate:a", 0.42, 0.36).from(0.88)
 	return marker
 
 func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Vector2.ZERO) -> Rect2:
@@ -3691,6 +5497,7 @@ func draw_center(parent: Control) -> void:
 	var center = make_panel(parent, CENTER_PANEL_RECT, Color(0.006, 0.014, 0.016, 0.96), 30, Color(0.48, 0.42, 0.24, 0.52), 4)
 	# 内部装饰框
 	make_panel(center, CENTER_INNER_RECT, Color(0.004, 0.036, 0.036, 0.98), 62, Color(0.28, 0.26, 0.18, 0.42), 0)
+	draw_center_pulse_network(center)
 	draw_center_wind_compass(center)
 	draw_center_phase_ribbon(center)
 
@@ -3710,6 +5517,7 @@ func draw_center(parent: Control) -> void:
 	if last != "":
 		var last_label = make_label(center, "上张", 13, Color(0.72, 0.76, 0.70), false)
 		apply_rect(last_label, CENTER_LAST_LABEL_RECT)
+		draw_center_last_tile_trace(center, last)
 		var tile = make_tile_view(last, CENTER_LAST_TILE_SIZE, false, Callable(), true)
 		center.add_child(tile)
 		apply_rect(tile, CENTER_LAST_TILE_RECT)
@@ -3720,9 +5528,151 @@ func draw_center(parent: Control) -> void:
 		var wind = make_label(center, str(CENTER_WIND_LABELS[i]), 19, wind_color, true)
 		apply_rect(wind, CENTER_WIND_RECTS[i])
 
-	# 骰子点装饰
+	draw_center_dice_plate(center)
+
+func draw_center_pulse_network(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "CenterPulseNetwork"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var phase_key = center_phase_key()
+	var accent = center_phase_color(phase_key)
+	var wall_progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var route = make_color_rect(rect_full(0.180, 0.500, 0.820, 0.528), Color(0.006, 0.016, 0.018, 0.36))
+	route.name = "CenterPulseNetworkRoute"
+	art.add_child(route)
+	var fill = make_color_rect(rect_full(0.030, 0.240, 0.030 + 0.900 * max(0.10, wall_progress), 0.760), Color(accent.r, accent.g, accent.b, 0.22))
+	fill.name = "CenterPulseNetworkFill"
+	route.add_child(fill)
+	var vertical = make_color_rect(rect_full(0.486, 0.220, 0.514, 0.795), Color(0.006, 0.016, 0.018, 0.30))
+	vertical.name = "CenterPulseNetworkVerticalRoute"
+	art.add_child(vertical)
+	var vertical_fill = make_color_rect(rect_full(0.240, 0.060, 0.760, 0.740), Color(accent.r, accent.g, accent.b, 0.16))
+	vertical_fill.name = "CenterPulseNetworkVerticalFill"
+	vertical.add_child(vertical_fill)
+	var nodes := [
+		["phase", Vector2(0.500, 0.205), 0.90],
+		["wind", Vector2(0.500, 0.500), 0.72],
+		["wall", Vector2(0.805, 0.515), wall_progress],
+		["last", Vector2(0.500, 0.800), 0.70 if get_last_discard() != "" else 0.22],
+	]
+	for entry in nodes:
+		var id = str(entry[0])
+		var pos: Vector2 = entry[1]
+		var strength = clamp(float(entry[2]), 0.12, 1.0)
+		var node = make_panel(art, rect_full(pos.x - 0.026, pos.y - 0.040, pos.x + 0.026, pos.y + 0.040), Color(accent.r, accent.g, accent.b, 0.10 + 0.18 * strength), 999, Color(1.0, 0.86, 0.48, 0.05 + 0.12 * strength), 0)
+		node.name = "CenterPulseNetworkNode_%s" % id
+	var gate = make_panel(art, rect_full(0.790, 0.455, 0.850, 0.575), Color(accent.r, accent.g, accent.b, 0.15), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	gate.name = "CenterPulseNetworkGate"
+	for i in range(4):
+		var tick = make_panel(art, rect_full(0.310 + float(i) * 0.105, 0.465, 0.326 + float(i) * 0.105, 0.570), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.030), 999, Color(1.0, 0.86, 0.48, 0.03), 0)
+		tick.name = "CenterPulseNetworkTick_%d" % i
+	for i in range(3):
+		var y = 0.315 + float(i) * 0.155
+		var pulse = make_panel(art, rect_full(0.462, y, 0.538, y + 0.040), Color(accent.r, accent.g, accent.b, 0.08 + float(i) * 0.018), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+		pulse.name = "CenterPulseNetworkPulse_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.38, 0.86).from(0.92)
+		tw.parallel().tween_property(gate, "modulate:a", 0.48, 0.86).from(0.96)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.86).from(0.38)
+		tw.parallel().tween_property(gate, "modulate:a", 0.96, 0.86).from(0.48)
+	return art
+
+func draw_center_last_tile_trace(parent: Control, tile: String) -> Control:
+	var accent = tile_accent(tile)
+	var trace = Control.new()
+	trace.name = "CenterLastTileTrace"
+	trace.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(trace, rect_full(0.235, 0.575, 0.765, 0.970))
+	parent.add_child(trace)
+	var route = make_panel(trace, rect_full(0.130, 0.300, 0.870, 0.380), Color(0.006, 0.014, 0.016, 0.44), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	route.name = "CenterLastTileRoute"
+	var fill = make_panel(route, rect_full(0.030, 0.260, 0.780, 0.740), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+	fill.name = "CenterLastTileFill"
+	var source = make_panel(trace, rect_full(0.055, 0.205, 0.165, 0.475), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	source.name = "CenterLastTileSourceNode"
+	var gate = make_panel(trace, rect_full(0.820, 0.190, 0.940, 0.500), Color(0.006, 0.014, 0.016, 0.56), 999, Color(accent.r, accent.g, accent.b, 0.24), 0)
+	gate.name = "CenterLastTileResponseGate"
+	var target = make_panel(trace, rect_full(0.455, 0.590, 0.545, 0.815), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	target.name = "CenterLastTileTargetNode"
+	var claim_route = make_panel(trace, rect_full(0.315, 0.675, 0.815, 0.755), Color(0.006, 0.014, 0.016, 0.42), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	claim_route.name = "CenterLastTileClaimRoute"
+	var claim_fill = make_panel(claim_route, rect_full(0.030, 0.260, 0.720, 0.740), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+	claim_fill.name = "CenterLastTileClaimFill"
+	var claim_gate = make_panel(trace, rect_full(0.775, 0.602, 0.855, 0.840), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	claim_gate.name = "CenterLastTileClaimGate"
+	for i in range(3):
+		var tick = make_panel(trace, rect_full(0.365 + float(i) * 0.095, 0.180, 0.388 + float(i) * 0.095, 0.500), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+		tick.name = "CenterLastTileTick_%d" % i
+	for i in range(2):
+		var claim_tick = make_panel(trace, rect_full(0.545 + float(i) * 0.085, 0.615, 0.568 + float(i) * 0.085, 0.855), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+		claim_tick.name = "CenterLastTileClaimTick_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.40, 0.72).from(0.88)
+		tw.parallel().tween_property(claim_fill, "modulate:a", 0.38, 0.72).from(0.84)
+		tw.tween_property(fill, "modulate:a", 0.88, 0.72).from(0.40)
+		tw.parallel().tween_property(claim_fill, "modulate:a", 0.84, 0.72).from(0.38)
+	return trace
+
+func draw_center_dice_plate(parent: Control) -> Control:
+	var plate = Control.new()
+	plate.name = "CenterDicePlate"
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(plate)
+	var accent = center_phase_color(center_phase_key())
+	var back = make_panel(plate, rect_full(0.305, 0.275, 0.695, 0.725), Color(0.018, 0.044, 0.044, 0.26), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	back.name = "CenterDicePlateBack"
+	var orbit = make_panel(plate, rect_full(0.345, 0.315, 0.655, 0.685), Color(accent.r, accent.g, accent.b, 0.050), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+	orbit.name = "CenterDiceOrbit"
 	for dot_rect in CENTER_DICE_DOT_RECTS:
-		make_panel(center, dot_rect, Color(0.58, 0.54, 0.40, 0.64), 22, Color(0.74, 0.70, 0.56, 0.28), 0)
+		var dot = make_panel(plate, dot_rect, Color(0.58, 0.54, 0.40, 0.64), 22, Color(0.74, 0.70, 0.56, 0.28), 0)
+		dot.name = "CenterDiceDot"
+	var focus = make_panel(plate, rect_full(0.465, 0.430, 0.535, 0.570), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.22), 0)
+	focus.name = "CenterDiceFocus"
+	var active_index = clamp(get_current_seat(), 0, CENTER_DICE_DOT_POINTS.size() - 1)
+	var active_point: Vector2 = CENTER_DICE_DOT_POINTS[active_index]
+	var route_left = min(active_point.x, 0.500) + 0.018
+	var route_right = max(active_point.x, 0.500) - 0.018
+	var route_top = min(active_point.y, 0.500) + 0.018
+	var route_bottom = max(active_point.y, 0.500) - 0.018
+	var turn_route = make_panel(plate, rect_full(route_left, route_top, route_right, route_bottom), Color(0.006, 0.014, 0.016, 0.42), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	turn_route.name = "CenterDiceTurnRoute"
+	var turn_fill = make_panel(plate, rect_full(route_left + 0.006, route_top + 0.006, route_right - 0.006, route_bottom - 0.006), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.88, 0.48, 0.05), 0)
+	turn_fill.name = "CenterDiceTurnFill"
+	var turn_gate = make_panel(plate, rect_full(active_point.x - 0.026, active_point.y - 0.026, active_point.x + 0.026, active_point.y + 0.026), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.48, 0.12), 0)
+	turn_gate.name = "CenterDiceTurnGate"
+	var outcome_route = make_panel(plate, rect_full(0.548, 0.478, 0.720, 0.542), Color(0.006, 0.014, 0.016, 0.38), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	outcome_route.name = "CenterDiceOutcomeRoute"
+	var outcome_strength = 0.520 + 0.100 * float(active_index)
+	var outcome_fill = make_panel(outcome_route, rect_full(0.030, 0.250, min(0.930, outcome_strength), 0.750), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.88, 0.48, 0.05), 0)
+	outcome_fill.name = "CenterDiceOutcomeFill"
+	var outcome_gate = make_panel(plate, rect_full(0.700, 0.440, 0.750, 0.580), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.48, 0.12), 0)
+	outcome_gate.name = "CenterDiceOutcomeGate"
+	for i in range(2):
+		var tick_x = lerp(active_point.x, 0.500, 0.34 + float(i) * 0.22)
+		var tick_y = lerp(active_point.y, 0.500, 0.34 + float(i) * 0.22)
+		var tick = make_panel(plate, rect_full(tick_x - 0.010, tick_y - 0.026, tick_x + 0.010, tick_y + 0.026), Color(accent.r, accent.g, accent.b, 0.23 - float(i) * 0.045), 999, Color(1.0, 0.88, 0.48, 0.04), 0)
+		tick.name = "CenterDiceTurnTick_%d" % i
+	for i in range(3):
+		var left = 0.585 + float(i) * 0.042
+		var tick = make_panel(plate, rect_full(left, 0.575, left + 0.014, 0.640), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035), 999, Color(1.0, 0.88, 0.48, 0.035), 0)
+		tick.name = "CenterDiceOutcomeTick_%d" % i
+	for i in range(4):
+		var point: Vector2 = CENTER_DICE_DOT_POINTS[i]
+		var spark = make_panel(plate, rect_full(point.x - 0.012, point.y - 0.080, point.x + 0.012, point.y - 0.030), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(1.0, 0.90, 0.56, 0.10), 0)
+		spark.name = "CenterDiceSpark_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(orbit, "modulate:a", 0.42, 0.92).from(0.92)
+		tw.tween_property(orbit, "modulate:a", 0.92, 0.92).from(0.42)
+	return plate
 
 func draw_center_phase_ribbon(parent: Control) -> Control:
 	var phase_key = center_phase_key()
@@ -3730,6 +5680,7 @@ func draw_center_phase_ribbon(parent: Control) -> Control:
 	var ribbon = make_panel(parent, CENTER_PHASE_RIBBON_RECT, Color(accent.r * 0.18, accent.g * 0.18, accent.b * 0.18, 0.88), 999, Color(accent.r, accent.g, accent.b, 0.44), 0)
 	ribbon.name = "CenterPhaseRibbon"
 	ribbon.add_child(make_color_rect(rect_full(0.06, 0.46, 0.94, 0.54), Color(accent.r, accent.g, accent.b, 0.26)))
+	draw_center_phase_flow_art(ribbon, phase_key, accent)
 	var left_seal = make_panel(ribbon, rect_full(0.035, 0.18, 0.125, 0.82), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(accent.r, accent.g, accent.b, 0.52), 0)
 	left_seal.name = "CenterPhaseSeal"
 	var pulse = make_panel(ribbon, rect_full(0.865, 0.28, 0.935, 0.72), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(accent.r, accent.g, accent.b, 0.40), 0)
@@ -3744,6 +5695,60 @@ func draw_center_phase_ribbon(parent: Control) -> Control:
 		tw.tween_property(pulse, "modulate:a", 0.30, 0.58).from(0.95)
 		tw.tween_property(pulse, "modulate:a", 0.95, 0.58).from(0.30)
 	return ribbon
+
+func draw_center_phase_flow_art(parent: Control, phase_key: String, accent: Color) -> Control:
+	var art = Control.new()
+	art.name = "CenterPhaseFlowArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var index = center_phase_flow_index(phase_key)
+	var rail = make_panel(art, rect_full(0.150, 0.705, 0.845, 0.800), Color(0.006, 0.016, 0.018, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	rail.name = "CenterPhaseFlowRail"
+	var fill_ratio = clamp(float(index + 1) / 4.0, 0.16, 1.0)
+	var fill = make_panel(rail, rect_full(0.020, 0.260, 0.020 + 0.940 * fill_ratio, 0.740), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+	fill.name = "CenterPhaseFlowFill"
+	var confirm_left = 0.198 + float(index) * 0.190
+	var confirm_route = make_panel(art, rect_full(0.190, 0.360, clamp(confirm_left + 0.072, 0.262, 0.835), 0.440), Color(accent.r, accent.g, accent.b, 0.10), 999, Color(1.0, 0.84, 0.44, 0.045), 0)
+	confirm_route.name = "CenterPhaseConfirmRoute"
+	var confirm_fill = make_panel(confirm_route, rect_full(0.035, 0.260, 0.965, 0.740), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.92, 0.54, 0.08), 0)
+	confirm_fill.name = "CenterPhaseConfirmFill"
+	var source_node = make_panel(art, rect_full(0.160, 0.305, 0.205, 0.495), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	source_node.name = "CenterPhaseSourceNode"
+	var gate = make_panel(art, rect_full(confirm_left + 0.046, 0.300, confirm_left + 0.104, 0.505), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.90, 0.56, 0.16), 0)
+	gate.name = "CenterPhaseConfirmGate"
+	for i in range(2):
+		var tick_left = 0.270 + float(i) * 0.075 + float(index) * 0.018
+		var tick = make_panel(art, rect_full(tick_left, 0.332, tick_left + 0.018, 0.468), Color(1.0, 0.86, 0.46, 0.22), 999, Color(1.0, 0.94, 0.62, 0.06), 0)
+		tick.name = "CenterPhaseConfirmTick_%d" % i
+	for i in range(4):
+		var left = 0.180 + float(i) * 0.190
+		var active = i == index
+		var node = make_panel(art, rect_full(left, 0.620, left + 0.040, 0.880), Color(accent.r, accent.g, accent.b, 0.40 if active else 0.16), 999, Color(1.0, 0.88, 0.52, 0.16 if active else 0.06), 0)
+		node.name = "CenterPhaseFlowNode_%d" % i
+	var cursor_left = 0.166 + float(index) * 0.190
+	var cursor = make_panel(art, rect_full(cursor_left, 0.570, cursor_left + 0.068, 0.930), Color(accent.r, accent.g, accent.b, 0.14), 999, Color(1.0, 0.88, 0.52, 0.16), 0)
+	cursor.name = "CenterPhaseFlowCursor"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.40, 0.74).from(0.88)
+		tw.tween_property(fill, "modulate:a", 0.88, 0.74).from(0.40)
+		tw.parallel().tween_property(confirm_fill, "modulate:a", 0.42, 0.68).from(0.86)
+		tw.tween_property(confirm_fill, "modulate:a", 0.86, 0.68).from(0.42)
+	return art
+
+func center_phase_flow_index(phase_key: String) -> int:
+	match phase_key:
+		"discard":
+			return 0
+		"claim":
+			return 1
+		"wait":
+			return 2
+		"ended":
+			return 3
+	return 0
 
 func center_phase_key() -> String:
 	if mode == "offline":
@@ -3808,8 +5813,41 @@ func draw_center_wall_meter(parent: Control, wall_count: int) -> void:
 		var border = Color(meter_color.r, meter_color.g, meter_color.b, 0.38 if lit else 0.12)
 		var bar = make_panel(meter, segment[0], fill, 18, border, 0)
 		bar.name = "CenterWallMeterSegment"
+	draw_center_wall_flow_art(meter, progress, meter_color)
 	if progress <= 0.18:
 		draw_center_low_wall_warning(meter, wall_count, meter_color)
+
+func draw_center_wall_flow_art(parent: Control, progress: float, meter_color: Color) -> Control:
+	var art = Control.new()
+	art.name = "CenterWallFlowArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var core = make_panel(art, rect_full(0.360, 0.360, 0.640, 0.640), Color(0.006, 0.016, 0.018, 0.44), 999, Color(meter_color.r, meter_color.g, meter_color.b, 0.16), 0)
+	core.name = "CenterWallFlowCore"
+	var fill = make_panel(core, rect_full(0.120, 0.420, 0.120 + 0.760 * max(0.08, progress), 0.580), Color(meter_color.r, meter_color.g, meter_color.b, 0.34), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+	fill.name = "CenterWallFlowFill"
+	var anchors := [
+		Vector2(0.500, 0.085),
+		Vector2(0.915, 0.500),
+		Vector2(0.500, 0.915),
+		Vector2(0.085, 0.500),
+	]
+	for i in range(anchors.size()):
+		var center: Vector2 = anchors[i]
+		var active = progress >= float(i) * 0.25
+		var node = make_panel(art, rect_full(center.x - 0.026, center.y - 0.046, center.x + 0.026, center.y + 0.046), Color(meter_color.r, meter_color.g, meter_color.b, 0.34 if active else 0.12), 999, Color(1.0, 0.86, 0.48, 0.12 if active else 0.04), 0)
+		node.name = "CenterWallFlowNode_%d" % i
+	for i in range(3):
+		var left = 0.680 + float(i) * 0.055
+		var tick = make_panel(art, rect_full(left, 0.450, left + 0.024, 0.550), Color(meter_color.r, meter_color.g, meter_color.b, 0.24 - float(i) * 0.035), 999, Color(1.0, 0.86, 0.48, 0.06), 0)
+		tick.name = "CenterWallFlowTick_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.38, 0.74).from(0.88)
+		tw.tween_property(fill, "modulate:a", 0.88, 0.74).from(0.38)
+	return art
 
 func draw_center_low_wall_warning(parent: Control, wall_count: int, meter_color: Color) -> Control:
 	var warning = make_panel(parent, rect_full(0.28, 0.34, 0.72, 0.66), Color(0.16, 0.040, 0.026, 0.30), 999, Color(meter_color.r, meter_color.g, meter_color.b, 0.42), 0)
@@ -3818,6 +5856,21 @@ func draw_center_low_wall_warning(parent: Control, wall_count: int, meter_color:
 	var badge = make_badge(warning, rect_full(0.10, 0.26, 0.90, 0.74), badge_text, 9, Color(0.20, 0.058, 0.038, 0.94), Color(0.96, 0.54, 0.32, 0.42), Color(0.98, 0.84, 0.64))
 	badge.name = "CenterWallLowWarningBadge"
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var route = make_color_rect(rect_full(0.155, 0.780, 0.845, 0.865), Color(0.006, 0.016, 0.018, 0.46))
+	route.name = "CenterWallLowDangerRoute"
+	warning.add_child(route)
+	var fill_ratio = clamp(float(wall_count) / 26.0, 0.10, 0.86)
+	var fill = make_color_rect(rect_full(0.035, 0.260, 0.035 + 0.900 * fill_ratio, 0.740), Color(0.96, 0.56, 0.30, 0.32))
+	fill.name = "CenterWallLowDangerFill"
+	route.add_child(fill)
+	var gate = make_color_rect(rect_full(0.785, 0.130, 0.830, 0.315), Color(0.98, 0.78, 0.38, 0.28))
+	gate.name = "CenterWallLowDangerGate"
+	warning.add_child(gate)
+	for i in range(3):
+		var left_tick = 0.570 + float(i) * 0.075
+		var tick = make_color_rect(rect_full(left_tick, 0.090, left_tick + 0.024, 0.220), Color(0.98, 0.62, 0.34, 0.28 - float(i) * 0.045))
+		tick.name = "CenterWallLowDangerTick_%d" % i
+		warning.add_child(tick)
 	for i in range(5):
 		var left = 0.12 + float(i) * 0.19
 		var spark = make_panel(parent, rect_full(left, 0.08, left + 0.038, 0.15), Color(0.96, 0.62, 0.28, 0.56), 999, Color(1.0, 0.84, 0.42, 0.24), 0)
@@ -3845,6 +5898,7 @@ func draw_melds(parent: Control) -> void:
 		var meld_list = get_melds(seat)
 		if meld_list.is_empty():
 			continue
+		draw_meld_lane_art(parent, seat, layout[1], meld_list.size())
 		var area = HBoxContainer.new()
 		configure_passive_container(area)
 		area.add_theme_constant_override("separation", 3)
@@ -3853,6 +5907,43 @@ func draw_melds(parent: Control) -> void:
 		for meld in meld_list:
 			if typeof(meld) == TYPE_ARRAY:
 				area.add_child(make_meld_group_view(meld as Array, seat))
+
+func draw_meld_lane_art(parent: Control, seat: int, rect: Rect2, meld_count: int) -> Control:
+	var art = Control.new()
+	art.name = "MeldLaneArt_%d" % seat
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect)
+	parent.add_child(art)
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var rail = make_panel(art, rect_full(0.010, 0.720, 0.990, 0.850), Color(0.006, 0.014, 0.016, 0.42), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	rail.name = "MeldLaneRail_%d" % seat
+	var fill_fraction = clamp(float(meld_count) / 4.0, 0.18, 1.0)
+	var fill = make_panel(rail, rect_full(0.020, 0.280, 0.020 + 0.940 * fill_fraction, 0.720), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+	fill.name = "MeldLaneFill_%d" % seat
+	var gate = make_panel(art, rect_full(0.910, 0.610, 0.975, 0.960), Color(0.006, 0.014, 0.016, 0.56), 999, Color(accent.r, accent.g, accent.b, 0.22), 0)
+	gate.name = "MeldLaneGate_%d" % seat
+	var exit_route = make_color_rect(rect_full(0.700, 0.520, 0.925, 0.585), Color(0.006, 0.014, 0.016, 0.34))
+	exit_route.name = "MeldLaneExitRoute_%d" % seat
+	art.add_child(exit_route)
+	var exit_fill = make_color_rect(rect_full(0.000, 0.000, 0.420 + 0.520 * fill_fraction, 1.000), Color(accent.r, accent.g, accent.b, 0.20))
+	exit_fill.name = "MeldLaneExitFill_%d" % seat
+	exit_route.add_child(exit_fill)
+	var exit_gate = make_color_rect(rect_full(0.902, 0.485, 0.932, 0.650), Color(accent.r, accent.g, accent.b, 0.20))
+	exit_gate.name = "MeldLaneExitGate_%d" % seat
+	art.add_child(exit_gate)
+	for i in range(min(4, max(1, meld_count))):
+		var left = 0.055 + float(i) * 0.105
+		var node = make_panel(art, rect_full(left, 0.105, left + 0.055, 0.555), Color(accent.r, accent.g, accent.b, 0.16 + 0.030 * float(i)), 5, Color(1.0, 0.86, 0.48, 0.06), 0)
+		node.name = "MeldLaneNode_%d_%d" % [seat, i]
+	for i in range(2):
+		var left = 0.760 + float(i) * 0.055
+		var exit_tick = make_color_rect(rect_full(left, 0.610, left + 0.016, 0.710), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
+		exit_tick.name = "MeldLaneExitTick_%d_%d" % [seat, i]
+		art.add_child(exit_tick)
+	for i in range(3):
+		var tick = make_panel(art, rect_full(0.525 + float(i) * 0.075, 0.225, 0.545 + float(i) * 0.075, 0.560), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+		tick.name = "MeldLaneTick_%d_%d" % [seat, i]
+	return art
 
 func make_meld_group_view(meld: Array, seat: int) -> Control:
 	var group = Panel.new()
@@ -3895,12 +5986,39 @@ func draw_meld_group_art(parent: Control, kind: String, accent: Color, meld_size
 	var rail = make_color_rect(rect_full(0.025, 0.760, 0.975, 0.820), Color(accent.r, accent.g, accent.b, 0.22))
 	rail.name = "MeldKindRail"
 	art.add_child(rail)
+	var route = make_panel(art, rect_full(0.075, 0.575, 0.935, 0.645), Color(0.006, 0.016, 0.018, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	route.name = "MeldRouteRail"
+	var route_fill = make_panel(route, rect_full(0.025, 0.240, 0.790, 0.760), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	route_fill.name = "MeldRouteFill"
+	for i in range(3):
+		var node_left = 0.135 + float(i) * 0.255
+		var node = make_panel(art, rect_full(node_left, 0.525, node_left + 0.045, 0.695), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(1.0, 0.88, 0.48, 0.10), 0)
+		node.name = "MeldRouteNode_%d" % i
+	var arrow = make_panel(art, rect_full(0.800, 0.500, 0.905, 0.720), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	arrow.name = "MeldRouteArrow"
+	var arrow_core = make_color_rect(rect_full(0.200, 0.445, 0.720, 0.555), Color(0.96, 0.84, 0.46, 0.34))
+	arrow_core.name = "MeldRouteArrowCore"
+	arrow.add_child(arrow_core)
+	var completion_route = make_color_rect(rect_full(0.585, 0.865, 0.942, 0.925), Color(0.006, 0.016, 0.018, 0.42))
+	completion_route.name = "MeldCompletionRoute"
+	art.add_child(completion_route)
+	var completion_fill = make_color_rect(rect_full(0.035, 0.250, 0.720, 0.750), Color(accent.r, accent.g, accent.b, 0.26))
+	completion_fill.name = "MeldCompletionFill"
+	completion_route.add_child(completion_fill)
+	var completion_gate = make_color_rect(rect_full(0.882, 0.205, 0.930, 0.390), Color(0.96, 0.82, 0.42, 0.24))
+	completion_gate.name = "MeldCompletionGate"
+	art.add_child(completion_gate)
 	var seal = make_panel(art, rect_full(0.760, 0.060, 0.930, 0.360), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(0.96, 0.82, 0.46, 0.18), 0)
 	seal.name = "MeldKindSeal"
 	for i in range(max(2, min(4, meld_size))):
 		var left = 0.110 + float(i) * 0.145
 		var bead = make_panel(art, rect_full(left, 0.700, left + 0.040, 0.880), Color(accent.r, accent.g, accent.b, 0.38), 999, Color(1.0, 0.88, 0.48, 0.14), 0)
 		bead.name = "MeldFlowBead_%d" % i
+	for i in range(2):
+		var left_tick = 0.690 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left_tick, 0.195, left_tick + 0.020, 0.315), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.045))
+		tick.name = "MeldCompletionTick_%d" % i
+		art.add_child(tick)
 	match kind:
 		"吃":
 			var bridge = make_color_rect(rect_full(0.190, 0.395, 0.720, 0.455), Color(0.42, 0.70, 0.58, 0.28))
@@ -3933,6 +6051,10 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	var panel_fill = Color(0.016, 0.028, 0.032, 0.94) if active else Color(0.012, 0.020, 0.024, 0.90)
 	var panel_border = Color(0.60, 0.52, 0.30, 0.56) if active else Color(0.32, 0.36, 0.34, 0.28)
 	var panel = make_panel(parent, rect, panel_fill, 18, panel_border, 3)
+	var seat_texture = add_illustration_texture(panel, "seat_brocade", rect_full(0.010, 0.015, 0.990, 0.985), 0.080 if active else 0.055, false)
+	if seat_texture != null:
+		seat_texture.name = "SeatBrocadeTexture_%d" % seat
+		panel.move_child(seat_texture, 0)
 	# 左侧座位颜色条
 	panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.025, 1.0), SEAT_ACCENT_COLORS[seat].blend(Color(0.12, 0.14, 0.14, 1.0))))
 	# 顶部高光
@@ -3962,6 +6084,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var turn_badge = make_badge(panel, rect_full(0.77, 0.11, 0.96, 0.32), "行牌", 11, Color(0.72, 0.60, 0.24, 0.92), Color(1.0, 0.86, 0.44, 0.42), Color(0.13, 0.12, 0.08))
 		turn_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if threat_badge_text != "":
+		draw_seat_threat_badge_art(panel, seat, threat_report)
 		var threat_badge = make_badge(panel, rect_full(0.57, 0.11, 0.75, 0.32), threat_badge_text, 12, opponent_seat_threat_color_from_report(threat_report), Color(1.0, 0.91, 0.48, 0.56), Color(0.10, 0.11, 0.10))
 		threat_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -3985,13 +6108,92 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	var has_flower_tiles = draw_seat_flower_tiles(panel, seat)
 	if flowers != "" and not has_flower_tiles:
 		river_text = "花 " + flowers + ("\n" + river_text if river_text != "" else "")
+	var river_rect = rect_full(0.39, 0.78 if has_flower_tiles else 0.63, 0.96, 0.92)
+	draw_seat_discard_preview_art(panel, seat, river_rect)
 	var river = make_label(panel, river_text, 12, UI_TEXT_MUTED, false)
-	apply_rect(river, rect_full(0.39, 0.78 if has_flower_tiles else 0.63, 0.96, 0.92))
+	apply_rect(river, river_rect)
 	river.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(river)
 	if seat == dealer_seat:
 		var dealer = make_badge(panel, rect_full(0.27, 0.06, 0.38, 0.28), "庄", 16, Color(0.58, 0.12, 0.08, 0.90), Color(1.0, 0.79, 0.34, 0.76), Color(0.96, 0.90, 0.72))
 		dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) -> Control:
+	var art = Control.new()
+	art.name = "SeatThreatBadgeArt_%d" % seat
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.535, 0.075, 0.955, 0.365))
+	parent.add_child(art)
+	var accent = opponent_seat_threat_color_from_report(report)
+	var score = float(report.get("score", 0.0))
+	var fill_ratio = clamp(score / 28.0, 0.24, 1.0)
+	var source = make_panel(art, rect_full(0.035, 0.345, 0.095, 0.695), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	source.name = "SeatThreatSourceNode_%d" % seat
+	var route = make_color_rect(rect_full(0.105, 0.540, 0.865, 0.625), Color(0.006, 0.014, 0.016, 0.44))
+	route.name = "SeatThreatRoute_%d" % seat
+	art.add_child(route)
+	var fill = make_color_rect(rect_full(0.020, 0.255, 0.020 + 0.940 * fill_ratio, 0.745), Color(accent.r, accent.g, accent.b, 0.30))
+	fill.name = "SeatThreatFill_%d" % seat
+	route.add_child(fill)
+	var gate = make_panel(art, rect_full(0.850, 0.365, 0.910, 0.775), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	gate.name = "SeatThreatGate_%d" % seat
+	var pressure_x = 0.105 + 0.760 * fill_ratio
+	var pressure = make_panel(art, rect_full(pressure_x - 0.020, 0.395, pressure_x + 0.020, 0.760), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(1.0, 0.86, 0.48, 0.12), 0)
+	pressure.name = "SeatThreatPressureNode_%d" % seat
+	var safe_tiles: Array = report.get("safe_tiles", [])
+	var safe_count = min(3, safe_tiles.size())
+	for i in range(3):
+		var alpha = 0.24 if i < safe_count else 0.10
+		var left = 0.245 + float(i) * 0.105
+		var tick = make_color_rect(rect_full(left, 0.225, left + 0.022, 0.455), Color(accent.r, accent.g, accent.b, alpha - float(i) * 0.035))
+		tick.name = "SeatThreatSafeTick_%d_%d" % [seat, i]
+		art.add_child(tick)
+	if str(report.get("readiness_label", "")) != "":
+		var readiness = make_panel(art, rect_full(0.690, 0.135, 0.760, 0.435), Color(0.92, 0.76, 0.34, 0.24), 999, Color(1.0, 0.86, 0.48, 0.12), 0)
+		readiness.name = "SeatThreatReadinessSeal_%d" % seat
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(pressure, "modulate:a", 0.38, 0.72).from(0.95)
+		tw.parallel().tween_property(fill, "modulate:a", 0.46, 0.72).from(0.96)
+		tw.tween_property(pressure, "modulate:a", 0.95, 0.72).from(0.38)
+		tw.parallel().tween_property(fill, "modulate:a", 0.96, 0.72).from(0.46)
+	return art
+
+func draw_seat_discard_preview_art(parent: Control, seat: int, rect: Rect2) -> bool:
+	var discards = get_discards(seat)
+	if discards.is_empty():
+		return false
+	var art = Control.new()
+	art.name = "SeatDiscardPreviewArt_%d" % seat
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect)
+	parent.add_child(art)
+	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var rail = make_panel(art, rect_full(0.000, 0.640, 0.980, 0.810), Color(0.006, 0.014, 0.016, 0.44), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	rail.name = "SeatDiscardPreviewRail_%d" % seat
+	var fill_fraction = clamp(float(discards.size()) / 18.0, 0.08, 1.0)
+	var fill = make_panel(rail, rect_full(0.020, 0.280, 0.020 + 0.940 * fill_fraction, 0.720), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+	fill.name = "SeatDiscardPreviewFill_%d" % seat
+	var visible_start = tail_window_start(discards.size(), 3)
+	var visible_count = discards.size() - visible_start
+	for i in range(visible_count):
+		var tile = str(discards[visible_start + i])
+		var left = 0.030 + float(i) * 0.092
+		var tile_node = make_panel(art, rect_full(left, 0.080, left + 0.070, 0.585), Color(accent.r, accent.g, accent.b, 0.14), 5, Color(tile_accent(tile).r, tile_accent(tile).g, tile_accent(tile).b, 0.22), 0)
+		tile_node.name = "SeatDiscardPreviewTile_%d_%d" % [seat, i]
+		var glyph = make_label(tile_node, tile_face_main(tile), 7, tile_accent(tile), true)
+		glyph.name = "SeatDiscardPreviewGlyph_%d_%d" % [seat, i]
+		apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+	if discards.size() > visible_count:
+		var overflow = make_panel(art, rect_full(0.335, 0.155, 0.390, 0.520), Color(0.80, 0.64, 0.30, 0.20), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+		overflow.name = "SeatDiscardPreviewOverflow_%d" % seat
+	var gate = make_panel(art, rect_full(0.875, 0.525, 0.935, 0.930), Color(0.006, 0.014, 0.016, 0.54), 999, Color(accent.r, accent.g, accent.b, 0.22), 0)
+	gate.name = "SeatDiscardPreviewGate_%d" % seat
+	for i in range(3):
+		var tick = make_panel(art, rect_full(0.505 + float(i) * 0.070, 0.210, 0.525 + float(i) * 0.070, 0.560), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+		tick.name = "SeatDiscardPreviewTick_%d_%d" % [seat, i]
+	return true
 
 func draw_seat_score_momentum_ribbon(parent: Control, seat: int) -> bool:
 	var report = score_context_report(seat)
@@ -4005,15 +6207,36 @@ func draw_seat_score_momentum_ribbon(parent: Control, seat: int) -> bool:
 	seal.name = "SeatScoreMomentumSeal"
 	var pulse = make_panel(ribbon, rect_full(0.885, 0.28, 0.948, 0.72), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(accent.r, accent.g, accent.b, 0.42), 0)
 	pulse.name = "SeatScoreMomentumPulse"
+	var rank = clamp(int(report.get("rank", 0)), 1, 4)
+	var rank_progress = 1.0 - float(rank - 1) / 3.0
+	var route = make_panel(ribbon, rect_full(0.145, 0.705, 0.845, 0.830), Color(0.006, 0.014, 0.016, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	route.name = "SeatScoreMomentumRoute"
+	var route_fill = make_panel(route, rect_full(0.020, 0.260, 0.020 + 0.940 * clamp(rank_progress, 0.10, 1.0), 0.740), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+	route_fill.name = "SeatScoreMomentumFill"
+	var rank_node_x = 0.145 + 0.700 * clamp(rank_progress, 0.06, 0.94)
+	var rank_node = make_panel(ribbon, rect_full(rank_node_x - 0.018, 0.600, rank_node_x + 0.018, 0.930), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.86, 0.48, 0.12), 0)
+	rank_node.name = "SeatScoreMomentumRankNode"
+	var strategy = str(report.get("strategy", "均衡"))
+	var gate_left = 0.820 if strategy == "追分" else 0.120 if strategy == "守成" else 0.470
+	var gate = make_panel(ribbon, rect_full(gate_left, 0.155, gate_left + 0.050, 0.465), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	gate.name = "SeatScoreMomentumGate"
+	for i in range(3):
+		var tick_left = 0.315 + float(i) * 0.110
+		var tick = make_panel(ribbon, rect_full(tick_left, 0.185, tick_left + 0.018, 0.425), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+		tick.name = "SeatScoreMomentumTick_%d" % i
 	var label = make_label(ribbon, score_momentum_label(report), 10, Color(0.96, 0.94, 0.84), true)
 	label.name = "SeatScoreMomentumLabel"
-	apply_rect(label, rect_full(0.135, 0.06, 0.875, 0.94))
+	apply_rect(label, rect_full(0.135, 0.04, 0.875, 0.670))
 	configure_clipped_label(label)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
 		tw.tween_property(pulse, "modulate:a", 0.30, 0.72).from(0.90)
+		tw.parallel().tween_property(route_fill, "modulate:a", 0.46, 0.72).from(0.94)
+		tw.parallel().tween_property(gate, "modulate:a", 0.50, 0.72).from(0.96)
 		tw.tween_property(pulse, "modulate:a", 0.90, 0.72).from(0.30)
+		tw.parallel().tween_property(route_fill, "modulate:a", 0.94, 0.72).from(0.46)
+		tw.parallel().tween_property(gate, "modulate:a", 0.96, 0.72).from(0.50)
 	return true
 
 func score_momentum_label(report: Dictionary) -> String:
@@ -4033,8 +6256,38 @@ func score_momentum_color(report: Dictionary) -> Color:
 
 func draw_seat_stat_pill(parent: Control, rect: Rect2, label_text: String, value_text: String, accent: Color) -> void:
 	var pill = make_panel(parent, rect, Color(0.010, 0.018, 0.022, 0.92), 10, accent.blend(Color(0.18, 0.19, 0.17, 1.0)), 0)
+	pill.name = "SeatStatPill_%s" % label_text
 	# 左侧强调色条
 	pill.add_child(make_color_rect(rect_full(0.0, 0.0, 0.06, 1.0), accent.darkened(0.06)))
+	var meter = make_panel(pill, rect_full(0.105, 0.790, 0.920, 0.890), Color(0.004, 0.012, 0.014, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	meter.name = "SeatStatMeter_%s" % label_text
+	var fill_ratio = seat_stat_fill_fraction(label_text, value_text)
+	var fill = make_panel(meter, rect_full(0.030, 0.260, 0.030 + 0.920 * fill_ratio, 0.740), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	fill.name = "SeatStatMeterFill_%s" % label_text
+	var gate_left = 0.105 + 0.815 * fill_ratio
+	var gate = make_color_rect(rect_full(gate_left - 0.014, 0.705, gate_left + 0.014, 0.930), Color(accent.r, accent.g, accent.b, 0.22))
+	gate.name = "SeatStatMeterGate_%s" % label_text
+	pill.add_child(gate)
+	for i in range(2):
+		var dot = make_panel(pill, rect_full(0.760 + float(i) * 0.070, 0.145, 0.790 + float(i) * 0.070, 0.325), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.04), 999, Color(accent.r, accent.g, accent.b, 0.06), 0)
+		dot.name = "SeatStatMeterDot_%s_%d" % [label_text, i]
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.565 + float(i) * 0.060, 0.595, 0.578 + float(i) * 0.060, 0.700), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
+		tick.name = "SeatStatMeterTick_%s_%d" % [label_text, i]
+		pill.add_child(tick)
+	var value_route = make_color_rect(rect_full(0.335, 0.410, 0.900, 0.470), Color(0.004, 0.012, 0.014, 0.38))
+	value_route.name = "SeatStatValueRoute_%s" % label_text
+	pill.add_child(value_route)
+	var value_fill = make_color_rect(rect_full(0.035, 0.250, 0.520 + 0.300 * fill_ratio, 0.750), Color(accent.r, accent.g, accent.b, 0.20))
+	value_fill.name = "SeatStatValueFill_%s" % label_text
+	value_route.add_child(value_fill)
+	var value_gate = make_color_rect(rect_full(0.875, 0.340, 0.910, 0.550), Color(accent.r, accent.g, accent.b, 0.18))
+	value_gate.name = "SeatStatValueGate_%s" % label_text
+	pill.add_child(value_gate)
+	for i in range(2):
+		var value_tick = make_color_rect(rect_full(0.625 + float(i) * 0.070, 0.315, 0.640 + float(i) * 0.070, 0.570), Color(accent.r, accent.g, accent.b, 0.18 - float(i) * 0.040))
+		value_tick.name = "SeatStatValueTick_%s_%d" % [label_text, i]
+		pill.add_child(value_tick)
 	var label = make_label(pill, label_text, 9, Color(0.72, 0.74, 0.66, 0.94), false)
 	apply_rect(label, rect_full(0.10, 0.12, 0.42, 0.88))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -4043,6 +6296,17 @@ func draw_seat_stat_pill(parent: Control, rect: Rect2, label_text: String, value
 	apply_rect(value, rect_full(0.34, 0.06, 0.94, 0.94))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(value)
+
+func seat_stat_fill_fraction(label_text: String, value_text: String) -> float:
+	var numeric = stat_row_numeric_value(value_text)
+	match label_text:
+		"手":
+			return clamp(numeric / 14.0, 0.08, 1.0)
+		"花":
+			return clamp(numeric / 8.0, 0.08, 1.0)
+		"分":
+			return clamp(numeric / 50000.0, 0.08, 1.0)
+	return clamp(numeric / 10.0, 0.08, 1.0)
 
 func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 	if mode != "offline" or seat < 0 or seat >= players.size():
@@ -4054,12 +6318,29 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 	art.name = "SeatFlowerTileArt"
 	var rail = make_panel(art, rect_full(0.030, 0.720, 0.970, 0.850), Color(0.78, 0.58, 0.28, 0.18), 999, Color(0.96, 0.78, 0.38, 0.14), 0)
 	rail.name = "SeatFlowerTileRail"
+	var collection_fill = make_color_rect(rect_full(0.050, 0.285, min(0.950, 0.050 + 0.210 * float(min(4, flowers.size()))), 0.715), Color(0.92, 0.70, 0.34, 0.28))
+	collection_fill.name = "SeatFlowerCollectionFill"
+	rail.add_child(collection_fill)
+	var route = make_color_rect(rect_full(0.145, 0.815, 0.930, 0.890), Color(0.006, 0.016, 0.018, 0.42))
+	route.name = "SeatFlowerCollectionRoute"
+	art.add_child(route)
+	var route_fill = make_color_rect(rect_full(0.035, 0.260, min(0.935, 0.220 + 0.155 * float(min(4, flowers.size()))), 0.740), Color(0.92, 0.70, 0.34, 0.24))
+	route_fill.name = "SeatFlowerCollectionRouteFill"
+	route.add_child(route_fill)
 	var seal = make_panel(art, rect_full(0.020, 0.160, 0.130, 0.660), Color(0.68, 0.42, 0.18, 0.26), 999, Color(0.96, 0.72, 0.36, 0.24), 0)
 	seal.name = "SeatFlowerTileSeal"
 	var seal_label = make_label(seal, "花", 10, Color(0.96, 0.86, 0.58), true)
 	apply_rect(seal_label, rect_full(0.0, 0.0, 1.0, 1.0))
 	var glow = make_panel(art, rect_full(0.875, 0.180, 0.945, 0.620), Color(0.92, 0.70, 0.34, 0.18), 999, Color(1.0, 0.84, 0.46, 0.16), 0)
 	glow.name = "SeatFlowerTileGlow"
+	var gate = make_color_rect(rect_full(0.900, 0.660, 0.940, 0.810), Color(0.96, 0.78, 0.38, 0.26))
+	gate.name = "SeatFlowerCollectionGate"
+	art.add_child(gate)
+	for i in range(3):
+		var left_tick = 0.650 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left_tick, 0.170, left_tick + 0.020, 0.300), Color(0.92, 0.70, 0.34, 0.24 - float(i) * 0.040))
+		tick.name = "SeatFlowerCollectionTick_%d" % i
+		art.add_child(tick)
 	var strip = HBoxContainer.new()
 	strip.name = "SeatFlowerTileStrip"
 	configure_passive_container(strip)
@@ -4085,6 +6366,10 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 
 func draw_table_log(parent: Control) -> void:
 	var panel = make_panel(parent, rect_full(0.018, 0.585, 0.205, 0.755), Color(0.012, 0.028, 0.032, 0.90), 14, Color(0.34, 0.44, 0.40, 0.26))
+	var log_texture = add_illustration_texture(panel, "table_log_scroll", rect_full(0.010, 0.030, 0.990, 0.970), 0.135, false)
+	if log_texture != null:
+		log_texture.name = "TableLogScrollTexture"
+		panel.move_child(log_texture, 0)
 	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.24), Color(0.040, 0.052, 0.050, 0.68), 14, Color(1.0, 1.0, 1.0, 0.025))
 	var title = make_label(panel, "行动流", 12, Color(0.84, 0.78, 0.60), true)
 	apply_rect(title, rect_full(0.06, 0.02, 0.45, 0.24))
@@ -4094,6 +6379,7 @@ func draw_table_log(parent: Control) -> void:
 	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var recent = table_log_tail(3)
 	if recent.is_empty():
+		draw_table_log_empty_art(panel)
 		var empty = make_label(panel, "等待开局", 11, Color(0.62, 0.72, 0.68), false)
 		apply_rect(empty, rect_full(0.06, 0.36, 0.94, 0.72))
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -4101,12 +6387,25 @@ func draw_table_log(parent: Control) -> void:
 		return
 	draw_table_log_timeline(panel, recent.size())
 	for i in range(recent.size()):
-		draw_table_log_row(panel, i, str(recent[i]))
+		draw_table_log_row(panel, i, str(recent[i]), i == recent.size() - 1)
+
+func draw_table_log_empty_art(parent: Control) -> Control:
+	var art = make_panel(parent, rect_full(0.120, 0.320, 0.880, 0.780), Color(0.018, 0.036, 0.038, 0.36), 14, Color(0.64, 0.72, 0.60, 0.12), 0)
+	art.name = "TableLogEmptyArt"
+	var rail = make_panel(art, rect_full(0.120, 0.510, 0.880, 0.570), Color(0.66, 0.72, 0.56, 0.14), 999, Color(0.84, 0.88, 0.66, 0.10), 0)
+	rail.name = "TableLogEmptyRail"
+	for i in range(3):
+		var left = 0.190 + float(i) * 0.285
+		var bead = make_panel(art, rect_full(left, 0.430, left + 0.080, 0.650), Color(0.54, 0.66, 0.58, 0.16 + float(i) * 0.035), 999, Color(0.78, 0.86, 0.68, 0.12), 0)
+		bead.name = "TableLogEmptyBead_%d" % i
+	return art
 
 func draw_table_log_timeline(parent: Control, row_count: int) -> Control:
 	var rail_bottom = 0.340 + float(max(0, row_count - 1)) * 0.215
 	var rail = make_panel(parent, rect_full(0.092, 0.342, 0.112, rail_bottom + 0.085), Color(0.78, 0.66, 0.34, 0.16), 999, Color(0.88, 0.76, 0.44, 0.16), 0)
 	rail.name = "TableLogTimelineRail"
+	var flow = make_panel(parent, rect_full(0.072, 0.320, 0.132, rail_bottom + 0.110), Color(0.78, 0.66, 0.34, 0.055), 999, Color(0.96, 0.84, 0.52, 0.075), 0)
+	flow.name = "TableLogTimelineFlow"
 	return rail
 
 func table_log_tail(limit: int) -> Array[String]:
@@ -4116,20 +6415,45 @@ func table_log_tail(limit: int) -> Array[String]:
 		result.append(str(table_logs[i]))
 	return result
 
-func draw_table_log_row(parent: Control, index: int, text: String) -> void:
+func draw_table_log_row(parent: Control, index: int, text: String, latest: bool = false) -> void:
 	var top = 0.30 + float(index) * 0.215
 	var row = make_panel(parent, rect_full(0.045, top, 0.955, top + 0.175), Color(0.026, 0.044, 0.044, 0.76), 8, Color(1.0, 1.0, 1.0, 0.030), 0)
+	row.name = "TableLogRow_%d" % index
 	var tag = table_log_tag(text)
 	var tag_color = table_log_tag_color(tag)
+	var lane = make_color_rect(rect_full(0.210, 0.790, 0.930, 0.830), Color(tag_color.r, tag_color.g, tag_color.b, 0.105))
+	lane.name = "TableLogEventLane"
+	row.add_child(lane)
 	var node = make_panel(row, rect_full(0.006, 0.34, 0.034, 0.66), Color(tag_color.r, tag_color.g, tag_color.b, 0.30), 999, Color(tag_color.r, tag_color.g, tag_color.b, 0.56), 0)
 	node.name = "TableLogTimelineNode"
 	var connector = make_color_rect(rect_full(0.034, 0.49, 0.058, 0.54), Color(tag_color.r, tag_color.g, tag_color.b, 0.22))
 	connector.name = "TableLogTimelineConnector"
 	row.add_child(connector)
-	if index == 2:
+	var tag_route = make_color_rect(rect_full(0.058, 0.585, 0.205, 0.635), Color(0.006, 0.016, 0.018, 0.34))
+	tag_route.name = "TableLogTagRoute"
+	row.add_child(tag_route)
+	var tag_fill = make_color_rect(rect_full(0.000, 0.000, 0.740, 1.000), Color(tag_color.r, tag_color.g, tag_color.b, 0.22))
+	tag_fill.name = "TableLogTagRouteFill"
+	tag_route.add_child(tag_fill)
+	var tag_gate = make_color_rect(rect_full(0.188, 0.520, 0.212, 0.705), Color(tag_color.r, tag_color.g, tag_color.b, 0.22))
+	tag_gate.name = "TableLogTagRouteGate"
+	row.add_child(tag_gate)
+	for i in range(2):
+		var left = 0.088 + float(i) * 0.042
+		var tick = make_color_rect(rect_full(left, 0.675, left + 0.012, 0.760), Color(tag_color.r, tag_color.g, tag_color.b, 0.20 - float(i) * 0.035))
+		tick.name = "TableLogTagRouteTick_%d_%d" % [index, i]
+		row.add_child(tick)
+	for i in range(2):
+		var pulse_left = 0.865 + float(i) * 0.035
+		var pulse = make_panel(row, rect_full(pulse_left, 0.250 + float(i) * 0.090, pulse_left + 0.026, 0.385 + float(i) * 0.090), Color(tag_color.r, tag_color.g, tag_color.b, 0.20 - float(i) * 0.04), 999, Color(tag_color.r, tag_color.g, tag_color.b, 0.10), 0)
+		pulse.name = "TableLogEventPulse_%d_%d" % [index, i]
+	if latest:
 		var glow = make_panel(row, rect_full(0.000, 0.26, 0.044, 0.74), Color(tag_color.r, tag_color.g, tag_color.b, 0.12), 999, Color(tag_color.r, tag_color.g, tag_color.b, 0.32), 0)
 		glow.name = "TableLogLatestGlow"
+		var cursor = make_panel(row, rect_full(0.905, 0.205, 0.972, 0.795), Color(tag_color.r, tag_color.g, tag_color.b, 0.12), 999, Color(tag_color.r, tag_color.g, tag_color.b, 0.26), 0)
+		cursor.name = "TableLogLatestCursor"
 	var badge = make_panel(row, rect_full(0.035, 0.22, 0.205, 0.78), tag_color.darkened(0.16), 6, tag_color, 0)
+	badge.name = "TableLogTagBadge"
 	var badge_text = make_label(badge, tag, 10, Color(0.98, 0.96, 0.86), true)
 	apply_rect(badge_text, rect_full(0.0, 0.0, 1.0, 1.0))
 	var body = make_label(row, table_log_display_text(text), 11, Color(0.76, 0.84, 0.78), false)
@@ -4181,6 +6505,10 @@ func draw_advisor_panel(parent: Control) -> void:
 	if mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled():
 		return
 	var panel = make_panel(parent, rect_full(0.155, 0.625, 0.545, 0.755), Color(0.014, 0.034, 0.040, 0.90), 14, Color(0.42, 0.36, 0.22, 0.34))
+	var advisor_texture = add_illustration_texture(panel, "advisor_map", rect_full(0.010, 0.035, 0.990, 0.965), 0.12, false)
+	if advisor_texture != null:
+		advisor_texture.name = "AdvisorMapTexture"
+		panel.move_child(advisor_texture, 0)
 	make_panel(panel, rect_full(0.0, 0.0, 1.0, 0.14), Color(0.044, 0.056, 0.058, 0.72), 14, Color(1.0, 1.0, 1.0, 0.025))
 	var title = make_label(panel, "牌势", 13, Color(0.86, 0.78, 0.56), true)
 	apply_rect(title, rect_full(0.03, 0.04, 0.16, 0.22))
@@ -4189,6 +6517,8 @@ func draw_advisor_panel(parent: Control) -> void:
 	apply_rect(context, rect_full(0.17, 0.04, 0.97, 0.22))
 	context.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(context)
+	draw_advisor_panel_context_route(panel)
+	draw_advisor_panel_decision_bridge(panel)
 	if offline_phase == "pending_claim":
 		draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "响应", "%s · %s" % [
 			tile_label(str(offline_pending_claim.get("tile", ""))),
@@ -4213,10 +6543,66 @@ func draw_advisor_panel(parent: Control) -> void:
 	draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "进程", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
 	draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 
+func draw_advisor_panel_context_route(parent: Control) -> Control:
+	var accent = hand_tray_state_fill()
+	var route = make_panel(parent, rect_full(0.045, 0.205, 0.955, 0.255), Color(0.006, 0.016, 0.018, 0.40), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	route.name = "AdvisorPanelContextRoute"
+	var fill = make_panel(route, rect_full(0.020, 0.260, 0.720, 0.740), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+	fill.name = "AdvisorPanelContextFill"
+	var gate = make_panel(parent, rect_full(0.905, 0.168, 0.955, 0.292), Color(0.006, 0.014, 0.016, 0.54), 999, Color(accent.r, accent.g, accent.b, 0.22), 0)
+	gate.name = "AdvisorPanelContextGate"
+	for i in range(3):
+		var tick = make_panel(parent, rect_full(0.300 + float(i) * 0.115, 0.170, 0.318 + float(i) * 0.115, 0.292), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.86, 0.48, 0.03), 0)
+		tick.name = "AdvisorPanelContextTick_%d" % i
+	for i in range(3):
+		var node = make_panel(parent, rect_full(0.185 + float(i) * 0.315, 0.235, 0.220 + float(i) * 0.315, 0.335), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+		node.name = "AdvisorPanelContextNode_%d" % i
+	return route
+
+func draw_advisor_panel_decision_bridge(parent: Control) -> Control:
+	var accent = hand_tray_state_fill()
+	var bridge = Control.new()
+	bridge.name = "AdvisorPanelDecisionBridge"
+	bridge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(bridge, rect_full(0.030, 0.255, 0.970, 0.330))
+	parent.add_child(bridge)
+	var rail = make_color_rect(rect_full(0.045, 0.435, 0.955, 0.535), Color(0.006, 0.016, 0.018, 0.44))
+	rail.name = "AdvisorPanelDecisionBridgeRail"
+	bridge.add_child(rail)
+	var fill = make_color_rect(rect_full(0.045, 0.455, 0.725, 0.515), Color(accent.r, accent.g, accent.b, 0.28))
+	fill.name = "AdvisorPanelDecisionBridgeFill"
+	bridge.add_child(fill)
+	var gate = make_color_rect(rect_full(0.925, 0.220, 0.955, 0.780), Color(0.96, 0.82, 0.42, 0.20))
+	gate.name = "AdvisorPanelDecisionBridgeGate"
+	bridge.add_child(gate)
+	for i in range(3):
+		var center = 0.170 + float(i) * 0.330
+		var node = make_panel(bridge, rect_full(center - 0.026, 0.170, center + 0.026, 0.830), Color(accent.r, accent.g, accent.b, 0.18 + float(i) * 0.030), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+		node.name = "AdvisorPanelDecisionNode_%d" % i
+	for i in range(4):
+		var left = 0.280 + float(i) * 0.105
+		var tick = make_color_rect(rect_full(left, 0.245, left + 0.014, 0.705), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.030))
+		tick.name = "AdvisorPanelDecisionTick_%d" % i
+		bridge.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.72).from(0.94)
+		tw.parallel().tween_property(gate, "modulate:a", 0.52, 0.72).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.94, 0.72).from(0.42)
+		tw.parallel().tween_property(gate, "modulate:a", 0.92, 0.72).from(0.52)
+	return bridge
+
 func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_text: String, sub_text: String, accent: Color) -> void:
 	var card = make_panel(parent, rect, Color(0.028, 0.048, 0.050, 0.78), 10, accent.darkened(0.28), 0)
 	card.name = "AdvisorInfoCard_%s" % heading
+	var card_texture = add_illustration_texture(card, "advisor_map", rect_full(0.015, 0.050, 0.985, 0.950), 0.080, false)
+	if card_texture != null:
+		card_texture.name = "AdvisorCardMapTexture_%s" % heading
+		card.move_child(card_texture, 0)
 	draw_advisor_signal_strip(card, heading, accent)
+	draw_advisor_card_signal_route(card, heading, main_text, sub_text, accent)
+	draw_advisor_card_meter(card, heading, main_text, sub_text, accent)
 	var label = make_label(card, heading, 10, accent, true)
 	apply_rect(label, rect_full(0.13, 0.07, 0.93, 0.26))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -4231,6 +6617,68 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 	secondary.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	secondary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	secondary.clip_text = true
+
+func draw_advisor_card_signal_route(parent: Control, heading: String, main_text: String, sub_text: String, accent: Color) -> Control:
+	var signal_ratio = clamp((float(main_text.length()) + float(sub_text.length()) * 0.36) / 22.0, 0.24, 1.0)
+	var route = make_color_rect(rect_full(0.085, 0.220, 0.590, 0.285), Color(0.006, 0.016, 0.018, 0.42))
+	route.name = "AdvisorCardSignalRoute_%s" % heading
+	parent.add_child(route)
+	var fill = make_color_rect(rect_full(0.030, 0.250, 0.030 + 0.910 * signal_ratio, 0.750), Color(accent.r, accent.g, accent.b, 0.28))
+	fill.name = "AdvisorCardSignalFill_%s" % heading
+	route.add_child(fill)
+	var source = make_panel(parent, rect_full(0.070, 0.185, 0.115, 0.320), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+	source.name = "AdvisorCardSignalSource_%s" % heading
+	var gate = make_panel(parent, rect_full(0.560, 0.170, 0.610, 0.335), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+	gate.name = "AdvisorCardSignalGate_%s" % heading
+	for i in range(2):
+		var left = 0.245 + float(i) * 0.135
+		var tick = make_color_rect(rect_full(left, 0.160, left + 0.020, 0.325), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.045))
+		tick.name = "AdvisorCardSignalTick_%s_%d" % [heading, i]
+		parent.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.44, 0.78).from(0.96)
+		tw.parallel().tween_property(gate, "modulate:a", 0.50, 0.78).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.96, 0.78).from(0.44)
+		tw.parallel().tween_property(gate, "modulate:a", 0.92, 0.78).from(0.50)
+	return route
+
+func draw_advisor_card_meter(parent: Control, heading: String, main_text: String, sub_text: String, accent: Color) -> Control:
+	var meter = make_panel(parent, rect_full(0.595, 0.075, 0.925, 0.255), Color(accent.r, accent.g, accent.b, 0.075), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	meter.name = "AdvisorCardMeter_%s" % heading
+	var rail = make_panel(meter, rect_full(0.080, 0.395, 0.920, 0.605), Color(0.010, 0.020, 0.022, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	rail.name = "AdvisorCardMeterRail_%s" % heading
+	var signal_ratio = clamp((float(main_text.length()) + float(sub_text.length()) * 0.42) / 24.0, 0.24, 1.0)
+	var fill = make_panel(rail, rect_full(0.035, 0.220, 0.035 + 0.930 * signal_ratio, 0.780), Color(accent.r, accent.g, accent.b, 0.44), 999, Color(1.0, 0.92, 0.62, 0.10), 0)
+	fill.name = "AdvisorCardMeterFill_%s" % heading
+	for i in range(3):
+		var left = 0.165 + float(i) * 0.275
+		var lit = signal_ratio >= 0.30 + float(i) * 0.24
+		var pip = make_panel(meter, rect_full(left, 0.205, left + 0.080, 0.795), Color(accent.r, accent.g, accent.b, 0.30 if lit else 0.10), 999, Color(accent.r, accent.g, accent.b, 0.18 if lit else 0.06), 0)
+		pip.name = "AdvisorCardMeterPip_%s_%d" % [heading, i]
+	var focus = make_panel(meter, rect_full(0.780, 0.185, 0.910, 0.815), Color(accent.r, accent.g, accent.b, 0.12), 999, Color(accent.r, accent.g, accent.b, 0.24), 0)
+	focus.name = "AdvisorCardMeterFocus_%s" % heading
+	var decision_route = make_color_rect(rect_full(0.130, 0.820, 0.900, 0.880), Color(0.006, 0.016, 0.018, 0.46))
+	decision_route.name = "AdvisorCardDecisionRoute_%s" % heading
+	parent.add_child(decision_route)
+	var decision_fill = make_color_rect(rect_full(0.035, 0.250, 0.035 + 0.870 * signal_ratio, 0.750), Color(accent.r, accent.g, accent.b, 0.30))
+	decision_fill.name = "AdvisorCardDecisionFill_%s" % heading
+	decision_route.add_child(decision_fill)
+	var decision_gate = make_color_rect(rect_full(0.870, 0.675, 0.910, 0.910), Color(0.96, 0.82, 0.42, 0.24))
+	decision_gate.name = "AdvisorCardDecisionGate_%s" % heading
+	parent.add_child(decision_gate)
+	for i in range(3):
+		var left = 0.220 + float(i) * 0.170
+		var tick = make_color_rect(rect_full(left, 0.690, left + 0.022, 0.805), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.040))
+		tick.name = "AdvisorCardDecisionTick_%s_%d" % [heading, i]
+		parent.add_child(tick)
+	if fx_enabled_effective():
+		var tw := create_tween()
+		tw.set_loops(8)
+		tw.tween_property(focus, "modulate:a", 0.42, 0.64).from(0.92).set_ease(Tween.EASE_OUT)
+		tw.tween_property(focus, "modulate:a", 0.92, 0.64).from(0.42).set_ease(Tween.EASE_IN)
+	return meter
 
 func draw_advisor_signal_strip(parent: Control, heading: String, accent: Color) -> Control:
 	var strip = make_panel(parent, rect_full(0.035, 0.13, 0.080, 0.88), accent.blend(Color(0.08, 0.10, 0.09, 1.0)), 8, accent.lightened(0.12), 0)
@@ -4380,6 +6828,11 @@ func draw_round_summary(parent: Control) -> void:
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.22).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	# UIEnhancements: 胜利星光粒子
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null:
+		ui_enhancements.create_enhanced_starlight(panel, Rect2(Vector2(0, 0), Vector2(panel.size.x if panel.size.x > 0 else 500, panel.size.y if panel.size.y > 0 else 300)), 8)
+		if offline_last_winner == 0:
+			ui_enhancements.create_enhanced_particle_burst(panel, Vector2(panel.size.x * 0.5 if panel.size.x > 0 else 250, 40), "gold", 16, 120.0)
 
 	# 胡牌详情展示（如果有）
 	if not last_win_score.is_empty() and int(last_win_score.get("fan", 0)) > 0:
@@ -4410,6 +6863,19 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.0, 0.0, 1.0, 1.0))
 	parent.add_child(art)
+	var victory_texture = add_illustration_texture(art, "victory_badge", rect_full(0.790, 0.010, 0.980, 0.190), 0.30, true)
+	if victory_texture != null:
+		# Apply gold foil shimmer for premium victory badge feel
+		if shader_materials.has("gold_foil_shimmer"):
+			var gold_overlay = ColorRect.new()
+			gold_overlay.name = "VictoryBadgeGoldFoil"
+			gold_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			gold_overlay.color = Color(0.92, 0.78, 0.38, 0.20)
+			gold_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+			apply_gold_foil_shader(gold_overlay, 0.7, 0.6)
+			victory_texture.add_child(gold_overlay)
+		victory_texture.name = "RoundSummaryVictoryBadgeTexture"
+		art.move_child(victory_texture, 0)
 	var wash = make_color_rect(rect_full(0.018, 0.170, 0.982, 0.960), Color(0.82, 0.66, 0.30, 0.032))
 	wash.name = "RoundSummaryAmbienceWash"
 	art.add_child(wash)
@@ -4437,6 +6903,20 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 		var ray = make_color_rect(rect_full(0.320, 0.470, 0.900, 0.530), Color(0.96, 0.82, 0.42, 0.24))
 		ray.name = "RoundSummaryWinnerBeaconRay"
 		beacon.add_child(ray)
+		var settle_route = make_color_rect(rect_full(0.615, 0.150, 0.885, 0.195), Color(0.006, 0.016, 0.018, 0.44))
+		settle_route.name = "RoundSummarySettlementRoute"
+		art.add_child(settle_route)
+		var settle_fill = make_color_rect(rect_full(0.615, 0.158, 0.850, 0.187), Color(winner_accent.r, winner_accent.g, winner_accent.b, 0.30))
+		settle_fill.name = "RoundSummarySettlementFill"
+		art.add_child(settle_fill)
+		var settle_gate = make_color_rect(rect_full(0.865, 0.105, 0.902, 0.240), Color(0.96, 0.82, 0.42, 0.24))
+		settle_gate.name = "RoundSummarySettlementGate"
+		art.add_child(settle_gate)
+		for i in range(3):
+			var left = 0.660 + float(i) * 0.066
+			var tick = make_color_rect(rect_full(left, 0.120, left + 0.018, 0.228), Color(winner_accent.r, winner_accent.g, winner_accent.b, 0.26 - float(i) * 0.040))
+			tick.name = "RoundSummarySettlementTick_%d" % i
+			art.add_child(tick)
 	if not is_offline_match_finished():
 		var gate = make_panel(art, rect_full(0.700, 0.880, 0.940, 0.950), Color(0.020, 0.040, 0.040, 0.56), 999, Color(0.74, 0.66, 0.36, 0.22), 0)
 		gate.name = "RoundSummaryNextHandGate"
@@ -4448,6 +6928,13 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 		var tw := create_tween()
 		tw.tween_property(orbit, "modulate:a", 0.52, 0.72).from(1.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(orbit, "modulate:a", 1.0, 0.72).from(0.52).set_ease(Tween.EASE_IN)
+		if victory_texture != null:
+			var badge_tw := create_tween()
+			badge_tw.set_loops(3600)
+			badge_tw.tween_property(victory_texture, "modulate:a", 0.18, 1.5).from(0.30)
+			badge_tw.parallel().tween_property(victory_texture, "rotation", 0.035, 1.5).from(-0.025)
+			badge_tw.tween_property(victory_texture, "modulate:a", 0.34, 1.5).from(0.18)
+			badge_tw.parallel().tween_property(victory_texture, "rotation", -0.025, 1.5).from(0.035)
 	return art
 
 func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
@@ -4465,6 +6952,10 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	# 详情面板 - 增大高度以容纳徽章
 	var detail_rect = Rect2(Vector2(0.04, 0.18), Vector2(0.96, 0.50))
 	var detail_panel = make_panel(parent, detail_rect, Color(0.012, 0.024, 0.030, 0.94), 14, Color(0.38, 0.42, 0.40, 0.28), 0)
+	var detail_texture = add_illustration_texture(detail_panel, "win_detail_scroll", rect_full(0.010, 0.030, 0.990, 0.970), 0.13, false)
+	if detail_texture != null:
+		detail_texture.name = "WinDetailScrollTexture"
+		detail_panel.move_child(detail_texture, 0)
 	detail_panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.015, 1.0), Color(0.84, 0.72, 0.38, 0.48)))
 
 	# 胡牌者信息行
@@ -4475,12 +6966,31 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	apply_rect(winner_label, rect_full(0.04, 0.06, 0.60, 0.22))
 	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
-	# 番数和分数 - 更醒目
+	# 番数和分数 - 更醒目 + 数字滚动动画
 	var score_text = "%d番  %d分" % [fan, points]
 	var score_label = make_label(detail_panel, score_text, 22, Color(0.96, 0.88, 0.52), true)
 	apply_rect(score_label, rect_full(0.62, 0.06, 0.96, 0.22))
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and points > 0:
+		score_label.text = "0番  0分"
+		var score_tw := create_tween()
+		var steps := 16
+		var step_dur := 0.4 / float(steps)
+		for step_i in range(steps):
+			var frac = float(step_i + 1) / float(steps)
+			var cur_fan = int(round(fan * frac))
+			var cur_pts = int(round(points * frac))
+			score_tw.tween_callback(func() -> void:
+				if is_instance_valid(score_label):
+					score_label.text = "%d番  %d分" % [cur_fan, cur_pts]
+			).set_delay(step_dur)
+		score_tw.tween_callback(func() -> void:
+			if is_instance_valid(score_label):
+				score_label.text = "%d番  %d分" % [fan, points]
+		)
 	draw_win_detail_showcase(detail_panel, win_tile, self_draw, fan, points)
+	draw_win_detail_score_constellation(detail_panel, reasons, fan, points)
+	draw_win_detail_resolution_bridge(detail_panel, fan, points, reasons.size())
 
 	# 番种徽章列表 - 每个番种独立展示（依次弹出动画）
 	if reasons.size() > 0:
@@ -4512,7 +7022,153 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var limit_name = str(score_data.get("limit_name", ""))
 	if limit_name != "":
 		var limit_badge = make_badge(detail_panel, rect_full(0.70, 0.70, 0.96, 0.92), limit_name, 12, Color(0.72, 0.32, 0.28, 0.92), Color(0.96, 0.66, 0.42, 0.48), Color(0.96, 0.94, 0.88))
+		limit_badge.name = "WinDetailLimitBadge"
 		limit_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		draw_win_detail_limit_art(detail_panel, limit_name, fan, points)
+
+func draw_win_detail_resolution_bridge(parent: Control, fan: int, points: int, reason_count: int) -> Control:
+	var bridge = Control.new()
+	bridge.name = "WinDetailResolutionBridge"
+	bridge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(bridge, rect_full(0.705, 0.300, 0.965, 0.640))
+	parent.add_child(bridge)
+	var strength = clamp(max(float(fan) / 8.0, float(points) / 12800.0), 0.12, 1.0)
+	var accent = Color(0.92, 0.74, 0.34)
+	var rail = make_color_rect(rect_full(0.080, 0.455, 0.920, 0.545), Color(0.006, 0.016, 0.018, 0.48))
+	rail.name = "WinDetailResolutionRail"
+	bridge.add_child(rail)
+	var fill = make_color_rect(rect_full(0.030, 0.260, 0.030 + 0.900 * strength, 0.740), Color(accent.r, accent.g, accent.b, 0.28))
+	fill.name = "WinDetailResolutionFill"
+	rail.add_child(fill)
+	var gate = make_panel(bridge, rect_full(0.825, 0.320, 0.940, 0.680), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.16), 0)
+	gate.name = "WinDetailResolutionGate"
+	var fan_node = make_panel(bridge, rect_full(0.045, 0.220, 0.185, 0.780), Color(0.48, 0.72, 0.58, 0.16), 999, Color(0.86, 0.96, 0.70, 0.12), 0)
+	fan_node.name = "WinDetailResolutionFanNode"
+	var fan_label = make_label(fan_node, "%d番" % fan, 8, Color(0.96, 0.92, 0.70, 0.90), true)
+	fan_label.name = "WinDetailResolutionFanGlyph"
+	apply_rect(fan_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var score_node = make_panel(bridge, rect_full(0.650, 0.205, 0.805, 0.795), Color(accent.r, accent.g, accent.b, 0.15), 999, Color(1.0, 0.88, 0.52, 0.14), 0)
+	score_node.name = "WinDetailResolutionScoreNode"
+	var score_label = make_label(score_node, "%d" % points, 8, Color(0.96, 0.92, 0.70, 0.90), true)
+	score_label.name = "WinDetailResolutionScoreGlyph"
+	apply_rect(score_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var yaku_strength = clamp(float(reason_count) / 5.0, 0.20, 1.0)
+	var yaku_route = make_color_rect(rect_full(0.185, 0.185, 0.625, 0.255), Color(0.006, 0.016, 0.018, 0.36))
+	yaku_route.name = "WinDetailResolutionYakuRoute"
+	bridge.add_child(yaku_route)
+	var yaku_fill = make_color_rect(rect_full(0.000, 0.250, yaku_strength, 0.750), Color(0.62, 0.78, 0.82, 0.22))
+	yaku_fill.name = "WinDetailResolutionYakuFill"
+	yaku_route.add_child(yaku_fill)
+	for i in range(3):
+		var tick = make_color_rect(rect_full(0.285 + float(i) * 0.105, 0.600, 0.303 + float(i) * 0.105, 0.790), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035))
+		tick.name = "WinDetailResolutionTick_%d" % i
+		bridge.add_child(tick)
+	for i in range(2):
+		var pip = make_panel(bridge, rect_full(0.245 + float(i) * 0.170, 0.320, 0.285 + float(i) * 0.170, 0.680), Color(0.62, 0.78, 0.82, 0.18), 999, Color(0.90, 0.96, 0.72, 0.08), 0)
+		pip.name = "WinDetailResolutionPip_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.70).from(0.96)
+		tw.parallel().tween_property(gate, "modulate:a", 0.52, 0.70).from(0.96)
+		tw.tween_property(fill, "modulate:a", 0.96, 0.70).from(0.42)
+		tw.parallel().tween_property(gate, "modulate:a", 0.96, 0.70).from(0.52)
+	return bridge
+
+func draw_win_detail_limit_art(parent: Control, limit_name: String, fan: int, points: int) -> Control:
+	var art = Control.new()
+	art.name = "WinDetailLimitArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.690, 0.680, 0.970, 0.940))
+	parent.add_child(art)
+	var intensity = clamp(max(float(fan) / 8.0, float(points) / 16000.0), 0.25, 1.0)
+	var accent = Color(0.90, 0.38, 0.28)
+	if limit_name.find("役满") >= 0 or limit_name.find("封顶") >= 0:
+		accent = Color(0.96, 0.66, 0.30)
+	var route = make_panel(art, rect_full(0.065, 0.720, 0.935, 0.835), Color(0.006, 0.016, 0.018, 0.52), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	route.name = "WinDetailLimitRoute"
+	var fill = make_panel(route, rect_full(0.025, 0.260, 0.025 + 0.930 * intensity, 0.740), Color(accent.r, accent.g, accent.b, 0.44), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	fill.name = "WinDetailLimitFill"
+	var gate = make_panel(art, rect_full(0.810, 0.165, 0.930, 0.665), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.88, 0.48, 0.24), 0)
+	gate.name = "WinDetailLimitGate"
+	var burst = make_panel(art, rect_full(0.020, 0.060, 0.220, 0.680), Color(accent.r, accent.g, accent.b, 0.12), 999, Color(1.0, 0.82, 0.46, 0.20), 0)
+	burst.name = "WinDetailLimitBurst"
+	for i in range(3):
+		var left = 0.165 + float(i) * 0.185
+		var tick = make_color_rect(rect_full(left, 0.470, left + 0.030, 0.660), Color(accent.r, accent.g, accent.b, 0.30 - float(i) * 0.045))
+		tick.name = "WinDetailLimitTick_%d" % i
+		art.add_child(tick)
+	for i in range(4):
+		var angle = float(i) * TAU / 4.0
+		var cx = 0.120 + cos(angle) * 0.075
+		var cy = 0.360 + sin(angle) * 0.220
+		var spark = make_panel(art, rect_full(cx - 0.014, cy - 0.055, cx + 0.014, cy + 0.055), Color(accent.r, accent.g, accent.b, 0.28 - float(i) * 0.025), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+		spark.name = "WinDetailLimitSpark_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(fill, "modulate:a", 0.46, 0.68).from(1.0)
+		tw.tween_property(fill, "modulate:a", 1.0, 0.68).from(0.46)
+	return art
+
+func draw_win_detail_score_constellation(parent: Control, reasons: Array, fan: int, points: int) -> Control:
+	var constellation = Control.new()
+	constellation.name = "WinDetailScoreConstellation"
+	constellation.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(constellation, rect_full(0.040, 0.720, 0.665, 0.925))
+	parent.add_child(constellation)
+	var fan_strength = clamp(float(fan) / 8.0, 0.0, 1.0)
+	var point_strength = clamp(float(points) / 12800.0, 0.0, 1.0)
+	var rail = make_panel(constellation, rect_full(0.035, 0.440, 0.965, 0.560), Color(0.82, 0.68, 0.32, 0.14 + fan_strength * 0.10), 999, Color(0.96, 0.82, 0.46, 0.12), 0)
+	rail.name = "WinDetailScoreRail"
+	var score_route = make_color_rect(rect_full(0.110, 0.790, 0.900, 0.865), Color(0.006, 0.016, 0.018, 0.42))
+	score_route.name = "WinDetailScoreRoute"
+	constellation.add_child(score_route)
+	var score_route_fill = make_color_rect(rect_full(0.030, 0.260, 0.030 + 0.900 * max(0.18, fan_strength), 0.740), Color(0.96, 0.78, 0.34, 0.28))
+	score_route_fill.name = "WinDetailScoreRouteFill"
+	score_route.add_child(score_route_fill)
+	var arc = make_panel(constellation, rect_full(0.385, 0.120, 0.615, 0.880), Color(0.96, 0.78, 0.34, 0.08 + point_strength * 0.08), 999, Color(0.96, 0.82, 0.46, 0.22 + point_strength * 0.16), 0)
+	arc.name = "WinDetailScoreArc"
+	var core = make_panel(constellation, rect_full(0.455, 0.235, 0.545, 0.765), Color(0.92, 0.74, 0.30, 0.30 + fan_strength * 0.18), 999, Color(1.0, 0.88, 0.52, 0.32), 0)
+	core.name = "WinDetailScoreCore"
+	var fan_label = make_label(core, str(max(1, fan)), 10, Color(0.98, 0.90, 0.62, 0.96), true)
+	fan_label.name = "WinDetailScoreFanGlyph"
+	apply_rect(fan_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	var star_count = min(6, max(3, reasons.size()))
+	for i in range(star_count):
+		var angle = -PI * 0.10 + float(i) * (PI * 1.20 / float(max(1, star_count - 1)))
+		var radius_x = 0.380
+		var radius_y = 0.310
+		var center = Vector2(0.500 + cos(angle) * radius_x, 0.500 + sin(angle) * radius_y)
+		var reason = str(reasons[i]) if i < reasons.size() else ""
+		var accent = fan_badge_color(reason) if reason != "" else Color(0.72, 0.64, 0.42)
+		var star = make_panel(constellation, rect_full(center.x - 0.020, center.y - 0.105, center.x + 0.020, center.y + 0.105), Color(accent.r, accent.g, accent.b, 0.34), 999, Color(accent.r, accent.g, accent.b, 0.42), 0)
+		star.name = "WinDetailScoreStar_%d" % i
+		if reason != "":
+			var tick = make_label(constellation, reason.substr(0, 1), 8, Color(0.96, 0.90, 0.68, 0.90), true)
+			tick.name = "WinDetailScoreStarGlyph_%d" % i
+			apply_rect(tick, rect_full(center.x - 0.045, 0.690, center.x + 0.045, 0.980))
+	var point_label = make_label(constellation, compact_score_text(points), 10, Color(0.74, 0.84, 0.76, 0.82), true)
+	point_label.name = "WinDetailScorePointLabel"
+	apply_rect(point_label, rect_full(0.680, 0.185, 0.965, 0.455))
+	point_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var gate = make_color_rect(rect_full(0.855, 0.600, 0.900, 0.760), Color(0.96, 0.82, 0.42, 0.24 + point_strength * 0.12))
+	gate.name = "WinDetailScoreGate"
+	constellation.add_child(gate)
+	for i in range(3):
+		var left = 0.650 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left, 0.610, left + 0.020, 0.740), Color(0.96, 0.78, 0.34, 0.24 - float(i) * 0.040))
+		tick.name = "WinDetailScoreRouteTick_%d" % i
+		constellation.add_child(tick)
+	var pulse = make_panel(constellation, rect_full(0.420, 0.160, 0.580, 0.840), Color(0.96, 0.78, 0.34, 0.08), 999, Color(1.0, 0.88, 0.52, 0.16), 0)
+	pulse.name = "WinDetailScorePulse"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(pulse, "scale", Vector2(1.12, 1.12), 0.72).from(Vector2(0.86, 0.86)).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(pulse, "modulate:a", 0.0, 0.72).from(0.76)
+		tw.tween_property(pulse, "scale", Vector2(0.86, 0.86), 0.04)
+	return constellation
 
 func draw_win_detail_yaku_track(parent: Control, reasons: Array) -> Control:
 	var track = Control.new()
@@ -4523,6 +7179,12 @@ func draw_win_detail_yaku_track(parent: Control, reasons: Array) -> Control:
 	var count = min(5, max(1, reasons.size()))
 	var rail = make_panel(track, rect_full(0.04, 0.44, 0.96, 0.56), Color(0.82, 0.70, 0.36, 0.18), 999, Color(0.92, 0.80, 0.46, 0.18), 0)
 	rail.name = "WinDetailYakuRail"
+	var fill_ratio = clamp(float(count) / 5.0, 0.20, 1.0)
+	var rail_fill = make_panel(rail, rect_full(0.025, 0.260, 0.025 + 0.950 * fill_ratio, 0.740), Color(0.90, 0.72, 0.34, 0.26), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+	rail_fill.name = "WinDetailYakuRailFill"
+	var gate = make_color_rect(rect_full(0.915, 0.300, 0.950, 0.700), Color(0.96, 0.78, 0.34, 0.22))
+	gate.name = "WinDetailYakuGate"
+	track.add_child(gate)
 	for i in range(count):
 		var reason = str(reasons[i])
 		var accent = fan_badge_color(reason)
@@ -4532,6 +7194,11 @@ func draw_win_detail_yaku_track(parent: Control, reasons: Array) -> Control:
 		if i == 0:
 			var glow = make_panel(track, rect_full(center - 0.046, 0.12, center + 0.046, 0.88), Color(accent.r, accent.g, accent.b, 0.12), 999, Color(accent.r, accent.g, accent.b, 0.26), 0)
 			glow.name = "WinDetailYakuLeadGlow"
+	for i in range(3):
+		var left = 0.560 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left, 0.710, left + 0.018, 0.870), Color(0.96, 0.78, 0.34, 0.22 - float(i) * 0.040))
+		tick.name = "WinDetailYakuTick_%d" % i
+		track.add_child(tick)
 	return track
 
 func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool, fan: int, points: int) -> Control:
@@ -4549,6 +7216,21 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 		apply_rect(tile, rect_full(0.10, 0.10, 0.48, 0.88))
 	else:
 		add_lucide_icon(showcase, "trophy", rect_full(0.12, 0.22, 0.44, 0.78), GOLD_BRIGHT)
+	var scoring_route = make_color_rect(rect_full(0.380, 0.830, 0.900, 0.890), Color(0.006, 0.016, 0.018, 0.46))
+	scoring_route.name = "WinDetailShowcaseRoute"
+	showcase.add_child(scoring_route)
+	var fan_strength = clamp(float(fan) / 8.0, 0.18, 1.0)
+	var scoring_fill = make_color_rect(rect_full(0.040, 0.250, 0.040 + 0.860 * fan_strength, 0.750), Color(0.96, 0.78, 0.34, 0.30))
+	scoring_fill.name = "WinDetailShowcaseRouteFill"
+	scoring_route.add_child(scoring_fill)
+	var scoring_gate = make_color_rect(rect_full(0.850, 0.610, 0.895, 0.835), Color(0.96, 0.82, 0.42, 0.28))
+	scoring_gate.name = "WinDetailShowcaseScoreGate"
+	showcase.add_child(scoring_gate)
+	for i in range(3):
+		var left = 0.515 + float(i) * 0.075
+		var tick = make_color_rect(rect_full(left, 0.610, left + 0.022, 0.735), Color(0.96, 0.78, 0.34, 0.26 - float(i) * 0.040))
+		tick.name = "WinDetailShowcaseRouteTick_%d" % i
+		showcase.add_child(tick)
 	var seal_text = "摸" if self_draw else "胡"
 	var seal = make_seal_stamp(showcase, rect_full(0.52, 0.06, 0.88, 0.52), seal_text, "round")
 	seal.name = "WinDetailSeal"
@@ -4559,7 +7241,8 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 	var pip_count = min(6, max(1, fan))
 	for i in range(pip_count):
 		var left = 0.08 + float(i) * 0.045
-		make_panel(showcase, rect_full(left, 0.02, left + 0.030, 0.08), Color(0.96, 0.80, 0.34, 0.70), 999, Color(1.0, 0.92, 0.56, 0.30), 0)
+		var pip = make_panel(showcase, rect_full(left, 0.02, left + 0.030, 0.08), Color(0.96, 0.80, 0.34, 0.70), 999, Color(1.0, 0.92, 0.56, 0.30), 0)
+		pip.name = "WinDetailShowcaseFanPip_%d" % i
 	if fx_enabled_effective():
 		showcase.modulate = Color(1, 1, 1, 0)
 		showcase.scale = Vector2(0.92, 0.92)
@@ -4598,7 +7281,12 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	var accent = round_summary_delta_color(delta, rank)
 	var row = make_panel(parent, row_rect, Color(0.016, 0.026, 0.030, 0.92), 11, accent.darkened(0.10), 0)
 	row.name = "RoundSummaryRankRow_%d" % seat
+	var rank_texture = add_illustration_texture(row, "rank_row_ribbon", rect_full(0.010, 0.040, 0.990, 0.960), 0.11, false)
+	if rank_texture != null:
+		rank_texture.name = "RankRowRibbonTexture_%d" % seat
+		row.move_child(rank_texture, 0)
 	row.add_child(make_color_rect(rect_full(0.0, 0.0, 0.026, 1.0), accent))
+	draw_round_summary_rank_route_art(row, rank, delta, accent)
 	var rank_badge = make_badge(row, rect_full(0.045, 0.18, 0.155, 0.82), "第%d" % rank, 12, accent.darkened(0.12), accent.lightened(0.10), Color(0.96, 0.94, 0.84))
 	rank_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if seat == offline_last_winner:
@@ -4616,6 +7304,14 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	apply_rect(delta_label, rect_full(0.700, 0.12, 0.835, 0.88))
 	delta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(delta_label)
+	# Animate score delta number roll
+	if fx_enabled_effective() and delta != 0 and DisplayServer.get_name().to_lower() != "headless":
+		var delay_for_roll = 0.28 + float(rank - 1) * 0.072
+		delta_label.text = "0"
+		var roll_tw := create_tween()
+		roll_tw.tween_callback(func() -> void:
+			AnimationEffects.animate_number(delta_label, delta, 0.4)
+		).set_delay(delay_for_roll)
 	var flowers = make_label(row, "花%d" % int(players[seat].get("flowers", 0)), 12, UI_TEXT_MUTED, false)
 	apply_rect(flowers, rect_full(0.860, 0.12, 0.970, 0.88))
 	flowers.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -4638,6 +7334,38 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 			var d_tw := create_tween()
 			d_tw.tween_property(delta_bar, "modulate:a", 1.0, 0.18).from(0.0).set_delay(delay + 0.12).set_ease(Tween.EASE_OUT)
 
+func draw_round_summary_rank_route_art(row: Control, rank: int, delta: int, accent: Color) -> Control:
+	var art = Control.new()
+	art.name = "RoundSummaryRankRouteArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(art, rect_full(0.035, 0.060, 0.975, 0.955))
+	row.add_child(art)
+	var rail = make_panel(art, rect_full(0.165, 0.170, 0.965, 0.265), Color(0.006, 0.014, 0.016, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	rail.name = "RoundSummaryRankRouteRail"
+	var fill_end = 0.080 + 0.880 * clamp((5.0 - float(rank)) / 4.0, 0.12, 1.0)
+	var fill = make_panel(rail, rect_full(0.020, 0.260, fill_end, 0.740), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	fill.name = "RoundSummaryRankRouteFill"
+	for i in range(4):
+		var left = 0.195 + float(i) * 0.205
+		var node_alpha = 0.32 if i <= 4 - rank else 0.13
+		var node = make_panel(art, rect_full(left, 0.120, left + 0.030, 0.315), Color(accent.r, accent.g, accent.b, node_alpha), 999, Color(0.96, 0.84, 0.48, 0.10), 0)
+		node.name = "RoundSummaryRankRouteNode_%d" % i
+	var trend_color = Color(0.34, 0.72, 0.50) if delta >= 0 else Color(0.78, 0.38, 0.34)
+	var trend_left = 0.700 if delta >= 0 else 0.615
+	var trend = make_panel(art, rect_full(trend_left, 0.370, trend_left + 0.185, 0.680), Color(trend_color.r, trend_color.g, trend_color.b, 0.14), 999, Color(trend_color.r, trend_color.g, trend_color.b, 0.16), 0)
+	trend.name = "RoundSummaryRankTrendGlow"
+	for i in range(3):
+		var spark_left = trend_left + 0.030 + float(i) * 0.048
+		var spark_top = 0.475 - float(sign(delta)) * float(i) * 0.030
+		var spark = make_panel(art, rect_full(spark_left, spark_top, spark_left + 0.024, spark_top + 0.110), Color(trend_color.r, trend_color.g, trend_color.b, 0.26 - float(i) * 0.035), 999, Color(0.96, 0.86, 0.52, 0.08), 0)
+		spark.name = "RoundSummaryRankTrendSpark_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.86).from(0.88)
+		tw.tween_property(fill, "modulate:a", 0.88, 0.86).from(0.42)
+	return art
+
 func draw_round_summary_delta_bar(row: Control, delta: int) -> Control:
 	var bar_root = Control.new()
 	bar_root.name = "RoundSummaryDeltaBar"
@@ -4652,7 +7380,13 @@ func draw_round_summary_delta_bar(row: Control, delta: int) -> Control:
 	var right = center + fraction * 0.48 if delta >= 0 else center
 	var fill = make_panel(bar_root, rect_full(left, 0.18, right, 0.82), accent, 999, accent.lightened(0.18), 0)
 	fill.name = "RoundSummaryDeltaBarFill"
-	make_panel(bar_root, rect_full(0.492, 0.02, 0.508, 0.98), Color(0.88, 0.78, 0.50, 0.34), 999, Color(0, 0, 0, 0), 0)
+	var center_gate = make_panel(bar_root, rect_full(0.492, 0.02, 0.508, 0.98), Color(0.88, 0.78, 0.50, 0.34), 999, Color(0, 0, 0, 0), 0)
+	center_gate.name = "RoundSummaryDeltaCenterGate"
+	for i in range(3):
+		var tick_left = (0.545 + float(i) * 0.050) if delta >= 0 else (0.435 - float(i) * 0.050)
+		var tick = make_color_rect(rect_full(tick_left, 0.000, tick_left + 0.018, 0.200), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040))
+		tick.name = "RoundSummaryDeltaTick_%d" % i
+		bar_root.add_child(tick)
 	return bar_root
 
 func round_summary_delta_bar_fraction(delta: int) -> float:
@@ -4726,11 +7460,14 @@ func draw_hand(parent: Control) -> void:
 	# 新手提示：首次出牌时显示
 	if show_hand_hint and tutorial_step == 0 and can_self_discard():
 		var hint_panel = make_panel(tray, rect_full(0.02, 0.50, 0.98, 0.92), Color(0.020, 0.042, 0.048, 0.94), 12, Color(0.30, 0.58, 0.48, 0.42), 0)
+		hint_panel.name = "HandTrayTutorialHint"
 		hint_panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.015, 1.0), Color(0.30, 0.62, 0.52, 0.56)))
+		draw_hand_tutorial_hint_art(hint_panel)
 		var hint_text = "💡 点击手牌即可打出 · 出牌后等待对手响应"
 		var hint_label = make_label(hint_panel, hint_text, 14, Color(0.94, 0.96, 0.92), false)
-		apply_rect(hint_label, rect_full(0.04, 0.15, 0.96, 0.85))
-		hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint_label.name = "HandTrayTutorialHintText"
+		apply_rect(hint_label, rect_full(0.190, 0.125, 0.940, 0.470))
+		hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# 首次出牌后关闭提示
 		var close_hint = func() -> void:
 			show_hand_hint = false
@@ -4743,6 +7480,7 @@ func draw_hand(parent: Control) -> void:
 	var hand = get_self_hand()
 	draw_hand_tray_suit_flow(tray, hand)
 	draw_hand_tray_momentum_art(tray, hand)
+	draw_hand_tray_action_path(tray, hand)
 	var hand_layout = hand_layout_metrics(hand)
 	var hand_box = HBoxContainer.new()
 	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -4801,6 +7539,52 @@ func draw_hand(parent: Control) -> void:
 			fx_last_animated_draw_serial = drawn_serial
 			play_hand_draw_tile_animation(tile_node, str(offline_last_draw.get("source", "normal")))
 
+func draw_hand_tutorial_hint_art(parent: Control) -> Control:
+	var art = Control.new()
+	art.name = "HandTrayTutorialHintArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var accent = Color(0.38, 0.76, 0.60)
+	var seal = make_panel(art, rect_full(0.036, 0.150, 0.145, 0.700), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(accent.r, accent.g, accent.b, 0.34), 0)
+	seal.name = "HandTrayTutorialSeal"
+	if add_lucide_icon(seal, "mouse-pointer-click", rect_full(0.220, 0.220, 0.780, 0.780), Color(0.96, 0.94, 0.78, 0.90)) == null:
+		var fallback = make_label(seal, "点", 12, Color(0.96, 0.94, 0.78, 0.90), true)
+		fallback.name = "HandTrayTutorialSealGlyph"
+		apply_rect(fallback, rect_full(0.0, 0.0, 1.0, 1.0))
+	var rail = make_panel(art, rect_full(0.195, 0.600, 0.880, 0.720), Color(0.010, 0.028, 0.030, 0.62), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	rail.name = "HandTrayTutorialStepRail"
+	var fill = make_panel(rail, rect_full(0.020, 0.260, 0.680, 0.740), Color(accent.r, accent.g, accent.b, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	fill.name = "HandTrayTutorialStepFill"
+	for i in range(3):
+		var center = 0.230 + float(i) * 0.205
+		var node = make_panel(art, rect_full(center - 0.018, 0.535, center + 0.018, 0.785), Color(accent.r, accent.g, accent.b, 0.50 if i == 0 else 0.24), 999, Color(0.90, 1.0, 0.72, 0.18), 0)
+		node.name = "HandTrayTutorialStepNode_%d" % i
+	var target = make_panel(art, rect_full(0.770, 0.220, 0.900, 0.840), Color(0.018, 0.038, 0.040, 0.46), 12, Color(0.88, 0.74, 0.38, 0.32), 0)
+	target.name = "HandTrayTutorialTargetTile"
+	var target_label = make_label(target, "牌", 14, Color(0.96, 0.88, 0.58, 0.92), true)
+	target_label.name = "HandTrayTutorialTargetGlyph"
+	apply_rect(target_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	for i in range(3):
+		var ripple = make_panel(art, rect_full(0.740 - float(i) * 0.016, 0.160 - float(i) * 0.025, 0.930 + float(i) * 0.016, 0.900 + float(i) * 0.025), Color(accent.r, accent.g, accent.b, 0.060 - float(i) * 0.010), 16, Color(accent.r, accent.g, accent.b, 0.110 - float(i) * 0.018), 0)
+		ripple.name = "HandTrayTutorialClickRipple_%d" % i
+		art.move_child(ripple, max(0, target.get_index()))
+	var arrow = make_label(art, ">", 16, Color(0.96, 0.86, 0.48, 0.82), true)
+	arrow.name = "HandTrayTutorialArrow"
+	apply_rect(arrow, rect_full(0.680, 0.255, 0.745, 0.710))
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.72).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.72).from(0.42)
+		var arrow_tw := create_tween()
+		arrow_tw.set_loops(3600)
+		arrow_tw.tween_property(arrow, "offset_left", 4.0, 0.56).from(0.0)
+		arrow_tw.parallel().tween_property(arrow, "modulate:a", 0.42, 0.56).from(0.92)
+		arrow_tw.tween_property(arrow, "offset_left", 0.0, 0.56).from(4.0)
+		arrow_tw.parallel().tween_property(arrow, "modulate:a", 0.92, 0.56).from(0.42)
+	return art
+
 func draw_hand_tray_state_art(parent: Control) -> Control:
 	var state = hand_tray_state_text()
 	var accent = hand_tray_state_fill()
@@ -4855,6 +7639,23 @@ func draw_hand_tray_suit_flow(parent: Control, hand: Array) -> Control:
 	]
 	var rail = make_panel(flow, rect_full(0.020, 0.440, 0.980, 0.570), Color(0.88, 0.74, 0.42, 0.10), 999, Color(0.96, 0.82, 0.46, 0.10), 0)
 	rail.name = "HandTraySuitRail"
+	var occupied_groups := 0
+	var dominant_index := 0
+	var dominant_count := -1
+	for i in range(counts.size()):
+		var count = int(counts[i])
+		if count > 0:
+			occupied_groups += 1
+		if count > dominant_count:
+			dominant_count = count
+			dominant_index = i
+	var coverage = clamp(float(occupied_groups) / 5.0, 0.08, 1.0)
+	var rail_fill = make_panel(rail, rect_full(0.018, 0.260, 0.018 + 0.944 * coverage, 0.740), Color(0.88, 0.74, 0.42, 0.26), 999, Color(0.96, 0.82, 0.46, 0.08), 0)
+	rail_fill.name = "HandTraySuitRailFill"
+	var gate_center = 0.085 + float(dominant_index) * 0.205
+	var gate_color: Color = colors[clamp(dominant_index, 0, colors.size() - 1)]
+	var gate = make_panel(flow, rect_full(gate_center - 0.048, 0.205, gate_center + 0.048, 0.795), Color(gate_color.r, gate_color.g, gate_color.b, 0.18), 999, Color(gate_color.r, gate_color.g, gate_color.b, 0.26), 0)
+	gate.name = "HandTraySuitDominantGate"
 	for i in range(labels.size()):
 		var count = int(counts[i])
 		var center = 0.085 + float(i) * 0.205
@@ -4866,6 +7667,11 @@ func draw_hand_tray_suit_flow(parent: Control, hand: Array) -> Control:
 		label.name = "HandTraySuitLabel_%s" % labels[i]
 		apply_rect(label, rect_full(center - 0.055, 0.680, center + 0.055, 0.980))
 		configure_clipped_label(label)
+	for i in range(4):
+		var left = 0.185 + float(i) * 0.205
+		var tick = make_color_rect(rect_full(left, 0.260, left + 0.016, 0.390), Color(0.88, 0.74, 0.42, 0.22 - float(i) * 0.030))
+		tick.name = "HandTraySuitFlowTick_%d" % i
+		flow.add_child(tick)
 	if has_pending_danger_discard():
 		var danger = make_panel(flow, rect_full(0.000, 0.000, 1.000, 1.000), Color(0.92, 0.34, 0.24, 0.08), 999, Color(1.0, 0.58, 0.36, 0.18), 0)
 		danger.name = "HandTraySuitDangerGlow"
@@ -4877,6 +7683,14 @@ func draw_hand_tray_momentum_art(parent: Control, hand: Array) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.250, 0.835, 0.745, 0.965))
 	parent.add_child(art)
+	var hand_texture = add_illustration_texture(art, "hand_tray_flow", rect_full(-0.025, -0.150, 1.025, 1.150), 0.13, false)
+	if hand_texture != null:
+		hand_texture.name = "HandTrayFlowTexture"
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var hand_texture_tw := create_tween()
+			hand_texture_tw.set_loops(3600)
+			hand_texture_tw.tween_property(hand_texture, "modulate:a", 0.075, 1.35).from(0.13)
+			hand_texture_tw.tween_property(hand_texture, "modulate:a", 0.13, 1.35).from(0.075)
 	var accent = hand_tray_state_fill()
 	var active = can_self_discard()
 	var rail = make_color_rect(rect_full(0.020, 0.420, 0.980, 0.580), Color(accent.r, accent.g, accent.b, 0.20 if active else 0.10))
@@ -4896,9 +7710,23 @@ func draw_hand_tray_momentum_art(parent: Control, hand: Array) -> Control:
 	focus.name = "HandTrayMomentumFocus"
 	var drawn_tile = str(offline_last_draw.get("tile", ""))
 	if mode == "offline" and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "":
+		var decision_route = make_panel(art, rect_full(0.685, 0.735, 0.930, 0.840), Color(0.006, 0.016, 0.018, 0.44), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+		decision_route.name = "HandTrayDrawDecisionRoute"
+		var decision_fill = make_panel(decision_route, rect_full(0.040, 0.260, 0.820, 0.740), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(1.0, 0.86, 0.48, 0.05), 0)
+		decision_fill.name = "HandTrayDrawDecisionFill"
+		var decision_gate = make_panel(art, rect_full(0.820, 0.640, 0.880, 0.930), Color(0.006, 0.014, 0.016, 0.54), 999, Color(accent.r, accent.g, accent.b, 0.22), 0)
+		decision_gate.name = "HandTrayDrawDecisionGate"
+		var source_is_gang = str(offline_last_draw.get("source", "")) == "gang"
+		var source_node = make_panel(art, rect_full(0.635, 0.625, 0.685, 0.895), Color(accent.r, accent.g, accent.b, 0.22 if source_is_gang else 0.14), 999, Color(1.0, 0.86, 0.48, 0.12 if source_is_gang else 0.05), 0)
+		source_node.name = "HandTrayDrawSourceNode"
+		var replacement_gate = make_panel(art, rect_full(0.892, 0.610, 0.940, 0.950), Color(0.86, 0.68, 0.30, 0.24 if source_is_gang else 0.10), 999, Color(1.0, 0.86, 0.48, 0.18 if source_is_gang else 0.06), 0)
+		replacement_gate.name = "HandTrayReplacementGate"
+		for i in range(2):
+			var tick = make_panel(art, rect_full(0.725 + float(i) * 0.055, 0.585, 0.745 + float(i) * 0.055, 0.705), Color(accent.r, accent.g, accent.b, 0.23 - float(i) * 0.045), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+			tick.name = "HandTrayDrawDecisionTick_%d" % i
 		var draw_badge = make_panel(art, rect_full(0.865, 0.050, 0.990, 0.930), Color(0.030, 0.044, 0.040, 0.80), 10, Color(0.92, 0.76, 0.34, 0.30), 0)
 		draw_badge.name = "HandTrayLastDrawBadge"
-		var badge_label = "杠" if str(offline_last_draw.get("source", "")) == "gang" else "摸"
+		var badge_label = "杠" if source_is_gang else "摸"
 		var draw_label = make_label(draw_badge, badge_label, 11, Color(0.96, 0.86, 0.56, 0.92), true)
 		draw_label.name = "HandTrayLastDrawLabel"
 		draw_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -4915,6 +7743,70 @@ func draw_hand_tray_momentum_art(parent: Control, hand: Array) -> Control:
 		tw.tween_property(focus, "modulate:a", 0.46, 0.55).from(1.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(focus, "modulate:a", 1.0, 0.55).from(0.46).set_ease(Tween.EASE_IN)
 	return art
+
+func draw_hand_tray_action_path(parent: Control, hand: Array) -> Control:
+	var path = Control.new()
+	path.name = "HandTrayActionPath"
+	path.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(path, rect_full(0.752, 0.835, 0.985, 0.965))
+	parent.add_child(path)
+	var active = can_self_discard()
+	var responding = mode == "offline" and offline_phase == "pending_claim"
+	var accent = hand_tray_state_fill()
+	var base_alpha := 0.34 if active else 0.18
+	if responding:
+		base_alpha = 0.30
+	var rail = make_panel(path, rect_full(0.040, 0.420, 0.920, 0.580), Color(accent.r, accent.g, accent.b, base_alpha), 999, Color(1.0, 0.86, 0.48, base_alpha * 0.42), 0)
+	rail.name = "HandTrayActionPathRail"
+	var progress = clamp(float(hand.size()) / 14.0, 0.0, 1.0)
+	var fill_right = 0.080 + 0.760 * progress
+	var fill = make_panel(path, rect_full(0.080, 0.465, fill_right, 0.535), Color(0.96, 0.80, 0.38, 0.34 if active else 0.16), 999, Color(1.0, 0.88, 0.50, 0.10), 0)
+	fill.name = "HandTrayActionPathFill"
+	var stream = make_panel(path, rect_full(0.120, 0.745, 0.855, 0.835), Color(0.006, 0.016, 0.018, 0.44), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	stream.name = "HandTrayActionPathStream"
+	var stream_fill = make_panel(stream, rect_full(0.020, 0.260, 0.020 + 0.940 * max(0.12, progress), 0.740), Color(accent.r, accent.g, accent.b, 0.24 if active else 0.12), 999, Color(1.0, 0.88, 0.52, 0.06), 0)
+	stream_fill.name = "HandTrayActionPathStreamFill"
+	for i in range(4):
+		var center = 0.080 + float(i) * 0.253
+		var lit = center <= fill_right or (active and i == 3)
+		var node = make_panel(path, rect_full(center - 0.018, 0.305, center + 0.018, 0.695), Color(accent.r, accent.g, accent.b, 0.52 if lit else 0.16), 999, Color(1.0, 0.88, 0.52, 0.22 if lit else 0.08), 0)
+		node.name = "HandTrayActionPathNode_%d" % i
+	for i in range(3):
+		var tick_left = 0.520 + float(i) * 0.075
+		var tick = make_panel(path, rect_full(tick_left, 0.130, tick_left + 0.030, 0.255), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.035), 999, Color(1.0, 0.88, 0.52, 0.06), 0)
+		tick.name = "HandTrayActionPathTick_%d" % i
+	var focus_left = 0.735 if active else 0.075
+	if responding:
+		focus_left = 0.455
+	var focus = make_panel(path, rect_full(focus_left, 0.135, focus_left + 0.110, 0.865), Color(accent.r, accent.g, accent.b, 0.34), 999, Color(1.0, 0.88, 0.52, 0.32), 0)
+	focus.name = "HandTrayActionPathFocus"
+	var glyph_text = "打" if active else ("应" if responding else "候")
+	var glyph = make_label(focus, glyph_text, 10, Color(0.98, 0.90, 0.64, 0.94), true)
+	glyph.name = "HandTrayActionPathGlyph"
+	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+	var target = make_panel(path, rect_full(0.880, 0.230, 0.990, 0.770), Color(0.030, 0.044, 0.040, 0.74), 999, Color(0.94, 0.76, 0.34, 0.30 if active else 0.12), 0)
+	target.name = "HandTrayActionPathTarget"
+	var gate = make_panel(path, rect_full(0.855, 0.720, 0.960, 0.930), Color(accent.r, accent.g, accent.b, 0.13 if active else 0.06), 999, Color(0.94, 0.76, 0.34, 0.12 if active else 0.04), 0)
+	gate.name = "HandTrayActionPathGate"
+	if active:
+		add_lucide_icon(path, "chevron-right", rect_full(0.820, 0.245, 0.905, 0.755), Color(0.96, 0.86, 0.54, 0.74))
+	var drawn_tile = str(offline_last_draw.get("tile", ""))
+	if mode == "offline" and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "":
+		var drawn = make_label(target, tile_face_main(drawn_tile), 10, tile_accent(drawn_tile), true)
+		drawn.name = "HandTrayActionPathDrawn"
+		apply_rect(drawn, rect_full(0.0, 0.0, 1.0, 1.0))
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(focus, "scale", Vector2(1.08, 1.08), 0.62).from(Vector2(0.94, 0.94)).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(focus, "modulate:a", 0.54, 0.62).from(1.0)
+		tw.tween_property(focus, "scale", Vector2(0.94, 0.94), 0.62).from(Vector2(1.08, 1.08)).set_ease(Tween.EASE_IN)
+		tw.parallel().tween_property(focus, "modulate:a", 1.0, 0.62).from(0.54)
+		var stream_tw := create_tween()
+		stream_tw.set_loops(12)
+		stream_tw.tween_property(stream_fill, "modulate:a", 0.38, 0.64).from(0.86)
+		stream_tw.tween_property(stream_fill, "modulate:a", 0.86, 0.64).from(0.38)
+	return path
 
 func hand_group_counts(hand: Array) -> Array[int]:
 	var counts: Array[int] = [0, 0, 0, 0, 0]
@@ -5013,6 +7905,19 @@ func make_hand_group_spacer(height: float, width: float = 12.0, label_text: Stri
 	spacer.add_child(line)
 	var cap = make_panel(spacer, rect_full(0.18, 0.04, 0.82, 0.11), Color(0.96, 0.78, 0.34, 0.58), 4, Color(1.0, 0.92, 0.62, 0.18), 0)
 	cap.name = "HandGroupDividerCap"
+	var route = make_color_rect(rect_full(0.18, 0.185, 0.82, 0.245), Color(0.006, 0.016, 0.018, 0.36))
+	route.name = "HandGroupDividerRoute"
+	spacer.add_child(route)
+	var fill = make_color_rect(rect_full(0.060, 0.250, 0.720, 0.750), Color(0.96, 0.78, 0.34, 0.24))
+	fill.name = "HandGroupDividerFill"
+	route.add_child(fill)
+	var gate = make_color_rect(rect_full(0.360, 0.660, 0.640, 0.760), Color(0.96, 0.78, 0.34, 0.20))
+	gate.name = "HandGroupDividerGate"
+	spacer.add_child(gate)
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.245 + float(i) * 0.275, 0.310, 0.355 + float(i) * 0.275, 0.365), Color(0.96, 0.78, 0.34, 0.22 - float(i) * 0.045))
+		tick.name = "HandGroupDividerTick_%d" % i
+		spacer.add_child(tick)
 	if label_text != "" and width >= 8.0:
 		var label = make_label(spacer, label_text, 8, Color(0.98, 0.88, 0.58, 0.92), true)
 		label.name = "HandGroupDividerLabel_%s" % label_text
@@ -5223,6 +8128,7 @@ func draw_actions(parent: Control) -> void:
 						human_discard_by_tile(selected_action_tile)
 					))
 		if player_ai_assist_enabled() and has_pending_danger_discard():
+			draw_danger_discard_confirmation_art(parent, pending_danger_discard_tile, pending_danger_discard_report, safe_discard_alternative_reports(pending_danger_discard_tile, 2))
 			for report in safe_discard_alternative_reports(pending_danger_discard_tile, 2):
 				var alternative_tile = str(report.get("tile", ""))
 				if alternative_tile == "":
@@ -5283,6 +8189,14 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.650, 0.150, 0.965, 0.850))
 	button.add_child(art)
+	var voice_texture = add_illustration_texture(art, "voice_wave", rect_full(-0.080, -0.080, 1.080, 1.080), 0.16, false)
+	if voice_texture != null:
+		voice_texture.name = "VoiceWaveTexture"
+		if active and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var voice_texture_tw := create_tween()
+			voice_texture_tw.set_loops(3600)
+			voice_texture_tw.tween_property(voice_texture, "modulate:a", 0.09, 0.72).from(0.18)
+			voice_texture_tw.tween_property(voice_texture, "modulate:a", 0.18, 0.72).from(0.09)
 	var accent = Color(0.42, 0.86, 0.64) if active else Color(0.70, 0.42, 0.42)
 	var base = make_panel(art, rect_full(0.020, 0.120, 0.300, 0.880), Color(accent.r, accent.g, accent.b, 0.26 if active else 0.18), 999, Color(accent.r, accent.g, accent.b, 0.32), 0)
 	base.name = "VoiceButtonStatusDot"
@@ -5296,6 +8210,32 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 	var meter_fill_right = 0.045 + 0.910 * (clamp(peak, 0.0, 1.0) if active else 0.10)
 	var meter_fill = make_panel(meter, rect_full(0.045, 0.260, meter_fill_right, 0.740), Color(accent.r, accent.g, accent.b, 0.54 if active else 0.18), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
 	meter_fill.name = "VoiceButtonPeakFill"
+	var channel = make_panel(art, rect_full(0.365, 0.640, 0.935, 0.735), Color(0.006, 0.016, 0.018, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	channel.name = "VoiceButtonMicChannel"
+	var channel_fill_right = 0.040 + 0.900 * (clamp(0.28 + peak * 0.62, 0.10, 1.0) if active else 0.18)
+	var channel_fill = make_panel(channel, rect_full(0.040, 0.260, channel_fill_right, 0.740), Color(accent.r, accent.g, accent.b, 0.32 if active else 0.13), 999, Color(1.0, 0.88, 0.52, 0.06), 0)
+	channel_fill.name = "VoiceButtonMicChannelFill"
+	var send_route = make_color_rect(rect_full(0.395, 0.205, 0.920, 0.280), Color(0.006, 0.016, 0.018, 0.44))
+	send_route.name = "VoiceButtonTransmitRoute"
+	art.add_child(send_route)
+	var send_fill_right = 0.040 + 0.880 * (clamp(0.34 + peak * 0.56, 0.18, 1.0) if active else 0.20)
+	var send_fill = make_color_rect(rect_full(0.040, 0.250, send_fill_right, 0.750), Color(accent.r, accent.g, accent.b, 0.30 if active else 0.12))
+	send_fill.name = "VoiceButtonTransmitFill"
+	send_route.add_child(send_fill)
+	var send_gate = make_color_rect(rect_full(0.895, 0.165, 0.935, 0.395), Color(0.96, 0.82, 0.42, 0.26 if active else 0.10))
+	send_gate.name = "VoiceButtonTransmitGate"
+	art.add_child(send_gate)
+	for i in range(3):
+		var sync_left = 0.500 + float(i) * 0.115
+		var sync = make_color_rect(rect_full(sync_left, 0.320, sync_left + 0.024, 0.430), Color(accent.r, accent.g, accent.b, (0.26 - float(i) * 0.040) if active else (0.10 - float(i) * 0.015)))
+		sync.name = "VoiceButtonSyncTick_%d" % i
+		art.add_child(sync)
+	var input_node = make_panel(art, rect_full(0.330, 0.560, 0.405, 0.815), Color(accent.r, accent.g, accent.b, 0.24 if active else 0.12), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	input_node.name = "VoiceButtonInputNode"
+	for i in range(3):
+		var packet_left = 0.650 + float(i) * 0.075
+		var packet = make_panel(art, rect_full(packet_left, 0.510, packet_left + 0.038, 0.610), Color(accent.r, accent.g, accent.b, (0.30 - float(i) * 0.045) if active else (0.12 - float(i) * 0.020)), 999, Color(1.0, 0.88, 0.52, 0.05), 0)
+		packet.name = "VoiceButtonPacketTick_%d" % i
 	for i in range(3):
 		var height = (0.24 + float(i) * 0.15) * (0.72 + peak * 0.38 if active else 1.0)
 		var top = 0.50 - height * 0.5
@@ -5310,6 +8250,18 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 		slash.rotation = -0.42
 		var lock = make_panel(art, rect_full(0.040, 0.680, 0.245, 0.920), Color(0.78, 0.48, 0.42, 0.22), 999, Color(0.92, 0.64, 0.56, 0.12), 0)
 		lock.name = "VoiceButtonMutedLock"
+		var mute_route = make_color_rect(rect_full(0.185, 0.720, 0.545, 0.780), Color(0.006, 0.016, 0.018, 0.44))
+		mute_route.name = "VoiceButtonMuteRoute"
+		art.add_child(mute_route)
+		var mute_fill = make_color_rect(rect_full(0.035, 0.250, 0.520, 0.750), Color(0.90, 0.62, 0.54, 0.18))
+		mute_fill.name = "VoiceButtonMuteFill"
+		mute_route.add_child(mute_fill)
+		var mute_gate = make_panel(art, rect_full(0.520, 0.660, 0.585, 0.835), Color(0.90, 0.62, 0.54, 0.16), 999, Color(0.96, 0.78, 0.66, 0.10), 0)
+		mute_gate.name = "VoiceButtonMuteGate"
+		for i in range(2):
+			var mute_tick = make_color_rect(rect_full(0.285 + float(i) * 0.105, 0.640, 0.305 + float(i) * 0.105, 0.835), Color(0.90, 0.62, 0.54, 0.18 - float(i) * 0.040))
+			mute_tick.name = "VoiceButtonMuteTick_%d" % i
+			art.add_child(mute_tick)
 	if active and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
@@ -5319,6 +8271,10 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 		ring_tw.set_loops(3600)
 		ring_tw.tween_property(listen_ring, "modulate:a", 0.34, 0.90).from(0.90)
 		ring_tw.tween_property(listen_ring, "modulate:a", 0.90, 0.90).from(0.34)
+		var channel_tw := create_tween()
+		channel_tw.set_loops(3600)
+		channel_tw.tween_property(channel_fill, "modulate:a", 0.38, 0.70).from(0.90)
+		channel_tw.tween_property(channel_fill, "modulate:a", 0.90, 0.70).from(0.38)
 	return art
 
 func draw_pending_claim_illustration(parent: Control) -> void:
@@ -5329,6 +8285,14 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 		return
 	var panel = make_panel(parent, rect_full(0.500, 0.724, 0.982, 0.842), Color(0.014, 0.030, 0.034, 0.96), 16, Color(0.76, 0.58, 0.30, 0.44), 4)
 	panel.name = "PendingClaimIllustration"
+	var pending_texture = add_illustration_texture(panel, "pending_claim_banner", rect_full(0.008, 0.018, 0.992, 0.982), 0.15, false)
+	if pending_texture != null:
+		pending_texture.name = "PendingClaimBannerTexture"
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var pending_texture_tw := create_tween()
+			pending_texture_tw.set_loops(3600)
+			pending_texture_tw.tween_property(pending_texture, "modulate:a", 0.09, 1.05).from(0.15)
+			pending_texture_tw.tween_property(pending_texture, "modulate:a", 0.15, 1.05).from(0.09)
 	panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.012, 1.0), Color(0.92, 0.70, 0.32, 0.64)))
 	panel.add_child(make_color_rect(rect_full(0.020, 0.080, 0.982, 0.105), Color(1.0, 0.86, 0.45, 0.12)))
 	make_cloud_decoration(panel, rect_full(0.64, -0.14, 1.04, 0.64), "mist", false).name = "PendingClaimMistCloud"
@@ -5338,6 +8302,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	source_badge.name = "PendingClaimSourceBadge"
 	source_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	draw_pending_claim_flow_art(panel, source_seat)
+	draw_pending_claim_timer_art(panel)
 	var title = make_label(panel, "%s 打出" % source_name, 12, Color(0.72, 0.78, 0.72), true)
 	apply_rect(title, rect_full(0.175, 0.105, 0.405, 0.345))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -5363,6 +8328,8 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var rail = make_panel(panel, rect_full(0.662, 0.555, 0.970, 0.870), Color(0.010, 0.022, 0.024, 0.62), 12, Color(0.88, 0.68, 0.32, 0.22), 0)
 	rail.name = "PendingClaimOptionRail"
 	var options: Array = offline_pending_claim.get("options", [])
+	draw_pending_claim_priority_art(rail, options)
+	draw_pending_claim_action_exit_art(rail, options)
 	var left = 0.030
 	for i in range(min(4, options.size())):
 		var claim_name = str(options[i])
@@ -5383,6 +8350,87 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 		tw.tween_property(panel, "offset_top", 0.0, 0.18).from(10.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(tile_view, "scale", Vector2(1.0, 1.0), 0.20).from(Vector2(0.88, 0.88)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.tween_property(tile_glow, "modulate:a", 0.34, 0.28).from(0.84)
+
+func draw_pending_claim_timer_art(parent: Control) -> Control:
+	var timer = Control.new()
+	timer.name = "PendingClaimTimerArt"
+	timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(timer, rect_full(0.420, 0.852, 0.958, 0.962))
+	parent.add_child(timer)
+	var rail = make_color_rect(rect_full(0.020, 0.365, 0.940, 0.455), Color(0.006, 0.016, 0.018, 0.46))
+	rail.name = "PendingClaimTimerRail"
+	timer.add_child(rail)
+	var fill = make_color_rect(rect_full(0.025, 0.260, 0.705, 0.740), Color(0.92, 0.70, 0.32, 0.28))
+	fill.name = "PendingClaimTimerFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.906, 0.195, 0.952, 0.650), Color(0.96, 0.78, 0.38, 0.24))
+	gate.name = "PendingClaimTimerGate"
+	timer.add_child(gate)
+	for i in range(4):
+		var left = 0.165 + float(i) * 0.155
+		var tick = make_color_rect(rect_full(left, 0.185, left + 0.018, 0.670), Color(0.92, 0.70, 0.32, 0.24 - float(i) * 0.035))
+		tick.name = "PendingClaimTimerTick_%d" % i
+		timer.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.38, 0.62).from(0.90)
+		tw.parallel().tween_property(gate, "modulate:a", 0.48, 0.62).from(0.88)
+		tw.tween_property(fill, "modulate:a", 0.90, 0.62).from(0.38)
+		tw.parallel().tween_property(gate, "modulate:a", 0.88, 0.62).from(0.48)
+	return timer
+
+func draw_pending_claim_action_exit_art(parent: Control, options: Array) -> Control:
+	var art = Control.new()
+	art.name = "PendingClaimActionExitArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var active_count = max(1, options.size())
+	var rail = make_color_rect(rect_full(0.118, 0.090, 0.920, 0.165), Color(0.006, 0.016, 0.018, 0.44))
+	rail.name = "PendingClaimActionExitRail"
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.030, 0.260, 0.220 + 0.160 * float(min(4, active_count)), 0.740), Color(0.88, 0.68, 0.32, 0.26))
+	fill.name = "PendingClaimActionExitFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.866, 0.230, 0.920, 0.420), Color(0.96, 0.78, 0.38, 0.24))
+	gate.name = "PendingClaimActionExitGate"
+	art.add_child(gate)
+	for i in range(3):
+		var left = 0.620 + float(i) * 0.065
+		var tick = make_color_rect(rect_full(left, 0.245, left + 0.020, 0.390), Color(0.88, 0.68, 0.32, 0.24 - float(i) * 0.040))
+		tick.name = "PendingClaimActionExitTick_%d" % i
+		art.add_child(tick)
+	return art
+
+func draw_pending_claim_priority_art(parent: Control, options: Array) -> Control:
+	var art = Control.new()
+	art.name = "PendingClaimPriorityArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var rail = make_panel(art, rect_full(0.035, 0.760, 0.790, 0.875), Color(0.006, 0.016, 0.018, 0.54), 999, Color(0.88, 0.68, 0.32, 0.10), 0)
+	rail.name = "PendingClaimPriorityRail"
+	var fill_ratio = clamp(float(max(1, options.size())) / 4.0, 0.18, 1.0)
+	var fill = make_panel(rail, rect_full(0.020, 0.260, 0.020 + 0.940 * fill_ratio, 0.740), Color(0.88, 0.68, 0.32, 0.30), 999, Color(1.0, 0.84, 0.46, 0.08), 0)
+	fill.name = "PendingClaimPriorityFill"
+	for i in range(min(4, options.size())):
+		var claim_name = str(options[i])
+		var color = claim_color(claim_name)
+		var left = 0.075 + float(i) * 0.190
+		var node = make_panel(art, rect_full(left, 0.640, left + 0.046, 0.940), Color(color.r, color.g, color.b, 0.26), 999, Color(1.0, 0.90, 0.54, 0.08), 0)
+		node.name = "PendingClaimPriorityNode_%s" % claim_name
+	var pass_node = make_panel(art, rect_full(0.845, 0.650, 0.925, 0.930), Color(0.46, 0.50, 0.48, 0.18), 999, Color(0.86, 0.88, 0.82, 0.08), 0)
+	pass_node.name = "PendingClaimPriorityPassNode"
+	for i in range(3):
+		var tick = make_panel(art, rect_full(0.705 + float(i) * 0.043, 0.145, 0.730 + float(i) * 0.043, 0.315), Color(0.92, 0.70, 0.32, 0.22 - float(i) * 0.035), 999, Color(1.0, 0.86, 0.48, 0.06), 0)
+		tick.name = "PendingClaimPriorityTick_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.40, 0.72).from(0.88)
+		tw.tween_property(fill, "modulate:a", 0.88, 0.72).from(0.40)
+	return art
 
 func draw_pending_claim_flow_art(parent: Control, source_seat: int) -> Control:
 	var flow = Control.new()
@@ -5416,6 +8464,114 @@ func draw_pending_claim_option_spark(parent: Control, left: float, color: Color,
 		tw.tween_property(spark, "modulate:a", 0.26, 0.58).from(0.88).set_delay(float(index) * 0.08)
 		tw.tween_property(spark, "modulate:a", 0.88, 0.58).from(0.26)
 	return spark
+
+func draw_danger_discard_confirmation_art(parent: Control, tile: String, report: Dictionary = {}, alternatives: Array = []) -> Control:
+	var panel = make_panel(parent, rect_full(0.500, 0.654, 0.982, 0.718), Color(0.040, 0.018, 0.016, 0.94), 14, Color(0.92, 0.46, 0.30, 0.42), 3)
+	panel.name = "DangerDiscardConfirmationArt"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var danger_texture = add_illustration_texture(panel, "danger_warning", rect_full(0.014, 0.030, 0.986, 0.970), 0.16, false)
+	if danger_texture != null:
+		danger_texture.name = "DangerWarningTexture"
+	panel.add_child(make_color_rect(rect_full(0.0, 0.0, 0.014, 1.0), Color(0.96, 0.38, 0.24, 0.64)))
+	var danger_tile = make_tile_view(tile, Vector2(34, 46), false, Callable(), true, "高", "确认")
+	danger_tile.name = "DangerDiscardTile"
+	panel.add_child(danger_tile)
+	apply_rect(danger_tile, rect_full(0.040, 0.130, 0.112, 0.905))
+	var route = make_panel(panel, rect_full(0.130, 0.460, 0.735, 0.560), Color(0.92, 0.42, 0.28, 0.24), 999, Color(1.0, 0.72, 0.48, 0.12), 0)
+	route.name = "DangerDiscardRouteRail"
+	var risk = clamp(max(float(report.get("risk", 0.0)), float(report.get("feed_risk", 0.0))) / 60.0, 0.18, 1.0)
+	var fill = make_panel(route, rect_full(0.020, 0.250, 0.020 + 0.940 * risk, 0.750), Color(0.94, 0.34, 0.24, 0.54), 999, Color(1.0, 0.72, 0.48, 0.16), 0)
+	fill.name = "DangerDiscardRiskFill"
+	for i in range(4):
+		var node_left = 0.160 + float(i) * 0.130
+		var node_active = risk >= (float(i) + 1.0) / 4.0
+		var node = make_panel(panel, rect_full(node_left, 0.405, node_left + 0.026, 0.615), Color(0.96, 0.38, 0.24, 0.34 if node_active else 0.12), 999, Color(1.0, 0.72, 0.48, 0.14 if node_active else 0.05), 0)
+		node.name = "DangerDiscardRiskNode_%d" % i
+	var alert = make_panel(panel, rect_full(0.532, 0.570, 0.718, 0.885), Color(0.92, 0.32, 0.24, 0.12), 999, Color(1.0, 0.66, 0.42, 0.14), 0)
+	alert.name = "DangerDiscardAlertHalo"
+	for i in range(3):
+		var ring = make_panel(alert, rect_full(0.090 + float(i) * 0.085, 0.170 - float(i) * 0.015, 0.910 - float(i) * 0.085, 0.830 + float(i) * 0.015), Color(0.94, 0.34, 0.24, 0.030), 999, Color(1.0, 0.66, 0.42, 0.12 - float(i) * 0.025), 0)
+		ring.name = "DangerDiscardAlertRing_%d" % i
+	var label_text = str(report.get("risk_label", "高"))
+	if label_text == "":
+		label_text = "高"
+	var seal = make_badge(panel, rect_full(0.142, 0.175, 0.235, 0.825), risk_badge_text(label_text), 10, Color(0.54, 0.16, 0.12, 0.94), Color(0.96, 0.50, 0.34, 0.34), Color(0.98, 0.90, 0.78))
+	seal.name = "DangerDiscardRiskSeal"
+	seal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var detail = make_label(panel, discard_safety_text(report) if not report.is_empty() else "风险高", 10, Color(0.92, 0.82, 0.68), true)
+	detail.name = "DangerDiscardDetailText"
+	apply_rect(detail, rect_full(0.252, 0.120, 0.612, 0.435))
+	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(detail)
+	var source_trace = make_color_rect(rect_full(0.252, 0.305, 0.560, 0.350), Color(0.006, 0.016, 0.018, 0.44))
+	source_trace.name = "DangerDiscardSourceTrace"
+	panel.add_child(source_trace)
+	var source_fill = make_color_rect(rect_full(0.252, 0.312, 0.252 + 0.308 * risk, 0.343), Color(0.94, 0.34, 0.24, 0.28))
+	source_fill.name = "DangerDiscardSourceFill"
+	panel.add_child(source_fill)
+	var source_gate = make_color_rect(rect_full(0.546, 0.245, 0.580, 0.395), Color(0.98, 0.70, 0.42, 0.22))
+	source_gate.name = "DangerDiscardSourceGate"
+	panel.add_child(source_gate)
+	for i in range(3):
+		var left = 0.310 + float(i) * 0.068
+		var active = risk >= (float(i) + 1.0) / 4.0
+		var trace_node = make_color_rect(rect_full(left, 0.250, left + 0.016, 0.405), Color(0.94, 0.34, 0.24, 0.24 if active else 0.10))
+		trace_node.name = "DangerDiscardSourceNode_%d" % i
+		panel.add_child(trace_node)
+	var confirm = make_badge(panel, rect_full(0.628, 0.185, 0.735, 0.815), "确认", 10, Color(0.60, 0.20, 0.15, 0.94), Color(0.96, 0.54, 0.34, 0.34), Color(0.98, 0.90, 0.78))
+	confirm.name = "DangerDiscardConfirmSeal"
+	confirm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var confirm_route = make_color_rect(rect_full(0.575, 0.760, 0.735, 0.840), Color(0.006, 0.016, 0.018, 0.46))
+	confirm_route.name = "DangerDiscardConfirmRoute"
+	panel.add_child(confirm_route)
+	var confirm_fill = make_color_rect(rect_full(0.040, 0.260, 0.780, 0.740), Color(0.94, 0.34, 0.24, 0.30))
+	confirm_fill.name = "DangerDiscardConfirmFill"
+	confirm_route.add_child(confirm_fill)
+	var confirm_gate = make_color_rect(rect_full(0.704, 0.650, 0.735, 0.760), Color(0.98, 0.70, 0.42, 0.28))
+	confirm_gate.name = "DangerDiscardConfirmGate"
+	panel.add_child(confirm_gate)
+	var safe_rail = make_panel(panel, rect_full(0.758, 0.145, 0.965, 0.855), Color(0.020, 0.042, 0.040, 0.74), 12, Color(0.42, 0.76, 0.58, 0.20), 0)
+	safe_rail.name = "DangerDiscardSafeRail"
+	var safe_route = make_color_rect(rect_full(0.748, 0.880, 0.965, 0.940), Color(0.006, 0.016, 0.018, 0.42))
+	safe_route.name = "DangerDiscardAlternativeRoute"
+	panel.add_child(safe_route)
+	var safe_fill = make_color_rect(rect_full(0.035, 0.260, 0.720, 0.740), Color(0.42, 0.76, 0.58, 0.28))
+	safe_fill.name = "DangerDiscardAlternativeFill"
+	safe_route.add_child(safe_fill)
+	for i in range(min(2, alternatives.size())):
+		var alt_report: Dictionary = alternatives[i]
+		var alt_tile = str(alt_report.get("tile", ""))
+		if alt_tile == "":
+			continue
+		var left = 0.060 + float(i) * 0.420
+		var chip = make_panel(safe_rail, rect_full(left, 0.170, left + 0.310, 0.830), Color(0.26, 0.58, 0.44, 0.36), 10, Color(0.62, 0.92, 0.70, 0.20), 0)
+		chip.name = "DangerDiscardSafeTile_%d" % i
+		var chip_label = make_label(chip, tile_face_main(alt_tile), 10, tile_accent(alt_tile), true)
+		chip_label.name = "DangerDiscardSafeGlyph_%d" % i
+		apply_rect(chip_label, rect_full(0.0, 0.0, 1.0, 1.0))
+	for i in range(3):
+		var pulse = make_panel(panel, rect_full(0.765 + float(i) * 0.055, 0.060, 0.790 + float(i) * 0.055, 0.150), Color(0.50, 0.86, 0.60, 0.22), 999, Color(0.80, 1.0, 0.70, 0.10), 0)
+		pulse.name = "DangerDiscardSafePulse_%d" % i
+	for i in range(2):
+		var confirm_tick = make_color_rect(rect_full(0.592 + float(i) * 0.044, 0.655, 0.606 + float(i) * 0.044, 0.745), Color(0.94, 0.34, 0.24, 0.26 - float(i) * 0.050))
+		confirm_tick.name = "DangerDiscardConfirmTick_%d" % i
+		panel.add_child(confirm_tick)
+		var safe_tick = make_color_rect(rect_full(0.822 + float(i) * 0.046, 0.065, 0.836 + float(i) * 0.046, 0.145), Color(0.50, 0.86, 0.60, 0.24 - float(i) * 0.045))
+		safe_tick.name = "DangerDiscardAlternativeTick_%d" % i
+		panel.add_child(safe_tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_top = 8.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.16).from(0.0)
+		tw.tween_property(panel, "offset_top", 0.0, 0.16).from(8.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.46).from(0.92)
+		var alert_tw := create_tween()
+		alert_tw.set_loops(3600)
+		alert_tw.tween_property(alert, "modulate:a", 0.44, 0.62).from(1.0)
+		alert_tw.tween_property(alert, "modulate:a", 1.0, 0.62).from(0.44)
+	return panel
 
 func pending_claim_source_badge_text(source_seat: int) -> String:
 	if source_seat >= 0 and source_seat < CENTER_WIND_LABELS.size():
@@ -5461,9 +8617,16 @@ func draw_action_dock(parent: Control) -> void:
 func draw_action_intent_dock(parent: Control, count: int) -> Control:
 	var intent = make_panel(parent, action_intent_rect_for_count(count), Color(0.020, 0.036, 0.038, 0.88), 13, action_intent_color().darkened(0.18), 0)
 	intent.name = "ActionIntentDock"
+	var action_texture = add_illustration_texture(intent, "action_dock_ribbon", rect_full(0.010, 0.040, 0.990, 0.960), 0.13, false)
+	if action_texture != null:
+		action_texture.name = "ActionDockRibbonTexture"
+		intent.move_child(action_texture, 0)
 	var color = action_intent_color()
 	var rail = make_panel(intent, rect_full(0.012, 0.18, 0.028, 0.82), color, 8, color.lightened(0.18), 0)
 	rail.name = "ActionIntentRail"
+	draw_action_intent_flow(intent, count, color)
+	draw_action_intent_command_bridge(intent, count, color)
+	draw_action_intent_exit_route(intent, count, color)
 	var icon_name = action_intent_icon_name()
 	if add_lucide_icon(intent, icon_name, rect_full(0.045, 0.18, 0.118, 0.82), color.lightened(0.22)) == null:
 		var fallback = make_label(intent, action_intent_fallback_icon_text(), 12, color.lightened(0.22), true)
@@ -5482,6 +8645,77 @@ func draw_action_intent_dock(parent: Control, count: int) -> Control:
 		tw.tween_property(rail, "modulate:a", 0.42, 0.64).from(0.92)
 		tw.tween_property(rail, "modulate:a", 0.92, 0.64)
 	return intent
+
+func draw_action_intent_command_bridge(parent: Control, count: int, color: Color) -> Control:
+	var bridge = Control.new()
+	bridge.name = "ActionIntentCommandBridge"
+	bridge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(bridge, rect_full(0.130, 0.390, 0.845, 0.690))
+	parent.add_child(bridge)
+	var rail = make_color_rect(rect_full(0.035, 0.450, 0.965, 0.550), Color(0.006, 0.016, 0.018, 0.42))
+	rail.name = "ActionIntentCommandBridgeRail"
+	bridge.add_child(rail)
+	var fill_right = clamp(0.170 + 0.155 * float(max(1, count)), 0.240, 0.925)
+	var fill = make_color_rect(rect_full(0.035, 0.470, fill_right, 0.530), Color(color.r, color.g, color.b, 0.26))
+	fill.name = "ActionIntentCommandBridgeFill"
+	bridge.add_child(fill)
+	var gate = make_color_rect(rect_full(0.920, 0.250, 0.965, 0.750), Color(0.92, 0.74, 0.36, 0.22))
+	gate.name = "ActionIntentCommandBridgeGate"
+	bridge.add_child(gate)
+	for i in range(min(4, max(1, count))):
+		var center = 0.115 + float(i) * 0.170
+		var node = make_panel(bridge, rect_full(center - 0.024, 0.190, center + 0.024, 0.810), Color(color.r, color.g, color.b, 0.28 - float(i) * 0.030), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		node.name = "ActionIntentCommandNode_%d" % i
+	for i in range(3):
+		var left = 0.615 + float(i) * 0.070
+		var tick = make_color_rect(rect_full(left, 0.260, left + 0.018, 0.740), Color(color.r, color.g, color.b, 0.22 - float(i) * 0.035))
+		tick.name = "ActionIntentCommandTick_%d" % i
+		bridge.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.70).from(0.94)
+		tw.parallel().tween_property(gate, "modulate:a", 0.52, 0.70).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.94, 0.70).from(0.42)
+		tw.parallel().tween_property(gate, "modulate:a", 0.92, 0.70).from(0.52)
+	return bridge
+
+func draw_action_intent_exit_route(parent: Control, count: int, color: Color) -> Control:
+	var route = make_color_rect(rect_full(0.705, 0.115, 0.965, 0.195), Color(0.006, 0.016, 0.018, 0.42))
+	route.name = "ActionIntentExitRoute"
+	parent.add_child(route)
+	var fill_right = min(0.940, 0.220 + 0.135 * float(max(1, count)))
+	var fill = make_color_rect(rect_full(0.035, 0.260, fill_right, 0.740), Color(color.r, color.g, color.b, 0.24))
+	fill.name = "ActionIntentExitFill"
+	route.add_child(fill)
+	var gate = make_color_rect(rect_full(0.930, 0.250, 0.970, 0.500), Color(0.92, 0.74, 0.36, 0.24))
+	gate.name = "ActionIntentExitGate"
+	parent.add_child(gate)
+	for i in range(3):
+		var left = 0.760 + float(i) * 0.050
+		var tick = make_color_rect(rect_full(left, 0.250, left + 0.016, 0.390), Color(color.r, color.g, color.b, 0.22 - float(i) * 0.035))
+		tick.name = "ActionIntentExitTick_%d" % i
+		parent.add_child(tick)
+	return route
+
+func draw_action_intent_flow(parent: Control, count: int, color: Color) -> Control:
+	var flow = make_panel(parent, rect_full(0.130, 0.735, 0.845, 0.850), Color(color.r, color.g, color.b, 0.085), 999, Color(color.r, color.g, color.b, 0.10), 0)
+	flow.name = "ActionIntentFlow"
+	var fill = make_panel(flow, rect_full(0.018, 0.310, min(0.982, 0.018 + 0.185 * float(max(1, count))), 0.690), Color(color.r, color.g, color.b, 0.32), 999, Color(1.0, 0.92, 0.62, 0.08), 0)
+	fill.name = "ActionIntentFlowFill"
+	for i in range(min(4, max(1, count))):
+		var left = 0.070 + float(i) * 0.160
+		var bead = make_panel(flow, rect_full(left, 0.165, left + 0.042, 0.835), Color(color.r, color.g, color.b, 0.28 - float(i) * 0.035), 999, Color(color.r, color.g, color.b, 0.12), 0)
+		bead.name = "ActionIntentFlowBead_%d" % i
+	var marker_left = min(0.925, 0.120 + 0.155 * float(max(0, count - 1)))
+	var marker = make_panel(flow, rect_full(marker_left, 0.030, marker_left + 0.060, 0.970), Color(color.r, color.g, color.b, 0.18), 999, Color(color.r, color.g, color.b, 0.26), 0)
+	marker.name = "ActionIntentCurrentMarker"
+	if fx_enabled_effective():
+		var tw := create_tween()
+		tw.set_loops(8)
+		tw.tween_property(marker, "modulate:a", 0.40, 0.58).from(0.95).set_ease(Tween.EASE_OUT)
+		tw.tween_property(marker, "modulate:a", 0.95, 0.58).from(0.40).set_ease(Tween.EASE_IN)
+	return flow
 
 func action_intent_rect_for_count(count: int) -> Rect2:
 	var dock_rect = action_dock_rect_for_count(count)
@@ -5551,9 +8785,19 @@ func finalize_action_bar_layout() -> void:
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
 	var height = ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0
+	var btn_index := 0
 	for child in action_bar.get_children():
 		if child is Button:
 			configure_action_button_size(child as Button, width, height, font_size)
+			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				child.pivot_offset = Vector2(width * 0.5, height * 0.5)
+				child.scale = Vector2(0.7, 0.7)
+				child.modulate = Color(1, 1, 1, 0)
+				var btw := create_tween()
+				btw.set_parallel(true)
+				btw.tween_property(child, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+				btw.tween_property(child, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
+			btn_index += 1
 
 func action_bar_button_count() -> int:
 	if action_bar == null:
@@ -5810,6 +9054,15 @@ func ensure_update_dialog() -> void:
 	update_dialog.add_child(dim)
 
 	var panel = make_panel(update_dialog, rect_full(0.325, 0.275, 0.675, 0.640), Color(0.016, 0.050, 0.058, 0.98), 18, Color(0.66, 0.54, 0.24, 0.62))
+	var package_texture = add_illustration_texture(panel, "update_package", rect_full(0.055, 0.165, 0.945, 0.430), 0.18, false)
+	if package_texture != null:
+		package_texture.name = "UpdatePackageTexture"
+		panel.move_child(package_texture, 0)
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var package_tw := create_tween()
+			package_tw.set_loops(3600)
+			package_tw.tween_property(package_texture, "modulate:a", 0.09, 1.4).from(0.18)
+			package_tw.tween_property(package_texture, "modulate:a", 0.18, 1.4).from(0.09)
 	var title = make_label(panel, "游戏更新", 22, Color(0.90, 0.82, 0.46), true)
 	apply_rect(title, rect_full(0.06, 0.06, 0.94, 0.22))
 	draw_update_dialog_art(panel)
@@ -5827,7 +9080,8 @@ func ensure_update_dialog() -> void:
 	apply_rect(update_progress, rect_full(0.08, 0.45, 0.92, 0.55))
 	update_progress_label = make_label(panel, "", 15, Color(0.88, 0.90, 0.78), false)
 	update_progress_label.clip_contents = true
-	apply_rect(update_progress_label, rect_full(0.08, 0.57, 0.92, 0.72))
+	apply_rect(update_progress_label, rect_full(0.08, 0.57, 0.92, 0.685))
+	draw_update_release_notes_art(panel)
 
 	var row = HBoxContainer.new()
 	configure_passive_container(row)
@@ -5838,12 +9092,44 @@ func ensure_update_dialog() -> void:
 	update_primary_button = make_small_button("安装", Color(0.18, 0.42, 0.34), func() -> void:
 		on_update_primary_pressed()
 	)
+	update_primary_button.name = "UpdatePrimaryButton"
+	draw_update_dialog_button_art(update_primary_button, "primary", Color(0.18, 0.42, 0.34))
 	row.add_child(update_primary_button)
 	update_secondary_button = make_small_button("关闭", Color(0.26, 0.30, 0.34), func() -> void:
 		on_update_secondary_pressed()
 	)
+	update_secondary_button.name = "UpdateSecondaryButton"
+	draw_update_dialog_button_art(update_secondary_button, "secondary", Color(0.26, 0.30, 0.34))
 	row.add_child(update_secondary_button)
 	refresh_update_dialog()
+
+func draw_update_dialog_button_art(button: Control, role: String, color: Color) -> Control:
+	var art = Control.new()
+	art.name = "UpdateDialogButtonArt_%s" % role
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var button_texture = add_illustration_texture(art, "update_notes_strip", rect_full(-0.060, -0.160, 1.060, 1.160), 0.13, false)
+	if button_texture != null:
+		button_texture.name = "UpdateDialogButtonTexture_%s" % role
+		art.move_child(button_texture, 0)
+	var rail = make_color_rect(rect_full(0.115, 0.735, 0.885, 0.830), Color(0.006, 0.016, 0.018, 0.50))
+	rail.name = "UpdateDialogButtonRail_%s" % role
+	art.add_child(rail)
+	var fill_right = 0.860 if role == "primary" else 0.560
+	var fill = make_color_rect(rect_full(0.035, 0.260, fill_right, 0.740), Color(color.r, color.g, color.b, 0.34))
+	fill.name = "UpdateDialogButtonFill_%s" % role
+	rail.add_child(fill)
+	var gate_left = 0.790 if role == "primary" else 0.115
+	var gate = make_color_rect(rect_full(gate_left, 0.230, gate_left + 0.050, 0.590), Color(color.r, color.g, color.b, 0.28))
+	gate.name = "UpdateDialogButtonGate_%s" % role
+	art.add_child(gate)
+	for i in range(2):
+		var left = 0.645 + float(i) * 0.060 if role == "primary" else 0.235 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left, 0.205, left + 0.020, 0.345), Color(color.r, color.g, color.b, 0.26 - float(i) * 0.050))
+		tick.name = "UpdateDialogButtonTick_%s_%d" % [role, i]
+		art.add_child(tick)
+	return art
 
 func draw_update_dialog_art(parent: Control) -> Control:
 	var art = Control.new()
@@ -5855,17 +9141,86 @@ func draw_update_dialog_art(parent: Control) -> Control:
 	rail.name = "UpdateDialogArtRail"
 	update_art_fill = make_panel(rail, rect_full(0.018, 0.260, 0.018, 0.740), Color(0.28, 0.68, 0.50, 0.58), 999, Color(0.64, 0.86, 0.62, 0.24), 0)
 	update_art_fill.name = "UpdateDialogArtFill"
+	var channel = make_panel(art, rect_full(0.145, 0.690, 0.855, 0.800), Color(0.18, 0.40, 0.36, 0.10), 999, Color(0.52, 0.76, 0.64, 0.08), 0)
+	channel.name = "UpdateDialogDownloadChannel"
 	var pack = make_panel(art, rect_full(0.012, 0.170, 0.120, 0.830), Color(0.050, 0.040, 0.026, 0.72), 12, Color(0.88, 0.72, 0.34, 0.32), 0)
 	pack.name = "UpdateDialogPackageIcon"
 	add_lucide_icon(pack, "download", rect_full(0.24, 0.22, 0.76, 0.78), GOLD_BRIGHT)
+	var verify = make_panel(art, rect_full(0.785, 0.155, 0.870, 0.845), Color(0.28, 0.48, 0.42, 0.18), 999, Color(0.66, 0.86, 0.66, 0.16), 0)
+	verify.name = "UpdateDialogVerifyNode"
+	add_lucide_icon(verify, "shield-check", rect_full(0.250, 0.250, 0.750, 0.750), Color(0.82, 0.96, 0.74, 0.78))
+	var verify_rail = make_panel(art, rect_full(0.610, 0.220, 0.770, 0.315), Color(0.006, 0.018, 0.020, 0.44), 999, Color(0.66, 0.86, 0.66, 0.10), 0)
+	verify_rail.name = "UpdateDialogVerifyRail"
+	var verify_fill = make_panel(verify_rail, rect_full(0.030, 0.260, 0.780, 0.740), Color(0.54, 0.82, 0.62, 0.28), 999, Color(0.82, 0.96, 0.74, 0.06), 0)
+	verify_fill.name = "UpdateDialogVerifyFill"
+	for i in range(2):
+		var verify_step = make_panel(art, rect_full(0.640 + float(i) * 0.065, 0.125, 0.680 + float(i) * 0.065, 0.405), Color(0.54, 0.82, 0.62, 0.22), 999, Color(0.82, 0.96, 0.74, 0.06), 0)
+		verify_step.name = "UpdateDialogVerifyStep_%d" % i
 	update_art_status_light = make_panel(art, rect_full(0.890, 0.240, 0.956, 0.760), Color(0.42, 0.58, 0.52, 0.36), 999, Color(0.72, 0.86, 0.70, 0.24), 0)
 	update_art_status_light.name = "UpdateDialogStatusLight"
+	for i in range(3):
+		var left = 0.230 + float(i) * 0.190
+		var packet = make_panel(art, rect_full(left, 0.650, left + 0.030, 0.840), Color(0.54, 0.82, 0.62, 0.24), 999, Color(0.82, 0.96, 0.74, 0.08), 0)
+		packet.name = "UpdateDialogMovingPacket_%d" % i
 	for i in range(4):
 		var left = 0.170 + float(i) * 0.160
 		var pip = make_panel(art, rect_full(left, 0.240, left + 0.050, 0.760), Color(0.70, 0.60, 0.34, 0.20), 999, Color(0.90, 0.78, 0.44, 0.12), 0)
 		pip.name = "UpdateDialogPacketPip_%d" % i
+	for i in range(3):
+		var tick = make_panel(art, rect_full(0.685 + float(i) * 0.042, 0.520, 0.707 + float(i) * 0.042, 0.650), Color(0.54, 0.82, 0.62, 0.24 - float(i) * 0.035), 999, Color(0.82, 0.96, 0.74, 0.05), 0)
+		tick.name = "UpdateDialogVerifyTick_%d" % i
 	draw_update_dialog_stage_map(parent)
 	return art
+
+func draw_update_release_notes_art(parent: Control) -> Control:
+	update_release_notes_art = Control.new()
+	update_release_notes_art.name = "UpdateReleaseNotesArt"
+	update_release_notes_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(update_release_notes_art, rect_full(0.080, 0.675, 0.920, 0.755))
+	parent.add_child(update_release_notes_art)
+	var notes_texture = add_illustration_texture(update_release_notes_art, "update_notes_strip", rect_full(-0.020, -0.700, 1.020, 1.320), 0.16, false)
+	if notes_texture != null:
+		notes_texture.name = "UpdateReleaseNotesTexture"
+		update_release_notes_art.move_child(notes_texture, 0)
+	var rail = make_color_rect(rect_full(0.000, 0.620, 1.000, 0.720), Color(0.006, 0.016, 0.018, 0.46))
+	rail.name = "UpdateReleaseNotesRail"
+	update_release_notes_art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.020, 0.260, 0.780, 0.740), Color(0.82, 0.70, 0.36, 0.26))
+	fill.name = "UpdateReleaseNotesFill"
+	rail.add_child(fill)
+	var stage_route = make_color_rect(rect_full(0.790, 0.300, 0.955, 0.390), Color(0.32, 0.54, 0.44, 0.20))
+	stage_route.name = "UpdateReleaseNotesStageRoute"
+	update_release_notes_art.add_child(stage_route)
+	var stage_fill = make_color_rect(rect_full(0.000, 0.000, 0.680, 1.000), Color(0.72, 0.88, 0.62, 0.24))
+	stage_fill.name = "UpdateReleaseNotesStageFill"
+	stage_route.add_child(stage_fill)
+	var stage_gate = make_color_rect(rect_full(0.928, 0.180, 0.965, 0.520), Color(0.72, 0.88, 0.62, 0.24))
+	stage_gate.name = "UpdateReleaseNotesStageGate"
+	update_release_notes_art.add_child(stage_gate)
+	var seal = make_color_rect(rect_full(0.000, 0.120, 0.040, 0.560), Color(0.90, 0.74, 0.36, 0.24))
+	seal.name = "UpdateReleaseNotesSeal"
+	update_release_notes_art.add_child(seal)
+	for i in range(3):
+		var left = 0.820 + float(i) * 0.045
+		var tick = make_color_rect(rect_full(left, 0.150, left + 0.016, 0.380), Color(0.82, 0.70, 0.36, 0.24 - float(i) * 0.040))
+		tick.name = "UpdateReleaseNotesTick_%d" % i
+		update_release_notes_art.add_child(tick)
+	for i in range(2):
+		var left = 0.070 + float(i) * 0.050
+		var node = make_color_rect(rect_full(left, 0.240, left + 0.024, 0.520), Color(0.82, 0.70, 0.36, 0.20 - float(i) * 0.035))
+		node.name = "UpdateReleaseNotesNode_%d" % i
+		update_release_notes_art.add_child(node)
+	for i in range(2):
+		var left = 0.845 + float(i) * 0.043
+		var tick = make_color_rect(rect_full(left, 0.475, left + 0.016, 0.610), Color(0.72, 0.88, 0.62, 0.20 - float(i) * 0.035))
+		tick.name = "UpdateReleaseNotesStageTick_%d" % i
+		update_release_notes_art.add_child(tick)
+	update_release_notes_label = make_label(update_release_notes_art, "", 10, Color(0.84, 0.88, 0.74), true)
+	update_release_notes_label.name = "UpdateReleaseNotesLabel"
+	apply_rect(update_release_notes_label, rect_full(0.145, 0.010, 0.790, 0.580))
+	update_release_notes_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(update_release_notes_label)
+	return update_release_notes_art
 
 func draw_update_dialog_stage_map(parent: Control) -> Control:
 	var map = Control.new()
@@ -5876,6 +9231,11 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	var rail = make_color_rect(rect_full(0.040, 0.480, 0.960, 0.540), Color(0.82, 0.72, 0.42, 0.16))
 	rail.name = "UpdateDialogStageRail"
 	map.add_child(rail)
+	var fill = make_color_rect(rect_full(0.000, 0.000, 0.020, 1.000), Color(0.72, 0.88, 0.62, 0.26))
+	fill.name = "UpdateDialogStageFill"
+	rail.add_child(fill)
+	var gate = make_panel(map, rect_full(0.057, 0.105, 0.103, 0.895), Color(0.72, 0.88, 0.62, 0.18), 999, Color(0.84, 0.96, 0.70, 0.14), 0)
+	gate.name = "UpdateDialogStageGate"
 	var stages := [
 		["checking", "查"],
 		["downloading", "下"],
@@ -5891,6 +9251,11 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 		var label = make_label(node, label_text, 9, Color(0.92, 0.88, 0.70, 0.82), true)
 		label.name = "UpdateDialogStageGlyph_%s" % stage_id
 		apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
+	for i in range(3):
+		var left = 0.190 + float(i) * 0.280
+		var tick = make_color_rect(rect_full(left, 0.275, left + 0.022, 0.405), Color(0.82, 0.72, 0.42, 0.18 - float(i) * 0.028))
+		tick.name = "UpdateDialogStageTick_%d" % i
+		map.add_child(tick)
 	return map
 
 func refresh_update_dialog() -> void:
@@ -5910,6 +9275,11 @@ func refresh_update_dialog() -> void:
 			update_progress.value = 0.0
 	if update_progress_label != null and is_instance_valid(update_progress_label):
 		update_progress_label.text = update_progress_text()
+	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
+		var notes_text = update_release_notes_summary_line()
+		update_release_notes_art.visible = notes_text != ""
+		if update_release_notes_label != null and is_instance_valid(update_release_notes_label):
+			update_release_notes_label.text = notes_text
 	refresh_update_dialog_art()
 	if update_primary_button != null and is_instance_valid(update_primary_button):
 		update_primary_button.visible = update_state != "checking" and update_state != "downloading" and update_state != "current"
@@ -5935,6 +9305,17 @@ func refresh_update_dialog_stage_map() -> void:
 		return
 	var active_index = update_stage_index()
 	var stages := ["checking", "downloading", "ready", "install"]
+	var progress = clamp(float(active_index) / float(stages.size() - 1), 0.0, 1.0)
+	var fill = update_dialog.find_child("UpdateDialogStageFill", true, false)
+	if fill is Control:
+		apply_rect(fill as Control, rect_full(0.000, 0.000, max(0.020, progress), 1.000))
+	var gate = update_dialog.find_child("UpdateDialogStageGate", true, false)
+	if gate is Control:
+		var center = 0.080 + float(active_index) * 0.280
+		apply_rect(gate as Control, rect_full(center - 0.023, 0.105, center + 0.023, 0.895))
+		if gate is Panel:
+			var gate_color = update_state_color()
+			(gate as Panel).add_theme_stylebox_override("panel", style(Color(gate_color.r, gate_color.g, gate_color.b, 0.22), 999, Color(gate_color.r, gate_color.g, gate_color.b, 0.24), 1, 0))
 	for i in range(stages.size()):
 		var stage_id = stages[i]
 		var node = update_dialog.find_child("UpdateDialogStageNode_%s" % stage_id, true, false)
@@ -5994,6 +9375,12 @@ func update_manifest_detail_text() -> String:
 	return "\n" + "  ".join(parts)
 
 func update_release_notes_summary() -> String:
+	var summary = update_release_notes_summary_line()
+	if summary == "":
+		return ""
+	return "\n更新说明: %s" % summary
+
+func update_release_notes_summary_line() -> String:
 	var first_line = ""
 	var count = 0
 	for raw_line in update_release_notes.split("\n", false):
@@ -6008,7 +9395,7 @@ func update_release_notes_summary() -> String:
 	if first_line.length() > UPDATE_NOTES_PREVIEW_CHARS:
 		first_line = first_line.substr(0, UPDATE_NOTES_PREVIEW_CHARS).strip_edges() + "..."
 	var suffix = " 等%d项" % count if count > 1 else ""
-	return "\n更新说明: %s%s" % [first_line, suffix]
+	return "%s%s" % [first_line, suffix]
 
 func on_update_primary_pressed() -> void:
 	if update_state == "ready":
@@ -11172,40 +14559,56 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		texture.offset_right = -inset_x
 		texture.offset_bottom = -inset_y
 		tile_body.add_child(texture)
-	if should_draw_tile_face_label(tile, tile_texture, lightweight_static_tile):
-		if lightweight_static_tile:
-			draw_compact_tile_face(tile_body, tile, size)
-		else:
-			draw_tile_face(tile_body, tile, size)
-	if should_draw_tile_corner(clickable, size, tile_texture, lightweight_static_tile):
-		var corner = Label.new()
-		corner.text = tile_corner(tile)
-		corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		corner.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		corner.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-		corner.add_theme_font_size_override("font_size", max(9, int(size.y * 0.16)))
-		corner.add_theme_color_override("font_color", tile_accent(tile))
-		tile_body.add_child(corner)
-		apply_rect(corner, rect_full(0.08, 0.04, 0.45, 0.30))
-	if TILE_TEXT_OVERLAYS_ENABLED and risk_text != "":
-		var badge = make_label(tile_body, risk_text, max(9, int(size.y * 0.14)), Color(1.0, 0.98, 0.90), true)
-		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var risk_color = tile_risk_color(risk)
-		badge.add_theme_stylebox_override("normal", style(risk_color.darkened(0.20), 8, risk_color.lightened(0.16), 1))
-		apply_rect(badge, rect_full(0.12, 0.76, 0.88, 0.96))
-	if TILE_TEXT_OVERLAYS_ENABLED and hint_badge != "":
-		var hint = make_label(tile_body, hint_badge, max(9, int(size.y * 0.13)), Color(0.09, 0.12, 0.08), true)
-		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hint.clip_text = true
-		var hint_color = tile_hint_badge_color(hint_badge)
-		hint.add_theme_stylebox_override("normal", style(hint_color, 8, hint_color.lightened(0.16), 1))
-		var left = 0.50 if hint_badge.length() > 1 else 0.62
-		apply_rect(hint, rect_full(left, 0.04, 0.92, 0.23))
-	if button != null:
-		add_clickable_tile_press_art(button, size, highlighted)
-	if button != null and callback.is_valid():
-		connect_immediate_button_action(button, callback)
+		if should_draw_tile_face_label(tile, tile_texture, lightweight_static_tile):
+			if lightweight_static_tile:
+				draw_compact_tile_face(tile_body, tile, size)
+			else:
+				draw_tile_face(tile_body, tile, size)
+		if should_draw_tile_corner(clickable, size, tile_texture, lightweight_static_tile):
+			var corner = Label.new()
+			corner.text = tile_corner(tile)
+			corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			corner.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			corner.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+			corner.add_theme_font_size_override("font_size", max(9, int(size.y * 0.16)))
+			corner.add_theme_color_override("font_color", tile_accent(tile))
+			tile_body.add_child(corner)
+			apply_rect(corner, rect_full(0.08, 0.04, 0.45, 0.30))
+		if risk_text != "" or hint_badge != "":
+			draw_tile_status_route_art(tile_body, risk, hint_badge)
+		if TILE_TEXT_OVERLAYS_ENABLED and risk_text != "":
+			var badge = make_label(tile_body, risk_text, max(9, int(size.y * 0.14)), Color(1.0, 0.98, 0.90), true)
+			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var risk_color = tile_risk_color(risk)
+			badge.add_theme_stylebox_override("normal", style(risk_color.darkened(0.20), 8, risk_color.lightened(0.16), 1))
+			apply_rect(badge, rect_full(0.12, 0.76, 0.88, 0.96))
+		if TILE_TEXT_OVERLAYS_ENABLED and hint_badge != "":
+			var hint = make_label(tile_body, hint_badge, max(9, int(size.y * 0.13)), Color(0.09, 0.12, 0.08), true)
+			hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			hint.clip_text = true
+			var hint_color = tile_hint_badge_color(hint_badge)
+			hint.add_theme_stylebox_override("normal", style(hint_color, 8, hint_color.lightened(0.16), 1))
+			var left = 0.50 if hint_badge.length() > 1 else 0.62
+			apply_rect(hint, rect_full(left, 0.04, 0.92, 0.23))
+		if button != null:
+			add_clickable_tile_press_art(button, size, highlighted)
+		if button != null and callback.is_valid():
+			connect_immediate_button_action(button, callback)
+		return tile_body if lightweight_static_tile else frame
 	return tile_body if lightweight_static_tile else frame
+
+func draw_tile_status_route_art(parent: Control, risk: String, hint_badge: String) -> Control:
+	var accent = tile_hint_badge_color(hint_badge) if hint_badge != "" else tile_risk_color(risk)
+	var route = make_panel(parent, rect_full(0.120, 0.825, 0.880, 0.900), Color(0.006, 0.014, 0.016, 0.36), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	route.name = "TileStatusRoute"
+	var fill = make_panel(route, rect_full(0.050, 0.280, 0.780 if hint_badge != "" else 0.620, 0.720), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+	fill.name = "TileStatusFill"
+	var gate = make_panel(parent, rect_full(0.755, 0.730, 0.870, 0.945), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(1.0, 0.86, 0.48, 0.08), 0)
+	gate.name = "TileStatusGate"
+	for i in range(2):
+		var tick = make_panel(parent, rect_full(0.410 + float(i) * 0.100, 0.735, 0.445 + float(i) * 0.100, 0.805), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.045), 999, Color(1.0, 0.86, 0.48, 0.03), 0)
+		tick.name = "TileStatusTick_%d" % i
+	return route
 
 func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bool) -> void:
 	var focus_glow = Panel.new()
@@ -11223,6 +14626,21 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 	button.add_child(sheen)
 	apply_rect(sheen, rect_full(0.12, 0.07, 0.88, 0.16))
 
+	var release_route = make_color_rect(rect_full(0.220, 0.880, 0.780, 0.940), Color(0.006, 0.016, 0.018, 0.44))
+	release_route.name = "ClickableTileReleaseRoute"
+	button.add_child(release_route)
+	var release_fill = make_color_rect(rect_full(0.050, 0.260, 0.620, 0.740), Color(0.96, 0.78, 0.34, 0.24))
+	release_fill.name = "ClickableTileReleaseFill"
+	release_route.add_child(release_fill)
+	var release_gate = make_color_rect(rect_full(0.720, 0.790, 0.790, 0.955), Color(0.96, 0.82, 0.42, 0.22))
+	release_gate.name = "ClickableTileReleaseGate"
+	button.add_child(release_gate)
+	for i in range(2):
+		var left = 0.395 + float(i) * 0.085
+		var tick = make_color_rect(rect_full(left, 0.805, left + 0.028, 0.910), Color(0.96, 0.78, 0.34, 0.22 - float(i) * 0.050))
+		tick.name = "ClickableTileReleaseTick_%d" % i
+		button.add_child(tick)
+
 	var tap_dot = Panel.new()
 	tap_dot.name = "ClickableTileTapDot"
 	tap_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -11239,12 +14657,20 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 		tw.set_parallel(true)
 		tw.tween_property(sheen, "color:a", 0.28, 0.05).from(0.0)
 		tw.tween_property(sheen, "color:a", 0.0, 0.16).set_delay(0.05)
+		if is_instance_valid(release_fill):
+			tw.tween_property(release_fill, "color:a", 0.46, 0.05).from(0.24)
+			tw.tween_property(release_fill, "color:a", 0.24, 0.16).set_delay(0.05)
+		if is_instance_valid(release_gate):
+			tw.tween_property(release_gate, "color:a", 0.44, 0.05).from(0.22)
+			tw.tween_property(release_gate, "color:a", 0.22, 0.16).set_delay(0.05)
 		tw.tween_property(tap_dot, "modulate:a", 0.62, 0.05).from(0.0)
 		tw.tween_property(tap_dot, "modulate:a", 0.0, 0.18).set_delay(0.05)
 		tw.tween_property(tap_dot, "scale", Vector2(1.12, 1.12), 0.18).from(Vector2(0.58, 0.58)).set_ease(Tween.EASE_OUT)
 		if is_instance_valid(focus_glow) and not highlighted:
 			tw.tween_property(focus_glow, "modulate:a", 0.35, 0.05).from(0.0)
 			tw.tween_property(focus_glow, "modulate:a", 0.0, 0.18).set_delay(0.05)
+		tw.tween_property(button, "scale", Vector2(0.92, 0.92), 0.04).from(Vector2(1.0, 1.0))
+		tw.chain().tween_property(button, "scale", Vector2(1.0, 1.0), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	)
 
 func tile_hint_badge_color(hint_badge: String) -> Color:
@@ -11371,6 +14797,40 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		apply_rect(fallback, rect_full(0.100, 0.150, 0.640, 0.850))
 	var sheen = make_panel(button, rect_full(0.060, 0.075, 0.940, 0.155), Color(1.0, 1.0, 1.0, 0.030), 999, Color(1.0, 1.0, 1.0, 0.0), 0)
 	sheen.name = "ActionButtonSheen"
+	var command_route = make_color_rect(rect_full(0.310, 0.760, 0.690, 0.850), Color(0.006, 0.014, 0.016, 0.46))
+	command_route.name = "ActionButtonCommandRoute"
+	button.add_child(command_route)
+	var command_fill = make_color_rect(rect_full(0.030, 0.270, 0.760, 0.730), Color(color.r, color.g, color.b, 0.28))
+	command_fill.name = "ActionButtonCommandFill"
+	command_route.add_child(command_fill)
+	var command_node = make_color_rect(rect_full(0.690, 0.700, 0.745, 0.900), Color(color.r, color.g, color.b, 0.22))
+	command_node.name = "ActionButtonCommandNode"
+	button.add_child(command_node)
+	var execution_gate = make_color_rect(rect_full(0.706, 0.705, 0.736, 0.900), Color(0.96, 0.82, 0.42, 0.24))
+	execution_gate.name = "ActionButtonExecutionGate"
+	button.add_child(execution_gate)
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.600 + float(i) * 0.050, 0.245, 0.620 + float(i) * 0.050, 0.360), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.06))
+		tick.name = "ActionButtonCommandTick_%d" % i
+		button.add_child(tick)
+	for i in range(3):
+		var left = 0.505 + float(i) * 0.050
+		var tick = make_color_rect(rect_full(left, 0.640, left + 0.016, 0.745), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.045))
+		tick.name = "ActionButtonExecutionTick_%d" % i
+		button.add_child(tick)
+	var confirm_route = make_color_rect(rect_full(0.745, 0.455, 0.940, 0.520), Color(0.006, 0.014, 0.016, 0.40))
+	confirm_route.name = "ActionButtonConfirmRoute"
+	button.add_child(confirm_route)
+	var confirm_fill = make_color_rect(rect_full(0.035, 0.260, 0.700, 0.740), Color(color.r, color.g, color.b, 0.22))
+	confirm_fill.name = "ActionButtonConfirmFill"
+	confirm_route.add_child(confirm_fill)
+	var confirm_gate = make_color_rect(rect_full(0.910, 0.405, 0.944, 0.575), Color(0.96, 0.82, 0.42, 0.22))
+	confirm_gate.name = "ActionButtonConfirmGate"
+	button.add_child(confirm_gate)
+	for i in range(2):
+		var confirm_tick = make_color_rect(rect_full(0.795 + float(i) * 0.048, 0.385, 0.810 + float(i) * 0.048, 0.585), Color(color.r, color.g, color.b, 0.22 - float(i) * 0.050))
+		confirm_tick.name = "ActionButtonConfirmTick_%d" % i
+		button.add_child(confirm_tick)
 	if role in ["win", "gang", "safe", "advice", "pass"]:
 		var seal = make_label(button, action_button_priority_mark(role), 10, Color(0.98, 0.90, 0.62, 0.78), true)
 		seal.name = "ActionButtonPrioritySeal"
@@ -11794,6 +15254,27 @@ func play_fx_deal_cascade(dealer: int) -> void:
 		var seat = (dealer + i) % 4
 		var seat_rect = fx_seat_screen_rect(seat)
 		var target = (seat_rect.position + seat_rect.size) * 0.5
+		var route = Control.new()
+		route.name = "DealCascadeRoute_%d" % seat
+		route.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var route_horizontal = abs(target.x - center.x) >= abs(target.y - center.y)
+		if route_horizontal:
+			apply_rect(route, rect_full(min(center.x, target.x), center.y - 0.006, max(center.x, target.x), center.y + 0.006))
+		else:
+			apply_rect(route, rect_full(center.x - 0.006, min(center.y, target.y), center.x + 0.006, max(center.y, target.y)))
+		root.add_child(route)
+		var route_fill = make_color_rect(rect_full(0.0, 0.0, 0.82, 1.0), Color(accent.r, accent.g, accent.b, 0.28))
+		route_fill.name = "DealCascadeRouteFill_%d" % seat
+		route.add_child(route_fill)
+		var route_gate = make_panel(root, rect_full(target.x - 0.016, target.y - 0.026, target.x + 0.016, target.y + 0.026), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.48, 0.16), 0)
+		route_gate.name = "DealCascadeSeatGate_%d" % seat
+		for tick_index in range(3):
+			var t = 0.28 + float(tick_index) * 0.18
+			var tick_x = lerp(center.x, target.x, t)
+			var tick_y = lerp(center.y, target.y, t)
+			var tick = make_color_rect(rect_full(tick_x - 0.006, tick_y - 0.018, tick_x + 0.006, tick_y + 0.018), Color(accent.r, accent.g, accent.b, 0.24 - float(tick_index) * 0.040))
+			tick.name = "DealCascadeRouteTick_%d_%d" % [seat, tick_index]
+			root.add_child(tick)
 		var target_pos = Vector2(target.x * viewport_size.x, target.y * viewport_size.y)
 		var seat_delay = float(i) * 0.05
 		for j in range(FX_DEAL_CASCADE_TILE_COUNT):
@@ -11867,12 +15348,44 @@ func play_fx_turn_switch_slide(seat: int) -> void:
 	compass_halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if fx_layer != null and is_instance_valid(fx_layer):
 		fx_layer.add_child(compass_halo)
+		var center_rect = root_layer_rect_to_screen_rect(CENTER_PANEL_RECT)
+		var center = (center_rect.position + center_rect.size) * 0.5
+		var seat_rect = fx_seat_screen_rect(seat)
+		var target_center = (seat_rect.position + seat_rect.size) * 0.5
+		var route = Control.new()
+		route.name = "TurnSwitchRoute"
+		route.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var route_horizontal = abs(target_center.x - center.x) >= abs(target_center.y - center.y)
+		if route_horizontal:
+			apply_rect(route, rect_full(min(center.x, target_center.x), center.y - 0.005, max(center.x, target_center.x), center.y + 0.005))
+		else:
+			apply_rect(route, rect_full(center.x - 0.005, min(center.y, target_center.y), center.x + 0.005, max(center.y, target_center.y)))
+		fx_layer.add_child(route)
+		var route_fill = make_color_rect(rect_full(0.0, 0.0, 0.740, 1.0), Color(accent.r, accent.g, accent.b, 0.32))
+		route_fill.name = "TurnSwitchRouteFill"
+		route.add_child(route_fill)
+		var gate = make_panel(fx_layer, rect_full(target_center.x - 0.014, target_center.y - 0.024, target_center.x + 0.014, target_center.y + 0.024), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.48, 0.16), 0)
+		gate.name = "TurnSwitchSeatGate"
+		for i in range(3):
+			var t = 0.300 + float(i) * 0.180
+			var tick_x = lerp(center.x, target_center.x, t)
+			var tick_y = lerp(center.y, target_center.y, t)
+			var tick = make_color_rect(rect_full(tick_x - 0.006, tick_y - 0.018, tick_x + 0.006, tick_y + 0.018), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040))
+			tick.name = "TurnSwitchRouteTick_%d" % i
+			fx_layer.add_child(tick)
 		var halo_tw := create_tween()
 		halo_tw.tween_property(compass_halo, "color:a", 0.10, dur * 0.4).from(0.0)
 		halo_tw.tween_property(compass_halo, "color:a", 0.0, dur * 0.6).from(0.10)
 		halo_tw.tween_callback(func() -> void:
 			if compass_halo != null and is_instance_valid(compass_halo):
 				compass_halo.queue_free()
+			if route != null and is_instance_valid(route):
+				route.queue_free()
+			if gate != null and is_instance_valid(gate):
+				gate.queue_free()
+			for child in fx_layer.get_children():
+				if str(child.name).begins_with("TurnSwitchRouteTick_"):
+					child.queue_free()
 		)
 	target.pivot_offset = target.size * 0.5
 
@@ -11973,6 +15486,25 @@ func play_fx_flower_bloom(seat: int, tile: String) -> void:
 	root.z_index = FX_LAYER_Z_INDEX + 2
 	fx_layer.add_child(root)
 	var accent = tile_accent(tile).lightened(0.18)
+	var bloom_texture_resource = illustration_texture("flower_bloom_shadow")
+	if bloom_texture_resource != null:
+		var bloom_texture = TextureRect.new()
+		bloom_texture.name = "FlowerBloomShadowTexture"
+		bloom_texture.texture = bloom_texture_resource
+		bloom_texture.modulate = Color(1.0, 1.0, 1.0, 0.20)
+		bloom_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bloom_texture.stretch_mode = TextureRect.STRETCH_SCALE
+		bloom_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bloom_texture.offset_left = -86.0
+		bloom_texture.offset_top = -76.0
+		bloom_texture.offset_right = 86.0
+		bloom_texture.offset_bottom = 70.0
+		root.add_child(bloom_texture)
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var bloom_texture_tw := create_tween()
+			bloom_texture_tw.set_parallel(true)
+			bloom_texture_tw.tween_property(bloom_texture, "modulate:a", 0.0, 0.58).from(0.24)
+			bloom_texture_tw.tween_property(bloom_texture, "scale", Vector2(1.16, 1.16), 0.58).from(Vector2(0.88, 0.88)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	var tile_view = make_tile_view(tile, Vector2(42, 58), false, Callable(), true)
 	tile_view.name = "FlowerBloomTile"
 	tile_view.position = Vector2(-21.0, -34.0)
@@ -12022,6 +15554,19 @@ func play_fx_flower_bloom(seat: int, tile: String) -> void:
 	ring.set_anchors_preset(Control.PRESET_CENTER)
 	ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 999, Color(accent.r, accent.g, accent.b, 0.50), 2, 0))
 	root.add_child(ring)
+	var route = make_color_rect(Rect2(Vector2(-46.0, 42.0), Vector2(92.0, 5.0)), Color(0.006, 0.016, 0.018, 0.48))
+	route.name = "FlowerBloomReplacementRoute"
+	root.add_child(route)
+	var route_fill = make_color_rect(Rect2(Vector2(3.0, 1.0), Vector2(66.0, 3.0)), Color(accent.r, accent.g, accent.b, 0.36))
+	route_fill.name = "FlowerBloomReplacementFill"
+	route.add_child(route_fill)
+	var gate = make_color_rect(Rect2(Vector2(35.0, 28.0), Vector2(8.0, 18.0)), Color(0.96, 0.82, 0.42, 0.32))
+	gate.name = "FlowerBloomReplacementGate"
+	root.add_child(gate)
+	for i in range(3):
+		var tick = make_color_rect(Rect2(Vector2(-18.0 + float(i) * 14.0, 28.0), Vector2(4.0, 12.0)), Color(accent.r, accent.g, accent.b, 0.30 - float(i) * 0.045))
+		tick.name = "FlowerBloomReplacementTick_%d" % i
+		root.add_child(tick)
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(tile_view, "modulate:a", 1.0, 0.14).from(0.0)
@@ -12036,6 +15581,8 @@ func play_fx_flower_bloom(seat: int, tile: String) -> void:
 	tw.tween_property(ring, "offset_top", -58.0, 0.44).from(-16.0)
 	tw.tween_property(ring, "offset_right", 58.0, 0.44).from(16.0)
 	tw.tween_property(ring, "offset_bottom", 58.0, 0.44).from(16.0)
+	tw.tween_property(route_fill, "modulate:a", 0.20, 0.36).from(0.92).set_delay(0.10)
+	tw.tween_property(route, "modulate:a", 0.0, 0.20).set_delay(0.52)
 	tw.tween_callback(func() -> void:
 		if root != null and is_instance_valid(root):
 			root.queue_free()
@@ -12087,26 +15634,113 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 	var half_dur := float(TRANSITION_DURATION_MSEC) / 2000.0
 	match style:
 		"ink_wash":
-			# 水墨过渡 - 墨色从右侧扩散覆盖
-			transition_overlay.color = Color(0.02, 0.02, 0.03, 0.0)
-			var ink_dur := 0.22
+			# 水墨过渡 - 多点墨滴扩散覆盖 + 笔触横扫
+			transition_overlay.color = Color(0.012, 0.014, 0.018, 0.0)
+			var ink_art = Control.new()
+			ink_art.name = "InkWashTransitionArt"
+			ink_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			ink_art.set_anchors_preset(Control.PRESET_FULL_RECT)
+			fx_layer.add_child(ink_art)
+			# 笔触横扫条 - 从左向右
+			var brush_bar = ColorRect.new()
+			brush_bar.name = "InkWashBrushBar"
+			brush_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			brush_bar.color = Color(0.02, 0.02, 0.03, 0.92)
+			brush_bar.anchor_top = 0.42
+			brush_bar.anchor_bottom = 0.58
+			brush_bar.anchor_left = -0.3
+			brush_bar.anchor_right = -0.1
+			ink_art.add_child(brush_bar)
+			# 墨滴扩散点 - 不同位置同时绽开
+			var ink_blots: Array[Panel] = []
+			var blot_positions := [
+				Vector2(0.28, 0.38), Vector2(0.52, 0.52),
+				Vector2(0.72, 0.42), Vector2(0.46, 0.70),
+			]
+			for i in range(blot_positions.size()):
+				var pos: Vector2 = blot_positions[i]
+				var blot = Panel.new()
+				blot.name = "InkWashBlot_%d" % i
+				blot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				var bl_style = StyleBoxFlat.new()
+				bl_style.bg_color = Color(0.015, 0.018, 0.022, 0.94)
+				bl_style.set_corner_radius_all(999)
+				blot.add_theme_stylebox_override("panel", bl_style)
+				blot.custom_minimum_size = Vector2(8, 8)
+				blot.set_anchors_preset(Control.PRESET_CENTER)
+				blot.anchor_left = pos.x
+				blot.anchor_right = pos.x
+				blot.anchor_top = pos.y
+				blot.anchor_bottom = pos.y
+				blot.scale = Vector2(0.1, 0.1)
+				ink_art.add_child(blot)
+				ink_blots.append(blot)
+			# 装饰线
+			var spine = make_color_rect(rect_full(0.080, 0.495, 0.920, 0.510), Color(0.82, 0.76, 0.62, 0.18))
+			spine.name = "InkWashSpine"
+			spine.modulate.a = 0.0
+			ink_art.add_child(spine)
+			# 进度填充 - 沿装饰线推进
+			var ink_fill = make_color_rect(rect_full(0.080, 0.497, 0.090, 0.508), Color(0.90, 0.80, 0.46, 0.30))
+			ink_fill.name = "InkWashFill"
+			ink_fill.modulate.a = 0.0
+			ink_art.add_child(ink_fill)
+			# 完成印记 - 装饰线尾端
+			var ink_gate = make_color_rect(rect_full(0.905, 0.470, 0.940, 0.535), Color(0.92, 0.78, 0.42, 0.22))
+			ink_gate.name = "InkWashCompletionGate"
+			ink_gate.modulate.a = 0.0
+			ink_art.add_child(ink_gate)
+			# 节奏刻度 - 三段墨迹节拍
+			var ink_ticks: Array[ColorRect] = []
+			for i in range(3):
+				var ink_tick = make_color_rect(rect_full(0.300 + float(i) * 0.150, 0.476, 0.318 + float(i) * 0.150, 0.529), Color(0.88, 0.76, 0.42, 0.22 - float(i) * 0.04))
+				ink_tick.name = "InkWashTick_%d" % i
+				ink_tick.modulate.a = 0.0
+				ink_art.add_child(ink_tick)
+				ink_ticks.append(ink_tick)
+			var ink_dur := 0.30
 			var tw := create_tween()
 			transition_tween = tw
 			transition_active = true
+			# 笔触横扫
 			tw.set_parallel(true)
-			tw.tween_property(transition_overlay, "color:a", 0.96, ink_dur).from(0.0).set_ease(Tween.EASE_IN)
-			tw.tween_property(transition_overlay, "anchor_left", 0.0, ink_dur).from(1.0).set_trans(Tween.TRANS_QUAD)
+			tw.tween_property(brush_bar, "anchor_left", 0.0, ink_dur * 0.7).from(-0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			tw.tween_property(brush_bar, "anchor_right", 1.0, ink_dur * 0.7).from(-0.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			# 墨滴同时扩散
+			for i in range(ink_blots.size()):
+				var blot = ink_blots[i]
+				var target_scale := randf_range(28.0, 45.0)
+				tw.tween_property(blot, "scale", Vector2(target_scale, target_scale), ink_dur).from(Vector2(0.1, 0.1)).set_delay(float(i) * 0.02).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			tw.tween_property(transition_overlay, "color:a", 0.97, ink_dur).from(0.0).set_ease(Tween.EASE_IN)
+			tw.tween_property(spine, "modulate:a", 1.0, ink_dur * 0.5).from(0.0).set_delay(ink_dur * 0.3)
+			# 进度填充推进至尾端
+			tw.tween_property(ink_fill, "modulate:a", 1.0, ink_dur * 0.4).from(0.0).set_delay(ink_dur * 0.3)
+			tw.tween_property(ink_fill, "anchor_right", 0.905, ink_dur * 0.7).from(0.090).set_delay(ink_dur * 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			# 节奏刻度依次点亮
+			for i in range(ink_ticks.size()):
+				tw.tween_property(ink_ticks[i], "modulate:a", 1.0, ink_dur * 0.25).from(0.0).set_delay(ink_dur * (0.35 + float(i) * 0.12))
+			# 完成印记闪现
+			tw.tween_property(ink_gate, "modulate:a", 1.0, ink_dur * 0.3).from(0.0).set_delay(ink_dur * 0.7)
 			tw.set_parallel(false)
 			tw.tween_callback(func() -> void:
 				callback.call()
 				transition_overlay.anchor_left = 0.0
 			)
-			tw.tween_property(transition_overlay, "color:a", 0.0, ink_dur).from(0.96).set_ease(Tween.EASE_OUT)
+			# 墨迹消散 - 反向缩小
+			tw.set_parallel(true)
+			tw.tween_property(transition_overlay, "color:a", 0.0, ink_dur * 0.8).from(0.97).set_ease(Tween.EASE_OUT)
+			for i in range(ink_blots.size()):
+				var blot = ink_blots[i]
+				tw.tween_property(blot, "modulate:a", 0.0, ink_dur * 0.6).from(1.0).set_delay(float(i) * 0.015)
+			tw.tween_property(brush_bar, "modulate:a", 0.0, ink_dur * 0.5).from(1.0)
+			tw.set_parallel(false)
 			tw.tween_callback(func() -> void:
 				transition_active = false
 				if transition_overlay != null and is_instance_valid(transition_overlay):
 					transition_overlay.visible = false
 					transition_overlay.anchor_left = 0.0
+				if ink_art != null and is_instance_valid(ink_art):
+					ink_art.queue_free()
 			)
 		"curtain":
 			# 珠帘过渡 - 多列竖线依次落下
@@ -12117,6 +15751,12 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 			strip_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			strip_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 			fx_layer.add_child(strip_container)
+			var top_rail = make_color_rect(rect_full(0.040, 0.035, 0.960, 0.050), Color(0.92, 0.76, 0.36, 0.34))
+			top_rail.name = "CurtainTopRail"
+			strip_container.add_child(top_rail)
+			var close_gate = make_color_rect(rect_full(0.472, 0.885, 0.528, 0.935), Color(0.92, 0.76, 0.36, 0.24))
+			close_gate.name = "CurtainCloseGate"
+			strip_container.add_child(close_gate)
 			for i in range(curtain_strips):
 				var strip = ColorRect.new()
 				strip.color = Color(0.02, 0.02, 0.03, 0.94)
@@ -12128,6 +15768,11 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				strip.anchor_top = -1.0
 				strip.anchor_bottom = -1.0
 				strip_container.add_child(strip)
+				var bead = make_panel(strip_container, rect_full(left_frac + 0.030, 0.020, left_frac + 0.060, 0.078), Color(0.86, 0.70, 0.34, 0.34), 999, Color(1.0, 0.88, 0.48, 0.16), 0)
+				bead.name = "CurtainBead_%d" % i
+				var route_tick = make_color_rect(rect_full(left_frac + 0.070, 0.875, left_frac + 0.088, 0.930), Color(0.86, 0.70, 0.34, 0.20))
+				route_tick.name = "CurtainCloseTick_%d" % i
+				strip_container.add_child(route_tick)
 				var s_tw := create_tween()
 				s_tw.tween_property(strip, "anchor_top", 0.0, 0.25).from(-1.0).set_delay(float(i) * 0.04).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 				s_tw.parallel().tween_property(strip, "anchor_bottom", 1.0, 0.25).from(-0.5).set_delay(float(i) * 0.04)
@@ -12149,12 +15794,71 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				if transition_overlay != null and is_instance_valid(transition_overlay):
 					transition_overlay.visible = false
 			).set_delay(0.60)
+		"ink_dissolve":
+			# 水墨溶解转场 - 使用 ink_dissolve_transition shader
+			var dissolve_rect = ColorRect.new()
+			dissolve_rect.name = "InkDissolveTransition"
+			dissolve_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			dissolve_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+			dissolve_rect.color = Color.WHITE
+			fx_layer.add_child(dissolve_rect)
+			var dissolve_mat = get_shader_material("ink_dissolve_transition")
+			if dissolve_mat != null:
+				dissolve_mat.set_shader_parameter("progress", 0.0)
+				dissolve_mat.set_shader_parameter("origin", Vector2(0.5, 0.5))
+				dissolve_mat.set_shader_parameter("edge_softness", 0.08)
+				dissolve_mat.set_shader_parameter("swirl_strength", 0.6)
+				dissolve_rect.material = dissolve_mat
+				var tw := create_tween()
+				transition_tween = tw
+				transition_active = true
+				tw.tween_method(func(val: float) -> void:
+					if dissolve_mat != null:
+						dissolve_mat.set_shader_parameter("progress", val)
+				, 0.0, 1.0, half_dur * 1.2)
+				tw.tween_callback(func() -> void:
+					callback.call()
+				)
+				tw.tween_method(func(val: float) -> void:
+					if dissolve_mat != null:
+						dissolve_mat.set_shader_parameter("progress", val)
+				, 1.0, 0.0, half_dur * 1.2)
+				tw.tween_callback(func() -> void:
+					transition_active = false
+					if dissolve_rect != null and is_instance_valid(dissolve_rect):
+						dissolve_rect.queue_free()
+					if transition_overlay != null and is_instance_valid(transition_overlay):
+						transition_overlay.visible = false
+				)
+			else:
+				callback.call()
+				if dissolve_rect != null and is_instance_valid(dissolve_rect):
+					dissolve_rect.queue_free()
 		_:
 			# 默认渐隐过渡
+			var fade_art = Control.new()
+			fade_art.name = "FadeTransitionArt"
+			fade_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			fade_art.set_anchors_preset(Control.PRESET_FULL_RECT)
+			fx_layer.add_child(fade_art)
+			var rail = make_color_rect(rect_full(0.300, 0.505, 0.700, 0.520), Color(0.82, 0.76, 0.62, 0.16))
+			rail.name = "FadeTransitionRail"
+			fade_art.add_child(rail)
+			var fill = make_color_rect(rect_full(0.300, 0.507, 0.610, 0.518), Color(0.90, 0.78, 0.42, 0.24))
+			fill.name = "FadeTransitionFill"
+			fade_art.add_child(fill)
+			var gate = make_color_rect(rect_full(0.650, 0.470, 0.685, 0.555), Color(0.90, 0.78, 0.42, 0.20))
+			gate.name = "FadeTransitionGate"
+			fade_art.add_child(gate)
+			for i in range(3):
+				var tick = make_color_rect(rect_full(0.405 + float(i) * 0.070, 0.475, 0.423 + float(i) * 0.070, 0.550), Color(0.90, 0.78, 0.42, 0.20 - float(i) * 0.035))
+				tick.name = "FadeTransitionTick_%d" % i
+				fade_art.add_child(tick)
 			var tw := create_tween()
 			transition_tween = tw
 			transition_active = true
 			tw.tween_property(transition_overlay, "color:a", 0.92, half_dur).from(0.0)
+			tw.parallel().tween_property(fill, "anchor_right", 0.685, half_dur).from(0.610)
 			tw.tween_callback(func() -> void:
 				callback.call()
 			)
@@ -12163,6 +15867,8 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				transition_active = false
 				if transition_overlay != null and is_instance_valid(transition_overlay):
 					transition_overlay.visible = false
+				if fade_art != null and is_instance_valid(fade_art):
+					fade_art.queue_free()
 			)
 
 # ============================================================
@@ -12201,6 +15907,38 @@ func play_fx_gang_burst(gang_type: String, seat: int) -> void:
 	fx_burst_label.modulate.a = 0.0
 	fx_burst_label.offset_top = 28.0
 	fx_burst_label.offset_bottom = 28.0
+	var gang_route = make_panel(fx_burst_root, rect_full(0.270, 0.640, 0.730, 0.700), Color(0.006, 0.016, 0.018, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	gang_route.name = "GangBurstRoute"
+	var gang_fill = make_panel(gang_route, rect_full(0.025, 0.260, 0.860 if gang_type == "added" else 0.720 if gang_type == "concealed" else 0.780, 0.740), Color(accent.r, accent.g, accent.b, 0.38), 999, Color(1.0, 0.90, 0.54, 0.08), 0)
+	gang_fill.name = "GangBurstRouteFill"
+	var draw_gate = make_panel(fx_burst_root, rect_full(0.690, 0.575, 0.745, 0.755), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.88, 0.48, 0.18), 0)
+	draw_gate.name = "GangBurstDrawGate"
+	var quad_node = make_panel(fx_burst_root, rect_full(0.468, 0.560, 0.532, 0.785), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.86, 0.46, 0.14), 0)
+	quad_node.name = "GangBurstQuadNode"
+	var type_route = make_color_rect(rect_full(0.310, 0.465, 0.690, 0.515), Color(0.006, 0.016, 0.018, 0.42))
+	type_route.name = "GangBurstTypeRoute"
+	fx_burst_root.add_child(type_route)
+	var type_fill_ratio = 0.880 if gang_type == "added" else 0.680 if gang_type == "concealed" else 0.760
+	var type_fill = make_color_rect(rect_full(0.035, 0.250, 0.035 + 0.900 * type_fill_ratio, 0.750), Color(accent.r, accent.g, accent.b, 0.28))
+	type_fill.name = "GangBurstTypeFill"
+	type_route.add_child(type_fill)
+	var type_gate = make_panel(fx_burst_root, rect_full(0.655, 0.420, 0.710, 0.560), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.48, 0.10), 0)
+	type_gate.name = "GangBurstTypeGate"
+	var type_source = make_panel(fx_burst_root, rect_full(0.292, 0.415, 0.342, 0.565), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.88, 0.48, 0.10), 0)
+	type_source.name = "GangBurstTypeSource"
+	for i in range(2):
+		var type_tick = make_color_rect(rect_full(0.430 + float(i) * 0.080, 0.412, 0.446 + float(i) * 0.080, 0.552), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040))
+		type_tick.name = "GangBurstTypeTick_%d" % i
+		fx_burst_root.add_child(type_tick)
+	for i in range(4):
+		var left = 0.405 + float(i) * 0.048
+		var tile_mark = make_panel(fx_burst_root, rect_full(left, 0.510, left + 0.032, 0.610), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.020), 6, Color(1.0, 0.86, 0.46, 0.08), 0)
+		tile_mark.name = "GangBurstTileMark_%d" % i
+	for i in range(3):
+		var left = 0.372 + float(i) * 0.088
+		var tick = make_color_rect(rect_full(left, 0.580, left + 0.018, 0.740), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.040))
+		tick.name = "GangBurstRouteTick_%d" % i
+		fx_burst_root.add_child(tick)
 	fx_burst_root.visible = true
 	var half := 0.70
 	var tw := create_tween()
@@ -12294,6 +16032,10 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 
 func draw_toast_illustration(toast_bg: Control, text: String) -> void:
 	var accent = toast_accent_color(text)
+	var ribbon = add_illustration_texture(toast_bg, "toast_ribbon", rect_full(0.035, 0.055, 0.965, 0.945), 0.18, false)
+	if ribbon != null:
+		ribbon.name = "ToastRibbonTexture"
+		toast_bg.move_child(ribbon, 0)
 	var seal = make_panel(toast_bg, rect_full(0.035, 0.18, 0.095, 0.82), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(accent.r, accent.g, accent.b, 0.52), 0)
 	seal.name = "ToastIconSeal"
 	var icon_name = toast_icon_name(text)
@@ -12302,6 +16044,61 @@ func draw_toast_illustration(toast_bg: Control, text: String) -> void:
 	var sheen = make_color_rect(rect_full(0.115, 0.18, 0.910, 0.28), Color(1.0, 0.90, 0.48, 0.12))
 	sheen.name = "ToastSheen"
 	toast_bg.add_child(sheen)
+	var route = make_panel(toast_bg, rect_full(0.145, 0.525, 0.695, 0.625), Color(0.006, 0.016, 0.018, 0.42), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	route.name = "ToastMessageRoute"
+	var route_fill = make_panel(route, rect_full(0.020, 0.260, 0.760, 0.740), Color(accent.r, accent.g, accent.b, 0.26), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	route_fill.name = "ToastMessageRouteFill"
+	for i in range(3):
+		var left = 0.190 + float(i) * 0.155
+		var node = make_panel(toast_bg, rect_full(left, 0.470, left + 0.022, 0.665), Color(accent.r, accent.g, accent.b, 0.28 - float(i) * 0.030), 999, Color(1.0, 0.90, 0.54, 0.08), 0)
+		node.name = "ToastMessageRouteNode_%d" % i
+	var type_node = make_panel(toast_bg, rect_full(0.805, 0.315, 0.850, 0.675), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+	type_node.name = "ToastTypeNode"
+	var life_rail = make_panel(toast_bg, rect_full(0.140, 0.760, 0.780, 0.860), Color(0.006, 0.016, 0.018, 0.54), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	life_rail.name = "ToastLifeRail"
+	var life_fill = make_panel(life_rail, rect_full(0.020, 0.260, 0.840, 0.740), Color(accent.r, accent.g, accent.b, 0.36), 999, Color(1.0, 0.92, 0.62, 0.08), 0)
+	life_fill.name = "ToastLifeFill"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var ribbon_tw := create_tween()
+		ribbon_tw.set_loops(3600)
+		if ribbon != null:
+			ribbon_tw.tween_property(ribbon, "modulate:a", 0.09, 1.0).from(0.18)
+			ribbon_tw.tween_property(ribbon, "modulate:a", 0.18, 1.0).from(0.09)
+		else:
+			ribbon_tw.tween_property(life_fill, "modulate:a", 0.54, 1.0).from(1.0)
+			ribbon_tw.tween_property(life_fill, "modulate:a", 1.0, 1.0).from(0.54)
+	var confirm_route = make_color_rect(rect_full(0.545, 0.665, 0.780, 0.725), Color(0.006, 0.016, 0.018, 0.42))
+	confirm_route.name = "ToastConfirmRoute"
+	toast_bg.add_child(confirm_route)
+	var confirm_fill = make_color_rect(rect_full(0.035, 0.250, 0.780, 0.750), Color(accent.r, accent.g, accent.b, 0.26))
+	confirm_fill.name = "ToastConfirmFill"
+	confirm_route.add_child(confirm_fill)
+	var confirm_gate = make_color_rect(rect_full(0.752, 0.555, 0.785, 0.760), Color(0.96, 0.82, 0.42, 0.24))
+	confirm_gate.name = "ToastConfirmGate"
+	toast_bg.add_child(confirm_gate)
+	var ack_bridge = make_color_rect(rect_full(0.675, 0.600, 0.755, 0.660), Color(0.006, 0.016, 0.018, 0.34))
+	ack_bridge.name = "ToastAckBridge"
+	toast_bg.add_child(ack_bridge)
+	var ack_fill = make_color_rect(rect_full(0.000, 0.000, 0.720, 1.000), Color(accent.r, accent.g, accent.b, 0.22))
+	ack_fill.name = "ToastAckBridgeFill"
+	ack_bridge.add_child(ack_fill)
+	var ack_gate = make_color_rect(rect_full(0.732, 0.590, 0.760, 0.685), Color(accent.r, accent.g, accent.b, 0.20))
+	ack_gate.name = "ToastAckBridgeGate"
+	toast_bg.add_child(ack_gate)
+	for i in range(2):
+		var confirm_tick_left = 0.610 + float(i) * 0.046
+		var confirm_tick = make_color_rect(rect_full(confirm_tick_left, 0.555, confirm_tick_left + 0.014, 0.760), Color(accent.r, accent.g, accent.b, 0.25 - float(i) * 0.045))
+		confirm_tick.name = "ToastConfirmTick_%d" % i
+		toast_bg.add_child(confirm_tick)
+	for i in range(2):
+		var ack_tick_left = 0.690 + float(i) * 0.030
+		var ack_tick = make_color_rect(rect_full(ack_tick_left, 0.675, ack_tick_left + 0.010, 0.745), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
+		ack_tick.name = "ToastAckBridgeTick_%d" % i
+		toast_bg.add_child(ack_tick)
+	for i in range(3):
+		var left = 0.730 + float(i) * 0.035
+		var dot = make_panel(toast_bg, rect_full(left, 0.315 + float(i % 2) * 0.190, left + 0.016, 0.425 + float(i % 2) * 0.190), Color(accent.r, accent.g, accent.b, 0.30 - float(i) * 0.045), 999, Color(1.0, 0.92, 0.56, 0.10), 0)
+		dot.name = "ToastStatusDot_%d" % i
 	var spark_count = 3 if text.find("成功") >= 0 or text.find("完成") >= 0 else 2
 	for i in range(spark_count):
 		var left = 0.900 + float(i) * 0.026
@@ -12312,8 +16109,51 @@ func draw_toast_illustration(toast_bg: Control, text: String) -> void:
 	var item_key = toast_item_key_for_text(text)
 	if item_key != "":
 		draw_item_toast_art(toast_bg, item_key, accent)
+	if toast_is_reward_text(text):
+		draw_toast_reward_bridge(toast_bg, text, accent)
+
+func toast_is_reward_text(text: String) -> bool:
+	return text.find("任务完成") >= 0 or text.find("购买成功") >= 0 or text.find("成就") >= 0 or text.find("金币") >= 0 or text.find("宝石") >= 0 or text.find("+") >= 0
+
+func draw_toast_reward_bridge(toast_bg: Control, text: String, accent: Color) -> Control:
+	var bridge = Control.new()
+	bridge.name = "ToastRewardBridge"
+	bridge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(bridge, rect_full(0.115, 0.215, 0.935, 0.805))
+	toast_bg.add_child(bridge)
+	var rail = make_color_rect(rect_full(0.055, 0.500, 0.945, 0.565), Color(0.006, 0.016, 0.018, 0.34))
+	rail.name = "ToastRewardBridgeRail"
+	bridge.add_child(rail)
+	var fill_width = 0.880 if text.find("成功") >= 0 or text.find("完成") >= 0 or text.find("成就") >= 0 else 0.650
+	var fill = make_color_rect(rect_full(0.020, 0.250, fill_width, 0.750), Color(accent.r, accent.g, accent.b, 0.24))
+	fill.name = "ToastRewardBridgeFill"
+	rail.add_child(fill)
+	var source = make_panel(bridge, rect_full(0.000, 0.330, 0.075, 0.735), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	source.name = "ToastRewardSourceNode"
+	var gate = make_panel(bridge, rect_full(0.880, 0.280, 0.965, 0.780), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.14), 0)
+	gate.name = "ToastRewardGate"
+	for i in range(3):
+		var left = 0.220 + float(i) * 0.175
+		var pip = make_panel(bridge, rect_full(left, 0.395, left + 0.035, 0.670), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.030), 999, Color(1.0, 0.90, 0.54, 0.07), 0)
+		pip.name = "ToastRewardPip_%d" % i
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.680 + float(i) * 0.060, 0.260, 0.696 + float(i) * 0.060, 0.430), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040))
+		tick.name = "ToastRewardTick_%d" % i
+		bridge.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.60).from(0.92)
+		tw.parallel().tween_property(gate, "modulate:a", 0.52, 0.60).from(0.96)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.60).from(0.42)
+		tw.parallel().tween_property(gate, "modulate:a", 0.96, 0.60).from(0.52)
+	return bridge
 
 func draw_achievement_toast_art(toast_bg: Control, accent: Color) -> void:
+	var glow_texture = add_illustration_texture(toast_bg, "achievement_medal_glow", rect_full(0.055, 0.010, 0.940, 0.980), 0.16, false)
+	if glow_texture != null:
+		glow_texture.name = "ToastAchievementGlowTexture"
+		toast_bg.move_child(glow_texture, 0)
 	var medal = make_panel(toast_bg, rect_full(0.100, 0.185, 0.142, 0.815), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(accent.r, accent.g, accent.b, 0.42), 0)
 	medal.name = "ToastAchievementMedal"
 	var core = make_panel(medal, rect_full(0.260, 0.250, 0.740, 0.750), Color(0.96, 0.82, 0.36, 0.52), 999, Color(1.0, 0.90, 0.50, 0.28), 0)
@@ -12322,18 +16162,50 @@ func draw_achievement_toast_art(toast_bg: Control, accent: Color) -> void:
 		var left = 0.150 + float(i) * 0.025
 		var ray = make_panel(toast_bg, rect_full(left, 0.300 + float(i % 2) * 0.240, left + 0.012, 0.430 + float(i % 2) * 0.240), Color(1.0, 0.86, 0.42, 0.34), 999, Color(1.0, 0.92, 0.56, 0.14), 0)
 		ray.name = "ToastAchievementRay_%d" % i
+	var route = make_color_rect(rect_full(0.705, 0.685, 0.872, 0.765), Color(0.006, 0.016, 0.018, 0.42))
+	route.name = "ToastAchievementUnlockRoute"
+	toast_bg.add_child(route)
+	var fill = make_color_rect(rect_full(0.035, 0.250, 0.820, 0.750), Color(1.0, 0.82, 0.34, 0.30))
+	fill.name = "ToastAchievementUnlockFill"
+	route.add_child(fill)
+	var gate = make_color_rect(rect_full(0.845, 0.255, 0.868, 0.515), Color(0.96, 0.82, 0.42, 0.28))
+	gate.name = "ToastAchievementUnlockGate"
+	toast_bg.add_child(gate)
+	for i in range(3):
+		var left = 0.724 + float(i) * 0.040
+		var tick = make_color_rect(rect_full(left, 0.275, left + 0.014, 0.395), Color(accent.r, accent.g, accent.b, 0.28 - float(i) * 0.045))
+		tick.name = "ToastAchievementUnlockTick_%d" % i
+		toast_bg.add_child(tick)
 
 func draw_item_toast_art(toast_bg: Control, item_id: String, accent: Color) -> void:
+	var charm_texture = add_illustration_texture(toast_bg, "item_activation_charm", rect_full(0.055, 0.010, 0.940, 0.980), 0.16, false)
+	if charm_texture != null:
+		charm_texture.name = "ToastItemActivationTexture"
+		toast_bg.move_child(charm_texture, 0)
 	var badge = make_panel(toast_bg, rect_full(0.820, 0.185, 0.870, 0.815), Color(accent.r, accent.g, accent.b, 0.22), 12, Color(accent.r, accent.g, accent.b, 0.38), 0)
 	badge.name = "ToastItemBadge"
 	var core = make_panel(badge, rect_full(0.220, 0.220, 0.780, 0.780), Color(accent.r, accent.g, accent.b, 0.40), 999, Color(1.0, 0.92, 0.62, 0.22), 0)
 	core.name = "ToastItemCore"
 	var item_mark = make_label(core, item_short_mark(item_id), 10, Color(0.98, 0.94, 0.78), true)
 	apply_rect(item_mark, rect_full(0.0, 0.0, 1.0, 1.0))
+	var activation_route = make_color_rect(rect_full(0.690, 0.700, 0.858, 0.780), Color(0.006, 0.016, 0.018, 0.42))
+	activation_route.name = "ToastItemActivationRoute"
+	toast_bg.add_child(activation_route)
+	var activation_fill = make_color_rect(rect_full(0.040, 0.250, 0.780, 0.750), Color(accent.r, accent.g, accent.b, 0.30))
+	activation_fill.name = "ToastItemActivationFill"
+	activation_route.add_child(activation_fill)
+	var gate = make_color_rect(rect_full(0.800, 0.255, 0.825, 0.475), Color(0.96, 0.82, 0.42, 0.28))
+	gate.name = "ToastItemActivationGate"
+	toast_bg.add_child(gate)
 	for i in range(3):
 		var top = 0.255 + float(i) * 0.165
 		var pip = make_panel(toast_bg, rect_full(0.878, top, 0.892, top + 0.070), Color(accent.r, accent.g, accent.b, 0.44), 999, Color(1.0, 0.92, 0.56, 0.16), 0)
 		pip.name = "ToastItemPip_%d" % i
+	for i in range(2):
+		var left = 0.718 + float(i) * 0.044
+		var tick = make_color_rect(rect_full(left, 0.270, left + 0.014, 0.390), Color(accent.r, accent.g, accent.b, 0.28 - float(i) * 0.050))
+		tick.name = "ToastItemActivationTick_%d" % i
+		toast_bg.add_child(tick)
 
 func toast_item_key_for_text(text: String) -> String:
 	for item_id in ITEM_TYPES.keys():
@@ -12377,6 +16249,50 @@ func toast_accent_color(text: String) -> Color:
 		return Color(0.84, 0.68, 0.30, 1.0)
 	return Color(0.40, 0.72, 0.58, 1.0)
 
+func draw_secondary_back_button_art(button: Control, screen_id: String, color: Color) -> Control:
+	var art = Control.new()
+	art.name = "SecondaryBackButtonArt_%s" % screen_id
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var back_texture = add_illustration_texture(art, "secondary_back_path", rect_full(-0.060, -0.200, 1.060, 1.160), 0.16, false)
+	if back_texture != null:
+		back_texture.name = "SecondaryBackTexture_%s" % screen_id
+		art.move_child(back_texture, 0)
+	var rail = make_color_rect(rect_full(0.250, 0.735, 0.880, 0.830), Color(0.006, 0.016, 0.018, 0.48))
+	rail.name = "SecondaryBackButtonRail_%s" % screen_id
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.045, 0.260, 0.700, 0.740), Color(color.r, color.g, color.b, 0.34))
+	fill.name = "SecondaryBackButtonFill_%s" % screen_id
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.075, 0.240, 0.125, 0.620), Color(0.72, 0.84, 0.72, 0.24))
+	gate.name = "SecondaryBackButtonGate_%s" % screen_id
+	art.add_child(gate)
+	var source = make_panel(art, rect_full(0.795, 0.675, 0.850, 0.890), Color(color.r, color.g, color.b, 0.20), 999, Color(0.92, 0.84, 0.48, 0.08), 0)
+	source.name = "SecondaryBackSourceNode_%s" % screen_id
+	var destination = make_panel(art, rect_full(0.165, 0.680, 0.220, 0.890), Color(0.72, 0.84, 0.72, 0.20), 999, Color(0.92, 0.84, 0.48, 0.08), 0)
+	destination.name = "SecondaryBackDestinationNode_%s" % screen_id
+	var confirm_route = make_color_rect(rect_full(0.555, 0.455, 0.910, 0.525), Color(0.006, 0.016, 0.018, 0.42))
+	confirm_route.name = "SecondaryBackConfirmRoute_%s" % screen_id
+	art.add_child(confirm_route)
+	var confirm_fill = make_color_rect(rect_full(0.035, 0.250, 0.620, 0.750), Color(color.r, color.g, color.b, 0.24))
+	confirm_fill.name = "SecondaryBackConfirmFill_%s" % screen_id
+	confirm_route.add_child(confirm_fill)
+	var confirm_gate = make_color_rect(rect_full(0.890, 0.395, 0.930, 0.610), Color(0.72, 0.84, 0.72, 0.20))
+	confirm_gate.name = "SecondaryBackConfirmGate_%s" % screen_id
+	art.add_child(confirm_gate)
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.645 + float(i) * 0.060, 0.220, 0.665 + float(i) * 0.060, 0.360), Color(color.r, color.g, color.b, 0.26 - float(i) * 0.050))
+		tick.name = "SecondaryBackButtonTick_%s_%d" % [screen_id, i]
+		art.add_child(tick)
+		var confirm_tick = make_color_rect(rect_full(0.675 + float(i) * 0.075, 0.390, 0.692 + float(i) * 0.075, 0.625), Color(color.r, color.g, color.b, 0.22 - float(i) * 0.045))
+		confirm_tick.name = "SecondaryBackConfirmTick_%s_%d" % [screen_id, i]
+		art.add_child(confirm_tick)
+		var node_tick = make_color_rect(rect_full(0.315 + float(i) * 0.210, 0.670, 0.335 + float(i) * 0.210, 0.870), Color(color.r, color.g, color.b, 0.22 - float(i) * 0.045))
+		node_tick.name = "SecondaryBackNodeTick_%s_%d" % [screen_id, i]
+		art.add_child(node_tick)
+	return art
+
 
 func current_status_text() -> String:
 	if mode == "offline":
@@ -12402,6 +16318,23 @@ func current_status_text() -> String:
 		return "等待吃碰杠胡响应"
 	return "轮到你出牌" if can_self_discard() else "等待对家行牌"
 
+func draw_secondary_screen_texture(parent: Control, texture_key: String, node_name: String, alpha: float = 0.16) -> TextureRect:
+	var texture = add_illustration_texture(parent, texture_key, rect_full(0.035, 0.105, 0.965, 0.315), alpha, false)
+	if texture == null:
+		return null
+	texture.name = node_name
+	parent.move_child(texture, 0)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(texture, "modulate:a", max(0.04, alpha * 0.58), 3.2).from(alpha)
+		tw.parallel().tween_property(texture, "offset_left", -5.0, 3.2).from(0.0)
+		tw.parallel().tween_property(texture, "offset_right", 5.0, 3.2).from(0.0)
+		tw.tween_property(texture, "modulate:a", alpha, 3.2).from(max(0.04, alpha * 0.58))
+		tw.parallel().tween_property(texture, "offset_left", 0.0, 3.2).from(-5.0)
+		tw.parallel().tween_property(texture, "offset_right", 0.0, 3.2).from(5.0)
+	return texture
+
 
 func show_rules_screen(instant: bool = false) -> void:
 	"""显示麻将规则和玩法说明"""
@@ -12420,6 +16353,7 @@ func _show_rules_screen_impl() -> void:
 
 	# 主面板
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
+	draw_secondary_screen_texture(panel, "rules_scroll", "RulesScrollTexture", 0.14)
 	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
 	panel.add_child(make_color_rect(rect_full(0.014, 0.012, 0.986, 0.028), Color(1.0, 1.0, 1.0, 0.045)))
 	# 书架式滑入动画 / Shelf-slide entrance
@@ -12443,6 +16377,7 @@ func _show_rules_screen_impl() -> void:
 		show_menu()
 	)
 	back.custom_minimum_size = Vector2(100, 48)
+	draw_secondary_back_button_art(back, "rules", Color(0.32, 0.38, 0.40))
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
 
@@ -12484,6 +16419,13 @@ func _show_rules_screen_impl() -> void:
 		"点击'重开'可重新开始本局",
 	], 3)
 
+	# 规则段落逐一滑入
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var sections: Array[Node] = []
+		for child in content.get_children():
+			sections.append(child)
+		AnimationEffects.list_items_stagger_in(sections, 0.28, 0.08)
+
 	# 记录已查看教程
 	tutorial_step = -1
 	save_tutorial_state()
@@ -12496,6 +16438,12 @@ func draw_rules_guide_art(parent: Control) -> Control:
 	make_ink_border(art, rect_full(0.0, 0.92, 1.0, 1.0), 2.0)
 	var rail = make_panel(art, rect_full(0.060, 0.480, 0.940, 0.560), Color(0.58, 0.50, 0.28, 0.22), 999, Color(0.82, 0.72, 0.38, 0.18), 0)
 	rail.name = "RulesGuideRail"
+	var rail_fill = make_color_rect(rect_full(0.020, 0.250, 0.920, 0.750), Color(0.86, 0.70, 0.34, 0.26))
+	rail_fill.name = "RulesGuideRailFill"
+	rail.add_child(rail_fill)
+	var gate = make_color_rect(rect_full(0.900, 0.260, 0.930, 0.435), Color(0.96, 0.82, 0.42, 0.26))
+	gate.name = "RulesGuideCompletionGate"
+	art.add_child(gate)
 	var steps = [
 		{"label": "目标", "icon": "target", "color": Color(0.78, 0.54, 0.30)},
 		{"label": "组牌", "icon": "layers", "color": Color(0.36, 0.66, 0.54)},
@@ -12514,6 +16462,11 @@ func draw_rules_guide_art(parent: Control) -> Control:
 		if i < steps.size() - 1:
 			var connector = make_panel(art, rect_full(center_x + 0.055, 0.435, center_x + 0.205, 0.605), Color(col.r, col.g, col.b, 0.18), 999, Color(col.r, col.g, col.b, 0.10), 0)
 			connector.name = "RulesGuideConnector_%d" % i
+	for i in range(3):
+		var left = 0.735 + float(i) * 0.045
+		var tick = make_color_rect(rect_full(left, 0.245, left + 0.016, 0.385), Color(0.86, 0.70, 0.34, 0.24 - float(i) * 0.040))
+		tick.name = "RulesGuideRhythmTick_%d" % i
+		art.add_child(tick)
 	var lead_glow = make_panel(art, rect_full(0.035, 0.180, 0.135, 0.820), Color(0.90, 0.72, 0.34, 0.16), 999, Color(1.0, 0.84, 0.42, 0.18), 0)
 	lead_glow.name = "RulesGuideLeadGlow"
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -12538,6 +16491,12 @@ func draw_rule_section_path_art(section: Control, section_index: int, title_text
 	var rail = make_color_rect(rect_full(0.120, 0.470, 0.880, 0.530), Color(accent.r, accent.g, accent.b, 0.26))
 	rail.name = "RuleSectionPathRail_%d" % section_index
 	strip.add_child(rail)
+	var fill = make_color_rect(rect_full(0.000, 0.000, 0.620 + 0.070 * float(section_index), 1.000), Color(accent.r, accent.g, accent.b, 0.26))
+	fill.name = "RuleSectionPathFill_%d" % section_index
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.835, 0.350, 0.880, 0.650), Color(accent.r, accent.g, accent.b, 0.24))
+	gate.name = "RuleSectionPathGate_%d" % section_index
+	strip.add_child(gate)
 	for i in range(3):
 		var x = 0.160 + float(i) * 0.340
 		var node = make_panel(strip, rect_full(x - 0.055, 0.300, x + 0.055, 0.700), Color(accent.r, accent.g, accent.b, 0.22 + float(i) * 0.035), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
@@ -12548,11 +16507,132 @@ func draw_rule_section_path_art(section: Control, section_index: int, title_text
 	var glyph = make_label(strip, title_text.substr(0, 1), 20, Color(0.96, 0.90, 0.62, 0.50), true)
 	glyph.name = "RuleSectionPathGlyph_%d" % section_index
 	apply_rect(glyph, rect_full(0.705, 0.120, 0.920, 0.470))
+	var example_bridge = make_color_rect(rect_full(0.270, 0.720, 0.705, 0.780), Color(0.006, 0.016, 0.018, 0.32))
+	example_bridge.name = "RuleSectionExampleBridge_%d" % section_index
+	strip.add_child(example_bridge)
+	var example_fill = make_color_rect(rect_full(0.000, 0.000, 0.700, 1.000), Color(accent.r, accent.g, accent.b, 0.20))
+	example_fill.name = "RuleSectionExampleBridgeFill_%d" % section_index
+	example_bridge.add_child(example_fill)
+	var example_gate = make_color_rect(rect_full(0.675, 0.665, 0.715, 0.845), Color(accent.r, accent.g, accent.b, 0.20))
+	example_gate.name = "RuleSectionExampleBridgeGate_%d" % section_index
+	strip.add_child(example_gate)
+	for i in range(2):
+		var left = 0.360 + float(i) * 0.070
+		var tick = make_color_rect(rect_full(left, 0.805, left + 0.018, 0.900), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
+		tick.name = "RuleSectionExampleBridgeTick_%d_%d" % [section_index, i]
+		strip.add_child(tick)
+	draw_rule_section_example_art(strip, section_index, accent)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
 		tw.tween_property(strip, "modulate:a", 0.72, 1.2).from(1.0)
 		tw.tween_property(strip, "modulate:a", 1.0, 1.2).from(0.72)
+
+func draw_rule_section_example_art(strip: Control, section_index: int, accent: Color) -> Control:
+	var example = Control.new()
+	example.name = "RuleSectionExampleArt_%d" % section_index
+	example.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(example, rect_full(0.070, 0.535, 0.930, 0.930))
+	strip.add_child(example)
+	var example_texture = add_illustration_texture(example, "rules_example_table", rect_full(-0.020, -0.100, 1.020, 1.100), 0.10, false)
+	if example_texture != null:
+		example_texture.name = "RulesExampleTableTexture_%d" % section_index
+	match section_index:
+		0:
+			draw_rule_goal_example(example, accent)
+		1:
+			draw_rule_tile_shape_example(example)
+		2:
+			draw_rule_special_shape_example(example, accent)
+		3:
+			draw_rule_action_example(example, accent)
+		_:
+			draw_rule_default_example(example, accent)
+	draw_rule_example_completion_art(example, section_index, accent)
+	return example
+
+func draw_rule_example_completion_art(parent: Control, section_index: int, accent: Color) -> Control:
+	var route = make_color_rect(rect_full(0.105, 0.850, 0.895, 0.925), Color(0.006, 0.016, 0.018, 0.40))
+	route.name = "RuleExampleCompletionRoute_%d" % section_index
+	parent.add_child(route)
+	var fill = make_color_rect(rect_full(0.035, 0.260, 0.760, 0.740), Color(accent.r, accent.g, accent.b, 0.24))
+	fill.name = "RuleExampleCompletionFill_%d" % section_index
+	route.add_child(fill)
+	var gate = make_color_rect(rect_full(0.830, 0.170, 0.885, 0.390), Color(accent.r, accent.g, accent.b, 0.22))
+	gate.name = "RuleExampleCompletionGate_%d" % section_index
+	parent.add_child(gate)
+	for i in range(2):
+		var left = 0.620 + float(i) * 0.075
+		var tick = make_color_rect(rect_full(left, 0.165, left + 0.024, 0.310), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040))
+		tick.name = "RuleExampleCompletionTick_%d_%d" % [section_index, i]
+		parent.add_child(tick)
+	return route
+
+func draw_rule_goal_example(parent: Control, accent: Color) -> void:
+	var groups := ["顺", "刻", "顺", "杠", "将"]
+	for i in range(groups.size()):
+		var left = 0.025 + float(i) * 0.190
+		var group = make_panel(parent, rect_full(left, 0.180, left + 0.135, 0.780), Color(accent.r, accent.g, accent.b, 0.18), 9, Color(accent.r, accent.g, accent.b, 0.18), 0)
+		group.name = "RuleGoalGroup_%d" % i
+		var label = make_label(group, groups[i], 9, Color(0.96, 0.90, 0.64, 0.92), true)
+		apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
+		if i < groups.size() - 1:
+			var link = make_panel(parent, rect_full(left + 0.145, 0.455, left + 0.178, 0.535), Color(0.96, 0.80, 0.38, 0.28), 999, Color(0.96, 0.80, 0.38, 0.08), 0)
+			link.name = "RuleGoalGroupLink_%d" % i
+
+func draw_rule_tile_shape_example(parent: Control) -> void:
+	var tiles := ["1W", "2W", "3W"]
+	for i in range(tiles.size()):
+		var tile = make_tile_view(str(tiles[i]), Vector2(22, 30), false, Callable(), i == 1)
+		tile.name = "RuleSectionExampleTile_1_%d" % i
+		parent.add_child(tile)
+		apply_rect(tile, rect_full(0.060 + float(i) * 0.130, 0.110, 0.160 + float(i) * 0.130, 0.900))
+	var pair_back = make_panel(parent, rect_full(0.560, 0.155, 0.900, 0.850), Color(0.030, 0.046, 0.044, 0.68), 10, Color(0.82, 0.70, 0.38, 0.20), 0)
+	pair_back.name = "RulePairExampleBack"
+	for i in range(2):
+		var tile = make_tile_view("E", Vector2(20, 28), false, Callable(), false)
+		tile.name = "RuleSectionExamplePairTile_%d" % i
+		pair_back.add_child(tile)
+		apply_rect(tile, rect_full(0.180 + float(i) * 0.300, 0.120, 0.390 + float(i) * 0.300, 0.880))
+
+func draw_rule_special_shape_example(parent: Control, accent: Color) -> void:
+	var rail = make_panel(parent, rect_full(0.045, 0.470, 0.955, 0.575), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	rail.name = "RuleSpecialExampleRail"
+	for i in range(7):
+		var left = 0.070 + float(i) * 0.125
+		var node = make_panel(parent, rect_full(left, 0.205, left + 0.070, 0.820), Color(0.78, 0.62, 0.32, 0.34), 999, Color(1.0, 0.86, 0.46, 0.20), 0)
+		node.name = "RuleSevenPairsNode_%d" % i
+	var orphan = make_panel(parent, rect_full(0.800, 0.080, 0.965, 0.400), Color(0.60, 0.44, 0.78, 0.18), 999, Color(0.82, 0.70, 0.96, 0.18), 0)
+	orphan.name = "RuleOrphanBadge"
+	var glyph = make_label(orphan, "幺", 10, Color(0.96, 0.90, 0.68, 0.86), true)
+	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+
+func draw_rule_action_example(parent: Control, accent: Color) -> void:
+	var actions := ["吃", "碰", "杠", "胡"]
+	var rail = make_panel(parent, rect_full(0.070, 0.795, 0.925, 0.895), Color(0.006, 0.018, 0.020, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	rail.name = "RuleActionFlowRail"
+	var fill = make_panel(rail, rect_full(0.025, 0.260, 0.820, 0.740), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	fill.name = "RuleActionFlowFill"
+	for i in range(actions.size()):
+		var left = 0.050 + float(i) * 0.225
+		var chip = make_panel(parent, rect_full(left, 0.165, left + 0.155, 0.830), Color(accent.r, accent.g, accent.b, 0.18 + float(i) * 0.025), 9, Color(0.96, 0.82, 0.46, 0.18), 0)
+		chip.name = "RuleActionChip_%s" % actions[i]
+		var label = make_label(chip, actions[i], 10, Color(0.96, 0.92, 0.76, 0.92), true)
+		apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
+		var node = make_panel(parent, rect_full(left + 0.052, 0.720, left + 0.103, 0.950), Color(accent.r, accent.g, accent.b, 0.22 + float(i) * 0.020), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		node.name = "RuleActionFlowNode_%d" % i
+		if i == actions.size() - 1:
+			var pulse = make_panel(parent, rect_full(left - 0.018, 0.070, left + 0.173, 0.925), Color(0.96, 0.76, 0.34, 0.08), 999, Color(1.0, 0.88, 0.52, 0.16), 0)
+			pulse.name = "RuleActionWinPulse"
+	for i in range(3):
+		var tick = make_panel(parent, rect_full(0.655 + float(i) * 0.055, 0.085, 0.680 + float(i) * 0.055, 0.225), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.035), 999, Color(1.0, 0.88, 0.52, 0.05), 0)
+		tick.name = "RuleActionFlowTick_%d" % i
+
+func draw_rule_default_example(parent: Control, accent: Color) -> void:
+	for i in range(3):
+		var left = 0.140 + float(i) * 0.250
+		var node = make_panel(parent, rect_full(left, 0.220, left + 0.100, 0.780), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+		node.name = "RuleDefaultExampleNode_%d" % i
 
 func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, section_index: int = -1) -> void:
 	var section = make_panel(parent, rect_full(0.0, 0.0, 1.0, 0.22), Color(0.012, 0.022, 0.028, 0.92), 14, Color(0.34, 0.38, 0.36, 0.28), 0)
@@ -12560,6 +16640,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.custom_minimum_size.y = 86
 	var marker = make_panel(section, rect_full(0.020, 0.170, 0.034, 0.830), Color(0.82, 0.66, 0.32, 0.42), 999, Color(0.96, 0.78, 0.38, 0.18), 0)
 	marker.name = "RuleSectionMarker"
+	draw_rule_line_bullets(section, lines, section_index)
 	if section_index >= 0:
 		draw_rule_section_path_art(section, section_index, title_text)
 
@@ -12578,6 +16659,33 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		line_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
+func draw_rule_line_bullets(section: Control, lines: Array, section_index: int = -1) -> Control:
+	var accent = Color(0.82, 0.66, 0.32)
+	if section_index >= 0:
+		var colors = [
+			Color(0.86, 0.62, 0.34),
+			Color(0.38, 0.70, 0.58),
+			Color(0.62, 0.56, 0.86),
+			Color(0.86, 0.72, 0.38),
+		]
+		accent = colors[clamp(section_index, 0, colors.size() - 1)]
+	var guide = Control.new()
+	guide.name = "RuleLineGuide_%d" % section_index
+	guide.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	guide.set_anchors_preset(Control.PRESET_FULL_RECT)
+	section.add_child(guide)
+	var rail = make_panel(guide, rect_full(0.046, 0.355, 0.052, 0.850), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(accent.r, accent.g, accent.b, 0.08), 0)
+	rail.name = "RuleLineRail_%d" % section_index
+	for i in range(min(4, lines.size())):
+		var top = 0.338 + float(i) * 0.155
+		var bullet = make_panel(guide, rect_full(0.041, top, 0.058, top + 0.070), Color(accent.r, accent.g, accent.b, 0.34 - float(i) * 0.035), 999, Color(0.96, 0.84, 0.48, 0.12), 0)
+		bullet.name = "RuleLineBullet_%d_%d" % [section_index, i]
+		var pulse = make_panel(guide, rect_full(0.062, top + 0.022, 0.094, top + 0.048), Color(accent.r, accent.g, accent.b, 0.13), 999, Color(accent.r, accent.g, accent.b, 0.04), 0)
+		pulse.name = "RuleLinePulse_%d_%d" % [section_index, i]
+	var lead = make_panel(guide, rect_full(0.036, 0.210, 0.064, 0.310), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	lead.name = "RuleLineLead_%d" % section_index
+	return guide
+
 func show_stats_screen(instant: bool = false) -> void:
 	"""显示详细游戏统计"""
 	if transition_active and not instant:
@@ -12594,6 +16702,7 @@ func _show_stats_screen_impl() -> void:
 	clear_screen()
 
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
+	draw_secondary_screen_texture(panel, "stats_chart", "StatsChartTexture", 0.16)
 	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), Color(0.90, 0.76, 0.36, 0.72)))
 	# 书架式滑入动画 / Shelf-slide entrance
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -12612,6 +16721,7 @@ func _show_stats_screen_impl() -> void:
 		show_menu()
 	)
 	back.custom_minimum_size = Vector2(100, 48)
+	draw_secondary_back_button_art(back, "stats", Color(0.32, 0.38, 0.40))
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
 	draw_stats_dashboard_art(panel)
@@ -12632,9 +16742,20 @@ func _show_stats_screen_impl() -> void:
 	add_stat_row(content, "最高得分", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))))
 	add_stat_row(content, "总手牌数", "%d 局" % int(game_stats.get("total_hands", 0)))
 
+	# 统计行依次滑入动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var rows: Array[Node] = []
+		for child in content.get_children():
+			rows.append(child)
+		AnimationEffects.list_items_stagger_in(rows, 0.25, 0.06)
+
 func draw_stats_dashboard_art(parent: Control) -> Control:
 	var dash = make_panel(parent, rect_full(0.08, 0.120, 0.92, 0.300), Color(0.014, 0.034, 0.040, 0.88), 16, Color(0.42, 0.36, 0.22, 0.34), 0)
 	dash.name = "StatsDashboardArt"
+	var stats_texture = add_illustration_texture(dash, "stats_dashboard_grid", rect_full(0.010, 0.035, 0.990, 0.965), 0.12, false)
+	if stats_texture != null:
+		stats_texture.name = "StatsDashboardGridTexture"
+		dash.move_child(stats_texture, 0)
 	# 水墨框装饰
 	make_ink_border(dash, rect_full(0.0, 0.0, 1.0, 0.06), 2.0)
 	make_ink_border(dash, rect_full(0.0, 0.94, 1.0, 1.0), 2.0)
@@ -12662,6 +16783,31 @@ func draw_stats_dashboard_art(parent: Control) -> Control:
 	var games_fill = clamp(float(games) / 20.0, 0.05, 1.0)
 	var games_bar = make_panel(games_track, rect_full(0.035, 0.35, 0.035 + 0.90 * games_fill, 0.65), Color(0.78, 0.64, 0.30, 0.58), 999, Color(0.92, 0.78, 0.42, 0.22), 0)
 	games_bar.name = "StatsGamesTrackFill"
+	var summary_score = clamp((win_rate + games_fill + min(float(best_score) / 12000.0, 1.0)) / 3.0, 0.06, 1.0)
+	var summary = make_panel(dash, rect_full(0.250, 0.120, 0.585, 0.215), Color(0.006, 0.018, 0.020, 0.46), 999, Color(0.54, 0.76, 0.60, 0.10), 0)
+	summary.name = "StatsSummaryChannel"
+	var summary_fill = make_panel(summary, rect_full(0.030, 0.260, 0.030 + 0.940 * summary_score, 0.740), Color(0.46, 0.74, 0.62, 0.30), 999, Color(0.84, 0.96, 0.70, 0.08), 0)
+	summary_fill.name = "StatsSummaryChannelFill"
+	for i in range(3):
+		var node_left = 0.280 + float(i) * 0.095
+		var node = make_panel(dash, rect_full(node_left, 0.070, node_left + 0.036, 0.250), Color(0.46, 0.74, 0.62, 0.24 - float(i) * 0.025), 999, Color(0.84, 0.96, 0.70, 0.06), 0)
+		node.name = "StatsSummaryNode_%d" % i
+	var summary_gate = make_panel(dash, rect_full(0.545, 0.065, 0.600, 0.265), Color(0.46, 0.74, 0.62, 0.14), 999, Color(0.84, 0.96, 0.70, 0.08), 0)
+	summary_gate.name = "StatsSummaryGate"
+	var scan_route = make_color_rect(rect_full(0.185, 0.465, 0.605, 0.525), Color(0.006, 0.016, 0.018, 0.40))
+	scan_route.name = "StatsDashboardScanRoute"
+	dash.add_child(scan_route)
+	var scan_fill = make_color_rect(rect_full(0.030, 0.260, 0.030 + 0.900 * summary_score, 0.740), Color(0.46, 0.74, 0.62, 0.24))
+	scan_fill.name = "StatsDashboardScanFill"
+	scan_route.add_child(scan_fill)
+	var scan_gate = make_color_rect(rect_full(0.582, 0.388, 0.620, 0.585), Color(0.92, 0.72, 0.34, 0.20 + 0.08 * summary_score))
+	scan_gate.name = "StatsDashboardScanGate"
+	dash.add_child(scan_gate)
+	for i in range(4):
+		var tick_left = 0.245 + float(i) * 0.070
+		var tick = make_color_rect(rect_full(tick_left, 0.385, tick_left + 0.014, 0.575), Color(0.46, 0.74, 0.62, 0.23 - float(i) * 0.030))
+		tick.name = "StatsDashboardScanTick_%d" % i
+		dash.add_child(tick)
 	var trend = Control.new()
 	trend.name = "StatsTrendLineArt"
 	trend.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -12689,11 +16835,39 @@ func draw_stats_dashboard_art(parent: Control) -> Control:
 			var connector = make_color_rect(rect_full(left, mid_y - 0.025, right, mid_y + 0.025), Color(0.46, 0.74, 0.62, 0.24))
 			connector.name = "StatsTrendConnector_%d" % i
 			trend.add_child(connector)
+	var performance_route = make_color_rect(rect_full(0.600, 0.455, 0.665, 0.515), Color(0.006, 0.016, 0.018, 0.42))
+	performance_route.name = "StatsPerformanceRoute"
+	dash.add_child(performance_route)
+	var performance_fill = make_color_rect(rect_full(0.600, 0.467, 0.600 + 0.065 * summary_score, 0.503), Color(0.46, 0.74, 0.62, 0.26))
+	performance_fill.name = "StatsPerformanceFill"
+	dash.add_child(performance_fill)
+	var performance_gate = make_color_rect(rect_full(0.648, 0.385, 0.678, 0.565), Color(0.92, 0.72, 0.34, 0.20 + 0.10 * summary_score))
+	performance_gate.name = "StatsPerformanceGate"
+	dash.add_child(performance_gate)
+	for i in range(2):
+		var perf_tick = make_color_rect(rect_full(0.615 + float(i) * 0.020, 0.395, 0.627 + float(i) * 0.020, 0.560), Color(0.46, 0.74, 0.62, 0.22 - float(i) * 0.040))
+		perf_tick.name = "StatsPerformanceTick_%d" % i
+		dash.add_child(perf_tick)
 	var score_medal = make_panel(dash, rect_full(0.665, 0.18, 0.925, 0.82), Color(0.050, 0.040, 0.026, 0.62), 18, Color(0.92, 0.72, 0.34, 0.30), 0)
 	score_medal.name = "StatsBestScoreMedal"
 	var medal_glow = make_panel(score_medal, rect_full(0.08, 0.16, 0.30, 0.84), Color(0.92, 0.72, 0.34, 0.24 if best_score != 0 else 0.10), 999, Color(1.0, 0.86, 0.46, 0.26), 0)
 	medal_glow.name = "StatsBestScoreGlow"
 	add_lucide_icon(score_medal, "trophy", rect_full(0.10, 0.24, 0.28, 0.76), GOLD_BRIGHT)
+	var best_score_route = make_color_rect(rect_full(0.350, 0.560, 0.910, 0.635), Color(0.006, 0.016, 0.018, 0.44))
+	best_score_route.name = "StatsBestScoreRoute"
+	score_medal.add_child(best_score_route)
+	var best_score_strength = clamp(float(best_score) / 12000.0, 0.08, 1.0)
+	var best_score_fill = make_color_rect(rect_full(0.040, 0.260, 0.040 + 0.870 * best_score_strength, 0.740), Color(0.92, 0.72, 0.34, 0.30))
+	best_score_fill.name = "StatsBestScoreRouteFill"
+	best_score_route.add_child(best_score_fill)
+	var best_score_gate = make_color_rect(rect_full(0.860, 0.420, 0.910, 0.610), Color(0.96, 0.82, 0.42, 0.26))
+	best_score_gate.name = "StatsBestScoreGate"
+	score_medal.add_child(best_score_gate)
+	for i in range(3):
+		var left = 0.560 + float(i) * 0.065
+		var tick = make_color_rect(rect_full(left, 0.405, left + 0.020, 0.520), Color(0.92, 0.72, 0.34, 0.24 - float(i) * 0.040))
+		tick.name = "StatsBestScoreTick_%d" % i
+		score_medal.add_child(tick)
 	var milestone_count = 0
 	for threshold in [3000, 6000, 9000]:
 		var unlocked = best_score >= int(threshold)
@@ -12701,6 +16875,13 @@ func draw_stats_dashboard_art(parent: Control) -> Control:
 		var milestone = make_panel(score_medal, rect_full(left, 0.690, left + 0.080, 0.860), Color(0.92, 0.72, 0.34, 0.40 if unlocked else 0.12), 999, Color(1.0, 0.86, 0.46, 0.20 if unlocked else 0.06), 0)
 		milestone.name = "StatsBestScoreMilestone_%d" % milestone_count
 		milestone_count += 1
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var scan_tw := create_tween()
+		scan_tw.set_loops(3600)
+		scan_tw.tween_property(scan_fill, "modulate:a", 0.40, 0.76).from(0.92)
+		scan_tw.parallel().tween_property(scan_gate, "modulate:a", 0.52, 0.76).from(0.88)
+		scan_tw.tween_property(scan_fill, "modulate:a", 0.92, 0.76).from(0.40)
+		scan_tw.parallel().tween_property(scan_gate, "modulate:a", 0.88, 0.76).from(0.52)
 	var rate_label = make_label(dash, "胜率 %d%%" % int(round(win_rate * 100.0)), 14, Color(0.86, 0.92, 0.80), true)
 	apply_rect(rate_label, rect_full(0.035, 0.02, 0.210, 0.18))
 	var games_label = make_label(dash, "历练 %d局" % games, 14, Color(0.92, 0.86, 0.62), true)
@@ -12709,14 +16890,50 @@ func draw_stats_dashboard_art(parent: Control) -> Control:
 	var best_label = make_label(score_medal, "最高 %s" % compact_score_text(best_score), 14, Color(0.96, 0.88, 0.58), true)
 	apply_rect(best_label, rect_full(0.33, 0.16, 0.94, 0.84))
 	best_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if games <= 0:
+		draw_stats_empty_state_art(dash)
 	return dash
+
+func draw_stats_empty_state_art(parent: Control) -> Control:
+	var empty = Control.new()
+	empty.name = "StatsEmptyStateArt"
+	empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(empty, rect_full(0.212, 0.545, 0.640, 0.925))
+	parent.add_child(empty)
+	var route = make_color_rect(rect_full(0.045, 0.430, 0.915, 0.505), Color(0.006, 0.016, 0.018, 0.46))
+	route.name = "StatsEmptyRoute"
+	empty.add_child(route)
+	var fill = make_color_rect(rect_full(0.030, 0.260, 0.430, 0.740), Color(0.78, 0.64, 0.30, 0.26))
+	fill.name = "StatsEmptyFill"
+	route.add_child(fill)
+	var gate = make_panel(empty, rect_full(0.850, 0.265, 0.930, 0.670), Color(0.78, 0.64, 0.30, 0.20), 999, Color(0.96, 0.82, 0.42, 0.16), 0)
+	gate.name = "StatsEmptyGate"
+	var glyph = make_label(gate, "始", 9, Color(0.96, 0.90, 0.64, 0.84), true)
+	glyph.name = "StatsEmptyGateGlyph"
+	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+	var seed = make_panel(empty, rect_full(0.040, 0.220, 0.115, 0.610), Color(0.46, 0.74, 0.62, 0.20), 999, Color(0.82, 0.96, 0.70, 0.08), 0)
+	seed.name = "StatsEmptySeedNode"
+	for i in range(3):
+		var left = 0.225 + float(i) * 0.145
+		var tick = make_panel(empty, rect_full(left, 0.225, left + 0.038, 0.520), Color(0.78, 0.64, 0.30, 0.25 - float(i) * 0.040), 999, Color(1.0, 0.90, 0.54, 0.06), 0)
+		tick.name = "StatsEmptyTick_%d" % i
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.38, 0.78).from(0.92)
+		tw.parallel().tween_property(gate, "modulate:a", 0.50, 0.78).from(0.90)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.78).from(0.38)
+		tw.parallel().tween_property(gate, "modulate:a", 0.90, 0.78).from(0.50)
+	return empty
 
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String) -> void:
 	var row = Panel.new()
+	row.name = "StatsRow_%s" % label_text
 	row.custom_minimum_size = Vector2(0, 52)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_stylebox_override("panel", style(Color(0.014, 0.024, 0.030, 0.92), 12, Color(0.30, 0.34, 0.32, 0.32), 0))
 	parent.add_child(row)
+	draw_stat_row_art(row, label_text, value_text)
 
 	var label = make_label(row, label_text, 18, Color(0.82, 0.84, 0.78), true)
 	apply_rect(label, rect_full(0.06, 0.15, 0.45, 0.85))
@@ -12725,6 +16942,94 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String)
 	var value = make_label(row, value_text, 20, Color(0.94, 0.90, 0.68), true)
 	apply_rect(value, rect_full(0.52, 0.12, 0.94, 0.88))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+func draw_stat_row_art(parent: Control, label_text: String, value_text: String) -> Control:
+	var accent = stat_row_accent(label_text)
+	var art = Control.new()
+	art.name = "StatsRowArt_%s" % label_text
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var marker = make_panel(art, rect_full(0.020, 0.260, 0.036, 0.740), Color(accent.r, accent.g, accent.b, 0.34), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+	marker.name = "StatsRowMarker_%s" % label_text
+	var rail = make_panel(art, rect_full(0.330, 0.720, 0.915, 0.820), Color(0.006, 0.016, 0.018, 0.52), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	rail.name = "StatsRowRail_%s" % label_text
+	var fill_ratio = stat_row_metric_fraction(label_text, value_text)
+	var fill = make_panel(rail, rect_full(0.018, 0.240, 0.018 + 0.944 * fill_ratio, 0.760), Color(accent.r, accent.g, accent.b, 0.42), 999, Color(1.0, 0.92, 0.62, 0.08), 0)
+	fill.name = "StatsRowFill_%s" % label_text
+	var trend_route = make_color_rect(rect_full(0.650, 0.255, 0.905, 0.335), Color(0.006, 0.016, 0.018, 0.40))
+	trend_route.name = "StatsRowTrendRoute_%s" % label_text
+	art.add_child(trend_route)
+	var trend_fill = make_color_rect(rect_full(0.035, 0.260, 0.035 + 0.900 * fill_ratio, 0.740), Color(accent.r, accent.g, accent.b, 0.24))
+	trend_fill.name = "StatsRowTrendFill_%s" % label_text
+	trend_route.add_child(trend_fill)
+	var trend_gate = make_color_rect(rect_full(0.885, 0.185, 0.925, 0.390), Color(accent.r, accent.g, accent.b, 0.22))
+	trend_gate.name = "StatsRowTrendGate_%s" % label_text
+	art.add_child(trend_gate)
+	var value_route = make_color_rect(rect_full(0.515, 0.470, 0.905, 0.540), Color(0.006, 0.016, 0.018, 0.36))
+	value_route.name = "StatsRowValueRoute_%s" % label_text
+	art.add_child(value_route)
+	var value_fill = make_color_rect(rect_full(0.000, 0.000, 0.420 + 0.520 * fill_ratio, 1.000), Color(accent.r, accent.g, accent.b, 0.20))
+	value_fill.name = "StatsRowValueFill_%s" % label_text
+	value_route.add_child(value_fill)
+	var value_gate = make_color_rect(rect_full(0.890, 0.405, 0.925, 0.635), Color(accent.r, accent.g, accent.b, 0.20))
+	value_gate.name = "StatsRowValueGate_%s" % label_text
+	art.add_child(value_gate)
+	for i in range(3):
+		var left = 0.365 + float(i) * 0.075
+		var lit = fill_ratio >= 0.25 + float(i) * 0.24
+		var node = make_panel(art, rect_full(left, 0.255, left + 0.022, 0.455), Color(accent.r, accent.g, accent.b, 0.34 if lit else 0.12), 999, Color(accent.r, accent.g, accent.b, 0.14 if lit else 0.04), 0)
+		node.name = "StatsRowNode_%s_%d" % [label_text, i]
+	for i in range(2):
+		var tick_left = 0.565 + float(i) * 0.060
+		var value_tick = make_color_rect(rect_full(tick_left, 0.585, tick_left + 0.018, 0.705), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
+		value_tick.name = "StatsRowValueTick_%s_%d" % [label_text, i]
+		art.add_child(value_tick)
+	for i in range(2):
+		var tick_left = 0.705 + float(i) * 0.055
+		var tick = make_color_rect(rect_full(tick_left, 0.450, tick_left + 0.018, 0.580), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040))
+		tick.name = "StatsRowTrendTick_%s_%d" % [label_text, i]
+		art.add_child(tick)
+	var focus = make_panel(art, rect_full(0.925, 0.245, 0.962, 0.755), Color(accent.r, accent.g, accent.b, 0.12), 999, Color(accent.r, accent.g, accent.b, 0.18), 0)
+	focus.name = "StatsRowFocus_%s" % label_text
+	return art
+
+func stat_row_accent(label_text: String) -> Color:
+	match label_text:
+		"总场次", "总手牌数":
+			return Color(0.58, 0.70, 0.62, 1.0)
+		"胜场", "胜率":
+			return Color(0.42, 0.72, 0.58, 1.0)
+		"累计分数", "最高得分":
+			return Color(0.82, 0.66, 0.32, 1.0)
+	return Color(0.62, 0.70, 0.68, 1.0)
+
+func stat_row_metric_fraction(label_text: String, value_text: String) -> float:
+	var numeric = stat_row_numeric_value(value_text)
+	match label_text:
+		"胜率":
+			return clamp(numeric / 100.0, 0.06, 1.0)
+		"总场次":
+			return clamp(numeric / 30.0, 0.06, 1.0)
+		"胜场":
+			return clamp(numeric / 20.0, 0.06, 1.0)
+		"累计分数":
+			return clamp(numeric / 30000.0, 0.06, 1.0)
+		"最高得分":
+			return clamp(numeric / 12000.0, 0.06, 1.0)
+		"总手牌数":
+			return clamp(numeric / 80.0, 0.06, 1.0)
+	return clamp(numeric / 100.0, 0.06, 1.0)
+
+func stat_row_numeric_value(value_text: String) -> float:
+	var cleaned = ""
+	for i in range(value_text.length()):
+		var ch = value_text.substr(i, 1)
+		if (ch >= "0" and ch <= "9") or ch == ".":
+			cleaned += ch
+	if cleaned == "":
+		return 0.0
+	return float(cleaned)
 
 # ============================================================
 # 商店系统
@@ -12738,7 +17043,7 @@ func show_shop_screen(instant: bool = false) -> void:
 	if instant or not fx_enabled_effective():
 		_build.call()
 	else:
-		play_screen_transition(_build, false, "curtain")
+		play_screen_transition(_build, false, "ink_wash")
 
 func _show_shop_screen_impl() -> void:
 	mode = "shop"
@@ -12751,6 +17056,7 @@ func _show_shop_screen_impl() -> void:
 
 	# 主面板
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.010, 0.024, 0.032, 0.98), 20, Color(0.52, 0.44, 0.26, 0.48))
+	draw_secondary_screen_texture(panel, "shop_vault", "ShopVaultTexture", 0.17)
 	panel.add_child(make_color_rect(rect_full(0.006, 0.02, 0.014, 0.98), GOLD_PRIMARY.darkened(0.2)))
 	# 书架式滑入动画 / Shelf-slide entrance
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -12772,12 +17078,25 @@ func _show_shop_screen_impl() -> void:
 
 	# 货币显示 - 增强样式
 	var coins_panel = make_panel(panel, rect_full(0.50, 0.035, 0.72, 0.090), Color(0.020, 0.036, 0.042, 0.92), 12, Color(0.46, 0.52, 0.42, 0.36), 0)
+	coins_panel.name = "ShopCurrencyPanel_coins"
+	draw_shop_currency_meter_art(coins_panel, "coins", int(currency.get("coins", 0)), Color(0.84, 0.68, 0.30))
+	# Add gold shimmer to currency panel
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and shader_materials.has("gold_foil_shimmer"):
+		var coin_gold = ColorRect.new()
+		coin_gold.name = "ShopCoinGoldFoil"
+		coin_gold.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		coin_gold.color = Color(0.92, 0.78, 0.38, 0.10)
+		coin_gold.set_anchors_preset(Control.PRESET_FULL_RECT)
+		apply_gold_foil_shader(coin_gold, 0.6, 0.3)
+		coins_panel.add_child(coin_gold)
 	add_lucide_icon(coins_panel, "coin", rect_full(0.06, 0.15, 0.22, 0.85), GOLD_PRIMARY)
 	var coins_label = make_label(coins_panel, str(int(currency.get("coins", 0))), 16, Color(0.96, 0.92, 0.68), true)
 	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	var gems_panel = make_panel(panel, rect_full(0.73, 0.035, 0.84, 0.090), Color(0.020, 0.036, 0.042, 0.92), 12, Color(0.42, 0.38, 0.56, 0.36), 0)
+	gems_panel.name = "ShopCurrencyPanel_gems"
+	draw_shop_currency_meter_art(gems_panel, "gems", int(currency.get("gems", 0)), Color(0.62, 0.52, 0.82))
 	add_lucide_icon(gems_panel, "diamond", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.62, 0.52, 0.82))
 	var gems_label = make_label(gems_panel, str(int(currency.get("gems", 0))), 16, Color(0.96, 0.92, 0.68), true)
 	apply_rect(gems_label, rect_full(0.25, 0.10, 0.95, 0.90))
@@ -12788,6 +17107,7 @@ func _show_shop_screen_impl() -> void:
 		show_menu()
 	)
 	back.custom_minimum_size = Vector2(100, 48)
+	draw_secondary_back_button_art(back, "shop", Color(0.32, 0.38, 0.40))
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.86, 0.030, 0.96, 0.090))
 	add_lucide_icon(back, "chevron-left", rect_full(0.08, 0.22, 0.30, 0.78), Color(0.92, 0.94, 0.88, 0.86))
@@ -12868,7 +17188,9 @@ func _show_shop_screen_impl() -> void:
 		# 拥有数量 - 带徽章样式
 		var count_badge_color = Color(0.28, 0.56, 0.48) if count > 0 else Color(0.38, 0.42, 0.40)
 		var count_badge = make_badge(row, rect_full(0.56, 0.20, 0.70, 0.80), "拥有 %d" % count, 13, count_badge_color.darkened(0.2), count_badge_color.lightened(0.2), Color(0.96, 0.96, 0.92))
+		count_badge.name = "ShopItemCountBadge_%s" % item_id
 		count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		draw_shop_item_count_badge_art(count_badge, item_color, count)
 
 		# 购买按钮 - 增强样式
 		var buy_btn = make_small_button("", Color(0.42, 0.38, 0.58), func() -> void:
@@ -12915,6 +17237,96 @@ func _show_shop_screen_impl() -> void:
 		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.95, 0.95)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
+func draw_shop_currency_meter_art(parent: Control, kind: String, amount: int, accent: Color) -> Control:
+	var art = Control.new()
+	art.name = "ShopCurrencyMeterArt_%s" % kind
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	var target = 5000 if kind == "coins" else 100
+	var fill_ratio = clamp(float(amount) / float(target), 0.08, 1.0)
+	var rail = make_panel(art, rect_full(0.040, 0.760, 0.950, 0.900), Color(0.006, 0.018, 0.020, 0.62), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	rail.name = "ShopCurrencyRail_%s" % kind
+	var fill = make_panel(rail, rect_full(0.025, 0.260, 0.025 + 0.950 * fill_ratio, 0.740), Color(accent.r, accent.g, accent.b, 0.50), 999, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	fill.name = "ShopCurrencyFill_%s" % kind
+	var flow_rail = make_panel(art, rect_full(0.285, 0.575, 0.860, 0.665), Color(0.006, 0.018, 0.020, 0.44), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	flow_rail.name = "ShopCurrencyFlowRail_%s" % kind
+	var flow_fill = make_panel(flow_rail, rect_full(0.025, 0.260, 0.025 + 0.950 * fill_ratio, 0.740), Color(accent.r, accent.g, accent.b, 0.28), 999, Color(1.0, 0.90, 0.54, 0.06), 0)
+	flow_fill.name = "ShopCurrencyFlowFill_%s" % kind
+	var vault = make_panel(art, rect_full(0.018, 0.125, 0.238, 0.875), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(accent.r, accent.g, accent.b, 0.26), 0)
+	vault.name = "ShopCurrencyVault_%s" % kind
+	var pulse_count = 4 if kind == "coins" else 3
+	for i in range(pulse_count):
+		var left = 0.315 + float(i) * (0.115 if kind == "coins" else 0.165)
+		var pulse = make_panel(art, rect_full(left, 0.170 + float(i % 2) * 0.110, left + 0.028, 0.410 + float(i % 2) * 0.110), Color(accent.r, accent.g, accent.b, 0.34), 999, Color(1.0, 0.92, 0.62, 0.12), 0)
+		pulse.name = "ShopCurrencyPulse_%s_%d" % [kind, i]
+	for i in range(3):
+		var node_left = 0.330 + float(i) * 0.165
+		var node = make_panel(art, rect_full(node_left, 0.505, node_left + 0.036, 0.735), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.025), 999, Color(1.0, 0.90, 0.54, 0.06), 0)
+		node.name = "ShopCurrencyFlowNode_%s_%d" % [kind, i]
+	for i in range(3):
+		var tick_left = 0.485 + float(i) * 0.070
+		var tick = make_color_rect(rect_full(tick_left, 0.690, tick_left + 0.016, 0.800), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035))
+		tick.name = "ShopCurrencyFlowTick_%s_%d" % [kind, i]
+		art.add_child(tick)
+	var threshold = make_panel(art, rect_full(0.875, 0.190, 0.935, 0.650), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(accent.r, accent.g, accent.b, 0.22), 0)
+	threshold.name = "ShopCurrencyThreshold_%s" % kind
+	var gate = make_panel(art, rect_full(0.828, 0.485, 0.930, 0.735), Color(accent.r, accent.g, accent.b, 0.12), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	gate.name = "ShopCurrencyFlowGate_%s" % kind
+	if fill_ratio <= 0.20:
+		var low_route = make_color_rect(rect_full(0.560, 0.315, 0.940, 0.390), Color(0.006, 0.016, 0.018, 0.44))
+		low_route.name = "ShopCurrencyLowRoute_%s" % kind
+		art.add_child(low_route)
+		var low_fill = make_color_rect(rect_full(0.030, 0.250, 0.540, 0.750), Color(0.92, 0.56, 0.34, 0.28))
+		low_fill.name = "ShopCurrencyLowFill_%s" % kind
+		low_route.add_child(low_fill)
+		var low_gate = make_color_rect(rect_full(0.900, 0.245, 0.940, 0.495), Color(0.96, 0.76, 0.38, 0.26))
+		low_gate.name = "ShopCurrencyLowGate_%s" % kind
+		art.add_child(low_gate)
+		for i in range(3):
+			var low_left = 0.625 + float(i) * 0.062
+			var low_tick = make_color_rect(rect_full(low_left, 0.235, low_left + 0.018, 0.390), Color(0.92, 0.56, 0.34, 0.24 - float(i) * 0.040))
+			low_tick.name = "ShopCurrencyLowTick_%s_%d" % [kind, i]
+			art.add_child(low_tick)
+	if amount <= 0:
+		var empty = make_panel(art, rect_full(0.775, 0.180, 0.955, 0.650), Color(0.72, 0.32, 0.28, 0.16), 999, Color(0.94, 0.48, 0.36, 0.14), 0)
+		empty.name = "ShopCurrencyEmptyWarning_%s" % kind
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(12)
+		tw.tween_property(fill, "modulate:a", 0.46, 0.70).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.70).from(0.46)
+		var flow_tw := create_tween()
+		flow_tw.set_loops(12)
+		flow_tw.tween_property(flow_fill, "modulate:a", 0.38, 0.70).from(0.88)
+		flow_tw.tween_property(flow_fill, "modulate:a", 0.88, 0.70).from(0.38)
+	return art
+
+func draw_shop_item_count_badge_art(parent: Control, item_color: Color, count: int) -> Control:
+	var art = Control.new()
+	art.name = "ShopItemCountBadgeArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(art)
+	parent.move_child(art, 0)
+	var rail = make_color_rect(rect_full(0.085, 0.740, 0.915, 0.830), Color(0.006, 0.016, 0.018, 0.40))
+	rail.name = "ShopItemCountRail"
+	art.add_child(rail)
+	var fill_ratio = clamp(float(count) / 4.0, 0.10, 1.0)
+	var fill = make_color_rect(rect_full(0.035, 0.260, 0.035 + 0.900 * fill_ratio, 0.740), Color(item_color.r, item_color.g, item_color.b, 0.28 if count > 0 else 0.14))
+	fill.name = "ShopItemCountFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.810, 0.220, 0.865, 0.440), Color(item_color.r, item_color.g, item_color.b, 0.24 if count > 0 else 0.12))
+	gate.name = "ShopItemCountGate"
+	art.add_child(gate)
+	for i in range(3):
+		var left = 0.160 + float(i) * 0.150
+		var lit = count > i
+		var pip = make_color_rect(rect_full(left, 0.255, left + 0.040, 0.440), Color(item_color.r, item_color.g, item_color.b, 0.26 if lit else 0.10))
+		pip.name = "ShopItemCountPip_%d" % i
+		art.add_child(pip)
+	return art
+
 func draw_shop_buy_button_art(button: Control, cost: int, affordable: bool) -> Control:
 	var art = Control.new()
 	art.name = "ShopBuyButtonArt"
@@ -12927,15 +17339,51 @@ func draw_shop_buy_button_art(button: Control, cost: int, affordable: bool) -> C
 	var fill_fraction = 0.86 if affordable else 0.28
 	var fill = make_panel(art, rect_full(0.080, 0.782, 0.080 + 0.840 * fill_fraction, 0.852), Color(accent.r, accent.g, accent.b, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
 	fill.name = "ShopBuyButtonAffordFill"
+	var route = make_panel(art, rect_full(0.285, 0.620, 0.860, 0.710), Color(0.006, 0.016, 0.018, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	route.name = "ShopBuyButtonCommandRoute"
+	var route_fill = make_panel(route, rect_full(0.030, 0.260, 0.030 + 0.910 * fill_fraction, 0.740), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.90, 0.54, 0.06), 0)
+	route_fill.name = "ShopBuyButtonCommandFill"
+	var settlement_route = make_color_rect(rect_full(0.170, 0.235, 0.560, 0.285), Color(0.010, 0.020, 0.022, 0.42))
+	settlement_route.name = "ShopBuyButtonSettlementRoute"
+	art.add_child(settlement_route)
+	var settlement_fill = make_color_rect(rect_full(0.170, 0.240, 0.170 + 0.390 * (0.80 if affordable else 0.22), 0.280), Color(accent.r, accent.g, accent.b, 0.34 if affordable else 0.16))
+	settlement_fill.name = "ShopBuyButtonSettlementFill"
+	art.add_child(settlement_fill)
 	var seal = make_panel(art, rect_full(0.705, 0.135, 0.905, 0.600), Color(accent.r, accent.g, accent.b, 0.14), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
 	seal.name = "ShopBuyButtonPriceSeal"
+	var gate = make_panel(art, rect_full(0.835, 0.475, 0.900, 0.710), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	gate.name = "ShopBuyButtonCommandGate"
+	var settlement_gate = make_color_rect(rect_full(0.545, 0.205, 0.585, 0.315), Color(accent.r, accent.g, accent.b, 0.24 if affordable else 0.12))
+	settlement_gate.name = "ShopBuyButtonSettlementGate"
+	art.add_child(settlement_gate)
 	for i in range(2):
 		var top = 0.185 + float(i) * 0.190
 		var spark = make_panel(art, rect_full(0.622 + float(i) * 0.044, top, 0.648 + float(i) * 0.044, top + 0.110), Color(accent.r, accent.g, accent.b, 0.28 if affordable else 0.14), 999, Color(1.0, 0.92, 0.60, 0.10), 0)
 		spark.name = "ShopBuyButtonSpark_%d" % i
+	for i in range(2):
+		var tick = make_panel(art, rect_full(0.480 + float(i) * 0.065, 0.425, 0.502 + float(i) * 0.065, 0.550), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.050), 999, Color(1.0, 0.92, 0.60, 0.06), 0)
+		tick.name = "ShopBuyButtonCommandTick_%d" % i
+	for i in range(3):
+		var tick_left = 0.232 + float(i) * 0.096
+		var settlement_tick = make_color_rect(rect_full(tick_left, 0.212, tick_left + 0.020, 0.310), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.035 if affordable else 0.10))
+		settlement_tick.name = "ShopBuyButtonSettlementTick_%d" % i
+		art.add_child(settlement_tick)
 	if not affordable:
 		var lock = make_panel(art, rect_full(0.050, 0.155, 0.215, 0.575), Color(0.82, 0.46, 0.40, 0.22), 999, Color(0.94, 0.64, 0.56, 0.12), 0)
 		lock.name = "ShopBuyButtonInsufficientLock"
+		var insufficient_route = make_color_rect(rect_full(0.185, 0.365, 0.650, 0.430), Color(0.006, 0.016, 0.018, 0.44))
+		insufficient_route.name = "ShopBuyButtonInsufficientRoute"
+		art.add_child(insufficient_route)
+		var insufficient_fill = make_color_rect(rect_full(0.035, 0.250, 0.500, 0.750), Color(0.86, 0.48, 0.42, 0.22))
+		insufficient_fill.name = "ShopBuyButtonInsufficientFill"
+		insufficient_route.add_child(insufficient_fill)
+		var insufficient_gate = make_color_rect(rect_full(0.625, 0.330, 0.665, 0.500), Color(0.94, 0.64, 0.56, 0.18))
+		insufficient_gate.name = "ShopBuyButtonInsufficientGate"
+		art.add_child(insufficient_gate)
+		for i in range(2):
+			var insufficient_tick = make_color_rect(rect_full(0.330 + float(i) * 0.090, 0.305, 0.348 + float(i) * 0.090, 0.520), Color(0.86, 0.48, 0.42, 0.20 - float(i) * 0.045))
+			insufficient_tick.name = "ShopBuyButtonInsufficientTick_%d" % i
+			art.add_child(insufficient_tick)
 	if affordable and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
@@ -12944,8 +17392,23 @@ func draw_shop_buy_button_art(button: Control, cost: int, affordable: bool) -> C
 	return art
 
 func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id: String = "") -> void:
+	var item_texture = add_illustration_texture(row, "shop_item_shelf", rect_full(0.010, 0.030, 0.765, 0.970), 0.105, false)
+	if item_texture != null:
+		item_texture.name = "ShopItemShelfTexture_%s" % (item_id if item_id != "" else "generic")
+		row.move_child(item_texture, 0)
 	var shelf = make_panel(row, rect_full(0.110, 0.820, 0.735, 0.885), Color(item_color.r, item_color.g, item_color.b, 0.16), 999, Color(item_color.r, item_color.g, item_color.b, 0.20), 0)
 	shelf.name = "ShopItemShelfRail"
+	var route = make_panel(row, rect_full(0.565, 0.365, 0.735, 0.455), Color(item_color.r, item_color.g, item_color.b, 0.10), 999, Color(item_color.r, item_color.g, item_color.b, 0.10), 0)
+	route.name = "ShopItemRouteRail"
+	var value_route = make_color_rect(rect_full(0.120, 0.555, 0.742, 0.595), Color(0.010, 0.020, 0.022, 0.40))
+	value_route.name = "ShopItemValueRoute"
+	row.add_child(value_route)
+	var value_fill = make_color_rect(rect_full(0.030, 0.260, 0.030 + 0.880 * clamp(float(count + 1) / 4.0, 0.18, 1.0), 0.740), Color(item_color.r, item_color.g, item_color.b, 0.24 if count > 0 else 0.14))
+	value_fill.name = "ShopItemValueFill"
+	value_route.add_child(value_fill)
+	var value_gate = make_color_rect(rect_full(0.714, 0.505, 0.754, 0.640), Color(item_color.r, item_color.g, item_color.b, 0.22 if count > 0 else 0.12))
+	value_gate.name = "ShopItemValueGate"
+	row.add_child(value_gate)
 	var energy = make_panel(row, rect_full(0.120, 0.060, 0.535, 0.105), Color(item_color.r, item_color.g, item_color.b, 0.12), 999, Color(item_color.r, item_color.g, item_color.b, 0.16), 0)
 	energy.name = "ShopItemEnergyRail"
 	var fill_right = 0.120 + 0.415 * clamp(float(count) / 3.0, 0.08, 1.0)
@@ -12970,6 +17433,34 @@ func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id
 		var alpha = 0.72 if count > 0 else 0.22
 		var pip = make_panel(stock, rect_full(left, 0.18, left + 0.145, 0.82), Color(item_color.r, item_color.g, item_color.b, alpha), 999, Color(item_color.r, item_color.g, item_color.b, 0.34), 0)
 		pip.name = "ShopItemStockPip_%d" % i
+	for i in range(3):
+		var left = 0.580 + float(i) * 0.050
+		var lit = count > i
+		var node = make_panel(row, rect_full(left, 0.300, left + 0.024, 0.520), Color(item_color.r, item_color.g, item_color.b, 0.30 if lit else 0.12), 999, Color(item_color.r, item_color.g, item_color.b, 0.16 if lit else 0.05), 0)
+		node.name = "ShopItemRouteNode_%d" % i
+	for i in range(2):
+		var value_tick_left = 0.530 + float(i) * 0.058
+		var value_tick = make_color_rect(rect_full(value_tick_left, 0.493, value_tick_left + 0.016, 0.640), Color(item_color.r, item_color.g, item_color.b, 0.22 - float(i) * 0.040 if count > 0 else 0.10))
+		value_tick.name = "ShopItemValueTick_%d" % i
+		row.add_child(value_tick)
+	var arrow = make_color_rect(rect_full(0.690, 0.402, 0.724, 0.418), Color(item_color.r, item_color.g, item_color.b, 0.26))
+	arrow.name = "ShopItemRouteArrow"
+	row.add_child(arrow)
+	var settlement_rail = make_color_rect(rect_full(0.320, 0.670, 0.742, 0.705), Color(0.010, 0.020, 0.022, 0.38))
+	settlement_rail.name = "ShopItemSettlementRail"
+	row.add_child(settlement_rail)
+	var settlement_fill_right = 0.320 + 0.422 * clamp(float(count + 1) / 4.0, 0.18, 1.0)
+	var settlement_fill = make_color_rect(rect_full(0.320, 0.676, settlement_fill_right, 0.699), Color(item_color.r, item_color.g, item_color.b, 0.28 if count > 0 else 0.14))
+	settlement_fill.name = "ShopItemSettlementFill"
+	row.add_child(settlement_fill)
+	var settlement_gate = make_color_rect(rect_full(0.724, 0.632, 0.758, 0.742), Color(item_color.r, item_color.g, item_color.b, 0.22 if count > 0 else 0.11))
+	settlement_gate.name = "ShopItemSettlementGate"
+	row.add_child(settlement_gate)
+	for i in range(3):
+		var tick_left = 0.396 + float(i) * 0.092
+		var tick = make_color_rect(rect_full(tick_left, 0.640, tick_left + 0.018, 0.728), Color(item_color.r, item_color.g, item_color.b, 0.22 - float(i) * 0.035 if count > 0 else 0.09))
+		tick.name = "ShopItemSettlementTick_%d" % i
+		row.add_child(tick)
 	var price_aura = make_panel(row, rect_full(0.755, 0.120, 0.988, 0.880), Color(0.62, 0.52, 0.82, 0.08), 14, Color(0.72, 0.62, 0.88, 0.18), 0)
 	price_aura.name = "ShopItemPriceAura"
 	for i in range(2):
@@ -13035,12 +17526,12 @@ var chat_messages: Array = []
 var chat_input: LineEdit = null
 
 func show_chat_panel() -> void:
-	if chat_messages.is_empty():
-		return
 	var chat_panel = make_panel(root_layer, rect_full(0.02, 0.38, 0.28, 0.72), Color(0.008, 0.018, 0.022, 0.95), 14, Color(0.38, 0.42, 0.40, 0.36), 0)
 	chat_panel.name = "ChatPanel"
 	draw_chat_panel_art(chat_panel)
 	var chat_text = "\n".join(chat_messages.slice(-8))
+	if chat_text.strip_edges() == "":
+		chat_text = "等待房间消息"
 	var chat_label = make_label(chat_panel, chat_text, 12, Color(0.82, 0.86, 0.80), false)
 	apply_rect(chat_label, rect_full(0.075, 0.260, 0.940, 0.910))
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
@@ -13052,6 +17543,9 @@ func draw_chat_panel_art(parent: Control) -> Control:
 	art.name = "ChatPanelArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.0, 0.0, 1.0, 1.0))
+	var chat_texture = add_illustration_texture(art, "chat_stream", rect_full(0.018, 0.010, 0.982, 0.985), 0.14, false)
+	if chat_texture != null:
+		chat_texture.name = "ChatStreamTexture"
 	# 笔触分隔线
 	make_brush_stroke_divider(art, rect_full(0.10, 0.12, 0.90, 0.15))
 	parent.add_child(art)
@@ -13066,30 +17560,79 @@ func draw_chat_panel_art(parent: Control) -> Control:
 	var count_badge = make_badge(header, rect_full(0.620, 0.170, 0.925, 0.830), "%d条" % min(99, chat_messages.size()), 10, Color(0.22, 0.40, 0.38, 0.92), Color(0.48, 0.72, 0.62, 0.34), Color(0.94, 0.96, 0.88))
 	count_badge.name = "ChatPanelCountBadge"
 	count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var header_bridge = make_color_rect(rect_full(0.070, 0.215, 0.250, 0.265), Color(0.006, 0.016, 0.018, 0.34))
+	header_bridge.name = "ChatPanelHeaderBridge"
+	art.add_child(header_bridge)
+	var header_bridge_fill = make_color_rect(rect_full(0.000, 0.000, clamp(float(chat_messages.size()) / 5.0, 0.20, 1.0), 1.000), Color(0.48, 0.78, 0.64, 0.22))
+	header_bridge_fill.name = "ChatPanelHeaderBridgeFill"
+	header_bridge.add_child(header_bridge_fill)
+	var header_bridge_gate = make_color_rect(rect_full(0.235, 0.190, 0.260, 0.300), Color(0.92, 0.76, 0.34, 0.20))
+	header_bridge_gate.name = "ChatPanelHeaderBridgeGate"
+	art.add_child(header_bridge_gate)
 	var rail = make_panel(art, rect_full(0.058, 0.285, 0.070, 0.900), Color(0.60, 0.76, 0.64, 0.20), 999, Color(0.80, 0.92, 0.72, 0.12), 0)
 	rail.name = "ChatPanelActivityRail"
+	for i in range(2):
+		var bridge_tick = make_color_rect(rect_full(0.110 + float(i) * 0.045, 0.270, 0.124 + float(i) * 0.045, 0.340), Color(0.48, 0.78, 0.64, 0.20 - float(i) * 0.035))
+		bridge_tick.name = "ChatPanelHeaderBridgeTick_%d" % i
+		art.add_child(bridge_tick)
 	var visible_count = min(5, chat_messages.size())
+	if visible_count == 0:
+		draw_chat_empty_state_art(art)
 	for i in range(visible_count):
 		var top = 0.320 + float(i) * 0.112
 		var message_text = str(chat_messages[chat_messages.size() - visible_count + i])
 		var is_self_message = message_text.begins_with("你:")
+		var lane = make_color_rect(rect_full(0.178, top + 0.028, 0.850, top + 0.040), Color(0.42, 0.74, 0.62, 0.10 if is_self_message else 0.055))
+		lane.name = "ChatPanelMessageLane_%d" % i
+		art.add_child(lane)
 		var node = make_panel(art, rect_full(0.044, top, 0.084, top + 0.048), Color(0.48, 0.78, 0.64, 0.46), 999, Color(0.80, 0.92, 0.70, 0.22), 0)
 		node.name = "ChatPanelMessageNode_%d" % i
 		var sender_chip = make_panel(art, rect_full(0.100, top - 0.008, 0.158, top + 0.056), Color(0.76, 0.62, 0.34, 0.36 if is_self_message else 0.18), 999, Color(0.96, 0.82, 0.42, 0.18 if is_self_message else 0.08), 0)
 		sender_chip.name = "ChatPanelSenderChip_%d" % i
+		var tick = make_panel(art, rect_full(0.818, top + 0.012, 0.846, top + 0.054), Color(0.62, 0.84, 0.70, 0.22 if is_self_message else 0.12), 999, Color(0.82, 0.96, 0.76, 0.08), 0)
+		tick.name = "ChatPanelFlowTick_%d" % i
 		if is_self_message:
 			var ribbon = make_color_rect(rect_full(0.168, top + 0.018, 0.305, top + 0.034), Color(0.86, 0.72, 0.36, 0.28))
 			ribbon.name = "ChatPanelOutgoingRibbon_%d" % i
 			art.add_child(ribbon)
 		var bead = make_panel(art, rect_full(0.895, top - 0.002, 0.915, top + 0.046), Color(0.42, 0.74, 0.62, 0.38), 999, Color(0.78, 0.92, 0.72, 0.14), 0)
 		bead.name = "ChatPanelUnreadBead_%d" % i
-	var latest_glow = make_panel(art, rect_full(0.036, 0.300, 0.092, 0.368), Color(0.92, 0.76, 0.34, 0.20), 999, Color(1.0, 0.86, 0.46, 0.18), 0)
+	var latest_top = 0.320 + float(max(0, visible_count - 1)) * 0.112
+	var latest_glow = make_panel(art, rect_full(0.036, latest_top - 0.020, 0.092, latest_top + 0.068), Color(0.92, 0.76, 0.34, 0.20), 999, Color(1.0, 0.86, 0.46, 0.18), 0)
 	latest_glow.name = "ChatPanelLatestGlow"
+	var latest_cursor = make_panel(art, rect_full(0.858, latest_top + 0.002, 0.884, latest_top + 0.058), Color(0.92, 0.76, 0.34, 0.18), 999, Color(1.0, 0.86, 0.46, 0.12), 0)
+	latest_cursor.name = "ChatPanelLatestCursor"
+	var sync_route = make_color_rect(rect_full(0.170, latest_top + 0.066, 0.884, latest_top + 0.092), Color(0.006, 0.016, 0.018, 0.34))
+	sync_route.name = "ChatPanelSyncRoute"
+	art.add_child(sync_route)
+	var sync_fill = make_color_rect(rect_full(0.170, latest_top + 0.071, 0.170 + 0.714 * clamp(float(visible_count) / 5.0, 0.20, 1.0), latest_top + 0.087), Color(0.42, 0.74, 0.62, 0.24))
+	sync_fill.name = "ChatPanelSyncFill"
+	art.add_child(sync_fill)
+	var sync_gate = make_color_rect(rect_full(0.862, latest_top + 0.045, 0.892, latest_top + 0.115), Color(0.92, 0.76, 0.34, 0.20))
+	sync_gate.name = "ChatPanelSyncGate"
+	art.add_child(sync_gate)
+	for i in range(2):
+		var sync_tick = make_color_rect(rect_full(0.610 + float(i) * 0.058, latest_top + 0.050, 0.626 + float(i) * 0.058, latest_top + 0.112), Color(0.42, 0.74, 0.62, 0.22 - float(i) * 0.040))
+		sync_tick.name = "ChatPanelSyncTick_%d" % i
+		art.add_child(sync_tick)
+	var delivery_route = make_color_rect(rect_full(0.520, 0.790, 0.930, 0.865), Color(0.006, 0.016, 0.018, 0.42))
+	delivery_route.name = "ChatPanelDeliveryRoute"
+	art.add_child(delivery_route)
+	var delivery_fill = make_color_rect(rect_full(0.035, 0.260, 0.220 + 0.140 * float(max(1, visible_count)), 0.740), Color(0.42, 0.74, 0.62, 0.26))
+	delivery_fill.name = "ChatPanelDeliveryFill"
+	delivery_route.add_child(delivery_fill)
+	var delivery_gate = make_color_rect(rect_full(0.900, 0.720, 0.930, 0.840), Color(0.92, 0.76, 0.34, 0.24))
+	delivery_gate.name = "ChatPanelDeliveryGate"
+	art.add_child(delivery_gate)
 	var input_pulse = make_panel(art, rect_full(0.760, 0.825, 0.940, 0.905), Color(0.42, 0.72, 0.62, 0.10), 999, Color(0.74, 0.92, 0.72, 0.10), 0)
 	input_pulse.name = "ChatPanelInputPulse"
 	for i in range(3):
 		var wave = make_panel(art, rect_full(0.790 + float(i) * 0.045, 0.850 - float(i % 2) * 0.020, 0.815 + float(i) * 0.045, 0.890), Color(0.62, 0.84, 0.70, 0.36 - float(i) * 0.06), 999, Color(0.82, 0.96, 0.76, 0.12), 0)
 		wave.name = "ChatPanelTypingWave_%d" % i
+	for i in range(3):
+		var tick = make_color_rect(rect_full(0.620 + float(i) * 0.055, 0.725, 0.640 + float(i) * 0.055, 0.845), Color(0.42, 0.74, 0.62, 0.24 - float(i) * 0.040))
+		tick.name = "ChatPanelDeliveryTick_%d" % i
+		art.add_child(tick)
 	add_lucide_icon(art, "sparkles", rect_full(0.835, 0.058, 0.930, 0.176), Color(0.94, 0.82, 0.46, 0.50))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
@@ -13101,6 +17644,51 @@ func draw_chat_panel_art(parent: Control) -> Control:
 		input_tw.tween_property(input_pulse, "modulate:a", 0.44, 0.80).from(1.0)
 		input_tw.tween_property(input_pulse, "modulate:a", 1.0, 0.80).from(0.44)
 	return art
+
+func draw_chat_empty_state_art(parent: Control) -> Control:
+	var empty = Control.new()
+	empty.name = "ChatPanelEmptyStateArt"
+	empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(empty, rect_full(0.095, 0.355, 0.925, 0.725))
+	parent.add_child(empty)
+	var rail = make_color_rect(rect_full(0.045, 0.520, 0.955, 0.595), Color(0.006, 0.016, 0.018, 0.42))
+	rail.name = "ChatPanelEmptyRail"
+	empty.add_child(rail)
+	var fill = make_color_rect(rect_full(0.035, 0.260, 0.420, 0.740), Color(0.42, 0.74, 0.62, 0.22))
+	fill.name = "ChatPanelEmptyFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.855, 0.370, 0.905, 0.720), Color(0.92, 0.76, 0.34, 0.22))
+	gate.name = "ChatPanelEmptyGate"
+	empty.add_child(gate)
+	var source = make_color_rect(rect_full(0.075, 0.340, 0.125, 0.700), Color(0.42, 0.74, 0.62, 0.24))
+	source.name = "ChatPanelEmptySource"
+	empty.add_child(source)
+	var listen_route = make_color_rect(rect_full(0.165, 0.710, 0.855, 0.785), Color(0.006, 0.016, 0.018, 0.40))
+	listen_route.name = "ChatPanelEmptyListenRoute"
+	empty.add_child(listen_route)
+	var listen_fill = make_color_rect(rect_full(0.035, 0.260, 0.560, 0.740), Color(0.42, 0.74, 0.62, 0.24))
+	listen_fill.name = "ChatPanelEmptyListenFill"
+	listen_route.add_child(listen_fill)
+	var listen_gate = make_color_rect(rect_full(0.810, 0.645, 0.865, 0.885), Color(0.92, 0.76, 0.34, 0.22))
+	listen_gate.name = "ChatPanelEmptyListenGate"
+	empty.add_child(listen_gate)
+	for i in range(3):
+		var left = 0.250 + float(i) * 0.170
+		var pulse = make_panel(empty, rect_full(left, 0.250, left + 0.070, 0.440), Color(0.42, 0.74, 0.62, 0.24 - float(i) * 0.035), 999, Color(0.82, 0.96, 0.76, 0.10), 0)
+		pulse.name = "ChatPanelEmptyPulse_%d" % i
+	for i in range(2):
+		var tick_left = 0.415 + float(i) * 0.105
+		var tick = make_color_rect(rect_full(tick_left, 0.635, tick_left + 0.020, 0.850), Color(0.42, 0.74, 0.62, 0.22 - float(i) * 0.040))
+		tick.name = "ChatPanelEmptyListenTick_%d" % i
+		empty.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "modulate:a", 0.42, 0.82).from(1.0)
+		tw.parallel().tween_property(listen_fill, "modulate:a", 0.38, 0.82).from(0.88)
+		tw.tween_property(fill, "modulate:a", 1.0, 0.82).from(0.42)
+		tw.parallel().tween_property(listen_fill, "modulate:a", 0.88, 0.82).from(0.38)
+	return empty
 
 func add_chat_message(text: String) -> void:
 	chat_messages.append(text)
@@ -13134,6 +17722,9 @@ func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_m
 
 	var duration := float(duration_msec) / 1000.0
 	var half_dur := duration * 0.5
+	var flip_art = draw_tile_flip_signal_art(tile_view, from_face_up)
+	var tile_ref = weakref(tile_view)
+	var flip_art_ref = weakref(flip_art) if flip_art != null else null
 
 	var tw := create_tween()
 	tile_flip_animations[anim_id] = tw
@@ -13143,9 +17734,10 @@ func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_m
 
 	# 在中点切换可见性
 	tw.tween_callback(func() -> void:
-		if tile_view == null or not is_instance_valid(tile_view):
+		var target = tile_ref.get_ref() as Control
+		if target == null:
 			return
-		tile_view.modulate = tile_view.modulate.darkened(0.1)
+		target.modulate = target.modulate.darkened(0.1)
 	)
 
 	# 第二阶段：从0缩放到1
@@ -13153,11 +17745,59 @@ func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_m
 
 	# 恢复颜色
 	tw.tween_callback(func() -> void:
-		if tile_view == null or not is_instance_valid(tile_view):
+		var target = tile_ref.get_ref() as Control
+		if target == null:
+			tile_flip_animations.erase(anim_id)
 			return
-		tile_view.modulate = Color(1, 1, 1, tile_view.modulate.a)
+		target.modulate = Color(1, 1, 1, target.modulate.a)
 		tile_flip_animations.erase(anim_id)
+		var art = flip_art_ref.get_ref() as Control if flip_art_ref != null else null
+		if art != null:
+			art.queue_free()
 	)
+
+func draw_tile_flip_signal_art(tile_view: Control, from_face_up: bool) -> Control:
+	if tile_view == null or not is_instance_valid(tile_view):
+		return null
+	var art = Control.new()
+	art.name = "TileFlipSignalArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tile_view.add_child(art)
+	var accent = Color(0.84, 0.68, 0.30) if from_face_up else Color(0.42, 0.72, 0.62)
+	var axis = make_color_rect(rect_full(0.470, 0.095, 0.530, 0.905), Color(accent.r, accent.g, accent.b, 0.30))
+	axis.name = "TileFlipAxis"
+	art.add_child(axis)
+	var axis_core = make_color_rect(rect_full(0.492, 0.140, 0.508, 0.860), Color(1.0, 0.92, 0.56, 0.34))
+	axis_core.name = "TileFlipAxisCore"
+	art.add_child(axis_core)
+	var source_gate = make_color_rect(rect_full(0.120, 0.430, 0.270, 0.570), Color(accent.r, accent.g, accent.b, 0.18))
+	source_gate.name = "TileFlipSourceGate"
+	art.add_child(source_gate)
+	var reveal_gate = make_color_rect(rect_full(0.730, 0.430, 0.880, 0.570), Color(0.96, 0.84, 0.48, 0.20))
+	reveal_gate.name = "TileFlipRevealGate"
+	art.add_child(reveal_gate)
+	var route = make_color_rect(rect_full(0.185, 0.815, 0.815, 0.860), Color(0.006, 0.016, 0.018, 0.38))
+	route.name = "TileFlipRoute"
+	art.add_child(route)
+	var fill_right = 0.680 if from_face_up else 0.840
+	var fill = make_color_rect(rect_full(0.025, 0.230, fill_right, 0.770), Color(accent.r, accent.g, accent.b, 0.30))
+	fill.name = "TileFlipRouteFill"
+	route.add_child(fill)
+	for i in range(3):
+		var left = 0.305 + float(i) * 0.190
+		var tick = make_color_rect(rect_full(left, 0.180, left + 0.036, 0.330), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.040))
+		tick.name = "TileFlipRhythmTick_%d" % i
+		art.add_child(tick)
+	var face_badge = make_color_rect(rect_full(0.405, 0.035, 0.595, 0.115), Color(accent.r, accent.g, accent.b, 0.18))
+	face_badge.name = "TileFlipFaceBadge_front" if from_face_up else "TileFlipFaceBadge_back"
+	art.add_child(face_badge)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(2)
+		tw.tween_property(axis, "modulate:a", 0.42, 0.16).from(1.0)
+		tw.tween_property(axis, "modulate:a", 1.0, 0.16).from(0.42)
+	return art
 
 func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, duration_msec: int = FX_CLAIM_FLY_DURATION_MSEC, arc_height: float = 80.0, callback: Callable = Callable()) -> void:
 	"""牌面飞行动画 - 带抛物线弧度"""
@@ -13167,6 +17807,7 @@ func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, d
 		return
 
 	ensure_fx_layer()
+	var route_art = draw_flying_tile_route_art(tile, from_pos, to_pos)
 
 	# 创建飞行中的牌面
 	var flying_tile = make_tile_view(tile, Vector2(56, 76), false, Callable())
@@ -13195,6 +17836,8 @@ func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, d
 	tw.tween_callback(func() -> void:
 		if flying_tile != null and is_instance_valid(flying_tile):
 			flying_tile.queue_free()
+		if route_art != null and is_instance_valid(route_art):
+			route_art.queue_free()
 		for i in range(tile_fly_animations.size() - 1, -1, -1):
 			var item: Dictionary = tile_fly_animations[i]
 			if item.get("tween") == tw:
@@ -13202,6 +17845,46 @@ func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, d
 		if callback.is_valid():
 			callback.call()
 	)
+
+func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2) -> Control:
+	if fx_layer == null or not is_instance_valid(fx_layer):
+		return null
+	var art = Control.new()
+	art.name = "FlyingTileRouteArt"
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	art.z_index = FX_LAYER_Z_INDEX + 1
+	fx_layer.add_child(art)
+	var accent = tile_accent(tile) if tile != "" else GOLD_PRIMARY
+	var viewport_size = effective_viewport_size()
+	var start = Vector2(clamp(from_pos.x / viewport_size.x, 0.0, 1.0), clamp(from_pos.y / viewport_size.y, 0.0, 1.0))
+	var end = Vector2(clamp(to_pos.x / viewport_size.x, 0.0, 1.0), clamp(to_pos.y / viewport_size.y, 0.0, 1.0))
+	var route_left = min(start.x, end.x)
+	var route_right = max(start.x, end.x)
+	var route_top = min(start.y, end.y)
+	var route_bottom = max(start.y, end.y)
+	var route = make_color_rect(rect_full(route_left, (start.y + end.y) * 0.5 - 0.004, route_right, (start.y + end.y) * 0.5 + 0.004), Color(0.006, 0.016, 0.018, 0.38))
+	route.name = "FlyingTileRouteRail"
+	art.add_child(route)
+	var fill = make_color_rect(rect_full(0.020, 0.200, 0.840, 0.800), Color(accent.r, accent.g, accent.b, 0.26))
+	fill.name = "FlyingTileRouteFill"
+	route.add_child(fill)
+	var source = make_panel(art, rect_full(start.x - 0.014, start.y - 0.026, start.x + 0.014, start.y + 0.026), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.86, 0.48, 0.12), 0)
+	source.name = "FlyingTileSourceGate"
+	var target = make_panel(art, rect_full(end.x - 0.018, end.y - 0.032, end.x + 0.018, end.y + 0.032), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.86, 0.48, 0.14), 0)
+	target.name = "FlyingTileLandingGate"
+	for i in range(3):
+		var t = 0.250 + float(i) * 0.180
+		var point = start.lerp(end, t)
+		var tick = make_color_rect(rect_full(point.x - 0.005, point.y - 0.020, point.x + 0.005, point.y + 0.020), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035))
+		tick.name = "FlyingTileRouteTick_%d" % i
+		art.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(4)
+		tw.tween_property(fill, "modulate:a", 0.36, 0.18).from(0.92)
+		tw.tween_property(fill, "modulate:a", 0.92, 0.18).from(0.36)
+	return art
 
 func human_discard_fly_start_position(index: int, hand_size: int) -> Vector2:
 	var screen_rect = root_layer_rect_to_screen_rect(HAND_TRAY_RECT)
@@ -13228,6 +17911,8 @@ func play_human_discard_fly_animation(tile: String, index: int, hand_size: int) 
 	play_tile_fly_animation(tile, from_pos, to_pos, 260, 52.0)
 	# 弃牌落水溅射 - 落点处水花扩散 / Discard splash on landing
 	call_deferred("play_discard_splash", to_pos, tile)
+	# 墨溅效果 / Ink splash on discard
+	call_deferred("_play_ink_splash_on_discard", to_pos, tile_accent(tile) if tile != "" else GOLD_PRIMARY)
 
 func play_claim_animation(claim: String, tile: String, from_seat: int, to_seat: int, callback: Callable = Callable()) -> void:
 	"""碰/杠/吃动画 - 组合飞行动画"""
@@ -13266,6 +17951,77 @@ func play_claim_animation(claim: String, tile: String, from_seat: int, to_seat: 
 	play_tile_fly_animation(tile, from_pos, to_pos, duration, arc, callback)
 	# 碰杠吃飞行尾迹粒子 - 沿弧线撒落金粉 / Claim fly trailing particles
 	play_claim_trail_particles(from_pos, to_pos, arc, color)
+	play_claim_resolution_art(claim, from_pos, to_pos, color, duration)
+
+func play_claim_resolution_art(claim: String, from_pos: Vector2, to_pos: Vector2, color: Color, duration_msec: int = FX_CLAIM_FLY_DURATION_MSEC) -> void:
+	"""吃碰杠落点确认插画 - 显示副露落位与动作类型"""
+	if not fx_enabled_effective():
+		return
+	ensure_fx_layer()
+	var root = Control.new()
+	root.name = "ClaimResolutionArt_%s" % claim
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.add_child(root)
+
+	var delta = to_pos - from_pos
+	var route_len = max(delta.length(), 1.0)
+	var route_angle = delta.angle()
+	var arrival_delay = max(0.05, float(duration_msec) / 1000.0 * 0.58)
+	var route = make_color_rect(Rect2(from_pos, Vector2(route_len, 4.0)), Color(0.010, 0.020, 0.020, 0.38))
+	route.name = "ClaimResolutionRoute_%s" % claim
+	route.rotation = route_angle
+	root.add_child(route)
+	var route_fill = make_color_rect(Rect2(Vector2(4.0, 1.0), Vector2(route_len * 0.84, 2.0)), Color(color.r, color.g, color.b, 0.34))
+	route_fill.name = "ClaimResolutionFill_%s" % claim
+	route.add_child(route_fill)
+	var gate = make_color_rect(Rect2(to_pos + Vector2(-34.0, -36.0), Vector2(68.0, 72.0)), Color(color.r, color.g, color.b, 0.16))
+	gate.name = "ClaimResolutionLandingGate_%s" % claim
+	root.add_child(gate)
+	var gate_core = make_color_rect(Rect2(Vector2(10.0, 12.0), Vector2(48.0, 48.0)), Color(0.98, 0.88, 0.50, 0.18))
+	gate_core.name = "ClaimResolutionGateCore_%s" % claim
+	gate.add_child(gate_core)
+	var glyph = make_label(gate, claim_display_label(claim), 24, color.lightened(0.34), true)
+	glyph.name = "ClaimResolutionGlyph_%s" % claim
+	glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+
+	var slot_count := 3
+	if claim == "gang":
+		slot_count = 4
+	elif claim == "chi":
+		slot_count = 3
+	for i in range(slot_count):
+		var x = -28.0 + float(i) * (56.0 / max(1.0, float(slot_count - 1)))
+		var slot = make_color_rect(Rect2(to_pos + Vector2(x - 7.0, 31.0), Vector2(14.0, 5.0)), Color(color.r, color.g, color.b, 0.30))
+		slot.name = "ClaimResolutionMeldSlot_%s_%d" % [claim, i]
+		root.add_child(slot)
+		var pip = make_color_rect(Rect2(to_pos + Vector2(x - 3.0, 21.0), Vector2(6.0, 6.0)), Color(0.98, 0.86, 0.48, 0.30))
+		pip.name = "ClaimResolutionMeldPip_%s_%d" % [claim, i]
+		root.add_child(pip)
+
+	for i in range(3):
+		var step = 0.42 + float(i) * 0.16
+		var tick_pos = from_pos.lerp(to_pos, step)
+		var tick = make_color_rect(Rect2(tick_pos + Vector2(-2.5, -2.5), Vector2(5.0, 5.0)), Color(color.r, color.g, color.b, 0.26))
+		tick.name = "ClaimResolutionTick_%s_%d" % [claim, i]
+		root.add_child(tick)
+
+	var halo = make_color_rect(Rect2(to_pos + Vector2(-46.0, -46.0), Vector2(92.0, 92.0)), Color(color.r, color.g, color.b, 0.08))
+	halo.name = "ClaimResolutionHalo_%s" % claim
+	root.add_child(halo)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		root.modulate.a = 0.0
+		var tw := create_tween()
+		tw.tween_property(root, "modulate:a", 1.0, 0.14).set_delay(arrival_delay)
+		tw.tween_property(halo, "scale", Vector2(1.20, 1.20), 0.36).from(Vector2(0.82, 0.82)).set_delay(arrival_delay).set_trans(Tween.TRANS_QUAD)
+		tw.parallel().tween_property(halo, "modulate:a", 0.0, 0.36).from(1.0).set_delay(arrival_delay + 0.12)
+		tw.tween_property(root, "modulate:a", 0.0, 0.30).set_delay(arrival_delay + 0.70)
+		tw.tween_callback(func() -> void:
+			if root != null and is_instance_valid(root):
+				root.queue_free()
+		)
 
 func play_claim_trail_particles(from_pos: Vector2, to_pos: Vector2, arc: float, color: Color) -> void:
 	"""沿碰杠吃飞行弧线撒落尾迹粒子"""
@@ -13277,10 +18033,31 @@ func play_claim_trail_particles(from_pos: Vector2, to_pos: Vector2, arc: float, 
 	trail_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	trail_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_layer.add_child(trail_root)
+	var delta = to_pos - from_pos
+	var route_len = max(delta.length(), 1.0)
+	var route_angle = delta.angle()
+	var route = make_color_rect(Rect2(from_pos, Vector2(route_len, 5.0)), Color(0.006, 0.016, 0.018, 0.46))
+	route.name = "ClaimTrailRoute"
+	route.rotation = route_angle
+	trail_root.add_child(route)
+	var route_fill = make_color_rect(Rect2(Vector2(4.0, 1.0), Vector2(route_len * 0.72, 3.0)), Color(color.r, color.g, color.b, 0.30))
+	route_fill.name = "ClaimTrailRouteFill"
+	route.add_child(route_fill)
+	var gate = make_color_rect(Rect2(to_pos + Vector2(-4.0, -18.0), Vector2(8.0, 24.0)), Color(0.96, 0.82, 0.42, 0.28))
+	gate.name = "ClaimTrailLandingGate"
+	trail_root.add_child(gate)
+	for i in range(3):
+		var step = 0.30 + float(i) * 0.18
+		var base = from_pos.lerp(to_pos, step)
+		var arc_offset = sin(step * PI) * arc
+		var node = make_color_rect(Rect2(Vector2(base.x - 3.0, base.y - arc_offset - 3.0), Vector2(6.0, 6.0)), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.040))
+		node.name = "ClaimTrailRhythmNode_%d" % i
+		trail_root.add_child(node)
 	var spark_count := 8
 	var fly_dur := float(FX_CLAIM_FLY_DURATION_MSEC) / 1000.0
 	for i in range(spark_count):
 		var spark = Panel.new()
+		spark.name = "ClaimTrailSpark_%d" % i
 		spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var s_style = StyleBoxFlat.new()
 		s_style.bg_color = Color(color.r, color.g, color.b, 0.0)
@@ -13415,6 +18192,7 @@ func play_discard_splash(target_pos: Vector2, tile: String) -> void:
 		ring.add_theme_stylebox_override("panel", r_style)
 		ring.custom_minimum_size = Vector2(18, 18)
 		ring.position = target_pos - Vector2(9.0, 9.0)
+		ring.name = "DiscardSplashRing_%d" % i
 		splash_root.add_child(ring)
 		var delay = float(i) * 0.07
 		var tw := create_tween()
@@ -13427,6 +18205,7 @@ func play_discard_splash(target_pos: Vector2, tile: String) -> void:
 	var droplet_count := 6
 	for i in range(droplet_count):
 		var drop = Panel.new()
+		drop.name = "DiscardSplashDrop_%d" % i
 		drop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var d_style = StyleBoxFlat.new()
 		d_style.bg_color = Color(0.60, 0.76, 0.72, 0.72)
@@ -13444,6 +18223,19 @@ func play_discard_splash(target_pos: Vector2, tile: String) -> void:
 		tw.tween_property(drop, "position:x", drop.position.x + dx, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(drop, "position:y", drop.position.y + dy, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(drop, "modulate:a", 0.0, 0.34).from(0.72)
+	var route = make_color_rect(Rect2(target_pos + Vector2(-32.0, 24.0), Vector2(64.0, 5.0)), Color(0.006, 0.016, 0.018, 0.48))
+	route.name = "DiscardSplashLandingRoute"
+	splash_root.add_child(route)
+	var route_fill = make_color_rect(Rect2(Vector2(3.0, 1.0), Vector2(46.0, 3.0)), Color(accent.r, accent.g, accent.b, 0.34))
+	route_fill.name = "DiscardSplashLandingFill"
+	route.add_child(route_fill)
+	var gate = make_color_rect(Rect2(target_pos + Vector2(23.0, 8.0), Vector2(7.0, 18.0)), Color(0.96, 0.82, 0.42, 0.30))
+	gate.name = "DiscardSplashLandingGate"
+	splash_root.add_child(gate)
+	for i in range(3):
+		var tick = make_color_rect(Rect2(target_pos + Vector2(-18.0 + float(i) * 13.0, 8.0), Vector2(4.0, 12.0)), Color(accent.r, accent.g, accent.b, 0.28 - float(i) * 0.045))
+		tick.name = "DiscardSplashLandingTick_%d" % i
+		splash_root.add_child(tick)
 	var cleanup := create_tween()
 	cleanup.tween_callback(func() -> void:
 		if splash_root != null and is_instance_valid(splash_root):
@@ -13474,6 +18266,17 @@ func rect_center_screen_position(rect: Rect2) -> Vector2:
 # ============================================================
 
 func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "normal") -> void:
+	# Create ripple ring effect for win celebration
+	if ui_enhancements != null and is_instance_valid(ui_enhancements) and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var center = get_viewport().size * 0.5
+		for ring_i in range(3):
+			var ring_colors = [
+				Color(1.0, 0.88, 0.44, 0.7),
+				Color(0.76, 0.90, 0.96, 0.5),
+				Color(0.92, 0.78, 0.36, 0.6),
+			]
+			ui_enhancements.create_ripple_ring(fx_layer, center, ring_colors[ring_i % ring_colors.size()], 2)
+
 	"""增强版胜利特效 - 带粒子、光效、震动"""
 	if not fx_enabled_effective() or fx_burst_root == null or not is_instance_valid(fx_burst_root):
 		return
@@ -13509,12 +18312,21 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 	particles_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_burst_root.add_child(particles_root)
 
-	# 生成粒子
+	# 生成粒子 (原有粒子系统保留)
 	var particles: Array[Control] = []
 	for i in range(particle_count):
 		var particle = _create_win_particle(color, i, particle_count)
 		particles_root.add_child(particle)
 		particles.append(particle)
+
+	# 调用新增强粒子系统
+	if ui_enhancements != null and ui_enhancements is UIEnhancements:
+		var theme_color = "gold"
+		if win_type == "self_draw":
+			theme_color = "jade"
+		elif win_type == "special":
+			theme_color = "cinnabar"
+		ui_enhancements.create_enhanced_particle_burst(fx_burst_root, Vector2(fx_burst_root.size.x * 0.5, fx_burst_root.size.y * 0.5), theme_color, particle_count, 180.0)
 
 	# 配置原有圆环 - 增强扩散效果
 	for ring in fx_burst_rings:
@@ -13586,6 +18398,12 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 	# 屏幕震动效果
 	_play_screen_shake(FX_WIN_SHAKE_AMPLITUDE, FX_WIN_SHAKE_FREQUENCY, 0.25)
 
+	# 金雨特效
+	_play_golden_rain(fx_burst_root, half * 2.0, 1.0 if win_type == "normal" else 1.5)
+
+	# 书法笔触揭示
+	var calligraphy = _play_calligraphy_reveal(fx_burst_root, text, color.lightened(0.2), Rect2(fx_burst_root.size * Vector2(0.2, 0.08), fx_burst_root.size * Vector2(0.6, 0.18)))
+
 	# 结束清理
 	tw.tween_callback(func() -> void:
 		_hide_fx_burst()
@@ -13595,6 +18413,8 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 			seal.queue_free()
 		if celebration_art != null and is_instance_valid(celebration_art):
 			celebration_art.queue_free()
+		if calligraphy != null and is_instance_valid(calligraphy):
+			calligraphy.queue_free()
 	).set_delay(half + 0.05)
 
 func clear_win_burst_dynamic_art() -> void:
@@ -13611,8 +18431,27 @@ func draw_win_celebration_art(parent: Control, color: Color, win_type: String) -
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(art)
+	var fanfare_texture = add_illustration_texture(art, "win_fanfare", rect_full(0.055, 0.045, 0.945, 0.885), 0.18, false)
+	if fanfare_texture != null:
+		fanfare_texture.name = "WinFanfareTexture"
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var fanfare_texture_tw := create_tween()
+			fanfare_texture_tw.set_loops(3600)
+			fanfare_texture_tw.tween_property(fanfare_texture, "modulate:a", 0.10, 0.80).from(0.20)
+			fanfare_texture_tw.tween_property(fanfare_texture, "modulate:a", 0.20, 0.80).from(0.10)
 	var track = make_panel(art, rect_full(0.220, 0.535, 0.780, 0.575), Color(color.r, color.g, color.b, 0.16), 999, Color(1.0, 0.86, 0.46, 0.16), 0)
 	track.name = "WinCelebrationTrack"
+	var track_fill = make_panel(track, rect_full(0.020, 0.230, 0.900 if win_type == "special" else 0.760 if win_type == "self_draw" else 0.620, 0.770), Color(color.r, color.g, color.b, 0.42), 999, Color(1.0, 0.90, 0.54, 0.10), 0)
+	track_fill.name = "WinCelebrationTrackFill"
+	var gate = make_panel(art, rect_full(0.730, 0.485, 0.790, 0.625), Color(color.r, color.g, color.b, 0.22), 999, Color(1.0, 0.86, 0.46, 0.20), 0)
+	gate.name = "WinCelebrationScoreGate"
+	var endpoint = make_panel(art, rect_full(0.475, 0.470, 0.525, 0.645), Color(color.r, color.g, color.b, 0.24), 999, Color(1.0, 0.88, 0.48, 0.20), 0)
+	endpoint.name = "WinCelebrationMedalNode"
+	for i in range(3):
+		var tick_left = 0.335 + float(i) * 0.120
+		var tick = make_color_rect(rect_full(tick_left, 0.490, tick_left + 0.018, 0.625), Color(color.r, color.g, color.b, 0.28 - float(i) * 0.045))
+		tick.name = "WinCelebrationTrackTick_%d" % i
+		art.add_child(tick)
 	var medal = make_panel(art, rect_full(0.455, 0.185, 0.545, 0.355), Color(color.r, color.g, color.b, 0.26), 999, Color(1.0, 0.86, 0.46, 0.34), 0)
 	medal.name = "WinCelebrationMedal"
 	add_lucide_icon(medal, "trophy", rect_full(0.22, 0.22, 0.78, 0.78), Color(0.98, 0.88, 0.50, 0.86))
@@ -13736,17 +18575,21 @@ func update_menu_parallax(mouse_pos: Vector2) -> void:
 	var ny: float = clamp((mouse_pos.y / viewport_size.y) * 2.0 - 1.0, -1.0, 1.0)
 	# 视差层：远景小幅度、中景中等、近景大幅度（营造纵深）
 	var layers := [
-		["MenuHeroFarMountain", -2.0, -1.2],     # 远山：最小位移
-		["MenuHeroMoon", -3.0, -2.0],            # 月亮：略大
-		["MenuHeroMistCloud1", -4.0, -1.6],
-		["MenuHeroMistCloud2", -3.6, -1.4],
-		["MenuHeroGoldCloud", 4.0, 1.6],
-		["MenuHeroWater", -5.0, -2.4],           # 水面：中等
-		["MenuHeroPineLeft", 6.0, 3.0],          # 松枝：较大
-		["MenuHeroBambooRight", -6.0, 3.0],      # 竹子：较大
-		["MenuHeroPlumBlossom", 7.0, 3.6],       # 梅花：近景
-		["MenuHeroRoundTable", 9.0, 4.4],        # 牌桌：近景
-		["MenuHeroSeal", -8.0, -4.0],            # 印章：近景反向
+		["MenuHeroPaintedBackdrop", -2.0, -1.2],
+		["MenuHeroFarMountain", -3.0, -1.8],     # 远山：最小位移
+		["MenuHeroMoon", -4.5, -3.0],            # 月亮：略大
+		["MenuHeroMistCloud1", -6.0, -2.4],
+		["MenuHeroMistCloud2", -5.4, -2.0],
+		["MenuHeroGoldCloud", 6.0, 2.4],
+		["MenuHeroWater", -7.0, -3.2],           # 水面：中等
+		["MenuHeroPineLeft", 9.0, 4.5],          # 松枝：较大
+		["MenuHeroBambooRight", -9.0, 4.5],      # 竹子：较大
+		["MenuHeroPlumBlossom", 11.0, 5.4],      # 梅花：近景
+		["MenuHeroRoundTable", 13.0, 6.0],       # 牌桌：最近景
+		["MenuHeroSeal", -12.0, -5.5],           # 印章：近景反向
+		["MenuHeroKoiGold", 8.0, 4.0],           # 锦鲤金
+		["MenuHeroKoiJade", -8.0, 3.5],          # 锦鲤翠
+		["MenuHeroDustLayer", 2.0, 1.0],         # 金粉：微弱跟随
 	]
 	for entry in layers:
 		var node = menu_hero_art.get_node_or_null(str(entry[0]))
@@ -13767,10 +18610,20 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.55, 0.12, 0.97, 0.86))
 	parent.add_child(art)
 
+	var painted_backdrop = add_illustration_texture(art, "menu_hero", rect_full(-0.030, -0.060, 1.030, 1.060), 0.30, false)
+	if painted_backdrop != null:
+		painted_backdrop.name = "MenuHeroPaintedBackdrop"
+		art.move_child(painted_backdrop, 0)
+		var backdrop_wash = make_color_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.008, 0.018, 0.020, 0.36))
+		backdrop_wash.name = "MenuHeroPaintedBackdropWash"
+		art.add_child(backdrop_wash)
+		art.move_child(backdrop_wash, min(1, art.get_child_count() - 1))
+
 	# 远景层 - 层叠远山剪影
 	make_mountain_silhouette(art, rect_full(0.0, 0.0, 1.0, 0.60), 3, INK_WASH).name = "MenuHeroFarMountain"
 	# 中景层 - 水面波纹
 	make_water_ripple(art, rect_full(0.05, 0.58, 0.95, 0.82), "lake", true).name = "MenuHeroWater"
+	draw_menu_hero_wind_path(art)
 
 	# 月亮 - 右上角满月辉光
 	make_moon_or_sun(art, rect_full(0.72, -0.05, 1.05, 0.28), "full_moon").name = "MenuHeroMoon"
@@ -13868,6 +18721,15 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 		breath_tween.set_loops(3600)
 		breath_tween.tween_property(art, "modulate:a", 0.88, 3.0).from(1.0)
 		breath_tween.tween_property(art, "modulate:a", 1.0, 3.0).from(0.88)
+		if painted_backdrop != null:
+			var backdrop_tween := create_tween()
+			backdrop_tween.set_loops(3600)
+			backdrop_tween.tween_property(painted_backdrop, "modulate:a", 0.20, 4.4).from(0.30)
+			backdrop_tween.parallel().tween_property(painted_backdrop, "offset_left", -10.0, 4.4).from(-6.0)
+			backdrop_tween.parallel().tween_property(painted_backdrop, "offset_right", 10.0, 4.4).from(6.0)
+			backdrop_tween.tween_property(painted_backdrop, "modulate:a", 0.30, 4.4).from(0.20)
+			backdrop_tween.parallel().tween_property(painted_backdrop, "offset_left", -6.0, 4.4).from(-10.0)
+			backdrop_tween.parallel().tween_property(painted_backdrop, "offset_right", 6.0, 4.4).from(10.0)
 
 		# 牌面柔和闪光 - 交替shimmer
 		for i in range(tiles.size()):
@@ -13905,12 +18767,62 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 
 	return art
 
+func draw_menu_hero_wind_path(parent: Control) -> Control:
+	var path = Control.new()
+	path.name = "MenuHeroWindPath"
+	path.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(path, rect_full(0.075, 0.305, 0.925, 0.705))
+	parent.add_child(path)
+	var rail = make_color_rect(rect_full(0.060, 0.485, 0.940, 0.515), Color(0.72, 0.80, 0.72, 0.105))
+	rail.name = "MenuHeroWindPathRail"
+	path.add_child(rail)
+	var fill = make_color_rect(rect_full(0.060, 0.492, 0.710, 0.508), Color(0.92, 0.78, 0.38, 0.245))
+	fill.name = "MenuHeroWindPathFill"
+	path.add_child(fill)
+	var gate = make_panel(path, rect_full(0.800, 0.410, 0.865, 0.590), Color(0.92, 0.78, 0.38, 0.145), 999, Color(0.98, 0.88, 0.50, 0.18), 0)
+	gate.name = "MenuHeroWindPathGate"
+	for i in range(4):
+		var t = 0.180 + float(i) * 0.185
+		var tick = make_color_rect(rect_full(t, 0.430, t + 0.014, 0.570), Color(0.92, 0.78, 0.38, 0.195 - float(i) * 0.026))
+		tick.name = "MenuHeroWindPathTick_%d" % i
+		path.add_child(tick)
+	for i in range(3):
+		var leaf = make_panel(path, rect_full(0.220 + float(i) * 0.190, 0.270 + float(i % 2) * 0.255, 0.260 + float(i) * 0.190, 0.360 + float(i % 2) * 0.255), Color(0.38, 0.66, 0.52, 0.18), 999, Color(0.84, 0.74, 0.36, 0.10), 0)
+		leaf.name = "MenuHeroWindLeaf_%d" % i
+		leaf.rotation = -0.45 + float(i) * 0.22
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(fill, "anchor_right", 0.930, 2.6).from(0.240).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(fill, "anchor_right", 0.710, 2.6).from(0.930).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		for i in range(3):
+			var leaf_node = path.get_node_or_null("MenuHeroWindLeaf_%d" % i)
+			if leaf_node != null:
+				var leaf_tw := create_tween()
+				leaf_tw.set_loops(3600)
+				leaf_tw.tween_property(leaf_node, "offset_top", -8.0, 1.8 + float(i) * 0.25).from(0.0)
+				leaf_tw.parallel().tween_property(leaf_node, "modulate:a", 0.52, 1.8 + float(i) * 0.25).from(1.0)
+				leaf_tw.tween_property(leaf_node, "offset_top", 0.0, 1.8 + float(i) * 0.25).from(-8.0)
+				leaf_tw.parallel().tween_property(leaf_node, "modulate:a", 1.0, 1.8 + float(i) * 0.25).from(0.52)
+	return path
+
 func draw_table_atmosphere_frame(parent: Control) -> Control:
 	var frame = Control.new()
 	frame.name = "TableAtmosphereFrame"
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(frame)
+	var table_wash = add_illustration_texture(frame, "table_wash", rect_full(-0.010, -0.010, 1.010, 1.010), 0.22, false)
+	if table_wash != null:
+		table_wash.name = "TableInkWashTexture"
+		frame.move_child(table_wash, 0)
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var wash_tw := create_tween()
+			wash_tw.set_loops(3600)
+			wash_tw.tween_property(table_wash, "modulate:a", 0.13, 3.6).from(0.22)
+			wash_tw.parallel().tween_property(table_wash, "scale", Vector2(1.012, 1.012), 3.6).from(Vector2.ONE)
+			wash_tw.tween_property(table_wash, "modulate:a", 0.22, 3.6).from(0.13)
+			wash_tw.parallel().tween_property(table_wash, "scale", Vector2.ONE, 3.6).from(Vector2(1.012, 1.012))
 	# 角落装饰 - 回纹式
 	make_chinese_corner(frame, rect_full(0.010, 0.010, 0.080, 0.080), "elaborate").name = "TableCornerTL"
 	make_chinese_corner(frame, rect_full(0.920, 0.010, 0.990, 0.080), "elaborate").name = "TableCornerTR"
@@ -13924,6 +18836,20 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	# 笔触分隔线替换单色金线
 	make_brush_stroke_divider(frame, rect_full(0.300, 0.040, 0.700, 0.050)).name = "TableTopDiv"
 	make_brush_stroke_divider(frame, rect_full(0.300, 0.950, 0.700, 0.960)).name = "TableBottomDiv"
+	var breath_route = make_color_rect(rect_full(0.125, 0.500, 0.875, 0.512), Color(0.82, 0.76, 0.58, 0.10))
+	breath_route.name = "TableAtmosphereBreathRoute"
+	frame.add_child(breath_route)
+	var breath_fill = make_color_rect(rect_full(0.035, 0.250, 0.720, 0.750), Color(0.90, 0.78, 0.42, 0.16))
+	breath_fill.name = "TableAtmosphereBreathFill"
+	breath_route.add_child(breath_fill)
+	var breath_gate = make_color_rect(rect_full(0.835, 0.470, 0.865, 0.545), Color(0.90, 0.78, 0.42, 0.14))
+	breath_gate.name = "TableAtmosphereBreathGate"
+	frame.add_child(breath_gate)
+	for i in range(4):
+		var left = 0.235 + float(i) * 0.135
+		var tick = make_color_rect(rect_full(left, 0.468, left + 0.014, 0.548), Color(0.90, 0.78, 0.42, 0.16 - float(i) * 0.025))
+		tick.name = "TableAtmosphereBreathTick_%d" % i
+		frame.add_child(tick)
 	# 侧面保留简单金线
 	for item in [
 		[rect_full(0.040, 0.300, 0.052, 0.700), Color(0.92, 0.78, 0.36, 0.12)],
@@ -13941,10 +18867,51 @@ func draw_table_living_illustration(parent: Control) -> Control:
 	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(layer)
 	draw_table_wall_lanterns(layer)
+	draw_table_wall_pressure_route(layer)
 	draw_table_turn_flow(layer)
 	draw_table_last_discard_ripple(layer)
 	draw_table_center_starlight(layer)
+	draw_table_round_tempo(layer)
+	# UIEnhancements: floating clouds and falling plum blossoms
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null:
+		ui_enhancements.create_floating_cloud(layer, Rect2(Vector2(0, 10), Vector2(parent.size.x if parent.size.x > 0 else 640, 60)), 15.0)
+		ui_enhancements.create_falling_plum_blossoms(layer, Rect2(Vector2(0, 0), Vector2(parent.size.x if parent.size.x > 0 else 640, parent.size.y if parent.size.y > 0 else 360)), 5)
 	return layer
+
+func draw_table_round_tempo(parent: Control) -> Control:
+	var tempo = Control.new()
+	tempo.name = "TableRoundTempoArt"
+	tempo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tempo.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(tempo)
+	var progress = clamp(float(max(offline_hand_number, 1)) / float(MATCH_MAX_HANDS), 0.0, 1.0)
+	var rail = make_panel(tempo, rect_full(0.365, 0.942, 0.635, 0.966), Color(0.006, 0.014, 0.016, 0.34), 999, Color(0.92, 0.78, 0.38, 0.10), 0)
+	rail.name = "TableRoundTempoRail"
+	var fill = make_color_rect(rect_full(0.020, 0.260, 0.020 + 0.780 * progress, 0.740), Color(0.90, 0.76, 0.36, 0.28))
+	fill.name = "TableRoundTempoFill"
+	rail.add_child(fill)
+	var gate = make_panel(tempo, rect_full(0.642, 0.925, 0.682, 0.982), Color(0.90, 0.76, 0.36, 0.16), 999, Color(1.0, 0.88, 0.50, 0.14), 0)
+	gate.name = "TableRoundTempoGate"
+	for i in range(MATCH_MAX_HANDS):
+		var x = 0.372 + float(i) * 0.032
+		var active = i < offline_hand_number
+		var node = make_panel(tempo, rect_full(x, 0.927, x + 0.012, 0.982), Color(0.90, 0.76, 0.36, 0.22 if active else 0.075), 999, Color(1.0, 0.88, 0.50, 0.10 if active else 0.035), 0)
+		node.name = "TableRoundTempoNode_%d" % i
+	var cursor_x = 0.372 + float(clamp(offline_hand_number - 1, 0, MATCH_MAX_HANDS - 1)) * 0.032
+	var cursor = make_panel(tempo, rect_full(cursor_x - 0.008, 0.912, cursor_x + 0.020, 0.996), Color(0.96, 0.82, 0.40, 0.16), 999, Color(1.0, 0.90, 0.54, 0.18), 0)
+	cursor.name = "TableRoundTempoCursor"
+	for i in range(3):
+		var tick = make_color_rect(rect_full(0.442 + float(i) * 0.066, 0.902, 0.452 + float(i) * 0.066, 0.923), Color(0.90, 0.76, 0.36, 0.18 - float(i) * 0.035))
+		tick.name = "TableRoundTempoTick_%d" % i
+		tempo.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_tween()
+		tw.set_loops(3600)
+		tw.tween_property(cursor, "scale", Vector2(1.16, 1.16), 0.9).from(Vector2(0.94, 0.94)).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(cursor, "modulate:a", 0.52, 0.9).from(1.0)
+		tw.tween_property(cursor, "scale", Vector2(0.94, 0.94), 0.08)
+		tw.parallel().tween_property(cursor, "modulate:a", 1.0, 0.08)
+	return tempo
 
 func draw_table_wall_lanterns(parent: Control) -> void:
 	var wall_progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
@@ -13964,11 +18931,37 @@ func draw_table_wall_lanterns(parent: Control) -> void:
 		if get_wall_count() <= 24:
 			var warning = make_panel(lantern, rect_full(0.08, 0.08, 0.92, 0.92), Color(0.86, 0.28, 0.16, 0.18), 999, Color(1.0, 0.58, 0.28, 0.38), 0)
 			warning.name = "TableWallLanternLowWarning_%d" % i
-		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var tw := create_tween()
-			tw.set_loops(3600)
-			tw.tween_property(core, "modulate:a", 0.42, 0.80).from(1.0).set_delay(float(i) * 0.10)
-			tw.tween_property(core, "modulate:a", 1.0, 0.80).from(0.42)
+			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				var tw := create_tween()
+				tw.set_loops(3600)
+				tw.tween_property(core, "modulate:a", 0.42, 0.80).from(1.0).set_delay(float(i) * 0.10)
+				tw.tween_property(core, "modulate:a", 1.0, 0.80).from(0.42)
+
+func draw_table_wall_pressure_route(parent: Control) -> Control:
+	var route = Control.new()
+	route.name = "TableWallPressureRoute"
+	route.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	route.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(route)
+	var progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var color = wall_meter_color(progress)
+	var segments := [
+		rect_full(0.185, 0.088, 0.815, 0.104),
+		rect_full(0.896, 0.205, 0.912, 0.805),
+		rect_full(0.185, 0.896, 0.815, 0.912),
+		rect_full(0.088, 0.205, 0.104, 0.805),
+	]
+	for i in range(segments.size()):
+		var segment = make_panel(route, segments[i], Color(0.006, 0.014, 0.016, 0.34), 999, Color(color.r, color.g, color.b, 0.10), 0)
+		segment.name = "TableWallPressureSegment_%d" % i
+	var fill = make_panel(route, rect_full(0.185, 0.088, 0.185 + 0.630 * progress, 0.104), Color(color.r, color.g, color.b, 0.28), 999, Color(1.0, 0.86, 0.48, 0.04), 0)
+	fill.name = "TableWallPressureFill"
+	var gate = make_panel(route, rect_full(0.840, 0.066, 0.895, 0.126), Color(color.r, color.g, color.b, 0.18), 999, Color(1.0, 0.86, 0.48, 0.10), 0)
+	gate.name = "TableWallPressureGate"
+	for i in range(4):
+		var tick = make_panel(route, rect_full(0.315 + float(i) * 0.095, 0.061, 0.332 + float(i) * 0.095, 0.132), Color(color.r, color.g, color.b, 0.23 - float(i) * 0.030), 999, Color(1.0, 0.86, 0.48, 0.03), 0)
+		tick.name = "TableWallPressureTick_%d" % i
+	return route
 
 func draw_table_turn_flow(parent: Control) -> void:
 	var positions := [
@@ -13988,6 +18981,28 @@ func draw_table_turn_flow(parent: Control) -> void:
 	apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
 	var flow = make_panel(parent, rect_full(0.380, 0.482, 0.620, 0.518), Color(accent.r, accent.g, accent.b, 0.11), 999, Color(accent.r, accent.g, accent.b, 0.11), 0)
 	flow.name = "TableTurnFlowRibbon"
+	var center := Vector2(0.500, 0.500)
+	var route = Control.new()
+	route.name = "TableTurnFlowRoute"
+	route.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if abs(pos.x - center.x) >= abs(pos.y - center.y):
+		apply_rect(route, rect_full(min(center.x, pos.x), center.y - 0.006, max(center.x, pos.x), center.y + 0.006))
+	else:
+		apply_rect(route, rect_full(center.x - 0.006, min(center.y, pos.y), center.x + 0.006, max(center.y, pos.y)))
+	parent.add_child(route)
+	var route_fill = make_color_rect(rect_full(0.020, 0.200, 0.820, 0.800), Color(accent.r, accent.g, accent.b, 0.26))
+	route_fill.name = "TableTurnFlowRouteFill"
+	route.add_child(route_fill)
+	var gate = make_color_rect(rect_full(pos.x - 0.016, pos.y - 0.040, pos.x + 0.016, pos.y + 0.040), Color(accent.r, accent.g, accent.b, 0.16))
+	gate.name = "TableTurnFlowGate"
+	parent.add_child(gate)
+	for i in range(3):
+		var t = 0.280 + float(i) * 0.180
+		var tick_x = lerp(center.x, pos.x, t)
+		var tick_y = lerp(center.y, pos.y, t)
+		var tick = make_color_rect(rect_full(tick_x - 0.006, tick_y - 0.026, tick_x + 0.006, tick_y + 0.026), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
+		tick.name = "TableTurnFlowTick_%d" % i
+		parent.add_child(tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(3600)
@@ -14009,6 +19024,39 @@ func draw_table_last_discard_ripple(parent: Control) -> void:
 	apply_rect(ripple, ripple_rect)
 	parent.add_child(ripple)
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	var source_center = Vector2((ripple_rect.position.x + ripple_rect.size.x) * 0.5, (ripple_rect.position.y + ripple_rect.size.y) * 0.5)
+	var table_center := Vector2(0.500, 0.500)
+	var route = Control.new()
+	route.name = "TableLastDiscardRoute"
+	route.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if abs(source_center.x - table_center.x) >= abs(source_center.y - table_center.y):
+		apply_rect(route, rect_full(min(source_center.x, table_center.x), source_center.y - 0.007, max(source_center.x, table_center.x), source_center.y + 0.007))
+	else:
+		apply_rect(route, rect_full(source_center.x - 0.007, min(source_center.y, table_center.y), source_center.x + 0.007, max(source_center.y, table_center.y)))
+	parent.add_child(route)
+	var route_fill = make_color_rect(rect_full(0.040, 0.180, 0.860, 0.820), Color(accent.r, accent.g, accent.b, 0.24))
+	route_fill.name = "TableLastDiscardRouteFill"
+	route.add_child(route_fill)
+	var source_node = make_panel(parent, rect_full(source_center.x - 0.014, source_center.y - 0.026, source_center.x + 0.014, source_center.y + 0.026), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(0.96, 0.78, 0.34, 0.18), 0)
+	source_node.name = "TableLastDiscardSourceNode"
+	var response_gate = make_panel(parent, rect_full(table_center.x - 0.024, table_center.y - 0.024, table_center.x + 0.024, table_center.y + 0.024), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(0.96, 0.78, 0.34, 0.20), 0)
+	response_gate.name = "TableLastDiscardResponseGate"
+	for i in range(4):
+		var t = 0.220 + float(i) * 0.150
+		var tick_x = lerp(source_center.x, table_center.x, t)
+		var tick_y = lerp(source_center.y, table_center.y, t)
+		var tick = make_color_rect(rect_full(tick_x - 0.005, tick_y - 0.022, tick_x + 0.005, tick_y + 0.022), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.032))
+		tick.name = "TableLastDiscardRouteTick_%d" % i
+		parent.add_child(tick)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var route_tw := create_tween()
+		route_tw.set_loops(3600)
+		route_tw.tween_property(route_fill, "modulate:a", 0.42, 0.72).from(1.0)
+		route_tw.parallel().tween_property(source_node, "modulate:a", 0.56, 0.72).from(1.0)
+		route_tw.parallel().tween_property(response_gate, "modulate:a", 0.74, 0.72).from(1.0)
+		route_tw.tween_property(route_fill, "modulate:a", 1.0, 0.72).from(0.42)
+		route_tw.parallel().tween_property(source_node, "modulate:a", 1.0, 0.72).from(0.56)
+		route_tw.parallel().tween_property(response_gate, "modulate:a", 1.0, 0.72).from(0.74)
 	for i in range(3):
 		var pad = 0.04 + float(i) * 0.12
 		var ring = make_panel(ripple, rect_full(-pad, -pad, 1.0 + pad, 1.0 + pad), Color(accent.r, accent.g, accent.b, 0.03), 999, Color(0.96, 0.78, 0.34, 0.20 - float(i) * 0.04), 0)
@@ -14025,17 +19073,60 @@ func draw_table_center_starlight(parent: Control) -> void:
 	star.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(star, rect_full(0.392, 0.348, 0.608, 0.660))
 	parent.add_child(star)
+	# 外圈辉光环 - 缓慢旋转
+	var glow_ring = Panel.new()
+	glow_ring.name = "TableCenterGlowRing"
+	glow_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gr_style = StyleBoxFlat.new()
+	gr_style.bg_color = Color(0, 0, 0, 0)
+	gr_style.border_color = Color(0.96, 0.82, 0.38, 0.12)
+	gr_style.set_border_width_all(1)
+	gr_style.set_corner_radius_all(999)
+	glow_ring.add_theme_stylebox_override("panel", gr_style)
+	apply_rect(glow_ring, rect_full(0.05, 0.05, 0.95, 0.95))
+	glow_ring.pivot_offset = glow_ring.size * 0.5 if glow_ring.size.x > 0 else Vector2(60, 60)
+	star.add_child(glow_ring)
+	# 内圈辉光环 - 反向旋转
+	var inner_ring = Panel.new()
+	inner_ring.name = "TableCenterInnerRing"
+	inner_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ir_style = StyleBoxFlat.new()
+	ir_style.bg_color = Color(0, 0, 0, 0)
+	ir_style.border_color = Color(0.92, 0.76, 0.34, 0.08)
+	ir_style.set_border_width_all(1)
+	ir_style.set_corner_radius_all(999)
+	inner_ring.add_theme_stylebox_override("panel", ir_style)
+	apply_rect(inner_ring, rect_full(0.18, 0.18, 0.82, 0.82))
+	inner_ring.pivot_offset = inner_ring.size * 0.5 if inner_ring.size.x > 0 else Vector2(40, 40)
+	star.add_child(inner_ring)
+	# 星光点 - 三层不同大小
 	for i in range(8):
 		var angle = float(i) * TAU / 8.0
-		var radius = 0.34 if i % 2 == 0 else 0.24
+		var radius = 0.38 if i % 3 == 0 else (0.28 if i % 3 == 1 else 0.18)
+		var spark_size = 0.018 if i % 3 == 0 else (0.012 if i % 3 == 1 else 0.008)
 		var center = Vector2(0.5 + cos(angle) * radius, 0.5 + sin(angle) * radius)
-		var spark = make_panel(star, rect_full(center.x - 0.015, center.y - 0.015, center.x + 0.015, center.y + 0.015), Color(0.96, 0.78, 0.34, 0.24), 999, Color(1.0, 0.90, 0.52, 0.22), 0)
+		var alpha = 0.32 if i % 3 == 0 else (0.22 if i % 3 == 1 else 0.16)
+		var spark = make_panel(star, rect_full(center.x - spark_size, center.y - spark_size, center.x + spark_size, center.y + spark_size), Color(0.96, 0.78, 0.34, alpha), 999, Color(1.0, 0.90, 0.52, alpha * 0.8), 0)
 		spark.name = "TableCenterStarlightSpark_%d" % i
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			var tw := create_tween()
 			tw.set_loops(3600)
-			tw.tween_property(spark, "modulate:a", 0.18, 0.72).from(0.82).set_delay(float(i) * 0.08)
-			tw.tween_property(spark, "modulate:a", 0.82, 0.72).from(0.18)
+			var blink_dur := randf_range(0.6, 1.2)
+			tw.tween_property(spark, "modulate:a", 0.12, blink_dur).from(0.92).set_delay(float(i) * 0.06)
+			tw.tween_property(spark, "modulate:a", 0.92, blink_dur).from(0.12)
+	# 旋转动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var rot_tw := create_tween()
+		rot_tw.set_loops(3600)
+		rot_tw.tween_property(glow_ring, "rotation", TAU, 20.0).from(0.0)
+		var rot_tw2 := create_tween()
+		rot_tw2.set_loops(3600)
+		rot_tw2.tween_property(inner_ring, "rotation", -TAU, 15.0).from(0.0)
+		# 辉光环呼吸
+		var breath_tw := create_tween()
+		breath_tw.set_loops(3600)
+		breath_tw.tween_property(glow_ring, "modulate:a", 0.4, 2.5).from(1.0).set_trans(Tween.TRANS_SINE)
+		breath_tw.tween_property(glow_ring, "modulate:a", 1.0, 2.5).from(0.4).set_trans(Tween.TRANS_SINE)
 
 
 func draw_center_wind_compass(parent: Control) -> Control:
@@ -14130,7 +19221,16 @@ func draw_summary_victory_ribbon(parent: Control) -> Control:
 	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(ribbon, rect_full(0.105, 0.055, 0.305, 0.145))
 	parent.add_child(ribbon)
-	make_panel(ribbon, rect_full(0.08, 0.20, 0.92, 0.80), Color(0.58, 0.12, 0.08, 0.58), 4, Color(1.0, 0.78, 0.34, 0.42), 0)
+	var ribbon_body = make_panel(ribbon, rect_full(0.08, 0.20, 0.92, 0.80), Color(0.58, 0.12, 0.08, 0.58), 4, Color(1.0, 0.78, 0.34, 0.42), 0)
+	# Gold foil shimmer on ribbon body
+	if shader_materials.has("gold_foil_shimmer"):
+		var gold_overlay = ColorRect.new()
+		gold_overlay.name = "SummaryRibbonGoldFoil"
+		gold_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gold_overlay.color = Color(0.92, 0.78, 0.38, 0.35)
+		gold_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+		apply_gold_foil_shader(gold_overlay, 0.6, 0.5)
+		ribbon_body.add_child(gold_overlay)
 	var left_tail = make_color_rect(rect_full(0.00, 0.30, 0.16, 0.70), Color(0.42, 0.08, 0.06, 0.54))
 	left_tail.name = "SummaryRibbonLeftTail"
 	ribbon.add_child(left_tail)
@@ -14394,6 +19494,10 @@ func make_water_ripple(parent: Control, rect: Rect2, style: String = "still", an
 		apply_rect(wave, rect_full(0.02 + x_shrink, y_pos - 0.04, 0.98 - x_shrink, y_pos + 0.04))
 		if style == "flowing":
 			wave.rotation = 0.01 * float(w % 2 * 2 - 1)
+	# 应用水波纹着色器增强视觉
+	if shader_materials.has("water_ripple") and DisplayServer.get_name().to_lower() != "headless":
+		var ripple_speed := 1.5 if style == "flowing" else (1.0 if style == "lake" else 0.6)
+		apply_water_ripple_shader(water, wave_color, ripple_speed)
 	if animated and fx_enabled_effective():
 		var tw := create_tween()
 		tw.set_loops(3600)
@@ -14452,6 +19556,19 @@ func make_moon_or_sun(parent: Control, rect: Rect2, phase: String = "full_moon")
 	body.add_theme_stylebox_override("panel", body_style)
 	moon.add_child(body)
 	apply_rect(body, rect_full(0.26, 0.26, 0.74, 0.74))
+	# Apply glow bloom shader to moon body for enhanced radiance
+	if shader_materials.has("glow_bloom"):
+		var bloom_glow = ColorRect.new()
+		bloom_glow.name = "MoonGlowBloom"
+		bloom_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bloom_glow.color = Color(1.0, 0.94, 0.82, 0.30)
+		bloom_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bloom_glow.offset_left = -8.0
+		bloom_glow.offset_top = -8.0
+		bloom_glow.offset_right = 8.0
+		bloom_glow.offset_bottom = 8.0
+		apply_glow_shader(bloom_glow, glow_color, 0.7, 1.5)
+		body.add_child(bloom_glow)
 	# Crescent shadow
 	if phase == "crescent":
 		var shadow = Panel.new()
@@ -14628,6 +19745,9 @@ func make_brush_stroke_divider(parent: Control, rect: Rect2, thickness: float = 
 	apply_rect(stroke, rect)
 	var ink_color := INK_MEDIUM
 	var ink_alpha := 0.52
+	# Apply brush stroke shader for authentic ink effect
+	if shader_materials.has("brush_stroke"):
+		apply_brush_stroke_shader(stroke, Color(ink_color.r, ink_color.g, ink_color.b, ink_alpha))
 	# Main body - wider center
 	var main = Panel.new()
 	main.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -14637,6 +19757,8 @@ func make_brush_stroke_divider(parent: Control, rect: Rect2, thickness: float = 
 	main.add_theme_stylebox_override("panel", main_style)
 	stroke.add_child(main)
 	apply_rect(main, rect_full(0.12, 0.28, 0.88, 0.72))
+	if shader_materials.has("brush_stroke"):
+		apply_brush_stroke_shader(main, Color(ink_color.r, ink_color.g, ink_color.b, 1.0))
 	# Start dot (brush press - thicker start)
 	var start_dot = Panel.new()
 	start_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -14724,7 +19846,7 @@ func make_lantern(parent: Control, rect: Rect2, color: Color = CINNABAR, lit: bo
 	tassel.add_theme_stylebox_override("panel", tl_style)
 	lantern.add_child(tassel)
 	apply_rect(tassel, rect_full(0.42, 0.82, 0.58, 0.96))
-	# Inner glow when lit
+	# Inner glow when lit - enhanced with glow shader
 	if lit:
 		var glow = Panel.new()
 		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -14734,6 +19856,8 @@ func make_lantern(parent: Control, rect: Rect2, color: Color = CINNABAR, lit: bo
 		glow.add_theme_stylebox_override("panel", gl_style)
 		lantern.add_child(glow)
 		apply_rect(glow, rect_full(0.18, 0.16, 0.82, 0.72))
+		if shader_materials.has("glow_bloom"):
+			apply_glow_shader(glow, Color(1.0, 0.88, 0.55, 1.0), 0.8, 2.0)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			var tw := create_tween()
 			tw.set_loops(3600)
@@ -14826,6 +19950,38 @@ func play_card_flip_animation(container: Control, cards: Array, stagger: bool = 
 		var card = cards[i]
 		card.scale = Vector2(0.0, 1.0)
 		card.modulate.a = 0.0
+		var flip_art = Control.new()
+		flip_art.name = "CardFlipEntryArt_%d" % i
+		flip_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		flip_art.set_anchors_preset(Control.PRESET_FULL_RECT)
+		card.add_child(flip_art)
+		var rail = make_color_rect(rect_full(0.120, 0.775, 0.880, 0.855), Color(0.006, 0.016, 0.018, 0.38))
+		rail.name = "CardFlipEntryRail_%d" % i
+		flip_art.add_child(rail)
+		var fill = make_color_rect(rect_full(0.035, 0.260, 0.740, 0.740), Color(0.86, 0.72, 0.36, 0.24))
+		fill.name = "CardFlipEntryFill_%d" % i
+		rail.add_child(fill)
+		var gate = make_color_rect(rect_full(0.805, 0.235, 0.850, 0.560), Color(0.90, 0.78, 0.42, 0.20))
+		gate.name = "CardFlipEntryGate_%d" % i
+		flip_art.add_child(gate)
+		var spine = make_color_rect(rect_full(0.485, 0.110, 0.515, 0.760), Color(0.92, 0.78, 0.38, 0.22))
+		spine.name = "CardFlipEntrySpine_%d" % i
+		flip_art.add_child(spine)
+		var focus = make_color_rect(rect_full(0.385, 0.135, 0.615, 0.345), Color(0.92, 0.76, 0.34, 0.10))
+		focus.name = "CardFlipEntryFocus_%d" % i
+		flip_art.add_child(focus)
+		var completion_gate = make_color_rect(rect_full(0.875, 0.590, 0.920, 0.785), Color(0.42, 0.74, 0.60, 0.22))
+		completion_gate.name = "CardFlipEntryCompletionGate_%d" % i
+		flip_art.add_child(completion_gate)
+		for tick_index in range(2):
+			var tick = make_color_rect(rect_full(0.520 + float(tick_index) * 0.075, 0.230, 0.540 + float(tick_index) * 0.075, 0.370), Color(0.86, 0.72, 0.36, 0.20 - float(tick_index) * 0.045))
+			tick.name = "CardFlipEntryTick_%d_%d" % [i, tick_index]
+			flip_art.add_child(tick)
+		for pip_index in range(3):
+			var pip_left = 0.660 + float(pip_index) * 0.050
+			var pip = make_color_rect(rect_full(pip_left, 0.610, pip_left + 0.024, 0.725), Color(0.42, 0.74, 0.60, 0.22 - float(pip_index) * 0.035))
+			pip.name = "CardFlipEntryCompletionPip_%d_%d" % [i, pip_index]
+			flip_art.add_child(pip)
 
 		var delay = 0.0
 		if stagger:
@@ -14840,14 +19996,57 @@ func play_button_press_animation(button: Button, scale_amount: float = 0.92) -> 
 	"""按钮按下动画"""
 	if not fx_enabled_effective():
 		return
+	var feedback = Control.new()
+	feedback.name = "ButtonPressFeedback"
+	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(feedback)
+	var rail = make_color_rect(rect_full(0.160, 0.725, 0.840, 0.820), Color(0.006, 0.016, 0.018, 0.42))
+	rail.name = "ButtonPressFeedbackRail"
+	feedback.add_child(rail)
+	var fill = make_color_rect(rect_full(0.035, 0.260, 0.820, 0.740), Color(0.86, 0.72, 0.36, 0.30))
+	fill.name = "ButtonPressFeedbackFill"
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.800, 0.210, 0.850, 0.570), Color(0.90, 0.78, 0.42, 0.24))
+	gate.name = "ButtonPressFeedbackGate"
+	feedback.add_child(gate)
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.545 + float(i) * 0.070, 0.220, 0.565 + float(i) * 0.070, 0.370), Color(0.86, 0.72, 0.36, 0.24 - float(i) * 0.050))
+		tick.name = "ButtonPressFeedbackTick_%d" % i
+		feedback.add_child(tick)
 
 	var tw := create_tween()
+	tw.set_parallel(true)
 	tw.tween_property(button, "scale", Vector2(scale_amount, scale_amount), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(fill, "modulate:a", 0.18, 0.08).from(1.0)
+	tw.set_parallel(false)
 	tw.tween_property(button, "scale", Vector2(1.0, 1.0), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var feedback_ref = weakref(feedback)
+	tw.tween_callback(func() -> void:
+		var feedback_node = feedback_ref.get_ref()
+		if feedback_node != null and is_instance_valid(feedback_node):
+			feedback_node.queue_free()
+	)
 
 # ============================================================
 # 环境氛围动画系统 / Environmental Atmosphere Animation
 # ============================================================
+
+func _call_ui_enhancement(method_name: String, arg1 = null, arg2 = null, arg3 = null) -> Variant:
+	if ui_enhancements == null or not is_instance_valid(ui_enhancements):
+		return null
+	if not ui_enhancements.has_method(method_name):
+		return null
+	if ambient_layer == null or not is_instance_valid(ambient_layer):
+		return null
+	var args: Array = [ambient_layer]
+	if arg1 != null:
+		args.append(arg1)
+	if arg2 != null:
+		args.append(arg2)
+	if arg3 != null:
+		args.append(arg3)
+	return ui_enhancements.callv(method_name, args)
 
 func start_ambient_animation(theme: String = "default") -> void:
 	"""启动环境氛围动画 - 支持四季自动主题"""
@@ -14879,19 +20078,37 @@ func start_ambient_animation(theme: String = "default") -> void:
 			_:
 				resolved_theme = "default"
 
+	# 应用时间色温
+	var time_tint := _apply_time_color_temperature()
+	if ambient_layer != null:
+		ambient_layer.modulate = time_tint
+
 	match resolved_theme:
 		"spring":
 			_start_petal_fall()
+			_start_depth_layered_dust()
+			_call_ui_enhancement("create_falling_plum_blossoms", ambient_layer.get_rect() if ambient_layer != null else Rect2(Vector2.ZERO, get_viewport().size))
+			if ui_enhancements != null and is_instance_valid(ui_enhancements) and ambient_layer != null and is_instance_valid(ambient_layer):
+				ui_enhancements.create_gold_dust(ambient_layer, ambient_layer.get_rect(), 4)
 		"summer":
 			_start_firefly_particles()
+			_start_depth_layered_dust()
+			_call_ui_enhancement("create_floating_cloud", Rect2(Vector2.ZERO, get_viewport().size), 20.0)
 		"autumn":
 			_start_leaf_fall()
+			_start_depth_layered_dust()
 		"festival":
 			_start_firework_particles()
+			_start_depth_layered_dust()
+			if ui_enhancements != null and is_instance_valid(ui_enhancements) and ambient_layer != null and is_instance_valid(ambient_layer):
+				ui_enhancements.create_gold_dust(ambient_layer, ambient_layer.get_rect(), 6)
 		"winter":
 			_start_snow_fall()
+			_start_depth_layered_dust()
 		_:
 			_start_default_ambient()
+			_start_depth_layered_dust()
+			_call_ui_enhancement("create_floating_cloud", Rect2(Vector2.ZERO, get_viewport().size), 15.0)
 
 func stop_ambient_animation() -> void:
 	"""停止环境氛围动画"""
@@ -15241,3 +20458,231 @@ func _start_snow_fall() -> void:
 		var rot_tw := create_tween()
 		rot_tw.set_loops(3600)
 		rot_tw.tween_property(flake, "rotation", PI, randf_range(3.0, 6.0)).from(0.0).set_delay(float(i) * 0.25)
+
+# ============================================================
+# 胜利金雨特效 / Victory Golden Rain Effect
+# ============================================================
+
+func _play_golden_rain(parent: Control, duration: float, intensity: float = 1.0) -> void:
+	var viewport_size = parent.size if parent.size.x > 0 else get_viewport().size
+	var rain_count := int(28 * intensity)
+	for i in range(rain_count):
+		var drop = Panel.new()
+		drop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var d_style = StyleBoxFlat.new()
+		var gold_hue := randf_range(0.08, 0.14)
+		d_style.bg_color = Color.from_hsv(gold_hue, 0.8, randf_range(0.85, 1.0), randf_range(0.6, 0.92))
+		d_style.set_corner_radius_all(50)
+		drop.add_theme_stylebox_override("panel", d_style)
+		var w := randf_range(2.0, 4.0)
+		var h := randf_range(8.0, 18.0)
+		drop.custom_minimum_size = Vector2(w, h)
+		drop.position = Vector2(randf() * viewport_size.x, -randf_range(10.0, 60.0))
+		parent.add_child(drop)
+		var fall_dur := randf_range(0.6, 1.4)
+		var delay := randf_range(0.0, duration * 0.6)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(drop, "position:y", viewport_size.y + 20.0, fall_dur).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_property(drop, "position:x", drop.position.x + randf_range(-20.0, 20.0), fall_dur).set_delay(delay)
+		tw.tween_property(drop, "modulate:a", 0.0, fall_dur * 0.3).set_delay(delay + fall_dur * 0.7)
+		tw.chain().tween_callback(func():
+			if is_instance_valid(drop):
+				drop.queue_free()
+		)
+
+func _play_calligraphy_reveal(parent: Control, text: String, color: Color, rect: Rect2) -> Control:
+	var container = Control.new()
+	container.name = "CalligraphyReveal"
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(container, rect)
+	parent.add_child(container)
+	var clip = Control.new()
+	clip.name = "CalligraphyClip"
+	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clip.clip_contents = true
+	clip.set_anchors_preset(Control.PRESET_FULL_RECT)
+	container.add_child(clip)
+	var label = make_label(clip, text, 42, color, true)
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.modulate.a = 0.0
+	# 墨迹展开遮罩 - 从左到右逐字显现
+	var mask = ColorRect.new()
+	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mask.color = Color(0, 0, 0, 0)
+	mask.set_anchors_preset(Control.PRESET_FULL_RECT)
+	clip.add_child(mask)
+	var tw := create_tween()
+	tw.tween_property(label, "modulate:a", 1.0, 0.3).from(0.0)
+	tw.parallel().tween_property(label, "position:y", 0.0, 0.5).from(12.0).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# 笔触墨痕装饰
+	var stroke = Panel.new()
+	stroke.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var s_style = StyleBoxFlat.new()
+	s_style.bg_color = Color(color.r, color.g, color.b, 0.3)
+	s_style.set_corner_radius_all(2)
+	stroke.add_theme_stylebox_override("panel", s_style)
+	stroke.custom_minimum_size = Vector2(0, 3)
+	stroke.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	stroke.offset_top = -6
+	stroke.offset_bottom = -3
+	container.add_child(stroke)
+	var stroke_tw := create_tween()
+	stroke_tw.tween_property(stroke, "scale:x", 1.0, 0.6).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_delay(0.2)
+	return container
+
+# ============================================================
+# 增强弃牌墨溅效果 / Enhanced Discard Ink Splash
+# ============================================================
+
+func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
+	if not fx_enabled_effective():
+		return
+	ensure_fx_layer()
+	var splash_root = Control.new()
+	splash_root.name = "InkSplashFx"
+	splash_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	splash_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.add_child(splash_root)
+	# 墨点飞溅 - 大小不一的不规则斑点
+	var splat_count := 5
+	for i in range(splat_count):
+		var splat = Panel.new()
+		splat.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sp_style = StyleBoxFlat.new()
+		sp_style.bg_color = Color(color.r * 0.3, color.g * 0.3, color.b * 0.3, randf_range(0.4, 0.7))
+		var radius := int(randf_range(8, 20))
+		sp_style.set_corner_radius_all(radius)
+		splat.add_theme_stylebox_override("panel", sp_style)
+		var sp_size := randf_range(6.0, 16.0)
+		splat.custom_minimum_size = Vector2(sp_size, sp_size * randf_range(0.6, 1.4))
+		splat.position = target_pos
+		splat.rotation = randf() * TAU
+		splash_root.add_child(splat)
+		var angle := randf() * TAU
+		var dist := randf_range(12.0, 40.0)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(splat, "position", target_pos + Vector2(cos(angle), sin(angle)) * dist, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(splat, "scale", Vector2(1.3, 1.3), 0.15).from(Vector2(0.3, 0.3))
+		tw.tween_property(splat, "modulate:a", 0.0, 0.5).from(1.0).set_delay(0.15)
+	# 墨晕扩散环
+	var ink_ring = Panel.new()
+	ink_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ring_style = StyleBoxFlat.new()
+	ring_style.bg_color = Color(0, 0, 0, 0)
+	ring_style.border_color = Color(color.r * 0.2, color.g * 0.2, color.b * 0.2, 0.5)
+	ring_style.set_border_width_all(2)
+	ring_style.set_corner_radius_all(50)
+	ink_ring.add_theme_stylebox_override("panel", ring_style)
+	ink_ring.custom_minimum_size = Vector2(10, 10)
+	ink_ring.position = target_pos - Vector2(5, 5)
+	splash_root.add_child(ink_ring)
+	var ring_tw := create_tween()
+	ring_tw.set_parallel(true)
+	ring_tw.tween_property(ink_ring, "custom_minimum_size", Vector2(60, 60), 0.4).from(Vector2(10, 10)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	ring_tw.tween_property(ink_ring, "position", target_pos - Vector2(30, 30), 0.4).from(target_pos - Vector2(5, 5))
+	ring_tw.tween_property(ink_ring, "modulate:a", 0.0, 0.4).from(1.0)
+	var cleanup := create_tween()
+	cleanup.tween_callback(func():
+		if is_instance_valid(splash_root):
+			splash_root.queue_free()
+	).set_delay(0.6)
+
+# ============================================================
+# 菜单卡片深度效果 / Menu Card Depth Effects
+# ============================================================
+
+func _add_card_shimmer(button: Button, color: Color) -> void:
+	var shimmer = ColorRect.new()
+	shimmer.name = "CardShimmer"
+	shimmer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shimmer.color = Color(1.0, 1.0, 1.0, 0.0)
+	shimmer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(shimmer)
+	var tw := shimmer.create_tween()
+	tw.set_loops(3600)
+	var cycle := randf_range(4.0, 7.0)
+	tw.tween_property(shimmer, "color:a", 0.035, cycle * 0.4).from(0.0).set_delay(randf_range(0.0, 3.0))
+	tw.tween_property(shimmer, "color:a", 0.0, cycle * 0.6)
+
+func _add_card_breathing_shadow(button: Button, color: Color) -> void:
+	var shadow = Panel.new()
+	shadow.name = "CardBreathingShadow"
+	shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shadow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shadow.offset_left = 4.0
+	shadow.offset_top = 6.0
+	shadow.offset_right = 4.0
+	shadow.offset_bottom = 6.0
+	var sh_style = StyleBoxFlat.new()
+	sh_style.bg_color = Color(0, 0, 0, 0.15)
+	sh_style.set_corner_radius_all(22)
+	shadow.add_theme_stylebox_override("panel", sh_style)
+	button.add_child(shadow)
+	button.move_child(shadow, 0)
+	var tw := shadow.create_tween()
+	tw.set_loops(3600)
+	tw.tween_property(shadow, "offset_top", 8.0, 2.5).from(6.0).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(shadow, "modulate:a", 0.7, 2.5).from(1.0)
+	tw.tween_property(shadow, "offset_top", 6.0, 2.5).from(8.0).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(shadow, "modulate:a", 1.0, 2.5).from(0.7)
+
+# ============================================================
+# 增强氛围 - 深度分层粒子 / Enhanced Ambient - Depth Layered Particles
+# ============================================================
+
+func _start_depth_layered_dust() -> void:
+	if ambient_layer == null or not is_instance_valid(ambient_layer):
+		return
+	var viewport_size = get_viewport().size
+	var layers_config := [
+		{"count": 6, "size_range": Vector2(4.0, 8.0), "speed": 0.4, "alpha": 0.6, "z": 2},
+		{"count": 10, "size_range": Vector2(2.0, 4.5), "speed": 0.7, "alpha": 0.4, "z": 0},
+		{"count": 14, "size_range": Vector2(1.0, 2.5), "speed": 1.2, "alpha": 0.25, "z": -2},
+	]
+	for layer_cfg in layers_config:
+		var layer_node = Control.new()
+		layer_node.name = "DepthDustLayer_z%d" % layer_cfg.z
+		layer_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer_node.set_anchors_preset(Control.PRESET_FULL_RECT)
+		layer_node.z_index = layer_cfg.z
+		ambient_layer.add_child(layer_node)
+		for i in range(layer_cfg.count):
+			var dust = Panel.new()
+			dust.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var d_style = StyleBoxFlat.new()
+			var warm_shift = randf_range(-0.03, 0.05)
+			d_style.bg_color = Color(0.96 + warm_shift, 0.88 + warm_shift, 0.52, layer_cfg.alpha)
+			d_style.set_corner_radius_all(50)
+			dust.add_theme_stylebox_override("panel", d_style)
+			var dsize = randf_range(layer_cfg.size_range.x, layer_cfg.size_range.y)
+			dust.custom_minimum_size = Vector2(dsize, dsize)
+			dust.position = Vector2(randf() * viewport_size.x, randf() * viewport_size.y)
+			layer_node.add_child(dust)
+			ambient_particles.append(dust)
+			var rise_dur = randf_range(8.0, 16.0) * layer_cfg.speed
+			var tw := create_tween()
+			tw.set_loops(3600)
+			tw.tween_property(dust, "position:y", dust.position.y - randf_range(60.0, 140.0), rise_dur).set_delay(float(i) * 0.5)
+			tw.parallel().tween_property(dust, "modulate:a", 0.0, rise_dur * 0.8).from(1.0).set_delay(float(i) * 0.5)
+			tw.tween_property(dust, "position:y", dust.position.y, 0.01)
+			tw.tween_property(dust, "modulate:a", 1.0, 0.01)
+			var drift_tw := create_tween()
+			drift_tw.set_loops(3600)
+			var drift_amp = randf_range(12.0, 35.0) / layer_cfg.speed
+			drift_tw.tween_property(dust, "position:x", dust.position.x + drift_amp, randf_range(3.0, 6.0)).set_trans(Tween.TRANS_SINE).set_delay(float(i) * 0.3)
+			drift_tw.tween_property(dust, "position:x", dust.position.x - drift_amp, randf_range(3.0, 6.0)).set_trans(Tween.TRANS_SINE)
+
+func _apply_time_color_temperature() -> Color:
+	var hour: int = int(Time.get_datetime_dict_from_system().get("hour", 12))
+	if hour >= 5 and hour < 8:
+		return Color(1.05, 0.98, 0.88, 1.0)
+	elif hour >= 8 and hour < 16:
+		return Color(1.0, 1.0, 1.0, 1.0)
+	elif hour >= 16 and hour < 19:
+		return Color(1.06, 0.94, 0.84, 1.0)
+	else:
+		return Color(0.88, 0.92, 1.06, 1.0)

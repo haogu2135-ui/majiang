@@ -19,6 +19,53 @@ const ANIMATION_ASSET_PATHS := {
 	"coin_spin": "res://assets/animations/coin_spin.json",
 	"victory_sparkle": "res://assets/animations/victory_sparkle.json",
 }
+const ILLUSTRATION_ASSET_PATHS := {
+	"menu_hero": "res://assets/illustrations/menu_hero_painting.png",
+	"table_wash": "res://assets/illustrations/table_ink_wash.png",
+	"toast_ribbon": "res://assets/illustrations/toast_ribbon.png",
+	"victory_badge": "res://assets/illustrations/victory_badge.png",
+	"rules_scroll": "res://assets/illustrations/rules_scroll.png",
+	"stats_chart": "res://assets/illustrations/stats_chart.png",
+	"shop_vault": "res://assets/illustrations/shop_vault.png",
+	"loading_gate": "res://assets/illustrations/loading_gate.png",
+	"daily_calendar": "res://assets/illustrations/daily_calendar.png",
+	"online_network": "res://assets/illustrations/online_network.png",
+	"update_package": "res://assets/illustrations/update_package.png",
+	"settings_compass": "res://assets/illustrations/settings_compass.png",
+	"diagnostic_wave": "res://assets/illustrations/diagnostic_wave.png",
+	"exit_gate": "res://assets/illustrations/exit_gate.png",
+	"chat_stream": "res://assets/illustrations/chat_stream.png",
+	"danger_warning": "res://assets/illustrations/danger_warning.png",
+	"win_fanfare": "res://assets/illustrations/win_fanfare.png",
+	"pending_claim_banner": "res://assets/illustrations/pending_claim_banner.png",
+	"voice_wave": "res://assets/illustrations/voice_wave.png",
+	"hand_tray_flow": "res://assets/illustrations/hand_tray_flow.png",
+	"hud_status_banner": "res://assets/illustrations/hud_status_banner.png",
+	"action_dock_ribbon": "res://assets/illustrations/action_dock_ribbon.png",
+	"table_log_scroll": "res://assets/illustrations/table_log_scroll.png",
+	"advisor_map": "res://assets/illustrations/advisor_map.png",
+	"flower_bloom_shadow": "res://assets/illustrations/flower_bloom_shadow.png",
+	"win_detail_scroll": "res://assets/illustrations/win_detail_scroll.png",
+	"seat_brocade": "res://assets/illustrations/seat_brocade.png",
+	"discard_river_wash": "res://assets/illustrations/discard_river_wash.png",
+	"last_discard_aura": "res://assets/illustrations/last_discard_aura.png",
+	"rank_row_ribbon": "res://assets/illustrations/rank_row_ribbon.png",
+	"menu_season_scroll": "res://assets/illustrations/menu_season_scroll.png",
+	"menu_daily_ledger": "res://assets/illustrations/menu_daily_ledger.png",
+	"stats_dashboard_grid": "res://assets/illustrations/stats_dashboard_grid.png",
+	"shop_item_shelf": "res://assets/illustrations/shop_item_shelf.png",
+	"rules_example_table": "res://assets/illustrations/rules_example_table.png",
+	"achievement_medal_glow": "res://assets/illustrations/achievement_medal_glow.png",
+	"item_activation_charm": "res://assets/illustrations/item_activation_charm.png",
+	"settings_audio_wave": "res://assets/illustrations/settings_audio_wave.png",
+	"settings_music_disc": "res://assets/illustrations/settings_music_disc.png",
+	"secondary_back_path": "res://assets/illustrations/secondary_back_path.png",
+	"menu_currency_brocade": "res://assets/illustrations/menu_currency_brocade.png",
+	"menu_settings_gear": "res://assets/illustrations/menu_settings_gear.png",
+	"lobby_action_token": "res://assets/illustrations/lobby_action_token.png",
+	"reset_danger_seal": "res://assets/illustrations/reset_danger_seal.png",
+	"update_notes_strip": "res://assets/illustrations/update_notes_strip.png",
+}
 # v1.0.159: 默认BGM改为《胡笳十八拍》，支持多个BGM切换
 const BGM_TRACKS := [
 	{"name": "胡笳十八拍", "path": "res://assets/audio/bgm_guofeng2.mp3"},
@@ -207,6 +254,16 @@ var animation_specs: Dictionary = {}
 var tile_back: Texture2D
 var felt_texture: Texture2D
 var wood_texture: Texture2D
+var illustration_textures: Dictionary = {}
+var shader_materials: Dictionary = {}
+const SHADER_PATHS := {
+	"ink_wash_bg": "res://shaders/ink_wash_bg.gdshader",
+	"glow_bloom": "res://shaders/glow_bloom.gdshader",
+	"water_ripple": "res://shaders/water_ripple.gdshader",
+	"brush_stroke": "res://shaders/brush_stroke.gdshader",
+	"gold_foil_shimmer": "res://shaders/gold_foil_shimmer.gdshader",
+	"ink_dissolve_transition": "res://shaders/ink_dissolve_transition.gdshader",
+}
 var audio_streams: Dictionary = {}
 var voice_streams: Dictionary = {}
 var audio_layer: Node
@@ -303,6 +360,8 @@ var update_progress_label: Label
 var update_progress: ProgressBar
 var update_art_fill: Panel
 var update_art_status_light: Panel
+var update_release_notes_art: Control
+var update_release_notes_label: Label
 var update_primary_button: Button
 var update_secondary_button: Button
 var update_state = "idle"
@@ -712,6 +771,22 @@ const GUOFENG_PANEL_FILL := Color(0.018, 0.022, 0.028, 0.96)
 const GUOFENG_PANEL_BORDER := Color(0.32, 0.28, 0.22, 0.48)
 const GUOFENG_PANEL_GOLD_LINE := Color(0.76, 0.62, 0.28, 0.62)
 
+# 国风扩展色 - 插画与氛围专用 / Guofeng Extended - Illustration & Atmosphere
+const GUOFENG_PANEL_HIGHLIGHT := Color(0.032, 0.040, 0.048, 0.94)
+const GUOFENG_ACCENT_JADE := Color(0.22, 0.52, 0.44, 0.88)
+const GUOFENG_ACCENT_CINNABAR := Color(0.78, 0.22, 0.16, 0.88)
+const GUOFENG_ACCENT_AZURE := Color(0.28, 0.48, 0.72, 0.88)
+const GUOFENG_INK_WASH_LIGHT := Color(0.48, 0.44, 0.50, 0.52)
+const GUOFENG_WATER_DEEP := Color(0.04, 0.08, 0.10, 0.62)
+const GUOFENG_WATER_SURFACE := Color(0.08, 0.14, 0.16, 0.38)
+const GUOFENG_MOON_GLOW := Color(1.0, 0.96, 0.82, 0.32)
+const GUOFENG_LANTERN_WARM := Color(1.0, 0.88, 0.52, 0.22)
+
+# 雨丝与远风景色 / Rain & Distant Scenery
+const RAIN_MIST := Color(0.72, 0.78, 0.82, 0.18)
+const RAIN_DROP := Color(0.88, 0.92, 0.96, 0.42)
+const DISTANT_MIST := Color(0.58, 0.62, 0.68, 0.28)
+
 # 动画 / 特效层参数。特效节点全部挂在持久化的 fx_layer 上，整桌每次 render_game
 # 调用 clear_screen 时 fx_layer 不被释放，因此补间动画可以跨整桌重绘连续播放。
 const FX_WIN_BURST_DURATION_MSEC := 1400
@@ -749,6 +824,17 @@ const FX_TURN_SWITCH_SLIDE_MSEC := 280
 const TRANSITION_SLIDE_DURATION_MSEC := 350
 const TRANSITION_CARD_FLIP_DURATION_MSEC := 280
 const TRANSITION_STAGGER_DELAY_MSEC := 40
+const TRANSITION_INK_WIPE_DURATION_MSEC := 420
+const TRANSITION_DISSOLVE_DURATION_MSEC := 380
+
+# 环境氛围动画参数 / Ambient Animation Parameters
+const AMBIENT_PETAL_COUNT := 16
+const AMBIENT_LEAF_COUNT := 14
+const AMBIENT_CLOUD_COUNT := 5
+const AMBIENT_FIREFLY_COUNT := 18
+const AMBIENT_SNOWFLAKE_COUNT := 20
+const AMBIENT_RAINDROP_COUNT := 28
+const AMBIENT_FIREWORK_COUNT := 6
 
 # ===== Shared UI helpers =====
 func add_background(parent: Control) -> void:
@@ -779,6 +865,34 @@ func add_texture(parent: Control, texture: Texture2D, rect: Rect2, alpha: float)
 	tex.texture = texture
 	tex.modulate = Color(1, 1, 1, alpha)
 	tex.stretch_mode = TextureRect.STRETCH_SCALE
+	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(tex, rect)
+	parent.add_child(tex)
+	return tex
+
+func illustration_texture(name: String) -> Texture2D:
+	return illustration_textures.get(name, null)
+
+func load_illustration_texture(path: String) -> Texture2D:
+	if ResourceLoader.exists(path):
+		return load(path)
+	var image = Image.new()
+	var image_path = ProjectSettings.globalize_path(path)
+	var err = image.load(image_path)
+	if err != OK:
+		return null
+	return ImageTexture.create_from_image(image)
+
+func add_illustration_texture(parent: Control, name: String, rect: Rect2, alpha: float = 1.0, keep_aspect: bool = false) -> TextureRect:
+	var texture = illustration_texture(name)
+	if texture == null:
+		return null
+	var tex = TextureRect.new()
+	tex.name = "IllustrationTexture_%s" % name
+	tex.texture = texture
+	tex.modulate = Color(1.0, 1.0, 1.0, alpha)
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED if keep_aspect else TextureRect.STRETCH_SCALE
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(tex, rect)
 	parent.add_child(tex)
@@ -848,10 +962,45 @@ func make_top_hud_button(text: String, color: Color, callback: Callable) -> Butt
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.add_theme_font_size_override("font_size", 15)
 	apply_button_style(button, color, 11, 2, 3)
+	draw_top_hud_button_art(button, text, color)
 	var icon_name = icon_name_for_button_text(text)
 	if icon_name != "":
 		add_lucide_icon(button, icon_name, rect_full(0.08, 0.22, 0.30, 0.78), Color(0.92, 0.94, 0.88, 0.86))
 	return button
+
+func draw_top_hud_button_art(button: Button, text: String, color: Color) -> Control:
+	var art = Control.new()
+	art.name = "TopHudButtonArt_%s" % text
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(art)
+	var icon_back = make_color_rect(rect_full(0.060, 0.180, 0.325, 0.820), Color(color.r, color.g, color.b, 0.18))
+	icon_back.name = "TopHudButtonIconBack_%s" % text
+	art.add_child(icon_back)
+	var rail = make_color_rect(rect_full(0.370, 0.755, 0.905, 0.850), Color(0.010, 0.018, 0.020, 0.46))
+	rail.name = "TopHudButtonRail_%s" % text
+	art.add_child(rail)
+	var fill = make_color_rect(rect_full(0.040, 0.240, 0.720, 0.760), Color(color.r, color.g, color.b, 0.32))
+	fill.name = "TopHudButtonRailFill_%s" % text
+	rail.add_child(fill)
+	var command_route = make_color_rect(rect_full(0.405, 0.575, 0.880, 0.660), Color(0.006, 0.016, 0.018, 0.42))
+	command_route.name = "TopHudButtonCommandRoute_%s" % text
+	art.add_child(command_route)
+	var command_fill = make_color_rect(rect_full(0.040, 0.260, 0.760, 0.740), Color(color.r, color.g, color.b, 0.26))
+	command_fill.name = "TopHudButtonCommandFill_%s" % text
+	command_route.add_child(command_fill)
+	var command_gate = make_color_rect(rect_full(0.835, 0.480, 0.885, 0.705), Color(0.92, 0.76, 0.38, 0.22))
+	command_gate.name = "TopHudButtonCommandGate_%s" % text
+	art.add_child(command_gate)
+	for i in range(2):
+		var dot = make_color_rect(rect_full(0.760 + float(i) * 0.055, 0.185, 0.790 + float(i) * 0.055, 0.335), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.04))
+		dot.name = "TopHudButtonPulse_%s_%d" % [text, i]
+		art.add_child(dot)
+	for i in range(2):
+		var tick = make_color_rect(rect_full(0.610 + float(i) * 0.060, 0.465, 0.628 + float(i) * 0.060, 0.705), Color(color.r, color.g, color.b, 0.23 - float(i) * 0.045))
+		tick.name = "TopHudButtonCommandTick_%s_%d" % [text, i]
+		art.add_child(tick)
+	return art
 
 func make_base_button(text: String, callback: Callable) -> Button:
 	var button = Button.new()
@@ -1214,6 +1363,62 @@ func numeric_count(value, fallback: int = 0) -> int:
 func fx_enabled_effective() -> bool:
 	return fx_enabled and fx_layer != null and is_instance_valid(fx_layer)
 
+func get_shader_material(shader_name: String) -> ShaderMaterial:
+	var base_mat = shader_materials.get(shader_name, null)
+	if base_mat == null:
+		return null
+	return base_mat.duplicate() as ShaderMaterial
+
+func apply_shader_to_control(control: Control, shader_name: String, params: Dictionary = {}) -> ShaderMaterial:
+	var mat = get_shader_material(shader_name)
+	if mat == null:
+		return null
+	for key in params.keys():
+		mat.set_shader_parameter(key, params[key])
+	control.material = mat
+	return mat
+
+func apply_ink_wash_shader(control: Control, grain: float = 0.04, vignette: float = 0.35, warmth: float = 0.06) -> ShaderMaterial:
+	return apply_shader_to_control(control, "ink_wash_bg", {
+		"grain_intensity": grain,
+		"vignette_strength": vignette,
+		"warmth": warmth,
+		"brush_streak_intensity": 0.02,
+		"time_scale": 0.0,
+	})
+
+func apply_glow_shader(control: Control, color: Color = Color(1.0, 0.88, 0.55, 1.0), intensity: float = 1.0, pulse_speed: float = 2.0) -> ShaderMaterial:
+	return apply_shader_to_control(control, "glow_bloom", {
+		"glow_color": color,
+		"intensity": intensity,
+		"pulse_speed": pulse_speed,
+		"falloff_power": 3.0,
+	})
+
+func apply_water_ripple_shader(control: Control, color: Color = Color(0.28, 0.48, 0.52, 0.18), speed: float = 1.5) -> ShaderMaterial:
+	return apply_shader_to_control(control, "water_ripple", {
+		"water_color": color,
+		"ripple_speed": speed,
+		"wave_frequency": 12.0,
+		"wave_amplitude": 0.02,
+		"wave_count": 4,
+	})
+
+func apply_gold_foil_shader(control: Control, speed: float = 0.8, sparkle: float = 0.4) -> ShaderMaterial:
+	return apply_shader_to_control(control, "gold_foil_shimmer", {
+		"shimmer_speed": speed,
+		"shimmer_width": 0.15,
+		"grain_intensity": 0.06,
+		"sparkle_density": sparkle,
+	})
+
+func apply_brush_stroke_shader(control: Control, color: Color = Color(0.12, 0.16, 0.20, 1.0)) -> ShaderMaterial:
+	return apply_shader_to_control(control, "brush_stroke", {
+		"ink_color": color,
+		"ink_bleed": 0.015,
+		"dry_brush_intensity": 0.3,
+	})
+
 func animation_asset_spec(animation_name: String) -> Dictionary:
 	if animation_name == "":
 		return {}
@@ -1266,8 +1471,40 @@ func draw_animation_preview(parent: Control, rect: Rect2, animation_name: String
 			draw_victory_sparkle_preview(preview)
 		_:
 			make_icon_badge(preview, rect_full(0.08, 0.08, 0.92, 0.92), "star", Color(0.20, 0.24, 0.24, 0.72), GOLD_LIGHT)
+	draw_animation_preview_timeline(preview, animation_name, spec)
 	animate_animation_preview(preview, animation_name)
 	return preview
+
+func draw_animation_preview_timeline(parent: Control, animation_name: String, spec: Dictionary) -> Control:
+	var timeline = Control.new()
+	timeline.name = "AnimationPreviewTimeline_%s" % animation_name
+	timeline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	timeline.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(timeline)
+	var frame_rate = max(1, int(spec.get("frame_rate", 60)))
+	var frame_count = max(1, int(spec.get("out_point", 0)) - int(spec.get("in_point", 0)))
+	var duration_ratio = clamp(float(frame_count) / float(frame_rate) / 2.4, 0.18, 1.0)
+	var accent = GOLD_BRIGHT if animation_name == "coin_spin" else SCARLET_GLOW
+	var rail = make_color_rect(rect_full(0.120, 0.820, 0.880, 0.895), Color(0.006, 0.016, 0.018, 0.46))
+	rail.name = "AnimationPreviewTimelineRail_%s" % animation_name
+	timeline.add_child(rail)
+	var fill = make_color_rect(rect_full(0.030, 0.250, 0.030 + 0.900 * duration_ratio, 0.750), Color(accent.r, accent.g, accent.b, 0.30))
+	fill.name = "AnimationPreviewTimelineFill_%s" % animation_name
+	rail.add_child(fill)
+	var gate = make_color_rect(rect_full(0.820, 0.700, 0.890, 0.930), Color(0.42, 0.74, 0.60, 0.24))
+	gate.name = "AnimationPreviewPlayGate_%s" % animation_name
+	timeline.add_child(gate)
+	for i in range(3):
+		var left = 0.270 + float(i) * 0.185
+		var key = make_color_rect(rect_full(left, 0.720, left + 0.034, 0.850), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.035))
+		key.name = "AnimationPreviewKeyframe_%s_%d" % [animation_name, i]
+		timeline.add_child(key)
+	for i in range(2):
+		var left = 0.645 + float(i) * 0.060
+		var tick = make_color_rect(rect_full(left, 0.160, left + 0.024, 0.310), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040))
+		tick.name = "AnimationPreviewTempoTick_%s_%d" % [animation_name, i]
+		timeline.add_child(tick)
+	return timeline
 
 func draw_coin_spin_preview(parent: Control) -> void:
 	var glow = make_panel(parent, rect_full(0.04, 0.04, 0.96, 0.96), Color(0.34, 0.26, 0.08, 0.36), 999, Color(0.96, 0.78, 0.32, 0.30), 0)
@@ -1793,6 +2030,21 @@ func load_assets() -> void:
 	felt_texture = load("res://assets/table/table_felt_green.jpg")
 	wood_texture = load("res://assets/table/table_dark_wood.jpg")
 	tile_back = load("res://assets/tiles/tile_back.png")
+	illustration_textures.clear()
+	for key in ILLUSTRATION_ASSET_PATHS.keys():
+		var path = str(ILLUSTRATION_ASSET_PATHS[key])
+		var texture = load_illustration_texture(path)
+		if texture != null:
+			illustration_textures[key] = texture
+
+	# 着色器材质加载
+	shader_materials.clear()
+	for key in SHADER_PATHS.keys():
+		var shader = load(str(SHADER_PATHS[key]))
+		if shader != null:
+			var mat = ShaderMaterial.new()
+			mat.shader = shader
+			shader_materials[key] = mat
 
 	# 音频资源立即加载
 	audio_streams = {
