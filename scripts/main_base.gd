@@ -84,6 +84,14 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"ui_action_role_rail": "res://assets/illustrations/ui_action_role_rail.png",
 	"ui_seat_info_plate": "res://assets/illustrations/ui_seat_info_plate.png",
 	"ui_hand_tray_state_chip": "res://assets/illustrations/ui_hand_tray_state_chip.png",
+	"ui_button_face_plate": "res://assets/illustrations/ui_button_face_plate.png",
+	"ui_shop_row_plate": "res://assets/illustrations/ui_shop_row_plate.png",
+	"ui_chat_lane_plate": "res://assets/illustrations/ui_chat_lane_plate.png",
+	"ui_confirm_sheet_plate": "res://assets/illustrations/ui_confirm_sheet_plate.png",
+	"ui_loading_progress_plate": "res://assets/illustrations/ui_loading_progress_plate.png",
+	"ui_settings_section_plate": "res://assets/illustrations/ui_settings_section_plate.png",
+	"ui_menu_card_face": "res://assets/illustrations/ui_menu_card_face.png",
+	"ui_online_form_field": "res://assets/illustrations/ui_online_form_field.png",
 	"reset_gpt_warning": "res://assets/illustrations/reset_gpt_warning.png",
 	"win_detail_gpt_scroll": "res://assets/illustrations/win_detail_gpt_scroll.png",
 	"win_celebration_gpt_burst": "res://assets/illustrations/win_celebration_gpt_burst.png",
@@ -1091,7 +1099,8 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "ui_titl
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_SCALE
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var tint_a = clampf(color.a if color.a > 0.001 else 1.0, 0.02, 1.0)
+	# Honor intentional alpha=0 (suppressed overlays). Only default when alpha is unset-ish negative.
+	var tint_a = 0.0 if color.a <= 0.0 else clampf(color.a, 0.02, 1.0)
 	tex.modulate = Color(
 		clampf(0.50 + color.r * 0.60, 0.20, 1.20),
 		clampf(0.50 + color.g * 0.60, 0.20, 1.20),
@@ -1138,19 +1147,80 @@ func set_overlay_alpha(node: Control, alpha: float) -> void:
 	node.modulate.a = clampf(alpha, 0.0, 1.0)
 
 
-func make_color_rect(rect: Rect2, color: Color) -> ColorRect:
-	var color_rect = ColorRect.new()
-	color_rect.color = color
-	color_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(color_rect, rect)
-	return color_rect
+func _gpt_plate_key_for_rect_color(rect: Rect2, color: Color) -> String:
+	# Pick an existing GPT illustration plate by chrome shape / luminance.
+	var w = maxf(absf(rect.size.x), 0.0001)
+	var h = maxf(absf(rect.size.y), 0.0001)
+	var aspect = w / h
+	var lum = color.r * 0.299 + color.g * 0.587 + color.b * 0.114
+	if color.a <= 0.18 and lum < 0.22:
+		return "ui_dark_scrim"
+	if aspect >= 5.5:
+		return "ui_meter_rail_plate" if h < 0.08 else "ui_progress_signal_strip"
+	if aspect >= 3.2 and aspect < 5.5:
+		if h < 0.12:
+			return "ui_chat_lane_plate"
+		return "ui_shop_row_plate" if w >= 0.55 else "ui_button_face_plate"
+	if aspect >= 1.6 and aspect < 3.2:
+		return "ui_button_face_plate" if lum > 0.25 else "ui_confirm_sheet_plate"
+	if aspect >= 0.70 and aspect < 1.05 and h >= 0.18:
+		return "ui_menu_card_face"
+	if aspect <= 0.40:
+		return "ui_action_role_rail"
+	if lum >= 0.62:
+		return "ui_river_soft_wash"
+	if lum <= 0.20:
+		return "ui_jade_reading_plate"
+	if lum <= 0.38:
+		return "ui_seat_info_plate"
+	return "ui_title_backplate"
+
+
+func make_color_rect(rect: Rect2, color: Color) -> Control:
+	# GPT plate host — never paints programmatic ColorRect slabs for UI chrome.
+	return make_gpt_plate_rect(rect, color, _gpt_plate_key_for_rect_color(rect, color))
+
 
 func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border: Color, shadow_size: int = 6) -> Panel:
+	# Panel is a layout host only; visual fill comes from GPT plates, not StyleBox paint.
 	var panel = Panel.new()
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(panel, rect)
-	var fill_color = soften_panel_color(color)
-	panel.add_theme_stylebox_override("panel", style(fill_color, radius, border.blend(UI_PANEL_BORDER), 1, max(0, shadow_size - 2)))
+	# Keep StyleBoxFlat for theme/luma probes (scrollbar QA), but alpha=0 so GPT plate is the only paint.
+	var fill_probe = soften_panel_color(color)
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(fill_probe.r, fill_probe.g, fill_probe.b, 0.0)
+	var rad := 8 if radius >= 900 else maxi(0, radius)
+	box.set_corner_radius_all(rad)
+	box.set_border_width_all(0)
+	box.border_color = Color(border.r, border.g, border.b, 0.0)
+	box.shadow_size = 0
+	panel.add_theme_stylebox_override("panel", box)
+	var plate_key := _gpt_plate_key_for_rect_color(rect, color)
+	var texture: Texture2D = optional_gpt_illustration_texture(plate_key)
+	if texture == null and plate_key != "ui_title_backplate":
+		texture = optional_gpt_illustration_texture("ui_title_backplate")
+	if texture == null:
+		texture = optional_gpt_illustration_texture("ui_jade_reading_plate")
+	if texture != null:
+		var tex = TextureRect.new()
+		tex.name = "GptPanelPlate"
+		tex.texture = texture
+		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex.stretch_mode = TextureRect.STRETCH_SCALE
+		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var fill_color = soften_panel_color(color)
+		var tint_a = clampf(fill_color.a if fill_color.a > 0.001 else 0.55, 0.08, 1.0)
+		# Keep a whisper of border warmth via slight gold lift on modulate.
+		var border_lift = clampf(border.a * 0.18, 0.0, 0.18)
+		tex.modulate = Color(
+			clampf(0.42 + fill_color.r * 0.70 + border.r * border_lift, 0.16, 1.25),
+			clampf(0.42 + fill_color.g * 0.70 + border.g * border_lift, 0.16, 1.25),
+			clampf(0.42 + fill_color.b * 0.70 + border.b * border_lift, 0.16, 1.25),
+			tint_a
+		)
+		panel.add_child(tex)
 	parent.add_child(panel)
 	return panel
 
@@ -1356,16 +1426,15 @@ func play_touch_button_down_by_id(button_id: int) -> void:
 	tw.set_parallel(true)
 	tw.tween_property(button, "scale", Vector2(0.96, 0.96), 0.08).from(Vector2(1.0, 1.0)).set_ease(Tween.EASE_OUT)
 	tw.tween_property(button, "modulate", Color(0.92, 0.92, 0.92, 1.0), 0.08).from(Color(1, 1, 1, 1))
-	var flash = ColorRect.new()
-	flash.color = Color(GOLD_GLOW.r, GOLD_GLOW.g, GOLD_GLOW.b, 0.22)
+	var flash = make_fullrect_overlay(Color(GOLD_GLOW.r, GOLD_GLOW.g, GOLD_GLOW.b, 0.22), "ui_soft_flash")
+	flash.name = "TouchButtonGptFlash"
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(flash)
 	var fl_tw := button.create_tween()
 	fl_tw.bind_node(flash)
 	fl_tw.set_parallel(true)
-	fl_tw.tween_property(flash, "color:a", 0.0, 0.12).from(0.22)
-	fl_tw.tween_property(flash, "modulate:a", 0.0, 0.16).from(1.0).set_delay(0.04)
+	fl_tw.tween_property(flash, "modulate:a", 0.0, 0.16).from(0.22)
 	fl_tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(flash.get_instance_id())).set_delay(0.18)
 
 func play_touch_button_up_by_id(button_id: int) -> void:
@@ -1382,11 +1451,59 @@ func connect_immediate_button_action(button: Button, callback: Callable) -> void
 		return
 	button.button_down.connect(callback)
 
+func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
+	if button == null or not is_instance_valid(button):
+		return
+	var old_plate = button.get_node_or_null("GptButtonFacePlate")
+	if old_plate != null and is_instance_valid(old_plate):
+		button.remove_child(old_plate)
+		old_plate.queue_free()
+	var plate_keys := [
+		"ui_button_face_plate",
+		"action_button_panel",
+		"ui_seat_info_plate",
+		"ui_title_backplate",
+		"ui_jade_reading_plate",
+	]
+	var texture: Texture2D = null
+	for key in plate_keys:
+		texture = optional_gpt_illustration_texture(str(key))
+		if texture != null:
+			break
+	if texture == null:
+		return
+	var tex = TextureRect.new()
+	tex.name = "GptButtonFacePlate"
+	tex.texture = texture
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.stretch_mode = TextureRect.STRETCH_SCALE
+	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var fill = soften_button_color(color)
+	var tint_a = clampf(fill.a if fill.a > 0.001 else 0.88, 0.35, 1.0)
+	tex.modulate = Color(
+		clampf(0.40 + fill.r * 0.75, 0.18, 1.25),
+		clampf(0.40 + fill.g * 0.75, 0.18, 1.25),
+		clampf(0.40 + fill.b * 0.75, 0.18, 1.25),
+		tint_a
+	)
+	button.add_child(tex)
+	button.move_child(tex, 0)
+
+
 func apply_button_style(button: Button, color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> void:
-	var style_set = button_style_set(color, radius, border_width, shadow_size)
-	button.add_theme_stylebox_override("normal", style_set["normal"])
-	button.add_theme_stylebox_override("hover", style_set["hover"])
-	button.add_theme_stylebox_override("pressed", style_set["pressed"])
+	# Transparent style hosts keep hit-testing; visual face is GPT plate (no StyleBoxFlat paint).
+	var pad := maxi(6, int(round(float(radius) * 0.35)))
+	var empty_normal := StyleBoxEmpty.new()
+	empty_normal.set_content_margin_all(pad)
+	var empty_hover := StyleBoxEmpty.new()
+	empty_hover.set_content_margin_all(pad)
+	var empty_pressed := StyleBoxEmpty.new()
+	empty_pressed.set_content_margin_all(maxi(4, pad - 1))
+	button.add_theme_stylebox_override("normal", empty_normal)
+	button.add_theme_stylebox_override("hover", empty_hover)
+	button.add_theme_stylebox_override("pressed", empty_pressed)
+	ensure_button_gpt_face_plate(button, color)
 
 func icon_name_for_button_text(text: String) -> String:
 	match text:
@@ -1592,21 +1709,7 @@ func make_icon_button(icon_name: String, color: Color, size: int = 24, callback:
 	button.add_theme_color_override("font_color", color)
 	button.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.4))
 
-	var btn_style = StyleBoxFlat.new()
-	btn_style.bg_color = Color(0.02, 0.03, 0.04, 0.85)
-	btn_style.set_corner_radius_all(size * 0.4)
-	btn_style.set_border_width_all(1)
-	btn_style.border_color = color.darkened(0.3)
-	button.add_theme_stylebox_override("normal", btn_style)
-
-	var hover_style = btn_style.duplicate()
-	hover_style.bg_color = Color(0.04, 0.05, 0.06, 0.92)
-	hover_style.border_color = color
-	button.add_theme_stylebox_override("hover", hover_style)
-
-	var pressed_style = btn_style.duplicate()
-	pressed_style.bg_color = color.darkened(0.4)
-	button.add_theme_stylebox_override("pressed", pressed_style)
+	apply_button_style(button, Color(0.02, 0.03, 0.04, 0.90), max(8, int(size * 0.4)), 1, 0)
 
 	if callback.is_valid():
 		connect_immediate_button_action(button, callback)

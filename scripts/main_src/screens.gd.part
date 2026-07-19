@@ -31,7 +31,13 @@ func _show_achievements_screen_impl() -> void:
 	if gpt_achievement_texture != null:
 		gpt_achievement_texture.name = "AchievementGPTGalleryTexture"
 		gpt_achievement_texture.modulate = Color(1.28, 1.08, 0.92, gpt_achievement_texture.modulate.a)  # r398 warm, no green boost
-	var achievement_readability_back = make_panel(panel, rect_full(0.045, 0.115, 0.955, 0.945), Color(0.12, 0.09, 0.06, 0.42), 18, Color(0.94, 0.80, 0.50, 0.42), 0)
+	var achievement_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.025, 0.78, 0.105), 0.42, false)
+	if achievement_title_strip != null:
+		achievement_title_strip.name = "AchievementGptTitleStrip"
+	var achievement_lane_plate = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.050, 0.300, 0.950, 0.920), 0.28, false)
+	if achievement_lane_plate != null:
+		achievement_lane_plate.name = "AchievementGptLanePlate"
+	var achievement_readability_back = make_panel(panel, rect_full(0.045, 0.115, 0.955, 0.945), Color(0.12, 0.09, 0.06, 0.28), 18, Color(0.94, 0.80, 0.50, 0.32), 0)
 	achievement_readability_back.name = "AchievementReadabilityBackplate"
 	var achievement_row_lane = make_panel(panel, rect_full(0.055, 0.320, 0.945, achievement_lane_bottom), Color(0.16, 0.12, 0.08, 0.78), 14, Color(1.0, 0.92, 0.70, 0.70), 0)  # r392
 	achievement_row_lane.name = "AchievementRowReadabilityLane"
@@ -329,6 +335,12 @@ func _show_online_lobby_impl() -> void:
 	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.72, false)
 	if gpt_online_texture != null:
 		gpt_online_texture.name = "OnlineLobbyGPTTexture"
+	var online_header_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.38, false)
+	if online_header_strip != null:
+		online_header_strip.name = "OnlineLobbyGptHeaderStrip"
+	var online_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.04, 0.12, 0.96, 0.94), 0.16, false)
+	if online_sheet != null:
+		online_sheet.name = "OnlineLobbyGptSheet"
 		gpt_online_texture.modulate = Color(1.28, 1.12, 0.94, minf(0.78, gpt_online_texture.modulate.a))  # r415 lift GPT surface
 	var fan_texture = add_illustration_texture(panel, "lobby_screen_fan", rect_full(0.38, 0.06, 0.98, 0.34), 0.025, false)
 	if fan_texture != null:
@@ -540,6 +552,12 @@ func _show_rules_screen_impl() -> void:
 	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
 	if gpt_rules_texture != null:
 		gpt_rules_texture.name = "RulesGPTScrollTexture"
+	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.40, false)
+	if rules_title_strip != null:
+		rules_title_strip.name = "RulesGptTitleStrip"
+	var rules_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.05, 0.14, 0.95, 0.92), 0.18, false)
+	if rules_sheet != null:
+		rules_sheet.name = "RulesGptSheet"
 		gpt_rules_texture.modulate = Color(1.24, 1.10, 0.96, minf(0.78, gpt_rules_texture.modulate.a))  # r416
 		panel.move_child(gpt_rules_texture, 0)
 	# 书架式滑入动画 / Shelf-slide entrance
@@ -690,8 +708,11 @@ func _show_shop_screen_impl() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	# 货币显示 - 增强样式
-	var coins_panel = make_panel(panel, rect_full(0.42, 0.035, 0.62, 0.090), Color(0.110, 0.155, 0.125, 0.94), 12, Color(0.82, 0.86, 0.56, 0.48), 0)
+	var coins_panel = make_panel(panel, rect_full(0.42, 0.035, 0.62, 0.090), Color(0.110, 0.155, 0.125, 0.55), 12, Color(0.82, 0.86, 0.56, 0.48), 0)
 	coins_panel.name = "ShopCurrencyPanel_coins"
+	var coins_gpt = add_optional_gpt_illustration_texture(coins_panel, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
+	if coins_gpt != null:
+		coins_gpt.name = "ShopCurrencyGptPlate_coins"
 	draw_shop_currency_meter_art(coins_panel, "coins", int(currency.get("coins", 0)), Color(0.84, 0.68, 0.30))
 	# Add gold shimmer to currency panel
 	var coin_gold = make_fullrect_overlay(Color(0.92, 0.78, 0.38, 0.10), "ui_soft_flash")
@@ -704,8 +725,11 @@ func _show_shop_screen_impl() -> void:
 	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
-	var gems_panel = make_panel(panel, rect_full(0.635, 0.035, 0.785, 0.090), Color(0.110, 0.145, 0.160, 0.94), 12, Color(0.78, 0.68, 0.90, 0.48), 0)
+	var gems_panel = make_panel(panel, rect_full(0.635, 0.035, 0.785, 0.090), Color(0.110, 0.145, 0.160, 0.55), 12, Color(0.78, 0.68, 0.90, 0.48), 0)
 	gems_panel.name = "ShopCurrencyPanel_gems"
+	var gems_gpt = add_optional_gpt_illustration_texture(gems_panel, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
+	if gems_gpt != null:
+		gems_gpt.name = "ShopCurrencyGptPlate_gems"
 	draw_shop_currency_meter_art(gems_panel, "gems", int(currency.get("gems", 0)), Color(0.62, 0.52, 0.82))
 	add_lucide_icon(gems_panel, "diamond", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.62, 0.52, 0.82))
 	var gems_label = make_label(gems_panel, str(int(currency.get("gems", 0))), 16, Color(0.96, 0.92, 0.68), true)
@@ -792,7 +816,13 @@ func _show_shop_screen_impl() -> void:
 		row.name = "ShopItemRow_%s" % item_id
 		row.custom_minimum_size = Vector2(0, shop_row_height)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var row_style = style(Color(0.16, 0.12, 0.08, 0.94), 14, Color(0.86, 0.72, 0.42, 0.50), 1, 3)  # r392
+		# r180: StyleBox is layout probe only (alpha=0); GPT plate paints the row.
+		var row_style = StyleBoxFlat.new()
+		row_style.bg_color = Color(0.16, 0.12, 0.08, 0.0)
+		row_style.set_corner_radius_all(14)
+		row_style.set_border_width_all(0)
+		row_style.border_color = Color(0.86, 0.72, 0.42, 0.0)
+		row_style.shadow_size = 0
 		row.add_theme_stylebox_override("panel", row_style)
 		content.add_child(row)
 		# 道具行交错入场 / Staggered item entrance
@@ -964,6 +994,17 @@ func _show_stats_screen_impl() -> void:
 	var gpt_stats_texture = add_optional_gpt_illustration_texture(panel, stats_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.68, false)
 	if gpt_stats_texture != null:
 		gpt_stats_texture.name = "StatsGPTDashboardTexture"
+	var stats_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.40, false)
+	if stats_title_strip != null:
+		stats_title_strip.name = "StatsGptTitleStrip"
+	var stats_section = add_optional_gpt_illustration_texture(panel, "ui_settings_section_plate", rect_full(0.06, 0.14, 0.94, 0.88), 0.20, false)
+	if stats_section != null:
+		stats_section.name = "StatsGptSectionPlate"
+	if stats_title_strip != null:
+		stats_title_strip.name = "StatsGptTitleStrip"
+	var stats_meter = add_optional_gpt_illustration_texture(panel, "ui_meter_rail_plate", rect_full(0.08, 0.90, 0.92, 0.96), 0.36, false)
+	if stats_meter != null:
+		stats_meter.name = "StatsGptBottomMeter"
 		gpt_stats_texture.modulate = Color(1.28, 1.12, 0.96, minf(0.76, gpt_stats_texture.modulate.a))  # r416
 	var stats_readability_back = make_panel(panel, rect_full(0.055, 0.115, 0.945, 0.945), Color(0.10, 0.07, 0.05, 0.16), 18, Color(0.94, 0.80, 0.50, 0.24), 0)  # r416
 	stats_readability_back.name = "StatsReadabilityBackplate"
@@ -1156,6 +1197,17 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var gpt_daily_texture = add_optional_gpt_illustration_texture(panel, daily_gpt_key, rect_full(0.020, 0.040, 0.980, 0.960), 0.50, false)
 	if gpt_daily_texture != null:
 		gpt_daily_texture.name = "DailyLoginGPTCalendarTexture"
+	var daily_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.06, 0.05, 0.94, 0.14), 0.40, false)
+	if daily_strip != null:
+		daily_strip.name = "DailyLoginGptStrip"
+	var daily_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.06, 0.16, 0.94, 0.92), 0.22, false)
+	if daily_sheet != null:
+		daily_sheet.name = "DailyGptSheetPlate"
+	var daily_section = add_optional_gpt_illustration_texture(panel, "ui_settings_section_plate", rect_full(0.12, 0.400, 0.88, 0.680), 0.34, false)
+	if daily_section != null:
+		daily_section.name = "DailyGptSectionPlate"
+	if daily_sheet != null:
+		daily_sheet.name = "DailyLoginGptSheet"
 		gpt_daily_texture.modulate = Color(1.28, 1.05, 0.90, minf(0.72, gpt_daily_texture.modulate.a))  # r392 warm
 		panel.move_child(gpt_daily_texture, min(1, panel.get_child_count() - 1))
 	var daily_mountain = make_layout_host(rect_full(0.035, 0.140, 0.965, 0.300))
@@ -1540,6 +1592,14 @@ func show_loading_screen() -> void:
 	if gpt_loading_texture != null:
 		gpt_loading_texture.name = "LoadingGPTBackdropTexture"
 		bg.move_child(gpt_loading_texture, 0)
+	var loading_meter = add_optional_gpt_illustration_texture(bg, "ui_loading_progress_plate", rect_full(0.16, 0.76, 0.84, 0.88), 0.62, false)
+	if loading_meter == null:
+		loading_meter = add_optional_gpt_illustration_texture(bg, "ui_meter_rail_plate", rect_full(0.18, 0.78, 0.82, 0.86), 0.55, false)
+	if loading_meter != null:
+		loading_meter.name = "LoadingGptMeter"
+	var loading_strip = add_optional_gpt_illustration_texture(bg, "ui_progress_signal_strip", rect_full(0.12, 0.70, 0.88, 0.90), 0.28, false)
+	if loading_strip != null:
+		loading_strip.name = "LoadingGptStrip"
 	var has_gpt_loading_backdrop := gpt_loading_texture != null
 	var fallback_alpha := 0.0 if has_gpt_loading_backdrop else 1.0
 	var moon = make_panel(bg, rect_full(0.690, 0.070, 0.795, 0.230), Color(0.88, 0.80, 0.58, 0.30 * fallback_alpha), 999, Color(0.96, 0.86, 0.52, 0.18 * fallback_alpha), 0)
@@ -1563,9 +1623,13 @@ func show_loading_screen() -> void:
 	water.name = "LoadingWater"
 	bg.add_child(water)
 
-	# 中央装饰面板
+	# 中央装饰面板 — GPT confirm sheet + gate art (no program slab paint)
 	var center_panel = make_panel(bg, rect_full(0.285, 0.205, 0.715, 0.805), Color(0.16, 0.12, 0.08, 0.96), 22, Color(0.94, 0.82, 0.50, 0.80), 8)  # r392
 	center_panel.name = "LoadingCenterPanel"
+	var center_sheet = add_optional_gpt_illustration_texture(center_panel, "ui_confirm_sheet_plate", rect_full(-0.02, -0.02, 1.02, 1.02), 0.78, false)
+	if center_sheet != null:
+		center_sheet.name = "LoadingCenterSheet"
+		center_panel.move_child(center_sheet, 0)
 	var loading_texture = add_illustration_texture(center_panel, "loading_gate", rect_full(-0.04, -0.05, 1.04, 1.05), 0.18, false)
 	if loading_texture != null:
 		loading_texture.name = "LoadingGateTexture"
@@ -1575,6 +1639,9 @@ func show_loading_screen() -> void:
 	var title_back = make_panel(center_panel, rect_full(0.08, 0.125, 0.92, 0.385), Color(0.04, 0.08, 0.06, 0.72), 14, Color(0.94, 0.80, 0.46, 0.35), 0)
 	title_back.name = "LoadingTitleBackplate"
 	title_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var title_plate = add_optional_gpt_illustration_texture(title_back, "ui_title_backplate", rect_full(-0.02, -0.05, 1.02, 1.05), 0.55, false)
+	if title_plate != null:
+		title_plate.name = "LoadingTitleGptPlate"
 	var title = make_label(center_panel, "云桌麻将", 52, GOLD_BRIGHT, true)
 	title.name = "LoadingTitleLabel"
 	apply_rect(title, rect_full(0.10, 0.150, 0.90, 0.365))
@@ -1728,8 +1795,17 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_bg.offset_top = 0
 	toast_bg.offset_right = 0
 	toast_bg.offset_bottom = 0
-	toast_bg.add_theme_stylebox_override("panel", style(Color(0.020, 0.042, 0.048, 0.96), 16, Color(0.50, 0.64, 0.56, 0.62), 2, 6))
-	toast_bg.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 0.018, 1.0), Color(0.40, 0.72, 0.58, 0.72)))
+	# Host style transparent; GPT toast banner is the visual face.
+	var toast_host := StyleBoxEmpty.new()
+	toast_host.set_content_margin_all(8)
+	toast_bg.add_theme_stylebox_override("panel", toast_host)
+	var toast_face = add_optional_gpt_illustration_texture(toast_bg, "toast_gpt_banner", rect_full(0.0, 0.0, 1.0, 1.0), 0.92, false)
+	if toast_face == null:
+		toast_face = add_optional_gpt_illustration_texture(toast_bg, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.88, false)
+	if toast_face != null:
+		toast_face.name = "ToastGptFacePlate"
+		toast_bg.move_child(toast_face, 0)
+	toast_bg.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 0.018, 1.0), Color(0.90, 0.76, 0.36, 0.55), "ui_action_role_rail"))
 	draw_toast_illustration(toast_bg, text)
 	var label = make_label(toast_bg, text, 16, Color(0.96, 0.96, 0.92), true)
 	apply_rect(label, rect_full(0.12, 0.04, 0.94, 0.96))

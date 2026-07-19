@@ -1,0 +1,37 @@
+[
+  {
+    "name": "ui_action_role_rail_v2",
+    "ok": true,
+    "path": "/home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_action_role_rail_v2.png",
+    "bytes": 25358
+  },
+  {
+    "name": "ui_hand_tray_state_chip_v2",
+    "ok": true,
+    "path": "/home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_hand_tray_state_chip_v2.png",
+    "bytes": 43608
+  },
+  {
+    "name": "ui_chat_lane_plate_v1",
+    "ok": false,
+    "error": "HTTP Error 502: Bad Gateway"
+  },
+  {
+    "name": "ui_confirm_sheet_plate_v1",
+    "ok": true,
+    "path": "/home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_confirm_sheet_plate_v1.png",
+    "bytes": 838231
+  },
+  {
+    "name": "ui_button_face_plate_v1",
+    "ok": true,
+    "path": "/home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_button_face_plate_v1.png",
+    "bytes": 122181
+  },
+  {
+    "name": "ui_shop_row_plate_v1",
+    "ok": true,
+    "path": "/home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_shop_row_plate_v1.png",
+    "bytes": 297547
+  }
+]

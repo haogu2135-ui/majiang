@@ -1,1 +1,14 @@
-{"status":"running","via":"sub2api","started_at":"2026-07-19T14:55:39+00:00"}
+{
+  "via_attempted": [
+    "abrdns_direct"
+  ],
+  "status": "ok",
+  "via": "abrdns_direct",
+  "path": "/home/guhao/majiang/garden-gpt-image-2/image/candidates/connectivity_probe/abrdns_direct_gpt-image-2.png",
+  "bytes": 1931379,
+  "finished_at": "2026-07-19T14:59:18.747077+00:00",
+  "sub2api_error": {
+    "message": "Upstream service temporarily unavailable",
+    "type": "upstream_error"
+  }
+}

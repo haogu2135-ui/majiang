@@ -1,0 +1,28 @@
+[15:10:06] start base=https://new-api.abrdns.com/v1
+[15:10:06] === ui_action_role_rail_v2 ===
+[15:10:56]   ok attempt=1 50.4s
+[15:10:56]   saved /home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_action_role_rail_v2.png bytes=25358
+[15:10:56] === ui_hand_tray_state_chip_v2 ===
+[15:12:58]   fail attempt=1 121.4s HTTP Error 502: Bad Gateway
+[15:13:57]   ok attempt=2 56.7s
+[15:13:57]   saved /home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_hand_tray_state_chip_v2.png bytes=43608
+[15:13:57] === ui_chat_lane_plate_v1 ===
+[15:16:01]   fail attempt=1 123.9s HTTP Error 502: Bad Gateway
+[15:18:09]   fail attempt=2 125.0s HTTP Error 502: Bad Gateway
+[15:20:17]   fail attempt=3 121.6s HTTP Error 502: Bad Gateway
+[15:22:30]   fail attempt=4 123.9s HTTP Error 502: Bad Gateway
+[15:22:42]   FATAL HTTP Error 502: Bad Gateway
+[15:22:42] === ui_confirm_sheet_plate_v1 ===
+[15:23:31]   ok attempt=1 49.1s
+[15:23:31]   saved /home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_confirm_sheet_plate_v1.png bytes=838231
+[15:23:31] === ui_button_face_plate_v1 ===
+[15:25:42]   fail attempt=1 130.5s HTTP Error 502: Bad Gateway
+[15:27:46]   fail attempt=2 121.7s HTTP Error 502: Bad Gateway
+[15:28:51]   ok attempt=3 58.2s
+[15:28:51]   saved /home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_button_face_plate_v1.png bytes=122181
+[15:28:51] === ui_shop_row_plate_v1 ===
+[15:30:53]   fail attempt=1 122.1s HTTP Error 502: Bad Gateway
+[15:32:57]   fail attempt=2 121.3s HTTP Error 502: Bad Gateway
+[15:33:48]   ok attempt=3 45.0s
+[15:33:48]   saved /home/guhao/majiang/garden-gpt-image-2/image/candidates/ui_polish_r180/ui_shop_row_plate_v1.png bytes=297547
+[15:33:48] DONE 5/6
