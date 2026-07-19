@@ -1,0 +1,1844 @@
+func _show_achievements_screen_impl() -> void:
+	mode = "achievements"
+	clear_screen()
+	var content_size = safe_content_pixel_size()
+	var panel_height = max(1.0, content_size.y * 0.96)
+	var achievement_scroll_top := 0.330
+	var achievement_scroll_max_bottom := 0.885
+	var achievement_row_height := 84.0
+	var achievement_row_gap := 10.0
+	var max_scroll_height = panel_height * (achievement_scroll_max_bottom - achievement_scroll_top)
+	var visible_row_count = int(clamp(floor((max_scroll_height + achievement_row_gap) / (achievement_row_height + achievement_row_gap)), 3.0, float(max(3, achievements.size()))))
+	var complete_scroll_height = float(visible_row_count) * achievement_row_height + float(max(0, visible_row_count - 1)) * achievement_row_gap + 1.0
+	var achievement_scroll_bottom = min(achievement_scroll_max_bottom, achievement_scroll_top + complete_scroll_height / panel_height)
+	var achievement_lane_bottom = min(0.930, achievement_scroll_bottom + 0.025)
+	var achievement_fade_top = min(0.940, achievement_scroll_bottom + 0.010)
+
+	var gallery_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.34), 24)
+	gallery_shadow.name = "AchievementGallery3DCastShadow"
+	var gallery_rear = make_panel(root_layer, rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.96), 22, Color(0.98, 0.88, 0.56, 0.76), 4)  # r392
+	gallery_rear.name = "AchievementGallery3DRearShell"
+	var gallery_lower_edge = make_panel(gallery_rear, rect_full(0.025, 0.954, 0.975, 0.994), Color(0.0, 0.0, 0.0, 0.18), 999, Color(0.96, 0.80, 0.44, 0.24), 0)
+	gallery_lower_edge.name = "AchievementGallery3DLowerEdge"
+	var gallery_top_glint = make_panel(gallery_rear, rect_full(0.040, 0.006, 0.960, 0.029), Color(1.0, 0.88, 0.52, 0.09), 999, Color(1.0, 0.94, 0.70, 0.03), 0)
+	gallery_top_glint.name = "AchievementGallery3DTopGlint"
+
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.96), 20, Color(1.0, 0.92, 0.68, 0.88))  # r398 warm lacquer shell
+	panel.name = "AchievementGalleryFrontPanel"
+	draw_secondary_screen_texture(panel, "achievement_medal_glow", "AchievementsGlowTexture", 0.035)
+	var achievement_gpt_key := "achievement_gpt_gallery"
+	var gpt_achievement_texture = add_optional_gpt_illustration_texture(panel, achievement_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.26, false)
+	if gpt_achievement_texture != null:
+		gpt_achievement_texture.name = "AchievementGPTGalleryTexture"
+		gpt_achievement_texture.modulate = Color(1.28, 1.08, 0.92, gpt_achievement_texture.modulate.a)  # r398 warm, no green boost
+	var achievement_readability_back = make_panel(panel, rect_full(0.045, 0.115, 0.955, 0.945), Color(0.12, 0.09, 0.06, 0.42), 18, Color(0.94, 0.80, 0.50, 0.42), 0)
+	achievement_readability_back.name = "AchievementReadabilityBackplate"
+	var achievement_row_lane = make_panel(panel, rect_full(0.055, 0.320, 0.945, achievement_lane_bottom), Color(0.16, 0.12, 0.08, 0.78), 14, Color(1.0, 0.92, 0.70, 0.70), 0)  # r392
+	achievement_row_lane.name = "AchievementRowReadabilityLane"
+	var lane_inset = make_panel(achievement_row_lane, rect_full(0.010, 0.020, 0.990, 0.980), Color(0.0, 0.0, 0.0, 0.06), 13, Color(0.86, 0.72, 0.42, 0.14), 0)  # r398
+	lane_inset.name = "AchievementGallery3DListInset"
+	var lane_shelf = make_panel(achievement_row_lane, rect_full(0.025, 0.925, 0.975, 0.990), Color(0.030, 0.025, 0.018, 0.22), 999, Color(0.94, 0.78, 0.42, 0.20), 0)
+	lane_shelf.name = "AchievementGallery3DBottomShelf"
+	var achievement_bottom_fade = make_panel(panel, rect_full(0.055, achievement_fade_top, 0.945, 0.955), Color(0.10, 0.07, 0.05, 0.18), 12, Color(0.86, 0.72, 0.42, 0.18), 0)  # r398
+	achievement_bottom_fade.name = "AchievementsBottomFadePanel"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_top = 18.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "offset_top", 0.0, 0.26).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	var title = make_label(panel, "成就图鉴", 30, Color(1.0, 0.94, 0.62), true)
+	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
+	title.add_theme_constant_override("outline_size", 4)
+
+	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
+		show_menu()
+	)
+	back.custom_minimum_size = Vector2(100, 48)
+	draw_secondary_back_button_art(back, "achievements", Color(0.36, 0.26, 0.16))
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+
+	draw_achievements_dashboard_art(panel)
+	draw_achievements_gallery_scan_art(panel)
+	draw_achievements_completion_convergence_art(panel)
+
+	var scroll = ScrollContainer.new()
+	scroll.name = "AchievementsScroll"
+	scroll.anchor_left = 0.055
+	scroll.anchor_top = achievement_scroll_top
+	scroll.anchor_right = 0.940
+	scroll.anchor_bottom = achievement_scroll_bottom
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	scroll.clip_contents = true
+	panel.add_child(scroll)
+	var achievements_scrollbar = scroll.get_v_scroll_bar()
+	if achievements_scrollbar != null:
+		achievements_scrollbar.name = "AchievementsScrollBar"
+		achievements_scrollbar.visible = false
+		achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var achievements_scroll_gutter = make_panel(panel, rect_full(0.947, achievement_scroll_top + 0.012, 0.960, achievement_scroll_bottom - 0.012), Color(0.020, 0.030, 0.028, 0.54), 999, Color(0.68, 0.56, 0.34, 0.16), 0)
+	achievements_scroll_gutter.name = "AchievementsScrollGutter"
+	achievements_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var achievements_scroll_thumb = make_panel(achievements_scroll_gutter, rect_full(0.200, 0.055, 0.800, 0.520), Color(0.56, 0.48, 0.30, 0.66), 999, Color(0.94, 0.76, 0.42, 0.22), 0)
+	achievements_scroll_thumb.name = "AchievementsScrollThumb"
+	achievements_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var grid = VBoxContainer.new()
+	configure_passive_container(grid)
+	grid.name = "AchievementsGrid"
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("separation", 10)
+	scroll.add_child(grid)
+
+	var rows: Array[Node] = []
+	var index = 0
+	for key in achievements.keys():
+		var row = make_achievement_row(str(key), index)
+		grid.add_child(row)
+		rows.append(row)
+		index += 1
+	var bottom_spacer = Control.new()
+	bottom_spacer.name = "AchievementsBottomSafeSpacer"
+	bottom_spacer.custom_minimum_size = Vector2(0, 78)
+	grid.add_child(bottom_spacer)
+	draw_achievements_row_collection_bus_art(panel)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		AnimationEffects.list_items_stagger_in(rows, 0.22, 0.035)
+
+func _show_menu_impl() -> void:
+	if voice_enabled:
+		stop_voice_chat(false)
+	mode = "menu"
+	clear_fx_overlays()
+	# 停止环境动画
+	stop_ambient_animation()
+	recover_audio_after_screen_change()
+	clear_screen()
+
+	# 增强的背景效果
+	add_background(root_layer)
+	menu_hero_art = draw_menu_hero_illustration(root_layer)
+	menu_parallax_enabled = true
+
+	var content_size = safe_content_pixel_size()
+
+	# 首屏按「标题 / 主操作 / 快捷入口 / 状态栏」分层，生成图负责框体和线条。
+	var header = Control.new()
+	header.name = "MenuTitleTextLayer"
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(header, rect_full(0.088, 0.105, 0.300, 0.180))
+	root_layer.add_child(header)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		header.modulate = Color(1, 1, 1, 0)
+		header.offset_top = -14.0
+		var h_tw := create_tween()
+		h_tw.set_parallel(true)
+		h_tw.tween_property(header, "modulate:a", 1.0, 0.30).from(0.0).set_ease(Tween.EASE_OUT)
+		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	# 游戏标题 - 更大更突出，使用国风金色
+	var title = make_label(header, "云桌麻将", 25, Color(0.22, 0.135, 0.055), true)
+	apply_rect(title, rect_full(0.010, 0.050, 0.950, 0.860))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 主菜单卡片区域 - 按安全区宽度收缩，避免移动端溢出。
+	draw_menu_primary_3d_stage(root_layer)
+	menu_realtime_3d_stage = Commercial3DStage.new()
+	menu_realtime_3d_stage.name = "MenuCommercial3DStage"
+	apply_rect(menu_realtime_3d_stage, rect_full(0.075, 0.245, 0.925, 0.800))
+	menu_realtime_3d_stage.modulate = Color(1.0, 1.0, 1.0, 0.98)
+	menu_realtime_3d_stage.configure("menu", fx_enabled_effective(), 0, 1.0, null, graphics_quality)
+	root_layer.add_child(menu_realtime_3d_stage)
+	var row = HBoxContainer.new()
+	configure_passive_container(row)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var card_gap := 28
+	row.add_theme_constant_override("separation", card_gap)
+	row.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 0)
+	var available_card_width = max(720.0, content_size.x * 0.78)
+	var card_width = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 290.0)
+	var card_height = clamp(floor(content_size.y * 0.225), 148.0, 176.0)
+	var row_width = card_width * 3.0 + float(card_gap * 2)
+	row.custom_minimum_size = Vector2(row_width, card_height)
+	root_layer.add_child(row)
+	row.position = Vector2(max(0.0, (content_size.x - row_width) * 0.5), content_size.y * 0.430)
+
+	# 三个主功能卡片 - 更大更醒目，使用国风配色
+	var cards: Array = []
+	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.78, 0.56, 0.28), func() -> void: start_offline(), "play")
+	card1.custom_minimum_size = Vector2(card_width, card_height)
+	row.add_child(card1)
+	cards.append(card1)
+
+	var card2 = make_menu_card("联机房间\n连接本机服务器", AZURE, func() -> void: show_online_lobby(), "users")
+	card2.custom_minimum_size = Vector2(card_width, card_height)
+	row.add_child(card2)
+	cards.append(card2)
+
+	var card3 = make_menu_card("商店\n道具和货币", VERMILION, func() -> void: show_shop_screen(), "gift")
+	card3.custom_minimum_size = Vector2(card_width, card_height)
+	row.add_child(card3)
+	cards.append(card3)
+
+	# 单机模式卡片弹跳强调
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and cards.size() > 0:
+		AnimationEffects.bounce(cards[0], 8.0, 0.6)
+	var quick_rail = draw_menu_quick_action_rail(root_layer)
+	# Season and daily status remain available in their dedicated screens; the main
+	# menu hero uses GPT art only to avoid legacy procedural point/line overlays.
+
+	# 底部信息栏 - 使用国风配色
+	var footer = Control.new()
+	footer.name = "MenuFooterTextLayer"
+	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(footer, rect_full(0.055, 0.828, 0.945, 0.948))
+	root_layer.add_child(footer)
+	var footer_back = make_panel(footer, rect_full(0.000, 0.050, 1.000, 0.950), Color(0.42, 0.52, 0.40, 0.995), 12, Color(1.0, 0.98, 0.86, 1.0), 0)
+	footer_back.name = "MenuFooterBackplate"
+	footer_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_menu_footer_economy_stats_bridge(footer)
+	# 底栏滑入动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		footer.modulate = Color(1, 1, 1, 0)
+		footer.offset_top = 12.0
+		var footer_tw := create_tween()
+		footer_tw.set_parallel(true)
+		footer_tw.tween_property(footer, "modulate:a", 1.0, 0.28).from(0.0).set_delay(0.18).set_ease(Tween.EASE_OUT)
+		footer_tw.tween_property(footer, "offset_top", 0.0, 0.28).from(12.0).set_delay(0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(0.030, 0.185, 0.190, 0.830), Color(0.58, 0.54, 0.42), Color(0.92, 0.88, 0.70))
+
+	# 货币显示 - 使用国风配色
+	var coins_text = "铜钱 %d" % int(currency.get("coins", 0))
+	var gems_text = "玉符 %d" % int(currency.get("gems", 0))
+	var currency_chip = make_menu_footer_status_chip(footer, "currency", "MenuCurrencyBadge", "%s   %s" % [coins_text, gems_text], rect_full(0.205, 0.185, 0.390, 0.830), Color(0.82, 0.62, 0.28), Color(1.00, 0.88, 0.56))
+	draw_menu_currency_badge_art(currency_chip)
+
+	# 赛季段位与积分
+	var rank_name = get_rank_name()
+	var _rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", "%s  积分 %d" % [rank_name, int(season_data.get("points", 0))], rect_full(0.405, 0.185, 0.570, 0.830), Color(0.46, 0.66, 0.54), Color(0.88, 0.96, 0.82))
+
+	# 统计概览 - 显示胜率等信息
+	var stats_text = "%d局 · 胜率%d%%" % [
+		int(game_stats.get("games_played", 0)),
+		int(float(game_stats.get("win_rate", 0.0)) * 100.0)
+	]
+	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_text, rect_full(0.585, 0.185, 0.745, 0.830), Color(0.42, 0.72, 0.66), Color(0.88, 0.96, 0.84))
+	draw_menu_stats_badge_art(stats_chip)
+
+	# 设置按钮 - 更大的触摸目标
+	var settings = make_small_button("设置", Color(0.26, 0.44, 0.58), func() -> void:
+		toggle_settings_panel()
+	)
+	settings.custom_minimum_size = Vector2(88, 48)
+	settings.name = "MenuSettingsButton"
+	settings.add_theme_font_size_override("font_size", 15)
+	footer.add_child(settings)
+	apply_rect(settings, rect_full(0.800, 0.155, 0.965, 0.875))
+
+	draw_menu_settings_button_art(settings)
+	add_lucide_icon(settings, "settings", rect_full(0.080, 0.240, 0.250, 0.760), Color(0.92, 0.94, 0.88, 0.92))
+
+	# 首次游戏提示 - 高亮常驻规则入口
+	if tutorial_step == 0:
+		var tutorial_hint = quick_rail.find_child("MenuQuickRulesButton", true, false) if quick_rail != null else null
+		if tutorial_hint != null and is_instance_valid(tutorial_hint) and fx_enabled_effective():
+			tutorial_hint.modulate.a = 0.92
+
+	draw_settings_overlay(root_layer)
+	ensure_update_dialog()
+
+	# 菜单入场动画 - 标题区和底栏交错出现
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		if header != null:
+			header.modulate.a = 0.0
+			header.offset_top = 12.0
+			var h_tw := create_tween()
+			h_tw.tween_property(header, "modulate:a", 1.0, 0.22).from(0.0).set_ease(Tween.EASE_OUT)
+			h_tw.parallel().tween_property(header, "offset_top", 0.0, 0.22).from(12.0).set_ease(Tween.EASE_OUT)
+		if footer != null:
+			footer.modulate.a = 0.0
+			footer.offset_top = 8.0
+			var f_tw := create_tween()
+			f_tw.tween_property(footer, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
+			f_tw.parallel().tween_property(footer, "offset_top", 0.0, 0.22).from(8.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
+
+func add_lobby_line_edit(parent: Control, label_text: String, value: String) -> LineEdit:
+	var row = VBoxContainer.new()
+	configure_passive_container(row)
+	row.custom_minimum_size = Vector2(0, 50)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 1)
+	parent.add_child(row)
+	var caption = Label.new()
+	caption.text = label_text
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.custom_minimum_size = Vector2(0, 16)
+	caption.add_theme_font_size_override("font_size", 13)
+	caption.add_theme_color_override("font_color", Color(0.95, 0.88, 0.64))
+	row.add_child(caption)
+	var edit = LineEdit.new()
+	edit.text = value
+	edit.custom_minimum_size = Vector2(240, 38)
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.add_theme_font_size_override("font_size", 18)
+	var input_styles = input_style_set()
+	edit.add_theme_stylebox_override("normal", input_styles["normal"])
+	edit.add_theme_stylebox_override("focus", input_styles["focus"])
+	edit.add_theme_stylebox_override("read_only", input_styles["read_only"])
+	edit.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
+	edit.add_theme_color_override("font_placeholder_color", Color(0.76, 0.80, 0.72))
+	edit.add_theme_color_override("font_selected_color", Color(0.10, 0.12, 0.10))
+	edit.add_theme_color_override("selection_color", Color(0.56, 0.70, 0.48, 0.72))
+	edit.add_theme_color_override("caret_color", Color(0.94, 0.86, 0.54))
+	draw_line_edit_input_art(edit, label_text)
+	var art_id := line_edit_art_id(label_text)
+	edit.focus_entered.connect(func() -> void:
+		play_line_edit_input_feedback(edit, art_id, false)
+	)
+	edit.text_changed.connect(func(_new_text: String) -> void:
+		play_line_edit_input_feedback(edit, art_id, true)
+	)
+	row.add_child(edit)
+	return edit
+
+func _show_online_lobby_impl() -> void:
+	mode = "online_lobby"
+	recover_audio_after_screen_change()
+	clear_screen()
+
+	# 主面板 - 统一的全屏面板
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.72), 18, Color(1.0, 0.95, 0.68, 0.55))  # r415 thinner shell
+	var lobby_shadow = make_soft_depth_panel(panel, rect_full(0.008, 0.025, 0.992, 1.020), Color(0.0, 0.0, 0.0, 0.10), 22)  # r415
+	lobby_shadow.name = "OnlineLobby3DCastShadow"
+	panel.move_child(lobby_shadow, 0)
+	var lobby_rear = make_soft_depth_panel(panel, rect_full(0.006, 0.010, 0.994, 0.990), Color(0.08, 0.06, 0.04, 0.08), 18)  # r415
+	lobby_rear.name = "OnlineLobby3DRearShell"
+	var lobby_top_glint = make_soft_depth_panel(panel, rect_full(0.040, 0.010, 0.960, 0.045), Color(1.0, 0.92, 0.60, 0.12), 999)  # r415
+	lobby_top_glint.name = "OnlineLobby3DTopGlint"
+	var lobby_lower_edge = make_soft_depth_panel(panel, rect_full(0.030, 0.940, 0.970, 0.990), Color(0.0, 0.0, 0.0, 0.06), 999)  # r415
+	lobby_lower_edge.name = "OnlineLobby3DLowerEdge"
+	draw_secondary_screen_texture(panel, "online_network", "OnlineLobbyNetworkTexture", 0.040)
+	var online_gpt_key := "online_gpt_lobby"
+	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.72, false)
+	if gpt_online_texture != null:
+		gpt_online_texture.name = "OnlineLobbyGPTTexture"
+		gpt_online_texture.modulate = Color(1.28, 1.12, 0.94, minf(0.78, gpt_online_texture.modulate.a))  # r415 lift GPT surface
+	var fan_texture = add_illustration_texture(panel, "lobby_screen_fan", rect_full(0.38, 0.06, 0.98, 0.34), 0.025, false)
+	if fan_texture != null:
+		fan_texture.name = "OnlineLobbyFanTexture"
+		panel.move_child(fan_texture, 0)
+
+	# 标题区域
+	var title = make_label(panel, "联机大厅", 32, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.04, 0.028, 0.28, 0.10))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var subtitle = make_label(panel, "连接本机或局域网房间，创建后等待玩家进入。", 15, Color(0.88, 0.94, 0.88), false)
+	apply_rect(subtitle, rect_full(0.04, 0.095, 0.48, 0.14))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 服务器和状态徽章
+	var endpoint_text := "%s:%d" % [DEFAULT_HOST, DEFAULT_PORT]
+	var server_badge = make_badge(panel, rect_full(0.600, 0.040, 0.815, 0.105), endpoint_text, 12, Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
+	server_badge.name = "OnlineLobbyServerEndpointBadge"
+	server_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var server_badge_label = server_badge.get_child(server_badge.get_child_count() - 1) as Label if server_badge.get_child_count() > 0 else null
+	if server_badge_label != null:
+		server_badge_label.name = "OnlineLobbyServerEndpointLabel"
+		apply_rect(server_badge_label, rect_full(0.055, 0.04, 0.945, 0.96))
+	var state_badge = make_badge(panel, rect_full(0.835, 0.040, 0.960, 0.105), lobby_connection_state_text(), 12, Color(0.18, 0.13, 0.08, 0.78), Color(0.78, 0.58, 0.30, 0.28), Color(0.94, 0.88, 0.72))  # r415 warm
+	state_badge.name = "OnlineLobbyConnectionStateBadge"
+	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var state_badge_label = state_badge.get_child(state_badge.get_child_count() - 1) as Label if state_badge.get_child_count() > 0 else null
+	if state_badge_label != null:
+		state_badge_label.name = "OnlineLobbyConnectionStateLabel"
+
+	# 表单面板 - 连接与房间设置
+	var online_split_back = make_panel(panel, rect_full(0.030, 0.155, 0.970, 0.880), Color(0.12, 0.09, 0.06, 0.06), 16, Color(0.92, 0.80, 0.50, 0.14), 0)  # r415
+	online_split_back.name = "OnlineLobbySplitReadabilityBackplate"
+	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
+	online_split_divider.name = "OnlineLobbySplitDivider"
+	panel.add_child(online_split_divider)
+	var form_panel = make_panel(panel, rect_full(0.035, 0.17, 0.475, 0.87), Color(0.18, 0.14, 0.10, 0.62), 14, Color(1.0, 0.94, 0.70, 0.42))  # r415
+	form_panel.name = "OnlineLobbyFormPanel"
+	var form_rear = make_soft_depth_panel(form_panel, rect_full(0.012, 0.020, 0.988, 0.980), Color(0.08, 0.06, 0.04, 0.06), 12)  # r415 warm
+	form_rear.name = "OnlineLobbyForm3DRearShell"
+	form_panel.move_child(form_rear, 0)
+	var form_top_rim = make_soft_depth_panel(form_panel, rect_full(0.040, 0.015, 0.960, 0.070), Color(1.0, 0.90, 0.56, 0.10), 999)
+	form_top_rim.name = "OnlineLobbyForm3DTopRim"
+	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.30, false)  # r415 keep smoke subdued
+	if form_panel_frame != null:
+		form_panel_frame.name = "OnlineLobbyFormGPTPanelFrameTexture"
+		form_panel.move_child(form_panel_frame, 0)
+	var form_title = make_label(form_panel, "连接与房间", 20, Color(0.90, 0.86, 0.60), true)
+	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
+	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var input_group_backplate = make_panel(form_panel, rect_full(0.045, 0.120, 0.955, 0.650), Color(0.10, 0.07, 0.04, 0.05), 10, Color(0.86, 0.70, 0.40, 0.06), 0)  # r415
+	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
+	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.14, false)
+	if input_group_plate != null:
+		input_group_plate.name = "OnlineLobbyInputGPTGroupPlateTexture"
+		input_group_backplate.move_child(input_group_plate, 0)
+	var input_group_spine = make_layout_host(rect_full(0.055, 0.150, 0.058, 0.615))
+	input_group_spine.name = "OnlineLobbyInputGroupSpine"
+	form_panel.add_child(input_group_spine)
+
+	var form = VBoxContainer.new()
+	configure_passive_container(form)
+	form.anchor_left = 0.06
+	form.anchor_top = 0.135
+	form.anchor_right = 0.94
+	form.anchor_bottom = 0.640
+	form.add_theme_constant_override("separation", 5)
+	form_panel.add_child(form)
+	online_name_edit = add_lobby_line_edit(form, "昵称", "云桌道友")
+	online_host_edit = add_lobby_line_edit(form, "服务器 IP/域名", DEFAULT_HOST)
+	online_room_edit = add_lobby_line_edit(form, "房间号", selected_room)
+
+	# 操作按钮组 - 连接/创建/加入
+	var button_row = HBoxContainer.new()
+	configure_passive_container(button_row)
+	button_row.add_theme_constant_override("separation", 8)
+	apply_rect(button_row, rect_full(0.06, 0.672, 0.94, 0.805))
+	form_panel.add_child(button_row)
+	button_row.add_child(make_lobby_action_button("连接", Color(0.20, 0.48, 0.66), func() -> void:
+		connect_online()
+	, 0.12, Vector2(108, 48)))
+	button_row.add_child(make_lobby_action_button("创建", Color(0.78, 0.56, 0.28), func() -> void:
+		send_online_action({"type": "createRoom", "name": online_name_edit.text}, "创建房间")
+	, 0.16, Vector2(108, 48)))
+	button_row.add_child(make_lobby_action_button("加入", Color(0.72, 0.48, 0.24), func() -> void:
+		selected_room = online_room_edit.text
+		send_online_action({"type": "joinRoom", "roomCode": online_room_edit.text, "name": online_name_edit.text}, "加入房间")
+	, 0.20, Vector2(108, 48)))
+
+	# 底部按钮 - 开始/返回
+	var start_row = HBoxContainer.new()
+	configure_passive_container(start_row)
+	start_row.add_theme_constant_override("separation", 10)
+	apply_rect(start_row, rect_full(0.06, 0.810, 0.94, 0.945))
+	form_panel.add_child(start_row)
+	var action_cluster_backplate = make_panel(form_panel, rect_full(0.045, 0.666, 0.955, 0.958), Color(0.10, 0.07, 0.04, 0.05), 10, Color(0.78, 0.58, 0.34, 0.06), 0)  # r415
+	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
+	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.16, false)
+	if action_group_plate != null:
+		action_group_plate.name = "OnlineLobbyActionGPTGroupPlateTexture"
+		action_cluster_backplate.move_child(action_group_plate, 0)
+	form_panel.move_child(action_cluster_backplate, max(0, form_panel.get_child_count() - 3))
+	var can_start_online := lobby_connection_state_text() == "已连接"
+	var start_button_text := "开始游戏" if can_start_online else "待连接"
+	var start_button = make_lobby_action_button(start_button_text, Color(0.56, 0.28, 0.22), func() -> void:
+		send_online_action({"type": "startGame"}, "开始游戏")
+	, 0.24, Vector2(168, 50))
+	start_button.name = "OnlineLobbyPrimaryStartButton"
+	start_button.size_flags_stretch_ratio = 1.35
+	start_button.disabled = not can_start_online
+	if not can_start_online:
+		start_button.modulate = Color(0.76, 0.78, 0.70, 0.74)
+	start_row.add_child(start_button)
+	var return_button = make_lobby_action_button("返回菜单", Color(0.28, 0.34, 0.36), func() -> void:
+		show_menu()
+	, 0.28, Vector2(112, 50))
+	return_button.name = "OnlineLobbySecondaryReturnButton"
+	return_button.size_flags_stretch_ratio = 0.85
+	start_row.add_child(return_button)
+	draw_online_lobby_action_flow_art(form_panel)
+
+	# 状态栏
+	var lobby_status_text := "可建房/入房，房主可开始" if can_start_online else "下一步 · 先连接，再建房或入房"
+	status_label = make_label(panel, lobby_status_text, 14, Color(0.82, 0.94, 0.86), false)
+	status_label.name = "OnlineLobbyStatusLabel"
+	apply_rect(status_label, rect_full(0.045, 0.896, 0.480, 0.936))
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(status_label)
+	var status_backplate = make_panel(panel, rect_full(0.035, 0.886, 0.492, 0.946), Color(0.14, 0.10, 0.06, 0.28), 10, Color(0.90, 0.76, 0.42, 0.16), 0)  # r415
+	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
+	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
+	draw_online_feedback_art(panel)
+
+	# 表单面板入场动画 - 左侧滑入
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		form_panel.modulate = Color(1, 1, 1, 0)
+		form_panel.offset_left = -16.0
+		var ftw := create_tween()
+		ftw.set_parallel(true)
+		ftw.tween_property(form_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT)
+		ftw.tween_property(form_panel, "offset_left", 0.0, 0.28).from(-16.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		if ui_enhancements != null:
+			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
+
+	# 房间状态面板
+	var log_panel = make_panel(panel, rect_full(0.505, 0.17, 0.965, 0.87), Color(0.18, 0.14, 0.10, 0.62), 14, Color(0.98, 0.92, 0.70, 0.42))  # r415
+	log_panel.name = "OnlineLobbyLogPanel"
+	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.30, false)  # r415 keep smoke subdued
+	if log_panel_frame != null:
+		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
+		log_panel.move_child(log_panel_frame, 0)
+	var log_readability_backplate = make_panel(log_panel, rect_full(0.035, 0.115, 0.965, 0.930), Color(0.10, 0.07, 0.04, 0.06), 10, Color(0.90, 0.76, 0.42, 0.08), 0)
+	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
+	# 右侧面板滑入动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		log_panel.modulate = Color(1, 1, 1, 0)
+		log_panel.offset_left = 18.0
+		var tw_log := create_tween()
+		tw_log.set_parallel(true)
+		tw_log.tween_property(log_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT).set_delay(0.12)
+		tw_log.tween_property(log_panel, "offset_left", 0.0, 0.28).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD).set_delay(0.12)
+		if ui_enhancements != null:
+			ui_enhancements.animate_panel_breath(log_panel, Vector2(0.0, -2.0), 3.6, 0.95)
+	var log_title = make_label(log_panel, "房间状态", 20, Color(0.84, 0.87, 0.74), true)
+	apply_rect(log_title, rect_full(0.05, 0.020, 0.48, 0.095))
+	log_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var room_badge_text = "房间号 " + (selected_room if selected_room != "" else "--")
+	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.26, false)
+	if room_gate_texture != null:
+		room_gate_texture.name = "LobbyRoomGateTokenTexture"
+	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, 12, Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
+	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_online_lobby_room_art(log_panel)
+	draw_online_lobby_roster_panel(log_panel)
+	draw_online_lobby_log_stream_art(log_panel)
+	var log_list_panel = draw_online_lobby_log_list_panel(log_panel)
+	logs_label = make_label(log_list_panel, "", 14, Color(0.92, 0.94, 0.84), false)
+	logs_label.name = "OnlineLobbyLogListText"
+	apply_rect(logs_label, rect_full(0.055, 0.260, 0.945, 0.930))
+	logs_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	logs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	logs_label.clip_text = true
+	logs_label.clip_contents = true
+	logs_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	logs_label.custom_minimum_size = Vector2.ZERO
+	render_room_log()
+	draw_online_lobby_connection_route(panel)
+	draw_online_lobby_feedback_sync_art(panel)
+	ensure_update_dialog()
+
+func _show_rules_screen_impl() -> void:
+	mode = "rules"
+	clear_screen()
+
+	var codex_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.14), 24)  # r416
+	codex_shadow.name = "RulesCodex3DCastShadow"
+	var codex_rear = make_panel(root_layer, rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.55), 22, Color(0.98, 0.86, 0.54, 0.40), 4)  # r416
+	codex_rear.name = "RulesCodex3DRearShell"
+	var codex_lower_edge = make_panel(codex_rear, rect_full(0.025, 0.954, 0.975, 0.994), Color(0.0, 0.0, 0.0, 0.08), 999, Color(0.92, 0.76, 0.40, 0.10), 0)  # r416
+	codex_lower_edge.name = "RulesCodex3DLowerEdge"
+	var codex_top_glint = make_panel(codex_rear, rect_full(0.040, 0.006, 0.960, 0.029), Color(1.0, 0.88, 0.52, 0.09), 999, Color(1.0, 0.94, 0.70, 0.03), 0)
+	codex_top_glint.name = "RulesCodex3DTopGlint"
+
+	# 主面板
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.58), 20, Color(1.0, 0.95, 0.70, 0.45))  # r416 rules
+	panel.name = "RulesCodexFrontPanel"
+	var rules_gpt_key := "rules_gpt_scroll"
+	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
+	if gpt_rules_texture != null:
+		gpt_rules_texture.name = "RulesGPTScrollTexture"
+		gpt_rules_texture.modulate = Color(1.24, 1.10, 0.96, minf(0.78, gpt_rules_texture.modulate.a))  # r416
+		panel.move_child(gpt_rules_texture, 0)
+	# 书架式滑入动画 / Shelf-slide entrance
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_right = -22.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "offset_right", 0.0, 0.26).from(-22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	# 标题
+	var title = make_label(panel, "麻将玩法指南", 27, Color(0.96, 0.88, 0.52), true)
+	apply_rect(title, rect_full(0.04, 0.024, 0.46, 0.082))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	draw_rules_guide_art(panel)
+
+	# 返回按钮
+	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
+		show_menu()
+	)
+	back.custom_minimum_size = Vector2(92, 44)
+	back.add_theme_font_size_override("font_size", 16)
+	draw_secondary_back_button_art(back, "rules", Color(0.36, 0.26, 0.16))
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.835, 0.026, 0.945, 0.112))
+
+	# 内容区域
+	var content_backplate = make_panel(panel, rect_full(0.050, 0.154, 0.950, 0.986), Color(0.10, 0.07, 0.05, 0.28), 16, Color(0.99, 0.92, 0.66, 0.36), 0)  # r416
+	content_backplate.name = "RulesContentReadabilityBackplate"
+	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var reading_inset = make_panel(content_backplate, rect_full(0.010, 0.020, 0.990, 0.980), Color(0.0, 0.0, 0.0, 0.05), 15, Color(0.82, 0.66, 0.36, 0.14), 0)
+	reading_inset.name = "RulesCodex3DReadingInset"
+	var reading_shelf = make_panel(content_backplate, rect_full(0.025, 0.930, 0.975, 0.992), Color(0.030, 0.025, 0.018, 0.08), 999, Color(0.94, 0.78, 0.42, 0.10), 0)  # r416
+	reading_shelf.name = "RulesCodex3DBottomShelf"
+	var content_sheen = make_layout_host(rect_full(0.030, 0.026, 0.970, 0.046))
+	content_sheen.name = "RulesContentTopSheen"
+	content_backplate.add_child(content_sheen)
+	var content_scroll = ScrollContainer.new()
+	content_scroll.name = "RulesContentScroll"
+	content_scroll.anchor_left = 0.058
+	content_scroll.anchor_top = 0.168
+	content_scroll.anchor_right = 0.930
+	content_scroll.anchor_bottom = 0.982
+	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	content_scroll.clip_contents = true
+	panel.add_child(content_scroll)
+	var rules_scrollbar = content_scroll.get_v_scroll_bar()
+	if rules_scrollbar != null:
+		rules_scrollbar.name = "RulesContentScrollBar"
+		rules_scrollbar.visible = false
+		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.70, 0.58, 0.34, 0.10), 0)  # r416
+	rules_scroll_gutter.name = "RulesContentScrollGutter"
+	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.96, 0.78, 0.42, 0.16), 0)
+	rules_scroll_thumb.name = "RulesContentScrollThumb"
+	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var content = VBoxContainer.new()
+	content.name = "RulesContentList"
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 10)
+	content_scroll.add_child(content)
+
+	# 基础规则
+	add_rule_section(content, "游戏目标", [
+		"4组面子 + 1对将牌即可胡牌",
+		"摸牌、打牌、吃碰杠来组合手牌",
+		"可自摸，也可点炮胡牌",
+	], 0)
+
+	add_rule_section(content, "牌型介绍", [
+		"顺子：同花色连续3张（123万）",
+		"刻子：3张相同（111万）",
+		"杠子：4张相同；将牌：任意一对",
+	], 1)
+
+	# 特殊牌型
+	add_rule_section(content, "特殊牌型", [
+		"七对：7个对子",
+		"十三幺：幺九字牌齐 + 任意一对",
+		"清一色：全部同一花色",
+	], 2)
+
+	# 操作说明
+	add_rule_section(content, "游戏操作", [
+		"点手牌即可打出",
+		"出现吃/碰/杠/胡时点击响应",
+		"点'重开'重新开局",
+	], 3)
+
+	# 规则段落逐一滑入
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var sections: Array[Node] = []
+		for child in content.get_children():
+			sections.append(child)
+		AnimationEffects.list_items_stagger_in(sections, 0.28, 0.08)
+
+	# 记录已查看教程
+	tutorial_step = -1
+	save_tutorial_state()
+
+func _show_shop_screen_impl() -> void:
+	mode = "shop"
+	clear_screen()
+
+	# 背景装饰 - 祥云与灯笼
+	make_cloud_decoration(root_layer, rect_full(0.02, 0.75, 0.25, 0.95), "mist", false)
+	make_cloud_decoration(root_layer, rect_full(0.75, 0.04, 0.98, 0.18), "gold", false)
+	make_lantern(root_layer, rect_full(0.03, 0.04, 0.09, 0.18), CINNABAR, true)
+
+	# The shop is presented as a physical lacquer display cabinet. Its rear shell
+	# stays inside the safe viewport and provides depth without changing layout.
+	var cabinet_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.34), 24)
+	cabinet_shadow.name = "ShopCabinet3DCastShadow"
+	var cabinet_rear = make_panel(root_layer, rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.96), 22, Color(0.98, 0.86, 0.54, 0.70), 4)  # r392
+	cabinet_rear.name = "ShopCabinet3DRearShell"
+	var cabinet_lower_edge = make_panel(cabinet_rear, rect_full(0.025, 0.955, 0.975, 0.994), Color(0.0, 0.0, 0.0, 0.24), 999, Color(0.92, 0.76, 0.40, 0.18), 0)
+	cabinet_lower_edge.name = "ShopCabinet3DLowerEdge"
+	var cabinet_top_glint = make_panel(cabinet_rear, rect_full(0.040, 0.006, 0.960, 0.028), Color(1.0, 0.86, 0.48, 0.09), 999, Color(1.0, 0.92, 0.66, 0.03), 0)
+	cabinet_top_glint.name = "ShopCabinet3DTopGlint"
+
+	# 主面板
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.97), 20, Color(1.0, 0.94, 0.68, 0.88))  # r392 warm shop
+	panel.name = "ShopCabinetFrontPanel"
+	draw_secondary_screen_texture(panel, "shop_vault", "ShopVaultTexture", 0.17)
+	var shop_gpt_key := "shop_gpt_vault"
+	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.54, false)
+	if gpt_shop_texture != null:
+		gpt_shop_texture.name = "ShopGPTVaultTexture"
+		gpt_shop_texture.modulate = Color(1.30, 1.08, 0.92, minf(0.72, gpt_shop_texture.modulate.a))  # r392 warm
+		panel.move_child(gpt_shop_texture, min(1, panel.get_child_count() - 1))
+	# 书架式滑入动画 / Shelf-slide entrance
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_left = 22.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "offset_left", 0.0, 0.26).from(22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	# 标题 - 带图标
+	add_lucide_icon(panel, "shopping-bag", rect_full(0.03, 0.030, 0.06, 0.090), GOLD_BRIGHT)
+	var title = make_label(panel, "商店", 30, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.07, 0.028, 0.40, 0.095))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 货币显示 - 增强样式
+	var coins_panel = make_panel(panel, rect_full(0.42, 0.035, 0.62, 0.090), Color(0.110, 0.155, 0.125, 0.94), 12, Color(0.82, 0.86, 0.56, 0.48), 0)
+	coins_panel.name = "ShopCurrencyPanel_coins"
+	draw_shop_currency_meter_art(coins_panel, "coins", int(currency.get("coins", 0)), Color(0.84, 0.68, 0.30))
+	# Add gold shimmer to currency panel
+	var coin_gold = make_fullrect_overlay(Color(0.92, 0.78, 0.38, 0.10), "ui_soft_flash")
+	coin_gold.name = "ShopCoinGoldFoil"
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and shader_materials.has("gold_foil_shimmer"):
+		apply_gold_foil_shader(coin_gold, 0.6, 0.3)
+	coins_panel.add_child(coin_gold)
+	add_lucide_icon(coins_panel, "coin", rect_full(0.06, 0.15, 0.22, 0.85), GOLD_PRIMARY)
+	var coins_label = make_label(coins_panel, str(int(currency.get("coins", 0))), 16, Color(0.96, 0.92, 0.68), true)
+	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
+	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	var gems_panel = make_panel(panel, rect_full(0.635, 0.035, 0.785, 0.090), Color(0.110, 0.145, 0.160, 0.94), 12, Color(0.78, 0.68, 0.90, 0.48), 0)
+	gems_panel.name = "ShopCurrencyPanel_gems"
+	draw_shop_currency_meter_art(gems_panel, "gems", int(currency.get("gems", 0)), Color(0.62, 0.52, 0.82))
+	add_lucide_icon(gems_panel, "diamond", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.62, 0.52, 0.82))
+	var gems_label = make_label(gems_panel, str(int(currency.get("gems", 0))), 16, Color(0.96, 0.92, 0.68), true)
+	apply_rect(gems_label, rect_full(0.25, 0.10, 0.95, 0.90))
+	gems_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	# 返回按钮
+	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
+		show_menu()
+	)
+	back.custom_minimum_size = Vector2(100, 48)
+	draw_secondary_back_button_art(back, "shop", Color(0.36, 0.26, 0.16))
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.84, 0.025, 0.96, 0.095))
+	add_lucide_icon(back, "chevron-left", rect_full(0.08, 0.22, 0.30, 0.78), Color(0.92, 0.94, 0.88, 0.86))
+	draw_shop_transaction_map_art(panel)
+
+	# 道具列表 - 带滚动支持
+	var display_shell = make_panel(panel, rect_full(0.032, 0.105, 0.938, 0.782), Color(0.12, 0.09, 0.06, 0.40), 17, Color(0.98, 0.86, 0.54, 0.52), 2)  # r392
+	display_shell.name = "ShopDisplayCabinet3DShell"
+	var display_inset = make_panel(display_shell, rect_full(0.012, 0.035, 0.988, 0.965), Color(0.0, 0.0, 0.0, 0.04), 15, Color(0.52, 0.68, 0.56, 0.14), 0)
+	display_inset.name = "ShopDisplayCabinet3DInset"
+	var display_shelf = make_panel(display_shell, rect_full(0.025, 0.925, 0.975, 0.990), Color(0.030, 0.024, 0.018, 0.36), 999, Color(0.94, 0.78, 0.40, 0.20), 0)
+	display_shelf.name = "ShopDisplayCabinet3DBottomShelf"
+	var scroll = ScrollContainer.new()
+	scroll.name = "ShopItemsScroll"
+	scroll.anchor_left = 0.04
+	scroll.anchor_top = 0.12
+	scroll.anchor_right = 0.930
+	scroll.anchor_bottom = 0.765
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	scroll.clip_contents = true
+	panel.add_child(scroll)
+	var shop_scrollbar = scroll.get_v_scroll_bar()
+	if shop_scrollbar != null:
+		shop_scrollbar.name = "ShopItemsScrollBar"
+		shop_scrollbar.visible = false
+		shop_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var shop_scroll_gutter = make_panel(panel, rect_full(0.948, 0.135, 0.960, 0.750), Color(0.022, 0.030, 0.026, 0.54), 999, Color(0.66, 0.56, 0.34, 0.16), 0)
+	shop_scroll_gutter.name = "ShopItemsScrollGutter"
+	shop_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var shop_scroll_thumb = make_panel(shop_scroll_gutter, rect_full(0.190, 0.050, 0.810, 0.900), Color(0.54, 0.46, 0.28, 0.66), 999, Color(0.94, 0.76, 0.42, 0.22), 0)
+	shop_scroll_thumb.name = "ShopItemsScrollThumb"
+	shop_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var content = VBoxContainer.new()
+	content.name = "ShopItemsContent"
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 10)
+	scroll.add_child(content)
+
+	# 让道具行按可用陈列区高度自适应，填满原本空洞的橱窗，同时保证不越过底部说明栏。
+	var shop_item_count := maxi(1, ITEM_TYPES.size())
+	var shop_content_pixels := safe_content_pixel_size()
+	var shop_scroll_pixels := shop_content_pixels.y * 0.96 * (0.765 - 0.12)
+	var shop_row_gap := 10.0
+	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_item_count - 1)) / float(shop_item_count)), 68.0, 120.0)
+
+	# 道具图标映射
+	var item_icon_map := {
+		"swap_card": "refresh-cw",
+		"peek_card": "info",
+		"lucky_charm": "leaf",
+		"double_coins": "coin",
+	}
+	# 道具颜色映射
+	var item_color_map := {
+		"swap_card": Color(0.22, 0.48, 0.72),
+		"peek_card": Color(0.62, 0.38, 0.72),
+		"lucky_charm": Color(0.78, 0.56, 0.28),
+		"double_coins": Color(0.72, 0.52, 0.22),
+	}
+
+	for item_id in ITEM_TYPES.keys():
+		var item_info = ITEM_TYPES[item_id]
+		var count = get_item_count(item_id)
+		var cost = int(item_info.get("cost_gems", 10))
+		var item_color = item_color_map.get(item_id, Color(0.42, 0.48, 0.44))
+		var icon_name = item_icon_map.get(item_id, "gift")
+
+		# 道具行面板
+		var row = Panel.new()
+		row.name = "ShopItemRow_%s" % item_id
+		row.custom_minimum_size = Vector2(0, shop_row_height)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var row_style = style(Color(0.16, 0.12, 0.08, 0.94), 14, Color(0.86, 0.72, 0.42, 0.50), 1, 3)  # r392
+		row.add_theme_stylebox_override("panel", row_style)
+		content.add_child(row)
+		# 道具行交错入场 / Staggered item entrance
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			var item_index = int(ITEM_TYPES.keys().find(item_id))
+			row.modulate = Color(1, 1, 1, 0)
+			row.offset_left = 14.0
+			var r_tw := create_tween()
+			r_tw.set_parallel(true)
+			r_tw.tween_property(row, "modulate:a", 1.0, 0.22).from(0.0).set_delay(float(item_index) * 0.06).set_ease(Tween.EASE_OUT)
+			r_tw.tween_property(row, "offset_left", 0.0, 0.22).from(14.0).set_delay(float(item_index) * 0.06).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+		draw_shop_item_row_art(row, item_color, count, item_id)
+
+		# 道具符主视觉由 GPT charm 资产承担；lucide 图标仅作为小型功能提示。
+		var icon_bg = make_panel(row, rect_full(0.030, 0.135, 0.118, 0.865), Color(item_color.r, item_color.g, item_color.b, 0.16), 14, Color(item_color.r, item_color.g, item_color.b, 0.26), 0)
+		icon_bg.name = "ShopItemCharmFrame_%s" % item_id
+		icon_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if not shop_charm_texture_is_safe(item_id):
+			draw_shop_native_charm_art(row, item_color, item_id, icon_name)
+		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
+
+		var text_plate = make_panel(row, rect_full(0.150, 0.055, 0.600, 0.920), Color(0.12, 0.09, 0.06, 0.32), 10, Color(0.90, 0.78, 0.44, 0.14), 1)
+		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
+		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		# 道具名称
+		var name_label = make_label(row, str(item_info.get("name", item_id)), 18, Color(0.96, 0.94, 0.88), true)
+		name_label.name = "ShopItemName_%s" % item_id
+		apply_rect(name_label, rect_full(0.164, 0.090, 0.480, 0.440))
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		configure_clipped_label(name_label)
+		var identity_label = make_label(row, shop_item_identity_text(item_id), 10, Color(item_color.r, item_color.g, item_color.b, 0.92), true)
+		identity_label.name = "ShopItemIdentity_%s" % item_id
+		apply_rect(identity_label, rect_full(0.492, 0.125, 0.588, 0.410))
+		identity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+		# 道具描述
+		var desc_label = make_label(row, str(item_info.get("desc", "")), 12, Color(0.86, 0.92, 0.84), false)
+		desc_label.name = "ShopItemDescription_%s" % item_id
+		apply_rect(desc_label, rect_full(0.164, 0.505, 0.590, 0.885))
+		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		configure_clipped_label(desc_label)
+
+		# 拥有数量 - 带徽章样式
+		var count_badge_color = Color(0.78, 0.56, 0.28) if count > 0 else Color(0.42, 0.34, 0.24)
+		var count_badge = make_badge(row, rect_full(0.630, 0.20, 0.765, 0.80), "×%d" % count, 13, count_badge_color.darkened(0.2), count_badge_color.lightened(0.2), Color(0.96, 0.96, 0.92))
+		count_badge.name = "ShopItemCountBadge_%s" % item_id
+		count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		draw_shop_item_count_badge_art(count_badge, item_color, count)
+
+		# 购买按钮 - 增强样式
+		var can_afford: bool = int(currency.get("gems", 0)) >= cost
+		var buy_btn = make_small_button("", Color(0.42, 0.38, 0.58), func() -> void:
+			if spend_gems(cost):
+				add_item(item_id, 1)
+				show_toast("购买成功！获得%s" % item_info.get("name", item_id), 2000)
+				# 播放购买成功动画
+				if fx_enabled_effective():
+					_play_purchase_success_animation(row, item_color)
+				# 刷新显示
+				_show_shop_screen_impl()
+			else:
+				show_toast("钻石不足", 1800)
+		)
+		buy_btn.custom_minimum_size = Vector2(100, 48)
+		buy_btn.name = "ShopItemBuyButton_%s" % item_id
+		row.add_child(buy_btn)
+		apply_rect(buy_btn, rect_full(0.825, 0.15, 0.955, 0.85))
+		draw_shop_buy_button_art(buy_btn, cost, can_afford)
+
+		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
+		add_lucide_icon(buy_btn, "diamond", rect_full(0.105, 0.290, 0.255, 0.710), Color(0.72, 0.62, 0.88) if can_afford else Color(0.94, 0.60, 0.54))
+		var command_label = make_label(buy_btn, "%s %d玉" % ["购买" if can_afford else "不足", cost], 13, Color(0.96, 0.94, 0.88) if can_afford else Color(0.98, 0.76, 0.68), true)
+		command_label.name = "ShopBuyButtonCommand_%s" % item_id
+		apply_rect(command_label, rect_full(0.310, 0.220, 0.920, 0.780))
+		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		configure_clipped_label(command_label)
+		var price_label = make_label(buy_btn, "%d玉" % cost, 14, Color(0.96, 0.90, 0.70) if can_afford else Color(0.98, 0.72, 0.62), true)
+		price_label.name = "ShopBuyButtonPrice_%s" % item_id
+		apply_rect(price_label, rect_full(0.310, 0.220, 0.920, 0.780))
+		price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		price_label.visible = false
+		configure_clipped_label(price_label)
+
+		# 按钮悬停效果
+		buy_btn.mouse_entered.connect(func() -> void:
+			if is_instance_valid(buy_btn):
+				var tw := buy_btn.create_tween()
+				tw.tween_property(buy_btn, "scale", Vector2(1.05, 1.05), 0.15).set_ease(Tween.EASE_OUT)
+		)
+		buy_btn.mouse_exited.connect(func() -> void:
+			if is_instance_valid(buy_btn):
+				var tw := buy_btn.create_tween()
+				tw.tween_property(buy_btn, "scale", Vector2(1.0, 1.0), 0.15).set_ease(Tween.EASE_OUT)
+		)
+
+	var total_inventory := 0
+	var affordable_items := 0
+	var min_cost := 9999
+	for item_id in ITEM_TYPES.keys():
+		var item_info = ITEM_TYPES[item_id]
+		var cost = int(item_info.get("cost_gems", 10))
+		total_inventory += get_item_count(item_id)
+		min_cost = min(min_cost, cost)
+		if int(currency.get("gems", 0)) >= cost:
+			affordable_items += 1
+	var shop_footer = make_panel(panel, rect_full(0.055, 0.790, 0.945, 0.935), Color(0.12, 0.09, 0.06, 0.58), 14, Color(0.78, 0.66, 0.40, 0.28), 0)
+	shop_footer.name = "ShopCabinetFooterPanel"
+	var footer_depth = make_panel(shop_footer, rect_full(0.012, 0.810, 0.988, 0.975), Color(0.0, 0.0, 0.0, 0.30), 11, Color(0.78, 0.58, 0.28, 0.08), 0)
+	footer_depth.name = "ShopCabinetFooter3DDepthEdge"
+	shop_footer.move_child(footer_depth, 0)
+	var footer_title = make_label(shop_footer, "宝阁说明", 17, Color(1.00, 0.92, 0.64), true)
+	footer_title.name = "ShopCabinetFooterTitle"
+	apply_rect(footer_title, rect_full(0.035, 0.120, 0.200, 0.460))
+	footer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(footer_title)
+	var footer_body = make_label(shop_footer, "道具在单机对局中即时生效，购买后进入本地库存。", 13, Color(0.92, 0.98, 0.88), false)
+	footer_body.name = "ShopCabinetFooterBody"
+	apply_rect(footer_body, rect_full(0.035, 0.515, 0.630, 0.850))
+	footer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(footer_body)
+	var inventory_text := "库存 %d件" % total_inventory
+	var footer_inventory = make_badge(shop_footer, rect_full(0.650, 0.175, 0.790, 0.775), inventory_text, 13, Color(0.060, 0.120, 0.110, 0.80), Color(0.42, 0.62, 0.50, 0.28), Color(0.90, 0.96, 0.84))
+	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
+	footer_inventory.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var state_text := "可买 %d种" % affordable_items if affordable_items > 0 else "最低 %d玉" % min_cost
+	var footer_state = make_badge(shop_footer, rect_full(0.810, 0.175, 0.965, 0.775), state_text, 13, Color(0.110, 0.092, 0.046, 0.82), Color(0.72, 0.56, 0.30, 0.30), Color(0.96, 0.90, 0.68))
+	footer_state.name = "ShopCabinetFooterStateBadge"
+	footer_state.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# 面板弹出动画
+	if fx_enabled_effective():
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.scale = Vector2(0.95, 0.95)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
+		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.95, 0.95)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+func _show_stats_screen_impl() -> void:
+	mode = "stats"
+	clear_screen()
+	var content_size = safe_content_pixel_size()
+	var panel_height = max(1.0, content_size.y * 0.96)
+	var stats_row_count := 6
+	var stats_content_top := 0.340
+	var stats_content_max_bottom := 0.920
+	var stats_available_height = panel_height * (stats_content_max_bottom - stats_content_top)
+	var stats_row_gap = clamp(panel_height * 0.010, 5.0, 10.0)
+	var stats_row_height = clamp(floor((stats_available_height - stats_row_gap * float(stats_row_count - 1)) / float(stats_row_count)), 42.0, 52.0)
+	var stats_content_height = stats_row_height * float(stats_row_count) + stats_row_gap * float(stats_row_count - 1)
+	var stats_content_bottom = min(stats_content_max_bottom, stats_content_top + stats_content_height / panel_height)
+	var stats_lane_bottom = min(0.940, stats_content_bottom + 0.020)
+
+	var stats_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.14), 24)  # r416
+	stats_shadow.name = "StatsConsole3DCastShadow"
+	var stats_rear = make_panel(root_layer, rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.55), 22, Color(0.98, 0.86, 0.54, 0.40), 4)  # r416
+	stats_rear.name = "StatsConsole3DRearShell"
+	var stats_lower_edge = make_panel(stats_rear, rect_full(0.025, 0.954, 0.975, 0.994), Color(0.0, 0.0, 0.0, 0.08), 999, Color(0.92, 0.76, 0.40, 0.10), 0)  # r416
+	stats_lower_edge.name = "StatsConsole3DLowerEdge"
+	var stats_top_glint = make_panel(stats_rear, rect_full(0.040, 0.006, 0.960, 0.029), Color(1.0, 0.88, 0.52, 0.09), 999, Color(1.0, 0.94, 0.70, 0.03), 0)
+	stats_top_glint.name = "StatsConsole3DTopGlint"
+
+	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.58), 20, Color(1.0, 0.94, 0.68, 0.45))  # r416 stats
+	panel.name = "StatsConsoleFrontPanel"
+	draw_secondary_screen_texture(panel, "stats_chart", "StatsChartTexture", 0.035)
+	var stats_gpt_key := "stats_gpt_dashboard"
+	var gpt_stats_texture = add_optional_gpt_illustration_texture(panel, stats_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.68, false)
+	if gpt_stats_texture != null:
+		gpt_stats_texture.name = "StatsGPTDashboardTexture"
+		gpt_stats_texture.modulate = Color(1.28, 1.12, 0.96, minf(0.76, gpt_stats_texture.modulate.a))  # r416
+	var stats_readability_back = make_panel(panel, rect_full(0.055, 0.115, 0.945, 0.945), Color(0.10, 0.07, 0.05, 0.16), 18, Color(0.94, 0.80, 0.50, 0.24), 0)  # r416
+	stats_readability_back.name = "StatsReadabilityBackplate"
+	var stats_row_lane = make_panel(panel, rect_full(0.065, 0.320, 0.935, stats_lane_bottom), Color(0.16, 0.12, 0.08, 0.40), 14, Color(0.96, 0.84, 0.54, 0.32), 0)  # r416
+	stats_row_lane.name = "StatsRowReadabilityLane"
+	var stats_lane_inset = make_panel(stats_row_lane, rect_full(0.010, 0.020, 0.990, 0.980), Color(0.0, 0.0, 0.0, 0.03), 13, Color(0.86, 0.70, 0.40, 0.08), 0)  # r416 warm
+	stats_lane_inset.name = "StatsConsole3DDataInset"
+	var stats_lane_shelf = make_panel(stats_row_lane, rect_full(0.025, 0.925, 0.975, 0.990), Color(0.012, 0.010, 0.008, 0.10), 999, Color(0.92, 0.74, 0.38, 0.08), 0)  # r416
+	stats_lane_shelf.name = "StatsConsole3DBottomShelf"
+	# 书架式滑入动画 / Shelf-slide entrance
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.offset_top = 18.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "offset_top", 0.0, 0.26).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	var title = make_label(panel, "游戏统计", 30, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
+		show_menu()
+	)
+	back.custom_minimum_size = Vector2(100, 48)
+	draw_secondary_back_button_art(back, "stats", Color(0.36, 0.26, 0.16))
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+	draw_stats_dashboard_art(panel)
+	draw_stats_data_scan_art(panel)
+	draw_stats_insight_convergence_art(panel)
+
+	# 统计数据
+	var content = VBoxContainer.new()
+	content.name = "StatsRows"
+	content.anchor_left = 0.08
+	content.anchor_top = stats_content_top
+	content.anchor_right = 0.92
+	content.anchor_bottom = stats_content_bottom
+	content.add_theme_constant_override("separation", int(round(stats_row_gap)))
+	panel.add_child(content)
+
+	add_stat_row(content, "总场次", "%d 局" % int(game_stats.get("games_played", 0)), stats_row_height)
+	add_stat_row(content, "胜场", "%d 局" % int(game_stats.get("games_won", 0)), stats_row_height)
+	add_stat_row(content, "胜率", "%.1f%%" % (float(game_stats.get("win_rate", 0.0)) * 100.0), stats_row_height)
+	add_stat_row(content, "累计净分", "%s 分" % compact_score_text(int(game_stats.get("total_score", 0))), stats_row_height)
+	add_stat_row(content, "单局最佳", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))), stats_row_height)
+	add_stat_row(content, "总手牌数", "%d 手" % int(game_stats.get("total_hands", 0)), stats_row_height)
+	draw_stats_row_summary_bus_art(panel)
+
+	# 统计行依次滑入动画
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var rows: Array[Node] = []
+		for child in content.get_children():
+			rows.append(child)
+		AnimationEffects.list_items_stagger_in(rows, 0.25, 0.06)
+
+func close_settings_panel() -> void:
+	settings_panel_open = false
+	reset_progress_confirming = false
+	refresh_current_screen()
+
+func refresh_update_dialog() -> void:
+	if update_state == "idle":
+		if update_dialog != null and is_instance_valid(update_dialog):
+			update_dialog.queue_free()
+		return
+	if update_status_label == null or not is_instance_valid(update_status_label):
+		return
+	update_status_label.text = update_message
+	if update_progress != null and is_instance_valid(update_progress):
+		var target_progress_value := 0.0
+		if update_total_bytes > 0:
+			target_progress_value = clamp(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes), 0.0, 100.0)
+		elif update_state == "ready":
+			target_progress_value = 100.0
+		else:
+			target_progress_value = 0.0
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			AnimationEffects.animate_progress_bar(update_progress, target_progress_value, 0.3)
+		else:
+			update_progress.value = target_progress_value
+	if update_progress_label != null and is_instance_valid(update_progress_label):
+		update_progress_label.text = update_progress_text()
+	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
+		var notes_text = update_release_notes_summary_line()
+		update_release_notes_art.visible = notes_text != ""
+		if update_release_notes_label != null and is_instance_valid(update_release_notes_label):
+			update_release_notes_label.text = notes_text
+	refresh_update_dialog_art()
+	if update_primary_button != null and is_instance_valid(update_primary_button):
+		update_primary_button.visible = update_state != "checking" and update_state != "downloading" and update_state != "current"
+		update_primary_button.text = "安装" if update_state == "ready" else "重试"
+	if update_secondary_button != null and is_instance_valid(update_secondary_button):
+		update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else "关闭"
+
+func refresh_update_dialog_art() -> void:
+	var progress = 0.0
+	if update_total_bytes > 0:
+		progress = clamp(float(update_downloaded_bytes) / float(update_total_bytes), 0.0, 1.0)
+	elif update_state == "ready" or update_state == "current":
+		progress = 1.0
+	if update_art_fill != null and is_instance_valid(update_art_fill):
+		apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
+	if update_art_status_light != null and is_instance_valid(update_art_status_light):
+		var color = update_state_color()
+		update_art_status_light.add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, 0.34), 999, Color(color.r, color.g, color.b, 0.42), 1, 0))
+	refresh_update_dialog_install_route(progress)
+	refresh_update_dialog_stage_map()
+
+func refresh_update_dialog_install_route(progress: float) -> void:
+	if update_dialog == null or not is_instance_valid(update_dialog):
+		return
+	var install_progress = 1.0 if update_state == "ready" or update_state == "installing" or update_state == "current" else clamp((progress - 0.72) / 0.28, 0.0, 1.0)
+	var install_fill = update_dialog.find_child("UpdateDialogInstallFill", true, false)
+	if install_fill is Control:
+		apply_rect(install_fill as Control, rect_full(0.080, 0.260, 0.080 + 0.840 * install_progress, 0.740))
+	var install_gate = update_dialog.find_child("UpdateDialogInstallGate", true, false)
+	if install_gate is Panel:
+		var color = update_state_color() if install_progress >= 1.0 else Color(0.82, 0.70, 0.36)
+		var alpha = 0.28 if install_progress >= 1.0 else 0.16
+		(install_gate as Panel).add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, alpha), 999, Color(color.r, color.g, color.b, 0.12), 1, 0))
+
+func refresh_update_dialog_stage_map() -> void:
+	if update_dialog == null or not is_instance_valid(update_dialog):
+		return
+	var active_index = update_stage_index()
+	var stages := ["checking", "downloading", "ready", "install"]
+	var progress = clamp(float(active_index) / float(stages.size() - 1), 0.0, 1.0)
+	var fill = update_dialog.find_child("UpdateDialogStageFill", true, false)
+	if fill is Control:
+		apply_rect(fill as Control, rect_full(0.000, 0.000, max(0.020, progress), 1.000))
+	var gate = update_dialog.find_child("UpdateDialogStageGate", true, false)
+	if gate is Control:
+		var center = 0.080 + float(active_index) * 0.280
+		apply_rect(gate as Control, rect_full(center - 0.023, 0.105, center + 0.023, 0.895))
+		if gate is Panel:
+			var gate_color = update_state_color()
+			(gate as Panel).add_theme_stylebox_override("panel", style(Color(gate_color.r, gate_color.g, gate_color.b, 0.22), 999, Color(gate_color.r, gate_color.g, gate_color.b, 0.24), 1, 0))
+	for i in range(stages.size()):
+		var stage_id = stages[i]
+		var node = update_dialog.find_child("UpdateDialogStageNode_%s" % stage_id, true, false)
+		if node is Panel:
+			var color = update_state_color() if i <= active_index else Color(0.26, 0.36, 0.36, 1.0)
+			var alpha = 0.52 if i == active_index else 0.32 if i < active_index else 0.18
+			(node as Panel).add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, alpha), 999, Color(color.r, color.g, color.b, alpha * 0.82), 1, 0))
+
+func show_achievements_screen(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_achievements_screen_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build, false, "ink_wash")
+
+func show_chat_panel() -> void:
+	var chat_panel = make_panel(root_layer, rect_full(0.02, 0.38, 0.28, 0.72), Color(0.008, 0.018, 0.022, 0.95), 14, Color(0.38, 0.42, 0.40, 0.36), 0)
+	chat_panel.name = "ChatPanel"
+	draw_chat_panel_art(chat_panel)
+	var chat_text = "\n".join(chat_messages.slice(-8))
+	if chat_text.strip_edges() == "":
+		chat_text = "等待房间消息"
+	var chat_label = make_label(chat_panel, chat_text, 12, Color(0.82, 0.86, 0.80), false)
+	apply_rect(chat_label, rect_full(0.075, 0.260, 0.940, 0.910))
+	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	chat_label.clip_text = true
+
+func show_daily_login_panel(login_result: Dictionary) -> void:
+	"""显示每日登录签到面板 - 增强版"""
+	mode = "daily_login"
+	clear_screen()
+
+	# 主面板
+	var panel = make_panel(root_layer, rect_full(0.16, 0.085, 0.84, 0.915), Color(0.18, 0.13, 0.09, 0.97), 24, Color(0.96, 0.84, 0.54, 0.82), 5)  # r392 warm
+	var daily_shadow = make_soft_depth_panel(panel, rect_full(0.010, 0.030, 0.990, 1.025), Color(0.0, 0.0, 0.0, 0.34), 24)
+	daily_shadow.name = "DailyLogin3DCastShadow"
+	panel.move_child(daily_shadow, 0)
+	var daily_rear = make_soft_depth_panel(panel, rect_full(0.008, 0.015, 0.992, 0.985), Color(0.04, 0.03, 0.02, 0.24), 20)  # r392
+	daily_rear.name = "DailyLogin3DRearShell"
+	var daily_top_glint = make_soft_depth_panel(panel, rect_full(0.050, 0.012, 0.950, 0.055), Color(1.0, 0.88, 0.52, 0.12), 999)
+	daily_top_glint.name = "DailyLogin3DTopGlint"
+	var daily_lower_edge = make_soft_depth_panel(panel, rect_full(0.040, 0.935, 0.960, 0.985), Color(0.0, 0.0, 0.0, 0.30), 999)
+	daily_lower_edge.name = "DailyLogin3DLowerEdge"
+	draw_secondary_screen_texture(panel, "daily_calendar", "DailyLoginCalendarTexture", 0.15)
+	var daily_gpt_key := "daily_login_gpt_calendar"
+	var gpt_daily_texture = add_optional_gpt_illustration_texture(panel, daily_gpt_key, rect_full(0.020, 0.040, 0.980, 0.960), 0.50, false)
+	if gpt_daily_texture != null:
+		gpt_daily_texture.name = "DailyLoginGPTCalendarTexture"
+		gpt_daily_texture.modulate = Color(1.28, 1.05, 0.90, minf(0.72, gpt_daily_texture.modulate.a))  # r392 warm
+		panel.move_child(gpt_daily_texture, min(1, panel.get_child_count() - 1))
+	var daily_mountain = make_layout_host(rect_full(0.035, 0.140, 0.965, 0.300))
+	daily_mountain.name = "DailyLoginMountain"
+	panel.add_child(daily_mountain)
+	var lantern_left = make_panel(panel, rect_full(0.060, 0.185, 0.105, 0.310), Color(0.72, 0.22, 0.14, 0.24), 999, Color(0.96, 0.72, 0.36, 0.14), 0)
+	lantern_left.name = "DailyLoginLanternLeft"
+	var lantern_right = make_panel(panel, rect_full(0.895, 0.185, 0.940, 0.310), Color(0.72, 0.22, 0.14, 0.24), 999, Color(0.96, 0.72, 0.36, 0.14), 0)
+	lantern_right.name = "DailyLoginLanternRight"
+	var plum = make_panel(panel, rect_full(0.830, 0.095, 0.940, 0.190), Color(0.78, 0.36, 0.46, 0.16), 999, Color(0.96, 0.72, 0.82, 0.10), 0)
+	plum.name = "DailyLoginPlumBlossom"
+
+	# 标题 - 使用Lucide图标
+	var title = make_label(panel, "每日签到", 32, Color(1.0, 0.94, 0.62), true)
+	apply_rect(title, rect_full(0.15, 0.06, 0.85, 0.16))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
+	title.add_theme_constant_override("outline_size", 4)
+	add_lucide_icon(panel, "gift", rect_full(0.08, 0.07, 0.14, 0.15), GOLD_BRIGHT)
+	var gift_glow = make_fullrect_overlay(Color(1.0, 0.88, 0.55, 0.0), "ui_soft_flash")
+	gift_glow.name = "DailyLoginGiftGlow"
+	gift_glow.offset_left = -6.0
+	gift_glow.offset_top = -6.0
+	gift_glow.offset_right = 6.0
+	gift_glow.offset_bottom = 6.0
+	panel.add_child(gift_glow)
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and shader_materials.has("glow_bloom"):
+		apply_glow_shader(gift_glow, Color(1.0, 0.88, 0.55, 0.6), 0.5, 1.2)
+
+	# 连续签到天数 - 更醒目
+	var days = int(login_result.get("consecutive_days", 1))
+	var days_text = "已连续签到 %d 天" % days
+	var days_label = make_label(panel, days_text, 26, Color(0.98, 0.97, 0.92), true)
+	apply_rect(days_label, rect_full(0.10, 0.18, 0.90, 0.28))
+	days_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	days_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.88))
+	days_label.add_theme_constant_override("outline_size", 3)
+
+	# 7天签到指示器 - 使用短卡片，避免程序点线装饰
+	var day_indicators_container = Control.new()
+	day_indicators_container.name = "DailyLoginDayIndicators"
+	day_indicators_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(day_indicators_container, rect_full(0.105, 0.305, 0.895, 0.425))
+	panel.add_child(day_indicators_container)
+
+	var current_day_in_cycle = days % 7
+	if current_day_in_cycle == 0:
+		current_day_in_cycle = 7
+
+	for i in range(7):
+		var day_num = i + 1
+		var is_claimed = day_num < current_day_in_cycle
+		var is_current = day_num == current_day_in_cycle
+		var is_milestone = day_num == 7
+
+		var x_pos = 0.012 + float(i) * 0.141
+		var indicator_rect = rect_full(x_pos, 0.050, x_pos + 0.110, 0.950)
+
+		# 选择颜色
+		var fill_color: Color
+		var border_color: Color
+		var text_color: Color
+		if is_claimed:
+			fill_color = Color(0.28, 0.20, 0.12, 0.92)
+			border_color = Color(0.42, 0.72, 0.62, 0.88)
+			text_color = Color(0.96, 0.96, 0.92)
+		elif is_current:
+			fill_color = Color(0.88, 0.72, 0.28, 0.92)
+			border_color = GOLD_BRIGHT
+			text_color = Color(0.12, 0.10, 0.08)
+		else:
+			fill_color = Color(0.16, 0.22, 0.20, 0.92)
+			border_color = Color(0.52, 0.58, 0.48, 0.68)
+			text_color = Color(0.92, 0.94, 0.86, 0.98)
+
+		var indicator = make_panel(day_indicators_container, indicator_rect, fill_color, 8, border_color, 0)
+		indicator.name = "DailyLoginDayNode_%d" % day_num
+		var text_back = make_panel(indicator, rect_full(0.070, 0.080, 0.930, 0.920), Color(0.006, 0.014, 0.016, 0.32 if is_current else 0.54), 6, Color(1.0, 0.88, 0.52, 0.10 if is_current else 0.06), 0)
+		text_back.name = "DailyLoginDayTextBack_%d" % day_num
+
+		var day_label = make_label(indicator, "第%d天" % day_num, 11, text_color, true)
+		day_label.name = "DailyLoginDayLabel_%d" % day_num
+		apply_rect(day_label, rect_full(0.070, 0.110, 0.930, 0.520))
+		configure_clipped_label(day_label)
+
+		var reward_icon = "双倍" if is_milestone else "+100"
+		var reward_color = text_color.darkened(0.18) if is_current else text_color.lightened(0.06)
+		var icon_label = make_label(indicator, reward_icon, 11, reward_color, true)
+		icon_label.name = "DailyLoginRewardLabel_%d" % day_num
+		apply_rect(icon_label, rect_full(0.070, 0.510, 0.930, 0.900))
+		configure_clipped_label(icon_label)
+
+		# 已签到的天数添加对勾
+		if is_claimed:
+			add_lucide_icon(indicator, "check", rect_full(0.25, 0.15, 0.75, 0.65), text_color)
+
+		if is_current:
+			indicator.modulate = Color(1, 1, 1, 0.96)
+	draw_daily_login_streak_art(panel, days, current_day_in_cycle)
+
+	# 奖励说明 - 增强视觉效果
+	var reward_text = "今日奖励："
+	var reward_icon_name = "gift"
+	if days % 7 == 0:
+		reward_text += "双倍分数加成卡 ×1"
+		reward_icon_name = "sparkles"
+	else:
+		reward_text += "金币 +100"
+		reward_icon_name = "coin"
+
+	var reward_panel = make_panel(panel, rect_full(0.14, 0.430, 0.86, 0.542), Color(0.018, 0.030, 0.034, 0.92), 14, Color(0.46, 0.52, 0.42, 0.36), 0)
+	reward_panel.name = "DailyLoginRewardPanel"
+	var reward_text_back = make_panel(reward_panel, rect_full(0.135, 0.120, 0.905, 0.880), Color(0.006, 0.014, 0.016, 0.46), 10, Color(0.92, 0.78, 0.42, 0.10), 0)
+	reward_text_back.name = "DailyLoginRewardTextBack"
+	var reward_icon_back = make_panel(reward_panel, rect_full(0.035, 0.180, 0.125, 0.820), Color(0.86, 0.66, 0.26, 0.18), 999, Color(1.0, 0.88, 0.52, 0.14), 0)
+	reward_icon_back.name = "DailyLoginRewardIconBack"
+
+	var reward_label = make_label(reward_panel, reward_text, 20, Color(0.96, 0.92, 0.68), true)
+	reward_label.name = "DailyLoginRewardTextLabel"
+	apply_rect(reward_label, rect_full(0.180, 0.150, 0.880, 0.850))
+	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	configure_clipped_label(reward_label)
+	add_lucide_icon(reward_icon_back, reward_icon_name, rect_full(0.180, 0.180, 0.820, 0.820), Color(0.96, 0.84, 0.46, 0.92))
+	draw_daily_login_reward_art(reward_panel, days)
+
+	# 签到进度条 - 增强版
+	var progress = days % 7
+	if progress == 0:
+		progress = 7
+	var progress_panel = make_panel(panel, rect_full(0.14, 0.560, 0.86, 0.650), Color(0.018, 0.030, 0.034, 0.92), 12, Color(0.38, 0.42, 0.40, 0.36), 0)
+	progress_panel.name = "DailyLoginProgressPanel"
+	var progress_rail = make_gpt_plate_rect(rect_full(0.120, 0.680, 0.880, 0.800), Color(0.006, 0.016, 0.018, 0.46))
+	progress_rail.name = "DailyLoginProgressRail"
+	progress_panel.add_child(progress_rail)
+	var progress_fill = make_gpt_plate_rect(rect_full(0.025, 0.250, 0.025 + 0.950 * clamp(float(progress) / 7.0, 0.08, 1.0), 0.750), Color(0.42, 0.72, 0.58, 0.34))
+	progress_fill.name = "DailyLoginProgressFill"
+	progress_fill.set_meta("animated_role", "daily_login_progress_flow")
+	progress_rail.add_child(progress_fill)
+
+	# 进度文字
+	var progress_text = make_label(progress_panel, "%d/7 天" % progress, 14, Color(0.96, 0.96, 0.92), true)
+	progress_text.name = "DailyLoginProgressText"
+	apply_rect(progress_text, rect_full(0.0, 0.0, 1.0, 0.66))
+	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	draw_daily_login_progress_confirm_art(panel, progress)
+
+	# 确认按钮 - 增强样式
+	var confirm_btn = make_small_button("领取奖励", Color(0.78, 0.56, 0.28), func() -> void:
+		# 领取奖励动画
+		if fx_enabled_effective():
+			_play_reward_claim_animation(panel, reward_text)
+		show_toast("签到成功！%s" % reward_text.replace("今日奖励：", ""), 2500)
+		show_menu(true)
+	)
+	confirm_btn.custom_minimum_size = Vector2(220, 50)
+	confirm_btn.name = "DailyLoginClaimButton"
+	draw_daily_login_claim_button_art(confirm_btn)
+	panel.add_child(confirm_btn)
+	apply_rect(confirm_btn, rect_full(0.315, 0.675, 0.685, 0.790))
+	add_lucide_icon(confirm_btn, "check", rect_full(0.08, 0.22, 0.22, 0.78), Color(0.96, 0.96, 0.92))
+	draw_daily_login_claim_flow_art(panel, progress)
+	# 七日奖励预告
+	var days_to_bonus = max(0, 7 - progress)
+	var forecast_badge_text = "已达成" if progress >= 7 else "还差 %d 天" % days_to_bonus
+	var forecast_body_text = "今日可领取双倍分数加成卡" if progress >= 7 else "第7天领取双倍分数加成卡"
+	var forecast_panel = make_panel(panel, rect_full(0.160, 0.820, 0.840, 0.955), Color(0.010, 0.022, 0.025, 0.64), 10, Color(0.76, 0.62, 0.32, 0.16), 0)
+	forecast_panel.name = "DailyLoginForecastPanel"
+	var forecast_rail = make_layout_host(rect_full(0.035, 0.180, 0.047, 0.820))
+	forecast_rail.name = "DailyLoginForecastRail"
+	forecast_panel.add_child(forecast_rail)
+	var forecast_title = make_label(forecast_panel, "七日奖励预告", 12, Color(0.96, 0.88, 0.58, 0.92), true)
+	forecast_title.name = "DailyLoginForecastTitle"
+	apply_rect(forecast_title, rect_full(0.080, 0.135, 0.560, 0.430))
+	configure_clipped_label(forecast_title)
+	var forecast_badge = make_label(forecast_panel, forecast_badge_text, 11, Color(0.96, 0.92, 0.72, 0.92), true)
+	forecast_badge.name = "DailyLoginForecastBadge"
+	forecast_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	apply_rect(forecast_badge, rect_full(0.765, 0.155, 0.925, 0.420))
+	configure_clipped_label(forecast_badge)
+	var forecast_badge_back = make_panel(forecast_panel, rect_full(0.745, 0.125, 0.945, 0.450), Color(0.82, 0.62, 0.24, 0.13), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	forecast_badge_back.name = "DailyLoginForecastBadgeBack"
+	forecast_panel.move_child(forecast_badge_back, forecast_badge.get_index())
+	var forecast_body = make_label(forecast_panel, forecast_body_text, 12, Color(0.84, 0.88, 0.78, 0.90), true)
+	forecast_body.name = "DailyLoginForecastBody"
+	apply_rect(forecast_body, rect_full(0.105, 0.520, 0.920, 0.820))
+	forecast_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(forecast_body)
+	var tip_back = make_panel(forecast_panel, rect_full(0.085, 0.485, 0.940, 0.850), Color(0.006, 0.014, 0.016, 0.28), 8, Color(0.76, 0.62, 0.32, 0.07), 0)
+	tip_back.name = "DailyLoginTipBack"
+	forecast_panel.move_child(tip_back, forecast_body.get_index())
+	var tip_label = make_label(forecast_panel, forecast_body_text, 12, Color(0.82, 0.86, 0.76, 0.0), true)
+	tip_label.name = "DailyLoginTipLabel"
+	apply_rect(tip_label, rect_full(0.105, 0.520, 0.920, 0.820))
+	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(tip_label)
+
+	# 面板弹出动画
+	if fx_enabled_effective():
+		panel.modulate = Color(1, 1, 1, 0)
+		panel.scale = Vector2(0.85, 0.85)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.3).from(0.0)
+		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.3).from(Vector2(0.85, 0.85)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+func show_diagnostic_dialog(lines: Array) -> void:
+	# 清除当前屏幕
+	clear_screen()
+
+	# 创建半透明背景
+	var bg = make_fullrect_overlay(Color(0, 0, 0, 0.72), "ui_dark_scrim")
+	bg.name = "DiagnosticDismissOverlay"
+	root_layer.add_child(bg)
+	apply_rect(bg, rect_full(0, 0, 1, 1))
+	draw_diagnostic_dismiss_art(bg)
+
+	# 创建诊断信息面板
+	var panel = make_panel(root_layer, rect_full(0.1, 0.15, 0.9, 0.85), Color(0.026, 0.058, 0.060, 0.95), 10, Color(0.66, 0.55, 0.28, 0.62))
+	panel.name = "DiagnosticDialogPanel"
+	var diagnostic_gpt_key := "diagnostic_gpt_panel"
+	var diagnostic_gpt_texture = add_optional_gpt_illustration_texture(panel, diagnostic_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.14, false)
+	if diagnostic_gpt_texture != null:
+		diagnostic_gpt_texture.name = "DiagnosticGPTPanelTexture"
+		panel.move_child(diagnostic_gpt_texture, 0)
+	var diagnostic_wave_hero = add_optional_gpt_illustration_texture(panel, "diagnostic_wave_hero", rect_full(0.080, 0.085, 0.920, 0.210), 0.20, false)
+	if diagnostic_wave_hero != null:
+		diagnostic_wave_hero.name = "DiagnosticWaveHeroTexture"
+		panel.move_child(diagnostic_wave_hero, min(1, panel.get_child_count() - 1))
+	draw_diagnostic_dialog_art(panel, lines)
+	draw_diagnostic_result_sync_art(panel, lines)
+
+	# 创建文本容器
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	panel.add_child(vbox)
+	apply_rect(vbox, rect_full(0.05, 0.205, 0.95, 0.95))
+
+	# 添加每一行文本
+	for line in lines:
+		var label = Label.new()
+		label.text = line
+		label.add_theme_font_size_override("font_size", 28)
+		if line.begins_with("【"):
+			label.add_theme_color_override("font_color", Color(0.94, 0.86, 0.44))
+			label.add_theme_font_size_override("font_size", 36)
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		elif line.begins_with("✓"):
+			label.add_theme_color_override("font_color", Color(0.42, 0.82, 0.56))
+		elif line.begins_with("✗"):
+			label.add_theme_color_override("font_color", Color(0.84, 0.42, 0.38))
+		elif line.begins_with("•"):
+			label.add_theme_color_override("font_color", Color(0.76, 0.78, 0.84))
+		else:
+			label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.91))
+		vbox.add_child(label)
+
+	# 面板入场动画 - 滑入 + 淡入
+	if fx_enabled_effective():
+		bg.modulate = Color(1, 1, 1, 0)
+		panel.offset_top = 20.0
+		panel.modulate = Color(1, 1, 1, 0)
+		var bg_tw := create_tween()
+		bg_tw.tween_property(bg, "modulate:a", 1.0, 0.18).from(0.0)
+		var p_tw := create_tween()
+		p_tw.set_parallel(true)
+		p_tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.06)
+		p_tw.tween_property(panel, "offset_top", 0.0, 0.22).from(20.0).set_delay(0.06).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		# Stagger labels in
+		var label_nodes: Array[Node] = []
+		for child in vbox.get_children():
+			if child is Label:
+				label_nodes.append(child)
+		if not label_nodes.is_empty():
+			for i in range(label_nodes.size()):
+				var lbl = label_nodes[i]
+				lbl.modulate.a = 0.0
+				var l_tw := create_tween()
+				l_tw.tween_property(lbl, "modulate:a", 1.0, 0.15).from(0.0).set_delay(0.12 + float(i) * 0.04).set_ease(Tween.EASE_OUT)
+
+	# 添加点击关闭功能
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	bg.gui_input.connect(func(event):
+		if event is InputEventScreenTouch and event.pressed:
+			refresh_current_screen()
+	)
+
+func show_exit_confirm() -> void:
+	"""显示退出确认对话框"""
+	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
+		return
+	var overlay = Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.modulate = Color(1, 1, 1, 0)
+	root_layer.add_child(overlay)
+	exit_confirm_panel = overlay
+
+	# 遮罩层 — r415: thinner scrim so GPT dialog plate can read warm, not void.
+	var mask = make_fullrect_overlay(Color(0.06, 0.04, 0.03, 0.14), "ui_dark_scrim")  # r435 thinner exit veil, table readable
+	mask.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(mask)
+
+	# 对话框面板 — r415: thin lacquer shell under GPT confirm plate.
+	var dialog = make_panel(overlay, rect_full(0.28, 0.35, 0.72, 0.65), Color(0.18, 0.13, 0.08, 0.20), 20, Color(0.96, 0.84, 0.48, 0.40), 4)  # r430
+	dialog.name = "ExitConfirmDialog"
+	var exit_gpt_key := "exit_gpt_confirm"
+	var gpt_exit_texture = add_optional_gpt_illustration_texture(dialog, exit_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.72, false)
+	if gpt_exit_texture != null:
+		gpt_exit_texture.name = "ExitConfirmGPTTexture"
+		gpt_exit_texture.modulate = Color(1.42, 1.22, 1.00, minf(0.90, gpt_exit_texture.modulate.a))  # r430 warmer brighter plate
+		dialog.move_child(gpt_exit_texture, 0)
+	var save_scroll = add_optional_gpt_illustration_texture(dialog, "exit_save_scroll", rect_full(0.115, 0.315, 0.885, 0.505), 0.28, false)
+	if save_scroll != null:
+		save_scroll.name = "ExitSaveScrollTexture"
+		dialog.move_child(save_scroll, min(1, dialog.get_child_count() - 1))
+	dialog.add_child(make_gpt_plate_rect(rect_full(0.006, 0.04, 0.012, 0.96), Color(0.90, 0.76, 0.36, 0.50)))
+	draw_exit_confirm_art(dialog)
+
+	# 标题
+	var title = make_label(dialog, "确认退出", 24, Color(0.94, 0.86, 0.48), true)
+	apply_rect(title, rect_full(0.08, 0.08, 0.92, 0.25))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 提示文本
+	var message = "是否退出当前游戏？\n进度将自动保存。"
+	var msg_label = make_label(dialog, message, 16, Color(0.92, 0.88, 0.76), false)  # r430 warm ink
+	apply_rect(msg_label, rect_full(0.10, 0.47, 0.90, 0.64))
+	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	draw_exit_confirm_choice_art(dialog)
+
+	# 按钮行
+	var button_row = HBoxContainer.new()
+	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_row.add_theme_constant_override("separation", 16)
+	apply_rect(button_row, rect_full(0.12, 0.72, 0.88, 0.92))
+	dialog.add_child(button_row)
+
+	# 继续游戏按钮
+	var continue_btn = make_small_button("继续游戏", Color(0.42, 0.34, 0.22), func() -> void:  # r392 warm
+		hide_exit_confirm()
+	)
+	continue_btn.custom_minimum_size = Vector2(140, 52)
+	draw_exit_confirm_button_art(continue_btn, "keep", Color(0.78, 0.56, 0.28))
+	button_row.add_child(continue_btn)
+
+	# 退出按钮
+	var exit_btn = make_small_button("退出游戏", Color(0.56, 0.36, 0.30), func() -> void:
+		hide_exit_confirm()
+		save_offline_progress()
+		show_menu()
+	)
+	exit_btn.custom_minimum_size = Vector2(140, 52)
+	draw_exit_confirm_button_art(exit_btn, "leave", Color(0.56, 0.36, 0.30))
+	button_row.add_child(exit_btn)
+
+	# 弹窗入场动画 - 使用AnimationEffects增强
+	if fx_enabled_effective():
+		overlay.modulate = Color(1, 1, 1, 0)
+		dialog.scale = Vector2(0.7, 0.7)
+		dialog.pivot_offset = dialog.size * 0.5 if dialog.size.length() > 0 else Vector2(200, 100)
+		var overlay_tw := create_tween()
+		overlay_tw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0)
+		var dialog_tw := create_tween()
+		dialog_tw.set_parallel(true)
+		dialog_tw.tween_property(dialog, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.7, 0.7)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		dialog_tw.tween_property(dialog, "modulate:a", 1.0, 0.2).from(0.0)
+		# 抖动"退出游戏"按钮吸引注意
+		var exit_btn_node = dialog.get_node_or_null("ExitConfirmDialog/ExitConfirmButtonArt_leave")
+		if exit_btn_node != null:
+			AnimationEffects.shake_popup(exit_btn_node, 6.0, 0.5)
+	else:
+		overlay.modulate = Color(1, 1, 1, 1)
+
+func show_loading_screen() -> void:
+	clear_screen()
+
+	# 背景面板 - 使用位图国风背景，避免叠加程序绘制装饰
+	var bg = make_panel(root_layer, rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.018, 0.024, 1.0), 0, Color(0.0, 0.0, 0.0, 0.0), 0)
+	var loading_gpt_key := "loading_scene_gpt_backdrop"
+	var gpt_loading_texture = add_optional_gpt_illustration_texture(bg, loading_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.78, false)
+	if gpt_loading_texture != null:
+		gpt_loading_texture.name = "LoadingGPTBackdropTexture"
+		bg.move_child(gpt_loading_texture, 0)
+	var has_gpt_loading_backdrop := gpt_loading_texture != null
+	var fallback_alpha := 0.0 if has_gpt_loading_backdrop else 1.0
+	var moon = make_panel(bg, rect_full(0.690, 0.070, 0.795, 0.230), Color(0.88, 0.80, 0.58, 0.30 * fallback_alpha), 999, Color(0.96, 0.86, 0.52, 0.18 * fallback_alpha), 0)
+	moon.name = "LoadingMoon"
+	if has_gpt_loading_backdrop:
+		var moon_transparent_style = StyleBoxFlat.new()
+		moon_transparent_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+		moon_transparent_style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+		moon_transparent_style.set_corner_radius_all(999)
+		moon_transparent_style.set_border_width_all(0)
+		moon.add_theme_stylebox_override("panel", moon_transparent_style)
+	var moon_glow = make_gpt_plate_rect(rect_full(0.650, 0.035, 0.835, 0.270), Color(0.96, 0.82, 0.46, 0.10 * fallback_alpha), "ui_soft_flash")
+	moon_glow.name = "MoonGlowBloom"
+	bg.add_child(moon_glow)
+	if not has_gpt_loading_backdrop and shader_materials.has("glow_bloom"):
+		apply_glow_shader(moon_glow, Color(0.96, 0.82, 0.46, 0.42), 0.45, 1.35)
+	var mountain = make_layout_host(rect_full(0.000, 0.300, 1.000, 0.520))
+	mountain.name = "LoadingFarMountain"
+	bg.add_child(mountain)
+	var water = make_layout_host(rect_full(0.000, 0.700, 1.000, 0.960))
+	water.name = "LoadingWater"
+	bg.add_child(water)
+
+	# 中央装饰面板
+	var center_panel = make_panel(bg, rect_full(0.285, 0.205, 0.715, 0.805), Color(0.16, 0.12, 0.08, 0.96), 22, Color(0.94, 0.82, 0.50, 0.80), 8)  # r392
+	center_panel.name = "LoadingCenterPanel"
+	var loading_texture = add_illustration_texture(center_panel, "loading_gate", rect_full(-0.04, -0.05, 1.04, 1.05), 0.18, false)
+	if loading_texture != null:
+		loading_texture.name = "LoadingGateTexture"
+		center_panel.move_child(loading_texture, 0)
+
+	# 游戏标题
+	var title_back = make_panel(center_panel, rect_full(0.08, 0.125, 0.92, 0.385), Color(0.04, 0.08, 0.06, 0.72), 14, Color(0.94, 0.80, 0.46, 0.35), 0)
+	title_back.name = "LoadingTitleBackplate"
+	title_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var title = make_label(center_panel, "云桌麻将", 52, GOLD_BRIGHT, true)
+	title.name = "LoadingTitleLabel"
+	apply_rect(title, rect_full(0.10, 0.150, 0.90, 0.365))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.clip_text = true
+	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.95))
+	title.add_theme_constant_override("outline_size", 5)
+
+	# 副标题
+	var subtitle = make_label(center_panel, "国风雅韵 · 智慧博弈", 18, Color(0.96, 0.97, 0.90, 1.0), false)
+	subtitle.name = "LoadingSubtitleLabel"
+	apply_rect(subtitle, rect_full(0.15, 0.365, 0.85, 0.460))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.clip_text = true
+	subtitle.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
+	subtitle.add_theme_constant_override("outline_size", 3)
+	draw_loading_shuffle_art(center_panel)
+	draw_loading_progress_feedback(center_panel)
+
+	# 加载动画区域
+	var loading_area = Control.new()
+	loading_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(loading_area, rect_full(0.22, 0.620, 0.78, 0.675))
+	center_panel.add_child(loading_area)
+
+	# 加载文字
+	var loading_text = make_label(loading_area, "正在加载中", 20, Color(1.0, 0.98, 0.92, 1.0), true)
+	loading_text.name = "LoadingStatusLabel"
+	apply_rect(loading_text, rect_full(0.0, 0.0, 1.0, 1.0))
+	loading_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading_text.clip_text = true
+	loading_text.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
+	loading_text.add_theme_constant_override("outline_size", 3)
+	loading_area.move_to_front()
+
+	# 底部游戏提示
+	var tips := [
+		"提示：合理利用吃碰杠，加速听牌",
+		"提示：注意观察对手弃牌，判断危险牌",
+		"提示：听牌时优先选择多面听",
+		"提示：保持手牌灵活性，避免过早定型",
+	]
+	draw_loading_tip_art(center_panel)
+	var tip_text = tips[randi() % tips.size()]
+	var tip_label = make_label(center_panel, tip_text, 15, Color(0.96, 0.96, 0.90, 1.0), false)
+	tip_label.name = "LoadingTipLabel"
+	apply_rect(tip_label, rect_full(0.10, 0.805, 0.90, 0.890))
+	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tip_label.clip_text = true
+	tip_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.85))
+	tip_label.add_theme_constant_override("outline_size", 2)
+	tip_label.move_to_front()
+
+	# 版本信息
+	var version_label = make_label(center_panel, "v%s" % app_version(), 12, Color(0.72, 0.74, 0.68, 0.78), false)
+	version_label.name = "LoadingVersionLabel"
+	apply_rect(version_label, rect_full(0.35, 0.90, 0.65, 0.97))
+	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	version_label.clip_text = true
+	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# 整体分层淡入动画 - 各元素交错入场
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		# 背景先入
+		bg.modulate.a = 0.0
+		var bg_tw := create_tween()
+		bg_tw.tween_property(bg, "modulate:a", 1.0, 0.4).set_ease(Tween.EASE_OUT)
+
+		center_panel.modulate.a = 1.0
+		title.modulate.a = 1.0
+		subtitle.modulate.a = 1.0
+	elif fx_enabled_effective():
+		center_panel.modulate.a = 0.0
+		var fade_tween := create_tween()
+		fade_tween.tween_property(center_panel, "modulate:a", 1.0, 0.5).set_ease(Tween.EASE_OUT)
+
+func show_menu(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	menu_parallax_enabled = false
+	var _build_menu = func() -> void:
+		_show_menu_impl()
+	if instant or not fx_enabled_effective():
+		_build_menu.call()
+	else:
+		play_screen_transition(_build_menu, false, "ink_dissolve")
+
+func show_online_lobby(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_online_lobby_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build, false, "ink_wash")
+
+func show_rules_screen(instant: bool = false) -> void:
+	"""显示麻将规则和玩法说明"""
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_rules_screen_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build, false, "curtain")
+
+func show_shop_screen(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_shop_screen_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build, false, "ink_wash")
+
+func show_stats_screen(instant: bool = false) -> void:
+	"""显示详细游戏统计"""
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_stats_screen_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build, false, "curtain")
+
+func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) -> void:
+	"""显示临时Toast提示"""
+	if fx_layer == null or not is_instance_valid(fx_layer):
+		return
+	if toast_container == null or not is_instance_valid(toast_container):
+		_build_fx_toast()
+	# 清除旧toast
+	if toast_current != null and is_instance_valid(toast_current):
+		toast_current.queue_free()
+		toast_current = null
+	if toast_tween != null and is_instance_valid(toast_tween):
+		toast_tween.kill()
+	# 创建toast节点
+	var toast_bg = Panel.new()
+	toast_bg.name = "Toast"
+	toast_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_bg.anchor_left = 0.18
+	toast_bg.anchor_right = 0.82
+	toast_bg.anchor_top = 0.06
+	toast_bg.anchor_bottom = 0.12
+	toast_bg.offset_left = 0
+	toast_bg.offset_top = 0
+	toast_bg.offset_right = 0
+	toast_bg.offset_bottom = 0
+	toast_bg.add_theme_stylebox_override("panel", style(Color(0.020, 0.042, 0.048, 0.96), 16, Color(0.50, 0.64, 0.56, 0.62), 2, 6))
+	toast_bg.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 0.018, 1.0), Color(0.40, 0.72, 0.58, 0.72)))
+	draw_toast_illustration(toast_bg, text)
+	var label = make_label(toast_bg, text, 16, Color(0.96, 0.96, 0.92), true)
+	apply_rect(label, rect_full(0.12, 0.04, 0.94, 0.96))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_bg.modulate = Color(1, 1, 1, 0)
+	toast_bg.offset_top = -28.0
+	toast_container.add_child(toast_bg)
+	toast_container.visible = true
+	toast_current = toast_bg
+	# 动画：弹跳滑入 → 停留 → 下滑淡出
+	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
+	var stay_dur := float(duration_msec) / 1000.0
+	var fade_dur := 0.28
+	var tw := create_tween()
+	toast_tween = tw
+	# 入场 - 从上方弹出 + 缩放弹跳
+	tw.tween_property(toast_bg, "modulate:a", 1.0, slide_dur).from(0.0)
+	tw.parallel().tween_property(toast_bg, "offset_top", 0.0, slide_dur).from(-28.0).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(toast_bg, "scale", Vector2(1.0, 1.0), slide_dur).from(Vector2(0.90, 0.90)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(toast_bg, "modulate:a", 0.0, fade_dur).set_delay(stay_dur)
+	# 退出 - 下滑
+	tw.parallel().tween_property(toast_bg, "offset_top", 14.0, fade_dur).set_delay(stay_dur)
+	tw.tween_callback(Callable(self, "cleanup_toast_by_id").bind(toast_bg.get_instance_id(), toast_container.get_instance_id())).set_delay(stay_dur + fade_dur + 0.02)
+
+func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
+	queue_free_node_by_id(toast_id)
+	var container = node_from_instance_id(container_id) as Control
+	if container != null:
+		container.visible = false
+	if toast_current != null and is_instance_valid(toast_current) and toast_current.get_instance_id() == toast_id:
+		toast_current = null
+
+func toggle_ai_assist_setting() -> void:
+	ai_assist_enabled = not ai_assist_enabled
+	save_settings()
+	show_toast("出牌辅助已%s" % ("开启" if ai_assist_enabled else "关闭"))
+	refresh_current_screen()
+
+func toggle_fast_mode_setting() -> void:
+	fast_mode_enabled = not fast_mode_enabled
+	save_settings()
+	refresh_current_screen()
+
+func toggle_fx_setting() -> void:
+	fx_enabled = not fx_enabled
+	save_settings()
+	if not fx_enabled:
+		clear_fx_overlays()
+	refresh_current_screen()
+
+func graphics_quality_label(short: bool = false) -> String:
+	match graphics_quality:
+		Commercial3DStage.QUALITY_LOW:
+			return "省电" if short else "省电模式"
+		Commercial3DStage.QUALITY_STANDARD:
+			return "标准"
+		Commercial3DStage.QUALITY_HIGH:
+			return "精细"
+		_:
+			return "自动"
+
+func cycle_graphics_quality_setting() -> void:
+	graphics_quality += 1
+	if graphics_quality > Commercial3DStage.QUALITY_HIGH:
+		graphics_quality = Commercial3DStage.QUALITY_AUTO
+	save_settings()
+	show_toast("3D画质已切换为%s" % graphics_quality_label())
+	refresh_current_screen()
+
+func toggle_music_setting() -> void:
+	music_enabled = not music_enabled
+	apply_audio_settings()
+	save_settings()
+	refresh_current_screen()
+
+func toggle_settings_panel() -> void:
+	settings_panel_open = not settings_panel_open
+	reset_progress_confirming = false
+	refresh_current_screen()
+
+func toggle_sfx_setting() -> void:
+	sfx_enabled = not sfx_enabled
+	save_settings()
+	refresh_current_screen()
+
+func toggle_tts_setting() -> void:
+	tts_enabled = not tts_enabled
+	save_settings()
+	refresh_current_screen()
+
+func toggle_voice_chat() -> void:
+	if mode != "online_game" and mode != "online_lobby":
+		set_status("语音需要进入联机房间后使用。")
+		return
+	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+		set_status("语音需要先连接服务器。")
+		return
+	if voice_enabled:
+		stop_voice_chat(true)
+	else:
+		start_voice_chat()
+	render_game()
+
+func update_manifest_detail_text() -> String:
+	var parts: Array[String] = []
+	if update_remote_size > 0:
+		parts.append(format_bytes(update_remote_size))
+	if update_remote_sha256 != "":
+		parts.append("SHA-256 " + update_remote_sha256.substr(0, 12))
+	if parts.is_empty():
+		return ""
+	return "\n" + "  ".join(parts)

@@ -1,0 +1,1 @@
+Chinese guofeng UI plate, seamless soft mid-jade green lacquer panel, subtle gold thin border, porcelain texture, soft paper grain, no text, no logo, no watermark, flat orthographic front view, UI asset, soft even lighting, corners gently rounded, clean empty center for text

@@ -1,0 +1,1 @@
+Soft mahjong table river wash underlay, muted jade-green felt with faint gold dust, very soft vignette, no tiles, no text, no logo, seamless UI texture, top-down view, low contrast so tiles can sit on top

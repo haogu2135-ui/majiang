@@ -1,0 +1,370 @@
+func announce_online_game_audio(next_game: Dictionary) -> void:
+	var tile = str(next_game.get("lastDiscard", ""))
+	var seat = int(next_game.get("lastDiscardSeat", -1))
+	if tile == "" or seat < 0:
+		return
+	var next_key = online_discard_audio_key(next_game)
+	if next_key == "" or next_key == online_announced_discard_key:
+		return
+	if online_game.is_empty():
+		online_announced_discard_key = next_key
+		return
+	var identity = online_discard_identity(seat, tile)
+	if identity != "" and identity == online_pending_local_discard_identity:
+		online_pending_local_discard_identity = ""
+		online_announced_discard_key = next_key
+		return
+	online_announced_discard_key = next_key
+	play_sfx("discard", -1.0)
+	speak_tile_call(tile)
+
+func build_voice_payload(frames: PackedVector2Array) -> Dictionary:
+	var encoded = encode_voice_frames(frames)
+	if encoded.is_empty():
+		return {}
+	var payload = {
+		"type": "voiceMessage",
+		"format": "pcm16",
+		"sampleRate": int(AudioServer.get_mix_rate()),
+		"channels": 1,
+		"sequence": voice_sequence,
+		"audio": str(encoded.get("audio", "")),
+		"peak": float(encoded.get("peak", 0.0)),
+	}
+	voice_sequence += 1
+	voice_peak = float(encoded.get("peak", 0.0))
+	return payload
+
+func claim_sfx_key(claim: String) -> String:
+	match claim:
+		"peng":
+			return "peng"
+		"gang":
+			return "gang"
+		"hu":
+			return "win"
+		"chi":
+			return "peng"
+	return "discard"
+
+func connect_online() -> void:
+	tcp.disconnect_from_host()
+	tcp = StreamPeerTCP.new()
+	tcp_buffer = ""
+	next_online_poll_msec = 0
+	online_room.clear()
+	online_game.clear()
+	clear_online_feedback()
+	sent_hello = false
+	var err = tcp.connect_to_host(online_host_edit.text.strip_edges(), DEFAULT_PORT)
+	set_status("正在连接 %s:%d ..." % [online_host_edit.text.strip_edges(), DEFAULT_PORT])
+	if err != OK:
+		set_status("连接失败：%s" % error_string(err))
+
+func handle_online_ack(data: Dictionary) -> void:
+	var message = online_server_message_text(data, "")
+	if message == "":
+		message = "%s已确认" % (online_last_sent_action if online_last_sent_action != "" else "操作")
+	set_online_feedback("服务器确认：%s" % message, false)
+
+func handle_online_error(data: Dictionary) -> void:
+	var message = online_server_message_text(data, "操作被服务器拒绝")
+	set_online_feedback("服务器拒绝：%s" % message, false)
+
+func handle_online_log(data: Dictionary) -> void:
+	var message = online_server_message_text(data, "")
+	if message == "":
+		return
+	if typeof(online_room.get("logs", [])) != TYPE_ARRAY:
+		online_room["logs"] = []
+	var logs: Array = online_room.get("logs", [])
+	logs.append(message)
+	while logs.size() > 14:
+		logs.remove_at(0)
+	online_room["logs"] = logs
+	set_online_feedback(message, false)
+	render_room_log()
+
+func handle_online_message(line: String) -> void:
+	var data = JSON.parse_string(line)
+	if typeof(data) != TYPE_DICTIONARY:
+		set_status("服务器消息解析失败")
+		return
+	var kind = normalize_online_message_kind(data)
+	if kind == "welcome":
+		set_status("已连接：" + str(data.get("name", "")))
+	elif kind == "info":
+		set_online_feedback(online_server_message_text(data, "服务器提示"), false)
+	elif kind == "error":
+		handle_online_error(data)
+	elif kind == "ack":
+		handle_online_ack(data)
+	elif kind == "log":
+		handle_online_log(data)
+	elif kind == "roomState":
+		clear_online_feedback()
+		var room_value = data.get("room", data)
+		online_room = (room_value as Dictionary).duplicate(true) if typeof(room_value) == TYPE_DICTIONARY else {}
+		selected_room = str(first_present(online_room, ["code", "roomCode", "room_code"], ""))
+		if online_room_edit:
+			online_room_edit.text = selected_room
+		render_room_log()
+	elif kind == "gameState":
+		clear_online_feedback()
+		var next_game = normalize_online_game_state(data)
+		announce_online_game_audio(next_game)
+		online_game = next_game
+		mode = "online_game"
+		request_game_render()
+	elif kind == "voiceMessage":
+		handle_voice_message(data)
+	else:
+		var message = online_server_message_text(data, "")
+		if message != "":
+			set_online_feedback(message, false)
+
+func normalize_last_discard_seat(value, fallback: int) -> int:
+	if typeof(value) == TYPE_DICTIONARY:
+		return int(first_present(value, ["seat", "fromSeat", "discardSeat"], fallback))
+	return fallback
+
+func normalize_last_discard_tile(value) -> String:
+	if typeof(value) == TYPE_DICTIONARY:
+		return str(first_present(value, ["tile", "code", "id"], ""))
+	return str(value)
+
+func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary:
+	var meld: Array = []
+	var needed: Array = []
+	if typeof(value) == TYPE_DICTIONARY:
+		meld = normalize_tile_array(first_present(value, ["meld", "tiles", "cards"], []))
+		needed = normalize_tile_array(first_present(value, ["needed", "handTiles", "use"], []))
+	elif typeof(value) == TYPE_ARRAY:
+		meld = normalize_tile_array(value)
+	if meld.is_empty() and not needed.is_empty() and claimed_tile != "":
+		meld = needed.duplicate()
+		meld.append(claimed_tile)
+		sort_hand(meld)
+	if needed.is_empty() and not meld.is_empty() and claimed_tile != "":
+		needed = meld.duplicate()
+		needed.erase(claimed_tile)
+	if meld.size() < 3:
+		return {}
+	return {"meld": meld, "needed": needed}
+
+func normalize_online_chi_choices(value, claimed_tile: String = "") -> Array:
+	var choices: Array = []
+	if typeof(value) != TYPE_ARRAY:
+		return choices
+	for item in value:
+		var choice = normalize_online_chi_choice(item, claimed_tile)
+		if not choice.is_empty():
+			choices.append(choice)
+	return choices
+
+func normalize_online_game_state(message: Dictionary) -> Dictionary:
+	var source = message.get("game", message)
+	if typeof(source) != TYPE_DICTIONARY:
+		source = {}
+	var game: Dictionary = (source as Dictionary).duplicate(true)
+	game["roomCode"] = str(first_present(game, ["roomCode", "room_code", "code"], selected_room))
+	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
+	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
+	game["wallCount"] = int(first_present(game, ["wallCount", "wallRemaining", "remainingTiles"], game.get("wallCount", 0)))
+	game["phase"] = normalize_online_phase(str(first_present(game, ["phase", "state", "status"], "")))
+	game["hand"] = normalize_tile_array(first_present(game, ["hand", "tiles", "yourHand", "selfHand"], []))
+	var last_discard_value = first_present(game, ["lastDiscard", "discard", "lastTile"], "")
+	game["lastDiscard"] = normalize_last_discard_tile(last_discard_value)
+	game["lastDiscardSeat"] = normalize_last_discard_seat(last_discard_value, int(first_present(game, ["lastDiscardSeat", "discardSeat", "lastDiscarder", "fromSeat"], -1)))
+	game["players"] = normalize_online_players(first_present(game, ["players", "seats"], []))
+	game["pending"] = normalize_online_pending(first_present(game, ["pending", "pendingClaim", "claim"], {}), game)
+	if str(game.get("phase", "")) == "" and typeof(game.get("pending", null)) == TYPE_DICTIONARY and game["pending"].get("options", []).size() > 0:
+		game["phase"] = "pendingClaim"
+	return game
+
+func normalize_online_melds(value) -> Array:
+	var melds: Array = []
+	if typeof(value) != TYPE_ARRAY:
+		return melds
+	for meld in value:
+		if typeof(meld) == TYPE_ARRAY:
+			melds.append(normalize_tile_array(meld))
+		elif typeof(meld) == TYPE_DICTIONARY:
+			melds.append(normalize_tile_array(first_present(meld, ["tiles", "meld", "cards"], [])))
+	return melds
+
+func normalize_online_message_kind(data: Dictionary) -> String:
+	var raw = str(first_present(data, ["type", "event", "kind", "messageType"], "")).strip_edges()
+	var compact = raw.to_lower().replace("_", "").replace("-", "")
+	if compact == "message" and data.has("event"):
+		raw = str(data.get("event", ""))
+		compact = raw.to_lower().replace("_", "").replace("-", "")
+	match compact:
+		"welcome", "hello":
+			return "welcome"
+		"info", "notice", "status", "servermessage", "message":
+			return "info"
+		"error", "err", "reject", "rejected", "actionrejected", "invalidaction", "denied":
+			return "error"
+		"ack", "ok", "success", "accepted", "actionack", "actionaccepted":
+			return "ack"
+		"roomstate", "roomupdate", "lobbystate", "lobbyupdate", "room":
+			return "roomState"
+		"gamestate", "gameupdate", "gamesnapshot", "state", "snapshot", "game":
+			return "gameState"
+		"voicemessage", "voice", "voicepacket":
+			return "voiceMessage"
+		"log", "roomlog", "eventlog":
+			return "log"
+	if data.has("game") or data.has("hand") or data.has("yourHand") or data.has("selfHand"):
+		return "gameState"
+	if data.has("room") or (data.has("players") and data.has("roomCode")):
+		return "roomState"
+	return raw
+
+func normalize_online_pending(value, game: Dictionary) -> Dictionary:
+	var pending: Dictionary = {}
+	if typeof(value) == TYPE_DICTIONARY:
+		pending = (value as Dictionary).duplicate(true)
+	var options = normalize_claim_options(first_present(pending, ["options", "claims", "actions"], game.get("claimOptions", [])))
+	pending["options"] = options
+	pending["tile"] = normalize_last_discard_tile(first_present(pending, ["tile", "discard", "lastDiscard"], game.get("lastDiscard", "")))
+	pending["fromSeat"] = int(first_present(pending, ["fromSeat", "discardSeat", "lastDiscardSeat"], game.get("lastDiscardSeat", -1)))
+	pending["chi_choices"] = normalize_online_chi_choices(first_present(pending, ["chi_choices", "chiChoices", "choices", "chi"], game.get("chiChoices", [])), str(pending.get("tile", "")))
+	if pending["chi_choices"].size() > 0 and not options.has("chi"):
+		options.append("chi")
+	return pending
+
+func normalize_online_phase(value: String) -> String:
+	var phase = value.strip_edges()
+	var compact = phase.to_lower().replace("_", "").replace("-", "")
+	if compact == "awaitdiscard" or compact == "discard" or compact == "turn":
+		return "awaitDiscard"
+	if compact == "pendingclaim" or compact == "claim" or compact == "response":
+		return "pendingClaim"
+	if compact == "ended" or compact == "finished" or compact == "gameover":
+		return "ended"
+	if compact == "ready" or compact == "waiting":
+		return compact
+	return phase
+
+func normalize_online_players(value) -> Array:
+	var result: Array = []
+	if typeof(value) != TYPE_ARRAY:
+		return result
+	for item in value:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var player: Dictionary = (item as Dictionary).duplicate(true)
+		var hand_value = first_present(player, ["hand", "tiles"], [])
+		var normalized_hand = normalize_tile_array(hand_value)
+		player["seat"] = int(first_present(player, ["seat", "index", "position"], result.size()))
+		player["name"] = str(first_present(player, ["name", "nickname", "userName"], "玩家"))
+		player["handCount"] = numeric_count(first_present(player, ["handCount", "hand_count", "tileCount"], normalized_hand), normalized_hand.size())
+		player["flowerCount"] = numeric_count(first_present(player, ["flowerCount", "flowers", "flower_count"], 0), 0)
+		player["score"] = int(first_present(player, ["score", "points"], 0))
+		player["discards"] = normalize_tile_array(first_present(player, ["discards", "discarded", "river"], []))
+		player["melds"] = normalize_online_melds(first_present(player, ["melds", "openMelds", "sets"], []))
+		result.append(player)
+	return result
+
+func online_action_label(payload: Dictionary) -> String:
+	var kind = str(payload.get("type", "操作"))
+	if kind == "discard":
+		return "打出%s" % tile_label(str(payload.get("tile", "")))
+	if kind == "claim":
+		return claim_label(str(payload.get("claim", "操作")))
+	if kind == "createRoom":
+		return "创建房间"
+	if kind == "joinRoom":
+		return "加入房间"
+	if kind == "startGame":
+		return "开始游戏"
+	return "操作"
+
+func online_claim_payload(claim: String, choice: Dictionary = {}) -> Dictionary:
+	var payload: Dictionary = {"type": "claim", "claim": claim}
+	if not choice.is_empty():
+		var meld = normalize_tile_array(choice.get("meld", choice.get("tiles", [])))
+		var needed = normalize_tile_array(choice.get("needed", []))
+		payload["choice"] = choice
+		payload["meld"] = meld
+		payload["tiles"] = meld
+		payload["needed"] = needed
+	return payload
+
+func online_discard_audio_key(game: Dictionary) -> String:
+	var tile = str(game.get("lastDiscard", ""))
+	var seat = int(game.get("lastDiscardSeat", -1))
+	if tile == "" or seat < 0:
+		return ""
+	var discard_count = 0
+	for player in game.get("players", []):
+		if typeof(player) != TYPE_DICTIONARY:
+			continue
+		if int(player.get("seat", -1)) == seat:
+			var discards = player.get("discards", [])
+			if typeof(discards) == TYPE_ARRAY:
+				discard_count = discards.size()
+			break
+	return "%s:%d" % [online_discard_identity(seat, tile), discard_count]
+
+func online_discard_identity(seat: int, tile: String) -> String:
+	if seat < 0 or tile == "":
+		return ""
+	return "%d:%s" % [seat, tile]
+
+func online_feedback_accent() -> Color:
+	if online_waiting_for_server:
+		return Color(0.42, 0.64, 0.88)
+	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
+		return Color(0.86, 0.42, 0.34)
+	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
+		return Color(0.38, 0.76, 0.56)
+	return Color(0.78, 0.62, 0.34)
+
+func online_feedback_fallback_glyph() -> String:
+	if online_waiting_for_server:
+		return "..."
+	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
+		return "!"
+	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
+		return "✓"
+	return "i"
+
+func online_feedback_icon_name() -> String:
+	if online_waiting_for_server:
+		return "loader"
+	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
+		return "triangle-alert"
+	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
+		return "check"
+	return "message-circle"
+
+func online_server_message_text(data: Dictionary, fallback: String) -> String:
+	var value = first_present(data, ["message", "text", "detail", "reason", "error"], fallback)
+	var text = str(value).strip_edges()
+	return text if text != "" else fallback
+
+func send_online(payload: Dictionary) -> bool:
+	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+		set_status("请先连接服务器。")
+		return false
+	var text = JSON.stringify(payload) + "\n"
+	tcp.put_data(text.to_utf8_buffer())
+	return true
+
+func send_online_action(payload: Dictionary, label: String = "") -> void:
+	var action_label = label if label.strip_edges() != "" else online_action_label(payload)
+	if send_online(payload):
+		play_outgoing_online_action_audio(payload)
+		online_last_sent_action = action_label
+		online_last_sent_msec = Time.get_ticks_msec()
+		set_online_feedback("已发送%s，等待服务器确认。" % action_label, true)
+
+func set_online_feedback(text: String, waiting: bool = false) -> void:
+	online_feedback = text
+	online_waiting_for_server = waiting
+	if not waiting:
+		online_last_sent_msec = 0
+	set_status(text)

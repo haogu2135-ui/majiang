@@ -1,0 +1,1 @@
+Chinese guofeng horizontal UI ink strip, elongated soft mid-jade lacquer bar with thin gold rim, subtle cloud pattern very faint, no text, no logo, UI asset, flat front view, empty center, soft lighting

@@ -1,0 +1,12 @@
+Use case: stylized-concept
+Asset type: in-game UI overlay illustration for a Godot mahjong round settlement screen
+Primary request: Create a wide decorative score-flow bus background for a Chinese mahjong game settlement panel. It should visually suggest score payments flowing from three player nodes into one winning player node, but it must not include any readable text, numbers, letters, UI labels, watermarks, or logos.
+Scene/backdrop: Transparent-looking dark jade UI strip with layered ink wash, lacquered black-green panels, soft gold route lines, jade nodes, cinnabar payer accents, subtle silk texture, and faint paper grain. The image can have an opaque dark transparent-style backdrop; the game will composite it with low alpha.
+Subject: A horizontal settlement flow diagram: four circular player anchor nodes along the lower band, three thin payment trails converging into a highlighted winner gate, a small archive seal motif on the right, tiny rhythm ticks and sparks along the routes. Keep everything abstract and ornamental, no actual mahjong tiles.
+Style/medium: premium Chinese ink-and-lacquer game UI illustration, hand-painted but clean, commercial mobile game quality, sharp enough for UI scaling, not cartoonish.
+Composition/framing: 16:9 canvas, most visual energy in the lower third and middle-lower band, generous empty space above so code-drawn labels and nodes can sit over it. Leave clean margins around all edges. Avoid a central hero object.
+Lighting/mood: restrained warm gold glow on routes, jade green ambient shadows, cinnabar red accents for outgoing payments, calm ceremonial settlement mood.
+Color palette: deep ink black, muted jade green, antique gold, small cinnabar red accents, warm ivory highlights. Avoid bright neon, avoid purple-blue gradients, avoid beige-dominated background.
+Materials/textures: silk weave, faint rice paper grain, brushed gold foil, lacquer panel edges, soft ink diffusion.
+Constraints: output should work as a semi-transparent overlay at low opacity; no text; no numerals; no letters; no watermark; no logo; no characters; no faces; no real-world casino chips; no busy background; no hard rectangular card frame; no isolated icons that look clickable.
+Avoid: typography, English, Chinese characters, readable symbols, detailed mahjong tiles, clutter, photorealism, flat vector look, bokeh or decorative orbs, pure single-color palette.

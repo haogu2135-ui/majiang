@@ -1,0 +1,6 @@
+extends "res://scripts/main_base.gd"
+
+const UIEnhancements = preload("res://scripts/ui_enhancements.gd")
+const AnimationEffects = preload("res://scripts/animation_effects.gd")
+
+var ui_enhancements: UIEnhancements

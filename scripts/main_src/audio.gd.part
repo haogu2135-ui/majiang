@@ -1,0 +1,814 @@
+func setup_audio() -> void:
+	print("AudioSetup: Starting audio system initialization")
+	ensure_master_audio_bus()
+	ensure_audio_layer()
+
+	# v1.0.153: Android音频焦点请求
+	if OS.get_name() == "Android":
+		request_android_audio_focus()
+
+	if bgm_player == null or not is_instance_valid(bgm_player):
+		print("AudioSetup: Creating background music player")
+		bgm_player = AudioStreamPlayer.new()
+		bgm_player.name = "BackgroundMusic"
+		bgm_player.volume_db = BGM_VOLUME_DB
+		bgm_player.bus = "Master"
+		bgm_player.process_mode = Node.PROCESS_MODE_ALWAYS
+		attach_audio_node(bgm_player)
+		if not bgm_player.finished.is_connected(_on_background_music_finished):
+			bgm_player.finished.connect(_on_background_music_finished)
+		print("AudioSetup: BGM player created successfully")
+	else:
+		print("AudioSetup: BGM player already exists")
+	if sfx_player == null or not is_instance_valid(sfx_player):
+		print("AudioSetup: Creating SFX player")
+		sfx_player = AudioStreamPlayer.new()
+		sfx_player.name = "TileSfx"
+		sfx_player.volume_db = -1.0
+		sfx_player.bus = "Master"
+		sfx_player.process_mode = Node.PROCESS_MODE_ALWAYS
+		attach_audio_node(sfx_player)
+	if action_sfx_player == null or not is_instance_valid(action_sfx_player):
+		print("AudioSetup: Creating action SFX player")
+		action_sfx_player = AudioStreamPlayer.new()
+		action_sfx_player.name = "ActionSfx"
+		action_sfx_player.volume_db = -1.0
+		action_sfx_player.bus = "Master"
+		action_sfx_player.process_mode = Node.PROCESS_MODE_ALWAYS
+		attach_audio_node(action_sfx_player)
+	bgm_player.stream = audio_streams.get("bgm", null)
+	if bgm_player.stream != null:
+		print("AudioSetup: BGM stream loaded successfully")
+	else:
+		print("AudioSetup: WARNING - BGM stream is null")
+	configure_background_music_stream()
+	select_tts_voice()
+	apply_audio_settings()
+	print("AudioSetup: Audio system initialization complete")
+
+func _exit_tree() -> void:
+	shutdown_runtime()
+
+
+func shutdown_runtime() -> void:
+	if not runtime_shutdown_requested:
+		runtime_shutdown_requested = true
+		mode = "shutdown"
+		game_render_queued = false
+		offline_ai_active = false
+		var pending_timers := runtime_delay_timers.duplicate()
+		runtime_delay_timers.clear()
+		for timer in pending_timers:
+			if timer != null and is_instance_valid(timer):
+				timer.stop()
+				timer.timeout.emit()
+				if is_instance_valid(timer) and not timer.is_queued_for_deletion():
+					timer.queue_free()
+	shutdown_runtime_audio()
+
+
+func shutdown_runtime_audio() -> void:
+	shutdown_android_tts()
+	stop_current_speech()
+	speech_queue_generation += 1
+	speech_queue.clear()
+	if speech_delay_timer != null and is_instance_valid(speech_delay_timer):
+		speech_delay_timer.stop()
+		speech_delay_timer.timeout.emit()
+		if is_instance_valid(speech_delay_timer) and not speech_delay_timer.is_queued_for_deletion():
+			speech_delay_timer.queue_free()
+	speech_delay_timer = null
+	speech_queue_active = false
+	var players: Array[AudioStreamPlayer] = []
+	for candidate in [bgm_player, sfx_player, action_sfx_player, voice_mic_player]:
+		var player := candidate as AudioStreamPlayer
+		if player != null and is_instance_valid(player):
+			players.append(player)
+	if audio_layer != null and is_instance_valid(audio_layer):
+		for child in audio_layer.get_children():
+			var one_shot := child as AudioStreamPlayer
+			if one_shot != null and not players.has(one_shot):
+				players.append(one_shot)
+	for player in players:
+		player.stop()
+		player.stream = null
+	voice_capture_effect = null
+	audio_streams.clear()
+	voice_streams.clear()
+	bgm_player = null
+	sfx_player = null
+	action_sfx_player = null
+	voice_mic_player = null
+
+func apply_audio_settings() -> void:
+	if bgm_player == null or not is_instance_valid(bgm_player):
+		return
+	ensure_master_audio_bus()
+	configure_background_music_stream()
+	bgm_player.volume_db = BGM_VOLUME_DB
+	if music_enabled and audio_runtime_enabled() and bgm_player.stream != null:
+		if not bgm_player.playing:
+			bgm_player.play()
+	elif bgm_player.playing:
+		bgm_player.stop()
+
+func audio_runtime_enabled() -> bool:
+	return DisplayServer.get_name().to_lower() != "headless"
+
+func wake_audio_from_interaction() -> void:
+	if not audio_touch_unlocked:
+		# v1.0.150: 首次交互也改为异步，不阻塞UI
+		print("AudioWake: 首次用户交互，异步初始化音频系统")
+		audio_touch_unlocked = true
+		# 立即异步执行，不阻塞按钮响应
+		call_deferred("_wake_audio_first_time")
+	else:
+		# 后续交互：异步
+		call_deferred("_wake_audio_deferred")
+
+func _wake_audio_first_time() -> void:
+	print("AudioWake: 开始异步初始化")
+	ensure_master_audio_bus()
+	print("AudioWake: 主音频总线已确保")
+	warm_speech_backend()
+	print("AudioWake: TTS初始化完成")
+	if music_enabled:
+		print("AudioWake: 准备启动背景音乐")
+		start_background_music()
+	print("AudioWake: 首次初始化完成")
+
+func _wake_audio_deferred() -> void:
+	ensure_master_audio_bus()
+	warm_speech_backend()
+	if music_enabled:
+		start_background_music()
+
+func recover_audio_after_screen_change() -> void:
+	if not audio_runtime_enabled():
+		return
+	ensure_master_audio_bus()
+	warm_speech_backend()
+	if music_enabled:
+		call_deferred("start_background_music")
+
+func switch_bgm_track() -> void:
+	# v1.0.157: 切换到下一首BGM
+	current_bgm_index = (current_bgm_index + 1) % BGM_TRACKS.size()
+	var track = BGM_TRACKS[current_bgm_index]
+	print("BGM: 切换到", track["name"], " - ", track["path"])
+
+	# 停止当前BGM
+	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
+		bgm_player.stop()
+
+	# 加载新BGM
+	var new_stream = load(track["path"])
+	if new_stream == null:
+		print("BGM: 警告 - 无法加载", track["path"])
+		set_status("BGM文件不存在: " + track["name"])
+		return
+
+	audio_streams["bgm"] = new_stream
+
+	# 更新播放器
+	if bgm_player != null and is_instance_valid(bgm_player):
+		bgm_player.stream = new_stream
+		configure_background_music_stream()
+		if music_enabled:
+			bgm_player.play()
+			print("BGM: 开始播放", track["name"])
+			set_status("正在播放: " + track["name"])
+
+func start_background_music() -> void:
+	if not music_enabled or not audio_runtime_enabled():
+		print("BGM: 音乐已关闭或音频不可用")
+		return
+
+	# 确保播放器存在
+	if bgm_player == null or not is_instance_valid(bgm_player):
+		print("BGM: 播放器不存在，调用setup_audio")
+		setup_audio()
+		if bgm_player == null or not is_instance_valid(bgm_player):
+			print("BGM: ERROR - setup_audio后播放器仍然为null")
+			return
+
+	# 确保音频流已加载
+	if bgm_player.stream == null:
+		print("BGM: 音频流为null，尝试加载")
+		bgm_player.stream = audio_streams.get("bgm", null)
+		if bgm_player.stream == null:
+			print("BGM: ERROR - 音频流加载失败")
+			return
+		print("BGM: 音频流加载成功")
+
+	# 配置循环
+	configure_background_music_stream()
+
+	# 确保主音频总线开启
+	ensure_master_audio_bus()
+
+	# 如果已经在播放，不要重复播放
+	if bgm_player.playing:
+		print("BGM: 已经在播放中")
+		return
+
+	# v1.0.149: 使用AudioServer直接播放，绕过可能的播放阻止
+	print("BGM: 尝试方法1 - 标准play()")
+	bgm_player.stream_paused = false
+	bgm_player.volume_db = BGM_VOLUME_DB
+	bgm_player.play()
+
+	# 等待一帧验证
+	await get_tree().process_frame
+
+	if bgm_player.playing:
+		print("BGM: ✓ 方法1成功")
+		next_bgm_retry_msec = Time.get_ticks_msec() + 850
+		return
+
+	# 方法1失败，尝试方法2：从0位置开始
+	print("BGM: 尝试方法2 - play(0.0)")
+	bgm_player.play(0.0)
+	await get_tree().process_frame
+
+	if bgm_player.playing:
+		print("BGM: ✓ 方法2成功")
+		next_bgm_retry_msec = Time.get_ticks_msec() + 850
+		return
+
+	# 方法2失败，尝试方法3：重新加载stream
+	print("BGM: 尝试方法3 - 重新加载stream")
+	var stream_backup = bgm_player.stream
+	bgm_player.stream = null
+	await get_tree().process_frame
+	bgm_player.stream = stream_backup
+	configure_background_music_stream()
+	bgm_player.play()
+	await get_tree().process_frame
+
+	if bgm_player.playing:
+		print("BGM: ✓ 方法3成功")
+		next_bgm_retry_msec = Time.get_ticks_msec() + 850
+		return
+
+	# 方法3失败，尝试方法4：完全重建播放器
+	print("BGM: 尝试方法4 - 重建播放器")
+	if bgm_player.get_parent() != null:
+		bgm_player.get_parent().remove_child(bgm_player)
+	bgm_player.queue_free()
+	bgm_player = null
+	setup_audio()
+	if bgm_player != null and bgm_player.stream != null:
+		bgm_player.play()
+		await get_tree().process_frame
+		if bgm_player.playing:
+			print("BGM: ✓ 方法4成功")
+		else:
+			print("BGM: ✗ 所有方法都失败")
+
+	next_bgm_retry_msec = Time.get_ticks_msec() + 850
+
+func configure_background_music_stream() -> void:
+	if bgm_player == null or not is_instance_valid(bgm_player) or bgm_player.stream == null:
+		return
+	var bgm_mp3 = bgm_player.stream as AudioStreamMP3
+	if bgm_mp3 != null:
+		bgm_mp3.loop = true
+		return
+	var bgm_wav = bgm_player.stream as AudioStreamWAV
+	if bgm_wav != null:
+		bgm_wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+
+func keep_background_music_alive(now_msec: int = -1) -> void:
+	if not music_enabled or not audio_runtime_enabled():
+		return
+	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
+		return
+	var now = now_msec if now_msec >= 0 else Time.get_ticks_msec()
+	if now < next_bgm_retry_msec:
+		return
+	start_background_music()
+
+func check_audio_health(now_msec: int) -> void:
+	# 音频系统健康检查，用于检测和恢复音频问题
+	if not audio_touch_unlocked:
+		return  # 用户还未激活音频，跳过检查
+
+	# 检查背景音乐状态
+	if music_enabled and audio_runtime_enabled():
+		if bgm_player == null or not is_instance_valid(bgm_player):
+			print("AudioHealth: BGM player lost, recreating...")
+			setup_audio()
+			return
+
+		if bgm_player.stream == null:
+			print("AudioHealth: BGM stream lost, reloading...")
+			bgm_player.stream = audio_streams.get("bgm", null)
+			configure_background_music_stream()
+
+		# 如果音乐应该播放但没有播放，且已经很久没检查了
+		if not bgm_player.playing and (now_msec - last_bgm_health_check) > 10000:
+			last_bgm_health_check = now_msec
+			print("AudioHealth: BGM should be playing but isn't, attempting restart...")
+			# 强制重新初始化
+			ensure_master_audio_bus()
+			start_background_music()
+
+	# 检查音效播放器
+	if sfx_enabled and (sfx_player == null or not is_instance_valid(sfx_player)):
+		print("AudioHealth: SFX player lost, recreating...")
+		setup_audio()
+
+func _on_background_music_finished() -> void:
+	next_bgm_retry_msec = 0
+	start_background_music()
+
+func play_sfx(name: String, volume_db: float = -3.0) -> void:
+	if not sfx_enabled or not audio_runtime_enabled():
+		return
+	ensure_master_audio_bus()
+	if music_enabled and bgm_player != null and is_instance_valid(bgm_player) and not bgm_player.playing:
+		start_background_music()
+	var stream = audio_streams.get(name, null)
+	if stream == null:
+		return
+	var player = action_sfx_player if is_action_sfx(name) else sfx_player
+	if player == null or not is_instance_valid(player):
+		player = make_one_shot_sfx_player(stream, boosted_sfx_volume_db(volume_db))
+		player.play()
+	else:
+		play_stream_on_audio_player(player, stream, boosted_sfx_volume_db(volume_db))
+
+func is_action_sfx(name: String) -> bool:
+	return ["peng", "gang", "win"].has(name)
+
+func play_stream_on_audio_player(player: AudioStreamPlayer, stream: AudioStream, volume_db: float) -> void:
+	if player == null or stream == null:
+		return
+	if player.playing:
+		player.stop()
+	player.stream = stream
+	player.volume_db = volume_db
+	player.bus = "Master"
+	player.process_mode = Node.PROCESS_MODE_ALWAYS
+	attach_audio_node(player)
+	player.play()
+
+func boosted_sfx_volume_db(volume_db: float) -> float:
+	return clamp(volume_db + SFX_VOLUME_BOOST_DB, -10.0, 1.5)
+
+func make_one_shot_sfx_player(stream: AudioStream, volume_db: float) -> AudioStreamPlayer:
+	var player = AudioStreamPlayer.new()
+	player.name = "OneShotSfx"
+	player.stream = stream
+	player.volume_db = volume_db
+	player.bus = "Master"
+	player.process_mode = Node.PROCESS_MODE_ALWAYS
+	attach_audio_node(player)
+	# 捕获实例ID而非节点引用，避免 finished 信号释放后计时器再引用已释放对象
+	# （Godot 4 在调用捕获了已释放对象的 lambda 时会在绑定阶段直接报错）
+	var player_id := player.get_instance_id()
+	player.finished.connect(func() -> void:
+		var node := instance_from_id(player_id)
+		if node != null and is_instance_valid(node):
+			(node as Node).queue_free()
+	)
+	var cleanup_timer := Timer.new()
+	cleanup_timer.name = "OneShotSfxCleanupTimer"
+	cleanup_timer.one_shot = true
+	cleanup_timer.wait_time = 3.0
+	cleanup_timer.process_callback = Timer.TIMER_PROCESS_IDLE
+	player.add_child(cleanup_timer)
+	cleanup_timer.timeout.connect(func() -> void:
+		var node := instance_from_id(player_id)
+		if node != null and is_instance_valid(node):
+			(node as Node).queue_free()
+	)
+	cleanup_timer.start()
+	return player
+
+func select_tts_voice() -> void:
+	tts_voice_id = ""
+	if not display_tts_voice_probe_available():
+		return
+	if ClassDB.class_has_method("DisplayServer", "tts_get_voices_for_language"):
+		for language in ["zh", "zh_CN", "zh-CN", "cmn"]:
+			var zh_voices = DisplayServer.tts_get_voices_for_language(language)
+			if not zh_voices.is_empty():
+				tts_voice_id = tts_voice_identifier(zh_voices[0])
+				if tts_voice_id != "":
+					return
+	if not ClassDB.class_has_method("DisplayServer", "tts_get_voices"):
+		return
+	for voice in DisplayServer.tts_get_voices():
+		var voice_id = tts_voice_identifier(voice)
+		if typeof(voice) == TYPE_DICTIONARY:
+			var language = str(voice.get("language", "")).to_lower()
+			if voice_id != "" and (tts_voice_id == "" or language.begins_with("zh")):
+				tts_voice_id = voice_id
+				if language.begins_with("zh"):
+					return
+		elif tts_voice_id == "":
+			tts_voice_id = voice_id
+
+func tts_voice_identifier(voice) -> String:
+	if typeof(voice) == TYPE_DICTIONARY:
+		return str(voice.get("id", voice.get("name", "")))
+	return str(voice)
+
+func display_tts_runtime_available() -> bool:
+	if not display_tts_voice_probe_available():
+		return false
+	return ClassDB.class_has_method("DisplayServer", "tts_speak")
+
+func display_tts_voice_probe_available() -> bool:
+	if OS.get_name() == "Linux" and not OS.has_feature("android"):
+		return false
+	return true
+
+func warm_speech_backend() -> void:
+	if not tts_enabled or not audio_runtime_enabled():
+		return
+	if display_tts_runtime_available():
+		if tts_voice_id == "":
+			select_tts_voice()
+		return
+	setup_android_tts()
+
+func can_speak_text() -> bool:
+	if not tts_enabled or not audio_runtime_enabled():
+		return false
+	if display_tts_runtime_available():
+		return true
+	if android_tts_runtime_available():
+		setup_android_tts()
+		return true
+	return false
+
+func speech_backend_ready() -> bool:
+	if not tts_enabled or not audio_runtime_enabled():
+		return false
+	if display_tts_runtime_available():
+		return true
+	if android_tts_runtime_available():
+		setup_android_tts()
+		if android_tts != null:
+			configure_android_tts()
+			return Time.get_ticks_msec() - android_tts_started_msec >= ANDROID_TTS_WARMUP_MSEC
+		if android_tts_requested and android_tts_requested_msec > 0:
+			if Time.get_ticks_msec() - android_tts_requested_msec < ANDROID_TTS_FALLBACK_MSEC:
+				return false
+		return display_tts_runtime_available()
+	return display_tts_runtime_available()
+
+func speak_text(text: String, interrupt: bool = false) -> bool:
+	if text.strip_edges() == "" or not can_speak_text():
+		return false
+	if speak_text_display(text, interrupt):
+		return true
+	if speak_text_android(text, interrupt):
+		return true
+	return false
+
+func speak_text_display(text: String, interrupt: bool = false) -> bool:
+	if not display_tts_runtime_available():
+		return false
+	if tts_voice_id == "":
+		select_tts_voice()
+	ensure_master_audio_bus()
+	if interrupt and ClassDB.class_has_method("DisplayServer", "tts_stop"):
+		DisplayServer.tts_stop()
+	var utterance_id = next_tts_utterance_id()
+	DisplayServer.tts_speak(text, tts_voice_id, 100, 1.0, 1.03, utterance_id, interrupt)
+	return true
+
+func request_android_audio_focus() -> void:
+	# v1.0.154: 请求Android音频焦点，针对小米MIUI优化
+	if not OS.get_name() == "Android":
+		return
+
+	print("AudioFocus: 请求Android音频焦点（小米MIUI优化）")
+
+	# 强制设置AudioServer为最大音量
+	var master_idx = AudioServer.get_bus_index("Master")
+	if master_idx >= 0:
+		AudioServer.set_bus_volume_db(master_idx, 0.0)
+		AudioServer.set_bus_mute(master_idx, false)
+		print("AudioFocus: Master总线音量=0dB，未静音")
+
+	# 小米专属：强制启用所有音频效果
+	var bus_count = AudioServer.get_bus_count()
+	for i in range(bus_count):
+		AudioServer.set_bus_mute(i, false)
+		print("AudioFocus: 总线", i, AudioServer.get_bus_name(i), "已解除静音")
+
+func play_test_tone_440hz() -> void:
+	# v1.0.155: 播放440Hz测试音，验证AudioStreamGenerator是否能工作
+	print("TestTone: 创建440Hz测试音播放器")
+
+	var generator = AudioStreamGenerator.new()
+	generator.mix_rate = 44100.0
+	generator.buffer_length = 0.1
+
+	var tone_player = AudioStreamPlayer.new()
+	tone_player.name = "TestTonePlayer"
+	tone_player.stream = generator
+	tone_player.volume_db = 0.0
+	tone_player.bus = "Master"
+	tone_player.process_mode = Node.PROCESS_MODE_ALWAYS
+
+	ensure_audio_layer()
+	if audio_layer != null and is_instance_valid(audio_layer):
+		audio_layer.add_child(tone_player)
+	else:
+		add_child(tone_player)
+
+	tone_player.play()
+	print("TestTone: 开始播放440Hz音调")
+
+	var playback = tone_player.get_stream_playback() as AudioStreamGeneratorPlayback
+	if playback == null:
+		print("TestTone: ERROR - 无法获取AudioStreamGeneratorPlayback")
+		tone_player.queue_free()
+		return
+
+	# 生成1秒的440Hz正弦波
+	var frequency = 440.0
+	var sample_rate = 44100.0
+	var samples_to_generate = int(sample_rate * 1.0)  # 1秒
+	var phase = 0.0
+
+	for i in range(samples_to_generate):
+		var sample = sin(phase * TAU)
+		playback.push_frame(Vector2(sample, sample))
+		phase = fmod(phase + frequency / sample_rate, 1.0)
+
+		# 每1000个样本让出一帧，避免阻塞
+		if i % 1000 == 0:
+			await get_tree().process_frame
+
+	print("TestTone: 440Hz音调生成完成")
+
+	# 等待播放完成后清理
+	await get_tree().create_timer(1.2).timeout
+	tone_player.stop()
+	tone_player.queue_free()
+	print("TestTone: 测试音播放器已清理")
+
+func android_tts_runtime_available() -> bool:
+	return OS.get_name() == "Android" and Engine.has_singleton("AndroidRuntime") and Engine.has_singleton("JavaClassWrapper")
+
+func setup_android_tts() -> void:
+	if not android_tts_runtime_available() or android_tts != null:
+		return
+	var now = Time.get_ticks_msec()
+	if android_tts_requested:
+		if android_tts_requested_msec > 0 and now - android_tts_requested_msec < ANDROID_TTS_FALLBACK_MSEC:
+			return
+		android_tts_requested = false
+		android_tts_requested_msec = 0
+	if android_tts_retry_after_msec > 0 and now < android_tts_retry_after_msec:
+		return
+	android_tts_requested = true
+	android_tts_requested_msec = now
+	var android_runtime = Engine.get_singleton("AndroidRuntime")
+	var activity = android_runtime.getActivity()
+	if activity == null:
+		android_tts_requested = false
+		android_tts_requested_msec = 0
+		android_tts_retry_after_msec = now + ANDROID_TTS_RETRY_MSEC
+		return
+	var create_tts = func() -> void:
+		var TextToSpeech = JavaClassWrapper.wrap("android.speech.tts.TextToSpeech")
+		var created_tts = TextToSpeech.TextToSpeech(activity, null)
+		var exception = JavaClassWrapper.get_exception()
+		if exception != null or created_tts == null:
+			android_tts = null
+			android_tts_requested = false
+			android_tts_requested_msec = 0
+			android_tts_retry_after_msec = Time.get_ticks_msec() + ANDROID_TTS_RETRY_MSEC
+			return
+		android_tts = created_tts
+		android_tts_started_msec = Time.get_ticks_msec()
+		android_tts_retry_after_msec = 0
+		android_tts_language_configured = false
+	if activity.has_java_method("runOnUiThread"):
+		activity.runOnUiThread(android_runtime.createRunnableFromGodotCallable(create_tts))
+	else:
+		create_tts.call()
+
+func configure_android_tts() -> void:
+	if android_tts == null or android_tts_language_configured:
+		return
+	if Time.get_ticks_msec() - android_tts_started_msec < ANDROID_TTS_WARMUP_MSEC:
+		return
+	var Locale = JavaClassWrapper.wrap("java.util.Locale")
+	var result = android_tts.setLanguage(Locale.CHINA)
+	if int(result) == -1 or int(result) == -2:
+		android_tts.setLanguage(Locale.CHINESE)
+	var exception = JavaClassWrapper.get_exception()
+	if exception != null:
+		android_tts_language_configured = false
+		android_tts_retry_after_msec = Time.get_ticks_msec() + ANDROID_TTS_RETRY_MSEC
+		return
+	android_tts.setSpeechRate(1.08)
+	android_tts.setPitch(1.02)
+	android_tts_language_configured = true
+
+func speak_text_android(text: String, interrupt: bool = false) -> bool:
+	if not android_tts_runtime_available():
+		return false
+	setup_android_tts()
+	if android_tts == null:
+		return false
+	configure_android_tts()
+	if Time.get_ticks_msec() - android_tts_started_msec < ANDROID_TTS_WARMUP_MSEC:
+		return false
+	var queue_mode = 0 if interrupt else 1
+	var utterance_id = "mahjong-%d" % next_tts_utterance_id()
+	var result = android_tts.speak(text, queue_mode, make_android_tts_params(), utterance_id)
+	var exception = JavaClassWrapper.get_exception()
+	if exception != null:
+		android_tts = null
+		android_tts_requested = false
+		android_tts_requested_msec = 0
+		android_tts_language_configured = false
+		android_tts_retry_after_msec = Time.get_ticks_msec() + ANDROID_TTS_RETRY_MSEC
+		return false
+	return int(result) == 0
+
+func make_android_tts_params():
+	var Bundle = JavaClassWrapper.wrap("android.os.Bundle")
+	var wrap_exception = JavaClassWrapper.get_exception()
+	if wrap_exception != null or Bundle == null:
+		return null
+	var params = Bundle.Bundle()
+	var exception = JavaClassWrapper.get_exception()
+	if exception != null:
+		return null
+	return params
+
+func next_tts_utterance_id() -> int:
+	var utterance_id = tts_utterance_id
+	tts_utterance_id += 1
+	if tts_utterance_id > 1000000000:
+		tts_utterance_id = 1
+	return utterance_id
+
+func shutdown_android_tts() -> void:
+	if android_tts == null:
+		return
+	if android_tts.has_java_method("stop"):
+		android_tts.stop()
+	if android_tts.has_java_method("shutdown"):
+		android_tts.shutdown()
+	android_tts = null
+	android_tts_requested = false
+	android_tts_requested_msec = 0
+	android_tts_retry_after_msec = 0
+	android_tts_language_configured = false
+
+func stop_current_speech() -> void:
+	if android_tts != null and android_tts.has_java_method("stop"):
+		android_tts.stop()
+	if ClassDB.class_has_method("DisplayServer", "tts_stop") and audio_runtime_enabled():
+		DisplayServer.tts_stop()
+
+func speak_text_delayed(text: String, delay_seconds: float = 0.0, interrupt: bool = false) -> void:
+	if text.strip_edges() == "":
+		return
+	if not tts_enabled:
+		return
+	if interrupt:
+		speech_queue.clear()
+		speech_queue_generation += 1
+		stop_current_speech()
+	speech_queue.append({
+		"text": text,
+		"delay": max(0.0, delay_seconds),
+		"interrupt": interrupt,
+		"generation": speech_queue_generation,
+		"attempts": 0,
+		"queued_msec": Time.get_ticks_msec(),
+	})
+	if not speech_queue_active:
+		call_deferred("drain_speech_queue")
+
+func speak_voice_clips_delayed(clips: Array, delay_seconds: float = 0.0, interrupt: bool = false) -> bool:
+	if clips.is_empty() or not tts_enabled:
+		return false
+	var normalized: Array[String] = []
+	for clip in clips:
+		var key = str(clip)
+		if key == "" or voice_streams.get(key, null) == null:
+			return false
+		normalized.append(key)
+	if interrupt:
+		speech_queue.clear()
+		speech_queue_generation += 1
+		stop_current_speech()
+	speech_queue.append({
+		"clips": normalized,
+		"delay": max(0.0, delay_seconds),
+		"interrupt": interrupt,
+		"generation": speech_queue_generation,
+		"queued_msec": Time.get_ticks_msec(),
+	})
+	if not speech_queue_active:
+		call_deferred("drain_speech_queue")
+	return true
+
+
+func wait_for_speech_delay(delay_seconds: float) -> void:
+	if delay_seconds <= 0.0:
+		return
+	if speech_delay_timer == null or not is_instance_valid(speech_delay_timer):
+		speech_delay_timer = Timer.new()
+		speech_delay_timer.name = "SpeechQueueDelayTimer"
+		speech_delay_timer.one_shot = true
+		speech_delay_timer.process_callback = Timer.TIMER_PROCESS_IDLE
+		attach_audio_node(speech_delay_timer)
+	speech_delay_timer.stop()
+	speech_delay_timer.wait_time = maxf(0.001, delay_seconds)
+	speech_delay_timer.start()
+	await speech_delay_timer.timeout
+
+
+func drain_speech_queue() -> void:
+	if speech_queue_active:
+		return
+	speech_queue_active = true
+	while not speech_queue.is_empty():
+		var next_item: Dictionary = speech_queue[0]
+		if next_item.has("clips"):
+			var clip_item: Dictionary = speech_queue.pop_front()
+			var clip_generation = int(clip_item.get("generation", speech_queue_generation))
+			var clip_delay = float(clip_item.get("delay", 0.0))
+			if clip_delay > 0.0:
+				await wait_for_speech_delay(clip_delay)
+			if clip_generation != speech_queue_generation:
+				continue
+			var clips: Array = clip_item.get("clips", [])
+			for clip in clips:
+				if clip_generation != speech_queue_generation:
+					break
+				play_voice_clip(str(clip))
+				await wait_for_speech_delay(SPEECH_CLIP_GAP_SECONDS)
+			if clip_generation == speech_queue_generation and SPEECH_CLIP_TAIL_SECONDS > 0.0:
+				await wait_for_speech_delay(SPEECH_CLIP_TAIL_SECONDS)
+			continue
+		if not speech_backend_ready():
+			var queued_msec = int(speech_queue[0].get("queued_msec", Time.get_ticks_msec()))
+			if Time.get_ticks_msec() - queued_msec < SPEECH_MAX_READY_WAIT_MSEC and can_speak_text():
+				await wait_for_speech_delay(SPEECH_READY_RETRY_SECONDS)
+				continue
+			speech_queue.pop_front()
+			continue
+		var item: Dictionary = speech_queue.pop_front()
+		var generation = int(item.get("generation", speech_queue_generation))
+		var delay = float(item.get("delay", 0.0))
+		if delay > 0.0:
+			await wait_for_speech_delay(delay)
+		if generation != speech_queue_generation:
+			continue
+		var spoken = speak_text(str(item.get("text", "")), bool(item.get("interrupt", false)))
+		if spoken:
+			await wait_for_speech_delay(0.34)
+		else:
+			var attempts = int(item.get("attempts", 0))
+			if attempts < 2 and can_speak_text():
+				item["attempts"] = attempts + 1
+				speech_queue.push_front(item)
+				await wait_for_speech_delay(SPEECH_READY_RETRY_SECONDS)
+	speech_queue_active = false
+
+func play_voice_clip(key: String) -> bool:
+	if key == "" or not tts_enabled or not audio_runtime_enabled():
+		return false
+	var stream = voice_streams.get(key, null)
+	if stream == null:
+		return false
+	ensure_master_audio_bus()
+	if music_enabled and bgm_player != null and is_instance_valid(bgm_player) and not bgm_player.playing:
+		start_background_music()
+	var player = make_one_shot_sfx_player(stream, VOICE_VOLUME_DB)
+	player.play()
+	return true
+
+func speak_tile_call(tile: String) -> void:
+	if speak_voice_clips_delayed([voice_clip_key_for_tile(tile)], SPEECH_TILE_DELAY_SECONDS, false):
+		return
+	speak_text_delayed(tile_speech_label(tile), SPEECH_TILE_DELAY_SECONDS, false)
+
+func speak_action_call(action: String, tile: String) -> void:
+	var clips: Array[String] = []
+	var action_key = voice_clip_key_for_action(action)
+	if action_key != "":
+		clips.append(action_key)
+	var tile_key = voice_clip_key_for_tile(tile)
+	if tile_key != "":
+		clips.append(tile_key)
+	if not clips.is_empty() and speak_voice_clips_delayed(clips, SPEECH_ACTION_DELAY_SECONDS, true):
+		return
+	var suffix = tile_speech_label(tile)
+	speak_text_delayed(action + suffix if suffix != "" else action, SPEECH_ACTION_DELAY_SECONDS, true)

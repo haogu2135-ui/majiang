@@ -1,0 +1,50 @@
+[
+  {
+    "name": "ui_river_soft_wash_warm_v2",
+    "ok": false,
+    "error": "HTTP Error 502: Bad Gateway",
+    "promote": "assets/illustrations/ui_river_soft_wash.png"
+  },
+  {
+    "name": "ui_meld_pad_warm_v1",
+    "ok": false,
+    "error": "HTTP Error 502: Bad Gateway",
+    "promote": "assets/illustrations/ui_meld_pad.png"
+  },
+  {
+    "name": "ui_progress_signal_strip_v1",
+    "ok": false,
+    "error": "HTTP Error 503: Service Unavailable",
+    "promote": "assets/illustrations/ui_progress_signal_strip.png"
+  },
+  {
+    "name": "ui_meter_rail_plate_v1",
+    "ok": false,
+    "error": "HTTP Error 503: Service Unavailable",
+    "promote": "assets/illustrations/ui_meter_rail_plate.png"
+  },
+  {
+    "name": "ui_action_role_rail_v1",
+    "ok": false,
+    "error": "HTTP Error 503: Service Unavailable",
+    "promote": "assets/illustrations/ui_action_role_rail.png"
+  },
+  {
+    "name": "ui_toast_banner_plate_v2",
+    "ok": false,
+    "error": "HTTP Error 503: Service Unavailable",
+    "promote": "assets/illustrations/toast_gpt_banner.png"
+  },
+  {
+    "name": "ui_seat_info_plate_v1",
+    "ok": false,
+    "error": "HTTP Error 503: Service Unavailable",
+    "promote": "assets/illustrations/ui_seat_info_plate.png"
+  },
+  {
+    "name": "ui_hand_tray_state_chip_v1",
+    "ok": false,
+    "error": "HTTP Error 503: Service Unavailable",
+    "promote": "assets/illustrations/ui_hand_tray_state_chip.png"
+  }
+]

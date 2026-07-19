@@ -1,0 +1,10 @@
+{
+  "sub2api": "http://127.0.0.1:8080/v1",
+  "group_id": 2,
+  "group_name": "私人",
+  "allow_image_generation": true,
+  "allow_batch_image_generation": true,
+  "probe_image": "garden-gpt-image-2/image/candidates/connectivity_probe/sub2api_enabled_gpt-image-2.png",
+  "probe_result": "ok",
+  "size": "1254x1254"
+}

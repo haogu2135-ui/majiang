@@ -1,0 +1,53 @@
+{
+  "base_url": "https://img.regenin.online",
+  "model": "GPT Image 2.0",
+  "ratio": "1:1",
+  "resolution": "2K",
+  "prompt": "Commercial cream porcelain Chinese mahjong tile face with red Zhong character, soft jade felt background, studio product lighting, clean game asset, centered, high detail\n\nNo watermark, no logo, no caption text, no website URL.",
+  "answer": "![](https://cdn.oreateai.com/gpt-image/1783843400623255885_132907539_0.png)",
+  "urls": [
+    "https://cdn.oreateai.com/gpt-image/1783843400623255885_132907539_0.png"
+  ],
+  "raw_size": [
+    1024,
+    1024
+  ],
+  "final_size": [
+    1024,
+    1024
+  ],
+  "watermark_boxes": [
+    {
+      "name": "br",
+      "box": [
+        563,
+        901,
+        1024,
+        1024
+      ],
+      "score": 2.48
+    },
+    {
+      "name": "bc",
+      "box": [
+        184,
+        901,
+        839,
+        1024
+      ],
+      "score": 2.185
+    },
+    {
+      "name": "bl",
+      "box": [
+        0,
+        901,
+        460,
+        1024
+      ],
+      "score": 2.118
+    }
+  ],
+  "saved": "/root/yunzhuo-mahjong-godot/garden-gpt-image-2/image/candidates/regenin/mahjong_zhong_regenin_2k.png",
+  "elapsed_s": 58.93
+}
