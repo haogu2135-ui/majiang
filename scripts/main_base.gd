@@ -1224,6 +1224,92 @@ func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border:
 	parent.add_child(panel)
 	return panel
 
+
+func tint_panel_gpt_plate(panel: Control, color: Color, plate_key: String = "") -> void:
+	# Re-tint existing GptPanelPlate (or attach one) without StyleBox paint.
+	if panel == null or not is_instance_valid(panel):
+		return
+	if panel is Panel:
+		var fill_probe = soften_panel_color(color)
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(fill_probe.r, fill_probe.g, fill_probe.b, 0.0)
+		box.set_corner_radius_all(8)
+		box.set_border_width_all(0)
+		box.border_color = Color(0, 0, 0, 0)
+		box.shadow_size = 0
+		(panel as Panel).add_theme_stylebox_override("panel", box)
+	var tex = panel.get_node_or_null("GptPanelPlate") as TextureRect
+	if tex == null:
+		var key := plate_key if plate_key != "" else "ui_hand_tray_state_chip"
+		var texture: Texture2D = optional_gpt_illustration_texture(key)
+		if texture == null:
+			texture = optional_gpt_illustration_texture("ui_hand_tray_state_chip")
+		if texture == null:
+			texture = optional_gpt_illustration_texture("ui_button_face_plate")
+		if texture == null:
+			texture = optional_gpt_illustration_texture("ui_title_backplate")
+		if texture == null:
+			return
+		tex = TextureRect.new()
+		tex.name = "GptPanelPlate"
+		tex.texture = texture
+		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex.stretch_mode = TextureRect.STRETCH_SCALE
+		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		panel.add_child(tex)
+		panel.move_child(tex, 0)
+	var fill_color = soften_panel_color(color)
+	var tint_a = clampf(fill_color.a if fill_color.a > 0.001 else 0.40, 0.08, 1.0)
+	tex.modulate = Color(
+		clampf(0.42 + fill_color.r * 0.70, 0.16, 1.25),
+		clampf(0.42 + fill_color.g * 0.70, 0.16, 1.25),
+		clampf(0.42 + fill_color.b * 0.70, 0.16, 1.25),
+		tint_a
+	)
+
+
+
+func ensure_fx_ring_gpt_plate(ring: Control, color: Color, alpha: float = 0.40) -> void:
+	# FX expanding rings: empty StyleBox host + GPT soft-flash plate (no border paint).
+	if ring == null or not is_instance_valid(ring):
+		return
+	if ring is Panel:
+		(ring as Panel).add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	var tex = ring.get_node_or_null("GptPanelPlate") as TextureRect
+	if tex == null:
+		var texture: Texture2D = optional_gpt_illustration_texture("ui_soft_flash")
+		if texture == null:
+			texture = optional_gpt_illustration_texture("ui_hand_tray_state_chip")
+		if texture == null:
+			return
+		tex = TextureRect.new()
+		tex.name = "GptPanelPlate"
+		tex.texture = texture
+		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex.stretch_mode = TextureRect.STRETCH_SCALE
+		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		ring.add_child(tex)
+		ring.move_child(tex, 0)
+	var a = clampf(alpha, 0.05, 1.0)
+	tex.modulate = Color(
+		clampf(0.45 + color.r * 0.70, 0.18, 1.25),
+		clampf(0.45 + color.g * 0.70, 0.18, 1.25),
+		clampf(0.45 + color.b * 0.70, 0.18, 1.25),
+		a
+	)
+
+
+
+func make_gpt_spark(size: Vector2, color: Color, plate_key: String = "ui_soft_flash") -> Control:
+	# Tiny GPT soft-flash particle host (no StyleBoxFlat paint).
+	var spark = make_gpt_plate_rect(Rect2(Vector2.ZERO, size), color, plate_key)
+	spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spark.custom_minimum_size = size
+	return spark
+
+
 func configure_passive_container(container: Control) -> void:
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -1317,18 +1403,22 @@ func draw_top_hud_button_art(button: Button, text: String, color: Color) -> Cont
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(art)
-	var icon_back = make_color_rect(rect_full(0.180, 0.170, 0.820, 0.830), Color(0.18, 0.13, 0.08, 0.20))
+	# r180: GPT accents with smoke-stable names/geometry (IconBack/Rail/Seal).
+	var icon_back = add_optional_gpt_illustration_texture(art, "ui_button_face_plate", rect_full(0.180, 0.170, 0.820, 0.830), 0.42, false)
+	if icon_back == null:
+		icon_back = make_gpt_plate_rect(rect_full(0.180, 0.170, 0.820, 0.830), Color(0.18, 0.13, 0.08, 0.20), "ui_button_face_plate")
+		art.add_child(icon_back)
 	icon_back.name = "TopHudButtonIconBack_%s" % text
-	art.add_child(icon_back)
-	var rail = make_color_rect(rect_full(0.285, 0.815, 0.715, 0.845), Color(0.72, 0.50, 0.22, 0.075))
+	var rail = add_optional_gpt_illustration_texture(art, "ui_meter_rail_plate", rect_full(0.285, 0.815, 0.715, 0.845), 0.36, false)
+	if rail == null:
+		rail = make_gpt_plate_rect(rect_full(0.285, 0.815, 0.715, 0.845), Color(0.72, 0.50, 0.22, 0.18), "ui_meter_rail_plate")
+		art.add_child(rail)
 	rail.name = "TopHudButtonRail_%s" % text
-	art.add_child(rail)
-	var fill = make_color_rect(rect_full(0.120, 0.300, 0.560, 0.700), Color(0.92, 0.72, 0.36, 0.060))
-	fill.name = "TopHudButtonRailFill_%s" % text
-	rail.add_child(fill)
-	var seal = make_color_rect(rect_full(0.735, 0.305, 0.790, 0.695), Color(0.62, 0.18, 0.12, 0.085))
+	var seal = add_optional_gpt_illustration_texture(art, "ui_hand_tray_state_chip", rect_full(0.735, 0.305, 0.790, 0.695), 0.40, false)
+	if seal == null:
+		seal = make_gpt_plate_rect(rect_full(0.735, 0.305, 0.790, 0.695), Color(0.62, 0.18, 0.12, 0.20), "ui_hand_tray_state_chip")
+		art.add_child(seal)
 	seal.name = "TopHudButtonSeal_%s" % text
-	art.add_child(seal)
 	return art
 
 func play_top_hud_button_press_feedback(button: Button, text: String, color: Color) -> void:
@@ -1520,26 +1610,32 @@ func icon_name_for_button_text(text: String) -> String:
 	return ""
 
 func button_style_set(color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> Dictionary:
+	# Cache still returns StyleBoxFlat hosts, but alpha=0 — GPT button face paints the chrome.
 	var key = button_style_set_cache_key(color, radius, border_width, shadow_size)
 	if button_style_set_cache.has(key):
 		return button_style_set_cache[key]
 	var fill = soften_button_color(color)
 	var cached_set = {
-		"normal": style(fill, radius, fill.lightened(0.16).blend(GOLD_DARK), border_width, shadow_size),
-		"hover": style(fill.lightened(0.06), radius, fill.lightened(0.24).blend(GOLD_PRIMARY), border_width, shadow_size + 1),
-		"pressed": style(fill.darkened(0.08), radius, fill.lightened(0.10).blend(GOLD_DARK), border_width, max(0, shadow_size - 1)),
+		"normal": style(Color(fill.r, fill.g, fill.b, 0.0), radius, Color(0, 0, 0, 0.0), 0, 0),
+		"hover": style(Color(fill.r, fill.g, fill.b, 0.0), radius, Color(0, 0, 0, 0.0), 0, 0),
+		"pressed": style(Color(fill.r, fill.g, fill.b, 0.0), radius, Color(0, 0, 0, 0.0), 0, 0),
 	}
 	store_button_style_set_cache(key, cached_set)
 	return cached_set
 
 func input_style_set() -> Dictionary:
+	# r180: transparent StyleBoxFlat hosts (no extra content margins that inflate LineEdit min size).
+	# GPT ui_online_form_field paints the field face.
 	var key = "default"
 	if input_style_set_cache.has(key):
 		return input_style_set_cache[key]
+	var normal = style(Color(0.120, 0.134, 0.112, 0.0), 10, Color(0.62, 0.54, 0.34, 0.0), 0, 0)
+	var focus = style(Color(0.145, 0.160, 0.130, 0.0), 10, Color(0.82, 0.68, 0.34, 0.0), 0, 0)
+	var read_only = style(Color(0.092, 0.104, 0.090, 0.0), 10, Color(0.40, 0.36, 0.24, 0.0), 0, 0)
 	var cached_set = {
-		"normal": style(Color(0.120, 0.134, 0.112, 0.90), 10, Color(0.62, 0.54, 0.34, 0.24), 1, 0),
-		"focus": style(Color(0.145, 0.160, 0.130, 0.94), 10, Color(0.82, 0.68, 0.34, 0.52), 1, 0),
-		"read_only": style(Color(0.092, 0.104, 0.090, 0.88), 10, Color(0.40, 0.36, 0.24, 0.18), 1, 0),
+		"normal": normal,
+		"focus": focus,
+		"read_only": read_only,
 	}
 	store_input_style_set_cache(key, cached_set)
 	return cached_set

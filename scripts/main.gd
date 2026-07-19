@@ -4986,10 +4986,20 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	if role_rail != null:
 		role_rail.name = "ActionButtonRoleRail"
 		role_rail.modulate = Color(color.r, color.g, color.b, rail_alpha)
-	var panel_alpha = 0.014 if compact_claim_mode and role == "pass" else (0.024 if compact_claim_mode else (0.220 if role == "pass" else 0.320))
-	var panel_plate = add_optional_gpt_illustration_texture(button, "action_button_panel", rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
+	# Smoke requires compact claim panel plate modulate.a <= 0.025; normal modes use denser GPT face.
+	var panel_alpha = 0.014 if compact_claim_mode and role == "pass" else (0.022 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
+	var panel_key := "action_button_panel" if compact_claim_mode else "ui_button_face_plate"
+	var panel_plate = add_optional_gpt_illustration_texture(button, panel_key, rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
+	if panel_plate == null:
+		panel_plate = add_optional_gpt_illustration_texture(button, "action_button_panel", rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate != null:
 		panel_plate.name = "ActionButtonPanelPlate"
+		panel_plate.modulate = Color(
+			clampf(0.40 + color.r * 0.60, 0.20, 1.2),
+			clampf(0.40 + color.g * 0.60, 0.20, 1.2),
+			clampf(0.40 + color.b * 0.60, 0.20, 1.2),
+			panel_alpha
+		)
 		button.move_child(panel_plate, 0)
 	if action_button_should_pulse(role):
 		var pulse_strength = action_button_pulse_strength(role)
@@ -7849,7 +7859,13 @@ func draw_game_top_hud(parent: Control) -> void:
 	draw_top_hud_wall_meter(hud, wall_rect)
 	var wall = make_label(hud, top_hud_wall_text(), 11, Color(0.90, 0.88, 0.74), true)
 	wall.name = "TopHudWallText"
-	wall.add_theme_stylebox_override("normal", style(Color(0.086, 0.076, 0.054, 0.62), 8, Color(0.58, 0.45, 0.24, 0.16), 1, 0))
+	var empty_wall := StyleBoxEmpty.new()
+	empty_wall.set_content_margin_all(4)
+	wall.add_theme_stylebox_override("normal", empty_wall)
+	var wall_chip = add_optional_gpt_illustration_texture(wall, "ui_button_face_plate", rect_full(-0.04, -0.08, 1.04, 1.08), 0.62, false)
+	if wall_chip != null:
+		wall_chip.name = "WallCountGptPlate"
+		wall.move_child(wall_chip, 0)
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
 	configure_clipped_label(wall)
 
@@ -10990,7 +11006,20 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 			name_text = name_text.substr(0, 3)
 		var name = make_label(chip, name_text, 10, Color(0.99, 0.97, 0.92), true)
 		name.name = "ScoreStripName_%d" % seat
-		name.add_theme_stylebox_override("normal", style(Color(SEAT_NAME_BADGE_COLORS[seat].r, SEAT_NAME_BADGE_COLORS[seat].g, SEAT_NAME_BADGE_COLORS[seat].b, 0.42), 8, Color(0.88, 0.78, 0.44, 0.08), 1, 0))
+		# r180: transparent label host; GPT chip paints the name badge.
+		var empty_name := StyleBoxEmpty.new()
+		empty_name.set_content_margin_all(4)
+		name.add_theme_stylebox_override("normal", empty_name)
+		var name_chip = add_optional_gpt_illustration_texture(name, "ui_hand_tray_state_chip", rect_full(-0.08, -0.10, 1.08, 1.10), 0.70, false)
+		if name_chip != null:
+			name_chip.name = "SeatNameGptChip_%d" % seat
+			name_chip.modulate = Color(
+				clampf(0.35 + SEAT_NAME_BADGE_COLORS[seat].r * 0.65, 0.20, 1.2),
+				clampf(0.35 + SEAT_NAME_BADGE_COLORS[seat].g * 0.65, 0.20, 1.2),
+				clampf(0.35 + SEAT_NAME_BADGE_COLORS[seat].b * 0.65, 0.20, 1.2),
+				0.78
+			)
+			name.move_child(name_chip, 0)
 		apply_rect(name, SCORE_STRIP_NAME_RECT)
 		configure_clipped_label(name)
 		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 12, Color(0.96, 0.94, 0.88), true)
@@ -13321,32 +13350,17 @@ func draw_table_center_starlight(parent: Control) -> void:
 	if mandala != null:
 		mandala.name = "TableCenterMandalaTexture"
 		mandala.pivot_offset = Vector2(80, 80)
-	# 外圈辉光环 - 缓慢旋转
-	var glow_ring = Panel.new()
-	glow_ring.name = "TableCenterGlowRing"
-	glow_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var gr_style = StyleBoxFlat.new()
-	gr_style.bg_color = Color(0, 0, 0, 0)
-	gr_style.border_color = Color(0.96, 0.82, 0.38, 0.12)
-	gr_style.set_border_width_all(1)
-	gr_style.set_corner_radius_all(999)
-	glow_ring.add_theme_stylebox_override("panel", gr_style)
-	apply_rect(glow_ring, rect_full(0.05, 0.05, 0.95, 0.95))
-	star.add_child(glow_ring)
-	glow_ring.pivot_offset = Vector2(60, 60)
-	# 内圈辉光环 - 反向旋转
-	var inner_ring = Panel.new()
-	inner_ring.name = "TableCenterInnerRing"
-	inner_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var ir_style = StyleBoxFlat.new()
-	ir_style.bg_color = Color(0, 0, 0, 0)
-	ir_style.border_color = Color(0.92, 0.76, 0.34, 0.08)
-	ir_style.set_border_width_all(1)
-	ir_style.set_corner_radius_all(999)
-	inner_ring.add_theme_stylebox_override("panel", ir_style)
-	apply_rect(inner_ring, rect_full(0.18, 0.18, 0.82, 0.82))
-	star.add_child(inner_ring)
-	inner_ring.pivot_offset = Vector2(40, 40)
+	# r180: GPT soft flash rings instead of program StyleBox borders.
+	var glow_ring = add_optional_gpt_illustration_texture(star, "ui_soft_flash", rect_full(0.05, 0.05, 0.95, 0.95), 0.14, false)
+	if glow_ring != null:
+		glow_ring.name = "TableCenterGlowRing"
+		glow_ring.modulate = Color(0.96, 0.82, 0.38, 0.16)
+		glow_ring.pivot_offset = Vector2(60, 60)
+	var inner_ring = add_optional_gpt_illustration_texture(star, "ui_soft_flash", rect_full(0.18, 0.18, 0.82, 0.82), 0.10, false)
+	if inner_ring != null:
+		inner_ring.name = "TableCenterInnerRing"
+		inner_ring.modulate = Color(0.92, 0.76, 0.34, 0.12)
+		inner_ring.pivot_offset = Vector2(40, 40)
 	# 星光点 - 三层不同大小
 	for i in range(8):
 		var angle = float(i) * TAU / 8.0
@@ -13369,12 +13383,14 @@ func draw_table_center_starlight(parent: Control) -> void:
 			var mandala_tw := create_tween()
 			mandala_tw.set_loops(48)
 			mandala_tw.tween_property(mandala, "rotation", TAU, 18.0).from(0.0)
-		var glow_tw := create_tween()
-		glow_tw.set_loops(48)
-		glow_tw.tween_property(glow_ring, "rotation", TAU, 12.0).from(0.0)
-		var inner_tw := create_tween()
-		inner_tw.set_loops(48)
-		inner_tw.tween_property(inner_ring, "rotation", -TAU, 16.0).from(0.0)
+		if glow_ring != null:
+			var glow_tw := create_tween()
+			glow_tw.set_loops(48)
+			glow_tw.tween_property(glow_ring, "rotation", TAU, 12.0).from(0.0)
+		if inner_ring != null:
+			var inner_tw := create_tween()
+			inner_tw.set_loops(48)
+			inner_tw.tween_property(inner_ring, "rotation", -TAU, 16.0).from(0.0)
 
 func draw_table_corner(parent: Control, rects: Array) -> void:
 	make_panel(parent, rects[0], TABLE_CORNER_FILL, 5, TABLE_CORNER_BORDER, 0)
@@ -15241,7 +15257,21 @@ func make_achievement_row(key: String, index: int) -> Control:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.custom_minimum_size = Vector2(0, 84)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_stylebox_override("panel", style(soften_panel_color(Color(0.300, 0.380, 0.315, 0.995) if unlocked else Color(0.255, 0.330, 0.280, 0.995)), 12, Color(accent.r, accent.g, accent.b, 0.82 if unlocked else 0.70).blend(UI_PANEL_BORDER).darkened(0.0), 1, 3 if unlocked else 2))
+	# r180: transparent host + GPT shop/settings plate for achievement row face.
+	var empty_row := StyleBoxEmpty.new()
+	row.add_theme_stylebox_override("panel", empty_row)
+	var row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.82 if unlocked else 0.62, false)
+	if row_plate == null:
+		row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
+	if row_plate != null:
+		row_plate.name = "AchievementRowGptPlate"
+		row_plate.modulate = Color(
+			clampf(0.35 + accent.r * 0.55, 0.20, 1.2),
+			clampf(0.35 + accent.g * 0.55, 0.20, 1.2),
+			clampf(0.35 + accent.b * 0.55, 0.20, 1.2),
+			0.86 if unlocked else 0.68
+		)
+		row.move_child(row_plate, 0)
 	draw_achievement_row_art(row, key, index, unlocked, accent)
 	var name_label = make_label(row, achievement_display_name(key), 16, Color(1.0, 0.95, 0.76) if unlocked else Color(0.96, 0.99, 0.96), true)
 	name_label.name = "AchievementRowName_%s" % key
@@ -15281,9 +15311,17 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var border_alpha := 0.018 if compact_claim_mode and role == "pass" else (0.070 if compact_claim_mode and is_focus_action else (0.036 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
 	var hover_border_alpha := 0.040 if compact_claim_mode and role == "pass" else (0.125 if compact_claim_mode and is_focus_action else (0.070 if compact_claim_mode else (0.090 if role == "pass" else (0.300 if is_focus_action else 0.180))))
 	var shadow_size := 1 if compact_claim_mode and role != "pass" else (0 if role == "pass" else (2 if is_focus_action else 1))
-	button.add_theme_stylebox_override("normal", style(Color(0.104, 0.078, 0.050, fill_alpha), 10, Color(color.r, color.g, color.b, border_alpha).blend(Color(0.70, 0.50, 0.24, border_alpha)), 1, shadow_size))
-	button.add_theme_stylebox_override("hover", style(Color(0.132, 0.098, 0.062, min(fill_alpha + 0.06, 0.86)), 10, Color(color.r, color.g, color.b, hover_border_alpha).blend(Color(0.86, 0.62, 0.28, hover_border_alpha)), 1, shadow_size + 1))
-	button.add_theme_stylebox_override("pressed", style(Color(0.078, 0.058, 0.040, min(fill_alpha + 0.08, 0.88)), 10, Color(color.r, color.g, color.b, border_alpha).blend(Color(0.52, 0.34, 0.16, border_alpha)), 1, 0))
+	# r180: empty StyleBox hit host + GPT button face (no program StyleBox paint).
+	var empty_normal := StyleBoxEmpty.new()
+	empty_normal.set_content_margin_all(8)
+	var empty_hover := StyleBoxEmpty.new()
+	empty_hover.set_content_margin_all(8)
+	var empty_pressed := StyleBoxEmpty.new()
+	empty_pressed.set_content_margin_all(7)
+	button.add_theme_stylebox_override("normal", empty_normal)
+	button.add_theme_stylebox_override("hover", empty_hover)
+	button.add_theme_stylebox_override("pressed", empty_pressed)
+	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, fill_alpha))
 	draw_action_button_art(button, text, color)
 	return button
 
@@ -15303,17 +15341,27 @@ func make_avatar_view(seat: int, active: bool) -> Control:
 	avatar.clip_contents = true
 	avatar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var border = Color(0.66, 0.58, 0.40, 0.52) if active else SEAT_AVATAR_BORDER_COLORS[seat].blend(Color(0.28, 0.27, 0.26, 1.0))
-	avatar.add_theme_stylebox_override("panel", style(Color(0.018, 0.038, 0.042, 0.96), 13, border, 1))
+	# r180: GPT seat plate is the avatar shell (no program StyleBox/band paint).
+	var empty_panel := StyleBoxEmpty.new()
+	avatar.add_theme_stylebox_override("panel", empty_panel)
+	var seat_plate = add_optional_gpt_illustration_texture(avatar, "ui_seat_info_plate", rect_full(-0.02, -0.02, 1.02, 1.02), 0.88 if active else 0.72, false)
+	if seat_plate != null:
+		seat_plate.name = "SeatAvatarGptPlate_%d" % seat
+		seat_plate.modulate = Color(
+			clampf(0.35 + border.r * 0.65, 0.20, 1.2),
+			clampf(0.35 + border.g * 0.65, 0.20, 1.2),
+			clampf(0.35 + border.b * 0.65, 0.20, 1.2),
+			0.90 if active else 0.78
+		)
+		avatar.move_child(seat_plate, 0)
 	var scenic_frame = add_optional_gpt_illustration_texture(avatar, "seat_avatar_scenic_frame", rect_full(-0.060, -0.050, 1.060, 1.050), 0.34 if active else 0.26, true)
 	if scenic_frame != null:
 		scenic_frame.name = "SeatAvatarScenicFrame_%d" % seat
-		avatar.move_child(scenic_frame, 0)
-	var band = make_color_rect(rect_full(0.0, 0.0, 1.0, 0.22), SEAT_AVATAR_BAND_COLORS[seat].blend(Color(0.12, 0.14, 0.14, 1.0)))
-	band.name = "SeatAvatarBand_%d" % seat
-	avatar.add_child(band)
-	var cap = make_color_rect(rect_full(0.0, 0.22, 1.0, 0.26), Color(1.0, 1.0, 1.0, 0.045))
-	cap.name = "SeatAvatarCap_%d" % seat
-	avatar.add_child(cap)
+		avatar.move_child(scenic_frame, min(1, avatar.get_child_count() - 1))
+	var band = add_optional_gpt_illustration_texture(avatar, "ui_progress_signal_strip", rect_full(0.0, 0.0, 1.0, 0.24), 0.28, false)
+	if band != null:
+		band.name = "SeatAvatarBand_%d" % seat
+		band.modulate = Color(SEAT_AVATAR_BAND_COLORS[seat].r, SEAT_AVATAR_BAND_COLORS[seat].g, SEAT_AVATAR_BAND_COLORS[seat].b, 0.55)
 	draw_avatar_figure(avatar, seat, active)
 
 	# 各座位的天象/景观已由 seat_avatar_scenic_frame 插画承载；旧 emoji 装饰(☀竹⛰☁)已移除。
@@ -15332,37 +15380,29 @@ func make_avatar_view(seat: int, active: bool) -> Control:
 		var active_badge = make_label(avatar, "行", 10, Color(0.12, 0.13, 0.10), true)
 		active_badge.name = "SeatAvatarActiveBadge_%d" % seat
 		active_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		active_badge.add_theme_stylebox_override("normal", style(Color(0.66, 0.56, 0.22, 0.82), 8, Color(0.84, 0.76, 0.46, 0.22), 1))
+		var empty_active := StyleBoxEmpty.new()
+		empty_active.set_content_margin_all(3)
+		active_badge.add_theme_stylebox_override("normal", empty_active)
+		var active_chip = add_optional_gpt_illustration_texture(active_badge, "ui_hand_tray_state_chip", rect_full(-0.10, -0.12, 1.10, 1.12), 0.80, false)
+		if active_chip != null:
+			active_chip.name = "SeatActiveGptChip_%d" % seat
+			active_chip.modulate = Color(0.92, 0.78, 0.36, 0.88)
+			active_badge.move_child(active_chip, 0)
 		apply_rect(active_badge, rect_full(0.620, 0.055, 0.920, 0.255))
 	return avatar
 
 func make_bamboo_decoration(parent: Control, rect: Rect2, segments: int = 3) -> Control:
-	"""创建竹节装饰"""
+	# r180: GPT jade rail plate instead of program bamboo ColorRect slabs.
 	var bamboo = Control.new()
+	bamboo.name = "BambooDecoration"
 	bamboo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(bamboo, rect)
-
-	var segment_height = 1.0 / float(segments)
-
-	for i in range(segments):
-		var y_start = i * segment_height
-		var y_end = (i + 1) * segment_height
-
-		# 竹节主体
-		var segment = make_color_rect(
-			rect_full(0.2, y_start + segment_height * 0.1, 0.8, y_end - segment_height * 0.1),
-			JADE_DARK.darkened(0.1 + float(i) * 0.05)
-		)
-		bamboo.add_child(segment)
-
-		# 竹节环
-		if i < segments - 1:
-			var ring = make_color_rect(
-				rect_full(0.15, y_end - segment_height * 0.15, 0.85, y_end + segment_height * 0.05),
-				JADE_DARK.darkened(0.2)
-			)
-			bamboo.add_child(ring)
-
+	var rail = add_optional_gpt_illustration_texture(bamboo, "ui_action_role_rail", rect_full(0.18, 0.02, 0.82, 0.98), 0.55, false)
+	if rail == null:
+		rail = add_optional_gpt_illustration_texture(bamboo, "ui_jade_reading_plate", rect_full(0.12, 0.0, 0.88, 1.0), 0.40, false)
+	if rail != null:
+		rail.name = "BambooGptRail"
+		rail.modulate = Color(0.35, 0.55, 0.42, 0.70)
 	parent.add_child(bamboo)
 	return bamboo
 
@@ -15384,151 +15424,73 @@ func make_bgm_switch_button(callback: Callable) -> Button:
 	return button
 
 func make_brush_stroke_divider(parent: Control, rect: Rect2, thickness: float = 2.5) -> Control:
-	"""创建毛笔笔触分隔线 - 中粗端细的流线造型"""
+	# r180: GPT progress strip as ink brush divider (no program StyleBox ink slabs).
 	var stroke = Control.new()
 	stroke.name = "BrushStrokeDivider"
 	stroke.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(stroke, rect)
-	var ink_color := INK_MEDIUM
-	var ink_alpha := 0.52
-	# Apply brush stroke shader for authentic ink effect
-	if shader_materials.has("brush_stroke"):
-		apply_brush_stroke_shader(stroke, Color(ink_color.r, ink_color.g, ink_color.b, ink_alpha))
-	# Main body - wider center
-	var main = Panel.new()
-	main.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var main_style = StyleBoxFlat.new()
-	main_style.bg_color = Color(ink_color.r, ink_color.g, ink_color.b, ink_alpha)
-	main_style.set_corner_radius_all(50)
-	main.add_theme_stylebox_override("panel", main_style)
-	stroke.add_child(main)
-	apply_rect(main, rect_full(0.12, 0.28, 0.88, 0.72))
-	if shader_materials.has("brush_stroke"):
-		apply_brush_stroke_shader(main, Color(ink_color.r, ink_color.g, ink_color.b, 1.0))
-	# Start dot (brush press - thicker start)
-	var start_dot = Panel.new()
-	start_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var s_style = StyleBoxFlat.new()
-	s_style.bg_color = Color(ink_color.r, ink_color.g, ink_color.b, ink_alpha * 1.3)
-	s_style.set_corner_radius_all(50)
-	start_dot.add_theme_stylebox_override("panel", s_style)
-	stroke.add_child(start_dot)
-	apply_rect(start_dot, rect_full(0.06, 0.20, 0.14, 0.80))
-	# Taper ends
-	var taper_r = Panel.new()
-	taper_r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var tr_style = StyleBoxFlat.new()
-	tr_style.bg_color = Color(ink_color.r, ink_color.g, ink_color.b, ink_alpha * 0.5)
-	tr_style.set_corner_radius_all(50)
-	taper_r.add_theme_stylebox_override("panel", tr_style)
-	stroke.add_child(taper_r)
-	apply_rect(taper_r, rect_full(0.86, 0.32, 0.96, 0.68))
-	# Splatter dots (ink spray)
-	for _i in range(3):
-		var dot = Panel.new()
-		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var d_style = StyleBoxFlat.new()
-		d_style.bg_color = Color(ink_color.r, ink_color.g, ink_color.b, 0.18 + randf() * 0.12)
-		d_style.set_corner_radius_all(50)
-		dot.add_theme_stylebox_override("panel", d_style)
-		stroke.add_child(dot)
-		var dx := 0.88 + randf() * 0.10
-		var dy := 0.30 + randf() * 0.40
-		apply_rect(dot, rect_full(dx - 0.02, dy - 0.02, dx + 0.02, dy + 0.02))
+	var strip = add_optional_gpt_illustration_texture(stroke, "ui_progress_signal_strip", rect_full(-0.02, 0.15, 1.02, 0.85), 0.42, false)
+	if strip == null:
+		strip = add_optional_gpt_illustration_texture(stroke, "ui_meter_rail_plate", rect_full(0.0, 0.25, 1.0, 0.75), 0.38, false)
+	if strip != null:
+		strip.name = "BrushStrokeGptStrip"
+		strip.modulate = Color(0.22, 0.20, 0.16, 0.55)
 	parent.add_child(stroke)
 	return stroke
 
+
 func make_chinese_corner(parent: Control, rect: Rect2, style: String = "simple") -> Control:
-	"""创建中式角落装饰 - 回纹或如意纹"""
+	# r180: GPT meter strips as corner filigree (no program ColorRect lines).
 	var corner = Control.new()
+	corner.name = "ChineseCorner_%s" % style
 	corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(corner, rect)
+	var h = add_optional_gpt_illustration_texture(corner, "ui_meter_rail_plate", rect_full(0.0, 0.0, 1.0, 0.18), 0.40, false)
+	if h != null:
+		h.name = "ChineseCornerH"
+		h.modulate = Color(0.86, 0.72, 0.36, 0.55)
+	var v = add_optional_gpt_illustration_texture(corner, "ui_action_role_rail", rect_full(0.0, 0.0, 0.18, 1.0), 0.40, false)
+	if v != null:
+		v.name = "ChineseCornerV"
+		v.modulate = Color(0.86, 0.72, 0.36, 0.55)
 	parent.add_child(corner)
-
-	var line_color = Color(GOLD_PRIMARY.r, GOLD_PRIMARY.g, GOLD_PRIMARY.b, 0.24)
-	var line_width = 0.034
-
-	# 绘制回纹图案 (使用ColorRect模拟)
-	# 水平线
-	var h1 = make_color_rect(rect_full(0.0, 0.0, 1.0, line_width), line_color)
-	corner.add_child(h1)
-
-	# 垂直线
-	var v1 = make_color_rect(rect_full(0.0, 0.0, line_width, 1.0), line_color)
-	corner.add_child(v1)
-
-	# 内部回纹
-	if style == "elaborate":
-		var margin = 0.15
-		var inner_color = Color(GOLD_PRIMARY.r, GOLD_PRIMARY.g, GOLD_PRIMARY.b, 0.18)
-		var h2 = make_color_rect(
-			rect_full(margin, margin, 1.0 - margin, margin + line_width),
-			inner_color
-		)
-		corner.add_child(h2)
-
-		var v2 = make_color_rect(
-			rect_full(margin, margin, margin + line_width, 1.0 - margin),
-			inner_color
-		)
-		corner.add_child(v2)
-
 	return corner
 
+
 func make_cloud_decoration(parent: Control, rect: Rect2, style: String = "auspicious", animated: bool = false) -> Control:
-	"""创建祥云装饰元素"""
+	# r180: GPT soft wash plate instead of program StyleBox cloud ellipses.
 	var cloud = Control.new()
+	cloud.name = "CloudDecoration_%s" % style
 	cloud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(cloud, rect)
-
-	var cloud_color: Color
+	var plate_key := "ui_soft_flash"
+	var tint := Color(0.92, 0.94, 0.98, 0.42)
 	match style:
-		"auspicious":
-			cloud_color = CLOUD_WHITE
 		"mist":
-			cloud_color = CLOUD_MIST
+			plate_key = "ui_river_soft_wash"
+			tint = Color(0.78, 0.84, 0.86, 0.38)
 		"gold":
-			cloud_color = CLOUD_GOLD
+			plate_key = "ui_soft_flash"
+			tint = Color(0.96, 0.86, 0.52, 0.40)
 		_:
-			cloud_color = CLOUD_WHITE
-
-	# 使用多个椭圆组合成祥云形状
-	var puffs := [
-		{"x": 0.15, "y": 0.55, "rx": 0.18, "ry": 0.28},
-		{"x": 0.35, "y": 0.42, "rx": 0.22, "ry": 0.32},
-		{"x": 0.58, "y": 0.48, "rx": 0.20, "ry": 0.30},
-		{"x": 0.78, "y": 0.58, "rx": 0.16, "ry": 0.24},
-		{"x": 0.25, "y": 0.68, "rx": 0.15, "ry": 0.22},
-		{"x": 0.50, "y": 0.72, "rx": 0.18, "ry": 0.26},
-		{"x": 0.72, "y": 0.76, "rx": 0.14, "ry": 0.20},
-	]
-
-	for puff in puffs:
-		var ellipse = Panel.new()
-		ellipse.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ellipse.modulate = cloud_color
-		var style_box = StyleBoxFlat.new()
-		style_box.bg_color = Color(cloud_color.r, cloud_color.g, cloud_color.b, cloud_color.a * 0.6)
-		style_box.set_corner_radius_all(50)
-		ellipse.add_theme_stylebox_override("panel", style_box)
-		apply_rect(ellipse, rect_full(
-			puff["x"] - puff["rx"],
-			puff["y"] - puff["ry"],
-			puff["x"] + puff["rx"],
-			puff["y"] + puff["ry"]
-		))
-		cloud.add_child(ellipse)
-
-	if animated and fx_enabled_effective():
+			plate_key = "ui_soft_flash"
+			tint = Color(0.94, 0.96, 0.98, 0.36)
+	var plate = add_optional_gpt_illustration_texture(cloud, plate_key, rect_full(-0.05, -0.08, 1.05, 1.08), tint.a, false)
+	if plate == null:
+		plate = add_optional_gpt_illustration_texture(cloud, "ui_title_backplate", rect_full(-0.05, -0.08, 1.05, 1.08), tint.a * 0.7, false)
+	if plate != null:
+		plate.name = "CloudGptPlate"
+		plate.modulate = Color(tint.r, tint.g, tint.b, tint.a)
+	if animated and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(48)
-		tw.tween_property(cloud, "modulate:a", cloud_color.a * 0.7, 2.5).from(cloud_color.a)
-		tw.tween_property(cloud, "modulate:a", cloud_color.a, 2.5).from(cloud_color.a * 0.7)
+		tw.tween_property(cloud, "modulate:a", 0.72, 2.5).from(1.0)
+		tw.tween_property(cloud, "modulate:a", 1.0, 2.5).from(0.72)
 		tw.tween_property(cloud, "offset_left", 8.0, 4.0).from(0.0)
 		tw.tween_property(cloud, "offset_left", 0.0, 4.0).from(8.0)
-
 	parent.add_child(cloud)
 	return cloud
+
 
 func make_hand_group_spacer(height: float, width: float = 3.0, label_text: String = "") -> Control:
 	var spacer = Control.new()
@@ -15561,158 +15523,98 @@ func make_hand_group_spacer(height: float, width: float = 3.0, label_text: Strin
 	return spacer
 
 func make_ink_border(parent: Control, rect: Rect2, thickness: float = 2.0) -> Control:
-	"""创建水墨笔触边框 - 模拟毛笔绘制效果"""
-	var container = Control.new()
-	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(container, rect)
+	# r180: GPT meter rails as ink border instead of program StyleBox strokes.
+	var border = Control.new()
+	border.name = "InkBorder"
+	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(border, rect)
+	var t_norm = clampf(thickness / 8.0, 0.35, 1.0)
+	var top = add_optional_gpt_illustration_texture(border, "ui_meter_rail_plate", rect_full(0.0, 0.0, 1.0, 0.08 * t_norm + 0.04), 0.42, false)
+	if top != null:
+		top.name = "InkBorderTop"
+		top.modulate = Color(0.18, 0.16, 0.12, 0.50)
+	var bot = add_optional_gpt_illustration_texture(border, "ui_meter_rail_plate", rect_full(0.0, 0.92 - 0.04 * t_norm, 1.0, 1.0), 0.42, false)
+	if bot != null:
+		bot.name = "InkBorderBottom"
+		bot.modulate = Color(0.18, 0.16, 0.12, 0.50)
+	var left = add_optional_gpt_illustration_texture(border, "ui_action_role_rail", rect_full(0.0, 0.0, 0.06 * t_norm + 0.02, 1.0), 0.40, false)
+	if left != null:
+		left.name = "InkBorderLeft"
+		left.modulate = Color(0.18, 0.16, 0.12, 0.48)
+	var right = add_optional_gpt_illustration_texture(border, "ui_action_role_rail", rect_full(0.94 - 0.02 * t_norm, 0.0, 1.0, 1.0), 0.40, false)
+	if right != null:
+		right.name = "InkBorderRight"
+		right.modulate = Color(0.18, 0.16, 0.12, 0.48)
+	parent.add_child(border)
+	return border
 
-	# 外框 - 粗笔触
-	var outer = make_color_rect(rect_full(0.0, 0.0, 1.0, thickness / rect.size.y), INK_DARK)
-	container.add_child(outer)
-
-	# 内框 - 细笔触
-	var inner = make_color_rect(rect_full(0.0, 0.0, 1.0, (thickness * 0.5) / rect.size.y), INK_MEDIUM)
-	inner.offset_top = thickness / rect.size.y
-	container.add_child(inner)
-
-	# 添加随机噪点模拟墨迹
-	var noise_count = int(rect.size.x * 0.3)
-	for i in range(noise_count):
-		var x = randf()
-		var noise_alpha = randf_range(0.1, 0.3)
-		var noise = make_color_rect(
-			rect_full(x - 0.002, 0.0, x + 0.002, 0.02),
-			Color(INK_DARK.r, INK_DARK.g, INK_DARK.b, noise_alpha)
-		)
-		container.add_child(noise)
-
-	parent.add_child(container)
-	return container
 
 func make_koi_fish(parent: Control, rect: Rect2, fish_color: Color = GOLD_PRIMARY, direction: String = "right") -> Control:
-	"""创建简化锦鲤装饰 - 椭圆鱼身 + 尾 + 眼"""
-	var koi = Control.new()
-	koi.name = "KoiFish"
-	koi.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(koi, rect)
-	var flip := -1.0 if direction == "left" else 1.0
-	# Body
-	var body = Panel.new()
-	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var body_style = StyleBoxFlat.new()
-	body_style.bg_color = Color(fish_color.r, fish_color.g, fish_color.b, 0.82)
-	body_style.set_corner_radius_all(50)
-	body.add_theme_stylebox_override("panel", body_style)
-	koi.add_child(body)
-	apply_rect(body, rect_full(0.22, 0.30, 0.72, 0.70))
-	# Tail
-	var tail = Panel.new()
-	tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tail.rotation = 0.28 * flip
-	var tail_style = StyleBoxFlat.new()
-	tail_style.bg_color = Color(fish_color.r, fish_color.g, fish_color.b, 0.68)
-	tail_style.set_corner_radius_all(50)
-	tail.add_theme_stylebox_override("panel", tail_style)
-	koi.add_child(tail)
-	if direction == "right":
-		apply_rect(tail, rect_full(0.04, 0.22, 0.28, 0.50))
-	else:
-		apply_rect(tail, rect_full(0.72, 0.22, 0.96, 0.50))
-	# Eye
-	var eye = Panel.new()
-	eye.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var eye_style = StyleBoxFlat.new()
-	eye_style.bg_color = Color(0.04, 0.04, 0.06, 0.92)
-	eye_style.set_corner_radius_all(50)
-	eye.add_theme_stylebox_override("panel", eye_style)
-	koi.add_child(eye)
-	var eye_x := 0.62 if direction == "right" else 0.32
-	apply_rect(eye, rect_full(eye_x - 0.04, 0.38, eye_x + 0.04, 0.46))
-	# Dorsal fin
-	var fin = Panel.new()
-	fin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fin_style = StyleBoxFlat.new()
-	fin_style.bg_color = Color(fish_color.r * 0.82, fish_color.g * 0.82, fish_color.b * 0.82, 0.58)
-	fin_style.set_corner_radius_all(50)
-	fin.add_theme_stylebox_override("panel", fin_style)
-	koi.add_child(fin)
-	apply_rect(fin, rect_full(0.38, 0.18, 0.58, 0.34))
-	parent.add_child(koi)
-	return koi
+	# r180: GPT chip plate silhouette instead of program StyleBox fish body parts.
+	var fish = Control.new()
+	fish.name = "KoiFish"
+	fish.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(fish, rect)
+	var plate = add_optional_gpt_illustration_texture(fish, "ui_hand_tray_state_chip", rect_full(0.0, 0.10, 1.0, 0.90), 0.55, false)
+	if plate == null:
+		plate = add_optional_gpt_illustration_texture(fish, "ui_button_face_plate", rect_full(0.0, 0.12, 1.0, 0.88), 0.45, false)
+	if plate != null:
+		plate.name = "KoiGptPlate"
+		plate.modulate = Color(
+			clampf(0.40 + fish_color.r * 0.60, 0.20, 1.2),
+			clampf(0.40 + fish_color.g * 0.60, 0.20, 1.2),
+			clampf(0.40 + fish_color.b * 0.60, 0.20, 1.2),
+			0.62
+		)
+		if direction == "left":
+			plate.flip_h = true
+	parent.add_child(fish)
+	return fish
+
 
 func make_lantern(parent: Control, rect: Rect2, color: Color = CINNABAR, lit: bool = true) -> Control:
-	"""创建灯笼装饰 - 灯体 + 金环 + 穗子"""
+	# r180: GPT chip/glow plates instead of program StyleBox lantern slabs.
 	var lantern = Control.new()
 	lantern.name = "Lantern"
 	lantern.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(lantern, rect)
-	# Top cap
-	var top_cap = Panel.new()
-	top_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var tc_style = StyleBoxFlat.new()
-	tc_style.bg_color = GOLD_DARK
-	tc_style.set_corner_radius_all(3)
-	top_cap.add_theme_stylebox_override("panel", tc_style)
-	lantern.add_child(top_cap)
-	apply_rect(top_cap, rect_full(0.32, 0.04, 0.68, 0.10))
-	# Hanging string
-	var hstring = Panel.new()
-	hstring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var hs_style = StyleBoxFlat.new()
-	hs_style.bg_color = GOLD_DARK
-	hs_style.set_corner_radius_all(1)
-	hstring.add_theme_stylebox_override("panel", hs_style)
-	lantern.add_child(hstring)
-	apply_rect(hstring, rect_full(0.46, 0.0, 0.54, 0.06))
-	# Main body
-	var body = Panel.new()
-	body.name = "LanternBody"
-	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var body_style = StyleBoxFlat.new()
-	body_style.bg_color = color
-	body_style.border_color = Color(color.r * 0.72, color.g * 0.72, color.b * 0.72, 0.52)
-	body_style.set_border_width_all(1)
-	body_style.set_corner_radius_all(12)
-	body.add_theme_stylebox_override("panel", body_style)
-	lantern.add_child(body)
-	apply_rect(body, rect_full(0.12, 0.10, 0.88, 0.76))
-	# Bottom cap
-	var bottom_cap = Panel.new()
-	bottom_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var bc_style = StyleBoxFlat.new()
-	bc_style.bg_color = GOLD_DARK
-	bc_style.set_corner_radius_all(3)
-	bottom_cap.add_theme_stylebox_override("panel", bc_style)
-	lantern.add_child(bottom_cap)
-	apply_rect(bottom_cap, rect_full(0.32, 0.76, 0.68, 0.82))
-	# Tassel
-	var tassel = Panel.new()
-	tassel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var tl_style = StyleBoxFlat.new()
-	tl_style.bg_color = Color(color.r * 0.88, color.g * 0.72, color.b * 0.42, 0.78)
-	tl_style.set_corner_radius_all(2)
-	tassel.add_theme_stylebox_override("panel", tl_style)
-	lantern.add_child(tassel)
-	apply_rect(tassel, rect_full(0.42, 0.82, 0.58, 0.96))
-	# Inner glow when lit - enhanced with glow shader
+	var body = add_optional_gpt_illustration_texture(lantern, "ui_hand_tray_state_chip", rect_full(0.10, 0.08, 0.90, 0.78), 0.82, false)
+	if body == null:
+		body = add_optional_gpt_illustration_texture(lantern, "ui_button_face_plate", rect_full(0.12, 0.10, 0.88, 0.76), 0.75, false)
+	if body != null:
+		body.name = "LanternGptBody"
+		body.modulate = Color(
+			clampf(0.45 + color.r * 0.70, 0.20, 1.25),
+			clampf(0.30 + color.g * 0.55, 0.15, 1.15),
+			clampf(0.28 + color.b * 0.50, 0.12, 1.10),
+			0.88 if lit else 0.62
+		)
+	var top_cap = add_optional_gpt_illustration_texture(lantern, "ui_meter_rail_plate", rect_full(0.28, 0.02, 0.72, 0.14), 0.55, false)
+	if top_cap != null:
+		top_cap.name = "LanternGptTopCap"
+		top_cap.modulate = Color(0.86, 0.72, 0.36, 0.70)
+	var tassel = add_optional_gpt_illustration_texture(lantern, "ui_action_role_rail", rect_full(0.40, 0.78, 0.60, 0.98), 0.50, false)
+	if tassel != null:
+		tassel.name = "LanternGptTassel"
+		tassel.modulate = Color(
+			clampf(0.50 + color.r * 0.40, 0.30, 1.10),
+			clampf(0.40 + color.g * 0.30, 0.22, 1.00),
+			clampf(0.28 + color.b * 0.25, 0.16, 0.95),
+			0.72
+		)
 	if lit:
-		var glow = Panel.new()
-		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var gl_style = StyleBoxFlat.new()
-		gl_style.bg_color = Color(1.0, 0.92, 0.62, 0.18)
-		gl_style.set_corner_radius_all(50)
-		glow.add_theme_stylebox_override("panel", gl_style)
-		lantern.add_child(glow)
-		apply_rect(glow, rect_full(0.18, 0.16, 0.82, 0.72))
-		if shader_materials.has("glow_bloom"):
-			apply_glow_shader(glow, Color(1.0, 0.88, 0.55, 1.0), 0.8, 2.0)
-		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var tw := create_tween()
-			tw.set_loops(48)
-			tw.tween_property(glow, "modulate:a", 0.62, 1.8).from(1.0)
-			tw.tween_property(glow, "modulate:a", 1.0, 1.8).from(0.62)
+		var glow = add_optional_gpt_illustration_texture(lantern, "ui_soft_flash", rect_full(0.14, 0.14, 0.86, 0.74), 0.42, false)
+		if glow != null:
+			glow.name = "LanternGptGlow"
+			glow.modulate = Color(1.0, 0.88, 0.55, 0.40)
+			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				var tw := create_tween()
+				tw.set_loops(48)
+				tw.tween_property(glow, "modulate:a", 0.22, 1.8).from(0.40)
+				tw.tween_property(glow, "modulate:a", 0.40, 1.8).from(0.22)
 	parent.add_child(lantern)
 	return lantern
+
 
 # ============================================================
 # 界面过渡动画 / Interface Transition Animation
@@ -15758,8 +15660,20 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	else:
 		group.custom_minimum_size = Vector2(float(tile_count) * (cell_w + float(sep)) + 8.0, maxf(44.0, cell_h + 8.0))
 	var accent: Color = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
-	# Thin seat-colored frame only — pure tile rows, no kind chrome.
-	group.add_theme_stylebox_override("panel", style(Color(0.012, 0.022, 0.018, 0.40), 6, Color(accent.r, accent.g, accent.b, 0.22), 1, 0))
+	# r180: GPT meld pad host — no StyleBox frame paint under tiles.
+	var empty_meld := StyleBoxEmpty.new()
+	group.add_theme_stylebox_override("panel", empty_meld)
+	var meld_pad = add_optional_gpt_illustration_texture(group, "ui_meld_pad", rect_full(-0.04, -0.06, 1.04, 1.06), 0.38, false)
+	if meld_pad == null:
+		meld_pad = add_optional_gpt_illustration_texture(group, "ui_river_soft_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.28, false)
+	if meld_pad != null:
+		meld_pad.name = "MeldGroupGptPad"
+		meld_pad.modulate = Color(
+			clampf(0.40 + accent.r * 0.55, 0.20, 1.15),
+			clampf(0.40 + accent.g * 0.55, 0.20, 1.15),
+			clampf(0.40 + accent.b * 0.55, 0.20, 1.15),
+			0.34
+		)
 	var tiles: BoxContainer = VBoxContainer.new() if vertical else HBoxContainer.new()
 	configure_passive_container(tiles)
 	tiles.name = "MeldTiles"
@@ -15862,10 +15776,11 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	button.text = ""
 	button.custom_minimum_size = Vector2(310, 210)
 	configure_touch_button(button)
-	# 生成图负责卡框；按钮自身只保留轻微交互反馈，避免程序线条覆盖。
-	button.add_theme_stylebox_override("normal", style(Color(0.0, 0.0, 0.0, 0.015), 10, Color(0.0, 0.0, 0.0, 0.0), 0, 0))
-	button.add_theme_stylebox_override("hover", style(Color(color.r, color.g, color.b, 0.10), 10, Color(0.96, 0.82, 0.42, 0.12), 1, 1))
-	button.add_theme_stylebox_override("pressed", style(Color(0.0, 0.0, 0.0, 0.12), 10, Color(0.96, 0.82, 0.42, 0.10), 1, 1))
+	# r180: menu card face is GPT plate; StyleBox hosts stay empty.
+	var empty_card := StyleBoxEmpty.new()
+	button.add_theme_stylebox_override("normal", empty_card)
+	button.add_theme_stylebox_override("hover", empty_card)
+	button.add_theme_stylebox_override("pressed", empty_card)
 	add_button_press_sheen(button)
 	if icon_name != "":
 		add_lucide_icon(button, icon_name, rect_full(0.735, 0.165, 0.865, 0.395), Color(0.92, 0.82, 0.58, 0.78))
@@ -15904,72 +15819,29 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	return button
 
 func make_moon_or_sun(parent: Control, rect: Rect2, phase: String = "full_moon") -> Control:
-	"""创建月亮/太阳装饰 - 满月/新月/旭日"""
+	# r180: GPT soft-flash plate instead of program StyleBox moon slabs.
 	var moon = Control.new()
 	moon.name = "MoonOrSun"
 	moon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(moon, rect)
-	var body_color: Color
-	var glow_color: Color
+	var tint := Color(0.96, 0.94, 0.86, 0.72)
 	match phase:
-		"full_moon":
-			body_color = Color(0.96, 0.94, 0.86, 0.92)
-			glow_color = Color(0.98, 0.96, 0.82, 0.28)
 		"crescent":
-			body_color = Color(0.94, 0.92, 0.84, 0.88)
-			glow_color = Color(0.96, 0.94, 0.80, 0.22)
+			tint = Color(0.94, 0.92, 0.84, 0.62)
 		"rising_sun":
-			body_color = Color(0.96, 0.68, 0.32, 0.94)
-			glow_color = Color(1.0, 0.78, 0.42, 0.35)
+			tint = Color(0.96, 0.72, 0.38, 0.70)
 		_:
-			body_color = Color(0.96, 0.94, 0.86, 0.92)
-			glow_color = Color(0.98, 0.96, 0.82, 0.28)
-	# Outer glow layers
-	for g in range(3):
-		var glow = Panel.new()
-		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var glow_style = StyleBoxFlat.new()
-		glow_style.bg_color = Color(glow_color.r, glow_color.g, glow_color.b, glow_color.a * (0.30 - float(g) * 0.08))
-		glow_style.set_corner_radius_all(50)
-		glow.add_theme_stylebox_override("panel", glow_style)
-		moon.add_child(glow)
-		var expand := 0.08 * float(g + 1)
-		apply_rect(glow, rect_full(0.50 - 0.24 - expand, 0.50 - 0.24 - expand, 0.50 + 0.24 + expand, 0.50 + 0.24 + expand))
-	# Moon body
-	var body = Panel.new()
-	body.name = "MoonBody"
-	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var body_style = StyleBoxFlat.new()
-	body_style.bg_color = body_color
-	body_style.set_corner_radius_all(50)
-	if phase == "rising_sun":
-		body_style.border_color = Color(1.0, 0.58, 0.28, 0.42)
-		body_style.set_border_width_all(2)
-	body.add_theme_stylebox_override("panel", body_style)
-	moon.add_child(body)
-	apply_rect(body, rect_full(0.26, 0.26, 0.74, 0.74))
-	# Apply glow bloom shader to moon body for enhanced radiance
-	if shader_materials.has("glow_bloom"):
-		var bloom_glow = make_fullrect_overlay(Color(1.0, 0.94, 0.82, 0.30), "ui_soft_flash")
-		bloom_glow.name = "MoonGlowBloom"
-		bloom_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		bloom_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-		bloom_glow.offset_left = -8.0
-		bloom_glow.offset_top = -8.0
-		bloom_glow.offset_right = 8.0
-		bloom_glow.offset_bottom = 8.0
-		apply_glow_shader(bloom_glow, glow_color, 0.7, 1.5)
-		body.add_child(bloom_glow)
-	# Crescent shadow
-	if phase == "crescent":
-		var shadow = Panel.new()
-		shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var shadow_style = StyleBoxFlat.new()
-		shadow_style.bg_color = Color(0.02, 0.02, 0.03, 0.92)
-		shadow_style.set_corner_radius_all(50)
-		shadow.add_theme_stylebox_override("panel", shadow_style)
-		moon.add_child(shadow)
-		apply_rect(shadow, rect_full(0.34, 0.18, 0.82, 0.82))
+			tint = Color(0.96, 0.94, 0.86, 0.72)
+	var glow = add_optional_gpt_illustration_texture(moon, "ui_soft_flash", rect_full(0.05, 0.05, 0.95, 0.95), 0.55, false)
+	if glow != null:
+		glow.name = "MoonGptGlow"
+		glow.modulate = Color(tint.r, tint.g, tint.b, tint.a * 0.55)
+	var body = add_optional_gpt_illustration_texture(moon, "ui_hand_tray_state_chip", rect_full(0.22, 0.22, 0.78, 0.78), 0.70, false)
+	if body == null:
+		body = add_optional_gpt_illustration_texture(moon, "ui_button_face_plate", rect_full(0.24, 0.24, 0.76, 0.76), 0.55, false)
+	if body != null:
+		body.name = "MoonGptBody"
+		body.modulate = Color(tint.r, tint.g, tint.b, tint.a)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
 		tw.set_loops(48)
@@ -15978,139 +15850,99 @@ func make_moon_or_sun(parent: Control, rect: Rect2, phase: String = "full_moon")
 	parent.add_child(moon)
 	return moon
 
+
 func make_mountain_silhouette(parent: Control, rect: Rect2, layers: int = 3, base_color: Color = INK_WASH) -> Control:
-	"""创建层叠远山剪影 - 水墨山水远景点缀"""
+	# r180: GPT dark scrim/wash layers instead of program mountain StyleBox peaks.
 	var mountain = Control.new()
 	mountain.name = "MountainSilhouette"
 	mountain.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(mountain, rect)
-	for layer_i in range(layers):
-		var layer_alpha = 0.25 + 0.20 * float(layer_i) / float(max(1, layers - 1))
-		var layer_color = Color(base_color.r, base_color.g, base_color.b, layer_alpha)
-		var peaks := 3 + layer_i % 2
-		var base_y := 0.80 - float(layer_i) * 0.12
-		var peak_spread := 0.90 / float(peaks)
-		for p in range(peaks):
-			var peak_x := 0.05 + float(p) * peak_spread + (0.05 * float(layer_i % 3))
-			var peak_height := 0.28 + 0.14 * sin(float(p + layer_i) * 1.7)
-			var peak_width := peak_spread * 0.55
-			var peak = Panel.new()
-			peak.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var peak_style = StyleBoxFlat.new()
-			peak_style.bg_color = layer_color
-			peak_style.set_corner_radius_all(4)
-			peak.add_theme_stylebox_override("panel", peak_style)
-			mountain.add_child(peak)
-			apply_rect(peak, rect_full(peak_x - peak_width * 0.5, base_y - peak_height, peak_x + peak_width * 0.5, base_y + 0.06))
-		var base_strip = Panel.new()
-		base_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var strip_style = StyleBoxFlat.new()
-		strip_style.bg_color = layer_color
-		strip_style.set_corner_radius_all(0)
-		base_strip.add_theme_stylebox_override("panel", strip_style)
-		mountain.add_child(base_strip)
-		apply_rect(base_strip, rect_full(0.0, base_y, 1.0, base_y + 0.10))
+	for layer_i in range(maxi(1, layers)):
+		var a = 0.18 + 0.14 * float(layer_i) / float(maxi(1, layers - 1))
+		var key = "ui_dark_scrim" if layer_i % 2 == 0 else "ui_jade_reading_plate"
+		var plate = add_optional_gpt_illustration_texture(
+			mountain,
+			key,
+			rect_full(-0.04 + float(layer_i) * 0.02, 0.20 + float(layer_i) * 0.08, 1.04 - float(layer_i) * 0.02, 1.02),
+			a,
+			false
+		)
+		if plate != null:
+			plate.name = "MountainGptLayer_%d" % layer_i
+			plate.modulate = Color(
+				clampf(0.30 + base_color.r * 0.50, 0.10, 1.0),
+				clampf(0.30 + base_color.g * 0.50, 0.10, 1.0),
+				clampf(0.30 + base_color.b * 0.50, 0.10, 1.0),
+				a
+			)
 	parent.add_child(mountain)
 	return mountain
 
+
 func make_pine_branch(parent: Control, rect: Rect2, direction: String = "left") -> Control:
-	"""创建松枝装饰 - 斜向枝干 + 针叶簇"""
+	# r180: GPT jade rail/wash instead of program StyleBox bark/needles.
 	var pine = Control.new()
 	pine.name = "PineBranch"
 	pine.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(pine, rect)
-	var bark_color := Color(0.32, 0.24, 0.18, 0.82)
-	var needle_color := Color(0.18, 0.38, 0.28, 0.78)
-	var flip_x := -1.0 if direction == "right" else 1.0
-	# Main branch
-	var branch_angle := 0.22 * flip_x
-	var main_branch = Panel.new()
-	main_branch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	main_branch.rotation = branch_angle
-	var mb_style = StyleBoxFlat.new()
-	mb_style.bg_color = bark_color
-	mb_style.set_corner_radius_all(50)
-	main_branch.add_theme_stylebox_override("panel", mb_style)
-	pine.add_child(main_branch)
-	apply_rect(main_branch, rect_full(0.15, 0.42, 0.85, 0.58))
-	# Needle clusters
-	var clusters := [
-		Vector2(0.28, 0.30), Vector2(0.48, 0.26), Vector2(0.68, 0.32),
-		Vector2(0.38, 0.56), Vector2(0.58, 0.60), Vector2(0.78, 0.58),
-	]
-	for cluster_pos in clusters:
-		var cluster = Panel.new()
-		cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var cl_style = StyleBoxFlat.new()
-		cl_style.bg_color = Color(needle_color.r, needle_color.g, needle_color.b, 0.62 + 0.14 * randf())
-		cl_style.set_corner_radius_all(50)
-		cluster.add_theme_stylebox_override("panel", cl_style)
-		pine.add_child(cluster)
-		apply_rect(cluster, rect_full(cluster_pos.x - 0.10, cluster_pos.y - 0.10, cluster_pos.x + 0.10, cluster_pos.y + 0.10))
+	var flip = -1.0 if direction == "right" else 1.0
+	var branch = add_optional_gpt_illustration_texture(pine, "ui_action_role_rail", rect_full(0.12, 0.36, 0.88, 0.64), 0.48, false)
+	if branch == null:
+		branch = add_optional_gpt_illustration_texture(pine, "ui_jade_reading_plate", rect_full(0.10, 0.30, 0.90, 0.70), 0.40, false)
+	if branch != null:
+		branch.name = "PineGptBranch"
+		branch.modulate = Color(0.32, 0.42, 0.30, 0.62)
+		branch.rotation = 0.18 * flip
+	var needles = add_optional_gpt_illustration_texture(pine, "ui_river_soft_wash", rect_full(0.05, 0.10, 0.95, 0.90), 0.30, false)
+	if needles != null:
+		needles.name = "PineGptNeedles"
+		needles.modulate = Color(0.22, 0.48, 0.34, 0.38)
 	parent.add_child(pine)
 	return pine
 
+
 func make_plum_blossom(parent: Control, rect: Rect2, count: int = 3, petal_color: Color = ROUGE, animated: bool = false) -> Control:
-	"""创建梅花装饰 - 五瓣梅花 + 花蕊 + 短枝"""
+	# r180: GPT soft-flash chips as plum blossoms (no program petal StyleBox).
 	var blossom = Control.new()
 	blossom.name = "PlumBlossom"
 	blossom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(blossom, rect)
-	# Branch lines
-	var branch_color = Color(0.36, 0.26, 0.22, 0.72)
-	var branch_segments := [
-		rect_full(0.42, 0.80, 0.48, 0.95),
-		rect_full(0.48, 0.55, 0.52, 0.82),
-		rect_full(0.30, 0.30, 0.50, 0.56),
-		rect_full(0.52, 0.40, 0.68, 0.56),
-	]
-	for seg in branch_segments:
-		var branch = Panel.new()
-		branch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var b_style = StyleBoxFlat.new()
-		b_style.bg_color = branch_color
-		b_style.set_corner_radius_all(50)
-		branch.add_theme_stylebox_override("panel", b_style)
-		blossom.add_child(branch)
-		apply_rect(branch, seg)
-	# Flowers
-	for f_idx in range(count):
-		var flower = Control.new()
-		flower.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var positions := [Vector2(0.32, 0.28), Vector2(0.62, 0.42), Vector2(0.48, 0.16), Vector2(0.72, 0.28), Vector2(0.25, 0.48)]
-		var fpos = positions[f_idx % positions.size()]
-		var fsize := 0.08 + 0.03 * float(f_idx % 3)
-		# Five petals
-		for p in range(5):
-			var angle := float(p) * TAU / 5.0
-			var petal = Panel.new()
-			petal.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var petal_style = StyleBoxFlat.new()
-			petal_style.bg_color = Color(petal_color.r, petal_color.g, petal_color.b, 0.78 - 0.08 * float(f_idx))
-			petal_style.set_corner_radius_all(50)
-			petal.add_theme_stylebox_override("panel", petal_style)
-			flower.add_child(petal)
-			var px: float = fpos.x + cos(angle) * fsize * 0.5
-			var py: float = fpos.y + sin(angle) * fsize * 0.5
-			apply_rect(petal, rect_full(px - fsize * 0.32, py - fsize * 0.32, px + fsize * 0.32, py + fsize * 0.32))
-		# Stamen
-		var stamen = Panel.new()
-		stamen.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var stamen_style = StyleBoxFlat.new()
-		stamen_style.bg_color = Color(GOLD_BRIGHT.r, GOLD_BRIGHT.g, GOLD_BRIGHT.b, 0.86)
-		stamen_style.set_corner_radius_all(50)
-		stamen.add_theme_stylebox_override("panel", stamen_style)
-		flower.add_child(stamen)
-		var stamen_size := fsize * 0.22
-		apply_rect(stamen, rect_full(fpos.x - stamen_size, fpos.y - stamen_size, fpos.x + stamen_size, fpos.y + stamen_size))
-		blossom.add_child(flower)
-	if animated and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
-		tw.set_loops(48)
-		tw.tween_property(blossom, "rotation", 0.012, 3.0).from(-0.012)
-		tw.tween_property(blossom, "rotation", -0.012, 3.0).from(0.012)
+	var n = clampi(count, 1, 5)
+	for i in range(n):
+		var cx = 0.18 + float(i) * (0.55 / float(maxi(1, n - 1))) if n > 1 else 0.50
+		var cy = 0.35 + (0.18 if i % 2 == 1 else 0.0)
+		var s = 0.22
+		var petal = add_optional_gpt_illustration_texture(
+			blossom,
+			"ui_soft_flash",
+			rect_full(cx - s, cy - s, cx + s, cy + s),
+			0.55,
+			false
+		)
+		if petal == null:
+			petal = add_optional_gpt_illustration_texture(
+				blossom,
+				"ui_hand_tray_state_chip",
+				rect_full(cx - s * 0.8, cy - s * 0.8, cx + s * 0.8, cy + s * 0.8),
+				0.50,
+				false
+			)
+		if petal != null:
+			petal.name = "PlumGptPetal_%d" % i
+			petal.modulate = Color(
+				clampf(0.50 + petal_color.r * 0.55, 0.30, 1.25),
+				clampf(0.30 + petal_color.g * 0.40, 0.18, 1.10),
+				clampf(0.30 + petal_color.b * 0.40, 0.18, 1.10),
+				0.55
+			)
+			if animated and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				var tw := create_tween()
+				tw.set_loops(36)
+				tw.tween_property(petal, "modulate:a", 0.30, 1.2 + float(i) * 0.15).from(0.55)
+				tw.tween_property(petal, "modulate:a", 0.55, 1.2 + float(i) * 0.15).from(0.30)
 	parent.add_child(blossom)
 	return blossom
+
 
 func make_reset_progress_button(callback: Callable) -> Button:
 	var label = "清空" if reset_progress_confirming else "重置"
@@ -16128,45 +15960,23 @@ func make_reset_progress_button(callback: Callable) -> Button:
 	return button
 
 func make_seal_stamp(parent: Control, rect: Rect2, text: String = "胡", style: String = "square") -> Control:
-	"""创建印章装饰效果"""
+	# r180: GPT chip plate + label instead of program seal StyleBox.
 	var seal = Control.new()
+	seal.name = "SealStamp_%s" % style
 	seal.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(seal, rect)
-
-	# 印章底色
-	var stamp = Panel.new()
-	stamp.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stamp.modulate = CINNABAR
-
-	var stamp_style = StyleBoxFlat.new()
-	stamp_style.bg_color = Color(CINNABAR.r, CINNABAR.g, CINNABAR.b, 0.85)
-	stamp_style.set_border_width_all(2)
-	stamp_style.border_color = CINNABAR.darkened(0.2)
-	if style == "round":
-		stamp_style.set_corner_radius_all(int(min(rect.size.x, rect.size.y) * 0.5))
-	else:
-		stamp_style.set_corner_radius_all(4)
-	stamp.add_theme_stylebox_override("panel", stamp_style)
-	stamp.set_anchors_preset(Control.PRESET_FULL_RECT)
-	seal.add_child(stamp)
-
-	# 印章文字
-	var label = make_label(seal, text, max(12, int(min(rect.size.x, rect.size.y) * 0.6)), PAPER_WARM, true)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.3))
-
-	# 添加磨损效果
-	var wear_count = 3
-	for i in range(wear_count):
-		var wear = make_color_rect(
-			rect_full(randf() * 0.6, randf() * 0.6, randf() * 0.4 + 0.5, randf() * 0.4 + 0.5),
-			Color(PAPER_WARM.r, PAPER_WARM.g, PAPER_WARM.b, randf_range(0.05, 0.15))
-		)
-		seal.add_child(wear)
-
+	var plate = add_optional_gpt_illustration_texture(seal, "ui_hand_tray_state_chip", rect_full(0.0, 0.0, 1.0, 1.0), 0.82, false)
+	if plate == null:
+		plate = add_optional_gpt_illustration_texture(seal, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.75, false)
+	if plate != null:
+		plate.name = "SealGptPlate"
+		plate.modulate = Color(0.72, 0.22, 0.16, 0.86)
+	var label = make_label(seal, text, 12, Color(0.98, 0.90, 0.72, 0.92), true)
+	label.name = "SealStampText"
+	apply_rect(label, rect_full(0.08, 0.08, 0.92, 0.92))
 	parent.add_child(seal)
 	return seal
+
 
 func make_setting_button(label: String, enabled: bool, callback: Callable) -> Button:
 	var color = Color(0.22, 0.52, 0.42) if enabled else Color(0.44, 0.32, 0.28)
@@ -16201,8 +16011,17 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	configure_passive_container(row)
 	row.custom_minimum_size = Vector2(0, 48)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_stylebox_override("panel", style(Color(0.310, 0.385, 0.325, 0.99), 10, Color(0.88, 0.94, 0.78, 0.78), 1, 0))
+	# r180: GPT settings plate only — no solid StyleBox row paint.
+	var empty_row := StyleBoxEmpty.new()
+	row.add_theme_stylebox_override("panel", empty_row)
 	parent.add_child(row)
+	var row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.58, false)
+	if row_plate == null:
+		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.52, false)
+	if row_plate != null:
+		row_plate.name = "SettingRowGptPlate_%s" % title
+		row_plate.modulate = Color(0.55, 0.68, 0.58, 0.62)
+		row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
 	var text_panel = make_panel(row, rect_full(0.028, 0.110, 0.565, 0.890), Color(0.045, 0.075, 0.080, 0.32), 8, Color(0.78, 0.90, 0.78, 0.32), 0)
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
@@ -16356,11 +16175,12 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 	button.clip_contents = false
 	button.disabled = not clickable
 	configure_touch_button(button)
-	var normal_border := Color(GOLD_BRIGHT.r, GOLD_BRIGHT.g, GOLD_BRIGHT.b, 0.74 if highlighted else 0.0)
-	button.add_theme_stylebox_override("normal", style(Color(0.0, 0.0, 0.0, 0.0), 8, normal_border, 2 if highlighted else 0, 0))
-	button.add_theme_stylebox_override("hover", style(Color(1.0, 0.90, 0.48, 0.025), 8, Color(GOLD_BRIGHT.r, GOLD_BRIGHT.g, GOLD_BRIGHT.b, 0.76), 2, 0))
-	button.add_theme_stylebox_override("pressed", style(Color(0.0, 0.0, 0.0, 0.06), 8, Color(GOLD_DARK.r, GOLD_DARK.g, GOLD_DARK.b, 0.64), 2, 0))
-	button.add_theme_stylebox_override("disabled", style(Color(0.0, 0.0, 0.0, 0.0), 8, normal_border, 1 if highlighted else 0, 0))
+	# r180: hit proxy is invisible; highlight is GPT soft flash, not StyleBox paint.
+	var empty_hit := StyleBoxEmpty.new()
+	button.add_theme_stylebox_override("normal", empty_hit)
+	button.add_theme_stylebox_override("hover", empty_hit)
+	button.add_theme_stylebox_override("pressed", empty_hit)
+	button.add_theme_stylebox_override("disabled", empty_hit)
 	frame.add_child(button)
 	apply_centered_rect(button, Vector2(0.5, 0.5), size)
 
@@ -16370,7 +16190,14 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 		var risk_badge := make_label(button, risk_text, max(9, int(size.y * 0.14)), Color(1.0, 0.98, 0.90), true)
 		risk_badge.name = "Hand3DRiskBadge"
 		risk_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		risk_badge.add_theme_stylebox_override("normal", style(risk_color.darkened(0.20), 8, risk_color.lightened(0.16), 1))
+		var empty_risk := StyleBoxEmpty.new()
+		empty_risk.set_content_margin_all(3)
+		risk_badge.add_theme_stylebox_override("normal", empty_risk)
+		var risk_chip = add_optional_gpt_illustration_texture(risk_badge, "ui_hand_tray_state_chip", rect_full(-0.08, -0.10, 1.08, 1.10), 0.78, false)
+		if risk_chip != null:
+			risk_chip.name = "RiskBadgeGptChip"
+			risk_chip.modulate = Color(risk_color.r, risk_color.g, risk_color.b, 0.88)
+			risk_badge.move_child(risk_chip, 0)
 		apply_rect(risk_badge, rect_full(0.12, 0.76, 0.88, 0.96))
 	if TILE_TEXT_OVERLAYS_ENABLED and hint_badge != "":
 		var hint_color := tile_hint_badge_color(hint_badge)
@@ -16378,7 +16205,14 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 		hint.name = "TileHintBadge"
 		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hint.clip_text = true
-		hint.add_theme_stylebox_override("normal", style(hint_color, 8, hint_color.lightened(0.16), 1))
+		var empty_hint := StyleBoxEmpty.new()
+		empty_hint.set_content_margin_all(3)
+		hint.add_theme_stylebox_override("normal", empty_hint)
+		var hint_chip = add_optional_gpt_illustration_texture(hint, "ui_hand_tray_state_chip", rect_full(-0.08, -0.10, 1.08, 1.10), 0.78, false)
+		if hint_chip != null:
+			hint_chip.name = "HintBadgeGptChip"
+			hint_chip.modulate = Color(hint_color.r, hint_color.g, hint_color.b, 0.88)
+			hint.move_child(hint_chip, 0)
 		var hint_left := 0.50 if hint_badge.length() > 1 else 0.62
 		apply_rect(hint, rect_full(hint_left, 0.04, 0.92, 0.23))
 
@@ -16479,18 +16313,12 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		if risk_text == "" and not highlighted:
 			border = Color(0.0, 0.0, 0.0, 0.0)
 	if button != null:
-		# 可点击牌面的增强样式
-		if tile_texture != null:
-			var hover_fill = Color(face.r, face.g, face.b, 1.0)
-			button.add_theme_stylebox_override("normal", style(face, 3, border, 0, 0))
-			button.add_theme_stylebox_override("hover", style(hover_fill, 3, Color(GOLD_PRIMARY.r, GOLD_PRIMARY.g, GOLD_PRIMARY.b, 0.22), 1, 0))
-			button.add_theme_stylebox_override("pressed", style(face.darkened(0.04), 3, Color(GOLD_DARK.r, GOLD_DARK.g, GOLD_DARK.b, 0.20), 1, 0))
-			button.add_theme_stylebox_override("disabled", style(face, 3, border, 0, 0))
-		else:
-			button.add_theme_stylebox_override("normal", style(face, 8, border, 2, 6))
-			button.add_theme_stylebox_override("hover", style(Color(0.98, 0.96, 0.90), 8, GOLD_PRIMARY, 3, 8))
-			button.add_theme_stylebox_override("pressed", style(Color(0.96, 0.94, 0.88), 8, GOLD_DARK, 2, 4))
-			button.add_theme_stylebox_override("disabled", style(face.darkened(0.08), 8, border.darkened(0.12), 1, 3))
+		# r180: tile face comes from assets/tiles; StyleBox hosts stay empty (no program porcelain paint).
+		var empty_tile := StyleBoxEmpty.new()
+		button.add_theme_stylebox_override("normal", empty_tile)
+		button.add_theme_stylebox_override("hover", empty_tile)
+		button.add_theme_stylebox_override("pressed", empty_tile)
+		button.add_theme_stylebox_override("disabled", empty_tile)
 		# 手牌hover发光效果 - 可点击牌专用 / Hand tile hover glow
 		button.mouse_entered.connect(func() -> void:
 			if not is_instance_valid(button):
@@ -16518,10 +16346,9 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 				g_tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(glow_rect.get_instance_id()))
 		)
 	else:
-		if tile_texture != null:
-			(tile_body as Panel).add_theme_stylebox_override("panel", style(face, 3, border, 0, 0))
-		else:
-			(tile_body as Panel).add_theme_stylebox_override("panel", style(face, 8, border, 2 if not highlighted else 3, static_tile_shadow_size(size)))
+		# r180: static tile panels stay StyleBox-empty; face art is assets/tiles only.
+		if tile_body is Panel:
+			(tile_body as Panel).add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	if tile_texture != null:
 		tile_body.clip_contents = true
 		var texture = TextureRect.new()
@@ -16566,7 +16393,14 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			var badge = make_label(tile_body, risk_text, max(9, int(size.y * 0.14)), Color(1.0, 0.98, 0.90), true)
 			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			var risk_color = tile_risk_color(risk)
-			badge.add_theme_stylebox_override("normal", style(risk_color.darkened(0.20), 8, risk_color.lightened(0.16), 1))
+			var empty_badge := StyleBoxEmpty.new()
+			empty_badge.set_content_margin_all(3)
+			badge.add_theme_stylebox_override("normal", empty_badge)
+			var badge_chip = add_optional_gpt_illustration_texture(badge, "ui_hand_tray_state_chip", rect_full(-0.08, -0.10, 1.08, 1.10), 0.78, false)
+			if badge_chip != null:
+				badge_chip.name = "RiskBadgeGptChip"
+				badge_chip.modulate = Color(risk_color.r, risk_color.g, risk_color.b, 0.88)
+				badge.move_child(badge_chip, 0)
 			apply_rect(badge, rect_full(0.12, 0.76, 0.88, 0.96))
 		if TILE_TEXT_OVERLAYS_ENABLED and hint_badge != "":
 			var hint = make_label(tile_body, hint_badge, max(9, int(size.y * 0.13)), Color(0.09, 0.12, 0.08), true)
@@ -16574,7 +16408,14 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			hint.clip_text = true
 			var hint_color = tile_hint_badge_color(hint_badge)
-			hint.add_theme_stylebox_override("normal", style(hint_color, 8, hint_color.lightened(0.16), 1))
+			var empty_hint := StyleBoxEmpty.new()
+			empty_hint.set_content_margin_all(3)
+			hint.add_theme_stylebox_override("normal", empty_hint)
+			var hint_chip = add_optional_gpt_illustration_texture(hint, "ui_hand_tray_state_chip", rect_full(-0.08, -0.10, 1.08, 1.10), 0.78, false)
+			if hint_chip != null:
+				hint_chip.name = "HintBadgeGptChip"
+				hint_chip.modulate = Color(hint_color.r, hint_color.g, hint_color.b, 0.88)
+				hint.move_child(hint_chip, 0)
 			var left = 0.50 if hint_badge.length() > 1 else 0.62
 			apply_rect(hint, rect_full(left, 0.04, 0.92, 0.23))
 			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -16619,14 +16460,24 @@ func make_wall_back_tile(size: Vector2 = WALL_BACK_TILE_SIZE, detailed: bool = t
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.clip_contents = true
-	panel.add_theme_stylebox_override("panel", style(Color(0.73, 0.69, 0.56, 0.98), 7, Color(0.34, 0.29, 0.18, 0.82), 1, 2 if detailed else 0))
+	# r180: wall back uses tile_back asset only — no program StyleBox porcelain slab.
+	var empty_wall_back := StyleBoxEmpty.new()
+	panel.add_theme_stylebox_override("panel", empty_wall_back)
 	if not detailed:
+		var bare = TextureRect.new()
+		bare.texture = tile_back
+		bare.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bare.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		bare.modulate = Color(1, 1, 1, 0.92)
+		bare.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bare.set_anchors_preset(Control.PRESET_FULL_RECT)
+		panel.add_child(bare)
 		return panel
 	var texture = TextureRect.new()
 	texture.texture = tile_back
 	texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	texture.modulate = Color(1, 1, 1, 0.20)
+	texture.modulate = Color(1, 1, 1, 0.92)
 	texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texture.set_anchors_preset(Control.PRESET_FULL_RECT)
 	texture.offset_left = 3
@@ -16640,43 +16491,30 @@ func make_wall_back_tile(size: Vector2 = WALL_BACK_TILE_SIZE, detailed: bool = t
 	return panel
 
 func make_water_ripple(parent: Control, rect: Rect2, style: String = "still", animated: bool = false) -> Control:
-	"""创建水面波纹装饰 - 静水/流水/湖面效果"""
+	# r180: GPT soft river wash instead of program StyleBox wave ellipses.
 	var water = Control.new()
 	water.name = "WaterRipple"
 	water.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(water, rect)
-	var wave_color := Color(0.72, 0.54, 0.28, 0.14) if style == "lake" else Color(0.64, 0.48, 0.24, 0.10)  # r449 warm
-	var wave_count := 5 if style == "flowing" else 3
-	var base_alpha := 0.18 if style == "still" else (0.14 if style == "flowing" else 0.22)
-	for w in range(wave_count):
-		var wave = Panel.new()
-		wave.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var wave_style = StyleBoxFlat.new()
-		wave_style.bg_color = Color(wave_color.r, wave_color.g, wave_color.b, base_alpha * (1.0 - float(w) * 0.25))
-		wave_style.set_corner_radius_all(50)
-		wave.add_theme_stylebox_override("panel", wave_style)
-		water.add_child(wave)
-		var y_pos := 0.20 + float(w) * (0.60 / float(max(1, wave_count - 1)))
-		var x_shrink := float(w) * 0.08
-		apply_rect(wave, rect_full(0.02 + x_shrink, y_pos - 0.04, 0.98 - x_shrink, y_pos + 0.04))
-		if style == "flowing":
-			wave.rotation = 0.01 * float(w % 2 * 2 - 1)
-	# 应用水波纹着色器增强视觉
-	if shader_materials.has("water_ripple") and DisplayServer.get_name().to_lower() != "headless":
-		var ripple_speed := 1.5 if style == "flowing" else (1.0 if style == "lake" else 0.6)
-		apply_water_ripple_shader(water, wave_color, ripple_speed)
-	if animated and fx_enabled_effective():
+	var alpha = 0.22 if style == "still" else (0.18 if style == "flowing" else 0.26)
+	var wash = add_optional_gpt_illustration_texture(water, "ui_river_soft_wash", rect_full(-0.04, -0.08, 1.04, 1.08), alpha, false)
+	if wash == null:
+		wash = add_optional_gpt_illustration_texture(water, "ui_soft_flash", rect_full(-0.04, -0.08, 1.04, 1.08), alpha * 0.8, false)
+	if wash != null:
+		wash.name = "WaterGptWash"
+		wash.modulate = Color(0.72, 0.58, 0.36, alpha + 0.10)
+	var strip = add_optional_gpt_illustration_texture(water, "ui_progress_signal_strip", rect_full(0.04, 0.42, 0.96, 0.62), alpha * 0.9, false)
+	if strip != null:
+		strip.name = "WaterGptStrip"
+		strip.modulate = Color(0.64, 0.48, 0.28, alpha)
+	if animated and fx_enabled_effective() and wash != null and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_tween()
-		tw.set_loops(48)
-		tw.tween_property(water, "modulate:a", 0.70, 3.0).from(1.0)
-		tw.tween_property(water, "modulate:a", 1.0, 3.0).from(0.70)
-		if style == "flowing":
-			var tw2 := create_tween()
-			tw2.set_loops(48)
-			tw2.tween_property(water, "offset_left", 4.0, 2.0).from(0.0)
-			tw2.tween_property(water, "offset_left", 0.0, 2.0).from(4.0)
+		tw.set_loops(36)
+		tw.tween_property(wash, "modulate:a", alpha * 0.55, 1.6).from(alpha + 0.10)
+		tw.tween_property(wash, "modulate:a", alpha + 0.10, 1.6).from(alpha * 0.55)
 	parent.add_child(water)
 	return water
+
 
 func play_card_flip_animation(container: Control, cards: Array, stagger: bool = true) -> void:
 	"""卡片翻转进场动画（用于菜单卡片等）- 增强版"""
@@ -17010,15 +16848,10 @@ func play_claim_trail_particles(from_pos: Vector2, to_pos: Vector2, arc: float, 
 	var spark_count := 8
 	var fly_dur := float(FX_CLAIM_FLY_DURATION_MSEC) / 1000.0
 	for i in range(spark_count):
-		var spark = Panel.new()
+		var ssize := randf_range(2.0, 4.5)
+		var spark = make_gpt_plate_rect(Rect2(Vector2.ZERO, Vector2(ssize, ssize)), Color(color.r, color.g, color.b, 0.55), "ui_soft_flash")
 		spark.name = "ClaimTrailSpark_%d" % i
 		spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var s_style = StyleBoxFlat.new()
-		s_style.bg_color = Color(color.r, color.g, color.b, 0.0)
-		s_style.set_corner_radius_all(50)
-		spark.add_theme_stylebox_override("panel", s_style)
-		var ssize := randf_range(2.0, 4.5)
-		spark.custom_minimum_size = Vector2(ssize, ssize)
 		trail_root.add_child(spark)
 		var step = float(i) / float(spark_count - 1)
 		# 弧线中点位置 + 随机散射
@@ -17160,17 +16993,9 @@ func play_discard_splash(target_pos: Vector2, tile: String) -> void:
 	# 水花环 - 从落点扩散
 	var ring_count := 3
 	for i in range(ring_count):
-		var ring = Panel.new()
+		var ring = make_gpt_plate_rect(Rect2(target_pos - Vector2(9.0, 9.0), Vector2(18, 18)), Color(accent.r * 0.6 + 0.4, accent.g * 0.6 + 0.4, accent.b * 0.6 + 0.3, 0.42), "ui_soft_flash")
 		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		ring.set_anchors_preset(Control.PRESET_CENTER)
-		var r_style = StyleBoxFlat.new()
-		r_style.bg_color = Color(0, 0, 0, 0)
-		r_style.set_corner_radius_all(40)
-		r_style.border_color = Color(accent.r * 0.6 + 0.4, accent.g * 0.6 + 0.4, accent.b * 0.6 + 0.3, 0.38)
-		r_style.set_border_width_all(1)
-		ring.add_theme_stylebox_override("panel", r_style)
-		ring.custom_minimum_size = Vector2(18, 18)
-		ring.position = target_pos - Vector2(9.0, 9.0)
 		ring.name = "DiscardSplashRing_%d" % i
 		splash_root.add_child(ring)
 		var delay = float(i) * 0.07
@@ -17183,15 +17008,10 @@ func play_discard_splash(target_pos: Vector2, tile: String) -> void:
 	# 散射小水滴
 	var droplet_count := 6
 	for i in range(droplet_count):
-		var drop = Panel.new()
+		var dsz := Vector2(randf_range(2, 4), randf_range(2, 4))
+		var drop = make_gpt_plate_rect(Rect2(target_pos + Vector2(randf_range(-3, 3), randf_range(-3, 3)), dsz), Color(0.60, 0.76, 0.72, 0.72), "ui_soft_flash")
 		drop.name = "DiscardSplashDrop_%d" % i
 		drop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var d_style = StyleBoxFlat.new()
-		d_style.bg_color = Color(0.60, 0.76, 0.72, 0.72)
-		d_style.set_corner_radius_all(50)
-		drop.add_theme_stylebox_override("panel", d_style)
-		drop.custom_minimum_size = Vector2(randf_range(2, 4), randf_range(2, 4))
-		drop.position = target_pos + Vector2(randf_range(-3, 3), randf_range(-3, 3))
 		splash_root.add_child(drop)
 		var angle := float(i) * TAU / float(droplet_count)
 		var dist := randf_range(16.0, 32.0)
@@ -17336,10 +17156,10 @@ func play_fx_deal_cascade(dealer: int) -> void:
 	apply_rect(ring_root, center_rect)
 	root.add_child(ring_root)
 	for i in range(4):
-		var ring = Panel.new()
+		var ring = make_gpt_plate_rect(Rect2(Vector2(-16, -16), Vector2(32, 32)), Color(accent.r, accent.g, accent.b, 0.30), "ui_soft_flash")
 		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		ring.set_anchors_preset(Control.PRESET_CENTER)
-		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 56, Color(accent.r, accent.g, accent.b, 0.30), 2, 0))
+		ring.name = "DealCascadeRing_%d" % i
 		ring_root.add_child(ring)
 		var delay = float(i) * 0.10
 		var tw_ring := create_tween()
@@ -17394,7 +17214,7 @@ func play_fx_deal_start(dealer: int) -> void:
 		ring.name = "DealStartPulseRing_%d" % i
 		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		ring.set_anchors_preset(Control.PRESET_CENTER)
-		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 48, Color(accent.r, accent.g, accent.b, 0.38), 2, 0))
+		ensure_fx_ring_gpt_plate(ring, accent, 0.38)
 		ring_root.add_child(ring)
 		var delay = float(i) * 0.08
 		var tw_ring := create_tween()
@@ -17418,7 +17238,7 @@ func play_fx_discard_ripple(seat: int = -1) -> void:
 	apply_rect(fx_ripple_root, ripple_rect)
 	for ring in fx_ripple_rings:
 		ring.modulate.a = 0.0
-		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 36, Color(0.74, 0.58, 0.22, 0.34), 1, 0))
+		ensure_fx_ring_gpt_plate(ring, Color(0.74, 0.58, 0.22), 0.34)
 		ring.offset_left = -16.0
 		ring.offset_top = -16.0
 		ring.offset_right = 16.0
@@ -17515,11 +17335,7 @@ func play_fx_flower_bloom(seat: int, tile: String) -> void:
 			tex.modulate = Color(1.0, 1.0, 1.0, 0.0)
 			petal = tex
 		else:
-			petal = Panel.new()
-			var petal_style = StyleBoxFlat.new()
-			petal_style.bg_color = Color(0.96, 0.58 + randf() * 0.18, 0.42 + randf() * 0.20, 0.78)
-			petal_style.set_corner_radius_all(999)
-			(petal as Panel).add_theme_stylebox_override("panel", petal_style)
+			petal = make_gpt_plate_rect(Rect2(Vector2(-4, -6), Vector2(8, 12)), Color(0.96, 0.58 + randf() * 0.18, 0.42 + randf() * 0.20, 0.78), "ui_soft_flash")
 		petal.name = "FlowerBloomPetal_%d" % i
 		petal.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		petal.offset_left = -9.0 if petal_texture_resource != null else -4.0
@@ -17543,7 +17359,7 @@ func play_fx_flower_bloom(seat: int, tile: String) -> void:
 	ring.name = "FlowerBloomRing"
 	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ring.set_anchors_preset(Control.PRESET_CENTER)
-	ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 999, Color(accent.r, accent.g, accent.b, 0.50), 2, 0))
+	ensure_fx_ring_gpt_plate(ring, accent, 0.50)
 	root.add_child(ring)
 	var route = make_color_rect(Rect2(Vector2(-46.0, 42.0), Vector2(92.0, 5.0)), Color(0.006, 0.016, 0.018, 0.48))
 	route.name = "FlowerBloomReplacementRoute"
@@ -17612,7 +17428,7 @@ func play_fx_gang_burst(gang_type: String, seat: int) -> void:
 	fx_burst_flash.modulate = Color(accent.r, accent.g, accent.b, 0.0)
 	for ring in fx_burst_rings:
 		ring.modulate.a = 0.0
-		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 60, accent.darkened(0.18), 3, 0))
+		ensure_fx_ring_gpt_plate(ring, accent.darkened(0.18), 0.42)
 		ring.offset_left = -42.0
 		ring.offset_top = -42.0
 		ring.offset_right = 42.0
@@ -17776,7 +17592,7 @@ func play_fx_win_burst(text: String, color: Color) -> void:
 	fx_burst_flash.modulate = Color(color.r, color.g, color.b, 0.0)
 	for ring in fx_burst_rings:
 		ring.modulate.a = 0.0
-		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 60, color.darkened(0.18), 3, 0))
+		ensure_fx_ring_gpt_plate(ring, color.darkened(0.18), 0.42)
 		ring.offset_left = -42.0
 		ring.offset_top = -42.0
 		ring.offset_right = 42.0
@@ -17846,18 +17662,12 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 		# Floating golden sparkle rain around center
 		var spark_count = 24
 		for si in range(spark_count):
-			var spark = Panel.new()
-			spark.name = "WinSparkRain_%d" % si
-			spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			var s_size = randf_range(2.0, 5.0)
-			spark.custom_minimum_size = Vector2(s_size, s_size)
-			var s_style = StyleBoxFlat.new()
-			s_style.bg_color = Color(1.0, 0.9, 0.5, randf_range(0.5, 0.9))
-			s_style.set_corner_radius_all(50)
-			spark.add_theme_stylebox_override("panel", s_style)
 			var sx = center.x + randf_range(-200.0, 200.0)
 			var sy = center.y + randf_range(-120.0, 100.0)
-			spark.position = Vector2(sx, sy)
+			var spark = make_gpt_plate_rect(Rect2(Vector2(sx, sy), Vector2(s_size, s_size)), Color(1.0, 0.9, 0.5, randf_range(0.5, 0.9)), "ui_soft_flash")
+			spark.name = "WinSparkRain_%d" % si
+			spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			fx_layer.add_child(spark)
 			var s_tw := create_tween()
 			s_tw.tween_property(spark, "position:y", sy - randf_range(40.0, 100.0), randf_range(1.0, 2.0)).set_delay(randf_range(0.0, 0.6)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -17923,7 +17733,7 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 	# 配置原有圆环 - 增强扩散效果
 	for ring in fx_burst_rings:
 		ring.modulate.a = 0.0
-		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 60, color, 4, 0))
+		ensure_fx_ring_gpt_plate(ring, color, 0.48)
 		ring.offset_left = -42.0
 		ring.offset_top = -42.0
 		ring.offset_right = 42.0
@@ -18173,7 +17983,7 @@ func play_tile_claim_burst(position: Vector2, color: Color, label_text: String =
 		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		ring.modulate = Color(color.r, color.g, color.b, 0.0)
 		ring.set_anchors_preset(Control.PRESET_CENTER)
-		ring.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0), 40, color, 2, 0))
+		ensure_fx_ring_gpt_plate(ring, color, 0.40)
 		burst_root.add_child(ring)
 		rings.append(ring)
 
@@ -19489,7 +19299,7 @@ func refresh_update_dialog_art() -> void:
 		apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
 	if update_art_status_light != null and is_instance_valid(update_art_status_light):
 		var color = update_state_color()
-		update_art_status_light.add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, 0.34), 999, Color(color.r, color.g, color.b, 0.42), 1, 0))
+		tint_panel_gpt_plate(update_art_status_light, Color(color.r, color.g, color.b, 0.42), "ui_hand_tray_state_chip")
 	refresh_update_dialog_install_route(progress)
 	refresh_update_dialog_stage_map()
 
@@ -19504,7 +19314,7 @@ func refresh_update_dialog_install_route(progress: float) -> void:
 	if install_gate is Panel:
 		var color = update_state_color() if install_progress >= 1.0 else Color(0.82, 0.70, 0.36)
 		var alpha = 0.28 if install_progress >= 1.0 else 0.16
-		(install_gate as Panel).add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, alpha), 999, Color(color.r, color.g, color.b, 0.12), 1, 0))
+		tint_panel_gpt_plate(install_gate as Panel, Color(color.r, color.g, color.b, alpha), "ui_hand_tray_state_chip")
 
 func refresh_update_dialog_stage_map() -> void:
 	if update_dialog == null or not is_instance_valid(update_dialog):
@@ -19521,14 +19331,14 @@ func refresh_update_dialog_stage_map() -> void:
 		apply_rect(gate as Control, rect_full(center - 0.023, 0.105, center + 0.023, 0.895))
 		if gate is Panel:
 			var gate_color = update_state_color()
-			(gate as Panel).add_theme_stylebox_override("panel", style(Color(gate_color.r, gate_color.g, gate_color.b, 0.22), 999, Color(gate_color.r, gate_color.g, gate_color.b, 0.24), 1, 0))
+			tint_panel_gpt_plate(gate as Panel, Color(gate_color.r, gate_color.g, gate_color.b, 0.28), "ui_hand_tray_state_chip")
 	for i in range(stages.size()):
 		var stage_id = stages[i]
 		var node = update_dialog.find_child("UpdateDialogStageNode_%s" % stage_id, true, false)
 		if node is Panel:
 			var color = update_state_color() if i <= active_index else Color(0.26, 0.36, 0.36, 1.0)
 			var alpha = 0.52 if i == active_index else 0.32 if i < active_index else 0.18
-			(node as Panel).add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, alpha), 999, Color(color.r, color.g, color.b, alpha * 0.82), 1, 0))
+			tint_panel_gpt_plate(node as Panel, Color(color.r, color.g, color.b, alpha), "ui_hand_tray_state_chip")
 
 func show_achievements_screen(instant: bool = false) -> void:
 	if transition_active and not instant:
@@ -20710,13 +20520,8 @@ func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(particle)
 
-		var shape = Panel.new()
-		shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var style_box = StyleBoxFlat.new()
-		style_box.bg_color = GOLD_PRIMARY.lightened(0.3)
-		style_box.set_corner_radius_all(50)
-		shape.add_theme_stylebox_override("panel", style_box)
-		shape.custom_minimum_size = Vector2(randf_range(6, 12), randf_range(6, 12))
+		var shape = make_gpt_spark(Vector2(randf_range(6, 12), randf_range(6, 12)), GOLD_PRIMARY.lightened(0.3))
+		shape.name = "RewardClaimSpark"
 		particle.add_child(shape)
 
 		# 从中心向外扩散
@@ -22620,10 +22425,19 @@ func ensure_update_dialog() -> void:
 	update_progress.value = 0.0
 	update_progress.show_percentage = false
 	update_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	update_progress.add_theme_stylebox_override("background", style(Color(0.014, 0.034, 0.038, 0.92), 10, Color(0.22, 0.30, 0.30, 0.52), 1))
-	update_progress.add_theme_stylebox_override("fill", style(Color(0.16, 0.48, 0.36, 0.96), 10, Color(0.54, 0.76, 0.60, 0.34), 1))
+	# ProgressBar theme hosts transparent; GPT meter plates paint track/fill.
+	update_progress.add_theme_stylebox_override("background", style(Color(0.014, 0.034, 0.038, 0.0), 10, Color(0.22, 0.30, 0.30, 0.0), 0, 0))
+	update_progress.add_theme_stylebox_override("fill", style(Color(0.16, 0.48, 0.36, 0.0), 10, Color(0.54, 0.76, 0.60, 0.0), 0, 0))
 	panel.add_child(update_progress)
 	apply_rect(update_progress, rect_full(0.08, 0.45, 0.92, 0.55))
+	var update_track = add_optional_gpt_illustration_texture(panel, "ui_meter_rail_plate", rect_full(0.08, 0.45, 0.92, 0.55), 0.55, false)
+	if update_track != null:
+		update_track.name = "UpdateProgressGptTrack"
+		panel.move_child(update_track, update_progress.get_index())
+	var update_fill_face = add_optional_gpt_illustration_texture(panel, "ui_loading_progress_plate", rect_full(0.08, 0.45, 0.92, 0.55), 0.42, false)
+	if update_fill_face != null:
+		update_fill_face.name = "UpdateProgressGptFillFace"
+		panel.move_child(update_fill_face, update_progress.get_index() + 1)
 	update_progress_label = make_label(panel, "", 15, Color(0.88, 0.90, 0.78), false)
 	update_progress_label.clip_contents = true
 	apply_rect(update_progress_label, rect_full(0.08, 0.57, 0.92, 0.685))
@@ -24806,10 +24620,10 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 	var focus_glow = Panel.new()
 	focus_glow.name = "ClickableTileFocusGlow"
 	focus_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	focus_glow.add_theme_stylebox_override("panel", style(Color(1.0, 0.92, 0.58, 0.0), 8, GOLD_BRIGHT, 2, 0))
 	focus_glow.modulate = Color(1.0, 1.0, 1.0, 0.66 if highlighted else 0.0)
 	button.add_child(focus_glow)
 	apply_rect(focus_glow, rect_full(0.035, 0.035, 0.965, 0.965))
+	ensure_fx_ring_gpt_plate(focus_glow, GOLD_BRIGHT, 0.40)
 
 	var sheen = make_gpt_plate_rect(rect_full(0.12, 0.07, 0.88, 0.16), Color(1.0, 0.93, 0.60, 0.0), "ui_soft_flash")
 	sheen.name = "ClickableTilePressSheen"
@@ -24852,11 +24666,11 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 	var tap_dot = Panel.new()
 	tap_dot.name = "ClickableTileTapDot"
 	tap_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tap_dot.add_theme_stylebox_override("panel", style(Color(1.0, 0.92, 0.48, 0.30), max(6, int(size.x * 0.16)), Color(1.0, 0.96, 0.78, 0.42), 1, 0))
 	tap_dot.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	tap_dot.scale = Vector2(0.58, 0.58)
 	button.add_child(tap_dot)
 	apply_rect(tap_dot, rect_full(0.37, 0.40, 0.63, 0.60))
+	ensure_fx_ring_gpt_plate(tap_dot, Color(1.0, 0.92, 0.48, 0.85), 0.55)
 
 	button.button_down.connect(func() -> void:
 		if not is_instance_valid(button) or not is_instance_valid(sheen) or not is_instance_valid(tap_dot):
@@ -25267,7 +25081,7 @@ func update_fx_turn_pulse() -> void:
 	var seat = get_current_seat()
 	apply_rect(fx_turn_pulse, fx_seat_screen_rect(seat))
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else UI_GOLD
-	fx_turn_glow.add_theme_stylebox_override("panel", style(Color(accent.r * 0.18, accent.g * 0.18, accent.b * 0.18, 0.08), 22, Color(accent.r, accent.g, accent.b, 0.30), 2, 0))
+	ensure_fx_ring_gpt_plate(fx_turn_glow, accent, 0.30)
 	fx_turn_pulse.visible = true
 	if tween_running:
 		fx_turn_pulse_tween.play()
@@ -25293,9 +25107,9 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
 	glow.modulate = Color(accent.r, accent.g, accent.b, 0.0)
-	glow.add_theme_stylebox_override("panel", style(Color(accent.r, accent.g, accent.b, 0.08), 10, Color(accent.r, accent.g, accent.b, 0.42), 2, 0))
 	tile_node.add_child(glow)
 	tile_node.move_child(glow, 0)
+	ensure_fx_ring_gpt_plate(glow, accent, 0.42)
 
 	# Sparkle burst particles around tile
 	var burst_count = 8
@@ -25305,14 +25119,9 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 		sp.name = "DrawSparkle_%d" % j
 		sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		sp.position = tile_center
-		var dot = Panel.new()
-		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var dot_size = randf_range(3.0, 6.0)
-		dot.custom_minimum_size = Vector2(dot_size, dot_size)
-		var dot_style = StyleBoxFlat.new()
-		dot_style.bg_color = Color(accent.r, accent.g, accent.b, randf_range(0.6, 0.9))
-		dot_style.set_corner_radius_all(50)
-		dot.add_theme_stylebox_override("panel", dot_style)
+		var dot = make_gpt_spark(Vector2(dot_size, dot_size), Color(accent.r, accent.g, accent.b, randf_range(0.6, 0.9)))
+		dot.name = "DrawSparkleDot"
 		sp.add_child(dot)
 		tile_node.add_child(sp)
 		var angle = randf() * TAU
@@ -25395,15 +25204,9 @@ func spawn_transition_complete_sparks() -> void:
 		ensure_fx_layer()
 	var burst_count = 16
 	for pi in range(burst_count):
-		var p = Panel.new()
-		p.name = "TransitionCompleteSpark_%d" % pi
-		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var ps = randf_range(3.0, 7.0)
-		p.custom_minimum_size = Vector2(ps, ps)
-		var pst = StyleBoxFlat.new()
-		pst.bg_color = Color(0.92, 0.78, 0.38, randf_range(0.5, 0.9))
-		pst.set_corner_radius_all(50)
-		p.add_theme_stylebox_override("panel", pst)
+		var p = make_gpt_spark(Vector2(ps, ps), Color(0.92, 0.78, 0.38, randf_range(0.5, 0.9)))
+		p.name = "TransitionCompleteSpark_%d" % pi
 		var vp_size = get_viewport().size
 		p.position = Vector2(randf_range(0.25, 0.75) * vp_size.x, randf_range(0.30, 0.70) * vp_size.y)
 		fx_layer.add_child(p)
@@ -25449,21 +25252,15 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 			brush_bar.name = "InkWashBrushBar"
 			ink_art.add_child(brush_bar)
 			# 墨滴扩散点 - 不同位置同时绽开
-			var ink_blots: Array[Panel] = []
+			var ink_blots: Array[Control] = []
 			var blot_positions := [
 				Vector2(0.28, 0.38), Vector2(0.52, 0.52),
 				Vector2(0.72, 0.42), Vector2(0.46, 0.70),
 			]
 			for i in range(blot_positions.size()):
 				var pos: Vector2 = blot_positions[i]
-				var blot = Panel.new()
+				var blot = make_gpt_spark(Vector2(8, 8), Color(0.015, 0.018, 0.022, 0.94), "ui_dark_scrim")
 				blot.name = "InkWashBlot_%d" % i
-				blot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				var bl_style = StyleBoxFlat.new()
-				bl_style.bg_color = Color(0.015, 0.018, 0.022, 0.94)
-				bl_style.set_corner_radius_all(999)
-				blot.add_theme_stylebox_override("panel", bl_style)
-				blot.custom_minimum_size = Vector2(8, 8)
 				blot.set_anchors_preset(Control.PRESET_CENTER)
 				blot.anchor_left = pos.x
 				blot.anchor_right = pos.x
@@ -26056,8 +25853,19 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	row.custom_minimum_size = Vector2(0, row_height)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var accent = stat_row_accent(label_text)
-	row.add_theme_stylebox_override("panel", style(Color(0.16, 0.12, 0.08, 0.52), 12, Color(accent.r, accent.g, accent.b, 0.32), 1, 0))  # r417 thinner row shell
+	row.add_theme_stylebox_override("panel", StyleBoxEmpty.new())  # GPT plates from draw_stat_row_art
 	parent.add_child(row)
+	var stats_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
+	if stats_row_plate == null:
+		stats_row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
+	if stats_row_plate != null:
+		stats_row_plate.name = "StatsRowGptPlate"
+		stats_row_plate.modulate = Color(
+			clampf(0.45 + accent.r * 0.55, 0.20, 1.20),
+			clampf(0.45 + accent.g * 0.55, 0.20, 1.20),
+			clampf(0.45 + accent.b * 0.55, 0.20, 1.20),
+			0.78
+		)
 	draw_stat_row_art(row, label_text, value_text)
 	var value_plate = make_panel(row, rect_full(0.545, 0.090, 0.955, 0.910), Color(0.10, 0.07, 0.05, 0.28), 10, Color(accent.r, accent.g, accent.b, 0.22), 0)  # r417
 	value_plate.name = "StatsRowValuePanel_%s" % label_text
@@ -26337,16 +26145,10 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 		var row_size = row.size
 		var center = Vector2(row_size.x * 0.5, row_size.y * 0.5)
 		for i in range(10):
-			var particle = Panel.new()
-			particle.name = "ShopPurchaseSuccessParticle_%d" % i
-			particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var p_style = StyleBoxFlat.new()
 			var gold_tone = GOLD_PRIMARY if i % 2 == 0 else GOLD_BRIGHT
-			p_style.bg_color = Color(gold_tone.r, gold_tone.g, gold_tone.b, 0.92)
-			p_style.set_corner_radius_all(50)
-			particle.add_theme_stylebox_override("panel", p_style)
 			var psize = 4.0 + randf() * 5.0
-			particle.size = Vector2(psize, psize)
+			var particle = make_gpt_spark(Vector2(psize, psize), Color(gold_tone.r, gold_tone.g, gold_tone.b, 0.92))
+			particle.name = "ShopPurchaseSuccessParticle_%d" % i
 			particle.position = center - Vector2(psize * 0.5, psize * 0.5)
 			row.add_child(particle)
 			var angle := float(i) * TAU / 10.0 + randf() * 0.3
@@ -26874,22 +26676,14 @@ func _create_win_particle(base_color: Color, index: int, total: int) -> Control:
 	particle.position = Vector2(cos(angle) * radius * 0.3, sin(angle) * radius * 0.3)
 
 	# 粒子核心
-	var core = Panel.new()
-	core.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var core_size = randf_range(6.0, 14.0)
-	core.custom_minimum_size = Vector2(core_size, core_size)
-
-	var particle_style = StyleBoxFlat.new()
 	var particle_color = base_color.lightened(randf_range(-0.2, 0.4))
-	particle_style.bg_color = Color(particle_color.r, particle_color.g, particle_color.b, randf_range(0.6, 0.95))
-	particle_style.set_corner_radius_all(int(core_size * 0.5))
-	core.add_theme_stylebox_override("panel", particle_style)
-
+	var core = make_gpt_spark(Vector2(core_size, core_size), Color(particle_color.r, particle_color.g, particle_color.b, randf_range(0.6, 0.95)))
+	core.name = "WinParticleCore"
 	core.offset_left = -core_size * 0.5
 	core.offset_top = -core_size * 0.5
 	core.offset_right = core_size * 0.5
 	core.offset_bottom = core_size * 0.5
-
 	particle.add_child(core)
 	particle.modulate.a = 0.0
 
@@ -27167,24 +26961,14 @@ func _create_petal() -> Control:
 	var petal_size := randf_range(7.0, 13.0)
 	for p in range(5):
 		var angle := float(p) * TAU / 5.0
-		var shape = Panel.new()
-		shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var p_style = StyleBoxFlat.new()
-		p_style.bg_color = Color(base_color.r, base_color.g, base_color.b, alpha)
-		p_style.set_corner_radius_all(50)
-		shape.add_theme_stylebox_override("panel", p_style)
-		shape.custom_minimum_size = Vector2(petal_size, petal_size * 1.6)
+		var shape = make_gpt_spark(Vector2(petal_size, petal_size * 1.6), Color(base_color.r, base_color.g, base_color.b, alpha))
+		shape.name = "PetalLobe_%d" % p
 		shape.rotation = angle
 		shape.position = Vector2(cos(angle) * petal_size * 0.5 - petal_size * 0.5, sin(angle) * petal_size * 0.5 - petal_size * 0.8)
 		flower_root.add_child(shape)
 	# 花蕊金点
-	var stamen = Panel.new()
-	stamen.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var s_style = StyleBoxFlat.new()
-	s_style.bg_color = Color(1.0, 0.90, 0.50, alpha)
-	s_style.set_corner_radius_all(50)
-	stamen.add_theme_stylebox_override("panel", s_style)
-	stamen.custom_minimum_size = Vector2(petal_size * 0.4, petal_size * 0.4)
+	var stamen = make_gpt_spark(Vector2(petal_size * 0.4, petal_size * 0.4), Color(1.0, 0.90, 0.50, alpha))
+	stamen.name = "PetalStamen"
 	stamen.position = Vector2(-petal_size * 0.2, -petal_size * 0.2)
 	flower_root.add_child(stamen)
 	petal.add_child(flower_root)
@@ -27253,26 +27037,16 @@ func _create_leaf() -> Control:
 	leaf.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var base_color: Color = LEAF_COLORS[randi() % LEAF_COLORS.size()]
 	var alpha := randf_range(0.5, 0.85)
-	# 叶身 - 带尖角的椭圆
-	var shape = Panel.new()
-	shape.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(base_color.r, base_color.g, base_color.b, alpha)
-	style.set_corner_radius_all(30)
-	shape.add_theme_stylebox_override("panel", style)
+	# 叶身 - GPT soft flash tint (no StyleBox paint)
 	var lw := randf_range(10.0, 18.0)
 	var lh := randf_range(8.0, 14.0)
-	shape.custom_minimum_size = Vector2(lw, lh)
+	var shape = make_gpt_spark(Vector2(lw, lh), Color(base_color.r, base_color.g, base_color.b, alpha))
+	shape.name = "LeafBody"
 	shape.rotation = randf() * PI
 	leaf.add_child(shape)
 	# 叶脉 - 暗色中线
-	var vein = Panel.new()
-	vein.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var v_style = StyleBoxFlat.new()
-	v_style.bg_color = Color(base_color.r * 0.6, base_color.g * 0.6, base_color.b * 0.6, alpha * 0.7)
-	v_style.set_corner_radius_all(50)
-	vein.add_theme_stylebox_override("panel", v_style)
-	vein.custom_minimum_size = Vector2(lw * 0.7, 1.5)
+	var vein = make_gpt_spark(Vector2(lw * 0.7, 1.5), Color(base_color.r * 0.6, base_color.g * 0.6, base_color.b * 0.6, alpha * 0.7))
+	vein.name = "LeafVein"
 	vein.position = Vector2(lw * 0.15, lh * 0.5 - 0.75)
 	vein.rotation = 0.0
 	leaf.add_child(vein)
@@ -27305,24 +27079,15 @@ func _start_firework_particles() -> void:
 		var particle = Control.new()
 		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var base_color: Color = FIREWORK_COLORS[randi() % FIREWORK_COLORS.size()]
-		var core = Panel.new()
-		core.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var style = StyleBoxFlat.new()
-		style.bg_color = Color(base_color.r, base_color.g, base_color.b, 0.92)
-		style.set_corner_radius_all(50)
-		core.add_theme_stylebox_override("panel", style)
-		core.custom_minimum_size = Vector2(randf_range(3, 6), randf_range(3, 6))
-		# 辉光层
-		var glow = Panel.new()
-		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var gl_style = StyleBoxFlat.new()
-		gl_style.bg_color = Color(base_color.r, base_color.g, base_color.b, 0.32)
-		gl_style.set_corner_radius_all(50)
-		glow.add_theme_stylebox_override("panel", gl_style)
-		var gsize := randf_range(10, 18)
-		glow.custom_minimum_size = Vector2(gsize, gsize)
-		glow.position = Vector2(-(gsize - core.custom_minimum_size.x) * 0.5, -(gsize - core.custom_minimum_size.y) * 0.5)
-		core.add_child(glow)
+		var csize := randf_range(3.0, 6.0)
+		var gsize := randf_range(10.0, 18.0)
+		# 辉光层 + 核心（并列 GPT spark，不嵌套）
+		var glow = make_gpt_spark(Vector2(gsize, gsize), Color(base_color.r, base_color.g, base_color.b, 0.32))
+		glow.name = "FireworkGlow"
+		glow.position = Vector2(-(gsize - csize) * 0.5, -(gsize - csize) * 0.5)
+		particle.add_child(glow)
+		var core = make_gpt_spark(Vector2(csize, csize), Color(base_color.r, base_color.g, base_color.b, 0.92))
+		core.name = "FireworkCore"
 		particle.add_child(core)
 		var cx: float = randf() * viewport_size.x
 		var cy: float = randf_range(0.10, 0.72) * viewport_size.y
@@ -27349,33 +27114,18 @@ func _start_firefly_particles() -> void:
 	for i in range(particle_count):
 		var particle = Control.new()
 		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var core = Panel.new()
-		core.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var style = StyleBoxFlat.new()
-		style.bg_color = Color(randf_range(0.72, 0.95), randf_range(0.88, 1.0), randf_range(0.32, 0.52), 0.0)
-		style.set_corner_radius_all(50)
-		core.add_theme_stylebox_override("panel", style)
-		var csize := randf_range(3, 6)
-		core.custom_minimum_size = Vector2(csize, csize)
-		# 萤火虫辉光 - 双层
-		var glow = Panel.new()
-		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var gl_style = StyleBoxFlat.new()
-		gl_style.bg_color = Color(0.85, 0.95, 0.45, 0.0)
-		gl_style.set_corner_radius_all(50)
-		glow.add_theme_stylebox_override("panel", gl_style)
-		glow.custom_minimum_size = Vector2(14, 14)
-		glow.position = Vector2(-4, -4)
-		core.add_child(glow)
-		var glow2 = Panel.new()
-		glow2.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var gl2_style = StyleBoxFlat.new()
-		gl2_style.bg_color = Color(1.0, 1.0, 0.62, 0.0)
-		gl2_style.set_corner_radius_all(50)
-		glow2.add_theme_stylebox_override("panel", gl2_style)
-		glow2.custom_minimum_size = Vector2(26, 26)
+		var csize := randf_range(3.0, 6.0)
+		# 萤火虫核心 + 双层辉光（并列 GPT spark）
+		var glow2 = make_gpt_spark(Vector2(26, 26), Color(1.0, 1.0, 0.62, 0.0))
+		glow2.name = "FireflyGlowOuter"
 		glow2.position = Vector2(-10, -10)
-		core.add_child(glow2)
+		particle.add_child(glow2)
+		var glow = make_gpt_spark(Vector2(14, 14), Color(0.85, 0.95, 0.45, 0.0))
+		glow.name = "FireflyGlow"
+		glow.position = Vector2(-4, -4)
+		particle.add_child(glow)
+		var core = make_gpt_spark(Vector2(csize, csize), Color(randf_range(0.72, 0.95), randf_range(0.88, 1.0), randf_range(0.32, 0.52), 0.0))
+		core.name = "FireflyCore"
 		particle.add_child(core)
 		var px: float = randf() * viewport_size.x
 		var py: float = randf_range(0.15, 0.85) * viewport_size.y
@@ -27407,26 +27157,15 @@ func _start_snow_fall() -> void:
 		var flake = Control.new()
 		flake.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var fsize := randf_range(3.0, 8.0)
-		# 雪花核心
-		var core = Panel.new()
-		core.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var style = StyleBoxFlat.new()
-		style.bg_color = Color(0.97, 0.99, 1.0, randf_range(0.5, 0.92))
-		style.set_corner_radius_all(50)
-		core.add_theme_stylebox_override("panel", style)
-		core.custom_minimum_size = Vector2(fsize, fsize)
-		flake.add_child(core)
-		# 柔光层 - 冰晶泛蓝白
-		var halo = Panel.new()
-		halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var h_style = StyleBoxFlat.new()
-		h_style.bg_color = Color(0.80, 0.92, 1.0, randf_range(0.10, 0.22))
-		h_style.set_corner_radius_all(50)
-		halo.add_theme_stylebox_override("panel", h_style)
+		# 雪花核心 + 柔光层（并列 GPT spark）
 		var hsize := fsize * 2.6
-		halo.custom_minimum_size = Vector2(hsize, hsize)
+		var halo = make_gpt_spark(Vector2(hsize, hsize), Color(0.80, 0.92, 1.0, randf_range(0.10, 0.22)))
+		halo.name = "SnowHalo"
 		halo.position = Vector2(-(hsize - fsize) * 0.5, -(hsize - fsize) * 0.5)
-		core.add_child(halo)
+		flake.add_child(halo)
+		var core = make_gpt_spark(Vector2(fsize, fsize), Color(0.97, 0.99, 1.0, randf_range(0.5, 0.92)))
+		core.name = "SnowCore"
+		flake.add_child(core)
 		var px: float = randf() * viewport_size.x
 		var py: float = randf_range(-1.0, 1.0) * viewport_size.y
 		flake.position = Vector2(px, py)
@@ -27455,16 +27194,11 @@ func _play_golden_rain(parent: Control, duration: float, intensity: float = 1.0)
 	var viewport_size = parent.size if parent.size.x > 0 else get_viewport().size
 	var rain_count := int(28 * intensity)
 	for i in range(rain_count):
-		var drop = Panel.new()
-		drop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var d_style = StyleBoxFlat.new()
 		var gold_hue := randf_range(0.08, 0.14)
-		d_style.bg_color = Color.from_hsv(gold_hue, 0.8, randf_range(0.85, 1.0), randf_range(0.6, 0.92))
-		d_style.set_corner_radius_all(50)
-		drop.add_theme_stylebox_override("panel", d_style)
 		var w := randf_range(2.0, 4.0)
 		var h := randf_range(8.0, 18.0)
-		drop.custom_minimum_size = Vector2(w, h)
+		var drop = make_gpt_spark(Vector2(w, h), Color.from_hsv(gold_hue, 0.8, randf_range(0.85, 1.0), randf_range(0.6, 0.92)))
+		drop.name = "GoldenRainDrop_%d" % i
 		drop.position = Vector2(randf() * viewport_size.x, -randf_range(10.0, 60.0))
 		parent.add_child(drop)
 		var fall_dur := randf_range(0.6, 1.4)
@@ -27500,15 +27234,12 @@ func _play_calligraphy_reveal(parent: Control, text: String, color: Color, rect:
 	var tw := create_tween()
 	tw.tween_property(label, "modulate:a", 1.0, 0.3).from(0.0)
 	tw.parallel().tween_property(label, "position:y", 0.0, 0.5).from(12.0).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	# 笔触墨痕装饰
-	var stroke = Panel.new()
-	stroke.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var s_style = StyleBoxFlat.new()
-	s_style.bg_color = Color(color.r, color.g, color.b, 0.3)
-	s_style.set_corner_radius_all(2)
-	stroke.add_theme_stylebox_override("panel", s_style)
-	stroke.custom_minimum_size = Vector2(0, 3)
+	# 笔触墨痕装饰 — GPT soft flash (no StyleBox paint)
+	var stroke = make_gpt_spark(Vector2(8, 3), Color(color.r, color.g, color.b, 0.3))
+	stroke.name = "CalligraphyStroke"
 	stroke.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	stroke.offset_left = 0
+	stroke.offset_right = 0
 	stroke.offset_top = -6
 	stroke.offset_bottom = -3
 	container.add_child(stroke)
@@ -27532,15 +27263,9 @@ func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
 	# 墨点飞溅 - 大小不一的不规则斑点
 	var splat_count := 5
 	for i in range(splat_count):
-		var splat = Panel.new()
-		splat.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var sp_style = StyleBoxFlat.new()
-		sp_style.bg_color = Color(color.r * 0.3, color.g * 0.3, color.b * 0.3, randf_range(0.4, 0.7))
-		var radius := int(randf_range(8, 20))
-		sp_style.set_corner_radius_all(radius)
-		splat.add_theme_stylebox_override("panel", sp_style)
 		var sp_size := randf_range(6.0, 16.0)
-		splat.custom_minimum_size = Vector2(sp_size, sp_size * randf_range(0.6, 1.4))
+		var splat = make_gpt_spark(Vector2(sp_size, sp_size * randf_range(0.6, 1.4)), Color(color.r * 0.3, color.g * 0.3, color.b * 0.3, randf_range(0.4, 0.7)))
+		splat.name = "InkSplashSplat_%d" % i
 		splat.position = target_pos
 		splat.rotation = randf() * TAU
 		splash_root.add_child(splat)
@@ -27551,18 +27276,13 @@ func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
 		tw.tween_property(splat, "position", target_pos + Vector2(cos(angle), sin(angle)) * dist, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(splat, "scale", Vector2(1.3, 1.3), 0.15).from(Vector2(0.3, 0.3))
 		tw.tween_property(splat, "modulate:a", 0.0, 0.5).from(1.0).set_delay(0.15)
-	# 墨晕扩散环
+	# 墨晕扩散环 — GPT soft flash ring (no StyleBox border paint)
 	var ink_ring = Panel.new()
 	ink_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var ring_style = StyleBoxFlat.new()
-	ring_style.bg_color = Color(0, 0, 0, 0)
-	ring_style.border_color = Color(color.r * 0.2, color.g * 0.2, color.b * 0.2, 0.5)
-	ring_style.set_border_width_all(2)
-	ring_style.set_corner_radius_all(50)
-	ink_ring.add_theme_stylebox_override("panel", ring_style)
 	ink_ring.custom_minimum_size = Vector2(10, 10)
 	ink_ring.position = target_pos - Vector2(5, 5)
 	splash_root.add_child(ink_ring)
+	ensure_fx_ring_gpt_plate(ink_ring, Color(color.r * 0.2, color.g * 0.2, color.b * 0.2, 0.5), 0.45)
 	var ring_tw := create_tween()
 	ring_tw.set_parallel(true)
 	ring_tw.tween_property(ink_ring, "custom_minimum_size", Vector2(60, 60), 0.4).from(Vector2(10, 10)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -27581,7 +27301,7 @@ func _add_card_shimmer(button: Button, color: Color) -> void:
 	button.add_child(shimmer)
 
 func _add_card_breathing_shadow(button: Button, color: Color) -> void:
-	var shadow = Panel.new()
+	var shadow = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.02, 0.02, 0.02, 0.18), "ui_dark_scrim")
 	shadow.name = "CardBreathingShadow"
 	shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shadow.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -27589,10 +27309,6 @@ func _add_card_breathing_shadow(button: Button, color: Color) -> void:
 	shadow.offset_top = 6.0
 	shadow.offset_right = 4.0
 	shadow.offset_bottom = 6.0
-	var sh_style = StyleBoxFlat.new()
-	sh_style.bg_color = Color(0, 0, 0, 0.15)
-	sh_style.set_corner_radius_all(22)
-	shadow.add_theme_stylebox_override("panel", sh_style)
 	button.add_child(shadow)
 	button.move_child(shadow, 0)
 	shadow.modulate = Color(1, 1, 1, 0.82)
@@ -27618,15 +27334,10 @@ func _start_depth_layered_dust() -> void:
 		layer_node.z_index = layer_cfg.z
 		ambient_layer.add_child(layer_node)
 		for i in range(layer_cfg.count):
-			var dust = Panel.new()
-			dust.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var d_style = StyleBoxFlat.new()
 			var warm_shift = randf_range(-0.03, 0.05)
-			d_style.bg_color = Color(0.96 + warm_shift, 0.88 + warm_shift, 0.52, layer_cfg.alpha)
-			d_style.set_corner_radius_all(50)
-			dust.add_theme_stylebox_override("panel", d_style)
 			var dsize = randf_range(layer_cfg.size_range.x, layer_cfg.size_range.y)
-			dust.custom_minimum_size = Vector2(dsize, dsize)
+			var dust = make_gpt_spark(Vector2(dsize, dsize), Color(0.96 + warm_shift, 0.88 + warm_shift, 0.52, layer_cfg.alpha))
+			dust.name = "DepthDust"
 			dust.position = Vector2(randf() * viewport_size.x, randf() * viewport_size.y)
 			layer_node.add_child(dust)
 			ambient_particles.append(dust)

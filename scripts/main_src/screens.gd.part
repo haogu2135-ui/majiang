@@ -1112,7 +1112,7 @@ func refresh_update_dialog_art() -> void:
 		apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
 	if update_art_status_light != null and is_instance_valid(update_art_status_light):
 		var color = update_state_color()
-		update_art_status_light.add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, 0.34), 999, Color(color.r, color.g, color.b, 0.42), 1, 0))
+		tint_panel_gpt_plate(update_art_status_light, Color(color.r, color.g, color.b, 0.42), "ui_hand_tray_state_chip")
 	refresh_update_dialog_install_route(progress)
 	refresh_update_dialog_stage_map()
 
@@ -1127,7 +1127,7 @@ func refresh_update_dialog_install_route(progress: float) -> void:
 	if install_gate is Panel:
 		var color = update_state_color() if install_progress >= 1.0 else Color(0.82, 0.70, 0.36)
 		var alpha = 0.28 if install_progress >= 1.0 else 0.16
-		(install_gate as Panel).add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, alpha), 999, Color(color.r, color.g, color.b, 0.12), 1, 0))
+		tint_panel_gpt_plate(install_gate as Panel, Color(color.r, color.g, color.b, alpha), "ui_hand_tray_state_chip")
 
 func refresh_update_dialog_stage_map() -> void:
 	if update_dialog == null or not is_instance_valid(update_dialog):
@@ -1144,14 +1144,14 @@ func refresh_update_dialog_stage_map() -> void:
 		apply_rect(gate as Control, rect_full(center - 0.023, 0.105, center + 0.023, 0.895))
 		if gate is Panel:
 			var gate_color = update_state_color()
-			(gate as Panel).add_theme_stylebox_override("panel", style(Color(gate_color.r, gate_color.g, gate_color.b, 0.22), 999, Color(gate_color.r, gate_color.g, gate_color.b, 0.24), 1, 0))
+			tint_panel_gpt_plate(gate as Panel, Color(gate_color.r, gate_color.g, gate_color.b, 0.28), "ui_hand_tray_state_chip")
 	for i in range(stages.size()):
 		var stage_id = stages[i]
 		var node = update_dialog.find_child("UpdateDialogStageNode_%s" % stage_id, true, false)
 		if node is Panel:
 			var color = update_state_color() if i <= active_index else Color(0.26, 0.36, 0.36, 1.0)
 			var alpha = 0.52 if i == active_index else 0.32 if i < active_index else 0.18
-			(node as Panel).add_theme_stylebox_override("panel", style(Color(color.r, color.g, color.b, alpha), 999, Color(color.r, color.g, color.b, alpha * 0.82), 1, 0))
+			tint_panel_gpt_plate(node as Panel, Color(color.r, color.g, color.b, alpha), "ui_hand_tray_state_chip")
 
 func show_achievements_screen(instant: bool = false) -> void:
 	if transition_active and not instant:
