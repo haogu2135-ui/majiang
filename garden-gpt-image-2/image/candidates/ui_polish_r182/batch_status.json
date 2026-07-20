@@ -1,0 +1,749 @@
+[
+  {
+    "round": 51,
+    "name": "menu_lobby_ui_overlay_dense_r182",
+    "asset": "menu_lobby_ui_overlay.png",
+    "ok": true,
+    "bytes": 1616620,
+    "problem": "Menu overlay thin vs hero; densify lacquer frame",
+    "next": "Round52 menu stage overlay"
+  },
+  {
+    "round": 52,
+    "name": "menu_primary_3d_stage_overlay_dense_r182",
+    "asset": "menu_primary_3d_stage_overlay.png",
+    "ok": true,
+    "bytes": 1764860,
+    "problem": "Primary stage frame weak depth",
+    "next": "Round53 claim trail"
+  },
+  {
+    "round": 53,
+    "name": "claim_response_trail_dense_r182",
+    "asset": "claim_response_trail.png",
+    "ok": true,
+    "bytes": 460702,
+    "problem": "Claim trail low ornament",
+    "next": "Round54 discard splash"
+  },
+  {
+    "round": 54,
+    "name": "discard_splash_wash_dense_r182",
+    "asset": "discard_splash_wash.png",
+    "ok": true,
+    "bytes": 1272506,
+    "problem": "Discard splash too flat",
+    "next": "Round55 lobby panel frame"
+  },
+  {
+    "round": 55,
+    "name": "online_lobby_panel_frame_v1_dense_r182",
+    "asset": "online_lobby_panel_frame_v1.png",
+    "ok": true,
+    "bytes": 1187259,
+    "problem": "Online lobby frame low density",
+    "next": "Round56 group plate"
+  },
+  {
+    "round": 56,
+    "name": "online_lobby_group_plate_v1_dense_r182",
+    "asset": "online_lobby_group_plate_v1.png",
+    "ok": true,
+    "bytes": 580520,
+    "problem": "Form group plate thin",
+    "next": "Round57 offline table overlay"
+  },
+  {
+    "round": 57,
+    "name": "offline_table_3d_overlay_dense_r182",
+    "asset": "offline_table_3d_overlay.png",
+    "ok": true,
+    "bytes": 1900479,
+    "problem": "Battle table overlay soft",
+    "next": "Round58 hand completion bus"
+  },
+  {
+    "round": 58,
+    "name": "hand_completion_gpt_bus_dense_r182",
+    "asset": "hand_completion_gpt_bus.png",
+    "ok": true,
+    "bytes": 222092,
+    "problem": "Hand progress bus sparse",
+    "next": "Round59 rules guide"
+  },
+  {
+    "round": 59,
+    "name": "rules_guide_panel_dense_r182",
+    "asset": "rules_guide_panel.png",
+    "ok": true,
+    "bytes": 228693,
+    "problem": "Rules guide plate pale",
+    "next": "Round60 rules progress"
+  },
+  {
+    "round": 60,
+    "name": "rules_reading_progress_panel_dense_r182",
+    "asset": "rules_reading_progress_panel.png",
+    "ok": true,
+    "bytes": 125426,
+    "problem": "Rules progress thin",
+    "next": "Round61 dock track"
+  },
+  {
+    "round": 61,
+    "name": "action_dock_track_panel_dense_r182",
+    "asset": "action_dock_track_panel.png",
+    "ok": true,
+    "bytes": 193567,
+    "problem": "Action dock track weak",
+    "next": "Round62 settings overview"
+  },
+  {
+    "round": 62,
+    "name": "settings_overview_panel_dense_r182",
+    "asset": "settings_overview_panel.png",
+    "ok": true,
+    "bytes": 198718,
+    "problem": "Settings overview flat",
+    "next": "Round63 settings signal"
+  },
+  {
+    "round": 63,
+    "name": "settings_section_signal_panel_dense_r182",
+    "asset": "settings_section_signal_panel.png",
+    "ok": true,
+    "bytes": 103497,
+    "problem": "Settings signal low contrast",
+    "next": "Round64 shop meter"
+  },
+  {
+    "round": 64,
+    "name": "shop_currency_meter_panel_dense_r182",
+    "asset": "shop_currency_meter_panel.png",
+    "ok": true,
+    "bytes": 106193,
+    "problem": "Shop meter plate thin",
+    "next": "Round65 form field"
+  },
+  {
+    "round": 65,
+    "name": "ui_online_form_field_dense_r182",
+    "asset": "ui_online_form_field.png",
+    "ok": true,
+    "bytes": 206428,
+    "problem": "Online form field sparse",
+    "next": "Round66 reset warning"
+  },
+  {
+    "round": 66,
+    "name": "reset_gpt_warning_dense_r182",
+    "asset": "reset_gpt_warning.png",
+    "ok": true,
+    "bytes": 943862,
+    "problem": "Reset warning low drama",
+    "next": "Round67 win detail"
+  },
+  {
+    "round": 67,
+    "name": "win_detail_gpt_scroll_dense_r182",
+    "asset": "win_detail_gpt_scroll.png",
+    "ok": true,
+    "bytes": 1483571,
+    "problem": "Win detail scroll soft",
+    "next": "Round68 win burst"
+  },
+  {
+    "round": 68,
+    "name": "win_celebration_gpt_burst_dense_r182",
+    "asset": "win_celebration_gpt_burst.png",
+    "ok": true,
+    "bytes": 562674,
+    "problem": "Win burst weak gold",
+    "next": "Round69 voice channel"
+  },
+  {
+    "round": 69,
+    "name": "voice_gpt_channel_dense_r182",
+    "asset": "voice_gpt_channel.png",
+    "ok": true,
+    "bytes": 115648,
+    "problem": "Voice channel plate thin",
+    "next": "Round70 feedback strip"
+  },
+  {
+    "round": 70,
+    "name": "online_feedback_gpt_strip_v2_dense_r182",
+    "asset": "online_feedback_gpt_strip_v2.png",
+    "ok": true,
+    "bytes": 333715,
+    "problem": "Feedback strip low density",
+    "next": "Round71 turn flow"
+  },
+  {
+    "round": 71,
+    "name": "table_turn_gpt_flow_dense_r182",
+    "asset": "table_turn_gpt_flow.png",
+    "ok": true,
+    "bytes": 227366,
+    "problem": "Turn flow sparse",
+    "next": "Round72 danger discard"
+  },
+  {
+    "round": 72,
+    "name": "danger_gpt_discard_dense_r182",
+    "asset": "danger_gpt_discard.png",
+    "ok": true,
+    "bytes": 256072,
+    "problem": "Danger discard warning weak",
+    "next": "Round73 menu tutorial"
+  },
+  {
+    "round": 73,
+    "name": "menu_tutorial_gpt_hint_dense_r182",
+    "asset": "menu_tutorial_gpt_hint.png",
+    "ok": true,
+    "bytes": 107584,
+    "problem": "Menu tutorial chip thin",
+    "next": "Round74 hand tutorial"
+  },
+  {
+    "round": 74,
+    "name": "hand_tutorial_gpt_hint_dense_r182",
+    "asset": "hand_tutorial_gpt_hint.png",
+    "ok": true,
+    "bytes": 114764,
+    "problem": "Hand tutorial chip thin",
+    "next": "Round75 flower bloom"
+  },
+  {
+    "round": 75,
+    "name": "flower_gpt_bloom_dense_r182",
+    "asset": "flower_gpt_bloom.png",
+    "ok": true,
+    "bytes": 1259694,
+    "problem": "Flower bloom low ornate",
+    "next": "Round76 seat discard preview"
+  },
+  {
+    "round": 76,
+    "name": "seat_discard_gpt_preview_dense_r182",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "bytes": 81922,
+    "problem": "Seat discard preview flat",
+    "next": "Round77 flower strip"
+  },
+  {
+    "round": 77,
+    "name": "seat_flower_gpt_strip_dense_r182",
+    "asset": "seat_flower_gpt_strip.png",
+    "ok": true,
+    "bytes": 496121,
+    "problem": "Flower strip weak",
+    "next": "Round78 wall warning"
+  },
+  {
+    "round": 78,
+    "name": "center_wall_gpt_warning_dense_r182",
+    "asset": "center_wall_gpt_warning.png",
+    "ok": true,
+    "bytes": 88849,
+    "problem": "Center wall warning thin",
+    "next": "Round79 top wall warning"
+  },
+  {
+    "round": 79,
+    "name": "top_hud_wall_gpt_warning_dense_r182",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "ok": true,
+    "bytes": 68741,
+    "problem": "Top wall warning thin",
+    "next": "Round80 gate token"
+  },
+  {
+    "round": 80,
+    "name": "lobby_room_gate_token_dense_r182",
+    "asset": "lobby_room_gate_token.png",
+    "ok": true,
+    "bytes": 356358,
+    "problem": "Gate token soft",
+    "next": "Round81 exit save scroll"
+  },
+  {
+    "round": 81,
+    "name": "exit_save_scroll_dense_r182",
+    "asset": "exit_save_scroll.png",
+    "ok": true,
+    "bytes": 445818,
+    "problem": "Exit save scroll pale",
+    "next": "Round82 winrate scroll"
+  },
+  {
+    "round": 82,
+    "name": "stats_winrate_scroll_dense_r182",
+    "asset": "stats_winrate_scroll.png",
+    "ok": true,
+    "bytes": 235809,
+    "problem": "Winrate scroll thin",
+    "next": "Round83 pattern quads"
+  },
+  {
+    "round": 83,
+    "name": "rules_pattern_quads_dense_r182",
+    "asset": "rules_pattern_quads.png",
+    "ok": true,
+    "bytes": 113148,
+    "problem": "Pattern quads low detail",
+    "next": "Round84 diagnostic hero"
+  },
+  {
+    "round": 84,
+    "name": "diagnostic_wave_hero_dense_r182",
+    "asset": "diagnostic_wave_hero.png",
+    "ok": true,
+    "bytes": 386312,
+    "problem": "Diagnostic hero weak",
+    "next": "Round85 wind pointer"
+  },
+  {
+    "round": 85,
+    "name": "center_wind_pointer_dense_r182",
+    "asset": "center_wind_pointer.png",
+    "ok": true,
+    "bytes": 153543,
+    "problem": "Wind pointer soft",
+    "next": "Round86 avatar frame"
+  },
+  {
+    "round": 86,
+    "name": "seat_avatar_scenic_frame_dense_r182",
+    "asset": "seat_avatar_scenic_frame.png",
+    "ok": true,
+    "bytes": 259022,
+    "problem": "Avatar frame thin",
+    "next": "Round87 wall landscape"
+  },
+  {
+    "round": 87,
+    "name": "wall_strip_landscape_v2_dense_r182",
+    "asset": "wall_strip_landscape_v2.png",
+    "ok": true,
+    "bytes": 279857,
+    "problem": "Wall landscape strip flat",
+    "next": "Round88 win self-draw cover"
+  },
+  {
+    "round": 88,
+    "name": "win_cover_self_draw_dense_r182",
+    "asset": "win_cover_self_draw.png",
+    "ok": true,
+    "bytes": 479223,
+    "problem": "Self-draw cover soft",
+    "next": "Round89 deal-in cover"
+  },
+  {
+    "round": 89,
+    "name": "win_cover_deal_in_dense_r182",
+    "asset": "win_cover_deal_in.png",
+    "ok": true,
+    "bytes": 423315,
+    "problem": "Deal-in cover soft",
+    "next": "Round90 draw-game cover"
+  },
+  {
+    "round": 90,
+    "name": "win_cover_draw_game_dense_r182",
+    "asset": "win_cover_draw_game.png",
+    "ok": true,
+    "bytes": 404035,
+    "problem": "Draw-game cover soft",
+    "next": "Round91 gang concealed"
+  },
+  {
+    "round": 91,
+    "name": "gang_closeup_concealed_dense_r182",
+    "asset": "gang_closeup_concealed.png",
+    "ok": true,
+    "bytes": 150423,
+    "problem": "Concealed gang closeup thin",
+    "next": "Round92 gang open"
+  },
+  {
+    "round": 92,
+    "name": "gang_closeup_open_dense_r182",
+    "asset": "gang_closeup_open.png",
+    "ok": true,
+    "bytes": 151151,
+    "problem": "Open gang closeup thin",
+    "next": "Round93 gang added"
+  },
+  {
+    "round": 93,
+    "name": "gang_closeup_added_dense_r182",
+    "asset": "gang_closeup_added.png",
+    "ok": true,
+    "bytes": 135114,
+    "problem": "Added gang closeup thin",
+    "next": "Round94 petals spring"
+  },
+  {
+    "round": 94,
+    "name": "petals_spring_dense_r182",
+    "asset": "petals_spring.png",
+    "ok": true,
+    "bytes": 42480,
+    "problem": "Spring petals sparse",
+    "next": "Round95 petals summer"
+  },
+  {
+    "round": 95,
+    "name": "petals_summer_dense_r182",
+    "asset": "petals_summer.png",
+    "ok": true,
+    "bytes": 42169,
+    "problem": "Summer petals sparse",
+    "next": "Round96 petals autumn"
+  },
+  {
+    "round": 96,
+    "name": "petals_autumn_dense_r182",
+    "asset": "petals_autumn.png",
+    "ok": true,
+    "bytes": 40085,
+    "problem": "Autumn petals sparse",
+    "next": "Round97 petals winter"
+  },
+  {
+    "round": 97,
+    "name": "petals_winter_dense_r182",
+    "asset": "petals_winter.png",
+    "ok": true,
+    "bytes": 45644,
+    "problem": "Winter petals sparse",
+    "next": "Round98 dealer seal"
+  },
+  {
+    "round": 98,
+    "name": "dealer_seal_dense_r182",
+    "asset": "dealer_seal.png",
+    "ok": true,
+    "bytes": 134143,
+    "problem": "Dealer seal low relief",
+    "next": "Round99 dealer ring"
+  },
+  {
+    "round": 99,
+    "name": "dealer_repeat_ring_dense_r182",
+    "asset": "dealer_repeat_ring.png",
+    "ok": true,
+    "bytes": 131098,
+    "problem": "Dealer ring thin",
+    "next": "Round100 active bloom"
+  },
+  {
+    "round": 100,
+    "name": "center_active_bloom_dense_r182",
+    "asset": "center_active_bloom.png",
+    "ok": true,
+    "bytes": 153947,
+    "problem": "Active bloom weak glow",
+    "next": "Round101 guide finger"
+  },
+  {
+    "round": 101,
+    "name": "guide_pointing_finger_dense_r182",
+    "asset": "guide_pointing_finger.png",
+    "ok": true,
+    "bytes": 37982,
+    "problem": "Guide finger thin",
+    "next": "Round102 fly flip"
+  },
+  {
+    "round": 102,
+    "name": "fly_transition_flip_dense_r182",
+    "asset": "fly_transition_flip.png",
+    "ok": true,
+    "bytes": 39525,
+    "problem": "Fly flip sparse",
+    "next": "Round103 charm huan"
+  },
+  {
+    "round": 103,
+    "name": "shop_charm_huan_dense_r182",
+    "asset": "shop_charm_huan.png",
+    "ok": true,
+    "bytes": 490603,
+    "problem": "Charm huan low luxe",
+    "next": "Round104 charm kan"
+  },
+  {
+    "round": 104,
+    "name": "shop_charm_kan_dense_r182",
+    "asset": "shop_charm_kan.png",
+    "ok": true,
+    "bytes": 521442,
+    "problem": "Charm kan low luxe",
+    "next": "Round105 charm yun"
+  },
+  {
+    "round": 105,
+    "name": "shop_charm_yun_dense_r182",
+    "asset": "shop_charm_yun.png",
+    "ok": true,
+    "bytes": 568899,
+    "problem": "Charm yun low luxe",
+    "next": "Round106 charm bei"
+  },
+  {
+    "round": 106,
+    "name": "shop_charm_bei_dense_r182",
+    "asset": "shop_charm_bei.png",
+    "ok": true,
+    "bytes": 549506,
+    "problem": "Charm bei low luxe",
+    "next": "Round107 medal bronze"
+  },
+  {
+    "round": 107,
+    "name": "achievement_medal_bronze_dense_r182",
+    "asset": "achievement_medal_bronze.png",
+    "ok": true,
+    "bytes": 131074,
+    "problem": "Bronze medal thin",
+    "next": "Round108 medal jade"
+  },
+  {
+    "round": 108,
+    "name": "achievement_medal_jade_dense_r182",
+    "asset": "achievement_medal_jade.png",
+    "ok": true,
+    "bytes": 154578,
+    "problem": "Jade medal thin",
+    "next": "Round109 medal gold"
+  },
+  {
+    "round": 109,
+    "name": "achievement_medal_gold_dense_r182",
+    "asset": "achievement_medal_gold.png",
+    "ok": true,
+    "bytes": 134665,
+    "problem": "Gold medal thin",
+    "next": "Round110 ribbon gold"
+  },
+  {
+    "round": 110,
+    "name": "rank_ribbon_gold_dense_r182",
+    "asset": "rank_ribbon_gold.png",
+    "ok": true,
+    "bytes": 70317,
+    "problem": "Gold ribbon sparse",
+    "next": "Round111 ribbon silver"
+  },
+  {
+    "round": 111,
+    "name": "rank_ribbon_silver_dense_r182",
+    "asset": "rank_ribbon_silver.png",
+    "ok": true,
+    "bytes": 73822,
+    "problem": "Silver ribbon sparse",
+    "next": "Round112 ribbon bronze"
+  },
+  {
+    "round": 112,
+    "name": "rank_ribbon_bronze_dense_r182",
+    "asset": "rank_ribbon_bronze.png",
+    "ok": true,
+    "bytes": 66693,
+    "problem": "Bronze ribbon sparse",
+    "next": "Round113 trophy"
+  },
+  {
+    "round": 113,
+    "name": "season_trophy_loop_dense_r182",
+    "asset": "season_trophy_loop.png",
+    "ok": true,
+    "bytes": 139606,
+    "problem": "Trophy loop thin",
+    "next": "Round114 verify stamp"
+  },
+  {
+    "round": 114,
+    "name": "update_verify_stamp_dense_r182",
+    "asset": "update_verify_stamp.png",
+    "ok": true,
+    "bytes": 136847,
+    "problem": "Verify stamp soft",
+    "next": "Round115 chat seal"
+  },
+  {
+    "round": 115,
+    "name": "chat_send_seal_dense_r182",
+    "asset": "chat_send_seal.png",
+    "ok": true,
+    "bytes": 37527,
+    "problem": "Chat seal thin",
+    "next": "Round116 rules goal"
+  },
+  {
+    "round": 116,
+    "name": "rules_section_goal_panel_dense_r182",
+    "asset": "rules_section_goal_panel.png",
+    "ok": true,
+    "bytes": 696031,
+    "problem": "Rules goal section pale",
+    "next": "Round117 rules meld"
+  },
+  {
+    "round": 117,
+    "name": "rules_section_meld_panel_dense_r182",
+    "asset": "rules_section_meld_panel.png",
+    "ok": true,
+    "bytes": 688779,
+    "problem": "Rules meld section pale",
+    "next": "Round118 rules special"
+  },
+  {
+    "round": 118,
+    "name": "rules_section_special_panel_dense_r182",
+    "asset": "rules_section_special_panel.png",
+    "ok": true,
+    "bytes": 713176,
+    "problem": "Rules special section pale",
+    "next": "Round119 rules action"
+  },
+  {
+    "round": 119,
+    "name": "rules_section_action_panel_dense_r182",
+    "asset": "rules_section_action_panel.png",
+    "ok": true,
+    "bytes": 739473,
+    "problem": "Rules action section pale",
+    "next": "Round120 ultra meld pad"
+  },
+  {
+    "round": 120,
+    "name": "ui_meld_pad_ultra_r182",
+    "asset": "ui_meld_pad.png",
+    "ok": true,
+    "bytes": 326557,
+    "problem": "Meld pad still needs richer lacquer",
+    "next": "Round121 river wash ultra"
+  },
+  {
+    "round": 121,
+    "name": "ui_river_soft_wash_ultra_r182",
+    "asset": "ui_river_soft_wash.png",
+    "ok": true,
+    "bytes": 1029910,
+    "problem": "River wash still pale under tiles",
+    "next": "Round122 hand tray ultra"
+  },
+  {
+    "round": 122,
+    "name": "hand_gpt_tray_bright_r432_ultra_r182",
+    "asset": "hand_gpt_tray_bright_r432.png",
+    "ok": true,
+    "bytes": 738157,
+    "problem": "Hand tray needs denser porcelain rim",
+    "next": "Round123 action dock ultra"
+  },
+  {
+    "round": 123,
+    "name": "action_gpt_dock_banner_r436_ultra_r182",
+    "asset": "action_gpt_dock_banner_r436.png",
+    "ok": true,
+    "bytes": 468136,
+    "problem": "Action dock banner needs richer gold",
+    "next": "Round124 top hud ultra"
+  },
+  {
+    "round": 124,
+    "name": "top_hud_gpt_banner_r434_ultra_r182",
+    "asset": "top_hud_gpt_banner_r434.png",
+    "ok": true,
+    "bytes": 430034,
+    "problem": "Top HUD banner needs denser jade",
+    "next": "Round125 seat brocade ultra"
+  },
+  {
+    "round": 125,
+    "name": "seat_gpt_brocade_v5_ultra_r182",
+    "asset": "seat_gpt_brocade_v5.png",
+    "ok": true,
+    "bytes": 279007,
+    "problem": "Seat plaque brocade still soft",
+    "next": "Round126 toast ultra"
+  },
+  {
+    "round": 126,
+    "name": "toast_gpt_banner_ultra_r182",
+    "asset": "toast_gpt_banner.png",
+    "ok": true,
+    "bytes": 506768,
+    "problem": "Toast banner thin edges",
+    "next": "Round127 button face ultra"
+  },
+  {
+    "round": 127,
+    "name": "ui_button_face_plate_ultra_r182",
+    "asset": "ui_button_face_plate.png",
+    "ok": true,
+    "bytes": 271160,
+    "problem": "Button face plate low relief",
+    "next": "Round128 meter fill ultra"
+  },
+  {
+    "round": 128,
+    "name": "ui_meter_fill_plate_ultra_r182",
+    "asset": "ui_meter_fill_plate.png",
+    "ok": true,
+    "bytes": 199814,
+    "problem": "Meter fill plate pale gold",
+    "next": "Round129 route rail ultra"
+  },
+  {
+    "round": 129,
+    "name": "ui_route_rail_plate_ultra_r182",
+    "asset": "ui_route_rail_plate.png",
+    "ok": true,
+    "bytes": 177359,
+    "problem": "Route rail plate thin",
+    "next": "Round130 menu hero ultra"
+  },
+  {
+    "round": 130,
+    "name": "menu_hero_gpt_backdrop_ultra_r182",
+    "asset": "menu_hero_gpt_backdrop.png",
+    "ok": true,
+    "bytes": 1637187,
+    "problem": "Menu hero needs richer stage depth",
+    "next": "Round131 table backdrop ultra"
+  },
+  {
+    "round": 131,
+    "name": "table_gpt_backdrop_v4_ultra_r182",
+    "asset": "table_gpt_backdrop_v4.png",
+    "ok": true,
+    "bytes": 2912963,
+    "problem": "Table felt backdrop soft grain",
+    "next": "Round132 rules scroll ultra"
+  },
+  {
+    "round": 132,
+    "name": "rules_gpt_scroll_ultra_r182",
+    "asset": "rules_gpt_scroll.png",
+    "ok": true,
+    "bytes": 1904340,
+    "problem": "Rules scroll needs denser paper grain",
+    "next": "Round133 shop vault ultra"
+  },
+  {
+    "round": 133,
+    "name": "shop_gpt_vault_ultra_r182",
+    "asset": "shop_gpt_vault.png",
+    "ok": true,
+    "bytes": 1763008,
+    "problem": "Shop vault needs denser gold vault",
+    "next": "Round134 stats ultra"
+  }
+]

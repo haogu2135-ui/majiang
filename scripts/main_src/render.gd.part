@@ -4408,7 +4408,7 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 
 func draw_menu_primary_3d_stage(parent: Control) -> Control:
 	var has_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
-	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.92, false)
+	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.96, false)  # r182 denser stage after r52
 	if stage_overlay != null:
 		stage_overlay.name = "MenuPrimary3DStageGPTOverlay"
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -4634,7 +4634,7 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 	var lower_tint = make_gpt_route_rail(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.010, 0.010, 0.22))
 	lower_tint.name = "MenuHeroControlReadabilityTint"
 	art.add_child(lower_tint)
-	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.66, false)
+	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.74, false)  # r182 denser overlay after r51
 	if ui_overlay != null:
 		ui_overlay.name = "MenuLobbyGeneratedUIOverlay"
 	return art

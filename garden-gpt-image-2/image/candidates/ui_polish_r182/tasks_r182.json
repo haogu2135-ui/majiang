@@ -1,0 +1,1402 @@
+[
+  {
+    "round": 51,
+    "name": "menu_lobby_ui_overlay_dense_r182",
+    "asset": "menu_lobby_ui_overlay.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Menu overlay thin vs hero; densify lacquer frame",
+    "next": "Round52 menu stage overlay",
+    "prompt": "Denser premium guofeng mahjong UI asset for menu lobby ui overlay: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Menu overlay thin vs hero; densify lacquer frame. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 52,
+    "name": "menu_primary_3d_stage_overlay_dense_r182",
+    "asset": "menu_primary_3d_stage_overlay.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Primary stage frame weak depth",
+    "next": "Round53 claim trail",
+    "prompt": "Denser premium guofeng mahjong UI asset for menu primary 3d stage overlay: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Primary stage frame weak depth. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 53,
+    "name": "claim_response_trail_dense_r182",
+    "asset": "claim_response_trail.png",
+    "target": [
+      1024,
+      288
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Claim trail low ornament",
+    "next": "Round54 discard splash",
+    "prompt": "Denser premium guofeng mahjong UI asset for claim response trail: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Claim trail low ornament. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 54,
+    "name": "discard_splash_wash_dense_r182",
+    "asset": "discard_splash_wash.png",
+    "target": [
+      768,
+      768
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Discard splash too flat",
+    "next": "Round55 lobby panel frame",
+    "prompt": "Denser premium guofeng mahjong UI asset for discard splash wash: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Discard splash too flat. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 55,
+    "name": "online_lobby_panel_frame_v1_dense_r182",
+    "asset": "online_lobby_panel_frame_v1.png",
+    "target": [
+      1024,
+      768
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Online lobby frame low density",
+    "next": "Round56 group plate",
+    "prompt": "Denser premium guofeng mahjong UI asset for online lobby panel frame v1: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Online lobby frame low density. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 56,
+    "name": "online_lobby_group_plate_v1_dense_r182",
+    "asset": "online_lobby_group_plate_v1.png",
+    "target": [
+      1024,
+      320
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Form group plate thin",
+    "next": "Round57 offline table overlay",
+    "prompt": "Denser premium guofeng mahjong UI asset for online lobby group plate v1: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Form group plate thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 57,
+    "name": "offline_table_3d_overlay_dense_r182",
+    "asset": "offline_table_3d_overlay.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Battle table overlay soft",
+    "next": "Round58 hand completion bus",
+    "prompt": "Denser premium guofeng mahjong UI asset for offline table 3d overlay: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Battle table overlay soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 58,
+    "name": "hand_completion_gpt_bus_dense_r182",
+    "asset": "hand_completion_gpt_bus.png",
+    "target": [
+      768,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Hand progress bus sparse",
+    "next": "Round59 rules guide",
+    "prompt": "Denser premium guofeng mahjong UI asset for hand completion gpt bus: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Hand progress bus sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 59,
+    "name": "rules_guide_panel_dense_r182",
+    "asset": "rules_guide_panel.png",
+    "target": [
+      960,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Rules guide plate pale",
+    "next": "Round60 rules progress",
+    "prompt": "Denser premium guofeng mahjong UI asset for rules guide panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Rules guide plate pale. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 60,
+    "name": "rules_reading_progress_panel_dense_r182",
+    "asset": "rules_reading_progress_panel.png",
+    "target": [
+      960,
+      80
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Rules progress thin",
+    "next": "Round61 dock track",
+    "prompt": "Denser premium guofeng mahjong UI asset for rules reading progress panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Rules progress thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 61,
+    "name": "action_dock_track_panel_dense_r182",
+    "asset": "action_dock_track_panel.png",
+    "target": [
+      1024,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Action dock track weak",
+    "next": "Round62 settings overview",
+    "prompt": "Denser premium guofeng mahjong UI asset for action dock track panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Action dock track weak. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 62,
+    "name": "settings_overview_panel_dense_r182",
+    "asset": "settings_overview_panel.png",
+    "target": [
+      768,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Settings overview flat",
+    "next": "Round63 settings signal",
+    "prompt": "Denser premium guofeng mahjong UI asset for settings overview panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Settings overview flat. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 63,
+    "name": "settings_section_signal_panel_dense_r182",
+    "asset": "settings_section_signal_panel.png",
+    "target": [
+      384,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Settings signal low contrast",
+    "next": "Round64 shop meter",
+    "prompt": "Denser premium guofeng mahjong UI asset for settings section signal panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Settings signal low contrast. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 64,
+    "name": "shop_currency_meter_panel_dense_r182",
+    "asset": "shop_currency_meter_panel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Shop meter plate thin",
+    "next": "Round65 form field",
+    "prompt": "Denser premium guofeng mahjong UI asset for shop currency meter panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Shop meter plate thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 65,
+    "name": "ui_online_form_field_dense_r182",
+    "asset": "ui_online_form_field.png",
+    "target": [
+      1024,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Online form field sparse",
+    "next": "Round66 reset warning",
+    "prompt": "Denser premium guofeng mahjong UI asset for ui online form field: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Online form field sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 66,
+    "name": "reset_gpt_warning_dense_r182",
+    "asset": "reset_gpt_warning.png",
+    "target": [
+      1024,
+      512
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Reset warning low drama",
+    "next": "Round67 win detail",
+    "prompt": "Denser premium guofeng mahjong UI asset for reset gpt warning: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Reset warning low drama. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 67,
+    "name": "win_detail_gpt_scroll_dense_r182",
+    "asset": "win_detail_gpt_scroll.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Win detail scroll soft",
+    "next": "Round68 win burst",
+    "prompt": "Denser premium guofeng mahjong UI asset for win detail gpt scroll: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Win detail scroll soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 68,
+    "name": "win_celebration_gpt_burst_dense_r182",
+    "asset": "win_celebration_gpt_burst.png",
+    "target": [
+      512,
+      512
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Win burst weak gold",
+    "next": "Round69 voice channel",
+    "prompt": "Denser premium guofeng mahjong UI asset for win celebration gpt burst: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Win burst weak gold. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 69,
+    "name": "voice_gpt_channel_dense_r182",
+    "asset": "voice_gpt_channel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Voice channel plate thin",
+    "next": "Round70 feedback strip",
+    "prompt": "Denser premium guofeng mahjong UI asset for voice gpt channel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Voice channel plate thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 70,
+    "name": "online_feedback_gpt_strip_v2_dense_r182",
+    "asset": "online_feedback_gpt_strip_v2.png",
+    "target": [
+      1024,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Feedback strip low density",
+    "next": "Round71 turn flow",
+    "prompt": "Denser premium guofeng mahjong UI asset for online feedback gpt strip v2: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Feedback strip low density. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 71,
+    "name": "table_turn_gpt_flow_dense_r182",
+    "asset": "table_turn_gpt_flow.png",
+    "target": [
+      768,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Turn flow sparse",
+    "next": "Round72 danger discard",
+    "prompt": "Denser premium guofeng mahjong UI asset for table turn gpt flow: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Turn flow sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 72,
+    "name": "danger_gpt_discard_dense_r182",
+    "asset": "danger_gpt_discard.png",
+    "target": [
+      512,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Danger discard warning weak",
+    "next": "Round73 menu tutorial",
+    "prompt": "Denser premium guofeng mahjong UI asset for danger gpt discard: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Danger discard warning weak. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 73,
+    "name": "menu_tutorial_gpt_hint_dense_r182",
+    "asset": "menu_tutorial_gpt_hint.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Menu tutorial chip thin",
+    "next": "Round74 hand tutorial",
+    "prompt": "Denser premium guofeng mahjong UI asset for menu tutorial gpt hint: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Menu tutorial chip thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 74,
+    "name": "hand_tutorial_gpt_hint_dense_r182",
+    "asset": "hand_tutorial_gpt_hint.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Hand tutorial chip thin",
+    "next": "Round75 flower bloom",
+    "prompt": "Denser premium guofeng mahjong UI asset for hand tutorial gpt hint: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Hand tutorial chip thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 75,
+    "name": "flower_gpt_bloom_dense_r182",
+    "asset": "flower_gpt_bloom.png",
+    "target": [
+      768,
+      768
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Flower bloom low ornate",
+    "next": "Round76 seat discard preview",
+    "prompt": "Denser premium guofeng mahjong UI asset for flower gpt bloom: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Flower bloom low ornate. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 76,
+    "name": "seat_discard_gpt_preview_dense_r182",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Seat discard preview flat",
+    "next": "Round77 flower strip",
+    "prompt": "Denser premium guofeng mahjong UI asset for seat discard gpt preview: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Seat discard preview flat. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 77,
+    "name": "seat_flower_gpt_strip_dense_r182",
+    "asset": "seat_flower_gpt_strip.png",
+    "target": [
+      768,
+      384
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Flower strip weak",
+    "next": "Round78 wall warning",
+    "prompt": "Denser premium guofeng mahjong UI asset for seat flower gpt strip: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Flower strip weak. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 78,
+    "name": "center_wall_gpt_warning_dense_r182",
+    "asset": "center_wall_gpt_warning.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Center wall warning thin",
+    "next": "Round79 top wall warning",
+    "prompt": "Denser premium guofeng mahjong UI asset for center wall gpt warning: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Center wall warning thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 79,
+    "name": "top_hud_wall_gpt_warning_dense_r182",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "target": [
+      512,
+      96
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Top wall warning thin",
+    "next": "Round80 gate token",
+    "prompt": "Denser premium guofeng mahjong UI asset for top hud wall gpt warning: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Top wall warning thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 80,
+    "name": "lobby_room_gate_token_dense_r182",
+    "asset": "lobby_room_gate_token.png",
+    "target": [
+      768,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Gate token soft",
+    "next": "Round81 exit save scroll",
+    "prompt": "Denser premium guofeng mahjong UI asset for lobby room gate token: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Gate token soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 81,
+    "name": "exit_save_scroll_dense_r182",
+    "asset": "exit_save_scroll.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Exit save scroll pale",
+    "next": "Round82 winrate scroll",
+    "prompt": "Denser premium guofeng mahjong UI asset for exit save scroll: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Exit save scroll pale. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 82,
+    "name": "stats_winrate_scroll_dense_r182",
+    "asset": "stats_winrate_scroll.png",
+    "target": [
+      512,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Winrate scroll thin",
+    "next": "Round83 pattern quads",
+    "prompt": "Denser premium guofeng mahjong UI asset for stats winrate scroll: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Winrate scroll thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 83,
+    "name": "rules_pattern_quads_dense_r182",
+    "asset": "rules_pattern_quads.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Pattern quads low detail",
+    "next": "Round84 diagnostic hero",
+    "prompt": "Denser premium guofeng mahjong UI asset for rules pattern quads: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Pattern quads low detail. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 84,
+    "name": "diagnostic_wave_hero_dense_r182",
+    "asset": "diagnostic_wave_hero.png",
+    "target": [
+      1280,
+      180
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Diagnostic hero weak",
+    "next": "Round85 wind pointer",
+    "prompt": "Denser premium guofeng mahjong UI asset for diagnostic wave hero: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Diagnostic hero weak. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 85,
+    "name": "center_wind_pointer_dense_r182",
+    "asset": "center_wind_pointer.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Wind pointer soft",
+    "next": "Round86 avatar frame",
+    "prompt": "Denser premium guofeng mahjong UI asset for center wind pointer: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Wind pointer soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 86,
+    "name": "seat_avatar_scenic_frame_dense_r182",
+    "asset": "seat_avatar_scenic_frame.png",
+    "target": [
+      384,
+      384
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Avatar frame thin",
+    "next": "Round87 wall landscape",
+    "prompt": "Denser premium guofeng mahjong UI asset for seat avatar scenic frame: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Avatar frame thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 87,
+    "name": "wall_strip_landscape_v2_dense_r182",
+    "asset": "wall_strip_landscape_v2.png",
+    "target": [
+      1024,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Wall landscape strip flat",
+    "next": "Round88 win self-draw cover",
+    "prompt": "Denser premium guofeng mahjong UI asset for wall strip landscape v2: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Wall landscape strip flat. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 88,
+    "name": "win_cover_self_draw_dense_r182",
+    "asset": "win_cover_self_draw.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Self-draw cover soft",
+    "next": "Round89 deal-in cover",
+    "prompt": "Denser premium guofeng mahjong UI asset for win cover self draw: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Self-draw cover soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 89,
+    "name": "win_cover_deal_in_dense_r182",
+    "asset": "win_cover_deal_in.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Deal-in cover soft",
+    "next": "Round90 draw-game cover",
+    "prompt": "Denser premium guofeng mahjong UI asset for win cover deal in: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Deal-in cover soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 90,
+    "name": "win_cover_draw_game_dense_r182",
+    "asset": "win_cover_draw_game.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Draw-game cover soft",
+    "next": "Round91 gang concealed",
+    "prompt": "Denser premium guofeng mahjong UI asset for win cover draw game: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Draw-game cover soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 91,
+    "name": "gang_closeup_concealed_dense_r182",
+    "asset": "gang_closeup_concealed.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Concealed gang closeup thin",
+    "next": "Round92 gang open",
+    "prompt": "Denser premium guofeng mahjong UI asset for gang closeup concealed: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Concealed gang closeup thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 92,
+    "name": "gang_closeup_open_dense_r182",
+    "asset": "gang_closeup_open.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Open gang closeup thin",
+    "next": "Round93 gang added",
+    "prompt": "Denser premium guofeng mahjong UI asset for gang closeup open: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Open gang closeup thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 93,
+    "name": "gang_closeup_added_dense_r182",
+    "asset": "gang_closeup_added.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Added gang closeup thin",
+    "next": "Round94 petals spring",
+    "prompt": "Denser premium guofeng mahjong UI asset for gang closeup added: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Added gang closeup thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 94,
+    "name": "petals_spring_dense_r182",
+    "asset": "petals_spring.png",
+    "target": [
+      128,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "problem": "Spring petals sparse",
+    "next": "Round95 petals summer",
+    "prompt": "Denser premium guofeng mahjong UI asset for petals spring: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Spring petals sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 95,
+    "name": "petals_summer_dense_r182",
+    "asset": "petals_summer.png",
+    "target": [
+      128,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "problem": "Summer petals sparse",
+    "next": "Round96 petals autumn",
+    "prompt": "Denser premium guofeng mahjong UI asset for petals summer: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Summer petals sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 96,
+    "name": "petals_autumn_dense_r182",
+    "asset": "petals_autumn.png",
+    "target": [
+      128,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "problem": "Autumn petals sparse",
+    "next": "Round97 petals winter",
+    "prompt": "Denser premium guofeng mahjong UI asset for petals autumn: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Autumn petals sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 97,
+    "name": "petals_winter_dense_r182",
+    "asset": "petals_winter.png",
+    "target": [
+      128,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "problem": "Winter petals sparse",
+    "next": "Round98 dealer seal",
+    "prompt": "Denser premium guofeng mahjong UI asset for petals winter: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Winter petals sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 98,
+    "name": "dealer_seal_dense_r182",
+    "asset": "dealer_seal.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Dealer seal low relief",
+    "next": "Round99 dealer ring",
+    "prompt": "Denser premium guofeng mahjong UI asset for dealer seal: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Dealer seal low relief. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 99,
+    "name": "dealer_repeat_ring_dense_r182",
+    "asset": "dealer_repeat_ring.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Dealer ring thin",
+    "next": "Round100 active bloom",
+    "prompt": "Denser premium guofeng mahjong UI asset for dealer repeat ring: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Dealer ring thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 100,
+    "name": "center_active_bloom_dense_r182",
+    "asset": "center_active_bloom.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Active bloom weak glow",
+    "next": "Round101 guide finger",
+    "prompt": "Denser premium guofeng mahjong UI asset for center active bloom: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Active bloom weak glow. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 101,
+    "name": "guide_pointing_finger_dense_r182",
+    "asset": "guide_pointing_finger.png",
+    "target": [
+      128,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "problem": "Guide finger thin",
+    "next": "Round102 fly flip",
+    "prompt": "Denser premium guofeng mahjong UI asset for guide pointing finger: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Guide finger thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 102,
+    "name": "fly_transition_flip_dense_r182",
+    "asset": "fly_transition_flip.png",
+    "target": [
+      128,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "problem": "Fly flip sparse",
+    "next": "Round103 charm huan",
+    "prompt": "Denser premium guofeng mahjong UI asset for fly transition flip: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Fly flip sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 103,
+    "name": "shop_charm_huan_dense_r182",
+    "asset": "shop_charm_huan.png",
+    "target": [
+      512,
+      512
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Charm huan low luxe",
+    "next": "Round104 charm kan",
+    "prompt": "Denser premium guofeng mahjong UI asset for shop charm huan: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Charm huan low luxe. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 104,
+    "name": "shop_charm_kan_dense_r182",
+    "asset": "shop_charm_kan.png",
+    "target": [
+      512,
+      512
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Charm kan low luxe",
+    "next": "Round105 charm yun",
+    "prompt": "Denser premium guofeng mahjong UI asset for shop charm kan: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Charm kan low luxe. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 105,
+    "name": "shop_charm_yun_dense_r182",
+    "asset": "shop_charm_yun.png",
+    "target": [
+      512,
+      512
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Charm yun low luxe",
+    "next": "Round106 charm bei",
+    "prompt": "Denser premium guofeng mahjong UI asset for shop charm yun: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Charm yun low luxe. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 106,
+    "name": "shop_charm_bei_dense_r182",
+    "asset": "shop_charm_bei.png",
+    "target": [
+      512,
+      512
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Charm bei low luxe",
+    "next": "Round107 medal bronze",
+    "prompt": "Denser premium guofeng mahjong UI asset for shop charm bei: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Charm bei low luxe. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 107,
+    "name": "achievement_medal_bronze_dense_r182",
+    "asset": "achievement_medal_bronze.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Bronze medal thin",
+    "next": "Round108 medal jade",
+    "prompt": "Denser premium guofeng mahjong UI asset for achievement medal bronze: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Bronze medal thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 108,
+    "name": "achievement_medal_jade_dense_r182",
+    "asset": "achievement_medal_jade.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Jade medal thin",
+    "next": "Round109 medal gold",
+    "prompt": "Denser premium guofeng mahjong UI asset for achievement medal jade: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Jade medal thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 109,
+    "name": "achievement_medal_gold_dense_r182",
+    "asset": "achievement_medal_gold.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Gold medal thin",
+    "next": "Round110 ribbon gold",
+    "prompt": "Denser premium guofeng mahjong UI asset for achievement medal gold: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Gold medal thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 110,
+    "name": "rank_ribbon_gold_dense_r182",
+    "asset": "rank_ribbon_gold.png",
+    "target": [
+      256,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Gold ribbon sparse",
+    "next": "Round111 ribbon silver",
+    "prompt": "Denser premium guofeng mahjong UI asset for rank ribbon gold: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Gold ribbon sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 111,
+    "name": "rank_ribbon_silver_dense_r182",
+    "asset": "rank_ribbon_silver.png",
+    "target": [
+      256,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Silver ribbon sparse",
+    "next": "Round112 ribbon bronze",
+    "prompt": "Denser premium guofeng mahjong UI asset for rank ribbon silver: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Silver ribbon sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 112,
+    "name": "rank_ribbon_bronze_dense_r182",
+    "asset": "rank_ribbon_bronze.png",
+    "target": [
+      256,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Bronze ribbon sparse",
+    "next": "Round113 trophy",
+    "prompt": "Denser premium guofeng mahjong UI asset for rank ribbon bronze: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Bronze ribbon sparse. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 113,
+    "name": "season_trophy_loop_dense_r182",
+    "asset": "season_trophy_loop.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Trophy loop thin",
+    "next": "Round114 verify stamp",
+    "prompt": "Denser premium guofeng mahjong UI asset for season trophy loop: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Trophy loop thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 114,
+    "name": "update_verify_stamp_dense_r182",
+    "asset": "update_verify_stamp.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Verify stamp soft",
+    "next": "Round115 chat seal",
+    "prompt": "Denser premium guofeng mahjong UI asset for update verify stamp: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Verify stamp soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 115,
+    "name": "chat_send_seal_dense_r182",
+    "asset": "chat_send_seal.png",
+    "target": [
+      128,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "problem": "Chat seal thin",
+    "next": "Round116 rules goal",
+    "prompt": "Denser premium guofeng mahjong UI asset for chat send seal: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Chat seal thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 116,
+    "name": "rules_section_goal_panel_dense_r182",
+    "asset": "rules_section_goal_panel.png",
+    "target": [
+      512,
+      768
+    ],
+    "api_size": "1024x1536",
+    "feather": 18,
+    "problem": "Rules goal section pale",
+    "next": "Round117 rules meld",
+    "prompt": "Denser premium guofeng mahjong UI asset for rules section goal panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Rules goal section pale. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 117,
+    "name": "rules_section_meld_panel_dense_r182",
+    "asset": "rules_section_meld_panel.png",
+    "target": [
+      512,
+      768
+    ],
+    "api_size": "1024x1536",
+    "feather": 18,
+    "problem": "Rules meld section pale",
+    "next": "Round118 rules special",
+    "prompt": "Denser premium guofeng mahjong UI asset for rules section meld panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Rules meld section pale. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 118,
+    "name": "rules_section_special_panel_dense_r182",
+    "asset": "rules_section_special_panel.png",
+    "target": [
+      512,
+      768
+    ],
+    "api_size": "1024x1536",
+    "feather": 18,
+    "problem": "Rules special section pale",
+    "next": "Round119 rules action",
+    "prompt": "Denser premium guofeng mahjong UI asset for rules section special panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Rules special section pale. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 119,
+    "name": "rules_section_action_panel_dense_r182",
+    "asset": "rules_section_action_panel.png",
+    "target": [
+      512,
+      768
+    ],
+    "api_size": "1024x1536",
+    "feather": 18,
+    "problem": "Rules action section pale",
+    "next": "Round120 ultra meld pad",
+    "prompt": "Denser premium guofeng mahjong UI asset for rules section action panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Rules action section pale. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 120,
+    "name": "ui_meld_pad_ultra_r182",
+    "asset": "ui_meld_pad.png",
+    "target": [
+      768,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Meld pad still needs richer lacquer",
+    "next": "Round121 river wash ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui meld pad: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Meld pad still needs richer lacquer. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 121,
+    "name": "ui_river_soft_wash_ultra_r182",
+    "asset": "ui_river_soft_wash.png",
+    "target": [
+      1024,
+      512
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "River wash still pale under tiles",
+    "next": "Round122 hand tray ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui river soft wash: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: River wash still pale under tiles. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 122,
+    "name": "hand_gpt_tray_bright_r432_ultra_r182",
+    "asset": "hand_gpt_tray_bright_r432.png",
+    "target": [
+      1280,
+      320
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Hand tray needs denser porcelain rim",
+    "next": "Round123 action dock ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for hand gpt tray bright r432: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Hand tray needs denser porcelain rim. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 123,
+    "name": "action_gpt_dock_banner_r436_ultra_r182",
+    "asset": "action_gpt_dock_banner_r436.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Action dock banner needs richer gold",
+    "next": "Round124 top hud ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for action gpt dock banner r436: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Action dock banner needs richer gold. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 124,
+    "name": "top_hud_gpt_banner_r434_ultra_r182",
+    "asset": "top_hud_gpt_banner_r434.png",
+    "target": [
+      1280,
+      220
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Top HUD banner needs denser jade",
+    "next": "Round125 seat brocade ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for top hud gpt banner r434: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Top HUD banner needs denser jade. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 125,
+    "name": "seat_gpt_brocade_v5_ultra_r182",
+    "asset": "seat_gpt_brocade_v5.png",
+    "target": [
+      512,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Seat plaque brocade still soft",
+    "next": "Round126 toast ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for seat gpt brocade v5: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Seat plaque brocade still soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 126,
+    "name": "toast_gpt_banner_ultra_r182",
+    "asset": "toast_gpt_banner.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Toast banner thin edges",
+    "next": "Round127 button face ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for toast gpt banner: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Toast banner thin edges. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 127,
+    "name": "ui_button_face_plate_ultra_r182",
+    "asset": "ui_button_face_plate.png",
+    "target": [
+      768,
+      192
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Button face plate low relief",
+    "next": "Round128 meter fill ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui button face plate: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Button face plate low relief. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 128,
+    "name": "ui_meter_fill_plate_ultra_r182",
+    "asset": "ui_meter_fill_plate.png",
+    "target": [
+      1024,
+      96
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Meter fill plate pale gold",
+    "next": "Round129 route rail ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui meter fill plate: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Meter fill plate pale gold. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 129,
+    "name": "ui_route_rail_plate_ultra_r182",
+    "asset": "ui_route_rail_plate.png",
+    "target": [
+      1024,
+      96
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "Route rail plate thin",
+    "next": "Round130 menu hero ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui route rail plate: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Route rail plate thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 130,
+    "name": "menu_hero_gpt_backdrop_ultra_r182",
+    "asset": "menu_hero_gpt_backdrop.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Menu hero needs richer stage depth",
+    "next": "Round131 table backdrop ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for menu hero gpt backdrop: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Menu hero needs richer stage depth. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 131,
+    "name": "table_gpt_backdrop_v4_ultra_r182",
+    "asset": "table_gpt_backdrop_v4.png",
+    "target": [
+      1536,
+      864
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Table felt backdrop soft grain",
+    "next": "Round132 rules scroll ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for table gpt backdrop v4: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Table felt backdrop soft grain. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 132,
+    "name": "rules_gpt_scroll_ultra_r182",
+    "asset": "rules_gpt_scroll.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Rules scroll needs denser paper grain",
+    "next": "Round133 shop vault ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for rules gpt scroll: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Rules scroll needs denser paper grain. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 133,
+    "name": "shop_gpt_vault_ultra_r182",
+    "asset": "shop_gpt_vault.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Shop vault needs denser gold vault",
+    "next": "Round134 stats ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for shop gpt vault: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Shop vault needs denser gold vault. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 134,
+    "name": "stats_gpt_dashboard_ultra_r182",
+    "asset": "stats_gpt_dashboard.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Stats dashboard soft panels",
+    "next": "Round135 online lobby ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for stats gpt dashboard: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Stats dashboard soft panels. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 135,
+    "name": "online_gpt_lobby_ultra_r182",
+    "asset": "online_gpt_lobby.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Online lobby scene soft",
+    "next": "Round136 daily calendar ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for online gpt lobby: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Online lobby scene soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 136,
+    "name": "daily_login_gpt_calendar_ultra_r182",
+    "asset": "daily_login_gpt_calendar.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Daily calendar thin lacquer",
+    "next": "Round137 achievement ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for daily login gpt calendar: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Daily calendar thin lacquer. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 137,
+    "name": "achievement_gpt_gallery_ultra_r182",
+    "asset": "achievement_gpt_gallery.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Achievement gallery needs denser hall",
+    "next": "Round138 settings ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for achievement gpt gallery: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Achievement gallery needs denser hall. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 138,
+    "name": "settings_gpt_panel_v2_ultra_r182",
+    "asset": "settings_gpt_panel_v2.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Settings panel soft",
+    "next": "Round139 chat panel ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for settings gpt panel v2: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Settings panel soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 139,
+    "name": "chat_gpt_panel_ultra_r182",
+    "asset": "chat_gpt_panel.png",
+    "target": [
+      768,
+      768
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Chat panel thin frame",
+    "next": "Round140 advisor ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for chat gpt panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Chat panel thin frame. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 140,
+    "name": "advisor_gpt_panel_ultra_r182",
+    "asset": "advisor_gpt_panel.png",
+    "target": [
+      768,
+      512
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Advisor panel soft",
+    "next": "Round141 exit confirm ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for advisor gpt panel: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Advisor panel soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 141,
+    "name": "exit_gpt_confirm_ultra_r182",
+    "asset": "exit_gpt_confirm.png",
+    "target": [
+      768,
+      512
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Exit confirm plate thin",
+    "next": "Round142 update dialog ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for exit gpt confirm: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Exit confirm plate thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 142,
+    "name": "update_gpt_dialog_ultra_r182",
+    "asset": "update_gpt_dialog.png",
+    "target": [
+      768,
+      512
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Update dialog soft",
+    "next": "Round143 win stage ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for update gpt dialog: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Update dialog soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 143,
+    "name": "win_result_stage_ultra_r182",
+    "asset": "win_result_stage.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Win stage needs denser celebration",
+    "next": "Round144 compass ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for win result stage: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Win stage needs denser celebration. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 144,
+    "name": "center_wind_gpt_compass_v2_ultra_r182",
+    "asset": "center_wind_gpt_compass_v2.png",
+    "target": [
+      512,
+      512
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Wind compass thin gold",
+    "next": "Round145 loading ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for center wind gpt compass v2: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Wind compass thin gold. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 145,
+    "name": "loading_scene_gpt_backdrop_ultra_r182",
+    "asset": "loading_scene_gpt_backdrop.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Loading backdrop soft",
+    "next": "Round146 title backplate ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for loading scene gpt backdrop: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Loading backdrop soft. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 146,
+    "name": "ui_title_backplate_ultra_r182",
+    "asset": "ui_title_backplate.png",
+    "target": [
+      1280,
+      720
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Title backplate thin",
+    "next": "Round147 dark scrim ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui title backplate: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Title backplate thin. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 147,
+    "name": "ui_dark_scrim_ultra_r182",
+    "asset": "ui_dark_scrim.png",
+    "target": [
+      1024,
+      1024
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Dark scrim flat ink",
+    "next": "Round148 soft flash ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui dark scrim: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Dark scrim flat ink. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 148,
+    "name": "ui_soft_flash_ultra_r182",
+    "asset": "ui_soft_flash.png",
+    "target": [
+      1024,
+      1024
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Soft flash weak highlight",
+    "next": "Round149 jade reading ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui soft flash: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Soft flash weak highlight. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 149,
+    "name": "ui_jade_reading_plate_ultra_r182",
+    "asset": "ui_jade_reading_plate.png",
+    "target": [
+      1024,
+      1024
+    ],
+    "api_size": "1024x1024",
+    "feather": 18,
+    "problem": "Jade reading plate soft grain",
+    "next": "Round150 wall feedback ultra",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for ui jade reading plate: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Jade reading plate soft grain. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  },
+  {
+    "round": 150,
+    "name": "wall_live_feedback_kit_ultra_r182",
+    "asset": "wall_live_feedback_kit.png",
+    "target": [
+      768,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 18,
+    "problem": "Wall feedback kit final densify",
+    "next": "All 150 rounds complete — verify smoke/pages",
+    "prompt": "ULTRA-dense ornate guofeng mahjong UI asset for wall live feedback kit: richer lacquer wood grain, deeper jade inlay, warmer gold filigree, soft studio rim light, empty center for UI overlays. Fix issue: Wall feedback kit final densify. Commercial AAA mobile quality, no text, no watermark, no flat color slabs."
+  }
+]

@@ -8952,7 +8952,7 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 
 func draw_menu_primary_3d_stage(parent: Control) -> Control:
 	var has_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
-	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.92, false)
+	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.96, false)  # r182 denser stage after r52
 	if stage_overlay != null:
 		stage_overlay.name = "MenuPrimary3DStageGPTOverlay"
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -9178,7 +9178,7 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 	var lower_tint = make_gpt_route_rail(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.010, 0.010, 0.22))
 	lower_tint.name = "MenuHeroControlReadabilityTint"
 	art.add_child(lower_tint)
-	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.66, false)
+	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.74, false)  # r182 denser overlay after r51
 	if ui_overlay != null:
 		ui_overlay.name = "MenuLobbyGeneratedUIOverlay"
 	return art
@@ -18175,7 +18175,7 @@ func _show_online_lobby_impl() -> void:
 	form_panel.move_child(form_rear, 0)
 	var form_top_rim = make_soft_depth_panel(form_panel, rect_full(0.040, 0.015, 0.960, 0.070), Color(1.0, 0.90, 0.56, 0.10), 999)
 	form_top_rim.name = "OnlineLobbyForm3DTopRim"
-	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.30, false)  # r415 keep smoke subdued
+	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r182 denser frame (smoke<=0.34)
 	if form_panel_frame != null:
 		form_panel_frame.name = "OnlineLobbyFormGPTPanelFrameTexture"
 		form_panel.move_child(form_panel_frame, 0)
@@ -18184,7 +18184,7 @@ func _show_online_lobby_impl() -> void:
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var input_group_backplate = make_panel(form_panel, rect_full(0.045, 0.120, 0.955, 0.650), Color(0.10, 0.07, 0.04, 0.05), 10, Color(0.86, 0.70, 0.40, 0.06), 0)  # r415
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
-	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.14, false)
+	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.15, false)  # r182 denser group (smoke<=0.16)
 	if input_group_plate != null:
 		input_group_plate.name = "OnlineLobbyInputGPTGroupPlateTexture"
 		input_group_backplate.move_child(input_group_plate, 0)
@@ -18229,7 +18229,7 @@ func _show_online_lobby_impl() -> void:
 	form_panel.add_child(start_row)
 	var action_cluster_backplate = make_panel(form_panel, rect_full(0.045, 0.666, 0.955, 0.958), Color(0.10, 0.07, 0.04, 0.05), 10, Color(0.78, 0.58, 0.34, 0.06), 0)  # r415
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
-	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.16, false)
+	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.17, false)  # r182 denser group (smoke<=0.18)
 	if action_group_plate != null:
 		action_group_plate.name = "OnlineLobbyActionGPTGroupPlateTexture"
 		action_cluster_backplate.move_child(action_group_plate, 0)
@@ -18279,7 +18279,7 @@ func _show_online_lobby_impl() -> void:
 	# 房间状态面板
 	var log_panel = make_panel(panel, rect_full(0.505, 0.17, 0.965, 0.87), Color(0.18, 0.14, 0.10, 0.62), 14, Color(0.98, 0.92, 0.70, 0.42))  # r415
 	log_panel.name = "OnlineLobbyLogPanel"
-	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.30, false)  # r415 keep smoke subdued
+	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r182 denser frame (smoke<=0.34)
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
@@ -18299,7 +18299,7 @@ func _show_online_lobby_impl() -> void:
 	apply_rect(log_title, rect_full(0.05, 0.020, 0.48, 0.095))
 	log_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var room_badge_text = "房间号 " + (selected_room if selected_room != "" else "--")
-	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.26, false)
+	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
 	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, 12, Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
