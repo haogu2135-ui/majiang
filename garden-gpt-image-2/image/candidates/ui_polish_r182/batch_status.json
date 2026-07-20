@@ -745,5 +745,158 @@
     "bytes": 1763008,
     "problem": "Shop vault needs denser gold vault",
     "next": "Round134 stats ultra"
+  },
+  {
+    "round": 134,
+    "name": "stats_gpt_dashboard_ultra_r182",
+    "asset": "stats_gpt_dashboard.png",
+    "ok": true,
+    "bytes": 1584153,
+    "problem": "Stats dashboard soft panels",
+    "next": "Round135 online lobby ultra"
+  },
+  {
+    "round": 135,
+    "name": "online_gpt_lobby_ultra_r182",
+    "asset": "online_gpt_lobby.png",
+    "ok": true,
+    "bytes": 1595748,
+    "problem": "Online lobby scene soft",
+    "next": "Round136 daily calendar ultra"
+  },
+  {
+    "round": 136,
+    "name": "daily_login_gpt_calendar_ultra_r182",
+    "asset": "daily_login_gpt_calendar.png",
+    "ok": true,
+    "bytes": 1595474,
+    "problem": "Daily calendar thin lacquer",
+    "next": "Round137 achievement ultra"
+  },
+  {
+    "round": 137,
+    "name": "achievement_gpt_gallery_ultra_r182",
+    "asset": "achievement_gpt_gallery.png",
+    "ok": true,
+    "bytes": 1609071,
+    "problem": "Achievement gallery needs denser hall",
+    "next": "Round138 settings ultra"
+  },
+  {
+    "round": 138,
+    "name": "settings_gpt_panel_v2_ultra_r182",
+    "asset": "settings_gpt_panel_v2.png",
+    "ok": true,
+    "bytes": 1742767,
+    "problem": "Settings panel soft",
+    "next": "Round139 chat panel ultra"
+  },
+  {
+    "round": 139,
+    "name": "chat_gpt_panel_ultra_r182",
+    "asset": "chat_gpt_panel.png",
+    "ok": true,
+    "bytes": 1197154,
+    "problem": "Chat panel thin frame",
+    "next": "Round140 advisor ultra"
+  },
+  {
+    "round": 140,
+    "name": "advisor_gpt_panel_ultra_r182",
+    "asset": "advisor_gpt_panel.png",
+    "ok": true,
+    "bytes": 727366,
+    "problem": "Advisor panel soft",
+    "next": "Round141 exit confirm ultra"
+  },
+  {
+    "round": 141,
+    "name": "exit_gpt_confirm_ultra_r182",
+    "asset": "exit_gpt_confirm.png",
+    "ok": true,
+    "bytes": 730819,
+    "problem": "Exit confirm plate thin",
+    "next": "Round142 update dialog ultra"
+  },
+  {
+    "round": 142,
+    "name": "update_gpt_dialog_ultra_r182",
+    "asset": "update_gpt_dialog.png",
+    "ok": true,
+    "bytes": 679517,
+    "problem": "Update dialog soft",
+    "next": "Round143 win stage ultra"
+  },
+  {
+    "round": 143,
+    "name": "win_result_stage_ultra_r182",
+    "asset": "win_result_stage.png",
+    "ok": true,
+    "bytes": 1773904,
+    "problem": "Win stage needs denser celebration",
+    "next": "Round144 compass ultra"
+  },
+  {
+    "round": 144,
+    "name": "center_wind_gpt_compass_v2_ultra_r182",
+    "asset": "center_wind_gpt_compass_v2.png",
+    "ok": true,
+    "bytes": 590963,
+    "problem": "Wind compass thin gold",
+    "next": "Round145 loading ultra"
+  },
+  {
+    "round": 145,
+    "name": "loading_scene_gpt_backdrop_ultra_r182",
+    "asset": "loading_scene_gpt_backdrop.png",
+    "ok": true,
+    "bytes": 1766777,
+    "problem": "Loading backdrop soft",
+    "next": "Round146 title backplate ultra"
+  },
+  {
+    "round": 146,
+    "name": "ui_title_backplate_ultra_r182",
+    "asset": "ui_title_backplate.png",
+    "ok": true,
+    "bytes": 1764930,
+    "problem": "Title backplate thin",
+    "next": "Round147 dark scrim ultra"
+  },
+  {
+    "round": 147,
+    "name": "ui_dark_scrim_ultra_r182",
+    "asset": "ui_dark_scrim.png",
+    "ok": true,
+    "bytes": 2069672,
+    "problem": "Dark scrim flat ink",
+    "next": "Round148 soft flash ultra"
+  },
+  {
+    "round": 148,
+    "name": "ui_soft_flash_ultra_r182",
+    "asset": "ui_soft_flash.png",
+    "ok": true,
+    "bytes": 2163714,
+    "problem": "Soft flash weak highlight",
+    "next": "Round149 jade reading ultra"
+  },
+  {
+    "round": 149,
+    "name": "ui_jade_reading_plate_ultra_r182",
+    "asset": "ui_jade_reading_plate.png",
+    "ok": true,
+    "bytes": 2065268,
+    "problem": "Jade reading plate soft grain",
+    "next": "Round150 wall feedback ultra"
+  },
+  {
+    "round": 150,
+    "name": "wall_live_feedback_kit_ultra_r182",
+    "asset": "wall_live_feedback_kit.png",
+    "ok": true,
+    "bytes": 349325,
+    "problem": "Wall feedback kit final densify",
+    "next": "All 150 rounds complete — verify smoke/pages"
   }
 ]
