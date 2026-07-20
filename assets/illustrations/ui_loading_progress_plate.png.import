@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://gpt088e8187f6ac2"
-path="res://.godot/imported/ui_loading_progress_plate.png-gpt.ctex"
+uid="uid://chp6avl3jnp08"
+path="res://.godot/imported/ui_loading_progress_plate.png-10a16a009a5391ad09c4e65e263bfa74.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/illustrations/ui_loading_progress_plate.png"
-dest_files=["res://.godot/imported/ui_loading_progress_plate.png-gpt.ctex"]
+dest_files=["res://.godot/imported/ui_loading_progress_plate.png-10a16a009a5391ad09c4e65e263bfa74.ctex"]
 
 [params]
 
@@ -25,7 +25,9 @@ mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
-process/fix=true
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0

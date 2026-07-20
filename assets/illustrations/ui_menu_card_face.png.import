@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://gptd251f9e7ae042"
-path="res://.godot/imported/ui_menu_card_face.png-gpt.ctex"
+uid="uid://dh300galq3qdt"
+path="res://.godot/imported/ui_menu_card_face.png-32c56a26a0193d6db735aa6d258b966b.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/illustrations/ui_menu_card_face.png"
-dest_files=["res://.godot/imported/ui_menu_card_face.png-gpt.ctex"]
+dest_files=["res://.godot/imported/ui_menu_card_face.png-32c56a26a0193d6db735aa6d258b966b.ctex"]
 
 [params]
 
@@ -25,7 +25,9 @@ mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
-process/fix=true
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0

@@ -32,6 +32,9 @@ func _show_achievements_screen_impl() -> void:
 		gpt_achievement_texture.name = "AchievementGPTGalleryTexture"
 		gpt_achievement_texture.modulate = Color(1.28, 1.08, 0.92, gpt_achievement_texture.modulate.a)  # r398 warm, no green boost
 	var achievement_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.025, 0.78, 0.105), 0.42, false)
+	var achievement_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.06, 0.14, 0.94, 0.90), 0.14, false)
+	if achievement_mid_ornament != null:
+		achievement_mid_ornament.name = "AchievementsMidOrnamentPlate"
 	if achievement_title_strip != null:
 		achievement_title_strip.name = "AchievementGptTitleStrip"
 	var achievement_lane_plate = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.050, 0.300, 0.950, 0.920), 0.28, false)
@@ -549,13 +552,16 @@ func _show_rules_screen_impl() -> void:
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.58), 20, Color(1.0, 0.95, 0.70, 0.45))  # r416 rules
 	panel.name = "RulesCodexFrontPanel"
 	var rules_gpt_key := "rules_gpt_scroll"
-	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
+	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.82, false)
 	if gpt_rules_texture != null:
 		gpt_rules_texture.name = "RulesGPTScrollTexture"
-	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.40, false)
+	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.52, false)
 	if rules_title_strip != null:
 		rules_title_strip.name = "RulesGptTitleStrip"
-	var rules_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.05, 0.14, 0.95, 0.92), 0.18, false)
+	var rules_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.05, 0.14, 0.95, 0.92), 0.28, false)
+	var rules_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.88), 0.16, false)
+	if rules_mid_ornament != null:
+		rules_mid_ornament.name = "RulesMidOrnamentPlate"
 	if rules_sheet != null:
 		rules_sheet.name = "RulesGptSheet"
 		gpt_rules_texture.modulate = Color(1.24, 1.10, 0.96, minf(0.78, gpt_rules_texture.modulate.a))  # r416
@@ -687,7 +693,10 @@ func _show_shop_screen_impl() -> void:
 	panel.name = "ShopCabinetFrontPanel"
 	draw_secondary_screen_texture(panel, "shop_vault", "ShopVaultTexture", 0.17)
 	var shop_gpt_key := "shop_gpt_vault"
-	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.54, false)
+	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.64, false)
+	var shop_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_shop_row_plate", rect_full(0.06, 0.16, 0.94, 0.90), 0.16, false)
+	if shop_mid_ornament != null:
+		shop_mid_ornament.name = "ShopMidOrnamentPlate"
 	if gpt_shop_texture != null:
 		gpt_shop_texture.name = "ShopGPTVaultTexture"
 		gpt_shop_texture.modulate = Color(1.30, 1.08, 0.92, minf(0.72, gpt_shop_texture.modulate.a))  # r392 warm
@@ -991,18 +1000,21 @@ func _show_stats_screen_impl() -> void:
 	panel.name = "StatsConsoleFrontPanel"
 	draw_secondary_screen_texture(panel, "stats_chart", "StatsChartTexture", 0.035)
 	var stats_gpt_key := "stats_gpt_dashboard"
-	var gpt_stats_texture = add_optional_gpt_illustration_texture(panel, stats_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.68, false)
+	var gpt_stats_texture = add_optional_gpt_illustration_texture(panel, stats_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.78, false)
 	if gpt_stats_texture != null:
 		gpt_stats_texture.name = "StatsGPTDashboardTexture"
-	var stats_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.40, false)
+	var stats_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.52, false)
 	if stats_title_strip != null:
 		stats_title_strip.name = "StatsGptTitleStrip"
-	var stats_section = add_optional_gpt_illustration_texture(panel, "ui_settings_section_plate", rect_full(0.06, 0.14, 0.94, 0.88), 0.20, false)
+	var stats_section = add_optional_gpt_illustration_texture(panel, "ui_settings_section_plate", rect_full(0.06, 0.14, 0.94, 0.88), 0.34, false)
+	var stats_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.86), 0.14, false)
+	if stats_mid_ornament != null:
+		stats_mid_ornament.name = "StatsMidOrnamentPlate"
 	if stats_section != null:
 		stats_section.name = "StatsGptSectionPlate"
 	if stats_title_strip != null:
 		stats_title_strip.name = "StatsGptTitleStrip"
-	var stats_meter = add_optional_gpt_illustration_texture(panel, "ui_meter_rail_plate", rect_full(0.08, 0.90, 0.92, 0.96), 0.36, false)
+	var stats_meter = add_optional_gpt_illustration_texture(panel, "ui_meter_rail_plate", rect_full(0.08, 0.90, 0.92, 0.96), 0.48, false)
 	if stats_meter != null:
 		stats_meter.name = "StatsGptBottomMeter"
 		gpt_stats_texture.modulate = Color(1.28, 1.12, 0.96, minf(0.76, gpt_stats_texture.modulate.a))  # r416
@@ -1194,13 +1206,13 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	daily_lower_edge.name = "DailyLogin3DLowerEdge"
 	draw_secondary_screen_texture(panel, "daily_calendar", "DailyLoginCalendarTexture", 0.15)
 	var daily_gpt_key := "daily_login_gpt_calendar"
-	var gpt_daily_texture = add_optional_gpt_illustration_texture(panel, daily_gpt_key, rect_full(0.020, 0.040, 0.980, 0.960), 0.50, false)
+	var gpt_daily_texture = add_optional_gpt_illustration_texture(panel, daily_gpt_key, rect_full(0.020, 0.040, 0.980, 0.960), 0.60, false)
 	if gpt_daily_texture != null:
 		gpt_daily_texture.name = "DailyLoginGPTCalendarTexture"
-	var daily_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.06, 0.05, 0.94, 0.14), 0.40, false)
+	var daily_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.06, 0.05, 0.94, 0.14), 0.52, false)
 	if daily_strip != null:
 		daily_strip.name = "DailyLoginGptStrip"
-	var daily_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.06, 0.16, 0.94, 0.92), 0.22, false)
+	var daily_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.06, 0.16, 0.94, 0.92), 0.34, false)
 	if daily_sheet != null:
 		daily_sheet.name = "DailyGptSheetPlate"
 	var daily_section = add_optional_gpt_illustration_texture(panel, "ui_settings_section_plate", rect_full(0.12, 0.400, 0.88, 0.680), 0.34, false)
@@ -1592,12 +1604,12 @@ func show_loading_screen() -> void:
 	if gpt_loading_texture != null:
 		gpt_loading_texture.name = "LoadingGPTBackdropTexture"
 		bg.move_child(gpt_loading_texture, 0)
-	var loading_meter = add_optional_gpt_illustration_texture(bg, "ui_loading_progress_plate", rect_full(0.16, 0.76, 0.84, 0.88), 0.62, false)
+	var loading_meter = add_optional_gpt_illustration_texture(bg, "ui_loading_progress_plate", rect_full(0.16, 0.76, 0.84, 0.88), 0.74, false)
 	if loading_meter == null:
 		loading_meter = add_optional_gpt_illustration_texture(bg, "ui_meter_rail_plate", rect_full(0.18, 0.78, 0.82, 0.86), 0.55, false)
 	if loading_meter != null:
 		loading_meter.name = "LoadingGptMeter"
-	var loading_strip = add_optional_gpt_illustration_texture(bg, "ui_progress_signal_strip", rect_full(0.12, 0.70, 0.88, 0.90), 0.28, false)
+	var loading_strip = add_optional_gpt_illustration_texture(bg, "ui_progress_signal_strip", rect_full(0.12, 0.70, 0.88, 0.90), 0.40, false)
 	if loading_strip != null:
 		loading_strip.name = "LoadingGptStrip"
 	var has_gpt_loading_backdrop := gpt_loading_texture != null

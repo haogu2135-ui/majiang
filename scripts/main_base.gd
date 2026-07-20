@@ -92,6 +92,9 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"ui_settings_section_plate": "res://assets/illustrations/ui_settings_section_plate.png",
 	"ui_menu_card_face": "res://assets/illustrations/ui_menu_card_face.png",
 	"ui_online_form_field": "res://assets/illustrations/ui_online_form_field.png",
+	"ui_ornament_tick_strip": "res://assets/illustrations/ui_ornament_tick_strip.png",
+	"ui_meter_fill_plate": "res://assets/illustrations/ui_meter_fill_plate.png",
+	"ui_route_rail_plate": "res://assets/illustrations/ui_route_rail_plate.png",
 	"reset_gpt_warning": "res://assets/illustrations/reset_gpt_warning.png",
 	"win_detail_gpt_scroll": "res://assets/illustrations/win_detail_gpt_scroll.png",
 	"win_celebration_gpt_burst": "res://assets/illustrations/win_celebration_gpt_burst.png",
@@ -1082,8 +1085,10 @@ func make_layout_host(rect: Rect2) -> Control:
 	return host
 
 
-func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "ui_title_backplate") -> Control:
+func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> Control:
 	# GPT plate (or invisible host). Never program ColorRect paint for chrome.
+	if plate_key == "":
+		plate_key = _gpt_plate_key_for_rect_color(rect, color)
 	var texture: Texture2D = optional_gpt_illustration_texture(plate_key)
 	if texture == null and plate_key != "ui_title_backplate":
 		texture = optional_gpt_illustration_texture("ui_title_backplate")
@@ -1149,12 +1154,20 @@ func set_overlay_alpha(node: Control, alpha: float) -> void:
 
 func _gpt_plate_key_for_rect_color(rect: Rect2, color: Color) -> String:
 	# Pick an existing GPT illustration plate by chrome shape / luminance.
+	# Prefer dedicated denser ornaments for thin rails / fills / ticks (no program slabs).
 	var w = maxf(absf(rect.size.x), 0.0001)
 	var h = maxf(absf(rect.size.y), 0.0001)
 	var aspect = w / h
 	var lum = color.r * 0.299 + color.g * 0.587 + color.b * 0.114
 	if color.a <= 0.18 and lum < 0.22:
 		return "ui_dark_scrim"
+	# Thin horizontal routes / fills / meter chrome
+	if aspect >= 4.0 and h <= 0.16:
+		if lum <= 0.22:
+			return "ui_route_rail_plate"
+		if lum >= 0.28:
+			return "ui_meter_fill_plate"
+		return "ui_meter_rail_plate"
 	if aspect >= 5.5:
 		return "ui_meter_rail_plate" if h < 0.08 else "ui_progress_signal_strip"
 	if aspect >= 3.2 and aspect < 5.5:
@@ -1165,8 +1178,17 @@ func _gpt_plate_key_for_rect_color(rect: Rect2, color: Color) -> String:
 		return "ui_button_face_plate" if lum > 0.25 else "ui_confirm_sheet_plate"
 	if aspect >= 0.70 and aspect < 1.05 and h >= 0.18:
 		return "ui_menu_card_face"
+	# Thin vertical ticks / rails → dedicated ornament or role rail
 	if aspect <= 0.40:
+		if w <= 0.05 or h <= 0.55:
+			return "ui_ornament_tick_strip"
 		return "ui_action_role_rail"
+	# Compact gate/seal-like chrome
+	if aspect >= 0.45 and aspect <= 1.35 and maxf(w, h) <= 0.12:
+		return "ui_hand_tray_state_chip"
+	# Soft wash / glow blobs
+	if color.a <= 0.20 and aspect >= 0.8 and aspect <= 2.2:
+		return "ui_soft_flash"
 	if lum >= 0.62:
 		return "ui_river_soft_wash"
 	if lum <= 0.20:
@@ -1179,6 +1201,62 @@ func _gpt_plate_key_for_rect_color(rect: Rect2, color: Color) -> String:
 func make_color_rect(rect: Rect2, color: Color) -> Control:
 	# GPT plate host — never paints programmatic ColorRect slabs for UI chrome.
 	return make_gpt_plate_rect(rect, color, _gpt_plate_key_for_rect_color(rect, color))
+
+
+func make_gpt_route_rail(rect: Rect2, color: Color = Color(0.006, 0.016, 0.018, 0.46)) -> Control:
+	# Dedicated dark GPT trough for HUD routes / meter tracks.
+	var key := "ui_route_rail_plate"
+	if optional_gpt_illustration_texture(key) == null:
+		key = "ui_meter_rail_plate"
+	return make_gpt_plate_rect(rect, color, key)
+
+
+func make_gpt_meter_fill(rect: Rect2, color: Color) -> Control:
+	# Dedicated warm GPT fill bar (tint via modulate).
+	var key := "ui_meter_fill_plate"
+	if optional_gpt_illustration_texture(key) == null:
+		key = "ui_progress_signal_strip"
+	return make_gpt_plate_rect(rect, color, key)
+
+
+func make_gpt_tick_strip(rect: Rect2, color: Color) -> Control:
+	# One GPT ornament strip instead of multi tick ColorRect stacks.
+	var key := "ui_ornament_tick_strip"
+	if optional_gpt_illustration_texture(key) == null:
+		key = "ui_progress_signal_strip"
+	return make_gpt_plate_rect(rect, color, key)
+
+
+func add_gpt_tick_strip(parent: Control, rect: Rect2, color: Color, node_name: String = "GptTickStrip") -> Control:
+	var node = make_gpt_tick_strip(rect, color)
+	node.name = node_name
+	if parent != null and is_instance_valid(parent):
+		parent.add_child(node)
+	return node
+
+
+func make_gpt_gate(rect: Rect2, color: Color) -> Control:
+	# Compact GPT gate/seal host (roundish chrome).
+	var key := "ui_hand_tray_state_chip"
+	if optional_gpt_illustration_texture(key) == null:
+		key = "ui_button_face_plate"
+	return make_gpt_plate_rect(rect, color, key)
+
+
+func make_gpt_ribbon(rect: Rect2, color: Color) -> Control:
+	# Thin GPT ribbon / accent lane (horizontal).
+	var key := "ui_progress_signal_strip"
+	if optional_gpt_illustration_texture("ui_ornament_tick_strip") != null and absf(rect.size.y) < 0.08:
+		key = "ui_ornament_tick_strip"
+	return make_gpt_plate_rect(rect, color, key)
+
+
+func make_gpt_edge_rail(rect: Rect2, color: Color) -> Control:
+	# Vertical edge accent rail.
+	var key := "ui_action_role_rail"
+	if optional_gpt_illustration_texture(key) == null:
+		key = "ui_ornament_tick_strip"
+	return make_gpt_plate_rect(rect, color, key)
 
 
 func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border: Color, shadow_size: int = 6) -> Panel:
@@ -1664,18 +1742,19 @@ func store_input_style_set_cache(key: String, cached_set: Dictionary) -> void:
 		input_style_set_cache.erase(oldest)
 
 func style(color: Color, radius: int, border: Color, border_width: int, shadow_size: int = 8) -> StyleBoxFlat:
-	var key = style_cache_key(color, radius, border, border_width, shadow_size)
+	# Host-only StyleBox: always transparent. GPT plates paint the chrome.
+	var safe_color = Color(color.r, color.g, color.b, 0.0)
+	var safe_border = Color(border.r, border.g, border.b, 0.0)
+	var key = style_cache_key(safe_color, radius, safe_border, 0, 0)
 	if style_cache.has(key):
 		return style_cache[key]
 	var box = StyleBoxFlat.new()
-	box.bg_color = color
+	box.bg_color = safe_color
 	box.set_corner_radius_all(radius)
-	box.set_border_width_all(border_width)
-	box.border_color = border
-	box.shadow_color = UI_PANEL_SHADOW
-	box.shadow_size = shadow_size
-	if shadow_size > 0:
-		box.shadow_offset = Vector2(0, 1)
+	box.set_border_width_all(0)
+	box.border_color = safe_border
+	box.shadow_color = Color(UI_PANEL_SHADOW.r, UI_PANEL_SHADOW.g, UI_PANEL_SHADOW.b, 0.0)
+	box.shadow_size = 0
 	store_style_cache(key, box)
 	return box
 
@@ -2005,25 +2084,21 @@ func draw_animation_preview_timeline(parent: Control, animation_name: String, sp
 	var frame_count = max(1, int(spec.get("out_point", 0)) - int(spec.get("in_point", 0)))
 	var duration_ratio = clamp(float(frame_count) / float(frame_rate) / 2.4, 0.18, 1.0)
 	var accent = animation_preview_accent(animation_name)
-	var rail = make_color_rect(rect_full(0.120, 0.820, 0.880, 0.895), Color(0.006, 0.016, 0.018, 0.46))
+	var rail = make_gpt_route_rail(rect_full(0.120, 0.820, 0.880, 0.895), Color(0.006, 0.016, 0.018, 0.46))
 	rail.name = "AnimationPreviewTimelineRail_%s" % animation_name
 	timeline.add_child(rail)
-	var fill = make_color_rect(rect_full(0.030, 0.250, 0.030 + 0.900 * duration_ratio, 0.750), Color(accent.r, accent.g, accent.b, 0.30))
+	var fill = make_gpt_meter_fill(rect_full(0.030, 0.250, 0.030 + 0.900 * duration_ratio, 0.750), Color(accent.r, accent.g, accent.b, 0.30))
 	fill.name = "AnimationPreviewTimelineFill_%s" % animation_name
 	rail.add_child(fill)
-	var gate = make_color_rect(rect_full(0.820, 0.700, 0.890, 0.930), Color(0.42, 0.74, 0.60, 0.24))
+	var gate = make_gpt_gate(rect_full(0.820, 0.700, 0.890, 0.930), Color(0.42, 0.74, 0.60, 0.24))
 	gate.name = "AnimationPreviewPlayGate_%s" % animation_name
 	timeline.add_child(gate)
 	for i in range(3):
 		var left = 0.270 + float(i) * 0.185
-		var key = make_color_rect(rect_full(left, 0.720, left + 0.034, 0.850), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.035))
+		var key = make_gpt_plate_rect(rect_full(left, 0.720, left + 0.034, 0.850), Color(accent.r, accent.g, accent.b, 0.26 - float(i) * 0.035))
 		key.name = "AnimationPreviewKeyframe_%s_%d" % [animation_name, i]
 		timeline.add_child(key)
-	for i in range(2):
-		var left = 0.645 + float(i) * 0.060
-		var tick = make_color_rect(rect_full(left, 0.160, left + 0.024, 0.310), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040))
-		tick.name = "AnimationPreviewTempoTick_%s_%d" % [animation_name, i]
-		timeline.add_child(tick)
+	var tick = add_gpt_tick_strip(timeline, rect_full(0.645, 0.160, (0.645) + float(1) * (0.060) + (0.024), 0.310), Color(accent.r, accent.g, accent.b, 0.24), "AnimationPreviewTempoTick_%s_0" % [animation_name])
 	return timeline
 
 func draw_coin_spin_preview(parent: Control) -> void:
@@ -2047,7 +2122,7 @@ func draw_victory_sparkle_preview(parent: Control) -> void:
 func draw_claim_response_orbit_preview(parent: Control) -> void:
 	var rail = make_panel(parent, rect_full(0.08, 0.42, 0.92, 0.58), Color(0.012, 0.026, 0.030, 0.70), 999, Color(0.88, 0.68, 0.32, 0.24), 0)
 	rail.name = "ClaimResponseOrbitRail"
-	var fill = make_color_rect(rect_full(0.055, 0.320, 0.780, 0.680), Color(0.88, 0.68, 0.32, 0.34))
+	var fill = make_gpt_meter_fill(rect_full(0.055, 0.320, 0.780, 0.680), Color(0.88, 0.68, 0.32, 0.34))
 	fill.name = "ClaimResponseOrbitFill"
 	rail.add_child(fill)
 	var source = make_panel(parent, rect_full(0.030, 0.300, 0.250, 0.700), Color(0.20, 0.44, 0.40, 0.42), 999, Color(0.86, 0.76, 0.42, 0.18), 0)
@@ -2055,11 +2130,7 @@ func draw_claim_response_orbit_preview(parent: Control) -> void:
 	var gate = make_panel(parent, rect_full(0.740, 0.230, 0.970, 0.770), Color(0.86, 0.66, 0.28, 0.34), 999, Color(1.0, 0.90, 0.52, 0.24), 0)
 	gate.name = "ClaimResponseOrbitGate"
 	add_lucide_icon(gate, "zap", rect_full(0.24, 0.24, 0.76, 0.76), Color(0.98, 0.88, 0.48, 0.86))
-	for i in range(3):
-		var left = 0.335 + float(i) * 0.125
-		var tick = make_color_rect(rect_full(left, 0.270, left + 0.032, 0.730), Color(0.92, 0.76, 0.38, 0.28 - float(i) * 0.045))
-		tick.name = "ClaimResponseOrbitTick_%d" % i
-		parent.add_child(tick)
+	var tick = add_gpt_tick_strip(parent, rect_full(0.335, 0.270, (0.335) + float(2) * (0.125) + (0.032), 0.730), Color(0.92, 0.76, 0.38, 0.28), "ClaimResponseOrbitTick_0")
 
 func draw_discard_ink_splash_preview(parent: Control) -> void:
 	var wake = make_panel(parent, rect_full(0.18, 0.18, 0.82, 0.82), Color(0, 0, 0, 0), 999, Color(0.86, 0.68, 0.34, 0.36), 0)  # r449 warm
@@ -2085,11 +2156,7 @@ func draw_tile_draw_fly_preview(parent: Control) -> void:
 	tile.name = "TileDrawFlyTile"
 	var gate = make_panel(parent, rect_full(0.835, 0.365, 0.970, 0.655), Color(0.92, 0.74, 0.36, 0.20), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
 	gate.name = "TileDrawFlyHandGate"
-	for i in range(3):
-		var left = 0.305 + float(i) * 0.135
-		var tick = make_color_rect(rect_full(left, 0.390, left + 0.028, 0.610), Color(0.42, 0.78, 0.62, 0.25 - float(i) * 0.040))
-		tick.name = "TileDrawFlyTick_%d" % i
-		parent.add_child(tick)
+	var tick = add_gpt_tick_strip(parent, rect_full(0.305, 0.390, (0.305) + float(2) * (0.135) + (0.028), 0.610), Color(0.42, 0.78, 0.62, 0.25), "TileDrawFlyTick_0")
 
 func draw_tile_discard_fly_preview(parent: Control) -> void:
 	var source = make_panel(parent, rect_full(0.060, 0.650, 0.285, 0.745), Color(0.34, 0.62, 0.54, 0.36), 999, Color(0.70, 0.90, 0.72, 0.10), 0)
@@ -2100,11 +2167,7 @@ func draw_tile_discard_fly_preview(parent: Control) -> void:
 	tile.name = "TileDiscardFlyTile"
 	var river = make_panel(parent, rect_full(0.755, 0.660, 0.970, 0.745), Color(0.10, 0.20, 0.20, 0.42), 999, Color(0.56, 0.82, 0.72, 0.12), 0)
 	river.name = "TileDiscardFlyRiverGate"
-	for i in range(3):
-		var left = 0.275 + float(i) * 0.150
-		var tick = make_color_rect(rect_full(left, 0.570 - float(i) * 0.070, left + 0.026, 0.690 - float(i) * 0.070), Color(0.92, 0.74, 0.36, 0.25 - float(i) * 0.040))
-		tick.name = "TileDiscardFlyTick_%d" % i
-		parent.add_child(tick)
+	var tick = add_gpt_tick_strip(parent, rect_full(0.275, 0.430, (0.275) + float(2) * (0.150) + (0.026), 0.620), Color(0.92, 0.74, 0.36, 0.25), "TileDiscardFlyTick_0")
 
 func draw_kong_reveal_burst_preview(parent: Control) -> void:
 	var burst = make_panel(parent, rect_full(0.115, 0.095, 0.885, 0.895), Color(0, 0, 0, 0), 999, Color(0.96, 0.78, 0.32, 0.32), 0)
