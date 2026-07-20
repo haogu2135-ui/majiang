@@ -4192,7 +4192,7 @@ func draw_meld_group_art(parent: Control, kind: String, accent: Color, meld_size
 	apply_rect(art, rect_full(0.000, 0.000, 1.000, 1.000))
 	parent.add_child(art)
 	parent.move_child(art, 0)
-	var pad = add_optional_gpt_illustration_texture(art, "ui_meld_pad", rect_full(-0.040, -0.080, 1.040, 1.080), 0.52, false)
+	var pad = add_optional_gpt_illustration_texture(art, "ui_meld_pad", rect_full(-0.040, -0.080, 1.040, 1.080), 0.60, false)  # r181 denser meld pad
 	if pad != null:
 		pad.name = "MeldGroupPad"
 		pad.modulate = Color(accent.r, accent.g, accent.b, 0.55)
@@ -4211,7 +4211,7 @@ func draw_meld_lane_art(parent: Control, seat: int, rect: Rect2, meld_count: int
 	art.z_index = 2
 	apply_rect(art, rect)
 	parent.add_child(art)
-	var wash = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(-0.04, -0.08, 1.04, 1.08), 0.14 if meld_count > 0 else 0.06, false)
+	var wash = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(-0.04, -0.08, 1.04, 1.08), 0.18 if meld_count > 0 else 0.08, false)  # r181 denser river wash
 	if wash != null:
 		wash.name = "MeldLaneSoftWash_%d" % seat
 	if meld_count > 0:
@@ -10730,7 +10730,7 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	# r180: GPT meld pad host — no StyleBox frame paint under tiles.
 	var empty_meld := StyleBoxEmpty.new()
 	group.add_theme_stylebox_override("panel", empty_meld)
-	var meld_pad = add_optional_gpt_illustration_texture(group, "ui_meld_pad", rect_full(-0.04, -0.06, 1.04, 1.06), 0.38, false)
+	var meld_pad = add_optional_gpt_illustration_texture(group, "ui_meld_pad", rect_full(-0.04, -0.06, 1.04, 1.06), 0.46, false)  # r181 denser meld group pad
 	if meld_pad == null:
 		meld_pad = add_optional_gpt_illustration_texture(group, "ui_river_soft_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.28, false)
 	if meld_pad != null:

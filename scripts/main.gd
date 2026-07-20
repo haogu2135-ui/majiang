@@ -8736,7 +8736,7 @@ func draw_meld_group_art(parent: Control, kind: String, accent: Color, meld_size
 	apply_rect(art, rect_full(0.000, 0.000, 1.000, 1.000))
 	parent.add_child(art)
 	parent.move_child(art, 0)
-	var pad = add_optional_gpt_illustration_texture(art, "ui_meld_pad", rect_full(-0.040, -0.080, 1.040, 1.080), 0.52, false)
+	var pad = add_optional_gpt_illustration_texture(art, "ui_meld_pad", rect_full(-0.040, -0.080, 1.040, 1.080), 0.60, false)  # r181 denser meld pad
 	if pad != null:
 		pad.name = "MeldGroupPad"
 		pad.modulate = Color(accent.r, accent.g, accent.b, 0.55)
@@ -8755,7 +8755,7 @@ func draw_meld_lane_art(parent: Control, seat: int, rect: Rect2, meld_count: int
 	art.z_index = 2
 	apply_rect(art, rect)
 	parent.add_child(art)
-	var wash = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(-0.04, -0.08, 1.04, 1.08), 0.14 if meld_count > 0 else 0.06, false)
+	var wash = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(-0.04, -0.08, 1.04, 1.08), 0.18 if meld_count > 0 else 0.08, false)  # r181 denser river wash
 	if wash != null:
 		wash.name = "MeldLaneSoftWash_%d" % seat
 	if meld_count > 0:
@@ -15274,7 +15274,7 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	# r180: GPT meld pad host — no StyleBox frame paint under tiles.
 	var empty_meld := StyleBoxEmpty.new()
 	group.add_theme_stylebox_override("panel", empty_meld)
-	var meld_pad = add_optional_gpt_illustration_texture(group, "ui_meld_pad", rect_full(-0.04, -0.06, 1.04, 1.06), 0.38, false)
+	var meld_pad = add_optional_gpt_illustration_texture(group, "ui_meld_pad", rect_full(-0.04, -0.06, 1.04, 1.06), 0.46, false)  # r181 denser meld group pad
 	if meld_pad == null:
 		meld_pad = add_optional_gpt_illustration_texture(group, "ui_river_soft_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.28, false)
 	if meld_pad != null:
@@ -17815,17 +17815,17 @@ func _show_achievements_screen_impl() -> void:
 	panel.name = "AchievementGalleryFrontPanel"
 	draw_secondary_screen_texture(panel, "achievement_medal_glow", "AchievementsGlowTexture", 0.035)
 	var achievement_gpt_key := "achievement_gpt_gallery"
-	var gpt_achievement_texture = add_optional_gpt_illustration_texture(panel, achievement_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.26, false)
+	var gpt_achievement_texture = add_optional_gpt_illustration_texture(panel, achievement_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.26, false)  # r181 keep subdued per smoke
 	if gpt_achievement_texture != null:
 		gpt_achievement_texture.name = "AchievementGPTGalleryTexture"
 		gpt_achievement_texture.modulate = Color(1.28, 1.08, 0.92, gpt_achievement_texture.modulate.a)  # r398 warm, no green boost
-	var achievement_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.025, 0.78, 0.105), 0.42, false)
-	var achievement_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.06, 0.14, 0.94, 0.90), 0.14, false)
+	var achievement_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.025, 0.78, 0.105), 0.48, false)  # r181 denser title strip
+	var achievement_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.06, 0.14, 0.94, 0.90), 0.18, false)
 	if achievement_mid_ornament != null:
 		achievement_mid_ornament.name = "AchievementsMidOrnamentPlate"
 	if achievement_title_strip != null:
 		achievement_title_strip.name = "AchievementGptTitleStrip"
-	var achievement_lane_plate = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.050, 0.300, 0.950, 0.920), 0.28, false)
+	var achievement_lane_plate = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.050, 0.300, 0.950, 0.920), 0.34, false)  # r181 denser lane
 	if achievement_lane_plate != null:
 		achievement_lane_plate.name = "AchievementGptLanePlate"
 	var achievement_readability_back = make_panel(panel, rect_full(0.045, 0.115, 0.955, 0.945), Color(0.12, 0.09, 0.06, 0.28), 18, Color(0.94, 0.80, 0.50, 0.32), 0)
@@ -18123,7 +18123,7 @@ func _show_online_lobby_impl() -> void:
 	lobby_lower_edge.name = "OnlineLobby3DLowerEdge"
 	draw_secondary_screen_texture(panel, "online_network", "OnlineLobbyNetworkTexture", 0.040)
 	var online_gpt_key := "online_gpt_lobby"
-	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.72, false)
+	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.76, false)
 	if gpt_online_texture != null:
 		gpt_online_texture.name = "OnlineLobbyGPTTexture"
 	var online_header_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.38, false)
@@ -18340,7 +18340,7 @@ func _show_rules_screen_impl() -> void:
 	var panel = make_panel(root_layer, rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.58), 20, Color(1.0, 0.95, 0.70, 0.45))  # r416 rules
 	panel.name = "RulesCodexFrontPanel"
 	var rules_gpt_key := "rules_gpt_scroll"
-	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.82, false)
+	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
 	if gpt_rules_texture != null:
 		gpt_rules_texture.name = "RulesGPTScrollTexture"
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.52, false)
@@ -18481,7 +18481,7 @@ func _show_shop_screen_impl() -> void:
 	panel.name = "ShopCabinetFrontPanel"
 	draw_secondary_screen_texture(panel, "shop_vault", "ShopVaultTexture", 0.17)
 	var shop_gpt_key := "shop_gpt_vault"
-	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.64, false)
+	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.68, false)
 	var shop_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_shop_row_plate", rect_full(0.06, 0.16, 0.94, 0.90), 0.16, false)
 	if shop_mid_ornament != null:
 		shop_mid_ornament.name = "ShopMidOrnamentPlate"
@@ -18788,7 +18788,7 @@ func _show_stats_screen_impl() -> void:
 	panel.name = "StatsConsoleFrontPanel"
 	draw_secondary_screen_texture(panel, "stats_chart", "StatsChartTexture", 0.035)
 	var stats_gpt_key := "stats_gpt_dashboard"
-	var gpt_stats_texture = add_optional_gpt_illustration_texture(panel, stats_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.78, false)
+	var gpt_stats_texture = add_optional_gpt_illustration_texture(panel, stats_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.82, false)
 	if gpt_stats_texture != null:
 		gpt_stats_texture.name = "StatsGPTDashboardTexture"
 	var stats_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.52, false)
@@ -18994,7 +18994,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	daily_lower_edge.name = "DailyLogin3DLowerEdge"
 	draw_secondary_screen_texture(panel, "daily_calendar", "DailyLoginCalendarTexture", 0.15)
 	var daily_gpt_key := "daily_login_gpt_calendar"
-	var gpt_daily_texture = add_optional_gpt_illustration_texture(panel, daily_gpt_key, rect_full(0.020, 0.040, 0.980, 0.960), 0.60, false)
+	var gpt_daily_texture = add_optional_gpt_illustration_texture(panel, daily_gpt_key, rect_full(0.020, 0.040, 0.980, 0.960), 0.64, false)
 	if gpt_daily_texture != null:
 		gpt_daily_texture.name = "DailyLoginGPTCalendarTexture"
 	var daily_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.06, 0.05, 0.94, 0.14), 0.52, false)

@@ -1,0 +1,107 @@
+[
+  {
+    "name": "table_gpt_backdrop_dense_r181",
+    "round": 26,
+    "ok": true,
+    "asset": "table_gpt_backdrop_v4.png",
+    "bytes": 1978742
+  },
+  {
+    "name": "menu_lobby_gpt_scene_dense_r181",
+    "round": 27,
+    "ok": true,
+    "asset": "menu_lobby_gpt_scene.png",
+    "bytes": 1488457
+  },
+  {
+    "name": "loading_scene_gpt_backdrop_dense_r181",
+    "round": 28,
+    "ok": true,
+    "asset": "loading_scene_gpt_backdrop.png",
+    "bytes": 1566389
+  },
+  {
+    "name": "rules_gpt_scroll_dense_r181",
+    "round": 29,
+    "ok": true,
+    "asset": "rules_gpt_scroll.png",
+    "bytes": 1310023
+  },
+  {
+    "name": "stats_gpt_dashboard_dense_r181",
+    "round": 30,
+    "ok": true,
+    "asset": "stats_gpt_dashboard.png",
+    "bytes": 1438202
+  },
+  {
+    "name": "shop_gpt_vault_dense_r181",
+    "round": 31,
+    "ok": true,
+    "asset": "shop_gpt_vault.png",
+    "bytes": 1514741
+  },
+  {
+    "name": "online_gpt_lobby_dense_r181",
+    "round": 32,
+    "ok": true,
+    "asset": "online_gpt_lobby.png",
+    "bytes": 1325932
+  },
+  {
+    "name": "daily_login_gpt_calendar_dense_r181",
+    "round": 33,
+    "ok": true,
+    "asset": "daily_login_gpt_calendar.png",
+    "bytes": 1403998
+  },
+  {
+    "name": "achievement_gpt_gallery_dense_r181",
+    "round": 34,
+    "ok": true,
+    "asset": "achievement_gpt_gallery.png",
+    "bytes": 1262816
+  },
+  {
+    "name": "advisor_gpt_panel_dense_r181",
+    "round": 35,
+    "ok": true,
+    "asset": "advisor_gpt_panel.png",
+    "bytes": 579554
+  },
+  {
+    "name": "chat_gpt_panel_dense_r181",
+    "round": 36,
+    "ok": true,
+    "asset": "chat_gpt_panel.png",
+    "bytes": 912429
+  },
+  {
+    "name": "settings_gpt_panel_v2_dense_r181",
+    "round": 37,
+    "ok": true,
+    "asset": "settings_gpt_panel_v2.png",
+    "bytes": 1401057
+  },
+  {
+    "name": "exit_gpt_confirm_dense_r181",
+    "round": 38,
+    "ok": true,
+    "asset": "exit_gpt_confirm.png",
+    "bytes": 547096
+  },
+  {
+    "name": "update_gpt_dialog_dense_r181",
+    "round": 39,
+    "ok": true,
+    "asset": "update_gpt_dialog.png",
+    "bytes": 631418
+  },
+  {
+    "name": "center_wind_gpt_compass_dense_r181",
+    "round": 40,
+    "ok": true,
+    "asset": "center_wind_gpt_compass_v2.png",
+    "bytes": 292861
+  }
+]

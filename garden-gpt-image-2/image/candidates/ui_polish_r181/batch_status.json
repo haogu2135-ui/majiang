@@ -1,0 +1,170 @@
+[
+  {
+    "name": "ui_route_rail_dense_r181",
+    "round": 2,
+    "ok": true,
+    "asset": "ui_route_rail_plate.png",
+    "bytes": 151271
+  },
+  {
+    "name": "ui_meter_fill_dense_r181",
+    "round": 3,
+    "ok": true,
+    "asset": "ui_meter_fill_plate.png",
+    "bytes": 171299
+  },
+  {
+    "name": "ui_ornament_tick_dense_r181",
+    "round": 4,
+    "ok": true,
+    "asset": "ui_ornament_tick_strip.png",
+    "bytes": 129985
+  },
+  {
+    "name": "ui_hand_tray_state_chip_dense_r181",
+    "round": 5,
+    "ok": true,
+    "asset": "ui_hand_tray_state_chip.png",
+    "bytes": 39766
+  },
+  {
+    "name": "ui_meter_rail_dense_r181",
+    "round": 6,
+    "ok": true,
+    "asset": "ui_meter_rail_plate.png",
+    "bytes": 200722
+  },
+  {
+    "name": "ui_button_face_dense_r181",
+    "round": 7,
+    "ok": true,
+    "asset": "ui_button_face_plate.png",
+    "bytes": 247534
+  },
+  {
+    "name": "ui_seat_info_dense_r181",
+    "round": 8,
+    "ok": true,
+    "asset": "ui_seat_info_plate.png",
+    "bytes": 245021
+  },
+  {
+    "name": "ui_progress_signal_dense_r181",
+    "round": 9,
+    "ok": true,
+    "asset": "ui_progress_signal_strip.png",
+    "bytes": 261338
+  },
+  {
+    "name": "ui_action_role_rail_dense_r181",
+    "round": 10,
+    "ok": true,
+    "asset": "ui_action_role_rail.png",
+    "bytes": 321451
+  },
+  {
+    "name": "hand_gpt_tray_dense_r181",
+    "round": 11,
+    "ok": true,
+    "asset": "hand_gpt_tray_bright_r432.png",
+    "bytes": 526337
+  },
+  {
+    "name": "action_gpt_dock_dense_r181",
+    "round": 12,
+    "ok": true,
+    "asset": "action_gpt_dock_banner_r436.png",
+    "bytes": 377363
+  },
+  {
+    "name": "top_hud_gpt_banner_dense_r181",
+    "round": 13,
+    "ok": true,
+    "asset": "top_hud_gpt_banner_r434.png",
+    "bytes": 404271
+  },
+  {
+    "name": "seat_gpt_brocade_dense_r181",
+    "round": 14,
+    "ok": true,
+    "asset": "seat_gpt_brocade_v5.png",
+    "bytes": 195240
+  },
+  {
+    "name": "toast_gpt_banner_dense_r181",
+    "round": 15,
+    "ok": true,
+    "asset": "toast_gpt_banner.png",
+    "bytes": 419710
+  },
+  {
+    "name": "ui_shop_row_dense_r181",
+    "round": 16,
+    "ok": true,
+    "asset": "ui_shop_row_plate.png",
+    "bytes": 337224
+  },
+  {
+    "name": "ui_chat_lane_dense_r181",
+    "round": 17,
+    "ok": true,
+    "asset": "ui_chat_lane_plate.png",
+    "bytes": 433565
+  },
+  {
+    "name": "ui_settings_section_dense_r181",
+    "round": 18,
+    "ok": true,
+    "asset": "ui_settings_section_plate.png",
+    "bytes": 369001
+  },
+  {
+    "name": "ui_loading_progress_dense_r181",
+    "round": 19,
+    "ok": true,
+    "asset": "ui_loading_progress_plate.png",
+    "bytes": 250260
+  },
+  {
+    "name": "ui_menu_card_face_dense_r181",
+    "round": 20,
+    "ok": true,
+    "asset": "ui_menu_card_face.png",
+    "bytes": 496293
+  },
+  {
+    "name": "ui_confirm_sheet_dense_r181",
+    "round": 21,
+    "ok": true,
+    "asset": "ui_confirm_sheet_plate.png",
+    "bytes": 680279
+  },
+  {
+    "name": "ui_river_soft_wash_dense_r181",
+    "round": 22,
+    "ok": true,
+    "asset": "ui_river_soft_wash.png",
+    "bytes": 851700
+  },
+  {
+    "name": "ui_dark_scrim_dense_r181",
+    "round": 23,
+    "ok": true,
+    "asset": "ui_dark_scrim.png",
+    "bytes": 1456482
+  },
+  {
+    "name": "ui_soft_flash_dense_r181",
+    "round": 24,
+    "ok": true,
+    "asset": "ui_soft_flash.png",
+    "bytes": 1470243
+  },
+  {
+    "name": "ui_title_backplate_dense_r181",
+    "round": 25,
+    "ok": true,
+    "asset": "ui_title_backplate.png",
+    "bytes": 1327994
+  }
+]

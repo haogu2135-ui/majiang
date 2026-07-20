@@ -944,7 +944,7 @@ func add_background(parent: Control) -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.modulate = Color(0.86, 0.78, 0.62, 0.82)
 	parent.add_child(bg)
-	var paper_wash = make_fullrect_overlay(Color(0.54, 0.42, 0.25, 0.12), "ui_jade_reading_plate")
+	var paper_wash = make_fullrect_overlay(Color(0.54, 0.42, 0.25, 0.15), "ui_jade_reading_plate")  # r181 denser paper wash
 	paper_wash.name = "GuofengWarmPaperWash"
 	parent.add_child(paper_wash)
 	var hero_wash = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.075, false)
@@ -954,7 +954,7 @@ func add_background(parent: Control) -> void:
 	tint.name = "GuofengWarmDimTint"
 	parent.add_child(tint)
 	# Edge wash via GPT plates only — no program ColorRect slabs.
-	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.12), Color(0.92, 0.78, 0.48, 0.035), "ui_soft_flash"))
+	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.12), Color(0.92, 0.78, 0.48, 0.045), "ui_soft_flash"))  # r181
 	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.88, 1.0, 1.0), Color(0.035, 0.026, 0.018, 0.155), "ui_dark_scrim"))
 	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 0.035, 1.0), Color(0.035, 0.026, 0.018, 0.120), "ui_dark_scrim"))
 	parent.add_child(make_gpt_plate_rect(rect_full(0.965, 0.0, 1.0, 1.0), Color(0.035, 0.026, 0.018, 0.120), "ui_dark_scrim"))

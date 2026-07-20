@@ -1,0 +1,72 @@
+[
+  {
+    "name": "win_result_stage_dense_r181",
+    "round": 41,
+    "ok": true,
+    "asset": "win_result_stage.png",
+    "bytes": 1470126
+  },
+  {
+    "name": "round_summary_score_flow_dense_r181",
+    "round": 42,
+    "ok": true,
+    "asset": "round_summary_score_flow_bus.png",
+    "bytes": 682220
+  },
+  {
+    "name": "table_log_gpt_scroll_dense_r181",
+    "round": 43,
+    "ok": true,
+    "asset": "table_log_gpt_scroll.png",
+    "bytes": 593820
+  },
+  {
+    "name": "diagnostic_gpt_panel_dense_r181",
+    "round": 44,
+    "ok": true,
+    "asset": "diagnostic_gpt_panel.png",
+    "bytes": 585831
+  },
+  {
+    "name": "intent_panel_plate_dense_r181",
+    "round": 46,
+    "ok": true,
+    "asset": "intent_panel_plate.png",
+    "bytes": 305499
+  },
+  {
+    "name": "action_button_panel_dense_r181",
+    "round": 47,
+    "ok": true,
+    "asset": "action_button_panel.png",
+    "bytes": 144136
+  },
+  {
+    "name": "ui_jade_reading_plate_dense_r181",
+    "round": 48,
+    "ok": true,
+    "asset": "ui_jade_reading_plate.png",
+    "bytes": 1490361
+  },
+  {
+    "name": "pending_claim_status_strip_dense_r181",
+    "round": 49,
+    "ok": true,
+    "asset": "pending_claim_status_strip.png",
+    "bytes": 255770
+  },
+  {
+    "name": "wall_live_feedback_kit_dense_r181",
+    "round": 50,
+    "ok": true,
+    "asset": "wall_live_feedback_kit.png",
+    "bytes": 294016
+  },
+  {
+    "name": "menu_hero_gpt_backdrop_dense_r181",
+    "round": 45,
+    "ok": true,
+    "asset": "menu_hero_gpt_backdrop.png",
+    "bytes": 1479653
+  }
+]
