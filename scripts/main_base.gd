@@ -1159,8 +1159,19 @@ func _gpt_plate_key_for_rect_color(rect: Rect2, color: Color) -> String:
 	var h = maxf(absf(rect.size.y), 0.0001)
 	var aspect = w / h
 	var lum = color.r * 0.299 + color.g * 0.587 + color.b * 0.114
+	var warm_gold = color.r > 0.70 and color.g > 0.45 and color.b < 0.55 and lum >= 0.45
+	var porcelain = lum >= 0.72 and color.b > 0.45 and absf(color.r - color.g) < 0.18
 	if color.a <= 0.18 and lum < 0.22:
 		return "ui_dark_scrim"
+	# Compact gold seals / coins / medallions
+	if warm_gold and aspect >= 0.75 and aspect <= 1.35 and maxf(w, h) <= 0.55:
+		if optional_gpt_illustration_texture("dealer_seal") != null:
+			return "dealer_seal"
+		return "ui_hand_tray_state_chip"
+	# Porcelain tile-like faces in animation previews
+	if porcelain and aspect >= 0.55 and aspect <= 0.95:
+		if optional_gpt_illustration_texture("ui_button_face_plate") != null:
+			return "ui_button_face_plate"
 	# Thin horizontal routes / fills / meter chrome
 	if aspect >= 4.0 and h <= 0.16:
 		if lum <= 0.22:
@@ -1259,7 +1270,7 @@ func make_gpt_edge_rail(rect: Rect2, color: Color) -> Control:
 	return make_gpt_plate_rect(rect, color, key)
 
 
-func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border: Color, shadow_size: int = 6) -> Panel:
+func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border: Color, shadow_size: int = 6, plate_key: String = "") -> Panel:
 	# Panel is a layout host only; visual fill comes from GPT plates, not StyleBox paint.
 	var panel = Panel.new()
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1274,7 +1285,8 @@ func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border:
 	box.border_color = Color(border.r, border.g, border.b, 0.0)
 	box.shadow_size = 0
 	panel.add_theme_stylebox_override("panel", box)
-	var plate_key := _gpt_plate_key_for_rect_color(rect, color)
+	if plate_key == "":
+		plate_key = _gpt_plate_key_for_rect_color(rect, color)
 	var texture: Texture2D = optional_gpt_illustration_texture(plate_key)
 	if texture == null and plate_key != "ui_title_backplate":
 		texture = optional_gpt_illustration_texture("ui_title_backplate")
@@ -2152,7 +2164,7 @@ func draw_tile_draw_fly_preview(parent: Control) -> void:
 	route.name = "TileDrawFlyRoute"
 	var fill = make_panel(route, rect_full(0.030, 0.250, 0.820, 0.750), Color(0.42, 0.78, 0.62, 0.32), 999, Color(0.96, 0.86, 0.50, 0.08), 0)
 	fill.name = "TileDrawFlyRouteFill"
-	var tile = make_panel(parent, rect_full(0.705, 0.235, 0.880, 0.735), Color(0.92, 0.88, 0.70, 0.94), 8, Color(0.24, 0.18, 0.10, 0.62), 0)
+	var tile = make_panel(parent, rect_full(0.705, 0.235, 0.880, 0.735), Color(0.92, 0.88, 0.70, 0.94), 8, Color(0.24, 0.18, 0.10, 0.62), 0, "ui_button_face_plate")
 	tile.name = "TileDrawFlyTile"
 	var gate = make_panel(parent, rect_full(0.835, 0.365, 0.970, 0.655), Color(0.92, 0.74, 0.36, 0.20), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
 	gate.name = "TileDrawFlyHandGate"
@@ -2163,7 +2175,7 @@ func draw_tile_discard_fly_preview(parent: Control) -> void:
 	source.name = "TileDiscardFlyHandSource"
 	var arc = make_panel(parent, rect_full(0.165, 0.145, 0.860, 0.765), Color(0, 0, 0, 0), 999, Color(0.92, 0.74, 0.36, 0.34), 0)
 	arc.name = "TileDiscardFlyArc"
-	var tile = make_panel(parent, rect_full(0.660, 0.130, 0.835, 0.630), Color(0.94, 0.90, 0.76, 0.94), 8, Color(0.28, 0.18, 0.10, 0.62), 0)
+	var tile = make_panel(parent, rect_full(0.660, 0.130, 0.835, 0.630), Color(0.94, 0.90, 0.76, 0.94), 8, Color(0.28, 0.18, 0.10, 0.62), 0, "ui_button_face_plate")
 	tile.name = "TileDiscardFlyTile"
 	var river = make_panel(parent, rect_full(0.755, 0.660, 0.970, 0.745), Color(0.10, 0.20, 0.20, 0.42), 999, Color(0.56, 0.82, 0.72, 0.12), 0)
 	river.name = "TileDiscardFlyRiverGate"

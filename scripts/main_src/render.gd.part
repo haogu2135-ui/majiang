@@ -523,13 +523,14 @@ func draw_action_dock(parent: Control) -> void:
 			dock_texture.modulate = Color(1.38, 1.26, 1.10, 1.0)
 			dock.move_child(dock_texture, dock.get_child_count() - 1)
 		# r452b: GPT title plate + soft flash mid-band (no program jade).
-		var mid_plate = make_gpt_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.98, 0.93, 0.80, 0.48), "ui_title_backplate")
+		# r184: light mid-band only — keep action_gpt_dock micro-detail readable.
+		var mid_plate = make_gpt_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.98, 0.93, 0.80, 0.12), "ui_title_backplate")  # r189 reveal denser dock
 		mid_plate.name = "ActionDockMidBandPlate"
 		dock.add_child(mid_plate)
-		var mid_wash = make_gpt_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(1.0, 0.95, 0.80, 0.30), "ui_soft_flash")
+		var mid_wash = make_gpt_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(1.0, 0.95, 0.80, 0.08), "ui_soft_flash")  # r189 lighter wash
 		mid_wash.name = "ActionDockMidBandWash"
 		dock.add_child(mid_wash)
-		var track_texture = add_optional_gpt_illustration_texture(dock, "action_dock_track_panel", rect_full(0.010, 0.120, 0.990, 0.900), 0.22, false)
+		var track_texture = add_optional_gpt_illustration_texture(dock, "action_dock_track_panel", rect_full(0.010, 0.120, 0.990, 0.900), 0.34, false)  # r189 denser r188 track
 		if track_texture != null:
 			track_texture.name = "ActionDockTrackPanelTexture"
 			dock.move_child(track_texture, dock.get_child_count() - 1)
@@ -2651,11 +2652,14 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 	art.z_index = 1
 	apply_rect(art, zone_rect)
 	parent.add_child(art)
-	var wash_a := 0.040 if discard_count > 0 else 0.018
+	# r187: slightly stronger warm GPT river bed so porcelain seats read against felt.
+	var wash_a := 0.070 if discard_count > 0 else 0.032
 	var soft = add_optional_gpt_illustration_texture(art, "ui_title_backplate", rect_full(-0.010, -0.040, 1.010, 1.040), wash_a, false)
+	if soft == null:
+		soft = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(-0.010, -0.040, 1.010, 1.040), wash_a, false)
 	if soft != null:
 		soft.name = "DiscardRiverWarmWash_%d" % seat
-		soft.modulate = Color(1.05, 0.96, 0.82, soft.modulate.a)
+		soft.modulate = Color(1.12, 1.02, 0.88, soft.modulate.a)
 	var is_last_source = seat == get_last_discard_seat() and discard_count > 0
 	if is_last_source:
 		var last_edge = make_gpt_plate_rect(rect_full(0.020, 0.040, 0.980, 0.085), Color(0.96, 0.80, 0.38, 0.18), "ui_soft_flash")
@@ -3283,12 +3287,13 @@ func draw_hand(parent: Control) -> void:
 	var tray_side_bevel = make_soft_depth_panel(tray, rect_full(0.010, 0.140, 0.035, 0.900), Color(1.0, 0.94, 0.66, 0.20), 999)
 	tray_side_bevel.name = "HandTray3DSideBevel"
 	var hand_gpt_key := "hand_gpt_tray"
-	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 0.94, false)
+	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 1.0, false)
 	if gpt_hand_texture != null:
 		gpt_hand_texture.name = "HandGPTTrayTexture"
-		gpt_hand_texture.modulate = Color(1.20, 1.12, 1.00, gpt_hand_texture.modulate.a)  # r453 warm tray
+		# r184: full GPT face + warm lift; avoid dark stage wash burying lacquer detail.
+		gpt_hand_texture.modulate = Color(1.34, 1.22, 1.08, 1.0)  # r189 warm lacquer lift
 		tray.move_child(gpt_hand_texture, min(1, tray.get_child_count() - 1))
-	var tile_stage = make_panel(tray, rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.42), 12, Color(0.96, 0.80, 0.48, 0.34), 0)
+	var tile_stage = make_panel(tray, rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.12), 12, Color(0.96, 0.80, 0.48, 0.16), 0)  # r189 show tray GPT
 	tile_stage.name = "HandTrayTileStage"
 	var tile_ground_shadow = make_soft_depth_panel(tile_stage, rect_full(0.030, 0.575, 0.970, 1.060), Color(0.0, 0.0, 0.0, 0.40), 16)
 	tile_ground_shadow.name = "HandTrayTileGroundShadow"
@@ -6386,7 +6391,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	panel.move_child(seat_rear, 0)
 	var seat_depth = make_soft_depth_panel(panel, rect_full(0.020, 0.760, 0.980, 0.990), Color(0.0, 0.0, 0.0, 0.08), 10)
 	seat_depth.name = "SeatPanel3DDepthEdge_%d" % seat
-	var seat_top_light = make_soft_depth_panel(panel, rect_full(0.040, 0.015, 0.960, 0.160), Color(1.0, 0.97, 0.76, 0.80 if active else 0.72), 999)
+	var seat_top_light = make_soft_depth_panel(panel, rect_full(0.040, 0.015, 0.960, 0.160), Color(1.0, 0.97, 0.76, 0.42 if active else 0.32), 999)
 	seat_top_light.name = "SeatPanelTopLight_%d" % seat
 	var seat_side_bevel = make_soft_depth_panel(panel, rect_full(0.015, 0.120, 0.060, 0.880), Color(1.0, 0.94, 0.66, 0.16 if active else 0.12), 999)
 	seat_side_bevel.name = "SeatPanel3DSideBevel_%d" % seat
@@ -6402,16 +6407,17 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		# Commercial lacquer midtones; extra lift on side seats which sit in darker table periphery.
 		# Keep brocade present but dim enough for name/score text to remain readable.
 		# r450: warm lacquer boost — do not amplify green channel (v9 jade seats).
-		var seat_mod := Color(1.20, 1.10, 0.98, minf(0.62, seat_texture.modulate.a))
+		# r184: show denser brocade; keep text legible via name/score plates.
+		var seat_mod := Color(1.24, 1.12, 0.98, minf(0.82, seat_texture.modulate.a))
 		if side == "left" or side == "right":
-			seat_mod = Color(1.24, 1.12, 0.98, minf(0.58, seat_texture.modulate.a))
+			seat_mod = Color(1.28, 1.14, 0.98, minf(0.78, seat_texture.modulate.a))
 		elif not active:
-			seat_mod = Color(1.16, 1.06, 0.96, minf(0.58, seat_texture.modulate.a))
+			seat_mod = Color(1.18, 1.08, 0.96, minf(0.72, seat_texture.modulate.a))
 		seat_texture.modulate = seat_mod
 		panel.move_child(seat_texture, min(1, panel.get_child_count() - 1))
 	# Side seats get a soft fill light so inactive plaques stay lacquer, not charcoal.
 	if side == "left" or side == "right":
-		var side_fill_light = make_soft_depth_panel(panel, rect_full(0.020, 0.040, 0.980, 0.920), Color(1.0, 0.97, 0.76, 0.30 if active else 0.26), 999)
+		var side_fill_light = make_soft_depth_panel(panel, rect_full(0.020, 0.040, 0.980, 0.920), Color(1.0, 0.97, 0.76, 0.16 if active else 0.12), 999)
 		side_fill_light.name = "SeatPanel3DSideFillLight_%d" % seat
 
 	# r449: skip mint jade wash slab (was covering brocade + nearby tiles with green).
@@ -11087,12 +11093,13 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.52, false)
 	if row_plate != null:
 		row_plate.name = "SettingRowGptPlate_%s" % title
-		row_plate.modulate = Color(0.55, 0.68, 0.58, 0.62)
+		# r186: warm lacquer plate (not mint) so text plate contrast stays commercial.
+		row_plate.modulate = Color(0.72, 0.62, 0.48, 0.70)
 		row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_panel(row, rect_full(0.028, 0.110, 0.565, 0.890), Color(0.045, 0.075, 0.080, 0.32), 8, Color(0.78, 0.90, 0.78, 0.32), 0)
+	var text_panel = make_panel(row, rect_full(0.028, 0.110, 0.565, 0.890), Color(0.08, 0.06, 0.04, 0.54), 8, Color(0.94, 0.82, 0.48, 0.28), 0)
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
-	var title_label = make_label(row, title, 13, Color(0.96, 0.94, 0.80, 0.98), true)
+	var title_label = make_label(row, title, 13, Color(0.98, 0.95, 0.84, 0.99), true)
 	title_label.name = "SettingRowTitle_%s" % title
 	apply_rect(title_label, rect_full(0.052, 0.130, 0.545, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT

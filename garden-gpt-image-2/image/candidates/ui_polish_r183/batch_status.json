@@ -1,0 +1,227 @@
+[
+  {
+    "round": 151,
+    "name": "chat_send_seal_commercial_r183",
+    "asset": "chat_send_seal.png",
+    "ok": true,
+    "bytes": 43929,
+    "problem": "Commercial polish: chat send seal still sparse/low-luxe for ship bar (bytes=37527, 128x128)",
+    "next": "Round152 commercial densify next"
+  },
+  {
+    "round": 152,
+    "name": "guide_pointing_finger_commercial_r183",
+    "asset": "guide_pointing_finger.png",
+    "ok": true,
+    "bytes": 36374,
+    "problem": "Commercial polish: guide pointing finger still sparse/low-luxe for ship bar (bytes=37982, 128x128)",
+    "next": "Round153 commercial densify next"
+  },
+  {
+    "round": 153,
+    "name": "fly_transition_flip_commercial_r183",
+    "asset": "fly_transition_flip.png",
+    "ok": true,
+    "bytes": 42997,
+    "problem": "Commercial polish: fly transition flip still sparse/low-luxe for ship bar (bytes=39525, 128x128)",
+    "next": "Round154 commercial densify next"
+  },
+  {
+    "round": 154,
+    "name": "ui_hand_tray_state_chip_commercial_r183",
+    "asset": "ui_hand_tray_state_chip.png",
+    "ok": true,
+    "bytes": 144545,
+    "problem": "Commercial polish: ui hand tray state chip still sparse/low-luxe for ship bar (bytes=39766, 256x256)",
+    "next": "Round155 commercial densify next"
+  },
+  {
+    "round": 155,
+    "name": "petals_spring_commercial_r183",
+    "asset": "petals_spring.png",
+    "ok": true,
+    "bytes": 37499,
+    "problem": "Commercial polish: petals spring still sparse/low-luxe for ship bar (bytes=42480, 128x128)",
+    "next": "Round156 commercial densify next"
+  },
+  {
+    "round": 156,
+    "name": "petals_summer_commercial_r183",
+    "asset": "petals_summer.png",
+    "ok": true,
+    "bytes": 42748,
+    "problem": "Commercial polish: petals summer still sparse/low-luxe for ship bar (bytes=42169, 128x128)",
+    "next": "Round157 commercial densify next"
+  },
+  {
+    "round": 157,
+    "name": "petals_autumn_commercial_r183",
+    "asset": "petals_autumn.png",
+    "ok": true,
+    "bytes": 38726,
+    "problem": "Commercial polish: petals autumn still sparse/low-luxe for ship bar (bytes=40085, 128x128)",
+    "next": "Round158 commercial densify next"
+  },
+  {
+    "round": 158,
+    "name": "petals_winter_commercial_r183",
+    "asset": "petals_winter.png",
+    "ok": true,
+    "bytes": 39729,
+    "problem": "Commercial polish: petals winter still sparse/low-luxe for ship bar (bytes=45644, 128x128)",
+    "next": "Round159 commercial densify next"
+  },
+  {
+    "round": 159,
+    "name": "rank_ribbon_bronze_commercial_r183",
+    "asset": "rank_ribbon_bronze.png",
+    "ok": true,
+    "bytes": 72957,
+    "problem": "Commercial polish: rank ribbon bronze still sparse/low-luxe for ship bar (bytes=66693, 256x128)",
+    "next": "Round160 commercial densify next"
+  },
+  {
+    "round": 160,
+    "name": "rank_ribbon_gold_commercial_r183",
+    "asset": "rank_ribbon_gold.png",
+    "ok": true,
+    "bytes": 76320,
+    "problem": "Commercial polish: rank ribbon gold still sparse/low-luxe for ship bar (bytes=70317, 256x128)",
+    "next": "Round161 commercial densify next"
+  },
+  {
+    "round": 161,
+    "name": "rank_ribbon_silver_commercial_r183",
+    "asset": "rank_ribbon_silver.png",
+    "ok": true,
+    "bytes": 68440,
+    "problem": "Commercial polish: rank ribbon silver still sparse/low-luxe for ship bar (bytes=73822, 256x128)",
+    "next": "Round162 commercial densify next"
+  },
+  {
+    "round": 162,
+    "name": "top_hud_wall_gpt_warning_commercial_r183",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "ok": true,
+    "bytes": 93807,
+    "problem": "Commercial polish: top hud wall gpt warning still sparse/low-luxe for ship bar (bytes=68741, 512x96)",
+    "next": "Round163 commercial densify next"
+  },
+  {
+    "round": 163,
+    "name": "center_wall_gpt_warning_commercial_r183",
+    "asset": "center_wall_gpt_warning.png",
+    "ok": true,
+    "bytes": 124634,
+    "problem": "Commercial polish: center wall gpt warning still sparse/low-luxe for ship bar (bytes=88849, 512x128)",
+    "next": "Round164 commercial densify next"
+  },
+  {
+    "round": 164,
+    "name": "seat_discard_gpt_preview_commercial_r183",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "bytes": 96277,
+    "problem": "Commercial polish: seat discard gpt preview still sparse/low-luxe for ship bar (bytes=81922, 384x128)",
+    "next": "Round165 commercial densify next"
+  },
+  {
+    "round": 165,
+    "name": "settings_section_signal_panel_commercial_r183",
+    "asset": "settings_section_signal_panel.png",
+    "ok": true,
+    "bytes": 108215,
+    "problem": "Commercial polish: settings section signal panel still sparse/low-luxe for ship bar (bytes=103497, 384x160)",
+    "next": "Round166 commercial densify next"
+  },
+  {
+    "round": 166,
+    "name": "shop_currency_meter_panel_commercial_r183",
+    "asset": "shop_currency_meter_panel.png",
+    "ok": true,
+    "bytes": 123760,
+    "problem": "Commercial polish: shop currency meter panel still sparse/low-luxe for ship bar (bytes=106193, 512x128)",
+    "next": "Round167 commercial densify next"
+  },
+  {
+    "round": 167,
+    "name": "menu_tutorial_gpt_hint_commercial_r183",
+    "asset": "menu_tutorial_gpt_hint.png",
+    "ok": true,
+    "bytes": 106818,
+    "problem": "Commercial polish: menu tutorial gpt hint still sparse/low-luxe for ship bar (bytes=107584, 512x128)",
+    "next": "Round168 commercial densify next"
+  },
+  {
+    "round": 168,
+    "name": "hand_tutorial_gpt_hint_commercial_r183",
+    "asset": "hand_tutorial_gpt_hint.png",
+    "ok": true,
+    "bytes": 118134,
+    "problem": "Commercial polish: hand tutorial gpt hint still sparse/low-luxe for ship bar (bytes=114764, 512x128)",
+    "next": "Round169 commercial densify next"
+  },
+  {
+    "round": 169,
+    "name": "voice_gpt_channel_commercial_r183",
+    "asset": "voice_gpt_channel.png",
+    "ok": true,
+    "bytes": 132109,
+    "problem": "Commercial polish: voice gpt channel still sparse/low-luxe for ship bar (bytes=115648, 512x128)",
+    "next": "Round170 commercial densify next"
+  },
+  {
+    "round": 170,
+    "name": "dealer_seal_commercial_r183",
+    "asset": "dealer_seal.png",
+    "ok": true,
+    "bytes": 141545,
+    "problem": "Commercial polish: dealer seal still sparse/low-luxe for ship bar (bytes=134143, 256x256)",
+    "next": "Round171 commercial densify next"
+  },
+  {
+    "round": 171,
+    "name": "dealer_repeat_ring_commercial_r183",
+    "asset": "dealer_repeat_ring.png",
+    "ok": true,
+    "bytes": 133701,
+    "problem": "Commercial polish: dealer repeat ring still sparse/low-luxe for ship bar (bytes=131098, 256x256)",
+    "next": "Round172 commercial densify next"
+  },
+  {
+    "round": 172,
+    "name": "center_active_bloom_commercial_r183",
+    "asset": "center_active_bloom.png",
+    "ok": true,
+    "bytes": 150867,
+    "problem": "Commercial polish: center active bloom still sparse/low-luxe for ship bar (bytes=153947, 256x256)",
+    "next": "Round173 commercial densify next"
+  },
+  {
+    "round": 173,
+    "name": "ui_ornament_tick_strip_commercial_r183",
+    "asset": "ui_ornament_tick_strip.png",
+    "ok": true,
+    "bytes": 191975,
+    "problem": "Commercial polish: ui ornament tick strip still sparse/low-luxe for ship bar (bytes=129985, 768x128)",
+    "next": "Round174 commercial densify next"
+  },
+  {
+    "round": 174,
+    "name": "ui_meter_fill_plate_commercial_r183",
+    "asset": "ui_meter_fill_plate.png",
+    "ok": true,
+    "bytes": 167343,
+    "problem": "Commercial polish: ui meter fill plate still sparse/low-luxe for ship bar (bytes=199814, 1024x96)",
+    "next": "Round175 commercial densify next"
+  },
+  {
+    "round": 175,
+    "name": "ui_route_rail_plate_commercial_r183",
+    "asset": "ui_route_rail_plate.png",
+    "ok": true,
+    "bytes": 173551,
+    "problem": "Commercial polish: ui route rail plate still sparse/low-luxe for ship bar (bytes=177359, 1024x96)",
+    "next": "Round176 commercial densify next"
+  }
+]

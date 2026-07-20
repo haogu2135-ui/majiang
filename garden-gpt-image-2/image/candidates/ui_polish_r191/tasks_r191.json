@@ -1,0 +1,82 @@
+[
+  {
+    "round": 213,
+    "name": "settings_section_signal_panel_commercial_r191",
+    "asset": "settings_section_signal_panel.png",
+    "target": [
+      384,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r191: settings_section_signal_panel thin (~108k) settings signal plate",
+    "next": "Round214 multi-try shop_currency_meter_panel",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong settings section signal plate. Vertical-friendly lacquer panel, jade signal motif empty soft center for settings labels, gold filigree border, carved wood micro-detail, warm studio light. No letters numbers watermark. No flat ColorRect. AAA maximum ornate density.",
+    "baseline_bytes": 108215
+  },
+  {
+    "round": 214,
+    "name": "shop_currency_meter_panel_commercial_r191",
+    "asset": "shop_currency_meter_panel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r191: shop_currency_meter_panel under-dense (~124k) shop currency meter",
+    "next": "Round215 multi-try rules_reading_progress_panel",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong shop currency meter plate. Wide horizontal lacquer meter banner, gold coin motif empty soft center for currency digits, jade bosses, heavy filigree, warm studio light, PBR micro-carving. No letters numbers watermark. No flat ColorRect. AAA ship quality dense.",
+    "baseline_bytes": 123760
+  },
+  {
+    "round": 215,
+    "name": "rules_reading_progress_panel_commercial_r191",
+    "asset": "rules_reading_progress_panel.png",
+    "target": [
+      960,
+      80
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r191: rules_reading_progress_panel thin (~125k) wide progress strip",
+    "next": "Round216 multi-try rules_pattern_quads",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong rules reading progress strip. Extremely wide thin horizontal lacquer progress bar plate, gold filigree ends, jade dots, soft empty center track for progress fill, warm studio light, ultra dense wood grain. No letters numbers watermark. No flat ColorRect. AAA commercial density.",
+    "baseline_bytes": 125426
+  },
+  {
+    "round": 216,
+    "name": "rules_pattern_quads_commercial_r191",
+    "asset": "rules_pattern_quads.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r191: rules_pattern_quads thin (~113k) rules pattern illustration plate",
+    "next": "Round217 multi-try voice_gpt_channel or residual seat/hand if kept denser",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong rules pattern quads plate. Horizontal lacquer plaque with four soft empty tile-slot recesses (no tile faces), gold corner bosses, jade inlay, dense carved filigree, warm studio light. No letters numbers watermark. No flat ColorRect. AAA ornate density.",
+    "baseline_bytes": 113148
+  },
+  {
+    "round": 217,
+    "name": "voice_gpt_channel_commercial_r191",
+    "asset": "voice_gpt_channel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r191: voice_gpt_channel mid-thin (~132k) voice channel plate",
+    "next": "Round218 pages_gpt_r191 capture + visual AAA sign-off",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong voice channel plate. Horizontal lacquer audio channel banner, soft empty center for mic/voice UI, gold sound-wave filigree abstract (no glyphs), jade bosses, warm studio light, dense PBR detail. No letters numbers watermark. No flat ColorRect. AAA ship quality.",
+    "baseline_bytes": 132109
+  }
+]

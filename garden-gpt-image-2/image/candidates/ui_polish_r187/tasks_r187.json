@@ -1,0 +1,58 @@
+[
+  {
+    "round": 196,
+    "name": "ui_meld_pad_commercial_r187",
+    "asset": "ui_meld_pad.png",
+    "target": [
+      768,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r187: ui_meld_pad.png needs denser battle/lobby plate",
+    "next": "Round197 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI \"ui meld pad\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for UI content. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. subtle felt pad under tiles, soft warm wash not green"
+  },
+  {
+    "round": 197,
+    "name": "ui_river_soft_wash_commercial_r187",
+    "asset": "ui_river_soft_wash.png",
+    "target": [
+      1024,
+      512
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r187: ui_river_soft_wash.png needs denser battle/lobby plate",
+    "next": "Round198 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI \"ui river soft wash\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for UI content. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. subtle felt pad under tiles, soft warm wash not green"
+  },
+  {
+    "round": 198,
+    "name": "lobby_room_gate_token_commercial_r187",
+    "asset": "lobby_room_gate_token.png",
+    "target": [
+      768,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r187: lobby_room_gate_token.png needs denser battle/lobby plate",
+    "next": "Round199 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI \"lobby room gate token\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for UI content. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. dark lacquer readable interior, warm gold rim"
+  },
+  {
+    "round": 199,
+    "name": "seat_discard_gpt_preview_commercial_r187",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r187: seat_discard_gpt_preview.png needs denser battle/lobby plate",
+    "next": "Round200 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI \"seat discard gpt preview\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for UI content. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. seat discard preview tray lacquer"
+  }
+]

@@ -5067,13 +5067,14 @@ func draw_action_dock(parent: Control) -> void:
 			dock_texture.modulate = Color(1.38, 1.26, 1.10, 1.0)
 			dock.move_child(dock_texture, dock.get_child_count() - 1)
 		# r452b: GPT title plate + soft flash mid-band (no program jade).
-		var mid_plate = make_gpt_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.98, 0.93, 0.80, 0.48), "ui_title_backplate")
+		# r184: light mid-band only — keep action_gpt_dock micro-detail readable.
+		var mid_plate = make_gpt_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.98, 0.93, 0.80, 0.12), "ui_title_backplate")  # r189 reveal denser dock
 		mid_plate.name = "ActionDockMidBandPlate"
 		dock.add_child(mid_plate)
-		var mid_wash = make_gpt_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(1.0, 0.95, 0.80, 0.30), "ui_soft_flash")
+		var mid_wash = make_gpt_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(1.0, 0.95, 0.80, 0.08), "ui_soft_flash")  # r189 lighter wash
 		mid_wash.name = "ActionDockMidBandWash"
 		dock.add_child(mid_wash)
-		var track_texture = add_optional_gpt_illustration_texture(dock, "action_dock_track_panel", rect_full(0.010, 0.120, 0.990, 0.900), 0.22, false)
+		var track_texture = add_optional_gpt_illustration_texture(dock, "action_dock_track_panel", rect_full(0.010, 0.120, 0.990, 0.900), 0.34, false)  # r189 denser r188 track
 		if track_texture != null:
 			track_texture.name = "ActionDockTrackPanelTexture"
 			dock.move_child(track_texture, dock.get_child_count() - 1)
@@ -7195,11 +7196,14 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 	art.z_index = 1
 	apply_rect(art, zone_rect)
 	parent.add_child(art)
-	var wash_a := 0.040 if discard_count > 0 else 0.018
+	# r187: slightly stronger warm GPT river bed so porcelain seats read against felt.
+	var wash_a := 0.070 if discard_count > 0 else 0.032
 	var soft = add_optional_gpt_illustration_texture(art, "ui_title_backplate", rect_full(-0.010, -0.040, 1.010, 1.040), wash_a, false)
+	if soft == null:
+		soft = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(-0.010, -0.040, 1.010, 1.040), wash_a, false)
 	if soft != null:
 		soft.name = "DiscardRiverWarmWash_%d" % seat
-		soft.modulate = Color(1.05, 0.96, 0.82, soft.modulate.a)
+		soft.modulate = Color(1.12, 1.02, 0.88, soft.modulate.a)
 	var is_last_source = seat == get_last_discard_seat() and discard_count > 0
 	if is_last_source:
 		var last_edge = make_gpt_plate_rect(rect_full(0.020, 0.040, 0.980, 0.085), Color(0.96, 0.80, 0.38, 0.18), "ui_soft_flash")
@@ -7827,12 +7831,13 @@ func draw_hand(parent: Control) -> void:
 	var tray_side_bevel = make_soft_depth_panel(tray, rect_full(0.010, 0.140, 0.035, 0.900), Color(1.0, 0.94, 0.66, 0.20), 999)
 	tray_side_bevel.name = "HandTray3DSideBevel"
 	var hand_gpt_key := "hand_gpt_tray"
-	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 0.94, false)
+	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 1.0, false)
 	if gpt_hand_texture != null:
 		gpt_hand_texture.name = "HandGPTTrayTexture"
-		gpt_hand_texture.modulate = Color(1.20, 1.12, 1.00, gpt_hand_texture.modulate.a)  # r453 warm tray
+		# r184: full GPT face + warm lift; avoid dark stage wash burying lacquer detail.
+		gpt_hand_texture.modulate = Color(1.34, 1.22, 1.08, 1.0)  # r189 warm lacquer lift
 		tray.move_child(gpt_hand_texture, min(1, tray.get_child_count() - 1))
-	var tile_stage = make_panel(tray, rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.42), 12, Color(0.96, 0.80, 0.48, 0.34), 0)
+	var tile_stage = make_panel(tray, rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.12), 12, Color(0.96, 0.80, 0.48, 0.16), 0)  # r189 show tray GPT
 	tile_stage.name = "HandTrayTileStage"
 	var tile_ground_shadow = make_soft_depth_panel(tile_stage, rect_full(0.030, 0.575, 0.970, 1.060), Color(0.0, 0.0, 0.0, 0.40), 16)
 	tile_ground_shadow.name = "HandTrayTileGroundShadow"
@@ -10930,7 +10935,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	panel.move_child(seat_rear, 0)
 	var seat_depth = make_soft_depth_panel(panel, rect_full(0.020, 0.760, 0.980, 0.990), Color(0.0, 0.0, 0.0, 0.08), 10)
 	seat_depth.name = "SeatPanel3DDepthEdge_%d" % seat
-	var seat_top_light = make_soft_depth_panel(panel, rect_full(0.040, 0.015, 0.960, 0.160), Color(1.0, 0.97, 0.76, 0.80 if active else 0.72), 999)
+	var seat_top_light = make_soft_depth_panel(panel, rect_full(0.040, 0.015, 0.960, 0.160), Color(1.0, 0.97, 0.76, 0.42 if active else 0.32), 999)
 	seat_top_light.name = "SeatPanelTopLight_%d" % seat
 	var seat_side_bevel = make_soft_depth_panel(panel, rect_full(0.015, 0.120, 0.060, 0.880), Color(1.0, 0.94, 0.66, 0.16 if active else 0.12), 999)
 	seat_side_bevel.name = "SeatPanel3DSideBevel_%d" % seat
@@ -10946,16 +10951,17 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		# Commercial lacquer midtones; extra lift on side seats which sit in darker table periphery.
 		# Keep brocade present but dim enough for name/score text to remain readable.
 		# r450: warm lacquer boost — do not amplify green channel (v9 jade seats).
-		var seat_mod := Color(1.20, 1.10, 0.98, minf(0.62, seat_texture.modulate.a))
+		# r184: show denser brocade; keep text legible via name/score plates.
+		var seat_mod := Color(1.24, 1.12, 0.98, minf(0.82, seat_texture.modulate.a))
 		if side == "left" or side == "right":
-			seat_mod = Color(1.24, 1.12, 0.98, minf(0.58, seat_texture.modulate.a))
+			seat_mod = Color(1.28, 1.14, 0.98, minf(0.78, seat_texture.modulate.a))
 		elif not active:
-			seat_mod = Color(1.16, 1.06, 0.96, minf(0.58, seat_texture.modulate.a))
+			seat_mod = Color(1.18, 1.08, 0.96, minf(0.72, seat_texture.modulate.a))
 		seat_texture.modulate = seat_mod
 		panel.move_child(seat_texture, min(1, panel.get_child_count() - 1))
 	# Side seats get a soft fill light so inactive plaques stay lacquer, not charcoal.
 	if side == "left" or side == "right":
-		var side_fill_light = make_soft_depth_panel(panel, rect_full(0.020, 0.040, 0.980, 0.920), Color(1.0, 0.97, 0.76, 0.30 if active else 0.26), 999)
+		var side_fill_light = make_soft_depth_panel(panel, rect_full(0.020, 0.040, 0.980, 0.920), Color(1.0, 0.97, 0.76, 0.16 if active else 0.12), 999)
 		side_fill_light.name = "SeatPanel3DSideFillLight_%d" % seat
 
 	# r449: skip mint jade wash slab (was covering brocade + nearby tiles with green).
@@ -15631,12 +15637,13 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.52, false)
 	if row_plate != null:
 		row_plate.name = "SettingRowGptPlate_%s" % title
-		row_plate.modulate = Color(0.55, 0.68, 0.58, 0.62)
+		# r186: warm lacquer plate (not mint) so text plate contrast stays commercial.
+		row_plate.modulate = Color(0.72, 0.62, 0.48, 0.70)
 		row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_panel(row, rect_full(0.028, 0.110, 0.565, 0.890), Color(0.045, 0.075, 0.080, 0.32), 8, Color(0.78, 0.90, 0.78, 0.32), 0)
+	var text_panel = make_panel(row, rect_full(0.028, 0.110, 0.565, 0.890), Color(0.08, 0.06, 0.04, 0.54), 8, Color(0.94, 0.82, 0.48, 0.28), 0)
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
-	var title_label = make_label(row, title, 13, Color(0.96, 0.94, 0.80, 0.98), true)
+	var title_label = make_label(row, title, 13, Color(0.98, 0.95, 0.84, 0.99), true)
 	title_label.name = "SettingRowTitle_%s" % title
 	apply_rect(title_label, rect_full(0.052, 0.130, 0.545, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -18175,7 +18182,7 @@ func _show_online_lobby_impl() -> void:
 	form_panel.move_child(form_rear, 0)
 	var form_top_rim = make_soft_depth_panel(form_panel, rect_full(0.040, 0.015, 0.960, 0.070), Color(1.0, 0.90, 0.56, 0.10), 999)
 	form_top_rim.name = "OnlineLobbyForm3DTopRim"
-	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r182 denser frame (smoke<=0.34)
+	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if form_panel_frame != null:
 		form_panel_frame.name = "OnlineLobbyFormGPTPanelFrameTexture"
 		form_panel.move_child(form_panel_frame, 0)
@@ -18255,12 +18262,16 @@ func _show_online_lobby_impl() -> void:
 
 	# 状态栏
 	var lobby_status_text := "可建房/入房，房主可开始" if can_start_online else "下一步 · 先连接，再建房或入房"
-	status_label = make_label(panel, lobby_status_text, 14, Color(0.82, 0.94, 0.86), false)
+	# r187: warm ivory status text + denser GPT plate for secondary readability.
+	status_label = make_label(panel, lobby_status_text, 14, Color(0.96, 0.92, 0.80), false)
 	status_label.name = "OnlineLobbyStatusLabel"
 	apply_rect(status_label, rect_full(0.045, 0.896, 0.480, 0.936))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+	status_label.add_theme_constant_override("shadow_offset_x", 1)
+	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(status_label)
-	var status_backplate = make_panel(panel, rect_full(0.035, 0.886, 0.492, 0.946), Color(0.14, 0.10, 0.06, 0.28), 10, Color(0.90, 0.76, 0.42, 0.16), 0)  # r415
+	var status_backplate = make_panel(panel, rect_full(0.035, 0.886, 0.492, 0.946), Color(0.10, 0.07, 0.04, 0.52), 10, Color(0.94, 0.80, 0.46, 0.28), 0)
 	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
 	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
 	draw_online_feedback_art(panel)
@@ -18279,11 +18290,11 @@ func _show_online_lobby_impl() -> void:
 	# 房间状态面板
 	var log_panel = make_panel(panel, rect_full(0.505, 0.17, 0.965, 0.87), Color(0.18, 0.14, 0.10, 0.62), 14, Color(0.98, 0.92, 0.70, 0.42))  # r415
 	log_panel.name = "OnlineLobbyLogPanel"
-	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r182 denser frame (smoke<=0.34)
+	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_panel(log_panel, rect_full(0.035, 0.115, 0.965, 0.930), Color(0.10, 0.07, 0.04, 0.06), 10, Color(0.90, 0.76, 0.42, 0.08), 0)
+	var log_readability_backplate = make_panel(log_panel, rect_full(0.035, 0.115, 0.965, 0.930), Color(0.10, 0.07, 0.04, 0.22), 10, Color(0.94, 0.80, 0.46, 0.16), 0)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	# 右侧面板滑入动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -18295,9 +18306,12 @@ func _show_online_lobby_impl() -> void:
 		tw_log.tween_property(log_panel, "offset_left", 0.0, 0.28).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD).set_delay(0.12)
 		if ui_enhancements != null:
 			ui_enhancements.animate_panel_breath(log_panel, Vector2(0.0, -2.0), 3.6, 0.95)
-	var log_title = make_label(log_panel, "房间状态", 20, Color(0.84, 0.87, 0.74), true)
+	var log_title = make_label(log_panel, "房间状态", 20, Color(0.98, 0.94, 0.82), true)
 	apply_rect(log_title, rect_full(0.05, 0.020, 0.48, 0.095))
 	log_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	log_title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.58))
+	log_title.add_theme_constant_override("shadow_offset_x", 1)
+	log_title.add_theme_constant_override("shadow_offset_y", 1)
 	var room_badge_text = "房间号 " + (selected_room if selected_room != "" else "--")
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
@@ -18642,26 +18656,33 @@ func _show_shop_screen_impl() -> void:
 			draw_shop_native_charm_art(row, item_color, item_id, icon_name)
 		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
 
-		var text_plate = make_panel(row, rect_full(0.150, 0.055, 0.600, 0.920), Color(0.12, 0.09, 0.06, 0.32), 10, Color(0.90, 0.78, 0.44, 0.14), 1)
+		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
+		var text_plate = make_panel(row, rect_full(0.150, 0.055, 0.600, 0.920), Color(0.10, 0.07, 0.04, 0.58), 10, Color(0.94, 0.82, 0.48, 0.28), 1)
 		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
 		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		# 道具名称
-		var name_label = make_label(row, str(item_info.get("name", item_id)), 18, Color(0.96, 0.94, 0.88), true)
+		var name_label = make_label(row, str(item_info.get("name", item_id)), 18, Color(0.99, 0.96, 0.88), true)
 		name_label.name = "ShopItemName_%s" % item_id
 		apply_rect(name_label, rect_full(0.164, 0.090, 0.480, 0.440))
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.62))
+		name_label.add_theme_constant_override("shadow_offset_x", 1)
+		name_label.add_theme_constant_override("shadow_offset_y", 1)
 		configure_clipped_label(name_label)
-		var identity_label = make_label(row, shop_item_identity_text(item_id), 10, Color(item_color.r, item_color.g, item_color.b, 0.92), true)
+		var identity_label = make_label(row, shop_item_identity_text(item_id), 10, Color(item_color.r, item_color.g, item_color.b, 0.96), true)
 		identity_label.name = "ShopItemIdentity_%s" % item_id
 		apply_rect(identity_label, rect_full(0.492, 0.125, 0.588, 0.410))
 		identity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 		# 道具描述
-		var desc_label = make_label(row, str(item_info.get("desc", "")), 12, Color(0.86, 0.92, 0.84), false)
+		var desc_label = make_label(row, str(item_info.get("desc", "")), 12, Color(0.92, 0.90, 0.82), false)
 		desc_label.name = "ShopItemDescription_%s" % item_id
 		apply_rect(desc_label, rect_full(0.164, 0.505, 0.590, 0.885))
 		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		desc_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.50))
+		desc_label.add_theme_constant_override("shadow_offset_x", 1)
+		desc_label.add_theme_constant_override("shadow_offset_y", 1)
 		configure_clipped_label(desc_label)
 
 		# 拥有数量 - 带徽章样式

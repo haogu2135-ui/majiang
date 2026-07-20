@@ -1,0 +1,47 @@
+[
+  {
+    "round": 186,
+    "name": "table_gpt_backdrop_v4_commercial_r185",
+    "asset": "table_gpt_backdrop_v4.png",
+    "ok": true,
+    "bytes": 2343347,
+    "problem": "Commercial r185: table_gpt_backdrop_v4.png needs AAA densify for ship bar",
+    "next": "Round187 commercial densify next"
+  },
+  {
+    "round": 187,
+    "name": "hand_gpt_tray_bright_r432_commercial_r185",
+    "asset": "hand_gpt_tray_bright_r432.png",
+    "ok": true,
+    "bytes": 677620,
+    "problem": "Commercial r185: hand_gpt_tray_bright_r432.png needs AAA densify for ship bar",
+    "next": "Round188 commercial densify next"
+  },
+  {
+    "round": 188,
+    "name": "menu_primary_3d_stage_overlay_warm_v390_commercial_r185",
+    "asset": "menu_primary_3d_stage_overlay_warm_v390.png",
+    "ok": true,
+    "bytes": 2859031,
+    "problem": "Commercial r185: menu_primary_3d_stage_overlay_warm_v390.png needs AAA densify for ship bar",
+    "next": "Round189 commercial densify next"
+  },
+  {
+    "round": 189,
+    "name": "online_lobby_panel_frame_warm_v392_commercial_r185",
+    "asset": "online_lobby_panel_frame_warm_v392.png",
+    "ok": true,
+    "bytes": 1323112,
+    "problem": "Commercial r185: online_lobby_panel_frame_warm_v392.png needs AAA densify for ship bar",
+    "next": "Round190 commercial densify next"
+  },
+  {
+    "round": 190,
+    "name": "action_gpt_dock_banner_r436_commercial_r185",
+    "asset": "action_gpt_dock_banner_r436.png",
+    "ok": true,
+    "bytes": 490292,
+    "problem": "Commercial r185: action_gpt_dock_banner_r436.png needs AAA densify for ship bar",
+    "next": "Round191 commercial densify next"
+  }
+]

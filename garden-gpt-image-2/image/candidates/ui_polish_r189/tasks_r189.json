@@ -1,0 +1,44 @@
+[
+  {
+    "round": 205,
+    "name": "hand_gpt_tray_bright_r432_commercial_r189",
+    "asset": "hand_gpt_tray_bright_r432.png",
+    "target": [
+      1280,
+      320
+    ],
+    "api_size": "1536x1024",
+    "feather": 14,
+    "problem": "r189: hand tray still short of AAA lacquer density on battle bottom band",
+    "next": "Round206 densify action_gpt_dock_banner",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong player hand tray. Wide horizontal premium lacquer wood tray, jade inlay rails, warm ivory soft empty center for tiles, muted gold filigree rim, soft studio lighting, PBR micro-detail. No letters numbers watermark. No flat ColorRect. AAA ship quality."
+  },
+  {
+    "round": 206,
+    "name": "action_gpt_dock_banner_r436_commercial_r189",
+    "asset": "action_gpt_dock_banner_r436.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "r189: action dock banner needs denser claim dock chrome",
+    "next": "Round207 densify seat_discard multi-try",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong action dock banner. Wide horizontal lacquer banner dock, jade corner bosses, gold filigree, soft empty mid band for action buttons, warm studio light. No letters numbers watermark. No flat ColorRect. AAA dense ornate PBR detail."
+  },
+  {
+    "round": 207,
+    "name": "seat_discard_gpt_preview_commercial_r189",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "problem": "r189: seat_discard still thin after r187/r188 reject — multi-try densify",
+    "next": "Round208 visual AAA audit pages_gpt_r189",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong seat discard preview tray. Compact horizontal lacquer tray with heavy ornate gold filigree, jade rim beads, warm ivory porcelain interior empty soft for tiles, soft studio light, maximum micro-detail texture density. No letters numbers watermark. No flat ColorRect. AAA."
+  }
+]

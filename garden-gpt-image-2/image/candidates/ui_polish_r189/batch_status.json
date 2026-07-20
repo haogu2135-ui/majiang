@@ -1,0 +1,35 @@
+[
+  {
+    "round": 205,
+    "name": "hand_gpt_tray_bright_r432_commercial_r189",
+    "asset": "hand_gpt_tray_bright_r432.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 677620,
+    "problem": "r189: hand tray still short of AAA lacquer density on battle bottom band",
+    "next": "Round206 densify action_gpt_dock_banner",
+    "note": "rejected lighter/equal 569846 vs 677620"
+  },
+  {
+    "round": 206,
+    "name": "action_gpt_dock_banner_r436_commercial_r189",
+    "asset": "action_gpt_dock_banner_r436.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 490292,
+    "problem": "r189: action dock banner needs denser claim dock chrome",
+    "next": "Round207 densify seat_discard multi-try",
+    "note": "rejected lighter/equal 465586 vs 490292"
+  },
+  {
+    "round": 207,
+    "name": "seat_discard_gpt_preview_commercial_r189",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 111572,
+    "problem": "r189: seat_discard still thin after r187/r188 reject — multi-try densify",
+    "next": "Round208 visual AAA audit pages_gpt_r189",
+    "note": "promoted 96277->111572"
+  }
+]

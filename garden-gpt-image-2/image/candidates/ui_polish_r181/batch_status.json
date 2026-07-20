@@ -1,5 +1,14 @@
 [
   {
+    "round": 1,
+    "name": "ui_meld_pad_dense_r181",
+    "asset": "ui_meld_pad.png",
+    "ok": true,
+    "bytes": 155045,
+    "problem": "Round1 archive gap: meld pad was never status-ok in r181; densify lacquer/jade under porcelain melds",
+    "next": "Round2+ archive already densified; cumulative 1-150 complete after this"
+  },
+  {
     "name": "ui_route_rail_dense_r181",
     "round": 2,
     "ok": true,

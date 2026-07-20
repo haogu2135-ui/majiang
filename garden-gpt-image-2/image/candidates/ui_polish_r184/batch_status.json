@@ -1,0 +1,92 @@
+[
+  {
+    "round": 176,
+    "name": "petals_spring_commercial_r184",
+    "asset": "petals_spring.png",
+    "ok": true,
+    "bytes": 43025,
+    "problem": "Commercial r184: petals_spring.png needs denser/luxe remaster for ship bar",
+    "next": "Round177 commercial densify next"
+  },
+  {
+    "round": 177,
+    "name": "petals_winter_commercial_r184",
+    "asset": "petals_winter.png",
+    "ok": true,
+    "bytes": 39874,
+    "problem": "Commercial r184: petals_winter.png needs denser/luxe remaster for ship bar",
+    "next": "Round178 commercial densify next"
+  },
+  {
+    "round": 178,
+    "name": "guide_pointing_finger_commercial_r184",
+    "asset": "guide_pointing_finger.png",
+    "ok": true,
+    "bytes": 36033,
+    "problem": "Commercial r184: guide_pointing_finger.png needs denser/luxe remaster for ship bar",
+    "next": "Round179 commercial densify next"
+  },
+  {
+    "round": 179,
+    "name": "rank_ribbon_silver_commercial_r184",
+    "asset": "rank_ribbon_silver.png",
+    "ok": true,
+    "bytes": 68833,
+    "problem": "Commercial r184: rank_ribbon_silver.png needs denser/luxe remaster for ship bar",
+    "next": "Round180 commercial densify next"
+  },
+  {
+    "round": 180,
+    "name": "ui_meter_fill_plate_commercial_r184",
+    "asset": "ui_meter_fill_plate.png",
+    "ok": true,
+    "bytes": 159313,
+    "problem": "Commercial r184: ui_meter_fill_plate.png needs denser/luxe remaster for ship bar",
+    "next": "Round181 commercial densify next"
+  },
+  {
+    "round": 181,
+    "name": "hand_gpt_tray_bright_r432_commercial_r184",
+    "asset": "hand_gpt_tray_bright_r432.png",
+    "ok": true,
+    "bytes": 586440,
+    "problem": "Commercial r184: hand_gpt_tray_bright_r432.png needs denser/luxe remaster for ship bar",
+    "next": "Round182 commercial densify next"
+  },
+  {
+    "round": 182,
+    "name": "action_gpt_dock_banner_r436_commercial_r184",
+    "asset": "action_gpt_dock_banner_r436.png",
+    "ok": true,
+    "bytes": 466089,
+    "problem": "Commercial r184: action_gpt_dock_banner_r436.png needs denser/luxe remaster for ship bar",
+    "next": "Round183 commercial densify next"
+  },
+  {
+    "round": 183,
+    "name": "seat_gpt_brocade_v5_commercial_r184",
+    "asset": "seat_gpt_brocade_v5.png",
+    "ok": true,
+    "bytes": 244868,
+    "problem": "Commercial r184: seat_gpt_brocade_v5.png needs denser/luxe remaster for ship bar",
+    "next": "Round184 commercial densify next"
+  },
+  {
+    "round": 184,
+    "name": "chat_send_seal_commercial_r184",
+    "asset": "chat_send_seal.png",
+    "ok": true,
+    "bytes": 41535,
+    "problem": "Commercial r184: chat_send_seal.png needs denser/luxe remaster for ship bar",
+    "next": "Round185 commercial densify next"
+  },
+  {
+    "round": 185,
+    "name": "fly_transition_flip_commercial_r184",
+    "asset": "fly_transition_flip.png",
+    "ok": true,
+    "bytes": 40554,
+    "problem": "Commercial r184: fly_transition_flip.png needs denser/luxe remaster for ship bar",
+    "next": "Round186 commercial densify next"
+  }
+]

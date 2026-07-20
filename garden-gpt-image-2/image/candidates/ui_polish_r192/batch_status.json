@@ -1,0 +1,46 @@
+[
+  {
+    "round": 218,
+    "name": "voice_gpt_channel_commercial_r192",
+    "asset": "voice_gpt_channel.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 144841,
+    "problem": "r192: voice_gpt_channel near-miss densify (best 134406 short of +2500 gate)",
+    "next": "Round219 multi-try seat_discard_gpt_preview",
+    "note": "promoted 132109->144841 tries=[140424,fail,144841]"
+  },
+  {
+    "round": 219,
+    "name": "seat_discard_gpt_preview_commercial_r192",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 111572,
+    "problem": "r192: seat_discard_gpt_preview kept denser thin (~111k) river discard pad",
+    "next": "Round220 multi-try top_hud_wall_gpt_warning",
+    "note": "rejected best 82875 vs 111572 tries=[73380,82875,81074]"
+  },
+  {
+    "round": 220,
+    "name": "top_hud_wall_gpt_warning_commercial_r192",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 109556,
+    "problem": "r192: top_hud_wall_gpt_warning still thin (~106k) battle top HUD strip",
+    "next": "Round221 multi-try center_wall_gpt_warning",
+    "note": "promoted 106467->109556 tries=[88113,109556,92657]"
+  },
+  {
+    "round": 221,
+    "name": "center_wall_gpt_warning_commercial_r192",
+    "asset": "center_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 124634,
+    "problem": "r192: center_wall_gpt_warning under-dense (~125k) table center wall plate",
+    "next": "Round222 multi-try ui_hand_tray_state_chip",
+    "note": "rejected best 125106 vs 124634 tries=[125106,118631,113116]"
+  }
+]

@@ -1,0 +1,57 @@
+[
+  {
+    "round": 213,
+    "name": "settings_section_signal_panel_commercial_r191",
+    "asset": "settings_section_signal_panel.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 128524,
+    "problem": "r191: settings_section_signal_panel thin (~108k) settings signal plate",
+    "next": "Round214 multi-try shop_currency_meter_panel",
+    "note": "promoted 108215->128524 tries=[fail,128524,121945]"
+  },
+  {
+    "round": 214,
+    "name": "shop_currency_meter_panel_commercial_r191",
+    "asset": "shop_currency_meter_panel.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 147598,
+    "problem": "r191: shop_currency_meter_panel under-dense (~124k) shop currency meter",
+    "next": "Round215 multi-try rules_reading_progress_panel",
+    "note": "promoted 123760->147598 tries=[122306,fail,147598]"
+  },
+  {
+    "round": 215,
+    "name": "rules_reading_progress_panel_commercial_r191",
+    "asset": "rules_reading_progress_panel.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 152932,
+    "problem": "r191: rules_reading_progress_panel thin (~125k) wide progress strip",
+    "next": "Round216 multi-try rules_pattern_quads",
+    "note": "promoted 125426->152932 tries=[152932,151177,147912]"
+  },
+  {
+    "round": 216,
+    "name": "rules_pattern_quads_commercial_r191",
+    "asset": "rules_pattern_quads.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 126104,
+    "problem": "r191: rules_pattern_quads thin (~113k) rules pattern illustration plate",
+    "next": "Round217 multi-try voice_gpt_channel or residual seat/hand if kept denser",
+    "note": "promoted 113148->126104 tries=[126104,99547,125060]"
+  },
+  {
+    "round": 217,
+    "name": "voice_gpt_channel_commercial_r191",
+    "asset": "voice_gpt_channel.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 132109,
+    "problem": "r191: voice_gpt_channel mid-thin (~132k) voice channel plate",
+    "next": "Round218 pages_gpt_r191 capture + visual AAA sign-off",
+    "note": "rejected best 134406 vs 132109 tries=[125085,134406,131883]"
+  }
+]

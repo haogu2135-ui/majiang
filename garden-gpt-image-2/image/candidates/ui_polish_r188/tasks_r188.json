@@ -1,0 +1,72 @@
+[
+  {
+    "round": 200,
+    "name": "action_button_panel_commercial_r188",
+    "asset": "action_button_panel.png",
+    "target": [
+      512,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 14,
+    "problem": "r188: action_button_panel too thin for claim/action buttons on battle dock",
+    "next": "Round201 densify action_dock_track_panel",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI action button plate. Horizontal lacquer wood button face, jade inlay corners, muted gold filigree rim, warm ivory soft center empty for button label text. Soft studio lighting. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality PBR micro-detail."
+  },
+  {
+    "round": 201,
+    "name": "action_dock_track_panel_commercial_r188",
+    "asset": "action_dock_track_panel.png",
+    "target": [
+      1024,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "r188: action_dock_track_panel sparse under action dock banner",
+    "next": "Round202 densify seat_discard_gpt_preview",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI action dock track strip. Wide horizontal lacquer rail, jade beads, gold filigree track, soft empty center band for UI buttons. Warm studio light. No letters numbers watermark. No flat ColorRect slabs. AAA dense ornate detail."
+  },
+  {
+    "round": 202,
+    "name": "seat_discard_gpt_preview_commercial_r188",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "problem": "r188: seat_discard_gpt_preview remains thin after r187 quality-gate restore",
+    "next": "Round203 densify ui_hand_tray_state_chip",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong seat discard preview tray. Small horizontal lacquer tray, jade rim, warm ivory interior empty soft for tiles, muted gold edge filigree. Soft studio light. No letters numbers watermark. No flat ColorRect. AAA dense detail at small size."
+  },
+  {
+    "round": 203,
+    "name": "ui_hand_tray_state_chip_commercial_r188",
+    "asset": "ui_hand_tray_state_chip.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 10,
+    "problem": "r188: ui_hand_tray_state_chip used widely as tint plate is under-dense",
+    "next": "Round204 densify top_hud_wall_gpt_warning",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI state chip seal. Square rounded lacquer seal, jade inlay, gold filigree border, soft empty center for status tint. Warm ivory and muted gold. Soft studio light. No letters numbers watermark. No flat ColorRect. AAA dense micro-detail."
+  },
+  {
+    "round": 204,
+    "name": "top_hud_wall_gpt_warning_commercial_r188",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "target": [
+      512,
+      96
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "problem": "r188: top_hud_wall_gpt_warning thin HUD ornament",
+    "next": "Round205 capture pages_gpt_r188 + visual AAA audit",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong top HUD warning strip. Wide thin horizontal lacquer banner, gold warning filigree, jade corner bosses, soft empty center for HUD text. Warm studio light. No letters numbers watermark. No flat ColorRect. AAA dense ornate detail."
+  }
+]

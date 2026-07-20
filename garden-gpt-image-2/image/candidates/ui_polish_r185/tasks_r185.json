@@ -1,0 +1,72 @@
+[
+  {
+    "round": 186,
+    "name": "table_gpt_backdrop_v4_commercial_r185",
+    "asset": "table_gpt_backdrop_v4.png",
+    "target": [
+      1536,
+      864
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r185: table_gpt_backdrop_v4.png needs AAA densify for ship bar",
+    "next": "Round187 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI asset \"table gpt backdrop v4\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio lighting. Empty soft center for tiles/text. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality, ornate PBR micro-detail. full mahjong table room aerial, felt table, wood frame, garden lantern atmosphere"
+  },
+  {
+    "round": 187,
+    "name": "hand_gpt_tray_bright_r432_commercial_r185",
+    "asset": "hand_gpt_tray_bright_r432.png",
+    "target": [
+      1280,
+      320
+    ],
+    "api_size": "1536x1024",
+    "feather": 14,
+    "problem": "Commercial r185: hand_gpt_tray_bright_r432.png needs AAA densify for ship bar",
+    "next": "Round188 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI asset \"hand gpt tray bright r432\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio lighting. Empty soft center for tiles/text. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality, ornate PBR micro-detail. horizontal lacquer hand tray, deep wood grain, gold rim, bright studio"
+  },
+  {
+    "round": 188,
+    "name": "menu_primary_3d_stage_overlay_warm_v390_commercial_r185",
+    "asset": "menu_primary_3d_stage_overlay_warm_v390.png",
+    "target": [
+      1536,
+      1024
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r185: menu_primary_3d_stage_overlay_warm_v390.png needs AAA densify for ship bar",
+    "next": "Round189 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI asset \"menu primary 3d stage overlay warm v390\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio lighting. Empty soft center for tiles/text. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality, ornate PBR micro-detail. menu stage frame overlay, ornate guofeng proscenium, soft vignette edges"
+  },
+  {
+    "round": 189,
+    "name": "online_lobby_panel_frame_warm_v392_commercial_r185",
+    "asset": "online_lobby_panel_frame_warm_v392.png",
+    "target": [
+      1024,
+      768
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r185: online_lobby_panel_frame_warm_v392.png needs AAA densify for ship bar",
+    "next": "Round190 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI asset \"online lobby panel frame warm v392\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio lighting. Empty soft center for tiles/text. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality, ornate PBR micro-detail. online lobby panel frame lacquer and jade, readable dark interior"
+  },
+  {
+    "round": 190,
+    "name": "action_gpt_dock_banner_r436_commercial_r185",
+    "asset": "action_gpt_dock_banner_r436.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r185: action_gpt_dock_banner_r436.png needs AAA densify for ship bar",
+    "next": "Round191 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI asset \"action gpt dock banner r436\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio lighting. Empty soft center for tiles/text. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality, ornate PBR micro-detail. action dock banner lacquer gold jade ultra dense"
+  }
+]

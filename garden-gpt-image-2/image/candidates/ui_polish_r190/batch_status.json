@@ -1,0 +1,57 @@
+[
+  {
+    "round": 208,
+    "name": "top_hud_wall_gpt_warning_commercial_r190",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 106467,
+    "problem": "r190: top_hud_wall_gpt_warning still thin HUD strip after r188 manual promote",
+    "next": "Round209 multi-try menu_tutorial_gpt_hint",
+    "note": "promoted 97099->106467 tries=[106467,100438,98796]"
+  },
+  {
+    "round": 209,
+    "name": "menu_tutorial_gpt_hint_commercial_r190",
+    "asset": "menu_tutorial_gpt_hint.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 156218,
+    "problem": "r190: menu_tutorial_gpt_hint under-dense for main menu tutorial chip",
+    "next": "Round210 multi-try center_wall_gpt_warning",
+    "note": "promoted 106818->156218 tries=[156218,134463,147455]"
+  },
+  {
+    "round": 210,
+    "name": "center_wall_gpt_warning_commercial_r190",
+    "asset": "center_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 124634,
+    "problem": "r190: center_wall_gpt_warning thin center-table warning plate",
+    "next": "Round211 multi-try seat_discard densify",
+    "note": "rejected best 123615 vs 124634 tries=[114135,123615,118586]"
+  },
+  {
+    "round": 211,
+    "name": "seat_discard_gpt_preview_commercial_r190",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 111572,
+    "problem": "r190: seat_discard still short of AAA after r189 111k promote — multi-try keep-best",
+    "next": "Round212 multi-try hand_tutorial_gpt_hint",
+    "note": "rejected best 103770 vs 111572 tries=[103770,fail,fail] (early-finalize after 502 storm)"
+  },
+  {
+    "round": 212,
+    "name": "hand_tutorial_gpt_hint_commercial_r190",
+    "asset": "hand_tutorial_gpt_hint.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 137108,
+    "problem": "r190: hand_tutorial_gpt_hint thin battle tutorial ribbon",
+    "next": "Round213 capture pages_gpt_r190 + visual AAA audit",
+    "note": "promoted 118134->137108 tries=[125546,132807,137108]"
+  }
+]

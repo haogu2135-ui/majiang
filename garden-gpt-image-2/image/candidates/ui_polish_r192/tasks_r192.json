@@ -1,0 +1,82 @@
+[
+  {
+    "round": 218,
+    "name": "voice_gpt_channel_commercial_r192",
+    "asset": "voice_gpt_channel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r192: voice_gpt_channel near-miss densify (best 134406 short of +2500 gate)",
+    "next": "Round219 multi-try seat_discard_gpt_preview",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong voice channel plate. Horizontal lacquer audio channel banner, soft empty center for mic/voice UI, gold sound-wave filigree abstract (no glyphs), jade bosses, warm studio light, dense PBR wood grain and filigree micro-detail. No letters numbers watermark. No flat ColorRect. Maximum AAA ornate density ship quality.",
+    "baseline_bytes": 132109
+  },
+  {
+    "round": 219,
+    "name": "seat_discard_gpt_preview_commercial_r192",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 14,
+    "tries": 3,
+    "problem": "r192: seat_discard_gpt_preview kept denser thin (~111k) river discard pad",
+    "next": "Round220 multi-try top_hud_wall_gpt_warning",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong seat discard river pad. Soft empty center for porcelain tile, lacquer wood frame, jade corner bosses, gold filigree border, warm studio light, heavy carved micro-detail, PBR density. No tile faces letters numbers watermark. No flat ColorRect. AAA ship quality dense pad.",
+    "baseline_bytes": 111572
+  },
+  {
+    "round": 220,
+    "name": "top_hud_wall_gpt_warning_commercial_r192",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "target": [
+      512,
+      96
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r192: top_hud_wall_gpt_warning still thin (~106k) battle top HUD strip",
+    "next": "Round221 multi-try center_wall_gpt_warning",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong top HUD wall strip. Extremely wide thin horizontal lacquer HUD banner, soft empty center for status labels, gold filigree ends, jade dots, warm studio light, ultra dense wood grain carving. No letters numbers watermark. No flat ColorRect. AAA commercial density.",
+    "baseline_bytes": 106467
+  },
+  {
+    "round": 221,
+    "name": "center_wall_gpt_warning_commercial_r192",
+    "asset": "center_wall_gpt_warning.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r192: center_wall_gpt_warning under-dense (~125k) table center wall plate",
+    "next": "Round222 multi-try ui_hand_tray_state_chip",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong center wall plate. Horizontal lacquer plaque for table center wall cue, soft empty center, gold corner bosses, jade inlay, dense carved filigree, warm studio light. No letters numbers watermark. No flat ColorRect. AAA ornate density.",
+    "baseline_bytes": 124634
+  },
+  {
+    "round": 222,
+    "name": "ui_hand_tray_state_chip_commercial_r192",
+    "asset": "ui_hand_tray_state_chip.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r192: ui_hand_tray_state_chip mid-thin (~153k) hand tray state chip",
+    "next": "Round223 pages_gpt_r192 capture + visual AAA sign-off",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong hand tray state chip. Compact lacquer chip plate, soft empty center for tray state label, gold filigree rim, jade accent, warm studio light, dense PBR micro-carving. No letters numbers watermark. No flat ColorRect. AAA ship quality.",
+    "baseline_bytes": 153133
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "round": 196,
+    "name": "ui_meld_pad_commercial_r187",
+    "asset": "ui_meld_pad.png",
+    "ok": true,
+    "bytes": 329625,
+    "problem": "Commercial r187: ui_meld_pad.png needs denser battle/lobby plate",
+    "next": "Round197 commercial densify next"
+  },
+  {
+    "round": 197,
+    "name": "ui_river_soft_wash_commercial_r187",
+    "asset": "ui_river_soft_wash.png",
+    "ok": true,
+    "bytes": 1009930,
+    "problem": "Commercial r187: ui_river_soft_wash.png needs denser battle/lobby plate",
+    "next": "Round198 commercial densify next"
+  },
+  {
+    "round": 198,
+    "name": "lobby_room_gate_token_commercial_r187",
+    "asset": "lobby_room_gate_token.png",
+    "ok": true,
+    "bytes": 317006,
+    "problem": "Commercial r187: lobby_room_gate_token.png needs denser battle/lobby plate",
+    "next": "Round199 commercial densify next"
+  },
+  {
+    "round": 199,
+    "name": "seat_discard_gpt_preview_commercial_r187",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "bytes": 85392,
+    "problem": "Commercial r187: seat_discard_gpt_preview.png needs denser battle/lobby plate",
+    "next": "Round200 commercial densify next"
+  }
+]

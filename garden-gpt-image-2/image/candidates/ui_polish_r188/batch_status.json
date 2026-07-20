@@ -1,0 +1,57 @@
+[
+  {
+    "round": 200,
+    "name": "action_button_panel_commercial_r188",
+    "asset": "action_button_panel.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 149805,
+    "problem": "r188: action_button_panel too thin for claim/action buttons on battle dock",
+    "next": "Round201 densify action_dock_track_panel",
+    "note": "promoted 144136->149805"
+  },
+  {
+    "round": 201,
+    "name": "action_dock_track_panel_commercial_r188",
+    "asset": "action_dock_track_panel.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 212452,
+    "problem": "r188: action_dock_track_panel sparse under action dock banner",
+    "next": "Round202 densify seat_discard_gpt_preview",
+    "note": "promoted 193567->212452"
+  },
+  {
+    "round": 202,
+    "name": "seat_discard_gpt_preview_commercial_r188",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 96277,
+    "problem": "r188: seat_discard_gpt_preview remains thin after r187 quality-gate restore",
+    "next": "Round203 densify ui_hand_tray_state_chip",
+    "note": "rejected lighter/equal 92304 vs 96277"
+  },
+  {
+    "round": 203,
+    "name": "ui_hand_tray_state_chip_commercial_r188",
+    "asset": "ui_hand_tray_state_chip.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 153133,
+    "problem": "r188: ui_hand_tray_state_chip used widely as tint plate is under-dense",
+    "next": "Round204 densify top_hud_wall_gpt_warning",
+    "note": "promoted 144545->153133"
+  },
+  {
+    "round": 204,
+    "name": "top_hud_wall_gpt_warning_commercial_r188",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 93807,
+    "problem": "r188: top_hud_wall_gpt_warning thin HUD ornament",
+    "next": "Round205 capture pages_gpt_r188 + visual AAA audit",
+    "note": "rejected lighter/equal 97099 vs 93807"
+  }
+]

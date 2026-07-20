@@ -1,0 +1,72 @@
+[
+  {
+    "round": 191,
+    "name": "ui_shop_row_plate_commercial_r186",
+    "asset": "ui_shop_row_plate.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r186: ui_shop_row_plate.png needs denser plate for shop/settings readability",
+    "next": "Round192 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI plate \"ui shop row plate\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for text/icons. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. horizontal shop item row plate, dark lacquer for text readability"
+  },
+  {
+    "round": 192,
+    "name": "ui_settings_section_plate_commercial_r186",
+    "asset": "ui_settings_section_plate.png",
+    "target": [
+      1024,
+      256
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r186: ui_settings_section_plate.png needs denser plate for shop/settings readability",
+    "next": "Round193 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI plate \"ui settings section plate\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for text/icons. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. settings section plate warm lacquer not green"
+  },
+  {
+    "round": 193,
+    "name": "ui_confirm_sheet_plate_commercial_r186",
+    "asset": "ui_confirm_sheet_plate.png",
+    "target": [
+      1024,
+      512
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r186: ui_confirm_sheet_plate.png needs denser plate for shop/settings readability",
+    "next": "Round194 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI plate \"ui confirm sheet plate\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for text/icons. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. confirm dialog sheet ornate guofeng panel"
+  },
+  {
+    "round": 194,
+    "name": "ui_menu_card_face_commercial_r186",
+    "asset": "ui_menu_card_face.png",
+    "target": [
+      512,
+      640
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "problem": "Commercial r186: ui_menu_card_face.png needs denser plate for shop/settings readability",
+    "next": "Round195 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI plate \"ui menu card face\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for text/icons. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. vertical menu card face lacquer gold jade"
+  },
+  {
+    "round": 195,
+    "name": "shop_currency_meter_panel_commercial_r186",
+    "asset": "shop_currency_meter_panel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "problem": "Commercial r186: shop_currency_meter_panel.png needs denser plate for shop/settings readability",
+    "next": "Round196 commercial densify next",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong UI plate \"shop currency meter panel\". Premium lacquer wood, jade inlay, warm ivory porcelain, muted gold filigree, soft studio light. Empty soft center for text/icons. No letters numbers watermark. No flat ColorRect slabs. AAA ship quality. currency meter panel gold jade"
+  }
+]

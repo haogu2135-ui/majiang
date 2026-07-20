@@ -1,0 +1,47 @@
+[
+  {
+    "round": 191,
+    "name": "ui_shop_row_plate_commercial_r186",
+    "asset": "ui_shop_row_plate.png",
+    "ok": true,
+    "bytes": 494850,
+    "problem": "Commercial r186: ui_shop_row_plate.png needs denser plate for shop/settings readability",
+    "next": "Round192 commercial densify next"
+  },
+  {
+    "round": 192,
+    "name": "ui_settings_section_plate_commercial_r186",
+    "asset": "ui_settings_section_plate.png",
+    "ok": true,
+    "bytes": 365365,
+    "problem": "Commercial r186: ui_settings_section_plate.png needs denser plate for shop/settings readability",
+    "next": "Round193 commercial densify next"
+  },
+  {
+    "round": 193,
+    "name": "ui_confirm_sheet_plate_commercial_r186",
+    "asset": "ui_confirm_sheet_plate.png",
+    "ok": true,
+    "bytes": 934867,
+    "problem": "Commercial r186: ui_confirm_sheet_plate.png needs denser plate for shop/settings readability",
+    "next": "Round194 commercial densify next"
+  },
+  {
+    "round": 194,
+    "name": "ui_menu_card_face_commercial_r186",
+    "asset": "ui_menu_card_face.png",
+    "ok": true,
+    "bytes": 539921,
+    "problem": "Commercial r186: ui_menu_card_face.png needs denser plate for shop/settings readability",
+    "next": "Round195 commercial densify next"
+  },
+  {
+    "round": 195,
+    "name": "shop_currency_meter_panel_commercial_r186",
+    "asset": "shop_currency_meter_panel.png",
+    "ok": true,
+    "bytes": 109196,
+    "problem": "Commercial r186: shop_currency_meter_panel.png needs denser plate for shop/settings readability",
+    "next": "Round196 commercial densify next"
+  }
+]

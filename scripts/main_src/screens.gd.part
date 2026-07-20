@@ -387,7 +387,7 @@ func _show_online_lobby_impl() -> void:
 	form_panel.move_child(form_rear, 0)
 	var form_top_rim = make_soft_depth_panel(form_panel, rect_full(0.040, 0.015, 0.960, 0.070), Color(1.0, 0.90, 0.56, 0.10), 999)
 	form_top_rim.name = "OnlineLobbyForm3DTopRim"
-	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r182 denser frame (smoke<=0.34)
+	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if form_panel_frame != null:
 		form_panel_frame.name = "OnlineLobbyFormGPTPanelFrameTexture"
 		form_panel.move_child(form_panel_frame, 0)
@@ -467,12 +467,16 @@ func _show_online_lobby_impl() -> void:
 
 	# 状态栏
 	var lobby_status_text := "可建房/入房，房主可开始" if can_start_online else "下一步 · 先连接，再建房或入房"
-	status_label = make_label(panel, lobby_status_text, 14, Color(0.82, 0.94, 0.86), false)
+	# r187: warm ivory status text + denser GPT plate for secondary readability.
+	status_label = make_label(panel, lobby_status_text, 14, Color(0.96, 0.92, 0.80), false)
 	status_label.name = "OnlineLobbyStatusLabel"
 	apply_rect(status_label, rect_full(0.045, 0.896, 0.480, 0.936))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+	status_label.add_theme_constant_override("shadow_offset_x", 1)
+	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(status_label)
-	var status_backplate = make_panel(panel, rect_full(0.035, 0.886, 0.492, 0.946), Color(0.14, 0.10, 0.06, 0.28), 10, Color(0.90, 0.76, 0.42, 0.16), 0)  # r415
+	var status_backplate = make_panel(panel, rect_full(0.035, 0.886, 0.492, 0.946), Color(0.10, 0.07, 0.04, 0.52), 10, Color(0.94, 0.80, 0.46, 0.28), 0)
 	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
 	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
 	draw_online_feedback_art(panel)
@@ -491,11 +495,11 @@ func _show_online_lobby_impl() -> void:
 	# 房间状态面板
 	var log_panel = make_panel(panel, rect_full(0.505, 0.17, 0.965, 0.87), Color(0.18, 0.14, 0.10, 0.62), 14, Color(0.98, 0.92, 0.70, 0.42))  # r415
 	log_panel.name = "OnlineLobbyLogPanel"
-	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r182 denser frame (smoke<=0.34)
+	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_panel(log_panel, rect_full(0.035, 0.115, 0.965, 0.930), Color(0.10, 0.07, 0.04, 0.06), 10, Color(0.90, 0.76, 0.42, 0.08), 0)
+	var log_readability_backplate = make_panel(log_panel, rect_full(0.035, 0.115, 0.965, 0.930), Color(0.10, 0.07, 0.04, 0.22), 10, Color(0.94, 0.80, 0.46, 0.16), 0)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	# 右侧面板滑入动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -507,9 +511,12 @@ func _show_online_lobby_impl() -> void:
 		tw_log.tween_property(log_panel, "offset_left", 0.0, 0.28).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD).set_delay(0.12)
 		if ui_enhancements != null:
 			ui_enhancements.animate_panel_breath(log_panel, Vector2(0.0, -2.0), 3.6, 0.95)
-	var log_title = make_label(log_panel, "房间状态", 20, Color(0.84, 0.87, 0.74), true)
+	var log_title = make_label(log_panel, "房间状态", 20, Color(0.98, 0.94, 0.82), true)
 	apply_rect(log_title, rect_full(0.05, 0.020, 0.48, 0.095))
 	log_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	log_title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.58))
+	log_title.add_theme_constant_override("shadow_offset_x", 1)
+	log_title.add_theme_constant_override("shadow_offset_y", 1)
 	var room_badge_text = "房间号 " + (selected_room if selected_room != "" else "--")
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
@@ -854,26 +861,33 @@ func _show_shop_screen_impl() -> void:
 			draw_shop_native_charm_art(row, item_color, item_id, icon_name)
 		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
 
-		var text_plate = make_panel(row, rect_full(0.150, 0.055, 0.600, 0.920), Color(0.12, 0.09, 0.06, 0.32), 10, Color(0.90, 0.78, 0.44, 0.14), 1)
+		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
+		var text_plate = make_panel(row, rect_full(0.150, 0.055, 0.600, 0.920), Color(0.10, 0.07, 0.04, 0.58), 10, Color(0.94, 0.82, 0.48, 0.28), 1)
 		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
 		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		# 道具名称
-		var name_label = make_label(row, str(item_info.get("name", item_id)), 18, Color(0.96, 0.94, 0.88), true)
+		var name_label = make_label(row, str(item_info.get("name", item_id)), 18, Color(0.99, 0.96, 0.88), true)
 		name_label.name = "ShopItemName_%s" % item_id
 		apply_rect(name_label, rect_full(0.164, 0.090, 0.480, 0.440))
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.62))
+		name_label.add_theme_constant_override("shadow_offset_x", 1)
+		name_label.add_theme_constant_override("shadow_offset_y", 1)
 		configure_clipped_label(name_label)
-		var identity_label = make_label(row, shop_item_identity_text(item_id), 10, Color(item_color.r, item_color.g, item_color.b, 0.92), true)
+		var identity_label = make_label(row, shop_item_identity_text(item_id), 10, Color(item_color.r, item_color.g, item_color.b, 0.96), true)
 		identity_label.name = "ShopItemIdentity_%s" % item_id
 		apply_rect(identity_label, rect_full(0.492, 0.125, 0.588, 0.410))
 		identity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 		# 道具描述
-		var desc_label = make_label(row, str(item_info.get("desc", "")), 12, Color(0.86, 0.92, 0.84), false)
+		var desc_label = make_label(row, str(item_info.get("desc", "")), 12, Color(0.92, 0.90, 0.82), false)
 		desc_label.name = "ShopItemDescription_%s" % item_id
 		apply_rect(desc_label, rect_full(0.164, 0.505, 0.590, 0.885))
 		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		desc_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.50))
+		desc_label.add_theme_constant_override("shadow_offset_x", 1)
+		desc_label.add_theme_constant_override("shadow_offset_y", 1)
 		configure_clipped_label(desc_label)
 
 		# 拥有数量 - 带徽章样式

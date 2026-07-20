@@ -287,16 +287,27 @@ static func create_particle_trail(parent: Node, start_pos: Vector2, end_pos: Vec
 		particle.position = start_pos
 		parent.add_child(particle)
 
-		# 粒子核心
-		var core = Panel.new()
-		core.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# 粒子核心 — GPT soft flash (no StyleBoxFlat paint)
 		var core_size = randf_range(2.0, 5.0)
-		core.custom_minimum_size = Vector2(core_size, core_size)
-
-		var particle_style = StyleBoxFlat.new()
-		particle_style.bg_color = Color(1.0, 0.9, 0.5, randf_range(0.5, 0.9))
-		particle_style.set_corner_radius_all(50)
-		core.add_theme_stylebox_override("panel", particle_style)
+		var core: Control
+		var flash_tex: Texture2D = null
+		if ResourceLoader.exists("res://assets/illustrations/ui_soft_flash.png"):
+			flash_tex = load("res://assets/illustrations/ui_soft_flash.png") as Texture2D
+		if flash_tex != null:
+			var tr = TextureRect.new()
+			tr.texture = flash_tex
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_SCALE
+			tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tr.custom_minimum_size = Vector2(core_size, core_size)
+			tr.size = Vector2(core_size, core_size)
+			tr.modulate = Color(1.0, 0.9, 0.5, randf_range(0.5, 0.9))
+			core = tr
+		else:
+			core = Control.new()
+			core.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			core.custom_minimum_size = Vector2(core_size, core_size)
+			core.modulate = Color(1, 1, 1, 0)
 		particle.add_child(core)
 
 		# 轨迹动画

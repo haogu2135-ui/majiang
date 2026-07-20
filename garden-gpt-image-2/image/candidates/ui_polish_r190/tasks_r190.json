@@ -1,0 +1,77 @@
+[
+  {
+    "round": 208,
+    "name": "top_hud_wall_gpt_warning_commercial_r190",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "target": [
+      512,
+      96
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r190: top_hud_wall_gpt_warning still thin HUD strip after r188 manual promote",
+    "next": "Round209 multi-try menu_tutorial_gpt_hint",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong top HUD warning strip. Wide thin horizontal lacquer banner, heavy gold warning filigree, jade corner bosses, carved wood grain micro-detail, soft empty center for HUD text. Warm studio light. No letters numbers watermark. No flat ColorRect. Maximum ornate density AAA."
+  },
+  {
+    "round": 209,
+    "name": "menu_tutorial_gpt_hint_commercial_r190",
+    "asset": "menu_tutorial_gpt_hint.png",
+    "target": [
+      512,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r190: menu_tutorial_gpt_hint under-dense for main menu tutorial chip",
+    "next": "Round210 multi-try center_wall_gpt_warning",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong menu tutorial hint plate. Horizontal lacquer scroll plate, jade and gold filigree, soft ivory empty center for tip text, warm studio light, PBR micro-carving. No letters numbers watermark. No flat ColorRect. AAA dense ornate detail."
+  },
+  {
+    "round": 210,
+    "name": "center_wall_gpt_warning_commercial_r190",
+    "asset": "center_wall_gpt_warning.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r190: center_wall_gpt_warning thin center-table warning plate",
+    "next": "Round211 multi-try seat_discard densify",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong center table wall warning plate. Horizontal lacquer plaque, jade bosses, gold filigree border, soft empty center for warning text, warm studio light, ultra dense wood grain and inlay. No letters numbers watermark. No flat ColorRect. AAA ship quality."
+  },
+  {
+    "round": 211,
+    "name": "seat_discard_gpt_preview_commercial_r190",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "tries": 3,
+    "problem": "r190: seat_discard still short of AAA after r189 111k promote — multi-try keep-best",
+    "next": "Round212 multi-try hand_tutorial_gpt_hint",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong seat discard preview tray. Compact horizontal lacquer tray, heavy ornate gold filigree, jade rim beads, warm ivory porcelain interior empty soft for tiles, carved micro-detail everywhere, soft studio light. No letters numbers watermark. No flat ColorRect. AAA maximum density."
+  },
+  {
+    "round": 212,
+    "name": "hand_tutorial_gpt_hint_commercial_r190",
+    "asset": "hand_tutorial_gpt_hint.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 12,
+    "tries": 3,
+    "problem": "r190: hand_tutorial_gpt_hint thin battle tutorial ribbon",
+    "next": "Round213 capture pages_gpt_r190 + visual AAA audit",
+    "prompt": "Ultra dense commercial remaster of Chinese guofeng mahjong hand tutorial hint ribbon. Wide horizontal lacquer ribbon plate, jade ends, gold filigree, soft empty center for tutorial tip text, warm studio light, dense PBR micro-detail. No letters numbers watermark. No flat ColorRect. AAA commercial ship quality."
+  }
+]
