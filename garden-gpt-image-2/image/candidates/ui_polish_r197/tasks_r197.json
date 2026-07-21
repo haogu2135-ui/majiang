@@ -1,0 +1,66 @@
+[
+  {
+    "round": 238,
+    "name": "settings_section_signal_panel_commercial_r197",
+    "asset": "settings_section_signal_panel.png",
+    "target": [
+      384,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "tries": 3,
+    "problem": "r197: settings_section_signal_panel mid-thin (~128k) settings section signal plate densify",
+    "next": "Round239 multi-try shop_currency_meter_panel",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong settings section signal plate. Compact lacquer jade-gold plate for settings section header signal, soft empty center for section title, carved wood micro pores, dense gold filigree, warm studio light, high-frequency PBR. No letters numbers watermark. No flat ColorRect. Commercial denser remaster.",
+    "baseline_bytes": 128524
+  },
+  {
+    "round": 239,
+    "name": "shop_currency_meter_panel_commercial_r197",
+    "asset": "shop_currency_meter_panel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "tries": 3,
+    "problem": "r197: shop_currency_meter_panel mid-thin (~147k) shop currency meter plate densify",
+    "next": "Round240 multi-try rules_reading_progress_panel",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong shop currency meter plate. Wide horizontal lacquer jade-gold meter tray for coin/gem HUD, soft empty center for numbers, dense carved rim and filigree, warm studio light, high-frequency PBR micro-detail. No letters numbers watermark. No flat ColorRect. Commercial denser remaster.",
+    "baseline_bytes": 147598
+  },
+  {
+    "round": 240,
+    "name": "rules_reading_progress_panel_commercial_r197",
+    "asset": "rules_reading_progress_panel.png",
+    "target": [
+      960,
+      80
+    ],
+    "api_size": "1536x1024",
+    "feather": 6,
+    "tries": 3,
+    "problem": "r197: rules_reading_progress_panel thin strip (~152k) reading progress densify",
+    "next": "Round241 multi-try voice_gpt_channel",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong rules reading progress strip. Very wide thin horizontal lacquer jade-gold progress rail plate, soft empty center for progress fill, dense micro filigree along edges, warm studio light, high-frequency PBR. No letters numbers watermark. No flat ColorRect. Commercial denser remaster.",
+    "baseline_bytes": 152932
+  },
+  {
+    "round": 241,
+    "name": "voice_gpt_channel_commercial_r197",
+    "asset": "voice_gpt_channel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "tries": 4,
+    "problem": "r197: voice_gpt_channel kept denser (~144k; r195 gens max 136k) densify retry",
+    "next": "Round242 pages_gpt_r197 capture + visual AAA",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong voice channel plate. Compact lacquer jade-gold plate for voice UI, soft empty center for icon/label, heavy carved rim, maximum high-frequency wood pores and gold filigree so final 512x128 PNG stays larger than 147k bytes, warm studio light. No letters numbers watermark. No flat ColorRect. Commercial denser than 144k prior live.",
+    "baseline_bytes": 144841
+  }
+]

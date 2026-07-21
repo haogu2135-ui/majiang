@@ -42,5 +42,16 @@
     "problem": "r192: center_wall_gpt_warning under-dense (~125k) table center wall plate",
     "next": "Round222 multi-try ui_hand_tray_state_chip",
     "note": "rejected best 125106 vs 124634 tries=[125106,118631,113116]"
+  },
+  {
+    "round": 222,
+    "name": "ui_hand_tray_state_chip_commercial_r192",
+    "asset": "ui_hand_tray_state_chip.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 153133,
+    "problem": "r192: ui_hand_tray_state_chip mid-thin (~153k) hand tray state chip",
+    "next": "Round223 pages_gpt_r192 capture + visual AAA sign-off",
+    "note": "rejected best 147567 vs 153133 tries=[137138,117913,147567]"
   }
 ]

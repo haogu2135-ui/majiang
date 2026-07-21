@@ -327,6 +327,7 @@ func add_line_edit(parent: Control, label_text: String, value: String) -> LineEd
 
 
 func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed: bool = false) -> Control:
+	# r215: GPT chrome conversion
 	if edit == null or not is_instance_valid(edit):
 		return null
 	var resolved_id := art_id
@@ -341,17 +342,21 @@ func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed:
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	edit.add_child(feedback)
-	var wash = make_panel(feedback, rect_full(0.010, 0.085, 0.990, 0.915), Color(accent.r, accent.g, accent.b, 0.14 if changed else 0.090), 12, Color(1.0, 0.88, 0.54, 0.18 if changed else 0.12), 0)
+	var wash = make_gpt_plate_rect(rect_full(0.010, 0.085, 0.990, 0.915), Color(accent.r, accent.g, accent.b, 0.14 if changed else 0.090), "ui_jade_reading_plate")
 	wash.name = "LineEditInputFeedbackWash_%s" % resolved_id
-	var bloom = make_panel(feedback, rect_full(0.055, 0.185, 0.945, 0.815), Color(1.0, 0.88, 0.54, 0.070 if changed else 0.045), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	feedback.add_child(wash)
+	var bloom = make_gpt_plate_rect(rect_full(0.055, 0.185, 0.945, 0.815), Color(1.0, 0.88, 0.54, 0.070 if changed else 0.045), "ui_button_face_plate")
 	bloom.name = "LineEditInputFeedbackGlow_%s" % resolved_id
-	var seal = make_panel(feedback, rect_full(0.862, 0.205, 0.936, 0.795), Color(accent.r, accent.g, accent.b, 0.18 if changed else 0.12), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	feedback.add_child(bloom)
+	var seal = make_gpt_gate(rect_full(0.862, 0.205, 0.936, 0.795), Color(accent.r, accent.g, accent.b, 0.18 if changed else 0.12))
 	seal.name = "LineEditInputFeedbackSeal_%s" % resolved_id
+	feedback.add_child(seal)
 	var seal_glyph = make_label(seal, "定" if changed else "入", 8, Color(0.98, 0.90, 0.62, 0.82), true)
 	seal_glyph.name = "LineEditInputFeedbackGlyph_%s" % resolved_id
 	apply_rect(seal_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var caret = make_panel(feedback, rect_full(0.812, 0.265, 0.840, 0.735), Color(0.96, 0.82, 0.44, 0.24 if changed else 0.16), 999, Color(1.0, 0.90, 0.58, 0.08), 0)
+	var caret = make_gpt_edge_rail(rect_full(0.812, 0.265, 0.840, 0.735), Color(0.96, 0.82, 0.44, 0.24 if changed else 0.16))
 	caret.name = "LineEditInputFeedbackCaret_%s" % resolved_id
+	feedback.add_child(caret)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
 		wash.scale = Vector2(0.96, 0.92)
@@ -371,6 +376,7 @@ func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed:
 	else:
 		feedback.modulate.a = 0.88
 	return feedback
+
 
 func line_edit_art_id(label_text: String) -> String:
 	if label_text.find("服务器") >= 0:
@@ -402,6 +408,7 @@ func line_edit_corner_glyph(art_id: String) -> String:
 
 
 func play_lobby_action_press_feedback(button: Button, text: String, color: Color) -> void:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return
 	var feedback = Control.new()
@@ -409,12 +416,15 @@ func play_lobby_action_press_feedback(button: Button, text: String, color: Color
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
-	var wash = make_panel(feedback, rect_full(0.018, 0.080, 0.982, 0.920), Color(color.r, color.g, color.b, 0.13), 12, Color(1.0, 0.88, 0.52, 0.18), 0)
+	var wash = make_gpt_plate_rect(rect_full(0.018, 0.080, 0.982, 0.920), Color(color.r, color.g, color.b, 0.13), "ui_jade_reading_plate")
 	wash.name = "LobbyActionPressWash_%s" % text
-	var glow = make_panel(feedback, rect_full(0.095, 0.155, 0.905, 0.845), Color(1.0, 0.86, 0.46, 0.060), 999, Color(color.r, color.g, color.b, 0.10), 0)
+	feedback.add_child(wash)
+	var glow = make_gpt_gate(rect_full(0.095, 0.155, 0.905, 0.845), Color(1.0, 0.86, 0.46, 0.060))
 	glow.name = "LobbyActionPressGlow_%s" % text
-	var seal = make_panel(feedback, rect_full(0.055, 0.130, 0.245, 0.515), Color(color.r, color.g, color.b, 0.16), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	feedback.add_child(glow)
+	var seal = make_gpt_gate(rect_full(0.055, 0.130, 0.245, 0.515), Color(color.r, color.g, color.b, 0.16))
 	seal.name = "LobbyActionPressSeal_%s" % text
+	feedback.add_child(seal)
 	var glyph = make_label(seal, lobby_action_glyph(text), 9, Color(0.98, 0.92, 0.66, 0.86), true)
 	glyph.name = "LobbyActionPressGlyph_%s" % text
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -436,6 +446,7 @@ func play_lobby_action_press_feedback(button: Button, text: String, color: Color
 	else:
 		feedback.modulate.a = 0.25
 	return
+
 
 func lobby_action_glyph(text: String) -> String:
 	if text.contains("连接"):
@@ -774,6 +785,7 @@ func request_reset_progress_from_settings() -> void:
 
 
 func play_settings_close_button_feedback(button: Button) -> void:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return
 	var feedback = Control.new()
@@ -782,16 +794,21 @@ func play_settings_close_button_feedback(button: Button) -> void:
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
 	var accent = Color(0.78, 0.64, 0.36)
-	var source = make_panel(feedback, rect_full(0.090, 0.545, 0.160, 0.805), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var source = make_gpt_edge_rail(rect_full(0.090, 0.545, 0.160, 0.805), Color(accent.r, accent.g, accent.b, 0.22))
 	source.name = "SettingsClosePressSource"
-	var route = make_panel(feedback, rect_full(0.160, 0.640, 0.810, 0.745), Color(0.006, 0.016, 0.018, 0.46), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.160, 0.640, 0.810, 0.745), Color(0.006, 0.016, 0.018, 0.46))
 	route.name = "SettingsClosePressRoute"
-	var fill = make_panel(route, rect_full(0.030, 0.260, 0.880, 0.740), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.88, 0.52, 0.04), 0)
+	feedback.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.030, 0.260, 0.880, 0.740), Color(accent.r, accent.g, accent.b, 0.30))
 	fill.name = "SettingsClosePressFill"
-	var gate = make_panel(feedback, rect_full(0.785, 0.520, 0.865, 0.835), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	route.add_child(fill)
+	var gate = make_gpt_gate(rect_full(0.785, 0.520, 0.865, 0.835), Color(accent.r, accent.g, accent.b, 0.20))
 	gate.name = "SettingsClosePressGate"
-	var seal = make_panel(feedback, rect_full(0.650, 0.130, 0.795, 0.520), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	feedback.add_child(gate)
+	var seal = make_gpt_gate(rect_full(0.650, 0.130, 0.795, 0.520), Color(accent.r, accent.g, accent.b, 0.18))
 	seal.name = "SettingsClosePressSeal"
+	feedback.add_child(seal)
 	var glyph = make_label(seal, "关", 9, Color(0.98, 0.92, 0.66, 0.88), true)
 	glyph.name = "SettingsClosePressGlyph"
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -831,6 +848,7 @@ func settings_section_icon(title_text: String) -> String:
 
 
 func play_settings_action_feedback(button: Button, role: String, color: Color) -> void:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return
 	var feedback = Control.new()
@@ -838,16 +856,21 @@ func play_settings_action_feedback(button: Button, role: String, color: Color) -
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
-	var source = make_panel(feedback, rect_full(0.070, 0.545, 0.140, 0.805), Color(color.r, color.g, color.b, 0.22), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var source = make_gpt_edge_rail(rect_full(0.070, 0.545, 0.140, 0.805), Color(color.r, color.g, color.b, 0.22))
 	source.name = "SettingsActionFeedbackSource_%s" % role
-	var route = make_panel(feedback, rect_full(0.140, 0.640, 0.810, 0.745), Color(0.006, 0.016, 0.018, 0.46), 999, Color(color.r, color.g, color.b, 0.10), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.140, 0.640, 0.810, 0.745), Color(0.006, 0.016, 0.018, 0.46))
 	route.name = "SettingsActionFeedbackRoute_%s" % role
-	var fill = make_panel(route, rect_full(0.030, 0.260, 0.870, 0.740), Color(color.r, color.g, color.b, 0.30), 999, Color(1.0, 0.88, 0.52, 0.04), 0)
+	feedback.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.030, 0.260, 0.870, 0.740), Color(color.r, color.g, color.b, 0.30))
 	fill.name = "SettingsActionFeedbackFill_%s" % role
-	var gate = make_panel(feedback, rect_full(0.785, 0.520, 0.865, 0.835), Color(color.r, color.g, color.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	route.add_child(fill)
+	var gate = make_gpt_gate(rect_full(0.785, 0.520, 0.865, 0.835), Color(color.r, color.g, color.b, 0.20))
 	gate.name = "SettingsActionFeedbackGate_%s" % role
-	var seal = make_panel(feedback, rect_full(0.650, 0.130, 0.795, 0.520), Color(color.r, color.g, color.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	feedback.add_child(gate)
+	var seal = make_gpt_gate(rect_full(0.650, 0.130, 0.795, 0.520), Color(color.r, color.g, color.b, 0.18))
 	seal.name = "SettingsActionFeedbackSeal_%s" % role
+	feedback.add_child(seal)
 	var glyph = make_label(seal, role.substr(0, 1), 9, Color(0.98, 0.92, 0.66, 0.88), true)
 	glyph.name = "SettingsActionFeedbackGlyph_%s" % role
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -866,6 +889,7 @@ func play_settings_action_feedback(button: Button, role: String, color: Color) -
 
 
 func play_reset_progress_button_feedback(button: Button, armed: bool) -> void:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return
 	var role = "armed" if armed else "prepare"
@@ -875,30 +899,38 @@ func play_reset_progress_button_feedback(button: Button, armed: bool) -> void:
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
-	var source = make_panel(feedback, rect_full(0.080, 0.515, 0.150, 0.760), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.78, 0.58, 0.10), 0)
+	var source = make_gpt_edge_rail(rect_full(0.080, 0.515, 0.150, 0.760), Color(accent.r, accent.g, accent.b, 0.22))
 	source.name = "ResetProgressPressSource_%s" % role
-	var route = make_panel(feedback, rect_full(0.155, 0.610, 0.875, 0.705), Color(0.020, 0.010, 0.010, 0.52), 999, Color(accent.r, accent.g, accent.b, 0.14), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.155, 0.610, 0.875, 0.705), Color(0.020, 0.010, 0.010, 0.52))
 	route.name = "ResetProgressPressRoute_%s" % role
+	feedback.add_child(route)
 	var fill_right = 0.900 if armed else 0.560
-	var fill = make_panel(route, rect_full(0.030, 0.250, fill_right, 0.750), Color(accent.r, accent.g, accent.b, 0.36 if armed else 0.28), 999, Color(1.0, 0.78, 0.58, 0.08), 0)
+	var fill = make_gpt_meter_fill(rect_full(0.030, 0.250, fill_right, 0.750), Color(accent.r, accent.g, accent.b, 0.36 if armed else 0.28))
 	fill.name = "ResetProgressPressFill_%s" % role
+	route.add_child(fill)
 	var gate_left = 0.815 if armed else 0.520
-	var gate = make_panel(feedback, rect_full(gate_left, 0.500, gate_left + 0.070, 0.790), Color(0.98, 0.76, 0.42, 0.26 if armed else 0.18), 999, Color(1.0, 0.86, 0.58, 0.12), 0)
+	var gate = make_gpt_gate(rect_full(gate_left, 0.500, gate_left + 0.070, 0.790), Color(0.98, 0.76, 0.42, 0.26 if armed else 0.18))
 	gate.name = "ResetProgressPressGate_%s" % role
-	var seal = make_panel(feedback, rect_full(0.060, 0.155, 0.205, 0.505), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.78, 0.58, 0.12), 0)
+	feedback.add_child(gate)
+	var seal = make_gpt_gate(rect_full(0.060, 0.155, 0.205, 0.505), Color(accent.r, accent.g, accent.b, 0.22))
 	seal.name = "ResetProgressPressSeal_%s" % role
+	feedback.add_child(seal)
 	var glyph = make_label(seal, "清" if armed else "警", 9, Color(0.98, 0.92, 0.70, 0.90), true)
 	glyph.name = "ResetProgressPressGlyph_%s" % role
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	for i in range(3):
-		var tick = make_panel(feedback, rect_full(0.390 + float(i) * 0.080, 0.445, 0.415 + float(i) * 0.080, 0.650), Color(accent.r, accent.g, accent.b, 0.25 - float(i) * 0.045), 999, Color(1.0, 0.82, 0.58, 0.06), 0)
+		var tick = make_gpt_tick_strip(rect_full(0.390 + float(i) * 0.080, 0.445, 0.415 + float(i) * 0.080, 0.650), Color(accent.r, accent.g, accent.b, 0.25 - float(i) * 0.045))
 		tick.name = "ResetProgressPressTick_%s_%d" % [role, i]
+		feedback.add_child(tick)
 	if armed:
-		var commit = make_panel(feedback, rect_full(0.700, 0.175, 0.840, 0.500), Color(0.98, 0.58, 0.38, 0.22), 999, Color(1.0, 0.84, 0.56, 0.12), 0)
+		var commit = make_gpt_plate_rect(rect_full(0.700, 0.175, 0.840, 0.500), Color(0.98, 0.58, 0.38, 0.22), "ui_jade_reading_plate")
 		commit.name = "ResetProgressPressCommitSeal"
+		feedback.add_child(commit)
 	else:
-		var lock = make_panel(feedback, rect_full(0.720, 0.175, 0.840, 0.500), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(1.0, 0.78, 0.58, 0.08), 0)
+		var lock = make_gpt_edge_rail(rect_full(0.720, 0.175, 0.840, 0.500), Color(accent.r, accent.g, accent.b, 0.16))
 		lock.name = "ResetProgressPressWarningLock"
+		feedback.add_child(lock)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
 		var tw := create_tween()
@@ -1506,6 +1538,7 @@ func hand_tray_state_border() -> Color:
 
 
 func play_voice_button_press_feedback(button: Button, active: bool, peak: float = 0.0) -> void:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return
 	var previous = button.find_child("VoiceButtonPressFeedback", false, false)
@@ -1517,23 +1550,29 @@ func play_voice_button_press_feedback(button: Button, active: bool, peak: float 
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
-	var source = make_panel(feedback, rect_full(0.620, 0.235, 0.695, 0.760), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var source = make_gpt_edge_rail(rect_full(0.620, 0.235, 0.695, 0.760), Color(accent.r, accent.g, accent.b, 0.22))
 	source.name = "VoiceButtonPressSource"
-	var route = make_panel(feedback, rect_full(0.670, 0.450, 0.950, 0.560), Color(0.006, 0.016, 0.018, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.670, 0.450, 0.950, 0.560), Color(0.006, 0.016, 0.018, 0.48))
 	route.name = "VoiceButtonPressRoute"
+	feedback.add_child(route)
 	var fill_right = 0.120 + 0.800 * (clamp(0.32 + peak * 0.60, 0.18, 1.0) if active else 0.42)
-	var fill = make_panel(route, rect_full(0.035, 0.245, fill_right, 0.755), Color(accent.r, accent.g, accent.b, 0.34 if active else 0.20), 999, Color(1.0, 0.88, 0.52, 0.04), 0)
+	var fill = make_gpt_meter_fill(rect_full(0.035, 0.245, fill_right, 0.755), Color(accent.r, accent.g, accent.b, 0.34 if active else 0.20))
 	fill.name = "VoiceButtonPressFill"
-	var gate = make_panel(feedback, rect_full(0.920, 0.360, 0.975, 0.660), Color(0.96, 0.82, 0.42, 0.24 if active else 0.14), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	route.add_child(fill)
+	var gate = make_gpt_gate(rect_full(0.920, 0.360, 0.975, 0.660), Color(0.96, 0.82, 0.42, 0.24 if active else 0.14))
 	gate.name = "VoiceButtonPressGate"
-	var seal = make_panel(feedback, rect_full(0.735, 0.095, 0.855, 0.360), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	feedback.add_child(gate)
+	var seal = make_gpt_gate(rect_full(0.735, 0.095, 0.855, 0.360), Color(accent.r, accent.g, accent.b, 0.18))
 	seal.name = "VoiceButtonPressSeal"
+	feedback.add_child(seal)
 	var glyph = make_label(seal, "声" if active else "静", 9, Color(0.98, 0.92, 0.72, 0.84), true)
 	glyph.name = "VoiceButtonPressGlyph"
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	for i in range(3):
-		var tick = make_panel(feedback, rect_full(0.720 + float(i) * 0.060, 0.640, 0.746 + float(i) * 0.060, 0.820), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040), 999, Color(1.0, 0.88, 0.52, 0.035), 0)
+		var tick = make_gpt_tick_strip(rect_full(0.720 + float(i) * 0.060, 0.640, 0.746 + float(i) * 0.060, 0.820), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040))
 		tick.name = "VoiceButtonPressTick_%d" % i
+		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
 		var tw := create_tween()
@@ -1897,6 +1936,7 @@ func handle_update_manifest_completed(result: int, response_code: int, body: Pac
 	begin_update_download(str(manifest.get("url", UPDATE_URL)), remote_version, str(manifest.get("notes", "")))
 
 func ensure_update_dialog() -> void:
+	# r215: GPT chrome conversion
 	if update_state == "idle" or root_layer == null:
 		return
 	if update_dialog != null and is_instance_valid(update_dialog):
@@ -1911,7 +1951,8 @@ func ensure_update_dialog() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	update_dialog.add_child(dim)
 
-	var panel = make_panel(update_dialog, rect_full(0.325, 0.275, 0.675, 0.640), Color(0.016, 0.050, 0.058, 0.98), 18, Color(0.66, 0.54, 0.24, 0.62))
+	var panel = make_gpt_plate_rect(rect_full(0.325, 0.275, 0.675, 0.640), Color(0.016, 0.050, 0.058, 0.98), "ui_jade_reading_plate")
+	update_dialog.add_child(panel)
 	var update_gpt_key := "update_gpt_dialog"
 	var update_gpt_texture = add_optional_gpt_illustration_texture(panel, update_gpt_key, rect_full(0.012, 0.018, 0.988, 0.982), 0.15, false)
 	if update_gpt_texture != null:
@@ -1987,6 +2028,7 @@ func ensure_update_dialog() -> void:
 
 
 func play_update_dialog_button_feedback(button: Button, role: String, color: Color) -> void:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return
 	var feedback = Control.new()
@@ -1995,26 +2037,32 @@ func play_update_dialog_button_feedback(button: Button, role: String, color: Col
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
 	var source_left = 0.105 if role == "primary" else 0.780
-	var source = make_panel(feedback, rect_full(source_left, 0.515, source_left + 0.070, 0.760), Color(color.r, color.g, color.b, 0.20), 999, Color(1.0, 0.90, 0.58, 0.08), 0)
+	var source = make_gpt_plate_rect(rect_full(source_left, 0.515, source_left + 0.070, 0.760), Color(color.r, color.g, color.b, 0.20), "ui_jade_reading_plate")
 	source.name = "UpdateDialogButtonPressSource_%s" % role
-	var route = make_panel(feedback, rect_full(0.165, 0.605, 0.835, 0.705), Color(0.006, 0.016, 0.018, 0.48), 999, Color(color.r, color.g, color.b, 0.12), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.165, 0.605, 0.835, 0.705), Color(0.006, 0.016, 0.018, 0.48))
 	route.name = "UpdateDialogButtonPressRoute_%s" % role
-	var fill = make_panel(route, rect_full(0.030, 0.250, 0.900, 0.750), Color(color.r, color.g, color.b, 0.34), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	feedback.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.030, 0.250, 0.900, 0.750), Color(color.r, color.g, color.b, 0.34))
 	fill.name = "UpdateDialogButtonPressFill_%s" % role
+	route.add_child(fill)
 	var gate_left = 0.790 if role == "primary" else 0.120
-	var gate = make_panel(feedback, rect_full(gate_left, 0.500, gate_left + 0.075, 0.790), Color(1.0, 0.82, 0.42, 0.22), 999, Color(1.0, 0.92, 0.62, 0.10), 0)
+	var gate = make_gpt_gate(rect_full(gate_left, 0.500, gate_left + 0.075, 0.790), Color(1.0, 0.82, 0.42, 0.22))
 	gate.name = "UpdateDialogButtonPressGate_%s" % role
+	feedback.add_child(gate)
 	var seal_left = 0.700 if role == "primary" else 0.070
-	var seal = make_panel(feedback, rect_full(seal_left, 0.165, seal_left + 0.135, 0.500), Color(color.r, color.g, color.b, 0.16), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	var seal = make_gpt_gate(rect_full(seal_left, 0.165, seal_left + 0.135, 0.500), Color(color.r, color.g, color.b, 0.16))
 	seal.name = "UpdateDialogButtonPressSeal_%s" % role
+	feedback.add_child(seal)
 	var glyph_text = "装" if role == "primary" else "关"
 	var glyph = make_label(seal, glyph_text, 9, Color(0.98, 0.92, 0.66, 0.88), true)
 	glyph.name = "UpdateDialogButtonPressGlyph_%s" % role
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	for i in range(3):
 		var tick_left = (0.430 + float(i) * 0.075) if role == "primary" else (0.565 - float(i) * 0.075)
-		var tick = make_panel(feedback, rect_full(tick_left, 0.445, tick_left + 0.024, 0.650), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.045), 999, Color(1.0, 0.90, 0.58, 0.06), 0)
+		var tick = make_gpt_tick_strip(rect_full(tick_left, 0.445, tick_left + 0.024, 0.650), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.045))
 		tick.name = "UpdateDialogButtonPressTick_%s_%d" % [role, i]
+		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
 		var tw := create_tween()
@@ -4218,6 +4266,7 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 	)
 
 func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> Control:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return null
 	var previous = button.find_child("ClickableTileCommitFeedback", false, false)
@@ -4229,16 +4278,21 @@ func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> C
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
-	var source = make_panel(feedback, rect_full(0.350, 0.180, 0.650, 0.300), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var source = make_gpt_plate_rect(rect_full(0.350, 0.180, 0.650, 0.300), Color(accent.r, accent.g, accent.b, 0.18), "ui_button_face_plate")
 	source.name = "ClickableTileCommitSource"
-	var route = make_panel(feedback, rect_full(0.300, 0.300, 0.700, 0.820), Color(0.006, 0.014, 0.016, 0.38), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.300, 0.300, 0.700, 0.820), Color(0.006, 0.014, 0.016, 0.38))
 	route.name = "ClickableTileCommitRoute"
-	var fill = make_panel(route, rect_full(0.390, 0.040, 0.610, 0.760), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.88, 0.52, 0.05), 0)
+	feedback.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.390, 0.040, 0.610, 0.760), Color(accent.r, accent.g, accent.b, 0.30))
 	fill.name = "ClickableTileCommitFill"
-	var gate = make_panel(feedback, rect_full(0.360, 0.760, 0.640, 0.930), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	route.add_child(fill)
+	var gate = make_gpt_gate(rect_full(0.360, 0.760, 0.640, 0.930), Color(accent.r, accent.g, accent.b, 0.24))
 	gate.name = "ClickableTileCommitGate"
-	var seal = make_panel(feedback, rect_full(0.665, 0.615, 0.885, 0.875), Color(0.92, 0.72, 0.34, 0.16), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	feedback.add_child(gate)
+	var seal = make_gpt_gate(rect_full(0.665, 0.615, 0.885, 0.875), Color(0.92, 0.72, 0.34, 0.16))
 	seal.name = "ClickableTileCommitSeal"
+	feedback.add_child(seal)
 	var glyph = make_label(seal, "出", 8, Color(0.98, 0.92, 0.66, 0.88), true)
 	glyph.name = "ClickableTileCommitGlyph"
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -4261,6 +4315,7 @@ func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> C
 	else:
 		feedback.modulate.a = 0.90
 	return feedback
+
 
 func tile_hint_badge_color(hint_badge: String) -> Color:
 	return HINT_BADGE_COLORS.get(hint_badge, DEFAULT_HINT_BADGE_COLOR)
@@ -4746,6 +4801,7 @@ func spawn_transition_complete_sparks() -> void:
 		).set_delay(0.7)
 
 func play_screen_transition(callback: Callable, instant: bool = false, style: String = "fade") -> void:
+	# r215: GPT chrome conversion
 	"""屏幕过渡动画：支持渐隐/水墨/珠帘风格"""
 	if instant or not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
 		callback.call()
@@ -4884,8 +4940,9 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				strip.anchor_top = -1.0
 				strip.anchor_bottom = -1.0
 				strip_container.add_child(strip)
-				var bead = make_panel(strip_container, rect_full(left_frac + 0.030, 0.020, left_frac + 0.060, 0.078), Color(0.86, 0.70, 0.34, 0.34), 999, Color(1.0, 0.88, 0.48, 0.16), 0)
+				var bead = make_gpt_gate(rect_full(left_frac + 0.030, 0.020, left_frac + 0.060, 0.078), Color(0.86, 0.70, 0.34, 0.34))
 				bead.name = "CurtainBead_%d" % i
+				strip_container.add_child(bead)
 				var route_tick = make_layout_host(rect_full(left_frac + 0.070, 0.875, left_frac + 0.088, 0.930))
 				route_tick.name = "CurtainCloseTick_%d" % i
 				strip_container.add_child(route_tick)
@@ -4990,6 +5047,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 
 
 func play_after_gang_replacement_draw_fx(seat: int, tile: String = "") -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or fx_burst_root == null or not is_instance_valid(fx_burst_root):
 		return null
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else Color(0.62, 0.54, 0.88)
@@ -5002,33 +5060,42 @@ func play_after_gang_replacement_draw_fx(seat: int, tile: String = "") -> Contro
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_burst_root.add_child(art)
-	var wall_source = make_panel(art, rect_full(0.150, 0.405, 0.245, 0.610), Color(accent.r, accent.g, accent.b, 0.18), 10, Color(1.0, 0.88, 0.52, 0.10), 0)
+	var wall_source = make_gpt_gate(rect_full(0.150, 0.405, 0.245, 0.610), Color(accent.r, accent.g, accent.b, 0.18))
 	wall_source.name = "AfterGangReplacementWallSource"
+	art.add_child(wall_source)
 	var wall_glyph = make_label(wall_source, "墙", 9, Color(0.98, 0.92, 0.66, 0.86), true)
 	wall_glyph.name = "AfterGangReplacementWallGlyph"
 	apply_rect(wall_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var route = make_panel(art, rect_full(0.235, 0.480, 0.780, 0.550), Color(0.006, 0.016, 0.018, 0.50), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	var route = make_gpt_route_rail(rect_full(0.235, 0.480, 0.780, 0.550), Color(0.006, 0.016, 0.018, 0.50))
 	route.name = "AfterGangReplacementRoute"
-	var fill = make_panel(route, rect_full(0.025, 0.250, 0.860, 0.750), Color(accent.r, accent.g, accent.b, 0.32), 999, Color(1.0, 0.90, 0.56, 0.06), 0)
+	art.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.025, 0.250, 0.860, 0.750), Color(accent.r, accent.g, accent.b, 0.32))
 	fill.name = "AfterGangReplacementFill"
-	var hand_gate = make_panel(art, rect_full(0.750, 0.410, 0.835, 0.625), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	route.add_child(fill)
+	var hand_gate = make_gpt_gate(rect_full(0.750, 0.410, 0.835, 0.625), Color(accent.r, accent.g, accent.b, 0.20))
 	hand_gate.name = "AfterGangReplacementHandGate"
-	var seal = make_panel(art, rect_full(0.640, 0.245, 0.765, 0.435), Color(0.92, 0.72, 0.34, 0.18), 999, Color(1.0, 0.88, 0.52, 0.14), 0)
+	art.add_child(hand_gate)
+	var seal = make_gpt_gate(rect_full(0.640, 0.245, 0.765, 0.435), Color(0.92, 0.72, 0.34, 0.18))
 	seal.name = "AfterGangReplacementSeal"
+	art.add_child(seal)
 	var glyph = make_label(seal, "补", 9, Color(0.98, 0.92, 0.66, 0.88), true)
 	glyph.name = "AfterGangReplacementGlyph"
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var tile_node = make_panel(art, rect_full(0.468, 0.335, 0.532, 0.660), Color(accent.r, accent.g, accent.b, 0.18), 8, Color(1.0, 0.88, 0.52, 0.12), 0)
+	var tile_node = make_gpt_gate(rect_full(0.468, 0.335, 0.532, 0.660), Color(accent.r, accent.g, accent.b, 0.18))
 	tile_node.name = "AfterGangReplacementTileNode"
+	art.add_child(tile_node)
 	var replacement_tile_glyph = make_label(tile_node, tile_label(tile) if tile != "" else "牌", 7, Color(0.96, 0.92, 0.78, 0.82), true)
 	replacement_tile_glyph.name = "AfterGangReplacementTileGlyph"
 	apply_rect(replacement_tile_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var archive_route = make_panel(art, rect_full(0.535, 0.660, 0.805, 0.740), Color(0.006, 0.016, 0.018, 0.42), 999, Color(0.92, 0.72, 0.34, 0.10), 0)
+	var archive_route = make_gpt_route_rail(rect_full(0.535, 0.660, 0.805, 0.740), Color(0.006, 0.016, 0.018, 0.42))
 	archive_route.name = "AfterGangReplacementArchiveRoute"
-	var archive_fill = make_panel(archive_route, rect_full(0.030, 0.250, 0.780, 0.750), Color(0.92, 0.72, 0.34, 0.24), 999, Color(1.0, 0.90, 0.56, 0.05), 0)
+	art.add_child(archive_route)
+	var archive_fill = make_gpt_meter_fill(rect_full(0.030, 0.250, 0.780, 0.750), Color(0.92, 0.72, 0.34, 0.24))
 	archive_fill.name = "AfterGangReplacementArchiveFill"
-	var archive_gate = make_panel(art, rect_full(0.775, 0.600, 0.835, 0.795), Color(0.92, 0.72, 0.34, 0.18), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	archive_route.add_child(archive_fill)
+	var archive_gate = make_gpt_gate(rect_full(0.775, 0.600, 0.835, 0.795), Color(0.92, 0.72, 0.34, 0.18))
 	archive_gate.name = "AfterGangReplacementArchiveGate"
+	art.add_child(archive_gate)
 	for i in range(3):
 		var left = 0.335 + float(i) * 0.105
 		var tick = make_layout_host(rect_full(left, 0.365, left + 0.018, 0.640))
@@ -5036,8 +5103,9 @@ func play_after_gang_replacement_draw_fx(seat: int, tile: String = "") -> Contro
 		art.add_child(tick)
 	for i in range(2):
 		var left = 0.610 + float(i) * 0.060
-		var pip = make_panel(art, rect_full(left, 0.610, left + 0.022, 0.790), Color(0.92, 0.72, 0.34, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.90, 0.56, 0.06), 0)
+		var pip = make_gpt_gate(rect_full(left, 0.610, left + 0.022, 0.790), Color(0.92, 0.72, 0.34, 0.22 - float(i) * 0.040))
 		pip.name = "AfterGangReplacementArchivePip_%d" % i
+		art.add_child(pip)
 	fx_burst_root.visible = true
 	if DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
@@ -5051,7 +5119,9 @@ func play_after_gang_replacement_draw_fx(seat: int, tile: String = "") -> Contro
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(art.get_instance_id()))
 	return art
 
+
 func play_wall_draw_resolution_fx(dealer: int) -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or fx_burst_root == null or not is_instance_valid(fx_burst_root):
 		return null
 	var previous = fx_burst_root.find_child("WallDrawResolutionFx", false, false)
@@ -5064,30 +5134,39 @@ func play_wall_draw_resolution_fx(dealer: int) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_burst_root.add_child(art)
-	var wall_source = make_panel(art, rect_full(0.150, 0.390, 0.250, 0.620), Color(0.56, 0.60, 0.58, 0.16), 10, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var wall_source = make_gpt_plate_rect(rect_full(0.150, 0.390, 0.250, 0.620), Color(0.56, 0.60, 0.58, 0.16), "ui_jade_reading_plate")
 	wall_source.name = "WallDrawEmptyWallSource"
+	art.add_child(wall_source)
 	var wall_glyph = make_label(wall_source, "墙", 9, Color(0.92, 0.92, 0.82, 0.84), true)
 	wall_glyph.name = "WallDrawEmptyWallGlyph"
 	apply_rect(wall_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var route = make_panel(art, rect_full(0.235, 0.475, 0.780, 0.550), Color(0.006, 0.016, 0.018, 0.50), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	var route = make_gpt_route_rail(rect_full(0.235, 0.475, 0.780, 0.550), Color(0.006, 0.016, 0.018, 0.50))
 	route.name = "WallDrawResolutionRoute"
-	var fill = make_panel(route, rect_full(0.025, 0.250, 0.940, 0.750), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.90, 0.56, 0.05), 0)
+	art.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.025, 0.250, 0.940, 0.750), Color(accent.r, accent.g, accent.b, 0.24))
 	fill.name = "WallDrawResolutionFill"
-	var draw_gate = make_panel(art, rect_full(0.745, 0.405, 0.835, 0.625), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	route.add_child(fill)
+	var draw_gate = make_gpt_gate(rect_full(0.745, 0.405, 0.835, 0.625), Color(accent.r, accent.g, accent.b, 0.18))
 	draw_gate.name = "WallDrawResolutionGate"
-	var seal = make_panel(art, rect_full(0.430, 0.245, 0.570, 0.455), Color(0.56, 0.60, 0.58, 0.14), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	art.add_child(draw_gate)
+	var seal = make_gpt_gate(rect_full(0.430, 0.245, 0.570, 0.455), Color(0.56, 0.60, 0.58, 0.14))
 	seal.name = "WallDrawSeal"
+	art.add_child(seal)
 	var glyph = make_label(seal, "荒", 10, Color(0.96, 0.92, 0.72, 0.88), true)
 	glyph.name = "WallDrawGlyph"
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var dealer_route = make_panel(art, rect_full(0.540, 0.650, 0.840, 0.745), Color(0.006, 0.016, 0.018, 0.42), 999, Color(accent.r, accent.g, accent.b, 0.10), 0)
+	var dealer_route = make_gpt_route_rail(rect_full(0.540, 0.650, 0.840, 0.745), Color(0.006, 0.016, 0.018, 0.42))
 	dealer_route.name = "WallDrawDealerRepeatRoute"
-	var dealer_fill = make_panel(dealer_route, rect_full(0.030, 0.250, 0.820, 0.750), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.90, 0.56, 0.05), 0)
+	art.add_child(dealer_route)
+	var dealer_fill = make_gpt_meter_fill(rect_full(0.030, 0.250, 0.820, 0.750), Color(accent.r, accent.g, accent.b, 0.24))
 	dealer_fill.name = "WallDrawDealerRepeatFill"
-	var dealer_gate = make_panel(art, rect_full(0.815, 0.575, 0.885, 0.820), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	dealer_route.add_child(dealer_fill)
+	var dealer_gate = make_gpt_gate(rect_full(0.815, 0.575, 0.885, 0.820), Color(accent.r, accent.g, accent.b, 0.18))
 	dealer_gate.name = "WallDrawDealerRepeatGate"
-	var dealer_seal = make_panel(art, rect_full(0.860, 0.210, 0.970, 0.420), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	art.add_child(dealer_gate)
+	var dealer_seal = make_gpt_gate(rect_full(0.860, 0.210, 0.970, 0.420), Color(accent.r, accent.g, accent.b, 0.16))
 	dealer_seal.name = "WallDrawDealerSeal"
+	art.add_child(dealer_seal)
 	var dealer_glyph = make_label(dealer_seal, "庄", 8, Color(0.98, 0.92, 0.66, 0.86), true)
 	dealer_glyph.name = "WallDrawDealerGlyph"
 	apply_rect(dealer_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -5098,8 +5177,9 @@ func play_wall_draw_resolution_fx(dealer: int) -> Control:
 		art.add_child(tick)
 	for i in range(3):
 		var left = 0.610 + float(i) * 0.062
-		var pip = make_panel(art, rect_full(left, 0.602, left + 0.022, 0.792), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035), 999, Color(1.0, 0.90, 0.56, 0.05), 0)
+		var pip = make_gpt_gate(rect_full(left, 0.602, left + 0.022, 0.792), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035))
 		pip.name = "WallDrawDealerRepeatPip_%d" % i
+		art.add_child(pip)
 	fx_burst_root.visible = true
 	if DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
@@ -5117,6 +5197,7 @@ func play_wall_draw_resolution_fx(dealer: int) -> Control:
 # Toast提示系统
 # ============================================================
 
+
 func _build_fx_toast() -> void:
 	toast_container = Control.new()
 	toast_container.name = "ToastContainer"
@@ -5127,6 +5208,7 @@ func _build_fx_toast() -> void:
 
 
 func play_toast_entry_feedback(toast_bg: Control, accent: Color) -> Control:
+	# r215: GPT chrome conversion
 	if toast_bg == null or not is_instance_valid(toast_bg):
 		return null
 	var previous = toast_bg.find_child("ToastEntryFeedback", false, false)
@@ -5137,16 +5219,21 @@ func play_toast_entry_feedback(toast_bg: Control, accent: Color) -> Control:
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	toast_bg.add_child(feedback)
-	var source = make_panel(feedback, rect_full(0.040, 0.255, 0.098, 0.745), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.90, 0.56, 0.10), 0)
+	var source = make_gpt_edge_rail(rect_full(0.040, 0.255, 0.098, 0.745), Color(accent.r, accent.g, accent.b, 0.20))
 	source.name = "ToastEntrySource"
-	var route = make_panel(feedback, rect_full(0.105, 0.360, 0.795, 0.475), Color(0.006, 0.014, 0.016, 0.44), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.105, 0.360, 0.795, 0.475), Color(0.006, 0.014, 0.016, 0.44))
 	route.name = "ToastEntryRoute"
-	var fill = make_panel(route, rect_full(0.025, 0.240, 0.780, 0.760), Color(accent.r, accent.g, accent.b, 0.30), 999, Color(1.0, 0.90, 0.56, 0.05), 0)
+	feedback.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.025, 0.240, 0.780, 0.760), Color(accent.r, accent.g, accent.b, 0.30))
 	fill.name = "ToastEntryFill"
-	var gate = make_panel(feedback, rect_full(0.770, 0.275, 0.830, 0.575), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.90, 0.56, 0.12), 0)
+	route.add_child(fill)
+	var gate = make_gpt_gate(rect_full(0.770, 0.275, 0.830, 0.575), Color(accent.r, accent.g, accent.b, 0.22))
 	gate.name = "ToastEntryGate"
-	var ack = make_panel(feedback, rect_full(0.825, 0.440, 0.895, 0.720), Color(0.92, 0.72, 0.34, 0.14), 999, Color(1.0, 0.90, 0.56, 0.08), 0)
+	feedback.add_child(gate)
+	var ack = make_gpt_edge_rail(rect_full(0.825, 0.440, 0.895, 0.720), Color(0.92, 0.72, 0.34, 0.14))
 	ack.name = "ToastEntryAckNode"
+	feedback.add_child(ack)
 	var glyph = make_label(ack, "达", 8, Color(0.98, 0.92, 0.66, 0.82), true)
 	glyph.name = "ToastEntryAckGlyph"
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -5169,6 +5256,7 @@ func play_toast_entry_feedback(toast_bg: Control, accent: Color) -> Control:
 	else:
 		feedback.modulate.a = 0.88
 	return feedback
+
 
 func toast_is_reward_text(text: String) -> bool:
 	return text.find("任务完成") >= 0 or text.find("购买成功") >= 0 or text.find("成就") >= 0 or text.find("金币") >= 0 or text.find("宝石") >= 0 or text.find("+") >= 0
@@ -5247,6 +5335,7 @@ func toast_accent_color(text: String) -> Color:
 
 
 func play_secondary_back_press_feedback(button: Button, screen_id: String, color: Color) -> void:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return
 	var feedback = Control.new()
@@ -5254,15 +5343,19 @@ func play_secondary_back_press_feedback(button: Button, screen_id: String, color
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
-	var route = make_panel(feedback, rect_full(0.105, 0.620, 0.860, 0.725), Color(0.006, 0.016, 0.018, 0.46), 999, Color(color.r, color.g, color.b, 0.10), 0)
+	var route = make_gpt_route_rail(rect_full(0.105, 0.620, 0.860, 0.725), Color(0.006, 0.016, 0.018, 0.46))
 	route.name = "SecondaryBackPressRoute_%s" % screen_id
-	var fill = make_panel(route, rect_full(0.040, 0.250, 0.840, 0.750), Color(color.r, color.g, color.b, 0.34), 999, Color(0.92, 0.84, 0.48, 0.07), 0)
+	feedback.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.040, 0.250, 0.840, 0.750), Color(color.r, color.g, color.b, 0.34))
 	fill.name = "SecondaryBackPressFill_%s" % screen_id
-	var gate = make_panel(feedback, rect_full(0.080, 0.545, 0.145, 0.820), Color(0.72, 0.84, 0.72, 0.24), 999, Color(0.92, 0.84, 0.48, 0.09), 0)
+	route.add_child(fill)
+	var gate = make_gpt_gate(rect_full(0.080, 0.545, 0.145, 0.820), Color(0.72, 0.84, 0.72, 0.24))
 	gate.name = "SecondaryBackPressGate_%s" % screen_id
+	feedback.add_child(gate)
 	for i in range(3):
-		var tick = make_panel(feedback, rect_full(0.405 + float(i) * 0.080, 0.500, 0.430 + float(i) * 0.080, 0.690), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.045), 999, Color(0.92, 0.84, 0.48, 0.05), 0)
+		var tick = make_gpt_tick_strip(rect_full(0.405 + float(i) * 0.080, 0.500, 0.430 + float(i) * 0.080, 0.690), Color(color.r, color.g, color.b, 0.24 - float(i) * 0.045))
 		tick.name = "SecondaryBackPressTick_%s_%d" % [screen_id, i]
+		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
 		var tw := create_tween()
@@ -5275,6 +5368,7 @@ func play_secondary_back_press_feedback(button: Button, screen_id: String, color
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
 	else:
 		feedback.modulate.a = 0.92
+
 
 func current_status_text() -> String:
 	if mode == "offline":
@@ -5320,6 +5414,7 @@ func top_hud_status_text() -> String:
 
 
 func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, section_index: int = -1) -> void:
+	# r215: GPT chrome conversion
 	var section_colors = [
 		Color(0.86, 0.62, 0.34),
 		Color(0.38, 0.70, 0.58),
@@ -5327,23 +5422,29 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		Color(0.86, 0.72, 0.38),
 	]
 	var accent = section_colors[clamp(section_index, 0, section_colors.size() - 1)] if section_index >= 0 else Color(0.62, 0.58, 0.42)
-	var section = make_panel(parent, rect_full(0.0, 0.0, 1.0, 0.22), Color(0.345, 0.425, 0.355, 0.99), 12, Color(accent.r, accent.g, accent.b, 0.80), 0)
+	var section = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.22), Color(0.345, 0.425, 0.355, 0.99), "ui_button_face_plate")
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
+	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	section.custom_minimum_size.y = 152 if lines.size() >= 4 else 136
-	var section_depth = make_panel(section, rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.06), 12, Color(accent.r, accent.g, accent.b, 0.16), 0)
+	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.06), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
-	var section_top_rim = make_panel(section, rect_full(0.025, 0.018, 0.975, 0.070), Color(1.0, 0.90, 0.58, 0.042), 999, Color(1.0, 0.94, 0.72, 0.016), 0)
+	section.add_child(section_depth)
+	var section_top_rim = make_gpt_ribbon(rect_full(0.025, 0.018, 0.975, 0.070), Color(1.0, 0.90, 0.58, 0.042))
 	section_top_rim.name = "RuleSection3DTopRim_%d" % section_index if section_index >= 0 else "RuleSection3DTopRim"
-	var example_plinth = make_panel(section, rect_full(0.820, 0.080, 0.982, 0.920), Color(accent.r * 0.16, accent.g * 0.18, accent.b * 0.18, 0.62), 12, Color(0.86, 0.66, 0.32, 0.14), 1)
+	section.add_child(section_top_rim)
+	var example_plinth = make_gpt_edge_rail(rect_full(0.820, 0.080, 0.982, 0.920), Color(accent.r * 0.16, accent.g * 0.18, accent.b * 0.18, 0.62))
 	example_plinth.name = "RuleSection3DExamplePlinth_%d" % section_index if section_index >= 0 else "RuleSection3DExamplePlinth"
+	section.add_child(example_plinth)
 	if section_index >= 0:
-		var marker = make_panel(section, rect_full(0.012, 0.190, 0.022, 0.810), Color(accent.r, accent.g, accent.b, 0.42), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+		var marker = make_gpt_gate(rect_full(0.012, 0.190, 0.022, 0.810), Color(accent.r, accent.g, accent.b, 0.42))
 		marker.name = "RuleSectionMarker"
+		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_panel(section, rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.205, 0.275, 0.230, 0.26), 10, Color(accent.r, accent.g, accent.b, 0.40), 0)
+	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.205, 0.275, 0.230, 0.26), "ui_jade_reading_plate")
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
+	section.add_child(text_backplate)
 
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.058
@@ -5369,6 +5470,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 
 
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String, row_height: float = 52.0) -> void:
+	# r215: GPT chrome conversion
 	var row = Panel.new()
 	row.name = "StatsRow_%s" % label_text
 	row.custom_minimum_size = Vector2(0, row_height)
@@ -5388,8 +5490,9 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 			0.78
 		)
 	draw_stat_row_art(row, label_text, value_text)
-	var value_plate = make_panel(row, rect_full(0.545, 0.090, 0.955, 0.910), Color(0.10, 0.07, 0.05, 0.28), 10, Color(accent.r, accent.g, accent.b, 0.22), 0)  # r417
+	var value_plate = make_gpt_plate_rect(rect_full(0.545, 0.090, 0.955, 0.910), Color(0.10, 0.07, 0.05, 0.28), "ui_jade_reading_plate")
 	value_plate.name = "StatsRowValuePanel_%s" % label_text
+	row.add_child(value_plate)
 	var value_sheen = make_layout_host(rect_full(0.035, 0.075, 0.965, 0.185))
 	value_sheen.name = "StatsRowValueSheen_%s" % label_text
 	value_plate.add_child(value_sheen)
@@ -5573,6 +5676,7 @@ func achievement_goal_text(key: String) -> String:
 
 
 func play_shop_buy_button_feedback(button: Button, affordable: bool) -> void:
+	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return
 	var accent = Color(0.62, 0.52, 0.86) if affordable else Color(0.74, 0.44, 0.38)
@@ -5582,27 +5686,34 @@ func play_shop_buy_button_feedback(button: Button, affordable: bool) -> void:
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(feedback)
-	var source = make_panel(feedback, rect_full(0.090, 0.520, 0.155, 0.760), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.90, 0.58, 0.08), 0)
+	var source = make_gpt_edge_rail(rect_full(0.090, 0.520, 0.155, 0.760), Color(accent.r, accent.g, accent.b, 0.20))
 	source.name = "ShopBuyButtonPressSource_%s" % role
-	var route = make_panel(feedback, rect_full(0.155, 0.610, 0.860, 0.705), Color(0.006, 0.016, 0.018, 0.48), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.155, 0.610, 0.860, 0.705), Color(0.006, 0.016, 0.018, 0.48))
 	route.name = "ShopBuyButtonPressRoute_%s" % role
+	feedback.add_child(route)
 	var fill_right = 0.900 if affordable else 0.380
-	var fill = make_panel(route, rect_full(0.030, 0.250, fill_right, 0.750), Color(accent.r, accent.g, accent.b, 0.34 if affordable else 0.22), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var fill = make_gpt_meter_fill(rect_full(0.030, 0.250, fill_right, 0.750), Color(accent.r, accent.g, accent.b, 0.34 if affordable else 0.22))
 	fill.name = "ShopBuyButtonPressFill_%s" % role
+	route.add_child(fill)
 	var gate_left = 0.805 if affordable else 0.220
-	var gate = make_panel(feedback, rect_full(gate_left, 0.500, gate_left + 0.070, 0.790), Color(1.0, 0.82, 0.42, 0.22 if affordable else 0.14), 999, Color(1.0, 0.92, 0.62, 0.10), 0)
+	var gate = make_gpt_gate(rect_full(gate_left, 0.500, gate_left + 0.070, 0.790), Color(1.0, 0.82, 0.42, 0.22 if affordable else 0.14))
 	gate.name = "ShopBuyButtonPressGate_%s" % role
-	var seal = make_panel(feedback, rect_full(0.690, 0.155, 0.835, 0.505), Color(accent.r, accent.g, accent.b, 0.16), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	feedback.add_child(gate)
+	var seal = make_gpt_gate(rect_full(0.690, 0.155, 0.835, 0.505), Color(accent.r, accent.g, accent.b, 0.16))
 	seal.name = "ShopBuyButtonPressSeal_%s" % role
+	feedback.add_child(seal)
 	var glyph = make_label(seal, "购" if affordable else "锁", 9, Color(0.98, 0.92, 0.66, 0.88), true)
 	glyph.name = "ShopBuyButtonPressGlyph_%s" % role
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	for i in range(3):
-		var tick = make_panel(feedback, rect_full(0.405 + float(i) * 0.075, 0.445, 0.430 + float(i) * 0.075, 0.650), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.045 if affordable else 0.13), 999, Color(1.0, 0.90, 0.58, 0.06), 0)
+		var tick = make_gpt_tick_strip(rect_full(0.405 + float(i) * 0.075, 0.445, 0.430 + float(i) * 0.075, 0.650), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.045 if affordable else 0.13))
 		tick.name = "ShopBuyButtonPressTick_%s_%d" % [role, i]
+		feedback.add_child(tick)
 	if not affordable:
-		var lock = make_panel(feedback, rect_full(0.055, 0.165, 0.190, 0.500), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.70, 0.58, 0.12), 0)
+		var lock = make_gpt_plate_rect(rect_full(0.055, 0.165, 0.190, 0.500), Color(accent.r, accent.g, accent.b, 0.20), "ui_jade_reading_plate")
 		lock.name = "ShopBuyButtonPressLock"
+		feedback.add_child(lock)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
 		var tw := create_tween()
@@ -5619,6 +5730,7 @@ func play_shop_buy_button_feedback(button: Button, affordable: bool) -> void:
 
 
 func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
+	# r215: GPT chrome conversion
 	"""播放购买成功动画 - 增强版：物品闪光 + 金币粒子飞溅"""
 	if row == null or not is_instance_valid(row):
 		return
@@ -5627,18 +5739,23 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	row.add_child(feedback)
-	var source = make_panel(feedback, rect_full(0.750, 0.250, 0.805, 0.735), Color(0.62, 0.52, 0.86, 0.22), 999, Color(1.0, 0.90, 0.54, 0.08), 0)
+	var source = make_gpt_edge_rail(rect_full(0.750, 0.250, 0.805, 0.735), Color(0.62, 0.52, 0.86, 0.22))
 	source.name = "ShopPurchaseSuccessSource"
-	var route = make_panel(feedback, rect_full(0.565, 0.590, 0.900, 0.675), Color(0.006, 0.016, 0.018, 0.50), 999, Color(item_color.r, item_color.g, item_color.b, 0.12), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.565, 0.590, 0.900, 0.675), Color(0.006, 0.016, 0.018, 0.50))
 	route.name = "ShopPurchaseSuccessRoute"
-	var fill = make_panel(route, rect_full(0.030, 0.260, 0.860, 0.740), Color(item_color.r, item_color.g, item_color.b, 0.34), 999, Color(1.0, 0.90, 0.54, 0.07), 0)
+	feedback.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.030, 0.260, 0.860, 0.740), Color(item_color.r, item_color.g, item_color.b, 0.34))
 	fill.name = "ShopPurchaseSuccessFill"
-	var gate = make_panel(feedback, rect_full(0.535, 0.515, 0.590, 0.755), Color(item_color.r, item_color.g, item_color.b, 0.24), 999, Color(1.0, 0.90, 0.54, 0.10), 0)
+	route.add_child(fill)
+	var gate = make_gpt_gate(rect_full(0.535, 0.515, 0.590, 0.755), Color(item_color.r, item_color.g, item_color.b, 0.24))
 	gate.name = "ShopPurchaseSuccessInventoryGate"
+	feedback.add_child(gate)
 	draw_shop_purchase_inventory_commit_art(feedback, item_color)
 	for i in range(3):
-		var tick = make_panel(feedback, rect_full(0.645 + float(i) * 0.070, 0.475, 0.666 + float(i) * 0.070, 0.745), Color(item_color.r, item_color.g, item_color.b, 0.26 - float(i) * 0.040), 999, Color(1.0, 0.90, 0.54, 0.05), 0)
+		var tick = make_gpt_tick_strip(rect_full(0.645 + float(i) * 0.070, 0.475, 0.666 + float(i) * 0.070, 0.745), Color(item_color.r, item_color.g, item_color.b, 0.26 - float(i) * 0.040))
 		tick.name = "ShopPurchaseSuccessTick_%d" % i
+		feedback.add_child(tick)
 	# 闪光效果
 	var flash = make_fullrect_overlay(Color(item_color.r, item_color.g, item_color.b, 0.0), "ui_soft_flash")
 	flash.name = "ShopPurchaseSuccessFlash"
@@ -5701,6 +5818,7 @@ func send_quick_chat(message: String) -> void:
 	show_toast("已发送: %s" % message, 1500)
 
 func play_chat_send_panel_feedback(message: String = "") -> Control:
+	# r215: GPT chrome conversion
 	var panel = find_child("ChatPanel", true, false) as Control
 	if panel == null or not is_instance_valid(panel):
 		return null
@@ -5710,23 +5828,29 @@ func play_chat_send_panel_feedback(message: String = "") -> Control:
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.add_child(feedback)
 	var accent = Color(0.42, 0.78, 0.62)
-	var source = make_panel(feedback, rect_full(0.095, 0.805, 0.170, 0.900), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(0.88, 0.96, 0.72, 0.08), 0)
+	var source = make_gpt_gate(rect_full(0.095, 0.805, 0.170, 0.900), Color(accent.r, accent.g, accent.b, 0.22))
 	source.name = "ChatSendPanelSource"
-	var route = make_panel(feedback, rect_full(0.165, 0.838, 0.900, 0.878), Color(0.006, 0.016, 0.018, 0.50), 999, Color(accent.r, accent.g, accent.b, 0.12), 0)
+	feedback.add_child(source)
+	var route = make_gpt_route_rail(rect_full(0.165, 0.838, 0.900, 0.878), Color(0.006, 0.016, 0.018, 0.50))
 	route.name = "ChatSendPanelRoute"
-	var fill = make_panel(route, rect_full(0.026, 0.260, 0.820, 0.740), Color(accent.r, accent.g, accent.b, 0.36), 999, Color(1.0, 0.90, 0.54, 0.06), 0)
+	feedback.add_child(route)
+	var fill = make_gpt_meter_fill(rect_full(0.026, 0.260, 0.820, 0.740), Color(accent.r, accent.g, accent.b, 0.36))
 	fill.name = "ChatSendPanelFill"
-	var gate = make_panel(feedback, rect_full(0.872, 0.785, 0.930, 0.928), Color(0.92, 0.74, 0.34, 0.24), 999, Color(1.0, 0.86, 0.46, 0.12), 0)
+	route.add_child(fill)
+	var gate = make_gpt_gate(rect_full(0.872, 0.785, 0.930, 0.928), Color(0.92, 0.74, 0.34, 0.24))
 	gate.name = "ChatSendPanelGate"
-	var receipt = make_panel(feedback, rect_full(0.745, 0.742, 0.820, 0.832), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.86, 0.46, 0.08), 0)
+	feedback.add_child(gate)
+	var receipt = make_gpt_gate(rect_full(0.745, 0.742, 0.820, 0.832), Color(accent.r, accent.g, accent.b, 0.18))
 	receipt.name = "ChatSendPanelReceiptNode"
+	feedback.add_child(receipt)
 	var glyph = make_label(receipt, str(message).substr(0, 1) if str(message).strip_edges() != "" else "发", 8, Color(0.96, 0.92, 0.72, 0.86), true)
 	glyph.name = "ChatSendPanelReceiptGlyph"
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	draw_chat_send_sync_bridge(feedback, accent)
 	for i in range(3):
-		var tick = make_panel(feedback, rect_full(0.320 + float(i) * 0.130, 0.770, 0.342 + float(i) * 0.130, 0.910), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040), 999, Color(1.0, 0.90, 0.54, 0.04), 0)
+		var tick = make_gpt_tick_strip(rect_full(0.320 + float(i) * 0.130, 0.770, 0.342 + float(i) * 0.130, 0.910), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040))
 		tick.name = "ChatSendPanelTick_%d" % i
+		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
 		var tw := create_tween()
@@ -5792,6 +5916,7 @@ func pending_claim_choice_target_position() -> Vector2:
 	return rect_center_screen_position(fx_seat_screen_rect(0))
 
 func play_pending_claim_choice_confirmation_fx(claim: String, from_seat: int, tile: String) -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or tile == "":
 		return null
 	ensure_fx_layer()
@@ -5816,17 +5941,21 @@ func play_pending_claim_choice_confirmation_fx(claim: String, from_seat: int, ti
 	var route_fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(fill_width, 3.0)))
 	route_fill.name = "PendingClaimChoiceFill_%s" % claim
 	route.add_child(route_fill)
-	var source = make_panel(art, Rect2(source_pos + Vector2(-12.0, -12.0), Vector2(24.0, 24.0)), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var source = make_gpt_plate_rect(Rect2(source_pos + Vector2(-12.0, -12.0), Vector2(24.0, 24.0)), Color(accent.r, accent.g, accent.b, 0.18), "ui_jade_reading_plate")
 	source.name = "PendingClaimChoiceSource_%s" % claim
-	var gate = make_panel(art, Rect2(target_pos + Vector2(-18.0, -14.0), Vector2(36.0, 28.0)), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	art.add_child(source)
+	var gate = make_gpt_gate(Rect2(target_pos + Vector2(-18.0, -14.0), Vector2(36.0, 28.0)), Color(accent.r, accent.g, accent.b, 0.20))
 	gate.name = "PendingClaimChoiceGate_%s" % claim
-	var seal = make_panel(art, Rect2(target_pos + Vector2(18.0, -34.0), Vector2(38.0, 30.0)), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.88, 0.52, 0.14), 0)
+	art.add_child(gate)
+	var seal = make_gpt_gate(Rect2(target_pos + Vector2(18.0, -34.0), Vector2(38.0, 30.0)), Color(accent.r, accent.g, accent.b, 0.22))
 	seal.name = "PendingClaimChoiceSeal_%s" % claim
+	art.add_child(seal)
 	var glyph = make_label(seal, label_text, 10, Color(0.98, 0.92, 0.66, 0.90), true)
 	glyph.name = "PendingClaimChoiceGlyph_%s" % claim
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var tile_badge = make_panel(art, Rect2(source_pos.lerp(target_pos, 0.62) + Vector2(-16.0, -22.0), Vector2(32.0, 30.0)), Color(0.018, 0.034, 0.036, 0.86), 8, Color(accent.r, accent.g, accent.b, 0.24), 0)
+	var tile_badge = make_gpt_gate(Rect2(source_pos.lerp(target_pos, 0.62) + Vector2(-16.0, -22.0), Vector2(32.0, 30.0)), Color(0.018, 0.034, 0.036, 0.86))
 	tile_badge.name = "PendingClaimChoiceTileBadge_%s" % claim
+	art.add_child(tile_badge)
 	var tile_glyph = make_label(tile_badge, tile_label(tile), 8, Color(0.98, 0.90, 0.66, 0.86), true)
 	tile_glyph.name = "PendingClaimChoiceTileGlyph_%s" % claim
 	apply_rect(tile_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -5843,8 +5972,9 @@ func play_pending_claim_choice_confirmation_fx(claim: String, from_seat: int, ti
 		tick.name = "PendingClaimChoiceTick_%s_%d" % [claim, i]
 		art.add_child(tick)
 	for i in range(2):
-		var pip = make_panel(art, Rect2(target_pos + Vector2(-26.0 + float(i) * 18.0, 30.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		var pip = make_gpt_gate(Rect2(target_pos + Vector2(-26.0 + float(i) * 18.0, 30.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040))
 		pip.name = "PendingClaimChoiceArchivePip_%s_%d" % [claim, i]
+		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
 		var tw := create_tween()
@@ -5859,6 +5989,7 @@ func play_pending_claim_choice_confirmation_fx(claim: String, from_seat: int, ti
 
 
 func play_human_action_choice_confirmation_fx(action: String, tile: String) -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or tile == "":
 		return null
 	ensure_fx_layer()
@@ -5881,17 +6012,21 @@ func play_human_action_choice_confirmation_fx(action: String, tile: String) -> C
 	var fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(length * 0.760, 3.0)))
 	fill.name = "HumanActionChoiceFill_%s" % action
 	route.add_child(fill)
-	var source = make_panel(art, Rect2(from_pos + Vector2(-13.0, -13.0), Vector2(26.0, 26.0)), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	var source = make_gpt_plate_rect(Rect2(from_pos + Vector2(-13.0, -13.0), Vector2(26.0, 26.0)), Color(accent.r, accent.g, accent.b, 0.20), "ui_jade_reading_plate")
 	source.name = "HumanActionChoiceSource_%s" % action
-	var gate = make_panel(art, Rect2(to_pos + Vector2(-20.0, -14.0), Vector2(40.0, 28.0)), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	art.add_child(source)
+	var gate = make_gpt_gate(Rect2(to_pos + Vector2(-20.0, -14.0), Vector2(40.0, 28.0)), Color(accent.r, accent.g, accent.b, 0.22))
 	gate.name = "HumanActionChoiceGate_%s" % action
-	var seal = make_panel(art, Rect2(to_pos + Vector2(20.0, -34.0), Vector2(46.0, 30.0)), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.88, 0.52, 0.14), 0)
+	art.add_child(gate)
+	var seal = make_gpt_gate(Rect2(to_pos + Vector2(20.0, -34.0), Vector2(46.0, 30.0)), Color(accent.r, accent.g, accent.b, 0.22))
 	seal.name = "HumanActionChoiceSeal_%s" % action
+	art.add_child(seal)
 	var glyph = make_label(seal, label_text, 9, Color(0.98, 0.92, 0.66, 0.90), true)
 	glyph.name = "HumanActionChoiceGlyph_%s" % action
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var tile_badge = make_panel(art, Rect2(from_pos.lerp(to_pos, 0.58) + Vector2(-17.0, -22.0), Vector2(34.0, 30.0)), Color(0.018, 0.034, 0.036, 0.86), 8, Color(accent.r, accent.g, accent.b, 0.24), 0)
+	var tile_badge = make_gpt_gate(Rect2(from_pos.lerp(to_pos, 0.58) + Vector2(-17.0, -22.0), Vector2(34.0, 30.0)), Color(0.018, 0.034, 0.036, 0.86))
 	tile_badge.name = "HumanActionChoiceTileBadge_%s" % action
+	art.add_child(tile_badge)
 	var tile_glyph = make_label(tile_badge, tile_label(tile), 8, Color(0.98, 0.90, 0.66, 0.86), true)
 	tile_glyph.name = "HumanActionChoiceTileGlyph_%s" % action
 	apply_rect(tile_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -5908,8 +6043,9 @@ func play_human_action_choice_confirmation_fx(action: String, tile: String) -> C
 		tick.name = "HumanActionChoiceTick_%s_%d" % [action, i]
 		art.add_child(tick)
 	for i in range(2):
-		var pip = make_panel(art, Rect2(to_pos + Vector2(-26.0 + float(i) * 18.0, 31.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		var pip = make_gpt_gate(Rect2(to_pos + Vector2(-26.0 + float(i) * 18.0, 31.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040))
 		pip.name = "HumanActionChoiceArchivePip_%s_%d" % [action, i]
+		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
 		var tw := create_tween()
@@ -5922,7 +6058,9 @@ func play_human_action_choice_confirmation_fx(action: String, tile: String) -> C
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(art_id))
 	return art
 
+
 func play_ai_claim_choice_confirmation_fx(seat: int, from_seat: int, tile: String, claim: String) -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or tile == "" or claim == "" or seat <= 0 or seat >= 4:
 		return null
 	ensure_fx_layer()
@@ -5945,22 +6083,27 @@ func play_ai_claim_choice_confirmation_fx(seat: int, from_seat: int, tile: Strin
 	var fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(length * 0.780, 3.0)))
 	fill.name = "AIClaimChoiceFill_%d_%s" % [seat, claim]
 	route.add_child(fill)
-	var source = make_panel(art, Rect2(source_pos + Vector2(-12.0, -12.0), Vector2(24.0, 24.0)), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var source = make_gpt_plate_rect(Rect2(source_pos + Vector2(-12.0, -12.0), Vector2(24.0, 24.0)), Color(accent.r, accent.g, accent.b, 0.18), "ui_jade_reading_plate")
 	source.name = "AIClaimChoiceSource_%d_%s" % [seat, claim]
-	var gate = make_panel(art, Rect2(target_pos + Vector2(-18.0, -14.0), Vector2(36.0, 28.0)), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	art.add_child(source)
+	var gate = make_gpt_gate(Rect2(target_pos + Vector2(-18.0, -14.0), Vector2(36.0, 28.0)), Color(accent.r, accent.g, accent.b, 0.20))
 	gate.name = "AIClaimChoiceGate_%d_%s" % [seat, claim]
-	var seal = make_panel(art, Rect2(target_pos + Vector2(18.0, -34.0), Vector2(40.0, 30.0)), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.88, 0.52, 0.14), 0)
+	art.add_child(gate)
+	var seal = make_gpt_gate(Rect2(target_pos + Vector2(18.0, -34.0), Vector2(40.0, 30.0)), Color(accent.r, accent.g, accent.b, 0.22))
 	seal.name = "AIClaimChoiceSeal_%d_%s" % [seat, claim]
+	art.add_child(seal)
 	var glyph = make_label(seal, label_text, 10, Color(0.98, 0.92, 0.66, 0.90), true)
 	glyph.name = "AIClaimChoiceGlyph_%d_%s" % [seat, claim]
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var seat_seal = make_panel(art, Rect2(target_pos + Vector2(-54.0, -30.0), Vector2(34.0, 26.0)), Color(SEAT_ACCENT_COLORS[seat].r, SEAT_ACCENT_COLORS[seat].g, SEAT_ACCENT_COLORS[seat].b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var seat_seal = make_gpt_gate(Rect2(target_pos + Vector2(-54.0, -30.0), Vector2(34.0, 26.0)), Color(SEAT_ACCENT_COLORS[seat].r, SEAT_ACCENT_COLORS[seat].g, SEAT_ACCENT_COLORS[seat].b, 0.18))
 	seat_seal.name = "AIClaimChoiceSeatSeal_%d_%s" % [seat, claim]
+	art.add_child(seat_seal)
 	var seat_glyph = make_label(seat_seal, seat_short_name(seat), 8, Color(0.94, 0.96, 0.90, 0.86), true)
 	seat_glyph.name = "AIClaimChoiceSeatGlyph_%d_%s" % [seat, claim]
 	apply_rect(seat_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var tile_badge = make_panel(art, Rect2(source_pos.lerp(target_pos, 0.58) + Vector2(-16.0, -22.0), Vector2(32.0, 30.0)), Color(0.018, 0.034, 0.036, 0.86), 8, Color(accent.r, accent.g, accent.b, 0.24), 0)
+	var tile_badge = make_gpt_gate(Rect2(source_pos.lerp(target_pos, 0.58) + Vector2(-16.0, -22.0), Vector2(32.0, 30.0)), Color(0.018, 0.034, 0.036, 0.86))
 	tile_badge.name = "AIClaimChoiceTileBadge_%d_%s" % [seat, claim]
+	art.add_child(tile_badge)
 	var tile_glyph = make_label(tile_badge, tile_label(tile), 8, Color(0.98, 0.90, 0.66, 0.86), true)
 	tile_glyph.name = "AIClaimChoiceTileGlyph_%d_%s" % [seat, claim]
 	apply_rect(tile_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -5977,8 +6120,9 @@ func play_ai_claim_choice_confirmation_fx(seat: int, from_seat: int, tile: Strin
 		tick.name = "AIClaimChoiceTick_%d_%s_%d" % [seat, claim, i]
 		art.add_child(tick)
 	for i in range(2):
-		var pip = make_panel(art, Rect2(target_pos + Vector2(-26.0 + float(i) * 18.0, 32.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		var pip = make_gpt_gate(Rect2(target_pos + Vector2(-26.0 + float(i) * 18.0, 32.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.040))
 		pip.name = "AIClaimChoiceArchivePip_%d_%s_%d" % [seat, claim, i]
+		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
 		var tw := create_tween()
@@ -5993,6 +6137,7 @@ func play_ai_claim_choice_confirmation_fx(seat: int, from_seat: int, tile: Strin
 
 
 func play_rob_gang_warning_fx(gang_seat: int, winner_seat: int, tile: String) -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or tile == "" or gang_seat < 0 or gang_seat >= 4 or winner_seat < 0 or winner_seat >= 4:
 		return null
 	ensure_fx_layer()
@@ -6015,25 +6160,30 @@ func play_rob_gang_warning_fx(gang_seat: int, winner_seat: int, tile: String) ->
 	var fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(length * 0.820, 4.0)))
 	fill.name = "RobGangWarningFill_%d_%d" % [gang_seat, winner_seat]
 	route.add_child(fill)
-	var source = make_panel(art, Rect2(source_pos + Vector2(-16.0, -16.0), Vector2(32.0, 32.0)), Color(0.54, 0.20, 0.18, 0.24), 999, Color(1.0, 0.78, 0.42, 0.14), 0)
+	var source = make_gpt_plate_rect(Rect2(source_pos + Vector2(-16.0, -16.0), Vector2(32.0, 32.0)), Color(0.54, 0.20, 0.18, 0.24), "ui_jade_reading_plate")
 	source.name = "RobGangWarningGangSource_%d_%d" % [gang_seat, winner_seat]
+	art.add_child(source)
 	var source_glyph = make_label(source, "杠", 10, Color(0.98, 0.86, 0.58, 0.88), true)
 	source_glyph.name = "RobGangWarningGangGlyph_%d_%d" % [gang_seat, winner_seat]
 	apply_rect(source_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var gate = make_panel(art, Rect2(target_pos + Vector2(-20.0, -16.0), Vector2(40.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.22), 999, Color(1.0, 0.82, 0.48, 0.14), 0)
+	var gate = make_gpt_gate(Rect2(target_pos + Vector2(-20.0, -16.0), Vector2(40.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.22))
 	gate.name = "RobGangWarningWinGate_%d_%d" % [gang_seat, winner_seat]
-	var seal = make_panel(art, Rect2(target_pos + Vector2(22.0, -38.0), Vector2(46.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.24), 999, Color(1.0, 0.84, 0.48, 0.16), 0)
+	art.add_child(gate)
+	var seal = make_gpt_gate(Rect2(target_pos + Vector2(22.0, -38.0), Vector2(46.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.24))
 	seal.name = "RobGangWarningSeal_%d_%d" % [gang_seat, winner_seat]
+	art.add_child(seal)
 	var glyph = make_label(seal, "抢杠", 9, Color(0.98, 0.92, 0.66, 0.92), true)
 	glyph.name = "RobGangWarningGlyph_%d_%d" % [gang_seat, winner_seat]
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var tile_badge = make_panel(art, Rect2(source_pos.lerp(target_pos, 0.56) + Vector2(-17.0, -24.0), Vector2(34.0, 30.0)), Color(0.018, 0.034, 0.036, 0.88), 8, Color(tile_color.r, tile_color.g, tile_color.b, 0.26), 0)
+	var tile_badge = make_gpt_gate(Rect2(source_pos.lerp(target_pos, 0.56) + Vector2(-17.0, -24.0), Vector2(34.0, 30.0)), Color(0.018, 0.034, 0.036, 0.88))
 	tile_badge.name = "RobGangWarningTileBadge_%d_%d" % [gang_seat, winner_seat]
+	art.add_child(tile_badge)
 	var tile_glyph = make_label(tile_badge, tile_label(tile), 8, Color(0.98, 0.90, 0.66, 0.88), true)
 	tile_glyph.name = "RobGangWarningTileGlyph_%d_%d" % [gang_seat, winner_seat]
 	apply_rect(tile_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var intercept = make_panel(art, Rect2(source_pos.lerp(target_pos, 0.72) + Vector2(-10.0, -10.0), Vector2(20.0, 20.0)), Color(1.0, 0.70, 0.36, 0.22), 999, Color(1.0, 0.90, 0.54, 0.14), 0)
+	var intercept = make_gpt_plate_rect(Rect2(source_pos.lerp(target_pos, 0.72) + Vector2(-10.0, -10.0), Vector2(20.0, 20.0)), Color(1.0, 0.70, 0.36, 0.22), "ui_jade_reading_plate")
 	intercept.name = "RobGangWarningIntercept_%d_%d" % [gang_seat, winner_seat]
+	art.add_child(intercept)
 	var archive_route = make_gpt_plate_rect(Rect2(target_pos + Vector2(-36.0, 24.0), Vector2(72.0, 5.0)), Color(0.040, 0.010, 0.010, 0.42))
 	archive_route.name = "RobGangWarningArchiveRoute_%d_%d" % [gang_seat, winner_seat]
 	art.add_child(archive_route)
@@ -6047,8 +6197,9 @@ func play_rob_gang_warning_fx(gang_seat: int, winner_seat: int, tile: String) ->
 		tick.name = "RobGangWarningTick_%d_%d_%d" % [gang_seat, winner_seat, i]
 		art.add_child(tick)
 	for i in range(3):
-		var pip = make_panel(art, Rect2(target_pos + Vector2(-30.0 + float(i) * 18.0, 35.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		var pip = make_gpt_gate(Rect2(target_pos + Vector2(-30.0 + float(i) * 18.0, 35.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035))
 		pip.name = "RobGangWarningPip_%d_%d_%d" % [gang_seat, winner_seat, i]
+		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
 		var tw := create_tween()
@@ -6061,7 +6212,9 @@ func play_rob_gang_warning_fx(gang_seat: int, winner_seat: int, tile: String) ->
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(art_id))
 	return art
 
+
 func play_next_hand_transition_fx(previous_dealer: int, next_dealer: int, repeat_dealer: bool) -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or previous_dealer < 0 or previous_dealer >= 4 or next_dealer < 0 or next_dealer >= 4:
 		return null
 	ensure_fx_layer()
@@ -6074,8 +6227,9 @@ func play_next_hand_transition_fx(previous_dealer: int, next_dealer: int, repeat
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_layer.add_child(art)
-	var archive = make_panel(art, Rect2(source_pos + Vector2(-24.0, -16.0), Vector2(48.0, 32.0)), Color(source_accent.r, source_accent.g, source_accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	var archive = make_gpt_plate_rect(Rect2(source_pos + Vector2(-24.0, -16.0), Vector2(48.0, 32.0)), Color(source_accent.r, source_accent.g, source_accent.b, 0.18), "ui_jade_reading_plate")
 	archive.name = "NextHandArchiveSource_%d_%d" % [previous_dealer, next_dealer]
+	art.add_child(archive)
 	var archive_glyph = make_label(archive, "结", 10, Color(0.98, 0.92, 0.66, 0.86), true)
 	archive_glyph.name = "NextHandArchiveGlyph_%d_%d" % [previous_dealer, next_dealer]
 	apply_rect(archive_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -6088,10 +6242,12 @@ func play_next_hand_transition_fx(previous_dealer: int, next_dealer: int, repeat
 	var fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(length * 0.760, 3.0)))
 	fill.name = "NextHandTransitionFill_%d_%d" % [previous_dealer, next_dealer]
 	route.add_child(fill)
-	var dealer_gate = make_panel(art, Rect2(target_pos + Vector2(-20.0, -16.0), Vector2(40.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	var dealer_gate = make_gpt_gate(Rect2(target_pos + Vector2(-20.0, -16.0), Vector2(40.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.20))
 	dealer_gate.name = "NextHandDealerGate_%d_%d" % [previous_dealer, next_dealer]
-	var dealer_seal = make_panel(art, Rect2(target_pos + Vector2(22.0, -38.0), Vector2(48.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.14), 0)
+	art.add_child(dealer_gate)
+	var dealer_seal = make_gpt_gate(Rect2(target_pos + Vector2(22.0, -38.0), Vector2(48.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.20))
 	dealer_seal.name = "NextHandDealerSeal_%d_%d" % [previous_dealer, next_dealer]
+	art.add_child(dealer_seal)
 	var dealer_glyph = make_label(dealer_seal, "连庄" if repeat_dealer else "新庄", 8, Color(0.98, 0.92, 0.66, 0.90), true)
 	dealer_glyph.name = "NextHandDealerGlyph_%d_%d" % [previous_dealer, next_dealer]
 	apply_rect(dealer_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -6101,8 +6257,9 @@ func play_next_hand_transition_fx(previous_dealer: int, next_dealer: int, repeat
 	var wall_fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(54.0, 3.0)))
 	wall_fill.name = "NextHandWallFill_%d_%d" % [previous_dealer, next_dealer]
 	wall_route.add_child(wall_fill)
-	var wall_gate = make_panel(art, Rect2(target_pos + Vector2(-18.0, 32.0), Vector2(36.0, 16.0)), Color(0.92, 0.72, 0.34, 0.14), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	var wall_gate = make_gpt_gate(Rect2(target_pos + Vector2(-18.0, 32.0), Vector2(36.0, 16.0)), Color(0.92, 0.72, 0.34, 0.14))
 	wall_gate.name = "NextHandWallGate_%d_%d" % [previous_dealer, next_dealer]
+	art.add_child(wall_gate)
 	for i in range(3):
 		var step = 0.240 + float(i) * 0.210
 		var pos = source_pos.lerp(target_pos, step)
@@ -6110,8 +6267,9 @@ func play_next_hand_transition_fx(previous_dealer: int, next_dealer: int, repeat
 		tick.name = "NextHandTransitionTick_%d_%d_%d" % [previous_dealer, next_dealer, i]
 		art.add_child(tick)
 	for i in range(3):
-		var pip = make_panel(art, Rect2(target_pos + Vector2(-28.0 + float(i) * 18.0, 52.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+		var pip = make_gpt_gate(Rect2(target_pos + Vector2(-28.0 + float(i) * 18.0, 52.0), Vector2(9.0, 9.0)), Color(accent.r, accent.g, accent.b, 0.22 - float(i) * 0.035))
 		pip.name = "NextHandWallPip_%d_%d_%d" % [previous_dealer, next_dealer, i]
+		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
 		var tw := create_tween()

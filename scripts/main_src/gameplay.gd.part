@@ -269,6 +269,7 @@ func sort_hand(hand: Array) -> void:
 	hand.sort_custom(func(a, b): return tile_sort_index(str(a)) < tile_sort_index(str(b)))
 
 func render_game() -> void:
+	# r215: GPT chrome conversion
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
 	last_game_render_msec = Time.get_ticks_msec()
@@ -280,16 +281,19 @@ func render_game() -> void:
 	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.015), 42)  # r426
 	table_floor_shadow.name = "OfflineTable3DFloorShadow"
 	# r406: apron sits under hand tray only — do not darken bottom river (zone y~0.638-0.824).
-	var table_apron = make_panel(root_layer, rect_full(0.145, 0.805, 0.855, 0.865), Color(0.12, 0.09, 0.05, 0.05), 20, Color(0.82, 0.64, 0.34, 0.06), 2)  # r421
+	var table_apron = make_gpt_route_rail(rect_full(0.145, 0.805, 0.855, 0.865), Color(0.12, 0.09, 0.05, 0.05))
 	table_apron.name = "OfflineTable3DFrontApron"
+	root_layer.add_child(table_apron)
 	var apron_highlight = make_soft_depth_panel(table_apron, rect_full(0.035, 0.040, 0.965, 0.170), Color(0.98, 0.78, 0.40, 0.06), 999)  # r406
 	apron_highlight.name = "OfflineTable3DApronHighlight"
 	var table_shadow = make_soft_depth_panel(root_layer, rect_full(0.112, 0.142, 0.888, 0.812), Color(0.0, 0.0, 0.0, 0.02), 38)  # r426
 	table_shadow.name = "OfflineTable3DCastShadow"
-	var outer = make_panel(root_layer, TABLE_OUTER_RECT, Color(0.08, 0.06, 0.04, 0.04), 24, Color(0.86, 0.66, 0.34, 0.08), 0)  # r420
+	var outer = make_gpt_plate_rect(TABLE_OUTER_RECT, Color(0.08, 0.06, 0.04, 0.04), "ui_jade_reading_plate")
 	outer.name = "OfflineTable3DOuterShell"
-	var table = make_panel(outer, TABLE_INNER_RECT, Color(0.10, 0.07, 0.045, 0.05), 18, Color(0.82, 0.66, 0.36, 0.08), 0)  # r420
+	root_layer.add_child(outer)
+	var table = make_gpt_plate_rect(TABLE_INNER_RECT, Color(0.10, 0.07, 0.045, 0.05), "ui_jade_reading_plate")
 	table.name = "OfflineTable3DInnerSurface"
+	outer.add_child(table)
 	# Room guofeng lives on screen_layer; table surface stays translucent so felt reads against the room plate.
 	var realtime_stage = Commercial3DStage.new()
 	realtime_stage.name = "OfflineCommercial3DStage"
@@ -331,6 +335,7 @@ func render_game() -> void:
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 	update_fx_turn_pulse()
+
 
 func update_ai_assistance_async() -> void:
 	# 异步更新AI辅助信息，不阻塞UI渲染
@@ -1307,6 +1312,7 @@ func get_chi_choices_from_counts(hand_counts: Array, tile: String) -> Array:
 	return choices
 
 func play_ai_discard_fly_animation(seat: int, tile: String) -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or tile == "" or seat <= 0 or seat >= 4:
 		return null
 	var from_pos = ai_discard_fly_start_position(seat)
@@ -1329,12 +1335,15 @@ func play_ai_discard_fly_animation(seat: int, tile: String) -> Control:
 	var route_fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(length * 0.760, 3.0)))
 	route_fill.name = "AIDiscardRouteFill_%d" % seat
 	route.add_child(route_fill)
-	var source = make_panel(art, Rect2(from_pos + Vector2(-11.0, -11.0), Vector2(22.0, 22.0)), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.08), 0)
+	var source = make_gpt_plate_rect(Rect2(from_pos + Vector2(-11.0, -11.0), Vector2(22.0, 22.0)), Color(accent.r, accent.g, accent.b, 0.18), "ui_jade_reading_plate")
 	source.name = "AIDiscardSource_%d" % seat
-	var gate = make_panel(art, Rect2(to_pos + Vector2(-8.0, -16.0), Vector2(16.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.20), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	art.add_child(source)
+	var gate = make_gpt_gate(Rect2(to_pos + Vector2(-8.0, -16.0), Vector2(16.0, 32.0)), Color(accent.r, accent.g, accent.b, 0.20))
 	gate.name = "AIDiscardGate_%d" % seat
-	var seal = make_panel(art, Rect2(to_pos + Vector2(14.0, -28.0), Vector2(34.0, 28.0)), Color(0.92, 0.72, 0.34, 0.16), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	art.add_child(gate)
+	var seal = make_gpt_gate(Rect2(to_pos + Vector2(14.0, -28.0), Vector2(34.0, 28.0)), Color(0.92, 0.72, 0.34, 0.16))
 	seal.name = "AIDiscardDecisionSeal_%d" % seat
+	art.add_child(seal)
 	var glyph = make_label(seal, "打", 8, Color(0.98, 0.92, 0.66, 0.86), true)
 	glyph.name = "AIDiscardDecisionGlyph_%d" % seat
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -1355,7 +1364,9 @@ func play_ai_discard_fly_animation(seat: int, tile: String) -> Control:
 		cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(art.get_instance_id())).set_delay(0.46)
 	return art
 
+
 func play_ai_draw_tile_animation(seat: int, tile: String, source: String = "normal") -> Control:
+	# r215: GPT chrome conversion
 	if not fx_enabled_effective() or tile == "" or seat <= 0 or seat >= 4:
 		return null
 	ensure_fx_layer()
@@ -1378,12 +1389,15 @@ func play_ai_draw_tile_animation(seat: int, tile: String, source: String = "norm
 	var route_fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(length * (0.82 if source_is_gang else 0.70), 3.0)))
 	route_fill.name = "AIDrawRouteFill_%d" % seat
 	route.add_child(route_fill)
-	var source_node = make_panel(art, Rect2(from_pos + Vector2(-18.0, -12.0), Vector2(36.0, 24.0)), Color(0.92, 0.72, 0.32, 0.15), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	var source_node = make_gpt_gate(Rect2(from_pos + Vector2(-18.0, -12.0), Vector2(36.0, 24.0)), Color(0.92, 0.72, 0.32, 0.15))
 	source_node.name = "AIDrawWallSource_%d" % seat
-	var gate = make_panel(art, Rect2(to_pos + Vector2(-18.0, -12.0), Vector2(36.0, 24.0)), Color(accent.r, accent.g, accent.b, 0.18), 999, Color(1.0, 0.88, 0.52, 0.12), 0)
+	art.add_child(source_node)
+	var gate = make_gpt_gate(Rect2(to_pos + Vector2(-18.0, -12.0), Vector2(36.0, 24.0)), Color(accent.r, accent.g, accent.b, 0.18))
 	gate.name = "AIDrawHandGate_%d" % seat
-	var tile_node = make_panel(art, Rect2(from_pos + Vector2(-13.0, -19.0), Vector2(26.0, 38.0)), Color(0.12, 0.09, 0.06, 0.72), 7, Color(accent.r, accent.g, accent.b, 0.34), 0)
+	art.add_child(gate)
+	var tile_node = make_gpt_gate(Rect2(from_pos + Vector2(-13.0, -19.0), Vector2(26.0, 38.0)), Color(0.12, 0.09, 0.06, 0.72))
 	tile_node.name = "AIDrawTileNode_%d" % seat
+	art.add_child(tile_node)
 	var tile_glyph = make_label(tile_node, "摸", 12, Color(0.98, 0.92, 0.66, 0.88), true)
 	tile_glyph.name = "AIDrawTileGlyph_%d" % seat
 	apply_rect(tile_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -1396,8 +1410,9 @@ func play_ai_draw_tile_animation(seat: int, tile: String, source: String = "norm
 	var decision_fill = make_layout_host(Rect2(Vector2(4.0, 1.0), Vector2(52.0, 3.0)))
 	decision_fill.name = "AIDrawDecisionFill_%d" % seat
 	decision_route.add_child(decision_fill)
-	var decision_gate = make_panel(art, Rect2(to_pos + Vector2(18.0, -28.0), Vector2(34.0, 26.0)), Color(0.92, 0.72, 0.34, 0.14), 999, Color(1.0, 0.88, 0.52, 0.10), 0)
+	var decision_gate = make_gpt_gate(Rect2(to_pos + Vector2(18.0, -28.0), Vector2(34.0, 26.0)), Color(0.92, 0.72, 0.34, 0.14))
 	decision_gate.name = "AIDrawDecisionGate_%d" % seat
+	art.add_child(decision_gate)
 	var decision_glyph = make_label(decision_gate, "补" if source_is_gang else "入", 8, Color(0.98, 0.92, 0.66, 0.82), true)
 	decision_glyph.name = "AIDrawDecisionGlyph_%d" % seat
 	apply_rect(decision_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -1415,6 +1430,7 @@ func play_ai_draw_tile_animation(seat: int, tile: String, source: String = "norm
 		var cleanup := create_tween()
 		cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(art.get_instance_id())).set_delay(0.54)
 	return art
+
 
 func human_action_choice_label(action: String) -> String:
 	match action:

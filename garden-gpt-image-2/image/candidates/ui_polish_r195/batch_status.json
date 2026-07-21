@@ -1,0 +1,57 @@
+[
+  {
+    "round": 233,
+    "name": "top_hud_wall_gpt_warning_commercial_r195",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 112252,
+    "problem": "r195: top_hud_wall hard mid-thin (109k; r194 gens 90-99k + 502 cut tries)",
+    "next": "Round234 multi-try voice_gpt_channel",
+    "note": "promoted 109556->112252 tries=[112252,101281,104241,104431,103221]"
+  },
+  {
+    "round": 234,
+    "name": "voice_gpt_channel_commercial_r195",
+    "asset": "voice_gpt_channel.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 144841,
+    "problem": "r195: voice_gpt_channel densify polish (~144k) voice channel plate",
+    "next": "Round235 multi-try center_active_bloom",
+    "note": "rejected best 136183 vs 144841 tries=[136183,124180,135770]"
+  },
+  {
+    "round": 235,
+    "name": "center_active_bloom_commercial_r195",
+    "asset": "center_active_bloom.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 166425,
+    "problem": "r195: center_active_bloom mid-thin (~150k) table center active bloom ornament",
+    "next": "Round236 multi-try menu_tutorial_gpt_hint",
+    "note": "promoted 150867->166425 tries=[162033,151874,166425]"
+  },
+  {
+    "round": 236,
+    "name": "menu_tutorial_gpt_hint_commercial_r195",
+    "asset": "menu_tutorial_gpt_hint.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 169910,
+    "problem": "r195: menu_tutorial_gpt_hint residual thin (~156k) menu ribbon hint plate",
+    "next": "Round237 multi-try seat_discard larger-canvas experiment",
+    "note": "promoted 156218->169910 tries=[167073,169910,150094]"
+  },
+  {
+    "round": 237,
+    "name": "seat_discard_gpt_preview_commercial_r195",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 121264,
+    "problem": "r195: seat_discard still hard-stuck (111k; r194 best 110k) — feather=4 + ultra micro-texture center, 5 tries",
+    "next": "Round238 pages_gpt_r195 capture + visual AAA",
+    "note": "promoted 111572->121264 tries=[111517,95646,121264,118811,114397]"
+  }
+]

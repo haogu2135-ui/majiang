@@ -1,0 +1,82 @@
+[
+  {
+    "round": 228,
+    "name": "seat_discard_gpt_preview_commercial_r194",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 5,
+    "tries": 5,
+    "problem": "r194: seat_discard hard-stuck (111k) — lower feather=5, denser textured center, 5 tries composition rethink",
+    "next": "Round229 multi-try top_hud_wall",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong seat discard river wood mat plate. Wide horizontal lacquered rosewood table mat for discarded tiles. IMPORTANT: fill almost entire surface with high-frequency wood grain pores, deep carved floral filigree border, jade corner bosses, gold micro-nails, subtle center recess still textured (not smooth empty blob), rich warm studio light, strong PBR micro-detail so PNG stays large after resize. No tile faces, no letters, no numbers, no watermark. No flat ColorRect slabs. Commercial ship quality denser than all prior thin river pads.",
+    "baseline_bytes": 111572
+  },
+  {
+    "round": 229,
+    "name": "top_hud_wall_gpt_warning_commercial_r194",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "target": [
+      512,
+      96
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "tries": 4,
+    "problem": "r194: top_hud_wall still mid-thin (~109k) battle top HUD wall cue plate",
+    "next": "Round230 multi-try dealer_seal",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong top HUD wall cue plate. Wide horizontal lacquer plaque for battle top HUD, soft empty center for short UI label, dense deep wood grain, gold corner bosses, jade vine filigree, carved micro-relief everywhere, warm studio light, high-frequency PBR surface complexity. No letters numbers watermark. No flat ColorRect. Commercial denser remaster.",
+    "baseline_bytes": 109556
+  },
+  {
+    "round": 230,
+    "name": "dealer_seal_commercial_r194",
+    "asset": "dealer_seal.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r194: dealer_seal mid-thin (~141k) battle dealer seal badge",
+    "next": "Round231 multi-try dealer_repeat_ring",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong dealer seal badge. Square-round lacquer and jade dealer stamp medallion, soft empty center for seal glyph space, heavy carved rim, dense filigree, gold studs, warm studio light, high-frequency PBR micro-carving, maximum ornate density. No letters numbers watermark. No flat ColorRect. Commercial ship quality.",
+    "baseline_bytes": 141545
+  },
+  {
+    "round": 231,
+    "name": "dealer_repeat_ring_commercial_r194",
+    "asset": "dealer_repeat_ring.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r194: dealer_repeat_ring mid-thin (~133k) dealer repeat ring ornament",
+    "next": "Round232 multi-try center_wind_pointer",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong dealer repeat ring ornament. Circular lacquer jade-gold ring badge, soft empty center hole for UI overlay, dense carved ring filigree, warm studio light, high-frequency PBR micro-detail, maximum ornate density. No letters numbers watermark. No flat ColorRect. Commercial ship quality.",
+    "baseline_bytes": 133701
+  },
+  {
+    "round": 232,
+    "name": "center_wind_pointer_commercial_r194",
+    "asset": "center_wind_pointer.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r194: center_wind_pointer mid-thin (~153k) table center wind pointer plate",
+    "next": "Round233 pages_gpt_r194 capture + visual AAA sign-off",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong center wind pointer plate. Circular compass-like lacquer plaque for table center wind direction, soft empty center for pointer UI, dense wood grain, gold rim, jade inlays, carved micro-relief, warm studio light, high-frequency PBR, commercial AAA density. No letters numbers watermark. No flat ColorRect.",
+    "baseline_bytes": 153543
+  }
+]

@@ -1,0 +1,57 @@
+[
+  {
+    "round": 242,
+    "name": "shop_currency_meter_panel_commercial_r198",
+    "asset": "shop_currency_meter_panel.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 147598,
+    "problem": "r198: shop_currency hard-stuck denser (147k; r197 gens max 133k) — 6 tries ultra microtexture",
+    "next": "Round243 multi-try rules_reading_progress_panel",
+    "note": "rejected best 145164 vs 147598 tries=[139267,132285,130611,109566,145164,137706]"
+  },
+  {
+    "round": 243,
+    "name": "rules_reading_progress_panel_commercial_r198",
+    "asset": "rules_reading_progress_panel.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 152932,
+    "problem": "r198: rules_reading hard-stuck denser (152k; r197 gens max 148k) — 6 tries dense strip",
+    "next": "Round244 multi-try hand_tutorial_gpt_hint",
+    "note": "rejected best 154326 vs 152932 tries=[149981,149670,152211,154326,142266,132533]"
+  },
+  {
+    "round": 244,
+    "name": "hand_tutorial_gpt_hint_commercial_r198",
+    "asset": "hand_tutorial_gpt_hint.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 147810,
+    "problem": "r198: hand_tutorial_gpt_hint mid-thin (~144k) battle hand tutorial ribbon densify",
+    "next": "Round245 multi-try top_hud_wall densify",
+    "note": "promoted 144135->147810 tries=[142942,139659,147810,136671]"
+  },
+  {
+    "round": 245,
+    "name": "top_hud_wall_gpt_warning_commercial_r198",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 112252,
+    "problem": "r198: top_hud_wall still mid-thin (112k) wall remaining meter plate densify",
+    "next": "Round246 multi-try center_wall_gpt_warning",
+    "note": "rejected best 109229 vs 112252 tries=[103587,109229,106435,91252,101082]"
+  },
+  {
+    "round": 246,
+    "name": "center_wall_gpt_warning_commercial_r198",
+    "asset": "center_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 134787,
+    "problem": "r198: center_wall_gpt_warning mid-thin (~134k) table center wall cue densify",
+    "next": "Round247 pages_gpt_r198 capture + visual AAA",
+    "note": "rejected best 130121 vs 134787 tries=[123236,118781,130121,116119]"
+  }
+]

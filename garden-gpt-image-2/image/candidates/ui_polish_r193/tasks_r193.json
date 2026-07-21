@@ -1,0 +1,82 @@
+[
+  {
+    "round": 223,
+    "name": "seat_discard_gpt_preview_commercial_r193",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "tries": 4,
+    "problem": "r193: seat_discard hard-stuck thin (111k; r192 gens lighter 73-82k) — denser river pad",
+    "next": "Round224 multi-try center_wall_gpt_warning",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong seat discard river pad plate. Wide horizontal lacquer wood mat for discarded tiles, large soft empty center recess for porcelain tile, heavy deep-carved floral filigree border, dense wood grain pores, jade corner bosses, gold micro-trim, high-frequency PBR micro-detail, warm studio key light, rich shadows in carvings, maximum texture density so PNG stays large. No tile faces, no letters, no numbers, no watermark. No flat ColorRect slabs. Commercial ship quality denser than prior thin attempts.",
+    "baseline_bytes": 111572
+  },
+  {
+    "round": 224,
+    "name": "center_wall_gpt_warning_commercial_r193",
+    "asset": "center_wall_gpt_warning.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "tries": 4,
+    "problem": "r193: center_wall near-miss densify (+472 only in r192) table center wall plate",
+    "next": "Round225 multi-try ui_hand_tray_state_chip",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong center wall cue plate. Horizontal lacquer plaque for table center wall, soft empty center for UI, dense deep wood grain, gold corner bosses, jade inlay vine filigree, carved micro-relief everywhere, warm studio light, high-frequency PBR surface complexity, maximum ornate density. No letters numbers watermark. No flat ColorRect. Commercial denser remaster.",
+    "baseline_bytes": 124634
+  },
+  {
+    "round": 225,
+    "name": "ui_hand_tray_state_chip_commercial_r193",
+    "asset": "ui_hand_tray_state_chip.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 10,
+    "tries": 4,
+    "problem": "r193: ui_hand_tray_state_chip under densify gate (live 153k; r192 best 147k)",
+    "next": "Round226 multi-try action_button_panel",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong hand tray state chip badge. Square compact lacquer jade-gold chip, soft empty center for short state label, heavy carved rim, dense filigree, jade gem center ring, warm studio light, high-frequency PBR micro-carving, maximum ornate density for large PNG. No letters numbers watermark. No flat ColorRect. Commercial ship quality.",
+    "baseline_bytes": 153133
+  },
+  {
+    "round": 226,
+    "name": "action_button_panel_commercial_r193",
+    "asset": "action_button_panel.png",
+    "target": [
+      512,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r193: action_button_panel mid-thin (~150k) battle action button face",
+    "next": "Round227 multi-try hand_tutorial_gpt_hint",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong action button plate. Wide horizontal lacquer button face, soft empty center for action glyph/label, gold filigree frame, jade bosses, dense wood grain and carved micro-detail, warm studio light, high-frequency PBR, commercial AAA density. No letters numbers watermark. No flat ColorRect.",
+    "baseline_bytes": 149805
+  },
+  {
+    "round": 227,
+    "name": "hand_tutorial_gpt_hint_commercial_r193",
+    "asset": "hand_tutorial_gpt_hint.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r193: hand_tutorial_gpt_hint residual thin (~137k) hand ribbon hint plate",
+    "next": "Round228 pages_gpt_r193 capture + visual AAA sign-off",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong hand tutorial hint ribbon plate. Wide horizontal lacquer ribbon banner for hand-area tutorial, soft empty center for hint text, gold filigree ends, jade accents, dense carved wood grain, warm studio light, high-frequency PBR micro-detail, maximum ornate density. No letters numbers watermark. No flat ColorRect. Commercial ship quality.",
+    "baseline_bytes": 137108
+  }
+]

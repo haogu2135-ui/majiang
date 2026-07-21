@@ -1,0 +1,46 @@
+[
+  {
+    "round": 238,
+    "name": "settings_section_signal_panel_commercial_r197",
+    "asset": "settings_section_signal_panel.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 138352,
+    "problem": "r197: settings_section_signal_panel mid-thin (~128k) settings section signal plate densify",
+    "next": "Round239 multi-try shop_currency_meter_panel",
+    "note": "promoted 128524->138352 tries=[131861,138352,128993]"
+  },
+  {
+    "round": 239,
+    "name": "shop_currency_meter_panel_commercial_r197",
+    "asset": "shop_currency_meter_panel.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 147598,
+    "problem": "r197: shop_currency_meter_panel mid-thin (~147k) shop currency meter plate densify",
+    "next": "Round240 multi-try rules_reading_progress_panel",
+    "note": "rejected best 133375 vs 147598 tries=[127454,128546,133375]"
+  },
+  {
+    "round": 240,
+    "name": "rules_reading_progress_panel_commercial_r197",
+    "asset": "rules_reading_progress_panel.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 152932,
+    "problem": "r197: rules_reading_progress_panel thin strip (~152k) reading progress densify",
+    "next": "Round241 multi-try voice_gpt_channel",
+    "note": "rejected best 148417 vs 152932 tries=[144595,148417,129187]"
+  },
+  {
+    "round": 241,
+    "name": "voice_gpt_channel_commercial_r197",
+    "asset": "voice_gpt_channel.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 152094,
+    "problem": "r197: voice_gpt_channel kept denser (~144k; r195 gens max 136k) densify retry",
+    "next": "Round242 pages_gpt_r197 capture + visual AAA",
+    "note": "promoted 144841->152094 tries=[152094,116964,138034,139847]"
+  }
+]

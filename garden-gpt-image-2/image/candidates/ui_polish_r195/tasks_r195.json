@@ -1,0 +1,82 @@
+[
+  {
+    "round": 233,
+    "name": "top_hud_wall_gpt_warning_commercial_r195",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "target": [
+      512,
+      96
+    ],
+    "api_size": "1536x1024",
+    "feather": 6,
+    "tries": 5,
+    "problem": "r195: top_hud_wall hard mid-thin (109k; r194 gens 90-99k + 502 cut tries)",
+    "next": "Round234 multi-try voice_gpt_channel",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong top HUD wall cue plate. Wide horizontal thin lacquer plaque, soft empty center for short UI label, dense deep wood grain pores everywhere, gold corner bosses, jade vine filigree, carved micro-relief, warm studio light, high-frequency PBR, maximum ornate density so PNG stays large at 512x96. No letters numbers watermark. No flat ColorRect. Commercial denser remaster.",
+    "baseline_bytes": 109556
+  },
+  {
+    "round": 234,
+    "name": "voice_gpt_channel_commercial_r195",
+    "asset": "voice_gpt_channel.png",
+    "target": [
+      512,
+      128
+    ],
+    "api_size": "1024x1024",
+    "feather": 8,
+    "tries": 3,
+    "problem": "r195: voice_gpt_channel densify polish (~144k) voice channel plate",
+    "next": "Round235 multi-try center_active_bloom",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong voice channel plate. Compact lacquer jade-gold plate for voice UI, soft empty center for icon/label, heavy carved rim, dense filigree, warm studio light, high-frequency PBR micro-detail. No letters numbers watermark. No flat ColorRect. Commercial ship quality.",
+    "baseline_bytes": 144841
+  },
+  {
+    "round": 235,
+    "name": "center_active_bloom_commercial_r195",
+    "asset": "center_active_bloom.png",
+    "target": [
+      256,
+      256
+    ],
+    "api_size": "1024x1024",
+    "feather": 10,
+    "tries": 3,
+    "problem": "r195: center_active_bloom mid-thin (~150k) table center active bloom ornament",
+    "next": "Round236 multi-try menu_tutorial_gpt_hint",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong center active bloom ornament. Circular radiant lacquer jade-gold bloom plate for table center active seat cue, soft empty center for UI, dense carved petals and gold filigree, warm studio light, high-frequency PBR. No letters numbers watermark. No flat ColorRect. Commercial denser remaster.",
+    "baseline_bytes": 150867
+  },
+  {
+    "round": 236,
+    "name": "menu_tutorial_gpt_hint_commercial_r195",
+    "asset": "menu_tutorial_gpt_hint.png",
+    "target": [
+      512,
+      160
+    ],
+    "api_size": "1536x1024",
+    "feather": 8,
+    "tries": 3,
+    "problem": "r195: menu_tutorial_gpt_hint residual thin (~156k) menu ribbon hint plate",
+    "next": "Round237 multi-try seat_discard larger-canvas experiment",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong menu tutorial hint ribbon plate. Wide horizontal lacquer ribbon banner, soft empty center for hint text, gold filigree ends, jade accents, dense carved wood grain, warm studio light, high-frequency PBR micro-detail. No letters numbers watermark. No flat ColorRect. Commercial ship quality.",
+    "baseline_bytes": 156218
+  },
+  {
+    "round": 237,
+    "name": "seat_discard_gpt_preview_commercial_r195",
+    "asset": "seat_discard_gpt_preview.png",
+    "target": [
+      384,
+      128
+    ],
+    "api_size": "1536x1024",
+    "feather": 4,
+    "tries": 5,
+    "problem": "r195: seat_discard still hard-stuck (111k; r194 best 110k) — feather=4 + ultra micro-texture center, 5 tries",
+    "next": "Round238 pages_gpt_r195 capture + visual AAA",
+    "prompt": "Ultra-dense AAA Chinese guofeng mahjong seat discard river wood mat. Wide horizontal rosewood lacquer mat, fill nearly entire surface with high-frequency wood grain pores and deep carved floral filigree, jade corner bosses, gold micro-nails, textured recess (not smooth empty), rich warm studio light, maximum PBR micro-detail so final 384x128 PNG stays larger than 112k bytes. No tile faces, no letters, no numbers, no watermark. No flat ColorRect. Commercial denser than all prior thin river pads.",
+    "baseline_bytes": 111572
+  }
+]

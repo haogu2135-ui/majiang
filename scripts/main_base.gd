@@ -44,7 +44,7 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"stats_gpt_dashboard": "res://assets/illustrations/stats_gpt_dashboard.png",
 	"achievement_gpt_gallery": "res://assets/illustrations/achievement_gpt_gallery.png",
 	"online_gpt_lobby": "res://assets/illustrations/online_gpt_lobby.png",
-	"online_lobby_panel_frame": "res://assets/illustrations/online_lobby_panel_frame_v1.png",
+	"online_lobby_panel_frame": "res://assets/illustrations/online_lobby_panel_frame_warm_v392.png",
 	"online_lobby_group_plate": "res://assets/illustrations/online_lobby_group_plate_v1.png",
 	"settings_gpt_panel": "res://assets/illustrations/settings_gpt_panel.png",
 	"settings_gpt_panel_v2": "res://assets/illustrations/settings_gpt_panel_v2.png",
@@ -448,8 +448,8 @@ var update_dialog: Control
 var update_status_label: Label
 var update_progress_label: Label
 var update_progress: ProgressBar
-var update_art_fill: Panel
-var update_art_status_light: Panel
+var update_art_fill: Control
+var update_art_status_light: Control
 var update_release_notes_art: Control
 var update_release_notes_label: Label
 var update_primary_button: Button

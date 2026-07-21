@@ -1,0 +1,57 @@
+[
+  {
+    "round": 228,
+    "name": "seat_discard_gpt_preview_commercial_r194",
+    "asset": "seat_discard_gpt_preview.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 111572,
+    "problem": "r194: seat_discard hard-stuck (111k) — lower feather=5, denser textured center, 5 tries composition rethink",
+    "next": "Round229 multi-try top_hud_wall",
+    "note": "rejected best 110431 vs 111572 tries=[109362,103599,98600,110431,99529]"
+  },
+  {
+    "round": 229,
+    "name": "top_hud_wall_gpt_warning_commercial_r194",
+    "asset": "top_hud_wall_gpt_warning.png",
+    "ok": true,
+    "promoted": false,
+    "bytes": 109556,
+    "problem": "r194: top_hud_wall still mid-thin (~109k) battle top HUD wall cue plate",
+    "next": "Round230 multi-try dealer_seal",
+    "note": "rejected best 99100 vs 109556 tries=[99100,90823,fail,fail]"
+  },
+  {
+    "round": 230,
+    "name": "dealer_seal_commercial_r194",
+    "asset": "dealer_seal.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 153852,
+    "problem": "r194: dealer_seal mid-thin (~141k) battle dealer seal badge",
+    "next": "Round231 multi-try dealer_repeat_ring",
+    "note": "promoted 141545->153852 tries=[140706,153852,143452]"
+  },
+  {
+    "round": 231,
+    "name": "dealer_repeat_ring_commercial_r194",
+    "asset": "dealer_repeat_ring.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 155914,
+    "problem": "r194: dealer_repeat_ring mid-thin (~133k) dealer repeat ring ornament",
+    "next": "Round232 multi-try center_wind_pointer",
+    "note": "promoted 133701->155914 tries=[128228,137358,155914]"
+  },
+  {
+    "round": 232,
+    "name": "center_wind_pointer_commercial_r194",
+    "asset": "center_wind_pointer.png",
+    "ok": true,
+    "promoted": true,
+    "bytes": 160976,
+    "problem": "r194: center_wind_pointer mid-thin (~153k) table center wind pointer plate",
+    "next": "Round233 pages_gpt_r194 capture + visual AAA sign-off",
+    "note": "promoted 153543->160976 tries=[154541,160976,156358]"
+  }
+]
