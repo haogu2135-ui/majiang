@@ -106,10 +106,10 @@ func _show_achievements_screen_impl() -> void:
 		achievements_scrollbar.visible = false
 		achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Panel StyleBoxFlat retained for scrollbar luma probes; visual via GPT plate child
-	var achievements_scroll_gutter = make_panel(panel, rect_full(0.947, achievement_scroll_top + 0.012, 0.960, achievement_scroll_bottom - 0.012), Color(0.020, 0.030, 0.028, 0.54), 999, Color(0.28, 0.24, 0.16, 0.20), 0)
+	var achievements_scroll_gutter = make_panel(panel, rect_full(0.947, achievement_scroll_top + 0.012, 0.960, achievement_scroll_bottom - 0.012), Color(0.020, 0.030, 0.028, 0.54), 999, Color(0.28, 0.24, 0.16, 0.20), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
 	achievements_scroll_gutter.name = "AchievementsScrollGutter"
 	achievements_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var achievements_scroll_thumb = make_panel(achievements_scroll_gutter, rect_full(0.200, 0.055, 0.800, 0.520), Color(0.56, 0.48, 0.30, 0.66), 999, Color(0.72, 0.62, 0.36, 0.24), 0)
+	var achievements_scroll_thumb = make_panel(achievements_scroll_gutter, rect_full(0.200, 0.055, 0.800, 0.520), Color(0.56, 0.48, 0.30, 0.66), 999, Color(0.72, 0.62, 0.36, 0.24), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	achievements_scroll_thumb.name = "AchievementsScrollThumb"
 	achievements_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -666,10 +666,10 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.28, 0.24, 0.16, 0.12), 0)
+	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.28, 0.24, 0.16, 0.12), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.72, 0.62, 0.36, 0.20), 0)
+	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.72, 0.62, 0.36, 0.20), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var content = VBoxContainer.new()
@@ -841,10 +841,10 @@ func _show_shop_screen_impl() -> void:
 		shop_scrollbar.name = "ShopItemsScrollBar"
 		shop_scrollbar.visible = false
 		shop_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var shop_scroll_gutter = make_panel(panel, rect_full(0.948, 0.135, 0.960, 0.750), Color(0.022, 0.030, 0.026, 0.54), 999, Color(0.28, 0.24, 0.16, 0.20), 0)
+	var shop_scroll_gutter = make_panel(panel, rect_full(0.948, 0.135, 0.960, 0.750), Color(0.022, 0.030, 0.026, 0.54), 999, Color(0.28, 0.24, 0.16, 0.20), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
 	shop_scroll_gutter.name = "ShopItemsScrollGutter"
 	shop_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var shop_scroll_thumb = make_panel(shop_scroll_gutter, rect_full(0.190, 0.050, 0.810, 0.900), Color(0.54, 0.46, 0.28, 0.66), 999, Color(0.72, 0.62, 0.36, 0.24), 0)
+	var shop_scroll_thumb = make_panel(shop_scroll_gutter, rect_full(0.190, 0.050, 0.810, 0.900), Color(0.54, 0.46, 0.28, 0.66), 999, Color(0.72, 0.62, 0.36, 0.24), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	shop_scroll_thumb.name = "ShopItemsScrollThumb"
 	shop_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
