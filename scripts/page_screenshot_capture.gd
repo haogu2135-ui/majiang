@@ -100,6 +100,7 @@ func capture_screen(screen_name: String, output_dir_res: String) -> void:
 	if scene.has_method("clear_fx_overlays"):
 		scene.clear_fx_overlays()
 	await settle()
+	_force_capture_visible_screens(scene)
 
 	var viewport_texture = root.get_texture()
 	if viewport_texture == null:
@@ -296,11 +297,25 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		_:
 			push_error("unknown screenshot screen: %s" % screen_name)
 
+
+func _force_capture_visible_screens(target: Node) -> void:
+	if target == null:
+		return
+	for node_name in [
+		"ShopCabinetFrontPanel",
+		"OnlineLobbyFormPanel",
+		"OnlineLobbyLogPanel",
+	]:
+		var node = target.find_child(node_name, true, false)
+		if node is CanvasItem:
+			(node as CanvasItem).modulate = Color(1, 1, 1, 1)
+
+
 func settle() -> void:
 	await process_frame
 	await process_frame
-	# Entrance staggers (shop/rules/stats) can last ~0.4s under xvfb (DisplayServer=x11).
-	await create_timer(0.55).timeout
+	# Entrance staggers (shop/rules/stats/online) can last ~0.4-0.5s under xvfb (DisplayServer=x11).
+	await create_timer(0.75).timeout
 	await process_frame
 	await process_frame
 

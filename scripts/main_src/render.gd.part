@@ -8520,22 +8520,22 @@ func draw_shop_native_charm_art(row: Control, item_color: Color, item_id: String
 
 
 func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id: String = "") -> void:
-	var shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
+	# r496: bright dense GPT row plate. Prefer high-luma assets over dark ui_shop_row_plate.
+	var shop_row_plate = add_optional_gpt_illustration_texture(row, "rules_guide_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.88, false)
 	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "shop_currency_meter_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.55, false)
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "fly_transition_flip", rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
+	if shop_row_plate == null:
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "settings_overview_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
+	if shop_row_plate == null:
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
 	if shop_row_plate != null:
 		shop_row_plate.name = "ShopItemRowGptPlate"
-		shop_row_plate.modulate = Color(
-			clampf(0.40 + item_color.r * 0.60, 0.20, 1.2),
-			clampf(0.40 + item_color.g * 0.60, 0.20, 1.2),
-			clampf(0.40 + item_color.b * 0.60, 0.20, 1.2),
-			0.90
-		)
+		shop_row_plate.modulate = Color(1.55, 1.38, 1.12, 0.96)
 	var shop_row_meter = add_optional_gpt_illustration_texture(row, "ui_meter_rail_plate", rect_full(0.08, 0.72, 0.92, 0.90), 0.48, false)
 	if shop_row_meter != null:
 		shop_row_meter.name = "ShopItemRowGptMeter"
 	# r204 GPT row chrome
-	var row_depth = make_gpt_plate_rect(rect_full(0.008, 0.180, 0.992, 0.985), Color(item_color.r, item_color.g, item_color.b, 0.16), "ui_shop_row_plate")
+	var row_depth = make_gpt_plate_rect(rect_full(0.008, 0.180, 0.992, 0.985), Color(0.86, 0.72, 0.48, 0.18), "settings_overview_panel")
 	row_depth.name = "ShopItem3DDepthEdge_%s" % (item_id if item_id != "" else "generic")
 	row.add_child(row_depth)
 	var row_top_rim = make_gpt_ribbon(rect_full(0.025, 0.025, 0.975, 0.085), Color(1.0, 0.88, 0.54, 0.12))

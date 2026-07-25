@@ -13080,22 +13080,22 @@ func draw_shop_native_charm_art(row: Control, item_color: Color, item_id: String
 
 
 func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id: String = "") -> void:
-	var shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
+	# r496: bright dense GPT row plate. Prefer high-luma assets over dark ui_shop_row_plate.
+	var shop_row_plate = add_optional_gpt_illustration_texture(row, "rules_guide_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.88, false)
 	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "shop_currency_meter_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.55, false)
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "fly_transition_flip", rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
+	if shop_row_plate == null:
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "settings_overview_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
+	if shop_row_plate == null:
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
 	if shop_row_plate != null:
 		shop_row_plate.name = "ShopItemRowGptPlate"
-		shop_row_plate.modulate = Color(
-			clampf(0.40 + item_color.r * 0.60, 0.20, 1.2),
-			clampf(0.40 + item_color.g * 0.60, 0.20, 1.2),
-			clampf(0.40 + item_color.b * 0.60, 0.20, 1.2),
-			0.90
-		)
+		shop_row_plate.modulate = Color(1.55, 1.38, 1.12, 0.96)
 	var shop_row_meter = add_optional_gpt_illustration_texture(row, "ui_meter_rail_plate", rect_full(0.08, 0.72, 0.92, 0.90), 0.48, false)
 	if shop_row_meter != null:
 		shop_row_meter.name = "ShopItemRowGptMeter"
 	# r204 GPT row chrome
-	var row_depth = make_gpt_plate_rect(rect_full(0.008, 0.180, 0.992, 0.985), Color(item_color.r, item_color.g, item_color.b, 0.16), "ui_shop_row_plate")
+	var row_depth = make_gpt_plate_rect(rect_full(0.008, 0.180, 0.992, 0.985), Color(0.86, 0.72, 0.48, 0.18), "settings_overview_panel")
 	row_depth.name = "ShopItem3DDepthEdge_%s" % (item_id if item_id != "" else "generic")
 	row.add_child(row_depth)
 	var row_top_rim = make_gpt_ribbon(rect_full(0.025, 0.025, 0.975, 0.085), Color(1.0, 0.88, 0.54, 0.12))
@@ -19319,26 +19319,29 @@ func _show_online_lobby_impl() -> void:
 	lobby_lower_edge.name = "OnlineLobby3DLowerEdge"
 	draw_secondary_screen_texture(panel, "online_network", "OnlineLobbyNetworkTexture", 0.040)
 	var online_gpt_key := "online_gpt_lobby"
-	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.86, false)
+	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.30, false)
 	if gpt_online_texture != null:
 		gpt_online_texture.name = "OnlineLobbyGPTTexture"
-	var online_header_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.38, false)
+		# r496: keep ornate vault, lower wash + warm lift so form text stays commercial-readable.
+		gpt_online_texture.modulate = Color(1.62, 1.40, 1.14, minf(0.48, gpt_online_texture.modulate.a))
+	var online_header_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.48, false)
 	if online_header_strip != null:
 		online_header_strip.name = "OnlineLobbyGptHeaderStrip"
-	var online_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.04, 0.12, 0.96, 0.94), 0.16, false)
+	var online_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.04, 0.12, 0.96, 0.94), 0.38, false)
 	if online_sheet != null:
 		online_sheet.name = "OnlineLobbyGptSheet"
-		gpt_online_texture.modulate = Color(1.16, 1.08, 0.96, minf(0.90, gpt_online_texture.modulate.a))  # r201 GPT-led
 	var fan_texture = add_illustration_texture(panel, "lobby_screen_fan", rect_full(0.38, 0.06, 0.98, 0.34), 0.025, false)
 	if fan_texture != null:
 		fan_texture.name = "OnlineLobbyFanTexture"
 		panel.move_child(fan_texture, 0)
 
 	# 标题区域
-	var title = make_label(panel, "联机大厅", 32, Color(0.94, 0.86, 0.48), true)
+	var title = make_label(panel, "联机大厅", 32, Color(1.0, 0.96, 0.78), true)
 	apply_rect(title, rect_full(0.04, 0.028, 0.28, 0.10))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var subtitle = make_label(panel, "连接本机或局域网房间，创建后等待玩家进入。", 15, Color(0.88, 0.94, 0.88), false)
+	title.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.92))
+	title.add_theme_constant_override("outline_size", 4)
+	var subtitle = make_label(panel, "连接本机或局域网房间，创建后等待玩家进入。", 15, Color(0.96, 0.96, 0.90), false)
 	apply_rect(subtitle, rect_full(0.04, 0.095, 0.48, 0.14))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
@@ -19359,15 +19362,17 @@ func _show_online_lobby_impl() -> void:
 		state_badge_label.name = "OnlineLobbyConnectionStateLabel"
 
 	# 表单面板 - 连接与房间设置
-	var online_split_back = make_gpt_plate_rect(rect_full(0.030, 0.155, 0.970, 0.880), Color(0.12, 0.09, 0.06, 0.06), "ui_button_face_plate")
+	var online_split_back = make_gpt_plate_rect(rect_full(0.030, 0.155, 0.970, 0.880), Color(0.90, 0.80, 0.58, 0.40), "settings_overview_panel")
 	online_split_back.name = "OnlineLobbySplitReadabilityBackplate"
 	panel.add_child(online_split_back)
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.18, 0.14, 0.10, 0.28), "ui_jade_reading_plate")
+	var form_panel = make_gpt_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.98, 0.92, 0.78, 0.90), "rules_guide_panel")
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
+	if form_panel is CanvasItem:
+		(form_panel as CanvasItem).modulate = Color(1.50, 1.36, 1.14, 0.96)
 	var form_rear = make_soft_depth_panel(form_panel, rect_full(0.012, 0.020, 0.988, 0.980), Color(0.08, 0.06, 0.04, 0.06), 12)  # r415 warm
 	form_rear.name = "OnlineLobbyForm3DRearShell"
 	form_panel.move_child(form_rear, 0)
@@ -19380,7 +19385,7 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", 20, Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_gpt_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.10, 0.07, 0.04, 0.05), "ui_button_face_plate")
+	var input_group_backplate = make_gpt_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.92, 0.84, 0.64, 0.42), "settings_overview_panel")
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
 	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.15, false)  # r182 denser group (smoke<=0.16)
@@ -19482,14 +19487,16 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.18, 0.14, 0.10, 0.28), "ui_jade_reading_plate")
+	var log_panel = make_gpt_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.98, 0.92, 0.78, 0.90), "rules_guide_panel")
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
+	if log_panel is CanvasItem:
+		(log_panel as CanvasItem).modulate = Color(1.50, 1.36, 1.14, 0.96)
 	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.10, 0.07, 0.04, 0.22), "ui_jade_reading_plate")
+	var log_readability_backplate = make_gpt_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.92, 0.84, 0.64, 0.70), "settings_overview_panel")
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
 	# 右侧面板滑入动画
@@ -19692,12 +19699,12 @@ func _show_shop_screen_impl() -> void:
 
 	# The shop is presented as a physical lacquer display cabinet. Its rear shell
 	# stays inside the safe viewport and provides depth without changing layout.
-	var cabinet_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.34), 24)
+	var cabinet_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.12), 24)
 	cabinet_shadow.name = "ShopCabinet3DCastShadow"
 	var cabinet_rear = make_gpt_plate_rect(rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.22), "ui_jade_reading_plate")
 	cabinet_rear.name = "ShopCabinet3DRearShell"
 	root_layer.add_child(cabinet_rear)
-	var cabinet_rear_gpt = add_optional_gpt_illustration_texture(cabinet_rear, "shop_gpt_vault", rect_full(-0.01, -0.01, 1.01, 1.01), 0.52, false)
+	var cabinet_rear_gpt = add_optional_gpt_illustration_texture(cabinet_rear, "shop_gpt_vault", rect_full(-0.01, -0.01, 1.01, 1.01), 0.34, false)
 	if cabinet_rear_gpt != null:
 		cabinet_rear_gpt.name = "ShopCabinetRearGPTTexture"
 		cabinet_rear.move_child(cabinet_rear_gpt, 0)
@@ -19714,13 +19721,14 @@ func _show_shop_screen_impl() -> void:
 	root_layer.add_child(panel)
 	draw_secondary_screen_texture(panel, "shop_vault", "ShopVaultTexture", 0.12)
 	var shop_gpt_key := "shop_gpt_vault"
-	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.82, false)
-	var shop_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_shop_row_plate", rect_full(0.06, 0.16, 0.94, 0.90), 0.16, false)
+	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.22, false)
+	var shop_mid_ornament = add_optional_gpt_illustration_texture(panel, "settings_overview_panel", rect_full(0.06, 0.16, 0.94, 0.90), 0.22, false)
 	if shop_mid_ornament != null:
 		shop_mid_ornament.name = "ShopMidOrnamentPlate"
 	if gpt_shop_texture != null:
 		gpt_shop_texture.name = "ShopGPTVaultTexture"
-		gpt_shop_texture.modulate = Color(1.18, 1.06, 0.94, minf(0.88, gpt_shop_texture.modulate.a))  # r200 GPT-led
+		# r496: reduce dark vault wash + warm lift so item rows remain commercial-readable.
+		gpt_shop_texture.modulate = Color(1.58, 1.34, 1.08, minf(0.62, gpt_shop_texture.modulate.a))
 		panel.move_child(gpt_shop_texture, min(1, panel.get_child_count() - 1))
 	# 书架式滑入动画 / Shelf-slide entrance
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -19733,9 +19741,11 @@ func _show_shop_screen_impl() -> void:
 
 	# 标题 - 带图标
 	add_lucide_icon(panel, "shopping-bag", rect_full(0.03, 0.030, 0.06, 0.090), GOLD_BRIGHT)
-	var title = make_label(panel, "商店", 30, Color(0.94, 0.86, 0.48), true)
+	var title = make_label(panel, "商店", 30, Color(1.0, 0.96, 0.78), true)
 	apply_rect(title, rect_full(0.07, 0.028, 0.40, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.92))
+	title.add_theme_constant_override("outline_size", 4)
 
 	# 货币显示 - 增强样式
 	var coins_panel = make_gpt_plate_rect(rect_full(0.42, 0.035, 0.62, 0.090), Color(0.110, 0.155, 0.125, 0.28), "ui_button_face_plate")
@@ -19882,19 +19892,23 @@ func _show_shop_screen_impl() -> void:
 		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
 
 		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
-		var text_plate = make_gpt_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.10, 0.07, 0.04, 0.58), "ui_jade_reading_plate")
+		var text_plate = make_gpt_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.98, 0.92, 0.78, 0.92), "rules_guide_panel")
 		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
 		row.add_child(text_plate)
 		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if text_plate is CanvasItem:
+			(text_plate as CanvasItem).modulate = Color(1.48, 1.34, 1.12, 0.94)
 
 		# 道具名称
-		var name_label = make_label(row, str(item_info.get("name", item_id)), 18, Color(0.99, 0.96, 0.88), true)
+		var name_label = make_label(row, str(item_info.get("name", item_id)), 20, Color(1.0, 0.98, 0.92), true)
 		name_label.name = "ShopItemName_%s" % item_id
 		apply_rect(name_label, rect_full(0.164, 0.090, 0.480, 0.440))
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.62))
+		name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
 		name_label.add_theme_constant_override("shadow_offset_x", 1)
 		name_label.add_theme_constant_override("shadow_offset_y", 1)
+		name_label.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.90))
+		name_label.add_theme_constant_override("outline_size", 4)
 		configure_clipped_label(name_label)
 		var identity_label = make_label(row, shop_item_identity_text(item_id), 10, Color(item_color.r, item_color.g, item_color.b, 0.96), true)
 		identity_label.name = "ShopItemIdentity_%s" % item_id
@@ -19902,13 +19916,15 @@ func _show_shop_screen_impl() -> void:
 		identity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 		# 道具描述
-		var desc_label = make_label(row, str(item_info.get("desc", "")), 12, Color(0.92, 0.90, 0.82), false)
+		var desc_label = make_label(row, str(item_info.get("desc", "")), 14, Color(0.98, 0.96, 0.90), false)
 		desc_label.name = "ShopItemDescription_%s" % item_id
 		apply_rect(desc_label, rect_full(0.164, 0.505, 0.590, 0.885))
 		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		desc_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.50))
+		desc_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.80))
 		desc_label.add_theme_constant_override("shadow_offset_x", 1)
 		desc_label.add_theme_constant_override("shadow_offset_y", 1)
+		desc_label.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.85))
+		desc_label.add_theme_constant_override("outline_size", 3)
 		configure_clipped_label(desc_label)
 
 		# 拥有数量 - 带徽章样式
