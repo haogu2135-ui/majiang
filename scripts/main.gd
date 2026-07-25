@@ -833,7 +833,6 @@ func speak_action_call(action: String, tile: String) -> void:
 
 func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 	var best: Dictionary = {}
-	var best_score = -1.0
 	var visible_counts_snapshot = visible_tile_counts()
 	for offset in range(1, 4):
 		var seat = (from_seat + offset) % 4
@@ -861,25 +860,46 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 				pass
 			else:
 				var gang_score = ai_claim_action_score(gang_report, offset)
-				if gang_score > best_score:
-					best = {"seat": seat, "claim": "gang", "score": gang_score, "claim_report": gang_report}
-					best_score = gang_score
+				var gang_candidate = {"seat": seat, "claim": "gang", "score": gang_score, "claim_report": gang_report}
+				if ai_claim_candidate_precedes(gang_candidate, best, from_seat):
+					best = gang_candidate
 		if options.has("peng"):
 			var peng_report = build_ai_claim_report(seat, "peng", tile, {}, claim_context)
 			if not bool(peng_report.get("allow", false)):
 				pass
 			else:
 				var peng_score = ai_claim_action_score(peng_report, offset)
-				if peng_score > best_score:
-					best = {"seat": seat, "claim": "peng", "score": peng_score, "claim_report": peng_report}
-					best_score = peng_score
+				var peng_candidate = {"seat": seat, "claim": "peng", "score": peng_score, "claim_report": peng_report}
+				if ai_claim_candidate_precedes(peng_candidate, best, from_seat):
+					best = peng_candidate
 		if options.has("chi"):
 			var chi_claim = best_ai_chi_claim(seat, tile, offset, claim_context)
-			var chi_score = float(chi_claim.get("score", -1000000.0))
-			if not chi_claim.is_empty() and chi_score > best_score:
+			if not chi_claim.is_empty() and ai_claim_candidate_precedes(chi_claim, best, from_seat):
 				best = chi_claim
-				best_score = chi_score
 	return best
+
+
+func claim_turn_offset(from_seat: int, claimant_seat: int) -> int:
+	if from_seat < 0 or claimant_seat < 0:
+		return 4
+	return posmod(claimant_seat - from_seat, 4)
+
+
+func ai_claim_candidate_precedes(candidate: Dictionary, incumbent: Dictionary, from_seat: int) -> bool:
+	if candidate.is_empty():
+		return false
+	if incumbent.is_empty():
+		return true
+	var candidate_priority = claim_priority(str(candidate.get("claim", "")))
+	var incumbent_priority = claim_priority(str(incumbent.get("claim", "")))
+	if candidate_priority != incumbent_priority:
+		return candidate_priority > incumbent_priority
+	var candidate_offset = claim_turn_offset(from_seat, int(candidate.get("seat", -1)))
+	var incumbent_offset = claim_turn_offset(from_seat, int(incumbent.get("seat", -1)))
+	if candidate_offset != incumbent_offset:
+		return candidate_offset < incumbent_offset
+	# 同一座位可能同时持有碰/杠选择；此时才让策略估值决定动作。
+	return float(candidate.get("score", -1000000.0)) > float(incumbent.get("score", -1000000.0))
 
 func best_ai_chi_claim(seat: int, tile: String, offset: int = 1, claim_context: Dictionary = {}) -> Dictionary:
 	var best: Dictionary = {}
@@ -1226,6 +1246,34 @@ func choose_ai_rob_gang(gang_seat: int, tile: String) -> Dictionary:
 			# 抢杠固定接受：额外番型 + 对手公开加杠信息。
 			return {"seat": seat, "claim": "hu", "score": 1100.0 - offset, "claim_report": {"accept": true, "reason": "抢杠", "fan": 0, "points": 0}}
 	return {}
+
+
+func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
+	var report := {
+		"can_rob": false,
+		"winner_seat": -1,
+		"robbers": [],
+		"human_robber": false,
+		"ai_robber": false,
+	}
+	if gang_seat < 0 or gang_seat >= players.size() or tile == "":
+		return report
+	var robbers: Array = []
+	for offset in range(1, 4):
+		var seat = (gang_seat + offset) % 4
+		if not can_win_for_seat(seat, tile):
+			continue
+		robbers.append(seat)
+		if int(report.get("winner_seat", -1)) < 0:
+			# 同级抢杠按出杠后的近家顺序仲裁；玩家可见窗口仍由玩法层处理。
+			report["winner_seat"] = seat
+		if is_ai_controlled_seat(seat):
+			report["ai_robber"] = true
+		else:
+			report["human_robber"] = true
+	report["robbers"] = robbers
+	report["can_rob"] = not robbers.is_empty()
+	return report
 
 # 荣和价值权衡：薄低番可过，厚高番/高压/守成必吃。
 func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -> Dictionary:
@@ -1654,6 +1702,71 @@ func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_rep
 			pen *= 0.55
 	return clamp(pen, 0.0, 220.0)
 
+
+func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> Dictionary:
+	var out := {
+		"pending": false,
+		"penalty": 0.0,
+		"opponent": -1,
+		"name": "",
+		"claim_count": 0,
+		"feed_score": 0.0,
+		"readiness": 0.0,
+		"text": "",
+	}
+	if mode != "offline" or seat < 0 or seat >= players.size() or tile == "":
+		return out
+	var details: Array = feed_report.get("details", [])
+	for item in details:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var opponent = int(item.get("opponent", -1))
+		if opponent < 0 or opponent >= players.size() or opponent == seat:
+			continue
+		# 已经由别人包赔时，本次弃牌不会把责任转移给当前出牌者。
+		if offline_package_liability.has(opponent):
+			continue
+		var claim_count = int(offline_claim_counts.get(claim_source_key(opponent, seat), 0))
+		if claim_count < 2:
+			continue
+		var feed_score = float(item.get("score", 0.0))
+		if feed_score <= 0.0:
+			continue
+		var readiness = opponent_readiness_score(opponent, eval_context)
+		var plan_pressure = opponent_plan_pressure(opponent, eval_context)
+		var meld_count = int(players[opponent].get("melds", []).size())
+		var penalty = 52.0 + feed_score * 1.55 + readiness * 1.8 + plan_pressure * 0.75 + float(meld_count) * 7.0
+		if get_wall_count() <= 28:
+			penalty += 14.0
+		if get_wall_count() <= 16:
+			penalty += 18.0
+		# 听牌时仍可为优质进攻承担责任；离听越远，越没有理由送出第三搭。
+		if shanten <= 0:
+			penalty *= 0.38
+		elif shanten == 1:
+			penalty *= 0.64
+		elif shanten >= 3:
+			penalty *= 1.12
+		match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
+			AI_DIFFICULTY_HARD:
+				penalty *= 1.48
+			AI_DIFFICULTY_EASY:
+				penalty *= 0.52
+		penalty = clamp(penalty, 0.0, 280.0)
+		if penalty <= float(out.get("penalty", 0.0)):
+			continue
+		var opponent_name = str(players[opponent].get("name", "座位%d" % opponent))
+		out["pending"] = true
+		out["penalty"] = penalty
+		out["opponent"] = opponent
+		out["name"] = opponent_name
+		out["claim_count"] = claim_count
+		out["feed_score"] = feed_score
+		out["readiness"] = readiness
+		out["text"] = "包三搭风险·%s" % opponent_name
+	return out
+
+
 func human_claim_discipline_report(seat: int, claim: String, from_seat: int, before_shanten: int, after_shanten: int, shape_gain: float, pressure_report: Dictionary = {}, open_melds: int = 0) -> Dictionary:
 	# R10: 对玩家弃牌的吃碰更克制；副露后若必打危险张喂 seat0，则拒吃/降分。
 	var out := {
@@ -1678,7 +1791,8 @@ func human_claim_discipline_report(seat: int, claim: String, from_seat: int, bef
 	var forced_safety = str(pressure_report.get("safety", "")) if typeof(pressure_report) == TYPE_DICTIONARY else ""
 	var feed_human = 0.0
 	if forced_tile != "":
-		var feed_report = deal_in_risk_summary(forced_tile, seat)
+		# human_target_discard_penalty 需要的是吃碰喂牌详情，不是仅含点炮摘要的 risk summary。
+		var feed_report = discard_feed_risk_report(forced_tile, seat)
 		var details: Array = feed_report.get("details", []) if typeof(feed_report) == TYPE_DICTIONARY else []
 		for item in details:
 			if typeof(item) != TYPE_DICTIONARY:
@@ -2090,6 +2204,7 @@ func ai_report_cache_key(seat: int) -> String:
 		"handno=%d" % offline_hand_number,
 		"wall=%d" % get_wall_count(),
 		"diff=%d" % clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD),
+		"package=" + package_liability_ai_cache_key(),
 	]
 	for player_seat in range(players.size()):
 		var player: Dictionary = players[player_seat]
@@ -2099,6 +2214,22 @@ func ai_report_cache_key(seat: int) -> String:
 		parts.append("p%d_disc=%s" % [player_seat, tile_array_key(player.get("discards", []))])
 		parts.append("p%d_meld=%s" % [player_seat, meld_array_key(player.get("melds", []))])
 	return "|".join(parts)
+
+
+func package_liability_ai_cache_key() -> String:
+	var parts: Array[String] = []
+	var claim_keys: Array = offline_claim_counts.keys()
+	claim_keys.sort_custom(func(a, b): return str(a) < str(b))
+	for key in claim_keys:
+		var count = int(offline_claim_counts.get(key, 0))
+		if count > 0:
+			parts.append("%s=%d" % [str(key), count])
+	var liability_keys: Array = offline_package_liability.keys()
+	liability_keys.sort_custom(func(a, b): return int(a) < int(b))
+	for key in liability_keys:
+		parts.append("L%s=%d" % [str(key), int(offline_package_liability.get(key, -1))])
+	return ",".join(parts)
+
 
 func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = []) -> Dictionary:
 	var simulated_counts = simulated_counts_snapshot if not simulated_counts_snapshot.is_empty() else tile_counts(simulated)
@@ -2205,6 +2336,10 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	# R9: 针对玩家的点炮惩罚（困难更重）
 	var human_pen = human_target_discard_penalty(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
 	score -= human_pen
+	# R11: 第三次喂同一家吃碰杠会形成包三搭责任，按牌况和难度显式规避。
+	var package_report = package_feed_discipline_report(seat, tile, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
+	var package_pen = float(package_report.get("penalty", 0.0))
+	score -= package_pen
 	return {
 		"tile": tile,
 		"score": score,
@@ -2236,6 +2371,10 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		"stance": ai_stance_label(defense, shanten),
 		"defense": defense,
 		"human_target_penalty": human_pen,
+		"package_feed_pending": bool(package_report.get("pending", false)),
+		"package_feed_penalty": package_pen,
+		"package_feed_opponent": int(package_report.get("opponent", -1)),
+		"package_feed_text": str(package_report.get("text", "")),
 		"ai_profile": ai_profile_label(seat),
 		"ai_profile_short": ai_profile_short_label(seat),
 		"ai_attack_multiplier": attack,
@@ -2930,8 +3069,10 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
 	var current_shanten = known_shanten if known_shanten != 99 else calculate_min_shanten_from_counts(hand_counts, open_melds)
 
-	# 缓存键：向听数 + 手牌计数
-	var cache_key = "%d:%d:%s" % [current_shanten, open_melds, counts_compact_key(hand_counts)]
+	# 有效张种类取决于手牌，但有效张数还取决于已见牌。
+	# 将可见张快照纳入缓存键，避免牌河/副露变化后复用旧的 ukeire。
+	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
+	var cache_key = "%d:%d:%s:%s" % [current_shanten, open_melds, counts_compact_key(hand_counts), counts_compact_key(visible_counts)]
 	if effective_tiles_cache.has(cache_key):
 		effective_tiles_cache_hits += 1
 		# 移到最近使用
@@ -2941,7 +3082,6 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 
 	effective_tiles_cache_misses += 1
 	var next_tile_count = hand.size() + 1
-	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
 	var total = 0
 	var variety = 0
 	var tiles: Array[String] = []
@@ -3951,7 +4091,10 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	var after_shanten = calculate_min_shanten(after, after_open_melds)
 	var pressure = opponent_pressure_score(seat)
 	var defense = ai_defense_weight(seat, before_shanten)
-	var rob_risk = gang_kind == "added" and seat != 0 and can_win_for_seat(0, tile)
+	# 补杠前先扫描整桌：旧逻辑只会看到玩家抢杠，AI 对 AI 时会把必被
+	# 抢走的补杠送入玩法层。任何一家已经能抢杠，当前 AI 都不应宣告该补杠。
+	var rob_threat = added_gang_rob_threat_report(seat, tile) if gang_kind == "added" else {}
+	var rob_risk = bool(rob_threat.get("can_rob", false))
 	# 杠牌可能导致有效进张（待牌）收窄：暗杠会从怀里抽走 4 张同名牌，
 	# 其中可能包含正在充当 kanchan/ryanmen 等待进张的孤张，进而压低听牌宽度。
 	# 关键约束：进张数只在「同一向听等级」下才可直接比较——杠后向听升高时
@@ -3972,6 +4115,8 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	report["pressure"] = pressure
 	report["defense"] = defense
 	report["rob_risk"] = rob_risk
+	report["rob_winner_seat"] = int(rob_threat.get("winner_seat", -1))
+	report["robbers"] = rob_threat.get("robbers", [])
 	report["before_ukeire"] = before_ukeire
 	report["after_ukeire"] = after_ukeire
 	report["wait_narrowed"] = wait_narrowed
@@ -4348,6 +4493,14 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 		return tile
 	return ""
 
+func draw_turn_tile_or_finish(seat: int, announce: bool = true, source: String = "normal") -> String:
+	var drawn = draw_tile_for(seat, announce, source)
+	# 牌墙可能只剩花牌：draw_tile_for 会完成补花后返回空串。此时没有
+	# 可供出牌的实牌，必须立刻荒庄，不能继续以少一张手牌进入 await_discard。
+	if drawn == "":
+		finish_wall_draw()
+	return drawn
+
 func sort_hand(hand: Array) -> void:
 	hand.sort_custom(func(a, b): return tile_sort_index(str(a)) < tile_sort_index(str(b)))
 
@@ -4567,7 +4720,7 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 		if was_rob_gang:
 			resolve_after_rob_gang_pass(from_seat, tile, prepared_ai_claim)
 		else:
-			resolve_ai_or_advance(from_seat, tile)
+			resolve_ai_or_advance(from_seat, tile, prepared_ai_claim)
 		if offline_phase == "await_discard":
 			run_ai_until_human()
 		return
@@ -4652,6 +4805,28 @@ func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
 			ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
 		return
 
+func _ai_sim_note_terminal_result(actor_seat: int) -> void:
+	# 不能根据触发动作推断终局类型：他家放铳后碰杠补牌自摸，或抢杠胡，
+	# 都会在同一轮 resolve 内结束。结算记录才是唯一准确来源。
+	if offline_phase != "ended":
+		return
+	if offline_last_winner < 0:
+		# 杠后补花可能刚好抽尽尾墙；该路径不会经过同步循环的常规摸牌分支。
+		ai_sim_stats["wall_ends"] = int(ai_sim_stats.get("wall_ends", 0)) + 1
+		return
+	var winner = offline_last_winner
+	var self_draw = bool(last_win_score.get("self_draw", false))
+	ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
+	ai_sim_stats["winner"] = winner
+	ai_sim_stats["self_draw"] = self_draw
+	if self_draw or actor_seat == winner:
+		return
+	ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
+	ai_sim_stats["deal_in_seat"] = actor_seat
+	# R10: 点炮给玩家（seat0）单独计数，衡量人机防点炮。
+	if winner == 0:
+		ai_sim_stats["deal_ins_to_human"] = int(ai_sim_stats.get("deal_ins_to_human", 0)) + 1
+
 func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 	# Headless all-bot single hand. Caller should deal_offline_hand first (or we deal).
 	if players.size() < 4:
@@ -4694,9 +4869,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
 				if bool(tsumo_decision.get("accept", true)):
 					finish_offline_round(seat, drawn, true, -1)
-					ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
-					ai_sim_stats["winner"] = seat
-					ai_sim_stats["self_draw"] = true
+					_ai_sim_note_terminal_result(seat)
 					break
 				ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
 			var gang_tile = choose_ai_concealed_gang(seat)
@@ -4704,7 +4877,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				perform_concealed_gang(seat, gang_tile)
 				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
 				if offline_phase == "ended":
-					ai_sim_stats["winner"] = offline_last_winner
+					_ai_sim_note_terminal_result(seat)
 					break
 				continue
 			gang_tile = choose_ai_added_gang(seat)
@@ -4712,7 +4885,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				perform_added_gang(seat, gang_tile)
 				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
 				if offline_phase == "ended":
-					ai_sim_stats["winner"] = offline_last_winner
+					_ai_sim_note_terminal_result(seat)
 					break
 				# added gang may leave await_discard after draw
 				continue
@@ -4753,16 +4926,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		var before_phase = offline_phase
 		resolve_after_discard(seat, discard_tile)
 		if offline_phase == "ended":
-			ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
-			ai_sim_stats["winner"] = offline_last_winner
-			ai_sim_stats["self_draw"] = false
-			# 非自摸终局：记放铳
-			if seat != offline_last_winner:
-				ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
-				ai_sim_stats["deal_in_seat"] = seat
-				# R10: 点炮给玩家（seat0）单独计数，衡量人机防点炮
-				if offline_last_winner == 0:
-					ai_sim_stats["deal_ins_to_human"] = int(ai_sim_stats.get("deal_ins_to_human", 0)) + 1
+			_ai_sim_note_terminal_result(seat)
 			break
 		if offline_phase == "await_discard" and before_phase == "resolving":
 			# claim applied or passed
@@ -4939,7 +5103,9 @@ func run_ai_until_human() -> void:
 			await wait_for_runtime_delay(ai_draw_delay())
 			if mode != "offline" or offline_phase != "await_discard" or current_seat != seat:
 				break
-			var drawn = draw_tile_for(seat)
+			var drawn = draw_turn_tile_or_finish(seat)
+			if drawn == "":
+				break
 			play_ai_draw_tile_animation(seat, drawn)
 			sort_hand(players[seat]["hand"])
 			offline_turn_needs_draw = false
@@ -4987,14 +5153,15 @@ func run_ai_until_human() -> void:
 		else:
 			await wait_for_runtime_delay(human_draw_delay())
 			if mode == "offline" and offline_phase == "await_discard" and current_seat == 0:
-				var drawn = draw_tile_for(0)
-				sort_hand(players[0]["hand"])
-				offline_turn_needs_draw = false
-				if can_win_for_seat(0):
-					add_log("你摸到%s，可以自摸。" % tile_label(drawn))
-				else:
-					add_log("轮到你出牌。")
-				render_game()
+				var drawn = draw_turn_tile_or_finish(0)
+				if drawn != "":
+					sort_hand(players[0]["hand"])
+					offline_turn_needs_draw = false
+					if can_win_for_seat(0):
+						add_log("你摸到%s，可以自摸。" % tile_label(drawn))
+					else:
+						add_log("轮到你出牌。")
+					render_game()
 	offline_ai_active = false
 
 func discard_tile_by_index(seat: int, index: int) -> String:
@@ -5034,13 +5201,14 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 	if not is_ai_controlled_seat(0) and from_seat != 0:
 		var human_hand_counts = tile_counts(players[0]["hand"])
 		var human_options = get_claim_options(0, from_seat, tile, human_hand_counts)
-		var visible_human_options = filter_claim_options_by_priority(human_options, claim_priority(str(ai_claim.get("claim", ""))))
+		var visible_human_options = filter_human_claim_options(human_options, from_seat, ai_claim)
 		if not visible_human_options.is_empty():
 			offline_pending_claim = {
 				"from_seat": from_seat,
 				"tile": tile,
 				"options": visible_human_options,
 				"chi_choices": get_chi_choices_from_counts(human_hand_counts, tile) if visible_human_options.has("chi") else [],
+				"ai_claim": ai_claim,
 			}
 			offline_phase = "pending_claim"
 			add_log("你可响应%s。" % tile_label(tile))
@@ -5068,6 +5236,25 @@ func filter_claim_options_by_priority(options: Array, minimum_priority: int) -> 
 		var claim = str(option)
 		if claim_priority(claim) >= minimum_priority:
 			result.append(claim)
+	return result
+
+
+func filter_human_claim_options(options: Array, from_seat: int, ai_claim: Dictionary = {}) -> Array:
+	if ai_claim.is_empty():
+		return options.duplicate()
+	var result: Array = []
+	var ai_priority = claim_priority(str(ai_claim.get("claim", "")))
+	var human_offset = claim_turn_offset(from_seat, 0)
+	var ai_offset = claim_turn_offset(from_seat, int(ai_claim.get("seat", -1)))
+	for option in options:
+		var claim = str(option)
+		var priority = claim_priority(claim)
+		if priority > ai_priority:
+			result.append(option)
+		elif priority == ai_priority:
+			# 保留项目现有多人可胡交互；碰杠等同级响应按近家优先。
+			if claim == "hu" or human_offset < ai_offset:
+				result.append(option)
 	return result
 
 func claim_priority(claim: String) -> int:
@@ -5208,6 +5395,8 @@ func finish_wall_draw() -> void:
 	offline_last_winner = -1
 	offline_dealer_repeat = true
 	last_score_deltas = [0, 0, 0, 0]
+	# 荒庄没有胡牌详情；清除上一局数据，避免结算面板展示过期番种。
+	last_win_score.clear()
 	round_summary = "荒庄，牌墙已空。%s连庄。" % players[dealer_seat]["name"]
 	add_log(round_summary)
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
@@ -5215,16 +5404,20 @@ func finish_wall_draw() -> void:
 	save_offline_progress()
 	render_game()
 
+func win_fx_type_for_score(score_data: Dictionary, self_draw: bool) -> String:
+	# points 是实际结算分（最低也有 200），不能用于判断“高番”特效。
+	# 统一按原始番数分档，避免所有普通和牌都误走 special 演出。
+	if int(score_data.get("fan", 0)) >= 6:
+		return "special"
+	return "self_draw" if self_draw else "normal"
+
 func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> void:
 	play_sfx("win", -1.0)
 	speak_action_call("自摸" if self_draw else "胡", win_tile)
 	var score_data = calculate_win_score(winner, win_tile, self_draw, win_context)
 	var fx_burst_text = ("自摸" if self_draw else "胡") + ("" if winner == 0 else " " + str(players[winner].get("name", "")))
 	var fx_burst_color = GOLD_PRIMARY if winner == 0 else VERMILION
-	# 判断胜利类型
-	var win_type = "self_draw" if self_draw else "normal"
-	if score_data.get("points", 0) >= 6:  # 高番数使用special效果
-		win_type = "special"
+	var win_type = win_fx_type_for_score(score_data, self_draw)
 	play_fx_win_burst_enhanced(fx_burst_text, fx_burst_color, win_type)
 	var points = int(score_data.get("points", 0))
 	var package_payer = package_payer_for(winner)
@@ -5584,7 +5777,13 @@ func discard_reason_label(tile: String, original_hand: Array, report: Dictionary
 
 func discard_safety_text(report: Dictionary) -> String:
 	var feed = str(report.get("feed_text", ""))
-	var suffix = " · " + feed if feed != "" else ""
+	var package_feed = str(report.get("package_feed_text", ""))
+	var feed_parts: Array[String] = []
+	if feed != "":
+		feed_parts.append(feed)
+	if package_feed != "":
+		feed_parts.append(package_feed)
+	var suffix = " · " + " · ".join(feed_parts) if not feed_parts.is_empty() else ""
 	match str(report.get("safety_label", "")):
 		"安":
 			return "全现物" + suffix
@@ -5602,6 +5801,8 @@ func discard_safety_text(report: Dictionary) -> String:
 		extra_parts.append(danger)
 	if feed != "":
 		extra_parts.append(feed)
+	if package_feed != "":
+		extra_parts.append(package_feed)
 	return "风险%s%s" % [
 		str(report.get("risk_label", "中")),
 		" · " + " · ".join(extra_parts) if not extra_parts.is_empty() else "",
@@ -6986,7 +7187,9 @@ func draw_after_gang(seat: int) -> void:
 	if wall.is_empty():
 		finish_wall_draw()
 		return
-	var drawn = draw_tile_for(seat, true, "gang")
+	var drawn = draw_turn_tile_or_finish(seat, true, "gang")
+	if drawn == "":
+		return
 	sort_hand(players[seat]["hand"])
 	offline_turn_needs_draw = false
 	offline_phase = "await_discard"
@@ -23427,6 +23630,8 @@ func deal_offline_hand() -> void:
 	offline_ai_active = false
 	round_summary = ""
 	last_score_deltas.clear()
+	# 上局胡牌详情只属于其结算面板，不能带入新一局。
+	last_win_score.clear()
 	offline_last_winner = -1
 	offline_dealer_repeat = false
 	offline_draw_serial = 0
@@ -26250,7 +26455,12 @@ func main_threat_opponent(seat: int, eval_context: Dictionary = {}) -> int:
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		var score = opponent_plan_pressure(other, eval_context)
+		var plan_pressure = opponent_plan_pressure(other, eval_context)
+		var readiness = opponent_readiness_score(other, eval_context)
+		# 无副露的深牌河同样可能已近听。主威胁必须与威胁面板的
+		# 路线/就绪口径一致，否则该对手的现物拿不到防守加分。
+		var readiness_pressure = readiness * 1.55 if readiness >= 7.0 else 0.0
+		var score = max(plan_pressure, readiness_pressure)
 		if score > best_score:
 			best_score = score
 			best_opponent = other
@@ -26272,6 +26482,12 @@ func is_tile_safe_against_all(tile: String, seat: int, eval_context: Dictionary 
 func is_suji_safe_tile(tile: String, seat: int, eval_context: Dictionary = {}) -> bool:
 	if not is_number_tile(tile) or seat < 0 or seat >= players.size():
 		return false
+	# "筋" is presented as a global safety cue and receives a defense bonus.
+	# Once a table has a clear main threat, a suji from an unrelated player must
+	# not make a tile look safe against that threat.
+	var main_threat = main_threat_opponent(seat, eval_context)
+	if main_threat >= 0:
+		return is_suji_safe_against_opponent(tile, main_threat, eval_context)
 	for other in range(players.size()):
 		if other == seat:
 			continue

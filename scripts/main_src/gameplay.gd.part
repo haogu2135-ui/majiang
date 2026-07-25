@@ -290,6 +290,14 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 		return tile
 	return ""
 
+func draw_turn_tile_or_finish(seat: int, announce: bool = true, source: String = "normal") -> String:
+	var drawn = draw_tile_for(seat, announce, source)
+	# 牌墙可能只剩花牌：draw_tile_for 会完成补花后返回空串。此时没有
+	# 可供出牌的实牌，必须立刻荒庄，不能继续以少一张手牌进入 await_discard。
+	if drawn == "":
+		finish_wall_draw()
+	return drawn
+
 func sort_hand(hand: Array) -> void:
 	hand.sort_custom(func(a, b): return tile_sort_index(str(a)) < tile_sort_index(str(b)))
 
@@ -509,7 +517,7 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 		if was_rob_gang:
 			resolve_after_rob_gang_pass(from_seat, tile, prepared_ai_claim)
 		else:
-			resolve_ai_or_advance(from_seat, tile)
+			resolve_ai_or_advance(from_seat, tile, prepared_ai_claim)
 		if offline_phase == "await_discard":
 			run_ai_until_human()
 		return
@@ -594,6 +602,28 @@ func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
 			ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
 		return
 
+func _ai_sim_note_terminal_result(actor_seat: int) -> void:
+	# 不能根据触发动作推断终局类型：他家放铳后碰杠补牌自摸，或抢杠胡，
+	# 都会在同一轮 resolve 内结束。结算记录才是唯一准确来源。
+	if offline_phase != "ended":
+		return
+	if offline_last_winner < 0:
+		# 杠后补花可能刚好抽尽尾墙；该路径不会经过同步循环的常规摸牌分支。
+		ai_sim_stats["wall_ends"] = int(ai_sim_stats.get("wall_ends", 0)) + 1
+		return
+	var winner = offline_last_winner
+	var self_draw = bool(last_win_score.get("self_draw", false))
+	ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
+	ai_sim_stats["winner"] = winner
+	ai_sim_stats["self_draw"] = self_draw
+	if self_draw or actor_seat == winner:
+		return
+	ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
+	ai_sim_stats["deal_in_seat"] = actor_seat
+	# R10: 点炮给玩家（seat0）单独计数，衡量人机防点炮。
+	if winner == 0:
+		ai_sim_stats["deal_ins_to_human"] = int(ai_sim_stats.get("deal_ins_to_human", 0)) + 1
+
 func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 	# Headless all-bot single hand. Caller should deal_offline_hand first (or we deal).
 	if players.size() < 4:
@@ -636,9 +666,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
 				if bool(tsumo_decision.get("accept", true)):
 					finish_offline_round(seat, drawn, true, -1)
-					ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
-					ai_sim_stats["winner"] = seat
-					ai_sim_stats["self_draw"] = true
+					_ai_sim_note_terminal_result(seat)
 					break
 				ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
 			var gang_tile = choose_ai_concealed_gang(seat)
@@ -646,7 +674,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				perform_concealed_gang(seat, gang_tile)
 				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
 				if offline_phase == "ended":
-					ai_sim_stats["winner"] = offline_last_winner
+					_ai_sim_note_terminal_result(seat)
 					break
 				continue
 			gang_tile = choose_ai_added_gang(seat)
@@ -654,7 +682,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				perform_added_gang(seat, gang_tile)
 				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
 				if offline_phase == "ended":
-					ai_sim_stats["winner"] = offline_last_winner
+					_ai_sim_note_terminal_result(seat)
 					break
 				# added gang may leave await_discard after draw
 				continue
@@ -695,16 +723,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		var before_phase = offline_phase
 		resolve_after_discard(seat, discard_tile)
 		if offline_phase == "ended":
-			ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
-			ai_sim_stats["winner"] = offline_last_winner
-			ai_sim_stats["self_draw"] = false
-			# 非自摸终局：记放铳
-			if seat != offline_last_winner:
-				ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
-				ai_sim_stats["deal_in_seat"] = seat
-				# R10: 点炮给玩家（seat0）单独计数，衡量人机防点炮
-				if offline_last_winner == 0:
-					ai_sim_stats["deal_ins_to_human"] = int(ai_sim_stats.get("deal_ins_to_human", 0)) + 1
+			_ai_sim_note_terminal_result(seat)
 			break
 		if offline_phase == "await_discard" and before_phase == "resolving":
 			# claim applied or passed
@@ -881,7 +900,9 @@ func run_ai_until_human() -> void:
 			await wait_for_runtime_delay(ai_draw_delay())
 			if mode != "offline" or offline_phase != "await_discard" or current_seat != seat:
 				break
-			var drawn = draw_tile_for(seat)
+			var drawn = draw_turn_tile_or_finish(seat)
+			if drawn == "":
+				break
 			play_ai_draw_tile_animation(seat, drawn)
 			sort_hand(players[seat]["hand"])
 			offline_turn_needs_draw = false
@@ -929,14 +950,15 @@ func run_ai_until_human() -> void:
 		else:
 			await wait_for_runtime_delay(human_draw_delay())
 			if mode == "offline" and offline_phase == "await_discard" and current_seat == 0:
-				var drawn = draw_tile_for(0)
-				sort_hand(players[0]["hand"])
-				offline_turn_needs_draw = false
-				if can_win_for_seat(0):
-					add_log("你摸到%s，可以自摸。" % tile_label(drawn))
-				else:
-					add_log("轮到你出牌。")
-				render_game()
+				var drawn = draw_turn_tile_or_finish(0)
+				if drawn != "":
+					sort_hand(players[0]["hand"])
+					offline_turn_needs_draw = false
+					if can_win_for_seat(0):
+						add_log("你摸到%s，可以自摸。" % tile_label(drawn))
+					else:
+						add_log("轮到你出牌。")
+					render_game()
 	offline_ai_active = false
 
 func discard_tile_by_index(seat: int, index: int) -> String:
@@ -976,13 +998,14 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 	if not is_ai_controlled_seat(0) and from_seat != 0:
 		var human_hand_counts = tile_counts(players[0]["hand"])
 		var human_options = get_claim_options(0, from_seat, tile, human_hand_counts)
-		var visible_human_options = filter_claim_options_by_priority(human_options, claim_priority(str(ai_claim.get("claim", ""))))
+		var visible_human_options = filter_human_claim_options(human_options, from_seat, ai_claim)
 		if not visible_human_options.is_empty():
 			offline_pending_claim = {
 				"from_seat": from_seat,
 				"tile": tile,
 				"options": visible_human_options,
 				"chi_choices": get_chi_choices_from_counts(human_hand_counts, tile) if visible_human_options.has("chi") else [],
+				"ai_claim": ai_claim,
 			}
 			offline_phase = "pending_claim"
 			add_log("你可响应%s。" % tile_label(tile))
@@ -1010,6 +1033,25 @@ func filter_claim_options_by_priority(options: Array, minimum_priority: int) -> 
 		var claim = str(option)
 		if claim_priority(claim) >= minimum_priority:
 			result.append(claim)
+	return result
+
+
+func filter_human_claim_options(options: Array, from_seat: int, ai_claim: Dictionary = {}) -> Array:
+	if ai_claim.is_empty():
+		return options.duplicate()
+	var result: Array = []
+	var ai_priority = claim_priority(str(ai_claim.get("claim", "")))
+	var human_offset = claim_turn_offset(from_seat, 0)
+	var ai_offset = claim_turn_offset(from_seat, int(ai_claim.get("seat", -1)))
+	for option in options:
+		var claim = str(option)
+		var priority = claim_priority(claim)
+		if priority > ai_priority:
+			result.append(option)
+		elif priority == ai_priority:
+			# 保留项目现有多人可胡交互；碰杠等同级响应按近家优先。
+			if claim == "hu" or human_offset < ai_offset:
+				result.append(option)
 	return result
 
 func claim_priority(claim: String) -> int:
@@ -1150,6 +1192,8 @@ func finish_wall_draw() -> void:
 	offline_last_winner = -1
 	offline_dealer_repeat = true
 	last_score_deltas = [0, 0, 0, 0]
+	# 荒庄没有胡牌详情；清除上一局数据，避免结算面板展示过期番种。
+	last_win_score.clear()
 	round_summary = "荒庄，牌墙已空。%s连庄。" % players[dealer_seat]["name"]
 	add_log(round_summary)
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
@@ -1157,16 +1201,20 @@ func finish_wall_draw() -> void:
 	save_offline_progress()
 	render_game()
 
+func win_fx_type_for_score(score_data: Dictionary, self_draw: bool) -> String:
+	# points 是实际结算分（最低也有 200），不能用于判断“高番”特效。
+	# 统一按原始番数分档，避免所有普通和牌都误走 special 演出。
+	if int(score_data.get("fan", 0)) >= 6:
+		return "special"
+	return "self_draw" if self_draw else "normal"
+
 func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> void:
 	play_sfx("win", -1.0)
 	speak_action_call("自摸" if self_draw else "胡", win_tile)
 	var score_data = calculate_win_score(winner, win_tile, self_draw, win_context)
 	var fx_burst_text = ("自摸" if self_draw else "胡") + ("" if winner == 0 else " " + str(players[winner].get("name", "")))
 	var fx_burst_color = GOLD_PRIMARY if winner == 0 else VERMILION
-	# 判断胜利类型
-	var win_type = "self_draw" if self_draw else "normal"
-	if score_data.get("points", 0) >= 6:  # 高番数使用special效果
-		win_type = "special"
+	var win_type = win_fx_type_for_score(score_data, self_draw)
 	play_fx_win_burst_enhanced(fx_burst_text, fx_burst_color, win_type)
 	var points = int(score_data.get("points", 0))
 	var package_payer = package_payer_for(winner)
@@ -1526,7 +1574,13 @@ func discard_reason_label(tile: String, original_hand: Array, report: Dictionary
 
 func discard_safety_text(report: Dictionary) -> String:
 	var feed = str(report.get("feed_text", ""))
-	var suffix = " · " + feed if feed != "" else ""
+	var package_feed = str(report.get("package_feed_text", ""))
+	var feed_parts: Array[String] = []
+	if feed != "":
+		feed_parts.append(feed)
+	if package_feed != "":
+		feed_parts.append(package_feed)
+	var suffix = " · " + " · ".join(feed_parts) if not feed_parts.is_empty() else ""
 	match str(report.get("safety_label", "")):
 		"安":
 			return "全现物" + suffix
@@ -1544,6 +1598,8 @@ func discard_safety_text(report: Dictionary) -> String:
 		extra_parts.append(danger)
 	if feed != "":
 		extra_parts.append(feed)
+	if package_feed != "":
+		extra_parts.append(package_feed)
 	return "风险%s%s" % [
 		str(report.get("risk_label", "中")),
 		" · " + " · ".join(extra_parts) if not extra_parts.is_empty() else "",

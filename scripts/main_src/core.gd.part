@@ -705,6 +705,8 @@ func deal_offline_hand() -> void:
 	offline_ai_active = false
 	round_summary = ""
 	last_score_deltas.clear()
+	# 上局胡牌详情只属于其结算面板，不能带入新一局。
+	last_win_score.clear()
 	offline_last_winner = -1
 	offline_dealer_repeat = false
 	offline_draw_serial = 0
@@ -3528,7 +3530,12 @@ func main_threat_opponent(seat: int, eval_context: Dictionary = {}) -> int:
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		var score = opponent_plan_pressure(other, eval_context)
+		var plan_pressure = opponent_plan_pressure(other, eval_context)
+		var readiness = opponent_readiness_score(other, eval_context)
+		# 无副露的深牌河同样可能已近听。主威胁必须与威胁面板的
+		# 路线/就绪口径一致，否则该对手的现物拿不到防守加分。
+		var readiness_pressure = readiness * 1.55 if readiness >= 7.0 else 0.0
+		var score = max(plan_pressure, readiness_pressure)
 		if score > best_score:
 			best_score = score
 			best_opponent = other
@@ -3550,6 +3557,12 @@ func is_tile_safe_against_all(tile: String, seat: int, eval_context: Dictionary 
 func is_suji_safe_tile(tile: String, seat: int, eval_context: Dictionary = {}) -> bool:
 	if not is_number_tile(tile) or seat < 0 or seat >= players.size():
 		return false
+	# "筋" is presented as a global safety cue and receives a defense bonus.
+	# Once a table has a clear main threat, a suji from an unrelated player must
+	# not make a tile look safe against that threat.
+	var main_threat = main_threat_opponent(seat, eval_context)
+	if main_threat >= 0:
+		return is_suji_safe_against_opponent(tile, main_threat, eval_context)
 	for other in range(players.size()):
 		if other == seat:
 			continue

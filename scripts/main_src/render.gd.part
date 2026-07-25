@@ -1122,7 +1122,9 @@ func draw_after_gang(seat: int) -> void:
 	if wall.is_empty():
 		finish_wall_draw()
 		return
-	var drawn = draw_tile_for(seat, true, "gang")
+	var drawn = draw_turn_tile_or_finish(seat, true, "gang")
+	if drawn == "":
+		return
 	sort_hand(players[seat]["hand"])
 	offline_turn_needs_draw = false
 	offline_phase = "await_discard"

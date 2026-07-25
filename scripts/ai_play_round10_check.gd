@@ -163,5 +163,6 @@ func run() -> void:
 	if failed:
 		print("=== RESULT: FAIL ===")
 		quit(1)
-	print("=== RESULT: OK ===")
-	quit(0)
+	else:
+		print("=== RESULT: OK ===")
+		quit(0)
