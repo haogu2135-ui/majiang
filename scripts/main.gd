@@ -854,7 +854,7 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 				}
 			# 留听：本家放弃低价值荣和，也不再降格碰/杠同一张。
 			continue
-		var claim_context = make_ai_claim_context(seat, visible_counts_snapshot, hand_counts)
+		var claim_context = make_ai_claim_context(seat, visible_counts_snapshot, hand_counts, from_seat)
 		if options.has("gang"):
 			var gang_report = build_ai_claim_report(seat, "gang", tile, {}, claim_context)
 			if not bool(gang_report.get("allow", false)):
@@ -929,7 +929,8 @@ func ai_claim_action_score(report: Dictionary, offset: int) -> float:
 	var claim_aggression = ai_claim_aggression(seat)
 	var risk_multiplier = clamp((2.0 - attack) * ai_risk_factor(seat), 0.64, 1.42)
 	var route_bonus = ai_claim_route_bonus(report)
-	return base * claim_aggression - float(offset) + (float(shanten_gain) * 28.0 + clamp(shape_gain, -24.0, 96.0) * 0.05) * attack - forced_risk * 0.03 * risk_multiplier + route_bonus
+	var human_pen = float(report.get("human_claim_penalty", 0.0))
+	return base * claim_aggression - float(offset) + (float(shanten_gain) * 28.0 + clamp(shape_gain, -24.0, 96.0) * 0.05) * attack - forced_risk * 0.03 * risk_multiplier + route_bonus - human_pen
 
 func ai_claim_route_bonus(report: Dictionary) -> float:
 	if report.is_empty():
@@ -949,7 +950,7 @@ func ai_claim_route_bonus(report: Dictionary) -> float:
 			score -= 12.0 * route_focus
 	return score
 
-func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_counts_snapshot: Array = []) -> Dictionary:
+func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_counts_snapshot: Array = [], from_seat: int = -1) -> Dictionary:
 	if seat < 0 or seat >= players.size():
 		return {}
 	var hand: Array = players[seat]["hand"]
@@ -964,6 +965,7 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 	var before_plan_report = hand_plan_report_for_seat_from_counts(seat, hand_counts, hand.size())
 	return {
 		"seat": seat,
+		"from_seat": from_seat,
 		"hand_counts": hand_counts,
 		"hand_size": hand.size(),
 		"open_melds": open_melds,
@@ -1005,6 +1007,9 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		"forced_discard_safety": "",
 		"declined_by_pressure": false,
 		"declined_by_plan": false,
+		"declined_by_human": false,
+		"from_seat": -1,
+		"human_claim_penalty": 0.0,
 		"plan_label": "",
 		"chi_choice": {},
 		"ai_profile": ai_profile_label(seat),
@@ -1089,6 +1094,12 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			allow = false
 			reason = "序盘蓄力"
 			declined_by_opening = true
+	var from_seat = int(claim_context.get("from_seat", -1)) if has_claim_context else -1
+	var human_discipline = human_claim_discipline_report(seat, claim, from_seat, before_shanten, after_shanten, shape_gain, pressure_report, open_melds)
+	var declined_by_human = allow and bool(human_discipline.get("decline", false))
+	if declined_by_human:
+		allow = false
+		reason = str(human_discipline.get("reason", "防点玩家"))
 	report["allow"] = allow
 	report["reason"] = reason
 	report["before_shanten"] = before_shanten
@@ -1103,6 +1114,9 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	report["declined_by_pressure"] = declined_by_pressure
 	report["declined_by_plan"] = declined_by_plan
 	report["declined_by_opening"] = declined_by_opening
+	report["declined_by_human"] = declined_by_human
+	report["from_seat"] = from_seat
+	report["human_claim_penalty"] = float(human_discipline.get("penalty", 0.0))
 	report["plan_label"] = before_plan_label
 	report["plan_bonus"] = float(claim_context.get("before_plan_bonus", 0.0)) if has_claim_context else float(hand_plan_report_for_seat_from_counts(seat, hand_counts, hand.size()).get("score_bonus", 0.0))
 	report["after_plan_label"] = str(after_plan_report.get("label", before_plan_label))
@@ -1587,6 +1601,159 @@ func human_relative_defense_bias(seat: int, late: float = -1.0) -> float:
 			adj *= 1.10
 	return adj
 
+func human_readiness_for_defense() -> float:
+	# 玩家（seat0）听牌压迫感：副露多 / 河牌深 / 残墙少
+	if players.is_empty() or mode != "offline":
+		return 0.0
+	var melds_arr = players[0].get("melds", [])
+	var disc_arr = players[0].get("discards", [])
+	var melds = int(melds_arr.size()) if typeof(melds_arr) == TYPE_ARRAY else 0
+	var discards = int(disc_arr.size()) if typeof(disc_arr) == TYPE_ARRAY else 0
+	var wall = get_wall_count()
+	var score = float(melds) * 3.4 + float(discards) * 0.22
+	if wall <= 30:
+		score += 2.5
+	if wall <= 18:
+		score += 3.5
+	if melds >= 3 or discards >= 14:
+		score += 4.0
+	return score
+
+func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
+	# 专门降低「点炮给玩家」：困难更怕喂 seat0，简单更敢打。
+	if seat <= 0 or seat >= players.size() or tile == "" or mode != "offline":
+		return 0.0
+	# 人机对局：seat0 非 AI；全 bot 采样仍把 seat0 当探针位
+	if (not offline_all_bot_mode) and is_ai_controlled_seat(0):
+		return 0.0
+	var human_feed = 0.0
+	var details: Array = feed_report.get("details", []) if typeof(feed_report) == TYPE_DICTIONARY else []
+	for item in details:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		if int(item.get("opponent", -1)) != 0:
+			continue
+		human_feed = max(human_feed, float(item.get("score", 0.0)))
+	var visible = visible_tile_count(tile)
+	var human_threat = opponent_pattern_threat_score(0, tile, visible, eval_context)
+	var readiness = human_readiness_for_defense()
+	if human_feed < 8.0 and human_threat < 6.0 and risk < AI_DANGER_RISK_SOFT and readiness < 8.0:
+		return 0.0
+	var pen = human_feed * 0.55 + human_threat * 0.90 + max(0.0, risk - 10.0) * 0.35
+	pen += readiness * 1.15
+	if shanten >= 3:
+		pen *= 1.18
+	elif shanten <= 0:
+		pen *= 0.42
+	elif shanten == 1:
+		pen *= 0.72
+	match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
+		AI_DIFFICULTY_HARD:
+			pen *= 1.45
+		AI_DIFFICULTY_EASY:
+			pen *= 0.55
+	return clamp(pen, 0.0, 220.0)
+
+func human_claim_discipline_report(seat: int, claim: String, from_seat: int, before_shanten: int, after_shanten: int, shape_gain: float, pressure_report: Dictionary = {}, open_melds: int = 0) -> Dictionary:
+	# R10: 对玩家弃牌的吃碰更克制；副露后若必打危险张喂 seat0，则拒吃/降分。
+	var out := {
+		"decline": false,
+		"reason": "",
+		"penalty": 0.0,
+		"from_human": false,
+		"feed_human": 0.0,
+		"readiness": 0.0,
+	}
+	if mode != "offline" or seat <= 0 or seat >= players.size():
+		return out
+	# 人机：seat0 是玩家；全 bot 采样仍把 seat0 当探针
+	if (not offline_all_bot_mode) and is_ai_controlled_seat(0):
+		return out
+	var from_human = from_seat == 0
+	out["from_human"] = from_human
+	var readiness = human_readiness_for_defense()
+	out["readiness"] = readiness
+	var forced_tile = str(pressure_report.get("discard", "")) if typeof(pressure_report) == TYPE_DICTIONARY else ""
+	var forced_risk = float(pressure_report.get("risk", 0.0)) if typeof(pressure_report) == TYPE_DICTIONARY else 0.0
+	var forced_safety = str(pressure_report.get("safety", "")) if typeof(pressure_report) == TYPE_DICTIONARY else ""
+	var feed_human = 0.0
+	if forced_tile != "":
+		var feed_report = deal_in_risk_summary(forced_tile, seat)
+		var details: Array = feed_report.get("details", []) if typeof(feed_report) == TYPE_DICTIONARY else []
+		for item in details:
+			if typeof(item) != TYPE_DICTIONARY:
+				continue
+			if int(item.get("opponent", -1)) != 0:
+				continue
+			feed_human = max(feed_human, float(item.get("score", 0.0)))
+		feed_human = max(feed_human, human_target_discard_penalty(seat, forced_tile, forced_risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, after_shanten) * 0.55)
+	out["feed_human"] = feed_human
+	var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var no_improve = after_shanten >= before_shanten
+	var weak_gain = shape_gain < (22.0 if claim == "chi" else 14.0)
+	var pen = 0.0
+	if from_human:
+		pen += 6.0 + readiness * 0.55
+		if claim == "chi":
+			pen += 8.0
+		elif claim == "peng":
+			pen += 3.5
+	pen += feed_human * 0.42
+	if forced_safety != "安" and forced_risk >= AI_DANGER_RISK_SOFT:
+		pen += (forced_risk - AI_DANGER_RISK_SOFT) * 0.55
+	if open_melds >= 2 and no_improve:
+		pen += 4.0
+	match diff:
+		AI_DIFFICULTY_HARD:
+			pen *= 1.40
+		AI_DIFFICULTY_EASY:
+			pen *= 0.48
+	out["penalty"] = clamp(pen, 0.0, 160.0)
+	var decline = false
+	var reason = ""
+	# 1) 吃/碰玩家牌且不降向听：困难更拒，标准拒脏吃
+	if from_human and no_improve and weak_gain and before_shanten >= 2:
+		if claim == "chi" and diff >= AI_DIFFICULTY_NORMAL:
+			decline = true
+			reason = "拒吃玩家"
+		elif claim == "chi" and diff == AI_DIFFICULTY_EASY and readiness >= 11.0:
+			decline = true
+			reason = "拒吃玩家"
+		elif claim == "peng" and diff == AI_DIFFICULTY_HARD and readiness >= 9.0 and before_shanten >= 3:
+			decline = true
+			reason = "拒碰玩家"
+	# 2) 副露后必打危险张且显著喂玩家：拒绝无收益副露
+	if (not decline) and no_improve and before_shanten >= 1:
+		var hot_feed = feed_human >= (18.0 if diff == AI_DIFFICULTY_HARD else 26.0)
+		var hot_risk = forced_safety != "安" and forced_risk >= (AI_DANGER_RISK_HIGH if diff != AI_DIFFICULTY_HARD else AI_DANGER_RISK_SOFT + 6.0)
+		if hot_feed or (hot_risk and (from_human or readiness >= 8.0)):
+			if diff == AI_DIFFICULTY_EASY and not hot_feed:
+				pass
+			else:
+				decline = true
+				reason = "防点玩家"
+	# 3) 残局高向听再吃玩家中张：困难直接拒
+	if (not decline) and from_human and claim == "chi" and before_shanten >= 3 and get_wall_count() <= 28 and no_improve:
+		if diff == AI_DIFFICULTY_HARD or readiness >= 10.0:
+			decline = true
+			reason = "残局拒吃"
+	out["decline"] = decline
+	out["reason"] = reason
+	if decline and offline_sim_quiet:
+		ai_sim_stats["human_claim_declines"] = int(ai_sim_stats.get("human_claim_declines", 0)) + 1
+	return out
+
+
+func offline_hand_ai_briefing_text() -> String:
+	var diff_idx = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var parts: Array[String] = ["AI难度 %s" % str(AI_DIFFICULTY_LABELS[diff_idx])]
+	for seat in range(1, min(4, players.size())):
+		var label = ai_profile_label(seat)
+		var name = str(players[seat].get("name", "座位%d" % seat))
+		if label != "":
+			parts.append("%s·%s" % [name, label])
+	return " · ".join(parts)
+
 func ai_profile(seat: int) -> Dictionary:
 	return ai_profile_source(seat).duplicate(true)
 
@@ -2035,6 +2202,9 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		if risk >= AI_DANGER_RISK_HIGH:
 			danger_pen += 28.0 if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) != AI_DIFFICULTY_EASY else 12.0
 		score -= danger_pen * defense
+	# R9: 针对玩家的点炮惩罚（困难更重）
+	var human_pen = human_target_discard_penalty(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
+	score -= human_pen
 	return {
 		"tile": tile,
 		"score": score,
@@ -2065,6 +2235,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		"fold_push": fold_push,
 		"stance": ai_stance_label(defense, shanten),
 		"defense": defense,
+		"human_target_penalty": human_pen,
 		"ai_profile": ai_profile_label(seat),
 		"ai_profile_short": ai_profile_short_label(seat),
 		"ai_attack_multiplier": attack,
@@ -4084,6 +4255,7 @@ func _start_offline_impl() -> void:
 		offline_hand_number = 1
 		offline_last_winner = -1
 		offline_dealer_repeat = false
+		offline_match_briefing_shown = false
 		table_logs.clear()
 		players.clear()
 		for i in range(4):
@@ -4456,6 +4628,8 @@ func reset_ai_sim_stats() -> void:
 		"dangerous_discards": 0,
 		"high_danger_discards": 0,
 		"deal_ins": 0,
+		"deal_ins_to_human": 0,
+		"human_claim_declines": 0,
 		"claims": 0,
 		"ron_passes": 0,
 		"tsumo_passes": 0,
@@ -4586,6 +4760,9 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 			if seat != offline_last_winner:
 				ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
 				ai_sim_stats["deal_in_seat"] = seat
+				# R10: 点炮给玩家（seat0）单独计数，衡量人机防点炮
+				if offline_last_winner == 0:
+					ai_sim_stats["deal_ins_to_human"] = int(ai_sim_stats.get("deal_ins_to_human", 0)) + 1
 			break
 		if offline_phase == "await_discard" and before_phase == "resolving":
 			# claim applied or passed
@@ -4614,6 +4791,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		var danger_total = 0
 		var high_danger_total = 0
 		var deal_in_total = 0
+		var deal_in_human_total = 0
+		var human_claim_decline_total = 0
 		var discard_total = 0
 		var ended_total = 0
 		var steps_total = 0
@@ -4641,6 +4820,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			danger_total += int(result.get("dangerous_discards", 0))
 			high_danger_total += int(result.get("high_danger_discards", 0))
 			deal_in_total += int(result.get("deal_ins", 0))
+			deal_in_human_total += int(result.get("deal_ins_to_human", 0))
+			human_claim_decline_total += int(result.get("human_claim_declines", 0))
 			discard_total += max(1, int(result.get("discards", 0)))
 			steps_total += int(result.get("steps", 0))
 			if bool(result.get("ended", false)):
@@ -4650,13 +4831,17 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		var danger_rate = float(danger_total) / float(max(1, discard_total))
 		var high_danger_rate = float(high_danger_total) / float(max(1, discard_total))
 		var deal_in_rate = float(deal_in_total) / float(max(1, hands_per_diff))
+		var deal_in_human_rate = float(deal_in_human_total) / float(max(1, hands_per_diff))
 		summary["by_diff"][diff] = {
 			"danger_rate": danger_rate,
 			"high_danger_rate": high_danger_rate,
 			"deal_in_rate": deal_in_rate,
+			"deal_in_to_human_rate": deal_in_human_rate,
+			"human_claim_declines": human_claim_decline_total,
 			"dangerous_discards": danger_total,
 			"high_danger_discards": high_danger_total,
 			"deal_ins": deal_in_total,
+			"deal_ins_to_human": deal_in_human_total,
 			"discards": discard_total,
 			"ended": ended_total,
 			"wins": wins_total,
@@ -4701,6 +4886,42 @@ func sample_bot_match_winrates(hands: int = 6, seed_base: int = 20260726) -> Dic
 		"finished": finished,
 		"win_counts": win_counts,
 		"deal_ins": deal_ins,
+	}
+
+func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 20260730) -> Dictionary:
+	# R9: 多手固定人设基准。返回 easy/hard 高危率、放铳率与耗时，供验收 hard 更稳。
+	var raw = sample_bot_strength_across_difficulties(hands_per_diff, seed_base, false)
+	var by: Dictionary = raw.get("by_diff", {})
+	var easy: Dictionary = by.get(AI_DIFFICULTY_EASY, {})
+	var normal: Dictionary = by.get(AI_DIFFICULTY_NORMAL, {})
+	var hard: Dictionary = by.get(AI_DIFFICULTY_HARD, {})
+	var easy_hd = float(easy.get("high_danger_rate", 1.0))
+	var hard_hd = float(hard.get("high_danger_rate", 1.0))
+	var easy_di = float(easy.get("deal_in_rate", 1.0))
+	var hard_di = float(hard.get("deal_in_rate", 1.0))
+	var easy_dr = float(easy.get("danger_rate", 1.0))
+	var hard_dr = float(hard.get("danger_rate", 1.0))
+	var easy_dih = float(easy.get("deal_in_to_human_rate", 1.0))
+	var hard_dih = float(hard.get("deal_in_to_human_rate", 1.0))
+	return {
+		"hands_per_diff": hands_per_diff,
+		"raw": raw,
+		"easy_high_danger": easy_hd,
+		"hard_high_danger": hard_hd,
+		"easy_deal_in": easy_di,
+		"hard_deal_in": hard_di,
+		"easy_deal_in_to_human": easy_dih,
+		"hard_deal_in_to_human": hard_dih,
+		"easy_danger": easy_dr,
+		"hard_danger": hard_dr,
+		"hard_safer_high_danger": hard_hd <= easy_hd + 0.08,
+		"hard_safer_deal_in": hard_di <= easy_di + 0.34,
+		"hard_safer_deal_in_to_human": hard_dih <= easy_dih + 0.34,
+		"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
+		"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
+		"normal_high_danger": float(normal.get("high_danger_rate", 1.0)),
+		"hard_human_claim_declines": int(hard.get("human_claim_declines", 0)),
+		"easy_human_claim_declines": int(easy.get("human_claim_declines", 0)),
 	}
 
 func run_ai_until_human() -> void:
@@ -23231,6 +23452,14 @@ func deal_offline_hand() -> void:
 	for seat in range(4):
 		sort_hand(players[seat]["hand"])
 	add_log("第%d局开始，%s坐庄。" % [offline_hand_number, players[dealer_seat]["name"]])
+	if not offline_sim_quiet:
+		var briefing = offline_hand_ai_briefing_text()
+		if briefing != "":
+			add_log(briefing)
+			# R10: 整场比赛只 toast 一次人设简报，避免每局弹窗刷屏；日志仍每局写。
+			if not offline_match_briefing_shown:
+				show_toast(briefing, 2600)
+				offline_match_briefing_shown = true
 	render_game()
 	play_fx_deal_start(dealer_seat)
 	play_fx_deal_cascade(dealer_seat)

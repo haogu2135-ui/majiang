@@ -197,6 +197,7 @@ func _start_offline_impl() -> void:
 		offline_hand_number = 1
 		offline_last_winner = -1
 		offline_dealer_repeat = false
+		offline_match_briefing_shown = false
 		table_logs.clear()
 		players.clear()
 		for i in range(4):
@@ -569,6 +570,8 @@ func reset_ai_sim_stats() -> void:
 		"dangerous_discards": 0,
 		"high_danger_discards": 0,
 		"deal_ins": 0,
+		"deal_ins_to_human": 0,
+		"human_claim_declines": 0,
 		"claims": 0,
 		"ron_passes": 0,
 		"tsumo_passes": 0,
@@ -699,6 +702,9 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 			if seat != offline_last_winner:
 				ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
 				ai_sim_stats["deal_in_seat"] = seat
+				# R10: 点炮给玩家（seat0）单独计数，衡量人机防点炮
+				if offline_last_winner == 0:
+					ai_sim_stats["deal_ins_to_human"] = int(ai_sim_stats.get("deal_ins_to_human", 0)) + 1
 			break
 		if offline_phase == "await_discard" and before_phase == "resolving":
 			# claim applied or passed
@@ -727,6 +733,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		var danger_total = 0
 		var high_danger_total = 0
 		var deal_in_total = 0
+		var deal_in_human_total = 0
+		var human_claim_decline_total = 0
 		var discard_total = 0
 		var ended_total = 0
 		var steps_total = 0
@@ -754,6 +762,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			danger_total += int(result.get("dangerous_discards", 0))
 			high_danger_total += int(result.get("high_danger_discards", 0))
 			deal_in_total += int(result.get("deal_ins", 0))
+			deal_in_human_total += int(result.get("deal_ins_to_human", 0))
+			human_claim_decline_total += int(result.get("human_claim_declines", 0))
 			discard_total += max(1, int(result.get("discards", 0)))
 			steps_total += int(result.get("steps", 0))
 			if bool(result.get("ended", false)):
@@ -763,13 +773,17 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		var danger_rate = float(danger_total) / float(max(1, discard_total))
 		var high_danger_rate = float(high_danger_total) / float(max(1, discard_total))
 		var deal_in_rate = float(deal_in_total) / float(max(1, hands_per_diff))
+		var deal_in_human_rate = float(deal_in_human_total) / float(max(1, hands_per_diff))
 		summary["by_diff"][diff] = {
 			"danger_rate": danger_rate,
 			"high_danger_rate": high_danger_rate,
 			"deal_in_rate": deal_in_rate,
+			"deal_in_to_human_rate": deal_in_human_rate,
+			"human_claim_declines": human_claim_decline_total,
 			"dangerous_discards": danger_total,
 			"high_danger_discards": high_danger_total,
 			"deal_ins": deal_in_total,
+			"deal_ins_to_human": deal_in_human_total,
 			"discards": discard_total,
 			"ended": ended_total,
 			"wins": wins_total,
@@ -814,6 +828,42 @@ func sample_bot_match_winrates(hands: int = 6, seed_base: int = 20260726) -> Dic
 		"finished": finished,
 		"win_counts": win_counts,
 		"deal_ins": deal_ins,
+	}
+
+func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 20260730) -> Dictionary:
+	# R9: 多手固定人设基准。返回 easy/hard 高危率、放铳率与耗时，供验收 hard 更稳。
+	var raw = sample_bot_strength_across_difficulties(hands_per_diff, seed_base, false)
+	var by: Dictionary = raw.get("by_diff", {})
+	var easy: Dictionary = by.get(AI_DIFFICULTY_EASY, {})
+	var normal: Dictionary = by.get(AI_DIFFICULTY_NORMAL, {})
+	var hard: Dictionary = by.get(AI_DIFFICULTY_HARD, {})
+	var easy_hd = float(easy.get("high_danger_rate", 1.0))
+	var hard_hd = float(hard.get("high_danger_rate", 1.0))
+	var easy_di = float(easy.get("deal_in_rate", 1.0))
+	var hard_di = float(hard.get("deal_in_rate", 1.0))
+	var easy_dr = float(easy.get("danger_rate", 1.0))
+	var hard_dr = float(hard.get("danger_rate", 1.0))
+	var easy_dih = float(easy.get("deal_in_to_human_rate", 1.0))
+	var hard_dih = float(hard.get("deal_in_to_human_rate", 1.0))
+	return {
+		"hands_per_diff": hands_per_diff,
+		"raw": raw,
+		"easy_high_danger": easy_hd,
+		"hard_high_danger": hard_hd,
+		"easy_deal_in": easy_di,
+		"hard_deal_in": hard_di,
+		"easy_deal_in_to_human": easy_dih,
+		"hard_deal_in_to_human": hard_dih,
+		"easy_danger": easy_dr,
+		"hard_danger": hard_dr,
+		"hard_safer_high_danger": hard_hd <= easy_hd + 0.08,
+		"hard_safer_deal_in": hard_di <= easy_di + 0.34,
+		"hard_safer_deal_in_to_human": hard_dih <= easy_dih + 0.34,
+		"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
+		"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
+		"normal_high_danger": float(normal.get("high_danger_rate", 1.0)),
+		"hard_human_claim_declines": int(hard.get("human_claim_declines", 0)),
+		"easy_human_claim_declines": int(easy.get("human_claim_declines", 0)),
 	}
 
 func run_ai_until_human() -> void:

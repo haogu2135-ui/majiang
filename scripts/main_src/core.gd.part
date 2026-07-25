@@ -730,6 +730,14 @@ func deal_offline_hand() -> void:
 	for seat in range(4):
 		sort_hand(players[seat]["hand"])
 	add_log("第%d局开始，%s坐庄。" % [offline_hand_number, players[dealer_seat]["name"]])
+	if not offline_sim_quiet:
+		var briefing = offline_hand_ai_briefing_text()
+		if briefing != "":
+			add_log(briefing)
+			# R10: 整场比赛只 toast 一次人设简报，避免每局弹窗刷屏；日志仍每局写。
+			if not offline_match_briefing_shown:
+				show_toast(briefing, 2600)
+				offline_match_briefing_shown = true
 	render_game()
 	play_fx_deal_start(dealer_seat)
 	play_fx_deal_cascade(dealer_seat)
