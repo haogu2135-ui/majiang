@@ -21,13 +21,35 @@ func _finish_startup() -> void:
 			show_menu(true)
 
 func ai_draw_delay() -> float:
-	return AI_DRAW_DELAY_SECONDS if fast_mode_enabled else 0.18
+	var base = AI_DRAW_DELAY_SECONDS if fast_mode_enabled else 0.18
+	return max(0.05, base * ai_pace_multiplier())
 
 func ai_discard_delay() -> float:
-	return AI_DISCARD_DELAY_SECONDS if fast_mode_enabled else 0.35
+	var base = AI_DISCARD_DELAY_SECONDS if fast_mode_enabled else 0.35
+	return max(0.08, base * ai_pace_multiplier())
 
 func ai_action_gap_delay() -> float:
-	return AI_ACTION_GAP_SECONDS if fast_mode_enabled else 0.35
+	var base = AI_ACTION_GAP_SECONDS if fast_mode_enabled else 0.35
+	return max(0.06, base * ai_pace_multiplier())
+
+func ai_pace_multiplier() -> float:
+	# 难度 + 牌局阶段调节 AI 摸切节奏：简单更慢好读，困难/残局更快。
+	var mult = 1.0
+	match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
+		AI_DIFFICULTY_EASY:
+			mult = 1.16
+		AI_DIFFICULTY_HARD:
+			mult = 0.86
+		_:
+			mult = 1.0
+	var wall = get_wall_count() if mode == "offline" else 84
+	if wall <= 20:
+		mult *= 0.88
+	elif wall <= 36:
+		mult *= 0.94
+	if mode == "offline" and offline_hand_number >= max(1, MATCH_MAX_HANDS - 1):
+		mult *= 0.92
+	return clamp(mult, 0.72, 1.35)
 
 func human_discard_response_gap_delay() -> float:
 	return HUMAN_DISCARD_RESPONSE_GAP_SECONDS if fast_mode_enabled else 0.05
@@ -83,6 +105,8 @@ func refresh_current_screen() -> void:
 		request_game_render()
 
 func request_game_render() -> void:
+	if offline_sim_quiet:
+		return
 	if mode != "offline" and mode != "online_game":
 		return
 	if game_render_queued:
@@ -269,6 +293,9 @@ func sort_hand(hand: Array) -> void:
 	hand.sort_custom(func(a, b): return tile_sort_index(str(a)) < tile_sort_index(str(b)))
 
 func render_game() -> void:
+	if offline_sim_quiet:
+		game_render_queued = false
+		return
 	# r215: GPT chrome conversion
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
@@ -526,6 +553,269 @@ func human_added_gang(tile: String) -> void:
 	perform_added_gang(0, tile)
 	render_game()
 
+func enable_offline_all_bot_mode(enabled: bool = true, quiet: bool = true) -> void:
+	offline_all_bot_mode = enabled
+	offline_sim_quiet = enabled and quiet
+	for i in range(players.size()):
+		players[i]["bot"] = enabled or i != 0
+	if not enabled:
+		offline_sim_quiet = false
+		reset_ai_profile_seat_map()
+
+func reset_ai_sim_stats() -> void:
+	ai_sim_stats = {
+		"steps": 0,
+		"discards": 0,
+		"dangerous_discards": 0,
+		"high_danger_discards": 0,
+		"deal_ins": 0,
+		"claims": 0,
+		"ron_passes": 0,
+		"tsumo_passes": 0,
+		"wins": 0,
+		"wall_ends": 0,
+		"winner": -1,
+		"self_draw": false,
+		"deal_in_seat": -1,
+	}
+
+func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
+	ai_sim_stats["discards"] = int(ai_sim_stats.get("discards", 0)) + 1
+	var reports = get_ai_discard_reports(seat)
+	for report in reports:
+		if str(report.get("tile", "")) != tile:
+			continue
+		var risk = float(report.get("risk", 0.0))
+		var feed = float(report.get("feed_risk", 0.0))
+		if risk >= 18.0 or feed >= 14.0:
+			ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
+		return
+
+func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
+	# Headless all-bot single hand. Caller should deal_offline_hand first (or we deal).
+	if players.size() < 4:
+		return {"ok": false, "reason": "no_players"}
+	enable_offline_all_bot_mode(true, true)
+	reset_ai_sim_stats()
+	if wall.is_empty() or int(players[0].get("hand", []).size()) < 13:
+		deal_offline_hand()
+	var guard = 0
+	while mode == "offline" and offline_phase != "ended" and guard < max_steps:
+		guard += 1
+		ai_sim_stats["steps"] = guard
+		if offline_phase == "pending_claim":
+			# bot 模式不应停人手牌；若残留则 AI 决策推进
+			var from_seat = int(offline_pending_claim.get("from_seat", -1))
+			var tile = str(offline_pending_claim.get("tile", ""))
+			if bool(offline_pending_claim.get("rob_gang", false)):
+				resolve_after_rob_gang_pass(from_seat, tile, offline_pending_claim.get("ai_claim", {}))
+			else:
+				resolve_ai_or_advance(from_seat, tile)
+			continue
+		if offline_phase != "await_discard":
+			break
+		var seat = current_seat
+		if not is_ai_controlled_seat(seat):
+			break
+		if offline_turn_needs_draw:
+			if wall.is_empty():
+				finish_wall_draw()
+				ai_sim_stats["wall_ends"] = int(ai_sim_stats.get("wall_ends", 0)) + 1
+				break
+			var drawn = draw_tile_for(seat, false)
+			if drawn == "":
+				finish_wall_draw()
+				ai_sim_stats["wall_ends"] = int(ai_sim_stats.get("wall_ends", 0)) + 1
+				break
+			sort_hand(players[seat]["hand"])
+			offline_turn_needs_draw = false
+			if can_win_for_seat(seat):
+				var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
+				if bool(tsumo_decision.get("accept", true)):
+					finish_offline_round(seat, drawn, true, -1)
+					ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
+					ai_sim_stats["winner"] = seat
+					ai_sim_stats["self_draw"] = true
+					break
+				ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
+			var gang_tile = choose_ai_concealed_gang(seat)
+			if gang_tile != "":
+				perform_concealed_gang(seat, gang_tile)
+				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
+				if offline_phase == "ended":
+					ai_sim_stats["winner"] = offline_last_winner
+					break
+				continue
+			gang_tile = choose_ai_added_gang(seat)
+			if gang_tile != "":
+				perform_added_gang(seat, gang_tile)
+				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
+				if offline_phase == "ended":
+					ai_sim_stats["winner"] = offline_last_winner
+					break
+				# added gang may leave await_discard after draw
+				continue
+		if mode != "offline" or offline_phase != "await_discard":
+			break
+		seat = current_seat
+		var reports = get_ai_discard_reports(seat)
+		var discard_tile = ""
+		if reports.is_empty():
+			var hand: Array = players[seat]["hand"]
+			discard_tile = str(hand[0]) if not hand.is_empty() else ""
+		else:
+			# 与 choose_ai_discard_for_seat 对齐（含简单档次优），但复用 reports 避免双倍开销
+			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
+				var best_score = float(reports[0].get("score", 0.0))
+				var second_score = float(reports[1].get("score", 0.0))
+				if best_score - second_score <= 55.0:
+					discard_tile = str(reports[1].get("tile", reports[0].get("tile", "")))
+				else:
+					discard_tile = str(reports[0].get("tile", ""))
+			else:
+				discard_tile = str(reports[0].get("tile", ""))
+		if discard_tile == "":
+			break
+		ai_sim_stats["discards"] = int(ai_sim_stats.get("discards", 0)) + 1
+		for report in reports:
+			if str(report.get("tile", "")) != discard_tile:
+				continue
+			var risk = float(report.get("risk", 0.0))
+			var feed = float(report.get("feed_risk", 0.0))
+			if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
+				ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
+			if risk >= AI_DANGER_RISK_HIGH:
+				ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
+			break
+		discard_tile_by_value(seat, discard_tile)
+		# 在 resolve 前记录可能的留听：choose_ai_claim 内会决策
+		var before_phase = offline_phase
+		resolve_after_discard(seat, discard_tile)
+		if offline_phase == "ended":
+			ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
+			ai_sim_stats["winner"] = offline_last_winner
+			ai_sim_stats["self_draw"] = false
+			# 非自摸终局：记放铳
+			if seat != offline_last_winner:
+				ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
+				ai_sim_stats["deal_in_seat"] = seat
+			break
+		if offline_phase == "await_discard" and before_phase == "resolving":
+			# claim applied or passed
+			pass
+	var scores: Array = []
+	for i in range(players.size()):
+		scores.append(int(players[i].get("score", 0)))
+	ai_sim_stats["scores"] = scores
+	ai_sim_stats["ok"] = offline_phase == "ended" or guard >= max_steps
+	ai_sim_stats["ended"] = offline_phase == "ended"
+	ai_sim_stats["wall"] = get_wall_count()
+	ai_sim_stats["phase"] = offline_phase
+	return ai_sim_stats.duplicate(true)
+
+func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base: int = 20260725, shuffle_profiles: bool = false) -> Dictionary:
+	# 固定种子短局采样：比较高危弃牌率 / 放铳率（越低越稳）与终局完成率。
+	# 默认不打乱人设，保证三档难度可比。
+	var summary := {
+		"hands_per_diff": hands_per_diff,
+		"shuffle_profiles": shuffle_profiles,
+		"by_diff": {},
+	}
+	var prev_diff = ai_difficulty
+	for diff in [AI_DIFFICULTY_EASY, AI_DIFFICULTY_NORMAL, AI_DIFFICULTY_HARD]:
+		ai_difficulty = diff
+		var danger_total = 0
+		var high_danger_total = 0
+		var deal_in_total = 0
+		var discard_total = 0
+		var ended_total = 0
+		var steps_total = 0
+		var wins_total = 0
+		var ms_total = 0
+		for h in range(hands_per_diff):
+			seed(seed_base + diff * 1009 + h * 17)
+			enable_offline_all_bot_mode(true, true)
+			if shuffle_profiles:
+				reshuffle_ai_profiles_for_hand()
+			else:
+				reset_ai_profile_seat_map()
+			mode = "offline"
+			offline_hand_number = 1
+			dealer_seat = h % 4
+			for s in range(4):
+				players[s]["score"] = MATCH_START_SCORE
+			var t0 = Time.get_ticks_msec()
+			deal_offline_hand()
+			# deal 会按难度 reshuffle；强制固定人设时再盖一次
+			if not shuffle_profiles:
+				reset_ai_profile_seat_map()
+			var result = simulate_offline_bot_hand_sync(700)
+			ms_total += Time.get_ticks_msec() - t0
+			danger_total += int(result.get("dangerous_discards", 0))
+			high_danger_total += int(result.get("high_danger_discards", 0))
+			deal_in_total += int(result.get("deal_ins", 0))
+			discard_total += max(1, int(result.get("discards", 0)))
+			steps_total += int(result.get("steps", 0))
+			if bool(result.get("ended", false)):
+				ended_total += 1
+			if int(result.get("winner", -1)) >= 0:
+				wins_total += 1
+		var danger_rate = float(danger_total) / float(max(1, discard_total))
+		var high_danger_rate = float(high_danger_total) / float(max(1, discard_total))
+		var deal_in_rate = float(deal_in_total) / float(max(1, hands_per_diff))
+		summary["by_diff"][diff] = {
+			"danger_rate": danger_rate,
+			"high_danger_rate": high_danger_rate,
+			"deal_in_rate": deal_in_rate,
+			"dangerous_discards": danger_total,
+			"high_danger_discards": high_danger_total,
+			"deal_ins": deal_in_total,
+			"discards": discard_total,
+			"ended": ended_total,
+			"wins": wins_total,
+			"avg_steps": float(steps_total) / float(max(1, hands_per_diff)),
+			"avg_ms": float(ms_total) / float(max(1, hands_per_diff)),
+		}
+	ai_difficulty = prev_diff
+	enable_offline_all_bot_mode(false, false)
+	return summary
+
+func sample_bot_match_winrates(hands: int = 6, seed_base: int = 20260726) -> Dictionary:
+	# 固定人设多手：统计各座位胜率（检验全 bot 循环稳定性，不做难度交叉）。
+	var prev_diff = ai_difficulty
+	ai_difficulty = AI_DIFFICULTY_NORMAL
+	enable_offline_all_bot_mode(true, true)
+	reset_ai_profile_seat_map()
+	var win_counts = [0, 0, 0, 0]
+	var deal_ins = [0, 0, 0, 0]
+	var finished = 0
+	for h in range(hands):
+		seed(seed_base + h * 131)
+		mode = "offline"
+		offline_hand_number = 1
+		dealer_seat = h % 4
+		for s in range(4):
+			players[s]["score"] = MATCH_START_SCORE
+		deal_offline_hand()
+		reset_ai_profile_seat_map()
+		var result = simulate_offline_bot_hand_sync(700)
+		if bool(result.get("ended", false)):
+			finished += 1
+		var w = int(result.get("winner", -1))
+		if w >= 0 and w < 4:
+			win_counts[w] = int(win_counts[w]) + 1
+		var di = int(result.get("deal_in_seat", -1))
+		if di >= 0 and di < 4:
+			deal_ins[di] = int(deal_ins[di]) + 1
+	ai_difficulty = prev_diff
+	enable_offline_all_bot_mode(false, false)
+	return {
+		"hands": hands,
+		"finished": finished,
+		"win_counts": win_counts,
+		"deal_ins": deal_ins,
+	}
+
 func run_ai_until_human() -> void:
 	if offline_ai_active:
 		return
@@ -546,8 +836,11 @@ func run_ai_until_human() -> void:
 			sort_hand(players[seat]["hand"])
 			offline_turn_needs_draw = false
 			if can_win_for_seat(seat):
-				finish_offline_round(seat, drawn, true, -1)
-				break
+				var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
+				if bool(tsumo_decision.get("accept", true)):
+					finish_offline_round(seat, drawn, true, -1)
+					break
+				# 留听：拒绝低价值自摸，进入正常弃牌（通常打出进张或无关张）。
 			request_game_render()
 			var gang_tile = choose_ai_concealed_gang(seat)
 			var ai_declared_gang = false
@@ -630,7 +923,7 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 	if mode != "offline" or offline_phase == "ended":
 		return
 	var ai_claim = choose_ai_claim(from_seat, tile)
-	if from_seat != 0:
+	if not is_ai_controlled_seat(0) and from_seat != 0:
 		var human_hand_counts = tile_counts(players[0]["hand"])
 		var human_options = get_claim_options(0, from_seat, tile, human_hand_counts)
 		var visible_human_options = filter_claim_options_by_priority(human_options, claim_priority(str(ai_claim.get("claim", ""))))
@@ -850,13 +1143,14 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	for seat in range(players.size()):
 		last_score_deltas.append(int(players[seat].get("score", 0)) - int(before_scores[seat]))
 
-	# 记录游戏统计
-	var player_score_delta = int(last_score_deltas[0])
+	# 记录游戏统计（全 bot 静默模拟跳过，避免污染本地成就/进度）
+	var player_score_delta = int(last_score_deltas[0]) if not last_score_deltas.is_empty() else 0
 	var player_won = winner == 0
-	record_game_result(player_won, player_score_delta, offline_hand_number)
+	if not offline_sim_quiet:
+		record_game_result(player_won, player_score_delta, offline_hand_number)
 
 	# 解锁成就
-	if player_won:
+	if (not offline_sim_quiet) and player_won:
 		unlock_achievement("first_win")
 		if self_draw:
 			unlock_achievement("self_draw")

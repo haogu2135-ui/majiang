@@ -712,6 +712,9 @@ func deal_offline_hand() -> void:
 	current_seat = dealer_seat
 	last_discard = ""
 	last_discard_seat = -1
+	# 每局按难度刷新 AI 人设座位映射（标准/困难有轮换）
+	if mode == "offline":
+		reshuffle_ai_profiles_for_hand()
 	for seat in range(players.size()):
 		players[seat]["hand"] = []
 		players[seat]["discards"] = []
@@ -2321,7 +2324,7 @@ func complete_added_gang(seat: int, tile: String) -> void:
 
 func begin_rob_gang_resolution(gang_seat: int, tile: String) -> bool:
 	var ai_claim = choose_ai_rob_gang(gang_seat, tile)
-	if gang_seat != 0 and can_win_for_seat(0, tile):
+	if (not is_ai_controlled_seat(0)) and gang_seat != 0 and can_win_for_seat(0, tile):
 		offline_pending_claim = {
 			"from_seat": gang_seat,
 			"tile": tile,
@@ -2859,12 +2862,60 @@ func should_confirm_danger_discard(index: int, tile: String, report: Dictionary)
 		if pending_danger_discard_tile != "":
 			clear_pending_danger_discard()
 		return false
-	if has_pending_danger_discard() and pending_danger_discard_tile == tile:
+	# 第二次点击同一张高危牌：放行（直接看 pending 标记，避免 phase 边界漏判）
+	if pending_danger_discard_tile != "" and pending_danger_discard_tile == tile:
+		return false
+	# 智能抑制：无更安全替代 / 非极端风险时不反复打扰
+	if not danger_discard_needs_confirmation(report):
+		clear_pending_danger_discard()
 		return false
 	pending_danger_discard_index = index
 	pending_danger_discard_tile = tile
 	pending_danger_discard_report = duplicate_ai_report(report, true)
 	return true
+
+func danger_discard_needs_confirmation(report: Dictionary) -> bool:
+	if report.is_empty():
+		return false
+	var tile = str(report.get("tile", ""))
+	var risk = float(report.get("risk", 0.0))
+	var feed_risk = float(report.get("feed_risk", 0.0))
+	var shanten = int(report.get("shanten", 8))
+	var wait_remaining = int(report.get("wait_total_remaining", 0))
+	var pressure = ai_pressure_context(0) if mode == "offline" else {}
+	var multi_threat = bool(pressure.get("multi_threat", false)) or int(pressure.get("hot_opponents", 0)) >= 2
+	var threat_rank = int(pressure.get("threat_rank", 0))
+	# 多威胁 / 极端危险：必确认
+	if multi_threat or threat_rank >= 3 or risk >= 42.0 or feed_risk >= 48.0:
+		return true
+	var alternatives = safe_discard_alternative_reports(tile, 3)
+	# 没有明显更安全替代：只在更高阈值提醒，避免“只能打这张”时反复弹
+	if alternatives.is_empty():
+		return risk >= 38.0 or feed_risk >= 42.0
+	var best_alt_risk = 999.0
+	var best_alt_shanten = 8
+	var has_safe_tenpai_alt = false
+	for alt in alternatives:
+		if typeof(alt) != TYPE_DICTIONARY:
+			continue
+		best_alt_risk = min(best_alt_risk, float(alt.get("risk", 999.0)))
+		var alt_sh = int(alt.get("shanten", 8))
+		best_alt_shanten = min(best_alt_shanten, alt_sh)
+		if alt_sh <= 0 and str(alt.get("safety_label", "")) != "":
+			has_safe_tenpai_alt = true
+	# 存在明显更安全的替代打法
+	if risk - best_alt_risk >= 10.0:
+		return true
+	# 薄听还要顶危险张：提醒
+	if shanten <= 0 and wait_remaining <= 2:
+		return true
+	# 有安全听牌替代却选高危：提醒
+	if shanten <= 0 and has_safe_tenpai_alt:
+		return true
+	# 为了听牌牺牲安全且替代也会听：若风险不算极端可少打扰
+	if shanten <= 0 and wait_remaining >= 6 and best_alt_shanten > 0 and risk < 36.0 and feed_risk < 38.0:
+		return false
+	return risk >= 34.0 or feed_risk >= 36.0
 
 func begin_danger_discard_confirmation(index: int, tile: String, report: Dictionary) -> void:
 	pending_danger_discard_index = index

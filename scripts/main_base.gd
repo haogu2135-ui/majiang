@@ -197,6 +197,14 @@ const SEAT_AVATAR_BAND_COLORS := [
 	Color(0.30, 0.22, 0.38),
 	Color(0.38, 0.22, 0.18),
 ]
+const AI_DIFFICULTY_EASY := 0
+const AI_DIFFICULTY_NORMAL := 1
+const AI_DIFFICULTY_HARD := 2
+const AI_DIFFICULTY_LABELS := ["简单", "标准", "困难"]
+const AI_DANGER_RISK_SOFT := 18.0
+const AI_DANGER_RISK_HIGH := 31.0
+const AI_DANGER_FEED_SOFT := 14.0
+const AI_FAST_EVAL_TOP_K := 4
 const AI_PROFILES := [
 	{
 		"label": "均衡",
@@ -377,6 +385,7 @@ var music_enabled = true
 var sfx_enabled = true
 var tts_enabled = true
 var fast_mode_enabled = true
+var ai_difficulty := AI_DIFFICULTY_NORMAL
 var fx_enabled = true
 var graphics_quality = Commercial3DStage.QUALITY_AUTO
 var ai_assist_enabled = false  # 出牌辅助（推荐/危险提示），玩家可在设置中开启
@@ -482,6 +491,11 @@ var offline_claim_counts: Dictionary = {}
 var offline_package_liability: Dictionary = {}
 var offline_last_draw: Dictionary = {}
 var offline_ai_active = false
+var offline_all_bot_mode := false
+var offline_sim_quiet := false
+## seat -> AI_PROFILES index; reshuffled by difficulty for variety
+var ai_profile_seat_map: Array = [0, 1, 2, 3]
+var ai_sim_stats: Dictionary = {}
 var round_summary = ""
 var last_score_deltas: Array[int] = []
 var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
@@ -1962,6 +1976,8 @@ func numeric_count(value, fallback: int = 0) -> int:
 	return int(value)
 
 func fx_enabled_effective() -> bool:
+	if offline_sim_quiet:
+		return false
 	return fx_enabled and fx_layer != null and is_instance_valid(fx_layer)
 
 func get_shader_material(shader_name: String) -> ShaderMaterial:
@@ -2277,6 +2293,7 @@ func load_settings() -> void:
 	fx_enabled = bool(config.get_value("gameplay", "fx_enabled", fx_enabled))
 	graphics_quality = clampi(int(config.get_value("gameplay", "graphics_quality", graphics_quality)), Commercial3DStage.QUALITY_AUTO, Commercial3DStage.QUALITY_HIGH)
 	ai_assist_enabled = bool(config.get_value("gameplay", "ai_assist_enabled", ai_assist_enabled))
+	ai_difficulty = clampi(int(config.get_value("gameplay", "ai_difficulty", ai_difficulty)), AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	current_bgm_index = int(config.get_value("gameplay", "current_bgm_index", 0))
 	if str(config.get_value("audio", "defaults_version", "")) != AUDIO_DEFAULTS_VERSION:
 		music_enabled = true
@@ -2294,6 +2311,7 @@ func save_settings() -> void:
 	config.set_value("gameplay", "fx_enabled", fx_enabled)
 	config.set_value("gameplay", "graphics_quality", graphics_quality)
 	config.set_value("gameplay", "ai_assist_enabled", ai_assist_enabled)
+	config.set_value("gameplay", "ai_difficulty", ai_difficulty)
 	config.set_value("gameplay", "current_bgm_index", current_bgm_index)
 	config.save(SETTINGS_PATH)
 
@@ -2614,6 +2632,8 @@ func load_offline_progress() -> bool:
 	return true
 
 func save_offline_progress() -> void:
+	if offline_sim_quiet:
+		return
 	if mode != "offline":
 		return
 	var config = ConfigFile.new()
@@ -3199,6 +3219,8 @@ func count_tile(hand: Array, tile: String) -> int:
 	return count
 
 func add_log(text: String) -> void:
+	if offline_sim_quiet:
+		return
 	table_logs.append(text)
 	while table_logs.size() > 10:
 		table_logs.pop_front()

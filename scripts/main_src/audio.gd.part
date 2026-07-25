@@ -324,6 +324,8 @@ func _on_background_music_finished() -> void:
 	start_background_music()
 
 func play_sfx(name: String, volume_db: float = -3.0) -> void:
+	if offline_sim_quiet:
+		return
 	if not sfx_enabled or not audio_runtime_enabled():
 		return
 	ensure_master_audio_bus()
@@ -796,11 +798,15 @@ func play_voice_clip(key: String) -> bool:
 	return true
 
 func speak_tile_call(tile: String) -> void:
+	if offline_sim_quiet:
+		return
 	if speak_voice_clips_delayed([voice_clip_key_for_tile(tile)], SPEECH_TILE_DELAY_SECONDS, false):
 		return
 	speak_text_delayed(tile_speech_label(tile), SPEECH_TILE_DELAY_SECONDS, false)
 
 func speak_action_call(action: String, tile: String) -> void:
+	if offline_sim_quiet:
+		return
 	var clips: Array[String] = []
 	var action_key = voice_clip_key_for_action(action)
 	if action_key != "":

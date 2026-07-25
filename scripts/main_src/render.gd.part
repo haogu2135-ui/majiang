@@ -8222,6 +8222,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_button("快速", fast_mode_enabled, func() -> void:
 		toggle_fast_mode_setting()
 	))
+	make_setting_row(play_grid, "AI 难度", "对手强度: %s" % ai_difficulty_label(), make_setting_button(ai_difficulty_label(true), true, func() -> void:
+		cycle_ai_difficulty_setting()
+	))
 	make_setting_row(play_grid, "桌面特效", "当前: %s" % ("开启" if fx_enabled else "关闭"), make_setting_button("特效", fx_enabled, func() -> void:
 		toggle_fx_setting()
 	))
@@ -12890,6 +12893,8 @@ func play_center_last_discard_feedback(parent: Control, tile: String, seat: int 
 
 
 func play_claim_animation(claim: String, tile: String, from_seat: int, to_seat: int, callback: Callable = Callable()) -> void:
+	if offline_sim_quiet:
+		return
 	"""碰/杠/吃动画 - 组合飞行动画"""
 	if not fx_enabled_effective():
 		if callback.is_valid():

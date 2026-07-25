@@ -1996,6 +1996,17 @@ func toggle_fast_mode_setting() -> void:
 	save_settings()
 	refresh_current_screen()
 
+func ai_difficulty_label(short: bool = false) -> String:
+	var idx = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var label = str(AI_DIFFICULTY_LABELS[idx]) if idx < AI_DIFFICULTY_LABELS.size() else "标准"
+	return label if not short else label.substr(0, 1)
+
+func cycle_ai_difficulty_setting() -> void:
+	ai_difficulty = (clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) + 1) % 3
+	save_settings()
+	show_toast("AI难度: %s" % ai_difficulty_label())
+	refresh_current_screen()
+
 func toggle_fx_setting() -> void:
 	fx_enabled = not fx_enabled
 	save_settings()
