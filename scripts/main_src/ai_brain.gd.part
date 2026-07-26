@@ -397,12 +397,35 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 			continue
 		simulated.remove_at(i)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) - 1
-		var report = build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, shared_context, simulated_counts, after_counts)
+		# 副露压力检查只需要知道是否会被迫切危险张。静默全 Bot 采样中，
+		# 不要为每一个候选再展开完整的进张/待牌/路线报告；这会在一次响应
+		# 中重复数十次 34 张扫描。前台对局和玩家助手仍走完整评估。
+		var report = build_ai_fast_post_claim_discard_report(seat, candidate, open_melds, pressure_context, shared_context, simulated_counts) if offline_sim_quiet else build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, shared_context, simulated_counts, after_counts)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		simulated.insert(i, candidate)
 		if best.is_empty() or float(report.get("score", -1000000.0)) > float(best.get("score", -1000000.0)):
 			best = report
 	return best
+
+
+func build_ai_fast_post_claim_discard_report(seat: int, tile: String, open_melds: int, pressure_context: Dictionary, eval_context: Dictionary, simulated_counts: Array) -> Dictionary:
+	# This is intentionally limited to the fields consumed by claim-pressure checks.
+	# It keeps quiet benchmark games representative of danger avoidance without using
+	# the full player-facing recommendation scorer for every hypothetical discard.
+	var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
+	var risk = deal_in_risk_score(tile, seat, eval_context)
+	var safety = tile_safety_label(tile, seat, [], eval_context)
+	var defense = ai_defense_weight(seat, shanten, pressure_context)
+	var score = -float(shanten) * 760.0 - risk * defense * ai_risk_factor(seat)
+	score += ai_safety_bonus(safety, defense, shanten)
+	return {
+		"tile": tile,
+		"score": score,
+		"shanten": shanten,
+		"risk": risk,
+		"safety_label": safety,
+		"fast_post_claim": true,
+	}
 
 func choose_ai_rob_gang(gang_seat: int, tile: String) -> Dictionary:
 	for offset in range(1, 4):
