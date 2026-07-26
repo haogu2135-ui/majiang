@@ -8116,6 +8116,18 @@ func draw_settings_overlay(parent: Control) -> void:
 	# r210: GPT chrome conversion
 	if not settings_panel_open:
 		return
+	var compact_settings = effective_viewport_size().y <= 560.0
+	var panel_rect = SETTINGS_PANEL_RECT
+	var audio_section_rect = SETTINGS_AUDIO_SECTION_RECT
+	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
+	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
+	if compact_settings:
+		# 540px 高度仍保留每行 48px 的点击目标：扩大模态可用高度，再让
+		# 上方两区容纳完整设置行，底部系统区维持一行双列。
+		panel_rect = rect_full(0.145, 0.010, 0.855, 0.990)
+		audio_section_rect = rect_full(0.040, 0.250, 0.488, 0.837)
+		play_section_rect = rect_full(0.512, 0.250, 0.960, 0.837)
+		maint_section_rect = rect_full(0.040, 0.855, 0.960, 0.989)
 	var overlay = Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -8127,10 +8139,10 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# A lacquer rear shell and cast shadow make the modal read as a physical
 	# control console while preserving the established 960-safe content bounds.
-	var panel_shadow_rect := Rect2(SETTINGS_PANEL_RECT.position + Vector2(0.006, 0.014), SETTINGS_PANEL_RECT.size + Vector2(0.010, 0.012))
+	var panel_shadow_rect := Rect2(panel_rect.position + Vector2(0.006, 0.014), panel_rect.size + Vector2(0.010, 0.012))
 	var panel_shadow = make_soft_depth_panel(overlay, panel_shadow_rect, Color(0.0, 0.0, 0.0, 0.40), 24)
 	panel_shadow.name = "SettingsConsole3DCastShadow"
-	var rear_shell_rect := Rect2(SETTINGS_PANEL_RECT.position - Vector2(0.009, 0.012), SETTINGS_PANEL_RECT.size + Vector2(0.011, 0.010))
+	var rear_shell_rect := Rect2(panel_rect.position - Vector2(0.009, 0.012), panel_rect.size + Vector2(0.011, 0.010))
 	var rear_shell = make_gpt_plate_rect(rear_shell_rect, Color(0.290, 0.360, 0.280, 0.98), "ui_jade_reading_plate")
 	rear_shell.name = "SettingsConsole3DRearShell"
 	overlay.add_child(rear_shell)
@@ -8142,7 +8154,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rear_shell.add_child(rear_top_glint)
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_plate_rect(SETTINGS_PANEL_RECT, Color(0.390, 0.470, 0.380, 0.99), "ui_jade_reading_plate")
+	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.99), "ui_jade_reading_plate")
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
@@ -8203,7 +8215,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	apply_rect(close, SETTINGS_CLOSE_RECT)
 
 	# 声音设置
-	var audio_grid = make_settings_section(panel, SETTINGS_AUDIO_SECTION_RECT, "声音")
+	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)
 	audio_grid.columns = 1
 	make_setting_row(audio_grid, "背景音乐", "当前: %s" % ("开启" if music_enabled else "关闭"), make_setting_button("音乐", music_enabled, func() -> void:
 		toggle_music_setting()
@@ -8219,7 +8231,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 
 	# 体验设置
-	var play_grid = make_settings_section(panel, SETTINGS_PLAY_SECTION_RECT, "体验")
+	var play_grid = make_settings_section(panel, play_section_rect, "体验", compact_settings)
 	play_grid.columns = 1
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_button("快速", fast_mode_enabled, func() -> void:
 		toggle_fast_mode_setting()
@@ -8238,7 +8250,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 
 	# 系统设置
-	var system_grid = make_settings_section(panel, SETTINGS_MAINT_SECTION_RECT, "系统")
+	var system_grid = make_settings_section(panel, maint_section_rect, "系统", compact_settings)
 	system_grid.columns = 2
 	make_setting_row(system_grid, "3D 画质", "当前: %s" % graphics_quality_label(), make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
@@ -12198,7 +12210,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	row.add_child(button)
 
 
-func make_settings_section(parent: Control, rect: Rect2, title_text: String) -> GridContainer:
+func make_settings_section(parent: Control, rect: Rect2, title_text: String, compact: bool = false) -> GridContainer:
 	# r214: bulk GPT chrome sweep
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
@@ -12230,9 +12242,11 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String) -> 
 	configure_passive_container(grid)
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 5)
+	grid.add_theme_constant_override("v_separation", 3 if compact else 5)
 	section.add_child(grid)
-	apply_rect(grid, SETTINGS_SECTION_GRID_RECT)
+	# Compact settings reserve the same 48px row target while tightening only
+	# the decorative title/chrome clearance inside each physical section.
+	apply_rect(grid, rect_full(0.035, 0.150, 0.965, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 

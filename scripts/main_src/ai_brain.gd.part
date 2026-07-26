@@ -1364,6 +1364,10 @@ func ai_report_cache_key(seat: int) -> String:
 	var parts: Array[String] = [
 		"seat=%d" % seat,
 		"mode=" + mode,
+		# 静默全 Bot 模拟只保留快评 Top-K；不能与玩家对局的完整候选共用缓存。
+		"sim=%d" % (1 if offline_sim_quiet else 0),
+		# 同一手牌在换局人设后评分会变化，映射也是报告状态的一部分。
+		"profiles=" + ai_profile_map_cache_key(),
 		"phase=" + offline_phase,
 		"cur=%d" % current_seat,
 		"draw=%d" % (1 if offline_turn_needs_draw else 0),
@@ -1381,6 +1385,13 @@ func ai_report_cache_key(seat: int) -> String:
 		parts.append("p%d_disc=%s" % [player_seat, tile_array_key(player.get("discards", []))])
 		parts.append("p%d_meld=%s" % [player_seat, meld_array_key(player.get("melds", []))])
 	return "|".join(parts)
+
+
+func ai_profile_map_cache_key() -> String:
+	var parts: Array[String] = []
+	for profile_index in ai_profile_seat_map:
+		parts.append(str(int(profile_index)))
+	return ",".join(parts)
 
 
 func package_liability_ai_cache_key() -> String:
@@ -2969,7 +2980,9 @@ func opponent_seat_threat_report(viewer: int, opponent: int, eval_context: Dicti
 		"readiness_score": readiness_score,
 		"readiness_label": readiness_label,
 		"readiness_reasons": readiness.get("reasons", []),
-		"safe_tiles": threat_safe_tile_labels(viewer, best_type, best_suit, 3, eval_context),
+		# 座位卡展示的是当前对手的威胁，安全牌也必须按该对手单独判断，
+		# 不能复用全桌主威胁的现物/风险排序。
+		"safe_tiles": threat_safe_tile_labels(viewer, best_type, best_suit, 3, eval_context, opponent),
 	}
 	store_threat_report_cache(cache_key, report)
 	return duplicate_threat_report(report)

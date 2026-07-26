@@ -2197,6 +2197,10 @@ func ai_report_cache_key(seat: int) -> String:
 	var parts: Array[String] = [
 		"seat=%d" % seat,
 		"mode=" + mode,
+		# 静默全 Bot 模拟只保留快评 Top-K；不能与玩家对局的完整候选共用缓存。
+		"sim=%d" % (1 if offline_sim_quiet else 0),
+		# 同一手牌在换局人设后评分会变化，映射也是报告状态的一部分。
+		"profiles=" + ai_profile_map_cache_key(),
 		"phase=" + offline_phase,
 		"cur=%d" % current_seat,
 		"draw=%d" % (1 if offline_turn_needs_draw else 0),
@@ -2214,6 +2218,13 @@ func ai_report_cache_key(seat: int) -> String:
 		parts.append("p%d_disc=%s" % [player_seat, tile_array_key(player.get("discards", []))])
 		parts.append("p%d_meld=%s" % [player_seat, meld_array_key(player.get("melds", []))])
 	return "|".join(parts)
+
+
+func ai_profile_map_cache_key() -> String:
+	var parts: Array[String] = []
+	for profile_index in ai_profile_seat_map:
+		parts.append(str(int(profile_index)))
+	return ",".join(parts)
 
 
 func package_liability_ai_cache_key() -> String:
@@ -3802,7 +3813,9 @@ func opponent_seat_threat_report(viewer: int, opponent: int, eval_context: Dicti
 		"readiness_score": readiness_score,
 		"readiness_label": readiness_label,
 		"readiness_reasons": readiness.get("reasons", []),
-		"safe_tiles": threat_safe_tile_labels(viewer, best_type, best_suit, 3, eval_context),
+		# 座位卡展示的是当前对手的威胁，安全牌也必须按该对手单独判断，
+		# 不能复用全桌主威胁的现物/风险排序。
+		"safe_tiles": threat_safe_tile_labels(viewer, best_type, best_suit, 3, eval_context, opponent),
 	}
 	store_threat_report_cache(cache_key, report)
 	return duplicate_threat_report(report)
@@ -14181,6 +14194,18 @@ func draw_settings_overlay(parent: Control) -> void:
 	# r210: GPT chrome conversion
 	if not settings_panel_open:
 		return
+	var compact_settings = effective_viewport_size().y <= 560.0
+	var panel_rect = SETTINGS_PANEL_RECT
+	var audio_section_rect = SETTINGS_AUDIO_SECTION_RECT
+	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
+	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
+	if compact_settings:
+		# 540px 高度仍保留每行 48px 的点击目标：扩大模态可用高度，再让
+		# 上方两区容纳完整设置行，底部系统区维持一行双列。
+		panel_rect = rect_full(0.145, 0.010, 0.855, 0.990)
+		audio_section_rect = rect_full(0.040, 0.250, 0.488, 0.837)
+		play_section_rect = rect_full(0.512, 0.250, 0.960, 0.837)
+		maint_section_rect = rect_full(0.040, 0.855, 0.960, 0.989)
 	var overlay = Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -14192,10 +14217,10 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# A lacquer rear shell and cast shadow make the modal read as a physical
 	# control console while preserving the established 960-safe content bounds.
-	var panel_shadow_rect := Rect2(SETTINGS_PANEL_RECT.position + Vector2(0.006, 0.014), SETTINGS_PANEL_RECT.size + Vector2(0.010, 0.012))
+	var panel_shadow_rect := Rect2(panel_rect.position + Vector2(0.006, 0.014), panel_rect.size + Vector2(0.010, 0.012))
 	var panel_shadow = make_soft_depth_panel(overlay, panel_shadow_rect, Color(0.0, 0.0, 0.0, 0.40), 24)
 	panel_shadow.name = "SettingsConsole3DCastShadow"
-	var rear_shell_rect := Rect2(SETTINGS_PANEL_RECT.position - Vector2(0.009, 0.012), SETTINGS_PANEL_RECT.size + Vector2(0.011, 0.010))
+	var rear_shell_rect := Rect2(panel_rect.position - Vector2(0.009, 0.012), panel_rect.size + Vector2(0.011, 0.010))
 	var rear_shell = make_gpt_plate_rect(rear_shell_rect, Color(0.290, 0.360, 0.280, 0.98), "ui_jade_reading_plate")
 	rear_shell.name = "SettingsConsole3DRearShell"
 	overlay.add_child(rear_shell)
@@ -14207,7 +14232,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rear_shell.add_child(rear_top_glint)
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_plate_rect(SETTINGS_PANEL_RECT, Color(0.390, 0.470, 0.380, 0.99), "ui_jade_reading_plate")
+	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.99), "ui_jade_reading_plate")
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
@@ -14268,7 +14293,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	apply_rect(close, SETTINGS_CLOSE_RECT)
 
 	# 声音设置
-	var audio_grid = make_settings_section(panel, SETTINGS_AUDIO_SECTION_RECT, "声音")
+	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)
 	audio_grid.columns = 1
 	make_setting_row(audio_grid, "背景音乐", "当前: %s" % ("开启" if music_enabled else "关闭"), make_setting_button("音乐", music_enabled, func() -> void:
 		toggle_music_setting()
@@ -14284,7 +14309,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 
 	# 体验设置
-	var play_grid = make_settings_section(panel, SETTINGS_PLAY_SECTION_RECT, "体验")
+	var play_grid = make_settings_section(panel, play_section_rect, "体验", compact_settings)
 	play_grid.columns = 1
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_button("快速", fast_mode_enabled, func() -> void:
 		toggle_fast_mode_setting()
@@ -14303,7 +14328,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 
 	# 系统设置
-	var system_grid = make_settings_section(panel, SETTINGS_MAINT_SECTION_RECT, "系统")
+	var system_grid = make_settings_section(panel, maint_section_rect, "系统", compact_settings)
 	system_grid.columns = 2
 	make_setting_row(system_grid, "3D 画质", "当前: %s" % graphics_quality_label(), make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
@@ -18263,7 +18288,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	row.add_child(button)
 
 
-func make_settings_section(parent: Control, rect: Rect2, title_text: String) -> GridContainer:
+func make_settings_section(parent: Control, rect: Rect2, title_text: String, compact: bool = false) -> GridContainer:
 	# r214: bulk GPT chrome sweep
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
@@ -18295,9 +18320,11 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String) -> 
 	configure_passive_container(grid)
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 5)
+	grid.add_theme_constant_override("v_separation", 3 if compact else 5)
 	section.add_child(grid)
-	apply_rect(grid, SETTINGS_SECTION_GRID_RECT)
+	# Compact settings reserve the same 48px row target while tightening only
+	# the decorative title/chrome clearance inside each physical section.
+	apply_rect(grid, rect_full(0.035, 0.150, 0.965, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 
@@ -26765,9 +26792,11 @@ func threat_level_rank(level: String) -> int:
 	return 0
 
 
-func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit: int, eval_context: Dictionary = {}) -> Array:
+func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit: int, eval_context: Dictionary = {}, opponent: int = -1) -> Array:
 	if seat < 0 or seat >= players.size() or limit <= 0:
 		return []
+	var target_opponent = opponent if opponent >= 0 and opponent < players.size() and opponent != seat else -1
+	var visible_counts = ai_context_visible_counts(eval_context)
 	var seen: Dictionary = {}
 	var best_tiles: Array[String] = []
 	var best_scores: Array = []
@@ -26779,9 +26808,27 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		seen[tile] = true
 		var safety = tile_safety_label(tile, seat, [], eval_context)
 		var risk = float(tile_risk_vector(tile, seat, [], eval_context).get("score", 0.0))
+		if target_opponent >= 0:
+			# 座位威胁卡只回答“对这一家是否安全”。全桌安牌仍保留最高级别，
+			# 其余现物、筋、壁均改按当前展示对手判断。
+			if is_tile_safe_against_all(tile, seat, eval_context):
+				safety = "安"
+			elif opponent_discard_tile_count(target_opponent, tile, eval_context) > 0:
+				safety = "现"
+			elif visible_tile_count_from_counts(tile, visible_counts) >= 3:
+				safety = "熟"
+			elif is_suji_safe_against_opponent(tile, target_opponent, eval_context):
+				safety = "筋"
+			elif is_kabe_safe_against_opponent(tile, target_opponent, visible_counts, eval_context):
+				safety = "壁"
+			else:
+				safety = ""
+			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, visible_counts, eval_context).get("risk", 0.0))
 		var score = -risk
 		if safety == "安":
 			score += 120.0
+		elif safety == "现":
+			score += 96.0
 		elif safety == "熟":
 			score += 72.0
 		elif safety == "筋":

@@ -3840,9 +3840,11 @@ func threat_level_rank(level: String) -> int:
 	return 0
 
 
-func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit: int, eval_context: Dictionary = {}) -> Array:
+func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit: int, eval_context: Dictionary = {}, opponent: int = -1) -> Array:
 	if seat < 0 or seat >= players.size() or limit <= 0:
 		return []
+	var target_opponent = opponent if opponent >= 0 and opponent < players.size() and opponent != seat else -1
+	var visible_counts = ai_context_visible_counts(eval_context)
 	var seen: Dictionary = {}
 	var best_tiles: Array[String] = []
 	var best_scores: Array = []
@@ -3854,9 +3856,27 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		seen[tile] = true
 		var safety = tile_safety_label(tile, seat, [], eval_context)
 		var risk = float(tile_risk_vector(tile, seat, [], eval_context).get("score", 0.0))
+		if target_opponent >= 0:
+			# 座位威胁卡只回答“对这一家是否安全”。全桌安牌仍保留最高级别，
+			# 其余现物、筋、壁均改按当前展示对手判断。
+			if is_tile_safe_against_all(tile, seat, eval_context):
+				safety = "安"
+			elif opponent_discard_tile_count(target_opponent, tile, eval_context) > 0:
+				safety = "现"
+			elif visible_tile_count_from_counts(tile, visible_counts) >= 3:
+				safety = "熟"
+			elif is_suji_safe_against_opponent(tile, target_opponent, eval_context):
+				safety = "筋"
+			elif is_kabe_safe_against_opponent(tile, target_opponent, visible_counts, eval_context):
+				safety = "壁"
+			else:
+				safety = ""
+			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, visible_counts, eval_context).get("risk", 0.0))
 		var score = -risk
 		if safety == "安":
 			score += 120.0
+		elif safety == "现":
+			score += 96.0
 		elif safety == "熟":
 			score += 72.0
 		elif safety == "筋":
