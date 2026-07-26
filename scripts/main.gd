@@ -1409,6 +1409,9 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		"wait_variety": 0,
 		"alt_best_points": 0,
 		"alt_remaining": 0,
+		# 仅在主动放弃自摸时填写：打回本次进张，保留摸牌前的听口。
+		"continue_discard": "",
+		"preserves_tenpai": false,
 	}
 	if seat < 0 or seat >= players.size() or drawn_tile == "":
 		report["accept"] = false
@@ -1517,9 +1520,25 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		report["accept"] = false
 		report["reason"] = "留听高番自摸"
 		report["score"] = 140.0 + float(alt_best_fan) * 10.0
+		# 不能把“拒绝自摸”只当成展示决定。此时若普通切牌或先行开杠，
+		# 可能损失原先的高价值听口；打回本次低价值进张才是完整的留听动作。
+		report["continue_discard"] = drawn_tile
+		report["preserves_tenpai"] = true
 		return report
 	report["reason"] = "稳妥自摸"
 	return report
+
+
+func ai_tsumo_continue_discard(seat: int, drawn_tile: String, decision: Dictionary = {}) -> String:
+	if seat < 0 or seat >= players.size() or drawn_tile == "":
+		return ""
+	if bool(decision.get("accept", true)) or not bool(decision.get("preserves_tenpai", false)):
+		return ""
+	var discard = str(decision.get("continue_discard", ""))
+	# 策略报告只能打回刚摸到的那一张，防止陈旧报告误用于后续回合。
+	if discard != drawn_tile or count_tile(players[seat]["hand"], discard) <= 0:
+		return ""
+	return discard
 
 func score_context_report(seat: int) -> Dictionary:
 	if mode != "offline" or seat < 0 or seat >= players.size() or players.is_empty():
@@ -4866,6 +4885,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		var seat = current_seat
 		if not is_ai_controlled_seat(seat):
 			break
+		var tsumo_continue_discard = ""
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -4885,32 +4905,34 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 					_ai_sim_note_terminal_result(seat)
 					break
 				ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
-			var gang_tile = choose_ai_concealed_gang(seat)
-			if gang_tile != "":
-				perform_concealed_gang(seat, gang_tile)
-				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
-				if offline_phase == "ended":
-					_ai_sim_note_terminal_result(seat)
-					break
-				continue
-			gang_tile = choose_ai_added_gang(seat)
-			if gang_tile != "":
-				perform_added_gang(seat, gang_tile)
-				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
-				if offline_phase == "ended":
-					_ai_sim_note_terminal_result(seat)
-					break
-				# added gang may leave await_discard after draw
-				continue
+				tsumo_continue_discard = ai_tsumo_continue_discard(seat, drawn, tsumo_decision)
+			if tsumo_continue_discard == "":
+				var gang_tile = choose_ai_concealed_gang(seat)
+				if gang_tile != "":
+					perform_concealed_gang(seat, gang_tile)
+					ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
+					if offline_phase == "ended":
+						_ai_sim_note_terminal_result(seat)
+						break
+					continue
+				gang_tile = choose_ai_added_gang(seat)
+				if gang_tile != "":
+					perform_added_gang(seat, gang_tile)
+					ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
+					if offline_phase == "ended":
+						_ai_sim_note_terminal_result(seat)
+						break
+					# added gang may leave await_discard after draw
+					continue
 		if mode != "offline" or offline_phase != "await_discard":
 			break
 		seat = current_seat
 		var reports = get_ai_discard_reports(seat)
-		var discard_tile = ""
-		if reports.is_empty():
+		var discard_tile = tsumo_continue_discard
+		if discard_tile == "" and reports.is_empty():
 			var hand: Array = players[seat]["hand"]
 			discard_tile = str(hand[0]) if not hand.is_empty() else ""
-		else:
+		elif discard_tile == "":
 			# 与 choose_ai_discard_for_seat 对齐（含简单档次优），但复用 reports 避免双倍开销
 			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
 				var best_score = float(reports[0].get("score", 0.0))
@@ -5109,6 +5131,7 @@ func run_ai_until_human() -> void:
 		await pace_after_human_discard_response()
 	while mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
 		var seat = current_seat
+		var tsumo_continue_discard = ""
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -5127,22 +5150,24 @@ func run_ai_until_human() -> void:
 				if bool(tsumo_decision.get("accept", true)):
 					finish_offline_round(seat, drawn, true, -1)
 					break
-				# 留听：拒绝低价值自摸，进入正常弃牌（通常打出进张或无关张）。
+				# 留听：明确打回本次低价值进张，保持摸牌前的高价值听口。
+				tsumo_continue_discard = ai_tsumo_continue_discard(seat, drawn, tsumo_decision)
 			request_game_render()
-			var gang_tile = choose_ai_concealed_gang(seat)
 			var ai_declared_gang = false
-			if gang_tile != "":
-				perform_concealed_gang(seat, gang_tile)
-				ai_declared_gang = true
-				if offline_phase == "ended":
-					break
-			else:
-				gang_tile = choose_ai_added_gang(seat)
+			if tsumo_continue_discard == "":
+				var gang_tile = choose_ai_concealed_gang(seat)
 				if gang_tile != "":
-					perform_added_gang(seat, gang_tile)
+					perform_concealed_gang(seat, gang_tile)
 					ai_declared_gang = true
 					if offline_phase == "ended":
 						break
+				else:
+					gang_tile = choose_ai_added_gang(seat)
+					if gang_tile != "":
+						perform_added_gang(seat, gang_tile)
+						ai_declared_gang = true
+						if offline_phase == "ended":
+							break
 			if ai_declared_gang and mode == "offline" and offline_phase == "await_discard":
 				request_game_render()
 				await pace_after_visible_ai_action()
@@ -5152,7 +5177,7 @@ func run_ai_until_human() -> void:
 		if mode != "offline" or offline_phase != "await_discard" or current_seat == 0:
 			break
 		seat = current_seat
-		var tile = choose_ai_discard_for_seat(seat)
+		var tile = tsumo_continue_discard if tsumo_continue_discard != "" else choose_ai_discard_for_seat(seat)
 		play_ai_discard_fly_animation(seat, tile)
 		discard_tile_by_value(seat, tile)
 		resolve_after_discard(seat, tile)
@@ -27162,29 +27187,53 @@ func is_full_straight_hand(seat: int, tiles: Array) -> bool:
 	return full_straight_suit(seat, tiles) >= 0
 
 func full_straight_suit(seat: int, tiles: Array) -> int:
-	var ranks_by_suit: Array = []
+	if seat < 0 or seat >= players.size():
+		return -1
+	var open_melds: Array = players[seat]["melds"]
 	for suit in range(3):
-		var ranks: Dictionary = {}
-		ranks_by_suit.append(ranks)
-	for tile in all_scoring_tiles(seat, tiles):
-		var code = str(tile)
-		if not is_number_tile(code):
-			continue
-		var index = tile_index(code)
-		if index < 0 or index >= 27:
-			continue
-		var suit = int(index / 9)
-		var rank = index % 9
-		(ranks_by_suit[suit] as Dictionary)[rank] = true
-	for suit in range(3):
-		var ranks: Dictionary = ranks_by_suit[suit]
-		var complete = true
-		for rank in range(9):
-			if not ranks.has(rank):
-				complete = false
+		var fulfilled_by_open = [false, false, false]
+		for meld in open_melds:
+			var group = full_straight_open_meld_group(meld, suit)
+			if group >= 0:
+				fulfilled_by_open[group] = true
+		var concealed_counts = tile_counts(tiles)
+		var concealed_sequences = 0
+		var valid = true
+		# 一条龙必须能在真实面子分解中取出 123、456、789，不能仅凭
+		# 同花色 1-9 曾出现过就加番。
+		for group in range(3):
+			if bool(fulfilled_by_open[group]):
+				continue
+			var start = suit * 9 + group * 3
+			for offset in range(3):
+				var index = start + offset
+				if int(concealed_counts[index]) <= 0:
+					valid = false
+					break
+				concealed_counts[index] = int(concealed_counts[index]) - 1
+			if not valid:
 				break
-		if complete:
+			concealed_sequences += 1
+		if not valid:
+			continue
+		var remaining_melds = 4 - open_melds.size() - concealed_sequences
+		if remaining_melds >= 0 and is_standard_complete_from_counts(concealed_counts, remaining_melds):
 			return suit
+	return -1
+
+func full_straight_open_meld_group(meld: Array, suit: int) -> int:
+	if meld.size() != 3 or suit < 0 or suit >= 3:
+		return -1
+	var rank_counts = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+	for tile in meld:
+		var index = tile_index(str(tile))
+		if index < 0 or index >= 27 or int(index / 9) != suit:
+			return -1
+		rank_counts[index % 9] = int(rank_counts[index % 9]) + 1
+	for group in range(3):
+		var start = group * 3
+		if int(rank_counts[start]) == 1 and int(rank_counts[start + 1]) == 1 and int(rank_counts[start + 2]) == 1:
+			return group
 	return -1
 
 func is_all_triplet_hand(seat: int, tiles: Array) -> bool:

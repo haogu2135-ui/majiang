@@ -4210,29 +4210,53 @@ func is_full_straight_hand(seat: int, tiles: Array) -> bool:
 	return full_straight_suit(seat, tiles) >= 0
 
 func full_straight_suit(seat: int, tiles: Array) -> int:
-	var ranks_by_suit: Array = []
+	if seat < 0 or seat >= players.size():
+		return -1
+	var open_melds: Array = players[seat]["melds"]
 	for suit in range(3):
-		var ranks: Dictionary = {}
-		ranks_by_suit.append(ranks)
-	for tile in all_scoring_tiles(seat, tiles):
-		var code = str(tile)
-		if not is_number_tile(code):
-			continue
-		var index = tile_index(code)
-		if index < 0 or index >= 27:
-			continue
-		var suit = int(index / 9)
-		var rank = index % 9
-		(ranks_by_suit[suit] as Dictionary)[rank] = true
-	for suit in range(3):
-		var ranks: Dictionary = ranks_by_suit[suit]
-		var complete = true
-		for rank in range(9):
-			if not ranks.has(rank):
-				complete = false
+		var fulfilled_by_open = [false, false, false]
+		for meld in open_melds:
+			var group = full_straight_open_meld_group(meld, suit)
+			if group >= 0:
+				fulfilled_by_open[group] = true
+		var concealed_counts = tile_counts(tiles)
+		var concealed_sequences = 0
+		var valid = true
+		# 一条龙必须能在真实面子分解中取出 123、456、789，不能仅凭
+		# 同花色 1-9 曾出现过就加番。
+		for group in range(3):
+			if bool(fulfilled_by_open[group]):
+				continue
+			var start = suit * 9 + group * 3
+			for offset in range(3):
+				var index = start + offset
+				if int(concealed_counts[index]) <= 0:
+					valid = false
+					break
+				concealed_counts[index] = int(concealed_counts[index]) - 1
+			if not valid:
 				break
-		if complete:
+			concealed_sequences += 1
+		if not valid:
+			continue
+		var remaining_melds = 4 - open_melds.size() - concealed_sequences
+		if remaining_melds >= 0 and is_standard_complete_from_counts(concealed_counts, remaining_melds):
 			return suit
+	return -1
+
+func full_straight_open_meld_group(meld: Array, suit: int) -> int:
+	if meld.size() != 3 or suit < 0 or suit >= 3:
+		return -1
+	var rank_counts = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+	for tile in meld:
+		var index = tile_index(str(tile))
+		if index < 0 or index >= 27 or int(index / 9) != suit:
+			return -1
+		rank_counts[index % 9] = int(rank_counts[index % 9]) + 1
+	for group in range(3):
+		var start = group * 3
+		if int(rank_counts[start]) == 1 and int(rank_counts[start + 1]) == 1 and int(rank_counts[start + 2]) == 1:
+			return group
 	return -1
 
 func is_all_triplet_hand(seat: int, tiles: Array) -> bool:

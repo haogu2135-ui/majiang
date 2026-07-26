@@ -650,6 +650,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		var seat = current_seat
 		if not is_ai_controlled_seat(seat):
 			break
+		var tsumo_continue_discard = ""
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -669,32 +670,34 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 					_ai_sim_note_terminal_result(seat)
 					break
 				ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
-			var gang_tile = choose_ai_concealed_gang(seat)
-			if gang_tile != "":
-				perform_concealed_gang(seat, gang_tile)
-				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
-				if offline_phase == "ended":
-					_ai_sim_note_terminal_result(seat)
-					break
-				continue
-			gang_tile = choose_ai_added_gang(seat)
-			if gang_tile != "":
-				perform_added_gang(seat, gang_tile)
-				ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
-				if offline_phase == "ended":
-					_ai_sim_note_terminal_result(seat)
-					break
-				# added gang may leave await_discard after draw
-				continue
+				tsumo_continue_discard = ai_tsumo_continue_discard(seat, drawn, tsumo_decision)
+			if tsumo_continue_discard == "":
+				var gang_tile = choose_ai_concealed_gang(seat)
+				if gang_tile != "":
+					perform_concealed_gang(seat, gang_tile)
+					ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
+					if offline_phase == "ended":
+						_ai_sim_note_terminal_result(seat)
+						break
+					continue
+				gang_tile = choose_ai_added_gang(seat)
+				if gang_tile != "":
+					perform_added_gang(seat, gang_tile)
+					ai_sim_stats["claims"] = int(ai_sim_stats.get("claims", 0)) + 1
+					if offline_phase == "ended":
+						_ai_sim_note_terminal_result(seat)
+						break
+					# added gang may leave await_discard after draw
+					continue
 		if mode != "offline" or offline_phase != "await_discard":
 			break
 		seat = current_seat
 		var reports = get_ai_discard_reports(seat)
-		var discard_tile = ""
-		if reports.is_empty():
+		var discard_tile = tsumo_continue_discard
+		if discard_tile == "" and reports.is_empty():
 			var hand: Array = players[seat]["hand"]
 			discard_tile = str(hand[0]) if not hand.is_empty() else ""
-		else:
+		elif discard_tile == "":
 			# 与 choose_ai_discard_for_seat 对齐（含简单档次优），但复用 reports 避免双倍开销
 			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
 				var best_score = float(reports[0].get("score", 0.0))
@@ -893,6 +896,7 @@ func run_ai_until_human() -> void:
 		await pace_after_human_discard_response()
 	while mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
 		var seat = current_seat
+		var tsumo_continue_discard = ""
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -911,22 +915,24 @@ func run_ai_until_human() -> void:
 				if bool(tsumo_decision.get("accept", true)):
 					finish_offline_round(seat, drawn, true, -1)
 					break
-				# 留听：拒绝低价值自摸，进入正常弃牌（通常打出进张或无关张）。
+				# 留听：明确打回本次低价值进张，保持摸牌前的高价值听口。
+				tsumo_continue_discard = ai_tsumo_continue_discard(seat, drawn, tsumo_decision)
 			request_game_render()
-			var gang_tile = choose_ai_concealed_gang(seat)
 			var ai_declared_gang = false
-			if gang_tile != "":
-				perform_concealed_gang(seat, gang_tile)
-				ai_declared_gang = true
-				if offline_phase == "ended":
-					break
-			else:
-				gang_tile = choose_ai_added_gang(seat)
+			if tsumo_continue_discard == "":
+				var gang_tile = choose_ai_concealed_gang(seat)
 				if gang_tile != "":
-					perform_added_gang(seat, gang_tile)
+					perform_concealed_gang(seat, gang_tile)
 					ai_declared_gang = true
 					if offline_phase == "ended":
 						break
+				else:
+					gang_tile = choose_ai_added_gang(seat)
+					if gang_tile != "":
+						perform_added_gang(seat, gang_tile)
+						ai_declared_gang = true
+						if offline_phase == "ended":
+							break
 			if ai_declared_gang and mode == "offline" and offline_phase == "await_discard":
 				request_game_render()
 				await pace_after_visible_ai_action()
@@ -936,7 +942,7 @@ func run_ai_until_human() -> void:
 		if mode != "offline" or offline_phase != "await_discard" or current_seat == 0:
 			break
 		seat = current_seat
-		var tile = choose_ai_discard_for_seat(seat)
+		var tile = tsumo_continue_discard if tsumo_continue_discard != "" else choose_ai_discard_for_seat(seat)
 		play_ai_discard_fly_animation(seat, tile)
 		discard_tile_by_value(seat, tile)
 		resolve_after_discard(seat, tile)

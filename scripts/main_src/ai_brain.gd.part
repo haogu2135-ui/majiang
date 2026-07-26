@@ -576,6 +576,9 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		"wait_variety": 0,
 		"alt_best_points": 0,
 		"alt_remaining": 0,
+		# 仅在主动放弃自摸时填写：打回本次进张，保留摸牌前的听口。
+		"continue_discard": "",
+		"preserves_tenpai": false,
 	}
 	if seat < 0 or seat >= players.size() or drawn_tile == "":
 		report["accept"] = false
@@ -684,9 +687,25 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		report["accept"] = false
 		report["reason"] = "留听高番自摸"
 		report["score"] = 140.0 + float(alt_best_fan) * 10.0
+		# 不能把“拒绝自摸”只当成展示决定。此时若普通切牌或先行开杠，
+		# 可能损失原先的高价值听口；打回本次低价值进张才是完整的留听动作。
+		report["continue_discard"] = drawn_tile
+		report["preserves_tenpai"] = true
 		return report
 	report["reason"] = "稳妥自摸"
 	return report
+
+
+func ai_tsumo_continue_discard(seat: int, drawn_tile: String, decision: Dictionary = {}) -> String:
+	if seat < 0 or seat >= players.size() or drawn_tile == "":
+		return ""
+	if bool(decision.get("accept", true)) or not bool(decision.get("preserves_tenpai", false)):
+		return ""
+	var discard = str(decision.get("continue_discard", ""))
+	# 策略报告只能打回刚摸到的那一张，防止陈旧报告误用于后续回合。
+	if discard != drawn_tile or count_tile(players[seat]["hand"], discard) <= 0:
+		return ""
+	return discard
 
 func score_context_report(seat: int) -> Dictionary:
 	if mode != "offline" or seat < 0 or seat >= players.size() or players.is_empty():
