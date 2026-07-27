@@ -2809,6 +2809,10 @@ func run() -> void:
 	check(count_button_text_prefix(claim_actions_parent, "荐吃") == 0 and has_button_text(claim_actions_parent, "吃234万"), "claim action bar shows legal chi choices without recommendation badge")
 	dispose_node(claim_actions_parent)
 	check(scene.hand_tray_text().find("建议") < 0, "hand tray does not show claim advice")
+	# 与 commit_discard 一致：待响应状态必须同时保留来源弃牌的身份。
+	scene.players[3]["discards"] = ["3W"]
+	scene.last_discard = "3W"
+	scene.last_discard_seat = 3
 	scene.human_claim("chi", chi_choices[1])
 	check(scene.offline_phase == "await_discard", "chosen chi returns to discard phase")
 	check(scene.players[0]["melds"].size() > 0 and scene.same_tile_list(scene.players[0]["melds"].back(), ["2W", "3W", "4W"]), "chosen chi meld is applied")
@@ -2850,6 +2854,8 @@ func run() -> void:
 	scene.players[1]["hand"] = waits_for_3w_hand()
 	scene.players[1]["melds"] = []
 	scene.players[3]["discards"] = ["3W"]
+	scene.last_discard = "3W"
+	scene.last_discard_seat = 3
 	scene.resolve_after_discard(3, "3W")
 	check(scene.offline_phase == "ended", "AI hu takes priority over human chi")
 	check(scene.offline_last_winner == 1, "higher priority AI hu wins the discard")
@@ -2862,6 +2868,8 @@ func run() -> void:
 	scene.players[1]["hand"] = waits_for_3w_hand()
 	scene.players[1]["melds"] = []
 	scene.players[3]["discards"] = ["3W"]
+	scene.last_discard = "3W"
+	scene.last_discard_seat = 3
 	scene.resolve_after_discard(3, "3W")
 	check(scene.offline_phase == "pending_claim", "human hu is still offered against AI hu")
 	check(scene.offline_pending_claim.get("options", []) == ["hu"], "only equal-priority human hu is offered")
@@ -3936,6 +3944,10 @@ func run() -> void:
 	scene.players[1]["hand"] = winning_hand()
 	scene.players[1]["melds"] = []
 	var discard_points = int(scene.calculate_win_score(1, "E", false).get("points", 0)) * 3
+	scene.players[2]["discards"].append("E")
+	scene.last_discard = "E"
+	scene.last_discard_seat = 2
+	scene.offline_phase = "resolving"
 	scene.finish_offline_round(1, "E", false, 2)
 	check(int(scene.players[2]["score"]) == other_before - discard_points, "discarder pays discard win despite package liability")
 	check(int(scene.players[1]["score"]) == winner_before + discard_points, "winner receives discard payment despite package liability")
@@ -3948,6 +3960,10 @@ func run() -> void:
 	scene.offline_dealer_repeat = false
 	scene.players[1]["hand"] = winning_hand()
 	scene.players[1]["melds"] = []
+	scene.players[0]["discards"].append("E")
+	scene.last_discard = "E"
+	scene.last_discard_seat = 0
+	scene.offline_phase = "resolving"
 	scene.finish_offline_round(1, "E", false, 0)
 	var winner_score = int(scene.players[1]["score"])
 	check(scene.offline_phase == "ended", "round ends after win")
@@ -3971,6 +3987,10 @@ func run() -> void:
 	scene.dealer_seat = 0
 	scene.players[1]["hand"] = winning_hand()
 	scene.players[1]["melds"] = []
+	scene.players[0]["discards"].append("E")
+	scene.last_discard = "E"
+	scene.last_discard_seat = 0
+	scene.offline_phase = "resolving"
 	scene.finish_offline_round(1, "E", false, 0)
 	check(scene.is_offline_match_finished(), "match finishes after final non-repeat hand")
 	scene.start_next_offline_hand(false)

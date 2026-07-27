@@ -1115,7 +1115,10 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			reason = "序盘蓄力"
 			declined_by_opening = true
 	var from_seat = int(claim_context.get("from_seat", -1)) if has_claim_context else -1
-	var human_discipline = human_claim_discipline_report(seat, claim, from_seat, before_shanten, after_shanten, shape_gain, pressure_report, open_melds)
+	var claim_eval_context = claim_context.get("eval_context", {}) if has_claim_context else {}
+	if typeof(claim_eval_context) != TYPE_DICTIONARY:
+		claim_eval_context = {}
+	var human_discipline = human_claim_discipline_report(seat, claim, from_seat, before_shanten, after_shanten, shape_gain, pressure_report, open_melds, claim_eval_context)
 	var declined_by_human = allow and bool(human_discipline.get("decline", false))
 	if declined_by_human:
 		allow = false
@@ -1194,6 +1197,9 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 	var forced_tile = str(best_post.get("tile", ""))
 	var forced_risk = float(best_post.get("risk", 0.0))
 	var forced_safety = str(best_post.get("safety_label", ""))
+	var forced_feed_report = best_post.get("feed_report", {})
+	if typeof(forced_feed_report) != TYPE_DICTIONARY:
+		forced_feed_report = {}
 	var decline = false
 	var pressure_limit = 4.6 * ai_pressure_tolerance(seat)
 	var risk_limit = 27.0 * ai_pressure_tolerance(seat)
@@ -1208,6 +1214,7 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 		"discard": forced_tile,
 		"risk": forced_risk,
 		"safety": forced_safety,
+		"feed_report": forced_feed_report,
 		"decline": decline,
 	}
 
@@ -1242,21 +1249,33 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 
 
 func build_ai_fast_post_claim_discard_report(seat: int, tile: String, open_melds: int, pressure_context: Dictionary, eval_context: Dictionary, simulated_counts: Array) -> Dictionary:
-	# This is intentionally limited to the fields consumed by claim-pressure checks.
-	# It keeps quiet benchmark games representative of danger avoidance without using
-	# the full player-facing recommendation scorer for every hypothetical discard.
+	# This stays deliberately smaller than the player-facing scorer, but keeps the
+	# practical risks that can make an otherwise safe forced discard unacceptable.
+	# The shared evaluation context bounds the added feed/package lookups per tile.
 	var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
 	var risk = deal_in_risk_score(tile, seat, eval_context)
 	var safety = tile_safety_label(tile, seat, [], eval_context)
 	var defense = ai_defense_weight(seat, shanten, pressure_context)
+	var feed_report = discard_feed_risk_report(tile, seat, [], eval_context)
+	var feed_risk = float(feed_report.get("score", 0.0))
+	var human_pen = human_target_discard_penalty(seat, tile, risk, feed_report, shanten, eval_context)
+	var package_report = package_feed_discipline_report(seat, tile, feed_report, shanten, eval_context)
+	var package_pen = float(package_report.get("penalty", 0.0))
 	var score = -float(shanten) * 760.0 - risk * defense * ai_risk_factor(seat)
 	score += ai_safety_bonus(safety, defense, shanten)
+	score -= feed_risk * discard_feed_penalty_weight(defense, shanten) * ai_risk_factor(seat)
+	score -= human_pen + package_pen
 	return {
 		"tile": tile,
 		"score": score,
 		"shanten": shanten,
 		"risk": risk,
+		"feed_risk": feed_risk,
+		"feed_report": feed_report,
 		"safety_label": safety,
+		"human_target_penalty": human_pen,
+		"package_feed_pending": bool(package_report.get("pending", false)),
+		"package_feed_penalty": package_pen,
 		"fast_post_claim": true,
 	}
 
@@ -1357,7 +1376,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		if rem <= 0:
 			continue
 		probe_hand.append(wait_tile)
-		var alt_score = calculate_win_score_from_tiles(seat, probe_hand, false)
+		var alt_score = calculate_win_score_from_tiles(seat, probe_hand, false, "", true)
 		probe_hand.pop_back()
 		var alt_points = int(alt_score.get("points", 0))
 		var alt_fan = int(alt_score.get("fan", 0))
@@ -1489,7 +1508,7 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 			continue
 		probe_hand.append(wait_tile)
 		# 比较时用荣和口径估其他听口；自摸额外番会让当前张更香，故阈值更高。
-		var alt_score = calculate_win_score_from_tiles(seat, probe_hand, false)
+		var alt_score = calculate_win_score_from_tiles(seat, probe_hand, false, "", true)
 		probe_hand.pop_back()
 		var alt_points = int(alt_score.get("points", 0))
 		var alt_fan = int(alt_score.get("fan", 0))
@@ -1809,7 +1828,7 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 	return out
 
 
-func human_claim_discipline_report(seat: int, claim: String, from_seat: int, before_shanten: int, after_shanten: int, shape_gain: float, pressure_report: Dictionary = {}, open_melds: int = 0) -> Dictionary:
+func human_claim_discipline_report(seat: int, claim: String, from_seat: int, before_shanten: int, after_shanten: int, shape_gain: float, pressure_report: Dictionary = {}, open_melds: int = 0, eval_context: Dictionary = {}) -> Dictionary:
 	# R10: 对玩家弃牌的吃碰更克制；副露后若必打危险张喂 seat0，则拒吃/降分。
 	var out := {
 		"decline": false,
@@ -1833,8 +1852,12 @@ func human_claim_discipline_report(seat: int, claim: String, from_seat: int, bef
 	var forced_safety = str(pressure_report.get("safety", "")) if typeof(pressure_report) == TYPE_DICTIONARY else ""
 	var feed_human = 0.0
 	if forced_tile != "":
-		# human_target_discard_penalty 需要的是吃碰喂牌详情，不是仅含点炮摘要的 risk summary。
-		var feed_report = discard_feed_risk_report(forced_tile, seat)
+		# 复用副露后弃牌评估的喂牌报告；旧缓存或外部调用没有该字段时再按需计算。
+		var feed_report = pressure_report.get("feed_report", {}) if typeof(pressure_report) == TYPE_DICTIONARY else {}
+		if typeof(feed_report) != TYPE_DICTIONARY:
+			feed_report = {}
+		if (feed_report as Dictionary).is_empty():
+			feed_report = discard_feed_risk_report(forced_tile, seat, [], eval_context)
 		var details: Array = feed_report.get("details", []) if typeof(feed_report) == TYPE_DICTIONARY else []
 		for item in details:
 			if typeof(item) != TYPE_DICTIONARY:
@@ -1842,7 +1865,7 @@ func human_claim_discipline_report(seat: int, claim: String, from_seat: int, bef
 			if int(item.get("opponent", -1)) != 0:
 				continue
 			feed_human = max(feed_human, float(item.get("score", 0.0)))
-		feed_human = max(feed_human, human_target_discard_penalty(seat, forced_tile, forced_risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, after_shanten) * 0.55)
+		feed_human = max(feed_human, human_target_discard_penalty(seat, forced_tile, forced_risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, after_shanten, eval_context) * 0.55)
 	out["feed_human"] = feed_human
 	var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	var no_improve = after_shanten >= before_shanten
@@ -2110,6 +2133,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 	if use_fast:
 		var defense_guess = ai_defense_weight(seat, 2, pressure_context)
 		var risk_factor = ai_risk_factor(seat)
+		var safest_candidate: Dictionary = {}
+		var safest_risk = INF
 		for item in candidates:
 			var cand = str(item.get("tile", ""))
 			var idx = int(item.get("tile_index", -1))
@@ -2126,12 +2151,36 @@ func get_ai_discard_reports(seat: int) -> Array:
 			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_HARD and risk >= AI_DANGER_RISK_SOFT:
 				cheap -= (risk - 12.0) * 1.35
 			item["cheap_score"] = cheap
+			item["fast_risk"] = risk
+			if safest_candidate.is_empty() or risk < safest_risk or (is_equal_approx(risk, safest_risk) and tile_sort_index(cand) < tile_sort_index(str(safest_candidate.get("tile", "")))):
+				safest_candidate = item.duplicate(false)
+				safest_risk = risk
 			simulated_counts[idx] = int(simulated_counts[idx]) + 1
 		candidates.sort_custom(func(a, b): return float(a.get("cheap_score", 0.0)) > float(b.get("cheap_score", 0.0)))
 		# 保留 Top-K 完整评估
 		var keep: Array = []
 		for j in range(min(AI_FAST_EVAL_TOP_K, candidates.size())):
 			keep.append(candidates[j])
+		# 静默模拟仍需在高压局看到一张明显更安全的弃攻牌。否则向听差
+		# 会在粗排阶段完全压过防守价值，Top-K 内没有可供完整评分的折返候选。
+		var high_pressure = float(pressure_context.get("readiness_pressure", 0.0)) >= 9.5 \
+			or int(pressure_context.get("threat_rank", 0)) >= 2 \
+			or bool(pressure_context.get("multi_threat", false))
+		var safest_kept = false
+		for item in keep:
+			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
+				safest_kept = true
+				break
+		if high_pressure and not safest_candidate.is_empty() and not safest_kept:
+			var replace_index = -1
+			var replace_risk = -1.0
+			for j in range(keep.size()):
+				var kept_risk = float(keep[j].get("fast_risk", 0.0))
+				if kept_risk > replace_risk:
+					replace_index = j
+					replace_risk = kept_risk
+			if replace_index >= 0 and safest_risk + 4.0 < replace_risk:
+				keep[replace_index] = safest_candidate
 		candidates = keep
 	for item in candidates:
 		var candidate = str(item.get("tile", ""))
@@ -2481,7 +2530,7 @@ func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, e
 		if not effective_tiles_are_winning and not is_complete_hand(winning_hand, open_melds):
 			winning_hand.pop_back()
 			continue
-		var score_data = calculate_win_score_from_tiles(seat, winning_hand, false)
+		var score_data = calculate_win_score_from_tiles(seat, winning_hand, false, "", true)
 		winning_hand.pop_back()
 		var fan = int(score_data.get("fan", 0))
 		var points = int(score_data.get("points", 0))
@@ -4738,6 +4787,8 @@ func human_discard(index: int) -> void:
 	clear_pending_danger_discard()
 	play_human_discard_fly_animation(tile, index, hand.size())
 	tile = discard_tile_by_index(0, index)
+	if tile == "":
+		return
 	render_game()
 	await get_tree().process_frame
 	if mode != "offline" or offline_phase != "resolving" or last_discard_seat != 0 or last_discard != tile:
@@ -4796,9 +4847,29 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 func human_self_win() -> void:
 	if mode != "offline" or not can_self_discard() or not can_win_for_seat(0):
 		return
-	var win_tile = str(players[0]["hand"].back())
+	var win_tile = current_self_draw_tile(0)
+	if win_tile == "":
+		return
 	play_human_action_choice_confirmation_fx("self_win", win_tile)
 	finish_offline_round(0, win_tile, true, -1)
+
+
+func current_self_draw_tile(seat: int) -> String:
+	if seat < 0 or seat >= players.size():
+		return ""
+	var hand: Array = players[seat].get("hand", [])
+	if hand.is_empty():
+		return ""
+	# Hands are sorted immediately after a draw. The final array element is
+	# therefore not necessarily the tile that completed the hand; retain the
+	# authoritative draw record for settlement text and result data.
+	var drawn_seat = int(offline_last_draw.get("seat", -1))
+	var drawn_tile = str(offline_last_draw.get("tile", ""))
+	if drawn_seat == seat and drawn_tile != "" and count_tile(hand, drawn_tile) > 0:
+		return drawn_tile
+	# Preserve recoverability for imported or legacy offline states that do not
+	# carry a draw record, while normal runtime always takes the branch above.
+	return str(hand.back())
 
 func human_concealed_gang(tile: String) -> void:
 	if mode != "offline" or not can_self_discard():
@@ -4979,10 +5050,12 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 			if risk >= AI_DANGER_RISK_HIGH:
 				ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
 			break
-		discard_tile_by_value(seat, discard_tile)
+		var committed_tile = discard_tile_by_value(seat, discard_tile)
+		if committed_tile == "":
+			break
 		# 在 resolve 前记录可能的留听：choose_ai_claim 内会决策
 		var before_phase = offline_phase
-		resolve_after_discard(seat, discard_tile)
+		resolve_after_discard(seat, committed_tile)
 		if offline_phase == "ended":
 			_ai_sim_note_terminal_result(seat)
 			break
@@ -5202,8 +5275,10 @@ func run_ai_until_human() -> void:
 		seat = current_seat
 		var tile = tsumo_continue_discard if tsumo_continue_discard != "" else choose_ai_discard_for_seat(seat)
 		play_ai_discard_fly_animation(seat, tile)
-		discard_tile_by_value(seat, tile)
-		resolve_after_discard(seat, tile)
+		var committed_tile = discard_tile_by_value(seat, tile)
+		if committed_tile == "":
+			break
+		resolve_after_discard(seat, committed_tile)
 		if offline_phase == "pending_claim" or offline_phase == "ended":
 			break
 		if mode == "offline" and offline_phase == "await_discard":
@@ -5226,23 +5301,50 @@ func run_ai_until_human() -> void:
 	offline_ai_active = false
 
 func discard_tile_by_index(seat: int, index: int) -> String:
+	if seat < 0 or seat >= players.size():
+		return ""
 	var hand: Array = players[seat]["hand"]
+	if index < 0 or index >= hand.size():
+		return ""
 	var tile = str(hand[index])
-	hand.remove_at(index)
-	commit_discard(seat, tile)
+	if not is_valid_offline_discard(seat, tile):
+		return ""
+	if not commit_discard(seat, tile):
+		return ""
 	return tile
 
-func discard_tile_by_value(seat: int, tile: String) -> void:
+func discard_tile_by_value(seat: int, tile: String) -> String:
+	if seat < 0 or seat >= players.size() or tile == "":
+		return ""
 	var hand: Array = players[seat]["hand"]
 	var index = find_tile_in_hand(hand, tile)
-	if index < 0 and hand.size() > 0:
-		index = 0
-		tile = str(hand[index])
-	if index >= 0:
-		hand.remove_at(index)
-	commit_discard(seat, tile)
+	if index < 0 or not is_valid_offline_discard(seat, tile):
+		return ""
+	if not commit_discard(seat, tile):
+		return ""
+	return tile
 
-func commit_discard(seat: int, tile: String) -> void:
+func is_valid_offline_discard_turn(seat: int) -> bool:
+	return mode == "offline" \
+		and seat >= 0 \
+		and seat < players.size() \
+		and offline_phase == "await_discard" \
+		and current_seat == seat \
+		and not offline_turn_needs_draw
+
+func is_valid_offline_discard(seat: int, tile: String) -> bool:
+	if not is_valid_offline_discard_turn(seat) or tile == "":
+		return false
+	return count_tile(players[seat].get("hand", []), tile) > 0
+
+func commit_discard(seat: int, tile: String) -> bool:
+	if not is_valid_offline_discard(seat, tile):
+		return false
+	var hand: Array = players[seat]["hand"]
+	var index = find_tile_in_hand(hand, tile)
+	if index < 0:
+		return false
+	hand.remove_at(index)
 	if seat == 0:
 		clear_pending_danger_discard()
 	players[seat]["discards"].append(tile)
@@ -5254,6 +5356,7 @@ func commit_discard(seat: int, tile: String) -> void:
 	play_fx_discard_ripple(seat)
 	speak_tile_call(tile)
 	add_log("%s打出%s。" % [players[seat]["name"], tile_label(tile)])
+	return true
 
 func resolve_after_discard(from_seat: int, tile: String) -> void:
 	if mode != "offline" or offline_phase == "ended":
@@ -5330,9 +5433,9 @@ func claim_priority(claim: String) -> int:
 
 func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snapshot: Array = []) -> Array:
 	var options: Array = []
-	if seat == from_seat or offline_phase == "ended":
+	if seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or tile == "" or offline_phase == "ended":
 		return options
-	var hand: Array = players[seat]["hand"] if seat >= 0 and seat < players.size() else []
+	var hand: Array = players[seat]["hand"]
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
 	if can_win_for_seat_from_counts(seat, hand_counts, tile):
 		options.append("hu")
@@ -5345,8 +5448,31 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 		options.append("chi")
 	return options
 
+func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> bool:
+	if mode != "offline" or seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or tile == "":
+		return false
+	if offline_phase != "resolving" and offline_phase != "pending_claim":
+		return false
+	if last_discard != tile or last_discard_seat != from_seat:
+		return false
+	var discards: Array = players[from_seat]["discards"]
+	if discards.is_empty() or str(discards.back()) != tile:
+		return false
+	var hand_counts = tile_counts(players[seat]["hand"])
+	var options = get_claim_options(seat, from_seat, tile, hand_counts)
+	if not options.has(claim):
+		return false
+	if claim != "chi" or chi_choice.is_empty():
+		return true
+	for option in get_chi_choices_from_counts(hand_counts, tile):
+		if typeof(option) != TYPE_DICTIONARY:
+			continue
+		if same_tile_list(option.get("meld", []), chi_choice.get("meld", [])) and same_tile_list(option.get("needed", []), chi_choice.get("needed", [])):
+			return true
+	return false
+
 func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> void:
-	if seat < 0 or seat >= players.size():
+	if not is_valid_offline_claim(seat, from_seat, tile, claim, chi_choice):
 		return
 	if claim == "hu":
 		finish_offline_round(seat, tile, false, from_seat)
@@ -5472,7 +5598,31 @@ func win_fx_type_for_score(score_data: Dictionary, self_draw: bool) -> String:
 		return "special"
 	return "self_draw" if self_draw else "normal"
 
+func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> bool:
+	if mode != "offline" or offline_phase == "ended" or winner < 0 or winner >= players.size():
+		return false
+	if self_draw:
+		return can_win_for_seat(winner)
+	if win_tile == "":
+		return false
+	var payer = from_seat if from_seat >= 0 else last_discard_seat
+	if payer < 0 or payer >= players.size() or payer == winner:
+		return false
+	if win_context == "rob_gang":
+		# 抢杠发生在补杠牌仍留在手里、碰牌尚未升级时，不能借用弃牌来源。
+		return can_added_gang(payer, win_tile) and can_win_for_seat(winner, win_tile)
+	if offline_phase != "resolving" and offline_phase != "pending_claim":
+		return false
+	var discards: Array = players[payer]["discards"]
+	if last_discard != win_tile or last_discard_seat != payer or discards.is_empty() or str(discards.back()) != win_tile:
+		return false
+	return can_win_for_seat(winner, win_tile)
+
 func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> void:
+	# Keep the state transition as strict as scoring: an invalid external or
+	# stale resolver result must not play a win effect or terminate the hand.
+	if not can_finish_offline_round(winner, win_tile, self_draw, from_seat, win_context):
+		return
 	play_sfx("win", -1.0)
 	speak_action_call("自摸" if self_draw else "胡", win_tile)
 	var score_data = calculate_win_score(winner, win_tile, self_draw, win_context)
@@ -25388,8 +25538,13 @@ func calculate_win_score(seat: int, win_tile: String, self_draw: bool, win_conte
 		test_hand.append(win_tile)
 	return calculate_win_score_from_tiles(seat, test_hand, self_draw, win_context)
 
-func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool, win_context: String = "") -> Dictionary:
+func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool, win_context: String = "", assume_complete: bool = false) -> Dictionary:
 	if seat < 0 or seat >= players.size():
+		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
+	# Keep the public scoring boundary authoritative. Normal game flow has already
+	# validated a win, but callers such as UI previews or imported match state must
+	# never turn an incomplete hand into a paid result.
+	if not assume_complete and not is_complete_hand(test_hand, players[seat]["melds"].size()):
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
 	var fan = 1
 	var reasons: Array[String] = ["平胡"]

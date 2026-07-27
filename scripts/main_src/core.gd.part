@@ -2314,23 +2314,43 @@ func package_payer_for(winner: int) -> int:
 	return int(offline_package_liability.get(winner, -1))
 
 
-func complete_added_gang(seat: int, tile: String) -> void:
-	var hand: Array = players[seat]["hand"]
-	if not remove_tiles(hand, tile, 1):
-		return
+func is_valid_offline_added_gang_completion(seat: int, tile: String) -> bool:
+	if mode != "offline" or seat < 0 or seat >= players.size() or tile == "" or not can_added_gang(seat, tile):
+		return false
+	if offline_phase == "await_discard":
+		return is_valid_offline_self_gang_turn(seat)
+	if offline_phase != "pending_claim":
+		return false
+	return bool(offline_pending_claim.get("rob_gang", false)) \
+		and int(offline_pending_claim.get("from_seat", -1)) == seat \
+		and str(offline_pending_claim.get("tile", "")) == tile
+
+func complete_added_gang(seat: int, tile: String) -> bool:
+	if not is_valid_offline_added_gang_completion(seat, tile):
+		return false
 	var melds: Array = players[seat]["melds"]
+	var meld_index = -1
 	for i in range(melds.size()):
 		var meld: Array = melds[i]
 		if is_triplet_meld(meld, tile):
-			meld.append(tile)
-			melds[i] = meld
+			meld_index = i
 			break
+	if meld_index < 0:
+		return false
+	var hand: Array = players[seat]["hand"]
+	if not remove_tiles(hand, tile, 1):
+		return false
+	var target_meld: Array = melds[meld_index]
+	target_meld.append(tile)
+	melds[meld_index] = target_meld
 	play_sfx("gang", -2.0)
 	speak_action_call("补杠", tile)
 	add_log("%s补杠%s。" % [players[seat]["name"], tile_label(tile)])
 	play_fx_gang_burst("added", seat)
 	sort_hand(hand)
+	offline_pending_claim.clear()
 	draw_after_gang(seat)
+	return true
 
 func begin_rob_gang_resolution(gang_seat: int, tile: String) -> bool:
 	var ai_claim = choose_ai_rob_gang(gang_seat, tile)
@@ -2388,8 +2408,13 @@ func calculate_win_score(seat: int, win_tile: String, self_draw: bool, win_conte
 		test_hand.append(win_tile)
 	return calculate_win_score_from_tiles(seat, test_hand, self_draw, win_context)
 
-func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool, win_context: String = "") -> Dictionary:
+func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool, win_context: String = "", assume_complete: bool = false) -> Dictionary:
 	if seat < 0 or seat >= players.size():
+		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
+	# Keep the public scoring boundary authoritative. Normal game flow has already
+	# validated a win, but callers such as UI previews or imported match state must
+	# never turn an incomplete hand into a paid result.
+	if not assume_complete and not is_complete_hand(test_hand, players[seat]["melds"].size()):
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
 	var fan = 1
 	var reasons: Array[String] = ["平胡"]

@@ -60,6 +60,12 @@ func run() -> void:
 
 	print("--- B) discard win remains a deal-in ---")
 	prepare_round(scene)
+	# 荣和者在收到 5W 前只有十三张，保持真实结算前置条件。
+	scene.players[2]["hand"] = ["1W", "1W", "1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W"]
+	scene.players[0]["discards"] = ["5W"]
+	scene.last_discard = "5W"
+	scene.last_discard_seat = 0
+	scene.offline_phase = "resolving"
 	scene.finish_offline_round(2, "5W", false, 0)
 	scene._ai_sim_note_terminal_result(0)
 	check(int(scene.ai_sim_stats.get("wins", 0)) == 1 and not bool(scene.ai_sim_stats.get("self_draw", true)), "荣和保留非自摸类型")
