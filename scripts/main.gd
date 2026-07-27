@@ -1336,6 +1336,10 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["accept"] = false
 		report["reason"] = "无效"
 		return report
+	if not can_win_for_seat(seat, tile):
+		report["accept"] = false
+		report["reason"] = "未成和"
+		return report
 	if win_context == "rob_gang":
 		report["reason"] = "抢杠"
 		report["score"] = 1120.0
@@ -1459,6 +1463,14 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		report["accept"] = false
 		report["reason"] = "无效"
 		return report
+	if not can_win_for_seat(seat):
+		report["accept"] = false
+		report["reason"] = "未成和"
+		return report
+	if current_self_draw_tile(seat) != drawn_tile:
+		report["accept"] = false
+		report["reason"] = "非当前摸牌"
+		return report
 	var open_melds = players[seat]["melds"].size()
 	var win_hand: Array = players[seat]["hand"]
 	# 当前手牌已含自摸张；去掉进张还原听牌形。
@@ -1481,10 +1493,6 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	# 自摸自带 +1 番，阈值高于荣和。
 	if fan >= 4 or points >= score_points_for_fan(4):
 		report["reason"] = "高价值自摸"
-		return report
-	if not is_complete_hand(win_hand, open_melds):
-		report["reason"] = "未成和"
-		report["accept"] = false
 		return report
 	var wait_metrics = effective_tile_metrics(tenpai_hand, open_melds, seat, 0)
 	var wait_tiles: Array = wait_metrics.get("tiles", [])
@@ -4822,10 +4830,13 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 		add_log("你选择过。")
 		var was_rob_gang = bool(offline_pending_claim.get("rob_gang", false))
 		var prepared_ai_claim: Dictionary = offline_pending_claim.get("ai_claim", {})
-		offline_pending_claim.clear()
 		if was_rob_gang:
+			# Keep the pending source until the completion boundary validates and
+			# consumes this deferred added-gang action.
 			resolve_after_rob_gang_pass(from_seat, tile, prepared_ai_claim)
 		else:
+			offline_pending_claim.clear()
+			offline_phase = "resolving"
 			resolve_ai_or_advance(from_seat, tile, prepared_ai_claim)
 		if offline_phase == "await_discard":
 			run_ai_until_human()
@@ -4841,6 +4852,7 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 	if was_rob_gang and claim == "hu":
 		finish_offline_round(0, tile, false, from_seat, "rob_gang")
 	else:
+		offline_phase = "resolving"
 		apply_offline_claim(0, from_seat, tile, claim, chi_choice)
 	render_game()
 
@@ -5387,9 +5399,23 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 	resolve_ai_or_advance(from_seat, tile, ai_claim)
 
 func resolve_ai_or_advance(from_seat: int, tile: String, prepared_claim: Dictionary = {}) -> void:
+	if mode != "offline" or offline_phase != "resolving" or from_seat < 0 or from_seat >= players.size() or tile == "":
+		return
+	var discards: Array = players[from_seat]["discards"]
+	if last_discard_seat != from_seat or last_discard != tile or discards.is_empty() or str(discards.back()) != tile:
+		return
 	var claim = prepared_claim if not prepared_claim.is_empty() else choose_ai_claim(from_seat, tile)
 	if not claim.is_empty():
-		apply_offline_claim(int(claim.get("seat", -1)), from_seat, tile, str(claim.get("claim", "")), claim.get("chi_choice", {}))
+		var claim_seat = int(claim.get("seat", -1))
+		var claim_name = str(claim.get("claim", ""))
+		var chi_choice = claim.get("chi_choice", {})
+		if is_valid_offline_claim(claim_seat, from_seat, tile, claim_name, chi_choice):
+			apply_offline_claim(claim_seat, from_seat, tile, claim_name, chi_choice)
+		else:
+			# AI reports are computed before a human response window. If a cached or
+			# stale report can no longer be committed, preserve table liveness by
+			# resolving the discard as an uncontested pass.
+			pass_discard_to_next(from_seat)
 	else:
 		pass_discard_to_next(from_seat)
 	request_game_render()
@@ -5455,6 +5481,17 @@ func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: Stri
 		return false
 	if last_discard != tile or last_discard_seat != from_seat:
 		return false
+	if offline_phase == "pending_claim":
+		# A visible response window belongs only to the human seat and must match
+		# the exact discard/options captured when that window was opened.
+		if bool(offline_pending_claim.get("rob_gang", false)) \
+			or seat != 0 \
+			or int(offline_pending_claim.get("from_seat", -1)) != from_seat \
+			or str(offline_pending_claim.get("tile", "")) != tile:
+			return false
+		var pending_options: Array = offline_pending_claim.get("options", [])
+		if not pending_options.has(claim):
+			return false
 	var discards: Array = players[from_seat]["discards"]
 	if discards.is_empty() or str(discards.back()) != tile:
 		return false
@@ -5548,10 +5585,21 @@ func remove_last_discard(seat: int, tile: String) -> void:
 	if index >= 0:
 		discards.remove_at(index)
 
-func perform_concealed_gang(seat: int, tile: String) -> void:
+func is_valid_offline_self_gang_turn(seat: int) -> bool:
+	return is_valid_offline_discard_turn(seat)
+
+func is_valid_offline_concealed_gang(seat: int, tile: String) -> bool:
+	return is_valid_offline_self_gang_turn(seat) and tile != "" and count_tile(players[seat].get("hand", []), tile) >= 4
+
+func is_valid_offline_added_gang(seat: int, tile: String) -> bool:
+	return is_valid_offline_self_gang_turn(seat) and can_added_gang(seat, tile)
+
+func perform_concealed_gang(seat: int, tile: String) -> bool:
+	if not is_valid_offline_concealed_gang(seat, tile):
+		return false
 	var hand: Array = players[seat]["hand"]
 	if not remove_tiles(hand, tile, 4):
-		return
+		return false
 	players[seat]["melds"].append([tile, tile, tile, tile])
 	play_sfx("gang", -2.0)
 	speak_action_call("暗杠", tile)
@@ -5559,13 +5607,14 @@ func perform_concealed_gang(seat: int, tile: String) -> void:
 	play_fx_gang_burst("concealed", seat)
 	sort_hand(hand)
 	draw_after_gang(seat)
+	return true
 
-func perform_added_gang(seat: int, tile: String) -> void:
-	if not can_added_gang(seat, tile):
-		return
+func perform_added_gang(seat: int, tile: String) -> bool:
+	if not is_valid_offline_added_gang(seat, tile):
+		return false
 	if begin_rob_gang_resolution(seat, tile):
-		return
-	complete_added_gang(seat, tile)
+		return true
+	return complete_added_gang(seat, tile)
 
 func resolve_after_rob_gang_pass(gang_seat: int, tile: String, prepared_ai_claim: Dictionary = {}) -> void:
 	var ai_claim = prepared_ai_claim if not prepared_ai_claim.is_empty() else choose_ai_rob_gang(gang_seat, tile)
@@ -5602,7 +5651,13 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 	if mode != "offline" or offline_phase == "ended" or winner < 0 or winner >= players.size():
 		return false
 	if self_draw:
-		return can_win_for_seat(winner)
+		if win_tile == "" or count_tile(players[winner].get("hand", []), win_tile) <= 0:
+			return false
+		# Settlement must name the tile actually drawn this turn. Without this
+		# guard, a stale caller can end a valid hand but record another hand tile
+		# as the winning tile, corrupting the result summary and score details.
+		var drawn_tile = current_self_draw_tile(winner)
+		return drawn_tile != "" and win_tile == drawn_tile and can_win_for_seat(winner)
 	if win_tile == "":
 		return false
 	var payer = from_seat if from_seat >= 0 else last_discard_seat
@@ -25464,23 +25519,43 @@ func package_payer_for(winner: int) -> int:
 	return int(offline_package_liability.get(winner, -1))
 
 
-func complete_added_gang(seat: int, tile: String) -> void:
-	var hand: Array = players[seat]["hand"]
-	if not remove_tiles(hand, tile, 1):
-		return
+func is_valid_offline_added_gang_completion(seat: int, tile: String) -> bool:
+	if mode != "offline" or seat < 0 or seat >= players.size() or tile == "" or not can_added_gang(seat, tile):
+		return false
+	if offline_phase == "await_discard":
+		return is_valid_offline_self_gang_turn(seat)
+	if offline_phase != "pending_claim":
+		return false
+	return bool(offline_pending_claim.get("rob_gang", false)) \
+		and int(offline_pending_claim.get("from_seat", -1)) == seat \
+		and str(offline_pending_claim.get("tile", "")) == tile
+
+func complete_added_gang(seat: int, tile: String) -> bool:
+	if not is_valid_offline_added_gang_completion(seat, tile):
+		return false
 	var melds: Array = players[seat]["melds"]
+	var meld_index = -1
 	for i in range(melds.size()):
 		var meld: Array = melds[i]
 		if is_triplet_meld(meld, tile):
-			meld.append(tile)
-			melds[i] = meld
+			meld_index = i
 			break
+	if meld_index < 0:
+		return false
+	var hand: Array = players[seat]["hand"]
+	if not remove_tiles(hand, tile, 1):
+		return false
+	var target_meld: Array = melds[meld_index]
+	target_meld.append(tile)
+	melds[meld_index] = target_meld
 	play_sfx("gang", -2.0)
 	speak_action_call("补杠", tile)
 	add_log("%s补杠%s。" % [players[seat]["name"], tile_label(tile)])
 	play_fx_gang_burst("added", seat)
 	sort_hand(hand)
+	offline_pending_claim.clear()
 	draw_after_gang(seat)
+	return true
 
 func begin_rob_gang_resolution(gang_seat: int, tile: String) -> bool:
 	var ai_claim = choose_ai_rob_gang(gang_seat, tile)

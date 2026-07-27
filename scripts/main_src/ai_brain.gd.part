@@ -503,6 +503,10 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["accept"] = false
 		report["reason"] = "无效"
 		return report
+	if not can_win_for_seat(seat, tile):
+		report["accept"] = false
+		report["reason"] = "未成和"
+		return report
 	if win_context == "rob_gang":
 		report["reason"] = "抢杠"
 		report["score"] = 1120.0
@@ -626,6 +630,14 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		report["accept"] = false
 		report["reason"] = "无效"
 		return report
+	if not can_win_for_seat(seat):
+		report["accept"] = false
+		report["reason"] = "未成和"
+		return report
+	if current_self_draw_tile(seat) != drawn_tile:
+		report["accept"] = false
+		report["reason"] = "非当前摸牌"
+		return report
 	var open_melds = players[seat]["melds"].size()
 	var win_hand: Array = players[seat]["hand"]
 	# 当前手牌已含自摸张；去掉进张还原听牌形。
@@ -648,10 +660,6 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	# 自摸自带 +1 番，阈值高于荣和。
 	if fan >= 4 or points >= score_points_for_fan(4):
 		report["reason"] = "高价值自摸"
-		return report
-	if not is_complete_hand(win_hand, open_melds):
-		report["reason"] = "未成和"
-		report["accept"] = false
 		return report
 	var wait_metrics = effective_tile_metrics(tenpai_hand, open_melds, seat, 0)
 	var wait_tiles: Array = wait_metrics.get("tiles", [])

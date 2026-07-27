@@ -11,6 +11,37 @@ mkdir -p "$LOG_DIR" "$(dirname "$REPORT")"
 PASS=0
 FAIL=0
 ROWS=()
+GODOT_TIMEOUT_SECONDS=180
+GODOT_KILL_GRACE_SECONDS=15
+
+ensure_no_active_godot() {
+	local active
+	active="$(pgrep -ax godot || true)"
+	if [ -n "$active" ]; then
+		echo "Refusing to start QA while another Godot process is active:" >&2
+		echo "$active" >&2
+		return 1
+	fi
+	return 0
+}
+
+run_low_resource_godot() {
+	if ! ensure_no_active_godot; then
+		return 1
+	fi
+	timeout --foreground --signal=TERM --kill-after="${GODOT_KILL_GRACE_SECONDS}s" "${GODOT_TIMEOUT_SECONDS}s" \
+		env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
+		nice -n 10 ionice -c 2 -n 7 godot "$@"
+}
+
+run_low_resource_xvfb_godot() {
+	if ! ensure_no_active_godot; then
+		return 1
+	fi
+	timeout --foreground --signal=TERM --kill-after="${GODOT_KILL_GRACE_SECONDS}s" "${GODOT_TIMEOUT_SECONDS}s" \
+		env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
+		nice -n 10 ionice -c 2 -n 7 xvfb-run -a godot "$@"
+}
 
 run_check() {
 	local name="$1"
@@ -61,23 +92,19 @@ run_check "Git whitespace check" "git_diff_check.log" \
 	git diff --check
 
 run_check "UI layout regression smoke" "ui_layout_smoke.log" \
-	env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
-		nice -n 10 ionice -c 2 -n 7 godot --headless --path "$ROOT_DIR" -s scripts/ui_layout_smoke_test.gd
+	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_layout_smoke_test.gd
 
 run_check "Offline gameplay smoke" "offline_smoke.log" \
-	env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
-		nice -n 10 ionice -c 2 -n 7 godot --headless --path "$ROOT_DIR" -s scripts/offline_smoke_test.gd
+	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/offline_smoke_test.gd
 
 run_check "Capture UI screenshots 1280x720" "capture_pages_1280x720.log" \
-	env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
-		nice -n 10 ionice -c 2 -n 7 xvfb-run -a godot --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd
+	run_low_resource_xvfb_godot --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd
 
 run_check "Screenshot manifest 1280x720" "manifest_1280x720.log" \
 	python3 scripts/ui_screenshot_manifest_check.py
 
 run_check "Capture UI screenshots 960x540" "capture_pages_960x540.log" \
-	env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
-		nice -n 10 ionice -c 2 -n 7 xvfb-run -a godot --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- --size=960x540
+	run_low_resource_xvfb_godot --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- --size=960x540
 
 run_check "Screenshot manifest 960x540" "manifest_960x540.log" \
 	python3 scripts/ui_screenshot_manifest_check.py \

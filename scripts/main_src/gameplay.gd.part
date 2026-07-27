@@ -518,9 +518,11 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 		if was_rob_gang:
 			# Keep the pending source until the completion boundary validates and
 			# consumes this deferred added-gang action.
+			offline_pending_claim["rob_gang_passed"] = true
 			resolve_after_rob_gang_pass(from_seat, tile, prepared_ai_claim)
 		else:
 			offline_pending_claim.clear()
+			offline_phase = "resolving"
 			resolve_ai_or_advance(from_seat, tile, prepared_ai_claim)
 		if offline_phase == "await_discard":
 			run_ai_until_human()
@@ -532,10 +534,13 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 		return
 	var was_rob_gang = bool(offline_pending_claim.get("rob_gang", false))
 	play_pending_claim_choice_confirmation_fx(claim, from_seat, tile)
-	offline_pending_claim.clear()
 	if was_rob_gang and claim == "hu":
+		# The settlement guard authenticates this claim against the pending
+		# rob-gang context, so it must remain intact until settlement consumes it.
 		finish_offline_round(0, tile, false, from_seat, "rob_gang")
 	else:
+		offline_pending_claim.clear()
+		offline_phase = "resolving"
 		apply_offline_claim(0, from_seat, tile, claim, chi_choice)
 	render_game()
 
@@ -1082,9 +1087,23 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 	resolve_ai_or_advance(from_seat, tile, ai_claim)
 
 func resolve_ai_or_advance(from_seat: int, tile: String, prepared_claim: Dictionary = {}) -> void:
+	if mode != "offline" or offline_phase != "resolving" or from_seat < 0 or from_seat >= players.size() or tile == "":
+		return
+	var discards: Array = players[from_seat]["discards"]
+	if last_discard_seat != from_seat or last_discard != tile or discards.is_empty() or str(discards.back()) != tile:
+		return
 	var claim = prepared_claim if not prepared_claim.is_empty() else choose_ai_claim(from_seat, tile)
 	if not claim.is_empty():
-		apply_offline_claim(int(claim.get("seat", -1)), from_seat, tile, str(claim.get("claim", "")), claim.get("chi_choice", {}))
+		var claim_seat = int(claim.get("seat", -1))
+		var claim_name = str(claim.get("claim", ""))
+		var chi_choice = claim.get("chi_choice", {})
+		if is_valid_offline_claim(claim_seat, from_seat, tile, claim_name, chi_choice):
+			apply_offline_claim(claim_seat, from_seat, tile, claim_name, chi_choice)
+		else:
+			# AI reports are computed before a human response window. If a cached or
+			# stale report can no longer be committed, preserve table liveness by
+			# resolving the discard as an uncontested pass.
+			pass_discard_to_next(from_seat)
 	else:
 		pass_discard_to_next(from_seat)
 	request_game_render()
@@ -1150,6 +1169,17 @@ func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: Stri
 		return false
 	if last_discard != tile or last_discard_seat != from_seat:
 		return false
+	if offline_phase == "pending_claim":
+		# A visible response window belongs only to the human seat and must match
+		# the exact discard/options captured when that window was opened.
+		if bool(offline_pending_claim.get("rob_gang", false)) \
+			or seat != 0 \
+			or int(offline_pending_claim.get("from_seat", -1)) != from_seat \
+			or str(offline_pending_claim.get("tile", "")) != tile:
+			return false
+		var pending_options: Array = offline_pending_claim.get("options", [])
+		if not pending_options.has(claim):
+			return false
 	var discards: Array = players[from_seat]["discards"]
 	if discards.is_empty() or str(discards.back()) != tile:
 		return false
@@ -1309,7 +1339,13 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 	if mode != "offline" or offline_phase == "ended" or winner < 0 or winner >= players.size():
 		return false
 	if self_draw:
-		return can_win_for_seat(winner)
+		if win_tile == "" or count_tile(players[winner].get("hand", []), win_tile) <= 0:
+			return false
+		# Settlement must name the tile actually drawn this turn. Without this
+		# guard, a stale caller can end a valid hand but record another hand tile
+		# as the winning tile, corrupting the result summary and score details.
+		var drawn_tile = current_self_draw_tile(winner)
+		return drawn_tile != "" and win_tile == drawn_tile and can_win_for_seat(winner)
 	if win_tile == "":
 		return false
 	var payer = from_seat if from_seat >= 0 else last_discard_seat
@@ -1317,6 +1353,30 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 		return false
 	if win_context == "rob_gang":
 		# 抢杠发生在补杠牌仍留在手里、碰牌尚未升级时，不能借用弃牌来源。
+		# 人类响应必须由已展示的抢杠窗口认证；若玩家选择过，才允许窗口中
+		# 预选的 AI 抢杠胡接管。没有玩家窗口时，只有 AI 自己的补杠决策能
+		# 直接结算，避免普通 resolving 状态伪造抢杠胡。
+		if offline_phase == "pending_claim":
+			if not bool(offline_pending_claim.get("rob_gang", false)) \
+				or int(offline_pending_claim.get("from_seat", -1)) != payer \
+				or str(offline_pending_claim.get("tile", "")) != win_tile:
+				return false
+			var passed = bool(offline_pending_claim.get("rob_gang_passed", false))
+			if winner == 0:
+				if passed:
+					return false
+			else:
+				var prepared_ai_claim = offline_pending_claim.get("ai_claim", {})
+				if not passed \
+					or typeof(prepared_ai_claim) != TYPE_DICTIONARY \
+					or int((prepared_ai_claim as Dictionary).get("seat", -1)) != winner \
+					or str((prepared_ai_claim as Dictionary).get("claim", "")) != "hu":
+					return false
+		elif offline_phase == "await_discard":
+			if not is_ai_controlled_seat(winner):
+				return false
+		else:
+			return false
 		return can_added_gang(payer, win_tile) and can_win_for_seat(winner, win_tile)
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
 		return false

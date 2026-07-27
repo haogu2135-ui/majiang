@@ -54,7 +54,9 @@ func run() -> void:
 	print("--- A) stale or foreign self-gang cannot mutate the table ---")
 	reset_round(scene)
 	scene.players[1]["hand"] = ["5W", "5W", "5W", "5W"]
-	scene.wall = ["7B"]
+	scene.wall = scene.make_wall()
+	scene.wall.clear()
+	scene.wall.append("7B")
 	check(not scene.perform_concealed_gang(2, "5W"), "非当前座位不能暗杠")
 	scene.offline_phase = "resolving"
 	check(not scene.perform_concealed_gang(1, "5W"), "响应阶段不能暗杠")
@@ -71,10 +73,15 @@ func run() -> void:
 	scene.players[0]["hand"] = rob_wait_hand()
 	scene.players[1]["melds"] = [["3W", "3W", "3W"]]
 	scene.players[1]["hand"] = ["3W"]
-	scene.wall = ["8B"]
+	scene.wall = scene.make_wall()
+	scene.wall.clear()
+	scene.wall.append("8B")
 	check(scene.perform_added_gang(1, "3W"), "补杠进入合法抢杠响应")
 	check(scene.offline_phase == "pending_claim" and bool(scene.offline_pending_claim.get("rob_gang", false)), "补杠保留抢杠来源上下文")
+	# Freeze automatic AI progression so this test observes the completion boundary.
+	scene.offline_ai_active = true
 	scene.human_claim("pass")
+	scene.offline_ai_active = false
 	check(scene.offline_phase == "await_discard" and scene.players[1]["melds"] == [["3W", "3W", "3W", "3W"]], "玩家过抢杠后合法完成补杠")
 	check(scene.players[1]["hand"] == ["8B"] and str(scene.offline_last_draw.get("source", "")) == "gang", "过抢杠后补入替代牌")
 

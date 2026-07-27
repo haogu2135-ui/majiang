@@ -27,11 +27,11 @@ spawn_agent(agent_type="ui-engineer", fork_context=false,
 ### 验证
 ```bash
 python3 tools/assemble_main.py --verify
-GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 nice -n 10 ionice -c 2 -n 7 godot --headless --path . -s scripts/ui_layout_smoke_test.gd
+timeout --foreground --signal=TERM --kill-after=15s 180s env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 nice -n 10 ionice -c 2 -n 7 godot --headless --path . -s scripts/ui_layout_smoke_test.gd
 ```
 
 ### 资源预算
 - 双 Codex 运行时，Godot smoke、截图、生图和批量导入必须串行；启动重型任务前先确认没有现存 `godot`、`xvfb-run` 或批量生图进程。
-- 使用 `scripts/verify_ui_regressions.sh` 执行完整 QA；脚本已固定为单线程、低 CPU 优先级和低 I/O 优先级。不得并行运行多个完整 QA。
+- 使用 `scripts/verify_ui_regressions.sh` 执行完整 QA；脚本已固定为单线程、低 CPU 优先级、低 I/O 优先级和 180 秒硬超时，并会拒绝与既有 Godot 进程并发。不得并行运行多个完整 QA。
 
 审计报告：`build/qa/ui_engineer/AUDIT_LATEST.md`

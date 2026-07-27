@@ -94,6 +94,7 @@ func run() -> void:
 	scene.players[1]["hand"] = winning_wait_hand()
 	scene.players[0]["hand"] = ["5W"]
 	scene.players[0]["melds"] = [["5W", "5W", "5W"]]
+	scene.offline_phase = "await_discard"
 	check(scene.can_finish_offline_round(1, "5W", false, 0, "rob_gang"), "未完成补杠可作为抢杠胡来源")
 	scene.finish_offline_round(1, "5W", false, 0, "rob_gang")
 	check(scene.offline_phase == "ended" and scene.offline_last_winner == 1 and scene.last_win_score.get("reasons", []).has("抢杠胡"), "合法抢杠胡正常结束并保留番种")
