@@ -489,7 +489,10 @@ var offline_turn_needs_draw = false
 var offline_pending_claim: Dictionary = {}
 var offline_claim_counts: Dictionary = {}
 var offline_package_liability: Dictionary = {}
+var offline_passed_win_tiles: Dictionary = {}  # seat -> {tile: true} 同张过水
+var offline_concealed_gang_tiles: Dictionary = {}  # seat -> {tile: true} 保留暗杠门清来源
 var offline_last_draw: Dictionary = {}
+var offline_self_draw_ready: Dictionary = {}  # 当前回合可自摸的真实摸牌；空值只兼容旧局状态
 var offline_ai_active = false
 var offline_all_bot_mode := false
 var offline_sim_quiet := false
@@ -3375,16 +3378,28 @@ func flower_preview(seat: int) -> String:
 		return ""
 	return join_tile_labels(players[seat].get("flower_tiles", []))
 
+
+func package_payer_from_state(winner: int) -> int:
+	if winner < 0 or winner >= players.size() or not offline_package_liability.has(winner):
+		return -1
+	var payer = int(offline_package_liability.get(winner, -1))
+	if payer < 0 or payer >= players.size() or payer == winner:
+		return -1
+	return payer
+
+
 func package_preview(seat: int) -> String:
 	if mode != "offline":
 		return ""
-	if offline_package_liability.has(seat):
-		var payer = int(offline_package_liability[seat])
+	var payer = package_payer_from_state(seat)
+	if payer >= 0:
 		return "%s包" % players[payer]["name"]
 	var targets: Array[String] = []
 	for key in offline_package_liability.keys():
 		if int(offline_package_liability[key]) == seat:
-			targets.append(str(players[int(key)]["name"]))
+			var winner = int(key)
+			if package_payer_from_state(winner) == seat:
+				targets.append(str(players[winner]["name"]))
 	if not targets.is_empty():
 		return "包%s" % "、".join(targets)
 	return ""
@@ -3393,8 +3408,9 @@ func active_package_lines() -> Array[String]:
 	var lines: Array[String] = []
 	for key in offline_package_liability.keys():
 		var winner = int(key)
-		var payer = int(offline_package_liability[key])
-		lines.append("包三搭：%s包赔%s" % [players[payer]["name"], players[winner]["name"]])
+		var payer = package_payer_from_state(winner)
+		if payer >= 0:
+			lines.append("包三搭：%s包赔%s" % [players[payer]["name"], players[winner]["name"]])
 	return lines
 
 func tile_label(tile: String) -> String:

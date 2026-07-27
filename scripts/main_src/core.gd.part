@@ -701,7 +701,10 @@ func deal_offline_hand() -> void:
 	clear_pending_danger_discard()
 	offline_claim_counts.clear()
 	offline_package_liability.clear()
+	offline_passed_win_tiles.clear()
+	offline_concealed_gang_tiles.clear()
 	offline_last_draw.clear()
+	offline_self_draw_ready.clear()
 	offline_ai_active = false
 	round_summary = ""
 	last_score_deltas.clear()
@@ -1281,7 +1284,7 @@ func fan_badge_color(reason: String) -> Color:
 	if reason == "平胡" or reason == "自摸" or reason == "门清" or reason == "断幺九" or reason == "庄家" or reason == "花牌":
 		return Color(0.28, 0.58, 0.42)
 	# 特殊操作 - 橙色
-	if reason == "杠" or reason == "杠上开花" or reason == "海底捞月" or reason == "抢杠胡" or reason == "大吊车":
+	if reason == "杠" or reason == "杠上开花" or reason == "海底捞月" or reason == "河底捞鱼" or reason == "抢杠胡" or reason == "大吊车":
 		return Color(0.82, 0.56, 0.28)
 	# 封顶 - 红色
 	if reason == "封顶":
@@ -2296,7 +2299,7 @@ func is_ai_claim_context_for_seat(claim_context: Dictionary, seat: int) -> bool:
 
 
 func record_claim_source(claimer: int, from_seat: int, claim: String) -> void:
-	if claimer < 0 or from_seat < 0 or claimer == from_seat:
+	if claimer < 0 or claimer >= players.size() or from_seat < 0 or from_seat >= players.size() or claimer == from_seat:
 		return
 	if claim != "chi" and claim != "peng" and claim != "gang":
 		return
@@ -2311,7 +2314,42 @@ func claim_source_key(claimer: int, from_seat: int) -> String:
 	return "%d:%d" % [claimer, from_seat]
 
 func package_payer_for(winner: int) -> int:
-	return int(offline_package_liability.get(winner, -1))
+	return package_payer_from_state(winner)
+
+
+func record_concealed_gang_meld(seat: int, tile: String) -> void:
+	if seat < 0 or seat >= players.size() or tile == "" or not TILE_CODES.has(tile):
+		return
+	var stored = offline_concealed_gang_tiles.get(seat, {})
+	var concealed_tiles: Dictionary = stored if typeof(stored) == TYPE_DICTIONARY else {}
+	concealed_tiles[tile] = true
+	offline_concealed_gang_tiles[seat] = concealed_tiles
+
+
+func is_concealed_gang_meld(seat: int, meld: Array) -> bool:
+	if seat < 0 or seat >= players.size() or meld.size() != 4 or not is_valid_scoring_meld(meld):
+		return false
+	var stored = offline_concealed_gang_tiles.get(seat, {})
+	if typeof(stored) != TYPE_DICTIONARY:
+		return false
+	return bool((stored as Dictionary).get(str(meld[0]), false))
+
+
+func exposed_meld_count_for_seat(seat: int) -> int:
+	if seat < 0 or seat >= players.size():
+		return 0
+	var melds = players[seat].get("melds", [])
+	if typeof(melds) != TYPE_ARRAY:
+		return 0
+	var exposed_count = 0
+	for item in melds:
+		if typeof(item) != TYPE_ARRAY or not is_concealed_gang_meld(seat, item as Array):
+			exposed_count += 1
+	return exposed_count
+
+
+func is_menzen_hand(seat: int) -> bool:
+	return seat >= 0 and seat < players.size() and exposed_meld_count_for_seat(seat) == 0
 
 
 func is_valid_offline_added_gang_completion(seat: int, tile: String) -> bool:
@@ -2354,7 +2392,7 @@ func complete_added_gang(seat: int, tile: String) -> bool:
 
 func begin_rob_gang_resolution(gang_seat: int, tile: String) -> bool:
 	var ai_claim = choose_ai_rob_gang(gang_seat, tile)
-	if (not is_ai_controlled_seat(0)) and gang_seat != 0 and can_win_for_seat(0, tile):
+	if (not is_ai_controlled_seat(0)) and gang_seat != 0 and can_ron_for_seat(0, tile):
 		offline_pending_claim = {
 			"from_seat": gang_seat,
 			"tile": tile,
@@ -2414,7 +2452,7 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	# Keep the public scoring boundary authoritative. Normal game flow has already
 	# validated a win, but callers such as UI previews or imported match state must
 	# never turn an incomplete hand into a paid result.
-	if not assume_complete and not is_complete_hand(test_hand, players[seat]["melds"].size()):
+	if not assume_complete and (not has_valid_scoring_melds(seat) or not is_complete_hand(test_hand, players[seat]["melds"].size())):
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
 	var fan = 1
 	var reasons: Array[String] = ["平胡"]
@@ -2427,6 +2465,9 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	if self_draw and bool(offline_last_draw.get("wall_empty", false)) and int(offline_last_draw.get("seat", -1)) == seat:
 		fan += 1
 		reasons.append("海底捞月")
+	if not assume_complete and not self_draw and win_context == "" and is_last_discard_context():
+		fan += 1
+		reasons.append("河底捞鱼")
 	if win_context == "rob_gang":
 		fan += 1
 		reasons.append("抢杠胡")
@@ -2436,7 +2477,7 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	if int(players[seat]["flowers"]) > 0:
 		fan += int(players[seat]["flowers"])
 		reasons.append("花牌")
-	if players[seat]["melds"].size() == 0:
+	if is_menzen_hand(seat):
 		fan += 1
 		reasons.append("门清")
 	if players[seat]["melds"].size() == 0 and is_seven_pairs(test_hand):
@@ -2494,6 +2535,14 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 
 func is_last_draw_context(seat: int, source: String) -> bool:
 	return int(offline_last_draw.get("seat", -1)) == seat and str(offline_last_draw.get("source", "")) == source
+
+
+func is_last_discard_context() -> bool:
+	if mode != "offline" or (offline_phase != "resolving" and offline_phase != "pending_claim"):
+		return false
+	if last_discard == "" or last_discard_seat < 0 or last_discard_seat >= players.size():
+		return false
+	return bool(offline_last_draw.get("wall_empty", false)) and int(offline_last_draw.get("seat", -1)) == last_discard_seat
 
 
 func is_seven_pairs(tiles: Array) -> bool:
@@ -4183,6 +4232,85 @@ func is_all_simples_hand(seat: int, tiles: Array) -> bool:
 			return false
 		has_tile = true
 	return has_tile
+
+
+func has_valid_scoring_melds(seat: int) -> bool:
+	if seat < 0 or seat >= players.size():
+		return false
+	var melds = players[seat].get("melds", [])
+	if typeof(melds) != TYPE_ARRAY or (melds as Array).size() > 4:
+		return false
+	for item in melds:
+		if typeof(item) != TYPE_ARRAY or not is_valid_scoring_meld(item as Array):
+			return false
+	return true
+
+
+func has_valid_scoring_tile_inventory(seat: int, tiles: Array) -> bool:
+	if seat < 0 or seat >= players.size():
+		return false
+	var counts = make_empty_tile_counts()
+	for item in tiles:
+		var index = tile_index(str(item))
+		if index < 0 or index >= counts.size():
+			return false
+		counts[index] = int(counts[index]) + 1
+	return has_valid_scoring_tile_inventory_from_counts(seat, counts, tiles.size())
+
+
+func has_valid_scoring_tile_inventory_from_counts(seat: int, hand_counts: Array, expected_tile_count: int = -1) -> bool:
+	if seat < 0 or seat >= players.size() or hand_counts.size() != TILE_CODES.size():
+		return false
+	var combined = hand_counts.duplicate()
+	var concealed_total = 0
+	for index in range(combined.size()):
+		var amount = int(combined[index])
+		if amount < 0 or amount > 4:
+			return false
+		combined[index] = amount
+		concealed_total += amount
+	if expected_tile_count >= 0 and concealed_total != expected_tile_count:
+		return false
+	var melds = players[seat].get("melds", [])
+	if typeof(melds) != TYPE_ARRAY:
+		return false
+	for meld in melds:
+		if typeof(meld) != TYPE_ARRAY:
+			return false
+		for item in meld:
+			var index = tile_index(str(item))
+			if index < 0 or index >= combined.size():
+				return false
+			combined[index] = int(combined[index]) + 1
+			if int(combined[index]) > 4:
+				return false
+	return true
+
+
+func is_valid_scoring_meld(meld: Array) -> bool:
+	if meld.size() != 3 and meld.size() != 4:
+		return false
+	var first_index = tile_index(str(meld[0]))
+	if first_index < 0:
+		return false
+	var all_same = true
+	var indexes: Array[int] = []
+	for tile in meld:
+		var index = tile_index(str(tile))
+		if index < 0:
+			return false
+		indexes.append(index)
+		if index != first_index:
+			all_same = false
+	if all_same:
+		return true
+	if meld.size() != 3:
+		return false
+	indexes.sort()
+	if indexes[0] >= 27 or indexes[2] >= 27:
+		return false
+	return int(indexes[0] / 9) == int(indexes[2] / 9) and indexes[1] == indexes[0] + 1 and indexes[2] == indexes[1] + 1
+
 
 func is_big_three_dragons_hand(seat: int, tiles: Array) -> bool:
 	return int(honor_group_stats(seat, tiles, DRAGON_CODES).get("triplets", 0)) == DRAGON_CODES.size()

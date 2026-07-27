@@ -285,10 +285,24 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 			"announce": announce,
 			"serial": offline_draw_serial,
 		}
+		# 与“最近摸牌”历史分开：只有尚未出牌或副露的当前摸牌可以自摸。
+		offline_self_draw_ready = {
+			"seat": seat,
+			"tile": tile,
+			"serial": offline_draw_serial,
+		}
+		# 过水仅持续到本家下一次实际摸牌；补杠补牌也属于新摸牌。
+		clear_passed_win_tiles(seat)
 		if announce:
 			request_game_render()
 		return tile
 	return ""
+
+
+func invalidate_self_draw_readiness() -> void:
+	# 保留非空失效标记，避免新运行时退回旧局兼容路径。
+	offline_self_draw_ready = {"seat": -1, "serial": -1}
+
 
 func draw_turn_tile_or_finish(seat: int, announce: bool = true, source: String = "normal") -> String:
 	var drawn = draw_tile_for(seat, announce, source)
@@ -512,7 +526,12 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 		return
 	if claim == "pass":
 		play_pending_claim_choice_confirmation_fx(claim, from_seat, tile)
-		add_log("你选择过。")
+		var pending_options: Array = offline_pending_claim.get("options", [])
+		if pending_options.has("hu"):
+			record_passed_win_tile(0, tile)
+			add_log("你选择过%s，过水至下次摸牌。" % tile_label(tile))
+		else:
+			add_log("你选择过。")
 		var was_rob_gang = bool(offline_pending_claim.get("rob_gang", false))
 		var prepared_ai_claim: Dictionary = offline_pending_claim.get("ai_claim", {})
 		if was_rob_gang:
@@ -561,14 +580,26 @@ func current_self_draw_tile(seat: int) -> String:
 	if hand.is_empty():
 		return ""
 	# Hands are sorted immediately after a draw. The final array element is
-	# therefore not necessarily the tile that completed the hand; retain the
-	# authoritative draw record for settlement text and result data.
-	var drawn_seat = int(offline_last_draw.get("seat", -1))
-	var drawn_tile = str(offline_last_draw.get("tile", ""))
-	if drawn_seat == seat and drawn_tile != "" and count_tile(hand, drawn_tile) > 0:
-		return drawn_tile
-	# Preserve recoverability for imported or legacy offline states that do not
-	# carry a draw record, while normal runtime always takes the branch above.
+	# therefore not necessarily the tile that completed the hand. Runtime state
+	# must also prove this seat has not discarded or called since that draw.
+	if not offline_self_draw_ready.is_empty():
+		var ready_seat = int(offline_self_draw_ready.get("seat", -1))
+		var ready_tile = str(offline_self_draw_ready.get("tile", ""))
+		var ready_serial = int(offline_self_draw_ready.get("serial", -1))
+		if ready_seat != seat or ready_tile == "" or ready_serial < 0:
+			return ""
+		if int(offline_last_draw.get("seat", -1)) != seat \
+			or str(offline_last_draw.get("tile", "")) != ready_tile \
+			or int(offline_last_draw.get("serial", -2)) != ready_serial \
+			or count_tile(hand, ready_tile) <= 0:
+			return ""
+		return ready_tile
+	# Imported pre-R47 snapshots do not have an explicit draw-readiness marker.
+	# Keep their historical fallback, while every live draw writes the marker.
+	var legacy_drawn_seat = int(offline_last_draw.get("seat", -1))
+	var legacy_drawn_tile = str(offline_last_draw.get("tile", ""))
+	if legacy_drawn_seat == seat and legacy_drawn_tile != "" and count_tile(hand, legacy_drawn_tile) > 0:
+		return legacy_drawn_tile
 	return str(hand.back())
 
 func human_concealed_gang(tile: String) -> void:
@@ -1047,6 +1078,7 @@ func commit_discard(seat: int, tile: String) -> bool:
 	hand.remove_at(index)
 	if seat == 0:
 		clear_pending_danger_discard()
+	invalidate_self_draw_readiness()
 	players[seat]["discards"].append(tile)
 	last_discard = tile
 	last_discard_seat = seat
@@ -1151,7 +1183,8 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 		return options
 	var hand: Array = players[seat]["hand"]
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
-	if can_win_for_seat_from_counts(seat, hand_counts, tile):
+	# 荣和边界统一处理舍张振听与过水，避免 UI/AI 展示不可提交的胡。
+	if can_ron_for_seat_from_counts(seat, hand_counts, tile):
 		options.append("hu")
 	var held_count = tile_count_from_counts(tile, hand_counts)
 	if held_count >= 3:
@@ -1202,6 +1235,7 @@ func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String,
 	if claim == "hu":
 		finish_offline_round(seat, tile, false, from_seat)
 		return
+	invalidate_self_draw_readiness()
 	remove_last_discard(from_seat, tile)
 	var hand: Array = players[seat]["hand"]
 	var meld: Array = []
@@ -1289,6 +1323,7 @@ func perform_concealed_gang(seat: int, tile: String) -> bool:
 	if not remove_tiles(hand, tile, 4):
 		return false
 	players[seat]["melds"].append([tile, tile, tile, tile])
+	record_concealed_gang_meld(seat, tile)
 	play_sfx("gang", -2.0)
 	speak_action_call("暗杠", tile)
 	add_log("%s暗杠%s。" % [players[seat]["name"], tile_label(tile)])
@@ -1313,6 +1348,7 @@ func resolve_after_rob_gang_pass(gang_seat: int, tile: String, prepared_ai_claim
 	render_game()
 
 func finish_wall_draw() -> void:
+	invalidate_self_draw_readiness()
 	offline_phase = "ended"
 	offline_turn_needs_draw = false
 	offline_pending_claim.clear()
@@ -1339,6 +1375,10 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 	if mode != "offline" or offline_phase == "ended" or winner < 0 or winner >= players.size():
 		return false
 	if self_draw:
+		# A complete hand and matching draw record are not enough: tsumo belongs
+		# only to the active post-draw action window, never to a stale resolver.
+		if not is_valid_offline_discard_turn(winner):
+			return false
 		if win_tile == "" or count_tile(players[winner].get("hand", []), win_tile) <= 0:
 			return false
 		# Settlement must name the tile actually drawn this turn. Without this
@@ -1377,13 +1417,13 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 				return false
 		else:
 			return false
-		return can_added_gang(payer, win_tile) and can_win_for_seat(winner, win_tile)
+		return can_added_gang(payer, win_tile) and can_ron_for_seat(winner, win_tile)
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
 		return false
 	var discards: Array = players[payer]["discards"]
 	if last_discard != win_tile or last_discard_seat != payer or discards.is_empty() or str(discards.back()) != win_tile:
 		return false
-	return can_win_for_seat(winner, win_tile)
+	return can_ron_for_seat(winner, win_tile)
 
 func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> void:
 	# Keep the state transition as strict as scoring: an invalid external or
@@ -1503,13 +1543,61 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size():
 		return false
+	if not has_valid_scoring_melds(seat):
+		return false
 	var tiles: Array = players[seat]["hand"].duplicate()
 	if extra_tile != "":
 		tiles.append(extra_tile)
 	return is_complete_hand(tiles, players[seat]["melds"].size())
 
+
+func record_passed_win_tile(seat: int, tile: String) -> void:
+	if seat < 0 or seat >= players.size() or tile == "":
+		return
+	var passed: Dictionary = offline_passed_win_tiles.get(seat, {})
+	passed[tile] = true
+	offline_passed_win_tiles[seat] = passed
+
+
+func clear_passed_win_tiles(seat: int) -> void:
+	if seat >= 0 and seat < players.size():
+		offline_passed_win_tiles.erase(seat)
+
+
+func is_passed_win_tile(seat: int, tile: String) -> bool:
+	if seat < 0 or tile == "":
+		return false
+	var passed = offline_passed_win_tiles.get(seat, {})
+	return typeof(passed) == TYPE_DICTIONARY and bool((passed as Dictionary).get(tile, false))
+
+
+func is_discard_furiten(seat: int, tile: String) -> bool:
+	# 商用常见舍张振听：河牌中已出现过的牌不能再荣和同名张。自摸不受影响。
+	if seat < 0 or seat >= players.size() or tile == "":
+		return false
+	var discards: Array = players[seat].get("discards", [])
+	for item in discards:
+		if str(item) == tile:
+			return true
+	return false
+
+
+func can_ron_for_seat(seat: int, tile: String) -> bool:
+	if tile == "" or is_discard_furiten(seat, tile) or is_passed_win_tile(seat, tile):
+		return false
+	return can_win_for_seat(seat, tile)
+
+
+func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -> bool:
+	if tile == "" or is_discard_furiten(seat, tile) or is_passed_win_tile(seat, tile):
+		return false
+	return can_win_for_seat_from_counts(seat, hand_counts, tile)
+
+
 func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size() or hand_counts.is_empty():
+		return false
+	if not has_valid_scoring_melds(seat):
 		return false
 	var counts = hand_counts
 	var tile_count = players[seat]["hand"].size()

@@ -18,7 +18,8 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 					"score": float(hu_decision.get("score", 1000.0)) - float(offset),
 					"claim_report": hu_decision,
 				}
-			# 留听：本家放弃低价值荣和，也不再降格碰/杠同一张。
+			# AI 主动留听也应进入同张过水；否则下一家重复同张可立刻绕过决策。
+			record_passed_win_tile(seat, tile)
 			continue
 		var claim_context = make_ai_claim_context(seat, visible_counts_snapshot, hand_counts, from_seat)
 		if options.has("gang"):
@@ -451,7 +452,7 @@ func choose_ai_rob_gang(gang_seat: int, tile: String) -> Dictionary:
 		var seat = (gang_seat + offset) % 4
 		if seat == gang_seat or not is_ai_controlled_seat(seat):
 			continue
-		if can_win_for_seat(seat, tile):
+		if can_ron_for_seat(seat, tile):
 			# 抢杠固定接受：额外番型 + 对手公开加杠信息。
 			return {"seat": seat, "claim": "hu", "score": 1100.0 - offset, "claim_report": {"accept": true, "reason": "抢杠", "fan": 0, "points": 0}}
 	return {}
@@ -470,7 +471,7 @@ func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
 	var robbers: Array = []
 	for offset in range(1, 4):
 		var seat = (gang_seat + offset) % 4
-		if not can_win_for_seat(seat, tile):
+		if not can_ron_for_seat(seat, tile):
 			continue
 		robbers.append(seat)
 		if int(report.get("winner_seat", -1)) < 0:
@@ -502,6 +503,16 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	if seat < 0 or seat >= players.size() or tile == "":
 		report["accept"] = false
 		report["reason"] = "无效"
+		return report
+	if is_discard_furiten(seat, tile):
+		report["accept"] = false
+		report["reason"] = "舍张振听"
+		report["score"] = 0.0
+		return report
+	if is_passed_win_tile(seat, tile):
+		report["accept"] = false
+		report["reason"] = "过水"
+		report["score"] = 0.0
 		return report
 	if not can_win_for_seat(seat, tile):
 		report["accept"] = false
@@ -629,6 +640,10 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	if seat < 0 or seat >= players.size() or drawn_tile == "":
 		report["accept"] = false
 		report["reason"] = "无效"
+		return report
+	if not is_valid_offline_discard_turn(seat):
+		report["accept"] = false
+		report["reason"] = "非自摸回合"
 		return report
 	if not can_win_for_seat(seat):
 		report["accept"] = false
@@ -960,7 +975,7 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 		if opponent < 0 or opponent >= players.size() or opponent == seat:
 			continue
 		# 已经由别人包赔时，本次弃牌不会把责任转移给当前出牌者。
-		if offline_package_liability.has(opponent):
+		if package_payer_for(opponent) >= 0:
 			continue
 		var claim_count = int(offline_claim_counts.get(claim_source_key(opponent, seat), 0))
 		if claim_count < 2:
@@ -1519,6 +1534,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var simulated_tile_count = simulated.size()
 	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
 	var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
+	var exposed_melds = exposed_meld_count_for_seat(seat)
 	var attack = ai_total_attack_multiplier(seat)
 	var route_focus = ai_route_focus(seat)
 	var risk_factor = ai_risk_factor(seat)
@@ -1590,7 +1606,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var midgame_push = midgame_danger_adjustment(seat, shanten, ukeire, safety, risk, feed_risk, pressure_context)
 	var opening_push = opening_efficiency_adjustment(seat, tile, shanten, original_counts, open_melds)
 	var post_meld_push = post_meld_route_adjustment(seat, tile, open_melds, original_counts, plan_label, plan_suit, shanten)
-	var open_wait_push = open_tenpai_quality_adjustment(seat, open_melds, shanten, wait_total_remaining, int(effective_tiles.size()) if typeof(effective_tiles) == TYPE_ARRAY else 0, wait_average_points, wait_best_points)
+	var open_wait_push = open_tenpai_quality_adjustment(seat, exposed_melds, shanten, wait_total_remaining, int(effective_tiles.size()) if typeof(effective_tiles) == TYPE_ARRAY else 0, wait_average_points, wait_best_points)
 	var score = -float(shanten) * 760.0
 	score += (float(ukeire) * 26.0 + float(variety) * 18.0) * attack
 	score += (shape * 0.30 + shape_quality * 0.42) * attack
@@ -1737,12 +1753,10 @@ func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, e
 	result["quality_penalty"] = quality_penalty
 	result["quality_text"] = wait_quality_text_from_values(total_remaining, self_discarded_waits)
 	var wait_score = (adjusted_remaining * 12.0 + float(effective_tiles.size()) * 16.0 + float(result["best_points"]) * 0.04 + average_points * 0.02 - quality_penalty) * attack_multiplier
-	# 副露听牌无法门清：更偏好厚听/多面，薄听额外惩罚。
-	var open_meld_count = open_melds
-	if open_meld_count <= 0 and seat >= 0 and seat < players.size():
-		open_meld_count = players[seat]["melds"].size()
-	if open_meld_count > 0:
-		var open_scale = (1.0 + float(min(3, open_meld_count)) * 0.08) * wait_focus
+	# 明副露听牌无法门清：暗杠仍保留门清资格，不套用这组薄听惩罚。
+	var exposed_meld_count = exposed_meld_count_for_seat(seat)
+	if exposed_meld_count > 0:
+		var open_scale = (1.0 + float(min(3, exposed_meld_count)) * 0.08) * wait_focus
 		if total_remaining <= 2:
 			wait_score -= (32.0 + float(3 - total_remaining) * 10.0) * open_scale
 		else:

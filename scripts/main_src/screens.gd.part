@@ -689,7 +689,8 @@ func _show_rules_screen_impl() -> void:
 	add_rule_section(content, "游戏目标", [
 		"4组面子 + 1对将牌即可胡牌",
 		"摸牌、打牌、吃碰杠来组合手牌",
-		"可自摸，也可点炮胡牌",
+		"可自摸，也可点炮胡牌；过水同张，摸前不可再胡",
+		"舍张振听：河牌出现过的牌不能再荣和，只能自摸",
 	], 0)
 
 	add_rule_section(content, "牌型介绍", [
