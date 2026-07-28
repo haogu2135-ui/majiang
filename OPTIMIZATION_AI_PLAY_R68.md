@@ -32,21 +32,23 @@ not a fair hard-vs-easy gate for "does the AI avoid feeding the player".
 ## Result
 
 - Aggregate commercial gate: `PASS`.
-- Fixed-profile aggregate: high-danger easy/hard `0.356/0.269`, player-target
-  high-danger `0.126/0.053`, deal-in `0.75/0.88`.
-- Fixed + shuffled aggregate: high-danger easy/hard `0.356/0.297`, player-target
-  high-danger `0.126/0.087`, deal-in `0.75/0.75`.
-- `humanRon` easy/hard remains `0.00/0.38` in this all-bot pack and is kept as a
-  diagnostic only because seat0 strength is intentionally tied to the sampled
-  difficulty.
+- Latest fixed-profile aggregate after the R71 quiet-guard rerun: high-danger
+  easy/hard `0.317/0.327`, player-target high-danger `0.151/0.116`, deal-in
+  `0.67/0.50`, `humanRon` `0.00/0.00`.
+- Latest fixed + shuffled aggregate after the R71 quiet-guard rerun: high-danger
+  easy/hard `0.356/0.317`, player-target high-danger `0.126/0.098`, deal-in
+  `0.75/0.38`, `humanRon` `0.00/0.00`.
+- `humanRon` is still treated as diagnostic in this all-bot pack because seat0
+  strength is intentionally tied to the sampled difficulty; R69 remains the fair
+  fixed-probe comparator.
 
 ## Resource Impact
 
 No normal gameplay cost. Evidence sampling remains serial, headless, single-thread,
 and intentionally small (16 total bot hands across fixed/shuffled rows). R68 skips
 the normal difficulty inside the commercial pack because the gate only compares
-easy versus hard, keeping the pack within the 180s budget even after the quiet
-fast-pruning guard change.
+easy versus hard, keeping the pack within the 180s budget. The R71 rerun finished
+in `151976ms` after adding the hard-only 2-away quiet guard.
 
 ## Run
 

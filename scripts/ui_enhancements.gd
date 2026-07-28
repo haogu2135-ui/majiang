@@ -302,11 +302,15 @@ func create_falling_plum_blossoms(parent: Control, rect: Rect2, count: int = 8) 
 		var fall_x = blossom.position.x + randf_range(-40.0, 40.0)
 		var fall_y = rect.position.y + rect.size.y + 40.0
 		var dur = randf_range(4.5, 8.0)
+		var blossom_id := blossom.get_instance_id()
 		tw.tween_property(blossom, "position", Vector2(fall_x, fall_y), dur).set_trans(Tween.TRANS_SINE)
 		tw.parallel().tween_property(blossom, "rotation", randf_range(-1.2, 1.2), dur)
 		tw.tween_callback(func() -> void:
-			blossom.position = Vector2(randf_range(rect.position.x, rect.position.x + rect.size.x), rect.position.y - 20.0)
-			blossom.rotation = 0.0
+			var blossom_node := instance_from_id(blossom_id) as Control
+			if blossom_node == null:
+				return
+			blossom_node.position = Vector2(randf_range(rect.position.x, rect.position.x + rect.size.x), rect.position.y - 20.0)
+			blossom_node.rotation = 0.0
 		)
 		active_particles.append(tw)
 

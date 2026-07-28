@@ -68,6 +68,7 @@ func shutdown_runtime() -> void:
 		mode = "shutdown"
 		game_render_queued = false
 		offline_ai_active = false
+		offline_ai_run_queued = false
 		var pending_timers := runtime_delay_timers.duplicate()
 		runtime_delay_timers.clear()
 		for timer in pending_timers:
@@ -76,7 +77,53 @@ func shutdown_runtime() -> void:
 				timer.timeout.emit()
 				if is_instance_valid(timer) and not timer.is_queued_for_deletion():
 					timer.queue_free()
+	shutdown_runtime_visuals()
 	shutdown_runtime_audio()
+
+
+func shutdown_runtime_visuals() -> void:
+	stop_ambient_animation()
+	clear_fx_overlays()
+	shutdown_runtime_tweens()
+	fx_turn_pulse_tween = null
+	fx_burst_tween = null
+	fx_ripple_tween = null
+	transition_tween = null
+	toast_tween = null
+	ambient_tween = null
+	queue_free_runtime_node(fx_layer)
+	fx_layer = null
+	fx_turn_pulse = null
+	fx_turn_glow = null
+	fx_burst_root = null
+	fx_burst_label = null
+	fx_burst_flash = null
+	fx_burst_rings.clear()
+	fx_ripple_root = null
+	fx_ripple_rings.clear()
+	transition_overlay = null
+	transition_pending_callback = Callable()
+	transition_active = false
+	toast_container = null
+	toast_current = null
+	queue_free_runtime_node(ui_enhancements)
+	ui_enhancements = null
+
+
+func shutdown_runtime_tweens() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	for candidate in tree.get_processed_tweens():
+		var tween := candidate as Tween
+		if tween != null and is_instance_valid(tween):
+			tween.kill()
+
+
+func queue_free_runtime_node(node: Node) -> void:
+	if node == null or not is_instance_valid(node) or node.is_queued_for_deletion():
+		return
+	node.queue_free()
 
 
 func shutdown_runtime_audio() -> void:
@@ -1625,6 +1672,18 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		if should_force_accept_for_wall_draw_ba(seat, points, wall):
 			report["reason"] = "查听落袋"
 			return report
+		var continue_eval_context = make_ai_evaluation_context(seat, visible_tile_counts())
+		var continue_risk = deal_in_risk_score(drawn_tile, seat, continue_eval_context)
+		var continue_feed_report = discard_feed_risk_report(drawn_tile, seat, [], continue_eval_context)
+		var continue_feed = float(continue_feed_report.get("score", 0.0)) if typeof(continue_feed_report) == TYPE_DICTIONARY else 0.0
+		var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+		var risk_limit = AI_DANGER_RISK_SOFT + (2.0 if diff == AI_DIFFICULTY_HARD else 6.0)
+		var feed_limit = AI_DANGER_FEED_SOFT + (2.0 if diff == AI_DIFFICULTY_HARD else 6.0)
+		if continue_risk >= risk_limit or continue_feed >= feed_limit:
+			report["reason"] = "危张自摸落袋"
+			report["continue_discard_risk"] = continue_risk
+			report["continue_discard_feed"] = continue_feed
+			return report
 		report["accept"] = false
 		report["reason"] = "留听高番自摸"
 		report["score"] = 140.0 + float(alt_best_fan) * 10.0
@@ -1839,6 +1898,24 @@ func human_target_discard_penalty_from_pressure(pressure: float) -> float:
 
 func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
 	return human_target_discard_penalty_from_pressure(human_target_discard_pressure(seat, tile, risk, feed_report, shanten, eval_context))
+
+
+func fast_human_target_discard_pressure(seat: int, tile: String, risk: float, shanten: int, eval_context: Dictionary = {}, readiness_override: float = -1.0) -> float:
+	if seat <= 0 or seat >= players.size() or tile == "" or mode != "offline":
+		return 0.0
+	if (not offline_all_bot_mode) and is_ai_controlled_seat(0):
+		return 0.0
+	var readiness = readiness_override if readiness_override >= 0.0 else human_readiness_for_defense()
+	if risk < AI_DANGER_RISK_SOFT and readiness < 8.0:
+		return 0.0
+	var pen = max(0.0, risk - 10.0) * 0.36 + readiness * 1.05
+	if shanten >= 3:
+		pen *= 1.10
+	elif shanten <= 0:
+		pen *= 0.45
+	elif shanten == 1:
+		pen *= 0.70
+	return clamp(pen, 0.0, 180.0)
 
 
 func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> Dictionary:
@@ -2220,9 +2297,11 @@ func get_ai_discard_reports(seat: int) -> Array:
 		var risk_factor = ai_risk_factor(seat)
 		var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 		var fast_human_guard = seat > 0 and mode == "offline" and (diff == AI_DIFFICULTY_HARD or human_readiness_for_defense() >= 8.0)
+		var fast_human_readiness = human_readiness_for_defense() if fast_human_guard else 0.0
 		var safest_candidate: Dictionary = {}
 		var safest_rank = INF
 		var human_pressure_peak = 0.0
+		var danger_risk_peak = 0.0
 		for item in candidates:
 			var cand = str(item.get("tile", ""))
 			var idx = int(item.get("tile_index", -1))
@@ -2230,11 +2309,11 @@ func get_ai_discard_reports(seat: int) -> Array:
 			var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
 			# 快评：只靠向听 + 危险，避免 34 张进张扫描
 			var risk = deal_in_risk_score(cand, seat, eval_context)
+			danger_risk_peak = max(danger_risk_peak, risk)
 			var cheap = -float(shanten) * 760.0 - risk * defense_guess * risk_factor
 			var human_pressure = 0.0
 			if fast_human_guard:
-				var fast_feed_report = discard_feed_risk_report(cand, seat, visible_counts_snapshot, eval_context)
-				human_pressure = human_target_discard_pressure(seat, cand, risk, fast_feed_report, shanten, eval_context)
+				human_pressure = fast_human_target_discard_pressure(seat, cand, risk, shanten, eval_context, fast_human_readiness)
 				var human_pen = human_target_discard_penalty_from_pressure(human_pressure)
 				cheap -= human_pen * 0.90
 				item["fast_human_pressure"] = human_pressure
@@ -2265,7 +2344,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 		var high_pressure = float(pressure_context.get("readiness_pressure", 0.0)) >= 9.5 \
 			or int(pressure_context.get("threat_rank", 0)) >= 2 \
 			or bool(pressure_context.get("multi_threat", false)) \
-			or human_pressure_peak >= 16.0
+			or human_pressure_peak >= 16.0 \
+			or (diff == AI_DIFFICULTY_HARD and danger_risk_peak >= AI_DANGER_RISK_HIGH + 12.0)
 		var safest_kept = false
 		for item in keep:
 			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
@@ -2301,6 +2381,7 @@ func get_ai_discard_reports(seat: int) -> Array:
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		simulated.insert(i, candidate)
 	sort_ai_discard_reports(reports)
+	apply_hard_danger_push_guard(reports)
 	store_ai_report_cache(cache_key, reports)
 	return duplicate_report_array(reports)
 
@@ -2312,6 +2393,73 @@ func sort_ai_discard_reports(reports: Array) -> void:
 			return tile_sort_index(str(a.get("tile", ""))) < tile_sort_index(str(b.get("tile", "")))
 		return score_a > score_b
 	)
+
+
+func apply_hard_danger_push_guard(reports: Array) -> void:
+	if reports.size() < 2 or clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) != AI_DIFFICULTY_HARD:
+		return
+	var best: Dictionary = reports[0]
+	var best_shanten = int(best.get("shanten", 8))
+	if best_shanten > 1:
+		return
+	var best_risk = float(best.get("risk", 0.0))
+	var best_feed = float(best.get("feed_risk", 0.0))
+	if best_risk < AI_DANGER_RISK_HIGH + 6.0 and best_feed < AI_DANGER_FEED_SOFT + 24.0:
+		return
+	var best_score = float(best.get("score", 0.0))
+	var best_pressure = hard_danger_push_rank(best)
+	var best_index = -1
+	var best_value = -INF
+	for i in range(1, reports.size()):
+		var candidate: Dictionary = reports[i]
+		var candidate_shanten = int(candidate.get("shanten", 8))
+		var shanten_delta = candidate_shanten - best_shanten
+		if shanten_delta > 1:
+			continue
+		if shanten_delta > 0:
+			var best_human_pressure = float(best.get("human_target_pressure", 0.0))
+			if best_human_pressure < 18.0:
+				continue
+			var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
+			if candidate_human_pressure > best_human_pressure - 4.0:
+				continue
+		var score_gap = best_score - float(candidate.get("score", 0.0))
+		var max_gap = 360.0 if best_shanten <= 0 else 520.0
+		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
+			max_gap += 140.0
+		if score_gap > max_gap:
+			continue
+		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
+		pressure_gain += hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))
+		if pressure_gain < 14.0:
+			continue
+		var value = pressure_gain - score_gap / 95.0 - float(max(0, shanten_delta)) * 2.4
+		if value > best_value:
+			best_value = value
+			best_index = i
+	if best_index > 0:
+		var safer = reports[best_index]
+		reports.remove_at(best_index)
+		reports.insert(0, safer)
+
+
+func hard_danger_push_rank(report: Dictionary) -> float:
+	return float(report.get("risk", 0.0)) + float(report.get("feed_risk", 0.0)) * 0.45 + float(report.get("human_target_pressure", 0.0)) * 0.60
+
+
+func hard_safety_value(label: String) -> float:
+	match label:
+		"安":
+			return 34.0
+		"现":
+			return 24.0
+		"熟":
+			return 18.0
+		"壁":
+			return 12.0
+		"筋":
+			return 9.0
+	return 0.0
 
 func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) -> Dictionary:
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
@@ -2522,6 +2670,20 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var safety = tile_safety_label(tile, seat, visible_counts, eval_context)
 	var danger_source: Dictionary = risk_summary.get("danger_source", {})
 	var defense = ai_defense_weight(seat, shanten, pressure_context)
+	var diff_idx = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var human_pressure = human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
+	var needs_guard_ukeire = false
+	if offline_sim_quiet and diff_idx == AI_DIFFICULTY_HARD and shanten == 2:
+		if safety != "":
+			needs_guard_ukeire = risk >= AI_DANGER_RISK_SOFT or feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
+		elif risk <= AI_DANGER_RISK_HIGH + 10.0:
+			needs_guard_ukeire = feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
+	if needs_guard_ukeire:
+		var guard_metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts)
+		ukeire = int(guard_metrics.get("count", 0))
+		variety = int(guard_metrics.get("variety", 0))
+		effective_tiles = guard_metrics.get("tiles", [])
+		effective_remaining = guard_metrics.get("remaining_by_tile", {})
 	var safety_bonus = ai_safety_bonus(safety, defense, shanten)
 	var emergency_defense = emergency_defense_adjustment(seat, shanten, safety, risk, feed_risk, pressure_context)
 	var tenpai_bonus = 220.0 if shanten <= 0 else 0.0
@@ -2551,7 +2713,6 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			danger_pen += 28.0 if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) != AI_DIFFICULTY_EASY else 12.0
 		score -= danger_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
-	var human_pressure = human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
 	var human_pen = human_target_discard_penalty_from_pressure(human_pressure)
 	score -= human_pen
 	# R11: 第三次喂同一家吃碰杠会形成包三搭责任，按牌况和难度显式规避。
@@ -3773,9 +3934,9 @@ func ai_defense_weight(seat: int, shanten: int, pressure_context: Dictionary = {
 		readiness += min(3.5, float(hot_opponents) * 0.55)
 	# 困难档整体更重防守权重
 	if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_HARD:
-		base *= 1.08
+		base *= 1.10
 	elif clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY:
-		base *= 0.90
+		base *= 0.88
 	return max(0.20, (base + progress * 0.52 + pressure * 0.08 + readiness * 0.10 + score_defense_adjustment(seat)) * ai_risk_factor(seat))
 
 func ai_pressure_context(seat: int, eval_context: Dictionary = {}) -> Dictionary:
@@ -3968,6 +4129,11 @@ func discard_feed_risk_report(tile: String, seat: int, visible_counts_snapshot: 
 
 func discard_feed_penalty_weight(defense: float, shanten: int) -> float:
 	var weight = 0.42 + max(0.0, defense - 0.70) * 0.28
+	match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
+		AI_DIFFICULTY_HARD:
+			weight *= 1.12
+		AI_DIFFICULTY_EASY:
+			weight *= 0.94
 	if shanten <= 0:
 		weight *= 0.35
 	elif shanten == 1:
@@ -4856,7 +5022,7 @@ func start_next_offline_hand(auto_run_ai: bool = true) -> void:
 	play_next_hand_transition_fx(previous_dealer, dealer_seat, offline_dealer_repeat)
 	deal_offline_hand()
 	if auto_run_ai and current_seat != 0:
-		run_ai_until_human()
+		schedule_ai_until_human()
 
 func make_wall() -> Array[String]:
 	var next_wall: Array[String] = []
@@ -5107,12 +5273,14 @@ func human_discard(index: int) -> void:
 	if tile == "":
 		return
 	render_game()
-	await get_tree().process_frame
+	get_tree().process_frame.connect(Callable(self, "resolve_human_discard_after_frame").bind(tile), CONNECT_ONE_SHOT)
+
+func resolve_human_discard_after_frame(tile: String) -> void:
 	if mode != "offline" or offline_phase != "resolving" or last_discard_seat != 0 or last_discard != tile:
 		return
 	resolve_after_discard(0, tile)
 	if mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
-		run_ai_until_human()
+		schedule_ai_until_human()
 
 func human_discard_by_tile(tile: String) -> void:
 	if not can_self_discard() or tile == "":
@@ -5153,9 +5321,9 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 			offline_pending_claim.clear()
 			offline_phase = "resolving"
 			resolve_ai_or_advance(from_seat, tile, prepared_ai_claim)
-		if offline_phase == "await_discard":
-			run_ai_until_human()
-		return
+			if offline_phase == "await_discard":
+				schedule_ai_until_human()
+			return
 	var options: Array = offline_pending_claim.get("options", [])
 	if not options.has(claim):
 		return
@@ -6016,8 +6184,17 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	return out
 
 
+func schedule_ai_until_human() -> void:
+	if mode != "offline" or offline_ai_active or offline_ai_run_queued:
+		return
+	offline_ai_run_queued = true
+	get_tree().process_frame.connect(Callable(self, "run_ai_until_human"), CONNECT_ONE_SHOT)
+
 func run_ai_until_human() -> void:
+	offline_ai_run_queued = false
 	if offline_ai_active:
+		return
+	if mode != "offline":
 		return
 	offline_ai_active = true
 	if last_discard_seat == 0:
@@ -12138,6 +12315,8 @@ func draw_loading_tip_art(parent: Control) -> Control:
 	art.add_child(bridge_gate)
 	bridge_gate.set_meta("animated_role", "loading_tip_shuffle_gate")
 	var bridge_tick = add_gpt_tick_strip(art, rect_full(0.325, 0.185, (0.343) + float(2) * (0.095), 0.465), Color(0.78, 0.62, 0.36, 0.070), "LoadingTipShuffleBridgeTick_0")
+	if bridge_tick != null:
+		bridge_tick.set_meta("animated_role", "loading_tip_shuffle_tick")
 	for i in range(2):
 		var node = make_gpt_gate(rect_full(0.275 + float(i) * 0.325, 0.485, 0.310 + float(i) * 0.325, 0.835), Color(accent.r, accent.g, accent.b, 0.060 - float(i) * 0.012))
 		node.name = "LoadingTipNode_%d" % i
@@ -16908,13 +17087,13 @@ func draw_table_center_starlight(parent: Control) -> void:
 			inner_tw.tween_property(inner_ring, "rotation", -TAU, 16.0).from(0.0)
 
 
-func draw_table_corner(parent: Control, rects: Array) -> void:
+func draw_table_corner(parent: Control, rects: Array, corner_index: int = -1) -> void:
 	# r214: bulk GPT chrome sweep
 	var corner_a = make_gpt_plate_rect(rects[0], TABLE_CORNER_FILL, "ui_jade_reading_plate")
-	corner_a.name = "TableCornerPlateA"
+	corner_a.name = "TableCornerPlateA_%d" % corner_index if corner_index >= 0 else "TableCornerPlateA"
 	parent.add_child(corner_a)
 	var corner_b = make_gpt_plate_rect(rects[1], TABLE_CORNER_VERTICAL_FILL, "ui_jade_reading_plate")
-	corner_b.name = "TableCornerPlateB"
+	corner_b.name = "TableCornerPlateB_%d" % corner_index if corner_index >= 0 else "TableCornerPlateB"
 	parent.add_child(corner_b)
 
 
@@ -17220,12 +17399,13 @@ func draw_table_log_timeline(parent: Control, row_count: int) -> Control:
 
 func draw_table_ornaments(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
-	for item in TABLE_ORNAMENT_EDGES:
+	for edge_index in range(TABLE_ORNAMENT_EDGES.size()):
+		var item = TABLE_ORNAMENT_EDGES[edge_index]
 		var _gpt_panel_host = make_gpt_plate_rect(item[0], item[1], "ui_jade_reading_plate")
-		_gpt_panel_host.name = "GptPanelHost"
+		_gpt_panel_host.name = "GptPanelHost_%d" % edge_index
 		parent.add_child(_gpt_panel_host)
-	for item in TABLE_CORNER_RECTS:
-		draw_table_corner(parent, item)
+	for corner_index in range(TABLE_CORNER_RECTS.size()):
+		draw_table_corner(parent, TABLE_CORNER_RECTS[corner_index], corner_index)
 
 
 func draw_table_round_tempo(parent: Control) -> Control:
@@ -18175,7 +18355,9 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 		var mute_gate = make_gpt_gate(rect_full(0.520, 0.660, 0.585, 0.835), Color(0.90, 0.62, 0.54, 0.22))
 		mute_gate.name = "VoiceButtonMuteGate"
 		art.add_child(mute_gate)
-		var mute_tick = add_gpt_tick_strip(art, rect_full(0.285, 0.640, (0.305) + float(1) * (0.105), 0.835), Color(0.90, 0.62, 0.54, 0.18), "VoiceButtonMuteTick_0")
+		for i in range(2):
+			var mute_left = 0.285 + float(i) * 0.105
+			add_gpt_tick_strip(art, rect_full(mute_left, 0.640, mute_left + 0.040, 0.835), Color(0.90, 0.62, 0.54, 0.18 - float(i) * 0.040), "VoiceButtonMuteTick_%d" % i)
 	if active:
 		if halo_texture != null:
 			halo_texture.modulate = Color(1, 1, 1, 0.08)
@@ -18219,7 +18401,7 @@ func draw_voice_button_feedback_loop(parent: Control, accent: Color, active: boo
 	for i in range(3):
 		var left = 0.205 + float(i) * 0.150
 		var tick = make_gpt_tick_strip(rect_full(left, 0.355, left + 0.024, 0.565), Color(accent.r, accent.g, accent.b, (0.22 - float(i) * 0.040) if active else (0.10 - float(i) * 0.018)))
-		tick.name = "VoiceButtonFeedbackTick_0"
+		tick.name = "VoiceButtonFeedbackTick_%d" % i
 		loop.add_child(tick)
 	if active:
 		fill.modulate = Color(1, 1, 1, 0.82)
@@ -19168,7 +19350,7 @@ func make_cloud_decoration(parent: Control, rect: Rect2, style: String = "auspic
 	return cloud
 
 
-func make_hand_group_spacer(height: float, width: float = 3.0, label_text: String = "") -> Control:
+func make_hand_group_spacer(height: float, width: float = 10.0, label_text: String = "") -> Control:
 	# r214: bulk GPT chrome sweep
 	var spacer = Control.new()
 	spacer.name = "HandGroupDivider"
@@ -20129,9 +20311,8 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 				callback.call()
 			connect_immediate_button_action(button, tile_callback)
 		return tile_body if lightweight_static_tile else frame
-	# Unknown / missing face texture: never leave a blank ivory plate.
 	draw_tile_depth_art(tile_body, size, clickable, highlighted, risk_text, false)
-	if tile != "" and missing_face_texture:
+	if TILE_TEXT_OVERLAYS_ENABLED and tile != "" and missing_face_texture:
 		if lightweight_static_tile:
 			draw_compact_tile_face(tile_body, tile, size)
 		else:
@@ -24399,13 +24580,15 @@ func set_online_feedback(text: String, waiting: bool = false) -> void:
 
 func _ready() -> void:
 	randomize()
+	var ui_capture_mode := OS.get_environment("YUNZHUO_UI_CAPTURE") == "1"
 	if OS.has_feature("mobile"):
 		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_LANDSCAPE)
 	setup_tile_order()
 	init_ui_enhancements()
 	show_loading_screen()
 	load_assets()
-	verify_audio_assets()
+	if not ui_capture_mode:
+		verify_audio_assets()
 	load_settings()
 	load_game_stats()
 	load_tutorial_state()
@@ -24415,7 +24598,8 @@ func _ready() -> void:
 	load_tasks()
 	load_inventory()
 	load_currency()
-	setup_audio()
+	if not ui_capture_mode:
+		setup_audio()
 	ensure_fx_layer()
 	setup_update_downloader()
 	# v1.0.149: 移除立即播放，恢复用户交互触发
@@ -25105,6 +25289,7 @@ func deal_offline_hand() -> void:
 	offline_last_draw.clear()
 	offline_self_draw_ready.clear()
 	offline_ai_active = false
+	offline_ai_run_queued = false
 	round_summary = ""
 	last_score_deltas.clear()
 	# 上局胡牌详情只属于其结算面板，不能带入新一局。
@@ -30114,7 +30299,9 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	section.custom_minimum_size.y = 152 if lines.size() >= 4 else 136
+	var line_count := int(lines.size())
+	var required_text_height := 24.0 + float(line_count) * 22.0 + float(line_count) * 5.0 + 34.0
+	section.custom_minimum_size.y = max(136.0, required_text_height)
 	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.06), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
 	section.add_child(section_depth)

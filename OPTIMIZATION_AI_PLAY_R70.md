@@ -24,11 +24,12 @@ gets a chance to consider it.
 
 ## Result
 
-- R69 fair-probe aggregate now reaches `humanRon` easy/hard `0.25/0.25`.
-- Player-target high-danger easy/hard improves to `0.110/0.062` in the same
-  fixed-probe run.
+- R69 fair-probe aggregate still reaches `humanRon` easy/hard `0.25/0.25` after
+  the R71 quiet-guard rerun.
+- Player-target high-danger easy/hard is `0.110/0.070` in the latest fixed-probe
+  run.
 - The fixed-probe check still stays under the 90s budget; current runtime was
-  `66098ms`.
+  `89090ms`.
 
 ## Resource Impact
 

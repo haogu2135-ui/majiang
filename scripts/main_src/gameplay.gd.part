@@ -251,7 +251,7 @@ func start_next_offline_hand(auto_run_ai: bool = true) -> void:
 	play_next_hand_transition_fx(previous_dealer, dealer_seat, offline_dealer_repeat)
 	deal_offline_hand()
 	if auto_run_ai and current_seat != 0:
-		run_ai_until_human()
+		schedule_ai_until_human()
 
 func make_wall() -> Array[String]:
 	var next_wall: Array[String] = []
@@ -502,12 +502,14 @@ func human_discard(index: int) -> void:
 	if tile == "":
 		return
 	render_game()
-	await get_tree().process_frame
+	get_tree().process_frame.connect(Callable(self, "resolve_human_discard_after_frame").bind(tile), CONNECT_ONE_SHOT)
+
+func resolve_human_discard_after_frame(tile: String) -> void:
 	if mode != "offline" or offline_phase != "resolving" or last_discard_seat != 0 or last_discard != tile:
 		return
 	resolve_after_discard(0, tile)
 	if mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
-		run_ai_until_human()
+		schedule_ai_until_human()
 
 func human_discard_by_tile(tile: String) -> void:
 	if not can_self_discard() or tile == "":
@@ -548,9 +550,9 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 			offline_pending_claim.clear()
 			offline_phase = "resolving"
 			resolve_ai_or_advance(from_seat, tile, prepared_ai_claim)
-		if offline_phase == "await_discard":
-			run_ai_until_human()
-		return
+			if offline_phase == "await_discard":
+				schedule_ai_until_human()
+			return
 	var options: Array = offline_pending_claim.get("options", [])
 	if not options.has(claim):
 		return
@@ -1411,8 +1413,17 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	return out
 
 
+func schedule_ai_until_human() -> void:
+	if mode != "offline" or offline_ai_active or offline_ai_run_queued:
+		return
+	offline_ai_run_queued = true
+	get_tree().process_frame.connect(Callable(self, "run_ai_until_human"), CONNECT_ONE_SHOT)
+
 func run_ai_until_human() -> void:
+	offline_ai_run_queued = false
 	if offline_ai_active:
+		return
+	if mode != "offline":
 		return
 	offline_ai_active = true
 	if last_discard_seat == 0:

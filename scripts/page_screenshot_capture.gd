@@ -37,11 +37,20 @@ func run() -> void:
 	DirAccess.make_dir_recursive_absolute(output_dir)
 
 	var selected_screens := selected_screen_names()
+	var scene = load("res://Main.tscn").instantiate()
+	apply_static_capture_mode(scene)
+	root.add_child(scene)
+	apply_static_capture_mode(scene)
+	await settle()
 	for screen_name in selected_screens:
-		await capture_screen(screen_name, output_dir_res)
-	# Give the audio/render backends one idle slice to retire resources from the
-	# final scene before the process exits. This keeps full multi-page captures
-	# deterministic on the dummy audio driver used by CI.
+		await capture_screen(scene, screen_name, output_dir_res)
+	if scene.has_method("clear_fx_overlays"):
+		scene.clear_fx_overlays()
+	if scene.has_method("shutdown_runtime"):
+		scene.shutdown_runtime()
+	scene.queue_free()
+	await process_frame
+	await process_frame
 	await create_timer(0.06).timeout
 	await process_frame
 
@@ -89,12 +98,8 @@ func selected_screen_names() -> Array:
 		return ["08_online_lobby"]
 	return SCREEN_NAMES.duplicate()
 
-func capture_screen(screen_name: String, output_dir_res: String) -> void:
-	var scene = load("res://Main.tscn").instantiate()
+func capture_screen(scene: Node, screen_name: String, output_dir_res: String) -> void:
 	apply_static_capture_mode(scene)
-	root.add_child(scene)
-	apply_static_capture_mode(scene)
-	await settle()
 	build_screen(scene, screen_name)
 	apply_static_capture_mode(scene)
 	if scene.has_method("clear_fx_overlays"):
@@ -123,10 +128,8 @@ func capture_screen(screen_name: String, output_dir_res: String) -> void:
 	print("saved %s: %s" % [screen_name, output_path])
 	if scene.has_method("clear_fx_overlays"):
 		scene.clear_fx_overlays()
-	if scene.has_method("shutdown_runtime"):
-		scene.shutdown_runtime()
-	scene.queue_free()
-	await process_frame
+	if scene.has_method("shutdown_runtime_tweens"):
+		scene.shutdown_runtime_tweens()
 	await process_frame
 	await process_frame
 
@@ -164,6 +167,8 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			seed_preview_online_lobby(scene)
 			scene._show_online_lobby_impl()
 		"09_daily_login":
+			scene.show_menu(true)
+			scene.clear_fx_overlays()
 			scene.show_daily_login_panel({
 				"show_reward": true,
 				"consecutive_days": 5,
@@ -508,4 +513,3 @@ func seed_preview_chat_panel(scene: Node) -> void:
 	]
 	if scene.has_method("show_chat_panel"):
 		scene.show_chat_panel()
-

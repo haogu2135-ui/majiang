@@ -56,6 +56,7 @@ func shutdown_runtime() -> void:
 		mode = "shutdown"
 		game_render_queued = false
 		offline_ai_active = false
+		offline_ai_run_queued = false
 		var pending_timers := runtime_delay_timers.duplicate()
 		runtime_delay_timers.clear()
 		for timer in pending_timers:
@@ -64,7 +65,53 @@ func shutdown_runtime() -> void:
 				timer.timeout.emit()
 				if is_instance_valid(timer) and not timer.is_queued_for_deletion():
 					timer.queue_free()
+	shutdown_runtime_visuals()
 	shutdown_runtime_audio()
+
+
+func shutdown_runtime_visuals() -> void:
+	stop_ambient_animation()
+	clear_fx_overlays()
+	shutdown_runtime_tweens()
+	fx_turn_pulse_tween = null
+	fx_burst_tween = null
+	fx_ripple_tween = null
+	transition_tween = null
+	toast_tween = null
+	ambient_tween = null
+	queue_free_runtime_node(fx_layer)
+	fx_layer = null
+	fx_turn_pulse = null
+	fx_turn_glow = null
+	fx_burst_root = null
+	fx_burst_label = null
+	fx_burst_flash = null
+	fx_burst_rings.clear()
+	fx_ripple_root = null
+	fx_ripple_rings.clear()
+	transition_overlay = null
+	transition_pending_callback = Callable()
+	transition_active = false
+	toast_container = null
+	toast_current = null
+	queue_free_runtime_node(ui_enhancements)
+	ui_enhancements = null
+
+
+func shutdown_runtime_tweens() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	for candidate in tree.get_processed_tweens():
+		var tween := candidate as Tween
+		if tween != null and is_instance_valid(tween):
+			tween.kill()
+
+
+func queue_free_runtime_node(node: Node) -> void:
+	if node == null or not is_instance_valid(node) or node.is_queued_for_deletion():
+		return
+	node.queue_free()
 
 
 func shutdown_runtime_audio() -> void:

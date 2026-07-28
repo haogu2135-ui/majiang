@@ -4620,6 +4620,8 @@ func draw_loading_tip_art(parent: Control) -> Control:
 	art.add_child(bridge_gate)
 	bridge_gate.set_meta("animated_role", "loading_tip_shuffle_gate")
 	var bridge_tick = add_gpt_tick_strip(art, rect_full(0.325, 0.185, (0.343) + float(2) * (0.095), 0.465), Color(0.78, 0.62, 0.36, 0.070), "LoadingTipShuffleBridgeTick_0")
+	if bridge_tick != null:
+		bridge_tick.set_meta("animated_role", "loading_tip_shuffle_tick")
 	for i in range(2):
 		var node = make_gpt_gate(rect_full(0.275 + float(i) * 0.325, 0.485, 0.310 + float(i) * 0.325, 0.835), Color(accent.r, accent.g, accent.b, 0.060 - float(i) * 0.012))
 		node.name = "LoadingTipNode_%d" % i
@@ -9390,13 +9392,13 @@ func draw_table_center_starlight(parent: Control) -> void:
 			inner_tw.tween_property(inner_ring, "rotation", -TAU, 16.0).from(0.0)
 
 
-func draw_table_corner(parent: Control, rects: Array) -> void:
+func draw_table_corner(parent: Control, rects: Array, corner_index: int = -1) -> void:
 	# r214: bulk GPT chrome sweep
 	var corner_a = make_gpt_plate_rect(rects[0], TABLE_CORNER_FILL, "ui_jade_reading_plate")
-	corner_a.name = "TableCornerPlateA"
+	corner_a.name = "TableCornerPlateA_%d" % corner_index if corner_index >= 0 else "TableCornerPlateA"
 	parent.add_child(corner_a)
 	var corner_b = make_gpt_plate_rect(rects[1], TABLE_CORNER_VERTICAL_FILL, "ui_jade_reading_plate")
-	corner_b.name = "TableCornerPlateB"
+	corner_b.name = "TableCornerPlateB_%d" % corner_index if corner_index >= 0 else "TableCornerPlateB"
 	parent.add_child(corner_b)
 
 
@@ -9702,12 +9704,13 @@ func draw_table_log_timeline(parent: Control, row_count: int) -> Control:
 
 func draw_table_ornaments(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
-	for item in TABLE_ORNAMENT_EDGES:
+	for edge_index in range(TABLE_ORNAMENT_EDGES.size()):
+		var item = TABLE_ORNAMENT_EDGES[edge_index]
 		var _gpt_panel_host = make_gpt_plate_rect(item[0], item[1], "ui_jade_reading_plate")
-		_gpt_panel_host.name = "GptPanelHost"
+		_gpt_panel_host.name = "GptPanelHost_%d" % edge_index
 		parent.add_child(_gpt_panel_host)
-	for item in TABLE_CORNER_RECTS:
-		draw_table_corner(parent, item)
+	for corner_index in range(TABLE_CORNER_RECTS.size()):
+		draw_table_corner(parent, TABLE_CORNER_RECTS[corner_index], corner_index)
 
 
 func draw_table_round_tempo(parent: Control) -> Control:
@@ -10657,7 +10660,9 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 		var mute_gate = make_gpt_gate(rect_full(0.520, 0.660, 0.585, 0.835), Color(0.90, 0.62, 0.54, 0.22))
 		mute_gate.name = "VoiceButtonMuteGate"
 		art.add_child(mute_gate)
-		var mute_tick = add_gpt_tick_strip(art, rect_full(0.285, 0.640, (0.305) + float(1) * (0.105), 0.835), Color(0.90, 0.62, 0.54, 0.18), "VoiceButtonMuteTick_0")
+		for i in range(2):
+			var mute_left = 0.285 + float(i) * 0.105
+			add_gpt_tick_strip(art, rect_full(mute_left, 0.640, mute_left + 0.040, 0.835), Color(0.90, 0.62, 0.54, 0.18 - float(i) * 0.040), "VoiceButtonMuteTick_%d" % i)
 	if active:
 		if halo_texture != null:
 			halo_texture.modulate = Color(1, 1, 1, 0.08)
@@ -10701,7 +10706,7 @@ func draw_voice_button_feedback_loop(parent: Control, accent: Color, active: boo
 	for i in range(3):
 		var left = 0.205 + float(i) * 0.150
 		var tick = make_gpt_tick_strip(rect_full(left, 0.355, left + 0.024, 0.565), Color(accent.r, accent.g, accent.b, (0.22 - float(i) * 0.040) if active else (0.10 - float(i) * 0.018)))
-		tick.name = "VoiceButtonFeedbackTick_0"
+		tick.name = "VoiceButtonFeedbackTick_%d" % i
 		loop.add_child(tick)
 	if active:
 		fill.modulate = Color(1, 1, 1, 0.82)
@@ -11650,7 +11655,7 @@ func make_cloud_decoration(parent: Control, rect: Rect2, style: String = "auspic
 	return cloud
 
 
-func make_hand_group_spacer(height: float, width: float = 3.0, label_text: String = "") -> Control:
+func make_hand_group_spacer(height: float, width: float = 10.0, label_text: String = "") -> Control:
 	# r214: bulk GPT chrome sweep
 	var spacer = Control.new()
 	spacer.name = "HandGroupDivider"
@@ -12611,9 +12616,8 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 				callback.call()
 			connect_immediate_button_action(button, tile_callback)
 		return tile_body if lightweight_static_tile else frame
-	# Unknown / missing face texture: never leave a blank ivory plate.
 	draw_tile_depth_art(tile_body, size, clickable, highlighted, risk_text, false)
-	if tile != "" and missing_face_texture:
+	if TILE_TEXT_OVERLAYS_ENABLED and tile != "" and missing_face_texture:
 		if lightweight_static_tile:
 			draw_compact_tile_face(tile_body, tile, size)
 		else:

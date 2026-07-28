@@ -1,13 +1,15 @@
 
 func _ready() -> void:
 	randomize()
+	var ui_capture_mode := OS.get_environment("YUNZHUO_UI_CAPTURE") == "1"
 	if OS.has_feature("mobile"):
 		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_LANDSCAPE)
 	setup_tile_order()
 	init_ui_enhancements()
 	show_loading_screen()
 	load_assets()
-	verify_audio_assets()
+	if not ui_capture_mode:
+		verify_audio_assets()
 	load_settings()
 	load_game_stats()
 	load_tutorial_state()
@@ -17,7 +19,8 @@ func _ready() -> void:
 	load_tasks()
 	load_inventory()
 	load_currency()
-	setup_audio()
+	if not ui_capture_mode:
+		setup_audio()
 	ensure_fx_layer()
 	setup_update_downloader()
 	# v1.0.149: 移除立即播放，恢复用户交互触发
@@ -707,6 +710,7 @@ func deal_offline_hand() -> void:
 	offline_last_draw.clear()
 	offline_self_draw_ready.clear()
 	offline_ai_active = false
+	offline_ai_run_queued = false
 	round_summary = ""
 	last_score_deltas.clear()
 	# 上局胡牌详情只属于其结算面板，不能带入新一局。
@@ -5716,7 +5720,9 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	section.custom_minimum_size.y = 152 if lines.size() >= 4 else 136
+	var line_count := int(lines.size())
+	var required_text_height := 24.0 + float(line_count) * 22.0 + float(line_count) * 5.0 + 34.0
+	section.custom_minimum_size.y = max(136.0, required_text_height)
 	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.06), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
 	section.add_child(section_depth)

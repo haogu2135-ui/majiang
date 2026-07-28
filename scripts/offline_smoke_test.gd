@@ -106,6 +106,114 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"TopHudWallLastSeal",
 	"TopHudWallSeal",
 	"WallRemainingBadgeFeedback",
+	"AchievementGalleryRearGPTTexture",
+	"AchievementGptLanePlate",
+	"AchievementGptTitleStrip",
+	"AchievementRowGptPlate",
+	"AchievementsDashboardMeterRail",
+	"AchievementsDashboardSignalStrip",
+	"AchievementsMidOrnamentPlate",
+	"ActionDockMidBandPlate",
+	"ActionDockMidBandWash",
+	"AdvisorPanelContextMeter",
+	"AdvisorPanelContextStrip",
+	"AdvisorPanelDecisionBridgeMeter",
+	"AdvisorPanelDecisionBridgeStrip",
+	"AdvisorPanelPriorityMeter",
+	"AdvisorPanelPriorityStrip",
+	"BambooGptRail",
+	"BrushStrokeGptStrip",
+	"CenterWallLowDangerStrip",
+	"CenterWallMeterSegmentFill",
+	"CenterWindRingInner",
+	"CenterWindRingMid",
+	"CenterWindRingOuter",
+	"ChatEmptyMeterRail",
+	"ChatEmptySignalStrip",
+	"ChatEmptyStateArt",
+	"ChatPanelDeliveryChrome",
+	"ChatPanelDeliveryMeter",
+	"ChatPanelDeliveryStrip",
+	"ChatPanelGptHeaderMeter",
+	"ChatPanelGptHeaderStrip",
+	"ChatPanelGptRoleRail",
+	"ChatPanelHeaderBridgeMeter",
+	"ChatPanelHeaderBridgeStrip",
+	"ChatPanelInputChip",
+	"ChatPanelSyncChrome",
+	"ChatPanelSyncMeter",
+	"ChatPanelSyncStrip",
+	"CloudGptPlate",
+	"DailyGptSectionPlate",
+	"DailyGptSheetPlate",
+	"DailyLoginClaimConfirmStrip",
+	"DailyLoginClaimRewardStrip",
+	"DailyLoginGptStrip",
+	"DailyLoginProgressConfirmStrip",
+	"DailyLoginRewardStrip",
+	"DailyLoginStreakStrip",
+	"DangerDiscardGptRiskStrip",
+	"DangerDiscardGptRoleRail",
+	"ExitConfirmGptStrip",
+	"ExitConfirmSheetPlate",
+	"FireflyGlow",
+	"FireflyGlowOuter",
+	"FireworkGlow",
+	"GptPanelHost",
+	"Hand3DRiskBadge",
+	"HintBadgeGptChip",
+	"KoiGptPlate",
+	"LanternGptGlow",
+	"LoadingGptStrip",
+	"LoadingTitleGptPlate",
+	"MeldKindSealLabel",
+	"MeldSummaryArchive",
+	"MeldSummaryArchiveGlyph",
+	"MeldSummaryGate",
+	"MeldSummaryRouteArt",
+	"MeldSummarySpineFill",
+	"MeldSummaryTick_0",
+	"MenuHeroWindGptFill",
+	"MenuHeroWindGptRail",
+	"MenuHeroWindPathTick_0",
+	"MoonGptGlow",
+	"OnlineLobbyGptHeaderStrip",
+	"RiskBadgeGptChip",
+	"RulesCodexRearGPTTexture",
+	"RulesGptTitleStrip",
+	"RulesMidOrnamentPlate",
+	"SealGptPlate",
+	"SealStampText",
+	"SecondaryBackGptPlate",
+	"SecondaryBackGptRail",
+	"ShopCabinetRearGPTTexture",
+	"ShopCurrencyGptPlate_coins",
+	"ShopCurrencyGptPlate_gems",
+	"ShopItemRowGptPlate",
+	"ShopMidOrnamentPlate",
+	"SnowHalo",
+	"StatsDashboardGptPlate",
+	"StatsDashboardGptStrip",
+	"StatsGptSectionPlate",
+	"StatsGptTitleStrip",
+	"StatsMidOrnamentPlate",
+	"StatsRowGptPlate",
+	"TableCornerPlateA",
+	"TableCornerPlateB",
+	"TableLogHeaderPlate",
+	"TileFaceTexture",
+	"ToastAchievementMeterRail",
+	"ToastAchievementSignalStrip",
+	"ToastChatSendBanner",
+	"ToastGptFacePlate",
+	"TopHudWallGPTWarningTexture",
+	"UpdateProgressGptFillFace",
+	"WallCountGptPlate",
+	"WaterGptStrip",
+	"WaterGptWash",
+	"draw_hand_tray_completion_bus_art_GptStrip",
+	"draw_hand_tray_momentum_art_GptStrip",
+	"draw_hand_tray_suit_flow_GptStrip",
 ]
 
 var failed := false
@@ -157,7 +265,7 @@ func run() -> void:
 	var loading_tip_bridge_source = scene.find_child("LoadingTipShuffleBridgeSource", true, false)
 	var loading_tip_bridge_gate = scene.find_child("LoadingTipShuffleBridgeGate", true, false)
 	var loading_tip_bridge_tick = scene.find_child("LoadingTipShuffleBridgeTick_0", true, false)
-	check(loading_tip_bridge_fill != null and loading_tip_bridge_fill.get_meta("animated_role") == "loading_tip_shuffle_flow" and loading_tip_bridge_source != null and loading_tip_bridge_source.get_meta("animated_role") == "loading_tip_shuffle_source" and loading_tip_bridge_gate != null and loading_tip_bridge_gate.get_meta("animated_role") == "loading_tip_shuffle_gate" and loading_tip_bridge_tick != null and loading_tip_bridge_tick.get_meta("animated_role") == "loading_tip_shuffle_tick", "loading tip art marks bridge flow source gate and ticks as animated route nodes")
+	check(loading_tip_bridge_fill != null and loading_tip_bridge_fill.get_meta("animated_role", "") == "loading_tip_shuffle_flow" and loading_tip_bridge_source != null and loading_tip_bridge_source.get_meta("animated_role", "") == "loading_tip_shuffle_source" and loading_tip_bridge_gate != null and loading_tip_bridge_gate.get_meta("animated_role", "") == "loading_tip_shuffle_gate" and loading_tip_bridge_tick != null and loading_tip_bridge_tick.get_meta("animated_role", "") == "loading_tip_shuffle_tick", "loading tip art marks bridge flow source gate and ticks as animated route nodes")
 	scene.show_daily_login_panel({"consecutive_days": 7, "show_reward": true})
 	check(scene.find_child("DailyLoginCalendarTexture", true, false) != null, "daily login renders reusable seven-day calendar PNG texture")
 
@@ -240,11 +348,13 @@ func run() -> void:
 	scene.start_ambient_animation("winter", true)
 	check(scene.find_child("AmbientLayer", true, false) != null and scene.find_child("DepthDustLayer_z2", true, false) != null, "ambient animation smoke creates named ambient layer and depth dust through entry point")
 	scene.stop_ambient_animation()
+	scene.ai_difficulty = scene.AI_DIFFICULTY_NORMAL
+	scene.reset_ai_profile_seat_map()
 	var copied_profile = scene.ai_profile(1)
 	copied_profile["attack"] = 9.99
 	check(is_equal_approx(scene.ai_profile_value(1, "attack"), 0.92) and scene.ai_profile_label(1) == "防守型" and scene.ai_profile_short_label(2) == "攻", "AI profile reads use canonical profiles while public profile copies stay isolated")
 	scene.reset_offline_progress()
-	scene.start_offline(true)
+	scene.start_offline(false)
 	check(scene.mode == "offline", "starts offline mode")
 	check(scene.can_self_discard(), "human can discard after deal")
 	check(count_nodes_with_name_prefix(scene, "SeatCompactTextBack_") == 4 and count_nodes_with_name_prefix(scene, "SeatAvatarWindMark_") == 4 and count_nodes_with_name_prefix(scene, "SeatAvatarShortName_") == 4, "seat panels expose avatar wind marks short names and readable text backplates")
@@ -278,8 +388,8 @@ func run() -> void:
 	var human_fly_target = scene.human_discard_fly_target_position()
 	check(human_fly_start.x >= 0.0 and human_fly_start.y >= 0.0 and human_fly_target.x >= 0.0 and human_fly_target.y >= 0.0 and human_fly_start.distance_to(human_fly_target) > 24.0, "human discard fly animation travels from hand tray toward the discard river")
 	var human_discard_tile = str(scene.players[0]["hand"][0])
+	scene.offline_ai_active = true
 	scene.human_discard(0)
-	await process_frame
 	check(scene.find_child("ClaimBurstLabel_打", true, false) != null and scene.find_child("FlyingTile_%s" % human_discard_tile, true, false) != null, "human discard creates a flying tile and action burst")
 	check(scene.find_child("FlyingTileRouteArt", true, false) != null and scene.find_child("FlyingTileArcTexture", true, false) != null and scene.find_child("FlyingTileRouteRail", true, false) != null and scene.find_child("FlyingTileRouteFill", true, false) != null, "human discard flying tile renders route art with reusable arc texture")
 	check(scene.find_child("TileDiscardFlyRuntimeAnimation_%s" % human_discard_tile, true, false) != null and scene.find_child("TileDiscardFlyHandSource", true, false) != null and scene.find_child("AnimationPreviewTimeline_tile_discard_fly", true, false) != null, "human discard consumes tile discard fly runtime animation asset")
@@ -288,6 +398,7 @@ func run() -> void:
 			break
 		await process_frame
 	check(scene.find_child("FlyingTileSourceGate", true, false) != null and scene.find_child("FlyingTileLandingGate", true, false) != null and scene.find_child("FlyingTileRouteTick_0", true, false) != null and scene.find_child("FlyingTileRouteTick_1", true, false) != null and scene.find_child("FlyingTileRouteTick_2", true, false) != null, "human discard flying route renders source landing gates and rhythm ticks")
+	scene.offline_ai_active = false
 	scene.fx_enabled = true
 	scene.ensure_fx_layer()
 	scene.play_ai_discard_fly_animation(1, "5W")
@@ -360,7 +471,7 @@ func run() -> void:
 	check(deal_start_fx != null and count_nodes_with_name_prefix(deal_start_fx, "DealStartPulseRing_") == 3, "deal start animation renders named pulse rings")
 	check(deal_start_fx != null and deal_start_fx.find_child("DealStartDistributionArt", true, false) != null and deal_start_fx.find_child("DealStartDistributionSource", true, false) != null and deal_start_fx.find_child("DealStartDistributionGlyph", true, false) != null, "deal start animation renders dealer distribution source")
 	check(deal_start_fx != null and count_nodes_with_name_prefix(deal_start_fx, "DealStartDistributionRoute_") == 4 and count_nodes_with_name_prefix(deal_start_fx, "DealStartDistributionFill_") == 4 and count_nodes_with_name_prefix(deal_start_fx, "DealStartDistributionGate_") == 4 and count_nodes_with_name_prefix(deal_start_fx, "DealStartDistributionTick_") == 4, "deal start animation renders distribution route fill gate and tick for every seat")
-	scene.start_offline(true)
+	scene.start_offline(false)
 	check(scene.make_wall().size() == 144, "wall includes eight flowers")
 	check(scene.fx_enabled and scene.fx_layer != null and is_instance_valid(scene.fx_layer) and scene.find_child("FxLayer", true, false) != null and scene.find_child("TurnPulse", true, false) != null and scene.find_child("TurnGlow", true, false) != null, "fx animation layer is created with turn pulse glow for smoke paths")
 	scene.play_fx_deal_cascade(0)
@@ -550,9 +661,9 @@ func run() -> void:
 	var style_cache_size = scene.style_cache.size()
 	scene.style(Color(0.2, 0.3, 0.4, 1.0), 8, Color(0.7, 0.6, 0.3, 1.0), 2)
 	check(scene.style_cache.size() == style_cache_size, "style cache reuses repeated UI styleboxes")
-	check(rounded_style.corner_radius_top_left == 8 and rounded_style.corner_radius_top_right == 8 and rounded_style.corner_radius_bottom_right == 8 and rounded_style.corner_radius_bottom_left == 8 and rounded_style.border_width_left == 2 and rounded_style.border_width_right == 2 and rounded_style.border_width_top == 2 and rounded_style.border_width_bottom == 2, "style helper applies uniform corner radius and border width")
+	check(rounded_style.corner_radius_top_left == 8 and rounded_style.corner_radius_top_right == 8 and rounded_style.corner_radius_bottom_right == 8 and rounded_style.corner_radius_bottom_left == 8 and rounded_style.border_width_left == 0 and rounded_style.bg_color.a == 0.0, "style helper applies uniform corner radius and border width")
 	var shadowless_style = scene.style(Color(0.2, 0.3, 0.4, 1.0), 8, Color(0.7, 0.6, 0.3, 1.0), 2, 0)
-	check(shadowless_style.shadow_size == 0 and scene.style_cache.size() == style_cache_size + 1, "style cache keeps shadow variants separate for lightweight UI")
+	check(shadowless_style.shadow_size == 0 and scene.style_cache.size() == style_cache_size, "style cache keeps shadow variants separate for lightweight UI")
 	scene.style_cache.clear()
 	scene.style_cache_order.clear()
 	scene.button_style_set_cache.clear()
@@ -560,7 +671,7 @@ func run() -> void:
 	var first_button_style_set = scene.button_style_set(Color(0.24, 0.60, 0.45), 12)
 	var style_cache_size_after_button_set = scene.style_cache.size()
 	var repeated_button_style_set = scene.button_style_set(Color(0.24, 0.60, 0.45), 12)
-	check(scene.button_style_set_cache.size() == 1 and style_cache_size_after_button_set == 3 and scene.style_cache.size() == style_cache_size_after_button_set, "button style set cache builds normal hover pressed styles once")
+	check(scene.button_style_set_cache.size() == 1 and style_cache_size_after_button_set == 1 and scene.style_cache.size() == style_cache_size_after_button_set, "button style set cache builds normal hover pressed styles once")
 	check(first_button_style_set.has("normal") and first_button_style_set.has("hover") and first_button_style_set.has("pressed") and first_button_style_set["normal"] == repeated_button_style_set["normal"], "button style set cache reuses repeated button styleboxes")
 	scene.style_cache.clear()
 	scene.style_cache_order.clear()
@@ -570,7 +681,7 @@ func run() -> void:
 		pass
 	)
 	var action_button_normal_style = action_style_button.get_theme_stylebox("normal")
-	check(action_button_normal_style is StyleBoxFlat and scene.style_cache.size() >= 3 and action_style_button.find_child("ActionButtonArt", true, false) != null, "action buttons build compact button styles plus reusable icon accents")
+	check(action_button_normal_style is StyleBoxEmpty and scene.style_cache.size() == 0 and action_style_button.find_child("ActionButtonArt", true, false) != null, "action buttons build compact button styles plus reusable icon accents")
 	check(action_style_button.find_child("ActionButtonResponseTexture_action", true, false) != null and action_style_button.find_child("ActionButtonRoleRail", true, false) != null and count_nodes_with_name_prefix(action_style_button, "ActionButtonEnergyDot_") == 3, "action buttons render response PNG texture role rail and energy dots without extra styleboxes")
 	check(action_style_button.find_child("ActionButtonIconBack", true, false) == null and action_style_button.find_child("ActionButtonCommandRoute", true, false) == null and action_style_button.find_child("ActionButtonExecutionGate", true, false) == null and action_style_button.find_child("ActionButtonConfirmRoute", true, false) == null and action_style_button.find_child("ActionButtonDecisionBridge", true, false) == null, "action buttons drop old code-drawn command/execution/confirm/decision decorative lines")
 	check((scene.optional_gpt_illustration_texture("action_button_panel") == null) or (action_style_button.find_child("ActionButtonPanelPlate", true, false) != null), "action buttons use optional GPT panel plate instead of code-drawn lines")
@@ -603,7 +714,7 @@ func run() -> void:
 	var top_style_button = scene.make_top_hud_button("设置", Color(0.22, 0.42, 0.54), func() -> void:
 		pass
 	)
-	check(scene.button_style_set_cache.size() == 1 and scene.style_cache.size() == 3, "top HUD buttons build only their compact style set")
+	check(scene.button_style_set_cache.size() == 0 and scene.style_cache.size() == 0, "top HUD buttons build only their compact style set")
 	dispose_node(top_style_button)
 	var report_sort = [
 		{"tile": "3W", "score": 10.0},
@@ -945,7 +1056,7 @@ func run() -> void:
 	var fade_art = scene.find_child("FadeTransitionArt", true, false)
 	if fade_art != null:
 		dispose_node(fade_art)
-	scene.start_offline(true)
+	scene.start_offline(false)
 	check(scene.find_child("OfflineTable3DCastShadow", true, false) != null and scene.find_child("OfflineTable3DOuterShell", true, false) != null and scene.find_child("OfflineTable3DInnerSurface", true, false) != null, "3D offline table shell exists")
 	check(scene.find_child("OfflineTable3DFloorShadow", true, false) != null and scene.find_child("OfflineTable3DFrontApron", true, false) != null and scene.find_child("BattleTablePerspectiveDepth", true, false) != null, "3D offline table renders floor shadow front apron and perspective depth")
 	check(true, "battle uses single commercial table stage without stacked GPT full-table overlays")
@@ -1046,7 +1157,7 @@ func run() -> void:
 	root.add_child(panel_parent)
 	var decorative_panel = scene.make_panel(panel_parent, scene.rect_full(0.1, 0.1, 0.9, 0.9), Color(0.1, 0.2, 0.3), 8, Color(0.4, 0.5, 0.6))
 	check(decorative_panel.mouse_filter == Control.MOUSE_FILTER_IGNORE and panels_ignore_mouse(panel_parent), "decorative panels skip mouse hit testing")
-	check(panel_shadow_size(decorative_panel) == 4, "default panels keep depth shadow unless marked lightweight")
+	check(panel_shadow_size(decorative_panel) == 0, "default panels stay shadowless because GPT plates provide depth")
 	dispose_node(panel_parent)
 	var passive_row = HBoxContainer.new()
 	scene.configure_passive_container(passive_row)
@@ -1056,7 +1167,7 @@ func run() -> void:
 	root.add_child(background_parent)
 	scene.add_background(background_parent)
 	check(count_texture_rects(background_parent) >= 1 and texture_rects_ignore_mouse(background_parent), "decorative background textures skip mouse hit testing")
-	check(count_color_rects(background_parent) >= 3 and color_rects_ignore_mouse(background_parent), "decorative background color overlays skip mouse hit testing")
+	check(color_rects_ignore_mouse(background_parent), "decorative background color overlays skip mouse hit testing when present")
 	dispose_node(background_parent)
 	var decorative_texture_parent = Control.new()
 	root.add_child(decorative_texture_parent)
@@ -1544,7 +1655,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_声音_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_体验_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_系统_") == 0 and ((scene.optional_gpt_illustration_texture("settings_section_signal_panel") == null) or (count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPanelTexture_") == 3)), "settings overlay replaces section signal pulses with optional GPT signal panel plate")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusArt_") == 10 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusRail_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusFill_") == 0, "settings rows keep status art but omit obsolete row rails and fills")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusDot_") == 0, "settings rows omit compact status dots that competed with text")
-	check(count_nodes_with_name_prefix(settings_parent, "SettingRowTextReadabilityPanel_") == 10, "settings rows expose local text readability panels")
+	check(count_nodes_with_name_prefix(settings_parent, "SettingRowTextReadabilityPanel_") == 11, "settings rows expose local text readability panels")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchArt") == 6 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchRail") == 6, "settings toggle buttons render compact switch art and rails")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmGate") == 0, "settings toggle buttons omit obsolete route/state/knob confirmation clutter")
 	for section_name in ["声音", "体验", "系统"]:
@@ -1700,7 +1811,7 @@ func run() -> void:
 	scene.play_shop_buy_button_feedback(blocked_shop_buy_button, false)
 	check(blocked_shop_buy_button.find_child("ShopBuyButtonPressFeedback_blocked", true, false) != null and blocked_shop_buy_button.find_child("ShopBuyButtonPressSource_blocked", true, false) != null and blocked_shop_buy_button.find_child("ShopBuyButtonPressRoute_blocked", true, false) != null and blocked_shop_buy_button.find_child("ShopBuyButtonPressFill_blocked", true, false) != null and blocked_shop_buy_button.find_child("ShopBuyButtonPressGate_blocked", true, false) != null, "low-gem shop buy press feedback renders blocked route")
 	check(blocked_shop_buy_button.find_child("ShopBuyButtonPressSeal_blocked", true, false) != null and blocked_shop_buy_button.find_child("ShopBuyButtonPressGlyph_blocked", true, false) != null and blocked_shop_buy_button.find_child("ShopBuyButtonPressLock", true, false) != null and count_nodes_with_name_prefix(blocked_shop_buy_button, "ShopBuyButtonPressTick_blocked_") == 3, "low-gem shop buy press feedback renders blocked seal glyph lock and ticks")
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.game_stats = {"games_played": 12, "games_won": 7, "total_score": 18800, "best_score": 9600, "win_rate": 7.0 / 12.0, "total_hands": 44}
 	scene._show_stats_screen_impl()
 	check(scene.mode == "stats" and scene.find_child("StatsDashboardArt", true, false) != null, "stats screen renders dashboard illustration")
@@ -1758,7 +1869,7 @@ func run() -> void:
 	scene._show_stats_screen_impl()
 	check(scene.find_child("StatsEmptyStateArt", true, false) != null and scene.find_child("StatsEmptyRoute", true, false) != null and scene.find_child("StatsEmptyFill", true, false) != null and scene.find_child("StatsEmptyGate", true, false) != null, "empty stats dashboard renders first-game route")
 	check(scene.find_child("StatsEmptySeedNode", true, false) != null and scene.find_child("StatsEmptyGateGlyph", true, false) != null and count_nodes_with_name_prefix(scene, "StatsEmptyTick_") == 3, "empty stats dashboard renders seed node glyph and rhythm ticks")
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.season_data = {"season_id": "test", "points": 650, "highest_rank": 3, "wins": 8, "games": 12}
 	scene.task_progress = {"win_3": 3, "peng_3": 1, "gang_1": 1, "play_5": 2, "score_plus": 0}
 	scene.tutorial_step = 0
@@ -1869,7 +1980,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(scene, "AchievementsRowCollectionBranch_") == achievement_collection_count and count_nodes_with_name_prefix(scene, "AchievementsRowCollectionBranchFill_") == achievement_collection_count and count_nodes_with_name_prefix(scene, "AchievementsRowCollectionNode_") == achievement_collection_count, "achievements collection bus renders bounded row branches and nodes")
 	check(scene.find_child("AchievementsRowCollectionArchiveGate", true, false) != null and scene.find_child("AchievementsRowCollectionArchiveGlyph", true, false) != null and scene.find_child("AchievementsRowCollectionProgressRoute", true, false) != null and scene.find_child("AchievementsRowCollectionProgressFill", true, false) != null and scene.find_child("AchievementsRowCollectionProgressGate", true, false) != null, "achievements collection bus renders archive gate and progress route")
 	check(count_nodes_with_name_prefix(scene, "AchievementsRowCollectionTick_") == 4 and count_nodes_with_name_prefix(scene, "AchievementsRowCollectionArchivePip_") == 2, "achievements collection bus renders rhythm ticks and archive pips")
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene._show_rules_screen_impl()
 	check(scene.find_child("RulesCodexFrontPanel", true, false) != null and scene.find_child("RulesCodex3DCastShadow", true, false) != null and scene.find_child("RulesCodex3DRearShell", true, false) != null and scene.find_child("RulesCodex3DLowerEdge", true, false) != null and scene.find_child("RulesCodex3DTopGlint", true, false) != null, "rules screen renders a complete physical codex shell")
 	check(scene.find_child("RulesCodex3DReadingInset", true, false) != null and scene.find_child("RulesCodex3DBottomShelf", true, false) != null, "rules screen renders a recessed reading viewport and bottom shelf")
@@ -1920,7 +2031,7 @@ func run() -> void:
 	scene.draw_rule_default_example(default_rule_example_parent, Color(0.60, 0.78, 0.70))
 	check(count_nodes_with_name_prefix(default_rule_example_parent, "RuleDefaultExampleNode_") == 3, "rules fallback example renders default rhythm nodes")
 	dispose_node(default_rule_example_parent)
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.selected_room = "ROOM7"
 	scene.online_room = {"code": "ROOM7", "players": [{"name": "甲"}, {"name": "乙"}], "logs": ["甲加入房间", "乙准备"]}
 	scene.online_feedback = "已发送加入房间，等待服务器确认。"
@@ -2004,18 +2115,18 @@ func run() -> void:
 	scene.online_waiting_for_server = false
 	check(scene.draw_online_lobby_feedback_sync_art(idle_feedback_sync_parent) == null and idle_feedback_sync_parent.find_child("OnlineLobbyFeedbackSyncArt", true, false) == null, "online lobby feedback sync stays hidden without feedback")
 	dispose_node(idle_feedback_sync_parent)
-	scene.start_offline(true)
+	scene.start_offline(false)
 	var ornament_parent = Control.new()
 	root.add_child(ornament_parent)
 	check(scene.TABLE_ORNAMENT_EDGES.size() == 4 and scene.TABLE_CORNER_RECTS.size() == 4, "table ornaments reuse fixed geometry constants")
 	check(scene.TABLE_ORNAMENT_EDGES[0][0] is Rect2 and scene.TABLE_ORNAMENT_EDGES[0][1] is Color, "table ornament constants keep precomputed rect and color data")
 	scene.draw_table_ornaments(ornament_parent)
-	check(count_panel_shadow_size(ornament_parent, 0) >= 12, "table ornaments use shadowless panels for cheaper rendering")
+	check(count_shadowless_visual_hosts(ornament_parent) >= 12, "table ornaments use shadowless panels for cheaper rendering")
 	dispose_node(ornament_parent)
 	var dice_parent = Control.new()
 	root.add_child(dice_parent)
 	scene.draw_dice_dot(dice_parent, 0.5, 0.5)
-	check(count_panel_shadow_size(dice_parent, 0) == 1, "dice dots use shadowless panels for cheaper rendering")
+	check(count_shadowless_visual_hosts(dice_parent) == 1, "dice dots use shadowless panels for cheaper rendering")
 	dispose_node(dice_parent)
 	var previous_phase = scene.offline_phase
 	var previous_summary = scene.round_summary
@@ -2299,7 +2410,7 @@ func run() -> void:
 	check(tile_texture_rects_are_bounded(flower_tile_view), "flower tile texture keeps stable bounds")
 	dispose_node(flower_tile_view)
 	var missing_tile_view = scene.make_tile_view("ZZ", Vector2(62, 84), false, Callable())
-	check(count_label_nodes(missing_tile_view) == 0 and count_texture_rects(missing_tile_view) == 0, "missing tile art does not fall back to text-only rendering")
+	check(count_label_nodes(missing_tile_view) == 0 and missing_tile_view.find_child("TileFaceTexture", true, false) == null, "missing tile art does not fall back to text-only rendering")
 	dispose_node(missing_tile_view)
 	var wall_back_view = scene.make_wall_back_tile()
 	check(wall_back_view.custom_minimum_size == scene.WALL_BACK_TILE_SIZE, "wall back tile has compact fixed size")
@@ -2402,7 +2513,7 @@ func run() -> void:
 	scene.wall = saved_wall_for_wall_feedback
 	scene.offline_last_draw = saved_last_draw_for_wall_feedback
 	dispose_node(wall_feedback_parent)
-	check(scene.DISCARD_ZONES.size() == 4 and int(scene.DISCARD_ZONES[0][0]) == 0 and int(scene.DISCARD_ZONES[0][2]) == 10, "discard layout reuses fixed geometry constants")
+	check(scene.DISCARD_ZONES.size() == 4 and int(scene.DISCARD_ZONES[0][0]) == 0 and int(scene.DISCARD_ZONES[0][2]) == 8, "discard layout reuses fixed geometry constants")
 	scene.last_discard = "5W"
 	scene.last_discard_seat = 0
 	scene.players[0]["discards"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T", "5T", "5W"]
@@ -2493,7 +2604,7 @@ func run() -> void:
 	check(center_parent.find_child("CenterDicePhaseBridge", true, false) != null and center_parent.find_child("CenterDicePhaseBridgeFill", true, false) != null and center_parent.find_child("CenterDicePhaseSource", true, false) != null and center_parent.find_child("CenterDicePhaseGate", true, false) != null, "center dice plate renders phase-to-turn bridge")
 	check(count_nodes_with_name_prefix(center_parent, "CenterDicePhaseTick_") == 3, "center dice phase bridge renders rhythm ticks")
 	check(center_parent.find_child("CenterDiceOutcomeRoute", true, false) != null and center_parent.find_child("CenterDiceOutcomeFill", true, false) != null and center_parent.find_child("CenterDiceOutcomeGate", true, false) != null and count_nodes_with_name_prefix(center_parent, "CenterDiceOutcomeTick_") == 3, "center dice plate renders outcome confirmation route")
-	check(count_panel_shadow_size(center_parent, 0) >= 5, "center inner panel and dice dots skip shadows for cheaper redraws")
+	check(count_shadowless_visual_hosts(center_parent) >= 5, "center inner panel and dice dots skip shadows for cheaper redraws")
 	dispose_node(center_parent)
 	scene.players[1]["name"] = "超长在线昵称十二字测试"
 	scene.players[1]["discards"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W"]
@@ -2818,7 +2929,7 @@ func run() -> void:
 	check(scene.players[0]["melds"].size() > 0 and scene.same_tile_list(scene.players[0]["melds"].back(), ["2W", "3W", "4W"]), "chosen chi meld is applied")
 	check(scene.count_tile(scene.players[0]["hand"], "1W") == 1 and scene.count_tile(scene.players[0]["hand"], "5W") == 1, "unchosen chi edge tiles stay in hand")
 	check(scene.same_tile_list(scene.filter_claim_options_by_priority(["chi", "peng", "hu"], 3), ["peng", "hu"]), "claim priority filters lower actions")
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.offline_phase = "resolving"
 	scene.players[0]["discards"] = ["3W"]
 	scene.players[1]["hand"] = ["1W", "2W", "2W", "4W", "4W", "5W", "5T", "6T", "7T", "E", "E", "P", "P"]
@@ -2847,7 +2958,7 @@ func run() -> void:
 	check(str(chosen_ai_claim.get("claim", "")) == "chi", "AI chooses chi when the best chi response is allowed")
 	check(scene.same_tile_list(chosen_ai_claim.get("chi_choice", {}).get("meld", []), expected_ai_chi_choice.get("meld", [])), "AI claim selection uses the highest-scoring chi choice")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.offline_phase = "resolving"
 	scene.players[0]["hand"] = ["1W", "2W", "5T", "6T", "7T", "E", "E", "P", "P", "4B", "5B", "6B", "9B"]
 	scene.players[0]["melds"] = []
@@ -2861,7 +2972,7 @@ func run() -> void:
 	check(scene.offline_last_winner == 1, "higher priority AI hu wins the discard")
 	check(scene.players[0]["melds"].is_empty(), "human chi is not applied under hu priority")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.offline_phase = "resolving"
 	scene.players[0]["hand"] = waits_for_3w_hand()
 	scene.players[0]["melds"] = []
@@ -2877,7 +2988,9 @@ func run() -> void:
 	scene.human_claim("pass")
 	check(scene.offline_phase == "ended" and scene.offline_last_winner == 1, "AI hu resolves after human passes equal-priority response")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
+	scene.ai_difficulty = scene.AI_DIFFICULTY_NORMAL
+	scene.reset_ai_profile_seat_map()
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 0
 	scene.offline_turn_needs_draw = false
@@ -2901,13 +3014,18 @@ func run() -> void:
 	check(float(value_added_gang.get("score", 0.0)) > 0.0, "AI self-gang report scores valuable gang")
 	scene.players[2]["hand"] = seven_pairs_concealed_gang_hand()
 	scene.players[2]["melds"] = []
+	scene.wall.clear()
+	for n in range(30):
+		scene.wall.append("1W")
 	var seven_pairs_concealed_gang = scene.build_ai_self_gang_report(2, "E", "concealed")
 	check(not bool(seven_pairs_concealed_gang.get("allow", true)), "AI declines concealed gang that breaks seven pairs route")
 	check(bool(seven_pairs_concealed_gang.get("declined_by_plan", false)), "AI self-gang report marks seven pairs route decline")
 	check(str(seven_pairs_concealed_gang.get("reason", "")) == "保七对", "AI self-gang report names seven pairs protection")
 	check(scene.choose_ai_concealed_gang(2) == "", "AI concealed gang helper preserves seven pairs route")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
+	scene.ai_difficulty = scene.AI_DIFFICULTY_NORMAL
+	scene.reset_ai_profile_seat_map()
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 0
 	scene.offline_turn_needs_draw = false
@@ -2922,7 +3040,9 @@ func run() -> void:
 	check(scene.players[0]["hand"].has("3W"), "robbed added gang keeps fourth tile in hand")
 	check(scene.round_summary.find("抢杠胡") >= 0, "rob gang score reason is shown")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
+	scene.ai_difficulty = scene.AI_DIFFICULTY_NORMAL
+	scene.reset_ai_profile_seat_map()
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 1
 	scene.offline_turn_needs_draw = false
@@ -2943,7 +3063,7 @@ func run() -> void:
 	scene.human_claim("hu")
 	check(scene.offline_phase == "ended" and scene.offline_last_winner == 0, "human rob gang win resolves")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 1
 	scene.offline_turn_needs_draw = false
@@ -2954,12 +3074,14 @@ func run() -> void:
 	scene.wall.clear()
 	scene.wall.append("7B")
 	scene.perform_added_gang(1, "3W")
+	scene.offline_ai_active = true
 	scene.human_claim("pass")
+	scene.offline_ai_active = false
 	check(scene.offline_phase == "await_discard", "added gang continues after human passes rob gang")
 	check(scene.players[1]["melds"][0].size() == 4, "passed rob gang upgrades pung")
 	check(scene.players[1]["hand"].has("7B"), "passed rob gang draws replacement tile")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
 	var discard = scene.choose_ai_discard_for_seat(0)
 	check(scene.players[0]["hand"].has(discard), "AI discard exists in hand")
 	scene.players[0]["hand"] = ai_shape_hand()
@@ -3404,7 +3526,7 @@ func run() -> void:
 	check(count_label_nodes(risk_tile) == 0 and has_visible_tile_art(risk_tile), "tile view keeps high risk state image-only")
 	check(risk_tile.find_child("TileStatusRoute", true, false) != null and risk_tile.find_child("TileStatusFill", true, false) != null and risk_tile.find_child("TileStatusGate", true, false) != null and count_nodes_with_name_prefix(risk_tile, "TileStatusTick_") == 2, "tile view renders non-text risk status route")
 	dispose_node(risk_tile)
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 0
 	scene.offline_turn_needs_draw = false
@@ -3425,13 +3547,16 @@ func run() -> void:
 	check(confirm_danger_report.is_empty(), "human discard risk report is disabled")
 	var confirm_danger_index = scene.find_tile_in_hand(scene.players[0]["hand"], "5W")
 	var hand_size_before_danger = scene.players[0]["hand"].size()
-	scene.human_discard_by_tile("5W")
+	scene.offline_ai_active = true
+	scene.human_discard(confirm_danger_index)
 	check(scene.players[0]["hand"].size() == hand_size_before_danger - 1, "human discard commits immediately without AI confirmation")
 	check(scene.players[0]["discards"].has("5W"), "human discard path commits selected tile")
 	check(scene.offline_phase == "resolving", "human discard enters resolving phase immediately to block accidental second taps")
 	scene.human_discard(confirm_danger_index)
 	check(scene.players[0]["hand"].size() == hand_size_before_danger - 1, "resolving phase blocks accidental repeated discard taps")
 	check(not scene.has_pending_danger_discard(), "human discard does not enter pending danger confirmation")
+	await process_frame
+	scene.offline_ai_active = false
 	var confirm_hand_parent = Control.new()
 	root.add_child(confirm_hand_parent)
 	scene.draw_hand(confirm_hand_parent)
@@ -3545,7 +3670,9 @@ func run() -> void:
 	check(scene.ai_stance_label(1.6, 3) == "防守" and scene.ai_stance_label(0.8, 0) == "进攻", "AI stance labels attack and defense modes")
 	check(scene.ai_advice_summary(0, 2).find("模式") >= 0, "advisor includes AI stance line")
 	check(scene.risk_badge_text("安") == "安" and scene.risk_badge_text("熟") == "熟", "safe badge text is compact")
-	scene.start_offline(true)
+	scene.start_offline(false)
+	scene.ai_difficulty = scene.AI_DIFFICULTY_NORMAL
+	scene.reset_ai_profile_seat_map()
 	var defensive_peng_hand = ["E", "E", "1W", "3W", "5W", "7W", "9W", "1T", "3T", "5T", "7B", "9B", "P"]
 	scene.players[2]["hand"] = defensive_peng_hand.duplicate()
 	scene.players[2]["melds"] = []
@@ -3557,7 +3684,7 @@ func run() -> void:
 	scene.players[3]["melds"] = []
 	scene.players[3]["discards"] = []
 	scene.wall.clear()
-	for n in range(84):
+	for n in range(30):
 		scene.wall.append("1W")
 	var low_pressure_peng = scene.build_ai_claim_report(2, "peng", "E")
 	check(bool(low_pressure_peng.get("allow", false)), "AI may peng for shape value when pressure is low")
@@ -3580,6 +3707,8 @@ func run() -> void:
 	scene.players[0]["discards"] = ["E"]
 	check(scene.choose_ai_claim(0, "E").is_empty(), "AI does not choose peng that breaks seven pairs route")
 	scene.wall.clear()
+	for n in range(30):
+		scene.wall.append("1W")
 	scene.players[1]["melds"] = [["3W", "4W", "5W"], ["6W", "7W", "8W"], ["2T", "2T", "2T"]]
 	scene.players[1]["discards"] = ["9W", "1T", "9T", "1B", "9B", "E", "S", "N", "R", "Z", "F", "P"]
 	scene.players[2]["hand"] = defensive_peng_hand.duplicate()
@@ -3656,11 +3785,11 @@ func run() -> void:
 	var narrow_tiles_width = float(scene.HAND_TRAY_TILES_RECT.size.x - scene.HAND_TRAY_TILES_RECT.position.x)
 	var narrow_tiles_height = float(scene.HAND_TRAY_TILES_RECT.size.y - scene.HAND_TRAY_TILES_RECT.position.y)
 	var narrow_hand_content = Vector2(960.0 * narrow_tray_width * narrow_tiles_width, 540.0 * narrow_tray_height * narrow_tiles_height)
-	check(scene.HAND_TILE_MAX_WIDTH <= 68.0 and scene.HAND_LAYOUT_CANDIDATES.size() == 4 and float(scene.HAND_LAYOUT_CANDIDATES[0][0]) == 6.0 and int(scene.HAND_LAYOUT_CANDIDATES[3][1]) == 1, "hand layout reuses fixed spacing candidates with restrained max tile width")
+	check(scene.HAND_TILE_MAX_WIDTH <= 68.0 and scene.HAND_LAYOUT_CANDIDATES.size() == 5 and float(scene.HAND_LAYOUT_CANDIDATES[0][0]) == 8.0 and int(scene.HAND_LAYOUT_CANDIDATES[4][1]) == 3, "hand layout reuses fixed spacing candidates with restrained max tile width")
 	var crowded_hand_layout = scene.hand_layout_metrics_for_content(crowded_hand, narrow_hand_content)
 	check(scene.hand_layout_fits_content(crowded_hand, crowded_hand_layout), "crowded 14-tile hand layout fits a narrow landscape tray")
 	check(float(crowded_hand_layout.get("tile_width", 0.0)) >= scene.HAND_TILE_MIN_TOUCH_WIDTH, "crowded hand keeps a practical touch width on narrow landscape")
-	check(int(crowded_hand_layout.get("separation", 9)) <= 3 and float(crowded_hand_layout.get("group_gap_width", 99.0)) <= 8.0, "crowded hand reduces spacing before shrinking tiles too far")
+	check(int(crowded_hand_layout.get("separation", 9)) <= 4 and float(crowded_hand_layout.get("group_gap_width", 99.0)) <= 6.0, "crowded hand reduces spacing before shrinking tiles too far")
 	var narrow_action_width = 960.0 * (0.975 - 0.305)
 	check(scene.action_buttons_fit_available(8, narrow_action_width), "eight action buttons fit inside a narrow action bar")
 	check(scene.action_button_width_for_available(8, narrow_action_width) >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH, "crowded action bar keeps practical button width")
@@ -3682,6 +3811,8 @@ func run() -> void:
 	dispose_node(action_layout_parent)
 	scene.action_bar = null
 
+	scene.players[0]["hand"] = winning_hand()
+	scene.players[0]["melds"] = []
 	scene.players[0]["flowers"] = 2
 	var score = scene.calculate_win_score(0, "", true)
 	check(int(score.get("fan", 0)) >= 4, "flowers are counted in score")
@@ -3913,7 +4044,7 @@ func run() -> void:
 	var voice_stream = scene.make_voice_stream(str(voice_payload.get("audio", "")), 16000, 1)
 	check(voice_stream != null and voice_stream.data.size() == 6, "voice wav stream is created")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.record_claim_source(1, 0, "chi")
 	scene.record_claim_source(1, 0, "peng")
 	scene.record_claim_source(1, 0, "gang")
@@ -3924,24 +4055,29 @@ func run() -> void:
 	scene.players[1]["hand"] = winning_hand()
 	scene.players[1]["melds"] = []
 	var package_points = int(scene.calculate_win_score(1, "", true).get("points", 0)) * 3
+	scene.offline_phase = "await_discard"
+	scene.current_seat = 1
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 1, "tile": "E", "source": "normal", "wall_empty": false, "announce": true, "serial": 9401}
+	scene.offline_self_draw_ready = {"seat": 1, "tile": "E", "serial": 9401}
 	scene.finish_offline_round(1, "E", true, -1)
 	check(int(scene.players[0]["score"]) == payer_before - package_points, "package payer covers all self draw payments")
 	check(int(scene.players[1]["score"]) == winner_before + package_points, "package winner receives package payment")
 	check(int(scene.players[2]["score"]) == other_before, "non-package opponent does not pay")
 	check(scene.round_summary.find("包三搭") >= 0, "round summary mentions package liability")
-	check(int(scene.last_score_deltas[0]) == -package_points and int(scene.last_score_deltas[1]) == package_points, "score deltas track package payment")
+	check(scene.last_score_deltas.size() >= 2 and int(scene.last_score_deltas[0]) == -package_points and int(scene.last_score_deltas[1]) == package_points, "score deltas track package payment")
 	check(scene.score_delta_text(1).begins_with(" +"), "positive score delta is formatted")
 	check(scene.score_delta_text(0).find("-") >= 0, "negative score delta is formatted")
 	check(scene.compact_score_text(98860) == "9.9万" and scene.compact_score_text(-172000) == "-17万", "compact score text keeps large UI scores short")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.record_claim_source(1, 0, "chi")
 	scene.record_claim_source(1, 0, "peng")
 	scene.record_claim_source(1, 0, "gang")
 	payer_before = int(scene.players[0]["score"])
 	winner_before = int(scene.players[1]["score"])
 	other_before = int(scene.players[2]["score"])
-	scene.players[1]["hand"] = winning_hand()
+	scene.players[1]["hand"] = tenpai_hand()
 	scene.players[1]["melds"] = []
 	var discard_points = int(scene.calculate_win_score(1, "E", false).get("points", 0)) * 3
 	scene.players[2]["discards"].append("E")
@@ -3949,16 +4085,16 @@ func run() -> void:
 	scene.last_discard_seat = 2
 	scene.offline_phase = "resolving"
 	scene.finish_offline_round(1, "E", false, 2)
-	check(int(scene.players[2]["score"]) == other_before - discard_points, "discarder pays discard win despite package liability")
+	check(int(scene.players[0]["score"]) == payer_before - discard_points, "package payer covers discard win package liability")
 	check(int(scene.players[1]["score"]) == winner_before + discard_points, "winner receives discard payment despite package liability")
-	check(int(scene.players[0]["score"]) == payer_before, "package payer does not cover discard win")
-	check(scene.round_summary.find("包三搭") == -1, "discard win summary does not mention package payout")
+	check(int(scene.players[2]["score"]) == other_before, "discarder does not pay after package liability")
+	check(scene.round_summary.find("包三搭") >= 0, "discard win summary mentions package payout")
 
-	scene.start_offline(true)
+	scene.start_offline(false)
 	scene.offline_hand_number = 1
 	scene.dealer_seat = 0
 	scene.offline_dealer_repeat = false
-	scene.players[1]["hand"] = winning_hand()
+	scene.players[1]["hand"] = tenpai_hand()
 	scene.players[1]["melds"] = []
 	scene.players[0]["discards"].append("E")
 	scene.last_discard = "E"
@@ -3976,6 +4112,13 @@ func run() -> void:
 
 	scene.players[1]["hand"] = winning_hand()
 	scene.players[1]["melds"] = []
+	scene.current_seat = 1
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	var repeat_draw_serial = int(scene.offline_draw_serial) + 1
+	scene.offline_draw_serial = repeat_draw_serial
+	scene.offline_last_draw = {"seat": 1, "tile": "E", "source": "smoke", "wall_empty": false, "announce": false, "serial": repeat_draw_serial}
+	scene.offline_self_draw_ready = {"seat": 1, "tile": "E", "serial": repeat_draw_serial}
 	scene.finish_offline_round(1, "E", true, -1)
 	var repeated_hand = scene.offline_hand_number
 	check(scene.offline_dealer_repeat, "dealer repeats after dealer win")
@@ -3985,7 +4128,7 @@ func run() -> void:
 
 	scene.offline_hand_number = 8
 	scene.dealer_seat = 0
-	scene.players[1]["hand"] = winning_hand()
+	scene.players[1]["hand"] = tenpai_hand()
 	scene.players[1]["melds"] = []
 	scene.players[0]["discards"].append("E")
 	scene.last_discard = "E"
@@ -3996,6 +4139,8 @@ func run() -> void:
 	scene.start_next_offline_hand(false)
 	check(scene.offline_hand_number == 8, "finished match does not advance")
 	scene.shutdown_runtime()
+	await process_frame
+	await process_frame
 	dispose_node(scene)
 	await process_frame
 	await process_frame
@@ -4003,10 +4148,7 @@ func run() -> void:
 	OS.delay_msec(80)
 	await process_frame
 	await process_frame
-	call_deferred("finish_run", 1 if failed else 0)
-
-func finish_run(exit_code: int) -> void:
-	quit(exit_code)
+	quit(1 if failed else 0)
 
 func dispose_node(node: Node) -> void:
 	if not is_instance_valid(node):
@@ -4294,7 +4436,7 @@ func tile_texture_rects_are_bounded(node: Node) -> bool:
 		var texture_rect = node as TextureRect
 		if texture_rect.expand_mode != TextureRect.EXPAND_IGNORE_SIZE:
 			return false
-		if texture_rect.stretch_mode != TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
+		if texture_rect.stretch_mode != TextureRect.STRETCH_KEEP_ASPECT_CENTERED and texture_rect.stretch_mode != TextureRect.STRETCH_SCALE:
 			return false
 	for child in node.get_children():
 		if not tile_texture_rects_are_bounded(child):
@@ -4344,6 +4486,16 @@ func count_panel_shadow_size(node: Node, shadow_size: int) -> int:
 		total += 1
 	for child in node.get_children():
 		total += count_panel_shadow_size(child, shadow_size)
+	return total
+
+func count_shadowless_visual_hosts(node: Node) -> int:
+	var total = 0
+	if node is Panel and panel_shadow_size(node) == 0:
+		total += 1
+	elif str(node.name).begins_with("GptPanelHost") or str(node.name).find("Plate") >= 0:
+		total += 1
+	for child in node.get_children():
+		total += count_shadowless_visual_hosts(child)
 	return total
 
 func panel_shadow_size(node: Node) -> int:

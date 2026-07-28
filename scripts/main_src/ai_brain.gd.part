@@ -792,6 +792,18 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		if should_force_accept_for_wall_draw_ba(seat, points, wall):
 			report["reason"] = "查听落袋"
 			return report
+		var continue_eval_context = make_ai_evaluation_context(seat, visible_tile_counts())
+		var continue_risk = deal_in_risk_score(drawn_tile, seat, continue_eval_context)
+		var continue_feed_report = discard_feed_risk_report(drawn_tile, seat, [], continue_eval_context)
+		var continue_feed = float(continue_feed_report.get("score", 0.0)) if typeof(continue_feed_report) == TYPE_DICTIONARY else 0.0
+		var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+		var risk_limit = AI_DANGER_RISK_SOFT + (2.0 if diff == AI_DIFFICULTY_HARD else 6.0)
+		var feed_limit = AI_DANGER_FEED_SOFT + (2.0 if diff == AI_DIFFICULTY_HARD else 6.0)
+		if continue_risk >= risk_limit or continue_feed >= feed_limit:
+			report["reason"] = "危张自摸落袋"
+			report["continue_discard_risk"] = continue_risk
+			report["continue_discard_feed"] = continue_feed
+			return report
 		report["accept"] = false
 		report["reason"] = "留听高番自摸"
 		report["score"] = 140.0 + float(alt_best_fan) * 10.0
@@ -1006,6 +1018,24 @@ func human_target_discard_penalty_from_pressure(pressure: float) -> float:
 
 func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
 	return human_target_discard_penalty_from_pressure(human_target_discard_pressure(seat, tile, risk, feed_report, shanten, eval_context))
+
+
+func fast_human_target_discard_pressure(seat: int, tile: String, risk: float, shanten: int, eval_context: Dictionary = {}, readiness_override: float = -1.0) -> float:
+	if seat <= 0 or seat >= players.size() or tile == "" or mode != "offline":
+		return 0.0
+	if (not offline_all_bot_mode) and is_ai_controlled_seat(0):
+		return 0.0
+	var readiness = readiness_override if readiness_override >= 0.0 else human_readiness_for_defense()
+	if risk < AI_DANGER_RISK_SOFT and readiness < 8.0:
+		return 0.0
+	var pen = max(0.0, risk - 10.0) * 0.36 + readiness * 1.05
+	if shanten >= 3:
+		pen *= 1.10
+	elif shanten <= 0:
+		pen *= 0.45
+	elif shanten == 1:
+		pen *= 0.70
+	return clamp(pen, 0.0, 180.0)
 
 
 func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> Dictionary:
@@ -1387,9 +1417,11 @@ func get_ai_discard_reports(seat: int) -> Array:
 		var risk_factor = ai_risk_factor(seat)
 		var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 		var fast_human_guard = seat > 0 and mode == "offline" and (diff == AI_DIFFICULTY_HARD or human_readiness_for_defense() >= 8.0)
+		var fast_human_readiness = human_readiness_for_defense() if fast_human_guard else 0.0
 		var safest_candidate: Dictionary = {}
 		var safest_rank = INF
 		var human_pressure_peak = 0.0
+		var danger_risk_peak = 0.0
 		for item in candidates:
 			var cand = str(item.get("tile", ""))
 			var idx = int(item.get("tile_index", -1))
@@ -1397,11 +1429,11 @@ func get_ai_discard_reports(seat: int) -> Array:
 			var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
 			# 快评：只靠向听 + 危险，避免 34 张进张扫描
 			var risk = deal_in_risk_score(cand, seat, eval_context)
+			danger_risk_peak = max(danger_risk_peak, risk)
 			var cheap = -float(shanten) * 760.0 - risk * defense_guess * risk_factor
 			var human_pressure = 0.0
 			if fast_human_guard:
-				var fast_feed_report = discard_feed_risk_report(cand, seat, visible_counts_snapshot, eval_context)
-				human_pressure = human_target_discard_pressure(seat, cand, risk, fast_feed_report, shanten, eval_context)
+				human_pressure = fast_human_target_discard_pressure(seat, cand, risk, shanten, eval_context, fast_human_readiness)
 				var human_pen = human_target_discard_penalty_from_pressure(human_pressure)
 				cheap -= human_pen * 0.90
 				item["fast_human_pressure"] = human_pressure
@@ -1432,7 +1464,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 		var high_pressure = float(pressure_context.get("readiness_pressure", 0.0)) >= 9.5 \
 			or int(pressure_context.get("threat_rank", 0)) >= 2 \
 			or bool(pressure_context.get("multi_threat", false)) \
-			or human_pressure_peak >= 16.0
+			or human_pressure_peak >= 16.0 \
+			or (diff == AI_DIFFICULTY_HARD and danger_risk_peak >= AI_DANGER_RISK_HIGH + 12.0)
 		var safest_kept = false
 		for item in keep:
 			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
@@ -1468,6 +1501,7 @@ func get_ai_discard_reports(seat: int) -> Array:
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		simulated.insert(i, candidate)
 	sort_ai_discard_reports(reports)
+	apply_hard_danger_push_guard(reports)
 	store_ai_report_cache(cache_key, reports)
 	return duplicate_report_array(reports)
 
@@ -1479,6 +1513,73 @@ func sort_ai_discard_reports(reports: Array) -> void:
 			return tile_sort_index(str(a.get("tile", ""))) < tile_sort_index(str(b.get("tile", "")))
 		return score_a > score_b
 	)
+
+
+func apply_hard_danger_push_guard(reports: Array) -> void:
+	if reports.size() < 2 or clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) != AI_DIFFICULTY_HARD:
+		return
+	var best: Dictionary = reports[0]
+	var best_shanten = int(best.get("shanten", 8))
+	if best_shanten > 1:
+		return
+	var best_risk = float(best.get("risk", 0.0))
+	var best_feed = float(best.get("feed_risk", 0.0))
+	if best_risk < AI_DANGER_RISK_HIGH + 6.0 and best_feed < AI_DANGER_FEED_SOFT + 24.0:
+		return
+	var best_score = float(best.get("score", 0.0))
+	var best_pressure = hard_danger_push_rank(best)
+	var best_index = -1
+	var best_value = -INF
+	for i in range(1, reports.size()):
+		var candidate: Dictionary = reports[i]
+		var candidate_shanten = int(candidate.get("shanten", 8))
+		var shanten_delta = candidate_shanten - best_shanten
+		if shanten_delta > 1:
+			continue
+		if shanten_delta > 0:
+			var best_human_pressure = float(best.get("human_target_pressure", 0.0))
+			if best_human_pressure < 18.0:
+				continue
+			var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
+			if candidate_human_pressure > best_human_pressure - 4.0:
+				continue
+		var score_gap = best_score - float(candidate.get("score", 0.0))
+		var max_gap = 360.0 if best_shanten <= 0 else 520.0
+		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
+			max_gap += 140.0
+		if score_gap > max_gap:
+			continue
+		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
+		pressure_gain += hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))
+		if pressure_gain < 14.0:
+			continue
+		var value = pressure_gain - score_gap / 95.0 - float(max(0, shanten_delta)) * 2.4
+		if value > best_value:
+			best_value = value
+			best_index = i
+	if best_index > 0:
+		var safer = reports[best_index]
+		reports.remove_at(best_index)
+		reports.insert(0, safer)
+
+
+func hard_danger_push_rank(report: Dictionary) -> float:
+	return float(report.get("risk", 0.0)) + float(report.get("feed_risk", 0.0)) * 0.45 + float(report.get("human_target_pressure", 0.0)) * 0.60
+
+
+func hard_safety_value(label: String) -> float:
+	match label:
+		"安":
+			return 34.0
+		"现":
+			return 24.0
+		"熟":
+			return 18.0
+		"壁":
+			return 12.0
+		"筋":
+			return 9.0
+	return 0.0
 
 func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) -> Dictionary:
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
@@ -1689,6 +1790,20 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var safety = tile_safety_label(tile, seat, visible_counts, eval_context)
 	var danger_source: Dictionary = risk_summary.get("danger_source", {})
 	var defense = ai_defense_weight(seat, shanten, pressure_context)
+	var diff_idx = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var human_pressure = human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
+	var needs_guard_ukeire = false
+	if offline_sim_quiet and diff_idx == AI_DIFFICULTY_HARD and shanten == 2:
+		if safety != "":
+			needs_guard_ukeire = risk >= AI_DANGER_RISK_SOFT or feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
+		elif risk <= AI_DANGER_RISK_HIGH + 10.0:
+			needs_guard_ukeire = feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
+	if needs_guard_ukeire:
+		var guard_metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts)
+		ukeire = int(guard_metrics.get("count", 0))
+		variety = int(guard_metrics.get("variety", 0))
+		effective_tiles = guard_metrics.get("tiles", [])
+		effective_remaining = guard_metrics.get("remaining_by_tile", {})
 	var safety_bonus = ai_safety_bonus(safety, defense, shanten)
 	var emergency_defense = emergency_defense_adjustment(seat, shanten, safety, risk, feed_risk, pressure_context)
 	var tenpai_bonus = 220.0 if shanten <= 0 else 0.0
@@ -1718,7 +1833,6 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			danger_pen += 28.0 if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) != AI_DIFFICULTY_EASY else 12.0
 		score -= danger_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
-	var human_pressure = human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
 	var human_pen = human_target_discard_penalty_from_pressure(human_pressure)
 	score -= human_pen
 	# R11: 第三次喂同一家吃碰杠会形成包三搭责任，按牌况和难度显式规避。
@@ -2940,9 +3054,9 @@ func ai_defense_weight(seat: int, shanten: int, pressure_context: Dictionary = {
 		readiness += min(3.5, float(hot_opponents) * 0.55)
 	# 困难档整体更重防守权重
 	if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_HARD:
-		base *= 1.08
+		base *= 1.10
 	elif clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY:
-		base *= 0.90
+		base *= 0.88
 	return max(0.20, (base + progress * 0.52 + pressure * 0.08 + readiness * 0.10 + score_defense_adjustment(seat)) * ai_risk_factor(seat))
 
 func ai_pressure_context(seat: int, eval_context: Dictionary = {}) -> Dictionary:
@@ -3135,6 +3249,11 @@ func discard_feed_risk_report(tile: String, seat: int, visible_counts_snapshot: 
 
 func discard_feed_penalty_weight(defense: float, shanten: int) -> float:
 	var weight = 0.42 + max(0.0, defense - 0.70) * 0.28
+	match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
+		AI_DIFFICULTY_HARD:
+			weight *= 1.12
+		AI_DIFFICULTY_EASY:
+			weight *= 0.94
 	if shanten <= 0:
 		weight *= 0.35
 	elif shanten == 1:

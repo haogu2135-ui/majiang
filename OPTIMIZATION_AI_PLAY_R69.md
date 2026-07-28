@@ -31,11 +31,11 @@ avoid feeding seat0 at least as well as easy AI?
 ## Result
 
 - Fixed-probe aggregate over 2 seeds × 2 hands/difficulty: `PASS`.
-- Overall high-danger easy/hard: `0.260/0.219`.
-- Player-target high-danger easy/hard: `0.110/0.062`.
+- Overall high-danger easy/hard after the R71 rerun: `0.260/0.230`.
+- Player-target high-danger easy/hard after the R71 rerun: `0.110/0.070`.
 - Actual `humanRon` easy/hard with fixed seat0 probe: `0.25/0.25`; this now
   passes a strict no-worse comparator and is a fair diagnostic comparator.
-- Runtime: `66098ms`, below the 90s R69 budget.
+- Runtime after the R71 rerun: `89090ms`, below the 90s R69 budget.
 
 ## Resource Impact
 

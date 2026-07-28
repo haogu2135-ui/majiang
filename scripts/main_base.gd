@@ -30,29 +30,41 @@ const ANIMATION_ASSET_PATHS := {
 const ILLUSTRATION_ASSET_PATHS := {}
 const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"menu_hero_gpt_backdrop": "res://assets/illustrations/menu_hero_gpt_backdrop.png",
+	"menu_hero_gpt_backdrop_warm": "res://assets/illustrations/menu_hero_gpt_backdrop_warm_v390.png",
 	"menu_lobby_gpt_scene": "res://assets/illustrations/menu_lobby_gpt_scene.png",
 	"menu_lobby_ui_overlay": "res://assets/illustrations/menu_lobby_ui_overlay.png",
 	"menu_primary_3d_stage_overlay": "res://assets/illustrations/menu_primary_3d_stage_overlay.png",
+	"menu_primary_3d_stage_overlay_warm": "res://assets/illustrations/menu_primary_3d_stage_overlay_warm_v390.png",
 	"loading_scene_gpt_backdrop": "res://assets/illustrations/loading_scene_gpt_backdrop.png",
 	"daily_login_gpt_calendar": "res://assets/illustrations/daily_login_gpt_calendar.png",
+	"daily_login_gpt_calendar_warm": "res://assets/illustrations/daily_login_gpt_calendar_warm_v392.png",
 	"shop_gpt_vault": "res://assets/illustrations/shop_gpt_vault.png",
+	"shop_gpt_vault_warm": "res://assets/illustrations/shop_gpt_vault_warm_v392.png",
 	"claim_response_trail": "res://assets/illustrations/claim_response_trail.png",
 	"discard_splash_wash": "res://assets/illustrations/discard_splash_wash.png",
 	"win_result_stage": "res://assets/illustrations/win_result_stage.png",
 	"round_summary_score_flow_bus": "res://assets/illustrations/round_summary_score_flow_bus.png",
 	"rules_gpt_scroll": "res://assets/illustrations/rules_gpt_scroll.png",
+	"rules_gpt_scroll_warm": "res://assets/illustrations/rules_gpt_scroll_warm_v391.png",
 	"stats_gpt_dashboard": "res://assets/illustrations/stats_gpt_dashboard.png",
+	"stats_gpt_dashboard_warm": "res://assets/illustrations/stats_gpt_dashboard_warm_v392.png",
 	"achievement_gpt_gallery": "res://assets/illustrations/achievement_gpt_gallery.png",
+	"achievement_gpt_gallery_warm": "res://assets/illustrations/achievement_gpt_gallery_warm_v391.png",
 	"online_gpt_lobby": "res://assets/illustrations/online_gpt_lobby.png",
 	"online_lobby_panel_frame": "res://assets/illustrations/online_lobby_panel_frame_warm_v392.png",
 	"online_lobby_group_plate": "res://assets/illustrations/online_lobby_group_plate_v1.png",
 	"settings_gpt_panel": "res://assets/illustrations/settings_gpt_panel.png",
 	"settings_gpt_panel_v2": "res://assets/illustrations/settings_gpt_panel_v2.png",
+	"settings_gpt_panel_warm": "res://assets/illustrations/settings_gpt_panel_warm_v391.png",
 	"table_gpt_backdrop": "res://assets/illustrations/table_gpt_backdrop_v4.png",
+	"table_gpt_backdrop_warm": "res://assets/illustrations/table_gpt_backdrop_warm_v391.png",
 	"offline_table_3d_overlay": "res://assets/illustrations/offline_table_3d_overlay.png",
 	"hand_gpt_tray": "res://assets/illustrations/hand_gpt_tray_bright_r432.png",
 	"hand_completion_gpt_bus": "res://assets/illustrations/hand_completion_gpt_bus.png",
 	"action_gpt_dock": "res://assets/illustrations/action_gpt_dock_banner_r436.png",
+	"action_gpt_dock_banner_r433": "res://assets/illustrations/action_gpt_dock_banner_r433.png",
+	"action_gpt_dock_bright": "res://assets/illustrations/action_gpt_dock_bright_r431.png",
+	"action_gpt_dock_warm": "res://assets/illustrations/action_gpt_dock_warm_v391.png",
 	"pending_claim_action_dock": "res://assets/illustrations/action_gpt_dock_banner_r436.png",
 	"pending_claim_status_strip": "res://assets/illustrations/pending_claim_status_strip.png",
 	"wall_live_feedback_kit": "res://assets/illustrations/wall_live_feedback_kit.png",
@@ -67,8 +79,11 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"table_log_gpt_scroll": "res://assets/illustrations/table_log_gpt_scroll.png",
 	"advisor_gpt_panel": "res://assets/illustrations/advisor_gpt_panel.png",
 	"top_hud_gpt_banner": "res://assets/illustrations/top_hud_gpt_banner_r434.png",
+	"top_hud_gpt_banner_warm": "res://assets/illustrations/top_hud_gpt_banner_warm_v392.png",
 	"seat_gpt_brocade": "res://assets/illustrations/seat_gpt_brocade_v5.png",
+	"seat_gpt_plaque_warm": "res://assets/illustrations/seat_gpt_plaque_warm_r429.png",
 	"exit_gpt_confirm": "res://assets/illustrations/exit_gpt_confirm.png",
+	"exit_gpt_confirm_warm": "res://assets/illustrations/exit_gpt_confirm_warm_v392.png",
 	"chat_gpt_panel": "res://assets/illustrations/chat_gpt_panel.png",
 	"update_gpt_dialog": "res://assets/illustrations/update_gpt_dialog.png",
 	"diagnostic_gpt_panel": "res://assets/illustrations/diagnostic_gpt_panel.png",
@@ -77,6 +92,7 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"ui_soft_flash": "res://assets/illustrations/ui_soft_flash.png",
 	"ui_dark_scrim": "res://assets/illustrations/ui_dark_scrim.png",
 	"ui_river_soft_wash": "res://assets/illustrations/ui_river_soft_wash.png",  # r180: warm ivory GPT wash (no green flood)
+	"ui_jade_ink_strip": "res://assets/illustrations/ui_jade_ink_strip.png",
 	"ui_jade_reading_plate": "res://assets/illustrations/ui_jade_reading_plate.png",
 	"ui_meld_pad": "res://assets/illustrations/ui_meld_pad.png",
 	"ui_progress_signal_strip": "res://assets/illustrations/ui_progress_signal_strip.png",
@@ -499,6 +515,7 @@ var offline_concealed_gang_tiles: Dictionary = {}  # seat -> {tile: true} 保留
 var offline_last_draw: Dictionary = {}
 var offline_self_draw_ready: Dictionary = {}  # 当前回合可自摸的真实摸牌；空值只兼容旧局状态
 var offline_ai_active = false
+var offline_ai_run_queued = false
 var offline_all_bot_mode := false
 var offline_sim_quiet := false
 var offline_match_briefing_shown := false
@@ -2785,6 +2802,7 @@ func setup_tile_order() -> void:
 
 func load_assets() -> void:
 	# 优先加载关键资源
+	var ui_capture_mode := OS.get_environment("YUNZHUO_UI_CAPTURE") == "1"
 	felt_texture = load("res://assets/table/table_felt_green.jpg")
 	wood_texture = load("res://assets/table/table_dark_wood.jpg")
 	tile_back = load_illustration_texture("res://assets/tiles/tile_back.png")
@@ -2812,26 +2830,30 @@ func load_assets() -> void:
 			mat.shader = shader
 			shader_materials[key] = mat
 
-	# 音频资源立即加载
-	audio_streams = {
-		"bgm": load(BGM_STREAM_PATH),
-		"bird": load("res://assets/audio/bird.mp3"),
-		"discard": load("res://assets/audio/discard.mp3"),
-		"draw": load("res://assets/audio/draw.mp3"),
-		"gang": load("res://assets/audio/kong.mp3"),
-		"peng": load("res://assets/audio/pong.mp3"),
-		"win": load("res://assets/audio/win.mp3"),
-	}
-	if audio_streams.get("bgm") == null:
-		print("BGM: 警告 - BGM文件加载失败！")
+	# 音频资源立即加载；截图捕获不需要音频后端，跳过以降低低资源 QA 耗时。
+	if ui_capture_mode:
+		audio_streams.clear()
 	else:
-		print("BGM: BGM文件加载成功，类型:", audio_streams.get("bgm").get_class())
+		audio_streams = {
+			"bgm": load(BGM_STREAM_PATH),
+			"bird": load("res://assets/audio/bird.mp3"),
+			"discard": load("res://assets/audio/discard.mp3"),
+			"draw": load("res://assets/audio/draw.mp3"),
+			"gang": load("res://assets/audio/kong.mp3"),
+			"peng": load("res://assets/audio/pong.mp3"),
+			"win": load("res://assets/audio/win.mp3"),
+		}
+		if audio_streams.get("bgm") == null:
+			print("BGM: 警告 - BGM文件加载失败！")
+		else:
+			print("BGM: BGM文件加载成功，类型:", audio_streams.get("bgm").get_class())
 
 	# 麻将牌纹理延迟加载（在空闲时间加载）
 	call_deferred("_load_tile_textures")
 
 	# 语音资源延迟加载
-	call_deferred("load_voice_assets")
+	if not ui_capture_mode:
+		call_deferred("load_voice_assets")
 
 func _load_tile_textures() -> void:
 	tile_textures.clear()
