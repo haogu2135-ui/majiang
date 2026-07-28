@@ -268,7 +268,8 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		allow = false
 		reason = "保路线"
 		declined_by_plan = true
-	var pressure_report = ai_open_claim_pressure_report(seat, claim, tile, before_shanten, after_shanten, after, after_open_melds, claim_context, after_counts)
+	var post_claim_bans = claim_discard_ban_tiles(claim, tile, extra_meld_tiles)
+	var pressure_report = ai_open_claim_pressure_report(seat, claim, tile, before_shanten, after_shanten, after, after_open_melds, claim_context, after_counts, post_claim_bans)
 	var declined_by_pressure = allow and bool(pressure_report.get("decline", false))
 	if declined_by_pressure:
 		allow = false
@@ -349,7 +350,7 @@ func ai_claim_shape_threshold(seat: int, claim: String, exposed_melds: int) -> f
 		return scaled
 	return threshold - max(0.0, ai_claim_aggression(seat) - 1.0) * 6.0
 
-func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, before_shanten: int, after_shanten: int, after_hand: Array, after_open_melds: int, claim_context: Dictionary = {}, after_counts_snapshot: Array = []) -> Dictionary:
+func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, before_shanten: int, after_shanten: int, after_hand: Array, after_open_melds: int, claim_context: Dictionary = {}, after_counts_snapshot: Array = [], banned_tiles = []) -> Dictionary:
 	var eval_context: Dictionary = {}
 	var pressure_context: Dictionary = {}
 	if is_ai_claim_context_for_seat(claim_context, seat):
@@ -366,7 +367,10 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 		pressure_context = ai_context_pressure_context(seat, eval_context)
 	var defense = ai_defense_weight(seat, before_shanten, pressure_context)
 	var pressure = float(pressure_context.get("opponent_pressure", 0.0))
-	var best_post = best_ai_post_claim_discard_report(seat, after_hand, after_open_melds, eval_context, after_counts_snapshot) if claim != "gang" else {}
+	var simulated_bans = banned_tiles
+	if typeof(simulated_bans) != TYPE_ARRAY and typeof(simulated_bans) != TYPE_DICTIONARY:
+		simulated_bans = claim_discard_ban_tiles(claim, tile, [])
+	var best_post = best_ai_post_claim_discard_report(seat, after_hand, after_open_melds, eval_context, after_counts_snapshot, simulated_bans) if claim != "gang" else {}
 	var forced_tile = str(best_post.get("tile", ""))
 	var forced_risk = float(best_post.get("risk", 0.0))
 	var forced_safety = str(best_post.get("safety_label", ""))
@@ -391,12 +395,19 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 		"decline": decline,
 	}
 
-func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds: int, eval_context: Dictionary = {}, after_counts_snapshot: Array = []) -> Dictionary:
+func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds: int, eval_context: Dictionary = {}, after_counts_snapshot: Array = [], banned_tiles = []) -> Dictionary:
 	var best: Dictionary = {}
 	var visible_counts_snapshot = visible_tile_counts() if eval_context.is_empty() else ai_context_visible_counts(eval_context)
 	var shared_context = make_ai_evaluation_context(seat, visible_counts_snapshot) if eval_context.is_empty() else eval_context
 	var pressure_context = ai_context_pressure_context(seat, shared_context)
 	var after_counts = after_counts_snapshot if not after_counts_snapshot.is_empty() else tile_counts(after_hand)
+	var banned_lookup := {}
+	if typeof(banned_tiles) == TYPE_ARRAY:
+		for item in banned_tiles:
+			banned_lookup[str(item)] = true
+	elif typeof(banned_tiles) == TYPE_DICTIONARY:
+		for key in banned_tiles.keys():
+			banned_lookup[str(key)] = true
 	var evaluated_tiles := {}
 	var simulated = after_hand.duplicate()
 	var simulated_counts = after_counts.duplicate()
@@ -405,6 +416,8 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 		if evaluated_tiles.has(candidate):
 			continue
 		evaluated_tiles[candidate] = true
+		if banned_lookup.get(candidate, false):
+			continue
 		var candidate_index = tile_index(candidate)
 		if candidate_index < 0 or candidate_index >= simulated_counts.size() or int(simulated_counts[candidate_index]) <= 0:
 			continue
@@ -1283,14 +1296,20 @@ func choose_ai_discard_for_seat(seat: int) -> String:
 		return ""
 	var reports = get_ai_discard_reports(seat)
 	if reports.is_empty():
-		return str(hand[0])
+		# 食替可能清空评分候选；统一走合法回退，必要时解除死锁禁打。
+		return choose_legal_offline_discard_tile(seat)
 	# 简单难度：在接近分差内偶尔选次优，制造可被利用的失误。
 	if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
 		var best_score = float(reports[0].get("score", 0.0))
 		var second_score = float(reports[1].get("score", 0.0))
 		if best_score - second_score <= 55.0:
-			return str(reports[1].get("tile", reports[0].get("tile", hand[0])))
-	return str(reports[0].get("tile", hand[0]))
+			var second_tile = str(reports[1].get("tile", ""))
+			if second_tile != "" and is_valid_offline_discard(seat, second_tile):
+				return second_tile
+	var best_tile = str(reports[0].get("tile", ""))
+	if best_tile != "" and is_valid_offline_discard(seat, best_tile):
+		return best_tile
+	return choose_legal_offline_discard_tile(seat)
 
 func get_ai_discard_reports(seat: int) -> Array:
 	var reports: Array = []
@@ -1319,6 +1338,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 		if evaluated_tiles.has(candidate):
 			continue
 		evaluated_tiles[candidate] = true
+		if is_claim_discard_banned(seat, candidate):
+			continue
 		var candidate_index = tile_index(candidate)
 		if candidate_index < 0 or candidate_index >= simulated_counts.size() or int(simulated_counts[candidate_index]) <= 0:
 			continue
@@ -1500,6 +1521,7 @@ func ai_report_cache_key(seat: int) -> String:
 		"wall=%d" % get_wall_count(),
 		"diff=%d" % clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD),
 		"package=" + package_liability_ai_cache_key(),
+		"claim_ban=" + claim_discard_ban_cache_key(seat),
 	]
 	for player_seat in range(players.size()):
 		var player: Dictionary = players[player_seat]
@@ -1516,6 +1538,13 @@ func ai_profile_map_cache_key() -> String:
 	for profile_index in ai_profile_seat_map:
 		parts.append(str(int(profile_index)))
 	return ",".join(parts)
+
+
+func claim_discard_ban_cache_key(seat: int) -> String:
+	var tiles = claim_discard_ban_tiles_for_seat(seat)
+	if tiles.is_empty():
+		return "-"
+	return ",".join(tiles)
 
 
 func package_liability_ai_cache_key() -> String:

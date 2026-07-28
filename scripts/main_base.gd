@@ -311,6 +311,7 @@ const HUMAN_DISCARD_RESPONSE_GAP_SECONDS := 0.01
 const AI_RETURN_TO_HUMAN_GAP_SECONDS := 0.08
 const HUMAN_DRAW_DELAY_SECONDS := 0.006
 const SCORE_LIMIT_FAN := 8
+const WALL_DRAW_NOTEN_BA := 1000  # 荒庄未听罚符：每家未听支付总额，由听牌者均分
 const SCORE_TABLE := {
 	1: 200,
 	2: 400,
@@ -490,6 +491,7 @@ var offline_pending_claim: Dictionary = {}
 var offline_claim_counts: Dictionary = {}
 var offline_package_liability: Dictionary = {}
 var offline_passed_win_tiles: Dictionary = {}  # seat -> {tile: true} 同张过水
+var offline_claim_discard_bans: Dictionary = {}  # seat -> {tile: true} 吃碰后本回合食替禁打
 var offline_concealed_gang_tiles: Dictionary = {}  # seat -> {tile: true} 保留暗杠门清来源
 var offline_last_draw: Dictionary = {}
 var offline_self_draw_ready: Dictionary = {}  # 当前回合可自摸的真实摸牌；空值只兼容旧局状态

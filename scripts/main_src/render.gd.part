@@ -3730,7 +3730,7 @@ func draw_hand(parent: Control) -> void:
 		var tile = str(hand[i])
 		if should_insert_hand_group_gap(hand, i):
 			hand_box.add_child(make_hand_group_spacer(tile_height, group_gap_width, hand_group_label(tile)))
-		var clickable = can_self_discard()
+		var clickable = can_self_discard() and not is_claim_discard_banned(0, tile)
 		# 新手引导高亮：可点击时添加视觉提示
 		var should_highlight = clickable and ((suggested_tile != "" and tile == suggested_tile) or (pending_tile != "" and tile == pending_tile))
 		var guide_highlight = interactive_guide_active and interactive_guide_type == "discard" and clickable

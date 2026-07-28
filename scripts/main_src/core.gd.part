@@ -702,6 +702,7 @@ func deal_offline_hand() -> void:
 	offline_claim_counts.clear()
 	offline_package_liability.clear()
 	offline_passed_win_tiles.clear()
+	offline_claim_discard_bans.clear()
 	offline_concealed_gang_tiles.clear()
 	offline_last_draw.clear()
 	offline_self_draw_ready.clear()

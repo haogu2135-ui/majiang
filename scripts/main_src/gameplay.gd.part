@@ -293,6 +293,8 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 		}
 		# 过水仅持续到本家下一次实际摸牌；补杠补牌也属于新摸牌。
 		clear_passed_win_tiles(seat)
+		# 摸到实牌后已进入新回合，上一拍副露的食替禁打一并解除。
+		clear_claim_discard_bans(seat)
 		if announce:
 			request_game_render()
 		return tile
@@ -486,6 +488,9 @@ func human_discard(index: int) -> void:
 	if index < 0 or index >= hand.size():
 		return
 	var tile = str(hand[index])
+	if is_claim_discard_banned(0, tile):
+		set_status("刚副露后不能打%s（食替）。" % tile_label(tile))
+		return
 	var report = discard_report_for_tile(tile)
 	if should_confirm_danger_discard(index, tile, report):
 		begin_danger_discard_confirmation(index, tile, report)
@@ -770,11 +775,13 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		seat = current_seat
 		var reports: Array = []
 		var discard_tile = tsumo_continue_discard
+		if discard_tile != "" and not is_valid_offline_discard(seat, discard_tile):
+			# 强制留听切张若撞上食替，改走普通合法候选，避免模拟卡死。
+			discard_tile = ""
 		if discard_tile == "":
 			reports = get_ai_discard_reports(seat)
 		if discard_tile == "" and reports.is_empty():
-			var hand: Array = players[seat]["hand"]
-			discard_tile = str(hand[0]) if not hand.is_empty() else ""
+			discard_tile = choose_legal_offline_discard_tile(seat)
 		elif discard_tile == "":
 			# 与 choose_ai_discard_for_seat 对齐（含简单档次优），但复用 reports 避免双倍开销
 			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
@@ -786,6 +793,10 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 					discard_tile = str(reports[0].get("tile", ""))
 			else:
 				discard_tile = str(reports[0].get("tile", ""))
+			if discard_tile != "" and not is_valid_offline_discard(seat, discard_tile):
+				discard_tile = choose_legal_offline_discard_tile(seat)
+		if discard_tile == "":
+			discard_tile = choose_legal_offline_discard_tile(seat)
 		if discard_tile == "":
 			break
 		ai_sim_stats["discards"] = int(ai_sim_stats.get("discards", 0)) + 1
@@ -1038,10 +1049,16 @@ func run_ai_until_human() -> void:
 			break
 		seat = current_seat
 		var tile = tsumo_continue_discard if tsumo_continue_discard != "" else choose_ai_discard_for_seat(seat)
+		if tile == "" or not is_valid_offline_discard(seat, tile):
+			tile = choose_legal_offline_discard_tile(seat, tile)
 		play_ai_discard_fly_animation(seat, tile)
 		var committed_tile = discard_tile_by_value(seat, tile)
 		if committed_tile == "":
-			break
+			# 最后一次死锁释放后再试，仍失败则退出避免空转。
+			tile = choose_legal_offline_discard_tile(seat)
+			committed_tile = discard_tile_by_value(seat, tile)
+			if committed_tile == "":
+				break
 		resolve_after_discard(seat, committed_tile)
 		if offline_phase == "pending_claim" or offline_phase == "ended":
 			break
@@ -1099,6 +1116,8 @@ func is_valid_offline_discard_turn(seat: int) -> bool:
 func is_valid_offline_discard(seat: int, tile: String) -> bool:
 	if not is_valid_offline_discard_turn(seat) or tile == "":
 		return false
+	if is_claim_discard_banned(seat, tile):
+		return false
 	return count_tile(players[seat].get("hand", []), tile) > 0
 
 func commit_discard(seat: int, tile: String) -> bool:
@@ -1115,6 +1134,8 @@ func commit_discard(seat: int, tile: String) -> bool:
 	players[seat]["discards"].append(tile)
 	last_discard = tile
 	last_discard_seat = seat
+	# 食替只约束本次副露后的立即出牌；成功切牌后立即解除。
+	clear_claim_discard_bans(seat)
 	offline_phase = "resolving"
 	offline_turn_needs_draw = false
 	play_sfx("discard", -2.5)
@@ -1319,7 +1340,11 @@ func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String,
 	offline_phase = "await_discard"
 	offline_pending_claim.clear()
 	if claim == "gang":
+		# 明杠后立刻补牌，本回合不再适用吃碰食替禁打。
+		clear_claim_discard_bans(seat)
 		draw_after_gang(seat)
+	else:
+		set_claim_discard_bans(seat, claim_discard_ban_tiles(claim, tile, meld))
 	play_fx_turn_switch_slide(seat)
 
 func pass_discard_to_next(from_seat: int) -> void:
@@ -1387,15 +1412,97 @@ func finish_wall_draw() -> void:
 	offline_pending_claim.clear()
 	offline_last_winner = -1
 	offline_dealer_repeat = true
-	last_score_deltas = [0, 0, 0, 0]
-	# 荒庄没有胡牌详情；清除上一局数据，避免结算面板展示过期番种。
-	last_win_score.clear()
-	round_summary = "荒庄，牌墙已空。%s连庄。" % players[dealer_seat]["name"]
+	# 荒庄不再是零分收束：按听牌/未听做一次低成本查听罚符，
+	# 避免商用对局里听牌无收益、未听无代价。
+	var settlement = settle_wall_draw_tenpai_payments()
+	last_score_deltas = settlement.get("deltas", [0, 0, 0, 0])
+	last_win_score = {
+		"wall_draw": true,
+		"fan": 0,
+		"points": 0,
+		"tenpai_seats": settlement.get("tenpai_seats", []),
+		"noten_seats": settlement.get("noten_seats", []),
+		"ba": int(settlement.get("ba", 0)),
+		"reasons": ["荒庄查听"],
+	}
+	var tenpai_seats: Array = settlement.get("tenpai_seats", [])
+	var noten_seats: Array = settlement.get("noten_seats", [])
+	var summary = "荒庄，牌墙已空。%s连庄。" % players[dealer_seat]["name"]
+	if tenpai_seats.is_empty():
+		summary += " 四家未听，不罚符。"
+	elif noten_seats.is_empty():
+		summary += " 四家听牌，不罚符。"
+	else:
+		var tenpai_names: Array[String] = []
+		for seat in tenpai_seats:
+			tenpai_names.append(str(players[int(seat)].get("name", "")))
+		var noten_names: Array[String] = []
+		for seat in noten_seats:
+			noten_names.append(str(players[int(seat)].get("name", "")))
+		summary += " 听牌：%s；未听：%s。未听各付%d，听牌均分。" % [
+			"、".join(tenpai_names),
+			"、".join(noten_names),
+			int(settlement.get("ba", WALL_DRAW_NOTEN_BA)),
+		]
+	round_summary = summary
 	add_log(round_summary)
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
 	play_wall_draw_resolution_fx(dealer_seat)
 	save_offline_progress()
 	render_game()
+
+
+func is_seat_tenpai_for_wall_draw(seat: int) -> bool:
+	# 荒庄查听只看结构听牌（向听<=0）。舍张振听/过水仍算听牌，因未听罚符
+	# 衡量的是牌面进度，不是荣和权利。
+	if seat < 0 or seat >= players.size():
+		return false
+	var hand: Array = players[seat].get("hand", [])
+	var open_melds = players[seat].get("melds", []).size()
+	if hand.is_empty() and open_melds <= 0:
+		return false
+	return calculate_min_shanten(hand, open_melds) <= 0
+
+
+func settle_wall_draw_tenpai_payments() -> Dictionary:
+	var deltas: Array = [0, 0, 0, 0]
+	var tenpai_seats: Array = []
+	var noten_seats: Array = []
+	var result := {
+		"deltas": deltas,
+		"tenpai_seats": tenpai_seats,
+		"noten_seats": noten_seats,
+		"ba": WALL_DRAW_NOTEN_BA,
+	}
+	if players.size() != 4:
+		return result
+	for seat in range(4):
+		if is_seat_tenpai_for_wall_draw(seat):
+			tenpai_seats.append(seat)
+		else:
+			noten_seats.append(seat)
+	if tenpai_seats.is_empty() or noten_seats.is_empty():
+		return result
+	var ba = max(0, int(WALL_DRAW_NOTEN_BA))
+	if ba <= 0:
+		return result
+	var before_scores: Array[int] = []
+	for seat in range(4):
+		before_scores.append(int(players[seat].get("score", 0)))
+	# 每家未听支付固定 ba，由全部听牌者均分；余数按座位号顺序补给听牌者，
+	# 保证桌面总分守恒且不引入额外搜索。
+	var pool = ba * noten_seats.size()
+	for seat in noten_seats:
+		players[int(seat)]["score"] = int(players[int(seat)].get("score", 0)) - ba
+	var base_share = int(pool / tenpai_seats.size())
+	var remainder = int(pool % tenpai_seats.size())
+	for index in range(tenpai_seats.size()):
+		var seat = int(tenpai_seats[index])
+		var gain = base_share + (1 if index < remainder else 0)
+		players[seat]["score"] = int(players[seat].get("score", 0)) + gain
+	for seat in range(4):
+		deltas[seat] = int(players[seat].get("score", 0)) - int(before_scores[seat])
+	return result
 
 func win_fx_type_for_score(score_data: Dictionary, self_draw: bool) -> String:
 	# points 是实际结算分（最低也有 200），不能用于判断“高番”特效。
@@ -1480,8 +1587,10 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var before_scores: Array[int] = []
 	for seat in range(players.size()):
 		before_scores.append(int(players[seat].get("score", 0)))
-	var has_package_self_draw = self_draw and package_payer >= 0 and package_payer != winner
-	if has_package_self_draw:
+	# 商用包三搭：一旦形成包赔归属，该赢家本局任何和型（自摸/荣和/抢杠）
+	# 都由包家承担三家合计支付，避免只在自摸生效、点炮却漏包。
+	var has_package_payment = package_payer >= 0 and package_payer != winner
+	if has_package_payment:
 		var package_payment = points * 3
 		players[package_payer]["score"] = int(players[package_payer].get("score", 0)) - package_payment
 		players[winner]["score"] = int(players[winner].get("score", 0)) + package_payment
@@ -1563,7 +1672,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		"、".join(score_data.get("reasons", [])),
 	]
 	round_summary += " %s" % ("庄家连庄。" if offline_dealer_repeat else "庄家下庄。")
-	if has_package_self_draw:
+	if has_package_payment:
 		round_summary += " 包三搭：%s包赔。" % players[package_payer]["name"]
 	if is_offline_match_finished():
 		round_summary += " 全场结束。"
@@ -1573,6 +1682,8 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	last_win_score["winner"] = winner
 	last_win_score["win_tile"] = win_tile
 	last_win_score["self_draw"] = self_draw
+	last_win_score["package_payer"] = package_payer if has_package_payment else -1
+	last_win_score["package_payment"] = has_package_payment
 
 	add_log(round_summary)
 	save_offline_progress()
@@ -1600,6 +1711,159 @@ func record_passed_win_tile(seat: int, tile: String) -> void:
 func clear_passed_win_tiles(seat: int) -> void:
 	if seat >= 0 and seat < players.size():
 		offline_passed_win_tiles.erase(seat)
+
+
+func clear_claim_discard_bans(seat: int = -1) -> void:
+	if seat < 0:
+		offline_claim_discard_bans.clear()
+		return
+	if seat < players.size():
+		offline_claim_discard_bans.erase(seat)
+
+
+func set_claim_discard_bans(seat: int, tiles) -> void:
+	if seat < 0 or seat >= players.size():
+		return
+	var banned: Dictionary = {}
+	if typeof(tiles) == TYPE_DICTIONARY:
+		for key in tiles.keys():
+			var code = str(key)
+			if code != "" and TILE_CODES.has(code):
+				banned[code] = true
+	elif typeof(tiles) == TYPE_ARRAY:
+		for item in tiles:
+			var code = str(item)
+			if code != "" and TILE_CODES.has(code):
+				banned[code] = true
+	else:
+		var code = str(tiles)
+		if code != "" and TILE_CODES.has(code):
+			banned[code] = true
+	if banned.is_empty():
+		offline_claim_discard_bans.erase(seat)
+		return
+	offline_claim_discard_bans[seat] = banned
+	# 若禁打后手牌已无任何可切张，立即解除，避免副露后锁死整桌。
+	if not seat_has_unbanned_hand_tile(seat):
+		offline_claim_discard_bans.erase(seat)
+
+
+func claim_discard_ban_tiles(claim: String, tile: String, meld: Array = []) -> Array:
+	# 商用地方麻将常见食替：
+	# 1) 吃/碰后本拍不得立刻打出刚副露的同名张；
+	# 2) 边张吃时不得立刻打出另一端可“换位”的同花色张（例如吃 4 成 234 禁打 1）。
+	var bans: Array = []
+	if tile == "" or not TILE_CODES.has(tile):
+		return bans
+	if claim == "peng" or claim == "chi":
+		bans.append(tile)
+	if claim != "chi":
+		return bans
+	var claimed_index = tile_index(tile)
+	if claimed_index < 0 or claimed_index >= 27:
+		return bans
+	var claimed_rank = claimed_index % 9
+	var suit_start = claimed_index - claimed_rank
+	var meld_tiles: Array = []
+	for item in meld:
+		var code = str(item)
+		if code != "" and TILE_CODES.has(code):
+			meld_tiles.append(code)
+	if meld_tiles.size() != 3:
+		return bans
+	var ranks: Array = []
+	for code in meld_tiles:
+		var index = tile_index(code)
+		if index < 0 or index >= 27 or (index - (index % 9)) != suit_start:
+			return bans
+		ranks.append(index % 9)
+	ranks.sort()
+	if ranks != [ranks[0], ranks[0] + 1, ranks[0] + 2]:
+		return bans
+	var low = int(ranks[0])
+	var high = int(ranks[2])
+	# 只对真正“跨端”的边吃施加第二禁张；中吃 456 仅禁本张。
+	if claimed_rank == low and high + 1 <= 8:
+		bans.append(TILE_CODES[suit_start + high + 1])
+	elif claimed_rank == high and low - 1 >= 0:
+		bans.append(TILE_CODES[suit_start + low - 1])
+	return bans
+
+
+func is_claim_discard_banned(seat: int, tile: String) -> bool:
+	if seat < 0 or tile == "":
+		return false
+	var banned = offline_claim_discard_bans.get(seat, {})
+	return typeof(banned) == TYPE_DICTIONARY and bool((banned as Dictionary).get(tile, false))
+
+
+func claim_discard_ban_tiles_for_seat(seat: int) -> Array:
+	var result: Array = []
+	if seat < 0:
+		return result
+	var banned = offline_claim_discard_bans.get(seat, {})
+	if typeof(banned) != TYPE_DICTIONARY:
+		return result
+	for key in (banned as Dictionary).keys():
+		result.append(str(key))
+	result.sort_custom(func(a, b): return tile_sort_index(str(a)) < tile_sort_index(str(b)))
+	return result
+
+
+func seat_has_unbanned_hand_tile(seat: int) -> bool:
+	if seat < 0 or seat >= players.size():
+		return false
+	var hand: Array = players[seat].get("hand", [])
+	if hand.is_empty():
+		return false
+	for item in hand:
+		var tile = str(item)
+		if tile != "" and not is_claim_discard_banned(seat, tile):
+			return true
+	return false
+
+
+func first_unbanned_hand_tile(seat: int) -> String:
+	if seat < 0 or seat >= players.size():
+		return ""
+	for item in players[seat].get("hand", []):
+		var tile = str(item)
+		if tile != "" and not is_claim_discard_banned(seat, tile):
+			return tile
+	return ""
+
+
+func release_claim_discard_deadlock(seat: int) -> bool:
+	# 食替是短生命周期禁打。若它把当前手牌全部封死，商用规则应放行，
+	# 而不是让 AI/玩家卡在 await_discard。
+	if seat < 0 or seat >= players.size():
+		return false
+	if not offline_claim_discard_bans.has(seat):
+		return false
+	if seat_has_unbanned_hand_tile(seat):
+		return false
+	clear_claim_discard_bans(seat)
+	return true
+
+
+func choose_legal_offline_discard_tile(seat: int, preferred: String = "") -> String:
+	if seat < 0 or seat >= players.size():
+		return ""
+	if preferred != "" and is_valid_offline_discard(seat, preferred):
+		return preferred
+	var tile = first_unbanned_hand_tile(seat)
+	if tile != "" and is_valid_offline_discard(seat, tile):
+		return tile
+	if release_claim_discard_deadlock(seat):
+		tile = first_unbanned_hand_tile(seat)
+		if tile != "" and is_valid_offline_discard(seat, tile):
+			return tile
+		# 解除后仍按合法回合校验；若回合本就不成立则继续返回空。
+		for item in players[seat].get("hand", []):
+			var fallback = str(item)
+			if is_valid_offline_discard(seat, fallback):
+				return fallback
+	return ""
 
 
 func is_passed_win_tile(seat: int, tile: String) -> bool:
