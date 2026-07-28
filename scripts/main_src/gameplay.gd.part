@@ -835,9 +835,43 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 	ai_sim_stats["phase"] = offline_phase
 	return ai_sim_stats.duplicate(true)
 
+
+func ensure_ai_benchmark_players() -> void:
+	# Benchmarks are often invoked from a fresh headless scene. Build the minimum
+	# offline table explicitly so evidence scripts do not depend on UI startup.
+	if players.size() < 4:
+		players.clear()
+		for i in range(4):
+			players.append({
+				"name": SEAT_NAMES[i],
+				"hand": [],
+				"discards": [],
+				"melds": [],
+				"flowers": 0,
+				"flower_tiles": [],
+				"score": MATCH_START_SCORE,
+				"bot": true,
+			})
+	for i in range(4):
+		players[i]["hand"] = []
+		players[i]["discards"] = []
+		players[i]["melds"] = []
+		players[i]["flowers"] = 0
+		players[i]["flower_tiles"] = []
+		players[i]["score"] = MATCH_START_SCORE
+		players[i]["bot"] = true
+	offline_pending_claim.clear()
+	offline_last_winner = -1
+	offline_dealer_repeat = false
+	last_discard = ""
+	last_discard_seat = -1
+	clear_ai_report_cache()
+
+
 func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base: int = 20260725, shuffle_profiles: bool = false) -> Dictionary:
 	# 固定种子短局采样：比较高危弃牌率 / 放铳率（越低越稳）与终局完成率。
 	# 默认不打乱人设，保证三档难度可比。
+	ensure_ai_benchmark_players()
 	var summary := {
 		"hands_per_diff": hands_per_diff,
 		"shuffle_profiles": shuffle_profiles,
@@ -857,12 +891,16 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		var wins_total = 0
 		var ms_total = 0
 		for h in range(hands_per_diff):
-			seed(seed_base + diff * 1009 + h * 17)
 			enable_offline_all_bot_mode(true, true)
+			var wall_seed = seed_base + h * 17
+			var profile_seed = seed_base + diff * 1009 + h * 17
 			if shuffle_profiles:
+				seed(profile_seed)
 				reshuffle_ai_profiles_for_hand()
 			else:
 				reset_ai_profile_seat_map()
+			seed(wall_seed)
+			offline_skip_ai_profile_reshuffle = true
 			mode = "offline"
 			offline_hand_number = 1
 			dealer_seat = h % 4
@@ -870,7 +908,7 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 				players[s]["score"] = MATCH_START_SCORE
 			var t0 = Time.get_ticks_msec()
 			deal_offline_hand()
-			# deal 会按难度 reshuffle；强制固定人设时再盖一次
+			# Benchmark keeps the wall identical across difficulties; fixed-profile rows also keep seats identical.
 			if not shuffle_profiles:
 				reset_ai_profile_seat_map()
 			var result = simulate_offline_bot_hand_sync(700)
@@ -912,6 +950,7 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 
 func sample_bot_match_winrates(hands: int = 6, seed_base: int = 20260726) -> Dictionary:
 	# 固定人设多手：统计各座位胜率（检验全 bot 循环稳定性，不做难度交叉）。
+	ensure_ai_benchmark_players()
 	var prev_diff = ai_difficulty
 	ai_difficulty = AI_DIFFICULTY_NORMAL
 	enable_offline_all_bot_mode(true, true)
@@ -961,6 +1000,13 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 	var hard_dr = float(hard.get("danger_rate", 1.0))
 	var easy_dih = float(easy.get("deal_in_to_human_rate", 1.0))
 	var hard_dih = float(hard.get("deal_in_to_human_rate", 1.0))
+	var easy_finished = int(easy.get("ended", 0))
+	var normal_finished = int(normal.get("ended", 0))
+	var hard_finished = int(hard.get("ended", 0))
+	var finished_all = easy_finished >= hands_per_diff and normal_finished >= hands_per_diff and hard_finished >= hands_per_diff
+	var hard_safer_high_danger = hard_hd <= easy_hd + 0.08
+	var hard_safer_deal_in = hard_di <= easy_di + 0.34
+	var hard_safer_deal_in_to_human = hard_dih <= easy_dih + 0.34
 	return {
 		"hands_per_diff": hands_per_diff,
 		"raw": raw,
@@ -972,15 +1018,186 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 		"hard_deal_in_to_human": hard_dih,
 		"easy_danger": easy_dr,
 		"hard_danger": hard_dr,
-		"hard_safer_high_danger": hard_hd <= easy_hd + 0.08,
-		"hard_safer_deal_in": hard_di <= easy_di + 0.34,
-		"hard_safer_deal_in_to_human": hard_dih <= easy_dih + 0.34,
+		"hard_safer_high_danger": hard_safer_high_danger,
+		"hard_safer_deal_in": hard_safer_deal_in,
+		"hard_safer_deal_in_to_human": hard_safer_deal_in_to_human,
+		"finished_all": finished_all,
+		"easy_finished": easy_finished,
+		"normal_finished": normal_finished,
+		"hard_finished": hard_finished,
+		"commercial_strength_ok": finished_all and hard_safer_high_danger and hard_safer_deal_in and hard_safer_deal_in_to_human,
 		"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
 		"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
 		"normal_high_danger": float(normal.get("high_danger_rate", 1.0)),
 		"hard_human_claim_declines": int(hard.get("human_claim_declines", 0)),
 		"easy_human_claim_declines": int(easy.get("human_claim_declines", 0)),
 	}
+
+
+func sample_ai_commercial_strength_pack(hands_per_diff: int = 2, seed_bases: Array = [20260730, 20260811, 20260827], include_shuffled: bool = true) -> Dictionary:
+	# R68: 多固定种子 + 可选打乱人设的低资源商用强度证据包。
+	var seeds: Array = seed_bases.duplicate() if typeof(seed_bases) == TYPE_ARRAY and not seed_bases.is_empty() else [20260730]
+	var fixed_rows: Array = []
+	var all_ok = true
+	var total_ms = 0
+	for seed_base in seeds:
+		var seed_int = int(seed_base)
+		var t0 = Time.get_ticks_msec()
+		var bench = sample_ai_strength_benchmark(hands_per_diff, seed_int)
+		var elapsed = Time.get_ticks_msec() - t0
+		total_ms += elapsed
+		var row = {
+			"mode": "fixed",
+			"seed_base": seed_int,
+			"hands_per_diff": hands_per_diff,
+			"elapsed_ms": elapsed,
+			"commercial_strength_ok": bool(bench.get("commercial_strength_ok", false)),
+			"finished_all": bool(bench.get("finished_all", false)),
+			"easy_high_danger": float(bench.get("easy_high_danger", 1.0)),
+			"hard_high_danger": float(bench.get("hard_high_danger", 1.0)),
+			"easy_deal_in": float(bench.get("easy_deal_in", 1.0)),
+			"hard_deal_in": float(bench.get("hard_deal_in", 1.0)),
+			"easy_deal_in_to_human": float(bench.get("easy_deal_in_to_human", 1.0)),
+			"hard_deal_in_to_human": float(bench.get("hard_deal_in_to_human", 1.0)),
+			"avg_ms_easy": float(bench.get("avg_ms_easy", 0.0)),
+			"avg_ms_hard": float(bench.get("avg_ms_hard", 0.0)),
+		}
+		fixed_rows.append(row)
+		if not bool(row.get("commercial_strength_ok", false)):
+			all_ok = false
+	var shuffled_row := {}
+	if include_shuffled:
+		var shuffle_seed = int(seeds[0]) + 101
+		var t1 = Time.get_ticks_msec()
+		var raw = sample_bot_strength_across_difficulties(hands_per_diff, shuffle_seed, true)
+		var elapsed_s = Time.get_ticks_msec() - t1
+		total_ms += elapsed_s
+		var by: Dictionary = raw.get("by_diff", {})
+		var easy: Dictionary = by.get(AI_DIFFICULTY_EASY, {})
+		var hard: Dictionary = by.get(AI_DIFFICULTY_HARD, {})
+		var easy_hd = float(easy.get("high_danger_rate", 1.0))
+		var hard_hd = float(hard.get("high_danger_rate", 1.0))
+		var easy_di = float(easy.get("deal_in_rate", 1.0))
+		var hard_di = float(hard.get("deal_in_rate", 1.0))
+		var easy_dih = float(easy.get("deal_in_to_human_rate", 1.0))
+		var hard_dih = float(hard.get("deal_in_to_human_rate", 1.0))
+		var finished_all = int(easy.get("ended", 0)) >= hands_per_diff and int(hard.get("ended", 0)) >= hands_per_diff
+		var shuffle_ok = finished_all and hard_hd <= easy_hd + 0.08 and hard_di <= easy_di + 0.34 and hard_dih <= easy_dih + 0.34
+		shuffled_row = {
+			"mode": "shuffled",
+			"seed_base": shuffle_seed,
+			"hands_per_diff": hands_per_diff,
+			"elapsed_ms": elapsed_s,
+			"commercial_strength_ok": shuffle_ok,
+			"finished_all": finished_all,
+			"easy_high_danger": easy_hd,
+			"hard_high_danger": hard_hd,
+			"easy_deal_in": easy_di,
+			"hard_deal_in": hard_di,
+			"easy_deal_in_to_human": easy_dih,
+			"hard_deal_in_to_human": hard_dih,
+			"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
+			"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
+		}
+		if not shuffle_ok:
+			all_ok = false
+	var pack := {
+		"version": APP_VERSION,
+		"hands_per_diff": hands_per_diff,
+		"seed_bases": seeds,
+		"include_shuffled": include_shuffled,
+		"fixed_rows": fixed_rows,
+		"shuffled_row": shuffled_row,
+		"total_elapsed_ms": total_ms,
+		"commercial_strength_ok": all_ok and not fixed_rows.is_empty(),
+		"fixed_pass_count": 0,
+	}
+	var fixed_pass = 0
+	for row in fixed_rows:
+		if bool(row.get("commercial_strength_ok", false)):
+			fixed_pass += 1
+	pack["fixed_pass_count"] = fixed_pass
+	return pack
+
+
+func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: String = "res://build/qa/ai_play_commercial_evidence") -> Dictionary:
+	# 把 R68 强度证据写成可复查 JSON/Markdown，避免只靠临时 probe 输出。
+	var out := {
+		"ok": false,
+		"dir": output_dir,
+		"json_path": "",
+		"md_path": "",
+		"error": "",
+	}
+	if pack.is_empty():
+		out["error"] = "empty_pack"
+		return out
+	var abs_dir = ProjectSettings.globalize_path(output_dir)
+	var dir_err = DirAccess.make_dir_recursive_absolute(abs_dir)
+	if dir_err != OK and not DirAccess.dir_exists_absolute(abs_dir):
+		out["error"] = "mkdir_failed:%d" % dir_err
+		return out
+	var json_path = output_dir.rstrip("/") + "/STRENGTH_PACK_LATEST.json"
+	var md_path = output_dir.rstrip("/") + "/STRENGTH_PACK_LATEST.md"
+	var json_file = FileAccess.open(json_path, FileAccess.WRITE)
+	if json_file == null:
+		out["error"] = "json_open_failed"
+		return out
+	json_file.store_string(JSON.stringify(pack, "	"))
+	json_file.close()
+	var lines: Array[String] = []
+	lines.append("# AI Commercial Strength Pack Latest")
+	lines.append("")
+	lines.append("Version: `%s`" % str(pack.get("version", APP_VERSION)))
+	lines.append("Hands/diff: %d" % int(pack.get("hands_per_diff", 0)))
+	lines.append("Commercial gate: **%s**" % ("PASS" if bool(pack.get("commercial_strength_ok", false)) else "FAIL"))
+	lines.append("Total elapsed ms: %d" % int(pack.get("total_elapsed_ms", 0)))
+	lines.append("")
+	lines.append("## Fixed-profile seeds")
+	for row in pack.get("fixed_rows", []):
+		if typeof(row) != TYPE_DICTIONARY:
+			continue
+		lines.append("- seed %s: ok=%s hd e/h=%.3f/%.3f di e/h=%.2f/%.2f human e/h=%.2f/%.2f ms_h=%.0f" % [
+			str(row.get("seed_base", 0)),
+			str(row.get("commercial_strength_ok", false)),
+			float(row.get("easy_high_danger", 1.0)),
+			float(row.get("hard_high_danger", 1.0)),
+			float(row.get("easy_deal_in", 1.0)),
+			float(row.get("hard_deal_in", 1.0)),
+			float(row.get("easy_deal_in_to_human", 1.0)),
+			float(row.get("hard_deal_in_to_human", 1.0)),
+			float(row.get("avg_ms_hard", 0.0)),
+		])
+	var shuffled = pack.get("shuffled_row", {})
+	if typeof(shuffled) == TYPE_DICTIONARY and not (shuffled as Dictionary).is_empty():
+		lines.append("")
+		lines.append("## Shuffled-profile sample")
+		lines.append("- seed %s: ok=%s hd e/h=%.3f/%.3f di e/h=%.2f/%.2f human e/h=%.2f/%.2f ms_h=%.0f" % [
+			str(shuffled.get("seed_base", 0)),
+			str(shuffled.get("commercial_strength_ok", false)),
+			float(shuffled.get("easy_high_danger", 1.0)),
+			float(shuffled.get("hard_high_danger", 1.0)),
+			float(shuffled.get("easy_deal_in", 1.0)),
+			float(shuffled.get("hard_deal_in", 1.0)),
+			float(shuffled.get("easy_deal_in_to_human", 1.0)),
+			float(shuffled.get("hard_deal_in_to_human", 1.0)),
+			float(shuffled.get("avg_ms_hard", 0.0)),
+		])
+	lines.append("")
+	lines.append("Generated by `sample_ai_commercial_strength_pack` / R68.")
+	var md_file = FileAccess.open(md_path, FileAccess.WRITE)
+	if md_file == null:
+		out["error"] = "md_open_failed"
+		return out
+	md_file.store_string("
+".join(lines) + "
+")
+	md_file.close()
+	out["ok"] = true
+	out["json_path"] = json_path
+	out["md_path"] = md_path
+	return out
+
 
 func run_ai_until_human() -> void:
 	if offline_ai_active:
@@ -1415,7 +1632,12 @@ func finish_wall_draw() -> void:
 	# 荒庄不再是零分收束：按听牌/未听做一次低成本查听罚符，
 	# 避免商用对局里听牌无收益、未听无代价。
 	var settlement = settle_wall_draw_tenpai_payments()
-	last_score_deltas = settlement.get("deltas", [0, 0, 0, 0])
+	var settled_deltas = settlement.get("deltas", [0, 0, 0, 0])
+	var next_deltas: Array[int] = [0, 0, 0, 0]
+	if typeof(settled_deltas) == TYPE_ARRAY:
+		for i in range(mini(4, (settled_deltas as Array).size())):
+			next_deltas[i] = int((settled_deltas as Array)[i])
+	last_score_deltas = next_deltas
 	last_win_score = {
 		"wall_draw": true,
 		"fan": 0,
@@ -1465,7 +1687,7 @@ func is_seat_tenpai_for_wall_draw(seat: int) -> bool:
 
 
 func settle_wall_draw_tenpai_payments() -> Dictionary:
-	var deltas: Array = [0, 0, 0, 0]
+	var deltas: Array[int] = [0, 0, 0, 0]
 	var tenpai_seats: Array = []
 	var noten_seats: Array = []
 	var result := {
@@ -1682,6 +1904,8 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	last_win_score["winner"] = winner
 	last_win_score["win_tile"] = win_tile
 	last_win_score["self_draw"] = self_draw
+	last_win_score["from_seat"] = -1 if self_draw else from_seat
+	last_win_score["multi_ron"] = false
 	last_win_score["package_payer"] = package_payer if has_package_payment else -1
 	last_win_score["package_payment"] = has_package_payment
 

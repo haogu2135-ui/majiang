@@ -80,7 +80,10 @@ func run_hand(scene, diff: int, hand_index: int) -> void:
 	if int(result.get("winner", -1)) >= 0:
 		check(not scene.last_win_score.is_empty() and int(scene.last_win_score.get("fan", 0)) >= 1, "%s 胡牌保留当前结算详情" % prefix)
 	else:
-		check(scene.last_win_score.is_empty() and scene.last_score_deltas == [0, 0, 0, 0], "%s 荒庄没有残留胡牌结算" % prefix)
+		# 荒庄可带查听分差，但绝不能残留普通胡牌番种。
+		check(bool(scene.last_win_score.get("wall_draw", false)) or scene.last_win_score.is_empty(), "%s 荒庄只保留查听摘要或空详情" % prefix)
+		check(int(scene.last_win_score.get("fan", 0)) == 0, "%s 荒庄没有胡牌番数" % prefix)
+		check(delta_total(scene) == 0, "%s 荒庄查听分差仍守恒" % prefix)
 
 
 func run() -> void:

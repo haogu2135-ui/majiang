@@ -49,7 +49,7 @@ func run() -> void:
 	scene.last_win_score = stale_win()
 	scene.offline_last_winner = 2
 	scene.finish_wall_draw()
-	check(scene.last_win_score.is_empty(), "荒庄不保留上一局胡牌番种")
+	check(bool(scene.last_win_score.get("wall_draw", false)) and int(scene.last_win_score.get("fan", -1)) == 0, "荒庄不保留上一局胡牌番种，只记查听摘要")
 	check(scene.offline_last_winner == -1, "荒庄没有赢家座位")
 	check(scene.round_summary.find("荒庄") >= 0, "荒庄结算摘要保持正确")
 

@@ -499,6 +499,7 @@ var offline_ai_active = false
 var offline_all_bot_mode := false
 var offline_sim_quiet := false
 var offline_match_briefing_shown := false
+var offline_skip_ai_profile_reshuffle := false
 ## seat -> AI_PROFILES index; reshuffled by difficulty for variety
 var ai_profile_seat_map: Array = [0, 1, 2, 3]
 var ai_sim_stats: Dictionary = {}

@@ -118,7 +118,8 @@ func ai_claim_action_score(report: Dictionary, offset: int) -> float:
 	var risk_multiplier = clamp((2.0 - attack) * ai_risk_factor(seat), 0.64, 1.42)
 	var route_bonus = ai_claim_route_bonus(report)
 	var human_pen = float(report.get("human_claim_penalty", 0.0))
-	return base * claim_aggression - float(offset) + (float(shanten_gain) * 28.0 + clamp(shape_gain, -24.0, 96.0) * 0.05) * attack - forced_risk * 0.03 * risk_multiplier + route_bonus - human_pen
+	var wall_draw_pen = float(report.get("wall_draw_claim_penalty", 0.0))
+	return base * claim_aggression - float(offset) + (float(shanten_gain) * 28.0 + clamp(shape_gain, -24.0, 96.0) * 0.05) * attack - forced_risk * 0.03 * risk_multiplier + route_bonus - human_pen - wall_draw_pen
 
 func ai_claim_route_bonus(report: Dictionary) -> float:
 	if report.is_empty():
@@ -198,8 +199,10 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		"declined_by_pressure": false,
 		"declined_by_plan": false,
 		"declined_by_human": false,
+		"declined_by_wall_draw": false,
 		"from_seat": -1,
 		"human_claim_penalty": 0.0,
+		"wall_draw_claim_penalty": 0.0,
 		"plan_label": "",
 		"chi_choice": {},
 		"ai_profile": ai_profile_label(seat),
@@ -295,6 +298,12 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	if declined_by_human:
 		allow = false
 		reason = str(human_discipline.get("reason", "防点玩家"))
+	var wall_draw_discipline = wall_draw_claim_discipline_report(seat, claim, before_shanten, after_shanten, shape_gain, exposed_melds)
+	# 残墙查听拒绝独立记录；即便牌型收益已不足，也要暴露商用拒因。
+	var declined_by_wall_draw = bool(wall_draw_discipline.get("decline", false))
+	if declined_by_wall_draw:
+		allow = false
+		reason = str(wall_draw_discipline.get("reason", "查听拒副露"))
 	report["allow"] = allow
 	report["reason"] = reason
 	report["before_shanten"] = before_shanten
@@ -312,8 +321,10 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	report["declined_by_plan"] = declined_by_plan
 	report["declined_by_opening"] = declined_by_opening
 	report["declined_by_human"] = declined_by_human
+	report["declined_by_wall_draw"] = declined_by_wall_draw
 	report["from_seat"] = from_seat
 	report["human_claim_penalty"] = float(human_discipline.get("penalty", 0.0))
+	report["wall_draw_claim_penalty"] = float(wall_draw_discipline.get("penalty", 0.0))
 	report["plan_label"] = before_plan_label
 	report["plan_bonus"] = float(claim_context.get("before_plan_bonus", 0.0)) if has_claim_context else float(hand_plan_report_for_seat_from_counts(seat, hand_counts, hand.size()).get("score_bonus", 0.0))
 	report["after_plan_label"] = str(after_plan_report.get("label", before_plan_label))
@@ -605,6 +616,9 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	if wall <= 18 or multi_threat or threat_rank >= 3 or readiness >= 12.5:
 		report["reason"] = "高压必胡"
 		return report
+	if should_force_accept_for_wall_draw_ba(seat, points, wall):
+		report["reason"] = "查听落袋"
+		return report
 	if strategy == "守成" or defense >= 1.25:
 		report["reason"] = "守成必胡"
 		return report
@@ -629,6 +643,10 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["reason"] = "厚听稳胡"
 		return report
 	if depth_ok and value_ok and profile_ok and fan <= 2:
+		# 残墙查听临近时，低番也优先落袋，避免未听付罚。
+		if should_force_accept_for_wall_draw_ba(seat, points, wall):
+			report["reason"] = "查听落袋"
+			return report
 		report["accept"] = false
 		report["reason"] = "留听高番"
 		report["score"] = 120.0 + float(alt_best_fan) * 10.0
@@ -747,6 +765,9 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	if wall <= 20 or multi_threat or threat_rank >= 3 or readiness >= 12.5:
 		report["reason"] = "高压必摸"
 		return report
+	if should_force_accept_for_wall_draw_ba(seat, points, wall):
+		report["reason"] = "查听落袋"
+		return report
 	if strategy == "守成" or defense >= 1.25:
 		report["reason"] = "守成必摸"
 		return report
@@ -767,6 +788,9 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		report["reason"] = "简单必摸"
 		return report
 	if depth_ok and value_ok and profile_ok and fan <= 3:
+		if should_force_accept_for_wall_draw_ba(seat, points, wall):
+			report["reason"] = "查听落袋"
+			return report
 		report["accept"] = false
 		report["reason"] = "留听高番自摸"
 		report["score"] = 140.0 + float(alt_best_fan) * 10.0
@@ -1646,11 +1670,12 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var opening_push = opening_efficiency_adjustment(seat, tile, shanten, original_counts, exposed_melds)
 	var post_meld_push = post_meld_route_adjustment(seat, tile, exposed_melds, original_counts, plan_label, plan_suit, shanten)
 	var open_wait_push = open_tenpai_quality_adjustment(seat, exposed_melds, shanten, wait_total_remaining, int(effective_tiles.size()) if typeof(effective_tiles) == TYPE_ARRAY else 0, wait_average_points, wait_best_points)
+	var wall_draw_push = wall_draw_tenpai_preservation_adjustment(seat, shanten, ukeire)
 	var score = -float(shanten) * 760.0
 	score += (float(ukeire) * 26.0 + float(variety) * 18.0) * attack
 	score += (shape * 0.30 + shape_quality * 0.42) * attack
 	score += (plan * 0.42 + plan_bonus) * route_focus + tenpai_bonus * attack
-	score += pressure * 1.12 - risk * defense * risk_factor + safety_bonus + emergency_defense + fold_push + midgame_push + opening_push + post_meld_push + open_wait_push
+	score += pressure * 1.12 - risk * defense * risk_factor + safety_bonus + emergency_defense + fold_push + midgame_push + opening_push + post_meld_push + open_wait_push + wall_draw_push
 	score -= feed_risk * discard_feed_penalty_weight(defense, shanten) * risk_factor
 	score += wait_value
 	# R8: 高危弃牌显式加罚——困难更重，降低实战放炮率
@@ -1700,6 +1725,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		"safety_bonus": safety_bonus,
 		"emergency_defense": emergency_defense,
 		"fold_push": fold_push,
+		"wall_draw_push": wall_draw_push,
 		"stance": ai_stance_label(defense, shanten),
 		"defense": defense,
 		"human_target_penalty": human_pen,
@@ -2089,6 +2115,175 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 		safety_value *= 1.18
 		danger_penalty *= 1.10
 	return (safety_value - danger_penalty) * scale
+
+
+func wall_draw_ba_urgency(wall_count: int = -1) -> float:
+	# 0..1：牌墙越接近荒庄，查听罚符越应影响听牌保留与落袋。
+	var wall = wall_count if wall_count >= 0 else get_wall_count()
+	if wall > 24:
+		return 0.0
+	return clamp(1.0 - float(wall) / 24.0, 0.0, 1.0)
+
+
+func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: int = 0) -> float:
+	# 残墙查听：听牌加分、一向听薄形追听、离听过远则不再硬推。
+	var urgency = wall_draw_ba_urgency()
+	if urgency <= 0.0 or seat < 0:
+		return 0.0
+	var ba = float(max(0, WALL_DRAW_NOTEN_BA))
+	var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var diff_scale = 0.72 if diff == AI_DIFFICULTY_EASY else (1.18 if diff == AI_DIFFICULTY_HARD else 1.0)
+	if shanten <= 0:
+		# 已听：保住查听收入，并略抬安全听牌。
+		return (52.0 + ba * 0.028) * urgency * diff_scale
+	if shanten == 1:
+		# 一向听：进张尚够时追听，避免荒庄付罚。
+		var chase = 28.0 + ba * 0.016 + float(clamp(ukeire, 0, 8)) * 1.8
+		return chase * urgency * diff_scale
+	if shanten >= 3:
+		# 明显未听：残墙不再为虚攻牺牲安全。
+		return -(18.0 + ba * 0.01) * urgency * diff_scale
+	return 0.0
+
+
+func should_force_accept_for_wall_draw_ba(seat: int, points: int, wall_count: int = -1) -> bool:
+	# 残墙末期：任何正分和都优先落袋；稍早则要求分数至少覆盖一部分查听罚符，
+	# 避免为虚高替代听口把已进张的小分拖进荒庄。
+	if seat < 0 or points <= 0:
+		return false
+	var wall = wall_count if wall_count >= 0 else get_wall_count()
+	var urgency = wall_draw_ba_urgency(wall)
+	if urgency <= 0.0:
+		return false
+	# 极残墙：直接落袋，与高压必胡窗口衔接但覆盖 19 张以上的空档。
+	if wall <= 12:
+		return true
+	var ba = max(0, WALL_DRAW_NOTEN_BA)
+	if ba <= 0:
+		return false
+	var need = int(round(float(ba) * (0.55 if urgency >= 0.55 else 0.85)))
+	match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
+		AI_DIFFICULTY_HARD:
+			need = int(round(float(need) * 0.85))
+		AI_DIFFICULTY_EASY:
+			need = int(round(float(need) * 1.20))
+	return points >= need
+
+
+func wall_draw_claim_discipline_report(seat: int, claim: String, before_shanten: int, after_shanten: int, shape_gain: float, exposed_melds: int = 0, wall_count: int = -1) -> Dictionary:
+	# R63: 残墙查听下，拒绝无法靠近听牌的脏副露，避免副露后仍付未听罚符。
+	var out := {
+		"decline": false,
+		"reason": "",
+		"penalty": 0.0,
+		"urgency": 0.0,
+	}
+	if seat < 0 or claim == "":
+		return out
+	var wall = wall_count if wall_count >= 0 else get_wall_count()
+	var urgency = wall_draw_ba_urgency(wall)
+	out["urgency"] = urgency
+	if urgency <= 0.0:
+		return out
+	var ba = float(max(0, WALL_DRAW_NOTEN_BA))
+	var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var diff_scale = 0.55 if diff == AI_DIFFICULTY_EASY else (1.25 if diff == AI_DIFFICULTY_HARD else 1.0)
+	var improved = after_shanten < before_shanten
+	var to_tenpai = after_shanten <= 0
+	var to_one_away = improved and after_shanten == 1
+	# 已听/进听/逼近一向听：查听目标一致，放行。
+	if to_tenpai or to_one_away:
+		return out
+	if claim == "gang" and improved:
+		return out
+	var pen = 0.0
+	if (not improved) and after_shanten >= 2:
+		pen = (10.0 + ba * 0.008 + float(after_shanten) * 3.0) * urgency * diff_scale
+		if claim == "chi":
+			pen *= 1.25
+		elif claim == "peng":
+			pen *= 1.05
+	elif (not improved) and after_shanten >= 1:
+		pen = (4.0 + ba * 0.004) * urgency * diff_scale
+	# 已开门后的弱收益副露，残墙更克制。
+	if exposed_melds >= 1 and (not improved) and after_shanten >= 2:
+		pen += 6.0 * urgency * diff_scale
+	out["penalty"] = clamp(pen, 0.0, 90.0)
+	# 极残墙：未降向听且仍离听 >=2，直接拒。
+	if wall <= 12 and after_shanten >= 2 and not improved:
+		out["decline"] = true
+		out["reason"] = "查听拒副露"
+		return out
+	# 中残墙：高向听无改善的脏开门/续露，按难度拒。
+	if wall <= 18 and before_shanten >= 3 and not improved:
+		if diff == AI_DIFFICULTY_EASY and claim != "chi" and shape_gain >= 34.0:
+			return out
+		out["decline"] = true
+		out["reason"] = "查听拒副露"
+		return out
+	# 高紧迫度：无改善且仍 2 向听以上的弱收益副露。
+	if urgency >= 0.5 and after_shanten >= 2 and not improved:
+		var need = 28.0 if claim == "peng" else (22.0 if claim == "gang" else 36.0)
+		if diff == AI_DIFFICULTY_HARD:
+			need += 6.0
+		elif diff == AI_DIFFICULTY_EASY:
+			need -= 8.0
+		if shape_gain < need:
+			out["decline"] = true
+			out["reason"] = "查听拒副露"
+	return out
+
+
+func wall_draw_self_gang_discipline_report(seat: int, gang_kind: String, before_shanten: int, after_shanten: int, wall_count: int = -1) -> Dictionary:
+	# R67: 残墙查听下，拒绝无法靠近听牌的暗杠/补杠，避免杠后仍付未听罚符。
+	var out := {
+		"decline": false,
+		"reason": "",
+		"penalty": 0.0,
+		"urgency": 0.0,
+	}
+	if seat < 0 or gang_kind == "":
+		return out
+	var wall = wall_count if wall_count >= 0 else get_wall_count()
+	var urgency = wall_draw_ba_urgency(wall)
+	out["urgency"] = urgency
+	if urgency <= 0.0:
+		return out
+	var ba = float(max(0, WALL_DRAW_NOTEN_BA))
+	var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var diff_scale = 0.55 if diff == AI_DIFFICULTY_EASY else (1.25 if diff == AI_DIFFICULTY_HARD else 1.0)
+	var improved = after_shanten < before_shanten
+	var to_tenpai = after_shanten <= 0
+	var to_one_away = improved and after_shanten == 1
+	# 已听/进听/逼近一向听：查听目标一致，放行。
+	if to_tenpai or to_one_away:
+		return out
+	var pen = 0.0
+	if (not improved) and after_shanten >= 2:
+		pen = (12.0 + ba * 0.01 + float(after_shanten) * 3.5) * urgency * diff_scale
+		if gang_kind == "added":
+			pen *= 1.10
+	elif (not improved) and after_shanten >= 1:
+		pen = (5.0 + ba * 0.005) * urgency * diff_scale
+	out["penalty"] = clamp(pen, 0.0, 110.0)
+	# 极残墙：未降向听且仍离听 >=2，直接拒。
+	if wall <= 12 and after_shanten >= 2 and not improved:
+		out["decline"] = true
+		out["reason"] = "查听拒杠"
+		return out
+	# 中残墙：高向听无改善的脏杠，按难度拒。
+	if wall <= 18 and before_shanten >= 3 and not improved:
+		if diff == AI_DIFFICULTY_EASY and gang_kind == "concealed" and after_shanten <= 2:
+			return out
+		out["decline"] = true
+		out["reason"] = "查听拒杠"
+		return out
+	# 高紧迫度：无改善且仍 2 向听以上。
+	if urgency >= 0.5 and after_shanten >= 2 and not improved:
+		out["decline"] = true
+		out["reason"] = "查听拒杠"
+	return out
+
 
 # 两向听/三向听在多威胁下的危险弃牌惩罚：补 emergency 与 tenpai_fold 之间的空档。
 # 序盘效率：优先切孤张字牌/幺九，避免过早打散对子与两面。
@@ -3401,6 +3596,8 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 		"defense": 0.0,
 		"rob_risk": false,
 		"declined_by_plan": false,
+		"declined_by_wall_draw": false,
+		"wall_draw_gang_penalty": 0.0,
 	}
 	if seat < 0 or seat >= players.size() or tile == "":
 		return report
@@ -3478,6 +3675,16 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	if bool(report.get("allow", false)) and pressure >= 6.8 and after_shanten >= 2 and not is_terminal_or_honor(tile):
 		report["allow"] = false
 		report["reason"] = "高压防守"
+	var wall_draw_discipline = wall_draw_self_gang_discipline_report(seat, gang_kind, before_shanten, after_shanten)
+	# 残墙查听拒因独立记录，即使其他门槛已拒也要暴露商用原因。
+	var declined_by_wall_draw = bool(wall_draw_discipline.get("decline", false))
+	if declined_by_wall_draw:
+		report["allow"] = false
+		report["reason"] = str(wall_draw_discipline.get("reason", "查听拒杠"))
+	report["declined_by_wall_draw"] = declined_by_wall_draw
+	report["wall_draw_gang_penalty"] = float(wall_draw_discipline.get("penalty", 0.0))
+	# 用最新 allow / 查听罚分重算，保证选择器排序与拒因一致。
+	report["score"] = ai_self_gang_action_score(report)
 	return report
 
 func ai_self_gang_action_score(report: Dictionary) -> float:
@@ -3524,6 +3731,7 @@ func ai_self_gang_action_score(report: Dictionary) -> float:
 		score -= 1000.0
 	if bool(report.get("declined_by_plan", false)):
 		score -= 1000.0
+	score -= float(report.get("wall_draw_gang_penalty", 0.0))
 	return score
 
 func ai_self_gang_score_threshold(gang_kind: String, before_shanten: int) -> float:

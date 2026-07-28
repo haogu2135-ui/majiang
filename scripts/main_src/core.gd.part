@@ -720,7 +720,10 @@ func deal_offline_hand() -> void:
 	last_discard_seat = -1
 	# 每局按难度刷新 AI 人设座位映射（标准/困难有轮换）
 	if mode == "offline":
-		reshuffle_ai_profiles_for_hand()
+		if offline_skip_ai_profile_reshuffle:
+			offline_skip_ai_profile_reshuffle = false
+		else:
+			reshuffle_ai_profiles_for_hand()
 	for seat in range(players.size()):
 		players[seat]["hand"] = []
 		players[seat]["discards"] = []
