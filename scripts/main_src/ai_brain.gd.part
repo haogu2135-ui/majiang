@@ -1384,11 +1384,16 @@ func get_ai_discard_reports(seat: int) -> Array:
 	var hand: Array = players[seat]["hand"]
 	if hand.is_empty():
 		return reports
-	var cache_key = ai_report_cache_key(seat)
-	if ai_report_cache.has(cache_key):
+	# Quiet all-bot hands advance after every decision, so a state-keyed report
+	# cannot be reused. Avoid retaining deep report copies during benchmarks;
+	# player-facing turns still use the cache for UI/advisor redraws.
+	var use_report_cache = not offline_sim_quiet
+	var cache_key = ai_report_cache_key(seat) if use_report_cache else ""
+	if use_report_cache and ai_report_cache.has(cache_key):
 		ai_report_cache_hits += 1
 		return duplicate_report_array(ai_report_cache[cache_key])
-	ai_report_cache_misses += 1
+	if use_report_cache:
+		ai_report_cache_misses += 1
 	var open_melds = players[seat]["melds"].size()
 	var visible_counts_snapshot = visible_tile_counts()
 	var eval_context = make_ai_evaluation_context(seat, visible_counts_snapshot)
@@ -1502,7 +1507,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 		simulated.insert(i, candidate)
 	sort_ai_discard_reports(reports)
 	apply_hard_danger_push_guard(reports)
-	store_ai_report_cache(cache_key, reports)
+	if use_report_cache:
+		store_ai_report_cache(cache_key, reports)
 	return duplicate_report_array(reports)
 
 func sort_ai_discard_reports(reports: Array) -> void:
@@ -1520,38 +1526,91 @@ func apply_hard_danger_push_guard(reports: Array) -> void:
 		return
 	var best: Dictionary = reports[0]
 	var best_shanten = int(best.get("shanten", 8))
-	if best_shanten > 1:
-		return
 	var best_risk = float(best.get("risk", 0.0))
 	var best_feed = float(best.get("feed_risk", 0.0))
+	var best_human_pressure = float(best.get("human_target_pressure", 0.0))
+	var best_wait_points = int(best.get("wait_best_points", 0))
+	var best_wait_remaining = int(best.get("wait_total_remaining", 0))
+	# 通常只在听牌/一向听时允许折返；但二向听若同时出现灾难级放铳、
+	# 喂牌或对玩家压力，继续硬推没有商用价值，应至少比较一张三向听弃攻牌。
+	var two_away_emergency = best_shanten == 2 and (
+		best_risk >= AI_DANGER_RISK_HIGH + 14.0
+		or best_feed >= AI_DANGER_FEED_SOFT + 28.0
+		or best_human_pressure >= 32.0
+	)
+	# 三项风险同时失控时，同向听的弃攻价值应高于单纯的效率分。
+	# 保留该更宽让步给真正灾难局，避免普通高压手牌过早放弃进攻。
+	var catastrophe_two_away = best_shanten == 2 \
+		and best_risk >= AI_DANGER_RISK_HIGH + 26.0 \
+		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
+		and best_human_pressure >= 28.0
+	# 低价值薄听不应在灾难级危险下硬推：只在 2 番以内、最多四张待牌时
+	# 放宽到一向听的折返，避免把高番/厚听也错误折掉。
+	var catastrophe_tenpai = best_shanten <= 0 \
+		and best_risk >= AI_DANGER_RISK_HIGH + 22.0 \
+		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
+		and best_wait_points > 0 and best_wait_points <= score_points_for_fan(2) \
+		and best_wait_remaining > 0 and best_wait_remaining <= 4
+	# 一向听仍有极端风险时，若同向听候选只损失极少效率却确实更安全，
+	# 不应被通用 14 分防守阈值卡住。该例外不允许增加向听。
+	var extreme_one_away = best_shanten == 1 \
+		and best_risk >= AI_DANGER_RISK_HIGH + 24.0 \
+		and best_feed >= AI_DANGER_FEED_SOFT + 20.0 \
+		and best_human_pressure >= 20.0
+	if ai_sim_trace_enabled:
+		best["hard_guard_two_away"] = two_away_emergency
+		best["hard_guard_catastrophe_two_away"] = catastrophe_two_away
+		best["hard_guard_catastrophe_tenpai"] = catastrophe_tenpai
+		best["hard_guard_extreme_one_away"] = extreme_one_away
+	if best_shanten > 1 and not two_away_emergency:
+		return
+	if best_shanten <= 0 and not catastrophe_tenpai:
+		return
 	if best_risk < AI_DANGER_RISK_HIGH + 6.0 and best_feed < AI_DANGER_FEED_SOFT + 24.0:
 		return
 	var best_score = float(best.get("score", 0.0))
 	var best_pressure = hard_danger_push_rank(best)
 	var best_index = -1
 	var best_value = -INF
+	var trace_safest: Dictionary = {}
+	var trace_safest_rank = INF
 	for i in range(1, reports.size()):
 		var candidate: Dictionary = reports[i]
 		var candidate_shanten = int(candidate.get("shanten", 8))
 		var shanten_delta = candidate_shanten - best_shanten
 		if shanten_delta > 1:
 			continue
-		if shanten_delta > 0:
-			var best_human_pressure = float(best.get("human_target_pressure", 0.0))
-			if best_human_pressure < 18.0:
-				continue
-			var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
-			if candidate_human_pressure > best_human_pressure - 4.0:
-				continue
 		var score_gap = best_score - float(candidate.get("score", 0.0))
-		var max_gap = 360.0 if best_shanten <= 0 else 520.0
-		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
-			max_gap += 140.0
-		if score_gap > max_gap:
-			continue
 		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
 		pressure_gain += hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))
-		if pressure_gain < 14.0:
+		if ai_sim_trace_enabled and shanten_delta == 0:
+			var candidate_rank = hard_danger_push_rank(candidate)
+			if trace_safest.is_empty() or candidate_rank < trace_safest_rank:
+				trace_safest = candidate
+				trace_safest_rank = candidate_rank
+				best["hard_guard_safe_tile"] = str(candidate.get("tile", ""))
+				best["hard_guard_safe_score_gap"] = score_gap
+				best["hard_guard_safe_pressure_gain"] = pressure_gain
+		if shanten_delta > 0:
+			if best_human_pressure < 18.0 and not catastrophe_tenpai:
+				continue
+			var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
+			if candidate_human_pressure > best_human_pressure - 4.0 and not catastrophe_tenpai:
+				continue
+		var max_gap = 360.0 if best_shanten <= 0 else (520.0 if best_shanten == 1 else 300.0)
+		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
+			max_gap += 140.0
+		if catastrophe_two_away:
+			max_gap = max(max_gap, 700.0)
+		if catastrophe_tenpai:
+			max_gap = max(max_gap, 800.0)
+		if score_gap > max_gap:
+			continue
+		# 三项同时失控的二向听只要求仍有明确净风险收益；常规局仍使用更高门槛。
+		var minimum_pressure_gain = 12.0 if catastrophe_two_away else 14.0
+		if extreme_one_away and shanten_delta == 0:
+			minimum_pressure_gain = 2.0
+		if pressure_gain < minimum_pressure_gain:
 			continue
 		var value = pressure_gain - score_gap / 95.0 - float(max(0, shanten_delta)) * 2.4
 		if value > best_value:
@@ -1559,6 +1618,9 @@ func apply_hard_danger_push_guard(reports: Array) -> void:
 			best_index = i
 	if best_index > 0:
 		var safer = reports[best_index]
+		if ai_sim_trace_enabled:
+			safer["hard_guard_moved"] = true
+			safer["hard_guard_from_tile"] = str(best.get("tile", ""))
 		reports.remove_at(best_index)
 		reports.insert(0, safer)
 

@@ -523,6 +523,7 @@ var offline_skip_ai_profile_reshuffle := false
 ## seat -> AI_PROFILES index; reshuffled by difficulty for variety
 var ai_profile_seat_map: Array = [0, 1, 2, 3]
 var ai_sim_stats: Dictionary = {}
+var ai_sim_trace_enabled := false  # 仅基准诊断：记录紧凑弃牌链路，不进入正常对局
 var round_summary = ""
 var last_score_deltas: Array[int] = []
 var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情

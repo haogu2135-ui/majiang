@@ -2264,11 +2264,16 @@ func get_ai_discard_reports(seat: int) -> Array:
 	var hand: Array = players[seat]["hand"]
 	if hand.is_empty():
 		return reports
-	var cache_key = ai_report_cache_key(seat)
-	if ai_report_cache.has(cache_key):
+	# Quiet all-bot hands advance after every decision, so a state-keyed report
+	# cannot be reused. Avoid retaining deep report copies during benchmarks;
+	# player-facing turns still use the cache for UI/advisor redraws.
+	var use_report_cache = not offline_sim_quiet
+	var cache_key = ai_report_cache_key(seat) if use_report_cache else ""
+	if use_report_cache and ai_report_cache.has(cache_key):
 		ai_report_cache_hits += 1
 		return duplicate_report_array(ai_report_cache[cache_key])
-	ai_report_cache_misses += 1
+	if use_report_cache:
+		ai_report_cache_misses += 1
 	var open_melds = players[seat]["melds"].size()
 	var visible_counts_snapshot = visible_tile_counts()
 	var eval_context = make_ai_evaluation_context(seat, visible_counts_snapshot)
@@ -2382,7 +2387,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 		simulated.insert(i, candidate)
 	sort_ai_discard_reports(reports)
 	apply_hard_danger_push_guard(reports)
-	store_ai_report_cache(cache_key, reports)
+	if use_report_cache:
+		store_ai_report_cache(cache_key, reports)
 	return duplicate_report_array(reports)
 
 func sort_ai_discard_reports(reports: Array) -> void:
@@ -2400,38 +2406,91 @@ func apply_hard_danger_push_guard(reports: Array) -> void:
 		return
 	var best: Dictionary = reports[0]
 	var best_shanten = int(best.get("shanten", 8))
-	if best_shanten > 1:
-		return
 	var best_risk = float(best.get("risk", 0.0))
 	var best_feed = float(best.get("feed_risk", 0.0))
+	var best_human_pressure = float(best.get("human_target_pressure", 0.0))
+	var best_wait_points = int(best.get("wait_best_points", 0))
+	var best_wait_remaining = int(best.get("wait_total_remaining", 0))
+	# 通常只在听牌/一向听时允许折返；但二向听若同时出现灾难级放铳、
+	# 喂牌或对玩家压力，继续硬推没有商用价值，应至少比较一张三向听弃攻牌。
+	var two_away_emergency = best_shanten == 2 and (
+		best_risk >= AI_DANGER_RISK_HIGH + 14.0
+		or best_feed >= AI_DANGER_FEED_SOFT + 28.0
+		or best_human_pressure >= 32.0
+	)
+	# 三项风险同时失控时，同向听的弃攻价值应高于单纯的效率分。
+	# 保留该更宽让步给真正灾难局，避免普通高压手牌过早放弃进攻。
+	var catastrophe_two_away = best_shanten == 2 \
+		and best_risk >= AI_DANGER_RISK_HIGH + 26.0 \
+		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
+		and best_human_pressure >= 28.0
+	# 低价值薄听不应在灾难级危险下硬推：只在 2 番以内、最多四张待牌时
+	# 放宽到一向听的折返，避免把高番/厚听也错误折掉。
+	var catastrophe_tenpai = best_shanten <= 0 \
+		and best_risk >= AI_DANGER_RISK_HIGH + 22.0 \
+		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
+		and best_wait_points > 0 and best_wait_points <= score_points_for_fan(2) \
+		and best_wait_remaining > 0 and best_wait_remaining <= 4
+	# 一向听仍有极端风险时，若同向听候选只损失极少效率却确实更安全，
+	# 不应被通用 14 分防守阈值卡住。该例外不允许增加向听。
+	var extreme_one_away = best_shanten == 1 \
+		and best_risk >= AI_DANGER_RISK_HIGH + 24.0 \
+		and best_feed >= AI_DANGER_FEED_SOFT + 20.0 \
+		and best_human_pressure >= 20.0
+	if ai_sim_trace_enabled:
+		best["hard_guard_two_away"] = two_away_emergency
+		best["hard_guard_catastrophe_two_away"] = catastrophe_two_away
+		best["hard_guard_catastrophe_tenpai"] = catastrophe_tenpai
+		best["hard_guard_extreme_one_away"] = extreme_one_away
+	if best_shanten > 1 and not two_away_emergency:
+		return
+	if best_shanten <= 0 and not catastrophe_tenpai:
+		return
 	if best_risk < AI_DANGER_RISK_HIGH + 6.0 and best_feed < AI_DANGER_FEED_SOFT + 24.0:
 		return
 	var best_score = float(best.get("score", 0.0))
 	var best_pressure = hard_danger_push_rank(best)
 	var best_index = -1
 	var best_value = -INF
+	var trace_safest: Dictionary = {}
+	var trace_safest_rank = INF
 	for i in range(1, reports.size()):
 		var candidate: Dictionary = reports[i]
 		var candidate_shanten = int(candidate.get("shanten", 8))
 		var shanten_delta = candidate_shanten - best_shanten
 		if shanten_delta > 1:
 			continue
-		if shanten_delta > 0:
-			var best_human_pressure = float(best.get("human_target_pressure", 0.0))
-			if best_human_pressure < 18.0:
-				continue
-			var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
-			if candidate_human_pressure > best_human_pressure - 4.0:
-				continue
 		var score_gap = best_score - float(candidate.get("score", 0.0))
-		var max_gap = 360.0 if best_shanten <= 0 else 520.0
-		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
-			max_gap += 140.0
-		if score_gap > max_gap:
-			continue
 		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
 		pressure_gain += hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))
-		if pressure_gain < 14.0:
+		if ai_sim_trace_enabled and shanten_delta == 0:
+			var candidate_rank = hard_danger_push_rank(candidate)
+			if trace_safest.is_empty() or candidate_rank < trace_safest_rank:
+				trace_safest = candidate
+				trace_safest_rank = candidate_rank
+				best["hard_guard_safe_tile"] = str(candidate.get("tile", ""))
+				best["hard_guard_safe_score_gap"] = score_gap
+				best["hard_guard_safe_pressure_gain"] = pressure_gain
+		if shanten_delta > 0:
+			if best_human_pressure < 18.0 and not catastrophe_tenpai:
+				continue
+			var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
+			if candidate_human_pressure > best_human_pressure - 4.0 and not catastrophe_tenpai:
+				continue
+		var max_gap = 360.0 if best_shanten <= 0 else (520.0 if best_shanten == 1 else 300.0)
+		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
+			max_gap += 140.0
+		if catastrophe_two_away:
+			max_gap = max(max_gap, 700.0)
+		if catastrophe_tenpai:
+			max_gap = max(max_gap, 800.0)
+		if score_gap > max_gap:
+			continue
+		# 三项同时失控的二向听只要求仍有明确净风险收益；常规局仍使用更高门槛。
+		var minimum_pressure_gain = 12.0 if catastrophe_two_away else 14.0
+		if extreme_one_away and shanten_delta == 0:
+			minimum_pressure_gain = 2.0
+		if pressure_gain < minimum_pressure_gain:
 			continue
 		var value = pressure_gain - score_gap / 95.0 - float(max(0, shanten_delta)) * 2.4
 		if value > best_value:
@@ -2439,6 +2498,9 @@ func apply_hard_danger_push_guard(reports: Array) -> void:
 			best_index = i
 	if best_index > 0:
 		var safer = reports[best_index]
+		if ai_sim_trace_enabled:
+			safer["hard_guard_moved"] = true
+			safer["hard_guard_from_tile"] = str(best.get("tile", ""))
 		reports.remove_at(best_index)
 		reports.insert(0, safer)
 
@@ -5438,6 +5500,157 @@ func reset_ai_sim_stats() -> void:
 		"self_draw": false,
 		"deal_in_seat": -1,
 	}
+	if ai_sim_trace_enabled:
+		ai_sim_stats["discard_trace"] = []
+
+
+func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Array, source: String) -> void:
+	# 只在排查种子回退时保存小型数值快照，避免基准和正常对局承受日志分配。
+	if not ai_sim_trace_enabled:
+		return
+	var selected: Dictionary = {}
+	var selected_rank = -1
+	var safest: Dictionary = {}
+	var safest_rank = INF
+	for index in range(reports.size()):
+		var report = reports[index]
+		if typeof(report) != TYPE_DICTIONARY:
+			continue
+		var candidate: Dictionary = report
+		var candidate_rank = float(candidate.get("risk", 0.0)) + float(candidate.get("feed_risk", 0.0)) * 0.45 + float(candidate.get("human_target_pressure", 0.0)) * 0.60
+		if safest.is_empty() or candidate_rank < safest_rank:
+			safest = candidate
+			safest_rank = candidate_rank
+		if str(candidate.get("tile", "")) == tile:
+			selected = candidate
+			selected_rank = index
+	var best: Dictionary = reports[0] if not reports.is_empty() and typeof(reports[0]) == TYPE_DICTIONARY else {}
+	var entry := {
+		"step": step,
+		"seat": seat,
+		"difficulty": ai_difficulty,
+		"tile": tile,
+		"source": source,
+		"selected_rank": selected_rank,
+		"risk": float(selected.get("risk", 0.0)),
+		"feed": float(selected.get("feed_risk", 0.0)),
+		"human_pressure": float(selected.get("human_target_pressure", 0.0)),
+		"shanten": int(selected.get("shanten", -1)),
+		"safety": str(selected.get("safety_label", "")),
+		"score": float(selected.get("score", 0.0)),
+		"best_tile": str(best.get("tile", "")),
+		"best_risk": float(best.get("risk", 0.0)),
+		"best_feed": float(best.get("feed_risk", 0.0)),
+		"best_shanten": int(best.get("shanten", -1)),
+		"safest_tile": str(safest.get("tile", "")),
+		"safest_rank": safest_rank if not safest.is_empty() else -1.0,
+		"safest_risk": float(safest.get("risk", 0.0)),
+		"safest_feed": float(safest.get("feed_risk", 0.0)),
+		"safest_human_pressure": float(safest.get("human_target_pressure", 0.0)),
+		"safest_shanten": int(safest.get("shanten", -1)),
+		"safest_score": float(safest.get("score", 0.0)),
+		"wait_best_points": int(selected.get("wait_best_points", 0)),
+		"wait_total_remaining": int(selected.get("wait_total_remaining", 0)),
+		"wait_value": float(selected.get("wait_value", 0.0)),
+		"hard_guard_two_away": bool(selected.get("hard_guard_two_away", false)),
+		"hard_guard_catastrophe_two_away": bool(selected.get("hard_guard_catastrophe_two_away", false)),
+		"hard_guard_safe_tile": str(selected.get("hard_guard_safe_tile", "")),
+		"hard_guard_safe_score_gap": float(selected.get("hard_guard_safe_score_gap", 0.0)),
+		"hard_guard_safe_pressure_gain": float(selected.get("hard_guard_safe_pressure_gain", 0.0)),
+		"hard_guard_moved": bool(selected.get("hard_guard_moved", false)),
+		"hard_guard_from_tile": str(selected.get("hard_guard_from_tile", "")),
+	}
+	(ai_sim_stats.get("discard_trace", []) as Array).append(entry)
+
+
+func offline_tile_ledger_report() -> Dictionary:
+	# 仅供离线对局和静默基准验收：将牌墙、暗手、河牌、副露和补花统一
+	# 记账，防止流程回归出现丢牌/复制牌却仍能正常结束对局。
+	var expected: Dictionary = {}
+	var actual: Dictionary = {}
+	var unknown: Array[String] = []
+	var malformed: Array[String] = []
+	var flower_mismatches: Array[String] = []
+	for tile in TILE_CODES:
+		expected[str(tile)] = 4
+	for tile in FLOWER_CODES:
+		expected[str(tile)] = 1
+	var note_tiles := func(tiles, source: String) -> void:
+		if typeof(tiles) != TYPE_ARRAY:
+			malformed.append(source)
+			return
+		for item in tiles:
+			var tile = str(item)
+			if not expected.has(tile):
+				unknown.append("%s@%s" % [tile, source])
+				continue
+			actual[tile] = int(actual.get(tile, 0)) + 1
+	if players.size() != 4:
+		malformed.append("players=%d" % players.size())
+	note_tiles.call(wall, "wall")
+	for seat in range(players.size()):
+		var player = players[seat]
+		if typeof(player) != TYPE_DICTIONARY:
+			malformed.append("seat%d" % seat)
+			continue
+		var player_data: Dictionary = player
+		note_tiles.call(player_data.get("hand", []), "hand%d" % seat)
+		note_tiles.call(player_data.get("discards", []), "river%d" % seat)
+		var flowers = player_data.get("flower_tiles", [])
+		note_tiles.call(flowers, "flowers%d" % seat)
+		if typeof(flowers) == TYPE_ARRAY and int(player_data.get("flowers", 0)) != (flowers as Array).size():
+			flower_mismatches.append("seat%d" % seat)
+		var melds = player_data.get("melds", [])
+		if typeof(melds) != TYPE_ARRAY:
+			malformed.append("melds%d" % seat)
+			continue
+		for meld_index in range((melds as Array).size()):
+			note_tiles.call((melds as Array)[meld_index], "meld%d:%d" % [seat, meld_index])
+	var missing: Array[String] = []
+	var overflow: Array[String] = []
+	var expected_total = 0
+	var actual_total = 0
+	for tile in expected:
+		var want = int(expected[tile])
+		var found = int(actual.get(tile, 0))
+		expected_total += want
+		actual_total += found
+		if found < want:
+			missing.append("%s:%d" % [str(tile), want - found])
+		elif found > want:
+			overflow.append("%s:%d" % [str(tile), found - want])
+	return {
+		"ok": malformed.is_empty() and unknown.is_empty() and flower_mismatches.is_empty() and missing.is_empty() and overflow.is_empty() and actual_total == expected_total,
+		"expected_total": expected_total,
+		"actual_total": actual_total,
+		"missing": missing,
+		"overflow": overflow,
+		"unknown": unknown,
+		"malformed": malformed,
+		"flower_mismatches": flower_mismatches,
+	}
+
+
+func offline_score_ledger_report(expected_total: int = -1) -> Dictionary:
+	# 结算必须只在四家之间转移分数；静默基准以此防住漏扣、重复加分。
+	var total = 0
+	var malformed: Array[String] = []
+	if players.size() != 4:
+		malformed.append("players=%d" % players.size())
+	for seat in range(players.size()):
+		var player = players[seat]
+		if typeof(player) != TYPE_DICTIONARY:
+			malformed.append("seat%d" % seat)
+			continue
+		total += int((player as Dictionary).get("score", 0))
+	var expected = total if expected_total < 0 else expected_total
+	return {
+		"ok": malformed.is_empty() and total == expected,
+		"total": total,
+		"expected_total": expected,
+		"delta": total - expected,
+		"malformed": malformed,
+	}
 
 func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
 	# Preserve simulation danger telemetry for a forced discard without rebuilding
@@ -5487,6 +5700,10 @@ func _ai_sim_note_terminal_result(actor_seat: int) -> void:
 		return
 	ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
 	ai_sim_stats["deal_in_seat"] = actor_seat
+	if ai_sim_trace_enabled:
+		ai_sim_stats["terminal_trace_step"] = int(ai_sim_stats.get("steps", -1))
+		ai_sim_stats["terminal_tile"] = last_discard
+		ai_sim_stats["terminal_winner"] = winner
 	# R10: 点炮给玩家（seat0）单独计数，衡量人机防点炮。
 	if winner == 0:
 		ai_sim_stats["deal_ins_to_human"] = int(ai_sim_stats.get("deal_ins_to_human", 0)) + 1
@@ -5499,6 +5716,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 	reset_ai_sim_stats()
 	if wall.is_empty() or int(players[0].get("hand", []).size()) < 13:
 		deal_offline_hand()
+	var score_ledger_before = offline_score_ledger_report()
 	var guard = 0
 	while mode == "offline" and offline_phase != "ended" and guard < max_steps:
 		guard += 1
@@ -5574,6 +5792,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		seat = current_seat
 		var reports: Array = []
 		var discard_tile = tsumo_continue_discard
+		var discard_source = "preserve_tenpai" if discard_tile != "" else "ranked"
 		if discard_tile != "" and not is_valid_offline_discard(seat, discard_tile):
 			# 强制留听切张若撞上食替，改走普通合法候选，避免模拟卡死。
 			discard_tile = ""
@@ -5581,6 +5800,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 			reports = get_ai_discard_reports(seat)
 		if discard_tile == "" and reports.is_empty():
 			discard_tile = choose_legal_offline_discard_tile(seat)
+			discard_source = "legal_fallback"
 		elif discard_tile == "":
 			# 与 choose_ai_discard_for_seat 对齐（含简单档次优），但复用 reports 避免双倍开销
 			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
@@ -5596,8 +5816,10 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				discard_tile = choose_legal_offline_discard_tile(seat)
 		if discard_tile == "":
 			discard_tile = choose_legal_offline_discard_tile(seat)
+			discard_source = "legal_fallback"
 		if discard_tile == "":
 			break
+		ai_sim_discard_trace_entry(guard, seat, discard_tile, reports, discard_source)
 		ai_sim_stats["discards"] = int(ai_sim_stats.get("discards", 0)) + 1
 		if reports.is_empty():
 			_ai_sim_note_discard_risk(seat, discard_tile)
@@ -5629,7 +5851,17 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 	for i in range(players.size()):
 		scores.append(int(players[i].get("score", 0)))
 	ai_sim_stats["scores"] = scores
-	ai_sim_stats["ok"] = offline_phase == "ended" or guard >= max_steps
+	var integrity = offline_tile_ledger_report()
+	var score_ledger_after = offline_score_ledger_report(int(score_ledger_before.get("total", 0)))
+	var score_conserved = bool(score_ledger_before.get("ok", false)) and bool(score_ledger_after.get("ok", false))
+	ai_sim_stats["integrity_ok"] = bool(integrity.get("ok", false))
+	ai_sim_stats["integrity_errors"] = int(integrity.get("missing", []).size()) + int(integrity.get("overflow", []).size()) + int(integrity.get("unknown", []).size()) + int(integrity.get("malformed", []).size()) + int(integrity.get("flower_mismatches", []).size())
+	ai_sim_stats["score_conserved"] = score_conserved
+	ai_sim_stats["score_total_before"] = int(score_ledger_before.get("total", 0))
+	ai_sim_stats["score_total_after"] = int(score_ledger_after.get("total", 0))
+	ai_sim_stats["score_delta"] = int(score_ledger_after.get("delta", 0))
+	ai_sim_stats["score_ledger_malformed"] = score_ledger_before.get("malformed", [])
+	ai_sim_stats["ok"] = (offline_phase == "ended" or guard >= max_steps) and bool(integrity.get("ok", false)) and score_conserved
 	ai_sim_stats["ended"] = offline_phase == "ended"
 	ai_sim_stats["wall"] = get_wall_count()
 	ai_sim_stats["phase"] = offline_phase
@@ -5719,6 +5951,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		var human_claim_decline_total = 0
 		var discard_total = 0
 		var ended_total = 0
+		var integrity_total = 0
+		var score_conserved_total = 0
 		var steps_total = 0
 		var wins_total = 0
 		var ms_total = 0
@@ -5755,6 +5989,10 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			steps_total += int(result.get("steps", 0))
 			if bool(result.get("ended", false)):
 				ended_total += 1
+			if bool(result.get("integrity_ok", false)):
+				integrity_total += 1
+			if bool(result.get("score_conserved", false)):
+				score_conserved_total += 1
 			if int(result.get("winner", -1)) >= 0:
 				wins_total += 1
 		var danger_rate = float(danger_total) / float(max(1, discard_total))
@@ -5779,6 +6017,10 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			"deal_ins_to_human": deal_in_human_total,
 			"discards": discard_total,
 			"ended": ended_total,
+			"integrity_passed": integrity_total,
+			"integrity_ok": integrity_total >= hands_per_diff,
+			"score_conserved_passed": score_conserved_total,
+			"score_conserved": score_conserved_total >= hands_per_diff,
 			"wins": wins_total,
 			"avg_steps": float(steps_total) / float(max(1, hands_per_diff)),
 			"avg_ms": float(ms_total) / float(max(1, hands_per_diff)),
@@ -5850,9 +6092,19 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 	var easy_finished = int(easy.get("ended", 0))
 	var normal_finished = int(normal.get("ended", 0))
 	var hard_finished = int(hard.get("ended", 0))
+	var easy_integrity = bool(easy.get("integrity_ok", false))
+	var normal_integrity = bool(normal.get("integrity_ok", false))
+	var hard_integrity = bool(hard.get("integrity_ok", false))
+	var easy_score_conserved = bool(easy.get("score_conserved", false))
+	var normal_score_conserved = bool(normal.get("score_conserved", false))
+	var hard_score_conserved = bool(hard.get("score_conserved", false))
 	var finished_all = easy_finished >= hands_per_diff and hard_finished >= hands_per_diff
+	var integrity_all = easy_integrity and hard_integrity
+	var score_conservation_all = easy_score_conserved and hard_score_conserved
 	if include_normal:
 		finished_all = finished_all and normal_finished >= hands_per_diff
+		integrity_all = integrity_all and normal_integrity
+		score_conservation_all = score_conservation_all and normal_score_conserved
 	var hard_safer_high_danger = hard_hd <= easy_hd + 0.08
 	var hard_safer_deal_in = hard_di <= easy_di + 0.34
 	var hard_safer_human_high_danger = hard_hhd <= easy_hhd + 0.08
@@ -5883,10 +6135,18 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 		"hard_safer_human_high_danger": hard_safer_human_high_danger,
 		"hard_safer_deal_in_to_human": hard_safer_deal_in_to_human,
 		"finished_all": finished_all,
+		"integrity_all": integrity_all,
+		"score_conservation_all": score_conservation_all,
 		"easy_finished": easy_finished,
 		"normal_finished": normal_finished,
 		"hard_finished": hard_finished,
-		"commercial_strength_ok": finished_all and hard_safer_high_danger and hard_safer_deal_in and hard_safer_human_high_danger,
+		"easy_integrity": easy_integrity,
+		"normal_integrity": normal_integrity,
+		"hard_integrity": hard_integrity,
+		"easy_score_conserved": easy_score_conserved,
+		"normal_score_conserved": normal_score_conserved,
+		"hard_score_conserved": hard_score_conserved,
+		"commercial_strength_ok": finished_all and integrity_all and score_conservation_all and hard_safer_high_danger and hard_safer_deal_in and hard_safer_human_high_danger,
 		"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
 		"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
 		"normal_high_danger": float(normal.get("high_danger_rate", 1.0)),
@@ -5902,6 +6162,10 @@ func empty_ai_strength_aggregate() -> Dictionary:
 		"hard_hands": 0,
 		"easy_finished": 0,
 		"hard_finished": 0,
+		"easy_integrity_passed": 0,
+		"hard_integrity_passed": 0,
+		"easy_score_conserved_passed": 0,
+		"hard_score_conserved_passed": 0,
 		"easy_discards": 0,
 		"hard_discards": 0,
 		"easy_dangerous_discards": 0,
@@ -5932,6 +6196,10 @@ func add_ai_strength_benchmark_to_aggregate(aggregate: Dictionary, bench: Dictio
 	aggregate["hard_hands"] = int(aggregate.get("hard_hands", 0)) + hands
 	aggregate["easy_finished"] = int(aggregate.get("easy_finished", 0)) + int(easy.get("ended", 0))
 	aggregate["hard_finished"] = int(aggregate.get("hard_finished", 0)) + int(hard.get("ended", 0))
+	aggregate["easy_integrity_passed"] = int(aggregate.get("easy_integrity_passed", 0)) + int(easy.get("integrity_passed", 0))
+	aggregate["hard_integrity_passed"] = int(aggregate.get("hard_integrity_passed", 0)) + int(hard.get("integrity_passed", 0))
+	aggregate["easy_score_conserved_passed"] = int(aggregate.get("easy_score_conserved_passed", 0)) + int(easy.get("score_conserved_passed", 0))
+	aggregate["hard_score_conserved_passed"] = int(aggregate.get("hard_score_conserved_passed", 0)) + int(hard.get("score_conserved_passed", 0))
 	aggregate["easy_discards"] = int(aggregate.get("easy_discards", 0)) + int(easy.get("discards", 0))
 	aggregate["hard_discards"] = int(aggregate.get("hard_discards", 0)) + int(hard.get("discards", 0))
 	aggregate["easy_dangerous_discards"] = int(aggregate.get("easy_dangerous_discards", 0)) + int(easy.get("dangerous_discards", 0))
@@ -5969,11 +6237,13 @@ func finalize_ai_strength_aggregate(aggregate: Dictionary) -> Dictionary:
 	out["easy_deal_in_to_human"] = float(out.get("easy_deal_ins_to_human", 0)) / float(easy_hands)
 	out["hard_deal_in_to_human"] = float(out.get("hard_deal_ins_to_human", 0)) / float(hard_hands)
 	out["finished_all"] = int(out.get("rows", 0)) > 0 and int(out.get("easy_finished", 0)) >= int(out.get("easy_hands", 0)) and int(out.get("hard_finished", 0)) >= int(out.get("hard_hands", 0))
+	out["integrity_all"] = int(out.get("rows", 0)) > 0 and int(out.get("easy_integrity_passed", 0)) >= int(out.get("easy_hands", 0)) and int(out.get("hard_integrity_passed", 0)) >= int(out.get("hard_hands", 0))
+	out["score_conservation_all"] = int(out.get("rows", 0)) > 0 and int(out.get("easy_score_conserved_passed", 0)) >= int(out.get("easy_hands", 0)) and int(out.get("hard_score_conserved_passed", 0)) >= int(out.get("hard_hands", 0))
 	out["hard_safer_high_danger"] = float(out.get("hard_high_danger", 1.0)) <= float(out.get("easy_high_danger", 0.0)) + 0.08
 	out["hard_safer_deal_in"] = float(out.get("hard_deal_in", 1.0)) <= float(out.get("easy_deal_in", 0.0)) + 0.34
 	out["hard_safer_human_high_danger"] = float(out.get("hard_human_high_danger", 1.0)) <= float(out.get("easy_human_high_danger", 0.0)) + 0.08
 	out["hard_safer_deal_in_to_human"] = float(out.get("hard_deal_in_to_human", 1.0)) <= float(out.get("easy_deal_in_to_human", 0.0)) + 0.34
-	out["commercial_strength_ok"] = bool(out.get("finished_all", false)) and bool(out.get("hard_safer_high_danger", false)) and bool(out.get("hard_safer_deal_in", false)) and bool(out.get("hard_safer_human_high_danger", false)) and bool(out.get("paired_wall_seed", false)) and bool(out.get("paired_profile_seed", false))
+	out["commercial_strength_ok"] = bool(out.get("finished_all", false)) and bool(out.get("integrity_all", false)) and bool(out.get("score_conservation_all", false)) and bool(out.get("hard_safer_high_danger", false)) and bool(out.get("hard_safer_deal_in", false)) and bool(out.get("hard_safer_human_high_danger", false)) and bool(out.get("paired_wall_seed", false)) and bool(out.get("paired_profile_seed", false))
 	return out
 
 
@@ -5992,6 +6262,12 @@ func ai_strength_pack_row(mode_name: String, seed_int: int, hands_per_diff: int,
 		"paired_profile_seed": bool(bench.get("paired_profile_seed", false)),
 		"commercial_strength_ok": bool(bench.get("commercial_strength_ok", false)),
 		"finished_all": bool(bench.get("finished_all", false)),
+		"integrity_all": bool(bench.get("integrity_all", false)),
+		"score_conservation_all": bool(bench.get("score_conservation_all", false)),
+		"easy_integrity": bool(easy.get("integrity_ok", false)),
+		"hard_integrity": bool(hard.get("integrity_ok", false)),
+		"easy_score_conserved": bool(easy.get("score_conserved", false)),
+		"hard_score_conserved": bool(hard.get("score_conserved", false)),
 		"easy_high_danger": float(bench.get("easy_high_danger", 1.0)),
 		"hard_high_danger": float(bench.get("hard_high_danger", 1.0)),
 		"easy_human_high_danger": float(bench.get("easy_human_high_danger", 1.0)),
@@ -6105,9 +6381,11 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	if not aggregate.is_empty():
 		lines.append("")
 		lines.append("## Aggregate Gate")
-		lines.append("- all rows: ok=%s finished=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f discards e/h=%d/%d" % [
+		lines.append("- all rows: ok=%s finished=%s integrity=%s score=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f discards e/h=%d/%d" % [
 			str(aggregate.get("commercial_strength_ok", false)),
 			str(aggregate.get("finished_all", false)),
+			str(aggregate.get("integrity_all", false)),
+			str(aggregate.get("score_conservation_all", false)),
 			float(aggregate.get("easy_high_danger", 1.0)),
 			float(aggregate.get("hard_high_danger", 1.0)),
 			float(aggregate.get("easy_human_high_danger", 1.0)),
@@ -6121,9 +6399,11 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 		])
 	var fixed_aggregate: Dictionary = pack.get("fixed_aggregate", {})
 	if not fixed_aggregate.is_empty():
-		lines.append("- fixed only: ok=%s finished=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f" % [
+		lines.append("- fixed only: ok=%s finished=%s integrity=%s score=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f" % [
 			str(fixed_aggregate.get("commercial_strength_ok", false)),
 			str(fixed_aggregate.get("finished_all", false)),
+			str(fixed_aggregate.get("integrity_all", false)),
+			str(fixed_aggregate.get("score_conservation_all", false)),
 			float(fixed_aggregate.get("easy_high_danger", 1.0)),
 			float(fixed_aggregate.get("hard_high_danger", 1.0)),
 			float(fixed_aggregate.get("easy_human_high_danger", 1.0)),
@@ -6138,9 +6418,11 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	for row in pack.get("fixed_rows", []):
 		if typeof(row) != TYPE_DICTIONARY:
 			continue
-		lines.append("- seed %s: ok=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
+		lines.append("- seed %s: ok=%s integrity=%s score=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
 			str(row.get("seed_base", 0)),
 			str(row.get("commercial_strength_ok", false)),
+			str(row.get("integrity_all", false)),
+			str(row.get("score_conservation_all", false)),
 			float(row.get("easy_high_danger", 1.0)),
 			float(row.get("hard_high_danger", 1.0)),
 			float(row.get("easy_human_high_danger", 1.0)),
@@ -6155,9 +6437,11 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	if typeof(shuffled) == TYPE_DICTIONARY and not (shuffled as Dictionary).is_empty():
 		lines.append("")
 		lines.append("## Shuffled-profile sample")
-		lines.append("- seed %s: ok=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
+		lines.append("- seed %s: ok=%s integrity=%s score=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
 			str(shuffled.get("seed_base", 0)),
 			str(shuffled.get("commercial_strength_ok", false)),
+			str(shuffled.get("integrity_all", false)),
+			str(shuffled.get("score_conservation_all", false)),
 			float(shuffled.get("easy_high_danger", 1.0)),
 			float(shuffled.get("hard_high_danger", 1.0)),
 			float(shuffled.get("easy_human_high_danger", 1.0)),
