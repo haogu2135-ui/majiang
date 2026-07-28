@@ -27,7 +27,7 @@ func run() -> void:
 	scene.fx_enabled = false
 
 	print("--- A) multi-seed commercial strength pack ---")
-	# Keep resource use low: 2 hands/diff × 3 fixed seeds + 1 shuffled sample.
+	# Keep resource use low: 2 hands/diff × easy/hard × 3 fixed seeds + 1 shuffled sample.
 	var seeds: Array = [20260730, 20260811, 20260827]
 	var t0 = Time.get_ticks_msec()
 	var pack = scene.sample_ai_commercial_strength_pack(2, seeds, true)
@@ -42,33 +42,56 @@ func run() -> void:
 	for row in pack.get("fixed_rows", []):
 		if typeof(row) != TYPE_DICTIONARY:
 			continue
-		print("    fixed seed=%s ok=%s hd=%.3f/%.3f di=%.2f/%.2f ms_h=%.0f" % [
+		print("    fixed seed=%s ok=%s hd=%.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f ms_h=%.0f" % [
 			str(row.get("seed_base", 0)),
 			str(row.get("commercial_strength_ok", false)),
 			float(row.get("easy_high_danger", 1.0)),
 			float(row.get("hard_high_danger", 1.0)),
+			float(row.get("easy_human_high_danger", 1.0)),
+			float(row.get("hard_human_high_danger", 1.0)),
 			float(row.get("easy_deal_in", 1.0)),
 			float(row.get("hard_deal_in", 1.0)),
 			float(row.get("avg_ms_hard", 0.0)),
 		])
+	var aggregate: Dictionary = pack.get("aggregate", {})
+	var fixed_aggregate: Dictionary = pack.get("fixed_aggregate", {})
+	print("    aggregate ok=%s fixed_ok=%s hd=%.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f humanRon=%.2f/%.2f paired=%s/%s" % [
+		str(aggregate.get("commercial_strength_ok", false)),
+		str(fixed_aggregate.get("commercial_strength_ok", false)),
+		float(aggregate.get("easy_high_danger", 1.0)),
+		float(aggregate.get("hard_high_danger", 1.0)),
+		float(aggregate.get("easy_human_high_danger", 1.0)),
+		float(aggregate.get("hard_human_high_danger", 1.0)),
+		float(aggregate.get("easy_deal_in", 1.0)),
+		float(aggregate.get("hard_deal_in", 1.0)),
+		float(aggregate.get("easy_deal_in_to_human", 1.0)),
+		float(aggregate.get("hard_deal_in_to_human", 1.0)),
+		str(pack.get("paired_wall_seed", false)),
+		str(pack.get("paired_profile_seed", false)),
+	])
 	var shuffled: Dictionary = pack.get("shuffled_row", {})
 	if not shuffled.is_empty():
-		print("    shuffled seed=%s ok=%s hd=%.3f/%.3f di=%.2f/%.2f ms_h=%.0f" % [
+		print("    shuffled seed=%s ok=%s hd=%.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f ms_h=%.0f" % [
 			str(shuffled.get("seed_base", 0)),
 			str(shuffled.get("commercial_strength_ok", false)),
 			float(shuffled.get("easy_high_danger", 1.0)),
 			float(shuffled.get("hard_high_danger", 1.0)),
+			float(shuffled.get("easy_human_high_danger", 1.0)),
+			float(shuffled.get("hard_human_high_danger", 1.0)),
 			float(shuffled.get("easy_deal_in", 1.0)),
 			float(shuffled.get("hard_deal_in", 1.0)),
 			float(shuffled.get("avg_ms_hard", 0.0)),
 		])
 	check((pack.get("fixed_rows", []) as Array).size() == 3, "pack contains three fixed-profile seeds")
-	check(int(pack.get("fixed_pass_count", 0)) == 3, "all fixed-profile seeds pass commercial gate")
+	check(bool(pack.get("paired_wall_seed", false)), "pack compares difficulties on paired wall seeds")
+	check(bool(pack.get("paired_profile_seed", false)), "pack compares difficulties on paired profile maps")
+	check(bool(fixed_aggregate.get("commercial_strength_ok", false)), "fixed-profile aggregate passes commercial gate")
 	check(not shuffled.is_empty(), "pack includes shuffled-profile sample")
-	check(bool(shuffled.get("commercial_strength_ok", false)), "shuffled-profile sample passes commercial gate")
+	check(str(shuffled.get("profile_policy", "")) == "paired_full_shuffle", "shuffled sample uses paired full profile maps")
+	check(bool(aggregate.get("commercial_strength_ok", false)), "aggregate including shuffled sample passes commercial gate")
 	check(bool(pack.get("commercial_strength_ok", false)), "aggregate commercial strength pack is green")
-	check(elapsed < 240000, "multi-seed pack stays within low-resource serial budget")
-	check(float(pack.get("total_elapsed_ms", 999999.0)) < 240000.0, "reported pack runtime stays low-resource")
+	check(elapsed < 180000, "multi-seed pack stays within low-resource serial budget")
+	check(float(pack.get("total_elapsed_ms", 999999.0)) < 180000.0, "reported pack runtime stays low-resource")
 
 	print("--- B) durable evidence artifacts ---")
 	var written = scene.write_ai_commercial_strength_evidence_pack(pack)

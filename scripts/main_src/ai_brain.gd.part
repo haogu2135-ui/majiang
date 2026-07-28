@@ -5,6 +5,7 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 		var seat = (from_seat + offset) % 4
 		if not is_ai_controlled_seat(seat):
 			continue
+		apply_ai_decision_difficulty_for_seat(seat)
 		var hand_counts = tile_counts(players[seat]["hand"])
 		var options = get_claim_options(seat, from_seat, tile, hand_counts)
 		if options.is_empty():
@@ -960,8 +961,9 @@ func human_readiness_for_defense() -> float:
 		score += 4.0
 	return score
 
-func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
-	# 专门降低「点炮给玩家」：困难更怕喂 seat0，简单更敢打。
+func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
+	# 难度无关的「喂玩家」威胁分：用于商用基准遥测，避免全 Bot 采样
+	# 中 seat0 也随难度变化导致实际和牌数污染防守评估。
 	if seat <= 0 or seat >= players.size() or tile == "" or mode != "offline":
 		return 0.0
 	# 人机对局：seat0 非 AI；全 bot 采样仍把 seat0 当探针位
@@ -988,12 +990,22 @@ func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_rep
 		pen *= 0.42
 	elif shanten == 1:
 		pen *= 0.72
+	return clamp(pen, 0.0, 220.0)
+
+
+func human_target_discard_penalty_from_pressure(pressure: float) -> float:
+	# 专门降低「点炮给玩家」：困难更怕喂 seat0，简单更敢打。
+	var pen = max(0.0, pressure)
 	match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
 		AI_DIFFICULTY_HARD:
 			pen *= 1.45
 		AI_DIFFICULTY_EASY:
 			pen *= 0.55
 	return clamp(pen, 0.0, 220.0)
+
+
+func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
+	return human_target_discard_penalty_from_pressure(human_target_discard_pressure(seat, tile, risk, feed_report, shanten, eval_context))
 
 
 func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> Dictionary:
@@ -1373,8 +1385,11 @@ func get_ai_discard_reports(seat: int) -> Array:
 	if use_fast:
 		var defense_guess = ai_defense_weight(seat, 2, pressure_context)
 		var risk_factor = ai_risk_factor(seat)
+		var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+		var fast_human_guard = seat > 0 and mode == "offline" and (diff == AI_DIFFICULTY_HARD or human_readiness_for_defense() >= 8.0)
 		var safest_candidate: Dictionary = {}
-		var safest_risk = INF
+		var safest_rank = INF
+		var human_pressure_peak = 0.0
 		for item in candidates:
 			var cand = str(item.get("tile", ""))
 			var idx = int(item.get("tile_index", -1))
@@ -1383,18 +1398,29 @@ func get_ai_discard_reports(seat: int) -> Array:
 			# 快评：只靠向听 + 危险，避免 34 张进张扫描
 			var risk = deal_in_risk_score(cand, seat, eval_context)
 			var cheap = -float(shanten) * 760.0 - risk * defense_guess * risk_factor
+			var human_pressure = 0.0
+			if fast_human_guard:
+				var fast_feed_report = discard_feed_risk_report(cand, seat, visible_counts_snapshot, eval_context)
+				human_pressure = human_target_discard_pressure(seat, cand, risk, fast_feed_report, shanten, eval_context)
+				var human_pen = human_target_discard_penalty_from_pressure(human_pressure)
+				cheap -= human_pen * 0.90
+				item["fast_human_pressure"] = human_pressure
+				item["fast_human_penalty"] = human_pen
+				human_pressure_peak = max(human_pressure_peak, human_pressure)
 			if shanten <= 0:
 				cheap += 180.0
 			elif shanten == 1:
 				cheap += 40.0
 			# 困难档快评也更厌恶危险张
-			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_HARD and risk >= AI_DANGER_RISK_SOFT:
+			if diff == AI_DIFFICULTY_HARD and risk >= AI_DANGER_RISK_SOFT:
 				cheap -= (risk - 12.0) * 1.35
 			item["cheap_score"] = cheap
 			item["fast_risk"] = risk
-			if safest_candidate.is_empty() or risk < safest_risk or (is_equal_approx(risk, safest_risk) and tile_sort_index(cand) < tile_sort_index(str(safest_candidate.get("tile", "")))):
+			var safety_rank = risk + human_pressure * 0.72
+			item["fast_safety_rank"] = safety_rank
+			if safest_candidate.is_empty() or safety_rank < safest_rank or (is_equal_approx(safety_rank, safest_rank) and tile_sort_index(cand) < tile_sort_index(str(safest_candidate.get("tile", "")))):
 				safest_candidate = item.duplicate(false)
-				safest_risk = risk
+				safest_rank = safety_rank
 			simulated_counts[idx] = int(simulated_counts[idx]) + 1
 		candidates.sort_custom(func(a, b): return float(a.get("cheap_score", 0.0)) > float(b.get("cheap_score", 0.0)))
 		# 保留 Top-K 完整评估
@@ -1405,7 +1431,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 		# 会在粗排阶段完全压过防守价值，Top-K 内没有可供完整评分的折返候选。
 		var high_pressure = float(pressure_context.get("readiness_pressure", 0.0)) >= 9.5 \
 			or int(pressure_context.get("threat_rank", 0)) >= 2 \
-			or bool(pressure_context.get("multi_threat", false))
+			or bool(pressure_context.get("multi_threat", false)) \
+			or human_pressure_peak >= 16.0
 		var safest_kept = false
 		for item in keep:
 			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
@@ -1413,13 +1440,13 @@ func get_ai_discard_reports(seat: int) -> Array:
 				break
 		if high_pressure and not safest_candidate.is_empty() and not safest_kept:
 			var replace_index = -1
-			var replace_risk = -1.0
+			var replace_rank = -1.0
 			for j in range(keep.size()):
-				var kept_risk = float(keep[j].get("fast_risk", 0.0))
-				if kept_risk > replace_risk:
+				var kept_rank = float(keep[j].get("fast_safety_rank", keep[j].get("fast_risk", 0.0)))
+				if kept_rank > replace_rank:
 					replace_index = j
-					replace_risk = kept_risk
-			if replace_index >= 0 and safest_risk + 4.0 < replace_risk:
+					replace_rank = kept_rank
+			if replace_index >= 0 and safest_rank + 4.0 < replace_rank:
 				keep[replace_index] = safest_candidate
 		candidates = keep
 	for item in candidates:
@@ -1691,7 +1718,8 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			danger_pen += 28.0 if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) != AI_DIFFICULTY_EASY else 12.0
 		score -= danger_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
-	var human_pen = human_target_discard_penalty(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
+	var human_pressure = human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
+	var human_pen = human_target_discard_penalty_from_pressure(human_pressure)
 	score -= human_pen
 	# R11: 第三次喂同一家吃碰杠会形成包三搭责任，按牌况和难度显式规避。
 	var package_report = package_feed_discipline_report(seat, tile, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
@@ -1728,6 +1756,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		"wall_draw_push": wall_draw_push,
 		"stance": ai_stance_label(defense, shanten),
 		"defense": defense,
+		"human_target_pressure": human_pressure,
 		"human_target_penalty": human_pen,
 		"package_feed_pending": bool(package_report.get("pending", false)),
 		"package_feed_penalty": package_pen,

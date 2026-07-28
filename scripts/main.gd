@@ -838,6 +838,7 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 		var seat = (from_seat + offset) % 4
 		if not is_ai_controlled_seat(seat):
 			continue
+		apply_ai_decision_difficulty_for_seat(seat)
 		var hand_counts = tile_counts(players[seat]["hand"])
 		var options = get_claim_options(seat, from_seat, tile, hand_counts)
 		if options.is_empty():
@@ -1793,8 +1794,9 @@ func human_readiness_for_defense() -> float:
 		score += 4.0
 	return score
 
-func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
-	# 专门降低「点炮给玩家」：困难更怕喂 seat0，简单更敢打。
+func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
+	# 难度无关的「喂玩家」威胁分：用于商用基准遥测，避免全 Bot 采样
+	# 中 seat0 也随难度变化导致实际和牌数污染防守评估。
 	if seat <= 0 or seat >= players.size() or tile == "" or mode != "offline":
 		return 0.0
 	# 人机对局：seat0 非 AI；全 bot 采样仍把 seat0 当探针位
@@ -1821,12 +1823,22 @@ func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_rep
 		pen *= 0.42
 	elif shanten == 1:
 		pen *= 0.72
+	return clamp(pen, 0.0, 220.0)
+
+
+func human_target_discard_penalty_from_pressure(pressure: float) -> float:
+	# 专门降低「点炮给玩家」：困难更怕喂 seat0，简单更敢打。
+	var pen = max(0.0, pressure)
 	match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
 		AI_DIFFICULTY_HARD:
 			pen *= 1.45
 		AI_DIFFICULTY_EASY:
 			pen *= 0.55
 	return clamp(pen, 0.0, 220.0)
+
+
+func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
+	return human_target_discard_penalty_from_pressure(human_target_discard_pressure(seat, tile, risk, feed_report, shanten, eval_context))
 
 
 func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> Dictionary:
@@ -2206,8 +2218,11 @@ func get_ai_discard_reports(seat: int) -> Array:
 	if use_fast:
 		var defense_guess = ai_defense_weight(seat, 2, pressure_context)
 		var risk_factor = ai_risk_factor(seat)
+		var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+		var fast_human_guard = seat > 0 and mode == "offline" and (diff == AI_DIFFICULTY_HARD or human_readiness_for_defense() >= 8.0)
 		var safest_candidate: Dictionary = {}
-		var safest_risk = INF
+		var safest_rank = INF
+		var human_pressure_peak = 0.0
 		for item in candidates:
 			var cand = str(item.get("tile", ""))
 			var idx = int(item.get("tile_index", -1))
@@ -2216,18 +2231,29 @@ func get_ai_discard_reports(seat: int) -> Array:
 			# 快评：只靠向听 + 危险，避免 34 张进张扫描
 			var risk = deal_in_risk_score(cand, seat, eval_context)
 			var cheap = -float(shanten) * 760.0 - risk * defense_guess * risk_factor
+			var human_pressure = 0.0
+			if fast_human_guard:
+				var fast_feed_report = discard_feed_risk_report(cand, seat, visible_counts_snapshot, eval_context)
+				human_pressure = human_target_discard_pressure(seat, cand, risk, fast_feed_report, shanten, eval_context)
+				var human_pen = human_target_discard_penalty_from_pressure(human_pressure)
+				cheap -= human_pen * 0.90
+				item["fast_human_pressure"] = human_pressure
+				item["fast_human_penalty"] = human_pen
+				human_pressure_peak = max(human_pressure_peak, human_pressure)
 			if shanten <= 0:
 				cheap += 180.0
 			elif shanten == 1:
 				cheap += 40.0
 			# 困难档快评也更厌恶危险张
-			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_HARD and risk >= AI_DANGER_RISK_SOFT:
+			if diff == AI_DIFFICULTY_HARD and risk >= AI_DANGER_RISK_SOFT:
 				cheap -= (risk - 12.0) * 1.35
 			item["cheap_score"] = cheap
 			item["fast_risk"] = risk
-			if safest_candidate.is_empty() or risk < safest_risk or (is_equal_approx(risk, safest_risk) and tile_sort_index(cand) < tile_sort_index(str(safest_candidate.get("tile", "")))):
+			var safety_rank = risk + human_pressure * 0.72
+			item["fast_safety_rank"] = safety_rank
+			if safest_candidate.is_empty() or safety_rank < safest_rank or (is_equal_approx(safety_rank, safest_rank) and tile_sort_index(cand) < tile_sort_index(str(safest_candidate.get("tile", "")))):
 				safest_candidate = item.duplicate(false)
-				safest_risk = risk
+				safest_rank = safety_rank
 			simulated_counts[idx] = int(simulated_counts[idx]) + 1
 		candidates.sort_custom(func(a, b): return float(a.get("cheap_score", 0.0)) > float(b.get("cheap_score", 0.0)))
 		# 保留 Top-K 完整评估
@@ -2238,7 +2264,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 		# 会在粗排阶段完全压过防守价值，Top-K 内没有可供完整评分的折返候选。
 		var high_pressure = float(pressure_context.get("readiness_pressure", 0.0)) >= 9.5 \
 			or int(pressure_context.get("threat_rank", 0)) >= 2 \
-			or bool(pressure_context.get("multi_threat", false))
+			or bool(pressure_context.get("multi_threat", false)) \
+			or human_pressure_peak >= 16.0
 		var safest_kept = false
 		for item in keep:
 			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
@@ -2246,13 +2273,13 @@ func get_ai_discard_reports(seat: int) -> Array:
 				break
 		if high_pressure and not safest_candidate.is_empty() and not safest_kept:
 			var replace_index = -1
-			var replace_risk = -1.0
+			var replace_rank = -1.0
 			for j in range(keep.size()):
-				var kept_risk = float(keep[j].get("fast_risk", 0.0))
-				if kept_risk > replace_risk:
+				var kept_rank = float(keep[j].get("fast_safety_rank", keep[j].get("fast_risk", 0.0)))
+				if kept_rank > replace_rank:
 					replace_index = j
-					replace_risk = kept_risk
-			if replace_index >= 0 and safest_risk + 4.0 < replace_risk:
+					replace_rank = kept_rank
+			if replace_index >= 0 and safest_rank + 4.0 < replace_rank:
 				keep[replace_index] = safest_candidate
 		candidates = keep
 	for item in candidates:
@@ -2524,7 +2551,8 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			danger_pen += 28.0 if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) != AI_DIFFICULTY_EASY else 12.0
 		score -= danger_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
-	var human_pen = human_target_discard_penalty(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
+	var human_pressure = human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
+	var human_pen = human_target_discard_penalty_from_pressure(human_pressure)
 	score -= human_pen
 	# R11: 第三次喂同一家吃碰杠会形成包三搭责任，按牌况和难度显式规避。
 	var package_report = package_feed_discipline_report(seat, tile, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context)
@@ -2561,6 +2589,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		"wall_draw_push": wall_draw_push,
 		"stance": ai_stance_label(defense, shanten),
 		"defense": defense,
+		"human_target_pressure": human_pressure,
 		"human_target_penalty": human_pen,
 		"package_feed_pending": bool(package_report.get("pending", false)),
 		"package_feed_penalty": package_pen,
@@ -5212,12 +5241,23 @@ func enable_offline_all_bot_mode(enabled: bool = true, quiet: bool = true) -> vo
 		offline_sim_quiet = false
 		reset_ai_profile_seat_map()
 
+func ai_decision_difficulty_for_seat(seat: int) -> int:
+	var base = ai_benchmark_base_difficulty if ai_benchmark_base_difficulty >= 0 else ai_difficulty
+	if offline_all_bot_mode and seat == ai_benchmark_probe_seat and ai_benchmark_probe_difficulty >= 0:
+		return clampi(ai_benchmark_probe_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	return clampi(base, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+
+func apply_ai_decision_difficulty_for_seat(seat: int) -> void:
+	ai_difficulty = ai_decision_difficulty_for_seat(seat)
+
 func reset_ai_sim_stats() -> void:
 	ai_sim_stats = {
 		"steps": 0,
 		"discards": 0,
 		"dangerous_discards": 0,
 		"high_danger_discards": 0,
+		"human_dangerous_discards": 0,
+		"human_high_danger_discards": 0,
 		"deal_ins": 0,
 		"deal_ins_to_human": 0,
 		"human_claim_declines": 0,
@@ -5246,6 +5286,20 @@ func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
 		ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
 	if risk >= AI_DANGER_RISK_HIGH:
 		ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
+	var hand_counts = tile_counts(players[seat].get("hand", []))
+	var tile_idx = tile_index(tile)
+	if tile_idx >= 0 and tile_idx < hand_counts.size() and int(hand_counts[tile_idx]) > 0:
+		hand_counts[tile_idx] = int(hand_counts[tile_idx]) - 1
+	var shanten = calculate_min_shanten_from_counts(hand_counts, int(players[seat].get("melds", []).size()))
+	_ai_sim_note_human_target_pressure(human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context))
+
+func _ai_sim_note_human_target_pressure(pressure: float) -> void:
+	# R68: 对玩家危险弃牌遥测必须难度无关；实际 seat0 和牌数在全 Bot
+	# 基准中会受 seat0 自身难度影响，只保留为诊断项。
+	if pressure >= 16.0:
+		ai_sim_stats["human_dangerous_discards"] = int(ai_sim_stats.get("human_dangerous_discards", 0)) + 1
+	if pressure >= 28.0:
+		ai_sim_stats["human_high_danger_discards"] = int(ai_sim_stats.get("human_high_danger_discards", 0)) + 1
 
 func _ai_sim_note_terminal_result(actor_seat: int) -> void:
 	# 不能根据触发动作推断终局类型：他家放铳后碰杠补牌自摸，或抢杠胡，
@@ -5295,6 +5349,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		var seat = current_seat
 		if not is_ai_controlled_seat(seat):
 			break
+		apply_ai_decision_difficulty_for_seat(seat)
 		var tsumo_continue_discard = ""
 		# 杠后补牌已经完成，故本轮不会再进入摸牌分支。先处理这张仍持有
 		# 当前自摸资格的牌，确保它和普通摸牌一样经过 AI 的价值决策。
@@ -5388,6 +5443,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 					ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
 				if risk >= AI_DANGER_RISK_HIGH:
 					ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
+				_ai_sim_note_human_target_pressure(float(report.get("human_target_pressure", report.get("human_target_penalty", 0.0))))
 				break
 		var committed_tile = discard_tile_by_value(seat, discard_tile)
 		if committed_tile == "":
@@ -5444,20 +5500,52 @@ func ensure_ai_benchmark_players() -> void:
 	clear_ai_report_cache()
 
 
-func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base: int = 20260725, shuffle_profiles: bool = false) -> Dictionary:
+func apply_benchmark_profile_shuffle(profile_seed: int) -> void:
+	# Benchmark-only shuffle: all difficulties must see the same persona seats so
+	# difficulty deltas are not contaminated by reshuffle_ai_profiles_for_hand().
+	var full: Array = [0, 1, 2, 3]
+	seed(profile_seed)
+	full.shuffle()
+	for i in range(4):
+		ai_profile_seat_map[i] = int(full[i])
+
+
+func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base: int = 20260725, shuffle_profiles: bool = false, diffs: Array = [], probe_seat: int = -1, probe_difficulty: int = -1) -> Dictionary:
 	# 固定种子短局采样：比较高危弃牌率 / 放铳率（越低越稳）与终局完成率。
-	# 默认不打乱人设，保证三档难度可比。
+	# 默认不打乱人设，保证三档难度可比；R69 可固定 seat0 为玩家探针难度，
+	# 让实际“对人放铳”不再受 seat0 自身强弱变化污染。
 	ensure_ai_benchmark_players()
+	var diff_list: Array = diffs.duplicate() if typeof(diffs) == TYPE_ARRAY and not diffs.is_empty() else [AI_DIFFICULTY_EASY, AI_DIFFICULTY_NORMAL, AI_DIFFICULTY_HARD]
+	var wall_seeds: Array = []
+	var profile_seeds: Array = []
+	for h in range(hands_per_diff):
+		wall_seeds.append(seed_base + h * 17)
+		profile_seeds.append(seed_base + 7919 + h * 17)
 	var summary := {
 		"hands_per_diff": hands_per_diff,
 		"shuffle_profiles": shuffle_profiles,
+		"paired_wall_seed": true,
+		"paired_profile_seed": true,
+		"fixed_probe_seat": probe_seat,
+		"fixed_probe_difficulty": probe_difficulty,
+		"wall_seeds": wall_seeds,
+		"profile_seeds": profile_seeds if shuffle_profiles else [],
+		"diffs_sampled": diff_list,
 		"by_diff": {},
 	}
 	var prev_diff = ai_difficulty
-	for diff in [AI_DIFFICULTY_EASY, AI_DIFFICULTY_NORMAL, AI_DIFFICULTY_HARD]:
+	var prev_base_diff = ai_benchmark_base_difficulty
+	var prev_probe_seat = ai_benchmark_probe_seat
+	var prev_probe_diff = ai_benchmark_probe_difficulty
+	for diff in diff_list:
 		ai_difficulty = diff
+		ai_benchmark_base_difficulty = diff
+		ai_benchmark_probe_seat = probe_seat
+		ai_benchmark_probe_difficulty = probe_difficulty
 		var danger_total = 0
 		var high_danger_total = 0
+		var human_danger_total = 0
+		var human_high_danger_total = 0
 		var deal_in_total = 0
 		var deal_in_human_total = 0
 		var human_claim_decline_total = 0
@@ -5468,11 +5556,10 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		var ms_total = 0
 		for h in range(hands_per_diff):
 			enable_offline_all_bot_mode(true, true)
-			var wall_seed = seed_base + h * 17
-			var profile_seed = seed_base + diff * 1009 + h * 17
+			var wall_seed = int(wall_seeds[h])
+			var profile_seed = int(profile_seeds[h])
 			if shuffle_profiles:
-				seed(profile_seed)
-				reshuffle_ai_profiles_for_hand()
+				apply_benchmark_profile_shuffle(profile_seed)
 			else:
 				reset_ai_profile_seat_map()
 			seed(wall_seed)
@@ -5491,6 +5578,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			ms_total += Time.get_ticks_msec() - t0
 			danger_total += int(result.get("dangerous_discards", 0))
 			high_danger_total += int(result.get("high_danger_discards", 0))
+			human_danger_total += int(result.get("human_dangerous_discards", 0))
+			human_high_danger_total += int(result.get("human_high_danger_discards", 0))
 			deal_in_total += int(result.get("deal_ins", 0))
 			deal_in_human_total += int(result.get("deal_ins_to_human", 0))
 			human_claim_decline_total += int(result.get("human_claim_declines", 0))
@@ -5502,16 +5591,22 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 				wins_total += 1
 		var danger_rate = float(danger_total) / float(max(1, discard_total))
 		var high_danger_rate = float(high_danger_total) / float(max(1, discard_total))
+		var human_danger_rate = float(human_danger_total) / float(max(1, discard_total))
+		var human_high_danger_rate = float(human_high_danger_total) / float(max(1, discard_total))
 		var deal_in_rate = float(deal_in_total) / float(max(1, hands_per_diff))
 		var deal_in_human_rate = float(deal_in_human_total) / float(max(1, hands_per_diff))
 		summary["by_diff"][diff] = {
 			"danger_rate": danger_rate,
 			"high_danger_rate": high_danger_rate,
+			"human_danger_rate": human_danger_rate,
+			"human_high_danger_rate": human_high_danger_rate,
 			"deal_in_rate": deal_in_rate,
 			"deal_in_to_human_rate": deal_in_human_rate,
 			"human_claim_declines": human_claim_decline_total,
 			"dangerous_discards": danger_total,
 			"high_danger_discards": high_danger_total,
+			"human_dangerous_discards": human_danger_total,
+			"human_high_danger_discards": human_high_danger_total,
 			"deal_ins": deal_in_total,
 			"deal_ins_to_human": deal_in_human_total,
 			"discards": discard_total,
@@ -5520,6 +5615,9 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			"avg_steps": float(steps_total) / float(max(1, hands_per_diff)),
 			"avg_ms": float(ms_total) / float(max(1, hands_per_diff)),
 		}
+	ai_benchmark_base_difficulty = prev_base_diff
+	ai_benchmark_probe_seat = prev_probe_seat
+	ai_benchmark_probe_difficulty = prev_probe_diff
 	ai_difficulty = prev_diff
 	enable_offline_all_bot_mode(false, false)
 	return summary
@@ -5561,9 +5659,12 @@ func sample_bot_match_winrates(hands: int = 6, seed_base: int = 20260726) -> Dic
 		"deal_ins": deal_ins,
 	}
 
-func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 20260730) -> Dictionary:
+func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 20260730, shuffle_profiles: bool = false, include_normal: bool = true, probe_seat: int = -1, probe_difficulty: int = -1) -> Dictionary:
 	# R9: 多手固定人设基准。返回 easy/hard 高危率、放铳率与耗时，供验收 hard 更稳。
-	var raw = sample_bot_strength_across_difficulties(hands_per_diff, seed_base, false)
+	var diffs: Array = [AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD]
+	if include_normal:
+		diffs = [AI_DIFFICULTY_EASY, AI_DIFFICULTY_NORMAL, AI_DIFFICULTY_HARD]
+	var raw = sample_bot_strength_across_difficulties(hands_per_diff, seed_base, shuffle_profiles, diffs, probe_seat, probe_difficulty)
 	var by: Dictionary = raw.get("by_diff", {})
 	var easy: Dictionary = by.get(AI_DIFFICULTY_EASY, {})
 	var normal: Dictionary = by.get(AI_DIFFICULTY_NORMAL, {})
@@ -5574,17 +5675,30 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 	var hard_di = float(hard.get("deal_in_rate", 1.0))
 	var easy_dr = float(easy.get("danger_rate", 1.0))
 	var hard_dr = float(hard.get("danger_rate", 1.0))
+	var easy_hhd = float(easy.get("human_high_danger_rate", 1.0))
+	var hard_hhd = float(hard.get("human_high_danger_rate", 1.0))
 	var easy_dih = float(easy.get("deal_in_to_human_rate", 1.0))
 	var hard_dih = float(hard.get("deal_in_to_human_rate", 1.0))
 	var easy_finished = int(easy.get("ended", 0))
 	var normal_finished = int(normal.get("ended", 0))
 	var hard_finished = int(hard.get("ended", 0))
-	var finished_all = easy_finished >= hands_per_diff and normal_finished >= hands_per_diff and hard_finished >= hands_per_diff
+	var finished_all = easy_finished >= hands_per_diff and hard_finished >= hands_per_diff
+	if include_normal:
+		finished_all = finished_all and normal_finished >= hands_per_diff
 	var hard_safer_high_danger = hard_hd <= easy_hd + 0.08
 	var hard_safer_deal_in = hard_di <= easy_di + 0.34
+	var hard_safer_human_high_danger = hard_hhd <= easy_hhd + 0.08
 	var hard_safer_deal_in_to_human = hard_dih <= easy_dih + 0.34
 	return {
 		"hands_per_diff": hands_per_diff,
+		"seed_base": seed_base,
+		"shuffle_profiles": shuffle_profiles,
+		"include_normal": include_normal,
+		"paired_wall_seed": bool(raw.get("paired_wall_seed", false)),
+		"paired_profile_seed": bool(raw.get("paired_profile_seed", false)),
+		"fixed_probe_seat": int(raw.get("fixed_probe_seat", -1)),
+		"fixed_probe_difficulty": int(raw.get("fixed_probe_difficulty", -1)),
+		"diffs_sampled": raw.get("diffs_sampled", []),
 		"raw": raw,
 		"easy_high_danger": easy_hd,
 		"hard_high_danger": hard_hd,
@@ -5594,14 +5708,17 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 		"hard_deal_in_to_human": hard_dih,
 		"easy_danger": easy_dr,
 		"hard_danger": hard_dr,
+		"easy_human_high_danger": easy_hhd,
+		"hard_human_high_danger": hard_hhd,
 		"hard_safer_high_danger": hard_safer_high_danger,
 		"hard_safer_deal_in": hard_safer_deal_in,
+		"hard_safer_human_high_danger": hard_safer_human_high_danger,
 		"hard_safer_deal_in_to_human": hard_safer_deal_in_to_human,
 		"finished_all": finished_all,
 		"easy_finished": easy_finished,
 		"normal_finished": normal_finished,
 		"hard_finished": hard_finished,
-		"commercial_strength_ok": finished_all and hard_safer_high_danger and hard_safer_deal_in and hard_safer_deal_in_to_human,
+		"commercial_strength_ok": finished_all and hard_safer_high_danger and hard_safer_deal_in and hard_safer_human_high_danger,
 		"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
 		"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
 		"normal_high_danger": float(normal.get("high_danger_rate", 1.0)),
@@ -5610,82 +5727,169 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 	}
 
 
+func empty_ai_strength_aggregate() -> Dictionary:
+	return {
+		"rows": 0,
+		"easy_hands": 0,
+		"hard_hands": 0,
+		"easy_finished": 0,
+		"hard_finished": 0,
+		"easy_discards": 0,
+		"hard_discards": 0,
+		"easy_dangerous_discards": 0,
+		"hard_dangerous_discards": 0,
+		"easy_high_danger_discards": 0,
+		"hard_high_danger_discards": 0,
+		"easy_human_dangerous_discards": 0,
+		"hard_human_dangerous_discards": 0,
+		"easy_human_high_danger_discards": 0,
+		"hard_human_high_danger_discards": 0,
+		"easy_deal_ins": 0,
+		"hard_deal_ins": 0,
+		"easy_deal_ins_to_human": 0,
+		"hard_deal_ins_to_human": 0,
+		"paired_wall_seed": true,
+		"paired_profile_seed": true,
+	}
+
+
+func add_ai_strength_benchmark_to_aggregate(aggregate: Dictionary, bench: Dictionary) -> void:
+	var raw: Dictionary = bench.get("raw", {})
+	var by: Dictionary = raw.get("by_diff", {})
+	var easy: Dictionary = by.get(AI_DIFFICULTY_EASY, {})
+	var hard: Dictionary = by.get(AI_DIFFICULTY_HARD, {})
+	var hands = int(bench.get("hands_per_diff", raw.get("hands_per_diff", 0)))
+	aggregate["rows"] = int(aggregate.get("rows", 0)) + 1
+	aggregate["easy_hands"] = int(aggregate.get("easy_hands", 0)) + hands
+	aggregate["hard_hands"] = int(aggregate.get("hard_hands", 0)) + hands
+	aggregate["easy_finished"] = int(aggregate.get("easy_finished", 0)) + int(easy.get("ended", 0))
+	aggregate["hard_finished"] = int(aggregate.get("hard_finished", 0)) + int(hard.get("ended", 0))
+	aggregate["easy_discards"] = int(aggregate.get("easy_discards", 0)) + int(easy.get("discards", 0))
+	aggregate["hard_discards"] = int(aggregate.get("hard_discards", 0)) + int(hard.get("discards", 0))
+	aggregate["easy_dangerous_discards"] = int(aggregate.get("easy_dangerous_discards", 0)) + int(easy.get("dangerous_discards", 0))
+	aggregate["hard_dangerous_discards"] = int(aggregate.get("hard_dangerous_discards", 0)) + int(hard.get("dangerous_discards", 0))
+	aggregate["easy_high_danger_discards"] = int(aggregate.get("easy_high_danger_discards", 0)) + int(easy.get("high_danger_discards", 0))
+	aggregate["hard_high_danger_discards"] = int(aggregate.get("hard_high_danger_discards", 0)) + int(hard.get("high_danger_discards", 0))
+	aggregate["easy_human_dangerous_discards"] = int(aggregate.get("easy_human_dangerous_discards", 0)) + int(easy.get("human_dangerous_discards", 0))
+	aggregate["hard_human_dangerous_discards"] = int(aggregate.get("hard_human_dangerous_discards", 0)) + int(hard.get("human_dangerous_discards", 0))
+	aggregate["easy_human_high_danger_discards"] = int(aggregate.get("easy_human_high_danger_discards", 0)) + int(easy.get("human_high_danger_discards", 0))
+	aggregate["hard_human_high_danger_discards"] = int(aggregate.get("hard_human_high_danger_discards", 0)) + int(hard.get("human_high_danger_discards", 0))
+	aggregate["easy_deal_ins"] = int(aggregate.get("easy_deal_ins", 0)) + int(easy.get("deal_ins", 0))
+	aggregate["hard_deal_ins"] = int(aggregate.get("hard_deal_ins", 0)) + int(hard.get("deal_ins", 0))
+	aggregate["easy_deal_ins_to_human"] = int(aggregate.get("easy_deal_ins_to_human", 0)) + int(easy.get("deal_ins_to_human", 0))
+	aggregate["hard_deal_ins_to_human"] = int(aggregate.get("hard_deal_ins_to_human", 0)) + int(hard.get("deal_ins_to_human", 0))
+	aggregate["paired_wall_seed"] = bool(aggregate.get("paired_wall_seed", true)) and bool(raw.get("paired_wall_seed", false))
+	aggregate["paired_profile_seed"] = bool(aggregate.get("paired_profile_seed", true)) and bool(raw.get("paired_profile_seed", false))
+
+
+func finalize_ai_strength_aggregate(aggregate: Dictionary) -> Dictionary:
+	var out = aggregate.duplicate(true)
+	var easy_hands = max(1, int(out.get("easy_hands", 0)))
+	var hard_hands = max(1, int(out.get("hard_hands", 0)))
+	var easy_discards = max(1, int(out.get("easy_discards", 0)))
+	var hard_discards = max(1, int(out.get("hard_discards", 0)))
+	out["easy_danger_rate"] = float(out.get("easy_dangerous_discards", 0)) / float(easy_discards)
+	out["hard_danger_rate"] = float(out.get("hard_dangerous_discards", 0)) / float(hard_discards)
+	out["easy_high_danger"] = float(out.get("easy_high_danger_discards", 0)) / float(easy_discards)
+	out["hard_high_danger"] = float(out.get("hard_high_danger_discards", 0)) / float(hard_discards)
+	out["easy_human_danger"] = float(out.get("easy_human_dangerous_discards", 0)) / float(easy_discards)
+	out["hard_human_danger"] = float(out.get("hard_human_dangerous_discards", 0)) / float(hard_discards)
+	out["easy_human_high_danger"] = float(out.get("easy_human_high_danger_discards", 0)) / float(easy_discards)
+	out["hard_human_high_danger"] = float(out.get("hard_human_high_danger_discards", 0)) / float(hard_discards)
+	out["easy_deal_in"] = float(out.get("easy_deal_ins", 0)) / float(easy_hands)
+	out["hard_deal_in"] = float(out.get("hard_deal_ins", 0)) / float(hard_hands)
+	out["easy_deal_in_to_human"] = float(out.get("easy_deal_ins_to_human", 0)) / float(easy_hands)
+	out["hard_deal_in_to_human"] = float(out.get("hard_deal_ins_to_human", 0)) / float(hard_hands)
+	out["finished_all"] = int(out.get("rows", 0)) > 0 and int(out.get("easy_finished", 0)) >= int(out.get("easy_hands", 0)) and int(out.get("hard_finished", 0)) >= int(out.get("hard_hands", 0))
+	out["hard_safer_high_danger"] = float(out.get("hard_high_danger", 1.0)) <= float(out.get("easy_high_danger", 0.0)) + 0.08
+	out["hard_safer_deal_in"] = float(out.get("hard_deal_in", 1.0)) <= float(out.get("easy_deal_in", 0.0)) + 0.34
+	out["hard_safer_human_high_danger"] = float(out.get("hard_human_high_danger", 1.0)) <= float(out.get("easy_human_high_danger", 0.0)) + 0.08
+	out["hard_safer_deal_in_to_human"] = float(out.get("hard_deal_in_to_human", 1.0)) <= float(out.get("easy_deal_in_to_human", 0.0)) + 0.34
+	out["commercial_strength_ok"] = bool(out.get("finished_all", false)) and bool(out.get("hard_safer_high_danger", false)) and bool(out.get("hard_safer_deal_in", false)) and bool(out.get("hard_safer_human_high_danger", false)) and bool(out.get("paired_wall_seed", false)) and bool(out.get("paired_profile_seed", false))
+	return out
+
+
+func ai_strength_pack_row(mode_name: String, seed_int: int, hands_per_diff: int, elapsed: int, bench: Dictionary) -> Dictionary:
+	var raw: Dictionary = bench.get("raw", {})
+	var by: Dictionary = raw.get("by_diff", {})
+	var easy: Dictionary = by.get(AI_DIFFICULTY_EASY, {})
+	var hard: Dictionary = by.get(AI_DIFFICULTY_HARD, {})
+	return {
+		"mode": mode_name,
+		"seed_base": seed_int,
+		"hands_per_diff": hands_per_diff,
+		"elapsed_ms": elapsed,
+		"profile_policy": "paired_full_shuffle" if bool(bench.get("shuffle_profiles", false)) else "fixed_seat_map",
+		"paired_wall_seed": bool(bench.get("paired_wall_seed", false)),
+		"paired_profile_seed": bool(bench.get("paired_profile_seed", false)),
+		"commercial_strength_ok": bool(bench.get("commercial_strength_ok", false)),
+		"finished_all": bool(bench.get("finished_all", false)),
+		"easy_high_danger": float(bench.get("easy_high_danger", 1.0)),
+		"hard_high_danger": float(bench.get("hard_high_danger", 1.0)),
+		"easy_human_high_danger": float(bench.get("easy_human_high_danger", 1.0)),
+		"hard_human_high_danger": float(bench.get("hard_human_high_danger", 1.0)),
+		"easy_deal_in": float(bench.get("easy_deal_in", 1.0)),
+		"hard_deal_in": float(bench.get("hard_deal_in", 1.0)),
+		"easy_deal_in_to_human": float(bench.get("easy_deal_in_to_human", 1.0)),
+		"hard_deal_in_to_human": float(bench.get("hard_deal_in_to_human", 1.0)),
+		"easy_discards": int(easy.get("discards", 0)),
+		"hard_discards": int(hard.get("discards", 0)),
+		"easy_high_danger_discards": int(easy.get("high_danger_discards", 0)),
+		"hard_high_danger_discards": int(hard.get("high_danger_discards", 0)),
+		"easy_human_high_danger_discards": int(easy.get("human_high_danger_discards", 0)),
+		"hard_human_high_danger_discards": int(hard.get("human_high_danger_discards", 0)),
+		"easy_deal_ins": int(easy.get("deal_ins", 0)),
+		"hard_deal_ins": int(hard.get("deal_ins", 0)),
+		"easy_deal_ins_to_human": int(easy.get("deal_ins_to_human", 0)),
+		"hard_deal_ins_to_human": int(hard.get("deal_ins_to_human", 0)),
+		"avg_ms_easy": float(bench.get("avg_ms_easy", 0.0)),
+		"avg_ms_hard": float(bench.get("avg_ms_hard", 0.0)),
+	}
+
+
 func sample_ai_commercial_strength_pack(hands_per_diff: int = 2, seed_bases: Array = [20260730, 20260811, 20260827], include_shuffled: bool = true) -> Dictionary:
-	# R68: 多固定种子 + 可选打乱人设的低资源商用强度证据包。
+	# R68: 多固定种子 + 可选打乱人设的低资源商用强度证据包。商用门槛看
+	# 同牌山/同人设映射的聚合结果，逐 seed 行只作为噪声定位。
 	var seeds: Array = seed_bases.duplicate() if typeof(seed_bases) == TYPE_ARRAY and not seed_bases.is_empty() else [20260730]
 	var fixed_rows: Array = []
-	var all_ok = true
 	var total_ms = 0
+	var fixed_aggregate = empty_ai_strength_aggregate()
+	var total_aggregate = empty_ai_strength_aggregate()
 	for seed_base in seeds:
 		var seed_int = int(seed_base)
 		var t0 = Time.get_ticks_msec()
-		var bench = sample_ai_strength_benchmark(hands_per_diff, seed_int)
+		var bench = sample_ai_strength_benchmark(hands_per_diff, seed_int, false, false)
 		var elapsed = Time.get_ticks_msec() - t0
 		total_ms += elapsed
-		var row = {
-			"mode": "fixed",
-			"seed_base": seed_int,
-			"hands_per_diff": hands_per_diff,
-			"elapsed_ms": elapsed,
-			"commercial_strength_ok": bool(bench.get("commercial_strength_ok", false)),
-			"finished_all": bool(bench.get("finished_all", false)),
-			"easy_high_danger": float(bench.get("easy_high_danger", 1.0)),
-			"hard_high_danger": float(bench.get("hard_high_danger", 1.0)),
-			"easy_deal_in": float(bench.get("easy_deal_in", 1.0)),
-			"hard_deal_in": float(bench.get("hard_deal_in", 1.0)),
-			"easy_deal_in_to_human": float(bench.get("easy_deal_in_to_human", 1.0)),
-			"hard_deal_in_to_human": float(bench.get("hard_deal_in_to_human", 1.0)),
-			"avg_ms_easy": float(bench.get("avg_ms_easy", 0.0)),
-			"avg_ms_hard": float(bench.get("avg_ms_hard", 0.0)),
-		}
+		add_ai_strength_benchmark_to_aggregate(fixed_aggregate, bench)
+		add_ai_strength_benchmark_to_aggregate(total_aggregate, bench)
+		var row = ai_strength_pack_row("fixed", seed_int, hands_per_diff, elapsed, bench)
 		fixed_rows.append(row)
-		if not bool(row.get("commercial_strength_ok", false)):
-			all_ok = false
 	var shuffled_row := {}
 	if include_shuffled:
 		var shuffle_seed = int(seeds[0]) + 101
 		var t1 = Time.get_ticks_msec()
-		var raw = sample_bot_strength_across_difficulties(hands_per_diff, shuffle_seed, true)
+		var bench_s = sample_ai_strength_benchmark(hands_per_diff, shuffle_seed, true, false)
 		var elapsed_s = Time.get_ticks_msec() - t1
 		total_ms += elapsed_s
-		var by: Dictionary = raw.get("by_diff", {})
-		var easy: Dictionary = by.get(AI_DIFFICULTY_EASY, {})
-		var hard: Dictionary = by.get(AI_DIFFICULTY_HARD, {})
-		var easy_hd = float(easy.get("high_danger_rate", 1.0))
-		var hard_hd = float(hard.get("high_danger_rate", 1.0))
-		var easy_di = float(easy.get("deal_in_rate", 1.0))
-		var hard_di = float(hard.get("deal_in_rate", 1.0))
-		var easy_dih = float(easy.get("deal_in_to_human_rate", 1.0))
-		var hard_dih = float(hard.get("deal_in_to_human_rate", 1.0))
-		var finished_all = int(easy.get("ended", 0)) >= hands_per_diff and int(hard.get("ended", 0)) >= hands_per_diff
-		var shuffle_ok = finished_all and hard_hd <= easy_hd + 0.08 and hard_di <= easy_di + 0.34 and hard_dih <= easy_dih + 0.34
-		shuffled_row = {
-			"mode": "shuffled",
-			"seed_base": shuffle_seed,
-			"hands_per_diff": hands_per_diff,
-			"elapsed_ms": elapsed_s,
-			"commercial_strength_ok": shuffle_ok,
-			"finished_all": finished_all,
-			"easy_high_danger": easy_hd,
-			"hard_high_danger": hard_hd,
-			"easy_deal_in": easy_di,
-			"hard_deal_in": hard_di,
-			"easy_deal_in_to_human": easy_dih,
-			"hard_deal_in_to_human": hard_dih,
-			"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
-			"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
-		}
-		if not shuffle_ok:
-			all_ok = false
+		add_ai_strength_benchmark_to_aggregate(total_aggregate, bench_s)
+		shuffled_row = ai_strength_pack_row("shuffled", shuffle_seed, hands_per_diff, elapsed_s, bench_s)
+	var fixed_summary = finalize_ai_strength_aggregate(fixed_aggregate)
+	var total_summary = finalize_ai_strength_aggregate(total_aggregate)
 	var pack := {
 		"version": APP_VERSION,
 		"hands_per_diff": hands_per_diff,
 		"seed_bases": seeds,
 		"include_shuffled": include_shuffled,
+		"diffs_sampled": [AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD],
+		"paired_wall_seed": bool(total_summary.get("paired_wall_seed", false)),
+		"paired_profile_seed": bool(total_summary.get("paired_profile_seed", false)),
 		"fixed_rows": fixed_rows,
 		"shuffled_row": shuffled_row,
+		"fixed_aggregate": fixed_summary,
+		"aggregate": total_summary,
 		"total_elapsed_ms": total_ms,
-		"commercial_strength_ok": all_ok and not fixed_rows.is_empty(),
+		"commercial_strength_ok": bool(fixed_summary.get("commercial_strength_ok", false)) and bool(total_summary.get("commercial_strength_ok", false)) and not fixed_rows.is_empty(),
 		"fixed_pass_count": 0,
 	}
 	var fixed_pass = 0
@@ -5727,17 +5931,52 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	lines.append("Version: `%s`" % str(pack.get("version", APP_VERSION)))
 	lines.append("Hands/diff: %d" % int(pack.get("hands_per_diff", 0)))
 	lines.append("Commercial gate: **%s**" % ("PASS" if bool(pack.get("commercial_strength_ok", false)) else "FAIL"))
+	lines.append("Diffs sampled: easy/hard paired wall=%s paired profiles=%s" % [str(pack.get("paired_wall_seed", false)), str(pack.get("paired_profile_seed", false))])
 	lines.append("Total elapsed ms: %d" % int(pack.get("total_elapsed_ms", 0)))
+	var aggregate: Dictionary = pack.get("aggregate", {})
+	if not aggregate.is_empty():
+		lines.append("")
+		lines.append("## Aggregate Gate")
+		lines.append("- all rows: ok=%s finished=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f discards e/h=%d/%d" % [
+			str(aggregate.get("commercial_strength_ok", false)),
+			str(aggregate.get("finished_all", false)),
+			float(aggregate.get("easy_high_danger", 1.0)),
+			float(aggregate.get("hard_high_danger", 1.0)),
+			float(aggregate.get("easy_human_high_danger", 1.0)),
+			float(aggregate.get("hard_human_high_danger", 1.0)),
+			float(aggregate.get("easy_deal_in", 1.0)),
+			float(aggregate.get("hard_deal_in", 1.0)),
+			float(aggregate.get("easy_deal_in_to_human", 1.0)),
+			float(aggregate.get("hard_deal_in_to_human", 1.0)),
+			int(aggregate.get("easy_discards", 0)),
+			int(aggregate.get("hard_discards", 0)),
+		])
+	var fixed_aggregate: Dictionary = pack.get("fixed_aggregate", {})
+	if not fixed_aggregate.is_empty():
+		lines.append("- fixed only: ok=%s finished=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f" % [
+			str(fixed_aggregate.get("commercial_strength_ok", false)),
+			str(fixed_aggregate.get("finished_all", false)),
+			float(fixed_aggregate.get("easy_high_danger", 1.0)),
+			float(fixed_aggregate.get("hard_high_danger", 1.0)),
+			float(fixed_aggregate.get("easy_human_high_danger", 1.0)),
+			float(fixed_aggregate.get("hard_human_high_danger", 1.0)),
+			float(fixed_aggregate.get("easy_deal_in", 1.0)),
+			float(fixed_aggregate.get("hard_deal_in", 1.0)),
+			float(fixed_aggregate.get("easy_deal_in_to_human", 1.0)),
+			float(fixed_aggregate.get("hard_deal_in_to_human", 1.0)),
+		])
 	lines.append("")
 	lines.append("## Fixed-profile seeds")
 	for row in pack.get("fixed_rows", []):
 		if typeof(row) != TYPE_DICTIONARY:
 			continue
-		lines.append("- seed %s: ok=%s hd e/h=%.3f/%.3f di e/h=%.2f/%.2f human e/h=%.2f/%.2f ms_h=%.0f" % [
+		lines.append("- seed %s: ok=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
 			str(row.get("seed_base", 0)),
 			str(row.get("commercial_strength_ok", false)),
 			float(row.get("easy_high_danger", 1.0)),
 			float(row.get("hard_high_danger", 1.0)),
+			float(row.get("easy_human_high_danger", 1.0)),
+			float(row.get("hard_human_high_danger", 1.0)),
 			float(row.get("easy_deal_in", 1.0)),
 			float(row.get("hard_deal_in", 1.0)),
 			float(row.get("easy_deal_in_to_human", 1.0)),
@@ -5748,11 +5987,13 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	if typeof(shuffled) == TYPE_DICTIONARY and not (shuffled as Dictionary).is_empty():
 		lines.append("")
 		lines.append("## Shuffled-profile sample")
-		lines.append("- seed %s: ok=%s hd e/h=%.3f/%.3f di e/h=%.2f/%.2f human e/h=%.2f/%.2f ms_h=%.0f" % [
+		lines.append("- seed %s: ok=%s hd e/h=%.3f/%.3f humanHD e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
 			str(shuffled.get("seed_base", 0)),
 			str(shuffled.get("commercial_strength_ok", false)),
 			float(shuffled.get("easy_high_danger", 1.0)),
 			float(shuffled.get("hard_high_danger", 1.0)),
+			float(shuffled.get("easy_human_high_danger", 1.0)),
+			float(shuffled.get("hard_human_high_danger", 1.0)),
 			float(shuffled.get("easy_deal_in", 1.0)),
 			float(shuffled.get("hard_deal_in", 1.0)),
 			float(shuffled.get("easy_deal_in_to_human", 1.0)),
