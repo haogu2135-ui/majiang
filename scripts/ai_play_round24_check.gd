@@ -59,6 +59,10 @@ func run() -> void:
 	var prospective_hand = tenpai.duplicate()
 	prospective_hand.append("2W")
 	scene.players[3]["hand"] = prospective_hand
+	# The report is now intentionally bound to a real post-draw action window.
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 3, "tile": "2W", "source": "normal", "wall_empty": false, "serial": 24}
+	scene.offline_self_draw_ready = {"seat": 3, "tile": "2W", "serial": 24}
 	var decision = scene.ai_tsumo_decision_report(3, "2W")
 	print("    decision=%s" % str(decision))
 	check(not bool(decision.get("accept", true)), "困难档会放弃低价值自摸")
@@ -67,6 +71,9 @@ func run() -> void:
 
 	print("--- B) sync bot path actually returns the drawn tile ---")
 	scene.players[3]["hand"] = tenpai.duplicate()
+	scene.offline_turn_needs_draw = true
+	scene.offline_last_draw.clear()
+	scene.offline_self_draw_ready.clear()
 	var result = scene.simulate_offline_bot_hand_sync(1)
 	print("    result=%s discard=%s" % [str(result), str(scene.players[3]["discards"])])
 	check(scene.players[3]["discards"].size() == 1 and str(scene.players[3]["discards"].back()) == "2W", "全机器人路径打回低价值自摸牌")

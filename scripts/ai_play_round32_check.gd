@@ -37,6 +37,7 @@ func reset_round(scene) -> void:
 	scene.mode = "offline"
 	scene.offline_phase = "resolving"
 	scene.offline_turn_needs_draw = false
+	scene.current_seat = 0
 	scene.offline_last_winner = -1
 	scene.offline_pending_claim.clear()
 	scene.last_win_score.clear()

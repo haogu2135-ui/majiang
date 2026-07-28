@@ -2452,7 +2452,7 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	# Keep the public scoring boundary authoritative. Normal game flow has already
 	# validated a win, but callers such as UI previews or imported match state must
 	# never turn an incomplete hand into a paid result.
-	if not assume_complete and (not has_valid_scoring_melds(seat) or not is_complete_hand(test_hand, players[seat]["melds"].size())):
+	if not assume_complete and (not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, test_hand) or not is_complete_hand(test_hand, players[seat]["melds"].size())):
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
 	var fan = 1
 	var reasons: Array[String] = ["平胡"]
@@ -3802,7 +3802,9 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 		return
 	if opponent_discard_tile_count(opponent, tile, eval_context) > 0:
 		return
-	var visible = visible_override if visible_override >= 0 else visible_tile_count(tile)
+	# Report batches already capture visibility once. Reuse that immutable state
+	# instead of repeatedly traversing every live discard and meld collection.
+	var visible = visible_override if visible_override >= 0 else visible_tile_count_from_counts(tile, visible_counts_snapshot)
 	var pressure = 2.0 + float(players[opponent]["melds"].size()) * 3.2
 	var readiness = opponent_readiness_score(opponent, eval_context)
 	if visible == 0:
@@ -3835,22 +3837,37 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 	result["pattern_threat"] = pattern_threat
 
 
-func threat_report_cache_key(viewer: int, opponent: int) -> String:
-	if mode != "offline" or viewer < 0 or opponent < 0:
+func threat_report_table_state_cache_key(viewer: int, visible_counts_snapshot: Array = []) -> String:
+	if mode != "offline" or viewer < 0 or viewer >= players.size():
 		return ""
 	var parts: Array[String] = [
-		"viewer=%d" % viewer,
-		"opponent=%d" % opponent,
 		"phase=" + offline_phase,
 		"cur=%d" % current_seat,
 		"wall=%d" % get_wall_count(),
 	]
+	# Context callers may supply a visibility snapshot that intentionally differs
+	# from the live table. Include it only for that snapshot-specific signature.
+	if not visible_counts_snapshot.is_empty():
+		parts.append("visible=" + counts_compact_key(visible_counts_snapshot))
 	for seat in range(players.size()):
 		var player: Dictionary = players[seat]
 		parts.append("p%d_hand=%s" % [seat, tile_array_key(player.get("hand", [])) if seat == viewer else "%d" % numeric_count(player.get("hand", []), 0)])
 		parts.append("p%d_disc=%s" % [seat, tile_array_key(player.get("discards", []))])
 		parts.append("p%d_meld=%s" % [seat, meld_array_key(player.get("melds", []))])
 	return "|".join(parts)
+
+
+func threat_report_cache_key(viewer: int, opponent: int, eval_context: Dictionary = {}) -> String:
+	if mode != "offline" or viewer < 0 or opponent < 0:
+		return ""
+	var state_key = ""
+	if not eval_context.is_empty() and int(eval_context.get("seat", -1)) == viewer:
+		state_key = str(eval_context.get("threat_cache_state_key", ""))
+	if state_key == "":
+		state_key = threat_report_table_state_cache_key(viewer)
+	if state_key == "":
+		return ""
+	return "viewer=%d|opponent=%d|%s" % [viewer, opponent, state_key]
 
 func store_threat_report_cache(key: String, report: Dictionary) -> void:
 	if key == "":

@@ -976,6 +976,7 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 		return {}
 	var hand: Array = players[seat]["hand"]
 	var open_melds = players[seat]["melds"].size()
+	var exposed_melds = exposed_meld_count_for_seat(seat)
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
 	var route_focus = ai_route_focus(seat)
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
@@ -990,6 +991,7 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 		"hand_counts": hand_counts,
 		"hand_size": hand.size(),
 		"open_melds": open_melds,
+		"exposed_melds": exposed_melds,
 		"before_shanten": before_shanten,
 		"before_plan_label": str(before_plan_report.get("label", "")),
 		"before_plan_bonus": float(before_plan_report.get("score_bonus", 0.0)),
@@ -1041,6 +1043,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	var hand: Array = players[seat]["hand"]
 	var has_claim_context = is_ai_claim_context_for_seat(claim_context, seat)
 	var open_melds = int(claim_context.get("open_melds", 0)) if has_claim_context else players[seat]["melds"].size()
+	var exposed_melds = int(claim_context.get("exposed_melds", exposed_meld_count_for_seat(seat))) if has_claim_context else exposed_meld_count_for_seat(seat)
 	var hand_counts = claim_context.get("hand_counts", []) if has_claim_context else tile_counts(hand)
 	var before_shanten = int(claim_context.get("before_shanten", 8)) if has_claim_context else calculate_min_shanten_from_counts(hand_counts, open_melds)
 	var before_plan_label = str(claim_context.get("before_plan_label", "")) if has_claim_context else str(hand_plan_report_for_seat_from_counts(seat, hand_counts, hand.size()).get("label", ""))
@@ -1048,7 +1051,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	var after_counts = hand_counts.duplicate()
 	var route_focus = float(claim_context.get("route_focus", 1.0)) if has_claim_context else ai_route_focus(seat)
 	var bonus = ai_claim_meld_bonus(seat, claim, tile, chi_choice)
-	var threshold = ai_claim_shape_threshold(seat, claim, open_melds)
+	var threshold = ai_claim_shape_threshold(seat, claim, exposed_melds)
 	match claim:
 		"gang":
 			if not consume_tile_count(after_counts, tile, 3) or not remove_known_tiles(after, tile, 3):
@@ -1094,7 +1097,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		allow = false
 		reason = "保七对"
 		declined_by_plan = true
-	elif open_melds == 0 and seat != 0 and ai_route_focus(seat) >= 1.15 and ["清一色", "混一色", "一条龙", "十三幺"].has(before_plan_label) and after_shanten >= before_shanten and shape_gain < max(18.0, threshold * 1.2):
+	elif exposed_melds == 0 and seat != 0 and ai_route_focus(seat) >= 1.15 and ["清一色", "混一色", "一条龙", "十三幺"].has(before_plan_label) and after_shanten >= before_shanten and shape_gain < max(18.0, threshold * 1.2):
 		allow = false
 		reason = "保路线"
 		declined_by_plan = true
@@ -1104,7 +1107,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		allow = false
 		reason = "高压防守"
 	var declined_by_opening = false
-	if allow and open_melds == 0 and before_shanten >= 3 and get_wall_count() >= 52:
+	if allow and exposed_melds == 0 and before_shanten >= 3 and get_wall_count() >= 52:
 		# 序盘高向听首副露：无降向听时更挑剔，避免脏型开牌。
 		var opening_need = threshold + 8.0 + float(before_shanten - 2) * 3.5
 		if claim == "chi":
@@ -1119,7 +1122,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	var claim_eval_context = claim_context.get("eval_context", {}) if has_claim_context else {}
 	if typeof(claim_eval_context) != TYPE_DICTIONARY:
 		claim_eval_context = {}
-	var human_discipline = human_claim_discipline_report(seat, claim, from_seat, before_shanten, after_shanten, shape_gain, pressure_report, open_melds, claim_eval_context)
+	var human_discipline = human_claim_discipline_report(seat, claim, from_seat, before_shanten, after_shanten, shape_gain, pressure_report, exposed_melds, claim_eval_context)
 	var declined_by_human = allow and bool(human_discipline.get("decline", false))
 	if declined_by_human:
 		allow = false
@@ -1130,6 +1133,8 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	report["after_shanten"] = after_shanten
 	report["shape_gain"] = shape_gain
 	report["threshold"] = threshold
+	report["structural_melds"] = open_melds
+	report["exposed_melds"] = exposed_melds
 	report["defense"] = float(pressure_report.get("defense", 0.0))
 	report["pressure"] = float(pressure_report.get("pressure", 0.0))
 	report["forced_discard"] = str(pressure_report.get("discard", ""))
@@ -1159,20 +1164,20 @@ func ai_claim_meld_bonus(seat: int, claim: String, tile: String, chi_choice: Dic
 			return (28.0 + float(chi_choice.get("score", 0.0)) * 0.08) * claim_aggression
 	return 0.0
 
-func ai_claim_shape_threshold(seat: int, claim: String, open_melds: int) -> float:
+func ai_claim_shape_threshold(seat: int, claim: String, exposed_melds: int) -> float:
 	var threshold = 9999.0
 	match claim:
 		"peng":
-			threshold = 10.0 if open_melds == 0 else -4.0
+			threshold = 10.0 if exposed_melds == 0 else -4.0
 		"chi":
 			# 首副露吃更克制，避免脏型开牌；已副露后放宽。
-			threshold = 17.0 if open_melds == 0 else 1.0
+			threshold = 17.0 if exposed_melds == 0 else 1.0
 		"gang":
-			threshold = 6.0 if open_melds == 0 else -2.0
+			threshold = 6.0 if exposed_melds == 0 else -2.0
 	if threshold >= 0.0:
 		var scaled = threshold / max(0.45, ai_claim_aggression(seat))
 		# 防守型再抬一点首吃门槛
-		if claim == "chi" and open_melds == 0:
+		if claim == "chi" and exposed_melds == 0:
 			scaled *= clamp(0.92 + ai_profile_value(seat, "defense") * 0.12, 1.0, 1.28)
 		return scaled
 	return threshold - max(0.0, ai_claim_aggression(seat) - 1.0) * 6.0
@@ -1851,7 +1856,7 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 	return out
 
 
-func human_claim_discipline_report(seat: int, claim: String, from_seat: int, before_shanten: int, after_shanten: int, shape_gain: float, pressure_report: Dictionary = {}, open_melds: int = 0, eval_context: Dictionary = {}) -> Dictionary:
+func human_claim_discipline_report(seat: int, claim: String, from_seat: int, before_shanten: int, after_shanten: int, shape_gain: float, pressure_report: Dictionary = {}, exposed_melds: int = 0, eval_context: Dictionary = {}) -> Dictionary:
 	# R10: 对玩家弃牌的吃碰更克制；副露后若必打危险张喂 seat0，则拒吃/降分。
 	var out := {
 		"decline": false,
@@ -1903,7 +1908,7 @@ func human_claim_discipline_report(seat: int, claim: String, from_seat: int, bef
 	pen += feed_human * 0.42
 	if forced_safety != "安" and forced_risk >= AI_DANGER_RISK_SOFT:
 		pen += (forced_risk - AI_DANGER_RISK_SOFT) * 0.55
-	if open_melds >= 2 and no_improve:
+	if exposed_melds >= 2 and no_improve:
 		pen += 4.0
 	match diff:
 		AI_DIFFICULTY_HARD:
@@ -2243,10 +2248,15 @@ func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) 
 		if other == seat:
 			continue
 		opponents[other] = build_opponent_runtime_state(other)
+	# Threat reports are requested once per opponent in a single evaluation pass.
+	# Capture their immutable table signature here so those requests neither rebuild
+	# the same long key nor drift to live state halfway through the pass.
+	var threat_cache_state_key = threat_report_table_state_cache_key(seat, visible_counts)
 	return {
 		"seat": seat,
 		"visible_counts": visible_counts,
 		"opponents": opponents,
+		"threat_cache_state_key": threat_cache_state_key,
 		"discard_pressures": {},
 		"feed_reports": {},
 		"risk_vectors": {},
@@ -2437,8 +2447,8 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var tenpai_bonus = 220.0 if shanten <= 0 else 0.0
 	var fold_push = tenpai_fold_adjustment(seat, shanten, ukeire, wait_best_points, wait_total_remaining, safety, risk, feed_risk, pressure_context)
 	var midgame_push = midgame_danger_adjustment(seat, shanten, ukeire, safety, risk, feed_risk, pressure_context)
-	var opening_push = opening_efficiency_adjustment(seat, tile, shanten, original_counts, open_melds)
-	var post_meld_push = post_meld_route_adjustment(seat, tile, open_melds, original_counts, plan_label, plan_suit, shanten)
+	var opening_push = opening_efficiency_adjustment(seat, tile, shanten, original_counts, exposed_melds)
+	var post_meld_push = post_meld_route_adjustment(seat, tile, exposed_melds, original_counts, plan_label, plan_suit, shanten)
 	var open_wait_push = open_tenpai_quality_adjustment(seat, exposed_melds, shanten, wait_total_remaining, int(effective_tiles.size()) if typeof(effective_tiles) == TYPE_ARRAY else 0, wait_average_points, wait_best_points)
 	var score = -float(shanten) * 760.0
 	score += (float(ukeire) * 26.0 + float(variety) * 18.0) * attack
@@ -3876,7 +3886,7 @@ func opponent_threat_report(seat: int, eval_context: Dictionary = {}) -> Diction
 func opponent_seat_threat_report(viewer: int, opponent: int, eval_context: Dictionary = {}) -> Dictionary:
 	if viewer < 0 or viewer >= players.size() or opponent < 0 or opponent >= players.size() or viewer == opponent:
 		return {}
-	var cache_key = threat_report_cache_key(viewer, opponent)
+	var cache_key = threat_report_cache_key(viewer, opponent, eval_context)
 	if cache_key != "" and threat_report_cache.has(cache_key):
 		return duplicate_threat_report(threat_report_cache[cache_key])
 	var best_score = 0.0
@@ -4980,16 +4990,20 @@ func reset_ai_sim_stats() -> void:
 	}
 
 func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
-	ai_sim_stats["discards"] = int(ai_sim_stats.get("discards", 0)) + 1
-	var reports = get_ai_discard_reports(seat)
-	for report in reports:
-		if str(report.get("tile", "")) != tile:
-			continue
-		var risk = float(report.get("risk", 0.0))
-		var feed = float(report.get("feed_risk", 0.0))
-		if risk >= 18.0 or feed >= 14.0:
-			ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
+	# Preserve simulation danger telemetry for a forced discard without rebuilding
+	# a full Top-K discard report. This is used after a deliberate tsumo pass,
+	# where the drawn tile is already the only valid preserve-tenpai action.
+	if seat < 0 or seat >= players.size() or tile == "":
 		return
+	var visible_counts = visible_tile_counts()
+	var eval_context = make_ai_evaluation_context(seat, visible_counts)
+	var risk = deal_in_risk_score(tile, seat, eval_context)
+	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context)
+	var feed = float(feed_report.get("score", 0.0))
+	if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
+		ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
+	if risk >= AI_DANGER_RISK_HIGH:
+		ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
 
 func _ai_sim_note_terminal_result(actor_seat: int) -> void:
 	# 不能根据触发动作推断终局类型：他家放铳后碰杠补牌自摸，或抢杠胡，
@@ -5040,6 +5054,18 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		if not is_ai_controlled_seat(seat):
 			break
 		var tsumo_continue_discard = ""
+		# 杠后补牌已经完成，故本轮不会再进入摸牌分支。先处理这张仍持有
+		# 当前自摸资格的牌，确保它和普通摸牌一样经过 AI 的价值决策。
+		if not offline_turn_needs_draw:
+			var existing_drawn_tile = current_self_draw_tile(seat)
+			if existing_drawn_tile != "" and can_win_for_seat(seat):
+				var existing_tsumo_decision = ai_tsumo_decision_report(seat, existing_drawn_tile)
+				if bool(existing_tsumo_decision.get("accept", true)):
+					finish_offline_round(seat, existing_drawn_tile, true, -1)
+					_ai_sim_note_terminal_result(seat)
+					break
+				ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
+				tsumo_continue_discard = ai_tsumo_continue_discard(seat, existing_drawn_tile, existing_tsumo_decision)
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -5081,8 +5107,10 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		if mode != "offline" or offline_phase != "await_discard":
 			break
 		seat = current_seat
-		var reports = get_ai_discard_reports(seat)
+		var reports: Array = []
 		var discard_tile = tsumo_continue_discard
+		if discard_tile == "":
+			reports = get_ai_discard_reports(seat)
 		if discard_tile == "" and reports.is_empty():
 			var hand: Array = players[seat]["hand"]
 			discard_tile = str(hand[0]) if not hand.is_empty() else ""
@@ -5100,16 +5128,19 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		if discard_tile == "":
 			break
 		ai_sim_stats["discards"] = int(ai_sim_stats.get("discards", 0)) + 1
-		for report in reports:
-			if str(report.get("tile", "")) != discard_tile:
-				continue
-			var risk = float(report.get("risk", 0.0))
-			var feed = float(report.get("feed_risk", 0.0))
-			if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
-				ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
-			if risk >= AI_DANGER_RISK_HIGH:
-				ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
-			break
+		if reports.is_empty():
+			_ai_sim_note_discard_risk(seat, discard_tile)
+		else:
+			for report in reports:
+				if str(report.get("tile", "")) != discard_tile:
+					continue
+				var risk = float(report.get("risk", 0.0))
+				var feed = float(report.get("feed_risk", 0.0))
+				if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
+					ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
+				if risk >= AI_DANGER_RISK_HIGH:
+					ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
+				break
 		var committed_tile = discard_tile_by_value(seat, discard_tile)
 		if committed_tile == "":
 			break
@@ -5288,6 +5319,16 @@ func run_ai_until_human() -> void:
 	while mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
 		var seat = current_seat
 		var tsumo_continue_discard = ""
+		# 杠后补牌留下的当前自摸资格也必须走同一套 AI 决策；此前这里会
+		# 直接在 draw_after_gang 中结算，从而跳过留听策略。
+		if not offline_turn_needs_draw:
+			var existing_drawn_tile = current_self_draw_tile(seat)
+			if existing_drawn_tile != "" and can_win_for_seat(seat):
+				var existing_tsumo_decision = ai_tsumo_decision_report(seat, existing_drawn_tile)
+				if bool(existing_tsumo_decision.get("accept", true)):
+					finish_offline_round(seat, existing_drawn_tile, true, -1)
+					break
+				tsumo_continue_discard = ai_tsumo_continue_discard(seat, existing_drawn_tile, existing_tsumo_decision)
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -5327,6 +5368,8 @@ func run_ai_until_human() -> void:
 			if ai_declared_gang and mode == "offline" and offline_phase == "await_discard":
 				request_game_render()
 				await pace_after_visible_ai_action()
+				# 补牌后的自摸资格要在下一轮优先裁决，再决定是否继续出牌。
+				continue
 			if should_yield_before_ai_discard():
 				await get_tree().process_frame
 			await wait_for_runtime_delay(ai_discard_delay())
@@ -5701,7 +5744,9 @@ func win_fx_type_for_score(score_data: Dictionary, self_draw: bool) -> String:
 	return "self_draw" if self_draw else "normal"
 
 func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> bool:
-	if mode != "offline" or offline_phase == "ended" or winner < 0 or winner >= players.size():
+	# 离线结算固定按四家支付/记账。先拒绝畸形导入桌面，避免通过
+	# winner/payer 的局部校验后在 finish_offline_round 的四座循环中越界。
+	if mode != "offline" or offline_phase == "ended" or players.size() != 4 or winner < 0 or winner >= players.size():
 		return false
 	if self_draw:
 		# A complete hand and matching draw record are not enough: tsumo belongs
@@ -5742,7 +5787,10 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 					or str((prepared_ai_claim as Dictionary).get("claim", "")) != "hu":
 					return false
 		elif offline_phase == "await_discard":
-			if not is_ai_controlled_seat(winner):
+			# 无人类响应窗时，只有正在本回合准备补杠的 AI 才能直接
+			# 结算抢杠胡。仅凭手中存在可补杠的刻子不足以证明当前牌源：
+			# 过期协程或导入状态可能在另一家的行动窗口里保留同样结构。
+			if not is_ai_controlled_seat(winner) or not is_valid_offline_added_gang(payer, win_tile):
 				return false
 		else:
 			return false
@@ -5872,11 +5920,11 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size():
 		return false
-	if not has_valid_scoring_melds(seat):
-		return false
 	var tiles: Array = players[seat]["hand"].duplicate()
 	if extra_tile != "":
 		tiles.append(extra_tile)
+	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, tiles):
+		return false
 	return is_complete_hand(tiles, players[seat]["melds"].size())
 
 
@@ -5897,36 +5945,78 @@ func is_passed_win_tile(seat: int, tile: String) -> bool:
 	if seat < 0 or tile == "":
 		return false
 	var passed = offline_passed_win_tiles.get(seat, {})
-	return typeof(passed) == TYPE_DICTIONARY and bool((passed as Dictionary).get(tile, false))
+	# Temporary furiten applies to every ron wait after declining any valid win,
+	# not only to the exact tile that was passed. The state clears on this seat's
+	# next actual draw in draw_tile_for.
+	return typeof(passed) == TYPE_DICTIONARY and not (passed as Dictionary).is_empty()
 
 
 func is_discard_furiten(seat: int, tile: String) -> bool:
-	# 商用常见舍张振听：河牌中已出现过的牌不能再荣和同名张。自摸不受影响。
 	if seat < 0 or seat >= players.size() or tile == "":
 		return false
+	var hand: Array = players[seat].get("hand", [])
+	var hand_counts = tile_counts(hand)
+	# Keep the helper tile-oriented for UI/AI callers: a non-waiting tile cannot
+	# be reported as furiten even if another current wait is in the river.
+	if can_win_for_seat_from_counts(seat, hand_counts, tile):
+		return is_discard_furiten_from_counts(seat, hand_counts)
+	# A completed self-draw hand holds fourteen tiles, so adding the drawn tile
+	# again is not a structural win. For UI/AI state inspection, reconstruct the
+	# pre-draw thirteen-tile base by removing that tile and retain its furiten flag.
+	var index = tile_index(tile)
+	if index < 0 or index >= hand_counts.size() or int(hand_counts[index]) <= 0:
+		return false
+	var pre_draw_counts = hand_counts.duplicate()
+	pre_draw_counts[index] = int(pre_draw_counts[index]) - 1
+	var open_melds = players[seat].get("melds", []).size()
+	if not is_complete_hand_from_counts(hand_counts, hand.size(), open_melds):
+		return false
+	return is_discard_furiten_from_counts(seat, pre_draw_counts, hand.size() - 1)
+
+
+func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_count_override: int = -1) -> bool:
+	# Discard furiten is wait-wide. If any tile in this seat's river completes
+	# the current hand structure, every ron wait is unavailable; self draw is not.
+	if seat < 0 or seat >= players.size() or hand_counts.size() != TILE_CODES.size():
+		return false
 	var discards: Array = players[seat].get("discards", [])
+	var seen := {}
+	var hand_tile_count = hand_tile_count_override if hand_tile_count_override >= 0 else players[seat].get("hand", []).size()
+	var open_melds = players[seat].get("melds", []).size()
 	for item in discards:
-		if str(item) == tile:
+		var discarded_tile = str(item)
+		if seen.has(discarded_tile):
+			continue
+		seen[discarded_tile] = true
+		var index = tile_index(discarded_tile)
+		if index < 0 or index >= hand_counts.size():
+			continue
+		var candidate_counts = hand_counts.duplicate()
+		candidate_counts[index] = int(candidate_counts[index]) + 1
+		if is_complete_hand_from_counts(candidate_counts, hand_tile_count + 1, open_melds):
 			return true
 	return false
 
 
 func can_ron_for_seat(seat: int, tile: String) -> bool:
-	if tile == "" or is_discard_furiten(seat, tile) or is_passed_win_tile(seat, tile):
+	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
-	return can_win_for_seat(seat, tile)
+	var hand_counts = tile_counts(players[seat].get("hand", []))
+	if not can_win_for_seat_from_counts(seat, hand_counts, tile):
+		return false
+	return not is_discard_furiten_from_counts(seat, hand_counts)
 
 
 func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -> bool:
-	if tile == "" or is_discard_furiten(seat, tile) or is_passed_win_tile(seat, tile):
+	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
-	return can_win_for_seat_from_counts(seat, hand_counts, tile)
+	if not can_win_for_seat_from_counts(seat, hand_counts, tile):
+		return false
+	return not is_discard_furiten_from_counts(seat, hand_counts)
 
 
 func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size() or hand_counts.is_empty():
-		return false
-	if not has_valid_scoring_melds(seat):
 		return false
 	var counts = hand_counts
 	var tile_count = players[seat]["hand"].size()
@@ -5937,6 +6027,8 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 		counts = hand_counts.duplicate()
 		counts[index] = int(counts[index]) + 1
 		tile_count += 1
+	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, counts, tile_count):
+		return false
 	return is_complete_hand_from_counts(counts, tile_count, players[seat]["melds"].size())
 
 func discard_report_for_tile(tile: String) -> Dictionary:
@@ -7590,8 +7682,9 @@ func draw_after_gang(seat: int) -> void:
 	offline_phase = "await_discard"
 	add_log("%s杠后补牌。" % players[seat]["name"])
 	play_after_gang_replacement_draw_fx(seat, drawn)
-	if can_win_for_seat(seat):
-		finish_offline_round(seat, drawn, true, -1)
+	# 杠后补牌与普通摸牌共用自摸行动窗口。这里不能直接结算：玩家需要
+	# 正常看到自摸操作，AI 也必须先评估是否保留更高价值的听口。
+	request_game_render()
 
 func draw_audio_test_button_art(button: Control) -> Control:
 	# r208: GPT chrome conversion
@@ -25787,7 +25880,7 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	# Keep the public scoring boundary authoritative. Normal game flow has already
 	# validated a win, but callers such as UI previews or imported match state must
 	# never turn an incomplete hand into a paid result.
-	if not assume_complete and (not has_valid_scoring_melds(seat) or not is_complete_hand(test_hand, players[seat]["melds"].size())):
+	if not assume_complete and (not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, test_hand) or not is_complete_hand(test_hand, players[seat]["melds"].size())):
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
 	var fan = 1
 	var reasons: Array[String] = ["平胡"]
@@ -27137,7 +27230,9 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 		return
 	if opponent_discard_tile_count(opponent, tile, eval_context) > 0:
 		return
-	var visible = visible_override if visible_override >= 0 else visible_tile_count(tile)
+	# Report batches already capture visibility once. Reuse that immutable state
+	# instead of repeatedly traversing every live discard and meld collection.
+	var visible = visible_override if visible_override >= 0 else visible_tile_count_from_counts(tile, visible_counts_snapshot)
 	var pressure = 2.0 + float(players[opponent]["melds"].size()) * 3.2
 	var readiness = opponent_readiness_score(opponent, eval_context)
 	if visible == 0:
@@ -27170,22 +27265,37 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 	result["pattern_threat"] = pattern_threat
 
 
-func threat_report_cache_key(viewer: int, opponent: int) -> String:
-	if mode != "offline" or viewer < 0 or opponent < 0:
+func threat_report_table_state_cache_key(viewer: int, visible_counts_snapshot: Array = []) -> String:
+	if mode != "offline" or viewer < 0 or viewer >= players.size():
 		return ""
 	var parts: Array[String] = [
-		"viewer=%d" % viewer,
-		"opponent=%d" % opponent,
 		"phase=" + offline_phase,
 		"cur=%d" % current_seat,
 		"wall=%d" % get_wall_count(),
 	]
+	# Context callers may supply a visibility snapshot that intentionally differs
+	# from the live table. Include it only for that snapshot-specific signature.
+	if not visible_counts_snapshot.is_empty():
+		parts.append("visible=" + counts_compact_key(visible_counts_snapshot))
 	for seat in range(players.size()):
 		var player: Dictionary = players[seat]
 		parts.append("p%d_hand=%s" % [seat, tile_array_key(player.get("hand", [])) if seat == viewer else "%d" % numeric_count(player.get("hand", []), 0)])
 		parts.append("p%d_disc=%s" % [seat, tile_array_key(player.get("discards", []))])
 		parts.append("p%d_meld=%s" % [seat, meld_array_key(player.get("melds", []))])
 	return "|".join(parts)
+
+
+func threat_report_cache_key(viewer: int, opponent: int, eval_context: Dictionary = {}) -> String:
+	if mode != "offline" or viewer < 0 or opponent < 0:
+		return ""
+	var state_key = ""
+	if not eval_context.is_empty() and int(eval_context.get("seat", -1)) == viewer:
+		state_key = str(eval_context.get("threat_cache_state_key", ""))
+	if state_key == "":
+		state_key = threat_report_table_state_cache_key(viewer)
+	if state_key == "":
+		return ""
+	return "viewer=%d|opponent=%d|%s" % [viewer, opponent, state_key]
 
 func store_threat_report_cache(key: String, report: Dictionary) -> void:
 	if key == "":
@@ -27578,6 +27688,47 @@ func has_valid_scoring_melds(seat: int) -> bool:
 	for item in melds:
 		if typeof(item) != TYPE_ARRAY or not is_valid_scoring_meld(item as Array):
 			return false
+	return true
+
+
+func has_valid_scoring_tile_inventory(seat: int, tiles: Array) -> bool:
+	if seat < 0 or seat >= players.size():
+		return false
+	var counts = make_empty_tile_counts()
+	for item in tiles:
+		var index = tile_index(str(item))
+		if index < 0 or index >= counts.size():
+			return false
+		counts[index] = int(counts[index]) + 1
+	return has_valid_scoring_tile_inventory_from_counts(seat, counts, tiles.size())
+
+
+func has_valid_scoring_tile_inventory_from_counts(seat: int, hand_counts: Array, expected_tile_count: int = -1) -> bool:
+	if seat < 0 or seat >= players.size() or hand_counts.size() != TILE_CODES.size():
+		return false
+	var combined = hand_counts.duplicate()
+	var concealed_total = 0
+	for index in range(combined.size()):
+		var amount = int(combined[index])
+		if amount < 0 or amount > 4:
+			return false
+		combined[index] = amount
+		concealed_total += amount
+	if expected_tile_count >= 0 and concealed_total != expected_tile_count:
+		return false
+	var melds = players[seat].get("melds", [])
+	if typeof(melds) != TYPE_ARRAY:
+		return false
+	for meld in melds:
+		if typeof(meld) != TYPE_ARRAY:
+			return false
+		for item in meld:
+			var index = tile_index(str(item))
+			if index < 0 or index >= combined.size():
+				return false
+			combined[index] = int(combined[index]) + 1
+			if int(combined[index]) > 4:
+				return false
 	return true
 
 

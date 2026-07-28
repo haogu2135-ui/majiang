@@ -1130,8 +1130,9 @@ func draw_after_gang(seat: int) -> void:
 	offline_phase = "await_discard"
 	add_log("%s杠后补牌。" % players[seat]["name"])
 	play_after_gang_replacement_draw_fx(seat, drawn)
-	if can_win_for_seat(seat):
-		finish_offline_round(seat, drawn, true, -1)
+	# 杠后补牌与普通摸牌共用自摸行动窗口。这里不能直接结算：玩家需要
+	# 正常看到自摸操作，AI 也必须先评估是否保留更高价值的听口。
+	request_game_render()
 
 func draw_audio_test_button_art(button: Control) -> Control:
 	# r208: GPT chrome conversion

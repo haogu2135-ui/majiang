@@ -56,7 +56,7 @@ func run() -> void:
 	scene.offline_sim_quiet = true
 	scene.setup_tile_order()
 
-	print("--- A) direct passed-win state blocks only the declined tile ---")
+	print("--- A) direct passed-win state blocks the declined tile ---")
 	reset_round(scene)
 	scene.players[1]["hand"] = winning_wait_hand()
 	check(scene.can_ron_for_seat(1, "5W"), "过水前同张可以荣和")

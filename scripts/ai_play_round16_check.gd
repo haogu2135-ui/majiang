@@ -52,6 +52,9 @@ func run() -> void:
 	prepare_round(scene)
 	# A gang replacement draw can finish during a discard resolver. The actor is
 	# intentionally seat 0 while seat 1 is the actual self-draw winner.
+	scene.current_seat = 1
+	scene.offline_last_draw = {"seat": 1, "tile": "5W", "source": "gang", "wall_empty": false, "serial": 16}
+	scene.offline_self_draw_ready = {"seat": 1, "tile": "5W", "serial": 16}
 	scene.finish_offline_round(1, "5W", true, -1)
 	scene._ai_sim_note_terminal_result(0)
 	check(int(scene.ai_sim_stats.get("wins", 0)) == 1, "杠上自摸计入胜局")

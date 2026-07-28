@@ -651,16 +651,20 @@ func reset_ai_sim_stats() -> void:
 	}
 
 func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
-	ai_sim_stats["discards"] = int(ai_sim_stats.get("discards", 0)) + 1
-	var reports = get_ai_discard_reports(seat)
-	for report in reports:
-		if str(report.get("tile", "")) != tile:
-			continue
-		var risk = float(report.get("risk", 0.0))
-		var feed = float(report.get("feed_risk", 0.0))
-		if risk >= 18.0 or feed >= 14.0:
-			ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
+	# Preserve simulation danger telemetry for a forced discard without rebuilding
+	# a full Top-K discard report. This is used after a deliberate tsumo pass,
+	# where the drawn tile is already the only valid preserve-tenpai action.
+	if seat < 0 or seat >= players.size() or tile == "":
 		return
+	var visible_counts = visible_tile_counts()
+	var eval_context = make_ai_evaluation_context(seat, visible_counts)
+	var risk = deal_in_risk_score(tile, seat, eval_context)
+	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context)
+	var feed = float(feed_report.get("score", 0.0))
+	if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
+		ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
+	if risk >= AI_DANGER_RISK_HIGH:
+		ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
 
 func _ai_sim_note_terminal_result(actor_seat: int) -> void:
 	# 不能根据触发动作推断终局类型：他家放铳后碰杠补牌自摸，或抢杠胡，
@@ -711,6 +715,18 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		if not is_ai_controlled_seat(seat):
 			break
 		var tsumo_continue_discard = ""
+		# 杠后补牌已经完成，故本轮不会再进入摸牌分支。先处理这张仍持有
+		# 当前自摸资格的牌，确保它和普通摸牌一样经过 AI 的价值决策。
+		if not offline_turn_needs_draw:
+			var existing_drawn_tile = current_self_draw_tile(seat)
+			if existing_drawn_tile != "" and can_win_for_seat(seat):
+				var existing_tsumo_decision = ai_tsumo_decision_report(seat, existing_drawn_tile)
+				if bool(existing_tsumo_decision.get("accept", true)):
+					finish_offline_round(seat, existing_drawn_tile, true, -1)
+					_ai_sim_note_terminal_result(seat)
+					break
+				ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
+				tsumo_continue_discard = ai_tsumo_continue_discard(seat, existing_drawn_tile, existing_tsumo_decision)
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -752,8 +768,10 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		if mode != "offline" or offline_phase != "await_discard":
 			break
 		seat = current_seat
-		var reports = get_ai_discard_reports(seat)
+		var reports: Array = []
 		var discard_tile = tsumo_continue_discard
+		if discard_tile == "":
+			reports = get_ai_discard_reports(seat)
 		if discard_tile == "" and reports.is_empty():
 			var hand: Array = players[seat]["hand"]
 			discard_tile = str(hand[0]) if not hand.is_empty() else ""
@@ -771,16 +789,19 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		if discard_tile == "":
 			break
 		ai_sim_stats["discards"] = int(ai_sim_stats.get("discards", 0)) + 1
-		for report in reports:
-			if str(report.get("tile", "")) != discard_tile:
-				continue
-			var risk = float(report.get("risk", 0.0))
-			var feed = float(report.get("feed_risk", 0.0))
-			if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
-				ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
-			if risk >= AI_DANGER_RISK_HIGH:
-				ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
-			break
+		if reports.is_empty():
+			_ai_sim_note_discard_risk(seat, discard_tile)
+		else:
+			for report in reports:
+				if str(report.get("tile", "")) != discard_tile:
+					continue
+				var risk = float(report.get("risk", 0.0))
+				var feed = float(report.get("feed_risk", 0.0))
+				if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
+					ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
+				if risk >= AI_DANGER_RISK_HIGH:
+					ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
+				break
 		var committed_tile = discard_tile_by_value(seat, discard_tile)
 		if committed_tile == "":
 			break
@@ -959,6 +980,16 @@ func run_ai_until_human() -> void:
 	while mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
 		var seat = current_seat
 		var tsumo_continue_discard = ""
+		# 杠后补牌留下的当前自摸资格也必须走同一套 AI 决策；此前这里会
+		# 直接在 draw_after_gang 中结算，从而跳过留听策略。
+		if not offline_turn_needs_draw:
+			var existing_drawn_tile = current_self_draw_tile(seat)
+			if existing_drawn_tile != "" and can_win_for_seat(seat):
+				var existing_tsumo_decision = ai_tsumo_decision_report(seat, existing_drawn_tile)
+				if bool(existing_tsumo_decision.get("accept", true)):
+					finish_offline_round(seat, existing_drawn_tile, true, -1)
+					break
+				tsumo_continue_discard = ai_tsumo_continue_discard(seat, existing_drawn_tile, existing_tsumo_decision)
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -998,6 +1029,8 @@ func run_ai_until_human() -> void:
 			if ai_declared_gang and mode == "offline" and offline_phase == "await_discard":
 				request_game_render()
 				await pace_after_visible_ai_action()
+				# 补牌后的自摸资格要在下一轮优先裁决，再决定是否继续出牌。
+				continue
 			if should_yield_before_ai_discard():
 				await get_tree().process_frame
 			await wait_for_runtime_delay(ai_discard_delay())
@@ -1372,7 +1405,9 @@ func win_fx_type_for_score(score_data: Dictionary, self_draw: bool) -> String:
 	return "self_draw" if self_draw else "normal"
 
 func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> bool:
-	if mode != "offline" or offline_phase == "ended" or winner < 0 or winner >= players.size():
+	# 离线结算固定按四家支付/记账。先拒绝畸形导入桌面，避免通过
+	# winner/payer 的局部校验后在 finish_offline_round 的四座循环中越界。
+	if mode != "offline" or offline_phase == "ended" or players.size() != 4 or winner < 0 or winner >= players.size():
 		return false
 	if self_draw:
 		# A complete hand and matching draw record are not enough: tsumo belongs
@@ -1413,7 +1448,10 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 					or str((prepared_ai_claim as Dictionary).get("claim", "")) != "hu":
 					return false
 		elif offline_phase == "await_discard":
-			if not is_ai_controlled_seat(winner):
+			# 无人类响应窗时，只有正在本回合准备补杠的 AI 才能直接
+			# 结算抢杠胡。仅凭手中存在可补杠的刻子不足以证明当前牌源：
+			# 过期协程或导入状态可能在另一家的行动窗口里保留同样结构。
+			if not is_ai_controlled_seat(winner) or not is_valid_offline_added_gang(payer, win_tile):
 				return false
 		else:
 			return false
@@ -1543,11 +1581,11 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size():
 		return false
-	if not has_valid_scoring_melds(seat):
-		return false
 	var tiles: Array = players[seat]["hand"].duplicate()
 	if extra_tile != "":
 		tiles.append(extra_tile)
+	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, tiles):
+		return false
 	return is_complete_hand(tiles, players[seat]["melds"].size())
 
 
@@ -1568,36 +1606,78 @@ func is_passed_win_tile(seat: int, tile: String) -> bool:
 	if seat < 0 or tile == "":
 		return false
 	var passed = offline_passed_win_tiles.get(seat, {})
-	return typeof(passed) == TYPE_DICTIONARY and bool((passed as Dictionary).get(tile, false))
+	# Temporary furiten applies to every ron wait after declining any valid win,
+	# not only to the exact tile that was passed. The state clears on this seat's
+	# next actual draw in draw_tile_for.
+	return typeof(passed) == TYPE_DICTIONARY and not (passed as Dictionary).is_empty()
 
 
 func is_discard_furiten(seat: int, tile: String) -> bool:
-	# 商用常见舍张振听：河牌中已出现过的牌不能再荣和同名张。自摸不受影响。
 	if seat < 0 or seat >= players.size() or tile == "":
 		return false
+	var hand: Array = players[seat].get("hand", [])
+	var hand_counts = tile_counts(hand)
+	# Keep the helper tile-oriented for UI/AI callers: a non-waiting tile cannot
+	# be reported as furiten even if another current wait is in the river.
+	if can_win_for_seat_from_counts(seat, hand_counts, tile):
+		return is_discard_furiten_from_counts(seat, hand_counts)
+	# A completed self-draw hand holds fourteen tiles, so adding the drawn tile
+	# again is not a structural win. For UI/AI state inspection, reconstruct the
+	# pre-draw thirteen-tile base by removing that tile and retain its furiten flag.
+	var index = tile_index(tile)
+	if index < 0 or index >= hand_counts.size() or int(hand_counts[index]) <= 0:
+		return false
+	var pre_draw_counts = hand_counts.duplicate()
+	pre_draw_counts[index] = int(pre_draw_counts[index]) - 1
+	var open_melds = players[seat].get("melds", []).size()
+	if not is_complete_hand_from_counts(hand_counts, hand.size(), open_melds):
+		return false
+	return is_discard_furiten_from_counts(seat, pre_draw_counts, hand.size() - 1)
+
+
+func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_count_override: int = -1) -> bool:
+	# Discard furiten is wait-wide. If any tile in this seat's river completes
+	# the current hand structure, every ron wait is unavailable; self draw is not.
+	if seat < 0 or seat >= players.size() or hand_counts.size() != TILE_CODES.size():
+		return false
 	var discards: Array = players[seat].get("discards", [])
+	var seen := {}
+	var hand_tile_count = hand_tile_count_override if hand_tile_count_override >= 0 else players[seat].get("hand", []).size()
+	var open_melds = players[seat].get("melds", []).size()
 	for item in discards:
-		if str(item) == tile:
+		var discarded_tile = str(item)
+		if seen.has(discarded_tile):
+			continue
+		seen[discarded_tile] = true
+		var index = tile_index(discarded_tile)
+		if index < 0 or index >= hand_counts.size():
+			continue
+		var candidate_counts = hand_counts.duplicate()
+		candidate_counts[index] = int(candidate_counts[index]) + 1
+		if is_complete_hand_from_counts(candidate_counts, hand_tile_count + 1, open_melds):
 			return true
 	return false
 
 
 func can_ron_for_seat(seat: int, tile: String) -> bool:
-	if tile == "" or is_discard_furiten(seat, tile) or is_passed_win_tile(seat, tile):
+	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
-	return can_win_for_seat(seat, tile)
+	var hand_counts = tile_counts(players[seat].get("hand", []))
+	if not can_win_for_seat_from_counts(seat, hand_counts, tile):
+		return false
+	return not is_discard_furiten_from_counts(seat, hand_counts)
 
 
 func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -> bool:
-	if tile == "" or is_discard_furiten(seat, tile) or is_passed_win_tile(seat, tile):
+	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
-	return can_win_for_seat_from_counts(seat, hand_counts, tile)
+	if not can_win_for_seat_from_counts(seat, hand_counts, tile):
+		return false
+	return not is_discard_furiten_from_counts(seat, hand_counts)
 
 
 func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size() or hand_counts.is_empty():
-		return false
-	if not has_valid_scoring_melds(seat):
 		return false
 	var counts = hand_counts
 	var tile_count = players[seat]["hand"].size()
@@ -1608,6 +1688,8 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 		counts = hand_counts.duplicate()
 		counts[index] = int(counts[index]) + 1
 		tile_count += 1
+	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, counts, tile_count):
+		return false
 	return is_complete_hand_from_counts(counts, tile_count, players[seat]["melds"].size())
 
 func discard_report_for_tile(tile: String) -> Dictionary:
