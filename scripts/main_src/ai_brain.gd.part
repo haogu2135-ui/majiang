@@ -1839,14 +1839,11 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var shape_report: Dictionary = shape_metrics.get("quality_report", {})
 	var shape_quality = float(shape_report.get("score", 0.0))
 	var shape_label = hand_shape_quality_text(shape_report)
-	var plan_eval: Dictionary
-	if offline_sim_quiet and shanten >= 3 and eval_context.has("fast_plan_report"):
-		plan_eval = {"score": float(eval_context.get("fast_plan_score", 0.0)), "report": eval_context.get("fast_plan_report", {})}
-	else:
-		plan_eval = hand_plan_eval_for_seat_from_counts(seat, simulated_counts, simulated_tile_count)
-		if offline_sim_quiet and not eval_context.has("fast_plan_report"):
-			eval_context["fast_plan_report"] = plan_eval.get("report", {})
-			eval_context["fast_plan_score"] = float(plan_eval.get("score", 0.0))
+	# Each discard creates a distinct hand. Reusing the first quiet candidate's
+	# route report here made later candidates inherit the wrong plan label and
+	# score. This evaluation is a bounded linear scan and quiet mode has at most
+	# four fully scored candidates, so keep it exact without expanding searches.
+	var plan_eval = hand_plan_eval_for_seat_from_counts(seat, simulated_counts, simulated_tile_count)
 	var plan = float(plan_eval.get("score", 0.0))
 	var plan_report: Dictionary = plan_eval.get("report", {})
 	var plan_label = str(plan_report.get("label", "标准"))
