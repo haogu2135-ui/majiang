@@ -1049,9 +1049,19 @@ func _control_is_subdued_art(node: Control, max_alpha: float) -> bool:
 	if node is ColorRect:
 		return (node as ColorRect).color.a <= max_alpha + 0.001
 	if node is TextureRect:
-		return node.modulate.a <= max_alpha + 0.001
+		return node.modulate.a * node.self_modulate.a <= max_alpha + 0.001
 	# Empty Control host (program art removed) counts as subdued.
 	return node.modulate.a <= max_alpha + 0.001 or node.get_child_count() == 0
+
+
+func inherited_canvas_modulate_alpha(node: Node) -> float:
+	var alpha := 1.0
+	var current := node
+	while current != null:
+		if current is CanvasItem:
+			alpha *= (current as CanvasItem).modulate.a
+		current = current.get_parent()
+	return alpha
 
 
 func check_secondary_back_button_art(scene, screen_id: String, viewport_size: Vector2) -> void:
@@ -1482,6 +1492,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 			var plate_rect = screen_rect(text_plate)
 			check(text_row_rect.grow(1.0).encloses(name_rect) and text_row_rect.grow(1.0).encloses(desc_rect), "shop row %s keeps labels inside row bounds at %s" % [item_id, viewport_size])
 			check(plate_rect.grow(1.0).encloses(name_rect) and plate_rect.grow(1.0).encloses(desc_rect), "shop row %s uses local text readability backplate at %s" % [item_id, viewport_size])
+			check(inherited_canvas_modulate_alpha(name_label) >= 0.98 and inherited_canvas_modulate_alpha(desc_label) >= 0.98, "shop row %s keeps text opacity independent from decorative plate alpha at %s" % [item_id, viewport_size])
 			check(name_label.clip_text and desc_label.clip_text, "shop row %s clips name and description safely at %s" % [item_id, viewport_size])
 			check(relative_luma(name_label.get_theme_color("font_color")) >= 0.90 and relative_luma(desc_label.get_theme_color("font_color")) >= 0.86, "shop row %s keeps text contrast readable at %s" % [item_id, viewport_size])
 			if charm_texture != null:
