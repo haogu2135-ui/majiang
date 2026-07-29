@@ -33,8 +33,11 @@ func reset_round(scene) -> void:
 	scene.mode = "offline"
 	scene.offline_phase = "await_discard"
 	scene.offline_turn_needs_draw = false
+	scene.current_seat = 0
 	scene.offline_last_winner = -1
 	scene.offline_pending_claim.clear()
+	scene.offline_last_draw.clear()
+	scene.offline_self_draw_ready.clear()
 	scene.last_win_score.clear()
 	scene.last_score_deltas.clear()
 	for i in range(4):
@@ -77,6 +80,10 @@ func run() -> void:
 	print("--- C) legal self draw and discard win still settle ---")
 	reset_round(scene)
 	scene.players[1]["hand"] = ["1W", "1W", "1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W", "5W"]
+	# A self draw must carry the same live proof written by draw_tile_for.
+	scene.current_seat = 1
+	scene.offline_last_draw = {"seat": 1, "tile": "5W", "source": "normal", "wall_empty": false, "serial": 30}
+	scene.offline_self_draw_ready = {"seat": 1, "tile": "5W", "serial": 30}
 	scene.finish_offline_round(1, "5W", true, -1)
 	check(scene.offline_phase == "ended" and scene.offline_last_winner == 1, "合法自摸正常结束")
 	check(not scene.last_win_score.is_empty() and score_total(scene) == initial_total, "合法自摸保留详情且分数守恒")

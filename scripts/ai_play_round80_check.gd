@@ -59,6 +59,9 @@ func run() -> void:
 	check(not quiet_reports.is_empty(), "quiet simulation still returns discard candidates")
 	check(scene.ai_report_cache.is_empty() and scene.ai_report_cache_order.is_empty(), "quiet simulation retains no state-unique report copies")
 	check(scene.ai_report_cache_hits == 0 and scene.ai_report_cache_misses == 0, "quiet simulation skips cache-key accounting")
+	quiet_reports[0]["caller_probe"] = true
+	var next_quiet_reports = scene.get_ai_discard_reports(1)
+	check(not next_quiet_reports.is_empty() and not next_quiet_reports[0].has("caller_probe"), "quiet callers cannot retain a report mutation into the next ranking")
 
 	print("--- B) interactive report cache remains available ---")
 	scene.enable_offline_all_bot_mode(false, false)

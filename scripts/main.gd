@@ -2340,10 +2340,6 @@ func get_ai_discard_reports(seat: int) -> Array:
 				safest_rank = safety_rank
 			simulated_counts[idx] = int(simulated_counts[idx]) + 1
 		candidates.sort_custom(func(a, b): return float(a.get("cheap_score", 0.0)) > float(b.get("cheap_score", 0.0)))
-		# 保留 Top-K 完整评估
-		var keep: Array = []
-		for j in range(min(AI_FAST_EVAL_TOP_K, candidates.size())):
-			keep.append(candidates[j])
 		# 静默模拟仍需在高压局看到一张明显更安全的弃攻牌。否则向听差
 		# 会在粗排阶段完全压过防守价值，Top-K 内没有可供完整评分的折返候选。
 		var high_pressure = float(pressure_context.get("readiness_pressure", 0.0)) >= 9.5 \
@@ -2351,6 +2347,12 @@ func get_ai_discard_reports(seat: int) -> Array:
 			or bool(pressure_context.get("multi_threat", false)) \
 			or human_pressure_peak >= 16.0 \
 			or (diff == AI_DIFFICULTY_HARD and danger_risk_peak >= AI_DANGER_RISK_HIGH + 12.0)
+		# 常态以三张控制基准成本；高压时保留第四张，让效率推进与
+		# 逃张能同时进入完整评分，不能只留下其中一方。
+		var full_eval_limit = AI_FAST_EVAL_PRESSURE_TOP_K if high_pressure else AI_FAST_EVAL_TOP_K
+		var keep: Array = []
+		for j in range(min(full_eval_limit, candidates.size())):
+			keep.append(candidates[j])
 		var safest_kept = false
 		for item in keep:
 			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
@@ -2389,6 +2391,10 @@ func get_ai_discard_reports(seat: int) -> Array:
 	apply_hard_danger_push_guard(reports)
 	if use_report_cache:
 		store_ai_report_cache(cache_key, reports)
+	# Quiet all-bot callers consume this one-shot ranking immediately and never
+	# retain it. The normal path keeps its defensive copies for cache/UI owners.
+	if offline_sim_quiet and offline_all_bot_mode:
+		return reports
 	return duplicate_report_array(reports)
 
 func sort_ai_discard_reports(reports: Array) -> void:
@@ -2480,6 +2486,11 @@ func apply_hard_danger_push_guard(reports: Array) -> void:
 		var max_gap = 360.0 if best_shanten <= 0 else (520.0 if best_shanten == 1 else 300.0)
 		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
 			max_gap += 140.0
+		# Two-away cannot justify paying a material point-push premium into a
+		# near-zero same-shanten fold once the existing emergency signal is live.
+		# Keep this below the catastrophe allowance and never permit shanten loss.
+		if two_away_emergency and shanten_delta == 0:
+			max_gap = max(max_gap, 410.0)
 		if catastrophe_two_away:
 			max_gap = max(max_gap, 700.0)
 		if catastrophe_tenpai:
@@ -4646,7 +4657,11 @@ func choose_ai_concealed_gang(seat: int) -> String:
 		return ""
 	var best_tile = ""
 	var best_score = -1000000.0
-	for tile in TILE_CODES:
+	var hand_counts = tile_counts(players[seat]["hand"])
+	for i in range(TILE_CODES.size()):
+		if int(hand_counts[i]) < 4:
+			continue
+		var tile = TILE_CODES[i]
 		var report = build_ai_self_gang_report(seat, tile, "concealed")
 		if not bool(report.get("allow", false)):
 			continue
@@ -4661,7 +4676,20 @@ func choose_ai_added_gang(seat: int) -> String:
 		return ""
 	var best_tile = ""
 	var best_score = -1000000.0
-	for tile in TILE_CODES:
+	var hand_counts = tile_counts(players[seat]["hand"])
+	var added_candidates := {}
+	for meld in players[seat]["melds"]:
+		if meld.is_empty():
+			continue
+		var meld_tile = str(meld[0])
+		if is_triplet_meld(meld, meld_tile):
+			added_candidates[meld_tile] = true
+	for i in range(TILE_CODES.size()):
+		if int(hand_counts[i]) <= 0:
+			continue
+		var tile = TILE_CODES[i]
+		if not added_candidates.has(tile):
+			continue
 		var report = build_ai_self_gang_report(seat, tile, "added")
 		if not bool(report.get("allow", false)):
 			continue
@@ -4692,6 +4720,17 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	if seat < 0 or seat >= players.size() or tile == "":
 		return report
 	var hand: Array = players[seat]["hand"]
+	# Reject non-gang tiles before any shanten/route work. The selectors call
+	# this on every draw, while legal gang candidates are exceptionally rare.
+	match gang_kind:
+		"concealed":
+			if count_tile(hand, tile) < 4:
+				return report
+		"added":
+			if not can_added_gang(seat, tile):
+				return report
+		_:
+			return report
 	var open_melds = players[seat]["melds"].size()
 	var before_shanten = calculate_min_shanten(hand, open_melds)
 	var before_plan_label = str(hand_plan_report_for_seat(seat, hand).get("label", ""))
@@ -4699,11 +4738,11 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	var after_open_melds = open_melds
 	match gang_kind:
 		"concealed":
-			if count_tile(hand, tile) < 4 or not remove_tiles(after, tile, 4):
+			if not remove_tiles(after, tile, 4):
 				return report
 			after_open_melds = open_melds + 1
 		"added":
-			if not can_added_gang(seat, tile) or not remove_tiles(after, tile, 1):
+			if not remove_tiles(after, tile, 1):
 				return report
 		_:
 			return report
@@ -5554,6 +5593,8 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"wait_value": float(selected.get("wait_value", 0.0)),
 		"hard_guard_two_away": bool(selected.get("hard_guard_two_away", false)),
 		"hard_guard_catastrophe_two_away": bool(selected.get("hard_guard_catastrophe_two_away", false)),
+		"hard_guard_catastrophe_tenpai": bool(selected.get("hard_guard_catastrophe_tenpai", false)),
+		"hard_guard_extreme_one_away": bool(selected.get("hard_guard_extreme_one_away", false)),
 		"hard_guard_safe_tile": str(selected.get("hard_guard_safe_tile", "")),
 		"hard_guard_safe_score_gap": float(selected.get("hard_guard_safe_score_gap", 0.0)),
 		"hard_guard_safe_pressure_gain": float(selected.get("hard_guard_safe_pressure_gain", 0.0)),
@@ -14676,17 +14717,21 @@ func draw_rule_section_path_art(section: Control, section_index: int, title_text
 		Color(0.86, 0.62, 0.34),
 		Color(0.38, 0.70, 0.58),
 		Color(0.62, 0.56, 0.86),
+		Color(0.38, 0.64, 0.82),
+		Color(0.72, 0.48, 0.74),
 		Color(0.86, 0.72, 0.38),
 	]
-	var icons = ["target", "layers", "sparkles", "mouse-pointer-click"]
+	var icons = ["git-merge", "calculator", "list-checks", "layers", "sparkles", "mouse-pointer-click"]
 	var accent: Color = colors[clamp(section_index, 0, colors.size() - 1)]
 	var icon_name = str(icons[clamp(section_index, 0, icons.size() - 1)])
 	var strip = make_gpt_ribbon(rect_full(0.835, 0.155, 0.965, 0.845), Color(accent.r, accent.g, accent.b, 0.125))
 	strip.name = "RuleSectionArtStrip_%d" % section_index
 	section.add_child(strip)
-	var section_panel_keys = ["rules_section_goal_panel", "rules_section_meld_panel", "rules_section_special_panel", "rules_section_action_panel"]
+	# Settlement and fan sections have no matching bitmap panel yet. They keep a
+	# neutral icon lane rather than borrowing the action illustration.
+	var section_panel_keys = ["rules_section_goal_panel", "", "", "rules_section_meld_panel", "rules_section_special_panel", "rules_section_action_panel"]
 	var panel_key = str(section_panel_keys[clamp(section_index, 0, section_panel_keys.size() - 1)])
-	var strip_plate = add_optional_gpt_illustration_texture(strip, panel_key, rect_full(-0.02, -0.02, 1.02, 1.02), 0.96, false)
+	var strip_plate = add_optional_gpt_illustration_texture(strip, panel_key, rect_full(-0.02, -0.02, 1.02, 1.02), 0.96, false) if panel_key != "" else null
 	var has_plate := strip_plate != null
 	if has_plate:
 		strip_plate.name = "RuleSectionArtGPTPlate_%d" % section_index
@@ -23007,25 +23052,29 @@ func _show_rules_screen_impl() -> void:
 	codex_top_glint.name = "RulesCodex3DTopGlint"
 	codex_rear.add_child(codex_top_glint)
 
-	# 主面板
-	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.22), "ui_jade_reading_plate")
+	# 主面板：纹理与交互/文字处于同级，避免父纹理调色压低阅读内容。
+	var panel = make_layout_host(rect_full(0.02, 0.02, 0.98, 0.98))
 	panel.name = "RulesCodexFrontPanel"
 	root_layer.add_child(panel)
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.22, 0.16, 0.11, 0.10), "ui_jade_reading_plate")
+	panel_plate.name = "RulesCodexFrontPlate"
+	panel.add_child(panel_plate)
 	var rules_gpt_key := "rules_gpt_scroll"
-	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.90, false)
+	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.06, false)
 	if gpt_rules_texture != null:
 		gpt_rules_texture.name = "RulesGPTScrollTexture"
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.52, false)
 	if rules_title_strip != null:
 		rules_title_strip.name = "RulesGptTitleStrip"
-	var rules_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.05, 0.14, 0.95, 0.92), 0.28, false)
-	var rules_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.88), 0.16, false)
+	var rules_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.05, 0.14, 0.95, 0.92), 0.10, false)
+	var rules_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.88), 0.05, false)
 	if rules_mid_ornament != null:
 		rules_mid_ornament.name = "RulesMidOrnamentPlate"
 	if rules_sheet != null:
 		rules_sheet.name = "RulesGptSheet"
-		gpt_rules_texture.modulate = Color(1.16, 1.08, 0.96, minf(0.90, gpt_rules_texture.modulate.a))  # r200 GPT-led
-		panel.move_child(gpt_rules_texture, 0)
+		if gpt_rules_texture != null:
+			gpt_rules_texture.modulate = Color(1.16, 1.08, 0.96, minf(0.06, gpt_rules_texture.modulate.a))
+			panel.move_child(gpt_rules_texture, 0)
 	# 书架式滑入动画 / Shelf-slide entrance
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
@@ -23053,7 +23102,7 @@ func _show_rules_screen_impl() -> void:
 	apply_rect(back, rect_full(0.835, 0.026, 0.945, 0.112))
 
 	# 内容区域
-	var content_backplate = make_gpt_plate_rect(rect_full(0.050, 0.154, 0.950, 0.986), Color(0.10, 0.07, 0.05, 0.14), "ui_jade_reading_plate")
+	var content_backplate = make_gpt_plate_rect(rect_full(0.050, 0.154, 0.950, 0.986), Color(0.10, 0.07, 0.05, 0.08), "ui_jade_reading_plate")
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -23083,47 +23132,85 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.28, 0.24, 0.16, 0.12), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
-	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_STOP
 	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.72, 0.62, 0.36, 0.20), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
-	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_STOP
+	rules_scroll_thumb.mouse_default_cursor_shape = Control.CURSOR_VSIZE
+	rules_scroll_thumb.tooltip_text = "拖动定位"
 	var content = VBoxContainer.new()
 	content.name = "RulesContentList"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 10)
 	content_scroll.add_child(content)
+	var rules_thumb_drag_state: Dictionary = {"active": false}
+	rules_scroll_thumb.gui_input.connect(func(event: InputEvent) -> void:
+		handle_rules_scroll_thumb_input(event, content_scroll, rules_scrollbar, rules_scroll_thumb, rules_scroll_gutter, rules_thumb_drag_state)
+	)
+	if rules_scrollbar != null:
+		rules_scrollbar.value_changed.connect(func(_value: float) -> void:
+			sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+		)
+	content_scroll.resized.connect(func() -> void:
+		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+	)
+	content.resized.connect(func() -> void:
+		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+	)
 
-	# 基础规则
-	add_rule_section(content, "游戏目标", [
+	# 本地规则合同：文案必须与计分和结算实现同步，不将其表述为外部认证的地方规则。
+	add_rule_section(content, "和牌与响应", [
 		"4组面子 + 1对将牌即可胡牌",
 		"摸牌、打牌、吃碰杠来组合手牌",
 		"可自摸，也可点炮胡牌；过水后整组听口摸前不可再荣和",
-		"响应优先：胡 > 碰/杠 > 吃；碰杠吃同级近家先，点炮多人可胡时保留玩家胡牌选择并按提交者单家结算",
+		"响应优先：胡 > 碰/杠 > 吃；碰杠吃同级近家先",
+		"点炮多人可胡时保留玩家窗口，最终单家结算",
 		"舍张振听：河中任一现听张都不能再荣和，只能自摸",
 		"食替：吃/碰后本拍不得立刻打出刚副露相关张",
-		"包三搭：同一来源三副露后，包家承担该家本局全部和牌支付",
-		"荒庄查听：牌墙耗尽后未听付听牌，四家同听/同未听不罚",
 	], 0)
+
+	add_rule_section(content, "结算与支付", [
+		"番分表：1番200、2番400、3番800、4番1600",
+		"5番3200、6番6400、7番12800、8番及以上25600封顶",
+		"自摸：其余三家各付一份；点炮和抢杠胡：责任方支付三份",
+		"包三搭：同一来源被吃、碰或明杠三次后形成包家",
+		"包家承担该家本局自摸、点炮、抢杠胡的三份支付",
+		"荒庄查听：每家未听付1000分，全部由听牌者均分",
+		"四家同听或同未听不罚",
+	], 1)
+
+	add_rule_section(content, "计番项目", [
+		"平胡1番；自摸、庄家、门清各加1番",
+		"每张花牌和每组杠各加1番",
+		"情境：杠上开花加2番；海底捞月、河底捞鱼、抢杠胡各加1番",
+		"七对+3、十三幺+7、清一色+3、混一色+2",
+		"字一色+5、碰碰胡+2、一条龙+2、断幺九+1",
+		"大吊车+2；大三元+6、小三元+4",
+		"大四喜+7、小四喜+5；同组大/小牌型择高",
+	], 2)
 
 	add_rule_section(content, "牌型介绍", [
 		"顺子：同花色连续3张（123万）",
 		"刻子：3张相同（111万）",
 		"杠子：4张相同；将牌：任意一对",
-	], 1)
+	], 3)
 
-	# 特殊牌型
 	add_rule_section(content, "特殊牌型", [
 		"七对：7个对子",
 		"十三幺：幺九字牌齐 + 任意一对",
-		"清一色：全部同一花色",
-	], 2)
+		"清一色：全部同一花色；混一色：一种花色配字牌",
+		"字一色：全是字牌",
+		"三元与四喜可形成大/小三元、大/小四喜",
+	], 4)
 
-	# 操作说明
 	add_rule_section(content, "游戏操作", [
 		"点手牌即可打出",
 		"出现吃/碰/杠/胡时点击响应",
 		"点'重开'重新开局",
-	], 3)
+		"本页说明当前单机本地实现",
+		"特殊地方番型与包赔细则仍以正式发布规则为准",
+	], 5)
+	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
 
 	# 规则段落逐一滑入
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -23135,6 +23222,47 @@ func _show_rules_screen_impl() -> void:
 	# 记录已查看教程
 	tutorial_step = -1
 	save_tutorial_state()
+
+
+func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
+	if content_scroll == null or thumb == null:
+		return
+	var scrollbar = content_scroll.get_v_scroll_bar()
+	var gutter = thumb.get_parent() as Control
+	if scrollbar == null or gutter == null:
+		return
+	var page = maxf(0.0, scrollbar.page)
+	var max_value = maxf(page, scrollbar.max_value)
+	var scroll_range = maxf(0.0, scrollbar.max_value - page)
+	var track_top = 0.050
+	var track_height = 0.900
+	var visible_ratio = 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
+	var thumb_height = track_height * visible_ratio
+	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
+	var thumb_top = track_top + (track_height - thumb_height) * progress
+	apply_rect(thumb, rect_full(0.220, thumb_top, 0.780, thumb_top + thumb_height))
+
+
+func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary) -> void:
+	if scrollbar == null or thumb == null or gutter == null:
+		return
+	if event is InputEventMouseButton:
+		var mouse_button = event as InputEventMouseButton
+		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
+			return
+		drag_state["active"] = mouse_button.pressed
+		thumb.accept_event()
+		return
+	if not (event is InputEventMouseMotion) or not bool(drag_state.get("active", false)):
+		return
+	var motion = event as InputEventMouseMotion
+	var scroll_range = maxf(0.0, scrollbar.max_value - scrollbar.page)
+	var track_height = maxf(1.0, gutter.size.y * 0.900 - thumb.size.y)
+	if scroll_range > 0.0:
+		scrollbar.value = clampf(scrollbar.value + motion.relative.y / track_height * scroll_range, 0.0, scroll_range)
+		content_scroll.scroll_vertical = int(round(scrollbar.value))
+		sync_rules_scroll_thumb(content_scroll, thumb)
+	thumb.accept_event()
 
 
 func _show_shop_screen_impl() -> void:
@@ -30576,13 +30704,20 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		Color(0.86, 0.62, 0.34),
 		Color(0.38, 0.70, 0.58),
 		Color(0.62, 0.56, 0.86),
+		Color(0.38, 0.64, 0.82),
+		Color(0.72, 0.48, 0.74),
 		Color(0.86, 0.72, 0.38),
 	]
 	var accent = section_colors[clamp(section_index, 0, section_colors.size() - 1)] if section_index >= 0 else Color(0.62, 0.58, 0.42)
-	var section = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.22), Color(0.345, 0.425, 0.355, 0.99), "ui_button_face_plate")
+	# Keep the decorative texture behind the content. A TextureRect parent would
+	# multiply its tint and alpha into the text, weakening the reading contrast.
+	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.16), "ui_button_face_plate")
+	section_plate.name = "RuleSectionPlate_%d" % section_index if section_index >= 0 else "RuleSectionPlate"
+	section.add_child(section_plate)
 	var line_count := int(lines.size())
 	var required_text_height := 24.0 + float(line_count) * 22.0 + float(line_count) * 5.0 + 34.0
 	section.custom_minimum_size.y = max(136.0, required_text_height)
@@ -30601,7 +30736,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.205, 0.275, 0.230, 0.26), "ui_jade_reading_plate")
+	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.205, 0.275, 0.230, 0.12), "ui_jade_reading_plate")
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

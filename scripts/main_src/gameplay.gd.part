@@ -721,6 +721,8 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"wait_value": float(selected.get("wait_value", 0.0)),
 		"hard_guard_two_away": bool(selected.get("hard_guard_two_away", false)),
 		"hard_guard_catastrophe_two_away": bool(selected.get("hard_guard_catastrophe_two_away", false)),
+		"hard_guard_catastrophe_tenpai": bool(selected.get("hard_guard_catastrophe_tenpai", false)),
+		"hard_guard_extreme_one_away": bool(selected.get("hard_guard_extreme_one_away", false)),
 		"hard_guard_safe_tile": str(selected.get("hard_guard_safe_tile", "")),
 		"hard_guard_safe_score_gap": float(selected.get("hard_guard_safe_score_gap", 0.0)),
 		"hard_guard_safe_pressure_gain": float(selected.get("hard_guard_safe_pressure_gain", 0.0)),

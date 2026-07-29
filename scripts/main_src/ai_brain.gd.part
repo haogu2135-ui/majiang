@@ -1460,10 +1460,6 @@ func get_ai_discard_reports(seat: int) -> Array:
 				safest_rank = safety_rank
 			simulated_counts[idx] = int(simulated_counts[idx]) + 1
 		candidates.sort_custom(func(a, b): return float(a.get("cheap_score", 0.0)) > float(b.get("cheap_score", 0.0)))
-		# 保留 Top-K 完整评估
-		var keep: Array = []
-		for j in range(min(AI_FAST_EVAL_TOP_K, candidates.size())):
-			keep.append(candidates[j])
 		# 静默模拟仍需在高压局看到一张明显更安全的弃攻牌。否则向听差
 		# 会在粗排阶段完全压过防守价值，Top-K 内没有可供完整评分的折返候选。
 		var high_pressure = float(pressure_context.get("readiness_pressure", 0.0)) >= 9.5 \
@@ -1471,6 +1467,12 @@ func get_ai_discard_reports(seat: int) -> Array:
 			or bool(pressure_context.get("multi_threat", false)) \
 			or human_pressure_peak >= 16.0 \
 			or (diff == AI_DIFFICULTY_HARD and danger_risk_peak >= AI_DANGER_RISK_HIGH + 12.0)
+		# 常态以三张控制基准成本；高压时保留第四张，让效率推进与
+		# 逃张能同时进入完整评分，不能只留下其中一方。
+		var full_eval_limit = AI_FAST_EVAL_PRESSURE_TOP_K if high_pressure else AI_FAST_EVAL_TOP_K
+		var keep: Array = []
+		for j in range(min(full_eval_limit, candidates.size())):
+			keep.append(candidates[j])
 		var safest_kept = false
 		for item in keep:
 			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
@@ -1509,6 +1511,10 @@ func get_ai_discard_reports(seat: int) -> Array:
 	apply_hard_danger_push_guard(reports)
 	if use_report_cache:
 		store_ai_report_cache(cache_key, reports)
+	# Quiet all-bot callers consume this one-shot ranking immediately and never
+	# retain it. The normal path keeps its defensive copies for cache/UI owners.
+	if offline_sim_quiet and offline_all_bot_mode:
+		return reports
 	return duplicate_report_array(reports)
 
 func sort_ai_discard_reports(reports: Array) -> void:
@@ -1600,6 +1606,11 @@ func apply_hard_danger_push_guard(reports: Array) -> void:
 		var max_gap = 360.0 if best_shanten <= 0 else (520.0 if best_shanten == 1 else 300.0)
 		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
 			max_gap += 140.0
+		# Two-away cannot justify paying a material point-push premium into a
+		# near-zero same-shanten fold once the existing emergency signal is live.
+		# Keep this below the catastrophe allowance and never permit shanten loss.
+		if two_away_emergency and shanten_delta == 0:
+			max_gap = max(max_gap, 410.0)
 		if catastrophe_two_away:
 			max_gap = max(max_gap, 700.0)
 		if catastrophe_tenpai:
@@ -3766,7 +3777,11 @@ func choose_ai_concealed_gang(seat: int) -> String:
 		return ""
 	var best_tile = ""
 	var best_score = -1000000.0
-	for tile in TILE_CODES:
+	var hand_counts = tile_counts(players[seat]["hand"])
+	for i in range(TILE_CODES.size()):
+		if int(hand_counts[i]) < 4:
+			continue
+		var tile = TILE_CODES[i]
 		var report = build_ai_self_gang_report(seat, tile, "concealed")
 		if not bool(report.get("allow", false)):
 			continue
@@ -3781,7 +3796,20 @@ func choose_ai_added_gang(seat: int) -> String:
 		return ""
 	var best_tile = ""
 	var best_score = -1000000.0
-	for tile in TILE_CODES:
+	var hand_counts = tile_counts(players[seat]["hand"])
+	var added_candidates := {}
+	for meld in players[seat]["melds"]:
+		if meld.is_empty():
+			continue
+		var meld_tile = str(meld[0])
+		if is_triplet_meld(meld, meld_tile):
+			added_candidates[meld_tile] = true
+	for i in range(TILE_CODES.size()):
+		if int(hand_counts[i]) <= 0:
+			continue
+		var tile = TILE_CODES[i]
+		if not added_candidates.has(tile):
+			continue
 		var report = build_ai_self_gang_report(seat, tile, "added")
 		if not bool(report.get("allow", false)):
 			continue
@@ -3812,6 +3840,17 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	if seat < 0 or seat >= players.size() or tile == "":
 		return report
 	var hand: Array = players[seat]["hand"]
+	# Reject non-gang tiles before any shanten/route work. The selectors call
+	# this on every draw, while legal gang candidates are exceptionally rare.
+	match gang_kind:
+		"concealed":
+			if count_tile(hand, tile) < 4:
+				return report
+		"added":
+			if not can_added_gang(seat, tile):
+				return report
+		_:
+			return report
 	var open_melds = players[seat]["melds"].size()
 	var before_shanten = calculate_min_shanten(hand, open_melds)
 	var before_plan_label = str(hand_plan_report_for_seat(seat, hand).get("label", ""))
@@ -3819,11 +3858,11 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	var after_open_melds = open_melds
 	match gang_kind:
 		"concealed":
-			if count_tile(hand, tile) < 4 or not remove_tiles(after, tile, 4):
+			if not remove_tiles(after, tile, 4):
 				return report
 			after_open_melds = open_melds + 1
 		"added":
-			if not can_added_gang(seat, tile) or not remove_tiles(after, tile, 1):
+			if not remove_tiles(after, tile, 1):
 				return report
 		_:
 			return report

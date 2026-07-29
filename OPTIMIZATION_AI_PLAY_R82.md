@@ -25,6 +25,15 @@ non-zero-sum settlement defects.
 The invariant sums four integer scores before and after a simulated hand. It
 does not alter AI candidate evaluation, add state searches, or retain reports.
 
+## Result
+
+- R82 passed: direct one-point score creation is rejected, and the seeded
+  easy/normal/hard simulations preserve both tile and score ledgers.
+- The one-hand commercial benchmark remained green with score conservation
+  required for all three sampled difficulties.
+- R69 remained green after the gate was added: actual fixed-human ron was
+  `0.25/0.00` (easy/hard) in `86679ms`, inside the serial `180s` budget.
+
 ## Run
 
 ```bash

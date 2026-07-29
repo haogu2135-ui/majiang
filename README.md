@@ -31,8 +31,8 @@ Godot 4.6.3 迁移版 Android 客户端。目标是替代原生 Android Canvas U
 ## 构建
 
 ```bash
-cd /root/yunzhuo-mahjong-godot
-GODOT_SILENCE_ROOT_WARNING=1 godot --headless --path . --export-release Android build/YunzhuoMahjongGodot-v1.0.164-godot.apk
+cd /home/guhao/majiang
+GODOT_SILENCE_ROOT_WARNING=1 godot --headless --path . --export-release Android build/YunzhuoMahjongGodot-v1.0.180-godot.apk
 ```
 
 Godot Android 设置：
@@ -67,32 +67,24 @@ GODOT_SILENCE_ROOT_WARNING=1 godot --headless --script scripts/offline_smoke_tes
 
 ## 下载服务
 
-当前 APK:
+发布产物（由发布流程生成，二进制 APK 不纳入此源码仓库）：
 
-- `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot-v1.0.164-godot.apk`
-- `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot-release.apk`，通用 release 兼容文件名，文件内容已覆盖为当前最新 APK
-- `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot.apk`，保留为更新下载的 latest 兼容文件名
-- `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjong.apk`
-- `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot-v1.0.42-godot.apk`，旧客户端兼容路径，文件内容已覆盖为当前最新 APK
-- `/root/yunzhuo-mahjong-godot/build/YunzhuoMahjongGodot-update.json`，Godot 客户端更新 manifest
+- `build/YunzhuoMahjongGodot-v1.0.180-godot.apk`：本版不可变下载文件，须与客户端 `UPDATE_URL` 一致。
+- `build/YunzhuoMahjongGodot-update.json`：更新 manifest，包含版本、下载地址和 SHA-256。
+- 如需兼容旧下载地址，可在部署阶段额外生成 `YunzhuoMahjongGodot-release.apk` 和 `YunzhuoMahjongGodot.apk` 别名；别名不替代版本化文件。
 
-APK 校验信息：
-
-- Size: `125298912`
-- SHA-256: `18ae74a6028130299c089ed2ede524b9cac5b0400714419a6b7414cd8b1241d0`
+发布前必须以实际 APK 写入 manifest 的 SHA-256；不要复用历史版本的文件大小或哈希。
 
 HTTP 服务：
 
 ```bash
-python3 -m http.server 18081 --bind 0.0.0.0 --directory /root/yunzhuo-mahjong-godot/build
+python3 -m http.server 18081 --bind 0.0.0.0 --directory /home/guhao/majiang/build
 ```
 
 下载地址：
 
 ```text
-http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.164-godot.apk
-http://129.146.180.88:18081/YunzhuoMahjongGodot-release.apk
-http://129.146.180.88:18081/YunzhuoMahjongGodot.apk
+http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk
 http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json
 ```
 
@@ -104,4 +96,4 @@ http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json
 
 ## 单机结算表
 
-当前本地结算使用显式番分表：1番 200、2番 400、3番 800、4番 1600、5番 3200、6番 6400、7番 12800、8番及以上 25600 封顶。自摸三家各付一份，点炮由点炮方付三份；包三搭成立后，包家对该家本局自摸、点炮与抢杠胡统一承担三份支付。
+当前本地结算使用显式番分表：1番 200、2番 400、3番 800、4番 1600、5番 3200、6番 6400、7番 12800、8番及以上 25600 封顶。自摸三家各付一份，点炮与抢杠胡由责任方付三份；包三搭成立后，包家对该家本局自摸、点炮与抢杠胡统一承担三份支付。荒庄时，每家未听付 1000 分，由全部听牌者均分；四家同听或同未听不罚。

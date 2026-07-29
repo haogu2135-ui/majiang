@@ -1113,7 +1113,8 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		check(back_rect.size.x >= 88.0 and back_rect.size.y >= 44.0, "rules back button keeps a 44px mobile touch height at %s" % viewport_size)
 		check_secondary_back_button_art(scene, "rules", viewport_size)
 	var previous_bottom := -1.0
-	for i in range(4):
+	var rules_section_count = int(scene.RULES_SECTION_COUNT)
+	for i in range(rules_section_count):
 		var section = scene.find_child("RuleSection_%d" % i, true, false) as Control
 		check(section != null, "rules section %d exists at %s" % [i, viewport_size])
 		if section == null:
@@ -1155,6 +1156,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 				var line_rect = screen_rect(line_label)
 				var text_back_rect = screen_rect(text_backplate)
 				check(text_back_rect.grow(1.0).encloses(line_rect), "rules section %d body label %s stays inside text backplate at %s" % [i, line_label.name, viewport_size])
+				check(label_text_width(line_label, line_label.text) <= line_rect.size.x + 1.0, "rules section %d body label %s fits without ellipsis at %s" % [i, line_label.name, viewport_size])
 		var section_plate = example_strip.find_child("RuleSectionArtGPTPlate_%d" % i, true, false) as Control if example_strip != null else null
 		var has_section_plate := section_plate != null
 		if has_section_plate:
@@ -1173,6 +1175,21 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 					var group = example_strip.find_child("RulePatternExampleGroup_%s" % group_id, true, false) as Control
 					var first_tile = example_strip.find_child("RulePatternExampleTile_%s_0" % group_id, true, false) as Control
 					check(group != null and first_tile != null, "rules pattern section exposes native %s tile example at %s" % [group_id, viewport_size])
+	if scroll_gutter != null and scroll_thumb != null and content_scrollbar != null:
+		var gutter_rect = screen_rect(scroll_gutter)
+		var thumb_rect = screen_rect(scroll_thumb)
+		var max_scroll = maxf(0.0, content_scrollbar.max_value - content_scrollbar.page)
+		check(scroll_thumb.mouse_filter == Control.MOUSE_FILTER_STOP and scroll_thumb.mouse_default_cursor_shape == Control.CURSOR_VSIZE, "rules custom thumb accepts vertical drag input at %s" % viewport_size)
+		check(thumb_rect.size.y <= gutter_rect.size.y + 1.0, "rules custom thumb stays within its gutter height at %s" % viewport_size)
+		if max_scroll > 1.0:
+			check(thumb_rect.size.y < gutter_rect.size.y - 2.0, "rules custom thumb reflects scrollable content depth at %s" % viewport_size)
+			var last_section = scene.find_child("RuleSection_%d" % (rules_section_count - 1), true, false) as Control
+			if last_section != null:
+				check(max_scroll >= screen_rect(last_section).end.y - scroll_rect.end.y - 1.0, "rules viewport can reach the final section at %s" % viewport_size)
+			content_scrollbar.value = max_scroll
+			scene.sync_rules_scroll_thumb(content_scroll, scroll_thumb)
+			var end_thumb_rect = screen_rect(scroll_thumb)
+			check(end_thumb_rect.end.y >= gutter_rect.end.y - max(2.0, gutter_rect.size.y * 0.06), "rules custom thumb reaches the gutter end at full scroll at %s" % viewport_size)
 
 func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 	check_secondary_back_button_art(scene, "achievements", viewport_size)

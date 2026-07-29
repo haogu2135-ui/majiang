@@ -5713,13 +5713,20 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		Color(0.86, 0.62, 0.34),
 		Color(0.38, 0.70, 0.58),
 		Color(0.62, 0.56, 0.86),
+		Color(0.38, 0.64, 0.82),
+		Color(0.72, 0.48, 0.74),
 		Color(0.86, 0.72, 0.38),
 	]
 	var accent = section_colors[clamp(section_index, 0, section_colors.size() - 1)] if section_index >= 0 else Color(0.62, 0.58, 0.42)
-	var section = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.22), Color(0.345, 0.425, 0.355, 0.99), "ui_button_face_plate")
+	# Keep the decorative texture behind the content. A TextureRect parent would
+	# multiply its tint and alpha into the text, weakening the reading contrast.
+	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.16), "ui_button_face_plate")
+	section_plate.name = "RuleSectionPlate_%d" % section_index if section_index >= 0 else "RuleSectionPlate"
+	section.add_child(section_plate)
 	var line_count := int(lines.size())
 	var required_text_height := 24.0 + float(line_count) * 22.0 + float(line_count) * 5.0 + 34.0
 	section.custom_minimum_size.y = max(136.0, required_text_height)
@@ -5738,7 +5745,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.205, 0.275, 0.230, 0.26), "ui_jade_reading_plate")
+	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.205, 0.275, 0.230, 0.12), "ui_jade_reading_plate")
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

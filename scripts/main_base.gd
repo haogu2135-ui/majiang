@@ -220,7 +220,11 @@ const AI_DIFFICULTY_LABELS := ["简单", "标准", "困难"]
 const AI_DANGER_RISK_SOFT := 18.0
 const AI_DANGER_RISK_HIGH := 31.0
 const AI_DANGER_FEED_SOFT := 14.0
-const AI_FAST_EVAL_TOP_K := 4
+# Quiet all-bot benchmarks fully score only the strongest three fast-ranked
+# candidates. Acute pressure keeps one additional slot so attack and fold can
+# be compared together. Interactive play never uses either cap.
+const AI_FAST_EVAL_TOP_K := 3
+const AI_FAST_EVAL_PRESSURE_TOP_K := 4
 const AI_PROFILES := [
 	{
 		"label": "均衡",
@@ -328,6 +332,7 @@ const AI_RETURN_TO_HUMAN_GAP_SECONDS := 0.08
 const HUMAN_DRAW_DELAY_SECONDS := 0.006
 const SCORE_LIMIT_FAN := 8
 const WALL_DRAW_NOTEN_BA := 1000  # 荒庄未听罚符：每家未听支付总额，由听牌者均分
+const RULES_SECTION_COUNT := 6
 const SCORE_TABLE := {
 	1: 200,
 	2: 400,

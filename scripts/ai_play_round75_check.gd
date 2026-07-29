@@ -61,6 +61,18 @@ func run() -> void:
 	]
 	scene.apply_hard_danger_push_guard(thin_tenpai_reports)
 	check(str(thin_tenpai_reports[0].get("tile", "")) == "S", "hard folds a thin low-value tenpai under catastrophic feed risk")
+	var emergency_same_shanten_reports: Array = [
+		{"tile": "4B", "score": 900.0, "shanten": 2, "risk": 37.8, "feed_risk": 50.7, "human_target_pressure": 27.3, "safety_label": ""},
+		{"tile": "R", "score": 497.8, "shanten": 2, "risk": 3.9, "feed_risk": 0.0, "human_target_pressure": 0.0, "safety_label": "安"},
+	]
+	scene.apply_hard_danger_push_guard(emergency_same_shanten_reports)
+	check(str(emergency_same_shanten_reports[0].get("tile", "")) == "R", "hard promotes a same-shanten near-zero fold during a two-away emergency")
+	var emergency_over_cap_reports: Array = [
+		{"tile": "4B", "score": 900.0, "shanten": 2, "risk": 37.8, "feed_risk": 50.7, "human_target_pressure": 27.3, "safety_label": ""},
+		{"tile": "R", "score": 489.0, "shanten": 2, "risk": 3.9, "feed_risk": 0.0, "human_target_pressure": 0.0, "safety_label": "安"},
+	]
+	scene.apply_hard_danger_push_guard(emergency_over_cap_reports)
+	check(str(emergency_over_cap_reports[0].get("tile", "")) == "4B", "two-away emergency does not widen beyond the measured same-shanten score gap")
 
 	print("--- B) seed-level terminal decision traces ---")
 	var seed_base = 20260811

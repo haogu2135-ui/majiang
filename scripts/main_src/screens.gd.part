@@ -599,25 +599,29 @@ func _show_rules_screen_impl() -> void:
 	codex_top_glint.name = "RulesCodex3DTopGlint"
 	codex_rear.add_child(codex_top_glint)
 
-	# 主面板
-	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.22), "ui_jade_reading_plate")
+	# 主面板：纹理与交互/文字处于同级，避免父纹理调色压低阅读内容。
+	var panel = make_layout_host(rect_full(0.02, 0.02, 0.98, 0.98))
 	panel.name = "RulesCodexFrontPanel"
 	root_layer.add_child(panel)
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.22, 0.16, 0.11, 0.10), "ui_jade_reading_plate")
+	panel_plate.name = "RulesCodexFrontPlate"
+	panel.add_child(panel_plate)
 	var rules_gpt_key := "rules_gpt_scroll"
-	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.90, false)
+	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.06, false)
 	if gpt_rules_texture != null:
 		gpt_rules_texture.name = "RulesGPTScrollTexture"
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.52, false)
 	if rules_title_strip != null:
 		rules_title_strip.name = "RulesGptTitleStrip"
-	var rules_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.05, 0.14, 0.95, 0.92), 0.28, false)
-	var rules_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.88), 0.16, false)
+	var rules_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.05, 0.14, 0.95, 0.92), 0.10, false)
+	var rules_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.88), 0.05, false)
 	if rules_mid_ornament != null:
 		rules_mid_ornament.name = "RulesMidOrnamentPlate"
 	if rules_sheet != null:
 		rules_sheet.name = "RulesGptSheet"
-		gpt_rules_texture.modulate = Color(1.16, 1.08, 0.96, minf(0.90, gpt_rules_texture.modulate.a))  # r200 GPT-led
-		panel.move_child(gpt_rules_texture, 0)
+		if gpt_rules_texture != null:
+			gpt_rules_texture.modulate = Color(1.16, 1.08, 0.96, minf(0.06, gpt_rules_texture.modulate.a))
+			panel.move_child(gpt_rules_texture, 0)
 	# 书架式滑入动画 / Shelf-slide entrance
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
@@ -645,7 +649,7 @@ func _show_rules_screen_impl() -> void:
 	apply_rect(back, rect_full(0.835, 0.026, 0.945, 0.112))
 
 	# 内容区域
-	var content_backplate = make_gpt_plate_rect(rect_full(0.050, 0.154, 0.950, 0.986), Color(0.10, 0.07, 0.05, 0.14), "ui_jade_reading_plate")
+	var content_backplate = make_gpt_plate_rect(rect_full(0.050, 0.154, 0.950, 0.986), Color(0.10, 0.07, 0.05, 0.08), "ui_jade_reading_plate")
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -675,47 +679,85 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.28, 0.24, 0.16, 0.12), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
-	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_STOP
 	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.72, 0.62, 0.36, 0.20), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
-	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_STOP
+	rules_scroll_thumb.mouse_default_cursor_shape = Control.CURSOR_VSIZE
+	rules_scroll_thumb.tooltip_text = "拖动定位"
 	var content = VBoxContainer.new()
 	content.name = "RulesContentList"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 10)
 	content_scroll.add_child(content)
+	var rules_thumb_drag_state: Dictionary = {"active": false}
+	rules_scroll_thumb.gui_input.connect(func(event: InputEvent) -> void:
+		handle_rules_scroll_thumb_input(event, content_scroll, rules_scrollbar, rules_scroll_thumb, rules_scroll_gutter, rules_thumb_drag_state)
+	)
+	if rules_scrollbar != null:
+		rules_scrollbar.value_changed.connect(func(_value: float) -> void:
+			sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+		)
+	content_scroll.resized.connect(func() -> void:
+		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+	)
+	content.resized.connect(func() -> void:
+		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+	)
 
-	# 基础规则
-	add_rule_section(content, "游戏目标", [
+	# 本地规则合同：文案必须与计分和结算实现同步，不将其表述为外部认证的地方规则。
+	add_rule_section(content, "和牌与响应", [
 		"4组面子 + 1对将牌即可胡牌",
 		"摸牌、打牌、吃碰杠来组合手牌",
 		"可自摸，也可点炮胡牌；过水后整组听口摸前不可再荣和",
-		"响应优先：胡 > 碰/杠 > 吃；碰杠吃同级近家先，点炮多人可胡时保留玩家胡牌选择并按提交者单家结算",
+		"响应优先：胡 > 碰/杠 > 吃；碰杠吃同级近家先",
+		"点炮多人可胡时保留玩家窗口，最终单家结算",
 		"舍张振听：河中任一现听张都不能再荣和，只能自摸",
 		"食替：吃/碰后本拍不得立刻打出刚副露相关张",
-		"包三搭：同一来源三副露后，包家承担该家本局全部和牌支付",
-		"荒庄查听：牌墙耗尽后未听付听牌，四家同听/同未听不罚",
 	], 0)
+
+	add_rule_section(content, "结算与支付", [
+		"番分表：1番200、2番400、3番800、4番1600",
+		"5番3200、6番6400、7番12800、8番及以上25600封顶",
+		"自摸：其余三家各付一份；点炮和抢杠胡：责任方支付三份",
+		"包三搭：同一来源被吃、碰或明杠三次后形成包家",
+		"包家承担该家本局自摸、点炮、抢杠胡的三份支付",
+		"荒庄查听：每家未听付1000分，全部由听牌者均分",
+		"四家同听或同未听不罚",
+	], 1)
+
+	add_rule_section(content, "计番项目", [
+		"平胡1番；自摸、庄家、门清各加1番",
+		"每张花牌和每组杠各加1番",
+		"情境：杠上开花加2番；海底捞月、河底捞鱼、抢杠胡各加1番",
+		"七对+3、十三幺+7、清一色+3、混一色+2",
+		"字一色+5、碰碰胡+2、一条龙+2、断幺九+1",
+		"大吊车+2；大三元+6、小三元+4",
+		"大四喜+7、小四喜+5；同组大/小牌型择高",
+	], 2)
 
 	add_rule_section(content, "牌型介绍", [
 		"顺子：同花色连续3张（123万）",
 		"刻子：3张相同（111万）",
 		"杠子：4张相同；将牌：任意一对",
-	], 1)
+	], 3)
 
-	# 特殊牌型
 	add_rule_section(content, "特殊牌型", [
 		"七对：7个对子",
 		"十三幺：幺九字牌齐 + 任意一对",
-		"清一色：全部同一花色",
-	], 2)
+		"清一色：全部同一花色；混一色：一种花色配字牌",
+		"字一色：全是字牌",
+		"三元与四喜可形成大/小三元、大/小四喜",
+	], 4)
 
-	# 操作说明
 	add_rule_section(content, "游戏操作", [
 		"点手牌即可打出",
 		"出现吃/碰/杠/胡时点击响应",
 		"点'重开'重新开局",
-	], 3)
+		"本页说明当前单机本地实现",
+		"特殊地方番型与包赔细则仍以正式发布规则为准",
+	], 5)
+	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
 
 	# 规则段落逐一滑入
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -727,6 +769,47 @@ func _show_rules_screen_impl() -> void:
 	# 记录已查看教程
 	tutorial_step = -1
 	save_tutorial_state()
+
+
+func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
+	if content_scroll == null or thumb == null:
+		return
+	var scrollbar = content_scroll.get_v_scroll_bar()
+	var gutter = thumb.get_parent() as Control
+	if scrollbar == null or gutter == null:
+		return
+	var page = maxf(0.0, scrollbar.page)
+	var max_value = maxf(page, scrollbar.max_value)
+	var scroll_range = maxf(0.0, scrollbar.max_value - page)
+	var track_top = 0.050
+	var track_height = 0.900
+	var visible_ratio = 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
+	var thumb_height = track_height * visible_ratio
+	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
+	var thumb_top = track_top + (track_height - thumb_height) * progress
+	apply_rect(thumb, rect_full(0.220, thumb_top, 0.780, thumb_top + thumb_height))
+
+
+func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary) -> void:
+	if scrollbar == null or thumb == null or gutter == null:
+		return
+	if event is InputEventMouseButton:
+		var mouse_button = event as InputEventMouseButton
+		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
+			return
+		drag_state["active"] = mouse_button.pressed
+		thumb.accept_event()
+		return
+	if not (event is InputEventMouseMotion) or not bool(drag_state.get("active", false)):
+		return
+	var motion = event as InputEventMouseMotion
+	var scroll_range = maxf(0.0, scrollbar.max_value - scrollbar.page)
+	var track_height = maxf(1.0, gutter.size.y * 0.900 - thumb.size.y)
+	if scroll_range > 0.0:
+		scrollbar.value = clampf(scrollbar.value + motion.relative.y / track_height * scroll_range, 0.0, scroll_range)
+		content_scroll.scroll_vertical = int(round(scrollbar.value))
+		sync_rules_scroll_thumb(content_scroll, thumb)
+	thumb.accept_event()
 
 
 func _show_shop_screen_impl() -> void:

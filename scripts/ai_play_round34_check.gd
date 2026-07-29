@@ -62,7 +62,7 @@ func run() -> void:
 	var reports = scene.get_ai_discard_reports(1)
 	var fold_report = report_for_tile(reports, "E")
 	print("    candidates=%d fold=%s" % [reports.size(), str(fold_report)])
-	check(reports.size() == scene.AI_FAST_EVAL_TOP_K, "静默模式仍限制完整评估数量")
+	check(reports.size() == scene.AI_FAST_EVAL_PRESSURE_TOP_K, "高压静默模式保留攻击与折返的完整评估槽位")
 	check(not fold_report.is_empty(), "高压下完整评估包含安全折返牌")
 	check(str(fold_report.get("safety_label", "")) == "现", "折返牌是主威胁现物")
 	var min_shanten = 99

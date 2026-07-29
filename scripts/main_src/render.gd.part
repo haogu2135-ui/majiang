@@ -6697,17 +6697,21 @@ func draw_rule_section_path_art(section: Control, section_index: int, title_text
 		Color(0.86, 0.62, 0.34),
 		Color(0.38, 0.70, 0.58),
 		Color(0.62, 0.56, 0.86),
+		Color(0.38, 0.64, 0.82),
+		Color(0.72, 0.48, 0.74),
 		Color(0.86, 0.72, 0.38),
 	]
-	var icons = ["target", "layers", "sparkles", "mouse-pointer-click"]
+	var icons = ["git-merge", "calculator", "list-checks", "layers", "sparkles", "mouse-pointer-click"]
 	var accent: Color = colors[clamp(section_index, 0, colors.size() - 1)]
 	var icon_name = str(icons[clamp(section_index, 0, icons.size() - 1)])
 	var strip = make_gpt_ribbon(rect_full(0.835, 0.155, 0.965, 0.845), Color(accent.r, accent.g, accent.b, 0.125))
 	strip.name = "RuleSectionArtStrip_%d" % section_index
 	section.add_child(strip)
-	var section_panel_keys = ["rules_section_goal_panel", "rules_section_meld_panel", "rules_section_special_panel", "rules_section_action_panel"]
+	# Settlement and fan sections have no matching bitmap panel yet. They keep a
+	# neutral icon lane rather than borrowing the action illustration.
+	var section_panel_keys = ["rules_section_goal_panel", "", "", "rules_section_meld_panel", "rules_section_special_panel", "rules_section_action_panel"]
 	var panel_key = str(section_panel_keys[clamp(section_index, 0, section_panel_keys.size() - 1)])
-	var strip_plate = add_optional_gpt_illustration_texture(strip, panel_key, rect_full(-0.02, -0.02, 1.02, 1.02), 0.96, false)
+	var strip_plate = add_optional_gpt_illustration_texture(strip, panel_key, rect_full(-0.02, -0.02, 1.02, 1.02), 0.96, false) if panel_key != "" else null
 	var has_plate := strip_plate != null
 	if has_plate:
 		strip_plate.name = "RuleSectionArtGPTPlate_%d" % section_index

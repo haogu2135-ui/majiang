@@ -43,7 +43,7 @@ func print_high_risk_trace(scene, trace: Array) -> void:
 		var human = float(item.get("human_pressure", 0.0))
 		if risk < scene.AI_DANGER_RISK_HIGH and human < 28.0:
 			continue
-		print("    step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f sh=%d source=%s guard=%s from=%s safe=%s gap=%.1f gain=%.1f" % [
+		print("    step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f sh=%d wait=%d/%d source=%s guard=%s thin=%s one=%s from=%s safe=%s gap=%.1f gain=%.1f" % [
 			int(item.get("step", -1)),
 			int(item.get("seat", -1)),
 			str(item.get("tile", "")),
@@ -51,8 +51,12 @@ func print_high_risk_trace(scene, trace: Array) -> void:
 			feed,
 			human,
 			int(item.get("shanten", -1)),
+			int(item.get("wait_best_points", 0)),
+			int(item.get("wait_total_remaining", 0)),
 			str(item.get("source", "")),
 			str(item.get("hard_guard_moved", false)),
+			str(item.get("hard_guard_catastrophe_tenpai", false)),
+			str(item.get("hard_guard_extreme_one_away", false)),
 			str(item.get("hard_guard_from_tile", "")),
 			str(item.get("hard_guard_safe_tile", "")),
 			float(item.get("hard_guard_safe_score_gap", 0.0)),
