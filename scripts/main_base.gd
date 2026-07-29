@@ -1146,7 +1146,12 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> C
 		host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		apply_rect(host, rect)
 		return host
+	var host = Control.new()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(host, rect)
 	var tex = TextureRect.new()
+	tex.name = "GptPlateTexture"
+	tex.z_index = -64
 	tex.texture = texture
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_SCALE
@@ -1159,8 +1164,9 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> C
 		clampf(0.50 + color.b * 0.60, 0.20, 1.20),
 		tint_a
 	)
-	apply_rect(tex, rect)
-	return tex
+	tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	host.add_child(tex)
+	return host
 
 
 func make_fullrect_overlay(color: Color, plate_key: String = "ui_dark_scrim") -> Control:
