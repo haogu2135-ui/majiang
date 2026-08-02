@@ -678,17 +678,19 @@ const WALL_LAYOUTS := [
 	[Vector2(0.906, 0.165), Vector2(0.954, 0.795), 12, false],
 ]
 const DISCARD_ZONES := [
-	# r452: bottom river taller/wider for porcelain density; sides keep dense 4-col.
-	[0, Rect2(Vector2(0.140, 0.455), Vector2(0.680, 0.740)), 8],  # bottom denser pocket
-	[2, Rect2(Vector2(0.285, 0.120), Vector2(0.715, 0.355)), 8],
-	[3, Rect2(Vector2(0.100, 0.155), Vector2(0.390, 0.760)), 4],
-	[1, Rect2(Vector2(0.610, 0.155), Vector2(0.900, 0.760)), 4],
+	# Four independent rivers form a clean ring around the center panel. Horizontal
+	# seats keep two dense rows; side seats use four columns without crossing into
+	# the top/bottom rivers or covering the center decision surface.
+	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.715, 0.875)), 8],
+	[2, Rect2(Vector2(0.285, 0.100), Vector2(0.715, 0.325)), 8],
+	[3, Rect2(Vector2(0.100, 0.325), Vector2(0.280, 0.675)), 4],
+	[1, Rect2(Vector2(0.720, 0.325), Vector2(0.900, 0.675)), 4],
 ]
 const MELD_LAYOUTS := [
-	[0, Rect2(Vector2(0.165, 0.742), Vector2(0.420, 0.812))],
-	[1, Rect2(Vector2(0.882, 0.240), Vector2(0.940, 0.680))],
-	[2, Rect2(Vector2(0.615, 0.100), Vector2(0.915, 0.195))],
-	[3, Rect2(Vector2(0.070, 0.240), Vector2(0.128, 0.680))],
+	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
+	[1, Rect2(Vector2(0.770, 0.240), Vector2(0.857, 0.680))],
+	[2, Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))],
+	[3, Rect2(Vector2(0.143, 0.240), Vector2(0.230, 0.680))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
 const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.345), Vector2(0.595, 0.635))

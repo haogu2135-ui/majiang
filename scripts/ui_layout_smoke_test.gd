@@ -26,11 +26,12 @@ func run() -> void:
 func seed_offline_battle_layout_state(scene) -> void:
 	scene.mode = "offline"
 	scene.players = [
-		{"name": "你", "hand": ["1W", "2W", "3W", "3W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E"], "discards": ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "S"], "melds": [], "flowers": 0, "score": 7400},
-		{"name": "青竹道人", "hand_count": 13, "discards": ["1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T"], "melds": [], "flowers": 1, "score": 53000},
-		{"name": "南山客", "hand_count": 13, "discards": ["1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B"], "melds": [], "flowers": 1, "score": 21000},
-		{"name": "扶摇散人", "hand_count": 13, "discards": ["Z", "F", "P", "R", "N", "E", "S"], "melds": [], "flowers": 0, "score": 19700},
+		{"name": "你", "hand": ["1W", "2W", "3W", "3W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E"], "discards": ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "S"], "melds": [["1W", "1W", "1W"], ["2W", "3W", "4W"], ["5W", "5W", "5W"], ["6W", "6W", "6W", "6W"]], "flowers": 0, "score": 7400},
+		{"name": "青竹道人", "hand_count": 13, "discards": ["1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T"], "melds": [["1T", "1T", "1T"], ["2T", "3T", "4T"], ["5T", "5T", "5T"], ["6T", "6T", "6T", "6T"]], "flowers": 1, "score": 53000},
+		{"name": "南山客", "hand_count": 13, "discards": ["1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B"], "melds": [["1B", "1B", "1B"], ["2B", "3B", "4B"], ["5B", "5B", "5B"], ["6B", "6B", "6B", "6B"]], "flowers": 1, "score": 21000},
+		{"name": "扶摇散人", "hand_count": 13, "discards": ["Z", "F", "P", "R", "N", "E", "S"], "melds": [["E", "E", "E"], ["S", "S", "S"], ["N", "N", "N"], ["R", "R", "R", "R"]], "flowers": 0, "score": 19700},
 	]
+	scene.table_logs = ["北家碰东风", "你摸入五条"]
 	scene.wall.clear()
 	scene.wall.append("5T")
 	scene.wall.append("6T")
@@ -74,6 +75,8 @@ func run_safe_area_layout_probe(viewport_size: Vector2, margins: Vector4) -> voi
 	scene.draw_game_top_hud(scene.root_layer)
 	for seat_layout in scene.SEAT_LAYOUTS:
 		scene.draw_seat(scene.root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), {})
+	scene.draw_melds(scene.root_layer)
+	scene.draw_table_log(scene.root_layer)
 	scene.draw_hand(scene.root_layer)
 	scene.draw_actions(scene.root_layer)
 	await process_frame
@@ -107,6 +110,8 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.draw_game_top_hud(scene.root_layer)
 	for seat_layout in scene.SEAT_LAYOUTS:
 		scene.draw_seat(scene.root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), {})
+	scene.draw_melds(scene.root_layer)
+	scene.draw_table_log(scene.root_layer)
 	scene.draw_hand(scene.root_layer)
 	scene.draw_actions(scene.root_layer)
 	await process_frame
@@ -554,13 +559,59 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		check(dock_rect.end.y <= hand_rect.position.y - 12.0, "battle action dock keeps a clear gap above hand tray at %s" % viewport_size)
 		check(dock_rect.size.y <= viewport_size.y * 0.115 + 1.0, "battle action dock remains a compact strip at %s" % viewport_size)
 	var discard_rects = battle_discard_zone_screen_rects(scene)
+	var root_rect = screen_rect(scene.root_layer)
+	var outer_rect = anchor_rect_in_parent(root_rect, scene.TABLE_OUTER_RECT)
+	var table_rect = anchor_rect_in_parent(outer_rect, scene.TABLE_INNER_RECT)
+	var center_rect = anchor_rect_in_parent(table_rect, scene.CENTER_PANEL_RECT)
+	for i in range(discard_rects.size()):
+		check(not rects_overlap(discard_rects[i], center_rect), "battle discard zone %d clears the center panel at %s" % [i, viewport_size])
+		for j in range(i + 1, discard_rects.size()):
+			check(not rects_overlap(discard_rects[i], discard_rects[j]), "battle discard zones %d and %d remain independent at %s" % [i, j, viewport_size])
 	var seat_rects: Array[Rect2] = []
+	var seat_rect_by_id: Dictionary = {}
 	for seat_layout in scene.SEAT_LAYOUTS:
-		var seat_panel = scene.find_child("SeatPanel_%d" % int(seat_layout[0]), true, false) as Control
+		var seat_id := int(seat_layout[0])
+		var seat_panel = scene.find_child("SeatPanel_%d" % seat_id, true, false) as Control
 		if seat_panel != null:
 			var seat_rect = screen_rect(seat_panel)
 			seat_rects.append(seat_rect)
-			check(viewport_rect.encloses(seat_rect), "battle seat panel %d stays inside viewport at %s" % [int(seat_layout[0]), viewport_size])
+			seat_rect_by_id[seat_id] = seat_rect
+			check(viewport_rect.encloses(seat_rect), "battle seat panel %d stays inside viewport at %s" % [seat_id, viewport_size])
+	var meld_rects: Array[Rect2] = []
+	for meld_layout in scene.MELD_LAYOUTS:
+		var meld_seat := int(meld_layout[0])
+		var meld_area = scene.find_child("MeldArea_%d" % meld_seat, true, false) as Control
+		if meld_area == null:
+			continue
+		var meld_rect = screen_rect(meld_area)
+		meld_rects.append(meld_rect)
+		check(viewport_rect.encloses(meld_rect), "battle meld area %d stays inside viewport at %s" % [meld_seat, viewport_size])
+		if seat_rect_by_id.has(meld_seat):
+			check(not rects_overlap(meld_rect, seat_rect_by_id[meld_seat]), "battle meld area %d clears its seat HUD at %s" % [meld_seat, viewport_size])
+		for discard_rect in discard_rects:
+			check(not rects_overlap(meld_rect, discard_rect), "battle meld area %d clears discard rivers at %s" % [meld_seat, viewport_size])
+		var group_count := 0
+		for child in meld_area.get_children():
+			var meld_group := child as Control
+			if meld_group == null or not str(meld_group.name).begins_with("MeldGroup_"):
+				continue
+			group_count += 1
+			check(meld_rect.grow(1.0).encloses(screen_rect(meld_group)), "battle meld group %d/%d stays inside its assigned lane at %s" % [meld_seat, group_count, viewport_size])
+		check(group_count == 4, "battle meld area %d fits all four groups at %s" % [meld_seat, viewport_size])
+	var table_log = scene.find_child("TableLogLedgerPanel", true, false) as Control
+	check(table_log != null, "battle renders named table log ledger at %s" % viewport_size)
+	if table_log != null:
+		var log_rect = screen_rect(table_log)
+		check(viewport_rect.encloses(log_rect), "battle table log stays inside viewport at %s" % viewport_size)
+		for seat_rect in seat_rects:
+			check(not rects_overlap(log_rect, seat_rect), "battle table log clears seat HUDs at %s" % viewport_size)
+		for meld_rect in meld_rects:
+			check(not rects_overlap(log_rect, meld_rect), "battle table log clears meld areas at %s" % viewport_size)
+		var expected_log_rows := 1 if viewport_size.y <= 560.0 else 2
+		check(controls_with_name_prefix(table_log, "TableLogLedgerRow_").size() == expected_log_rows, "battle table log uses %d readable rows at %s" % [expected_log_rows, viewport_size])
+		for body in controls_with_name_prefix(table_log, "TableLogLedgerBody_"):
+			var body_label := body as Label
+			check(body_label != null and body_label.clip_text and label_text_width(body_label, body_label.text) <= screen_rect(body_label).size.x + 2.0, "battle table log latest event fits its row at %s" % viewport_size)
 	var action_children: Array = []
 	if scene.action_bar != null:
 		action_children = scene.action_bar.get_children()
@@ -1720,6 +1771,9 @@ func check_compact_seat_panels(scene, viewport_size: Vector2) -> void:
 		if seat != 0:
 			check(str(name.text).length() <= 2, "AI seat %d uses abbreviated name/profile label at %s" % [seat, viewport_size])
 		check(str(meta.text).find("分") < 0, "seat %d keeps score out of hand/flower meta at %s" % [seat, viewport_size])
+		if is_side_thumbnail:
+			check(str(meta.text).begins_with("手") and str(meta.text).find("弃") >= 0, "side seat %d merges hand flower and discard counts into one scan line at %s" % [seat, viewport_size])
+			check(label_text_width(meta, meta.text) <= screen_rect(meta).size.x + 2.0, "side seat %d combined meta fits without ellipsis at %s" % [seat, viewport_size])
 		check(str(score.text).strip_edges() != "", "seat %d keeps score visible as its own label at %s" % [seat, viewport_size])
 
 func check_safe_area_layout(scene, viewport_size: Vector2, page_label: String) -> void:

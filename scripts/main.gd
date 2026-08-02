@@ -12931,6 +12931,7 @@ func seat_meld_face_rotation(seat: int) -> float:
 
 func draw_melds(parent: Control) -> void:
 	var proxy_order := 1000
+	var compact_melds := effective_viewport_size().y <= 560.0
 	for layout in MELD_LAYOUTS:
 		var seat = int(layout[0])
 		var meld_list = get_melds(seat)
@@ -12939,19 +12940,33 @@ func draw_melds(parent: Control) -> void:
 		# Soft seat lane; melds sit next to the player plaque.
 		draw_meld_lane_art(parent, seat, layout[1], meld_list.size())
 		var vertical: bool = seat_meld_is_vertical(seat)
-		var area: BoxContainer = VBoxContainer.new() if vertical else HBoxContainer.new()
+		var area: Container
+		if vertical:
+			var side_grid := GridContainer.new()
+			side_grid.columns = 2
+			area = side_grid
+		else:
+			area = HBoxContainer.new()
 		area.name = "MeldArea_%d" % seat
 		configure_passive_container(area)
 		area.z_index = 6  # r449 above river bed, below river faces (8)
 		area.add_theme_constant_override("separation", 3)
-		area.alignment = BoxContainer.ALIGNMENT_BEGIN
+		if area is BoxContainer:
+			(area as BoxContainer).alignment = BoxContainer.ALIGNMENT_BEGIN
 		apply_rect(area, layout[1])
 		parent.add_child(area)
+		var meld_tile_size := Vector2.ZERO
+		if vertical and compact_melds:
+			meld_tile_size = Vector2(21, 28)
+		elif not vertical and compact_melds:
+			meld_tile_size = Vector2(14, 21)
+		elif not vertical and meld_list.size() >= 4:
+			meld_tile_size = Vector2(20, 28)
 		for meld in meld_list:
 			if typeof(meld) == TYPE_ARRAY:
 				var meld_tiles := meld as Array
 				# Chi/peng/gang share one lane orientation per seat — no kind-specific layout.
-				area.add_child(make_meld_group_view(meld_tiles, seat, false, proxy_order))
+				area.add_child(make_meld_group_view(meld_tiles, seat, false, proxy_order, meld_tile_size))
 				proxy_order += meld_tiles.size() + 1
 
 func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: int, shadow_size: int = 0) -> Panel:
@@ -15350,18 +15365,18 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(side_score, rect_full(side_score_left, 0.090, 0.940, 0.300))
 		side_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(side_score, true)
-		var side_stats = make_label(panel, seat_hand_flower_short_text(p), 9, Color(0.96, 0.94, 0.84), false)
+		var side_stats = make_label(panel, "", 9, Color(0.96, 0.94, 0.84), false)
 		side_stats.name = "SeatCompactMeta_%d" % seat
-		apply_rect(side_stats, rect_full(0.285, 0.340, 0.675, 0.515))
+		var side_discard_count = get_discards(seat).size()
+		var side_meta_text = "手%d" % int(p.get("hand_count", 0))
+		if int(p.get("flowers", 0)) > 0:
+			side_meta_text += " 花%d" % int(p.get("flowers", 0))
+		if side_discard_count > 0:
+			side_meta_text += " 弃%d" % side_discard_count
+		side_stats.text = side_meta_text
+		apply_rect(side_stats, rect_full(0.285, 0.340, 0.940, 0.515))
 		side_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_stats, false)
-		var side_discard_count = seat_recent_river_count_text(seat)
-		if side_discard_count != "":
-			var side_river_count = make_label(panel, side_discard_count, 9, Color(0.94, 0.92, 0.80), false)
-			side_river_count.name = "SeatDiscardPreviewRecentLabel_%d" % seat
-			apply_rect(side_river_count, rect_full(0.690, 0.340, 0.940, 0.515))
-			side_river_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			style_seat_readable_label(side_river_count, false)
 		if active:
 			var side_turn = make_badge(panel, rect_full(0.785, 0.555, 0.940, 0.730), "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
 			side_turn.name = "SeatCompactTurn_%d" % seat
@@ -17556,7 +17571,10 @@ func draw_table_living_illustration(parent: Control) -> Control:
 
 func draw_table_log(parent: Control) -> void:
 	# r213: GPT chrome conversion
-	var ledger_panel = make_gpt_gate(rect_full(0.018, 0.585, 0.205, 0.755), Color(0.094, 0.074, 0.048, 0.88))
+	var compact_log := effective_viewport_size().y <= 560.0
+	var ledger_rect := rect_full(0.018, 0.565, 0.140, 0.735)
+	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
+	ledger_panel.name = "TableLogLedgerPanel"
 	parent.add_child(ledger_panel)
 	var ledger_texture = add_illustration_texture(ledger_panel, "table_log_scroll", rect_full(0.010, 0.018, 0.990, 0.982), 0.075, false)
 	if ledger_texture != null:
@@ -17566,13 +17584,13 @@ func draw_table_log(parent: Control) -> void:
 	var ledger_spine = make_gpt_edge_rail(rect_full(0.035, 0.075, 0.050, 0.915), Color(0.78, 0.56, 0.24, 0.34))
 	ledger_spine.name = "TableLogLedgerSpine"
 	ledger_panel.add_child(ledger_spine)
-	var ledger_title = make_label(ledger_panel, "牌桌记", 12, Color(0.90, 0.78, 0.52), true)
-	apply_rect(ledger_title, rect_full(0.085, 0.030, 0.430, 0.230))
+	var ledger_title = make_label(ledger_panel, "牌桌记", 10 if compact_log else 12, Color(0.90, 0.78, 0.52), true)
+	apply_rect(ledger_title, rect_full(0.085, 0.030, 0.590 if compact_log else 0.430, 0.230))
 	ledger_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var ledger_count = make_label(ledger_panel, "%d条" % table_logs.size(), 10, Color(0.72, 0.66, 0.48), false)
-	apply_rect(ledger_count, rect_full(0.560, 0.040, 0.930, 0.220))
+	var ledger_count = make_label(ledger_panel, "%d条" % table_logs.size(), 8 if compact_log else 10, Color(0.72, 0.66, 0.48), false)
+	apply_rect(ledger_count, rect_full(0.610 if compact_log else 0.560, 0.040, 0.930, 0.220))
 	ledger_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	var log_recent = table_log_tail(2)
+	var log_recent = table_log_tail(1 if compact_log else 2)
 	if log_recent.is_empty():
 		var waiting = make_label(ledger_panel, "等待开局", 12, Color(0.74, 0.66, 0.44), true)
 		apply_rect(waiting, rect_full(0.080, 0.330, 0.920, 0.710))
@@ -17583,7 +17601,8 @@ func draw_table_log(parent: Control) -> void:
 		var log_text = str(log_recent[log_i])
 		var row_tag = table_log_tag(log_text)
 		var row_color = table_log_tag_color(row_tag)
-		var row_panel = make_gpt_plate_rect(rect_full(0.075, row_top, 0.940, row_top + 0.205), Color(0.052, 0.044, 0.030, 0.54), "ui_jade_reading_plate")
+		var row_bottom = 0.840 if compact_log else row_top + 0.205
+		var row_panel = make_gpt_plate_rect(rect_full(0.075, row_top, 0.940, row_bottom), Color(0.052, 0.044, 0.030, 0.54), "ui_jade_reading_plate")
 		row_panel.name = "TableLogLedgerRow_%d" % log_i
 		ledger_panel.add_child(row_panel)
 		var row_badge = make_gpt_gate(rect_full(0.025, 0.190, 0.170, 0.800), Color(row_color.r, row_color.g, row_color.b, 0.24))
@@ -17591,7 +17610,8 @@ func draw_table_log(parent: Control) -> void:
 		row_panel.add_child(row_badge)
 		var row_mark = make_label(row_badge, row_tag.substr(0, 1), 9, Color(0.98, 0.90, 0.66), true)
 		apply_rect(row_mark, rect_full(0.0, 0.0, 1.0, 1.0))
-		var row_body = make_label(row_panel, table_log_display_text(log_text), 10, Color(0.80, 0.76, 0.60), false)
+		var row_body = make_label(row_panel, table_log_display_text(log_text), 9 if compact_log else 10, Color(0.80, 0.76, 0.60), false)
+		row_body.name = "TableLogLedgerBody_%d" % log_i
 		apply_rect(row_body, rect_full(0.205, 0.070, 0.955, 0.900))
 		row_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(row_body)
@@ -19920,7 +19940,7 @@ func make_lobby_action_button(text: String, color: Color, callback: Callable, in
 	)
 	return button
 
-func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, proxy_order_base: int = 0) -> Control:
+func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, proxy_order_base: int = 0, tile_size_override: Vector2 = Vector2.ZERO) -> Control:
 	# Unified chi/peng/gang presentation: same tile strip per seat orientation.
 	# Melds sit in front of each player; tile faces all point toward table center.
 	# Vertical seats (1/3) stack tiles; horizontal seats (0/2) run tiles in a row.
@@ -19932,16 +19952,20 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	group.clip_contents = false
 	# Natural upright art size; rotation handles table-facing orientation.
-	var tile_size: Vector2 = Vector2(28, 38) if vertical else Vector2(26, 36)
+	var tile_size: Vector2 = tile_size_override if tile_size_override.x > 0.0 and tile_size_override.y > 0.0 else (Vector2(28, 38) if vertical else Vector2(26, 36))
 	var tile_count: int = maxi(1, meld.size())
-	var sep: int = 3 if vertical else 2
+	var compact_tiles := tile_size_override.x > 0.0 and tile_size_override.y > 0.0
+	var sep: int = (2 if compact_tiles else 3) if vertical else (1 if compact_tiles and tile_size.x <= 18.0 else 2)
+	var group_padding := 6.0 if compact_tiles else 8.0
 	# After ±90° rotation, visual footprint swaps width/height.
 	var cell_w: float = tile_size.y if vertical else tile_size.x
 	var cell_h: float = tile_size.x if vertical else tile_size.y
 	if vertical:
-		group.custom_minimum_size = Vector2(maxf(40.0, cell_w + 8.0), float(tile_count) * (cell_h + float(sep)) + 8.0)
+		var minimum_width := 34.0 if compact_tiles else 40.0
+		group.custom_minimum_size = Vector2(maxf(minimum_width, cell_w + group_padding), float(tile_count) * (cell_h + float(sep)) + group_padding)
 	else:
-		group.custom_minimum_size = Vector2(float(tile_count) * (cell_w + float(sep)) + 8.0, maxf(44.0, cell_h + 8.0))
+		var minimum_height := 30.0 if compact_tiles else 44.0
+		group.custom_minimum_size = Vector2(float(tile_count) * (cell_w + float(sep)) + group_padding, maxf(minimum_height, cell_h + group_padding))
 	var accent: Color = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
 	# r180: GPT meld pad host — no StyleBox frame paint under tiles.
 	var empty_meld := StyleBoxEmpty.new()
@@ -31699,13 +31723,13 @@ func seat_meld_rect(seat: int) -> Rect2:
 	# Mirror MELD_LAYOUTS — melds in front of each seat, facing table center.
 	match seat:
 		0:
-			return Rect2(Vector2(0.200, 0.758), Vector2(0.580, 0.812))
+			return Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))
 		1:
-			return Rect2(Vector2(0.800, 0.300), Vector2(0.870, 0.620))
+			return Rect2(Vector2(0.770, 0.240), Vector2(0.857, 0.680))
 		2:
-			return Rect2(Vector2(0.620, 0.112), Vector2(0.900, 0.198))
+			return Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))
 		3:
-			return Rect2(Vector2(0.130, 0.300), Vector2(0.200, 0.620))
+			return Rect2(Vector2(0.143, 0.240), Vector2(0.230, 0.680))
 		_:
 			return Rect2(Vector2(0.40, 0.40), Vector2(0.60, 0.50))
 

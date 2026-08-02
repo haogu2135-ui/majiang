@@ -6612,13 +6612,13 @@ func seat_meld_rect(seat: int) -> Rect2:
 	# Mirror MELD_LAYOUTS — melds in front of each seat, facing table center.
 	match seat:
 		0:
-			return Rect2(Vector2(0.200, 0.758), Vector2(0.580, 0.812))
+			return Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))
 		1:
-			return Rect2(Vector2(0.800, 0.300), Vector2(0.870, 0.620))
+			return Rect2(Vector2(0.770, 0.240), Vector2(0.857, 0.680))
 		2:
-			return Rect2(Vector2(0.620, 0.112), Vector2(0.900, 0.198))
+			return Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))
 		3:
-			return Rect2(Vector2(0.130, 0.300), Vector2(0.200, 0.620))
+			return Rect2(Vector2(0.143, 0.240), Vector2(0.230, 0.680))
 		_:
 			return Rect2(Vector2(0.40, 0.40), Vector2(0.60, 0.50))
 
