@@ -123,7 +123,7 @@ func create_enhanced_particle_burst(parent: Control, center: Vector2, color_them
 		var target_pos = center + Vector2(cos(angle), sin(angle)) * distance
 
 		# 创建Tween动画
-		var tw = create_tween()
+		var tw = particle.create_tween()
 		tw.set_parallel(true)
 
 		# 移动动画
@@ -173,8 +173,8 @@ func create_enhanced_starlight(parent: Control, rect: Rect2, star_count: int = 1
 		star.position = center + Vector2(cos(angle), sin(angle)) * radius - Vector2(star_size * 0.5, star_size * 0.5)
 		star_container.add_child(star)
 		particle_nodes.append(star)
-		var tw = create_tween()
-		tw.set_loops()
+		var tw = star.create_tween()
+		tw.set_loops(48)
 		var duration = randf_range(0.8, 1.8)
 		tw.tween_property(star, "modulate:a", 0.15, duration).set_trans(Tween.TRANS_SINE)
 		tw.tween_property(star, "modulate:a", col.a, duration).set_trans(Tween.TRANS_SINE)
@@ -184,14 +184,14 @@ func create_enhanced_starlight(parent: Control, rect: Rect2, star_count: int = 1
 func apply_hand_tile_hover_effect(tile_control: Control, is_hovered: bool) -> void:
 	if is_hovered:
 		# 悬停时的微放大和高亮
-		var tw = create_tween()
+		var tw = tile_control.create_tween()
 		tw.set_parallel(true)
 		tw.tween_property(tile_control, "scale", Vector2(1.08, 1.08), 0.15).set_ease(Tween.EASE_OUT)
 		tw.tween_property(tile_control, "modulate", Color(1.1, 1.1, 1.1, 1.0), 0.15)
 		active_particles.append(tw)
 	else:
 		# 恢复原始状态
-		var tw = create_tween()
+		var tw = tile_control.create_tween()
 		tw.set_parallel(true)
 		tw.tween_property(tile_control, "scale", Vector2.ONE, 0.15).set_ease(Tween.EASE_OUT)
 		tw.tween_property(tile_control, "modulate", Color.WHITE, 0.15)
@@ -199,7 +199,9 @@ func apply_hand_tile_hover_effect(tile_control: Control, is_hovered: bool) -> vo
 
 # 为选中的手牌添加弹跳动画
 func apply_hand_tile_select_bounce(tile_control: Control) -> void:
-	var tw = create_tween()
+	if tile_control == null or not is_instance_valid(tile_control):
+		return
+	var tw = tile_control.create_tween()
 	tw.set_trans(Tween.TRANS_BACK)
 	tw.set_ease(Tween.EASE_OUT)
 	tw.tween_property(tile_control, "position:y", tile_control.position.y - 10.0, 0.2)
@@ -234,7 +236,7 @@ func create_floating_cloud(parent: Control, rect: Rect2, speed: float = 20.0) ->
 		spark.position = Vector2(rect.size.x * puff.pos.x - puff_size.x * 0.5, rect.size.y * puff.pos.y - puff_size.y * 0.5)
 		cloud.add_child(spark)
 
-	var tw = create_tween()
+	var tw = cloud.create_tween()
 	tw.set_loops(48)
 	var duration = rect.size.x / max(1.0, speed)
 	tw.tween_property(cloud, "position:x", rect.position.x + rect.size.x, duration).from(rect.position.x - rect.size.x)
@@ -268,7 +270,7 @@ func create_bamboo_sway(parent: Control, rect: Rect2, segments: int = 5) -> Cont
 			ring.position = Vector2(rect.size.x * 0.15, (i + 1) * segment_height - segment_height * 0.075)
 			bamboo.add_child(ring)
 
-	var tw = create_tween()
+	var tw = bamboo.create_tween()
 	tw.set_loops(48)
 	tw.set_trans(Tween.TRANS_SINE)
 	tw.set_ease(Tween.EASE_IN_OUT)
@@ -297,7 +299,7 @@ func create_falling_plum_blossoms(parent: Control, rect: Rect2, count: int = 8) 
 				(petal as TextureRect).texture = ptex
 		blossom.add_child(petal)
 
-		var tw = create_tween()
+		var tw = blossom.create_tween()
 		tw.set_loops(48)
 		var fall_x = blossom.position.x + randf_range(-40.0, 40.0)
 		var fall_y = rect.position.y + rect.size.y + 40.0
@@ -344,7 +346,7 @@ func create_floating_spirit(parent: Control, rect: Rect2, count: int = 6) -> voi
 		glow.position = Vector2(-spirit_size * 0.6, -spirit_size * 0.6)
 		spirit.add_child(glow)
 
-		var tw = create_tween()
+		var tw = spirit.create_tween()
 		tw.set_loops(48)
 		var drift = Vector2(randf_range(-30.0, 30.0), randf_range(-40.0, -10.0))
 		var dur = randf_range(3.0, 6.0)
@@ -360,7 +362,7 @@ func create_ripple_ring(parent: Control, center: Vector2, color: Color = Color(1
 		ring.position = center - Vector2(base * 0.5, base * 0.5)
 		parent.add_child(ring)
 		particle_nodes.append(ring)
-		var tw = create_tween()
+		var tw = ring.create_tween()
 		tw.set_parallel(true)
 		var target = base * 3.5
 		tw.tween_property(ring, "size", Vector2(target, target), 0.7 + float(i) * 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -382,7 +384,7 @@ func create_gold_dust(parent: Control, rect: Rect2, count: int = 8) -> void:
 		parent.add_child(dust)
 		particle_nodes.append(dust)
 
-		var tw = create_tween()
+		var tw = dust.create_tween()
 		tw.set_loops(48)
 		var drift_x = randf_range(-40.0, 40.0)
 		var drift_y = randf_range(-20.0, 20.0)
@@ -392,7 +394,7 @@ func create_gold_dust(parent: Control, rect: Rect2, count: int = 8) -> void:
 		tw.tween_property(dust, "position:x", dust.position.x, dur).set_trans(Tween.TRANS_SINE)
 		tw.parallel().tween_property(dust, "position:y", dust.position.y, dur).set_trans(Tween.TRANS_SINE)
 
-		var flicker_tw = create_tween()
+		var flicker_tw = dust.create_tween()
 		flicker_tw.set_loops(48)
 		flicker_tw.set_trans(Tween.TRANS_SINE)
 		flicker_tw.tween_property(dust, "modulate:a", 0.1, randf_range(1.0, 2.5))
@@ -404,7 +406,7 @@ func animate_panel_breath(panel: Control, drift: Vector2 = Vector2(0.0, -4.0), d
 	if panel == null:
 		return
 	var base_pos = panel.position
-	var tw = create_tween()
+	var tw = panel.create_tween()
 	tw.set_loops(48)
 	tw.set_trans(Tween.TRANS_SINE)
 	tw.set_ease(Tween.EASE_IN_OUT)
@@ -445,7 +447,7 @@ func create_orbiting_motes(parent: Control, rect: Rect2, theme: String = "gold",
 		mote.position = start - Vector2(mote_size * 0.5, mote_size * 0.5)
 
 		var mote_id := mote.get_instance_id()
-		var orbit_tw = create_tween()
+		var orbit_tw = mote.create_tween()
 		orbit_tw.set_loops(48)
 		orbit_tw.tween_method(func(t: float) -> void:
 			var mote_node := instance_from_id(mote_id) as Control
@@ -457,7 +459,7 @@ func create_orbiting_motes(parent: Control, rect: Rect2, theme: String = "gold",
 		, 0.0, 1.0, randf_range(7.5, 12.0))
 		active_particles.append(orbit_tw)
 
-		var flicker_tw = create_tween()
+		var flicker_tw = mote.create_tween()
 		flicker_tw.set_loops(48)
 		flicker_tw.set_trans(Tween.TRANS_SINE)
 		flicker_tw.tween_property(mote, "modulate:a", 0.24, randf_range(1.2, 2.4)).from(0.82)
@@ -503,7 +505,7 @@ func create_ribbon_sweep(parent: Control, rect: Rect2, color: Color, duration: f
 	streak.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	sweep.add_child(streak)
 
-	var tw = create_tween()
+	var tw = sweep.create_tween()
 	tw.set_loops(48)
 	tw.tween_property(sweep, "modulate:a", 0.15, duration * 0.5).from(0.85)
 	tw.tween_property(sweep, "modulate:a", 0.85, duration * 0.5)

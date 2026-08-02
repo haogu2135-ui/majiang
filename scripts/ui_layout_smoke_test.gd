@@ -31,7 +31,9 @@ func seed_offline_battle_layout_state(scene) -> void:
 		{"name": "南山客", "hand_count": 13, "discards": ["1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B"], "melds": [["1B", "1B", "1B"], ["2B", "3B", "4B"], ["5B", "5B", "5B"], ["6B", "6B", "6B", "6B"]], "flowers": 1, "score": 21000},
 		{"name": "扶摇散人", "hand_count": 13, "discards": ["Z", "F", "P", "R", "N", "E", "S"], "melds": [["E", "E", "E"], ["S", "S", "S"], ["N", "N", "N"], ["R", "R", "R", "R"]], "flowers": 0, "score": 19700},
 	]
-	scene.table_logs = ["北家碰东风", "你摸入五条"]
+	scene.table_logs.clear()
+	scene.table_logs.append("北家碰东风")
+	scene.table_logs.append("你摸入五条")
 	scene.wall.clear()
 	scene.wall.append("5T")
 	scene.wall.append("6T")

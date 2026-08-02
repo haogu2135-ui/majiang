@@ -1927,8 +1927,10 @@ func draw_chat_panel_art(parent: Control) -> Control:
 	var rail = add_optional_gpt_illustration_texture(art, "ui_action_role_rail", rect_full(0.050, 0.285, 0.078, 0.900), 0.40, false)
 	if rail == null:
 		rail = make_gpt_edge_rail(rect_full(0.058, 0.285, 0.070, 0.900), Color(0.60, 0.76, 0.64, 0.20))
-	rail.name = "ChatPanelActivityRail"
-	art.add_child(rail)
+		rail.name = "ChatPanelActivityRail"
+		art.add_child(rail)
+	else:
+		rail.name = "ChatPanelActivityRail"
 	var visible_count = min(5, chat_messages.size())
 	if visible_count == 0:
 		draw_chat_empty_state_art(art)
@@ -4522,7 +4524,7 @@ func draw_loading_progress_feedback(parent: Control) -> Control:
 		art.add_child(pip)
 	if fx_enabled_effective():
 		fill.modulate = Color(1, 1, 1, 0.86)
-		var tw := create_tween()
+		var tw := art.create_tween()
 		tw.set_loops(8)
 		tw.tween_property(fill, "anchor_right", 0.980, 1.15).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(gate, "modulate:a", 0.46, 0.56).from(0.94)
@@ -4568,7 +4570,7 @@ func draw_loading_shuffle_art(parent: Control) -> Control:
 		apply_rect(tile, rect_full(left, 0.170 + float(i % 2) * 0.080, left + 0.070, 0.740 + float(i % 2) * 0.080))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		# 印章旋转出现
-		var seal_tw := create_tween()
+		var seal_tw := art.create_tween()
 		seal_tw.tween_property(seal, "scale", Vector2(1.0, 1.0), 0.6).from(Vector2(0.3, 0.3)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		seal_tw.parallel().tween_property(seal, "modulate:a", 1.0, 0.5).from(0.0)
 		# 牌面依次翻转级联动画 - 模拟洗牌
@@ -4577,7 +4579,7 @@ func draw_loading_shuffle_art(parent: Control) -> Control:
 			if tile_node != null:
 				var delay := float(i) * 0.12
 				# 翻转循环
-				var flip_tw := create_tween()
+				var flip_tw := art.create_tween()
 				flip_tw.set_loops(6)
 				flip_tw.tween_property(tile_node, "scale:x", 0.0, 0.2).from(1.0).set_delay(delay + 1.2 + float(i) * 0.4)
 				flip_tw.tween_property(tile_node, "scale:x", 1.0, 0.2).from(0.0)
@@ -4846,11 +4848,14 @@ func draw_melds(parent: Control) -> void:
 			meld_tile_size = Vector2(14, 21)
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
-		for meld in meld_list:
+		for meld_index in range(meld_list.size()):
+			var meld = meld_list[meld_index]
 			if typeof(meld) == TYPE_ARRAY:
 				var meld_tiles := meld as Array
 				# Chi/peng/gang share one lane orientation per seat — no kind-specific layout.
-				area.add_child(make_meld_group_view(meld_tiles, seat, false, proxy_order, meld_tile_size))
+				var meld_group := make_meld_group_view(meld_tiles, seat, false, proxy_order, meld_tile_size)
+				meld_group.name = "MeldGroup_%d_%s" % [meld_index, meld_kind_label(meld_tiles)]
+				area.add_child(meld_group)
 				proxy_order += meld_tiles.size() + 1
 
 func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: int, shadow_size: int = 0) -> Panel:
@@ -9500,38 +9505,6 @@ func draw_table_log(parent: Control) -> void:
 		row_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(row_body)
 	return
-	var panel = make_gpt_gate(rect_full(0.018, 0.585, 0.205, 0.755), Color(0.012, 0.028, 0.032, 0.90))
-	parent.add_child(panel)
-	var log_texture = add_illustration_texture(panel, "table_log_scroll", rect_full(0.010, 0.030, 0.990, 0.970), 0.135, false)
-	if log_texture != null:
-		log_texture.name = "TableLogScrollTexture"
-		panel.move_child(log_texture, 0)
-	var table_log_gpt_key := "table_log_gpt_scroll"
-	var gpt_log_texture = add_optional_gpt_illustration_texture(panel, table_log_gpt_key, rect_full(0.006, 0.018, 0.994, 0.982), 0.14, false)
-	if gpt_log_texture != null:
-		gpt_log_texture.name = "TableLogGPTScrollTexture"
-		panel.move_child(gpt_log_texture, min(1, panel.get_child_count() - 1))
-	var table_log_header = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.24), Color(0.040, 0.052, 0.050, 0.68), "ui_title_backplate")
-	table_log_header.name = "TableLogHeaderPlate"
-	panel.add_child(table_log_header)
-	var title = make_label(panel, "行动流", 12, Color(0.84, 0.78, 0.60), true)
-	apply_rect(title, rect_full(0.06, 0.02, 0.45, 0.24))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var count = make_label(panel, "%d条" % table_logs.size(), 10, Color(0.54, 0.66, 0.62), false)
-	apply_rect(count, rect_full(0.52, 0.03, 0.94, 0.24))
-	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	var recent = table_log_tail(3)
-	if recent.is_empty():
-		draw_table_log_empty_art(panel)
-		var empty = make_label(panel, "等待开局", 11, Color(0.62, 0.72, 0.68), false)
-		apply_rect(empty, rect_full(0.06, 0.36, 0.94, 0.72))
-		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		configure_clipped_label(empty)
-		return
-	draw_table_log_timeline(panel, recent.size())
-	draw_table_log_latest_sync(panel, str(recent[recent.size() - 1]), recent.size())
-	for i in range(recent.size()):
-		draw_table_log_row(panel, i, str(recent[i]), i == recent.size() - 1)
 
 
 func draw_table_log_archive_commit(parent: Control, tag_color: Color) -> Control:

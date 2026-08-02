@@ -2639,13 +2639,10 @@ func run() -> void:
 	var compact_panel := clipped_seat_parent.find_child("SeatPanel_1", true, false) as Control
 	check(compact_panel != null and compact_panel.clip_contents, "seat compact panel clips overflow")
 	check(clipped_seat_parent.find_child("SeatCompactName_1", true, false) != null and clipped_seat_parent.find_child("SeatCompactMeta_1", true, false) != null and clipped_seat_parent.find_child("SeatCompactScore_1", true, false) != null, "seat compact panel exposes name meta score labels")
-	var recent_river_label := clipped_seat_parent.find_child("SeatDiscardPreviewRecentLabel_1", true, false) as Label
-	check(label_is_clipped(recent_river_label) and str(recent_river_label.text).begins_with("弃") and str(recent_river_label.text).length() <= 4, "seat discard preview uses thumbnail discard count")
-	check(clipped_seat_parent.find_child("SeatDiscardPreviewArt_1", true, false) != null and clipped_seat_parent.find_child("SeatDiscardPreviewWash_1", true, false) != null and clipped_seat_parent.find_child("SeatDiscardPreviewRail_1", true, false) != null and clipped_seat_parent.find_child("SeatDiscardPreviewFill_1", true, false) != null and clipped_seat_parent.find_child("SeatDiscardPreviewGate_1", true, false) != null, "seat discard preview renders illustrated river rail")
-	check(scene.optional_gpt_illustration_texture("seat_discard_gpt_preview") == null or clipped_seat_parent.find_child("SeatDiscardGPTPreviewTexture_1", true, false) != null, "seat discard preview consumes optional GPT preview texture when generated")
-	check(count_nodes_with_name_prefix(clipped_seat_parent, "SeatDiscardPreviewTile_1_") == 3 and count_nodes_with_name_prefix(clipped_seat_parent, "SeatDiscardPreviewGlyph_1_") == 3 and clipped_seat_parent.find_child("SeatDiscardPreviewOverflow_1", true, false) != null and count_nodes_with_name_prefix(clipped_seat_parent, "SeatDiscardPreviewTick_1_") == 3, "seat discard preview renders recent tiles glyphs overflow and rhythm ticks")
-	check(clipped_seat_parent.find_child("SeatDiscardPreviewHistoryRoute_1", true, false) != null and clipped_seat_parent.find_child("SeatDiscardPreviewHistoryFill_1", true, false) != null and clipped_seat_parent.find_child("SeatDiscardPreviewHistoryGate_1", true, false) != null, "seat discard preview renders history route to overflow")
-	check(count_nodes_with_name_prefix(clipped_seat_parent, "SeatDiscardPreviewHistoryNode_1_") == 2 and count_nodes_with_name_prefix(clipped_seat_parent, "SeatDiscardPreviewHistoryTick_1_") == 2, "seat discard preview history route renders nodes and rhythm ticks")
+	var side_meta_label := clipped_seat_parent.find_child("SeatCompactMeta_1", true, false) as Label
+	var side_meta_text := str(side_meta_label.text) if side_meta_label != null else ""
+	check(label_is_clipped(side_meta_label) and side_meta_text.contains("手") and side_meta_text.contains("花") and side_meta_text.contains("弃"), "side seat merges hand flower and discard counts into one readable meta line")
+	check(side_meta_label != null and side_meta_text.length() <= 12, "side seat merged meta line stays compact without a narrow discard preview column")
 	dispose_node(clipped_seat_parent)
 	var log_parent = Control.new()
 	root.add_child(log_parent)
@@ -2655,7 +2652,8 @@ func run() -> void:
 	scene.table_logs.append("这是一条很长的补花和包赔牌谱记录三")
 	scene.table_logs.append("这是一条很长的补花和包赔牌谱记录四")
 	scene.draw_table_log(log_parent)
-	check(log_parent.find_child("TableLogScrollTexture", true, false) != null, "table log renders reusable scroll PNG texture")
+	check(log_parent.find_child("TableLogLedgerPanel", true, false) != null, "table log renders named ledger panel")
+	check(log_parent.find_child("TableLogLedgerTexture", true, false) != null, "table log renders reusable scroll PNG texture")
 	check(scene.optional_gpt_illustration_texture("table_log_gpt_scroll") == null or log_parent.find_child("TableLogGPTScrollTexture", true, false) != null, "table log consumes optional GPT scroll texture when generated")
 	check(label_is_clipped(first_label_containing_text(log_parent, "补花")), "table log clips long rows inside compact panel")
 	check(count_label_nodes(log_parent) == 10, "table log renders title, count, archive and commit glyphs, and three structured action rows")

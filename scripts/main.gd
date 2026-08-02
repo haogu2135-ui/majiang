@@ -10043,8 +10043,10 @@ func draw_chat_panel_art(parent: Control) -> Control:
 	var rail = add_optional_gpt_illustration_texture(art, "ui_action_role_rail", rect_full(0.050, 0.285, 0.078, 0.900), 0.40, false)
 	if rail == null:
 		rail = make_gpt_edge_rail(rect_full(0.058, 0.285, 0.070, 0.900), Color(0.60, 0.76, 0.64, 0.20))
-	rail.name = "ChatPanelActivityRail"
-	art.add_child(rail)
+		rail.name = "ChatPanelActivityRail"
+		art.add_child(rail)
+	else:
+		rail.name = "ChatPanelActivityRail"
 	var visible_count = min(5, chat_messages.size())
 	if visible_count == 0:
 		draw_chat_empty_state_art(art)
@@ -12638,7 +12640,7 @@ func draw_loading_progress_feedback(parent: Control) -> Control:
 		art.add_child(pip)
 	if fx_enabled_effective():
 		fill.modulate = Color(1, 1, 1, 0.86)
-		var tw := create_tween()
+		var tw := art.create_tween()
 		tw.set_loops(8)
 		tw.tween_property(fill, "anchor_right", 0.980, 1.15).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(gate, "modulate:a", 0.46, 0.56).from(0.94)
@@ -12684,7 +12686,7 @@ func draw_loading_shuffle_art(parent: Control) -> Control:
 		apply_rect(tile, rect_full(left, 0.170 + float(i % 2) * 0.080, left + 0.070, 0.740 + float(i % 2) * 0.080))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		# 印章旋转出现
-		var seal_tw := create_tween()
+		var seal_tw := art.create_tween()
 		seal_tw.tween_property(seal, "scale", Vector2(1.0, 1.0), 0.6).from(Vector2(0.3, 0.3)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		seal_tw.parallel().tween_property(seal, "modulate:a", 1.0, 0.5).from(0.0)
 		# 牌面依次翻转级联动画 - 模拟洗牌
@@ -12693,7 +12695,7 @@ func draw_loading_shuffle_art(parent: Control) -> Control:
 			if tile_node != null:
 				var delay := float(i) * 0.12
 				# 翻转循环
-				var flip_tw := create_tween()
+				var flip_tw := art.create_tween()
 				flip_tw.set_loops(6)
 				flip_tw.tween_property(tile_node, "scale:x", 0.0, 0.2).from(1.0).set_delay(delay + 1.2 + float(i) * 0.4)
 				flip_tw.tween_property(tile_node, "scale:x", 1.0, 0.2).from(0.0)
@@ -12962,11 +12964,14 @@ func draw_melds(parent: Control) -> void:
 			meld_tile_size = Vector2(14, 21)
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
-		for meld in meld_list:
+		for meld_index in range(meld_list.size()):
+			var meld = meld_list[meld_index]
 			if typeof(meld) == TYPE_ARRAY:
 				var meld_tiles := meld as Array
 				# Chi/peng/gang share one lane orientation per seat — no kind-specific layout.
-				area.add_child(make_meld_group_view(meld_tiles, seat, false, proxy_order, meld_tile_size))
+				var meld_group := make_meld_group_view(meld_tiles, seat, false, proxy_order, meld_tile_size)
+				meld_group.name = "MeldGroup_%d_%s" % [meld_index, meld_kind_label(meld_tiles)]
+				area.add_child(meld_group)
 				proxy_order += meld_tiles.size() + 1
 
 func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: int, shadow_size: int = 0) -> Panel:
@@ -17616,38 +17621,6 @@ func draw_table_log(parent: Control) -> void:
 		row_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(row_body)
 	return
-	var panel = make_gpt_gate(rect_full(0.018, 0.585, 0.205, 0.755), Color(0.012, 0.028, 0.032, 0.90))
-	parent.add_child(panel)
-	var log_texture = add_illustration_texture(panel, "table_log_scroll", rect_full(0.010, 0.030, 0.990, 0.970), 0.135, false)
-	if log_texture != null:
-		log_texture.name = "TableLogScrollTexture"
-		panel.move_child(log_texture, 0)
-	var table_log_gpt_key := "table_log_gpt_scroll"
-	var gpt_log_texture = add_optional_gpt_illustration_texture(panel, table_log_gpt_key, rect_full(0.006, 0.018, 0.994, 0.982), 0.14, false)
-	if gpt_log_texture != null:
-		gpt_log_texture.name = "TableLogGPTScrollTexture"
-		panel.move_child(gpt_log_texture, min(1, panel.get_child_count() - 1))
-	var table_log_header = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.24), Color(0.040, 0.052, 0.050, 0.68), "ui_title_backplate")
-	table_log_header.name = "TableLogHeaderPlate"
-	panel.add_child(table_log_header)
-	var title = make_label(panel, "行动流", 12, Color(0.84, 0.78, 0.60), true)
-	apply_rect(title, rect_full(0.06, 0.02, 0.45, 0.24))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var count = make_label(panel, "%d条" % table_logs.size(), 10, Color(0.54, 0.66, 0.62), false)
-	apply_rect(count, rect_full(0.52, 0.03, 0.94, 0.24))
-	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	var recent = table_log_tail(3)
-	if recent.is_empty():
-		draw_table_log_empty_art(panel)
-		var empty = make_label(panel, "等待开局", 11, Color(0.62, 0.72, 0.68), false)
-		apply_rect(empty, rect_full(0.06, 0.36, 0.94, 0.72))
-		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		configure_clipped_label(empty)
-		return
-	draw_table_log_timeline(panel, recent.size())
-	draw_table_log_latest_sync(panel, str(recent[recent.size() - 1]), recent.size())
-	for i in range(recent.size()):
-		draw_table_log_row(panel, i, str(recent[i]), i == recent.size() - 1)
 
 
 func draw_table_log_archive_commit(parent: Control, tag_color: Color) -> Control:
@@ -30124,7 +30097,7 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 	tile_node.position.y = rest_y - 18.0
 	tile_node.scale = Vector2(0.92, 0.92)
 	tile_node.modulate = Color(1.0, 1.0, 1.0, 0.78)
-	var tw := create_tween()
+	var tw := tile_node.create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(tile_node, "position:y", rest_y, 0.22).from(rest_y - 18.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tw.tween_property(tile_node, "scale", Vector2(1.02, 1.02), 0.18).from(Vector2(0.92, 0.92)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -31725,11 +31698,11 @@ func seat_meld_rect(seat: int) -> Rect2:
 		0:
 			return Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))
 		1:
-			return Rect2(Vector2(0.770, 0.240), Vector2(0.857, 0.680))
+			return Rect2(Vector2(0.775, 0.240), Vector2(0.857, 0.680))
 		2:
 			return Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))
 		3:
-			return Rect2(Vector2(0.143, 0.240), Vector2(0.230, 0.680))
+			return Rect2(Vector2(0.143, 0.240), Vector2(0.225, 0.680))
 		_:
 			return Rect2(Vector2(0.40, 0.40), Vector2(0.60, 0.50))
 
@@ -32078,16 +32051,16 @@ func _animate_petal_fall(petal: Control, delay: float) -> void:
 	var sway_amplitude = randf_range(40.0, 110.0)
 	var sway_frequency = randf_range(0.4, 1.2)
 	# 垂直下落
-	var tw := create_tween()
+	var tw := petal.create_tween()
 	tw.set_loops(48)
 	tw.tween_property(petal, "position:y", viewport_size.y + 40.0, fall_duration).from(-30.0).set_delay(delay)
 	# 水平摇摆（正弦感）
-	var sway_tw := create_tween()
+	var sway_tw := petal.create_tween()
 	sway_tw.set_loops(48)
 	sway_tw.tween_property(petal, "position:x", petal.position.x + sway_amplitude, 1.0 / sway_frequency).set_delay(delay).set_trans(Tween.TRANS_SINE)
 	sway_tw.tween_property(petal, "position:x", petal.position.x - sway_amplitude, 1.0 / sway_frequency).set_trans(Tween.TRANS_SINE)
 	# 旋转
-	var rot_tw := create_tween()
+	var rot_tw := petal.create_tween()
 	rot_tw.set_loops(48)
 	rot_tw.tween_property(petal, "rotation", PI * 0.5, fall_duration * 0.5).from(0.0).set_delay(delay)
 	rot_tw.tween_property(petal, "rotation", -PI * 0.5, fall_duration * 0.5).set_delay(delay)
@@ -32111,7 +32084,7 @@ func _animate_cloud_drift(cloud: Control, delay: float) -> void:
 	var drift_duration = randf_range(20.0, 35.0)
 	var viewport_size = get_viewport().size
 	cloud.position.x = -cloud.size.x
-	var tw := create_tween()
+	var tw := cloud.create_tween()
 	tw.set_loops(48)
 	tw.tween_property(cloud, "position:x", viewport_size.x + cloud.size.x, drift_duration).set_delay(delay)
 
@@ -32150,16 +32123,16 @@ func _animate_leaf_fall(leaf: Control, delay: float) -> void:
 	"""落叶飘落动画 - 飘摇 + 翻转"""
 	var viewport_size = get_viewport().size
 	var fall_duration = randf_range(11.0, 19.0)
-	var tw := create_tween()
+	var tw := leaf.create_tween()
 	tw.set_loops(48)
 	tw.tween_property(leaf, "position:y", viewport_size.y + 40.0, fall_duration).from(-30.0).set_delay(delay).set_trans(Tween.TRANS_QUAD)
-	var sway_tw := create_tween()
+	var sway_tw := leaf.create_tween()
 	sway_tw.set_loops(48)
 	var amp := randf_range(40.0, 100.0)
 	sway_tw.tween_property(leaf, "position:x", leaf.position.x + amp, randf_range(1.2, 2.4)).set_delay(delay).set_trans(Tween.TRANS_SINE)
 	sway_tw.tween_property(leaf, "position:x", leaf.position.x - amp, randf_range(1.2, 2.4)).set_trans(Tween.TRANS_SINE)
 	# 翻转 - 落叶特有
-	var flip_tw := create_tween()
+	var flip_tw := leaf.create_tween()
 	flip_tw.set_loops(48)
 	flip_tw.tween_property(leaf, "rotation", PI * 1.2, fall_duration * 0.6).from(0.0).set_delay(delay)
 	flip_tw.tween_property(leaf, "rotation", 0.0, fall_duration * 0.4).from(PI * 1.2).set_delay(delay + fall_duration * 0.6)
@@ -32188,14 +32161,14 @@ func _start_firework_particles() -> void:
 		ambient_layer.add_child(particle)
 		ambient_particles.append(particle)
 		# 闪烁 + 微扩散
-		var tw := create_tween()
+		var tw := particle.create_tween()
 		tw.set_loops(48)
 		tw.tween_property(particle, "modulate:a", 1.0, randf_range(0.18, 0.42)).from(0.0).set_delay(float(i) * 0.12)
 		tw.parallel().tween_property(particle, "scale", Vector2(1.4, 1.4), randf_range(0.4, 0.9)).from(Vector2(0.6, 0.6)).set_delay(float(i) * 0.12).set_ease(Tween.EASE_OUT)
 		tw.tween_property(particle, "modulate:a", 0.0, randf_range(0.6, 1.4)).from(1.0)
 		tw.tween_property(particle, "scale", Vector2(0.8, 0.8), randf_range(0.6, 1.2))
 		# 漂浮回落
-		var fall_tw := create_tween()
+		var fall_tw := particle.create_tween()
 		fall_tw.set_loops(48)
 		fall_tw.tween_property(particle, "position:y", cy + randf_range(20.0, 50.0), randf_range(2.0, 3.5)).set_delay(float(i) * 0.12)
 		fall_tw.tween_property(particle, "position:y", cy, randf_range(2.0, 3.5))
@@ -32226,16 +32199,16 @@ func _start_firefly_particles() -> void:
 		ambient_layer.add_child(particle)
 		ambient_particles.append(particle)
 		# 呼吸闪烁 - core与glow同步
-		var tw := create_tween()
+		var tw := core.create_tween()
 		tw.set_loops(48)
 		tw.tween_property(core, "modulate:a", 1.0, randf_range(0.9, 2.0)).from(0.0).set_ease(Tween.EASE_IN_OUT)
 		tw.tween_property(core, "modulate:a", 0.0, randf_range(0.9, 2.0)).from(1.0).set_ease(Tween.EASE_IN_OUT)
-		var glow_tw := create_tween()
+		var glow_tw := glow.create_tween()
 		glow_tw.set_loops(48)
 		glow_tw.tween_property(glow, "modulate:a", 0.8, randf_range(0.9, 2.0)).from(0.0)
 		glow_tw.tween_property(glow, "modulate:a", 0.0, randf_range(0.9, 2.0)).from(0.8)
 		# 漂移 - 8字形漫游
-		var drift_tw := create_tween()
+		var drift_tw := particle.create_tween()
 		drift_tw.set_loops(48)
 		drift_tw.tween_property(particle, "position:x", px + randf_range(25.0, 65.0), randf_range(2.5, 4.5)).set_trans(Tween.TRANS_SINE)
 		drift_tw.parallel().tween_property(particle, "position:y", py + randf_range(-30.0, 30.0), randf_range(2.5, 4.5)).set_trans(Tween.TRANS_SINE)
@@ -32265,17 +32238,17 @@ func _start_snow_fall() -> void:
 		ambient_layer.add_child(flake)
 		ambient_particles.append(flake)
 		# 下落
-		var fall_tw := create_tween()
+		var fall_tw := flake.create_tween()
 		fall_tw.set_loops(48)
 		var fall_dur = randf_range(9.0, 17.0)
 		fall_tw.tween_property(flake, "position:y", viewport_size.y + 30.0, fall_dur).from(py - viewport_size.y).set_delay(float(i) * 0.25).set_trans(Tween.TRANS_LINEAR)
 		# 随风飘 + 自旋
-		var sway_tw := create_tween()
+		var sway_tw := flake.create_tween()
 		sway_tw.set_loops(48)
 		var amp := randf_range(30.0, 80.0)
 		sway_tw.tween_property(flake, "position:x", px + amp, randf_range(1.5, 3.5)).set_delay(float(i) * 0.25).set_trans(Tween.TRANS_SINE)
 		sway_tw.tween_property(flake, "position:x", px - amp, randf_range(1.5, 3.5)).set_trans(Tween.TRANS_SINE)
-		var rot_tw := create_tween()
+		var rot_tw := flake.create_tween()
 		rot_tw.set_loops(48)
 		rot_tw.tween_property(flake, "rotation", PI, randf_range(3.0, 6.0)).from(0.0).set_delay(float(i) * 0.25)
 
@@ -32435,13 +32408,13 @@ func _start_depth_layered_dust() -> void:
 			layer_node.add_child(dust)
 			ambient_particles.append(dust)
 			var rise_dur = randf_range(8.0, 16.0) * layer_cfg.speed
-			var tw := create_tween()
+			var tw := dust.create_tween()
 			tw.set_loops(48)
 			tw.tween_property(dust, "position:y", dust.position.y - randf_range(60.0, 140.0), rise_dur).set_delay(float(i) * 0.5)
 			tw.parallel().tween_property(dust, "modulate:a", 0.0, rise_dur * 0.8).from(1.0).set_delay(float(i) * 0.5)
 			tw.tween_property(dust, "position:y", dust.position.y, 0.01)
 			tw.tween_property(dust, "modulate:a", 1.0, 0.01)
-			var drift_tw := create_tween()
+			var drift_tw := dust.create_tween()
 			drift_tw.set_loops(48)
 			var drift_amp = randf_range(12.0, 35.0) / layer_cfg.speed
 			drift_tw.tween_property(dust, "position:x", dust.position.x + drift_amp, randf_range(3.0, 6.0)).set_trans(Tween.TRANS_SINE).set_delay(float(i) * 0.3)

@@ -688,9 +688,9 @@ const DISCARD_ZONES := [
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
-	[1, Rect2(Vector2(0.770, 0.240), Vector2(0.857, 0.680))],
+	[1, Rect2(Vector2(0.775, 0.240), Vector2(0.857, 0.680))],
 	[2, Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))],
-	[3, Rect2(Vector2(0.143, 0.240), Vector2(0.230, 0.680))],
+	[3, Rect2(Vector2(0.143, 0.240), Vector2(0.225, 0.680))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
 const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.345), Vector2(0.595, 0.635))
