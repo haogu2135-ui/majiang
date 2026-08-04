@@ -1057,6 +1057,11 @@ func _show_shop_screen_impl() -> void:
 		var count_badge = make_badge(row, rect_full(0.630, 0.20, 0.765, 0.80), "×%d" % count, 13, count_badge_color.darkened(0.2), count_badge_color.lightened(0.2), Color(0.96, 0.96, 0.92))
 		count_badge.name = "ShopItemCountBadge_%s" % item_id
 		count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# 徽章文字压在织锦底板上，仅靠阴影不足；补描边保证 ×N 可读。
+		for count_child in count_badge.get_children():
+			if count_child is Label:
+				(count_child as Label).add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.92))
+				(count_child as Label).add_theme_constant_override("outline_size", 4)
 		draw_shop_item_count_badge_art(count_badge, item_color, count)
 
 		# 购买按钮 - 增强样式
