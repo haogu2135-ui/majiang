@@ -1470,8 +1470,9 @@ func make_label(parent: Control, text: String, font_size: int, color: Color, bol
 	parent.add_child(label)
 	return label
 
-func make_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color) -> Control:
-	var badge = make_panel(parent, rect, fill, 9, border, 0)
+func make_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color, plate_key: String = "") -> Control:
+	# plate_key 留空时按 rect/color 自动推断；窄徽章会被判成竖导轨纹理，读数场景应显式传安静底板。
+	var badge = make_panel(parent, rect, fill, 9, border, 0, plate_key)
 	var label = make_label(badge, text, font_size, text_color, true)
 	apply_rect(label, rect_full(0.08, 0.04, 0.92, 0.96))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

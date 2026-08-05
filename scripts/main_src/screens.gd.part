@@ -1054,7 +1054,7 @@ func _show_shop_screen_impl() -> void:
 
 		# 拥有数量 - 带徽章样式
 		var count_badge_color = Color(0.78, 0.56, 0.28) if count > 0 else Color(0.42, 0.34, 0.24)
-		var count_badge = make_badge(row, rect_full(0.630, 0.20, 0.765, 0.80), "×%d" % count, 13, count_badge_color.darkened(0.2), count_badge_color.lightened(0.2), Color(0.96, 0.96, 0.92))
+		var count_badge = make_badge(row, rect_full(0.630, 0.20, 0.765, 0.80), "×%d" % count, 15, count_badge_color.darkened(0.2), count_badge_color.lightened(0.2), Color(0.98, 0.97, 0.94), "ui_jade_reading_plate")
 		count_badge.name = "ShopItemCountBadge_%s" % item_id
 		count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		# 徽章文字压在织锦底板上，仅靠阴影不足；补描边保证 ×N 可读。
