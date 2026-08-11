@@ -1,5 +1,5 @@
 extends SceneTree
-## Round 13: AI must not declare an added gang that any opponent can rob.
+## Round 13: added-gang risk must respect the public-information boundary.
 var failed := false
 
 
@@ -67,33 +67,36 @@ func run() -> void:
 	scene.offline_all_bot_mode = false
 	scene.offline_sim_quiet = true
 
-	print("--- A) AI opponent rob threat ---")
+	print("--- A) hidden AI wait is not exposed to the declarer ---")
 	setup_added_gang_fixture(scene)
 	scene.players[2]["hand"] = rob_gang_wait_hand()
 	check(scene.can_win_for_seat(2, "5W"), "AI 对手具备抢杠胡")
 	var ai_threat = scene.added_gang_rob_threat_report(1, "5W")
 	var ai_report = scene.build_ai_self_gang_report(1, "5W", "added")
 	print("    threat=%s report=%s" % [ai_threat, ai_report])
-	check(bool(ai_threat.get("can_rob", false)), "全桌威胁报告识别 AI 抢杠")
-	check(int(ai_threat.get("winner_seat", -1)) == 2, "抢杠仲裁记录近家 AI")
-	check(bool(ai_report.get("rob_risk", false)), "补杠报告带 AI 抢杠风险")
-	check(not bool(ai_report.get("allow", true)) and str(ai_report.get("reason", "")) == "防抢杠", "AI 拒绝必被 AI 抢走的补杠")
-	check(scene.choose_ai_added_gang(1) == "", "补杠选择器不会输出必抢杠牌")
+	check(bool(ai_threat.get("public_only", false)), "补杠威胁报告只使用公开信息")
+	check(int(ai_threat.get("winner_seat", -2)) == -1 and not bool(ai_threat.get("ai_robber", true)), "报告不泄露暗手中的 AI 抢杠者")
+	var ai_choice = scene.choose_ai_added_gang(1)
 
-	print("--- B) human rob threat remains protected ---")
+	print("--- B) human hidden wait produces the same public decision ---")
 	setup_added_gang_fixture(scene)
 	scene.players[0]["hand"] = rob_gang_wait_hand()
 	var human_threat = scene.added_gang_rob_threat_report(1, "5W")
 	var human_report = scene.build_ai_self_gang_report(1, "5W", "added")
-	check(bool(human_threat.get("human_robber", false)), "全桌威胁报告保留玩家抢杠")
-	check(bool(human_report.get("rob_risk", false)), "玩家抢杠仍会阻止 AI 补杠")
+	var human_choice = scene.choose_ai_added_gang(1)
+	check(is_equal_approx(float(human_threat.get("risk_score", -1.0)), float(ai_threat.get("risk_score", -2.0))), "AI/玩家暗手互换不改变公开风险")
+	check(bool(human_report.get("rob_risk", false)) == bool(ai_report.get("rob_risk", true)) and bool(human_report.get("allow", false)) == bool(ai_report.get("allow", true)), "AI/玩家暗手互换不改变补杠决定")
+	check(human_choice == ai_choice, "AI/玩家暗手互换不改变选择器输出")
+	check(not bool(human_threat.get("human_robber", true)), "报告不泄露玩家暗手抢杠")
 
-	print("--- C) safe added gang has no false positive ---")
+	print("--- C) non-winning hidden hand keeps the same public decision ---")
 	setup_added_gang_fixture(scene)
 	var safe_threat = scene.added_gang_rob_threat_report(1, "5W")
 	var safe_report = scene.build_ai_self_gang_report(1, "5W", "added")
-	check(not bool(safe_threat.get("can_rob", true)), "无人可抢时威胁报告为空")
-	check(not bool(safe_report.get("rob_risk", true)), "无人可抢时补杠不带虚假风险")
+	var safe_choice = scene.choose_ai_added_gang(1)
+	check(is_equal_approx(float(safe_threat.get("risk_score", -1.0)), float(ai_threat.get("risk_score", -2.0))), "能否实际抢杠不改变公开风险")
+	check(bool(safe_report.get("rob_risk", false)) == bool(ai_report.get("rob_risk", true)) and bool(safe_report.get("allow", false)) == bool(ai_report.get("allow", true)), "能否实际抢杠不改变补杠决定")
+	check(safe_choice == ai_choice, "能否实际抢杠不改变选择器输出")
 
 	scene.queue_free()
 	if failed:

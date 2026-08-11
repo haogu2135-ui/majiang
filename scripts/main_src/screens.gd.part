@@ -147,10 +147,9 @@ func _show_menu_impl() -> void:
 	recover_audio_after_screen_change()
 	clear_screen()
 
-	# 增强的背景效果
-	add_background(root_layer)
-	menu_hero_art = draw_menu_hero_illustration(root_layer)
-	menu_parallax_enabled = true
+	# The primary GPT stage below is the menu's sole full-screen scene.
+	menu_hero_art = null
+	menu_parallax_enabled = false
 
 	var content_size = safe_content_pixel_size()
 
@@ -169,9 +168,12 @@ func _show_menu_impl() -> void:
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 游戏标题 - 更大更突出，使用国风金色
-	var title = make_label(header, "云桌麻将", 25, Color(0.22, 0.135, 0.055), true)
+	var title = make_label(header, "云桌麻将", 30, Color(1.00, 0.88, 0.54), true)
+	title.name = "MenuTitleLabel"
 	apply_rect(title, rect_full(0.010, 0.050, 0.950, 0.860))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.add_theme_constant_override("outline_size", 3)
+	title.add_theme_color_override("font_outline_color", Color(0.08, 0.045, 0.018, 0.96))
 
 	# 主菜单卡片区域 - 按安全区宽度收缩，避免移动端溢出。
 	draw_menu_primary_3d_stage(root_layer)
@@ -278,6 +280,9 @@ func _show_menu_impl() -> void:
 		if tutorial_hint != null and is_instance_valid(tutorial_hint) and fx_enabled_effective():
 			tutorial_hint.modulate.a = 0.92
 
+	# Keep the product title above the full-screen menu stages while leaving modal
+	# overlays free to cover it when settings/update UI is intentionally open.
+	root_layer.move_child(header, root_layer.get_child_count() - 1)
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 
@@ -2017,12 +2022,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 		return
 	if toast_container == null or not is_instance_valid(toast_container):
 		_build_fx_toast()
-	# 清除旧toast
-	if toast_current != null and is_instance_valid(toast_current):
-		toast_current.queue_free()
-		toast_current = null
-	if toast_tween != null and is_instance_valid(toast_tween):
-		toast_tween.kill()
+	dismiss_active_toast()
 	# 创建toast节点
 	var toast_bg = Panel.new()
 	toast_bg.name = "Toast"
@@ -2055,6 +2055,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_container.add_child(toast_bg)
 	toast_container.visible = true
 	toast_current = toast_bg
+	toast_mode = mode
 	# 动画：弹跳滑入 → 停留 → 下滑淡出
 	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
 	var stay_dur := float(duration_msec) / 1000.0
@@ -2071,12 +2072,31 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	tw.tween_callback(Callable(self, "cleanup_toast_by_id").bind(toast_bg.get_instance_id(), toast_container.get_instance_id())).set_delay(stay_dur + fade_dur + 0.02)
 
 func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
+	var is_current := toast_current != null and is_instance_valid(toast_current) and toast_current.get_instance_id() == toast_id
 	queue_free_node_by_id(toast_id)
+	if not is_current:
+		return
 	var container = node_from_instance_id(container_id) as Control
 	if container != null:
 		container.visible = false
-	if toast_current != null and is_instance_valid(toast_current) and toast_current.get_instance_id() == toast_id:
-		toast_current = null
+	toast_current = null
+	toast_tween = null
+	toast_mode = ""
+
+func dismiss_active_toast() -> void:
+	if toast_tween != null and is_instance_valid(toast_tween):
+		toast_tween.kill()
+	toast_tween = null
+	if toast_current != null and is_instance_valid(toast_current):
+		toast_current.queue_free()
+	toast_current = null
+	if toast_container != null and is_instance_valid(toast_container):
+		toast_container.visible = false
+	toast_mode = ""
+
+func clear_toast_on_mode_change() -> void:
+	if toast_mode != "" and toast_mode != mode:
+		dismiss_active_toast()
 
 func toggle_ai_assist_setting() -> void:
 	ai_assist_enabled = not ai_assist_enabled

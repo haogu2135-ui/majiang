@@ -3054,10 +3054,14 @@ func run() -> void:
 	scene.players[1]["melds"] = [["3W", "3W", "3W"]]
 	scene.players[1]["hand"] = ["3W", "1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T", "9T", "E"]
 	var rob_risk_added_gang = scene.build_ai_self_gang_report(1, "3W", "added")
-	check(not bool(rob_risk_added_gang.get("allow", true)), "AI self-gang report declines added gang that can be robbed")
-	check(bool(rob_risk_added_gang.get("rob_risk", false)), "AI self-gang report marks rob-gang risk")
-	check(str(rob_risk_added_gang.get("reason", "")) == "防抢杠", "AI self-gang report names rob-gang defense")
-	check(scene.choose_ai_added_gang(1) == "", "AI added gang helper avoids known rob-gang loss")
+	var hidden_wait_choice = scene.choose_ai_added_gang(1)
+	scene.players[0]["hand"] = ["1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B", "1T", "2T", "3T", "4T"]
+	var hidden_safe_added_gang = scene.build_ai_self_gang_report(1, "3W", "added")
+	var hidden_safe_choice = scene.choose_ai_added_gang(1)
+	check(bool(rob_risk_added_gang.get("rob_risk_public", false)), "AI self-gang report marks public-information chankan evaluation")
+	check(is_equal_approx(float(rob_risk_added_gang.get("rob_risk_score", -1.0)), float(hidden_safe_added_gang.get("rob_risk_score", -2.0))), "AI added-gang risk ignores concealed opponent tile contents")
+	check(bool(rob_risk_added_gang.get("allow", false)) == bool(hidden_safe_added_gang.get("allow", true)) and hidden_wait_choice == hidden_safe_choice, "AI added-gang decision is invariant to hidden winning state")
+	scene.players[0]["hand"] = waits_for_3w_hand()
 	scene.perform_added_gang(1, "3W")
 	check(scene.offline_phase == "pending_claim", "human can respond to AI added gang with rob win")
 	check(bool(scene.offline_pending_claim.get("rob_gang", false)), "pending claim is marked as rob gang")

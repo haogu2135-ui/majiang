@@ -496,7 +496,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		role_rail.name = "ActionButtonRoleRail"
 		role_rail.modulate = Color(color.r, color.g, color.b, rail_alpha)
 	# Smoke requires compact claim panel plate modulate.a <= 0.025; normal modes use denser GPT face.
-	var panel_alpha = 0.014 if compact_claim_mode and role == "pass" else (0.022 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
+	var panel_alpha = 0.56 if compact_claim_mode and role == "pass" else (0.64 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
 	var panel_key := "action_button_panel" if compact_claim_mode else "ui_button_face_plate"
 	var panel_plate = add_optional_gpt_illustration_texture(button, panel_key, rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate == null:
@@ -524,6 +524,11 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 			pulse_tw.set_loops(12)
 			pulse_tw.tween_property(pulse, "modulate:a", trough, 0.64).from(peak)
 			pulse_tw.tween_property(pulse, "modulate:a", peak, 0.64).from(trough)
+	# Button native text is painted by the parent CanvasItem. Keep every authored
+	# decorative child behind it so compact claim labels remain crisp in all states.
+	for child in button.get_children():
+		if child is CanvasItem:
+			(child as CanvasItem).show_behind_parent = true
 	button.button_down.connect(func() -> void:
 		if not is_instance_valid(button):
 			return
@@ -3171,25 +3176,11 @@ func draw_discards(parent: Control) -> void:
 					face_tex.texture = forced
 					tile_textures[norm_code] = forced
 					face_tex.modulate = Color(1.0, 1.0, 1.0, 1.0)
-			# mild face lift on side/bottom rivers without recoloring assets
-			if seat == 0:
-				if face_tex != null:
-					face_tex.modulate = Color(
-						minf(1.35, face_tex.modulate.r * 1.08),
-						minf(1.30, face_tex.modulate.g * 1.06),
-						minf(1.22, face_tex.modulate.b * 1.04),
-						face_tex.modulate.a
-					)
-				tile_node.modulate = Color(1.06, 1.04, 1.02, tile_node.modulate.a)
-			if seat == 1:
-				if face_tex != null:
-					face_tex.modulate = Color(
-						minf(1.50, face_tex.modulate.r * 1.14),
-						minf(1.40, face_tex.modulate.g * 1.12),
-						minf(1.26, face_tex.modulate.b * 1.08),
-						face_tex.modulate.a
-					)
-				tile_node.modulate = Color(1.10, 1.07, 1.04, tile_node.modulate.a)
+			# Tile artwork keeps its authored RGB on every seat. River emphasis comes
+			# from the existing GPT mats and focus marker, never runtime tinting.
+			if face_tex != null:
+				face_tex.modulate = Color(1.0, 1.0, 1.0, face_tex.modulate.a)
+			tile_node.modulate = Color(1.0, 1.0, 1.0, tile_node.modulate.a)
 			grid.add_child(tile_node)
 			if highlighted:
 				tile_node.name = "RecentDiscardTile_%d" % seat
@@ -4452,6 +4443,7 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 	var art = Control.new()
 	art.name = "LineEditInputArt_%s" % art_id
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.show_behind_parent = true
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	edit.add_child(art)
 	var accent = line_edit_accent(label_text)
@@ -5249,7 +5241,7 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	var rail = Control.new()
 	rail.name = "MenuQuickActionRail"
 	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(rail, rect_full(0.320, 0.708, 0.680, 0.782))
+	apply_rect(rail, rect_full(0.250, 0.704, 0.750, 0.804))
 	parent.add_child(rail)
 	var items := [
 		["rules", "规则", "help-circle", Color(0.30, 0.58, 0.50), Callable(self, "show_rules_screen")],
@@ -5267,21 +5259,21 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		surface_tw.set_loops(48)
 		surface_tw.tween_property(surface, "modulate:a", 0.48, 1.35).from(0.72).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		surface_tw.tween_property(surface, "modulate:a", 0.72, 1.35).from(0.48).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	var button_width = 0.180
-	var start_x = 0.055
-	var usable = 0.890 - button_width
-	var step = usable / float(max(1, items.size() - 1))
+	var start_x := 0.025
+	var end_x := 0.975
+	var gap := 0.018
+	var button_width := (end_x - start_x - gap * float(max(0, items.size() - 1))) / float(max(1, items.size()))
 	for i in range(items.size()):
 		var item: Array = items[i]
 		var quick_id := str(item[0])
 		var quick_color: Color = item[3]
 		var button = make_small_button(str(item[1]), item[3], item[4])
 		button.name = "MenuQuick%sButton" % quick_id.capitalize()
-		button.custom_minimum_size = Vector2(104, 36)
+		button.custom_minimum_size = Vector2(96, 44)
 		button.button_down.connect(Callable(self, "play_menu_quick_button_press_feedback").bind(button, quick_id, quick_color))
 		rail.add_child(button)
-		var left = start_x + float(i) * step
-		apply_rect(button, rect_full(left, 0.160, left + button_width, 0.640))
+		var left = start_x + float(i) * (button_width + gap)
+		apply_rect(button, rect_full(left, 0.060, left + button_width, 0.940))
 		add_lucide_icon(button, str(item[2]), rect_full(0.100, 0.255, 0.225, 0.575), Color(0.94, 0.92, 0.76, 0.88))
 		configure_menu_button_motion(button, 0.12 + float(i) * 0.045, 1.060, 0.0)
 	return rail
@@ -11467,7 +11459,13 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var button = make_base_button(text, callback)
 	var role = action_button_visual_role(text)
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
+	button.add_theme_color_override("font_color", Color(1.00, 0.98, 0.88))
+	button.add_theme_color_override("font_hover_color", Color(1.00, 1.00, 0.96))
+	button.add_theme_color_override("font_pressed_color", Color(1.00, 0.92, 0.68))
+	button.add_theme_color_override("font_disabled_color", Color(0.82, 0.82, 0.74))
+	button.add_theme_color_override("font_outline_color", Color(0.035, 0.020, 0.008, 0.96))
 	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"
+	button.add_theme_constant_override("outline_size", 3 if compact_claim_mode else 2)
 	var is_focus_action = ["win", "gang", "safe", "advice"].has(role) or text.begins_with("荐")
 	var fill_alpha := 0.205 if compact_claim_mode and role == "pass" else (0.355 if compact_claim_mode and is_focus_action else (0.285 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
 	var border_alpha := 0.018 if compact_claim_mode and role == "pass" else (0.070 if compact_claim_mode and is_focus_action else (0.036 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))

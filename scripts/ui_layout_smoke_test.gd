@@ -77,6 +77,7 @@ func run_safe_area_layout_probe(viewport_size: Vector2, margins: Vector4) -> voi
 	scene.draw_game_top_hud(scene.root_layer)
 	for seat_layout in scene.SEAT_LAYOUTS:
 		scene.draw_seat(scene.root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), {})
+	scene.draw_discards(scene.root_layer)
 	scene.draw_melds(scene.root_layer)
 	scene.draw_table_log(scene.root_layer)
 	scene.draw_hand(scene.root_layer)
@@ -112,6 +113,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.draw_game_top_hud(scene.root_layer)
 	for seat_layout in scene.SEAT_LAYOUTS:
 		scene.draw_seat(scene.root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), {})
+	scene.draw_discards(scene.root_layer)
 	scene.draw_melds(scene.root_layer)
 	scene.draw_table_log(scene.root_layer)
 	scene.draw_hand(scene.root_layer)
@@ -122,6 +124,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_pending_claim_action_bar(scene, actual_viewport)
 	check_hand_tray_layout(scene, actual_viewport)
 	check_battle_viewport_bounds(scene, actual_viewport)
+	check_discard_tile_original_rgb(scene, actual_viewport)
 	await check_online_score_strip_probe(scene, actual_viewport)
 	scene.settings_panel_open = true
 	scene.draw_settings_overlay(scene.root_layer)
@@ -132,11 +135,22 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.online_room = {"code": "ROOM7", "players": [{"name": "甲"}, {"name": "乙"}], "logs": ["甲加入房间", "乙准备"]}
 	scene.online_feedback = "已发送加入房间，等待服务器确认。"
 	scene.online_waiting_for_server = true
+	scene.show_toast("AI难度 标准", 60000)
+	await process_frame
+	check(scene.toast_current != null and scene.toast_mode == "offline", "offline battle toast records its source mode at %s" % actual_viewport)
 	scene._show_online_lobby_impl()
 	await process_frame
+	check(scene.toast_current == null and scene.toast_mode == "" and scene.toast_container != null and not scene.toast_container.visible, "changing from battle to lobby clears the stale toast at %s" % actual_viewport)
+	scene.show_toast("大厅同页提示", 60000)
+	await process_frame
+	var same_page_toast_id: int = scene.toast_current.get_instance_id() if scene.toast_current != null else -1
+	scene._show_online_lobby_impl()
+	await process_frame
+	check(scene.toast_current != null and scene.toast_current.get_instance_id() == same_page_toast_id and scene.toast_mode == "online_lobby", "same-page lobby refresh preserves its active toast at %s" % actual_viewport)
 	check_online_lobby_layout(scene, actual_viewport)
 	scene._show_rules_screen_impl()
 	await process_frame
+	check(scene.toast_current == null and scene.toast_mode == "" and not scene.toast_container.visible, "leaving the lobby clears its toast before rules at %s" % actual_viewport)
 	check_rules_layout(scene, actual_viewport)
 	scene.achievements["first_win"] = true
 	scene.achievements["seven_pairs"] = true
@@ -340,7 +354,42 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 	var subtitle_labels = controls_with_name_prefix(scene, "MenuCardSubtitleLabel")
 	var quick_rail = scene.find_child("MenuQuickActionRail", true, false) as Control
 	var footer = scene.find_child("MenuFooterTextLayer", true, false) as Control
+	var header = scene.find_child("MenuTitleTextLayer", true, false) as Control
+	var product_title = scene.find_child("MenuTitleLabel", true, false) as Label
+	var stage_overlay = scene.find_child("MenuPrimary3DStageGPTOverlay", true, false) as CanvasItem
+	var commercial_stage = scene.find_child("MenuCommercial3DStage", true, false) as CanvasItem
+	var menu_scrim = scene.find_child("MenuBackgroundReadabilityScrim", true, false) as CanvasItem
 	check(text_backplates.size() == 3 and title_labels.size() == 3 and subtitle_labels.size() == 3, "menu primary cards expose readable title subtitle and text backplates at %s" % viewport_size)
+	check(header != null and product_title != null, "menu exposes a named foreground product title at %s" % viewport_size)
+	if header != null and product_title != null:
+		check(product_title.text == "云桌麻将" and product_title.get_theme_font_size("font_size") >= 28, "menu product title keeps its full name and commercial display size at %s" % viewport_size)
+		check(relative_luma(product_title.get_theme_color("font_color")) >= 0.80, "menu product title keeps bright foreground contrast at %s" % viewport_size)
+		if stage_overlay != null and stage_overlay.get_parent() == header.get_parent():
+			check(header.get_index() > stage_overlay.get_index(), "menu product title draws above the full-screen GPT stage at %s" % viewport_size)
+		if commercial_stage != null and commercial_stage.get_parent() == header.get_parent():
+			check(header.get_index() > commercial_stage.get_index(), "menu product title draws above the commercial stage at %s" % viewport_size)
+	check(menu_scrim != null and stage_overlay != null, "menu keeps one GPT background scrim and one full-screen scene at %s" % viewport_size)
+	check(scene.find_child("MenuHeroGPTBackdropTexture", true, false) == null and scene.find_child("MenuLobbyGeneratedUIOverlay", true, false) == null and scene.find_child("GuofengPaperSceneryBackdrop", true, false) == null, "menu omits duplicate full-screen hero and generic scenery layers at %s" % viewport_size)
+	var quick_actions := {
+		"Rules": "规则",
+		"Stats": "战绩",
+		"Achievements": "成就",
+		"Shop": "商店",
+	}
+	var quick_rects: Array[Rect2] = []
+	for quick_id in quick_actions:
+		var quick_button = scene.find_child("MenuQuick%sButton" % quick_id, true, false) as Button
+		check(quick_button != null, "menu quick action %s exists at %s" % [quick_actions[quick_id], viewport_size])
+		if quick_button != null:
+			check(quick_button.text == str(quick_actions[quick_id]) and quick_button.get_theme_font_size("font_size") >= 18, "menu quick action %s keeps a readable native label at %s" % [quick_actions[quick_id], viewport_size])
+			check_button_face_behind_native_text(quick_button, "menu quick action %s" % quick_actions[quick_id], viewport_size)
+			var quick_rect = screen_rect(quick_button)
+			check(quick_rect.size.x >= 96.0 and quick_rect.size.y >= 44.0, "menu quick action %s keeps a non-overlapping touch target at %s" % [quick_actions[quick_id], viewport_size])
+			if quick_rail != null:
+				check(screen_rect(quick_rail).grow(1.0).encloses(quick_rect), "menu quick action %s stays inside its rail at %s" % [quick_actions[quick_id], viewport_size])
+			for previous_rect in quick_rects:
+				check(not previous_rect.intersects(quick_rect, true), "menu quick action %s does not overlap another shortcut at %s" % [quick_actions[quick_id], viewport_size])
+			quick_rects.append(quick_rect)
 	for backplate in text_backplates:
 		var card = backplate.get_parent() as Button
 		check(card != null, "menu card text backplate belongs to a button at %s" % viewport_size)
@@ -410,6 +459,8 @@ func check_menu_footer_layout(scene, viewport_size: Vector2) -> void:
 		rects.append(settings_rect)
 		check(footer_rect.grow(1.0).encloses(settings_rect), "menu settings button stays inside footer at %s" % viewport_size)
 		check(settings_rect.size.x >= 88.0 and settings_rect.size.y >= 40.0, "menu settings button keeps practical touch size at %s" % viewport_size)
+		check(settings.text == "设置" and settings.get_theme_font_size("font_size") >= 15, "menu settings button keeps a readable native label at %s" % viewport_size)
+		check_button_face_behind_native_text(settings, "menu settings button", viewport_size)
 		scene.center_touch_button_pivot_by_id(settings.get_instance_id())
 		check(settings.pivot_offset.distance_to(settings.size * 0.5) <= 1.0, "menu settings button press feedback stays centered at %s" % viewport_size)
 		check(settings.find_child("MenuSettingsButtonArt", true, false) != null and settings.find_child("MenuSettingsGearTexture", true, false) != null, "menu settings button keeps material art and gear layer at %s" % viewport_size)
@@ -459,6 +510,11 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		found += 1
 		var rect = screen_rect(button)
 		check(rect.size.x >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH - 0.5 and rect.size.y >= 40.0, "pending claim %s keeps touch target at %s" % [text, viewport_size])
+		check(button.get_theme_font_size("font_size") >= 14, "pending claim %s keeps readable native action text at %s" % [text, viewport_size])
+		check_button_face_behind_native_text(button, "pending claim action %s" % text, viewport_size)
+		for decoration_name in ["ActionButtonArt", "ActionButton3DDepthEdge", "ActionButton3DTopRim", "ActionButton3DSideBevel", "ActionButtonSheen", "ActionButtonPanelPlate"]:
+			var decoration = button.find_child(decoration_name, false, false) as CanvasItem
+			check(decoration == null or decoration.show_behind_parent, "pending claim %s keeps %s behind native text at %s" % [text, decoration_name, viewport_size])
 		check(rect.position.x >= -0.5 and rect.end.x <= viewport_size.x + 0.5, "pending claim %s stays inside viewport at %s" % [text, viewport_size])
 		check(rect.position.x >= previous_right - 0.5, "pending claim buttons remain ordered at %s" % viewport_size)
 		check(button.find_child("ActionButtonEnergyDot_0", true, false) == null, "pending claim %s uses compact action styling without energy dots at %s" % [text, viewport_size])
@@ -500,7 +556,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		check(first_button.find_child("ActionButton3DDepthEdge", true, false) != null and first_button.find_child("ActionButton3DTopRim", true, false) != null, "pending claim buttons expose physical depth and a light-catching top rim at %s" % viewport_size)
 		var panel_plate = first_button.find_child("ActionButtonPanelPlate", true, false) as TextureRect
 		if panel_plate != null:
-			check(panel_plate.modulate.a <= 0.025, "pending claim compact button panel plate stays restrained at %s" % viewport_size)
+			check(panel_plate.modulate.a >= 0.50 and panel_plate.modulate.a <= 0.70 and panel_plate.show_behind_parent, "pending claim compact GPT panel provides a dark text backing behind the native label at %s" % viewport_size)
 	check(scene.find_child("ActionIntentDock", true, false) == null, "pending claim omits extra action intent strip at %s" % viewport_size)
 
 func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
@@ -646,6 +702,23 @@ func battle_discard_zone_screen_rects(scene) -> Array[Rect2]:
 	for zone in scene.DISCARD_ZONES:
 		rects.append(anchor_rect_in_parent(table_rect, zone[1]))
 	return rects
+
+func check_discard_tile_original_rgb(scene, viewport_size: Vector2) -> void:
+	for seat in range(4):
+		var grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
+		check(grid != null, "battle river %d exists for original-RGB audit at %s" % [seat, viewport_size])
+		if grid == null:
+			continue
+		var checked_tiles := 0
+		for tile_node in grid.get_children():
+			var face = tile_node.find_child("TileFaceTexture", true, false) as TextureRect
+			if face == null:
+				continue
+			checked_tiles += 1
+			var tile_canvas = tile_node as CanvasItem
+			check(tile_canvas != null and is_equal_approx(tile_canvas.modulate.r, 1.0) and is_equal_approx(tile_canvas.modulate.g, 1.0) and is_equal_approx(tile_canvas.modulate.b, 1.0), "battle river %d tile host keeps authored RGB at %s" % [seat, viewport_size])
+			check(is_equal_approx(face.modulate.r, 1.0) and is_equal_approx(face.modulate.g, 1.0) and is_equal_approx(face.modulate.b, 1.0), "battle river %d tile face keeps authored RGB at %s" % [seat, viewport_size])
+		check(checked_tiles > 0, "battle river %d exposes tile faces for original-RGB audit at %s" % [seat, viewport_size])
 
 func anchor_rect_in_parent(parent_rect: Rect2, anchor_rect: Rect2) -> Rect2:
 	var left = parent_rect.position.x + anchor_rect.position.x * parent_rect.size.x
@@ -957,11 +1030,13 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		check(input_rect.position.y < action_rect.position.y and not input_rect.intersects(action_rect, true), "online lobby input and action groups remain vertically separated at %s" % viewport_size)
 		check(action_rect.end.y <= form_rect.end.y - max(10.0, form_rect.size.y * 0.030), "online lobby action cluster lifts off the form bottom at %s" % viewport_size)
 		for input_id in ["name", "server", "room"]:
-			var input_art = scene.find_child("LineEditInputArt_%s" % input_id, true, false)
-			var input_edit = input_art.get_parent() as Control if input_art != null else null
+			var input_art = scene.find_child("LineEditInputArt_%s" % input_id, true, false) as CanvasItem
+			var input_edit = input_art.get_parent() as LineEdit if input_art != null else null
 			check(input_edit != null, "online lobby keeps the %s input visible at %s" % [input_id, viewport_size])
 			if input_edit == null:
 				continue
+			check(input_art.show_behind_parent, "online lobby %s GPT field art stays behind native text caret and selection at %s" % [input_id, viewport_size])
+			check(input_edit.text.strip_edges() != "" and input_edit.get_theme_font_size("font_size") >= 18, "online lobby %s input keeps a visible non-empty value at %s" % [input_id, viewport_size])
 			var edit_rect = screen_rect(input_edit)
 			check(edit_rect.position.y >= input_rect.position.y - 1.0 and edit_rect.end.y <= input_rect.end.y + 1.0, "online lobby %s input stays inside input group at %s" % [input_id, viewport_size])
 			check(edit_rect.end.y <= action_rect.position.y - 2.0, "online lobby %s input clears action group at %s" % [input_id, viewport_size])
@@ -1056,6 +1131,8 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		action_rects.append(rect)
 		check(rect.size.x >= 96.0 and rect.size.y >= 46.0, "online lobby %s keeps stable touch size at %s" % [text, viewport_size])
 		check(rect.position.x >= form_rect.position.x - 1.0 and rect.end.x <= form_rect.end.x + 1.0, "online lobby %s stays inside form panel at %s" % [text, viewport_size])
+		check(button.text == text and button.get_theme_font_size("font_size") >= 17, "online lobby %s keeps a readable native label at %s" % [text, viewport_size])
+		check_button_face_behind_native_text(button, "online lobby %s button" % text, viewport_size)
 		var button_art = button.find_child("LobbyActionButtonArt_%s" % text, true, false) as Control
 		var button_glow = button.find_child("LobbyActionButtonGlow_%s" % text, true, false) as Control
 		var button_seal = button.find_child("LobbyActionButtonSeal_%s" % text, true, false) as Control
@@ -1124,6 +1201,11 @@ func check_secondary_back_button_art(scene, screen_id: String, viewport_size: Ve
 	var confirm_fill = scene.find_child("SecondaryBackConfirmFill_%s" % screen_id, true, false) as Control
 	var confirm_gate = scene.find_child("SecondaryBackConfirmGate_%s" % screen_id, true, false) as Control
 	check(art != null and confirm_route != null and confirm_fill != null and confirm_gate != null, "secondary back button %s exposes quiet route art at %s" % [screen_id, viewport_size])
+	if art != null:
+		var back_button = art.get_parent() as Button
+		check(back_button != null and back_button.text == "返回", "secondary back button %s keeps its native 返回 label at %s" % [screen_id, viewport_size])
+		if back_button != null:
+			check_button_face_behind_native_text(back_button, "secondary back button %s" % screen_id, viewport_size)
 	if confirm_route != null and confirm_fill != null and confirm_gate != null:
 		# Subdued route: either invisible host / low-modulate plate, or legacy low-alpha ColorRect.
 		# r372: program color routes removed — empty Control hosts or low-alpha plates are OK.
@@ -1896,6 +1978,12 @@ func check_settings_button_art_text_safe_zone(button: Button, prefixes: Array, l
 		check(nodes.size() > 0, "settings row %s exposes %s art for safe-zone audit at %s" % [label_text, prefix, viewport_size])
 		for node in nodes:
 			check(not rects_overlap(safe_zone, screen_rect(node)), "settings row %s keeps %s out of the button text safe zone at %s" % [label_text, node.name, viewport_size])
+
+func check_button_face_behind_native_text(button: Button, label_text: String, viewport_size: Vector2) -> void:
+	if button == null:
+		return
+	var face = button.find_child("GptButtonFacePlate", false, false) as CanvasItem
+	check(face != null and face.show_behind_parent, "%s keeps its GPT face behind native text at %s" % [label_text, viewport_size])
 
 func relative_luma(color: Color) -> float:
 	return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722

@@ -129,6 +129,7 @@ func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
 func clear_screen() -> void:
+	clear_toast_on_mode_change()
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
 			continue
@@ -166,6 +167,8 @@ func clear_screen() -> void:
 	add_child(screen_layer)
 	if mode == "offline":
 		add_battle_background(screen_layer)
+	elif mode == "menu":
+		add_menu_background(screen_layer)
 	else:
 		add_background(screen_layer)
 	root_layer = Control.new()

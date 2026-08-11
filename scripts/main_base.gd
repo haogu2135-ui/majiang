@@ -625,6 +625,7 @@ var transition_active := false
 var toast_container: Control
 var toast_tween: Tween
 var toast_current: Control
+var toast_mode := ""
 
 # 牌面动画系统变量 / Tile Animation System Variables
 var tile_flip_animations: Dictionary = {}  # 进行中的翻转动画
@@ -1007,6 +1008,13 @@ func add_background(parent: Control) -> void:
 	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.88, 1.0, 1.0), Color(0.035, 0.026, 0.018, 0.155), "ui_dark_scrim"))
 	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 0.035, 1.0), Color(0.035, 0.026, 0.018, 0.120), "ui_dark_scrim"))
 	parent.add_child(make_gpt_plate_rect(rect_full(0.965, 0.0, 1.0, 1.0), Color(0.035, 0.026, 0.018, 0.120), "ui_dark_scrim"))
+
+func add_menu_background(parent: Control) -> void:
+	# The menu owns one full-screen scene in draw_menu_primary_3d_stage(). Keep
+	# only a single GPT scrim underneath it so fallback/loading frames stay clean.
+	var scrim = make_fullrect_overlay(Color(0.012, 0.020, 0.018, 0.94), "ui_dark_scrim")
+	scrim.name = "MenuBackgroundReadabilityScrim"
+	parent.add_child(scrim)
 
 func add_battle_background(parent: Control) -> void:
 	# Dark underfill via GPT plate so transparent PNG edges never flash pure black.
@@ -1718,6 +1726,10 @@ func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 		clampf(0.40 + fill.b * 0.75, 0.18, 1.25),
 		tint_a
 	)
+	# Button draws its native text before normal child CanvasItems.  Keep the
+	# generated face behind the parent so it cannot cover labels such as 返回、
+	# 设置 and the menu quick actions while icons/press feedback remain children.
+	tex.show_behind_parent = true
 	button.add_child(tex)
 	button.move_child(tex, 0)
 

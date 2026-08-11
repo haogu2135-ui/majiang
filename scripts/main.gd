@@ -1375,24 +1375,75 @@ func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
 		"robbers": [],
 		"human_robber": false,
 		"ai_robber": false,
+		"public_only": true,
+		"risk_score": 0.0,
+		"max_risk": 0.0,
+		"risk_seat": -1,
+		"risk_threshold": 0.0,
+		"risk_details": [],
 	}
 	if gang_seat < 0 or gang_seat >= players.size() or tile == "":
 		return report
-	var robbers: Array = []
+	# The declarer must not inspect concealed opponent hands.  Estimate chankan
+	# danger only from public rivers, melds, wall depth and inferred readiness;
+	# actual winners are still resolved by the gameplay layer after declaration.
+	var visible_counts = visible_tile_counts()
+	var eval_context = make_ai_evaluation_context(gang_seat, visible_counts)
+	var visible = max(3, visible_tile_count_from_counts(tile, visible_counts))
+	var details: Array = []
 	for offset in range(1, 4):
 		var seat = (gang_seat + offset) % 4
-		if not can_ron_for_seat(seat, tile):
+		# A tile already in this opponent's river is a public furiten clue and
+		# cannot be a credible chankan target for that seat.
+		if opponent_discard_tile_count(seat, tile, eval_context) > 0:
 			continue
-		robbers.append(seat)
-		if int(report.get("winner_seat", -1)) < 0:
-			# 同级抢杠按出杠后的近家顺序仲裁；玩家可见窗口仍由玩法层处理。
-			report["winner_seat"] = seat
-		if is_ai_controlled_seat(seat):
-			report["ai_robber"] = true
-		else:
-			report["human_robber"] = true
-	report["robbers"] = robbers
-	report["can_rob"] = not robbers.is_empty()
+		var components = single_opponent_deal_in_risk_components(tile, gang_seat, seat, visible, visible_counts, eval_context)
+		var readiness = opponent_readiness_score(seat, eval_context)
+		var meld_count = players[seat]["melds"].size()
+		var discard_count = players[seat]["discards"].size()
+		var public_risk = float(components.get("risk", 0.0))
+		# Chankan requires a completed wait.  Early closed hands have little
+		# public evidence, while late/open hands retain the full public risk.
+		if readiness < 7.0 and meld_count < 3 and discard_count < 12:
+			public_risk *= 0.35
+		elif readiness < 9.5 and meld_count < 3:
+			public_risk *= 0.75
+		if public_risk <= 0.01:
+			continue
+		details.append({
+			"seat": seat,
+			"offset": offset,
+			"risk": public_risk,
+			"readiness": readiness,
+			"pattern_threat": float(components.get("pattern_threat", 0.0)),
+		})
+	details.sort_custom(func(a, b):
+		var risk_a = float(a.get("risk", 0.0))
+		var risk_b = float(b.get("risk", 0.0))
+		if is_equal_approx(risk_a, risk_b):
+			return int(a.get("offset", 4)) < int(b.get("offset", 4))
+		return risk_a > risk_b
+	)
+	var aggregate_risk = 0.0
+	var risk_seats: Array = []
+	for i in range(details.size()):
+		var detail: Dictionary = details[i]
+		var detail_risk = float(detail.get("risk", 0.0))
+		aggregate_risk += detail_risk if i == 0 else detail_risk * 0.32
+		if detail_risk >= 12.0:
+			risk_seats.append(int(detail.get("seat", -1)))
+	var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var threshold = 30.0 if diff == AI_DIFFICULTY_EASY else (21.0 if diff == AI_DIFFICULTY_HARD else 25.0)
+	var max_risk = float(details[0].get("risk", 0.0)) if not details.is_empty() else 0.0
+	report["risk_score"] = aggregate_risk
+	report["max_risk"] = max_risk
+	report["risk_seat"] = int(details[0].get("seat", -1)) if not details.is_empty() else -1
+	report["risk_threshold"] = threshold
+	report["risk_details"] = details
+	report["robbers"] = risk_seats
+	# Compatibility key: this now means credible public risk, never exact hidden
+	# hand knowledge.  winner_seat/human_robber/ai_robber intentionally stay empty.
+	report["can_rob"] = max_risk >= threshold or aggregate_risk >= threshold + 6.0
 	return report
 
 # 荣和价值权衡：薄低番可过，厚高番/高压/守成必吃。
@@ -4746,10 +4797,19 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	var after_shanten = calculate_min_shanten(after, after_open_melds)
 	var pressure = opponent_pressure_score(seat)
 	var defense = ai_defense_weight(seat, before_shanten)
-	# 补杠前先扫描整桌：旧逻辑只会看到玩家抢杠，AI 对 AI 时会把必被
-	# 抢走的补杠送入玩法层。任何一家已经能抢杠，当前 AI 都不应宣告该补杠。
+	# 补杠只看公开信息推断抢杠风险，不能读取任何对手暗手。
 	var rob_threat = added_gang_rob_threat_report(seat, tile) if gang_kind == "added" else {}
-	var rob_risk = bool(rob_threat.get("can_rob", false))
+	var rob_risk_score = float(rob_threat.get("risk_score", 0.0))
+	var rob_risk_threshold = float(rob_threat.get("risk_threshold", 999.0))
+	# 已听的补杠可容忍略高风险；离听较远时则更谨慎。
+	if after_shanten <= 0:
+		rob_risk_threshold += 6.0
+	elif after_shanten >= 2:
+		rob_risk_threshold -= 2.0
+	var rob_risk = gang_kind == "added" and (
+		float(rob_threat.get("max_risk", 0.0)) >= rob_risk_threshold
+		or rob_risk_score >= rob_risk_threshold + 6.0
+	)
 	# 杠牌可能导致有效进张（待牌）收窄：暗杠会从怀里抽走 4 张同名牌，
 	# 其中可能包含正在充当 kanchan/ryanmen 等待进张的孤张，进而压低听牌宽度。
 	# 关键约束：进张数只在「同一向听等级」下才可直接比较——杠后向听升高时
@@ -4770,7 +4830,11 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 	report["pressure"] = pressure
 	report["defense"] = defense
 	report["rob_risk"] = rob_risk
-	report["rob_winner_seat"] = int(rob_threat.get("winner_seat", -1))
+	report["rob_risk_public"] = gang_kind == "added"
+	report["rob_risk_score"] = rob_risk_score
+	report["rob_risk_threshold"] = rob_risk_threshold
+	report["rob_winner_seat"] = -1
+	report["rob_risk_seat"] = int(rob_threat.get("risk_seat", -1))
 	report["robbers"] = rob_threat.get("robbers", [])
 	report["before_ukeire"] = before_ukeire
 	report["after_ukeire"] = after_ukeire
@@ -4853,6 +4917,14 @@ func ai_self_gang_action_score(report: Dictionary) -> float:
 		score -= (26.0 + float(lose_count) * 18.0) * wait_focus
 	if gang_kind == "added":
 		score -= 6.0
+		var public_rob_risk = float(report.get("rob_risk_score", 0.0))
+		var public_rob_weight = 1.10
+		match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
+			AI_DIFFICULTY_HARD:
+				public_rob_weight = 1.35
+			AI_DIFFICULTY_EASY:
+				public_rob_weight = 0.82
+		score -= min(public_rob_risk, 48.0) * public_rob_weight
 	if bool(report.get("rob_risk", false)):
 		score -= 1000.0
 	if bool(report.get("declined_by_plan", false)):
@@ -4998,6 +5070,7 @@ func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
 func clear_screen() -> void:
+	clear_toast_on_mode_change()
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
 			continue
@@ -5035,6 +5108,8 @@ func clear_screen() -> void:
 	add_child(screen_layer)
 	if mode == "offline":
 		add_battle_background(screen_layer)
+	elif mode == "menu":
+		add_menu_background(screen_layer)
 	else:
 		add_background(screen_layer)
 	root_layer = Control.new()
@@ -8612,7 +8687,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		role_rail.name = "ActionButtonRoleRail"
 		role_rail.modulate = Color(color.r, color.g, color.b, rail_alpha)
 	# Smoke requires compact claim panel plate modulate.a <= 0.025; normal modes use denser GPT face.
-	var panel_alpha = 0.014 if compact_claim_mode and role == "pass" else (0.022 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
+	var panel_alpha = 0.56 if compact_claim_mode and role == "pass" else (0.64 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
 	var panel_key := "action_button_panel" if compact_claim_mode else "ui_button_face_plate"
 	var panel_plate = add_optional_gpt_illustration_texture(button, panel_key, rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate == null:
@@ -8640,6 +8715,11 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 			pulse_tw.set_loops(12)
 			pulse_tw.tween_property(pulse, "modulate:a", trough, 0.64).from(peak)
 			pulse_tw.tween_property(pulse, "modulate:a", peak, 0.64).from(trough)
+	# Button native text is painted by the parent CanvasItem. Keep every authored
+	# decorative child behind it so compact claim labels remain crisp in all states.
+	for child in button.get_children():
+		if child is CanvasItem:
+			(child as CanvasItem).show_behind_parent = true
 	button.button_down.connect(func() -> void:
 		if not is_instance_valid(button):
 			return
@@ -11287,25 +11367,11 @@ func draw_discards(parent: Control) -> void:
 					face_tex.texture = forced
 					tile_textures[norm_code] = forced
 					face_tex.modulate = Color(1.0, 1.0, 1.0, 1.0)
-			# mild face lift on side/bottom rivers without recoloring assets
-			if seat == 0:
-				if face_tex != null:
-					face_tex.modulate = Color(
-						minf(1.35, face_tex.modulate.r * 1.08),
-						minf(1.30, face_tex.modulate.g * 1.06),
-						minf(1.22, face_tex.modulate.b * 1.04),
-						face_tex.modulate.a
-					)
-				tile_node.modulate = Color(1.06, 1.04, 1.02, tile_node.modulate.a)
-			if seat == 1:
-				if face_tex != null:
-					face_tex.modulate = Color(
-						minf(1.50, face_tex.modulate.r * 1.14),
-						minf(1.40, face_tex.modulate.g * 1.12),
-						minf(1.26, face_tex.modulate.b * 1.08),
-						face_tex.modulate.a
-					)
-				tile_node.modulate = Color(1.10, 1.07, 1.04, tile_node.modulate.a)
+			# Tile artwork keeps its authored RGB on every seat. River emphasis comes
+			# from the existing GPT mats and focus marker, never runtime tinting.
+			if face_tex != null:
+				face_tex.modulate = Color(1.0, 1.0, 1.0, face_tex.modulate.a)
+			tile_node.modulate = Color(1.0, 1.0, 1.0, tile_node.modulate.a)
 			grid.add_child(tile_node)
 			if highlighted:
 				tile_node.name = "RecentDiscardTile_%d" % seat
@@ -12568,6 +12634,7 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 	var art = Control.new()
 	art.name = "LineEditInputArt_%s" % art_id
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.show_behind_parent = true
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	edit.add_child(art)
 	var accent = line_edit_accent(label_text)
@@ -13365,7 +13432,7 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	var rail = Control.new()
 	rail.name = "MenuQuickActionRail"
 	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(rail, rect_full(0.320, 0.708, 0.680, 0.782))
+	apply_rect(rail, rect_full(0.250, 0.704, 0.750, 0.804))
 	parent.add_child(rail)
 	var items := [
 		["rules", "规则", "help-circle", Color(0.30, 0.58, 0.50), Callable(self, "show_rules_screen")],
@@ -13383,21 +13450,21 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		surface_tw.set_loops(48)
 		surface_tw.tween_property(surface, "modulate:a", 0.48, 1.35).from(0.72).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		surface_tw.tween_property(surface, "modulate:a", 0.72, 1.35).from(0.48).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	var button_width = 0.180
-	var start_x = 0.055
-	var usable = 0.890 - button_width
-	var step = usable / float(max(1, items.size() - 1))
+	var start_x := 0.025
+	var end_x := 0.975
+	var gap := 0.018
+	var button_width := (end_x - start_x - gap * float(max(0, items.size() - 1))) / float(max(1, items.size()))
 	for i in range(items.size()):
 		var item: Array = items[i]
 		var quick_id := str(item[0])
 		var quick_color: Color = item[3]
 		var button = make_small_button(str(item[1]), item[3], item[4])
 		button.name = "MenuQuick%sButton" % quick_id.capitalize()
-		button.custom_minimum_size = Vector2(104, 36)
+		button.custom_minimum_size = Vector2(96, 44)
 		button.button_down.connect(Callable(self, "play_menu_quick_button_press_feedback").bind(button, quick_id, quick_color))
 		rail.add_child(button)
-		var left = start_x + float(i) * step
-		apply_rect(button, rect_full(left, 0.160, left + button_width, 0.640))
+		var left = start_x + float(i) * (button_width + gap)
+		apply_rect(button, rect_full(left, 0.060, left + button_width, 0.940))
 		add_lucide_icon(button, str(item[2]), rect_full(0.100, 0.255, 0.225, 0.575), Color(0.94, 0.92, 0.76, 0.88))
 		configure_menu_button_motion(button, 0.12 + float(i) * 0.045, 1.060, 0.0)
 	return rail
@@ -19583,7 +19650,13 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var button = make_base_button(text, callback)
 	var role = action_button_visual_role(text)
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
+	button.add_theme_color_override("font_color", Color(1.00, 0.98, 0.88))
+	button.add_theme_color_override("font_hover_color", Color(1.00, 1.00, 0.96))
+	button.add_theme_color_override("font_pressed_color", Color(1.00, 0.92, 0.68))
+	button.add_theme_color_override("font_disabled_color", Color(0.82, 0.82, 0.74))
+	button.add_theme_color_override("font_outline_color", Color(0.035, 0.020, 0.008, 0.96))
 	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"
+	button.add_theme_constant_override("outline_size", 3 if compact_claim_mode else 2)
 	var is_focus_action = ["win", "gang", "safe", "advice"].has(role) or text.begins_with("荐")
 	var fill_alpha := 0.205 if compact_claim_mode and role == "pass" else (0.355 if compact_claim_mode and is_focus_action else (0.285 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
 	var border_alpha := 0.018 if compact_claim_mode and role == "pass" else (0.070 if compact_claim_mode and is_focus_action else (0.036 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
@@ -22695,10 +22768,9 @@ func _show_menu_impl() -> void:
 	recover_audio_after_screen_change()
 	clear_screen()
 
-	# 增强的背景效果
-	add_background(root_layer)
-	menu_hero_art = draw_menu_hero_illustration(root_layer)
-	menu_parallax_enabled = true
+	# The primary GPT stage below is the menu's sole full-screen scene.
+	menu_hero_art = null
+	menu_parallax_enabled = false
 
 	var content_size = safe_content_pixel_size()
 
@@ -22717,9 +22789,12 @@ func _show_menu_impl() -> void:
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 游戏标题 - 更大更突出，使用国风金色
-	var title = make_label(header, "云桌麻将", 25, Color(0.22, 0.135, 0.055), true)
+	var title = make_label(header, "云桌麻将", 30, Color(1.00, 0.88, 0.54), true)
+	title.name = "MenuTitleLabel"
 	apply_rect(title, rect_full(0.010, 0.050, 0.950, 0.860))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.add_theme_constant_override("outline_size", 3)
+	title.add_theme_color_override("font_outline_color", Color(0.08, 0.045, 0.018, 0.96))
 
 	# 主菜单卡片区域 - 按安全区宽度收缩，避免移动端溢出。
 	draw_menu_primary_3d_stage(root_layer)
@@ -22826,6 +22901,9 @@ func _show_menu_impl() -> void:
 		if tutorial_hint != null and is_instance_valid(tutorial_hint) and fx_enabled_effective():
 			tutorial_hint.modulate.a = 0.92
 
+	# Keep the product title above the full-screen menu stages while leaving modal
+	# overlays free to cover it when settings/update UI is intentionally open.
+	root_layer.move_child(header, root_layer.get_child_count() - 1)
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 
@@ -24565,12 +24643,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 		return
 	if toast_container == null or not is_instance_valid(toast_container):
 		_build_fx_toast()
-	# 清除旧toast
-	if toast_current != null and is_instance_valid(toast_current):
-		toast_current.queue_free()
-		toast_current = null
-	if toast_tween != null and is_instance_valid(toast_tween):
-		toast_tween.kill()
+	dismiss_active_toast()
 	# 创建toast节点
 	var toast_bg = Panel.new()
 	toast_bg.name = "Toast"
@@ -24603,6 +24676,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_container.add_child(toast_bg)
 	toast_container.visible = true
 	toast_current = toast_bg
+	toast_mode = mode
 	# 动画：弹跳滑入 → 停留 → 下滑淡出
 	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
 	var stay_dur := float(duration_msec) / 1000.0
@@ -24619,12 +24693,31 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	tw.tween_callback(Callable(self, "cleanup_toast_by_id").bind(toast_bg.get_instance_id(), toast_container.get_instance_id())).set_delay(stay_dur + fade_dur + 0.02)
 
 func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
+	var is_current := toast_current != null and is_instance_valid(toast_current) and toast_current.get_instance_id() == toast_id
 	queue_free_node_by_id(toast_id)
+	if not is_current:
+		return
 	var container = node_from_instance_id(container_id) as Control
 	if container != null:
 		container.visible = false
-	if toast_current != null and is_instance_valid(toast_current) and toast_current.get_instance_id() == toast_id:
-		toast_current = null
+	toast_current = null
+	toast_tween = null
+	toast_mode = ""
+
+func dismiss_active_toast() -> void:
+	if toast_tween != null and is_instance_valid(toast_tween):
+		toast_tween.kill()
+	toast_tween = null
+	if toast_current != null and is_instance_valid(toast_current):
+		toast_current.queue_free()
+	toast_current = null
+	if toast_container != null and is_instance_valid(toast_container):
+		toast_container.visible = false
+	toast_mode = ""
+
+func clear_toast_on_mode_change() -> void:
+	if toast_mode != "" and toast_mode != mode:
+		dismiss_active_toast()
 
 func toggle_ai_assist_setting() -> void:
 	ai_assist_enabled = not ai_assist_enabled
