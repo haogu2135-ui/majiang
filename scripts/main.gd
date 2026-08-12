@@ -8896,7 +8896,6 @@ func draw_actions(parent: Control) -> void:
 			# 新手引导：吃碰杠提示
 			if interactive_guide_active and interactive_guide_type == "claim":
 				show_toast("💡 对手打出了一张牌，你可以选择吃/碰/杠/胡或过")
-			draw_pending_claim_illustration(parent)
 			var claim_recommendation = recommended_claim_report() if player_ai_assist_enabled() else {}
 			for claim in offline_pending_claim.get("options", []):
 				var claim_name = str(claim)
@@ -8921,6 +8920,32 @@ func draw_actions(parent: Control) -> void:
 					))
 			action_bar.add_child(make_action_button(compact_pass_claim_button_text(claim_recommendation), pass_claim_button_color(claim_recommendation), func() -> void:
 				human_claim("pass")
+			))
+			draw_pending_claim_illustration(parent)
+			draw_action_dock(parent)
+			finalize_action_bar_layout()
+			return
+		if player_ai_assist_enabled() and has_pending_danger_discard():
+			var selected_danger_tile = pending_danger_discard_tile
+			var danger_alternatives = safe_discard_alternative_reports(selected_danger_tile, 2)
+			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
+			var confirm_danger_button = make_action_button("确认打%s" % tile_label(selected_danger_tile), Color(0.86, 0.34, 0.24), func() -> void:
+				human_discard_by_tile(selected_danger_tile)
+			)
+			confirm_danger_button.name = "DangerDiscardConfirmButton"
+			action_bar.add_child(confirm_danger_button)
+			for report in danger_alternatives:
+				var alternative_tile = str(report.get("tile", ""))
+				if alternative_tile == "":
+					continue
+				var selected_alternative_tile = alternative_tile
+				action_bar.add_child(make_action_button("改打%s" % tile_label(selected_alternative_tile), safe_discard_button_color(report), func() -> void:
+					human_discard_by_tile(selected_alternative_tile)
+				))
+			action_bar.add_child(make_action_button("取消", Color(0.52, 0.56, 0.58), func() -> void:
+				clear_pending_danger_discard()
+				set_status(current_status_text())
+				render_game()
 			))
 			draw_action_dock(parent)
 			finalize_action_bar_layout()
@@ -8968,21 +8993,6 @@ func draw_actions(parent: Control) -> void:
 					action_bar.add_child(make_action_button(alternative_discard_button_text(report), alternative_discard_button_color(report), func() -> void:
 						human_discard_by_tile(selected_action_tile)
 					))
-		if player_ai_assist_enabled() and has_pending_danger_discard():
-			draw_danger_discard_confirmation_art(parent, pending_danger_discard_tile, pending_danger_discard_report, safe_discard_alternative_reports(pending_danger_discard_tile, 2))
-			for report in safe_discard_alternative_reports(pending_danger_discard_tile, 2):
-				var alternative_tile = str(report.get("tile", ""))
-				if alternative_tile == "":
-					continue
-				var selected_alternative_tile = alternative_tile
-				action_bar.add_child(make_action_button("改打%s" % tile_label(selected_alternative_tile), safe_discard_button_color(report), func() -> void:
-					human_discard_by_tile(selected_alternative_tile)
-				))
-			action_bar.add_child(make_action_button("取消", Color(0.52, 0.56, 0.58), func() -> void:
-				clear_pending_danger_discard()
-				set_status(current_status_text())
-				render_game()
-			))
 		action_bar.add_child(make_action_button("重开", Color(0.70, 0.32, 0.22), func() -> void:
 			start_offline()
 		))
@@ -10313,6 +10323,9 @@ func draw_daily_login_claim_button_art(button: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(art)
+	# Button native text is painted by the parent CanvasItem. Keep the authored
+	# bitmap chrome behind it so the CTA remains readable at compact resolutions.
+	art.show_behind_parent = true
 	var accent = Color(0.32, 0.62, 0.52)
 	# r180: GPT button + meter instead of rail/fill/tick chrome.
 	var face = add_optional_gpt_illustration_texture(art, "ui_button_face_plate", rect_full(0.04, 0.08, 0.96, 0.92), 0.72, false)
@@ -10510,8 +10523,18 @@ func draw_daily_login_streak_art(parent: Control, days: int, current_day_in_cycl
 
 func draw_danger_discard_confirmation_art(parent: Control, tile: String, report: Dictionary = {}, alternatives: Array = []) -> Control:
 	# r209: GPT chrome conversion
-	var panel = make_gpt_route_rail(rect_full(0.500, 0.654, 0.982, 0.718), Color(0.040, 0.018, 0.016, 0.94))
+	var content_size = safe_content_pixel_size()
+	var panel_height_px = clampf(content_size.y * 0.095, 56.0, 68.0)
+	var panel_width_px = clampf(content_size.x * 0.310, 300.0, 440.0)
+	var panel_gap_px = clampf(content_size.y * 0.010, 6.0, 10.0)
+	var panel_bottom = action_bar_dock_layout_rect().position.y - panel_gap_px / maxf(1.0, content_size.y)
+	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
+	var panel_right = action_bar_dock_layout_rect().size.x
+	var panel_left = panel_right - panel_width_px / maxf(1.0, content_size.x)
+	var panel = make_gpt_route_rail(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.040, 0.018, 0.016, 0.94))
 	panel.name = "DangerDiscardConfirmationArt"
+	panel.z_index = 20
+	panel.clip_contents = true
 	parent.add_child(panel)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var seal_texture = add_illustration_texture(panel, "danger_decision_seal", rect_full(0.015, -1.080, 0.515, 2.000), 0.16, true)
@@ -10532,12 +10555,13 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	var danger_risk_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.120, 0.430, 0.760, 0.600), 0.34, false)
 	if danger_risk_strip != null:
 		danger_risk_strip.name = "DangerDiscardGptRiskStrip"
+		danger_risk_strip.visible = false
 	panel.add_child(make_gpt_edge_rail(rect_full(0.0, 0.0, 0.014, 1.0), Color(0.96, 0.38, 0.24, 0.64)))
 	var danger_tile = make_tile_view(tile, Vector2(34, 46), false, Callable(), true, "高", "确认")
 	danger_tile.name = "DangerDiscardTile"
 	panel.add_child(danger_tile)
-	apply_rect(danger_tile, rect_full(0.040, 0.130, 0.112, 0.905))
-	var route = make_gpt_route_rail(rect_full(0.130, 0.460, 0.735, 0.560), Color(0.92, 0.42, 0.28, 0.24))
+	apply_rect(danger_tile, rect_full(0.025, 0.080, 0.125, 0.920))
+	var route = make_gpt_route_rail(rect_full(0.150, 0.790, 0.715, 0.885), Color(0.92, 0.42, 0.28, 0.24))
 	route.name = "DangerDiscardRouteRail"
 	panel.add_child(route)
 	var risk = clamp(max(float(report.get("risk", 0.0)), float(report.get("feed_risk", 0.0))) / 60.0, 0.18, 1.0)
@@ -10549,9 +10573,11 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		var node_active = risk >= (float(i) + 1.0) / 4.0
 		var node = make_gpt_gate(rect_full(node_left, 0.405, node_left + 0.026, 0.615), Color(0.96, 0.38, 0.24, 0.34 if node_active else 0.12))
 		node.name = "DangerDiscardRiskNode_%d" % i
+		node.visible = false
 		panel.add_child(node)
 	var alert = make_gpt_plate_rect(rect_full(0.532, 0.570, 0.718, 0.885), Color(0.92, 0.32, 0.24, 0.12), "ui_jade_reading_plate")
 	alert.name = "DangerDiscardAlertHalo"
+	alert.visible = false
 	panel.add_child(alert)
 	for i in range(3):
 		var ring = make_gpt_plate_rect(rect_full(0.090 + float(i) * 0.085, 0.170 - float(i) * 0.015, 0.910 - float(i) * 0.085, 0.830 + float(i) * 0.015), Color(0.94, 0.34, 0.24, 0.030), "ui_jade_reading_plate")
@@ -10560,55 +10586,71 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	var label_text = str(report.get("risk_label", "高"))
 	if label_text == "":
 		label_text = "高"
-	var seal = make_badge(panel, rect_full(0.142, 0.175, 0.235, 0.825), risk_badge_text(label_text), 10, Color(0.54, 0.16, 0.12, 0.94), Color(0.96, 0.50, 0.34, 0.34), Color(0.98, 0.90, 0.78))
+	var title = make_label(panel, "%s危：%s" % [label_text, tile_label(tile)], 13, Color(0.98, 0.90, 0.72), true)
+	title.name = "DangerDiscardTitleText"
+	apply_rect(title, rect_full(0.150, 0.070, 0.715, 0.455))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(title)
+	var seal = make_badge(panel, rect_full(0.750, 0.145, 0.855, 0.855), risk_badge_text(label_text), 11, Color(0.54, 0.16, 0.12, 0.94), Color(0.96, 0.50, 0.34, 0.34), Color(0.98, 0.90, 0.78))
 	seal.name = "DangerDiscardRiskSeal"
 	seal.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var detail = make_label(panel, discard_safety_text(report) if not report.is_empty() else "风险高", 10, Color(0.92, 0.82, 0.68), true)
+	var detail = make_label(panel, discard_safety_text(report) if not report.is_empty() else "风险高", 12, Color(0.92, 0.86, 0.72), true)
 	detail.name = "DangerDiscardDetailText"
-	apply_rect(detail, rect_full(0.252, 0.120, 0.612, 0.435))
+	apply_rect(detail, rect_full(0.150, 0.455, 0.715, 0.780))
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(detail)
 	var source_trace = make_gpt_route_rail(rect_full(0.252, 0.305, 0.560, 0.350), Color(0.006, 0.016, 0.018, 0.44))
 	source_trace.name = "DangerDiscardSourceTrace"
+	source_trace.visible = false
 	panel.add_child(source_trace)
 	var source_fill = make_gpt_meter_fill(rect_full(0.252, 0.312, 0.252 + 0.308 * risk, 0.343), Color(0.94, 0.34, 0.24, 0.28))
 	source_fill.name = "DangerDiscardSourceFill"
+	source_fill.visible = false
 	panel.add_child(source_fill)
 	var source_gate = make_gpt_gate(rect_full(0.546, 0.245, 0.580, 0.395), Color(0.98, 0.70, 0.42, 0.22))
 	source_gate.name = "DangerDiscardSourceGate"
+	source_gate.visible = false
 	panel.add_child(source_gate)
 	for i in range(3):
 		var left = 0.310 + float(i) * 0.068
 		var active = risk >= (float(i) + 1.0) / 4.0
 		var trace_node = make_gpt_tick_strip(rect_full(left, 0.250, left + 0.016, 0.405), Color(0.94, 0.34, 0.24, 0.24 if active else 0.10))
 		trace_node.name = "DangerDiscardSourceNode_%d" % i
+		trace_node.visible = false
 		panel.add_child(trace_node)
-	var confirm = make_badge(panel, rect_full(0.628, 0.185, 0.735, 0.815), "确认", 10, Color(0.60, 0.20, 0.15, 0.94), Color(0.96, 0.54, 0.34, 0.34), Color(0.98, 0.90, 0.78))
+	var confirm = make_badge(panel, rect_full(0.875, 0.145, 0.975, 0.855), "确认", 10, Color(0.60, 0.20, 0.15, 0.94), Color(0.96, 0.54, 0.34, 0.34), Color(0.98, 0.90, 0.78))
 	confirm.name = "DangerDiscardConfirmSeal"
 	confirm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	confirm.visible = false
 	var confirm_route = make_gpt_route_rail(rect_full(0.575, 0.760, 0.735, 0.840), Color(0.006, 0.016, 0.018, 0.46))
 	confirm_route.name = "DangerDiscardConfirmRoute"
+	confirm_route.visible = false
 	panel.add_child(confirm_route)
 	var confirm_fill = make_gpt_meter_fill(rect_full(0.040, 0.260, 0.780, 0.740), Color(0.94, 0.34, 0.24, 0.30))
 	confirm_fill.name = "DangerDiscardConfirmFill"
 	confirm_route.add_child(confirm_fill)
 	var confirm_gate = make_gpt_gate(rect_full(0.704, 0.650, 0.735, 0.760), Color(0.98, 0.70, 0.42, 0.28))
 	confirm_gate.name = "DangerDiscardConfirmGate"
+	confirm_gate.visible = false
 	panel.add_child(confirm_gate)
 	var safe_rail = make_gpt_route_rail(rect_full(0.758, 0.145, 0.965, 0.855), Color(0.020, 0.042, 0.040, 0.74))
 	safe_rail.name = "DangerDiscardSafeRail"
+	safe_rail.visible = false
 	panel.add_child(safe_rail)
 	var lattice_texture = add_illustration_texture(safe_rail, "danger_choice_lattice", rect_full(-0.060, -0.110, 1.060, 1.110), 0.14, false)
 	if lattice_texture != null:
 		lattice_texture.name = "DangerChoiceLatticeTexture"
 	var safe_route = make_gpt_route_rail(rect_full(0.748, 0.880, 0.965, 0.940), Color(0.006, 0.016, 0.018, 0.42))
 	safe_route.name = "DangerDiscardAlternativeRoute"
+	safe_route.visible = false
 	panel.add_child(safe_route)
 	var safe_fill = make_gpt_meter_fill(rect_full(0.035, 0.260, 0.720, 0.740), Color(0.42, 0.76, 0.58, 0.28))
 	safe_fill.name = "DangerDiscardAlternativeFill"
 	safe_route.add_child(safe_fill)
-	draw_danger_discard_decision_bridge(panel, risk, alternatives)
-	draw_danger_discard_final_choice_art(panel, risk, alternatives)
+	var decision_bridge = draw_danger_discard_decision_bridge(panel, risk, alternatives)
+	decision_bridge.visible = false
+	var final_choice_art = draw_danger_discard_final_choice_art(panel, risk, alternatives)
+	final_choice_art.visible = false
 	for i in range(min(2, alternatives.size())):
 		var alt_report: Dictionary = alternatives[i]
 		var alt_tile = str(alt_report.get("tile", ""))
@@ -10624,13 +10666,16 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	for i in range(3):
 		var pulse = make_gpt_tick_strip(rect_full(0.765 + float(i) * 0.055, 0.060, 0.790 + float(i) * 0.055, 0.150), Color(0.50, 0.86, 0.60, 0.22))
 		pulse.name = "DangerDiscardSafePulse_%d" % i
+		pulse.visible = false
 		panel.add_child(pulse)
 	for i in range(2):
 		var confirm_tick = make_gpt_tick_strip(rect_full(0.592 + float(i) * 0.044, 0.655, 0.606 + float(i) * 0.044, 0.745), Color(0.94, 0.34, 0.24, 0.26 - float(i) * 0.050))
 		confirm_tick.name = "DangerDiscardConfirmTick_0"
+		confirm_tick.visible = false
 		panel.add_child(confirm_tick)
 		var safe_tick = make_gpt_tick_strip(rect_full(0.822 + float(i) * 0.046, 0.065, 0.836 + float(i) * 0.046, 0.145), Color(0.50, 0.86, 0.60, 0.24 - float(i) * 0.045))
 		safe_tick.name = "DangerDiscardAlternativeTick_0"
+		safe_tick.visible = false
 		panel.add_child(safe_tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
@@ -13987,11 +14032,21 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var tile = str(offline_pending_claim.get("tile", ""))
 	if tile == "":
 		return
+	var content_size = safe_content_pixel_size()
+	var dock_rect = action_dock_rect_for_count(max(1, action_bar_button_count()))
+	var panel_height_px = clampf(content_size.y * 0.095, 50.0, 64.0)
+	var panel_width_px = clampf(content_size.x * 0.270, 240.0, 320.0)
+	var panel_gap_px = clampf(content_size.y * 0.010, 6.0, 10.0)
+	var panel_bottom = dock_rect.position.y - panel_gap_px / maxf(1.0, content_size.y)
+	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
+	var panel_right = dock_rect.size.x - 0.010
+	var panel_left = maxf(dock_rect.position.x, panel_right - panel_width_px / maxf(1.0, content_size.x))
 	var has_status_strip := optional_gpt_illustration_texture("pending_claim_status_strip") != null
-	var panel = make_gpt_route_rail(rect_full(0.185, 0.628, 0.360, 0.668), Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
+	var panel = make_gpt_route_rail(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
 	panel.name = "PendingClaimIllustration"
+	panel.z_index = 20
 	parent.add_child(panel)
-	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(-0.035, -0.180, 1.035, 1.180), 0.56, false)
+	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(-0.025, -0.120, 1.025, 1.120), 0.62, false)
 	if status_strip != null:
 		status_strip.name = "PendingClaimStatusStripTexture"
 		panel.move_child(status_strip, 0)
@@ -14000,25 +14055,27 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.add_child(mist)
 	var source_seat = int(offline_pending_claim.get("from_seat", -1))
 	var source_name = str(players[source_seat]["name"]) if source_seat >= 0 and source_seat < players.size() else "对手"
-	var source_badge = make_badge(panel, rect_full(0.020, 0.170, 0.110, 0.830), pending_claim_source_badge_text(source_seat), 8, Color(0.34, 0.13, 0.09, 0.68), Color(0.84, 0.58, 0.28, 0.20), Color(0.96, 0.88, 0.68))
+	var source_badge = make_badge(panel, rect_full(0.020, 0.120, 0.155, 0.880), pending_claim_source_badge_text(source_seat), 11, Color(0.34, 0.13, 0.09, 0.68), Color(0.84, 0.58, 0.28, 0.20), Color(0.96, 0.88, 0.68))
 	source_badge.name = "PendingClaimSourceBadge"
 	source_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var tile_preview = make_tile_view(tile, Vector2(20, 28), false, Callable(), true)
+	var tile_preview = make_tile_view(tile, Vector2(34, 46), false, Callable(), true)
 	tile_preview.name = "PendingClaimTile"
 	panel.add_child(tile_preview)
-	apply_rect(tile_preview, rect_full(0.155, 0.125, 0.285, 0.875))
-	var title = make_label(panel, "%s 打出" % source_name, 9, Color(0.80, 0.76, 0.60, 0.76), true)
-	apply_rect(title, rect_full(0.315, 0.080, 0.715, 0.540))
+	apply_rect(tile_preview, rect_full(0.170, 0.020, 0.315, 0.980))
+	var title = make_label(panel, "%s 打出" % source_name, 13, Color(0.92, 0.88, 0.72, 0.96), true)
+	title.name = "PendingClaimSourceText"
+	apply_rect(title, rect_full(0.345, 0.060, 0.790, 0.535))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
-	var tile_name = make_label(panel, tile_label(tile), 11, Color(0.94, 0.82, 0.52, 0.92), true)
-	apply_rect(tile_name, rect_full(0.720, 0.080, 0.950, 0.540))
+	var tile_name = make_label(panel, tile_label(tile), 14, Color(0.98, 0.88, 0.58, 1.0), true)
+	tile_name.name = "PendingClaimTileName"
+	apply_rect(tile_name, rect_full(0.790, 0.060, 0.970, 0.535))
 	tile_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(tile_name)
-	var focus = make_label(panel, "响应", 8, Color(0.86, 0.82, 0.64, 0.64), true)
+	var focus = make_label(panel, "请选择响应", 11, Color(0.88, 0.86, 0.72, 0.88), true)
 	focus.name = "PendingClaimFocusText"
-	apply_rect(focus, rect_full(0.315, 0.545, 0.950, 0.920))
-	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	apply_rect(focus, rect_full(0.345, 0.535, 0.970, 0.940))
+	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(focus)
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
@@ -14247,7 +14304,18 @@ func draw_round_summary(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
 	if mode != "offline" or offline_phase != "ended":
 		return
-	var panel = make_gpt_plate_rect(ROUND_SUMMARY_PANEL_RECT, Color(0.010, 0.026, 0.032, 0.97), "ui_jade_reading_plate")
+	var content_size = safe_content_pixel_size()
+	var panel_width_px = clampf(content_size.x * 0.500, 480.0, 720.0)
+	var panel_height_px = clampf(content_size.y * 0.500, 270.0, 420.0)
+	var panel_gap_px = clampf(content_size.y * 0.012, 8.0, 12.0)
+	var panel_bottom = action_bar_dock_layout_rect().position.y - panel_gap_px / maxf(1.0, content_size.y)
+	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
+	var panel_left = 0.5 - panel_width_px / maxf(2.0, content_size.x * 2.0)
+	var panel_right = 0.5 + panel_width_px / maxf(2.0, content_size.x * 2.0)
+	var panel = make_gpt_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.010, 0.026, 0.032, 0.97), "ui_jade_reading_plate")
+	panel.name = "RoundSummaryPanel"
+	panel.z_index = 30
+	panel.clip_contents = true
 	parent.add_child(panel)
 	# 标题栏
 	var _gpt_panel_host = make_gpt_plate_rect(ROUND_SUMMARY_HEADER_RECT, Color(0.042, 0.054, 0.052, 0.82), "ui_jade_reading_plate")
@@ -14259,6 +14327,7 @@ func draw_round_summary(parent: Control) -> void:
 
 	# 标题 - 始终显示
 	var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 26, Color(0.94, 0.86, 0.48), true)
+	title.name = "RoundSummaryTitle"
 	apply_rect(title, ROUND_SUMMARY_TITLE_RECT)
 
 	# 胜利丝带和星光 - 始终显示
@@ -14289,6 +14358,7 @@ func draw_round_summary(parent: Control) -> void:
 		lines.append("")
 		lines.append_array(package_lines)
 	var body = make_label(panel, "\n".join(lines), 14, Color(0.76, 0.86, 0.80), false)
+	body.name = "RoundSummaryBody"
 	apply_rect(body, ROUND_SUMMARY_TEXT_RECT)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
@@ -16443,10 +16513,10 @@ func draw_settings_overlay(parent: Control) -> void:
 	# 体验设置
 	var play_grid = make_settings_section(panel, play_section_rect, "体验", compact_settings)
 	play_grid.columns = 1
-	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_button("快速", fast_mode_enabled, func() -> void:
+	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_selector_button("快速" if fast_mode_enabled else "标准", "AI 节奏", func() -> void:
 		toggle_fast_mode_setting()
 	))
-	make_setting_row(play_grid, "AI 难度", "对手强度: %s" % ai_difficulty_label(), make_setting_button(ai_difficulty_label(true), true, func() -> void:
+	make_setting_row(play_grid, "AI 难度", "对手强度: %s" % ai_difficulty_label(), make_setting_selector_button(ai_difficulty_label(), "AI 难度", func() -> void:
 		cycle_ai_difficulty_setting()
 	))
 	make_setting_row(play_grid, "桌面特效", "当前: %s" % ("开启" if fx_enabled else "关闭"), make_setting_button("特效", fx_enabled, func() -> void:
@@ -19428,8 +19498,9 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var self_draw = bool(score_data.get("self_draw", false))
 
 	# 详情面板 - 增大高度以容纳徽章
-	var detail_rect = Rect2(Vector2(0.04, 0.18), Vector2(0.96, 0.50))
+	var detail_rect = Rect2(Vector2(0.04, 0.145), Vector2(0.96, 0.430))
 	var detail_panel = make_gpt_plate_rect(detail_rect, Color(0.012, 0.024, 0.030, 0.94), "ui_jade_reading_plate")
+	detail_panel.name = "WinDetailPanel"
 	parent.add_child(detail_panel)
 	var detail_texture = add_illustration_texture(detail_panel, "win_detail_scroll", rect_full(0.010, 0.030, 0.990, 0.970), 0.13, false)
 	if detail_texture != null:
@@ -19447,12 +19518,14 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	if win_tile != "":
 		winner_text += " %s" % tile_label(win_tile)
 	var winner_label = make_label(detail_panel, winner_text, 18, Color(0.94, 0.88, 0.58), true)
+	winner_label.name = "WinDetailWinnerLabel"
 	apply_rect(winner_label, rect_full(0.04, 0.06, 0.60, 0.22))
 	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	# 番数和分数 - 更醒目 + 数字滚动动画
 	var score_text = "%d番  %d分" % [fan, points]
 	var score_label = make_label(detail_panel, score_text, 22, Color(0.96, 0.88, 0.52), true)
+	score_label.name = "WinDetailScoreLabel"
 	apply_rect(score_label, rect_full(0.62, 0.06, 0.96, 0.22))
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and points > 0:
@@ -19467,13 +19540,20 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 			score_tw.tween_callback(Callable(self, "set_label_text_by_id").bind(score_label.get_instance_id(), "%d番  %d分" % [cur_fan, cur_pts])).set_delay(step_dur)
 		score_tw.tween_callback(Callable(self, "set_label_text_by_id").bind(score_label.get_instance_id(), "%d番  %d分" % [fan, points]))
 	draw_win_detail_showcase(detail_panel, win_tile, self_draw, fan, points)
-	draw_win_detail_score_constellation(detail_panel, reasons, fan, points)
-	draw_win_detail_resolution_bridge(detail_panel, fan, points, reasons.size())
+	# Keep the legacy authored subtrees available for structural compatibility,
+	# but suppress their duplicated micro-readouts. The primary score line,
+	# winning tile, and full yaku badges carry the commercial reading hierarchy.
+	var score_constellation = draw_win_detail_score_constellation(detail_panel, reasons, fan, points)
+	score_constellation.visible = false
+	var resolution_bridge = draw_win_detail_resolution_bridge(detail_panel, fan, points, reasons.size())
+	resolution_bridge.visible = false
 
 	# 番种徽章列表 - 每个番种独立展示（依次弹出动画）
 	if reasons.size() > 0:
-		draw_win_detail_yaku_track(detail_panel, reasons)
+		var yaku_track = draw_win_detail_yaku_track(detail_panel, reasons)
+		yaku_track.visible = false
 		var badge_container = HBoxContainer.new()
+		badge_container.name = "WinDetailYakuBadges"
 		badge_container.alignment = BoxContainer.ALIGNMENT_BEGIN
 		badge_container.add_theme_constant_override("separation", 6)
 		apply_rect(badge_container, rect_full(0.04, 0.28, 0.70, 0.56))
@@ -19502,7 +19582,8 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 		var limit_badge = make_badge(detail_panel, rect_full(0.70, 0.70, 0.96, 0.92), limit_name, 12, Color(0.72, 0.32, 0.28, 0.92), Color(0.96, 0.66, 0.42, 0.48), Color(0.96, 0.94, 0.88))
 		limit_badge.name = "WinDetailLimitBadge"
 		limit_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		draw_win_detail_limit_art(detail_panel, limit_name, fan, points)
+		var limit_art = draw_win_detail_limit_art(detail_panel, limit_name, fan, points)
+		limit_art.visible = false
 
 
 func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool, fan: int, points: int) -> Control:
@@ -19517,7 +19598,7 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 	_gpt_panel_host.name = "GptPanelHost"
 	showcase.add_child(_gpt_panel_host)
 	if win_tile != "":
-		var tile = make_tile_view(win_tile, Vector2(52, 72), false, Callable(), true)
+		var tile = make_tile_view(win_tile, Vector2(34, 46), false, Callable(), true)
 		tile.name = "WinDetailTile"
 		showcase.add_child(tile)
 		apply_rect(tile, rect_full(0.10, 0.10, 0.48, 0.88))
@@ -19539,8 +19620,10 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 	seal.name = "WinDetailSeal"
 	var fan_label = make_label(showcase, "%d番" % fan, 15, Color(0.96, 0.88, 0.58), true)
 	apply_rect(fan_label, rect_full(0.52, 0.50, 0.92, 0.72))
+	fan_label.visible = false
 	var point_label = make_label(showcase, compact_score_text(points), 13, Color(0.74, 0.84, 0.76), true)
 	apply_rect(point_label, rect_full(0.52, 0.70, 0.92, 0.90))
+	point_label.visible = false
 	var pip_count = min(6, max(1, fan))
 	for i in range(pip_count):
 		var left = 0.08 + float(i) * 0.045
@@ -20348,6 +20431,21 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 	draw_setting_switch_art(button, enabled)
 	button.button_down.connect(func() -> void:
 		play_settings_action_feedback(button, "Toggle", color)
+	)
+	return button
+
+func make_setting_selector_button(value_text: String, setting_label: String, callback: Callable) -> Button:
+	var color = Color(0.34, 0.46, 0.58)
+	var button = make_small_button(value_text, color, callback)
+	button.custom_minimum_size = Vector2(112, 46)
+	button.add_theme_font_size_override("font_size", 15)
+	button.clip_text = true
+	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	button.set_meta("setting_label", setting_label)
+	button.set_meta("setting_kind", "selector")
+	button.set_meta("setting_state", value_text)
+	button.button_down.connect(func() -> void:
+		play_settings_action_feedback(button, "Selector", color)
 	)
 	return button
 
@@ -23305,20 +23403,25 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.28, 0.24, 0.16, 0.12), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
-	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_STOP
+	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.72, 0.62, 0.36, 0.20), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
-	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_STOP
-	rules_scroll_thumb.mouse_default_cursor_shape = Control.CURSOR_VSIZE
-	rules_scroll_thumb.tooltip_text = "拖动定位"
+	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rules_scroll_hit_target = Control.new()
+	rules_scroll_hit_target.name = "RulesContentScrollHitTarget"
+	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
+	rules_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
+	rules_scroll_hit_target.tooltip_text = "拖动定位"
+	apply_rect(rules_scroll_hit_target, rect_full(0.910, 0.168, 0.960, 0.982))
+	panel.add_child(rules_scroll_hit_target)
 	var content = VBoxContainer.new()
 	content.name = "RulesContentList"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 10)
 	content_scroll.add_child(content)
 	var rules_thumb_drag_state: Dictionary = {"active": false}
-	rules_scroll_thumb.gui_input.connect(func(event: InputEvent) -> void:
-		handle_rules_scroll_thumb_input(event, content_scroll, rules_scrollbar, rules_scroll_thumb, rules_scroll_gutter, rules_thumb_drag_state)
+	rules_scroll_hit_target.gui_input.connect(func(event: InputEvent) -> void:
+		handle_rules_scroll_thumb_input(event, content_scroll, rules_scrollbar, rules_scroll_thumb, rules_scroll_gutter, rules_thumb_drag_state, rules_scroll_hit_target)
 	)
 	if rules_scrollbar != null:
 		rules_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -23416,26 +23519,47 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	apply_rect(thumb, rect_full(0.220, thumb_top, 0.780, thumb_top + thumb_height))
 
 
-func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary) -> void:
+func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null) -> void:
 	if scrollbar == null or thumb == null or gutter == null:
 		return
+	var event_target = input_target if input_target != null else thumb
 	if event is InputEventMouseButton:
 		var mouse_button = event as InputEventMouseButton
+		if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP or mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			if mouse_button.pressed:
+				var direction = -1.0 if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0
+				var wheel_scroll_range = maxf(0.0, scrollbar.max_value - scrollbar.page)
+				scrollbar.value = clampf(scrollbar.value + direction * maxf(24.0, scrollbar.page * 0.12), 0.0, wheel_scroll_range)
+				content_scroll.scroll_vertical = int(round(scrollbar.value))
+				sync_rules_scroll_thumb(content_scroll, thumb)
+				event_target.accept_event()
+			return
 		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
 			return
 		drag_state["active"] = mouse_button.pressed
-		thumb.accept_event()
+		event_target.accept_event()
 		return
-	if not (event is InputEventMouseMotion) or not bool(drag_state.get("active", false)):
+	if event is InputEventScreenTouch:
+		var touch = event as InputEventScreenTouch
+		drag_state["active"] = touch.pressed
+		event_target.accept_event()
 		return
-	var motion = event as InputEventMouseMotion
+	if not bool(drag_state.get("active", false)):
+		return
+	var relative_y := 0.0
+	if event is InputEventMouseMotion:
+		relative_y = (event as InputEventMouseMotion).relative.y
+	elif event is InputEventScreenDrag:
+		relative_y = (event as InputEventScreenDrag).relative.y
+	else:
+		return
 	var scroll_range = maxf(0.0, scrollbar.max_value - scrollbar.page)
 	var track_height = maxf(1.0, gutter.size.y * 0.900 - thumb.size.y)
 	if scroll_range > 0.0:
-		scrollbar.value = clampf(scrollbar.value + motion.relative.y / track_height * scroll_range, 0.0, scroll_range)
+		scrollbar.value = clampf(scrollbar.value + relative_y / track_height * scroll_range, 0.0, scroll_range)
 		content_scroll.scroll_vertical = int(round(scrollbar.value))
 		sync_rules_scroll_thumb(content_scroll, thumb)
-	thumb.accept_event()
+	event_target.accept_event()
 
 
 func _show_shop_screen_impl() -> void:
@@ -24019,6 +24143,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 	# 主面板
 	var panel = make_gpt_plate_rect(rect_full(0.16, 0.085, 0.84, 0.915), Color(0.18, 0.13, 0.09, 0.97), "ui_jade_reading_plate")
+	panel.name = "DailyLoginPanel"
 	root_layer.add_child(panel)
 	var daily_shadow = make_soft_depth_panel(panel, rect_full(0.010, 0.030, 0.990, 1.025), Color(0.0, 0.0, 0.0, 0.34), 24)
 	daily_shadow.name = "DailyLogin3DCastShadow"
@@ -24067,6 +24192,18 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
 	title.add_theme_constant_override("outline_size", 4)
 	add_lucide_icon(panel, "gift", rect_full(0.08, 0.07, 0.14, 0.15), GOLD_BRIGHT)
+	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
+		show_menu(true)
+	)
+	back.name = "DailyLoginBackButton"
+	back.custom_minimum_size = Vector2(100, 46)
+	back.add_theme_font_size_override("font_size", 15)
+	draw_secondary_back_button_art(back, "daily_login", Color(0.36, 0.26, 0.16))
+	for child in back.get_children():
+		if child is CanvasItem:
+			(child as CanvasItem).show_behind_parent = true
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.805, 0.055, 0.965, 0.170))
 	var gift_glow = make_fullrect_overlay(Color(1.0, 0.88, 0.55, 0.0), "ui_soft_flash")
 	gift_glow.name = "DailyLoginGiftGlow"
 	gift_glow.offset_left = -6.0

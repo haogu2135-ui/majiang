@@ -15,7 +15,9 @@
 | 舍张振听 | 自家河牌命中当前任一听口时，全部荣和听口无效；自摸仍可结算 | `scripts/main_src/gameplay.gd.part` 的 `is_discard_furiten`、`can_ron_for_seat` | `scripts/ai_play_round41_check.gd` |
 | 过水 | 放弃有效荣和后，下一次实际摸牌前不可荣和任一当前听口；摸牌后解除 | `scripts/main_src/gameplay.gd.part` 的 `record_passed_win_tile`、`is_passed_win_tile`、`clear_passed_win_tiles` | `scripts/ai_play_round42_check.gd`、`scripts/ai_play_round57_check.gd` |
 | 食替 | 吃/碰后本拍禁打副露相关张；边吃额外禁换位张；实摸或成功出牌后解除，且不会锁死出牌 | `scripts/main_src/gameplay.gd.part` 的 `claim_discard_ban_tiles`、`is_claim_discard_banned`、`release_claim_discard_deadlock` | `scripts/ai_play_round58_check.gd` |
-| 响应仲裁 | 胡优先于碰/杠/吃；同级碰杠吃由近家优先；玩家多人荣和窗口最终按提交者单家结算 | `scripts/main_src/gameplay.gd.part` 的 `resolve_ai_or_advance`、`apply_offline_claim`；`scripts/main_src/core.gd.part` 的抢杠入口 | `scripts/ai_play_round30_check.gd`、`scripts/ai_play_round32_check.gd` |
+| 响应仲裁 | 胡优先于碰/杠/吃；同级碰杠吃由近家优先；玩家多人荣和窗口最终按提交者单家结算 | `scripts/main_src/gameplay.gd.part` 的 `resolve_ai_or_advance`、`apply_offline_claim`；`scripts/main_src/core.gd.part` 的抢杠入口 | `scripts/ai_play_round30_check.gd`、`scripts/ai_play_round32_check.gd`、`scripts/ai_play_round65_check.gd` |
 | 全桌账本 | 每局牌张账与四座总分均须守恒；静默商业模拟会输出 `score_conserved` | `scripts/main_src/gameplay.gd.part` 的 `offline_score_ledger_report` 和模拟聚合 | `scripts/ai_play_round82_check.gd` |
 
 游戏内“麻将玩法指南”和 README 只展示上述本地合同的玩家可见摘要；改动番分、支付或牌型时，必须同时更新这三处并运行对应回归。
+
+完整串行门禁使用 `scripts/verify_ai_commercial.sh`；它会统一运行本表回归、隐藏信息公平、策略质量、账本守恒和多种子强度样本，并将最新报告写入 `build/qa/ai_play_commercial_evidence/EVIDENCE_LATEST.md`。

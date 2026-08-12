@@ -53,6 +53,52 @@ func seed_offline_battle_layout_state(scene) -> void:
 		],
 	}
 
+func seed_danger_discard_layout_state(scene) -> void:
+	seed_offline_battle_layout_state(scene)
+	scene.offline_phase = "await_discard"
+	scene.offline_pending_claim.clear()
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.ai_assist_enabled = true
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "5T", "6T", "7T", "E", "E", "P", "P", "S"]
+	scene.pending_danger_discard_index = 12
+	scene.pending_danger_discard_tile = "S"
+	scene.pending_danger_discard_report = {
+		"tile": "S",
+		"risk": 52.0,
+		"feed_risk": 48.0,
+		"risk_label": "高",
+		"safety_label": "",
+		"feed_text": "对家听口偏高",
+		"danger_source": {"reason": "牌路危险", "seat": 2},
+	}
+
+func seed_win_detail_layout_state(scene) -> void:
+	seed_offline_battle_layout_state(scene)
+	scene.offline_phase = "ended"
+	scene.offline_pending_claim.clear()
+	scene.offline_last_winner = 0
+	scene.offline_dealer_repeat = false
+	scene.dealer_seat = 1
+	scene.offline_hand_number = 1
+	scene.round_summary = "你自摸清一色碰碰胡，8番 16分。清一色、碰碰胡、自摸。庄家下庄。"
+	scene.last_win_score = {
+		"winner": 0,
+		"fan": 8,
+		"points": 16,
+		"reasons": ["清一色", "碰碰胡", "自摸"],
+		"win_tile": "9W",
+		"self_draw": true,
+		"limit_name": "高番",
+	}
+	scene.last_score_deltas.clear()
+	for delta in [3600, -1200, -1200, -1200]:
+		scene.last_score_deltas.append(delta)
+	for seat in range(4):
+		scene.players[seat]["score"] = 22000 + seat * 900
+	scene.players[0]["score"] = 31200
+	scene.players[0]["name"] = "你"
+
 func run_safe_area_layout_probe(viewport_size: Vector2, margins: Vector4) -> void:
 	var viewport_i = Vector2i(int(viewport_size.x), int(viewport_size.y))
 	root.size = viewport_i
@@ -125,6 +171,14 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_hand_tray_layout(scene, actual_viewport)
 	check_battle_viewport_bounds(scene, actual_viewport)
 	check_discard_tile_original_rgb(scene, actual_viewport)
+	seed_danger_discard_layout_state(scene)
+	scene.render_game()
+	await process_frame
+	check_danger_discard_layout(scene, actual_viewport)
+	seed_win_detail_layout_state(scene)
+	scene.render_game()
+	await process_frame
+	check_round_summary_layout(scene, actual_viewport)
 	await check_online_score_strip_probe(scene, actual_viewport)
 	scene.settings_panel_open = true
 	scene.draw_settings_overlay(scene.root_layer)
@@ -527,7 +581,11 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 	var dock_shadow = scene.find_child("ActionDock3DCastShadow", true, false) as Control
 	var dock_apron = scene.find_child("ActionDock3DFrontApron", true, false) as Control
 	var hand = scene.find_child("HandTray", true, false) as Control
+	var context_tile = scene.find_child("PendingClaimTile", true, false) as Control
+	var source_text = scene.find_child("PendingClaimSourceText", true, false) as Label
+	var tile_name = scene.find_child("PendingClaimTileName", true, false) as Label
 	check(summary != null and dock != null and dock_shadow != null and dock_apron != null and hand != null, "pending claim renders summary, physical dock shell, and hand tray at %s" % viewport_size)
+	check(context_tile != null and source_text != null and tile_name != null, "pending claim exposes readable source and real target tile context at %s" % viewport_size)
 	check(scene.find_child("ActionDock3DRearShell", true, false) != null and scene.find_child("ActionDock3DJadeTrack", true, false) != null, "action dock exposes rear shell and jade track at %s" % viewport_size)
 	var seat_shell = scene.find_child("SeatPanel3DRearShell_0", true, false)
 	var seat_lip = scene.find_child("SeatPanel3DJadeLip_0", true, false)
@@ -539,7 +597,12 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		var summary_rect = screen_rect(summary)
 		var dock_rect = screen_rect(dock)
 		var hand_rect = screen_rect(hand)
-		check(summary_rect.end.y <= dock_rect.position.y - 6.0, "pending claim summary clears action dock at %s" % viewport_size)
+		check(summary_rect.size.y >= 44.0, "pending claim summary keeps at least 44px decision context height at %s" % viewport_size)
+		check(summary_rect.end.y <= dock_rect.position.y - 5.0, "pending claim summary clears action dock at %s" % viewport_size)
+		var horizontal_gap = maxf(0.0, maxf(dock_rect.position.x - summary_rect.end.x, summary_rect.position.x - dock_rect.end.x))
+		var reference_button = first_button_with_text(scene.action_bar, "过")
+		var reference_width = screen_rect(reference_button).size.x if reference_button != null else scene.ACTION_BUTTON_MAX_WIDTH
+		check(horizontal_gap <= reference_width + 1.0, "pending claim summary stays within one action-button width of the dock at %s" % viewport_size)
 		check(dock.clip_contents, "pending claim action dock clips decorative artwork at %s" % viewport_size)
 		check(dock_rect.end.y <= hand_rect.position.y - 10.0, "pending claim action dock keeps a clear channel above hand tray at %s" % viewport_size)
 		var dock_texture = scene.find_child("PendingClaimActionGPTDockTexture", true, false) as TextureRect
@@ -548,6 +611,12 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 			check(dock_rect.grow(1.0).encloses(dock_texture_rect), "pending claim GPT dock texture stays inside action dock at %s" % viewport_size)
 			check(not rects_overlap(summary_rect.grow(-1.0), dock_texture_rect.grow(-1.0)), "pending claim GPT dock texture clears summary strip at %s" % viewport_size)
 			check(dock_texture_rect.end.y <= hand_rect.position.y - 10.0, "pending claim GPT dock texture clears hand tray at %s" % viewport_size)
+	if context_tile != null:
+		var context_tile_rect = screen_rect(context_tile)
+		check(context_tile_rect.size.x >= 32.0 and context_tile_rect.size.y >= 44.0, "pending claim target tile keeps a readable 32x44 preview at %s" % viewport_size)
+	if source_text != null and tile_name != null:
+		check(source_text.get_theme_font_size("font_size") >= 13 and tile_name.get_theme_font_size("font_size") >= 13, "pending claim source and tile labels keep 13px+ text at %s" % viewport_size)
+		check(source_text.clip_text and tile_name.clip_text, "pending claim source and tile labels clip safely at %s" % viewport_size)
 	var pending_dock_texture = scene.find_child("PendingClaimActionGPTDockTexture", true, false) as TextureRect
 	if pending_dock_texture != null:
 		check(pending_dock_texture.modulate.a <= 0.90, "pending claim GPT action dock stays below full opacity at %s" % viewport_size)
@@ -558,6 +627,91 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		if panel_plate != null:
 			check(panel_plate.modulate.a >= 0.50 and panel_plate.modulate.a <= 0.70 and panel_plate.show_behind_parent, "pending claim compact GPT panel provides a dark text backing behind the native label at %s" % viewport_size)
 	check(scene.find_child("ActionIntentDock", true, false) == null, "pending claim omits extra action intent strip at %s" % viewport_size)
+
+func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
+	var panel = scene.find_child("DangerDiscardConfirmationArt", true, false) as Control
+	var tile = scene.find_child("DangerDiscardTile", true, false) as Control
+	var title = scene.find_child("DangerDiscardTitleText", true, false) as Label
+	var detail = scene.find_child("DangerDiscardDetailText", true, false) as Label
+	var risk_seal = scene.find_child("DangerDiscardRiskSeal", true, false) as Control
+	var dock = scene.find_child("ActionButtonDock", true, false) as Control
+	var confirm_button = scene.find_child("DangerDiscardConfirmButton", true, false) as Button
+	var cancel_button = first_button_with_text(scene.action_bar, "取消")
+	check(panel != null and tile != null and title != null and detail != null and risk_seal != null and dock != null and confirm_button != null and cancel_button != null, "danger discard exposes warning context, target tile, explicit confirm/cancel actions, and dock at %s" % viewport_size)
+	if panel == null:
+		return
+	var panel_rect = screen_rect(panel)
+	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "danger discard warning stays inside the viewport safe bounds at %s" % viewport_size)
+	check(panel_rect.size.y >= 32.0, "danger discard warning keeps a readable compact height at %s" % viewport_size)
+	for seat in range(4):
+		var discard_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
+		if discard_grid != null:
+			for discard_tile in discard_grid.get_children():
+				if discard_tile is Control and (discard_tile as Control).visible:
+					check(not rects_overlap(panel_rect, screen_rect(discard_tile as Control)), "danger discard warning clears visible river tile %d/%s at %s" % [seat, discard_tile.name, viewport_size])
+		var meld_area = scene.find_child("MeldArea_%d" % seat, true, false) as Control
+		if meld_area != null:
+			for meld_group in meld_area.get_children():
+				if meld_group is Control and str(meld_group.name).begins_with("MeldGroup_"):
+					check(not rects_overlap(panel_rect, screen_rect(meld_group as Control)), "danger discard warning clears meld %d/%s at %s" % [seat, meld_group.name, viewport_size])
+	if tile != null:
+		check(panel_rect.grow(1.0).encloses(screen_rect(tile)), "danger discard target tile stays inside the warning panel at %s" % viewport_size)
+	if title != null and detail != null:
+		check(title.clip_text and title.get_theme_font_size("font_size") >= 13, "danger discard title remains clipped and prominent at %s" % viewport_size)
+		check(detail.clip_text and detail.get_theme_font_size("font_size") >= 12, "danger discard detail text remains clipped and readable at %s" % viewport_size)
+	if confirm_button != null:
+		var confirm_rect = screen_rect(confirm_button)
+		check(confirm_button.text == "确认打南", "danger discard primary action names the exact tile at %s" % viewport_size)
+		check(confirm_rect.size.x >= 72.0 and confirm_rect.size.y >= 40.0, "danger discard confirm action keeps a prominent touch target at %s" % viewport_size)
+	if cancel_button != null:
+		var cancel_rect = screen_rect(cancel_button)
+		check(cancel_rect.size.x >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH - 0.5 and cancel_rect.size.y >= 40.0, "danger discard cancel action keeps a practical touch target at %s" % viewport_size)
+	check(first_button_with_text(scene.action_bar, "重开") == null and first_button_with_text(scene.action_bar, "提示") == null and scene.find_child("VoiceActionButton", true, false) == null, "danger discard dedicated dock hides secondary global actions at %s" % viewport_size)
+	if dock != null:
+		check(screen_rect(dock).end.y <= viewport_size.y - 44.0, "danger discard action dock leaves room for the hand tray at %s" % viewport_size)
+
+func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
+	var panel = scene.find_child("RoundSummaryPanel", true, false) as Control
+	var title = scene.find_child("RoundSummaryTitle", true, false) as Label
+	var body = scene.find_child("RoundSummaryBody", true, false) as Label
+	var detail_panel = scene.find_child("WinDetailPanel", true, false) as Control
+	var winner_label = scene.find_child("WinDetailWinnerLabel", true, false) as Label
+	var score_label = scene.find_child("WinDetailScoreLabel", true, false) as Label
+	var win_tile = scene.find_child("WinDetailTile", true, false) as Control
+	var dock = scene.find_child("ActionButtonDock", true, false) as Control
+	var next_button = first_button_with_text(scene.action_bar, "下一局")
+	var menu_button = first_button_with_text(scene.action_bar, "菜单")
+	check(panel != null and title != null and body != null and detail_panel != null and winner_label != null and score_label != null and win_tile != null, "round summary exposes title, score body, win detail, and winning tile at %s" % viewport_size)
+	check(next_button != null and menu_button != null, "round summary exposes clear next-hand and menu routes at %s" % viewport_size)
+	if panel == null:
+		return
+	var panel_rect = screen_rect(panel)
+	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "round summary panel stays inside the viewport safe bounds at %s" % viewport_size)
+	for node in [title, body, detail_panel]:
+		if node != null:
+			check(panel_rect.grow(1.0).encloses(screen_rect(node)), "round summary keeps %s inside its panel at %s" % [node.name, viewport_size])
+	for seat in range(4):
+		var rank_row = scene.find_child("RoundSummaryRankRow_%d" % seat, true, false) as Control
+		check(rank_row != null, "round summary exposes rank row %d at %s" % [seat, viewport_size])
+		if rank_row != null:
+			check(panel_rect.grow(1.0).encloses(screen_rect(rank_row)), "round summary rank row %d stays inside the panel at %s" % [seat, viewport_size])
+	if title != null:
+		check(title.get_theme_font_size("font_size") >= 26 and title.clip_text == false, "round summary title remains prominent at %s" % viewport_size)
+	if body != null:
+		check(body.clip_text and body.get_theme_font_size("font_size") >= 14, "round summary body remains clipped and readable at %s" % viewport_size)
+	if detail_panel != null:
+		var detail_rect = screen_rect(detail_panel)
+		for node in [winner_label, score_label, win_tile]:
+			if node != null:
+				check(detail_rect.grow(1.0).encloses(screen_rect(node)), "win detail keeps %s inside its panel at %s" % [node.name, viewport_size])
+	if winner_label != null and score_label != null:
+		check(winner_label.get_theme_font_size("font_size") >= 18 and score_label.get_theme_font_size("font_size") >= 22, "win detail winner and score text remain prominent at %s" % viewport_size)
+	if dock != null:
+		check(panel_rect.end.y <= screen_rect(dock).position.y - 8.0, "round summary clears the action dock at %s" % viewport_size)
+	for button in [next_button, menu_button]:
+		if button != null:
+			var button_rect = screen_rect(button)
+			check(button_rect.size.x >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH - 0.5 and button_rect.size.y >= 40.0, "round summary action %s keeps a practical touch target at %s" % [button.text, viewport_size])
 
 func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
 	var hand = scene.find_child("HandTray", true, false) as Control
@@ -826,7 +980,8 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		"音效反馈": ["已开", "已关"],
 		"语音报牌": ["已开", "已关"],
 		"播放测试": "试音",
-		"AI 节奏": ["已开", "已关"],
+		"AI 节奏": ["快速", "标准"],
+		"AI 难度": ["简单", "标准", "困难"],
 		"桌面特效": ["已开", "已关"],
 		"3D 画质": ["自动", "省电", "标准", "精细"],
 		"出牌辅助": ["已开", "已关"],
@@ -835,7 +990,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	}
 	var settings_sections := {
 		"声音": ["背景音乐", "音效反馈", "语音报牌", "播放测试"],
-		"体验": ["AI 节奏", "桌面特效", "出牌辅助", "播放曲目"],
+		"体验": ["AI 节奏", "AI 难度", "桌面特效", "出牌辅助", "播放曲目"],
 		"系统": ["3D 画质", "本地进度"],
 	}
 	var section_rects: Array = []
@@ -896,6 +1051,8 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			if status_label != null:
 				check(text_panel_rect.grow(1.0).encloses(screen_rect(status_label)), "settings row %s readability panel backs the status at %s" % [title, viewport_size])
 		var switch_art = button.find_child("SettingSwitchArt", true, false) as Control
+		if title == "AI 节奏" or title == "AI 难度":
+			check(str(button.get_meta("setting_kind", "")) == "selector" and switch_art == null, "settings row %s uses enum selector semantics instead of a boolean switch at %s" % [title, viewport_size])
 		if switch_art != null:
 			var switch_rect = screen_rect(switch_art)
 			check(switch_rect.position.x >= button_rect.position.x + button_rect.size.x * 0.66 and switch_rect.end.x <= button_rect.end.x + 1.0, "settings row %s switch art stays in the right edge lane at %s" % [title, viewport_size])
@@ -1230,6 +1387,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 	var content_scrollbar = scene.find_child("RulesContentScrollBar", true, false) as VScrollBar
 	var scroll_gutter = scene.find_child("RulesContentScrollGutter", true, false) as Control
 	var scroll_thumb = scene.find_child("RulesContentScrollThumb", true, false) as Control
+	var scroll_hit_target = scene.find_child("RulesContentScrollHitTarget", true, false) as Control
 	var content_list = scene.find_child("RulesContentList", true, false) as Control
 	var back_button = first_button_with_text(scene, "返回")
 	check(guide != null and content_backplate != null and content_scroll != null and content_list != null and back_button != null, "rules screen exposes guide, content backplate, scroll list, and back button at %s" % viewport_size)
@@ -1252,6 +1410,14 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		var gutter_rect = screen_rect(scroll_gutter)
 		check(content_rect.grow(1.0).encloses(gutter_rect) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "rules custom scroll gutter stays outside the text viewport at %s" % viewport_size)
 		check(gutter_rect.grow(1.0).encloses(screen_rect(scroll_thumb)), "rules custom scroll thumb stays inside gutter at %s" % viewport_size)
+		check(screen_rect(scroll_thumb).size.x <= 16.0, "rules custom scrollbar keeps its narrow visual treatment at %s" % viewport_size)
+	check(scroll_hit_target != null, "rules exposes a dedicated transparent scroll hit target at %s" % viewport_size)
+	if scroll_hit_target != null:
+		var hit_rect = screen_rect(scroll_hit_target)
+		check(hit_rect.size.x >= 44.0, "rules scroll hit target keeps at least 44px width at %s" % viewport_size)
+		check(scroll_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP, "rules scroll hit target receives pointer and touch input at %s" % viewport_size)
+		if scroll_gutter != null:
+			check(hit_rect.grow(1.0).encloses(screen_rect(scroll_gutter)), "rules scroll hit target contains the narrow visual gutter at %s" % viewport_size)
 	if back_button != null:
 		var back_rect = screen_rect(back_button)
 		check(not guide_rect.intersects(back_rect, true), "rules back button does not overlap guide at %s" % viewport_size)
@@ -1324,7 +1490,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		var gutter_rect = screen_rect(scroll_gutter)
 		var thumb_rect = screen_rect(scroll_thumb)
 		var max_scroll = maxf(0.0, content_scrollbar.max_value - content_scrollbar.page)
-		check(scroll_thumb.mouse_filter == Control.MOUSE_FILTER_STOP and scroll_thumb.mouse_default_cursor_shape == Control.CURSOR_VSIZE, "rules custom thumb accepts vertical drag input at %s" % viewport_size)
+		check(scroll_thumb.mouse_filter == Control.MOUSE_FILTER_IGNORE and scroll_hit_target != null and scroll_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP and scroll_hit_target.mouse_default_cursor_shape == Control.CURSOR_VSIZE, "rules custom scrollbar routes vertical drag input through its wide hit target at %s" % viewport_size)
 		check(thumb_rect.size.y <= gutter_rect.size.y + 1.0, "rules custom thumb stays within its gutter height at %s" % viewport_size)
 		if max_scroll > 1.0:
 			check(thumb_rect.size.y < gutter_rect.size.y - 2.0, "rules custom thumb reflects scrollable content depth at %s" % viewport_size)
@@ -1692,10 +1858,13 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 				check(not rects_overlap(row_rect, footer_rect), "shop item rows do not overlap the footer panel at %s" % viewport_size)
 
 func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
+	var panel = scene.find_child("DailyLoginPanel", true, false) as Control
 	var indicators = scene.find_child("DailyLoginDayIndicators", true, false) as Control
 	var reward_panel = scene.find_child("DailyLoginRewardPanel", true, false) as Control
 	var progress_panel = scene.find_child("DailyLoginProgressPanel", true, false) as Control
 	var claim_button = scene.find_child("DailyLoginClaimButton", true, false) as Button
+	var back_button = scene.find_child("DailyLoginBackButton", true, false) as Button
+	var claim_art = scene.find_child("DailyLoginClaimButtonArt", true, false) as CanvasItem
 	var tip_back = scene.find_child("DailyLoginTipBack", true, false) as Control
 	var tip_label = scene.find_child("DailyLoginTipLabel", true, false) as Label
 	var forecast_panel = scene.find_child("DailyLoginForecastPanel", true, false) as Control
@@ -1704,10 +1873,15 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 	var forecast_body = scene.find_child("DailyLoginForecastBody", true, false) as Label
 	var forecast_badge = scene.find_child("DailyLoginForecastBadge", true, false) as Label
 	var forecast_badge_back = scene.find_child("DailyLoginForecastBadgeBack", true, false) as Control
-	check(indicators != null and reward_panel != null and progress_panel != null and claim_button != null and forecast_panel != null, "daily login exposes day reward progress claim and forecast controls at %s" % viewport_size)
+	check(panel != null and indicators != null and reward_panel != null and progress_panel != null and claim_button != null and back_button != null and forecast_panel != null, "daily login exposes panel, day reward progress, claim, return, and forecast controls at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("daily_login_gpt_calendar") == null or scene.find_child("DailyLoginGPTCalendarTexture", true, false) != null, "daily login consumes GPT calendar art at %s" % viewport_size)
-	if indicators == null or reward_panel == null or progress_panel == null or claim_button == null or forecast_panel == null:
+	if panel == null or indicators == null or reward_panel == null or progress_panel == null or claim_button == null or back_button == null or forecast_panel == null:
 		return
+	var panel_rect = screen_rect(panel)
+	var daily_back_rect = screen_rect(back_button)
+	check(panel_rect.grow(1.0).encloses(daily_back_rect), "daily login return button stays inside the panel at %s" % viewport_size)
+	check(daily_back_rect.size.x >= 92.0 and daily_back_rect.size.y >= 44.0 and back_button.text == "返回", "daily login exposes an explicit 44px+ return path at %s" % viewport_size)
+	check(claim_button.text == "领取奖励" and claim_art != null and claim_art.show_behind_parent, "daily login keeps the native claim CTA text above its bitmap art at %s" % viewport_size)
 	var indicator_rect = screen_rect(indicators)
 	var previous_rect := Rect2()
 	for i in range(1, 8):

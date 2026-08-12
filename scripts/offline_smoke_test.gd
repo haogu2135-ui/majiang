@@ -267,7 +267,7 @@ func run() -> void:
 	var loading_tip_bridge_tick = scene.find_child("LoadingTipShuffleBridgeTick_0", true, false)
 	check(loading_tip_bridge_fill != null and loading_tip_bridge_fill.get_meta("animated_role", "") == "loading_tip_shuffle_flow" and loading_tip_bridge_source != null and loading_tip_bridge_source.get_meta("animated_role", "") == "loading_tip_shuffle_source" and loading_tip_bridge_gate != null and loading_tip_bridge_gate.get_meta("animated_role", "") == "loading_tip_shuffle_gate" and loading_tip_bridge_tick != null and loading_tip_bridge_tick.get_meta("animated_role", "") == "loading_tip_shuffle_tick", "loading tip art marks bridge flow source gate and ticks as animated route nodes")
 	scene.show_daily_login_panel({"consecutive_days": 7, "show_reward": true})
-	check(scene.find_child("DailyLoginCalendarTexture", true, false) != null, "daily login renders reusable seven-day calendar PNG texture")
+	check(scene.find_child("DailyLoginPanel", true, false) != null and scene.find_child("DailyLoginCalendarTexture", true, false) != null, "daily login renders its named panel and reusable seven-day calendar PNG texture")
 
 	check(scene.find_child("DailyLogin3DCastShadow", true, false) != null and scene.find_child("DailyLogin3DRearShell", true, false) != null and scene.find_child("DailyLogin3DTopGlint", true, false) != null and scene.find_child("DailyLogin3DLowerEdge", true, false) != null, "daily login renders commercial 3D lacquer shell")
 	check(scene.optional_gpt_illustration_texture("daily_login_gpt_calendar") == null or scene.find_child("DailyLoginGPTCalendarTexture", true, false) != null, "daily login consumes optional GPT calendar texture when generated")
@@ -1386,6 +1386,20 @@ func run() -> void:
 	check(illustration_parent.find_child("RoundSummaryNextHandGate", true, false) != null and count_nodes_with_name_prefix(illustration_parent, "RoundSummaryNextHandPip_") == 3, "round summary ambience renders next-hand gate pips")
 	check(illustration_parent.find_child("RoundSummaryNextActionRoute", true, false) != null and illustration_parent.find_child("RoundSummaryNextActionFill", true, false) != null and illustration_parent.find_child("RoundSummaryNextActionSource", true, false) != null and illustration_parent.find_child("RoundSummaryNextActionGate", true, false) != null, "round summary ambience renders route toward next action")
 	check(count_nodes_with_name_prefix(illustration_parent, "RoundSummaryNextActionTick_") == 2, "round summary next action route renders rhythm ticks")
+	var summary_panel_parent = Control.new()
+	root.add_child(summary_panel_parent)
+	var summary_previous_mode = scene.mode
+	var summary_previous_phase = scene.offline_phase
+	var summary_previous_win_score = scene.last_win_score.duplicate(true)
+	scene.mode = "offline"
+	scene.offline_phase = "ended"
+	scene.last_win_score = {}
+	scene.draw_round_summary(summary_panel_parent)
+	check(summary_panel_parent.find_child("RoundSummaryPanel", true, false) != null, "round summary renders its named settlement panel")
+	dispose_node(summary_panel_parent)
+	scene.mode = summary_previous_mode
+	scene.offline_phase = summary_previous_phase
+	scene.last_win_score = summary_previous_win_score
 	var match_complete_parent = Control.new()
 	root.add_child(match_complete_parent)
 	scene.offline_hand_number = scene.MATCH_MAX_HANDS
@@ -1409,9 +1423,9 @@ func run() -> void:
 		"win_tile": "5W",
 		"self_draw": true,
 	})
-	check(win_detail_parent.find_child("WinDetailScrollTexture", true, false) != null, "win detail renders reusable scroll PNG texture")
+	check(win_detail_parent.find_child("WinDetailPanel", true, false) != null and win_detail_parent.find_child("WinDetailScrollTexture", true, false) != null, "win detail renders its named panel and reusable scroll PNG texture")
 	check(scene.optional_gpt_illustration_texture("win_detail_gpt_scroll") == null or win_detail_parent.find_child("WinDetailGPTScrollTexture", true, false) != null, "win detail consumes optional GPT scroll texture when generated")
-	check(win_detail_parent.find_child("WinDetailShowcase", true, false) != null and win_detail_parent.find_child("WinDetailTile", true, false) != null and win_detail_parent.find_child("WinDetailSeal", true, false) != null, "win detail renders tile showcase and seal")
+	check(win_detail_parent.find_child("WinDetailShowcase", true, false) != null and win_detail_parent.find_child("WinDetailTile", true, false) != null and win_detail_parent.find_child("WinDetailSeal", true, false) != null and win_detail_parent.find_child("WinDetailYakuBadges", true, false) != null, "win detail renders tile showcase, seal, and readable yaku badges")
 	check(win_detail_parent.find_child("WinDetailShowcaseRoute", true, false) != null and win_detail_parent.find_child("WinDetailShowcaseRouteFill", true, false) != null and win_detail_parent.find_child("WinDetailShowcaseScoreGate", true, false) != null, "win detail showcase renders tile-to-score route")
 	check(count_nodes_with_name_prefix(win_detail_parent, "WinDetailShowcaseRouteTick_") == 3 and count_nodes_with_name_prefix(win_detail_parent, "WinDetailShowcaseFanPip_") == 4, "win detail showcase renders route rhythm ticks and fan pips")
 	check(win_detail_parent.find_child("WinDetailYakuTrack", true, false) != null and win_detail_parent.find_child("WinDetailYakuRail", true, false) != null and count_nodes_with_name_prefix(win_detail_parent, "WinDetailYakuNode_") == 3, "win detail renders yaku track rail and one node per reason")
@@ -1559,6 +1573,41 @@ func run() -> void:
 	check(danger_art_parent.find_child("DangerDiscardFinalAlternativeBridge", true, false) != null and danger_art_parent.find_child("DangerDiscardFinalAlternativeFill", true, false) != null, "danger discard final choice renders alternative convergence bridge")
 	check(count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardFinalChoiceNode_") == 3 and count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardFinalChoiceTick_") == 3, "danger discard final choice renders convergence nodes and rhythm ticks")
 	dispose_node(danger_art_parent)
+	var danger_action_parent = Control.new()
+	root.add_child(danger_action_parent)
+	var danger_previous_mode = scene.mode
+	var danger_previous_phase = scene.offline_phase
+	var danger_previous_seat = scene.current_seat
+	var danger_previous_needs_draw = scene.offline_turn_needs_draw
+	var danger_previous_assist = scene.ai_assist_enabled
+	var danger_previous_hand = scene.players[0]["hand"].duplicate()
+	var danger_previous_pending_index = scene.pending_danger_discard_index
+	var danger_previous_pending_tile = scene.pending_danger_discard_tile
+	var danger_previous_pending_report = scene.pending_danger_discard_report.duplicate(true)
+	var danger_previous_action_bar = scene.action_bar
+	scene.mode = "offline"
+	scene.offline_phase = "await_discard"
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.ai_assist_enabled = true
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "5T", "6T", "7T", "E", "E", "P", "P", "S"]
+	scene.pending_danger_discard_index = 12
+	scene.pending_danger_discard_tile = "S"
+	scene.pending_danger_discard_report = {"tile": "S", "risk_label": "高", "risk": 52.0, "feed_risk": 48.0, "safety_label": ""}
+	scene.draw_actions(danger_action_parent)
+	var danger_confirm_button = danger_action_parent.find_child("DangerDiscardConfirmButton", true, false) as Button
+	check(danger_confirm_button != null and danger_confirm_button.text == "确认打南" and danger_action_parent.find_child("VoiceActionButton", true, false) == null, "danger discard action branch renders an explicit tile-specific confirm button without secondary voice action")
+	dispose_node(danger_action_parent)
+	scene.mode = danger_previous_mode
+	scene.offline_phase = danger_previous_phase
+	scene.current_seat = danger_previous_seat
+	scene.offline_turn_needs_draw = danger_previous_needs_draw
+	scene.ai_assist_enabled = danger_previous_assist
+	scene.players[0]["hand"] = danger_previous_hand
+	scene.pending_danger_discard_index = danger_previous_pending_index
+	scene.pending_danger_discard_tile = danger_previous_pending_tile
+	scene.pending_danger_discard_report = danger_previous_pending_report
+	scene.action_bar = danger_previous_action_bar
 	scene.chat_messages = ["甲: 准备好了", "乙: 碰", "你: 收到"]
 	scene.show_chat_panel()
 	check(scene.find_child("ChatPanelBrocadeTexture", true, false) != null and scene.find_child("ChatStreamTexture", true, false) != null, "chat panel renders reusable brocade and stream PNG textures")

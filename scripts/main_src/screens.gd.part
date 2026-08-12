@@ -684,20 +684,25 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.28, 0.24, 0.16, 0.12), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
-	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_STOP
+	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.72, 0.62, 0.36, 0.20), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
-	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_STOP
-	rules_scroll_thumb.mouse_default_cursor_shape = Control.CURSOR_VSIZE
-	rules_scroll_thumb.tooltip_text = "拖动定位"
+	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rules_scroll_hit_target = Control.new()
+	rules_scroll_hit_target.name = "RulesContentScrollHitTarget"
+	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
+	rules_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
+	rules_scroll_hit_target.tooltip_text = "拖动定位"
+	apply_rect(rules_scroll_hit_target, rect_full(0.910, 0.168, 0.960, 0.982))
+	panel.add_child(rules_scroll_hit_target)
 	var content = VBoxContainer.new()
 	content.name = "RulesContentList"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 10)
 	content_scroll.add_child(content)
 	var rules_thumb_drag_state: Dictionary = {"active": false}
-	rules_scroll_thumb.gui_input.connect(func(event: InputEvent) -> void:
-		handle_rules_scroll_thumb_input(event, content_scroll, rules_scrollbar, rules_scroll_thumb, rules_scroll_gutter, rules_thumb_drag_state)
+	rules_scroll_hit_target.gui_input.connect(func(event: InputEvent) -> void:
+		handle_rules_scroll_thumb_input(event, content_scroll, rules_scrollbar, rules_scroll_thumb, rules_scroll_gutter, rules_thumb_drag_state, rules_scroll_hit_target)
 	)
 	if rules_scrollbar != null:
 		rules_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -795,26 +800,47 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	apply_rect(thumb, rect_full(0.220, thumb_top, 0.780, thumb_top + thumb_height))
 
 
-func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary) -> void:
+func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null) -> void:
 	if scrollbar == null or thumb == null or gutter == null:
 		return
+	var event_target = input_target if input_target != null else thumb
 	if event is InputEventMouseButton:
 		var mouse_button = event as InputEventMouseButton
+		if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP or mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			if mouse_button.pressed:
+				var direction = -1.0 if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0
+				var wheel_scroll_range = maxf(0.0, scrollbar.max_value - scrollbar.page)
+				scrollbar.value = clampf(scrollbar.value + direction * maxf(24.0, scrollbar.page * 0.12), 0.0, wheel_scroll_range)
+				content_scroll.scroll_vertical = int(round(scrollbar.value))
+				sync_rules_scroll_thumb(content_scroll, thumb)
+				event_target.accept_event()
+			return
 		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
 			return
 		drag_state["active"] = mouse_button.pressed
-		thumb.accept_event()
+		event_target.accept_event()
 		return
-	if not (event is InputEventMouseMotion) or not bool(drag_state.get("active", false)):
+	if event is InputEventScreenTouch:
+		var touch = event as InputEventScreenTouch
+		drag_state["active"] = touch.pressed
+		event_target.accept_event()
 		return
-	var motion = event as InputEventMouseMotion
+	if not bool(drag_state.get("active", false)):
+		return
+	var relative_y := 0.0
+	if event is InputEventMouseMotion:
+		relative_y = (event as InputEventMouseMotion).relative.y
+	elif event is InputEventScreenDrag:
+		relative_y = (event as InputEventScreenDrag).relative.y
+	else:
+		return
 	var scroll_range = maxf(0.0, scrollbar.max_value - scrollbar.page)
 	var track_height = maxf(1.0, gutter.size.y * 0.900 - thumb.size.y)
 	if scroll_range > 0.0:
-		scrollbar.value = clampf(scrollbar.value + motion.relative.y / track_height * scroll_range, 0.0, scroll_range)
+		scrollbar.value = clampf(scrollbar.value + relative_y / track_height * scroll_range, 0.0, scroll_range)
 		content_scroll.scroll_vertical = int(round(scrollbar.value))
 		sync_rules_scroll_thumb(content_scroll, thumb)
-	thumb.accept_event()
+	event_target.accept_event()
 
 
 func _show_shop_screen_impl() -> void:
@@ -1398,6 +1424,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 	# 主面板
 	var panel = make_gpt_plate_rect(rect_full(0.16, 0.085, 0.84, 0.915), Color(0.18, 0.13, 0.09, 0.97), "ui_jade_reading_plate")
+	panel.name = "DailyLoginPanel"
 	root_layer.add_child(panel)
 	var daily_shadow = make_soft_depth_panel(panel, rect_full(0.010, 0.030, 0.990, 1.025), Color(0.0, 0.0, 0.0, 0.34), 24)
 	daily_shadow.name = "DailyLogin3DCastShadow"
@@ -1446,6 +1473,18 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
 	title.add_theme_constant_override("outline_size", 4)
 	add_lucide_icon(panel, "gift", rect_full(0.08, 0.07, 0.14, 0.15), GOLD_BRIGHT)
+	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
+		show_menu(true)
+	)
+	back.name = "DailyLoginBackButton"
+	back.custom_minimum_size = Vector2(100, 46)
+	back.add_theme_font_size_override("font_size", 15)
+	draw_secondary_back_button_art(back, "daily_login", Color(0.36, 0.26, 0.16))
+	for child in back.get_children():
+		if child is CanvasItem:
+			(child as CanvasItem).show_behind_parent = true
+	panel.add_child(back)
+	apply_rect(back, rect_full(0.805, 0.055, 0.965, 0.170))
 	var gift_glow = make_fullrect_overlay(Color(1.0, 0.88, 0.55, 0.0), "ui_soft_flash")
 	gift_glow.name = "DailyLoginGiftGlow"
 	gift_glow.offset_left = -6.0

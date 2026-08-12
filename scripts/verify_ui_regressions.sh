@@ -16,9 +16,14 @@ GODOT_KILL_GRACE_SECONDS=15
 
 ensure_no_active_godot() {
 	local active
-	active="$(pgrep -ax godot || true)"
+	active="$(
+		pgrep -ax godot 2>/dev/null || true
+		pgrep -ax godot4 2>/dev/null || true
+		pgrep -ax Xvfb 2>/dev/null || true
+		pgrep -af '(^|/)[x]vfb-run([[:space:]]|$)' 2>/dev/null || true
+	)"
 	if [ -n "$active" ]; then
-		echo "Refusing to start QA while another Godot process is active:" >&2
+		echo "Refusing to start QA while another Godot/Xvfb process is active:" >&2
 		echo "$active" >&2
 		return 1
 	fi
@@ -35,12 +40,28 @@ run_low_resource_godot() {
 }
 
 run_low_resource_xvfb_godot() {
+	local screen_size="$1"
+	shift
 	if ! ensure_no_active_godot; then
 		return 1
 	fi
 	timeout --foreground --signal=TERM --kill-after="${GODOT_KILL_GRACE_SECONDS}s" "${GODOT_TIMEOUT_SECONDS}s" \
 		env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
-		nice -n 10 ionice -c 2 -n 7 xvfb-run -a godot "$@"
+		nice -n 10 ionice -c 2 -n 7 xvfb-run -a -s "-screen 0 ${screen_size}x24" \
+		godot --rendering-driver opengl3 --audio-driver Dummy "$@"
+}
+
+capture_pages_for_size() {
+	local screen_size="$1"
+	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
+		--size="$screen_size" \
+		--screens=01_menu,02_menu_settings,03_offline_battle,04_rules,05_stats || return 1
+	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
+		--size="$screen_size" \
+		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading || return 1
+	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
+		--size="$screen_size" \
+		--screens=13_round_summary,14_danger_discard,15_pending_claim_full,16_win_detail
 }
 
 run_check() {
@@ -97,14 +118,14 @@ run_check "UI layout regression smoke" "ui_layout_smoke.log" \
 run_check "Offline gameplay smoke" "offline_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/offline_smoke_test.gd
 
-run_check "Capture UI screenshots 1280x720" "capture_pages_1280x720.log" \
-	run_low_resource_xvfb_godot --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd
+run_check "Capture UI screenshots 1280x720 (3 serial batches)" "capture_pages_1280x720.log" \
+	capture_pages_for_size 1280x720
 
 run_check "Screenshot manifest 1280x720" "manifest_1280x720.log" \
 	python3 scripts/ui_screenshot_manifest_check.py
 
-run_check "Capture UI screenshots 960x540" "capture_pages_960x540.log" \
-	run_low_resource_xvfb_godot --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- --size=960x540
+run_check "Capture UI screenshots 960x540 (3 serial batches)" "capture_pages_960x540.log" \
+	capture_pages_for_size 960x540
 
 run_check "Screenshot manifest 960x540" "manifest_960x540.log" \
 	python3 scripts/ui_screenshot_manifest_check.py \
@@ -112,12 +133,22 @@ run_check "Screenshot manifest 960x540" "manifest_960x540.log" \
 	--report build/qa/ui_screenshot_manifest_report_960x540.md \
 	--expected-size 960x540
 
+run_check "Capture UI screenshots 1920x1080 (3 serial batches)" "capture_pages_1920x1080.log" \
+	capture_pages_for_size 1920x1080
+
+run_check "Screenshot manifest 1920x1080" "manifest_1920x1080.log" \
+	python3 scripts/ui_screenshot_manifest_check.py \
+	--pages-dir build/qa/pages_1920x1080 \
+	--report build/qa/ui_screenshot_manifest_report_1920x1080.md \
+	--expected-size 1920x1080
+
 run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 	check_no_runtime_leaks \
 	"$LOG_DIR/ui_layout_smoke.log" \
 	"$LOG_DIR/offline_smoke.log" \
 	"$LOG_DIR/capture_pages_1280x720.log" \
-	"$LOG_DIR/capture_pages_960x540.log"
+	"$LOG_DIR/capture_pages_960x540.log" \
+	"$LOG_DIR/capture_pages_1920x1080.log"
 
 STATUS="PASS"
 if [ "$FAIL" -ne 0 ]; then
@@ -155,13 +186,20 @@ fi
 	echo "| 每日签到七日预告贴底、层级弱 | UI layout smoke + screenshots |"
 	echo "| 加载页 GPT 背景上叠 native fallback 矩形 | UI layout smoke + screenshots |"
 	echo "| 生成 chrome 伪文字、伪控件、强残影 | UI layout smoke alpha 上限 + screenshots |"
+	echo "| pending claim 上下文过小且远离操作栏 | UI layout smoke + 15_pending_claim_full 三分辨率截图 |"
+	echo "| 每日签到 CTA 层级和退出路径 | UI layout smoke + 09_daily_login 三分辨率截图 |"
+	echo "| AI 节奏/难度枚举误显示布尔状态 | UI layout smoke + 02_menu_settings 三分辨率截图 |"
+	echo "| 规则滚动条触控命中过窄 | UI layout smoke 44px hit target + 04_rules 三分辨率截图 |"
+	echo "| 结算、危险弃牌、完整响应、胡牌详情缺正式证据 | 13～16 三分辨率截图 + manifest |"
 	echo ""
 	echo "## Screenshot Artifacts"
 	echo ""
 	echo "- 1280x720 contact sheet: \`$ROOT_DIR/build/qa/pages/contact_sheet.jpg\`"
 	echo "- 960x540 contact sheet: \`$ROOT_DIR/build/qa/pages_960x540/contact_sheet.jpg\`"
+	echo "- 1920x1080 contact sheet: \`$ROOT_DIR/build/qa/pages_1920x1080/contact_sheet.jpg\`"
 	echo "- 1280x720 manifest: \`$ROOT_DIR/build/qa/ui_screenshot_manifest_report.md\`"
 	echo "- 960x540 manifest: \`$ROOT_DIR/build/qa/ui_screenshot_manifest_report_960x540.md\`"
+	echo "- 1920x1080 manifest: \`$ROOT_DIR/build/qa/ui_screenshot_manifest_report_1920x1080.md\`"
 	echo ""
 	echo "This report is a gate over the known UI regression set. It still complements, rather than replaces, manual visual review for newly introduced aesthetic issues."
 } >"$REPORT"

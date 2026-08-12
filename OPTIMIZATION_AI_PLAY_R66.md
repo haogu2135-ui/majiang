@@ -21,6 +21,9 @@ reliable for CI and external QA runs.
 - Add a fresh-scene R66 check that clears `players`, then verifies strength and
   match samples initialize themselves, finish, and stay within low-resource
   timing budgets.
+- Keep raw high-danger telemetry diagnostic: after R90 the focused assertion
+  follows the bounded commercial guard and the actionable player-pressure
+  guard instead of requiring a noisy one-hand sample to be strictly lower.
 
 ## Resource Impact
 

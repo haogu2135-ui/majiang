@@ -13,6 +13,10 @@ const SCREEN_NAMES := [
 	"08_online_lobby",
 	"09_daily_login",
 	"10_loading",
+	"13_round_summary",
+	"14_danger_discard",
+	"15_pending_claim_full",
+	"16_win_detail",
 ]
 
 func _initialize() -> void:
@@ -92,6 +96,19 @@ func selected_screen_names() -> Array:
 	for arg in args:
 		if arg.begins_with("--screen="):
 			return [arg.substr("--screen=".length())]
+		if arg.begins_with("--screens="):
+			var selected: Array = []
+			for raw_name in arg.substr("--screens=".length()).split(",", false):
+				var screen_name = str(raw_name).strip_edges()
+				if not SCREEN_NAMES.has(screen_name):
+					printerr("unknown screenshot screen: %s" % screen_name)
+					quit(1)
+					return []
+				selected.append(screen_name)
+			if selected.is_empty():
+				printerr("--screens requires at least one screen name")
+				quit(1)
+			return selected
 	if args.has("--offline-battle-only"):
 		return ["03_offline_battle"]
 	if args.has("--online-lobby-only"):
@@ -393,6 +410,7 @@ func seed_preview_online_lobby(scene: Node) -> void:
 
 func seed_preview_round_summary(scene: Node) -> void:
 	scene.offline_phase = "ended"
+	scene.offline_hand_number = 1
 	scene.offline_last_winner = 0
 	scene.offline_dealer_repeat = false
 	scene.dealer_seat = 0
@@ -455,6 +473,7 @@ func seed_preview_pending_claim_full(scene: Node) -> void:
 
 func seed_preview_win_detail(scene: Node) -> void:
 	scene.offline_phase = "ended"
+	scene.offline_hand_number = 1
 	scene.offline_last_winner = 0
 	scene.offline_dealer_repeat = false
 	scene.dealer_seat = 1

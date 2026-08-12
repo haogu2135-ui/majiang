@@ -24,6 +24,10 @@ EXPECTED_SCREENS = [
     "08_online_lobby.png",
     "09_daily_login.png",
     "10_loading.png",
+    "13_round_summary.png",
+    "14_danger_discard.png",
+    "15_pending_claim_full.png",
+    "16_win_detail.png",
 ]
 DEFAULT_EXPECTED_SIZE = (1280, 720)
 CONTACT_SHEET_COLUMNS = 2
