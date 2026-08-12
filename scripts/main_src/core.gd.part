@@ -1687,6 +1687,8 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	var content_width = max(1.0, safe_content_pixel_size().x)
 	var bar_rect = action_bar_layout_rect()
 	var dock_rect = action_bar_dock_layout_rect()
+	if mode == "offline" and has_pending_danger_discard():
+		return dock_rect
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_count(count, separation)
 	var dock_pixels = float(count) * width + float(max(0, count - 1) * separation) + 24.0
@@ -1694,11 +1696,15 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
 
 func action_bar_layout_rect() -> Rect2:
+	if mode == "offline" and has_pending_danger_discard():
+		return DANGER_ACTION_BAR_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
 		return PENDING_CLAIM_ACTION_BAR_RECT
 	return ACTION_BAR_RECT
 
 func action_bar_dock_layout_rect() -> Rect2:
+	if mode == "offline" and has_pending_danger_discard():
+		return DANGER_ACTION_BAR_DOCK_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
 		return PENDING_CLAIM_ACTION_BAR_DOCK_RECT
 	return ACTION_BAR_DOCK_RECT
@@ -1752,6 +1758,8 @@ func action_bar_pixel_width() -> float:
 	return safe_content_pixel_size().x * (rect.size.x - rect.position.x)
 
 func action_button_separation_for_count(count: int) -> int:
+	if mode == "offline" and has_pending_danger_discard():
+		return 3
 	if mode == "offline" and offline_phase == "pending_claim":
 		# r400: keep 3px when many legal claim choices so buttons stay >= min touch width.
 		return 3 if count >= 6 else 4

@@ -13,21 +13,46 @@ FAIL=0
 ROWS=()
 GODOT_TIMEOUT_SECONDS=180
 GODOT_KILL_GRACE_SECONDS=15
+RUNTIME_CLEAR_RETRIES=20
+RUNTIME_CLEAR_RETRY_SECONDS=0.25
 
-ensure_no_active_godot() {
+active_godot_processes() {
 	local active
 	active="$(
-		pgrep -ax godot 2>/dev/null || true
-		pgrep -ax godot4 2>/dev/null || true
-		pgrep -ax Xvfb 2>/dev/null || true
-		pgrep -af '(^|/)[x]vfb-run([[:space:]]|$)' 2>/dev/null || true
+		{
+			pgrep -ax godot 2>/dev/null || true
+			pgrep -ax godot4 2>/dev/null || true
+			pgrep -ax Xvfb 2>/dev/null || true
+			pgrep -af '(^|/)[x]vfb-run([[:space:]]|$)' 2>/dev/null || true
+		} | while IFS= read -r process_line; do
+			[ -n "$process_line" ] || continue
+			local process_pid="${process_line%% *}"
+			local process_state
+			process_state="$(ps -o stat= -p "$process_pid" 2>/dev/null | awk '{print $1}')"
+			case "$process_state" in
+				""|Z*) continue ;;
+			esac
+			printf '%s\n' "$process_line"
+			done
 	)"
-	if [ -n "$active" ]; then
-		echo "Refusing to start QA while another Godot/Xvfb process is active:" >&2
-		echo "$active" >&2
-		return 1
-	fi
-	return 0
+	printf '%s' "$active"
+}
+
+ensure_no_active_godot() {
+	local active=""
+	local attempt
+	for attempt in $(seq 0 "$RUNTIME_CLEAR_RETRIES"); do
+		active="$(active_godot_processes)"
+		if [ -z "$active" ]; then
+			return 0
+		fi
+		if [ "$attempt" -lt "$RUNTIME_CLEAR_RETRIES" ]; then
+			sleep "$RUNTIME_CLEAR_RETRY_SECONDS"
+		fi
+	done
+	echo "Refusing to start QA while another Godot/Xvfb process is active:" >&2
+	echo "$active" >&2
+	return 1
 }
 
 run_low_resource_godot() {

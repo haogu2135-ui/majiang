@@ -8745,7 +8745,8 @@ func draw_action_dock(parent: Control) -> void:
 	if count <= 0:
 		return
 	var pending_claim_mode = mode == "offline" and offline_phase == "pending_claim"
-	if not pending_claim_mode:
+	var danger_confirm_mode = mode == "offline" and has_pending_danger_discard()
+	if not pending_claim_mode and not danger_confirm_mode:
 		draw_action_intent_dock(parent, count)
 	# r451c: translucent lacquer shell + GPT dock plate on top (no jade program slabs).
 	var dock_fill_alpha := 0.12 if pending_claim_mode else 0.14
@@ -8799,7 +8800,7 @@ func draw_action_dock(parent: Control) -> void:
 		if track_texture != null:
 			track_texture.name = "ActionDockTrackPanelTexture"
 			dock.move_child(track_texture, dock.get_child_count() - 1)
-	if not pending_claim_mode and not action_buttons.is_empty():
+	if not pending_claim_mode and not danger_confirm_mode and not action_buttons.is_empty():
 		var first_button := action_buttons[0] as Button
 		var label_alpha := 0.54 if pending_claim_mode else 0.76
 		var focus_label = make_label(dock, first_button.text, 10, Color(0.92, 0.90, 0.72, label_alpha), true)
@@ -8928,7 +8929,6 @@ func draw_actions(parent: Control) -> void:
 		if player_ai_assist_enabled() and has_pending_danger_discard():
 			var selected_danger_tile = pending_danger_discard_tile
 			var danger_alternatives = safe_discard_alternative_reports(selected_danger_tile, 2)
-			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
 			var confirm_danger_button = make_action_button("确认打%s" % tile_label(selected_danger_tile), Color(0.86, 0.34, 0.24), func() -> void:
 				human_discard_by_tile(selected_danger_tile)
 			)
@@ -8948,6 +8948,7 @@ func draw_actions(parent: Control) -> void:
 				render_game()
 			))
 			draw_action_dock(parent)
+			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
 			finalize_action_bar_layout()
 			return
 		if can_self_discard() and can_win_for_seat(0):
@@ -10523,14 +10524,12 @@ func draw_daily_login_streak_art(parent: Control, days: int, current_day_in_cycl
 
 func draw_danger_discard_confirmation_art(parent: Control, tile: String, report: Dictionary = {}, alternatives: Array = []) -> Control:
 	# r209: GPT chrome conversion
-	var content_size = safe_content_pixel_size()
-	var panel_height_px = clampf(content_size.y * 0.095, 56.0, 68.0)
-	var panel_width_px = clampf(content_size.x * 0.310, 300.0, 440.0)
-	var panel_gap_px = clampf(content_size.y * 0.010, 6.0, 10.0)
-	var panel_bottom = action_bar_dock_layout_rect().position.y - panel_gap_px / maxf(1.0, content_size.y)
-	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
-	var panel_right = action_bar_dock_layout_rect().size.x
-	var panel_left = panel_right - panel_width_px / maxf(1.0, content_size.x)
+	var dock_rect = action_bar_dock_layout_rect()
+	var bar_rect = action_bar_layout_rect()
+	var panel_left = dock_rect.position.x + 0.008
+	var panel_top = dock_rect.position.y + 0.008
+	var panel_right = maxf(bar_rect.position.x - 0.006, dock_rect.position.x + 0.114)
+	var panel_bottom = dock_rect.size.y - 0.008
 	var panel = make_gpt_route_rail(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.040, 0.018, 0.016, 0.94))
 	panel.name = "DangerDiscardConfirmationArt"
 	panel.z_index = 20
@@ -10557,11 +10556,11 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		danger_risk_strip.name = "DangerDiscardGptRiskStrip"
 		danger_risk_strip.visible = false
 	panel.add_child(make_gpt_edge_rail(rect_full(0.0, 0.0, 0.014, 1.0), Color(0.96, 0.38, 0.24, 0.64)))
-	var danger_tile = make_tile_view(tile, Vector2(34, 46), false, Callable(), true, "高", "确认")
+	var danger_tile = make_tile_view(tile, Vector2(32, 44), false, Callable(), true, "高", "")
 	danger_tile.name = "DangerDiscardTile"
 	panel.add_child(danger_tile)
-	apply_rect(danger_tile, rect_full(0.025, 0.080, 0.125, 0.920))
-	var route = make_gpt_route_rail(rect_full(0.150, 0.790, 0.715, 0.885), Color(0.92, 0.42, 0.28, 0.24))
+	apply_rect(danger_tile, rect_full(0.015, 0.035, 0.350, 0.965))
+	var route = make_gpt_route_rail(rect_full(0.380, 0.810, 0.970, 0.900), Color(0.92, 0.42, 0.28, 0.24))
 	route.name = "DangerDiscardRouteRail"
 	panel.add_child(route)
 	var risk = clamp(max(float(report.get("risk", 0.0)), float(report.get("feed_risk", 0.0))) / 60.0, 0.18, 1.0)
@@ -10588,15 +10587,22 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		label_text = "高"
 	var title = make_label(panel, "%s危：%s" % [label_text, tile_label(tile)], 13, Color(0.98, 0.90, 0.72), true)
 	title.name = "DangerDiscardTitleText"
-	apply_rect(title, rect_full(0.150, 0.070, 0.715, 0.455))
+	apply_rect(title, rect_full(0.380, 0.060, 0.985, 0.455))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
 	var seal = make_badge(panel, rect_full(0.750, 0.145, 0.855, 0.855), risk_badge_text(label_text), 11, Color(0.54, 0.16, 0.12, 0.94), Color(0.96, 0.50, 0.34, 0.34), Color(0.98, 0.90, 0.78))
 	seal.name = "DangerDiscardRiskSeal"
 	seal.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var detail = make_label(panel, discard_safety_text(report) if not report.is_empty() else "风险高", 12, Color(0.92, 0.86, 0.72), true)
+	seal.visible = false
+	var compact_reason = "牌路危险"
+	var danger_source = report.get("danger_source", {})
+	if typeof(danger_source) == TYPE_DICTIONARY and str(danger_source.get("reason", "")) != "":
+		compact_reason = str(danger_source.get("reason", ""))
+	elif str(report.get("feed_text", "")) != "":
+		compact_reason = str(report.get("feed_text", ""))
+	var detail = make_label(panel, compact_reason, 12, Color(0.92, 0.86, 0.72), true)
 	detail.name = "DangerDiscardDetailText"
-	apply_rect(detail, rect_full(0.150, 0.455, 0.715, 0.780))
+	apply_rect(detail, rect_full(0.380, 0.455, 0.985, 0.800))
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(detail)
 	var source_trace = make_gpt_route_rail(rect_full(0.252, 0.305, 0.560, 0.350), Color(0.006, 0.016, 0.018, 0.44))
@@ -27008,6 +27014,8 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	var content_width = max(1.0, safe_content_pixel_size().x)
 	var bar_rect = action_bar_layout_rect()
 	var dock_rect = action_bar_dock_layout_rect()
+	if mode == "offline" and has_pending_danger_discard():
+		return dock_rect
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_count(count, separation)
 	var dock_pixels = float(count) * width + float(max(0, count - 1) * separation) + 24.0
@@ -27015,11 +27023,15 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
 
 func action_bar_layout_rect() -> Rect2:
+	if mode == "offline" and has_pending_danger_discard():
+		return DANGER_ACTION_BAR_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
 		return PENDING_CLAIM_ACTION_BAR_RECT
 	return ACTION_BAR_RECT
 
 func action_bar_dock_layout_rect() -> Rect2:
+	if mode == "offline" and has_pending_danger_discard():
+		return DANGER_ACTION_BAR_DOCK_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
 		return PENDING_CLAIM_ACTION_BAR_DOCK_RECT
 	return ACTION_BAR_DOCK_RECT
@@ -27073,6 +27085,8 @@ func action_bar_pixel_width() -> float:
 	return safe_content_pixel_size().x * (rect.size.x - rect.position.x)
 
 func action_button_separation_for_count(count: int) -> int:
+	if mode == "offline" and has_pending_danger_discard():
+		return 3
 	if mode == "offline" and offline_phase == "pending_claim":
 		# r400: keep 3px when many legal claim choices so buttons stay >= min touch width.
 		return 3 if count >= 6 else 4

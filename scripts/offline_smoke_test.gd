@@ -1584,7 +1584,6 @@ func run() -> void:
 	var danger_previous_pending_index = scene.pending_danger_discard_index
 	var danger_previous_pending_tile = scene.pending_danger_discard_tile
 	var danger_previous_pending_report = scene.pending_danger_discard_report.duplicate(true)
-	var danger_previous_action_bar = scene.action_bar
 	scene.mode = "offline"
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 0
@@ -1607,7 +1606,7 @@ func run() -> void:
 	scene.pending_danger_discard_index = danger_previous_pending_index
 	scene.pending_danger_discard_tile = danger_previous_pending_tile
 	scene.pending_danger_discard_report = danger_previous_pending_report
-	scene.action_bar = danger_previous_action_bar
+	scene.action_bar = null
 	scene.chat_messages = ["甲: 准备好了", "乙: 碰", "你: 收到"]
 	scene.show_chat_panel()
 	check(scene.find_child("ChatPanelBrocadeTexture", true, false) != null and scene.find_child("ChatStreamTexture", true, false) != null, "chat panel renders reusable brocade and stream PNG textures")
