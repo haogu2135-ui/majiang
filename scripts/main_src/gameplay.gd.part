@@ -331,6 +331,7 @@ func render_game() -> void:
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI
 	current_human_advice = []
+	current_seat_threat_reports = {}
 	draw_game_top_hud(root_layer)
 
 	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.015), 42)  # r426
@@ -368,10 +369,8 @@ func render_game() -> void:
 	draw_center(table)
 	draw_discards(table)
 
-	# 座位面板暂时不显示威胁报告
-	var seat_threat_reports: Dictionary = {}
 	for seat_layout in SEAT_LAYOUTS:
-		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), seat_threat_reports)
+		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
@@ -418,14 +417,34 @@ func update_ai_assistance_async() -> void:
 		update_seat_threats_display(seat_threat_reports)
 
 func update_hand_ai_hints() -> void:
-	# 更新手牌上的AI提示标记（如果手牌托盘已渲染）
-	# 这里可以选择性地重绘手牌区域，或者等待下次render_game
-	pass
+	# 手牌牌面、风险徽标和推荐徽标都由 draw_hand 一次性构造；只替换
+	# HandTray 子树，避免再次进入 render_game 并重新排队异步计算。
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var old_tray = root_layer.get_node_or_null("HandTray")
+	if old_tray == null or not is_instance_valid(old_tray):
+		return
+	root_layer.remove_child(old_tray)
+	old_tray.queue_free()
+	draw_hand(root_layer)
 
 func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
-	# 更新座位威胁显示（如果座位面板已渲染）
-	# 这里可以选择性地更新座位信息，或者等待下次render_game
-	pass
+	current_seat_threat_reports = seat_threat_reports.duplicate(true)
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	# SeatPanel 的尺寸和朝向由 SEAT_LAYOUTS 决定，重绘这些局部面板比整局
+	# render_game 更安全，也不会重新触发 AI 辅助 deferred 回调。
+	for seat_layout in SEAT_LAYOUTS:
+		var seat := int(seat_layout[0])
+		var old_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		if old_panel != null and is_instance_valid(old_panel):
+			root_layer.remove_child(old_panel)
+			old_panel.queue_free()
+		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
+		if old_shadow != null and is_instance_valid(old_shadow):
+			root_layer.remove_child(old_shadow)
+			old_shadow.queue_free()
+		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
 
 func table_log_tail(limit: int) -> Array[String]:
 	var result: Array[String] = []

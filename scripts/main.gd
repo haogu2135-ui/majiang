@@ -5272,6 +5272,7 @@ func render_game() -> void:
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI
 	current_human_advice = []
+	current_seat_threat_reports = {}
 	draw_game_top_hud(root_layer)
 
 	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.015), 42)  # r426
@@ -5309,10 +5310,8 @@ func render_game() -> void:
 	draw_center(table)
 	draw_discards(table)
 
-	# 座位面板暂时不显示威胁报告
-	var seat_threat_reports: Dictionary = {}
 	for seat_layout in SEAT_LAYOUTS:
-		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), seat_threat_reports)
+		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
@@ -5359,14 +5358,34 @@ func update_ai_assistance_async() -> void:
 		update_seat_threats_display(seat_threat_reports)
 
 func update_hand_ai_hints() -> void:
-	# 更新手牌上的AI提示标记（如果手牌托盘已渲染）
-	# 这里可以选择性地重绘手牌区域，或者等待下次render_game
-	pass
+	# 手牌牌面、风险徽标和推荐徽标都由 draw_hand 一次性构造；只替换
+	# HandTray 子树，避免再次进入 render_game 并重新排队异步计算。
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var old_tray = root_layer.get_node_or_null("HandTray")
+	if old_tray == null or not is_instance_valid(old_tray):
+		return
+	root_layer.remove_child(old_tray)
+	old_tray.queue_free()
+	draw_hand(root_layer)
 
 func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
-	# 更新座位威胁显示（如果座位面板已渲染）
-	# 这里可以选择性地更新座位信息，或者等待下次render_game
-	pass
+	current_seat_threat_reports = seat_threat_reports.duplicate(true)
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	# SeatPanel 的尺寸和朝向由 SEAT_LAYOUTS 决定，重绘这些局部面板比整局
+	# render_game 更安全，也不会重新触发 AI 辅助 deferred 回调。
+	for seat_layout in SEAT_LAYOUTS:
+		var seat := int(seat_layout[0])
+		var old_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		if old_panel != null and is_instance_valid(old_panel):
+			root_layer.remove_child(old_panel)
+			old_panel.queue_free()
+		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
+		if old_shadow != null and is_instance_valid(old_shadow):
+			root_layer.remove_child(old_shadow)
+			old_shadow.queue_free()
+		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
 
 func table_log_tail(limit: int) -> Array[String]:
 	var result: Array[String] = []
@@ -15488,6 +15507,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			var top_dealer = make_badge(panel, rect_full(0.575, 0.075, 0.670, 0.355), "庄", 9, Color(0.58, 0.12, 0.08, 0.88), Color(1.0, 0.79, 0.34, 0.56), Color(0.98, 0.92, 0.74))
 			top_dealer.name = "SeatCompactDealer_%d" % seat
 			top_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
 		return
 
 	if side == "left" or side == "right":
@@ -15536,6 +15556,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			apply_rect(side_status, rect_full(0.285, 0.565, 0.940, 0.720))
 			side_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_seat_readable_label(side_status, false)
+		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
 		return
 
 	# 头像
@@ -15587,6 +15608,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var simple_dealer = make_badge(panel, rect_full(0.555, 0.075, 0.635, 0.255), "庄", 9, Color(0.58, 0.12, 0.08, 0.86), Color(1.0, 0.79, 0.34, 0.56), Color(0.96, 0.90, 0.72))
 		simple_dealer.name = "SeatCompactDealer_%d" % seat
 		simple_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
 	return
 
 	var threat_report = seat_threat_report_from_map(seat, seat_threat_reports)
@@ -15647,6 +15669,27 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 				dealer_tw.parallel().tween_property(dealer_texture, "modulate:a", 0.22, 0.95).from(0.42)
 		var dealer = make_badge(panel, rect_full(0.27, 0.06, 0.38, 0.28), "庄", 16, Color(0.58, 0.12, 0.08, 0.90), Color(1.0, 0.79, 0.34, 0.76), Color(0.96, 0.90, 0.72))
 		dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
+
+
+func draw_compact_seat_threat_badge(parent: Control, seat: int, seat_threat_reports: Dictionary, side: String) -> void:
+	var report = seat_threat_report_from_map(seat, seat_threat_reports)
+	var badge_text = opponent_seat_threat_badge_text_from_report(report)
+	if badge_text == "":
+		return
+	var art = draw_seat_threat_badge_art(parent, seat, report)
+	var badge_rect := rect_full(0.560, 0.340, 0.945, 0.535)
+	if side == "top":
+		badge_rect = rect_full(0.560, 0.385, 0.945, 0.555)
+		apply_rect(art, rect_full(0.560, 0.385, 0.945, 0.555))
+	elif side == "left" or side == "right":
+		badge_rect = rect_full(0.285, 0.545, 0.720, 0.735)
+		apply_rect(art, rect_full(0.285, 0.545, 0.720, 0.735))
+	else:
+		apply_rect(art, rect_full(0.560, 0.340, 0.945, 0.535))
+	var badge = make_badge(parent, badge_rect, badge_text, 8 if side == "left" or side == "right" else 9, opponent_seat_threat_color_from_report(report), Color(1.0, 0.91, 0.48, 0.46), Color(0.10, 0.11, 0.10))
+	badge.name = "SeatThreatBadge_%d" % seat
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 func seat_status_summary_fallback(seat: int) -> String:

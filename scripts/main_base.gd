@@ -533,6 +533,7 @@ var round_summary = ""
 var last_score_deltas: Array[int] = []
 var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
 var current_human_advice: Array = []
+var current_seat_threat_reports: Dictionary = {}
 var tile_order: Dictionary = {}
 var tile_sort_order: Dictionary = {}
 var tile_metadata_ready = false

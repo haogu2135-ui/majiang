@@ -7297,6 +7297,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			var top_dealer = make_badge(panel, rect_full(0.575, 0.075, 0.670, 0.355), "庄", 9, Color(0.58, 0.12, 0.08, 0.88), Color(1.0, 0.79, 0.34, 0.56), Color(0.98, 0.92, 0.74))
 			top_dealer.name = "SeatCompactDealer_%d" % seat
 			top_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
 		return
 
 	if side == "left" or side == "right":
@@ -7345,6 +7346,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			apply_rect(side_status, rect_full(0.285, 0.565, 0.940, 0.720))
 			side_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_seat_readable_label(side_status, false)
+		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
 		return
 
 	# 头像
@@ -7396,6 +7398,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var simple_dealer = make_badge(panel, rect_full(0.555, 0.075, 0.635, 0.255), "庄", 9, Color(0.58, 0.12, 0.08, 0.86), Color(1.0, 0.79, 0.34, 0.56), Color(0.96, 0.90, 0.72))
 		simple_dealer.name = "SeatCompactDealer_%d" % seat
 		simple_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
 	return
 
 	var threat_report = seat_threat_report_from_map(seat, seat_threat_reports)
@@ -7456,6 +7459,27 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 				dealer_tw.parallel().tween_property(dealer_texture, "modulate:a", 0.22, 0.95).from(0.42)
 		var dealer = make_badge(panel, rect_full(0.27, 0.06, 0.38, 0.28), "庄", 16, Color(0.58, 0.12, 0.08, 0.90), Color(1.0, 0.79, 0.34, 0.76), Color(0.96, 0.90, 0.72))
 		dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
+
+
+func draw_compact_seat_threat_badge(parent: Control, seat: int, seat_threat_reports: Dictionary, side: String) -> void:
+	var report = seat_threat_report_from_map(seat, seat_threat_reports)
+	var badge_text = opponent_seat_threat_badge_text_from_report(report)
+	if badge_text == "":
+		return
+	var art = draw_seat_threat_badge_art(parent, seat, report)
+	var badge_rect := rect_full(0.560, 0.340, 0.945, 0.535)
+	if side == "top":
+		badge_rect = rect_full(0.560, 0.385, 0.945, 0.555)
+		apply_rect(art, rect_full(0.560, 0.385, 0.945, 0.555))
+	elif side == "left" or side == "right":
+		badge_rect = rect_full(0.285, 0.545, 0.720, 0.735)
+		apply_rect(art, rect_full(0.285, 0.545, 0.720, 0.735))
+	else:
+		apply_rect(art, rect_full(0.560, 0.340, 0.945, 0.535))
+	var badge = make_badge(parent, badge_rect, badge_text, 8 if side == "left" or side == "right" else 9, opponent_seat_threat_color_from_report(report), Color(1.0, 0.91, 0.48, 0.46), Color(0.10, 0.11, 0.10))
+	badge.name = "SeatThreatBadge_%d" % seat
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 func seat_status_summary_fallback(seat: int) -> String:
