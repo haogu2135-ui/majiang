@@ -12,6 +12,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,8 +103,25 @@ def request_json(url: str, payload: dict[str, object], headers: dict[str, str], 
         raise RuntimeError(f"HTTP {exc.code}: {body}") from exc
 
 
-def download_url(url: str, user_agent: str, timeout: int) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": user_agent})
+def resolve_sub2api_media_url(url: str, base_url: str) -> str:
+    """Map Sub2API's internal media port back to its public local API port."""
+    parsed = urlparse(url)
+    gateway = urlparse(base_url)
+    if parsed.hostname not in {"127.0.0.1", "localhost"}:
+        return url
+    if parsed.port != 18889 or gateway.hostname not in {"127.0.0.1", "localhost"}:
+        return url
+    if not gateway.scheme or not gateway.netloc:
+        return url
+    path = parsed.path
+    if path.startswith("/v1/"):
+        path = path[3:]
+    return urlunparse((gateway.scheme, gateway.netloc, path, parsed.params, parsed.query, parsed.fragment))
+
+
+def download_url(url: str, user_agent: str, timeout: int, base_url: str = "") -> bytes:
+    resolved_url = resolve_sub2api_media_url(url, base_url)
+    req = urllib.request.Request(resolved_url, headers={"User-Agent": user_agent})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read()
@@ -112,7 +130,7 @@ def download_url(url: str, user_agent: str, timeout: int) -> bytes:
         raise RuntimeError(f"download HTTP {exc.code}: {body}") from exc
 
 
-def extract_image_bytes(data: dict[str, object], headers: dict[str, str], timeout: int) -> bytes:
+def extract_image_bytes(data: dict[str, object], headers: dict[str, str], timeout: int, base_url: str) -> bytes:
     items = data.get("data")
     if not isinstance(items, list) or not items:
         raise RuntimeError("API response did not include a non-empty data array")
@@ -126,7 +144,7 @@ def extract_image_bytes(data: dict[str, object], headers: dict[str, str], timeou
 
     url = first.get("url")
     if isinstance(url, str) and url:
-        return download_url(url, headers["User-Agent"], timeout)
+        return download_url(url, headers["User-Agent"], timeout, base_url)
 
     preview = json.dumps(data, ensure_ascii=False)[:2000]
     raise RuntimeError(f"API response did not include b64_json or url: {preview}")
@@ -199,7 +217,7 @@ def main() -> int:
     }
 
     data = request_json(base_url + "/images/generations", payload, headers, args.timeout)
-    image_bytes = extract_image_bytes(data, headers, args.timeout)
+    image_bytes = extract_image_bytes(data, headers, args.timeout, base_url)
     requested_out = Path(args.out)
     if not requested_out.is_absolute():
         requested_out = ROOT / requested_out

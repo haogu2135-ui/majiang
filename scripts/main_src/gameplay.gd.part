@@ -375,6 +375,7 @@ func render_game() -> void:
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
 	draw_hand(root_layer)
+	draw_advisor_panel(root_layer)
 	draw_actions(root_layer)
 	draw_round_summary(root_layer)
 
@@ -424,9 +425,29 @@ func update_hand_ai_hints() -> void:
 	var old_tray = root_layer.get_node_or_null("HandTray")
 	if old_tray == null or not is_instance_valid(old_tray):
 		return
+	var old_tray_index := old_tray.get_index()
 	root_layer.remove_child(old_tray)
 	old_tray.queue_free()
 	draw_hand(root_layer)
+	var new_tray = root_layer.get_node_or_null("HandTray")
+	if new_tray != null:
+		root_layer.move_child(new_tray, mini(old_tray_index, root_layer.get_child_count() - 1))
+	refresh_ai_advisor_panel()
+
+func refresh_ai_advisor_panel() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var old_panel = root_layer.get_node_or_null("AdvisorPanel")
+	var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
+	if old_panel != null and is_instance_valid(old_panel):
+		root_layer.remove_child(old_panel)
+		old_panel.queue_free()
+	if mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled():
+		return
+	draw_advisor_panel(root_layer)
+	var new_panel = root_layer.get_node_or_null("AdvisorPanel")
+	if new_panel != null and old_panel_index >= 0:
+		root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
 
 func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	current_seat_threat_reports = seat_threat_reports.duplicate(true)
@@ -437,14 +458,22 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
 		var old_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
 		if old_panel != null and is_instance_valid(old_panel):
 			root_layer.remove_child(old_panel)
 			old_panel.queue_free()
 		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
+		var old_shadow_index := old_shadow.get_index() if old_shadow != null and is_instance_valid(old_shadow) else -1
 		if old_shadow != null and is_instance_valid(old_shadow):
 			root_layer.remove_child(old_shadow)
 			old_shadow.queue_free()
 		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		var new_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
+		var new_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		if new_shadow != null and old_shadow_index >= 0:
+			root_layer.move_child(new_shadow, mini(old_shadow_index, root_layer.get_child_count() - 1))
+		if new_panel != null and old_panel_index >= 0:
+			root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
 
 func table_log_tail(limit: int) -> Array[String]:
 	var result: Array[String] = []

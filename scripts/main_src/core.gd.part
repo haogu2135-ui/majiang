@@ -487,15 +487,17 @@ func poll_online(now_msec: int = -1) -> void:
 	if status != tcp_status:
 		tcp_status = status
 		if status == StreamPeerTCP.STATUS_CONNECTED:
-			set_status("已连接服务器")
+			set_online_feedback("已连接服务器，可建房或入房。", false)
 			if not sent_hello:
 				sent_hello = true
 				send_online({"type": "hello", "name": online_name_edit.text if online_name_edit else "云桌道友"})
 		elif status == StreamPeerTCP.STATUS_ERROR:
-			set_status("连接出错")
+			set_online_feedback("连接出错，请重试。", false)
 		elif status == StreamPeerTCP.STATUS_NONE and mode.begins_with("online"):
-			pass
+			set_online_feedback("连接已断开，请重新连接。", false)
+		refresh_online_lobby_state()
 	if status != StreamPeerTCP.STATUS_CONNECTED:
+		refresh_online_lobby_state()
 		return
 	var available = tcp.get_available_bytes()
 	if available <= 0:
@@ -507,6 +509,7 @@ func poll_online(now_msec: int = -1) -> void:
 		tcp_buffer = tcp_buffer.substr(split_at + 1)
 		if line.length() > 0:
 			handle_online_message(line)
+	refresh_online_lobby_state()
 
 
 func play_outgoing_online_action_audio(payload: Dictionary) -> void:
@@ -535,6 +538,7 @@ func clear_online_feedback() -> void:
 	online_waiting_for_server = false
 	online_last_sent_action = ""
 	online_last_sent_msec = 0
+	refresh_online_feedback_art()
 
 
 func start_voice_chat() -> void:
@@ -1509,23 +1513,10 @@ func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> Str
 	var parts: Array[String] = []
 	parts.append("荐%s" % tile_label(str(best.get("tile", ""))))
 	parts.append(shanten_label(int(best.get("shanten", 8))))
-	var reason = str(best.get("reason_label", ""))
-	if reason != "":
-		parts.append(reason)
-	var plan = hand_plan_text(best)
-	if plan != "":
-		parts.append(plan)
 	parts.append("进%d/%d" % [int(best.get("ukeire", 0)), int(best.get("variety", 0))])
-	var wait = effective_tile_text(best, 2)
-	if wait != "":
-		parts.append(wait)
 	var safety = discard_safety_short_text(best)
 	if safety != "":
 		parts.append(safety)
-	parts.append(str(best.get("stance", "均衡")))
-	var safe_hint = safest_discard_hint_text(best, safest)
-	if safe_hint != "":
-		parts.append(safe_hint)
 	return " · ".join(parts)
 
 func hand_tray_state_text() -> String:

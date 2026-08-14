@@ -58,8 +58,9 @@ func connect_online() -> void:
 	sent_hello = false
 	var err = tcp.connect_to_host(online_host_edit.text.strip_edges(), DEFAULT_PORT)
 	set_status("正在连接 %s:%d ..." % [online_host_edit.text.strip_edges(), DEFAULT_PORT])
+	refresh_online_lobby_state()
 	if err != OK:
-		set_status("连接失败：%s" % error_string(err))
+		set_online_feedback("连接失败：%s" % error_string(err), false)
 
 func handle_online_ack(data: Dictionary) -> void:
 	var message = online_server_message_text(data, "")
@@ -92,7 +93,8 @@ func handle_online_message(line: String) -> void:
 		return
 	var kind = normalize_online_message_kind(data)
 	if kind == "welcome":
-		set_status("已连接：" + str(data.get("name", "")))
+		var server_name = str(data.get("name", "")).strip_edges()
+		set_online_feedback("已连接%s，可建房或入房。" % (("：" + server_name) if server_name != "" else "服务器"), false)
 	elif kind == "info":
 		set_online_feedback(online_server_message_text(data, "服务器提示"), false)
 	elif kind == "error":
@@ -348,7 +350,7 @@ func online_server_message_text(data: Dictionary, fallback: String) -> String:
 
 func send_online(payload: Dictionary) -> bool:
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
-		set_status("请先连接服务器。")
+		set_online_feedback("请先连接服务器。", false)
 		return false
 	var text = JSON.stringify(payload) + "\n"
 	tcp.put_data(text.to_utf8_buffer())
@@ -368,3 +370,4 @@ func set_online_feedback(text: String, waiting: bool = false) -> void:
 	if not waiting:
 		online_last_sent_msec = 0
 	set_status(text)
+	refresh_online_feedback_art()

@@ -5316,6 +5316,7 @@ func render_game() -> void:
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
 	draw_hand(root_layer)
+	draw_advisor_panel(root_layer)
 	draw_actions(root_layer)
 	draw_round_summary(root_layer)
 
@@ -5365,9 +5366,29 @@ func update_hand_ai_hints() -> void:
 	var old_tray = root_layer.get_node_or_null("HandTray")
 	if old_tray == null or not is_instance_valid(old_tray):
 		return
+	var old_tray_index := old_tray.get_index()
 	root_layer.remove_child(old_tray)
 	old_tray.queue_free()
 	draw_hand(root_layer)
+	var new_tray = root_layer.get_node_or_null("HandTray")
+	if new_tray != null:
+		root_layer.move_child(new_tray, mini(old_tray_index, root_layer.get_child_count() - 1))
+	refresh_ai_advisor_panel()
+
+func refresh_ai_advisor_panel() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var old_panel = root_layer.get_node_or_null("AdvisorPanel")
+	var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
+	if old_panel != null and is_instance_valid(old_panel):
+		root_layer.remove_child(old_panel)
+		old_panel.queue_free()
+	if mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled():
+		return
+	draw_advisor_panel(root_layer)
+	var new_panel = root_layer.get_node_or_null("AdvisorPanel")
+	if new_panel != null and old_panel_index >= 0:
+		root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
 
 func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	current_seat_threat_reports = seat_threat_reports.duplicate(true)
@@ -5378,14 +5399,22 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
 		var old_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
 		if old_panel != null and is_instance_valid(old_panel):
 			root_layer.remove_child(old_panel)
 			old_panel.queue_free()
 		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
+		var old_shadow_index := old_shadow.get_index() if old_shadow != null and is_instance_valid(old_shadow) else -1
 		if old_shadow != null and is_instance_valid(old_shadow):
 			root_layer.remove_child(old_shadow)
 			old_shadow.queue_free()
 		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		var new_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
+		var new_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		if new_shadow != null and old_shadow_index >= 0:
+			root_layer.move_child(new_shadow, mini(old_shadow_index, root_layer.get_child_count() - 1))
+		if new_panel != null and old_panel_index >= 0:
+			root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
 
 func table_log_tail(limit: int) -> Array[String]:
 	var result: Array[String] = []
@@ -9157,7 +9186,11 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# r214: bulk GPT chrome sweep
 	if not force_visible and (mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled()):
 		return
-	var panel = make_gpt_plate_rect(rect_full(0.155, 0.625, 0.545, 0.755), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
+	# The narrow center-left HUD slot sits between the left river and the center
+	# surface, above the player river; it stays clear of every discard zone,
+	# action dock, and hand tray at all supported aspect ratios.
+	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, 0.405, 0.650), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
+	panel.set_name("AdvisorPanel")
 	parent.add_child(panel)
 	var advisor_texture = add_illustration_texture(panel, "advisor_map", rect_full(0.010, 0.035, 0.990, 0.965), 0.12, false)
 	if advisor_texture != null:
@@ -9182,31 +9215,29 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	draw_advisor_panel_priority_sweep(panel)
 	draw_advisor_panel_decision_bridge(panel)
 	draw_advisor_panel_analysis_scan(panel)
+	var advisor_card_rect_a := rect_full(0.03, 0.34, 0.97, 0.53)
+	var advisor_card_rect_b := rect_full(0.03, 0.55, 0.97, 0.74)
+	var advisor_card_rect_c := rect_full(0.03, 0.76, 0.97, 0.95)
 	if offline_phase == "pending_claim":
-		draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "响应", "%s · %s" % [
-			tile_label(str(offline_pending_claim.get("tile", ""))),
-			claim_options_text(offline_pending_claim),
-		], human_claim_hint_text(), Color(0.86, 0.78, 0.56))
-		draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "牌局", advisor_turn_line(), current_status_text(), Color(0.62, 0.78, 0.82))
-		draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+		draw_advisor_info_card(panel, advisor_card_rect_a, "响应", "%s" % tile_label(str(offline_pending_claim.get("tile", ""))), "%s" % claim_options_text(offline_pending_claim), Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, advisor_card_rect_b, "牌局", advisor_turn_line(), current_status_text(), Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, advisor_card_rect_c, "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 		return
 	if can_self_discard():
 		var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
 		if reports.is_empty():
-			draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "推荐", "整理手牌", "等待可执行出牌", Color(0.86, 0.78, 0.56))
-			draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "收益", score_strategy_text(0), advisor_turn_line(), Color(0.62, 0.78, 0.82))
-			draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+			draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "整理", "待出牌", Color(0.86, 0.78, 0.56))
+			draw_advisor_info_card(panel, advisor_card_rect_b, "势", "等待", advisor_turn_line(), Color(0.62, 0.78, 0.82))
+			draw_advisor_info_card(panel, advisor_card_rect_c, "守", "观测", opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 			return
 		var best: Dictionary = reports[0]
-		draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "推荐", advisor_primary_text(best), advisor_options_text(reports, 3), Color(0.86, 0.78, 0.56))
-		draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "收益", advisor_value_text(best), advisor_shape_text(best), Color(0.62, 0.78, 0.82))
-		draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0, best), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+		draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "打%s" % tile_label(str(best.get("tile", ""))), "%s · 进%d" % [shanten_label(int(best.get("shanten", 8))), int(best.get("ukeire", 0))], Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, advisor_card_rect_b, "势", shanten_label(int(best.get("shanten", 8))), "进%d" % int(best.get("ukeire", 0)), Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, advisor_card_rect_c, "守", discard_safety_short_text(best), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 		return
-	draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "牌局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
-	draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "进程", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
-	draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
-
-
+	draw_advisor_info_card(panel, advisor_card_rect_a, "局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
+	draw_advisor_info_card(panel, advisor_card_rect_b, "势", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
+	draw_advisor_info_card(panel, advisor_card_rect_c, "守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 func draw_advisor_panel_analysis_scan(parent: Control) -> Control:
 	# r209: GPT chrome conversion
 	var accent = hand_tray_state_fill()
@@ -12708,16 +12739,16 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	edit.add_child(art)
 	var accent = line_edit_accent(label_text)
-	var field_plate = add_optional_gpt_illustration_texture(art, "ui_online_form_field", rect_full(0.000, 0.000, 1.000, 1.000), 0.70, false)
+	var field_plate = add_optional_gpt_illustration_texture(art, "ui_online_form_field", rect_full(0.000, 0.000, 1.000, 1.000), 0.32, false)
 	if field_plate == null:
-		field_plate = add_optional_gpt_illustration_texture(art, "ui_chat_lane_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.55, false)
+		field_plate = add_optional_gpt_illustration_texture(art, "ui_chat_lane_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.28, false)
 	if field_plate != null:
 		field_plate.name = "LineEditGptFieldPlate_%s" % art_id
 		field_plate.modulate = Color(
 			clampf(0.55 + accent.r * 0.45, 0.30, 1.15),
 			clampf(0.55 + accent.g * 0.45, 0.30, 1.15),
 			clampf(0.55 + accent.b * 0.45, 0.30, 1.15),
-			0.70
+			0.38
 		)
 	var surface = make_gpt_plate_rect(rect_full(0.006, 0.055, 0.994, 0.945), Color(0.006, 0.018, 0.018, 0.070), "ui_jade_reading_plate")
 	surface.name = "LineEditInputSurface_%s" % art_id
@@ -16472,7 +16503,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	var panel_shadow = make_soft_depth_panel(overlay, panel_shadow_rect, Color(0.0, 0.0, 0.0, 0.40), 24)
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 	var rear_shell_rect := Rect2(panel_rect.position - Vector2(0.009, 0.012), panel_rect.size + Vector2(0.011, 0.010))
-	var rear_shell = make_gpt_plate_rect(rear_shell_rect, Color(0.290, 0.360, 0.280, 0.98), "ui_jade_reading_plate")
+	var rear_shell = make_gpt_plate_rect(rear_shell_rect, Color(0.290, 0.360, 0.280, 0.38), "ui_jade_reading_plate")
 	rear_shell.name = "SettingsConsole3DRearShell"
 	overlay.add_child(rear_shell)
 	var rear_lower_edge = make_gpt_route_rail(rect_full(0.022, 0.944, 0.978, 0.995), Color(0.0, 0.0, 0.0, 0.16))
@@ -16483,7 +16514,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rear_shell.add_child(rear_top_glint)
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.99), "ui_jade_reading_plate")
+	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.50), "ui_jade_reading_plate")
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
@@ -16501,12 +16532,12 @@ func draw_settings_overlay(parent: Control) -> void:
 		var corner_cap = make_gpt_plate_rect(rect_full(corner_x, corner_y, corner_x + 0.026, corner_y + 0.034), Color(0.58, 0.40, 0.16, 0.34), "ui_jade_reading_plate")
 		corner_cap.name = "SettingsConsole3DCornerCap_%d" % corner_index
 		panel.add_child(corner_cap)
-	var compass_texture = add_illustration_texture(panel, "settings_compass", rect_full(0.018, 0.018, 0.982, 0.982), 0.055, false)
+	var compass_texture = add_illustration_texture(panel, "settings_compass", rect_full(0.018, 0.018, 0.982, 0.982), 0.020, false)
 	if compass_texture != null:
 		compass_texture.name = "SettingsCompassTexture"
 		panel.move_child(compass_texture, 0)
 	var settings_gpt_key := "settings_gpt_panel_v2"
-	var gpt_settings_texture = add_optional_gpt_illustration_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.44, false)
+	var gpt_settings_texture = add_optional_gpt_illustration_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.035, false)
 	if gpt_settings_texture != null:
 		gpt_settings_texture.name = "SettingsGPTPanelTexture"
 		gpt_settings_texture.modulate = Color(2.65, 2.72, 2.20, gpt_settings_texture.modulate.a)
@@ -20521,16 +20552,16 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
 	parent.add_child(row)
-	var row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.58, false)
+	var row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.24, false)
 	if row_plate == null:
-		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.52, false)
+		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
 	if row_plate != null:
 		row_plate.name = "SettingRowGptPlate_%s" % title
 		# r186: warm lacquer plate (not mint) so text plate contrast stays commercial.
-		row_plate.modulate = Color(0.72, 0.62, 0.48, 0.70)
+		row_plate.modulate = Color(0.78, 0.68, 0.52, 0.38)
 		row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.08, 0.06, 0.04, 0.54), "ui_jade_reading_plate")
+	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.08, 0.06, 0.04, 0.30), "ui_jade_reading_plate")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
 	var title_label = make_label(row, title, 13, Color(0.98, 0.95, 0.84, 0.99), true)
@@ -20560,7 +20591,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_plate_rect(rect, Color(0.330, 0.405, 0.335, 0.98), "ui_jade_reading_plate")
+	var section = make_gpt_plate_rect(rect, Color(0.330, 0.405, 0.335, 0.44), "ui_jade_reading_plate")
 	section.name = "SettingsSection_%s" % title_text
 	parent.add_child(section)
 	var section_depth = make_gpt_route_rail(rect_full(0.015, 0.910, 0.985, 0.985), Color(0.0, 0.0, 0.0, 0.10))
@@ -20569,13 +20600,13 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_top_rim = make_gpt_ribbon(rect_full(0.035, 0.018, 0.965, 0.048), Color(1.0, 0.88, 0.56, 0.055))
 	section_top_rim.name = "SettingsSection3DTopRim_%s" % title_text
 	section.add_child(section_top_rim)
-	var section_plate = add_optional_gpt_illustration_texture(section, "ui_settings_section_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.72, false)
+	var section_plate = add_optional_gpt_illustration_texture(section, "ui_settings_section_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.10, false)
 	if section_plate == null:
-		section_plate = add_optional_gpt_illustration_texture(section, "ui_confirm_sheet_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.55, false)
+		section_plate = add_optional_gpt_illustration_texture(section, "ui_confirm_sheet_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.08, false)
 	if section_plate != null:
 		section_plate.name = "SettingsSectionGptPlate_%s" % title_text
 		section.move_child(section_plate, 0)
-	var brocade_texture = add_illustration_texture(section, "settings_section_brocade", rect_full(-0.012, -0.020, 1.012, 1.020), 0.085, false)
+	var brocade_texture = add_illustration_texture(section, "settings_section_brocade", rect_full(-0.012, -0.020, 1.012, 1.020), 0.025, false)
 	if brocade_texture != null:
 		brocade_texture.name = "SettingsSectionBrocadeTexture_%s" % title_text
 	draw_settings_section_signal(section, title_text)
@@ -22799,7 +22830,7 @@ func _show_achievements_screen_impl() -> void:
 	gallery_top_glint.name = "AchievementGallery3DTopGlint"
 	gallery_rear.add_child(gallery_top_glint)
 
-	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.28), "ui_jade_reading_plate")
+	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.08), "ui_jade_reading_plate")
 	panel.name = "AchievementGalleryFrontPanel"
 	root_layer.add_child(panel)
 	draw_secondary_screen_texture(panel, "achievement_medal_glow", "AchievementsGlowTexture", 0.035)
@@ -22880,6 +22911,13 @@ func _show_achievements_screen_impl() -> void:
 	var achievements_scroll_thumb = make_panel(achievements_scroll_gutter, rect_full(0.200, 0.055, 0.800, 0.520), Color(0.56, 0.48, 0.30, 0.66), 999, Color(0.72, 0.62, 0.36, 0.24), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	achievements_scroll_thumb.name = "AchievementsScrollThumb"
 	achievements_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var achievements_scroll_hit_target = Control.new()
+	achievements_scroll_hit_target.name = "AchievementsScrollHitTarget"
+	achievements_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
+	achievements_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
+	achievements_scroll_hit_target.tooltip_text = "拖动查看全部成就"
+	apply_rect(achievements_scroll_hit_target, rect_full(0.940, achievement_scroll_top - 0.005, 0.990, achievement_scroll_bottom + 0.005))
+	panel.add_child(achievements_scroll_hit_target)
 
 	var grid = VBoxContainer.new()
 	configure_passive_container(grid)
@@ -22899,9 +22937,30 @@ func _show_achievements_screen_impl() -> void:
 	bottom_spacer.name = "AchievementsBottomSafeSpacer"
 	bottom_spacer.custom_minimum_size = Vector2(0, 78)
 	grid.add_child(bottom_spacer)
+	var achievements_thumb_drag_state: Dictionary = {"active": false}
+	achievements_scroll_hit_target.gui_input.connect(func(event: InputEvent) -> void:
+		handle_rules_scroll_thumb_input(event, scroll, achievements_scrollbar, achievements_scroll_thumb, achievements_scroll_gutter, achievements_thumb_drag_state, achievements_scroll_hit_target)
+	)
+	if achievements_scrollbar != null:
+		achievements_scrollbar.value_changed.connect(func(_value: float) -> void:
+			sync_achievements_scroll_thumb(scroll, achievements_scroll_thumb)
+		)
+	scroll.resized.connect(func() -> void:
+		sync_achievements_scroll_thumb(scroll, achievements_scroll_thumb)
+	)
+	grid.resized.connect(func() -> void:
+		sync_achievements_scroll_thumb(scroll, achievements_scroll_thumb)
+	)
+	call_deferred("sync_achievements_scroll_thumb", scroll, achievements_scroll_thumb)
 	draw_achievements_row_collection_bus_art(panel)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.list_items_stagger_in(rows, 0.22, 0.035)
+
+
+func sync_achievements_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
+	if content_scroll == null or thumb == null:
+		return
+	sync_rules_scroll_thumb(content_scroll, thumb)
 
 
 func _show_menu_impl() -> void:
@@ -23129,15 +23188,15 @@ func _show_online_lobby_impl() -> void:
 	lobby_lower_edge.name = "OnlineLobby3DLowerEdge"
 	draw_secondary_screen_texture(panel, "online_network", "OnlineLobbyNetworkTexture", 0.040)
 	var online_gpt_key := "online_gpt_lobby"
-	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.30, false)
+	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.03, false)
 	if gpt_online_texture != null:
 		gpt_online_texture.name = "OnlineLobbyGPTTexture"
 		# r496: keep ornate vault, lower wash + warm lift so form text stays commercial-readable.
-		gpt_online_texture.modulate = Color(1.62, 1.40, 1.14, minf(0.48, gpt_online_texture.modulate.a))
-	var online_header_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.48, false)
+		gpt_online_texture.modulate = Color(1.10, 1.06, 1.02, minf(0.05, gpt_online_texture.modulate.a))
+	var online_header_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.26, false)
 	if online_header_strip != null:
 		online_header_strip.name = "OnlineLobbyGptHeaderStrip"
-	var online_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.04, 0.12, 0.96, 0.94), 0.38, false)
+	var online_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.04, 0.12, 0.96, 0.94), 0.02, false)
 	if online_sheet != null:
 		online_sheet.name = "OnlineLobbyGptSheet"
 	var fan_texture = add_illustration_texture(panel, "lobby_screen_fan", rect_full(0.38, 0.06, 0.98, 0.34), 0.025, false)
@@ -23172,23 +23231,23 @@ func _show_online_lobby_impl() -> void:
 		state_badge_label.name = "OnlineLobbyConnectionStateLabel"
 
 	# 表单面板 - 连接与房间设置
-	var online_split_back = make_gpt_plate_rect(rect_full(0.030, 0.155, 0.970, 0.880), Color(0.90, 0.80, 0.58, 0.40), "settings_overview_panel")
+	var online_split_back = make_gpt_plate_rect(rect_full(0.030, 0.155, 0.970, 0.880), Color(0.90, 0.80, 0.58, 0.18), "settings_overview_panel")
 	online_split_back.name = "OnlineLobbySplitReadabilityBackplate"
 	panel.add_child(online_split_back)
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.98, 0.92, 0.78, 0.90), "rules_guide_panel")
+	var form_panel = make_gpt_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.98, 0.92, 0.78, 0.34), "rules_guide_panel")
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
-		(form_panel as CanvasItem).modulate = Color(1.50, 1.36, 1.14, 0.96)
+		(form_panel as CanvasItem).modulate = Color(1.18, 1.12, 1.04, 0.94)
 	var form_rear = make_soft_depth_panel(form_panel, rect_full(0.012, 0.020, 0.988, 0.980), Color(0.08, 0.06, 0.04, 0.06), 12)  # r415 warm
 	form_rear.name = "OnlineLobbyForm3DRearShell"
 	form_panel.move_child(form_rear, 0)
 	var form_top_rim = make_soft_depth_panel(form_panel, rect_full(0.040, 0.015, 0.960, 0.070), Color(1.0, 0.90, 0.56, 0.10), 999)
 	form_top_rim.name = "OnlineLobbyForm3DTopRim"
-	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r188 smoke-safe frame alpha; densify texture not alpha
+	var form_panel_frame = add_optional_gpt_illustration_texture(form_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.18, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if form_panel_frame != null:
 		form_panel_frame.name = "OnlineLobbyFormGPTPanelFrameTexture"
 		form_panel.move_child(form_panel_frame, 0)
@@ -23297,16 +23356,16 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.98, 0.92, 0.78, 0.90), "rules_guide_panel")
+	var log_panel = make_gpt_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.98, 0.92, 0.78, 0.34), "rules_guide_panel")
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
-		(log_panel as CanvasItem).modulate = Color(1.50, 1.36, 1.14, 0.96)
-	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.32, false)  # r188 smoke-safe frame alpha; densify texture not alpha
+		(log_panel as CanvasItem).modulate = Color(1.18, 1.12, 1.04, 0.94)
+	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.18, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.92, 0.84, 0.64, 0.70), "settings_overview_panel")
+	var log_readability_backplate = make_gpt_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.92, 0.84, 0.64, 0.52), "settings_overview_panel")
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
 	# 右侧面板滑入动画
@@ -23349,6 +23408,59 @@ func _show_online_lobby_impl() -> void:
 	draw_online_lobby_connection_route(panel)
 	draw_online_lobby_feedback_sync_art(panel)
 	ensure_update_dialog()
+	refresh_online_lobby_state()
+
+
+func refresh_online_lobby_state() -> void:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return
+	var state := lobby_connection_state_text()
+	var connected := state == "已连接"
+	if state != "已连接" and online_waiting_for_server:
+		var connection_feedback := "正在连接服务器，请稍候" if state == "连接中" else ("连接异常，请重试" if state == "异常" else "请先连接服务器。")
+		set_online_feedback(connection_feedback, false)
+	var state_label = root_layer.find_child("OnlineLobbyConnectionStateLabel", true, false) as Label
+	if state_label != null:
+		state_label.text = state
+		state_label.tooltip_text = "服务器连接状态：%s" % state
+	var state_badge = root_layer.find_child("OnlineLobbyConnectionStateBadge", true, false) as CanvasItem
+	if state_badge != null:
+		state_badge.modulate = Color(1.0, 1.0, 1.0, 1.0) if connected else Color(0.88, 0.92, 0.88, 0.92)
+	var start_button = root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+	if start_button != null:
+		start_button.text = "开始游戏" if connected else "待连接"
+		start_button.disabled = not connected
+		start_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if connected else Color(0.76, 0.78, 0.70, 0.74)
+	var lobby_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
+	if lobby_status == null:
+		return
+	if state == "已连接":
+		lobby_status.text = "可建房/入房，房主可开始"
+	elif state == "连接中":
+		lobby_status.text = "正在连接服务器，请稍候"
+	elif state == "异常":
+		lobby_status.text = "连接异常，请重试"
+	else:
+		lobby_status.text = "下一步 · 先连接，再建房或入房"
+	configure_clipped_label(lobby_status)
+
+
+func refresh_online_feedback_art() -> void:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return
+	var feedback_art = root_layer.find_child("OnlineFeedbackArt", true, false) as Control
+	var feedback_parent: Control = feedback_art.get_parent() as Control if feedback_art != null else null
+	if feedback_parent == null:
+		var form_panel = root_layer.find_child("OnlineLobbyFormPanel", true, false) as Control
+		if form_panel != null:
+			feedback_parent = form_panel.get_parent() as Control
+	if feedback_art != null and feedback_parent != null:
+		feedback_parent.remove_child(feedback_art)
+		feedback_art.queue_free()
+	if online_feedback.strip_edges() == "" and not online_waiting_for_server:
+		return
+	if feedback_parent != null:
+		draw_online_feedback_art(feedback_parent)
 
 
 func _show_rules_screen_impl() -> void:
@@ -23361,7 +23473,7 @@ func _show_rules_screen_impl() -> void:
 	var codex_rear = make_gpt_plate_rect(rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.18), "ui_jade_reading_plate")
 	codex_rear.name = "RulesCodex3DRearShell"
 	root_layer.add_child(codex_rear)
-	var codex_rear_gpt = add_optional_gpt_illustration_texture(codex_rear, "rules_gpt_scroll", rect_full(-0.01, -0.01, 1.01, 1.01), 0.48, false)
+	var codex_rear_gpt = add_optional_gpt_illustration_texture(codex_rear, "rules_gpt_scroll", rect_full(-0.01, -0.01, 1.01, 1.01), 0.16, false)
 	if codex_rear_gpt != null:
 		codex_rear_gpt.name = "RulesCodexRearGPTTexture"
 		codex_rear.move_child(codex_rear_gpt, 0)
@@ -23628,7 +23740,7 @@ func _show_shop_screen_impl() -> void:
 	var cabinet_rear = make_gpt_plate_rect(rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.22), "ui_jade_reading_plate")
 	cabinet_rear.name = "ShopCabinet3DRearShell"
 	root_layer.add_child(cabinet_rear)
-	var cabinet_rear_gpt = add_optional_gpt_illustration_texture(cabinet_rear, "shop_gpt_vault", rect_full(-0.01, -0.01, 1.01, 1.01), 0.34, false)
+	var cabinet_rear_gpt = add_optional_gpt_illustration_texture(cabinet_rear, "shop_gpt_vault", rect_full(-0.01, -0.01, 1.01, 1.01), 0.14, false)
 	if cabinet_rear_gpt != null:
 		cabinet_rear_gpt.name = "ShopCabinetRearGPTTexture"
 		cabinet_rear.move_child(cabinet_rear_gpt, 0)
@@ -23640,19 +23752,19 @@ func _show_shop_screen_impl() -> void:
 	cabinet_rear.add_child(cabinet_top_glint)
 
 	# 主面板
-	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.28), "ui_jade_reading_plate")
+	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.20), "ui_jade_reading_plate")
 	panel.name = "ShopCabinetFrontPanel"
 	root_layer.add_child(panel)
-	draw_secondary_screen_texture(panel, "shop_vault", "ShopVaultTexture", 0.12)
+	draw_secondary_screen_texture(panel, "shop_vault", "ShopVaultTexture", 0.05)
 	var shop_gpt_key := "shop_gpt_vault"
-	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.22, false)
-	var shop_mid_ornament = add_optional_gpt_illustration_texture(panel, "settings_overview_panel", rect_full(0.06, 0.16, 0.94, 0.90), 0.22, false)
+	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.08, false)
+	var shop_mid_ornament = add_optional_gpt_illustration_texture(panel, "settings_overview_panel", rect_full(0.06, 0.16, 0.94, 0.90), 0.05, false)
 	if shop_mid_ornament != null:
 		shop_mid_ornament.name = "ShopMidOrnamentPlate"
 	if gpt_shop_texture != null:
 		gpt_shop_texture.name = "ShopGPTVaultTexture"
 		# r496: reduce dark vault wash + warm lift so item rows remain commercial-readable.
-		gpt_shop_texture.modulate = Color(1.58, 1.34, 1.08, minf(0.62, gpt_shop_texture.modulate.a))
+		gpt_shop_texture.modulate = Color(1.22, 1.14, 1.04, minf(0.18, gpt_shop_texture.modulate.a))
 		panel.move_child(gpt_shop_texture, min(1, panel.get_child_count() - 1))
 	# 书架式滑入动画 / Shelf-slide entrance
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -25057,8 +25169,9 @@ func connect_online() -> void:
 	sent_hello = false
 	var err = tcp.connect_to_host(online_host_edit.text.strip_edges(), DEFAULT_PORT)
 	set_status("正在连接 %s:%d ..." % [online_host_edit.text.strip_edges(), DEFAULT_PORT])
+	refresh_online_lobby_state()
 	if err != OK:
-		set_status("连接失败：%s" % error_string(err))
+		set_online_feedback("连接失败：%s" % error_string(err), false)
 
 func handle_online_ack(data: Dictionary) -> void:
 	var message = online_server_message_text(data, "")
@@ -25091,7 +25204,8 @@ func handle_online_message(line: String) -> void:
 		return
 	var kind = normalize_online_message_kind(data)
 	if kind == "welcome":
-		set_status("已连接：" + str(data.get("name", "")))
+		var server_name = str(data.get("name", "")).strip_edges()
+		set_online_feedback("已连接%s，可建房或入房。" % (("：" + server_name) if server_name != "" else "服务器"), false)
 	elif kind == "info":
 		set_online_feedback(online_server_message_text(data, "服务器提示"), false)
 	elif kind == "error":
@@ -25347,7 +25461,7 @@ func online_server_message_text(data: Dictionary, fallback: String) -> String:
 
 func send_online(payload: Dictionary) -> bool:
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
-		set_status("请先连接服务器。")
+		set_online_feedback("请先连接服务器。", false)
 		return false
 	var text = JSON.stringify(payload) + "\n"
 	tcp.put_data(text.to_utf8_buffer())
@@ -25367,6 +25481,7 @@ func set_online_feedback(text: String, waiting: bool = false) -> void:
 	if not waiting:
 		online_last_sent_msec = 0
 	set_status(text)
+	refresh_online_feedback_art()
 
 
 func _ready() -> void:
@@ -25857,15 +25972,17 @@ func poll_online(now_msec: int = -1) -> void:
 	if status != tcp_status:
 		tcp_status = status
 		if status == StreamPeerTCP.STATUS_CONNECTED:
-			set_status("已连接服务器")
+			set_online_feedback("已连接服务器，可建房或入房。", false)
 			if not sent_hello:
 				sent_hello = true
 				send_online({"type": "hello", "name": online_name_edit.text if online_name_edit else "云桌道友"})
 		elif status == StreamPeerTCP.STATUS_ERROR:
-			set_status("连接出错")
+			set_online_feedback("连接出错，请重试。", false)
 		elif status == StreamPeerTCP.STATUS_NONE and mode.begins_with("online"):
-			pass
+			set_online_feedback("连接已断开，请重新连接。", false)
+		refresh_online_lobby_state()
 	if status != StreamPeerTCP.STATUS_CONNECTED:
+		refresh_online_lobby_state()
 		return
 	var available = tcp.get_available_bytes()
 	if available <= 0:
@@ -25877,6 +25994,7 @@ func poll_online(now_msec: int = -1) -> void:
 		tcp_buffer = tcp_buffer.substr(split_at + 1)
 		if line.length() > 0:
 			handle_online_message(line)
+	refresh_online_lobby_state()
 
 
 func play_outgoing_online_action_audio(payload: Dictionary) -> void:
@@ -25905,6 +26023,7 @@ func clear_online_feedback() -> void:
 	online_waiting_for_server = false
 	online_last_sent_action = ""
 	online_last_sent_msec = 0
+	refresh_online_feedback_art()
 
 
 func start_voice_chat() -> void:
@@ -26879,23 +26998,10 @@ func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> Str
 	var parts: Array[String] = []
 	parts.append("荐%s" % tile_label(str(best.get("tile", ""))))
 	parts.append(shanten_label(int(best.get("shanten", 8))))
-	var reason = str(best.get("reason_label", ""))
-	if reason != "":
-		parts.append(reason)
-	var plan = hand_plan_text(best)
-	if plan != "":
-		parts.append(plan)
 	parts.append("进%d/%d" % [int(best.get("ukeire", 0)), int(best.get("variety", 0))])
-	var wait = effective_tile_text(best, 2)
-	if wait != "":
-		parts.append(wait)
 	var safety = discard_safety_short_text(best)
 	if safety != "":
 		parts.append(safety)
-	parts.append(str(best.get("stance", "均衡")))
-	var safe_hint = safest_discard_hint_text(best, safest)
-	if safe_hint != "":
-		parts.append(safe_hint)
 	return " · ".join(parts)
 
 func hand_tray_state_text() -> String:

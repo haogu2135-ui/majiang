@@ -947,7 +947,11 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# r214: bulk GPT chrome sweep
 	if not force_visible and (mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled()):
 		return
-	var panel = make_gpt_plate_rect(rect_full(0.155, 0.625, 0.545, 0.755), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
+	# The narrow center-left HUD slot sits between the left river and the center
+	# surface, above the player river; it stays clear of every discard zone,
+	# action dock, and hand tray at all supported aspect ratios.
+	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, 0.405, 0.650), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
+	panel.set_name("AdvisorPanel")
 	parent.add_child(panel)
 	var advisor_texture = add_illustration_texture(panel, "advisor_map", rect_full(0.010, 0.035, 0.990, 0.965), 0.12, false)
 	if advisor_texture != null:
@@ -972,31 +976,29 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	draw_advisor_panel_priority_sweep(panel)
 	draw_advisor_panel_decision_bridge(panel)
 	draw_advisor_panel_analysis_scan(panel)
+	var advisor_card_rect_a := rect_full(0.03, 0.34, 0.97, 0.53)
+	var advisor_card_rect_b := rect_full(0.03, 0.55, 0.97, 0.74)
+	var advisor_card_rect_c := rect_full(0.03, 0.76, 0.97, 0.95)
 	if offline_phase == "pending_claim":
-		draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "响应", "%s · %s" % [
-			tile_label(str(offline_pending_claim.get("tile", ""))),
-			claim_options_text(offline_pending_claim),
-		], human_claim_hint_text(), Color(0.86, 0.78, 0.56))
-		draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "牌局", advisor_turn_line(), current_status_text(), Color(0.62, 0.78, 0.82))
-		draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+		draw_advisor_info_card(panel, advisor_card_rect_a, "响应", "%s" % tile_label(str(offline_pending_claim.get("tile", ""))), "%s" % claim_options_text(offline_pending_claim), Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, advisor_card_rect_b, "牌局", advisor_turn_line(), current_status_text(), Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, advisor_card_rect_c, "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 		return
 	if can_self_discard():
 		var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
 		if reports.is_empty():
-			draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "推荐", "整理手牌", "等待可执行出牌", Color(0.86, 0.78, 0.56))
-			draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "收益", score_strategy_text(0), advisor_turn_line(), Color(0.62, 0.78, 0.82))
-			draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+			draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "整理", "待出牌", Color(0.86, 0.78, 0.56))
+			draw_advisor_info_card(panel, advisor_card_rect_b, "势", "等待", advisor_turn_line(), Color(0.62, 0.78, 0.82))
+			draw_advisor_info_card(panel, advisor_card_rect_c, "守", "观测", opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 			return
 		var best: Dictionary = reports[0]
-		draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "推荐", advisor_primary_text(best), advisor_options_text(reports, 3), Color(0.86, 0.78, 0.56))
-		draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "收益", advisor_value_text(best), advisor_shape_text(best), Color(0.62, 0.78, 0.82))
-		draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0, best), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+		draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "打%s" % tile_label(str(best.get("tile", ""))), "%s · 进%d" % [shanten_label(int(best.get("shanten", 8))), int(best.get("ukeire", 0))], Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, advisor_card_rect_b, "势", shanten_label(int(best.get("shanten", 8))), "进%d" % int(best.get("ukeire", 0)), Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, advisor_card_rect_c, "守", discard_safety_short_text(best), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 		return
-	draw_advisor_info_card(panel, rect_full(0.03, 0.28, 0.36, 0.88), "牌局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
-	draw_advisor_info_card(panel, rect_full(0.38, 0.28, 0.68, 0.88), "进程", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
-	draw_advisor_info_card(panel, rect_full(0.70, 0.28, 0.97, 0.88), "防守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
-
-
+	draw_advisor_info_card(panel, advisor_card_rect_a, "局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
+	draw_advisor_info_card(panel, advisor_card_rect_b, "势", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
+	draw_advisor_info_card(panel, advisor_card_rect_c, "守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 func draw_advisor_panel_analysis_scan(parent: Control) -> Control:
 	# r209: GPT chrome conversion
 	var accent = hand_tray_state_fill()
@@ -4498,16 +4500,16 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	edit.add_child(art)
 	var accent = line_edit_accent(label_text)
-	var field_plate = add_optional_gpt_illustration_texture(art, "ui_online_form_field", rect_full(0.000, 0.000, 1.000, 1.000), 0.70, false)
+	var field_plate = add_optional_gpt_illustration_texture(art, "ui_online_form_field", rect_full(0.000, 0.000, 1.000, 1.000), 0.32, false)
 	if field_plate == null:
-		field_plate = add_optional_gpt_illustration_texture(art, "ui_chat_lane_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.55, false)
+		field_plate = add_optional_gpt_illustration_texture(art, "ui_chat_lane_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.28, false)
 	if field_plate != null:
 		field_plate.name = "LineEditGptFieldPlate_%s" % art_id
 		field_plate.modulate = Color(
 			clampf(0.55 + accent.r * 0.45, 0.30, 1.15),
 			clampf(0.55 + accent.g * 0.45, 0.30, 1.15),
 			clampf(0.55 + accent.b * 0.45, 0.30, 1.15),
-			0.70
+			0.38
 		)
 	var surface = make_gpt_plate_rect(rect_full(0.006, 0.055, 0.994, 0.945), Color(0.006, 0.018, 0.018, 0.070), "ui_jade_reading_plate")
 	surface.name = "LineEditInputSurface_%s" % art_id
@@ -8262,7 +8264,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	var panel_shadow = make_soft_depth_panel(overlay, panel_shadow_rect, Color(0.0, 0.0, 0.0, 0.40), 24)
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 	var rear_shell_rect := Rect2(panel_rect.position - Vector2(0.009, 0.012), panel_rect.size + Vector2(0.011, 0.010))
-	var rear_shell = make_gpt_plate_rect(rear_shell_rect, Color(0.290, 0.360, 0.280, 0.98), "ui_jade_reading_plate")
+	var rear_shell = make_gpt_plate_rect(rear_shell_rect, Color(0.290, 0.360, 0.280, 0.38), "ui_jade_reading_plate")
 	rear_shell.name = "SettingsConsole3DRearShell"
 	overlay.add_child(rear_shell)
 	var rear_lower_edge = make_gpt_route_rail(rect_full(0.022, 0.944, 0.978, 0.995), Color(0.0, 0.0, 0.0, 0.16))
@@ -8273,7 +8275,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rear_shell.add_child(rear_top_glint)
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.99), "ui_jade_reading_plate")
+	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.50), "ui_jade_reading_plate")
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
@@ -8291,12 +8293,12 @@ func draw_settings_overlay(parent: Control) -> void:
 		var corner_cap = make_gpt_plate_rect(rect_full(corner_x, corner_y, corner_x + 0.026, corner_y + 0.034), Color(0.58, 0.40, 0.16, 0.34), "ui_jade_reading_plate")
 		corner_cap.name = "SettingsConsole3DCornerCap_%d" % corner_index
 		panel.add_child(corner_cap)
-	var compass_texture = add_illustration_texture(panel, "settings_compass", rect_full(0.018, 0.018, 0.982, 0.982), 0.055, false)
+	var compass_texture = add_illustration_texture(panel, "settings_compass", rect_full(0.018, 0.018, 0.982, 0.982), 0.020, false)
 	if compass_texture != null:
 		compass_texture.name = "SettingsCompassTexture"
 		panel.move_child(compass_texture, 0)
 	var settings_gpt_key := "settings_gpt_panel_v2"
-	var gpt_settings_texture = add_optional_gpt_illustration_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.44, false)
+	var gpt_settings_texture = add_optional_gpt_illustration_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.035, false)
 	if gpt_settings_texture != null:
 		gpt_settings_texture.name = "SettingsGPTPanelTexture"
 		gpt_settings_texture.modulate = Color(2.65, 2.72, 2.20, gpt_settings_texture.modulate.a)
@@ -12311,16 +12313,16 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
 	parent.add_child(row)
-	var row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.58, false)
+	var row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.24, false)
 	if row_plate == null:
-		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.52, false)
+		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
 	if row_plate != null:
 		row_plate.name = "SettingRowGptPlate_%s" % title
 		# r186: warm lacquer plate (not mint) so text plate contrast stays commercial.
-		row_plate.modulate = Color(0.72, 0.62, 0.48, 0.70)
+		row_plate.modulate = Color(0.78, 0.68, 0.52, 0.38)
 		row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.08, 0.06, 0.04, 0.54), "ui_jade_reading_plate")
+	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.08, 0.06, 0.04, 0.30), "ui_jade_reading_plate")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
 	var title_label = make_label(row, title, 13, Color(0.98, 0.95, 0.84, 0.99), true)
@@ -12350,7 +12352,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_plate_rect(rect, Color(0.330, 0.405, 0.335, 0.98), "ui_jade_reading_plate")
+	var section = make_gpt_plate_rect(rect, Color(0.330, 0.405, 0.335, 0.44), "ui_jade_reading_plate")
 	section.name = "SettingsSection_%s" % title_text
 	parent.add_child(section)
 	var section_depth = make_gpt_route_rail(rect_full(0.015, 0.910, 0.985, 0.985), Color(0.0, 0.0, 0.0, 0.10))
@@ -12359,13 +12361,13 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_top_rim = make_gpt_ribbon(rect_full(0.035, 0.018, 0.965, 0.048), Color(1.0, 0.88, 0.56, 0.055))
 	section_top_rim.name = "SettingsSection3DTopRim_%s" % title_text
 	section.add_child(section_top_rim)
-	var section_plate = add_optional_gpt_illustration_texture(section, "ui_settings_section_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.72, false)
+	var section_plate = add_optional_gpt_illustration_texture(section, "ui_settings_section_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.10, false)
 	if section_plate == null:
-		section_plate = add_optional_gpt_illustration_texture(section, "ui_confirm_sheet_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.55, false)
+		section_plate = add_optional_gpt_illustration_texture(section, "ui_confirm_sheet_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.08, false)
 	if section_plate != null:
 		section_plate.name = "SettingsSectionGptPlate_%s" % title_text
 		section.move_child(section_plate, 0)
-	var brocade_texture = add_illustration_texture(section, "settings_section_brocade", rect_full(-0.012, -0.020, 1.012, 1.020), 0.085, false)
+	var brocade_texture = add_illustration_texture(section, "settings_section_brocade", rect_full(-0.012, -0.020, 1.012, 1.020), 0.025, false)
 	if brocade_texture != null:
 		brocade_texture.name = "SettingsSectionBrocadeTexture_%s" % title_text
 	draw_settings_section_signal(section, title_text)
