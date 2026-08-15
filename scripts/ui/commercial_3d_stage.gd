@@ -1,7 +1,6 @@
 class_name Commercial3DStage
 extends SubViewportContainer
 
-const TILE_BACK_TEXTURE_PATH := "res://assets/tiles/tile_back.png"  # r389 warm 2D back
 const FELT_TEXTURE_PATH := "res://assets/table/table_felt_warm_gpt.png"  # r428: GPT warm bright felt (lifted from gpt-image-2)
 const LACQUER_TEXTURE_PATH := "res://assets/table/table_lacquer_3d_gpt.png"
 const FELT_NORMAL_PATH := "res://assets/table/table_felt_3d_normal.png"
@@ -12,17 +11,6 @@ const QUALITY_AUTO := -1
 const QUALITY_LOW := 0
 const QUALITY_STANDARD := 1
 const QUALITY_HIGH := 2
-const MENU_TILE_PATHS := [
-	"res://assets/tiles_subtle_3d/tile_man1.png",
-	"res://assets/tiles_subtle_3d/tile_honor_east.png",
-	"res://assets/tiles_subtle_3d/tile_pin5.png",
-]
-const SEAT_TILE_PATHS := [
-	"res://assets/tiles_subtle_3d/tile_honor_east.png",
-	"res://assets/tiles_subtle_3d/tile_honor_south.png",
-	"res://assets/tiles_subtle_3d/tile_honor_west.png",
-	"res://assets/tiles_subtle_3d/tile_honor_north.png",
-]
 
 var stage_mode := "battle"
 var effects_enabled := true
@@ -145,12 +133,9 @@ func sync_battle_state(requested_active_seat: int, requested_wall_ratio: float) 
 	active_seat = clamp(requested_active_seat, 0, 3)
 	wall_ratio = clamp(requested_wall_ratio, 0.0, 1.0)
 	if is_node_ready() and stage_mode == "battle":
-		var bodies := find_child("BattleWallBodies3D", true, false) as MultiMeshInstance3D
-		var current_count := bodies.multimesh.instance_count if bodies != null and bodies.multimesh != null else -1
-		if current_count != _wall_instance_count(wall_ratio):
-			_build_scene(focus_texture_cache)
-			return
-	_update_active_marker()
+		# Wall faces are rendered by the 2D assets/tiles layer; this stage only
+		# carries the table surface and active-seat lighting.
+		_update_active_marker()
 
 
 func _build_scene(focus_texture: Texture2D = null) -> void:
@@ -321,8 +306,6 @@ func _build_menu_stage() -> void:
 	_apply_material_texture(lacquer, LACQUER_TEXTURE_PATH, Vector3(1.35, 1.35, 1.35), Color(0.90, 0.86, 0.80), LACQUER_NORMAL_PATH, LACQUER_ROUGHNESS_PATH, 0.50)
 	_apply_material_texture(jade, FELT_TEXTURE_PATH, Vector3(1.0, 1.0, 1.0), Color(1.20, 1.06, 0.90), FELT_NORMAL_PATH, FELT_ROUGHNESS_PATH, 0.62)  # r423
 	gold_material = _material("Antique gold", Color(0.72, 0.48, 0.16), 0.86, 0.18, Color(0.22, 0.10, 0.02))
-	var porcelain := _material("Warm porcelain", Color(0.97, 0.94, 0.86), 0.05, 0.12, Color(0.10, 0.08, 0.05))
-
 	_add_beveled_box(stage_root, "MenuTableBody", Vector3(10.8, 0.58, 4.65), Vector3(0.0, -0.58, 0.15), lacquer, 0.16)
 	_add_beveled_box(stage_root, "MenuTableSurface", Vector3(10.35, 0.18, 4.22), Vector3(0.0, -0.20, 0.10), jade, 0.075)
 	_add_beveled_box(stage_root, "MenuFrontGoldRail", Vector3(10.15, 0.075, 0.075), Vector3(0.0, -0.08, 2.18), gold_material, 0.026)
@@ -341,110 +324,23 @@ func _build_menu_stage() -> void:
 		_add_beveled_box(pedestal, "PedestalBase", Vector3(2.42, 0.18, 1.85), Vector3(0.0, 0.02, 0.12), lacquer, 0.070)
 		_add_beveled_box(pedestal, "PedestalJadeInset", Vector3(2.16, 0.08, 1.58), Vector3(0.0, 0.14, 0.08), jade, 0.030)
 		_add_beveled_box(pedestal, "PedestalGoldLip", Vector3(2.22, 0.055, 0.055), Vector3(0.0, 0.19, 0.88), gold_material, 0.020)
-		var texture := _load_texture(MENU_TILE_PATHS[i])
-		showcase_tiles.append(_add_upright_tile(pedestal, "HeroTile_%d" % i, Vector3(0.0, 1.48, -0.05), rotations[i], porcelain, texture))
-		showcase_tiles.append(_add_upright_tile(pedestal, "CompanionTileLeft_%d" % i, Vector3(-0.62, 1.17, 0.14), rotations[i] - 0.10, porcelain, _load_texture(MENU_TILE_PATHS[(i + 1) % 3]), Vector2(0.54, 0.78)))
-		showcase_tiles.append(_add_upright_tile(pedestal, "CompanionTileRight_%d" % i, Vector3(0.62, 1.17, 0.14), rotations[i] + 0.10, porcelain, _load_texture(MENU_TILE_PATHS[(i + 2) % 3]), Vector2(0.54, 0.78)))
+		# Menu actions are authored 2D controls above this decorative stage. No
+		# physical or textured 3D tile is spawned here.
 
 
 func _build_hand_stage() -> void:
 	var lacquer := _material("Hand tray lacquer", Color(0.020, 0.017, 0.013), 0.60, 0.20)
 	_apply_material_texture(lacquer, LACQUER_TEXTURE_PATH, Vector3(2.2, 2.2, 2.2), Color(0.86, 0.82, 0.76), LACQUER_NORMAL_PATH, LACQUER_ROUGHNESS_PATH, 0.42)
-	var porcelain := _material("Hand tile porcelain", Color(0.86, 0.84, 0.79), 0.01, 0.30, Color(0.0, 0.0, 0.0))
-	var jade_back := _material("Hand tile jade back", Color(0.18, 0.12, 0.08), 0.14, 0.24, Color(0.06, 0.04, 0.02))
 	var hand_gold := _material("Hand tray gold", Color(0.74, 0.50, 0.16), 0.88, 0.16, Color(0.16, 0.055, 0.006))
 	_add_beveled_box(stage_root, "HandTray3DFloor", Vector3(24.0, 0.16, 1.30), Vector3(0.0, -0.91, -0.08), lacquer, 0.065)
 	_add_beveled_box(stage_root, "HandTray3DGoldRail", Vector3(23.4, 0.055, 0.065), Vector3(0.0, -0.805, 0.61), hand_gold, 0.020)
-
-	var tile_height := hand_world_tile_height
-	var tile_width := clampf(tile_height * hand_tile_aspect, 0.88, 1.25)
-	var identity_transforms: Array[Transform3D] = []
-	for i in range(hand_face_textures.size()):
-		identity_transforms.append(Transform3D.IDENTITY)
-	hand_body_batch = _add_multimesh(stage_root, "HandTilePorcelainBodies3D", _beveled_box_mesh(Vector3(tile_width, tile_height, 0.20), 0.060, _quality_bevel_segments()), identity_transforms)
-	hand_body_batch.material_override = porcelain
-	hand_back_batch = _add_multimesh(stage_root, "HandTileJadeBacks3D", _beveled_box_mesh(Vector3(tile_width * 0.94, tile_height * 0.94, 0.060), 0.025, _quality_bevel_segments()), identity_transforms)
-	hand_back_batch.material_override = jade_back
-	hand_foot_batch = _add_multimesh(stage_root, "HandTileJadeFeet3D", _beveled_box_mesh(Vector3(tile_width * 0.92, 0.090, 0.235), 0.026, _quality_bevel_segments()), identity_transforms)
-	hand_foot_batch.material_override = jade_back
-	for i in range(hand_face_textures.size()):
-		var state: Dictionary = hand_tile_states[i] if i < hand_tile_states.size() else {}
-		var highlighted := bool(state.get("highlighted", false))
-		var risk_strength := float(state.get("risk_strength", 0.0))
-		var accent: Color = state.get("accent", Color(0.78, 0.56, 0.20))
-		var tile_root := Node3D.new()
-		tile_root.name = "HandPhysicalTile3D_%02d" % i
-		tile_root.set_meta("rest_y", 0.015 + (0.128 if highlighted else 0.0))
-		tile_root.set_meta("rest_z", 0.0)
-		tile_root.set_meta("rest_roll", 0.0)
-		tile_root.set_meta("highlighted", highlighted)
-		tile_root.set_meta("drawn", bool(state.get("drawn", false)))
-		stage_root.add_child(tile_root)
-		hand_tile_roots.append(tile_root)
-
-		if highlighted or risk_strength > 0.15:
-			var rim_color := Color(accent.r, accent.g, accent.b, 1.0)
-			var rim_material := _material("Hand tile state rim %d" % i, rim_color.lightened(0.14 if highlighted else 0.0).darkened(0.04 if highlighted else 0.16), 0.84 if highlighted else 0.60, 0.11 if highlighted else 0.20, rim_color * (0.44 if highlighted else 0.09))
-			_add_beveled_box(tile_root, "HandTileStateRim_%02d" % i, Vector3(tile_width + (0.100 if highlighted else 0.060), tile_height + (0.100 if highlighted else 0.060), 0.128 if highlighted else 0.105), Vector3(0.0, 0.0, -0.060), rim_material, 0.060 if highlighted else 0.052)
-		var decal_texture := hand_face_textures[i]
-		if decal_texture != null:
-			var decal := _add_quad(tile_root, "HandTileDecal_%02d" % i, Vector2(tile_width * 0.94, tile_height * 0.94), Vector3(0.0, 0.0, 0.106), _face_decal_material(decal_texture, true))
-			decal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_apply_hand_layout()
-	_apply_hand_pose(1.0, true)
-	if effects_enabled:
-		for tile_root in hand_tile_roots:
-			if bool(tile_root.get_meta("drawn", false)):
-				tile_root.position.y += 0.28
-				tile_root.position.z += 0.12
-				tile_root.scale = Vector3(0.88, 0.88, 0.88)
+	# Hand faces are authored TextureRect nodes in the main 2D render path.
+	# This stage only supplies the optional tray depth rail.
 
 
 func _build_table_tiles_stage() -> void:
-	if table_tile_entries.is_empty():
-		return
-	var porcelain := _material("River tile porcelain", Color(0.87, 0.85, 0.80), 0.01, 0.28, Color(0.0, 0.0, 0.0))
-	var glaze_lip := _material("River tile glaze lip", Color(0.93, 0.91, 0.87), 0.02, 0.22, Color(0.0, 0.0, 0.0))
-	var jade_base := _material("River tile lacquer base", Color(0.12, 0.09, 0.06), 0.14, 0.24, Color(0.04, 0.03, 0.02))  # r408
-	var shadow_material := _material("River tile contact shadow", Color(0.0, 0.0, 0.0, 0.28), 0.0, 1.0)
-	shadow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	shadow_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var identity_transforms: Array[Transform3D] = []
-	for i in range(table_tile_entries.size()):
-		identity_transforms.append(Transform3D.IDENTITY)
-	table_tile_body_batch = _add_multimesh(stage_root, "TableTilePorcelainBodies3D", _beveled_box_mesh(Vector3(1.0, 0.14, 1.0), 0.055, _quality_bevel_segments()), identity_transforms)
-	table_tile_body_batch.material_override = porcelain
-	table_tile_face_batch = _add_multimesh(stage_root, "TableTileGlazeLips3D", _beveled_box_mesh(Vector3(0.965, 0.030, 0.965), 0.038, _quality_bevel_segments()), identity_transforms)
-	table_tile_face_batch.material_override = glaze_lip
-	table_tile_base_batch = _add_multimesh(stage_root, "TableTileJadeBases3D", _beveled_box_mesh(Vector3(1.0, 0.055, 1.0), 0.025, _quality_bevel_segments()), identity_transforms)
-	table_tile_base_batch.material_override = jade_base
-	var shadow_mesh := QuadMesh.new()
-	shadow_mesh.size = Vector2(1.12, 1.12)
-	table_tile_shadow_batch = _add_multimesh(stage_root, "TableTileContactShadows3D", shadow_mesh, identity_transforms)
-	table_tile_shadow_batch.material_override = shadow_material
-	table_tile_shadow_batch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	for i in range(table_tile_entries.size()):
-		var entry: Dictionary = table_tile_entries[i]
-		var tile_root := Node3D.new()
-		tile_root.name = "TableTilePhysical3D_%02d" % i
-		tile_root.set_meta("highlighted", bool(entry.get("highlighted", false)))
-		tile_root.set_meta("raised", bool(entry.get("raised", false)))
-		tile_root.set_meta("role", str(entry.get("role", "discard")))
-		tile_root.set_meta("phase", float(i) * 0.31)
-		stage_root.add_child(tile_root)
-		table_tile_roots.append(tile_root)
-		var accent: Color = entry.get("accent", Color(0.84, 0.65, 0.28))
-		if bool(entry.get("highlighted", false)):
-			var rim_material := _material("River latest tile rim", accent.lightened(0.18).darkened(0.0), 0.90, 0.08, accent * 0.50)
-			_add_beveled_box(tile_root, "TableTileLatestRim", Vector3(1.20, 0.075, 1.20), Vector3(0.0, -0.038, 0.0), rim_material, 0.058)
-		var face_texture := entry.get("texture", null) as Texture2D
-		if face_texture != null:
-			var decal_material := _face_decal_material(face_texture, false)
-			var decal := _add_quad(tile_root, "TableTileDecal_%02d" % i, Vector2(0.94, 0.94), Vector3(0.0, 0.096, 0.0), decal_material)
-			decal.rotation.x = -PI * 0.5
-			decal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_apply_table_tile_layout()
-	_apply_table_tile_pose(1.0, true)
+	# Discards and melds are already rendered as 2D TextureRect nodes.
+	return
 
 
 func _build_battle_stage(focus_texture: Texture2D) -> void:
@@ -502,21 +398,8 @@ func _build_battle_stage(focus_texture: Texture2D) -> void:
 
 
 func _build_wall_arc(material: StandardMaterial3D) -> void:
-	var body_transforms := _wall_body_transforms()
-	var back_transforms := _wall_back_transforms(body_transforms)
-
-	var body_mesh := _beveled_box_mesh(Vector3(0.43, 0.15, 0.64), 0.045, _quality_bevel_segments())
-	var body_instance := _add_multimesh(stage_root, "BattleWallBodies3D", body_mesh, body_transforms)
-	body_instance.material_override = material
-
-	var back_texture := _load_texture(TILE_BACK_TEXTURE_PATH)
-	if back_texture == null or back_transforms.is_empty():
-		return
-	var back_mesh := QuadMesh.new()
-	back_mesh.size = Vector2(0.405, 0.605)
-	back_mesh.material = _texture_material(back_texture, 0.06)  # r427 less wall-back noise near rivers
-	var back_instance := _add_multimesh(stage_root, "BattleWallBackFaces3D", back_mesh, back_transforms)
-	back_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# The wall is a 2D TextureRect grid owned by draw_walls().
+	return
 
 
 func _wall_instance_count(ratio: float) -> int:
@@ -580,16 +463,8 @@ func _build_corner_hardware(lacquer: StandardMaterial3D) -> void:
 
 
 func _build_seat_plaques(porcelain: StandardMaterial3D) -> void:
-	var positions := [
-		Vector3(0.0, 0.23, 2.02),
-		Vector3(4.04, 0.23, 0.0),
-		Vector3(0.0, 0.23, -2.02),
-		Vector3(-4.04, 0.23, 0.0),
-	]
-	var rotations := [0.0, -PI * 0.5, PI, PI * 0.5]
-	for i in range(4):
-		var plaque := _add_flat_tile(stage_root, "SeatPlaque_%d" % i, positions[i], porcelain, _load_texture(SEAT_TILE_PATHS[i]), Vector2(0.42, 0.58))
-		plaque.rotation.y = rotations[i]
+	# Seat labels are owned by the 2D seat panels.
+	return
 
 
 func _wall_tile_transform(position: Vector3, yaw: float) -> Transform3D:
@@ -611,41 +486,13 @@ func _update_active_marker() -> void:
 
 
 func _add_upright_tile(parent: Node3D, node_name: String, position: Vector3, yaw: float, body_material: StandardMaterial3D, texture: Texture2D, tile_size: Vector2 = Vector2(0.72, 1.02)) -> Node3D:
-	var tile := Node3D.new()
-	tile.name = node_name
-	tile.position = position
-	tile.rotation.y = yaw
-	tile.set_meta("rest_y", position.y)
-	tile.set_meta("rest_yaw", yaw)
-	parent.add_child(tile)
-	var jade_back := _material("Carved jade tile back", Color(0.20, 0.14, 0.09), 0.14, 0.18, Color(0.06, 0.04, 0.02))
-	_add_beveled_box(tile, "PorcelainBody", Vector3(tile_size.x, tile_size.y, 0.16), Vector3.ZERO, body_material, 0.055)
-	_add_beveled_box(tile, "JadeBackLayer", Vector3(tile_size.x * 0.92, tile_size.y * 0.90, 0.035), Vector3(0.0, 0.0, -0.090), jade_back, 0.014)
-	_add_beveled_box(tile, "JadeFoot", Vector3(tile_size.x * 0.92, 0.09, 0.19), Vector3(0.0, -tile_size.y * 0.45, -0.012), jade_back, 0.026)
-	var back_texture := _load_texture(TILE_BACK_TEXTURE_PATH)
-	if back_texture != null:
-		var back := _add_quad(tile, "TileBack", tile_size * Vector2(0.88, 0.86), Vector3(0.0, 0.0, -0.110), _texture_material(back_texture, 0.18))
-		back.rotation.y = PI
-		back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	if texture != null:
-		var face := _add_quad(tile, "TileFace", tile_size * Vector2(0.94, 0.94), Vector3(0.0, 0.0, 0.086), _face_decal_material(texture, true))
-		face.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return tile
+	# Retained as a compatibility stub; visible tile faces must never be 3D meshes.
+	return null
 
 
 func _add_flat_tile(parent: Node3D, node_name: String, position: Vector3, body_material: StandardMaterial3D, texture: Texture2D, tile_size: Vector2) -> Node3D:
-	var tile := Node3D.new()
-	tile.name = node_name
-	tile.position = position
-	tile.set_meta("rest_y", position.y)
-	parent.add_child(tile)
-	var jade_base := _material("Flat tile lacquer base", Color(0.14, 0.10, 0.07), 0.16, 0.22, Color(0.05, 0.03, 0.02))  # r425 no jade green under focus/seat plaques
-	_add_beveled_box(tile, "JadeBase", Vector3(tile_size.x * 0.94, 0.060, tile_size.y * 0.94), Vector3(0.0, -0.090, 0.0), jade_base, 0.022)
-	_add_beveled_box(tile, "PorcelainBody", Vector3(tile_size.x, 0.16, tile_size.y), Vector3.ZERO, body_material, 0.048)
-	var face := _add_quad(tile, "TileFace", tile_size * Vector2(0.94, 0.94), Vector3(0.0, 0.092, 0.0), _face_decal_material(texture, true))
-	face.rotation.x = -PI * 0.5
-	face.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return tile
+	# Retained as a compatibility stub; visible tile faces must never be 3D meshes.
+	return null
 
 
 func _add_box(parent: Node3D, node_name: String, dimensions: Vector3, position: Vector3, material: StandardMaterial3D) -> MeshInstance3D:

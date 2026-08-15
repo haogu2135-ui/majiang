@@ -493,10 +493,14 @@ func poll_online(now_msec: int = -1) -> void:
 				send_online({"type": "hello", "name": online_name_edit.text if online_name_edit else "云桌道友"})
 		elif status == StreamPeerTCP.STATUS_ERROR:
 			set_online_feedback("连接出错，请重试。", false)
+			clear_online_room_snapshot()
 		elif status == StreamPeerTCP.STATUS_NONE and mode.begins_with("online"):
 			set_online_feedback("连接已断开，请重新连接。", false)
+			clear_online_room_snapshot()
 		refresh_online_lobby_state()
 	if status != StreamPeerTCP.STATUS_CONNECTED:
+		if mode == "online_lobby" and not online_room.is_empty():
+			clear_online_room_snapshot()
 		refresh_online_lobby_state()
 		return
 	var available = tcp.get_available_bytes()
@@ -679,7 +683,7 @@ func normalize_claim_options(value) -> Array:
 
 
 func render_room_log() -> void:
-	if logs_label == null:
+	if not is_instance_valid(logs_label):
 		return
 	var logs = online_room.get("logs", [])
 	if typeof(logs) != TYPE_ARRAY:
@@ -1628,6 +1632,8 @@ func pending_claim_focus_text() -> String:
 func action_intent_rect_for_count(count: int) -> Rect2:
 	var dock_rect = action_dock_rect_for_count(count)
 	var left = max(0.580, dock_rect.position.x)
+	if mode == "offline" and offline_phase == "pending_claim":
+		return Rect2(Vector2(left, 0.558), Vector2(0.975, 0.606))
 	return Rect2(Vector2(left, 0.604), Vector2(0.975, 0.650))  # r437 above dock (height unchanged)
 
 func action_intent_text(count: int) -> String:
@@ -1707,11 +1713,15 @@ func finalize_action_bar_layout() -> void:
 	if count <= 0:
 		return
 	var separation = action_button_separation_for_count(count)
-	action_bar.add_theme_constant_override("separation", separation)
+	if action_bar is FlowContainer:
+		action_bar.add_theme_constant_override("h_separation", separation)
+		action_bar.add_theme_constant_override("v_separation", separation)
+	else:
+		action_bar.add_theme_constant_override("separation", separation)
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
 	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"
-	var height = 43.0 if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)  # r400
+	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
 	var btn_index := 0
 	for child in action_bar.get_children():
 		if child is Button:
@@ -1752,8 +1762,9 @@ func action_button_separation_for_count(count: int) -> int:
 	if mode == "offline" and has_pending_danger_discard():
 		return 3
 	if mode == "offline" and offline_phase == "pending_claim":
-		# r400: keep 3px when many legal claim choices so buttons stay >= min touch width.
-		return 3 if count >= 6 else 4
+		# Keep a small, stable gap; FlowContainer wraps claim choices when the row
+		# cannot fit full-size touch targets.
+		return 3
 	if count <= 5:
 		return 4
 	if count <= 8:
@@ -1763,11 +1774,7 @@ func action_button_separation_for_count(count: int) -> int:
 
 func action_button_font_size(width: float) -> int:
 	if mode == "offline" and offline_phase == "pending_claim":
-		if width >= 72.0:
-			return 16
-		if width >= 60.0:
-			return 15
-		return 14  # r397 readable when dock widened
+		return 16 if width >= 72.0 else 15
 	if width >= 78.0:
 		return 18
 	if width >= 68.0:
@@ -4630,15 +4637,8 @@ func should_draw_tile_face_label(tile: String, texture: Texture2D, _lightweight_
 	return TILE_TEXT_OVERLAYS_ENABLED and tile != "" and texture == null
 
 func tile_art_alpha(tile: String, size: Vector2) -> float:
-	# Keep large battle/hand faces fully opaque so suit strokes are not washed out.
-	if size.x < 30.0:
-		return 0.78
-	if size.x >= 50.0:
-		return 1.0
-	if is_flower_tile(tile):
-		return 1.0
-	if is_honor_tile(tile):
-		return 1.0
+	# Authored assets/tiles already carry their intended alpha. Preserve it at
+	# every size so compact rivers do not lose ink density at runtime.
 	return 1.0
 
 func tile_texture_bleed(size: Vector2, lightweight_static_tile: bool) -> Vector2:
@@ -5971,6 +5971,20 @@ func achievement_goal_text(key: String) -> String:
 		"ten_wins":
 			return "目标：累计获胜 10 局"
 	return "目标：完成%s" % achievement_display_name(key)
+
+func achievement_progress_text(key: String) -> String:
+	var unlocked := bool(achievements.get(key, false))
+	if key == "five_wins":
+		var current_wins := clampi(int(game_stats.get("games_won", 0)), 0, 5)
+		if unlocked:
+			current_wins = 5
+		return "进度 %d/5" % current_wins
+	if key == "ten_wins":
+		var current_wins := clampi(int(game_stats.get("games_won", 0)), 0, 10)
+		if unlocked:
+			current_wins = 10
+		return "进度 %d/10" % current_wins
+	return "完成度 已达成" if unlocked else "完成度 待完成"
 
 # ============================================================
 # 商店系统

@@ -351,13 +351,6 @@ func render_game() -> void:
 	table.name = "OfflineTable3DInnerSurface"
 	outer.add_child(table)
 	# Room guofeng lives on screen_layer; table surface stays translucent so felt reads against the room plate.
-	var realtime_stage = Commercial3DStage.new()
-	realtime_stage.name = "OfflineCommercial3DStage"
-	realtime_stage.set_anchors_preset(Control.PRESET_FULL_RECT)
-	realtime_stage.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	var focus_texture: Texture2D = tile_textures.get(last_discard, null)
-	realtime_stage.configure("battle", fx_enabled_effective(), get_current_seat(), float(wall.size()) / 136.0, focus_texture, graphics_quality)
-	table.add_child(realtime_stage)
 	var perspective_depth = BattleTableDepth.new()
 	perspective_depth.name = "BattleTablePerspectiveDepth"
 	perspective_depth.set_anchors_preset(Control.PRESET_FULL_RECT)

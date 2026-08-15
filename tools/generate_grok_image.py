@@ -79,6 +79,18 @@ def sniff_extension(data: bytes, fallback: str = ".bin") -> str:
     return fallback
 
 
+def validate_image_bytes(data: bytes, source: str) -> bytes:
+    """Reject successful HTTP responses that are not raster image data."""
+    image_suffix = sniff_extension(data, "")
+    if image_suffix not in {".jpg", ".png", ".webp"}:
+        preview = data[:32].decode("ascii", errors="replace")
+        raise RuntimeError(
+            f"{source} did not return PNG, JPEG, or WebP bytes "
+            f"(received {len(data)} bytes; prefix={preview!r})"
+        )
+    return data
+
+
 def output_path_for_bytes(requested_path: Path, data: bytes, keep_suffix: bool) -> Path:
     if keep_suffix and requested_path.suffix:
         return requested_path
@@ -140,11 +152,11 @@ def extract_image_bytes(data: dict[str, object], headers: dict[str, str], timeou
 
     b64_json = first.get("b64_json")
     if isinstance(b64_json, str) and b64_json:
-        return base64.b64decode(b64_json)
+        return validate_image_bytes(base64.b64decode(b64_json, validate=True), "b64_json")
 
     url = first.get("url")
     if isinstance(url, str) and url:
-        return download_url(url, headers["User-Agent"], timeout, base_url)
+        return validate_image_bytes(download_url(url, headers["User-Agent"], timeout, base_url), url)
 
     preview = json.dumps(data, ensure_ascii=False)[:2000]
     raise RuntimeError(f"API response did not include b64_json or url: {preview}")

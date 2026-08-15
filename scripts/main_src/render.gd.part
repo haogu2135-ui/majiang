@@ -4,7 +4,12 @@ func action_button_width_for_available(count: int, available_width: float, separ
 	var gap = action_button_separation_for_count(count) if separation < 0 else separation
 	var layout_slack = 2.0
 	var available = available_width - float(max(0, count - 1) * gap) - layout_slack
-	return min(ACTION_BUTTON_MAX_WIDTH, floor(max(1.0, available / float(count))))
+	var width: float = minf(float(ACTION_BUTTON_MAX_WIDTH), floorf(maxf(1.0, available / float(count))))
+	if mode == "offline" and offline_phase == "pending_claim":
+		# Claim buttons wrap in a reserved right-side lane; keep labels readable
+		# while allowing four buttons on the first row at 960x540.
+		return maxf(float(PENDING_CLAIM_BUTTON_MIN_WIDTH), width)
+	return width
 
 func action_button_width_for_count(count: int, separation: int = -1) -> float:
 	return action_button_width_for_available(count, action_bar_pixel_width(), separation)
@@ -674,10 +679,20 @@ func draw_action_intent_flow(parent: Control, count: int, color: Color) -> Contr
 	return null
 
 func draw_actions(parent: Control) -> void:
-	action_bar = HBoxContainer.new()
-	action_bar.alignment = BoxContainer.ALIGNMENT_END
+	if mode == "offline" and offline_phase == "pending_claim":
+		var flow_bar := FlowContainer.new()
+		flow_bar.alignment = FlowContainer.ALIGNMENT_END
+		flow_bar.add_theme_constant_override("h_separation", 3)
+		flow_bar.add_theme_constant_override("v_separation", 3)
+		flow_bar.custom_minimum_size = Vector2(0, 92)
+		action_bar = flow_bar
+	else:
+		var row_bar := HBoxContainer.new()
+		row_bar.alignment = BoxContainer.ALIGNMENT_END
+		action_bar = row_bar
 	configure_passive_container(action_bar)
-	action_bar.add_theme_constant_override("separation", 6)
+	if not action_bar is FlowContainer:
+		action_bar.add_theme_constant_override("separation", 6)
 	apply_rect(action_bar, action_bar_layout_rect())
 	parent.add_child(action_bar)
 
@@ -3127,35 +3142,14 @@ func collect_table_3d_entries_from_proxies(parent: Control) -> Array[Dictionary]
 
 
 func queue_table_3d_stage_refresh(parent: Control) -> void:
-	if parent == null or bool(parent.get_meta("table_3d_refresh_queued", false)):
-		return
-	parent.set_meta("table_3d_refresh_queued", true)
-	call_deferred("refresh_table_3d_stage_from_proxies", parent.get_instance_id())
+	# 牌河和副露由 assets/tiles 的 2D TextureRect 独占；保留函数名只为兼容旧调用点。
+	return
 
 
 func refresh_table_3d_stage_from_proxies(parent_id: int) -> void:
-	var parent := instance_from_id(parent_id) as Control
-	if parent == null or not is_instance_valid(parent):
-		return
-	parent.set_meta("table_3d_refresh_queued", false)
-	var entries := collect_table_3d_entries_from_proxies(parent)
-	var realtime_stage := parent.get_node_or_null("TableRealtime3DStage") as Commercial3DStage
-	if entries.is_empty():
-		if realtime_stage != null:
-			realtime_stage.queue_free()
-		return
-	if realtime_stage == null:
-		realtime_stage = Commercial3DStage.new()
-		realtime_stage.name = "TableRealtime3DStage"
-		realtime_stage.set_anchors_preset(Control.PRESET_FULL_RECT)
-		realtime_stage.modulate = Color(1.0, 1.0, 1.0, 1.0)
-		parent.add_child(realtime_stage)
-	realtime_stage.configure_table_tiles(entries, fx_enabled_effective(), graphics_quality)
-	parent.move_child(realtime_stage, parent.get_child_count() - 1)
-	for child in parent.get_children():
-		var overlay := child as Control
-		if overlay != null and bool(overlay.get_meta("table_3d_foreground", false)):
-			parent.move_child(overlay, parent.get_child_count() - 1)
+	# Historical 3D proxy refresh intentionally disabled. The visible 2D tile node
+	# remains the single source of truth for discard and meld faces.
+	return
 
 
 func make_discard_3d_entry(tile: String, seat: int, zone_rect: Rect2, columns: int, visual_index: int, tile_size: Vector2, table_render_size: Vector2, highlighted: bool) -> Dictionary:
@@ -3543,17 +3537,15 @@ func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2
 
 
 func draw_game_top_hud(parent: Control) -> void:
-	# r214: bulk GPT chrome sweep
-	# 顶部HUD面板 - 增强视觉效果
-	var hud = make_gpt_plate_rect(TOP_HUD_RECT, Color(0.058, 0.078, 0.062, 0.95), "ui_jade_reading_plate")
+	# Keep the generated texture as a restrained header surface; status text and
+	# controls remain the primary visual signal at 960x540.
+	var hud = make_gpt_plate_rect(TOP_HUD_RECT, Color(0.058, 0.078, 0.062, 0.72), "ui_jade_reading_plate")
 	hud.name = "TopHud3DShell"
 	parent.add_child(hud)
 	hud.clip_contents = true
 	var hud_shadow = make_soft_depth_panel(hud, rect_full(0.010, 0.220, 0.990, 1.080), Color(0.0, 0.0, 0.0, 0.36), 12)
 	hud_shadow.name = "TopHud3DCastShadow"
 	hud.move_child(hud_shadow, 0)
-	var hud_rear = make_soft_depth_panel(hud, rect_full(0.008, 0.030, 0.992, 0.980), Color(0.040, 0.028, 0.018, 0.22), 11)
-	hud_rear.name = "TopHud3DRearShell"
 	var hud_depth = make_soft_depth_panel(hud, rect_full(0.018, 0.620, 0.982, 0.980), Color(0.14, 0.084, 0.036, 0.38), 10)
 	hud_depth.name = "TopHud3DDepthEdge"
 	var hud_top_rim = make_soft_depth_panel(hud, rect_full(0.030, 0.015, 0.970, 0.095), Color(1.0, 0.92, 0.58, 0.22), 999)
@@ -3561,10 +3553,10 @@ func draw_game_top_hud(parent: Control) -> void:
 	var hud_jade_rail = make_soft_depth_panel(hud, rect_full(0.040, 0.860, 0.960, 0.930), Color(0.42, 0.30, 0.14, 0.14), 999)
 	hud_jade_rail.name = "TopHud3DJadeRail"
 	var top_hud_gpt_key := "top_hud_gpt_banner"
-	var gpt_top_hud_texture = add_optional_gpt_illustration_texture(hud, top_hud_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.90, false)
+	var gpt_top_hud_texture = add_optional_gpt_atlas_texture(hud, top_hud_gpt_key, Rect2(0.0, 0.0, 1254.0, 260.0), rect_full(0.000, 0.000, 1.000, 0.230), 0.26, false)
 	if gpt_top_hud_texture != null:
 		gpt_top_hud_texture.name = "TopHudGPTBannerTexture"
-		gpt_top_hud_texture.modulate = Color(1.18, 1.10, 0.98, gpt_top_hud_texture.modulate.a)  # r453 r434 warm banner
+		gpt_top_hud_texture.modulate = Color(1.10, 1.04, 0.94, 0.26)
 		hud.move_child(gpt_top_hud_texture, min(1, hud.get_child_count() - 1))
 
 	# 模式徽章
@@ -3584,10 +3576,10 @@ func draw_game_top_hud(parent: Control) -> void:
 		status_rect = Rect2(Vector2(0.270, 0.090), Vector2(0.610, 0.515))
 		wall_rect = Rect2(Vector2(0.632, 0.140), Vector2(0.766, 0.860))
 	# r202: GPT title/status chips instead of make_panel lacquer hosts
-	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.90, 0.72, 0.34, 0.34), "ui_title_backplate")
+	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.90, 0.72, 0.34, 0.52), "ui_title_backplate")
 	title_back.name = "TopHudTitleBack"
 	hud.add_child(title_back)
-	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.58, 0.74, 0.64, 0.30), "ui_button_face_plate")
+	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.58, 0.74, 0.64, 0.46), "ui_button_face_plate")
 	status_back.name = "TopHudStatusBack"
 	hud.add_child(status_back)
 	var title = make_label(hud, title_text, 15 if mode == "offline" else 16, Color(0.96, 0.80, 0.48), true)
@@ -5648,6 +5640,8 @@ func draw_online_lobby_log_stream_art(parent: Control) -> Control:
 
 func online_lobby_player_entries() -> Array:
 	var entries: Array = []
+	if lobby_connection_state_text() != "已连接":
+		return entries
 	var players_value = online_room.get("players", [])
 	if typeof(players_value) != TYPE_ARRAY:
 		return entries
@@ -5733,7 +5727,7 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var count_value = 0
 	var logs_value = online_room.get("logs", [])
-	if typeof(logs_value) == TYPE_ARRAY:
+	if lobby_connection_state_text() == "已连接" and typeof(logs_value) == TYPE_ARRAY:
 		count_value = (logs_value as Array).size()
 	var count_badge = make_badge(list, rect_full(0.760, 0.045, 0.955, 0.190), "%d条" % count_value, 10, Color(0.036, 0.052, 0.046, 0.86), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
 	count_badge.name = "OnlineLobbyLogCountBadge"
@@ -5754,7 +5748,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 		art.move_child(overlay, 0)
 	var player_count = 0
 	var ready_count = 0
-	var players_value = online_room.get("players", [])
+	var players_value = online_room.get("players", []) if lobby_connection_state_text() == "已连接" else []
 	if typeof(players_value) == TYPE_ARRAY:
 		var players_array := players_value as Array
 		player_count = players_array.size()
@@ -8258,21 +8252,11 @@ func draw_settings_overlay(parent: Control) -> void:
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
 
-	# A lacquer rear shell and cast shadow make the modal read as a physical
-	# control console while preserving the established 960-safe content bounds.
+	# Keep one authored panel surface behind the modal content. The scrim and
+	# primary GPT plate provide depth without a second full-page rear texture.
 	var panel_shadow_rect := Rect2(panel_rect.position + Vector2(0.006, 0.014), panel_rect.size + Vector2(0.010, 0.012))
 	var panel_shadow = make_soft_depth_panel(overlay, panel_shadow_rect, Color(0.0, 0.0, 0.0, 0.40), 24)
 	panel_shadow.name = "SettingsConsole3DCastShadow"
-	var rear_shell_rect := Rect2(panel_rect.position - Vector2(0.009, 0.012), panel_rect.size + Vector2(0.011, 0.010))
-	var rear_shell = make_gpt_plate_rect(rear_shell_rect, Color(0.290, 0.360, 0.280, 0.38), "ui_jade_reading_plate")
-	rear_shell.name = "SettingsConsole3DRearShell"
-	overlay.add_child(rear_shell)
-	var rear_lower_edge = make_gpt_route_rail(rect_full(0.022, 0.944, 0.978, 0.995), Color(0.0, 0.0, 0.0, 0.16))
-	rear_lower_edge.name = "SettingsConsole3DLowerEdge"
-	rear_shell.add_child(rear_lower_edge)
-	var rear_top_glint = make_gpt_route_rail(rect_full(0.035, 0.006, 0.965, 0.030), Color(1.0, 0.90, 0.54, 0.18))
-	rear_top_glint.name = "SettingsConsole3DTopGlint"
-	rear_shell.add_child(rear_top_glint)
 
 	# 设置面板 - 更精致的样式
 	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.50), "ui_jade_reading_plate")
@@ -8293,10 +8277,6 @@ func draw_settings_overlay(parent: Control) -> void:
 		var corner_cap = make_gpt_plate_rect(rect_full(corner_x, corner_y, corner_x + 0.026, corner_y + 0.034), Color(0.58, 0.40, 0.16, 0.34), "ui_jade_reading_plate")
 		corner_cap.name = "SettingsConsole3DCornerCap_%d" % corner_index
 		panel.add_child(corner_cap)
-	var compass_texture = add_illustration_texture(panel, "settings_compass", rect_full(0.018, 0.018, 0.982, 0.982), 0.020, false)
-	if compass_texture != null:
-		compass_texture.name = "SettingsCompassTexture"
-		panel.move_child(compass_texture, 0)
 	var settings_gpt_key := "settings_gpt_panel_v2"
 	var gpt_settings_texture = add_optional_gpt_illustration_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.035, false)
 	if gpt_settings_texture != null:
@@ -11009,10 +10989,6 @@ func draw_walls(parent: Control) -> void:
 	var active_counts = wall_visual_active_counts(progress)
 	# When the battle already hosts a realtime commercial 3D wall, keep 2D strips as
 	# invisible layout/metadata carriers so the physical MultiMesh stacks own the look.
-	var suppress_flat_walls := parent != null and (
-		str(parent.name) == "OfflineTable3DInnerSurface"
-		or parent.find_child("OfflineCommercial3DStage", true, false) != null
-	)
 	for i in range(WALL_LAYOUTS.size()):
 		var item = WALL_LAYOUTS[i]
 		var capacity = int(item[2])
@@ -11023,10 +10999,6 @@ func draw_walls(parent: Control) -> void:
 		strip.anchor_top = item[0].y
 		strip.anchor_right = item[1].x
 		strip.anchor_bottom = item[1].y
-		if suppress_flat_walls:
-			strip.visible = false
-			strip.modulate = Color(1.0, 1.0, 1.0, 0.0)
-			strip.set_meta("suppressed_by_commercial_3d", true)
 		parent.add_child(strip)
 	draw_wall_count_feedback_art(parent, wall_count, progress, recent_feedback)
 	draw_wall_remaining_badge(parent, wall_count, progress, recent_feedback)
@@ -11554,12 +11526,12 @@ func make_achievement_row(key: String, index: int) -> Control:
 	apply_rect(goal_label, rect_full(0.140, 0.360, 0.660, 0.570))
 	goal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(goal_label)
-	var progress_back = make_gpt_gate(rect_full(0.135, 0.660, 0.285, 0.910), Color(accent.r, accent.g, accent.b, 0.24 if unlocked else 0.18))
+	var progress_back = make_gpt_gate(rect_full(0.135, 0.660, 0.390, 0.910), Color(accent.r, accent.g, accent.b, 0.24 if unlocked else 0.18))
 	progress_back.name = "AchievementRowProgressTextBackplate_%s" % key
 	row.add_child(progress_back)
-	var progress_text = make_label(row, "进度 1/1" if unlocked else "进度 0/1", 13, Color(0.98, 0.88, 0.56, 0.98) if unlocked else Color(0.86, 0.96, 0.92, 0.98), true)
+	var progress_text = make_label(row, achievement_progress_text(key), 13, Color(0.98, 0.88, 0.56, 0.98) if unlocked else Color(0.86, 0.96, 0.92, 0.98), true)
 	progress_text.name = "AchievementRowProgressText_%s" % key
-	apply_rect(progress_text, rect_full(0.146, 0.660, 0.274, 0.910))
+	apply_rect(progress_text, rect_full(0.146, 0.660, 0.378, 0.910))
 	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	configure_clipped_label(progress_text)
 	var state_label = make_label(row, "已获" if unlocked else "未达", 13, Color(1.00, 0.90, 0.58) if unlocked else Color(0.92, 1.00, 0.96), true)

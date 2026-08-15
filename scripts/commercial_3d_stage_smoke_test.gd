@@ -30,10 +30,9 @@ func run() -> void:
 	check(stage.find_child("MenuTableBody", true, false) is MeshInstance3D, "menu mode creates a lacquer table body")
 	var menu_table_body := stage.find_child("MenuTableBody", true, false) as MeshInstance3D
 	check(menu_table_body != null and menu_table_body.mesh is ArrayMesh, "menu table shell uses rounded physical geometry")
-	check(stage.find_child("HeroTile_0", true, false) is Node3D and stage.find_child("HeroTile_2", true, false) is Node3D, "menu mode creates textured 3D tile showcases")
-	check(stage.find_child("TileBack", true, false) is MeshInstance3D, "showcase tiles include a textured physical back")
-	var menu_tile_body := stage.find_child("PorcelainBody", true, false) as MeshInstance3D
-	check(menu_tile_body != null and menu_tile_body.mesh is ArrayMesh, "showcase tiles use rounded procedural bodies instead of sharp boxes")
+	check(stage.find_child("Menu3DShowcase", true, false) is Node3D, "menu mode keeps a decorative 3D stage behind the 2D menu")
+	check(stage.find_child("HeroTile_0", true, false) == null and stage.find_child("HeroTile_2", true, false) == null, "menu mode never creates executable 3D tile showcases")
+	check(stage.find_child("TileBack", true, false) == null and stage.find_child("PorcelainBody", true, false) == null, "menu mode keeps tile faces out of the 3D stage")
 	check(stage.stretch_shrink >= 1 and stage.stretch_shrink <= 4, "3D render resolution uses a bounded adaptive scale")
 
 	var focus_texture = load("res://assets/tiles/tile_honor_east.png") as Texture2D
@@ -51,31 +50,21 @@ func run() -> void:
 	check(lacquer_material != null and lacquer_material.albedo_texture != null, "battle shell loads the GPT-generated seamless lacquer material")
 	check(felt_material != null and felt_material.normal_enabled and felt_material.normal_texture != null and felt_material.roughness_texture != null, "standard quality adds seamless felt normal and roughness maps")
 	check(lacquer_material != null and lacquer_material.normal_enabled and lacquer_material.normal_texture != null and lacquer_material.roughness_texture != null, "standard quality adds lacquer grain normal and roughness maps")
-	var wall_bodies := stage.find_child("BattleWallBodies3D", true, false) as MultiMeshInstance3D
-	var wall_backs := stage.find_child("BattleWallBackFaces3D", true, false) as MultiMeshInstance3D
-	check(wall_bodies != null and wall_backs != null and wall_bodies.multimesh.instance_count == 18 and wall_backs.multimesh.instance_count == 9, "battle mode batches nine remaining two-tile wall stacks")
-	var wall_source_transforms: Array = stage.call("_wall_body_transforms")
-	var first_remaining_stack: Transform3D = wall_source_transforms[0] if wall_source_transforms.size() > 0 else Transform3D()
-	var first_upper_tile: Transform3D = wall_source_transforms[1] if wall_source_transforms.size() > 1 else Transform3D()
-	check(first_remaining_stack.origin.z > 2.0, "depleted wall advances sequentially around the table instead of shrinking every side")
-	check(first_upper_tile.origin.y > first_remaining_stack.origin.y + 0.10, "wall stacks preserve a visible two-tile height")
-	check(wall_bodies != null and wall_bodies.multimesh.mesh is ArrayMesh and wall_bodies.multimesh.mesh.get_faces().size() > 36, "batched wall tiles retain commercial rounded-edge geometry")
-	check(stage.find_child("SeatPlaque_0", true, false) is Node3D and stage.find_child("SeatPlaque_3", true, false) is Node3D, "battle mode creates four physical wind plaques")
-	check(stage.find_child("FocusDiscard3DTile", true, false) is Node3D, "battle mode maps the current discard texture onto a 3D tile")
+	check(stage.find_child("BattleWallBodies3D", true, false) == null and stage.find_child("BattleWallBackFaces3D", true, false) == null, "battle mode leaves wall faces to the 2D assets/tiles layer")
+	check(stage.find_child("SeatPlaque_0", true, false) == null and stage.find_child("SeatPlaque_3", true, false) == null, "battle mode keeps wind plaques in the 2D seat panels")
+	check(stage.find_child("FocusDiscard3DTile", true, false) == null and stage.find_child("FocusDiscardContactShadow", true, false) != null, "battle mode has no 3D focus tile, only an optional contact shadow")
 	check(stage.find_child("CornerGoldCap_0", true, false) is MeshInstance3D and stage.find_child("CornerGoldCap_3", true, false) is MeshInstance3D, "battle mode creates four diamond corner fittings")
 	var marker := stage.find_child("ActiveSeat3DMarker", true, false) as Node3D
 	check(marker != null and marker.position.z < 0.0, "battle mode places the active marker at the requested seat")
 	stage.configure("battle", false, 0, 1.0, focus_texture, StageScript.QUALITY_HIGH)
 	await process_frame
-	wall_bodies = stage.find_child("BattleWallBodies3D", true, false) as MultiMeshInstance3D
-	check(wall_bodies != null and wall_bodies.multimesh.instance_count == 72, "full wall state renders all 36 two-tile wall stacks")
+	check(stage.find_child("BattleWallBodies3D", true, false) == null and stage.find_child("BattleWallBackFaces3D", true, false) == null, "high quality battle mode still does not instantiate 3D wall faces")
 	var realtime_viewport := stage.find_child("Realtime3DViewport", true, false) as SubViewport
 	check(realtime_viewport != null and realtime_viewport.msaa_3d == Viewport.MSAA_4X and realtime_viewport.positional_shadow_atlas_size == 2048, "high quality profile raises antialiasing and shadow precision")
 	stage.sync_battle_state(3, 0.10)
 	await process_frame
-	wall_bodies = stage.find_child("BattleWallBodies3D", true, false) as MultiMeshInstance3D
 	marker = stage.find_child("ActiveSeat3DMarker", true, false) as Node3D
-	check(wall_bodies != null and wall_bodies.multimesh.instance_count == 8, "incremental state sync rebuilds only when the depleted wall stack count changes")
+	check(stage.find_child("BattleWallBodies3D", true, false) == null and stage.find_child("BattleWallBackFaces3D", true, false) == null, "incremental state sync never rebuilds 3D wall faces")
 	check(marker != null and marker.position.x < 0.0, "incremental state sync also updates the active seat marker")
 	stage.configure("battle", false, 1, 0.50, focus_texture, StageScript.QUALITY_LOW)
 	await process_frame
@@ -98,7 +87,7 @@ func run() -> void:
 		check(int(diagnostics.render_pixels) <= int(expected.pixels), "quality profile keeps viewport pixels within its mobile render budget")
 		check(int(diagnostics.render_pixel_budget) == int(expected.pixels), "quality profile exposes the configured render pixel budget")
 		check(int(diagnostics.bevel_segments) == int(expected.bevel) and int(diagnostics.cylinder_segments) == int(expected.cylinder), "quality profile applies its deterministic mesh tessellation")
-		check(int(diagnostics.multimesh_instances) == 2 and int(diagnostics.batched_instances) == 108, "battle wall stays in two draw batches at full capacity")
+		check(int(diagnostics.multimesh_instances) == 0 and int(diagnostics.batched_instances) == 0, "battle stage has no 3D tile batches")
 		check(int(diagnostics.mesh_instances) <= 42 and int(diagnostics.unique_mesh_faces) <= int(expected.max_faces), "battle scene stays within its per-profile geometry budget")
 
 	var hand_faces: Array = [
@@ -117,21 +106,14 @@ func run() -> void:
 	await process_frame
 	await process_frame
 	var hand_camera := stage.find_child("CommercialStageCamera", true, false) as Camera3D
-	var hand_body_batch := stage.find_child("HandTilePorcelainBodies3D", true, false) as MultiMeshInstance3D
-	var hand_back_batch := stage.find_child("HandTileJadeBacks3D", true, false) as MultiMeshInstance3D
-	var hand_foot_batch := stage.find_child("HandTileJadeFeet3D", true, false) as MultiMeshInstance3D
-	var hand_decal := stage.find_child("HandTileDecal_00", true, false) as MeshInstance3D
 	var hand_tiles := stage.find_children("HandPhysicalTile3D_*", "Node3D", true, false)
 	check(hand_camera != null and hand_camera.projection == Camera3D.PROJECTION_ORTHOGONAL, "hand mode uses a stable orthographic 3D camera aligned to hit targets")
 	check(stage.find_child("HandTray3DFloor", true, false) is MeshInstance3D and stage.find_child("HandTray3DGoldRail", true, false) is MeshInstance3D, "hand mode creates a physical lacquer tray and gold rail")
-	check(hand_tiles.size() == 3 and hand_body_batch != null and hand_back_batch != null and hand_foot_batch != null, "hand mode creates one physical transform root per decal and three shared body batches")
-	check(hand_body_batch.multimesh.instance_count == 3 and hand_back_batch.multimesh.instance_count == 3 and hand_foot_batch.multimesh.instance_count == 3 and hand_body_batch.multimesh.mesh is ArrayMesh, "hand mode batches all porcelain bodies, jade backs, and jade feet into three draw groups")
-	check(hand_decal != null and hand_decal.mesh != null and hand_decal.mesh.material is StandardMaterial3D and (hand_decal.mesh.material as StandardMaterial3D).albedo_texture != null, "hand mode maps exact transparent face decals onto physical tiles")
-	var hovered_tile := stage.find_child("HandPhysicalTile3D_01", true, false) as Node3D
-	var rest_hover_y := hovered_tile.position.y if hovered_tile != null else 0.0
+	check(hand_tiles.is_empty() and stage.find_child("HandTilePorcelainBodies3D", true, false) == null and stage.find_child("HandTileJadeBacks3D", true, false) == null and stage.find_child("HandTileJadeFeet3D", true, false) == null, "hand mode keeps all tile faces in the 2D render path")
+	check(stage.find_child("HandTileDecal_00", true, false) == null, "hand mode does not create 3D face decals")
 	stage.set_hand_hovered(1, true)
 	stage._process(0.12)
-	check(hovered_tile != null and hovered_tile.position.y > rest_hover_y + 0.08, "hand hit proxy can lift the matching physical tile on hover")
+	check(stage.find_child("HandPhysicalTile3D_01", true, false) == null, "hand hover state never creates a 3D tile hit target")
 
 	var table_entries: Array[Dictionary] = [
 		{"texture": hand_faces[0], "center": Vector2(0.32, 0.35), "size": Vector2(0.035, 0.070), "rotation": -0.01, "highlighted": false, "accent": Color(0.42, 0.72, 0.60)},
@@ -143,17 +125,10 @@ func run() -> void:
 	await process_frame
 	await process_frame
 	var table_tile_camera := stage.find_child("CommercialStageCamera", true, false) as Camera3D
-	var table_body_batch := stage.find_child("TableTilePorcelainBodies3D", true, false) as MultiMeshInstance3D
-	var table_face_batch := stage.find_child("TableTileGlazeLips3D", true, false) as MultiMeshInstance3D
-	var table_base_batch := stage.find_child("TableTileJadeBases3D", true, false) as MultiMeshInstance3D
-	var table_shadow_batch := stage.find_child("TableTileContactShadows3D", true, false) as MultiMeshInstance3D
 	var table_tiles := stage.find_children("TableTilePhysical3D_*", "Node3D", true, false)
-	var table_decal := stage.find_child("TableTileDecal_00", true, false) as MeshInstance3D
 	check(table_tile_camera != null and table_tile_camera.projection == Camera3D.PROJECTION_ORTHOGONAL and is_equal_approx(table_tile_camera.rotation_degrees.x, -90.0), "table tile mode uses a stable top-down orthographic camera")
-	check(table_tiles.size() == 3 and table_body_batch != null and table_face_batch != null and table_base_batch != null and table_shadow_batch != null, "table tile mode creates physical roots and four shared geometry batches")
-	check(table_body_batch.multimesh.instance_count == 3 and table_face_batch.multimesh.instance_count == 3 and table_base_batch.multimesh.instance_count == 3 and table_shadow_batch.multimesh.instance_count == 3, "table tile mode batches porcelain bodies, glaze lips, jade bases, and contact shadows")
-	check(table_decal != null and table_decal.mesh.material is StandardMaterial3D and (table_decal.mesh.material as StandardMaterial3D).albedo_texture != null, "table tile mode maps exact transparent face decals through its color-faithful shader")
-	check(stage.find_child("TableTileLatestRim", true, false) is MeshInstance3D, "table tile mode gives the latest discard a physical highlight rim")
+	check(table_tiles.is_empty() and stage.find_child("TableTilePorcelainBodies3D", true, false) == null and stage.find_child("TableTileGlazeLips3D", true, false) == null and stage.find_child("TableTileJadeBases3D", true, false) == null and stage.find_child("TableTileContactShadows3D", true, false) == null, "table tile mode keeps all discard and meld faces in the 2D render path")
+	check(stage.find_child("TableTileDecal_00", true, false) == null and stage.find_child("TableTileLatestRim", true, false) == null, "table tile mode does not create 3D face decals or tile rims")
 
 	host.queue_free()
 	await process_frame

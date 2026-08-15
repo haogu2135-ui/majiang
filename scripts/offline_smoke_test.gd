@@ -1062,7 +1062,10 @@ func run() -> void:
 	check(true, "battle uses single commercial table stage without stacked GPT full-table overlays")
 	check(scene.find_child("Table3DInsetShadow", true, false) != null and scene.find_child("Table3DFeltVignette", true, false) != null and scene.find_child("Table3DCenterSpotlight", true, false) != null, "3D offline table atmosphere exists")
 	check(scene.find_child("TopHud3DShell", true, false) != null and scene.find_child("TopHud3DCastShadow", true, false) != null and scene.find_child("TopHud3DDepthEdge", true, false) != null, "3D top HUD shell exists")
-	check(scene.find_child("TopHud3DRearShell", true, false) != null and scene.find_child("TopHud3DTopRim", true, false) != null and scene.find_child("TopHud3DJadeRail", true, false) != null, "3D top HUD exposes rear lacquer shell, light-catching rim, and jade rail")
+	check(scene.find_child("TopHud3DRearShell", true, false) == null and scene.find_child("TopHud3DTopRim", true, false) != null and scene.find_child("TopHud3DJadeRail", true, false) != null, "top HUD keeps one primary surface without a duplicate rear lacquer shell")
+	var top_hud_banner = scene.find_child("TopHudGPTBannerTexture", true, false) as TextureRect
+	if top_hud_banner != null:
+		check(top_hud_banner.modulate.a <= 0.40, "top HUD banner stays subdued behind status text")
 	var seat_shadow = scene.find_child("SeatPanel3DCastShadow_0", true, false)
 	var seat_rear = scene.find_child("SeatPanel3DRearShell_0", true, false)
 	var seat_jade = scene.find_child("SeatPanel3DJadeLip_0", true, false)
@@ -1074,10 +1077,11 @@ func run() -> void:
 	check(action_rear != null and action_jade != null and scene.find_child("ActionDock3DFrontApron", true, false) != null, "action dock uses commercial 3D rear shell and jade track")
 	check(scene.find_child("HandTray3DCastShadow", true, false) != null and scene.find_child("HandTray3DFrontLip", true, false) != null and scene.find_child("HandTray3DSideBevel", true, false) != null and count_nodes_with_name_prefix(scene, "HandTile_") > 0, "2D hand tray shell and authored hand tiles exist")
 	var offline_commercial_stage = scene.find_child("OfflineCommercial3DStage", true, false) as CanvasItem
-	check(offline_commercial_stage != null and offline_commercial_stage.modulate.a >= 0.90, "battle commercial 3D stage renders near-opaque for product-quality depth")
+	check(offline_commercial_stage == null, "battle does not mount a 3D tile stage")
 	var menu_probe = scene.find_child("MenuCommercial3DStage", true, false)
-	# menu stage only exists on menu screen; battle path still validates wall strip suppression under 3D
-	var wall_suppressed := 0
+	check(menu_probe == null, "menu does not mount a 3D tile showcase")
+	# Wall strips remain visible 2D TextureRect assets.
+	var wall_visible := 0
 	var wall_strip_total := 0
 	var table_surface = scene.find_child("OfflineTable3DInnerSurface", true, false) as Node
 	var wall_search_root: Node = table_surface if table_surface != null else scene
@@ -1086,12 +1090,9 @@ func run() -> void:
 			continue
 		wall_strip_total += 1
 		var canvas_wall := wall_child as CanvasItem
-		var is_suppressed := bool(wall_child.get_meta("suppressed_by_commercial_3d", false))
-		if not is_suppressed and canvas_wall != null:
-			is_suppressed = (not canvas_wall.visible) or canvas_wall.modulate.a <= 0.01
-		if is_suppressed:
-			wall_suppressed += 1
-	check(wall_strip_total == scene.WALL_LAYOUTS.size() and wall_suppressed == scene.WALL_LAYOUTS.size(), "battle path suppresses flat wall strips under commercial 3D walls")
+		if canvas_wall != null and canvas_wall.visible and canvas_wall.modulate.a > 0.01:
+			wall_visible += 1
+	check(wall_strip_total == scene.WALL_LAYOUTS.size() and wall_visible == scene.WALL_LAYOUTS.size(), "battle path keeps all wall strips as visible 2D assets")
 	var table_overlay = scene.find_child("OfflineTable3DOverlayTexture", true, false) as CanvasItem
 	check(table_overlay == null or table_overlay.modulate.a <= 0.12, "optional table overlay stays nearly invisible when present")
 	scene.game_render_queued = false
@@ -1673,7 +1674,7 @@ func run() -> void:
 	scene.draw_settings_overlay(settings_parent)
 	var settings_panel = settings_parent.find_child("SettingsPanel", true, false) as Control
 	check(settings_panel != null and control_anchor_rect_matches(settings_panel, scene.SETTINGS_PANEL_RECT), "settings overlay uses named 960-safe modal geometry")
-	check(settings_parent.find_child("SettingsConsole3DCastShadow", true, false) != null and settings_parent.find_child("SettingsConsole3DRearShell", true, false) != null and settings_parent.find_child("SettingsConsole3DLowerEdge", true, false) != null and settings_parent.find_child("SettingsConsole3DTopGlint", true, false) != null, "settings overlay renders a physical console rear shell with cast shadow and edge lighting")
+	check(settings_parent.find_child("SettingsConsole3DCastShadow", true, false) != null and settings_parent.find_child("SettingsConsole3DRearShell", true, false) == null and settings_parent.find_child("SettingsConsole3DLowerEdge", true, false) == null and settings_parent.find_child("SettingsConsole3DTopGlint", true, false) == null, "settings overlay keeps one primary surface without a duplicate rear shell")
 	check(settings_parent.find_child("SettingsConsole3DLeftRail", true, false) != null and settings_parent.find_child("SettingsConsole3DRightRail", true, false) != null and settings_parent.find_child("SettingsConsole3DInnerFloor", true, false) != null and count_nodes_with_name_prefix(settings_parent, "SettingsConsole3DCornerCap_") == 4, "settings console renders side rails inner floor and four corner fittings")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsSection3DCastShadow_") == 3 and count_nodes_with_name_prefix(settings_parent, "SettingsSection3DDepthEdge_") == 3 and count_nodes_with_name_prefix(settings_parent, "SettingsSection3DTopRim_") == 3, "settings sections render three complete physical shadow depth and top-rim layers")
 	check(settings_parent.find_child("SettingsCompassTexture", true, false) != null, "settings overlay renders reusable compass PNG texture")
@@ -1780,7 +1781,7 @@ func run() -> void:
 	scene.inventory = {"swap_card": 2, "peek_card": 0, "lucky_charm": 1, "double_coins": 0}
 	scene._show_shop_screen_impl()
 	check(scene.mode == "shop" and scene.find_child("ShopItemRow_swap_card", true, false) != null and count_nodes_with_name_prefix(scene, "ShopItemRow_") == scene.ITEM_TYPES.size(), "shop screen renders named item rows")
-	check(scene.find_child("ShopCabinetFrontPanel", true, false) != null and scene.find_child("ShopCabinet3DCastShadow", true, false) != null and scene.find_child("ShopCabinet3DRearShell", true, false) != null and scene.find_child("ShopCabinet3DLowerEdge", true, false) != null and scene.find_child("ShopCabinet3DTopGlint", true, false) != null, "shop screen renders a complete physical lacquer cabinet shell")
+	check(scene.find_child("ShopCabinetFrontPanel", true, false) != null and scene.find_child("ShopCabinet3DCastShadow", true, false) != null and scene.find_child("ShopCabinet3DRearShell", true, false) == null and scene.find_child("ShopCabinet3DLowerEdge", true, false) == null and scene.find_child("ShopCabinet3DTopGlint", true, false) == null, "shop screen keeps one front cabinet surface without a duplicate rear shell")
 	check(scene.find_child("ShopDisplayCabinet3DShell", true, false) != null and scene.find_child("ShopDisplayCabinet3DInset", true, false) != null and scene.find_child("ShopDisplayCabinet3DBottomShelf", true, false) != null and scene.find_child("ShopCabinetFooter3DDepthEdge", true, false) != null, "shop screen renders a recessed item display and physical footer shelf")
 	check(count_nodes_with_name_prefix(scene, "ShopItem3DDepthEdge_") == scene.ITEM_TYPES.size() and count_nodes_with_name_prefix(scene, "ShopItem3DTopRim_") == scene.ITEM_TYPES.size() and count_nodes_with_name_prefix(scene, "ShopItem3DCharmPlinth_") == scene.ITEM_TYPES.size(), "shop item rows render complete physical shelf and charm-plinth layers")
 	check(count_named_nodes(scene, "ShopBuyButton3DDepthEdge") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopBuyButton3DSideBevel") == scene.ITEM_TYPES.size(), "shop buy buttons render physical depth and side bevels")
@@ -2034,7 +2035,7 @@ func run() -> void:
 	await process_frame
 	var rules_section_count := int(scene.RULES_SECTION_COUNT)
 	check(rules_section_count == 6, "rules implementation declares the six-section local rules contract")
-	check(scene.find_child("RulesCodexFrontPanel", true, false) != null and scene.find_child("RulesCodexFrontPlate", true, false) != null and scene.find_child("RulesCodex3DCastShadow", true, false) != null and scene.find_child("RulesCodex3DRearShell", true, false) != null and scene.find_child("RulesCodex3DLowerEdge", true, false) != null and scene.find_child("RulesCodex3DTopGlint", true, false) != null, "rules screen renders a complete physical codex shell")
+	check(scene.find_child("RulesCodexFrontPanel", true, false) != null and scene.find_child("RulesCodexFrontPlate", true, false) != null and scene.find_child("RulesCodex3DCastShadow", true, false) != null and scene.find_child("RulesCodex3DRearShell", true, false) == null and scene.find_child("RulesCodex3DLowerEdge", true, false) == null and scene.find_child("RulesCodex3DTopGlint", true, false) == null, "rules screen keeps one front surface without a duplicate rear shell")
 	check(scene.find_child("RulesCodex3DReadingInset", true, false) != null and scene.find_child("RulesCodex3DBottomShelf", true, false) != null, "rules screen renders a recessed reading viewport and bottom shelf")
 	check(count_nodes_with_name_prefix(scene, "RuleSection3DDepthEdge_") == rules_section_count and count_nodes_with_name_prefix(scene, "RuleSection3DTopRim_") == rules_section_count and count_nodes_with_name_prefix(scene, "RuleSection3DExamplePlinth_") == rules_section_count, "every rules section renders physical card and example-plinth layers")
 	check(scene.mode == "rules" and scene.find_child("RulesGuideArt", true, false) != null and ((scene.optional_gpt_illustration_texture("rules_guide_panel") == null) or (scene.find_child("RulesGuidePanelPlate", true, false) != null)), "rules screen renders guide illustration using optional GPT guide plate instead of code-drawn rail lines")
@@ -2091,11 +2092,12 @@ func run() -> void:
 	scene.online_waiting_for_server = true
 	scene._show_online_lobby_impl()
 	check(scene.mode == "online_lobby" and scene.find_child("OnlineLobbyRoomArt", true, false) != null and scene.find_child("OnlineLobbyRoomFanOverlay", true, false) != null and scene.find_child("OnlineLobbyRoomNode", true, false) != null, "online lobby renders room status illustration with reusable fan overlay")
+	check(scene.find_child("OnlineLobbyRoomBadge", true, false) != null, "online lobby exposes a named room badge for connection-state refresh")
 	check(scene.find_child("OnlineLobbyRoomSummaryPanel", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryOccupancy", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryReady", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryState", true, false) != null, "online lobby renders compact room state summary chips")
 	check(scene.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) != null, "online lobby room summary exposes readable native labels")
 	check(has_label_text(scene, "入席 2/4") and has_label_text(scene, "已备 0") and has_label_text(scene, "未连接"), "online lobby room summary reports occupancy ready count and connection state")
 	check(scene.find_child("OnlineLobbyNetworkTexture", true, false) != null and scene.find_child("OnlineLobbyFanTexture", true, false) != null and scene.find_child("LobbyRoomGateTokenTexture", true, false) != null, "online lobby renders reusable network, fan, and GPT room-token PNG textures")
-	check(scene.optional_gpt_illustration_texture("online_gpt_lobby") == null or scene.find_child("OnlineLobbyGPTTexture", true, false) != null, "online lobby consumes optional GPT lobby texture when generated")
+	check(scene.find_child("OnlineLobbyGPTTexture", true, false) == null, "online lobby avoids a duplicate full-page GPT texture behind the form")
 	check(scene.optional_gpt_illustration_texture("online_lobby_panel_frame") == null or (scene.find_child("OnlineLobbyFormGPTPanelFrameTexture", true, false) != null and scene.find_child("OnlineLobbyLogGPTPanelFrameTexture", true, false) != null), "online lobby consumes generated panel-frame textures")
 	check(scene.optional_gpt_illustration_texture("online_lobby_group_plate") == null or (scene.find_child("OnlineLobbyInputGPTGroupPlateTexture", true, false) != null and scene.find_child("OnlineLobbyActionGPTGroupPlateTexture", true, false) != null), "online lobby consumes generated group-plate textures")
 	check(scene.find_child("OnlineLobbyServerEndpointBadge", true, false) != null and scene.find_child("OnlineLobbyConnectionStateBadge", true, false) != null, "online lobby keeps named top endpoint and connection-state badges")

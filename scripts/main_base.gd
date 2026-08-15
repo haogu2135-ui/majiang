@@ -50,11 +50,11 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"stats_gpt_dashboard_warm": "res://assets/illustrations/stats_gpt_dashboard_warm_v392.png",
 	"achievement_gpt_gallery": "res://assets/illustrations/achievement_gpt_gallery.png",
 	"achievement_gpt_gallery_warm": "res://assets/illustrations/achievement_gpt_gallery_warm_v391.png",
-	"online_gpt_lobby": "res://assets/illustrations/online_gpt_lobby.png",
+	"online_gpt_lobby": "res://assets/illustrations/online_gpt_lobby_sub2api_gpt2_20260814.png",
 	"online_lobby_panel_frame": "res://assets/illustrations/online_lobby_panel_frame_warm_v392.png",
 	"online_lobby_group_plate": "res://assets/illustrations/online_lobby_group_plate_v1.png",
 	"settings_gpt_panel": "res://assets/illustrations/settings_gpt_panel.png",
-	"settings_gpt_panel_v2": "res://assets/illustrations/settings_gpt_panel_v2.png",
+	"settings_gpt_panel_v2": "res://assets/illustrations/settings_gpt_panel_v2_sub2api_gpt2_20260814.png",
 	"settings_gpt_panel_warm": "res://assets/illustrations/settings_gpt_panel_warm_v391.png",
 	"table_gpt_backdrop": "res://assets/illustrations/table_gpt_backdrop_v4.png",
 	"table_gpt_backdrop_warm": "res://assets/illustrations/table_gpt_backdrop_warm_v391.png",
@@ -452,6 +452,7 @@ var achievements = {
 }
 var last_login_date = ""  # 上次登录日期 YYYY-MM-DD
 var consecutive_login_days = 0  # 连续登录天数
+var login_reward_claimed_date = ""  # 最近一次领取签到奖励的日期 YYYY-MM-DD
 # 赛季系统
 var season_data = {
 	"season_id": "",
@@ -476,7 +477,7 @@ var screen_layer: Control
 var root_layer: Control
 var status_label: Label
 var logs_label: Label
-var action_bar: HBoxContainer
+var action_bar: Container
 var update_request: HTTPRequest
 var update_dialog: Control
 var update_status_label: Label
@@ -782,11 +783,12 @@ const HAND_LAYOUT_CANDIDATES := [
 ]
 const ACTION_BUTTON_MAX_WIDTH := 72.0
 const ACTION_BUTTON_MIN_TOUCH_WIDTH := 50.0
+const PENDING_CLAIM_BUTTON_MIN_WIDTH := 55.0
 const ACTION_BUTTON_HEIGHT := 44.0
 const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const ACTION_BAR_RECT := Rect2(Vector2(0.534, 0.698), Vector2(0.960, 0.782))
-const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
-const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.534, 0.698), Vector2(0.960, 0.782))
+const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.680, 0.588), Vector2(0.972, 0.790))
+const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.700, 0.598), Vector2(0.960, 0.790))
 const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
 const TOP_HUD_BUTTON_SIZE := Vector2(56, 38)
@@ -2453,14 +2455,17 @@ func load_login_state() -> void:
 	if config.load(LOGIN_PATH) == OK:
 		last_login_date = str(config.get_value("login", "last_date", ""))
 		consecutive_login_days = int(config.get_value("login", "consecutive_days", 0))
+		login_reward_claimed_date = str(config.get_value("login", "reward_claimed_date", ""))
 	else:
 		last_login_date = ""
 		consecutive_login_days = 0
+		login_reward_claimed_date = ""
 
 func save_login_state() -> void:
 	var config = ConfigFile.new()
 	config.set_value("login", "last_date", last_login_date)
 	config.set_value("login", "consecutive_days", consecutive_login_days)
+	config.set_value("login", "reward_claimed_date", login_reward_claimed_date)
 	config.save(LOGIN_PATH)
 
 func check_and_update_login() -> Dictionary:
@@ -2469,6 +2474,7 @@ func check_and_update_login() -> Dictionary:
 		"is_first_login_today": false,
 		"consecutive_days": consecutive_login_days,
 		"show_reward": false,
+		"claimed_today": login_reward_claimed_date == today,
 	}
 
 	if last_login_date != today:
@@ -2482,12 +2488,44 @@ func check_and_update_login() -> Dictionary:
 			# 中断了，重新计数
 			consecutive_login_days = 1
 		last_login_date = today
+		login_reward_claimed_date = ""
 		save_login_state()
 		result.consecutive_days = consecutive_login_days
-		result.show_reward = true
 		# 重置每日任务
 		reset_daily_tasks()
+	result.claimed_today = login_reward_claimed_date == today
+	result.show_reward = not result.claimed_today
 
+	return result
+
+func claim_daily_login_reward() -> Dictionary:
+	var today = Time.get_date_string_from_system()
+	if last_login_date != today:
+		return {"claimed": false, "already_claimed": false, "reason": "签到状态已过期"}
+	if login_reward_claimed_date == today:
+		return {"claimed": false, "already_claimed": true, "reason": "今日奖励已领取"}
+
+	var reward_day = posmod(consecutive_login_days - 1, 7) + 1
+	var result := {
+		"claimed": true,
+		"already_claimed": false,
+		"day": reward_day,
+		"coins": 0,
+		"item_id": "",
+		"detail": "",
+	}
+	if reward_day == 7:
+		inventory["double_coins"] = int(inventory.get("double_coins", 0)) + 1
+		save_inventory()
+		result["item_id"] = "double_coins"
+		result["detail"] = "双倍金币卡 ×1"
+	else:
+		currency["coins"] = int(currency.get("coins", 0)) + 100
+		save_currency()
+		result["coins"] = 100
+		result["detail"] = "金币 +100"
+	login_reward_claimed_date = today
+	save_login_state()
 	return result
 
 # ============================================================
@@ -3054,18 +3092,12 @@ func tile_path(code: String) -> String:
 	return "res://assets/tiles/tile_back.png"
 
 func preferred_tile_path(primary: String) -> String:
-	# Authoritative runtime faces live in assets/tiles.
-	if FileAccess.file_exists(primary):
-		return primary
-	var subtle_3d_path = primary.replace("res://assets/tiles/", "res://assets/tiles_subtle_3d/")
-	if FileAccess.file_exists(subtle_3d_path):
-		return subtle_3d_path
-	return "res://assets/tiles/tile_back.png"
+	# Tile faces are authored 2D assets. Never fall back to a 3D face directory.
+	return primary
 
 func tile_decal_path(code: String) -> String:
-	var source_path := tile_path(code)
-	var decal_path := "res://assets/tile_decals_3d/%s" % source_path.get_file()
-	return decal_path if FileAccess.file_exists(decal_path) else source_path
+	# Keep the legacy cache name, but source it from the same 2D face asset.
+	return tile_path(code)
 
 func suit_code(suit: int) -> String:
 	match suit:

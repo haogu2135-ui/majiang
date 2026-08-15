@@ -52,6 +52,7 @@ func seed_offline_battle_layout_state(scene) -> void:
 			{"meld": ["3W", "4W", "5W"]},
 		],
 	}
+	scene.ai_assist_enabled = false
 
 func seed_danger_discard_layout_state(scene) -> void:
 	seed_offline_battle_layout_state(scene)
@@ -168,6 +169,14 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_top_hud_buttons(scene, actual_viewport)
 	check_compact_seat_panels(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
+	scene.ai_assist_enabled = true
+	scene.render_game()
+	await process_frame
+	check_advisor_interaction_layout(scene, actual_viewport)
+	scene.ai_assist_enabled = false
+	scene.render_game()
+	await process_frame
+	check(scene.find_child("AdvisorPanel", true, false) == null, "disabling AI advisor removes the panel at %s" % actual_viewport)
 	check_hand_tray_layout(scene, actual_viewport)
 	check_battle_viewport_bounds(scene, actual_viewport)
 	check_discard_tile_original_rgb(scene, actual_viewport)
@@ -209,6 +218,9 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.achievements["first_win"] = true
 	scene.achievements["seven_pairs"] = true
 	scene.achievements["thirteen_orphans"] = false
+	scene.achievements["five_wins"] = false
+	scene.achievements["ten_wins"] = false
+	scene.game_stats["games_won"] = 3
 	scene._show_achievements_screen_impl()
 	await process_frame
 	check_achievements_layout(scene, actual_viewport)
@@ -420,8 +432,9 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 		check(relative_luma(product_title.get_theme_color("font_color")) >= 0.80, "menu product title keeps bright foreground contrast at %s" % viewport_size)
 		if stage_overlay != null and stage_overlay.get_parent() == header.get_parent():
 			check(header.get_index() > stage_overlay.get_index(), "menu product title draws above the full-screen GPT stage at %s" % viewport_size)
-		if commercial_stage != null and commercial_stage.get_parent() == header.get_parent():
-			check(header.get_index() > commercial_stage.get_index(), "menu product title draws above the commercial stage at %s" % viewport_size)
+			if commercial_stage != null and commercial_stage.get_parent() == header.get_parent():
+				check(header.get_index() > commercial_stage.get_index(), "menu product title draws above the commercial stage at %s" % viewport_size)
+	check(commercial_stage == null, "menu does not mount an executable 3D tile showcase at %s" % viewport_size)
 	check(menu_scrim != null and stage_overlay != null, "menu keeps one GPT background scrim and one full-screen scene at %s" % viewport_size)
 	check(scene.find_child("MenuHeroGPTBackdropTexture", true, false) == null and scene.find_child("MenuLobbyGeneratedUIOverlay", true, false) == null and scene.find_child("GuofengPaperSceneryBackdrop", true, false) == null, "menu omits duplicate full-screen hero and generic scenery layers at %s" % viewport_size)
 	var quick_actions := {
@@ -484,6 +497,7 @@ func check_menu_footer_layout(scene, viewport_size: Vector2) -> void:
 		"stats": "MenuStatsBadge",
 	}
 	var previous_right := -1.0
+	var previous_top := -1.0
 	var rects: Array[Rect2] = []
 	for chip_id in ["version", "currency", "rank", "stats"]:
 		var chip = scene.find_child("MenuFooterStatusChip_%s" % chip_id, true, false) as Control
@@ -555,6 +569,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 	var expected := ["胡", "杠", "碰", "吃1-3", "吃2-4", "吃3-5", "过"]
 	var removed_long_labels := ["吃123万", "吃234万", "吃345万"]
 	var previous_right := -1.0
+	var previous_top := -1.0
 	var found := 0
 	for text in expected:
 		var button = first_button_with_text(scene.action_bar, text)
@@ -570,9 +585,12 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 			var decoration = button.find_child(decoration_name, false, false) as CanvasItem
 			check(decoration == null or decoration.show_behind_parent, "pending claim %s keeps %s behind native text at %s" % [text, decoration_name, viewport_size])
 		check(rect.position.x >= -0.5 and rect.end.x <= viewport_size.x + 0.5, "pending claim %s stays inside viewport at %s" % [text, viewport_size])
-		check(rect.position.x >= previous_right - 0.5, "pending claim buttons remain ordered at %s" % viewport_size)
+		if previous_top >= 0.0 and rect.position.y > previous_top + 2.0:
+			previous_right = -1.0
+		check(rect.position.x >= previous_right - 0.5, "pending claim buttons remain ordered within each wrapped row at %s" % viewport_size)
 		check(button.find_child("ActionButtonEnergyDot_0", true, false) == null, "pending claim %s uses compact action styling without energy dots at %s" % [text, viewport_size])
 		previous_right = rect.end.x
+		previous_top = rect.position.y
 	check(found == expected.size(), "pending claim complex action bar renders all legal choices at %s" % viewport_size)
 	for text in removed_long_labels:
 		check(first_button_with_text(scene.action_bar, text) == null, "pending claim action bar omits long label %s at %s" % [text, viewport_size])
@@ -590,7 +608,10 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 	var seat_shell = scene.find_child("SeatPanel3DRearShell_0", true, false)
 	var seat_lip = scene.find_child("SeatPanel3DJadeLip_0", true, false)
 	check(seat_shell != null and seat_lip != null and scene.find_child("SeatPanel3DRightBevel_0", true, false) != null and scene.find_child("SeatPanel3DJadeWash_0", true, false) != null, "seat HUD exposes commercial rear shell, jade lip, right bevel, and jade wash at %s" % viewport_size)
-	check(scene.find_child("TopHud3DRearShell", true, false) != null and scene.find_child("TopHud3DTopRim", true, false) != null and scene.find_child("TopHud3DJadeRail", true, false) != null, "top HUD exposes commercial rear shell, top rim, and jade rail at %s" % viewport_size)
+	check(scene.find_child("TopHud3DRearShell", true, false) == null and scene.find_child("TopHud3DTopRim", true, false) != null and scene.find_child("TopHud3DJadeRail", true, false) != null, "top HUD keeps one primary surface without a duplicate rear shell at %s" % viewport_size)
+	var top_hud_banner = scene.find_child("TopHudGPTBannerTexture", true, false) as TextureRect
+	if top_hud_banner != null:
+		check(top_hud_banner.modulate.a <= 0.40, "top HUD banner stays subdued behind status text at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("pending_claim_action_dock") == null or scene.find_child("PendingClaimActionGPTDockTexture", true, false) != null, "pending claim consumes GPT action dock at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("pending_claim_status_strip") == null or scene.find_child("PendingClaimStatusStripTexture", true, false) != null, "pending claim consumes GPT status strip at %s" % viewport_size)
 	if summary != null and dock != null and hand != null:
@@ -627,6 +648,29 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		if panel_plate != null:
 			check(panel_plate.modulate.a >= 0.50 and panel_plate.modulate.a <= 0.70 and panel_plate.show_behind_parent, "pending claim compact GPT panel provides a dark text backing behind the native label at %s" % viewport_size)
 	check(scene.find_child("ActionIntentDock", true, false) == null, "pending claim omits extra action intent strip at %s" % viewport_size)
+
+func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
+	var panel = scene.find_child("AdvisorPanel", true, false) as Control
+	var dock = scene.find_child("ActionButtonDock", true, false) as Control
+	var hand = scene.find_child("HandTray", true, false) as Control
+	check(panel != null and dock != null and hand != null, "AI advisor exposes panel, action dock, and hand context at %s" % viewport_size)
+	if panel == null:
+		return
+	var panel_rect = screen_rect(panel)
+	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "AI advisor panel stays inside viewport at %s" % viewport_size)
+	if dock != null:
+		check(not rects_overlap(panel_rect, screen_rect(dock)), "AI advisor panel clears the action dock at %s" % viewport_size)
+	if hand != null:
+		check(not rects_overlap(panel_rect, screen_rect(hand)), "AI advisor panel clears the hand tray at %s" % viewport_size)
+	for heading in ["响应", "牌局", "防守"]:
+		var card = panel.find_child("AdvisorInfoCard_%s" % heading, true, false) as Control
+		check(card != null and panel_rect.grow(1.0).encloses(screen_rect(card)), "AI advisor %s card stays inside the panel at %s" % [heading, viewport_size])
+	var recommended_count := 0
+	if scene.action_bar != null:
+		for child in scene.action_bar.get_children():
+			if child is Button and str((child as Button).text).contains("荐"):
+				recommended_count += 1
+	check(recommended_count > 0, "AI advisor exposes a recommended claim action at %s" % viewport_size)
 
 func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	var panel = scene.find_child("DangerDiscardConfirmationArt", true, false) as Control
@@ -734,23 +778,19 @@ func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
 	if hand_tile_sample != null:
 		check(hand_rect.grow(2.0).encloses(screen_rect(hand_tile_sample)), "2D hand tile stays inside hand tray at %s" % viewport_size)
 	var battle_commercial = scene.find_child("OfflineCommercial3DStage", true, false) as CanvasItem
-	if battle_commercial != null:
-		check(battle_commercial.modulate.a >= 0.90, "offline battle commercial 3D stage stays near-opaque at %s" % viewport_size)
-		var suppressed_walls := 0
-		var wall_total := 0
-		var table_surface = scene.find_child("OfflineTable3DInnerSurface", true, false) as Node
-		var wall_search_root: Node = table_surface if table_surface != null else scene
-		for wall_node in wall_search_root.get_children():
-			if not str(wall_node.name).begins_with("WallBackStrip"):
-				continue
-			wall_total += 1
-			var canvas_wall := wall_node as CanvasItem
-			var is_suppressed := bool(wall_node.get_meta("suppressed_by_commercial_3d", false))
-			if not is_suppressed and canvas_wall != null:
-				is_suppressed = (not canvas_wall.visible) or canvas_wall.modulate.a <= 0.01
-			if is_suppressed:
-				suppressed_walls += 1
-		check(wall_total == scene.WALL_LAYOUTS.size() and suppressed_walls == scene.WALL_LAYOUTS.size(), "offline battle hides flat walls under 3D stacks at %s" % viewport_size)
+	check(battle_commercial == null, "offline battle does not mount an executable 3D tile stage at %s" % viewport_size)
+	var visible_walls := 0
+	var wall_total := 0
+	var table_surface = scene.find_child("OfflineTable3DInnerSurface", true, false) as Node
+	var wall_search_root: Node = table_surface if table_surface != null else scene
+	for wall_node in wall_search_root.get_children():
+		if not str(wall_node.name).begins_with("WallBackStrip"):
+			continue
+		wall_total += 1
+		var canvas_wall := wall_node as CanvasItem
+		if canvas_wall != null and canvas_wall.visible and canvas_wall.modulate.a > 0.01:
+			visible_walls += 1
+	check(wall_total == scene.WALL_LAYOUTS.size() and visible_walls == scene.WALL_LAYOUTS.size(), "offline battle keeps all wall strips as visible 2D assets at %s" % viewport_size)
 	var tiles = controls_with_name_prefix(scene, "HandTile_")
 	check(tiles.size() == scene.get_self_hand().size(), "hand tray exposes one named hand tile per self tile at %s" % viewport_size)
 	for tile in tiles:
@@ -769,7 +809,8 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 	var dock_rect = screen_rect(dock) if dock != null else Rect2()
 	if hand != null and dock != null:
 		check(dock_rect.end.y <= hand_rect.position.y - 12.0, "battle action dock keeps a clear gap above hand tray at %s" % viewport_size)
-		check(dock_rect.size.y <= viewport_size.y * 0.115 + 1.0, "battle action dock remains a compact strip at %s" % viewport_size)
+		var dock_height_limit := viewport_size.y * (0.24 if scene.offline_phase == "pending_claim" else 0.115) + 1.0
+		check(dock_rect.size.y <= dock_height_limit, "battle action dock remains within its one/two-row height budget at %s" % viewport_size)
 	var discard_rects = battle_discard_zone_screen_rects(scene)
 	var root_rect = screen_rect(scene.root_layer)
 	var outer_rect = anchor_rect_in_parent(root_rect, scene.TABLE_OUTER_RECT)
@@ -919,7 +960,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	var panel_shadow = overlay_control.find_child("SettingsConsole3DCastShadow", true, false) as Control
 	var rear_shell = overlay_control.find_child("SettingsConsole3DRearShell", true, false) as Control
 	check(panel != null, "settings overlay exposes a named modal panel at %s" % viewport_size)
-	check(panel_shadow != null and rear_shell != null, "settings overlay exposes a physical rear shell and cast shadow at %s" % viewport_size)
+	check(panel_shadow != null and rear_shell == null, "settings overlay keeps one primary surface without a duplicate rear shell at %s" % viewport_size)
 	var panel_rect := Rect2()
 	if panel != null:
 		panel_rect = screen_rect(panel)
@@ -1146,6 +1187,8 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var roster_title = scene.find_child("OnlineLobbyRosterTitle", true, false) as Label
 	var log_list_title = scene.find_child("OnlineLobbyLogListTitle", true, false) as Label
 	var log_count_badge = scene.find_child("OnlineLobbyLogCountBadge", true, false) as Control
+	var room_badge = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
+	var room_offline_state = scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Label
 	var endpoint_badge = scene.find_child("OnlineLobbyServerEndpointBadge", true, false) as Control
 	var endpoint_label = scene.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
 	var state_badge = scene.find_child("OnlineLobbyConnectionStateBadge", true, false) as Control
@@ -1153,6 +1196,11 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	check(form_panel != null and log_panel != null, "online lobby exposes named form and log panels at %s" % viewport_size)
 	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
 	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null, "online lobby exposes room summary roster and log list hierarchy at %s" % viewport_size)
+	check(room_offline_state != null and not room_status_art.visible and not roster_panel.visible and not log_list_panel.visible, "disconnected lobby hides stale room, roster, and log content behind an explicit empty state at %s" % viewport_size)
+	check(scene.online_room.is_empty() and room_offline_state != null and room_offline_state.text == "连接后显示房间、席位和日志", "disconnected lobby clears the room snapshot and explains the empty state at %s" % viewport_size)
+	if room_badge != null and room_badge.get_child_count() > 0:
+		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label
+		check(room_badge_label != null and room_badge_label.text == "房间号 --", "disconnected lobby replaces the room badge with a neutral placeholder at %s" % viewport_size)
 	check(endpoint_badge != null and endpoint_label != null and state_badge != null and connection_state_label != null, "online lobby exposes top endpoint and connection-state badges at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("online_lobby_panel_frame") == null or (scene.find_child("OnlineLobbyFormGPTPanelFrameTexture", true, false) != null and scene.find_child("OnlineLobbyLogGPTPanelFrameTexture", true, false) != null), "online lobby consumes GPT panel-frame textures at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("online_lobby_group_plate") == null or (scene.find_child("OnlineLobbyInputGPTGroupPlateTexture", true, false) != null and scene.find_child("OnlineLobbyActionGPTGroupPlateTexture", true, false) != null), "online lobby consumes GPT group-plate textures at %s" % viewport_size)
@@ -1377,10 +1425,9 @@ func check_secondary_back_button_art(scene, screen_id: String, viewport_size: Ve
 
 func check_rules_layout(scene, viewport_size: Vector2) -> void:
 	var codex_front = scene.find_child("RulesCodexFrontPanel", true, false) as Control
-	var codex_rear = scene.find_child("RulesCodex3DRearShell", true, false) as Control
 	var codex_shadow = scene.find_child("RulesCodex3DCastShadow", true, false) as Control
 	var reading_inset = scene.find_child("RulesCodex3DReadingInset", true, false) as Control
-	check(codex_front != null and codex_rear != null and codex_shadow != null and reading_inset != null, "rules exposes a physical codex front, rear shell, shadow, and reading inset at %s" % viewport_size)
+	check(codex_front != null and codex_shadow != null and reading_inset == null, "rules exposes one front surface and shadow without a duplicate reading inset at %s" % viewport_size)
 	var guide = scene.find_child("RulesGuideArt", true, false) as Control
 	var content_backplate = scene.find_child("RulesContentReadabilityBackplate", true, false) as Control
 	var content_scroll = scene.find_child("RulesContentScroll", true, false) as ScrollContainer
@@ -1644,7 +1691,9 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 		check(relative_luma(locked_name.get_theme_color("font_color")) >= 0.82 and relative_luma(locked_state.get_theme_color("font_color")) >= 0.86, "locked achievement text keeps readable contrast at %s" % viewport_size)
 		check(relative_luma(locked_goal.get_theme_color("font_color")) >= 0.66 and relative_luma(locked_progress_text.get_theme_color("font_color")) >= 0.74, "locked achievement helper text keeps readable contrast at %s" % viewport_size)
 		check(locked_name.clip_text and locked_goal.clip_text and locked_progress_text.clip_text and locked_state.clip_text, "locked achievement labels clip safely at %s" % viewport_size)
-		check(locked_goal.text.begins_with("目标：") and locked_progress_text.text == "进度 0/1", "locked achievement exposes goal and binary progress text at %s" % viewport_size)
+		check(locked_goal.text.begins_with("目标：") and locked_progress_text.text == "完成度 待完成", "locked achievement exposes goal and truthful completion state at %s" % viewport_size)
+		var five_progress = scene.find_child("AchievementRowProgressText_five_wins", true, false) as Label
+		check(five_progress != null and five_progress.text == "进度 3/5", "cumulative five-win achievement exposes live 3/5 progress at %s" % viewport_size)
 		check(not rects_overlap(screen_rect(locked_name), screen_rect(locked_state)), "locked achievement name and state chip text stay separated at %s" % viewport_size)
 		check(screen_rect(locked_name).get_center().y < screen_rect(locked_goal).get_center().y, "locked achievement name stays visually above goal text at %s" % viewport_size)
 		if locked_goal_back != null:
@@ -1744,7 +1793,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	var cabinet_rear = scene.find_child("ShopCabinet3DRearShell", true, false) as Control
 	var cabinet_shadow = scene.find_child("ShopCabinet3DCastShadow", true, false) as Control
 	var display_shell = scene.find_child("ShopDisplayCabinet3DShell", true, false) as Control
-	check(cabinet_front != null and cabinet_rear != null and cabinet_shadow != null and display_shell != null, "shop exposes a physical front cabinet, rear shell, shadow, and recessed display at %s" % viewport_size)
+	check(cabinet_front != null and cabinet_rear == null and cabinet_shadow != null and display_shell != null, "shop exposes one front cabinet surface without a duplicate rear shell at %s" % viewport_size)
 	var item_ids := ["swap_card", "peek_card", "lucky_charm", "double_coins"]
 	var scroll = scene.find_child("ShopItemsScroll", true, false) as ScrollContainer
 	var scrollbar = scene.find_child("ShopItemsScrollBar", true, false) as VScrollBar

@@ -205,12 +205,6 @@ func _show_menu_impl() -> void:
 
 	# 主菜单卡片区域 - 按安全区宽度收缩，避免移动端溢出。
 	draw_menu_primary_3d_stage(root_layer)
-	menu_realtime_3d_stage = Commercial3DStage.new()
-	menu_realtime_3d_stage.name = "MenuCommercial3DStage"
-	apply_rect(menu_realtime_3d_stage, rect_full(0.075, 0.245, 0.925, 0.800))
-	menu_realtime_3d_stage.modulate = Color(1.0, 1.0, 1.0, 0.98)
-	menu_realtime_3d_stage.configure("menu", fx_enabled_effective(), 0, 1.0, null, graphics_quality)
-	root_layer.add_child(menu_realtime_3d_stage)
 	var row = HBoxContainer.new()
 	configure_passive_container(row)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -374,6 +368,8 @@ func _show_online_lobby_impl() -> void:
 	mode = "online_lobby"
 	recover_audio_after_screen_change()
 	clear_screen()
+	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+		clear_online_room_snapshot()
 
 	# 主面板 - 统一的全屏面板
 	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.28), "ui_jade_reading_plate")
@@ -387,19 +383,10 @@ func _show_online_lobby_impl() -> void:
 	lobby_top_glint.name = "OnlineLobby3DTopGlint"
 	var lobby_lower_edge = make_soft_depth_panel(panel, rect_full(0.030, 0.940, 0.970, 0.990), Color(0.0, 0.0, 0.0, 0.06), 999)  # r415
 	lobby_lower_edge.name = "OnlineLobby3DLowerEdge"
-	draw_secondary_screen_texture(panel, "online_network", "OnlineLobbyNetworkTexture", 0.040)
 	var online_gpt_key := "online_gpt_lobby"
-	var gpt_online_texture = add_optional_gpt_illustration_texture(panel, online_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.03, false)
-	if gpt_online_texture != null:
-		gpt_online_texture.name = "OnlineLobbyGPTTexture"
-		# r496: keep ornate vault, lower wash + warm lift so form text stays commercial-readable.
-		gpt_online_texture.modulate = Color(1.10, 1.06, 1.02, minf(0.05, gpt_online_texture.modulate.a))
 	var online_header_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.26, false)
 	if online_header_strip != null:
 		online_header_strip.name = "OnlineLobbyGptHeaderStrip"
-	var online_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.04, 0.12, 0.96, 0.94), 0.02, false)
-	if online_sheet != null:
-		online_sheet.name = "OnlineLobbyGptSheet"
 	var fan_texture = add_illustration_texture(panel, "lobby_screen_fan", rect_full(0.38, 0.06, 0.98, 0.34), 0.025, false)
 	if fan_texture != null:
 		fan_texture.name = "OnlineLobbyFanTexture"
@@ -432,9 +419,6 @@ func _show_online_lobby_impl() -> void:
 		state_badge_label.name = "OnlineLobbyConnectionStateLabel"
 
 	# 表单面板 - 连接与房间设置
-	var online_split_back = make_gpt_plate_rect(rect_full(0.030, 0.155, 0.970, 0.880), Color(0.90, 0.80, 0.58, 0.18), "settings_overview_panel")
-	online_split_back.name = "OnlineLobbySplitReadabilityBackplate"
-	panel.add_child(online_split_back)
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
@@ -590,11 +574,17 @@ func _show_online_lobby_impl() -> void:
 	if room_gate_texture != null:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
 	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, 12, Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
+	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	draw_online_lobby_room_art(log_panel)
 	draw_online_lobby_roster_panel(log_panel)
 	draw_online_lobby_log_stream_art(log_panel)
 	var log_list_panel = draw_online_lobby_log_list_panel(log_panel)
+	var room_offline_state = make_label(log_panel, "连接后显示房间、席位和日志", 16, Color(0.82, 0.86, 0.78, 0.86), true)
+	room_offline_state.name = "OnlineLobbyRoomOfflineState"
+	apply_rect(room_offline_state, rect_full(0.12, 0.42, 0.88, 0.58))
+	room_offline_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	configure_clipped_label(room_offline_state)
 	logs_label = make_label(log_list_panel, "", 14, Color(0.92, 0.94, 0.84), false)
 	logs_label.name = "OnlineLobbyLogListText"
 	apply_rect(logs_label, rect_full(0.055, 0.260, 0.945, 0.930))
@@ -627,6 +617,23 @@ func refresh_online_lobby_state() -> void:
 	var state_badge = root_layer.find_child("OnlineLobbyConnectionStateBadge", true, false) as CanvasItem
 	if state_badge != null:
 		state_badge.modulate = Color(1.0, 1.0, 1.0, 1.0) if connected else Color(0.88, 0.92, 0.88, 0.92)
+	var room_badge = root_layer.find_child("OnlineLobbyRoomBadge", true, false)
+	if room_badge != null:
+		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
+		if room_badge_label != null:
+			room_badge_label.text = "房间号 " + (selected_room if connected and selected_room != "" else "--")
+	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
+	var roster = root_layer.find_child("OnlineLobbyRosterPanel", true, false) as CanvasItem
+	var log_list = root_layer.find_child("OnlineLobbyLogListPanel", true, false) as CanvasItem
+	var offline_state = root_layer.find_child("OnlineLobbyRoomOfflineState", true, false) as CanvasItem
+	if room_art != null:
+		room_art.visible = connected
+	if roster != null:
+		roster.visible = connected
+	if log_list != null:
+		log_list.visible = connected
+	if offline_state != null:
+		offline_state.visible = not connected
 	var start_button = root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
 	if start_button != null:
 		start_button.text = "开始游戏" if connected else "待连接"
@@ -644,6 +651,9 @@ func refresh_online_lobby_state() -> void:
 	else:
 		lobby_status.text = "下一步 · 先连接，再建房或入房"
 	configure_clipped_label(lobby_status)
+	var room_state_label = root_layer.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
+	if room_state_label != null:
+		room_state_label.text = state
 
 
 func refresh_online_feedback_art() -> void:
@@ -671,43 +681,19 @@ func _show_rules_screen_impl() -> void:
 
 	var codex_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.14), 24)  # r416
 	codex_shadow.name = "RulesCodex3DCastShadow"
-	var codex_rear = make_gpt_plate_rect(rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.18), "ui_jade_reading_plate")
-	codex_rear.name = "RulesCodex3DRearShell"
-	root_layer.add_child(codex_rear)
-	var codex_rear_gpt = add_optional_gpt_illustration_texture(codex_rear, "rules_gpt_scroll", rect_full(-0.01, -0.01, 1.01, 1.01), 0.16, false)
-	if codex_rear_gpt != null:
-		codex_rear_gpt.name = "RulesCodexRearGPTTexture"
-		codex_rear.move_child(codex_rear_gpt, 0)
-	var codex_lower_edge = make_gpt_route_rail(rect_full(0.025, 0.954, 0.975, 0.994), Color(0.0, 0.0, 0.0, 0.05))
-	codex_lower_edge.name = "RulesCodex3DLowerEdge"
-	codex_rear.add_child(codex_lower_edge)
-	var codex_top_glint = make_gpt_route_rail(rect_full(0.040, 0.006, 0.960, 0.029), Color(1.0, 0.88, 0.52, 0.05))
-	codex_top_glint.name = "RulesCodex3DTopGlint"
-	codex_rear.add_child(codex_top_glint)
 
 	# 主面板：纹理与交互/文字处于同级，避免父纹理调色压低阅读内容。
 	var panel = make_layout_host(rect_full(0.02, 0.02, 0.98, 0.98))
 	panel.name = "RulesCodexFrontPanel"
 	root_layer.add_child(panel)
+	# The front plate is the single authored surface for the page; keep the
+	# content area free of a second full-page illustration.
 	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.22, 0.16, 0.11, 0.10), "ui_jade_reading_plate")
 	panel_plate.name = "RulesCodexFrontPlate"
 	panel.add_child(panel_plate)
-	var rules_gpt_key := "rules_gpt_scroll"
-	var gpt_rules_texture = add_optional_gpt_illustration_texture(panel, rules_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.06, false)
-	if gpt_rules_texture != null:
-		gpt_rules_texture.name = "RulesGPTScrollTexture"
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.52, false)
 	if rules_title_strip != null:
 		rules_title_strip.name = "RulesGptTitleStrip"
-	var rules_sheet = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.05, 0.14, 0.95, 0.92), 0.10, false)
-	var rules_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.88), 0.05, false)
-	if rules_mid_ornament != null:
-		rules_mid_ornament.name = "RulesMidOrnamentPlate"
-	if rules_sheet != null:
-		rules_sheet.name = "RulesGptSheet"
-		if gpt_rules_texture != null:
-			gpt_rules_texture.modulate = Color(1.16, 1.08, 0.96, minf(0.06, gpt_rules_texture.modulate.a))
-			panel.move_child(gpt_rules_texture, 0)
 	# 书架式滑入动画 / Shelf-slide entrance
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
@@ -735,16 +721,10 @@ func _show_rules_screen_impl() -> void:
 	apply_rect(back, rect_full(0.835, 0.026, 0.945, 0.112))
 
 	# 内容区域
-	var content_backplate = make_gpt_plate_rect(rect_full(0.050, 0.154, 0.950, 0.986), Color(0.10, 0.07, 0.05, 0.08), "ui_jade_reading_plate")
+	var content_backplate = make_layout_host(rect_full(0.050, 0.154, 0.950, 0.986))
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var reading_inset = make_gpt_plate_rect(rect_full(0.010, 0.020, 0.990, 0.980), Color(0.0, 0.0, 0.0, 0.05), "ui_jade_reading_plate")
-	reading_inset.name = "RulesCodex3DReadingInset"
-	content_backplate.add_child(reading_inset)
-	var reading_shelf = make_gpt_route_rail(rect_full(0.025, 0.930, 0.975, 0.992), Color(0.030, 0.025, 0.018, 0.08))
-	reading_shelf.name = "RulesCodex3DBottomShelf"
-	content_backplate.add_child(reading_shelf)
 	var content_sheen = make_layout_host(rect_full(0.030, 0.026, 0.970, 0.046))
 	content_sheen.name = "RulesContentTopSheen"
 	content_backplate.add_child(content_sheen)
@@ -938,30 +918,15 @@ func _show_shop_screen_impl() -> void:
 	# stays inside the safe viewport and provides depth without changing layout.
 	var cabinet_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.12), 24)
 	cabinet_shadow.name = "ShopCabinet3DCastShadow"
-	var cabinet_rear = make_gpt_plate_rect(rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.22), "ui_jade_reading_plate")
-	cabinet_rear.name = "ShopCabinet3DRearShell"
-	root_layer.add_child(cabinet_rear)
-	var cabinet_rear_gpt = add_optional_gpt_illustration_texture(cabinet_rear, "shop_gpt_vault", rect_full(-0.01, -0.01, 1.01, 1.01), 0.14, false)
-	if cabinet_rear_gpt != null:
-		cabinet_rear_gpt.name = "ShopCabinetRearGPTTexture"
-		cabinet_rear.move_child(cabinet_rear_gpt, 0)
-	var cabinet_lower_edge = make_gpt_route_rail(rect_full(0.025, 0.955, 0.975, 0.994), Color(0.0, 0.0, 0.0, 0.10))
-	cabinet_lower_edge.name = "ShopCabinet3DLowerEdge"
-	cabinet_rear.add_child(cabinet_lower_edge)
-	var cabinet_top_glint = make_gpt_route_rail(rect_full(0.040, 0.006, 0.960, 0.028), Color(1.0, 0.86, 0.48, 0.05))
-	cabinet_top_glint.name = "ShopCabinet3DTopGlint"
-	cabinet_rear.add_child(cabinet_top_glint)
+	# Keep one shop cabinet surface on the front panel; a second full-page rear
+	# illustration made item rows harder to scan at 960x540.
 
 	# 主面板
 	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.20), "ui_jade_reading_plate")
 	panel.name = "ShopCabinetFrontPanel"
 	root_layer.add_child(panel)
-	draw_secondary_screen_texture(panel, "shop_vault", "ShopVaultTexture", 0.05)
 	var shop_gpt_key := "shop_gpt_vault"
 	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.08, false)
-	var shop_mid_ornament = add_optional_gpt_illustration_texture(panel, "settings_overview_panel", rect_full(0.06, 0.16, 0.94, 0.90), 0.05, false)
-	if shop_mid_ornament != null:
-		shop_mid_ornament.name = "ShopMidOrnamentPlate"
 	if gpt_shop_texture != null:
 		gpt_shop_texture.name = "ShopGPTVaultTexture"
 		# r496: reduce dark vault wash + warm lift so item rows remain commercial-readable.
@@ -1578,6 +1543,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 	# 连续签到天数 - 更醒目
 	var days = int(login_result.get("consecutive_days", 1))
+	var claimed_today = bool(login_result.get("claimed_today", false))
 	var days_text = "已连续签到 %d 天" % days
 	var days_label = make_label(panel, days_text, 26, Color(0.98, 0.97, 0.92), true)
 	apply_rect(days_label, rect_full(0.10, 0.18, 0.90, 0.28))
@@ -1598,7 +1564,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 	for i in range(7):
 		var day_num = i + 1
-		var is_claimed = day_num < current_day_in_cycle
+		var is_claimed = day_num < current_day_in_cycle or (day_num == current_day_in_cycle and claimed_today)
 		var is_current = day_num == current_day_in_cycle
 		var is_milestone = day_num == 7
 
@@ -1650,10 +1616,10 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	draw_daily_login_streak_art(panel, days, current_day_in_cycle)
 
 	# 奖励说明 - 增强视觉效果
-	var reward_text = "今日奖励："
+	var reward_text = "今日奖励已入账：" if claimed_today else "今日奖励："
 	var reward_icon_name = "gift"
-	if days % 7 == 0:
-		reward_text += "双倍分数加成卡 ×1"
+	if current_day_in_cycle == 7:
+		reward_text += "双倍金币卡 ×1"
 		reward_icon_name = "sparkles"
 	else:
 		reward_text += "金币 +100"
@@ -1699,13 +1665,40 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	draw_daily_login_progress_confirm_art(panel, progress)
 
-	# 确认按钮 - 增强样式
-	var confirm_btn = make_small_button("领取奖励", Color(0.78, 0.56, 0.28), func() -> void:
-		# 领取奖励动画
+	# 确认按钮 - 一次性入账，领取后保留页面并明确显示已领取。
+	var claim_state := {"claimed": claimed_today}
+	var confirm_btn: Button
+	confirm_btn = make_small_button("已领取" if claimed_today else "领取奖励", Color(0.78, 0.56, 0.28), func() -> void:
+		if bool(claim_state.get("claimed", false)):
+			show_toast("今日奖励已领取。", 1800)
+			return
+		var claim_result = claim_daily_login_reward()
+		if not bool(claim_result.get("claimed", false)):
+			show_toast(str(claim_result.get("reason", "签到奖励领取失败")), 2200)
+			return
+		claim_state["claimed"] = true
 		if fx_enabled_effective():
-			_play_reward_claim_animation(panel, reward_text)
-		show_toast("签到成功！%s" % reward_text.replace("今日奖励：", ""), 2500)
-		show_menu(true)
+			_play_reward_claim_animation(panel, "今日奖励：" + str(claim_result.get("detail", "")))
+		reward_label.text = "今日奖励已入账：%s" % str(claim_result.get("detail", ""))
+		confirm_btn.text = "已领取"
+		confirm_btn.disabled = true
+		confirm_btn.modulate = Color(0.72, 0.76, 0.68, 0.72)
+		var current_indicator = day_indicators_container.find_child("DailyLoginDayNode_%d" % current_day_in_cycle, true, false) as Control
+		if current_indicator != null:
+			var current_reward_label = current_indicator.find_child("DailyLoginRewardLabel_%d" % current_day_in_cycle, true, false) as Label
+			if current_reward_label != null:
+				current_reward_label.text = "已领"
+			if current_indicator.find_child("DailyLoginCurrentClaimCheck", true, false) == null:
+				var check_icon = add_lucide_icon(current_indicator, "check", rect_full(0.25, 0.15, 0.75, 0.65), Color(0.96, 0.96, 0.92))
+				if check_icon != null:
+					check_icon.name = "DailyLoginCurrentClaimCheck"
+		var forecast_badge_node = panel.find_child("DailyLoginForecastBadge", true, false) as Label
+		if forecast_badge_node != null:
+			forecast_badge_node.text = "已领取"
+		var forecast_body_node = panel.find_child("DailyLoginForecastBody", true, false) as Label
+		if forecast_body_node != null:
+			forecast_body_node.text = "奖励已入账，明日可继续签到"
+		show_toast("签到成功！%s" % str(claim_result.get("detail", "")), 2500)
 	)
 	confirm_btn.custom_minimum_size = Vector2(220, 50)
 	confirm_btn.name = "DailyLoginClaimButton"
@@ -1713,11 +1706,14 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	panel.add_child(confirm_btn)
 	apply_rect(confirm_btn, rect_full(0.315, 0.675, 0.685, 0.790))
 	add_lucide_icon(confirm_btn, "check", rect_full(0.08, 0.22, 0.22, 0.78), Color(0.96, 0.96, 0.92))
+	if claimed_today:
+		confirm_btn.disabled = true
+		confirm_btn.modulate = Color(0.72, 0.76, 0.68, 0.72)
 	draw_daily_login_claim_flow_art(panel, progress)
 	# 七日奖励预告
 	var days_to_bonus = max(0, 7 - progress)
-	var forecast_badge_text = "已达成" if progress >= 7 else "还差 %d 天" % days_to_bonus
-	var forecast_body_text = "今日可领取双倍分数加成卡" if progress >= 7 else "第7天领取双倍分数加成卡"
+	var forecast_badge_text = "已领取" if claimed_today else ("今日可领" if progress >= 7 else "还差 %d 天" % days_to_bonus)
+	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍金币卡" if progress >= 7 else "第7天领取双倍金币卡")
 	var forecast_panel = make_gpt_route_rail(rect_full(0.160, 0.820, 0.840, 0.955), Color(0.010, 0.022, 0.025, 0.64))
 	forecast_panel.name = "DailyLoginForecastPanel"
 	panel.add_child(forecast_panel)

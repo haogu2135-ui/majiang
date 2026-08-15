@@ -52,8 +52,7 @@ func connect_online() -> void:
 	tcp = StreamPeerTCP.new()
 	tcp_buffer = ""
 	next_online_poll_msec = 0
-	online_room.clear()
-	online_game.clear()
+	clear_online_room_snapshot()
 	clear_online_feedback()
 	sent_hello = false
 	var err = tcp.connect_to_host(online_host_edit.text.strip_edges(), DEFAULT_PORT)
@@ -61,6 +60,15 @@ func connect_online() -> void:
 	refresh_online_lobby_state()
 	if err != OK:
 		set_online_feedback("连接失败：%s" % error_string(err), false)
+
+func clear_online_room_snapshot() -> void:
+	online_room.clear()
+	online_game.clear()
+	online_announced_discard_key = ""
+	online_pending_local_discard_identity = ""
+	if mode == "online_lobby":
+		render_room_log()
+		refresh_online_lobby_state()
 
 func handle_online_ack(data: Dictionary) -> void:
 	var message = online_server_message_text(data, "")
