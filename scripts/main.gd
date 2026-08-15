@@ -2267,7 +2267,7 @@ func ai_pressure_tolerance(seat: int) -> float:
 	return ai_profile_value(seat, "pressure")
 
 func score_points_for_fan(fan: int) -> int:
-	var key = clamp(fan, 1, SCORE_LIMIT_FAN)
+	var key = clamp(fan, 1, rule_score_limit_fan())
 	return int(SCORE_TABLE.get(key, SCORE_TABLE[SCORE_LIMIT_FAN]))
 
 func is_complete_hand(tiles: Array, open_melds: int) -> bool:
@@ -5199,10 +5199,10 @@ func start_next_offline_hand(auto_run_ai: bool = true) -> void:
 
 func make_wall() -> Array[String]:
 	var next_wall: Array[String] = []
-	for code in TILE_CODES:
+	for code in rule_tile_codes():
 		for copy in range(4):
 			next_wall.append(code)
-	for code in FLOWER_CODES:
+	for code in rule_flower_codes():
 		next_wall.append(code)
 	return next_wall
 
@@ -6993,7 +6993,7 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 		options.append("gang")
 	if held_count >= 2:
 		options.append("peng")
-	if seat == (from_seat + 1) % 4 and not get_chi_choices_from_counts(hand_counts, tile).is_empty():
+	if rule_allows_chi() and seat == (from_seat + 1) % 4 and not get_chi_choices_from_counts(hand_counts, tile).is_empty():
 		options.append("chi")
 	return options
 
@@ -7003,6 +7003,8 @@ func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: Stri
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
 		return false
 	if last_discard != tile or last_discard_seat != from_seat:
+		return false
+	if claim == "chi" and not rule_allows_chi():
 		return false
 	if offline_phase == "pending_claim":
 		# A visible response window belongs only to the human seat and must match
@@ -7336,7 +7338,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var win_type = win_fx_type_for_score(score_data, self_draw)
 	play_fx_win_burst_enhanced(fx_burst_text, fx_burst_color, win_type)
 	var points = int(score_data.get("points", 0))
-	var package_payer = package_payer_for(winner)
+	var package_payer = package_payer_for(winner) if rule_uses_package_liability() else -1
 	var before_scores: Array[int] = []
 	for seat in range(players.size()):
 		before_scores.append(int(players[seat].get("score", 0)))
@@ -7452,7 +7454,9 @@ func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 		tiles.append(extra_tile)
 	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, tiles):
 		return false
-	return is_complete_hand(tiles, players[seat]["melds"].size())
+	if not is_complete_hand(tiles, players[seat]["melds"].size()):
+		return false
+	return rule_minimum_met_for_tiles(seat, tiles, extra_tile == "")
 
 
 func record_passed_win_tile(seat: int, tile: String) -> void:
@@ -7709,7 +7713,9 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 		tile_count += 1
 	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, counts, tile_count):
 		return false
-	return is_complete_hand_from_counts(counts, tile_count, players[seat]["melds"].size())
+	if not is_complete_hand_from_counts(counts, tile_count, players[seat]["melds"].size()):
+		return false
+	return rule_minimum_met_for_tiles(seat, tiles_from_counts(counts), false)
 
 func discard_report_for_tile(tile: String) -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard() or tile == "":
@@ -11792,7 +11798,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		hud.move_child(gpt_top_hud_texture, min(1, hud.get_child_count() - 1))
 
 	# 模式徽章
-	var mode_text = "单机" if mode == "offline" else "联机"
+	var mode_text = ("单机 · " + rule_variant_short_label()) if mode == "offline" else "联机"
 	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 11, Color(0.100, 0.082, 0.058, 0.78), Color(0.52, 0.42, 0.22, 0.22), Color(0.94, 0.88, 0.72))
 	mode_badge.name = "TopHudModeBadge"
 	mode_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -13980,7 +13986,10 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 		art.move_child(overlay, 0)
 	var player_count = 0
 	var ready_count = 0
-	var players_value = online_room.get("players", []) if lobby_connection_state_text() == "已连接" else []
+	# Keep the last room snapshot visible while a join/create request is waiting
+	# for the server. The connection badge still reports the current state.
+	var show_room_snapshot := lobby_connection_state_text() == "已连接" or online_waiting_for_server
+	var players_value = online_room.get("players", []) if show_room_snapshot else []
 	if typeof(players_value) == TYPE_ARRAY:
 		var players_array := players_value as Array
 		player_count = players_array.size()
@@ -16546,6 +16555,18 @@ func draw_settings_overlay(parent: Control) -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.flash(close, 0.5, 1.0, 0.8)
 	apply_rect(close, SETTINGS_CLOSE_RECT)
+	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.84, 0.90, 0.78), true)
+	rule_setting_label.name = "SettingsRuleVariantLabel"
+	apply_rect(rule_setting_label, rect_full(0.550, 0.060, 0.675, 0.145))
+	rule_setting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(rule_setting_label)
+	var rule_setting_button = make_setting_selector_button(rule_variant_short_label(), "地方规则", func() -> void:
+		cycle_rule_variant_setting()
+	)
+	rule_setting_button.name = "SettingsRuleVariantButton"
+	rule_setting_button.tooltip_text = rule_variant_summary(rule_variant)
+	apply_rect(rule_setting_button, rect_full(0.685, 0.055, 0.815, 0.165))
+	panel.add_child(rule_setting_button)
 
 	# 声音设置
 	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)
@@ -23132,7 +23153,7 @@ func _show_online_lobby_impl() -> void:
 	mode = "online_lobby"
 	recover_audio_after_screen_change()
 	clear_screen()
-	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and not online_waiting_for_server:
 		clear_online_room_snapshot()
 
 	# 主面板 - 统一的全屏面板
@@ -23468,7 +23489,7 @@ func _show_rules_screen_impl() -> void:
 		tw.tween_property(panel, "offset_right", 0.0, 0.26).from(-22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 标题
-	var title = make_label(panel, "麻将玩法指南", 27, Color(0.96, 0.88, 0.52), true)
+	var title = make_label(panel, "麻将玩法指南 · %s" % rule_variant_label(), 25, Color(0.96, 0.88, 0.52), true)
 	apply_rect(title, rect_full(0.04, 0.024, 0.46, 0.082))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
@@ -23541,9 +23562,14 @@ func _show_rules_screen_impl() -> void:
 	)
 
 	# 本地规则合同：文案必须与计分和结算实现同步，不将其表述为外部认证的地方规则。
+	var current_profile := rule_profile()
+	var chi_text := "允许吃牌（仅限下家弃牌）" if rule_allows_chi() else "不允许吃牌，仅可碰、杠、胡"
+	var flower_text := "含8张花牌，补花后计番" if bool(current_profile.get("include_flowers", true)) else "不含花牌"
 	add_rule_section(content, "和牌与响应", [
+		"当前档案：%s" % rule_variant_label(),
+		"牌墙：%d张 · %s · %s" % [rule_wall_size(), flower_text, chi_text],
 		"4组面子 + 1对将牌即可胡牌",
-		"摸牌、打牌、吃碰杠来组合手牌",
+		"摸牌、打牌、碰杠来组合手牌；" + ("吃牌" if rule_allows_chi() else "本档案禁吃"),
 		"可自摸，也可点炮胡牌；过水后整组听口摸前不可再荣和",
 		"响应优先：胡 > 碰/杠 > 吃；碰杠吃同级近家先",
 		"点炮多人可胡时保留玩家窗口，最终单家结算",
@@ -23552,18 +23578,19 @@ func _show_rules_screen_impl() -> void:
 	], 0)
 
 	add_rule_section(content, "结算与支付", [
+		"本档案：至少%d番和牌，%d番封顶" % [rule_min_fan(), rule_score_limit_fan()],
 		"番分表：1番200、2番400、3番800、4番1600",
-		"5番3200、6番6400、7番12800、8番及以上25600封顶",
+		"5番3200、6番6400、7番12800、%d番及以上封顶" % rule_score_limit_fan(),
 		"自摸：其余三家各付一份；点炮和抢杠胡：责任方支付三份",
-		"包三搭：同一来源被吃、碰或明杠三次后形成包家",
-		"包家承担该家本局自摸、点炮、抢杠胡的三份支付",
+		"包三搭：同一来源被吃、碰或明杠三次后形成包家" if rule_uses_package_liability() else "本档案不启用包三搭责任支付",
+		"包家承担该家本局自摸、点炮、抢杠胡的三份支付" if rule_uses_package_liability() else "点炮和抢杠胡由责任方支付三份",
 		"荒庄查听：每家未听付1000分，全部由听牌者均分",
 		"四家同听或同未听不罚",
 	], 1)
 
 	add_rule_section(content, "计番项目", [
 		"平胡1番；自摸、庄家、门清各加1番",
-		"每张花牌和每组杠各加1番",
+		"每张花牌和每组杠各加1番" if bool(current_profile.get("include_flowers", true)) else "每组杠加1番；本档案不计花牌",
 		"情境：杠上开花加2番；海底捞月、河底捞鱼、抢杠胡各加1番",
 		"七对+3、十三幺+7、清一色+3、混一色+2",
 		"字一色+5、碰碰胡+2、一条龙+2、断幺九+1",
@@ -23589,7 +23616,7 @@ func _show_rules_screen_impl() -> void:
 		"点手牌即可打出",
 		"出现吃/碰/杠/胡时点击响应",
 		"点'重开'重新开局",
-		"本页说明当前单机本地实现",
+		"本页说明当前单机本地实现；当前档案为%s" % rule_variant_label(),
 		"特殊地方番型与包赔细则仍以正式发布规则为准",
 	], 5)
 	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
@@ -25000,6 +25027,15 @@ func cycle_ai_difficulty_setting() -> void:
 	show_toast("AI难度: %s" % ai_difficulty_label())
 	refresh_current_screen()
 
+func cycle_rule_variant_setting() -> void:
+	var current_index := RULE_VARIANT_ORDER.find(normalized_rule_variant(rule_variant))
+	if current_index < 0:
+		current_index = RULE_VARIANT_ORDER.size() - 1
+	rule_variant = str(RULE_VARIANT_ORDER[(current_index + 1) % RULE_VARIANT_ORDER.size()])
+	save_settings()
+	show_toast("地方规则：%s · 下一局生效" % rule_variant_label(rule_variant))
+	refresh_current_screen()
+
 func toggle_fx_setting() -> void:
 	fx_enabled = not fx_enabled
 	save_settings()
@@ -25480,6 +25516,75 @@ func _ready() -> void:
 	# v1.0.149: 移除立即播放，恢复用户交互触发
 	call_deferred("_finish_startup")
 
+func normalized_rule_variant(value: String = "") -> String:
+	var candidate := value.strip_edges().to_lower()
+	return candidate if RULE_VARIANT_PROFILES.has(candidate) else RULE_VARIANT_YANGZHOU
+
+func active_rule_variant() -> String:
+	if mode == "offline" and offline_active_rule_variant != "":
+		return normalized_rule_variant(offline_active_rule_variant)
+	return normalized_rule_variant(rule_variant)
+
+func rule_profile(variant: String = "") -> Dictionary:
+	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
+	return (RULE_VARIANT_PROFILES.get(key, RULE_VARIANT_PROFILES[RULE_VARIANT_YANGZHOU]) as Dictionary).duplicate(true)
+
+func rule_variant_label(variant: String = "") -> String:
+	return str(rule_profile(variant).get("label", "扬州麻将"))
+
+func rule_variant_short_label(variant: String = "") -> String:
+	return str(rule_profile(variant).get("short_label", "扬州"))
+
+func rule_variant_summary(variant: String = "") -> String:
+	return str(rule_profile(variant).get("summary", "144张牌，含字牌与花牌。"))
+
+func rule_tile_codes(variant: String = "") -> Array[String]:
+	var profile := rule_profile(variant)
+	var codes: Array[String] = []
+	for index in range(TILE_CODES.size()):
+		if not bool(profile.get("include_honors", true)) and index >= 27:
+			continue
+		codes.append(str(TILE_CODES[index]))
+	return codes
+
+func rule_flower_codes(variant: String = "") -> Array[String]:
+	var flowers: Array[String] = []
+	if bool(rule_profile(variant).get("include_flowers", true)):
+		for code in FLOWER_CODES:
+			flowers.append(str(code))
+	return flowers
+
+func rule_wall_size(variant: String = "") -> int:
+	return rule_tile_codes(variant).size() * 4 + rule_flower_codes(variant).size()
+
+func rule_allows_chi(variant: String = "") -> bool:
+	return bool(rule_profile(variant).get("allow_chi", true))
+
+func rule_min_fan(variant: String = "") -> int:
+	return max(1, int(rule_profile(variant).get("min_fan", 1)))
+
+func rule_score_limit_fan(variant: String = "") -> int:
+	return clampi(int(rule_profile(variant).get("limit_fan", SCORE_LIMIT_FAN)), 1, SCORE_LIMIT_FAN)
+
+func rule_uses_package_liability(variant: String = "") -> bool:
+	return bool(rule_profile(variant).get("package_liability", false))
+
+func is_tile_enabled_for_rule(tile: String, variant: String = "") -> bool:
+	return rule_tile_codes(variant).has(tile)
+
+func tiles_from_counts(counts: Array) -> Array:
+	var tiles: Array = []
+	for index in range(mini(counts.size(), TILE_CODES.size())):
+		for _copy in range(max(0, int(counts[index]))):
+			tiles.append(TILE_CODES[index])
+	return tiles
+
+func rule_minimum_met_for_tiles(seat: int, tiles: Array, self_draw: bool, win_context: String = "") -> bool:
+	if rule_min_fan() <= 1:
+		return true
+	var score_data := calculate_win_score_from_tiles(seat, tiles, self_draw, win_context)
+	return int(score_data.get("fan", 0)) >= rule_min_fan()
+
 
 func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 	"""播放奖励领取动画 - 闪光和粒子效果"""
@@ -25953,7 +26058,7 @@ func poll_online(now_msec: int = -1) -> void:
 			clear_online_room_snapshot()
 		refresh_online_lobby_state()
 	if status != StreamPeerTCP.STATUS_CONNECTED:
-		if mode == "online_lobby" and not online_room.is_empty():
+		if mode == "online_lobby" and not online_room.is_empty() and not online_waiting_for_server:
 			clear_online_room_snapshot()
 		refresh_online_lobby_state()
 		return
@@ -26182,6 +26287,7 @@ func deal_offline_hand() -> void:
 	offline_draw_serial = 0
 	fx_last_animated_draw_serial = -1
 	current_seat = dealer_seat
+	offline_active_rule_variant = normalized_rule_variant(rule_variant)
 	last_discard = ""
 	last_discard_seat = -1
 	# 每局按难度刷新 AI 人设座位映射（标准/困难有轮换）
@@ -27994,8 +28100,8 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	var points = score_points_for_fan(fan)
 	return {
 		"fan": fan,
-		"limit_fan": min(fan, SCORE_LIMIT_FAN),
-		"limit_name": "封顶" if fan >= SCORE_LIMIT_FAN else "",
+		"limit_fan": min(fan, rule_score_limit_fan()),
+		"limit_name": "封顶" if fan >= rule_score_limit_fan() else "",
 		"points": points,
 		"reasons": reasons,
 	}
@@ -29736,7 +29842,10 @@ func has_valid_scoring_tile_inventory(seat: int, tiles: Array) -> bool:
 		return false
 	var counts = make_empty_tile_counts()
 	for item in tiles:
-		var index = tile_index(str(item))
+		var code = str(item)
+		if not is_tile_enabled_for_rule(code):
+			return false
+		var index = tile_index(code)
 		if index < 0 or index >= counts.size():
 			return false
 		counts[index] = int(counts[index]) + 1
@@ -29747,10 +29856,13 @@ func has_valid_scoring_tile_inventory_from_counts(seat: int, hand_counts: Array,
 	if seat < 0 or seat >= players.size() or hand_counts.size() != TILE_CODES.size():
 		return false
 	var combined = hand_counts.duplicate()
+	var allowed_codes := rule_tile_codes()
 	var concealed_total = 0
 	for index in range(combined.size()):
 		var amount = int(combined[index])
 		if amount < 0 or amount > 4:
+			return false
+		if amount > 0 and not allowed_codes.has(TILE_CODES[index]):
 			return false
 		combined[index] = amount
 		concealed_total += amount
@@ -29763,7 +29875,10 @@ func has_valid_scoring_tile_inventory_from_counts(seat: int, hand_counts: Array,
 		if typeof(meld) != TYPE_ARRAY:
 			return false
 		for item in meld:
-			var index = tile_index(str(item))
+			var code = str(item)
+			if not is_tile_enabled_for_rule(code):
+				return false
+			var index = tile_index(code)
 			if index < 0 or index >= combined.size():
 				return false
 			combined[index] = int(combined[index]) + 1
@@ -31438,7 +31553,7 @@ func achievement_progress_text(key: String) -> String:
 		if unlocked:
 			current_wins = 10
 		return "进度 %d/10" % current_wins
-	return "完成度 已达成" if unlocked else "完成度 待完成"
+	return "进度 %d/1" % (1 if unlocked else 0)
 
 # ============================================================
 # 商店系统

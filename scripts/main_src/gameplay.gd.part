@@ -258,10 +258,10 @@ func start_next_offline_hand(auto_run_ai: bool = true) -> void:
 
 func make_wall() -> Array[String]:
 	var next_wall: Array[String] = []
-	for code in TILE_CODES:
+	for code in rule_tile_codes():
 		for copy in range(4):
 			next_wall.append(code)
-	for code in FLOWER_CODES:
+	for code in rule_flower_codes():
 		next_wall.append(code)
 	return next_wall
 
@@ -2052,7 +2052,7 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 		options.append("gang")
 	if held_count >= 2:
 		options.append("peng")
-	if seat == (from_seat + 1) % 4 and not get_chi_choices_from_counts(hand_counts, tile).is_empty():
+	if rule_allows_chi() and seat == (from_seat + 1) % 4 and not get_chi_choices_from_counts(hand_counts, tile).is_empty():
 		options.append("chi")
 	return options
 
@@ -2062,6 +2062,8 @@ func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: Stri
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
 		return false
 	if last_discard != tile or last_discard_seat != from_seat:
+		return false
+	if claim == "chi" and not rule_allows_chi():
 		return false
 	if offline_phase == "pending_claim":
 		# A visible response window belongs only to the human seat and must match
@@ -2395,7 +2397,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var win_type = win_fx_type_for_score(score_data, self_draw)
 	play_fx_win_burst_enhanced(fx_burst_text, fx_burst_color, win_type)
 	var points = int(score_data.get("points", 0))
-	var package_payer = package_payer_for(winner)
+	var package_payer = package_payer_for(winner) if rule_uses_package_liability() else -1
 	var before_scores: Array[int] = []
 	for seat in range(players.size()):
 		before_scores.append(int(players[seat].get("score", 0)))
@@ -2511,7 +2513,9 @@ func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 		tiles.append(extra_tile)
 	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, tiles):
 		return false
-	return is_complete_hand(tiles, players[seat]["melds"].size())
+	if not is_complete_hand(tiles, players[seat]["melds"].size()):
+		return false
+	return rule_minimum_met_for_tiles(seat, tiles, extra_tile == "")
 
 
 func record_passed_win_tile(seat: int, tile: String) -> void:
@@ -2768,7 +2772,9 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 		tile_count += 1
 	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, counts, tile_count):
 		return false
-	return is_complete_hand_from_counts(counts, tile_count, players[seat]["melds"].size())
+	if not is_complete_hand_from_counts(counts, tile_count, players[seat]["melds"].size()):
+		return false
+	return rule_minimum_met_for_tiles(seat, tiles_from_counts(counts), false)
 
 func discard_report_for_tile(tile: String) -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard() or tile == "":

@@ -1387,7 +1387,7 @@ func ai_pressure_tolerance(seat: int) -> float:
 	return ai_profile_value(seat, "pressure")
 
 func score_points_for_fan(fan: int) -> int:
-	var key = clamp(fan, 1, SCORE_LIMIT_FAN)
+	var key = clamp(fan, 1, rule_score_limit_fan())
 	return int(SCORE_TABLE.get(key, SCORE_TABLE[SCORE_LIMIT_FAN]))
 
 func is_complete_hand(tiles: Array, open_melds: int) -> bool:

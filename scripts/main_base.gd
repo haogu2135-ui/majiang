@@ -294,6 +294,57 @@ const FLOWER_LABELS := ["春", "夏", "秋", "冬", "梅", "兰", "竹", "菊"]
 const THIRTEEN_ORPHANS_CODES := ["1W", "9W", "1T", "9T", "1B", "9B", "E", "S", "N", "R", "Z", "F", "P"]
 const WIND_CODES := ["E", "S", "N", "R"]
 const DRAGON_CODES := ["Z", "F", "P"]
+const RULE_VARIANT_GUANGDONG := "guangdong"
+const RULE_VARIANT_SICHUAN := "sichuan"
+const RULE_VARIANT_NANJING := "nanjing"
+const RULE_VARIANT_YANGZHOU := "yangzhou"
+const RULE_VARIANT_ORDER := [RULE_VARIANT_GUANGDONG, RULE_VARIANT_SICHUAN, RULE_VARIANT_NANJING, RULE_VARIANT_YANGZHOU]
+const RULE_VARIANT_PROFILES := {
+	RULE_VARIANT_GUANGDONG: {
+		"label": "广东麻将",
+		"short_label": "广东",
+		"include_honors": true,
+		"include_flowers": false,
+		"allow_chi": true,
+		"min_fan": 3,
+		"limit_fan": 8,
+		"package_liability": false,
+		"summary": "136张牌，无花牌；允许吃，和牌至少3番，8番封顶。",
+	},
+	RULE_VARIANT_SICHUAN: {
+		"label": "四川麻将",
+		"short_label": "四川",
+		"include_honors": false,
+		"include_flowers": false,
+		"allow_chi": false,
+		"min_fan": 1,
+		"limit_fan": 8,
+		"package_liability": false,
+		"summary": "108张牌，去除字牌和花牌；不允许吃，1番起和，8番封顶。",
+	},
+	RULE_VARIANT_NANJING: {
+		"label": "南京麻将",
+		"short_label": "南京",
+		"include_honors": true,
+		"include_flowers": true,
+		"allow_chi": true,
+		"min_fan": 1,
+		"limit_fan": 8,
+		"package_liability": false,
+		"summary": "144张牌，含字牌与花牌；允许吃，1番起和，8番封顶。",
+	},
+	RULE_VARIANT_YANGZHOU: {
+		"label": "扬州麻将",
+		"short_label": "扬州",
+		"include_honors": true,
+		"include_flowers": true,
+		"allow_chi": true,
+		"min_fan": 1,
+		"limit_fan": 8,
+		"package_liability": true,
+		"summary": "144张牌，含字牌与花牌；允许吃，1番起和，8番封顶，启用包三搭。",
+	},
+}
 const RISK_BADGE_TEXT := {
 	"安": "安",
 	"现": "现",
@@ -526,6 +577,8 @@ var offline_all_bot_mode := false
 var offline_sim_quiet := false
 var offline_match_briefing_shown := false
 var offline_skip_ai_profile_reshuffle := false
+var rule_variant := RULE_VARIANT_YANGZHOU
+var offline_active_rule_variant := ""
 ## seat -> AI_PROFILES index; reshuffled by difficulty for variety
 var ai_profile_seat_map: Array = [0, 1, 2, 3]
 var ai_sim_stats: Dictionary = {}
@@ -2348,6 +2401,8 @@ func load_settings() -> void:
 	graphics_quality = clampi(int(config.get_value("gameplay", "graphics_quality", graphics_quality)), Commercial3DStage.QUALITY_AUTO, Commercial3DStage.QUALITY_HIGH)
 	ai_assist_enabled = bool(config.get_value("gameplay", "ai_assist_enabled", ai_assist_enabled))
 	ai_difficulty = clampi(int(config.get_value("gameplay", "ai_difficulty", ai_difficulty)), AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var saved_rule_variant := str(config.get_value("gameplay", "rule_variant", rule_variant)).strip_edges().to_lower()
+	rule_variant = saved_rule_variant if RULE_VARIANT_PROFILES.has(saved_rule_variant) else RULE_VARIANT_YANGZHOU
 	current_bgm_index = int(config.get_value("gameplay", "current_bgm_index", 0))
 	if str(config.get_value("audio", "defaults_version", "")) != AUDIO_DEFAULTS_VERSION:
 		music_enabled = true
@@ -2366,6 +2421,8 @@ func save_settings() -> void:
 	config.set_value("gameplay", "graphics_quality", graphics_quality)
 	config.set_value("gameplay", "ai_assist_enabled", ai_assist_enabled)
 	config.set_value("gameplay", "ai_difficulty", ai_difficulty)
+	var saved_rule_variant := rule_variant if RULE_VARIANT_PROFILES.has(rule_variant) else RULE_VARIANT_YANGZHOU
+	config.set_value("gameplay", "rule_variant", saved_rule_variant)
 	config.set_value("gameplay", "current_bgm_index", current_bgm_index)
 	config.save(SETTINGS_PATH)
 
@@ -3093,7 +3150,7 @@ func tile_path(code: String) -> String:
 
 func preferred_tile_path(primary: String) -> String:
 	# Tile faces are authored 2D assets. Never fall back to a 3D face directory.
-	return primary
+	return primary if FileAccess.file_exists(primary) else "res://assets/tiles/tile_back.png"
 
 func tile_decal_path(code: String) -> String:
 	# Keep the legacy cache name, but source it from the same 2D face asset.

@@ -227,6 +227,20 @@ func run() -> void:
 	await process_frame
 	check(scene.app_version() == "1.0.180-godot", "project version matches exported app version")
 	check(scene.AUDIO_DEFAULTS_VERSION == "1.0.159-godot", "audio defaults migrate for this release")
+	var original_rule_variant := str(scene.rule_variant)
+	var expected_rule_wall_sizes := {
+		scene.RULE_VARIANT_GUANGDONG: 136,
+		scene.RULE_VARIANT_SICHUAN: 108,
+		scene.RULE_VARIANT_NANJING: 144,
+		scene.RULE_VARIANT_YANGZHOU: 144,
+	}
+	for variant in scene.RULE_VARIANT_ORDER:
+		var variant_key := str(variant)
+		scene.rule_variant = variant_key
+		var variant_wall = scene.make_wall()
+		check(variant_wall.size() == int(expected_rule_wall_sizes.get(variant_key, -1)) and scene.rule_wall_size(variant_key) == variant_wall.size(), "地方规则 %s 牌墙数量与档案一致" % scene.rule_variant_label(variant_key))
+	check(scene.rule_allows_chi(scene.RULE_VARIANT_SICHUAN) == false and scene.rule_allows_chi(scene.RULE_VARIANT_GUANGDONG) and scene.rule_min_fan(scene.RULE_VARIANT_GUANGDONG) == 3, "地方规则差异影响吃牌权限与最低番数")
+	scene.rule_variant = original_rule_variant
 	check(not scene.player_ai_assist_enabled(), "offline player side does not enable AI assistance")
 	check(scene.UPDATE_MANIFEST_URL == "http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json", "update manifest URL points to live download service")
 	check(scene.UPDATE_URL == "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk", "fallback update APK URL uses this release's immutable APK path")

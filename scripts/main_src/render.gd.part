@@ -3560,7 +3560,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		hud.move_child(gpt_top_hud_texture, min(1, hud.get_child_count() - 1))
 
 	# 模式徽章
-	var mode_text = "单机" if mode == "offline" else "联机"
+	var mode_text = ("单机 · " + rule_variant_short_label()) if mode == "offline" else "联机"
 	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 11, Color(0.100, 0.082, 0.058, 0.78), Color(0.52, 0.42, 0.22, 0.22), Color(0.94, 0.88, 0.72))
 	mode_badge.name = "TopHudModeBadge"
 	mode_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -5748,7 +5748,10 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 		art.move_child(overlay, 0)
 	var player_count = 0
 	var ready_count = 0
-	var players_value = online_room.get("players", []) if lobby_connection_state_text() == "已连接" else []
+	# Keep the last room snapshot visible while a join/create request is waiting
+	# for the server. The connection badge still reports the current state.
+	var show_room_snapshot := lobby_connection_state_text() == "已连接" or online_waiting_for_server
+	var players_value = online_room.get("players", []) if show_room_snapshot else []
 	if typeof(players_value) == TYPE_ARRAY:
 		var players_array := players_value as Array
 		player_count = players_array.size()
@@ -8314,6 +8317,18 @@ func draw_settings_overlay(parent: Control) -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.flash(close, 0.5, 1.0, 0.8)
 	apply_rect(close, SETTINGS_CLOSE_RECT)
+	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.84, 0.90, 0.78), true)
+	rule_setting_label.name = "SettingsRuleVariantLabel"
+	apply_rect(rule_setting_label, rect_full(0.550, 0.060, 0.675, 0.145))
+	rule_setting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(rule_setting_label)
+	var rule_setting_button = make_setting_selector_button(rule_variant_short_label(), "地方规则", func() -> void:
+		cycle_rule_variant_setting()
+	)
+	rule_setting_button.name = "SettingsRuleVariantButton"
+	rule_setting_button.tooltip_text = rule_variant_summary(rule_variant)
+	apply_rect(rule_setting_button, rect_full(0.685, 0.055, 0.815, 0.165))
+	panel.add_child(rule_setting_button)
 
 	# 声音设置
 	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)

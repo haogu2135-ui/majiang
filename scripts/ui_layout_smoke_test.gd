@@ -1691,7 +1691,7 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 		check(relative_luma(locked_name.get_theme_color("font_color")) >= 0.82 and relative_luma(locked_state.get_theme_color("font_color")) >= 0.86, "locked achievement text keeps readable contrast at %s" % viewport_size)
 		check(relative_luma(locked_goal.get_theme_color("font_color")) >= 0.66 and relative_luma(locked_progress_text.get_theme_color("font_color")) >= 0.74, "locked achievement helper text keeps readable contrast at %s" % viewport_size)
 		check(locked_name.clip_text and locked_goal.clip_text and locked_progress_text.clip_text and locked_state.clip_text, "locked achievement labels clip safely at %s" % viewport_size)
-		check(locked_goal.text.begins_with("目标：") and locked_progress_text.text == "完成度 待完成", "locked achievement exposes goal and truthful completion state at %s" % viewport_size)
+		check(locked_goal.text.begins_with("目标：") and locked_progress_text.text == "进度 0/1", "locked achievement exposes goal and truthful completion state at %s" % viewport_size)
 		var five_progress = scene.find_child("AchievementRowProgressText_five_wins", true, false) as Label
 		check(five_progress != null and five_progress.text == "进度 3/5", "cumulative five-win achievement exposes live 3/5 progress at %s" % viewport_size)
 		check(not rects_overlap(screen_rect(locked_name), screen_rect(locked_state)), "locked achievement name and state chip text stay separated at %s" % viewport_size)
