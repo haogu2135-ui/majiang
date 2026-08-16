@@ -5110,6 +5110,8 @@ func clear_screen() -> void:
 		add_battle_background(screen_layer)
 	elif mode == "menu":
 		add_menu_background(screen_layer)
+	elif mode == "rules":
+		add_rules_background(screen_layer)
 	else:
 		add_background(screen_layer)
 	root_layer = Control.new()
@@ -14999,7 +15001,7 @@ func draw_rule_section_example_art(strip: Control, section_index: int, accent: C
 	example.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(example, rect_full(0.070, 0.545, 0.930, 0.930))
 	strip.add_child(example)
-	var example_texture = add_illustration_texture(example, "rules_example_table", rect_full(-0.020, -0.100, 1.020, 1.100), 0.16, false)
+	var example_texture = add_illustration_texture(example, "rules_example_table", rect_full(-0.020, -0.100, 1.020, 1.100), 0.08, false)
 	if example_texture != null:
 		example_texture.name = "RulesExampleTableTexture_%d" % section_index
 	match section_index:
@@ -15036,7 +15038,7 @@ func draw_rule_section_path_art(section: Control, section_index: int, title_text
 	# neutral icon lane rather than borrowing the action illustration.
 	var section_panel_keys = ["rules_section_goal_panel", "", "", "rules_section_meld_panel", "rules_section_special_panel", "rules_section_action_panel"]
 	var panel_key = str(section_panel_keys[clamp(section_index, 0, section_panel_keys.size() - 1)])
-	var strip_plate = add_optional_gpt_illustration_texture(strip, panel_key, rect_full(-0.02, -0.02, 1.02, 1.02), 0.96, false) if panel_key != "" else null
+	var strip_plate = add_optional_gpt_illustration_texture(strip, panel_key, rect_full(-0.02, -0.02, 1.02, 1.02), 0.72, false) if panel_key != "" else null
 	var has_plate := strip_plate != null
 	if has_plate:
 		strip_plate.name = "RuleSectionArtGPTPlate_%d" % section_index
@@ -15171,7 +15173,7 @@ func draw_rules_guide_art(parent: Control) -> Control:
 	art.name = "RulesGuideArt"
 	parent.add_child(art)
 	# 国风底板插画替代原 rail/fill/gate/tick/connector/lead_glow 代码自绘装饰
-	var guide_plate = add_optional_gpt_illustration_texture(art, "rules_guide_panel", rect_full(-0.02, -0.05, 1.02, 1.05), 0.34, false)
+	var guide_plate = add_optional_gpt_illustration_texture(art, "rules_guide_panel", rect_full(-0.02, -0.05, 1.02, 1.05), 0.20, false)
 	if guide_plate != null:
 		guide_plate.name = "RulesGuidePanelPlate"
 		art.move_child(guide_plate, 0)
@@ -16488,7 +16490,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
-	var scrim = make_gpt_route_rail(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.72))
+	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.68), "ui_dark_scrim")
 	scrim.name = "SettingsOverlayScrim"
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
@@ -16500,7 +16502,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.50), "ui_jade_reading_plate")
+	var panel = make_gpt_plate_rect(panel_rect, Color(0.390, 0.470, 0.380, 0.76), "settings_gpt_panel_v2")
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
@@ -20538,13 +20540,13 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
 	parent.add_child(row)
-	var row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.24, false)
+	var row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.16, false)
 	if row_plate == null:
-		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
+		row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.14, false)
 	if row_plate != null:
 		row_plate.name = "SettingRowGptPlate_%s" % title
 		# r186: warm lacquer plate (not mint) so text plate contrast stays commercial.
-		row_plate.modulate = Color(0.78, 0.68, 0.52, 0.38)
+		row_plate.modulate = Color(0.78, 0.68, 0.52, 0.20)
 		row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
 	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.08, 0.06, 0.04, 0.30), "ui_jade_reading_plate")
@@ -20577,7 +20579,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_plate_rect(rect, Color(0.330, 0.405, 0.335, 0.44), "ui_jade_reading_plate")
+	var section = make_gpt_plate_rect(rect, Color(0.330, 0.405, 0.335, 0.20), "ui_jade_reading_plate")
 	section.name = "SettingsSection_%s" % title_text
 	parent.add_child(section)
 	var section_depth = make_gpt_route_rail(rect_full(0.015, 0.910, 0.985, 0.985), Color(0.0, 0.0, 0.0, 0.10))
@@ -20586,9 +20588,9 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_top_rim = make_gpt_ribbon(rect_full(0.035, 0.018, 0.965, 0.048), Color(1.0, 0.88, 0.56, 0.055))
 	section_top_rim.name = "SettingsSection3DTopRim_%s" % title_text
 	section.add_child(section_top_rim)
-	var section_plate = add_optional_gpt_illustration_texture(section, "ui_settings_section_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.10, false)
+	var section_plate = add_optional_gpt_illustration_texture(section, "ui_settings_section_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.06, false)
 	if section_plate == null:
-		section_plate = add_optional_gpt_illustration_texture(section, "ui_confirm_sheet_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.08, false)
+		section_plate = add_optional_gpt_illustration_texture(section, "ui_confirm_sheet_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.05, false)
 	if section_plate != null:
 		section_plate.name = "SettingsSectionGptPlate_%s" % title_text
 		section.move_child(section_plate, 0)
@@ -23473,10 +23475,10 @@ func _show_rules_screen_impl() -> void:
 	root_layer.add_child(panel)
 	# The front plate is the single authored surface for the page; keep the
 	# content area free of a second full-page illustration.
-	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.22, 0.16, 0.11, 0.10), "ui_jade_reading_plate")
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.22, 0.16, 0.11, 0.055), "ui_jade_reading_plate")
 	panel_plate.name = "RulesCodexFrontPlate"
 	panel.add_child(panel_plate)
-	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.52, false)
+	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.32, false)
 	if rules_title_strip != null:
 		rules_title_strip.name = "RulesGptTitleStrip"
 	# 书架式滑入动画 / Shelf-slide entrance
@@ -31292,19 +31294,19 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.16), "ui_button_face_plate")
+	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.085), "ui_button_face_plate")
 	section_plate.name = "RuleSectionPlate_%d" % section_index if section_index >= 0 else "RuleSectionPlate"
 	section.add_child(section_plate)
 	var line_count := int(lines.size())
 	var required_text_height := 24.0 + float(line_count) * 22.0 + float(line_count) * 5.0 + 34.0
 	section.custom_minimum_size.y = max(136.0, required_text_height)
-	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.06), "ui_button_face_plate")
+	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.035), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
 	section.add_child(section_depth)
-	var section_top_rim = make_gpt_ribbon(rect_full(0.025, 0.018, 0.975, 0.070), Color(1.0, 0.90, 0.58, 0.042))
+	var section_top_rim = make_gpt_ribbon(rect_full(0.025, 0.018, 0.975, 0.070), Color(1.0, 0.90, 0.58, 0.028))
 	section_top_rim.name = "RuleSection3DTopRim_%d" % section_index if section_index >= 0 else "RuleSection3DTopRim"
 	section.add_child(section_top_rim)
-	var example_plinth = make_gpt_edge_rail(rect_full(0.820, 0.080, 0.982, 0.920), Color(accent.r * 0.16, accent.g * 0.18, accent.b * 0.18, 0.62))
+	var example_plinth = make_gpt_edge_rail(rect_full(0.820, 0.080, 0.982, 0.920), Color(accent.r * 0.16, accent.g * 0.18, accent.b * 0.18, 0.42))
 	example_plinth.name = "RuleSection3DExamplePlinth_%d" % section_index if section_index >= 0 else "RuleSection3DExamplePlinth"
 	section.add_child(example_plinth)
 	if section_index >= 0:
@@ -31313,7 +31315,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.205, 0.275, 0.230, 0.12), "ui_jade_reading_plate")
+	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.008, 0.012, 0.012, 0.38), "ui_jade_reading_plate")
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

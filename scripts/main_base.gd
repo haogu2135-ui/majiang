@@ -1074,6 +1074,13 @@ func add_menu_background(parent: Control) -> void:
 	scrim.name = "MenuBackgroundReadabilityScrim"
 	parent.add_child(scrim)
 
+func add_rules_background(parent: Control) -> void:
+	# Rules are a reading surface: reuse the quiet authored settings frame instead
+	# of stacking the general wood/paper/scenery background beneath the copy.
+	var codex = make_fullrect_overlay(Color(0.024, 0.040, 0.038, 0.92), "settings_gpt_panel_v2")
+	codex.name = "RulesBackgroundCodexFrame"
+	parent.add_child(codex)
+
 func add_battle_background(parent: Control) -> void:
 	# Dark underfill via GPT plate so transparent PNG edges never flash pure black.
 	var base = make_fullrect_overlay(Color(0.030, 0.042, 0.036, 1.0), "ui_dark_scrim")
@@ -1323,11 +1330,6 @@ func _gpt_plate_key_for_rect_color(rect: Rect2, color: Color) -> String:
 	if lum <= 0.38:
 		return "ui_seat_info_plate"
 	return "ui_title_backplate"
-
-
-func make_color_rect(rect: Rect2, color: Color) -> Control:
-	# GPT plate host — never paints programmatic ColorRect slabs for UI chrome.
-	return make_gpt_plate_rect(rect, color, _gpt_plate_key_for_rect_color(rect, color))
 
 
 func make_gpt_route_rail(rect: Rect2, color: Color = Color(0.006, 0.016, 0.018, 0.46)) -> Control:

@@ -169,6 +169,8 @@ func clear_screen() -> void:
 		add_battle_background(screen_layer)
 	elif mode == "menu":
 		add_menu_background(screen_layer)
+	elif mode == "rules":
+		add_rules_background(screen_layer)
 	else:
 		add_background(screen_layer)
 	root_layer = Control.new()

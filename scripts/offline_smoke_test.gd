@@ -240,6 +240,10 @@ func run() -> void:
 		var variant_wall = scene.make_wall()
 		check(variant_wall.size() == int(expected_rule_wall_sizes.get(variant_key, -1)) and scene.rule_wall_size(variant_key) == variant_wall.size(), "地方规则 %s 牌墙数量与档案一致" % scene.rule_variant_label(variant_key))
 	check(scene.rule_allows_chi(scene.RULE_VARIANT_SICHUAN) == false and scene.rule_allows_chi(scene.RULE_VARIANT_GUANGDONG) and scene.rule_min_fan(scene.RULE_VARIANT_GUANGDONG) == 3, "地方规则差异影响吃牌权限与最低番数")
+	check(not scene.rule_tile_codes(scene.RULE_VARIANT_SICHUAN).has("E") and scene.rule_tile_codes(scene.RULE_VARIANT_GUANGDONG).has("E"), "四川去除字牌而广东保留字牌")
+	check(scene.rule_flower_codes(scene.RULE_VARIANT_GUANGDONG).is_empty() and scene.rule_flower_codes(scene.RULE_VARIANT_SICHUAN).is_empty() and scene.rule_flower_codes(scene.RULE_VARIANT_NANJING).size() == 8 and scene.rule_flower_codes(scene.RULE_VARIANT_YANGZHOU).size() == 8, "广东四川无花牌而南京扬州含八张花牌")
+	check(not scene.rule_uses_package_liability(scene.RULE_VARIANT_NANJING) and scene.rule_uses_package_liability(scene.RULE_VARIANT_YANGZHOU), "扬州启用包三搭而南京不启用")
+	check(scene.rule_variant_label(scene.RULE_VARIANT_GUANGDONG) == "广东麻将" and scene.rule_variant_label(scene.RULE_VARIANT_SICHUAN) == "四川麻将" and scene.rule_variant_label(scene.RULE_VARIANT_NANJING) == "南京麻将" and scene.rule_variant_label(scene.RULE_VARIANT_YANGZHOU) == "扬州麻将", "四种地方规则提供稳定的中文名称")
 	scene.rule_variant = original_rule_variant
 	check(not scene.player_ai_assist_enabled(), "offline player side does not enable AI assistance")
 	check(scene.UPDATE_MANIFEST_URL == "http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json", "update manifest URL points to live download service")
