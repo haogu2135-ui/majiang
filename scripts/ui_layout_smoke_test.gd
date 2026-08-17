@@ -150,6 +150,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	var scene = load("res://Main.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
+	var original_rule_variant := str(scene.rule_variant)
 	var actual_viewport = scene.effective_viewport_size()
 	scene.fx_enabled = false
 	scene.show_loading_screen()
@@ -189,10 +190,22 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await process_frame
 	check_round_summary_layout(scene, actual_viewport)
 	await check_online_score_strip_probe(scene, actual_viewport)
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_YANGZHOU
+	scene.rule_variant = scene.RULE_VARIANT_SICHUAN
 	scene.settings_panel_open = true
 	scene.draw_settings_overlay(scene.root_layer)
 	await process_frame
 	check_settings_overlay(scene, actual_viewport)
+	var rule_variant_button = scene.find_child("SettingsRuleVariantButton", true, false) as Button
+	if rule_variant_button != null:
+		rule_variant_button.button_down.emit()
+		var refreshed_rule_status = scene.find_child("SettingsRuleVariantStatus", true, false) as Label
+		var refreshed_rule_text: String = str(refreshed_rule_status.text) if refreshed_rule_status != null else "<missing>"
+		check(refreshed_rule_text == "当前局：扬州 · 下一局：南京", "settings local-rule state refreshes after cycling the queued profile at %s (got %s)" % [actual_viewport, refreshed_rule_text])
+	# The selector callback intentionally persists. Restore the pre-smoke profile
+	# so layout QA cannot alter later gameplay tests or the developer's settings.
+	scene.rule_variant = original_rule_variant
+	scene.save_settings()
 	scene.settings_panel_open = false
 	scene.selected_room = "ROOM7"
 	scene.online_room = {"code": "ROOM7", "players": [{"name": "甲"}, {"name": "乙"}], "logs": ["甲加入房间", "乙准备"]}
@@ -972,9 +985,22 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	if close_button != null and panel != null:
 		check(panel_rect.grow(1.0).encloses(screen_rect(close_button)), "settings close button stays inside modal bounds at %s" % viewport_size)
 	var header_title_label = overlay_control.find_child("SettingsTitleLabel", true, false) as Label
+	var rule_variant_label = overlay_control.find_child("SettingsRuleVariantLabel", true, false) as Label
+	var rule_variant_button = overlay_control.find_child("SettingsRuleVariantButton", true, false) as Button
+	var rule_variant_status = overlay_control.find_child("SettingsRuleVariantStatus", true, false) as Label
 	var overview_art = overlay_control.find_child("SettingsOverviewArt", true, false) as Control
 	var overview_summary = overlay_control.find_child("SettingsOverviewSummary", true, false) as Label
 	check(header_title_label != null and overview_art != null and overview_summary != null, "settings header exposes named title and overview controls at %s" % viewport_size)
+	check(rule_variant_label != null and rule_variant_button != null and rule_variant_status != null, "settings header exposes the local-rule selector and persistent activation state at %s" % viewport_size)
+	check(overlay_control.find_child("SettingsTitleBack", true, false) == null, "settings header relies on the dedicated clean panel surface without a duplicate texture rail at %s" % viewport_size)
+	if rule_variant_label != null and rule_variant_button != null and rule_variant_status != null:
+		var rule_label_rect = screen_rect(rule_variant_label)
+		var rule_button_rect = screen_rect(rule_variant_button)
+		var rule_status_rect = screen_rect(rule_variant_status)
+		check(rule_variant_status.text == "当前局：扬州 · 下一局：四川", "settings local-rule state distinguishes the active and queued profiles at %s" % viewport_size)
+		check(rule_variant_status.clip_text and rule_variant_status.get_theme_font_size("font_size") >= 11 and relative_luma(rule_variant_status.get_theme_color("font_color")) >= 0.80, "settings local-rule state remains readable and clipped at %s" % viewport_size)
+		check(not rects_overlap(rule_label_rect.grow(-1.0), rule_button_rect.grow(-1.0)) and not rects_overlap(rule_status_rect.grow(-1.0), rule_button_rect.grow(-1.0)), "settings local-rule label and state clear the selector button at %s" % viewport_size)
+		check(label_text_width(rule_variant_status, rule_variant_status.text) <= rule_status_rect.size.x + 1.0, "settings local-rule state fits its header lane at %s" % viewport_size)
 	if header_title_label != null and panel != null:
 		check(panel_rect.grow(1.0).encloses(screen_rect(header_title_label)), "settings title stays inside modal at %s" % viewport_size)
 		check(header_title_label.clip_text and header_title_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS, "settings title clips safely at %s" % viewport_size)
@@ -1458,6 +1484,8 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		check(content_rect.grow(1.0).encloses(gutter_rect) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "rules custom scroll gutter stays outside the text viewport at %s" % viewport_size)
 		check(gutter_rect.grow(1.0).encloses(screen_rect(scroll_thumb)), "rules custom scroll thumb stays inside gutter at %s" % viewport_size)
 		check(screen_rect(scroll_thumb).size.x <= 16.0, "rules custom scrollbar keeps its narrow visual treatment at %s" % viewport_size)
+		if viewport_size.y <= 560.0:
+			check(screen_rect(scroll_thumb).size.x >= 8.0, "rules custom scrollbar remains discoverable on compact viewports at %s" % viewport_size)
 	check(scroll_hit_target != null, "rules exposes a dedicated transparent scroll hit target at %s" % viewport_size)
 	if scroll_hit_target != null:
 		var hit_rect = screen_rect(scroll_hit_target)
@@ -1469,6 +1497,8 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		var back_rect = screen_rect(back_button)
 		check(not guide_rect.intersects(back_rect, true), "rules back button does not overlap guide at %s" % viewport_size)
 		check(back_rect.size.x >= 88.0 and back_rect.size.y >= 44.0, "rules back button keeps a 44px mobile touch height at %s" % viewport_size)
+		var back_art = back_button.find_child("SecondaryBackButtonArt_rules", true, false) as CanvasItem
+		check(back_art != null and back_art.show_behind_parent, "rules back button keeps authored chrome behind native exit text at %s" % viewport_size)
 		check_secondary_back_button_art(scene, "rules", viewport_size)
 	var previous_bottom := -1.0
 	var rules_section_count = int(scene.RULES_SECTION_COUNT)

@@ -8027,6 +8027,9 @@ func draw_secondary_back_button_art(button: Control, screen_id: String, color: C
 	var art = Control.new()
 	art.name = "SecondaryBackButtonArt_%s" % screen_id
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Button native text is drawn before ordinary children. Keep the authored
+	# return chrome behind the parent so the exit label remains the top layer.
+	art.show_behind_parent = true
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(art)
 	var back_texture = add_illustration_texture(art, "secondary_back_path", rect_full(-0.060, -0.200, 1.060, 1.160), 0.16, false)
@@ -8284,10 +8287,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	var gpt_settings_texture = add_optional_gpt_illustration_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.035, false)
 	if gpt_settings_texture != null:
 		gpt_settings_texture.name = "SettingsGPTPanelTexture"
-		gpt_settings_texture.modulate = Color(2.65, 2.72, 2.20, gpt_settings_texture.modulate.a)
-	var title_back = make_gpt_route_rail(rect_full(0.0, 0.0, 1.0, 0.16), Color(0.16, 0.22, 0.18, 0.96))
-	title_back.name = "SettingsTitleBack"
-	panel.add_child(title_back)
+		gpt_settings_texture.modulate = Color(1.58, 1.62, 1.30, gpt_settings_texture.modulate.a)
+	# Keep the panel's dedicated clean header as the only title surface. A second
+	# high-frequency rail competes with the title and rule selector at compact sizes.
 	# 设置面板滑入动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		overlay.modulate = Color(1, 1, 1, 0)
@@ -8319,7 +8321,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	apply_rect(close, SETTINGS_CLOSE_RECT)
 	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.84, 0.90, 0.78), true)
 	rule_setting_label.name = "SettingsRuleVariantLabel"
-	apply_rect(rule_setting_label, rect_full(0.550, 0.060, 0.675, 0.145))
+	apply_rect(rule_setting_label, rect_full(0.550, 0.040, 0.675, 0.115))
 	rule_setting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(rule_setting_label)
 	var rule_setting_button = make_setting_selector_button(rule_variant_short_label(), "地方规则", func() -> void:
@@ -8327,8 +8329,13 @@ func draw_settings_overlay(parent: Control) -> void:
 	)
 	rule_setting_button.name = "SettingsRuleVariantButton"
 	rule_setting_button.tooltip_text = rule_variant_summary(rule_variant)
-	apply_rect(rule_setting_button, rect_full(0.685, 0.055, 0.815, 0.165))
+	apply_rect(rule_setting_button, rect_full(0.685, 0.035, 0.815, 0.125))
 	panel.add_child(rule_setting_button)
+	var rule_variant_status = make_label(panel, rule_variant_activation_status_text(), 11, Color(0.82, 0.86, 0.70, 0.94), true)
+	rule_variant_status.name = "SettingsRuleVariantStatus"
+	apply_rect(rule_variant_status, rect_full(0.550, 0.125, 0.815, 0.165))
+	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(rule_variant_status)
 
 	# 声音设置
 	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)

@@ -363,6 +363,8 @@ func run() -> void:
 	scene._start_depth_layered_dust()
 	check(depth_dust_parent.find_child("DepthDustLayer_z2", true, false) != null and depth_dust_parent.find_child("DepthDustLayer_z0", true, false) != null and depth_dust_parent.find_child("DepthDustLayer_z-2", true, false) != null and count_descendants(depth_dust_parent) >= 33, "ambient depth dust renders three parallax particle layers")
 	scene.stop_ambient_animation()
+	scene.fx_enabled = true
+	scene.ensure_fx_layer()
 	scene.start_ambient_animation("winter", true)
 	check(scene.find_child("AmbientLayer", true, false) != null and scene.find_child("DepthDustLayer_z2", true, false) != null, "ambient animation smoke creates named ambient layer and depth dust through entry point")
 	scene.stop_ambient_animation()
@@ -4119,6 +4121,7 @@ func run() -> void:
 	var voice_stream = scene.make_voice_stream(str(voice_payload.get("audio", "")), 16000, 1)
 	check(voice_stream != null and voice_stream.data.size() == 6, "voice wav stream is created")
 
+	scene.rule_variant = scene.RULE_VARIANT_YANGZHOU
 	scene.start_offline(false)
 	scene.record_claim_source(1, 0, "chi")
 	scene.record_claim_source(1, 0, "peng")

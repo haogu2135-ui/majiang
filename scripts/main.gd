@@ -16267,6 +16267,9 @@ func draw_secondary_back_button_art(button: Control, screen_id: String, color: C
 	var art = Control.new()
 	art.name = "SecondaryBackButtonArt_%s" % screen_id
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Button native text is drawn before ordinary children. Keep the authored
+	# return chrome behind the parent so the exit label remains the top layer.
+	art.show_behind_parent = true
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(art)
 	var back_texture = add_illustration_texture(art, "secondary_back_path", rect_full(-0.060, -0.200, 1.060, 1.160), 0.16, false)
@@ -16524,10 +16527,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	var gpt_settings_texture = add_optional_gpt_illustration_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.035, false)
 	if gpt_settings_texture != null:
 		gpt_settings_texture.name = "SettingsGPTPanelTexture"
-		gpt_settings_texture.modulate = Color(2.65, 2.72, 2.20, gpt_settings_texture.modulate.a)
-	var title_back = make_gpt_route_rail(rect_full(0.0, 0.0, 1.0, 0.16), Color(0.16, 0.22, 0.18, 0.96))
-	title_back.name = "SettingsTitleBack"
-	panel.add_child(title_back)
+		gpt_settings_texture.modulate = Color(1.58, 1.62, 1.30, gpt_settings_texture.modulate.a)
+	# Keep the panel's dedicated clean header as the only title surface. A second
+	# high-frequency rail competes with the title and rule selector at compact sizes.
 	# 设置面板滑入动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		overlay.modulate = Color(1, 1, 1, 0)
@@ -16559,7 +16561,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	apply_rect(close, SETTINGS_CLOSE_RECT)
 	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.84, 0.90, 0.78), true)
 	rule_setting_label.name = "SettingsRuleVariantLabel"
-	apply_rect(rule_setting_label, rect_full(0.550, 0.060, 0.675, 0.145))
+	apply_rect(rule_setting_label, rect_full(0.550, 0.040, 0.675, 0.115))
 	rule_setting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(rule_setting_label)
 	var rule_setting_button = make_setting_selector_button(rule_variant_short_label(), "地方规则", func() -> void:
@@ -16567,8 +16569,13 @@ func draw_settings_overlay(parent: Control) -> void:
 	)
 	rule_setting_button.name = "SettingsRuleVariantButton"
 	rule_setting_button.tooltip_text = rule_variant_summary(rule_variant)
-	apply_rect(rule_setting_button, rect_full(0.685, 0.055, 0.815, 0.165))
+	apply_rect(rule_setting_button, rect_full(0.685, 0.035, 0.815, 0.125))
 	panel.add_child(rule_setting_button)
+	var rule_variant_status = make_label(panel, rule_variant_activation_status_text(), 11, Color(0.82, 0.86, 0.70, 0.94), true)
+	rule_variant_status.name = "SettingsRuleVariantStatus"
+	apply_rect(rule_variant_status, rect_full(0.550, 0.125, 0.815, 0.165))
+	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	configure_clipped_label(rule_variant_status)
 
 	# 声音设置
 	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)
@@ -23530,12 +23537,17 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.28, 0.24, 0.16, 0.12), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
+	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.07, 0.06, 0.05, 0.58), 999, Color(0.24, 0.20, 0.14, 0.18), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.72, 0.62, 0.36, 0.20), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var compact_rules_scroll := effective_viewport_size().y <= 560.0
+	var thumb_left := 0.080 if compact_rules_scroll else 0.220
+	var thumb_right := 0.920 if compact_rules_scroll else 0.780
+	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.78, 0.66, 0.38, 0.90), 999, Color(0.88, 0.76, 0.46, 0.34), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rules_scroll_thumb.set_meta("track_left", thumb_left)
+	rules_scroll_thumb.set_meta("track_right", thumb_right)
 	var rules_scroll_hit_target = Control.new()
 	rules_scroll_hit_target.name = "RulesContentScrollHitTarget"
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -23651,7 +23663,9 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var thumb_height = track_height * visible_ratio
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
 	var thumb_top = track_top + (track_height - thumb_height) * progress
-	apply_rect(thumb, rect_full(0.220, thumb_top, 0.780, thumb_top + thumb_height))
+	var thumb_left = float(thumb.get_meta("track_left", 0.220))
+	var thumb_right = float(thumb.get_meta("track_right", 0.780))
+	apply_rect(thumb, rect_full(thumb_left, thumb_top, thumb_right, thumb_top + thumb_height))
 
 
 func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null) -> void:
@@ -25035,8 +25049,19 @@ func cycle_rule_variant_setting() -> void:
 		current_index = RULE_VARIANT_ORDER.size() - 1
 	rule_variant = str(RULE_VARIANT_ORDER[(current_index + 1) % RULE_VARIANT_ORDER.size()])
 	save_settings()
+	refresh_rule_variant_controls()
 	show_toast("地方规则：%s · 下一局生效" % rule_variant_label(rule_variant))
 	refresh_current_screen()
+
+func refresh_rule_variant_controls() -> void:
+	var selector = find_child("SettingsRuleVariantButton", true, false) as Button
+	if selector != null:
+		selector.text = rule_variant_short_label()
+		selector.tooltip_text = rule_variant_summary(rule_variant)
+		selector.set_meta("setting_state", rule_variant_short_label())
+	var status = find_child("SettingsRuleVariantStatus", true, false) as Label
+	if status != null:
+		status.text = rule_variant_activation_status_text()
 
 func toggle_fx_setting() -> void:
 	fx_enabled = not fx_enabled
@@ -25539,6 +25564,15 @@ func rule_variant_short_label(variant: String = "") -> String:
 
 func rule_variant_summary(variant: String = "") -> String:
 	return str(rule_profile(variant).get("summary", "144张牌，含字牌与花牌。"))
+
+func rule_variant_activation_status_text() -> String:
+	if mode == "offline" and offline_active_rule_variant != "":
+		var active_short := rule_variant_short_label(offline_active_rule_variant)
+		var setting_short := rule_variant_short_label(rule_variant)
+		if normalized_rule_variant(offline_active_rule_variant) != normalized_rule_variant(rule_variant):
+			return "当前局：" + active_short + " · 下一局：" + setting_short
+		return "当前局：" + active_short
+	return "下次开局：" + rule_variant_short_label()
 
 func rule_tile_codes(variant: String = "") -> Array[String]:
 	var profile := rule_profile(variant)

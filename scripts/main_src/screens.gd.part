@@ -743,12 +743,17 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.08, 0.06, 0.04, 0.18), 999, Color(0.28, 0.24, 0.16, 0.12), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
+	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.07, 0.06, 0.05, 0.58), 999, Color(0.24, 0.20, 0.14, 0.18), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(0.220, 0.050, 0.780, 0.580), Color(0.62, 0.52, 0.30, 0.58), 999, Color(0.72, 0.62, 0.36, 0.20), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var compact_rules_scroll := effective_viewport_size().y <= 560.0
+	var thumb_left := 0.080 if compact_rules_scroll else 0.220
+	var thumb_right := 0.920 if compact_rules_scroll else 0.780
+	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.78, 0.66, 0.38, 0.90), 999, Color(0.88, 0.76, 0.46, 0.34), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rules_scroll_thumb.set_meta("track_left", thumb_left)
+	rules_scroll_thumb.set_meta("track_right", thumb_right)
 	var rules_scroll_hit_target = Control.new()
 	rules_scroll_hit_target.name = "RulesContentScrollHitTarget"
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -864,7 +869,9 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var thumb_height = track_height * visible_ratio
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
 	var thumb_top = track_top + (track_height - thumb_height) * progress
-	apply_rect(thumb, rect_full(0.220, thumb_top, 0.780, thumb_top + thumb_height))
+	var thumb_left = float(thumb.get_meta("track_left", 0.220))
+	var thumb_right = float(thumb.get_meta("track_right", 0.780))
+	apply_rect(thumb, rect_full(thumb_left, thumb_top, thumb_right, thumb_top + thumb_height))
 
 
 func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null) -> void:
@@ -2248,8 +2255,19 @@ func cycle_rule_variant_setting() -> void:
 		current_index = RULE_VARIANT_ORDER.size() - 1
 	rule_variant = str(RULE_VARIANT_ORDER[(current_index + 1) % RULE_VARIANT_ORDER.size()])
 	save_settings()
+	refresh_rule_variant_controls()
 	show_toast("地方规则：%s · 下一局生效" % rule_variant_label(rule_variant))
 	refresh_current_screen()
+
+func refresh_rule_variant_controls() -> void:
+	var selector = find_child("SettingsRuleVariantButton", true, false) as Button
+	if selector != null:
+		selector.text = rule_variant_short_label()
+		selector.tooltip_text = rule_variant_summary(rule_variant)
+		selector.set_meta("setting_state", rule_variant_short_label())
+	var status = find_child("SettingsRuleVariantStatus", true, false) as Label
+	if status != null:
+		status.text = rule_variant_activation_status_text()
 
 func toggle_fx_setting() -> void:
 	fx_enabled = not fx_enabled

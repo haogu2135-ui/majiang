@@ -48,6 +48,15 @@ func rule_variant_short_label(variant: String = "") -> String:
 func rule_variant_summary(variant: String = "") -> String:
 	return str(rule_profile(variant).get("summary", "144张牌，含字牌与花牌。"))
 
+func rule_variant_activation_status_text() -> String:
+	if mode == "offline" and offline_active_rule_variant != "":
+		var active_short := rule_variant_short_label(offline_active_rule_variant)
+		var setting_short := rule_variant_short_label(rule_variant)
+		if normalized_rule_variant(offline_active_rule_variant) != normalized_rule_variant(rule_variant):
+			return "当前局：" + active_short + " · 下一局：" + setting_short
+		return "当前局：" + active_short
+	return "下次开局：" + rule_variant_short_label()
+
 func rule_tile_codes(variant: String = "") -> Array[String]:
 	var profile := rule_profile(variant)
 	var codes: Array[String] = []
