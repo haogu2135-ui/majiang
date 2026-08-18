@@ -286,6 +286,12 @@ func check_loading_layout(scene, viewport_size: Vector2) -> void:
 	var water = scene.find_child("LoadingWater", true, false) as Control
 	check(center_panel != null and title != null and subtitle != null and status != null and tip != null and version != null, "loading screen exposes named readable text nodes at %s" % viewport_size)
 	check(shuffle_art != null and progress_art != null and progress_route != null and progress_fill != null and progress_gate != null and tip_art != null and tip_rail != null and tip_fill != null, "loading screen renders progress and tip route art for layout audit at %s" % viewport_size)
+	var loading_face_count := 0
+	for i in range(5):
+		var shuffle_tile = scene.find_child("LoadingShuffleTile_%d" % i, true, false) as Control
+		if shuffle_tile != null and shuffle_tile.find_child("TileFaceTexture", true, false) is TextureRect:
+			loading_face_count += 1
+	check(loading_face_count == 5, "loading shuffle uses five authored 2D tile faces instead of blank box-like backs at %s" % viewport_size)
 	if gpt_backdrop != null:
 		var moon_style: StyleBoxFlat = null
 		if moon != null:
@@ -755,6 +761,10 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	if panel == null:
 		return
 	var panel_rect = screen_rect(panel)
+	var panel_texture_path := ""
+	if panel is TextureRect and (panel as TextureRect).texture != null:
+		panel_texture_path = (panel as TextureRect).texture.resource_path
+	check(panel_texture_path.ends_with("/ui_dark_scrim.png") and panel.self_modulate.a >= 0.98, "round summary uses an opaque authored reading scrim at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "round summary panel stays inside the viewport safe bounds at %s" % viewport_size)
 	for node in [title, body, detail_panel]:
 		if node != null:
@@ -767,7 +777,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	if title != null:
 		check(title.get_theme_font_size("font_size") >= 26 and title.clip_text == false, "round summary title remains prominent at %s" % viewport_size)
 	if body != null:
-		check(body.clip_text and body.get_theme_font_size("font_size") >= 14, "round summary body remains clipped and readable at %s" % viewport_size)
+		check(body.clip_text and body.get_theme_font_size("font_size") >= 15 and relative_luma(body.get_theme_color("font_color")) >= 0.92, "round summary body remains bright, clipped, and readable at %s" % viewport_size)
 	if detail_panel != null:
 		var detail_rect = screen_rect(detail_panel)
 		for node in [winner_label, score_label, win_tile]:
@@ -1146,10 +1156,10 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		var text_panel = overlay_control.find_child("SettingRowTextReadabilityPanel_%s" % title, true, false) as Control
 		check(title_label != null and status_label != null and text_panel != null, "settings row %s exposes title status and readability panel at %s" % [title, viewport_size])
 		if title_label != null:
-			check(title_label.clip_text and title_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and title_label.get_theme_font_size("font_size") >= 13 and relative_luma(title_label.get_theme_color("font_color")) >= 0.86, "settings row %s title stays bright clipped and readable at %s" % [title, viewport_size])
+			check(title_label.clip_text and title_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and title_label.get_theme_font_size("font_size") >= 14 and relative_luma(title_label.get_theme_color("font_color")) >= 0.94, "settings row %s title stays bright clipped and readable at %s" % [title, viewport_size])
 			check(not rects_overlap(screen_rect(title_label), button_rect), "settings row %s title clears the button lane at %s" % [title, viewport_size])
 		if status_label != null:
-			check(status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and status_label.get_theme_font_size("font_size") >= 12 and relative_luma(status_label.get_theme_color("font_color")) >= 0.82, "settings row %s status stays bright clipped and readable at %s" % [title, viewport_size])
+			check(status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and status_label.get_theme_font_size("font_size") >= 13 and relative_luma(status_label.get_theme_color("font_color")) >= 0.94, "settings row %s status stays bright clipped and readable at %s" % [title, viewport_size])
 			check(not rects_overlap(screen_rect(status_label), button_rect), "settings row %s status clears the button lane at %s" % [title, viewport_size])
 		if text_panel != null:
 			var text_panel_rect = screen_rect(text_panel)

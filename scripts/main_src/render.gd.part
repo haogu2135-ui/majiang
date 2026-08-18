@@ -4613,9 +4613,12 @@ func draw_loading_shuffle_art(parent: Control) -> Control:
 	sync_gate.name = "LoadingShuffleSyncGate"
 	art.add_child(sync_gate)
 	var tick = add_gpt_tick_strip(art, rect_full(0.350, 0.385, (0.368) + float(2) * (0.100), 0.645), Color(0.78, 0.62, 0.36, 0.24), "LoadingShuffleSyncTick_0")
-	for i in range(5):
+	# Show authored 2D tile faces instead of five identical backs. At compact
+	# resolutions the backs read like missing-glyph boxes rather than a shuffle.
+	var loading_tiles := ["E", "S", "N", "R", "Z"]
+	for i in range(loading_tiles.size()):
 		var left = 0.145 + float(i) * 0.175
-		var tile = make_wall_back_tile(Vector2(24, 34), true)
+		var tile = make_tile_view(str(loading_tiles[i]), Vector2(24, 34), false, Callable())
 		tile.name = "LoadingShuffleTile_%d" % i
 		art.add_child(tile)
 		apply_rect(tile, rect_full(left, 0.170 + float(i % 2) * 0.080, left + 0.070, 0.740 + float(i % 2) * 0.080))
@@ -6140,13 +6143,13 @@ func draw_round_summary(parent: Control) -> void:
 	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
 	var panel_left = 0.5 - panel_width_px / maxf(2.0, content_size.x * 2.0)
 	var panel_right = 0.5 + panel_width_px / maxf(2.0, content_size.x * 2.0)
-	var panel = make_gpt_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.010, 0.026, 0.032, 0.97), "ui_jade_reading_plate")
+	var panel = make_gpt_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.006, 0.012, 0.010, 1.0), "ui_dark_scrim")
 	panel.name = "RoundSummaryPanel"
 	panel.z_index = 30
 	panel.clip_contents = true
 	parent.add_child(panel)
 	# 标题栏
-	var _gpt_panel_host = make_gpt_plate_rect(ROUND_SUMMARY_HEADER_RECT, Color(0.042, 0.054, 0.052, 0.82), "ui_jade_reading_plate")
+	var _gpt_panel_host = make_gpt_plate_rect(ROUND_SUMMARY_HEADER_RECT, Color(0.018, 0.026, 0.022, 0.96), "ui_dark_scrim")
 	_gpt_panel_host.name = "GptPanelHost"
 	panel.add_child(_gpt_panel_host)
 	# 左侧金色装饰
@@ -6185,11 +6188,13 @@ func draw_round_summary(parent: Control) -> void:
 	if not package_lines.is_empty():
 		lines.append("")
 		lines.append_array(package_lines)
-	var body = make_label(panel, "\n".join(lines), 14, Color(0.76, 0.86, 0.80), false)
+	var body = make_label(panel, "\n".join(lines), 15, Color(0.94, 0.96, 0.90), false)
 	body.name = "RoundSummaryBody"
 	apply_rect(body, ROUND_SUMMARY_TEXT_RECT)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	body.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.92))
+	body.add_theme_constant_override("outline_size", 2)
 	configure_clipped_label(body)
 	var rank = 1
 	for seat in ranked_seats_by_score():
@@ -6209,15 +6214,15 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.0, 0.0, 1.0, 1.0))
 	parent.add_child(art)
 	var win_stage_key := "win_result_stage"
-	var gpt_stage_texture = add_optional_gpt_illustration_texture(art, win_stage_key, rect_full(-0.020, -0.040, 1.020, 1.020), 0.22, false)
+	var gpt_stage_texture = add_optional_gpt_illustration_texture(art, win_stage_key, rect_full(-0.020, -0.040, 1.020, 1.020), 0.08, false)
 	if gpt_stage_texture != null:
 		gpt_stage_texture.name = "RoundSummaryGPTWinStageTexture"
 		art.move_child(gpt_stage_texture, 0)
-	var settlement_wave = add_illustration_texture(art, "summary_settlement_wave", rect_full(0.025, 0.610, 0.975, 0.965), 0.14, false)
+	var settlement_wave = add_illustration_texture(art, "summary_settlement_wave", rect_full(0.025, 0.610, 0.975, 0.965), 0.07, false)
 	if settlement_wave != null:
 		settlement_wave.name = "RoundSummarySettlementWave"
 		art.move_child(settlement_wave, 0)
-	var laurel = add_illustration_texture(art, "summary_laurel", rect_full(0.040, 0.015, 0.960, 0.250), 0.16, false)
+	var laurel = add_illustration_texture(art, "summary_laurel", rect_full(0.040, 0.015, 0.960, 0.250), 0.10, false)
 	if laurel != null:
 		laurel.name = "RoundSummaryLaurelTexture"
 		art.move_child(laurel, 0)
@@ -6569,7 +6574,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	var row_rect = Rect2(Vector2(0.08, top), Vector2(0.92, top + ROUND_SUMMARY_RANK_ROW_HEIGHT))
 	var delta = round_summary_score_delta(seat)
 	var accent = round_summary_delta_color(delta, rank)
-	var row = make_gpt_plate_rect(row_rect, Color(0.016, 0.026, 0.030, 0.92), "ui_jade_reading_plate")
+	var row = make_gpt_plate_rect(row_rect, Color(0.006, 0.012, 0.010, 0.98), "ui_dark_scrim")
 	row.name = "RoundSummaryRankRow_%d" % seat
 	parent.add_child(row)
 	var rank_texture = add_illustration_texture(row, "rank_row_ribbon", rect_full(0.010, 0.040, 0.990, 0.960), 0.11, false)
@@ -6584,20 +6589,20 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 			row.move_child(tier_ribbon, min(1, row.get_child_count() - 1))
 	row.add_child(make_gpt_edge_rail(rect_full(0.0, 0.0, 0.026, 1.0), accent))
 	draw_round_summary_rank_route_art(row, rank, delta, accent)
-	var rank_badge = make_badge(row, rect_full(0.045, 0.18, 0.155, 0.82), "第%d" % rank, 12, accent.darkened(0.12), accent.lightened(0.10), Color(0.96, 0.94, 0.84))
+	var rank_badge = make_badge(row, rect_full(0.045, 0.18, 0.155, 0.82), "第%d" % rank, 13, accent.darkened(0.12), accent.lightened(0.10), Color(0.98, 0.96, 0.88))
 	rank_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if seat == offline_last_winner:
 		var winner_seal = make_seal_stamp(row, rect_full(0.020, 0.080, 0.060, 0.480), "胜", "round")
 		winner_seal.name = "RoundSummaryWinnerSeal"
-	var name = make_label(row, str(players[seat]["name"]), 14, UI_TEXT_MAIN, true)
+	var name = make_label(row, str(players[seat]["name"]), 15, Color(0.96, 0.97, 0.92), true)
 	apply_rect(name, rect_full(0.185, 0.12, 0.500, 0.88))
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(name)
-	var score = make_label(row, compact_score_text(int(players[seat].get("score", 0))), 14, UI_TEXT_MAIN, true)
+	var score = make_label(row, compact_score_text(int(players[seat].get("score", 0))), 15, Color(0.96, 0.97, 0.92), true)
 	apply_rect(score, rect_full(0.500, 0.12, 0.675, 0.88))
 	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(score)
-	var delta_label = make_label(row, round_summary_delta_text(delta), 13, accent.lightened(0.28), true)
+	var delta_label = make_label(row, round_summary_delta_text(delta), 14, accent.lightened(0.36), true)
 	apply_rect(delta_label, rect_full(0.700, 0.12, 0.835, 0.88))
 	delta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(delta_label)
@@ -6613,7 +6618,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 				return
 			AnimationEffects.animate_number(roll_label, delta, 0.4)
 		).set_delay(delay_for_roll)
-	var flowers = make_label(row, "花%d" % int(players[seat].get("flowers", 0)), 12, UI_TEXT_MUTED, false)
+	var flowers = make_label(row, "花%d" % int(players[seat].get("flowers", 0)), 13, Color(0.86, 0.90, 0.84), false)
 	apply_rect(flowers, rect_full(0.860, 0.12, 0.970, 0.88))
 	flowers.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(flowers)
@@ -11354,7 +11359,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 
 	# 详情面板 - 增大高度以容纳徽章
 	var detail_rect = Rect2(Vector2(0.04, 0.145), Vector2(0.96, 0.430))
-	var detail_panel = make_gpt_plate_rect(detail_rect, Color(0.012, 0.024, 0.030, 0.94), "ui_jade_reading_plate")
+	var detail_panel = make_gpt_plate_rect(detail_rect, Color(0.006, 0.012, 0.010, 0.98), "ui_dark_scrim")
 	detail_panel.name = "WinDetailPanel"
 	parent.add_child(detail_panel)
 	var detail_texture = add_illustration_texture(detail_panel, "win_detail_scroll", rect_full(0.010, 0.030, 0.990, 0.970), 0.13, false)
@@ -12336,15 +12341,15 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		row_plate.modulate = Color(0.78, 0.68, 0.52, 0.20)
 		row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.08, 0.06, 0.04, 0.30), "ui_jade_reading_plate")
+	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.012, 0.016, 0.012, 0.72), "ui_dark_scrim")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
-	var title_label = make_label(row, title, 13, Color(0.98, 0.95, 0.84, 0.99), true)
+	var title_label = make_label(row, title, 14, Color(1.0, 0.97, 0.88, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
 	apply_rect(title_label, rect_full(0.052, 0.130, 0.545, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
-	var status_label = make_label(row, status, 12, Color(0.84, 0.90, 0.82, 0.96), false)
+	var status_label = make_label(row, status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
 	apply_rect(status_label, rect_full(0.052, 0.500, 0.550, 0.860))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
