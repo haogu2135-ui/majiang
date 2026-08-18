@@ -1076,7 +1076,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 			discard_source = "legal_fallback"
 		elif discard_tile == "":
 			# 与 choose_ai_discard_for_seat 对齐（含简单档次优），但复用 reports 避免双倍开销
-			if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
+			if ai_decision_difficulty_for_seat(seat) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
 				var best_score = float(reports[0].get("score", 0.0))
 				var second_score = float(reports[1].get("score", 0.0))
 				if best_score - second_score <= 55.0:

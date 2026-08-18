@@ -605,6 +605,18 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		previous_right = rect.end.x
 		previous_top = rect.position.y
 	check(found == expected.size(), "pending claim complex action bar renders all legal choices at %s" % viewport_size)
+	var pending_rows: Dictionary = {}
+	for action_child in scene.action_bar.get_children():
+		if action_child is Button:
+			var action_rect = screen_rect(action_child as Control)
+			var row_key := int(round(action_rect.position.y))
+			pending_rows[row_key] = int(pending_rows.get(row_key, 0)) + 1
+	check(pending_rows.size() <= 2, "pending claim actions stay within two stable rows at %s" % viewport_size)
+	if viewport_size.x <= 960.0 and pending_rows.size() == 2:
+		var widest_row := 0
+		for row_count in pending_rows.values():
+			widest_row = maxi(widest_row, int(row_count))
+		check(widest_row >= 5, "compact pending claim actions use the widened lane for a five-button first row at %s" % viewport_size)
 	for text in removed_long_labels:
 		check(first_button_with_text(scene.action_bar, text) == null, "pending claim action bar omits long label %s at %s" % [text, viewport_size])
 	var summary = scene.find_child("PendingClaimIllustration", true, false) as Control
@@ -653,7 +665,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		check(source_text.clip_text and tile_name.clip_text, "pending claim source and tile labels clip safely at %s" % viewport_size)
 	var pending_dock_texture = scene.find_child("PendingClaimActionGPTDockTexture", true, false) as TextureRect
 	if pending_dock_texture != null:
-		check(pending_dock_texture.modulate.a <= 0.90, "pending claim GPT action dock stays below full opacity at %s" % viewport_size)
+		check(pending_dock_texture.modulate.a <= 0.40, "pending claim GPT action dock stays subdued behind individual actions at %s" % viewport_size)
 	var first_button = first_button_with_text(scene.action_bar, "吃3-5")
 	if first_button != null:
 		check(first_button.find_child("ActionButton3DDepthEdge", true, false) != null and first_button.find_child("ActionButton3DTopRim", true, false) != null, "pending claim buttons expose physical depth and a light-catching top rim at %s" % viewport_size)
@@ -1497,6 +1509,10 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		var back_rect = screen_rect(back_button)
 		check(not guide_rect.intersects(back_rect, true), "rules back button does not overlap guide at %s" % viewport_size)
 		check(back_rect.size.x >= 88.0 and back_rect.size.y >= 44.0, "rules back button keeps a 44px mobile touch height at %s" % viewport_size)
+		var back_plate = back_button.find_child("SecondaryBackGptPlate", true, false) as CanvasItem
+		var back_rail = back_button.find_child("SecondaryBackGptRail", true, false) as CanvasItem
+		check(back_plate == null or back_plate.show_behind_parent, "rules back plate stays behind native exit text at %s" % viewport_size)
+		check(back_rail == null or back_rail.show_behind_parent, "rules back rail stays behind native exit text at %s" % viewport_size)
 		var back_art = back_button.find_child("SecondaryBackButtonArt_rules", true, false) as CanvasItem
 		check(back_art != null and back_art.show_behind_parent, "rules back button keeps authored chrome behind native exit text at %s" % viewport_size)
 		check_secondary_back_button_art(scene, "rules", viewport_size)

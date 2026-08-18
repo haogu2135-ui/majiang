@@ -1416,7 +1416,8 @@ func choose_ai_discard_for_seat(seat: int) -> String:
 		# 食替可能清空评分候选；统一走合法回退，必要时解除死锁禁打。
 		return choose_legal_offline_discard_tile(seat)
 	# 简单难度：在接近分差内偶尔选次优，制造可被利用的失误。
-	if clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
+	var decision_difficulty := ai_decision_difficulty_for_seat(seat)
+	if decision_difficulty == AI_DIFFICULTY_EASY and reports.size() >= 2 and randf() < 0.30:
 		var best_score = float(reports[0].get("score", 0.0))
 		var second_score = float(reports[1].get("score", 0.0))
 		if best_score - second_score <= 55.0:
@@ -1435,6 +1436,7 @@ func get_ai_discard_reports(seat: int) -> Array:
 	var hand: Array = players[seat]["hand"]
 	if hand.is_empty():
 		return reports
+	var decision_difficulty := ai_decision_difficulty_for_seat(seat)
 	# Quiet all-bot hands advance after every decision, so a state-keyed report
 	# cannot be reused. Avoid retaining deep report copies during benchmarks;
 	# player-facing turns still use the cache for UI/advisor redraws.
@@ -1471,7 +1473,7 @@ func get_ai_discard_reports(seat: int) -> Array:
 	if use_fast:
 		var defense_guess = ai_defense_weight(seat, 2, pressure_context)
 		var risk_factor = ai_risk_factor(seat)
-		var diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+		var diff = decision_difficulty
 		var fast_human_guard = seat > 0 and mode == "offline" and (diff == AI_DIFFICULTY_HARD or human_readiness_for_defense() >= 8.0)
 		var fast_human_readiness = human_readiness_for_defense() if fast_human_guard else 0.0
 		var safest_candidate: Dictionary = {}
@@ -1559,7 +1561,7 @@ func get_ai_discard_reports(seat: int) -> Array:
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		simulated.insert(i, candidate)
 	sort_ai_discard_reports(reports)
-	apply_hard_danger_push_guard(reports)
+	apply_hard_danger_push_guard(reports, seat)
 	if use_report_cache:
 		store_ai_report_cache(cache_key, reports)
 	# Quiet all-bot callers consume this one-shot ranking immediately and never
@@ -1578,8 +1580,9 @@ func sort_ai_discard_reports(reports: Array) -> void:
 	)
 
 
-func apply_hard_danger_push_guard(reports: Array) -> void:
-	if reports.size() < 2 or clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) != AI_DIFFICULTY_HARD:
+func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
+	var decision_difficulty := ai_decision_difficulty_for_seat(seat) if seat >= 0 else clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	if reports.size() < 2 or decision_difficulty != AI_DIFFICULTY_HARD:
 		return
 	var best: Dictionary = reports[0]
 	var best_shanten = int(best.get("shanten", 8))

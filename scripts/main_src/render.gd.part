@@ -455,7 +455,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	button.add_child(art)
 	var role = action_button_visual_role(text)
 	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"
-	var depth_alpha := 0.36 if compact_claim_mode and role == "pass" else (0.54 if compact_claim_mode else (0.50 if role == "pass" else 0.68))
+	var depth_alpha := 0.52 if compact_claim_mode and role == "pass" else (0.70 if compact_claim_mode else (0.50 if role == "pass" else 0.68))
 	var cast_shadow = make_soft_depth_panel(button, rect_full(0.040, 0.120, 0.990, 1.040), Color(0.0, 0.0, 0.0, 0.18 if compact_claim_mode else 0.26), 10)
 	cast_shadow.name = "ActionButton3DCastShadow"
 	button.move_child(cast_shadow, 0)
@@ -463,12 +463,21 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	depth_edge.name = "ActionButton3DDepthEdge"
 	button.add_child(depth_edge)
 	button.move_child(depth_edge, min(1, button.get_child_count() - 1))
-	var top_rim = make_gpt_ribbon(rect_full(0.050, 0.040, 0.950, 0.155), Color(1.0, 0.94, 0.70, 0.060 if compact_claim_mode else 0.100))
+	var top_rim = make_gpt_ribbon(rect_full(0.050, 0.040, 0.950, 0.155), Color(1.0, 0.94, 0.70, 0.120 if compact_claim_mode else 0.100))
 	top_rim.name = "ActionButton3DTopRim"
 	button.add_child(top_rim)
-	var side_bevel = make_gpt_edge_rail(rect_full(0.020, 0.180, 0.065, 0.820), Color(1.0, 0.92, 0.62, 0.035 if compact_claim_mode else 0.055))
+	var side_bevel = make_gpt_edge_rail(rect_full(0.020, 0.180, 0.065, 0.820), Color(1.0, 0.92, 0.62, 0.075 if compact_claim_mode else 0.055))
 	side_bevel.name = "ActionButton3DSideBevel"
 	button.add_child(side_bevel)
+	if compact_claim_mode:
+		# A restrained authored right/bottom edge keeps 55px claim targets visually
+		# separable without widening the wrapped lane or painting a native slab.
+		var compact_right_edge = make_gpt_edge_rail(rect_full(0.935, 0.180, 0.980, 0.820), Color(color.r, color.g, color.b, 0.22 if role == "pass" else 0.34))
+		compact_right_edge.name = "ActionButtonCompactRightEdge"
+		button.add_child(compact_right_edge)
+		var compact_bottom_edge = make_gpt_ribbon(rect_full(0.080, 0.875, 0.920, 0.945), Color(color.r, color.g, color.b, 0.18 if role == "pass" else 0.28))
+		compact_bottom_edge.name = "ActionButtonCompactBottomEdge"
+		button.add_child(compact_bottom_edge)
 	apply_rect(art, rect_full(0.036, 0.230, 0.176, 0.770) if compact_claim_mode else rect_full(0.030, 0.120, 0.245, 0.880))
 	var is_focus_action = ["win", "gang", "safe", "advice"].has(role) or text.begins_with("荐")
 	var seal_alpha = 0.016 if compact_claim_mode and role == "pass" else (0.032 if compact_claim_mode and is_focus_action else (0.024 if compact_claim_mode else (0.070 if role == "pass" else (0.155 if is_focus_action else 0.105))))
@@ -495,14 +504,14 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	if response_texture != null:
 		response_texture.name = "ActionButtonResponseTexture_%s" % role
 		button.move_child(response_texture, 0)
-	var rail_alpha = 0.14 if compact_claim_mode and role == "pass" else (0.20 if compact_claim_mode else (0.42 if role == "pass" else 0.58))
+	var rail_alpha = 0.20 if compact_claim_mode and role == "pass" else (0.28 if compact_claim_mode else (0.42 if role == "pass" else 0.58))
 	var role_rail = add_optional_gpt_illustration_texture(button, "ui_action_role_rail", rect_full(0.000, 0.120, 0.034, 0.880), rail_alpha, false)
 	if role_rail != null:
 		role_rail.name = "ActionButtonRoleRail"
 		role_rail.modulate = Color(color.r, color.g, color.b, rail_alpha)
 	# Smoke requires compact claim panel plate modulate.a <= 0.025; normal modes use denser GPT face.
-	var panel_alpha = 0.56 if compact_claim_mode and role == "pass" else (0.64 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
-	var panel_key := "action_button_panel" if compact_claim_mode else "ui_button_face_plate"
+	var panel_alpha = 0.60 if compact_claim_mode and role == "pass" else (0.70 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
+	var panel_key := "ui_dark_scrim" if compact_claim_mode else "ui_button_face_plate"
 	var panel_plate = add_optional_gpt_illustration_texture(button, panel_key, rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate == null:
 		panel_plate = add_optional_gpt_illustration_texture(button, "action_button_panel", rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
@@ -591,10 +600,10 @@ func draw_action_dock(parent: Control) -> void:
 	lower_reflection.name = "ActionDock3DLowerReflection"
 	dock.add_child(lower_reflection)
 	if pending_claim_mode:
-		var pending_dock_texture = add_optional_gpt_illustration_texture(dock, "pending_claim_action_dock", rect_full(0.002, 0.010, 0.998, 0.990), 0.88, false)
+		var pending_dock_texture = add_optional_gpt_illustration_texture(dock, "pending_claim_action_dock", rect_full(0.002, 0.010, 0.998, 0.990), 0.34, false)
 		if pending_dock_texture != null:
 			pending_dock_texture.name = "PendingClaimActionGPTDockTexture"
-			pending_dock_texture.modulate = Color(1.32, 1.20, 1.05, 0.88)
+			pending_dock_texture.modulate = Color(1.08, 1.02, 0.94, 0.34)
 			dock.move_child(pending_dock_texture, dock.get_child_count() - 1)
 	else:
 		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock", rect_full(0.000, 0.010, 1.000, 0.990), 0.98, false)
@@ -3539,24 +3548,26 @@ func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2
 func draw_game_top_hud(parent: Control) -> void:
 	# Keep the generated texture as a restrained header surface; status text and
 	# controls remain the primary visual signal at 960x540.
-	var hud = make_gpt_plate_rect(TOP_HUD_RECT, Color(0.058, 0.078, 0.062, 0.72), "ui_jade_reading_plate")
+	var hud = make_gpt_plate_rect(TOP_HUD_RECT, Color(0.028, 0.036, 0.032, 0.26), "ui_dark_scrim")
 	hud.name = "TopHud3DShell"
 	parent.add_child(hud)
 	hud.clip_contents = true
 	var hud_shadow = make_soft_depth_panel(hud, rect_full(0.010, 0.220, 0.990, 1.080), Color(0.0, 0.0, 0.0, 0.36), 12)
 	hud_shadow.name = "TopHud3DCastShadow"
 	hud.move_child(hud_shadow, 0)
-	var hud_depth = make_soft_depth_panel(hud, rect_full(0.018, 0.620, 0.982, 0.980), Color(0.14, 0.084, 0.036, 0.38), 10)
+	var hud_depth = make_soft_depth_panel(hud, rect_full(0.018, 0.620, 0.982, 0.980), Color(0.14, 0.084, 0.036, 0.24), 10)
 	hud_depth.name = "TopHud3DDepthEdge"
-	var hud_top_rim = make_soft_depth_panel(hud, rect_full(0.030, 0.015, 0.970, 0.095), Color(1.0, 0.92, 0.58, 0.22), 999)
+	var hud_top_rim = make_soft_depth_panel(hud, rect_full(0.030, 0.015, 0.970, 0.095), Color(1.0, 0.92, 0.58, 0.12), 999)
 	hud_top_rim.name = "TopHud3DTopRim"
-	var hud_jade_rail = make_soft_depth_panel(hud, rect_full(0.040, 0.860, 0.960, 0.930), Color(0.42, 0.30, 0.14, 0.14), 999)
+	var hud_jade_rail = make_soft_depth_panel(hud, rect_full(0.040, 0.860, 0.960, 0.930), Color(0.42, 0.30, 0.14, 0.08), 999)
 	hud_jade_rail.name = "TopHud3DJadeRail"
 	var top_hud_gpt_key := "top_hud_gpt_banner"
-	var gpt_top_hud_texture = add_optional_gpt_atlas_texture(hud, top_hud_gpt_key, Rect2(0.0, 0.0, 1254.0, 260.0), rect_full(0.000, 0.000, 1.000, 0.230), 0.26, false)
+	var gpt_top_hud_texture = add_optional_gpt_atlas_texture(hud, top_hud_gpt_key, Rect2(0.0, 0.0, 1254.0, 260.0), rect_full(0.000, 0.000, 1.000, 0.230), 0.06, false)
 	if gpt_top_hud_texture != null:
 		gpt_top_hud_texture.name = "TopHudGPTBannerTexture"
-		gpt_top_hud_texture.modulate = Color(1.10, 1.04, 0.94, 0.26)
+		# Keep the authored header material present without competing with the
+		# long AI profile/status line at compact resolutions.
+		gpt_top_hud_texture.modulate = Color(1.02, 1.00, 0.96, 0.018)
 		hud.move_child(gpt_top_hud_texture, min(1, hud.get_child_count() - 1))
 
 	# 模式徽章
@@ -3576,10 +3587,10 @@ func draw_game_top_hud(parent: Control) -> void:
 		status_rect = Rect2(Vector2(0.270, 0.090), Vector2(0.610, 0.515))
 		wall_rect = Rect2(Vector2(0.632, 0.140), Vector2(0.766, 0.860))
 	# r202: GPT title/status chips instead of make_panel lacquer hosts
-	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.90, 0.72, 0.34, 0.52), "ui_title_backplate")
+	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.90, 0.72, 0.34, 0.18), "ui_dark_scrim")
 	title_back.name = "TopHudTitleBack"
 	hud.add_child(title_back)
-	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.58, 0.74, 0.64, 0.46), "ui_button_face_plate")
+	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.58, 0.74, 0.64, 0.16), "ui_dark_scrim")
 	status_back.name = "TopHudStatusBack"
 	hud.add_child(status_back)
 	var title = make_label(hud, title_text, 15 if mode == "offline" else 16, Color(0.96, 0.80, 0.48), true)
@@ -3600,7 +3611,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		draw_score_strip(hud, TOP_HUD_SCORE_STRIP_RECT)
 
 	# 余牌信息
-	var wall_back = make_gpt_plate_rect(rect_full(wall_rect.position.x - 0.006, wall_rect.position.y - 0.010, wall_rect.size.x + 0.006, wall_rect.size.y + 0.010), Color(0.72, 0.56, 0.28, 0.26), "ui_title_backplate")
+	var wall_back = make_gpt_plate_rect(rect_full(wall_rect.position.x - 0.006, wall_rect.position.y - 0.010, wall_rect.size.x + 0.006, wall_rect.size.y + 0.010), Color(0.72, 0.56, 0.28, 0.10), "ui_dark_scrim")
 	wall_back.name = "TopHudWallBack"
 	hud.add_child(wall_back)
 	draw_top_hud_wall_meter(hud, wall_rect)
@@ -3609,7 +3620,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	var empty_wall := StyleBoxEmpty.new()
 	empty_wall.set_content_margin_all(4)
 	wall.add_theme_stylebox_override("normal", empty_wall)
-	var wall_chip = add_optional_gpt_illustration_texture(wall, "ui_button_face_plate", rect_full(-0.04, -0.08, 1.04, 1.08), 0.62, false)
+	var wall_chip = add_optional_gpt_illustration_texture(wall, "ui_dark_scrim", rect_full(-0.04, -0.08, 1.04, 1.08), 0.22, false)
 	if wall_chip != null:
 		wall_chip.name = "WallCountGptPlate"
 		wall.move_child(wall_chip, 0)
@@ -7190,7 +7201,7 @@ func style_seat_readable_label(label: Label, primary: bool = true) -> void:
 	var fill := Color(1.0, 0.98, 0.90, 1.0) if primary else Color(0.96, 0.94, 0.84, 0.96)
 	label.add_theme_color_override("font_color", fill)
 	label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
-	label.add_theme_constant_override("outline_size", 4 if primary else 3)
+	label.add_theme_constant_override("outline_size", 4)
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.78))
 	label.add_theme_constant_override("shadow_offset_x", 1)
 	label.add_theme_constant_override("shadow_offset_y", 1)
@@ -7303,7 +7314,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var side_avatar = make_avatar_view(seat, active)
 		panel.add_child(side_avatar)
 		apply_rect(side_avatar, rect_full(0.040, 0.245, 0.240, 0.755))
-		var side_text_back = make_gpt_plate_rect(rect_full(0.255, 0.060, 0.960, 0.860), Color(0.08, 0.06, 0.04, 0.86), "ui_jade_reading_plate")
+		var side_text_back = make_gpt_plate_rect(rect_full(0.255, 0.060, 0.960, 0.860), Color(0.08, 0.06, 0.04, 0.86), "ui_dark_scrim")
 		side_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(side_text_back)
 		var side_name_right := 0.590 if seat == dealer_seat else 0.620
@@ -7322,7 +7333,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(side_score, rect_full(side_score_left, 0.090, 0.940, 0.300))
 		side_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(side_score, true)
-		var side_stats = make_label(panel, "", 9, Color(0.96, 0.94, 0.84), false)
+		var side_stats = make_label(panel, "", 10, Color(0.96, 0.94, 0.84), false)
 		side_stats.name = "SeatCompactMeta_%d" % seat
 		var side_discard_count = get_discards(seat).size()
 		var side_meta_text = "手%d" % int(p.get("hand_count", 0))
@@ -7340,7 +7351,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			side_turn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var side_status_text = "打%s" % tile_label(get_last_discard()) if recent_discard_source else ""
 		if side_status_text != "":
-			var side_status = make_label(panel, side_status_text, 9, Color(1.0, 0.94, 0.74), false)
+			var side_status = make_label(panel, side_status_text, 10, Color(1.0, 0.94, 0.74), false)
 			side_status.name = "SeatCompactStatus_%d" % seat
 			apply_rect(side_status, rect_full(0.285, 0.565, 0.940, 0.720))
 			side_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -8021,9 +8032,11 @@ func draw_secondary_back_button_art(button: Control, screen_id: String, color: C
 	var back_plate = add_optional_gpt_illustration_texture(button, "ui_seat_info_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.36, false)
 	if back_plate != null:
 		back_plate.name = "SecondaryBackGptPlate"
+		back_plate.show_behind_parent = true
 	var back_rail = add_optional_gpt_illustration_texture(button, "ui_action_role_rail", rect_full(0.02, 0.10, 0.12, 0.90), 0.50, false)
 	if back_rail != null:
 		back_rail.name = "SecondaryBackGptRail"
+		back_rail.show_behind_parent = true
 	var art = Control.new()
 	art.name = "SecondaryBackButtonArt_%s" % screen_id
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -10274,12 +10287,12 @@ func draw_top_hud_hand_progress(parent: Control) -> Control:
 
 func draw_top_hud_status_art(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
-	var hud_texture = add_illustration_texture(parent, "hud_status_banner", rect_full(0.090, 0.055, 0.445, 0.930), 0.115, false)
+	var hud_texture = add_illustration_texture(parent, "hud_status_banner", rect_full(0.090, 0.055, 0.445, 0.930), 0.025, false)
 	if hud_texture != null:
 		hud_texture.name = "TopHudBannerTexture"
 		parent.move_child(hud_texture, 0)
-		hud_texture.modulate = Color(1, 1, 1, 0.09)
-	var halo_texture = add_illustration_texture(parent, "hud_phase_ring", rect_full(0.060, 0.045, 0.192, 0.955), 0.16, true)
+		hud_texture.modulate = Color(1, 1, 1, 0.020)
+	var halo_texture = add_illustration_texture(parent, "hud_phase_ring", rect_full(0.060, 0.045, 0.192, 0.955), 0.04, true)
 	if halo_texture != null:
 		halo_texture.name = "TopHudPhaseRingTexture"
 		parent.move_child(halo_texture, 0)
@@ -10289,39 +10302,39 @@ func draw_top_hud_status_art(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.104, 0.120, 0.132, 0.880))
 	parent.add_child(art)
 	var color = center_phase_color(center_phase_key())
-	var icon_back = make_gpt_plate_rect(rect_full(0.08, 0.18, 0.92, 0.82), Color(color.r, color.g, color.b, 0.18), "ui_button_face_plate")
+	var icon_back = make_gpt_plate_rect(rect_full(0.08, 0.18, 0.92, 0.82), Color(color.r, color.g, color.b, 0.07), "ui_dark_scrim")
 	icon_back.name = "TopHudStatusIconBack"
 	art.add_child(icon_back)
 	var icon_name = top_hud_status_icon_name()
 	if icon_name != "":
 		add_lucide_icon(art, icon_name, rect_full(0.24, 0.30, 0.76, 0.70), Color(0.96, 0.92, 0.76, 0.86))
-	var pulse = make_gpt_tick_strip(rect_full(0.010, 0.080, 0.990, 0.920), Color(color.r, color.g, color.b, 0.08))
+	var pulse = make_gpt_tick_strip(rect_full(0.010, 0.080, 0.990, 0.920), Color(color.r, color.g, color.b, 0.025))
 	pulse.name = "TopHudStatusPulse"
 	art.add_child(pulse)
 	art.move_child(pulse, 0)
-	var rail = make_gpt_route_rail(rect_full(0.106, 0.820, 0.425, 0.870), Color(color.r, color.g, color.b, 0.16))
+	var rail = make_gpt_route_rail(rect_full(0.106, 0.820, 0.425, 0.870), Color(color.r, color.g, color.b, 0.05))
 	rail.name = "TopHudStatusRail"
 	parent.add_child(rail)
-	var route = make_gpt_route_rail(rect_full(0.138, 0.690, 0.425, 0.735), Color(0.006, 0.016, 0.018, 0.42))
+	var route = make_gpt_route_rail(rect_full(0.138, 0.690, 0.425, 0.735), Color(0.006, 0.016, 0.018, 0.15))
 	route.name = "TopHudStatusRoute"
 	parent.add_child(route)
-	var route_fill = make_gpt_meter_fill(rect_full(0.030, 0.260, 0.760, 0.740), Color(color.r, color.g, color.b, 0.26))
+	var route_fill = make_gpt_meter_fill(rect_full(0.030, 0.260, 0.760, 0.740), Color(color.r, color.g, color.b, 0.08))
 	route_fill.name = "TopHudStatusRouteFill"
 	route.add_child(route_fill)
-	var gate = make_gpt_gate(rect_full(0.404, 0.635, 0.428, 0.785), Color(0.96, 0.82, 0.42, 0.20))
+	var gate = make_gpt_gate(rect_full(0.404, 0.635, 0.428, 0.785), Color(0.96, 0.82, 0.42, 0.07))
 	gate.name = "TopHudStatusRouteGate"
 	parent.add_child(gate)
 	for i in range(3):
 		var left = 0.118 + float(i) * 0.018
-		var pip = make_gpt_gate(rect_full(left, 0.180, left + 0.008, 0.300), Color(color.r, color.g, color.b, 0.38))
+		var pip = make_gpt_gate(rect_full(left, 0.180, left + 0.008, 0.300), Color(color.r, color.g, color.b, 0.14))
 		pip.name = "TopHudStatusPip_%d" % i
 		parent.add_child(pip)
-	var tick = add_gpt_tick_strip(parent, rect_full(0.210, 0.625, (0.210) + float(2) * (0.052) + (0.010), 0.790), Color(color.r, color.g, color.b, 0.23), "TopHudStatusRouteTick_0")
+	var tick = add_gpt_tick_strip(parent, rect_full(0.210, 0.625, (0.210) + float(2) * (0.052) + (0.010), 0.790), Color(color.r, color.g, color.b, 0.08), "TopHudStatusRouteTick_0")
 	if halo_texture != null:
 		halo_texture.modulate.a = 0.12
-	pulse.modulate = Color(1, 1, 1, 0.56)
-	route_fill.modulate = Color(1, 1, 1, 0.84)
-	gate.modulate = Color(1, 1, 1, 0.80)
+	pulse.modulate = Color(1, 1, 1, 0.38)
+	route_fill.modulate = Color(1, 1, 1, 0.62)
+	gate.modulate = Color(1, 1, 1, 0.65)
 	return art
 
 
@@ -11576,9 +11589,9 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"
 	button.add_theme_constant_override("outline_size", 3 if compact_claim_mode else 2)
 	var is_focus_action = ["win", "gang", "safe", "advice"].has(role) or text.begins_with("荐")
-	var fill_alpha := 0.205 if compact_claim_mode and role == "pass" else (0.355 if compact_claim_mode and is_focus_action else (0.285 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
-	var border_alpha := 0.018 if compact_claim_mode and role == "pass" else (0.070 if compact_claim_mode and is_focus_action else (0.036 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
-	var hover_border_alpha := 0.040 if compact_claim_mode and role == "pass" else (0.125 if compact_claim_mode and is_focus_action else (0.070 if compact_claim_mode else (0.090 if role == "pass" else (0.300 if is_focus_action else 0.180))))
+	var fill_alpha := 0.260 if compact_claim_mode and role == "pass" else (0.460 if compact_claim_mode and is_focus_action else (0.360 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
+	var border_alpha := 0.045 if compact_claim_mode and role == "pass" else (0.150 if compact_claim_mode and is_focus_action else (0.090 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
+	var hover_border_alpha := 0.080 if compact_claim_mode and role == "pass" else (0.220 if compact_claim_mode and is_focus_action else (0.140 if compact_claim_mode else (0.090 if role == "pass" else (0.300 if is_focus_action else 0.180))))
 	var shadow_size := 1 if compact_claim_mode and role != "pass" else (0 if role == "pass" else (2 if is_focus_action else 1))
 	# r180: empty StyleBox hit host + GPT button face (no program StyleBox paint).
 	var empty_normal := StyleBoxEmpty.new()

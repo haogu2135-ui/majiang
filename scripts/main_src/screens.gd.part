@@ -743,13 +743,13 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.946, 0.960), Color(0.07, 0.06, 0.05, 0.58), 999, Color(0.24, 0.20, 0.14, 0.18), 0, "ui_dark_scrim")  # r227 authored dark track
+	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.950, 0.960), Color(0.07, 0.06, 0.05, 0.72), 999, Color(0.24, 0.20, 0.14, 0.18), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var compact_rules_scroll := effective_viewport_size().y <= 560.0
-	var thumb_left := 0.080 if compact_rules_scroll else 0.220
-	var thumb_right := 0.920 if compact_rules_scroll else 0.780
-	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.78, 0.66, 0.38, 0.90), 999, Color(0.88, 0.76, 0.46, 0.34), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var thumb_left := 0.100 if compact_rules_scroll else 0.300
+	var thumb_right := 0.900 if compact_rules_scroll else 0.700
+	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.78, 0.66, 0.38, 0.99), 999, Color(0.98, 0.88, 0.58, 0.58), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rules_scroll_thumb.set_meta("track_left", thumb_left)
