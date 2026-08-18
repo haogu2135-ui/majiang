@@ -5,6 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPORT="$ROOT_DIR/build/qa/ui_regression_verification_report.md"
 LOG_DIR="$ROOT_DIR/build/qa/logs"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S %z')"
+REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+WORKTREE_STATE="clean"
+RUNTIME_SOURCE_STATE="clean"
+if [ -n "$(git -C "$ROOT_DIR" status --porcelain 2>/dev/null)" ]; then
+	WORKTREE_STATE="dirty"
+fi
+if [ -n "$(git -C "$ROOT_DIR" status --porcelain -- project.godot scripts/main_base.gd scripts/main.gd scripts/main_src scripts/ui 2>/dev/null)" ]; then
+	RUNTIME_SOURCE_STATE="dirty"
+fi
 
 mkdir -p "$LOG_DIR" "$(dirname "$REPORT")"
 
@@ -215,6 +224,9 @@ fi
 	echo "# UI Regression Verification Report"
 	echo ""
 	echo "- Time: $TIMESTAMP"
+	echo "- Git revision: \`$REVISION\`"
+	echo "- Worktree state: $WORKTREE_STATE"
+	echo "- Runtime source vs HEAD: $RUNTIME_SOURCE_STATE"
 	echo "- Result: $STATUS"
 	echo "- Passed checks: $PASS"
 	echo "- Failed checks: $FAIL"

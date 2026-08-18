@@ -9,6 +9,7 @@ REPORT="$REPORT_DIR/EVIDENCE_LATEST.md"
 LOG_DIR="$REPORT_DIR/logs"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S %z')"
 REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+REVISION_FULL="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf 'unknown')"
 WORKTREE_STATE="clean"
 RUNTIME_SOURCE_STATE="clean"
 if [ -n "$(git -C "$ROOT_DIR" status --porcelain 2>/dev/null)" ]; then
@@ -34,6 +35,8 @@ fi
 
 PASS=0
 FAIL=0
+CACHED=0
+EXECUTED=0
 ROWS=()
 
 mkdir -p "$LOG_DIR"
@@ -73,16 +76,27 @@ run_check() {
 	shift 3
 	local log_path="$LOG_DIR/$log_name"
 	local started finished elapsed exit_code
-	if $RESUME && [ -f "$log_path" ] && grep -q '=== RESULT: OK ===' "$log_path"; then
+	if $RESUME &&
+		[ "$RUNTIME_SOURCE_STATE" = "clean" ] &&
+		[ -f "$log_path" ] &&
+		grep -q '=== RESULT: OK ===' "$log_path" &&
+		grep -Fqx "=== QA REVISION: $REVISION_FULL ===" "$log_path"; then
 		echo "PASS: $name (cached successful Godot log)"
 		ROWS+=("| $category | $name | PASS | cached | \`$log_path\` |")
 		PASS=$((PASS + 1))
+		CACHED=$((CACHED + 1))
 		return 0
 	fi
 
+	EXECUTED=$((EXECUTED + 1))
 	started="$(date +%s)"
 	echo "==> $name"
 	if (cd "$ROOT_DIR" && "$@") >"$log_path" 2>&1; then
+		if [ "$RUNTIME_SOURCE_STATE" = "clean" ]; then
+			printf '\n=== QA REVISION: %s ===\n' "$REVISION_FULL" >>"$log_path"
+		else
+			printf '\n=== QA REVISION: unbound-dirty-runtime ===\n' >>"$log_path"
+		fi
 		finished="$(date +%s)"
 		elapsed=$((finished - started))
 		echo "PASS: $name (${elapsed}s)"
@@ -155,6 +169,8 @@ fi
 	echo "- Result: **$STATUS**"
 	echo "- Passed checks: $PASS"
 	echo "- Failed checks: $FAIL"
+	echo "- Executed checks: $EXECUTED"
+	echo "- Cached checks: $CACHED"
 	echo "- Run mode: $RUN_MODE"
 	echo "- Execution policy: serial Godot processes, \`LP_NUM_THREADS=1\`, low CPU/I/O priority, 180-second hard timeout per Godot check"
 	echo ""

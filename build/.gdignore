@@ -1,0 +1,1 @@
+# Exclude generated QA captures and evidence from Godot's resource scan.

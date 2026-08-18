@@ -3,7 +3,8 @@
 .import/
 
 # Build outputs and generated QA captures
-build/
+build/*
+!build/.gdignore
 *.apk
 *.idsig
 
