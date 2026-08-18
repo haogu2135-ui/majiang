@@ -136,6 +136,8 @@ run_godot_check "Strength evidence" 68 "paired multi-seed strength pack passes"
 run_godot_check "Strength evidence" 89 "independent fixed-player pressure sample passes"
 run_godot_check "Strength evidence" 90 "only actionable danger counts against hard AI"
 run_godot_check "Information fairness" 91 "hidden-hand swaps cannot alter added-gang AI"
+run_godot_check "Endgame policy" 92 "hard guard covers catastrophic thin-tenpai pressure"
+run_godot_check "Strategy quality" 93 "avoidable all-opponent danger telemetry stays actionable"
 
 STATUS="PASS"
 if [ "$FAIL" -ne 0 ]; then
@@ -170,7 +172,8 @@ fi
 	echo "- Endgame claims: late-wall open claims and self-gangs must preserve tenpai discipline while useful actions remain available."
 	echo "- Fairness: decisions under test use only public information; concealed-hand swaps cannot change added-gang declarations."
 	echo "- Integrity: every sampled terminal hand keeps the 144-tile physical ledger and the four-seat score ledger."
-	echo "- Difficulty and strength: easy/normal/hard conservation is exercised; paired easy/hard multi-seed packs and an independent fixed-player probe must pass."
+echo "- Difficulty and strength: easy/normal/hard conservation is exercised; paired easy/hard multi-seed packs and an independent fixed-player probe must pass."
+	echo "- Hard-defense diagnostics: catastrophic thin-tenpai pressure is guarded, while all-opponent danger telemetry only counts same-shanten actionable alternatives."
 	echo "- Performance: fresh-scene, primary strength, and independent strength samples must finish within their low-resource budgets."
 	echo ""
 	echo "## Durable Strength Artifact"

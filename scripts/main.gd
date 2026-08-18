@@ -172,7 +172,7 @@ func apply_audio_settings() -> void:
 		bgm_player.stop()
 
 func audio_runtime_enabled() -> bool:
-	return DisplayServer.get_name().to_lower() != "headless"
+	return DisplayServer.get_name().to_lower() != "headless" and OS.get_environment("YUNZHUO_UI_CAPTURE") != "1"
 
 func wake_audio_from_interaction() -> void:
 	if not audio_touch_unlocked:
@@ -17077,8 +17077,12 @@ func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id
 	route.name = "ShopItemRouteRail"
 	row.add_child(route)
 	var value_route = add_optional_gpt_illustration_texture(row, "ui_progress_signal_strip", rect_full(0.120, 0.530, 0.790, 0.620), 0.28, false)
-	if value_route != null:
-		value_route.name = "ShopItemValueRoute"
+	if value_route == null:
+		# Preserve the child layout when an imported artifact is unavailable;
+		# this host is invisible and never substitutes program-painted chrome.
+		value_route = make_layout_host(rect_full(0.120, 0.530, 0.790, 0.620))
+		row.add_child(value_route)
+	value_route.name = "ShopItemValueRoute"
 	var value_fill = make_gpt_meter_fill(rect_full(0.030, 0.260, 0.030 + 0.880 * clamp(float(count + 1) / 4.0, 0.18, 1.0), 0.740), Color(item_color.r, item_color.g, item_color.b, 0.10 if count > 0 else 0.055))
 	value_fill.name = "ShopItemValueFill"
 	value_route.add_child(value_fill)

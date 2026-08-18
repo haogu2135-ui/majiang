@@ -1128,27 +1128,25 @@ func optional_gpt_illustration_texture(name: String) -> Texture2D:
 	return optional_gpt_illustration_textures.get(name, null)
 
 func load_illustration_texture(path: String) -> Texture2D:
-	# Prefer imported CompressedTexture2D when present; if import cache is stale
-	# (ResourceLoader.exists true but ctex missing), fall back to raw PNG load.
-	if ResourceLoader.exists(path):
-		var import_path := path + ".import"
-		var ctex_ok := true
-		if FileAccess.file_exists(import_path):
-			var import_cfg := ConfigFile.new()
-			if import_cfg.load(import_path) == OK:
-				var dest = str(import_cfg.get_value("remap", "path", ""))
-				if dest != "" and not FileAccess.file_exists(dest):
-					ctex_ok = false
-		if ctex_ok:
-			var imported = load(path)
-			if imported is Texture2D:
-				return imported
-	var image = Image.new()
-	var image_path = ProjectSettings.globalize_path(path)
-	var err = image.load(image_path)
-	if err != OK:
+	if not imported_texture_artifact_ready(path):
 		return null
-	return ImageTexture.create_from_image(image)
+	var imported = ResourceLoader.load(path, "Texture2D")
+	return imported as Texture2D if imported is Texture2D else null
+
+func imported_texture_artifact_ready(path: String) -> bool:
+	if not ResourceLoader.exists(path):
+		return false
+	var import_path := path + ".import"
+	if not FileAccess.file_exists(import_path):
+		# Exported PCK resources are remapped internally and do not expose .import.
+		return true
+	var import_cfg := ConfigFile.new()
+	if import_cfg.load(import_path) != OK:
+		return false
+	var imported_path := str(import_cfg.get_value("remap", "path", ""))
+	if imported_path == "":
+		return false
+	return FileAccess.file_exists(ProjectSettings.globalize_path(imported_path))
 
 func add_illustration_texture(parent: Control, name: String, rect: Rect2, alpha: float = 1.0, keep_aspect: bool = false) -> TextureRect:
 	var texture = illustration_texture(name)

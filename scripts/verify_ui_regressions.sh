@@ -118,6 +118,26 @@ check_no_runtime_leaks() {
 	return 0
 }
 
+check_no_runtime_errors() {
+	local log_path
+	for log_path in "$@"; do
+		if rg -n '^(SCRIPT )?ERROR:' "$log_path"; then
+			return 1
+		fi
+	done
+	return 0
+}
+
+check_no_runtime_generated_bitmap_textures() {
+	if rg -n '\bImage\.(new|create)|ImageTexture\.create_from_image' \
+		"$ROOT_DIR/scripts/main_base.gd" \
+		"$ROOT_DIR/scripts/main_src" \
+		"$ROOT_DIR/scripts/ui"; then
+		return 1
+	fi
+	return 0
+}
+
 run_check "Python QA tools compile" "py_compile.log" \
 	python3 -m py_compile \
 	tools/assemble_main.py \
@@ -136,6 +156,9 @@ run_check "main.gd generated output parity" "assemble_verify.log" \
 
 run_check "Git whitespace check" "git_diff_check.log" \
 	git diff --check
+
+run_check "Runtime UI uses imported bitmap assets only" "runtime_bitmap_policy.log" \
+	check_no_runtime_generated_bitmap_textures
 
 run_check "UI layout regression smoke" "ui_layout_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_layout_smoke_test.gd
@@ -169,6 +192,14 @@ run_check "Screenshot manifest 1920x1080" "manifest_1920x1080.log" \
 
 run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 	check_no_runtime_leaks \
+	"$LOG_DIR/ui_layout_smoke.log" \
+	"$LOG_DIR/offline_smoke.log" \
+	"$LOG_DIR/capture_pages_1280x720.log" \
+	"$LOG_DIR/capture_pages_960x540.log" \
+	"$LOG_DIR/capture_pages_1920x1080.log"
+
+run_check "Runtime error log scan" "runtime_error_scan.log" \
+	check_no_runtime_errors \
 	"$LOG_DIR/ui_layout_smoke.log" \
 	"$LOG_DIR/offline_smoke.log" \
 	"$LOG_DIR/capture_pages_1280x720.log" \
@@ -216,6 +247,7 @@ fi
 	echo "| AI 节奏/难度枚举误显示布尔状态 | UI layout smoke + 02_menu_settings 三分辨率截图 |"
 	echo "| 规则滚动条触控命中过窄 | UI layout smoke 44px hit target + 04_rules 三分辨率截图 |"
 	echo "| 结算、危险弃牌、完整响应、胡牌详情缺正式证据 | 13～16 三分辨率截图 + manifest |"
+	echo "| 位图导入缓存缺失时运行时 ImageTexture 兜底并刷资源错误 | imported bitmap policy + runtime error log scan |"
 	echo ""
 	echo "## Screenshot Artifacts"
 	echo ""

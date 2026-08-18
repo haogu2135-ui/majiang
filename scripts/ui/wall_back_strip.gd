@@ -192,23 +192,15 @@ func get_warning_texture() -> Texture2D:
 	return warning_texture_cache
 
 func load_wall_texture(path: String) -> Texture2D:
-	# Avoid noisy failed-resource loads when a clean checkout has not generated
-	# Godot's compressed import cache yet; the raw authored PNG remains valid.
-	if ResourceLoader.exists(path):
-		var ctex_ok := true
-		var import_path := path + ".import"
-		if FileAccess.file_exists(import_path):
-			var import_cfg := ConfigFile.new()
-			if import_cfg.load(import_path) == OK:
-				var dest := str(import_cfg.get_value("remap", "path", ""))
-				if dest != "" and not FileAccess.file_exists(dest):
-					ctex_ok = false
-		if ctex_ok:
-				var imported_texture = load(path)
-				if imported_texture is Texture2D:
-					return imported_texture
-	var image = Image.new()
-	var err = image.load(ProjectSettings.globalize_path(path))
-	if err != OK:
+	if not ResourceLoader.exists(path):
 		return null
-	return ImageTexture.create_from_image(image)
+	var import_path := path + ".import"
+	if FileAccess.file_exists(import_path):
+		var import_cfg := ConfigFile.new()
+		if import_cfg.load(import_path) != OK:
+			return null
+		var imported_path := str(import_cfg.get_value("remap", "path", ""))
+		if imported_path == "" or not FileAccess.file_exists(ProjectSettings.globalize_path(imported_path)):
+			return null
+	var imported_texture = ResourceLoader.load(path, "Texture2D")
+	return imported_texture as Texture2D if imported_texture is Texture2D else null

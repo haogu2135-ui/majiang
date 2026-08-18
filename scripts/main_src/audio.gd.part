@@ -160,7 +160,7 @@ func apply_audio_settings() -> void:
 		bgm_player.stop()
 
 func audio_runtime_enabled() -> bool:
-	return DisplayServer.get_name().to_lower() != "headless"
+	return DisplayServer.get_name().to_lower() != "headless" and OS.get_environment("YUNZHUO_UI_CAPTURE") != "1"
 
 func wake_audio_from_interaction() -> void:
 	if not audio_touch_unlocked:
