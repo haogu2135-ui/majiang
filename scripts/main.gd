@@ -5643,6 +5643,8 @@ func reset_ai_sim_stats() -> void:
 		"discards": 0,
 		"dangerous_discards": 0,
 		"high_danger_discards": 0,
+		"avoidable_dangerous_discards": 0,
+		"avoidable_high_danger_discards": 0,
 		"human_dangerous_discards": 0,
 		"human_high_danger_discards": 0,
 		"human_avoidable_dangerous_discards": 0,
@@ -5684,6 +5686,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 			selected = candidate
 			selected_rank = index
 	var best: Dictionary = reports[0] if not reports.is_empty() and typeof(reports[0]) == TYPE_DICTIONARY else {}
+	var avoidable: Dictionary = _ai_sim_avoidable_danger_report(selected, reports) if not selected.is_empty() else {}
 	var entry := {
 		"step": step,
 		"seat": seat,
@@ -5708,6 +5711,11 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"safest_human_pressure": float(safest.get("human_target_pressure", 0.0)),
 		"safest_shanten": int(safest.get("shanten", -1)),
 		"safest_score": float(safest.get("score", 0.0)),
+		"avoidable_dangerous": bool(avoidable.get("avoidable_dangerous", false)),
+		"avoidable_high_danger": bool(avoidable.get("avoidable_high_danger", false)),
+		"avoidable_candidate_tile": str(avoidable.get("candidate_tile", "")),
+		"avoidable_pressure_gain": float(avoidable.get("pressure_gain", 0.0)),
+		"avoidable_candidate_shanten": int(avoidable.get("candidate_shanten", -1)),
 		"wait_best_points": int(selected.get("wait_best_points", 0)),
 		"wait_total_remaining": int(selected.get("wait_total_remaining", 0)),
 		"wait_value": float(selected.get("wait_value", 0.0)),
@@ -5889,6 +5897,72 @@ func _ai_sim_human_pressure_is_avoidable(selected: Dictionary, reports: Array) -
 	return false
 
 
+func _ai_sim_avoidable_danger_report(selected: Dictionary, reports: Array) -> Dictionary:
+	# General opponent telemetry is intentionally stricter than raw danger:
+	# only a fully evaluated same-shanten alternative with preserved hand quality
+	# and a material risk/feed reduction is actionable. Forced discards therefore
+	# remain visible in raw counters without becoming false defense failures.
+	var selected_risk = float(selected.get("risk", 0.0))
+	var selected_feed = float(selected.get("feed_risk", 0.0))
+	var selected_dangerous = selected_risk >= AI_DANGER_RISK_SOFT or selected_feed >= AI_DANGER_FEED_SOFT
+	var selected_high = selected_risk >= AI_DANGER_RISK_HIGH
+	var result := {
+		"selected_dangerous": selected_dangerous,
+		"selected_high_danger": selected_high,
+		"avoidable_dangerous": false,
+		"avoidable_high_danger": false,
+		"candidate_tile": "",
+		"candidate_shanten": -1,
+		"pressure_gain": 0.0,
+		"score_gap": 0.0,
+	}
+	if not selected_dangerous:
+		return result
+	var selected_shanten = int(selected.get("shanten", 8))
+	var selected_tile = str(selected.get("tile", ""))
+	var selected_rank = selected_risk + selected_feed * 0.45
+	var required_drop = maxf(8.0, selected_rank * 0.25)
+	for item in reports:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var candidate: Dictionary = item
+		if str(candidate.get("tile", "")) == selected_tile:
+			continue
+		if int(candidate.get("shanten", 8)) != selected_shanten:
+			continue
+		if not _ai_sim_human_pressure_quality_preserved(selected, candidate):
+			continue
+		var candidate_risk = float(candidate.get("risk", 0.0))
+		var candidate_feed = float(candidate.get("feed_risk", 0.0))
+		# A candidate cannot trade away a large part of one danger vector merely
+		# to improve the other; the combined rank must also drop materially.
+		if candidate_risk > selected_risk + 4.0 or candidate_feed > selected_feed + 6.0:
+			continue
+		if selected_high and candidate_risk > selected_risk - maxf(8.0, selected_risk * 0.20):
+			continue
+		var candidate_rank = candidate_risk + candidate_feed * 0.45
+		var pressure_gain = selected_rank - candidate_rank
+		if pressure_gain < required_drop:
+			continue
+		result["avoidable_dangerous"] = true
+		result["avoidable_high_danger"] = selected_high
+		result["candidate_tile"] = str(candidate.get("tile", ""))
+		result["candidate_shanten"] = int(candidate.get("shanten", 8))
+		result["pressure_gain"] = pressure_gain
+		result["score_gap"] = float(selected.get("score", 0.0)) - float(candidate.get("score", 0.0))
+		return result
+	return result
+
+
+func _ai_sim_note_avoidable_danger_report(selected: Dictionary, reports: Array) -> Dictionary:
+	var result = _ai_sim_avoidable_danger_report(selected, reports)
+	if bool(result.get("avoidable_dangerous", false)):
+		ai_sim_stats["avoidable_dangerous_discards"] = int(ai_sim_stats.get("avoidable_dangerous_discards", 0)) + 1
+	if bool(result.get("avoidable_high_danger", false)):
+		ai_sim_stats["avoidable_high_danger_discards"] = int(ai_sim_stats.get("avoidable_high_danger_discards", 0)) + 1
+	return result
+
+
 func _ai_sim_note_human_target_pressure_report(selected: Dictionary, reports: Array) -> void:
 	var pressure = float(selected.get("human_target_pressure", selected.get("human_target_penalty", 0.0)))
 	_ai_sim_note_human_target_pressure(pressure)
@@ -6050,6 +6124,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 					ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
 				if risk >= AI_DANGER_RISK_HIGH:
 					ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
+				_ai_sim_note_avoidable_danger_report(report, reports)
 				_ai_sim_note_human_target_pressure_report(report, reports)
 				break
 		var committed_tile = discard_tile_by_value(seat, discard_tile)
@@ -6161,6 +6236,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		ai_benchmark_probe_difficulty = probe_difficulty
 		var danger_total = 0
 		var high_danger_total = 0
+		var avoidable_danger_total = 0
+		var avoidable_high_danger_total = 0
 		var human_danger_total = 0
 		var human_high_danger_total = 0
 		var human_avoidable_danger_total = 0
@@ -6199,6 +6276,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			ms_total += Time.get_ticks_msec() - t0
 			danger_total += int(result.get("dangerous_discards", 0))
 			high_danger_total += int(result.get("high_danger_discards", 0))
+			avoidable_danger_total += int(result.get("avoidable_dangerous_discards", 0))
+			avoidable_high_danger_total += int(result.get("avoidable_high_danger_discards", 0))
 			human_danger_total += int(result.get("human_dangerous_discards", 0))
 			human_high_danger_total += int(result.get("human_high_danger_discards", 0))
 			human_avoidable_danger_total += int(result.get("human_avoidable_dangerous_discards", 0))
@@ -6218,6 +6297,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 				wins_total += 1
 		var danger_rate = float(danger_total) / float(max(1, discard_total))
 		var high_danger_rate = float(high_danger_total) / float(max(1, discard_total))
+		var avoidable_danger_rate = float(avoidable_danger_total) / float(max(1, discard_total))
+		var avoidable_high_danger_rate = float(avoidable_high_danger_total) / float(max(1, discard_total))
 		var human_danger_rate = float(human_danger_total) / float(max(1, discard_total))
 		var human_high_danger_rate = float(human_high_danger_total) / float(max(1, discard_total))
 		var human_avoidable_danger_rate = float(human_avoidable_danger_total) / float(max(1, discard_total))
@@ -6227,6 +6308,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		summary["by_diff"][diff] = {
 			"danger_rate": danger_rate,
 			"high_danger_rate": high_danger_rate,
+			"avoidable_danger_rate": avoidable_danger_rate,
+			"avoidable_high_danger_rate": avoidable_high_danger_rate,
 			"human_danger_rate": human_danger_rate,
 			"human_high_danger_rate": human_high_danger_rate,
 			"human_avoidable_danger_rate": human_avoidable_danger_rate,
@@ -6236,6 +6319,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			"human_claim_declines": human_claim_decline_total,
 			"dangerous_discards": danger_total,
 			"high_danger_discards": high_danger_total,
+			"avoidable_dangerous_discards": avoidable_danger_total,
+			"avoidable_high_danger_discards": avoidable_high_danger_total,
 			"human_dangerous_discards": human_danger_total,
 			"human_high_danger_discards": human_high_danger_total,
 			"human_avoidable_dangerous_discards": human_avoidable_danger_total,
@@ -6308,6 +6393,8 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 	var hard: Dictionary = by.get(AI_DIFFICULTY_HARD, {})
 	var easy_hd = float(easy.get("high_danger_rate", 1.0))
 	var hard_hd = float(hard.get("high_danger_rate", 1.0))
+	var easy_ahd = float(easy.get("avoidable_high_danger_rate", 1.0))
+	var hard_ahd = float(hard.get("avoidable_high_danger_rate", 1.0))
 	var easy_di = float(easy.get("deal_in_rate", 1.0))
 	var hard_di = float(hard.get("deal_in_rate", 1.0))
 	var easy_dr = float(easy.get("danger_rate", 1.0))
@@ -6335,6 +6422,7 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 		integrity_all = integrity_all and normal_integrity
 		score_conservation_all = score_conservation_all and normal_score_conserved
 	var hard_safer_high_danger = hard_hd <= easy_hd + 0.08
+	var hard_safer_avoidable_high_danger = hard_ahd <= easy_ahd + 0.08
 	var hard_safer_deal_in = hard_di <= easy_di + 0.34
 	var hard_safer_human_high_danger = hard_hhd <= easy_hhd + 0.08
 	var hard_safer_human_avoidable_high_danger = hard_ahhd <= easy_ahhd + 0.08
@@ -6352,6 +6440,8 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 		"raw": raw,
 		"easy_high_danger": easy_hd,
 		"hard_high_danger": hard_hd,
+		"easy_avoidable_high_danger": easy_ahd,
+		"hard_avoidable_high_danger": hard_ahd,
 		"easy_deal_in": easy_di,
 		"hard_deal_in": hard_di,
 		"easy_deal_in_to_human": easy_dih,
@@ -6363,6 +6453,7 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 		"easy_human_avoidable_high_danger": easy_ahhd,
 		"hard_human_avoidable_high_danger": hard_ahhd,
 		"hard_safer_high_danger": hard_safer_high_danger,
+		"hard_safer_avoidable_high_danger": hard_safer_avoidable_high_danger,
 		"hard_safer_deal_in": hard_safer_deal_in,
 		"hard_safer_human_high_danger": hard_safer_human_high_danger,
 		"hard_safer_human_avoidable_high_danger": hard_safer_human_avoidable_high_danger,
@@ -6405,6 +6496,10 @@ func empty_ai_strength_aggregate() -> Dictionary:
 		"hard_dangerous_discards": 0,
 		"easy_high_danger_discards": 0,
 		"hard_high_danger_discards": 0,
+		"easy_avoidable_dangerous_discards": 0,
+		"hard_avoidable_dangerous_discards": 0,
+		"easy_avoidable_high_danger_discards": 0,
+		"hard_avoidable_high_danger_discards": 0,
 		"easy_human_dangerous_discards": 0,
 		"hard_human_dangerous_discards": 0,
 		"easy_human_high_danger_discards": 0,
@@ -6443,6 +6538,10 @@ func add_ai_strength_benchmark_to_aggregate(aggregate: Dictionary, bench: Dictio
 	aggregate["hard_dangerous_discards"] = int(aggregate.get("hard_dangerous_discards", 0)) + int(hard.get("dangerous_discards", 0))
 	aggregate["easy_high_danger_discards"] = int(aggregate.get("easy_high_danger_discards", 0)) + int(easy.get("high_danger_discards", 0))
 	aggregate["hard_high_danger_discards"] = int(aggregate.get("hard_high_danger_discards", 0)) + int(hard.get("high_danger_discards", 0))
+	aggregate["easy_avoidable_dangerous_discards"] = int(aggregate.get("easy_avoidable_dangerous_discards", 0)) + int(easy.get("avoidable_dangerous_discards", 0))
+	aggregate["hard_avoidable_dangerous_discards"] = int(aggregate.get("hard_avoidable_dangerous_discards", 0)) + int(hard.get("avoidable_dangerous_discards", 0))
+	aggregate["easy_avoidable_high_danger_discards"] = int(aggregate.get("easy_avoidable_high_danger_discards", 0)) + int(easy.get("avoidable_high_danger_discards", 0))
+	aggregate["hard_avoidable_high_danger_discards"] = int(aggregate.get("hard_avoidable_high_danger_discards", 0)) + int(hard.get("avoidable_high_danger_discards", 0))
 	aggregate["easy_human_dangerous_discards"] = int(aggregate.get("easy_human_dangerous_discards", 0)) + int(easy.get("human_dangerous_discards", 0))
 	aggregate["hard_human_dangerous_discards"] = int(aggregate.get("hard_human_dangerous_discards", 0)) + int(hard.get("human_dangerous_discards", 0))
 	aggregate["easy_human_high_danger_discards"] = int(aggregate.get("easy_human_high_danger_discards", 0)) + int(easy.get("human_high_danger_discards", 0))
@@ -6469,6 +6568,10 @@ func finalize_ai_strength_aggregate(aggregate: Dictionary) -> Dictionary:
 	out["hard_danger_rate"] = float(out.get("hard_dangerous_discards", 0)) / float(hard_discards)
 	out["easy_high_danger"] = float(out.get("easy_high_danger_discards", 0)) / float(easy_discards)
 	out["hard_high_danger"] = float(out.get("hard_high_danger_discards", 0)) / float(hard_discards)
+	out["easy_avoidable_danger"] = float(out.get("easy_avoidable_dangerous_discards", 0)) / float(easy_discards)
+	out["hard_avoidable_danger"] = float(out.get("hard_avoidable_dangerous_discards", 0)) / float(hard_discards)
+	out["easy_avoidable_high_danger"] = float(out.get("easy_avoidable_high_danger_discards", 0)) / float(easy_discards)
+	out["hard_avoidable_high_danger"] = float(out.get("hard_avoidable_high_danger_discards", 0)) / float(hard_discards)
 	out["easy_human_danger"] = float(out.get("easy_human_dangerous_discards", 0)) / float(easy_discards)
 	out["hard_human_danger"] = float(out.get("hard_human_dangerous_discards", 0)) / float(hard_discards)
 	out["easy_human_high_danger"] = float(out.get("easy_human_high_danger_discards", 0)) / float(easy_discards)
@@ -6485,6 +6588,7 @@ func finalize_ai_strength_aggregate(aggregate: Dictionary) -> Dictionary:
 	out["integrity_all"] = int(out.get("rows", 0)) > 0 and int(out.get("easy_integrity_passed", 0)) >= int(out.get("easy_hands", 0)) and int(out.get("hard_integrity_passed", 0)) >= int(out.get("hard_hands", 0))
 	out["score_conservation_all"] = int(out.get("rows", 0)) > 0 and int(out.get("easy_score_conserved_passed", 0)) >= int(out.get("easy_hands", 0)) and int(out.get("hard_score_conserved_passed", 0)) >= int(out.get("hard_hands", 0))
 	out["hard_safer_high_danger"] = float(out.get("hard_high_danger", 1.0)) <= float(out.get("easy_high_danger", 0.0)) + 0.08
+	out["hard_safer_avoidable_high_danger"] = float(out.get("hard_avoidable_high_danger", 1.0)) <= float(out.get("easy_avoidable_high_danger", 0.0)) + 0.08
 	out["hard_safer_deal_in"] = float(out.get("hard_deal_in", 1.0)) <= float(out.get("easy_deal_in", 0.0)) + 0.34
 	out["hard_safer_human_high_danger"] = float(out.get("hard_human_high_danger", 1.0)) <= float(out.get("easy_human_high_danger", 0.0)) + 0.08
 	out["hard_safer_human_avoidable_high_danger"] = float(out.get("hard_human_avoidable_high_danger", 1.0)) <= float(out.get("easy_human_avoidable_high_danger", 0.0)) + 0.08
@@ -6516,6 +6620,8 @@ func ai_strength_pack_row(mode_name: String, seed_int: int, hands_per_diff: int,
 		"hard_score_conserved": bool(hard.get("score_conserved", false)),
 		"easy_high_danger": float(bench.get("easy_high_danger", 1.0)),
 		"hard_high_danger": float(bench.get("hard_high_danger", 1.0)),
+		"easy_avoidable_high_danger": float(bench.get("easy_avoidable_high_danger", 1.0)),
+		"hard_avoidable_high_danger": float(bench.get("hard_avoidable_high_danger", 1.0)),
 		"easy_human_high_danger": float(bench.get("easy_human_high_danger", 1.0)),
 		"hard_human_high_danger": float(bench.get("hard_human_high_danger", 1.0)),
 		"easy_human_avoidable_high_danger": float(bench.get("easy_human_avoidable_high_danger", 1.0)),
@@ -6528,6 +6634,10 @@ func ai_strength_pack_row(mode_name: String, seed_int: int, hands_per_diff: int,
 		"hard_discards": int(hard.get("discards", 0)),
 		"easy_high_danger_discards": int(easy.get("high_danger_discards", 0)),
 		"hard_high_danger_discards": int(hard.get("high_danger_discards", 0)),
+		"easy_avoidable_dangerous_discards": int(easy.get("avoidable_dangerous_discards", 0)),
+		"hard_avoidable_dangerous_discards": int(hard.get("avoidable_dangerous_discards", 0)),
+		"easy_avoidable_high_danger_discards": int(easy.get("avoidable_high_danger_discards", 0)),
+		"hard_avoidable_high_danger_discards": int(hard.get("avoidable_high_danger_discards", 0)),
 		"easy_human_high_danger_discards": int(easy.get("human_high_danger_discards", 0)),
 		"hard_human_high_danger_discards": int(hard.get("human_high_danger_discards", 0)),
 		"easy_human_avoidable_high_danger_discards": int(easy.get("human_avoidable_high_danger_discards", 0)),
@@ -6631,13 +6741,15 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	if not aggregate.is_empty():
 		lines.append("")
 		lines.append("## Aggregate Gate")
-		lines.append("- all rows: ok=%s finished=%s integrity=%s score=%s hd e/h=%.3f/%.3f humanHD raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f discards e/h=%d/%d" % [
+		lines.append("- all rows: ok=%s finished=%s integrity=%s score=%s hd raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f humanHD raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f discards e/h=%d/%d" % [
 			str(aggregate.get("commercial_strength_ok", false)),
 			str(aggregate.get("finished_all", false)),
 			str(aggregate.get("integrity_all", false)),
 			str(aggregate.get("score_conservation_all", false)),
 			float(aggregate.get("easy_high_danger", 1.0)),
 			float(aggregate.get("hard_high_danger", 1.0)),
+			float(aggregate.get("easy_avoidable_high_danger", 1.0)),
+			float(aggregate.get("hard_avoidable_high_danger", 1.0)),
 			float(aggregate.get("easy_human_high_danger", 1.0)),
 			float(aggregate.get("hard_human_high_danger", 1.0)),
 			float(aggregate.get("easy_human_avoidable_high_danger", 1.0)),
@@ -6651,13 +6763,15 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 		])
 	var fixed_aggregate: Dictionary = pack.get("fixed_aggregate", {})
 	if not fixed_aggregate.is_empty():
-		lines.append("- fixed only: ok=%s finished=%s integrity=%s score=%s hd e/h=%.3f/%.3f humanHD raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f" % [
+		lines.append("- fixed only: ok=%s finished=%s integrity=%s score=%s hd raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f humanHD raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f" % [
 			str(fixed_aggregate.get("commercial_strength_ok", false)),
 			str(fixed_aggregate.get("finished_all", false)),
 			str(fixed_aggregate.get("integrity_all", false)),
 			str(fixed_aggregate.get("score_conservation_all", false)),
 			float(fixed_aggregate.get("easy_high_danger", 1.0)),
 			float(fixed_aggregate.get("hard_high_danger", 1.0)),
+			float(fixed_aggregate.get("easy_avoidable_high_danger", 1.0)),
+			float(fixed_aggregate.get("hard_avoidable_high_danger", 1.0)),
 			float(fixed_aggregate.get("easy_human_high_danger", 1.0)),
 			float(fixed_aggregate.get("hard_human_high_danger", 1.0)),
 			float(fixed_aggregate.get("easy_human_avoidable_high_danger", 1.0)),
@@ -6672,13 +6786,15 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	for row in pack.get("fixed_rows", []):
 		if typeof(row) != TYPE_DICTIONARY:
 			continue
-		lines.append("- seed %s: ok=%s integrity=%s score=%s hd e/h=%.3f/%.3f humanHD raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
+		lines.append("- seed %s: ok=%s integrity=%s score=%s hd raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f humanHD raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
 			str(row.get("seed_base", 0)),
 			str(row.get("commercial_strength_ok", false)),
 			str(row.get("integrity_all", false)),
 			str(row.get("score_conservation_all", false)),
 			float(row.get("easy_high_danger", 1.0)),
 			float(row.get("hard_high_danger", 1.0)),
+			float(row.get("easy_avoidable_high_danger", 1.0)),
+			float(row.get("hard_avoidable_high_danger", 1.0)),
 			float(row.get("easy_human_high_danger", 1.0)),
 			float(row.get("hard_human_high_danger", 1.0)),
 			float(row.get("easy_human_avoidable_high_danger", 1.0)),
@@ -6693,13 +6809,15 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	if typeof(shuffled) == TYPE_DICTIONARY and not (shuffled as Dictionary).is_empty():
 		lines.append("")
 		lines.append("## Shuffled-profile sample")
-		lines.append("- seed %s: ok=%s integrity=%s score=%s hd e/h=%.3f/%.3f humanHD raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
+		lines.append("- seed %s: ok=%s integrity=%s score=%s hd raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f humanHD raw e/h=%.3f/%.3f avoid e/h=%.3f/%.3f di e/h=%.2f/%.2f humanRon e/h=%.2f/%.2f ms_h=%.0f" % [
 			str(shuffled.get("seed_base", 0)),
 			str(shuffled.get("commercial_strength_ok", false)),
 			str(shuffled.get("integrity_all", false)),
 			str(shuffled.get("score_conservation_all", false)),
 			float(shuffled.get("easy_high_danger", 1.0)),
 			float(shuffled.get("hard_high_danger", 1.0)),
+			float(shuffled.get("easy_avoidable_high_danger", 1.0)),
+			float(shuffled.get("hard_avoidable_high_danger", 1.0)),
 			float(shuffled.get("easy_human_high_danger", 1.0)),
 			float(shuffled.get("hard_human_high_danger", 1.0)),
 			float(shuffled.get("easy_human_avoidable_high_danger", 1.0)),
@@ -9557,7 +9675,7 @@ func draw_center(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
 	var center_shadow = make_soft_depth_panel(parent, rect_full(CENTER_PANEL_RECT.position.x + 0.008, CENTER_PANEL_RECT.position.y + 0.014, CENTER_PANEL_RECT.size.x + 0.010, CENTER_PANEL_RECT.size.y + 0.018), Color(0.0, 0.0, 0.0, 0.38), 22)
 	center_shadow.name = "CenterConsole3DCastShadow"
-	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color(0.10, 0.08, 0.05, 0.78), "ui_jade_reading_plate")
+	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color(0.10, 0.08, 0.05, 0.64), "ui_jade_reading_plate")
 	center.name = "CenterConsole3DShell"
 	parent.add_child(center)
 	center.clip_contents = true
@@ -9565,7 +9683,7 @@ func draw_center(parent: Control) -> void:
 	center_depth.name = "CenterConsole3DDepthEdge"
 	var center_top_light = make_soft_depth_panel(center, rect_full(0.080, 0.025, 0.920, 0.095), Color(1.0, 0.93, 0.58, 0.18), 999)
 	center_top_light.name = "CenterConsoleTopLight"
-	var center_compass = add_optional_gpt_illustration_texture(center, "center_wind_gpt_compass", rect_full(0.035, 0.025, 0.965, 0.975), 0.12, true)
+	var center_compass = add_optional_gpt_illustration_texture(center, "center_wind_gpt_compass", rect_full(0.035, 0.025, 0.965, 0.975), 0.07, true)
 	if center_compass != null:
 		center_compass.name = "CenterGPTCompassTexture"
 		center.move_child(center_compass, 0)
@@ -9597,8 +9715,11 @@ func draw_center(parent: Control) -> void:
 
 	# 风位标签
 	for i in range(4):
-		var wind_color = Color(0.86, 0.72, 0.42, 0.82) if i == get_current_seat() else Color(0.56, 0.50, 0.34, 0.52)
+		var wind_color = Color(0.86, 0.72, 0.42, 0.82) if i == get_current_seat() else Color(0.72, 0.67, 0.49, 0.80)
 		var wind = make_label(center, str(CENTER_WIND_LABELS[i]), 17, wind_color, true)
+		wind.name = "CenterWindLabel_%s" % str(CENTER_WIND_LABELS[i])
+		wind.add_theme_color_override("font_outline_color", Color(0.015, 0.028, 0.018, 0.90))
+		wind.add_theme_constant_override("outline_size", 1)
 		apply_rect(wind, CENTER_WIND_RECTS[i])
 
 	draw_center_dice_plate(center)
@@ -13126,7 +13247,7 @@ func draw_melds(parent: Control) -> void:
 			area = HBoxContainer.new()
 		area.name = "MeldArea_%d" % seat
 		configure_passive_container(area)
-		area.z_index = 6  # r449 above river bed, below river faces (8)
+		area.z_index = 10  # r453 keep meld faces above any same-pixel river fallback
 		area.add_theme_constant_override("separation", 3)
 		if area is BoxContainer:
 			(area as BoxContainer).alignment = BoxContainer.ALIGNMENT_BEGIN
@@ -15491,11 +15612,11 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		# Keep brocade present but dim enough for name/score text to remain readable.
 		# r450: warm lacquer boost — do not amplify green channel (v9 jade seats).
 		# r184: show denser brocade; keep text legible via name/score plates.
-		var seat_mod := Color(1.24, 1.12, 0.98, minf(0.82, seat_texture.modulate.a))
+		var seat_mod := Color(1.20, 1.10, 0.96, minf(0.58, seat_texture.modulate.a))
 		if side == "left" or side == "right":
-			seat_mod = Color(1.28, 1.14, 0.98, minf(0.78, seat_texture.modulate.a))
+			seat_mod = Color(1.22, 1.11, 0.96, minf(0.54, seat_texture.modulate.a))
 		elif not active:
-			seat_mod = Color(1.18, 1.08, 0.96, minf(0.72, seat_texture.modulate.a))
+			seat_mod = Color(1.16, 1.07, 0.94, minf(0.48, seat_texture.modulate.a))
 		seat_texture.modulate = seat_mod
 		panel.move_child(seat_texture, min(1, panel.get_child_count() - 1))
 	# Side seats get a soft fill light so inactive plaques stay lacquer, not charcoal.
@@ -17808,7 +17929,7 @@ func draw_table_living_illustration(parent: Control) -> Control:
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(layer)
-	layer.modulate = Color(1.0, 1.0, 1.0, 0.10)
+	layer.modulate = Color(1.0, 1.0, 1.0, 0.055)
 	draw_table_last_discard_ripple(layer)
 	return layer
 
@@ -30263,13 +30384,15 @@ func tile_art_alpha(tile: String, size: Vector2) -> float:
 	return 1.0
 
 func tile_texture_bleed(size: Vector2, lightweight_static_tile: bool) -> Vector2:
-	# r438: side-river weld a bit tighter at sep=0 without face overflow.
-	var expand_ratio := 0.138  # r452 denser river weld
-	if size.x >= 52.0:
+	# r453: keep compact river faces close to their authored porcelain edge while
+	# leaving a small dark gutter between adjacent grid cells. Hand tiles retain
+	# their fuller bleed because they are not lightweight static river faces.
+	var expand_ratio := 0.138
+	if lightweight_static_tile:
+		expand_ratio = 0.100 if size.x >= 52.0 else 0.075
+	elif size.x >= 52.0:
 		expand_ratio = 0.155
-	elif lightweight_static_tile:
-		expand_ratio = 0.125
-	var expand := Vector2(max(3.0, size.x * expand_ratio), max(3.0, size.y * expand_ratio))
+	var expand := Vector2(max(1.5, size.x * expand_ratio), max(1.5, size.y * expand_ratio))
 	return expand
 
 

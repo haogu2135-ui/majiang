@@ -841,6 +841,37 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 	var outer_rect = anchor_rect_in_parent(root_rect, scene.TABLE_OUTER_RECT)
 	var table_rect = anchor_rect_in_parent(outer_rect, scene.TABLE_INNER_RECT)
 	var center_rect = anchor_rect_in_parent(table_rect, scene.CENTER_PANEL_RECT)
+	var center_shell = scene.find_child("CenterConsole3DShell", true, false) as Control
+	check(center_shell != null, "battle screen exposes the center console shell at %s" % viewport_size)
+	if center_shell != null:
+		center_rect = screen_rect(center_shell)
+	var active_wind_luma := -1.0
+	var inactive_wind_luma_max := -1.0
+	var current_wind_seat := int(scene.get_current_seat())
+	for i in range(scene.CENTER_WIND_LABELS.size()):
+		var wind_text := str(scene.CENTER_WIND_LABELS[i])
+		var wind_label = scene.find_child("CenterWindLabel_%s" % wind_text, true, false) as Label
+		check(wind_label != null, "center wind label %s exists at %s" % [wind_text, viewport_size])
+		if wind_label == null:
+			continue
+		var expected_wind_rect: Rect2 = scene.CENTER_WIND_RECTS[i]
+		var actual_wind_rect := Rect2(
+			Vector2(wind_label.anchor_left, wind_label.anchor_top),
+			Vector2(wind_label.anchor_right, wind_label.anchor_bottom)
+		)
+		var wind_color = wind_label.get_theme_color("font_color")
+		var outline_color = wind_label.get_theme_color("font_outline_color")
+		check(wind_label.text == wind_text and wind_label.get_theme_font_size("font_size") == 17, "center wind label %s keeps stable text sizing at %s" % [wind_text, viewport_size])
+		check(actual_wind_rect.position.distance_to(expected_wind_rect.position) <= 0.001 and actual_wind_rect.size.distance_to(expected_wind_rect.size) <= 0.001, "center wind label %s keeps its compass anchor at %s" % [wind_text, viewport_size])
+		check(center_rect.grow(1.0).encloses(screen_rect(wind_label)), "center wind label %s stays inside the center console at %s" % [wind_text, viewport_size])
+		check(wind_label.get_theme_constant("outline_size") >= 1 and outline_color.a >= 0.89, "center wind label %s keeps a dark readability outline at %s" % [wind_text, viewport_size])
+		if i == current_wind_seat:
+			active_wind_luma = relative_luma(wind_color)
+			check(wind_color.a >= 0.81, "active center wind label remains fully legible at %s" % viewport_size)
+		else:
+			inactive_wind_luma_max = maxf(inactive_wind_luma_max, relative_luma(wind_color))
+			check(wind_color.a >= 0.80, "inactive center wind label %s remains legible at %s" % [wind_text, viewport_size])
+	check(active_wind_luma > inactive_wind_luma_max, "active center wind label remains brighter than inactive labels at %s" % viewport_size)
 	for i in range(discard_rects.size()):
 		check(not rects_overlap(discard_rects[i], center_rect), "battle discard zone %d clears the center panel at %s" % [i, viewport_size])
 		for j in range(i + 1, discard_rects.size()):

@@ -1314,7 +1314,7 @@ func draw_center(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
 	var center_shadow = make_soft_depth_panel(parent, rect_full(CENTER_PANEL_RECT.position.x + 0.008, CENTER_PANEL_RECT.position.y + 0.014, CENTER_PANEL_RECT.size.x + 0.010, CENTER_PANEL_RECT.size.y + 0.018), Color(0.0, 0.0, 0.0, 0.38), 22)
 	center_shadow.name = "CenterConsole3DCastShadow"
-	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color(0.10, 0.08, 0.05, 0.78), "ui_jade_reading_plate")
+	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color(0.10, 0.08, 0.05, 0.64), "ui_jade_reading_plate")
 	center.name = "CenterConsole3DShell"
 	parent.add_child(center)
 	center.clip_contents = true
@@ -1322,7 +1322,7 @@ func draw_center(parent: Control) -> void:
 	center_depth.name = "CenterConsole3DDepthEdge"
 	var center_top_light = make_soft_depth_panel(center, rect_full(0.080, 0.025, 0.920, 0.095), Color(1.0, 0.93, 0.58, 0.18), 999)
 	center_top_light.name = "CenterConsoleTopLight"
-	var center_compass = add_optional_gpt_illustration_texture(center, "center_wind_gpt_compass", rect_full(0.035, 0.025, 0.965, 0.975), 0.12, true)
+	var center_compass = add_optional_gpt_illustration_texture(center, "center_wind_gpt_compass", rect_full(0.035, 0.025, 0.965, 0.975), 0.07, true)
 	if center_compass != null:
 		center_compass.name = "CenterGPTCompassTexture"
 		center.move_child(center_compass, 0)
@@ -1354,8 +1354,11 @@ func draw_center(parent: Control) -> void:
 
 	# 风位标签
 	for i in range(4):
-		var wind_color = Color(0.86, 0.72, 0.42, 0.82) if i == get_current_seat() else Color(0.56, 0.50, 0.34, 0.52)
+		var wind_color = Color(0.86, 0.72, 0.42, 0.82) if i == get_current_seat() else Color(0.72, 0.67, 0.49, 0.80)
 		var wind = make_label(center, str(CENTER_WIND_LABELS[i]), 17, wind_color, true)
+		wind.name = "CenterWindLabel_%s" % str(CENTER_WIND_LABELS[i])
+		wind.add_theme_color_override("font_outline_color", Color(0.015, 0.028, 0.018, 0.90))
+		wind.add_theme_constant_override("outline_size", 1)
 		apply_rect(wind, CENTER_WIND_RECTS[i])
 
 	draw_center_dice_plate(center)
@@ -4883,7 +4886,7 @@ func draw_melds(parent: Control) -> void:
 			area = HBoxContainer.new()
 		area.name = "MeldArea_%d" % seat
 		configure_passive_container(area)
-		area.z_index = 6  # r449 above river bed, below river faces (8)
+		area.z_index = 10  # r453 keep meld faces above any same-pixel river fallback
 		area.add_theme_constant_override("separation", 3)
 		if area is BoxContainer:
 			(area as BoxContainer).alignment = BoxContainer.ALIGNMENT_BEGIN
@@ -7248,11 +7251,11 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		# Keep brocade present but dim enough for name/score text to remain readable.
 		# r450: warm lacquer boost — do not amplify green channel (v9 jade seats).
 		# r184: show denser brocade; keep text legible via name/score plates.
-		var seat_mod := Color(1.24, 1.12, 0.98, minf(0.82, seat_texture.modulate.a))
+		var seat_mod := Color(1.20, 1.10, 0.96, minf(0.58, seat_texture.modulate.a))
 		if side == "left" or side == "right":
-			seat_mod = Color(1.28, 1.14, 0.98, minf(0.78, seat_texture.modulate.a))
+			seat_mod = Color(1.22, 1.11, 0.96, minf(0.54, seat_texture.modulate.a))
 		elif not active:
-			seat_mod = Color(1.18, 1.08, 0.96, minf(0.72, seat_texture.modulate.a))
+			seat_mod = Color(1.16, 1.07, 0.94, minf(0.48, seat_texture.modulate.a))
 		seat_texture.modulate = seat_mod
 		panel.move_child(seat_texture, min(1, panel.get_child_count() - 1))
 	# Side seats get a soft fill light so inactive plaques stay lacquer, not charcoal.
@@ -9565,7 +9568,7 @@ func draw_table_living_illustration(parent: Control) -> Control:
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(layer)
-	layer.modulate = Color(1.0, 1.0, 1.0, 0.10)
+	layer.modulate = Color(1.0, 1.0, 1.0, 0.055)
 	draw_table_last_discard_ripple(layer)
 	return layer
 

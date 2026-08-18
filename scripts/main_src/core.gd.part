@@ -4730,13 +4730,15 @@ func tile_art_alpha(tile: String, size: Vector2) -> float:
 	return 1.0
 
 func tile_texture_bleed(size: Vector2, lightweight_static_tile: bool) -> Vector2:
-	# r438: side-river weld a bit tighter at sep=0 without face overflow.
-	var expand_ratio := 0.138  # r452 denser river weld
-	if size.x >= 52.0:
+	# r453: keep compact river faces close to their authored porcelain edge while
+	# leaving a small dark gutter between adjacent grid cells. Hand tiles retain
+	# their fuller bleed because they are not lightweight static river faces.
+	var expand_ratio := 0.138
+	if lightweight_static_tile:
+		expand_ratio = 0.100 if size.x >= 52.0 else 0.075
+	elif size.x >= 52.0:
 		expand_ratio = 0.155
-	elif lightweight_static_tile:
-		expand_ratio = 0.125
-	var expand := Vector2(max(3.0, size.x * expand_ratio), max(3.0, size.y * expand_ratio))
+	var expand := Vector2(max(1.5, size.x * expand_ratio), max(1.5, size.y * expand_ratio))
 	return expand
 
 

@@ -42,11 +42,13 @@ func run() -> void:
 	for row in pack.get("fixed_rows", []):
 		if typeof(row) != TYPE_DICTIONARY:
 			continue
-		print("    fixed seed=%s ok=%s hd=%.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f ms_h=%.0f" % [
+		print("    fixed seed=%s ok=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f ms_h=%.0f" % [
 			str(row.get("seed_base", 0)),
 			str(row.get("commercial_strength_ok", false)),
 			float(row.get("easy_high_danger", 1.0)),
 			float(row.get("hard_high_danger", 1.0)),
+			float(row.get("easy_avoidable_high_danger", 1.0)),
+			float(row.get("hard_avoidable_high_danger", 1.0)),
 			float(row.get("easy_human_high_danger", 1.0)),
 			float(row.get("hard_human_high_danger", 1.0)),
 			float(row.get("easy_deal_in", 1.0)),
@@ -55,11 +57,13 @@ func run() -> void:
 		])
 	var aggregate: Dictionary = pack.get("aggregate", {})
 	var fixed_aggregate: Dictionary = pack.get("fixed_aggregate", {})
-	print("    aggregate ok=%s fixed_ok=%s hd=%.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f humanRon=%.2f/%.2f paired=%s/%s" % [
+	print("    aggregate ok=%s fixed_ok=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f humanRon=%.2f/%.2f paired=%s/%s" % [
 		str(aggregate.get("commercial_strength_ok", false)),
 		str(fixed_aggregate.get("commercial_strength_ok", false)),
 		float(aggregate.get("easy_high_danger", 1.0)),
 		float(aggregate.get("hard_high_danger", 1.0)),
+		float(aggregate.get("easy_avoidable_high_danger", 1.0)),
+		float(aggregate.get("hard_avoidable_high_danger", 1.0)),
 		float(aggregate.get("easy_human_high_danger", 1.0)),
 		float(aggregate.get("hard_human_high_danger", 1.0)),
 		float(aggregate.get("easy_deal_in", 1.0)),
@@ -71,11 +75,13 @@ func run() -> void:
 	])
 	var shuffled: Dictionary = pack.get("shuffled_row", {})
 	if not shuffled.is_empty():
-		print("    shuffled seed=%s ok=%s hd=%.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f ms_h=%.0f" % [
+		print("    shuffled seed=%s ok=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f di=%.2f/%.2f ms_h=%.0f" % [
 			str(shuffled.get("seed_base", 0)),
 			str(shuffled.get("commercial_strength_ok", false)),
 			float(shuffled.get("easy_high_danger", 1.0)),
 			float(shuffled.get("hard_high_danger", 1.0)),
+			float(shuffled.get("easy_avoidable_high_danger", 1.0)),
+			float(shuffled.get("hard_avoidable_high_danger", 1.0)),
 			float(shuffled.get("easy_human_high_danger", 1.0)),
 			float(shuffled.get("hard_human_high_danger", 1.0)),
 			float(shuffled.get("easy_deal_in", 1.0)),
@@ -112,8 +118,10 @@ func run() -> void:
 	var md_text = FileAccess.get_file_as_string(md_path)
 	check(json_text.find("commercial_strength_ok") >= 0, "json evidence contains commercial gate field")
 	check(json_text.find("score_conservation_all") >= 0, "json evidence contains score-conservation field")
+	check(json_text.find("avoidable_high_danger") >= 0, "json evidence contains actionable all-opponent danger telemetry")
 	check(md_text.find("AI Commercial Strength Pack Latest") >= 0, "markdown evidence has title")
 	check(md_text.find("PASS") >= 0 or md_text.find("FAIL") >= 0, "markdown evidence reports gate result")
+	check(md_text.find("hd raw e/h=") >= 0 and md_text.find("avoid e/h=") >= 0, "markdown evidence reports raw and actionable all-opponent danger")
 
 	scene.enable_offline_all_bot_mode(false, false)
 	scene.queue_free()

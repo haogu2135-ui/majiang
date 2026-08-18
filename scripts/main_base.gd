@@ -726,7 +726,7 @@ const WALL_VISUAL_FULL_COUNT := 92
 const DISCARD_TILE_MAX_SIZE := Vector2(88, 116)  # r452 denser bottom/side porcelain cap
 const DISCARD_TILE_MIN_SIZE := Vector2(34, 46)  # r451 denser floor
 const DISCARD_TILE_ASPECT := 52.0 / 38.0
-const DISCARD_GRID_SEPARATION := 0  # r449 weld porcelain cells; bleed handles pad
+const DISCARD_GRID_SEPARATION := 2  # r453 tiny authored-face gutter keeps river cells legible
 const WALL_LAYOUTS := [
 	[Vector2(0.255, 0.050), Vector2(0.745, 0.095), 16, true],
 	[Vector2(0.255, 0.850), Vector2(0.745, 0.895), 16, true],
@@ -761,7 +761,7 @@ const CENTER_LAST_TILE_SIZE := Vector2(38, 52)
 const CENTER_WIND_RECTS := [
 	Rect2(Vector2(0.43, 0.05), Vector2(0.57, 0.22)),
 	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
-	Rect2(Vector2(0.43, 0.79), Vector2(0.57, 0.94)),
+	Rect2(Vector2(0.43, 0.74), Vector2(0.57, 1.00)),
 	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
 ]
 const CENTER_DICE_DOT_POINTS := [
