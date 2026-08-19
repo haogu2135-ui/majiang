@@ -649,6 +649,14 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		var summary_rect = screen_rect(summary)
 		var dock_rect = screen_rect(dock)
 		var hand_rect = screen_rect(hand)
+		for zone in scene.DISCARD_ZONES:
+			var discard_grid = scene.find_child("DiscardGrid_%d" % int(zone[0]), true, false) as Control
+			if discard_grid != null:
+				check(not rects_overlap(summary_rect, screen_rect(discard_grid)), "pending claim summary clears discard zone %d at %s" % [int(zone[0]), viewport_size])
+		for meld_layout in scene.MELD_LAYOUTS:
+			var meld_area = scene.find_child("MeldArea_%d" % int(meld_layout[0]), true, false) as Control
+			if meld_area != null:
+				check(not rects_overlap(summary_rect, screen_rect(meld_area)), "pending claim summary clears meld area %d at %s" % [int(meld_layout[0]), viewport_size])
 		check(summary_rect.size.y >= 44.0, "pending claim summary keeps at least 44px decision context height at %s" % viewport_size)
 		check(summary_rect.end.y <= dock_rect.position.y - 5.0, "pending claim summary clears action dock at %s" % viewport_size)
 		var horizontal_gap = maxf(0.0, maxf(dock_rect.position.x - summary_rect.end.x, summary_rect.position.x - dock_rect.end.x))
@@ -713,6 +721,14 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	var confirm_button = scene.find_child("DangerDiscardConfirmButton", true, false) as Button
 	var cancel_button = first_button_with_text(scene.action_bar, "取消")
 	check(panel != null and tile != null and title != null and detail != null and risk_seal != null and dock != null and confirm_button != null and cancel_button != null, "danger discard exposes warning context, target tile, explicit confirm/cancel actions, and dock at %s" % viewport_size)
+	var compact_danger_text = scene.pending_danger_discard_text()
+	var compact_alternatives = scene.safe_discard_alternative_text(scene.pending_danger_discard_tile)
+	check(not compact_danger_text.contains("..."), "danger discard compact status avoids ellipsis at %s" % viewport_size)
+	check(compact_danger_text.contains(scene.tile_label(scene.pending_danger_discard_tile)) and compact_danger_text.contains("高危"), "danger discard compact status keeps target and risk at %s" % viewport_size)
+	if compact_alternatives != "":
+		check(compact_danger_text.contains("可改打"), "danger discard compact status keeps alternative action at %s" % viewport_size)
+	var hud_danger_text = scene.top_hud_status_text()
+	check(hud_danger_text.contains("风险确认") and hud_danger_text.contains(scene.tile_label(scene.pending_danger_discard_tile)) and hud_danger_text != compact_danger_text, "danger discard top HUD uses a distinct complete event summary at %s" % viewport_size)
 	if panel == null:
 		return
 	var panel_rect = screen_rect(panel)

@@ -111,7 +111,7 @@ func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 	var flash = make_fullrect_overlay(Color(1.0, 0.92, 0.55, 0.0), "ui_soft_flash")
 	panel.add_child(flash)
 
-	var flash_tween := create_tween()
+	var flash_tween := create_screen_tween()
 	flash_tween.tween_property(flash, "modulate:a", 0.3, 0.15)
 	flash_tween.tween_property(flash, "modulate:a", 0.0, 0.3)
 	flash_tween.tween_callback(Callable(self, "queue_free_node_by_id").bind(flash.get_instance_id()))
@@ -132,7 +132,7 @@ func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 		var distance = randf_range(80, 200)
 		var target_pos = particle.position + Vector2(cos(angle), sin(angle)) * distance
 
-		var particle_tween := create_tween()
+		var particle_tween := create_screen_tween()
 		particle_tween.set_parallel(true)
 		particle_tween.tween_property(particle, "position", target_pos, 0.6).set_ease(Tween.EASE_OUT)
 		particle_tween.tween_property(particle, "modulate:a", 0.0, 0.6).from(1.0)
@@ -353,11 +353,11 @@ func hide_exit_confirm() -> void:
 	var panel_id = panel.get_instance_id()
 	var dialog = panel.find_child("ExitConfirmDialog", true, false)
 	if fx_enabled_effective() and dialog != null and is_instance_valid(dialog):
-		var d_tw := create_tween()
+		var d_tw := create_screen_tween()
 		d_tw.set_parallel(true)
 		d_tw.tween_property(dialog, "scale", Vector2(0.8, 0.8), 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		d_tw.tween_property(dialog, "modulate:a", 0.0, 0.12)
-	var tween = create_tween()
+	var tween = create_screen_tween()
 	tween.tween_property(panel, "modulate:a", 0.0, 0.15)
 	tween.tween_callback(Callable(self, "queue_free_node_by_id").bind(panel_id))
 
@@ -443,7 +443,7 @@ func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed:
 		wash.scale = Vector2(0.96, 0.92)
 		bloom.scale = Vector2(0.84, 0.84)
 		seal.scale = Vector2(0.86, 0.86)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.bind_node(feedback)
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 0.98, 0.06).from(0.0)
@@ -514,7 +514,7 @@ func play_lobby_action_press_feedback(button: Button, text: String, color: Color
 		wash.scale = Vector2(0.92, 0.90)
 		glow.scale = Vector2(0.78, 0.78)
 		seal.scale = Vector2(0.86, 0.86)
-		var simple_press_tw := create_tween()
+		var simple_press_tw := create_screen_tween()
 		simple_press_tw.bind_node(feedback)
 		simple_press_tw.set_parallel(true)
 		simple_press_tw.tween_property(feedback, "modulate:a", 0.92, 0.06).from(0.0)
@@ -929,7 +929,7 @@ func play_settings_close_button_feedback(button: Button) -> void:
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(1.0).set_delay(0.06)
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
@@ -991,7 +991,7 @@ func play_settings_action_feedback(button: Button, role: String, color: Color) -
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(1.0).set_delay(0.07)
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
@@ -1044,7 +1044,7 @@ func play_reset_progress_button_feedback(button: Button, armed: bool) -> void:
 		feedback.add_child(lock)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0 if armed else 0.680, 0.15).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -1473,9 +1473,7 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 		selected_separation = separation
 		selected_width = candidate_width
 		# Prefer readable spacing (not welded) while keeping touch width.
-		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and separation >= 4 and gap_width >= 6.0:
-			break
-		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and separation >= 4:
+		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and gap_width >= 4.0:
 			break
 	var tile_width = min(HAND_TILE_MAX_WIDTH, floor(max(1.0, selected_width)))
 	var tile_height = floor(tile_width * HAND_TILE_ASPECT)
@@ -1673,7 +1671,7 @@ func play_voice_button_press_feedback(button: Button, active: bool, peak: float 
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.990, 0.14).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -1765,6 +1763,11 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	var dock_rect = action_bar_dock_layout_rect()
 	if mode == "offline" and has_pending_danger_discard():
 		return dock_rect
+	if mode == "offline" and offline_phase == "pending_claim":
+		# Pending claims use a reserved two-row lane. Keeping its physical shell
+		# fixed prevents wide viewports from pushing the context panel into a
+		# gap beside the right river.
+		return dock_rect
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_count(count, separation)
 	var dock_pixels = float(count) * width + float(max(0, count - 1) * separation) + 24.0
@@ -1777,6 +1780,49 @@ func action_bar_layout_rect() -> Rect2:
 	if mode == "offline" and offline_phase == "pending_claim":
 		return PENDING_CLAIM_ACTION_BAR_RECT
 	return ACTION_BAR_RECT
+
+func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
+	# Keep the response context in the root-layer lane between the transformed
+	# side rivers. Its lower edge also stays above the transformed bottom river
+	# and the action dock, so this remains valid when table chrome is nested.
+	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
+	var safe_width = maxf(1.0, resolved_size.x)
+	var safe_height = maxf(1.0, resolved_size.y)
+	var outer_width = maxf(0.001, TABLE_OUTER_RECT.size.x - TABLE_OUTER_RECT.position.x)
+	var outer_height = maxf(0.001, TABLE_OUTER_RECT.size.y - TABLE_OUTER_RECT.position.y)
+	var table_left = TABLE_OUTER_RECT.position.x + TABLE_INNER_RECT.position.x * outer_width
+	var table_top = TABLE_OUTER_RECT.position.y + TABLE_INNER_RECT.position.y * outer_height
+	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
+	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
+	var left_river = seat_discard_rect(3)
+	var right_river = seat_discard_rect(1)
+	var bottom_river = seat_discard_rect(0)
+	var lane_gap_x = 8.0 / safe_width
+	var lane_left = table_left + left_river.size.x * table_width + lane_gap_x
+	var lane_right = table_left + right_river.position.x * table_width - lane_gap_x
+	var lane_width = maxf(0.12, lane_right - lane_left)
+	var panel_width_px = clampf(safe_width * 0.270, 240.0, 320.0)
+	var panel_width = minf(panel_width_px / safe_width, lane_width)
+	var dock_rect = action_dock_rect_for_count(action_bar_button_count())
+	var dock_left = dock_rect.position.x
+	var centered_panel_x = (lane_left + lane_right) * 0.5
+	var dock_aligned_panel_x = dock_left - panel_width * 0.5
+	var panel_center_x = clampf(dock_aligned_panel_x, lane_left + panel_width * 0.5, lane_right - panel_width * 0.5)
+	if panel_center_x <= lane_left or panel_center_x >= lane_right:
+		panel_center_x = centered_panel_x
+	var panel_height_px = clampf(safe_height * 0.082, 48.0, 58.0)
+	var panel_height = minf(panel_height_px / safe_height, 0.105)
+	var lane_gap_y = 8.0 / safe_height
+	var bottom_river_top = table_top + bottom_river.position.y * table_height
+	var dock_top = dock_rect.position.y
+	var panel_bottom = minf(bottom_river_top - lane_gap_y, dock_top - lane_gap_y)
+	var panel_top = panel_bottom - panel_height
+	return rect_full(
+		panel_center_x - panel_width * 0.5,
+		panel_top,
+		panel_center_x + panel_width * 0.5,
+		panel_bottom
+	)
 
 func action_bar_dock_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
@@ -1809,7 +1855,7 @@ func finalize_action_bar_layout() -> void:
 				child.pivot_offset = Vector2(width * 0.5, height * 0.5)
 				child.scale = Vector2(0.7, 0.7)
 				child.modulate = Color(1, 1, 1, 0)
-				var btw := create_tween()
+				var btw := create_screen_tween()
 				btw.set_parallel(true)
 				btw.tween_property(child, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 				btw.tween_property(child, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
@@ -2072,7 +2118,7 @@ func ensure_update_dialog() -> void:
 		update_dialog.modulate.a = 0.0
 		panel.pivot_offset = panel.size * 0.5
 		panel.scale = Vector2(0.8, 0.8)
-		var entry_tw := create_tween()
+		var entry_tw := create_screen_tween()
 		entry_tw.set_parallel(true)
 		entry_tw.tween_property(update_dialog, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
 		entry_tw.tween_property(panel, "scale", Vector2.ONE, 0.3).from(Vector2(0.8, 0.8)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -2081,7 +2127,7 @@ func ensure_update_dialog() -> void:
 		package_texture.name = "UpdatePackageTexture"
 		panel.move_child(package_texture, 0)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var package_tw := create_tween()
+			var package_tw := create_screen_tween()
 			package_tw.set_loops(48)
 			package_tw.tween_property(package_texture, "modulate:a", 0.09, 1.4).from(0.18)
 			package_tw.tween_property(package_texture, "modulate:a", 0.18, 1.4).from(0.09)
@@ -2174,7 +2220,7 @@ func play_update_dialog_button_feedback(button: Button, role: String, color: Col
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0, 0.15).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -3108,12 +3154,15 @@ func pending_danger_discard_text() -> String:
 		return current_status_text()
 	var report = pending_danger_discard_report if not pending_danger_discard_report.is_empty() else discard_report_for_tile(pending_danger_discard_tile)
 	var alternatives = safe_discard_alternative_text(pending_danger_discard_tile)
-	var details = discard_safety_text(report) if not report.is_empty() else "风险高"
-	return "高危：再点确认打出%s · %s%s" % [
-		tile_label(pending_danger_discard_tile),
-		details,
-		" · 可改打" + alternatives if alternatives != "" else "",
+	var source = report.get("danger_source", {}) if typeof(report) == TYPE_DICTIONARY else {}
+	var reason = str(source.get("reason", "牌路危险")) if typeof(source) == TYPE_DICTIONARY else "牌路危险"
+	var parts: Array[String] = [
+		"高危：%s" % tile_label(pending_danger_discard_tile),
+		reason,
 	]
+	if alternatives != "":
+		parts.append("可改打%s" % alternatives)
+	return " · ".join(parts)
 
 func safe_discard_alternative_text(excluded_tile: String, limit: int = 2) -> String:
 	var text := ""
@@ -4781,7 +4830,7 @@ func play_action_button_press_feedback(button: Button, role: String, color: Colo
 	apply_rect(seal, rect_full(0.785, 0.185, 0.940, 0.470))
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.990, 0.14).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -5086,7 +5135,7 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 		var angle = randf() * TAU
 		var dist = randf_range(18.0, 42.0)
 		var target_pos = tile_center + Vector2(cos(angle), sin(angle)) * dist
-		var sp_tw := create_tween()
+		var sp_tw := create_screen_tween()
 		sp_tw.set_parallel(true)
 		sp_tw.tween_property(sp, "position", target_pos, 0.32).set_delay(randf_range(0.0, 0.1)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		sp_tw.tween_property(dot, "modulate:a", 0.0, 0.30).from(1.0).set_delay(randf_range(0.0, 0.1))
@@ -5169,7 +5218,7 @@ func spawn_transition_complete_sparks() -> void:
 		var vp_size = get_viewport().size
 		p.position = Vector2(randf_range(0.25, 0.75) * vp_size.x, randf_range(0.30, 0.70) * vp_size.y)
 		fx_layer.add_child(p)
-		var ptw := create_tween()
+		var ptw := create_screen_tween()
 		ptw.set_parallel(true)
 		var p_angle = randf() * TAU
 		var p_dist = randf_range(35.0, 90.0)
@@ -5253,7 +5302,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				ink_art.add_child(ink_tick)
 				ink_ticks.append(ink_tick)
 			var ink_dur := 0.30
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			transition_tween = tw
 			transition_active = true
 			# 笔触横扫
@@ -5329,10 +5378,10 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				var route_tick = make_layout_host(rect_full(left_frac + 0.070, 0.875, left_frac + 0.088, 0.930))
 				route_tick.name = "CurtainCloseTick_%d" % i
 				strip_container.add_child(route_tick)
-				var s_tw := create_tween()
+				var s_tw := create_screen_tween()
 				s_tw.tween_property(strip, "anchor_top", 0.0, 0.25).from(-1.0).set_delay(float(i) * 0.04).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 				s_tw.parallel().tween_property(strip, "anchor_bottom", 1.0, 0.25).from(-0.5).set_delay(float(i) * 0.04)
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			transition_tween = tw
 			transition_active = true
 			tw.tween_callback(func() -> void:
@@ -5340,7 +5389,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 			).set_delay(0.28)
 			tw.tween_callback(func() -> void:
 				for child in strip_container.get_children():
-					var c_tw := create_tween()
+					var c_tw := create_screen_tween()
 					c_tw.tween_property(child, "anchor_top", -1.0, 0.20).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 					c_tw.parallel().tween_property(child, "anchor_bottom", -0.5, 0.20).from(1.0)
 			).set_delay(0.35)
@@ -5362,7 +5411,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				dissolve_mat.set_shader_parameter("edge_softness", 0.08)
 				dissolve_mat.set_shader_parameter("swirl_strength", 0.6)
 				dissolve_rect.material = dissolve_mat
-				var tw := create_tween()
+				var tw := create_screen_tween()
 				transition_tween = tw
 				transition_active = true
 				tw.tween_method(func(val: float) -> void:
@@ -5407,7 +5456,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				var tick = make_layout_host(rect_full(0.405 + float(i) * 0.070, 0.475, 0.423 + float(i) * 0.070, 0.550))
 				tick.name = "FadeTransitionTick_%d" % i
 				fade_art.add_child(tick)
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			transition_tween = tw
 			transition_active = true
 			tw.tween_property(transition_overlay, "modulate:a", 0.92, half_dur).from(0.0)
@@ -5492,7 +5541,7 @@ func play_after_gang_replacement_draw_fx(seat: int, tile: String = "") -> Contro
 	fx_burst_root.visible = true
 	if DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(art, "modulate:a", 1.0, 0.08).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.22).from(0.060).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -5566,7 +5615,7 @@ func play_wall_draw_resolution_fx(dealer: int) -> Control:
 	fx_burst_root.visible = true
 	if DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(art, "modulate:a", 1.0, 0.08).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.22).from(0.060).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -5627,7 +5676,7 @@ func play_toast_entry_feedback(toast_bg: Control, accent: Color) -> Control:
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.16).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -5741,7 +5790,7 @@ func play_secondary_back_press_feedback(button: Button, screen_id: String, color
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.15).from(0.150).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -5781,6 +5830,8 @@ func current_status_text() -> String:
 # 顶部栏状态：以「事件」视角描述局势，避免与手牌托盘的「行动」提示重复同一句话。
 func top_hud_status_text() -> String:
 	if mode == "offline":
+		if has_pending_danger_discard():
+			return "风险确认·%s" % tile_label(pending_danger_discard_tile)
 		if offline_phase == "pending_claim":
 			var claim_seat = int(offline_pending_claim.get("from_seat", -1))
 			var claim_tile = tile_label(str(offline_pending_claim.get("tile", "")))
@@ -6122,7 +6173,7 @@ func play_shop_buy_button_feedback(button: Button, affordable: bool) -> void:
 		feedback.add_child(lock)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0 if affordable else 0.520, 0.15).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -6167,19 +6218,19 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 	flash.name = "ShopPurchaseSuccessFlash"
 	feedback.add_child(flash)
 
-	var flash_tween := create_tween()
+	var flash_tween := create_screen_tween()
 	flash_tween.tween_property(flash, "modulate:a", 0.3, 0.15)
 	flash_tween.tween_property(flash, "modulate:a", 0.0, 0.3)
 	flash_tween.tween_callback(Callable(self, "queue_free_node_by_id").bind(flash.get_instance_id()))
 
 	# 边框高亮 - 增强为更明显的发光
-	var highlight_tween := create_tween()
+	var highlight_tween := create_screen_tween()
 	highlight_tween.tween_property(row, "modulate", Color(1.25, 1.22, 1.18, 1.0), 0.15)
 	highlight_tween.tween_property(row, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.3)
 
 	# 金币粒子飞溅 - 从行中心向四周散开
 	if fx_enabled_effective() and is_instance_valid(row):
-		var route_tw := create_tween()
+		var route_tw := create_screen_tween()
 		route_tw.set_parallel(true)
 		route_tw.tween_property(fill, "anchor_right", 1.0, 0.24).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		route_tw.tween_property(gate, "scale", Vector2(1.12, 1.12), 0.18).from(Vector2(0.86, 0.86)).set_ease(Tween.EASE_OUT)
@@ -6198,7 +6249,7 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 			var angle := float(i) * TAU / 10.0 + randf() * 0.3
 			var dist := 40.0 + randf() * 50.0
 			var target_pos: Vector2 = center + Vector2(cos(angle), sin(angle)) * dist - Vector2(psize * 0.5, psize * 0.5)
-			var p_tw := create_tween()
+			var p_tw := create_screen_tween()
 			p_tw.set_parallel(true)
 			p_tw.tween_property(particle, "position", target_pos, 0.6).set_ease(Tween.EASE_OUT)
 			p_tw.tween_property(particle, "modulate:a", 0.0, 0.6).set_ease(Tween.EASE_IN)
@@ -6259,7 +6310,7 @@ func play_chat_send_panel_feedback(message: String = "") -> Control:
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.08).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0, 0.20).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -6383,7 +6434,7 @@ func play_pending_claim_choice_confirmation_fx(claim: String, from_seat: int, ti
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(route_fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(gate, "scale", Vector2(1.08, 1.08), 0.16).from(Vector2(0.82, 0.82)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -6454,7 +6505,7 @@ func play_human_action_choice_confirmation_fx(action: String, tile: String) -> C
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(gate, "scale", Vector2(1.08, 1.08), 0.16).from(Vector2(0.82, 0.82)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -6531,7 +6582,7 @@ func play_ai_claim_choice_confirmation_fx(seat: int, from_seat: int, tile: Strin
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(gate, "scale", Vector2(1.08, 1.08), 0.16).from(Vector2(0.82, 0.82)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -6608,7 +6659,7 @@ func play_rob_gang_warning_fx(gang_seat: int, winner_seat: int, tile: String) ->
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(intercept, "scale", Vector2(1.22, 1.22), 0.16).from(Vector2(0.78, 0.78)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -6678,7 +6729,7 @@ func play_next_hand_transition_fx(previous_dealer: int, next_dealer: int, repeat
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(dealer_gate, "scale", Vector2(1.08, 1.08), 0.16).from(Vector2(0.82, 0.82)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -6800,7 +6851,7 @@ func _play_screen_shake(amplitude: float, frequency: float, duration: float) -> 
 		return
 
 	var shake_count = int(duration * frequency)
-	var tw := create_tween()
+	var tw := create_screen_tween()
 
 	for i in range(shake_count):
 		var progress = float(i) / float(shake_count)
@@ -6887,7 +6938,7 @@ func play_button_press_animation(button: Button, scale_amount: float = 0.92) -> 
 		tick.name = "ButtonPressFeedbackTick_%d" % i
 		feedback.add_child(tick)
 
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	tw.set_parallel(true)
 	tw.tween_property(button, "scale", Vector2(scale_amount, scale_amount), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_property(fill, "modulate:a", 0.18, 0.08).from(1.0)
@@ -7288,7 +7339,7 @@ func _play_golden_rain(parent: Control, duration: float, intensity: float = 1.0)
 		parent.add_child(drop)
 		var fall_dur := randf_range(0.6, 1.4)
 		var delay := randf_range(0.0, duration * 0.6)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(drop, "position:y", viewport_size.y + 20.0, fall_dur).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tw.tween_property(drop, "position:x", drop.position.x + randf_range(-20.0, 20.0), fall_dur).set_delay(delay)
@@ -7316,7 +7367,7 @@ func _play_calligraphy_reveal(parent: Control, text: String, color: Color, rect:
 	var mask = make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
 	mask.set_anchors_preset(Control.PRESET_FULL_RECT)
 	clip.add_child(mask)
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	tw.tween_property(label, "modulate:a", 1.0, 0.3).from(0.0)
 	tw.parallel().tween_property(label, "position:y", 0.0, 0.5).from(12.0).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	# 笔触墨痕装饰 — GPT soft flash (no StyleBox paint)
@@ -7328,7 +7379,7 @@ func _play_calligraphy_reveal(parent: Control, text: String, color: Color, rect:
 	stroke.offset_top = -6
 	stroke.offset_bottom = -3
 	container.add_child(stroke)
-	var stroke_tw := create_tween()
+	var stroke_tw := create_screen_tween()
 	stroke_tw.tween_property(stroke, "scale:x", 1.0, 0.6).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_delay(0.2)
 	return container
 
@@ -7356,7 +7407,7 @@ func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
 		splash_root.add_child(splat)
 		var angle := randf() * TAU
 		var dist := randf_range(12.0, 40.0)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(splat, "position", target_pos + Vector2(cos(angle), sin(angle)) * dist, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(splat, "scale", Vector2(1.3, 1.3), 0.15).from(Vector2(0.3, 0.3))
@@ -7368,12 +7419,12 @@ func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
 	ink_ring.position = target_pos - Vector2(5, 5)
 	splash_root.add_child(ink_ring)
 	ensure_fx_ring_gpt_plate(ink_ring, Color(color.r * 0.2, color.g * 0.2, color.b * 0.2, 0.5), 0.45)
-	var ring_tw := create_tween()
+	var ring_tw := create_screen_tween()
 	ring_tw.set_parallel(true)
 	ring_tw.tween_property(ink_ring, "custom_minimum_size", Vector2(60, 60), 0.4).from(Vector2(10, 10)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	ring_tw.tween_property(ink_ring, "position", target_pos - Vector2(30, 30), 0.4).from(target_pos - Vector2(5, 5))
 	ring_tw.tween_property(ink_ring, "modulate:a", 0.0, 0.4).from(1.0)
-	var cleanup := create_tween()
+	var cleanup := create_screen_tween()
 	cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(splash_root.get_instance_id())).set_delay(0.6)
 
 # ============================================================

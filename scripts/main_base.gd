@@ -677,6 +677,7 @@ var transition_overlay: Control
 var transition_tween: Tween
 var transition_pending_callback: Callable
 var transition_active := false
+var screen_tweens: Array[Tween] = []
 var toast_container: Control
 var toast_tween: Tween
 var toast_current: Control
@@ -737,10 +738,10 @@ const DISCARD_ZONES := [
 	# Four independent rivers form a clean ring around the center panel. Horizontal
 	# seats keep two dense rows; side seats use four columns without crossing into
 	# the top/bottom rivers or covering the center decision surface.
-	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.715, 0.875)), 8],
+	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.630, 0.875)), 8],
 	[2, Rect2(Vector2(0.285, 0.100), Vector2(0.715, 0.325)), 8],
-	[3, Rect2(Vector2(0.100, 0.325), Vector2(0.280, 0.675)), 4],
-	[1, Rect2(Vector2(0.720, 0.325), Vector2(0.900, 0.675)), 4],
+	[3, Rect2(Vector2(0.100, 0.325), Vector2(0.280, 0.590)), 4],
+	[1, Rect2(Vector2(0.720, 0.325), Vector2(0.900, 0.590)), 4],
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
@@ -832,7 +833,7 @@ const HAND_LAYOUT_CANDIDATES := [
 	[6.0, 4],
 	[4.0, 4],
 	[3.0, 3],
-	[0.0, 3],
+	[4.0, 3],
 ]
 const ACTION_BUTTON_MAX_WIDTH := 72.0
 const ACTION_BUTTON_MIN_TOUCH_WIDTH := 50.0
@@ -840,8 +841,8 @@ const PENDING_CLAIM_BUTTON_MIN_WIDTH := 55.0
 const ACTION_BUTTON_HEIGHT := 44.0
 const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const ACTION_BAR_RECT := Rect2(Vector2(0.534, 0.698), Vector2(0.960, 0.782))
-const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.620, 0.588), Vector2(0.972, 0.790))
-const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.960, 0.790))
+const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.632, 0.588), Vector2(0.972, 0.790))
+const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.972, 0.790))
 const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
 const TOP_HUD_BUTTON_SIZE := Vector2(56, 38)
@@ -1044,21 +1045,38 @@ const AMBIENT_RAINDROP_COUNT := 28
 const AMBIENT_FIREWORK_COUNT := 6
 
 # ===== Shared UI helpers =====
+func create_screen_tween() -> Tween:
+	var tween := create_tween()
+	screen_tweens.append(tween)
+	tween.finished.connect(Callable(self, "_forget_screen_tween").bind(tween))
+	return tween
+
+func _forget_screen_tween(tween: Tween) -> void:
+	var index := screen_tweens.find(tween)
+	if index >= 0:
+		screen_tweens.remove_at(index)
+
+func clear_screen_tweens() -> void:
+	for tween in screen_tweens:
+		if tween != null and is_instance_valid(tween):
+			tween.kill()
+	screen_tweens.clear()
+
 func add_background(parent: Control) -> void:
 	var bg = TextureRect.new()
 	bg.texture = wood_texture
 	bg.stretch_mode = TextureRect.STRETCH_SCALE
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.modulate = Color(0.86, 0.78, 0.62, 0.82)
+	bg.modulate = Color(0.86, 0.78, 0.62, 0.30)
 	parent.add_child(bg)
-	var paper_wash = make_fullrect_overlay(Color(0.54, 0.42, 0.25, 0.15), "ui_jade_reading_plate")  # r181 denser paper wash
+	var paper_wash = make_fullrect_overlay(Color(0.54, 0.42, 0.25, 0.025), "ui_jade_reading_plate")
 	paper_wash.name = "GuofengWarmPaperWash"
 	parent.add_child(paper_wash)
-	var hero_wash = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.075, false)
+	var hero_wash = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.012, false)
 	if hero_wash != null:
 		hero_wash.name = "GuofengPaperSceneryBackdrop"
-	var tint = make_fullrect_overlay(Color(0.070, 0.062, 0.046, 0.600), "ui_dark_scrim")
+	var tint = make_fullrect_overlay(Color(0.070, 0.062, 0.046, 0.48), "ui_dark_scrim")
 	tint.name = "GuofengWarmDimTint"
 	parent.add_child(tint)
 	# Edge wash via GPT plates only — no program ColorRect slabs.
@@ -1070,7 +1088,7 @@ func add_background(parent: Control) -> void:
 func add_menu_background(parent: Control) -> void:
 	# The menu owns one full-screen scene in draw_menu_primary_3d_stage(). Keep
 	# only a single GPT scrim underneath it so fallback/loading frames stay clean.
-	var scrim = make_fullrect_overlay(Color(0.012, 0.020, 0.018, 0.94), "ui_dark_scrim")
+	var scrim = make_fullrect_overlay(Color(0.012, 0.020, 0.018, 0.52), "ui_dark_scrim")
 	scrim.name = "MenuBackgroundReadabilityScrim"
 	parent.add_child(scrim)
 
@@ -1088,12 +1106,12 @@ func add_battle_background(parent: Control) -> void:
 	parent.add_child(base)
 
 	# Single full-screen guofeng room plate (table_gpt_backdrop). Do not stack a second photo.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.92, false)
+	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.44, false)
 	if battle_scene != null:
 		battle_scene.name = "OfflineBattleGuofengBackdrop"
 	else:
 		# Fallback to menu hero scenery if table plate missing.
-		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.78, false)
+		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.36, false)
 		if garden_scene != null:
 			garden_scene.name = "OfflineBattleGuofengBackdrop"
 		else:
@@ -1102,7 +1120,7 @@ func add_battle_background(parent: Control) -> void:
 				fallback_wash.name = "OfflineBattleInkWashBackdrop"
 
 	# Light vignette only — keep guofeng art visible while protecting tile contrast.
-	var readability_tint = make_fullrect_overlay(Color(0.008, 0.014, 0.012, 0.18), "ui_dark_scrim")
+	var readability_tint = make_fullrect_overlay(Color(0.008, 0.014, 0.012, 0.54), "ui_dark_scrim")
 	readability_tint.name = "OfflineBattleReadabilityTint"
 	parent.add_child(readability_tint)
 	# Soft edge falloff via GPT plates — no program ColorRect green slabs.

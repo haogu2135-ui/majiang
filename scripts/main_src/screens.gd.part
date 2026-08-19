@@ -67,7 +67,7 @@ func _show_achievements_screen_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 18.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_top", 0.0, 0.26).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -190,7 +190,7 @@ func _show_menu_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		header.modulate = Color(1, 1, 1, 0)
 		header.offset_top = -14.0
-		var h_tw := create_tween()
+		var h_tw := create_screen_tween()
 		h_tw.set_parallel(true)
 		h_tw.tween_property(header, "modulate:a", 1.0, 0.30).from(0.0).set_ease(Tween.EASE_OUT)
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -258,7 +258,7 @@ func _show_menu_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		footer.modulate = Color(1, 1, 1, 0)
 		footer.offset_top = 12.0
-		var footer_tw := create_tween()
+		var footer_tw := create_screen_tween()
 		footer_tw.set_parallel(true)
 		footer_tw.tween_property(footer, "modulate:a", 1.0, 0.28).from(0.0).set_delay(0.18).set_ease(Tween.EASE_OUT)
 		footer_tw.tween_property(footer, "offset_top", 0.0, 0.28).from(12.0).set_delay(0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -313,13 +313,13 @@ func _show_menu_impl() -> void:
 		if header != null:
 			header.modulate.a = 0.0
 			header.offset_top = 12.0
-			var h_tw := create_tween()
+			var h_tw := create_screen_tween()
 			h_tw.tween_property(header, "modulate:a", 1.0, 0.22).from(0.0).set_ease(Tween.EASE_OUT)
 			h_tw.parallel().tween_property(header, "offset_top", 0.0, 0.22).from(12.0).set_ease(Tween.EASE_OUT)
 		if footer != null:
 			footer.modulate.a = 0.0
 			footer.offset_top = 8.0
-			var f_tw := create_tween()
+			var f_tw := create_screen_tween()
 			f_tw.tween_property(footer, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
 			f_tw.parallel().tween_property(footer, "offset_top", 0.0, 0.22).from(8.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
 
@@ -533,7 +533,7 @@ func _show_online_lobby_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		form_panel.modulate = Color(1, 1, 1, 0)
 		form_panel.offset_left = -16.0
-		var ftw := create_tween()
+		var ftw := create_screen_tween()
 		ftw.set_parallel(true)
 		ftw.tween_property(form_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT)
 		ftw.tween_property(form_panel, "offset_left", 0.0, 0.28).from(-16.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -557,7 +557,7 @@ func _show_online_lobby_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		log_panel.modulate = Color(1, 1, 1, 0)
 		log_panel.offset_left = 18.0
-		var tw_log := create_tween()
+		var tw_log := create_screen_tween()
 		tw_log.set_parallel(true)
 		tw_log.tween_property(log_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT).set_delay(0.12)
 		tw_log.tween_property(log_panel, "offset_left", 0.0, 0.28).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD).set_delay(0.12)
@@ -698,7 +698,7 @@ func _show_rules_screen_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_right = -22.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_right", 0.0, 0.26).from(-22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -949,7 +949,7 @@ func _show_shop_screen_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_left = 22.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_left", 0.0, 0.26).from(22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -1090,7 +1090,7 @@ func _show_shop_screen_impl() -> void:
 			var item_index = int(ITEM_TYPES.keys().find(item_id))
 			row.modulate = Color(1, 1, 1, 0)
 			row.offset_left = 14.0
-			var r_tw := create_tween()
+			var r_tw := create_screen_tween()
 			r_tw.set_parallel(true)
 			r_tw.tween_property(row, "modulate:a", 1.0, 0.22).from(0.0).set_delay(float(item_index) * 0.06).set_ease(Tween.EASE_OUT)
 			r_tw.tween_property(row, "offset_left", 0.0, 0.22).from(14.0).set_delay(float(item_index) * 0.06).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -1240,7 +1240,7 @@ func _show_shop_screen_impl() -> void:
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.scale = Vector2(0.95, 0.95)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.95, 0.95)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -1313,7 +1313,7 @@ func _show_stats_screen_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 18.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_top", 0.0, 0.26).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -1765,7 +1765,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.scale = Vector2(0.85, 0.85)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.3).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.3).from(Vector2(0.85, 0.85)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -1829,9 +1829,9 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		bg.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 20.0
 		panel.modulate = Color(1, 1, 1, 0)
-		var bg_tw := create_tween()
+		var bg_tw := create_screen_tween()
 		bg_tw.tween_property(bg, "modulate:a", 1.0, 0.18).from(0.0)
-		var p_tw := create_tween()
+		var p_tw := create_screen_tween()
 		p_tw.set_parallel(true)
 		p_tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.06)
 		p_tw.tween_property(panel, "offset_top", 0.0, 0.22).from(20.0).set_delay(0.06).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -1844,7 +1844,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 			for i in range(label_nodes.size()):
 				var lbl = label_nodes[i]
 				lbl.modulate.a = 0.0
-				var l_tw := create_tween()
+				var l_tw := create_screen_tween()
 				l_tw.tween_property(lbl, "modulate:a", 1.0, 0.15).from(0.0).set_delay(0.12 + float(i) * 0.04).set_ease(Tween.EASE_OUT)
 
 	# 添加点击关闭功能
@@ -1932,9 +1932,9 @@ func show_exit_confirm() -> void:
 		overlay.modulate = Color(1, 1, 1, 0)
 		dialog.scale = Vector2(0.7, 0.7)
 		dialog.pivot_offset = dialog.size * 0.5 if dialog.size.length() > 0 else Vector2(200, 100)
-		var overlay_tw := create_tween()
+		var overlay_tw := create_screen_tween()
 		overlay_tw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0)
-		var dialog_tw := create_tween()
+		var dialog_tw := create_screen_tween()
 		dialog_tw.set_parallel(true)
 		dialog_tw.tween_property(dialog, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.7, 0.7)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		dialog_tw.tween_property(dialog, "modulate:a", 1.0, 0.2).from(0.0)
@@ -2080,7 +2080,7 @@ func show_loading_screen() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		# 背景先入
 		bg.modulate.a = 0.0
-		var bg_tw := create_tween()
+		var bg_tw := create_screen_tween()
 		bg_tw.tween_property(bg, "modulate:a", 1.0, 0.4).set_ease(Tween.EASE_OUT)
 
 		center_panel.modulate.a = 1.0
@@ -2088,7 +2088,7 @@ func show_loading_screen() -> void:
 		subtitle.modulate.a = 1.0
 	elif fx_enabled_effective():
 		center_panel.modulate.a = 0.0
-		var fade_tween := create_tween()
+		var fade_tween := create_screen_tween()
 		fade_tween.tween_property(center_panel, "modulate:a", 1.0, 0.5).set_ease(Tween.EASE_OUT)
 
 
@@ -2189,7 +2189,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
 	var stay_dur := float(duration_msec) / 1000.0
 	var fade_dur := 0.28
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	toast_tween = tw
 	# 入场 - 从上方弹出 + 缩放弹跳
 	tw.tween_property(toast_bg, "modulate:a", 1.0, slide_dur).from(0.0)

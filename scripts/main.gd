@@ -5073,6 +5073,7 @@ func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
 func clear_screen() -> void:
+	clear_screen_tweens()
 	clear_toast_on_mode_change()
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
@@ -8259,7 +8260,7 @@ func play_ai_discard_fly_animation(seat: int, tile: String) -> Control:
 		tick.name = "AIDiscardRouteTick_%d_%d" % [seat, i]
 		art.add_child(tick)
 	if DisplayServer.get_name().to_lower() != "headless":
-		var cleanup := create_tween()
+		var cleanup := create_screen_tween()
 		cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(art.get_instance_id())).set_delay(0.46)
 	return art
 
@@ -8322,11 +8323,11 @@ func play_ai_draw_tile_animation(seat: int, tile: String, source: String = "norm
 		tick.name = "AIDrawRouteTick_%d_%d" % [seat, i]
 		art.add_child(tick)
 	if DisplayServer.get_name().to_lower() != "headless":
-		var tile_tw := create_tween()
+		var tile_tw := create_screen_tween()
 		tile_tw.tween_property(tile_node, "position", to_pos + Vector2(-13.0, -19.0), 0.24).from(from_pos + Vector2(-13.0, -19.0))
 		tile_tw.parallel().tween_property(tile_node, "rotation", 0.10, 0.12).from(-0.12)
 		tile_tw.tween_property(tile_node, "modulate:a", 0.0, 0.16).from(1.0)
-		var cleanup := create_tween()
+		var cleanup := create_screen_tween()
 		cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(art.get_instance_id())).set_delay(0.54)
 	return art
 
@@ -8507,7 +8508,7 @@ func draw_achievement_row_art(parent: Control, key: String, index: int, unlocked
 		shine.name = "AchievementRowUnlockedShine_%s" % key
 		art.add_child(shine)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var stamp_tw := create_tween()
+			var stamp_tw := create_screen_tween()
 			stamp_tw.set_parallel(true)
 			stamp_tw.tween_property(shine, "modulate:a", 0.90, 0.12).from(0.0)
 			stamp_tw.tween_property(shine, "scale", Vector2(1.0, 1.0), 0.22).from(Vector2(1.36, 1.36)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -8594,7 +8595,7 @@ func draw_achievements_completion_convergence_art(parent: Control) -> Control:
 		art.add_child(node)
 	var tick = add_gpt_tick_strip(art, rect_full(0.560, 0.175, (0.574) + float(2) * (0.058), 0.400), Color(jade.r, jade.g, jade.b, 0.22), "AchievementsCompletionTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.36, 0.70).from(0.90)
 		tw.parallel().tween_property(claim_fill, "modulate:a", 0.34, 0.70).from(0.84)
@@ -8733,7 +8734,7 @@ func draw_achievements_gallery_scan_art(parent: Control) -> Control:
 	var tick = add_gpt_tick_strip(art, rect_full(0.325, 0.180, (0.325) + float(3) * (0.105) + (0.014), 0.705), Color(jade.r, jade.g, jade.b, 0.23), "AchievementsGalleryScanTick_0")
 	if fx_enabled_effective():
 		art.modulate.a = 0.88
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(fill, "anchor_right", 0.975, 0.94).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(gate, "modulate:a", 0.48, 0.47).from(0.92)
@@ -8799,7 +8800,7 @@ func draw_achievements_row_collection_bus_art(parent: Control) -> Control:
 		pip.name = "AchievementsRowCollectionArchivePip_%d" % i
 		art.add_child(pip)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(spine_fill, "modulate:a", 0.38, 0.82).from(0.86)
 		tw.parallel().tween_property(progress_fill, "modulate:a", 0.34, 0.82).from(0.82)
@@ -8895,7 +8896,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		if fx_enabled_effective():
 			var peak = lerp(0.42, 0.84, pulse_strength)
 			var trough = lerp(0.10, 0.25, pulse_strength)
-			var pulse_tw := create_tween()
+			var pulse_tw := create_screen_tween()
 			pulse_tw.set_loops(12)
 			pulse_tw.tween_property(pulse, "modulate:a", trough, 0.64).from(peak)
 			pulse_tw.tween_property(pulse, "modulate:a", peak, 0.64).from(trough)
@@ -9069,7 +9070,7 @@ func draw_actions(parent: Control) -> void:
 	# 操作按钮淡入动画
 	if fx_enabled_effective():
 		action_bar.modulate = Color(1, 1, 1, 0)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(action_bar, "modulate:a", 1.0, 0.18).from(0.0)
 
 	if mode == "offline":
@@ -9264,7 +9265,7 @@ func draw_advisor_card_meter(parent: Control, heading: String, main_text: String
 	if decision_meter != null:
 		decision_meter.name = "AdvisorCardDecisionMeter_%s" % heading
 	if fx_enabled_effective():
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(8)
 		tw.tween_property(focus, "modulate:a", 0.42, 0.64).from(0.92).set_ease(Tween.EASE_OUT)
 		tw.tween_property(focus, "modulate:a", 0.92, 0.64).from(0.42).set_ease(Tween.EASE_IN)
@@ -9290,7 +9291,7 @@ func draw_advisor_card_signal_route(parent: Control, heading: String, main_text:
 	if gate != null:
 		gate.name = "AdvisorCardSignalGate_%s" % heading
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and fill != null:
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.44, 0.78).from(0.96)
 		if gate != null:
@@ -9430,7 +9431,7 @@ func draw_advisor_panel_analysis_scan(parent: Control) -> Control:
 	var tick = add_gpt_tick_strip(scan, rect_full(0.235, 0.315, (0.235) + float(3) * (0.135) + (0.014), 0.815), Color(accent.r, accent.g, accent.b, 0.22), "AdvisorPanelAnalysisTick_0")
 	if fx_enabled_effective():
 		scan.modulate.a = 0.86
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(intake_fill, "anchor_right", 0.980, 0.72).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(risk_fill, "anchor_right", 0.940, 0.72).from(0.100).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -9514,7 +9515,7 @@ func draw_advisor_signal_strip(parent: Control, heading: String, accent: Color) 
 	apply_rect(icon, rect_full(0.04, 0.72, 0.96, 0.96))
 	icon.clip_text = true
 	if fx_enabled_effective():
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(pulse, "modulate:a", 0.38, 0.72).from(0.92)
 		tw.tween_property(pulse, "modulate:a", 0.92, 0.72)
@@ -9664,7 +9665,7 @@ func draw_bgm_switch_button_art(button: Control) -> Control:
 	art.add_child(playback_gate)
 	var tick_2 = add_gpt_tick_strip(art, rect_full(0.325, 0.075, (0.344) + float(2) * (0.105), 0.260), Color(accent.r, accent.g, accent.b, 0.16), "BgmSwitchPlaybackTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(disc, "rotation", 0.10, 1.2).from(-0.10)
 		tw.tween_property(disc, "rotation", -0.10, 1.2).from(0.10)
@@ -9767,7 +9768,7 @@ func draw_center_last_discard_response_window(parent: Control, accent: Color) ->
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	var tick = add_gpt_tick_strip(window, rect_full(0.270, 0.250, (0.270) + float(2) * (0.135) + (0.026), 0.760), Color(accent.r, accent.g, accent.b, 0.22), "CenterLastDiscardResponseWindowTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.38, 0.56).from(0.86)
 		tw.parallel().tween_property(seal, "modulate:a", 0.64, 0.56).from(0.92)
@@ -9829,7 +9830,7 @@ func draw_center_last_tile_trace(parent: Control, tile: String) -> Control:
 	var tick = add_gpt_tick_strip(trace, rect_full(0.365, 0.180, (0.388) + float(2) * (0.095), 0.500), Color(accent.r, accent.g, accent.b, 0.24), "CenterLastTileTick_0")
 	var claim_tick = add_gpt_tick_strip(trace, rect_full(0.545, 0.615, (0.568) + float(1) * (0.085), 0.855), Color(accent.r, accent.g, accent.b, 0.22), "CenterLastTileClaimTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.40, 0.72).from(0.88)
 		tw.parallel().tween_property(claim_fill, "modulate:a", 0.38, 0.72).from(0.84)
@@ -9873,7 +9874,7 @@ func draw_center_low_wall_warning(parent: Control, wall_count: int, meter_color:
 		spark.name = "CenterWallLowSpark"
 		parent.add_child(spark)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(warning, "modulate:a", 0.35, 0.45).from(0.85)
 		tw.tween_property(warning, "modulate:a", 0.85, 0.45).from(0.35)
@@ -9924,7 +9925,7 @@ func draw_center_phase_flow_art(parent: Control, phase_key: String, accent: Colo
 	cursor.name = "CenterPhaseFlowCursor"
 	art.add_child(cursor)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.40, 0.74).from(0.88)
 		tw.tween_property(fill, "modulate:a", 0.88, 0.74).from(0.40)
@@ -9957,12 +9958,12 @@ func draw_center_phase_ribbon(parent: Control) -> Control:
 	configure_clipped_label(label)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if halo != null:
-			var halo_tw := create_tween()
+			var halo_tw := create_screen_tween()
 			halo_tw.set_loops(48)
 			halo_tw.tween_property(halo, "rotation", -TAU, 10.0).from(0.0)
 			halo_tw.parallel().tween_property(halo, "modulate:a", 0.03, 5.0).from(0.07)
 			halo_tw.tween_property(halo, "modulate:a", 0.07, 5.0).from(0.03)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(pulse, "modulate:a", 0.30, 0.58).from(0.95)
 		tw.tween_property(pulse, "modulate:a", 0.95, 0.58).from(0.30)
@@ -10015,7 +10016,7 @@ func draw_center_pulse_network(parent: Control) -> Control:
 		pulse.name = "CenterPulseNetworkPulse_%d" % i
 		art.add_child(pulse)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.38, 0.86).from(0.92)
 		tw.parallel().tween_property(gate, "modulate:a", 0.48, 0.86).from(0.96)
@@ -10087,18 +10088,18 @@ func draw_center_wall_flow_art(parent: Control, progress: float, meter_color: Co
 	var tick_2 = add_gpt_tick_strip(art, rect_full(0.680, 0.450, (0.680) + float(2) * (0.055) + (0.024), 0.550), Color(meter_color.r, meter_color.g, meter_color.b, 0.24), "CenterWallFlowTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if mandala != null:
-			var mandala_tw := create_tween()
+			var mandala_tw := create_screen_tween()
 			mandala_tw.set_loops(48)
 			mandala_tw.tween_property(mandala, "rotation", TAU, 12.0).from(0.0)
 			mandala_tw.parallel().tween_property(mandala, "modulate:a", 0.04, 4.8).from(0.08)
 			mandala_tw.tween_property(mandala, "modulate:a", 0.08, 4.8).from(0.04)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.38, 0.74).from(0.88)
 		tw.parallel().tween_property(draw_fill, "modulate:a", 0.40, 0.74).from(0.88)
 		tw.tween_property(fill, "modulate:a", 0.88, 0.74).from(0.38)
 		tw.parallel().tween_property(draw_fill, "modulate:a", 0.88, 0.74).from(0.40)
-		var pulse_tw := create_tween()
+		var pulse_tw := create_screen_tween()
 		pulse_tw.set_loops(48)
 		pulse_tw.tween_property(pulse, "scale", Vector2(1.08, 1.08), 0.72).from(Vector2(0.98, 0.98)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		pulse_tw.parallel().tween_property(pulse, "modulate:a", 0.48 + pressure * 0.26, 0.72).from(0.86)
@@ -10180,7 +10181,7 @@ func draw_center_wind_compass(parent: Control) -> Control:
 		pointer_texture.pivot_offset = pointer_texture.size * 0.5
 		pointer_texture.rotation = float(current) * TAU / 4.0
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var pointer_tw := create_tween()
+			var pointer_tw := create_screen_tween()
 			pointer_tw.set_loops(48)
 			pointer_tw.tween_property(pointer_texture, "modulate:a", 0.50, 0.85).from(0.24)
 			pointer_tw.tween_property(pointer_texture, "modulate:a", 0.24, 0.85).from(0.50)
@@ -10456,7 +10457,7 @@ func draw_chat_send_sync_bridge(parent: Control, accent: Color) -> Control:
 	stream_fill.modulate = Color(1, 1, 1, 0.78)
 	confirm_fill.modulate = Color(1, 1, 1, 0.72)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and seal_texture != null:
-		var seal_tw := create_tween()
+		var seal_tw := create_screen_tween()
 		seal_tw.set_loops(3)
 		seal_tw.tween_property(seal_texture, "scale", Vector2(1.180, 1.180), 0.16).from(Vector2(0.720, 0.720)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		seal_tw.parallel().tween_property(seal_texture, "rotation", -0.08, 0.16).from(0.12)
@@ -10712,7 +10713,7 @@ func draw_daily_login_streak_art(parent: Control, days: int, current_day_in_cycl
 			milestone_texture.name = "DailyLoginMilestoneSealTexture"
 			art.move_child(milestone_texture, min(1, art.get_child_count() - 1))
 			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var milestone_tw := create_tween()
+				var milestone_tw := create_screen_tween()
 				milestone_tw.set_loops(48)
 				milestone_tw.tween_property(milestone_texture, "scale", Vector2(1.08, 1.08), 0.72).from(Vector2(0.96, 0.96)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 				milestone_tw.parallel().tween_property(milestone_texture, "modulate:a", 0.38, 0.72).from(0.20)
@@ -10885,7 +10886,7 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 8.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.16).from(0.0)
 		tw.tween_property(panel, "offset_top", 0.0, 0.16).from(8.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -10920,7 +10921,7 @@ func draw_danger_discard_decision_bridge(parent: Control, risk: float, alternati
 	bridge.add_child(gate)
 	var tick = add_gpt_tick_strip(bridge, rect_full(0.455, 0.180, (0.455) + float(2) * (0.105) + (0.022), 0.820), Color(0.94, 0.48, 0.30, 0.22), "DangerDiscardDecisionTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(confirm_fill, "modulate:a", 0.36, 0.58).from(0.88)
 		tw.parallel().tween_property(alternative_fill, "modulate:a", 0.40, 0.58).from(0.90)
@@ -10972,7 +10973,7 @@ func draw_danger_discard_final_choice_art(parent: Control, risk: float, alternat
 		tick.name = "DangerDiscardFinalChoiceTick_0"
 		art.add_child(tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.46, 0.52).from(0.82)
 		tw.parallel().tween_property(alt_fill, "modulate:a", 0.38, 0.52).from(0.82)
@@ -11188,7 +11189,7 @@ func draw_diagnostic_dialog_art(parent: Control, lines: Array) -> Control:
 	art.add_child(trace_dismiss_gate)
 	var tick_2 = add_gpt_tick_strip(art, rect_full(0.765, 0.685, (0.779) + float(2) * (0.052), 0.885), Color(accent.r, accent.g, accent.b, 0.22), "DiagnosticTraceDismissTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.42, 0.60).from(0.94)
 		tw.tween_property(fill, "modulate:a", 0.94, 0.60).from(0.42)
@@ -11269,7 +11270,7 @@ func draw_diagnostic_result_sync_art(parent: Control, lines: Array) -> Control:
 	var tick = add_gpt_tick_strip(art, rect_full(0.270, 0.125, (0.270) + float(3) * (0.095) + (0.014), 0.890), Color(accent.r, accent.g, accent.b, 0.23), "DiagnosticResultSyncTick_0")
 	if fx_enabled_effective():
 		art.modulate.a = 0.86
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.78).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(gate, "modulate:a", 0.48, 0.39).from(0.92)
@@ -11323,7 +11324,7 @@ func draw_discard_river_archive_art(parent: Control, seat: int, accent: Color, d
 	archive.add_child(window_gate)
 	var tick = add_gpt_tick_strip(archive, rect_full(0.250, 0.175, (0.250) + float(2) * (0.145) + (0.020), 0.650), Color(accent.r, accent.g, accent.b, 0.18), "DiscardRiverArchiveTick_%d_0" % [seat])
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.34, 0.72).from(0.86)
 		tw.parallel().tween_property(window_fill, "modulate:a", 0.30, 0.72).from(0.80)
@@ -11446,7 +11447,7 @@ func draw_discard_river_summary_art(parent: Control, total_discards: int, active
 		pip.name = "DiscardRiverSummaryArchivePip_%d" % i
 		art.add_child(pip)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.38, 0.78).from(0.86)
 		tw.parallel().tween_property(gate, "modulate:a", 0.48, 0.78).from(0.92)
@@ -11838,7 +11839,7 @@ func draw_exit_confirm_choice_commit_feedback(parent: Control, route_id: String,
 		feedback.add_child(pip)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.bind_node(feedback)
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.08).from(0.0)
@@ -11894,13 +11895,13 @@ func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2
 		art.add_child(tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if arc_texture != null:
-			var arc_tw := create_tween()
+			var arc_tw := create_screen_tween()
 			arc_tw.set_loops(4)
 			arc_tw.tween_property(arc_texture, "modulate:a", 0.24, 0.18).from(0.10)
 			arc_tw.parallel().tween_property(arc_texture, "rotation", 0.04, 0.18).from(-0.04)
 			arc_tw.tween_property(arc_texture, "modulate:a", 0.10, 0.18).from(0.24)
 			arc_tw.parallel().tween_property(arc_texture, "rotation", -0.04, 0.18).from(0.04)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(4)
 		tw.tween_property(fill, "modulate:a", 0.36, 0.18).from(0.92)
 		tw.parallel().tween_property(target, "modulate:a", 0.56, 0.18).from(0.94)
@@ -12106,7 +12107,7 @@ func draw_hand(parent: Control) -> void:
 	var pending_tile = pending_danger_discard_tile if assist_enabled and has_pending_danger_discard() else ""
 	var tile_width = float(hand_layout.get("tile_width", HAND_TILE_MAX_WIDTH))
 	var tile_height = float(hand_layout.get("tile_height", tile_width * HAND_TILE_ASPECT))
-	var group_gap_width = maxf(3.0, float(hand_layout.get("group_gap_width", 4.0)))
+	var group_gap_width = maxf(4.0, float(hand_layout.get("group_gap_width", 4.0)))
 	var drawn_tile = str(offline_last_draw.get("tile", ""))
 	var drawn_serial = int(offline_last_draw.get("serial", -1))
 	var should_animate_drawn_tile = mode == "offline" and fx_enabled_effective() and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
@@ -12123,7 +12124,7 @@ func draw_hand(parent: Control) -> void:
 	var hand_box = HBoxContainer.new()
 	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	configure_passive_container(hand_box)
-	hand_box.add_theme_constant_override("separation", maxi(4, int(hand_layout.get("separation", 4))))
+	hand_box.add_theme_constant_override("separation", maxi(0, int(hand_layout.get("separation", 4))))
 	hand_box.z_index = 4
 	apply_rect(hand_box, HAND_TRAY_TILES_RECT)
 	tray.add_child(hand_box)
@@ -12132,7 +12133,7 @@ func draw_hand(parent: Control) -> void:
 	if fx_enabled_effective():
 		tray.modulate = Color(1, 1, 1, 0)
 		tray.offset_top = 24.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		var slide_dur := float(HAND_SLIDE_IN_DURATION_MSEC) / 1000.0
 		tw.set_parallel(true)
 		tw.tween_property(tray, "modulate:a", 1.0, slide_dur).from(0.0)
@@ -12541,7 +12542,7 @@ func draw_hand_tutorial_discard_flow(parent: Control, accent: Color) -> Control:
 	if guide_texture != null:
 		guide_texture.name = "HandTutorialPointingFingerTexture"
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var guide_tw := create_tween()
+			var guide_tw := create_screen_tween()
 			guide_tw.set_loops(48)
 			guide_tw.tween_property(guide_texture, "position", guide_texture.position + Vector2(7.0, -5.0), 0.54).from(guide_texture.position)
 			guide_tw.parallel().tween_property(guide_texture, "modulate:a", 0.42, 0.54).from(0.20)
@@ -12732,7 +12733,7 @@ func draw_item_toast_effect_route(toast_bg: Control, item_id: String, accent: Co
 	var node = add_gpt_tick_strip(route, rect_full(0.230, 0.245, (0.230) + float(2) * (0.150) + (0.028), 0.750), Color(accent.r, accent.g, accent.b, 0.22), "ToastItemEffectNode_0")
 	var tick = add_gpt_tick_strip(route, rect_full(0.610, 0.170, (0.624) + float(1) * (0.060), 0.430), Color(accent.r, accent.g, accent.b, 0.22), "ToastItemEffectTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.40, 0.70).from(0.92)
 		tw.parallel().tween_property(gate, "modulate:a", 0.46, 0.70).from(0.90)
@@ -12798,7 +12799,7 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	if aura_texture != null:
 		aura_texture.name = "LastDiscardAuraTexture"
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var aura_texture_tw := create_tween()
+			var aura_texture_tw := create_screen_tween()
 			aura_texture_tw.set_loops(6)
 			aura_texture_tw.tween_property(aura_texture, "modulate:a", 0.06, 0.42).from(0.18)
 			aura_texture_tw.parallel().tween_property(aura_texture, "scale", Vector2(1.06, 1.06), 0.42).from(Vector2(0.96, 0.96))
@@ -12849,7 +12850,7 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	if fx_enabled_effective():
 		marker.modulate = Color(1, 1, 1, 0)
 		marker.scale = Vector2(0.92, 0.92)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(marker, "modulate:a", 1.0, 0.16).from(0.0)
 		tw.tween_property(marker, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.92, 0.92)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -12898,7 +12899,7 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 	apply_rect(corner_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
-		var intro := create_tween()
+		var intro := create_screen_tween()
 		intro.tween_property(art, "modulate:a", 1.0, 0.22).from(0.0).set_ease(Tween.EASE_OUT)
 	return art
 
@@ -13074,7 +13075,7 @@ func draw_lobby_action_button_art(button: Button, text: String, color: Color) ->
 	glyph.name = "LobbyActionButtonGlyph_%s" % text
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(glow, "modulate:a", 0.26, 1.15).from(0.46)
 		tw.parallel().tween_property(seal, "scale", Vector2(1.015, 1.015), 1.15).from(Vector2.ONE).set_ease(Tween.EASE_IN_OUT)
@@ -13202,7 +13203,7 @@ func draw_meld_summary_route_art(parent: Control, total_melds: int, active_seats
 		pip.name = "MeldSummaryArchivePip_%d" % i
 		art.add_child(pip)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.38, 0.78).from(0.86)
 		tw.tween_property(fill, "modulate:a", 0.86, 0.78).from(0.38)
@@ -13336,11 +13337,11 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 		arrow.name = "MenuCardEntryArrow"
 		apply_rect(arrow, rect_full(0.0, 0.0, 1.0, 1.0))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(accent, "modulate:a", 0.46, 1.10).from(0.82)
 		tw.tween_property(accent, "modulate:a", 0.82, 1.10).from(0.46)
-		var focus_tw := create_tween()
+		var focus_tw := create_screen_tween()
 		focus_tw.set_loops(48)
 		focus_tw.tween_property(focus, "modulate:a", 0.58, 0.82).from(1.0)
 		focus_tw.tween_property(focus, "modulate:a", 1.0, 0.82).from(0.58)
@@ -13349,13 +13350,13 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 
 func draw_menu_primary_3d_stage(parent: Control) -> Control:
 	var has_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
-	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.96, false)  # r182 denser stage after r52
+	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.38, false)
 	if stage_overlay != null:
 		stage_overlay.name = "MenuPrimary3DStageGPTOverlay"
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			stage_overlay.modulate.a = 0.0
-			var overlay_tw := create_tween()
-			overlay_tw.tween_property(stage_overlay, "modulate:a", 0.92, 0.36).from(0.0).set_delay(0.02).set_ease(Tween.EASE_OUT)
+			var overlay_tw := create_screen_tween()
+			overlay_tw.tween_property(stage_overlay, "modulate:a", 0.38, 0.36).from(0.0).set_delay(0.02).set_ease(Tween.EASE_OUT)
 	var stage = Control.new()
 	stage.name = "MenuPrimary3DStage"
 	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -13378,12 +13379,12 @@ func draw_menu_primary_3d_stage(parent: Control) -> Control:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		stage.modulate.a = 0.0
 		stage.offset_top = 10.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(stage, "modulate:a", fallback_alpha, 0.34).from(0.0).set_delay(0.04).set_ease(Tween.EASE_OUT)
 		tw.tween_property(stage, "offset_top", 0.0, 0.34).from(10.0).set_delay(0.04).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		if not has_stage_overlay:
-			var breath := create_tween()
+			var breath := create_screen_tween()
 			breath.set_loops(48)
 			breath.tween_property(table_highlight, "modulate:a", 0.58, 1.6).from(0.86).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			breath.tween_property(table_highlight, "modulate:a", 0.86, 1.6).from(0.58).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -13678,7 +13679,7 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	rail.move_child(surface, 0)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		surface.modulate.a = 0.72
-		var surface_tw := create_tween()
+		var surface_tw := create_screen_tween()
 		surface_tw.set_loops(48)
 		surface_tw.tween_property(surface, "modulate:a", 0.48, 1.35).from(0.72).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		surface_tw.tween_property(surface, "modulate:a", 0.72, 1.35).from(0.48).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -13730,7 +13731,7 @@ func draw_menu_season_progress_art(parent: Control) -> Control:
 	rail.add_child(fill)
 	if progress > 0.0 and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		fill.anchor_right = 0.030
-		var fill_tw := create_tween()
+		var fill_tw := create_screen_tween()
 		fill_tw.tween_property(fill, "anchor_right", 0.030 + 0.940 * progress, 0.5).set_delay(0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	var route = make_gpt_route_rail(rect_full(0.105, 0.505, 0.880, 0.605), Color(0.010, 0.020, 0.022, 0.48))
 	route.name = "MenuSeasonRouteRail"
@@ -13740,7 +13741,7 @@ func draw_menu_season_progress_art(parent: Control) -> Control:
 	route.add_child(route_fill)
 	if progress > 0.0 and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		route_fill.anchor_right = 0.025
-		var rf_tw := create_tween()
+		var rf_tw := create_screen_tween()
 		rf_tw.tween_property(route_fill, "anchor_right", 0.025 + 0.950 * progress, 0.5).set_delay(0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	var route_gate_left = 0.105 + 0.775 * progress
 	var route_gate = make_gpt_gate(rect_full(route_gate_left - 0.018, 0.455, route_gate_left + 0.018, 0.655), Color(0.92, 0.74, 0.34, 0.20))
@@ -13808,7 +13809,7 @@ func draw_menu_season_progress_art(parent: Control) -> Control:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if trophy_texture != null:
 			trophy_texture.modulate.a = 0.78
-			var trophy_tw := create_tween()
+			var trophy_tw := create_screen_tween()
 			trophy_tw.set_loops(48)
 			trophy_tw.tween_property(trophy_texture, "rotation", 0.055, 1.15).from(-0.055).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			trophy_tw.parallel().tween_property(trophy_texture, "scale", Vector2(1.060, 1.060), 1.15).from(Vector2(0.960, 0.960)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -13816,7 +13817,7 @@ func draw_menu_season_progress_art(parent: Control) -> Control:
 			trophy_tw.tween_property(trophy_texture, "rotation", -0.055, 1.15).from(0.055).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			trophy_tw.parallel().tween_property(trophy_texture, "scale", Vector2(0.960, 0.960), 1.15).from(Vector2(1.060, 1.060)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			trophy_tw.parallel().tween_property(trophy_texture, "modulate:a", 0.72, 1.15).from(0.96).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		var pulse_tw := create_tween()
+		var pulse_tw := create_screen_tween()
 		pulse_tw.set_loops(48)
 		pulse_tw.tween_property(current_pulse, "modulate:a", 0.36, 0.80).from(0.82).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		pulse_tw.parallel().tween_property(current_pulse, "scale", Vector2(1.040, 1.040), 0.80).from(Vector2.ONE).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -14225,16 +14226,9 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	if tile == "":
 		return
 	var content_size = safe_content_pixel_size()
-	var dock_rect = action_dock_rect_for_count(max(1, action_bar_button_count()))
-	var panel_height_px = clampf(content_size.y * 0.095, 50.0, 64.0)
-	var panel_width_px = clampf(content_size.x * 0.270, 240.0, 320.0)
-	var panel_gap_px = clampf(content_size.y * 0.010, 6.0, 10.0)
-	var panel_bottom = dock_rect.position.y - panel_gap_px / maxf(1.0, content_size.y)
-	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
-	var panel_right = dock_rect.size.x - 0.010
-	var panel_left = maxf(dock_rect.position.x, panel_right - panel_width_px / maxf(1.0, content_size.x))
+	var context_rect = pending_claim_context_layout_rect(content_size)
 	var has_status_strip := optional_gpt_illustration_texture("pending_claim_status_strip") != null
-	var panel = make_gpt_route_rail(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
+	var panel = make_gpt_route_rail(context_rect, Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
 	panel.name = "PendingClaimIllustration"
 	panel.z_index = 20
 	parent.add_child(panel)
@@ -14272,7 +14266,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 10.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.18).from(0.0)
 		tw.tween_property(panel, "offset_top", 0.0, 0.18).from(10.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -14424,7 +14418,7 @@ func draw_reset_progress_button_art(button: Control) -> Control:
 	if armed:
 		draw_reset_progress_confirm_art(art, accent)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.40, 0.70).from(0.92)
 		tw.tween_property(fill, "modulate:a", 0.92, 0.70).from(0.40)
@@ -14485,7 +14479,7 @@ func draw_reset_progress_confirm_art(parent: Control, accent: Color) -> Control:
 		glyph.name = "ResetProgressConfirmGlyph"
 		apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(route_fill, "modulate:a", 0.42, 0.55).from(1.0)
 		tw.tween_property(route_fill, "modulate:a", 1.0, 0.55).from(0.42)
@@ -14530,7 +14524,7 @@ func draw_round_summary(parent: Control) -> void:
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.scale = Vector2(0.88, 0.88)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.22).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -14680,11 +14674,11 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 	else:
 		draw_round_summary_match_complete_art(art, ranked)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(orbit, "modulate:a", 0.52, 0.72).from(1.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(orbit, "modulate:a", 1.0, 0.72).from(0.52).set_ease(Tween.EASE_IN)
 		if laurel != null:
-			var laurel_tw := create_tween()
+			var laurel_tw := create_screen_tween()
 			laurel_tw.set_loops(48)
 			laurel_tw.tween_property(laurel, "modulate:a", 0.10, 2.2).from(0.16)
 			laurel_tw.parallel().tween_property(laurel, "offset_left", -8.0, 2.2).from(0.0)
@@ -14693,14 +14687,14 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 			laurel_tw.parallel().tween_property(laurel, "offset_left", 0.0, 2.2).from(-8.0)
 			laurel_tw.parallel().tween_property(laurel, "offset_right", 0.0, 2.2).from(8.0)
 		if victory_texture != null:
-			var badge_tw := create_tween()
+			var badge_tw := create_screen_tween()
 			badge_tw.set_loops(48)
 			badge_tw.tween_property(victory_texture, "modulate:a", 0.18, 1.5).from(0.30)
 			badge_tw.parallel().tween_property(victory_texture, "rotation", 0.035, 1.5).from(-0.025)
 			badge_tw.tween_property(victory_texture, "modulate:a", 0.34, 1.5).from(0.18)
 			badge_tw.parallel().tween_property(victory_texture, "rotation", -0.025, 1.5).from(0.035)
 		if settlement_wave != null:
-			var wave_tw := create_tween()
+			var wave_tw := create_screen_tween()
 			wave_tw.set_loops(48)
 			wave_tw.tween_property(settlement_wave, "modulate:a", 0.22, 2.0).from(0.10)
 			wave_tw.parallel().tween_property(settlement_wave, "position:y", settlement_wave.position.y - 3.0, 2.0).from(settlement_wave.position.y + 2.0)
@@ -14789,7 +14783,7 @@ func draw_round_summary_score_flow_bus(parent: Control, ranked: Array) -> Contro
 	var tick_2 = add_gpt_tick_strip(bus, rect_full(0.640, 0.770, (0.660) + float(2) * (0.056), 0.898), Color(0.86, 0.70, 0.36, 0.22), "RoundSummaryScoreFlowTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		bus.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(bus, "modulate:a", 1.0, 0.16).from(0.0).set_delay(0.16)
 		tw.tween_property(flow_fill, "anchor_right", 0.980, 0.28).from(0.060).set_delay(0.20).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -14878,14 +14872,14 @@ func draw_round_summary_match_complete_art(parent: Control, ranked: Array) -> Co
 	seal.name = "RoundSummaryFinalSeal"
 	art.add_child(seal)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.42, 0.82).from(0.94)
 		tw.parallel().tween_property(archive_gate, "modulate:a", 0.50, 0.82).from(0.92)
 		tw.tween_property(fill, "modulate:a", 0.94, 0.82).from(0.42)
 		tw.parallel().tween_property(archive_gate, "modulate:a", 0.92, 0.82).from(0.50)
 		if laurel != null:
-			var laurel_tw := create_tween()
+			var laurel_tw := create_screen_tween()
 			laurel_tw.set_loops(12)
 			laurel_tw.tween_property(laurel, "modulate:a", 0.08, 1.6).from(0.14)
 			laurel_tw.parallel().tween_property(laurel, "offset_top", -6.0, 1.6).from(0.0)
@@ -14972,7 +14966,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 		var delay_for_roll = 0.28 + float(rank - 1) * 0.072
 		delta_label.text = "0"
 		var delta_label_id := delta_label.get_instance_id()
-		var roll_tw := create_tween()
+		var roll_tw := create_screen_tween()
 		roll_tw.tween_callback(func() -> void:
 			var roll_label := instance_from_id(delta_label_id) as Label
 			if roll_label == null:
@@ -14988,7 +14982,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 		row.modulate = Color(1, 1, 1, 0)
 		row.offset_left = -10.0
 		row.offset_right = -10.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		var delay = 0.14 + float(rank - 1) * 0.072
 		tw.tween_property(row, "modulate:a", 1.0, 0.22).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
@@ -14998,7 +14992,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 		var delta_bar = row.get_node_or_null("RoundSummaryDeltaBar")
 		if delta_bar != null and is_instance_valid(delta_bar):
 			delta_bar.modulate.a = 0.0
-			var d_tw := create_tween()
+			var d_tw := create_screen_tween()
 			d_tw.tween_property(delta_bar, "modulate:a", 1.0, 0.18).from(0.0).set_delay(delay + 0.12).set_ease(Tween.EASE_OUT)
 
 
@@ -15043,7 +15037,7 @@ func draw_round_summary_settlement_commit_art(parent: Control, winner: int, acce
 		art.add_child(pip)
 	if fx_enabled_effective():
 		art.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(art, "modulate:a", 1.0, 0.08).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.20).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -15204,7 +15198,7 @@ func draw_rule_section_path_art(section: Control, section_index: int, title_text
 		apply_rect(glyph, rect_full(0.650, 0.110, 0.920, 0.440))
 		draw_rule_section_example_art(strip, section_index, accent)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(strip, "modulate:a", 0.72, 1.2).from(1.0)
 		tw.tween_property(strip, "modulate:a", 1.0, 1.2).from(0.72)
@@ -15296,7 +15290,7 @@ func draw_rules_completion_convergence_art(parent: Control) -> Control:
 		art.add_child(node)
 	var tick = add_gpt_tick_strip(art, rect_full(0.545, 0.180, (0.560) + float(2) * (0.060), 0.420), Color(jade.r, jade.g, jade.b, 0.22), "RulesCompletionTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.38, 0.72).from(0.90)
 		tw.parallel().tween_property(practice_fill, "modulate:a", 0.34, 0.72).from(0.84)
@@ -15410,7 +15404,7 @@ func draw_rules_section_summary_bus_art(parent: Control) -> Control:
 		pip.name = "RulesSectionSummaryArchivePip_%d" % i
 		art.add_child(pip)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(spine_fill, "modulate:a", 0.38, 0.82).from(0.86)
 		tw.parallel().tween_property(practice_fill, "modulate:a", 0.34, 0.82).from(0.82)
@@ -15830,7 +15824,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		if dealer_texture != null:
 			dealer_texture.name = "DealerSealTexture_%d" % seat
 			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var dealer_tw := create_tween()
+				var dealer_tw := create_screen_tween()
 				dealer_tw.set_loops(48)
 				dealer_tw.tween_property(dealer_texture, "rotation", 0.035, 0.95).from(-0.025)
 				dealer_tw.parallel().tween_property(dealer_texture, "modulate:a", 0.42, 0.95).from(0.22)
@@ -16003,11 +15997,11 @@ func draw_seat_discard_preview_art(parent: Control, seat: int, rect: Rect2) -> b
 		art.add_child(history_tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if wash_texture != null:
-			var wash_tw := create_tween()
+			var wash_tw := create_screen_tween()
 			wash_tw.set_loops(48)
 			wash_tw.tween_property(wash_texture, "modulate:a", 0.24, 1.30).from(0.10)
 			wash_tw.tween_property(wash_texture, "modulate:a", 0.10, 1.30).from(0.24)
-		var gate_tw := create_tween()
+		var gate_tw := create_screen_tween()
 		gate_tw.set_loops(48)
 		gate_tw.tween_property(gate, "modulate:a", 0.46, 0.82).from(0.96)
 		gate_tw.parallel().tween_property(fill, "modulate:a", 0.56, 0.82).from(0.92)
@@ -16055,7 +16049,7 @@ func draw_seat_flower_settlement_art(parent: Control, flower_count: int) -> Cont
 	art.add_child(handoff_gate)
 	var tick = add_gpt_tick_strip(art, rect_full(0.245, 0.185, (0.245) + float(2) * (0.145) + (0.020), 0.625), Color(jade.r, jade.g, jade.b, 0.20), "SeatFlowerSettlementTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.36, 0.72).from(0.88)
 		tw.parallel().tween_property(handoff_fill, "modulate:a", 0.32, 0.72).from(0.82)
@@ -16140,11 +16134,11 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 		more.name = "SeatFlowerMoreBadge"
 		more.custom_minimum_size = Vector2(24, 31)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(glow, "modulate:a", 0.35, 0.80).from(0.88)
 		tw.tween_property(glow, "modulate:a", 0.88, 0.80).from(0.35)
-		var replacement_tw := create_tween()
+		var replacement_tw := create_screen_tween()
 		replacement_tw.set_loops(10)
 		replacement_tw.tween_property(replacement_fill, "modulate:a", 0.38, 0.82).from(0.90)
 		replacement_tw.tween_property(replacement_fill, "modulate:a", 0.90, 0.82).from(0.38)
@@ -16207,7 +16201,7 @@ func draw_seat_score_momentum_ribbon(parent: Control, seat: int) -> bool:
 	apply_rect(label, rect_full(0.135, 0.04, 0.875, 0.670))
 	configure_clipped_label(label)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(pulse, "modulate:a", 0.30, 0.72).from(0.90)
 		tw.parallel().tween_property(route_fill, "modulate:a", 0.46, 0.72).from(0.94)
@@ -16318,7 +16312,7 @@ func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) 
 		readiness.name = "SeatThreatReadinessSeal_%d" % seat
 		art.add_child(readiness)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var readiness_tw := create_tween()
+			var readiness_tw := create_screen_tween()
 			readiness_tw.set_loops(48)
 			readiness_tw.tween_property(readiness, "scale", Vector2(1.120, 1.120), 0.58).from(Vector2.ONE).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			readiness_tw.parallel().tween_property(readiness, "modulate:a", 0.48, 0.58).from(1.0)
@@ -16326,11 +16320,11 @@ func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) 
 			readiness_tw.parallel().tween_property(readiness, "modulate:a", 1.0, 0.58).from(0.48)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if radar_texture != null:
-			var drift := create_tween()
+			var drift := create_screen_tween()
 			drift.set_loops(48)
 			drift.tween_property(radar_texture, "rotation", 0.10, 2.8).from(-0.10)
 			drift.tween_property(radar_texture, "rotation", -0.10, 2.8).from(0.10)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(pressure, "modulate:a", 0.38, 0.72).from(0.95)
 		tw.parallel().tween_property(fill, "modulate:a", 0.46, 0.72).from(0.96)
@@ -16387,7 +16381,7 @@ func draw_seat_turn_handoff_art(parent: Control, seat: int, active: bool) -> Con
 		tick.name = "SeatTurnHandoffTick_%d_%d" % [seat, i]
 		art.add_child(tick)
 	if active and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.42, 0.78).from(0.92)
 		tw.parallel().tween_property(seal, "scale", Vector2(1.035, 1.035), 0.78).from(Vector2.ONE)
@@ -16477,7 +16471,7 @@ func draw_secondary_screen_texture(parent: Control, texture_key: String, node_na
 	texture.name = node_name
 	parent.move_child(texture, 0)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(texture, "modulate:a", max(0.04, alpha * 0.58), 3.2).from(alpha)
 		tw.parallel().tween_property(texture, "offset_left", -5.0, 3.2).from(0.0)
@@ -16540,7 +16534,7 @@ func draw_setting_switch_art(parent: Control, enabled: bool) -> Control:
 		var start_left = 0.10 if enabled else 0.58
 		knob.anchor_left = start_left
 		knob.anchor_right = start_left + 0.32
-		var slide_tw := create_tween()
+		var slide_tw := create_screen_tween()
 		slide_tw.tween_property(knob, "anchor_left", knob_left, 0.22).from(start_left).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		slide_tw.parallel().tween_property(knob, "anchor_right", knob_left + 0.32, 0.22).from(start_left + 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	return art
@@ -16676,7 +16670,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		overlay.modulate = Color(1, 1, 1, 0)
 		panel.offset_right = 20.0
-		var stw := create_tween()
+		var stw := create_screen_tween()
 		stw.set_parallel(true)
 		stw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
 		stw.tween_property(panel, "offset_right", 0.0, 0.2).from(20.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -16949,11 +16943,11 @@ func draw_shop_currency_meter_art(parent: Control, kind: String, amount: int, ac
 		empty.name = "ShopCurrencyEmptyWarning_%s" % kind
 		art.add_child(empty)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.46, 0.70).from(0.92)
 		tw.tween_property(fill, "modulate:a", 0.92, 0.70).from(0.46)
-		var flow_tw := create_tween()
+		var flow_tw := create_screen_tween()
 		flow_tw.set_loops(12)
 		flow_tw.tween_property(flow_fill, "modulate:a", 0.38, 0.70).from(0.88)
 		flow_tw.tween_property(flow_fill, "modulate:a", 0.88, 0.70).from(0.38)
@@ -17160,12 +17154,12 @@ func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id
 		shine.name = "ShopItemPriceSpark_%d" % i
 		row.add_child(shine)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(price_aura, "modulate:a", 0.42, 0.90).from(0.88)
 		tw.tween_property(price_aura, "modulate:a", 0.88, 0.90).from(0.42)
 		if charm_texture != null:
-			var charm_tw := create_tween()
+			var charm_tw := create_screen_tween()
 			charm_tw.set_loops(48)
 			charm_tw.tween_property(charm_texture, "rotation", 0.035, 1.15).from(-0.025)
 			charm_tw.parallel().tween_property(charm_texture, "modulate:a", 0.34, 1.15).from(0.18)
@@ -17307,7 +17301,7 @@ func draw_shop_transaction_map_art(parent: Control) -> Control:
 		tick_2.name = "ShopTransactionSettlementTick_0"
 		art.add_child(tick_2)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(gem_fill, "modulate:a", 0.38, 0.82).from(0.92)
 		tw.tween_property(gem_fill, "modulate:a", 0.92, 0.82).from(0.38)
@@ -17531,7 +17525,7 @@ func draw_stats_data_scan_art(parent: Control) -> Control:
 	var tick = add_gpt_tick_strip(art, rect_full(0.330, 0.205, (0.330) + float(2) * (0.135) + (0.014), 0.760), Color(accent.r, accent.g, accent.b, 0.24), "StatsDataScanTick_0")
 	if fx_enabled_effective():
 		art.modulate.a = 0.86
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "anchor_right", 0.980, 1.05).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(gate, "modulate:a", 0.48, 0.52).from(0.94)
@@ -17604,7 +17598,7 @@ func draw_stats_insight_convergence_art(parent: Control) -> Control:
 		art.add_child(branch)
 	var tick = add_gpt_tick_strip(art, rect_full(0.585, 0.180, (0.600) + float(2) * (0.060), 0.420), Color(jade.r, jade.g, jade.b, 0.22), "StatsInsightTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.36, 0.72).from(0.90)
 		tw.parallel().tween_property(archive_fill, "modulate:a", 0.34, 0.72).from(0.84)
@@ -17647,7 +17641,7 @@ func draw_stats_mastery_route(parent: Control, win_rate: float, games_fill: floa
 		mastery.add_child(branch)
 	var tick = add_gpt_tick_strip(mastery, rect_full(0.360, 0.265, (0.360) + float(3) * (0.085) + (0.014), 0.720), Color(accent.r, accent.g, accent.b, 0.22), "StatsMasteryTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.42, 0.78).from(0.92)
 		tw.parallel().tween_property(gate, "modulate:a", 0.50, 0.78).from(0.90)
@@ -17707,7 +17701,7 @@ func draw_stats_row_summary_bus_art(parent: Control) -> Control:
 		pip.name = "StatsRowSummaryArchivePip_%d" % i
 		art.add_child(pip)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(spine_fill, "modulate:a", 0.38, 0.82).from(0.86)
 		tw.parallel().tween_property(insight_fill, "modulate:a", 0.34, 0.82).from(0.82)
@@ -17839,7 +17833,7 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	var center_spotlight = make_soft_depth_panel(frame, rect_full(0.300, 0.275, 0.700, 0.690), Color(0.90, 0.76, 0.42, 0.030), 999)
 	center_spotlight.name = "Table3DCenterSpotlight"
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var glow_tw := create_tween()
+		var glow_tw := create_screen_tween()
 		glow_tw.set_loops(24)
 		glow_tw.tween_property(center_spotlight, "modulate:a", 0.55, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		glow_tw.tween_property(center_spotlight, "modulate:a", 0.82, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -17878,7 +17872,7 @@ func draw_table_center_starlight(parent: Control) -> void:
 		spark.name = "TableCenterStarlightSpark_%d" % i
 		star.add_child(spark)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			tw.set_loops(48)
 			var blink_dur := randf_range(0.6, 1.2)
 			tw.tween_property(spark, "modulate:a", 0.12, blink_dur).from(0.92).set_delay(float(i) * 0.06)
@@ -17887,15 +17881,15 @@ func draw_table_center_starlight(parent: Control) -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if mandala != null:
 			mandala.modulate.a = 0.10
-			var mandala_tw := create_tween()
+			var mandala_tw := create_screen_tween()
 			mandala_tw.set_loops(48)
 			mandala_tw.tween_property(mandala, "rotation", TAU, 18.0).from(0.0)
 		if glow_ring != null:
-			var glow_tw := create_tween()
+			var glow_tw := create_screen_tween()
 			glow_tw.set_loops(48)
 			glow_tw.tween_property(glow_ring, "rotation", TAU, 12.0).from(0.0)
 		if inner_ring != null:
-			var inner_tw := create_tween()
+			var inner_tw := create_screen_tween()
 			inner_tw.set_loops(48)
 			inner_tw.tween_property(inner_ring, "rotation", -TAU, 16.0).from(0.0)
 
@@ -18018,7 +18012,7 @@ func draw_table_log_archive_commit(parent: Control, tag_color: Color) -> Control
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	var tick = add_gpt_tick_strip(commit, rect_full(0.260, 0.455, (0.260) + float(2) * (0.135) + (0.030), 0.760), Color(tag_color.r, tag_color.g, tag_color.b, 0.18), "TableLogArchiveCommitTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.36, 0.66).from(0.88)
 		tw.parallel().tween_property(seal, "modulate:a", 0.58, 0.66).from(0.90)
@@ -18057,7 +18051,7 @@ func draw_table_log_empty_art(parent: Control) -> Control:
 		art.add_child(bead)
 	var tick = add_gpt_tick_strip(art, rect_full(0.330, 0.610, (0.330) + float(2) * (0.090) + (0.016), 0.810), Color(0.54, 0.70, 0.60, 0.22), "TableLogEmptyListenTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(listen_fill, "modulate:a", 0.38, 0.86).from(0.90)
 		tw.tween_property(listen_fill, "modulate:a", 0.90, 0.86).from(0.38)
@@ -18112,7 +18106,7 @@ func draw_table_log_latest_sync(parent: Control, latest_text: String, row_count:
 	var archive_tick = add_gpt_tick_strip(sync, rect_full(0.790, 0.595, (0.804) + float(1) * (0.050), 0.890), Color(tag_color.r, tag_color.g, tag_color.b, 0.18), "TableLogCountArchiveTick_0")
 	draw_table_log_archive_commit(sync, tag_color)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "modulate:a", 0.40, 0.72).from(0.92)
 		tw.parallel().tween_property(gate, "modulate:a", 0.46, 0.72).from(0.90)
@@ -18396,13 +18390,13 @@ func draw_tile_flip_signal_art(tile_view: Control, from_face_up: bool) -> Contro
 	art.add_child(face_badge)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if halo != null:
-			var halo_tw := create_tween()
+			var halo_tw := create_screen_tween()
 			halo_tw.set_loops(2)
 			halo_tw.tween_property(halo, "rotation", 0.16, 0.16).from(-0.16)
 			halo_tw.parallel().tween_property(halo, "modulate:a", 0.30, 0.16).from(0.12)
 			halo_tw.tween_property(halo, "rotation", -0.16, 0.16).from(0.16)
 			halo_tw.parallel().tween_property(halo, "modulate:a", 0.12, 0.16).from(0.30)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(2)
 		tw.tween_property(axis, "modulate:a", 0.42, 0.16).from(1.0)
 		tw.parallel().tween_property(route, "modulate:a", 0.56, 0.16).from(0.96)
@@ -18427,7 +18421,7 @@ func draw_tile_status_route_art(parent: Control, risk: String, hint_badge: Strin
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var peak := 0.96 if hint_badge != "" else 0.88
 		var trough := 0.48 if hint_badge != "" else 0.56
-		var pulse_tw := create_tween()
+		var pulse_tw := create_screen_tween()
 		pulse_tw.set_loops(48)
 		pulse_tw.tween_property(fill, "modulate:a", trough, 0.70).from(peak)
 		pulse_tw.parallel().tween_property(gate, "modulate:a", trough * 0.85, 0.70).from(peak * 0.90)
@@ -18637,7 +18631,7 @@ func draw_top_hud_hand_progress(parent: Control) -> Control:
 		if repeat_ring != null:
 			repeat_ring.name = "HandProgressDealerRepeatRing"
 			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var repeat_tw := create_tween()
+				var repeat_tw := create_screen_tween()
 				repeat_tw.set_loops(48)
 				repeat_tw.tween_property(repeat_ring, "rotation", TAU, 2.4).from(0.0)
 				repeat_tw.parallel().tween_property(repeat_ring, "modulate:a", 0.42, 1.2).from(0.18)
@@ -18647,11 +18641,11 @@ func draw_top_hud_hand_progress(parent: Control) -> Control:
 		repeat_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	draw_hand_progress_wall_sync(progress, accent)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(rail_panel, "modulate:a", 0.58, 0.72).from(0.94)
 		tw.tween_property(rail_panel, "modulate:a", 0.94, 0.72).from(0.58)
-		var route_tw := create_tween()
+		var route_tw := create_screen_tween()
 		route_tw.set_loops(12)
 		route_tw.tween_property(route_fill, "modulate:a", 0.38, 0.76).from(0.88)
 		route_tw.tween_property(route_fill, "modulate:a", 0.88, 0.76).from(0.38)
@@ -18790,7 +18784,7 @@ func draw_turn_switch_action_ready_art(parent: Control, seat: int, target_center
 		art.modulate = Color(1, 1, 1, 0)
 		seal.pivot_offset = seal.size * 0.5
 		seal.scale = Vector2(0.70, 0.70)
-		var enter := create_tween()
+		var enter := create_screen_tween()
 		enter.set_parallel(true)
 		enter.tween_property(art, "modulate:a", 1.0, 0.20).from(0.0).set_ease(Tween.EASE_OUT)
 		enter.tween_property(seal, "scale", Vector2(1.0, 1.0), 0.26).from(Vector2(0.70, 0.70)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -18825,7 +18819,7 @@ func draw_update_dialog_art(parent: Control) -> Control:
 	if verify_stamp != null:
 		verify_stamp.name = "UpdateVerifyStampTexture"
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var verify_tw := create_tween()
+			var verify_tw := create_screen_tween()
 			verify_tw.set_loops(48)
 			verify_tw.tween_property(verify_stamp, "scale", Vector2(1.06, 1.06), 0.80).from(Vector2(0.96, 0.96))
 			verify_tw.parallel().tween_property(verify_stamp, "modulate:a", 0.34, 0.80).from(0.16)
@@ -19033,7 +19027,7 @@ func draw_update_status_convergence_art(parent: Control) -> Control:
 	var tick = add_gpt_tick_strip(art, rect_full(0.310, 0.145, (0.310) + float(2) * (0.100) + (0.014), 0.850), Color(accent.r, accent.g, accent.b, 0.23), "UpdateStatusConvergenceTick_0")
 	if fx_enabled_effective():
 		art.modulate.a = 0.88
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(10)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.82).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(gate, "modulate:a", 0.48, 0.41).from(0.92)
@@ -19061,7 +19055,7 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 	if voice_texture != null:
 		voice_texture.name = "VoiceWaveTexture"
 		if active and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var voice_texture_tw := create_tween()
+			var voice_texture_tw := create_screen_tween()
 			voice_texture_tw.set_loops(48)
 			voice_texture_tw.tween_property(voice_texture, "modulate:a", 0.09, 0.72).from(0.18)
 			voice_texture_tw.tween_property(voice_texture, "modulate:a", 0.18, 0.72).from(0.09)
@@ -19380,7 +19374,7 @@ func draw_wall_count_feedback_art(parent: Control, wall_count: int, progress: fl
 		warning.name = "WallDrawLowWarningPulse"
 		art.add_child(warning)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(4)
 		tw.tween_property(sheen, "modulate:a", 0.42, 0.22).from(0.92)
 		tw.parallel().tween_property(edge, "modulate:a", 0.56, 0.22).from(0.94)
@@ -19483,7 +19477,7 @@ func draw_win_celebration_art(parent: Control, color: Color, win_type: String) -
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
 		medal.scale = Vector2(0.72, 0.72)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		if cover_texture != null:
 			cover_texture.modulate.a = 0.0
@@ -19574,7 +19568,7 @@ func draw_win_detail_limit_art(parent: Control, limit_name: String, fan: int, po
 		spark.name = "WinDetailLimitSpark_%d" % i
 		art.add_child(spark)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.46, 0.68).from(1.0)
 		tw.tween_property(fill, "modulate:a", 1.0, 0.68).from(0.46)
@@ -19628,13 +19622,13 @@ func draw_win_detail_resolution_bridge(parent: Control, fan: int, points: int, r
 		bridge.add_child(pip)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if seal_texture != null:
-			var seal_tw := create_tween()
+			var seal_tw := create_screen_tween()
 			seal_tw.set_loops(12)
 			seal_tw.tween_property(seal_texture, "modulate:a", 0.26, 0.70).from(0.10)
 			seal_tw.parallel().tween_property(seal_texture, "rotation", 0.05, 0.70).from(-0.05)
 			seal_tw.tween_property(seal_texture, "modulate:a", 0.10, 0.70).from(0.26)
 			seal_tw.parallel().tween_property(seal_texture, "rotation", -0.05, 0.70).from(0.05)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.42, 0.70).from(0.96)
 		tw.parallel().tween_property(gate, "modulate:a", 0.52, 0.70).from(0.96)
@@ -19697,7 +19691,7 @@ func draw_win_detail_score_constellation(parent: Control, reasons: Array, fan: i
 	pulse.name = "WinDetailScorePulse"
 	constellation.add_child(pulse)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(12)
 		tw.tween_property(pulse, "scale", Vector2(1.12, 1.12), 0.72).from(Vector2(0.86, 0.86)).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(pulse, "modulate:a", 0.0, 0.72).from(0.76)
@@ -19751,7 +19745,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and points > 0:
 		score_label.text = "0番  0分"
-		var score_tw := create_tween()
+		var score_tw := create_screen_tween()
 		var steps := 16
 		var step_dur := 0.4 / float(steps)
 		for step_i in range(steps):
@@ -19792,7 +19786,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 				badge.modulate = Color(1, 1, 1, 0)
 				badge.scale = Vector2(0.6, 0.6)
 				var delay = 0.16 + float(i) * 0.06
-				var tw := create_tween()
+				var tw := create_screen_tween()
 				tw.set_parallel(true)
 				tw.tween_property(badge, "modulate:a", 1.0, 0.18).from(0.0).set_delay(delay)
 				tw.tween_property(badge, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.6, 0.6)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK).set_delay(delay)
@@ -19854,7 +19848,7 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 	if fx_enabled_effective():
 		showcase.modulate = Color(1, 1, 1, 0)
 		showcase.scale = Vector2(0.92, 0.92)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(showcase, "modulate:a", 1.0, 0.24).from(0.0).set_delay(0.08)
 		tw.tween_property(showcase, "scale", Vector2(1.0, 1.0), 0.24).from(Vector2(0.92, 0.92)).set_delay(0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -20137,7 +20131,7 @@ func make_cloud_decoration(parent: Control, rect: Rect2, style: String = "auspic
 		plate.name = "CloudGptPlate"
 		plate.modulate = Color(tint.r, tint.g, tint.b, tint.a)
 	if animated and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(cloud, "modulate:a", 0.72, 2.5).from(1.0)
 		tw.tween_property(cloud, "modulate:a", 1.0, 2.5).from(0.72)
@@ -20263,7 +20257,7 @@ func make_lantern(parent: Control, rect: Rect2, color: Color = CINNABAR, lit: bo
 			glow.name = "LanternGptGlow"
 			glow.modulate = Color(1.0, 0.88, 0.55, 0.40)
 			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var tw := create_tween()
+				var tw := create_screen_tween()
 				tw.set_loops(48)
 				tw.tween_property(glow, "modulate:a", 0.22, 1.8).from(0.40)
 				tw.tween_property(glow, "modulate:a", 0.40, 1.8).from(0.22)
@@ -20407,7 +20401,7 @@ func configure_menu_button_motion(button: Control, delay: float = 0.0, hover_sca
 		return
 	button.modulate.a = 0.0
 	button.scale = Vector2(0.965, 0.965)
-	var intro := create_tween()
+	var intro := create_screen_tween()
 	intro.set_parallel(true)
 	intro.tween_property(button, "modulate:a", 1.0, 0.30).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	intro.tween_property(button, "scale", Vector2.ONE, 0.38).from(Vector2(0.965, 0.965)).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -20505,7 +20499,7 @@ func make_moon_or_sun(parent: Control, rect: Rect2, phase: String = "full_moon")
 		body.name = "MoonGptBody"
 		body.modulate = Color(tint.r, tint.g, tint.b, tint.a)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(moon, "modulate:a", 0.72, 4.0).from(1.0)
 		tw.tween_property(moon, "modulate:a", 1.0, 4.0).from(0.72)
@@ -20598,7 +20592,7 @@ func make_plum_blossom(parent: Control, rect: Rect2, count: int = 3, petal_color
 				0.55
 			)
 			if animated and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var tw := create_tween()
+				var tw := create_screen_tween()
 				tw.set_loops(36)
 				tw.tween_property(petal, "modulate:a", 0.30, 1.2 + float(i) * 0.15).from(0.55)
 				tw.tween_property(petal, "modulate:a", 0.55, 1.2 + float(i) * 0.15).from(0.30)
@@ -20839,7 +20833,7 @@ func draw_tile_depth_art(tile_body: Control, size: Vector2, clickable: bool, hig
 		recent_top_glint.name = "TileRecentDiscardTopGlint"
 		tile_body.add_child(recent_top_glint)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var recent_tw := create_tween()
+			var recent_tw := create_screen_tween()
 			recent_tw.set_loops(6)
 			recent_tw.tween_property(recent_frame, "modulate:a", 0.52, 0.40).from(1.0)
 			recent_tw.parallel().tween_property(recent_inner_frame, "modulate:a", 0.40, 0.40).from(0.90)
@@ -21115,7 +21109,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			var left = 0.50 if hint_badge.length() > 1 else 0.62
 			apply_rect(hint, rect_full(left, 0.04, 0.92, 0.23))
 			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var hint_tw := create_tween()
+				var hint_tw := create_screen_tween()
 				hint_tw.set_loops(48)
 				hint_tw.tween_property(hint, "modulate:a", 0.72, 0.60).from(1.0)
 				hint_tw.tween_property(hint, "modulate:a", 1.0, 0.60).from(0.72)
@@ -21203,7 +21197,7 @@ func make_water_ripple(parent: Control, rect: Rect2, style: String = "still", an
 		strip.name = "WaterGptStrip"
 		strip.modulate = Color(0.64, 0.48, 0.28, alpha)
 	if animated and fx_enabled_effective() and wash != null and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_loops(36)
 		tw.tween_property(wash, "modulate:a", alpha * 0.55, 1.6).from(alpha + 0.10)
 		tw.tween_property(wash, "modulate:a", alpha + 0.10, 1.6).from(alpha * 0.55)
@@ -21268,7 +21262,7 @@ func play_card_flip_animation(container: Control, cards: Array, stagger: bool = 
 		spark_dot.modulate.a = 0.0
 		flip_art.add_child(spark_dot)
 
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(card, "scale", Vector2(1.0, 1.0), duration).from(Vector2(0.76, 0.88)).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.tween_property(card, "modulate:a", 1.0, duration * 0.55).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
@@ -21336,7 +21330,7 @@ func play_center_dice_turn_feedback(parent: Control, active_index: int = -1, acc
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.16).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -21409,7 +21403,7 @@ func play_center_last_discard_feedback(parent: Control, tile: String, seat: int 
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.16).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -21525,7 +21519,7 @@ func play_claim_resolution_art(claim: String, from_pos: Vector2, to_pos: Vector2
 	root.add_child(halo)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		root.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(root, "modulate:a", 1.0, 0.14).set_delay(arrival_delay)
 		tw.tween_property(halo, "scale", Vector2(1.20, 1.20), 0.36).from(Vector2(0.82, 0.82)).set_delay(arrival_delay).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(halo, "modulate:a", 0.0, 0.36).from(1.0).set_delay(arrival_delay + 0.12)
@@ -21577,12 +21571,12 @@ func play_claim_trail_particles(from_pos: Vector2, to_pos: Vector2, arc: float, 
 		var arc_offset = sin(step * PI) * arc
 		spark.position = Vector2(base.x + randf_range(-6.0, 6.0), base.y - arc_offset + randf_range(-6.0, 6.0))
 		var delay = step * fly_dur
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(spark, "modulate:a", 0.9, 0.12).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(spark, "scale", Vector2(1.3, 1.3), 0.18).from(Vector2(0.5, 0.5)).set_delay(delay)
 		tw.tween_property(spark, "modulate:a", 0.0, 0.40).from(0.9).set_delay(delay + 0.18)
 		tw.parallel().tween_property(spark, "position:y", spark.position.y + randf_range(18.0, 38.0), 0.40).set_delay(delay + 0.18).set_trans(Tween.TRANS_QUAD)
-	var cleanup := create_tween()
+	var cleanup := create_screen_tween()
 	cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(trail_root.get_instance_id())).set_delay(fly_dur + 0.6)
 
 func play_daily_login_claim_press_feedback(button: Button) -> void:
@@ -21620,7 +21614,7 @@ func play_daily_login_claim_press_feedback(button: Button) -> void:
 		feedback.add_child(spark)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(1.0).set_delay(0.06)
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
@@ -21690,7 +21684,7 @@ func play_discard_pass_to_next_fx(from_seat: int, next_seat: int, tile: String) 
 		pip.name = "DiscardPassArchivePip_%d_%d_%d" % [from_seat, next_seat, i]
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(archive_fill, "scale:x", 1.0, 0.14).from(0.18).set_ease(Tween.EASE_OUT)
 		tw.tween_property(draw_fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -21728,7 +21722,7 @@ func play_discard_splash(target_pos: Vector2, tile: String) -> void:
 		ring.name = "DiscardSplashRing_%d" % i
 		splash_root.add_child(ring)
 		var delay = float(i) * 0.07
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(ring, "offset_left", -42.0, 0.32).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(ring, "offset_top", -42.0, 0.32).from(0.0).set_delay(delay)
 		tw.parallel().tween_property(ring, "offset_right", 42.0, 0.32).from(0.0).set_delay(delay)
@@ -21746,7 +21740,7 @@ func play_discard_splash(target_pos: Vector2, tile: String) -> void:
 		var dist := randf_range(16.0, 32.0)
 		var dx: float = cos(angle) * dist
 		var dy: float = sin(angle) * dist
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(drop, "position:x", drop.position.x + dx, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(drop, "position:y", drop.position.y + dy, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -21764,7 +21758,7 @@ func play_discard_splash(target_pos: Vector2, tile: String) -> void:
 		var tick = make_gpt_tick_strip(Rect2(target_pos + Vector2(-18.0 + float(i) * 13.0, 8.0), Vector2(4.0, 12.0)), Color(accent.r, accent.g, accent.b, 0.28 - float(i) * 0.045))
 		tick.name = "DiscardSplashLandingTick_0"
 		splash_root.add_child(tick)
-	var cleanup := create_tween()
+	var cleanup := create_screen_tween()
 	cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(splash_root.get_instance_id())).set_delay(0.42)
 
 func play_exit_confirm_button_feedback(button: Button, route_id: String, color: Color) -> void:
@@ -21814,7 +21808,7 @@ func play_exit_confirm_button_feedback(button: Button, route_id: String, color: 
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0, 0.15).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -21882,7 +21876,7 @@ func play_fx_deal_cascade(dealer: int) -> void:
 			var jitter_y: float = (float(j) - float(FX_DEAL_CASCADE_TILE_COUNT) * 0.5) * 2.0
 			var land_pos = Vector2(target_pos.x + jitter_x, target_pos.y + jitter_y)
 			var step_delay = seat_delay + float(j) * 0.022
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			tw.set_parallel(true)
 			tw.tween_property(tile, "modulate:a", 0.82, 0.10).from(0.0).set_delay(step_delay)
 			tw.tween_property(tile, "position", land_pos, 0.30).set_delay(step_delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -21901,7 +21895,7 @@ func play_fx_deal_cascade(dealer: int) -> void:
 		ring.name = "DealCascadeRing_%d" % i
 		ring_root.add_child(ring)
 		var delay = float(i) * 0.10
-		var tw_ring := create_tween()
+		var tw_ring := create_screen_tween()
 		tw_ring.set_parallel(true)
 		tw_ring.tween_property(ring, "modulate:a", 0.0, 0.50).from(0.55).set_delay(delay)
 		tw_ring.tween_property(ring, "offset_left", -90.0, 0.50).from(-16.0).set_delay(delay)
@@ -21909,7 +21903,7 @@ func play_fx_deal_cascade(dealer: int) -> void:
 		tw_ring.tween_property(ring, "offset_right", 90.0, 0.50).from(16.0).set_delay(delay)
 		tw_ring.tween_property(ring, "offset_bottom", 90.0, 0.50).from(16.0).set_delay(delay)
 	draw_deal_cascade_completion_art(root, dealer, center, accent)
-	var cleanup := create_tween()
+	var cleanup := create_screen_tween()
 	cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(root.get_instance_id())).set_delay(span + 0.45)
 
 
@@ -21938,7 +21932,7 @@ func play_fx_deal_start(dealer: int) -> void:
 		tile.position = Vector2(center.x * viewport_size.x - 12.0, center.y * viewport_size.y - 17.0)
 		var target_position = Vector2(target.x * viewport_size.x - 12.0, target.y * viewport_size.y - 17.0)
 		var delay = float(i) * 0.055
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(tile, "modulate:a", 0.80, 0.12).from(0.0).set_delay(delay)
 		tw.tween_property(tile, "position", target_position, 0.46).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -21957,14 +21951,14 @@ func play_fx_deal_start(dealer: int) -> void:
 		ensure_fx_ring_gpt_plate(ring, accent, 0.38)
 		ring_root.add_child(ring)
 		var delay = float(i) * 0.08
-		var tw_ring := create_tween()
+		var tw_ring := create_screen_tween()
 		tw_ring.set_parallel(true)
 		tw_ring.tween_property(ring, "modulate:a", 0.0, 0.42).from(0.62).set_delay(delay)
 		tw_ring.tween_property(ring, "offset_left", -72.0, 0.42).from(-16.0).set_delay(delay)
 		tw_ring.tween_property(ring, "offset_top", -72.0, 0.42).from(-16.0).set_delay(delay)
 		tw_ring.tween_property(ring, "offset_right", 72.0, 0.42).from(16.0).set_delay(delay)
 		tw_ring.tween_property(ring, "offset_bottom", 72.0, 0.42).from(16.0).set_delay(delay)
-	var cleanup := create_tween()
+	var cleanup := create_screen_tween()
 	cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(root.get_instance_id())).set_delay(0.72)
 
 func play_fx_discard_ripple(seat: int = -1) -> void:
@@ -21985,7 +21979,7 @@ func play_fx_discard_ripple(seat: int = -1) -> void:
 		ring.offset_bottom = 16.0
 	fx_ripple_root.visible = true
 	var span := float(FX_DISCARD_RIPPLE_DURATION_MSEC) / 1000.0
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	fx_ripple_tween = tw
 	tw.set_parallel(true)
 	for i in range(fx_ripple_rings.size()):
@@ -22042,7 +22036,7 @@ func play_fx_flower_bloom(seat: int, tile: String) -> void:
 		bloom_texture.offset_bottom = 70.0
 		root.add_child(bloom_texture)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var bloom_texture_tw := create_tween()
+			var bloom_texture_tw := create_screen_tween()
 			bloom_texture_tw.set_parallel(true)
 			bloom_texture_tw.tween_property(bloom_texture, "modulate:a", 0.0, 0.58).from(0.24)
 			bloom_texture_tw.tween_property(bloom_texture, "scale", Vector2(1.16, 1.16), 0.58).from(Vector2(0.88, 0.88)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -22088,7 +22082,7 @@ func play_fx_flower_bloom(seat: int, tile: String) -> void:
 		var angle = -PI * 0.85 + float(i) * PI * 1.70 / 7.0
 		var distance = randf_range(34.0, 70.0)
 		var target = Vector2(cos(angle), sin(angle)) * distance
-		var petal_tw := create_tween()
+		var petal_tw := create_screen_tween()
 		petal_tw.set_parallel(true)
 		var delay = float(i) * 0.018
 		petal_tw.tween_property(petal, "modulate:a", 0.92, 0.08).from(0.0).set_delay(delay)
@@ -22114,7 +22108,7 @@ func play_fx_flower_bloom(seat: int, tile: String) -> void:
 		var tick = make_gpt_tick_strip(Rect2(Vector2(-18.0 + float(i) * 14.0, 28.0), Vector2(4.0, 12.0)), Color(accent.r, accent.g, accent.b, 0.30 - float(i) * 0.045))
 		tick.name = "FlowerBloomReplacementTick_0"
 		root.add_child(tick)
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	tw.set_parallel(true)
 	tw.tween_property(tile_view, "modulate:a", 1.0, 0.14).from(0.0)
 	tw.tween_property(tile_view, "scale", Vector2(1.0, 1.0), 0.22).from(Vector2(0.72, 0.72)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -22229,7 +22223,7 @@ func play_fx_gang_burst(gang_type: String, seat: int) -> void:
 	var tick = add_gpt_tick_strip(fx_burst_root, rect_full(0.372, 0.580, (0.372) + float(2) * (0.088) + (0.018), 0.740), Color(accent.r, accent.g, accent.b, 0.26), "GangBurstRouteTick_0")
 	fx_burst_root.visible = true
 	var half := 0.70
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	fx_burst_tween = tw
 	tw.set_parallel(true)
 	tw.tween_property(fx_burst_flash, "modulate:a", 0.12, 0.16).from(0.0)
@@ -22271,7 +22265,7 @@ func play_fx_turn_switch_slide(seat: int) -> void:
 	var accent = SEAT_ACCENT_COLORS[seat] if seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
 	# 极轻微的缩放呼吸 + 偏色高光，不打扰阅读
 	var dur := float(FX_TURN_SWITCH_SLIDE_MSEC) / 1000.0
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	tw.set_parallel(true)
 	tw.tween_property(target, "scale", Vector2(1.004, 1.004), dur * 0.5).from(Vector2(0.998, 0.998)).set_ease(Tween.EASE_OUT)
 	tw.chain().tween_property(target, "scale", Vector2(1.0, 1.0), dur * 0.5).set_ease(Tween.EASE_IN_OUT)
@@ -22308,7 +22302,7 @@ func play_fx_turn_switch_slide(seat: int) -> void:
 			tick.name = "TurnSwitchRouteTick_0"
 			fx_layer.add_child(tick)
 		var ready_art = draw_turn_switch_action_ready_art(fx_layer, seat, target_center, accent)
-		var halo_tw := create_tween()
+		var halo_tw := create_screen_tween()
 		halo_tw.tween_property(compass_halo, "modulate:a", 0.10, dur * 0.4).from(0.0)
 		halo_tw.tween_property(compass_halo, "modulate:a", 0.0, dur * 0.6).from(0.10)
 		halo_tw.tween_callback(Callable(self, "cleanup_turn_switch_fx_by_id").bind(
@@ -22349,7 +22343,7 @@ func play_fx_win_burst(text: String, color: Color) -> void:
 	fx_burst_label.offset_bottom = 28.0
 	fx_burst_root.visible = true
 	var half := float(FX_WIN_BURST_DURATION_MSEC) / 1000.0
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	fx_burst_tween = tw
 	tw.set_parallel(true)
 	tw.tween_property(fx_burst_flash, "modulate:a", 0.10, 0.18).from(0.0)
@@ -22393,7 +22387,7 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 			beam.position = center
 			beam.size = Vector2(3.0, 0.0)
 			fx_layer.add_child(beam)
-			var beam_tw := create_tween()
+			var beam_tw := create_screen_tween()
 			beam_tw.tween_property(beam, "size:y", randf_range(160.0, 280.0), 0.5).from(0.0).set_delay(randf_range(0.0, 0.2)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 			beam_tw.parallel().tween_property(beam, "modulate:a", randf_range(0.15, 0.30), 0.3).from(0.0).set_delay(randf_range(0.0, 0.15))
 			beam_tw.tween_property(beam, "modulate:a", 0.0, 0.4).set_delay(0.5)
@@ -22414,7 +22408,7 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 			spark.name = "WinSparkRain_%d" % si
 			spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			fx_layer.add_child(spark)
-			var s_tw := create_tween()
+			var s_tw := create_screen_tween()
 			s_tw.tween_property(spark, "position:y", sy - randf_range(40.0, 100.0), randf_range(1.0, 2.0)).set_delay(randf_range(0.0, 0.6)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 			s_tw.parallel().tween_property(spark, "modulate:a", 0.0, randf_range(0.8, 1.5)).set_delay(randf_range(0.2, 0.8))
 			var spark_id := spark.get_instance_id()
@@ -22506,7 +22500,7 @@ func play_fx_win_burst_enhanced(text: String, color: Color, win_type: String = "
 	var half := float(duration) / 2000.0
 
 	# 创建主动画
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	fx_burst_tween = tw
 	tw.set_parallel(true)
 
@@ -22584,7 +22578,7 @@ func play_menu_card_press_feedback(button: Button, color: Color) -> void:
 		feedback.modulate.a = 0.0
 		wash.scale = Vector2(0.960, 0.960)
 		glow.scale = Vector2(0.900, 0.900)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(wash, "scale", Vector2(1.015, 1.015), 0.14).from(Vector2(0.960, 0.960)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -22618,7 +22612,7 @@ func play_menu_quick_button_press_feedback(button: Button, quick_id: String, col
 		feedback.modulate.a = 0.0
 		wash.scale = Vector2(0.940, 0.940)
 		seal.scale = Vector2(0.860, 0.860)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(wash, "scale", Vector2(1.040, 1.040), 0.14).from(Vector2(0.940, 0.940)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -22640,7 +22634,7 @@ func play_menu_settings_button_press_feedback(button: Button) -> void:
 	button.add_child(feedback)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(1.0).set_delay(0.06)
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
@@ -22659,7 +22653,7 @@ func play_menu_transition(from_menu: Control, to_menu: Callable, style: String =
 	match style:
 		"slide_left":
 			# 当前菜单滑出
-			var tw_out := create_tween()
+			var tw_out := create_screen_tween()
 			tw_out.tween_property(from_menu, "position:x", -viewport_size.x, duration).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 			tw_out.parallel().tween_property(from_menu, "modulate:a", 0.5, duration).from(1.0)
 
@@ -22669,13 +22663,13 @@ func play_menu_transition(from_menu: Control, to_menu: Callable, style: String =
 				to_menu.call()
 				root_layer.position.x = viewport_size.x
 
-				var tw_in := create_tween()
+				var tw_in := create_screen_tween()
 				tw_in.tween_property(root_layer, "position:x", 0.0, duration).from(viewport_size.x).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 				tw_in.parallel().tween_property(root_layer, "modulate:a", 1.0, duration).from(0.5)
 			)
 
 		"slide_right":
-			var tw_out := create_tween()
+			var tw_out := create_screen_tween()
 			tw_out.tween_property(from_menu, "position:x", viewport_size.x, duration).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 			tw_out.parallel().tween_property(from_menu, "modulate:a", 0.5, duration).from(1.0)
 
@@ -22684,13 +22678,13 @@ func play_menu_transition(from_menu: Control, to_menu: Callable, style: String =
 				to_menu.call()
 				root_layer.position.x = -viewport_size.x
 
-				var tw_in := create_tween()
+				var tw_in := create_screen_tween()
 				tw_in.tween_property(root_layer, "position:x", 0.0, duration).from(-viewport_size.x).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 				tw_in.parallel().tween_property(root_layer, "modulate:a", 1.0, duration).from(0.5)
 			)
 
 		"fade":
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			tw.tween_property(from_menu, "modulate:a", 0.0, duration * 0.5)
 			tw.tween_callback(func() -> void:
 				from_menu.queue_free()
@@ -22700,7 +22694,7 @@ func play_menu_transition(from_menu: Control, to_menu: Callable, style: String =
 			tw.tween_property(root_layer, "modulate:a", 1.0, duration * 0.5)
 
 		"zoom":
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			tw.set_parallel(true)
 			tw.tween_property(from_menu, "scale", Vector2(0.8, 0.8), duration * 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 			tw.tween_property(from_menu, "modulate:a", 0.0, duration * 0.5)
@@ -22756,7 +22750,7 @@ func play_tile_claim_burst(position: Vector2, color: Color, label_text: String =
 		label.modulate.a = 0.0
 		label.scale = Vector2(0.72, 0.72)
 
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	tw.set_parallel(true)
 
 	for i in range(ring_count):
@@ -22792,7 +22786,7 @@ func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_m
 	var tile_ref = weakref(tile_view)
 	var flip_art_ref = weakref(flip_art) if flip_art != null else null
 
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	tile_flip_animations[anim_id] = tw
 
 	# 第一阶段：正面缩放到0（模拟翻转到侧面）
@@ -22861,7 +22855,7 @@ func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, d
 		fx_layer.add_child(flip_texture)
 
 	var duration := float(duration_msec) / 1000.0
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	var flying_tile_id := flying_tile.get_instance_id()
 	var flip_texture_id := flip_texture.get_instance_id() if flip_texture != null else 0
 	var route_art_id := route_art.get_instance_id() if route_art != null else 0
@@ -23007,7 +23001,7 @@ func _show_achievements_screen_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 18.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_top", 0.0, 0.26).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -23130,7 +23124,7 @@ func _show_menu_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		header.modulate = Color(1, 1, 1, 0)
 		header.offset_top = -14.0
-		var h_tw := create_tween()
+		var h_tw := create_screen_tween()
 		h_tw.set_parallel(true)
 		h_tw.tween_property(header, "modulate:a", 1.0, 0.30).from(0.0).set_ease(Tween.EASE_OUT)
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -23198,7 +23192,7 @@ func _show_menu_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		footer.modulate = Color(1, 1, 1, 0)
 		footer.offset_top = 12.0
-		var footer_tw := create_tween()
+		var footer_tw := create_screen_tween()
 		footer_tw.set_parallel(true)
 		footer_tw.tween_property(footer, "modulate:a", 1.0, 0.28).from(0.0).set_delay(0.18).set_ease(Tween.EASE_OUT)
 		footer_tw.tween_property(footer, "offset_top", 0.0, 0.28).from(12.0).set_delay(0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -23253,13 +23247,13 @@ func _show_menu_impl() -> void:
 		if header != null:
 			header.modulate.a = 0.0
 			header.offset_top = 12.0
-			var h_tw := create_tween()
+			var h_tw := create_screen_tween()
 			h_tw.tween_property(header, "modulate:a", 1.0, 0.22).from(0.0).set_ease(Tween.EASE_OUT)
 			h_tw.parallel().tween_property(header, "offset_top", 0.0, 0.22).from(12.0).set_ease(Tween.EASE_OUT)
 		if footer != null:
 			footer.modulate.a = 0.0
 			footer.offset_top = 8.0
-			var f_tw := create_tween()
+			var f_tw := create_screen_tween()
 			f_tw.tween_property(footer, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
 			f_tw.parallel().tween_property(footer, "offset_top", 0.0, 0.22).from(8.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
 
@@ -23473,7 +23467,7 @@ func _show_online_lobby_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		form_panel.modulate = Color(1, 1, 1, 0)
 		form_panel.offset_left = -16.0
-		var ftw := create_tween()
+		var ftw := create_screen_tween()
 		ftw.set_parallel(true)
 		ftw.tween_property(form_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT)
 		ftw.tween_property(form_panel, "offset_left", 0.0, 0.28).from(-16.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -23497,7 +23491,7 @@ func _show_online_lobby_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		log_panel.modulate = Color(1, 1, 1, 0)
 		log_panel.offset_left = 18.0
-		var tw_log := create_tween()
+		var tw_log := create_screen_tween()
 		tw_log.set_parallel(true)
 		tw_log.tween_property(log_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT).set_delay(0.12)
 		tw_log.tween_property(log_panel, "offset_left", 0.0, 0.28).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD).set_delay(0.12)
@@ -23638,7 +23632,7 @@ func _show_rules_screen_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_right = -22.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_right", 0.0, 0.26).from(-22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -23889,7 +23883,7 @@ func _show_shop_screen_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_left = 22.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_left", 0.0, 0.26).from(22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -24030,7 +24024,7 @@ func _show_shop_screen_impl() -> void:
 			var item_index = int(ITEM_TYPES.keys().find(item_id))
 			row.modulate = Color(1, 1, 1, 0)
 			row.offset_left = 14.0
-			var r_tw := create_tween()
+			var r_tw := create_screen_tween()
 			r_tw.set_parallel(true)
 			r_tw.tween_property(row, "modulate:a", 1.0, 0.22).from(0.0).set_delay(float(item_index) * 0.06).set_ease(Tween.EASE_OUT)
 			r_tw.tween_property(row, "offset_left", 0.0, 0.22).from(14.0).set_delay(float(item_index) * 0.06).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -24180,7 +24174,7 @@ func _show_shop_screen_impl() -> void:
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.scale = Vector2(0.95, 0.95)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.95, 0.95)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -24253,7 +24247,7 @@ func _show_stats_screen_impl() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 18.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_top", 0.0, 0.26).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -24705,7 +24699,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.scale = Vector2(0.85, 0.85)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.3).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.3).from(Vector2(0.85, 0.85)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -24769,9 +24763,9 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		bg.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 20.0
 		panel.modulate = Color(1, 1, 1, 0)
-		var bg_tw := create_tween()
+		var bg_tw := create_screen_tween()
 		bg_tw.tween_property(bg, "modulate:a", 1.0, 0.18).from(0.0)
-		var p_tw := create_tween()
+		var p_tw := create_screen_tween()
 		p_tw.set_parallel(true)
 		p_tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.06)
 		p_tw.tween_property(panel, "offset_top", 0.0, 0.22).from(20.0).set_delay(0.06).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -24784,7 +24778,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 			for i in range(label_nodes.size()):
 				var lbl = label_nodes[i]
 				lbl.modulate.a = 0.0
-				var l_tw := create_tween()
+				var l_tw := create_screen_tween()
 				l_tw.tween_property(lbl, "modulate:a", 1.0, 0.15).from(0.0).set_delay(0.12 + float(i) * 0.04).set_ease(Tween.EASE_OUT)
 
 	# 添加点击关闭功能
@@ -24872,9 +24866,9 @@ func show_exit_confirm() -> void:
 		overlay.modulate = Color(1, 1, 1, 0)
 		dialog.scale = Vector2(0.7, 0.7)
 		dialog.pivot_offset = dialog.size * 0.5 if dialog.size.length() > 0 else Vector2(200, 100)
-		var overlay_tw := create_tween()
+		var overlay_tw := create_screen_tween()
 		overlay_tw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0)
-		var dialog_tw := create_tween()
+		var dialog_tw := create_screen_tween()
 		dialog_tw.set_parallel(true)
 		dialog_tw.tween_property(dialog, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.7, 0.7)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		dialog_tw.tween_property(dialog, "modulate:a", 1.0, 0.2).from(0.0)
@@ -25020,7 +25014,7 @@ func show_loading_screen() -> void:
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		# 背景先入
 		bg.modulate.a = 0.0
-		var bg_tw := create_tween()
+		var bg_tw := create_screen_tween()
 		bg_tw.tween_property(bg, "modulate:a", 1.0, 0.4).set_ease(Tween.EASE_OUT)
 
 		center_panel.modulate.a = 1.0
@@ -25028,7 +25022,7 @@ func show_loading_screen() -> void:
 		subtitle.modulate.a = 1.0
 	elif fx_enabled_effective():
 		center_panel.modulate.a = 0.0
-		var fade_tween := create_tween()
+		var fade_tween := create_screen_tween()
 		fade_tween.tween_property(center_panel, "modulate:a", 1.0, 0.5).set_ease(Tween.EASE_OUT)
 
 
@@ -25129,7 +25123,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
 	var stay_dur := float(duration_msec) / 1000.0
 	var fade_dur := 0.28
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	toast_tween = tw
 	# 入场 - 从上方弹出 + 缩放弹跳
 	tw.tween_property(toast_bg, "modulate:a", 1.0, slide_dur).from(0.0)
@@ -25774,7 +25768,7 @@ func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 	var flash = make_fullrect_overlay(Color(1.0, 0.92, 0.55, 0.0), "ui_soft_flash")
 	panel.add_child(flash)
 
-	var flash_tween := create_tween()
+	var flash_tween := create_screen_tween()
 	flash_tween.tween_property(flash, "modulate:a", 0.3, 0.15)
 	flash_tween.tween_property(flash, "modulate:a", 0.0, 0.3)
 	flash_tween.tween_callback(Callable(self, "queue_free_node_by_id").bind(flash.get_instance_id()))
@@ -25795,7 +25789,7 @@ func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 		var distance = randf_range(80, 200)
 		var target_pos = particle.position + Vector2(cos(angle), sin(angle)) * distance
 
-		var particle_tween := create_tween()
+		var particle_tween := create_screen_tween()
 		particle_tween.set_parallel(true)
 		particle_tween.tween_property(particle, "position", target_pos, 0.6).set_ease(Tween.EASE_OUT)
 		particle_tween.tween_property(particle, "modulate:a", 0.0, 0.6).from(1.0)
@@ -26016,11 +26010,11 @@ func hide_exit_confirm() -> void:
 	var panel_id = panel.get_instance_id()
 	var dialog = panel.find_child("ExitConfirmDialog", true, false)
 	if fx_enabled_effective() and dialog != null and is_instance_valid(dialog):
-		var d_tw := create_tween()
+		var d_tw := create_screen_tween()
 		d_tw.set_parallel(true)
 		d_tw.tween_property(dialog, "scale", Vector2(0.8, 0.8), 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		d_tw.tween_property(dialog, "modulate:a", 0.0, 0.12)
-	var tween = create_tween()
+	var tween = create_screen_tween()
 	tween.tween_property(panel, "modulate:a", 0.0, 0.15)
 	tween.tween_callback(Callable(self, "queue_free_node_by_id").bind(panel_id))
 
@@ -26106,7 +26100,7 @@ func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed:
 		wash.scale = Vector2(0.96, 0.92)
 		bloom.scale = Vector2(0.84, 0.84)
 		seal.scale = Vector2(0.86, 0.86)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.bind_node(feedback)
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 0.98, 0.06).from(0.0)
@@ -26177,7 +26171,7 @@ func play_lobby_action_press_feedback(button: Button, text: String, color: Color
 		wash.scale = Vector2(0.92, 0.90)
 		glow.scale = Vector2(0.78, 0.78)
 		seal.scale = Vector2(0.86, 0.86)
-		var simple_press_tw := create_tween()
+		var simple_press_tw := create_screen_tween()
 		simple_press_tw.bind_node(feedback)
 		simple_press_tw.set_parallel(true)
 		simple_press_tw.tween_property(feedback, "modulate:a", 0.92, 0.06).from(0.0)
@@ -26592,7 +26586,7 @@ func play_settings_close_button_feedback(button: Button) -> void:
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(1.0).set_delay(0.06)
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
@@ -26654,7 +26648,7 @@ func play_settings_action_feedback(button: Button, role: String, color: Color) -
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(1.0).set_delay(0.07)
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
@@ -26707,7 +26701,7 @@ func play_reset_progress_button_feedback(button: Button, armed: bool) -> void:
 		feedback.add_child(lock)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0 if armed else 0.680, 0.15).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -27136,9 +27130,7 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 		selected_separation = separation
 		selected_width = candidate_width
 		# Prefer readable spacing (not welded) while keeping touch width.
-		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and separation >= 4 and gap_width >= 6.0:
-			break
-		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and separation >= 4:
+		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and gap_width >= 4.0:
 			break
 	var tile_width = min(HAND_TILE_MAX_WIDTH, floor(max(1.0, selected_width)))
 	var tile_height = floor(tile_width * HAND_TILE_ASPECT)
@@ -27336,7 +27328,7 @@ func play_voice_button_press_feedback(button: Button, active: bool, peak: float 
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.990, 0.14).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -27428,6 +27420,11 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	var dock_rect = action_bar_dock_layout_rect()
 	if mode == "offline" and has_pending_danger_discard():
 		return dock_rect
+	if mode == "offline" and offline_phase == "pending_claim":
+		# Pending claims use a reserved two-row lane. Keeping its physical shell
+		# fixed prevents wide viewports from pushing the context panel into a
+		# gap beside the right river.
+		return dock_rect
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_count(count, separation)
 	var dock_pixels = float(count) * width + float(max(0, count - 1) * separation) + 24.0
@@ -27440,6 +27437,49 @@ func action_bar_layout_rect() -> Rect2:
 	if mode == "offline" and offline_phase == "pending_claim":
 		return PENDING_CLAIM_ACTION_BAR_RECT
 	return ACTION_BAR_RECT
+
+func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
+	# Keep the response context in the root-layer lane between the transformed
+	# side rivers. Its lower edge also stays above the transformed bottom river
+	# and the action dock, so this remains valid when table chrome is nested.
+	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
+	var safe_width = maxf(1.0, resolved_size.x)
+	var safe_height = maxf(1.0, resolved_size.y)
+	var outer_width = maxf(0.001, TABLE_OUTER_RECT.size.x - TABLE_OUTER_RECT.position.x)
+	var outer_height = maxf(0.001, TABLE_OUTER_RECT.size.y - TABLE_OUTER_RECT.position.y)
+	var table_left = TABLE_OUTER_RECT.position.x + TABLE_INNER_RECT.position.x * outer_width
+	var table_top = TABLE_OUTER_RECT.position.y + TABLE_INNER_RECT.position.y * outer_height
+	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
+	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
+	var left_river = seat_discard_rect(3)
+	var right_river = seat_discard_rect(1)
+	var bottom_river = seat_discard_rect(0)
+	var lane_gap_x = 8.0 / safe_width
+	var lane_left = table_left + left_river.size.x * table_width + lane_gap_x
+	var lane_right = table_left + right_river.position.x * table_width - lane_gap_x
+	var lane_width = maxf(0.12, lane_right - lane_left)
+	var panel_width_px = clampf(safe_width * 0.270, 240.0, 320.0)
+	var panel_width = minf(panel_width_px / safe_width, lane_width)
+	var dock_rect = action_dock_rect_for_count(action_bar_button_count())
+	var dock_left = dock_rect.position.x
+	var centered_panel_x = (lane_left + lane_right) * 0.5
+	var dock_aligned_panel_x = dock_left - panel_width * 0.5
+	var panel_center_x = clampf(dock_aligned_panel_x, lane_left + panel_width * 0.5, lane_right - panel_width * 0.5)
+	if panel_center_x <= lane_left or panel_center_x >= lane_right:
+		panel_center_x = centered_panel_x
+	var panel_height_px = clampf(safe_height * 0.082, 48.0, 58.0)
+	var panel_height = minf(panel_height_px / safe_height, 0.105)
+	var lane_gap_y = 8.0 / safe_height
+	var bottom_river_top = table_top + bottom_river.position.y * table_height
+	var dock_top = dock_rect.position.y
+	var panel_bottom = minf(bottom_river_top - lane_gap_y, dock_top - lane_gap_y)
+	var panel_top = panel_bottom - panel_height
+	return rect_full(
+		panel_center_x - panel_width * 0.5,
+		panel_top,
+		panel_center_x + panel_width * 0.5,
+		panel_bottom
+	)
 
 func action_bar_dock_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
@@ -27472,7 +27512,7 @@ func finalize_action_bar_layout() -> void:
 				child.pivot_offset = Vector2(width * 0.5, height * 0.5)
 				child.scale = Vector2(0.7, 0.7)
 				child.modulate = Color(1, 1, 1, 0)
-				var btw := create_tween()
+				var btw := create_screen_tween()
 				btw.set_parallel(true)
 				btw.tween_property(child, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 				btw.tween_property(child, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
@@ -27735,7 +27775,7 @@ func ensure_update_dialog() -> void:
 		update_dialog.modulate.a = 0.0
 		panel.pivot_offset = panel.size * 0.5
 		panel.scale = Vector2(0.8, 0.8)
-		var entry_tw := create_tween()
+		var entry_tw := create_screen_tween()
 		entry_tw.set_parallel(true)
 		entry_tw.tween_property(update_dialog, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
 		entry_tw.tween_property(panel, "scale", Vector2.ONE, 0.3).from(Vector2(0.8, 0.8)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -27744,7 +27784,7 @@ func ensure_update_dialog() -> void:
 		package_texture.name = "UpdatePackageTexture"
 		panel.move_child(package_texture, 0)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var package_tw := create_tween()
+			var package_tw := create_screen_tween()
 			package_tw.set_loops(48)
 			package_tw.tween_property(package_texture, "modulate:a", 0.09, 1.4).from(0.18)
 			package_tw.tween_property(package_texture, "modulate:a", 0.18, 1.4).from(0.09)
@@ -27837,7 +27877,7 @@ func play_update_dialog_button_feedback(button: Button, role: String, color: Col
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0, 0.15).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -28771,12 +28811,15 @@ func pending_danger_discard_text() -> String:
 		return current_status_text()
 	var report = pending_danger_discard_report if not pending_danger_discard_report.is_empty() else discard_report_for_tile(pending_danger_discard_tile)
 	var alternatives = safe_discard_alternative_text(pending_danger_discard_tile)
-	var details = discard_safety_text(report) if not report.is_empty() else "风险高"
-	return "高危：再点确认打出%s · %s%s" % [
-		tile_label(pending_danger_discard_tile),
-		details,
-		" · 可改打" + alternatives if alternatives != "" else "",
+	var source = report.get("danger_source", {}) if typeof(report) == TYPE_DICTIONARY else {}
+	var reason = str(source.get("reason", "牌路危险")) if typeof(source) == TYPE_DICTIONARY else "牌路危险"
+	var parts: Array[String] = [
+		"高危：%s" % tile_label(pending_danger_discard_tile),
+		reason,
 	]
+	if alternatives != "":
+		parts.append("可改打%s" % alternatives)
+	return " · ".join(parts)
 
 func safe_discard_alternative_text(excluded_tile: String, limit: int = 2) -> String:
 	var text := ""
@@ -30444,7 +30487,7 @@ func play_action_button_press_feedback(button: Button, role: String, color: Colo
 	apply_rect(seal, rect_full(0.785, 0.185, 0.940, 0.470))
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.990, 0.14).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -30749,7 +30792,7 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 		var angle = randf() * TAU
 		var dist = randf_range(18.0, 42.0)
 		var target_pos = tile_center + Vector2(cos(angle), sin(angle)) * dist
-		var sp_tw := create_tween()
+		var sp_tw := create_screen_tween()
 		sp_tw.set_parallel(true)
 		sp_tw.tween_property(sp, "position", target_pos, 0.32).set_delay(randf_range(0.0, 0.1)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		sp_tw.tween_property(dot, "modulate:a", 0.0, 0.30).from(1.0).set_delay(randf_range(0.0, 0.1))
@@ -30832,7 +30875,7 @@ func spawn_transition_complete_sparks() -> void:
 		var vp_size = get_viewport().size
 		p.position = Vector2(randf_range(0.25, 0.75) * vp_size.x, randf_range(0.30, 0.70) * vp_size.y)
 		fx_layer.add_child(p)
-		var ptw := create_tween()
+		var ptw := create_screen_tween()
 		ptw.set_parallel(true)
 		var p_angle = randf() * TAU
 		var p_dist = randf_range(35.0, 90.0)
@@ -30916,7 +30959,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				ink_art.add_child(ink_tick)
 				ink_ticks.append(ink_tick)
 			var ink_dur := 0.30
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			transition_tween = tw
 			transition_active = true
 			# 笔触横扫
@@ -30992,10 +31035,10 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				var route_tick = make_layout_host(rect_full(left_frac + 0.070, 0.875, left_frac + 0.088, 0.930))
 				route_tick.name = "CurtainCloseTick_%d" % i
 				strip_container.add_child(route_tick)
-				var s_tw := create_tween()
+				var s_tw := create_screen_tween()
 				s_tw.tween_property(strip, "anchor_top", 0.0, 0.25).from(-1.0).set_delay(float(i) * 0.04).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 				s_tw.parallel().tween_property(strip, "anchor_bottom", 1.0, 0.25).from(-0.5).set_delay(float(i) * 0.04)
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			transition_tween = tw
 			transition_active = true
 			tw.tween_callback(func() -> void:
@@ -31003,7 +31046,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 			).set_delay(0.28)
 			tw.tween_callback(func() -> void:
 				for child in strip_container.get_children():
-					var c_tw := create_tween()
+					var c_tw := create_screen_tween()
 					c_tw.tween_property(child, "anchor_top", -1.0, 0.20).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 					c_tw.parallel().tween_property(child, "anchor_bottom", -0.5, 0.20).from(1.0)
 			).set_delay(0.35)
@@ -31025,7 +31068,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				dissolve_mat.set_shader_parameter("edge_softness", 0.08)
 				dissolve_mat.set_shader_parameter("swirl_strength", 0.6)
 				dissolve_rect.material = dissolve_mat
-				var tw := create_tween()
+				var tw := create_screen_tween()
 				transition_tween = tw
 				transition_active = true
 				tw.tween_method(func(val: float) -> void:
@@ -31070,7 +31113,7 @@ func play_screen_transition(callback: Callable, instant: bool = false, style: St
 				var tick = make_layout_host(rect_full(0.405 + float(i) * 0.070, 0.475, 0.423 + float(i) * 0.070, 0.550))
 				tick.name = "FadeTransitionTick_%d" % i
 				fade_art.add_child(tick)
-			var tw := create_tween()
+			var tw := create_screen_tween()
 			transition_tween = tw
 			transition_active = true
 			tw.tween_property(transition_overlay, "modulate:a", 0.92, half_dur).from(0.0)
@@ -31155,7 +31198,7 @@ func play_after_gang_replacement_draw_fx(seat: int, tile: String = "") -> Contro
 	fx_burst_root.visible = true
 	if DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(art, "modulate:a", 1.0, 0.08).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.22).from(0.060).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -31229,7 +31272,7 @@ func play_wall_draw_resolution_fx(dealer: int) -> Control:
 	fx_burst_root.visible = true
 	if DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(art, "modulate:a", 1.0, 0.08).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.22).from(0.060).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -31290,7 +31333,7 @@ func play_toast_entry_feedback(toast_bg: Control, accent: Color) -> Control:
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.16).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -31404,7 +31447,7 @@ func play_secondary_back_press_feedback(button: Button, screen_id: String, color
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.15).from(0.150).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -31444,6 +31487,8 @@ func current_status_text() -> String:
 # 顶部栏状态：以「事件」视角描述局势，避免与手牌托盘的「行动」提示重复同一句话。
 func top_hud_status_text() -> String:
 	if mode == "offline":
+		if has_pending_danger_discard():
+			return "风险确认·%s" % tile_label(pending_danger_discard_tile)
 		if offline_phase == "pending_claim":
 			var claim_seat = int(offline_pending_claim.get("from_seat", -1))
 			var claim_tile = tile_label(str(offline_pending_claim.get("tile", "")))
@@ -31785,7 +31830,7 @@ func play_shop_buy_button_feedback(button: Button, affordable: bool) -> void:
 		feedback.add_child(lock)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0 if affordable else 0.520, 0.15).from(0.120).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -31830,19 +31875,19 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 	flash.name = "ShopPurchaseSuccessFlash"
 	feedback.add_child(flash)
 
-	var flash_tween := create_tween()
+	var flash_tween := create_screen_tween()
 	flash_tween.tween_property(flash, "modulate:a", 0.3, 0.15)
 	flash_tween.tween_property(flash, "modulate:a", 0.0, 0.3)
 	flash_tween.tween_callback(Callable(self, "queue_free_node_by_id").bind(flash.get_instance_id()))
 
 	# 边框高亮 - 增强为更明显的发光
-	var highlight_tween := create_tween()
+	var highlight_tween := create_screen_tween()
 	highlight_tween.tween_property(row, "modulate", Color(1.25, 1.22, 1.18, 1.0), 0.15)
 	highlight_tween.tween_property(row, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.3)
 
 	# 金币粒子飞溅 - 从行中心向四周散开
 	if fx_enabled_effective() and is_instance_valid(row):
-		var route_tw := create_tween()
+		var route_tw := create_screen_tween()
 		route_tw.set_parallel(true)
 		route_tw.tween_property(fill, "anchor_right", 1.0, 0.24).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		route_tw.tween_property(gate, "scale", Vector2(1.12, 1.12), 0.18).from(Vector2(0.86, 0.86)).set_ease(Tween.EASE_OUT)
@@ -31861,7 +31906,7 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 			var angle := float(i) * TAU / 10.0 + randf() * 0.3
 			var dist := 40.0 + randf() * 50.0
 			var target_pos: Vector2 = center + Vector2(cos(angle), sin(angle)) * dist - Vector2(psize * 0.5, psize * 0.5)
-			var p_tw := create_tween()
+			var p_tw := create_screen_tween()
 			p_tw.set_parallel(true)
 			p_tw.tween_property(particle, "position", target_pos, 0.6).set_ease(Tween.EASE_OUT)
 			p_tw.tween_property(particle, "modulate:a", 0.0, 0.6).set_ease(Tween.EASE_IN)
@@ -31922,7 +31967,7 @@ func play_chat_send_panel_feedback(message: String = "") -> Control:
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.08).from(0.0)
 		tw.tween_property(fill, "anchor_right", 1.0, 0.20).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -32046,7 +32091,7 @@ func play_pending_claim_choice_confirmation_fx(claim: String, from_seat: int, ti
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(route_fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(gate, "scale", Vector2(1.08, 1.08), 0.16).from(Vector2(0.82, 0.82)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -32117,7 +32162,7 @@ func play_human_action_choice_confirmation_fx(action: String, tile: String) -> C
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(gate, "scale", Vector2(1.08, 1.08), 0.16).from(Vector2(0.82, 0.82)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -32194,7 +32239,7 @@ func play_ai_claim_choice_confirmation_fx(seat: int, from_seat: int, tile: Strin
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(gate, "scale", Vector2(1.08, 1.08), 0.16).from(Vector2(0.82, 0.82)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -32271,7 +32316,7 @@ func play_rob_gang_warning_fx(gang_seat: int, winner_seat: int, tile: String) ->
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(intercept, "scale", Vector2(1.22, 1.22), 0.16).from(Vector2(0.78, 0.78)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -32341,7 +32386,7 @@ func play_next_hand_transition_fx(previous_dealer: int, next_dealer: int, repeat
 		art.add_child(pip)
 	if DisplayServer.get_name().to_lower() != "headless":
 		var art_id := art.get_instance_id()
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(fill, "scale:x", 1.0, 0.18).from(0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(dealer_gate, "scale", Vector2(1.08, 1.08), 0.16).from(Vector2(0.82, 0.82)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -32463,7 +32508,7 @@ func _play_screen_shake(amplitude: float, frequency: float, duration: float) -> 
 		return
 
 	var shake_count = int(duration * frequency)
-	var tw := create_tween()
+	var tw := create_screen_tween()
 
 	for i in range(shake_count):
 		var progress = float(i) / float(shake_count)
@@ -32550,7 +32595,7 @@ func play_button_press_animation(button: Button, scale_amount: float = 0.92) -> 
 		tick.name = "ButtonPressFeedbackTick_%d" % i
 		feedback.add_child(tick)
 
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	tw.set_parallel(true)
 	tw.tween_property(button, "scale", Vector2(scale_amount, scale_amount), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_property(fill, "modulate:a", 0.18, 0.08).from(1.0)
@@ -32951,7 +32996,7 @@ func _play_golden_rain(parent: Control, duration: float, intensity: float = 1.0)
 		parent.add_child(drop)
 		var fall_dur := randf_range(0.6, 1.4)
 		var delay := randf_range(0.0, duration * 0.6)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(drop, "position:y", viewport_size.y + 20.0, fall_dur).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tw.tween_property(drop, "position:x", drop.position.x + randf_range(-20.0, 20.0), fall_dur).set_delay(delay)
@@ -32979,7 +33024,7 @@ func _play_calligraphy_reveal(parent: Control, text: String, color: Color, rect:
 	var mask = make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
 	mask.set_anchors_preset(Control.PRESET_FULL_RECT)
 	clip.add_child(mask)
-	var tw := create_tween()
+	var tw := create_screen_tween()
 	tw.tween_property(label, "modulate:a", 1.0, 0.3).from(0.0)
 	tw.parallel().tween_property(label, "position:y", 0.0, 0.5).from(12.0).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	# 笔触墨痕装饰 — GPT soft flash (no StyleBox paint)
@@ -32991,7 +33036,7 @@ func _play_calligraphy_reveal(parent: Control, text: String, color: Color, rect:
 	stroke.offset_top = -6
 	stroke.offset_bottom = -3
 	container.add_child(stroke)
-	var stroke_tw := create_tween()
+	var stroke_tw := create_screen_tween()
 	stroke_tw.tween_property(stroke, "scale:x", 1.0, 0.6).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_delay(0.2)
 	return container
 
@@ -33019,7 +33064,7 @@ func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
 		splash_root.add_child(splat)
 		var angle := randf() * TAU
 		var dist := randf_range(12.0, 40.0)
-		var tw := create_tween()
+		var tw := create_screen_tween()
 		tw.set_parallel(true)
 		tw.tween_property(splat, "position", target_pos + Vector2(cos(angle), sin(angle)) * dist, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(splat, "scale", Vector2(1.3, 1.3), 0.15).from(Vector2(0.3, 0.3))
@@ -33031,12 +33076,12 @@ func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
 	ink_ring.position = target_pos - Vector2(5, 5)
 	splash_root.add_child(ink_ring)
 	ensure_fx_ring_gpt_plate(ink_ring, Color(color.r * 0.2, color.g * 0.2, color.b * 0.2, 0.5), 0.45)
-	var ring_tw := create_tween()
+	var ring_tw := create_screen_tween()
 	ring_tw.set_parallel(true)
 	ring_tw.tween_property(ink_ring, "custom_minimum_size", Vector2(60, 60), 0.4).from(Vector2(10, 10)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	ring_tw.tween_property(ink_ring, "position", target_pos - Vector2(30, 30), 0.4).from(target_pos - Vector2(5, 5))
 	ring_tw.tween_property(ink_ring, "modulate:a", 0.0, 0.4).from(1.0)
-	var cleanup := create_tween()
+	var cleanup := create_screen_tween()
 	cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(splash_root.get_instance_id())).set_delay(0.6)
 
 # ============================================================

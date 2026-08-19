@@ -129,6 +129,7 @@ func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
 func clear_screen() -> void:
+	clear_screen_tweens()
 	clear_toast_on_mode_change()
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
@@ -3315,7 +3316,7 @@ func play_ai_discard_fly_animation(seat: int, tile: String) -> Control:
 		tick.name = "AIDiscardRouteTick_%d_%d" % [seat, i]
 		art.add_child(tick)
 	if DisplayServer.get_name().to_lower() != "headless":
-		var cleanup := create_tween()
+		var cleanup := create_screen_tween()
 		cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(art.get_instance_id())).set_delay(0.46)
 	return art
 
@@ -3378,11 +3379,11 @@ func play_ai_draw_tile_animation(seat: int, tile: String, source: String = "norm
 		tick.name = "AIDrawRouteTick_%d_%d" % [seat, i]
 		art.add_child(tick)
 	if DisplayServer.get_name().to_lower() != "headless":
-		var tile_tw := create_tween()
+		var tile_tw := create_screen_tween()
 		tile_tw.tween_property(tile_node, "position", to_pos + Vector2(-13.0, -19.0), 0.24).from(from_pos + Vector2(-13.0, -19.0))
 		tile_tw.parallel().tween_property(tile_node, "rotation", 0.10, 0.12).from(-0.12)
 		tile_tw.tween_property(tile_node, "modulate:a", 0.0, 0.16).from(1.0)
-		var cleanup := create_tween()
+		var cleanup := create_screen_tween()
 		cleanup.tween_callback(Callable(self, "queue_free_node_by_id").bind(art.get_instance_id())).set_delay(0.54)
 	return art
 
