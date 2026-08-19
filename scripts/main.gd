@@ -6470,7 +6470,7 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 		"easy_score_conserved": easy_score_conserved,
 		"normal_score_conserved": normal_score_conserved,
 		"hard_score_conserved": hard_score_conserved,
-		"commercial_strength_ok": finished_all and integrity_all and score_conservation_all and hard_safer_high_danger and hard_safer_deal_in and hard_safer_human_avoidable_high_danger and hard_safer_deal_in_to_human,
+		"commercial_strength_ok": finished_all and integrity_all and score_conservation_all and hard_safer_high_danger and hard_safer_avoidable_high_danger and hard_safer_deal_in and hard_safer_human_avoidable_high_danger and hard_safer_deal_in_to_human,
 		"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
 		"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
 		"normal_high_danger": float(normal.get("high_danger_rate", 1.0)),
@@ -6593,7 +6593,7 @@ func finalize_ai_strength_aggregate(aggregate: Dictionary) -> Dictionary:
 	out["hard_safer_human_high_danger"] = float(out.get("hard_human_high_danger", 1.0)) <= float(out.get("easy_human_high_danger", 0.0)) + 0.08
 	out["hard_safer_human_avoidable_high_danger"] = float(out.get("hard_human_avoidable_high_danger", 1.0)) <= float(out.get("easy_human_avoidable_high_danger", 0.0)) + 0.08
 	out["hard_safer_deal_in_to_human"] = float(out.get("hard_deal_in_to_human", 1.0)) <= float(out.get("easy_deal_in_to_human", 0.0)) + 0.34
-	out["commercial_strength_ok"] = bool(out.get("finished_all", false)) and bool(out.get("integrity_all", false)) and bool(out.get("score_conservation_all", false)) and bool(out.get("hard_safer_high_danger", false)) and bool(out.get("hard_safer_deal_in", false)) and bool(out.get("hard_safer_human_avoidable_high_danger", false)) and bool(out.get("hard_safer_deal_in_to_human", false)) and bool(out.get("paired_wall_seed", false)) and bool(out.get("paired_profile_seed", false))
+	out["commercial_strength_ok"] = bool(out.get("finished_all", false)) and bool(out.get("integrity_all", false)) and bool(out.get("score_conservation_all", false)) and bool(out.get("hard_safer_high_danger", false)) and bool(out.get("hard_safer_avoidable_high_danger", false)) and bool(out.get("hard_safer_deal_in", false)) and bool(out.get("hard_safer_human_avoidable_high_danger", false)) and bool(out.get("hard_safer_deal_in_to_human", false)) and bool(out.get("paired_wall_seed", false)) and bool(out.get("paired_profile_seed", false))
 	return out
 
 

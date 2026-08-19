@@ -65,8 +65,9 @@ run_low_resource_godot() {
 }
 
 check_release_version() {
-	rg -q '^config/version="1\.0\.180-godot"$' "$ROOT_DIR/project.godot" &&
-		rg -q '^const APP_VERSION := "1\.0\.180-godot"$' "$ROOT_DIR/scripts/main_base.gd"
+	# Use grep, not rg: rg is not guaranteed to exist in a non-interactive shell.
+	grep -qE '^config/version="1\.0\.180-godot"$' "$ROOT_DIR/project.godot" &&
+		grep -qE '^const APP_VERSION := "1\.0\.180-godot"$' "$ROOT_DIR/scripts/main_base.gd"
 }
 
 run_check() {
@@ -152,6 +153,7 @@ run_godot_check "Strength evidence" 90 "only actionable danger counts against ha
 run_godot_check "Information fairness" 91 "hidden-hand swaps cannot alter added-gang AI"
 run_godot_check "Endgame policy" 92 "hard guard covers catastrophic thin-tenpai pressure"
 run_godot_check "Strategy quality" 93 "avoidable all-opponent danger telemetry stays actionable"
+run_godot_check "Strength evidence" 94 "all-opponent avoidable danger is mandatory for commercial PASS"
 
 STATUS="PASS"
 if [ "$FAIL" -ne 0 ]; then
@@ -189,7 +191,7 @@ fi
 	echo "- Fairness: decisions under test use only public information; concealed-hand swaps cannot change added-gang declarations."
 	echo "- Integrity: every sampled terminal hand keeps the 144-tile physical ledger and the four-seat score ledger."
 echo "- Difficulty and strength: easy/normal/hard conservation is exercised; paired easy/hard multi-seed packs and an independent fixed-player probe must pass."
-	echo "- Hard-defense diagnostics: catastrophic thin-tenpai pressure is guarded, while all-opponent danger telemetry only counts same-shanten actionable alternatives."
+	echo "- Hard-defense diagnostics: catastrophic thin-tenpai pressure is guarded; all-opponent danger telemetry only counts same-shanten actionable alternatives and is mandatory for commercial PASS."
 	echo "- Performance: fresh-scene, primary strength, and independent strength samples must finish within their low-resource budgets."
 	echo ""
 	echo "## Durable Strength Artifact"

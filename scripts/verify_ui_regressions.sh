@@ -117,34 +117,50 @@ run_check() {
 	fi
 }
 
-check_no_runtime_leaks() {
-	local log_path
-	for log_path in "$@"; do
-		if rg -n "ObjectDB instances leaked|resources still in use|RIDs of type .* leaked|RID allocations .* leaked|Leaked instance:" "$log_path"; then
+# scan_absent PATTERN TARGET...
+# Passes (0) only when the scan actually ran and found nothing. A missing
+# scanner, a missing target, or any grep error fails (1) instead of reporting
+# a clean result: these gates must never pass without having scanned.
+scan_absent() {
+	local pattern="$1"
+	shift
+	if ! command -v grep >/dev/null 2>&1; then
+		echo "scan tool unavailable: grep not found; refusing to report a clean scan" >&2
+		return 1
+	fi
+	local target
+	for target in "$@"; do
+		if [ ! -e "$target" ]; then
+			echo "scan target missing: $target; refusing to report a clean scan" >&2
 			return 1
 		fi
 	done
-	return 0
+	# grep -rnE: 0 = matched (regression present), 1 = clean, 2+ = scan error.
+	local status=0
+	grep -rnE "$pattern" "$@" || status=$?
+	case "$status" in
+		0) return 1 ;;
+		1) return 0 ;;
+		*)
+			echo "scan failed with grep status $status; refusing to report a clean scan" >&2
+			return 1
+			;;
+	esac
+}
+
+check_no_runtime_leaks() {
+	scan_absent "ObjectDB instances leaked|resources still in use|RIDs of type .* leaked|RID allocations .* leaked|Leaked instance:" "$@"
 }
 
 check_no_runtime_errors() {
-	local log_path
-	for log_path in "$@"; do
-		if rg -n '^(SCRIPT )?ERROR:' "$log_path"; then
-			return 1
-		fi
-	done
-	return 0
+	scan_absent '^(SCRIPT )?ERROR:' "$@"
 }
 
 check_no_runtime_generated_bitmap_textures() {
-	if rg -n '\bImage\.(new|create)|ImageTexture\.create_from_image' \
+	scan_absent '\bImage\.(new|create)|ImageTexture\.create_from_image' \
 		"$ROOT_DIR/scripts/main_base.gd" \
 		"$ROOT_DIR/scripts/main_src" \
-		"$ROOT_DIR/scripts/ui"; then
-		return 1
-	fi
-	return 0
+		"$ROOT_DIR/scripts/ui"
 }
 
 run_check "Python QA tools compile" "py_compile.log" \
