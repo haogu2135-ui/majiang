@@ -2455,6 +2455,18 @@ func sort_ai_discard_reports(reports: Array) -> void:
 		var score_a = float(a.get("score", 0.0))
 		var score_b = float(b.get("score", 0.0))
 		if is_equal_approx(score_a, score_b):
+			var shanten_a = int(a.get("shanten", 8))
+			var shanten_b = int(b.get("shanten", 8))
+			if shanten_a != shanten_b:
+				return shanten_a < shanten_b
+			var ukeire_a = int(a.get("ukeire", 0))
+			var ukeire_b = int(b.get("ukeire", 0))
+			if ukeire_a != ukeire_b:
+				return ukeire_a > ukeire_b
+			var danger_a = float(a.get("risk", 0.0)) + float(a.get("feed_risk", 0.0)) * 0.45
+			var danger_b = float(b.get("risk", 0.0)) + float(b.get("feed_risk", 0.0)) * 0.45
+			if not is_equal_approx(danger_a, danger_b):
+				return danger_a < danger_b
 			return tile_sort_index(str(a.get("tile", ""))) < tile_sort_index(str(b.get("tile", "")))
 		return score_a > score_b
 	)
@@ -5281,7 +5293,7 @@ func render_game() -> void:
 	current_seat_threat_reports = {}
 	draw_game_top_hud(root_layer)
 
-	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.015), 42)  # r426
+	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.008), 42)  # r426
 	table_floor_shadow.name = "OfflineTable3DFloorShadow"
 	# r406: apron sits under hand tray only — do not darken bottom river (zone y~0.638-0.824).
 	var table_apron = make_gpt_route_rail(rect_full(0.145, 0.805, 0.855, 0.865), Color(0.12, 0.09, 0.05, 0.05))
@@ -5289,7 +5301,7 @@ func render_game() -> void:
 	root_layer.add_child(table_apron)
 	var apron_highlight = make_soft_depth_panel(table_apron, rect_full(0.035, 0.040, 0.965, 0.170), Color(0.98, 0.78, 0.40, 0.06), 999)  # r406
 	apron_highlight.name = "OfflineTable3DApronHighlight"
-	var table_shadow = make_soft_depth_panel(root_layer, rect_full(0.112, 0.142, 0.888, 0.812), Color(0.0, 0.0, 0.0, 0.02), 38)  # r426
+	var table_shadow = make_soft_depth_panel(root_layer, rect_full(0.112, 0.142, 0.888, 0.812), Color(0.0, 0.0, 0.0, 0.010), 38)  # r426
 	table_shadow.name = "OfflineTable3DCastShadow"
 	var outer = make_gpt_plate_rect(TABLE_OUTER_RECT, Color(0.08, 0.06, 0.04, 0.04), "ui_jade_reading_plate")
 	outer.name = "OfflineTable3DOuterShell"
@@ -8368,9 +8380,10 @@ func action_button_width_for_available(count: int, available_width: float, separ
 	var available = available_width - float(max(0, count - 1) * gap) - layout_slack
 	var width: float = minf(float(ACTION_BUTTON_MAX_WIDTH), floorf(maxf(1.0, available / float(count))))
 	if mode == "offline" and offline_phase == "pending_claim":
-		# Claim buttons wrap in a reserved right-side lane; keep labels readable
-		# while allowing four buttons on the first row at 960x540.
-		return maxf(float(PENDING_CLAIM_BUTTON_MIN_WIDTH), width)
+		# At compact height, 60px targets produce a stable 5+2 grouping in the
+		# widened lane. Larger viewports retain the existing one-row behavior.
+		var pending_min_width := 60.0 if effective_viewport_size().y <= 560.0 else float(PENDING_CLAIM_BUTTON_MIN_WIDTH)
+		return maxf(pending_min_width, width)
 	return width
 
 func action_button_width_for_count(count: int, separation: int = -1) -> float:
@@ -8817,7 +8830,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	button.add_child(art)
 	var role = action_button_visual_role(text)
 	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"
-	var depth_alpha := 0.52 if compact_claim_mode and role == "pass" else (0.70 if compact_claim_mode else (0.50 if role == "pass" else 0.68))
+	var depth_alpha := 0.62 if compact_claim_mode and role == "pass" else (0.78 if compact_claim_mode else (0.50 if role == "pass" else 0.68))
 	var cast_shadow = make_soft_depth_panel(button, rect_full(0.040, 0.120, 0.990, 1.040), Color(0.0, 0.0, 0.0, 0.18 if compact_claim_mode else 0.26), 10)
 	cast_shadow.name = "ActionButton3DCastShadow"
 	button.move_child(cast_shadow, 0)
@@ -8825,7 +8838,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	depth_edge.name = "ActionButton3DDepthEdge"
 	button.add_child(depth_edge)
 	button.move_child(depth_edge, min(1, button.get_child_count() - 1))
-	var top_rim = make_gpt_ribbon(rect_full(0.050, 0.040, 0.950, 0.155), Color(1.0, 0.94, 0.70, 0.120 if compact_claim_mode else 0.100))
+	var top_rim = make_gpt_ribbon(rect_full(0.050, 0.040, 0.950, 0.155), Color(1.0, 0.94, 0.70, 0.180 if compact_claim_mode else 0.100))
 	top_rim.name = "ActionButton3DTopRim"
 	button.add_child(top_rim)
 	var side_bevel = make_gpt_edge_rail(rect_full(0.020, 0.180, 0.065, 0.820), Color(1.0, 0.92, 0.62, 0.075 if compact_claim_mode else 0.055))
@@ -8834,10 +8847,10 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	if compact_claim_mode:
 		# A restrained authored right/bottom edge keeps 55px claim targets visually
 		# separable without widening the wrapped lane or painting a native slab.
-		var compact_right_edge = make_gpt_edge_rail(rect_full(0.935, 0.180, 0.980, 0.820), Color(color.r, color.g, color.b, 0.22 if role == "pass" else 0.34))
+		var compact_right_edge = make_gpt_edge_rail(rect_full(0.935, 0.180, 0.980, 0.820), Color(color.r, color.g, color.b, 0.32 if role == "pass" else 0.52))
 		compact_right_edge.name = "ActionButtonCompactRightEdge"
 		button.add_child(compact_right_edge)
-		var compact_bottom_edge = make_gpt_ribbon(rect_full(0.080, 0.875, 0.920, 0.945), Color(color.r, color.g, color.b, 0.18 if role == "pass" else 0.28))
+		var compact_bottom_edge = make_gpt_ribbon(rect_full(0.080, 0.875, 0.920, 0.945), Color(color.r, color.g, color.b, 0.24 if role == "pass" else 0.40))
 		compact_bottom_edge.name = "ActionButtonCompactBottomEdge"
 		button.add_child(compact_bottom_edge)
 	apply_rect(art, rect_full(0.036, 0.230, 0.176, 0.770) if compact_claim_mode else rect_full(0.030, 0.120, 0.245, 0.880))
@@ -8871,19 +8884,30 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	if role_rail != null:
 		role_rail.name = "ActionButtonRoleRail"
 		role_rail.modulate = Color(color.r, color.g, color.b, rail_alpha)
-	# Smoke requires compact claim panel plate modulate.a <= 0.025; normal modes use denser GPT face.
+	# Compact claims use the authored action plate as their distinct dark face.
 	var panel_alpha = 0.60 if compact_claim_mode and role == "pass" else (0.70 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
-	var panel_key := "ui_dark_scrim" if compact_claim_mode else "ui_button_face_plate"
+	var panel_key := "action_button_panel" if compact_claim_mode else "ui_button_face_plate"
 	var panel_plate = add_optional_gpt_illustration_texture(button, panel_key, rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate == null:
-		panel_plate = add_optional_gpt_illustration_texture(button, "action_button_panel", rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
+		panel_plate = add_optional_gpt_illustration_texture(button, "ui_dark_scrim", rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate != null:
 		panel_plate.name = "ActionButtonPanelPlate"
-		panel_plate.modulate = Color(
+		var compact_panel_tint := Color(
+			clampf(0.30 + color.r * 0.28, 0.18, 0.62),
+			clampf(0.30 + color.g * 0.28, 0.18, 0.62),
+			clampf(0.28 + color.b * 0.24, 0.16, 0.58),
+			panel_alpha
+		) if compact_claim_mode else Color(
 			clampf(0.40 + color.r * 0.60, 0.20, 1.2),
 			clampf(0.40 + color.g * 0.60, 0.20, 1.2),
 			clampf(0.40 + color.b * 0.60, 0.20, 1.2),
 			panel_alpha
+		)
+		panel_plate.modulate = Color(
+			compact_panel_tint.r,
+			compact_panel_tint.g,
+			compact_panel_tint.b,
+			compact_panel_tint.a
 		)
 		button.move_child(panel_plate, 0)
 	if action_button_should_pulse(role):
@@ -8934,8 +8958,8 @@ func draw_action_dock(parent: Control) -> void:
 	if not pending_claim_mode and not danger_confirm_mode:
 		draw_action_intent_dock(parent, count)
 	# r451c: translucent lacquer shell + GPT dock plate on top (no jade program slabs).
-	var dock_fill_alpha := 0.24 if pending_claim_mode else 0.22
-	var dock_border_alpha := 0.56 if pending_claim_mode else 0.68
+	var dock_fill_alpha := 0.28 if pending_claim_mode else 0.26
+	var dock_border_alpha := 0.62 if pending_claim_mode else 0.72
 	var dock_rect := action_dock_rect_for_count(count)
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
 	var dock_shadow = make_soft_depth_panel(parent, dock_shadow_rect, Color(0.0, 0.0, 0.0, 0.18 if pending_claim_mode else 0.22), 12)
@@ -8945,7 +8969,7 @@ func draw_action_dock(parent: Control) -> void:
 	parent.add_child(dock)
 	dock.clip_contents = true
 	var action_buttons = action_bar_buttons()
-	var dock_rear = make_soft_depth_panel(dock, rect_full(0.012, 0.040, 0.988, 0.980), Color(0.08, 0.055, 0.035, 0.08), 10)
+	var dock_rear = make_soft_depth_panel(dock, rect_full(0.012, 0.040, 0.988, 0.980), Color(0.08, 0.055, 0.035, 0.12), 10)
 	dock_rear.name = "ActionDock3DRearShell"
 	dock.move_child(dock_rear, 0)
 	var dock_floor = make_layout_host(rect_full(0.018, 0.620, 0.982, 0.920))
@@ -8965,7 +8989,7 @@ func draw_action_dock(parent: Control) -> void:
 		var pending_dock_texture = add_optional_gpt_illustration_texture(dock, "pending_claim_action_dock", rect_full(0.002, 0.010, 0.998, 0.990), 0.52, false)
 		if pending_dock_texture != null:
 			pending_dock_texture.name = "PendingClaimActionGPTDockTexture"
-			pending_dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.40)
+			pending_dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.38)
 			dock.move_child(pending_dock_texture, dock.get_child_count() - 1)
 	else:
 		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock", rect_full(0.000, 0.010, 1.000, 0.990), 0.62, false)
@@ -9052,7 +9076,7 @@ func draw_action_intent_flow(parent: Control, count: int, color: Color) -> Contr
 func draw_actions(parent: Control) -> void:
 	if mode == "offline" and offline_phase == "pending_claim":
 		var flow_bar := FlowContainer.new()
-		flow_bar.alignment = FlowContainer.ALIGNMENT_END
+		flow_bar.alignment = FlowContainer.ALIGNMENT_CENTER
 		flow_bar.add_theme_constant_override("h_separation", 3)
 		flow_bar.add_theme_constant_override("v_separation", 3)
 		flow_bar.custom_minimum_size = Vector2(0, 92)
@@ -12837,9 +12861,19 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 		ripple.name = "LastDiscardFocusRipple_%d" % i
 		marker.add_child(ripple)
 		marker.move_child(ripple, max(0, glow.get_index()))
+	# During a claim window the center response window is the primary signal;
+	# keep the river marker structural but quiet so the same discard is not read
+	# as two competing response targets.
+	if mode == "offline" and offline_phase == "pending_claim":
+		glow.modulate.a = 0.42
+		route.visible = false
+		response_bridge.visible = false
+		for ripple_node in marker.get_children():
+			if ripple_node is Control and str(ripple_node.name).begins_with("LastDiscardFocusRipple_"):
+				(ripple_node as Control).visible = false
 	# The center console already renders the last tile outside the claim window.
 	# Keep the enlarged duplicate only while a claim response needs a focal tile.
-	var center_already_shows_last := not (mode == "offline" and offline_phase == "pending_claim")
+	var center_already_shows_last := true
 	if not center_already_shows_last:
 		var focus_tile_size = Vector2(44, 60)
 		var focus_tile = make_tile_view(tile, focus_tile_size, false, Callable(), true)
@@ -12883,10 +12917,10 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 			clampf(0.55 + accent.b * 0.45, 0.30, 1.15),
 			0.38
 		)
-	var surface = make_gpt_plate_rect(rect_full(0.006, 0.055, 0.994, 0.945), Color(0.006, 0.018, 0.018, 0.070), "ui_jade_reading_plate")
+	var surface = make_gpt_plate_rect(rect_full(0.006, 0.055, 0.994, 0.945), Color(0.018, 0.026, 0.024, 0.64), "ui_dark_scrim")
 	surface.name = "LineEditInputSurface_%s" % art_id
 	art.add_child(surface)
-	var inner = make_gpt_plate_rect(rect_full(0.032, 0.210, 0.968, 0.790), Color(0.002, 0.010, 0.011, 0.020), "ui_button_face_plate")
+	var inner = make_gpt_plate_rect(rect_full(0.032, 0.210, 0.968, 0.790), Color(0.010, 0.018, 0.018, 0.46), "ui_dark_scrim")
 	inner.name = "LineEditInputInner_%s" % art_id
 	art.add_child(inner)
 	var accent_wash = make_gpt_edge_rail(rect_full(0.020, 0.320, 0.027, 0.680), Color(accent.r, accent.g, accent.b, 0.12))
@@ -17044,30 +17078,30 @@ func draw_shop_native_charm_art(row: Control, item_color: Color, item_id: String
 func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id: String = "") -> void:
 	# Use the dedicated shop plate as the primary surface. Rules/settings artwork
 	# carries a bright center wash that competes with row copy at 960x540.
-	var shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.68, false)
+	var shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.30, false)
 	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.34, false)
 	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_jade_reading_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_jade_reading_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.30, false)
 	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "settings_overview_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.56, false)
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "settings_overview_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.28, false)
 	if shop_row_plate != null:
 		shop_row_plate.name = "ShopItemRowGptPlate"
-		shop_row_plate.modulate = Color(1.0, 1.0, 1.0, 0.78)
+		shop_row_plate.modulate = Color(0.76, 0.72, 0.62, 0.62)
 	var shop_row_meter = add_optional_gpt_illustration_texture(row, "ui_meter_rail_plate", rect_full(0.08, 0.72, 0.92, 0.90), 0.48, false)
 	if shop_row_meter != null:
 		shop_row_meter.name = "ShopItemRowGptMeter"
 	# r204 GPT row chrome
-	var row_depth = make_gpt_plate_rect(rect_full(0.008, 0.180, 0.992, 0.985), Color(0.86, 0.72, 0.48, 0.18), "settings_overview_panel")
+	var row_depth = make_gpt_plate_rect(rect_full(0.008, 0.180, 0.992, 0.985), Color(0.86, 0.72, 0.48, 0.11), "settings_overview_panel")
 	row_depth.name = "ShopItem3DDepthEdge_%s" % (item_id if item_id != "" else "generic")
 	row.add_child(row_depth)
 	var row_top_rim = make_gpt_ribbon(rect_full(0.025, 0.025, 0.975, 0.085), Color(1.0, 0.88, 0.54, 0.12))
 	row_top_rim.name = "ShopItem3DTopRim_%s" % (item_id if item_id != "" else "generic")
 	row.add_child(row_top_rim)
-	var charm_plinth = make_gpt_plate_rect(rect_full(0.018, 0.105, 0.145, 0.920), Color(0.82, 0.62, 0.30, 0.36), "ui_hand_tray_state_chip")
+	var charm_plinth = make_gpt_plate_rect(rect_full(0.018, 0.105, 0.145, 0.920), Color(0.82, 0.62, 0.30, 0.28), "ui_hand_tray_state_chip")
 	charm_plinth.name = "ShopItem3DCharmPlinth_%s" % (item_id if item_id != "" else "generic")
 	row.add_child(charm_plinth)
-	var item_texture = add_illustration_texture(row, "shop_item_shelf", rect_full(0.010, 0.030, 0.790, 0.970), 0.075, false)
+	var item_texture = add_illustration_texture(row, "shop_item_shelf", rect_full(0.010, 0.030, 0.790, 0.970), 0.035, false)
 	if item_texture != null:
 		item_texture.name = "ShopItemShelfTexture_%s" % (item_id if item_id != "" else "generic")
 		row.move_child(item_texture, 0)
@@ -17829,15 +17863,15 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(frame)
-	var inset_shadow = make_soft_depth_panel(frame, rect_full(0.052, 0.080, 0.948, 0.920), Color(0.0, 0.0, 0.0, 0.045), 26)
+	var inset_shadow = make_soft_depth_panel(frame, rect_full(0.052, 0.080, 0.948, 0.920), Color(0.0, 0.0, 0.0, 0.026), 26)
 	inset_shadow.name = "Table3DInsetShadow"
-	var felt_vignette = make_soft_depth_panel(frame, rect_full(0.145, 0.175, 0.855, 0.805), Color(0.04, 0.028, 0.016, 0.015), 24)
+	var felt_vignette = make_soft_depth_panel(frame, rect_full(0.145, 0.175, 0.855, 0.805), Color(0.04, 0.028, 0.016, 0.006), 24)
 	felt_vignette.name = "Table3DFeltVignette"
 	var near_highlight = make_soft_depth_panel(frame, rect_full(0.145, 0.755, 0.855, 0.820), Color(0.98, 0.78, 0.38, 0.06), 999)
 	near_highlight.name = "Table3DNearRimHighlight"
 	var far_rim = make_soft_depth_panel(frame, rect_full(0.160, 0.120, 0.840, 0.168), Color(0.86, 0.66, 0.32, 0.05), 999)
 	far_rim.name = "Table3DFarRimHighlight"
-	var center_spotlight = make_soft_depth_panel(frame, rect_full(0.300, 0.275, 0.700, 0.690), Color(0.90, 0.76, 0.42, 0.030), 999)
+	var center_spotlight = make_soft_depth_panel(frame, rect_full(0.300, 0.275, 0.700, 0.690), Color(0.90, 0.76, 0.42, 0.018), 999)
 	center_spotlight.name = "Table3DCenterSpotlight"
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var glow_tw := create_screen_tween()
@@ -19963,9 +19997,9 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"
 	button.add_theme_constant_override("outline_size", 3 if compact_claim_mode else 2)
 	var is_focus_action = ["win", "gang", "safe", "advice"].has(role) or text.begins_with("荐")
-	var fill_alpha := 0.260 if compact_claim_mode and role == "pass" else (0.460 if compact_claim_mode and is_focus_action else (0.360 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
-	var border_alpha := 0.045 if compact_claim_mode and role == "pass" else (0.150 if compact_claim_mode and is_focus_action else (0.090 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
-	var hover_border_alpha := 0.080 if compact_claim_mode and role == "pass" else (0.220 if compact_claim_mode and is_focus_action else (0.140 if compact_claim_mode else (0.090 if role == "pass" else (0.300 if is_focus_action else 0.180))))
+	var fill_alpha := 0.340 if compact_claim_mode and role == "pass" else (0.560 if compact_claim_mode and is_focus_action else (0.440 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
+	var border_alpha := 0.080 if compact_claim_mode and role == "pass" else (0.220 if compact_claim_mode and is_focus_action else (0.140 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
+	var hover_border_alpha := 0.140 if compact_claim_mode and role == "pass" else (0.300 if compact_claim_mode and is_focus_action else (0.220 if compact_claim_mode else (0.090 if role == "pass" else (0.300 if is_focus_action else 0.180))))
 	var shadow_size := 1 if compact_claim_mode and role != "pass" else (0 if role == "pass" else (2 if is_focus_action else 1))
 	# r180: empty StyleBox hit host + GPT button face (no program StyleBox paint).
 	var empty_normal := StyleBoxEmpty.new()
@@ -23365,11 +23399,13 @@ func _show_online_lobby_impl() -> void:
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.98, 0.92, 0.78, 0.34), "rules_guide_panel")
+	var form_panel = make_gpt_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.055, 0.044, 0.032, 0.72), "ui_dark_scrim")
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
-		(form_panel as CanvasItem).modulate = Color(1.18, 1.12, 1.04, 0.94)
+		# Keep child labels, fields, and buttons at authored brightness; the
+		# ui_dark_scrim plate above carries the panel dimming.
+		(form_panel as CanvasItem).modulate = Color(1.0, 1.0, 1.0, 1.0)
 	var form_rear = make_soft_depth_panel(form_panel, rect_full(0.012, 0.020, 0.988, 0.980), Color(0.08, 0.06, 0.04, 0.06), 12)  # r415 warm
 	form_rear.name = "OnlineLobbyForm3DRearShell"
 	form_panel.move_child(form_rear, 0)
@@ -23382,9 +23418,11 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", 20, Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_gpt_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.92, 0.84, 0.64, 0.42), "settings_overview_panel")
+	var input_group_backplate = make_gpt_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.026, 0.036, 0.034, 0.76), "ui_dark_scrim")
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
+	if input_group_backplate is CanvasItem:
+		(input_group_backplate as CanvasItem).modulate = Color(0.78, 0.72, 0.58, 0.88)
 	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.15, false)  # r182 denser group (smoke<=0.16)
 	if input_group_plate != null:
 		input_group_plate.name = "OnlineLobbyInputGPTGroupPlateTexture"
@@ -23484,18 +23522,22 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.98, 0.92, 0.78, 0.34), "rules_guide_panel")
+	var log_panel = make_gpt_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.055, 0.044, 0.032, 0.72), "ui_dark_scrim")
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
-		(log_panel as CanvasItem).modulate = Color(1.18, 1.12, 1.04, 0.94)
+		# Do not recursively dim the room title and empty-state copy.
+		(log_panel as CanvasItem).modulate = Color(1.0, 1.0, 1.0, 1.0)
 	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.18, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.92, 0.84, 0.64, 0.52), "settings_overview_panel")
+	var log_readability_backplate = make_gpt_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.022, 0.030, 0.028, 0.80), "ui_dark_scrim")
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
+	var empty_state_backplate = make_gpt_plate_rect(rect_full(0.090, 0.380, 0.910, 0.620), Color(0.018, 0.028, 0.028, 0.74), "ui_dark_scrim")
+	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
+	log_panel.add_child(empty_state_backplate)
 	# 右侧面板滑入动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		log_panel.modulate = Color(1, 1, 1, 0)
@@ -23568,6 +23610,7 @@ func refresh_online_lobby_state() -> void:
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
 	var roster = root_layer.find_child("OnlineLobbyRosterPanel", true, false) as CanvasItem
 	var log_list = root_layer.find_child("OnlineLobbyLogListPanel", true, false) as CanvasItem
+	var empty_state_backplate = root_layer.find_child("OnlineLobbyEmptyStateReadabilityBackplate", true, false) as CanvasItem
 	var offline_state = root_layer.find_child("OnlineLobbyRoomOfflineState", true, false) as CanvasItem
 	if room_art != null:
 		room_art.visible = connected
@@ -23575,6 +23618,8 @@ func refresh_online_lobby_state() -> void:
 		roster.visible = connected
 	if log_list != null:
 		log_list.visible = connected
+	if empty_state_backplate != null:
+		empty_state_backplate.visible = not connected
 	if offline_state != null:
 		offline_state.visible = not connected
 	var start_button = root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
@@ -23686,17 +23731,23 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_gutter = make_panel(panel, rect_full(0.936, 0.180, 0.952, 0.960), Color(0.07, 0.06, 0.05, 0.86), 999, Color(0.24, 0.20, 0.14, 0.28), 0, "ui_dark_scrim")  # r227 authored dark track
+	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.949, 0.960), Color(0.07, 0.06, 0.05, 0.92), 999, Color(0.30, 0.25, 0.16, 0.42), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var compact_rules_scroll := effective_viewport_size().y <= 560.0
-	var thumb_left := 0.060 if compact_rules_scroll else 0.160
-	var thumb_right := 0.940 if compact_rules_scroll else 0.840
-	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.78, 0.66, 0.38, 1.0), 999, Color(0.98, 0.88, 0.58, 0.76), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var thumb_left := 0.060 if compact_rules_scroll else 0.220
+	var thumb_right := 0.940 if compact_rules_scroll else 0.780
+	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), 999, Color(1.0, 0.92, 0.64, 0.92), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rules_scroll_thumb.set_meta("track_left", thumb_left)
 	rules_scroll_thumb.set_meta("track_right", thumb_right)
+	var scroll_top_icon = add_lucide_icon(rules_scroll_gutter, "chevron-up", rect_full(0.205, 0.008, 0.795, 0.070), Color(1.0, 0.90, 0.58, 0.80))
+	if scroll_top_icon != null:
+		scroll_top_icon.name = "RulesContentScrollTopCue"
+	var scroll_bottom_icon = add_lucide_icon(rules_scroll_gutter, "chevron-down", rect_full(0.205, 0.930, 0.795, 0.992), Color(1.0, 0.90, 0.58, 0.86))
+	if scroll_bottom_icon != null:
+		scroll_bottom_icon.name = "RulesContentScrollBottomCue"
 	var rules_scroll_hit_target = Control.new()
 	rules_scroll_hit_target.name = "RulesContentScrollHitTarget"
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -24050,12 +24101,12 @@ func _show_shop_screen_impl() -> void:
 		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
 
 		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
-		var text_plate = make_gpt_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.98, 0.92, 0.78, 0.92), "rules_guide_panel")
+		var text_plate = make_gpt_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.046, 0.040, 0.030, 0.74), "ui_dark_scrim")
 		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
 		row.add_child(text_plate)
 		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if text_plate is CanvasItem:
-			(text_plate as CanvasItem).modulate = Color(1.48, 1.34, 1.12, 0.94)
+			(text_plate as CanvasItem).modulate = Color(0.74, 0.68, 0.56, 0.82)
 
 		# 道具名称
 		var name_label = make_label(row, str(item_info.get("name", item_id)), 20, Color(1.0, 0.98, 0.92), true)
@@ -27444,7 +27495,7 @@ func action_bar_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
-		return PENDING_CLAIM_ACTION_BAR_RECT
+		return PENDING_CLAIM_ACTION_BAR_COMPACT_RECT if effective_viewport_size().y <= 560.0 else PENDING_CLAIM_ACTION_BAR_RECT
 	return ACTION_BAR_RECT
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
@@ -27494,7 +27545,7 @@ func action_bar_dock_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_DOCK_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
-		return PENDING_CLAIM_ACTION_BAR_DOCK_RECT
+		return PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT if effective_viewport_size().y <= 560.0 else PENDING_CLAIM_ACTION_BAR_DOCK_RECT
 	return ACTION_BAR_DOCK_RECT
 
 func finalize_action_bar_layout() -> void:

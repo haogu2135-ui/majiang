@@ -1778,7 +1778,7 @@ func action_bar_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
-		return PENDING_CLAIM_ACTION_BAR_RECT
+		return PENDING_CLAIM_ACTION_BAR_COMPACT_RECT if effective_viewport_size().y <= 560.0 else PENDING_CLAIM_ACTION_BAR_RECT
 	return ACTION_BAR_RECT
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
@@ -1828,7 +1828,7 @@ func action_bar_dock_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_DOCK_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
-		return PENDING_CLAIM_ACTION_BAR_DOCK_RECT
+		return PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT if effective_viewport_size().y <= 560.0 else PENDING_CLAIM_ACTION_BAR_DOCK_RECT
 	return ACTION_BAR_DOCK_RECT
 
 func finalize_action_bar_layout() -> void:

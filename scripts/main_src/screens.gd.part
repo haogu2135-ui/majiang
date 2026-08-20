@@ -422,11 +422,13 @@ func _show_online_lobby_impl() -> void:
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.98, 0.92, 0.78, 0.34), "rules_guide_panel")
+	var form_panel = make_gpt_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.055, 0.044, 0.032, 0.72), "ui_dark_scrim")
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
-		(form_panel as CanvasItem).modulate = Color(1.18, 1.12, 1.04, 0.94)
+		# Keep child labels, fields, and buttons at authored brightness; the
+		# ui_dark_scrim plate above carries the panel dimming.
+		(form_panel as CanvasItem).modulate = Color(1.0, 1.0, 1.0, 1.0)
 	var form_rear = make_soft_depth_panel(form_panel, rect_full(0.012, 0.020, 0.988, 0.980), Color(0.08, 0.06, 0.04, 0.06), 12)  # r415 warm
 	form_rear.name = "OnlineLobbyForm3DRearShell"
 	form_panel.move_child(form_rear, 0)
@@ -439,9 +441,11 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", 20, Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_gpt_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.92, 0.84, 0.64, 0.42), "settings_overview_panel")
+	var input_group_backplate = make_gpt_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.026, 0.036, 0.034, 0.76), "ui_dark_scrim")
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
+	if input_group_backplate is CanvasItem:
+		(input_group_backplate as CanvasItem).modulate = Color(0.78, 0.72, 0.58, 0.88)
 	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.15, false)  # r182 denser group (smoke<=0.16)
 	if input_group_plate != null:
 		input_group_plate.name = "OnlineLobbyInputGPTGroupPlateTexture"
@@ -541,18 +545,22 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.98, 0.92, 0.78, 0.34), "rules_guide_panel")
+	var log_panel = make_gpt_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.055, 0.044, 0.032, 0.72), "ui_dark_scrim")
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
-		(log_panel as CanvasItem).modulate = Color(1.18, 1.12, 1.04, 0.94)
+		# Do not recursively dim the room title and empty-state copy.
+		(log_panel as CanvasItem).modulate = Color(1.0, 1.0, 1.0, 1.0)
 	var log_panel_frame = add_optional_gpt_illustration_texture(log_panel, "online_lobby_panel_frame", rect_full(-0.010, -0.012, 1.010, 1.012), 0.18, false)  # r188 smoke-safe frame alpha; densify texture not alpha
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.92, 0.84, 0.64, 0.52), "settings_overview_panel")
+	var log_readability_backplate = make_gpt_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.022, 0.030, 0.028, 0.80), "ui_dark_scrim")
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
+	var empty_state_backplate = make_gpt_plate_rect(rect_full(0.090, 0.380, 0.910, 0.620), Color(0.018, 0.028, 0.028, 0.74), "ui_dark_scrim")
+	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
+	log_panel.add_child(empty_state_backplate)
 	# 右侧面板滑入动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		log_panel.modulate = Color(1, 1, 1, 0)
@@ -625,6 +633,7 @@ func refresh_online_lobby_state() -> void:
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
 	var roster = root_layer.find_child("OnlineLobbyRosterPanel", true, false) as CanvasItem
 	var log_list = root_layer.find_child("OnlineLobbyLogListPanel", true, false) as CanvasItem
+	var empty_state_backplate = root_layer.find_child("OnlineLobbyEmptyStateReadabilityBackplate", true, false) as CanvasItem
 	var offline_state = root_layer.find_child("OnlineLobbyRoomOfflineState", true, false) as CanvasItem
 	if room_art != null:
 		room_art.visible = connected
@@ -632,6 +641,8 @@ func refresh_online_lobby_state() -> void:
 		roster.visible = connected
 	if log_list != null:
 		log_list.visible = connected
+	if empty_state_backplate != null:
+		empty_state_backplate.visible = not connected
 	if offline_state != null:
 		offline_state.visible = not connected
 	var start_button = root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
@@ -743,17 +754,23 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_gutter = make_panel(panel, rect_full(0.936, 0.180, 0.952, 0.960), Color(0.07, 0.06, 0.05, 0.86), 999, Color(0.24, 0.20, 0.14, 0.28), 0, "ui_dark_scrim")  # r227 authored dark track
+	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.949, 0.960), Color(0.07, 0.06, 0.05, 0.92), 999, Color(0.30, 0.25, 0.16, 0.42), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var compact_rules_scroll := effective_viewport_size().y <= 560.0
-	var thumb_left := 0.060 if compact_rules_scroll else 0.160
-	var thumb_right := 0.940 if compact_rules_scroll else 0.840
-	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.78, 0.66, 0.38, 1.0), 999, Color(0.98, 0.88, 0.58, 0.76), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var thumb_left := 0.060 if compact_rules_scroll else 0.220
+	var thumb_right := 0.940 if compact_rules_scroll else 0.780
+	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), 999, Color(1.0, 0.92, 0.64, 0.92), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rules_scroll_thumb.set_meta("track_left", thumb_left)
 	rules_scroll_thumb.set_meta("track_right", thumb_right)
+	var scroll_top_icon = add_lucide_icon(rules_scroll_gutter, "chevron-up", rect_full(0.205, 0.008, 0.795, 0.070), Color(1.0, 0.90, 0.58, 0.80))
+	if scroll_top_icon != null:
+		scroll_top_icon.name = "RulesContentScrollTopCue"
+	var scroll_bottom_icon = add_lucide_icon(rules_scroll_gutter, "chevron-down", rect_full(0.205, 0.930, 0.795, 0.992), Color(1.0, 0.90, 0.58, 0.86))
+	if scroll_bottom_icon != null:
+		scroll_bottom_icon.name = "RulesContentScrollBottomCue"
 	var rules_scroll_hit_target = Control.new()
 	rules_scroll_hit_target.name = "RulesContentScrollHitTarget"
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -1107,12 +1124,12 @@ func _show_shop_screen_impl() -> void:
 		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
 
 		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
-		var text_plate = make_gpt_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.98, 0.92, 0.78, 0.92), "rules_guide_panel")
+		var text_plate = make_gpt_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.046, 0.040, 0.030, 0.74), "ui_dark_scrim")
 		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
 		row.add_child(text_plate)
 		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if text_plate is CanvasItem:
-			(text_plate as CanvasItem).modulate = Color(1.48, 1.34, 1.12, 0.94)
+			(text_plate as CanvasItem).modulate = Color(0.74, 0.68, 0.56, 0.82)
 
 		# 道具名称
 		var name_label = make_label(row, str(item_info.get("name", item_id)), 20, Color(1.0, 0.98, 0.92), true)

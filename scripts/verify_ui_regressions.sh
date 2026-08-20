@@ -92,7 +92,7 @@ capture_pages_for_size() {
 		--screens=01_menu,02_menu_settings,03_offline_battle,04_rules,05_stats || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
-		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading || return 1
+		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading,23_online_lobby_connected || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
 		--screens=13_round_summary,14_danger_discard,15_pending_claim_full,16_win_detail
@@ -188,6 +188,9 @@ run_check "Runtime UI uses imported bitmap assets only" "runtime_bitmap_policy.l
 run_check "UI layout regression smoke" "ui_layout_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_layout_smoke_test.gd
 
+run_check "UI hover pressed focus and connected-lobby smoke" "ui_interaction_smoke.log" \
+	run_low_resource_xvfb_godot 1280x720 --path "$ROOT_DIR" -s scripts/ui_interaction_smoke_test.gd
+
 run_check "Offline gameplay smoke" "offline_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/offline_smoke_test.gd
 
@@ -218,6 +221,7 @@ run_check "Screenshot manifest 1920x1080" "manifest_1920x1080.log" \
 run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 	check_no_runtime_leaks \
 	"$LOG_DIR/ui_layout_smoke.log" \
+	"$LOG_DIR/ui_interaction_smoke.log" \
 	"$LOG_DIR/offline_smoke.log" \
 	"$LOG_DIR/capture_pages_1280x720.log" \
 	"$LOG_DIR/capture_pages_960x540.log" \
@@ -226,6 +230,7 @@ run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 run_check "Runtime error log scan" "runtime_error_scan.log" \
 	check_no_runtime_errors \
 	"$LOG_DIR/ui_layout_smoke.log" \
+	"$LOG_DIR/ui_interaction_smoke.log" \
 	"$LOG_DIR/offline_smoke.log" \
 	"$LOG_DIR/capture_pages_1280x720.log" \
 	"$LOG_DIR/capture_pages_960x540.log" \
@@ -267,6 +272,7 @@ fi
 	echo "| 成就页目标、进度、状态 lane 压缩 | UI layout smoke + screenshots |"
 	echo "| 商店库存、购买 CTA、滚动槽小屏间距不足 | UI layout smoke + offline smoke + screenshots |"
 	echo "| 联机大厅未连接状态重复 raw endpoint，主按钮语义不清 | UI layout smoke + offline smoke |"
+	echo "| 联机大厅 hover/pressed/focus 与已连接房间状态缺少证据 | Xvfb interaction smoke + 23_online_lobby_connected 三分辨率截图 |"
 	echo "| 每日签到七日预告贴底、层级弱 | UI layout smoke + screenshots |"
 	echo "| 加载页 GPT 背景上叠 native fallback 矩形 | UI layout smoke + screenshots |"
 	echo "| 生成 chrome 伪文字、伪控件、强残影 | UI layout smoke alpha 上限 + screenshots |"

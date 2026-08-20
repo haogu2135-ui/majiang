@@ -1575,6 +1575,18 @@ func sort_ai_discard_reports(reports: Array) -> void:
 		var score_a = float(a.get("score", 0.0))
 		var score_b = float(b.get("score", 0.0))
 		if is_equal_approx(score_a, score_b):
+			var shanten_a = int(a.get("shanten", 8))
+			var shanten_b = int(b.get("shanten", 8))
+			if shanten_a != shanten_b:
+				return shanten_a < shanten_b
+			var ukeire_a = int(a.get("ukeire", 0))
+			var ukeire_b = int(b.get("ukeire", 0))
+			if ukeire_a != ukeire_b:
+				return ukeire_a > ukeire_b
+			var danger_a = float(a.get("risk", 0.0)) + float(a.get("feed_risk", 0.0)) * 0.45
+			var danger_b = float(b.get("risk", 0.0)) + float(b.get("feed_risk", 0.0)) * 0.45
+			if not is_equal_approx(danger_a, danger_b):
+				return danger_a < danger_b
 			return tile_sort_index(str(a.get("tile", ""))) < tile_sort_index(str(b.get("tile", "")))
 		return score_a > score_b
 	)

@@ -17,7 +17,29 @@ const SCREEN_NAMES := [
 	"14_danger_discard",
 	"15_pending_claim_full",
 	"16_win_detail",
+	"23_online_lobby_connected",
 ]
+
+class ConnectedLobbyCaptureTransport:
+	extends RefCounted
+
+	func get_status() -> int:
+		return StreamPeerTCP.STATUS_CONNECTED
+
+	func poll() -> Error:
+		return OK
+
+	func get_available_bytes() -> int:
+		return 0
+
+	func get_utf8_string(_bytes: int) -> String:
+		return ""
+
+	func put_data(_data: PackedByteArray) -> Error:
+		return OK
+
+	func disconnect_from_host() -> void:
+		pass
 
 func _initialize() -> void:
 	call_deferred("run")
@@ -250,6 +272,9 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			seed_preview_win_detail(scene)
 			scene.render_game()
 			scene.clear_fx_overlays()
+		"23_online_lobby_connected":
+			seed_preview_online_lobby_connected(scene)
+			scene._show_online_lobby_impl()
 		"17_hand_tutorial":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
@@ -407,6 +432,27 @@ func seed_preview_online_lobby(scene: Node) -> void:
 	}
 	scene.online_feedback = "已发送加入房间，等待服务器确认。"
 	scene.online_waiting_for_server = true
+
+func seed_preview_online_lobby_connected(scene: Node) -> void:
+	scene.tcp = ConnectedLobbyCaptureTransport.new()
+	scene.tcp_status = StreamPeerTCP.STATUS_CONNECTED
+	scene.selected_room = "ROOM7"
+	scene.online_room = {
+		"code": "ROOM7",
+		"players": [
+			{"seat": 0, "name": "甲", "ready": true},
+			{"seat": 1, "name": "乙", "ready": true},
+			{"seat": 2, "name": "丙", "ready": false},
+		],
+		"logs": [
+			"甲加入房间",
+			"乙准备就绪",
+			"丙加入房间",
+			"房间同步完成，等待房主开始",
+		],
+	}
+	scene.online_feedback = "房间同步完成，等待房主开始。"
+	scene.online_waiting_for_server = false
 
 func seed_preview_round_summary(scene: Node) -> void:
 	scene.offline_phase = "ended"
