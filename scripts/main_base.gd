@@ -476,6 +476,12 @@ var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
 var reset_progress_confirming = false
 var exit_confirm_panel: Control = null
+var exit_confirm_focus_restore_id := 0
+var update_dialog_focus_restore_id := 0
+var daily_login_view_state: Dictionary = {}
+var loading_screen_active := false
+var loading_view_state: Dictionary = {}
+var discard_window_start_by_seat: Dictionary = {}
 var tutorial_step = 0  # 新手教程步骤：0=未开始，1-5=各步骤，-1=已完成
 var tutorial_panel: Control = null
 var show_hand_hint = true  # 是否显示手牌操作提示
@@ -749,8 +755,8 @@ const DISCARD_ZONES := [
 	# the top/bottom rivers or covering the center decision surface.
 	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.630, 0.875)), 8],
 	[2, Rect2(Vector2(0.285, 0.100), Vector2(0.715, 0.325)), 8],
-	[3, Rect2(Vector2(0.100, 0.325), Vector2(0.280, 0.590)), 4],
-	[1, Rect2(Vector2(0.720, 0.325), Vector2(0.900, 0.590)), 4],
+	[3, Rect2(Vector2(0.100, 0.325), Vector2(0.280, 0.590)), 3],
+	[1, Rect2(Vector2(0.720, 0.325), Vector2(0.900, 0.590)), 3],
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
@@ -1079,14 +1085,11 @@ func add_background(parent: Control) -> void:
 	bg.stretch_mode = TextureRect.STRETCH_SCALE
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.modulate = Color(0.86, 0.78, 0.62, 0.30)
+	bg.modulate = Color(0.86, 0.78, 0.62, 0.38)
 	parent.add_child(bg)
-	var paper_wash = make_fullrect_overlay(Color(0.54, 0.42, 0.25, 0.025), "ui_jade_reading_plate")
-	paper_wash.name = "GuofengWarmPaperWash"
-	parent.add_child(paper_wash)
-	var hero_wash = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.012, false)
-	if hero_wash != null:
-		hero_wash.name = "GuofengPaperSceneryBackdrop"
+	# Generic utility pages use one authored bitmap substrate. Their local panels
+	# carry the page-specific texture, so a second full-screen scene is omitted to
+	# keep settings, shop, lobby, and daily-login copy out of a texture stack.
 	var tint = make_fullrect_overlay(Color(0.070, 0.062, 0.046, 0.48), "ui_dark_scrim")
 	tint.name = "GuofengWarmDimTint"
 	parent.add_child(tint)

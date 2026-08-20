@@ -7,6 +7,54 @@ DEFAULT_UNSIGNED_DEBUG_APK="$ROOT_DIR/build/qa/YunzhuoMahjongGodot-v1.0.180-debu
 BUILD_TOOLS="${ANDROID_BUILD_TOOLS:-/opt/android-sdk/build-tools/36.1.0}"
 AAPT2="$BUILD_TOOLS/aapt2"
 APKSIGNER="$BUILD_TOOLS/apksigner"
+RETIRED_ILLUSTRATIONS=(
+	"online_gpt_lobby.png"
+	"online_feedback_gpt_strip.png"
+	"online_gpt_lobby_v2.png"
+	"seat_gpt_brocade_v3.png"
+	"settings_gpt_panel_v2.png"
+	"online_lobby_panel_frame_v1.png"
+	"online_lobby_panel_frame_v2.png"
+	"table_gpt_backdrop_v3.png"
+	"menu_primary_3d_stage_overlay_v2.png"
+	"action_gpt_dock_v7.png"
+	"action_gpt_dock_v4.png"
+	"online_lobby_group_plate_v2.png"
+	"top_hud_gpt_banner_v4.png"
+	"top_hud_gpt_banner_v5.png"
+	"top_hud_gpt_banner_v3.png"
+	"hand_gpt_tray_v3.png"
+	"top_hud_gpt_banner_v2.png"
+	"hand_gpt_tray_v4.png"
+	"seat_gpt_brocade_v6.png"
+	"seat_gpt_brocade_v9.png"
+	"seat_gpt_brocade_v7.png"
+	"seat_gpt_brocade_v8.png"
+	"action_gpt_dock_v6.png"
+	"seat_gpt_brocade_v4.png"
+	"action_gpt_dock_v8.png"
+	"action_gpt_dock_banner_r433.png"
+	"action_gpt_dock_bright_r431.png"
+	"ui_jade_ink_strip.png"
+	"action_gpt_dock_warm_v391.png"
+	"stats_gpt_dashboard_warm_v392.png"
+	"offline_table_3d_overlay.png"
+	"settings_gpt_panel.png"
+	"claim_response_trail.png"
+	"seat_gpt_plaque_warm_r429.png"
+	"table_gpt_backdrop_warm_v391.png"
+	"table_log_gpt_scroll.png"
+	"daily_login_gpt_calendar_warm_v392.png"
+	"rules_gpt_scroll.png"
+	"achievement_gpt_gallery_warm_v391.png"
+	"menu_primary_3d_stage_overlay_warm_v390.png"
+	"settings_gpt_panel_warm_v391.png"
+	"menu_hero_gpt_backdrop_warm_v390.png"
+	"rules_gpt_scroll_warm_v391.png"
+	"shop_gpt_vault_warm_v392.png"
+	"exit_gpt_confirm_warm_v392.png"
+	"top_hud_gpt_banner_warm_v392.png"
+)
 QA_RESOURCE_PATTERN='(^|/)(build/qa(/|$)|qa(/|$)|garden-gpt-image-2(/|$)|tools/|assets/references/|assets/illustrations/_replaced_[^/]+/|scripts/(ai_play_[^/]*_check|round[0-9]+_check|[^/]*_smoke_test|[^/]*_capture|test_animations|verify_[^/]+)(\.|/|$)|test_[^/]+\.(gd|gdc|gde|tscn)(\.uid)?$|extension_api\.json$)'
 
 fail() {
@@ -33,7 +81,7 @@ configure_android_host_compat() {
 }
 
 qa_filter_self_test() {
-	local bad_path good_path required_filter
+	local bad_path good_path required_filter retired
 	local -a bad_paths=(
 		"assets/build/qa/report.md"
 		"assets/scripts/ai_play_soak_check.gdc"
@@ -69,6 +117,10 @@ qa_filter_self_test() {
 		'test_*.gd*' \
 		'test_*.tscn'; do
 		grep -Fq "$required_filter" "$ROOT_DIR/export_presets.example.cfg" || fail "export filter missing: $required_filter"
+	done
+	for retired in "${RETIRED_ILLUSTRATIONS[@]}"; do
+		required_filter="assets/illustrations/$retired"
+		grep -Fq "$required_filter" "$ROOT_DIR/export_presets.example.cfg" || fail "retired illustration export filter missing: $required_filter"
 	done
 	grep -q '^gradle_build/use_gradle_build=true$' "$ROOT_DIR/export_presets.example.cfg" || fail "SDK overrides require Gradle build"
 	grep -q '^gradle_build/min_sdk="24"$' "$ROOT_DIR/export_presets.example.cfg" || fail "min SDK export contract mismatch"
@@ -159,6 +211,11 @@ ENTRIES="$(zipinfo -1 "$APK")"
 if grep -Eq "$QA_RESOURCE_PATTERN" <<<"$ENTRIES"; then
 	fail "development or QA resources are packaged"
 fi
+for retired in "${RETIRED_ILLUSTRATIONS[@]}"; do
+	if grep -Fq "assets/.godot/imported/$retired-" <<<"$ENTRIES" || grep -Fxq "assets/assets/illustrations/$retired.import" <<<"$ENTRIES"; then
+		fail "retired illustration is packaged: $retired"
+	fi
+done
 
 grep -qx 'assets/scripts/main.gdc' <<<"$ENTRIES" || fail "compiled main runtime script missing"
 grep -qx 'assets/scripts/ui/commercial_3d_stage.gdc' <<<"$ENTRIES" || fail "commercial 3D stage missing"

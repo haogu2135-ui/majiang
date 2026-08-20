@@ -169,10 +169,53 @@ func _notification(what: int) -> void:
 		update_safe_area_layout()
 		call_deferred("refresh_current_screen")
 
-func _input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") and root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
-		get_viewport().set_input_as_handled()
+func focused_control_instance_id() -> int:
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	return focus_owner.get_instance_id() if focus_owner != null and is_instance_valid(focus_owner) else 0
+
+func restore_control_focus_by_id(control_id: int) -> void:
+	var control = node_from_instance_id(control_id) as Control
+	if control == null or not control.is_visible_in_tree():
+		return
+	if control.focus_mode == Control.FOCUS_NONE:
+		control.focus_mode = Control.FOCUS_ALL
+	control.grab_focus()
+
+func focus_named_control(control_name: String) -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var control = root_layer.find_child(control_name, true, false) as Control
+	if control == null or not control.is_visible_in_tree():
+		return
+	if control.focus_mode == Control.FOCUS_NONE:
+		control.focus_mode = Control.FOCUS_ALL
+	control.grab_focus()
+
+func handle_ui_cancel() -> bool:
+	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
+		hide_exit_confirm()
+		return true
+	if root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
 		dismiss_diagnostic_dialog()
+		return true
+	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
+		on_update_secondary_pressed()
+		return true
+	if settings_panel_open:
+		close_settings_panel()
+		return true
+	match mode:
+		"shop", "daily_login", "rules", "stats", "achievements", "online_lobby":
+			show_menu(true)
+			return true
+		"offline", "online_game":
+			show_exit_confirm()
+			return true
+	return false
+
+func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and handle_ui_cancel():
+		get_viewport().set_input_as_handled()
 		return
 	var pressed = false
 	if event is InputEventScreenTouch:
@@ -355,6 +398,8 @@ func hide_exit_confirm() -> void:
 	var panel = exit_confirm_panel
 	exit_confirm_panel = null
 	var panel_id = panel.get_instance_id()
+	var restore_id := exit_confirm_focus_restore_id
+	exit_confirm_focus_restore_id = 0
 	var dialog = panel.find_child("ExitConfirmDialog", true, false)
 	if fx_enabled_effective() and dialog != null and is_instance_valid(dialog):
 		var d_tw := create_screen_tween()
@@ -363,7 +408,11 @@ func hide_exit_confirm() -> void:
 		d_tw.tween_property(dialog, "modulate:a", 0.0, 0.12)
 	var tween = create_screen_tween()
 	tween.tween_property(panel, "modulate:a", 0.0, 0.15)
-	tween.tween_callback(Callable(self, "queue_free_node_by_id").bind(panel_id))
+	tween.tween_callback(Callable(self, "finish_exit_confirm_hide").bind(panel_id, restore_id))
+
+func finish_exit_confirm_hide(panel_id: int, restore_id: int) -> void:
+	queue_free_node_by_id(panel_id)
+	call_deferred("restore_control_focus_by_id", restore_id)
 
 
 func menu_quick_button_glyph(quick_id: String) -> String:
@@ -844,6 +893,7 @@ func deal_offline_hand() -> void:
 	offline_passed_win_tiles.clear()
 	offline_claim_discard_bans.clear()
 	offline_concealed_gang_tiles.clear()
+	discard_window_start_by_seat.clear()
 	offline_last_draw.clear()
 	offline_self_draw_ready.clear()
 	offline_ai_active = false
@@ -2148,16 +2198,20 @@ func ensure_update_dialog() -> void:
 	if update_dialog != null and is_instance_valid(update_dialog):
 		refresh_update_dialog()
 		return
+	update_dialog_focus_restore_id = focused_control_instance_id()
 	update_dialog = Control.new()
+	update_dialog.name = "UpdateDialogOverlay"
 	update_dialog.set_anchors_preset(Control.PRESET_FULL_RECT)
 	update_dialog.mouse_filter = Control.MOUSE_FILTER_STOP
 	root_layer.add_child(update_dialog)
 
 	var dim = make_fullrect_overlay(Color(0.0, 0.0, 0.0, 0.40), "ui_dark_scrim")
+	dim.name = "UpdateDialogScrim"
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	update_dialog.add_child(dim)
 
 	var panel = make_gpt_plate_rect(rect_full(0.325, 0.275, 0.675, 0.640), Color(0.016, 0.050, 0.058, 0.98), "ui_jade_reading_plate")
+	panel.name = "UpdateDialogPanel"
 	update_dialog.add_child(panel)
 	var update_gpt_key := "update_gpt_dialog"
 	var update_gpt_texture = add_optional_gpt_illustration_texture(panel, update_gpt_key, rect_full(0.012, 0.018, 0.988, 0.982), 0.15, false)
@@ -2222,15 +2276,26 @@ func ensure_update_dialog() -> void:
 		on_update_primary_pressed()
 	)
 	update_primary_button.name = "UpdatePrimaryButton"
+	update_primary_button.focus_mode = Control.FOCUS_ALL
 	draw_update_dialog_button_art(update_primary_button, "primary", Color(0.18, 0.42, 0.34))
 	row.add_child(update_primary_button)
 	update_secondary_button = make_small_button("关闭", Color(0.26, 0.30, 0.34), func() -> void:
 		on_update_secondary_pressed()
 	)
 	update_secondary_button.name = "UpdateSecondaryButton"
+	update_secondary_button.focus_mode = Control.FOCUS_ALL
 	draw_update_dialog_button_art(update_secondary_button, "secondary", Color(0.26, 0.30, 0.34))
 	row.add_child(update_secondary_button)
+	update_primary_button.focus_neighbor_left = update_secondary_button.get_path()
+	update_primary_button.focus_neighbor_right = update_secondary_button.get_path()
+	update_primary_button.focus_next = update_secondary_button.get_path()
+	update_primary_button.focus_previous = update_secondary_button.get_path()
+	update_secondary_button.focus_neighbor_left = update_primary_button.get_path()
+	update_secondary_button.focus_neighbor_right = update_primary_button.get_path()
+	update_secondary_button.focus_next = update_primary_button.get_path()
+	update_secondary_button.focus_previous = update_primary_button.get_path()
 	refresh_update_dialog()
+	update_secondary_button.grab_focus()
 
 
 func play_update_dialog_button_feedback(button: Button, role: String, color: Color) -> void:
@@ -2349,6 +2414,8 @@ func update_release_notes_summary_line() -> String:
 	return "%s%s" % [first_line, suffix]
 
 func on_update_primary_pressed() -> void:
+	if update_state == "checking" or update_state == "downloading" or update_state == "current" or update_state == "installing":
+		return
 	if update_state == "ready":
 		open_downloaded_update()
 	else:

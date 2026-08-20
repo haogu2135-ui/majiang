@@ -66,6 +66,15 @@ func has_label_text(scope: Node, expected: String) -> bool:
 	return false
 
 
+func node_is_descendant_of(node: Node, ancestor: Node) -> bool:
+	var cursor := node
+	while cursor != null:
+		if cursor == ancestor:
+			return true
+		cursor = cursor.get_parent()
+	return false
+
+
 func move_pointer(position: Vector2, settle_seconds: float = 0.42) -> void:
 	Input.warp_mouse(position)
 	var motion := InputEventMouseMotion.new()
@@ -217,6 +226,19 @@ func run() -> void:
 		check(create_button.button_pressed, "screen-touch down produces the native pressed state")
 		await send_screen_touch(create_button.get_global_rect().get_center(), false)
 		check(bool(touch_probe.get("pressed", false)) and not create_button.button_pressed, "screen-touch release activates the real lobby button")
+	var disconnected_start = scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+	check(disconnected_start != null and disconnected_start.disabled, "disconnected lobby exposes a visibly disabled start action")
+	if disconnected_start != null:
+		var disabled_start_probe := {"pressed": 0}
+		disconnected_start.pressed.connect(func() -> void:
+			disabled_start_probe["pressed"] = int(disabled_start_probe.get("pressed", 0)) + 1
+		)
+		var disabled_start_center := disconnected_start.get_global_rect().get_center()
+		await send_left_button(disabled_start_center, true)
+		await send_left_button(disabled_start_center, false)
+		await send_screen_touch(disabled_start_center, true)
+		await send_screen_touch(disabled_start_center, false)
+		check(int(disabled_start_probe.get("pressed", 0)) == 0 and disconnected_start.disabled, "disabled start ignores desktop and single-finger activation")
 
 	print("--- B) keyboard focus and editing drive the real line edit ---")
 	var name_edit := scene.online_name_edit as LineEdit
@@ -452,6 +474,181 @@ func run() -> void:
 		await send_screen_touch(touch_dismiss_position, false)
 		await settle(0.10)
 	check(scene.find_child("DiagnosticDialogPanel", true, false) == null, "single-finger backdrop press dismisses the diagnostic")
+
+	print("--- G) exit confirmation owns focus and blocks input penetration ---")
+	scene.show_menu(true)
+	await settle(0.05)
+	var menu_settings = scene.find_child("MenuSettingsButton", true, false) as Button
+	check(menu_settings != null, "menu exposes a focus-restore source control")
+	var menu_settings_probe := {"pressed": 0}
+	if menu_settings != null:
+		menu_settings.focus_mode = Control.FOCUS_ALL
+		menu_settings.pressed.connect(func() -> void:
+			menu_settings_probe["pressed"] = int(menu_settings_probe.get("pressed", 0)) + 1
+		)
+		menu_settings.grab_focus()
+		scene.show_exit_confirm()
+		await settle(0.05)
+		var exit_overlay = scene.exit_confirm_panel as Control
+		var continue_button := first_button_with_text(exit_overlay, "继续游戏")
+		var leave_button := first_button_with_text(exit_overlay, "退出游戏")
+		var exit_focus_owner := scene.get_viewport().gui_get_focus_owner() as Control
+		check(exit_overlay != null and continue_button != null and leave_button != null, "exit confirmation exposes both explicit decisions")
+		check(continue_button != null and continue_button.focus_mode == Control.FOCUS_ALL and continue_button.has_focus() and node_is_descendant_of(exit_focus_owner, exit_overlay), "exit confirmation moves keyboard focus inside the modal")
+		var covered_settings_center := menu_settings.get_global_rect().get_center()
+		await send_left_button(covered_settings_center, true)
+		await send_left_button(covered_settings_center, false)
+		await send_screen_touch(covered_settings_center, true)
+		await send_screen_touch(covered_settings_center, false)
+		check(int(menu_settings_probe.get("pressed", 0)) == 0 and scene.exit_confirm_panel != null, "exit modal blocks desktop and touch input from reaching the menu")
+		await send_key(KEY_ESCAPE, 0)
+		await settle(0.20)
+		check(scene.exit_confirm_panel == null and scene.find_child("ExitConfirmDialog", true, false) == null and menu_settings.has_focus(), "ui_cancel closes exit confirmation and restores prior focus")
+
+		scene.show_exit_confirm()
+		await settle(0.05)
+		continue_button = first_button_with_text(scene.exit_confirm_panel, "继续游戏")
+		await send_key(KEY_ENTER, 0)
+		await settle(0.20)
+		check(scene.exit_confirm_panel == null, "Enter activates the safe default exit-confirmation action")
+
+		scene.show_exit_confirm()
+		await settle(0.05)
+		continue_button = first_button_with_text(scene.exit_confirm_panel, "继续游戏")
+		if continue_button != null:
+			var continue_center := continue_button.get_global_rect().get_center()
+			await send_screen_touch(continue_center, true)
+			await send_screen_touch(continue_center, false)
+			await settle(0.20)
+		check(scene.exit_confirm_panel == null, "single-finger safe-default activation closes exit confirmation")
+
+	print("--- H) settings modal owns focus and blocks every background input path ---")
+	scene.show_menu(true)
+	await settle(0.05)
+	scene.settings_panel_open = true
+	scene.refresh_current_screen()
+	await settle(0.05)
+	var settings_overlay = scene.find_child("SettingsOverlay", true, false) as Control
+	var settings_close = scene.find_child("SettingsCloseButton", true, false) as Button
+	var settings_underlay = scene.find_child("MenuSettingsButton", true, false) as Button
+	var settings_underlay_probe := {"pressed": 0}
+	if settings_underlay != null:
+		settings_underlay.pressed.connect(func() -> void:
+			settings_underlay_probe["pressed"] = int(settings_underlay_probe.get("pressed", 0)) + 1
+		)
+	var settings_focus_owner := scene.get_viewport().gui_get_focus_owner() as Control
+	check(settings_overlay != null and settings_close != null and settings_underlay != null, "settings exposes its modal close action above the menu")
+	check(settings_close != null and settings_close.has_focus() and node_is_descendant_of(settings_focus_owner, settings_overlay), "settings moves keyboard focus to its safe close action")
+	await send_key(KEY_TAB, 0)
+	check(settings_close != null and settings_close.has_focus(), "settings traps sequential keyboard focus inside the modal")
+	if settings_underlay != null:
+		var covered_settings_position := settings_underlay.get_global_rect().get_center()
+		await send_left_button(covered_settings_position, true)
+		await send_left_button(covered_settings_position, false)
+		await send_screen_touch(covered_settings_position, true)
+		await send_screen_touch(covered_settings_position, false)
+	check(int(settings_underlay_probe.get("pressed", 0)) == 0 and scene.settings_panel_open, "settings blocks desktop and touch input from reaching the menu")
+	await send_key(KEY_ENTER, 0)
+	await settle(0.10)
+	var restored_settings = scene.find_child("MenuSettingsButton", true, false) as Button
+	check(not scene.settings_panel_open and scene.find_child("SettingsOverlay", true, false) == null and restored_settings != null and restored_settings.has_focus(), "Enter closes settings and restores menu focus")
+
+	scene.settings_panel_open = true
+	scene.refresh_current_screen()
+	await settle(0.05)
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.10)
+	restored_settings = scene.find_child("MenuSettingsButton", true, false) as Button
+	check(not scene.settings_panel_open and scene.find_child("SettingsOverlay", true, false) == null and restored_settings != null and restored_settings.has_focus(), "ui_cancel closes settings and restores menu focus")
+	menu_settings = restored_settings
+	menu_settings_probe = {"pressed": 0}
+	if menu_settings != null:
+		menu_settings.pressed.connect(func() -> void:
+			menu_settings_probe["pressed"] = int(menu_settings_probe.get("pressed", 0)) + 1
+		)
+
+	print("--- I) update modal owns focus and keeps the underlying menu inert ---")
+	if menu_settings != null:
+		menu_settings.grab_focus()
+	scene.update_state = "checking"
+	scene.update_message = "正在检查更新。"
+	scene.ensure_update_dialog()
+	await settle(0.05)
+	var blocked_primary = scene.find_child("UpdatePrimaryButton", true, false) as Button
+	var blocked_primary_probe := {"pressed": 0}
+	check(blocked_primary != null and blocked_primary.visible and blocked_primary.disabled and blocked_primary.text == "检查中", "active update work exposes a visible disabled primary action")
+	if blocked_primary != null:
+		blocked_primary.pressed.connect(func() -> void:
+			blocked_primary_probe["pressed"] = int(blocked_primary_probe.get("pressed", 0)) + 1
+		)
+		var blocked_primary_center := blocked_primary.get_global_rect().get_center()
+		await send_left_button(blocked_primary_center, true)
+		await send_left_button(blocked_primary_center, false)
+		await send_screen_touch(blocked_primary_center, true)
+		await send_screen_touch(blocked_primary_center, false)
+	scene.get_viewport().gui_release_focus()
+	await send_key(KEY_ENTER, 0)
+	check(int(blocked_primary_probe.get("pressed", 0)) == 0 and scene.update_state == "checking", "disabled update primary ignores desktop touch and unfocused keyboard activation")
+	scene.update_state = "idle"
+	scene.refresh_update_dialog()
+	await settle(0.10)
+	if menu_settings != null:
+		menu_settings.grab_focus()
+	scene.update_state = "error"
+	scene.update_message = "更新服务器暂时不可用，请稍后重试。"
+	scene.ensure_update_dialog()
+	await settle(0.05)
+	var update_overlay = scene.find_child("UpdateDialogOverlay", true, false) as Control
+	var update_secondary = scene.find_child("UpdateSecondaryButton", true, false) as Button
+	var update_focus_owner := scene.get_viewport().gui_get_focus_owner() as Control
+	check(update_overlay != null and update_secondary != null, "update flow exposes a named modal and secondary exit action")
+	check(update_secondary != null and update_secondary.focus_mode == Control.FOCUS_ALL and update_secondary.has_focus() and node_is_descendant_of(update_focus_owner, update_overlay), "update modal moves keyboard focus to its safe action")
+	if menu_settings != null:
+		var update_probe_before := int(menu_settings_probe.get("pressed", 0))
+		var covered_menu_center := menu_settings.get_global_rect().get_center()
+		await send_left_button(covered_menu_center, true)
+		await send_left_button(covered_menu_center, false)
+		await send_screen_touch(covered_menu_center, true)
+		await send_screen_touch(covered_menu_center, false)
+		check(int(menu_settings_probe.get("pressed", 0)) == update_probe_before and scene.find_child("UpdateDialogOverlay", true, false) != null, "update modal blocks desktop and touch input penetration")
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.10)
+	check(scene.update_state == "idle" and scene.find_child("UpdateDialogOverlay", true, false) == null and (menu_settings == null or menu_settings.has_focus()), "ui_cancel closes a non-active update modal and restores prior focus")
+
+	scene.update_state = "error"
+	scene.update_message = "更新服务器暂时不可用，请稍后重试。"
+	scene.ensure_update_dialog()
+	await settle(0.05)
+	await send_key(KEY_ENTER, 0)
+	await settle(0.10)
+	check(scene.update_state == "idle" and scene.find_child("UpdateDialogOverlay", true, false) == null, "Enter activates the focused update close action")
+
+	print("--- J) disabled daily claim and page exit routes remain deterministic ---")
+	scene.show_daily_login_panel({"consecutive_days": 5, "claimed_today": true, "show_reward": true})
+	await settle(0.05)
+	var claim_button = scene.find_child("DailyLoginClaimButton", true, false) as Button
+	var claim_probe := {"pressed": 0}
+	check(claim_button != null and claim_button.disabled, "already-claimed daily reward exposes a disabled claim action")
+	if claim_button != null:
+		claim_button.pressed.connect(func() -> void:
+			claim_probe["pressed"] = int(claim_probe.get("pressed", 0)) + 1
+		)
+		var coins_before := int(scene.currency.get("coins", 0))
+		var claim_center := claim_button.get_global_rect().get_center()
+		await send_left_button(claim_center, true)
+		await send_left_button(claim_center, false)
+		await send_screen_touch(claim_center, true)
+		await send_screen_touch(claim_center, false)
+		check(int(claim_probe.get("pressed", 0)) == 0 and int(scene.currency.get("coins", 0)) == coins_before, "disabled daily claim ignores desktop and touch activation without duplicate reward")
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.10)
+	check(scene.mode == "menu" and scene.find_child("MenuSettingsButton", true, false) != null, "ui_cancel returns from daily login to the menu")
+
+	scene._show_shop_screen_impl()
+	await settle(0.05)
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.10)
+	check(scene.mode == "menu" and scene.find_child("MenuSettingsButton", true, false) != null, "ui_cancel returns from the shop to the menu")
 
 	if scene.has_method("shutdown_runtime"):
 		scene.shutdown_runtime()

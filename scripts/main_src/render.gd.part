@@ -80,7 +80,8 @@ func discard_zone_visible_rows(zone_rect: Rect2, columns: int) -> int:
 func discard_zone_visible_rows_for_table_size(zone_rect: Rect2, columns: int, table_size: Vector2) -> int:
 	var zone_size = discard_zone_pixel_size_for_table_size(zone_rect, table_size)
 	var max_rows = int(floor((zone_size.y + float(DISCARD_GRID_SEPARATION)) / (DISCARD_TILE_MIN_SIZE.y + float(DISCARD_GRID_SEPARATION))))
-	# r449: bottom/top (8-col) prefer 2 rows; sides (4-col) keep up to 4
+	# r500: bottom/top (8-col) prefer 2 rows; compact side rivers use 3 columns
+	# so authored faces and the latest-discard marker stay readable at 960px.
 	var row_cap := 2 if columns >= 8 else 4
 	return clamp(max_rows, 1, row_cap)
 
@@ -2998,17 +2999,43 @@ func discard_river_owner_badge_rect(seat: int) -> Rect2:
 		2:
 			return rect_full(0.720, 0.035, 0.975, 0.195)
 		1:
-			return rect_full(0.080, 0.825, 0.920, 0.965)
+			return rect_full(0.080, 0.035, 0.920, 0.225)
 		3:
-			return rect_full(0.080, 0.825, 0.920, 0.965)
+			return rect_full(0.080, 0.035, 0.920, 0.225)
 	return rect_full(0.720, 0.805, 0.975, 0.965)
 
-func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int) -> Control:
+func discard_archive_button_rect(seat: int) -> Rect2:
+	if seat == 1 or seat == 3:
+		return rect_full(0.500, 0.500, 0.990, 0.990)
+	return rect_full(0.745, 0.500, 0.995, 0.995)
+
+func discard_archive_button_text(discard_count: int, visible_start: int, visible_capacity: int) -> String:
+	var latest_start := tail_window_start(discard_count, visible_capacity)
+	if visible_start <= 0:
+		return "最新"
+	if visible_start >= latest_start:
+		return "前%d" % visible_start
+	return "前%d" % mini(visible_capacity, visible_start)
+
+func cycle_discard_archive_window(seat: int, visible_capacity: int) -> void:
+	var discards := get_discards(seat)
+	var latest_start := tail_window_start(discards.size(), visible_capacity)
+	if latest_start <= 0:
+		discard_window_start_by_seat.erase(seat)
+		return
+	var current_start := clampi(int(discard_window_start_by_seat.get(seat, latest_start)), 0, latest_start)
+	if current_start <= 0:
+		discard_window_start_by_seat.erase(seat)
+	else:
+		discard_window_start_by_seat[seat] = maxi(0, current_start - visible_capacity)
+	request_game_render()
+
+func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int) -> Control:
 	if discard_count <= 0:
 		return null
 	var overlay = Control.new()
 	overlay.name = "DiscardRiverOwnerOverlay_%d" % seat
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.mouse_filter = Control.MOUSE_FILTER_PASS
 	apply_rect(overlay, zone_rect)
 	parent.add_child(overlay)
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
@@ -3018,6 +3045,31 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	var owner = make_badge(overlay, discard_river_owner_badge_rect(seat), discard_river_owner_text(seat), 8, Color(0.010, 0.024, 0.026, fill_alpha), Color(accent.r, accent.g, accent.b, border_alpha), Color(0.92, 0.88, 0.70, 0.78))
 	owner.name = "DiscardRiverOwnerBadge_%d" % seat
 	owner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	owner.tooltip_text = "%s · 当前 %d-%d / %d" % [discard_river_owner_text(seat), visible_start + 1, visible_start + visible_count, discard_count]
+	if discard_count > visible_capacity:
+		var archive_button = make_small_button(discard_archive_button_text(discard_count, visible_start, visible_capacity), Color(accent.r, accent.g, accent.b, 0.44), Callable(self, "cycle_discard_archive_window").bind(seat, visible_capacity))
+		archive_button.name = "DiscardRiverArchiveButton_%d" % seat
+		archive_button.z_index = 12
+		archive_button.custom_minimum_size = Vector2(44, 44)
+		archive_button.add_theme_font_size_override("font_size", 10)
+		for color_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
+			archive_button.add_theme_color_override(color_name, Color(1.0, 1.0, 1.0, 0.0))
+		archive_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		archive_button.tooltip_text = "点击查看更早弃牌\n完整牌河：%s" % join_tile_labels(get_discards(seat))
+		archive_button.set_meta("hidden_count", visible_start)
+		archive_button.set_meta("window_start", visible_start)
+		archive_button.set_meta("visible_capacity", visible_capacity)
+		overlay.add_child(archive_button)
+		apply_rect(archive_button, discard_archive_button_rect(seat))
+		var archive_art := draw_discard_river_archive_art(archive_button, seat, accent, discard_count, visible_start, visible_count)
+		archive_art.modulate.a = 0.48
+		archive_button.move_child(archive_art, 0)
+		var archive_label = make_label(archive_button, archive_button.text, 10, Color(1.0, 0.94, 0.66, 1.0), true)
+		archive_label.name = "DiscardRiverArchiveLabel_%d" % seat
+		archive_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		archive_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.98))
+		archive_label.add_theme_constant_override("outline_size", 3)
+		apply_rect(archive_label, rect_full(0.04, 0.02, 0.96, 0.72))
 	return overlay
 
 func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int) -> Control:
@@ -3223,14 +3275,22 @@ func draw_discards(parent: Control) -> void:
 		var size_basis: Vector2 = table_render_size if table_render_size.x > 8.0 and table_render_size.y > 8.0 else table_size
 		var visible_rows = discard_zone_visible_rows_for_table_size(zone_rect, grid.columns, size_basis)
 		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, grid.columns, visible_rows, size_basis)
-		var visible_start = tail_window_start(discards.size(), grid.columns * visible_rows)
-		var visible_count = discards.size() - visible_start
+		var raw_visible_capacity: int = int(grid.columns * visible_rows)
+		var visible_capacity := raw_visible_capacity
+		if discards.size() > raw_visible_capacity:
+			visible_capacity = maxi(1, raw_visible_capacity - 2)
+		var latest_start := tail_window_start(discards.size(), visible_capacity)
+		var visible_start := clampi(int(discard_window_start_by_seat.get(seat, latest_start)), 0, latest_start)
+		var visible_count = mini(visible_capacity, discards.size() - visible_start)
+		grid.set_meta("visible_capacity", visible_capacity)
+		grid.set_meta("window_start", visible_start)
+		grid.set_meta("discard_count", discards.size())
 		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count)
 		if river_art != null:
 			parent.move_child(river_art, max(0, grid.get_index()))
 		for i in range(visible_count):
 			var source_index = visible_start + i
-			var highlighted = seat == get_last_discard_seat() and i == visible_count - 1
+			var highlighted = seat == get_last_discard_seat() and source_index == discards.size() - 1
 			var tile_code := str(discards[source_index])
 			var tile_node = make_tile_view(tile_code, tile_size, false, Callable(), highlighted)
 			# r452: all rivers expand into grid cells for dense porcelain coverage.
@@ -3253,15 +3313,17 @@ func draw_discards(parent: Control) -> void:
 			if face_tex != null:
 				face_tex.modulate = Color(1.0, 1.0, 1.0, face_tex.modulate.a)
 			tile_node.modulate = Color(1.0, 1.0, 1.0, tile_node.modulate.a)
+			tile_node.set_meta("discard_source_index", source_index)
+			tile_node.set_meta("discard_tile_code", tile_code)
 			grid.add_child(tile_node)
 			if highlighted:
 				tile_node.name = "RecentDiscardTile_%d" % seat
 				tile_node.z_index = 10
-		var owner_overlay := draw_discard_river_owner_overlay(parent, seat, zone_rect, discards.size())
+		var owner_overlay := draw_discard_river_owner_overlay(parent, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity)
 		if owner_overlay != null:
 			owner_overlay.set_meta("table_3d_foreground", true)
 			foreground_overlays.append(owner_overlay)
-		if seat == get_last_discard_seat() and visible_count > 0:
+		if seat == get_last_discard_seat() and visible_start + visible_count == discards.size() and visible_count > 0:
 			var focus_marker := draw_last_discard_focus_marker(parent, seat, table_size)
 			if focus_marker != null:
 				var focus_tile := focus_marker.find_child("LastDiscardFocusActualTile", true, false) as CanvasItem
@@ -3647,6 +3709,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	var settings = make_top_hud_button("设置", Color(0.45, 0.34, 0.18), func() -> void:
 		toggle_settings_panel()
 	)
+	settings.name = "TopHudSettingsButton"
 	hud.add_child(settings)
 	apply_rect(settings, TOP_HUD_SETTINGS_BUTTON_RECT)
 
@@ -3656,6 +3719,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		else:
 			show_online_lobby()
 	)
+	back.name = "TopHudBackButton"
 	hud.add_child(back)
 	apply_rect(back, TOP_HUD_BACK_BUTTON_RECT)
 
@@ -3761,6 +3825,9 @@ func draw_hand(parent: Control) -> void:
 	var group_gap_width = maxf(4.0, float(hand_layout.get("group_gap_width", 4.0)))
 	var drawn_tile = str(offline_last_draw.get("tile", ""))
 	var drawn_serial = int(offline_last_draw.get("serial", -1))
+	var stable_drawn_index := -1
+	if mode == "offline" and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and hand.size() % 3 == 2:
+		stable_drawn_index = hand.rfind(drawn_tile)
 	var should_animate_drawn_tile = mode == "offline" and fx_enabled_effective() and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
 	var draw_state_assigned := false
 	# Pure 2D hand: authored assets/tiles faces via make_tile_view (no realtime 3D stage).
@@ -3814,6 +3881,14 @@ func draw_hand(parent: Control) -> void:
 				send_online_action({"type": "discard", "tile": tile}, "打出%s" % tile_label(tile))
 		var tile_node = make_tile_view(tile, Vector2(tile_width, tile_height), clickable, callback, highlighted, risk, hint_badge)
 		tile_node.name = "HandTile_%02d_%s" % [i, tile]
+		tile_node.set_meta("hand_source_index", i)
+		tile_node.set_meta("hand_tile_code", tile)
+		tile_node.set_meta("drawn_tile", i == stable_drawn_index)
+		if i == stable_drawn_index and tile_node.get_child_count() > 0:
+			var drawn_body = tile_node.get_child(0) as Control
+			if drawn_body != null:
+				drawn_body.offset_top -= 4.0
+				drawn_body.offset_bottom -= 4.0
 		hand_box.add_child(tile_node)
 		if should_animate_drawn_tile and tile == drawn_tile and bool(tile_node.get_meta("drawn_anim_pending", true)):
 			# one-shot draw pop for the newest self tile when available
@@ -4569,7 +4644,7 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 	return art
 
 
-func draw_loading_progress_feedback(parent: Control) -> Control:
+func draw_loading_progress_feedback(parent: Control, progress_ratio: float = 0.72) -> Control:
 	# r212: GPT chrome conversion
 	var art = Control.new()
 	art.name = "LoadingProgressFeedback"
@@ -4583,7 +4658,7 @@ func draw_loading_progress_feedback(parent: Control) -> Control:
 	var route = make_gpt_route_rail(rect_full(0.125, 0.370, 0.875, 0.485), Color(0.006, 0.016, 0.018, 0.30))
 	route.name = "LoadingProgressRoute"
 	art.add_child(route)
-	var fill = make_gpt_meter_fill(rect_full(0.025, 0.260, 0.720, 0.740), Color(accent.r, accent.g, accent.b, 0.18))
+	var fill = make_gpt_meter_fill(rect_full(0.025, 0.260, clampf(progress_ratio, 0.08, 0.98), 0.740), Color(accent.r, accent.g, accent.b, 0.18))
 	fill.name = "LoadingProgressFill"
 	route.add_child(fill)
 	var gate = make_gpt_gate(rect_full(0.850, 0.250, 0.915, 0.620), Color(accent.r, accent.g, accent.b, 0.13))
@@ -4606,7 +4681,7 @@ func draw_loading_progress_feedback(parent: Control) -> Control:
 		tw.set_loops(8)
 		tw.tween_property(fill, "anchor_right", 0.980, 1.15).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.parallel().tween_property(gate, "modulate:a", 0.46, 0.56).from(0.94)
-		tw.tween_property(fill, "anchor_right", 0.720, 0.01)
+		tw.tween_property(fill, "anchor_right", clampf(progress_ratio, 0.08, 0.98), 0.01)
 		tw.parallel().tween_property(gate, "modulate:a", 0.94, 0.56).from(0.46)
 	return art
 
@@ -6172,6 +6247,32 @@ func draw_reset_progress_confirm_art(parent: Control, accent: Color) -> Control:
 	return confirm
 
 
+func round_summary_compact_body_text() -> String:
+	if last_win_score.is_empty():
+		return round_summary
+	var winner := clampi(int(last_win_score.get("winner", offline_last_winner)), 0, players.size() - 1)
+	var win_tile := str(last_win_score.get("win_tile", ""))
+	var action_text := "自摸" if bool(last_win_score.get("self_draw", false)) else "胡"
+	var limit_name := str(last_win_score.get("limit_name", ""))
+	var result := "%s%s%s · %d番%s %d分 · %s" % [
+		str(players[winner].get("name", "玩家")),
+		action_text,
+		tile_label(win_tile) if win_tile != "" else "",
+		int(last_win_score.get("fan", 0)),
+		(" " + limit_name) if limit_name != "" else "",
+		int(last_win_score.get("points", 0)),
+		"庄家连庄" if offline_dealer_repeat else "庄家下庄",
+	]
+	var settlement_lines: Array[String] = []
+	for package_line in active_package_lines():
+		settlement_lines.append(str(package_line).trim_suffix("。"))
+	if is_offline_match_finished() or round_summary.contains("全场结束"):
+		settlement_lines.append("全场结束")
+	if not settlement_lines.is_empty():
+		result += "\n" + " · ".join(settlement_lines)
+	return result
+
+
 func draw_round_summary(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
 	if mode != "offline" or offline_phase != "ended":
@@ -6229,14 +6330,19 @@ func draw_round_summary(parent: Control) -> void:
 	if not package_lines.is_empty():
 		lines.append("")
 		lines.append_array(package_lines)
-	var body = make_label(panel, "\n".join(lines), 15, Color(0.94, 0.96, 0.90), false)
+	var full_summary_text := "\n".join(lines)
+	var compact_summary := effective_viewport_size().y <= 560.0
+	var body = make_label(panel, round_summary_compact_body_text(), 12 if compact_summary else 14, Color(0.94, 0.96, 0.90), false)
 	body.name = "RoundSummaryBody"
-	apply_rect(body, ROUND_SUMMARY_TEXT_RECT)
+	apply_rect(body, rect_full(0.06, 0.410, 0.94, 0.558))
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	body.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.92))
 	body.add_theme_constant_override("outline_size", 2)
-	configure_clipped_label(body)
+	body.clip_text = true
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	body.tooltip_text = full_summary_text
 	var rank = 1
 	for seat in ranked_seats_by_score():
 		draw_round_summary_rank_row(panel, seat, rank)
@@ -8312,6 +8418,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		play_section_rect = rect_full(0.512, 0.250, 0.960, 0.837)
 		maint_section_rect = rect_full(0.040, 0.855, 0.960, 0.989)
 	var overlay = Control.new()
+	overlay.name = "SettingsOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
@@ -8376,11 +8483,19 @@ func draw_settings_overlay(parent: Control) -> void:
 	)
 	close.custom_minimum_size = Vector2(88, 42)
 	close.name = "SettingsCloseButton"
+	close.focus_mode = Control.FOCUS_ALL
 	draw_settings_close_button_art(close)
 	panel.add_child(close)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.flash(close, 0.5, 1.0, 0.8)
 	apply_rect(close, SETTINGS_CLOSE_RECT)
+	close.focus_neighbor_left = close.get_path()
+	close.focus_neighbor_right = close.get_path()
+	close.focus_neighbor_top = close.get_path()
+	close.focus_neighbor_bottom = close.get_path()
+	close.focus_next = close.get_path()
+	close.focus_previous = close.get_path()
+	close.grab_focus()
 	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.84, 0.90, 0.78), true)
 	rule_setting_label.name = "SettingsRuleVariantLabel"
 	apply_rect(rule_setting_label, rect_full(0.550, 0.040, 0.675, 0.115))
@@ -9669,6 +9784,7 @@ func draw_table_log(parent: Control) -> void:
 		apply_rect(row_body, rect_full(0.205, 0.070, 0.955, 0.900))
 		row_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(row_body)
+		row_body.tooltip_text = row_body.text
 	return
 
 
@@ -11454,11 +11570,14 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	if reasons.size() > 0:
 		var yaku_track = draw_win_detail_yaku_track(detail_panel, reasons)
 		yaku_track.visible = false
-		var badge_container = HBoxContainer.new()
+		var compact_yaku := effective_viewport_size().y <= 560.0
+		var badge_container = HFlowContainer.new()
 		badge_container.name = "WinDetailYakuBadges"
 		badge_container.alignment = BoxContainer.ALIGNMENT_BEGIN
-		badge_container.add_theme_constant_override("separation", 6)
-		apply_rect(badge_container, rect_full(0.04, 0.28, 0.70, 0.56))
+		badge_container.add_theme_constant_override("h_separation", 3 if compact_yaku else 5)
+		badge_container.add_theme_constant_override("v_separation", 2 if compact_yaku else 3)
+		badge_container.clip_contents = true
+		apply_rect(badge_container, rect_full(0.04, 0.26, 0.70, 0.94))
 		detail_panel.add_child(badge_container)
 
 		for i in range(reasons.size()):
@@ -11466,7 +11585,10 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 			# 根据番种类型选择不同颜色
 			var badge_color = fan_badge_color(reason_str)
 			var badge_border = badge_color.lightened(0.16)
-			var badge = make_badge(badge_container, Rect2(Vector2.ZERO, Vector2.ZERO), reason_str, 13, badge_color.darkened(0.18), badge_border, Color(0.96, 0.94, 0.88))
+			var badge = make_badge(badge_container, Rect2(Vector2.ZERO, Vector2.ZERO), reason_str, 10 if compact_yaku else 13, badge_color.darkened(0.18), badge_border, Color(0.96, 0.94, 0.88))
+			badge.name = "WinDetailYakuBadge_%d" % i
+			badge.custom_minimum_size = Vector2(clampf(38.0 + float(reason_str.length()) * (6.0 if compact_yaku else 12.0), 52.0 if compact_yaku else 58.0, 68.0 if compact_yaku else 112.0), 18.0 if compact_yaku else 22.0)
+			badge.tooltip_text = reason_str
 			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			# 徽章依次弹出动画
 			if fx_enabled_effective():

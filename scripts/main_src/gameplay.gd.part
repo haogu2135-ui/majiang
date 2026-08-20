@@ -91,6 +91,17 @@ func pace_after_visible_ai_action(returning_to_human: bool = false) -> void:
 		await wait_for_runtime_delay(delay)
 
 func refresh_current_screen() -> void:
+	if loading_screen_active:
+		show_loading_screen(loading_view_state)
+		return
+	# Full-screen diagnostic and exit confirmation controls already use normalized
+	# anchors. Keep the topmost modal mounted during a live resize; the source page
+	# is rebuilt at the new size when the modal is explicitly dismissed.
+	if root_layer != null and is_instance_valid(root_layer):
+		if root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+			return
+		if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
+			return
 	if mode == "menu":
 		show_menu(true)
 	elif mode == "rules":
@@ -101,6 +112,10 @@ func refresh_current_screen() -> void:
 		show_achievements_screen(true)
 	elif mode == "online_lobby":
 		show_online_lobby(true)
+	elif mode == "shop":
+		show_shop_screen(true)
+	elif mode == "daily_login":
+		show_daily_login_panel(daily_login_view_state)
 	elif mode == "offline" or mode == "online_game":
 		request_game_render()
 
@@ -129,6 +144,7 @@ func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
 func clear_screen() -> void:
+	loading_screen_active = false
 	clear_screen_tweens()
 	clear_toast_on_mode_change()
 	for child in get_children():

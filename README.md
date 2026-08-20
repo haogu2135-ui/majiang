@@ -32,8 +32,11 @@ Godot 4.6.3 迁移版 Android 客户端。目标是替代原生 Android Canvas U
 
 ```bash
 cd /home/guhao/majiang
-GODOT_SILENCE_ROOT_WARNING=1 godot --headless --path . --export-release Android build/YunzhuoMahjongGodot-v1.0.180-godot.apk
+cp export_presets.example.cfg export_presets.cfg
+QEMU_LD_PREFIX=/usr/x86_64-linux-gnu GODOT_SILENCE_ROOT_WARNING=1 godot --headless --path . --export-release Android build/YunzhuoMahjongGodot-v1.0.180-godot.apk
 ```
+
+`export_presets.cfg` 是忽略提交的本机配置；首次导出从受控模板复制，release 签名信息只填入本机文件。ARM64 主机上的 Android build-tools 是 x86_64 程序，导出和 Gradle daemon 操作都需要 `QEMU_LD_PREFIX=/usr/x86_64-linux-gnu`；x86_64 主机可省略该变量。导出前可先运行 `scripts/verify_android_release.sh --toolchain-self-test`。
 
 Godot Android 设置：
 

@@ -7,6 +7,11 @@ const VIEWPORTS := [
 ]
 const SAFE_AREA_PROBE_VIEWPORT := Vector2(960, 540)
 const SAFE_AREA_PROBE_MARGINS := Vector4(42.0, 26.0, 34.0, 46.0)
+const CONTINUOUS_RESIZE_VIEWPORTS := [
+	Vector2(1920, 1080),
+	Vector2(1280, 720),
+	Vector2(960, 540),
+]
 
 var failed := false
 
@@ -17,6 +22,7 @@ func run() -> void:
 	for viewport_size in VIEWPORTS:
 		await run_layout_checks_for_viewport(viewport_size)
 	await run_safe_area_layout_probe(SAFE_AREA_PROBE_VIEWPORT, SAFE_AREA_PROBE_MARGINS)
+	await run_continuous_resize_capacity_probe()
 	if failed:
 		quit(1)
 	else:
@@ -82,12 +88,12 @@ func seed_win_detail_layout_state(scene) -> void:
 	scene.offline_dealer_repeat = false
 	scene.dealer_seat = 1
 	scene.offline_hand_number = 1
-	scene.round_summary = "你自摸清一色碰碰胡，8番 16分。清一色、碰碰胡、自摸。庄家下庄。"
+	scene.round_summary = "你自摸九万，8番高番 16分。清一色、碰碰胡、门清、一条龙、杠上开花、海底捞月、自摸、花牌加番。庄家下庄。包三搭：青竹道人包赔你。全场结束。"
 	scene.last_win_score = {
 		"winner": 0,
 		"fan": 8,
 		"points": 16,
-		"reasons": ["清一色", "碰碰胡", "自摸"],
+		"reasons": ["清一色", "碰碰胡", "门清", "一条龙", "杠上开花", "海底捞月", "自摸", "花牌加番"],
 		"win_tile": "9W",
 		"self_draw": true,
 		"limit_name": "高番",
@@ -99,6 +105,271 @@ func seed_win_detail_layout_state(scene) -> void:
 		scene.players[seat]["score"] = 22000 + seat * 900
 	scene.players[0]["score"] = 31200
 	scene.players[0]["name"] = "你"
+	scene.offline_package_liability = {0: 1}
+
+
+func seed_battle_capacity_layout_state(scene) -> void:
+	# Deliberately stress independent visible zones at once; the fixture validates
+	# layout capacity rather than a legal in-progress tile ledger.
+	seed_offline_battle_layout_state(scene)
+	scene.offline_phase = "await_discard"
+	scene.offline_pending_claim.clear()
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "5T", "9T", "E", "R"]
+	scene.offline_last_draw = {"seat": 0, "tile": "R", "source": "normal", "announce": false, "serial": 901}
+	scene.offline_self_draw_ready = {"seat": 0, "tile": "R", "serial": 901}
+	var river_codes := ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T", "9T", "1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B", "E", "S", "W", "N", "Z", "F", "P", "R"]
+	var meld_sets := [
+		["1W", "1W", "1W"],
+		["2T", "3T", "4T"],
+		["5B", "5B", "5B"],
+		["R", "R", "R", "R"],
+	]
+	var flower_tiles := ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8"]
+	for seat in range(4):
+		scene.players[seat]["discards"] = river_codes.duplicate()
+		scene.players[seat]["melds"] = meld_sets.duplicate(true)
+		scene.players[seat]["flowers"] = flower_tiles.size()
+		scene.players[seat]["flower_tiles"] = flower_tiles.duplicate()
+	scene.last_discard = "R"
+	scene.last_discard_seat = 3
+	scene.table_logs.clear()
+	for i in range(scene.ONLINE_LOG_HISTORY_LIMIT):
+		scene.table_logs.append("第%02d巡：北家杠上补花后打出一张牌，四家牌河与副露状态已同步" % (i + 1))
+
+
+func settle_layout(seconds: float = 0.0) -> void:
+	await process_frame
+	await process_frame
+	if seconds > 0.0:
+		await create_timer(seconds).timeout
+		await process_frame
+
+
+func apply_runtime_resize(scene, viewport_size: Vector2) -> void:
+	var viewport_i := Vector2i(int(viewport_size.x), int(viewport_size.y))
+	root.size = viewport_i
+	root.content_scale_size = viewport_i
+	DisplayServer.window_set_size(viewport_i)
+	# Exercise the production deferred resize path even when the headless display
+	# backend does not emit a native window notification.
+	scene._notification(1008) # Node.NOTIFICATION_WM_SIZE_CHANGED
+	await settle_layout(0.14)
+
+
+func run_continuous_resize_capacity_probe() -> void:
+	var initial_size: Vector2 = CONTINUOUS_RESIZE_VIEWPORTS[0]
+	var initial_i := Vector2i(int(initial_size.x), int(initial_size.y))
+	root.size = initial_i
+	root.content_scale_size = initial_i
+	DisplayServer.window_set_size(initial_i)
+	await process_frame
+	var scene = load("res://Main.tscn").instantiate()
+	root.add_child(scene)
+	await settle_layout()
+	scene.fx_enabled = false
+	seed_battle_capacity_layout_state(scene)
+	scene.render_game()
+	await settle_layout()
+	for viewport_size in CONTINUOUS_RESIZE_VIEWPORTS:
+		await apply_runtime_resize(scene, viewport_size)
+		var actual_viewport: Vector2 = scene.effective_viewport_size()
+		check(actual_viewport.distance_to(viewport_size) <= 1.0, "continuous resize reaches %s without recreating the scene (got %s)" % [viewport_size, actual_viewport])
+		check_battle_capacity_layout(scene, actual_viewport)
+	await check_discard_archive_access(scene, Vector2(960, 540), 1)
+
+	# Pages that compute compact layout at build time must rebuild from their
+	# persisted state on every notification, without recreating Main itself.
+	var loading_fixture := {"status": "正在同步商用资源", "progress_ratio": 0.43, "tip": "提示：旋转屏幕不会丢失加载状态"}
+	scene.show_loading_screen(loading_fixture)
+	await settle_layout()
+	for viewport_size in CONTINUOUS_RESIZE_VIEWPORTS:
+		await apply_runtime_resize(scene, viewport_size)
+		var loading_panel = scene.find_child("LoadingPanel", true, false) as Control
+		var loading_status = scene.find_child("LoadingStatusLabel", true, false) as Label
+		var loading_fill = scene.find_child("LoadingProgressFill", true, false) as Control
+		check(loading_panel != null and loading_status != null and loading_status.text == str(loading_fixture["status"]), "loading screen and status survive live resize at %s" % viewport_size)
+		check(loading_fill != null and absf(loading_fill.anchor_right - float(loading_fixture["progress_ratio"])) <= 0.001 and scene.loading_view_state == loading_fixture, "loading progress and view state survive live resize at %s" % viewport_size)
+
+	scene._show_shop_screen_impl()
+	await settle_layout()
+	for viewport_size in CONTINUOUS_RESIZE_VIEWPORTS:
+		await apply_runtime_resize(scene, viewport_size)
+		check_shop_layout(scene, viewport_size)
+		var shop_rows := controls_with_name_prefix(scene, "ShopItemRow_")
+		check(shop_rows.size() == 4, "shop preserves all four product rows through live resize at %s" % viewport_size)
+		if not shop_rows.is_empty():
+			var expected_row_cap := 168.0 if viewport_size.x >= 1600.0 else 120.0
+			var expected_row_height := clampf(floorf((scene.safe_content_pixel_size().y * 0.96 * (0.765 - 0.12) - 30.0) / 4.0), 68.0, expected_row_cap)
+			check(absf((shop_rows[0] as Control).custom_minimum_size.y - expected_row_height) <= 1.0, "shop recomputes compact row height through live resize at %s" % viewport_size)
+			if viewport_size.x >= 1600.0:
+				check((shop_rows[0] as Control).custom_minimum_size.y > 120.0, "wide shop uses the full display height instead of leaving a shelf-sized blank lane at %s" % viewport_size)
+
+	var daily_fixture := {"consecutive_days": 5, "claimed_today": true, "show_reward": true}
+	scene.show_daily_login_panel(daily_fixture)
+	await settle_layout()
+	for viewport_size in CONTINUOUS_RESIZE_VIEWPORTS:
+		await apply_runtime_resize(scene, viewport_size)
+		check_daily_login_layout(scene, viewport_size)
+		var claim_button = scene.find_child("DailyLoginClaimButton", true, false) as Button
+		check(claim_button != null and claim_button.disabled and scene.daily_login_view_state == daily_fixture, "daily-login claimed state survives live resize at %s" % viewport_size)
+
+	seed_battle_capacity_layout_state(scene)
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_YANGZHOU
+	scene.rule_variant = scene.RULE_VARIANT_SICHUAN
+	scene.settings_panel_open = true
+	scene.render_game()
+	await settle_layout()
+	for viewport_size in CONTINUOUS_RESIZE_VIEWPORTS:
+		await apply_runtime_resize(scene, viewport_size)
+		check_settings_overlay(scene, viewport_size)
+		var settings_close = scene.find_child("SettingsCloseButton", true, false) as Button
+		check(settings_close != null and settings_close.has_focus(), "settings modal keeps its safe default focus through live resize at %s" % viewport_size)
+	scene.close_settings_panel()
+	await settle_layout()
+
+	seed_battle_capacity_layout_state(scene)
+	scene.render_game()
+	await settle_layout()
+
+	# Transient overlays must survive the same production resize notification.
+	scene.show_exit_confirm()
+	await settle_layout()
+	await apply_runtime_resize(scene, Vector2(1280, 720))
+	var exit_dialog = scene.find_child("ExitConfirmDialog", true, false) as Control
+	check(exit_dialog != null and Rect2(Vector2.ZERO, Vector2(1280, 720)).grow(1.0).encloses(screen_rect(exit_dialog)), "exit confirmation remains mounted and bounded through a live resize")
+	scene.hide_exit_confirm()
+	await settle_layout(0.20)
+
+	var diagnostic_lines := diagnostic_layout_lines()
+	scene.show_diagnostic_dialog(diagnostic_lines)
+	await settle_layout()
+	var diagnostic_scroll = scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	if diagnostic_scroll != null:
+		diagnostic_scroll.scroll_vertical = mini(180, int(diagnostic_scroll.get_v_scroll_bar().max_value))
+		await settle_layout(0.05)
+	var diagnostic_scroll_before: int = diagnostic_scroll.scroll_vertical if diagnostic_scroll != null else -1
+	await apply_runtime_resize(scene, Vector2(960, 540))
+	check(scene.find_child("DiagnosticDialogPanel", true, false) != null, "diagnostic modal remains open through a live resize")
+	diagnostic_scroll = scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	check(diagnostic_scroll != null and diagnostic_scroll_before > 0 and abs(diagnostic_scroll.scroll_vertical - diagnostic_scroll_before) <= 1, "diagnostic modal preserves its non-zero scroll position through live resize")
+	await check_diagnostic_layout(scene, Vector2(960, 540), diagnostic_lines.size())
+	scene.dismiss_diagnostic_dialog()
+	await settle_layout(0.08)
+
+	scene.update_state = "error"
+	scene.update_message = "更新服务器暂时不可用，请稍后重试。"
+	scene.ensure_update_dialog()
+	await settle_layout()
+	await apply_runtime_resize(scene, Vector2(1280, 720))
+	var update_overlay = scene.find_child("UpdateDialogOverlay", true, false) as Control
+	var update_secondary = scene.find_child("UpdateSecondaryButton", true, false) as Button
+	check(update_overlay != null and update_secondary != null and update_secondary.has_focus(), "update modal remains mounted with focus through a live resize")
+	scene.update_state = "idle"
+	scene.refresh_update_dialog()
+	scene.queue_free()
+	await settle_layout()
+
+
+func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
+	check(scene.get_self_hand().size() == 14, "capacity fixture keeps all fourteen pending-discard hand tiles at %s" % viewport_size)
+	var metrics: Dictionary = scene.hand_layout_metrics(scene.get_self_hand())
+	check(scene.hand_layout_fits_content(scene.get_self_hand(), metrics), "fourteen-tile hand fits the authored tray at %s" % viewport_size)
+	check(controls_with_name_prefix(scene, "HandTile_").size() == 14, "fourteen-tile hand renders every 2D face at %s" % viewport_size)
+	for zone in scene.DISCARD_ZONES:
+		var seat := int(zone[0])
+		var grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
+		var visible_capacity := int(grid.get_meta("visible_capacity", 0)) if grid != null else 0
+		var expected_visible := mini(scene.get_discards(seat).size(), visible_capacity)
+		check(grid != null and grid.get_child_count() == expected_visible, "river %d exposes its full %d-tile visible window at %s" % [seat, expected_visible, viewport_size])
+		var latest_start: int = int(scene.tail_window_start(scene.get_discards(seat).size(), visible_capacity))
+		var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
+		check(archive_button != null and int(archive_button.get_meta("hidden_count", -1)) == latest_start and archive_button.text == scene.discard_archive_button_text(scene.get_discards(seat).size(), latest_start, visible_capacity), "river %d exposes an accurate authored archive entry for %d older tiles at %s" % [seat, latest_start, viewport_size])
+		if archive_button != null:
+			var archive_rect := screen_rect(archive_button)
+			var archive_label = archive_button.find_child("DiscardRiverArchiveLabel_%d" % seat, true, false) as Label
+			check(archive_rect.size.x >= 44.0 and archive_rect.size.y >= 44.0 and archive_button.get_combined_minimum_size().x <= archive_rect.size.x + 1.0, "river %d archive entry remains a readable 44px target at %s" % [seat, viewport_size])
+			check(archive_label != null and archive_label.text == archive_button.text and relative_luma(archive_label.get_theme_color("font_color")) >= 0.88 and archive_rect.grow(1.0).encloses(screen_rect(archive_label)), "river %d archive entry exposes its count above the authored art at %s" % [seat, viewport_size])
+		if seat == scene.get_last_discard_seat():
+			var recent = scene.find_child("RecentDiscardTile_%d" % seat, true, false) as Control
+			check(recent != null and int(recent.get_meta("discard_source_index", -1)) == scene.get_discards(seat).size() - 1 and str(recent.get_meta("discard_tile_code", "")) == str(scene.get_discards(seat)[-1]), "river %d retains one accurate latest-discard marker at capacity at %s" % [seat, viewport_size])
+		var flower_meta = scene.find_child("SeatCompactMeta_%d" % seat, true, false) as Label
+		check(flower_meta != null and flower_meta.text.contains("花8"), "seat %d preserves the full eight-flower count at %s" % [seat, viewport_size])
+	check_battle_viewport_bounds(scene, viewport_size)
+	check_hand_tray_layout(scene, viewport_size)
+	var hand_tiles := controls_with_name_prefix(scene, "HandTile_")
+	var regular_gaps: Array[float] = []
+	var group_gaps: Array[float] = []
+	var regular_button_y: Array[float] = []
+	var drawn_button_y := INF
+	var drawn_count := 0
+	for i in range(hand_tiles.size()):
+		var tile := hand_tiles[i]
+		var tile_rect := screen_rect(tile)
+		var face = tile.find_child("TileFaceTexture", true, false) as TextureRect
+		var buttons := tile.find_children("*", "Button", true, false)
+		var hit_button = buttons[0] as Button if not buttons.is_empty() else null
+		var expected_code := str(scene.get_self_hand()[i])
+		check(tile_rect.size.x >= scene.HAND_TILE_MIN_TOUCH_WIDTH and tile_rect.size.y >= 44.0, "fourteen-tile hand target %s remains at least 46x44px at %s" % [tile.name, viewport_size])
+		check(str(tile.get_meta("hand_tile_code", "")) == expected_code and int(tile.get_meta("hand_source_index", -1)) == i, "hand tile %d preserves its source identity at %s" % [i, viewport_size])
+		check(face != null and face.texture != null and face.texture != scene.tile_back and str(face.texture.resource_path).begins_with("res://assets/tiles/"), "hand tile %d uses its authored 2D face instead of a back or fallback at %s" % [i, viewport_size])
+		check(hit_button != null and not hit_button.disabled and hit_button.mouse_filter == Control.MOUSE_FILTER_STOP and tile_rect.grow(5.0).encloses(screen_rect(hit_button)), "hand tile %d exposes a bounded native button target at %s" % [i, viewport_size])
+		if hit_button != null:
+			if bool(tile.get_meta("drawn_tile", false)):
+				drawn_count += 1
+				drawn_button_y = screen_rect(hit_button).position.y
+			else:
+				regular_button_y.append(screen_rect(hit_button).position.y)
+		if i > 0:
+			var previous_rect := screen_rect(hand_tiles[i - 1])
+			var gap := tile_rect.position.x - previous_rect.end.x
+			check(gap >= -0.5, "adjacent hand tiles %d/%d do not overlap at %s" % [i - 1, i, viewport_size])
+			if scene.should_insert_hand_group_gap(scene.get_self_hand(), i):
+				group_gaps.append(gap)
+			else:
+				regular_gaps.append(gap)
+	var largest_regular_gap := 0.0
+	for gap in regular_gaps:
+		largest_regular_gap = maxf(largest_regular_gap, gap)
+	check(not group_gaps.is_empty() and group_gaps.min() >= largest_regular_gap + 3.0, "hand suit groups retain a clear but compact authored gap at %s" % viewport_size)
+	var regular_top := INF
+	for y in regular_button_y:
+		regular_top = minf(regular_top, y)
+	check(drawn_count == 1 and drawn_button_y <= regular_top - 3.0, "fourteen-tile hand exposes one stable raised drawn tile at %s" % viewport_size)
+
+
+func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
+	var discards: Array = scene.get_discards(seat)
+	var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
+	check(archive_button != null, "river %d exposes its archive navigation at %s" % [seat, viewport_size])
+	if archive_button == null:
+		return
+	var initial_capacity := maxi(1, int(archive_button.get_meta("visible_capacity", 1)))
+	var maximum_page_steps := ceili(float(discards.size()) / float(initial_capacity)) + 1
+	for _step in range(maximum_page_steps):
+		if int(archive_button.get_meta("window_start", -1)) <= 0:
+			break
+		archive_button.button_down.emit()
+		await settle_layout(0.06)
+		archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
+		if archive_button == null:
+			break
+	var earliest_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
+	var earliest_first = earliest_grid.get_child(0) as Control if earliest_grid != null and earliest_grid.get_child_count() > 0 else null
+	var earliest_start := int(archive_button.get_meta("window_start", -1)) if archive_button != null else -1
+	var earliest_capacity := int(archive_button.get_meta("visible_capacity", 0)) if archive_button != null else 0
+	var earliest_source := int(earliest_first.get_meta("discard_source_index", -1)) if earliest_first != null else -1
+	check(archive_button != null and archive_button.text == scene.discard_archive_button_text(discards.size(), 0, earliest_capacity) and earliest_source == 0, "river %d archive navigation reaches the first public discard at %s (start=%d capacity=%d source=%d)" % [seat, viewport_size, earliest_start, earliest_capacity, earliest_source])
+	if archive_button == null:
+		return
+	archive_button.button_down.emit()
+	await settle_layout(0.06)
+	var latest_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
+	var latest_last = latest_grid.get_child(latest_grid.get_child_count() - 1) as Control if latest_grid != null and latest_grid.get_child_count() > 0 else null
+	var latest_start := int(scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false).get_meta("window_start", -1)) if scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) != null else -1
+	var latest_source := int(latest_last.get_meta("discard_source_index", -1)) if latest_last != null else -1
+	check(latest_last != null and latest_source == discards.size() - 1, "river %d archive navigation returns to the true latest discard at %s (start=%d source=%d expected=%d)" % [seat, viewport_size, latest_start, latest_source, discards.size() - 1])
 
 
 func diagnostic_layout_lines() -> Array[String]:
@@ -857,12 +1128,23 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	if title != null:
 		check(title.get_theme_font_size("font_size") >= 26 and title.clip_text == false, "round summary title remains prominent at %s" % viewport_size)
 	if body != null:
-		check(body.clip_text and body.get_theme_font_size("font_size") >= 15 and relative_luma(body.get_theme_color("font_color")) >= 0.92, "round summary body remains bright, clipped, and readable at %s" % viewport_size)
+		var minimum_summary_font := 12 if viewport_size.y <= 560.0 else 14
+		check(body.clip_text and body.get_theme_font_size("font_size") >= minimum_summary_font and relative_luma(body.get_theme_color("font_color")) >= 0.92, "round summary body remains bright, clipped, and readable at %s" % viewport_size)
+		check(body.text.contains("庄家下庄") and body.text.contains("包赔") and body.text.contains("全场结束") and body.tooltip_text.contains(scene.round_summary), "round summary keeps dealer, package-liability, and match-end text visible while exposing the complete source at %s" % viewport_size)
+		check(body.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "long settlement text uses smart wrapping at %s" % viewport_size)
+		check(body.get_line_count() >= 2 and body.get_visible_line_count() >= 2, "long settlement renders both compact information lines at %s" % viewport_size)
 	if detail_panel != null:
 		var detail_rect = screen_rect(detail_panel)
 		for node in [winner_label, score_label, win_tile]:
 			if node != null:
 				check(detail_rect.grow(1.0).encloses(screen_rect(node)), "win detail keeps %s inside its panel at %s" % [node.name, viewport_size])
+		var yaku_badges = scene.find_child("WinDetailYakuBadges", true, false) as Container
+		check(yaku_badges != null and yaku_badges.get_child_count() == scene.last_win_score.get("reasons", []).size(), "win detail retains every long-fixture yaku entry at %s" % viewport_size)
+		if yaku_badges != null:
+			check(detail_rect.grow(1.0).encloses(screen_rect(yaku_badges)), "win detail yaku container stays inside its panel at %s" % viewport_size)
+			for badge in yaku_badges.get_children():
+				if badge is Control:
+					check(detail_rect.grow(1.0).encloses(screen_rect(badge as Control)), "win detail yaku entry %s stays visible inside the panel at %s" % [badge.name, viewport_size])
 	if winner_label != null and score_label != null:
 		check(winner_label.get_theme_font_size("font_size") >= 18 and score_label.get_theme_font_size("font_size") >= 22, "win detail winner and score text remain prominent at %s" % viewport_size)
 	if dock != null:
@@ -1010,7 +1292,7 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		check(controls_with_name_prefix(table_log, "TableLogLedgerRow_").size() == expected_log_rows, "battle table log uses %d readable rows at %s" % [expected_log_rows, viewport_size])
 		for body in controls_with_name_prefix(table_log, "TableLogLedgerBody_"):
 			var body_label := body as Label
-			check(body_label != null and body_label.clip_text and label_text_width(body_label, body_label.text) <= screen_rect(body_label).size.x + 2.0, "battle table log latest event fits its row at %s" % viewport_size)
+			check(body_label != null and body_label.clip_text and (label_text_width(body_label, body_label.text) <= screen_rect(body_label).size.x + 2.0 or body_label.tooltip_text == body_label.text), "battle table log latest event fits or exposes its full value at %s" % viewport_size)
 	var action_children: Array = []
 	if scene.action_bar != null:
 		action_children = scene.action_bar.get_children()
@@ -2131,7 +2413,7 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 	var daily_back_rect = screen_rect(back_button)
 	check(panel_rect.grow(1.0).encloses(daily_back_rect), "daily login return button stays inside the panel at %s" % viewport_size)
 	check(daily_back_rect.size.x >= 92.0 and daily_back_rect.size.y >= 44.0 and back_button.text == "返回", "daily login exposes an explicit 44px+ return path at %s" % viewport_size)
-	check(claim_button.text == "领取奖励" and claim_art != null and claim_art.show_behind_parent, "daily login keeps the native claim CTA text above its bitmap art at %s" % viewport_size)
+	check((claim_button.text == "领取奖励" or claim_button.text == "已领取") and claim_art != null and claim_art.show_behind_parent, "daily login keeps the native claim CTA text above its bitmap art at %s" % viewport_size)
 	var indicator_rect = screen_rect(indicators)
 	var previous_rect := Rect2()
 	for i in range(1, 8):

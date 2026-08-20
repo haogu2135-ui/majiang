@@ -269,6 +269,7 @@ func run() -> void:
 	check(scene.optional_gpt_illustration_texture("wall_live_feedback_kit") == null or (dynamic_atlas_texture != null and dynamic_atlas_texture.texture is AtlasTexture and dynamic_atlas_texture.modulate.a > 0.49 and dynamic_atlas_texture.modulate.a < 0.51), "optional GPT atlas texture factory slices generated sheet assets")
 	dispose_node(dynamic_illustration_parent)
 	scene.show_loading_screen()
+	check(scene.find_child("LoadingPanel", true, false) != null, "loading screen exposes its named root panel for live-resize rebuild checks")
 	check(scene.find_child("LoadingCenterPanel", true, false) != null, "loading screen exposes center panel for readability and layout checks")
 	check(scene.find_child("LoadingGateTexture", true, false) != null, "loading screen renders reusable moon-gate PNG texture")
 	check(scene.optional_gpt_illustration_texture("loading_scene_gpt_backdrop") == null or scene.find_child("LoadingGPTBackdropTexture", true, false) != null, "loading screen consumes optional GPT backdrop texture when generated")
@@ -941,6 +942,9 @@ func run() -> void:
 	scene.update_total_bytes = 1024
 	scene.update_release_notes = "第一条 UI 优化\n第二条 动画增强\n第三条 插画补齐"
 	scene.ensure_update_dialog()
+	var update_overlay = scene.find_child("UpdateDialogOverlay", true, false) as Control
+	var update_panel = scene.find_child("UpdateDialogPanel", true, false) as Control
+	check(update_overlay != null and update_panel != null and update_panel.get_parent() == update_overlay, "update dialog keeps its named panel inside the modal overlay")
 	check(scene.optional_gpt_illustration_texture("update_gpt_dialog") == null or scene.find_child("UpdateGPTDialogTexture", true, false) != null, "update dialog consumes optional GPT dialog texture when generated")
 	check(scene.find_child("UpdateDialogArt", true, false) != null and scene.find_child("UpdateDialogArtRail", true, false) != null and scene.find_child("UpdateDialogArtFill", true, false) != null, "update dialog renders package progress illustration")
 	check(scene.find_child("UpdateDialogPackageIcon", true, false) != null and scene.find_child("UpdateDialogStatusLight", true, false) != null and count_nodes_with_name_prefix(scene, "UpdateDialogPacketPip_") == 4, "update dialog renders package icon status light and packet pips")
@@ -1195,6 +1199,7 @@ func run() -> void:
 	scene.add_background(background_parent)
 	check(count_texture_rects(background_parent) >= 1 and texture_rects_ignore_mouse(background_parent), "decorative background textures skip mouse hit testing")
 	check(color_rects_ignore_mouse(background_parent), "decorative background color overlays skip mouse hit testing when present")
+	check(background_parent.find_child("GuofengWarmPaperWash", true, false) == null and background_parent.find_child("GuofengPaperSceneryBackdrop", true, false) == null, "generic utility background keeps one authored full-screen substrate without stacked paper or hero washes")
 	dispose_node(background_parent)
 	var decorative_texture_parent = Control.new()
 	root.add_child(decorative_texture_parent)
@@ -2629,6 +2634,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(last_discard_parent, "DiscardRiverWindowFill_") == 4 and count_nodes_with_name_prefix(last_discard_parent, "DiscardRiverWindowGate_") == 4 and count_nodes_with_name_prefix(last_discard_parent, "DiscardRiverWindowTick_") == 8, "discard river renders visible-window progress fills gates and ticks")
 	check(count_nodes_with_name_prefix(last_discard_parent, "DiscardRiverArchiveArt_") == 4 and last_discard_parent.find_child("DiscardRiverArchiveSource_0", true, false) != null and last_discard_parent.find_child("DiscardRiverArchiveRoute_0", true, false) != null and last_discard_parent.find_child("DiscardRiverArchiveFill_0", true, false) != null and last_discard_parent.find_child("DiscardRiverArchiveGate_0", true, false) != null, "discard river renders archive convergence routes for every seat")
 	check(last_discard_parent.find_child("DiscardRiverArchiveSeal_0", true, false) != null and last_discard_parent.find_child("DiscardRiverArchiveGlyph_0", true, false) != null and last_discard_parent.find_child("DiscardRiverArchiveWindowRoute_0", true, false) != null and last_discard_parent.find_child("DiscardRiverArchiveWindowFill_0", true, false) != null and last_discard_parent.find_child("DiscardRiverArchiveWindowGate_0", true, false) != null, "discard river archive renders seal glyph and window route")
+	check(last_discard_parent.find_child("DiscardRiverArchiveLabel_0", true, false) != null, "discard river archive exposes its named readable count above the authored art")
 	check(count_nodes_with_name_prefix(last_discard_parent, "DiscardRiverArchiveTick_0_") == 3, "discard river archive renders active-seat rhythm ticks")
 	check(last_discard_parent.find_child("DiscardRiverSummaryArt", true, false) != null and last_discard_parent.find_child("DiscardRiverSummarySpine", true, false) != null and last_discard_parent.find_child("DiscardRiverSummaryFill", true, false) != null and last_discard_parent.find_child("DiscardRiverSummarySource", true, false) != null and last_discard_parent.find_child("DiscardRiverSummaryGate", true, false) != null, "discard river renders cross-table summary route")
 	check(last_discard_parent.find_child("DiscardRiverSummaryGlyph", true, false) != null and last_discard_parent.find_child("DiscardRiverSummaryArchive", true, false) != null and last_discard_parent.find_child("DiscardRiverSummaryArchiveGlyph", true, false) != null and count_nodes_with_name_prefix(last_discard_parent, "DiscardRiverSummaryArchivePip_") == 2, "discard river summary renders glyph archive and pips")

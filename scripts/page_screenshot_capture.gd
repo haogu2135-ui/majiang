@@ -192,8 +192,7 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		"03_offline_battle":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
-			seed_preview_discards(scene)
-			seed_preview_pending_claim(scene)
+			seed_preview_capacity_battle(scene)
 			scene.render_game()
 			scene.clear_fx_overlays()
 		"04_rules":
@@ -438,6 +437,36 @@ func seed_preview_discards(scene: Node) -> void:
 	scene.table_logs.clear()
 	scene.add_log("预览：弃牌区与副露使用真实牌面贴图。")
 
+
+func seed_preview_capacity_battle(scene: Node) -> void:
+	seed_preview_discards(scene)
+	scene.offline_phase = "await_discard"
+	scene.offline_pending_claim.clear()
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "5T", "9T", "E", "R"]
+	scene.offline_last_draw = {"seat": 0, "tile": "R", "source": "normal", "announce": false, "serial": 902}
+	scene.offline_self_draw_ready = {"seat": 0, "tile": "R", "serial": 902}
+	var river_codes := ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T", "9T", "1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B", "E", "S", "W", "N", "Z", "F", "P", "R"]
+	var meld_sets := [
+		["1W", "1W", "1W"],
+		["2T", "3T", "4T"],
+		["5B", "5B", "5B"],
+		["R", "R", "R", "R"],
+	]
+	var flower_tiles := ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8"]
+	for seat in range(4):
+		scene.players[seat]["discards"] = river_codes.duplicate()
+		scene.players[seat]["melds"] = meld_sets.duplicate(true)
+		scene.players[seat]["flowers"] = flower_tiles.size()
+		scene.players[seat]["flower_tiles"] = flower_tiles.duplicate()
+	scene.last_discard = "R"
+	scene.last_discard_seat = 3
+	scene.table_logs.clear()
+	for i in range(scene.ONLINE_LOG_HISTORY_LIMIT):
+		scene.table_logs.append("第%02d巡：四家牌河、副露与花牌状态已同步" % (i + 1))
+
+
 func seed_preview_pending_claim(scene: Node) -> void:
 	scene.offline_phase = "pending_claim"
 	scene.players[0]["hand"] = ["1W", "2W", "3W", "3W", "4W", "5W", "5T", "6T", "7T", "E", "E", "P", "P"]
@@ -502,20 +531,21 @@ func seed_preview_round_summary(scene: Node) -> void:
 	scene.offline_last_winner = 0
 	scene.offline_dealer_repeat = false
 	scene.dealer_seat = 0
-	scene.round_summary = "东家自摸平胡，1番 2分。平胡。庄家下庄。"
+	scene.round_summary = "东家自摸九万，8番高番 16分。清一色、碰碰胡、门清、一条龙、杠上开花、海底捞月、自摸、花牌加番。庄家下庄。包三搭：南家包赔东家。全场结束。"
 	scene.last_win_score = {
 		"winner": 0,
-		"fan": 1,
-		"points": 2,
-		"reasons": ["平胡"],
-		"win_tile": "5W",
+		"fan": 8,
+		"points": 16,
+		"reasons": ["清一色", "碰碰胡", "门清", "一条龙", "杠上开花", "海底捞月", "自摸", "花牌加番"],
+		"win_tile": "9W",
 		"self_draw": true,
-		"limit_name": "",
+		"limit_name": "高番",
 	}
 	for seat in range(4):
 		scene.players[seat]["score"] = 24000 + (3 - seat) * 1200
 		scene.players[seat]["flowers"] = 2 if seat % 2 == 0 else 1
 	scene.players[0]["score"] = 27600
+	scene.offline_package_liability = {0: 1}
 	scene.add_log("预览：本局结算面板。")
 
 func seed_preview_danger_discard(scene: Node) -> void:
@@ -565,12 +595,12 @@ func seed_preview_win_detail(scene: Node) -> void:
 	scene.offline_last_winner = 0
 	scene.offline_dealer_repeat = false
 	scene.dealer_seat = 1
-	scene.round_summary = "你自摸清一色碰碰胡，8番 16分。清一色、碰碰胡、自摸。庄家下庄。"
+	scene.round_summary = "你自摸九万，8番高番 16分。清一色、碰碰胡、门清、一条龙、杠上开花、海底捞月、自摸、花牌加番。庄家下庄。包三搭：青竹道人包赔你。全场结束。"
 	scene.last_win_score = {
 		"winner": 0,
 		"fan": 8,
 		"points": 16,
-		"reasons": ["清一色", "碰碰胡", "自摸"],
+		"reasons": ["清一色", "碰碰胡", "门清", "一条龙", "杠上开花", "海底捞月", "自摸", "花牌加番"],
 		"win_tile": "9W",
 		"self_draw": true,
 		"limit_name": "高番",
@@ -580,6 +610,7 @@ func seed_preview_win_detail(scene: Node) -> void:
 		scene.players[seat]["flowers"] = 1 + (seat % 2)
 	scene.players[0]["score"] = 31200
 	scene.players[0]["name"] = "你"
+	scene.offline_package_liability = {0: 1}
 	scene.add_log("预览：胡牌详情结算。")
 
 func seed_preview_hand_tutorial(scene: Node) -> void:

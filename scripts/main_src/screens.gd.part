@@ -1166,7 +1166,8 @@ func _show_shop_screen_impl() -> void:
 	var shop_content_pixels := safe_content_pixel_size()
 	var shop_scroll_pixels := shop_content_pixels.y * 0.96 * (0.765 - 0.12)
 	var shop_row_gap := 10.0
-	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_item_count - 1)) / float(shop_item_count)), 68.0, 120.0)
+	var shop_row_max_height := 168.0 if effective_viewport_size().x >= 1600.0 else 120.0
+	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_item_count - 1)) / float(shop_item_count)), 68.0, shop_row_max_height)
 
 	# 道具图标映射
 	var item_icon_map := {
@@ -1482,11 +1483,18 @@ func close_settings_panel() -> void:
 	settings_panel_open = false
 	reset_progress_confirming = false
 	refresh_current_screen()
+	if mode == "menu" or mode == "offline" or mode == "online_game":
+		var restore_name := "MenuSettingsButton" if mode == "menu" else "TopHudSettingsButton"
+		call_deferred("focus_named_control", restore_name)
 
 func refresh_update_dialog() -> void:
 	if update_state == "idle":
+		var restore_id := update_dialog_focus_restore_id
+		update_dialog_focus_restore_id = 0
 		if update_dialog != null and is_instance_valid(update_dialog):
 			update_dialog.queue_free()
+		update_dialog = null
+		call_deferred("restore_control_focus_by_id", restore_id)
 		return
 	if update_status_label == null or not is_instance_valid(update_status_label):
 		return
@@ -1512,8 +1520,20 @@ func refresh_update_dialog() -> void:
 			update_release_notes_label.text = notes_text
 	refresh_update_dialog_art()
 	if update_primary_button != null and is_instance_valid(update_primary_button):
-		update_primary_button.visible = update_state != "checking" and update_state != "downloading" and update_state != "current"
-		update_primary_button.text = "安装" if update_state == "ready" else "重试"
+		var primary_blocked := update_state == "checking" or update_state == "downloading" or update_state == "current" or update_state == "installing"
+		update_primary_button.visible = update_state != "current"
+		update_primary_button.disabled = primary_blocked
+		match update_state:
+			"checking":
+				update_primary_button.text = "检查中"
+			"downloading":
+				update_primary_button.text = "下载中"
+			"installing":
+				update_primary_button.text = "安装中"
+			"ready":
+				update_primary_button.text = "安装"
+			_:
+				update_primary_button.text = "重试"
 	if update_secondary_button != null and is_instance_valid(update_secondary_button):
 		update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else "关闭"
 
@@ -1597,6 +1617,7 @@ func show_chat_panel() -> void:
 func show_daily_login_panel(login_result: Dictionary) -> void:
 	# r215: GPT chrome conversion
 	"""显示每日登录签到面板 - 增强版"""
+	daily_login_view_state = login_result.duplicate(true)
 	mode = "daily_login"
 	clear_screen()
 
@@ -2015,6 +2036,7 @@ func dismiss_diagnostic_dialog() -> void:
 		return
 	if root_layer.find_child("DiagnosticDialogPanel", true, false) == null:
 		return
+	clear_screen()
 	refresh_current_screen()
 
 
@@ -2023,7 +2045,9 @@ func show_exit_confirm() -> void:
 	"""显示退出确认对话框"""
 	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 		return
+	exit_confirm_focus_restore_id = focused_control_instance_id()
 	var overlay = Control.new()
+	overlay.name = "ExitConfirmOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.modulate = Color(1, 1, 1, 0)
@@ -2076,6 +2100,8 @@ func show_exit_confirm() -> void:
 	var continue_btn = make_small_button("继续游戏", Color(0.42, 0.34, 0.22), func() -> void:  # r392 warm
 		hide_exit_confirm()
 	)
+	continue_btn.name = "ExitConfirmContinueButton"
+	continue_btn.focus_mode = Control.FOCUS_ALL
 	continue_btn.custom_minimum_size = Vector2(140, 52)
 	draw_exit_confirm_button_art(continue_btn, "keep", Color(0.78, 0.56, 0.28))
 	button_row.add_child(continue_btn)
@@ -2086,9 +2112,20 @@ func show_exit_confirm() -> void:
 		save_offline_progress()
 		show_menu()
 	)
+	exit_btn.name = "ExitConfirmLeaveButton"
+	exit_btn.focus_mode = Control.FOCUS_ALL
 	exit_btn.custom_minimum_size = Vector2(140, 52)
 	draw_exit_confirm_button_art(exit_btn, "leave", Color(0.56, 0.36, 0.30))
 	button_row.add_child(exit_btn)
+	continue_btn.focus_neighbor_left = continue_btn.get_path()
+	continue_btn.focus_neighbor_right = exit_btn.get_path()
+	continue_btn.focus_next = exit_btn.get_path()
+	continue_btn.focus_previous = exit_btn.get_path()
+	exit_btn.focus_neighbor_left = continue_btn.get_path()
+	exit_btn.focus_neighbor_right = exit_btn.get_path()
+	exit_btn.focus_next = continue_btn.get_path()
+	exit_btn.focus_previous = continue_btn.get_path()
+	continue_btn.grab_focus()
 
 	# 弹窗入场动画 - 使用AnimationEffects增强
 	if fx_enabled_effective():
@@ -2109,12 +2146,21 @@ func show_exit_confirm() -> void:
 		overlay.modulate = Color(1, 1, 1, 1)
 
 
-func show_loading_screen() -> void:
+func show_loading_screen(view_state: Dictionary = {}) -> void:
 	# r215: GPT chrome conversion
+	if not view_state.is_empty():
+		loading_view_state = view_state.duplicate(true)
+	if loading_view_state.is_empty():
+		loading_view_state = {
+			"status": "正在加载中",
+			"progress_ratio": 0.72,
+		}
 	clear_screen()
+	loading_screen_active = true
 
 	# 背景面板 - 使用位图国风背景，避免叠加程序绘制装饰
 	var bg = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.018, 0.024, 1.0), "ui_jade_reading_plate")
+	bg.name = "LoadingPanel"
 	root_layer.add_child(bg)
 	var loading_gpt_key := "loading_scene_gpt_backdrop"
 	var gpt_loading_texture = add_optional_gpt_illustration_texture(bg, loading_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.78, false)
@@ -2195,7 +2241,7 @@ func show_loading_screen() -> void:
 	subtitle.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
 	subtitle.add_theme_constant_override("outline_size", 3)
 	draw_loading_shuffle_art(center_panel)
-	draw_loading_progress_feedback(center_panel)
+	draw_loading_progress_feedback(center_panel, float(loading_view_state.get("progress_ratio", 0.72)))
 
 	# 加载动画区域
 	var loading_area = Control.new()
@@ -2204,7 +2250,7 @@ func show_loading_screen() -> void:
 	center_panel.add_child(loading_area)
 
 	# 加载文字
-	var loading_text = make_label(loading_area, "正在加载中", 20, Color(1.0, 0.98, 0.92, 1.0), true)
+	var loading_text = make_label(loading_area, str(loading_view_state.get("status", "正在加载中")), 20, Color(1.0, 0.98, 0.92, 1.0), true)
 	loading_text.name = "LoadingStatusLabel"
 	apply_rect(loading_text, rect_full(0.0, 0.0, 1.0, 1.0))
 	loading_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2221,7 +2267,10 @@ func show_loading_screen() -> void:
 		"提示：保持手牌灵活性，避免过早定型",
 	]
 	draw_loading_tip_art(center_panel)
-	var tip_text = tips[randi() % tips.size()]
+	var tip_text := str(loading_view_state.get("tip", ""))
+	if tip_text == "":
+		tip_text = tips[randi() % tips.size()]
+		loading_view_state["tip"] = tip_text
 	var tip_label = make_label(center_panel, tip_text, 15, Color(0.96, 0.96, 0.90, 1.0), false)
 	tip_label.name = "LoadingTipLabel"
 	apply_rect(tip_label, rect_full(0.10, 0.805, 0.90, 0.890))
