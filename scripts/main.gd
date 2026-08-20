@@ -20488,11 +20488,12 @@ func make_lantern(parent: Control, rect: Rect2, color: Color = CINNABAR, lit: bo
 # 界面过渡动画 / Interface Transition Animation
 # ============================================================
 
-func make_lobby_action_button(text: String, color: Color, callback: Callable, intro_delay: float = 0.12, min_size: Vector2 = Vector2(130, 50)) -> Button:
+func make_lobby_action_button(text: String, color: Color, callback: Callable, intro_delay: float = 0.12, min_size: Vector2 = Vector2(130, 50), intro_alpha: float = 1.0) -> Button:
 	var button = make_small_button(text, color, callback)
 	button.custom_minimum_size = min_size
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	button.set_meta("menu_motion_intro_alpha", clampf(intro_alpha, 0.0, 1.0))
 	button.add_theme_font_size_override("font_size", 17)
 	button.add_theme_color_override("font_color", Color(0.97, 0.95, 0.84))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90))
@@ -20618,11 +20619,12 @@ func configure_menu_button_motion(button: Control, delay: float = 0.0, hover_sca
 		button.pivot_offset = button.size * 0.5
 	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
 		return
+	var intro_alpha := clampf(float(button.get_meta("menu_motion_intro_alpha", 1.0)), 0.0, 1.0)
 	button.modulate.a = 0.0
 	button.scale = Vector2(0.965, 0.965)
 	var intro := create_screen_tween()
 	intro.set_parallel(true)
-	intro.tween_property(button, "modulate:a", 1.0, 0.30).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	intro.tween_property(button, "modulate:a", intro_alpha, 0.30).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	intro.tween_property(button, "scale", Vector2.ONE, 0.38).from(Vector2(0.965, 0.965)).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	button.mouse_entered.connect(func() -> void:
 		var motion_button = button_ref.get_ref() as Control
@@ -23666,20 +23668,20 @@ func _show_online_lobby_impl() -> void:
 	var start_button_color := Color(0.74, 0.48, 0.16) if can_start_online else Color(0.38, 0.34, 0.28)
 	var start_button = make_lobby_action_button(start_button_text, start_button_color, func() -> void:
 		send_online_action({"type": "startGame"}, "开始游戏")
-	, 0.24, Vector2(178, 50))
+	, 0.24, Vector2(196, 50))
 	start_button.name = "OnlineLobbyPrimaryStartButton"
-	start_button.size_flags_stretch_ratio = 1.55
+	start_button.size_flags_stretch_ratio = 1.90
 	start_button.disabled = not can_start_online
 	if not can_start_online:
 		start_button.modulate = Color(0.76, 0.78, 0.70, 0.74)
 	start_row.add_child(start_button)
 	var return_button = make_lobby_action_button("返回菜单", Color(0.28, 0.34, 0.36), func() -> void:
 		show_menu()
-	, 0.28, Vector2(112, 50))
+	, 0.28, Vector2(112, 50), 0.80 if can_start_online else 1.0)
 	return_button.name = "OnlineLobbySecondaryReturnButton"
 	return_button.size_flags_stretch_ratio = 0.72
 	if can_start_online:
-		return_button.modulate = Color(0.82, 0.84, 0.82, 0.84)
+		return_button.modulate = Color(0.82, 0.84, 0.82, 0.80)
 	start_row.add_child(return_button)
 	draw_online_lobby_action_flow_art(form_panel)
 
@@ -23848,7 +23850,7 @@ func refresh_online_lobby_state() -> void:
 		ensure_button_gpt_face_plate(start_button, Color(0.74, 0.48, 0.16) if connected else Color(0.38, 0.34, 0.28))
 	var return_button = root_layer.find_child("OnlineLobbySecondaryReturnButton", true, false) as Button
 	if return_button != null:
-		return_button.modulate = Color(0.82, 0.84, 0.82, 0.84) if connected else Color(1.0, 1.0, 1.0, 1.0)
+		return_button.modulate = Color(0.82, 0.84, 0.82, 0.80) if connected else Color(1.0, 1.0, 1.0, 1.0)
 	var lobby_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	if lobby_status != null:
 		if state == "已连接":

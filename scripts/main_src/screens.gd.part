@@ -511,20 +511,20 @@ func _show_online_lobby_impl() -> void:
 	var start_button_color := Color(0.74, 0.48, 0.16) if can_start_online else Color(0.38, 0.34, 0.28)
 	var start_button = make_lobby_action_button(start_button_text, start_button_color, func() -> void:
 		send_online_action({"type": "startGame"}, "开始游戏")
-	, 0.24, Vector2(178, 50))
+	, 0.24, Vector2(196, 50))
 	start_button.name = "OnlineLobbyPrimaryStartButton"
-	start_button.size_flags_stretch_ratio = 1.55
+	start_button.size_flags_stretch_ratio = 1.90
 	start_button.disabled = not can_start_online
 	if not can_start_online:
 		start_button.modulate = Color(0.76, 0.78, 0.70, 0.74)
 	start_row.add_child(start_button)
 	var return_button = make_lobby_action_button("返回菜单", Color(0.28, 0.34, 0.36), func() -> void:
 		show_menu()
-	, 0.28, Vector2(112, 50))
+	, 0.28, Vector2(112, 50), 0.80 if can_start_online else 1.0)
 	return_button.name = "OnlineLobbySecondaryReturnButton"
 	return_button.size_flags_stretch_ratio = 0.72
 	if can_start_online:
-		return_button.modulate = Color(0.82, 0.84, 0.82, 0.84)
+		return_button.modulate = Color(0.82, 0.84, 0.82, 0.80)
 	start_row.add_child(return_button)
 	draw_online_lobby_action_flow_art(form_panel)
 
@@ -693,7 +693,7 @@ func refresh_online_lobby_state() -> void:
 		ensure_button_gpt_face_plate(start_button, Color(0.74, 0.48, 0.16) if connected else Color(0.38, 0.34, 0.28))
 	var return_button = root_layer.find_child("OnlineLobbySecondaryReturnButton", true, false) as Button
 	if return_button != null:
-		return_button.modulate = Color(0.82, 0.84, 0.82, 0.84) if connected else Color(1.0, 1.0, 1.0, 1.0)
+		return_button.modulate = Color(0.82, 0.84, 0.82, 0.80) if connected else Color(1.0, 1.0, 1.0, 1.0)
 	var lobby_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	if lobby_status != null:
 		if state == "已连接":

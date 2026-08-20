@@ -12078,11 +12078,12 @@ func make_lantern(parent: Control, rect: Rect2, color: Color = CINNABAR, lit: bo
 # 界面过渡动画 / Interface Transition Animation
 # ============================================================
 
-func make_lobby_action_button(text: String, color: Color, callback: Callable, intro_delay: float = 0.12, min_size: Vector2 = Vector2(130, 50)) -> Button:
+func make_lobby_action_button(text: String, color: Color, callback: Callable, intro_delay: float = 0.12, min_size: Vector2 = Vector2(130, 50), intro_alpha: float = 1.0) -> Button:
 	var button = make_small_button(text, color, callback)
 	button.custom_minimum_size = min_size
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	button.set_meta("menu_motion_intro_alpha", clampf(intro_alpha, 0.0, 1.0))
 	button.add_theme_font_size_override("font_size", 17)
 	button.add_theme_color_override("font_color", Color(0.97, 0.95, 0.84))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90))
@@ -12208,11 +12209,12 @@ func configure_menu_button_motion(button: Control, delay: float = 0.0, hover_sca
 		button.pivot_offset = button.size * 0.5
 	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
 		return
+	var intro_alpha := clampf(float(button.get_meta("menu_motion_intro_alpha", 1.0)), 0.0, 1.0)
 	button.modulate.a = 0.0
 	button.scale = Vector2(0.965, 0.965)
 	var intro := create_screen_tween()
 	intro.set_parallel(true)
-	intro.tween_property(button, "modulate:a", 1.0, 0.30).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	intro.tween_property(button, "modulate:a", intro_alpha, 0.30).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	intro.tween_property(button, "scale", Vector2.ONE, 0.38).from(Vector2(0.965, 0.965)).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	button.mouse_entered.connect(func() -> void:
 		var motion_button = button_ref.get_ref() as Control
