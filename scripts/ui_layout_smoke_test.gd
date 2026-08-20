@@ -100,6 +100,25 @@ func seed_win_detail_layout_state(scene) -> void:
 	scene.players[0]["score"] = 31200
 	scene.players[0]["name"] = "你"
 
+
+func diagnostic_layout_lines() -> Array[String]:
+	return [
+		"【音频系统诊断 v1.0.156】", "",
+		"1. 用户激活: 是", "2. 设备: 小米手机 (MIUI)", "",
+		"⚠️ v1.0.156重大改动", "BGM已从WAV改为MP3格式", "因为您能听到TTS语音提示",
+		"说明音频系统正常", "只是WAV格式不兼容", "", "【请回答】",
+		"1. 能听到背景音乐了吗？", "2. 刚才的440Hz测试音听到了吗？", "",
+		"3. BGM播放器: 正常", "4. BGM音频流: 已加载", "5. BGM正在播放: 是",
+		"6. BGM音量: -8.0dB (0dB=最大)", "7. 音频总线: Master",
+		"8. Master总线音量: 0.0dB", "9. Master总线静音: 否",
+		"10. 音频格式: AudioStreamMP3", "", "✓ BGM播放成功", "",
+		"小米手机听不到声音？", "请检查以下MIUI设置:", "",
+		"1. 断开蓝牙设备", "2. 按音量+键调整【媒体音量】", "3. 关闭【游戏加速】",
+		"4. 关闭【省电模式】", "5. 设置→应用管理→本应用", "   →省电策略→无限制",
+		"6. 尝试重启手机", "", "点击任意位置关闭",
+	]
+
+
 func run_safe_area_layout_probe(viewport_size: Vector2, margins: Vector4) -> void:
 	var viewport_i = Vector2i(int(viewport_size.x), int(viewport_size.y))
 	root.size = viewport_i
@@ -223,6 +242,13 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene._show_online_lobby_impl()
 	await process_frame
 	check(scene.toast_current != null and scene.toast_current.get_instance_id() == same_page_toast_id and scene.toast_mode == "online_lobby", "same-page lobby refresh preserves its active toast at %s" % actual_viewport)
+	var waiting_occupancy = scene.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
+	var waiting_room_badge = scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
+	check(scene.online_waiting_for_server and waiting_occupancy != null and waiting_occupancy.text == "入席 2/4" and waiting_room_badge != null and waiting_room_badge.text == "房间号 ROOM7", "waiting lobby refresh preserves its room snapshot at %s" % actual_viewport)
+	scene.set_online_feedback("请先连接服务器。", false)
+	scene.clear_online_room_snapshot()
+	scene.refresh_online_lobby_state()
+	await process_frame
 	check_online_lobby_layout(scene, actual_viewport)
 	scene._show_rules_screen_impl()
 	await process_frame
@@ -252,6 +278,11 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.show_daily_login_panel({"consecutive_days": 5, "show_reward": true})
 	await process_frame
 	check_daily_login_layout(scene, actual_viewport)
+	scene.show_menu(true)
+	var diagnostic_lines := diagnostic_layout_lines()
+	scene.show_diagnostic_dialog(diagnostic_lines)
+	await process_frame
+	await check_diagnostic_layout(scene, actual_viewport, diagnostic_lines.size())
 	scene.currency = {"coins": 28975, "gems": 10}
 	scene.season_data = {"season_id": "qa", "points": 1250, "highest_rank": 2, "wins": 6, "games": 9}
 	scene.game_stats["games_played"] = 9
@@ -263,6 +294,38 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_menu_footer_layout(scene, actual_viewport)
 	scene.queue_free()
 	await process_frame
+
+
+func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> void:
+	var panel = scene.find_child("DiagnosticDialogPanel", true, false) as Control
+	var scroll = scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	var content_list = scene.find_child("DiagnosticContentList", true, false) as VBoxContainer
+	var close_button = scene.find_child("DiagnosticCloseButton", true, false) as Button
+	var last_line = scene.find_child("DiagnosticContentLine_%02d" % (line_count - 1), true, false) as Label
+	check(panel != null and scroll != null and content_list != null and close_button != null and last_line != null, "diagnostic exposes panel, native content scroll, complete list, and close action at %s" % viewport_size)
+	if panel == null or scroll == null or content_list == null or close_button == null or last_line == null:
+		return
+	var panel_rect = screen_rect(panel)
+	var scroll_rect = screen_rect(scroll)
+	var list_rect = screen_rect(content_list)
+	var close_rect = screen_rect(close_button)
+	check(Rect2(Vector2.ZERO, viewport_size).grow(1.0).encloses(panel_rect), "diagnostic panel stays inside viewport at %s" % viewport_size)
+	check(panel_rect.grow(1.0).encloses(scroll_rect) and panel_rect.grow(1.0).encloses(close_rect), "diagnostic scroll and fixed close action stay inside panel at %s" % viewport_size)
+	check(scroll_rect.size.y >= 44.0 and close_rect.size.x >= 104.0 and close_rect.size.y >= 44.0, "diagnostic scroll and close action retain usable hit areas at %s" % viewport_size)
+	check(scroll_rect.end.y + 4.0 <= close_rect.position.y, "diagnostic content clears the fixed close lane at %s" % viewport_size)
+	check(scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "diagnostic uses vertical-only native scrolling at %s" % viewport_size)
+	check(content_list.size_flags_horizontal == Control.SIZE_EXPAND_FILL and list_rect.size.x <= scroll_rect.size.x + 1.0, "diagnostic wrapped content fits the scroll width at %s" % viewport_size)
+	check(close_button.focus_mode == Control.FOCUS_ALL and close_button.has_focus(), "diagnostic close action owns modal keyboard focus at %s" % viewport_size)
+	var scroll_bar := scroll.get_v_scroll_bar()
+	check(scroll_bar != null and scroll_bar.max_value > scroll_bar.page, "full diagnostic report creates a vertical scroll range at %s" % viewport_size)
+	if scroll_bar == null or scroll_bar.max_value <= scroll_bar.page:
+		return
+	scroll.scroll_vertical = int(ceil(scroll_bar.max_value - scroll_bar.page))
+	await process_frame
+	await process_frame
+	var last_rect = screen_rect(last_line)
+	check(last_rect.position.y >= scroll_rect.position.y - 1.0 and last_rect.end.y <= scroll_rect.end.y + 1.0, "diagnostic final line is reachable at the bottom of the scroll range at %s" % viewport_size)
+
 
 func check_loading_layout(scene, viewport_size: Vector2) -> void:
 	var center_panel = scene.find_child("LoadingCenterPanel", true, false) as Control
@@ -1312,6 +1375,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	if room_badge != null and room_badge.get_child_count() > 0:
 		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label
 		check(room_badge_label != null and room_badge_label.text == "房间号 --", "disconnected lobby replaces the room badge with a neutral placeholder at %s" % viewport_size)
+		check(room_badge.mouse_filter == Control.MOUSE_FILTER_STOP, "online lobby room badge exposes a touch detail target at %s" % viewport_size)
 	check(endpoint_badge != null and endpoint_label != null and state_badge != null and connection_state_label != null, "online lobby exposes top endpoint and connection-state badges at %s" % viewport_size)
 	check(name_edit != null and name_edit.max_length == scene.ONLINE_NAME_MAX_LENGTH, "online lobby nickname input enforces its client boundary at %s" % viewport_size)
 	check(host_edit != null and host_edit.max_length == scene.ONLINE_HOST_MAX_LENGTH and host_edit.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_URL, "online lobby host input enforces its boundary and URL keyboard at %s" % viewport_size)
@@ -1415,6 +1479,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 				var row_rect = screen_rect(row)
 				check(roster_rect.grow(1.0).encloses(row_rect), "online lobby roster row %d stays inside roster panel at %s" % [i, viewport_size])
 				check(row_rect.size.y >= max(18.0, roster_rect.size.y * 0.14), "online lobby roster row %d keeps readable height at %s" % [i, viewport_size])
+				check(row.mouse_filter == Control.MOUSE_FILTER_STOP, "online lobby roster row %d exposes a touch detail target at %s" % [i, viewport_size])
 			var name_label = scene.find_child("OnlineLobbyRosterName_%d" % i, true, false) as Label
 			var state_label = scene.find_child("OnlineLobbyRosterState_%d" % i, true, false) as Label
 			check(name_label != null and state_label != null, "online lobby roster row %d exposes name and state labels at %s" % [i, viewport_size])

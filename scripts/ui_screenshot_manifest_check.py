@@ -28,7 +28,9 @@ EXPECTED_SCREENS = [
     "14_danger_discard.png",
     "15_pending_claim_full.png",
     "16_win_detail.png",
+    "21_diagnostic.png",
     "23_online_lobby_connected.png",
+    "24_online_lobby_disconnect_recovery.png",
 ]
 DEFAULT_EXPECTED_SIZE = (1280, 720)
 CONTACT_SHEET_COLUMNS = 2

@@ -2,6 +2,7 @@ extends SceneTree
 ## Local TCP protocol contract: real StreamPeerTCP, newline framing, state normalization, and disconnect cleanup.
 
 const PORT := 23333
+const BURST_LOG_COUNT := 1500
 var failed := false
 var server := TCPServer.new()
 var server_peer: StreamPeerTCP
@@ -161,6 +162,8 @@ func run() -> void:
 	await pump(scene, 14)
 	check(scene.online_room.is_empty() and scene.online_game.is_empty(), "disconnect clears room and game snapshots")
 	check(not scene.online_waiting_for_server, "disconnect clears the waiting-for-server state")
+	check(scene.mode == "online_lobby", "an in-game disconnect returns the player to the online lobby")
+	check(scene.online_feedback.contains("连接已断开"), "the returned lobby explains why the online game ended")
 
 	# Reconnect on the same listening fixture and exercise server feedback after
 	# the client has returned to a clean lobby state.
@@ -170,7 +173,8 @@ func run() -> void:
 	if not is_instance_valid(scene.online_name_edit):
 		scene.online_name_edit = LineEdit.new()
 		scene.add_child(scene.online_name_edit)
-		scene.online_name_edit.text = "协议测试者"
+	check(scene.online_name_edit.text == expected_name, "disconnect recovery preserves the normalized player identity")
+	scene.online_name_edit.text = "协议测试者"
 	if not is_instance_valid(scene.online_host_edit):
 		scene.online_host_edit = LineEdit.new()
 		scene.add_child(scene.online_host_edit)
@@ -180,6 +184,19 @@ func run() -> void:
 	check(server_peer != null, "client can reconnect after a dropped TCP session")
 	var hello_again := await wait_for_line(scene, "hello")
 	check(str(hello_again.get("name", "")) == "协议测试者", "reconnect sends a fresh hello instead of reusing stale framing")
+	var burst_wire := ""
+	for i in range(BURST_LOG_COUNT):
+		burst_wire += JSON.stringify({"type": "log", "text": "突发日志%04d" % (i + 1)}) + "\n"
+	check(server_peer.put_data(burst_wire.to_utf8_buffer()) == OK, "server queues a multi-chunk burst of newline-delimited messages")
+	await pump(scene, 80)
+	var burst_logs := scene.online_room.get("logs", []) as Array
+	var first_retained_burst: int = BURST_LOG_COUNT - int(scene.ONLINE_LOG_HISTORY_LIMIT) + 1
+	check(burst_logs.size() == scene.ONLINE_LOG_HISTORY_LIMIT and burst_logs.front() == "突发日志%04d" % first_retained_burst and burst_logs.back() == "突发日志%04d" % BURST_LOG_COUNT, "multi-chunk burst preserves exactly the newest bounded log history")
+	check(scene.tcp_buffer.is_empty() and scene.tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED, "burst framing drains completely without dropping the connection")
+	await send_fragmented({"type": "log", "text": "界".repeat(scene.ONLINE_LOG_ENTRY_MAX_LENGTH + 32)})
+	await pump(scene, 8)
+	var bounded_server_logs := scene.online_room.get("logs", []) as Array
+	check(not bounded_server_logs.is_empty() and str(bounded_server_logs.back()).length() == scene.ONLINE_LOG_ENTRY_MAX_LENGTH, "server log entries are truncated to the declared UI boundary")
 	await send_fragmented({"type": "error", "reason": "房间已满"})
 	await send_fragmented({"type": "log", "text": "服务器已记录拒绝"})
 	await pump(scene, 10)
@@ -189,6 +206,13 @@ func run() -> void:
 		scene.handle_online_message(JSON.stringify({"type": "log", "text": "追加日志%02d" % (i + 1)}))
 	var appended_logs := scene.online_room.get("logs", []) as Array
 	check(appended_logs.size() == scene.ONLINE_LOG_HISTORY_LIMIT and appended_logs.front() == "追加日志07" and appended_logs.back() == "追加日志20", "incremental logs retain exactly the newest fourteen entries")
+
+	var oversized_partial := ("{\"type\":\"log\",\"text\":\"" + "X".repeat(scene.ONLINE_MESSAGE_MAX_BYTES + 32)).to_utf8_buffer()
+	check(server_peer.put_data(oversized_partial) == OK, "server queues an oversized unterminated frame")
+	await pump(scene, 80)
+	check(scene.tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED, "oversized unterminated frames are rejected with a transport disconnect")
+	check(scene.tcp_buffer.is_empty() and scene.online_room.is_empty() and scene.online_game.is_empty(), "protocol rejection clears buffered bytes and stale online snapshots")
+	check(scene.online_feedback.contains("消息过大"), "protocol rejection exposes an actionable lobby error")
 
 	scene.shutdown_runtime()
 	scene.queue_free()

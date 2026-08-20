@@ -101,10 +101,10 @@ capture_pages_for_size() {
 		--screens=01_menu,02_menu_settings,03_offline_battle,04_rules,05_stats || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
-		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading,23_online_lobby_connected || return 1
+		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading,23_online_lobby_connected,24_online_lobby_disconnect_recovery || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
-		--screens=13_round_summary,14_danger_discard,15_pending_claim_full,16_win_detail
+		--screens=13_round_summary,14_danger_discard,15_pending_claim_full,16_win_detail,21_diagnostic
 }
 
 run_check() {
@@ -287,6 +287,7 @@ fi
 	echo "| 商店库存、购买 CTA、滚动槽小屏间距不足 | UI layout smoke + offline smoke + screenshots |"
 	echo "| 联机大厅未连接状态重复 raw endpoint，主按钮语义不清 | UI layout smoke + offline smoke |"
 	echo "| 联机大厅 hover/pressed/focus 与已连接房间状态缺少证据 | Xvfb interaction smoke + 23_online_lobby_connected 三分辨率截图 |"
+	echo "| 联机对局断线后停留空游戏页、昵称丢失或错误提示不可见 | online protocol smoke + 24_online_lobby_disconnect_recovery 三分辨率截图 |"
 	echo "| 每日签到七日预告贴底、层级弱 | UI layout smoke + screenshots |"
 	echo "| 加载页 GPT 背景上叠 native fallback 矩形 | UI layout smoke + screenshots |"
 	echo "| 生成 chrome 伪文字、伪控件、强残影 | UI layout smoke alpha 上限 + screenshots |"

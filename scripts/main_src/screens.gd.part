@@ -469,7 +469,7 @@ func _show_online_lobby_impl() -> void:
 	form.anchor_bottom = 0.640
 	form.add_theme_constant_override("separation", 5)
 	form_panel.add_child(form)
-	online_name_edit = add_lobby_line_edit(form, "昵称", "云桌道友", ONLINE_NAME_MAX_LENGTH)
+	online_name_edit = add_lobby_line_edit(form, "昵称", online_player_name, ONLINE_NAME_MAX_LENGTH)
 	online_name_edit.name = "OnlineLobbyNameEdit"
 	online_host_edit = add_lobby_line_edit(form, "服务器 IP/域名", online_connection_host, ONLINE_HOST_MAX_LENGTH, LineEdit.KEYBOARD_TYPE_URL)
 	online_host_edit.name = "OnlineLobbyHostEdit"
@@ -595,7 +595,11 @@ func _show_online_lobby_impl() -> void:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
 	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, 12, Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
-	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP
+	room_badge.gui_input.connect(func(event: InputEvent) -> void:
+		if online_detail_press_event(event):
+			show_online_room_code_detail()
+	)
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
@@ -743,6 +747,26 @@ func refresh_online_room_content() -> void:
 	if log_count_label != null:
 		log_count_label.text = "%d条" % log_count
 	render_room_log()
+
+func online_detail_press_event(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		return mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
+	if event is InputEventScreenTouch:
+		return (event as InputEventScreenTouch).pressed
+	return false
+
+func show_online_room_code_detail() -> void:
+	var room_code := bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
+	if room_code != "":
+		show_toast("房间号：%s" % room_code, 3600)
+
+func show_online_roster_detail(slot: int) -> void:
+	var entry := online_lobby_player_for_slot(online_lobby_player_entries(), slot)
+	if entry.is_empty():
+		return
+	var player_name := online_lobby_slot_name(entry)
+	show_toast("玩家 %d：%s" % [slot + 1, player_name], 3600)
 
 
 func refresh_online_feedback_art() -> void:
@@ -1894,20 +1918,38 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	draw_diagnostic_dialog_art(panel, lines)
 	draw_diagnostic_result_sync_art(panel, lines)
 
-	# 创建文本容器
+	# Keep the detailed report scrollable while the close action remains fixed.
+	var content_scroll = ScrollContainer.new()
+	content_scroll.name = "DiagnosticContentScroll"
+	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	content_scroll.scroll_deadzone = 8
+	content_scroll.clip_contents = true
+	panel.add_child(content_scroll)
+	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.755))
+	content_scroll.get_v_scroll_bar().name = "DiagnosticContentScrollBar"
+
 	var vbox = VBoxContainer.new()
+	vbox.name = "DiagnosticContentList"
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 8)
-	panel.add_child(vbox)
-	apply_rect(vbox, rect_full(0.05, 0.205, 0.95, 0.95))
+	content_scroll.add_child(vbox)
 
 	# 添加每一行文本
-	for line in lines:
+	for line_index in range(lines.size()):
+		var line = str(lines[line_index])
 		var label = Label.new()
+		label.name = "DiagnosticContentLine_%02d" % line_index
 		label.text = line
-		label.add_theme_font_size_override("font_size", 28)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.custom_minimum_size.y = 12.0 if line == "" else 26.0
+		label.add_theme_font_size_override("font_size", 20)
 		if line.begins_with("【"):
 			label.add_theme_color_override("font_color", Color(0.94, 0.86, 0.44))
-			label.add_theme_font_size_override("font_size", 36)
+			label.add_theme_font_size_override("font_size", 26)
+			label.custom_minimum_size.y = 34.0
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		elif line.begins_with("✓"):
 			label.add_theme_color_override("font_color", Color(0.42, 0.82, 0.56))
@@ -1918,6 +1960,17 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		else:
 			label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.91))
 		vbox.add_child(label)
+
+	var close_button = make_small_button("关闭", Color(0.30, 0.42, 0.38), Callable(self, "dismiss_diagnostic_dialog"))
+	close_button.name = "DiagnosticCloseButton"
+	close_button.focus_mode = Control.FOCUS_ALL
+	close_button.custom_minimum_size = Vector2(128, 44)
+	panel.add_child(close_button)
+	apply_rect(close_button, rect_full(0.385, 0.780, 0.615, 0.900))
+	var cancel_shortcut = Shortcut.new()
+	cancel_shortcut.events = InputMap.action_get_events("ui_cancel")
+	close_button.shortcut = cancel_shortcut
+	close_button.grab_focus()
 
 	# 面板入场动画 - 滑入 + 淡入
 	if fx_enabled_effective():
@@ -1944,10 +1997,25 @@ func show_diagnostic_dialog(lines: Array) -> void:
 
 	# 添加点击关闭功能
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
-	bg.gui_input.connect(func(event):
-		if event is InputEventScreenTouch and event.pressed:
-			refresh_current_screen()
+	bg.gui_input.connect(func(event: InputEvent) -> void:
+		var dismiss := false
+		if event is InputEventScreenTouch:
+			dismiss = (event as InputEventScreenTouch).pressed
+		elif event is InputEventMouseButton:
+			var mouse_event := event as InputEventMouseButton
+			dismiss = mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
+		if dismiss:
+			bg.accept_event()
+			dismiss_diagnostic_dialog()
 	)
+
+
+func dismiss_diagnostic_dialog() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	if root_layer.find_child("DiagnosticDialogPanel", true, false) == null:
+		return
+	refresh_current_screen()
 
 
 func show_exit_confirm() -> void:

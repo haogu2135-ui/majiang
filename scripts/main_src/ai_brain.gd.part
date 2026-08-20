@@ -1720,8 +1720,17 @@ func hard_safety_value(label: String) -> float:
 			return 9.0
 	return 0.0
 
+func known_tile_counts_for_seat(seat: int, visible_counts_snapshot: Array = []) -> Array:
+	var known_counts = (visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()).duplicate()
+	if known_counts.is_empty():
+		known_counts = make_empty_tile_counts()
+	if seat >= 0 and seat < players.size():
+		add_visible_tile_counts(known_counts, players[seat].get("hand", []))
+	return known_counts
+
 func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) -> Dictionary:
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
+	var known_counts = known_tile_counts_for_seat(seat, visible_counts)
 	var opponents: Dictionary = {}
 	for other in range(players.size()):
 		if other == seat:
@@ -1734,6 +1743,7 @@ func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) 
 	return {
 		"seat": seat,
 		"visible_counts": visible_counts,
+		"known_counts": known_counts,
 		"opponents": opponents,
 		"threat_cache_state_key": threat_cache_state_key,
 		"discard_pressures": {},
@@ -1750,6 +1760,13 @@ func ai_context_visible_counts(eval_context: Dictionary, fallback: Array = []) -
 		if typeof(counts) == TYPE_ARRAY and not counts.is_empty():
 			return counts
 	return fallback if not fallback.is_empty() else visible_tile_counts()
+
+func ai_context_known_counts(eval_context: Dictionary, seat: int, fallback: Array = []) -> Array:
+	if not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat:
+		var counts = eval_context.get("known_counts", [])
+		if typeof(counts) == TYPE_ARRAY and not counts.is_empty():
+			return counts
+	return known_tile_counts_for_seat(seat, fallback)
 
 func ai_context_opponent_state(eval_context: Dictionary, opponent: int) -> Dictionary:
 	if eval_context.is_empty() or not eval_context.has("opponents"):
@@ -3269,17 +3286,17 @@ func tile_safety_label(tile: String, seat: int, visible_counts_snapshot: Array =
 		var cache = eval_context.get("safety_labels", {})
 		if typeof(cache) == TYPE_DICTIONARY and cache.has(cache_key):
 			return str(cache.get(cache_key, ""))
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
 	var label = ""
 	if is_tile_safe_against_all(tile, seat, eval_context):
 		label = "安"
 	elif is_main_threat_genbutsu(tile, seat, eval_context):
 		label = "现"
-	elif visible_tile_count_from_counts(tile, visible_counts) >= 3:
+	elif visible_tile_count_from_counts(tile, known_counts) >= 3:
 		label = "熟"
 	elif is_suji_safe_tile(tile, seat, eval_context):
 		label = "筋"
-	elif is_kabe_safe_tile(tile, seat, visible_counts, eval_context):
+	elif is_kabe_safe_tile(tile, seat, known_counts, eval_context):
 		label = "壁"
 	if not eval_context.is_empty():
 		var cache = eval_context.get("safety_labels", {})
@@ -3295,8 +3312,8 @@ func discard_pressure_score(tile: String, seat: int, visible_counts_snapshot: Ar
 		if typeof(cache) == TYPE_DICTIONARY and cache.has(cache_key):
 			return float(cache.get(cache_key, 0.0))
 	var score = 0.0
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, visible_counts)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
+	var visible = visible_tile_count_from_counts(tile, known_counts)
 	score += float(visible) * 3.4
 	if is_terminal_or_honor(tile):
 		score += 3.0
@@ -3327,8 +3344,8 @@ func discard_feed_risk_report(tile: String, seat: int, visible_counts_snapshot: 
 	if tile == "" or seat < 0 or seat >= players.size():
 		return report
 	var details: Array = []
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, visible_counts)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
+	var visible = visible_tile_count_from_counts(tile, known_counts)
 	var next_seat = (seat + 1) % 4
 	var next_seat_chi_score := 0.0
 	if next_seat != seat:
@@ -3435,8 +3452,8 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 	var vector: Dictionary = {"score": 0.0, "threat": 0.0, "visible": 0, "danger_source": {}}
 	if tile == "" or seat < 0 or seat >= players.size():
 		return vector
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, visible_counts)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
+	var visible = visible_tile_count_from_counts(tile, known_counts)
 	vector["visible"] = visible
 	var risk = 0.0
 	var threat = 0.0
@@ -3446,7 +3463,7 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		write_single_opponent_deal_in_risk_components(opponent_vector, tile, seat, other, visible, visible_counts, eval_context)
+		write_single_opponent_deal_in_risk_components(opponent_vector, tile, seat, other, visible, known_counts, eval_context)
 		var opponent_risk = float(opponent_vector.get("risk", 0.0))
 		risk += opponent_risk
 		threat += float(opponent_vector.get("pattern_threat", 0.0))
@@ -3474,7 +3491,8 @@ func opponent_tile_threat_score(tile: String, seat: int, visible_counts_snapshot
 	if not risk_vector.is_empty():
 		return float(risk_vector.get("threat", 0.0))
 	var total = 0.0
-	var visible = visible_tile_count_from_counts(tile, visible_counts_snapshot)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
+	var visible = visible_tile_count_from_counts(tile, known_counts)
 	for other in range(players.size()):
 		if other == seat:
 			continue

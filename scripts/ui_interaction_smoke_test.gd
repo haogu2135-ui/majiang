@@ -56,6 +56,16 @@ func first_button_with_text(scope: Node, text: String) -> Button:
 	return null
 
 
+func has_label_text(scope: Node, expected: String) -> bool:
+	if scope == null:
+		return false
+	for candidate in scope.find_children("*", "Label", true, false):
+		var label := candidate as Label
+		if label != null and label.text == expected:
+			return true
+	return false
+
+
 func move_pointer(position: Vector2, settle_seconds: float = 0.42) -> void:
 	Input.warp_mouse(position)
 	var motion := InputEventMouseMotion.new()
@@ -130,6 +140,24 @@ func connected_room_fixture() -> Dictionary:
 		],
 		"logs": ["甲加入房间", "乙准备就绪", "丙加入房间", "房间同步完成"],
 	}
+
+
+func diagnostic_interaction_lines() -> Array[String]:
+	return [
+		"【音频系统诊断 v1.0.156】", "",
+		"1. 用户激活: 是", "2. 设备: 小米手机 (MIUI)", "",
+		"⚠️ v1.0.156重大改动", "BGM已从WAV改为MP3格式", "因为您能听到TTS语音提示",
+		"说明音频系统正常", "只是WAV格式不兼容", "", "【请回答】",
+		"1. 能听到背景音乐了吗？", "2. 刚才的440Hz测试音听到了吗？", "",
+		"3. BGM播放器: 正常", "4. BGM音频流: 已加载", "5. BGM正在播放: 是",
+		"6. BGM音量: -8.0dB (0dB=最大)", "7. 音频总线: Master",
+		"8. Master总线音量: 0.0dB", "9. Master总线静音: 否",
+		"10. 音频格式: AudioStreamMP3", "", "✓ BGM播放成功", "",
+		"小米手机听不到声音？", "请检查以下MIUI设置:", "",
+		"1. 断开蓝牙设备", "2. 按音量+键调整【媒体音量】", "3. 关闭【游戏加速】",
+		"4. 关闭【省电模式】", "5. 设置→应用管理→本应用", "   →省电策略→无限制",
+		"6. 尝试重启手机", "", "点击任意位置关闭",
+	]
 
 
 func run() -> void:
@@ -312,6 +340,7 @@ func run() -> void:
 	check(logs != null and logs.text.contains("实时日志01") and logs.text.contains("实时日志14"), "all fourteen retained room logs remain accessible")
 	check(log_count_label != null and log_count_label.text == "14条", "live log count stays synchronized with retained history")
 	var log_scroll = scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var review_scroll := 0
 	if log_scroll != null:
 		log_scroll.scroll_vertical = 0
 		await process_frame
@@ -333,10 +362,96 @@ func run() -> void:
 			check(log_scroll.scroll_vertical == 0, "Xvfb exposes no touchscreen device; drag validation remains a real-device gate")
 			await send_wheel_down(log_scroll.get_global_rect().get_center())
 			check(log_scroll.scroll_vertical > 0, "desktop wheel scrolls the same native room log history")
+		review_scroll = log_scroll.scroll_vertical
 	scene.handle_online_message(JSON.stringify({"type": "log", "text": "实时日志15"}))
 	await settle(0.05)
 	check((scene.online_room.get("logs", []) as Array).size() == scene.ONLINE_LOG_HISTORY_LIMIT, "appended logs stay within the fourteen-entry history limit")
 	check(logs != null and not logs.text.contains("实时日志01") and logs.text.contains("实时日志15") and log_count_label != null and log_count_label.text == "14条", "log append evicts the oldest line and refreshes text and count")
+	if log_scroll != null:
+		check(log_scroll.scroll_vertical == review_scroll, "new logs preserve the scroll offset while the user reviews history")
+		var before_follow_bar := log_scroll.get_v_scroll_bar()
+		log_scroll.scroll_vertical = int(round(maxf(0.0, before_follow_bar.max_value - before_follow_bar.page)))
+		await process_frame
+		scene.handle_online_message(JSON.stringify({"type": "log", "text": "末尾跟随" + "长".repeat(80)}))
+		await settle(0.05)
+		var after_follow_bar := log_scroll.get_v_scroll_bar()
+		var after_follow_max := int(round(maxf(0.0, after_follow_bar.max_value - after_follow_bar.page)))
+		check(log_scroll.scroll_vertical == after_follow_max and after_follow_max > review_scroll, "new logs remain visible when the user was already at the bottom (value=%d max=%d)" % [log_scroll.scroll_vertical, after_follow_max])
+
+	print("--- E) touch reveals full clipped room and roster identities ---")
+	var long_name := "名".repeat(scene.ONLINE_NAME_MAX_LENGTH)
+	var long_room := "R".repeat(scene.ONLINE_ROOM_CODE_MAX_LENGTH)
+	scene.handle_online_message(JSON.stringify({
+		"type": "roomState",
+		"room": {
+			"roomCode": long_room,
+			"players": [{"seat": 0, "name": long_name, "ready": true}],
+			"logs": scene.online_room.get("logs", []),
+		},
+	}))
+	await settle(0.05)
+	var long_name_label = scene.find_child("OnlineLobbyRosterName_0", true, false) as Label
+	var long_room_label = scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
+	check(long_name_label != null and long_name_label.tooltip_text == long_name and long_room_label != null and long_room_label.tooltip_text.contains(long_room), "clipped roster and room labels retain their complete source values")
+	var roster_row = scene.find_child("OnlineLobbyRosterRow_0", true, false) as Control
+	if roster_row != null:
+		await send_screen_touch(roster_row.get_global_rect().get_center(), true)
+		await send_screen_touch(roster_row.get_global_rect().get_center(), false)
+		await settle(0.05)
+		check(scene.toast_current != null and has_label_text(scene.toast_current, "玩家 1：%s" % long_name), "single-finger roster press reveals the complete nickname")
+	var room_badge_touch = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
+	if room_badge_touch != null:
+		await send_screen_touch(room_badge_touch.get_global_rect().get_center(), true)
+		await send_screen_touch(room_badge_touch.get_global_rect().get_center(), false)
+		await settle(0.05)
+		check(scene.toast_current != null and has_label_text(scene.toast_current, "房间号：%s" % long_room), "single-finger room-badge press reveals the complete room code")
+
+	print("--- F) diagnostic report scroll and modal dismiss paths ---")
+	var diagnostic_lines := diagnostic_interaction_lines()
+	scene.show_diagnostic_dialog(diagnostic_lines)
+	await settle(0.10)
+	var diagnostic_scroll = scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	var diagnostic_close = scene.find_child("DiagnosticCloseButton", true, false) as Button
+	check(diagnostic_scroll != null and diagnostic_close != null, "diagnostic exposes its native scroll and explicit close action")
+	if diagnostic_scroll != null:
+		var diagnostic_bar := diagnostic_scroll.get_v_scroll_bar()
+		check(diagnostic_bar.max_value > diagnostic_bar.page, "full diagnostic report creates a native vertical range")
+		diagnostic_scroll.scroll_vertical = 0
+		await send_wheel_down(diagnostic_scroll.get_global_rect().get_center())
+		check(diagnostic_scroll.scroll_vertical > 0, "desktop wheel scrolls the full diagnostic report")
+	if diagnostic_close != null:
+		check(diagnostic_close.focus_mode == Control.FOCUS_ALL and diagnostic_close.has_focus(), "diagnostic close action receives modal keyboard focus")
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.10)
+	check(scene.find_child("DiagnosticDialogPanel", true, false) == null and scene.find_child("OnlineLobbyFormPanel", true, false) != null, "ui_cancel closes the diagnostic and restores the source page")
+
+	scene.show_diagnostic_dialog(diagnostic_lines)
+	await settle(0.05)
+	diagnostic_close = scene.find_child("DiagnosticCloseButton", true, false) as Button
+	if diagnostic_close != null:
+		await send_key(KEY_ENTER, 0)
+		await settle(0.10)
+	check(scene.find_child("DiagnosticDialogPanel", true, false) == null, "focused explicit close button dismisses the diagnostic")
+
+	scene.show_diagnostic_dialog(diagnostic_lines)
+	await settle(0.05)
+	var dismiss_overlay = scene.find_child("DiagnosticDismissOverlay", true, false) as Control
+	if dismiss_overlay != null:
+		var mouse_dismiss_position := dismiss_overlay.get_global_rect().position + Vector2(8.0, 8.0)
+		await send_left_button(mouse_dismiss_position, true)
+		await send_left_button(mouse_dismiss_position, false)
+		await settle(0.10)
+	check(scene.find_child("DiagnosticDialogPanel", true, false) == null, "desktop backdrop click dismisses the diagnostic")
+
+	scene.show_diagnostic_dialog(diagnostic_lines)
+	await settle(0.05)
+	dismiss_overlay = scene.find_child("DiagnosticDismissOverlay", true, false) as Control
+	if dismiss_overlay != null:
+		var touch_dismiss_position := dismiss_overlay.get_global_rect().position + Vector2(8.0, 8.0)
+		await send_screen_touch(touch_dismiss_position, true)
+		await send_screen_touch(touch_dismiss_position, false)
+		await settle(0.10)
+	check(scene.find_child("DiagnosticDialogPanel", true, false) == null, "single-finger backdrop press dismisses the diagnostic")
 
 	if scene.has_method("shutdown_runtime"):
 		scene.shutdown_runtime()

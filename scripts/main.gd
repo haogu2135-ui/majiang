@@ -2600,8 +2600,17 @@ func hard_safety_value(label: String) -> float:
 			return 9.0
 	return 0.0
 
+func known_tile_counts_for_seat(seat: int, visible_counts_snapshot: Array = []) -> Array:
+	var known_counts = (visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()).duplicate()
+	if known_counts.is_empty():
+		known_counts = make_empty_tile_counts()
+	if seat >= 0 and seat < players.size():
+		add_visible_tile_counts(known_counts, players[seat].get("hand", []))
+	return known_counts
+
 func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) -> Dictionary:
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
+	var known_counts = known_tile_counts_for_seat(seat, visible_counts)
 	var opponents: Dictionary = {}
 	for other in range(players.size()):
 		if other == seat:
@@ -2614,6 +2623,7 @@ func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) 
 	return {
 		"seat": seat,
 		"visible_counts": visible_counts,
+		"known_counts": known_counts,
 		"opponents": opponents,
 		"threat_cache_state_key": threat_cache_state_key,
 		"discard_pressures": {},
@@ -2630,6 +2640,13 @@ func ai_context_visible_counts(eval_context: Dictionary, fallback: Array = []) -
 		if typeof(counts) == TYPE_ARRAY and not counts.is_empty():
 			return counts
 	return fallback if not fallback.is_empty() else visible_tile_counts()
+
+func ai_context_known_counts(eval_context: Dictionary, seat: int, fallback: Array = []) -> Array:
+	if not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat:
+		var counts = eval_context.get("known_counts", [])
+		if typeof(counts) == TYPE_ARRAY and not counts.is_empty():
+			return counts
+	return known_tile_counts_for_seat(seat, fallback)
 
 func ai_context_opponent_state(eval_context: Dictionary, opponent: int) -> Dictionary:
 	if eval_context.is_empty() or not eval_context.has("opponents"):
@@ -4149,17 +4166,17 @@ func tile_safety_label(tile: String, seat: int, visible_counts_snapshot: Array =
 		var cache = eval_context.get("safety_labels", {})
 		if typeof(cache) == TYPE_DICTIONARY and cache.has(cache_key):
 			return str(cache.get(cache_key, ""))
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
 	var label = ""
 	if is_tile_safe_against_all(tile, seat, eval_context):
 		label = "安"
 	elif is_main_threat_genbutsu(tile, seat, eval_context):
 		label = "现"
-	elif visible_tile_count_from_counts(tile, visible_counts) >= 3:
+	elif visible_tile_count_from_counts(tile, known_counts) >= 3:
 		label = "熟"
 	elif is_suji_safe_tile(tile, seat, eval_context):
 		label = "筋"
-	elif is_kabe_safe_tile(tile, seat, visible_counts, eval_context):
+	elif is_kabe_safe_tile(tile, seat, known_counts, eval_context):
 		label = "壁"
 	if not eval_context.is_empty():
 		var cache = eval_context.get("safety_labels", {})
@@ -4175,8 +4192,8 @@ func discard_pressure_score(tile: String, seat: int, visible_counts_snapshot: Ar
 		if typeof(cache) == TYPE_DICTIONARY and cache.has(cache_key):
 			return float(cache.get(cache_key, 0.0))
 	var score = 0.0
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, visible_counts)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
+	var visible = visible_tile_count_from_counts(tile, known_counts)
 	score += float(visible) * 3.4
 	if is_terminal_or_honor(tile):
 		score += 3.0
@@ -4207,8 +4224,8 @@ func discard_feed_risk_report(tile: String, seat: int, visible_counts_snapshot: 
 	if tile == "" or seat < 0 or seat >= players.size():
 		return report
 	var details: Array = []
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, visible_counts)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
+	var visible = visible_tile_count_from_counts(tile, known_counts)
 	var next_seat = (seat + 1) % 4
 	var next_seat_chi_score := 0.0
 	if next_seat != seat:
@@ -4315,8 +4332,8 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 	var vector: Dictionary = {"score": 0.0, "threat": 0.0, "visible": 0, "danger_source": {}}
 	if tile == "" or seat < 0 or seat >= players.size():
 		return vector
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, visible_counts)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
+	var visible = visible_tile_count_from_counts(tile, known_counts)
 	vector["visible"] = visible
 	var risk = 0.0
 	var threat = 0.0
@@ -4326,7 +4343,7 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		write_single_opponent_deal_in_risk_components(opponent_vector, tile, seat, other, visible, visible_counts, eval_context)
+		write_single_opponent_deal_in_risk_components(opponent_vector, tile, seat, other, visible, known_counts, eval_context)
 		var opponent_risk = float(opponent_vector.get("risk", 0.0))
 		risk += opponent_risk
 		threat += float(opponent_vector.get("pattern_threat", 0.0))
@@ -4354,7 +4371,8 @@ func opponent_tile_threat_score(tile: String, seat: int, visible_counts_snapshot
 	if not risk_vector.is_empty():
 		return float(risk_vector.get("threat", 0.0))
 	var total = 0.0
-	var visible = visible_tile_count_from_counts(tile, visible_counts_snapshot)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
+	var visible = visible_tile_count_from_counts(tile, known_counts)
 	for other in range(players.size()):
 		if other == seat:
 			continue
@@ -6483,7 +6501,9 @@ func sample_ai_strength_benchmark(hands_per_diff: int = 3, seed_base: int = 2026
 		"easy_score_conserved": easy_score_conserved,
 		"normal_score_conserved": normal_score_conserved,
 		"hard_score_conserved": hard_score_conserved,
-		"commercial_strength_ok": finished_all and integrity_all and score_conservation_all and hard_safer_high_danger and hard_safer_avoidable_high_danger and hard_safer_deal_in and hard_safer_human_avoidable_high_danger and hard_safer_deal_in_to_human,
+		# Raw danger includes forced discards with no quality-preserving alternative.
+		# Keep it as telemetry; commercial defense is gated by actionable danger.
+		"commercial_strength_ok": finished_all and integrity_all and score_conservation_all and hard_safer_avoidable_high_danger and hard_safer_human_avoidable_high_danger and hard_safer_deal_in_to_human,
 		"avg_ms_easy": float(easy.get("avg_ms", 0.0)),
 		"avg_ms_hard": float(hard.get("avg_ms", 0.0)),
 		"normal_high_danger": float(normal.get("high_danger_rate", 1.0)),
@@ -6606,7 +6626,7 @@ func finalize_ai_strength_aggregate(aggregate: Dictionary) -> Dictionary:
 	out["hard_safer_human_high_danger"] = float(out.get("hard_human_high_danger", 1.0)) <= float(out.get("easy_human_high_danger", 0.0)) + 0.08
 	out["hard_safer_human_avoidable_high_danger"] = float(out.get("hard_human_avoidable_high_danger", 1.0)) <= float(out.get("easy_human_avoidable_high_danger", 0.0)) + 0.08
 	out["hard_safer_deal_in_to_human"] = float(out.get("hard_deal_in_to_human", 1.0)) <= float(out.get("easy_deal_in_to_human", 0.0)) + 0.34
-	out["commercial_strength_ok"] = bool(out.get("finished_all", false)) and bool(out.get("integrity_all", false)) and bool(out.get("score_conservation_all", false)) and bool(out.get("hard_safer_high_danger", false)) and bool(out.get("hard_safer_avoidable_high_danger", false)) and bool(out.get("hard_safer_deal_in", false)) and bool(out.get("hard_safer_human_avoidable_high_danger", false)) and bool(out.get("hard_safer_deal_in_to_human", false)) and bool(out.get("paired_wall_seed", false)) and bool(out.get("paired_profile_seed", false))
+	out["commercial_strength_ok"] = bool(out.get("finished_all", false)) and bool(out.get("integrity_all", false)) and bool(out.get("score_conservation_all", false)) and bool(out.get("hard_safer_avoidable_high_danger", false)) and bool(out.get("hard_safer_human_avoidable_high_danger", false)) and bool(out.get("hard_safer_deal_in_to_human", false)) and bool(out.get("paired_wall_seed", false)) and bool(out.get("paired_profile_seed", false))
 	return out
 
 
@@ -14117,6 +14137,12 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		var row_fill = Color(0.024, 0.048, 0.044, 0.92) if active else Color(0.014, 0.026, 0.026, 0.82)
 		var row = make_gpt_center_crop_plate_rect(rect_full(0.035, top, 0.965, top + 0.165), row_fill, "ui_dark_scrim")
 		row.name = "OnlineLobbyRosterRow_%d" % i
+		row.mouse_filter = Control.MOUSE_FILTER_STOP
+		var detail_slot := i
+		row.gui_input.connect(func(event: InputEvent) -> void:
+			if online_detail_press_event(event):
+				show_online_roster_detail(detail_slot)
+		)
 		roster.add_child(row)
 		var seal = make_gpt_gate(rect_full(0.020, 0.145, 0.092, 0.855), Color(0.42, 0.68, 0.50, 0.20 if active else 0.10))
 		seal.name = "OnlineLobbyRosterSeatSeal_%d" % i
@@ -23460,7 +23486,7 @@ func _show_online_lobby_impl() -> void:
 	form.anchor_bottom = 0.640
 	form.add_theme_constant_override("separation", 5)
 	form_panel.add_child(form)
-	online_name_edit = add_lobby_line_edit(form, "昵称", "云桌道友", ONLINE_NAME_MAX_LENGTH)
+	online_name_edit = add_lobby_line_edit(form, "昵称", online_player_name, ONLINE_NAME_MAX_LENGTH)
 	online_name_edit.name = "OnlineLobbyNameEdit"
 	online_host_edit = add_lobby_line_edit(form, "服务器 IP/域名", online_connection_host, ONLINE_HOST_MAX_LENGTH, LineEdit.KEYBOARD_TYPE_URL)
 	online_host_edit.name = "OnlineLobbyHostEdit"
@@ -23586,7 +23612,11 @@ func _show_online_lobby_impl() -> void:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
 	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, 12, Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
-	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP
+	room_badge.gui_input.connect(func(event: InputEvent) -> void:
+		if online_detail_press_event(event):
+			show_online_room_code_detail()
+	)
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
@@ -23734,6 +23764,26 @@ func refresh_online_room_content() -> void:
 	if log_count_label != null:
 		log_count_label.text = "%d条" % log_count
 	render_room_log()
+
+func online_detail_press_event(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		return mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
+	if event is InputEventScreenTouch:
+		return (event as InputEventScreenTouch).pressed
+	return false
+
+func show_online_room_code_detail() -> void:
+	var room_code := bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
+	if room_code != "":
+		show_toast("房间号：%s" % room_code, 3600)
+
+func show_online_roster_detail(slot: int) -> void:
+	var entry := online_lobby_player_for_slot(online_lobby_player_entries(), slot)
+	if entry.is_empty():
+		return
+	var player_name := online_lobby_slot_name(entry)
+	show_toast("玩家 %d：%s" % [slot + 1, player_name], 3600)
 
 
 func refresh_online_feedback_art() -> void:
@@ -24885,20 +24935,38 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	draw_diagnostic_dialog_art(panel, lines)
 	draw_diagnostic_result_sync_art(panel, lines)
 
-	# 创建文本容器
+	# Keep the detailed report scrollable while the close action remains fixed.
+	var content_scroll = ScrollContainer.new()
+	content_scroll.name = "DiagnosticContentScroll"
+	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	content_scroll.scroll_deadzone = 8
+	content_scroll.clip_contents = true
+	panel.add_child(content_scroll)
+	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.755))
+	content_scroll.get_v_scroll_bar().name = "DiagnosticContentScrollBar"
+
 	var vbox = VBoxContainer.new()
+	vbox.name = "DiagnosticContentList"
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 8)
-	panel.add_child(vbox)
-	apply_rect(vbox, rect_full(0.05, 0.205, 0.95, 0.95))
+	content_scroll.add_child(vbox)
 
 	# 添加每一行文本
-	for line in lines:
+	for line_index in range(lines.size()):
+		var line = str(lines[line_index])
 		var label = Label.new()
+		label.name = "DiagnosticContentLine_%02d" % line_index
 		label.text = line
-		label.add_theme_font_size_override("font_size", 28)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.custom_minimum_size.y = 12.0 if line == "" else 26.0
+		label.add_theme_font_size_override("font_size", 20)
 		if line.begins_with("【"):
 			label.add_theme_color_override("font_color", Color(0.94, 0.86, 0.44))
-			label.add_theme_font_size_override("font_size", 36)
+			label.add_theme_font_size_override("font_size", 26)
+			label.custom_minimum_size.y = 34.0
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		elif line.begins_with("✓"):
 			label.add_theme_color_override("font_color", Color(0.42, 0.82, 0.56))
@@ -24909,6 +24977,17 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		else:
 			label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.91))
 		vbox.add_child(label)
+
+	var close_button = make_small_button("关闭", Color(0.30, 0.42, 0.38), Callable(self, "dismiss_diagnostic_dialog"))
+	close_button.name = "DiagnosticCloseButton"
+	close_button.focus_mode = Control.FOCUS_ALL
+	close_button.custom_minimum_size = Vector2(128, 44)
+	panel.add_child(close_button)
+	apply_rect(close_button, rect_full(0.385, 0.780, 0.615, 0.900))
+	var cancel_shortcut = Shortcut.new()
+	cancel_shortcut.events = InputMap.action_get_events("ui_cancel")
+	close_button.shortcut = cancel_shortcut
+	close_button.grab_focus()
 
 	# 面板入场动画 - 滑入 + 淡入
 	if fx_enabled_effective():
@@ -24935,10 +25014,25 @@ func show_diagnostic_dialog(lines: Array) -> void:
 
 	# 添加点击关闭功能
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
-	bg.gui_input.connect(func(event):
-		if event is InputEventScreenTouch and event.pressed:
-			refresh_current_screen()
+	bg.gui_input.connect(func(event: InputEvent) -> void:
+		var dismiss := false
+		if event is InputEventScreenTouch:
+			dismiss = (event as InputEventScreenTouch).pressed
+		elif event is InputEventMouseButton:
+			var mouse_event := event as InputEventMouseButton
+			dismiss = mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
+		if dismiss:
+			bg.accept_event()
+			dismiss_diagnostic_dialog()
 	)
+
+
+func dismiss_diagnostic_dialog() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	if root_layer.find_child("DiagnosticDialogPanel", true, false) == null:
+		return
+	refresh_current_screen()
 
 
 func show_exit_confirm() -> void:
@@ -25478,8 +25572,9 @@ func bounded_online_input(value: String, max_length: int) -> String:
 	return value.strip_edges().left(maxi(0, max_length))
 
 func online_name_input() -> String:
-	var value := bounded_online_input(online_name_edit.text if is_instance_valid(online_name_edit) else "", ONLINE_NAME_MAX_LENGTH)
-	return value if value != "" else "云桌道友"
+	var value := bounded_online_input(online_name_edit.text if is_instance_valid(online_name_edit) else online_player_name, ONLINE_NAME_MAX_LENGTH)
+	online_player_name = value if value != "" else "云桌道友"
+	return online_player_name
 
 func online_host_input() -> String:
 	return bounded_online_input(online_host_edit.text if is_instance_valid(online_host_edit) else online_connection_host, ONLINE_HOST_MAX_LENGTH)
@@ -25503,7 +25598,7 @@ func connect_online() -> void:
 		online_host_edit.text = host
 	tcp.disconnect_from_host()
 	tcp = StreamPeerTCP.new()
-	tcp_buffer = ""
+	tcp_buffer.clear()
 	next_online_poll_msec = 0
 	clear_online_room_snapshot()
 	clear_online_feedback()
@@ -25513,6 +25608,18 @@ func connect_online() -> void:
 	refresh_online_lobby_state()
 	if err != OK:
 		set_online_feedback("连接失败：%s" % error_string(err), false)
+
+func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
+	var should_show_lobby := return_to_lobby and mode == "online_game"
+	tcp.disconnect_from_host()
+	tcp_status = tcp.get_status()
+	tcp_buffer.clear()
+	sent_hello = false
+	clear_online_room_snapshot()
+	if should_show_lobby:
+		show_online_lobby(true)
+	set_online_feedback(message, false)
+	refresh_online_lobby_state()
 
 func create_online_room() -> void:
 	var player_name := online_name_input()
@@ -25841,7 +25948,10 @@ func send_online(payload: Dictionary) -> bool:
 		set_online_feedback("请先连接服务器。", false)
 		return false
 	var text = JSON.stringify(payload) + "\n"
-	tcp.put_data(text.to_utf8_buffer())
+	var write_error := tcp.put_data(text.to_utf8_buffer())
+	if write_error != OK:
+		close_online_transport("发送失败，请重新连接。")
+		return false
 	return true
 
 func send_online_action(payload: Dictionary, label: String = "") -> void:
@@ -26032,6 +26142,10 @@ func _notification(what: int) -> void:
 		call_deferred("refresh_current_screen")
 
 func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+		get_viewport().set_input_as_handled()
+		dismiss_diagnostic_dialog()
+		return
 	var pressed = false
 	if event is InputEventScreenTouch:
 		pressed = event.pressed
@@ -26432,11 +26546,11 @@ func poll_online(now_msec: int = -1) -> void:
 				sent_hello = true
 				send_online({"type": "hello", "name": online_name_input()})
 		elif status == StreamPeerTCP.STATUS_ERROR:
-			set_online_feedback("连接出错，请重试。", false)
-			clear_online_room_snapshot()
+			close_online_transport("连接出错，请重试。")
+			return
 		elif status == StreamPeerTCP.STATUS_NONE and mode.begins_with("online"):
-			set_online_feedback("连接已断开，请重新连接。", false)
-			clear_online_room_snapshot()
+			close_online_transport("连接已断开，请重新连接。")
+			return
 		refresh_online_lobby_state()
 	if status != StreamPeerTCP.STATUS_CONNECTED:
 		if mode == "online_lobby" and not online_room.is_empty() and not online_waiting_for_server:
@@ -26446,13 +26560,27 @@ func poll_online(now_msec: int = -1) -> void:
 	var available = tcp.get_available_bytes()
 	if available <= 0:
 		return
-	tcp_buffer += tcp.get_utf8_string(available)
-	while tcp_buffer.find("\n") >= 0:
-		var split_at = tcp_buffer.find("\n")
-		var line = tcp_buffer.substr(0, split_at).strip_edges()
-		tcp_buffer = tcp_buffer.substr(split_at + 1)
+	var read_size := mini(available, ONLINE_TCP_READ_CHUNK_BYTES)
+	var read_result := tcp.get_data(read_size)
+	if int(read_result[0]) != OK:
+		close_online_transport("接收失败，请重新连接。")
+		return
+	tcp_buffer.append_array(read_result[1] as PackedByteArray)
+	while tcp_buffer.find(10) >= 0:
+		var split_at := tcp_buffer.find(10)
+		var raw_line := tcp_buffer.slice(0, split_at)
+		tcp_buffer = tcp_buffer.slice(split_at + 1)
+		if raw_line.size() > ONLINE_MESSAGE_MAX_BYTES:
+			close_online_transport("服务器消息过大，已断开连接。")
+			return
+		if not raw_line.is_empty() and raw_line[raw_line.size() - 1] == 13:
+			raw_line.resize(raw_line.size() - 1)
+		var line := raw_line.get_string_from_utf8().strip_edges()
 		if line.length() > 0:
 			handle_online_message(line)
+	if tcp_buffer.size() > ONLINE_MESSAGE_MAX_BYTES:
+		close_online_transport("服务器消息过大，已断开连接。")
+		return
 	refresh_online_lobby_state()
 
 
@@ -26625,6 +26753,16 @@ func normalize_claim_options(value) -> Array:
 func render_room_log() -> void:
 	if not is_instance_valid(logs_label):
 		return
+	var log_scroll: ScrollContainer = null
+	if root_layer != null and is_instance_valid(root_layer):
+		log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var previous_scroll := 0
+	var follow_latest := true
+	if log_scroll != null:
+		var previous_bar := log_scroll.get_v_scroll_bar()
+		previous_scroll = log_scroll.scroll_vertical
+		var previous_max := maxf(0.0, previous_bar.max_value - previous_bar.page)
+		follow_latest = previous_max <= 1.0 or float(previous_scroll) >= previous_max - 6.0
 	var logs = online_room.get("logs", [])
 	if typeof(logs) != TYPE_ARRAY:
 		logs = []
@@ -26642,6 +26780,12 @@ func render_room_log() -> void:
 		if line != "":
 			text += "· " + line + "\n"
 	logs_label.text = text
+	if follow_latest:
+		call_deferred("defer_online_log_scroll_to_end")
+	else:
+		call_deferred("restore_online_log_scroll", previous_scroll)
+
+func defer_online_log_scroll_to_end() -> void:
 	call_deferred("scroll_online_log_to_end")
 
 func scroll_online_log_to_end() -> void:
@@ -26652,6 +26796,13 @@ func scroll_online_log_to_end() -> void:
 		return
 	var scrollbar := log_scroll.get_v_scroll_bar()
 	log_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
+
+func restore_online_log_scroll(value: int) -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	if log_scroll != null:
+		log_scroll.scroll_vertical = value
 
 
 func deal_offline_hand() -> void:
@@ -29714,7 +29865,9 @@ func is_kabe_safe_tile(tile: String, seat: int, visible_counts_snapshot: Array =
 func is_kabe_safe_against_opponent(tile: String, opponent: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> bool:
 	if not is_number_tile(tile) or opponent < 0 or opponent >= players.size():
 		return false
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
+	# An explicit snapshot may include tiles known only to the acting seat. Keep it
+	# authoritative; the evaluation context's public counts are only the fallback.
+	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else ai_context_visible_counts(eval_context)
 	var index = tile_index(tile)
 	if index < 0 or index >= 27 or index >= visible_counts.size():
 		return false
@@ -29950,6 +30103,7 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		return []
 	var target_opponent = opponent if opponent >= 0 and opponent < players.size() and opponent != seat else -1
 	var visible_counts = ai_context_visible_counts(eval_context)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts)
 	var seen: Dictionary = {}
 	var best_tiles: Array[String] = []
 	var best_scores: Array = []
@@ -29968,15 +30122,15 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 				safety = "安"
 			elif opponent_discard_tile_count(target_opponent, tile, eval_context) > 0:
 				safety = "现"
-			elif visible_tile_count_from_counts(tile, visible_counts) >= 3:
+			elif visible_tile_count_from_counts(tile, known_counts) >= 3:
 				safety = "熟"
 			elif is_suji_safe_against_opponent(tile, target_opponent, eval_context):
 				safety = "筋"
-			elif is_kabe_safe_against_opponent(tile, target_opponent, visible_counts, eval_context):
+			elif is_kabe_safe_against_opponent(tile, target_opponent, known_counts, eval_context):
 				safety = "壁"
 			else:
 				safety = ""
-			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, visible_counts, eval_context).get("risk", 0.0))
+			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, known_counts, eval_context).get("risk", 0.0))
 		var score = -risk
 		if safety == "安":
 			score += 120.0

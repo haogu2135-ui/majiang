@@ -2,19 +2,137 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APK="${1:-$ROOT_DIR/build/qa/YunzhuoMahjongGodot-v1.0.180-ui3d-commercial-sdk36.apk}"
-BUILD_TOOLS="${ANDROID_BUILD_TOOLS:-/opt/android-sdk/build-tools/36.0.0}"
+DEFAULT_RELEASE_APK="$ROOT_DIR/build/qa/YunzhuoMahjongGodot-v1.0.180-commercial-sdk36.apk"
+DEFAULT_UNSIGNED_DEBUG_APK="$ROOT_DIR/build/qa/YunzhuoMahjongGodot-v1.0.180-debug-sdk36.apk"
+BUILD_TOOLS="${ANDROID_BUILD_TOOLS:-/opt/android-sdk/build-tools/36.1.0}"
 AAPT2="$BUILD_TOOLS/aapt2"
 APKSIGNER="$BUILD_TOOLS/apksigner"
+QA_RESOURCE_PATTERN='(^|/)(build/qa(/|$)|qa(/|$)|garden-gpt-image-2(/|$)|tools/|assets/references/|assets/illustrations/_replaced_[^/]+/|scripts/(ai_play_[^/]*_check|round[0-9]+_check|[^/]*_smoke_test|[^/]*_capture|test_animations|verify_[^/]+)(\.|/|$)|test_[^/]+\.(gd|gdc|gde|tscn)(\.uid)?$|extension_api\.json$)'
 
 fail() {
 	echo "FAIL: $*" >&2
 	exit 1
 }
 
+usage() {
+	cat <<EOF
+Usage:
+  $(basename "$0") [SIGNED_RELEASE_APK]
+  $(basename "$0") --unsigned-debug [UNSIGNED_DEBUG_APK]
+  $(basename "$0") --self-test
+  $(basename "$0") --toolchain-self-test
+EOF
+}
+
+configure_android_host_compat() {
+	if [ "$(uname -m)" = "aarch64" ] && file "$AAPT2" | grep -q 'x86-64'; then
+		[ -x /usr/bin/qemu-x86_64 ] || fail "qemu-x86_64 is required for Google build-tools on this ARM64 host"
+		[ -x /usr/x86_64-linux-gnu/lib/ld-linux-x86-64.so.2 ] || fail "amd64 cross sysroot is required for Google build-tools on this ARM64 host"
+		export QEMU_LD_PREFIX="${QEMU_LD_PREFIX:-/usr/x86_64-linux-gnu}"
+	fi
+}
+
+qa_filter_self_test() {
+	local bad_path good_path required_filter
+	local -a bad_paths=(
+		"assets/build/qa/report.md"
+		"assets/scripts/ai_play_soak_check.gdc"
+		"assets/scripts/ai_play_round95_check.gd.uid"
+		"assets/scripts/ui_interaction_smoke_test.gdc"
+		"assets/scripts/ui_preview_capture.gdc"
+		"assets/scripts/verify_ai_soak.sh"
+		"assets/assets/illustrations/_replaced_20260820/old.png"
+		"assets/test_audio.gdc"
+		"assets/extension_api.json"
+	)
+	local -a good_paths=(
+		"assets/scripts/main.gdc"
+		"assets/scripts/ui/commercial_3d_stage.gdc"
+		"assets/assets/illustrations/toast_gpt_banner.png"
+		"assets/shaders/table_cinematic_lighting.gdshader"
+	)
+	for bad_path in "${bad_paths[@]}"; do
+		grep -Eq "$QA_RESOURCE_PATTERN" <<<"$bad_path" || fail "QA leakage pattern missed: $bad_path"
+	done
+	for good_path in "${good_paths[@]}"; do
+		if grep -Eq "$QA_RESOURCE_PATTERN" <<<"$good_path"; then
+			fail "QA leakage pattern rejected a runtime resource: $good_path"
+		fi
+	done
+	for required_filter in \
+		'assets/illustrations/_replaced_*/**' \
+		'scripts/*_smoke_test.gd*' \
+		'scripts/*_capture.gd*' \
+		'scripts/verify_*.sh' \
+		'scripts/ai_play_*_check.gd*' \
+		'scripts/round*_check.gd*' \
+		'test_*.gd*' \
+		'test_*.tscn'; do
+		grep -Fq "$required_filter" "$ROOT_DIR/export_presets.example.cfg" || fail "export filter missing: $required_filter"
+	done
+	grep -q '^gradle_build/use_gradle_build=true$' "$ROOT_DIR/export_presets.example.cfg" || fail "SDK overrides require Gradle build"
+	grep -q '^gradle_build/min_sdk="24"$' "$ROOT_DIR/export_presets.example.cfg" || fail "min SDK export contract mismatch"
+	grep -q '^gradle_build/target_sdk="36"$' "$ROOT_DIR/export_presets.example.cfg" || fail "target SDK export contract mismatch"
+	echo "PASS: Android QA resource filter self-test"
+}
+
+android_toolchain_self_test() {
+	[ -x "$AAPT2" ] || fail "aapt2 not found: $AAPT2"
+	[ -x "$APKSIGNER" ] || fail "apksigner not found: $APKSIGNER"
+	[ -x "$BUILD_TOOLS/zipalign" ] || fail "zipalign not found: $BUILD_TOOLS/zipalign"
+	[ -x /opt/android-sdk/platform-tools/adb ] || fail "SDK adb not found"
+	[ -f /opt/android-sdk/platforms/android-36/android.jar ] || fail "Android 36 platform not found"
+	[ -f /root/.local/share/godot/export_templates/4.6.3.stable/android_debug.apk ] || fail "Godot 4.6.3 Android debug template not found"
+	[ -f /root/.local/share/godot/export_templates/4.6.3.stable/android_release.apk ] || fail "Godot 4.6.3 Android release template not found"
+	[ -f /root/.local/share/godot/export_templates/4.6.3.stable/android_source.zip ] || fail "Godot 4.6.3 Android source template not found"
+	grep -q '^Pkg.Revision=36\.1\.0$' "$BUILD_TOOLS/source.properties" || fail "Android build-tools revision mismatch"
+	grep -q '^AndroidVersion.ApiLevel=36$' /opt/android-sdk/platforms/android-36/source.properties || fail "Android platform API mismatch"
+	configure_android_host_compat
+	"$AAPT2" version 2>&1 | grep -q 'Android Asset Packaging Tool'
+	"$APKSIGNER" version >/dev/null
+	"$BUILD_TOOLS/zipalign" -c 1 /root/.local/share/godot/export_templates/4.6.3.stable/android_release.apk >/dev/null
+	/opt/android-sdk/platform-tools/adb version | grep -q 'Android Debug Bridge version'
+	echo "PASS: Android SDK 36 toolchain self-test"
+}
+
+AUDIT_MODE="release"
+APK="$DEFAULT_RELEASE_APK"
+case "${1:-}" in
+	--self-test)
+		[ "$#" -eq 1 ] || fail "--self-test does not accept an APK"
+		qa_filter_self_test
+		exit 0
+		;;
+	--toolchain-self-test)
+		[ "$#" -eq 1 ] || fail "--toolchain-self-test does not accept an APK"
+		android_toolchain_self_test
+		exit 0
+		;;
+	--unsigned-debug)
+		[ "$#" -le 2 ] || fail "--unsigned-debug accepts at most one APK path"
+		AUDIT_MODE="unsigned-debug"
+		APK="${2:-$DEFAULT_UNSIGNED_DEBUG_APK}"
+		;;
+	--help|-h)
+		usage
+		exit 0
+		;;
+	-*)
+		usage >&2
+		fail "unknown option: $1"
+		;;
+	"")
+		;;
+	*)
+		[ "$#" -eq 1 ] || fail "release audit accepts at most one APK path"
+		APK="$1"
+		;;
+esac
+
 [ -f "$APK" ] || fail "APK not found: $APK"
 [ -x "$AAPT2" ] || fail "aapt2 not found: $AAPT2"
 [ -x "$APKSIGNER" ] || fail "apksigner not found: $APKSIGNER"
+configure_android_host_compat
 
 BADGING="$($AAPT2 dump badging "$APK")"
 grep -q "package: name='com.yunzhuo.mahjong' versionCode='180' versionName='1.0.180-godot'" <<<"$BADGING" || fail "package or version metadata mismatch"
@@ -22,19 +140,30 @@ grep -q "minSdkVersion:'24'" <<<"$BADGING" || fail "min SDK mismatch"
 grep -q "targetSdkVersion:'36'" <<<"$BADGING" || fail "target SDK mismatch"
 grep -q "compileSdkVersion='36'" <<<"$BADGING" || fail "compile SDK mismatch"
 
-SIGNATURE="$($APKSIGNER verify --verbose --print-certs "$APK")"
-grep -q "Verified using v2 scheme .*: true" <<<"$SIGNATURE" || fail "APK v2 signature missing"
-grep -q "Verified using v3 scheme .*: true" <<<"$SIGNATURE" || fail "APK v3 signature missing"
-grep -q "CN=Yunzhuo Mahjong, O=Yunzhuo, C=CN" <<<"$SIGNATURE" || fail "release signing certificate mismatch"
+if [ "$AUDIT_MODE" = "unsigned-debug" ]; then
+	if SIGNATURE="$($APKSIGNER verify --verbose --print-certs "$APK" 2>&1)"; then
+		fail "debug evidence APK is signed; use the release audit for signed artifacts"
+	fi
+	grep -q '^DOES NOT VERIFY$' <<<"$SIGNATURE" || fail "unexpected unsigned APK verification result"
+	grep -q 'ERROR: Missing META-INF/MANIFEST.MF' <<<"$SIGNATURE" || fail "APK signature failure is not the expected unsigned status"
+else
+	SIGNATURE="$($APKSIGNER verify --verbose --print-certs "$APK")"
+	grep -q "Verified using v2 scheme .*: true" <<<"$SIGNATURE" || fail "APK v2 signature missing"
+	grep -q "Verified using v3 scheme .*: true" <<<"$SIGNATURE" || fail "APK v3 signature missing"
+	grep -q "CN=Yunzhuo Mahjong, O=Yunzhuo, C=CN" <<<"$SIGNATURE" || fail "release signing certificate mismatch"
+fi
 
-if zipinfo -1 "$APK" | grep -Eq '^(assets/)?(build/qa|garden-gpt-image-2|tools/|references/|scripts/(ai_play_round[0-9]+_check|offline_smoke_test|online_protocol_smoke_test|page_screenshot_capture|ui_layout_smoke_test|commercial_3d_stage_smoke_test|verify_[^/]+))'; then
+"$BUILD_TOOLS/zipalign" -c -P 16 4 "$APK" >/dev/null || fail "APK is not zip-aligned for Android 16 KiB pages"
+
+ENTRIES="$(zipinfo -1 "$APK")"
+if grep -Eq "$QA_RESOURCE_PATTERN" <<<"$ENTRIES"; then
 	fail "development or QA resources are packaged"
 fi
 
-ENTRIES="$(zipinfo -1 "$APK")"
-grep -q 'commercial_3d_stage.gdc' <<<"$ENTRIES" || fail "commercial 3D stage missing"
-grep -q 'battle_table_depth.gdc' <<<"$ENTRIES" || fail "battle table depth renderer missing"
-grep -q 'table_cinematic_lighting.gdshader' <<<"$ENTRIES" || fail "cinematic table shader missing"
+grep -qx 'assets/scripts/main.gdc' <<<"$ENTRIES" || fail "compiled main runtime script missing"
+grep -qx 'assets/scripts/ui/commercial_3d_stage.gdc' <<<"$ENTRIES" || fail "commercial 3D stage missing"
+grep -qx 'assets/scripts/ui/battle_table_depth.gdc' <<<"$ENTRIES" || fail "battle table depth renderer missing"
+grep -qx 'assets/shaders/table_cinematic_lighting.gdshader' <<<"$ENTRIES" || fail "cinematic table shader missing"
 grep -q 'tile_decals_3d' <<<"$ENTRIES" || fail "3D tile decals missing"
 
 python3 - "$APK" <<'PY'
@@ -58,7 +187,11 @@ PY
 
 SIZE="$(stat -c '%s' "$APK")"
 HASH="$(sha256sum "$APK" | awk '{print $1}')"
-echo "PASS: Android release audit"
+if [ "$AUDIT_MODE" = "unsigned-debug" ]; then
+	echo "PASS: Android unsigned debug APK audit (not distributable)"
+else
+	echo "PASS: Android signed release audit"
+fi
 echo "APK: $APK"
 echo "Size: $SIZE bytes"
 echo "SHA-256: $HASH"

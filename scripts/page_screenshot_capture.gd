@@ -17,7 +17,9 @@ const SCREEN_NAMES := [
 	"14_danger_discard",
 	"15_pending_claim_full",
 	"16_win_detail",
+	"21_diagnostic",
 	"23_online_lobby_connected",
+	"24_online_lobby_disconnect_recovery",
 ]
 
 class ConnectedLobbyCaptureTransport:
@@ -275,6 +277,9 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		"23_online_lobby_connected":
 			seed_preview_online_lobby_connected(scene)
 			scene._show_online_lobby_impl()
+		"24_online_lobby_disconnect_recovery":
+			seed_preview_online_lobby_disconnect_recovery(scene)
+			scene._show_online_lobby_impl()
 		"17_hand_tutorial":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
@@ -305,13 +310,7 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		"21_diagnostic":
 			scene.show_menu(true)
 			scene.clear_fx_overlays()
-			scene.show_diagnostic_dialog([
-				"【系统诊断】",
-				"✓ 音频资源完整",
-				"✓ 牌面纹理就绪",
-				"• 网络：离线预览",
-				"✗ 可选：云存档未连接",
-			])
+			scene.show_diagnostic_dialog(diagnostic_capture_lines())
 			# Capture mode: force fully-visible static dialog (skip entrance fade).
 			var diag_panel = scene.find_child("DiagnosticDialogPanel", true, false)
 			if diag_panel is Control:
@@ -343,6 +342,49 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			scene.clear_fx_overlays()
 		_:
 			push_error("unknown screenshot screen: %s" % screen_name)
+
+
+func diagnostic_capture_lines() -> Array[String]:
+	return [
+		"【音频系统诊断 v1.0.156】",
+		"",
+		"1. 用户激活: 是",
+		"2. 设备: 小米手机 (MIUI)",
+		"",
+		"⚠️ v1.0.156重大改动",
+		"BGM已从WAV改为MP3格式",
+		"因为您能听到TTS语音提示",
+		"说明音频系统正常",
+		"只是WAV格式不兼容",
+		"",
+		"【请回答】",
+		"1. 能听到背景音乐了吗？",
+		"2. 刚才的440Hz测试音听到了吗？",
+		"",
+		"3. BGM播放器: 正常",
+		"4. BGM音频流: 已加载",
+		"5. BGM正在播放: 是",
+		"6. BGM音量: -8.0dB (0dB=最大)",
+		"7. 音频总线: Master",
+		"8. Master总线音量: 0.0dB",
+		"9. Master总线静音: 否",
+		"10. 音频格式: AudioStreamMP3",
+		"",
+		"✓ BGM播放成功",
+		"",
+		"小米手机听不到声音？",
+		"请检查以下MIUI设置:",
+		"",
+		"1. 断开蓝牙设备",
+		"2. 按音量+键调整【媒体音量】",
+		"3. 关闭【游戏加速】",
+		"4. 关闭【省电模式】",
+		"5. 设置→应用管理→本应用",
+		"   →省电策略→无限制",
+		"6. 尝试重启手机",
+		"",
+		"点击任意位置关闭",
+	]
 
 
 func _force_capture_visible_screens(target: Node) -> void:
@@ -416,22 +458,10 @@ func seed_preview_pending_claim(scene: Node) -> void:
 	scene.add_log("预览：响应插画展示吃碰选择。")
 
 func seed_preview_online_lobby(scene: Node) -> void:
-	scene.selected_room = "ROOM7"
-	scene.online_room = {
-		"code": "ROOM7",
-		"players": [
-			{"name": "甲"},
-			{"name": "乙"},
-		],
-		"logs": [
-			"甲加入房间",
-			"乙准备就绪",
-			"房间已满，等待开局",
-			"系统：对局将按国标麻将规则结算",
-		],
-	}
-	scene.online_feedback = "已发送加入房间，等待服务器确认。"
-	scene.online_waiting_for_server = true
+	scene.selected_room = ""
+	scene.online_room = {}
+	scene.online_feedback = ""
+	scene.online_waiting_for_server = false
 
 func seed_preview_online_lobby_connected(scene: Node) -> void:
 	scene.tcp = ConnectedLobbyCaptureTransport.new()
@@ -452,6 +482,18 @@ func seed_preview_online_lobby_connected(scene: Node) -> void:
 		],
 	}
 	scene.online_feedback = "房间同步完成，等待房主开始。"
+	scene.online_waiting_for_server = false
+
+func seed_preview_online_lobby_disconnect_recovery(scene: Node) -> void:
+	scene.tcp = StreamPeerTCP.new()
+	scene.tcp_status = StreamPeerTCP.STATUS_NONE
+	scene.tcp_buffer.clear()
+	scene.sent_hello = false
+	scene.online_player_name = "协议测试者"
+	scene.selected_room = "ROOM7"
+	scene.online_room = {}
+	scene.online_game = {}
+	scene.online_feedback = "连接已断开，请重新连接。"
 	scene.online_waiting_for_server = false
 
 func seed_preview_round_summary(scene: Node) -> void:

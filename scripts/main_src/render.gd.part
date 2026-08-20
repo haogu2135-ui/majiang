@@ -5743,6 +5743,12 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		var row_fill = Color(0.024, 0.048, 0.044, 0.92) if active else Color(0.014, 0.026, 0.026, 0.82)
 		var row = make_gpt_center_crop_plate_rect(rect_full(0.035, top, 0.965, top + 0.165), row_fill, "ui_dark_scrim")
 		row.name = "OnlineLobbyRosterRow_%d" % i
+		row.mouse_filter = Control.MOUSE_FILTER_STOP
+		var detail_slot := i
+		row.gui_input.connect(func(event: InputEvent) -> void:
+			if online_detail_press_event(event):
+				show_online_roster_detail(detail_slot)
+		)
 		roster.add_child(row)
 		var seal = make_gpt_gate(rect_full(0.020, 0.145, 0.092, 0.855), Color(0.42, 0.68, 0.50, 0.20 if active else 0.10))
 		seal.name = "OnlineLobbyRosterSeatSeal_%d" % i

@@ -11,6 +11,8 @@ const ONLINE_HOST_MAX_LENGTH := 253
 const ONLINE_ROOM_CODE_MAX_LENGTH := 32
 const ONLINE_LOG_HISTORY_LIMIT := 14
 const ONLINE_LOG_ENTRY_MAX_LENGTH := 240
+const ONLINE_TCP_READ_CHUNK_BYTES := 64 * 1024
+const ONLINE_MESSAGE_MAX_BYTES := 256 * 1024
 const APP_VERSION := "1.0.180-godot"
 const UPDATE_MANIFEST_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json"
 const UPDATE_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk"
@@ -639,12 +641,13 @@ var pending_danger_discard_tile = ""
 var pending_danger_discard_report: Dictionary = {}
 var selected_room = ""
 var online_connection_host := DEFAULT_HOST
+var online_player_name := "云桌道友"
 var online_host_edit: LineEdit
 var online_room_edit: LineEdit
 var online_name_edit: LineEdit
 var tcp = StreamPeerTCP.new()
 var tcp_status = StreamPeerTCP.STATUS_NONE
-var tcp_buffer = ""
+var tcp_buffer := PackedByteArray()
 var online_room: Dictionary = {}
 var online_game: Dictionary = {}
 var online_feedback = ""

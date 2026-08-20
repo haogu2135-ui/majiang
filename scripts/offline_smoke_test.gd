@@ -317,6 +317,12 @@ func run() -> void:
 	check(scene.find_child("DailyLoginClaimConfirmRoute", true, false) != null and scene.find_child("DailyLoginClaimConfirmFill", true, false) != null and scene.find_child("DailyLoginClaimConfirmGate", true, false) != null and count_nodes_with_name_prefix(scene, "DailyLoginClaimFlowNode_") == 3, "daily login claim flow renders confirmation route and milestone nodes")
 	check(count_nodes_with_name_prefix(scene, "DailyLoginClaimRewardTick_") == 3 and count_nodes_with_name_prefix(scene, "DailyLoginClaimConfirmTick_") == 2, "daily login claim flow renders reward and confirm rhythm ticks")
 	scene.show_diagnostic_dialog(["【音频系统诊断 v1.0.156】", "✓ BGM文件加载成功", "✗ BGM未播放", "• 建议检查媒体音量", "   →省电策略→无限制"])
+	var diagnostic_scroll = scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	var diagnostic_list = scene.find_child("DiagnosticContentList", true, false) as VBoxContainer
+	var diagnostic_close = scene.find_child("DiagnosticCloseButton", true, false) as Button
+	check(diagnostic_scroll != null and diagnostic_list != null and diagnostic_close != null, "diagnostic dialog exposes native scroll content and an explicit close action")
+	check(diagnostic_scroll != null and diagnostic_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and diagnostic_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "diagnostic dialog scrolls vertically without horizontal overflow")
+	check(diagnostic_close != null and diagnostic_close.focus_mode == Control.FOCUS_ALL and diagnostic_close.shortcut != null, "diagnostic close action supports modal focus and ui_cancel shortcut")
 	check(scene.optional_gpt_illustration_texture("diagnostic_gpt_panel") == null or scene.find_child("DiagnosticGPTPanelTexture", true, false) != null, "diagnostic dialog consumes optional GPT panel texture when generated")
 	check(scene.find_child("DiagnosticWaveTexture", true, false) != null and scene.find_child("DiagnosticSignalMapTexture", true, false) != null and scene.find_child("DiagnosticWaveHeroTexture", true, false) != null, "diagnostic dialog renders reusable wave, hero, and signal-map PNG textures")
 	check(scene.find_child("DiagnosticDialogPanel", true, false) != null and scene.find_child("DiagnosticDialogArt", true, false) != null and scene.find_child("DiagnosticHealthRail", true, false) != null, "diagnostic dialog renders illustrated health rail")
@@ -3428,6 +3434,7 @@ func run() -> void:
 	check(threatened_risk > neutral_risk, "same-suit exposed melds raise deal-in risk")
 	var risk_summary = scene.deal_in_risk_summary("5W", 0)
 	var visible_risk_counts = scene.visible_tile_counts()
+	var known_risk_counts = scene.known_tile_counts_for_seat(0, visible_risk_counts)
 	var cached_risk_summary = scene.deal_in_risk_summary("5W", 0, visible_risk_counts)
 	var tile_risk_vector = scene.tile_risk_vector("5W", 0, visible_risk_counts)
 	var vector_risk_summary = scene.deal_in_risk_summary("5W", 0, visible_risk_counts, tile_risk_vector)
@@ -3446,15 +3453,15 @@ func run() -> void:
 	var pressure_score = scene.discard_pressure_score("5W", 0)
 	var cached_pressure_score = scene.discard_pressure_score("5W", 0, visible_risk_counts)
 	var pressure_context = scene.ai_pressure_context(0)
-	var visible_five_man = scene.visible_tile_count("5W")
+	var known_five_man = scene.visible_tile_count_from_counts("5W", known_risk_counts)
 	var manual_risk = 0.0
 	for other in range(scene.players.size()):
-		manual_risk += scene.single_opponent_deal_in_risk("5W", 0, other, visible_five_man, visible_risk_counts)
+		manual_risk += scene.single_opponent_deal_in_risk("5W", 0, other, known_five_man, known_risk_counts)
 	var reusable_risk_components: Dictionary = {"risk": -1.0, "pattern_threat": -1.0}
-	scene.write_single_opponent_deal_in_risk_components(reusable_risk_components, "5W", 0, 1, visible_five_man, visible_risk_counts)
-	var returned_risk_components = scene.single_opponent_deal_in_risk_components("5W", 0, 1, visible_five_man, visible_risk_counts)
+	scene.write_single_opponent_deal_in_risk_components(reusable_risk_components, "5W", 0, 1, known_five_man, known_risk_counts)
+	var returned_risk_components = scene.single_opponent_deal_in_risk_components("5W", 0, 1, known_five_man, known_risk_counts)
 	var reusable_matches_returned = is_equal_approx(float(reusable_risk_components.get("risk", -1.0)), float(returned_risk_components.get("risk", -2.0))) and is_equal_approx(float(reusable_risk_components.get("pattern_threat", -1.0)), float(returned_risk_components.get("pattern_threat", -2.0)))
-	scene.write_single_opponent_deal_in_risk_components(reusable_risk_components, "", 0, 1, visible_five_man, visible_risk_counts)
+	scene.write_single_opponent_deal_in_risk_components(reusable_risk_components, "", 0, 1, known_five_man, known_risk_counts)
 	var summary_source = risk_summary.get("danger_source", {})
 	check(is_equal_approx(float(risk_summary.get("score", -1.0)), manual_risk), "deal-in risk summary scans opponent risks once")
 	check(reusable_matches_returned and is_equal_approx(float(reusable_risk_components.get("risk", -1.0)), 0.0) and is_equal_approx(float(reusable_risk_components.get("pattern_threat", -1.0)), 0.0), "deal-in risk component scan can reuse one result dictionary safely")

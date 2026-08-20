@@ -82,8 +82,37 @@ func run() -> void:
 				wait_remaining,
 			])
 	check(bool(result.get("ended", false)), "diagnostic hard hand completes")
-	check(thin_pressure_cases > 0, "seed exposes at least one catastrophic thin-tenpai case")
-	check(guarded_cases == thin_pressure_cases, "every catastrophic thin-tenpai case carries the hard guard")
+	check(guarded_cases == thin_pressure_cases, "every naturally sampled catastrophic thin-tenpai case carries the hard guard")
+
+	print("--- B) deterministic catastrophic thin-tenpai contract ---")
+	var catastrophe := {
+		"tile": "5W",
+		"score": 1240.0,
+		"shanten": 0,
+		"ukeire": 3,
+		"risk": scene.AI_DANGER_RISK_HIGH + 24.0,
+		"feed_risk": scene.AI_DANGER_FEED_SOFT + 34.0,
+		"human_target_pressure": 24.0,
+		"safety_label": "",
+		"wait_best_points": scene.score_points_for_fan(2),
+		"wait_total_remaining": 3,
+	}
+	var guarded_safe := {
+		"tile": "E",
+		"score": 1090.0,
+		"shanten": 1,
+		"ukeire": 6,
+		"risk": 8.0,
+		"feed_risk": 4.0,
+		"human_target_pressure": 6.0,
+		"safety_label": "安",
+		"wait_best_points": 0,
+		"wait_total_remaining": 0,
+	}
+	var reports: Array = [catastrophe, guarded_safe]
+	scene.apply_hard_danger_push_guard(reports, -1)
+	check(bool(catastrophe.get("hard_guard_catastrophe_tenpai", false)), "catastrophic thin tenpai activates the dedicated hard guard")
+	check(str(reports[0].get("tile", "")) == "E" and bool(reports[0].get("hard_guard_moved", false)), "hard guard moves the quality-bounded safer discard to the front")
 
 	scene.ai_sim_trace_enabled = false
 	scene.enable_offline_all_bot_mode(false, false)

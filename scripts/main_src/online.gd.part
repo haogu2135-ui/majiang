@@ -51,8 +51,9 @@ func bounded_online_input(value: String, max_length: int) -> String:
 	return value.strip_edges().left(maxi(0, max_length))
 
 func online_name_input() -> String:
-	var value := bounded_online_input(online_name_edit.text if is_instance_valid(online_name_edit) else "", ONLINE_NAME_MAX_LENGTH)
-	return value if value != "" else "云桌道友"
+	var value := bounded_online_input(online_name_edit.text if is_instance_valid(online_name_edit) else online_player_name, ONLINE_NAME_MAX_LENGTH)
+	online_player_name = value if value != "" else "云桌道友"
+	return online_player_name
 
 func online_host_input() -> String:
 	return bounded_online_input(online_host_edit.text if is_instance_valid(online_host_edit) else online_connection_host, ONLINE_HOST_MAX_LENGTH)
@@ -76,7 +77,7 @@ func connect_online() -> void:
 		online_host_edit.text = host
 	tcp.disconnect_from_host()
 	tcp = StreamPeerTCP.new()
-	tcp_buffer = ""
+	tcp_buffer.clear()
 	next_online_poll_msec = 0
 	clear_online_room_snapshot()
 	clear_online_feedback()
@@ -86,6 +87,18 @@ func connect_online() -> void:
 	refresh_online_lobby_state()
 	if err != OK:
 		set_online_feedback("连接失败：%s" % error_string(err), false)
+
+func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
+	var should_show_lobby := return_to_lobby and mode == "online_game"
+	tcp.disconnect_from_host()
+	tcp_status = tcp.get_status()
+	tcp_buffer.clear()
+	sent_hello = false
+	clear_online_room_snapshot()
+	if should_show_lobby:
+		show_online_lobby(true)
+	set_online_feedback(message, false)
+	refresh_online_lobby_state()
 
 func create_online_room() -> void:
 	var player_name := online_name_input()
@@ -414,7 +427,10 @@ func send_online(payload: Dictionary) -> bool:
 		set_online_feedback("请先连接服务器。", false)
 		return false
 	var text = JSON.stringify(payload) + "\n"
-	tcp.put_data(text.to_utf8_buffer())
+	var write_error := tcp.put_data(text.to_utf8_buffer())
+	if write_error != OK:
+		close_online_transport("发送失败，请重新连接。")
+		return false
 	return true
 
 func send_online_action(payload: Dictionary, label: String = "") -> void:

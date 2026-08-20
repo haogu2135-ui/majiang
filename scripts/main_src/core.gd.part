@@ -170,6 +170,10 @@ func _notification(what: int) -> void:
 		call_deferred("refresh_current_screen")
 
 func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+		get_viewport().set_input_as_handled()
+		dismiss_diagnostic_dialog()
+		return
 	var pressed = false
 	if event is InputEventScreenTouch:
 		pressed = event.pressed
@@ -570,11 +574,11 @@ func poll_online(now_msec: int = -1) -> void:
 				sent_hello = true
 				send_online({"type": "hello", "name": online_name_input()})
 		elif status == StreamPeerTCP.STATUS_ERROR:
-			set_online_feedback("连接出错，请重试。", false)
-			clear_online_room_snapshot()
+			close_online_transport("连接出错，请重试。")
+			return
 		elif status == StreamPeerTCP.STATUS_NONE and mode.begins_with("online"):
-			set_online_feedback("连接已断开，请重新连接。", false)
-			clear_online_room_snapshot()
+			close_online_transport("连接已断开，请重新连接。")
+			return
 		refresh_online_lobby_state()
 	if status != StreamPeerTCP.STATUS_CONNECTED:
 		if mode == "online_lobby" and not online_room.is_empty() and not online_waiting_for_server:
@@ -584,13 +588,27 @@ func poll_online(now_msec: int = -1) -> void:
 	var available = tcp.get_available_bytes()
 	if available <= 0:
 		return
-	tcp_buffer += tcp.get_utf8_string(available)
-	while tcp_buffer.find("\n") >= 0:
-		var split_at = tcp_buffer.find("\n")
-		var line = tcp_buffer.substr(0, split_at).strip_edges()
-		tcp_buffer = tcp_buffer.substr(split_at + 1)
+	var read_size := mini(available, ONLINE_TCP_READ_CHUNK_BYTES)
+	var read_result := tcp.get_data(read_size)
+	if int(read_result[0]) != OK:
+		close_online_transport("接收失败，请重新连接。")
+		return
+	tcp_buffer.append_array(read_result[1] as PackedByteArray)
+	while tcp_buffer.find(10) >= 0:
+		var split_at := tcp_buffer.find(10)
+		var raw_line := tcp_buffer.slice(0, split_at)
+		tcp_buffer = tcp_buffer.slice(split_at + 1)
+		if raw_line.size() > ONLINE_MESSAGE_MAX_BYTES:
+			close_online_transport("服务器消息过大，已断开连接。")
+			return
+		if not raw_line.is_empty() and raw_line[raw_line.size() - 1] == 13:
+			raw_line.resize(raw_line.size() - 1)
+		var line := raw_line.get_string_from_utf8().strip_edges()
 		if line.length() > 0:
 			handle_online_message(line)
+	if tcp_buffer.size() > ONLINE_MESSAGE_MAX_BYTES:
+		close_online_transport("服务器消息过大，已断开连接。")
+		return
 	refresh_online_lobby_state()
 
 
@@ -763,6 +781,16 @@ func normalize_claim_options(value) -> Array:
 func render_room_log() -> void:
 	if not is_instance_valid(logs_label):
 		return
+	var log_scroll: ScrollContainer = null
+	if root_layer != null and is_instance_valid(root_layer):
+		log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var previous_scroll := 0
+	var follow_latest := true
+	if log_scroll != null:
+		var previous_bar := log_scroll.get_v_scroll_bar()
+		previous_scroll = log_scroll.scroll_vertical
+		var previous_max := maxf(0.0, previous_bar.max_value - previous_bar.page)
+		follow_latest = previous_max <= 1.0 or float(previous_scroll) >= previous_max - 6.0
 	var logs = online_room.get("logs", [])
 	if typeof(logs) != TYPE_ARRAY:
 		logs = []
@@ -780,6 +808,12 @@ func render_room_log() -> void:
 		if line != "":
 			text += "· " + line + "\n"
 	logs_label.text = text
+	if follow_latest:
+		call_deferred("defer_online_log_scroll_to_end")
+	else:
+		call_deferred("restore_online_log_scroll", previous_scroll)
+
+func defer_online_log_scroll_to_end() -> void:
 	call_deferred("scroll_online_log_to_end")
 
 func scroll_online_log_to_end() -> void:
@@ -790,6 +824,13 @@ func scroll_online_log_to_end() -> void:
 		return
 	var scrollbar := log_scroll.get_v_scroll_bar()
 	log_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
+
+func restore_online_log_scroll(value: int) -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	if log_scroll != null:
+		log_scroll.scroll_vertical = value
 
 
 func deal_offline_hand() -> void:
@@ -3852,7 +3893,9 @@ func is_kabe_safe_tile(tile: String, seat: int, visible_counts_snapshot: Array =
 func is_kabe_safe_against_opponent(tile: String, opponent: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> bool:
 	if not is_number_tile(tile) or opponent < 0 or opponent >= players.size():
 		return false
-	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
+	# An explicit snapshot may include tiles known only to the acting seat. Keep it
+	# authoritative; the evaluation context's public counts are only the fallback.
+	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else ai_context_visible_counts(eval_context)
 	var index = tile_index(tile)
 	if index < 0 or index >= 27 or index >= visible_counts.size():
 		return false
@@ -4088,6 +4131,7 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		return []
 	var target_opponent = opponent if opponent >= 0 and opponent < players.size() and opponent != seat else -1
 	var visible_counts = ai_context_visible_counts(eval_context)
+	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts)
 	var seen: Dictionary = {}
 	var best_tiles: Array[String] = []
 	var best_scores: Array = []
@@ -4106,15 +4150,15 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 				safety = "安"
 			elif opponent_discard_tile_count(target_opponent, tile, eval_context) > 0:
 				safety = "现"
-			elif visible_tile_count_from_counts(tile, visible_counts) >= 3:
+			elif visible_tile_count_from_counts(tile, known_counts) >= 3:
 				safety = "熟"
 			elif is_suji_safe_against_opponent(tile, target_opponent, eval_context):
 				safety = "筋"
-			elif is_kabe_safe_against_opponent(tile, target_opponent, visible_counts, eval_context):
+			elif is_kabe_safe_against_opponent(tile, target_opponent, known_counts, eval_context):
 				safety = "壁"
 			else:
 				safety = ""
-			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, visible_counts, eval_context).get("risk", 0.0))
+			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, known_counts, eval_context).get("risk", 0.0))
 		var score = -risk
 		if safety == "安":
 			score += 120.0

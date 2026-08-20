@@ -40,7 +40,7 @@ REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unk
 	printf -- '- Git revision: `%s`\n' "$REVISION"
 	echo "- Result: **$STATUS**"
 	printf -- '- Godot: `%s` (`%s`)\n' "$GODOT_VERSION" "$GODOT_BIN"
-	echo "- Contract: real localhost TCPServer/StreamPeerTCP, newline framing, fragmented JSON, bounded endpoint/name/room/log fields, outbound actions, disconnect cleanup"
+	echo "- Contract: real localhost TCPServer/StreamPeerTCP, byte-safe newline framing, fragmented JSON, 1,500-message burst, bounded fields and wire buffer, oversized-frame rejection, outbound actions, in-game disconnect recovery, and reconnect"
 	printf -- '- Log: `%s`\n' "$LOG"
 } >"$REPORT"
 
