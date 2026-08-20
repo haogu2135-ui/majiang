@@ -743,13 +743,13 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.950, 0.960), Color(0.07, 0.06, 0.05, 0.72), 999, Color(0.24, 0.20, 0.14, 0.18), 0, "ui_dark_scrim")  # r227 authored dark track
+	var rules_scroll_gutter = make_panel(panel, rect_full(0.936, 0.180, 0.952, 0.960), Color(0.07, 0.06, 0.05, 0.86), 999, Color(0.24, 0.20, 0.14, 0.28), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var compact_rules_scroll := effective_viewport_size().y <= 560.0
-	var thumb_left := 0.100 if compact_rules_scroll else 0.300
-	var thumb_right := 0.900 if compact_rules_scroll else 0.700
-	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.78, 0.66, 0.38, 0.99), 999, Color(0.98, 0.88, 0.58, 0.58), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var thumb_left := 0.060 if compact_rules_scroll else 0.160
+	var thumb_right := 0.940 if compact_rules_scroll else 0.840
+	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.78, 0.66, 0.38, 1.0), 999, Color(0.98, 0.88, 0.58, 0.76), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rules_scroll_thumb.set_meta("track_left", thumb_left)
@@ -759,7 +759,7 @@ func _show_rules_screen_impl() -> void:
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
 	rules_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	rules_scroll_hit_target.tooltip_text = "拖动定位"
-	apply_rect(rules_scroll_hit_target, rect_full(0.910, 0.168, 0.960, 0.982))
+	apply_rect(rules_scroll_hit_target, rect_full(0.900, 0.168, 0.964, 0.982))
 	panel.add_child(rules_scroll_hit_target)
 	var content = VBoxContainer.new()
 	content.name = "RulesContentList"

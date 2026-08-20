@@ -572,7 +572,7 @@ func draw_action_dock(parent: Control) -> void:
 	if not pending_claim_mode and not danger_confirm_mode:
 		draw_action_intent_dock(parent, count)
 	# r451c: translucent lacquer shell + GPT dock plate on top (no jade program slabs).
-	var dock_fill_alpha := 0.12 if pending_claim_mode else 0.14
+	var dock_fill_alpha := 0.24 if pending_claim_mode else 0.22
 	var dock_border_alpha := 0.56 if pending_claim_mode else 0.68
 	var dock_rect := action_dock_rect_for_count(count)
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
@@ -600,26 +600,26 @@ func draw_action_dock(parent: Control) -> void:
 	lower_reflection.name = "ActionDock3DLowerReflection"
 	dock.add_child(lower_reflection)
 	if pending_claim_mode:
-		var pending_dock_texture = add_optional_gpt_illustration_texture(dock, "pending_claim_action_dock", rect_full(0.002, 0.010, 0.998, 0.990), 0.34, false)
+		var pending_dock_texture = add_optional_gpt_illustration_texture(dock, "pending_claim_action_dock", rect_full(0.002, 0.010, 0.998, 0.990), 0.52, false)
 		if pending_dock_texture != null:
 			pending_dock_texture.name = "PendingClaimActionGPTDockTexture"
-			pending_dock_texture.modulate = Color(1.08, 1.02, 0.94, 0.34)
+			pending_dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.40)
 			dock.move_child(pending_dock_texture, dock.get_child_count() - 1)
 	else:
-		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock", rect_full(0.000, 0.010, 1.000, 0.990), 0.98, false)
+		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock", rect_full(0.000, 0.010, 1.000, 0.990), 0.62, false)
 		if dock_texture != null:
 			dock_texture.name = "ActionGPTDockTexture"
-			dock_texture.modulate = Color(1.38, 1.26, 1.10, 1.0)
+			dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.72)
 			dock.move_child(dock_texture, dock.get_child_count() - 1)
 		# r452b: GPT title plate + soft flash mid-band (no program jade).
 		# r184: light mid-band only — keep action_gpt_dock micro-detail readable.
-		var mid_plate = make_gpt_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.98, 0.93, 0.80, 0.12), "ui_title_backplate")  # r189 reveal denser dock
+		var mid_plate = make_gpt_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.98, 0.93, 0.80, 0.07), "ui_title_backplate")  # r189 reveal denser dock
 		mid_plate.name = "ActionDockMidBandPlate"
 		dock.add_child(mid_plate)
-		var mid_wash = make_gpt_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(1.0, 0.95, 0.80, 0.08), "ui_soft_flash")  # r189 lighter wash
+		var mid_wash = make_gpt_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(1.0, 0.95, 0.80, 0.035), "ui_soft_flash")  # r189 lighter wash
 		mid_wash.name = "ActionDockMidBandWash"
 		dock.add_child(mid_wash)
-		var track_texture = add_optional_gpt_illustration_texture(dock, "action_dock_track_panel", rect_full(0.010, 0.120, 0.990, 0.900), 0.38, false)  # r221 denser track
+		var track_texture = add_optional_gpt_illustration_texture(dock, "action_dock_track_panel", rect_full(0.010, 0.120, 0.990, 0.900), 0.22, false)  # r221 denser track
 		if track_texture != null:
 			track_texture.name = "ActionDockTrackPanelTexture"
 			dock.move_child(track_texture, dock.get_child_count() - 1)
@@ -4475,12 +4475,16 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 		ripple.name = "LastDiscardFocusRipple_%d" % i
 		marker.add_child(ripple)
 		marker.move_child(ripple, max(0, glow.get_index()))
-	var focus_tile_size = Vector2(44, 60)
-	var focus_tile = make_tile_view(tile, focus_tile_size, false, Callable(), true)
-	focus_tile.name = "LastDiscardFocusActualTile"
-	focus_tile.z_index = 8
-	marker.add_child(focus_tile)
-	apply_centered_rect(focus_tile, Vector2(0.50, 0.48), focus_tile_size)
+	# The center console already renders the last tile outside the claim window.
+	# Keep the enlarged duplicate only while a claim response needs a focal tile.
+	var center_already_shows_last := not (mode == "offline" and offline_phase == "pending_claim")
+	if not center_already_shows_last:
+		var focus_tile_size = Vector2(44, 60)
+		var focus_tile = make_tile_view(tile, focus_tile_size, false, Callable(), true)
+		focus_tile.name = "LastDiscardFocusActualTile"
+		focus_tile.z_index = 8
+		marker.add_child(focus_tile)
+		apply_centered_rect(focus_tile, Vector2(0.50, 0.48), focus_tile_size)
 	var badge = make_badge(marker, rect_full(0.020, -0.190, 1.020, 0.060), "%s 刚打 %s" % [pending_claim_source_badge_text(seat), tile_label(tile)], 8, Color(0.018, 0.036, 0.038, 0.72), Color(0.88, 0.68, 0.32, 0.28), Color(0.96, 0.92, 0.76))
 	badge.name = "LastDiscardFocusBadge"
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -5759,7 +5763,9 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.050, 0.160, 0.950, 0.285))
 	parent.add_child(art)
-	var overlay = add_illustration_texture(art, "lobby_screen_fan", rect_full(-0.020, -0.140, 1.020, 1.100), 0.025, false)
+	# Keep the decorative fan in a narrow header band; the room summary is a
+	# reading surface and must not inherit the texture's high-frequency detail.
+	var overlay = add_illustration_texture(art, "lobby_screen_fan", rect_full(0.640, -0.120, 1.020, 0.280), 0.010, false)
 	if overlay != null:
 		overlay.name = "OnlineLobbyRoomFanOverlay"
 		art.move_child(overlay, 0)
@@ -5775,7 +5781,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 		for player_value in players_array:
 			if typeof(player_value) == TYPE_DICTIONARY and bool((player_value as Dictionary).get("ready", false)):
 				ready_count += 1
-	var summary_panel = make_gpt_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.48), "ui_button_face_plate")
+	var summary_panel = make_gpt_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.84), "ui_button_face_plate")
 	summary_panel.name = "OnlineLobbyRoomSummaryPanel"
 	art.add_child(summary_panel)
 	var occupancy_chip = make_gpt_gate(rect_full(0.030, 0.140, 0.315, 0.860), Color(0.030, 0.060, 0.050, 0.72))
@@ -8674,17 +8680,18 @@ func draw_shop_native_charm_art(row: Control, item_color: Color, item_id: String
 
 
 func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id: String = "") -> void:
-	# r496: bright dense GPT row plate. Prefer high-luma assets over dark ui_shop_row_plate.
-	var shop_row_plate = add_optional_gpt_illustration_texture(row, "rules_guide_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.88, false)
+	# Use the dedicated shop plate as the primary surface. Rules/settings artwork
+	# carries a bright center wash that competes with row copy at 960x540.
+	var shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.68, false)
 	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "fly_transition_flip", rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
 	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "settings_overview_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.86, false)
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_jade_reading_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
 	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
+		shop_row_plate = add_optional_gpt_illustration_texture(row, "settings_overview_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.56, false)
 	if shop_row_plate != null:
 		shop_row_plate.name = "ShopItemRowGptPlate"
-		shop_row_plate.modulate = Color(1.55, 1.38, 1.12, 0.96)
+		shop_row_plate.modulate = Color(1.0, 1.0, 1.0, 0.78)
 	var shop_row_meter = add_optional_gpt_illustration_texture(row, "ui_meter_rail_plate", rect_full(0.08, 0.72, 0.92, 0.90), 0.48, false)
 	if shop_row_meter != null:
 		shop_row_meter.name = "ShopItemRowGptMeter"
@@ -9460,9 +9467,9 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(frame)
-	var inset_shadow = make_soft_depth_panel(frame, rect_full(0.052, 0.080, 0.948, 0.920), Color(0.0, 0.0, 0.0, 0.10), 26)
+	var inset_shadow = make_soft_depth_panel(frame, rect_full(0.052, 0.080, 0.948, 0.920), Color(0.0, 0.0, 0.0, 0.045), 26)
 	inset_shadow.name = "Table3DInsetShadow"
-	var felt_vignette = make_soft_depth_panel(frame, rect_full(0.145, 0.175, 0.855, 0.805), Color(0.04, 0.028, 0.016, 0.035), 24)
+	var felt_vignette = make_soft_depth_panel(frame, rect_full(0.145, 0.175, 0.855, 0.805), Color(0.04, 0.028, 0.016, 0.015), 24)
 	felt_vignette.name = "Table3DFeltVignette"
 	var near_highlight = make_soft_depth_panel(frame, rect_full(0.145, 0.755, 0.855, 0.820), Color(0.98, 0.78, 0.38, 0.06), 999)
 	near_highlight.name = "Table3DNearRimHighlight"
@@ -12461,10 +12468,12 @@ func draw_tile_depth_art(tile_body: Control, size: Vector2, clickable: bool, hig
 		lift_shadow.name = "TileRecentLiftShadow"
 		tile_body.add_child(lift_shadow)
 		tile_body.move_child(lift_shadow, 0)
-		var recent_frame = make_gpt_plate_rect(rect_full(0.010, 0.010, 0.990, 0.990), Color(1.0, 0.92, 0.50, 0.0), "ui_jade_reading_plate")
+		# A low-alpha static frame is the semantic marker in screenshots and
+		# reduced-motion/headless mode; animation may intensify it when enabled.
+		var recent_frame = make_gpt_plate_rect(rect_full(0.010, 0.010, 0.990, 0.990), Color(1.0, 0.92, 0.50, 0.34), "ui_jade_reading_plate")
 		recent_frame.name = "TileRecentDiscardGoldFrame"
 		tile_body.add_child(recent_frame)
-		var recent_inner_frame = make_gpt_plate_rect(rect_full(0.050, 0.050, 0.950, 0.950), Color(1.0, 0.96, 0.70, 0.0), "ui_jade_reading_plate")
+		var recent_inner_frame = make_gpt_plate_rect(rect_full(0.050, 0.050, 0.950, 0.950), Color(1.0, 0.96, 0.70, 0.22), "ui_jade_reading_plate")
 		recent_inner_frame.name = "TileRecentDiscardInnerFrame"
 		tile_body.add_child(recent_inner_frame)
 		var recent_top_glint = make_gpt_plate_rect(rect_full(0.120, 0.045, 0.760, 0.105), Color(1.0, 0.96, 0.72, 0.10))
