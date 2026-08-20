@@ -581,7 +581,8 @@ func draw_action_dock(parent: Control) -> void:
 		return
 	var pending_claim_mode = mode == "offline" and offline_phase == "pending_claim"
 	var danger_confirm_mode = mode == "offline" and has_pending_danger_discard()
-	if not pending_claim_mode and not danger_confirm_mode:
+	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
+	if not pending_claim_mode and not danger_confirm_mode and not ended_action_mode:
 		draw_action_intent_dock(parent, count)
 	# r451c: translucent lacquer shell + GPT dock plate on top (no jade program slabs).
 	var dock_fill_alpha := 0.28 if pending_claim_mode else 0.26
@@ -5683,16 +5684,20 @@ func draw_online_lobby_log_stream_art(parent: Control) -> Control:
 
 func online_lobby_player_entries() -> Array:
 	var entries: Array = []
-	if lobby_connection_state_text() != "已连接":
+	if lobby_connection_state_text() != "已连接" and not online_waiting_for_server:
 		return entries
 	var players_value = online_room.get("players", [])
 	if typeof(players_value) != TYPE_ARRAY:
 		return entries
 	for player in players_value:
 		if typeof(player) == TYPE_DICTIONARY:
-			entries.append((player as Dictionary).duplicate(true))
+			var entry := (player as Dictionary).duplicate(true)
+			entry["seat"] = int(first_present(entry, ["seat", "index", "position"], entries.size()))
+			entry["name"] = bounded_online_input(str(first_present(entry, ["name", "nickname", "userName"], "道友")), ONLINE_NAME_MAX_LENGTH)
+			entry["ready"] = bool(first_present(entry, ["ready", "isReady"], false))
+			entries.append(entry)
 		else:
-			entries.append({"name": str(player)})
+			entries.append({"seat": entries.size(), "name": bounded_online_input(str(player), ONLINE_NAME_MAX_LENGTH), "ready": false})
 	return entries
 
 func online_lobby_player_for_slot(entries: Array, slot: int) -> Dictionary:
@@ -5723,7 +5728,7 @@ func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 
 func draw_online_lobby_roster_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
-	var roster = make_gpt_plate_rect(rect_full(0.050, 0.295, 0.950, 0.632), Color(0.008, 0.020, 0.022, 0.42), "ui_button_face_plate")
+	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.94), "ui_dark_scrim")
 	roster.name = "OnlineLobbyRosterPanel"
 	parent.add_child(roster)
 	var title = make_label(roster, "玩家席位", 13, Color(0.94, 0.94, 0.80), true)
@@ -5735,9 +5740,8 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		var entry = online_lobby_player_for_slot(entries, i)
 		var active := not entry.is_empty()
 		var top = 0.185 + float(i) * 0.192
-		var row_fill = Color(0.024, 0.048, 0.044, 0.72) if active else Color(0.014, 0.026, 0.026, 0.56)
-		var row_border = Color(0.58, 0.78, 0.56, 0.16) if active else Color(0.56, 0.58, 0.42, 0.080)
-		var row = make_gpt_plate_rect(rect_full(0.035, top, 0.965, top + 0.165), row_fill, "ui_jade_reading_plate")
+		var row_fill = Color(0.024, 0.048, 0.044, 0.92) if active else Color(0.014, 0.026, 0.026, 0.82)
+		var row = make_gpt_center_crop_plate_rect(rect_full(0.035, top, 0.965, top + 0.165), row_fill, "ui_dark_scrim")
 		row.name = "OnlineLobbyRosterRow_%d" % i
 		roster.add_child(row)
 		var seal = make_gpt_gate(rect_full(0.020, 0.145, 0.092, 0.855), Color(0.42, 0.68, 0.50, 0.20 if active else 0.10))
@@ -5749,32 +5753,42 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		name.name = "OnlineLobbyRosterName_%d" % i
 		apply_rect(name, rect_full(0.118, 0.070, 0.610, 0.930))
 		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
+		name.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(name)
 		var state = make_label(row, online_lobby_slot_state(entry, i), 11, Color(0.82, 0.94, 0.74, 0.96 if active else 0.74), false)
 		state.name = "OnlineLobbyRosterState_%d" % i
 		apply_rect(state, rect_full(0.640, 0.080, 0.940, 0.920))
 		state.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		state.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
+		state.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(state)
 	return roster
 
 
 func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
-	var list = make_gpt_plate_rect(rect_full(0.050, 0.646, 0.950, 0.925), Color(0.008, 0.018, 0.020, 0.42), "ui_button_face_plate")
+	var list = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.632, 0.950, 0.945), Color(0.008, 0.016, 0.016, 0.94), "ui_dark_scrim")
 	list.name = "OnlineLobbyLogListPanel"
 	parent.add_child(list)
 	list.clip_contents = true
 	var title = make_label(list, "房间日志", 13, Color(0.94, 0.94, 0.80), true)
 	title.name = "OnlineLobbyLogListTitle"
-	apply_rect(title, rect_full(0.035, 0.040, 0.360, 0.190))
+	apply_rect(title, rect_full(0.035, 0.025, 0.360, 0.170))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.86))
+	title.add_theme_constant_override("outline_size", 1)
 	var count_value = 0
 	var logs_value = online_room.get("logs", [])
 	if lobby_connection_state_text() == "已连接" and typeof(logs_value) == TYPE_ARRAY:
 		count_value = (logs_value as Array).size()
-	var count_badge = make_badge(list, rect_full(0.760, 0.045, 0.955, 0.190), "%d条" % count_value, 10, Color(0.036, 0.052, 0.046, 0.86), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
+	var count_badge = make_badge(list, rect_full(0.760, 0.030, 0.955, 0.175), "%d条" % count_value, 10, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
 	count_badge.name = "OnlineLobbyLogCountBadge"
 	count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if count_badge.get_child_count() > 0:
+		var count_label = count_badge.get_child(count_badge.get_child_count() - 1) as Label
+		if count_label != null:
+			count_label.name = "OnlineLobbyLogCountLabel"
 	return list
 
 
@@ -5803,7 +5817,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 		for player_value in players_array:
 			if typeof(player_value) == TYPE_DICTIONARY and bool((player_value as Dictionary).get("ready", false)):
 				ready_count += 1
-	var summary_panel = make_gpt_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.84), "ui_button_face_plate")
+	var summary_panel = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.92), "ui_dark_scrim")
 	summary_panel.name = "OnlineLobbyRoomSummaryPanel"
 	art.add_child(summary_panel)
 	var occupancy_chip = make_gpt_gate(rect_full(0.030, 0.140, 0.315, 0.860), Color(0.030, 0.060, 0.050, 0.72))
@@ -8702,18 +8716,18 @@ func draw_shop_native_charm_art(row: Control, item_color: Color, item_id: String
 
 
 func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id: String = "") -> void:
-	# Use the dedicated shop plate as the primary surface. Rules/settings artwork
-	# carries a bright center wash that competes with row copy at 960x540.
-	var shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.30, false)
-	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.34, false)
-	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_jade_reading_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.30, false)
-	if shop_row_plate == null:
-		shop_row_plate = add_optional_gpt_illustration_texture(row, "settings_overview_panel", rect_full(0.0, 0.0, 1.0, 1.0), 0.28, false)
+	# The center crop of the authored dark-scrim bitmap is deliberately quiet:
+	# product copy remains continuous while the dedicated shop art survives only
+	# as a very faint edge texture.
+	var readability_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.022, 0.034, 0.032, 0.99), "ui_dark_scrim", 0.22)
+	readability_plate.name = "ShopItemRowLowFrequencyPlate"
+	row.add_child(readability_plate)
+	row.move_child(readability_plate, 0)
+	var shop_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.040, false)
 	if shop_row_plate != null:
 		shop_row_plate.name = "ShopItemRowGptPlate"
-		shop_row_plate.modulate = Color(0.76, 0.72, 0.62, 0.62)
+		shop_row_plate.modulate = Color(1.0, 0.96, 0.90, 0.040)
+		row.move_child(shop_row_plate, min(1, row.get_child_count() - 1))
 	var shop_row_meter = add_optional_gpt_illustration_texture(row, "ui_meter_rail_plate", rect_full(0.08, 0.72, 0.92, 0.90), 0.48, false)
 	if shop_row_meter != null:
 		shop_row_meter.name = "ShopItemRowGptMeter"

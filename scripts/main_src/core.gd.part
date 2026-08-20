@@ -568,7 +568,7 @@ func poll_online(now_msec: int = -1) -> void:
 			set_online_feedback("已连接服务器，可建房或入房。", false)
 			if not sent_hello:
 				sent_hello = true
-				send_online({"type": "hello", "name": online_name_edit.text if online_name_edit else "云桌道友"})
+				send_online({"type": "hello", "name": online_name_input()})
 		elif status == StreamPeerTCP.STATUS_ERROR:
 			set_online_feedback("连接出错，请重试。", false)
 			clear_online_room_snapshot()
@@ -769,17 +769,27 @@ func render_room_log() -> void:
 	var text = ""
 	if logs.is_empty():
 		text = "暂无房间日志"
-	var start_index = max(0, logs.size() - 5)
+	var start_index = max(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
 	for i in range(start_index, logs.size()):
 		var log_item = logs[i]
 		var line = ""
 		if typeof(log_item) == TYPE_DICTIONARY:
-			line = str(log_item.get("text", "")).strip_edges()
+			line = str(log_item.get("text", "")).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
 		else:
-			line = str(log_item).strip_edges()
+			line = str(log_item).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
 		if line != "":
 			text += "· " + line + "\n"
 	logs_label.text = text
+	call_deferred("scroll_online_log_to_end")
+
+func scroll_online_log_to_end() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	if log_scroll == null:
+		return
+	var scrollbar := log_scroll.get_v_scroll_bar()
+	log_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
 
 
 func deal_offline_hand() -> void:

@@ -6,6 +6,11 @@ const Commercial3DStage := preload("res://scripts/ui/commercial_3d_stage.gd")
 const TABLE_CINEMATIC_LIGHTING_SHADER := preload("res://shaders/table_cinematic_lighting.gdshader")
 const DEFAULT_HOST := "129.146.180.88"
 const DEFAULT_PORT := 23333
+const ONLINE_NAME_MAX_LENGTH := 24
+const ONLINE_HOST_MAX_LENGTH := 253
+const ONLINE_ROOM_CODE_MAX_LENGTH := 32
+const ONLINE_LOG_HISTORY_LIMIT := 14
+const ONLINE_LOG_ENTRY_MAX_LENGTH := 240
 const APP_VERSION := "1.0.180-godot"
 const UPDATE_MANIFEST_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json"
 const UPDATE_URL := "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk"
@@ -527,7 +532,7 @@ var mode = "menu"
 var screen_layer: Control
 var root_layer: Control
 var status_label: Label
-var logs_label: Label
+var logs_label: RichTextLabel
 var action_bar: Container
 var update_request: HTTPRequest
 var update_dialog: Control
@@ -633,6 +638,7 @@ var pending_danger_discard_index = -1
 var pending_danger_discard_tile = ""
 var pending_danger_discard_report: Dictionary = {}
 var selected_room = ""
+var online_connection_host := DEFAULT_HOST
 var online_host_edit: LineEdit
 var online_room_edit: LineEdit
 var online_name_edit: LineEdit
@@ -1252,6 +1258,31 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> C
 		clampf(0.50 + color.g * 0.60, 0.20, 1.20),
 		clampf(0.50 + color.b * 0.60, 0.20, 1.20),
 		tint_a
+	)
+	apply_rect(tex, rect)
+	return tex
+
+
+func make_gpt_center_crop_plate_rect(rect: Rect2, color: Color, plate_key: String, crop_fraction: float = 0.30) -> Control:
+	var source: Texture2D = optional_gpt_illustration_texture(plate_key)
+	if source == null:
+		return make_layout_host(rect)
+	var fraction := clampf(crop_fraction, 0.10, 0.80)
+	var source_size := source.get_size()
+	var crop_size := source_size * fraction
+	var atlas := AtlasTexture.new()
+	atlas.atlas = source
+	atlas.region = Rect2((source_size - crop_size) * 0.5, crop_size)
+	var tex := TextureRect.new()
+	tex.texture = atlas
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.stretch_mode = TextureRect.STRETCH_SCALE
+	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tex.self_modulate = Color(
+		clampf(0.50 + color.r * 0.60, 0.20, 1.20),
+		clampf(0.50 + color.g * 0.60, 0.20, 1.20),
+		clampf(0.50 + color.b * 0.60, 0.20, 1.20),
+		clampf(color.a, 0.02, 1.0)
 	)
 	apply_rect(tex, rect)
 	return tex

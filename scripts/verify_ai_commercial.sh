@@ -4,6 +4,8 @@
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GODOT_BIN="${GODOT_BIN:-godot}"
+EXPECTED_GODOT_VERSION_PREFIX="${EXPECTED_GODOT_VERSION_PREFIX:-4.6.3}"
 REPORT_DIR="$ROOT_DIR/build/qa/ai_play_commercial_evidence"
 REPORT="$REPORT_DIR/EVIDENCE_LATEST.md"
 LOG_DIR="$REPORT_DIR/logs"
@@ -43,8 +45,7 @@ mkdir -p "$LOG_DIR"
 
 ensure_no_active_runtime() {
 	local active=""
-	active+="$(pgrep -ax godot 2>/dev/null || true)"
-	active+="$(pgrep -ax godot4 2>/dev/null || true)"
+	active+="$(pgrep -ia '^godot' 2>/dev/null || true)"
 	active+="$(pgrep -ax Xvfb 2>/dev/null || true)"
 	active+="$(pgrep -af '(^|/)[x]vfb-run([[:space:]]|$)' 2>/dev/null || true)"
 	if [ -n "$active" ]; then
@@ -61,7 +62,15 @@ run_low_resource_godot() {
 	fi
 	timeout --foreground --signal=TERM --kill-after="${GODOT_KILL_GRACE_SECONDS}s" "${GODOT_TIMEOUT_SECONDS}s" \
 		env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
-		nice -n 10 ionice -c 2 -n 7 godot "$@"
+		nice -n 10 ionice -c 2 -n 7 "$GODOT_BIN" "$@"
+}
+
+check_target_godot_version() {
+	local version
+	command -v "$GODOT_BIN" >/dev/null 2>&1 || return 1
+	version="$("$GODOT_BIN" --version 2>/dev/null | head -n 1)"
+	printf '%s\n' "$version"
+	[[ "$version" == "$EXPECTED_GODOT_VERSION_PREFIX"* ]]
 }
 
 check_release_version() {
@@ -127,6 +136,8 @@ run_check "Build contract" "main.gd generated output parity" "assemble_verify.lo
 	python3 tools/assemble_main.py --verify
 run_check "Build contract" "release version remains 1.0.180-godot" "version_contract.log" \
 	check_release_version
+run_check "Build contract" "target Godot engine is 4.6.3" "godot_version.log" \
+	check_target_godot_version
 
 run_godot_check "Rule legality" 15 "wall exhaustion ends the hand safely"
 run_godot_check "Rule legality" 30 "illegal win declarations cannot settle"
@@ -169,6 +180,8 @@ fi
 	echo "- Worktree state: $WORKTREE_STATE"
 	echo "- Runtime source vs HEAD: $RUNTIME_SOURCE_STATE"
 	echo "- Version: \`1.0.180-godot\`"
+	echo "- Godot binary: \`$GODOT_BIN\`"
+	echo "- Required Godot version: \`$EXPECTED_GODOT_VERSION_PREFIX\`"
 	echo "- Result: **$STATUS**"
 	echo "- Passed checks: $PASS"
 	echo "- Failed checks: $FAIL"

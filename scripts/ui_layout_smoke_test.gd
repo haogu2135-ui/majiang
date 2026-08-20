@@ -774,6 +774,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	var menu_button = first_button_with_text(scene.action_bar, "菜单")
 	check(panel != null and title != null and body != null and detail_panel != null and winner_label != null and score_label != null and win_tile != null, "round summary exposes title, score body, win detail, and winning tile at %s" % viewport_size)
 	check(next_button != null and menu_button != null, "round summary exposes clear next-hand and menu routes at %s" % viewport_size)
+	check(scene.find_child("ActionIntentDock", true, false) == null, "round summary omits the live action intent strip at %s" % viewport_size)
 	if panel == null:
 		return
 	var panel_rect = screen_rect(panel)
@@ -1257,6 +1258,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			previous_setting_row_rects.append(setting_child_rect)
 
 func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
+	var page_plate = scene.find_child("OnlineLobbyLowFrequencyPagePlate", true, false) as TextureRect
 	var form_panel = scene.find_child("OnlineLobbyFormPanel", true, false) as Control
 	var log_panel = scene.find_child("OnlineLobbyLogPanel", true, false) as Control
 	var input_backplate = scene.find_child("OnlineLobbyInputGroupBackplate", true, false) as Control
@@ -1278,7 +1280,11 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var room_summary_state_label = scene.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
 	var roster_panel = scene.find_child("OnlineLobbyRosterPanel", true, false) as Control
 	var log_list_panel = scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
-	var log_list_text = scene.find_child("OnlineLobbyLogListText", true, false) as Control
+	var log_scroll = scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var log_list_text = scene.find_child("OnlineLobbyLogListText", true, false) as RichTextLabel
+	var name_edit = scene.find_child("OnlineLobbyNameEdit", true, false) as LineEdit
+	var host_edit = scene.find_child("OnlineLobbyHostEdit", true, false) as LineEdit
+	var room_edit = scene.find_child("OnlineLobbyRoomEdit", true, false) as LineEdit
 	var roster_title = scene.find_child("OnlineLobbyRosterTitle", true, false) as Label
 	var log_list_title = scene.find_child("OnlineLobbyLogListTitle", true, false) as Label
 	var log_count_badge = scene.find_child("OnlineLobbyLogCountBadge", true, false) as Control
@@ -1288,25 +1294,40 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var endpoint_label = scene.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
 	var state_badge = scene.find_child("OnlineLobbyConnectionStateBadge", true, false) as Control
 	var connection_state_label = scene.find_child("OnlineLobbyConnectionStateLabel", true, false) as Label
-	check(form_panel != null and log_panel != null, "online lobby exposes named form and log panels at %s" % viewport_size)
+	check(page_plate != null and form_panel != null and log_panel != null, "online lobby exposes a low-frequency page plate and named split panels at %s" % viewport_size)
+	if page_plate != null:
+		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
+		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.95, "disconnected lobby uses an opaque low-frequency authored bitmap substrate at %s" % viewport_size)
 	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
 	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null, "online lobby exposes room summary roster and log list hierarchy at %s" % viewport_size)
+	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
+	var log_list_texture = (log_list_panel as TextureRect).texture if log_list_panel is TextureRect else null
+	var roster_source = (roster_texture as AtlasTexture).atlas if roster_texture is AtlasTexture else roster_texture
+	var log_list_source = (log_list_texture as AtlasTexture).atlas if log_list_texture is AtlasTexture else log_list_texture
+	var roster_texture_path := str(roster_source.resource_path) if roster_source != null else ""
+	var log_list_texture_path := str(log_list_source.resource_path) if log_list_source != null else ""
+	check(roster_texture_path.ends_with("ui_dark_scrim.png") and log_list_texture_path.ends_with("ui_dark_scrim.png"), "online lobby reading panels use the low-frequency dark bitmap substrate at %s" % viewport_size)
 	check(room_offline_state != null and not room_status_art.visible and not roster_panel.visible and not log_list_panel.visible, "disconnected lobby hides stale room, roster, and log content behind an explicit empty state at %s" % viewport_size)
 	check(scene.online_room.is_empty() and room_offline_state != null and room_offline_state.text == "连接后显示房间、席位和日志", "disconnected lobby clears the room snapshot and explains the empty state at %s" % viewport_size)
 	if room_badge != null and room_badge.get_child_count() > 0:
 		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label
 		check(room_badge_label != null and room_badge_label.text == "房间号 --", "disconnected lobby replaces the room badge with a neutral placeholder at %s" % viewport_size)
 	check(endpoint_badge != null and endpoint_label != null and state_badge != null and connection_state_label != null, "online lobby exposes top endpoint and connection-state badges at %s" % viewport_size)
+	check(name_edit != null and name_edit.max_length == scene.ONLINE_NAME_MAX_LENGTH, "online lobby nickname input enforces its client boundary at %s" % viewport_size)
+	check(host_edit != null and host_edit.max_length == scene.ONLINE_HOST_MAX_LENGTH and host_edit.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_URL, "online lobby host input enforces its boundary and URL keyboard at %s" % viewport_size)
+	check(room_edit != null and room_edit.max_length == scene.ONLINE_ROOM_CODE_MAX_LENGTH, "online lobby room input enforces its client boundary at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("online_lobby_panel_frame") == null or (scene.find_child("OnlineLobbyFormGPTPanelFrameTexture", true, false) != null and scene.find_child("OnlineLobbyLogGPTPanelFrameTexture", true, false) != null), "online lobby consumes GPT panel-frame textures at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("online_lobby_group_plate") == null or (scene.find_child("OnlineLobbyInputGPTGroupPlateTexture", true, false) != null and scene.find_child("OnlineLobbyActionGPTGroupPlateTexture", true, false) != null), "online lobby consumes GPT group-plate textures at %s" % viewport_size)
 	var form_gpt_frame = scene.find_child("OnlineLobbyFormGPTPanelFrameTexture", true, false) as CanvasItem
 	var log_gpt_frame = scene.find_child("OnlineLobbyLogGPTPanelFrameTexture", true, false) as CanvasItem
 	var input_gpt_plate = scene.find_child("OnlineLobbyInputGPTGroupPlateTexture", true, false) as CanvasItem
 	var action_gpt_plate = scene.find_child("OnlineLobbyActionGPTGroupPlateTexture", true, false) as CanvasItem
-	check(form_gpt_frame == null or form_gpt_frame.modulate.a <= 0.34, "online lobby form GPT frame stays subdued at %s" % viewport_size)
-	check(log_gpt_frame == null or log_gpt_frame.modulate.a <= 0.34, "online lobby log GPT frame stays subdued at %s" % viewport_size)
-	check(input_gpt_plate == null or input_gpt_plate.modulate.a <= 0.16, "online lobby input GPT group plate stays below the controls at %s" % viewport_size)
-	check(action_gpt_plate == null or action_gpt_plate.modulate.a <= 0.18, "online lobby action GPT group plate stays below the controls at %s" % viewport_size)
+	var fan_texture = scene.find_child("OnlineLobbyFanTexture", true, false) as CanvasItem
+	check(form_gpt_frame == null or form_gpt_frame.modulate.a <= 0.06, "online lobby form GPT frame stays edge-level at %s" % viewport_size)
+	check(log_gpt_frame == null or log_gpt_frame.modulate.a <= 0.06, "online lobby log GPT frame stays edge-level at %s" % viewport_size)
+	check(input_gpt_plate == null or input_gpt_plate.modulate.a <= 0.05, "online lobby input GPT group plate stays below the controls at %s" % viewport_size)
+	check(action_gpt_plate == null or action_gpt_plate.modulate.a <= 0.05, "online lobby action GPT group plate stays below the controls at %s" % viewport_size)
+	check(fan_texture == null or fan_texture.modulate.a <= 0.01, "online lobby fan remains a quiet header-edge decoration at %s" % viewport_size)
 	if form_panel == null or log_panel == null:
 		return
 	var form_rect = screen_rect(form_panel)
@@ -1314,7 +1335,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	check(not form_rect.intersects(log_rect, true), "online lobby form and log panels do not overlap at %s" % viewport_size)
 	check(form_rect.position.x >= -0.5 and log_rect.end.x <= viewport_size.x + 0.5, "online lobby split panels stay inside viewport at %s" % viewport_size)
 	if endpoint_badge != null and endpoint_label != null and state_badge != null:
-		var expected_endpoint := "%s:%d" % [scene.DEFAULT_HOST, scene.DEFAULT_PORT]
+		var expected_endpoint: String = str(scene.online_connection_endpoint_text())
 		var endpoint_rect = screen_rect(endpoint_badge)
 		var endpoint_label_rect = screen_rect(endpoint_label)
 		var state_rect = screen_rect(state_badge)
@@ -1401,10 +1422,13 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 				check(name_label.clip_text and name_label.get_theme_font_size("font_size") >= 12 and relative_luma(name_label.get_theme_color("font_color")) >= 0.88, "online lobby roster row %d name is readable and clipped at %s" % [i, viewport_size])
 			if state_label != null:
 				check(state_label.clip_text and state_label.get_theme_font_size("font_size") >= 11 and relative_luma(state_label.get_theme_color("font_color")) >= 0.84, "online lobby roster row %d state is readable and clipped at %s" % [i, viewport_size])
+		if log_scroll != null:
+			check(log_list_rect.grow(1.0).encloses(screen_rect(log_scroll)), "online lobby native log scroll stays inside log list panel at %s" % viewport_size)
+			check(log_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and log_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and log_scroll.get_v_scroll_bar() != null, "online lobby log uses native touch-scroll with a vertical range at %s" % viewport_size)
 		if log_list_text != null:
-			check(log_list_rect.grow(1.0).encloses(screen_rect(log_list_text)), "online lobby log text stays inside log list panel at %s" % viewport_size)
-			var log_label = log_list_text as Label
-			check(log_label != null and log_label.clip_text and log_label.get_theme_font_size("font_size") >= 14 and relative_luma(log_label.get_theme_color("font_color")) >= 0.90, "online lobby log text stays readable and clipped at %s" % viewport_size)
+			check(log_scroll != null and log_list_text.get_parent() == log_scroll, "online lobby log text is owned by the native scroll container at %s" % viewport_size)
+			var minimum_log_font := 13 if viewport_size.y <= 560.0 else 14
+			check(log_list_text.fit_content and not log_list_text.scroll_active and log_list_text.get_theme_font_size("normal_font_size") >= minimum_log_font and relative_luma(log_list_text.get_theme_color("default_color")) >= 0.90, "online lobby log text stays readable and delegates scrolling to its parent at %s" % viewport_size)
 	var feedback_rect := Rect2()
 	if feedback != null:
 		feedback_rect = screen_rect(feedback)
@@ -1897,6 +1921,8 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	var cabinet_shadow = scene.find_child("ShopCabinet3DCastShadow", true, false) as Control
 	var display_shell = scene.find_child("ShopDisplayCabinet3DShell", true, false) as Control
 	check(cabinet_front != null and cabinet_rear == null and cabinet_shadow != null and display_shell != null, "shop exposes one front cabinet surface without a duplicate rear shell at %s" % viewport_size)
+	var vault_texture = scene.find_child("ShopGPTVaultTexture", true, false) as CanvasItem
+	check(vault_texture == null or vault_texture.modulate.a <= 0.03, "shop full-page vault texture stays below the reading surfaces at %s" % viewport_size)
 	var item_ids := ["swap_card", "peek_card", "lucky_charm", "double_coins"]
 	var scroll = scene.find_child("ShopItemsScroll", true, false) as ScrollContainer
 	var scrollbar = scene.find_child("ShopItemsScrollBar", true, false) as VScrollBar
@@ -1927,7 +1953,14 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 		var buy_price = scene.find_child("ShopBuyButtonPrice_%s" % item_id, true, false) as Label
 		var row_depth = scene.find_child("ShopItem3DDepthEdge_%s" % item_id, true, false) as Control
 		var charm_plinth = scene.find_child("ShopItem3DCharmPlinth_%s" % item_id, true, false) as Control
+		var row_readability = row.find_child("ShopItemRowLowFrequencyPlate", true, false) as TextureRect if row != null else null
+		var row_generated_plate = row.find_child("ShopItemRowGptPlate", true, false) as CanvasItem if row != null else null
 		check(row != null, "shop row %s exists at %s" % [item_id, viewport_size])
+		check(row_readability != null, "shop row %s exposes an authored low-frequency reading surface at %s" % [item_id, viewport_size])
+		if row_readability != null:
+			var row_source = (row_readability.texture as AtlasTexture).atlas if row_readability.texture is AtlasTexture else row_readability.texture
+			check(row_source != null and str(row_source.resource_path).ends_with("ui_dark_scrim.png") and row_readability.self_modulate.a >= 0.98, "shop row %s uses an opaque low-frequency bitmap center crop at %s" % [item_id, viewport_size])
+		check(row_generated_plate == null or row_generated_plate.modulate.a <= 0.05, "shop row %s keeps high-frequency generated art at edge-level alpha at %s" % [item_id, viewport_size])
 		check(row_depth != null and charm_plinth != null, "shop row %s exposes a physical shelf edge and charm plinth at %s" % [item_id, viewport_size])
 		if row != null:
 			row_rects.append(screen_rect(row))

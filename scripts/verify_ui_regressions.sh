@@ -2,6 +2,8 @@
 # 一键验证前期 UI 排查问题是否回归。
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GODOT_BIN="${GODOT_BIN:-godot}"
+EXPECTED_GODOT_VERSION_PREFIX="${EXPECTED_GODOT_VERSION_PREFIX:-4.6.3}"
 REPORT="$ROOT_DIR/build/qa/ui_regression_verification_report.md"
 LOG_DIR="$ROOT_DIR/build/qa/logs"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S %z')"
@@ -29,8 +31,7 @@ active_godot_processes() {
 	local active
 	active="$(
 		{
-			pgrep -ax godot 2>/dev/null || true
-			pgrep -ax godot4 2>/dev/null || true
+				pgrep -ia '^godot' 2>/dev/null || true
 			pgrep -ax Xvfb 2>/dev/null || true
 			pgrep -af '(^|/)[x]vfb-run([[:space:]]|$)' 2>/dev/null || true
 		} | while IFS= read -r process_line; do
@@ -70,7 +71,7 @@ run_low_resource_godot() {
 	fi
 	timeout --foreground --signal=TERM --kill-after="${GODOT_KILL_GRACE_SECONDS}s" "${GODOT_TIMEOUT_SECONDS}s" \
 		env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
-		nice -n 10 ionice -c 2 -n 7 godot "$@"
+		nice -n 10 ionice -c 2 -n 7 "$GODOT_BIN" "$@"
 }
 
 run_low_resource_xvfb_godot() {
@@ -82,7 +83,15 @@ run_low_resource_xvfb_godot() {
 	timeout --foreground --signal=TERM --kill-after="${GODOT_KILL_GRACE_SECONDS}s" "${GODOT_TIMEOUT_SECONDS}s" \
 		env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
 		nice -n 10 ionice -c 2 -n 7 xvfb-run -a -s "-screen 0 ${screen_size}x24" \
-		godot --rendering-driver opengl3 --audio-driver Dummy "$@"
+			"$GODOT_BIN" --rendering-driver opengl3 --audio-driver Dummy "$@"
+}
+
+check_target_godot_version() {
+	local version
+	command -v "$GODOT_BIN" >/dev/null 2>&1 || return 1
+	version="$("$GODOT_BIN" --version 2>/dev/null | head -n 1)"
+	printf '%s\n' "$version"
+	[[ "$version" == "$EXPECTED_GODOT_VERSION_PREFIX"* ]]
 }
 
 capture_pages_for_size() {
@@ -185,11 +194,14 @@ run_check "Git whitespace check" "git_diff_check.log" \
 run_check "Runtime UI uses imported bitmap assets only" "runtime_bitmap_policy.log" \
 	check_no_runtime_generated_bitmap_textures
 
+run_check "Target Godot engine is 4.6.3" "godot_version.log" \
+	check_target_godot_version
+
 run_check "UI layout regression smoke" "ui_layout_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_layout_smoke_test.gd
 
 run_check "UI hover pressed focus and connected-lobby smoke" "ui_interaction_smoke.log" \
-	run_low_resource_xvfb_godot 1280x720 --path "$ROOT_DIR" -s scripts/ui_interaction_smoke_test.gd
+	run_low_resource_xvfb_godot 960x540 --path "$ROOT_DIR" -s scripts/ui_interaction_smoke_test.gd
 
 run_check "Offline gameplay smoke" "offline_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/offline_smoke_test.gd
@@ -248,6 +260,8 @@ fi
 	echo "- Git revision: \`$REVISION\`"
 	echo "- Worktree state: $WORKTREE_STATE"
 	echo "- Runtime source vs HEAD: $RUNTIME_SOURCE_STATE"
+	echo "- Godot binary: \`$GODOT_BIN\`"
+	echo "- Required Godot version: \`$EXPECTED_GODOT_VERSION_PREFIX\`"
 	echo "- Result: $STATUS"
 	echo "- Passed checks: $PASS"
 	echo "- Failed checks: $FAIL"

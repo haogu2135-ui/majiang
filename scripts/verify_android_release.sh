@@ -27,7 +27,7 @@ grep -q "Verified using v2 scheme .*: true" <<<"$SIGNATURE" || fail "APK v2 sign
 grep -q "Verified using v3 scheme .*: true" <<<"$SIGNATURE" || fail "APK v3 signature missing"
 grep -q "CN=Yunzhuo Mahjong, O=Yunzhuo, C=CN" <<<"$SIGNATURE" || fail "release signing certificate mismatch"
 
-if zipinfo -1 "$APK" | grep -Eq '^(assets/)?(build/qa|garden-gpt-image-2|tools/|references/|scripts/(ai_play_round[0-9]+_check|offline_smoke_test|page_screenshot_capture|ui_layout_smoke_test|commercial_3d_stage_smoke_test|verify_ui_regressions|verify_ai_commercial))'; then
+if zipinfo -1 "$APK" | grep -Eq '^(assets/)?(build/qa|garden-gpt-image-2|tools/|references/|scripts/(ai_play_round[0-9]+_check|offline_smoke_test|online_protocol_smoke_test|page_screenshot_capture|ui_layout_smoke_test|commercial_3d_stage_smoke_test|verify_[^/]+))'; then
 	fail "development or QA resources are packaged"
 fi
 

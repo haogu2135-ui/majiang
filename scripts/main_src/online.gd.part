@@ -47,7 +47,33 @@ func claim_sfx_key(claim: String) -> String:
 			return "peng"
 	return "discard"
 
+func bounded_online_input(value: String, max_length: int) -> String:
+	return value.strip_edges().left(maxi(0, max_length))
+
+func online_name_input() -> String:
+	var value := bounded_online_input(online_name_edit.text if is_instance_valid(online_name_edit) else "", ONLINE_NAME_MAX_LENGTH)
+	return value if value != "" else "云桌道友"
+
+func online_host_input() -> String:
+	return bounded_online_input(online_host_edit.text if is_instance_valid(online_host_edit) else online_connection_host, ONLINE_HOST_MAX_LENGTH)
+
+func online_room_code_input() -> String:
+	return bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
+
+func online_connection_endpoint_text() -> String:
+	var host := bounded_online_input(online_connection_host, ONLINE_HOST_MAX_LENGTH)
+	if host == "":
+		host = DEFAULT_HOST
+	return "%s:%d" % [host, DEFAULT_PORT]
+
 func connect_online() -> void:
+	var host := online_host_input()
+	if host == "":
+		set_online_feedback("请输入服务器 IP 或域名。", false)
+		return
+	online_connection_host = host
+	if is_instance_valid(online_host_edit):
+		online_host_edit.text = host
 	tcp.disconnect_from_host()
 	tcp = StreamPeerTCP.new()
 	tcp_buffer = ""
@@ -55,11 +81,30 @@ func connect_online() -> void:
 	clear_online_room_snapshot()
 	clear_online_feedback()
 	sent_hello = false
-	var err = tcp.connect_to_host(online_host_edit.text.strip_edges(), DEFAULT_PORT)
-	set_status("正在连接 %s:%d ..." % [online_host_edit.text.strip_edges(), DEFAULT_PORT])
+	var err = tcp.connect_to_host(host, DEFAULT_PORT)
+	set_status("正在连接 %s ..." % online_connection_endpoint_text())
 	refresh_online_lobby_state()
 	if err != OK:
 		set_online_feedback("连接失败：%s" % error_string(err), false)
+
+func create_online_room() -> void:
+	var player_name := online_name_input()
+	if is_instance_valid(online_name_edit):
+		online_name_edit.text = player_name
+	send_online_action({"type": "createRoom", "name": player_name}, "创建房间")
+
+func join_online_room() -> void:
+	var room_code := online_room_code_input()
+	if room_code == "":
+		set_online_feedback("请输入房间号。", false)
+		return
+	var player_name := online_name_input()
+	selected_room = room_code
+	if is_instance_valid(online_room_edit):
+		online_room_edit.text = room_code
+	if is_instance_valid(online_name_edit):
+		online_name_edit.text = player_name
+	send_online_action({"type": "joinRoom", "roomCode": room_code, "name": player_name}, "加入房间")
 
 func clear_online_room_snapshot() -> void:
 	online_room.clear()
@@ -81,18 +126,18 @@ func handle_online_error(data: Dictionary) -> void:
 	set_online_feedback("服务器拒绝：%s" % message, false)
 
 func handle_online_log(data: Dictionary) -> void:
-	var message = online_server_message_text(data, "")
+	var message = online_server_message_text(data, "").left(ONLINE_LOG_ENTRY_MAX_LENGTH)
 	if message == "":
 		return
 	if typeof(online_room.get("logs", [])) != TYPE_ARRAY:
 		online_room["logs"] = []
 	var logs: Array = online_room.get("logs", [])
 	logs.append(message)
-	while logs.size() > 14:
+	while logs.size() > ONLINE_LOG_HISTORY_LIMIT:
 		logs.remove_at(0)
 	online_room["logs"] = logs
 	set_online_feedback(message, false)
-	render_room_log()
+	refresh_online_lobby_state()
 
 func handle_online_message(line: String) -> void:
 	var data = JSON.parse_string(line)
@@ -115,10 +160,18 @@ func handle_online_message(line: String) -> void:
 		clear_online_feedback()
 		var room_value = data.get("room", data)
 		online_room = (room_value as Dictionary).duplicate(true) if typeof(room_value) == TYPE_DICTIONARY else {}
-		selected_room = str(first_present(online_room, ["code", "roomCode", "room_code"], ""))
-		if online_room_edit:
+		selected_room = bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var room_logs = online_room.get("logs", [])
+		if typeof(room_logs) == TYPE_ARRAY:
+			var bounded_logs: Array = []
+			for item in (room_logs as Array).slice(maxi(0, (room_logs as Array).size() - ONLINE_LOG_HISTORY_LIMIT)):
+				var bounded_log := str(item.get("text", "") if typeof(item) == TYPE_DICTIONARY else item).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
+				if bounded_log != "":
+					bounded_logs.append(bounded_log)
+			online_room["logs"] = bounded_logs
+		if is_instance_valid(online_room_edit):
 			online_room_edit.text = selected_room
-		render_room_log()
+		refresh_online_lobby_state()
 	elif kind == "gameState":
 		clear_online_feedback()
 		var next_game = normalize_online_game_state(data)
