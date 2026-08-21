@@ -1126,21 +1126,27 @@ func add_battle_background(parent: Control) -> void:
 	parent.add_child(base)
 
 	# Single full-screen guofeng room plate (table_gpt_backdrop). Do not stack a second photo.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.54, false)
+	# Alpha stays low: at 0.54 the authored dragon/wood grain ran at a higher spatial
+	# frequency than the 14-18px HUD copy layered over it (measured luma stdev 77.7 on
+	# the 1280 capture), so seat plaques and the table log lost their edges. Holding the
+	# art near 0.30 keeps the guofeng read while flattening the ground under small text.
+	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.30, false)
 	if battle_scene != null:
 		battle_scene.name = "OfflineBattleGuofengBackdrop"
 	else:
 		# Fallback to menu hero scenery if table plate missing.
-		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.36, false)
+		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
 		if garden_scene != null:
 			garden_scene.name = "OfflineBattleGuofengBackdrop"
 		else:
-			var fallback_wash = add_illustration_texture(parent, "table_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.55, false)
+			var fallback_wash = add_illustration_texture(parent, "table_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.34, false)
 			if fallback_wash != null:
 				fallback_wash.name = "OfflineBattleInkWashBackdrop"
 
-	# Light vignette only — keep guofeng art visible while protecting tile contrast.
-	var readability_tint = make_fullrect_overlay(Color(0.008, 0.014, 0.012, 0.30), "ui_dark_scrim")
+	# One readability mask over the single art plate. Kept very light because the
+	# backdrop alpha above now does the flattening; stacking a heavier scrim here only
+	# crushed the frame darker without improving text separation.
+	var readability_tint = make_fullrect_overlay(Color(0.008, 0.014, 0.012, 0.16), "ui_dark_scrim")
 	readability_tint.name = "OfflineBattleReadabilityTint"
 	parent.add_child(readability_tint)
 

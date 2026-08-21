@@ -24047,11 +24047,16 @@ func _show_rules_screen_impl() -> void:
 	var compact_rules_scroll := effective_viewport_size().y <= 560.0
 	var gutter_left := 0.934
 	var gutter_right := 0.949
-	var rules_scroll_gutter = make_panel(panel, rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.07, 0.06, 0.05, 0.92), 999, Color(0.30, 0.25, 0.16, 0.42), 0, "ui_dark_scrim")  # r227 authored dark track
+	var rules_scroll_gutter = make_panel(panel, rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.05, 0.043, 0.035, 0.96), 999, Color(0.42, 0.35, 0.22, 0.62), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var thumb_left := 0.150 if compact_rules_scroll else 0.260
-	var thumb_right := 0.850 if compact_rules_scroll else 0.740
+	# Thumb width is a fraction of the gutter, so a fixed fraction rendered ~9px at
+	# 1280 and under 7px at 960 while growing past the 16px cap at 1920. Solve the
+	# fraction from a pixel target instead so the grip reads the same on every rung.
+	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * effective_viewport_size().x)
+	var thumb_span_frac := clampf(14.0 / gutter_span_px, 0.10, 0.96)
+	var thumb_left := 0.5 - thumb_span_frac * 0.5
+	var thumb_right := 0.5 + thumb_span_frac * 0.5
 	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), 999, Color(1.0, 0.92, 0.64, 0.92), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
