@@ -5152,6 +5152,7 @@ func clear_screen() -> void:
 	update_secondary_button = null
 	menu_realtime_3d_stage = null
 	safe_area_margins = current_safe_area_margins()
+	emit_ui_qa_marker("safe_area|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f" % [safe_area_margins.x, safe_area_margins.y, safe_area_margins.z, safe_area_margins.w, effective_viewport_size().x, effective_viewport_size().y])
 	screen_layer = Control.new()
 	screen_layer.name = "ScreenLayer"
 	screen_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -5184,6 +5185,7 @@ func _start_offline_impl() -> void:
 	if voice_enabled:
 		stop_voice_chat(false)
 	mode = "offline"
+	emit_ui_qa_marker("page|offline")
 	recover_audio_after_screen_change()
 	# 尝试加载进度
 	var loaded = load_offline_progress()
@@ -5376,6 +5378,10 @@ func render_game() -> void:
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 	update_fx_turn_pulse()
+	if mode == "offline":
+		schedule_ui_qa_page_ready("offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
+		if settings_panel_open:
+			schedule_ui_qa_page_ready("settings", ["SettingsPanel", "SettingsTitleLabel", "SettingsRuleVariantButton", "SettingsCloseButton"])
 
 
 func update_ai_assistance_async() -> void:
@@ -23327,6 +23333,7 @@ func _show_menu_impl() -> void:
 	if voice_enabled:
 		stop_voice_chat(false)
 	mode = "menu"
+	emit_ui_qa_marker("page|menu")
 	clear_fx_overlays()
 	# 停止环境动画
 	stop_ambient_animation()
@@ -23480,6 +23487,9 @@ func _show_menu_impl() -> void:
 			var f_tw := create_screen_tween()
 			f_tw.tween_property(footer, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
 			f_tw.parallel().tween_property(footer, "offset_top", 0.0, 0.22).from(8.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
+	schedule_ui_qa_page_ready("menu", ["MenuTitleLabel", "MenuSettingsButton", "MenuQuickRulesButton"])
+	if settings_panel_open:
+		schedule_ui_qa_page_ready("settings", ["SettingsPanel", "SettingsTitleLabel", "SettingsRuleVariantButton", "SettingsCloseButton"])
 
 
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
@@ -23526,6 +23536,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 func _show_online_lobby_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "online_lobby"
+	emit_ui_qa_marker("page|online_lobby")
 	recover_audio_after_screen_change()
 	clear_screen()
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and not online_waiting_for_server:
@@ -23800,6 +23811,7 @@ func _show_online_lobby_impl() -> void:
 	draw_online_lobby_feedback_sync_art(panel)
 	ensure_update_dialog()
 	refresh_online_lobby_state()
+	schedule_ui_qa_page_ready("online_lobby", ["OnlineLobbyFormPanel", "OnlineLobbyNameEdit", "OnlineLobbyLogPanel", "OnlineLobbyLogScroll"])
 
 
 func refresh_online_lobby_state() -> void:
@@ -23948,6 +23960,7 @@ func refresh_online_feedback_art() -> void:
 func _show_rules_screen_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "rules"
+	emit_ui_qa_marker("page|rules")
 	clear_screen()
 
 	var codex_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.14), 24)  # r416
@@ -24132,6 +24145,7 @@ func _show_rules_screen_impl() -> void:
 	# 记录已查看教程
 	tutorial_step = -1
 	save_tutorial_state()
+	schedule_ui_qa_page_ready("rules", ["RulesCodexFrontPanel", "RulesContentScroll", "RulesContentScrollHitTarget", "RulesContentScrollThumb"])
 
 
 func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
@@ -24149,6 +24163,7 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var visible_ratio = 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
 	var thumb_height = track_height * visible_ratio
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
+	emit_ui_qa_marker("scroll|rules|%d|%d" % [int(round(scrollbar.value)), int(round(scroll_range))])
 	var thumb_top = track_top + (track_height - thumb_height) * progress
 	var thumb_left = float(thumb.get_meta("track_left", 0.220))
 	var thumb_right = float(thumb.get_meta("track_right", 0.780))
@@ -24643,6 +24658,7 @@ func _show_stats_screen_impl() -> void:
 
 func close_settings_panel() -> void:
 	settings_panel_open = false
+	emit_ui_qa_marker("settings|closed")
 	reset_progress_confirming = false
 	refresh_current_screen()
 	if mode == "menu" or mode == "offline" or mode == "online_game":
@@ -24781,6 +24797,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	"""显示每日登录签到面板 - 增强版"""
 	daily_login_view_state = login_result.duplicate(true)
 	mode = "daily_login"
+	emit_ui_qa_marker("page|daily_login")
 	clear_screen()
 
 	# 主面板
@@ -25207,6 +25224,7 @@ func show_exit_confirm() -> void:
 	"""显示退出确认对话框"""
 	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 		return
+	emit_ui_qa_marker("exit_confirm|open")
 	exit_confirm_focus_restore_id = focused_control_instance_id()
 	var overlay = Control.new()
 	overlay.name = "ExitConfirmOverlay"
@@ -25306,6 +25324,7 @@ func show_exit_confirm() -> void:
 			AnimationEffects.shake_popup(exit_btn_node, 6.0, 0.5)
 	else:
 		overlay.modulate = Color(1, 1, 1, 1)
+	schedule_ui_qa_page_ready("exit_confirm", ["ExitConfirmDialog", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"])
 
 
 func show_loading_screen(view_state: Dictionary = {}) -> void:
@@ -25677,6 +25696,7 @@ func toggle_music_setting() -> void:
 
 func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
+	emit_ui_qa_marker("settings|%s" % ("open" if settings_panel_open else "closed"))
 	reset_progress_confirming = false
 	refresh_current_screen()
 
@@ -26379,6 +26399,63 @@ func handle_ui_cancel() -> bool:
 			return true
 	return false
 
+
+func emit_ui_qa_marker(marker: String) -> void:
+	# Android smoke reads process markers from logcat; keep them invisible in the UI.
+	if OS.has_feature("android"):
+		print("UI_QA_MARKER|%s" % marker)
+
+
+func schedule_ui_qa_page_ready(page: String, required_nodes: Array) -> void:
+	if not OS.has_feature("android") or root_layer == null or not is_instance_valid(root_layer):
+		return
+	call_deferred("emit_ui_qa_page_ready", page, required_nodes.duplicate(), root_layer.get_instance_id())
+
+
+func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int) -> void:
+	# Wait through screen transitions and layout passes so Android evidence cannot
+	# mistake a mode assignment or partially-built control tree for a ready page.
+	for _i in range(120):
+		if not transition_active:
+			break
+		await get_tree().process_frame
+	if transition_active:
+		return
+	for _i in range(18):
+		await get_tree().process_frame
+	if root_layer == null or not is_instance_valid(root_layer) or root_layer.get_instance_id() != root_id:
+		return
+	if page == "settings":
+		if not settings_panel_open:
+			return
+	elif page == "exit_confirm":
+		if exit_confirm_panel == null or not is_instance_valid(exit_confirm_panel):
+			return
+	elif mode != page:
+		return
+	var root_rect := root_layer.get_global_rect()
+	var viewport_size := effective_viewport_size()
+	var node_parts: Array[String] = []
+	var missing_parts: Array[String] = []
+	for node_name_variant in required_nodes:
+		var node_name := str(node_name_variant)
+		var node := root_layer.find_child(node_name, true, false) as Control
+		if node == null or not is_instance_valid(node) or not node.is_visible_in_tree():
+			missing_parts.append(node_name)
+			continue
+		var rect := node.get_global_rect()
+		node_parts.append("%s@%.1f,%.1f,%.1f,%.1f" % [node_name, rect.position.x, rect.position.y, rect.size.x, rect.size.y])
+	var missing := ",".join(missing_parts)
+	emit_ui_qa_marker("page_ready|%s|ready_msec=%d|root=%.1f,%.1f,%.1f,%.1f|safe=%.1f,%.1f,%.1f,%.1f|viewport=%.1f,%.1f|nodes=%s|missing=%s" % [
+		page,
+		Time.get_ticks_msec(),
+		root_rect.position.x, root_rect.position.y, root_rect.size.x, root_rect.size.y,
+		safe_area_margins.x, safe_area_margins.y, safe_area_margins.z, safe_area_margins.w,
+		viewport_size.x, viewport_size.y,
+		";".join(node_parts), missing
+	])
+
+
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and handle_ui_cancel():
 		get_viewport().set_input_as_handled()
@@ -26395,6 +26472,9 @@ func _input(event: InputEvent) -> void:
 		update_menu_parallax(get_global_mouse_position())
 	elif menu_parallax_enabled and event is InputEventScreenDrag:
 		update_menu_parallax(event.position)
+	if event is InputEventScreenDrag:
+		var drag := event as InputEventScreenDrag
+		emit_ui_qa_marker("touch_drag|%s|%.1f|%.1f" % [mode, drag.position.x, drag.position.y])
 
 func unlock_achievement(key: String) -> bool:
 	if not achievements.has(key):
@@ -26561,6 +26641,7 @@ func hide_exit_confirm() -> void:
 	"""隐藏退出确认对话框"""
 	if exit_confirm_panel == null or not is_instance_valid(exit_confirm_panel):
 		return
+	emit_ui_qa_marker("exit_confirm|closed")
 	var panel = exit_confirm_panel
 	exit_confirm_panel = null
 	var panel_id = panel.get_instance_id()
@@ -26579,6 +26660,8 @@ func hide_exit_confirm() -> void:
 func finish_exit_confirm_hide(panel_id: int, restore_id: int) -> void:
 	queue_free_node_by_id(panel_id)
 	call_deferred("restore_control_focus_by_id", restore_id)
+	if mode == "offline":
+		call_deferred("schedule_ui_qa_page_ready", "offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
 
 
 func menu_quick_button_glyph(quick_id: String) -> String:
@@ -27039,6 +27122,7 @@ func scroll_online_log_to_end() -> void:
 		return
 	var scrollbar := log_scroll.get_v_scroll_bar()
 	log_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
+	emit_ui_qa_marker("scroll|online_lobby|%d|%d" % [log_scroll.scroll_vertical, int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))])
 
 func restore_online_log_scroll(value: int) -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
@@ -27046,6 +27130,8 @@ func restore_online_log_scroll(value: int) -> void:
 	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
 	if log_scroll != null:
 		log_scroll.scroll_vertical = value
+		var scrollbar := log_scroll.get_v_scroll_bar()
+		emit_ui_qa_marker("scroll|online_lobby|%d|%d" % [log_scroll.scroll_vertical, int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))])
 
 
 func deal_offline_hand() -> void:

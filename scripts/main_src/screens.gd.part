@@ -169,6 +169,7 @@ func _show_menu_impl() -> void:
 	if voice_enabled:
 		stop_voice_chat(false)
 	mode = "menu"
+	emit_ui_qa_marker("page|menu")
 	clear_fx_overlays()
 	# 停止环境动画
 	stop_ambient_animation()
@@ -322,6 +323,9 @@ func _show_menu_impl() -> void:
 			var f_tw := create_screen_tween()
 			f_tw.tween_property(footer, "modulate:a", 1.0, 0.22).from(0.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
 			f_tw.parallel().tween_property(footer, "offset_top", 0.0, 0.22).from(8.0).set_delay(0.08).set_ease(Tween.EASE_OUT)
+	schedule_ui_qa_page_ready("menu", ["MenuTitleLabel", "MenuSettingsButton", "MenuQuickRulesButton"])
+	if settings_panel_open:
+		schedule_ui_qa_page_ready("settings", ["SettingsPanel", "SettingsTitleLabel", "SettingsRuleVariantButton", "SettingsCloseButton"])
 
 
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
@@ -368,6 +372,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 func _show_online_lobby_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "online_lobby"
+	emit_ui_qa_marker("page|online_lobby")
 	recover_audio_after_screen_change()
 	clear_screen()
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and not online_waiting_for_server:
@@ -642,6 +647,7 @@ func _show_online_lobby_impl() -> void:
 	draw_online_lobby_feedback_sync_art(panel)
 	ensure_update_dialog()
 	refresh_online_lobby_state()
+	schedule_ui_qa_page_ready("online_lobby", ["OnlineLobbyFormPanel", "OnlineLobbyNameEdit", "OnlineLobbyLogPanel", "OnlineLobbyLogScroll"])
 
 
 func refresh_online_lobby_state() -> void:
@@ -790,6 +796,7 @@ func refresh_online_feedback_art() -> void:
 func _show_rules_screen_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "rules"
+	emit_ui_qa_marker("page|rules")
 	clear_screen()
 
 	var codex_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.14), 24)  # r416
@@ -974,6 +981,7 @@ func _show_rules_screen_impl() -> void:
 	# 记录已查看教程
 	tutorial_step = -1
 	save_tutorial_state()
+	schedule_ui_qa_page_ready("rules", ["RulesCodexFrontPanel", "RulesContentScroll", "RulesContentScrollHitTarget", "RulesContentScrollThumb"])
 
 
 func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
@@ -991,6 +999,7 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var visible_ratio = 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
 	var thumb_height = track_height * visible_ratio
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
+	emit_ui_qa_marker("scroll|rules|%d|%d" % [int(round(scrollbar.value)), int(round(scroll_range))])
 	var thumb_top = track_top + (track_height - thumb_height) * progress
 	var thumb_left = float(thumb.get_meta("track_left", 0.220))
 	var thumb_right = float(thumb.get_meta("track_right", 0.780))
@@ -1485,6 +1494,7 @@ func _show_stats_screen_impl() -> void:
 
 func close_settings_panel() -> void:
 	settings_panel_open = false
+	emit_ui_qa_marker("settings|closed")
 	reset_progress_confirming = false
 	refresh_current_screen()
 	if mode == "menu" or mode == "offline" or mode == "online_game":
@@ -1623,6 +1633,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	"""显示每日登录签到面板 - 增强版"""
 	daily_login_view_state = login_result.duplicate(true)
 	mode = "daily_login"
+	emit_ui_qa_marker("page|daily_login")
 	clear_screen()
 
 	# 主面板
@@ -2049,6 +2060,7 @@ func show_exit_confirm() -> void:
 	"""显示退出确认对话框"""
 	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 		return
+	emit_ui_qa_marker("exit_confirm|open")
 	exit_confirm_focus_restore_id = focused_control_instance_id()
 	var overlay = Control.new()
 	overlay.name = "ExitConfirmOverlay"
@@ -2148,6 +2160,7 @@ func show_exit_confirm() -> void:
 			AnimationEffects.shake_popup(exit_btn_node, 6.0, 0.5)
 	else:
 		overlay.modulate = Color(1, 1, 1, 1)
+	schedule_ui_qa_page_ready("exit_confirm", ["ExitConfirmDialog", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"])
 
 
 func show_loading_screen(view_state: Dictionary = {}) -> void:
@@ -2519,6 +2532,7 @@ func toggle_music_setting() -> void:
 
 func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
+	emit_ui_qa_marker("settings|%s" % ("open" if settings_panel_open else "closed"))
 	reset_progress_confirming = false
 	refresh_current_screen()
 

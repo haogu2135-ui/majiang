@@ -178,6 +178,7 @@ func clear_screen() -> void:
 	update_secondary_button = null
 	menu_realtime_3d_stage = null
 	safe_area_margins = current_safe_area_margins()
+	emit_ui_qa_marker("safe_area|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f" % [safe_area_margins.x, safe_area_margins.y, safe_area_margins.z, safe_area_margins.w, effective_viewport_size().x, effective_viewport_size().y])
 	screen_layer = Control.new()
 	screen_layer.name = "ScreenLayer"
 	screen_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -210,6 +211,7 @@ func _start_offline_impl() -> void:
 	if voice_enabled:
 		stop_voice_chat(false)
 	mode = "offline"
+	emit_ui_qa_marker("page|offline")
 	recover_audio_after_screen_change()
 	# 尝试加载进度
 	var loaded = load_offline_progress()
@@ -402,6 +404,10 @@ func render_game() -> void:
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 	update_fx_turn_pulse()
+	if mode == "offline":
+		schedule_ui_qa_page_ready("offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
+		if settings_panel_open:
+			schedule_ui_qa_page_ready("settings", ["SettingsPanel", "SettingsTitleLabel", "SettingsRuleVariantButton", "SettingsCloseButton"])
 
 
 func update_ai_assistance_async() -> void:

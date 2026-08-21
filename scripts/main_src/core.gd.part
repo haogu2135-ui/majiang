@@ -213,6 +213,63 @@ func handle_ui_cancel() -> bool:
 			return true
 	return false
 
+
+func emit_ui_qa_marker(marker: String) -> void:
+	# Android smoke reads process markers from logcat; keep them invisible in the UI.
+	if OS.has_feature("android"):
+		print("UI_QA_MARKER|%s" % marker)
+
+
+func schedule_ui_qa_page_ready(page: String, required_nodes: Array) -> void:
+	if not OS.has_feature("android") or root_layer == null or not is_instance_valid(root_layer):
+		return
+	call_deferred("emit_ui_qa_page_ready", page, required_nodes.duplicate(), root_layer.get_instance_id())
+
+
+func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int) -> void:
+	# Wait through screen transitions and layout passes so Android evidence cannot
+	# mistake a mode assignment or partially-built control tree for a ready page.
+	for _i in range(120):
+		if not transition_active:
+			break
+		await get_tree().process_frame
+	if transition_active:
+		return
+	for _i in range(18):
+		await get_tree().process_frame
+	if root_layer == null or not is_instance_valid(root_layer) or root_layer.get_instance_id() != root_id:
+		return
+	if page == "settings":
+		if not settings_panel_open:
+			return
+	elif page == "exit_confirm":
+		if exit_confirm_panel == null or not is_instance_valid(exit_confirm_panel):
+			return
+	elif mode != page:
+		return
+	var root_rect := root_layer.get_global_rect()
+	var viewport_size := effective_viewport_size()
+	var node_parts: Array[String] = []
+	var missing_parts: Array[String] = []
+	for node_name_variant in required_nodes:
+		var node_name := str(node_name_variant)
+		var node := root_layer.find_child(node_name, true, false) as Control
+		if node == null or not is_instance_valid(node) or not node.is_visible_in_tree():
+			missing_parts.append(node_name)
+			continue
+		var rect := node.get_global_rect()
+		node_parts.append("%s@%.1f,%.1f,%.1f,%.1f" % [node_name, rect.position.x, rect.position.y, rect.size.x, rect.size.y])
+	var missing := ",".join(missing_parts)
+	emit_ui_qa_marker("page_ready|%s|ready_msec=%d|root=%.1f,%.1f,%.1f,%.1f|safe=%.1f,%.1f,%.1f,%.1f|viewport=%.1f,%.1f|nodes=%s|missing=%s" % [
+		page,
+		Time.get_ticks_msec(),
+		root_rect.position.x, root_rect.position.y, root_rect.size.x, root_rect.size.y,
+		safe_area_margins.x, safe_area_margins.y, safe_area_margins.z, safe_area_margins.w,
+		viewport_size.x, viewport_size.y,
+		";".join(node_parts), missing
+	])
+
+
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and handle_ui_cancel():
 		get_viewport().set_input_as_handled()
@@ -229,6 +286,9 @@ func _input(event: InputEvent) -> void:
 		update_menu_parallax(get_global_mouse_position())
 	elif menu_parallax_enabled and event is InputEventScreenDrag:
 		update_menu_parallax(event.position)
+	if event is InputEventScreenDrag:
+		var drag := event as InputEventScreenDrag
+		emit_ui_qa_marker("touch_drag|%s|%.1f|%.1f" % [mode, drag.position.x, drag.position.y])
 
 func unlock_achievement(key: String) -> bool:
 	if not achievements.has(key):
@@ -395,6 +455,7 @@ func hide_exit_confirm() -> void:
 	"""隐藏退出确认对话框"""
 	if exit_confirm_panel == null or not is_instance_valid(exit_confirm_panel):
 		return
+	emit_ui_qa_marker("exit_confirm|closed")
 	var panel = exit_confirm_panel
 	exit_confirm_panel = null
 	var panel_id = panel.get_instance_id()
@@ -413,6 +474,8 @@ func hide_exit_confirm() -> void:
 func finish_exit_confirm_hide(panel_id: int, restore_id: int) -> void:
 	queue_free_node_by_id(panel_id)
 	call_deferred("restore_control_focus_by_id", restore_id)
+	if mode == "offline":
+		call_deferred("schedule_ui_qa_page_ready", "offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
 
 
 func menu_quick_button_glyph(quick_id: String) -> String:
@@ -873,6 +936,7 @@ func scroll_online_log_to_end() -> void:
 		return
 	var scrollbar := log_scroll.get_v_scroll_bar()
 	log_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
+	emit_ui_qa_marker("scroll|online_lobby|%d|%d" % [log_scroll.scroll_vertical, int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))])
 
 func restore_online_log_scroll(value: int) -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
@@ -880,6 +944,8 @@ func restore_online_log_scroll(value: int) -> void:
 	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
 	if log_scroll != null:
 		log_scroll.scroll_vertical = value
+		var scrollbar := log_scroll.get_v_scroll_bar()
+		emit_ui_qa_marker("scroll|online_lobby|%d|%d" % [log_scroll.scroll_vertical, int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))])
 
 
 func deal_offline_hand() -> void:
