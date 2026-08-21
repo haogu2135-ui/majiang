@@ -813,9 +813,10 @@ func offline_tile_ledger_report() -> Dictionary:
 	var unknown: Array[String] = []
 	var malformed: Array[String] = []
 	var flower_mismatches: Array[String] = []
-	for tile in TILE_CODES:
+	var active_variant: String = active_rule_variant()
+	for tile in rule_tile_codes(active_variant):
 		expected[str(tile)] = 4
-	for tile in FLOWER_CODES:
+	for tile in rule_flower_codes(active_variant):
 		expected[str(tile)] = 1
 	var note_tiles := func(tiles, source: String) -> void:
 		if typeof(tiles) != TYPE_ARRAY:

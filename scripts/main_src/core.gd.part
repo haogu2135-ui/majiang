@@ -1209,6 +1209,12 @@ func effective_viewport_size() -> Vector2:
 		)
 	return viewport_size
 
+
+func commercial_ui_font_size(base_size: int, wide_increment: int = 0) -> int:
+	# Keep 960/1280 typography stable; use one bounded desktop breakpoint so
+	# 1920-wide pages do not become visually sparse without continuous scaling.
+	return base_size + wide_increment if effective_viewport_size().x >= 1600.0 else base_size
+
 func current_safe_area_margins() -> Vector4:
 	if safe_area_test_margins_override.x >= 0.0 and safe_area_test_margins_override.y >= 0.0 and safe_area_test_margins_override.z >= 0.0 and safe_area_test_margins_override.w >= 0.0:
 		return clamp_safe_area_margins(safe_area_test_margins_override, effective_viewport_size())
@@ -2556,6 +2562,10 @@ func is_ai_claim_context_for_seat(claim_context: Dictionary, seat: int) -> bool:
 
 
 func record_claim_source(claimer: int, from_seat: int, claim: String) -> void:
+	# 包三搭只属于启用该规则的牌局；其它地方规则不能让 AI 看到
+	# 不会结算的责任状态，也不能让旧状态在切换规则后继续生效。
+	if not rule_uses_package_liability():
+		return
 	if claimer < 0 or claimer >= players.size() or from_seat < 0 or from_seat >= players.size() or claimer == from_seat:
 		return
 	if claim != "chi" and claim != "peng" and claim != "gang":
@@ -2571,6 +2581,8 @@ func claim_source_key(claimer: int, from_seat: int) -> String:
 	return "%d:%d" % [claimer, from_seat]
 
 func package_payer_for(winner: int) -> int:
+	if not rule_uses_package_liability():
+		return -1
 	return package_payer_from_state(winner)
 
 
@@ -5989,7 +6001,10 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section_plate.name = "RuleSectionPlate_%d" % section_index if section_index >= 0 else "RuleSectionPlate"
 	section.add_child(section_plate)
 	var line_count := int(lines.size())
-	var required_text_height := 24.0 + float(line_count) * 22.0 + float(line_count) * 5.0 + 34.0
+	var wide_typography := effective_viewport_size().x >= 1600.0
+	var line_height := 25.0 if wide_typography else 22.0
+	var line_gap := 6.0 if wide_typography else 5.0
+	var required_text_height := (26.0 if wide_typography else 24.0) + float(line_count) * line_height + float(line_count) * line_gap + (38.0 if wide_typography else 34.0)
 	section.custom_minimum_size.y = max(136.0, required_text_height)
 	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.035), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
@@ -6015,19 +6030,19 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	vbox.anchor_top = 0.040
 	vbox.anchor_right = 0.792 if section_index >= 0 else 0.96
 	vbox.anchor_bottom = 0.970
-	vbox.add_theme_constant_override("separation", 5)
+	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)
 
-	var title_label = make_label(vbox, title_text, 18, Color(1.00, 0.91, 0.60), true)
+	var title_label = make_label(vbox, title_text, commercial_ui_font_size(18, 3), Color(1.00, 0.91, 0.60), true)
 	title_label.name = "RuleSectionTitle_%d" % section_index if section_index >= 0 else "RuleSectionTitle"
-	title_label.custom_minimum_size = Vector2(0, 24)
+	title_label.custom_minimum_size = Vector2(0, 26 if wide_typography else 24)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
 
 	for line in lines:
-		var line_label = make_label(vbox, str(line), 15, Color(0.94, 0.96, 0.88), false)
+		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
 		line_label.name = "RuleSectionLine_%d" % section_index if section_index >= 0 else "RuleSectionLine"
-		line_label.custom_minimum_size = Vector2(0, 22)
+		line_label.custom_minimum_size = Vector2(0, line_height)
 		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(line_label)
 		line_label.clip_contents = true

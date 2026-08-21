@@ -74,9 +74,11 @@ GODOT_SILENCE_ROOT_WARNING=1 godot --headless --script scripts/offline_smoke_tes
 scripts/verify_ai_commercial.sh
 scripts/verify_ui_regressions.sh
 scripts/verify_android_release.sh /path/to/YunzhuoMahjongGodot-v1.0.180.apk
+scripts/verify_android_device.sh --unsigned-debug /path/to/device-test.apk
+scripts/verify_online_production.sh [HOST] [PORT]
 ```
 
-AI 门禁覆盖本地规则、隐藏信息公平、策略、牌张/分数守恒和多种子强度；UI 门禁覆盖布局、离线玩法、三种分辨率页面截图与泄漏扫描。Android 门禁需要实际签名 APK 和 Android build-tools，源码仓库本身不构成签名发布证据。
+AI 门禁覆盖本地规则、隐藏信息公平、策略、牌张/分数守恒和多种子强度；UI 门禁覆盖布局、离线玩法、三种分辨率页面截图与泄漏扫描。Android 静态门禁需要实际签名 APK 和 Android build-tools；真机门禁要求恰好一个已授权 adb 设备，覆盖安装/启动、触控、IME、安全区和系统返回；生产探针只发送 `hello`，不创建房间。上述门禁仍不能替代 approved signing identity、signed APK/AAB、生产多客户端持续 soak 或人工视觉验收。
 
 ## 下载服务
 

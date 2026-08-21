@@ -85,6 +85,9 @@ qa_filter_self_test() {
 	local -a bad_paths=(
 		"assets/build/qa/report.md"
 		"assets/scripts/ai_play_soak_check.gdc"
+		"assets/scripts/ai_play_rule_variant_soak_check.gdc"
+		"assets/scripts/verify_android_device.sh"
+		"assets/scripts/verify_online_production.sh"
 		"assets/scripts/ai_play_round95_check.gd.uid"
 		"assets/scripts/ui_interaction_smoke_test.gdc"
 		"assets/scripts/ui_preview_capture.gdc"

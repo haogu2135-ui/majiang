@@ -4,7 +4,14 @@
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GODOT_BIN="${GODOT_BIN:-godot}"
+DEFAULT_GODOT_BIN="/opt/godot/Godot_v4.6.3-stable_linux.arm64"
+if [ -z "${GODOT_BIN:-}" ]; then
+	if [ -x "$DEFAULT_GODOT_BIN" ]; then
+		GODOT_BIN="$DEFAULT_GODOT_BIN"
+	else
+		GODOT_BIN="godot"
+	fi
+fi
 EXPECTED_GODOT_VERSION_PREFIX="${EXPECTED_GODOT_VERSION_PREFIX:-4.6.3}"
 REPORT_DIR="$ROOT_DIR/build/qa/ai_play_commercial_evidence"
 REPORT="$REPORT_DIR/EVIDENCE_LATEST.md"
@@ -154,6 +161,8 @@ run_godot_check "Rule legality" 65 "single-winner ron arbitration is determinist
 run_godot_check "Endgame policy" 67 "late-wall self-gang discipline is bounded"
 run_godot_check "Runtime stability" 66 "fresh-scene benchmarks initialize and finish"
 run_godot_check "Tile integrity" 74 "the full 144-tile ledger is conserved"
+run_check "Rule variants" "all local rule profiles complete AI hands and score correctly" "ai_rule_variant_soak.log" \
+	run_low_resource_godot --headless --path "$ROOT_DIR" -s "scripts/ai_play_rule_variant_soak_check.gd"
 run_godot_check "Scoring contract" 77 "advertised special hands score correctly"
 run_godot_check "Score integrity" 82 "all difficulties conserve table score"
 run_godot_check "Strategy quality" 87 "pure-suit route reward is counted once"

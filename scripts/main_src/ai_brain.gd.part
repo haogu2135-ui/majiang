@@ -1100,7 +1100,7 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 		"readiness": 0.0,
 		"text": "",
 	}
-	if mode != "offline" or seat < 0 or seat >= players.size() or tile == "":
+	if mode != "offline" or not rule_uses_package_liability() or seat < 0 or seat >= players.size() or tile == "":
 		return out
 	var details: Array = feed_report.get("details", [])
 	for item in details:

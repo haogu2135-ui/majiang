@@ -1980,7 +1980,7 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 		"readiness": 0.0,
 		"text": "",
 	}
-	if mode != "offline" or seat < 0 or seat >= players.size() or tile == "":
+	if mode != "offline" or not rule_uses_package_liability() or seat < 0 or seat >= players.size() or tile == "":
 		return out
 	var details: Array = feed_report.get("details", [])
 	for item in details:
@@ -5787,9 +5787,10 @@ func offline_tile_ledger_report() -> Dictionary:
 	var unknown: Array[String] = []
 	var malformed: Array[String] = []
 	var flower_mismatches: Array[String] = []
-	for tile in TILE_CODES:
+	var active_variant: String = active_rule_variant()
+	for tile in rule_tile_codes(active_variant):
 		expected[str(tile)] = 4
-	for tile in FLOWER_CODES:
+	for tile in rule_flower_codes(active_variant):
 		expected[str(tile)] = 1
 	var note_tiles := func(tiles, source: String) -> void:
 		if typeof(tiles) != TYPE_ARRAY:
@@ -20494,7 +20495,7 @@ func make_lobby_action_button(text: String, color: Color, callback: Callable, in
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	button.set_meta("menu_motion_intro_alpha", clampf(intro_alpha, 0.0, 1.0))
-	button.add_theme_font_size_override("font_size", 17)
+	button.add_theme_font_size_override("font_size", commercial_ui_font_size(17, 2))
 	button.add_theme_color_override("font_color", Color(0.97, 0.95, 0.84))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90))
 	button.add_theme_color_override("font_pressed_color", Color(0.98, 0.90, 0.66))
@@ -20670,14 +20671,14 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	text_back.name = "MenuCardTextBackplate"
 	button.add_child(text_back)
 	text_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var title = make_label(button, title_text, 22, Color(1.00, 0.90, 0.56), true)
+	var title = make_label(button, title_text, commercial_ui_font_size(22, 4), Color(1.00, 0.90, 0.56), true)
 	title.name = "MenuCardTitleLabel"
 	apply_rect(title, rect_full(0.10, 0.13, 0.68 if icon_name != "" else 0.92, 0.48))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	configure_clipped_label(title)
 	if subtitle_text != "":
-		var subtitle = make_label(button, subtitle_text, 14, Color(0.92, 0.90, 0.76), false)
+		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(14, 2), Color(0.92, 0.90, 0.76), false)
 		subtitle.name = "MenuCardSubtitleLabel"
 		apply_rect(subtitle, rect_full(0.10, 0.50, 0.68 if icon_name != "" else 0.92, 0.78))
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -23353,7 +23354,7 @@ func _show_menu_impl() -> void:
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 游戏标题 - 更大更突出，使用国风金色
-	var title = make_label(header, "云桌麻将", 30, Color(1.00, 0.88, 0.54), true)
+	var title = make_label(header, "云桌麻将", commercial_ui_font_size(30, 4), Color(1.00, 0.88, 0.54), true)
 	title.name = "MenuTitleLabel"
 	apply_rect(title, rect_full(0.010, 0.050, 0.950, 0.860))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -23492,7 +23493,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	caption.text = label_text
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption.custom_minimum_size = Vector2(0, 16)
-	caption.add_theme_font_size_override("font_size", 13)
+	caption.add_theme_font_size_override("font_size", commercial_ui_font_size(13, 1))
 	caption.add_theme_color_override("font_color", Color(0.95, 0.88, 0.64))
 	row.add_child(caption)
 	var edit = LineEdit.new()
@@ -23501,7 +23502,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	edit.virtual_keyboard_type = keyboard_type
 	edit.custom_minimum_size = Vector2(240, 38)
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	edit.add_theme_font_size_override("font_size", 18)
+	edit.add_theme_font_size_override("font_size", commercial_ui_font_size(18, 2))
 	var input_styles = input_style_set()
 	edit.add_theme_stylebox_override("normal", input_styles["normal"])
 	edit.add_theme_stylebox_override("focus", input_styles["focus"])
@@ -23556,18 +23557,18 @@ func _show_online_lobby_impl() -> void:
 		panel.move_child(fan_texture, 0)
 
 	# 标题区域
-	var title = make_label(panel, "联机大厅", 32, Color(1.0, 0.96, 0.78), true)
+	var title = make_label(panel, "联机大厅", commercial_ui_font_size(32, 6), Color(1.0, 0.96, 0.78), true)
 	apply_rect(title, rect_full(0.04, 0.028, 0.28, 0.10))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.92))
 	title.add_theme_constant_override("outline_size", 4)
-	var subtitle = make_label(panel, "连接本机或局域网房间，创建后等待玩家进入。", 15, Color(0.96, 0.96, 0.90), false)
+	var subtitle = make_label(panel, "连接本机或局域网房间，创建后等待玩家进入。", commercial_ui_font_size(15, 2), Color(0.96, 0.96, 0.90), false)
 	apply_rect(subtitle, rect_full(0.04, 0.095, 0.48, 0.14))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	# 服务器和状态徽章
 	var endpoint_text := online_connection_endpoint_text()
-	var server_badge = make_badge(panel, rect_full(0.600, 0.040, 0.815, 0.105), endpoint_text, 12, Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
+	var server_badge = make_badge(panel, rect_full(0.600, 0.040, 0.815, 0.105), endpoint_text, commercial_ui_font_size(12, 2), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
 	server_badge.name = "OnlineLobbyServerEndpointBadge"
 	server_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var server_badge_label = server_badge.get_child(server_badge.get_child_count() - 1) as Label if server_badge.get_child_count() > 0 else null
@@ -23575,7 +23576,7 @@ func _show_online_lobby_impl() -> void:
 		server_badge_label.name = "OnlineLobbyServerEndpointLabel"
 		apply_rect(server_badge_label, rect_full(0.055, 0.04, 0.945, 0.96))
 		server_badge_label.tooltip_text = endpoint_text
-	var state_badge = make_badge(panel, rect_full(0.835, 0.040, 0.960, 0.105), lobby_connection_state_text(), 12, Color(0.18, 0.13, 0.08, 0.78), Color(0.78, 0.58, 0.30, 0.28), Color(0.94, 0.88, 0.72))  # r415 warm
+	var state_badge = make_badge(panel, rect_full(0.835, 0.040, 0.960, 0.105), lobby_connection_state_text(), commercial_ui_font_size(12, 2), Color(0.18, 0.13, 0.08, 0.78), Color(0.78, 0.58, 0.30, 0.28), Color(0.94, 0.88, 0.72))  # r415 warm
 	state_badge.name = "OnlineLobbyConnectionStateBadge"
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var state_badge_label = state_badge.get_child(state_badge.get_child_count() - 1) as Label if state_badge.get_child_count() > 0 else null
@@ -23602,7 +23603,7 @@ func _show_online_lobby_impl() -> void:
 	if form_panel_frame != null:
 		form_panel_frame.name = "OnlineLobbyFormGPTPanelFrameTexture"
 		form_panel.move_child(form_panel_frame, 0)
-	var form_title = make_label(form_panel, "连接与房间", 20, Color(0.90, 0.86, 0.60), true)
+	var form_title = make_label(form_panel, "连接与房间", commercial_ui_font_size(20, 3), Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.98), "ui_dark_scrim", 0.24)
@@ -23688,7 +23689,7 @@ func _show_online_lobby_impl() -> void:
 	# 状态栏
 	var lobby_status_text := "可建房/入房，房主可开始" if can_start_online else "下一步 · 先连接，再建房或入房"
 	# r187: warm ivory status text + denser GPT plate for secondary readability.
-	status_label = make_label(panel, lobby_status_text, 14, Color(0.96, 0.92, 0.80), false)
+	status_label = make_label(panel, lobby_status_text, commercial_ui_font_size(14, 2), Color(0.96, 0.92, 0.80), false)
 	status_label.name = "OnlineLobbyStatusLabel"
 	apply_rect(status_label, rect_full(0.045, 0.896, 0.480, 0.936))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -23740,7 +23741,7 @@ func _show_online_lobby_impl() -> void:
 		tw_log.tween_property(log_panel, "offset_left", 0.0, 0.28).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD).set_delay(0.12)
 		if ui_enhancements != null:
 			ui_enhancements.animate_panel_breath(log_panel, Vector2(0.0, -2.0), 3.6, 0.95)
-	var log_title = make_label(log_panel, "房间状态", 20, Color(0.98, 0.94, 0.82), true)
+	var log_title = make_label(log_panel, "房间状态", commercial_ui_font_size(20, 3), Color(0.98, 0.94, 0.82), true)
 	apply_rect(log_title, rect_full(0.05, 0.020, 0.48, 0.095))
 	log_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	log_title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.58))
@@ -23750,7 +23751,7 @@ func _show_online_lobby_impl() -> void:
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
-	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, 12, Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
+	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP
 	room_badge.gui_input.connect(func(event: InputEvent) -> void:
@@ -23765,7 +23766,7 @@ func _show_online_lobby_impl() -> void:
 	draw_online_lobby_roster_panel(log_panel)
 	draw_online_lobby_log_stream_art(log_panel)
 	var log_list_panel = draw_online_lobby_log_list_panel(log_panel)
-	var room_offline_state = make_label(log_panel, "连接后显示房间、席位和日志", 16, Color(0.82, 0.86, 0.78, 0.86), true)
+	var room_offline_state = make_label(log_panel, "连接后显示房间、席位和日志", commercial_ui_font_size(16, 2), Color(0.82, 0.86, 0.78, 0.86), true)
 	room_offline_state.name = "OnlineLobbyRoomOfflineState"
 	apply_rect(room_offline_state, rect_full(0.12, 0.42, 0.88, 0.58))
 	room_offline_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -23789,7 +23790,7 @@ func _show_online_lobby_impl() -> void:
 	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	logs_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.88))
 	logs_label.add_theme_color_override("default_color", Color(0.96, 0.97, 0.88))
-	logs_label.add_theme_font_size_override("normal_font_size", 13 if compact_lobby_log else 14)
+	logs_label.add_theme_font_size_override("normal_font_size", 13 if compact_lobby_log else commercial_ui_font_size(14, 2))
 	logs_label.add_theme_constant_override("outline_size", 1)
 	logs_label.add_theme_constant_override("line_spacing", -2 if compact_lobby_log else 0)
 	logs_label.custom_minimum_size = Vector2.ZERO
@@ -23974,7 +23975,7 @@ func _show_rules_screen_impl() -> void:
 		tw.tween_property(panel, "offset_right", 0.0, 0.26).from(-22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 标题
-	var title = make_label(panel, "麻将玩法指南 · %s" % rule_variant_label(), 25, Color(0.96, 0.88, 0.52), true)
+	var title = make_label(panel, "麻将玩法指南 · %s" % rule_variant_label(), commercial_ui_font_size(25, 5), Color(0.96, 0.88, 0.52), true)
 	apply_rect(title, rect_full(0.04, 0.024, 0.46, 0.082))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
@@ -23985,7 +23986,7 @@ func _show_rules_screen_impl() -> void:
 		show_menu()
 	)
 	back.custom_minimum_size = Vector2(92, 44)
-	back.add_theme_font_size_override("font_size", 16)
+	back.add_theme_font_size_override("font_size", commercial_ui_font_size(16, 2))
 	draw_secondary_back_button_art(back, "rules", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.835, 0.026, 0.945, 0.112))
@@ -24013,21 +24014,25 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rules_scroll_gutter = make_panel(panel, rect_full(0.934, 0.180, 0.949, 0.960), Color(0.07, 0.06, 0.05, 0.92), 999, Color(0.30, 0.25, 0.16, 0.42), 0, "ui_dark_scrim")  # r227 authored dark track
+	var compact_rules_scroll := effective_viewport_size().y <= 560.0
+	var gutter_left := 0.934
+	var gutter_right := 0.950 if compact_rules_scroll else 0.949
+	var rules_scroll_gutter = make_panel(panel, rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.07, 0.06, 0.05, 0.92), 999, Color(0.30, 0.25, 0.16, 0.42), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var compact_rules_scroll := effective_viewport_size().y <= 560.0
-	var thumb_left := 0.060 if compact_rules_scroll else 0.220
-	var thumb_right := 0.940 if compact_rules_scroll else 0.780
+	var thumb_left := 0.180 if compact_rules_scroll else 0.220
+	var thumb_right := 0.820 if compact_rules_scroll else 0.780
 	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), 999, Color(1.0, 0.92, 0.64, 0.92), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rules_scroll_thumb.set_meta("track_left", thumb_left)
 	rules_scroll_thumb.set_meta("track_right", thumb_right)
-	var scroll_top_icon = add_lucide_icon(rules_scroll_gutter, "chevron-up", rect_full(0.205, 0.008, 0.795, 0.070), Color(1.0, 0.90, 0.58, 0.80))
+	var scroll_icon_left := 0.080 if compact_rules_scroll else 0.205
+	var scroll_icon_right := 0.920 if compact_rules_scroll else 0.795
+	var scroll_top_icon = add_lucide_icon(rules_scroll_gutter, "chevron-up", rect_full(scroll_icon_left, 0.014 if compact_rules_scroll else 0.008, scroll_icon_right, 0.145 if compact_rules_scroll else 0.070), Color(1.0, 0.90, 0.58, 0.86))
 	if scroll_top_icon != null:
 		scroll_top_icon.name = "RulesContentScrollTopCue"
-	var scroll_bottom_icon = add_lucide_icon(rules_scroll_gutter, "chevron-down", rect_full(0.205, 0.930, 0.795, 0.992), Color(1.0, 0.90, 0.58, 0.86))
+	var scroll_bottom_icon = add_lucide_icon(rules_scroll_gutter, "chevron-down", rect_full(scroll_icon_left, 0.855 if compact_rules_scroll else 0.930, scroll_icon_right, 0.986), Color(1.0, 0.90, 0.58, 0.92))
 	if scroll_bottom_icon != null:
 		scroll_bottom_icon.name = "RulesContentScrollBottomCue"
 	var rules_scroll_hit_target = Control.new()
@@ -24232,7 +24237,7 @@ func _show_shop_screen_impl() -> void:
 
 	# 标题 - 带图标
 	add_lucide_icon(panel, "shopping-bag", rect_full(0.03, 0.030, 0.06, 0.090), GOLD_BRIGHT)
-	var title = make_label(panel, "商店", 30, Color(1.0, 0.96, 0.78), true)
+	var title = make_label(panel, "商店", commercial_ui_font_size(30, 4), Color(1.0, 0.96, 0.78), true)
 	apply_rect(title, rect_full(0.07, 0.028, 0.40, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.92))
@@ -24253,7 +24258,7 @@ func _show_shop_screen_impl() -> void:
 		apply_gold_foil_shader(coin_gold, 0.6, 0.3)
 	coins_panel.add_child(coin_gold)
 	add_lucide_icon(coins_panel, "coin", rect_full(0.06, 0.15, 0.22, 0.85), GOLD_PRIMARY)
-	var coins_label = make_label(coins_panel, str(int(currency.get("coins", 0))), 16, Color(0.96, 0.92, 0.68), true)
+	var coins_label = make_label(coins_panel, str(int(currency.get("coins", 0))), commercial_ui_font_size(16, 2), Color(0.96, 0.92, 0.68), true)
 	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
@@ -24265,7 +24270,7 @@ func _show_shop_screen_impl() -> void:
 		gems_gpt.name = "ShopCurrencyGptPlate_gems"
 	draw_shop_currency_meter_art(gems_panel, "gems", int(currency.get("gems", 0)), Color(0.62, 0.52, 0.82))
 	add_lucide_icon(gems_panel, "diamond", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.62, 0.52, 0.82))
-	var gems_label = make_label(gems_panel, str(int(currency.get("gems", 0))), 16, Color(0.96, 0.92, 0.68), true)
+	var gems_label = make_label(gems_panel, str(int(currency.get("gems", 0))), commercial_ui_font_size(16, 2), Color(0.96, 0.92, 0.68), true)
 	apply_rect(gems_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	gems_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
@@ -24392,7 +24397,7 @@ func _show_shop_screen_impl() -> void:
 			(text_plate as CanvasItem).modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 		# 道具名称
-		var name_label = make_label(row, str(item_info.get("name", item_id)), 20, Color(1.0, 0.98, 0.92), true)
+		var name_label = make_label(row, str(item_info.get("name", item_id)), commercial_ui_font_size(20, 3), Color(1.0, 0.98, 0.92), true)
 		name_label.name = "ShopItemName_%s" % item_id
 		apply_rect(name_label, rect_full(0.164, 0.090, 0.480, 0.440))
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -24408,7 +24413,7 @@ func _show_shop_screen_impl() -> void:
 		identity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 		# 道具描述
-		var desc_label = make_label(row, str(item_info.get("desc", "")), 14, Color(0.98, 0.96, 0.90), false)
+		var desc_label = make_label(row, str(item_info.get("desc", "")), commercial_ui_font_size(14, 2), Color(0.98, 0.96, 0.90), false)
 		desc_label.name = "ShopItemDescription_%s" % item_id
 		apply_rect(desc_label, rect_full(0.164, 0.505, 0.590, 0.885))
 		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -24421,7 +24426,7 @@ func _show_shop_screen_impl() -> void:
 
 		# 拥有数量 - 带徽章样式
 		var count_badge_color = Color(0.78, 0.56, 0.28) if count > 0 else Color(0.42, 0.34, 0.24)
-		var count_badge = make_badge(row, rect_full(0.630, 0.20, 0.765, 0.80), "×%d" % count, 15, count_badge_color.darkened(0.2), count_badge_color.lightened(0.2), Color(0.98, 0.97, 0.94), "ui_jade_reading_plate")
+		var count_badge = make_badge(row, rect_full(0.630, 0.20, 0.765, 0.80), "×%d" % count, commercial_ui_font_size(15, 2), count_badge_color.darkened(0.2), count_badge_color.lightened(0.2), Color(0.98, 0.97, 0.94), "ui_jade_reading_plate")
 		count_badge.name = "ShopItemCountBadge_%s" % item_id
 		count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		# 徽章文字压在织锦底板上，仅靠阴影不足；补描边保证 ×N 可读。
@@ -24453,7 +24458,7 @@ func _show_shop_screen_impl() -> void:
 
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
 		add_lucide_icon(buy_btn, "diamond", rect_full(0.105, 0.290, 0.255, 0.710), Color(0.72, 0.62, 0.88) if can_afford else Color(0.94, 0.60, 0.54))
-		var command_label = make_label(buy_btn, "%s %d玉" % ["购买" if can_afford else "不足", cost], 13, Color(0.96, 0.94, 0.88) if can_afford else Color(0.98, 0.76, 0.68), true)
+		var command_label = make_label(buy_btn, "%s %d玉" % ["购买" if can_afford else "不足", cost], commercial_ui_font_size(13, 2), Color(0.96, 0.94, 0.88) if can_afford else Color(0.98, 0.76, 0.68), true)
 		command_label.name = "ShopBuyButtonCommand_%s" % item_id
 		apply_rect(command_label, rect_full(0.310, 0.220, 0.920, 0.780))
 		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -24494,22 +24499,22 @@ func _show_shop_screen_impl() -> void:
 	footer_depth.name = "ShopCabinetFooter3DDepthEdge"
 	shop_footer.add_child(footer_depth)
 	shop_footer.move_child(footer_depth, 0)
-	var footer_title = make_label(shop_footer, "宝阁说明", 17, Color(1.00, 0.92, 0.64), true)
+	var footer_title = make_label(shop_footer, "宝阁说明", commercial_ui_font_size(17, 3), Color(1.00, 0.92, 0.64), true)
 	footer_title.name = "ShopCabinetFooterTitle"
 	apply_rect(footer_title, rect_full(0.035, 0.120, 0.200, 0.460))
 	footer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_title)
-	var footer_body = make_label(shop_footer, "道具在单机对局中即时生效，购买后进入本地库存。", 13, Color(0.92, 0.98, 0.88), false)
+	var footer_body = make_label(shop_footer, "道具在单机对局中即时生效，购买后进入本地库存。", commercial_ui_font_size(13, 2), Color(0.92, 0.98, 0.88), false)
 	footer_body.name = "ShopCabinetFooterBody"
 	apply_rect(footer_body, rect_full(0.035, 0.515, 0.630, 0.850))
 	footer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_body)
 	var inventory_text := "库存 %d件" % total_inventory
-	var footer_inventory = make_badge(shop_footer, rect_full(0.650, 0.175, 0.790, 0.775), inventory_text, 13, Color(0.060, 0.120, 0.110, 0.80), Color(0.42, 0.62, 0.50, 0.28), Color(0.90, 0.96, 0.84))
+	var footer_inventory = make_badge(shop_footer, rect_full(0.650, 0.175, 0.790, 0.775), inventory_text, commercial_ui_font_size(13, 2), Color(0.060, 0.120, 0.110, 0.80), Color(0.42, 0.62, 0.50, 0.28), Color(0.90, 0.96, 0.84))
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
 	footer_inventory.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var state_text := "可买 %d种" % affordable_items if affordable_items > 0 else "最低 %d玉" % min_cost
-	var footer_state = make_badge(shop_footer, rect_full(0.810, 0.175, 0.965, 0.775), state_text, 13, Color(0.110, 0.092, 0.046, 0.82), Color(0.72, 0.56, 0.30, 0.30), Color(0.96, 0.90, 0.68))
+	var footer_state = make_badge(shop_footer, rect_full(0.810, 0.175, 0.965, 0.775), state_text, commercial_ui_font_size(13, 2), Color(0.110, 0.092, 0.046, 0.82), Color(0.72, 0.56, 0.30, 0.30), Color(0.96, 0.90, 0.68))
 	footer_state.name = "ShopCabinetFooterStateBadge"
 	footer_state.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -27370,6 +27375,12 @@ func effective_viewport_size() -> Vector2:
 		)
 	return viewport_size
 
+
+func commercial_ui_font_size(base_size: int, wide_increment: int = 0) -> int:
+	# Keep 960/1280 typography stable; use one bounded desktop breakpoint so
+	# 1920-wide pages do not become visually sparse without continuous scaling.
+	return base_size + wide_increment if effective_viewport_size().x >= 1600.0 else base_size
+
 func current_safe_area_margins() -> Vector4:
 	if safe_area_test_margins_override.x >= 0.0 and safe_area_test_margins_override.y >= 0.0 and safe_area_test_margins_override.z >= 0.0 and safe_area_test_margins_override.w >= 0.0:
 		return clamp_safe_area_margins(safe_area_test_margins_override, effective_viewport_size())
@@ -28717,6 +28728,10 @@ func is_ai_claim_context_for_seat(claim_context: Dictionary, seat: int) -> bool:
 
 
 func record_claim_source(claimer: int, from_seat: int, claim: String) -> void:
+	# 包三搭只属于启用该规则的牌局；其它地方规则不能让 AI 看到
+	# 不会结算的责任状态，也不能让旧状态在切换规则后继续生效。
+	if not rule_uses_package_liability():
+		return
 	if claimer < 0 or claimer >= players.size() or from_seat < 0 or from_seat >= players.size() or claimer == from_seat:
 		return
 	if claim != "chi" and claim != "peng" and claim != "gang":
@@ -28732,6 +28747,8 @@ func claim_source_key(claimer: int, from_seat: int) -> String:
 	return "%d:%d" % [claimer, from_seat]
 
 func package_payer_for(winner: int) -> int:
+	if not rule_uses_package_liability():
+		return -1
 	return package_payer_from_state(winner)
 
 
@@ -32150,7 +32167,10 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section_plate.name = "RuleSectionPlate_%d" % section_index if section_index >= 0 else "RuleSectionPlate"
 	section.add_child(section_plate)
 	var line_count := int(lines.size())
-	var required_text_height := 24.0 + float(line_count) * 22.0 + float(line_count) * 5.0 + 34.0
+	var wide_typography := effective_viewport_size().x >= 1600.0
+	var line_height := 25.0 if wide_typography else 22.0
+	var line_gap := 6.0 if wide_typography else 5.0
+	var required_text_height := (26.0 if wide_typography else 24.0) + float(line_count) * line_height + float(line_count) * line_gap + (38.0 if wide_typography else 34.0)
 	section.custom_minimum_size.y = max(136.0, required_text_height)
 	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.035), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
@@ -32176,19 +32196,19 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	vbox.anchor_top = 0.040
 	vbox.anchor_right = 0.792 if section_index >= 0 else 0.96
 	vbox.anchor_bottom = 0.970
-	vbox.add_theme_constant_override("separation", 5)
+	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)
 
-	var title_label = make_label(vbox, title_text, 18, Color(1.00, 0.91, 0.60), true)
+	var title_label = make_label(vbox, title_text, commercial_ui_font_size(18, 3), Color(1.00, 0.91, 0.60), true)
 	title_label.name = "RuleSectionTitle_%d" % section_index if section_index >= 0 else "RuleSectionTitle"
-	title_label.custom_minimum_size = Vector2(0, 24)
+	title_label.custom_minimum_size = Vector2(0, 26 if wide_typography else 24)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
 
 	for line in lines:
-		var line_label = make_label(vbox, str(line), 15, Color(0.94, 0.96, 0.88), false)
+		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
 		line_label.name = "RuleSectionLine_%d" % section_index if section_index >= 0 else "RuleSectionLine"
-		line_label.custom_minimum_size = Vector2(0, 22)
+		line_label.custom_minimum_size = Vector2(0, line_height)
 		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(line_label)
 		line_label.clip_contents = true

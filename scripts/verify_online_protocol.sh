@@ -3,7 +3,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GODOT_BIN="${GODOT_BIN:-godot}"
+DEFAULT_GODOT_BIN="/opt/godot/Godot_v4.6.3-stable_linux.arm64"
+if [ -z "${GODOT_BIN:-}" ]; then
+	if [ -x "$DEFAULT_GODOT_BIN" ]; then
+		GODOT_BIN="$DEFAULT_GODOT_BIN"
+	else
+		GODOT_BIN="godot"
+	fi
+fi
 EXPECTED_GODOT_VERSION_PREFIX="${EXPECTED_GODOT_VERSION_PREFIX:-4.6.3}"
 REPORT_DIR="$ROOT_DIR/build/qa/online_protocol_evidence"
 REPORT="$REPORT_DIR/EVIDENCE_LATEST.md"

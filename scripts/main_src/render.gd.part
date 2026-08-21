@@ -12084,7 +12084,7 @@ func make_lobby_action_button(text: String, color: Color, callback: Callable, in
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	button.set_meta("menu_motion_intro_alpha", clampf(intro_alpha, 0.0, 1.0))
-	button.add_theme_font_size_override("font_size", 17)
+	button.add_theme_font_size_override("font_size", commercial_ui_font_size(17, 2))
 	button.add_theme_color_override("font_color", Color(0.97, 0.95, 0.84))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90))
 	button.add_theme_color_override("font_pressed_color", Color(0.98, 0.90, 0.66))
@@ -12260,14 +12260,14 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	text_back.name = "MenuCardTextBackplate"
 	button.add_child(text_back)
 	text_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var title = make_label(button, title_text, 22, Color(1.00, 0.90, 0.56), true)
+	var title = make_label(button, title_text, commercial_ui_font_size(22, 4), Color(1.00, 0.90, 0.56), true)
 	title.name = "MenuCardTitleLabel"
 	apply_rect(title, rect_full(0.10, 0.13, 0.68 if icon_name != "" else 0.92, 0.48))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	configure_clipped_label(title)
 	if subtitle_text != "":
-		var subtitle = make_label(button, subtitle_text, 14, Color(0.92, 0.90, 0.76), false)
+		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(14, 2), Color(0.92, 0.90, 0.76), false)
 		subtitle.name = "MenuCardSubtitleLabel"
 		apply_rect(subtitle, rect_full(0.10, 0.50, 0.68 if icon_name != "" else 0.92, 0.78))
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT

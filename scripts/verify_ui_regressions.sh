@@ -2,7 +2,14 @@
 # 一键验证前期 UI 排查问题是否回归。
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GODOT_BIN="${GODOT_BIN:-godot}"
+DEFAULT_GODOT_BIN="/opt/godot/Godot_v4.6.3-stable_linux.arm64"
+if [ -z "${GODOT_BIN:-}" ]; then
+	if [ -x "$DEFAULT_GODOT_BIN" ]; then
+		GODOT_BIN="$DEFAULT_GODOT_BIN"
+	else
+		GODOT_BIN="godot"
+	fi
+fi
 EXPECTED_GODOT_VERSION_PREFIX="${EXPECTED_GODOT_VERSION_PREFIX:-4.6.3}"
 REPORT="$ROOT_DIR/build/qa/ui_regression_verification_report.md"
 LOG_DIR="$ROOT_DIR/build/qa/logs"
