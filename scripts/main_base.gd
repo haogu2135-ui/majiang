@@ -25,6 +25,7 @@ const ACHIEVEMENTS_PATH := "user://achievements.cfg"
 const LOGIN_PATH := "user://login.cfg"
 const AUDIO_DEFAULTS_VERSION := "1.0.159-godot"
 const BGM_STREAM_PATH := "res://assets/audio/bgm_guofeng2.mp3"
+const UI_CJK_FONT_PATH := "res://assets/fonts/DroidSansFallbackFull.ttf"
 const ANIMATION_ASSET_PATHS := {
 	"coin_spin": "res://assets/animations/coin_spin.json",
 	"victory_sparkle": "res://assets/animations/victory_sparkle.json",
@@ -693,6 +694,7 @@ var transition_tween: Tween
 var transition_pending_callback: Callable
 var transition_active := false
 var screen_tweens: Array[Tween] = []
+var _ui_cjk_font: Font = null
 var toast_container: Control
 var toast_tween: Tween
 var toast_current: Control
@@ -1079,6 +1081,15 @@ func clear_screen_tweens() -> void:
 			tween.kill()
 	screen_tweens.clear()
 
+func ui_cjk_font() -> Font:
+	if _ui_cjk_font != null:
+		return _ui_cjk_font
+	var font_file := FontFile.new()
+	if font_file.load_dynamic_font(UI_CJK_FONT_PATH) != OK:
+		return null
+	_ui_cjk_font = font_file
+	return _ui_cjk_font
+
 func add_background(parent: Control) -> void:
 	var bg = TextureRect.new()
 	bg.texture = wood_texture
@@ -1090,19 +1101,14 @@ func add_background(parent: Control) -> void:
 	# Generic utility pages use one authored bitmap substrate. Their local panels
 	# carry the page-specific texture, so a second full-screen scene is omitted to
 	# keep settings, shop, lobby, and daily-login copy out of a texture stack.
-	var tint = make_fullrect_overlay(Color(0.070, 0.062, 0.046, 0.48), "ui_dark_scrim")
+	var tint = make_fullrect_overlay(Color(0.070, 0.062, 0.046, 0.38), "ui_dark_scrim")
 	tint.name = "GuofengWarmDimTint"
 	parent.add_child(tint)
-	# Edge wash via GPT plates only — no program ColorRect slabs.
-	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.12), Color(0.92, 0.78, 0.48, 0.045), "ui_soft_flash"))  # r181
-	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.88, 1.0, 1.0), Color(0.035, 0.026, 0.018, 0.155), "ui_dark_scrim"))
-	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 0.035, 1.0), Color(0.035, 0.026, 0.018, 0.120), "ui_dark_scrim"))
-	parent.add_child(make_gpt_plate_rect(rect_full(0.965, 0.0, 1.0, 1.0), Color(0.035, 0.026, 0.018, 0.120), "ui_dark_scrim"))
 
 func add_menu_background(parent: Control) -> void:
 	# The menu owns one full-screen scene in draw_menu_primary_3d_stage(). Keep
 	# only a single GPT scrim underneath it so fallback/loading frames stay clean.
-	var scrim = make_fullrect_overlay(Color(0.012, 0.020, 0.018, 0.52), "ui_dark_scrim")
+	var scrim = make_fullrect_overlay(Color(0.012, 0.020, 0.018, 0.38), "ui_dark_scrim")
 	scrim.name = "MenuBackgroundReadabilityScrim"
 	parent.add_child(scrim)
 
@@ -1120,7 +1126,7 @@ func add_battle_background(parent: Control) -> void:
 	parent.add_child(base)
 
 	# Single full-screen guofeng room plate (table_gpt_backdrop). Do not stack a second photo.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.44, false)
+	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.54, false)
 	if battle_scene != null:
 		battle_scene.name = "OfflineBattleGuofengBackdrop"
 	else:
@@ -1134,14 +1140,9 @@ func add_battle_background(parent: Control) -> void:
 				fallback_wash.name = "OfflineBattleInkWashBackdrop"
 
 	# Light vignette only — keep guofeng art visible while protecting tile contrast.
-	var readability_tint = make_fullrect_overlay(Color(0.008, 0.014, 0.012, 0.54), "ui_dark_scrim")
+	var readability_tint = make_fullrect_overlay(Color(0.008, 0.014, 0.012, 0.30), "ui_dark_scrim")
 	readability_tint.name = "OfflineBattleReadabilityTint"
 	parent.add_child(readability_tint)
-	# Soft edge falloff via GPT plates — no program ColorRect green slabs.
-	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 0.10), Color(0.02, 0.03, 0.02, 0.16), "ui_dark_scrim"))
-	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.90, 1.0, 1.0), Color(0.02, 0.03, 0.02, 0.20), "ui_dark_scrim"))
-	parent.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 0.06, 1.0), Color(0.02, 0.03, 0.02, 0.12), "ui_dark_scrim"))
-	parent.add_child(make_gpt_plate_rect(rect_full(0.94, 0.0, 1.0, 1.0), Color(0.02, 0.03, 0.02, 0.12), "ui_dark_scrim"))
 
 func add_texture(parent: Control, texture: Texture2D, rect: Rect2, alpha: float) -> TextureRect:
 	var tex = TextureRect.new()
@@ -1584,6 +1585,7 @@ func make_label(parent: Control, text: String, font_size: int, color: Color, bol
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_override("font", ui_cjk_font())
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
 	if bold:
@@ -1730,6 +1732,7 @@ func make_base_button(text: String, callback: Callable) -> Button:
 	var button = Button.new()
 	button.text = text
 	configure_touch_button(button)
+	button.add_theme_font_override("font", ui_cjk_font())
 	button.add_theme_color_override("font_color", Color(0.95, 0.93, 0.82))
 	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.50))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.92))
@@ -2070,6 +2073,7 @@ func make_icon_button(icon_name: String, color: Color, size: int = 24, callback:
 	button.text = ICON_CODES.get(icon_name, "")
 	button.custom_minimum_size = Vector2(size * 1.8, size * 1.8)
 	configure_touch_button(button)
+	button.add_theme_font_override("font", ui_cjk_font())
 	button.add_theme_font_size_override("font_size", size)
 	button.add_theme_color_override("font_color", color)
 	button.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.4))

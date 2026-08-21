@@ -495,12 +495,14 @@ func add_line_edit(parent: Control, label_text: String, value: String) -> LineEd
 	var caption = Label.new()
 	caption.text = label_text
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.add_theme_font_override("font", ui_cjk_font())
 	caption.add_theme_font_size_override("font_size", 18)
 	caption.add_theme_color_override("font_color", Color(0.92, 0.86, 0.62))
 	parent.add_child(caption)
 	var edit = LineEdit.new()
 	edit.text = value
 	edit.custom_minimum_size = Vector2(360, 46)
+	edit.add_theme_font_override("font", ui_cjk_font())
 	edit.add_theme_font_size_override("font_size", 21)
 	var input_styles = input_style_set()
 	edit.add_theme_stylebox_override("normal", input_styles["normal"])
@@ -5229,6 +5231,7 @@ func _build_fx_burst() -> void:
 	fx_burst_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_burst_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fx_burst_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fx_burst_label.add_theme_font_override("font", ui_cjk_font())
 	fx_burst_label.add_theme_font_size_override("font_size", FX_BURST_LABEL_FONT_SIZE)
 	fx_burst_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.72))
 	fx_burst_label.add_theme_constant_override("shadow_offset_x", 2)
@@ -6087,7 +6090,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.008, 0.012, 0.012, 0.38), "ui_jade_reading_plate")
+	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.32), "settings_gpt_panel_v2")
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

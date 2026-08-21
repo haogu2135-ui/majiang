@@ -825,22 +825,31 @@ func draw_actions(parent: Control) -> void:
 				if offer_safest and safest_tile != "" and safest_tile != recommended_tile:
 					var selected_safest_tile = safest_tile
 					excluded_action_tiles.append(selected_safest_tile)
-					action_bar.add_child(make_action_button(safest_discard_button_text(safest_report), safe_discard_button_color(safest_report), func() -> void:
+					var safest_button = make_action_button(safest_discard_button_text(safest_report), safe_discard_button_color(safest_report), func() -> void:
 						human_discard_by_tile(selected_safest_tile)
-					))
+					)
+					safest_button.name = "SafestDiscardButton"
+					safest_button.tooltip_text = ai_discard_brief(safest_report)
+					action_bar.add_child(safest_button)
 				var recommended_button_text = safest_discard_button_text(recommended_report) if offer_safest and safest_tile == recommended_tile else recommended_discard_button_text(selected_recommended_tile)
-				action_bar.add_child(make_action_button(recommended_button_text, recommended_discard_button_color(recommended_report), func() -> void:
+				var recommended_button = make_action_button(recommended_button_text, recommended_discard_button_color(recommended_report), func() -> void:
 					human_discard_by_tile(selected_recommended_tile)
-				))
+				)
+				recommended_button.name = "RecommendedDiscardButton"
+				recommended_button.tooltip_text = ai_discard_brief(recommended_report)
+				action_bar.add_child(recommended_button)
 				var alternative_limit = 1 if offer_safest and safest_tile != "" and safest_tile != recommended_tile else 2
 				for report in discard_action_alternative_reports(excluded_action_tiles, alternative_limit):
 					var alternative_tile = str(report.get("tile", ""))
 					if alternative_tile == "":
 						continue
 					var selected_action_tile = alternative_tile
-					action_bar.add_child(make_action_button(alternative_discard_button_text(report), alternative_discard_button_color(report), func() -> void:
+					var alternative_button = make_action_button(alternative_discard_button_text(report), alternative_discard_button_color(report), func() -> void:
 						human_discard_by_tile(selected_action_tile)
-					))
+					)
+					alternative_button.name = "AlternativeDiscardButton_%s" % alternative_tile
+					alternative_button.tooltip_text = ai_discard_brief(report)
+					action_bar.add_child(alternative_button)
 		action_bar.add_child(make_action_button("重开", Color(0.70, 0.32, 0.22), func() -> void:
 			start_offline()
 		))
@@ -5338,10 +5347,10 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 	var ambient_tint = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.024, 0.022, 0.02))
 	ambient_tint.name = "MenuHeroCommercialReadabilityTint"
 	art.add_child(ambient_tint)
-	var lower_tint = make_gpt_route_rail(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.010, 0.010, 0.22))
+	var lower_tint = make_gpt_route_rail(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.010, 0.010, 0.12))
 	lower_tint.name = "MenuHeroControlReadabilityTint"
 	art.add_child(lower_tint)
-	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.74, false)  # r182 denser overlay after r51
+	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.36, false)  # r497 single restrained menu overlay
 	if ui_overlay != null:
 		ui_overlay.name = "MenuLobbyGeneratedUIOverlay"
 	return art
@@ -12886,6 +12895,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			corner.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			corner.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+			corner.add_theme_font_override("font", ui_cjk_font())
 			corner.add_theme_font_size_override("font_size", max(9, int(size.y * 0.16)))
 			corner.add_theme_color_override("font_color", tile_accent(tile))
 			tile_body.add_child(corner)

@@ -9242,22 +9242,31 @@ func draw_actions(parent: Control) -> void:
 				if offer_safest and safest_tile != "" and safest_tile != recommended_tile:
 					var selected_safest_tile = safest_tile
 					excluded_action_tiles.append(selected_safest_tile)
-					action_bar.add_child(make_action_button(safest_discard_button_text(safest_report), safe_discard_button_color(safest_report), func() -> void:
+					var safest_button = make_action_button(safest_discard_button_text(safest_report), safe_discard_button_color(safest_report), func() -> void:
 						human_discard_by_tile(selected_safest_tile)
-					))
+					)
+					safest_button.name = "SafestDiscardButton"
+					safest_button.tooltip_text = ai_discard_brief(safest_report)
+					action_bar.add_child(safest_button)
 				var recommended_button_text = safest_discard_button_text(recommended_report) if offer_safest and safest_tile == recommended_tile else recommended_discard_button_text(selected_recommended_tile)
-				action_bar.add_child(make_action_button(recommended_button_text, recommended_discard_button_color(recommended_report), func() -> void:
+				var recommended_button = make_action_button(recommended_button_text, recommended_discard_button_color(recommended_report), func() -> void:
 					human_discard_by_tile(selected_recommended_tile)
-				))
+				)
+				recommended_button.name = "RecommendedDiscardButton"
+				recommended_button.tooltip_text = ai_discard_brief(recommended_report)
+				action_bar.add_child(recommended_button)
 				var alternative_limit = 1 if offer_safest and safest_tile != "" and safest_tile != recommended_tile else 2
 				for report in discard_action_alternative_reports(excluded_action_tiles, alternative_limit):
 					var alternative_tile = str(report.get("tile", ""))
 					if alternative_tile == "":
 						continue
 					var selected_action_tile = alternative_tile
-					action_bar.add_child(make_action_button(alternative_discard_button_text(report), alternative_discard_button_color(report), func() -> void:
+					var alternative_button = make_action_button(alternative_discard_button_text(report), alternative_discard_button_color(report), func() -> void:
 						human_discard_by_tile(selected_action_tile)
-					))
+					)
+					alternative_button.name = "AlternativeDiscardButton_%s" % alternative_tile
+					alternative_button.tooltip_text = ai_discard_brief(report)
+					action_bar.add_child(alternative_button)
 		action_bar.add_child(make_action_button("重开", Color(0.70, 0.32, 0.22), func() -> void:
 			start_offline()
 		))
@@ -13755,10 +13764,10 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 	var ambient_tint = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.024, 0.022, 0.02))
 	ambient_tint.name = "MenuHeroCommercialReadabilityTint"
 	art.add_child(ambient_tint)
-	var lower_tint = make_gpt_route_rail(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.010, 0.010, 0.22))
+	var lower_tint = make_gpt_route_rail(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.010, 0.010, 0.12))
 	lower_tint.name = "MenuHeroControlReadabilityTint"
 	art.add_child(lower_tint)
-	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.74, false)  # r182 denser overlay after r51
+	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.36, false)  # r497 single restrained menu overlay
 	if ui_overlay != null:
 		ui_overlay.name = "MenuLobbyGeneratedUIOverlay"
 	return art
@@ -21303,6 +21312,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			corner.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			corner.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+			corner.add_theme_font_override("font", ui_cjk_font())
 			corner.add_theme_font_size_override("font_size", max(9, int(size.y * 0.16)))
 			corner.add_theme_color_override("font_color", tile_accent(tile))
 			tile_body.add_child(corner)
@@ -23502,6 +23512,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	var caption = Label.new()
 	caption.text = label_text
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.add_theme_font_override("font", ui_cjk_font())
 	caption.custom_minimum_size = Vector2(0, 16)
 	caption.add_theme_font_size_override("font_size", commercial_ui_font_size(13, 1))
 	caption.add_theme_color_override("font_color", Color(0.95, 0.88, 0.64))
@@ -23509,6 +23520,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	var edit = LineEdit.new()
 	edit.text = value
 	edit.max_length = max_length
+	edit.add_theme_font_override("font", ui_cjk_font())
 	edit.virtual_keyboard_type = keyboard_type
 	edit.custom_minimum_size = Vector2(240, 38)
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -23796,6 +23808,7 @@ func _show_online_lobby_impl() -> void:
 	logs_label.scroll_active = false
 	logs_label.bbcode_enabled = false
 	logs_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logs_label.add_theme_font_override("normal_font", ui_cjk_font())
 	logs_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	logs_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -23972,7 +23985,7 @@ func _show_rules_screen_impl() -> void:
 	root_layer.add_child(panel)
 	# The front plate is the single authored surface for the page; keep the
 	# content area free of a second full-page illustration.
-	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.22, 0.16, 0.11, 0.055), "ui_jade_reading_plate")
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.38), "settings_gpt_panel_v2")
 	panel_plate.name = "RulesCodexFrontPlate"
 	panel.add_child(panel_plate)
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.32, false)
@@ -24009,6 +24022,10 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var content_surface = add_optional_gpt_illustration_texture(content_backplate, "settings_gpt_panel_v2", rect_full(-0.015, -0.020, 1.015, 1.020), 0.24, false)
+	if content_surface != null:
+		content_surface.name = "RulesContentLowFrequencySurface"
+		content_backplate.move_child(content_surface, 0)
 	var content_sheen = make_layout_host(rect_full(0.030, 0.026, 0.970, 0.046))
 	content_sheen.name = "RulesContentTopSheen"
 	content_backplate.add_child(content_sheen)
@@ -24029,12 +24046,12 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var compact_rules_scroll := effective_viewport_size().y <= 560.0
 	var gutter_left := 0.934
-	var gutter_right := 0.950 if compact_rules_scroll else 0.949
+	var gutter_right := 0.949
 	var rules_scroll_gutter = make_panel(panel, rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.07, 0.06, 0.05, 0.92), 999, Color(0.30, 0.25, 0.16, 0.42), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var thumb_left := 0.180 if compact_rules_scroll else 0.220
-	var thumb_right := 0.820 if compact_rules_scroll else 0.780
+	var thumb_left := 0.150 if compact_rules_scroll else 0.260
+	var thumb_right := 0.850 if compact_rules_scroll else 0.740
 	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), 999, Color(1.0, 0.92, 0.64, 0.92), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -24053,7 +24070,7 @@ func _show_rules_screen_impl() -> void:
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
 	rules_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	rules_scroll_hit_target.tooltip_text = "拖动定位"
-	apply_rect(rules_scroll_hit_target, rect_full(0.900, 0.168, 0.964, 0.982))
+	apply_rect(rules_scroll_hit_target, rect_full(0.892, 0.168, 0.970, 0.982))
 	panel.add_child(rules_scroll_hit_target)
 	var content = VBoxContainer.new()
 	content.name = "RulesContentList"
@@ -25143,6 +25160,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		label.name = "DiagnosticContentLine_%02d" % line_index
 		label.text = line
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.add_theme_font_override("font", ui_cjk_font())
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.custom_minimum_size.y = 12.0 if line == "" else 26.0
 		label.add_theme_font_size_override("font_size", 20)
@@ -26681,12 +26699,14 @@ func add_line_edit(parent: Control, label_text: String, value: String) -> LineEd
 	var caption = Label.new()
 	caption.text = label_text
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.add_theme_font_override("font", ui_cjk_font())
 	caption.add_theme_font_size_override("font_size", 18)
 	caption.add_theme_color_override("font_color", Color(0.92, 0.86, 0.62))
 	parent.add_child(caption)
 	var edit = LineEdit.new()
 	edit.text = value
 	edit.custom_minimum_size = Vector2(360, 46)
+	edit.add_theme_font_override("font", ui_cjk_font())
 	edit.add_theme_font_size_override("font_size", 21)
 	var input_styles = input_style_set()
 	edit.add_theme_stylebox_override("normal", input_styles["normal"])
@@ -31415,6 +31435,7 @@ func _build_fx_burst() -> void:
 	fx_burst_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_burst_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fx_burst_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fx_burst_label.add_theme_font_override("font", ui_cjk_font())
 	fx_burst_label.add_theme_font_size_override("font_size", FX_BURST_LABEL_FONT_SIZE)
 	fx_burst_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.72))
 	fx_burst_label.add_theme_constant_override("shadow_offset_x", 2)
@@ -32273,7 +32294,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.008, 0.012, 0.012, 0.38), "ui_jade_reading_plate")
+	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.32), "settings_gpt_panel_v2")
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

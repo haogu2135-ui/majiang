@@ -3415,6 +3415,18 @@ func run() -> void:
 	check(recommend_actions_parent.find_child("VoiceActionButton", true, false) != null, "live action bar renders named voice action button")
 	check(recommend_actions_parent.find_child("VoiceButtonMicChannel", true, false) != null and recommend_actions_parent.find_child("VoiceButtonTransmitRoute", true, false) != null and recommend_actions_parent.find_child("VoiceButtonNetworkEcho", true, false) != null and recommend_actions_parent.find_child("VoiceButtonFeedbackLoop", true, false) != null, "live action bar voice button renders channel transmit network and feedback loop art")
 	dispose_node(recommend_actions_parent)
+	var previous_action_assist = scene.ai_assist_enabled
+	scene.ai_assist_enabled = true
+	var explain_actions_parent = Control.new()
+	root.add_child(explain_actions_parent)
+	scene.draw_actions(explain_actions_parent)
+	var recommended_action_button = explain_actions_parent.find_child("RecommendedDiscardButton", true, false) as Button
+	check(recommended_action_button != null and recommended_action_button.tooltip_text.find("推荐打") >= 0, "AI recommended discard action exposes its decision rationale tooltip")
+	var safest_action_button = explain_actions_parent.find_child("SafestDiscardButton", true, false) as Button
+	if safest_action_button != null:
+		check(safest_action_button.tooltip_text.find("推荐打") >= 0, "AI safest discard action exposes its decision rationale tooltip")
+	dispose_node(explain_actions_parent)
+	scene.ai_assist_enabled = previous_action_assist
 	check(scene.discard_action_alternative_reports("E", 2).is_empty(), "human alternative discard helper is disabled")
 	var recommend_hand_parent = Control.new()
 	root.add_child(recommend_hand_parent)
