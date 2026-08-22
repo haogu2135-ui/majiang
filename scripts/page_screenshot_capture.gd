@@ -63,6 +63,9 @@ func run() -> void:
 	var output_dir_res = requested_output_dir(viewport_size)
 	var output_dir = ProjectSettings.globalize_path(output_dir_res)
 	DirAccess.make_dir_recursive_absolute(output_dir)
+	if not write_capture_metadata(output_dir_res, viewport_size):
+		quit(1)
+		return
 
 	var selected_screens := selected_screen_names()
 	var scene = load("res://Main.tscn").instantiate()
@@ -114,6 +117,25 @@ func requested_output_dir(viewport_size: Vector2i) -> String:
 	if viewport_size == DEFAULT_VIEWPORT_SIZE:
 		return DEFAULT_OUTPUT_DIR
 	return "res://build/qa/pages_%dx%d" % [viewport_size.x, viewport_size.y]
+
+func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> bool:
+	var metadata := {
+		"capture_revision": OS.get_environment("YUNZHUO_CAPTURE_REVISION"),
+		"capture_batch_id": OS.get_environment("YUNZHUO_CAPTURE_BATCH_ID"),
+		"worktree_state": OS.get_environment("YUNZHUO_CAPTURE_WORKTREE_STATE"),
+		"runtime_source_state": OS.get_environment("YUNZHUO_CAPTURE_RUNTIME_SOURCE_STATE"),
+		"worktree_diff_fingerprint": OS.get_environment("YUNZHUO_CAPTURE_WORKTREE_DIFF_FINGERPRINT"),
+		"runtime_source_diff_fingerprint": OS.get_environment("YUNZHUO_CAPTURE_RUNTIME_SOURCE_DIFF_FINGERPRINT"),
+		"capture_size": "%dx%d" % [viewport_size.x, viewport_size.y],
+		"capture_time_utc": Time.get_datetime_string_from_system(true),
+	}
+	var metadata_path := ProjectSettings.globalize_path("%s/capture_metadata.json" % output_dir_res)
+	var file := FileAccess.open(metadata_path, FileAccess.WRITE)
+	if file == null:
+		printerr("failed to write capture metadata: %s" % metadata_path)
+		return false
+	file.store_string(JSON.stringify(metadata) + "\n")
+	return true
 
 func selected_screen_names() -> Array:
 	var args := OS.get_cmdline_user_args()
@@ -309,7 +331,7 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		"21_diagnostic":
 			scene.show_menu(true)
 			scene.clear_fx_overlays()
-			scene.show_diagnostic_dialog(diagnostic_capture_lines())
+			scene.show_diagnostic_dialog(diagnostic_capture_lines(scene))
 			# Capture mode: force fully-visible static dialog (skip entrance fade).
 			var diag_panel = scene.find_child("DiagnosticDialogPanel", true, false)
 			if diag_panel is Control:
@@ -343,14 +365,17 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			push_error("unknown screenshot screen: %s" % screen_name)
 
 
-func diagnostic_capture_lines() -> Array[String]:
+func diagnostic_capture_lines(scene: Node = null) -> Array[String]:
+	var version := "1.0.180-godot"
+	if scene != null and scene.has_method("app_version"):
+		version = str(scene.call("app_version"))
 	return [
-		"【音频系统诊断 v1.0.156】",
+		"【音频系统诊断 %s】" % version,
 		"",
 		"1. 用户激活: 是",
 		"2. 设备: 小米手机 (MIUI)",
 		"",
-		"⚠️ v1.0.156重大改动",
+		"⚠️ 当前音频说明",
 		"BGM已从WAV改为MP3格式",
 		"因为您能听到TTS语音提示",
 		"说明音频系统正常",

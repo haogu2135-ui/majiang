@@ -424,6 +424,9 @@ const ITEM_TYPES := {
 
 var tile_textures: Dictionary = {}
 var tile_decal_textures: Dictionary = {}
+var tile_assets_ready := false
+var tile_assets_validation_complete := false
+var tile_asset_errors: Array = []
 var icon_textures: Dictionary = {}
 var animation_specs: Dictionary = {}
 var tile_back: Texture2D
@@ -1127,7 +1130,7 @@ func add_battle_background(parent: Control) -> void:
 	# Normal battle renders own one authored room plate. Keep the dark plate only as a
 	# fallback under a missing/transparent asset, so two full-screen textures do not
 	# compete beneath the HUD.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.09, false)
+	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.30, false)
 	if battle_scene != null:
 		battle_scene.name = "OfflineBattleGuofengBackdrop"
 	else:
@@ -1142,18 +1145,6 @@ func add_battle_background(parent: Control) -> void:
 			var fallback_wash = add_illustration_texture(parent, "table_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.22, false)
 			if fallback_wash != null:
 				fallback_wash.name = "OfflineBattleInkWashBackdrop"
-
-	# The room plate is high-frequency by design. A cropped center of the existing
-	# authored dark-scrim keeps the table readable without repainting the whole
-	# screen with another full-frame texture.
-	var reading_surface = make_gpt_center_crop_plate_rect(
-		rect_full(0.105, 0.165, 0.895, 0.835),
-		Color(0.012, 0.022, 0.020, 0.58),
-		"ui_dark_scrim",
-		0.22
-	)
-	reading_surface.name = "OfflineBattleReadingSurface"
-	parent.add_child(reading_surface)
 
 func add_texture(parent: Control, texture: Texture2D, rect: Rect2, alpha: float) -> TextureRect:
 	var tex = TextureRect.new()
@@ -3057,15 +3048,71 @@ func load_assets() -> void:
 func _load_tile_textures() -> void:
 	tile_textures.clear()
 	tile_decal_textures.clear()
+	tile_asset_errors.clear()
 	for code in TILE_CODES:
-		tile_textures[code] = load_tile_texture(tile_path(code))
-		tile_decal_textures[code] = load_tile_texture(tile_decal_path(code))
+		var code_key := str(code)
+		var face_path := tile_path(code_key)
+		var face_texture := load_tile_texture(face_path)
+		tile_textures[code_key] = face_texture
+		tile_decal_textures[code_key] = face_texture
+		_register_tile_asset_error(code_key, face_path, face_texture)
 	for code in FLOWER_CODES:
-		tile_textures[code] = load_tile_texture(tile_path(code))
-		tile_decal_textures[code] = load_tile_texture(tile_decal_path(code))
+		var code_key := str(code)
+		var face_path := tile_path(code_key)
+		var face_texture := load_tile_texture(face_path)
+		tile_textures[code_key] = face_texture
+		tile_decal_textures[code_key] = face_texture
+		_register_tile_asset_error(code_key, face_path, face_texture)
+	tile_assets_validation_complete = true
+	tile_assets_ready = tile_asset_errors.is_empty()
+	if tile_assets_ready:
+		print("TileAssets: verified %d authored 2D faces under res://assets/tiles/" % (TILE_CODES.size() + FLOWER_CODES.size()))
+	else:
+		for detail in tile_asset_errors:
+			push_error("TileAssets: code=%s path=%s reason=%s" % [detail.get("code", ""), detail.get("path", ""), detail.get("reason", "unknown")])
 
 func load_tile_texture(path: String) -> Texture2D:
 	return load_illustration_texture(path)
+
+func tile_asset_error_for(code: String, path: String, texture: Texture2D = null) -> Dictionary:
+	if path == "":
+		return {"code": code, "path": path, "reason": "empty_face_path"}
+	if not path.begins_with("res://assets/tiles/"):
+		return {"code": code, "path": path, "reason": "outside_assets_tiles"}
+	if not ResourceLoader.exists(path) and not FileAccess.file_exists(path):
+		return {"code": code, "path": path, "reason": "missing_file"}
+	if texture == null:
+		return {"code": code, "path": path, "reason": "texture_unavailable"}
+	return {}
+
+func _register_tile_asset_error(code: String, path: String, texture: Texture2D) -> void:
+	var detail := tile_asset_error_for(code, path, texture)
+	if not detail.is_empty():
+		tile_asset_errors.append(detail)
+
+func ensure_tile_assets_ready(show_diagnostic: bool = true) -> bool:
+	if not tile_assets_validation_complete:
+		_load_tile_textures()
+	if tile_assets_ready:
+		return true
+	if show_diagnostic:
+		show_tile_asset_diagnostic()
+	return false
+
+func show_tile_asset_diagnostic() -> void:
+	var lines: Array[String] = [
+		"【牌面资源校验失败】",
+		"为避免对局出现无牌面空槽，本局已停止启动。",
+		"仅接受 res://assets/tiles/ 下的已导入 2D 牌面。",
+	]
+	for detail in tile_asset_errors:
+		lines.append("✗ %s · %s · %s" % [detail.get("code", ""), detail.get("path", ""), detail.get("reason", "unknown")])
+	lines.append("请修复以上资源后重新启动应用。")
+	if root_layer != null and is_instance_valid(root_layer):
+		if root_layer.find_child("DiagnosticDialogPanel", true, false) == null:
+			call("show_diagnostic_dialog", lines)
+	else:
+		push_error("TileAssets: startup blocked before diagnostic layer was ready")
 
 func verify_audio_assets() -> void:
 	# 验证所有音频资源已正确加载

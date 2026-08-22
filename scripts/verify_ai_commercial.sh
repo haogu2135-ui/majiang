@@ -19,6 +19,15 @@ LOG_DIR="$REPORT_DIR/logs"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S %z')"
 REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
 REVISION_FULL="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+git_state_fingerprint() {
+	{
+		git -C "$ROOT_DIR" diff --binary -- "$@" 2>/dev/null || true
+		git -C "$ROOT_DIR" status --porcelain -- "$@" 2>/dev/null || true
+	} | sha256sum | awk '{print $1}'
+}
+WORKTREE_DIFF_FINGERPRINT="$(git_state_fingerprint)"
+RUNTIME_SOURCE_DIFF_FINGERPRINT="$(git_state_fingerprint project.godot scripts/main_base.gd scripts/main.gd scripts/main_src scripts/ui)"
+QA_BATCH_ID="$(date -u '+%Y%m%dT%H%M%SZ')-${REVISION}-${RUNTIME_SOURCE_DIFF_FINGERPRINT:0:12}"
 WORKTREE_STATE="clean"
 RUNTIME_SOURCE_STATE="clean"
 if [ -n "$(git -C "$ROOT_DIR" status --porcelain 2>/dev/null)" ]; then
@@ -187,8 +196,11 @@ fi
 	echo ""
 	echo "- Time: $TIMESTAMP"
 	echo "- Git revision: \`$REVISION\`"
+	echo "- QA batch: \`$QA_BATCH_ID\`"
 	echo "- Worktree state: $WORKTREE_STATE"
 	echo "- Runtime source vs HEAD: $RUNTIME_SOURCE_STATE"
+	echo "- Worktree diff fingerprint: \`$WORKTREE_DIFF_FINGERPRINT\`"
+	echo "- Runtime source diff fingerprint: \`$RUNTIME_SOURCE_DIFF_FINGERPRINT\`"
 	echo "- Version: \`1.0.180-godot\`"
 	echo "- Godot binary: \`$GODOT_BIN\`"
 	echo "- Required Godot version: \`$EXPECTED_GODOT_VERSION_PREFIX\`"

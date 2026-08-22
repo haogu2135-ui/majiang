@@ -10,6 +10,8 @@ func init_ui_enhancements() -> void:
 	add_child(ui_enhancements)
 
 func _finish_startup() -> void:
+	if not ensure_tile_assets_ready():
+		return
 	if OS.get_cmdline_user_args().has("--offline-preview"):
 		start_offline(true)
 	else:
@@ -198,6 +200,8 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func start_offline(instant: bool = false) -> void:
+	if not ensure_tile_assets_ready():
+		return
 	if transition_active and not instant:
 		return
 	var _build = func() -> void:

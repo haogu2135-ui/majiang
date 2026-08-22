@@ -7462,20 +7462,21 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var side_text_back = make_gpt_center_crop_plate_rect(rect_full(0.255, 0.060, 0.960, 0.860), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
 		side_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(side_text_back)
+		var compact_side := effective_viewport_size().y <= 560.0
 		var side_name_right := 0.590 if seat == dealer_seat else 0.620
-		var side_name = make_label(panel, seat_compact_display_name(seat, p, 2), 11, Color(1.0, 0.98, 0.90), true)
+		var side_name = make_label(panel, seat_compact_display_name(seat, p, 2), 12 if compact_side else 11, Color(1.0, 0.98, 0.90), true)
 		side_name.name = "SeatCompactName_%d" % seat
-		apply_rect(side_name, rect_full(0.285, 0.090, side_name_right, 0.300))
+		apply_rect(side_name, rect_full(0.285, 0.075, side_name_right, 0.285 if compact_side else 0.300))
 		side_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_name, true)
 		if seat == dealer_seat:
 			var side_dealer = make_badge(panel, rect_full(0.610, 0.094, 0.690, 0.292), "庄", 8, Color(0.58, 0.12, 0.08, 0.84), Color(1.0, 0.79, 0.34, 0.54), Color(0.98, 0.92, 0.74))
 			side_dealer.name = "SeatCompactDealer_%d" % seat
 			side_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var side_score_left := 0.715 if seat == dealer_seat else 0.640
-		var side_score = make_label(panel, seat_score_text(p), 9, Color(1.0, 0.94, 0.72), true)
+		var side_score_left := 0.285 if compact_side else (0.715 if seat == dealer_seat else 0.640)
+		var side_score = make_label(panel, seat_score_text(p), 10 if compact_side else 9, Color(1.0, 0.94, 0.72), true)
 		side_score.name = "SeatCompactScore_%d" % seat
-		apply_rect(side_score, rect_full(side_score_left, 0.090, 0.940, 0.300))
+		apply_rect(side_score, rect_full(side_score_left, 0.295 if compact_side else 0.090, 0.940, 0.435 if compact_side else 0.300))
 		side_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(side_score, true)
 		var side_stats = make_label(panel, "", 10, Color(0.96, 0.94, 0.84), false)
@@ -7487,18 +7488,19 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		if side_discard_count > 0:
 			side_meta_text += " 弃%d" % side_discard_count
 		side_stats.text = side_meta_text
-		apply_rect(side_stats, rect_full(0.285, 0.340, 0.940, 0.515))
+		apply_rect(side_stats, rect_full(0.285, 0.445 if compact_side else 0.340, 0.940, 0.570 if compact_side else 0.515))
 		side_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_stats, false)
 		if active:
-			var side_turn = make_badge(panel, rect_full(0.785, 0.555, 0.940, 0.730), "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
+			var side_turn_rect := rect_full(0.285, 0.545, 0.470, 0.680) if compact_side else rect_full(0.785, 0.555, 0.940, 0.730)
+			var side_turn = make_badge(panel, side_turn_rect, "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
 			side_turn.name = "SeatCompactTurn_%d" % seat
 			side_turn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var side_status_text = "打%s" % tile_label(get_last_discard()) if recent_discard_source else ""
 		if side_status_text != "":
 			var side_status = make_label(panel, side_status_text, 10, Color(1.0, 0.94, 0.74), false)
 			side_status.name = "SeatCompactStatus_%d" % seat
-			apply_rect(side_status, rect_full(0.285, 0.565, 0.940, 0.720))
+			apply_rect(side_status, rect_full(0.285, 0.690 if compact_side else 0.565, 0.940, 0.800 if compact_side else 0.720))
 			side_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_seat_readable_label(side_status, false)
 		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
@@ -7628,8 +7630,8 @@ func draw_compact_seat_threat_badge(parent: Control, seat: int, seat_threat_repo
 		badge_rect = rect_full(0.560, 0.385, 0.945, 0.555)
 		apply_rect(art, rect_full(0.560, 0.385, 0.945, 0.555))
 	elif side == "left" or side == "right":
-		badge_rect = rect_full(0.285, 0.545, 0.720, 0.735)
-		apply_rect(art, rect_full(0.285, 0.545, 0.720, 0.735))
+		badge_rect = rect_full(0.520, 0.545, 0.945, 0.680)
+		apply_rect(art, rect_full(0.520, 0.545, 0.945, 0.680))
 	else:
 		apply_rect(art, rect_full(0.560, 0.340, 0.945, 0.535))
 	var badge = make_badge(parent, badge_rect, badge_text, 8 if side == "left" or side == "right" else 9, opponent_seat_threat_color_from_report(report), Color(1.0, 0.91, 0.48, 0.46), Color(0.10, 0.11, 0.10))

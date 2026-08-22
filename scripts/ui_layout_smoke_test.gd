@@ -374,9 +374,9 @@ func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> v
 
 func diagnostic_layout_lines() -> Array[String]:
 	return [
-		"【音频系统诊断 v1.0.156】", "",
+		"【音频系统诊断 1.0.180-godot】", "",
 		"1. 用户激活: 是", "2. 设备: 小米手机 (MIUI)", "",
-		"⚠️ v1.0.156重大改动", "BGM已从WAV改为MP3格式", "因为您能听到TTS语音提示",
+		"⚠️ 当前音频说明", "BGM已从WAV改为MP3格式", "因为您能听到TTS语音提示",
 		"说明音频系统正常", "只是WAV格式不兼容", "", "【请回答】",
 		"1. 能听到背景音乐了吗？", "2. 刚才的440Hz测试音听到了吗？", "",
 		"3. BGM播放器: 正常", "4. BGM音频流: 已加载", "5. BGM正在播放: 是",
@@ -1099,6 +1099,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	var panel = scene.find_child("RoundSummaryPanel", true, false) as Control
 	var title = scene.find_child("RoundSummaryTitle", true, false) as Label
 	var body = scene.find_child("RoundSummaryBody", true, false) as Label
+	var top_status = scene.find_child("TopHudStatus", true, false) as Label
 	var detail_panel = scene.find_child("WinDetailPanel", true, false) as Control
 	var winner_label = scene.find_child("WinDetailWinnerLabel", true, false) as Label
 	var score_label = scene.find_child("WinDetailScoreLabel", true, false) as Label
@@ -1106,9 +1107,20 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	var dock = scene.find_child("ActionButtonDock", true, false) as Control
 	var next_button = first_button_with_text(scene.action_bar, "下一局")
 	var menu_button = first_button_with_text(scene.action_bar, "菜单")
-	check(panel != null and title != null and body != null and detail_panel != null and winner_label != null and score_label != null and win_tile != null, "round summary exposes title, score body, win detail, and winning tile at %s" % viewport_size)
+	check(panel != null and title != null and body != null and top_status != null and detail_panel != null and winner_label != null and score_label != null and win_tile != null, "round summary exposes title, score body, compact top status, win detail, and winning tile at %s" % viewport_size)
 	check(next_button != null and menu_button != null, "round summary exposes clear next-hand and menu routes at %s" % viewport_size)
 	check(scene.find_child("ActionIntentDock", true, false) == null, "round summary omits the live action intent strip at %s" % viewport_size)
+	if top_status != null:
+		check(top_status.text == "本局结算 · 你自摸 8番 16分" and not top_status.text.contains("..."), "round summary top HUD uses a complete short settlement status at %s" % viewport_size)
+	var saved_summary_score: Dictionary = scene.last_win_score.duplicate(true)
+	var saved_summary_hand_number: int = int(scene.offline_hand_number)
+	scene.last_win_score = {"wall_draw": true}
+	scene.offline_hand_number = 1
+	check(scene.top_hud_status_text() == "本局结算 · 荒庄", "wall draw top HUD uses a short settlement status at %s" % viewport_size)
+	scene.offline_hand_number = scene.MATCH_MAX_HANDS
+	check(scene.top_hud_status_text() == "全场结束 · 荒庄", "match-complete wall draw top HUD names the terminal settlement at %s" % viewport_size)
+	scene.last_win_score = saved_summary_score
+	scene.offline_hand_number = saved_summary_hand_number
 	if panel == null:
 		return
 	var panel_rect = screen_rect(panel)

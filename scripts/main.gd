@@ -4984,6 +4984,8 @@ func init_ui_enhancements() -> void:
 	add_child(ui_enhancements)
 
 func _finish_startup() -> void:
+	if not ensure_tile_assets_ready():
+		return
 	if OS.get_cmdline_user_args().has("--offline-preview"):
 		start_offline(true)
 	else:
@@ -5172,6 +5174,8 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func start_offline(instant: bool = false) -> void:
+	if not ensure_tile_assets_ready():
+		return
 	if transition_active and not instant:
 		return
 	var _build = func() -> void:
@@ -15882,20 +15886,21 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var side_text_back = make_gpt_center_crop_plate_rect(rect_full(0.255, 0.060, 0.960, 0.860), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
 		side_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(side_text_back)
+		var compact_side := effective_viewport_size().y <= 560.0
 		var side_name_right := 0.590 if seat == dealer_seat else 0.620
-		var side_name = make_label(panel, seat_compact_display_name(seat, p, 2), 11, Color(1.0, 0.98, 0.90), true)
+		var side_name = make_label(panel, seat_compact_display_name(seat, p, 2), 12 if compact_side else 11, Color(1.0, 0.98, 0.90), true)
 		side_name.name = "SeatCompactName_%d" % seat
-		apply_rect(side_name, rect_full(0.285, 0.090, side_name_right, 0.300))
+		apply_rect(side_name, rect_full(0.285, 0.075, side_name_right, 0.285 if compact_side else 0.300))
 		side_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_name, true)
 		if seat == dealer_seat:
 			var side_dealer = make_badge(panel, rect_full(0.610, 0.094, 0.690, 0.292), "庄", 8, Color(0.58, 0.12, 0.08, 0.84), Color(1.0, 0.79, 0.34, 0.54), Color(0.98, 0.92, 0.74))
 			side_dealer.name = "SeatCompactDealer_%d" % seat
 			side_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var side_score_left := 0.715 if seat == dealer_seat else 0.640
-		var side_score = make_label(panel, seat_score_text(p), 9, Color(1.0, 0.94, 0.72), true)
+		var side_score_left := 0.285 if compact_side else (0.715 if seat == dealer_seat else 0.640)
+		var side_score = make_label(panel, seat_score_text(p), 10 if compact_side else 9, Color(1.0, 0.94, 0.72), true)
 		side_score.name = "SeatCompactScore_%d" % seat
-		apply_rect(side_score, rect_full(side_score_left, 0.090, 0.940, 0.300))
+		apply_rect(side_score, rect_full(side_score_left, 0.295 if compact_side else 0.090, 0.940, 0.435 if compact_side else 0.300))
 		side_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(side_score, true)
 		var side_stats = make_label(panel, "", 10, Color(0.96, 0.94, 0.84), false)
@@ -15907,18 +15912,19 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		if side_discard_count > 0:
 			side_meta_text += " 弃%d" % side_discard_count
 		side_stats.text = side_meta_text
-		apply_rect(side_stats, rect_full(0.285, 0.340, 0.940, 0.515))
+		apply_rect(side_stats, rect_full(0.285, 0.445 if compact_side else 0.340, 0.940, 0.570 if compact_side else 0.515))
 		side_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_stats, false)
 		if active:
-			var side_turn = make_badge(panel, rect_full(0.785, 0.555, 0.940, 0.730), "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
+			var side_turn_rect := rect_full(0.285, 0.545, 0.470, 0.680) if compact_side else rect_full(0.785, 0.555, 0.940, 0.730)
+			var side_turn = make_badge(panel, side_turn_rect, "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
 			side_turn.name = "SeatCompactTurn_%d" % seat
 			side_turn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var side_status_text = "打%s" % tile_label(get_last_discard()) if recent_discard_source else ""
 		if side_status_text != "":
 			var side_status = make_label(panel, side_status_text, 10, Color(1.0, 0.94, 0.74), false)
 			side_status.name = "SeatCompactStatus_%d" % seat
-			apply_rect(side_status, rect_full(0.285, 0.565, 0.940, 0.720))
+			apply_rect(side_status, rect_full(0.285, 0.690 if compact_side else 0.565, 0.940, 0.800 if compact_side else 0.720))
 			side_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_seat_readable_label(side_status, false)
 		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
@@ -16048,8 +16054,8 @@ func draw_compact_seat_threat_badge(parent: Control, seat: int, seat_threat_repo
 		badge_rect = rect_full(0.560, 0.385, 0.945, 0.555)
 		apply_rect(art, rect_full(0.560, 0.385, 0.945, 0.555))
 	elif side == "left" or side == "right":
-		badge_rect = rect_full(0.285, 0.545, 0.720, 0.735)
-		apply_rect(art, rect_full(0.285, 0.545, 0.720, 0.735))
+		badge_rect = rect_full(0.520, 0.545, 0.945, 0.680)
+		apply_rect(art, rect_full(0.520, 0.545, 0.945, 0.680))
 	else:
 		apply_rect(art, rect_full(0.560, 0.340, 0.945, 0.535))
 	var badge = make_badge(parent, badge_rect, badge_text, 8 if side == "left" or side == "right" else 9, opponent_seat_threat_color_from_report(report), Color(1.0, 0.91, 0.48, 0.46), Color(0.10, 0.11, 0.10))
@@ -23615,9 +23621,23 @@ func _show_online_lobby_impl() -> void:
 	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.98), "ui_dark_scrim", 0.24)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
-	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.380, 0.910, 0.620), Color(0.018, 0.030, 0.030, 0.98), "ui_dark_scrim", 0.18)
+	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.98), "ui_dark_scrim", 0.18)
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	log_panel.add_child(empty_state_backplate)
+	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(18, 2), Color(0.98, 0.94, 0.82), true)
+	empty_state_title.name = "OnlineLobbyRoomOfflineTitle"
+	apply_rect(empty_state_title, rect_full(0.16, 0.04, 0.84, 0.30))
+	empty_state_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	empty_state_title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
+	empty_state_title.add_theme_constant_override("outline_size", 3)
+	configure_clipped_label(empty_state_title)
+	var empty_state_hint = make_label(empty_state_backplate, "请先使用左侧连接", commercial_ui_font_size(13, 1), Color(0.86, 0.88, 0.80), false)
+	empty_state_hint.name = "OnlineLobbyRoomOfflineHint"
+	apply_rect(empty_state_hint, rect_full(0.16, 0.70, 0.84, 0.96))
+	empty_state_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	empty_state_hint.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.88))
+	empty_state_hint.add_theme_constant_override("outline_size", 2)
+	configure_clipped_label(empty_state_hint)
 	# 右侧面板滑入动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		log_panel.modulate = Color(1, 1, 1, 0)
@@ -26433,7 +26453,7 @@ func test_audio_setting() -> void:
 	ensure_master_audio_bus()
 	warm_speech_backend()
 
-	print("===== 开始音频测试 v1.0.155 =====")
+	print("===== 开始音频测试 %s =====" % app_version())
 
 	# v1.0.155: 先测试AudioStreamGenerator生成的音调
 	print("AudioTest: 播放440Hz测试音（1秒）")
@@ -26450,12 +26470,12 @@ func test_audio_setting() -> void:
 
 	# 收集诊断信息
 	var diag = []
-	diag.append("【音频系统诊断 v1.0.156】")
+	diag.append("【音频系统诊断 %s】" % app_version())
 	diag.append("")
 	diag.append("1. 用户激活: " + ("是" if audio_touch_unlocked else "否"))
 	diag.append("2. 设备: 小米手机 (MIUI)")
 	diag.append("")
-	diag.append("⚠️ v1.0.156重大改动")
+	diag.append("⚠️ 当前音频说明")
 	diag.append("BGM已从WAV改为MP3格式")
 	diag.append("因为您能听到TTS语音提示")
 	diag.append("说明音频系统正常")
@@ -32100,6 +32120,25 @@ func current_status_text() -> String:
 	return "轮到你出牌" if can_self_discard() else "等待对家行牌"
 
 
+# Keep the ended-state HUD short; detailed yaku and liability text belongs in the settlement panel.
+func ended_top_hud_status_text() -> String:
+	var settlement_label := "全场结束" if is_offline_match_finished() else "本局结算"
+	if bool(last_win_score.get("wall_draw", false)):
+		return "%s · 荒庄" % settlement_label
+	var winner := int(last_win_score.get("winner", offline_last_winner))
+	if winner >= 0 and winner < players.size():
+		var winner_name := str(players[winner].get("name", "玩家")).strip_edges()
+		if winner_name == "":
+			winner_name = "玩家"
+		var action_text := "自摸" if bool(last_win_score.get("self_draw", false)) else "胡"
+		var fan := int(last_win_score.get("fan", 0))
+		var points := int(last_win_score.get("points", 0))
+		if fan > 0 or points > 0:
+			return "%s · %s%s %d番 %d分" % [settlement_label, winner_name, action_text, fan, points]
+		return "%s · %s%s" % [settlement_label, winner_name, action_text]
+	return settlement_label
+
+
 # 顶部栏状态：以「事件」视角描述局势，避免与手牌托盘的「行动」提示重复同一句话。
 func top_hud_status_text() -> String:
 	if mode == "offline":
@@ -32117,6 +32156,8 @@ func top_hud_status_text() -> String:
 				var last_seat = get_last_discard_seat()
 				if last_seat >= 0 and last_seat < players.size():
 					return "%s · 上张%s" % [current_status_text(), tile_label(last_tile)]
+		if offline_phase == "ended":
+			return ended_top_hud_status_text()
 	return current_status_text()
 
 

@@ -354,7 +354,7 @@ func test_audio_setting() -> void:
 	ensure_master_audio_bus()
 	warm_speech_backend()
 
-	print("===== 开始音频测试 v1.0.155 =====")
+	print("===== 开始音频测试 %s =====" % app_version())
 
 	# v1.0.155: 先测试AudioStreamGenerator生成的音调
 	print("AudioTest: 播放440Hz测试音（1秒）")
@@ -371,12 +371,12 @@ func test_audio_setting() -> void:
 
 	# 收集诊断信息
 	var diag = []
-	diag.append("【音频系统诊断 v1.0.156】")
+	diag.append("【音频系统诊断 %s】" % app_version())
 	diag.append("")
 	diag.append("1. 用户激活: " + ("是" if audio_touch_unlocked else "否"))
 	diag.append("2. 设备: 小米手机 (MIUI)")
 	diag.append("")
-	diag.append("⚠️ v1.0.156重大改动")
+	diag.append("⚠️ 当前音频说明")
 	diag.append("BGM已从WAV改为MP3格式")
 	diag.append("因为您能听到TTS语音提示")
 	diag.append("说明音频系统正常")
@@ -6021,6 +6021,25 @@ func current_status_text() -> String:
 	return "轮到你出牌" if can_self_discard() else "等待对家行牌"
 
 
+# Keep the ended-state HUD short; detailed yaku and liability text belongs in the settlement panel.
+func ended_top_hud_status_text() -> String:
+	var settlement_label := "全场结束" if is_offline_match_finished() else "本局结算"
+	if bool(last_win_score.get("wall_draw", false)):
+		return "%s · 荒庄" % settlement_label
+	var winner := int(last_win_score.get("winner", offline_last_winner))
+	if winner >= 0 and winner < players.size():
+		var winner_name := str(players[winner].get("name", "玩家")).strip_edges()
+		if winner_name == "":
+			winner_name = "玩家"
+		var action_text := "自摸" if bool(last_win_score.get("self_draw", false)) else "胡"
+		var fan := int(last_win_score.get("fan", 0))
+		var points := int(last_win_score.get("points", 0))
+		if fan > 0 or points > 0:
+			return "%s · %s%s %d番 %d分" % [settlement_label, winner_name, action_text, fan, points]
+		return "%s · %s%s" % [settlement_label, winner_name, action_text]
+	return settlement_label
+
+
 # 顶部栏状态：以「事件」视角描述局势，避免与手牌托盘的「行动」提示重复同一句话。
 func top_hud_status_text() -> String:
 	if mode == "offline":
@@ -6038,6 +6057,8 @@ func top_hud_status_text() -> String:
 				var last_seat = get_last_discard_seat()
 				if last_seat >= 0 and last_seat < players.size():
 					return "%s · 上张%s" % [current_status_text(), tile_label(last_tile)]
+		if offline_phase == "ended":
+			return ended_top_hud_status_text()
 	return current_status_text()
 
 

@@ -153,9 +153,9 @@ func connected_room_fixture() -> Dictionary:
 
 func diagnostic_interaction_lines() -> Array[String]:
 	return [
-		"【音频系统诊断 v1.0.156】", "",
+		"【音频系统诊断 1.0.180-godot】", "",
 		"1. 用户激活: 是", "2. 设备: 小米手机 (MIUI)", "",
-		"⚠️ v1.0.156重大改动", "BGM已从WAV改为MP3格式", "因为您能听到TTS语音提示",
+		"⚠️ 当前音频说明", "BGM已从WAV改为MP3格式", "因为您能听到TTS语音提示",
 		"说明音频系统正常", "只是WAV格式不兼容", "", "【请回答】",
 		"1. 能听到背景音乐了吗？", "2. 刚才的440Hz测试音听到了吗？", "",
 		"3. BGM播放器: 正常", "4. BGM音频流: 已加载", "5. BGM正在播放: 是",

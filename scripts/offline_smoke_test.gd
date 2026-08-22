@@ -317,7 +317,7 @@ func run() -> void:
 	check(scene.find_child("DailyLoginClaimFlowArt", true, false) != null and scene.find_child("DailyLoginClaimFlowSource", true, false) != null and scene.find_child("DailyLoginClaimRewardRoute", true, false) != null and scene.find_child("DailyLoginClaimRewardFill", true, false) != null and scene.find_child("DailyLoginClaimRewardGate", true, false) != null and scene.find_child("DailyLoginClaimRewardGlyph", true, false) != null, "daily login renders streak-to-reward claim flow and reward glyph")
 	check(scene.find_child("DailyLoginClaimConfirmRoute", true, false) != null and scene.find_child("DailyLoginClaimConfirmFill", true, false) != null and scene.find_child("DailyLoginClaimConfirmGate", true, false) != null and count_nodes_with_name_prefix(scene, "DailyLoginClaimFlowNode_") == 3, "daily login claim flow renders confirmation route and milestone nodes")
 	check(count_nodes_with_name_prefix(scene, "DailyLoginClaimRewardTick_") == 3 and count_nodes_with_name_prefix(scene, "DailyLoginClaimConfirmTick_") == 2, "daily login claim flow renders reward and confirm rhythm ticks")
-	scene.show_diagnostic_dialog(["【音频系统诊断 v1.0.156】", "✓ BGM文件加载成功", "✗ BGM未播放", "• 建议检查媒体音量", "   →省电策略→无限制"])
+	scene.show_diagnostic_dialog(["【音频系统诊断 %s】" % scene.app_version(), "✓ BGM文件加载成功", "✗ BGM未播放", "• 建议检查媒体音量", "   →省电策略→无限制"])
 	var diagnostic_scroll = scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
 	var diagnostic_list = scene.find_child("DiagnosticContentList", true, false) as VBoxContainer
 	var diagnostic_close = scene.find_child("DiagnosticCloseButton", true, false) as Button
@@ -839,6 +839,15 @@ func run() -> void:
 	for code in scene.TILE_CODES + scene.FLOWER_CODES:
 		check(FileAccess.file_exists(scene.tile_path(str(code))), "tile asset exists: " + str(code))
 		check(scene.tile_textures.get(str(code), null) != null, "tile texture loads: " + str(code))
+	check(scene.tile_assets_validation_complete, "tile asset validation completes before gameplay")
+	check(scene.tile_assets_ready and scene.tile_asset_errors.is_empty(), "all legal tile faces pass the startup asset gate")
+	check(scene.ensure_tile_assets_ready(false), "complete tile asset gate permits gameplay")
+	var missing_face_detail: Dictionary = scene.tile_asset_error_for("5W", "res://assets/tiles/not_real_smoke_tile.png", null)
+	check(str(missing_face_detail.get("code", "")) == "5W" and str(missing_face_detail.get("path", "")) == "res://assets/tiles/not_real_smoke_tile.png" and str(missing_face_detail.get("reason", "")) == "missing_file", "missing legal tile face reports code path and missing-file reason")
+	var outside_face_detail: Dictionary = scene.tile_asset_error_for("5W", "res://assets/tiles_3d/tile_5W.png", null)
+	check(str(outside_face_detail.get("reason", "")) == "outside_assets_tiles", "tile face outside assets/tiles is rejected by the startup asset gate")
+	var unknown_face_detail: Dictionary = scene.tile_asset_error_for("ZZ", "", null)
+	check(str(unknown_face_detail.get("code", "")) == "ZZ" and str(unknown_face_detail.get("reason", "")) == "empty_face_path", "unknown tile face reports its code and empty path")
 	for sample_code in ["5W", "E", "H1"]:
 		var sample_path = scene.tile_path(sample_code)
 		check(sample_path.begins_with("res://assets/tiles/") and not sample_path.contains("assets/tiles_3d/"), "playable tile face %s uses assets/tiles authored sprites" % sample_code)
@@ -2226,11 +2235,13 @@ func run() -> void:
 	var previous_phase = scene.offline_phase
 	var previous_summary = scene.round_summary
 	var previous_hand_number = scene.offline_hand_number
+	var previous_last_win_score: Dictionary = scene.last_win_score.duplicate(true)
 	var previous_last_discard = scene.last_discard
 	var previous_last_discard_seat = scene.last_discard_seat
 	scene.offline_phase = "ended"
 	scene.offline_hand_number = 1
 	scene.round_summary = "超长顶部状态文本用于验证HUD不会自动换行挤压分数和按钮区域"
+	scene.last_win_score = {"winner": 0, "fan": 8, "points": 16, "self_draw": true}
 	scene.last_discard = "5W"
 	scene.last_discard_seat = 0
 	var hud_parent = Control.new()
@@ -2239,7 +2250,8 @@ func run() -> void:
 	var hud_panel = hud_parent.get_child(0) as Control if hud_parent.get_child_count() > 0 else null
 	check(control_anchor_rect_matches(hud_panel, scene.TOP_HUD_RECT), "top HUD root uses fixed geometry constants")
 	check(scene.optional_gpt_illustration_texture("top_hud_gpt_banner") == null or hud_parent.find_child("TopHudGPTBannerTexture", true, false) != null, "top HUD consumes optional GPT banner texture when generated")
-	check(label_is_clipped(first_label_containing_text(hud_parent, "超长顶部状态文本")), "top HUD status clips long text instead of wrapping")
+	var ended_status_label = hud_parent.find_child("TopHudStatus", true, false) as Label
+	check(ended_status_label != null and ended_status_label.text == "本局结算 · 你自摸 8番 16分" and not ended_status_label.text.contains("..."), "top HUD ended status uses a complete short settlement summary")
 	check(label_is_clipped(first_label_containing_text(hud_parent, "余")), "top HUD wall summary clips inside its slot")
 	var offline_title_rect := Rect2(Vector2(0.106, 0.090), Vector2(0.260, 0.535))
 	var offline_status_rect := Rect2(Vector2(0.270, 0.090), Vector2(0.610, 0.515))
@@ -2333,6 +2345,7 @@ func run() -> void:
 	scene.offline_phase = previous_phase
 	scene.round_summary = previous_summary
 	scene.offline_hand_number = previous_hand_number
+	scene.last_win_score = previous_last_win_score
 	scene.last_discard = previous_last_discard
 	scene.last_discard_seat = previous_last_discard_seat
 	var avatar = scene.make_avatar_view(1, true)

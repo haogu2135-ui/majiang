@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import os
+import subprocess
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageStat
@@ -110,6 +114,85 @@ def validate(pages_dir: Path, expected_size: tuple[int, int]) -> tuple[bool, lis
     return ok, rows
 
 
+def current_git_state() -> tuple[str, str, str]:
+    revision = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    status = subprocess.run(
+        ["git", "-C", str(ROOT), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    runtime_status = subprocess.run(
+        [
+            "git", "-C", str(ROOT), "status", "--porcelain", "--",
+            "project.godot", "scripts/main_base.gd", "scripts/main.gd",
+            "scripts/main_src", "scripts/ui",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return revision, ("dirty" if status else "clean"), ("dirty" if runtime_status else "clean")
+
+
+def current_state_fingerprint(paths: tuple[str, ...] = ()) -> str:
+    path_args = ["--", *paths]
+    diff = subprocess.run(
+        ["git", "-C", str(ROOT), "diff", "--binary", *path_args],
+        check=True,
+        capture_output=True,
+    ).stdout
+    status = subprocess.run(
+        ["git", "-C", str(ROOT), "status", "--porcelain", *path_args],
+        check=True,
+        capture_output=True,
+    ).stdout
+    return hashlib.sha256(diff + status).hexdigest()
+
+
+def validate_capture_metadata(pages_dir: Path, expected_size: tuple[int, int]) -> tuple[bool, list[str]]:
+    metadata_path = pages_dir / "capture_metadata.json"
+    if not metadata_path.exists():
+        return False, [f"missing `{metadata_path}`"]
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"invalid `{metadata_path}`: {exc}"]
+    try:
+        revision, worktree_state, runtime_source_state = current_git_state()
+        worktree_diff_fingerprint = current_state_fingerprint()
+        runtime_source_diff_fingerprint = current_state_fingerprint(
+            ("project.godot", "scripts/main_base.gd", "scripts/main.gd", "scripts/main_src", "scripts/ui")
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return False, [f"unable to read current git state: {exc}"]
+    expected = {
+        "capture_revision": revision,
+        "worktree_state": worktree_state,
+        "runtime_source_state": runtime_source_state,
+        "worktree_diff_fingerprint": worktree_diff_fingerprint,
+        "runtime_source_diff_fingerprint": runtime_source_diff_fingerprint,
+        "capture_size": f"{expected_size[0]}x{expected_size[1]}",
+    }
+    issues = []
+    for key, expected_value in expected.items():
+        actual_value = str(metadata.get(key, ""))
+        if actual_value != expected_value:
+            issues.append(f"{key} expected `{expected_value}` got `{actual_value}`")
+    capture_batch_id = str(metadata.get("capture_batch_id", ""))
+    expected_batch_id = os.environ.get("YUNZHUO_CAPTURE_BATCH_ID", "")
+    if not capture_batch_id:
+        issues.append("capture_batch_id is missing")
+    elif expected_batch_id and capture_batch_id != expected_batch_id:
+        issues.append(f"capture_batch_id expected `{expected_batch_id}` got `{capture_batch_id}`")
+    return not issues, issues
+
+
 def write_report(
     report_path: Path,
     pages_dir: Path,
@@ -117,6 +200,8 @@ def write_report(
     expected_size: tuple[int, int],
     rows: list[dict[str, object]],
     ok: bool,
+    metadata_ok: bool,
+    metadata_issues: list[str],
 ) -> None:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
@@ -125,6 +210,8 @@ def write_report(
         f"Pages directory: `{pages_dir}`",
         f"Expected size: `{expected_size[0]}x{expected_size[1]}`",
         f"Contact sheet: `{contact_sheet}`",
+        f"Capture metadata: `{pages_dir / 'capture_metadata.json'}`",
+        f"Capture metadata status: `{'passed' if metadata_ok else 'failed'}`",
         f"Status: `{'passed' if ok else 'failed'}`",
         "",
         "| File | Size | Mean luma | Luma stdev | Alpha range | Status |",
@@ -143,6 +230,9 @@ def write_report(
         lines.append(
             f"| `{row['file']}` | {size_text} | {mean_text} | {stdev_text} | {alpha_text} | {row['status']} |"
         )
+    if metadata_issues:
+        lines.extend(["", "Capture metadata issues:", ""])
+        lines.extend(f"- {issue}" for issue in metadata_issues)
     lines.extend(
         [
             "",
@@ -199,9 +289,10 @@ def main() -> int:
 
     contact_sheet = args.contact_sheet if args.contact_sheet is not None else args.pages_dir / DEFAULT_CONTACT_SHEET_NAME
     ok, rows = validate(args.pages_dir, args.expected_size)
+    metadata_ok, metadata_issues = validate_capture_metadata(args.pages_dir, args.expected_size)
     contact_ok = write_contact_sheet(args.pages_dir, rows, contact_sheet)
-    ok = ok and contact_ok
-    write_report(args.report, args.pages_dir, contact_sheet, args.expected_size, rows, ok)
+    ok = ok and contact_ok and metadata_ok
+    write_report(args.report, args.pages_dir, contact_sheet, args.expected_size, rows, ok, metadata_ok, metadata_issues)
     print(f"wrote {args.report}")
     return 0 if ok else 1
 

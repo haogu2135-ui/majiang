@@ -577,9 +577,23 @@ func _show_online_lobby_impl() -> void:
 	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.98), "ui_dark_scrim", 0.24)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
-	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.380, 0.910, 0.620), Color(0.018, 0.030, 0.030, 0.98), "ui_dark_scrim", 0.18)
+	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.98), "ui_dark_scrim", 0.18)
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	log_panel.add_child(empty_state_backplate)
+	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(18, 2), Color(0.98, 0.94, 0.82), true)
+	empty_state_title.name = "OnlineLobbyRoomOfflineTitle"
+	apply_rect(empty_state_title, rect_full(0.16, 0.04, 0.84, 0.30))
+	empty_state_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	empty_state_title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
+	empty_state_title.add_theme_constant_override("outline_size", 3)
+	configure_clipped_label(empty_state_title)
+	var empty_state_hint = make_label(empty_state_backplate, "请先使用左侧连接", commercial_ui_font_size(13, 1), Color(0.86, 0.88, 0.80), false)
+	empty_state_hint.name = "OnlineLobbyRoomOfflineHint"
+	apply_rect(empty_state_hint, rect_full(0.16, 0.70, 0.84, 0.96))
+	empty_state_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	empty_state_hint.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.88))
+	empty_state_hint.add_theme_constant_override("outline_size", 2)
+	configure_clipped_label(empty_state_hint)
 	# 右侧面板滑入动画
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		log_panel.modulate = Color(1, 1, 1, 0)

@@ -15,6 +15,15 @@ REPORT="$ROOT_DIR/build/qa/ui_regression_verification_report.md"
 LOG_DIR="$ROOT_DIR/build/qa/logs"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S %z')"
 REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+git_state_fingerprint() {
+	{
+		git -C "$ROOT_DIR" diff --binary -- "$@" 2>/dev/null || true
+		git -C "$ROOT_DIR" status --porcelain -- "$@" 2>/dev/null || true
+	} | sha256sum | awk '{print $1}'
+}
+WORKTREE_DIFF_FINGERPRINT="$(git_state_fingerprint)"
+RUNTIME_SOURCE_DIFF_FINGERPRINT="$(git_state_fingerprint project.godot scripts/main_base.gd scripts/main.gd scripts/main_src scripts/ui)"
+QA_BATCH_ID="$(date -u '+%Y%m%dT%H%M%SZ')-${REVISION}-${RUNTIME_SOURCE_DIFF_FINGERPRINT:0:12}"
 WORKTREE_STATE="clean"
 RUNTIME_SOURCE_STATE="clean"
 if [ -n "$(git -C "$ROOT_DIR" status --porcelain 2>/dev/null)" ]; then
@@ -103,6 +112,12 @@ check_target_godot_version() {
 
 capture_pages_for_size() {
 	local screen_size="$1"
+	export YUNZHUO_CAPTURE_REVISION="$REVISION"
+	export YUNZHUO_CAPTURE_BATCH_ID="$QA_BATCH_ID"
+	export YUNZHUO_CAPTURE_WORKTREE_STATE="$WORKTREE_STATE"
+	export YUNZHUO_CAPTURE_RUNTIME_SOURCE_STATE="$RUNTIME_SOURCE_STATE"
+	export YUNZHUO_CAPTURE_WORKTREE_DIFF_FINGERPRINT="$WORKTREE_DIFF_FINGERPRINT"
+	export YUNZHUO_CAPTURE_RUNTIME_SOURCE_DIFF_FINGERPRINT="$RUNTIME_SOURCE_DIFF_FINGERPRINT"
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
 		--screens=01_menu,02_menu_settings,03_offline_battle,04_rules,05_stats || return 1
@@ -265,8 +280,11 @@ fi
 	echo ""
 	echo "- Time: $TIMESTAMP"
 	echo "- Git revision: \`$REVISION\`"
+	echo "- QA batch: \`$QA_BATCH_ID\`"
 	echo "- Worktree state: $WORKTREE_STATE"
 	echo "- Runtime source vs HEAD: $RUNTIME_SOURCE_STATE"
+	echo "- Worktree diff fingerprint: \`$WORKTREE_DIFF_FINGERPRINT\`"
+	echo "- Runtime source diff fingerprint: \`$RUNTIME_SOURCE_DIFF_FINGERPRINT\`"
 	echo "- Godot binary: \`$GODOT_BIN\`"
 	echo "- Required Godot version: \`$EXPECTED_GODOT_VERSION_PREFIX\`"
 	echo "- Result: $STATUS"
