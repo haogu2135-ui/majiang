@@ -5329,7 +5329,7 @@ func render_game() -> void:
 	current_seat_threat_reports = {}
 	draw_game_top_hud(root_layer)
 
-	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.008), 42)  # r426
+	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.004), 42)  # r426
 	table_floor_shadow.name = "OfflineTable3DFloorShadow"
 	# r406: apron sits under hand tray only — do not darken bottom river (zone y~0.638-0.824).
 	var table_apron = make_gpt_route_rail(rect_full(0.145, 0.805, 0.855, 0.865), Color(0.12, 0.09, 0.05, 0.05))
@@ -5337,12 +5337,15 @@ func render_game() -> void:
 	root_layer.add_child(table_apron)
 	var apron_highlight = make_soft_depth_panel(table_apron, rect_full(0.035, 0.040, 0.965, 0.170), Color(0.98, 0.78, 0.40, 0.06), 999)  # r406
 	apron_highlight.name = "OfflineTable3DApronHighlight"
-	var table_shadow = make_soft_depth_panel(root_layer, rect_full(0.112, 0.142, 0.888, 0.812), Color(0.0, 0.0, 0.0, 0.010), 38)  # r426
+	var table_shadow = make_soft_depth_panel(root_layer, rect_full(0.112, 0.142, 0.888, 0.812), Color(0.0, 0.0, 0.0, 0.005), 38)  # r426
 	table_shadow.name = "OfflineTable3DCastShadow"
-	var outer = make_gpt_plate_rect(TABLE_OUTER_RECT, Color(0.08, 0.06, 0.04, 0.04), "ui_jade_reading_plate")
+	# The battle background already supplies the authored table surface. Keep the
+	# table nodes as geometry hosts so board children retain their coordinates,
+	# but do not repaint a second full-size high-frequency plate over the room.
+	var outer = make_layout_host(TABLE_OUTER_RECT)
 	outer.name = "OfflineTable3DOuterShell"
 	root_layer.add_child(outer)
-	var table = make_gpt_plate_rect(TABLE_INNER_RECT, Color(0.10, 0.07, 0.045, 0.05), "ui_jade_reading_plate")
+	var table = make_layout_host(TABLE_INNER_RECT)
 	table.name = "OfflineTable3DInnerSurface"
 	outer.add_child(table)
 	# Room guofeng lives on screen_layer; table surface stays translucent so felt reads against the room plate.
@@ -9003,13 +9006,11 @@ func draw_action_dock(parent: Control) -> void:
 	if not pending_claim_mode and not danger_confirm_mode and not ended_action_mode:
 		draw_action_intent_dock(parent, count)
 	# r451c: translucent lacquer shell + GPT dock plate on top (no jade program slabs).
-	var dock_fill_alpha := 0.28 if pending_claim_mode else 0.26
-	var dock_border_alpha := 0.62 if pending_claim_mode else 0.72
 	var dock_rect := action_dock_rect_for_count(count)
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
 	var dock_shadow = make_soft_depth_panel(parent, dock_shadow_rect, Color(0.0, 0.0, 0.0, 0.18 if pending_claim_mode else 0.22), 12)
 	dock_shadow.name = "ActionDock3DCastShadow"
-	var dock = make_gpt_plate_rect(dock_rect, Color(0.28, 0.20, 0.12, dock_fill_alpha), "ui_jade_reading_plate")
+	var dock = make_gpt_center_crop_plate_rect(dock_rect, Color(0.018, 0.026, 0.024, 0.78), "ui_dark_scrim", 0.20)
 	dock.name = "ActionButtonDock"
 	parent.add_child(dock)
 	dock.clip_contents = true
@@ -9037,10 +9038,10 @@ func draw_action_dock(parent: Control) -> void:
 			pending_dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.38)
 			dock.move_child(pending_dock_texture, dock.get_child_count() - 1)
 	else:
-		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock", rect_full(0.000, 0.010, 1.000, 0.990), 0.62, false)
+		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock", rect_full(0.000, 0.010, 1.000, 0.990), 0.30, false)
 		if dock_texture != null:
 			dock_texture.name = "ActionGPTDockTexture"
-			dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.72)
+			dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.54)
 			dock.move_child(dock_texture, dock.get_child_count() - 1)
 		# r452b: GPT title plate + soft flash mid-band (no program jade).
 		# r184: light mid-band only — keep action_gpt_dock micro-detail readable.
@@ -10589,12 +10590,6 @@ func draw_chat_send_toast_art(toast_bg: Control, accent: Color) -> Control:
 	receipt.modulate = Color(1, 1, 1, 0.80)
 	return art
 
-
-func draw_compact_tile_face(parent: Control, tile: String, size: Vector2) -> void:
-	var face = make_label(parent, tile_label(tile), compact_tile_face_font_size(size), tile_accent(tile), true)
-	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	face.clip_text = true
-	apply_rect(face, rect_full(0.08, 0.15, 0.92, 0.85))
 
 func draw_daily_login_claim_button_art(button: Control) -> Control:
 	var art = Control.new()
@@ -13462,34 +13457,25 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 	art.move_child(cast_shadow, 0)
 	var depth_edge = make_soft_depth_panel(art, rect_full(0.050, 0.825, 0.950, 0.985), Color(0.22, 0.14, 0.06, card_depth_alpha), 14)
 	depth_edge.name = "MenuCardDepthEdge"
-	var card_face = add_optional_gpt_illustration_texture(art, "ui_menu_card_face", rect_full(0.030, 0.045, 0.970, 0.955), 0.86, false)
-	if card_face == null:
-		card_face = add_optional_gpt_illustration_texture(art, "ui_button_face_plate", rect_full(0.030, 0.045, 0.970, 0.955), 0.78, false)
-	if card_face == null:
-		card_face = add_optional_gpt_illustration_texture(art, "action_button_panel", rect_full(0.030, 0.045, 0.970, 0.955), 0.72, false)
-	if card_face == null:
-		card_face = add_optional_gpt_illustration_texture(art, "ui_seat_info_plate", rect_full(0.030, 0.045, 0.970, 0.955), 0.70, false)
-	if card_face != null:
-		card_face.name = "MenuCardGptFace"
-		card_face.modulate = Color(
-			clampf(0.45 + color.r * 0.55, 0.25, 1.2),
-			clampf(0.45 + color.g * 0.55, 0.25, 1.2),
-			clampf(0.45 + color.b * 0.55, 0.25, 1.2),
-			0.88
-		)
-	var surface = make_gpt_plate_rect(rect_full(0.030, 0.045, 0.970, 0.955), Color(0.145, 0.185, 0.150, 0.28), "ui_jade_reading_plate")
+	# Menu cards share the same quiet reading material as rules/settings. The
+	# authored dark-scrim center crop keeps the scene recognizable while removing
+	# the repeated high-frequency jade plate behind every line of copy.
+	var card_face = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.045, 0.970, 0.955), Color(0.012, 0.024, 0.022, 0.82), "ui_dark_scrim", 0.22)
+	card_face.name = "MenuCardGptFace"
+	art.add_child(card_face)
+	var surface = make_layout_host(rect_full(0.030, 0.045, 0.970, 0.955))
 	surface.name = "MenuCardSurface"
 	art.add_child(surface)
 	var top_sheen = make_soft_depth_panel(art, rect_full(0.055, 0.060, 0.945, 0.185), Color(1.0, 0.92, 0.62, card_sheen_alpha), 12)
 	top_sheen.name = "MenuCardTopSheen"
-	var inner = make_gpt_plate_rect(rect_full(0.060, 0.090, 0.940, 0.910), Color(0.085 + color.r * 0.12, 0.095 + color.g * 0.10, 0.080 + color.b * 0.08, 0.52), "ui_jade_reading_plate")
+	var inner = make_layout_host(rect_full(0.060, 0.090, 0.940, 0.910))
 	inner.name = "MenuCardInner"
 	art.add_child(inner)
 	var accent = make_gpt_route_rail(rect_full(0.075, 0.740, 0.925, 0.870), Color(color.r, color.g, color.b, 0.10))
 	accent.name = "MenuCardAccent"
 	art.add_child(accent)
 	var icon_echo_left = 0.695 if icon_name != "" else 0.765
-	var echo = make_gpt_plate_rect(rect_full(icon_echo_left, 0.135, icon_echo_left + 0.220, 0.455), Color(color.r, color.g, color.b, 0.055), "ui_jade_reading_plate")
+	var echo = make_layout_host(rect_full(icon_echo_left, 0.135, icon_echo_left + 0.220, 0.455))
 	echo.name = "MenuCardIconEcho"
 	art.add_child(echo)
 	var focus = make_gpt_gate(rect_full(0.805, 0.720, 0.910, 0.925), Color(color.r, color.g, color.b, 0.13))
@@ -15800,9 +15786,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_shadow.name = "SeatPanel3DCastShadow_%d" % seat
 	# Lift midtones so inactive side seats still read as lacquer plaques, not black voids.
 	# r449: warm lacquer seat shell — no mint/jade green program fills under brocade.
-	var panel_fill = Color(0.34, 0.26, 0.16, 0.96) if active else (Color(0.30, 0.23, 0.15, 0.94) if recent_discard_source else Color(0.27, 0.21, 0.14, 0.92))
-	var panel_border = Color(1.0, 0.92, 0.58, 0.96) if active else (Color(0.96, 0.86, 0.52, 0.90) if recent_discard_source else Color(0.90, 0.80, 0.48, 0.84))
-	var panel = make_gpt_plate_rect(rect, panel_fill, "ui_jade_reading_plate")
+	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.018, 0.026, 0.024, 0.88), "ui_dark_scrim", 0.20)
 	panel.name = "SeatPanel_%d" % seat
 	parent.add_child(panel)
 	panel.clip_contents = true
@@ -15861,7 +15845,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var top_avatar = make_avatar_view(seat, active)
 		panel.add_child(top_avatar)
 		apply_rect(top_avatar, rect_full(0.035, 0.175, 0.185, 0.825))
-		var top_text_back = make_gpt_plate_rect(rect_full(0.205, 0.050, 0.955, 0.945), Color(0.08, 0.06, 0.04, 0.86), "ui_jade_reading_plate")
+		var top_text_back = make_gpt_center_crop_plate_rect(rect_full(0.205, 0.050, 0.955, 0.945), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
 		top_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(top_text_back)
 		var top_name = make_label(panel, seat_compact_display_name(seat, p, 3), 12, Color(1.0, 0.98, 0.90), true)
@@ -15895,7 +15879,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var side_avatar = make_avatar_view(seat, active)
 		panel.add_child(side_avatar)
 		apply_rect(side_avatar, rect_full(0.040, 0.245, 0.240, 0.755))
-		var side_text_back = make_gpt_plate_rect(rect_full(0.255, 0.060, 0.960, 0.860), Color(0.08, 0.06, 0.04, 0.86), "ui_dark_scrim")
+		var side_text_back = make_gpt_center_crop_plate_rect(rect_full(0.255, 0.060, 0.960, 0.860), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
 		side_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(side_text_back)
 		var side_name_right := 0.590 if seat == dealer_seat else 0.620
@@ -15947,7 +15931,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	apply_rect(avatar, avatar_rect)
 
 	var content_left := 0.295 if side == "bottom" else 0.305
-	var text_back = make_gpt_plate_rect(rect_full(content_left - 0.018, 0.052, 0.965, 0.875), Color(0.08, 0.06, 0.04, 0.86), "ui_jade_reading_plate")
+	var text_back = make_gpt_center_crop_plate_rect(rect_full(content_left - 0.018, 0.052, 0.965, 0.875), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
 	text_back.name = "SeatCompactTextBack_%d" % seat
 	panel.add_child(text_back)
 	var simple_name = make_label(panel, seat_compact_display_name(seat, p, 2), 15 if side == "bottom" else 12, Color(1.0, 0.98, 0.90), true)
@@ -18045,21 +18029,29 @@ func draw_table_action_readiness_convergence(parent: Control) -> Control:
 
 
 func draw_table_atmosphere_frame(parent: Control) -> Control:
+	# Keep the named atmosphere anchors for layout/smoke probes, but let the
+	# single battle backdrop own the table surface instead of repainting a second
+	# full-size texture stack beneath the board.
 	var frame = Control.new()
 	frame.name = "TableAtmosphereFrame"
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(frame)
-	var inset_shadow = make_soft_depth_panel(frame, rect_full(0.052, 0.080, 0.948, 0.920), Color(0.0, 0.0, 0.0, 0.026), 26)
+	var inset_shadow = make_layout_host(rect_full(0.052, 0.080, 0.948, 0.920))
 	inset_shadow.name = "Table3DInsetShadow"
-	var felt_vignette = make_soft_depth_panel(frame, rect_full(0.145, 0.175, 0.855, 0.805), Color(0.04, 0.028, 0.016, 0.006), 24)
+	frame.add_child(inset_shadow)
+	var felt_vignette = make_layout_host(rect_full(0.145, 0.175, 0.855, 0.805))
 	felt_vignette.name = "Table3DFeltVignette"
-	var near_highlight = make_soft_depth_panel(frame, rect_full(0.145, 0.755, 0.855, 0.820), Color(0.98, 0.78, 0.38, 0.06), 999)
+	frame.add_child(felt_vignette)
+	var near_highlight = make_layout_host(rect_full(0.145, 0.755, 0.855, 0.820))
 	near_highlight.name = "Table3DNearRimHighlight"
-	var far_rim = make_soft_depth_panel(frame, rect_full(0.160, 0.120, 0.840, 0.168), Color(0.86, 0.66, 0.32, 0.05), 999)
+	frame.add_child(near_highlight)
+	var far_rim = make_layout_host(rect_full(0.160, 0.120, 0.840, 0.168))
 	far_rim.name = "Table3DFarRimHighlight"
-	var center_spotlight = make_soft_depth_panel(frame, rect_full(0.300, 0.275, 0.700, 0.690), Color(0.90, 0.76, 0.42, 0.018), 999)
+	frame.add_child(far_rim)
+	var center_spotlight = make_layout_host(rect_full(0.300, 0.275, 0.700, 0.690))
 	center_spotlight.name = "Table3DCenterSpotlight"
+	frame.add_child(center_spotlight)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var glow_tw := create_screen_tween()
 		glow_tw.set_loops(24)
@@ -18566,21 +18558,6 @@ func draw_table_wall_pressure_route(parent: Control) -> Control:
 	var tick = add_gpt_tick_strip(route, rect_full(0.315, 0.061, (0.332) + float(3) * (0.095), 0.132), Color(color.r, color.g, color.b, 0.095), "TableWallPressureTick_0")
 	return route
 
-
-func draw_tile_face(parent: Control, tile: String, size: Vector2) -> void:
-	var main = make_label(parent, tile_face_main(tile), tile_face_font_size(size), tile_accent(tile), true)
-	main.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	main.clip_text = true
-	var sub_text = tile_face_sub(tile)
-	if is_number_tile(tile):
-		apply_rect(main, rect_full(0.18, 0.22, 0.82, 0.64))
-	else:
-		apply_rect(main, rect_full(0.12, 0.20, 0.88, 0.72))
-	if sub_text != "" and size.y >= 40:
-		var sub = make_label(parent, sub_text, max(9, int(size.y * 0.20)), tile_accent(tile).darkened(0.08), true)
-		sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		sub.clip_text = true
-		apply_rect(sub, rect_full(0.16, 0.58, 0.84, 0.83))
 
 func draw_tile_flip_signal_art(tile_view: Control, from_face_up: bool) -> Control:
 	if tile_view == null or not is_instance_valid(tile_view):
@@ -20673,9 +20650,10 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	button.add_theme_stylebox_override("hover", empty_card)
 	button.add_theme_stylebox_override("pressed", empty_card)
 	add_button_press_sheen(button)
-	if icon_name != "":
-		add_lucide_icon(button, icon_name, rect_full(0.735, 0.165, 0.865, 0.395), Color(0.92, 0.82, 0.58, 0.78))
 	draw_menu_card_entry_art(button, color, icon_name)
+	if icon_name != "":
+		# Keep the primary icon above the generated face and card ornament.
+		add_lucide_icon(button, icon_name, rect_full(0.735, 0.165, 0.865, 0.395), Color(0.92, 0.82, 0.58, 0.78))
 	if force_depth_art:
 		_add_card_breathing_shadow(button, color)
 		_add_card_shimmer(button, color)
@@ -20998,91 +20976,37 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	return grid
 
 
-func draw_tile_depth_art(tile_body: Control, size: Vector2, clickable: bool, highlighted: bool, risk_text: String, has_texture: bool) -> void:
-	# r212: GPT chrome conversion
-	if size.x < 24.0 or size.y < 30.0:
-		return
-	var scale_alpha = clamp(size.x / HAND_TILE_MAX_WIDTH, 0.42, 1.0)
-	var edge_alpha = 0.34 * scale_alpha
-	if highlighted:
-		edge_alpha += 0.105
-	if risk_text != "":
-		edge_alpha += 0.035
-	if has_texture:
-		edge_alpha *= 0.78
-	var face_shadow = Color(0.04, 0.070, 0.055, (0.075 if has_texture else 0.145) * scale_alpha)
-	var base_shadow = make_gpt_plate_rect(rect_full(0.075, 0.865, 1.010, 1.045), Color(0.0, 0.0, 0.0, (0.080 if has_texture else 0.135) * scale_alpha), "ui_button_face_plate")
-	base_shadow.name = "TileContactShadow"
-	tile_body.add_child(base_shadow)
-	tile_body.move_child(base_shadow, 0)
-	var rear_shadow = make_gpt_plate_rect(rect_full(0.030, 0.040, 0.992, 0.990), Color(0.0, 0.0, 0.0, (0.022 if has_texture else 0.050) * scale_alpha), "ui_jade_reading_plate")
-	rear_shadow.name = "TileBodyRearShadow"
-	tile_body.add_child(rear_shadow)
-	tile_body.move_child(rear_shadow, 0)
-	var bottom_edge = make_gpt_edge_rail(rect_full(0.080, 0.945, 0.960, 0.995) if has_texture else rect_full(0.060, 0.842, 0.958, 0.996), Color(0.035, 0.075, 0.058, edge_alpha * (0.50 if has_texture else 1.0)))
-	bottom_edge.name = "TileDepthBottomEdge"
-	tile_body.add_child(bottom_edge)
-	var bottom_side_core = make_gpt_ribbon(rect_full(0.140, 0.960, 0.900, 0.988) if has_texture else rect_full(0.105, 0.905, 0.902, 0.980), Color(0.18, 0.14, 0.08, (0.040 if has_texture else 0.175) * scale_alpha))
-	bottom_side_core.name = "TileDepthBottomSideCore"
-	tile_body.add_child(bottom_side_core)
-	if has_texture:
-		var textured_gold_lip = make_gpt_ribbon(rect_full(0.145, 0.868, 0.850, 0.900), Color(0.72, 0.58, 0.32, 0.045 * scale_alpha))
-		textured_gold_lip.name = "TileDepthTexturedGoldLip"
-		tile_body.add_child(textured_gold_lip)
-	if not has_texture:
-		var bottom_gold_lip = make_gpt_ribbon(rect_full(0.130, 0.850, 0.875, 0.888), Color(0.98, 0.80, 0.38, 0.170 * scale_alpha))
-		bottom_gold_lip.name = "TileDepthGoldLip"
-		tile_body.add_child(bottom_gold_lip)
-	var right_edge = make_gpt_edge_rail(rect_full(0.955, 0.140, 0.995, 0.900) if has_texture else rect_full(0.838, 0.090, 0.986, 0.924), Color(0.025, 0.058, 0.047, edge_alpha * (0.55 if has_texture else 0.96)))
-	right_edge.name = "TileDepthRightEdge"
-	tile_body.add_child(right_edge)
-	var right_side_core = make_gpt_route_rail(rect_full(0.970, 0.200, 0.992, 0.780) if has_texture else rect_full(0.900, 0.145, 0.970, 0.825), Color(0.18, 0.14, 0.08, (0.040 if has_texture else 0.165) * scale_alpha))
-	right_side_core.name = "TileDepthRightSideCore"
-	tile_body.add_child(right_side_core)
-	if not has_texture:
-		var right_gold_lip = make_gpt_ribbon(rect_full(0.824, 0.155, 0.866, 0.815), Color(0.95, 0.78, 0.38, 0.095 * scale_alpha))
-		right_gold_lip.name = "TileDepthRightGoldLip"
-		tile_body.add_child(right_gold_lip)
-		var face_inset = make_gpt_plate_rect(rect_full(0.055, 0.050, 0.855, 0.838), Color(1.0, 0.98, 0.90, 0.045), "ui_jade_reading_plate")
-		face_inset.name = "TilePorcelainFaceInset"
-		tile_body.add_child(face_inset)
-	var inner_shadow = make_gpt_plate_rect(rect_full(0.080, 0.840, 0.825, 0.910) if has_texture else rect_full(0.070, 0.812, 0.830, 0.895), face_shadow)
-	inner_shadow.name = "TileDepthInnerShadow"
-	tile_body.add_child(inner_shadow)
-	var top_sheen = make_gpt_ribbon(rect_full(0.125, 0.060, 0.720, 0.105) if has_texture else rect_full(0.115, 0.055, 0.755, 0.118), Color(1.0, 0.97, 0.88, (0.010 if has_texture else 0.12) * scale_alpha))
-	top_sheen.name = "TilePorcelainTopSheen"
-	tile_body.add_child(top_sheen)
-	var left_glaze = make_gpt_plate_rect(rect_full(0.058, 0.135, 0.080, 0.750) if has_texture else rect_full(0.052, 0.120, 0.090, 0.780), Color(1.0, 0.97, 0.90, (0.016 if has_texture else 0.095) * scale_alpha))
-	left_glaze.name = "TilePorcelainLeftGlaze"
-	tile_body.add_child(left_glaze)
-	if highlighted:
-		var lift_shadow = make_gpt_plate_rect(rect_full(0.095, 0.890, 0.985, 1.085), Color(0.0, 0.0, 0.0, 0.210), "ui_button_face_plate")
-		lift_shadow.name = "TileRecentLiftShadow"
-		tile_body.add_child(lift_shadow)
-		tile_body.move_child(lift_shadow, 0)
-		# A low-alpha static frame is the semantic marker in screenshots and
-		# reduced-motion/headless mode; animation may intensify it when enabled.
-		var recent_frame = make_gpt_plate_rect(rect_full(0.010, 0.010, 0.990, 0.990), Color(1.0, 0.92, 0.50, 0.34), "ui_jade_reading_plate")
-		recent_frame.name = "TileRecentDiscardGoldFrame"
-		tile_body.add_child(recent_frame)
-		var recent_inner_frame = make_gpt_plate_rect(rect_full(0.050, 0.050, 0.950, 0.950), Color(1.0, 0.96, 0.70, 0.22), "ui_jade_reading_plate")
-		recent_inner_frame.name = "TileRecentDiscardInnerFrame"
-		tile_body.add_child(recent_inner_frame)
-		var recent_top_glint = make_gpt_plate_rect(rect_full(0.120, 0.045, 0.760, 0.105), Color(1.0, 0.96, 0.72, 0.10))
-		recent_top_glint.name = "TileRecentDiscardTopGlint"
-		tile_body.add_child(recent_top_glint)
-		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var recent_tw := create_screen_tween()
-			recent_tw.set_loops(6)
-			recent_tw.tween_property(recent_frame, "modulate:a", 0.52, 0.40).from(1.0)
-			recent_tw.parallel().tween_property(recent_inner_frame, "modulate:a", 0.40, 0.40).from(0.90)
-			recent_tw.tween_property(recent_frame, "modulate:a", 1.0, 0.40).from(0.52)
-			recent_tw.parallel().tween_property(recent_inner_frame, "modulate:a", 0.90, 0.40).from(0.40)
-	if clickable or highlighted:
-		var base_alpha = 0.020 if has_texture else 0.040
-		var commit_glow = make_gpt_meter_fill(rect_full(0.130, 0.040, 0.890, 0.960), Color(0.94, 0.70, 0.30, base_alpha + (0.035 if highlighted else 0.0)))
-		commit_glow.name = "TileSubtleCommitGlow"
-		tile_body.add_child(commit_glow)
+func draw_tile_depth_art(_tile_body: Control, _size: Vector2, _clickable: bool, _highlighted: bool, _risk_text: String, _has_texture: bool) -> void:
+	# Tile faces are complete authored 2D assets. Decorative depth/highlight art
+	# must never be inserted into the face node, where it changes the tile pixels.
+	# Selection and danger state are rendered by hit-frame siblings.
+	return
+
+
+func draw_tile_external_marker(parent: Control, highlighted: bool) -> Control:
+	if parent == null or not highlighted:
+		return null
+	# The marker is a sibling of the tile body, so it can signal the latest discard
+	# without tinting or repainting any pixel from assets/tiles.
+	var marker := Control.new()
+	marker.name = "TileRecentDiscardMarker"
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.z_index = 12
+	apply_rect(marker, rect_full(-0.045, -0.045, 1.045, 1.045))
+	parent.add_child(marker)
+	var top = add_optional_gpt_illustration_texture(marker, "ui_progress_signal_strip", rect_full(0.02, -0.015, 0.98, 0.060), 0.42, false)
+	if top != null:
+		top.name = "TileRecentMarkerTop"
+	var bottom = add_optional_gpt_illustration_texture(marker, "ui_progress_signal_strip", rect_full(0.02, 0.940, 0.98, 1.015), 0.42, false)
+	if bottom != null:
+		bottom.name = "TileRecentMarkerBottom"
+	var left = add_optional_gpt_illustration_texture(marker, "ui_action_role_rail", rect_full(-0.015, 0.05, 0.060, 0.95), 0.42, false)
+	if left != null:
+		left.name = "TileRecentMarkerLeft"
+	var right = add_optional_gpt_illustration_texture(marker, "ui_action_role_rail", rect_full(0.940, 0.05, 1.015, 0.95), 0.42, false)
+	if right != null:
+		right.name = "TileRecentMarkerRight"
+	return marker
 
 
 func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, callback: Callable, highlighted: bool, risk: String, hint_badge: String, tile_index: int, hand_stage: Commercial3DStage) -> Control:
@@ -21116,7 +21040,7 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 	var risk_text := risk_badge_text(risk)
 	if TILE_TEXT_OVERLAYS_ENABLED and risk_text != "":
 		var risk_color := tile_risk_color(risk)
-		var risk_badge := make_label(button, risk_text, max(9, int(size.y * 0.14)), Color(1.0, 0.98, 0.90), true)
+		var risk_badge := make_label(frame, risk_text, max(9, int(size.y * 0.14)), Color(1.0, 0.98, 0.90), true)
 		risk_badge.name = "Hand3DRiskBadge"
 		risk_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var empty_risk := StyleBoxEmpty.new()
@@ -21130,7 +21054,7 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 		apply_rect(risk_badge, rect_full(0.12, 0.76, 0.88, 0.96))
 	if TILE_TEXT_OVERLAYS_ENABLED and hint_badge != "":
 		var hint_color := tile_hint_badge_color(hint_badge)
-		var hint := make_label(button, hint_badge, max(9, int(size.y * 0.13)), Color(0.09, 0.12, 0.08), true)
+		var hint := make_label(frame, hint_badge, max(9, int(size.y * 0.13)), Color(0.09, 0.12, 0.08), true)
 		hint.name = "TileHintBadge"
 		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hint.clip_text = true
@@ -21163,7 +21087,7 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 	)
 	if clickable and callback.is_valid():
 		var tile_callback := func() -> void:
-			play_clickable_tile_commit_feedback(button, tile)
+			play_clickable_tile_commit_feedback(button, tile, frame)
 			callback.call()
 		connect_immediate_button_action(button, tile_callback)
 	return frame
@@ -21219,154 +21143,94 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			tile_body.clip_contents = false
 			tile_body.offset_top -= 4.0
 			tile_body.offset_bottom -= 4.0
-	# 优化的牌面边框和颜色 - 使用国风配色
+
 	var risk_text = risk_badge_text(risk)
-	var border = tile_risk_color(risk) if risk_text != "" else GOLD_DARK
-	if highlighted:
-		border = GOLD_BRIGHT
-	var face = Color(0.94, 0.92, 0.88, 1.0) if not highlighted else Color(0.96, 0.94, 0.90, 1.0)
 	var tile_key := normalize_tile_code(tile) if tile != "" else tile
 	var tile_texture = tile_textures.get(tile_key, null)
 	if tile_texture == null and tile_key != "":
-		# On-demand load for valid codes not yet cached; never cache tile_back as face.
-		var resolved := load_tile_texture(tile_path(tile_key))
+		# On-demand load for valid codes; never cache tile_back as a face.
+		var face_path := tile_path(tile_key)
+		var resolved := load_tile_texture(face_path) if face_path != "" else null
 		if resolved != null and resolved != tile_back:
 			tile_texture = resolved
 			tile_textures[tile_key] = resolved
-		elif resolved != null:
-			tile_texture = null
 	var missing_face_texture := tile_texture == null
-	if tile_texture != null:
-		# Match porcelain face; avoid bright white underlay halos between tiles.
-		face = Color(0.86, 0.82, 0.74, 1.0)
-		if risk_text == "" and not highlighted:
-			border = Color(0.0, 0.0, 0.0, 0.0)
+
 	if button != null:
-		# r180: tile face comes from assets/tiles; StyleBox hosts stay empty (no program porcelain paint).
+		# The button is a hit target only; its native surface stays empty.
 		var empty_tile := StyleBoxEmpty.new()
 		button.add_theme_stylebox_override("normal", empty_tile)
 		button.add_theme_stylebox_override("hover", empty_tile)
 		button.add_theme_stylebox_override("pressed", empty_tile)
 		button.add_theme_stylebox_override("disabled", empty_tile)
-		# 手牌hover发光效果 - 可点击牌专用 / Hand tile hover glow
 		button.mouse_entered.connect(func() -> void:
 			if not is_instance_valid(button):
 				return
-			var previous_glow = button.get_node_or_null("TileHoverGlow")
+			var glow_parent: Control = frame if frame != null else button
+			var previous_glow = glow_parent.get_node_or_null("TileHoverGlow")
 			if previous_glow != null and is_instance_valid(previous_glow):
-				button.remove_child(previous_glow)
+				glow_parent.remove_child(previous_glow)
 				previous_glow.queue_free()
 			var glow_rect = make_fullrect_overlay(Color(GOLD_GLOW.r, GOLD_GLOW.g, GOLD_GLOW.b, 0.0), "ui_soft_flash")
 			glow_rect.name = "TileHoverGlow"
 			glow_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			glow_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-			button.add_child(glow_rect)
-			button.move_child(glow_rect, 0)
+			glow_parent.add_child(glow_rect)
+			glow_parent.move_child(glow_rect, 0)
 			var g_tw := button.create_tween()
 			g_tw.tween_property(glow_rect, "modulate:a", 0.14, 0.16).from(0.0).set_ease(Tween.EASE_OUT)
 		)
 		button.mouse_exited.connect(func() -> void:
 			if not is_instance_valid(button):
 				return
-			var glow_rect = button.get_node_or_null("TileHoverGlow")
+			var glow_parent: Control = frame if frame != null else button
+			var glow_rect = glow_parent.get_node_or_null("TileHoverGlow")
 			if glow_rect != null and is_instance_valid(glow_rect):
 				var g_tw := button.create_tween()
 				g_tw.tween_property(glow_rect, "modulate:a", 0.0, 0.14).from(glow_rect.modulate.a).set_ease(Tween.EASE_IN)
 				g_tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(glow_rect.get_instance_id()))
 		)
-	else:
-		# r180: static tile panels stay StyleBox-empty; face art is assets/tiles only.
-		if tile_body is Panel:
-			(tile_body as Panel).add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	elif tile_body is Panel:
+		(tile_body as Panel).add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+
 	if tile_texture != null:
 		tile_body.clip_contents = true
 		var texture = TextureRect.new()
 		texture.name = "TileFaceTexture"
 		texture.texture = tile_texture
 		texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		# SCALE fills the cell; authored transparent padding is cropped by clip_contents
-		# after we expand slightly past the button bounds.
 		texture.stretch_mode = TextureRect.STRETCH_SCALE
-		var art_a := tile_art_alpha(tile, size)
-		texture.modulate = Color(1.0, 1.0, 1.0, art_a)
+		texture.modulate = Color(1.0, 1.0, 1.0, tile_art_alpha(tile, size))
 		texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		texture.set_anchors_preset(Control.PRESET_FULL_RECT)
 		var bleed = tile_texture_bleed(size, lightweight_static_tile)
-		# Positive bleed expands the face so opaque porcelain reaches the cell edge.
 		texture.offset_left = -bleed.x
 		texture.offset_top = -bleed.y
 		texture.offset_right = bleed.x
 		texture.offset_bottom = bleed.y
 		tile_body.add_child(texture)
-		# No thick porcelain depth bars on textured faces — they open dark gutters between tiles.
+		var visual_parent: Control = frame if frame != null else tile_body
+		if frame != null and (risk_text != "" or hint_badge != ""):
+			draw_tile_status_route_art(visual_parent, risk, hint_badge)
 		if highlighted:
 			draw_tile_depth_art(tile_body, size, clickable, highlighted, risk_text, true)
-		if should_draw_tile_face_label(tile, tile_texture, lightweight_static_tile):
-			if lightweight_static_tile:
-				draw_compact_tile_face(tile_body, tile, size)
-			else:
-				draw_tile_face(tile_body, tile, size)
-		if should_draw_tile_corner(clickable, size, tile_texture, lightweight_static_tile):
-			var corner = Label.new()
-			corner.text = tile_corner(tile)
-			corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			corner.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-			corner.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-			corner.add_theme_font_override("font", ui_cjk_font())
-			corner.add_theme_font_size_override("font_size", max(9, int(size.y * 0.16)))
-			corner.add_theme_color_override("font_color", tile_accent(tile))
-			tile_body.add_child(corner)
-			apply_rect(corner, rect_full(0.08, 0.04, 0.45, 0.30))
-		if risk_text != "" or hint_badge != "":
-			draw_tile_status_route_art(tile_body, risk, hint_badge)
-		if TILE_TEXT_OVERLAYS_ENABLED and risk_text != "":
-			var badge = make_label(tile_body, risk_text, max(9, int(size.y * 0.14)), Color(1.0, 0.98, 0.90), true)
-			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var risk_color = tile_risk_color(risk)
-			var empty_badge := StyleBoxEmpty.new()
-			empty_badge.set_content_margin_all(3)
-			badge.add_theme_stylebox_override("normal", empty_badge)
-			var badge_chip = add_optional_gpt_illustration_texture(badge, "ui_hand_tray_state_chip", rect_full(-0.08, -0.10, 1.08, 1.10), 0.78, false)
-			if badge_chip != null:
-				badge_chip.name = "RiskBadgeGptChip"
-				badge_chip.modulate = Color(risk_color.r, risk_color.g, risk_color.b, 0.88)
-				badge.move_child(badge_chip, 0)
-			apply_rect(badge, rect_full(0.12, 0.76, 0.88, 0.96))
-		if TILE_TEXT_OVERLAYS_ENABLED and hint_badge != "":
-			var hint = make_label(tile_body, hint_badge, max(9, int(size.y * 0.13)), Color(0.09, 0.12, 0.08), true)
-			hint.name = "TileHintBadge"
-			hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			hint.clip_text = true
-			var hint_color = tile_hint_badge_color(hint_badge)
-			var empty_hint := StyleBoxEmpty.new()
-			empty_hint.set_content_margin_all(3)
-			hint.add_theme_stylebox_override("normal", empty_hint)
-			var hint_chip = add_optional_gpt_illustration_texture(hint, "ui_hand_tray_state_chip", rect_full(-0.08, -0.10, 1.08, 1.10), 0.78, false)
-			if hint_chip != null:
-				hint_chip.name = "HintBadgeGptChip"
-				hint_chip.modulate = Color(hint_color.r, hint_color.g, hint_color.b, 0.88)
-				hint.move_child(hint_chip, 0)
-			var left = 0.50 if hint_badge.length() > 1 else 0.62
-			apply_rect(hint, rect_full(left, 0.04, 0.92, 0.23))
-			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var hint_tw := create_screen_tween()
-				hint_tw.set_loops(48)
-				hint_tw.tween_property(hint, "modulate:a", 0.72, 0.60).from(1.0)
-				hint_tw.tween_property(hint, "modulate:a", 1.0, 0.60).from(0.72)
+			var marker = draw_tile_external_marker(visual_parent, true)
+			if marker != null and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				var marker_tw := create_screen_tween()
+				marker_tw.set_loops(48)
+				marker_tw.tween_property(marker, "modulate:a", 0.72, 0.60).from(1.0)
+				marker_tw.tween_property(marker, "modulate:a", 1.0, 0.60).from(0.72)
 		if button != null:
-			add_clickable_tile_press_art(button, size, highlighted)
+			add_clickable_tile_press_art(button, size, highlighted, visual_parent)
 		if button != null and callback.is_valid():
 			var tile_callback := func() -> void:
-				play_clickable_tile_commit_feedback(button, tile)
+				play_clickable_tile_commit_feedback(button, tile, visual_parent)
 				callback.call()
 			connect_immediate_button_action(button, tile_callback)
 		return tile_body if lightweight_static_tile else frame
-	draw_tile_depth_art(tile_body, size, clickable, highlighted, risk_text, false)
-	if TILE_TEXT_OVERLAYS_ENABLED and tile != "" and missing_face_texture:
-		if lightweight_static_tile:
-			draw_compact_tile_face(tile_body, tile, size)
-		else:
-			draw_tile_face(tile_body, tile, size)
+
+	if missing_face_texture and tile_key != "" and tile_index(tile_key) >= 0:
+		push_warning("Missing authored tile face asset: %s" % tile_key)
 	return tile_body if lightweight_static_tile else frame
 
 func make_voice_stream(audio_base64: String, sample_rate: int, channels: int) -> AudioStreamWAV:
@@ -24022,10 +23886,10 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var content_surface = add_optional_gpt_illustration_texture(content_backplate, "settings_gpt_panel_v2", rect_full(-0.015, -0.020, 1.015, 1.020), 0.24, false)
-	if content_surface != null:
-		content_surface.name = "RulesContentLowFrequencySurface"
-		content_backplate.move_child(content_surface, 0)
+	var content_surface = make_gpt_center_crop_plate_rect(rect_full(-0.015, -0.020, 1.015, 1.020), Color(0.022, 0.034, 0.032, 0.78), "ui_dark_scrim", 0.22)
+	content_surface.name = "RulesContentLowFrequencySurface"
+	content_backplate.add_child(content_surface)
+	content_backplate.move_child(content_surface, 0)
 	var content_sheen = make_layout_host(rect_full(0.030, 0.026, 0.970, 0.046))
 	content_sheen.name = "RulesContentTopSheen"
 	content_backplate.add_child(content_sheen)
@@ -24033,7 +23897,9 @@ func _show_rules_screen_impl() -> void:
 	content_scroll.name = "RulesContentScroll"
 	content_scroll.anchor_left = 0.058
 	content_scroll.anchor_top = 0.168
-	content_scroll.anchor_right = 0.930
+	# Reserve a small stable gap for the custom scroll lane instead of letting its
+	# wider visual thumb overlap the last glyph column.
+	content_scroll.anchor_right = 0.925
 	content_scroll.anchor_bottom = 0.982
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
@@ -24045,16 +23911,15 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var compact_rules_scroll := effective_viewport_size().y <= 560.0
-	var gutter_left := 0.934
-	var gutter_right := 0.949
+	var gutter_left := 0.930
+	var gutter_right := 0.948
 	var rules_scroll_gutter = make_panel(panel, rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.05, 0.043, 0.035, 0.96), 999, Color(0.42, 0.35, 0.22, 0.62), 0, "ui_dark_scrim")  # r227 authored dark track
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Thumb width is a fraction of the gutter, so a fixed fraction rendered ~9px at
-	# 1280 and under 7px at 960 while growing past the 16px cap at 1920. Solve the
-	# fraction from a pixel target instead so the grip reads the same on every rung.
+	# Solve the fraction from a pixel target so the grip remains discoverable on
+	# 960/1280/1920 captures and still has a stable touch target on Android.
 	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * effective_viewport_size().x)
-	var thumb_span_frac := clampf(14.0 / gutter_span_px, 0.10, 0.96)
+	var thumb_span_frac := clampf(16.0 / gutter_span_px, 0.20, 0.96)
 	var thumb_left := 0.5 - thumb_span_frac * 0.5
 	var thumb_right := 0.5 + thumb_span_frac * 0.5
 	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), 999, Color(1.0, 0.92, 0.64, 0.92), 0, "ui_progress_signal_strip")  # r227 GPT thumb
@@ -24253,7 +24118,12 @@ func _show_shop_screen_impl() -> void:
 	# illustration made item rows harder to scan at 960x540.
 
 	# 主面板
-	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.20), "ui_jade_reading_plate")
+	var panel = make_gpt_center_crop_plate_rect(
+		rect_full(0.02, 0.02, 0.98, 0.98),
+		Color(0.018, 0.028, 0.026, 0.90),
+		"ui_dark_scrim",
+		0.26
+	)
 	panel.name = "ShopCabinetFrontPanel"
 	root_layer.add_child(panel)
 	var shop_gpt_key := "shop_gpt_vault"
@@ -24323,10 +24193,10 @@ func _show_shop_screen_impl() -> void:
 	draw_shop_transaction_map_art(panel)
 
 	# 道具列表 - 带滚动支持
-	var display_shell = make_gpt_plate_rect(rect_full(0.032, 0.105, 0.938, 0.782), Color(0.12, 0.09, 0.06, 0.40), "ui_button_face_plate")
+	var display_shell = make_gpt_center_crop_plate_rect(rect_full(0.032, 0.105, 0.938, 0.782), Color(0.012, 0.022, 0.022, 0.88), "ui_dark_scrim", 0.24)
 	display_shell.name = "ShopDisplayCabinet3DShell"
 	panel.add_child(display_shell)
-	var display_inset = make_gpt_plate_rect(rect_full(0.012, 0.035, 0.988, 0.965), Color(0.0, 0.0, 0.0, 0.04), "ui_jade_reading_plate")
+	var display_inset = make_layout_host(rect_full(0.012, 0.035, 0.988, 0.965))
 	display_inset.name = "ShopDisplayCabinet3DInset"
 	display_shell.add_child(display_inset)
 	var display_shelf = make_gpt_route_rail(rect_full(0.025, 0.925, 0.975, 0.990), Color(0.030, 0.024, 0.018, 0.36))
@@ -31032,33 +30902,34 @@ func count_gang_melds(seat: int) -> int:
 	return amount
 
 
-func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bool) -> void:
-	var focus_glow = Panel.new()
+func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bool, marker_parent: Control = null) -> void:
+	var visual_parent: Control = marker_parent if marker_parent != null and is_instance_valid(marker_parent) else button
+	var focus_glow = Control.new()
 	focus_glow.name = "ClickableTileFocusGlow"
 	focus_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	focus_glow.modulate = Color(1.0, 1.0, 1.0, 0.66 if highlighted else 0.0)
-	button.add_child(focus_glow)
+	visual_parent.add_child(focus_glow)
 	apply_rect(focus_glow, rect_full(0.035, 0.035, 0.965, 0.965))
 	ensure_fx_ring_gpt_plate(focus_glow, GOLD_BRIGHT, 0.40)
 
 	var sheen = make_gpt_plate_rect(rect_full(0.12, 0.07, 0.88, 0.16), Color(1.0, 0.93, 0.60, 0.0), "ui_soft_flash")
 	sheen.name = "ClickableTilePressSheen"
-	button.add_child(sheen)
+	visual_parent.add_child(sheen)
 
 	var release_route = make_gpt_plate_rect(rect_full(0.220, 0.880, 0.780, 0.940), Color(0.006, 0.016, 0.018, 0.44))
 	release_route.name = "ClickableTileReleaseRoute"
-	button.add_child(release_route)
+	visual_parent.add_child(release_route)
 	var release_fill = make_layout_host(rect_full(0.050, 0.260, 0.620, 0.740))
 	release_fill.name = "ClickableTileReleaseFill"
 	release_route.add_child(release_fill)
 	var release_gate = make_layout_host(rect_full(0.720, 0.790, 0.790, 0.955))
 	release_gate.name = "ClickableTileReleaseGate"
-	button.add_child(release_gate)
+	visual_parent.add_child(release_gate)
 	for i in range(2):
 		var left = 0.395 + float(i) * 0.085
 		var tick = make_layout_host(rect_full(left, 0.805, left + 0.028, 0.910))
 		tick.name = "ClickableTileReleaseTick_%d" % i
-		button.add_child(tick)
+		visual_parent.add_child(tick)
 	button.pivot_offset = size * 0.5
 	button.mouse_entered.connect(func() -> void:
 		if not is_instance_valid(button) or button.disabled:
@@ -31079,12 +30950,12 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 		rest_tween.tween_property(button, "rotation", 0.0, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	)
 
-	var tap_dot = Panel.new()
+	var tap_dot = Control.new()
 	tap_dot.name = "ClickableTileTapDot"
 	tap_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tap_dot.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	tap_dot.scale = Vector2(0.58, 0.58)
-	button.add_child(tap_dot)
+	visual_parent.add_child(tap_dot)
 	apply_rect(tap_dot, rect_full(0.37, 0.40, 0.63, 0.60))
 	ensure_fx_ring_gpt_plate(tap_dot, Color(1.0, 0.92, 0.48, 0.85), 0.55)
 
@@ -31112,11 +30983,12 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 		tw.chain().tween_property(button, "scale", release_scale, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	)
 
-func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> Control:
+func play_clickable_tile_commit_feedback(button: Button, tile: String = "", marker_parent: Control = null) -> Control:
 	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return null
-	var previous = button.find_child("ClickableTileCommitFeedback", false, false)
+	var visual_parent: Control = marker_parent if marker_parent != null and is_instance_valid(marker_parent) else button
+	var previous = visual_parent.find_child("ClickableTileCommitFeedback", false, false)
 	if previous != null and is_instance_valid(previous):
 		previous.queue_free()
 	var accent = tile_accent(tile) if tile != "" else GOLD_PRIMARY
@@ -31124,7 +30996,7 @@ func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> C
 	feedback.name = "ClickableTileCommitFeedback"
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
-	button.add_child(feedback)
+	visual_parent.add_child(feedback)
 	var source = make_gpt_plate_rect(rect_full(0.350, 0.180, 0.650, 0.300), Color(accent.r, accent.g, accent.b, 0.18), "ui_button_face_plate")
 	source.name = "ClickableTileCommitSource"
 	feedback.add_child(source)
@@ -31167,9 +31039,6 @@ func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> C
 func tile_hint_badge_color(hint_badge: String) -> Color:
 	return HINT_BADGE_COLORS.get(hint_badge, DEFAULT_HINT_BADGE_COLOR)
 
-func should_draw_tile_corner(clickable: bool, size: Vector2, texture: Texture2D, _lightweight_static_tile: bool) -> bool:
-	return TILE_TEXT_OVERLAYS_ENABLED and texture == null and (clickable or size.x >= 50.0)
-
 func should_use_lightweight_static_tile(clickable: bool, size: Vector2) -> bool:
 	return not clickable and size.x < 56.0  # r431 more river faces use compact porcelain body
 
@@ -31179,9 +31048,6 @@ func static_tile_shadow_size(size: Vector2) -> int:
 	if size.x < 60.0:
 		return 3
 	return 8
-
-func should_draw_tile_face_label(tile: String, texture: Texture2D, _lightweight_static_tile: bool) -> bool:
-	return TILE_TEXT_OVERLAYS_ENABLED and tile != "" and texture == null
 
 func tile_art_alpha(tile: String, size: Vector2) -> float:
 	# Authored assets/tiles already carry their intended alpha. Preserve it at
@@ -31199,10 +31065,6 @@ func tile_texture_bleed(size: Vector2, lightweight_static_tile: bool) -> Vector2
 		expand_ratio = 0.155
 	var expand := Vector2(max(1.5, size.x * expand_ratio), max(1.5, size.y * expand_ratio))
 	return expand
-
-
-func compact_tile_face_font_size(size: Vector2) -> int:
-	return max(9, int(size.y * 0.32))
 
 func risk_badge_text(risk: String) -> String:
 	return RISK_BADGE_TEXT.get(risk, "")
@@ -32299,7 +32161,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.32), "settings_gpt_panel_v2")
+	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.72), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

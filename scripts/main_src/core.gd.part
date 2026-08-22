@@ -4823,33 +4823,34 @@ func count_gang_melds(seat: int) -> int:
 	return amount
 
 
-func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bool) -> void:
-	var focus_glow = Panel.new()
+func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bool, marker_parent: Control = null) -> void:
+	var visual_parent: Control = marker_parent if marker_parent != null and is_instance_valid(marker_parent) else button
+	var focus_glow = Control.new()
 	focus_glow.name = "ClickableTileFocusGlow"
 	focus_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	focus_glow.modulate = Color(1.0, 1.0, 1.0, 0.66 if highlighted else 0.0)
-	button.add_child(focus_glow)
+	visual_parent.add_child(focus_glow)
 	apply_rect(focus_glow, rect_full(0.035, 0.035, 0.965, 0.965))
 	ensure_fx_ring_gpt_plate(focus_glow, GOLD_BRIGHT, 0.40)
 
 	var sheen = make_gpt_plate_rect(rect_full(0.12, 0.07, 0.88, 0.16), Color(1.0, 0.93, 0.60, 0.0), "ui_soft_flash")
 	sheen.name = "ClickableTilePressSheen"
-	button.add_child(sheen)
+	visual_parent.add_child(sheen)
 
 	var release_route = make_gpt_plate_rect(rect_full(0.220, 0.880, 0.780, 0.940), Color(0.006, 0.016, 0.018, 0.44))
 	release_route.name = "ClickableTileReleaseRoute"
-	button.add_child(release_route)
+	visual_parent.add_child(release_route)
 	var release_fill = make_layout_host(rect_full(0.050, 0.260, 0.620, 0.740))
 	release_fill.name = "ClickableTileReleaseFill"
 	release_route.add_child(release_fill)
 	var release_gate = make_layout_host(rect_full(0.720, 0.790, 0.790, 0.955))
 	release_gate.name = "ClickableTileReleaseGate"
-	button.add_child(release_gate)
+	visual_parent.add_child(release_gate)
 	for i in range(2):
 		var left = 0.395 + float(i) * 0.085
 		var tick = make_layout_host(rect_full(left, 0.805, left + 0.028, 0.910))
 		tick.name = "ClickableTileReleaseTick_%d" % i
-		button.add_child(tick)
+		visual_parent.add_child(tick)
 	button.pivot_offset = size * 0.5
 	button.mouse_entered.connect(func() -> void:
 		if not is_instance_valid(button) or button.disabled:
@@ -4870,12 +4871,12 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 		rest_tween.tween_property(button, "rotation", 0.0, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	)
 
-	var tap_dot = Panel.new()
+	var tap_dot = Control.new()
 	tap_dot.name = "ClickableTileTapDot"
 	tap_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tap_dot.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	tap_dot.scale = Vector2(0.58, 0.58)
-	button.add_child(tap_dot)
+	visual_parent.add_child(tap_dot)
 	apply_rect(tap_dot, rect_full(0.37, 0.40, 0.63, 0.60))
 	ensure_fx_ring_gpt_plate(tap_dot, Color(1.0, 0.92, 0.48, 0.85), 0.55)
 
@@ -4903,11 +4904,12 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 		tw.chain().tween_property(button, "scale", release_scale, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	)
 
-func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> Control:
+func play_clickable_tile_commit_feedback(button: Button, tile: String = "", marker_parent: Control = null) -> Control:
 	# r215: GPT chrome conversion
 	if button == null or not is_instance_valid(button):
 		return null
-	var previous = button.find_child("ClickableTileCommitFeedback", false, false)
+	var visual_parent: Control = marker_parent if marker_parent != null and is_instance_valid(marker_parent) else button
+	var previous = visual_parent.find_child("ClickableTileCommitFeedback", false, false)
 	if previous != null and is_instance_valid(previous):
 		previous.queue_free()
 	var accent = tile_accent(tile) if tile != "" else GOLD_PRIMARY
@@ -4915,7 +4917,7 @@ func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> C
 	feedback.name = "ClickableTileCommitFeedback"
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
-	button.add_child(feedback)
+	visual_parent.add_child(feedback)
 	var source = make_gpt_plate_rect(rect_full(0.350, 0.180, 0.650, 0.300), Color(accent.r, accent.g, accent.b, 0.18), "ui_button_face_plate")
 	source.name = "ClickableTileCommitSource"
 	feedback.add_child(source)
@@ -4958,9 +4960,6 @@ func play_clickable_tile_commit_feedback(button: Button, tile: String = "") -> C
 func tile_hint_badge_color(hint_badge: String) -> Color:
 	return HINT_BADGE_COLORS.get(hint_badge, DEFAULT_HINT_BADGE_COLOR)
 
-func should_draw_tile_corner(clickable: bool, size: Vector2, texture: Texture2D, _lightweight_static_tile: bool) -> bool:
-	return TILE_TEXT_OVERLAYS_ENABLED and texture == null and (clickable or size.x >= 50.0)
-
 func should_use_lightweight_static_tile(clickable: bool, size: Vector2) -> bool:
 	return not clickable and size.x < 56.0  # r431 more river faces use compact porcelain body
 
@@ -4970,9 +4969,6 @@ func static_tile_shadow_size(size: Vector2) -> int:
 	if size.x < 60.0:
 		return 3
 	return 8
-
-func should_draw_tile_face_label(tile: String, texture: Texture2D, _lightweight_static_tile: bool) -> bool:
-	return TILE_TEXT_OVERLAYS_ENABLED and tile != "" and texture == null
 
 func tile_art_alpha(tile: String, size: Vector2) -> float:
 	# Authored assets/tiles already carry their intended alpha. Preserve it at
@@ -4990,10 +4986,6 @@ func tile_texture_bleed(size: Vector2, lightweight_static_tile: bool) -> Vector2
 		expand_ratio = 0.155
 	var expand := Vector2(max(1.5, size.x * expand_ratio), max(1.5, size.y * expand_ratio))
 	return expand
-
-
-func compact_tile_face_font_size(size: Vector2) -> int:
-	return max(9, int(size.y * 0.32))
 
 func risk_badge_text(risk: String) -> String:
 	return RISK_BADGE_TEXT.get(risk, "")
@@ -6090,7 +6082,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.32), "settings_gpt_panel_v2")
+	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.72), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

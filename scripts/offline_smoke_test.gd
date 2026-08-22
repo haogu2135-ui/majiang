@@ -843,7 +843,8 @@ func run() -> void:
 		var sample_path = scene.tile_path(sample_code)
 		check(sample_path.begins_with("res://assets/tiles/") and not sample_path.contains("assets/tiles_3d/"), "playable tile face %s uses assets/tiles authored sprites" % sample_code)
 	var missing_tile_path = scene.preferred_tile_path("res://assets/tiles/not_real_smoke_tile.png")
-	check(missing_tile_path == "res://assets/tiles/tile_back.png" and not missing_tile_path.contains("assets/tiles_3d/"), "missing tile fallback uses the base tile back instead of legacy generated 3D sprites")
+	check(missing_tile_path == "res://assets/tiles/not_real_smoke_tile.png" and not FileAccess.file_exists(missing_tile_path), "missing tile face stays missing instead of falling back to a wall back or legacy generated 3D sprite")
+	check(scene.tile_path("ZZ") == "", "unknown tile codes do not resolve to a wall-back face")
 	for audio_key in ["bgm", "discard", "draw", "peng", "gang", "win"]:
 		check(scene.audio_streams.get(audio_key, null) != null, "audio stream loads: " + str(audio_key))
 	for voice_key in ["tile_5W", "tile_E", "tile_P", "action_peng", "action_zimo"]:

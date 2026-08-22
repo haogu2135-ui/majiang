@@ -439,6 +439,7 @@ const SHADER_PATHS := {
 	"brush_stroke": "res://shaders/brush_stroke.gdshader",
 	"gold_foil_shimmer": "res://shaders/gold_foil_shimmer.gdshader",
 	"ink_dissolve_transition": "res://shaders/ink_dissolve_transition.gdshader",
+	"lucide_tint": "res://shaders/lucide_tint.gdshader",
 }
 var audio_streams: Dictionary = {}
 var voice_streams: Dictionary = {}
@@ -1091,19 +1092,17 @@ func ui_cjk_font() -> Font:
 	return _ui_cjk_font
 
 func add_background(parent: Control) -> void:
-	var bg = TextureRect.new()
-	bg.texture = wood_texture
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.modulate = Color(0.86, 0.78, 0.62, 0.38)
-	parent.add_child(bg)
-	# Generic utility pages use one authored bitmap substrate. Their local panels
-	# carry the page-specific texture, so a second full-screen scene is omitted to
-	# keep settings, shop, lobby, and daily-login copy out of a texture stack.
-	var tint = make_fullrect_overlay(Color(0.070, 0.062, 0.046, 0.38), "ui_dark_scrim")
-	tint.name = "GuofengWarmDimTint"
-	parent.add_child(tint)
+	# Utility pages share one quiet authored substrate. Local panels can still
+	# carry feature-specific textures without a competing wood scene behind every
+	# title, field, and CTA.
+	var base = make_gpt_center_crop_plate_rect(
+		rect_full(0.0, 0.0, 1.0, 1.0),
+		Color(0.018, 0.028, 0.026, 0.90),
+		"ui_dark_scrim",
+		0.30
+	)
+	base.name = "UtilityPageLowFrequencyBackdrop"
+	parent.add_child(base)
 
 func add_menu_background(parent: Control) -> void:
 	# The menu owns one full-screen scene in draw_menu_primary_3d_stage(). Keep
@@ -1113,42 +1112,48 @@ func add_menu_background(parent: Control) -> void:
 	parent.add_child(scrim)
 
 func add_rules_background(parent: Control) -> void:
-	# Rules are a reading surface: reuse the quiet authored settings frame instead
-	# of stacking the general wood/paper/scenery background beneath the copy.
-	var codex = make_fullrect_overlay(Color(0.024, 0.040, 0.038, 0.92), "settings_gpt_panel_v2")
-	codex.name = "RulesBackgroundCodexFrame"
+	# Rules use the same low-frequency substrate as utility pages; the local codex
+	# panel owns the single reading-frame treatment.
+	var codex = make_gpt_center_crop_plate_rect(
+		rect_full(0.0, 0.0, 1.0, 1.0),
+		Color(0.018, 0.028, 0.026, 0.90),
+		"ui_dark_scrim",
+		0.30
+	)
+	codex.name = "RulesBackgroundLowFrequencyBackdrop"
 	parent.add_child(codex)
 
 func add_battle_background(parent: Control) -> void:
-	# Dark underfill via GPT plate so transparent PNG edges never flash pure black.
-	var base = make_fullrect_overlay(Color(0.030, 0.042, 0.036, 1.0), "ui_dark_scrim")
-	base.name = "OfflineBattleGuofengBase"
-	parent.add_child(base)
-
-	# Single full-screen guofeng room plate (table_gpt_backdrop). Do not stack a second photo.
-	# Alpha stays low: at 0.54 the authored dragon/wood grain ran at a higher spatial
-	# frequency than the 14-18px HUD copy layered over it (measured luma stdev 77.7 on
-	# the 1280 capture), so seat plaques and the table log lost their edges. Holding the
-	# art near 0.30 keeps the guofeng read while flattening the ground under small text.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.30, false)
+	# Normal battle renders own one authored room plate. Keep the dark plate only as a
+	# fallback under a missing/transparent asset, so two full-screen textures do not
+	# compete beneath the HUD.
+	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.09, false)
 	if battle_scene != null:
 		battle_scene.name = "OfflineBattleGuofengBackdrop"
 	else:
+		var base = make_fullrect_overlay(Color(0.030, 0.042, 0.036, 1.0), "ui_dark_scrim")
+		base.name = "OfflineBattleGuofengBase"
+		parent.add_child(base)
 		# Fallback to menu hero scenery if table plate missing.
-		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
+		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.16, false)
 		if garden_scene != null:
 			garden_scene.name = "OfflineBattleGuofengBackdrop"
 		else:
-			var fallback_wash = add_illustration_texture(parent, "table_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.34, false)
+			var fallback_wash = add_illustration_texture(parent, "table_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.22, false)
 			if fallback_wash != null:
 				fallback_wash.name = "OfflineBattleInkWashBackdrop"
 
-	# One readability mask over the single art plate. Kept very light because the
-	# backdrop alpha above now does the flattening; stacking a heavier scrim here only
-	# crushed the frame darker without improving text separation.
-	var readability_tint = make_fullrect_overlay(Color(0.008, 0.014, 0.012, 0.16), "ui_dark_scrim")
-	readability_tint.name = "OfflineBattleReadabilityTint"
-	parent.add_child(readability_tint)
+	# The room plate is high-frequency by design. A cropped center of the existing
+	# authored dark-scrim keeps the table readable without repainting the whole
+	# screen with another full-frame texture.
+	var reading_surface = make_gpt_center_crop_plate_rect(
+		rect_full(0.105, 0.165, 0.895, 0.835),
+		Color(0.012, 0.022, 0.020, 0.58),
+		"ui_dark_scrim",
+		0.22
+	)
+	reading_surface.name = "OfflineBattleReadingSurface"
+	parent.add_child(reading_surface)
 
 func add_texture(parent: Control, texture: Texture2D, rect: Rect2, alpha: float) -> TextureRect:
 	var tex = TextureRect.new()
@@ -2136,7 +2141,14 @@ func add_lucide_icon(parent: Control, icon_name: String, rect: Rect2, tint: Colo
 	icon.texture = texture
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.modulate = tint
+	# Lucide SVGs use currentColor, which Godot imports as black. Rebuild the
+	# visible pixels from alpha so the caller's tint remains effective.
+	var tint_material = get_shader_material("lucide_tint")
+	if tint_material != null:
+		tint_material.set_shader_parameter("icon_color", tint)
+		icon.material = tint_material
+	else:
+		icon.modulate = tint
 	apply_rect(icon, rect)
 	parent.add_child(icon)
 	return icon
@@ -3213,11 +3225,14 @@ func tile_path(code: String) -> String:
 			return preferred_tile_path("res://assets/tiles/tile_honor_green.png")
 		"P":
 			return preferred_tile_path("res://assets/tiles/tile_honor_white.png")
-	return "res://assets/tiles/tile_back.png"
+	# Unknown codes are invalid faces, not wall backs. Callers must decide how to
+	# represent an unavailable tile instead of presenting a back as a face.
+	return ""
 
 func preferred_tile_path(primary: String) -> String:
-	# Tile faces are authored 2D assets. Never fall back to a 3D face directory.
-	return primary if FileAccess.file_exists(primary) else "res://assets/tiles/tile_back.png"
+	# A missing face must remain missing. Returning tile_back here makes a broken
+	# face look valid to callers and can leak a wall-back into rivers or hand UI.
+	return primary
 
 func tile_decal_path(code: String) -> String:
 	# Keep the legacy cache name, but source it from the same 2D face asset.
