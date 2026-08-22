@@ -99,8 +99,8 @@ python3 -m http.server 18081 --bind 0.0.0.0 --directory /home/guhao/majiang/buil
 下载地址：
 
 ```text
-http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk
-http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json
+http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk
+http://127.0.0.1:18081/YunzhuoMahjongGodot-update.json
 ```
 
 如果外网无法访问，需要在云服务器安全组/防火墙放行 TCP `18081`。

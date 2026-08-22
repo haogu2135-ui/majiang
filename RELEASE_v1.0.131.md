@@ -94,9 +94,9 @@
 
 ### 下载地址
 ```
-http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.131-godot.apk
-http://129.146.180.88:18081/YunzhuoMahjongGodot-release.apk
-http://129.146.180.88:18081/YunzhuoMahjongGodot.apk
+http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.131-godot.apk
+http://127.0.0.1:18081/YunzhuoMahjongGodot-release.apk
+http://127.0.0.1:18081/YunzhuoMahjongGodot.apk
 ```
 
 ### 应用内更新

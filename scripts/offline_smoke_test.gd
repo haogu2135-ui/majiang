@@ -245,9 +245,9 @@ func run() -> void:
 	check(not scene.rule_uses_package_liability(scene.RULE_VARIANT_NANJING) and scene.rule_uses_package_liability(scene.RULE_VARIANT_YANGZHOU), "扬州启用包三搭而南京不启用")
 	check(scene.rule_variant_label(scene.RULE_VARIANT_GUANGDONG) == "广东麻将" and scene.rule_variant_label(scene.RULE_VARIANT_SICHUAN) == "四川麻将" and scene.rule_variant_label(scene.RULE_VARIANT_NANJING) == "南京麻将" and scene.rule_variant_label(scene.RULE_VARIANT_YANGZHOU) == "扬州麻将", "四种地方规则提供稳定的中文名称")
 	scene.rule_variant = original_rule_variant
-	check(not scene.player_ai_assist_enabled(), "offline player side does not enable AI assistance")
-	check(scene.UPDATE_MANIFEST_URL == "http://129.146.180.88:18081/YunzhuoMahjongGodot-update.json", "update manifest URL points to live download service")
-	check(scene.UPDATE_URL == "http://129.146.180.88:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk", "fallback update APK URL uses this release's immutable APK path")
+	check(not scene.player_ai_assist_enabled() and scene.DEFAULT_HOST == "127.0.0.1", "offline player side keeps local production host and does not enable AI assistance")
+	check(scene.UPDATE_MANIFEST_URL == "http://127.0.0.1:18081/YunzhuoMahjongGodot-update.json", "update manifest URL points to the local download service")
+	check(scene.UPDATE_URL == "http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk", "fallback update APK URL uses this release's immutable APK path")
 	check(bool(ProjectSettings.get_setting("audio/general/text_to_speech", false)), "Godot text-to-speech project setting is enabled")
 	check(bool(ProjectSettings.get_setting("audio/driver/enable_input", false)), "audio input is enabled for voice features")
 	check(all_illustration_png_files_are_declared_or_optional_gpt(scene), "all illustration PNG files are declared as fixed UI assets or optional GPT targets")
