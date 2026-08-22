@@ -93,7 +93,7 @@ AI 门禁覆盖本地规则、隐藏信息公平、策略、牌张/分数守恒�
 HTTP 服务：
 
 ```bash
-python3 -m http.server 18081 --bind 0.0.0.0 --directory /home/guhao/majiang/build
+python3 -m http.server 18081 --bind 127.0.0.1 --directory /home/guhao/majiang/build
 ```
 
 下载地址：
@@ -103,7 +103,7 @@ http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk
 http://127.0.0.1:18081/YunzhuoMahjongGodot-update.json
 ```
 
-如果外网无法访问，需要在云服务器安全组/防火墙放行 TCP `18081`。
+更新服务现在只绑定本机回环地址 `127.0.0.1`，仅供本机客户端访问。
 
 ## 后续待做
 
