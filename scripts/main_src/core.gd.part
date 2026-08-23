@@ -6211,19 +6211,19 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	var accent = stat_row_accent(label_text)
 	row.add_theme_stylebox_override("panel", StyleBoxEmpty.new())  # GPT plates from draw_stat_row_art
 	parent.add_child(row)
-	var stats_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
-	if stats_row_plate == null:
-		stats_row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
-	if stats_row_plate != null:
-		stats_row_plate.name = "StatsRowGptPlate"
-		stats_row_plate.modulate = Color(
-			clampf(0.45 + accent.r * 0.55, 0.20, 1.20),
-			clampf(0.45 + accent.g * 0.55, 0.20, 1.20),
-			clampf(0.45 + accent.b * 0.55, 0.20, 1.20),
-			0.78
-		)
+	# Use the authored scrim center as a quiet reading surface; metric chrome
+	# below still carries the row accent and trend signal.
+	var stats_row_plate = make_gpt_center_crop_plate_rect(
+		rect_full(0.0, 0.0, 1.0, 1.0),
+		Color(0.014, 0.028, 0.026, 0.72),
+		"ui_dark_scrim",
+		0.18
+	)
+	stats_row_plate.name = "StatsRowGptPlate"
+	row.add_child(stats_row_plate)
+	row.move_child(stats_row_plate, 0)
 	draw_stat_row_art(row, label_text, value_text)
-	var value_plate = make_gpt_plate_rect(rect_full(0.545, 0.090, 0.955, 0.910), Color(0.10, 0.07, 0.05, 0.28), "ui_jade_reading_plate")
+	var value_plate = make_gpt_center_crop_plate_rect(rect_full(0.545, 0.090, 0.955, 0.910), Color(0.016, 0.030, 0.028, 0.58), "ui_dark_scrim", 0.18)
 	value_plate.name = "StatsRowValuePanel_%s" % label_text
 	row.add_child(value_plate)
 	var value_sheen = make_layout_host(rect_full(0.035, 0.075, 0.965, 0.185))

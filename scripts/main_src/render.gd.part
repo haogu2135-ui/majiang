@@ -11709,18 +11709,17 @@ func make_achievement_row(key: String, index: int) -> Control:
 	# r180: transparent host + GPT shop/settings plate for achievement row face.
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
-	var row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.82 if unlocked else 0.62, false)
-	if row_plate == null:
-		row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
-	if row_plate != null:
-		row_plate.name = "AchievementRowGptPlate"
-		row_plate.modulate = Color(
-			clampf(0.35 + accent.r * 0.55, 0.20, 1.2),
-			clampf(0.35 + accent.g * 0.55, 0.20, 1.2),
-			clampf(0.35 + accent.b * 0.55, 0.20, 1.2),
-			0.86 if unlocked else 0.68
-		)
-		row.move_child(row_plate, 0)
+	# Keep the gallery's authored medal as the visual accent while the row body
+	# stays quiet enough for title, goal, progress and state to scan together.
+	var row_plate = make_gpt_center_crop_plate_rect(
+		rect_full(0.0, 0.0, 1.0, 1.0),
+		Color(0.014, 0.028, 0.026, 0.72),
+		"ui_dark_scrim",
+		0.18
+	)
+	row_plate.name = "AchievementRowGptPlate"
+	row.add_child(row_plate)
+	row.move_child(row_plate, 0)
 	draw_achievement_row_art(row, key, index, unlocked, accent)
 	var name_label = make_label(row, achievement_display_name(key), 16, Color(1.0, 0.95, 0.76) if unlocked else Color(0.96, 0.99, 0.96), true)
 	name_label.name = "AchievementRowName_%s" % key

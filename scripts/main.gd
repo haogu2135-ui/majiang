@@ -20133,18 +20133,17 @@ func make_achievement_row(key: String, index: int) -> Control:
 	# r180: transparent host + GPT shop/settings plate for achievement row face.
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
-	var row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.82 if unlocked else 0.62, false)
-	if row_plate == null:
-		row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
-	if row_plate != null:
-		row_plate.name = "AchievementRowGptPlate"
-		row_plate.modulate = Color(
-			clampf(0.35 + accent.r * 0.55, 0.20, 1.2),
-			clampf(0.35 + accent.g * 0.55, 0.20, 1.2),
-			clampf(0.35 + accent.b * 0.55, 0.20, 1.2),
-			0.86 if unlocked else 0.68
-		)
-		row.move_child(row_plate, 0)
+	# Keep the gallery's authored medal as the visual accent while the row body
+	# stays quiet enough for title, goal, progress and state to scan together.
+	var row_plate = make_gpt_center_crop_plate_rect(
+		rect_full(0.0, 0.0, 1.0, 1.0),
+		Color(0.014, 0.028, 0.026, 0.72),
+		"ui_dark_scrim",
+		0.18
+	)
+	row_plate.name = "AchievementRowGptPlate"
+	row.add_child(row_plate)
+	row.move_child(row_plate, 0)
 	draw_achievement_row_art(row, key, index, unlocked, accent)
 	var name_label = make_label(row, achievement_display_name(key), 16, Color(1.0, 0.95, 0.76) if unlocked else Color(0.96, 0.99, 0.96), true)
 	name_label.name = "AchievementRowName_%s" % key
@@ -23169,18 +23168,24 @@ func _show_achievements_screen_impl() -> void:
 		achievements_scrollbar.visible = false
 		achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Panel StyleBoxFlat retained for scrollbar luma probes; visual via GPT plate child
-	var achievements_scroll_gutter = make_panel(panel, rect_full(0.947, achievement_scroll_top + 0.012, 0.960, achievement_scroll_bottom - 0.012), Color(0.020, 0.030, 0.028, 0.54), 999, Color(0.28, 0.24, 0.16, 0.20), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
+	var achievements_scroll_gutter = make_panel(panel, rect_full(0.946, achievement_scroll_top + 0.012, 0.962, achievement_scroll_bottom - 0.012), Color(0.030, 0.048, 0.044, 0.74), 999, Color(0.40, 0.50, 0.40, 0.38), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
 	achievements_scroll_gutter.name = "AchievementsScrollGutter"
 	achievements_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var achievements_scroll_thumb = make_panel(achievements_scroll_gutter, rect_full(0.200, 0.055, 0.800, 0.520), Color(0.56, 0.48, 0.30, 0.66), 999, Color(0.72, 0.62, 0.36, 0.24), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var achievements_scroll_up = add_lucide_icon(achievements_scroll_gutter, "chevron-up", rect_full(0.15, 0.008, 0.85, 0.145), Color(0.80, 0.88, 0.74, 0.88))
+	if achievements_scroll_up != null:
+		achievements_scroll_up.name = "AchievementsScrollUpIcon"
+	var achievements_scroll_thumb = make_panel(achievements_scroll_gutter, rect_full(0.200, 0.055, 0.800, 0.520), Color(0.72, 0.62, 0.34, 0.88), 999, Color(0.90, 0.82, 0.54, 0.38), 0, "ui_progress_signal_strip")  # r227 GPT thumb
 	achievements_scroll_thumb.name = "AchievementsScrollThumb"
 	achievements_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var achievements_scroll_down = add_lucide_icon(achievements_scroll_gutter, "chevron-down", rect_full(0.15, 0.855, 0.85, 0.992), Color(0.80, 0.88, 0.74, 0.88))
+	if achievements_scroll_down != null:
+		achievements_scroll_down.name = "AchievementsScrollDownIcon"
 	var achievements_scroll_hit_target = Control.new()
 	achievements_scroll_hit_target.name = "AchievementsScrollHitTarget"
 	achievements_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
 	achievements_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	achievements_scroll_hit_target.tooltip_text = "拖动查看全部成就"
-	apply_rect(achievements_scroll_hit_target, rect_full(0.940, achievement_scroll_top - 0.005, 0.990, achievement_scroll_bottom + 0.005))
+	apply_rect(achievements_scroll_hit_target, rect_full(0.938, achievement_scroll_top - 0.005, 0.990, achievement_scroll_bottom + 0.005))
 	panel.add_child(achievements_scroll_hit_target)
 
 	var grid = VBoxContainer.new()
@@ -23497,12 +23502,19 @@ func _show_online_lobby_impl() -> void:
 		server_badge_label.name = "OnlineLobbyServerEndpointLabel"
 		apply_rect(server_badge_label, rect_full(0.055, 0.04, 0.945, 0.96))
 		server_badge_label.tooltip_text = endpoint_text
-	var state_badge = make_badge(panel, rect_full(0.835, 0.040, 0.960, 0.105), lobby_connection_state_text(), commercial_ui_font_size(12, 2), Color(0.18, 0.13, 0.08, 0.78), Color(0.78, 0.58, 0.30, 0.28), Color(0.94, 0.88, 0.72))  # r415 warm
+	var connection_state := lobby_connection_state_text()
+	var connection_state_tint := online_connection_state_tint(connection_state)
+	var state_badge = make_badge(panel, rect_full(0.835, 0.040, 0.960, 0.105), connection_state, commercial_ui_font_size(12, 2), Color(0.020, 0.038, 0.034, 0.92), Color(0.22, 0.42, 0.30, 0.30), connection_state_tint, "ui_dark_scrim")
 	state_badge.name = "OnlineLobbyConnectionStateBadge"
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var state_badge_label = state_badge.get_child(state_badge.get_child_count() - 1) as Label if state_badge.get_child_count() > 0 else null
 	if state_badge_label != null:
 		state_badge_label.name = "OnlineLobbyConnectionStateLabel"
+		apply_rect(state_badge_label, rect_full(0.285, 0.04, 0.955, 0.96))
+	var state_badge_icon = add_lucide_icon(state_badge, online_connection_state_icon(connection_state), rect_full(0.075, 0.22, 0.245, 0.78), connection_state_tint)
+	if state_badge_icon != null:
+		state_badge_icon.name = "OnlineLobbyConnectionStateIcon"
+		state_badge.move_child(state_badge_icon, 0)
 
 	# 表单面板 - 连接与房间设置
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
@@ -23742,11 +23754,36 @@ func _show_online_lobby_impl() -> void:
 	schedule_ui_qa_page_ready("online_lobby", ["OnlineLobbyFormPanel", "OnlineLobbyNameEdit", "OnlineLobbyLogPanel", "OnlineLobbyLogScroll"])
 
 
+func online_connection_state_icon(state: String) -> String:
+	match state:
+		"已连接":
+			return "check"
+		"连接中":
+			return "refresh-cw"
+		"异常":
+			return "alert-triangle"
+		_:
+			return "x-circle"
+
+
+func online_connection_state_tint(state: String) -> Color:
+	match state:
+		"已连接":
+			return Color(0.46, 0.92, 0.64, 0.98)
+		"连接中":
+			return Color(0.98, 0.78, 0.34, 0.98)
+		"异常":
+			return Color(1.00, 0.50, 0.38, 0.98)
+		_:
+			return Color(0.76, 0.82, 0.80, 0.96)
+
+
 func refresh_online_lobby_state() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var state := lobby_connection_state_text()
 	var connected := state == "已连接"
+	var state_tint := online_connection_state_tint(state)
 	var show_room_snapshot := connected or online_waiting_for_server
 	if state != "已连接" and online_waiting_for_server:
 		var connection_feedback := "正在连接服务器，请稍候" if state == "连接中" else ("连接异常，请重试" if state == "异常" else "请先连接服务器。")
@@ -23757,11 +23794,22 @@ func refresh_online_lobby_state() -> void:
 		state_label.tooltip_text = "服务器连接状态：%s" % state
 	var state_badge = root_layer.find_child("OnlineLobbyConnectionStateBadge", true, false) as CanvasItem
 	if state_badge != null:
-		state_badge.modulate = Color(1.0, 1.0, 1.0, 1.0) if connected else Color(0.88, 0.92, 0.88, 0.92)
+		tint_panel_gpt_plate(state_badge as Control, Color(state_tint.r, state_tint.g, state_tint.b, 0.92), "ui_dark_scrim")
+		state_badge.modulate = Color.WHITE
 	var endpoint_label = root_layer.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
 	if endpoint_label != null:
 		endpoint_label.text = online_connection_endpoint_text()
 		endpoint_label.tooltip_text = endpoint_label.text
+	var state_icon = root_layer.find_child("OnlineLobbyConnectionStateIcon", true, false) as TextureRect
+	if state_icon != null:
+		state_icon.texture = lucide_icon_texture(online_connection_state_icon(state))
+		var icon_material := state_icon.material as ShaderMaterial
+		if icon_material != null:
+			icon_material.set_shader_parameter("icon_color", state_tint)
+		else:
+			state_icon.modulate = state_tint
+	if state_label != null:
+		state_label.add_theme_color_override("font_color", state_tint.lightened(0.08))
 	var room_badge = root_layer.find_child("OnlineLobbyRoomBadge", true, false)
 	if room_badge != null:
 		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
@@ -24408,6 +24456,8 @@ func _show_shop_screen_impl() -> void:
 			else:
 				show_toast("钻石不足", 1800)
 		)
+		# Keep the CTA distinct without repeating the full high-frequency button frame.
+		ensure_button_gpt_face_plate(buy_btn, Color(0.42, 0.38, 0.58, 0.38))
 		buy_btn.custom_minimum_size = Vector2(100, 48)
 		buy_btn.name = "ShopItemBuyButton_%s" % item_id
 		row.add_child(buy_btn)
@@ -32341,19 +32391,19 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	var accent = stat_row_accent(label_text)
 	row.add_theme_stylebox_override("panel", StyleBoxEmpty.new())  # GPT plates from draw_stat_row_art
 	parent.add_child(row)
-	var stats_row_plate = add_optional_gpt_illustration_texture(row, "ui_shop_row_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
-	if stats_row_plate == null:
-		stats_row_plate = add_optional_gpt_illustration_texture(row, "ui_settings_section_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.70, false)
-	if stats_row_plate != null:
-		stats_row_plate.name = "StatsRowGptPlate"
-		stats_row_plate.modulate = Color(
-			clampf(0.45 + accent.r * 0.55, 0.20, 1.20),
-			clampf(0.45 + accent.g * 0.55, 0.20, 1.20),
-			clampf(0.45 + accent.b * 0.55, 0.20, 1.20),
-			0.78
-		)
+	# Use the authored scrim center as a quiet reading surface; metric chrome
+	# below still carries the row accent and trend signal.
+	var stats_row_plate = make_gpt_center_crop_plate_rect(
+		rect_full(0.0, 0.0, 1.0, 1.0),
+		Color(0.014, 0.028, 0.026, 0.72),
+		"ui_dark_scrim",
+		0.18
+	)
+	stats_row_plate.name = "StatsRowGptPlate"
+	row.add_child(stats_row_plate)
+	row.move_child(stats_row_plate, 0)
 	draw_stat_row_art(row, label_text, value_text)
-	var value_plate = make_gpt_plate_rect(rect_full(0.545, 0.090, 0.955, 0.910), Color(0.10, 0.07, 0.05, 0.28), "ui_jade_reading_plate")
+	var value_plate = make_gpt_center_crop_plate_rect(rect_full(0.545, 0.090, 0.955, 0.910), Color(0.016, 0.030, 0.028, 0.58), "ui_dark_scrim", 0.18)
 	value_plate.name = "StatsRowValuePanel_%s" % label_text
 	row.add_child(value_plate)
 	var value_sheen = make_layout_host(rect_full(0.035, 0.075, 0.965, 0.185))
