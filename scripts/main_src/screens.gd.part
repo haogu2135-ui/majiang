@@ -186,7 +186,7 @@ func _show_menu_impl() -> void:
 	var header = Control.new()
 	header.name = "MenuTitleTextLayer"
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(header, rect_full(0.088, 0.105, 0.300, 0.180))
+	apply_rect(header, rect_full(0.070, 0.075, 0.420, 0.205))
 	root_layer.add_child(header)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		header.modulate = Color(1, 1, 1, 0)
@@ -197,12 +197,20 @@ func _show_menu_impl() -> void:
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 游戏标题 - 更大更突出，使用国风金色
-	var title = make_label(header, "云桌麻将", commercial_ui_font_size(30, 4), Color(1.00, 0.88, 0.54), true)
+	var title = make_label(header, "云桌麻将", commercial_ui_font_size(42, 6), Color(1.00, 0.90, 0.58), true)
 	title.name = "MenuTitleLabel"
-	apply_rect(title, rect_full(0.010, 0.050, 0.950, 0.860))
+	apply_rect(title, rect_full(0.010, 0.025, 0.950, 0.660))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.add_theme_constant_override("outline_size", 3)
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
+	title.add_theme_constant_override("shadow_offset_x", 2)
+	title.add_theme_constant_override("shadow_offset_y", 3)
+	title.add_theme_constant_override("outline_size", 4)
 	title.add_theme_color_override("font_outline_color", Color(0.08, 0.045, 0.018, 0.96))
+	var title_rule = make_label(header, "一桌风雅，四方入席", commercial_ui_font_size(14, 2), Color(0.92, 0.86, 0.68, 0.88), false)
+	title_rule.name = "MenuTitleRule"
+	apply_rect(title_rule, rect_full(0.018, 0.650, 0.940, 0.950))
+	title_rule.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	style_background_readable_label(title_rule, 2)
 
 	# 主菜单卡片区域 - 按安全区宽度收缩，避免移动端溢出。
 	draw_menu_primary_3d_stage(root_layer)
@@ -250,7 +258,7 @@ func _show_menu_impl() -> void:
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(footer, rect_full(0.055, 0.828, 0.945, 0.948))
 	root_layer.add_child(footer)
-	var footer_back = make_gpt_plate_rect(rect_full(0.000, 0.050, 1.000, 0.950), Color(0.42, 0.52, 0.40, 0.995), "ui_jade_reading_plate")
+	var footer_back = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.050, 1.000, 0.950), Color(0.018, 0.034, 0.032, 0.94), "ui_dark_scrim", 0.18)
 	footer_back.name = "MenuFooterBackplate"
 	footer.add_child(footer_back)
 	footer_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -288,6 +296,7 @@ func _show_menu_impl() -> void:
 	var settings = make_small_button("设置", Color(0.26, 0.44, 0.58), func() -> void:
 		toggle_settings_panel()
 	)
+	ensure_button_gpt_face_plate(settings, Color(0.26, 0.44, 0.58, 0.40))
 	settings.custom_minimum_size = Vector2(88, 48)
 	settings.name = "MenuSettingsButton"
 	settings.add_theme_font_size_override("font_size", 15)

@@ -1817,8 +1817,9 @@ func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 	if old_plate != null and is_instance_valid(old_plate):
 		button.remove_child(old_plate)
 		old_plate.queue_free()
+	var primary_plate_key := "ui_dark_scrim" if color.a <= 0.45 else "ui_button_face_plate"
 	var plate_keys := [
-		"ui_button_face_plate",
+		primary_plate_key,
 		"action_button_panel",
 		"ui_seat_info_plate",
 		"ui_title_backplate",
@@ -1831,9 +1832,22 @@ func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 			break
 	if texture == null:
 		return
+	var face_texture: Texture2D = texture
+	if primary_plate_key == "ui_dark_scrim":
+		# Both authored plates are framed bitmaps. Use a quiet center crop on
+		# compact controls so their decorative frames do not compete with labels.
+		var quiet_texture: Texture2D = optional_gpt_illustration_texture("ui_settings_section_plate")
+		if quiet_texture != null:
+			face_texture = quiet_texture
+		var source_size := face_texture.get_size()
+		var crop_size := source_size * 0.18
+		var center_crop := AtlasTexture.new()
+		center_crop.atlas = face_texture
+		center_crop.region = Rect2((source_size - crop_size) * 0.5, crop_size)
+		face_texture = center_crop
 	var tex = TextureRect.new()
 	tex.name = "GptButtonFacePlate"
-	tex.texture = texture
+	tex.texture = face_texture
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_SCALE
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
