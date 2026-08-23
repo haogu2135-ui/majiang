@@ -946,11 +946,13 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		previous_top = rect.position.y
 	check(found == expected.size(), "pending claim complex action bar renders all legal choices at %s" % viewport_size)
 	var pending_rows: Dictionary = {}
+	var pending_last_button_bottom := -1.0
 	for action_child in scene.action_bar.get_children():
 		if action_child is Button:
 			var action_rect = screen_rect(action_child as Control)
 			var row_key := int(round(action_rect.position.y))
 			pending_rows[row_key] = int(pending_rows.get(row_key, 0)) + 1
+			pending_last_button_bottom = maxf(pending_last_button_bottom, action_rect.end.y)
 	check(pending_rows.size() <= 2, "pending claim actions stay within two stable rows at %s" % viewport_size)
 	if viewport_size.x <= 960.0 and pending_rows.size() == 2:
 		var widest_row := 0
@@ -999,6 +1001,9 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		check(horizontal_gap <= reference_width + 1.0, "pending claim summary stays within one action-button width of the dock at %s" % viewport_size)
 		check(dock.clip_contents, "pending claim action dock clips decorative artwork at %s" % viewport_size)
 		check(dock_rect.end.y <= hand_rect.position.y - 10.0, "pending claim action dock keeps a clear channel above hand tray at %s" % viewport_size)
+		if pending_last_button_bottom >= 0.0:
+			var dock_bottom_padding = dock_rect.end.y - pending_last_button_bottom
+			check(dock_bottom_padding >= 10.0 and dock_bottom_padding <= 24.0, "pending claim action dock keeps compact bottom padding at %s" % viewport_size)
 		var dock_texture = scene.find_child("PendingClaimActionGPTDockTexture", true, false) as TextureRect
 		if dock_texture != null:
 			var dock_texture_rect = screen_rect(dock_texture)

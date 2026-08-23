@@ -1939,10 +1939,7 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return dock_rect
 	if mode == "offline" and offline_phase == "pending_claim":
-		# Pending claims use a reserved two-row lane. Keeping its physical shell
-		# fixed prevents wide viewports from pushing the context panel into a
-		# gap beside the right river.
-		return dock_rect
+		return pending_claim_action_dock_rect_for_count(count)
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_count(count, separation)
 	var dock_pixels = float(count) * width + float(max(0, count - 1) * separation) + 24.0
@@ -1953,8 +1950,42 @@ func action_bar_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
-		return PENDING_CLAIM_ACTION_BAR_COMPACT_RECT if effective_viewport_size().y <= 560.0 else PENDING_CLAIM_ACTION_BAR_RECT
+		return pending_claim_action_bar_rect_for_count(action_bar_button_count())
 	return ACTION_BAR_RECT
+
+func pending_claim_action_base_rect() -> Rect2:
+	return PENDING_CLAIM_ACTION_BAR_COMPACT_RECT if effective_viewport_size().y <= 560.0 else PENDING_CLAIM_ACTION_BAR_RECT
+
+func pending_claim_action_dock_base_rect() -> Rect2:
+	return PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT if effective_viewport_size().y <= 560.0 else PENDING_CLAIM_ACTION_BAR_DOCK_RECT
+
+func pending_claim_action_row_count(count: int) -> int:
+	if count <= 0:
+		return 1
+	var bar_rect = pending_claim_action_base_rect()
+	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
+	var separation = action_button_separation_for_count(count)
+	var button_width = action_button_width_for_available(count, available_width, separation)
+	var row_capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, button_width + float(separation)))))
+	return maxi(1, int(ceil(float(count) / float(row_capacity))))
+
+func pending_claim_action_content_height(count: int) -> float:
+	var rows = pending_claim_action_row_count(count)
+	var button_height = maxf(44.0, ACTION_BUTTON_HEIGHT)
+	var separation = action_button_separation_for_count(count)
+	return float(rows) * button_height + float(maxi(0, rows - 1) * separation)
+
+func pending_claim_action_dock_rect_for_count(count: int) -> Rect2:
+	var base_rect = pending_claim_action_dock_base_rect()
+	var content_height = maxf(1.0, safe_content_pixel_size().y)
+	var dock_height = (8.0 + pending_claim_action_content_height(count) + 14.0) / content_height
+	var top = maxf(base_rect.position.y, base_rect.size.y - dock_height)
+	return Rect2(Vector2(base_rect.position.x, top), base_rect.size)
+
+func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
+	var dock_rect = pending_claim_action_dock_rect_for_count(count)
+	var base_rect = pending_claim_action_base_rect()
+	return Rect2(Vector2(base_rect.position.x, dock_rect.position.y + 0.010), dock_rect.size)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
 	# Keep the response context in the root-layer lane between the transformed
@@ -2003,7 +2034,7 @@ func action_bar_dock_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_DOCK_RECT
 	if mode == "offline" and offline_phase == "pending_claim":
-		return PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT if effective_viewport_size().y <= 560.0 else PENDING_CLAIM_ACTION_BAR_DOCK_RECT
+		return pending_claim_action_dock_rect_for_count(action_bar_button_count())
 	return ACTION_BAR_DOCK_RECT
 
 func finalize_action_bar_layout() -> void:
@@ -2016,8 +2047,10 @@ func finalize_action_bar_layout() -> void:
 	if action_bar is FlowContainer:
 		action_bar.add_theme_constant_override("h_separation", separation)
 		action_bar.add_theme_constant_override("v_separation", separation)
+		action_bar.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
 	else:
 		action_bar.add_theme_constant_override("separation", separation)
+	apply_rect(action_bar, action_bar_layout_rect())
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
 	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"

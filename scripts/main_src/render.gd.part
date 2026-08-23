@@ -705,7 +705,7 @@ func draw_actions(parent: Control) -> void:
 		flow_bar.alignment = FlowContainer.ALIGNMENT_CENTER
 		flow_bar.add_theme_constant_override("h_separation", 3)
 		flow_bar.add_theme_constant_override("v_separation", 3)
-		flow_bar.custom_minimum_size = Vector2(0, 92)
+		flow_bar.custom_minimum_size = Vector2.ZERO
 		action_bar = flow_bar
 	else:
 		var row_bar := HBoxContainer.new()
