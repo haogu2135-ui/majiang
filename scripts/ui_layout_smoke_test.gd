@@ -60,6 +60,43 @@ func seed_offline_battle_layout_state(scene) -> void:
 	}
 	scene.ai_assist_enabled = false
 
+func seed_online_pending_claim_layout_state(scene) -> void:
+	scene.mode = "online_game"
+	scene.offline_phase = "await_discard"
+	scene.online_feedback = ""
+	scene.online_waiting_for_server = false
+	scene.current_seat = 0
+	scene.online_game = {
+		"roomCode": "QA7",
+		"phase": "pendingClaim",
+		"youSeat": 0,
+		"currentSeat": 0,
+		"wallCount": 55,
+		"hand": ["1W", "2W", "3W", "3W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "R"],
+		"lastDiscard": "3W",
+		"lastDiscardSeat": 3,
+		"players": [
+			{"seat": 0, "name": "你", "handCount": 14, "flowerCount": 0, "score": 26400, "discards": ["1W", "2W"], "melds": []},
+			{"seat": 1, "name": "东风夜放", "handCount": 13, "flowerCount": 1, "score": 23800, "discards": ["1T", "2T"], "melds": []},
+			{"seat": 2, "name": "南山客", "handCount": 13, "flowerCount": 0, "score": 27200, "discards": ["1B", "2B"], "melds": []},
+			{"seat": 3, "name": "北海若", "handCount": 13, "flowerCount": 0, "score": 22600, "discards": ["Z", "F", "P"], "melds": []},
+		],
+		"pending": {
+			"tile": "3W",
+			"fromSeat": 3,
+			"options": ["hu", "gang", "peng", "chi"],
+			"chi_choices": [
+				{"meld": ["1W", "2W", "3W"]},
+				{"meld": ["2W", "3W", "4W"]},
+				{"meld": ["3W", "4W", "5W"]},
+			],
+		},
+	}
+	scene.table_logs.clear()
+	scene.table_logs.append("北海若打出三万，等待响应")
+	scene.table_logs.append("在线房间 QA7 已同步")
+	scene.ai_assist_enabled = false
+
 func seed_danger_discard_layout_state(scene) -> void:
 	seed_offline_battle_layout_state(scene)
 	scene.offline_phase = "await_discard"
@@ -460,6 +497,22 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_top_hud_buttons(scene, actual_viewport)
 	check_compact_seat_panels(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
+	seed_online_pending_claim_layout_state(scene)
+	scene.clear_screen()
+	scene.draw_game_top_hud(scene.root_layer)
+	for seat_layout in scene.SEAT_LAYOUTS:
+		scene.draw_seat(scene.root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), {})
+	scene.draw_discards(scene.root_layer)
+	scene.draw_melds(scene.root_layer)
+	scene.draw_table_log(scene.root_layer)
+	scene.draw_hand(scene.root_layer)
+	scene.draw_actions(scene.root_layer)
+	await process_frame
+	check_pending_claim_action_bar(scene, actual_viewport)
+	check_online_pending_claim_layout(scene, actual_viewport)
+	seed_offline_battle_layout_state(scene)
+	scene.render_game()
+	await process_frame
 	scene.ai_assist_enabled = true
 	scene.render_game()
 	await process_frame
@@ -1027,6 +1080,27 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 			check(panel_plate.modulate.a >= 0.50 and panel_plate.modulate.a <= 0.70 and panel_plate.show_behind_parent, "pending claim compact GPT panel provides a dark text backing behind the native label at %s" % viewport_size)
 	check(scene.find_child("ActionIntentDock", true, false) == null, "pending claim omits extra action intent strip at %s" % viewport_size)
 
+func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
+	var pending = scene.pending_claim_state()
+	check(scene.mode == "online_game" and not pending.is_empty(), "online pending fixture exposes a real response window at %s" % viewport_size)
+	check(scene.action_bar is FlowContainer, "online pending actions use a wrapping touch lane at %s" % viewport_size)
+	var voice = scene.find_child("VoiceActionButton", true, false) as Button
+	check(voice != null, "online pending keeps the voice action available during response at %s" % viewport_size)
+	if voice != null:
+		var voice_rect = screen_rect(voice)
+		check(voice_rect.size.x >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH - 0.5 and voice_rect.size.y >= 44.0, "online voice action keeps a full touch target during response at %s" % viewport_size)
+	var source_text = scene.find_child("PendingClaimSourceText", true, false) as Label
+	var tile_name = scene.find_child("PendingClaimTileName", true, false) as Label
+	var focus_text = scene.find_child("PendingClaimFocusText", true, false) as Label
+	check(source_text != null and source_text.text == "北海若 打出", "online pending context names the discard source at %s" % viewport_size)
+	check(tile_name != null and tile_name.text == scene.tile_label("3W"), "online pending context shows the server tile at %s" % viewport_size)
+	check(focus_text != null and focus_text.text.contains("胡牌机会"), "online pending context explains the response priority at %s" % viewport_size)
+	var action_dock = scene.find_child("ActionButtonDock", true, false) as Control
+	var summary = scene.find_child("PendingClaimIllustration", true, false) as Control
+	check(action_dock != null and summary != null, "online pending mounts context and action dock together at %s" % viewport_size)
+	if action_dock != null and summary != null:
+		check(screen_rect(summary).end.y <= screen_rect(action_dock).position.y - 5.0, "online pending context clears the action dock at %s" % viewport_size)
+
 func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	var panel = scene.find_child("AdvisorPanel", true, false) as Control
 	var dock = scene.find_child("ActionButtonDock", true, false) as Control
@@ -1223,7 +1297,7 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 	var dock_rect = screen_rect(dock) if dock != null else Rect2()
 	if hand != null and dock != null:
 		check(dock_rect.end.y <= hand_rect.position.y - 12.0, "battle action dock keeps a clear gap above hand tray at %s" % viewport_size)
-		var dock_height_limit := viewport_size.y * (0.24 if scene.offline_phase == "pending_claim" else 0.115) + 1.0
+		var dock_height_limit := viewport_size.y * (0.24 if scene.has_pending_claim_window() else 0.115) + 1.0
 		check(dock_rect.size.y <= dock_height_limit, "battle action dock remains within its one/two-row height budget at %s" % viewport_size)
 	var discard_rects = battle_discard_zone_screen_rects(scene)
 	var root_rect = screen_rect(scene.root_layer)

@@ -1355,7 +1355,7 @@ func center_phase_key() -> String:
 	if mode == "online_game":
 		if str(online_game.get("phase", "")) == "ended":
 			return "ended"
-		if typeof(online_game.get("pending", null)) == TYPE_DICTIONARY or str(online_game.get("phase", "")) == "pendingClaim":
+		if has_pending_claim_window():
 			return "claim"
 		if can_self_discard():
 			return "discard"
@@ -1753,7 +1753,7 @@ func hand_tray_text() -> String:
 		return current_status_text()
 	if has_pending_danger_discard():
 		return pending_danger_discard_text()
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return human_claim_hint_text()
 	if mode == "offline" and can_self_discard():
 		var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
@@ -1779,14 +1779,13 @@ func hand_tray_state_text() -> String:
 	if mode == "offline":
 		if offline_phase == "ended":
 			return "结算"
-		if offline_phase == "pending_claim":
+		if has_pending_claim_window():
 			return "响应"
 		if can_self_discard():
 			return "出牌"
 		return "等待"
 	if mode == "online_game":
-		var pending = online_game.get("pending", null)
-		if typeof(pending) == TYPE_DICTIONARY and pending.get("options", []).size() > 0:
+		if has_pending_claim_window():
 			return "响应"
 		return "出牌" if can_self_discard() else "等待"
 	return "准备"
@@ -1864,10 +1863,47 @@ func pending_claim_source_badge_text(source_seat: int) -> String:
 		return CENTER_WIND_LABELS[source_seat] + "家"
 	return "对手"
 
+func pending_claim_state() -> Dictionary:
+	if mode == "offline":
+		if offline_phase != "pending_claim":
+			return {}
+		return offline_pending_claim.duplicate(true)
+	if mode != "online_game":
+		return {}
+	var online_pending = online_game.get("pending", null)
+	if typeof(online_pending) != TYPE_DICTIONARY:
+		return {}
+	var options = online_pending.get("options", [])
+	if typeof(options) != TYPE_ARRAY or options.is_empty():
+		return {}
+	var chi_choices = online_pending.get("chi_choices", [])
+	if typeof(chi_choices) != TYPE_ARRAY:
+		chi_choices = []
+	return {
+		"from_seat": int(online_pending.get("fromSeat", online_pending.get("from_seat", -1))),
+		"tile": str(online_pending.get("tile", "")),
+		"options": (options as Array).duplicate(true),
+		"chi_choices": (chi_choices as Array).duplicate(true),
+		"rob_gang": bool(online_pending.get("rob_gang", false)),
+	}
+
+func has_pending_claim_window() -> bool:
+	return not pending_claim_state().is_empty()
+
+func pending_claim_source_name(source_seat: int) -> String:
+	if source_seat < 0:
+		return "对手"
+	var source_info = get_player_info(source_seat)
+	var source_name = str(source_info.get("name", "对手")).strip_edges()
+	return source_name if source_name != "" and source_name != "空位" else "对手"
+
 func pending_claim_focus_text() -> String:
-	if bool(offline_pending_claim.get("rob_gang", false)):
+	var pending = pending_claim_state()
+	if pending.is_empty():
+		return "响应窗口 · 可操作或过"
+	if bool(pending.get("rob_gang", false)):
 		return "抢杠窗口 · 优先确认胡牌"
-	var options: Array = offline_pending_claim.get("options", [])
+	var options: Array = pending.get("options", [])
 	if options.has("hu"):
 		return "胡牌机会 · 可选择胡或过"
 	if options.has("gang"):
@@ -1884,12 +1920,12 @@ func pending_claim_focus_text() -> String:
 func action_intent_rect_for_count(count: int) -> Rect2:
 	var dock_rect = action_dock_rect_for_count(count)
 	var left = max(0.580, dock_rect.position.x)
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return Rect2(Vector2(left, 0.558), Vector2(0.975, 0.606))
 	return Rect2(Vector2(left, 0.604), Vector2(0.975, 0.650))  # r437 above dock (height unchanged)
 
 func action_intent_text(count: int) -> String:
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return "响应窗口 · 选择吃碰杠胡或过"
 	if mode == "offline" and offline_phase == "ended":
 		return "本局结束 · 继续下一局或重开"
@@ -1902,7 +1938,7 @@ func action_intent_text(count: int) -> String:
 	return "可用操作 · %d项" % count
 
 func action_intent_color() -> Color:
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return Color(0.86, 0.62, 0.32)
 	if mode == "offline" and has_pending_danger_discard():
 		return Color(0.92, 0.46, 0.34)
@@ -1917,7 +1953,7 @@ func action_intent_icon_name() -> String:
 		return "alert-triangle"
 	if mode == "offline" and can_self_discard():
 		return "zap"
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return "sparkles"
 	if mode == "online_game":
 		return "users"
@@ -1928,7 +1964,7 @@ func action_intent_fallback_icon_text() -> String:
 		return "!"
 	if mode == "offline" and can_self_discard():
 		return "行"
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return "应"
 	return "i"
 
@@ -1938,7 +1974,7 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	var dock_rect = action_bar_dock_layout_rect()
 	if mode == "offline" and has_pending_danger_discard():
 		return dock_rect
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return pending_claim_action_dock_rect_for_count(count)
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_count(count, separation)
@@ -1949,7 +1985,7 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 func action_bar_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_RECT
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return pending_claim_action_bar_rect_for_count(action_bar_button_count())
 	return ACTION_BAR_RECT
 
@@ -2033,7 +2069,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 func action_bar_dock_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_DOCK_RECT
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return pending_claim_action_dock_rect_for_count(action_bar_button_count())
 	return ACTION_BAR_DOCK_RECT
 
@@ -2053,7 +2089,7 @@ func finalize_action_bar_layout() -> void:
 	apply_rect(action_bar, action_bar_layout_rect())
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
-	var compact_claim_mode := mode == "offline" and offline_phase == "pending_claim"
+	var compact_claim_mode := has_pending_claim_window()
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
 	var btn_index := 0
 	for child in action_bar.get_children():
@@ -2094,7 +2130,7 @@ func action_bar_pixel_width() -> float:
 func action_button_separation_for_count(count: int) -> int:
 	if mode == "offline" and has_pending_danger_discard():
 		return 3
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		# Keep a small, stable gap; FlowContainer wraps claim choices when the row
 		# cannot fit full-size touch targets.
 		return 3
@@ -2106,7 +2142,7 @@ func action_button_separation_for_count(count: int) -> int:
 
 
 func action_button_font_size(width: float) -> int:
-	if mode == "offline" and offline_phase == "pending_claim":
+	if has_pending_claim_window():
 		return 16 if width >= 72.0 else 15
 	if width >= 78.0:
 		return 18
@@ -6049,6 +6085,9 @@ func current_status_text() -> String:
 		return online_feedback
 	if phase == "ended":
 		return str(online_game.get("winnerText", "牌局结束"))
+	if has_pending_claim_window():
+		var pending = pending_claim_state()
+		return "等待你响应%s" % tile_label(str(pending.get("tile", "")))
 	if phase == "pendingClaim":
 		return "等待吃碰杠胡响应"
 	return "轮到你出牌" if can_self_discard() else "等待对家行牌"
