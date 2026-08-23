@@ -20,7 +20,7 @@ func _show_achievements_screen_impl() -> void:
 	var gallery_rear = make_gpt_plate_rect(rect_full(0.012, 0.012, 0.988, 0.988), Color(0.18, 0.13, 0.09, 0.22), "ui_jade_reading_plate")
 	gallery_rear.name = "AchievementGallery3DRearShell"
 	root_layer.add_child(gallery_rear)
-	var gallery_rear_gpt = add_optional_gpt_illustration_texture(gallery_rear, "achievement_gpt_gallery", rect_full(-0.01, -0.01, 1.01, 1.01), 0.42, false)
+	var gallery_rear_gpt = add_optional_gpt_illustration_texture(gallery_rear, "achievement_gpt_gallery", rect_full(-0.01, -0.01, 1.01, 1.01), 0.24, false)
 	if gallery_rear_gpt != null:
 		gallery_rear_gpt.name = "AchievementGalleryRearGPTTexture"
 		gallery_rear.move_child(gallery_rear_gpt, 0)
@@ -36,23 +36,23 @@ func _show_achievements_screen_impl() -> void:
 	root_layer.add_child(panel)
 	draw_secondary_screen_texture(panel, "achievement_medal_glow", "AchievementsGlowTexture", 0.035)
 	var achievement_gpt_key := "achievement_gpt_gallery"
-	var gpt_achievement_texture = add_optional_gpt_illustration_texture(panel, achievement_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.26, false)  # r181 keep subdued per smoke
+	var gpt_achievement_texture = add_optional_gpt_illustration_texture(panel, achievement_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.18, false)  # r181 keep subdued per smoke
 	if gpt_achievement_texture != null:
 		gpt_achievement_texture.name = "AchievementGPTGalleryTexture"
 		gpt_achievement_texture.modulate = Color(1.28, 1.08, 0.92, gpt_achievement_texture.modulate.a)  # r398 warm, no green boost
-	var achievement_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.025, 0.78, 0.105), 0.48, false)  # r181 denser title strip
-	var achievement_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.06, 0.14, 0.94, 0.90), 0.18, false)
+	var achievement_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.025, 0.78, 0.105), 0.35, false)  # r181 denser title strip
+	var achievement_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.06, 0.14, 0.94, 0.90), 0.06, false)
 	if achievement_mid_ornament != null:
 		achievement_mid_ornament.name = "AchievementsMidOrnamentPlate"
 	if achievement_title_strip != null:
 		achievement_title_strip.name = "AchievementGptTitleStrip"
-	var achievement_lane_plate = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.050, 0.300, 0.950, 0.920), 0.34, false)  # r181 denser lane
+	var achievement_lane_plate = add_optional_gpt_illustration_texture(panel, "ui_confirm_sheet_plate", rect_full(0.050, 0.300, 0.950, 0.920), 0.12, false)  # r181 denser lane
 	if achievement_lane_plate != null:
 		achievement_lane_plate.name = "AchievementGptLanePlate"
-	var achievement_readability_back = make_gpt_plate_rect(rect_full(0.045, 0.115, 0.955, 0.945), Color(0.12, 0.09, 0.06, 0.14), "ui_jade_reading_plate")
+	var achievement_readability_back = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.115, 0.955, 0.945), Color(0.012, 0.024, 0.022, 0.82), "ui_dark_scrim", 0.22)
 	achievement_readability_back.name = "AchievementReadabilityBackplate"
 	panel.add_child(achievement_readability_back)
-	var achievement_row_lane = make_gpt_route_rail(rect_full(0.055, 0.320, 0.945, achievement_lane_bottom), Color(0.16, 0.12, 0.08, 0.42))
+	var achievement_row_lane = make_gpt_center_crop_plate_rect(rect_full(0.055, 0.320, 0.945, achievement_lane_bottom), Color(0.012, 0.024, 0.022, 0.62), "ui_dark_scrim", 0.18)
 	achievement_row_lane.name = "AchievementRowReadabilityLane"
 	panel.add_child(achievement_row_lane)
 	var lane_inset = make_gpt_route_rail(rect_full(0.010, 0.020, 0.990, 0.980), Color(0.0, 0.0, 0.0, 0.06))
@@ -906,7 +906,7 @@ func _show_rules_screen_impl() -> void:
 	apply_rect(title, rect_full(0.04, 0.024, 0.46, 0.082))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
-	draw_rules_guide_art(panel)
+	var rules_guide = draw_rules_guide_art(panel)
 
 	# 返回按钮
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
@@ -917,6 +917,16 @@ func _show_rules_screen_impl() -> void:
 	draw_secondary_back_button_art(back, "rules", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.835, 0.026, 0.945, 0.112))
+	var rules_status_plate = make_gpt_plate_rect(rect_full(0.790, 0.116, 0.925, 0.151), Color(0.012, 0.026, 0.024, 0.78), "ui_dark_scrim")
+	rules_status_plate.name = "RulesReadingStatusPlate"
+	panel.add_child(rules_status_plate)
+	var rules_status = make_label(rules_status_plate, "阅读 1/6", 10, Color(0.86, 0.92, 0.82), true)
+	rules_status.name = "RulesReadingStatus"
+	apply_rect(rules_status, rect_full(0.06, 0.0, 0.94, 1.0))
+	rules_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rules_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	configure_clipped_label(rules_status)
+	rules_status.tooltip_text = "当前规则阅读位置"
 
 	# 内容区域
 	var content_backplate = make_layout_host(rect_full(0.050, 0.154, 0.950, 0.986))
@@ -991,12 +1001,15 @@ func _show_rules_screen_impl() -> void:
 	if rules_scrollbar != null:
 		rules_scrollbar.value_changed.connect(func(_value: float) -> void:
 			sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+			sync_rules_guide_state(content_scroll, rules_guide)
 		)
 	content_scroll.resized.connect(func() -> void:
 		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+		sync_rules_guide_state(content_scroll, rules_guide)
 	)
 	content.resized.connect(func() -> void:
 		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
+		sync_rules_guide_state(content_scroll, rules_guide)
 	)
 
 	# 本地规则合同：文案必须与计分和结算实现同步，不将其表述为外部认证的地方规则。
@@ -1058,6 +1071,7 @@ func _show_rules_screen_impl() -> void:
 		"特殊地方番型与包赔细则仍以正式发布规则为准",
 	], 5)
 	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
+	call_deferred("sync_rules_guide_state", content_scroll, rules_guide)
 
 	# 规则段落逐一滑入
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -1092,6 +1106,39 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var thumb_left = float(thumb.get_meta("track_left", 0.220))
 	var thumb_right = float(thumb.get_meta("track_right", 0.780))
 	apply_rect(thumb, rect_full(thumb_left, thumb_top, thumb_right, thumb_top + thumb_height))
+
+
+func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control) -> void:
+	if content_scroll == null or guide == null:
+		return
+	var scrollbar = content_scroll.get_v_scroll_bar()
+	if scrollbar == null:
+		return
+	var page = maxf(0.0, scrollbar.page)
+	var scroll_range = maxf(0.0, scrollbar.max_value - page)
+	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
+	var total_sections := maxi(1, RULES_SECTION_COUNT)
+	var current_section := clampi(int(floor(progress * float(total_sections))) + 1, 1, total_sections)
+	var status = guide.get_parent().find_child("RulesReadingStatus", true, false) as Label
+	if status != null:
+		status.text = "阅读 %d/%d" % [current_section, total_sections]
+		status.tooltip_text = "当前第%d段，共%d段规则" % [current_section, total_sections]
+	var active_step := clampi(int(round(progress * 3.0)), 0, 3)
+	for i in range(4):
+		var step = guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
+		if step == null:
+			continue
+		var active := i == active_step
+		step.set_meta("active", active)
+		var plate = step.find_child("RulesGuideStepActivePlate_%d" % i, true, false) as CanvasItem
+		if plate != null:
+			plate.modulate = Color(1.0, 1.0, 1.0, 0.72 if active else 0.08)
+		var icon = step.find_child("RulesGuideStepIcon_%d" % i, true, false) as CanvasItem
+		if icon != null:
+			icon.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.48)
+		var label = step.find_child("RulesGuideStepLabel_%d" % i, true, false) as Label
+		if label != null:
+			label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.66) if active else Color(0.68, 0.76, 0.70))
 
 
 func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null) -> void:
@@ -1507,14 +1554,14 @@ func _show_stats_screen_impl() -> void:
 	root_layer.add_child(panel)
 	draw_secondary_screen_texture(panel, "stats_chart", "StatsChartTexture", 0.035)
 	var stats_gpt_key := "stats_gpt_dashboard"
-	var gpt_stats_texture = add_optional_gpt_illustration_texture(panel, stats_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.82, false)
+	var gpt_stats_texture = add_optional_gpt_illustration_texture(panel, stats_gpt_key, rect_full(0.000, 0.000, 1.000, 1.000), 0.42, false)
 	if gpt_stats_texture != null:
 		gpt_stats_texture.name = "StatsGPTDashboardTexture"
 	var stats_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.04, 0.02, 0.80, 0.10), 0.52, false)
 	if stats_title_strip != null:
 		stats_title_strip.name = "StatsGptTitleStrip"
-	var stats_section = add_optional_gpt_illustration_texture(panel, "ui_settings_section_plate", rect_full(0.06, 0.14, 0.94, 0.88), 0.34, false)
-	var stats_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.86), 0.14, false)
+	var stats_section = add_optional_gpt_illustration_texture(panel, "ui_settings_section_plate", rect_full(0.06, 0.14, 0.94, 0.88), 0.12, false)
+	var stats_mid_ornament = add_optional_gpt_illustration_texture(panel, "ui_jade_reading_plate", rect_full(0.08, 0.18, 0.92, 0.86), 0.05, false)
 	if stats_mid_ornament != null:
 		stats_mid_ornament.name = "StatsMidOrnamentPlate"
 	if stats_section != null:
@@ -1525,10 +1572,10 @@ func _show_stats_screen_impl() -> void:
 	if stats_meter != null:
 		stats_meter.name = "StatsGptBottomMeter"
 		gpt_stats_texture.modulate = Color(1.28, 1.12, 0.96, minf(0.76, gpt_stats_texture.modulate.a))  # r416
-	var stats_readability_back = make_gpt_plate_rect(rect_full(0.055, 0.115, 0.945, 0.945), Color(0.10, 0.07, 0.05, 0.16), "ui_jade_reading_plate")
+	var stats_readability_back = make_gpt_center_crop_plate_rect(rect_full(0.055, 0.115, 0.945, 0.945), Color(0.012, 0.024, 0.022, 0.88), "ui_dark_scrim", 0.22)
 	stats_readability_back.name = "StatsReadabilityBackplate"
 	panel.add_child(stats_readability_back)
-	var stats_row_lane = make_gpt_route_rail(rect_full(0.065, 0.320, 0.935, stats_lane_bottom), Color(0.16, 0.12, 0.08, 0.40))
+	var stats_row_lane = make_gpt_center_crop_plate_rect(rect_full(0.065, 0.320, 0.935, stats_lane_bottom), Color(0.012, 0.024, 0.022, 0.66), "ui_dark_scrim", 0.18)
 	stats_row_lane.name = "StatsRowReadabilityLane"
 	panel.add_child(stats_row_lane)
 	var stats_lane_inset = make_gpt_route_rail(rect_full(0.010, 0.020, 0.990, 0.980), Color(0.0, 0.0, 0.0, 0.03))

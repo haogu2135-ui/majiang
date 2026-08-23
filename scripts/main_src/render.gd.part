@@ -512,17 +512,17 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		role_rail.name = "ActionButtonRoleRail"
 		role_rail.modulate = Color(color.r, color.g, color.b, rail_alpha)
 	# Compact claims use the authored action plate as their distinct dark face.
-	var panel_alpha = 0.32 if compact_claim_mode and role == "pass" else (0.54 if compact_claim_mode else (0.42 if role == "pass" else 0.70))
-	var panel_key := "ui_dark_scrim" if compact_claim_mode else "ui_button_face_plate"
+	var panel_alpha = 0.28 if compact_claim_mode and role == "pass" else (0.66 if compact_claim_mode and is_focus_action else (0.56 if compact_claim_mode else (0.42 if role == "pass" else 0.70)))
+	var panel_key := "ui_button_face_plate" if compact_claim_mode and is_focus_action else ("ui_dark_scrim" if compact_claim_mode else "ui_button_face_plate")
 	var panel_plate = add_optional_gpt_illustration_texture(button, panel_key, rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate == null:
 		panel_plate = add_optional_gpt_illustration_texture(button, "ui_dark_scrim", rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate != null:
 		panel_plate.name = "ActionButtonPanelPlate"
 		var compact_panel_tint := Color(
-			clampf(0.30 + color.r * 0.28, 0.18, 0.62),
-			clampf(0.30 + color.g * 0.28, 0.18, 0.62),
-			clampf(0.28 + color.b * 0.24, 0.16, 0.58),
+			clampf(0.34 + color.r * 0.42, 0.18, 0.82),
+			clampf(0.30 + color.g * 0.38, 0.18, 0.76),
+			clampf(0.24 + color.b * 0.30, 0.16, 0.66),
 			panel_alpha
 		) if compact_claim_mode else Color(
 			clampf(0.40 + color.r * 0.60, 0.20, 1.2),
@@ -6340,6 +6340,7 @@ func draw_round_summary(parent: Control) -> void:
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	body.tooltip_text = full_summary_text
+	draw_round_summary_rank_header(panel, compact_summary)
 	var rank = 1
 	for seat in ranked_seats_by_score():
 		draw_round_summary_rank_row(panel, seat, rank)
@@ -6348,6 +6349,29 @@ func draw_round_summary(parent: Control) -> void:
 		var next_dealer = dealer_seat if offline_dealer_repeat else (dealer_seat + 1) % 4
 		var next = make_badge(panel, ROUND_SUMMARY_NEXT_DEALER_RECT, "下一局庄家  %s" % players[next_dealer]["name"], 13, Color(0.030, 0.046, 0.048, 0.90), Color(0.46, 0.40, 0.24, 0.36), Color(0.82, 0.86, 0.76))
 		next.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func draw_round_summary_rank_header(parent: Control, compact_summary: bool) -> Control:
+	var header = make_gpt_plate_rect(ROUND_SUMMARY_RANK_HEADER_RECT, Color(0.012, 0.026, 0.024, 0.78), "ui_jade_reading_plate")
+	header.name = "RoundSummaryRankHeader"
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(header)
+	var header_font := 9 if compact_summary else 11
+	var columns := [
+		["名次", rect_full(0.045, 0.090, 0.155, 0.940), HORIZONTAL_ALIGNMENT_CENTER],
+		["玩家", rect_full(0.185, 0.090, 0.500, 0.940), HORIZONTAL_ALIGNMENT_LEFT],
+		["总分", rect_full(0.500, 0.090, 0.675, 0.940), HORIZONTAL_ALIGNMENT_RIGHT],
+		["本局", rect_full(0.700, 0.090, 0.835, 0.940), HORIZONTAL_ALIGNMENT_RIGHT],
+		["花数", rect_full(0.860, 0.090, 0.970, 0.940), HORIZONTAL_ALIGNMENT_RIGHT],
+	]
+	for column in columns:
+		var label = make_label(header, str(column[0]), header_font, Color(0.78, 0.88, 0.80), true)
+		label.name = "RoundSummaryRankHeader_%s" % str(column[0])
+		apply_rect(label, column[1])
+		label.horizontal_alignment = int(column[2])
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		configure_clipped_label(label)
+	return header
 
 
 func draw_round_summary_ambience(parent: Control) -> Control:
@@ -7113,8 +7137,15 @@ func draw_rules_guide_art(parent: Control) -> Control:
 		var node = make_gpt_gate(rect_full(center_x - 0.042, 0.155, center_x + 0.042, 0.825), Color(col.r, col.g, col.b, 0.24))
 		node.name = "RulesGuideStep_%d" % i
 		art.add_child(node)
-		add_lucide_icon(node, str(step.get("icon", "circle")), rect_full(0.25, 0.16, 0.75, 0.56), col.lightened(0.36))
+		var active_plate = add_optional_gpt_illustration_texture(node, "ui_progress_signal_strip", rect_full(-0.16, -0.16, 1.16, 1.16), 0.08 if i != 0 else 0.62, false)
+		if active_plate != null:
+			active_plate.name = "RulesGuideStepActivePlate_%d" % i
+			node.move_child(active_plate, 0)
+		var icon = add_lucide_icon(node, str(step.get("icon", "circle")), rect_full(0.25, 0.16, 0.75, 0.56), col.lightened(0.36))
+		if icon != null:
+			icon.name = "RulesGuideStepIcon_%d" % i
 		var label = make_label(node, str(step.get("label", "")), 11, Color(0.96, 0.94, 0.82), true)
+		label.name = "RulesGuideStepLabel_%d" % i
 		apply_rect(label, rect_full(0.06, 0.570, 0.94, 0.940))
 	return art
 
@@ -11764,8 +11795,8 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var compact_claim_mode := has_pending_claim_window()
 	button.add_theme_constant_override("outline_size", 3 if compact_claim_mode else 2)
 	var is_focus_action = ["win", "gang", "safe", "advice"].has(role) or text.begins_with("荐")
-	var fill_alpha := 0.280 if compact_claim_mode and role == "pass" else (0.500 if compact_claim_mode and is_focus_action else (0.380 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
-	var border_alpha := 0.080 if compact_claim_mode and role == "pass" else (0.220 if compact_claim_mode and is_focus_action else (0.140 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
+	var fill_alpha := 0.240 if compact_claim_mode and role == "pass" else (0.680 if compact_claim_mode and is_focus_action else (0.420 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
+	var border_alpha := 0.060 if compact_claim_mode and role == "pass" else (0.360 if compact_claim_mode and is_focus_action else (0.160 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
 	var hover_border_alpha := 0.140 if compact_claim_mode and role == "pass" else (0.300 if compact_claim_mode and is_focus_action else (0.220 if compact_claim_mode else (0.090 if role == "pass" else (0.300 if is_focus_action else 0.180))))
 	var shadow_size := 1 if compact_claim_mode and role != "pass" else (0 if role == "pass" else (2 if is_focus_action else 1))
 	# r180: empty StyleBox hit host + GPT button face (no program StyleBox paint).
