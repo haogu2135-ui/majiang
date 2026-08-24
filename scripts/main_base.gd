@@ -430,6 +430,8 @@ var tile_asset_errors: Array = []
 var icon_textures: Dictionary = {}
 var animation_specs: Dictionary = {}
 var tile_back: Texture2D
+# Legacy helper aliases retained for smoke-test and extension compatibility.
+# The active table renderer uses Commercial3DStage textures directly.
 var felt_texture: Texture2D
 var wood_texture: Texture2D
 var illustration_textures: Dictionary = {}
@@ -809,12 +811,12 @@ const CENTER_DICE_DOT_BORDER := Color(0.76, 0.72, 0.58, 0.26)
 const ROUND_SUMMARY_PANEL_RECT := Rect2(Vector2(0.245, 0.155), Vector2(0.755, 0.675))
 const ROUND_SUMMARY_HEADER_RECT := Rect2(Vector2(0.0, 0.0), Vector2(1.0, 0.14))
 const ROUND_SUMMARY_TITLE_RECT := Rect2(Vector2(0.06, 0.025), Vector2(0.94, 0.125))
-const ROUND_SUMMARY_TEXT_RECT := Rect2(Vector2(0.06, 0.450), Vector2(0.94, 0.540))
-const ROUND_SUMMARY_RANK_HEADER_RECT := Rect2(Vector2(0.08, 0.558), Vector2(0.92, 0.590))
-const ROUND_SUMMARY_RANK_START_Y := 0.596
-const ROUND_SUMMARY_RANK_ROW_HEIGHT := 0.074
-const ROUND_SUMMARY_RANK_ROW_GAP := 0.008
-const ROUND_SUMMARY_NEXT_DEALER_RECT := Rect2(Vector2(0.08, 0.925), Vector2(0.92, 0.978))
+const ROUND_SUMMARY_TEXT_RECT := Rect2(Vector2(0.06, 0.385), Vector2(0.94, 0.520))
+const ROUND_SUMMARY_RANK_HEADER_RECT := Rect2(Vector2(0.08, 0.535), Vector2(0.92, 0.575))
+const ROUND_SUMMARY_RANK_START_Y := 0.585
+const ROUND_SUMMARY_RANK_ROW_HEIGHT := 0.065
+const ROUND_SUMMARY_RANK_ROW_GAP := 0.006
+const ROUND_SUMMARY_NEXT_DEALER_RECT := Rect2(Vector2(0.08, 0.885), Vector2(0.92, 0.955))
 const TABLE_OUTER_RECT := Rect2(Vector2(0.135, 0.115), Vector2(0.865, 0.790))
 const TABLE_OUTER_TEXTURE_RECT := Rect2(Vector2(0.008, 0.012), Vector2(0.992, 0.988))
 const TABLE_INNER_RECT := Rect2(Vector2(0.035, 0.045), Vector2(0.965, 0.955))
@@ -1179,10 +1181,11 @@ func imported_texture_artifact_ready(path: String) -> bool:
 	var import_cfg := ConfigFile.new()
 	if import_cfg.load(import_path) != OK:
 		return false
-	var imported_path := str(import_cfg.get_value("remap", "path", ""))
-	if imported_path == "":
-		return false
-	return FileAccess.file_exists(ProjectSettings.globalize_path(imported_path))
+	for remap_key in ["path", "path.etc2", "path.astc", "path.s3tc", "path.bptc"]:
+		var imported_path := str(import_cfg.get_value("remap", remap_key, ""))
+		if imported_path != "" and FileAccess.file_exists(ProjectSettings.globalize_path(imported_path)):
+			return true
+	return false
 
 func add_illustration_texture(parent: Control, name: String, rect: Rect2, alpha: float = 1.0, keep_aspect: bool = false) -> TextureRect:
 	var texture = illustration_texture(name)
@@ -3008,9 +3011,9 @@ func setup_tile_order() -> void:
 func load_assets() -> void:
 	# 优先加载关键资源
 	var ui_capture_mode := OS.get_environment("YUNZHUO_UI_CAPTURE") == "1"
-	felt_texture = load("res://assets/table/table_felt_green.jpg")
-	wood_texture = load("res://assets/table/table_dark_wood.jpg")
 	tile_back = load_illustration_texture("res://assets/tiles/tile_back.png")
+	felt_texture = tile_back
+	wood_texture = tile_back
 	illustration_textures.clear()
 	for key in ILLUSTRATION_ASSET_PATHS.keys():
 		var path = str(ILLUSTRATION_ASSET_PATHS[key])

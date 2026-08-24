@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dptqvylbjj5el"
-path="res://.godot/imported/seat_discard_gpt_preview.png-c3e43d08ce7caf158d5f5a13bcc81edf.ctex"
+path.etc2="res://.godot/imported/seat_discard_gpt_preview.png-c3e43d08ce7caf158d5f5a13bcc81edf.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/seat_discard_gpt_preview.png"
-dest_files=["res://.godot/imported/seat_discard_gpt_preview.png-c3e43d08ce7caf158d5f5a13bcc81edf.ctex"]
+dest_files=["res://.godot/imported/seat_discard_gpt_preview.png-c3e43d08ce7caf158d5f5a13bcc81edf.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

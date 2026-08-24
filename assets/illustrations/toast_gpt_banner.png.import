@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://biaoprpo82hsc"
-path="res://.godot/imported/toast_gpt_banner.png-d7d332e2266aba199fe7ce3f9c816e68.ctex"
+path.etc2="res://.godot/imported/toast_gpt_banner.png-d7d332e2266aba199fe7ce3f9c816e68.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/toast_gpt_banner.png"
-dest_files=["res://.godot/imported/toast_gpt_banner.png-d7d332e2266aba199fe7ce3f9c816e68.ctex"]
+dest_files=["res://.godot/imported/toast_gpt_banner.png-d7d332e2266aba199fe7ce3f9c816e68.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dv4g45kjr01gh"
-path="res://.godot/imported/menu_lobby_ui_overlay.png-305864987e65e67f9c42956f108c2931.ctex"
+path.etc2="res://.godot/imported/menu_lobby_ui_overlay.png-305864987e65e67f9c42956f108c2931.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/menu_lobby_ui_overlay.png"
-dest_files=["res://.godot/imported/menu_lobby_ui_overlay.png-305864987e65e67f9c42956f108c2931.ctex"]
+dest_files=["res://.godot/imported/menu_lobby_ui_overlay.png-305864987e65e67f9c42956f108c2931.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

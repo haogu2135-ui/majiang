@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bwa3id4ynpct1"
-path="res://.godot/imported/season_trophy_loop.png-d2349019380aaced6f21e9aca60798a9.ctex"
+path.etc2="res://.godot/imported/season_trophy_loop.png-d2349019380aaced6f21e9aca60798a9.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/season_trophy_loop.png"
-dest_files=["res://.godot/imported/season_trophy_loop.png-d2349019380aaced6f21e9aca60798a9.ctex"]
+dest_files=["res://.godot/imported/season_trophy_loop.png-d2349019380aaced6f21e9aca60798a9.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -9125,18 +9125,19 @@ func draw_action_intent_flow(parent: Control, count: int, color: Color) -> Contr
 
 func draw_actions(parent: Control) -> void:
 	if has_pending_claim_window():
-		var flow_bar := FlowContainer.new()
-		flow_bar.alignment = FlowContainer.ALIGNMENT_CENTER
-		flow_bar.add_theme_constant_override("h_separation", 3)
-		flow_bar.add_theme_constant_override("v_separation", 3)
-		flow_bar.custom_minimum_size = Vector2.ZERO
-		action_bar = flow_bar
+		var grid_bar := GridContainer.new()
+		grid_bar.name = "PendingClaimActionGrid"
+		grid_bar.columns = pending_claim_action_columns(action_bar_button_count())
+		grid_bar.add_theme_constant_override("h_separation", 3)
+		grid_bar.add_theme_constant_override("v_separation", 3)
+		grid_bar.custom_minimum_size = Vector2.ZERO
+		action_bar = grid_bar
 	else:
 		var row_bar := HBoxContainer.new()
 		row_bar.alignment = BoxContainer.ALIGNMENT_END
 		action_bar = row_bar
 	configure_passive_container(action_bar)
-	if not action_bar is FlowContainer:
+	if not action_bar is GridContainer:
 		action_bar.add_theme_constant_override("separation", 6)
 	apply_rect(action_bar, action_bar_layout_rect())
 	parent.add_child(action_bar)
@@ -9150,15 +9151,24 @@ func draw_actions(parent: Control) -> void:
 	if mode == "offline":
 		if offline_phase == "ended":
 			if not is_offline_match_finished():
-				action_bar.add_child(make_action_button("下一局", Color(0.32, 0.72, 0.60), func() -> void:
+				var next_hand_button = make_action_button("下一局", Color(0.32, 0.72, 0.60), func() -> void:
 					start_next_offline_hand()
-				))
-			action_bar.add_child(make_action_button("新赛", Color(0.86, 0.42, 0.32), func() -> void:
+				)
+				next_hand_button.name = "NextHandPrimaryButton"
+				next_hand_button.set_meta("action_priority", "primary")
+				action_bar.add_child(next_hand_button)
+			var new_match_button = make_action_button("新赛", Color(0.86, 0.42, 0.32), func() -> void:
 				start_offline()
-			))
-			action_bar.add_child(make_action_button("菜单", Color(0.48, 0.54, 0.56), func() -> void:
+			)
+			new_match_button.name = "NewMatchSecondaryButton"
+			new_match_button.set_meta("action_priority", "secondary")
+			action_bar.add_child(new_match_button)
+			var summary_menu_button = make_action_button("菜单", Color(0.48, 0.54, 0.56), func() -> void:
 				show_menu()
-			))
+			)
+			summary_menu_button.name = "SummaryMenuSecondaryButton"
+			summary_menu_button.set_meta("action_priority", "secondary")
+			action_bar.add_child(summary_menu_button)
 			draw_action_dock(parent)
 			finalize_action_bar_layout()
 			return
@@ -9774,12 +9784,7 @@ func draw_center(parent: Control) -> void:
 		center_compass.name = "CenterGPTCompassTexture"
 		center.move_child(center_compass, 0)
 
-	# 状态文本（响应窗口已有专属面板，避免中央与其重复）
-	if not (mode == "offline" and offline_phase == "pending_claim"):
-		var status = make_label(center, current_status_text(), 16, Color(0.92, 0.86, 0.70), true)
-		apply_rect(status, CENTER_STATUS_RECT)
-
-	# 余牌信息已在牌墙 badge 和顶部 HUD 实时刷新，中心只保留低权重状态提示。
+	# 完整阶段提示只由顶部 HUD承载；中心保留牌墙、上张、风位和骰子等桌面事实。
 	var center_wall_count = get_wall_count()
 	var center_wall_low = center_wall_count <= 24
 	var center_wall_alpha = 0.72 if center_wall_low else 0.38
@@ -14755,7 +14760,7 @@ func draw_round_summary(parent: Control) -> void:
 	var compact_summary := effective_viewport_size().y <= 560.0
 	var body = make_label(panel, round_summary_compact_body_text(), 12 if compact_summary else 14, Color(0.94, 0.96, 0.90), false)
 	body.name = "RoundSummaryBody"
-	apply_rect(body, rect_full(0.06, 0.410, 0.94, 0.558))
+	apply_rect(body, ROUND_SUMMARY_TEXT_RECT)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	body.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.92))
@@ -17251,6 +17256,8 @@ func texture_has_transparent_edge(texture: Texture2D) -> bool:
 	var image = texture.get_image()
 	if image == null or image.is_empty():
 		return false
+	if image.is_compressed() and image.decompress() != OK:
+		return false
 	var width = image.get_width()
 	var height = image.get_height()
 	if width <= 1 or height <= 1:
@@ -18211,7 +18218,10 @@ func draw_table_living_illustration(parent: Control) -> Control:
 func draw_table_log(parent: Control) -> void:
 	# r213: GPT chrome conversion
 	var compact_log := effective_viewport_size().y <= 560.0
-	var ledger_rect := rect_full(0.018, 0.565, 0.140, 0.735)
+	# The compact ledger sits below the side seat card, so it can grow rightward
+	# without touching the side river. This gives the latest event a real reading
+	# lane instead of relying on a tooltip for every long sentence.
+	var ledger_rect := rect_full(0.018, 0.565, 0.180, 0.735)
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
 	parent.add_child(ledger_panel)
@@ -18249,10 +18259,12 @@ func draw_table_log(parent: Control) -> void:
 		row_panel.add_child(row_badge)
 		var row_mark = make_label(row_badge, row_tag.substr(0, 1), 9, Color(0.98, 0.90, 0.66), true)
 		apply_rect(row_mark, rect_full(0.0, 0.0, 1.0, 1.0))
-		var row_body = make_label(row_panel, table_log_display_text(log_text), 9 if compact_log else 10, Color(0.80, 0.76, 0.60), false)
+		var row_body = make_label(row_panel, table_log_display_text(log_text), 10 if compact_log else 10, Color(0.80, 0.76, 0.60), false)
 		row_body.name = "TableLogLedgerBody_%d" % log_i
 		apply_rect(row_body, rect_full(0.205, 0.070, 0.955, 0.900))
 		row_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		row_body.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		configure_clipped_label(row_body)
 		row_body.tooltip_text = row_body.text
 	return
@@ -19970,8 +19982,9 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var win_tile = str(score_data.get("win_tile", ""))
 	var self_draw = bool(score_data.get("self_draw", false))
 
-	# 详情面板 - 增大高度以容纳徽章
-	var detail_rect = Rect2(Vector2(0.04, 0.145), Vector2(0.96, 0.430))
+	# Keep the detail strip above the settlement copy and rank table. The previous
+	# tall strip let its yaku flow extend into the body and ranking rows at 960px.
+	var detail_rect = Rect2(Vector2(0.04, 0.145), Vector2(0.96, 0.375))
 	var detail_panel = make_gpt_plate_rect(detail_rect, Color(0.006, 0.012, 0.010, 0.98), "ui_dark_scrim")
 	detail_panel.name = "WinDetailPanel"
 	parent.add_child(detail_panel)
@@ -19990,16 +20003,17 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var winner_text = "%s %s" % [players[winner]["name"], "自摸" if self_draw else "胡"]
 	if win_tile != "":
 		winner_text += " %s" % tile_label(win_tile)
-	var winner_label = make_label(detail_panel, winner_text, 18, Color(0.94, 0.88, 0.58), true)
+	var compact_detail := effective_viewport_size().y <= 560.0
+	var winner_label = make_label(detail_panel, winner_text, 16 if compact_detail else 18, Color(0.94, 0.88, 0.58), true)
 	winner_label.name = "WinDetailWinnerLabel"
-	apply_rect(winner_label, rect_full(0.04, 0.06, 0.60, 0.22))
+	apply_rect(winner_label, rect_full(0.04, 0.05, 0.60, 0.25))
 	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	# 番数和分数 - 更醒目 + 数字滚动动画
 	var score_text = "%d番  %d分" % [fan, points]
-	var score_label = make_label(detail_panel, score_text, 22, Color(0.96, 0.88, 0.52), true)
+	var score_label = make_label(detail_panel, score_text, 20 if compact_detail else 22, Color(0.96, 0.88, 0.52), true)
 	score_label.name = "WinDetailScoreLabel"
-	apply_rect(score_label, rect_full(0.62, 0.06, 0.96, 0.22))
+	apply_rect(score_label, rect_full(0.62, 0.05, 0.96, 0.25))
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and points > 0:
 		score_label.text = "0番  0分"
@@ -20032,7 +20046,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 		badge_container.add_theme_constant_override("h_separation", 3 if compact_yaku else 5)
 		badge_container.add_theme_constant_override("v_separation", 2 if compact_yaku else 3)
 		badge_container.clip_contents = true
-		apply_rect(badge_container, rect_full(0.04, 0.26, 0.70, 0.94))
+		apply_rect(badge_container, rect_full(0.04, 0.30, 0.70, 0.94))
 		detail_panel.add_child(badge_container)
 
 		for i in range(reasons.size()):
@@ -20058,7 +20072,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	# 特殊标记
 	var limit_name = str(score_data.get("limit_name", ""))
 	if limit_name != "":
-		var limit_badge = make_badge(detail_panel, rect_full(0.70, 0.70, 0.96, 0.92), limit_name, 12, Color(0.72, 0.32, 0.28, 0.92), Color(0.96, 0.66, 0.42, 0.48), Color(0.96, 0.94, 0.88))
+		var limit_badge = make_badge(detail_panel, rect_full(0.70, 0.68, 0.96, 0.94), limit_name, 11 if compact_detail else 12, Color(0.72, 0.32, 0.28, 0.92), Color(0.96, 0.66, 0.42, 0.48), Color(0.96, 0.94, 0.88))
 		limit_badge.name = "WinDetailLimitBadge"
 		limit_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var limit_art = draw_win_detail_limit_art(detail_panel, limit_name, fan, points)
@@ -24212,11 +24226,18 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control) -> 
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
 	var total_sections := maxi(1, RULES_SECTION_COUNT)
 	var current_section := clampi(int(floor(progress * float(total_sections))) + 1, 1, total_sections)
+	var anchors = rules_section_anchors(content_scroll)
+	if not anchors.is_empty():
+		current_section = 1
+		var section_view_threshold = maxf(18.0, page * 0.08)
+		for anchor in anchors:
+			if float(anchor.get("top", 0.0)) <= scrollbar.value + section_view_threshold:
+				current_section = clampi(int(anchor.get("index", 0)) + 1, 1, total_sections)
 	var status = guide.get_parent().find_child("RulesReadingStatus", true, false) as Label
 	if status != null:
 		status.text = "阅读 %d/%d" % [current_section, total_sections]
 		status.tooltip_text = "当前第%d段，共%d段规则" % [current_section, total_sections]
-	var active_step := clampi(int(round(progress * 3.0)), 0, 3)
+	var active_step := clampi(int(floor(float(current_section - 1) * 4.0 / float(total_sections))), 0, 3)
 	for i in range(4):
 		var step = guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
 		if step == null:
@@ -24234,6 +24255,49 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control) -> 
 			label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.66) if active else Color(0.68, 0.76, 0.70))
 
 
+func rules_section_anchors(content_scroll: ScrollContainer) -> Array[Dictionary]:
+	var anchors: Array[Dictionary] = []
+	if content_scroll == null:
+		return anchors
+	var content = content_scroll.find_child("RulesContentList", true, false) as Control
+	if content == null:
+		return anchors
+	for child in content.get_children():
+		var section := child as Control
+		if section == null or not section.has_meta("rules_section_index"):
+			continue
+		var section_index := int(section.get_meta("rules_section_index", -1))
+		if section_index < 0:
+			continue
+		anchors.append({"index": section_index, "top": section.position.y, "height": section.size.y})
+	return anchors
+
+
+func snap_rules_scroll_to_section(content_scroll: ScrollContainer) -> void:
+	if content_scroll == null:
+		return
+	var scrollbar = content_scroll.get_v_scroll_bar()
+	if scrollbar == null:
+		return
+	var anchors = rules_section_anchors(content_scroll)
+	if anchors.is_empty():
+		return
+	var nearest_top := float(anchors[0].get("top", 0.0))
+	var nearest_distance := absf(nearest_top - scrollbar.value)
+	for anchor in anchors:
+		var top := float(anchor.get("top", 0.0))
+		var distance := absf(top - scrollbar.value)
+		if distance < nearest_distance:
+			nearest_top = top
+			nearest_distance = distance
+	var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
+	var target := clampf(nearest_top, 0.0, scroll_range)
+	if absf(scrollbar.value - target) > 1.0:
+		scrollbar.value = target
+		content_scroll.scroll_vertical = int(round(target))
+
+
+
 func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null) -> void:
 	if scrollbar == null or thumb == null or gutter == null:
 		return
@@ -24247,16 +24311,24 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 				scrollbar.value = clampf(scrollbar.value + direction * maxf(24.0, scrollbar.page * 0.12), 0.0, wheel_scroll_range)
 				content_scroll.scroll_vertical = int(round(scrollbar.value))
 				sync_rules_scroll_thumb(content_scroll, thumb)
+				snap_rules_scroll_to_section(content_scroll)
+				sync_rules_scroll_thumb(content_scroll, thumb)
 				event_target.accept_event()
 			return
 		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
 			return
 		drag_state["active"] = mouse_button.pressed
+		if not mouse_button.pressed:
+			snap_rules_scroll_to_section(content_scroll)
+			sync_rules_scroll_thumb(content_scroll, thumb)
 		event_target.accept_event()
 		return
 	if event is InputEventScreenTouch:
 		var touch = event as InputEventScreenTouch
 		drag_state["active"] = touch.pressed
+		if not touch.pressed:
+			snap_rules_scroll_to_section(content_scroll)
+			sync_rules_scroll_thumb(content_scroll, thumb)
 		event_target.accept_event()
 		return
 	if not bool(drag_state.get("active", false)):
@@ -28007,23 +28079,27 @@ func hand_group_label(tile: String) -> String:
 
 
 func hand_tray_text() -> String:
-	if not player_ai_assist_enabled():
-		return current_status_text()
 	if has_pending_danger_discard():
-		return pending_danger_discard_text()
+		return pending_danger_discard_text() if player_ai_assist_enabled() else "高危牌已标记 · 选择出牌"
 	if has_pending_claim_window():
-		return human_claim_hint_text()
+		return human_claim_hint_text() if player_ai_assist_enabled() else "选择响应"
 	if mode == "offline" and can_self_discard():
-		var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
-		if not reports.is_empty():
-			var best: Dictionary = reports[0]
-			var safest = safest_discard_report()
-			return compact_hand_tray_summary(best, safest)
-	return current_status_text()
+		if player_ai_assist_enabled():
+			var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
+			if not reports.is_empty():
+				var best: Dictionary = reports[0]
+				var safest = safest_discard_report()
+				return compact_hand_tray_summary(best, safest)
+		return "点击手牌出牌"
+	if mode == "offline" and offline_phase == "ended":
+		return "结算完成"
+	if mode == "online_game":
+		return "等待对家" if not can_self_discard() else "点击手牌出牌"
+	return "等待对家"
 
 func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> String:
 	if best.is_empty():
-		return current_status_text()
+		return "整理手牌"
 	var parts: Array[String] = []
 	parts.append("荐%s" % tile_label(str(best.get("tile", ""))))
 	parts.append(shanten_label(int(best.get("shanten", 8))))
@@ -28230,13 +28306,14 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	var content_width = max(1.0, safe_content_pixel_size().x)
 	var bar_rect = action_bar_layout_rect()
 	var dock_rect = action_bar_dock_layout_rect()
+	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	if mode == "offline" and has_pending_danger_discard():
 		return dock_rect
 	if has_pending_claim_window():
 		return pending_claim_action_dock_rect_for_count(count)
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_count(count, separation)
-	var dock_pixels = float(count) * width + float(max(0, count - 1) * separation) + 24.0
+	var dock_pixels = ended_action_bar_required_width(count) + 24.0 if ended_action_mode else float(count) * width + float(max(0, count - 1) * separation) + 24.0
 	var left = max(dock_rect.position.x, bar_rect.size.x - dock_pixels / content_width)
 	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
 
@@ -28256,12 +28333,22 @@ func pending_claim_action_dock_base_rect() -> Rect2:
 func pending_claim_action_row_count(count: int) -> int:
 	if count <= 0:
 		return 1
+	var columns = pending_claim_action_columns(count)
+	return maxi(1, int(ceil(float(count) / float(columns))))
+
+func pending_claim_action_columns(count: int) -> int:
+	if count <= 0:
+		return 1
+	# Compact response windows keep a stable five-button first row. Wide layouts
+	# fit the complete response set on one row when the dock can accommodate it.
+	if effective_viewport_size().y <= 560.0:
+		return mini(5, count)
 	var bar_rect = pending_claim_action_base_rect()
 	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
 	var separation = action_button_separation_for_count(count)
-	var button_width = action_button_width_for_available(count, available_width, separation)
-	var row_capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, button_width + float(separation)))))
-	return maxi(1, int(ceil(float(count) / float(row_capacity))))
+	var width = action_button_width_for_available(count, available_width, separation)
+	var capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, width + float(separation)))))
+	return mini(count, maxi(1, capacity))
 
 func pending_claim_action_content_height(count: int) -> float:
 	var rows = pending_claim_action_row_count(count)
@@ -28338,7 +28425,8 @@ func finalize_action_bar_layout() -> void:
 	if count <= 0:
 		return
 	var separation = action_button_separation_for_count(count)
-	if action_bar is FlowContainer:
+	if action_bar is GridContainer:
+		(action_bar as GridContainer).columns = pending_claim_action_columns(count)
 		action_bar.add_theme_constant_override("h_separation", separation)
 		action_bar.add_theme_constant_override("v_separation", separation)
 		action_bar.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
@@ -28349,12 +28437,19 @@ func finalize_action_bar_layout() -> void:
 	var font_size = action_button_font_size(width)
 	var compact_claim_mode := has_pending_claim_window()
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
+	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
+	var ended_widths := ended_action_button_widths(count) if ended_action_mode else []
 	var btn_index := 0
 	for child in action_bar.get_children():
 		if child is Button:
-			configure_action_button_size(child as Button, width, height, font_size)
+			var button_width: float = float(width)
+			var button_font_size: int = int(font_size)
+			if ended_action_mode and btn_index < ended_widths.size():
+				button_width = float(ended_widths[btn_index])
+				button_font_size = 18 if str((child as Button).get_meta("action_priority", "secondary")) == "primary" else 15
+			configure_action_button_size(child as Button, button_width, height, button_font_size)
 			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				child.pivot_offset = Vector2(width * 0.5, height * 0.5)
+				child.pivot_offset = Vector2(button_width * 0.5, height * 0.5)
 				child.scale = Vector2(0.7, 0.7)
 				child.modulate = Color(1, 1, 1, 0)
 				var btw := create_screen_tween()
@@ -28362,6 +28457,33 @@ func finalize_action_bar_layout() -> void:
 				btw.tween_property(child, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 				btw.tween_property(child, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
 			btn_index += 1
+
+func ended_action_button_widths(count: int) -> Array[float]:
+	var widths: Array[float] = []
+	if count <= 0:
+		return widths
+	var available = action_bar_pixel_width()
+	var separation = float(action_button_separation_for_count(count))
+	var primary = clampf(available * 0.38, 116.0, 176.0)
+	var secondary_count = maxi(0, count - 1)
+	var secondary = 0.0
+	if secondary_count > 0:
+		secondary = clampf((available - primary - separation * float(secondary_count)) / float(secondary_count), 88.0, 132.0)
+		var used = primary + secondary * float(secondary_count) + separation * float(secondary_count)
+		if used > available:
+			primary = maxf(108.0, primary - (used - available))
+	for i in range(count):
+		widths.append(primary if i == 0 else secondary)
+	return widths
+
+func ended_action_bar_required_width(count: int) -> float:
+	var widths = ended_action_button_widths(count)
+	if widths.is_empty():
+		return 0.0
+	var total = 0.0
+	for width in widths:
+		total += width
+	return total + float(maxi(0, widths.size() - 1) * action_button_separation_for_count(count))
 
 func action_bar_button_count() -> int:
 	if action_bar == null:
@@ -32407,6 +32529,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	# multiply its tint and alpha into the text, weakening the reading contrast.
 	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
+	section.set_meta("rules_section_index", section_index)
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.085), "ui_button_face_plate")

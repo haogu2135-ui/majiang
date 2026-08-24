@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b3g35xp4r1a2s"
-path="res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495203464e8eeee.ctex"
+path.etc2="res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495203464e8eeee.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/menu_lobby_gpt_scene.png"
-dest_files=["res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495203464e8eeee.ctex"]
+dest_files=["res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495203464e8eeee.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

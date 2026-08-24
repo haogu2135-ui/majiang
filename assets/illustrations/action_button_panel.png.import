@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b0yqvk8r0bnve"
-path="res://.godot/imported/action_button_panel.png-059fe58d45c0ee0be2708d1eabe9018b.ctex"
+path.etc2="res://.godot/imported/action_button_panel.png-059fe58d45c0ee0be2708d1eabe9018b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/action_button_panel.png"
-dest_files=["res://.godot/imported/action_button_panel.png-059fe58d45c0ee0be2708d1eabe9018b.ctex"]
+dest_files=["res://.godot/imported/action_button_panel.png-059fe58d45c0ee0be2708d1eabe9018b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

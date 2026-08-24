@@ -1119,11 +1119,18 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control) -> 
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
 	var total_sections := maxi(1, RULES_SECTION_COUNT)
 	var current_section := clampi(int(floor(progress * float(total_sections))) + 1, 1, total_sections)
+	var anchors = rules_section_anchors(content_scroll)
+	if not anchors.is_empty():
+		current_section = 1
+		var section_view_threshold = maxf(18.0, page * 0.08)
+		for anchor in anchors:
+			if float(anchor.get("top", 0.0)) <= scrollbar.value + section_view_threshold:
+				current_section = clampi(int(anchor.get("index", 0)) + 1, 1, total_sections)
 	var status = guide.get_parent().find_child("RulesReadingStatus", true, false) as Label
 	if status != null:
 		status.text = "阅读 %d/%d" % [current_section, total_sections]
 		status.tooltip_text = "当前第%d段，共%d段规则" % [current_section, total_sections]
-	var active_step := clampi(int(round(progress * 3.0)), 0, 3)
+	var active_step := clampi(int(floor(float(current_section - 1) * 4.0 / float(total_sections))), 0, 3)
 	for i in range(4):
 		var step = guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
 		if step == null:
@@ -1141,6 +1148,49 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control) -> 
 			label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.66) if active else Color(0.68, 0.76, 0.70))
 
 
+func rules_section_anchors(content_scroll: ScrollContainer) -> Array[Dictionary]:
+	var anchors: Array[Dictionary] = []
+	if content_scroll == null:
+		return anchors
+	var content = content_scroll.find_child("RulesContentList", true, false) as Control
+	if content == null:
+		return anchors
+	for child in content.get_children():
+		var section := child as Control
+		if section == null or not section.has_meta("rules_section_index"):
+			continue
+		var section_index := int(section.get_meta("rules_section_index", -1))
+		if section_index < 0:
+			continue
+		anchors.append({"index": section_index, "top": section.position.y, "height": section.size.y})
+	return anchors
+
+
+func snap_rules_scroll_to_section(content_scroll: ScrollContainer) -> void:
+	if content_scroll == null:
+		return
+	var scrollbar = content_scroll.get_v_scroll_bar()
+	if scrollbar == null:
+		return
+	var anchors = rules_section_anchors(content_scroll)
+	if anchors.is_empty():
+		return
+	var nearest_top := float(anchors[0].get("top", 0.0))
+	var nearest_distance := absf(nearest_top - scrollbar.value)
+	for anchor in anchors:
+		var top := float(anchor.get("top", 0.0))
+		var distance := absf(top - scrollbar.value)
+		if distance < nearest_distance:
+			nearest_top = top
+			nearest_distance = distance
+	var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
+	var target := clampf(nearest_top, 0.0, scroll_range)
+	if absf(scrollbar.value - target) > 1.0:
+		scrollbar.value = target
+		content_scroll.scroll_vertical = int(round(target))
+
+
+
 func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null) -> void:
 	if scrollbar == null or thumb == null or gutter == null:
 		return
@@ -1154,16 +1204,24 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 				scrollbar.value = clampf(scrollbar.value + direction * maxf(24.0, scrollbar.page * 0.12), 0.0, wheel_scroll_range)
 				content_scroll.scroll_vertical = int(round(scrollbar.value))
 				sync_rules_scroll_thumb(content_scroll, thumb)
+				snap_rules_scroll_to_section(content_scroll)
+				sync_rules_scroll_thumb(content_scroll, thumb)
 				event_target.accept_event()
 			return
 		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
 			return
 		drag_state["active"] = mouse_button.pressed
+		if not mouse_button.pressed:
+			snap_rules_scroll_to_section(content_scroll)
+			sync_rules_scroll_thumb(content_scroll, thumb)
 		event_target.accept_event()
 		return
 	if event is InputEventScreenTouch:
 		var touch = event as InputEventScreenTouch
 		drag_state["active"] = touch.pressed
+		if not touch.pressed:
+			snap_rules_scroll_to_section(content_scroll)
+			sync_rules_scroll_thumb(content_scroll, thumb)
 		event_target.accept_event()
 		return
 	if not bool(drag_state.get("active", false)):

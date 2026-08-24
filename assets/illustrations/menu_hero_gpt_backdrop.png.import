@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://btu5tt6r8tpde"
-path="res://.godot/imported/menu_hero_gpt_backdrop.png-542b78f1120fc09c42ad013ad311776a.ctex"
+path.etc2="res://.godot/imported/menu_hero_gpt_backdrop.png-542b78f1120fc09c42ad013ad311776a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/menu_hero_gpt_backdrop.png"
-dest_files=["res://.godot/imported/menu_hero_gpt_backdrop.png-542b78f1120fc09c42ad013ad311776a.ctex"]
+dest_files=["res://.godot/imported/menu_hero_gpt_backdrop.png-542b78f1120fc09c42ad013ad311776a.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

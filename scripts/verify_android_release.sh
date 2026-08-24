@@ -55,7 +55,7 @@ RETIRED_ILLUSTRATIONS=(
 	"exit_gpt_confirm_warm_v392.png"
 	"top_hud_gpt_banner_warm_v392.png"
 )
-QA_RESOURCE_PATTERN='(^|/)(build/qa(/|$)|qa(/|$)|garden-gpt-image-2(/|$)|tools/|assets/references/|assets/illustrations/_replaced_[^/]+/|scripts/(ai_play_[^/]*_check|round[0-9]+_check|[^/]*_smoke_test|[^/]*_capture|test_animations|verify_[^/]+)(\.|/|$)|test_[^/]+\.(gd|gdc|gde|tscn)(\.uid)?$|extension_api\.json$)'
+QA_RESOURCE_PATTERN='(^|/)(build/qa(/|$)|qa(/|$)|garden-gpt-image-2(/|$)|tools/|assets/references/|assets/illustrations/_replaced_[^/]+/|scripts/(_tmp_[^/]+|ai_play_[^/]*_check|round[0-9]+_check|[^/]*_smoke_test|[^/]*_capture|test_animations|verify_[^/]+)(\.|/|$)|test_[^/]+\.(gd|gdc|gde|tscn)(\.uid)?$|extension_api\.json$)'
 
 fail() {
 	echo "FAIL: $*" >&2
@@ -89,6 +89,7 @@ qa_filter_self_test() {
 		"assets/scripts/verify_android_device.sh"
 		"assets/scripts/verify_online_production.sh"
 		"assets/scripts/ai_play_round95_check.gd.uid"
+		"assets/scripts/_tmp_find_multiwait.gd.remap"
 		"assets/scripts/ui_interaction_smoke_test.gdc"
 		"assets/scripts/ui_preview_capture.gdc"
 		"assets/scripts/verify_ai_soak.sh"
@@ -113,11 +114,15 @@ qa_filter_self_test() {
 	for required_filter in \
 		'assets/illustrations/_replaced_*/**' \
 		'assets/tiles_3d/**' \
+		'assets/tiles/tile_back_3d.png' \
+		'scripts/_tmp_*.gd*' \
 		'assets/audio/bgm_loop.wav' \
 		'assets/tiles_subtle_3d/**' \
 		'assets/tile_decals_3d/**' \
 		'assets/table/table_felt_3d_gpt.png' \
 		'assets/table/table_felt_warm_bright_r428.png' \
+		'assets/table/table_felt_green.jpg' \
+		'assets/table/table_dark_wood.jpg' \
 		'scripts/*_smoke_test.gd*' \
 		'scripts/*_capture.gd*' \
 		'scripts/verify_*.sh' \
@@ -230,25 +235,68 @@ grep -qx 'assets/scripts/main.gdc' <<<"$ENTRIES" || fail "compiled main runtime 
 grep -qx 'assets/scripts/ui/commercial_3d_stage.gdc' <<<"$ENTRIES" || fail "commercial 3D stage missing"
 grep -qx 'assets/scripts/ui/battle_table_depth.gdc' <<<"$ENTRIES" || fail "battle table depth renderer missing"
 grep -qx 'assets/shaders/table_cinematic_lighting.gdshader' <<<"$ENTRIES" || fail "cinematic table shader missing"
-grep -q 'tile_decals_3d' <<<"$ENTRIES" || fail "3D tile decals missing"
+grep -q 'assets/.godot/imported/tile_man1.png-' <<<"$ENTRIES" || fail "2D tile faces missing"
 
-python3 - "$APK" <<'PY'
+for excluded_entry in \
+	'assets/assets/audio/bgm_loop.wav' \
+	'assets/assets/tiles_3d/' \
+	'assets/assets/tiles_subtle_3d/' \
+	'assets/assets/tile_decals_3d/' \
+	'assets/assets/tiles/tile_back_3d.png' \
+	'assets/assets/table/table_felt_3d_gpt.png' \
+	'assets/assets/table/table_felt_warm_bright_r428.png' \
+	'assets/assets/table/table_felt_green.jpg' \
+	'assets/assets/table/table_dark_wood.jpg' \
+	'assets/.godot/imported/bgm_loop.wav-' \
+	'assets/.godot/imported/table_felt_3d_gpt.png-' \
+	'assets/.godot/imported/table_felt_warm_bright_r428.png-' \
+	'assets/.godot/imported/table_felt_green.jpg-' \
+	'assets/.godot/imported/table_dark_wood.jpg-'; do
+	if grep -Fq "$excluded_entry" <<<"$ENTRIES"; then
+		fail "excluded resource is packaged: $excluded_entry"
+	fi
+done
+
+python3 - "$APK" "$AAPT2" <<'PY'
 import io
+import re
+import subprocess
 import sys
 import zipfile
 
 from PIL import Image
 
 expected = {
-    "res/mipmap-xxxhdpi-v4/icon.webp": ((192, 192), "RGBA"),
-    "res/mipmap-xxxhdpi-v4/icon_foreground.webp": ((432, 432), "RGBA"),
-    "res/mipmap-xxxhdpi-v4/icon_background.webp": ((432, 432), "RGB"),
+    "icon": ((192, 192), "RGBA"),
+    "icon_foreground": ((432, 432), "RGBA"),
+    "icon_background": ((432, 432), "RGB"),
 }
+resource_dump = subprocess.check_output(
+    [sys.argv[2], "dump", "resources", "-v", sys.argv[1]], text=True
+)
+resource_paths = {}
+current = None
+for line in resource_dump.splitlines():
+    resource_match = re.match(r"\s*resource\s+\S+\s+mipmap/(icon(?:_foreground|_background)?)\s*$", line)
+    if resource_match:
+        current = resource_match.group(1)
+        continue
+    if line.lstrip().startswith("resource "):
+        current = None
+        continue
+    if current is not None and current not in resource_paths:
+        file_match = re.search(r"\(file\)\s+(res/\S+)", line)
+        if file_match:
+            resource_paths[current] = file_match.group(1)
+
 with zipfile.ZipFile(sys.argv[1]) as apk:
-    for path, (size, mode) in expected.items():
+    for resource_name, (size, mode) in expected.items():
+        path = resource_paths.get(resource_name)
+        if path is None:
+            raise SystemExit(f"launcher resource missing: mipmap/{resource_name}")
         image = Image.open(io.BytesIO(apk.read(path)))
         if image.size != size or image.mode != mode:
-            raise SystemExit(f"invalid launcher icon {path}: {image.size} {image.mode}")
+            raise SystemExit(f"invalid launcher icon {resource_name} ({path}): {image.size} {image.mode}")
 PY
 
 SIZE="$(stat -c '%s' "$APK")"

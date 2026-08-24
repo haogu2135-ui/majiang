@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://civkqj0q5v6i2"
-path="res://.godot/imported/menu_primary_3d_stage_overlay.png-a5820737ee54db145f9681bfe870b94e.ctex"
+path.etc2="res://.godot/imported/menu_primary_3d_stage_overlay.png-a5820737ee54db145f9681bfe870b94e.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/menu_primary_3d_stage_overlay.png"
-dest_files=["res://.godot/imported/menu_primary_3d_stage_overlay.png-a5820737ee54db145f9681bfe870b94e.ctex"]
+dest_files=["res://.godot/imported/menu_primary_3d_stage_overlay.png-a5820737ee54db145f9681bfe870b94e.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

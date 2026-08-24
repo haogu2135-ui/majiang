@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://de8hn1wtqx86t"
-path="res://.godot/imported/shop_currency_meter_panel.png-edec79d99cc28318c04600bcf68a5342.ctex"
+path.etc2="res://.godot/imported/shop_currency_meter_panel.png-edec79d99cc28318c04600bcf68a5342.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/shop_currency_meter_panel.png"
-dest_files=["res://.godot/imported/shop_currency_meter_panel.png-edec79d99cc28318c04600bcf68a5342.ctex"]
+dest_files=["res://.godot/imported/shop_currency_meter_panel.png-edec79d99cc28318c04600bcf68a5342.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

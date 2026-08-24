@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://hkkkwks2qxuv"
-path="res://.godot/imported/win_result_stage.png-73ba6d46819daa4069482dee0b385674.ctex"
+path.etc2="res://.godot/imported/win_result_stage.png-73ba6d46819daa4069482dee0b385674.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/win_result_stage.png"
-dest_files=["res://.godot/imported/win_result_stage.png-73ba6d46819daa4069482dee0b385674.ctex"]
+dest_files=["res://.godot/imported/win_result_stage.png-73ba6d46819daa4069482dee0b385674.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://leh1vlq25bup"
-path="res://.godot/imported/stats_winrate_scroll.png-7ad1b31ecd1cd4a56dcf931d8321a398.ctex"
+path.etc2="res://.godot/imported/stats_winrate_scroll.png-7ad1b31ecd1cd4a56dcf931d8321a398.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/stats_winrate_scroll.png"
-dest_files=["res://.godot/imported/stats_winrate_scroll.png-7ad1b31ecd1cd4a56dcf931d8321a398.ctex"]
+dest_files=["res://.godot/imported/stats_winrate_scroll.png-7ad1b31ecd1cd4a56dcf931d8321a398.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

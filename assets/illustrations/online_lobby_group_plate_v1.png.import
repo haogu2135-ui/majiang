@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ber2ukujxk11o"
-path="res://.godot/imported/online_lobby_group_plate_v1.png-8a2b3dc3020a4fe02c75a635e38aaf63.ctex"
+path.etc2="res://.godot/imported/online_lobby_group_plate_v1.png-8a2b3dc3020a4fe02c75a635e38aaf63.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/online_lobby_group_plate_v1.png"
-dest_files=["res://.godot/imported/online_lobby_group_plate_v1.png-8a2b3dc3020a4fe02c75a635e38aaf63.ctex"]
+dest_files=["res://.godot/imported/online_lobby_group_plate_v1.png-8a2b3dc3020a4fe02c75a635e38aaf63.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

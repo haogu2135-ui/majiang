@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dh1pva3i8w0rw"
-path="res://.godot/imported/shop_gpt_vault.png-51750af76bda1d2a15579ce74ae58522.ctex"
+path.etc2="res://.godot/imported/shop_gpt_vault.png-51750af76bda1d2a15579ce74ae58522.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/shop_gpt_vault.png"
-dest_files=["res://.godot/imported/shop_gpt_vault.png-51750af76bda1d2a15579ce74ae58522.ctex"]
+dest_files=["res://.godot/imported/shop_gpt_vault.png-51750af76bda1d2a15579ce74ae58522.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

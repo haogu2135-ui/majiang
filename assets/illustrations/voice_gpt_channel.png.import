@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b73cn5gvlolac"
-path="res://.godot/imported/voice_gpt_channel.png-c7bc3c41d640164fda63693e57d115fb.ctex"
+path.etc2="res://.godot/imported/voice_gpt_channel.png-c7bc3c41d640164fda63693e57d115fb.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/voice_gpt_channel.png"
-dest_files=["res://.godot/imported/voice_gpt_channel.png-c7bc3c41d640164fda63693e57d115fb.ctex"]
+dest_files=["res://.godot/imported/voice_gpt_channel.png-c7bc3c41d640164fda63693e57d115fb.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

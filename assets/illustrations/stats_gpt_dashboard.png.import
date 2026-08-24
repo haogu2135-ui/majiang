@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d14bbqm7wqfd8"
-path="res://.godot/imported/stats_gpt_dashboard.png-fe7e87c57167d4ff39946ae5a4373bb1.ctex"
+path.etc2="res://.godot/imported/stats_gpt_dashboard.png-fe7e87c57167d4ff39946ae5a4373bb1.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/stats_gpt_dashboard.png"
-dest_files=["res://.godot/imported/stats_gpt_dashboard.png-fe7e87c57167d4ff39946ae5a4373bb1.ctex"]
+dest_files=["res://.godot/imported/stats_gpt_dashboard.png-fe7e87c57167d4ff39946ae5a4373bb1.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

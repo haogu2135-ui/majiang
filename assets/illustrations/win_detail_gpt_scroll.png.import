@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c5fn0uexq0qwc"
-path="res://.godot/imported/win_detail_gpt_scroll.png-171d257955f6753b0d5f59b478e025a4.ctex"
+path.etc2="res://.godot/imported/win_detail_gpt_scroll.png-171d257955f6753b0d5f59b478e025a4.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/win_detail_gpt_scroll.png"
-dest_files=["res://.godot/imported/win_detail_gpt_scroll.png-171d257955f6753b0d5f59b478e025a4.ctex"]
+dest_files=["res://.godot/imported/win_detail_gpt_scroll.png-171d257955f6753b0d5f59b478e025a4.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -1749,23 +1749,27 @@ func hand_group_label(tile: String) -> String:
 
 
 func hand_tray_text() -> String:
-	if not player_ai_assist_enabled():
-		return current_status_text()
 	if has_pending_danger_discard():
-		return pending_danger_discard_text()
+		return pending_danger_discard_text() if player_ai_assist_enabled() else "高危牌已标记 · 选择出牌"
 	if has_pending_claim_window():
-		return human_claim_hint_text()
+		return human_claim_hint_text() if player_ai_assist_enabled() else "选择响应"
 	if mode == "offline" and can_self_discard():
-		var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
-		if not reports.is_empty():
-			var best: Dictionary = reports[0]
-			var safest = safest_discard_report()
-			return compact_hand_tray_summary(best, safest)
-	return current_status_text()
+		if player_ai_assist_enabled():
+			var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
+			if not reports.is_empty():
+				var best: Dictionary = reports[0]
+				var safest = safest_discard_report()
+				return compact_hand_tray_summary(best, safest)
+		return "点击手牌出牌"
+	if mode == "offline" and offline_phase == "ended":
+		return "结算完成"
+	if mode == "online_game":
+		return "等待对家" if not can_self_discard() else "点击手牌出牌"
+	return "等待对家"
 
 func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> String:
 	if best.is_empty():
-		return current_status_text()
+		return "整理手牌"
 	var parts: Array[String] = []
 	parts.append("荐%s" % tile_label(str(best.get("tile", ""))))
 	parts.append(shanten_label(int(best.get("shanten", 8))))
@@ -1972,13 +1976,14 @@ func action_dock_rect_for_count(count: int) -> Rect2:
 	var content_width = max(1.0, safe_content_pixel_size().x)
 	var bar_rect = action_bar_layout_rect()
 	var dock_rect = action_bar_dock_layout_rect()
+	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	if mode == "offline" and has_pending_danger_discard():
 		return dock_rect
 	if has_pending_claim_window():
 		return pending_claim_action_dock_rect_for_count(count)
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_count(count, separation)
-	var dock_pixels = float(count) * width + float(max(0, count - 1) * separation) + 24.0
+	var dock_pixels = ended_action_bar_required_width(count) + 24.0 if ended_action_mode else float(count) * width + float(max(0, count - 1) * separation) + 24.0
 	var left = max(dock_rect.position.x, bar_rect.size.x - dock_pixels / content_width)
 	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
 
@@ -1998,12 +2003,22 @@ func pending_claim_action_dock_base_rect() -> Rect2:
 func pending_claim_action_row_count(count: int) -> int:
 	if count <= 0:
 		return 1
+	var columns = pending_claim_action_columns(count)
+	return maxi(1, int(ceil(float(count) / float(columns))))
+
+func pending_claim_action_columns(count: int) -> int:
+	if count <= 0:
+		return 1
+	# Compact response windows keep a stable five-button first row. Wide layouts
+	# fit the complete response set on one row when the dock can accommodate it.
+	if effective_viewport_size().y <= 560.0:
+		return mini(5, count)
 	var bar_rect = pending_claim_action_base_rect()
 	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
 	var separation = action_button_separation_for_count(count)
-	var button_width = action_button_width_for_available(count, available_width, separation)
-	var row_capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, button_width + float(separation)))))
-	return maxi(1, int(ceil(float(count) / float(row_capacity))))
+	var width = action_button_width_for_available(count, available_width, separation)
+	var capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, width + float(separation)))))
+	return mini(count, maxi(1, capacity))
 
 func pending_claim_action_content_height(count: int) -> float:
 	var rows = pending_claim_action_row_count(count)
@@ -2080,7 +2095,8 @@ func finalize_action_bar_layout() -> void:
 	if count <= 0:
 		return
 	var separation = action_button_separation_for_count(count)
-	if action_bar is FlowContainer:
+	if action_bar is GridContainer:
+		(action_bar as GridContainer).columns = pending_claim_action_columns(count)
 		action_bar.add_theme_constant_override("h_separation", separation)
 		action_bar.add_theme_constant_override("v_separation", separation)
 		action_bar.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
@@ -2091,12 +2107,19 @@ func finalize_action_bar_layout() -> void:
 	var font_size = action_button_font_size(width)
 	var compact_claim_mode := has_pending_claim_window()
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
+	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
+	var ended_widths := ended_action_button_widths(count) if ended_action_mode else []
 	var btn_index := 0
 	for child in action_bar.get_children():
 		if child is Button:
-			configure_action_button_size(child as Button, width, height, font_size)
+			var button_width: float = float(width)
+			var button_font_size: int = int(font_size)
+			if ended_action_mode and btn_index < ended_widths.size():
+				button_width = float(ended_widths[btn_index])
+				button_font_size = 18 if str((child as Button).get_meta("action_priority", "secondary")) == "primary" else 15
+			configure_action_button_size(child as Button, button_width, height, button_font_size)
 			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				child.pivot_offset = Vector2(width * 0.5, height * 0.5)
+				child.pivot_offset = Vector2(button_width * 0.5, height * 0.5)
 				child.scale = Vector2(0.7, 0.7)
 				child.modulate = Color(1, 1, 1, 0)
 				var btw := create_screen_tween()
@@ -2104,6 +2127,33 @@ func finalize_action_bar_layout() -> void:
 				btw.tween_property(child, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 				btw.tween_property(child, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
 			btn_index += 1
+
+func ended_action_button_widths(count: int) -> Array[float]:
+	var widths: Array[float] = []
+	if count <= 0:
+		return widths
+	var available = action_bar_pixel_width()
+	var separation = float(action_button_separation_for_count(count))
+	var primary = clampf(available * 0.38, 116.0, 176.0)
+	var secondary_count = maxi(0, count - 1)
+	var secondary = 0.0
+	if secondary_count > 0:
+		secondary = clampf((available - primary - separation * float(secondary_count)) / float(secondary_count), 88.0, 132.0)
+		var used = primary + secondary * float(secondary_count) + separation * float(secondary_count)
+		if used > available:
+			primary = maxf(108.0, primary - (used - available))
+	for i in range(count):
+		widths.append(primary if i == 0 else secondary)
+	return widths
+
+func ended_action_bar_required_width(count: int) -> float:
+	var widths = ended_action_button_widths(count)
+	if widths.is_empty():
+		return 0.0
+	var total = 0.0
+	for width in widths:
+		total += width
+	return total + float(maxi(0, widths.size() - 1) * action_button_separation_for_count(count))
 
 func action_bar_button_count() -> int:
 	if action_bar == null:
@@ -6149,6 +6199,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	# multiply its tint and alpha into the text, weakening the reading contrast.
 	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
+	section.set_meta("rules_section_index", section_index)
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.085), "ui_button_face_plate")

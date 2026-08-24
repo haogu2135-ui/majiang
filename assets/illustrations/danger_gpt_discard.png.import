@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cd4wqv371joud"
-path="res://.godot/imported/danger_gpt_discard.png-a5ecc418ceca4e897c55a505181a2cf9.ctex"
+path.etc2="res://.godot/imported/danger_gpt_discard.png-a5ecc418ceca4e897c55a505181a2cf9.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/danger_gpt_discard.png"
-dest_files=["res://.godot/imported/danger_gpt_discard.png-a5ecc418ceca4e897c55a505181a2cf9.ctex"]
+dest_files=["res://.godot/imported/danger_gpt_discard.png-a5ecc418ceca4e897c55a505181a2cf9.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

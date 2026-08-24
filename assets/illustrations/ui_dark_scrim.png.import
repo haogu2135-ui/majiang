@@ -3,19 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c0cpi4i4oybqr"
-path="res://.godot/imported/ui_dark_scrim.png-adeda846e7409ff307139e3ef16ead4a.ctex"
+path.etc2="res://.godot/imported/ui_dark_scrim.png-adeda846e7409ff307139e3ef16ead4a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/illustrations/ui_dark_scrim.png"
-dest_files=["res://.godot/imported/ui_dark_scrim.png-adeda846e7409ff307139e3ef16ead4a.ctex"]
+dest_files=["res://.godot/imported/ui_dark_scrim.png-adeda846e7409ff307139e3ef16ead4a.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
