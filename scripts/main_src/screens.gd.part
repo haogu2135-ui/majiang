@@ -1004,10 +1004,12 @@ func _show_rules_screen_impl() -> void:
 			sync_rules_guide_state(content_scroll, rules_guide)
 		)
 	content_scroll.resized.connect(func() -> void:
+		normalize_rules_section_heights(content_scroll)
 		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
 		sync_rules_guide_state(content_scroll, rules_guide)
 	)
 	content.resized.connect(func() -> void:
+		normalize_rules_section_heights(content_scroll)
 		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
 		sync_rules_guide_state(content_scroll, rules_guide)
 	)
@@ -1072,6 +1074,7 @@ func _show_rules_screen_impl() -> void:
 	], 5)
 	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
 	call_deferred("sync_rules_guide_state", content_scroll, rules_guide)
+	call_deferred("normalize_rules_section_heights", content_scroll)
 
 	# 规则段落逐一滑入
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -1106,6 +1109,24 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var thumb_left = float(thumb.get_meta("track_left", 0.220))
 	var thumb_right = float(thumb.get_meta("track_right", 0.780))
 	apply_rect(thumb, rect_full(thumb_left, thumb_top, thumb_right, thumb_top + thumb_height))
+
+
+func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
+	if content_scroll == null:
+		return
+	var content = content_scroll.find_child("RulesContentList", true, false) as Control
+	if content == null:
+		return
+	var viewport_height := content_scroll.size.y
+	if viewport_height <= 1.0:
+		viewport_height = effective_viewport_size().y * 0.814
+	var section_min_height := maxf(136.0, viewport_height + 12.0)
+	for child in content.get_children():
+		var section := child as Control
+		if section == null or not section.has_meta("rules_section_index"):
+			continue
+		if section.custom_minimum_size.y < section_min_height:
+			section.custom_minimum_size.y = section_min_height
 
 
 func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control) -> void:

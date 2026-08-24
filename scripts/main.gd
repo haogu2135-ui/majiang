@@ -8905,7 +8905,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		compact_bottom_edge.name = "ActionButtonCompactBottomEdge"
 		button.add_child(compact_bottom_edge)
 	apply_rect(art, rect_full(0.036, 0.230, 0.176, 0.770) if compact_claim_mode else rect_full(0.030, 0.120, 0.245, 0.880))
-	var is_focus_action = ["win", "gang", "safe", "advice"].has(role) or text.begins_with("荐")
+	var is_focus_action = ["win", "gang", "safe", "advice", "next"].has(role) or text.begins_with("荐")
 	var seal_alpha = 0.016 if compact_claim_mode and role == "pass" else (0.032 if compact_claim_mode and is_focus_action else (0.024 if compact_claim_mode else (0.070 if role == "pass" else (0.155 if is_focus_action else 0.105))))
 	var seal_border_alpha = 0.020 if compact_claim_mode and role == "pass" else (0.038 if compact_claim_mode and is_focus_action else (0.026 if compact_claim_mode else (0.080 if role == "pass" else (0.135 if is_focus_action else 0.090))))
 	var simple_seal = make_gpt_gate(rect_full(0.060, 0.165, 0.640, 0.835), Color(color.r, color.g, color.b, seal_alpha))
@@ -9156,6 +9156,7 @@ func draw_actions(parent: Control) -> void:
 				)
 				next_hand_button.name = "NextHandPrimaryButton"
 				next_hand_button.set_meta("action_priority", "primary")
+				next_hand_button.tooltip_text = "继续当前牌局，进入下一局"
 				action_bar.add_child(next_hand_button)
 			var new_match_button = make_action_button("新赛", Color(0.86, 0.42, 0.32), func() -> void:
 				start_offline()
@@ -9473,8 +9474,8 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 			draw_advisor_info_card(panel, advisor_card_rect_c, "守", "观测", opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 			return
 		var best: Dictionary = reports[0]
-		draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "打%s" % tile_label(str(best.get("tile", ""))), "%s · 进%d" % [shanten_label(int(best.get("shanten", 8))), int(best.get("ukeire", 0))], Color(0.86, 0.78, 0.56))
-		draw_advisor_info_card(panel, advisor_card_rect_b, "势", shanten_label(int(best.get("shanten", 8))), "进%d" % int(best.get("ukeire", 0)), Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "打%s · %s" % [tile_label(str(best.get("tile", ""))), advisor_confidence_text(reports)], advisor_recommendation_reason_text(best), Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, advisor_card_rect_b, "势", advisor_progress_text(best), advisor_value_short_text(best), Color(0.62, 0.78, 0.82))
 		draw_advisor_info_card(panel, advisor_card_rect_c, "守", discard_safety_short_text(best), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 		return
 	draw_advisor_info_card(panel, advisor_card_rect_a, "局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
@@ -15948,7 +15949,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			side_dealer.name = "SeatCompactDealer_%d" % seat
 			side_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var side_score_left := 0.285 if compact_side else (0.715 if seat == dealer_seat else 0.640)
-		var side_score = make_label(panel, seat_score_text(p), 10 if compact_side else 9, Color(1.0, 0.94, 0.72), true)
+		var side_score = make_label(panel, seat_score_text(p), 11 if compact_side else 9, Color(1.0, 0.94, 0.72), true)
 		side_score.name = "SeatCompactScore_%d" % seat
 		apply_rect(side_score, rect_full(side_score_left, 0.295 if compact_side else 0.090, 0.940, 0.435 if compact_side else 0.300))
 		side_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -18221,7 +18222,9 @@ func draw_table_log(parent: Control) -> void:
 	# The compact ledger sits below the side seat card, so it can grow rightward
 	# without touching the side river. This gives the latest event a real reading
 	# lane instead of relying on a tooltip for every long sentence.
-	var ledger_rect := rect_full(0.018, 0.515, 0.140, 0.735)
+	var ledger_right := 0.340 if compact_log else 0.260
+	var ledger_bottom := 0.225
+	var ledger_rect := rect_full(0.018, 0.128, ledger_right, ledger_bottom)
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
 	parent.add_child(ledger_panel)
@@ -18259,7 +18262,7 @@ func draw_table_log(parent: Control) -> void:
 		row_panel.add_child(row_badge)
 		var row_mark = make_label(row_badge, row_tag.substr(0, 1), 9, Color(0.98, 0.90, 0.66), true)
 		apply_rect(row_mark, rect_full(0.0, 0.0, 1.0, 1.0))
-		var row_body = make_label(row_panel, table_log_display_text(log_text), 10 if compact_log else 10, Color(0.80, 0.76, 0.60), false)
+		var row_body = make_label(row_panel, table_log_display_text(log_text), 11 if compact_log else 10, Color(0.80, 0.76, 0.60), false)
 		row_body.name = "TableLogLedgerBody_%d" % log_i
 		apply_rect(row_body, rect_full(0.205, 0.070, 0.955, 0.900))
 		row_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -20233,7 +20236,7 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	button.add_theme_color_override("font_outline_color", Color(0.035, 0.020, 0.008, 0.96))
 	var compact_claim_mode := has_pending_claim_window()
 	button.add_theme_constant_override("outline_size", 3 if compact_claim_mode else 2)
-	var is_focus_action = ["win", "gang", "safe", "advice"].has(role) or text.begins_with("荐")
+	var is_focus_action = ["win", "gang", "safe", "advice", "next"].has(role) or text.begins_with("荐")
 	var fill_alpha := 0.240 if compact_claim_mode and role == "pass" else (0.680 if compact_claim_mode and is_focus_action else (0.420 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
 	var border_alpha := 0.060 if compact_claim_mode and role == "pass" else (0.360 if compact_claim_mode and is_focus_action else (0.160 if compact_claim_mode else (0.045 if role == "pass" else (0.220 if is_focus_action else 0.110))))
 	var hover_border_alpha := 0.140 if compact_claim_mode and role == "pass" else (0.300 if compact_claim_mode and is_focus_action else (0.220 if compact_claim_mode else (0.090 if role == "pass" else (0.300 if is_focus_action else 0.180))))
@@ -24112,10 +24115,12 @@ func _show_rules_screen_impl() -> void:
 			sync_rules_guide_state(content_scroll, rules_guide)
 		)
 	content_scroll.resized.connect(func() -> void:
+		normalize_rules_section_heights(content_scroll)
 		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
 		sync_rules_guide_state(content_scroll, rules_guide)
 	)
 	content.resized.connect(func() -> void:
+		normalize_rules_section_heights(content_scroll)
 		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
 		sync_rules_guide_state(content_scroll, rules_guide)
 	)
@@ -24180,6 +24185,7 @@ func _show_rules_screen_impl() -> void:
 	], 5)
 	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
 	call_deferred("sync_rules_guide_state", content_scroll, rules_guide)
+	call_deferred("normalize_rules_section_heights", content_scroll)
 
 	# 规则段落逐一滑入
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -24214,6 +24220,24 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var thumb_left = float(thumb.get_meta("track_left", 0.220))
 	var thumb_right = float(thumb.get_meta("track_right", 0.780))
 	apply_rect(thumb, rect_full(thumb_left, thumb_top, thumb_right, thumb_top + thumb_height))
+
+
+func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
+	if content_scroll == null:
+		return
+	var content = content_scroll.find_child("RulesContentList", true, false) as Control
+	if content == null:
+		return
+	var viewport_height := content_scroll.size.y
+	if viewport_height <= 1.0:
+		viewport_height = effective_viewport_size().y * 0.814
+	var section_min_height := maxf(136.0, viewport_height + 12.0)
+	for child in content.get_children():
+		var section := child as Control
+		if section == null or not section.has_meta("rules_section_index"):
+			continue
+		if section.custom_minimum_size.y < section_min_height:
+			section.custom_minimum_size.y = section_min_height
 
 
 func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control) -> void:
@@ -28103,12 +28127,53 @@ func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> Str
 		return "整理手牌"
 	var parts: Array[String] = []
 	parts.append("荐%s" % tile_label(str(best.get("tile", ""))))
-	parts.append(shanten_label(int(best.get("shanten", 8))))
-	parts.append("进%d/%d" % [int(best.get("ukeire", 0)), int(best.get("variety", 0))])
-	var safety = discard_safety_short_text(best)
+	parts.append("进%d" % int(best.get("ukeire", 0)))
+	return " · ".join(parts)
+
+func advisor_confidence_text(reports: Array) -> String:
+	if reports.size() < 2:
+		return "单一路线"
+	var best_score := float(reports[0].get("score", 0.0))
+	var next_score := float(reports[1].get("score", 0.0))
+	var gap := best_score - next_score
+	if gap >= 180.0:
+		return "高把握"
+	if gap >= 72.0:
+		return "较稳"
+	return "可比较"
+
+func advisor_recommendation_reason_text(report: Dictionary) -> String:
+	var parts: Array[String] = []
+	var reason := str(report.get("reason_label", ""))
+	if reason != "":
+		parts.append(reason)
+	var plan := hand_plan_text(report)
+	if plan != "":
+		parts.append(plan)
+	var safety := discard_safety_short_text(report)
 	if safety != "":
 		parts.append(safety)
-	return " · ".join(parts)
+	return " · ".join(parts) if not parts.is_empty() else "保持牌形效率"
+
+func advisor_progress_text(report: Dictionary) -> String:
+	return "%s · 进%d/%d" % [
+		shanten_label(int(report.get("shanten", 8))),
+		int(report.get("ukeire", 0)),
+		int(report.get("variety", 0)),
+	]
+
+func advisor_value_short_text(report: Dictionary) -> String:
+	var parts: Array[String] = []
+	var shape := str(report.get("shape_label", ""))
+	if shape != "":
+		parts.append(shape)
+	var wait_quality := wait_quality_text(report)
+	if wait_quality != "":
+		parts.append(wait_quality)
+	var plan := hand_plan_text(report)
+	if plan != "" and not parts.has(plan):
+		parts.append(plan)
+	return " · ".join(parts) if not parts.is_empty() else "牌形保持"
 
 func hand_tray_state_text() -> String:
 	if mode == "offline":
@@ -28261,13 +28326,13 @@ func action_intent_rect_for_count(count: int) -> Rect2:
 
 func action_intent_text(count: int) -> String:
 	if has_pending_claim_window():
-		return "响应窗口 · 选择吃碰杠胡或过"
+		return "响应 · 选择动作或过"
 	if mode == "offline" and offline_phase == "ended":
-		return "本局结束 · 继续下一局或重开"
+		return "结算 · 继续下一局"
 	if mode == "offline" and has_pending_danger_discard():
-		return "风险确认 · 可改打更安全牌"
+		return "风险 · 确认或改打"
 	if mode == "offline" and can_self_discard():
-		return "我方行动 · 点击手牌或采用推荐"
+		return "出牌 · 点击手牌"
 	if mode == "online_game":
 		return "在线操作 · 等待或提交响应" if count <= 1 else "在线操作 · 处理当前响应"
 	return "可用操作 · %d项" % count
@@ -28340,16 +28405,19 @@ func pending_claim_action_row_count(count: int) -> int:
 func pending_claim_action_columns(count: int) -> int:
 	if count <= 0:
 		return 1
-	# Compact response windows keep a stable five-button first row. Wide layouts
-	# fit the complete response set on one row when the dock can accommodate it.
+	# Keep pass (and online voice) in a deliberate secondary row. The response
+	# choices therefore retain a stable scan order instead of letting the last
+	# button drift between rows with Flow capacity.
+	var tail_actions := 2 if mode == "online_game" else 1
+	var response_count := maxi(1, count - tail_actions) if count > tail_actions else 1
 	if effective_viewport_size().y <= 560.0:
-		return mini(5, count)
+		return mini(5, response_count)
 	var bar_rect = pending_claim_action_base_rect()
 	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_available(count, available_width, separation)
 	var capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, width + float(separation)))))
-	return mini(count, maxi(1, capacity))
+	return mini(response_count, maxi(1, capacity))
 
 func pending_claim_action_content_height(count: int) -> float:
 	var rows = pending_claim_action_row_count(count)
@@ -28526,10 +28594,10 @@ func action_button_separation_for_count(count: int) -> int:
 
 func action_button_font_size(width: float) -> int:
 	if has_pending_claim_window():
-		return 16 if width >= 72.0 else 15
-	if width >= 78.0:
+		return 15 if width >= 78.0 else 14
+	if width >= 86.0:
 		return 18
-	if width >= 68.0:
+	if width >= 76.0:
 		return 16
 	return 14
 
@@ -31507,7 +31575,9 @@ func action_button_visual_role(text: String) -> String:
 		return "voice"
 	if text.contains("菜单"):
 		return "menu"
-	if text.contains("下一") or text.contains("新赛") or text.contains("重开"):
+	if text.contains("下一局"):
+		return "next"
+	if text.contains("新赛") or text.contains("重开"):
 		return "refresh"
 	return "action"
 
@@ -31527,6 +31597,8 @@ func action_button_icon_name(role: String) -> String:
 			return "volume-2"
 		"menu":
 			return "menu"
+		"next":
+			return "play"
 		"refresh":
 			return "refresh-cw"
 	return ""
@@ -31551,6 +31623,8 @@ func action_button_fallback_icon_text(role: String, text: String) -> String:
 			return "声"
 		"menu":
 			return "目"
+		"next":
+			return "续"
 		"refresh":
 			return "循"
 		"action":
@@ -31567,6 +31641,8 @@ func action_button_priority_mark(role: String) -> String:
 			return "安"
 		"advice":
 			return "荐"
+		"next":
+			return "续"
 	return ""
 
 func action_button_should_pulse(role: String) -> bool:
@@ -31580,7 +31656,7 @@ func action_button_should_pulse(role: String) -> bool:
 # response_texture 的弱呼吸提示）。
 func action_button_pulse_strength(role: String) -> float:
 	match role:
-		"win", "gang", "safe", "advice":
+		"win", "gang", "safe", "advice", "next":
 			return 1.0
 		"pass":
 			return 0.0

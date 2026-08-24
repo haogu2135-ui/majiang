@@ -1772,12 +1772,53 @@ func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> Str
 		return "整理手牌"
 	var parts: Array[String] = []
 	parts.append("荐%s" % tile_label(str(best.get("tile", ""))))
-	parts.append(shanten_label(int(best.get("shanten", 8))))
-	parts.append("进%d/%d" % [int(best.get("ukeire", 0)), int(best.get("variety", 0))])
-	var safety = discard_safety_short_text(best)
+	parts.append("进%d" % int(best.get("ukeire", 0)))
+	return " · ".join(parts)
+
+func advisor_confidence_text(reports: Array) -> String:
+	if reports.size() < 2:
+		return "单一路线"
+	var best_score := float(reports[0].get("score", 0.0))
+	var next_score := float(reports[1].get("score", 0.0))
+	var gap := best_score - next_score
+	if gap >= 180.0:
+		return "高把握"
+	if gap >= 72.0:
+		return "较稳"
+	return "可比较"
+
+func advisor_recommendation_reason_text(report: Dictionary) -> String:
+	var parts: Array[String] = []
+	var reason := str(report.get("reason_label", ""))
+	if reason != "":
+		parts.append(reason)
+	var plan := hand_plan_text(report)
+	if plan != "":
+		parts.append(plan)
+	var safety := discard_safety_short_text(report)
 	if safety != "":
 		parts.append(safety)
-	return " · ".join(parts)
+	return " · ".join(parts) if not parts.is_empty() else "保持牌形效率"
+
+func advisor_progress_text(report: Dictionary) -> String:
+	return "%s · 进%d/%d" % [
+		shanten_label(int(report.get("shanten", 8))),
+		int(report.get("ukeire", 0)),
+		int(report.get("variety", 0)),
+	]
+
+func advisor_value_short_text(report: Dictionary) -> String:
+	var parts: Array[String] = []
+	var shape := str(report.get("shape_label", ""))
+	if shape != "":
+		parts.append(shape)
+	var wait_quality := wait_quality_text(report)
+	if wait_quality != "":
+		parts.append(wait_quality)
+	var plan := hand_plan_text(report)
+	if plan != "" and not parts.has(plan):
+		parts.append(plan)
+	return " · ".join(parts) if not parts.is_empty() else "牌形保持"
 
 func hand_tray_state_text() -> String:
 	if mode == "offline":
@@ -1930,13 +1971,13 @@ func action_intent_rect_for_count(count: int) -> Rect2:
 
 func action_intent_text(count: int) -> String:
 	if has_pending_claim_window():
-		return "响应窗口 · 选择吃碰杠胡或过"
+		return "响应 · 选择动作或过"
 	if mode == "offline" and offline_phase == "ended":
-		return "本局结束 · 继续下一局或重开"
+		return "结算 · 继续下一局"
 	if mode == "offline" and has_pending_danger_discard():
-		return "风险确认 · 可改打更安全牌"
+		return "风险 · 确认或改打"
 	if mode == "offline" and can_self_discard():
-		return "我方行动 · 点击手牌或采用推荐"
+		return "出牌 · 点击手牌"
 	if mode == "online_game":
 		return "在线操作 · 等待或提交响应" if count <= 1 else "在线操作 · 处理当前响应"
 	return "可用操作 · %d项" % count
@@ -2009,16 +2050,19 @@ func pending_claim_action_row_count(count: int) -> int:
 func pending_claim_action_columns(count: int) -> int:
 	if count <= 0:
 		return 1
-	# Compact response windows keep a stable five-button first row. Wide layouts
-	# fit the complete response set on one row when the dock can accommodate it.
+	# Keep pass (and online voice) in a deliberate secondary row. The response
+	# choices therefore retain a stable scan order instead of letting the last
+	# button drift between rows with Flow capacity.
+	var tail_actions := 2 if mode == "online_game" else 1
+	var response_count := maxi(1, count - tail_actions) if count > tail_actions else 1
 	if effective_viewport_size().y <= 560.0:
-		return mini(5, count)
+		return mini(5, response_count)
 	var bar_rect = pending_claim_action_base_rect()
 	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
 	var separation = action_button_separation_for_count(count)
 	var width = action_button_width_for_available(count, available_width, separation)
 	var capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, width + float(separation)))))
-	return mini(count, maxi(1, capacity))
+	return mini(response_count, maxi(1, capacity))
 
 func pending_claim_action_content_height(count: int) -> float:
 	var rows = pending_claim_action_row_count(count)
@@ -2195,10 +2239,10 @@ func action_button_separation_for_count(count: int) -> int:
 
 func action_button_font_size(width: float) -> int:
 	if has_pending_claim_window():
-		return 16 if width >= 72.0 else 15
-	if width >= 78.0:
+		return 15 if width >= 78.0 else 14
+	if width >= 86.0:
 		return 18
-	if width >= 68.0:
+	if width >= 76.0:
 		return 16
 	return 14
 
@@ -5176,7 +5220,9 @@ func action_button_visual_role(text: String) -> String:
 		return "voice"
 	if text.contains("菜单"):
 		return "menu"
-	if text.contains("下一") or text.contains("新赛") or text.contains("重开"):
+	if text.contains("下一局"):
+		return "next"
+	if text.contains("新赛") or text.contains("重开"):
 		return "refresh"
 	return "action"
 
@@ -5196,6 +5242,8 @@ func action_button_icon_name(role: String) -> String:
 			return "volume-2"
 		"menu":
 			return "menu"
+		"next":
+			return "play"
 		"refresh":
 			return "refresh-cw"
 	return ""
@@ -5220,6 +5268,8 @@ func action_button_fallback_icon_text(role: String, text: String) -> String:
 			return "声"
 		"menu":
 			return "目"
+		"next":
+			return "续"
 		"refresh":
 			return "循"
 		"action":
@@ -5236,6 +5286,8 @@ func action_button_priority_mark(role: String) -> String:
 			return "安"
 		"advice":
 			return "荐"
+		"next":
+			return "续"
 	return ""
 
 func action_button_should_pulse(role: String) -> bool:
@@ -5249,7 +5301,7 @@ func action_button_should_pulse(role: String) -> bool:
 # response_texture 的弱呼吸提示）。
 func action_button_pulse_strength(role: String) -> float:
 	match role:
-		"win", "gang", "safe", "advice":
+		"win", "gang", "safe", "advice", "next":
 			return 1.0
 		"pass":
 			return 0.0

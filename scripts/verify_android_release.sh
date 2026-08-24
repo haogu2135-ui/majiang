@@ -55,7 +55,7 @@ RETIRED_ILLUSTRATIONS=(
 	"exit_gpt_confirm_warm_v392.png"
 	"top_hud_gpt_banner_warm_v392.png"
 )
-MAX_RELEASE_APK_BYTES="${ANDROID_RELEASE_MAX_BYTES:-155000000}"
+MAX_RELEASE_APK_BYTES="${ANDROID_RELEASE_MAX_BYTES:-125000000}"
 QA_RESOURCE_PATTERN='(^|/)(build/qa(/|$)|qa(/|$)|garden-gpt-image-2(/|$)|tools/|assets/references/|assets/illustrations/_replaced_[^/]+/|scripts/(_tmp_[^/]+|ai_play_[^/]*_check|round[0-9]+_check|[^/]*_smoke_test|[^/]*_capture|test_animations|verify_[^/]+)(\.|/|$)|test_[^/]+\.(gd|gdc|gde|tscn)(\.uid)?$|extension_api\.json$)'
 
 fail() {
