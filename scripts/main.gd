@@ -8432,7 +8432,7 @@ func action_button_width_for_available(count: int, available_width: float, separ
 	if has_pending_claim_window():
 		# Keep authored touch targets intact; the FlowContainer supplies the second
 		# row when a compact viewport cannot fit the full response set.
-		var pending_min_width := 60.0 if mode == "offline" and effective_viewport_size().y <= 560.0 else float(ACTION_BUTTON_MIN_TOUCH_WIDTH)
+		var pending_min_width := PENDING_CLAIM_BUTTON_MIN_WIDTH if mode == "offline" and effective_viewport_size().y <= 560.0 else float(ACTION_BUTTON_MIN_TOUCH_WIDTH)
 		return maxf(pending_min_width, width)
 	return width
 
@@ -14705,7 +14705,8 @@ func draw_round_summary(parent: Control) -> void:
 		return
 	var content_size = safe_content_pixel_size()
 	var panel_width_px = clampf(content_size.x * 0.500, 480.0, 720.0)
-	var panel_height_px = clampf(content_size.y * 0.500, 270.0, 420.0)
+	var compact_summary := effective_viewport_size().y <= 560.0
+	var panel_height_px = clampf(content_size.y * 0.500, 320.0 if compact_summary else 270.0, 420.0)
 	var panel_gap_px = clampf(content_size.y * 0.012, 8.0, 12.0)
 	var panel_bottom = action_bar_dock_layout_rect().position.y - panel_gap_px / maxf(1.0, content_size.y)
 	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
@@ -14757,7 +14758,6 @@ func draw_round_summary(parent: Control) -> void:
 		lines.append("")
 		lines.append_array(package_lines)
 	var full_summary_text := "\n".join(lines)
-	var compact_summary := effective_viewport_size().y <= 560.0
 	var body = make_label(panel, round_summary_compact_body_text(), 12 if compact_summary else 14, Color(0.94, 0.96, 0.90), false)
 	body.name = "RoundSummaryBody"
 	apply_rect(body, ROUND_SUMMARY_TEXT_RECT)
@@ -18221,7 +18221,7 @@ func draw_table_log(parent: Control) -> void:
 	# The compact ledger sits below the side seat card, so it can grow rightward
 	# without touching the side river. This gives the latest event a real reading
 	# lane instead of relying on a tooltip for every long sentence.
-	var ledger_rect := rect_full(0.018, 0.565, 0.180, 0.735)
+	var ledger_rect := rect_full(0.018, 0.515, 0.140, 0.735)
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
 	parent.add_child(ledger_panel)
@@ -20004,14 +20004,14 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	if win_tile != "":
 		winner_text += " %s" % tile_label(win_tile)
 	var compact_detail := effective_viewport_size().y <= 560.0
-	var winner_label = make_label(detail_panel, winner_text, 16 if compact_detail else 18, Color(0.94, 0.88, 0.58), true)
+	var winner_label = make_label(detail_panel, winner_text, 18, Color(0.94, 0.88, 0.58), true)
 	winner_label.name = "WinDetailWinnerLabel"
 	apply_rect(winner_label, rect_full(0.04, 0.05, 0.60, 0.25))
 	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	# 番数和分数 - 更醒目 + 数字滚动动画
 	var score_text = "%d番  %d分" % [fan, points]
-	var score_label = make_label(detail_panel, score_text, 20 if compact_detail else 22, Color(0.96, 0.88, 0.52), true)
+	var score_label = make_label(detail_panel, score_text, 22, Color(0.96, 0.88, 0.52), true)
 	score_label.name = "WinDetailScoreLabel"
 	apply_rect(score_label, rect_full(0.62, 0.05, 0.96, 0.25))
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -20084,7 +20084,8 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 	var showcase = Control.new()
 	showcase.name = "WinDetailShowcase"
 	showcase.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(showcase, rect_full(0.72, 0.27, 0.96, 0.68))
+	var compact_showcase := effective_viewport_size().y <= 560.0
+	apply_rect(showcase, rect_full(0.70, 0.18, 0.98, 0.96) if compact_showcase else rect_full(0.72, 0.27, 0.96, 0.68))
 	parent.add_child(showcase)
 	make_cloud_decoration(showcase, rect_full(-0.08, 0.06, 0.56, 0.82), "gold", false)
 	var _gpt_panel_host = make_gpt_plate_rect(rect_full(0.16, 0.08, 0.90, 0.92), Color(0.018, 0.036, 0.038, 0.72), "ui_jade_reading_plate")
@@ -20094,7 +20095,7 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 		var tile = make_tile_view(win_tile, Vector2(34, 46), false, Callable(), true)
 		tile.name = "WinDetailTile"
 		showcase.add_child(tile)
-		apply_rect(tile, rect_full(0.10, 0.10, 0.48, 0.88))
+		apply_rect(tile, rect_full(0.10, 0.06, 0.48, 0.94) if compact_showcase else rect_full(0.10, 0.10, 0.48, 0.88))
 	else:
 		add_lucide_icon(showcase, "trophy", rect_full(0.12, 0.22, 0.44, 0.78), GOLD_BRIGHT)
 	var scoring_route = make_gpt_route_rail(rect_full(0.380, 0.830, 0.900, 0.890), Color(0.006, 0.016, 0.018, 0.46))
@@ -28438,7 +28439,9 @@ func finalize_action_bar_layout() -> void:
 	var compact_claim_mode := has_pending_claim_window()
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
-	var ended_widths := ended_action_button_widths(count) if ended_action_mode else []
+	var ended_widths: Array[float] = []
+	if ended_action_mode:
+		ended_widths = ended_action_button_widths(count)
 	var btn_index := 0
 	for child in action_bar.get_children():
 		if child is Button:

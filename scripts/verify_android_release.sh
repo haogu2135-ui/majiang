@@ -55,6 +55,7 @@ RETIRED_ILLUSTRATIONS=(
 	"exit_gpt_confirm_warm_v392.png"
 	"top_hud_gpt_banner_warm_v392.png"
 )
+MAX_RELEASE_APK_BYTES="${ANDROID_RELEASE_MAX_BYTES:-155000000}"
 QA_RESOURCE_PATTERN='(^|/)(build/qa(/|$)|qa(/|$)|garden-gpt-image-2(/|$)|tools/|assets/references/|assets/illustrations/_replaced_[^/]+/|scripts/(_tmp_[^/]+|ai_play_[^/]*_check|round[0-9]+_check|[^/]*_smoke_test|[^/]*_capture|test_animations|verify_[^/]+)(\.|/|$)|test_[^/]+\.(gd|gdc|gde|tscn)(\.uid)?$|extension_api\.json$)'
 
 fail() {
@@ -117,12 +118,16 @@ qa_filter_self_test() {
 		'assets/tiles/tile_back_3d.png' \
 		'scripts/_tmp_*.gd*' \
 		'assets/audio/bgm_loop.wav' \
+		'assets/audio/bgm_guofeng1.mp3' \
+		'assets/audio/bgm_guofeng2.mp3' \
+		'assets/audio/bgm_guofeng3.mp3' \
 		'assets/tiles_subtle_3d/**' \
 		'assets/tile_decals_3d/**' \
 		'assets/table/table_felt_3d_gpt.png' \
 		'assets/table/table_felt_warm_bright_r428.png' \
 		'assets/table/table_felt_green.jpg' \
 		'assets/table/table_dark_wood.jpg' \
+		'assets/illustrations/wall_strip_landscape.png' \
 		'scripts/*_smoke_test.gd*' \
 		'scripts/*_capture.gd*' \
 		'scripts/verify_*.sh' \
@@ -130,11 +135,24 @@ qa_filter_self_test() {
 		'scripts/round*_check.gd*' \
 		'test_*.gd*' \
 		'test_*.tscn'; do
-		grep -Fq "$required_filter" "$ROOT_DIR/export_presets.example.cfg" || fail "export filter missing: $required_filter"
+	grep -Fq "$required_filter" "$ROOT_DIR/export_presets.example.cfg" || fail "export filter missing: $required_filter"
+	done
+	for required_include in \
+		'scripts/ui/commercial_3d_stage.gd' \
+		'scripts/ui_enhancements.gd'; do
+		grep -Fq "$required_include" "$ROOT_DIR/export_presets.example.cfg" || fail "include filter missing: $required_include"
 	done
 	for retired in "${RETIRED_ILLUSTRATIONS[@]}"; do
 		required_filter="assets/illustrations/$retired"
 		grep -Fq "$required_filter" "$ROOT_DIR/export_presets.example.cfg" || fail "retired illustration export filter missing: $required_filter"
+	done
+	grep -q '^export_filter="scenes"$' "$ROOT_DIR/export_presets.example.cfg" || fail "Android export must use the scene dependency filter"
+	for required_include in \
+		'Main.tscn' \
+		'scripts/main.gd' \
+		'assets/audio/mobile/*.mp3' \
+		'assets/illustrations/*.png'; do
+		grep -Fq "$required_include" "$ROOT_DIR/export_presets.example.cfg" || fail "runtime include filter missing: $required_include"
 	done
 	grep -q '^gradle_build/use_gradle_build=true$' "$ROOT_DIR/export_presets.example.cfg" || fail "SDK overrides require Gradle build"
 	grep -q '^gradle_build/min_sdk="24"$' "$ROOT_DIR/export_presets.example.cfg" || fail "min SDK export contract mismatch"
@@ -239,6 +257,9 @@ grep -q 'assets/.godot/imported/tile_man1.png-' <<<"$ENTRIES" || fail "2D tile f
 
 for excluded_entry in \
 	'assets/assets/audio/bgm_loop.wav' \
+	'assets/assets/audio/bgm_guofeng1.mp3' \
+	'assets/assets/audio/bgm_guofeng2.mp3' \
+	'assets/assets/audio/bgm_guofeng3.mp3' \
 	'assets/assets/tiles_3d/' \
 	'assets/assets/tiles_subtle_3d/' \
 	'assets/assets/tile_decals_3d/' \
@@ -251,7 +272,8 @@ for excluded_entry in \
 	'assets/.godot/imported/table_felt_3d_gpt.png-' \
 	'assets/.godot/imported/table_felt_warm_bright_r428.png-' \
 	'assets/.godot/imported/table_felt_green.jpg-' \
-	'assets/.godot/imported/table_dark_wood.jpg-'; do
+	'assets/.godot/imported/table_dark_wood.jpg-' \
+	'assets/.godot/imported/wall_strip_landscape.png-'; do
 	if grep -Fq "$excluded_entry" <<<"$ENTRIES"; then
 		fail "excluded resource is packaged: $excluded_entry"
 	fi
@@ -301,6 +323,10 @@ PY
 
 SIZE="$(stat -c '%s' "$APK")"
 HASH="$(sha256sum "$APK" | awk '{print $1}')"
+if [ "$AUDIT_MODE" = "release" ]; then
+	[[ "$MAX_RELEASE_APK_BYTES" =~ ^[0-9]+$ ]] || fail "ANDROID_RELEASE_MAX_BYTES must be an integer"
+	[ "$SIZE" -le "$MAX_RELEASE_APK_BYTES" ] || fail "release APK exceeds size budget: $SIZE > $MAX_RELEASE_APK_BYTES bytes"
+fi
 if [ "$AUDIT_MODE" = "unsigned-debug" ]; then
 	echo "PASS: Android unsigned debug APK audit (not distributable)"
 else

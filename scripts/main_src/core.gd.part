@@ -2108,7 +2108,9 @@ func finalize_action_bar_layout() -> void:
 	var compact_claim_mode := has_pending_claim_window()
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
-	var ended_widths := ended_action_button_widths(count) if ended_action_mode else []
+	var ended_widths: Array[float] = []
+	if ended_action_mode:
+		ended_widths = ended_action_button_widths(count)
 	var btn_index := 0
 	for child in action_bar.get_children():
 		if child is Button:

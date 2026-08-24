@@ -24,7 +24,7 @@ const TUTORIAL_PATH := "user://tutorial.cfg"
 const ACHIEVEMENTS_PATH := "user://achievements.cfg"
 const LOGIN_PATH := "user://login.cfg"
 const AUDIO_DEFAULTS_VERSION := "1.0.159-godot"
-const BGM_STREAM_PATH := "res://assets/audio/bgm_guofeng2.mp3"
+const BGM_STREAM_PATH := "res://assets/audio/mobile/bgm_guofeng2.mp3"
 const UI_CJK_FONT_PATH := "res://assets/fonts/DroidSansFallbackFull.ttf"
 const ANIMATION_ASSET_PATHS := {
 	"coin_spin": "res://assets/animations/coin_spin.json",
@@ -177,9 +177,9 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 }
 # v1.0.159: 默认BGM改为《胡笳十八拍》，支持多个BGM切换
 const BGM_TRACKS := [
-	{"name": "胡笳十八拍", "path": "res://assets/audio/bgm_guofeng2.mp3"},
-	{"name": "梅花三弄", "path": "res://assets/audio/bgm_guofeng1.mp3"},
-	{"name": "汉宫秋月", "path": "res://assets/audio/bgm_guofeng3.mp3"},
+	{"name": "胡笳十八拍", "path": "res://assets/audio/mobile/bgm_guofeng2.mp3"},
+	{"name": "梅花三弄", "path": "res://assets/audio/mobile/bgm_guofeng1.mp3"},
+	{"name": "汉宫秋月", "path": "res://assets/audio/mobile/bgm_guofeng3.mp3"},
 	{"name": "原版", "path": "res://assets/audio/bgm_loop.mp3"}
 ]
 const PLAYER_AI_ASSIST_ENABLED := false
@@ -867,8 +867,8 @@ const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792)
 const ACTION_BAR_RECT := Rect2(Vector2(0.534, 0.698), Vector2(0.960, 0.782))
 const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.632, 0.588), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.972, 0.790))
-const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.575, 0.558), Vector2(0.972, 0.790))
-const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.585, 0.568), Vector2(0.972, 0.790))
+const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.645, 0.558), Vector2(0.972, 0.790))
+const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.655, 0.568), Vector2(0.972, 0.790))
 const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
 const TOP_HUD_BUTTON_SIZE := Vector2(56, 38)

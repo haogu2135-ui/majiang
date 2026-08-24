@@ -3451,7 +3451,7 @@ func run() -> void:
 	var hint_text = scene.human_hint_text()
 	check(hint_text.find("建议") < 0 and hint_text == scene.current_status_text(), "human hint text returns status without AI advice")
 	var tray_summary = scene.hand_tray_text()
-	check(not tray_summary.begins_with("荐") and tray_summary == scene.current_status_text(), "hand tray uses status without AI summary")
+	check(not tray_summary.begins_with("荐") and tray_summary == "点击手牌出牌", "hand tray uses a complementary discard prompt without AI summary")
 	check(scene.discard_alternative_text(scene.current_human_advice, 2).find("/") >= 0, "internal AI alternative text remains available for AI reports")
 	check(scene.shanten_label(0) == "听牌", "shanten label names tenpai")
 	check(scene.risk_label(10.0) == "低" and scene.risk_label(40.0) == "高", "risk labels bucket danger")

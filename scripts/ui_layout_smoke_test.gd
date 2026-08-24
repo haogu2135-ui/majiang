@@ -1083,7 +1083,12 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var pending = scene.pending_claim_state()
 	check(scene.mode == "online_game" and not pending.is_empty(), "online pending fixture exposes a real response window at %s" % viewport_size)
-	check(scene.action_bar is FlowContainer, "online pending actions use a wrapping touch lane at %s" % viewport_size)
+	check(scene.action_bar is GridContainer, "online pending actions use a fixed-column touch lane at %s" % viewport_size)
+	if scene.action_bar is GridContainer:
+		var pending_grid := scene.action_bar as GridContainer
+		var action_count: int = scene.action_bar_button_count()
+		check(pending_grid.columns == scene.pending_claim_action_columns(action_count), "online pending action columns match the layout contract at %s" % viewport_size)
+		check(scene.pending_claim_action_row_count(action_count) == int(ceil(float(action_count) / float(maxi(1, pending_grid.columns)))), "online pending action rows match the fixed column count at %s" % viewport_size)
 	var voice = scene.find_child("VoiceActionButton", true, false) as Button
 	check(voice != null, "online pending keeps the voice action available during response at %s" % viewport_size)
 	if voice != null:
