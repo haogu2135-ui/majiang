@@ -112,6 +112,12 @@ qa_filter_self_test() {
 	done
 	for required_filter in \
 		'assets/illustrations/_replaced_*/**' \
+		'assets/tiles_3d/**' \
+		'assets/audio/bgm_loop.wav' \
+		'assets/tiles_subtle_3d/**' \
+		'assets/tile_decals_3d/**' \
+		'assets/table/table_felt_3d_gpt.png' \
+		'assets/table/table_felt_warm_bright_r428.png' \
 		'scripts/*_smoke_test.gd*' \
 		'scripts/*_capture.gd*' \
 		'scripts/verify_*.sh' \
