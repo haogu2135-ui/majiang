@@ -17101,6 +17101,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(system_grid, "本地进度", "清空统计与离线记录", make_reset_progress_button(func() -> void:
 		request_reset_progress_from_settings()
 	))
+	configure_button_focus_navigation(panel, "SettingsCloseButton")
 
 
 func draw_settings_overview_art(parent: Control) -> Control:
@@ -25391,6 +25392,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	apply_rect(tip_label, rect_full(0.105, 0.520, 0.920, 0.820))
 	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(tip_label)
+	configure_button_focus_navigation(panel, "DailyLoginClaimButton")
 
 	# 面板弹出动画
 	if fx_enabled_effective():
@@ -28750,6 +28752,7 @@ func finalize_action_bar_layout() -> void:
 			btw.tween_property(button, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			btw.tween_property(button, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
 		btn_index += 1
+	configure_button_focus_navigation(action_bar)
 
 func ended_action_button_widths(count: int) -> Array[float]:
 	var widths: Array[float] = []

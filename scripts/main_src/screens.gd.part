@@ -2205,6 +2205,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	apply_rect(tip_label, rect_full(0.105, 0.520, 0.920, 0.820))
 	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(tip_label)
+	configure_button_focus_navigation(panel, "DailyLoginClaimButton")
 
 	# 面板弹出动画
 	if fx_enabled_effective():

@@ -1762,12 +1762,73 @@ func play_button_press_sheen_by_id(button_id: int, sheen_id: int) -> void:
 	tw.tween_property(sheen, "modulate:a", 0.0, 0.16)
 
 func configure_touch_button(button: Button) -> void:
-	button.focus_mode = Control.FOCUS_NONE
+	# Touch controls also need a usable keyboard/gamepad path. The authored
+	# focus plate below supplies the visual state that the transparent button
+	# style hosts intentionally do not provide.
+	button.focus_mode = Control.FOCUS_ALL
 	button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	button.add_theme_color_override("font_focus_color", Color(1.0, 0.98, 0.78, 1.0))
+	button.add_theme_color_override("font_hover_focus_color", Color(1.0, 1.0, 0.92, 1.0))
+	button.add_theme_color_override("font_pressed_color", Color(1.0, 0.90, 0.58, 1.0))
+	button.add_theme_color_override("font_hover_pressed_color", Color(1.0, 0.94, 0.70, 1.0))
+	add_button_focus_feedback(button)
 	# 增强的触摸反馈动画 - 加内发光 border flash
 	var button_id := button.get_instance_id()
 	button.button_down.connect(Callable(self, "play_touch_button_down_by_id").bind(button_id))
 	button.button_up.connect(Callable(self, "play_touch_button_up_by_id").bind(button_id))
+
+func add_button_focus_feedback(button: Button) -> void:
+	if button == null or not is_instance_valid(button):
+		return
+	var focus_plate = add_optional_gpt_illustration_texture(button, "ui_button_face_plate", rect_full(-0.025, -0.025, 1.025, 1.025), 0.0, false)
+	if focus_plate == null:
+		return
+	focus_plate.name = "ButtonFocusPlate"
+	focus_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	focus_plate.show_behind_parent = true
+	focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.0)
+	var button_id := button.get_instance_id()
+	button.focus_entered.connect(Callable(self, "set_button_focus_feedback_by_id").bind(button_id, true))
+	button.focus_exited.connect(Callable(self, "set_button_focus_feedback_by_id").bind(button_id, false))
+
+func set_button_focus_feedback_by_id(button_id: int, focused: bool) -> void:
+	var button = node_from_instance_id(button_id) as Button
+	if button == null or not is_instance_valid(button):
+		return
+	var focus_plate = button.get_node_or_null("ButtonFocusPlate") as CanvasItem
+	if focus_plate == null:
+		return
+	focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.82 if focused else 0.0)
+
+func configure_button_focus_navigation(root: Control, default_focus_name: String = "") -> void:
+	if root == null or not is_instance_valid(root):
+		return
+	var focusable: Array[Button] = []
+	for node in root.find_children("*", "Button", true, false):
+		var button := node as Button
+		if button == null or not button.visible or button.disabled:
+			continue
+		button.focus_mode = Control.FOCUS_ALL
+		focusable.append(button)
+	if focusable.is_empty():
+		return
+	for index in range(focusable.size()):
+		var button := focusable[index]
+		var previous := focusable[(index - 1 + focusable.size()) % focusable.size()]
+		var next := focusable[(index + 1) % focusable.size()]
+		button.focus_previous = previous.get_path()
+		button.focus_next = next.get_path()
+		button.focus_neighbor_left = previous.get_path()
+		button.focus_neighbor_right = next.get_path()
+		button.focus_neighbor_top = previous.get_path()
+		button.focus_neighbor_bottom = next.get_path()
+	var requested: Button = null
+	if default_focus_name != "":
+		requested = root.find_child(default_focus_name, true, false) as Button
+	if requested == null or requested.disabled or not requested.visible:
+		requested = focusable[0]
+	if requested.is_inside_tree():
+		requested.grab_focus()
 
 func center_touch_button_pivot_by_id(button_id: int) -> void:
 	var button = node_from_instance_id(button_id) as Button

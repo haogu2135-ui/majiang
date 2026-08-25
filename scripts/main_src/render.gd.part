@@ -8661,6 +8661,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(system_grid, "本地进度", "清空统计与离线记录", make_reset_progress_button(func() -> void:
 		request_reset_progress_from_settings()
 	))
+	configure_button_focus_navigation(panel, "SettingsCloseButton")
 
 
 func draw_settings_overview_art(parent: Control) -> Control:

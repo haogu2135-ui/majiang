@@ -571,7 +571,8 @@ func run() -> void:
 	check(settings_overlay != null and settings_close != null and settings_underlay != null, "settings exposes its modal close action above the menu")
 	check(settings_close != null and settings_close.has_focus() and node_is_descendant_of(settings_focus_owner, settings_overlay), "settings moves keyboard focus to its safe close action")
 	await send_key(KEY_TAB, 0)
-	check(settings_close != null and settings_close.has_focus(), "settings traps sequential keyboard focus inside the modal")
+	settings_focus_owner = scene.get_viewport().gui_get_focus_owner() as Control
+	check(settings_focus_owner != null and node_is_descendant_of(settings_focus_owner, settings_overlay) and settings_focus_owner != settings_close, "settings advances sequential keyboard focus to another modal control")
 	if settings_underlay != null:
 		var covered_settings_position := settings_underlay.get_global_rect().get_center()
 		await send_left_button(covered_settings_position, true)
@@ -579,6 +580,7 @@ func run() -> void:
 		await send_screen_touch(covered_settings_position, true)
 		await send_screen_touch(covered_settings_position, false)
 	check(int(settings_underlay_probe.get("pressed", 0)) == 0 and scene.settings_panel_open, "settings blocks desktop and touch input from reaching the menu")
+	settings_close.grab_focus()
 	await send_key(KEY_ENTER, 0)
 	await settle(0.10)
 	var restored_settings = scene.find_child("MenuSettingsButton", true, false) as Button
