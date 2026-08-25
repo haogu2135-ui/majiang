@@ -846,6 +846,7 @@ const TABLE_CORNER_RECTS := [
 const HAND_TILE_MAX_WIDTH := 68.0
 const HAND_TILE_MIN_TOUCH_WIDTH := 46.0
 const HAND_TILE_ASPECT := 1.36
+const HAND_MIN_GROUP_GAP := 6.0
 const HAND_TRAY_RECT := Rect2(Vector2(0.185, 0.815), Vector2(0.985, 0.985))
 const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
 const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.145), Vector2(0.988, 0.170))
@@ -859,9 +860,11 @@ const HAND_LAYOUT_CANDIDATES := [
 	[3.0, 3],
 	[4.0, 3],
 ]
-const ACTION_BUTTON_MAX_WIDTH := 88.0
+const ACTION_BUTTON_MAX_WIDTH := 148.0
+const ACTION_BUTTON_MEDIUM_MAX_WIDTH := 124.0
+const ACTION_BUTTON_COMPACT_MAX_WIDTH := 88.0
 const ACTION_BUTTON_MIN_TOUCH_WIDTH := 50.0
-const PENDING_CLAIM_BUTTON_MIN_WIDTH := 60.0
+const PENDING_CLAIM_BUTTON_MIN_WIDTH := 50.0
 const ACTION_BUTTON_HEIGHT := 44.0
 const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const ACTION_BAR_RECT := Rect2(Vector2(0.534, 0.698), Vector2(0.960, 0.782))
@@ -1098,17 +1101,13 @@ func ui_cjk_font() -> Font:
 	return _ui_cjk_font
 
 func add_background(parent: Control) -> void:
-	# Utility pages share one quiet authored substrate. Local panels can still
-	# carry feature-specific textures without a competing wood scene behind every
-	# title, field, and CTA.
-	var base = make_gpt_center_crop_plate_rect(
-		rect_full(0.0, 0.0, 1.0, 1.0),
-		Color(0.018, 0.028, 0.026, 0.90),
-		"ui_dark_scrim",
-		0.30
-	)
+	# Utility pages own their reading surface. Keep this shared authored wash quiet
+	# so a page panel does not become a second opaque full-screen scrim.
+	var base = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.10, false)
+	if base == null:
+		base = make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
+		parent.add_child(base)
 	base.name = "UtilityPageLowFrequencyBackdrop"
-	parent.add_child(base)
 
 func add_menu_background(parent: Control) -> void:
 	# The menu owns one full-screen scene in draw_menu_primary_3d_stage(). Keep
@@ -1118,16 +1117,13 @@ func add_menu_background(parent: Control) -> void:
 	parent.add_child(scrim)
 
 func add_rules_background(parent: Control) -> void:
-	# Rules use the same low-frequency substrate as utility pages; the local codex
-	# panel owns the single reading-frame treatment.
-	var codex = make_gpt_center_crop_plate_rect(
-		rect_full(0.0, 0.0, 1.0, 1.0),
-		Color(0.018, 0.028, 0.026, 0.90),
-		"ui_dark_scrim",
-		0.30
-	)
+	# The codex panel owns the reading frame; the page-level layer remains a quiet
+	# authored wash instead of another full-screen dark bitmap.
+	var codex = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.10, false)
+	if codex == null:
+		codex = make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
+		parent.add_child(codex)
 	codex.name = "RulesBackgroundLowFrequencyBackdrop"
-	parent.add_child(codex)
 
 func add_battle_background(parent: Control) -> void:
 	# Normal battle renders own one authored room plate. Keep the dark plate only as a

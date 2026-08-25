@@ -153,7 +153,8 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 	var pressure_context = ai_pressure_context(seat, eval_context)
 	eval_context["pressure_context"] = pressure_context
 	var before_shanten = calculate_min_shanten_from_counts(hand_counts, open_melds)
-	var before_plan_report = hand_plan_report_for_seat_from_counts(seat, hand_counts, hand.size())
+	var before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size())
+	var before_plan_report: Dictionary = before_plan_eval.get("report", {})
 	return {
 		"seat": seat,
 		"from_seat": from_seat,
@@ -165,7 +166,10 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 		"before_plan_label": str(before_plan_report.get("label", "")),
 		"before_plan_bonus": float(before_plan_report.get("score_bonus", 0.0)),
 		"route_focus": route_focus,
-		"before_score": evaluate_ai_hand_from_counts(hand_counts) + hand_plan_score_from_counts(hand_counts, hand.size()) * 0.35 * route_focus,
+		# Use the same seat-aware plan score as discard reports. The report merges
+		# exposed melds; the numeric score must do the same or claim comparisons
+		# and post-meld discards disagree about the active route.
+		"before_score": evaluate_ai_hand_from_counts(hand_counts) + float(before_plan_eval.get("score", 0.0)) * 0.35 * route_focus,
 		"visible_counts": visible_counts,
 		"eval_context": eval_context,
 		"pressure_context": pressure_context,
@@ -217,7 +221,11 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	var exposed_melds = int(claim_context.get("exposed_melds", exposed_meld_count_for_seat(seat))) if has_claim_context else exposed_meld_count_for_seat(seat)
 	var hand_counts = claim_context.get("hand_counts", []) if has_claim_context else tile_counts(hand)
 	var before_shanten = int(claim_context.get("before_shanten", 8)) if has_claim_context else calculate_min_shanten_from_counts(hand_counts, open_melds)
-	var before_plan_label = str(claim_context.get("before_plan_label", "")) if has_claim_context else str(hand_plan_report_for_seat_from_counts(seat, hand_counts, hand.size()).get("label", ""))
+	var standalone_before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size()) if not has_claim_context else {}
+	var before_plan_report = claim_context.get("before_plan_report", {}) if has_claim_context else standalone_before_plan_eval.get("report", {})
+	if typeof(before_plan_report) != TYPE_DICTIONARY:
+		before_plan_report = {}
+	var before_plan_label = str(claim_context.get("before_plan_label", before_plan_report.get("label", ""))) if has_claim_context else str(before_plan_report.get("label", ""))
 	var after = hand.duplicate()
 	var after_counts = hand_counts.duplicate()
 	var route_focus = float(claim_context.get("route_focus", 1.0)) if has_claim_context else ai_route_focus(seat)
@@ -239,8 +247,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			return report
 	var after_open_melds = open_melds + 1
 	var after_shanten = calculate_min_shanten_from_counts(after_counts, after_open_melds)
-	var before_score = float(claim_context.get("before_score", 0.0)) if has_claim_context else evaluate_ai_hand_from_counts(hand_counts) + hand_plan_score_from_counts(hand_counts, hand.size()) * 0.35 * route_focus
-	var after_score = evaluate_ai_hand_from_counts(after_counts) + hand_plan_score_from_counts(after_counts, after.size()) * 0.35 * route_focus + bonus
+	var before_score = float(claim_context.get("before_score", 0.0)) if has_claim_context else evaluate_ai_hand_from_counts(hand_counts) + float(standalone_before_plan_eval.get("score", 0.0)) * 0.35 * route_focus
 	var extra_meld_tiles: Array = []
 	match claim:
 		"gang":
@@ -252,6 +259,10 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			for needed in chi_choice.get("needed", []):
 				extra_meld_tiles.append(str(needed))
 	var after_plan_report = plan_report_with_extra_melds(seat, after_counts, after.size(), extra_meld_tiles)
+	# The route report includes both existing and newly exposed melds. Reuse its
+	# score for the claim delta so the numeric comparison matches the displayed
+	# route label and the later post-meld discard evaluator.
+	var after_score = evaluate_ai_hand_from_counts(after_counts) + float(after_plan_report.get("score", hand_plan_score_from_counts(after_counts, after.size()))) * 0.35 * route_focus + bonus
 	var shape_gain = after_score - before_score
 	var allow = false
 	var reason = "牌型收益不足"
@@ -1927,8 +1938,10 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	# score. This evaluation is a bounded linear scan and quiet mode has at most
 	# four fully scored candidates, so keep it exact without expanding searches.
 	var plan_eval = hand_plan_eval_for_seat_from_counts(seat, simulated_counts, simulated_tile_count)
-	var plan = float(plan_eval.get("score", 0.0))
 	var plan_report: Dictionary = plan_eval.get("report", {})
+	# hand_plan_report_for_seat_from_features folds exposed melds into the route
+	# report; use that same score instead of the concealed-only fast score.
+	var plan = float(plan_report.get("score", plan_eval.get("score", 0.0)))
 	var plan_label = str(plan_report.get("label", "标准"))
 	var plan_suit = int(plan_report.get("suit", -1))
 	var plan_bonus = float(plan_report.get("score_bonus", 0.0))
@@ -3105,9 +3118,12 @@ func hand_plan_report_for_seat_from_features(seat: int, counts: Array, tile_coun
 
 func hand_plan_eval_for_seat_from_counts(seat: int, counts: Array, tile_count: int) -> Dictionary:
 	var features = hand_plan_features_from_counts(counts, tile_count)
+	var report = hand_plan_report_for_seat_from_features(seat, counts, tile_count, features)
 	return {
-		"score": hand_plan_score_from_features(counts, features),
-		"report": hand_plan_report_for_seat_from_features(seat, counts, tile_count, features),
+		# Keep the scalar and the human-readable report sourced from one
+		# seat-aware calculation. This matters once the seat has exposed melds.
+		"score": float(report.get("score", hand_plan_score_from_features(counts, features))),
+		"report": report,
 	}
 
 func hand_plan_report(tiles: Array) -> Dictionary:

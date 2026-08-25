@@ -1033,7 +1033,8 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 	var pressure_context = ai_pressure_context(seat, eval_context)
 	eval_context["pressure_context"] = pressure_context
 	var before_shanten = calculate_min_shanten_from_counts(hand_counts, open_melds)
-	var before_plan_report = hand_plan_report_for_seat_from_counts(seat, hand_counts, hand.size())
+	var before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size())
+	var before_plan_report: Dictionary = before_plan_eval.get("report", {})
 	return {
 		"seat": seat,
 		"from_seat": from_seat,
@@ -1045,7 +1046,10 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 		"before_plan_label": str(before_plan_report.get("label", "")),
 		"before_plan_bonus": float(before_plan_report.get("score_bonus", 0.0)),
 		"route_focus": route_focus,
-		"before_score": evaluate_ai_hand_from_counts(hand_counts) + hand_plan_score_from_counts(hand_counts, hand.size()) * 0.35 * route_focus,
+		# Use the same seat-aware plan score as discard reports. The report merges
+		# exposed melds; the numeric score must do the same or claim comparisons
+		# and post-meld discards disagree about the active route.
+		"before_score": evaluate_ai_hand_from_counts(hand_counts) + float(before_plan_eval.get("score", 0.0)) * 0.35 * route_focus,
 		"visible_counts": visible_counts,
 		"eval_context": eval_context,
 		"pressure_context": pressure_context,
@@ -1097,7 +1101,11 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	var exposed_melds = int(claim_context.get("exposed_melds", exposed_meld_count_for_seat(seat))) if has_claim_context else exposed_meld_count_for_seat(seat)
 	var hand_counts = claim_context.get("hand_counts", []) if has_claim_context else tile_counts(hand)
 	var before_shanten = int(claim_context.get("before_shanten", 8)) if has_claim_context else calculate_min_shanten_from_counts(hand_counts, open_melds)
-	var before_plan_label = str(claim_context.get("before_plan_label", "")) if has_claim_context else str(hand_plan_report_for_seat_from_counts(seat, hand_counts, hand.size()).get("label", ""))
+	var standalone_before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size()) if not has_claim_context else {}
+	var before_plan_report = claim_context.get("before_plan_report", {}) if has_claim_context else standalone_before_plan_eval.get("report", {})
+	if typeof(before_plan_report) != TYPE_DICTIONARY:
+		before_plan_report = {}
+	var before_plan_label = str(claim_context.get("before_plan_label", before_plan_report.get("label", ""))) if has_claim_context else str(before_plan_report.get("label", ""))
 	var after = hand.duplicate()
 	var after_counts = hand_counts.duplicate()
 	var route_focus = float(claim_context.get("route_focus", 1.0)) if has_claim_context else ai_route_focus(seat)
@@ -1119,8 +1127,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			return report
 	var after_open_melds = open_melds + 1
 	var after_shanten = calculate_min_shanten_from_counts(after_counts, after_open_melds)
-	var before_score = float(claim_context.get("before_score", 0.0)) if has_claim_context else evaluate_ai_hand_from_counts(hand_counts) + hand_plan_score_from_counts(hand_counts, hand.size()) * 0.35 * route_focus
-	var after_score = evaluate_ai_hand_from_counts(after_counts) + hand_plan_score_from_counts(after_counts, after.size()) * 0.35 * route_focus + bonus
+	var before_score = float(claim_context.get("before_score", 0.0)) if has_claim_context else evaluate_ai_hand_from_counts(hand_counts) + float(standalone_before_plan_eval.get("score", 0.0)) * 0.35 * route_focus
 	var extra_meld_tiles: Array = []
 	match claim:
 		"gang":
@@ -1132,6 +1139,10 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			for needed in chi_choice.get("needed", []):
 				extra_meld_tiles.append(str(needed))
 	var after_plan_report = plan_report_with_extra_melds(seat, after_counts, after.size(), extra_meld_tiles)
+	# The route report includes both existing and newly exposed melds. Reuse its
+	# score for the claim delta so the numeric comparison matches the displayed
+	# route label and the later post-meld discard evaluator.
+	var after_score = evaluate_ai_hand_from_counts(after_counts) + float(after_plan_report.get("score", hand_plan_score_from_counts(after_counts, after.size()))) * 0.35 * route_focus + bonus
 	var shape_gain = after_score - before_score
 	var allow = false
 	var reason = "牌型收益不足"
@@ -2807,8 +2818,10 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	# score. This evaluation is a bounded linear scan and quiet mode has at most
 	# four fully scored candidates, so keep it exact without expanding searches.
 	var plan_eval = hand_plan_eval_for_seat_from_counts(seat, simulated_counts, simulated_tile_count)
-	var plan = float(plan_eval.get("score", 0.0))
 	var plan_report: Dictionary = plan_eval.get("report", {})
+	# hand_plan_report_for_seat_from_features folds exposed melds into the route
+	# report; use that same score instead of the concealed-only fast score.
+	var plan = float(plan_report.get("score", plan_eval.get("score", 0.0)))
 	var plan_label = str(plan_report.get("label", "标准"))
 	var plan_suit = int(plan_report.get("suit", -1))
 	var plan_bonus = float(plan_report.get("score_bonus", 0.0))
@@ -3985,9 +3998,12 @@ func hand_plan_report_for_seat_from_features(seat: int, counts: Array, tile_coun
 
 func hand_plan_eval_for_seat_from_counts(seat: int, counts: Array, tile_count: int) -> Dictionary:
 	var features = hand_plan_features_from_counts(counts, tile_count)
+	var report = hand_plan_report_for_seat_from_features(seat, counts, tile_count, features)
 	return {
-		"score": hand_plan_score_from_features(counts, features),
-		"report": hand_plan_report_for_seat_from_features(seat, counts, tile_count, features),
+		# Keep the scalar and the human-readable report sourced from one
+		# seat-aware calculation. This matters once the seat has exposed melds.
+		"score": float(report.get("score", hand_plan_score_from_features(counts, features))),
+		"report": report,
 	}
 
 func hand_plan_report(tiles: Array) -> Dictionary:
@@ -8424,17 +8440,25 @@ func human_action_choice_target_position(action: String) -> Vector2:
 
 func action_button_width_for_available(count: int, available_width: float, separation: int = -1) -> float:
 	if count <= 0:
-		return ACTION_BUTTON_MAX_WIDTH
+		return action_button_max_width_for_viewport()
 	var gap = action_button_separation_for_count(count) if separation < 0 else separation
 	var layout_slack = 2.0
 	var available = available_width - float(max(0, count - 1) * gap) - layout_slack
-	var width: float = minf(float(ACTION_BUTTON_MAX_WIDTH), floorf(maxf(1.0, available / float(count))))
+	var width: float = minf(action_button_max_width_for_viewport(), floorf(maxf(1.0, available / float(count))))
 	if has_pending_claim_window():
 		# Keep authored touch targets intact; the FlowContainer supplies the second
 		# row when a compact viewport cannot fit the full response set.
 		var pending_min_width := PENDING_CLAIM_BUTTON_MIN_WIDTH if mode == "offline" and effective_viewport_size().y <= 560.0 else float(ACTION_BUTTON_MIN_TOUCH_WIDTH)
 		return maxf(pending_min_width, width)
 	return width
+
+func action_button_max_width_for_viewport() -> float:
+	var viewport_size := effective_viewport_size()
+	if viewport_size.y <= 560.0 or viewport_size.x < 1100.0:
+		return ACTION_BUTTON_COMPACT_MAX_WIDTH
+	if viewport_size.x < 1600.0:
+		return ACTION_BUTTON_MEDIUM_MAX_WIDTH
+	return ACTION_BUTTON_MAX_WIDTH
 
 func action_button_width_for_count(count: int, separation: int = -1) -> float:
 	return action_button_width_for_available(count, action_bar_pixel_width(), separation)
@@ -9124,14 +9148,29 @@ func draw_action_intent_flow(parent: Control, count: int, color: Color) -> Contr
 	return null
 
 func draw_actions(parent: Control) -> void:
+	var pending_claim_response_bar: Control = null
+	var pending_claim_tail_bar: HBoxContainer = null
 	if has_pending_claim_window():
+		var pending_root := VBoxContainer.new()
+		pending_root.name = "PendingClaimActionStack"
+		pending_root.alignment = BoxContainer.ALIGNMENT_END
+		pending_root.add_theme_constant_override("separation", 4)
 		var grid_bar := GridContainer.new()
-		grid_bar.name = "PendingClaimActionGrid"
-		grid_bar.columns = pending_claim_action_columns(action_bar_button_count())
-		grid_bar.add_theme_constant_override("h_separation", 3)
-		grid_bar.add_theme_constant_override("v_separation", 3)
+		grid_bar.name = "PendingClaimResponseGrid"
+		grid_bar.add_theme_constant_override("h_separation", 4)
+		grid_bar.add_theme_constant_override("v_separation", 4)
 		grid_bar.custom_minimum_size = Vector2.ZERO
-		action_bar = grid_bar
+		pending_root.add_child(grid_bar)
+		pending_claim_tail_bar = HBoxContainer.new()
+		pending_claim_tail_bar.name = "PendingClaimSecondaryLane"
+		pending_claim_tail_bar.alignment = BoxContainer.ALIGNMENT_END
+		pending_claim_tail_bar.add_theme_constant_override("separation", 3)
+		pending_claim_tail_bar.custom_minimum_size = Vector2(0.0, ACTION_BUTTON_HEIGHT)
+		pending_claim_tail_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		configure_passive_container(pending_claim_tail_bar)
+		pending_root.add_child(pending_claim_tail_bar)
+		action_bar = pending_root
+		pending_claim_response_bar = grid_bar
 	else:
 		var row_bar := HBoxContainer.new()
 		row_bar.alignment = BoxContainer.ALIGNMENT_END
@@ -9162,7 +9201,7 @@ func draw_actions(parent: Control) -> void:
 				start_offline()
 			)
 			new_match_button.name = "NewMatchSecondaryButton"
-			new_match_button.set_meta("action_priority", "secondary")
+			new_match_button.set_meta("action_priority", "primary" if is_offline_match_finished() else "secondary")
 			action_bar.add_child(new_match_button)
 			var summary_menu_button = make_action_button("菜单", Color(0.48, 0.54, 0.56), func() -> void:
 				show_menu()
@@ -9178,30 +9217,33 @@ func draw_actions(parent: Control) -> void:
 			if interactive_guide_active and interactive_guide_type == "claim":
 				show_toast("💡 对手打出了一张牌，你可以选择吃/碰/杠/胡或过")
 			var claim_recommendation = recommended_claim_report() if player_ai_assist_enabled() else {}
-			for claim in offline_pending_claim.get("options", []):
+			for claim in ordered_pending_claim_options(offline_pending_claim.get("options", []), claim_recommendation):
 				var claim_name = str(claim)
 				if claim_name == "chi":
-					var chi_choices: Array = offline_pending_claim.get("chi_choices", [])
+					var chi_choices: Array = ordered_pending_chi_choices(offline_pending_claim.get("chi_choices", []), claim_recommendation)
 					if chi_choices.is_empty():
 						var is_recommended_claim = is_recommended_claim_action(claim_name, {}, claim_recommendation)
-						action_bar.add_child(make_action_button(compact_pending_claim_action_text(claim_name, {}, claim_recommendation), claim_action_button_color(claim_name, is_recommended_claim), func() -> void:
+						pending_claim_response_bar.add_child(make_action_button(compact_pending_claim_action_text(claim_name, {}, claim_recommendation), claim_action_button_color(claim_name, is_recommended_claim), func() -> void:
 							human_claim(claim_name)
 						))
 					else:
 						for choice in chi_choices:
 							var selected_choice: Dictionary = choice
 							var is_recommended_choice = is_recommended_claim_action(claim_name, selected_choice, claim_recommendation)
-							action_bar.add_child(make_action_button(compact_pending_claim_action_text(claim_name, selected_choice, claim_recommendation), claim_action_button_color(claim_name, is_recommended_choice), func() -> void:
+							pending_claim_response_bar.add_child(make_action_button(compact_pending_claim_action_text(claim_name, selected_choice, claim_recommendation), claim_action_button_color(claim_name, is_recommended_choice), func() -> void:
 								human_claim("chi", selected_choice)
 							))
 				else:
 					var is_recommended_claim = is_recommended_claim_action(claim_name, {}, claim_recommendation)
-					action_bar.add_child(make_action_button(compact_pending_claim_action_text(claim_name, {}, claim_recommendation), claim_action_button_color(claim_name, is_recommended_claim), func() -> void:
+					pending_claim_response_bar.add_child(make_action_button(compact_pending_claim_action_text(claim_name, {}, claim_recommendation), claim_action_button_color(claim_name, is_recommended_claim), func() -> void:
 						human_claim(claim_name)
 					))
-			action_bar.add_child(make_action_button(compact_pass_claim_button_text(claim_recommendation), pass_claim_button_color(claim_recommendation), func() -> void:
+			var offline_pass_button := make_action_button(compact_pass_claim_button_text(claim_recommendation), pass_claim_button_color(claim_recommendation), func() -> void:
 				human_claim("pass")
-			))
+			)
+			if offline_pass_button != null:
+				offline_pass_button.set_meta("pending_tail", true)
+				pending_claim_tail_bar.add_child(offline_pass_button)
 			draw_pending_claim_illustration(parent)
 			draw_action_dock(parent)
 			finalize_action_bar_layout()
@@ -9293,36 +9335,43 @@ func draw_actions(parent: Control) -> void:
 	if mode == "online_game":
 		var pending = pending_claim_state()
 		if not pending.is_empty():
-			for claim in pending.get("options", []):
+			for claim in ordered_pending_claim_options(pending.get("options", [])):
 				var claim_name = str(claim)
 				if claim_name == "chi":
-					var chi_choices: Array = pending.get("chi_choices", [])
+					var chi_choices: Array = ordered_pending_chi_choices(pending.get("chi_choices", []))
 					if chi_choices.is_empty():
-						action_bar.add_child(make_action_button(claim_label(claim_name), claim_color(claim_name), func() -> void:
+						pending_claim_response_bar.add_child(make_action_button(claim_label(claim_name), claim_color(claim_name), func() -> void:
 							send_online_action(online_claim_payload(claim_name), claim_label(claim_name))
 						))
 					else:
 						for choice in chi_choices:
 							var selected_choice: Dictionary = choice
 							var selected_choice_label = compact_chi_choice_button_label(selected_choice)
-							action_bar.add_child(make_action_button(selected_choice_label, claim_color(claim_name), func() -> void:
+							pending_claim_response_bar.add_child(make_action_button(selected_choice_label, claim_color(claim_name), func() -> void:
 								send_online_action(online_claim_payload("chi", selected_choice), selected_choice_label)
 							))
 				else:
-					action_bar.add_child(make_action_button(claim_label(claim_name), claim_color(claim_name), func() -> void:
+					pending_claim_response_bar.add_child(make_action_button(claim_label(claim_name), claim_color(claim_name), func() -> void:
 						send_online_action(online_claim_payload(claim_name), claim_label(claim_name))
 					))
 			if pending.get("options", []).size() > 0:
-				action_bar.add_child(make_action_button("过", Color(0.38, 0.43, 0.44), func() -> void:
+				var online_pass_button := make_action_button("过", Color(0.38, 0.43, 0.44), func() -> void:
 					send_online_action(online_claim_payload("pass"), "过")
-				))
+				)
+				if online_pass_button != null:
+					online_pass_button.set_meta("pending_tail", true)
+					pending_claim_tail_bar.add_child(online_pass_button)
 			draw_pending_claim_illustration(parent)
 	var voice = make_action_button("闭麦" if voice_enabled else "语音", Color(0.74, 0.24, 0.24) if voice_enabled else Color(0.24, 0.52, 0.72), func() -> void:
 		toggle_voice_chat()
 	)
 	voice.name = "VoiceActionButton"
 	draw_voice_button_art(voice, voice_enabled, voice_peak)
-	action_bar.add_child(voice)
+	if has_pending_claim_window():
+		voice.set_meta("pending_tail", true)
+		pending_claim_tail_bar.add_child(voice)
+	else:
+		action_bar.add_child(voice)
 	draw_action_dock(parent)
 	finalize_action_bar_layout()
 
@@ -11485,6 +11534,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		archive_button.z_index = 12
 		archive_button.custom_minimum_size = Vector2(44, 44)
 		archive_button.add_theme_font_size_override("font_size", 10)
+		archive_button.focus_mode = Control.FOCUS_ALL
 		for color_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
 			archive_button.add_theme_color_override(color_name, Color(1.0, 1.0, 1.0, 0.0))
 		archive_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
@@ -11495,14 +11545,17 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		overlay.add_child(archive_button)
 		apply_rect(archive_button, discard_archive_button_rect(seat))
 		var archive_art := draw_discard_river_archive_art(archive_button, seat, accent, discard_count, visible_start, visible_count)
-		archive_art.modulate.a = 0.48
+		archive_art.modulate.a = 0.82
 		archive_button.move_child(archive_art, 0)
-		var archive_label = make_label(archive_button, archive_button.text, 10, Color(1.0, 0.94, 0.66, 1.0), true)
+		add_lucide_icon(archive_button, "book-open", rect_full(0.08, 0.07, 0.30, 0.34), Color(1.0, 0.92, 0.62, 0.92))
+		var archive_label = make_label(archive_button, "历史\n%s" % archive_button.text, 10, Color(1.0, 0.94, 0.66, 1.0), true)
 		archive_label.name = "DiscardRiverArchiveLabel_%d" % seat
 		archive_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		archive_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.98))
 		archive_label.add_theme_constant_override("outline_size", 3)
-		apply_rect(archive_label, rect_full(0.04, 0.02, 0.96, 0.72))
+		archive_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		archive_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		apply_rect(archive_label, rect_full(0.20, 0.08, 0.96, 0.94))
 	return overlay
 
 func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int) -> Control:
@@ -12203,7 +12256,7 @@ func draw_hand(parent: Control) -> void:
 	apply_rect(tray_text, HAND_TRAY_TEXT_RECT)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(tray_text)
-	if has_pending_claim_window():
+	if has_pending_claim_window() or has_pending_danger_discard():
 		tray_text.visible = false
 
 	# 状态徽章
@@ -12965,6 +13018,18 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 			aura_texture_tw.tween_property(aura_texture, "modulate:a", 0.18, 0.42).from(0.06)
 			aura_texture_tw.parallel().tween_property(aura_texture, "scale", Vector2(0.96, 0.96), 0.42).from(Vector2(1.06, 1.06))
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
+	# Keep a stable authored edge around the latest tile. Animation and response
+	# routes can quiet down during a claim window, but the target itself remains
+	# locatable without relying on the center prompt.
+	for edge_data in [
+		[rect_full(0.010, 0.010, 0.990, 0.060), "top"],
+		[rect_full(0.010, 0.940, 0.990, 0.990), "bottom"],
+		[rect_full(0.010, 0.060, 0.060, 0.940), "left"],
+		[rect_full(0.940, 0.060, 0.990, 0.940), "right"],
+	]:
+		var edge = make_gpt_edge_rail(edge_data[0], Color(accent.r, accent.g, accent.b, 0.56))
+		edge.name = "LastDiscardStaticFrame_%s" % str(edge_data[1])
+		marker.add_child(edge)
 	var glow = make_gpt_gate(rect_full(0.04, 0.04, 0.96, 0.96), Color(accent.r, accent.g, accent.b, 0.10))
 	glow.name = "LastDiscardFocusGlow"
 	marker.add_child(glow)
@@ -13000,7 +13065,7 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	# keep the river marker structural but quiet so the same discard is not read
 	# as two competing response targets.
 	if mode == "offline" and offline_phase == "pending_claim":
-		glow.modulate.a = 0.42
+		glow.modulate.a = 0.72
 		route.visible = false
 		response_bridge.visible = false
 		for ripple_node in marker.get_children():
@@ -15933,49 +15998,59 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	if side == "left" or side == "right":
 		var side_avatar = make_avatar_view(seat, active)
 		panel.add_child(side_avatar)
-		apply_rect(side_avatar, rect_full(0.040, 0.245, 0.240, 0.755))
-		var side_text_back = make_gpt_center_crop_plate_rect(rect_full(0.255, 0.060, 0.960, 0.860), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
+		var compact_side := effective_viewport_size().y <= 560.0
+		var side_content_left := 0.225 if compact_side else 0.285
+		var side_text_back_left := 0.195 if compact_side else 0.255
+		apply_rect(side_avatar, rect_full(0.035, 0.245, 0.180 if compact_side else 0.240, 0.755))
+		var side_text_back = make_gpt_center_crop_plate_rect(rect_full(side_text_back_left, 0.060, 0.960, 0.860), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
 		side_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(side_text_back)
-		var compact_side := effective_viewport_size().y <= 560.0
 		var side_name_right := 0.590 if seat == dealer_seat else 0.620
-		var side_name = make_label(panel, seat_compact_display_name(seat, p, 2), 12 if compact_side else 11, Color(1.0, 0.98, 0.90), true)
+		var side_name = make_label(panel, seat_compact_display_name(seat, p, 2), 12, Color(1.0, 0.98, 0.90), true)
 		side_name.name = "SeatCompactName_%d" % seat
-		apply_rect(side_name, rect_full(0.285, 0.075, side_name_right, 0.285 if compact_side else 0.300))
+		apply_rect(side_name, rect_full(side_content_left, 0.075, side_name_right, 0.285 if compact_side else 0.300))
 		side_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_name, true)
 		if seat == dealer_seat:
 			var side_dealer = make_badge(panel, rect_full(0.610, 0.094, 0.690, 0.292), "庄", 8, Color(0.58, 0.12, 0.08, 0.84), Color(1.0, 0.79, 0.34, 0.54), Color(0.98, 0.92, 0.74))
 			side_dealer.name = "SeatCompactDealer_%d" % seat
 			side_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var side_score_left := 0.285 if compact_side else (0.715 if seat == dealer_seat else 0.640)
-		var side_score = make_label(panel, seat_score_text(p), 11 if compact_side else 9, Color(1.0, 0.94, 0.72), true)
+		var side_score_left := side_content_left if compact_side else (0.715 if seat == dealer_seat else 0.640)
+		var side_score = make_label(panel, seat_score_text(p), 11, Color(1.0, 0.94, 0.72), true)
 		side_score.name = "SeatCompactScore_%d" % seat
 		apply_rect(side_score, rect_full(side_score_left, 0.295 if compact_side else 0.090, 0.940, 0.435 if compact_side else 0.300))
 		side_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(side_score, true)
-		var side_stats = make_label(panel, "", 10, Color(0.96, 0.94, 0.84), false)
+		var side_stats = make_label(panel, "", 11, Color(0.96, 0.94, 0.84), false)
 		side_stats.name = "SeatCompactMeta_%d" % seat
 		var side_discard_count = get_discards(seat).size()
-		var side_meta_text = "手%d" % int(p.get("hand_count", 0))
-		if int(p.get("flowers", 0)) > 0:
-			side_meta_text += " 花%d" % int(p.get("flowers", 0))
-		if side_discard_count > 0:
-			side_meta_text += " 弃%d" % side_discard_count
+		var side_meta_text: String
+		if compact_side:
+			# Keep all three scan-critical counters in one short, non-truncating lane.
+			side_meta_text = "手%d/花%d/弃%d" % [int(p.get("hand_count", 0)), int(p.get("flowers", 0)), side_discard_count]
+		else:
+			side_meta_text = "手%d" % int(p.get("hand_count", 0))
+			if int(p.get("flowers", 0)) > 0:
+				side_meta_text += " 花%d" % int(p.get("flowers", 0))
+			if side_discard_count > 0:
+				side_meta_text += " 弃%d" % side_discard_count
 		side_stats.text = side_meta_text
-		apply_rect(side_stats, rect_full(0.285, 0.445 if compact_side else 0.340, 0.940, 0.570 if compact_side else 0.515))
+		apply_rect(side_stats, rect_full(side_content_left, 0.445 if compact_side else 0.340, 0.940, 0.570 if compact_side else 0.515))
 		side_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_stats, false)
 		if active:
-			var side_turn_rect := rect_full(0.285, 0.545, 0.470, 0.680) if compact_side else rect_full(0.785, 0.555, 0.940, 0.730)
+			var side_turn_rect := rect_full(side_content_left, 0.545, 0.470, 0.680) if compact_side else rect_full(0.785, 0.555, 0.940, 0.730)
 			var side_turn = make_badge(panel, side_turn_rect, "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
 			side_turn.name = "SeatCompactTurn_%d" % seat
 			side_turn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var side_status_text = "打%s" % tile_label(get_last_discard()) if recent_discard_source else ""
 		if side_status_text != "":
-			var side_status = make_label(panel, side_status_text, 10, Color(1.0, 0.94, 0.74), false)
+			var side_threat = seat_threat_report_from_map(seat, seat_threat_reports)
+			var side_has_threat := opponent_seat_threat_badge_text_from_report(side_threat) != ""
+			var side_status = make_label(panel, side_status_text, 11, Color(1.0, 0.94, 0.74), false)
 			side_status.name = "SeatCompactStatus_%d" % seat
-			apply_rect(side_status, rect_full(0.285, 0.690 if compact_side else 0.565, 0.940, 0.800 if compact_side else 0.720))
+			var side_status_right := 0.500 if side_has_threat else 0.940
+			apply_rect(side_status, rect_full(side_content_left, 0.690 if compact_side else 0.565, side_status_right, 0.800 if compact_side else 0.720))
 			side_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_seat_readable_label(side_status, false)
 		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
@@ -16889,7 +16964,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
-	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.68), "ui_dark_scrim")
+	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.42), "ui_dark_scrim")
 	scrim.name = "SettingsOverlayScrim"
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
@@ -16901,7 +16976,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.88), "ui_dark_scrim", 0.20)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.58), "ui_dark_scrim", 0.20)
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
@@ -17310,7 +17385,7 @@ func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id
 	# The center crop of the authored dark-scrim bitmap is deliberately quiet:
 	# product copy remains continuous while the dedicated shop art survives only
 	# as a very faint edge texture.
-	var readability_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.022, 0.034, 0.032, 0.99), "ui_dark_scrim", 0.22)
+	var readability_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.022, 0.034, 0.032, 0.58), "ui_dark_scrim", 0.22)
 	readability_plate.name = "ShopItemRowLowFrequencyPlate"
 	row.add_child(readability_plate)
 	row.move_child(readability_plate, 0)
@@ -23497,6 +23572,38 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	row.add_child(edit)
 	return edit
 
+func refresh_online_lobby_action_states() -> void:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return
+	var connection_state := lobby_connection_state_text()
+	var connected := connection_state == "已连接"
+	var connecting := connection_state == "连接中"
+	var room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
+	var connect_button = root_layer.find_child("OnlineLobbyConnectButton", true, false) as Button
+	var create_button = root_layer.find_child("OnlineLobbyCreateButton", true, false) as Button
+	var join_button = root_layer.find_child("OnlineLobbyJoinButton", true, false) as Button
+	if connect_button != null:
+		connect_button.disabled = connected or connecting
+		connect_button.tooltip_text = "已连接当前服务器" if connected else ("正在连接服务器" if connecting else "连接服务器")
+		connect_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if connect_button.disabled else Color.WHITE
+	if create_button != null:
+		create_button.disabled = not connected
+		create_button.tooltip_text = "连接后创建房间" if not connected else "创建新房间"
+		create_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if create_button.disabled else Color.WHITE
+	if join_button != null:
+		join_button.disabled = not connected or room_code == ""
+		join_button.tooltip_text = "连接后输入房间号" if not connected else ("输入房间号后加入" if room_code == "" else "加入指定房间")
+		join_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if join_button.disabled else Color.WHITE
+	var current_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
+	if current_status != null and online_feedback.strip_edges() == "":
+		if not connected:
+			current_status.text = "下一步 · 先连接，再建房或入房"
+		elif room_code == "":
+			current_status.text = "已连接 · 可创建房间；输入房间号后可加入"
+		else:
+			current_status.text = "已连接 · 可创建或加入房间"
+
+
 func _show_online_lobby_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "online_lobby"
@@ -23510,7 +23617,7 @@ func _show_online_lobby_impl() -> void:
 	# The disconnected lobby is an operational form, so its full-page substrate
 	# uses the low-frequency authored bitmap. Decorative detail stays at the
 	# header edge instead of running behind inputs and calls to action.
-	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.96), "ui_dark_scrim", 0.36)
+	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.58), "ui_dark_scrim", 0.18)
 	panel.name = "OnlineLobbyLowFrequencyPagePlate"
 	root_layer.add_child(panel)
 	var lobby_shadow = make_soft_depth_panel(panel, rect_full(0.008, 0.025, 0.992, 1.020), Color(0.0, 0.0, 0.0, 0.10), 22)  # r415
@@ -23569,7 +23676,7 @@ func _show_online_lobby_impl() -> void:
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.98), "ui_dark_scrim", 0.28)
+	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.50), "ui_dark_scrim", 0.18)
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
@@ -23588,7 +23695,7 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", commercial_ui_font_size(20, 3), Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.98), "ui_dark_scrim", 0.24)
+	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.56), "ui_dark_scrim", 0.14)
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
 	if input_group_backplate is CanvasItem:
@@ -23615,6 +23722,10 @@ func _show_online_lobby_impl() -> void:
 	online_host_edit.name = "OnlineLobbyHostEdit"
 	online_room_edit = add_lobby_line_edit(form, "房间号", selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 	online_room_edit.name = "OnlineLobbyRoomEdit"
+	online_room_edit.text_changed.connect(func(value: String) -> void:
+		selected_room = bounded_online_input(value, ONLINE_ROOM_CODE_MAX_LENGTH)
+		refresh_online_lobby_action_states()
+	)
 
 	# 操作按钮组 - 连接/创建/加入
 	var button_row = HBoxContainer.new()
@@ -23622,15 +23733,22 @@ func _show_online_lobby_impl() -> void:
 	button_row.add_theme_constant_override("separation", 8)
 	apply_rect(button_row, rect_full(0.06, 0.672, 0.94, 0.805))
 	form_panel.add_child(button_row)
-	button_row.add_child(make_lobby_action_button("连接", Color(0.20, 0.48, 0.66), func() -> void:
+	var connect_button = make_lobby_action_button("连接", Color(0.20, 0.48, 0.66), func() -> void:
 		connect_online()
-	, 0.12, Vector2(108, 48)))
-	button_row.add_child(make_lobby_action_button("创建", Color(0.78, 0.56, 0.28), func() -> void:
+	, 0.12, Vector2(108, 48))
+	connect_button.name = "OnlineLobbyConnectButton"
+	button_row.add_child(connect_button)
+	var create_button = make_lobby_action_button("创建", Color(0.78, 0.56, 0.28), func() -> void:
 		create_online_room()
-	, 0.16, Vector2(108, 48)))
-	button_row.add_child(make_lobby_action_button("加入", Color(0.72, 0.48, 0.24), func() -> void:
+	, 0.16, Vector2(108, 48))
+	create_button.name = "OnlineLobbyCreateButton"
+	button_row.add_child(create_button)
+	var join_button = make_lobby_action_button("加入", Color(0.72, 0.48, 0.24), func() -> void:
 		join_online_room()
-	, 0.20, Vector2(108, 48)))
+	, 0.20, Vector2(108, 48))
+	join_button.name = "OnlineLobbyJoinButton"
+	button_row.add_child(join_button)
+	refresh_online_lobby_action_states()
 
 	# 底部按钮 - 开始/返回
 	var start_row = HBoxContainer.new()
@@ -23638,7 +23756,7 @@ func _show_online_lobby_impl() -> void:
 	start_row.add_theme_constant_override("separation", 10)
 	apply_rect(start_row, rect_full(0.06, 0.810, 0.94, 0.945))
 	form_panel.add_child(start_row)
-	var action_cluster_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.666, 0.955, 0.958), Color(0.024, 0.036, 0.034, 0.96), "ui_dark_scrim", 0.24)
+	var action_cluster_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.666, 0.955, 0.958), Color(0.024, 0.036, 0.034, 0.62), "ui_dark_scrim", 0.24)
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
 	form_panel.add_child(action_cluster_backplate)
 	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.040, false)
@@ -23679,7 +23797,7 @@ func _show_online_lobby_impl() -> void:
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(status_label)
-	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.98), "ui_dark_scrim", 0.20)
+	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.62), "ui_dark_scrim", 0.20)
 	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
 	panel.add_child(status_backplate)
 	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
@@ -23697,7 +23815,7 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.98), "ui_dark_scrim", 0.28)
+	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.50), "ui_dark_scrim", 0.18)
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
@@ -23707,10 +23825,10 @@ func _show_online_lobby_impl() -> void:
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.98), "ui_dark_scrim", 0.24)
+	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.48), "ui_dark_scrim", 0.14)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
-	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.98), "ui_dark_scrim", 0.18)
+	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.68), "ui_dark_scrim", 0.18)
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	log_panel.add_child(empty_state_backplate)
 	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(18, 2), Color(0.98, 0.94, 0.82), true)
@@ -23901,6 +24019,7 @@ func refresh_online_lobby_state() -> void:
 			lobby_status.text = "下一步 · 先连接，再建房或入房"
 		configure_clipped_label(lobby_status)
 	refresh_online_room_content()
+	refresh_online_lobby_action_states()
 
 func refresh_online_room_content() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
@@ -23997,7 +24116,7 @@ func _show_rules_screen_impl() -> void:
 	root_layer.add_child(panel)
 	# The front plate is the single authored surface for the page; keep the
 	# content area free of a second full-page illustration.
-	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.38), "settings_gpt_panel_v2")
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.16), "settings_gpt_panel_v2")
 	panel_plate.name = "RulesCodexFrontPlate"
 	panel.add_child(panel_plate)
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.32, false)
@@ -24044,7 +24163,7 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var content_surface = make_gpt_center_crop_plate_rect(rect_full(-0.015, -0.020, 1.015, 1.020), Color(0.022, 0.034, 0.032, 0.78), "ui_dark_scrim", 0.22)
+	var content_surface = make_gpt_center_crop_plate_rect(rect_full(-0.015, -0.020, 1.015, 1.020), Color(0.022, 0.034, 0.032, 0.14), "ui_dark_scrim", 0.10)
 	content_surface.name = "RulesContentLowFrequencySurface"
 	content_backplate.add_child(content_surface)
 	content_backplate.move_child(content_surface, 0)
@@ -24108,6 +24227,14 @@ func _show_rules_screen_impl() -> void:
 	var rules_thumb_drag_state: Dictionary = {"active": false}
 	rules_scroll_hit_target.gui_input.connect(func(event: InputEvent) -> void:
 		handle_rules_scroll_thumb_input(event, content_scroll, rules_scrollbar, rules_scroll_thumb, rules_scroll_gutter, rules_thumb_drag_state, rules_scroll_hit_target)
+	)
+	content_scroll.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			var wheel_event := event as InputEventMouseButton
+			if wheel_event.pressed and (wheel_event.button_index == MOUSE_BUTTON_WHEEL_UP or wheel_event.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+				# ScrollContainer applies the wheel delta after gui_input; defer the
+				# chapter snap so the next frame starts on a complete section.
+				call_deferred("snap_rules_scroll_to_section", content_scroll)
 	)
 	if rules_scrollbar != null:
 		rules_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -24186,6 +24313,7 @@ func _show_rules_screen_impl() -> void:
 	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
 	call_deferred("sync_rules_guide_state", content_scroll, rules_guide)
 	call_deferred("normalize_rules_section_heights", content_scroll)
+	call_deferred("snap_rules_scroll_to_section", content_scroll)
 
 	# 规则段落逐一滑入
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -24231,7 +24359,10 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 	var viewport_height := content_scroll.size.y
 	if viewport_height <= 1.0:
 		viewport_height = effective_viewport_size().y * 0.814
-	var section_min_height := maxf(136.0, viewport_height + 12.0)
+	# Let the authored text height define the chapter. A small viewport-relative
+	# floor keeps short chapters tappable without turning every chapter into a
+	# mostly empty full-screen black sheet.
+	var section_min_height := maxf(136.0, viewport_height * 0.38)
 	for child in content.get_children():
 		var section := child as Control
 		if section == null or not section.has_meta("rules_section_index"):
@@ -24394,9 +24525,9 @@ func _show_shop_screen_impl() -> void:
 	# 主面板
 	var panel = make_gpt_center_crop_plate_rect(
 		rect_full(0.02, 0.02, 0.98, 0.98),
-		Color(0.018, 0.028, 0.026, 0.90),
+		Color(0.018, 0.028, 0.026, 0.38),
 		"ui_dark_scrim",
-		0.26
+		0.16
 	)
 	panel.name = "ShopCabinetFrontPanel"
 	root_layer.add_child(panel)
@@ -24467,7 +24598,7 @@ func _show_shop_screen_impl() -> void:
 	draw_shop_transaction_map_art(panel)
 
 	# 道具列表 - 带滚动支持
-	var display_shell = make_gpt_center_crop_plate_rect(rect_full(0.032, 0.105, 0.938, 0.782), Color(0.012, 0.022, 0.022, 0.88), "ui_dark_scrim", 0.24)
+	var display_shell = make_gpt_center_crop_plate_rect(rect_full(0.032, 0.105, 0.938, 0.782), Color(0.012, 0.022, 0.022, 0.44), "ui_dark_scrim", 0.14)
 	display_shell.name = "ShopDisplayCabinet3DShell"
 	panel.add_child(display_shell)
 	var display_inset = make_layout_host(rect_full(0.012, 0.035, 0.988, 0.965))
@@ -24498,19 +24629,31 @@ func _show_shop_screen_impl() -> void:
 	shop_scroll_thumb.name = "ShopItemsScrollThumb"
 	shop_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var content = VBoxContainer.new()
+	var shop_wide_layout := effective_viewport_size().x >= 1600.0
+	var content: Control
+	if shop_wide_layout:
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 12)
+		grid.add_theme_constant_override("v_separation", 12)
+		content = grid
+	else:
+		var list := VBoxContainer.new()
+		list.add_theme_constant_override("separation", 10)
+		content = list
 	content.name = "ShopItemsContent"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 10)
 	scroll.add_child(content)
 
 	# 让道具行按可用陈列区高度自适应，填满原本空洞的橱窗，同时保证不越过底部说明栏。
 	var shop_item_count := maxi(1, ITEM_TYPES.size())
 	var shop_content_pixels := safe_content_pixel_size()
 	var shop_scroll_pixels := shop_content_pixels.y * 0.96 * (0.765 - 0.12)
-	var shop_row_gap := 10.0
-	var shop_row_max_height := 168.0 if effective_viewport_size().x >= 1600.0 else 120.0
-	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_item_count - 1)) / float(shop_item_count)), 68.0, shop_row_max_height)
+	var shop_columns := 2 if shop_wide_layout else 1
+	var shop_visual_rows := maxi(1, ceili(float(shop_item_count) / float(shop_columns)))
+	var shop_row_gap := 12.0 if shop_wide_layout else 10.0
+	var shop_row_max_height := 246.0 if shop_wide_layout else 120.0
+	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_visual_rows - 1)) / float(shop_visual_rows)), 68.0, shop_row_max_height)
 
 	# 道具图标映射
 	var item_icon_map := {
@@ -24570,7 +24713,7 @@ func _show_shop_screen_impl() -> void:
 		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
 
 		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
-		var text_plate = make_gpt_center_crop_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.024, 0.034, 0.032, 0.99), "ui_dark_scrim", 0.22)
+		var text_plate = make_gpt_center_crop_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.024, 0.034, 0.032, 0.64), "ui_dark_scrim", 0.14)
 		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
 		row.add_child(text_plate)
 		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -24636,7 +24779,8 @@ func _show_shop_screen_impl() -> void:
 		buy_btn.custom_minimum_size = Vector2(100, 48)
 		buy_btn.name = "ShopItemBuyButton_%s" % item_id
 		row.add_child(buy_btn)
-		apply_rect(buy_btn, rect_full(0.825, 0.15, 0.955, 0.85))
+		var buy_button_left := 0.790 if shop_wide_layout else 0.825
+		apply_rect(buy_btn, rect_full(buy_button_left, 0.15, 0.955, 0.85))
 		draw_shop_buy_button_art(buy_btn, cost, can_afford)
 
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
@@ -27995,6 +28139,8 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 	var selected_gap = 0.0
 	var selected_separation = 1
 	var selected_width = 1.0
+	var compact_view := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
+	var minimum_group_gap := HAND_MIN_GROUP_GAP if compact_view else 4.0
 	for candidate in HAND_LAYOUT_CANDIDATES:
 		var gap_width = float(candidate[0])
 		var separation = int(candidate[1])
@@ -28003,8 +28149,11 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 		selected_separation = separation
 		selected_width = candidate_width
 		# Prefer readable spacing (not welded) while keeping touch width.
-		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and gap_width >= 4.0:
+		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and gap_width >= minimum_group_gap:
 			break
+	if selected_gap < minimum_group_gap:
+		selected_gap = minimum_group_gap
+		selected_width = hand_tile_width_for_space(content_size, count, gap_count, selected_gap, selected_separation)
 	var tile_width = min(HAND_TILE_MAX_WIDTH, floor(max(1.0, selected_width)))
 	var tile_height = floor(tile_width * HAND_TILE_ASPECT)
 	return {
@@ -28105,7 +28254,8 @@ func hand_group_label(tile: String) -> String:
 
 func hand_tray_text() -> String:
 	if has_pending_danger_discard():
-		return pending_danger_discard_text() if player_ai_assist_enabled() else "高危牌已标记 · 选择出牌"
+		# 顶部 HUD 和确认 dock 负责完整风险说明；托盘只展示牌面与高亮目标。
+		return "目标牌已标记" if player_ai_assist_enabled() else "选择出牌"
 	if has_pending_claim_window():
 		return human_claim_hint_text() if player_ai_assist_enabled() else "选择响应"
 	if mode == "offline" and can_self_discard():
@@ -28179,6 +28329,8 @@ func hand_tray_state_text() -> String:
 	if mode == "offline":
 		if offline_phase == "ended":
 			return "结算"
+		if has_pending_danger_discard():
+			return "确认"
 		if has_pending_claim_window():
 			return "响应"
 		if can_self_discard():
@@ -28297,6 +28449,31 @@ func pending_claim_source_name(source_seat: int) -> String:
 	var source_name = str(source_info.get("name", "对手")).strip_edges()
 	return source_name if source_name != "" and source_name != "空位" else "对手"
 
+func ordered_pending_claim_options(options: Array, recommendation: Dictionary = {}) -> Array:
+	var ordered: Array = []
+	var preferred := str(recommendation.get("claim", ""))
+	if preferred != "" and preferred != "pass" and options.has(preferred):
+		ordered.append(preferred)
+	for claim in ["hu", "gang", "peng", "chi"]:
+		if options.has(claim) and not ordered.has(claim):
+			ordered.append(claim)
+	for claim in options:
+		if not ordered.has(claim):
+			ordered.append(claim)
+	return ordered
+
+func ordered_pending_chi_choices(choices: Array, recommendation: Dictionary = {}) -> Array:
+	var ordered: Array = choices.duplicate(true)
+	if str(recommendation.get("claim", "")) != "chi":
+		return ordered
+	for i in range(ordered.size()):
+		var choice = ordered[i]
+		if typeof(choice) == TYPE_DICTIONARY and is_recommended_claim_action("chi", choice, recommendation):
+			ordered.remove_at(i)
+			ordered.push_front(choice)
+			break
+	return ordered
+
 func pending_claim_focus_text() -> String:
 	var pending = pending_claim_state()
 	if pending.is_empty():
@@ -28399,19 +28576,36 @@ func pending_claim_action_dock_base_rect() -> Rect2:
 func pending_claim_action_row_count(count: int) -> int:
 	if count <= 0:
 		return 1
+	var response_count = pending_claim_response_count(count)
 	var columns = pending_claim_action_columns(count)
-	return maxi(1, int(ceil(float(count) / float(columns))))
+	var response_rows = maxi(1, int(ceil(float(response_count) / float(columns))))
+	# Pass/cancel/voice share one deliberate secondary lane below the response grid.
+	return response_rows + pending_claim_action_tail_count()
+
+func pending_claim_action_tail_count() -> int:
+	return 1
+
+func pending_claim_tail_button_count() -> int:
+	return 2 if mode == "online_game" else 1
+
+func pending_claim_response_count(count: int) -> int:
+	var tail_buttons := pending_claim_tail_button_count()
+	return maxi(1, count - tail_buttons) if count > tail_buttons else 1
 
 func pending_claim_action_columns(count: int) -> int:
 	if count <= 0:
 		return 1
-	# Keep pass (and online voice) in a deliberate secondary row. The response
+	# Keep pass (and online voice) in a deliberate secondary lane. The response
 	# choices therefore retain a stable scan order instead of letting the last
 	# button drift between rows with Flow capacity.
-	var tail_actions := 2 if mode == "online_game" else 1
-	var response_count := maxi(1, count - tail_actions) if count > tail_actions else 1
+	var response_count := pending_claim_response_count(count)
 	if effective_viewport_size().y <= 560.0:
-		return mini(5, response_count)
+		var compact_rect := pending_claim_action_base_rect()
+		var compact_width := safe_content_pixel_size().x * maxf(0.001, compact_rect.size.x - compact_rect.position.x)
+		var compact_separation := action_button_separation_for_count(count)
+		var compact_button_width := action_button_width_for_available(count, compact_width, compact_separation)
+		var compact_capacity := maxi(1, int(floor((compact_width + float(compact_separation)) / maxf(1.0, compact_button_width + float(compact_separation)))))
+		return mini(response_count, compact_capacity)
 	var bar_rect = pending_claim_action_base_rect()
 	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
 	var separation = action_button_separation_for_count(count)
@@ -28429,13 +28623,21 @@ func pending_claim_action_dock_rect_for_count(count: int) -> Rect2:
 	var base_rect = pending_claim_action_dock_base_rect()
 	var content_height = maxf(1.0, safe_content_pixel_size().y)
 	var dock_height = (8.0 + pending_claim_action_content_height(count) + 14.0) / content_height
-	var top = maxf(base_rect.position.y, base_rect.size.y - dock_height)
+	# Keep the dock bottom in its established hand-safe lane, but let taller
+	# response stacks grow upward instead of forcing their containers below it.
+	var top = maxf(0.30, base_rect.size.y - dock_height)
 	return Rect2(Vector2(base_rect.position.x, top), base_rect.size)
 
 func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 	var dock_rect = pending_claim_action_dock_rect_for_count(count)
 	var base_rect = pending_claim_action_base_rect()
-	return Rect2(Vector2(base_rect.position.x, dock_rect.position.y + 0.010), dock_rect.size)
+	var content_height := maxf(1.0, safe_content_pixel_size().y)
+	var top_inset := 8.0 / content_height
+	var bottom_inset := 14.0 / content_height
+	return Rect2(
+		Vector2(base_rect.position.x, dock_rect.position.y + top_inset),
+		Vector2(dock_rect.size.x, dock_rect.size.y - bottom_inset)
+	)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
 	# Keep the response context in the root-layer lane between the transformed
@@ -28494,40 +28696,60 @@ func finalize_action_bar_layout() -> void:
 	if count <= 0:
 		return
 	var separation = action_button_separation_for_count(count)
+	var compact_claim_mode := has_pending_claim_window()
 	if action_bar is GridContainer:
 		(action_bar as GridContainer).columns = pending_claim_action_columns(count)
 		action_bar.add_theme_constant_override("h_separation", separation)
 		action_bar.add_theme_constant_override("v_separation", separation)
 		action_bar.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
+	elif compact_claim_mode:
+		var response_grid := action_bar.get_node_or_null("PendingClaimResponseGrid") as GridContainer
+		if response_grid != null:
+			response_grid.columns = pending_claim_action_columns(count)
+			response_grid.add_theme_constant_override("h_separation", separation)
+			response_grid.add_theme_constant_override("v_separation", separation)
+		var stack := action_bar as VBoxContainer
+		if stack != null:
+			stack.add_theme_constant_override("separation", separation)
+			stack.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
 	else:
 		action_bar.add_theme_constant_override("separation", separation)
 	apply_rect(action_bar, action_bar_layout_rect())
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
-	var compact_claim_mode := has_pending_claim_window()
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	var ended_widths: Array[float] = []
 	if ended_action_mode:
 		ended_widths = ended_action_button_widths(count)
+	var buttons := action_bar_buttons()
+	var full_width := maxf(float(width), action_bar_pixel_width())
+	var pending_tail_buttons: Array[Button] = []
+	for button in buttons:
+		if compact_claim_mode and bool(button.get_meta("pending_tail", false)):
+			pending_tail_buttons.append(button)
 	var btn_index := 0
-	for child in action_bar.get_children():
-		if child is Button:
-			var button_width: float = float(width)
-			var button_font_size: int = int(font_size)
-			if ended_action_mode and btn_index < ended_widths.size():
-				button_width = float(ended_widths[btn_index])
-				button_font_size = 18 if str((child as Button).get_meta("action_priority", "secondary")) == "primary" else 15
-			configure_action_button_size(child as Button, button_width, height, button_font_size)
-			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				child.pivot_offset = Vector2(button_width * 0.5, height * 0.5)
-				child.scale = Vector2(0.7, 0.7)
-				child.modulate = Color(1, 1, 1, 0)
-				var btw := create_screen_tween()
-				btw.set_parallel(true)
-				btw.tween_property(child, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-				btw.tween_property(child, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
-			btn_index += 1
+	for button in buttons:
+		var button_width: float = float(width)
+		var button_font_size: int = int(font_size)
+		if compact_claim_mode and bool(button.get_meta("pending_tail", false)):
+			# Pass/cancel/voice share one full-width lane below the response choices.
+			button_width = (full_width - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
+			button_font_size = 15
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if ended_action_mode and btn_index < ended_widths.size():
+			button_width = float(ended_widths[btn_index])
+			button_font_size = 18 if str(button.get_meta("action_priority", "secondary")) == "primary" else 15
+		configure_action_button_size(button, button_width, height, button_font_size)
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			button.pivot_offset = Vector2(button_width * 0.5, height * 0.5)
+			button.scale = Vector2(0.7, 0.7)
+			button.modulate = Color(1, 1, 1, 0)
+			var btw := create_screen_tween()
+			btw.set_parallel(true)
+			btw.tween_property(button, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			btw.tween_property(button, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
+		btn_index += 1
 
 func ended_action_button_widths(count: int) -> Array[float]:
 	var widths: Array[float] = []
@@ -28537,6 +28759,12 @@ func ended_action_button_widths(count: int) -> Array[float]:
 	var separation = float(action_button_separation_for_count(count))
 	var primary = clampf(available * 0.38, 116.0, 176.0)
 	var secondary_count = maxi(0, count - 1)
+	var primary_index := 0
+	var visible_buttons := action_bar_buttons()
+	for i in range(visible_buttons.size()):
+		if str(visible_buttons[i].get_meta("action_priority", "secondary")) == "primary":
+			primary_index = i
+			break
 	var secondary = 0.0
 	if secondary_count > 0:
 		secondary = clampf((available - primary - separation * float(secondary_count)) / float(secondary_count), 88.0, 132.0)
@@ -28544,7 +28772,7 @@ func ended_action_button_widths(count: int) -> Array[float]:
 		if used > available:
 			primary = maxf(108.0, primary - (used - available))
 	for i in range(count):
-		widths.append(primary if i == 0 else secondary)
+		widths.append(primary if i == primary_index else secondary)
 	return widths
 
 func ended_action_bar_required_width(count: int) -> float:
@@ -28557,22 +28785,23 @@ func ended_action_bar_required_width(count: int) -> float:
 	return total + float(maxi(0, widths.size() - 1) * action_button_separation_for_count(count))
 
 func action_bar_button_count() -> int:
-	if action_bar == null:
-		return 0
-	var count = 0
-	for child in action_bar.get_children():
-		if child is Button:
-			count += 1
-	return count
+	return action_bar_buttons().size()
 
 func action_bar_buttons() -> Array[Button]:
 	var buttons: Array[Button] = []
 	if action_bar == null:
 		return buttons
-	for child in action_bar.get_children():
+	collect_action_bar_buttons(action_bar, buttons)
+	return buttons
+
+func collect_action_bar_buttons(node: Node, buttons: Array[Button]) -> void:
+	if node == null:
+		return
+	for child in node.get_children():
 		if child is Button:
 			buttons.append(child as Button)
-	return buttons
+		elif child is Control:
+			collect_action_bar_buttons(child, buttons)
 
 func action_bar_pixel_width() -> float:
 	var rect = action_bar_layout_rect()
@@ -28584,7 +28813,7 @@ func action_button_separation_for_count(count: int) -> int:
 	if has_pending_claim_window():
 		# Keep a small, stable gap; FlowContainer wraps claim choices when the row
 		# cannot fit full-size touch targets.
-		return 3
+		return 1 if effective_viewport_size().y <= 560.0 else 3
 	if count <= 5:
 		return 4
 	if count <= 8:
@@ -32635,7 +32864,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.72), "ui_dark_scrim", 0.22)
+	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.46), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

@@ -185,6 +185,7 @@ run_godot_check "Endgame policy" 92 "hard guard covers catastrophic thin-tenpai 
 run_godot_check "Strategy quality" 93 "avoidable all-opponent danger telemetry stays actionable"
 run_godot_check "Strength evidence" 94 "all-opponent avoidable danger is mandatory for commercial PASS"
 run_godot_check "Strategy quality" 95 "exact-score discard ties preserve decision quality"
+run_godot_check "Strategy quality" 97 "exposed melds affect numeric route scoring"
 
 STATUS="PASS"
 if [ "$FAIL" -ne 0 ]; then

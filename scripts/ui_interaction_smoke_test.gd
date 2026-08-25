@@ -196,36 +196,67 @@ func run() -> void:
 	await settle(0.65)
 
 	print("--- A) pointer hover and press drive the real lobby button ---")
-	var create_button := first_button_with_text(scene, "创建")
-	check(create_button != null, "disconnected lobby exposes the create action")
-	if create_button != null:
+	var connect_button := first_button_with_text(scene, "连接")
+	check(connect_button != null and not connect_button.disabled, "disconnected lobby exposes the active connection action")
+	if connect_button != null:
 		var hover_probe := {"entered": false, "exited": false}
-		create_button.mouse_entered.connect(func() -> void:
+		var button_down_probe := {"down": 0}
+		connect_button.button_down.connect(func() -> void:
+			button_down_probe["down"] = int(button_down_probe.get("down", 0)) + 1
+		)
+		connect_button.mouse_entered.connect(func() -> void:
 			hover_probe["entered"] = true
 		)
-		create_button.mouse_exited.connect(func() -> void:
+		connect_button.mouse_exited.connect(func() -> void:
 			hover_probe["exited"] = true
 		)
 		await move_pointer(Vector2(4.0, 4.0))
-		var rest_scale := create_button.scale
-		check(not create_button.is_hovered() and rest_scale.distance_to(Vector2.ONE) <= 0.015, "mouse exit reaches the stable resting transform")
-		await move_pointer(create_button.get_global_rect().get_center())
-		check(create_button.is_hovered() and bool(hover_probe.get("entered", false)), "mouse motion enters the hit target and emits the native hover signal")
-		await send_left_button(create_button.get_global_rect().get_center(), true)
-		check(create_button.button_pressed, "left-button down produces the native pressed state")
-		check(create_button.find_child("LobbyActionPressFeedback_创建", true, false) != null, "button-down signal produces authored press feedback")
-		await send_left_button(create_button.get_global_rect().get_center(), false)
-		check(not create_button.button_pressed, "left-button release clears the native pressed state")
+		var rest_scale := connect_button.scale
+		check(not connect_button.is_hovered() and rest_scale.distance_to(Vector2.ONE) <= 0.015, "mouse exit reaches the stable resting transform")
+		await move_pointer(connect_button.get_global_rect().get_center())
+		check(connect_button.is_hovered() and bool(hover_probe.get("entered", false)), "mouse motion enters the hit target and emits the native hover signal")
+		await send_left_button(connect_button.get_global_rect().get_center(), true)
+		check(int(button_down_probe.get("down", 0)) == 1, "left-button down reaches the native button-down signal")
+		check(connect_button.find_child("LobbyActionPressFeedback_连接", true, false) != null, "button-down signal produces authored press feedback")
+		await send_left_button(connect_button.get_global_rect().get_center(), false)
+		check(not connect_button.button_pressed, "left-button release clears the native pressed state")
 		await move_pointer(Vector2(4.0, 4.0))
-		check(not create_button.is_hovered() and bool(hover_probe.get("exited", false)), "mouse exit clears hover and emits the native exit signal")
+		check(not connect_button.is_hovered() and bool(hover_probe.get("exited", false)), "mouse exit clears hover and emits the native exit signal")
+		# A successful connection intentionally disables the connect action. Use a
+		# connected fixture for the independent touch activation path instead of
+		# testing a button whose state changes as part of its own callback.
+		var touch_transport := ConnectedLobbyTransport.new()
+		scene.tcp = touch_transport
+		scene.tcp_status = StreamPeerTCP.STATUS_CONNECTED
+		scene.online_room = connected_room_fixture()
+		scene.online_waiting_for_server = false
+		scene.refresh_online_lobby_state()
+		await settle()
+		var touch_button := first_button_with_text(scene, "创建")
+		check(touch_button != null and not touch_button.disabled, "connected lobby exposes a touch-testable create action")
 		var touch_probe := {"pressed": false}
-		create_button.pressed.connect(func() -> void:
-			touch_probe["pressed"] = true
-		)
-		await send_screen_touch(create_button.get_global_rect().get_center(), true)
-		check(create_button.button_pressed, "screen-touch down produces the native pressed state")
-		await send_screen_touch(create_button.get_global_rect().get_center(), false)
-		check(bool(touch_probe.get("pressed", false)) and not create_button.button_pressed, "screen-touch release activates the real lobby button")
+		var touch_down_probe := {"down": 0}
+		if touch_button != null:
+			touch_button.button_down.connect(func() -> void:
+				touch_down_probe["down"] = int(touch_down_probe.get("down", 0)) + 1
+			)
+			touch_button.pressed.connect(func() -> void:
+				touch_probe["pressed"] = true
+			)
+		if scene.tcp != null:
+			scene.tcp.disconnect_from_host()
+		if touch_button != null:
+			await send_screen_touch(touch_button.get_global_rect().get_center(), true)
+			check(int(touch_down_probe.get("down", 0)) == 1, "screen-touch down reaches the native button-down signal")
+			await send_screen_touch(touch_button.get_global_rect().get_center(), false)
+			check(bool(touch_probe.get("pressed", false)) and not touch_button.button_pressed, "screen-touch release activates the real lobby button")
+		scene.tcp = StreamPeerTCP.new()
+		scene.tcp_status = StreamPeerTCP.STATUS_NONE
+		scene.online_room.clear()
+		scene.online_waiting_for_server = false
+		scene.online_feedback = ""
+		scene.refresh_online_lobby_state()
+		await settle()
 	var disconnected_start = scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
 	check(disconnected_start != null and disconnected_start.disabled, "disconnected lobby exposes a visibly disabled start action")
 	if disconnected_start != null:

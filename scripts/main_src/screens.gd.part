@@ -386,6 +386,38 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	row.add_child(edit)
 	return edit
 
+func refresh_online_lobby_action_states() -> void:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return
+	var connection_state := lobby_connection_state_text()
+	var connected := connection_state == "已连接"
+	var connecting := connection_state == "连接中"
+	var room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
+	var connect_button = root_layer.find_child("OnlineLobbyConnectButton", true, false) as Button
+	var create_button = root_layer.find_child("OnlineLobbyCreateButton", true, false) as Button
+	var join_button = root_layer.find_child("OnlineLobbyJoinButton", true, false) as Button
+	if connect_button != null:
+		connect_button.disabled = connected or connecting
+		connect_button.tooltip_text = "已连接当前服务器" if connected else ("正在连接服务器" if connecting else "连接服务器")
+		connect_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if connect_button.disabled else Color.WHITE
+	if create_button != null:
+		create_button.disabled = not connected
+		create_button.tooltip_text = "连接后创建房间" if not connected else "创建新房间"
+		create_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if create_button.disabled else Color.WHITE
+	if join_button != null:
+		join_button.disabled = not connected or room_code == ""
+		join_button.tooltip_text = "连接后输入房间号" if not connected else ("输入房间号后加入" if room_code == "" else "加入指定房间")
+		join_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if join_button.disabled else Color.WHITE
+	var current_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
+	if current_status != null and online_feedback.strip_edges() == "":
+		if not connected:
+			current_status.text = "下一步 · 先连接，再建房或入房"
+		elif room_code == "":
+			current_status.text = "已连接 · 可创建房间；输入房间号后可加入"
+		else:
+			current_status.text = "已连接 · 可创建或加入房间"
+
+
 func _show_online_lobby_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "online_lobby"
@@ -399,7 +431,7 @@ func _show_online_lobby_impl() -> void:
 	# The disconnected lobby is an operational form, so its full-page substrate
 	# uses the low-frequency authored bitmap. Decorative detail stays at the
 	# header edge instead of running behind inputs and calls to action.
-	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.96), "ui_dark_scrim", 0.36)
+	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.58), "ui_dark_scrim", 0.18)
 	panel.name = "OnlineLobbyLowFrequencyPagePlate"
 	root_layer.add_child(panel)
 	var lobby_shadow = make_soft_depth_panel(panel, rect_full(0.008, 0.025, 0.992, 1.020), Color(0.0, 0.0, 0.0, 0.10), 22)  # r415
@@ -458,7 +490,7 @@ func _show_online_lobby_impl() -> void:
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.98), "ui_dark_scrim", 0.28)
+	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.50), "ui_dark_scrim", 0.18)
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
@@ -477,7 +509,7 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", commercial_ui_font_size(20, 3), Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.98), "ui_dark_scrim", 0.24)
+	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.56), "ui_dark_scrim", 0.14)
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
 	if input_group_backplate is CanvasItem:
@@ -504,6 +536,10 @@ func _show_online_lobby_impl() -> void:
 	online_host_edit.name = "OnlineLobbyHostEdit"
 	online_room_edit = add_lobby_line_edit(form, "房间号", selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 	online_room_edit.name = "OnlineLobbyRoomEdit"
+	online_room_edit.text_changed.connect(func(value: String) -> void:
+		selected_room = bounded_online_input(value, ONLINE_ROOM_CODE_MAX_LENGTH)
+		refresh_online_lobby_action_states()
+	)
 
 	# 操作按钮组 - 连接/创建/加入
 	var button_row = HBoxContainer.new()
@@ -511,15 +547,22 @@ func _show_online_lobby_impl() -> void:
 	button_row.add_theme_constant_override("separation", 8)
 	apply_rect(button_row, rect_full(0.06, 0.672, 0.94, 0.805))
 	form_panel.add_child(button_row)
-	button_row.add_child(make_lobby_action_button("连接", Color(0.20, 0.48, 0.66), func() -> void:
+	var connect_button = make_lobby_action_button("连接", Color(0.20, 0.48, 0.66), func() -> void:
 		connect_online()
-	, 0.12, Vector2(108, 48)))
-	button_row.add_child(make_lobby_action_button("创建", Color(0.78, 0.56, 0.28), func() -> void:
+	, 0.12, Vector2(108, 48))
+	connect_button.name = "OnlineLobbyConnectButton"
+	button_row.add_child(connect_button)
+	var create_button = make_lobby_action_button("创建", Color(0.78, 0.56, 0.28), func() -> void:
 		create_online_room()
-	, 0.16, Vector2(108, 48)))
-	button_row.add_child(make_lobby_action_button("加入", Color(0.72, 0.48, 0.24), func() -> void:
+	, 0.16, Vector2(108, 48))
+	create_button.name = "OnlineLobbyCreateButton"
+	button_row.add_child(create_button)
+	var join_button = make_lobby_action_button("加入", Color(0.72, 0.48, 0.24), func() -> void:
 		join_online_room()
-	, 0.20, Vector2(108, 48)))
+	, 0.20, Vector2(108, 48))
+	join_button.name = "OnlineLobbyJoinButton"
+	button_row.add_child(join_button)
+	refresh_online_lobby_action_states()
 
 	# 底部按钮 - 开始/返回
 	var start_row = HBoxContainer.new()
@@ -527,7 +570,7 @@ func _show_online_lobby_impl() -> void:
 	start_row.add_theme_constant_override("separation", 10)
 	apply_rect(start_row, rect_full(0.06, 0.810, 0.94, 0.945))
 	form_panel.add_child(start_row)
-	var action_cluster_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.666, 0.955, 0.958), Color(0.024, 0.036, 0.034, 0.96), "ui_dark_scrim", 0.24)
+	var action_cluster_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.666, 0.955, 0.958), Color(0.024, 0.036, 0.034, 0.62), "ui_dark_scrim", 0.24)
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
 	form_panel.add_child(action_cluster_backplate)
 	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.040, false)
@@ -568,7 +611,7 @@ func _show_online_lobby_impl() -> void:
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(status_label)
-	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.98), "ui_dark_scrim", 0.20)
+	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.62), "ui_dark_scrim", 0.20)
 	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
 	panel.add_child(status_backplate)
 	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
@@ -586,7 +629,7 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.98), "ui_dark_scrim", 0.28)
+	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.50), "ui_dark_scrim", 0.18)
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
@@ -596,10 +639,10 @@ func _show_online_lobby_impl() -> void:
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.98), "ui_dark_scrim", 0.24)
+	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.48), "ui_dark_scrim", 0.14)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
-	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.98), "ui_dark_scrim", 0.18)
+	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.68), "ui_dark_scrim", 0.18)
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	log_panel.add_child(empty_state_backplate)
 	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(18, 2), Color(0.98, 0.94, 0.82), true)
@@ -790,6 +833,7 @@ func refresh_online_lobby_state() -> void:
 			lobby_status.text = "下一步 · 先连接，再建房或入房"
 		configure_clipped_label(lobby_status)
 	refresh_online_room_content()
+	refresh_online_lobby_action_states()
 
 func refresh_online_room_content() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
@@ -886,7 +930,7 @@ func _show_rules_screen_impl() -> void:
 	root_layer.add_child(panel)
 	# The front plate is the single authored surface for the page; keep the
 	# content area free of a second full-page illustration.
-	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.38), "settings_gpt_panel_v2")
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.16), "settings_gpt_panel_v2")
 	panel_plate.name = "RulesCodexFrontPlate"
 	panel.add_child(panel_plate)
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.32, false)
@@ -933,7 +977,7 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var content_surface = make_gpt_center_crop_plate_rect(rect_full(-0.015, -0.020, 1.015, 1.020), Color(0.022, 0.034, 0.032, 0.78), "ui_dark_scrim", 0.22)
+	var content_surface = make_gpt_center_crop_plate_rect(rect_full(-0.015, -0.020, 1.015, 1.020), Color(0.022, 0.034, 0.032, 0.14), "ui_dark_scrim", 0.10)
 	content_surface.name = "RulesContentLowFrequencySurface"
 	content_backplate.add_child(content_surface)
 	content_backplate.move_child(content_surface, 0)
@@ -997,6 +1041,14 @@ func _show_rules_screen_impl() -> void:
 	var rules_thumb_drag_state: Dictionary = {"active": false}
 	rules_scroll_hit_target.gui_input.connect(func(event: InputEvent) -> void:
 		handle_rules_scroll_thumb_input(event, content_scroll, rules_scrollbar, rules_scroll_thumb, rules_scroll_gutter, rules_thumb_drag_state, rules_scroll_hit_target)
+	)
+	content_scroll.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			var wheel_event := event as InputEventMouseButton
+			if wheel_event.pressed and (wheel_event.button_index == MOUSE_BUTTON_WHEEL_UP or wheel_event.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+				# ScrollContainer applies the wheel delta after gui_input; defer the
+				# chapter snap so the next frame starts on a complete section.
+				call_deferred("snap_rules_scroll_to_section", content_scroll)
 	)
 	if rules_scrollbar != null:
 		rules_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -1075,6 +1127,7 @@ func _show_rules_screen_impl() -> void:
 	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
 	call_deferred("sync_rules_guide_state", content_scroll, rules_guide)
 	call_deferred("normalize_rules_section_heights", content_scroll)
+	call_deferred("snap_rules_scroll_to_section", content_scroll)
 
 	# 规则段落逐一滑入
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -1120,7 +1173,10 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 	var viewport_height := content_scroll.size.y
 	if viewport_height <= 1.0:
 		viewport_height = effective_viewport_size().y * 0.814
-	var section_min_height := maxf(136.0, viewport_height + 12.0)
+	# Let the authored text height define the chapter. A small viewport-relative
+	# floor keeps short chapters tappable without turning every chapter into a
+	# mostly empty full-screen black sheet.
+	var section_min_height := maxf(136.0, viewport_height * 0.38)
 	for child in content.get_children():
 		var section := child as Control
 		if section == null or not section.has_meta("rules_section_index"):
@@ -1283,9 +1339,9 @@ func _show_shop_screen_impl() -> void:
 	# 主面板
 	var panel = make_gpt_center_crop_plate_rect(
 		rect_full(0.02, 0.02, 0.98, 0.98),
-		Color(0.018, 0.028, 0.026, 0.90),
+		Color(0.018, 0.028, 0.026, 0.38),
 		"ui_dark_scrim",
-		0.26
+		0.16
 	)
 	panel.name = "ShopCabinetFrontPanel"
 	root_layer.add_child(panel)
@@ -1356,7 +1412,7 @@ func _show_shop_screen_impl() -> void:
 	draw_shop_transaction_map_art(panel)
 
 	# 道具列表 - 带滚动支持
-	var display_shell = make_gpt_center_crop_plate_rect(rect_full(0.032, 0.105, 0.938, 0.782), Color(0.012, 0.022, 0.022, 0.88), "ui_dark_scrim", 0.24)
+	var display_shell = make_gpt_center_crop_plate_rect(rect_full(0.032, 0.105, 0.938, 0.782), Color(0.012, 0.022, 0.022, 0.44), "ui_dark_scrim", 0.14)
 	display_shell.name = "ShopDisplayCabinet3DShell"
 	panel.add_child(display_shell)
 	var display_inset = make_layout_host(rect_full(0.012, 0.035, 0.988, 0.965))
@@ -1387,19 +1443,31 @@ func _show_shop_screen_impl() -> void:
 	shop_scroll_thumb.name = "ShopItemsScrollThumb"
 	shop_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var content = VBoxContainer.new()
+	var shop_wide_layout := effective_viewport_size().x >= 1600.0
+	var content: Control
+	if shop_wide_layout:
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 12)
+		grid.add_theme_constant_override("v_separation", 12)
+		content = grid
+	else:
+		var list := VBoxContainer.new()
+		list.add_theme_constant_override("separation", 10)
+		content = list
 	content.name = "ShopItemsContent"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 10)
 	scroll.add_child(content)
 
 	# 让道具行按可用陈列区高度自适应，填满原本空洞的橱窗，同时保证不越过底部说明栏。
 	var shop_item_count := maxi(1, ITEM_TYPES.size())
 	var shop_content_pixels := safe_content_pixel_size()
 	var shop_scroll_pixels := shop_content_pixels.y * 0.96 * (0.765 - 0.12)
-	var shop_row_gap := 10.0
-	var shop_row_max_height := 168.0 if effective_viewport_size().x >= 1600.0 else 120.0
-	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_item_count - 1)) / float(shop_item_count)), 68.0, shop_row_max_height)
+	var shop_columns := 2 if shop_wide_layout else 1
+	var shop_visual_rows := maxi(1, ceili(float(shop_item_count) / float(shop_columns)))
+	var shop_row_gap := 12.0 if shop_wide_layout else 10.0
+	var shop_row_max_height := 246.0 if shop_wide_layout else 120.0
+	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_visual_rows - 1)) / float(shop_visual_rows)), 68.0, shop_row_max_height)
 
 	# 道具图标映射
 	var item_icon_map := {
@@ -1459,7 +1527,7 @@ func _show_shop_screen_impl() -> void:
 		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
 
 		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
-		var text_plate = make_gpt_center_crop_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.024, 0.034, 0.032, 0.99), "ui_dark_scrim", 0.22)
+		var text_plate = make_gpt_center_crop_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.024, 0.034, 0.032, 0.64), "ui_dark_scrim", 0.14)
 		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
 		row.add_child(text_plate)
 		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1525,7 +1593,8 @@ func _show_shop_screen_impl() -> void:
 		buy_btn.custom_minimum_size = Vector2(100, 48)
 		buy_btn.name = "ShopItemBuyButton_%s" % item_id
 		row.add_child(buy_btn)
-		apply_rect(buy_btn, rect_full(0.825, 0.15, 0.955, 0.85))
+		var buy_button_left := 0.790 if shop_wide_layout else 0.825
+		apply_rect(buy_btn, rect_full(buy_button_left, 0.15, 0.955, 0.85))
 		draw_shop_buy_button_art(buy_btn, cost, can_afford)
 
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点

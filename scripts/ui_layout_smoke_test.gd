@@ -237,8 +237,12 @@ func run_continuous_resize_capacity_probe() -> void:
 		var shop_rows := controls_with_name_prefix(scene, "ShopItemRow_")
 		check(shop_rows.size() == 4, "shop preserves all four product rows through live resize at %s" % viewport_size)
 		if not shop_rows.is_empty():
-			var expected_row_cap := 168.0 if viewport_size.x >= 1600.0 else 120.0
-			var expected_row_height := clampf(floorf((scene.safe_content_pixel_size().y * 0.96 * (0.765 - 0.12) - 30.0) / 4.0), 68.0, expected_row_cap)
+			var expected_wide: bool = viewport_size.x >= 1600.0
+			var expected_columns: int = 2 if expected_wide else 1
+			var expected_rows: int = maxi(1, ceili(4.0 / float(expected_columns)))
+			var expected_gap := 12.0 if expected_wide else 10.0
+			var expected_row_cap := 246.0 if expected_wide else 120.0
+			var expected_row_height := clampf(floorf((scene.safe_content_pixel_size().y * 0.96 * (0.765 - 0.12) - expected_gap * float(expected_rows - 1)) / float(expected_rows)), 68.0, expected_row_cap)
 			check(absf((shop_rows[0] as Control).custom_minimum_size.y - expected_row_height) <= 1.0, "shop recomputes compact row height through live resize at %s" % viewport_size)
 			if viewport_size.x >= 1600.0:
 				check((shop_rows[0] as Control).custom_minimum_size.y > 120.0, "wide shop uses the full display height instead of leaving a shelf-sized blank lane at %s" % viewport_size)
@@ -327,7 +331,7 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 			var archive_rect := screen_rect(archive_button)
 			var archive_label = archive_button.find_child("DiscardRiverArchiveLabel_%d" % seat, true, false) as Label
 			check(archive_rect.size.x >= 44.0 and archive_rect.size.y >= 44.0 and archive_button.get_combined_minimum_size().x <= archive_rect.size.x + 1.0, "river %d archive entry remains a readable 44px target at %s" % [seat, viewport_size])
-			check(archive_label != null and archive_label.text == archive_button.text and relative_luma(archive_label.get_theme_color("font_color")) >= 0.88 and archive_rect.grow(1.0).encloses(screen_rect(archive_label)), "river %d archive entry exposes its count above the authored art at %s" % [seat, viewport_size])
+			check(archive_label != null and str(archive_label.text).contains("历史") and str(archive_label.text).contains(archive_button.text) and relative_luma(archive_label.get_theme_color("font_color")) >= 0.88 and archive_rect.grow(1.0).encloses(screen_rect(archive_label)), "river %d archive entry exposes a labelled history action above the authored art at %s" % [seat, viewport_size])
 		if seat == scene.get_last_discard_seat():
 			var recent = scene.find_child("RecentDiscardTile_%d" % seat, true, false) as Control
 			check(recent != null and int(recent.get_meta("discard_source_index", -1)) == scene.get_discards(seat).size() - 1 and str(recent.get_meta("discard_tile_code", "")) == str(scene.get_discards(seat)[-1]), "river %d retains one accurate latest-discard marker at capacity at %s" % [seat, viewport_size])
@@ -998,20 +1002,42 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		previous_right = rect.end.x
 		previous_top = rect.position.y
 	check(found == expected.size(), "pending claim complex action bar renders all legal choices at %s" % viewport_size)
-	var pending_rows: Dictionary = {}
+	var response_grid = scene.find_child("PendingClaimResponseGrid", true, false) as Control
+	var response_buttons: Array[Button] = []
+	if response_grid != null:
+		collect_buttons(response_grid, response_buttons)
+	var tail_buttons: Array[Button] = []
+	var tail_lane = scene.find_child("PendingClaimSecondaryLane", true, false) as Control
+	if tail_lane != null:
+		collect_buttons(tail_lane, tail_buttons)
+	var pending_buttons: Array[Button] = scene.action_bar_buttons()
+	var response_rows: Dictionary = {}
 	var pending_last_button_bottom := -1.0
-	for action_child in scene.action_bar.get_children():
-		if action_child is Button:
-			var action_rect = screen_rect(action_child as Control)
-			var row_key := int(round(action_rect.position.y))
-			pending_rows[row_key] = int(pending_rows.get(row_key, 0)) + 1
-			pending_last_button_bottom = maxf(pending_last_button_bottom, action_rect.end.y)
-	check(pending_rows.size() <= 2, "pending claim actions stay within two stable rows at %s" % viewport_size)
-	if viewport_size.x <= 960.0 and pending_rows.size() == 2:
+	for button in response_buttons:
+		var action_rect = screen_rect(button)
+		var row_key := int(round(action_rect.position.y))
+		response_rows[row_key] = int(response_rows.get(row_key, 0)) + 1
+	for button in pending_buttons:
+		pending_last_button_bottom = maxf(pending_last_button_bottom, screen_rect(button).end.y)
+	var response_columns := 1
+	if response_grid is GridContainer:
+		response_columns = (response_grid as GridContainer).columns
+	check(response_grid != null, "pending claim actions expose a dedicated response grid at %s" % viewport_size)
+	check(response_buttons.size() == scene.pending_claim_response_count(pending_buttons.size()), "pending claim response grid contains only response choices at %s" % viewport_size)
+	check(response_rows.size() == int(ceil(float(response_buttons.size()) / float(maxi(1, response_columns)))), "pending claim response rows match the grid contract at %s" % viewport_size)
+	check(tail_lane != null and tail_buttons.size() == scene.pending_claim_tail_button_count(), "pending claim actions expose the expected secondary tail lane at %s" % viewport_size)
+	if viewport_size.x <= 960.0:
 		var widest_row := 0
-		for row_count in pending_rows.values():
+		for row_count in response_rows.values():
 			widest_row = maxi(widest_row, int(row_count))
-		check(widest_row >= 5, "compact pending claim actions use the widened lane for a five-button first row at %s" % viewport_size)
+		check(widest_row >= mini(5, response_buttons.size()), "compact pending claim responses keep the widened primary row at %s" % viewport_size)
+	check(tail_lane != null and tail_buttons.size() == scene.pending_claim_tail_button_count(), "pending claim actions expose the expected buttons inside one secondary lane at %s" % viewport_size)
+	if tail_lane != null:
+		var tail_lane_rect = screen_rect(tail_lane)
+		check(absf(tail_lane_rect.size.x - scene.action_bar_pixel_width()) <= 2.0, "pending claim secondary lane spans the action width at %s (actual=%.1f expected=%.1f)" % [viewport_size, tail_lane_rect.size.x, scene.action_bar_pixel_width()])
+		for tail_button in tail_buttons:
+			check(tail_lane_rect.grow(1.0).encloses(screen_rect(tail_button)) and screen_rect(tail_button).size.x >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH - 0.5, "pending claim tail button stays in its secondary lane at %s" % viewport_size)
+	check(response_rows.size() + scene.pending_claim_action_tail_count() == scene.pending_claim_action_row_count(pending_buttons.size()), "pending claim response and tail rows form the complete action stack at %s" % viewport_size)
 	for text in removed_long_labels:
 		check(first_button_with_text(scene.action_bar, text) == null, "pending claim action bar omits long label %s at %s" % [text, viewport_size])
 	var summary = scene.find_child("PendingClaimIllustration", true, false) as Control
@@ -1056,7 +1082,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		check(dock_rect.end.y <= hand_rect.position.y - 10.0, "pending claim action dock keeps a clear channel above hand tray at %s" % viewport_size)
 		if pending_last_button_bottom >= 0.0:
 			var dock_bottom_padding = dock_rect.end.y - pending_last_button_bottom
-			check(dock_bottom_padding >= 10.0 and dock_bottom_padding <= 24.0, "pending claim action dock keeps compact bottom padding at %s" % viewport_size)
+			check(dock_bottom_padding >= 10.0 and dock_bottom_padding <= 24.0, "pending claim action dock keeps compact bottom padding at %s (padding=%.1f dock_bottom=%.1f last_button=%.1f)" % [viewport_size, dock_bottom_padding, dock_rect.end.y, pending_last_button_bottom])
 		var dock_texture = scene.find_child("PendingClaimActionGPTDockTexture", true, false) as TextureRect
 		if dock_texture != null:
 			var dock_texture_rect = screen_rect(dock_texture)
@@ -1083,12 +1109,14 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var pending = scene.pending_claim_state()
 	check(scene.mode == "online_game" and not pending.is_empty(), "online pending fixture exposes a real response window at %s" % viewport_size)
-	check(scene.action_bar is GridContainer, "online pending actions use a fixed-column touch lane at %s" % viewport_size)
-	if scene.action_bar is GridContainer:
-		var pending_grid := scene.action_bar as GridContainer
-		var action_count: int = scene.action_bar_button_count()
-		check(pending_grid.columns == scene.pending_claim_action_columns(action_count), "online pending action columns match the layout contract at %s" % viewport_size)
-		check(scene.pending_claim_action_row_count(action_count) == int(ceil(float(action_count) / float(maxi(1, pending_grid.columns)))), "online pending action rows match the fixed column count at %s" % viewport_size)
+	check(scene.action_bar is VBoxContainer, "online pending actions use a stacked response and secondary action lane at %s" % viewport_size)
+	var pending_grid := scene.find_child("PendingClaimResponseGrid", true, false) as GridContainer
+	var action_count: int = scene.action_bar_button_count()
+	check(pending_grid != null, "online pending actions expose their response grid at %s" % viewport_size)
+	if pending_grid != null:
+		var response_count: int = scene.pending_claim_response_count(action_count)
+		check(pending_grid.columns == scene.pending_claim_action_columns(action_count), "online pending response columns match the layout contract at %s" % viewport_size)
+		check(pending_grid.get_child_count() == response_count and int(ceil(float(response_count) / float(maxi(1, pending_grid.columns)))) + scene.pending_claim_action_tail_count() == scene.pending_claim_action_row_count(action_count), "online pending response and tail rows match the stack contract at %s" % viewport_size)
 	var voice = scene.find_child("VoiceActionButton", true, false) as Button
 	check(voice != null, "online pending keeps the voice action available during response at %s" % viewport_size)
 	if voice != null:
@@ -1123,10 +1151,9 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 		var card = panel.find_child("AdvisorInfoCard_%s" % heading, true, false) as Control
 		check(card != null and panel_rect.grow(1.0).encloses(screen_rect(card)), "AI advisor %s card stays inside the panel at %s" % [heading, viewport_size])
 	var recommended_count := 0
-	if scene.action_bar != null:
-		for child in scene.action_bar.get_children():
-			if child is Button and str((child as Button).text).contains("荐"):
-				recommended_count += 1
+	for child in scene.action_bar_buttons():
+		if str(child.text).contains("荐"):
+			recommended_count += 1
 	check(recommended_count > 0, "AI advisor exposes a recommended claim action at %s" % viewport_size)
 
 func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
@@ -1389,12 +1416,8 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		for body in controls_with_name_prefix(table_log, "TableLogLedgerBody_"):
 			var body_label := body as Label
 			check(body_label != null and body_label.clip_text and (label_text_width(body_label, body_label.text) <= screen_rect(body_label).size.x + 2.0 or body_label.tooltip_text == body_label.text), "battle table log latest event fits or exposes its full value at %s" % viewport_size)
-	var action_children: Array = []
-	if scene.action_bar != null:
-		action_children = scene.action_bar.get_children()
+	var action_children: Array = scene.action_bar_buttons()
 	for child in action_children:
-		if not (child is Button):
-			continue
 		var button = child as Button
 		var button_rect = screen_rect(button)
 		check(viewport_rect.encloses(button_rect), "battle action button %s stays inside viewport at %s" % [button.text, viewport_size])
@@ -1455,6 +1478,15 @@ func collect_visible_text_and_buttons(node: Node, found: Array[Control]) -> void
 			found.append(control)
 	for child in node.get_children():
 		collect_visible_text_and_buttons(child, found)
+
+func collect_buttons(node: Node, found: Array[Button]) -> void:
+	if node == null:
+		return
+	if node is Button:
+		found.append(node as Button)
+		return
+	for child in node.get_children():
+		collect_buttons(child, found)
 
 func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	var overlay = scene.root_layer.get_child(scene.root_layer.get_child_count() - 1) if scene.root_layer.get_child_count() > 0 else null
@@ -1738,7 +1770,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	check(page_plate != null and form_panel != null and log_panel != null, "online lobby exposes a low-frequency page plate and named split panels at %s" % viewport_size)
 	if page_plate != null:
 		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
-		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.95, "disconnected lobby uses an opaque low-frequency authored bitmap substrate at %s" % viewport_size)
+		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.55 and page_plate.self_modulate.a <= 0.85, "disconnected lobby uses a subdued low-frequency authored bitmap substrate at %s" % viewport_size)
 	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
 	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null, "online lobby exposes room summary roster and log list hierarchy at %s" % viewport_size)
 	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
@@ -2371,7 +2403,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	var scrollbar = scene.find_child("ShopItemsScrollBar", true, false) as VScrollBar
 	var scroll_gutter = scene.find_child("ShopItemsScrollGutter", true, false) as Control
 	var scroll_thumb = scene.find_child("ShopItemsScrollThumb", true, false) as Control
-	var content = scene.find_child("ShopItemsContent", true, false) as VBoxContainer
+	var content = scene.find_child("ShopItemsContent", true, false) as Control
 	var footer_panel = scene.find_child("ShopCabinetFooterPanel", true, false) as Control
 	var footer_title = scene.find_child("ShopCabinetFooterTitle", true, false) as Label
 	var footer_body = scene.find_child("ShopCabinetFooterBody", true, false) as Label
@@ -2402,7 +2434,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 		check(row_readability != null, "shop row %s exposes an authored low-frequency reading surface at %s" % [item_id, viewport_size])
 		if row_readability != null:
 			var row_source = (row_readability.texture as AtlasTexture).atlas if row_readability.texture is AtlasTexture else row_readability.texture
-			check(row_source != null and str(row_source.resource_path).ends_with("ui_dark_scrim.png") and row_readability.self_modulate.a >= 0.98, "shop row %s uses an opaque low-frequency bitmap center crop at %s" % [item_id, viewport_size])
+			check(row_source != null and str(row_source.resource_path).ends_with("ui_dark_scrim.png") and row_readability.self_modulate.a >= 0.45 and row_readability.self_modulate.a <= 0.75, "shop row %s uses a subdued low-frequency bitmap center crop at %s" % [item_id, viewport_size])
 		check(row_generated_plate == null or row_generated_plate.modulate.a <= 0.05, "shop row %s keeps high-frequency generated art at edge-level alpha at %s" % [item_id, viewport_size])
 		check(row_depth != null and charm_plinth != null, "shop row %s exposes a physical shelf edge and charm plinth at %s" % [item_id, viewport_size])
 		if row != null:

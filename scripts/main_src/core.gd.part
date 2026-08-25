@@ -1640,6 +1640,8 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 	var selected_gap = 0.0
 	var selected_separation = 1
 	var selected_width = 1.0
+	var compact_view := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
+	var minimum_group_gap := HAND_MIN_GROUP_GAP if compact_view else 4.0
 	for candidate in HAND_LAYOUT_CANDIDATES:
 		var gap_width = float(candidate[0])
 		var separation = int(candidate[1])
@@ -1648,8 +1650,11 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 		selected_separation = separation
 		selected_width = candidate_width
 		# Prefer readable spacing (not welded) while keeping touch width.
-		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and gap_width >= 4.0:
+		if candidate_width >= HAND_TILE_MIN_TOUCH_WIDTH and gap_width >= minimum_group_gap:
 			break
+	if selected_gap < minimum_group_gap:
+		selected_gap = minimum_group_gap
+		selected_width = hand_tile_width_for_space(content_size, count, gap_count, selected_gap, selected_separation)
 	var tile_width = min(HAND_TILE_MAX_WIDTH, floor(max(1.0, selected_width)))
 	var tile_height = floor(tile_width * HAND_TILE_ASPECT)
 	return {
@@ -1750,7 +1755,8 @@ func hand_group_label(tile: String) -> String:
 
 func hand_tray_text() -> String:
 	if has_pending_danger_discard():
-		return pending_danger_discard_text() if player_ai_assist_enabled() else "高危牌已标记 · 选择出牌"
+		# 顶部 HUD 和确认 dock 负责完整风险说明；托盘只展示牌面与高亮目标。
+		return "目标牌已标记" if player_ai_assist_enabled() else "选择出牌"
 	if has_pending_claim_window():
 		return human_claim_hint_text() if player_ai_assist_enabled() else "选择响应"
 	if mode == "offline" and can_self_discard():
@@ -1824,6 +1830,8 @@ func hand_tray_state_text() -> String:
 	if mode == "offline":
 		if offline_phase == "ended":
 			return "结算"
+		if has_pending_danger_discard():
+			return "确认"
 		if has_pending_claim_window():
 			return "响应"
 		if can_self_discard():
@@ -1942,6 +1950,31 @@ func pending_claim_source_name(source_seat: int) -> String:
 	var source_name = str(source_info.get("name", "对手")).strip_edges()
 	return source_name if source_name != "" and source_name != "空位" else "对手"
 
+func ordered_pending_claim_options(options: Array, recommendation: Dictionary = {}) -> Array:
+	var ordered: Array = []
+	var preferred := str(recommendation.get("claim", ""))
+	if preferred != "" and preferred != "pass" and options.has(preferred):
+		ordered.append(preferred)
+	for claim in ["hu", "gang", "peng", "chi"]:
+		if options.has(claim) and not ordered.has(claim):
+			ordered.append(claim)
+	for claim in options:
+		if not ordered.has(claim):
+			ordered.append(claim)
+	return ordered
+
+func ordered_pending_chi_choices(choices: Array, recommendation: Dictionary = {}) -> Array:
+	var ordered: Array = choices.duplicate(true)
+	if str(recommendation.get("claim", "")) != "chi":
+		return ordered
+	for i in range(ordered.size()):
+		var choice = ordered[i]
+		if typeof(choice) == TYPE_DICTIONARY and is_recommended_claim_action("chi", choice, recommendation):
+			ordered.remove_at(i)
+			ordered.push_front(choice)
+			break
+	return ordered
+
 func pending_claim_focus_text() -> String:
 	var pending = pending_claim_state()
 	if pending.is_empty():
@@ -2044,19 +2077,36 @@ func pending_claim_action_dock_base_rect() -> Rect2:
 func pending_claim_action_row_count(count: int) -> int:
 	if count <= 0:
 		return 1
+	var response_count = pending_claim_response_count(count)
 	var columns = pending_claim_action_columns(count)
-	return maxi(1, int(ceil(float(count) / float(columns))))
+	var response_rows = maxi(1, int(ceil(float(response_count) / float(columns))))
+	# Pass/cancel/voice share one deliberate secondary lane below the response grid.
+	return response_rows + pending_claim_action_tail_count()
+
+func pending_claim_action_tail_count() -> int:
+	return 1
+
+func pending_claim_tail_button_count() -> int:
+	return 2 if mode == "online_game" else 1
+
+func pending_claim_response_count(count: int) -> int:
+	var tail_buttons := pending_claim_tail_button_count()
+	return maxi(1, count - tail_buttons) if count > tail_buttons else 1
 
 func pending_claim_action_columns(count: int) -> int:
 	if count <= 0:
 		return 1
-	# Keep pass (and online voice) in a deliberate secondary row. The response
+	# Keep pass (and online voice) in a deliberate secondary lane. The response
 	# choices therefore retain a stable scan order instead of letting the last
 	# button drift between rows with Flow capacity.
-	var tail_actions := 2 if mode == "online_game" else 1
-	var response_count := maxi(1, count - tail_actions) if count > tail_actions else 1
+	var response_count := pending_claim_response_count(count)
 	if effective_viewport_size().y <= 560.0:
-		return mini(5, response_count)
+		var compact_rect := pending_claim_action_base_rect()
+		var compact_width := safe_content_pixel_size().x * maxf(0.001, compact_rect.size.x - compact_rect.position.x)
+		var compact_separation := action_button_separation_for_count(count)
+		var compact_button_width := action_button_width_for_available(count, compact_width, compact_separation)
+		var compact_capacity := maxi(1, int(floor((compact_width + float(compact_separation)) / maxf(1.0, compact_button_width + float(compact_separation)))))
+		return mini(response_count, compact_capacity)
 	var bar_rect = pending_claim_action_base_rect()
 	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
 	var separation = action_button_separation_for_count(count)
@@ -2074,13 +2124,21 @@ func pending_claim_action_dock_rect_for_count(count: int) -> Rect2:
 	var base_rect = pending_claim_action_dock_base_rect()
 	var content_height = maxf(1.0, safe_content_pixel_size().y)
 	var dock_height = (8.0 + pending_claim_action_content_height(count) + 14.0) / content_height
-	var top = maxf(base_rect.position.y, base_rect.size.y - dock_height)
+	# Keep the dock bottom in its established hand-safe lane, but let taller
+	# response stacks grow upward instead of forcing their containers below it.
+	var top = maxf(0.30, base_rect.size.y - dock_height)
 	return Rect2(Vector2(base_rect.position.x, top), base_rect.size)
 
 func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 	var dock_rect = pending_claim_action_dock_rect_for_count(count)
 	var base_rect = pending_claim_action_base_rect()
-	return Rect2(Vector2(base_rect.position.x, dock_rect.position.y + 0.010), dock_rect.size)
+	var content_height := maxf(1.0, safe_content_pixel_size().y)
+	var top_inset := 8.0 / content_height
+	var bottom_inset := 14.0 / content_height
+	return Rect2(
+		Vector2(base_rect.position.x, dock_rect.position.y + top_inset),
+		Vector2(dock_rect.size.x, dock_rect.size.y - bottom_inset)
+	)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
 	# Keep the response context in the root-layer lane between the transformed
@@ -2139,40 +2197,60 @@ func finalize_action_bar_layout() -> void:
 	if count <= 0:
 		return
 	var separation = action_button_separation_for_count(count)
+	var compact_claim_mode := has_pending_claim_window()
 	if action_bar is GridContainer:
 		(action_bar as GridContainer).columns = pending_claim_action_columns(count)
 		action_bar.add_theme_constant_override("h_separation", separation)
 		action_bar.add_theme_constant_override("v_separation", separation)
 		action_bar.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
+	elif compact_claim_mode:
+		var response_grid := action_bar.get_node_or_null("PendingClaimResponseGrid") as GridContainer
+		if response_grid != null:
+			response_grid.columns = pending_claim_action_columns(count)
+			response_grid.add_theme_constant_override("h_separation", separation)
+			response_grid.add_theme_constant_override("v_separation", separation)
+		var stack := action_bar as VBoxContainer
+		if stack != null:
+			stack.add_theme_constant_override("separation", separation)
+			stack.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
 	else:
 		action_bar.add_theme_constant_override("separation", separation)
 	apply_rect(action_bar, action_bar_layout_rect())
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
-	var compact_claim_mode := has_pending_claim_window()
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	var ended_widths: Array[float] = []
 	if ended_action_mode:
 		ended_widths = ended_action_button_widths(count)
+	var buttons := action_bar_buttons()
+	var full_width := maxf(float(width), action_bar_pixel_width())
+	var pending_tail_buttons: Array[Button] = []
+	for button in buttons:
+		if compact_claim_mode and bool(button.get_meta("pending_tail", false)):
+			pending_tail_buttons.append(button)
 	var btn_index := 0
-	for child in action_bar.get_children():
-		if child is Button:
-			var button_width: float = float(width)
-			var button_font_size: int = int(font_size)
-			if ended_action_mode and btn_index < ended_widths.size():
-				button_width = float(ended_widths[btn_index])
-				button_font_size = 18 if str((child as Button).get_meta("action_priority", "secondary")) == "primary" else 15
-			configure_action_button_size(child as Button, button_width, height, button_font_size)
-			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				child.pivot_offset = Vector2(button_width * 0.5, height * 0.5)
-				child.scale = Vector2(0.7, 0.7)
-				child.modulate = Color(1, 1, 1, 0)
-				var btw := create_screen_tween()
-				btw.set_parallel(true)
-				btw.tween_property(child, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-				btw.tween_property(child, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
-			btn_index += 1
+	for button in buttons:
+		var button_width: float = float(width)
+		var button_font_size: int = int(font_size)
+		if compact_claim_mode and bool(button.get_meta("pending_tail", false)):
+			# Pass/cancel/voice share one full-width lane below the response choices.
+			button_width = (full_width - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
+			button_font_size = 15
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if ended_action_mode and btn_index < ended_widths.size():
+			button_width = float(ended_widths[btn_index])
+			button_font_size = 18 if str(button.get_meta("action_priority", "secondary")) == "primary" else 15
+		configure_action_button_size(button, button_width, height, button_font_size)
+		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+			button.pivot_offset = Vector2(button_width * 0.5, height * 0.5)
+			button.scale = Vector2(0.7, 0.7)
+			button.modulate = Color(1, 1, 1, 0)
+			var btw := create_screen_tween()
+			btw.set_parallel(true)
+			btw.tween_property(button, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			btw.tween_property(button, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
+		btn_index += 1
 
 func ended_action_button_widths(count: int) -> Array[float]:
 	var widths: Array[float] = []
@@ -2182,6 +2260,12 @@ func ended_action_button_widths(count: int) -> Array[float]:
 	var separation = float(action_button_separation_for_count(count))
 	var primary = clampf(available * 0.38, 116.0, 176.0)
 	var secondary_count = maxi(0, count - 1)
+	var primary_index := 0
+	var visible_buttons := action_bar_buttons()
+	for i in range(visible_buttons.size()):
+		if str(visible_buttons[i].get_meta("action_priority", "secondary")) == "primary":
+			primary_index = i
+			break
 	var secondary = 0.0
 	if secondary_count > 0:
 		secondary = clampf((available - primary - separation * float(secondary_count)) / float(secondary_count), 88.0, 132.0)
@@ -2189,7 +2273,7 @@ func ended_action_button_widths(count: int) -> Array[float]:
 		if used > available:
 			primary = maxf(108.0, primary - (used - available))
 	for i in range(count):
-		widths.append(primary if i == 0 else secondary)
+		widths.append(primary if i == primary_index else secondary)
 	return widths
 
 func ended_action_bar_required_width(count: int) -> float:
@@ -2202,22 +2286,23 @@ func ended_action_bar_required_width(count: int) -> float:
 	return total + float(maxi(0, widths.size() - 1) * action_button_separation_for_count(count))
 
 func action_bar_button_count() -> int:
-	if action_bar == null:
-		return 0
-	var count = 0
-	for child in action_bar.get_children():
-		if child is Button:
-			count += 1
-	return count
+	return action_bar_buttons().size()
 
 func action_bar_buttons() -> Array[Button]:
 	var buttons: Array[Button] = []
 	if action_bar == null:
 		return buttons
-	for child in action_bar.get_children():
+	collect_action_bar_buttons(action_bar, buttons)
+	return buttons
+
+func collect_action_bar_buttons(node: Node, buttons: Array[Button]) -> void:
+	if node == null:
+		return
+	for child in node.get_children():
 		if child is Button:
 			buttons.append(child as Button)
-	return buttons
+		elif child is Control:
+			collect_action_bar_buttons(child, buttons)
 
 func action_bar_pixel_width() -> float:
 	var rect = action_bar_layout_rect()
@@ -2229,7 +2314,7 @@ func action_button_separation_for_count(count: int) -> int:
 	if has_pending_claim_window():
 		# Keep a small, stable gap; FlowContainer wraps claim choices when the row
 		# cannot fit full-size touch targets.
-		return 3
+		return 1 if effective_viewport_size().y <= 560.0 else 3
 	if count <= 5:
 		return 4
 	if count <= 8:
@@ -6280,7 +6365,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.72), "ui_dark_scrim", 0.22)
+	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.46), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 
