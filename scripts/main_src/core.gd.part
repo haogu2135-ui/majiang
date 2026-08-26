@@ -6503,7 +6503,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.set_meta("rules_section_index", section_index)
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.085), "ui_button_face_plate")
+	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.035), "ui_button_face_plate")
 	section_plate.name = "RuleSectionPlate_%d" % section_index if section_index >= 0 else "RuleSectionPlate"
 	section.add_child(section_plate)
 	var line_count := int(lines.size())
@@ -6512,7 +6512,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var line_gap := 6.0 if wide_typography else 5.0
 	var required_text_height := (26.0 if wide_typography else 24.0) + float(line_count) * line_height + float(line_count) * line_gap + (38.0 if wide_typography else 34.0)
 	section.custom_minimum_size.y = max(136.0, required_text_height)
-	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.035), "ui_button_face_plate")
+	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.018), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
 	section.add_child(section_depth)
 	var section_top_rim = make_gpt_ribbon(rect_full(0.025, 0.018, 0.975, 0.070), Color(1.0, 0.90, 0.58, 0.028))
@@ -6527,7 +6527,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.730 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.27), "ui_dark_scrim", 0.22)
+	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.730 if section_index >= 0 else 0.940, 0.990), Color(0.018, 0.032, 0.030, 0.14), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

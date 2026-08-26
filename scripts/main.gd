@@ -14325,7 +14325,7 @@ func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 
 func draw_online_lobby_roster_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
-	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.94), "ui_dark_scrim")
+	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.64), "ui_dark_scrim")
 	roster.name = "OnlineLobbyRosterPanel"
 	parent.add_child(roster)
 	var title = make_label(roster, "玩家席位", 13, Color(0.94, 0.94, 0.80), true)
@@ -14371,7 +14371,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 
 func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
-	var list = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.632, 0.950, 0.945), Color(0.008, 0.016, 0.016, 0.94), "ui_dark_scrim")
+	var list = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.632, 0.950, 0.945), Color(0.008, 0.016, 0.016, 0.64), "ui_dark_scrim")
 	list.name = "OnlineLobbyLogListPanel"
 	parent.add_child(list)
 	list.clip_contents = true
@@ -14433,7 +14433,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 		for player_value in players_array:
 			if typeof(player_value) == TYPE_DICTIONARY and bool((player_value as Dictionary).get("ready", false)):
 				ready_count += 1
-	var summary_panel = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.92), "ui_dark_scrim")
+	var summary_panel = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.68), "ui_dark_scrim")
 	summary_panel.name = "OnlineLobbyRoomSummaryPanel"
 	art.add_child(summary_panel)
 	var occupancy_chip = make_gpt_gate(rect_full(0.030, 0.140, 0.315, 0.860), Color(0.030, 0.060, 0.050, 0.72))
@@ -21125,12 +21125,12 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
 	parent.add_child(row)
-	var row_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.022, 0.020, 0.30), "ui_dark_scrim", 0.18)
+	var row_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.022, 0.020, 0.18), "ui_dark_scrim", 0.18)
 	row_plate.name = "SettingRowGptPlate_%s" % title
 	row.add_child(row_plate)
 	row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.012, 0.016, 0.012, 0.72), "ui_dark_scrim")
+	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.012, 0.016, 0.012, 0.52), "ui_dark_scrim")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
 	var title_label = make_label(row, title, 14, Color(1.0, 0.97, 0.88, 1.0), true)
@@ -21160,7 +21160,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_center_crop_plate_rect(rect, Color(0.016, 0.028, 0.026, 0.82), "ui_dark_scrim", 0.18)
+	var section = make_gpt_center_crop_plate_rect(rect, Color(0.016, 0.028, 0.026, 0.62), "ui_dark_scrim", 0.18)
 	section.name = "SettingsSection_%s" % title_text
 	parent.add_child(section)
 	var section_depth = make_gpt_route_rail(rect_full(0.015, 0.910, 0.985, 0.985), Color(0.0, 0.0, 0.0, 0.10))
@@ -24220,7 +24220,7 @@ func _show_rules_screen_impl() -> void:
 	root_layer.add_child(panel)
 	# The front plate is the single authored surface for the page; keep the
 	# content area free of a second full-page illustration.
-	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.10), "settings_gpt_panel_v2")
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.065), "settings_gpt_panel_v2")
 	panel_plate.name = "RulesCodexFrontPlate"
 	panel.add_child(panel_plate)
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.32, false)
@@ -24267,7 +24267,7 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var content_surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.000, 0.690, 1.000), Color(0.022, 0.034, 0.032, 0.018), "ui_dark_scrim", 0.10)
+	var content_surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.018, 0.650, 0.982), Color(0.022, 0.034, 0.032, 0.02), "ui_dark_scrim", 0.10)
 	content_surface.name = "RulesContentLowFrequencySurface"
 	content_backplate.add_child(content_surface)
 	content_backplate.move_child(content_surface, 0)
@@ -33128,7 +33128,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.set_meta("rules_section_index", section_index)
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.085), "ui_button_face_plate")
+	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.035), "ui_button_face_plate")
 	section_plate.name = "RuleSectionPlate_%d" % section_index if section_index >= 0 else "RuleSectionPlate"
 	section.add_child(section_plate)
 	var line_count := int(lines.size())
@@ -33137,7 +33137,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var line_gap := 6.0 if wide_typography else 5.0
 	var required_text_height := (26.0 if wide_typography else 24.0) + float(line_count) * line_height + float(line_count) * line_gap + (38.0 if wide_typography else 34.0)
 	section.custom_minimum_size.y = max(136.0, required_text_height)
-	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.035), "ui_button_face_plate")
+	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.018), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
 	section.add_child(section_depth)
 	var section_top_rim = make_gpt_ribbon(rect_full(0.025, 0.018, 0.975, 0.070), Color(1.0, 0.90, 0.58, 0.028))
@@ -33152,7 +33152,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.730 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.27), "ui_dark_scrim", 0.22)
+	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.730 if section_index >= 0 else 0.940, 0.990), Color(0.018, 0.032, 0.030, 0.14), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 

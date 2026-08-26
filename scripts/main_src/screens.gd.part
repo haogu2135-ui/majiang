@@ -963,7 +963,7 @@ func _show_rules_screen_impl() -> void:
 	root_layer.add_child(panel)
 	# The front plate is the single authored surface for the page; keep the
 	# content area free of a second full-page illustration.
-	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.10), "settings_gpt_panel_v2")
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.065), "settings_gpt_panel_v2")
 	panel_plate.name = "RulesCodexFrontPlate"
 	panel.add_child(panel_plate)
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.32, false)
@@ -1010,7 +1010,7 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var content_surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.000, 0.690, 1.000), Color(0.022, 0.034, 0.032, 0.018), "ui_dark_scrim", 0.10)
+	var content_surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.018, 0.650, 0.982), Color(0.022, 0.034, 0.032, 0.02), "ui_dark_scrim", 0.10)
 	content_surface.name = "RulesContentLowFrequencySurface"
 	content_backplate.add_child(content_surface)
 	content_backplate.move_child(content_surface, 0)

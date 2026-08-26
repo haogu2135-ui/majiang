@@ -169,6 +169,8 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		scene.clear_fx_overlays()
 	await settle()
 	_force_capture_visible_screens(scene)
+	if screen_name == "13_round_summary" or screen_name == "16_win_detail":
+		stabilize_capture_round_summary(scene)
 
 	var viewport_texture = root.get_texture()
 	if viewport_texture == null:
@@ -423,6 +425,21 @@ func _force_capture_visible_screens(target: Node) -> void:
 		if node is CanvasItem:
 			(node as CanvasItem).modulate = Color(1, 1, 1, 1)
 
+func stabilize_capture_round_summary(target: Node) -> void:
+	if target == null:
+		return
+	var panel := target.find_child("RoundSummaryPanel", true, false) as Control
+	if panel == null:
+		return
+	panel.visible = true
+	panel.z_index = 30
+	panel.modulate = Color(1, 1, 1, 1)
+	panel.scale = Vector2.ONE
+	panel.offset_left = 0.0
+	panel.offset_top = 0.0
+	panel.offset_right = 0.0
+	panel.offset_bottom = 0.0
+
 
 func settle() -> void:
 	await process_frame
@@ -433,6 +450,7 @@ func settle() -> void:
 	await process_frame
 
 func seed_preview_discards(scene: Node) -> void:
+	scene.set_meta("ui_capture_meld_fixture", "seat0+seat2 horizontal; seat1+seat3 vertical")
 	var preview_discards := [
 		["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "S", "N", "1T", "2T", "3T", "4T"],
 		["1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T", "9T", "E", "S", "W", "1B", "2B", "3B", "4B"],
