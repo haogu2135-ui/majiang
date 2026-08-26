@@ -6,8 +6,9 @@ func _show_achievements_screen_impl() -> void:
 	var panel_height = max(1.0, content_size.y * 0.96)
 	var achievement_scroll_top := 0.330
 	var achievement_scroll_max_bottom := 0.885
-	var achievement_row_height := 84.0
-	var achievement_row_gap := 10.0
+	var wide_achievement_gallery := effective_viewport_size().x >= 1600.0
+	var achievement_row_height := 104.0 if wide_achievement_gallery else 84.0
+	var achievement_row_gap := 12.0 if wide_achievement_gallery else 10.0
 	var max_scroll_height = panel_height * (achievement_scroll_max_bottom - achievement_scroll_top)
 	var visible_row_count = int(clamp(floor((max_scroll_height + achievement_row_gap) / (achievement_row_height + achievement_row_gap)), 3.0, float(max(3, achievements.size()))))
 	var complete_scroll_height = float(visible_row_count) * achievement_row_height + float(max(0, visible_row_count - 1)) * achievement_row_gap + 1.0
@@ -130,7 +131,7 @@ func _show_achievements_screen_impl() -> void:
 	configure_passive_container(grid)
 	grid.name = "AchievementsGrid"
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("separation", 10)
+	grid.add_theme_constant_override("separation", int(achievement_row_gap))
 	scroll.add_child(grid)
 
 	var rows: Array[Node] = []
@@ -212,7 +213,7 @@ func _show_menu_impl() -> void:
 	title.add_theme_constant_override("shadow_offset_y", 3)
 	title.add_theme_constant_override("outline_size", 4)
 	title.add_theme_color_override("font_outline_color", Color(0.08, 0.045, 0.018, 0.96))
-	var title_rule = make_label(header, "一桌风雅，四方入席", commercial_ui_font_size(14, 2), Color(0.92, 0.86, 0.68, 0.88), false)
+	var title_rule = make_label(header, "一桌风雅，四方入席 · %s" % rule_variant_label(), commercial_ui_font_size(14, 2), Color(0.92, 0.86, 0.68, 0.88), false)
 	title_rule.name = "MenuTitleRule"
 	apply_rect(title_rule, rect_full(0.018, 0.650, 0.940, 0.950))
 	title_rule.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -223,12 +224,13 @@ func _show_menu_impl() -> void:
 	var row = HBoxContainer.new()
 	configure_passive_container(row)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	var card_gap := 28
+	var wide_menu: bool = content_size.x >= 1600.0
+	var card_gap := 32 if wide_menu else 28
 	row.add_theme_constant_override("separation", card_gap)
 	row.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 0)
 	var available_card_width = max(720.0, content_size.x * 0.78)
-	var card_width = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 290.0)
-	var card_height = clamp(floor(content_size.y * 0.225), 148.0, 176.0)
+	var card_width = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 340.0 if wide_menu else 290.0)
+	var card_height = clamp(floor(content_size.y * (0.225 if not wide_menu else 0.190)), 148.0, 198.0 if wide_menu else 176.0)
 	var row_width = card_width * 3.0 + float(card_gap * 2)
 	row.custom_minimum_size = Vector2(row_width, card_height)
 	root_layer.add_child(row)
@@ -241,7 +243,7 @@ func _show_menu_impl() -> void:
 	row.add_child(card1)
 	cards.append(card1)
 
-	var card2 = make_menu_card("联机房间\n连接本机服务器", AZURE, func() -> void: show_online_lobby(), "users")
+	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", AZURE, func() -> void: show_online_lobby(), "users")
 	card2.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card2)
 	cards.append(card2)
@@ -458,7 +460,7 @@ func _show_online_lobby_impl() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.92))
 	title.add_theme_constant_override("outline_size", 4)
-	var subtitle = make_label(panel, "连接本机或局域网房间，创建后等待玩家进入。", commercial_ui_font_size(15, 2), Color(0.96, 0.96, 0.90), false)
+	var subtitle = make_label(panel, "连接本机或局域网，先连接再创建或加入房间。", commercial_ui_font_size(15, 2), Color(0.96, 0.96, 0.90), false)
 	apply_rect(subtitle, rect_full(0.04, 0.095, 0.48, 0.14))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
@@ -490,7 +492,7 @@ func _show_online_lobby_impl() -> void:
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.50), "ui_dark_scrim", 0.18)
+	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.32), "ui_dark_scrim", 0.18)
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
@@ -509,7 +511,7 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", commercial_ui_font_size(20, 3), Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.56), "ui_dark_scrim", 0.14)
+	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.30), "ui_dark_scrim", 0.14)
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
 	if input_group_backplate is CanvasItem:
@@ -570,7 +572,7 @@ func _show_online_lobby_impl() -> void:
 	start_row.add_theme_constant_override("separation", 10)
 	apply_rect(start_row, rect_full(0.06, 0.810, 0.94, 0.945))
 	form_panel.add_child(start_row)
-	var action_cluster_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.666, 0.955, 0.958), Color(0.024, 0.036, 0.034, 0.62), "ui_dark_scrim", 0.24)
+	var action_cluster_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.666, 0.955, 0.958), Color(0.024, 0.036, 0.034, 0.36), "ui_dark_scrim", 0.24)
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
 	form_panel.add_child(action_cluster_backplate)
 	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.040, false)
@@ -611,7 +613,7 @@ func _show_online_lobby_impl() -> void:
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(status_label)
-	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.62), "ui_dark_scrim", 0.20)
+	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.36), "ui_dark_scrim", 0.20)
 	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
 	panel.add_child(status_backplate)
 	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
@@ -629,7 +631,7 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.50), "ui_dark_scrim", 0.18)
+	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.32), "ui_dark_scrim", 0.18)
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
@@ -639,10 +641,10 @@ func _show_online_lobby_impl() -> void:
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.48), "ui_dark_scrim", 0.14)
+	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.26), "ui_dark_scrim", 0.14)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
-	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.68), "ui_dark_scrim", 0.18)
+	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.42), "ui_dark_scrim", 0.18)
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	log_panel.add_child(empty_state_backplate)
 	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(18, 2), Color(0.98, 0.94, 0.82), true)
@@ -675,13 +677,15 @@ func _show_online_lobby_impl() -> void:
 	log_title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.58))
 	log_title.add_theme_constant_override("shadow_offset_x", 1)
 	log_title.add_theme_constant_override("shadow_offset_y", 1)
-	var room_badge_text = "房间号 " + (selected_room if selected_room != "" else "--")
+	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
+	var room_badge_text = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
 	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
-	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP
+	room_badge.visible = room_snapshot_visible
+	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
 	room_badge.gui_input.connect(func(event: InputEvent) -> void:
 		if online_detail_press_event(event):
 			show_online_room_code_detail()
@@ -756,7 +760,7 @@ func online_connection_state_tint(state: String) -> Color:
 		"异常":
 			return Color(1.00, 0.50, 0.38, 0.98)
 		_:
-			return Color(0.76, 0.82, 0.80, 0.96)
+			return Color(0.84, 0.66, 0.56, 0.98)
 
 
 func refresh_online_lobby_state() -> void:
@@ -795,7 +799,9 @@ func refresh_online_lobby_state() -> void:
 	if room_badge != null:
 		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 		if room_badge_label != null:
-			room_badge_label.text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "--")
+			room_badge.visible = show_room_snapshot
+			room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
+			room_badge_label.text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
 			room_badge_label.tooltip_text = room_badge_label.text
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
 	var roster = root_layer.find_child("OnlineLobbyRosterPanel", true, false) as CanvasItem
@@ -930,7 +936,7 @@ func _show_rules_screen_impl() -> void:
 	root_layer.add_child(panel)
 	# The front plate is the single authored surface for the page; keep the
 	# content area free of a second full-page illustration.
-	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.16), "settings_gpt_panel_v2")
+	var panel_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.08, 0.12, 0.11, 0.10), "settings_gpt_panel_v2")
 	panel_plate.name = "RulesCodexFrontPlate"
 	panel.add_child(panel_plate)
 	var rules_title_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.05, 0.03, 0.78, 0.11), 0.32, false)
@@ -977,7 +983,7 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var content_surface = make_gpt_center_crop_plate_rect(rect_full(-0.015, -0.020, 1.015, 1.020), Color(0.022, 0.034, 0.032, 0.14), "ui_dark_scrim", 0.10)
+	var content_surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.000, 0.748, 1.000), Color(0.022, 0.034, 0.032, 0.035), "ui_dark_scrim", 0.10)
 	content_surface.name = "RulesContentLowFrequencySurface"
 	content_backplate.add_child(content_surface)
 	content_backplate.move_child(content_surface, 0)
@@ -1412,7 +1418,7 @@ func _show_shop_screen_impl() -> void:
 	draw_shop_transaction_map_art(panel)
 
 	# 道具列表 - 带滚动支持
-	var display_shell = make_gpt_center_crop_plate_rect(rect_full(0.032, 0.105, 0.938, 0.782), Color(0.012, 0.022, 0.022, 0.44), "ui_dark_scrim", 0.14)
+	var display_shell = make_gpt_center_crop_plate_rect(rect_full(0.032, 0.105, 0.938, 0.782), Color(0.012, 0.022, 0.022, 0.28), "ui_dark_scrim", 0.14)
 	display_shell.name = "ShopDisplayCabinet3DShell"
 	panel.add_child(display_shell)
 	var display_inset = make_layout_host(rect_full(0.012, 0.035, 0.988, 0.965))
@@ -1466,7 +1472,7 @@ func _show_shop_screen_impl() -> void:
 	var shop_columns := 2 if shop_wide_layout else 1
 	var shop_visual_rows := maxi(1, ceili(float(shop_item_count) / float(shop_columns)))
 	var shop_row_gap := 12.0 if shop_wide_layout else 10.0
-	var shop_row_max_height := 246.0 if shop_wide_layout else 120.0
+	var shop_row_max_height := 320.0 if shop_wide_layout else 120.0
 	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_visual_rows - 1)) / float(shop_visual_rows)), 68.0, shop_row_max_height)
 
 	# 道具图标映射
@@ -1527,7 +1533,7 @@ func _show_shop_screen_impl() -> void:
 		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
 
 		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
-		var text_plate = make_gpt_center_crop_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.024, 0.034, 0.032, 0.64), "ui_dark_scrim", 0.14)
+		var text_plate = make_gpt_center_crop_plate_rect(rect_full(0.150, 0.055, 0.600, 0.920), Color(0.024, 0.034, 0.032, 0.52), "ui_dark_scrim", 0.14)
 		text_plate.name = "ShopItemTextReadabilityPanel_%s" % item_id
 		row.add_child(text_plate)
 		text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1592,6 +1598,8 @@ func _show_shop_screen_impl() -> void:
 		ensure_button_gpt_face_plate(buy_btn, Color(0.42, 0.38, 0.58, 0.38))
 		buy_btn.custom_minimum_size = Vector2(100, 48)
 		buy_btn.name = "ShopItemBuyButton_%s" % item_id
+		buy_btn.disabled = not can_afford
+		buy_btn.tooltip_text = "购买%s，花费%d玉" % [str(item_info.get("name", item_id)), cost] if can_afford else "钻石不足：需要%d玉，当前%d玉" % [cost, int(currency.get("gems", 0))]
 		row.add_child(buy_btn)
 		var buy_button_left := 0.790 if shop_wide_layout else 0.825
 		apply_rect(buy_btn, rect_full(buy_button_left, 0.15, 0.955, 0.85))
@@ -1679,8 +1687,10 @@ func _show_stats_screen_impl() -> void:
 	var stats_content_top := 0.340
 	var stats_content_max_bottom := 0.920
 	var stats_available_height = panel_height * (stats_content_max_bottom - stats_content_top)
-	var stats_row_gap = clamp(panel_height * 0.010, 5.0, 10.0)
-	var stats_row_height = clamp(floor((stats_available_height - stats_row_gap * float(stats_row_count - 1)) / float(stats_row_count)), 42.0, 52.0)
+	var wide_stats_layout := effective_viewport_size().x >= 1600.0
+	var stats_row_gap = 14.0 if wide_stats_layout else clamp(panel_height * 0.010, 5.0, 10.0)
+	var stats_row_height_cap := 104.0 if wide_stats_layout else 52.0
+	var stats_row_height = clamp(floor((stats_available_height - stats_row_gap * float(stats_row_count - 1)) / float(stats_row_count)), 42.0, stats_row_height_cap)
 	var stats_content_height = stats_row_height * float(stats_row_count) + stats_row_gap * float(stats_row_count - 1)
 	var stats_content_bottom = min(stats_content_max_bottom, stats_content_top + stats_content_height / panel_height)
 	var stats_lane_bottom = min(0.940, stats_content_bottom + 0.020)
@@ -2516,7 +2526,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	var center_panel = make_gpt_plate_rect(rect_full(0.285, 0.205, 0.715, 0.805), Color(0.16, 0.12, 0.08, 0.96), "ui_jade_reading_plate")
 	center_panel.name = "LoadingCenterPanel"
 	bg.add_child(center_panel)
-	var center_sheet = add_optional_gpt_illustration_texture(center_panel, "ui_confirm_sheet_plate", rect_full(-0.02, -0.02, 1.02, 1.02), 0.78, false)
+	var center_sheet = add_optional_gpt_illustration_texture(center_panel, "ui_confirm_sheet_plate", rect_full(-0.02, -0.02, 1.02, 1.02), 0.44, false)
 	if center_sheet != null:
 		center_sheet.name = "LoadingCenterSheet"
 		center_panel.move_child(center_sheet, 0)
@@ -2590,7 +2600,11 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	tip_label.move_to_front()
 
 	# 版本信息
-	var version_label = make_label(center_panel, "v%s" % app_version(), 12, Color(0.72, 0.74, 0.68, 0.78), false)
+	var version_plate = make_gpt_center_crop_plate_rect(rect_full(0.30, 0.885, 0.70, 0.985), Color(0.018, 0.030, 0.026, 0.46), "ui_dark_scrim", 0.12)
+	version_plate.name = "LoadingVersionReadabilityPlate"
+	version_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center_panel.add_child(version_plate)
+	var version_label = make_label(center_panel, "v%s" % app_version(), 12, Color(0.88, 0.88, 0.78, 0.94), false)
 	version_label.name = "LoadingVersionLabel"
 	apply_rect(version_label, rect_full(0.35, 0.90, 0.65, 0.97))
 	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

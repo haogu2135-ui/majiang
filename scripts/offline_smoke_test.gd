@@ -245,6 +245,10 @@ func run() -> void:
 	check(not scene.rule_uses_package_liability(scene.RULE_VARIANT_NANJING) and scene.rule_uses_package_liability(scene.RULE_VARIANT_YANGZHOU), "扬州启用包三搭而南京不启用")
 	check(scene.rule_variant_label(scene.RULE_VARIANT_GUANGDONG) == "广东麻将" and scene.rule_variant_label(scene.RULE_VARIANT_SICHUAN) == "四川麻将" and scene.rule_variant_label(scene.RULE_VARIANT_NANJING) == "南京麻将" and scene.rule_variant_label(scene.RULE_VARIANT_YANGZHOU) == "扬州麻将", "四种地方规则提供稳定的中文名称")
 	scene.rule_variant = original_rule_variant
+	# Gameplay fixtures below assert the commercial Yangzhou ledger (144 tiles,
+	# eight flowers, one-fan wins). Keep the smoke deterministic regardless of
+	# the developer's persisted local-rule preference.
+	scene.rule_variant = scene.RULE_VARIANT_YANGZHOU
 	check(not scene.player_ai_assist_enabled() and scene.DEFAULT_HOST == "127.0.0.1", "offline player side keeps local production host and does not enable AI assistance")
 	check(scene.UPDATE_MANIFEST_URL == "http://127.0.0.1:18081/YunzhuoMahjongGodot-update.json", "update manifest URL points to the local download service")
 	check(scene.UPDATE_URL == "http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk", "fallback update APK URL uses this release's immutable APK path")
@@ -271,6 +275,7 @@ func run() -> void:
 	scene.show_loading_screen()
 	check(scene.find_child("LoadingPanel", true, false) != null, "loading screen exposes its named root panel for live-resize rebuild checks")
 	check(scene.find_child("LoadingCenterPanel", true, false) != null, "loading screen exposes center panel for readability and layout checks")
+	check(scene.find_child("LoadingVersionReadabilityPlate", true, false) != null, "loading screen gives the version label an authored readability plate")
 	check(scene.find_child("LoadingGateTexture", true, false) != null, "loading screen renders reusable moon-gate PNG texture")
 	check(scene.optional_gpt_illustration_texture("loading_scene_gpt_backdrop") == null or scene.find_child("LoadingGPTBackdropTexture", true, false) != null, "loading screen consumes optional GPT backdrop texture when generated")
 	check(scene.find_child("LoadingMoon", true, false) != null and scene.find_child("MoonGlowBloom", true, false) != null and scene.find_child("LoadingFarMountain", true, false) != null and scene.find_child("LoadingWater", true, false) != null, "loading screen renders moon shader bloom art and ink-wash environment layers")
@@ -1925,7 +1930,8 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(scene, "StatsMasteryBranch_") == 3 and count_nodes_with_name_prefix(scene, "StatsMasteryTick_") == 4, "stats mastery route renders metric branches and rhythm ticks")
 	check(scene.find_child("StatsDashboardScanRoute", true, false) != null and scene.find_child("StatsDashboardScanFill", true, false) != null and scene.find_child("StatsDashboardScanGate", true, false) != null and count_nodes_with_name_prefix(scene, "StatsDashboardScanTick_") == 4, "stats dashboard renders scan route from summary to trend")
 	check(scene.find_child("StatsSummaryNarrativePanel", true, false) != null and scene.find_child("StatsSummaryNarrativeTitle", true, false) != null and scene.find_child("StatsSummaryNarrativeBody", true, false) != null and scene.find_child("StatsSummaryNarrativeMeta", true, false) != null and scene.find_child("StatsSummaryNarrativeRail", true, false) != null, "stats dashboard renders compact narrative summary panel")
-	check(has_label_text(scene, "顺风") and has_label_text(scene, "7胜/12局"), "stats narrative summary labels the current record state")
+	var stats_narrative_meta = scene.find_child("StatsSummaryNarrativeMeta", true, false) as Label
+	check(has_label_text(scene, "顺风") and stats_narrative_meta != null and str(stats_narrative_meta.text).begins_with("7胜/12局") and str(stats_narrative_meta.text).contains("胜率"), "stats narrative summary labels the current record state and win rate")
 	check(scene.find_child("StatsDataScanArt", true, false) != null and scene.find_child("StatsDataScanSource", true, false) != null and scene.find_child("StatsDataScanRoute", true, false) != null and scene.find_child("StatsDataScanFill", true, false) != null and scene.find_child("StatsDataScanGate", true, false) != null, "stats screen renders data scan route")
 	check(scene.find_child("StatsDataScanArchive", true, false) != null and scene.find_child("StatsDataScanGlyph", true, false) != null and count_nodes_with_name_prefix(scene, "StatsDataScanNode_") == 4 and count_nodes_with_name_prefix(scene, "StatsDataScanTick_") == 3, "stats data scan renders archive glyph metric nodes and rhythm ticks")
 	check(scene.find_child("StatsInsightConvergenceArt", true, false) != null and scene.find_child("StatsInsightSource", true, false) != null and scene.find_child("StatsInsightRoute", true, false) != null and scene.find_child("StatsInsightFill", true, false) != null and scene.find_child("StatsInsightGate", true, false) != null, "stats screen renders insight convergence route")

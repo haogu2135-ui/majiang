@@ -1018,7 +1018,7 @@ func player_ai_assist_enabled() -> bool:
 
 func top_hud_wall_text() -> String:
 	var last = get_last_discard()
-	return "余%d 上%s" % [get_wall_count(), tile_label(last) if last != "" else "--"]
+	return "余牌 %d · 上张 %s" % [get_wall_count(), tile_label(last) if last != "" else "--"]
 
 
 func top_hud_status_icon_name() -> String:
@@ -1714,12 +1714,30 @@ func hand_tile_normalized_centers(hand: Array, metrics: Dictionary) -> PackedFlo
 func hand_layout_fits_content(hand: Array, metrics: Dictionary) -> bool:
 	return hand_layout_required_width(hand, metrics) <= float(metrics.get("content_width", hand_content_pixel_size().x)) + 0.5
 
-func hand_tile_hint_badge(tile: String, suggested_tile: String, pending_tile: String) -> String:
+func hand_tile_hint_badge(tile: String, suggested_tile: String, pending_tile: String, drawn: bool = false) -> String:
 	if pending_tile != "" and tile == pending_tile:
 		return "确认"
 	if suggested_tile != "" and tile == suggested_tile:
 		return "荐"
+	if drawn:
+		return "摸"
 	return ""
+
+func hand_tile_interaction_tooltip(tile: String, report: Dictionary = {}, hint_badge: String = "", drawn: bool = false) -> String:
+	var parts: Array[String] = [tile_label(tile)]
+	if hint_badge == "确认":
+		parts.append("当前待确认")
+	elif hint_badge == "荐":
+		parts.append("AI推荐出牌")
+	elif hint_badge == "摸" or drawn:
+		parts.append("新摸入")
+	var risk := str(report.get("safety_label", report.get("risk_label", "")))
+	if risk != "":
+		parts.append("风险%s" % risk)
+	var reason := str(report.get("feed_text", report.get("reason_label", ""))).strip_edges()
+	if reason != "":
+		parts.append(reason)
+	return " · ".join(parts)
 
 func should_insert_hand_group_gap(hand: Array, index: int) -> bool:
 	if index <= 0 or index >= hand.size():
@@ -1760,6 +1778,11 @@ func hand_tray_text() -> String:
 	if has_pending_claim_window():
 		return human_claim_hint_text() if player_ai_assist_enabled() else "选择响应"
 	if mode == "offline" and can_self_discard():
+		var wall_count := get_wall_count()
+		if wall_count <= 12:
+			return "牌墙将尽 · 余%d · 谨慎出牌" % wall_count
+		if wall_count <= 24 and not player_ai_assist_enabled():
+			return "牌墙偏少 · 余%d · 点击手牌出牌" % wall_count
 		if player_ai_assist_enabled():
 			var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
 			if not reports.is_empty():
@@ -1779,6 +1802,9 @@ func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> Str
 	var parts: Array[String] = []
 	parts.append("荐%s" % tile_label(str(best.get("tile", ""))))
 	parts.append("进%d" % int(best.get("ukeire", 0)))
+	var safest_tile := str(safest.get("tile", ""))
+	if safest_tile != "" and safest_tile != str(best.get("tile", "")):
+		parts.append("稳%s" % tile_label(safest_tile))
 	return " · ".join(parts)
 
 func advisor_confidence_text(reports: Array) -> String:
@@ -2046,6 +2072,42 @@ func action_intent_fallback_icon_text() -> String:
 		return "应"
 	return "i"
 
+
+func action_button_tooltip(text: String) -> String:
+	# Keep the visual CTA short while exposing the consequence on hover/focus.
+	var clean := text.strip_edges()
+	if clean == "过" or clean == "建议过" or clean == "荐过":
+		return "放弃本次吃、碰、杠或胡响应，继续轮转"
+	if clean.begins_with("吃"):
+		return "选择这组顺子吃牌，接着进入你的出牌阶段"
+	if clean.begins_with("碰"):
+		return "选择碰牌，公开这组刻子并继续出牌"
+	if clean.begins_with("杠"):
+		return "选择杠牌，公开或补齐这组牌并补摸一张"
+	if clean.contains("自摸"):
+		return "确认自摸胡牌并进入结算"
+	if clean.begins_with("确认打"):
+		return "确认打出这张高风险牌"
+	if clean.begins_with("改打"):
+		return "改打这张牌，降低当前放铳风险"
+	if clean.begins_with("荐打") or clean.begins_with("稳打"):
+		return "使用 AI 的%s出牌建议" % ("稳妥" if clean.begins_with("稳打") else "推荐")
+	if clean == "提示":
+		return "查看当前牌局的出牌与响应建议"
+	if clean == "重开":
+		return "放弃当前牌局并重新开局"
+	if clean == "下一局":
+		return "继续当前对局，进入下一局"
+	if clean == "新赛":
+		return "结束当前对局并开始新的比赛"
+	if clean == "菜单":
+		return "返回主菜单"
+	if clean == "取消":
+		return "取消当前确认，不打出这张牌"
+	if clean == "语音" or clean == "闭麦":
+		return "切换语音麦克风状态"
+	return clean
+
 func action_dock_rect_for_count(count: int) -> Rect2:
 	var content_width = max(1.0, safe_content_pixel_size().x)
 	var bar_rect = action_bar_layout_rect()
@@ -2176,12 +2238,50 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var dock_top = dock_rect.position.y
 	var panel_bottom = minf(bottom_river_top - lane_gap_y, dock_top - lane_gap_y)
 	var panel_top = panel_bottom - panel_height
-	return rect_full(
+	var base_candidate := rect_full(
 		panel_center_x - panel_width * 0.5,
 		panel_top,
 		panel_center_x + panel_width * 0.5,
 		panel_bottom
 	)
+	# The context is a decision surface, so it must never sit on top of a river or
+	# an exposed meld when a compact viewport leaves more than one viable slot.
+	var candidates: Array[Rect2] = [base_candidate]
+	var raised_bottom: float = panel_top - lane_gap_y
+	if raised_bottom - panel_height > 0.08:
+		candidates.append(rect_full(
+			panel_center_x - panel_width * 0.5,
+			raised_bottom - panel_height,
+			panel_center_x + panel_width * 0.5,
+			raised_bottom
+		))
+	for candidate in candidates:
+		if pending_claim_context_candidate_is_clear(candidate, table_left, table_top, table_width, table_height):
+			return candidate
+	return base_candidate
+
+func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: float, table_top: float, table_width: float, table_height: float) -> bool:
+	var occupied: Array[Rect2] = []
+	for zone in DISCARD_ZONES:
+		var zone_rect: Rect2 = zone[1]
+		occupied.append(rect_full(
+			table_left + zone_rect.position.x * table_width,
+			table_top + zone_rect.position.y * table_height,
+			table_left + zone_rect.size.x * table_width,
+			table_top + zone_rect.size.y * table_height
+		))
+	for meld_layout in MELD_LAYOUTS:
+		var meld_rect: Rect2 = meld_layout[1]
+		occupied.append(rect_full(
+			table_left + meld_rect.position.x * table_width,
+			table_top + meld_rect.position.y * table_height,
+			table_left + meld_rect.size.x * table_width,
+			table_top + meld_rect.size.y * table_height
+		))
+	for occupied_rect in occupied:
+		if candidate.intersects(occupied_rect.grow(0.004), true):
+			return false
+	return true
 
 func action_bar_dock_layout_rect() -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
@@ -2251,7 +2351,13 @@ func finalize_action_bar_layout() -> void:
 			btw.tween_property(button, "scale", Vector2.ONE, 0.2).from(Vector2(0.7, 0.7)).set_delay(float(btn_index) * 0.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			btw.tween_property(button, "modulate:a", 1.0, 0.14).from(0.0).set_delay(float(btn_index) * 0.05)
 		btn_index += 1
-	configure_button_focus_navigation(action_bar)
+	if mode == "online_game" and online_waiting_for_server:
+		for waiting_button in buttons:
+			if waiting_button.name != "VoiceActionButton":
+				waiting_button.disabled = true
+				waiting_button.tooltip_text = "正在等待服务器确认本次操作"
+	var default_focus_name := "DangerDiscardConfirmButton" if mode == "offline" and has_pending_danger_discard() else ""
+	configure_button_focus_navigation(action_bar, default_focus_name)
 
 func ended_action_button_widths(count: int) -> Array[float]:
 	var widths: Array[float] = []
@@ -6267,6 +6373,12 @@ func current_status_text() -> String:
 			return "等待你响应%s" % tile_label(str(offline_pending_claim.get("tile", "")))
 		if wall.is_empty() and offline_turn_needs_draw:
 			return "牌墙已空"
+		var remaining_wall := get_wall_count()
+		var turn_summary := "轮到你出牌" if current_seat == 0 else "%s行牌" % players[current_seat]["name"]
+		if remaining_wall <= 12:
+			return "牌墙将尽 · 余%d · %s" % [remaining_wall, turn_summary]
+		if remaining_wall <= 24:
+			return "牌墙偏少 · 余%d · %s" % [remaining_wall, turn_summary]
 		if current_seat == 0:
 			return "轮到你出牌"
 		return "%s行牌" % players[current_seat]["name"]
@@ -6306,19 +6418,19 @@ func ended_top_hud_status_text() -> String:
 func top_hud_status_text() -> String:
 	if mode == "offline":
 		if has_pending_danger_discard():
-			return "风险确认·%s" % tile_label(pending_danger_discard_tile)
+			return "风险确认 · %s" % tile_label(pending_danger_discard_tile)
 		if offline_phase == "pending_claim":
 			var claim_seat = int(offline_pending_claim.get("from_seat", -1))
 			var claim_tile = tile_label(str(offline_pending_claim.get("tile", "")))
 			if claim_seat >= 0 and claim_seat < players.size():
-				return "%s打出%s" % [players[claim_seat]["name"], claim_tile]
-			return "响应%s" % claim_tile
+				return "%s 打出 %s · 响应窗口" % [players[claim_seat]["name"], claim_tile]
+			return "响应 %s · 响应窗口" % claim_tile
 		if offline_phase != "ended" and not (wall.is_empty() and offline_turn_needs_draw):
 			var last_tile = get_last_discard()
 			if last_tile != "":
 				var last_seat = get_last_discard_seat()
 				if last_seat >= 0 and last_seat < players.size():
-					return "%s · 上张%s" % [current_status_text(), tile_label(last_tile)]
+					return "%s · %s打出%s" % [current_status_text(), players[last_seat]["name"], tile_label(last_tile)]
 		if offline_phase == "ended":
 			return ended_top_hud_status_text()
 	return current_status_text()
@@ -6366,20 +6478,22 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.818 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.46), "ui_dark_scrim", 0.22)
+	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.748 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.34), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.058
 	vbox.anchor_top = 0.040
-	vbox.anchor_right = 0.792 if section_index >= 0 else 0.96
+	vbox.anchor_right = 0.735 if section_index >= 0 else 0.96
 	vbox.anchor_bottom = 0.970
 	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)
 
-	var title_label = make_label(vbox, title_text, commercial_ui_font_size(18, 3), Color(1.00, 0.91, 0.60), true)
+	var numbered_title := "%02d · %s" % [section_index + 1, title_text] if section_index >= 0 else title_text
+	var title_label = make_label(vbox, numbered_title, commercial_ui_font_size(18, 3), Color(1.00, 0.91, 0.60), true)
 	title_label.name = "RuleSectionTitle_%d" % section_index if section_index >= 0 else "RuleSectionTitle"
+	title_label.tooltip_text = title_text
 	title_label.custom_minimum_size = Vector2(0, 26 if wide_typography else 24)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
@@ -6414,7 +6528,10 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	row.add_child(stats_row_plate)
 	row.move_child(stats_row_plate, 0)
 	draw_stat_row_art(row, label_text, value_text)
-	var value_plate = make_gpt_center_crop_plate_rect(rect_full(0.545, 0.090, 0.955, 0.910), Color(0.016, 0.030, 0.028, 0.58), "ui_dark_scrim", 0.18)
+	var wide_stats_row := effective_viewport_size().x >= 1600.0
+	var value_left := 0.565 if wide_stats_row else 0.545
+	var value_right := 0.835 if wide_stats_row else 0.955
+	var value_plate = make_gpt_center_crop_plate_rect(rect_full(value_left, 0.090, value_right, 0.910), Color(0.016, 0.030, 0.028, 0.58), "ui_dark_scrim", 0.18)
 	value_plate.name = "StatsRowValuePanel_%s" % label_text
 	row.add_child(value_plate)
 	var value_sheen = make_layout_host(rect_full(0.035, 0.075, 0.965, 0.185))
@@ -6432,7 +6549,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 
 	var value = make_label(row, value_text, value_font_size, Color(1.00, 0.94, 0.68), true)
 	value.name = "StatsRowValueLabel_%s" % label_text
-	apply_rect(value, rect_full(0.575, 0.120, 0.925, 0.880))
+	apply_rect(value, rect_full(value_left + 0.030, 0.120, value_right - 0.030, 0.880))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(value)
 
@@ -6607,6 +6724,10 @@ func achievement_progress_text(key: String) -> String:
 			current_wins = 10
 		return "进度 %d/10" % current_wins
 	return "进度 %d/1" % (1 if unlocked else 0)
+
+
+func achievement_state_text(key: String) -> String:
+	return "已达成" if bool(achievements.get(key, false)) else "进行中"
 
 # ============================================================
 # 商店系统

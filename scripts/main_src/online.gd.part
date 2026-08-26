@@ -435,6 +435,9 @@ func send_online(payload: Dictionary) -> bool:
 
 func send_online_action(payload: Dictionary, label: String = "") -> void:
 	var action_label = label if label.strip_edges() != "" else online_action_label(payload)
+	if online_waiting_for_server:
+		set_online_feedback("正在等待上一次%s的服务器确认。" % action_label, true)
+		return
 	if send_online(payload):
 		play_outgoing_online_action_audio(payload)
 		online_last_sent_action = action_label

@@ -88,9 +88,10 @@ func discard_zone_visible_rows(zone_rect: Rect2, columns: int) -> int:
 func discard_zone_visible_rows_for_table_size(zone_rect: Rect2, columns: int, table_size: Vector2) -> int:
 	var zone_size = discard_zone_pixel_size_for_table_size(zone_rect, table_size)
 	var max_rows = int(floor((zone_size.y + float(DISCARD_GRID_SEPARATION)) / (DISCARD_TILE_MIN_SIZE.y + float(DISCARD_GRID_SEPARATION))))
-	# r500: bottom/top (8-col) prefer 2 rows; compact side rivers use 3 columns
-	# so authored faces and the latest-discard marker stay readable at 960px.
-	var row_cap := 2 if columns >= 8 else 4
+	# r500: bottom/top (8-col) prefer 2 rows. On compact screens, side rivers
+	# trade one visible row for a larger face so the tile glyph remains readable.
+	var compact_side_river := columns <= 3 and effective_viewport_size().y <= 560.0
+	var row_cap := 2 if columns >= 8 else (3 if compact_side_river else 4)
 	return clamp(max_rows, 1, row_cap)
 
 func achievement_medal_gpt_key(key: String, unlocked: bool) -> String:
@@ -310,10 +311,10 @@ func draw_achievements_dashboard_art(parent: Control) -> Control:
 	medal_glyph.name = "AchievementsMedalGlyph"
 	apply_rect(medal_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	# Progress + unlock rails (GPT plates) for smoke/readability; nodes remain as soft ticks.
-	var progress_rail = make_gpt_plate_rect(rect_full(0.180, 0.760, 0.700, 0.900), Color(0.16, 0.14, 0.10, 0.42), "ui_progress_signal_strip")
+	var progress_rail = make_gpt_plate_rect(rect_full(0.180, 0.760, 0.700, 0.900), Color(0.16, 0.14, 0.10, 0.36), "ui_progress_signal_strip")
 	progress_rail.name = "AchievementsProgressRail"
 	art.add_child(progress_rail)
-	var progress_fill = make_gpt_plate_rect(rect_full(0.180, 0.760, 0.180 + 0.520 * max(0.08, ratio), 0.900), Color(0.78, 0.58, 0.28, 0.34), "ui_meter_rail_plate")
+	var progress_fill = make_gpt_plate_rect(rect_full(0.180, 0.760, 0.180 + 0.520 * max(0.08, ratio), 0.900), Color(0.78, 0.58, 0.28, 0.54), "ui_meter_rail_plate")
 	progress_fill.name = "AchievementsProgressFill"
 	art.add_child(progress_fill)
 	var progress_gate = make_gpt_plate_rect(rect_full(0.685, 0.735, 0.725, 0.925), Color(0.92, 0.76, 0.36, 0.28), "ui_button_face_plate")
@@ -1398,7 +1399,10 @@ func draw_center(parent: Control) -> void:
 	var center_wall_count = get_wall_count()
 	var center_wall_low = center_wall_count <= 24
 	var center_wall_alpha = 0.72 if center_wall_low else 0.38
-	var wall_label = make_label(center, "余牌" if center_wall_low else "牌山", 10, Color(0.68, 0.66, 0.54, center_wall_alpha), false)
+	var wall_label_text := "牌墙将尽" if center_wall_count <= 12 else ("余牌" if center_wall_low else "牌山")
+	var wall_label = make_label(center, wall_label_text, 10 if center_wall_count > 12 else 9, Color(0.68, 0.66, 0.54, center_wall_alpha), false)
+	wall_label.name = "CenterWallStatusLabel"
+	wall_label.tooltip_text = "牌墙剩余 %d 张" % center_wall_count
 	apply_rect(wall_label, CENTER_WALL_LABEL_RECT)
 	var wall_text = make_label(center, "%d" % center_wall_count, 19 if center_wall_low else 16, Color(0.86, 0.72, 0.46, 0.78 if center_wall_low else 0.36), true)
 	apply_rect(wall_text, CENTER_WALL_COUNT_RECT)
@@ -2483,6 +2487,7 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	title.name = "DangerDiscardTitleText"
 	apply_rect(title, rect_full(0.380, 0.060, 0.985, 0.455))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.tooltip_text = pending_danger_discard_text()
 	configure_clipped_label(title)
 	var seal = make_badge(panel, rect_full(0.750, 0.145, 0.855, 0.855), risk_badge_text(label_text), 11, Color(0.54, 0.16, 0.12, 0.94), Color(0.96, 0.50, 0.34, 0.34), Color(0.98, 0.90, 0.78))
 	seal.name = "DangerDiscardRiskSeal"
@@ -2498,6 +2503,7 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	detail.name = "DangerDiscardDetailText"
 	apply_rect(detail, rect_full(0.380, 0.455, 0.985, 0.800))
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	detail.tooltip_text = pending_danger_discard_text()
 	configure_clipped_label(detail)
 	var source_trace = make_gpt_route_rail(rect_full(0.252, 0.305, 0.560, 0.350), Color(0.006, 0.016, 0.018, 0.44))
 	source_trace.name = "DangerDiscardSourceTrace"
@@ -3702,7 +3708,9 @@ func draw_game_top_hud(parent: Control) -> void:
 	draw_top_hud_status_art(hud)
 
 	# 标题
-	var title_text = "修炼场 · 第%d局" % [offline_hand_number] if mode == "offline" else "房间 " + str(online_game.get("roomCode", selected_room))
+	var dealer_wind: String = str(CENTER_WIND_LABELS[clampi(dealer_seat, 0, CENTER_WIND_LABELS.size() - 1)]) if mode == "offline" else ""
+	var compact_top_hud := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+	var title_text = ("第%d局 · 庄%s" if compact_top_hud else "修炼场 · 第%d局 · 庄%s") % [offline_hand_number, dealer_wind] if mode == "offline" else "房间 " + str(online_game.get("roomCode", selected_room))
 	var title_rect := TOP_HUD_TITLE_RECT
 	var status_rect := TOP_HUD_STATUS_RECT
 	var wall_rect := TOP_HUD_WALL_RECT
@@ -3915,7 +3923,8 @@ func draw_hand(parent: Control) -> void:
 		var highlighted = should_highlight or guide_highlight
 		var report: Dictionary = hand_reports.get(tile, {})
 		var risk = str(report.get("safety_label", report.get("risk_label", ""))) if assist_enabled and clickable else ""
-		var hint_badge = hand_tile_hint_badge(tile, suggested_tile, pending_tile) if assist_enabled and clickable else ""
+		var is_drawn_tile_marker := i == stable_drawn_index
+		var hint_badge = hand_tile_hint_badge(tile, suggested_tile, pending_tile, is_drawn_tile_marker) if assist_enabled and clickable else ""
 		var callback = func() -> void:
 			# 玩家执行操作时关闭引导
 			if interactive_guide_active:
@@ -3930,6 +3939,8 @@ func draw_hand(parent: Control) -> void:
 		tile_node.set_meta("hand_source_index", i)
 		tile_node.set_meta("hand_tile_code", tile)
 		tile_node.set_meta("drawn_tile", i == stable_drawn_index)
+		tile_node.set_meta("danger_pending", pending_tile != "" and tile == pending_tile)
+		tile_node.tooltip_text = hand_tile_interaction_tooltip(tile, report, hint_badge, is_drawn_tile_marker)
 		if i == stable_drawn_index and tile_node.get_child_count() > 0:
 			var drawn_body = tile_node.get_child(0) as Control
 			if drawn_body != null:
@@ -5059,7 +5070,27 @@ func draw_melds(parent: Control) -> void:
 		if vertical and compact_melds:
 			meld_tile_size = Vector2(21, 28)
 		elif not vertical and compact_melds:
-			meld_tile_size = Vector2(14, 21)
+			# Keep horizontal melds readable on 960px screens. Use the actual lane
+			# width to spend space on tile faces before falling back to a smaller
+			# group; the lane direction remains fixed per seat.
+			var horizontal_tile_count := 0
+			var horizontal_group_count := 0
+			for horizontal_meld in meld_list:
+				if typeof(horizontal_meld) == TYPE_ARRAY:
+					horizontal_tile_count += (horizontal_meld as Array).size()
+					horizontal_group_count += 1
+			if horizontal_tile_count > 0:
+				var lane_width_px := safe_content_pixel_size().x * float(layout[1].size.x)
+				var group_padding_px := float(horizontal_group_count) * 6.0
+				var group_gap_px := float(maxi(0, horizontal_group_count - 1)) * 3.0
+				# make_meld_group_view reserves one compact separator per tile. Try
+				# the wider two-pixel rhythm first, then switch to one pixel when
+				# several four-tile groups share the same lane.
+				var compact_tile_width := floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count) * 2.0) / float(horizontal_tile_count))
+				if compact_tile_width <= 18.0:
+					compact_tile_width = floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count)) / float(horizontal_tile_count))
+				compact_tile_width = clampf(compact_tile_width, 15.0, 20.0)
+				meld_tile_size = Vector2(compact_tile_width, floorf(compact_tile_width * 1.5))
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
 		for meld_index in range(meld_list.size()):
@@ -6059,12 +6090,14 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	source_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var tile_preview = make_tile_view(tile, Vector2(34, 46), false, Callable(), true)
 	tile_preview.name = "PendingClaimTile"
+	tile_preview.tooltip_text = "%s打出的%s · 点击下方按钮选择响应" % [source_name, tile_label(tile)]
 	panel.add_child(tile_preview)
 	apply_rect(tile_preview, rect_full(0.170, 0.020, 0.315, 0.980))
 	var title = make_label(panel, "%s 打出" % source_name, 13, Color(0.92, 0.88, 0.72, 0.96), true)
 	title.name = "PendingClaimSourceText"
 	apply_rect(title, rect_full(0.345, 0.060, 0.790, 0.535))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.tooltip_text = "%s打出%s，正在等待你的响应" % [source_name, tile_label(tile)]
 	style_background_readable_label(title, 2)
 	var tile_name = make_label(panel, tile_label(tile), 14, Color(0.98, 0.88, 0.58, 1.0), true)
 	tile_name.name = "PendingClaimTileName"
@@ -6404,6 +6437,7 @@ func draw_round_summary(parent: Control) -> void:
 		var next_dealer = dealer_seat if offline_dealer_repeat else (dealer_seat + 1) % 4
 		var next = make_badge(panel, ROUND_SUMMARY_NEXT_DEALER_RECT, "下一局庄家  %s" % players[next_dealer]["name"], 13, Color(0.030, 0.046, 0.048, 0.90), Color(0.46, 0.40, 0.24, 0.36), Color(0.82, 0.86, 0.76))
 		next.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		next.tooltip_text = "下一局由%s坐庄" % players[next_dealer]["name"]
 
 
 func draw_round_summary_rank_header(parent: Control, compact_summary: bool) -> Control:
@@ -6794,7 +6828,7 @@ func draw_round_summary_rank_route_art(row: Control, rank: int, delta: int, acce
 func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	# r214: bulk GPT chrome sweep
 	var top = ROUND_SUMMARY_RANK_START_Y + float(rank - 1) * (ROUND_SUMMARY_RANK_ROW_HEIGHT + ROUND_SUMMARY_RANK_ROW_GAP)
-	var row_rect = Rect2(Vector2(0.08, top), Vector2(0.92, top + ROUND_SUMMARY_RANK_ROW_HEIGHT))
+	var row_rect = rect_full(0.08, top, 0.92, top + ROUND_SUMMARY_RANK_ROW_HEIGHT)
 	var delta = round_summary_score_delta(seat)
 	var accent = round_summary_delta_color(delta, rank)
 	var row = make_gpt_plate_rect(row_rect, Color(0.006, 0.012, 0.010, 0.98), "ui_dark_scrim")
@@ -6826,6 +6860,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(score)
 	var delta_label = make_label(row, round_summary_delta_text(delta), 14, accent.lightened(0.36), true)
+	delta_label.tooltip_text = "本局分数变化：%s" % round_summary_delta_text(delta)
 	apply_rect(delta_label, rect_full(0.700, 0.12, 0.835, 0.88))
 	delta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(delta_label)
@@ -6842,6 +6877,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 			AnimationEffects.animate_number(roll_label, delta, 0.4)
 		).set_delay(delay_for_roll)
 	var flowers = make_label(row, "花%d" % int(players[seat].get("flowers", 0)), 13, Color(0.86, 0.90, 0.84), false)
+	flowers.tooltip_text = "花牌 %d 张" % int(players[seat].get("flowers", 0))
 	apply_rect(flowers, rect_full(0.860, 0.12, 0.970, 0.88))
 	flowers.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(flowers)
@@ -8524,7 +8560,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
-	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.42), "ui_dark_scrim")
+	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.58), "ui_dark_scrim")
 	scrim.name = "SettingsOverlayScrim"
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
@@ -8536,7 +8572,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.58), "ui_dark_scrim", 0.20)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.50), "ui_dark_scrim", 0.20)
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
@@ -9380,7 +9416,7 @@ func draw_stats_dashboard_art(parent: Control) -> Control:
 	apply_rect(narrative_body, rect_full(0.150, 0.300, 0.900, 0.660))
 	narrative_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(narrative_body)
-	var narrative_meta = make_label(narrative_panel, "%d胜/%d局" % [wins_count, games_count], 9, Color(0.72, 0.84, 0.72), false)
+	var narrative_meta = make_label(narrative_panel, "%d胜/%d局 · 胜率%d%%" % [wins_count, games_count, int(round(compact_win_rate * 100.0))], 9, Color(0.72, 0.84, 0.72), false)
 	narrative_meta.name = "StatsSummaryNarrativeMeta"
 	apply_rect(narrative_meta, rect_full(0.150, 0.655, 0.900, 0.910))
 	narrative_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -11623,7 +11659,9 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 
 	# Keep the detail strip above the settlement copy and rank table. The previous
 	# tall strip let its yaku flow extend into the body and ranking rows at 960px.
-	var detail_rect = Rect2(Vector2(0.04, 0.145), Vector2(0.96, 0.375))
+	# This project stores anchor rectangles as left/top/right/bottom endpoints.
+	# Keep the detail strip ending before the settlement body at 0.385.
+	var detail_rect = rect_full(0.04, 0.145, 0.96, 0.375)
 	var detail_panel = make_gpt_plate_rect(detail_rect, Color(0.006, 0.012, 0.010, 0.98), "ui_dark_scrim")
 	detail_panel.name = "WinDetailPanel"
 	parent.add_child(detail_panel)
@@ -11813,7 +11851,8 @@ func make_achievement_row(key: String, index: int) -> Control:
 	var row = Panel.new()
 	row.name = "AchievementRow_%s" % key
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.custom_minimum_size = Vector2(0, 84)
+	var achievement_row_height: float = 104.0 if effective_viewport_size().x >= 1600.0 else 84.0
+	row.custom_minimum_size = Vector2(0, achievement_row_height)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# r180: transparent host + GPT shop/settings plate for achievement row face.
 	var empty_row := StyleBoxEmpty.new()
@@ -11853,7 +11892,7 @@ func make_achievement_row(key: String, index: int) -> Control:
 	apply_rect(progress_text, rect_full(0.146, 0.660, 0.378, 0.910))
 	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	configure_clipped_label(progress_text)
-	var state_label = make_label(row, "已获" if unlocked else "未达", 13, Color(1.00, 0.90, 0.58) if unlocked else Color(0.92, 1.00, 0.96), true)
+	var state_label = make_label(row, achievement_state_text(key), 13, Color(1.00, 0.90, 0.58) if unlocked else Color(0.92, 1.00, 0.96), true)
 	state_label.name = "AchievementRowState_%s" % key
 	apply_rect(state_label, rect_full(0.830, 0.220, 0.940, 0.780))
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -11864,6 +11903,7 @@ func make_achievement_row(key: String, index: int) -> Control:
 func make_action_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
 	var role = action_button_visual_role(text)
+	button.tooltip_text = action_button_tooltip(text)
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
 	button.add_theme_color_override("font_color", Color(1.00, 0.98, 0.88))
 	button.add_theme_color_override("font_hover_color", Color(1.00, 1.00, 0.96))
@@ -12561,6 +12601,7 @@ func make_seal_stamp(parent: Control, rect: Rect2, text: String = "胡", style: 
 func make_setting_button(label: String, enabled: bool, callback: Callable) -> Button:
 	var color = Color(0.22, 0.52, 0.42) if enabled else Color(0.44, 0.32, 0.28)
 	var button = make_small_button("已开" if enabled else "已关", color, callback)
+	button.tooltip_text = "%s：当前%s，点击切换" % [label, "开启" if enabled else "关闭"]
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", 15)
@@ -12577,6 +12618,7 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 func make_setting_selector_button(value_text: String, setting_label: String, callback: Callable) -> Button:
 	var color = Color(0.34, 0.46, 0.58)
 	var button = make_small_button(value_text, color, callback)
+	button.tooltip_text = "%s：当前%s，点击切换选项" % [setting_label, value_text]
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", 15)
@@ -12594,6 +12636,7 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 	var quality_colors := [Color(0.32, 0.46, 0.34), Color(0.30, 0.48, 0.42), Color(0.34, 0.46, 0.58), Color(0.56, 0.42, 0.22)]
 	var color_index := clampi(graphics_quality + 1, 0, quality_colors.size() - 1)
 	var button = make_small_button(graphics_quality_label(true), quality_colors[color_index], callback)
+	button.tooltip_text = "3D画质：当前%s，点击切换" % graphics_quality_label(true)
 	var quality_color: Color = quality_colors[color_index]
 	ensure_button_gpt_face_plate(button, Color(quality_color.r, quality_color.g, quality_color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
