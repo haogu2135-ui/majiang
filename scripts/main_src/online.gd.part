@@ -156,6 +156,24 @@ func handle_online_log(data: Dictionary) -> void:
 	set_online_feedback(message, false)
 	refresh_online_lobby_state()
 
+
+func handle_online_chat(data: Dictionary) -> void:
+	var message := online_server_message_text(data, "").left(CHAT_MESSAGE_MAX_LENGTH)
+	if message == "":
+		return
+	var sender_value = first_present(data, ["sender", "name", "player", "from"], "对家")
+	var sender := str(sender_value)
+	if typeof(sender_value) == TYPE_DICTIONARY:
+		sender = str(first_present(sender_value, ["name", "nickname", "userName"], "对家"))
+	sender = sender.strip_edges().left(ONLINE_NAME_MAX_LENGTH)
+	if sender == "":
+		sender = "对家"
+	add_chat_message("%s: %s" % [sender, message])
+	if chat_panel_open:
+		refresh_chat_panel()
+	else:
+		set_status("新消息 · %s" % message)
+
 func handle_online_message(line: String) -> void:
 	var data = JSON.parse_string(line)
 	if typeof(data) != TYPE_DICTIONARY:
@@ -171,6 +189,8 @@ func handle_online_message(line: String) -> void:
 		handle_online_error(data)
 	elif kind == "ack":
 		handle_online_ack(data)
+	elif kind == "chat":
+		handle_online_chat(data)
 	elif kind == "log":
 		handle_online_log(data)
 	elif kind == "roomState":
@@ -282,6 +302,8 @@ func normalize_online_message_kind(data: Dictionary) -> String:
 	match compact:
 		"welcome", "hello":
 			return "welcome"
+		"chat", "chatmessage", "roomchat":
+			return "chat"
 		"info", "notice", "status", "servermessage", "message":
 			return "info"
 		"error", "err", "reject", "rejected", "actionrejected", "invalidaction", "denied":
@@ -296,6 +318,8 @@ func normalize_online_message_kind(data: Dictionary) -> String:
 			return "voiceMessage"
 		"log", "roomlog", "eventlog":
 			return "log"
+	if (data.has("sender") or data.has("fromSeat") or data.has("player")) and (data.has("message") or data.has("text")):
+		return "chat"
 	if data.has("game") or data.has("hand") or data.has("yourHand") or data.has("selfHand"):
 		return "gameState"
 	if data.has("room") or (data.has("players") and data.has("roomCode")):
@@ -396,6 +420,8 @@ func online_discard_identity(seat: int, tile: String) -> String:
 
 func online_feedback_accent() -> Color:
 	if online_waiting_for_server:
+		if online_waiting_response_is_slow():
+			return Color(0.92, 0.66, 0.30)
 		return Color(0.42, 0.64, 0.88)
 	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
 		return Color(0.86, 0.42, 0.34)
@@ -405,7 +431,7 @@ func online_feedback_accent() -> Color:
 
 func online_feedback_fallback_glyph() -> String:
 	if online_waiting_for_server:
-		return "..."
+		return "~" if online_waiting_response_is_slow() else "..."
 	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
 		return "!"
 	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
@@ -414,12 +440,16 @@ func online_feedback_fallback_glyph() -> String:
 
 func online_feedback_icon_name() -> String:
 	if online_waiting_for_server:
-		return "loader"
+		return "clock-3" if online_waiting_response_is_slow() else "loader"
 	if online_feedback.find("拒绝") >= 0 or online_feedback.find("失败") >= 0 or online_feedback.find("不是") >= 0:
 		return "triangle-alert"
 	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
 		return "check"
 	return "message-circle"
+
+
+func online_waiting_response_is_slow() -> bool:
+	return online_waiting_for_server and online_last_sent_msec > 0 and Time.get_ticks_msec() - online_last_sent_msec >= ONLINE_SLOW_NOTICE_MSEC
 
 func online_server_message_text(data: Dictionary, fallback: String) -> String:
 	var value = first_present(data, ["message", "text", "detail", "reason", "error"], fallback)
@@ -437,7 +467,7 @@ func send_online(payload: Dictionary) -> bool:
 		return false
 	return true
 
-func send_online_action(payload: Dictionary, label: String = "") -> void:
+func send_online_action(payload: Dictionary, label: String = "") -> bool:
 	var action_label = label if label.strip_edges() != "" else online_action_label(payload)
 	var action_type := str(payload.get("type", "")).strip_edges()
 	var repeated_request := online_waiting_for_server and (
@@ -446,18 +476,32 @@ func send_online_action(payload: Dictionary, label: String = "") -> void:
 	)
 	if repeated_request:
 		set_online_feedback("正在等待上一次%s的服务器确认。" % action_label, true)
-		return
+		return false
 	if send_online(payload):
 		play_outgoing_online_action_audio(payload)
 		online_last_sent_action = action_label
 		online_last_sent_type = action_type
 		online_last_sent_msec = Time.get_ticks_msec()
 		set_online_feedback("已发送%s，等待服务器确认。" % action_label, true)
+		return true
+	return false
 
 func set_online_feedback(text: String, waiting: bool = false) -> void:
 	online_feedback = text
 	online_waiting_for_server = waiting
 	if not waiting:
 		online_last_sent_msec = 0
+		online_slow_notice_shown = false
 	set_status(text)
 	refresh_online_feedback_art()
+
+
+func update_online_slow_response_notice(now_msec: int) -> void:
+	if not online_waiting_for_server or online_last_sent_msec <= 0:
+		online_slow_notice_shown = false
+		return
+	if now_msec - online_last_sent_msec < ONLINE_SLOW_NOTICE_MSEC or online_slow_notice_shown:
+		return
+	online_slow_notice_shown = true
+	var action_label := online_last_sent_action if online_last_sent_action != "" else "操作"
+	set_online_feedback("服务器响应较慢，仍在等待%s确认。" % action_label, true)

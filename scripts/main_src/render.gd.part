@@ -933,6 +933,18 @@ func draw_actions(parent: Control) -> void:
 		pending_claim_tail_bar.add_child(voice)
 	else:
 		action_bar.add_child(voice)
+	var chat_button := make_action_button("聊天", Color(0.30, 0.58, 0.54), func() -> void:
+		toggle_chat_panel()
+	)
+	chat_button.name = "ChatActionButton"
+	chat_button.tooltip_text = "打开或关闭房间聊天 · 快捷键 Esc关闭"
+	if chat_panel_open:
+		chat_button.modulate = Color(0.78, 0.92, 0.82, 0.92)
+	if has_pending_claim_window():
+		chat_button.set_meta("pending_tail", true)
+		pending_claim_tail_bar.add_child(chat_button)
+	else:
+		action_bar.add_child(chat_button)
 	draw_action_dock(parent)
 	finalize_action_bar_layout()
 
@@ -3787,6 +3799,8 @@ func draw_game_top_hud(parent: Control) -> void:
 func draw_hand(parent: Control) -> void:
 	# r213: GPT chrome conversion
 	# 手牌托盘 - 增强视觉效果
+	var hand := get_self_hand()
+	normalized_hand_keyboard_selection(hand)
 	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.018, 0.026, 0.024, 0.94), "ui_dark_scrim", 0.20)
 	tray.name = "HandTray"
 	parent.add_child(tray)
@@ -3859,7 +3873,6 @@ func draw_hand(parent: Control) -> void:
 		interactive_guide_active = true
 		interactive_guide_type = "discard"
 
-	var hand = get_self_hand()
 	var suit_flow = draw_hand_tray_suit_flow(tray, hand)
 	if suit_flow != null:
 		suit_flow.modulate = Color(1.0, 1.0, 1.0, 0.22)
@@ -3917,14 +3930,17 @@ func draw_hand(parent: Control) -> void:
 		if should_insert_hand_group_gap(hand, i):
 			hand_box.add_child(make_hand_group_spacer(tile_height, group_gap_width, hand_group_label(tile)))
 		var clickable = can_self_discard() and not is_claim_discard_banned(0, tile)
+		var keyboard_selected := clickable and i == hand_keyboard_selection
 		# 新手引导高亮：可点击时添加视觉提示
 		var should_highlight = clickable and ((suggested_tile != "" and tile == suggested_tile) or (pending_tile != "" and tile == pending_tile))
 		var guide_highlight = interactive_guide_active and interactive_guide_type == "discard" and clickable
-		var highlighted = should_highlight or guide_highlight
+		var highlighted = should_highlight or guide_highlight or keyboard_selected
 		var report: Dictionary = hand_reports.get(tile, {})
 		var risk = str(report.get("safety_label", report.get("risk_label", ""))) if assist_enabled and clickable else ""
 		var is_drawn_tile_marker := i == stable_drawn_index
 		var hint_badge = hand_tile_hint_badge(tile, suggested_tile, pending_tile, is_drawn_tile_marker) if assist_enabled and clickable else ""
+		if keyboard_selected and hint_badge == "":
+			hint_badge = "选"
 		var callback = func() -> void:
 			# 玩家执行操作时关闭引导
 			if interactive_guide_active:
@@ -3940,7 +3956,10 @@ func draw_hand(parent: Control) -> void:
 		tile_node.set_meta("hand_tile_code", tile)
 		tile_node.set_meta("drawn_tile", i == stable_drawn_index)
 		tile_node.set_meta("danger_pending", pending_tile != "" and tile == pending_tile)
+		tile_node.set_meta("keyboard_selected", keyboard_selected)
 		tile_node.tooltip_text = hand_tile_interaction_tooltip(tile, report, hint_badge, is_drawn_tile_marker)
+		if keyboard_selected and hint_badge != "选":
+			tile_node.tooltip_text += " · 键盘已选 · Enter确认出牌"
 		if i == stable_drawn_index and tile_node.get_child_count() > 0:
 			var drawn_body = tile_node.get_child(0) as Control
 			if drawn_body != null:

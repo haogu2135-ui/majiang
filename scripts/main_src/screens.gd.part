@@ -679,6 +679,15 @@ func _show_online_lobby_impl() -> void:
 	log_title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.58))
 	log_title.add_theme_constant_override("shadow_offset_x", 1)
 	log_title.add_theme_constant_override("shadow_offset_y", 1)
+	var lobby_chat_button := make_small_button("聊天", Color(0.30, 0.58, 0.54), func() -> void:
+		toggle_chat_panel()
+	)
+	lobby_chat_button.name = "ChatLobbyButton"
+	lobby_chat_button.custom_minimum_size = Vector2(72, 34)
+	lobby_chat_button.add_theme_font_size_override("font_size", 12)
+	lobby_chat_button.tooltip_text = "打开或关闭房间聊天"
+	apply_rect(lobby_chat_button, rect_full(0.500, 0.030, 0.640, 0.105))
+	log_panel.add_child(lobby_chat_button)
 	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	var room_badge_text = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
@@ -1940,19 +1949,87 @@ func show_achievements_screen(instant: bool = false) -> void:
 		play_screen_transition(_build, false, "ink_wash")
 
 func show_chat_panel() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var existing := root_layer.find_child("ChatPanel", true, false) as Control
+	if existing != null and is_instance_valid(existing):
+		chat_panel_open = true
+		return
+	chat_panel_open = true
 	# r215: GPT chrome conversion
 	var chat_panel = make_gpt_plate_rect(rect_full(0.02, 0.38, 0.28, 0.72), Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
 	chat_panel.name = "ChatPanel"
+	chat_panel.z_index = 45
+	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	chat_panel.clip_contents = true
 	root_layer.add_child(chat_panel)
 	draw_chat_panel_art(chat_panel)
 	var chat_text = "\n".join(chat_messages.slice(-8))
 	if chat_text.strip_edges() == "":
 		chat_text = "等待房间消息"
 	var chat_label = make_label(chat_panel, chat_text, 12, Color(0.82, 0.86, 0.80), false)
-	apply_rect(chat_label, rect_full(0.075, 0.260, 0.940, 0.910))
+	chat_label.name = "ChatPanelMessageText"
+	apply_rect(chat_label, rect_full(0.075, 0.285, 0.940, 0.775))
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	chat_label.clip_text = true
+	chat_label.tooltip_text = chat_text
+
+	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_chat_panel"))
+	close_button.name = "ChatPanelCloseButton"
+	close_button.tooltip_text = "关闭聊天面板 · 快捷键 Esc"
+	close_button.custom_minimum_size = Vector2(34, 34)
+	apply_rect(close_button, rect_full(0.820, 0.055, 0.950, 0.190))
+	chat_panel.add_child(close_button)
+
+	var quick_row := HBoxContainer.new()
+	quick_row.name = "ChatPanelQuickMessages"
+	quick_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	quick_row.add_theme_constant_override("separation", 3)
+	configure_passive_container(quick_row)
+	apply_rect(quick_row, rect_full(0.075, 0.205, 0.800, 0.270))
+	chat_panel.add_child(quick_row)
+	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
+		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
+		var quick_button := make_small_button(quick_message, Color(0.28, 0.54, 0.48), func() -> void:
+			send_quick_chat(quick_message)
+		)
+		quick_button.name = "ChatQuickMessageButton_%d" % quick_index
+		quick_button.custom_minimum_size = Vector2(62, 30)
+		quick_button.add_theme_font_size_override("font_size", 11)
+		quick_button.tooltip_text = "发送快捷消息：%s" % quick_message
+		quick_row.add_child(quick_button)
+
+	chat_input = LineEdit.new()
+	chat_input.name = "ChatInput"
+	chat_input.placeholder_text = "输入消息..."
+	chat_input.max_length = CHAT_MESSAGE_MAX_LENGTH
+	chat_input.clear_button_enabled = true
+	chat_input.add_theme_font_override("font", ui_cjk_font())
+	chat_input.add_theme_font_size_override("font_size", 12)
+	chat_input.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
+	chat_input.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
+	var input_styles := input_style_set()
+	chat_input.add_theme_stylebox_override("normal", input_styles["normal"])
+	chat_input.add_theme_stylebox_override("focus", input_styles["focus"])
+	chat_input.add_theme_stylebox_override("read_only", input_styles["read_only"])
+	draw_line_edit_input_art(chat_input, "聊天")
+	chat_input.text_submitted.connect(func(_value: String) -> void:
+		send_chat_input()
+	)
+	apply_rect(chat_input, rect_full(0.075, 0.805, 0.690, 0.945))
+	chat_panel.add_child(chat_input)
+
+	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
+	send_button.name = "ChatSendButton"
+	send_button.custom_minimum_size = Vector2(62, 42)
+	send_button.add_theme_font_size_override("font_size", 13)
+	send_button.tooltip_text = "发送当前消息 · Enter"
+	apply_rect(send_button, rect_full(0.710, 0.805, 0.940, 0.945))
+	chat_panel.add_child(send_button)
+
+	configure_button_focus_navigation(chat_panel, "ChatInput")
+	call_deferred("focus_named_control", "ChatInput")
 
 
 func show_daily_login_panel(login_result: Dictionary) -> void:
@@ -2890,7 +2967,10 @@ func toggle_voice_chat() -> void:
 		stop_voice_chat(true)
 	else:
 		start_voice_chat()
-	render_game()
+	if mode == "online_game":
+		render_game()
+	else:
+		refresh_current_screen()
 
 func update_manifest_detail_text() -> String:
 	var parts: Array[String] = []

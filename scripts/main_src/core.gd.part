@@ -160,6 +160,7 @@ func _process(_delta: float) -> void:
 		poll_voice_capture()
 	if mode == "online_lobby" or mode == "online_game":
 		poll_online(now)
+		update_online_slow_response_notice(now)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
@@ -200,6 +201,9 @@ func handle_ui_cancel() -> bool:
 		return true
 	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
 		on_update_secondary_pressed()
+		return true
+	if chat_panel_open:
+		close_chat_panel()
 		return true
 	if settings_panel_open:
 		close_settings_panel()
@@ -274,6 +278,9 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and handle_ui_cancel():
 		get_viewport().set_input_as_handled()
 		return
+	if handle_game_keyboard_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	var pressed = false
 	if event is InputEventScreenTouch:
 		pressed = event.pressed
@@ -289,6 +296,259 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
 		emit_ui_qa_marker("touch_drag|%s|%.1f|%.1f" % [mode, drag.position.x, drag.position.y])
+
+
+func keyboard_event_key(event: InputEventKey) -> int:
+	if event.keycode != KEY_NONE:
+		return event.keycode
+	return event.physical_keycode
+
+
+func game_keyboard_focus_is_text_input() -> bool:
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	return focus_owner is LineEdit or focus_owner is TextEdit
+
+
+func game_keyboard_focus_is_action_button() -> bool:
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	return focus_owner is Button and not game_keyboard_focus_is_hand_tile(focus_owner)
+
+
+func game_keyboard_focus_is_hand_tile(control: Control) -> bool:
+	var current: Node = control
+	while current != null:
+		if current.name.begins_with("HandTile_"):
+			return true
+		current = current.get_parent()
+	return false
+
+
+func game_keyboard_input_allowed() -> bool:
+	if mode != "offline" and mode != "online_game":
+		return false
+	if chat_panel_open or game_keyboard_focus_is_text_input():
+		return false
+	return true
+
+
+func game_keyboard_input_throttled() -> bool:
+	var now := Time.get_ticks_msec()
+	if now - last_game_keyboard_input_msec < GAME_KEYBOARD_REPEAT_GUARD_MSEC:
+		return true
+	last_game_keyboard_input_msec = now
+	return false
+
+
+func keyboard_number_index(key: int) -> int:
+	match key:
+		KEY_1, KEY_KP_1:
+			return 0
+		KEY_2, KEY_KP_2:
+			return 1
+		KEY_3, KEY_KP_3:
+			return 2
+		KEY_4, KEY_KP_4:
+			return 3
+		KEY_5, KEY_KP_5:
+			return 4
+		KEY_6, KEY_KP_6:
+			return 5
+		KEY_7, KEY_KP_7:
+			return 6
+		KEY_8, KEY_KP_8:
+			return 7
+		KEY_9, KEY_KP_9:
+			return 8
+		KEY_0, KEY_KP_0:
+			return 9
+	return -1
+
+
+func hand_keyboard_tile_selectable(index: int, hand: Array = []) -> bool:
+	var source := hand if not hand.is_empty() else get_self_hand()
+	if index < 0 or index >= source.size():
+		return false
+	var tile := str(source[index])
+	if tile == "":
+		return false
+	return mode != "offline" or not is_claim_discard_banned(0, tile)
+
+
+func normalized_hand_keyboard_selection(hand: Array) -> int:
+	if not can_self_discard() or hand.is_empty():
+		hand_keyboard_selection = -1
+		return -1
+	if hand_keyboard_selection < 0:
+		return -1
+	var candidate := clampi(hand_keyboard_selection, 0, hand.size() - 1)
+	if hand_keyboard_tile_selectable(candidate, hand):
+		hand_keyboard_selection = candidate
+		return candidate
+	for index in range(hand.size()):
+		if hand_keyboard_tile_selectable(index, hand):
+			hand_keyboard_selection = index
+			return index
+	hand_keyboard_selection = -1
+	return -1
+
+
+func set_hand_keyboard_selection(index: int, announce: bool = true) -> bool:
+	if not can_self_discard():
+		return false
+	var hand := get_self_hand()
+	var next_index := normalized_hand_keyboard_selection(hand)
+	if index >= 0:
+		next_index = clampi(index, 0, hand.size() - 1)
+		if not hand_keyboard_tile_selectable(next_index, hand):
+			var direction := 1 if index >= hand_keyboard_selection else -1
+			for step in range(1, hand.size() + 1):
+				var probe := posmod(next_index + direction * step, hand.size())
+				if hand_keyboard_tile_selectable(probe, hand):
+					next_index = probe
+					break
+		if not hand_keyboard_tile_selectable(next_index, hand):
+			return false
+	hand_keyboard_selection = next_index
+	if announce and next_index >= 0:
+		set_status("已选%s · Enter确认出牌" % tile_label(str(hand[next_index])))
+	request_game_render()
+	call_deferred("focus_hand_keyboard_control")
+	return true
+
+
+func move_hand_keyboard_selection(delta: int) -> bool:
+	if not can_self_discard():
+		return false
+	var hand := get_self_hand()
+	if hand.is_empty():
+		return false
+	var direction := 1 if delta >= 0 else -1
+	var current := normalized_hand_keyboard_selection(hand)
+	if current < 0:
+		current = 0 if direction > 0 else hand.size() - 1
+	var steps := maxi(1, abs(delta))
+	var next := current
+	for _step in range(steps):
+		for _probe in range(hand.size()):
+			next = posmod(next + direction, hand.size())
+			if hand_keyboard_tile_selectable(next, hand):
+				break
+		if not hand_keyboard_tile_selectable(next, hand):
+			return false
+	return set_hand_keyboard_selection(next)
+
+
+func focus_hand_keyboard_control() -> void:
+	if root_layer == null or not is_instance_valid(root_layer) or hand_keyboard_selection < 0:
+		return
+	for node in root_layer.find_children("HandTile_*", "Control", true, false):
+		var tile_node := node as Control
+		if tile_node == null or int(tile_node.get_meta("hand_source_index", -1)) != hand_keyboard_selection:
+			continue
+		for button_node in tile_node.find_children("*", "Button", true, false):
+			var button := button_node as Button
+			if button != null and not button.disabled:
+				button.grab_focus()
+				return
+
+
+func keyboard_claim_action(claim: String) -> bool:
+	if not has_pending_claim_window():
+		return false
+	if mode == "offline":
+		var options: Array = offline_pending_claim.get("options", [])
+		if claim == "confirm":
+			for preferred in ["hu", "gang", "peng", "chi"]:
+				if options.has(preferred):
+					claim = preferred
+					break
+		if claim == "chi":
+			var choices: Array = ordered_pending_chi_choices(offline_pending_claim.get("chi_choices", []))
+			if not choices.is_empty():
+				human_claim("chi", choices[0])
+				return true
+		if claim == "pass" or options.has(claim):
+			human_claim(claim)
+			return true
+		return false
+	var pending := pending_claim_state()
+	var options: Array = pending.get("options", [])
+	if claim == "confirm":
+		for preferred in ["hu", "gang", "peng", "chi"]:
+			if options.has(preferred):
+				claim = preferred
+				break
+	if claim == "chi":
+		var choices: Array = ordered_pending_chi_choices(pending.get("chi_choices", []))
+		if not choices.is_empty():
+			send_online_action(online_claim_payload("chi", choices[0]), "吃%s" % compact_chi_choice_button_label(choices[0]))
+			return true
+	if claim == "pass" or options.has(claim):
+		send_online_action(online_claim_payload(claim), claim_label(claim) if claim != "pass" else "过")
+		return true
+	return false
+
+
+func handle_game_keyboard_input(event: InputEvent) -> bool:
+	if not game_keyboard_input_allowed() or not event is InputEventKey:
+		return false
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return false
+	var key := keyboard_event_key(key_event)
+	var number_index := keyboard_number_index(key)
+	var recognized_key := number_index >= 0 or key in [KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END, KEY_C, KEY_P, KEY_G, KEY_H, KEY_X, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]
+	if not recognized_key and not key_event.is_action_pressed("ui_left") and not key_event.is_action_pressed("ui_right"):
+		return false
+	if game_keyboard_input_throttled():
+		return true
+	if number_index >= 0:
+		return set_hand_keyboard_selection(number_index)
+	if key == KEY_LEFT or key_event.is_action_pressed("ui_left"):
+		return move_hand_keyboard_selection(-1)
+	if key == KEY_RIGHT or key_event.is_action_pressed("ui_right"):
+		return move_hand_keyboard_selection(1)
+	if key == KEY_HOME:
+		return set_hand_keyboard_selection(0)
+	if key == KEY_END:
+		return set_hand_keyboard_selection(get_self_hand().size() - 1)
+	if has_pending_claim_window():
+		if key == KEY_C:
+			return keyboard_claim_action("chi")
+		if key == KEY_P:
+			return keyboard_claim_action("peng")
+		if key == KEY_G:
+			return keyboard_claim_action("gang")
+		if key == KEY_H:
+			return keyboard_claim_action("hu")
+		if key == KEY_X or key == KEY_SPACE:
+			return keyboard_claim_action("pass")
+		if key == KEY_ENTER or key == KEY_KP_ENTER:
+			if game_keyboard_focus_is_action_button():
+				return false
+			return keyboard_claim_action("confirm")
+		return false
+	if key == KEY_H and mode == "offline" and can_win_for_seat(0):
+		human_self_win()
+		return true
+	if key == KEY_G and mode == "offline" and can_self_discard():
+		var gang_tile := first_concealed_gang_tile(0)
+		if gang_tile == "":
+			gang_tile = first_added_gang_tile(0)
+		if gang_tile != "":
+			if count_tile(players[0]["hand"], gang_tile) >= 4:
+				human_concealed_gang(gang_tile)
+			else:
+				human_added_gang(gang_tile)
+			return true
+	if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_SPACE:
+		if game_keyboard_focus_is_action_button() and hand_keyboard_selection < 0:
+			return false
+		var selected := normalized_hand_keyboard_selection(get_self_hand())
+		if selected >= 0:
+			human_discard(selected)
+			return true
+	return false
 
 func unlock_achievement(key: String) -> bool:
 	if not achievements.has(key):
@@ -754,6 +1014,7 @@ func clear_online_feedback() -> void:
 	online_last_sent_action = ""
 	online_last_sent_type = ""
 	online_last_sent_msec = 0
+	online_slow_notice_shown = false
 	refresh_online_feedback_art()
 
 
@@ -1755,7 +2016,9 @@ func hand_tile_hint_badge(tile: String, suggested_tile: String, pending_tile: St
 
 func hand_tile_interaction_tooltip(tile: String, report: Dictionary = {}, hint_badge: String = "", drawn: bool = false) -> String:
 	var parts: Array[String] = [tile_label(tile)]
-	if hint_badge == "确认":
+	if hint_badge == "选":
+		parts.append("键盘已选 · Enter确认出牌")
+	elif hint_badge == "确认":
 		parts.append("当前待确认")
 	elif hint_badge == "荐":
 		parts.append("AI推荐出牌")
@@ -1808,6 +2071,9 @@ func hand_tray_text() -> String:
 	if has_pending_claim_window():
 		return human_claim_hint_text() if player_ai_assist_enabled() else "选择响应"
 	if mode == "offline" and can_self_discard():
+		var selected_tile := hand_keyboard_selected_tile()
+		if selected_tile != "":
+			return "已选%s · Enter确认出牌" % tile_label(selected_tile)
 		var wall_count := get_wall_count()
 		if wall_count <= 12:
 			return "牌墙将尽 · 余%d · 谨慎出牌" % wall_count
@@ -1823,8 +2089,18 @@ func hand_tray_text() -> String:
 	if mode == "offline" and offline_phase == "ended":
 		return "结算完成"
 	if mode == "online_game":
+		var online_selected_tile := hand_keyboard_selected_tile()
+		if online_selected_tile != "":
+			return "已选%s · Enter确认出牌" % tile_label(online_selected_tile)
 		return "等待对家" if not can_self_discard() else "点击手牌出牌"
 	return "等待对家"
+
+
+func hand_keyboard_selected_tile() -> String:
+	var hand := get_self_hand()
+	if hand_keyboard_selection < 0 or hand_keyboard_selection >= hand.size() or not hand_keyboard_tile_selectable(hand_keyboard_selection, hand):
+		return ""
+	return str(hand[hand_keyboard_selection])
 
 func compact_hand_tray_summary(best: Dictionary, safest: Dictionary = {}) -> String:
 	if best.is_empty():
@@ -2107,17 +2383,17 @@ func action_button_tooltip(text: String) -> String:
 	# Keep the visual CTA short while exposing the consequence on hover/focus.
 	var clean := text.strip_edges()
 	if clean == "过" or clean == "建议过" or clean == "荐过":
-		return "放弃本次吃、碰、杠或胡响应，继续轮转"
+		return "放弃本次吃、碰、杠或胡响应，继续轮转 · 快捷键 X / Space"
 	if clean.begins_with("吃"):
-		return "选择这组顺子吃牌，接着进入你的出牌阶段"
+		return "选择这组顺子吃牌，接着进入你的出牌阶段 · 快捷键 C"
 	if clean.begins_with("碰"):
-		return "选择碰牌，公开这组刻子并继续出牌"
+		return "选择碰牌，公开这组刻子并继续出牌 · 快捷键 P"
 	if clean.begins_with("杠"):
-		return "选择杠牌，公开或补齐这组牌并补摸一张"
+		return "选择杠牌，公开或补齐这组牌并补摸一张 · 快捷键 G"
 	if clean.contains("自摸"):
-		return "确认自摸胡牌并进入结算"
+		return "确认自摸胡牌并进入结算 · 快捷键 H"
 	if clean.begins_with("确认打"):
-		return "确认打出这张高风险牌"
+		return "确认打出这张高风险牌 · Enter确认"
 	if clean.begins_with("改打"):
 		return "改打这张牌，降低当前放铳风险"
 	if clean.begins_with("荐打") or clean.begins_with("稳打"):
@@ -2133,7 +2409,7 @@ func action_button_tooltip(text: String) -> String:
 	if clean == "菜单":
 		return "返回主菜单"
 	if clean == "取消":
-		return "取消当前确认，不打出这张牌"
+		return "取消当前确认，不打出这张牌 · 快捷键 Esc"
 	if clean == "语音" or clean == "闭麦":
 		return "切换语音麦克风状态"
 	return clean
@@ -2405,8 +2681,7 @@ func finalize_action_bar_layout() -> void:
 			if waiting_button.name != "VoiceActionButton":
 				waiting_button.disabled = true
 				waiting_button.tooltip_text = "正在等待服务器确认本次操作"
-	var default_focus_name := "DangerDiscardConfirmButton" if mode == "offline" and has_pending_danger_discard() else ""
-	configure_button_focus_navigation(action_bar, default_focus_name)
+	configure_button_focus_navigation(action_bar, action_bar_default_focus_name())
 
 func ended_action_button_widths(count: int) -> Array[float]:
 	var widths: Array[float] = []
@@ -2463,6 +2738,18 @@ func collect_action_bar_buttons(node: Node, buttons: Array[Button]) -> void:
 func action_bar_pixel_width() -> float:
 	var rect = action_bar_layout_rect()
 	return safe_content_pixel_size().x * (rect.size.x - rect.position.x)
+
+
+func action_bar_default_focus_name() -> String:
+	if mode == "offline" and has_pending_danger_discard():
+		return "DangerDiscardConfirmButton"
+	if mode == "offline" and offline_phase == "ended":
+		if not is_offline_match_finished():
+			return "NextHandPrimaryButton"
+		return "NewMatchSecondaryButton"
+	if mode == "online_game" and online_waiting_for_server:
+		return "VoiceActionButton"
+	return ""
 
 func action_button_separation_for_count(count: int) -> int:
 	if mode == "offline" and has_pending_danger_discard():
@@ -6428,9 +6715,10 @@ func current_status_text() -> String:
 			return "牌墙将尽 · 余%d · %s" % [remaining_wall, turn_summary]
 		if remaining_wall <= 24:
 			return "牌墙偏少 · 余%d · %s" % [remaining_wall, turn_summary]
-		if current_seat == 0:
-			return "轮到你出牌"
-		return "%s行牌" % players[current_seat]["name"]
+			if current_seat == 0:
+				var selected_tile := hand_keyboard_selected_tile()
+				return "轮到你出牌 · 已选%s" % tile_label(selected_tile) if selected_tile != "" else "轮到你出牌"
+			return "%s行牌" % players[current_seat]["name"]
 	var phase = str(online_game.get("phase", ""))
 	if online_feedback != "":
 		return online_feedback
@@ -6441,7 +6729,10 @@ func current_status_text() -> String:
 		return "等待你响应%s" % tile_label(str(pending.get("tile", "")))
 	if phase == "pendingClaim":
 		return "等待吃碰杠胡响应"
-	return "轮到你出牌" if can_self_discard() else "等待对家行牌"
+	if can_self_discard():
+		var selected_tile := hand_keyboard_selected_tile()
+		return "轮到你出牌 · 已选%s" % tile_label(selected_tile) if selected_tile != "" else "轮到你出牌"
+	return "等待对家行牌"
 
 
 # Keep the ended-state HUD short; detailed yaku and liability text belongs in the settlement panel.
@@ -6910,20 +7201,72 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 
 var chat_messages: Array = []
 var chat_input: LineEdit = null
+var chat_panel_open := false
 
 
 func add_chat_message(text: String) -> void:
-	chat_messages.append(text)
+	var clean := str(text).strip_edges().left(CHAT_MESSAGE_MAX_LENGTH)
+	if clean == "":
+		return
+	chat_messages.append(clean)
 	if chat_messages.size() > 50:
 		chat_messages = chat_messages.slice(-30)
 
 func send_quick_chat(message: String) -> void:
 	if mode != "online_lobby" and mode != "online_game":
 		return
-	add_chat_message("你: %s" % message)
-	play_chat_send_panel_feedback(message)
-	send_online_action({"type": "chat", "message": message}, "发送消息")
-	show_toast("已发送: %s" % message, 1500)
+	var clean := str(message).strip_edges().left(CHAT_MESSAGE_MAX_LENGTH)
+	if clean == "":
+		set_status("请输入消息后再发送。")
+		return
+	if not send_online_action({"type": "chat", "message": clean}, "发送消息"):
+		return
+	add_chat_message("你: %s" % clean)
+	play_chat_send_panel_feedback(clean)
+	show_toast("已发送：%s" % clean, 1500)
+	if is_instance_valid(chat_input):
+		chat_input.clear()
+	if chat_panel_open:
+		refresh_chat_panel()
+
+
+func send_chat_input() -> void:
+	if not is_instance_valid(chat_input):
+		return
+	send_quick_chat(chat_input.text)
+
+
+func toggle_chat_panel() -> void:
+	if mode != "online_lobby" and mode != "online_game":
+		set_status("聊天需要进入联机房间后使用。")
+		return
+	if chat_panel_open:
+		close_chat_panel()
+	else:
+		show_chat_panel()
+
+
+func refresh_chat_panel() -> void:
+	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
+		return
+	var old_panel := root_layer.find_child("ChatPanel", true, false) as Control
+	if old_panel != null and is_instance_valid(old_panel):
+		root_layer.remove_child(old_panel)
+		old_panel.queue_free()
+	chat_input = null
+	show_chat_panel()
+
+
+func close_chat_panel() -> void:
+	chat_panel_open = false
+	var panel := root_layer.find_child("ChatPanel", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if panel != null and is_instance_valid(panel):
+		root_layer.remove_child(panel)
+		panel.queue_free()
+	chat_input = null
+	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
+	if chat_button != null and not chat_button.disabled:
+		chat_button.grab_focus()
 
 func play_chat_send_panel_feedback(message: String = "") -> Control:
 	# r215: GPT chrome conversion

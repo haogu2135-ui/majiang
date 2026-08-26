@@ -147,6 +147,8 @@ func should_yield_before_ai_discard() -> bool:
 
 func clear_screen() -> void:
 	loading_screen_active = false
+	if mode != "online_lobby" and mode != "online_game":
+		chat_panel_open = false
 	clear_screen_tweens()
 	clear_toast_on_mode_change()
 	for child in get_children():
@@ -179,6 +181,7 @@ func clear_screen() -> void:
 	update_primary_button = null
 	update_secondary_button = null
 	menu_realtime_3d_stage = null
+	chat_input = null
 	safe_area_margins = current_safe_area_margins()
 	emit_ui_qa_marker("safe_area|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f" % [safe_area_margins.x, safe_area_margins.y, safe_area_margins.z, safe_area_margins.w, effective_viewport_size().x, effective_viewport_size().y])
 	screen_layer = Control.new()
@@ -212,6 +215,8 @@ func start_offline(instant: bool = false) -> void:
 		play_screen_transition(_build, false, "ink_wash")
 
 func _start_offline_impl() -> void:
+	hand_keyboard_selection = -1
+	last_game_keyboard_input_msec = 0
 	if voice_enabled:
 		stop_voice_chat(false)
 	mode = "offline"
@@ -399,6 +404,8 @@ func render_game() -> void:
 	draw_advisor_panel(root_layer)
 	draw_actions(root_layer)
 	draw_round_summary(root_layer)
+	if chat_panel_open:
+		show_chat_panel()
 
 	# 记录渲染性能
 	var render_elapsed = Time.get_ticks_msec() - render_start_time
@@ -577,6 +584,7 @@ func human_discard(index: int) -> void:
 	tile = discard_tile_by_index(0, index)
 	if tile == "":
 		return
+	hand_keyboard_selection = -1
 	render_game()
 	get_tree().process_frame.connect(Callable(self, "resolve_human_discard_after_frame").bind(tile), CONNECT_ONE_SHOT)
 
@@ -603,6 +611,7 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 	if mode != "offline" or offline_phase != "pending_claim":
 		return
 	clear_pending_danger_discard()
+	hand_keyboard_selection = -1
 	var from_seat = int(offline_pending_claim.get("from_seat", -1))
 	var tile = str(offline_pending_claim.get("tile", ""))
 	if from_seat < 0 or tile == "":
@@ -653,6 +662,7 @@ func human_self_win() -> void:
 	if win_tile == "":
 		return
 	play_human_action_choice_confirmation_fx("self_win", win_tile)
+	hand_keyboard_selection = -1
 	finish_offline_round(0, win_tile, true, -1)
 
 
@@ -691,6 +701,7 @@ func human_concealed_gang(tile: String) -> void:
 	if count_tile(players[0]["hand"], tile) < 4:
 		return
 	clear_pending_danger_discard()
+	hand_keyboard_selection = -1
 	play_human_action_choice_confirmation_fx("concealed_gang", tile)
 	perform_concealed_gang(0, tile)
 	render_game()
@@ -701,6 +712,7 @@ func human_added_gang(tile: String) -> void:
 	if not can_added_gang(0, tile):
 		return
 	clear_pending_danger_discard()
+	hand_keyboard_selection = -1
 	play_human_action_choice_confirmation_fx("added_gang", tile)
 	perform_added_gang(0, tile)
 	render_game()
