@@ -695,8 +695,9 @@ func poll_online(now_msec: int = -1) -> void:
 			return
 		refresh_online_lobby_state()
 	if status != StreamPeerTCP.STATUS_CONNECTED:
-		if mode == "online_lobby" and not online_room.is_empty() and not online_waiting_for_server:
-			clear_online_room_snapshot()
+		if mode == "online_lobby" and not online_room.is_empty():
+			close_online_transport("连接已断开，请重新连接。")
+			return
 		refresh_online_lobby_state()
 		return
 	var available = tcp.get_available_bytes()
@@ -751,6 +752,7 @@ func clear_online_feedback() -> void:
 	online_feedback = ""
 	online_waiting_for_server = false
 	online_last_sent_action = ""
+	online_last_sent_type = ""
 	online_last_sent_msec = 0
 	refresh_online_feedback_art()
 
@@ -908,6 +910,9 @@ func render_room_log() -> void:
 	var logs = online_room.get("logs", [])
 	if typeof(logs) != TYPE_ARRAY:
 		logs = []
+	var log_count := (logs as Array).size()
+	if follow_latest:
+		online_log_seen_count = log_count
 	var text = ""
 	if logs.is_empty():
 		text = "暂无房间日志"
@@ -922,6 +927,7 @@ func render_room_log() -> void:
 		if line != "":
 			text += "· " + line + "\n"
 	logs_label.text = text
+	refresh_online_log_navigation()
 	if follow_latest:
 		call_deferred("defer_online_log_scroll_to_end")
 	else:
@@ -938,6 +944,8 @@ func scroll_online_log_to_end() -> void:
 		return
 	var scrollbar := log_scroll.get_v_scroll_bar()
 	log_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
+	online_log_seen_count = online_lobby_log_count()
+	refresh_online_log_navigation()
 	emit_ui_qa_marker("scroll|online_lobby|%d|%d" % [log_scroll.scroll_vertical, int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))])
 
 func restore_online_log_scroll(value: int) -> void:
@@ -948,6 +956,28 @@ func restore_online_log_scroll(value: int) -> void:
 		log_scroll.scroll_vertical = value
 		var scrollbar := log_scroll.get_v_scroll_bar()
 		emit_ui_qa_marker("scroll|online_lobby|%d|%d" % [log_scroll.scroll_vertical, int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))])
+	refresh_online_log_navigation()
+
+func online_lobby_log_count() -> int:
+	var logs = online_room.get("logs", [])
+	return (logs as Array).size() if typeof(logs) == TYPE_ARRAY else 0
+
+func online_lobby_log_unread_count() -> int:
+	return maxi(0, online_lobby_log_count() - online_log_seen_count)
+
+func refresh_online_log_navigation() -> void:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return
+	var latest_button = root_layer.find_child("OnlineLobbyLogLatestButton", true, false) as Button
+	var unread_label = root_layer.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label
+	var unread := online_lobby_log_unread_count()
+	if latest_button != null:
+		latest_button.text = "最新" if unread <= 0 else "最新 %d" % unread
+		latest_button.tooltip_text = "跳到最新房间日志" if unread <= 0 else "还有 %d 条未读日志，跳到最新" % unread
+		latest_button.modulate = Color(1.0, 0.95, 0.72, 1.0) if unread > 0 else Color(0.88, 0.90, 0.82, 0.82)
+	if unread_label != null:
+		unread_label.text = "未读 %d" % unread if unread > 0 else "已到最新"
+		unread_label.visible = unread > 0
 
 
 func deal_offline_hand() -> void:
@@ -2246,18 +2276,37 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	)
 	# The context is a decision surface, so it must never sit on top of a river or
 	# an exposed meld when a compact viewport leaves more than one viable slot.
-	var candidates: Array[Rect2] = [base_candidate]
+	# Try horizontal and vertical alternatives in a deterministic order. This is
+	# important for safe-area offsets where the action dock is no longer centered.
+	var candidate_centers: Array[float] = [panel_center_x]
+	if absf(centered_panel_x - panel_center_x) > 0.001:
+		candidate_centers.append(centered_panel_x)
+	var left_panel_center: float = lane_left + panel_width * 0.5
+	var right_panel_center: float = lane_right - panel_width * 0.5
+	if absf(left_panel_center - panel_center_x) > 0.001:
+		candidate_centers.append(left_panel_center)
+	if absf(right_panel_center - panel_center_x) > 0.001 and absf(right_panel_center - left_panel_center) > 0.001:
+		candidate_centers.append(right_panel_center)
+	var candidate_bottoms: Array[float] = [panel_bottom]
 	var raised_bottom: float = panel_top - lane_gap_y
 	if raised_bottom - panel_height > 0.08:
-		candidates.append(rect_full(
-			panel_center_x - panel_width * 0.5,
-			raised_bottom - panel_height,
-			panel_center_x + panel_width * 0.5,
-			raised_bottom
-		))
-	for candidate in candidates:
-		if pending_claim_context_candidate_is_clear(candidate, table_left, table_top, table_width, table_height):
-			return candidate
+		candidate_bottoms.append(raised_bottom)
+	var mid_bottom := clampf(table_top + table_height * 0.56, panel_height + 0.08, panel_bottom)
+	if absf(mid_bottom - panel_bottom) > 0.001 and absf(mid_bottom - raised_bottom) > 0.001:
+		candidate_bottoms.append(mid_bottom)
+	var upper_bottom := clampf(table_top + table_height * 0.36, panel_height + 0.08, panel_bottom)
+	if absf(upper_bottom - mid_bottom) > 0.001 and absf(upper_bottom - panel_bottom) > 0.001:
+		candidate_bottoms.append(upper_bottom)
+	for candidate_center in candidate_centers:
+		for candidate_bottom in candidate_bottoms:
+			var candidate := rect_full(
+				candidate_center - panel_width * 0.5,
+				candidate_bottom - panel_height,
+				candidate_center + panel_width * 0.5,
+				candidate_bottom
+			)
+			if pending_claim_context_candidate_is_clear(candidate, table_left, table_top, table_width, table_height):
+				return candidate
 	return base_candidate
 
 func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: float, table_top: float, table_width: float, table_height: float) -> bool:
@@ -6478,14 +6527,14 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		section.add_child(marker)
 		draw_rule_section_path_art(section, section_index, title_text)
 
-	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.748 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.34), "ui_dark_scrim", 0.22)
+	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.730 if section_index >= 0 else 0.970, 0.990), Color(0.018, 0.032, 0.030, 0.27), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
 
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.058
 	vbox.anchor_top = 0.040
-	vbox.anchor_right = 0.735 if section_index >= 0 else 0.96
+	vbox.anchor_right = 0.718 if section_index >= 0 else 0.96
 	vbox.anchor_bottom = 0.970
 	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)

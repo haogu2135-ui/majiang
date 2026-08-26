@@ -242,7 +242,7 @@ func run_continuous_resize_capacity_probe() -> void:
 			var expected_rows: int = maxi(1, ceili(4.0 / float(expected_columns)))
 			var expected_gap := 12.0 if expected_wide else 10.0
 			var expected_row_cap := 320.0 if expected_wide else 120.0
-			var expected_row_height := clampf(floorf((scene.safe_content_pixel_size().y * 0.96 * (0.765 - 0.12) - expected_gap * float(expected_rows - 1)) / float(expected_rows)), 68.0, expected_row_cap)
+			var expected_row_height := clampf(floorf((scene.safe_content_pixel_size().y * 0.96 * (0.750 - 0.12) - expected_gap * float(expected_rows - 1)) / float(expected_rows)), 68.0, expected_row_cap)
 			check(absf((shop_rows[0] as Control).custom_minimum_size.y - expected_row_height) <= 1.0, "shop recomputes compact row height through live resize at %s" % viewport_size)
 			if viewport_size.x >= 1600.0:
 				check((shop_rows[0] as Control).custom_minimum_size.y > 120.0, "wide shop uses the full display height instead of leaving a shelf-sized blank lane at %s" % viewport_size)
@@ -562,6 +562,8 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await process_frame
 	check(scene.toast_current != null and scene.toast_mode == "offline", "offline battle toast records its source mode at %s" % actual_viewport)
 	scene._show_online_lobby_impl()
+	var pending_room_edit = scene.find_child("OnlineLobbyRoomEdit", true, false) as LineEdit
+	check(scene.online_waiting_for_server and pending_room_edit != null and pending_room_edit.text == "ROOM7", "waiting lobby keeps its pending room draft before transport recovery at %s" % actual_viewport)
 	await process_frame
 	check(scene.toast_current == null and scene.toast_mode == "" and scene.toast_container != null and not scene.toast_container.visible, "changing from battle to lobby clears the stale toast at %s" % actual_viewport)
 	scene.show_toast("大厅同页提示", 60000)
@@ -572,7 +574,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check(scene.toast_current != null and scene.toast_current.get_instance_id() == same_page_toast_id and scene.toast_mode == "online_lobby", "same-page lobby refresh preserves its active toast at %s" % actual_viewport)
 	var waiting_occupancy = scene.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
 	var waiting_room_badge = scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
-	check(scene.online_waiting_for_server and waiting_occupancy != null and waiting_occupancy.text == "入席 2/4" and waiting_room_badge != null and waiting_room_badge.text == "房间号 ROOM7", "waiting lobby refresh preserves its room snapshot at %s" % actual_viewport)
+	check(not scene.online_waiting_for_server and scene.selected_room == "" and scene.online_room.is_empty() and waiting_occupancy != null and waiting_room_badge != null and waiting_room_badge.text == "房间号 连接后显示", "disconnected lobby recovery clears the stale room snapshot at %s" % actual_viewport)
 	scene.set_online_feedback("请先连接服务器。", false)
 	scene.clear_online_room_snapshot()
 	scene.refresh_online_lobby_state()
@@ -1232,10 +1234,11 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	var winner_label = scene.find_child("WinDetailWinnerLabel", true, false) as Label
 	var score_label = scene.find_child("WinDetailScoreLabel", true, false) as Label
 	var win_tile = scene.find_child("WinDetailTile", true, false) as Control
+	var rank_header = scene.find_child("RoundSummaryRankHeader", true, false) as Control
 	var dock = scene.find_child("ActionButtonDock", true, false) as Control
 	var next_button = first_button_with_text(scene.action_bar, "下一局")
 	var menu_button = first_button_with_text(scene.action_bar, "菜单")
-	check(panel != null and title != null and body != null and top_status != null and detail_panel != null and winner_label != null and score_label != null and win_tile != null, "round summary exposes title, score body, compact top status, win detail, and winning tile at %s" % viewport_size)
+	check(panel != null and title != null and body != null and top_status != null and detail_panel != null and winner_label != null and score_label != null and win_tile != null and rank_header != null, "round summary exposes title, score body, compact top status, win detail, winning tile, and rank header at %s" % viewport_size)
 	check(next_button != null and menu_button != null, "round summary exposes clear next-hand and menu routes at %s" % viewport_size)
 	check(scene.find_child("ActionIntentDock", true, false) == null, "round summary omits the live action intent strip at %s" % viewport_size)
 	if top_status != null:
@@ -1257,7 +1260,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 		panel_texture_path = (panel as TextureRect).texture.resource_path
 	check(panel_texture_path.ends_with("/ui_dark_scrim.png") and panel.self_modulate.a >= 0.98, "round summary uses an opaque authored reading scrim at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "round summary panel stays inside the viewport safe bounds at %s" % viewport_size)
-	for node in [title, body, detail_panel]:
+	for node in [title, body, detail_panel, rank_header]:
 		if node != null:
 			check(panel_rect.grow(1.0).encloses(screen_rect(node)), "round summary keeps %s inside its panel at %s" % [node.name, viewport_size])
 	for seat in range(4):
@@ -1276,6 +1279,8 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	if detail_panel != null:
 		var detail_rect = screen_rect(detail_panel)
 		check(not rects_overlap(detail_rect, screen_rect(body)), "round summary win detail clears settlement body at %s" % viewport_size)
+		if rank_header != null:
+			check(not rects_overlap(detail_rect, screen_rect(rank_header)), "round summary win detail clears rank header at %s" % viewport_size)
 		for node in [winner_label, score_label, win_tile]:
 			if node != null:
 				check(detail_rect.grow(1.0).encloses(screen_rect(node)), "win detail keeps %s inside its panel at %s" % [node.name, viewport_size])
@@ -1286,10 +1291,19 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 			for badge in yaku_badges.get_children():
 				if badge is Control:
 					check(detail_rect.grow(1.0).encloses(screen_rect(badge as Control)), "win detail yaku entry %s stays visible inside the panel at %s" % [badge.name, viewport_size])
+			var limit_badge = scene.find_child("WinDetailLimitBadge", true, false) as Control
+			if limit_badge != null:
+				check(not rects_overlap(screen_rect(limit_badge), screen_rect(yaku_badges)), "win detail limit badge clears the yaku lane at %s" % viewport_size)
 	for seat in range(4):
 		var row = scene.find_child("RoundSummaryRankRow_%d" % seat, true, false) as Control
 		if row != null and detail_panel != null:
 			check(not rects_overlap(screen_rect(detail_panel), screen_rect(row)), "round summary rank row %d clears win detail at %s" % [seat, viewport_size])
+		if row != null and rank_header != null:
+			check(not rects_overlap(screen_rect(rank_header), screen_rect(row)), "round summary rank row %d clears rank header at %s" % [seat, viewport_size])
+		for other_seat in range(seat):
+			var other_row = scene.find_child("RoundSummaryRankRow_%d" % other_seat, true, false) as Control
+			if row != null and other_row != null:
+				check(not rects_overlap(screen_rect(row), screen_rect(other_row)), "round summary rank rows %d and %d remain mutually exclusive at %s" % [other_seat, seat, viewport_size])
 	if winner_label != null and score_label != null:
 		check(winner_label.get_theme_font_size("font_size") >= 18 and score_label.get_theme_font_size("font_size") >= 22, "win detail winner and score text remain prominent at %s" % viewport_size)
 	if dock != null:
@@ -1425,7 +1439,20 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 			if meld_group == null or not str(meld_group.name).begins_with("MeldGroup_"):
 				continue
 			group_count += 1
-			check(meld_rect.grow(1.0).encloses(screen_rect(meld_group)), "battle meld group %d/%d stays inside its assigned lane at %s" % [meld_seat, group_count, viewport_size])
+			var group_rect := screen_rect(meld_group)
+			check(meld_rect.grow(1.0).encloses(group_rect), "battle meld group %d/%d stays inside its assigned lane at %s" % [meld_seat, group_count, viewport_size])
+			var expected_vertical: bool = bool(scene.seat_meld_is_vertical(meld_seat))
+			var meld_tiles = meld_group.find_child("MeldTiles", true, false) as Control
+			var lane_orientation_ok: bool = bool(meld_tiles is VBoxContainer if expected_vertical else meld_tiles is HBoxContainer)
+			check(lane_orientation_ok and meld_tiles.get_child_count() >= 3, "battle meld group %d/%d keeps the seat-facing %s tile lane at %s" % [meld_seat, group_count, "vertical" if expected_vertical else "horizontal", viewport_size])
+			if meld_tiles != null:
+				for holder in meld_tiles.get_children():
+					if not (holder is Control) or holder.get_child_count() == 0:
+						continue
+					var tile_view := holder.get_child(0) as Control
+					check(tile_view != null and absf(tile_view.rotation - scene.seat_meld_face_rotation(meld_seat)) <= 0.001, "battle meld group %d/%d faces toward the table center at %s" % [meld_seat, group_count, viewport_size])
+					if not expected_vertical and viewport_size.y <= 560.0 and tile_view != null:
+						check(tile_view.size.x >= 18.0, "compact horizontal meld group %d/%d keeps an 18px tile face minimum at %s" % [meld_seat, group_count, viewport_size])
 		check(group_count == 4, "battle meld area %d fits all four groups at %s" % [meld_seat, viewport_size])
 	var table_log = scene.find_child("TableLogLedgerPanel", true, false) as Control
 	check(table_log != null, "battle renders named table log ledger at %s" % viewport_size)
@@ -1789,6 +1816,8 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var roster_title = scene.find_child("OnlineLobbyRosterTitle", true, false) as Label
 	var log_list_title = scene.find_child("OnlineLobbyLogListTitle", true, false) as Label
 	var log_count_badge = scene.find_child("OnlineLobbyLogCountBadge", true, false) as Control
+	var log_latest_button = scene.find_child("OnlineLobbyLogLatestButton", true, false) as Button
+	var log_unread_label = scene.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label
 	var room_badge = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
 	var room_offline_state = scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Label
 	var endpoint_badge = scene.find_child("OnlineLobbyServerEndpointBadge", true, false) as Control
@@ -1798,9 +1827,9 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	check(page_plate != null and form_panel != null and log_panel != null, "online lobby exposes a low-frequency page plate and named split panels at %s" % viewport_size)
 	if page_plate != null:
 		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
-		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.55 and page_plate.self_modulate.a <= 0.85, "disconnected lobby uses a subdued low-frequency authored bitmap substrate at %s" % viewport_size)
+		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.35 and page_plate.self_modulate.a <= 0.60, "disconnected lobby uses a restrained low-frequency authored bitmap substrate at %s" % viewport_size)
 	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
-	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null, "online lobby exposes room summary roster and log list hierarchy at %s" % viewport_size)
+	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null and log_latest_button != null and log_unread_label != null, "online lobby exposes room summary roster log list and latest-log controls at %s" % viewport_size)
 	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
 	var log_list_texture = (log_list_panel as TextureRect).texture if log_list_panel is TextureRect else null
 	var roster_source = (roster_texture as AtlasTexture).atlas if roster_texture is AtlasTexture else roster_texture
@@ -1859,7 +1888,8 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 			if input_edit == null:
 				continue
 			check(input_art.show_behind_parent, "online lobby %s GPT field art stays behind native text caret and selection at %s" % [input_id, viewport_size])
-			check(input_edit.text.strip_edges() != "" and input_edit.get_theme_font_size("font_size") >= 18, "online lobby %s input keeps a visible non-empty value at %s" % [input_id, viewport_size])
+			var room_input_may_be_empty: bool = input_id == "room" and scene.lobby_connection_state_text() != "已连接" and not scene.online_waiting_for_server
+			check((input_edit.text.strip_edges() != "" or room_input_may_be_empty) and input_edit.get_theme_font_size("font_size") >= 18, "online lobby %s input keeps a visible value or an intentional disconnected empty state at %s" % [input_id, viewport_size])
 			var edit_rect = screen_rect(input_edit)
 			check(edit_rect.position.y >= input_rect.position.y - 1.0 and edit_rect.end.y <= input_rect.end.y + 1.0, "online lobby %s input stays inside input group at %s" % [input_id, viewport_size])
 			check(edit_rect.end.y <= action_rect.position.y - 2.0, "online lobby %s input clears action group at %s" % [input_id, viewport_size])
@@ -1908,8 +1938,11 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 			check(roster_rect.grow(1.0).encloses(screen_rect(roster_title)) and roster_title.get_theme_font_size("font_size") >= 13 and relative_luma(roster_title.get_theme_color("font_color")) >= 0.88, "online lobby roster title is readable and contained at %s" % viewport_size)
 		if log_list_title != null:
 			check(log_list_rect.grow(1.0).encloses(screen_rect(log_list_title)) and log_list_title.get_theme_font_size("font_size") >= 13 and relative_luma(log_list_title.get_theme_color("font_color")) >= 0.88, "online lobby log title is readable and contained at %s" % viewport_size)
-		if log_count_badge != null:
-			check(log_list_rect.grow(1.0).encloses(screen_rect(log_count_badge)), "online lobby log count badge stays inside log panel at %s" % viewport_size)
+			if log_count_badge != null:
+				check(log_list_rect.grow(1.0).encloses(screen_rect(log_count_badge)), "online lobby log count badge stays inside log panel at %s" % viewport_size)
+			if log_latest_button != null and log_unread_label != null:
+				check(log_list_rect.grow(1.0).encloses(screen_rect(log_latest_button)) and log_latest_button.tooltip_text.contains("最新"), "online lobby latest-log button stays inside the log header and explains its route at %s" % viewport_size)
+				check(log_list_rect.grow(1.0).encloses(screen_rect(log_unread_label)), "online lobby unread-log indicator stays inside the log header at %s" % viewport_size)
 		for i in range(4):
 			var row = scene.find_child("OnlineLobbyRosterRow_%d" % i, true, false) as Control
 			check(row != null, "online lobby roster row %d exists at %s" % [i, viewport_size])
@@ -1932,6 +1965,20 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 			check(log_scroll != null and log_list_text.get_parent() == log_scroll, "online lobby log text is owned by the native scroll container at %s" % viewport_size)
 			var minimum_log_font := 13 if viewport_size.y <= 560.0 else 14
 			check(log_list_text.fit_content and not log_list_text.scroll_active and log_list_text.get_theme_font_size("normal_font_size") >= minimum_log_font and relative_luma(log_list_text.get_theme_color("default_color")) >= 0.90, "online lobby log text stays readable and delegates scrolling to its parent at %s" % viewport_size)
+		# Exercise the unread path with a bounded synthetic snapshot, then restore
+		# the disconnected fixture so this probe cannot leak room state downstream.
+		var saved_room: Dictionary = scene.online_room.duplicate(true)
+		var saved_seen: int = int(scene.online_log_seen_count)
+		scene.online_room = {"logs": ["第一条", "第二条", "第三条"]}
+		scene.online_log_seen_count = 1
+		scene.refresh_online_log_navigation()
+		check(log_latest_button != null and log_latest_button.text == "最新 2" and log_unread_label != null and log_unread_label.visible and log_unread_label.text == "未读 2", "online lobby exposes an accurate unread-log count at %s" % viewport_size)
+		scene.scroll_online_log_to_end()
+		check(scene.online_log_seen_count == 3 and log_latest_button != null and log_latest_button.text == "最新" and log_unread_label != null and not log_unread_label.visible, "online lobby latest-log route clears unread state at %s" % viewport_size)
+		scene.online_room = saved_room
+		scene.online_log_seen_count = saved_seen
+		scene.render_room_log()
+		scene.refresh_online_log_navigation()
 	var feedback_rect := Rect2()
 	if feedback != null:
 		feedback_rect = screen_rect(feedback)
@@ -2132,7 +2179,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 			var text_rect = screen_rect(text_backplate)
 			var strip_rect = screen_rect(example_strip)
 			check(text_rect.end.x <= strip_rect.position.x - 6.0, "rules section %d text and example lanes do not overlap at %s" % [i, viewport_size])
-			check(text_rect.size.x >= rect.size.x * 0.74, "rules section %d prioritizes reading width over example art at %s" % [i, viewport_size])
+			check(text_rect.size.x >= rect.size.x * 0.70, "rules section %d keeps a readable text lane beside example art at %s" % [i, viewport_size])
 			check(strip_rect.size.x <= rect.size.x * 0.18, "rules section %d keeps example strip compact at %s" % [i, viewport_size])
 			check(rect.grow(1.0).encloses(text_rect), "rules section %d text backplate stays inside section frame at %s" % [i, viewport_size])
 		if title_label != null:

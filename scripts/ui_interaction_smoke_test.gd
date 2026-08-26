@@ -142,6 +142,7 @@ func send_key(keycode: Key, unicode_value: int) -> void:
 func connected_room_fixture() -> Dictionary:
 	return {
 		"code": "ROOM7",
+		"canStart": false,
 		"players": [
 			{"seat": 0, "name": "甲", "ready": true},
 			{"seat": 1, "name": "乙", "ready": true},
@@ -324,7 +325,7 @@ func run() -> void:
 	var log_list = scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
 	var offline_state = scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Control
 	check(connection_label != null and connection_label.text == "已连接", "connection badge reports the connected state")
-	check(start_button != null and not start_button.disabled and start_button.text == "开始游戏", "connected lobby enables the primary start action")
+	check(start_button != null and start_button.disabled and start_button.text == "等待开局" and start_button.tooltip_text.contains("开局"), "connected lobby gates the primary start action until the server grants permission")
 	check(start_button != null and return_button != null and start_button.size.x > return_button.size.x + 36.0 and return_button.modulate.a <= 0.85, "connected lobby gives start a unique primary hierarchy")
 	check(room_art != null and room_art.visible and roster != null and roster.visible and log_list != null and log_list.visible, "connected lobby reveals room summary, roster, and logs")
 	check(offline_state != null and not offline_state.visible, "connected lobby hides the disconnected empty state")
@@ -339,6 +340,12 @@ func run() -> void:
 	check(roster_name != null and roster_name.text == "丙", "connected roster renders server-provided seat identity")
 	check(logs != null and logs.text.contains("甲加入房间") and logs.text.contains("房间同步完成"), "connected log panel renders the complete room event stream")
 	check(logs != null and logs.fit_content and not logs.scroll_active, "connected log text delegates overflow to the native scroll container")
+	scene.online_room["canStart"] = true
+	scene.refresh_online_lobby_state()
+	await settle(0.05)
+	check(start_button != null and not start_button.disabled and start_button.text == "开始游戏", "connected lobby enables the primary start action after the server grants permission")
+	scene.online_room["canStart"] = false
+	scene.refresh_online_lobby_state()
 
 	print("--- D) bounded actions and live room messages update the same page ---")
 	transport.writes.clear()

@@ -122,6 +122,10 @@ func join_online_room() -> void:
 func clear_online_room_snapshot() -> void:
 	online_room.clear()
 	online_game.clear()
+	online_log_seen_count = 0
+	selected_room = ""
+	if is_instance_valid(online_room_edit):
+		online_room_edit.text = ""
 	online_announced_discard_key = ""
 	online_pending_local_discard_identity = ""
 	if mode == "online_lobby":
@@ -435,12 +439,18 @@ func send_online(payload: Dictionary) -> bool:
 
 func send_online_action(payload: Dictionary, label: String = "") -> void:
 	var action_label = label if label.strip_edges() != "" else online_action_label(payload)
-	if online_waiting_for_server:
+	var action_type := str(payload.get("type", "")).strip_edges()
+	var repeated_request := online_waiting_for_server and (
+		(action_type != "" and action_type == online_last_sent_type) or
+		(action_type == "" and action_label == online_last_sent_action)
+	)
+	if repeated_request:
 		set_online_feedback("正在等待上一次%s的服务器确认。" % action_label, true)
 		return
 	if send_online(payload):
 		play_outgoing_online_action_audio(payload)
 		online_last_sent_action = action_label
+		online_last_sent_type = action_type
 		online_last_sent_msec = Time.get_ticks_msec()
 		set_online_feedback("已发送%s，等待服务器确认。" % action_label, true)
 

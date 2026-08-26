@@ -5089,7 +5089,7 @@ func draw_melds(parent: Control) -> void:
 				var compact_tile_width := floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count) * 2.0) / float(horizontal_tile_count))
 				if compact_tile_width <= 18.0:
 					compact_tile_width = floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count)) / float(horizontal_tile_count))
-				compact_tile_width = clampf(compact_tile_width, 15.0, 20.0)
+				compact_tile_width = clampf(compact_tile_width, 18.0, 20.0)
 				meld_tile_size = Vector2(compact_tile_width, floorf(compact_tile_width * 1.5))
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
@@ -5941,6 +5941,19 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.86))
 	title.add_theme_constant_override("outline_size", 1)
+	var latest_button = make_small_button("最新", Color(0.34, 0.42, 0.34), Callable(self, "scroll_online_log_to_end"))
+	latest_button.name = "OnlineLobbyLogLatestButton"
+	latest_button.custom_minimum_size = Vector2(76, 28)
+	latest_button.add_theme_font_size_override("font_size", 10)
+	latest_button.tooltip_text = "跳到最新房间日志"
+	apply_rect(latest_button, rect_full(0.535, 0.025, 0.745, 0.175))
+	list.add_child(latest_button)
+	var unread_label = make_label(list, "已到最新", 9, Color(0.72, 0.84, 0.66, 0.86), false)
+	unread_label.name = "OnlineLobbyLogUnreadLabel"
+	apply_rect(unread_label, rect_full(0.385, 0.035, 0.520, 0.165))
+	unread_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	unread_label.visible = false
+	configure_clipped_label(unread_label)
 	var count_value = 0
 	var logs_value = online_room.get("logs", [])
 	if lobby_connection_state_text() == "已连接" and typeof(logs_value) == TYPE_ARRAY:
@@ -8560,7 +8573,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
-	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.58), "ui_dark_scrim")
+	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.44), "ui_dark_scrim")
 	scrim.name = "SettingsOverlayScrim"
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
@@ -8572,9 +8585,22 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.50), "ui_dark_scrim", 0.20)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.38), "ui_dark_scrim", 0.20)
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
+	overlay.gui_input.connect(func(event: InputEvent) -> void:
+		var should_close := false
+		if event is InputEventKey and (event as InputEventKey).pressed and event.is_action_pressed("ui_cancel"):
+			should_close = true
+		elif event is InputEventMouseButton:
+			var mouse_event := event as InputEventMouseButton
+			should_close = mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and not panel.get_global_rect().has_point(mouse_event.position)
+		elif event is InputEventScreenTouch:
+			var touch_event := event as InputEventScreenTouch
+			should_close = touch_event.pressed and not panel.get_global_rect().has_point(touch_event.position)
+		if should_close:
+			close_settings_panel()
+	)
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
 	left_depth_rail.name = "SettingsConsole3DLeftRail"
 	panel.add_child(left_depth_rail)
@@ -8622,6 +8648,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	ensure_button_gpt_face_plate(close, Color(0.30, 0.34, 0.36, 0.40))
 	close.custom_minimum_size = Vector2(88, 42)
 	close.name = "SettingsCloseButton"
+	close.tooltip_text = "关闭设置（Esc）"
 	close.focus_mode = Control.FOCUS_ALL
 	draw_settings_close_button_art(close)
 	panel.add_child(close)
