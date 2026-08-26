@@ -676,7 +676,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	var attack = ai_total_attack_multiplier(seat)
 	var defense = ai_profile_value(seat, "defense")
 	# 残墙短、多威胁、防守型、守成：优先落袋为安
-	if wall <= 18 or multi_threat or threat_rank >= 3 or readiness >= 12.5:
+	if wall <= wall_phase_threshold(18) or multi_threat or threat_rank >= 3 or readiness >= 12.5:
 		report["reason"] = "高压必胡"
 		return report
 	if should_force_accept_for_wall_draw_ba(seat, points, wall):
@@ -697,7 +697,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	# 更优听口显著更大，且替代张还够厚，才考虑留听
 	var points_gap = float(alt_best_points - points)
 	var avg_gap = alt_average - float(points)
-	var depth_ok = wall >= 26 and alt_remaining >= 3
+	var depth_ok = wall >= wall_phase_threshold(26) and alt_remaining >= 3
 	var value_ok = points_gap >= float(score_points_for_fan(max(1, fan + 1)) - points) or avg_gap >= 260.0
 	var raw_wait = float(ai_profile_source(seat).get("wait", 1.0))
 	var profile_ok = wait_focus >= 1.12 or attack >= 1.12 or raw_wait >= 1.30
@@ -825,7 +825,7 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	var wait_focus = ai_wait_value_focus(seat)
 	var attack = ai_total_attack_multiplier(seat)
 	var defense = ai_profile_value(seat, "defense")
-	if wall <= 20 or multi_threat or threat_rank >= 3 or readiness >= 12.5:
+	if wall <= wall_phase_threshold(20) or multi_threat or threat_rank >= 3 or readiness >= 12.5:
 		report["reason"] = "高压必摸"
 		return report
 	if should_force_accept_for_wall_draw_ba(seat, points, wall):
@@ -840,7 +840,7 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	# 自摸门槛严于荣和：需要更深的牌墙与更大分差才留听。
 	var points_gap = float(alt_best_points - points)
 	var avg_gap = alt_average - float(points)
-	var depth_ok = wall >= 30 and alt_remaining >= 4
+	var depth_ok = wall >= wall_phase_threshold(30) and alt_remaining >= 4
 	var value_ok = points_gap >= float(score_points_for_fan(min(SCORE_LIMIT_FAN, max(2, fan + 1)))) or avg_gap >= 360.0
 	var profile_ok = wait_focus >= 1.15 or attack >= 1.15
 	if current_remaining >= 2 and points_gap < float(score_points_for_fan(4)):
@@ -1027,9 +1027,9 @@ func human_readiness_for_defense() -> float:
 	var discards = int(disc_arr.size()) if typeof(disc_arr) == TYPE_ARRAY else 0
 	var wall = get_wall_count()
 	var score = float(melds) * 3.4 + float(discards) * 0.22
-	if wall <= 30:
+	if wall <= wall_phase_threshold(30):
 		score += 2.5
-	if wall <= 18:
+	if wall <= wall_phase_threshold(18):
 		score += 3.5
 	if melds >= 3 or discards >= 14:
 		score += 4.0
@@ -2356,13 +2356,13 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 	var hot_opponents = int(pressure_context.get("hot_opponents", 0)) if pressure_context.has("hot_opponents") else 0
 	var multi_threat = bool(pressure_context.get("multi_threat", false)) or hot_opponents >= 2
 	# 薄一向听/多威胁时更早进入弃攻转守窗口
-	var wall_limit = 30
+	var wall_limit = wall_phase_threshold(30)
 	if multi_threat:
-		wall_limit = 38
+		wall_limit = wall_phase_threshold(38)
 	if shanten == 1 and ukeire <= 4:
-		wall_limit = max(wall_limit, 42 if multi_threat else 34)
+		wall_limit = max(wall_limit, wall_phase_threshold(42 if multi_threat else 34))
 	if shanten == 1 and ukeire <= 2:
-		wall_limit = max(wall_limit, 44 if multi_threat else 38)
+		wall_limit = max(wall_limit, wall_phase_threshold(44 if multi_threat else 38))
 	if wall > wall_limit:
 		return 0.0
 	var readiness = float(pressure_context.get("readiness_pressure", 0.0)) if pressure_context.has("readiness_pressure") else opponent_readiness_pressure_score(seat)
@@ -2373,7 +2373,7 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 	if readiness < 8.5 and threat_rank < 2 and not multi_threat:
 		return 0.0
 	# 残墙越少越偏向防守
-	var wall_ebb = clamp(1.0 - float(wall) / float(max(24, wall_limit)), 0.0, 1.0)
+	var wall_ebb = clamp(1.0 - float(wall) / float(max(wall_phase_threshold(24), wall_limit)), 0.0, 1.0)
 	# 自身听牌强度：ukeire 越多、预期番越高越强推；薄听则倾向转守
 	var own_strength = clamp(float(ukeire) / 14.0, 0.0, 1.0)
 	own_strength = clamp(own_strength + float(wait_best_points) / 8000.0, 0.0, 1.0)
@@ -2429,9 +2429,9 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 func wall_draw_ba_urgency(wall_count: int = -1) -> float:
 	# 0..1：牌墙越接近荒庄，查听罚符越应影响听牌保留与落袋。
 	var wall = wall_count if wall_count >= 0 else get_wall_count()
-	if wall > 24:
+	if wall > wall_low_threshold():
 		return 0.0
-	return clamp(1.0 - float(wall) / 24.0, 0.0, 1.0)
+	return clamp(1.0 - float(wall) / float(max(1, wall_low_threshold())), 0.0, 1.0)
 
 
 func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: int = 0) -> float:
@@ -2465,7 +2465,7 @@ func should_force_accept_for_wall_draw_ba(seat: int, points: int, wall_count: in
 	if urgency <= 0.0:
 		return false
 	# 极残墙：直接落袋，与高压必胡窗口衔接但覆盖 19 张以上的空档。
-	if wall <= 12:
+	if wall_is_critical(wall):
 		return true
 	var ba = max(0, WALL_DRAW_NOTEN_BA)
 	if ba <= 0:
@@ -2519,12 +2519,12 @@ func wall_draw_claim_discipline_report(seat: int, claim: String, before_shanten:
 		pen += 6.0 * urgency * diff_scale
 	out["penalty"] = clamp(pen, 0.0, 90.0)
 	# 极残墙：未降向听且仍离听 >=2，直接拒。
-	if wall <= 12 and after_shanten >= 2 and not improved:
+	if wall_is_critical(wall) and after_shanten >= 2 and not improved:
 		out["decline"] = true
 		out["reason"] = "查听拒副露"
 		return out
 	# 中残墙：高向听无改善的脏开门/续露，按难度拒。
-	if wall <= 18 and before_shanten >= 3 and not improved:
+	if wall <= wall_low_threshold() and before_shanten >= 3 and not improved:
 		if diff == AI_DIFFICULTY_EASY and claim != "chi" and shape_gain >= 34.0:
 			return out
 		out["decline"] = true
@@ -2576,12 +2576,12 @@ func wall_draw_self_gang_discipline_report(seat: int, gang_kind: String, before_
 		pen = (5.0 + ba * 0.005) * urgency * diff_scale
 	out["penalty"] = clamp(pen, 0.0, 110.0)
 	# 极残墙：未降向听且仍离听 >=2，直接拒。
-	if wall <= 12 and after_shanten >= 2 and not improved:
+	if wall_is_critical(wall) and after_shanten >= 2 and not improved:
 		out["decline"] = true
 		out["reason"] = "查听拒杠"
 		return out
 	# 中残墙：高向听无改善的脏杠，按难度拒。
-	if wall <= 18 and before_shanten >= 3 and not improved:
+	if wall <= wall_low_threshold() and before_shanten >= 3 and not improved:
 		if diff == AI_DIFFICULTY_EASY and gang_kind == "concealed" and after_shanten <= 2:
 			return out
 		out["decline"] = true
@@ -2668,10 +2668,11 @@ func opening_efficiency_adjustment(seat: int, tile: String, shanten: int, origin
 	if seat < 0 or tile == "" or shanten <= 1:
 		return 0.0
 	var wall = get_wall_count()
-	if wall < 50:
+	var opening_wall_threshold := wall_phase_threshold(50)
+	if wall < opening_wall_threshold:
 		return 0.0
 	# 越靠近开局、向听越高，权重越大
-	var phase = clamp((float(wall) - 50.0) / 34.0, 0.0, 1.0)
+	var phase = clamp((float(wall) - float(opening_wall_threshold)) / float(maxi(1, wall_phase_threshold(84) - opening_wall_threshold)), 0.0, 1.0)
 	var depth = clamp(float(shanten - 1) / 4.0, 0.0, 1.0)
 	var scale = (0.55 + phase * 0.70 + depth * 0.45) * ai_route_focus(seat)
 	if open_melds > 0:
@@ -2714,7 +2715,7 @@ func midgame_danger_adjustment(seat: int, shanten: int, ukeire: int, safety: Str
 	if not multi_threat and readiness < 10.0 and threat_rank < 2:
 		return 0.0
 	var wall = get_wall_count()
-	if wall > 52 and not multi_threat:
+	if wall > wall_phase_threshold(52) and not multi_threat:
 		return 0.0
 	# 进张很薄时更怕放枪；进张厚则可继续做牌
 	var thin = clamp(1.0 - float(ukeire) / 12.0, 0.0, 1.0)
@@ -3213,7 +3214,7 @@ func ai_defense_weight(seat: int, shanten: int, pressure_context: Dictionary = {
 		base = 1.16
 	else:
 		base = 1.34
-	var progress = clamp(1.0 - float(get_wall_count()) / 84.0, 0.0, 1.0)
+	var progress = clamp(1.0 - float(get_wall_count()) / float(maxi(1, display_wall_total())), 0.0, 1.0)
 	var pressure = float(pressure_context.get("opponent_pressure", 0.0)) if pressure_context.has("opponent_pressure") else opponent_pressure_score(seat)
 	var readiness = float(pressure_context.get("readiness_pressure", 0.0)) if pressure_context.has("readiness_pressure") else opponent_readiness_pressure_score(seat)
 	var hot_opponents = int(pressure_context.get("hot_opponents", 0)) if pressure_context.has("hot_opponents") else 0
@@ -3732,9 +3733,9 @@ func opponent_readiness_report(viewer: int, opponent: int, eval_context: Diction
 		reasons.append("两副露")
 	elif melds == 1:
 		reasons.append("一副露")
-	if wall_count <= 24:
+	if wall_count <= wall_low_threshold():
 		reasons.append("末盘")
-	elif wall_count <= 40:
+	elif wall_count <= wall_phase_threshold(40):
 		reasons.append("后盘")
 	var plan = opponent_plan_pressure(opponent, eval_context)
 	if plan >= 16.0:
@@ -3760,7 +3761,7 @@ func opponent_readiness_score_from_plan(opponent: int, plan_pressure: float) -> 
 		return 0.0
 	var discards = players[opponent]["discards"].size()
 	var melds = players[opponent]["melds"].size()
-	var wall_progress = clamp(1.0 - float(get_wall_count()) / 84.0, 0.0, 1.0)
+	var wall_progress = clamp(1.0 - float(get_wall_count()) / float(maxi(1, display_wall_total())), 0.0, 1.0)
 	var score = float(discards) * 0.45 + float(melds) * 2.15 + wall_progress * 5.2 + plan_pressure * 0.20
 	if discards >= 10:
 		score += 1.0
@@ -3771,9 +3772,10 @@ func opponent_readiness_score_from_plan(opponent: int, plan_pressure: float) -> 
 	if melds >= 3:
 		score += 1.8
 	var wall_count = get_wall_count()
-	if wall_count <= 40:
+	var late_wall_threshold := wall_phase_threshold(40)
+	if wall_count <= late_wall_threshold:
 		score += 1.0
-	if wall_count <= 24:
+	if wall_is_low(wall_count):
 		score += 1.2
 	return score
 

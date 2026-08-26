@@ -271,6 +271,10 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
 	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
 	game["wallCount"] = int(first_present(game, ["wallCount", "wallRemaining", "remainingTiles"], game.get("wallCount", 0)))
+	var server_variant := str(first_present(game, ["ruleVariant", "rule_variant", "variant"], game.get("ruleVariant", ""))).strip_edges().to_lower()
+	game["ruleVariant"] = server_variant if RULE_VARIANT_PROFILES.has(server_variant) else ""
+	var server_wall_total := int(first_present(game, ["wallTotal", "wallSize", "totalTiles", "deckSize"], game.get("wallTotal", 0)))
+	game["wallTotal"] = maxi(0, server_wall_total)
 	game["phase"] = normalize_online_phase(str(first_present(game, ["phase", "state", "status"], "")))
 	game["hand"] = normalize_tile_array(first_present(game, ["hand", "tiles", "yourHand", "selfHand"], []))
 	var last_discard_value = first_present(game, ["lastDiscard", "discard", "lastTile"], "")
@@ -503,5 +507,5 @@ func update_online_slow_response_notice(now_msec: int) -> void:
 	if now_msec - online_last_sent_msec < ONLINE_SLOW_NOTICE_MSEC or online_slow_notice_shown:
 		return
 	online_slow_notice_shown = true
-	var action_label := online_last_sent_action if online_last_sent_action != "" else "操作"
+	var action_label: String = online_last_sent_action if online_last_sent_action != "" else "操作"
 	set_online_feedback("服务器响应较慢，仍在等待%s确认。" % action_label, true)

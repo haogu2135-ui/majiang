@@ -1556,7 +1556,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	var attack = ai_total_attack_multiplier(seat)
 	var defense = ai_profile_value(seat, "defense")
 	# 残墙短、多威胁、防守型、守成：优先落袋为安
-	if wall <= 18 or multi_threat or threat_rank >= 3 or readiness >= 12.5:
+	if wall <= wall_phase_threshold(18) or multi_threat or threat_rank >= 3 or readiness >= 12.5:
 		report["reason"] = "高压必胡"
 		return report
 	if should_force_accept_for_wall_draw_ba(seat, points, wall):
@@ -1577,7 +1577,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	# 更优听口显著更大，且替代张还够厚，才考虑留听
 	var points_gap = float(alt_best_points - points)
 	var avg_gap = alt_average - float(points)
-	var depth_ok = wall >= 26 and alt_remaining >= 3
+	var depth_ok = wall >= wall_phase_threshold(26) and alt_remaining >= 3
 	var value_ok = points_gap >= float(score_points_for_fan(max(1, fan + 1)) - points) or avg_gap >= 260.0
 	var raw_wait = float(ai_profile_source(seat).get("wait", 1.0))
 	var profile_ok = wait_focus >= 1.12 or attack >= 1.12 or raw_wait >= 1.30
@@ -1705,7 +1705,7 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	var wait_focus = ai_wait_value_focus(seat)
 	var attack = ai_total_attack_multiplier(seat)
 	var defense = ai_profile_value(seat, "defense")
-	if wall <= 20 or multi_threat or threat_rank >= 3 or readiness >= 12.5:
+	if wall <= wall_phase_threshold(20) or multi_threat or threat_rank >= 3 or readiness >= 12.5:
 		report["reason"] = "高压必摸"
 		return report
 	if should_force_accept_for_wall_draw_ba(seat, points, wall):
@@ -1720,7 +1720,7 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	# 自摸门槛严于荣和：需要更深的牌墙与更大分差才留听。
 	var points_gap = float(alt_best_points - points)
 	var avg_gap = alt_average - float(points)
-	var depth_ok = wall >= 30 and alt_remaining >= 4
+	var depth_ok = wall >= wall_phase_threshold(30) and alt_remaining >= 4
 	var value_ok = points_gap >= float(score_points_for_fan(min(SCORE_LIMIT_FAN, max(2, fan + 1)))) or avg_gap >= 360.0
 	var profile_ok = wait_focus >= 1.15 or attack >= 1.15
 	if current_remaining >= 2 and points_gap < float(score_points_for_fan(4)):
@@ -1907,9 +1907,9 @@ func human_readiness_for_defense() -> float:
 	var discards = int(disc_arr.size()) if typeof(disc_arr) == TYPE_ARRAY else 0
 	var wall = get_wall_count()
 	var score = float(melds) * 3.4 + float(discards) * 0.22
-	if wall <= 30:
+	if wall <= wall_phase_threshold(30):
 		score += 2.5
-	if wall <= 18:
+	if wall <= wall_phase_threshold(18):
 		score += 3.5
 	if melds >= 3 or discards >= 14:
 		score += 4.0
@@ -3236,13 +3236,13 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 	var hot_opponents = int(pressure_context.get("hot_opponents", 0)) if pressure_context.has("hot_opponents") else 0
 	var multi_threat = bool(pressure_context.get("multi_threat", false)) or hot_opponents >= 2
 	# 薄一向听/多威胁时更早进入弃攻转守窗口
-	var wall_limit = 30
+	var wall_limit = wall_phase_threshold(30)
 	if multi_threat:
-		wall_limit = 38
+		wall_limit = wall_phase_threshold(38)
 	if shanten == 1 and ukeire <= 4:
-		wall_limit = max(wall_limit, 42 if multi_threat else 34)
+		wall_limit = max(wall_limit, wall_phase_threshold(42 if multi_threat else 34))
 	if shanten == 1 and ukeire <= 2:
-		wall_limit = max(wall_limit, 44 if multi_threat else 38)
+		wall_limit = max(wall_limit, wall_phase_threshold(44 if multi_threat else 38))
 	if wall > wall_limit:
 		return 0.0
 	var readiness = float(pressure_context.get("readiness_pressure", 0.0)) if pressure_context.has("readiness_pressure") else opponent_readiness_pressure_score(seat)
@@ -3253,7 +3253,7 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 	if readiness < 8.5 and threat_rank < 2 and not multi_threat:
 		return 0.0
 	# 残墙越少越偏向防守
-	var wall_ebb = clamp(1.0 - float(wall) / float(max(24, wall_limit)), 0.0, 1.0)
+	var wall_ebb = clamp(1.0 - float(wall) / float(max(wall_phase_threshold(24), wall_limit)), 0.0, 1.0)
 	# 自身听牌强度：ukeire 越多、预期番越高越强推；薄听则倾向转守
 	var own_strength = clamp(float(ukeire) / 14.0, 0.0, 1.0)
 	own_strength = clamp(own_strength + float(wait_best_points) / 8000.0, 0.0, 1.0)
@@ -3309,9 +3309,9 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 func wall_draw_ba_urgency(wall_count: int = -1) -> float:
 	# 0..1：牌墙越接近荒庄，查听罚符越应影响听牌保留与落袋。
 	var wall = wall_count if wall_count >= 0 else get_wall_count()
-	if wall > 24:
+	if wall > wall_low_threshold():
 		return 0.0
-	return clamp(1.0 - float(wall) / 24.0, 0.0, 1.0)
+	return clamp(1.0 - float(wall) / float(max(1, wall_low_threshold())), 0.0, 1.0)
 
 
 func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: int = 0) -> float:
@@ -3345,7 +3345,7 @@ func should_force_accept_for_wall_draw_ba(seat: int, points: int, wall_count: in
 	if urgency <= 0.0:
 		return false
 	# 极残墙：直接落袋，与高压必胡窗口衔接但覆盖 19 张以上的空档。
-	if wall <= 12:
+	if wall_is_critical(wall):
 		return true
 	var ba = max(0, WALL_DRAW_NOTEN_BA)
 	if ba <= 0:
@@ -3399,12 +3399,12 @@ func wall_draw_claim_discipline_report(seat: int, claim: String, before_shanten:
 		pen += 6.0 * urgency * diff_scale
 	out["penalty"] = clamp(pen, 0.0, 90.0)
 	# 极残墙：未降向听且仍离听 >=2，直接拒。
-	if wall <= 12 and after_shanten >= 2 and not improved:
+	if wall_is_critical(wall) and after_shanten >= 2 and not improved:
 		out["decline"] = true
 		out["reason"] = "查听拒副露"
 		return out
 	# 中残墙：高向听无改善的脏开门/续露，按难度拒。
-	if wall <= 18 and before_shanten >= 3 and not improved:
+	if wall <= wall_low_threshold() and before_shanten >= 3 and not improved:
 		if diff == AI_DIFFICULTY_EASY and claim != "chi" and shape_gain >= 34.0:
 			return out
 		out["decline"] = true
@@ -3456,12 +3456,12 @@ func wall_draw_self_gang_discipline_report(seat: int, gang_kind: String, before_
 		pen = (5.0 + ba * 0.005) * urgency * diff_scale
 	out["penalty"] = clamp(pen, 0.0, 110.0)
 	# 极残墙：未降向听且仍离听 >=2，直接拒。
-	if wall <= 12 and after_shanten >= 2 and not improved:
+	if wall_is_critical(wall) and after_shanten >= 2 and not improved:
 		out["decline"] = true
 		out["reason"] = "查听拒杠"
 		return out
 	# 中残墙：高向听无改善的脏杠，按难度拒。
-	if wall <= 18 and before_shanten >= 3 and not improved:
+	if wall <= wall_low_threshold() and before_shanten >= 3 and not improved:
 		if diff == AI_DIFFICULTY_EASY and gang_kind == "concealed" and after_shanten <= 2:
 			return out
 		out["decline"] = true
@@ -3548,10 +3548,11 @@ func opening_efficiency_adjustment(seat: int, tile: String, shanten: int, origin
 	if seat < 0 or tile == "" or shanten <= 1:
 		return 0.0
 	var wall = get_wall_count()
-	if wall < 50:
+	var opening_wall_threshold := wall_phase_threshold(50)
+	if wall < opening_wall_threshold:
 		return 0.0
 	# 越靠近开局、向听越高，权重越大
-	var phase = clamp((float(wall) - 50.0) / 34.0, 0.0, 1.0)
+	var phase = clamp((float(wall) - float(opening_wall_threshold)) / float(maxi(1, wall_phase_threshold(84) - opening_wall_threshold)), 0.0, 1.0)
 	var depth = clamp(float(shanten - 1) / 4.0, 0.0, 1.0)
 	var scale = (0.55 + phase * 0.70 + depth * 0.45) * ai_route_focus(seat)
 	if open_melds > 0:
@@ -3594,7 +3595,7 @@ func midgame_danger_adjustment(seat: int, shanten: int, ukeire: int, safety: Str
 	if not multi_threat and readiness < 10.0 and threat_rank < 2:
 		return 0.0
 	var wall = get_wall_count()
-	if wall > 52 and not multi_threat:
+	if wall > wall_phase_threshold(52) and not multi_threat:
 		return 0.0
 	# 进张很薄时更怕放枪；进张厚则可继续做牌
 	var thin = clamp(1.0 - float(ukeire) / 12.0, 0.0, 1.0)
@@ -4093,7 +4094,7 @@ func ai_defense_weight(seat: int, shanten: int, pressure_context: Dictionary = {
 		base = 1.16
 	else:
 		base = 1.34
-	var progress = clamp(1.0 - float(get_wall_count()) / 84.0, 0.0, 1.0)
+	var progress = clamp(1.0 - float(get_wall_count()) / float(maxi(1, display_wall_total())), 0.0, 1.0)
 	var pressure = float(pressure_context.get("opponent_pressure", 0.0)) if pressure_context.has("opponent_pressure") else opponent_pressure_score(seat)
 	var readiness = float(pressure_context.get("readiness_pressure", 0.0)) if pressure_context.has("readiness_pressure") else opponent_readiness_pressure_score(seat)
 	var hot_opponents = int(pressure_context.get("hot_opponents", 0)) if pressure_context.has("hot_opponents") else 0
@@ -4612,9 +4613,9 @@ func opponent_readiness_report(viewer: int, opponent: int, eval_context: Diction
 		reasons.append("两副露")
 	elif melds == 1:
 		reasons.append("一副露")
-	if wall_count <= 24:
+	if wall_count <= wall_low_threshold():
 		reasons.append("末盘")
-	elif wall_count <= 40:
+	elif wall_count <= wall_phase_threshold(40):
 		reasons.append("后盘")
 	var plan = opponent_plan_pressure(opponent, eval_context)
 	if plan >= 16.0:
@@ -4640,7 +4641,7 @@ func opponent_readiness_score_from_plan(opponent: int, plan_pressure: float) -> 
 		return 0.0
 	var discards = players[opponent]["discards"].size()
 	var melds = players[opponent]["melds"].size()
-	var wall_progress = clamp(1.0 - float(get_wall_count()) / 84.0, 0.0, 1.0)
+	var wall_progress = clamp(1.0 - float(get_wall_count()) / float(maxi(1, display_wall_total())), 0.0, 1.0)
 	var score = float(discards) * 0.45 + float(melds) * 2.15 + wall_progress * 5.2 + plan_pressure * 0.20
 	if discards >= 10:
 		score += 1.0
@@ -4651,9 +4652,10 @@ func opponent_readiness_score_from_plan(opponent: int, plan_pressure: float) -> 
 	if melds >= 3:
 		score += 1.8
 	var wall_count = get_wall_count()
-	if wall_count <= 40:
+	var late_wall_threshold := wall_phase_threshold(40)
+	if wall_count <= late_wall_threshold:
 		score += 1.0
-	if wall_count <= 24:
+	if wall_is_low(wall_count):
 		score += 1.2
 	return score
 
@@ -5034,10 +5036,10 @@ func ai_pace_multiplier() -> float:
 			mult = 0.86
 		_:
 			mult = 1.0
-	var wall = get_wall_count() if mode == "offline" else 84
-	if wall <= 20:
+	var wall = get_wall_count() if mode == "offline" else maxi(0, int(round(float(display_wall_total()) * 0.58)))
+	if wall <= wall_phase_threshold(20):
 		mult *= 0.88
-	elif wall <= 36:
+	elif wall <= wall_phase_threshold(36):
 		mult *= 0.94
 	if mode == "offline" and offline_hand_number >= max(1, MATCH_MAX_HANDS - 1):
 		mult *= 0.92
@@ -5139,6 +5141,9 @@ func clear_screen() -> void:
 	loading_screen_active = false
 	if mode != "online_lobby" and mode != "online_game":
 		chat_panel_open = false
+	if mode != "offline" and mode != "online_game":
+		advisor_detail_open = false
+		table_log_archive_open = false
 	clear_screen_tweens()
 	clear_toast_on_mode_change()
 	for child in get_children():
@@ -5390,8 +5395,12 @@ func render_game() -> void:
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
+	if table_log_archive_open:
+		draw_table_log_archive_panel(root_layer)
 	draw_hand(root_layer)
 	draw_advisor_panel(root_layer)
+	if advisor_detail_open:
+		draw_advisor_detail_panel(root_layer)
 	draw_actions(root_layer)
 	draw_round_summary(root_layer)
 	if chat_panel_open:
@@ -5467,6 +5476,8 @@ func refresh_ai_advisor_panel() -> void:
 	if mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled():
 		return
 	draw_advisor_panel(root_layer)
+	if advisor_detail_open:
+		draw_advisor_detail_panel(root_layer)
 	var new_panel = root_layer.get_node_or_null("AdvisorPanel")
 	if new_panel != null and old_panel_index >= 0:
 		root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
@@ -8962,6 +8973,14 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		var seal = make_label(button, priority_mark, 8 if compact_claim_mode else 10, Color(0.98, 0.90, 0.62, priority_alpha), true)
 		seal.name = "ActionButtonPrioritySeal"
 		apply_rect(seal, rect_full(0.740, 0.145, 0.940, 0.455))
+	var shortcut_hint := action_button_shortcut_hint(text)
+	if shortcut_hint != "":
+		var shortcut_label = make_label(button, shortcut_hint, 7 if compact_claim_mode else 8, Color(0.96, 0.90, 0.68, 0.76), true)
+		shortcut_label.name = "ActionButtonShortcutHint"
+		shortcut_label.tooltip_text = "快捷键 %s" % shortcut_hint
+		apply_rect(shortcut_label, rect_full(0.690, 0.018, 0.965, 0.180))
+		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		configure_clipped_label(shortcut_label)
 	var response_alpha = 0.002 if compact_claim_mode and role == "pass" else (0.004 if compact_claim_mode else (0.020 if role == "pass" else 0.050))
 	var response_texture = add_illustration_texture(button, "claim_response_orbit", rect_full(-0.030, -0.120, 1.030, 1.120), response_alpha, false)
 	if response_texture != null:
@@ -9104,6 +9123,12 @@ func draw_action_dock(parent: Control) -> void:
 		apply_rect(focus_label, rect_full(0.055, 0.035, 0.425, 0.225))
 		focus_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(focus_label)
+	if mode == "online_game" and online_waiting_for_server:
+		var waiting_label = make_label(dock, "同步中 · 等待服务器确认", 9, Color(0.76, 0.86, 0.82, 0.86), true)
+		waiting_label.name = "ActionDockWaitingStatus"
+		apply_rect(waiting_label, rect_full(0.440, 0.035, 0.945, 0.225))
+		waiting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		configure_clipped_label(waiting_label)
 	parent.move_child(dock_shadow, max(0, action_bar.get_index()))
 	parent.move_child(dock, max(0, action_bar.get_index()))
 
@@ -9163,6 +9188,8 @@ func draw_action_intent_flow(parent: Control, count: int, color: Color) -> Contr
 func draw_actions(parent: Control) -> void:
 	var pending_claim_response_bar: Control = null
 	var pending_claim_tail_bar: HBoxContainer = null
+	if mode == "online_game":
+		draw_chat_action_button(parent)
 	if has_pending_claim_window():
 		var pending_root := VBoxContainer.new()
 		pending_root.name = "PendingClaimActionStack"
@@ -9192,6 +9219,8 @@ func draw_actions(parent: Control) -> void:
 	if not action_bar is GridContainer:
 		action_bar.add_theme_constant_override("separation", 6)
 	apply_rect(action_bar, action_bar_layout_rect())
+	var summary_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
+	action_bar.z_index = 31 if summary_action_mode else 18
 	parent.add_child(action_bar)
 
 	# 操作按钮淡入动画
@@ -9385,20 +9414,22 @@ func draw_actions(parent: Control) -> void:
 		pending_claim_tail_bar.add_child(voice)
 	else:
 		action_bar.add_child(voice)
+	draw_action_dock(parent)
+	finalize_action_bar_layout()
+
+func draw_chat_action_button(parent: Control) -> void:
 	var chat_button := make_action_button("聊天", Color(0.30, 0.58, 0.54), func() -> void:
 		toggle_chat_panel()
 	)
 	chat_button.name = "ChatActionButton"
 	chat_button.tooltip_text = "打开或关闭房间聊天 · 快捷键 Esc关闭"
+	chat_button.custom_minimum_size = Vector2(82, 44)
+	chat_button.add_theme_font_size_override("font_size", 14)
+	chat_button.z_index = 18
 	if chat_panel_open:
 		chat_button.modulate = Color(0.78, 0.92, 0.82, 0.92)
-	if has_pending_claim_window():
-		chat_button.set_meta("pending_tail", true)
-		pending_claim_tail_bar.add_child(chat_button)
-	else:
-		action_bar.add_child(chat_button)
-	draw_action_dock(parent)
-	finalize_action_bar_layout()
+	apply_rect(chat_button, CHAT_ACTION_BUTTON_RECT)
+	parent.add_child(chat_button)
 
 func draw_advisor_card_meter(parent: Control, heading: String, main_text: String, sub_text: String, accent: Color) -> Control:
 	# r213: GPT chrome conversion
@@ -9525,9 +9556,16 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	apply_rect(title, rect_full(0.03, 0.04, 0.16, 0.22))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var context = make_label(panel, advisor_context_line(), 11, Color(0.62, 0.72, 0.68), false)
-	apply_rect(context, rect_full(0.17, 0.04, 0.97, 0.22))
+	apply_rect(context, rect_full(0.17, 0.04, 0.52, 0.22))
 	context.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(context)
+	var detail_button := make_small_button("详解", Color(0.48, 0.56, 0.40), Callable(self, "toggle_advisor_detail_panel"))
+	detail_button.name = "AdvisorDetailButton"
+	detail_button.custom_minimum_size = Vector2(36, 26)
+	detail_button.add_theme_font_size_override("font_size", 9)
+	detail_button.tooltip_text = "展开牌势详解 · Esc收起"
+	apply_rect(detail_button, rect_full(0.56, 0.035, 0.97, 0.225))
+	panel.add_child(detail_button)
 	draw_advisor_panel_context_route(panel)
 	draw_advisor_panel_priority_sweep(panel)
 	draw_advisor_panel_decision_bridge(panel)
@@ -9555,6 +9593,54 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	draw_advisor_info_card(panel, advisor_card_rect_a, "局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
 	draw_advisor_info_card(panel, advisor_card_rect_b, "势", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
 	draw_advisor_info_card(panel, advisor_card_rect_c, "守", advisor_defense_text(0), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+
+
+func draw_advisor_detail_panel(parent: Control) -> void:
+	if not advisor_detail_open or mode != "offline" or not player_ai_assist_enabled():
+		return
+	var panel = make_gpt_plate_rect(rect_full(0.160, 0.130, 0.840, 0.545), Color(0.014, 0.034, 0.040, 0.96), "ui_jade_reading_plate")
+	panel.name = "AdvisorDetailPanel"
+	panel.z_index = 44
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.clip_contents = true
+	parent.add_child(panel)
+	var map_texture = add_illustration_texture(panel, "advisor_map", rect_full(0.010, 0.035, 0.990, 0.965), 0.075, false)
+	if map_texture != null:
+		map_texture.name = "AdvisorDetailMapTexture"
+		panel.move_child(map_texture, 0)
+	var title = make_label(panel, "牌势详解", 16, Color(0.90, 0.80, 0.56), true)
+	title.name = "AdvisorDetailTitle"
+	apply_rect(title, rect_full(0.055, 0.045, 0.58, 0.145))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var context = make_label(panel, advisor_context_line(), 11, Color(0.66, 0.76, 0.70), false)
+	context.name = "AdvisorDetailContext"
+	apply_rect(context, rect_full(0.060, 0.145, 0.72, 0.235))
+	context.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(context)
+	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_advisor_detail_panel"))
+	close_button.name = "AdvisorDetailCloseButton"
+	close_button.custom_minimum_size = Vector2(36, 36)
+	close_button.tooltip_text = "收起牌势详解 · Esc"
+	apply_rect(close_button, rect_full(0.910, 0.045, 0.970, 0.175))
+	panel.add_child(close_button)
+	var detail_route = make_gpt_route_rail(rect_full(0.060, 0.255, 0.940, 0.275), Color(0.006, 0.016, 0.018, 0.48))
+	detail_route.name = "AdvisorDetailRoute"
+	panel.add_child(detail_route)
+	var detail_fill = make_gpt_meter_fill(rect_full(0.020, 0.250, 0.720, 0.750), Color(0.74, 0.64, 0.38, 0.30))
+	detail_fill.name = "AdvisorDetailRouteFill"
+	detail_route.add_child(detail_fill)
+	var detail_text = make_label(panel, advisor_detail_text(), 13, Color(0.86, 0.90, 0.84), false)
+	detail_text.name = "AdvisorDetailText"
+	apply_rect(detail_text, rect_full(0.070, 0.315, 0.930, 0.875))
+	detail_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	detail_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	detail_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	detail_text.clip_text = true
+	detail_text.tooltip_text = detail_text.text
+	var hint = make_label(panel, "", 10, Color(0.66, 0.72, 0.64), false)
+	hint.name = "AdvisorDetailHint"
+	apply_rect(hint, rect_full(0.070, 0.900, 0.760, 0.955))
+	configure_clipped_label(hint)
 func draw_advisor_panel_analysis_scan(parent: Control) -> Control:
 	# r209: GPT chrome conversion
 	var accent = hand_tray_state_fill()
@@ -9861,12 +9947,12 @@ func draw_center(parent: Control) -> void:
 
 	# 完整阶段提示只由顶部 HUD承载；中心保留牌墙、上张、风位和骰子等桌面事实。
 	var center_wall_count = get_wall_count()
-	var center_wall_low = center_wall_count <= 24
+	var center_wall_low = wall_is_low(center_wall_count)
 	var center_wall_alpha = 0.72 if center_wall_low else 0.38
-	var wall_label_text := "牌墙将尽" if center_wall_count <= 12 else ("余牌" if center_wall_low else "牌山")
-	var wall_label = make_label(center, wall_label_text, 10 if center_wall_count > 12 else 9, Color(0.68, 0.66, 0.54, center_wall_alpha), false)
+	var wall_label_text := wall_state_text(center_wall_count)
+	var wall_label = make_label(center, wall_label_text, 10 if not wall_is_critical(center_wall_count) else 9, Color(0.68, 0.66, 0.54, center_wall_alpha), false)
 	wall_label.name = "CenterWallStatusLabel"
-	wall_label.tooltip_text = "牌墙剩余 %d 张" % center_wall_count
+	wall_label.tooltip_text = "牌墙剩余 %d/%d 张 · %s" % [center_wall_count, display_wall_total(), wall_state_text(center_wall_count)]
 	apply_rect(wall_label, CENTER_WALL_LABEL_RECT)
 	var wall_text = make_label(center, "%d" % center_wall_count, 19 if center_wall_low else 16, Color(0.86, 0.72, 0.46, 0.78 if center_wall_low else 0.36), true)
 	apply_rect(wall_text, CENTER_WALL_COUNT_RECT)
@@ -10015,12 +10101,17 @@ func draw_center_low_wall_warning(parent: Control, wall_count: int, meter_color:
 	var low_pulse = make_gpt_tick_strip(rect_full(-0.045, -0.100, 1.045, 1.100), Color(0.96, 0.28, 0.12, 0.08))
 	low_pulse.name = "CenterWallLowPulse"
 	warning.add_child(low_pulse)
-	var badge_text = "荒庄临近" if wall_count <= 18 else "余牌偏低"
+	var badge_text = "荒庄临近" if wall_is_critical(wall_count) else "余牌偏低"
 	var badge = make_badge(warning, rect_full(0.10, 0.26, 0.90, 0.74), badge_text, 9, Color(0.20, 0.058, 0.038, 0.94), Color(0.96, 0.54, 0.32, 0.42), Color(0.98, 0.84, 0.64))
 	badge.name = "CenterWallLowWarningBadge"
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var warning_detail = make_label(warning, "余牌 %d · 谨慎出牌" % wall_count, 8, Color(0.98, 0.82, 0.64, 0.88), true)
+	warning_detail.name = "CenterWallLowWarningDetail"
+	apply_rect(warning_detail, rect_full(0.12, 0.72, 0.88, 0.98))
+	warning_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	configure_clipped_label(warning_detail)
 	# r180: GPT danger meter strip instead of route/fill/gate/tick chrome.
-	var fill_ratio = clamp(float(wall_count) / 26.0, 0.10, 0.86)
+	var fill_ratio = clamp(float(wall_count) / float(maxi(1, wall_low_threshold() + 2)), 0.10, 0.86)
 	var danger = Control.new()
 	danger.name = "CenterWallLowDangerChrome"
 	danger.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -10148,7 +10239,7 @@ func draw_center_pulse_network(parent: Control) -> Control:
 	parent.add_child(art)
 	var phase_key = center_phase_key()
 	var accent = center_phase_color(phase_key)
-	var wall_progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var wall_progress := wall_progress()
 	var route = make_gpt_route_rail(rect_full(0.180, 0.500, 0.820, 0.528), Color(0.006, 0.016, 0.018, 0.36))
 	route.name = "CenterPulseNetworkRoute"
 	art.add_child(route)
@@ -10277,7 +10368,7 @@ func draw_center_wall_flow_art(parent: Control, progress: float, meter_color: Co
 
 
 func draw_center_wall_meter(parent: Control, wall_count: int) -> void:
-	var progress = clamp(float(wall_count) / 144.0, 0.0, 1.0)
+	var progress := wall_progress(wall_count)
 	var meter_color = wall_meter_color(progress)
 	var meter = Control.new()
 	meter.name = "CenterWallMeter"
@@ -10306,7 +10397,7 @@ func draw_center_wall_meter(parent: Control, wall_count: int) -> void:
 		bar.name = "CenterWallMeterSegment"
 		meter.add_child(bar)
 	draw_center_wall_flow_art(meter, progress, meter_color)
-	if progress <= 0.18:
+	if wall_is_low(wall_count):
 		draw_center_low_wall_warning(meter, wall_count, meter_color)
 
 func draw_center_wind_compass(parent: Control) -> Control:
@@ -11831,6 +11922,8 @@ func draw_discards(parent: Control) -> void:
 			tile_node.modulate = Color(1.0, 1.0, 1.0, tile_node.modulate.a)
 			tile_node.set_meta("discard_source_index", source_index)
 			tile_node.set_meta("discard_tile_code", tile_code)
+			if highlighted:
+				tile_node.tooltip_text = "%s刚打出%s · 当前最后一张牌" % [pending_claim_source_name(seat), tile_label(tile_code)]
 			grid.add_child(tile_node)
 			if highlighted:
 				tile_node.name = "RecentDiscardTile_%d" % seat
@@ -12165,10 +12258,20 @@ func draw_game_top_hud(parent: Control) -> void:
 		hud.move_child(gpt_top_hud_texture, min(1, hud.get_child_count() - 1))
 
 	# 模式徽章
-	var mode_text = ("单机 · " + rule_variant_short_label()) if mode == "offline" else "联机"
+	var mode_text := "单机 · " + rule_variant_short_label()
+	var mode_tooltip := rule_variant_summary()
+	if mode == "online_game":
+		var server_variant := str(online_game.get("ruleVariant", "")).strip_edges().to_lower()
+		if RULE_VARIANT_PROFILES.has(server_variant):
+			mode_text = "联机 · " + rule_variant_short_label(server_variant)
+			mode_tooltip = "服务器规则：" + rule_variant_summary(server_variant)
+		else:
+			mode_text = "联机 · 规则同步中"
+			mode_tooltip = "等待服务器下发当前牌局规则"
 	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 11, Color(0.100, 0.082, 0.058, 0.78), Color(0.52, 0.42, 0.22, 0.22), Color(0.94, 0.88, 0.72))
 	mode_badge.name = "TopHudModeBadge"
 	mode_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mode_badge.tooltip_text = mode_tooltip
 	draw_top_hud_status_art(hud)
 
 	# 标题
@@ -12200,6 +12303,9 @@ func draw_game_top_hud(parent: Control) -> void:
 	status.name = "TopHudStatus"
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
+	# Keep transient gameplay feedback connected to the visible HUD instance.
+	# The shared reference is also used by set_status() for immediate errors.
+	status_label = status
 	draw_top_hud_hand_progress(hud)
 
 	# 离线战斗中分数已在四家座位卡常驻显示，顶部不再重复铺一整条分数面板。
@@ -12212,6 +12318,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.add_child(wall_back)
 	draw_top_hud_wall_meter(hud, wall_rect)
 	var wall = make_label(hud, top_hud_wall_text(), 11, Color(0.90, 0.88, 0.74), true)
+	wall.tooltip_text = "牌墙剩余 %d/%d 张 · %s · 上张%s" % [get_wall_count(), display_wall_total(), wall_state_text(), tile_label(get_last_discard()) if get_last_discard() != "" else "无"]
 	wall.name = "TopHudWallText"
 	var empty_wall := StyleBoxEmpty.new()
 	empty_wall.set_content_margin_all(4)
@@ -12284,14 +12391,22 @@ func draw_hand(parent: Control) -> void:
 	tile_stage.add_child(tile_baseline)
 	tray.move_child(tile_stage, min(2, tray.get_child_count() - 1))
 
-	# 状态文本
+	# 状态文本与操作提示分成两条稳定的阅读线，避免长状态在窄屏挤压牌面。
+	var shortcut_hint_text := hand_shortcut_hint_text()
 	var tray_text = make_label(tray, hand_tray_text(), 14, Color(0.92, 0.82, 0.56), true)
 	tray_text.clip_text = true
-	apply_rect(tray_text, HAND_TRAY_TEXT_RECT)
+	apply_rect(tray_text, rect_full(0.030, 0.030, 0.760, 0.096) if shortcut_hint_text != "" else HAND_TRAY_TEXT_RECT)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(tray_text)
 	if has_pending_claim_window() or has_pending_danger_discard():
 		tray_text.visible = false
+	if shortcut_hint_text != "":
+		var shortcut_label = make_label(tray, shortcut_hint_text, 9, Color(0.68, 0.76, 0.70, 0.88), false)
+		shortcut_label.name = "HandTrayShortcutHint"
+		apply_rect(shortcut_label, rect_full(0.034, 0.098, 0.758, 0.145))
+		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		configure_clipped_label(shortcut_label)
+		shortcut_label.tooltip_text = shortcut_hint_text
 
 	# 状态徽章
 	var state_chip = add_optional_gpt_illustration_texture(tray, "ui_hand_tray_state_chip", rect_full(0.783, 0.028, 0.982, 0.157), 0.55, false)
@@ -12425,7 +12540,7 @@ func draw_hand(parent: Control) -> void:
 
 func draw_hand_progress_wall_sync(parent: Control, accent: Color) -> Control:
 	# r213: GPT chrome conversion
-	var wall_ratio = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var wall_ratio := wall_progress()
 	var pressure = 1.0 - wall_ratio
 	var color = wall_meter_color(wall_ratio)
 	var sync = Control.new()
@@ -12447,7 +12562,7 @@ func draw_hand_progress_wall_sync(parent: Control, accent: Color) -> Control:
 	gate.name = "HandProgressWallSyncGate"
 	sync.add_child(gate)
 	var tick = add_gpt_tick_strip(sync, rect_full(0.245, 0.315, (0.285) + float(2) * (0.190), 0.685), Color(color.r, color.g, color.b, 0.18 + pressure * 0.10), "HandProgressWallSyncTick_0")
-	if get_wall_count() <= 24:
+	if wall_is_low():
 		var warning = make_gpt_gate(rect_full(0.790, 0.020, 0.985, 0.250), Color(0.56, 0.14, 0.08, 0.30))
 		warning.name = "HandProgressWallSyncLowWarning"
 		sync.add_child(warning)
@@ -13047,6 +13162,9 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	var marker = Control.new()
 	marker.name = "LastDiscardFocusMarker"
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.set_meta("discard_source_seat", seat)
+	marker.set_meta("discard_tile_code", tile)
+	marker.tooltip_text = "%s刚打出%s · 这是当前牌桌最后一张牌" % [pending_claim_source_name(seat), tile_label(tile)]
 	apply_rect(marker, marker_rect)
 	parent.add_child(marker)
 	var aura_texture = add_illustration_texture(marker, "last_discard_aura", rect_full(-0.170, -0.220, 1.170, 1.170), 0.18, false)
@@ -13126,6 +13244,7 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	var badge = make_badge(marker, rect_full(0.020, -0.190, 1.020, 0.060), "%s 刚打 %s" % [pending_claim_source_badge_text(seat), tile_label(tile)], 8, Color(0.018, 0.036, 0.038, 0.72), Color(0.88, 0.68, 0.32, 0.28), Color(0.96, 0.92, 0.76))
 	badge.name = "LastDiscardFocusBadge"
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.tooltip_text = marker.tooltip_text
 	add_lucide_icon(marker, "sparkles", rect_full(0.68, -0.28, 1.10, 0.22), Color(0.98, 0.86, 0.42, 0.72))
 	if fx_enabled_effective():
 		marker.modulate = Color(1, 1, 1, 0)
@@ -13533,6 +13652,10 @@ func draw_melds(parent: Control) -> void:
 		configure_passive_container(area)
 		area.z_index = 10  # r453 keep meld faces above any same-pixel river fallback
 		area.add_theme_constant_override("separation", 3)
+		area.set_meta("seat", seat)
+		area.set_meta("orientation", "vertical" if vertical else "horizontal")
+		area.set_meta("face_rotation", seat_meld_face_rotation(seat))
+		area.set_meta("layout_role", "meld_lane")
 		if area is BoxContainer:
 			(area as BoxContainer).alignment = BoxContainer.ALIGNMENT_BEGIN
 		apply_rect(area, layout[1])
@@ -13551,7 +13674,8 @@ func draw_melds(parent: Control) -> void:
 					horizontal_tile_count += (horizontal_meld as Array).size()
 					horizontal_group_count += 1
 			if horizontal_tile_count > 0:
-				var lane_width_px := safe_content_pixel_size().x * float(layout[1].size.x)
+				var lane_width_fraction := float(layout[1].size.x - layout[1].position.x)
+				var lane_width_px := safe_content_pixel_size().x * lane_width_fraction
 				var group_padding_px := float(horizontal_group_count) * 6.0
 				var group_gap_px := float(maxi(0, horizontal_group_count - 1)) * 3.0
 				# make_meld_group_view reserves one compact separator per tile. Try
@@ -13560,10 +13684,12 @@ func draw_melds(parent: Control) -> void:
 				var compact_tile_width := floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count) * 2.0) / float(horizontal_tile_count))
 				if compact_tile_width <= 18.0:
 					compact_tile_width = floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count)) / float(horizontal_tile_count))
-				compact_tile_width = clampf(compact_tile_width, 18.0, 20.0)
+					compact_tile_width = clampf(compact_tile_width, 18.0, 20.0)
 				meld_tile_size = Vector2(compact_tile_width, floorf(compact_tile_width * 1.5))
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
+		area.set_meta("tile_size", meld_tile_size if meld_tile_size != Vector2.ZERO else Vector2(26, 36) if not vertical else Vector2(28, 38))
+		area.set_meta("group_count", meld_list.size())
 		for meld_index in range(meld_list.size()):
 			var meld = meld_list[meld_index]
 			if typeof(meld) == TYPE_ARRAY:
@@ -13571,6 +13697,10 @@ func draw_melds(parent: Control) -> void:
 				# Chi/peng/gang share one lane orientation per seat — no kind-specific layout.
 				var meld_group := make_meld_group_view(meld_tiles, seat, false, proxy_order, meld_tile_size)
 				meld_group.name = "MeldGroup_%d_%s" % [meld_index, meld_kind_label(meld_tiles)]
+				meld_group.set_meta("seat", seat)
+				meld_group.set_meta("orientation", "vertical" if vertical else "horizontal")
+				meld_group.set_meta("tile_count", meld_tiles.size())
+				meld_group.set_meta("face_rotation", seat_meld_face_rotation(seat))
 				area.add_child(meld_group)
 				proxy_order += meld_tiles.size() + 1
 
@@ -14356,7 +14486,7 @@ func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 
 func draw_online_lobby_roster_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
-	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.64), "ui_dark_scrim")
+	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.50), "ui_dark_scrim")
 	roster.name = "OnlineLobbyRosterPanel"
 	parent.add_child(roster)
 	var title = make_label(roster, "玩家席位", 13, Color(0.94, 0.94, 0.80), true)
@@ -14369,6 +14499,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		var active := not entry.is_empty()
 		var top = 0.185 + float(i) * 0.192
 		var row_fill = Color(0.024, 0.048, 0.044, 0.92) if active else Color(0.014, 0.026, 0.026, 0.82)
+		row_fill.a *= 0.82
 		var row = make_gpt_center_crop_plate_rect(rect_full(0.035, top, 0.965, top + 0.165), row_fill, "ui_dark_scrim")
 		row.name = "OnlineLobbyRosterRow_%d" % i
 		row.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -14402,7 +14533,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 
 func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
-	var list = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.632, 0.950, 0.945), Color(0.008, 0.016, 0.016, 0.64), "ui_dark_scrim")
+	var list = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.632, 0.950, 0.945), Color(0.008, 0.016, 0.016, 0.50), "ui_dark_scrim")
 	list.name = "OnlineLobbyLogListPanel"
 	parent.add_child(list)
 	list.clip_contents = true
@@ -14464,7 +14595,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 		for player_value in players_array:
 			if typeof(player_value) == TYPE_DICTIONARY and bool((player_value as Dictionary).get("ready", false)):
 				ready_count += 1
-	var summary_panel = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.68), "ui_dark_scrim")
+	var summary_panel = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.54), "ui_dark_scrim")
 	summary_panel.name = "OnlineLobbyRoomSummaryPanel"
 	art.add_child(summary_panel)
 	var occupancy_chip = make_gpt_gate(rect_full(0.030, 0.140, 0.315, 0.860), Color(0.030, 0.060, 0.050, 0.72))
@@ -14588,9 +14719,15 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	apply_rect(tile_name, rect_full(0.790, 0.060, 0.970, 0.535))
 	tile_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(tile_name, 2)
+	var urgency = make_label(panel, pending_claim_urgency_text(), 9, Color(0.98, 0.70, 0.42, 0.92), true)
+	urgency.name = "PendingClaimUrgencyText"
+	apply_rect(urgency, rect_full(0.345, 0.455, 0.970, 0.535))
+	urgency.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(urgency)
+	urgency.tooltip_text = "响应窗口提示：" + pending_claim_urgency_text()
 	var focus = make_label(panel, pending_claim_focus_text(), 11, Color(0.88, 0.86, 0.72, 0.88), true)
 	focus.name = "PendingClaimFocusText"
-	apply_rect(focus, rect_full(0.345, 0.535, 0.970, 0.940))
+	apply_rect(focus, rect_full(0.345, 0.550, 0.970, 0.940))
 	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(focus, 2)
 	if fx_enabled_effective():
@@ -14855,9 +14992,18 @@ func draw_round_summary(parent: Control) -> void:
 	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
 	var panel_left = 0.5 - panel_width_px / maxf(2.0, content_size.x * 2.0)
 	var panel_right = 0.5 + panel_width_px / maxf(2.0, content_size.x * 2.0)
+	var modal_input_shield := Control.new()
+	modal_input_shield.name = "RoundSummaryModalInputShield"
+	modal_input_shield.set_anchors_preset(Control.PRESET_FULL_RECT)
+	modal_input_shield.mouse_filter = Control.MOUSE_FILTER_STOP
+	modal_input_shield.z_index = 29
+	modal_input_shield.set_meta("layout_role", "settlement_modal_input_shield")
+	parent.add_child(modal_input_shield)
 	var panel = make_gpt_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.006, 0.012, 0.010, 1.0), "ui_dark_scrim")
 	panel.name = "RoundSummaryPanel"
 	panel.z_index = 30
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.set_meta("layout_role", "settlement_modal")
 	panel.clip_contents = true
 	parent.add_child(panel)
 	# 标题栏
@@ -17056,7 +17202,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.38), "ui_dark_scrim", 0.20)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.32), "ui_dark_scrim", 0.20)
 	panel.name = "SettingsPanel"
 	overlay.add_child(panel)
 	overlay.gui_input.connect(func(event: InputEvent) -> void:
@@ -18407,11 +18553,18 @@ func draw_table_log(parent: Control) -> void:
 	ledger_spine.name = "TableLogLedgerSpine"
 	ledger_panel.add_child(ledger_spine)
 	var ledger_title = make_label(ledger_panel, "牌桌记录", 10 if compact_log else 12, Color(0.90, 0.78, 0.52), true)
-	apply_rect(ledger_title, rect_full(0.085, 0.030, 0.620 if compact_log else 0.560, 0.230))
+	apply_rect(ledger_title, rect_full(0.085, 0.030, 0.430 if compact_log else 0.500, 0.230))
 	ledger_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var ledger_count = make_label(ledger_panel, "%d条" % table_logs.size(), 8 if compact_log else 10, Color(0.72, 0.66, 0.48), false)
-	apply_rect(ledger_count, rect_full(0.640 if compact_log else 0.580, 0.040, 0.930, 0.220))
+	apply_rect(ledger_count, rect_full(0.455 if compact_log else 0.520, 0.040, 0.650, 0.220))
 	ledger_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var archive_button := make_small_button("历史", Color(0.48, 0.42, 0.28), Callable(self, "toggle_table_log_archive"))
+	archive_button.name = "TableLogArchiveButton"
+	archive_button.custom_minimum_size = Vector2(48 if compact_log else 54, 28 if compact_log else 32)
+	archive_button.add_theme_font_size_override("font_size", 10 if compact_log else 11)
+	archive_button.tooltip_text = "查看完整牌桌记录 · 最近记录可滚动查看"
+	apply_rect(archive_button, rect_full(0.690, 0.025, 0.950, 0.240))
+	ledger_panel.add_child(archive_button)
 	var log_recent = table_log_tail(1 if compact_log else 2)
 	if log_recent.is_empty():
 		var waiting = make_label(ledger_panel, "等待开局", 12, Color(0.74, 0.66, 0.44), true)
@@ -18441,6 +18594,67 @@ func draw_table_log(parent: Control) -> void:
 		configure_clipped_label(row_body)
 		row_body.tooltip_text = row_body.text
 	return
+
+
+func draw_table_log_archive_panel(parent: Control) -> void:
+	if not table_log_archive_open or (mode != "offline" and mode != "online_game"):
+		return
+	var panel = make_gpt_plate_rect(rect_full(0.230, 0.120, 0.870, 0.545), Color(0.014, 0.034, 0.040, 0.96), "ui_jade_reading_plate")
+	panel.name = "TableLogArchivePanel"
+	panel.z_index = 43
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.clip_contents = true
+	panel.set_meta("layout_role", "table_log_archive")
+	parent.add_child(panel)
+	var texture = add_illustration_texture(panel, "table_log_scroll", rect_full(0.010, 0.025, 0.990, 0.975), 0.075, false)
+	if texture != null:
+		texture.name = "TableLogArchiveTexture"
+		panel.move_child(texture, 0)
+	var title = make_label(panel, "牌桌记录·历史", 16, Color(0.90, 0.80, 0.56), true)
+	title.name = "TableLogArchiveTitle"
+	apply_rect(title, rect_full(0.060, 0.045, 0.650, 0.150))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var count = make_label(panel, "%d条" % table_logs.size(), 11, Color(0.70, 0.76, 0.66), false)
+	count.name = "TableLogArchiveCount"
+	apply_rect(count, rect_full(0.680, 0.060, 0.820, 0.145))
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_table_log_archive"))
+	close_button.name = "TableLogArchiveCloseButton"
+	close_button.custom_minimum_size = Vector2(36, 36)
+	close_button.tooltip_text = "关闭牌桌记录 · Esc"
+	apply_rect(close_button, rect_full(0.900, 0.045, 0.970, 0.175))
+	panel.add_child(close_button)
+	var route = make_gpt_route_rail(rect_full(0.060, 0.180, 0.940, 0.205), Color(0.006, 0.016, 0.018, 0.48))
+	route.name = "TableLogArchiveRoute"
+	panel.add_child(route)
+	var scroll := ScrollContainer.new()
+	scroll.name = "TableLogArchiveScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	apply_rect(scroll, rect_full(0.060, 0.225, 0.940, 0.925))
+	panel.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.name = "TableLogArchiveList"
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 6)
+	scroll.add_child(list)
+	if table_logs.is_empty():
+		var empty = make_label(list, "暂无牌桌记录", 13, Color(0.76, 0.82, 0.72), false)
+		empty.name = "TableLogArchiveEmpty"
+		empty.custom_minimum_size = Vector2(0, 44)
+	else:
+		var start_index := maxi(0, table_logs.size() - ONLINE_LOG_HISTORY_LIMIT)
+		for log_i in range(start_index, table_logs.size()):
+			var full_text := table_log_display_text(str(table_logs[log_i]))
+			var row := make_label(list, "%02d  %s" % [log_i + 1, full_text], 13, Color(0.84, 0.88, 0.80), false)
+			row.name = "TableLogArchiveRow_%d" % log_i
+			row.custom_minimum_size = Vector2(0, 42)
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			row.clip_text = false
+			row.tooltip_text = full_text
+	call_deferred("scroll_table_log_archive_to_end")
 
 
 func draw_table_log_archive_commit(parent: Control, tag_color: Color) -> Control:
@@ -18743,9 +18957,9 @@ func draw_table_turn_flow(parent: Control) -> void:
 
 func draw_table_wall_lanterns(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
-	if get_wall_count() > 24:
+	if not wall_is_low():
 		return
-	var wall_progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var wall_progress := wall_progress()
 	var lantern_positions := [
 		Vector2(0.500, 0.075),
 		Vector2(0.912, 0.505),
@@ -18774,7 +18988,7 @@ func draw_table_wall_pressure_route(parent: Control) -> Control:
 	route.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	route.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(route)
-	var progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var progress := wall_progress()
 	var color = wall_meter_color(progress)
 	var segments := [
 		rect_full(0.185, 0.088, 0.815, 0.104),
@@ -19154,7 +19368,7 @@ func draw_top_hud_wall_meter(parent: Control, meter_rect: Rect2 = TOP_HUD_WALL_R
 	simple_meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(simple_meter, meter_rect)
 	parent.add_child(simple_meter)
-	var wall_progress = clamp(float(get_wall_count()) / 144.0, 0.0, 1.0)
+	var wall_progress := wall_progress()
 	var meter_color = wall_meter_color(wall_progress)
 	# r199: wire densified GPT plate (was registry-only / WallBackStrip fallback)
 	var top_wall_gpt = add_optional_gpt_illustration_texture(simple_meter, "top_hud_wall_gpt_warning", rect_full(-0.04, -0.06, 1.04, 1.06), 0.28, false)  # r220 denser visibility
@@ -19183,7 +19397,7 @@ func draw_top_hud_wall_meter(parent: Control, meter_rect: Rect2 = TOP_HUD_WALL_R
 	count_label.name = "TopHudWallCount"
 	apply_rect(count_label, rect_full(0.245, 0.115, 0.560, 0.520))
 	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	if get_wall_count() <= 24:
+	if wall_is_low():
 		var low_pulse_simple = make_gpt_gate(rect_full(0.755, 0.155, 0.935, 0.455), Color(0.96, 0.40, 0.22, 0.28))
 		low_pulse_simple.name = "TopHudWallLowPulseSimple"
 		simple_meter.add_child(low_pulse_simple)
@@ -19726,16 +19940,16 @@ func wall_live_feedback_corner_region(right_corner: bool) -> Rect2:
 func wall_remaining_badge_state_text(wall_count: int, recent_feedback: bool) -> String:
 	if recent_feedback:
 		return "补岭" if str(offline_last_draw.get("source", "")) == "gang" else "摸入"
-	if wall_count <= 18:
+	if wall_is_critical(wall_count):
 		return "荒近"
-	if wall_count <= 24:
+	if wall_is_low(wall_count):
 		return "低余"
 	return "实时"
 
 func draw_wall_remaining_badge(parent: Control, wall_count: int, progress: float, recent_feedback: bool) -> Control:
 	# r214: bulk GPT chrome sweep
 	var color = wall_meter_color(progress)
-	var low_wall = wall_count <= 24
+	var low_wall := wall_is_low(wall_count)
 	var has_live_feedback_kit := optional_gpt_illustration_texture("wall_live_feedback_kit") != null
 	var badge = make_gpt_gate(rect_full(0.758, 0.016, 0.962, 0.083), Color(0.010, 0.020, 0.020, 0.72))
 	badge.name = "WallRemainingBadge"
@@ -19784,10 +19998,10 @@ func draw_wall_remaining_badge(parent: Control, wall_count: int, progress: float
 
 func draw_wall_count_feedback_art(parent: Control, wall_count: int, progress: float, recent_feedback: bool) -> Control:
 	# r214: bulk GPT chrome sweep
-	if not recent_feedback and wall_count > 24:
+	if not recent_feedback and not wall_is_low(wall_count):
 		return null
 	var color = wall_meter_color(progress)
-	var low_wall = wall_count <= 24
+	var low_wall := wall_is_low(wall_count)
 	var has_live_feedback_kit := optional_gpt_illustration_texture("wall_live_feedback_kit") != null
 	var art = Control.new()
 	art.name = "WallDrawFeedbackArt"
@@ -19828,8 +20042,8 @@ func draw_wall_count_feedback_art(parent: Control, wall_count: int, progress: fl
 
 func draw_walls(parent: Control) -> void:
 	var wall_count = get_wall_count()
-	var progress = clamp(float(wall_count) / float(WALL_VISUAL_FULL_COUNT), 0.0, 1.0)
-	var low_wall = wall_count <= 24
+	var progress := wall_progress(wall_count)
+	var low_wall := wall_is_low(wall_count)
 	var recent_feedback = mode == "offline" and bool(offline_last_draw.get("announce", false))
 	var active_counts = wall_visual_active_counts(progress)
 	# When the battle already hosts a realtime commercial 3D wall, keep 2D strips as
@@ -20402,6 +20616,8 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var button = make_base_button(text, callback)
 	var role = action_button_visual_role(text)
 	button.tooltip_text = action_button_tooltip(text)
+	button.set_meta("action_role", role)
+	button.set_meta("action_shortcut", action_button_shortcut_hint(text))
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
 	button.add_theme_color_override("font_color", Color(1.00, 0.98, 0.88))
 	button.add_theme_color_override("font_hover_color", Color(1.00, 1.00, 0.96))
@@ -21156,12 +21372,12 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
 	parent.add_child(row)
-	var row_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.022, 0.020, 0.18), "ui_dark_scrim", 0.18)
+	var row_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.022, 0.020, 0.05), "ui_dark_scrim", 0.18)
 	row_plate.name = "SettingRowGptPlate_%s" % title
 	row.add_child(row_plate)
 	row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.012, 0.016, 0.012, 0.52), "ui_dark_scrim")
+	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
 	var title_label = make_label(row, title, 14, Color(1.0, 0.97, 0.88, 1.0), true)
@@ -21191,7 +21407,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_center_crop_plate_rect(rect, Color(0.016, 0.028, 0.026, 0.62), "ui_dark_scrim", 0.18)
+	var section = make_gpt_center_crop_plate_rect(rect, Color(0.016, 0.028, 0.026, 0.52), "ui_dark_scrim", 0.18)
 	section.name = "SettingsSection_%s" % title_text
 	parent.add_child(section)
 	var section_depth = make_gpt_route_rail(rect_full(0.015, 0.910, 0.985, 0.985), Color(0.0, 0.0, 0.0, 0.10))
@@ -23721,7 +23937,7 @@ func _show_online_lobby_impl() -> void:
 	# The disconnected lobby is an operational form, so its full-page substrate
 	# uses the low-frequency authored bitmap. Decorative detail stays at the
 	# header edge instead of running behind inputs and calls to action.
-	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.44), "ui_dark_scrim", 0.18)
+	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.38), "ui_dark_scrim", 0.18)
 	panel.name = "OnlineLobbyLowFrequencyPagePlate"
 	root_layer.add_child(panel)
 	var lobby_shadow = make_soft_depth_panel(panel, rect_full(0.008, 0.025, 0.992, 1.020), Color(0.0, 0.0, 0.0, 0.10), 22)  # r415
@@ -23780,7 +23996,7 @@ func _show_online_lobby_impl() -> void:
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.22), "ui_dark_scrim", 0.18)
+	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.14), "ui_dark_scrim", 0.18)
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
@@ -23799,12 +24015,10 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", commercial_ui_font_size(20, 3), Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.18), "ui_dark_scrim", 0.14)
+	var input_group_backplate = make_layout_host(rect_full(0.045, 0.120, 0.955, 0.650))
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
-	if input_group_backplate is CanvasItem:
-		(input_group_backplate as CanvasItem).modulate = Color(1.0, 1.0, 1.0, 1.0)
-	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.035, false)
+	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.018, false)
 	if input_group_plate != null:
 		input_group_plate.name = "OnlineLobbyInputGPTGroupPlateTexture"
 		input_group_backplate.move_child(input_group_plate, 0)
@@ -23860,10 +24074,10 @@ func _show_online_lobby_impl() -> void:
 	start_row.add_theme_constant_override("separation", 10)
 	apply_rect(start_row, rect_full(0.06, 0.810, 0.94, 0.945))
 	form_panel.add_child(start_row)
-	var action_cluster_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.666, 0.955, 0.958), Color(0.024, 0.036, 0.034, 0.22), "ui_dark_scrim", 0.24)
+	var action_cluster_backplate = make_layout_host(rect_full(0.045, 0.666, 0.955, 0.958))
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
 	form_panel.add_child(action_cluster_backplate)
-	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.040, false)
+	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.020, false)
 	if action_group_plate != null:
 		action_group_plate.name = "OnlineLobbyActionGPTGroupPlateTexture"
 		action_cluster_backplate.move_child(action_group_plate, 0)
@@ -23874,9 +24088,9 @@ func _show_online_lobby_impl() -> void:
 	var start_button_color := Color(0.74, 0.48, 0.16) if can_start_online else Color(0.38, 0.34, 0.28)
 	var start_button = make_lobby_action_button(start_button_text, start_button_color, func() -> void:
 		send_online_action({"type": "startGame"}, "开始游戏")
-	, 0.24, Vector2(196, 50))
+	, 0.24, Vector2(210, 50))
 	start_button.name = "OnlineLobbyPrimaryStartButton"
-	start_button.size_flags_stretch_ratio = 1.90
+	start_button.size_flags_stretch_ratio = 2.40
 	start_button.disabled = not can_start_online
 	start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
 	if not can_start_online:
@@ -23884,11 +24098,10 @@ func _show_online_lobby_impl() -> void:
 	start_row.add_child(start_button)
 	var return_button = make_lobby_action_button("返回菜单", Color(0.28, 0.34, 0.36), func() -> void:
 		show_menu()
-	, 0.28, Vector2(112, 50), 0.80 if can_start_online else 1.0)
+	, 0.28, Vector2(104, 50), 0.80)
 	return_button.name = "OnlineLobbySecondaryReturnButton"
-	return_button.size_flags_stretch_ratio = 0.72
-	if can_start_online:
-		return_button.modulate = Color(0.82, 0.84, 0.82, 0.80)
+	return_button.size_flags_stretch_ratio = 0.60
+	return_button.modulate = Color(0.82, 0.84, 0.82, 0.80)
 	start_row.add_child(return_button)
 	draw_online_lobby_action_flow_art(form_panel)
 
@@ -23903,7 +24116,7 @@ func _show_online_lobby_impl() -> void:
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(status_label)
-	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.22), "ui_dark_scrim", 0.20)
+	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.12), "ui_dark_scrim", 0.20)
 	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
 	panel.add_child(status_backplate)
 	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
@@ -23921,7 +24134,7 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.22), "ui_dark_scrim", 0.18)
+	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.14), "ui_dark_scrim", 0.18)
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
@@ -23931,10 +24144,10 @@ func _show_online_lobby_impl() -> void:
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.10), "ui_dark_scrim", 0.14)
+	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.06), "ui_dark_scrim", 0.14)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
-	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.26), "ui_dark_scrim", 0.18)
+	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.18), "ui_dark_scrim", 0.18)
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	log_panel.add_child(empty_state_backplate)
 	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(18, 2), Color(0.98, 0.94, 0.82), true)
@@ -24307,10 +24520,6 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var content_surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.018, 0.650, 0.982), Color(0.022, 0.034, 0.032, 0.02), "ui_dark_scrim", 0.10)
-	content_surface.name = "RulesContentLowFrequencySurface"
-	content_backplate.add_child(content_surface)
-	content_backplate.move_child(content_surface, 0)
 	var content_sheen = make_layout_host(rect_full(0.030, 0.026, 0.970, 0.046))
 	content_sheen.name = "RulesContentTopSheen"
 	content_backplate.add_child(content_sheen)
@@ -25245,19 +25454,21 @@ func show_chat_panel() -> void:
 		return
 	chat_panel_open = true
 	# r215: GPT chrome conversion
-	var chat_panel = make_gpt_plate_rect(rect_full(0.02, 0.38, 0.28, 0.72), Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
+	var compact_chat := chat_panel_rect().size.x < 0.250
+	var chat_panel = make_gpt_plate_rect(chat_panel_rect(), Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
 	chat_panel.name = "ChatPanel"
 	chat_panel.z_index = 45
+	chat_panel.set_meta("layout_role", "top_safe_drawer" if mode == "online_game" else "lobby_drawer")
 	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	chat_panel.clip_contents = true
 	root_layer.add_child(chat_panel)
 	draw_chat_panel_art(chat_panel)
-	var chat_text = "\n".join(chat_messages.slice(-8))
+	var chat_text = "\n".join(chat_messages.slice(-3 if compact_chat else -8))
 	if chat_text.strip_edges() == "":
 		chat_text = "等待房间消息"
-	var chat_label = make_label(chat_panel, chat_text, 12, Color(0.82, 0.86, 0.80), false)
+	var chat_label = make_label(chat_panel, chat_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
 	chat_label.name = "ChatPanelMessageText"
-	apply_rect(chat_label, rect_full(0.075, 0.285, 0.940, 0.775))
+	apply_rect(chat_label, rect_full(0.060, 0.465 if compact_chat else 0.285, 0.940, 0.690 if compact_chat else 0.775))
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	chat_label.clip_text = true
@@ -25275,7 +25486,7 @@ func show_chat_panel() -> void:
 	quick_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	quick_row.add_theme_constant_override("separation", 3)
 	configure_passive_container(quick_row)
-	apply_rect(quick_row, rect_full(0.075, 0.205, 0.800, 0.270))
+	apply_rect(quick_row, rect_full(0.060, 0.205 if not compact_chat else 0.235, 0.940, 0.270 if not compact_chat else 0.450))
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -25283,8 +25494,8 @@ func show_chat_panel() -> void:
 			send_quick_chat(quick_message)
 		)
 		quick_button.name = "ChatQuickMessageButton_%d" % quick_index
-		quick_button.custom_minimum_size = Vector2(62, 30)
-		quick_button.add_theme_font_size_override("font_size", 11)
+		quick_button.custom_minimum_size = Vector2(46 if compact_chat else 62, 26 if compact_chat else 30)
+		quick_button.add_theme_font_size_override("font_size", 10 if compact_chat else 11)
 		quick_button.tooltip_text = "发送快捷消息：%s" % quick_message
 		quick_row.add_child(quick_button)
 
@@ -25305,15 +25516,15 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
-	apply_rect(chat_input, rect_full(0.075, 0.805, 0.690, 0.945))
+	apply_rect(chat_input, rect_full(0.060, 0.720 if compact_chat else 0.805, 0.690, 0.955 if compact_chat else 0.945))
 	chat_panel.add_child(chat_input)
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
 	send_button.name = "ChatSendButton"
-	send_button.custom_minimum_size = Vector2(62, 42)
-	send_button.add_theme_font_size_override("font_size", 13)
+	send_button.custom_minimum_size = Vector2(42 if compact_chat else 62, 28 if compact_chat else 42)
+	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
-	apply_rect(send_button, rect_full(0.710, 0.805, 0.940, 0.945))
+	apply_rect(send_button, rect_full(0.710, 0.720 if compact_chat else 0.805, 0.940, 0.955 if compact_chat else 0.945))
 	chat_panel.add_child(send_button)
 
 	configure_button_focus_navigation(chat_panel, "ChatInput")
@@ -26543,6 +26754,10 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
 	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
 	game["wallCount"] = int(first_present(game, ["wallCount", "wallRemaining", "remainingTiles"], game.get("wallCount", 0)))
+	var server_variant := str(first_present(game, ["ruleVariant", "rule_variant", "variant"], game.get("ruleVariant", ""))).strip_edges().to_lower()
+	game["ruleVariant"] = server_variant if RULE_VARIANT_PROFILES.has(server_variant) else ""
+	var server_wall_total := int(first_present(game, ["wallTotal", "wallSize", "totalTiles", "deckSize"], game.get("wallTotal", 0)))
+	game["wallTotal"] = maxi(0, server_wall_total)
 	game["phase"] = normalize_online_phase(str(first_present(game, ["phase", "state", "status"], "")))
 	game["hand"] = normalize_tile_array(first_present(game, ["hand", "tiles", "yourHand", "selfHand"], []))
 	var last_discard_value = first_present(game, ["lastDiscard", "discard", "lastTile"], "")
@@ -26775,7 +26990,7 @@ func update_online_slow_response_notice(now_msec: int) -> void:
 	if now_msec - online_last_sent_msec < ONLINE_SLOW_NOTICE_MSEC or online_slow_notice_shown:
 		return
 	online_slow_notice_shown = true
-	var action_label := online_last_sent_action if online_last_sent_action != "" else "操作"
+	var action_label: String = online_last_sent_action if online_last_sent_action != "" else "操作"
 	set_online_feedback("服务器响应较慢，仍在等待%s确认。" % action_label, true)
 
 
@@ -26813,6 +27028,10 @@ func normalized_rule_variant(value: String = "") -> String:
 func active_rule_variant() -> String:
 	if mode == "offline" and offline_active_rule_variant != "":
 		return normalized_rule_variant(offline_active_rule_variant)
+	if mode == "online_game":
+		var server_variant := str(online_game.get("ruleVariant", "")).strip_edges().to_lower()
+		if RULE_VARIANT_PROFILES.has(server_variant):
+			return server_variant
 	return normalized_rule_variant(rule_variant)
 
 func rule_profile(variant: String = "") -> Dictionary:
@@ -26855,6 +27074,52 @@ func rule_flower_codes(variant: String = "") -> Array[String]:
 
 func rule_wall_size(variant: String = "") -> int:
 	return rule_tile_codes(variant).size() * 4 + rule_flower_codes(variant).size()
+
+
+func display_wall_total() -> int:
+	if mode == "online_game":
+		for key in ["wallTotal", "wallSize", "totalTiles", "deckSize"]:
+			var server_total := int(online_game.get(key, 0))
+			if server_total > 0:
+				return server_total
+	return maxi(1, rule_wall_size())
+
+
+func wall_progress(wall_count: int = -1) -> float:
+	var remaining := get_wall_count() if wall_count < 0 else wall_count
+	return clamp(float(remaining) / float(display_wall_total()), 0.0, 1.0)
+
+
+func wall_low_threshold() -> int:
+	return maxi(12, int(round(float(display_wall_total()) * 0.167)))
+
+
+func wall_critical_threshold() -> int:
+	return maxi(6, int(round(float(display_wall_total()) * 0.125)))
+
+
+func wall_phase_threshold(yangzhou_reference: int) -> int:
+	# AI phase constants were tuned against the 144-tile Yangzhou wall. Scale
+	# those references so alternate rules keep the same relative timing.
+	return maxi(1, int(round(float(yangzhou_reference) * float(display_wall_total()) / 144.0)))
+
+
+func wall_is_low(wall_count: int = -1) -> bool:
+	var remaining := get_wall_count() if wall_count < 0 else wall_count
+	return remaining <= wall_low_threshold()
+
+
+func wall_is_critical(wall_count: int = -1) -> bool:
+	var remaining := get_wall_count() if wall_count < 0 else wall_count
+	return remaining <= wall_critical_threshold()
+
+
+func wall_state_text(wall_count: int = -1) -> String:
+	if wall_is_critical(wall_count):
+		return "牌墙将尽"
+	if wall_is_low(wall_count):
+		return "牌墙偏少"
+	return "牌墙充足"
 
 func rule_allows_chi(variant: String = "") -> bool:
 	return bool(rule_profile(variant).get("allow_chi", true))
@@ -26981,6 +27246,12 @@ func handle_ui_cancel() -> bool:
 		return true
 	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
 		on_update_secondary_pressed()
+		return true
+	if advisor_detail_open:
+		close_advisor_detail_panel()
+		return true
+	if table_log_archive_open:
+		close_table_log_archive()
 		return true
 	if chat_panel_open:
 		close_chat_panel()
@@ -28088,8 +28359,7 @@ func player_ai_assist_enabled() -> bool:
 
 
 func top_hud_wall_text() -> String:
-	var last = get_last_discard()
-	return "余牌 %d · 上张 %s" % [get_wall_count(), tile_label(last) if last != "" else "--"]
+	return "余牌 %d/%d · %s" % [get_wall_count(), display_wall_total(), wall_state_text().replace("牌墙", "")]
 
 
 func top_hud_status_icon_name() -> String:
@@ -28309,7 +28579,12 @@ func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Ve
 		var columns = int(zone[2])
 		var visible_rows = discard_zone_visible_rows_for_table_size(zone_rect, columns, resolved_table_size)
 		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, columns, visible_rows, resolved_table_size)
-		var visible_start = tail_window_start(discards.size(), columns * visible_rows)
+		var raw_visible_capacity := maxi(1, columns * visible_rows)
+		var visible_capacity := raw_visible_capacity
+		if discards.size() > raw_visible_capacity:
+			# Match draw_discards: reserve two cells for its authored archive affordance.
+			visible_capacity = maxi(1, raw_visible_capacity - 2)
+		var visible_start = tail_window_start(discards.size(), visible_capacity)
 		var visible_index = discards.size() - 1 - visible_start
 		if visible_index < 0:
 			return Rect2()
@@ -28855,9 +29130,9 @@ func hand_tray_text() -> String:
 		if selected_tile != "":
 			return "已选%s · Enter确认出牌" % tile_label(selected_tile)
 		var wall_count := get_wall_count()
-		if wall_count <= 12:
+		if wall_is_critical(wall_count):
 			return "牌墙将尽 · 余%d · 谨慎出牌" % wall_count
-		if wall_count <= 24 and not player_ai_assist_enabled():
+		if wall_is_low(wall_count) and not player_ai_assist_enabled():
 			return "牌墙偏少 · 余%d · 点击手牌出牌" % wall_count
 		if player_ai_assist_enabled():
 			var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
@@ -28874,6 +29149,18 @@ func hand_tray_text() -> String:
 			return "已选%s · Enter确认出牌" % tile_label(online_selected_tile)
 		return "等待对家" if not can_self_discard() else "点击手牌出牌"
 	return "等待对家"
+
+
+func hand_shortcut_hint_text() -> String:
+	if has_pending_danger_discard():
+		return "Enter 确认 · Esc 取消"
+	if has_pending_claim_window():
+		return pending_claim_shortcut_text(pending_claim_state().get("options", []))
+	if mode == "online_game" and online_waiting_for_server:
+		return "操作已提交 · 等待服务器确认"
+	if can_self_discard():
+		return "方向键选牌 · Enter 出牌"
+	return ""
 
 
 func hand_keyboard_selected_tile() -> String:
@@ -28918,6 +29205,31 @@ func advisor_recommendation_reason_text(report: Dictionary) -> String:
 		parts.append(safety)
 	return " · ".join(parts) if not parts.is_empty() else "保持牌形效率"
 
+
+func advisor_detail_text() -> String:
+	var lines: Array[String] = []
+	if offline_phase == "pending_claim":
+		lines.append("响应目标：%s" % tile_label(str(offline_pending_claim.get("tile", ""))))
+		lines.append("可选动作：%s" % claim_options_text(offline_pending_claim))
+		lines.append("决策顺序：先确认胡牌机会，再比较吃碰杠对牌型的影响。")
+		lines.append("当前提示：%s" % human_claim_hint_text())
+		return "\n".join(lines)
+	if can_self_discard():
+		var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
+		if reports.is_empty():
+			return "暂未形成稳定推荐。\n先整理孤张与搭子，再重新评估牌形。"
+		var best: Dictionary = reports[0]
+		lines.append("推荐出牌：%s" % advisor_primary_text(best))
+		lines.append("推荐理由：%s" % advisor_recommendation_reason_text(best))
+		lines.append("牌形收益：%s" % advisor_value_text(best))
+		lines.append("备选路线：%s" % advisor_options_text(reports, 5))
+		lines.append("防守提醒：%s" % advisor_defense_text(0, best))
+		return "\n".join(lines)
+	lines.append("当前阶段：%s" % advisor_turn_line())
+	lines.append("局面状态：%s" % current_status_text())
+	lines.append("防守提醒：%s" % advisor_defense_text(0))
+	return "\n".join(lines)
+
 func advisor_progress_text(report: Dictionary) -> String:
 	return "%s · 进%d/%d" % [
 		shanten_label(int(report.get("shanten", 8))),
@@ -28952,6 +29264,8 @@ func hand_tray_state_text() -> String:
 	if mode == "online_game":
 		if has_pending_claim_window():
 			return "响应"
+		if online_waiting_for_server:
+			return "同步"
 		return "出牌" if can_self_discard() else "等待"
 	return "准备"
 
@@ -28965,6 +29279,8 @@ func hand_tray_state_fill() -> Color:
 			return Color(0.46, 0.34, 0.56, 0.72)
 		"等待":
 			return Color(0.30, 0.28, 0.24, 0.68)
+		"同步":
+			return Color(0.30, 0.46, 0.58, 0.72)
 	return Color(0.34, 0.30, 0.24, 0.68)
 
 func hand_tray_state_border() -> Color:
@@ -29091,20 +29407,55 @@ func pending_claim_focus_text() -> String:
 	var pending = pending_claim_state()
 	if pending.is_empty():
 		return "响应窗口 · 可操作或过"
+	var focus_text := "响应窗口 · 可操作或过"
 	if bool(pending.get("rob_gang", false)):
-		return "抢杠窗口 · 优先确认胡牌"
+		focus_text = "抢杠窗口 · 优先确认胡牌"
+	else:
+		var options: Array = pending.get("options", [])
+		if options.has("hu"):
+			focus_text = "胡牌机会 · 可选择胡或过"
+		elif options.has("gang"):
+			focus_text = "杠牌机会 · 注意后续补牌"
+		elif options.has("peng") and options.has("chi"):
+			focus_text = "吃碰选择 · 比较进张与安全"
+		elif options.has("peng"):
+			focus_text = "碰牌机会 · 确认是否加速成型"
+		elif options.has("chi"):
+			focus_text = "吃牌机会 · 选择顺子组合"
+	var shortcut_text := pending_claim_shortcut_text(pending.get("options", []))
+	return focus_text + " · " + shortcut_text if shortcut_text != "" else focus_text
+
+
+func pending_claim_urgency_text() -> String:
+	var pending := pending_claim_state()
+	if pending.is_empty():
+		return ""
+	if bool(pending.get("rob_gang", false)):
+		return "紧迫度高 · 抢杠胡牌窗口"
 	var options: Array = pending.get("options", [])
 	if options.has("hu"):
-		return "胡牌机会 · 可选择胡或过"
-	if options.has("gang"):
-		return "杠牌机会 · 注意后续补牌"
-	if options.has("peng") and options.has("chi"):
-		return "吃碰选择 · 比较进张与安全"
-	if options.has("peng"):
-		return "碰牌机会 · 确认是否加速成型"
-	if options.has("chi"):
-		return "吃牌机会 · 选择顺子组合"
-	return "响应窗口 · 可操作或过"
+		return "紧迫度高 · 先确认胡牌"
+	if wall_is_critical():
+		return "紧迫度高 · 牌墙将尽，尽快决定"
+	if wall_is_low():
+		return "紧迫度中 · 牌墙偏少，比较进张"
+	return "紧迫度中 · 先看推荐，再选择响应"
+
+
+func pending_claim_shortcut_text(options: Array) -> String:
+	var shortcuts: Array[String] = []
+	var shortcut_by_claim := {
+		"chi": "C吃",
+		"peng": "P碰",
+		"gang": "G杠",
+		"hu": "H胡",
+	}
+	for claim in ["hu", "gang", "peng", "chi"]:
+		if options.has(claim):
+			shortcuts.append(str(shortcut_by_claim[claim]))
+	if not options.is_empty():
+		shortcuts.append("X过")
+	return " · ".join(shortcuts)
 
 
 func action_intent_rect_for_count(count: int) -> Rect2:
@@ -29193,6 +29544,26 @@ func action_button_tooltip(text: String) -> String:
 	if clean == "语音" or clean == "闭麦":
 		return "切换语音麦克风状态"
 	return clean
+
+
+func action_button_shortcut_hint(text: String) -> String:
+	var clean := text.strip_edges()
+	if clean == "过" or clean == "建议过" or clean == "荐过":
+		return "X"
+	if clean.begins_with("吃"):
+		return "C"
+	if clean.begins_with("碰"):
+		return "P"
+	if clean.begins_with("杠"):
+		return "G"
+	if clean.contains("自摸") or clean == "胡":
+		return "H"
+	if clean.begins_with("确认打"):
+		return "ENT"
+	if clean == "取消":
+		return "ESC"
+	return ""
+
 
 func action_dock_rect_for_count(count: int) -> Rect2:
 	var content_width = max(1.0, safe_content_pixel_size().x)
@@ -29400,6 +29771,7 @@ func finalize_action_bar_layout() -> void:
 		return
 	var count = action_bar_button_count()
 	if count <= 0:
+		configure_chat_action_focus_navigation()
 		return
 	var separation = action_button_separation_for_count(count)
 	var compact_claim_mode := has_pending_claim_window()
@@ -29461,7 +29833,107 @@ func finalize_action_bar_layout() -> void:
 			if waiting_button.name != "VoiceActionButton":
 				waiting_button.disabled = true
 				waiting_button.tooltip_text = "正在等待服务器确认本次操作"
-	configure_button_focus_navigation(action_bar, action_bar_default_focus_name())
+	if compact_claim_mode:
+		var response_grid := action_bar.get_node_or_null("PendingClaimResponseGrid") as GridContainer
+		if response_grid != null:
+			for response_button in response_grid.get_children():
+				if response_button is Button:
+					(response_button as Button).name = "PendingClaimPrimaryButton"
+					break
+	var default_focus_name := action_bar_default_focus_name()
+	configure_button_focus_navigation(action_bar, default_focus_name, default_focus_name != "")
+	configure_pending_claim_spatial_focus_navigation()
+	configure_chat_action_focus_navigation()
+
+
+func set_action_focus_neighbor(button: Button, direction: String, target: Button) -> void:
+	if button == null or target == null or not is_instance_valid(button) or not is_instance_valid(target):
+		return
+	if not button.is_inside_tree() or not target.is_inside_tree():
+		return
+	var target_path := target.get_path()
+	match direction:
+		"left":
+			button.focus_neighbor_left = target_path
+		"right":
+			button.focus_neighbor_right = target_path
+		"top":
+			button.focus_neighbor_top = target_path
+		"bottom":
+			button.focus_neighbor_bottom = target_path
+
+
+func configure_pending_claim_spatial_focus_navigation() -> void:
+	if action_bar == null or not is_instance_valid(action_bar) or not has_pending_claim_window():
+		return
+	var response_grid := action_bar.get_node_or_null("PendingClaimResponseGrid") as GridContainer
+	var response_buttons: Array[Button] = []
+	if response_grid != null:
+		for child in response_grid.get_children():
+			var response_button := child as Button
+			if response_button != null and response_button.visible and not response_button.disabled:
+				response_buttons.append(response_button)
+	var tail_lane := action_bar.get_node_or_null("PendingClaimSecondaryLane") as Control
+	var tail_buttons: Array[Button] = []
+	if tail_lane != null:
+		for child in tail_lane.get_children():
+			var tail_button := child as Button
+			if tail_button != null and tail_button.visible and not tail_button.disabled:
+				tail_buttons.append(tail_button)
+	if not response_buttons.is_empty():
+		var columns := maxi(1, response_grid.columns if response_grid != null else response_buttons.size())
+		var row_count := int(ceil(float(response_buttons.size()) / float(columns)))
+		for index in range(response_buttons.size()):
+			var button := response_buttons[index]
+			var row := int(index / columns)
+			var column := index % columns
+			var row_start := row * columns
+			var row_end := mini(response_buttons.size(), row_start + columns)
+			var left_index := row_end - 1 if column == 0 else index - 1
+			var right_index := row_start if index >= row_end - 1 else index + 1
+			var top_row := row_count - 1 if row == 0 else row - 1
+			var bottom_row := 0 if row == row_count - 1 else row + 1
+			var top_index := mini(response_buttons.size() - 1, top_row * columns + column)
+			var bottom_index := mini(response_buttons.size() - 1, bottom_row * columns + column)
+			set_action_focus_neighbor(button, "left", response_buttons[left_index])
+			set_action_focus_neighbor(button, "right", response_buttons[right_index])
+			set_action_focus_neighbor(button, "top", response_buttons[top_index])
+			if row == row_count - 1 and not tail_buttons.is_empty():
+				set_action_focus_neighbor(button, "bottom", tail_buttons[mini(column, tail_buttons.size() - 1)])
+			else:
+				set_action_focus_neighbor(button, "bottom", response_buttons[bottom_index])
+		if not tail_buttons.is_empty():
+			var last_row_start := (row_count - 1) * columns
+			for index in range(tail_buttons.size()):
+				var button := tail_buttons[index]
+				set_action_focus_neighbor(button, "left", tail_buttons[(index - 1 + tail_buttons.size()) % tail_buttons.size()])
+				set_action_focus_neighbor(button, "right", tail_buttons[(index + 1) % tail_buttons.size()])
+				set_action_focus_neighbor(button, "top", response_buttons[mini(response_buttons.size() - 1, last_row_start + index)])
+				set_action_focus_neighbor(button, "bottom", response_buttons[0])
+
+
+func configure_chat_action_focus_navigation() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button
+	if chat_button == null or chat_button.disabled or not chat_button.visible:
+		return
+	var action_buttons: Array[Button] = []
+	if action_bar != null and is_instance_valid(action_bar):
+		for button in action_bar_buttons():
+			if button != null and button.visible and not button.disabled:
+				action_buttons.append(button)
+	if action_buttons.is_empty():
+		return
+	chat_button.focus_mode = Control.FOCUS_ALL
+	var first_action := action_buttons[0]
+	var last_action := action_buttons[action_buttons.size() - 1]
+	chat_button.focus_neighbor_right = first_action.get_path()
+	chat_button.focus_next = first_action.get_path()
+	chat_button.focus_previous = last_action.get_path()
+	set_action_focus_neighbor(first_action, "left", chat_button)
+	first_action.focus_previous = chat_button.get_path()
+	last_action.focus_next = chat_button.get_path()
 
 func ended_action_button_widths(count: int) -> Array[float]:
 	var widths: Array[float] = []
@@ -29529,6 +30001,8 @@ func action_bar_default_focus_name() -> String:
 		return "NewMatchSecondaryButton"
 	if mode == "online_game" and online_waiting_for_server:
 		return "VoiceActionButton"
+	if has_pending_claim_window():
+		return "PendingClaimPrimaryButton"
 	return ""
 
 func action_button_separation_for_count(count: int) -> int:
@@ -33491,19 +33965,21 @@ func current_status_text() -> String:
 			return "牌墙已空"
 		var remaining_wall := get_wall_count()
 		var turn_summary := "轮到你出牌" if current_seat == 0 else "%s行牌" % players[current_seat]["name"]
-		if remaining_wall <= 12:
+		if wall_is_critical(remaining_wall):
 			return "牌墙将尽 · 余%d · %s" % [remaining_wall, turn_summary]
-		if remaining_wall <= 24:
+		if wall_is_low(remaining_wall):
 			return "牌墙偏少 · 余%d · %s" % [remaining_wall, turn_summary]
-			if current_seat == 0:
-				var selected_tile := hand_keyboard_selected_tile()
-				return "轮到你出牌 · 已选%s" % tile_label(selected_tile) if selected_tile != "" else "轮到你出牌"
-			return "%s行牌" % players[current_seat]["name"]
+		if current_seat == 0:
+			var selected_tile := hand_keyboard_selected_tile()
+			return "轮到你出牌 · 已选%s" % tile_label(selected_tile) if selected_tile != "" else "轮到你出牌"
+		return "%s行牌" % players[current_seat]["name"]
 	var phase = str(online_game.get("phase", ""))
 	if online_feedback != "":
 		return online_feedback
 	if phase == "ended":
 		return str(online_game.get("winnerText", "牌局结束"))
+	if online_waiting_for_server:
+		return "操作已提交 · 等待服务器确认"
 	if has_pending_claim_window():
 		var pending = pending_claim_state()
 		return "等待你响应%s" % tile_label(str(pending.get("tile", "")))
@@ -33984,6 +34460,14 @@ var chat_input: LineEdit = null
 var chat_panel_open := false
 
 
+func chat_panel_rect() -> Rect2:
+	# The game drawer lives in the top-right breathing room above the right meld
+	# lane. The lobby gets a taller reading area because it has no table geometry.
+	if mode == "online_lobby":
+		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
+	return Rect2(Vector2(0.800, 0.008), Vector2(0.985, 0.235))
+
+
 func add_chat_message(text: String) -> void:
 	var clean := str(text).strip_edges().left(CHAT_MESSAGE_MAX_LENGTH)
 	if clean == "":
@@ -34047,6 +34531,54 @@ func close_chat_panel() -> void:
 	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if chat_button != null and not chat_button.disabled:
 		chat_button.grab_focus()
+
+
+func toggle_advisor_detail_panel() -> void:
+	if mode != "offline" or not player_ai_assist_enabled():
+		return
+	advisor_detail_open = not advisor_detail_open
+	request_game_render()
+	if advisor_detail_open:
+		call_deferred("focus_named_control", "AdvisorDetailCloseButton")
+	else:
+		call_deferred("focus_named_control", "AdvisorDetailButton")
+
+
+func close_advisor_detail_panel() -> void:
+	if not advisor_detail_open:
+		return
+	advisor_detail_open = false
+	request_game_render()
+	call_deferred("focus_named_control", "AdvisorDetailButton")
+
+
+func toggle_table_log_archive() -> void:
+	if mode != "offline" and mode != "online_game":
+		return
+	table_log_archive_open = not table_log_archive_open
+	request_game_render()
+	if table_log_archive_open:
+		call_deferred("focus_named_control", "TableLogArchiveCloseButton")
+	else:
+		call_deferred("focus_named_control", "TableLogArchiveButton")
+
+
+func close_table_log_archive() -> void:
+	if not table_log_archive_open:
+		return
+	table_log_archive_open = false
+	request_game_render()
+	call_deferred("focus_named_control", "TableLogArchiveButton")
+
+
+func scroll_table_log_archive_to_end() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var archive_scroll := root_layer.find_child("TableLogArchiveScroll", true, false) as ScrollContainer
+	if archive_scroll == null:
+		return
+	var scrollbar := archive_scroll.get_v_scroll_bar()
+	archive_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
 
 func play_chat_send_panel_feedback(message: String = "") -> Control:
 	# r215: GPT chrome conversion

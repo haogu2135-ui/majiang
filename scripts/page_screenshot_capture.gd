@@ -13,11 +13,18 @@ const SCREEN_NAMES := [
 	"08_online_lobby",
 	"09_daily_login",
 	"10_loading",
+	"11_exit_confirm",
+	"12_toast",
 	"13_round_summary",
 	"14_danger_discard",
 	"15_pending_claim_full",
 	"16_win_detail",
+	"17_hand_tutorial",
+	"18_update_dialog",
+	"19_reset_progress",
+	"20_chat_panel",
 	"21_diagnostic",
+	"22_advisor",
 	"23_online_lobby_connected",
 	"24_online_lobby_disconnect_recovery",
 ]
@@ -127,6 +134,26 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 		"worktree_diff_fingerprint": OS.get_environment("YUNZHUO_CAPTURE_WORKTREE_DIFF_FINGERPRINT"),
 		"runtime_source_diff_fingerprint": OS.get_environment("YUNZHUO_CAPTURE_RUNTIME_SOURCE_DIFF_FINGERPRINT"),
 		"capture_size": "%dx%d" % [viewport_size.x, viewport_size.y],
+		"meld_fixture_contract": {
+			"seed": "seed_preview_discards",
+			"horizontal_seats": [0, 2],
+			"vertical_seats": [1, 3],
+			"meld_group_count_variants": {
+				"seed_preview_discards": [4, 3, 3, 4],
+				"seed_preview_capacity_battle": [4, 4, 4, 4],
+			},
+			"compact_horizontal_tile_width_min": 18,
+			"orientation_rule": "top/bottom horizontal; left/right vertical; faces point to table center",
+		},
+		"interactive_state_contract": {
+			"11_exit_confirm": {"required_nodes": ["ExitConfirmDialog", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"], "default_focus": "ExitConfirmContinueButton", "state_text": "确认退出"},
+			"12_toast": {"required_nodes": ["ToastContainer", "Toast"], "default_focus": "", "state_text": "成就解锁：初入牌桌"},
+			"17_hand_tutorial": {"required_nodes": ["HandTrayTutorialHint", "HandTrayTutorialTargetTile"], "default_focus": "", "state_text": "点击一张手牌，将它打入牌河"},
+			"18_update_dialog": {"required_nodes": ["UpdatePrimaryButton", "UpdateSecondaryButton"], "default_focus": "UpdateSecondaryButton", "state_text": "发现新版本 v1.0.181"},
+			"19_reset_progress": {"required_nodes": ["SettingsPanel", "SettingsCloseButton", "ResetProgressConfirmArt"], "default_focus": "SettingsCloseButton", "state_text": "再次点击确认清空本地进度"},
+			"20_chat_panel": {"required_nodes": ["ChatPanel", "ChatPanelCloseButton", "ChatInput", "ChatSendButton"], "default_focus": "ChatInput", "state_text": "房间消息"},
+			"22_advisor": {"required_nodes": ["AdvisorPanel", "AdvisorDetailButton"], "default_focus": "AdvisorDetailButton", "state_text": "牌势"},
+		},
 		"capture_time_utc": Time.get_datetime_string_from_system(true),
 	}
 	var metadata_path := ProjectSettings.globalize_path("%s/capture_metadata.json" % output_dir_res)
@@ -165,6 +192,11 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 	apply_static_capture_mode(scene)
 	build_screen(scene, screen_name)
 	apply_static_capture_mode(scene)
+	if ["03_offline_battle", "13_round_summary", "14_danger_discard", "15_pending_claim_full", "16_win_detail"].has(screen_name):
+		if not validate_preview_meld_fixture(scene):
+			printerr("capture fixture contract failed for %s" % screen_name)
+			quit(1)
+			return
 	if scene.has_method("clear_fx_overlays"):
 		scene.clear_fx_overlays()
 	await settle()
@@ -197,6 +229,30 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		scene.shutdown_runtime_tweens()
 	await process_frame
 	await process_frame
+
+func validate_preview_meld_fixture(scene: Node) -> bool:
+	var fixture = scene.get_meta("ui_capture_meld_fixture", {})
+	if typeof(fixture) != TYPE_DICTIONARY:
+		printerr("meld fixture metadata is missing or not a Dictionary")
+		return false
+	if fixture.get("horizontal_seats", []) != [0, 2] or fixture.get("vertical_seats", []) != [1, 3]:
+		printerr("meld fixture seat contract mismatch: %s" % fixture)
+		return false
+	var expected_counts: Array = fixture.get("meld_group_counts", [])
+	if expected_counts.is_empty() or scene.players.size() != 4:
+		printerr("meld fixture count contract mismatch: counts=%s players=%d" % [expected_counts, scene.players.size()])
+		return false
+	for seat in range(4):
+		var player: Dictionary = scene.players[seat]
+		var melds: Array = player.get("melds", [])
+		if melds.size() != int(expected_counts[seat]):
+			printerr("meld fixture group count mismatch at seat %d: got=%d expected=%d player=%s" % [seat, melds.size(), int(expected_counts[seat]), player])
+			return false
+		var expected_vertical := seat == 1 or seat == 3
+		if bool(scene.seat_meld_is_vertical(seat)) != expected_vertical:
+			printerr("meld fixture orientation mismatch at seat %d: got=%s expected=%s" % [seat, scene.seat_meld_is_vertical(seat), expected_vertical])
+			return false
+	return true
 
 func apply_static_capture_mode(scene: Node) -> void:
 	scene.set("fx_enabled", false)
@@ -450,7 +506,14 @@ func settle() -> void:
 	await process_frame
 
 func seed_preview_discards(scene: Node) -> void:
-	scene.set_meta("ui_capture_meld_fixture", "seat0+seat2 horizontal; seat1+seat3 vertical")
+	scene.set_meta("ui_capture_meld_fixture", {
+		"seed": "seed_preview_discards",
+		"horizontal_seats": [0, 2],
+		"vertical_seats": [1, 3],
+		"meld_group_counts": [4, 3, 3, 4],
+		"compact_horizontal_tile_width_min": 18,
+		"orientation_rule": "top/bottom horizontal; left/right vertical; faces point to table center",
+	})
 	var preview_discards := [
 		["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "S", "N", "1T", "2T", "3T", "4T"],
 		["1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T", "9T", "E", "S", "W", "1B", "2B", "3B", "4B"],
@@ -508,6 +571,14 @@ func seed_preview_capacity_battle(scene: Node) -> void:
 	scene.table_logs.clear()
 	for i in range(scene.ONLINE_LOG_HISTORY_LIMIT):
 		scene.table_logs.append("第%02d巡：四家牌河、副露与花牌状态已同步" % (i + 1))
+	scene.set_meta("ui_capture_meld_fixture", {
+		"seed": "seed_preview_capacity_battle",
+		"horizontal_seats": [0, 2],
+		"vertical_seats": [1, 3],
+		"meld_group_counts": [4, 4, 4, 4],
+		"compact_horizontal_tile_width_min": 18,
+		"orientation_rule": "top/bottom horizontal; left/right vertical; faces point to table center",
+	})
 
 
 func seed_preview_pending_claim(scene: Node) -> void:

@@ -33,6 +33,10 @@ func normalized_rule_variant(value: String = "") -> String:
 func active_rule_variant() -> String:
 	if mode == "offline" and offline_active_rule_variant != "":
 		return normalized_rule_variant(offline_active_rule_variant)
+	if mode == "online_game":
+		var server_variant := str(online_game.get("ruleVariant", "")).strip_edges().to_lower()
+		if RULE_VARIANT_PROFILES.has(server_variant):
+			return server_variant
 	return normalized_rule_variant(rule_variant)
 
 func rule_profile(variant: String = "") -> Dictionary:
@@ -75,6 +79,52 @@ func rule_flower_codes(variant: String = "") -> Array[String]:
 
 func rule_wall_size(variant: String = "") -> int:
 	return rule_tile_codes(variant).size() * 4 + rule_flower_codes(variant).size()
+
+
+func display_wall_total() -> int:
+	if mode == "online_game":
+		for key in ["wallTotal", "wallSize", "totalTiles", "deckSize"]:
+			var server_total := int(online_game.get(key, 0))
+			if server_total > 0:
+				return server_total
+	return maxi(1, rule_wall_size())
+
+
+func wall_progress(wall_count: int = -1) -> float:
+	var remaining := get_wall_count() if wall_count < 0 else wall_count
+	return clamp(float(remaining) / float(display_wall_total()), 0.0, 1.0)
+
+
+func wall_low_threshold() -> int:
+	return maxi(12, int(round(float(display_wall_total()) * 0.167)))
+
+
+func wall_critical_threshold() -> int:
+	return maxi(6, int(round(float(display_wall_total()) * 0.125)))
+
+
+func wall_phase_threshold(yangzhou_reference: int) -> int:
+	# AI phase constants were tuned against the 144-tile Yangzhou wall. Scale
+	# those references so alternate rules keep the same relative timing.
+	return maxi(1, int(round(float(yangzhou_reference) * float(display_wall_total()) / 144.0)))
+
+
+func wall_is_low(wall_count: int = -1) -> bool:
+	var remaining := get_wall_count() if wall_count < 0 else wall_count
+	return remaining <= wall_low_threshold()
+
+
+func wall_is_critical(wall_count: int = -1) -> bool:
+	var remaining := get_wall_count() if wall_count < 0 else wall_count
+	return remaining <= wall_critical_threshold()
+
+
+func wall_state_text(wall_count: int = -1) -> String:
+	if wall_is_critical(wall_count):
+		return "牌墙将尽"
+	if wall_is_low(wall_count):
+		return "牌墙偏少"
+	return "牌墙充足"
 
 func rule_allows_chi(variant: String = "") -> bool:
 	return bool(rule_profile(variant).get("allow_chi", true))
@@ -201,6 +251,12 @@ func handle_ui_cancel() -> bool:
 		return true
 	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
 		on_update_secondary_pressed()
+		return true
+	if advisor_detail_open:
+		close_advisor_detail_panel()
+		return true
+	if table_log_archive_open:
+		close_table_log_archive()
 		return true
 	if chat_panel_open:
 		close_chat_panel()
@@ -1308,8 +1364,7 @@ func player_ai_assist_enabled() -> bool:
 
 
 func top_hud_wall_text() -> String:
-	var last = get_last_discard()
-	return "余牌 %d · 上张 %s" % [get_wall_count(), tile_label(last) if last != "" else "--"]
+	return "余牌 %d/%d · %s" % [get_wall_count(), display_wall_total(), wall_state_text().replace("牌墙", "")]
 
 
 func top_hud_status_icon_name() -> String:
@@ -1529,7 +1584,12 @@ func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Ve
 		var columns = int(zone[2])
 		var visible_rows = discard_zone_visible_rows_for_table_size(zone_rect, columns, resolved_table_size)
 		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, columns, visible_rows, resolved_table_size)
-		var visible_start = tail_window_start(discards.size(), columns * visible_rows)
+		var raw_visible_capacity := maxi(1, columns * visible_rows)
+		var visible_capacity := raw_visible_capacity
+		if discards.size() > raw_visible_capacity:
+			# Match draw_discards: reserve two cells for its authored archive affordance.
+			visible_capacity = maxi(1, raw_visible_capacity - 2)
+		var visible_start = tail_window_start(discards.size(), visible_capacity)
 		var visible_index = discards.size() - 1 - visible_start
 		if visible_index < 0:
 			return Rect2()
@@ -2075,9 +2135,9 @@ func hand_tray_text() -> String:
 		if selected_tile != "":
 			return "已选%s · Enter确认出牌" % tile_label(selected_tile)
 		var wall_count := get_wall_count()
-		if wall_count <= 12:
+		if wall_is_critical(wall_count):
 			return "牌墙将尽 · 余%d · 谨慎出牌" % wall_count
-		if wall_count <= 24 and not player_ai_assist_enabled():
+		if wall_is_low(wall_count) and not player_ai_assist_enabled():
 			return "牌墙偏少 · 余%d · 点击手牌出牌" % wall_count
 		if player_ai_assist_enabled():
 			var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
@@ -2094,6 +2154,18 @@ func hand_tray_text() -> String:
 			return "已选%s · Enter确认出牌" % tile_label(online_selected_tile)
 		return "等待对家" if not can_self_discard() else "点击手牌出牌"
 	return "等待对家"
+
+
+func hand_shortcut_hint_text() -> String:
+	if has_pending_danger_discard():
+		return "Enter 确认 · Esc 取消"
+	if has_pending_claim_window():
+		return pending_claim_shortcut_text(pending_claim_state().get("options", []))
+	if mode == "online_game" and online_waiting_for_server:
+		return "操作已提交 · 等待服务器确认"
+	if can_self_discard():
+		return "方向键选牌 · Enter 出牌"
+	return ""
 
 
 func hand_keyboard_selected_tile() -> String:
@@ -2138,6 +2210,31 @@ func advisor_recommendation_reason_text(report: Dictionary) -> String:
 		parts.append(safety)
 	return " · ".join(parts) if not parts.is_empty() else "保持牌形效率"
 
+
+func advisor_detail_text() -> String:
+	var lines: Array[String] = []
+	if offline_phase == "pending_claim":
+		lines.append("响应目标：%s" % tile_label(str(offline_pending_claim.get("tile", ""))))
+		lines.append("可选动作：%s" % claim_options_text(offline_pending_claim))
+		lines.append("决策顺序：先确认胡牌机会，再比较吃碰杠对牌型的影响。")
+		lines.append("当前提示：%s" % human_claim_hint_text())
+		return "\n".join(lines)
+	if can_self_discard():
+		var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
+		if reports.is_empty():
+			return "暂未形成稳定推荐。\n先整理孤张与搭子，再重新评估牌形。"
+		var best: Dictionary = reports[0]
+		lines.append("推荐出牌：%s" % advisor_primary_text(best))
+		lines.append("推荐理由：%s" % advisor_recommendation_reason_text(best))
+		lines.append("牌形收益：%s" % advisor_value_text(best))
+		lines.append("备选路线：%s" % advisor_options_text(reports, 5))
+		lines.append("防守提醒：%s" % advisor_defense_text(0, best))
+		return "\n".join(lines)
+	lines.append("当前阶段：%s" % advisor_turn_line())
+	lines.append("局面状态：%s" % current_status_text())
+	lines.append("防守提醒：%s" % advisor_defense_text(0))
+	return "\n".join(lines)
+
 func advisor_progress_text(report: Dictionary) -> String:
 	return "%s · 进%d/%d" % [
 		shanten_label(int(report.get("shanten", 8))),
@@ -2172,6 +2269,8 @@ func hand_tray_state_text() -> String:
 	if mode == "online_game":
 		if has_pending_claim_window():
 			return "响应"
+		if online_waiting_for_server:
+			return "同步"
 		return "出牌" if can_self_discard() else "等待"
 	return "准备"
 
@@ -2185,6 +2284,8 @@ func hand_tray_state_fill() -> Color:
 			return Color(0.46, 0.34, 0.56, 0.72)
 		"等待":
 			return Color(0.30, 0.28, 0.24, 0.68)
+		"同步":
+			return Color(0.30, 0.46, 0.58, 0.72)
 	return Color(0.34, 0.30, 0.24, 0.68)
 
 func hand_tray_state_border() -> Color:
@@ -2311,20 +2412,55 @@ func pending_claim_focus_text() -> String:
 	var pending = pending_claim_state()
 	if pending.is_empty():
 		return "响应窗口 · 可操作或过"
+	var focus_text := "响应窗口 · 可操作或过"
 	if bool(pending.get("rob_gang", false)):
-		return "抢杠窗口 · 优先确认胡牌"
+		focus_text = "抢杠窗口 · 优先确认胡牌"
+	else:
+		var options: Array = pending.get("options", [])
+		if options.has("hu"):
+			focus_text = "胡牌机会 · 可选择胡或过"
+		elif options.has("gang"):
+			focus_text = "杠牌机会 · 注意后续补牌"
+		elif options.has("peng") and options.has("chi"):
+			focus_text = "吃碰选择 · 比较进张与安全"
+		elif options.has("peng"):
+			focus_text = "碰牌机会 · 确认是否加速成型"
+		elif options.has("chi"):
+			focus_text = "吃牌机会 · 选择顺子组合"
+	var shortcut_text := pending_claim_shortcut_text(pending.get("options", []))
+	return focus_text + " · " + shortcut_text if shortcut_text != "" else focus_text
+
+
+func pending_claim_urgency_text() -> String:
+	var pending := pending_claim_state()
+	if pending.is_empty():
+		return ""
+	if bool(pending.get("rob_gang", false)):
+		return "紧迫度高 · 抢杠胡牌窗口"
 	var options: Array = pending.get("options", [])
 	if options.has("hu"):
-		return "胡牌机会 · 可选择胡或过"
-	if options.has("gang"):
-		return "杠牌机会 · 注意后续补牌"
-	if options.has("peng") and options.has("chi"):
-		return "吃碰选择 · 比较进张与安全"
-	if options.has("peng"):
-		return "碰牌机会 · 确认是否加速成型"
-	if options.has("chi"):
-		return "吃牌机会 · 选择顺子组合"
-	return "响应窗口 · 可操作或过"
+		return "紧迫度高 · 先确认胡牌"
+	if wall_is_critical():
+		return "紧迫度高 · 牌墙将尽，尽快决定"
+	if wall_is_low():
+		return "紧迫度中 · 牌墙偏少，比较进张"
+	return "紧迫度中 · 先看推荐，再选择响应"
+
+
+func pending_claim_shortcut_text(options: Array) -> String:
+	var shortcuts: Array[String] = []
+	var shortcut_by_claim := {
+		"chi": "C吃",
+		"peng": "P碰",
+		"gang": "G杠",
+		"hu": "H胡",
+	}
+	for claim in ["hu", "gang", "peng", "chi"]:
+		if options.has(claim):
+			shortcuts.append(str(shortcut_by_claim[claim]))
+	if not options.is_empty():
+		shortcuts.append("X过")
+	return " · ".join(shortcuts)
 
 
 func action_intent_rect_for_count(count: int) -> Rect2:
@@ -2413,6 +2549,26 @@ func action_button_tooltip(text: String) -> String:
 	if clean == "语音" or clean == "闭麦":
 		return "切换语音麦克风状态"
 	return clean
+
+
+func action_button_shortcut_hint(text: String) -> String:
+	var clean := text.strip_edges()
+	if clean == "过" or clean == "建议过" or clean == "荐过":
+		return "X"
+	if clean.begins_with("吃"):
+		return "C"
+	if clean.begins_with("碰"):
+		return "P"
+	if clean.begins_with("杠"):
+		return "G"
+	if clean.contains("自摸") or clean == "胡":
+		return "H"
+	if clean.begins_with("确认打"):
+		return "ENT"
+	if clean == "取消":
+		return "ESC"
+	return ""
+
 
 func action_dock_rect_for_count(count: int) -> Rect2:
 	var content_width = max(1.0, safe_content_pixel_size().x)
@@ -2620,6 +2776,7 @@ func finalize_action_bar_layout() -> void:
 		return
 	var count = action_bar_button_count()
 	if count <= 0:
+		configure_chat_action_focus_navigation()
 		return
 	var separation = action_button_separation_for_count(count)
 	var compact_claim_mode := has_pending_claim_window()
@@ -2681,7 +2838,107 @@ func finalize_action_bar_layout() -> void:
 			if waiting_button.name != "VoiceActionButton":
 				waiting_button.disabled = true
 				waiting_button.tooltip_text = "正在等待服务器确认本次操作"
-	configure_button_focus_navigation(action_bar, action_bar_default_focus_name())
+	if compact_claim_mode:
+		var response_grid := action_bar.get_node_or_null("PendingClaimResponseGrid") as GridContainer
+		if response_grid != null:
+			for response_button in response_grid.get_children():
+				if response_button is Button:
+					(response_button as Button).name = "PendingClaimPrimaryButton"
+					break
+	var default_focus_name := action_bar_default_focus_name()
+	configure_button_focus_navigation(action_bar, default_focus_name, default_focus_name != "")
+	configure_pending_claim_spatial_focus_navigation()
+	configure_chat_action_focus_navigation()
+
+
+func set_action_focus_neighbor(button: Button, direction: String, target: Button) -> void:
+	if button == null or target == null or not is_instance_valid(button) or not is_instance_valid(target):
+		return
+	if not button.is_inside_tree() or not target.is_inside_tree():
+		return
+	var target_path := target.get_path()
+	match direction:
+		"left":
+			button.focus_neighbor_left = target_path
+		"right":
+			button.focus_neighbor_right = target_path
+		"top":
+			button.focus_neighbor_top = target_path
+		"bottom":
+			button.focus_neighbor_bottom = target_path
+
+
+func configure_pending_claim_spatial_focus_navigation() -> void:
+	if action_bar == null or not is_instance_valid(action_bar) or not has_pending_claim_window():
+		return
+	var response_grid := action_bar.get_node_or_null("PendingClaimResponseGrid") as GridContainer
+	var response_buttons: Array[Button] = []
+	if response_grid != null:
+		for child in response_grid.get_children():
+			var response_button := child as Button
+			if response_button != null and response_button.visible and not response_button.disabled:
+				response_buttons.append(response_button)
+	var tail_lane := action_bar.get_node_or_null("PendingClaimSecondaryLane") as Control
+	var tail_buttons: Array[Button] = []
+	if tail_lane != null:
+		for child in tail_lane.get_children():
+			var tail_button := child as Button
+			if tail_button != null and tail_button.visible and not tail_button.disabled:
+				tail_buttons.append(tail_button)
+	if not response_buttons.is_empty():
+		var columns := maxi(1, response_grid.columns if response_grid != null else response_buttons.size())
+		var row_count := int(ceil(float(response_buttons.size()) / float(columns)))
+		for index in range(response_buttons.size()):
+			var button := response_buttons[index]
+			var row := int(index / columns)
+			var column := index % columns
+			var row_start := row * columns
+			var row_end := mini(response_buttons.size(), row_start + columns)
+			var left_index := row_end - 1 if column == 0 else index - 1
+			var right_index := row_start if index >= row_end - 1 else index + 1
+			var top_row := row_count - 1 if row == 0 else row - 1
+			var bottom_row := 0 if row == row_count - 1 else row + 1
+			var top_index := mini(response_buttons.size() - 1, top_row * columns + column)
+			var bottom_index := mini(response_buttons.size() - 1, bottom_row * columns + column)
+			set_action_focus_neighbor(button, "left", response_buttons[left_index])
+			set_action_focus_neighbor(button, "right", response_buttons[right_index])
+			set_action_focus_neighbor(button, "top", response_buttons[top_index])
+			if row == row_count - 1 and not tail_buttons.is_empty():
+				set_action_focus_neighbor(button, "bottom", tail_buttons[mini(column, tail_buttons.size() - 1)])
+			else:
+				set_action_focus_neighbor(button, "bottom", response_buttons[bottom_index])
+		if not tail_buttons.is_empty():
+			var last_row_start := (row_count - 1) * columns
+			for index in range(tail_buttons.size()):
+				var button := tail_buttons[index]
+				set_action_focus_neighbor(button, "left", tail_buttons[(index - 1 + tail_buttons.size()) % tail_buttons.size()])
+				set_action_focus_neighbor(button, "right", tail_buttons[(index + 1) % tail_buttons.size()])
+				set_action_focus_neighbor(button, "top", response_buttons[mini(response_buttons.size() - 1, last_row_start + index)])
+				set_action_focus_neighbor(button, "bottom", response_buttons[0])
+
+
+func configure_chat_action_focus_navigation() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button
+	if chat_button == null or chat_button.disabled or not chat_button.visible:
+		return
+	var action_buttons: Array[Button] = []
+	if action_bar != null and is_instance_valid(action_bar):
+		for button in action_bar_buttons():
+			if button != null and button.visible and not button.disabled:
+				action_buttons.append(button)
+	if action_buttons.is_empty():
+		return
+	chat_button.focus_mode = Control.FOCUS_ALL
+	var first_action := action_buttons[0]
+	var last_action := action_buttons[action_buttons.size() - 1]
+	chat_button.focus_neighbor_right = first_action.get_path()
+	chat_button.focus_next = first_action.get_path()
+	chat_button.focus_previous = last_action.get_path()
+	set_action_focus_neighbor(first_action, "left", chat_button)
+	first_action.focus_previous = chat_button.get_path()
+	last_action.focus_next = chat_button.get_path()
 
 func ended_action_button_widths(count: int) -> Array[float]:
 	var widths: Array[float] = []
@@ -2749,6 +3006,8 @@ func action_bar_default_focus_name() -> String:
 		return "NewMatchSecondaryButton"
 	if mode == "online_game" and online_waiting_for_server:
 		return "VoiceActionButton"
+	if has_pending_claim_window():
+		return "PendingClaimPrimaryButton"
 	return ""
 
 func action_button_separation_for_count(count: int) -> int:
@@ -6711,19 +6970,21 @@ func current_status_text() -> String:
 			return "牌墙已空"
 		var remaining_wall := get_wall_count()
 		var turn_summary := "轮到你出牌" if current_seat == 0 else "%s行牌" % players[current_seat]["name"]
-		if remaining_wall <= 12:
+		if wall_is_critical(remaining_wall):
 			return "牌墙将尽 · 余%d · %s" % [remaining_wall, turn_summary]
-		if remaining_wall <= 24:
+		if wall_is_low(remaining_wall):
 			return "牌墙偏少 · 余%d · %s" % [remaining_wall, turn_summary]
-			if current_seat == 0:
-				var selected_tile := hand_keyboard_selected_tile()
-				return "轮到你出牌 · 已选%s" % tile_label(selected_tile) if selected_tile != "" else "轮到你出牌"
-			return "%s行牌" % players[current_seat]["name"]
+		if current_seat == 0:
+			var selected_tile := hand_keyboard_selected_tile()
+			return "轮到你出牌 · 已选%s" % tile_label(selected_tile) if selected_tile != "" else "轮到你出牌"
+		return "%s行牌" % players[current_seat]["name"]
 	var phase = str(online_game.get("phase", ""))
 	if online_feedback != "":
 		return online_feedback
 	if phase == "ended":
 		return str(online_game.get("winnerText", "牌局结束"))
+	if online_waiting_for_server:
+		return "操作已提交 · 等待服务器确认"
 	if has_pending_claim_window():
 		var pending = pending_claim_state()
 		return "等待你响应%s" % tile_label(str(pending.get("tile", "")))
@@ -7204,6 +7465,14 @@ var chat_input: LineEdit = null
 var chat_panel_open := false
 
 
+func chat_panel_rect() -> Rect2:
+	# The game drawer lives in the top-right breathing room above the right meld
+	# lane. The lobby gets a taller reading area because it has no table geometry.
+	if mode == "online_lobby":
+		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
+	return Rect2(Vector2(0.800, 0.008), Vector2(0.985, 0.235))
+
+
 func add_chat_message(text: String) -> void:
 	var clean := str(text).strip_edges().left(CHAT_MESSAGE_MAX_LENGTH)
 	if clean == "":
@@ -7267,6 +7536,54 @@ func close_chat_panel() -> void:
 	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if chat_button != null and not chat_button.disabled:
 		chat_button.grab_focus()
+
+
+func toggle_advisor_detail_panel() -> void:
+	if mode != "offline" or not player_ai_assist_enabled():
+		return
+	advisor_detail_open = not advisor_detail_open
+	request_game_render()
+	if advisor_detail_open:
+		call_deferred("focus_named_control", "AdvisorDetailCloseButton")
+	else:
+		call_deferred("focus_named_control", "AdvisorDetailButton")
+
+
+func close_advisor_detail_panel() -> void:
+	if not advisor_detail_open:
+		return
+	advisor_detail_open = false
+	request_game_render()
+	call_deferred("focus_named_control", "AdvisorDetailButton")
+
+
+func toggle_table_log_archive() -> void:
+	if mode != "offline" and mode != "online_game":
+		return
+	table_log_archive_open = not table_log_archive_open
+	request_game_render()
+	if table_log_archive_open:
+		call_deferred("focus_named_control", "TableLogArchiveCloseButton")
+	else:
+		call_deferred("focus_named_control", "TableLogArchiveButton")
+
+
+func close_table_log_archive() -> void:
+	if not table_log_archive_open:
+		return
+	table_log_archive_open = false
+	request_game_render()
+	call_deferred("focus_named_control", "TableLogArchiveButton")
+
+
+func scroll_table_log_archive_to_end() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var archive_scroll := root_layer.find_child("TableLogArchiveScroll", true, false) as ScrollContainer
+	if archive_scroll == null:
+		return
+	var scrollbar := archive_scroll.get_v_scroll_bar()
+	archive_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
 
 func play_chat_send_panel_feedback(message: String = "") -> Control:
 	# r215: GPT chrome conversion

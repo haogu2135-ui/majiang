@@ -433,7 +433,7 @@ func _show_online_lobby_impl() -> void:
 	# The disconnected lobby is an operational form, so its full-page substrate
 	# uses the low-frequency authored bitmap. Decorative detail stays at the
 	# header edge instead of running behind inputs and calls to action.
-	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.44), "ui_dark_scrim", 0.18)
+	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.38), "ui_dark_scrim", 0.18)
 	panel.name = "OnlineLobbyLowFrequencyPagePlate"
 	root_layer.add_child(panel)
 	var lobby_shadow = make_soft_depth_panel(panel, rect_full(0.008, 0.025, 0.992, 1.020), Color(0.0, 0.0, 0.0, 0.10), 22)  # r415
@@ -492,7 +492,7 @@ func _show_online_lobby_impl() -> void:
 	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.22), "ui_dark_scrim", 0.18)
+	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.14), "ui_dark_scrim", 0.18)
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
@@ -511,12 +511,10 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", commercial_ui_font_size(20, 3), Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.120, 0.955, 0.650), Color(0.020, 0.034, 0.032, 0.18), "ui_dark_scrim", 0.14)
+	var input_group_backplate = make_layout_host(rect_full(0.045, 0.120, 0.955, 0.650))
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
-	if input_group_backplate is CanvasItem:
-		(input_group_backplate as CanvasItem).modulate = Color(1.0, 1.0, 1.0, 1.0)
-	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.035, false)
+	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.018, false)
 	if input_group_plate != null:
 		input_group_plate.name = "OnlineLobbyInputGPTGroupPlateTexture"
 		input_group_backplate.move_child(input_group_plate, 0)
@@ -572,10 +570,10 @@ func _show_online_lobby_impl() -> void:
 	start_row.add_theme_constant_override("separation", 10)
 	apply_rect(start_row, rect_full(0.06, 0.810, 0.94, 0.945))
 	form_panel.add_child(start_row)
-	var action_cluster_backplate = make_gpt_center_crop_plate_rect(rect_full(0.045, 0.666, 0.955, 0.958), Color(0.024, 0.036, 0.034, 0.22), "ui_dark_scrim", 0.24)
+	var action_cluster_backplate = make_layout_host(rect_full(0.045, 0.666, 0.955, 0.958))
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
 	form_panel.add_child(action_cluster_backplate)
-	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.040, false)
+	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.020, false)
 	if action_group_plate != null:
 		action_group_plate.name = "OnlineLobbyActionGPTGroupPlateTexture"
 		action_cluster_backplate.move_child(action_group_plate, 0)
@@ -586,9 +584,9 @@ func _show_online_lobby_impl() -> void:
 	var start_button_color := Color(0.74, 0.48, 0.16) if can_start_online else Color(0.38, 0.34, 0.28)
 	var start_button = make_lobby_action_button(start_button_text, start_button_color, func() -> void:
 		send_online_action({"type": "startGame"}, "开始游戏")
-	, 0.24, Vector2(196, 50))
+	, 0.24, Vector2(210, 50))
 	start_button.name = "OnlineLobbyPrimaryStartButton"
-	start_button.size_flags_stretch_ratio = 1.90
+	start_button.size_flags_stretch_ratio = 2.40
 	start_button.disabled = not can_start_online
 	start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
 	if not can_start_online:
@@ -596,11 +594,10 @@ func _show_online_lobby_impl() -> void:
 	start_row.add_child(start_button)
 	var return_button = make_lobby_action_button("返回菜单", Color(0.28, 0.34, 0.36), func() -> void:
 		show_menu()
-	, 0.28, Vector2(112, 50), 0.80 if can_start_online else 1.0)
+	, 0.28, Vector2(104, 50), 0.80)
 	return_button.name = "OnlineLobbySecondaryReturnButton"
-	return_button.size_flags_stretch_ratio = 0.72
-	if can_start_online:
-		return_button.modulate = Color(0.82, 0.84, 0.82, 0.80)
+	return_button.size_flags_stretch_ratio = 0.60
+	return_button.modulate = Color(0.82, 0.84, 0.82, 0.80)
 	start_row.add_child(return_button)
 	draw_online_lobby_action_flow_art(form_panel)
 
@@ -615,7 +612,7 @@ func _show_online_lobby_impl() -> void:
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(status_label)
-	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.22), "ui_dark_scrim", 0.20)
+	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.12), "ui_dark_scrim", 0.20)
 	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
 	panel.add_child(status_backplate)
 	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
@@ -633,7 +630,7 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.22), "ui_dark_scrim", 0.18)
+	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.14), "ui_dark_scrim", 0.18)
 	log_panel.name = "OnlineLobbyLogPanel"
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
@@ -643,10 +640,10 @@ func _show_online_lobby_impl() -> void:
 	if log_panel_frame != null:
 		log_panel_frame.name = "OnlineLobbyLogGPTPanelFrameTexture"
 		log_panel.move_child(log_panel_frame, 0)
-	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.10), "ui_dark_scrim", 0.14)
+	var log_readability_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.115, 0.965, 0.930), Color(0.020, 0.032, 0.030, 0.06), "ui_dark_scrim", 0.14)
 	log_readability_backplate.name = "OnlineLobbyLogReadabilityBackplate"
 	log_panel.add_child(log_readability_backplate)
-	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.26), "ui_dark_scrim", 0.18)
+	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.18), "ui_dark_scrim", 0.18)
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	log_panel.add_child(empty_state_backplate)
 	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(18, 2), Color(0.98, 0.94, 0.82), true)
@@ -1019,10 +1016,6 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.name = "RulesContentReadabilityBackplate"
 	panel.add_child(content_backplate)
 	content_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var content_surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.018, 0.650, 0.982), Color(0.022, 0.034, 0.032, 0.02), "ui_dark_scrim", 0.10)
-	content_surface.name = "RulesContentLowFrequencySurface"
-	content_backplate.add_child(content_surface)
-	content_backplate.move_child(content_surface, 0)
 	var content_sheen = make_layout_host(rect_full(0.030, 0.026, 0.970, 0.046))
 	content_sheen.name = "RulesContentTopSheen"
 	content_backplate.add_child(content_sheen)
@@ -1957,19 +1950,21 @@ func show_chat_panel() -> void:
 		return
 	chat_panel_open = true
 	# r215: GPT chrome conversion
-	var chat_panel = make_gpt_plate_rect(rect_full(0.02, 0.38, 0.28, 0.72), Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
+	var compact_chat := chat_panel_rect().size.x < 0.250
+	var chat_panel = make_gpt_plate_rect(chat_panel_rect(), Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
 	chat_panel.name = "ChatPanel"
 	chat_panel.z_index = 45
+	chat_panel.set_meta("layout_role", "top_safe_drawer" if mode == "online_game" else "lobby_drawer")
 	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	chat_panel.clip_contents = true
 	root_layer.add_child(chat_panel)
 	draw_chat_panel_art(chat_panel)
-	var chat_text = "\n".join(chat_messages.slice(-8))
+	var chat_text = "\n".join(chat_messages.slice(-3 if compact_chat else -8))
 	if chat_text.strip_edges() == "":
 		chat_text = "等待房间消息"
-	var chat_label = make_label(chat_panel, chat_text, 12, Color(0.82, 0.86, 0.80), false)
+	var chat_label = make_label(chat_panel, chat_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
 	chat_label.name = "ChatPanelMessageText"
-	apply_rect(chat_label, rect_full(0.075, 0.285, 0.940, 0.775))
+	apply_rect(chat_label, rect_full(0.060, 0.465 if compact_chat else 0.285, 0.940, 0.690 if compact_chat else 0.775))
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	chat_label.clip_text = true
@@ -1987,7 +1982,7 @@ func show_chat_panel() -> void:
 	quick_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	quick_row.add_theme_constant_override("separation", 3)
 	configure_passive_container(quick_row)
-	apply_rect(quick_row, rect_full(0.075, 0.205, 0.800, 0.270))
+	apply_rect(quick_row, rect_full(0.060, 0.205 if not compact_chat else 0.235, 0.940, 0.270 if not compact_chat else 0.450))
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -1995,8 +1990,8 @@ func show_chat_panel() -> void:
 			send_quick_chat(quick_message)
 		)
 		quick_button.name = "ChatQuickMessageButton_%d" % quick_index
-		quick_button.custom_minimum_size = Vector2(62, 30)
-		quick_button.add_theme_font_size_override("font_size", 11)
+		quick_button.custom_minimum_size = Vector2(46 if compact_chat else 62, 26 if compact_chat else 30)
+		quick_button.add_theme_font_size_override("font_size", 10 if compact_chat else 11)
 		quick_button.tooltip_text = "发送快捷消息：%s" % quick_message
 		quick_row.add_child(quick_button)
 
@@ -2017,15 +2012,15 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
-	apply_rect(chat_input, rect_full(0.075, 0.805, 0.690, 0.945))
+	apply_rect(chat_input, rect_full(0.060, 0.720 if compact_chat else 0.805, 0.690, 0.955 if compact_chat else 0.945))
 	chat_panel.add_child(chat_input)
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
 	send_button.name = "ChatSendButton"
-	send_button.custom_minimum_size = Vector2(62, 42)
-	send_button.add_theme_font_size_override("font_size", 13)
+	send_button.custom_minimum_size = Vector2(42 if compact_chat else 62, 28 if compact_chat else 42)
+	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
-	apply_rect(send_button, rect_full(0.710, 0.805, 0.940, 0.945))
+	apply_rect(send_button, rect_full(0.710, 0.720 if compact_chat else 0.805, 0.940, 0.955 if compact_chat else 0.945))
 	chat_panel.add_child(send_button)
 
 	configure_button_focus_navigation(chat_panel, "ChatInput")

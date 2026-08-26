@@ -123,7 +123,7 @@ capture_pages_for_size() {
 		--screens=01_menu,02_menu_settings,03_offline_battle,04_rules,05_stats || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
-		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading,23_online_lobby_connected,24_online_lobby_disconnect_recovery || return 1
+		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading,11_exit_confirm,12_toast,17_hand_tutorial,18_update_dialog,19_reset_progress,20_chat_panel,22_advisor,23_online_lobby_connected,24_online_lobby_disconnect_recovery || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
 		--screens=13_round_summary,14_danger_discard,15_pending_claim_full,16_win_detail,21_diagnostic

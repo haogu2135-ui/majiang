@@ -612,6 +612,8 @@ var last_score_deltas: Array[int] = []
 var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
 var current_human_advice: Array = []
 var current_seat_threat_reports: Dictionary = {}
+var advisor_detail_open := false
+var table_log_archive_open := false
 var tile_order: Dictionary = {}
 var tile_sort_order: Dictionary = {}
 var tile_metadata_ready = false
@@ -883,6 +885,7 @@ const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.635, 0.558),
 const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.645, 0.568), Vector2(0.972, 0.790))
 const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
+const CHAT_ACTION_BUTTON_RECT := Rect2(Vector2(0.430, 0.698), Vector2(0.520, 0.782))
 const TOP_HUD_BUTTON_SIZE := Vector2(56, 38)
 const TOP_HUD_MODE_BADGE_RECT := Rect2(Vector2(0.018, 0.14), Vector2(0.100, 0.44))
 const SAFE_CONTENT_MIN_MARGIN := Vector4(12.0, 8.0, 12.0, 10.0)
@@ -1658,9 +1661,19 @@ func make_small_button(text: String, color: Color, callback: Callable) -> Button
 	apply_button_style(button, color, 12, 2, 4)
 	return button
 
+func top_hud_button_tooltip(text: String) -> String:
+	match text.strip_edges():
+		"设置":
+			return "打开牌局设置、音频和操作辅助"
+		"返回":
+			return "离开当前牌桌并返回上一层 · Esc"
+		"更新":
+			return "检查并下载可用更新"
+	return text.strip_edges()
+
 func make_top_hud_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
-	button.tooltip_text = text
+	button.tooltip_text = top_hud_button_tooltip(text)
 	button.text = ""
 	button.custom_minimum_size = TOP_HUD_BUTTON_SIZE
 	button.clip_text = true
@@ -1809,7 +1822,7 @@ func set_button_focus_feedback_by_id(button_id: int, focused: bool) -> void:
 		return
 	focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.82 if focused else 0.0)
 
-func configure_button_focus_navigation(root: Control, default_focus_name: String = "") -> void:
+func configure_button_focus_navigation(root: Control, default_focus_name: String = "", grab_default_focus: bool = true) -> void:
 	if root == null or not is_instance_valid(root):
 		return
 	var focusable: Array[Button] = []
@@ -1831,6 +1844,8 @@ func configure_button_focus_navigation(root: Control, default_focus_name: String
 		button.focus_neighbor_right = next.get_path()
 		button.focus_neighbor_top = previous.get_path()
 		button.focus_neighbor_bottom = next.get_path()
+	if not grab_default_focus:
+		return
 	var requested: Button = null
 	if default_focus_name != "":
 		requested = root.find_child(default_focus_name, true, false) as Button

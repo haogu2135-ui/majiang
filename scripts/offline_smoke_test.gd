@@ -1524,6 +1524,17 @@ func run() -> void:
 	check(advisor_panel_parent.find_child("AdvisorMapTexture", true, false) != null, "advisor panel renders reusable decision-map PNG texture")
 	check(scene.optional_gpt_illustration_texture("advisor_gpt_panel") == null or advisor_panel_parent.find_child("AdvisorGPTPanelTexture", true, false) != null, "advisor panel consumes optional GPT panel texture when generated")
 	check(advisor_panel_parent.find_child("AdvisorPanelAnalysisScan", true, false) != null and advisor_panel_parent.find_child("AdvisorPanelAnalysisSource", true, false) != null and advisor_panel_parent.find_child("AdvisorPanelAnalysisGate", true, false) != null, "advisor panel renders analysis scan layer")
+	var advisor_detail_previous_mode: String = str(scene.mode)
+	var advisor_detail_previous_assist: bool = bool(scene.ai_assist_enabled)
+	var advisor_detail_previous_open: bool = bool(scene.advisor_detail_open)
+	scene.mode = "offline"
+	scene.ai_assist_enabled = true
+	scene.advisor_detail_open = true
+	scene.draw_advisor_detail_panel(advisor_panel_parent)
+	check(advisor_panel_parent.find_child("AdvisorDetailPanel", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailMapTexture", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailRoute", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailRouteFill", true, false) != null, "advisor detail panel renders a wide in-panel rationale route")
+	scene.mode = advisor_detail_previous_mode
+	scene.ai_assist_enabled = advisor_detail_previous_assist
+	scene.advisor_detail_open = advisor_detail_previous_open
 	dispose_node(advisor_panel_parent)
 	var advisor_card_parent = Control.new()
 	root.add_child(advisor_card_parent)
@@ -1659,6 +1670,7 @@ func run() -> void:
 	check(scene.find_child("ChatPanelBrocadeTexture", true, false) != null and scene.find_child("ChatStreamTexture", true, false) != null, "chat panel renders reusable brocade and stream PNG textures")
 	check(scene.optional_gpt_illustration_texture("chat_gpt_panel") == null or scene.find_child("ChatGPTPanelTexture", true, false) != null, "chat panel consumes optional GPT panel texture when generated")
 	check(scene.find_child("ChatPanel", true, false) != null and scene.find_child("ChatPanelArt", true, false) != null and scene.find_child("ChatPanelHeader", true, false) != null and scene.find_child("ChatPanelCountBadge", true, false) != null, "chat panel renders illustrated header and count badge")
+	check(scene.find_child("ChatPanelCloseButton", true, false) != null and scene.find_child("ChatPanelMessageText", true, false) != null and scene.find_child("ChatPanelQuickMessages", true, false) != null, "chat panel exposes close message and quick-message controls")
 	check(scene.find_child("ChatPanelHeaderBridge", true, false) != null and scene.find_child("ChatPanelHeaderBridgeFill", true, false) != null and scene.find_child("ChatPanelHeaderBridgeGate", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelHeaderBridgeTick_") == 2, "chat panel renders header-to-feed bridge route")
 	check(scene.find_child("ChatPanelActivityRail", true, false) != null and scene.find_child("ChatPanelLatestGlow", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelMessageNode_") == 3, "chat panel renders activity rail and one visible node per recent message")
 	check(count_nodes_with_name_prefix(scene, "ChatPanelSenderChip_") == 3 and count_nodes_with_name_prefix(scene, "ChatPanelUnreadBead_") == 3, "chat panel renders sender chips and unread beads")
@@ -2782,15 +2794,29 @@ func run() -> void:
 	check(log_parent.find_child("TableLogArchiveCommit", true, false) != null and log_parent.find_child("TableLogArchiveCommitSource", true, false) != null and log_parent.find_child("TableLogArchiveCommitRoute", true, false) != null and log_parent.find_child("TableLogArchiveCommitFill", true, false) != null and log_parent.find_child("TableLogArchiveCommitGate", true, false) != null, "table log renders archive commit route")
 	check(log_parent.find_child("TableLogArchiveCommitSeal", true, false) != null and log_parent.find_child("TableLogArchiveCommitGlyph", true, false) != null and count_nodes_with_name_prefix(log_parent, "TableLogArchiveCommitTick_") == 3, "table log archive commit renders seal glyph and rhythm ticks")
 	check(has_label_text(log_parent, "4条"), "table log shows total event count")
+	var table_archive_previous_open: bool = bool(scene.table_log_archive_open)
+	scene.mode = "offline"
+	scene.table_log_archive_open = true
+	scene.draw_table_log_archive_panel(log_parent)
+	check(log_parent.find_child("TableLogArchiveButton", true, false) != null, "table log exposes the history button in its compact ledger")
+	check(log_parent.find_child("TableLogArchivePanel", true, false) != null, "table log opens a dedicated archive panel")
+	check(log_parent.find_child("TableLogArchiveTexture", true, false) != null and log_parent.find_child("TableLogArchiveTitle", true, false) != null and log_parent.find_child("TableLogArchiveCount", true, false) != null, "table log archive panel keeps its texture title and count")
+	check(log_parent.find_child("TableLogArchiveCloseButton", true, false) != null and log_parent.find_child("TableLogArchiveRoute", true, false) != null and log_parent.find_child("TableLogArchiveScroll", true, false) != null and log_parent.find_child("TableLogArchiveList", true, false) != null, "table log archive exposes close route and native scroll list")
+	check(count_nodes_with_name_prefix(log_parent, "TableLogArchiveRow_") >= 3, "table log archive exposes at least three recent rows")
+	scene.table_log_archive_open = table_archive_previous_open
 	dispose_node(log_parent)
 	var empty_log_parent = Control.new()
 	root.add_child(empty_log_parent)
 	scene.table_logs.clear()
 	scene.draw_table_log(empty_log_parent)
+	scene.table_log_archive_open = true
+	scene.draw_table_log_archive_panel(empty_log_parent)
 	check(empty_log_parent.find_child("TableLogEmptyArt", true, false) != null and empty_log_parent.find_child("TableLogEmptyRail", true, false) != null and count_nodes_with_name_prefix(empty_log_parent, "TableLogEmptyBead_") == 3, "empty table log renders waiting-state illustration")
 	check(empty_log_parent.find_child("TableLogEmptyListenRoute", true, false) != null and empty_log_parent.find_child("TableLogEmptyListenFill", true, false) != null and empty_log_parent.find_child("TableLogEmptyListenGate", true, false) != null and empty_log_parent.find_child("TableLogEmptySourceNode", true, false) != null, "empty table log renders listen-ready route")
 	check(count_nodes_with_name_prefix(empty_log_parent, "TableLogEmptyListenTick_") == 3, "empty table log renders listen-ready rhythm ticks")
 	check(has_label_text(empty_log_parent, "等待开局"), "empty table log keeps waiting-state text visible")
+	check(empty_log_parent.find_child("TableLogArchiveEmpty", true, false) != null, "empty table log archive exposes an explicit empty state")
+	scene.table_log_archive_open = false
 	dispose_node(empty_log_parent)
 	scene.players[0]["flower_tiles"] = ["H1", "H2"]
 	var flower_strip_parent = Control.new()

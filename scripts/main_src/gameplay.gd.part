@@ -44,10 +44,10 @@ func ai_pace_multiplier() -> float:
 			mult = 0.86
 		_:
 			mult = 1.0
-	var wall = get_wall_count() if mode == "offline" else 84
-	if wall <= 20:
+	var wall = get_wall_count() if mode == "offline" else maxi(0, int(round(float(display_wall_total()) * 0.58)))
+	if wall <= wall_phase_threshold(20):
 		mult *= 0.88
-	elif wall <= 36:
+	elif wall <= wall_phase_threshold(36):
 		mult *= 0.94
 	if mode == "offline" and offline_hand_number >= max(1, MATCH_MAX_HANDS - 1):
 		mult *= 0.92
@@ -149,6 +149,9 @@ func clear_screen() -> void:
 	loading_screen_active = false
 	if mode != "online_lobby" and mode != "online_game":
 		chat_panel_open = false
+	if mode != "offline" and mode != "online_game":
+		advisor_detail_open = false
+		table_log_archive_open = false
 	clear_screen_tweens()
 	clear_toast_on_mode_change()
 	for child in get_children():
@@ -400,8 +403,12 @@ func render_game() -> void:
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
+	if table_log_archive_open:
+		draw_table_log_archive_panel(root_layer)
 	draw_hand(root_layer)
 	draw_advisor_panel(root_layer)
+	if advisor_detail_open:
+		draw_advisor_detail_panel(root_layer)
 	draw_actions(root_layer)
 	draw_round_summary(root_layer)
 	if chat_panel_open:
@@ -477,6 +484,8 @@ func refresh_ai_advisor_panel() -> void:
 	if mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled():
 		return
 	draw_advisor_panel(root_layer)
+	if advisor_detail_open:
+		draw_advisor_detail_panel(root_layer)
 	var new_panel = root_layer.get_node_or_null("AdvisorPanel")
 	if new_panel != null and old_panel_index >= 0:
 		root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))

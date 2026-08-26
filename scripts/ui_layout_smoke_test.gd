@@ -72,6 +72,8 @@ func seed_online_pending_claim_layout_state(scene) -> void:
 		"youSeat": 0,
 		"currentSeat": 0,
 		"wallCount": 55,
+		"wallTotal": 108,
+		"ruleVariant": "sichuan",
 		"hand": ["1W", "2W", "3W", "3W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "R"],
 		"lastDiscard": "3W",
 		"lastDiscardSeat": 3,
@@ -501,6 +503,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_top_hud_buttons(scene, actual_viewport)
 	check_compact_seat_panels(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
+	await check_table_log_archive_layout(scene, actual_viewport)
 	seed_online_pending_claim_layout_state(scene)
 	scene.clear_screen()
 	scene.draw_game_top_hud(scene.root_layer)
@@ -514,6 +517,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await process_frame
 	check_pending_claim_action_bar(scene, actual_viewport)
 	check_online_pending_claim_layout(scene, actual_viewport)
+	await check_chat_panel_layout(scene, actual_viewport)
 	seed_offline_battle_layout_state(scene)
 	scene.render_game()
 	await process_frame
@@ -521,6 +525,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.render_game()
 	await process_frame
 	check_advisor_interaction_layout(scene, actual_viewport)
+	await check_advisor_detail_layout(scene, actual_viewport)
 	scene.ai_assist_enabled = false
 	scene.render_game()
 	await process_frame
@@ -771,6 +776,13 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 	var score_strip = scene.find_child("ScoreStrip", true, false) as Control
 	check(hud != null and hud.clip_contents, "top HUD clips decorative artwork at %s" % viewport_size)
 	check(title != null and status != null and title_back != null and status_back != null and wall_back != null and wall_text != null and wall_meter != null, "top HUD exposes readable title status and wall groups at %s" % viewport_size)
+	check(scene.rule_wall_size("guangdong") == 136 and scene.rule_wall_size("sichuan") == 108 and scene.rule_wall_size("yangzhou") == 144, "rule profiles expose their actual wall totals at %s" % viewport_size)
+	var saved_active_variant := str(scene.offline_active_rule_variant)
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_GUANGDONG
+	check(scene.display_wall_total() == 136 and scene.wall_low_threshold() == 23 and scene.wall_critical_threshold() == 17, "Guangdong wall thresholds scale from the active 136-tile rule at %s" % viewport_size)
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_SICHUAN
+	check(scene.display_wall_total() == 108 and scene.wall_low_threshold() == 18 and scene.wall_critical_threshold() == 14, "Sichuan wall thresholds scale from the active 108-tile rule at %s" % viewport_size)
+	scene.offline_active_rule_variant = saved_active_variant
 	if title != null and status != null:
 		var title_rect = screen_rect(title)
 		var status_rect = screen_rect(status)
@@ -793,7 +805,7 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 		var wall_meter_rect = screen_rect(wall_meter)
 		check(wall_back_rect.grow(1.0).encloses(wall_text_rect) and wall_back_rect.grow(1.0).encloses(wall_meter_rect), "top HUD wall backplate contains text and meter at %s" % viewport_size)
 		check(wall_text.clip_text and wall_text.get_theme_font_size("font_size") >= 11 and relative_luma(wall_text.get_theme_color("font_color")) >= 0.78, "top HUD wall text remains readable at %s" % viewport_size)
-		check(str(wall_text.text).begins_with("余牌 ") and str(wall_text.text).contains(" · 上张 "), "top HUD wall text keeps explicit remaining-wall and last-discard labels at %s" % viewport_size)
+		check(str(wall_text.text).begins_with("余牌 ") and wall_text.tooltip_text.contains("牌墙剩余") and wall_text.tooltip_text.contains("上张"), "top HUD wall counter and last-discard context remain explicit at %s" % viewport_size)
 		if status != null:
 			check(screen_rect(status).end.x <= wall_back_rect.position.x - 2.0, "top HUD status clears wall badge at %s" % viewport_size)
 	if scene.mode == "offline":
@@ -805,6 +817,7 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 		check(button != null, "top HUD has %s button at %s" % [label_text, viewport_size])
 		if button == null:
 			continue
+		check(button.tooltip_text != label_text and button.tooltip_text != "", "top HUD %s tooltip explains the full action at %s" % [label_text, viewport_size])
 		var rect = screen_rect(button)
 		rects.append(rect)
 		check(rect.size.x >= 44.0 and rect.size.y >= 36.0, "top HUD %s keeps practical touch target at %s" % [label_text, viewport_size])
@@ -1007,6 +1020,8 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 			previous_right = -1.0
 		check(rect.position.x >= previous_right - 0.5, "pending claim buttons remain ordered within each wrapped row at %s" % viewport_size)
 		check(button.find_child("ActionButtonEnergyDot_0", true, false) == null, "pending claim %s uses compact action styling without energy dots at %s" % [text, viewport_size])
+		var shortcut_hint = button.find_child("ActionButtonShortcutHint", true, false) as Label
+		check(shortcut_hint != null and shortcut_hint.text == scene.action_button_shortcut_hint(text) and button.get_meta("action_shortcut", "") == shortcut_hint.text, "pending claim %s exposes its keyboard shortcut in the action node at %s" % [text, viewport_size])
 		previous_right = rect.end.x
 		previous_top = rect.position.y
 	check(found == expected.size(), "pending claim complex action bar renders all legal choices at %s" % viewport_size)
@@ -1046,9 +1061,23 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		for tail_button in tail_buttons:
 			check(tail_lane_rect.grow(1.0).encloses(screen_rect(tail_button)) and screen_rect(tail_button).size.x >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH - 0.5, "pending claim tail button stays in its secondary lane at %s" % viewport_size)
 	check(response_rows.size() + scene.pending_claim_action_tail_count() == scene.pending_claim_action_row_count(pending_buttons.size()), "pending claim response and tail rows form the complete action stack at %s" % viewport_size)
+	if response_grid is GridContainer and not response_buttons.is_empty():
+		var focus_columns := maxi(1, (response_grid as GridContainer).columns)
+		var expected_right := response_buttons[1] if focus_columns > 1 and response_buttons.size() > 1 else response_buttons[0]
+		var expected_bottom := response_buttons[focus_columns] if response_buttons.size() > focus_columns else (tail_buttons[0] if not tail_buttons.is_empty() else response_buttons[0])
+		check(response_buttons[0].focus_neighbor_right == expected_right.get_path(), "pending claim left/right focus follows the visible response row at %s" % viewport_size)
+		check(response_buttons[0].focus_neighbor_bottom == expected_bottom.get_path(), "pending claim up/down focus follows the visible response column at %s" % viewport_size)
+		if not tail_buttons.is_empty():
+			var last_response := response_buttons[response_buttons.size() - 1]
+			var last_column := (response_buttons.size() - 1) % focus_columns
+			var expected_tail := tail_buttons[mini(last_column, tail_buttons.size() - 1)]
+			var last_row_start := int((response_buttons.size() - 1) / focus_columns) * focus_columns
+			var expected_tail_top := response_buttons[mini(response_buttons.size() - 1, last_row_start + mini(last_column, tail_buttons.size() - 1))]
+			check(last_response.focus_neighbor_bottom == expected_tail.get_path() and expected_tail.focus_neighbor_top == expected_tail_top.get_path(), "pending claim secondary lane is reachable from the final response row at %s" % viewport_size)
 	for text in removed_long_labels:
 		check(first_button_with_text(scene.action_bar, text) == null, "pending claim action bar omits long label %s at %s" % [text, viewport_size])
 	var summary = scene.find_child("PendingClaimIllustration", true, false) as Control
+	var urgency_text = scene.find_child("PendingClaimUrgencyText", true, false) as Label
 	var dock = scene.find_child("ActionButtonDock", true, false) as Control
 	var dock_shadow = scene.find_child("ActionDock3DCastShadow", true, false) as Control
 	var dock_apron = scene.find_child("ActionDock3DFrontApron", true, false) as Control
@@ -1057,7 +1086,9 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 	var source_text = scene.find_child("PendingClaimSourceText", true, false) as Label
 	var tile_name = scene.find_child("PendingClaimTileName", true, false) as Label
 	check(summary != null and dock != null and dock_shadow != null and dock_apron != null and hand != null, "pending claim renders summary, physical dock shell, and hand tray at %s" % viewport_size)
-	check(context_tile != null and source_text != null and tile_name != null, "pending claim exposes readable source and real target tile context at %s" % viewport_size)
+	check(context_tile != null and source_text != null and tile_name != null and urgency_text != null, "pending claim exposes readable source, urgency, and real target tile context at %s" % viewport_size)
+	if urgency_text != null:
+		check(urgency_text.text.contains("紧迫度") and urgency_text.clip_text, "pending claim urgency stays visible and clipped inside its context strip at %s" % viewport_size)
 	check(scene.find_child("ActionDock3DRearShell", true, false) != null and scene.find_child("ActionDock3DJadeTrack", true, false) != null, "action dock exposes rear shell and jade track at %s" % viewport_size)
 	var seat_shell = scene.find_child("SeatPanel3DRearShell_0", true, false)
 	var seat_lip = scene.find_child("SeatPanel3DJadeLip_0", true, false)
@@ -1114,7 +1145,9 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		var panel_plate = first_button.find_child("ActionButtonPanelPlate", true, false) as TextureRect
 		if panel_plate != null:
 			check(panel_plate.modulate.a >= 0.50 and panel_plate.modulate.a <= 0.70 and panel_plate.show_behind_parent, "pending claim compact GPT panel provides a dark text backing behind the native label at %s" % viewport_size)
-	check(scene.find_child("ActionIntentDock", true, false) == null, "pending claim omits extra action intent strip at %s" % viewport_size)
+		check(scene.find_child("ActionIntentDock", true, false) == null, "pending claim omits extra action intent strip at %s" % viewport_size)
+	var primary_claim = scene.find_child("PendingClaimPrimaryButton", true, false) as Button
+	check(primary_claim != null and primary_claim.has_focus(), "pending claim gives keyboard focus to the first legal response at %s" % viewport_size)
 
 func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var pending = scene.pending_claim_state()
@@ -1135,14 +1168,125 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var source_text = scene.find_child("PendingClaimSourceText", true, false) as Label
 	var tile_name = scene.find_child("PendingClaimTileName", true, false) as Label
 	var focus_text = scene.find_child("PendingClaimFocusText", true, false) as Label
+	var urgency_text = scene.find_child("PendingClaimUrgencyText", true, false) as Label
+	var mode_badge = scene.find_child("TopHudModeBadge", true, false) as Control
+	var wall_text = scene.find_child("TopHudWallText", true, false) as Label
+	var mode_label: Label = null
+	if mode_badge != null:
+		for badge_child in mode_badge.get_children():
+			if badge_child is Label:
+				mode_label = badge_child as Label
+				break
 	check(source_text != null and source_text.text == "北海若 打出", "online pending context names the discard source at %s" % viewport_size)
 	check(tile_name != null and tile_name.text == scene.tile_label("3W"), "online pending context shows the server tile at %s" % viewport_size)
 	check(focus_text != null and focus_text.text.contains("胡牌机会"), "online pending context explains the response priority at %s" % viewport_size)
+	check(focus_text != null and focus_text.text.contains("H胡") and focus_text.text.contains("X过"), "online pending context exposes response keyboard shortcuts at %s" % viewport_size)
+	check(urgency_text != null and urgency_text.text.contains("紧迫度高") and urgency_text.clip_text, "online pending context exposes a visible urgency cue at %s" % viewport_size)
+	check(mode_badge != null and mode_label != null and mode_label.text == "联机 · 四川" and mode_badge.tooltip_text.contains("108张"), "online HUD displays the server rule profile instead of the local setting at %s" % viewport_size)
+	check(wall_text != null and wall_text.text.contains("55/108") and wall_text.tooltip_text.contains("55/108"), "online HUD scales the wall meter and tooltip to the server total at %s" % viewport_size)
+	var live_status = scene.find_child("TopHudStatus", true, false) as Label
+	var status_before: String = live_status.text if live_status != null else ""
+	scene.set_status("即时反馈：联机操作已送达")
+	check(live_status != null and live_status.text == "即时反馈：联机操作已送达", "online gameplay feedback updates the visible top HUD status immediately at %s" % viewport_size)
+	if status_before != "":
+		scene.set_status(status_before)
 	var action_dock = scene.find_child("ActionButtonDock", true, false) as Control
 	var summary = scene.find_child("PendingClaimIllustration", true, false) as Control
 	check(action_dock != null and summary != null, "online pending mounts context and action dock together at %s" % viewport_size)
 	if action_dock != null and summary != null:
 		check(screen_rect(summary).end.y <= screen_rect(action_dock).position.y - 5.0, "online pending context clears the action dock at %s" % viewport_size)
+	var waiting_state_before: bool = bool(scene.online_waiting_for_server)
+	var waiting_feedback_before: String = str(scene.online_feedback)
+	scene.online_waiting_for_server = true
+	scene.online_feedback = ""
+	scene.render_game()
+	await settle_layout()
+	var waiting_status = scene.find_child("TopHudStatus", true, false) as Label
+	var waiting_action = scene.find_child("ActionDockWaitingStatus", true, false) as Label
+	check(scene.current_status_text() == "操作已提交 · 等待服务器确认" and waiting_status != null and waiting_status.text == scene.current_status_text(), "online submitted state is explicit in the top HUD at %s" % viewport_size)
+	check(waiting_action != null and waiting_action.text.contains("等待服务器"), "online submitted state is explicit in the action dock at %s" % viewport_size)
+	var online_chat_button := scene.find_child("ChatActionButton", true, false) as Button
+	var online_response_buttons: Array[Button] = []
+	if pending_grid != null:
+		collect_buttons(pending_grid, online_response_buttons)
+	var waiting_voice := scene.find_child("VoiceActionButton", true, false) as Button
+	var online_first_action: Button = waiting_voice if scene.online_waiting_for_server else (online_response_buttons[0] if not online_response_buttons.is_empty() else waiting_voice)
+	check(online_chat_button != null and online_first_action != null and online_chat_button.focus_neighbor_right == online_first_action.get_path(), "online chat is reachable from the response action lane via directional focus at %s" % viewport_size)
+	scene.online_waiting_for_server = waiting_state_before
+	scene.online_feedback = waiting_feedback_before
+	scene.render_game()
+	await settle_layout()
+
+func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
+	scene.show_chat_panel()
+	await settle_layout(0.04)
+	var panel = scene.find_child("ChatPanel", true, false) as Control
+	var input = scene.find_child("ChatInput", true, false) as LineEdit
+	var close_button = scene.find_child("ChatPanelCloseButton", true, false) as Button
+	var send_button = scene.find_child("ChatSendButton", true, false) as Button
+	check(panel != null and input != null and close_button != null and send_button != null, "online chat exposes drawer, input, close, and send controls at %s" % viewport_size)
+	if panel != null:
+		var panel_rect = screen_rect(panel)
+		check(panel.get_meta("layout_role", "") == "top_safe_drawer", "online game chat uses the top-safe drawer route at %s" % viewport_size)
+		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "online game chat drawer stays inside viewport at %s" % viewport_size)
+		check(panel_rect.position.x >= viewport_size.x * 0.76 and panel_rect.end.y <= viewport_size.y * 0.29, "online game chat drawer stays in the upper-right safe lane at %s" % viewport_size)
+		for seat in range(4):
+			var seat_panel = scene.find_child("SeatPanel_%d" % seat, true, false) as Control
+			var meld_area = scene.find_child("MeldArea_%d" % seat, true, false) as Control
+			var discard_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as Control
+			if seat_panel != null:
+				check(not rects_overlap(panel_rect, screen_rect(seat_panel)), "online chat clears seat HUD %d at %s" % [seat, viewport_size])
+			if meld_area != null:
+				check(not rects_overlap(panel_rect, screen_rect(meld_area)), "online chat clears meld lane %d at %s" % [seat, viewport_size])
+			if discard_grid != null:
+				check(not rects_overlap(panel_rect, screen_rect(discard_grid)), "online chat clears discard river %d at %s" % [seat, viewport_size])
+	if input != null and panel != null:
+		check(screen_rect(panel).grow(1.0).encloses(screen_rect(input)) and input.max_length == scene.CHAT_MESSAGE_MAX_LENGTH, "online chat input stays inside the drawer and preserves its length boundary at %s" % viewport_size)
+	if close_button != null and send_button != null:
+		check(close_button.tooltip_text.contains("关闭") and send_button.tooltip_text.contains("Enter"), "online chat close/send controls expose complete action hints at %s" % viewport_size)
+	scene.close_chat_panel()
+	await settle_layout()
+	check(scene.find_child("ChatPanel", true, false) == null and not scene.chat_panel_open, "online chat closes cleanly and clears its open state at %s" % viewport_size)
+
+func check_table_log_archive_layout(scene, viewport_size: Vector2) -> void:
+	var saved_logs: Array = scene.table_logs.duplicate()
+	while scene.table_logs.size() < 4:
+		scene.table_logs.append("第%02d巡：牌桌状态已同步" % (scene.table_logs.size() + 1))
+	scene.render_game()
+	await settle_layout()
+	var archive_button = scene.find_child("TableLogArchiveButton", true, false) as Button
+	check(archive_button != null and archive_button.text == "历史" and archive_button.tooltip_text.contains("完整"), "table log keeps an explicit history action in the compact ledger at %s" % viewport_size)
+	scene.toggle_table_log_archive()
+	await settle_layout(0.04)
+	var panel = scene.find_child("TableLogArchivePanel", true, false) as Control
+	var scroll = scene.find_child("TableLogArchiveScroll", true, false) as ScrollContainer
+	var list = scene.find_child("TableLogArchiveList", true, false) as VBoxContainer
+	var close_button = scene.find_child("TableLogArchiveCloseButton", true, false) as Button
+	var title = scene.find_child("TableLogArchiveTitle", true, false) as Label
+	check(panel != null and scroll != null and list != null and close_button != null and title != null, "table log archive exposes a dedicated scroll panel and close route at %s" % viewport_size)
+	if panel != null:
+		var panel_rect = screen_rect(panel)
+		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "table log archive stays inside viewport at %s" % viewport_size)
+		var dock = scene.find_child("ActionButtonDock", true, false) as Control
+		var hand = scene.find_child("HandTray", true, false) as Control
+		check((dock == null or not rects_overlap(panel_rect, screen_rect(dock))) and (hand == null or not rects_overlap(panel_rect, screen_rect(hand))), "table log archive clears action dock and hand tray at %s" % viewport_size)
+	if list != null:
+		var rows = controls_with_name_prefix(list, "TableLogArchiveRow_")
+		check(rows.size() >= 3, "table log archive exposes at least three recent records at %s" % viewport_size)
+		for row in rows:
+			var row_label := row as Label
+			check(row_label != null and not row_label.clip_text and row_label.tooltip_text != "", "table log archive keeps full row text available in the scroll surface at %s" % viewport_size)
+	if scroll != null:
+		check(scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "table log archive uses native vertical touch scrolling at %s" % viewport_size)
+	check(close_button == null or close_button.has_focus(), "table log archive returns focus to its close route at %s" % viewport_size)
+	scene.close_table_log_archive()
+	await settle_layout()
+	scene.table_logs.clear()
+	for log_item in saved_logs:
+		scene.table_logs.append(str(log_item))
+	scene.render_game()
+	await settle_layout()
+
 
 func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	var panel = scene.find_child("AdvisorPanel", true, false) as Control
@@ -1160,11 +1304,39 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	for heading in ["响应", "牌局", "防守"]:
 		var card = panel.find_child("AdvisorInfoCard_%s" % heading, true, false) as Control
 		check(card != null and panel_rect.grow(1.0).encloses(screen_rect(card)), "AI advisor %s card stays inside the panel at %s" % [heading, viewport_size])
+	var detail_button = scene.find_child("AdvisorDetailButton", true, false) as Button
+	check(detail_button != null and detail_button.text == "详解" and detail_button.tooltip_text.contains("展开"), "AI advisor exposes an explicit detail action at %s" % viewport_size)
 	var recommended_count := 0
 	for child in scene.action_bar_buttons():
 		if str(child.text).contains("荐"):
 			recommended_count += 1
 	check(recommended_count > 0, "AI advisor exposes a recommended claim action at %s" % viewport_size)
+
+func check_advisor_detail_layout(scene, viewport_size: Vector2) -> void:
+	var detail_button = scene.find_child("AdvisorDetailButton", true, false) as Button
+	if detail_button == null:
+		check(false, "AI advisor detail action is available before expansion at %s" % viewport_size)
+		return
+	detail_button.button_down.emit()
+	await settle_layout(0.04)
+	var panel = scene.find_child("AdvisorDetailPanel", true, false) as Control
+	var text = scene.find_child("AdvisorDetailText", true, false) as Label
+	var close_button = scene.find_child("AdvisorDetailCloseButton", true, false) as Button
+	check(panel != null and text != null and close_button != null, "AI advisor opens a dedicated detail panel at %s" % viewport_size)
+	if panel != null:
+		var panel_rect = screen_rect(panel)
+		check(panel_rect.size.x >= viewport_size.x * 0.55, "AI advisor detail panel provides a wide reading lane at %s" % viewport_size)
+		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "AI advisor detail panel stays inside viewport at %s" % viewport_size)
+		var dock = scene.find_child("ActionButtonDock", true, false) as Control
+		var hand = scene.find_child("HandTray", true, false) as Control
+		check((dock == null or not rects_overlap(panel_rect, screen_rect(dock))) and (hand == null or not rects_overlap(panel_rect, screen_rect(hand))), "AI advisor detail clears action dock and hand tray at %s" % viewport_size)
+	if text != null:
+		check(text.text.contains("响应目标") and text.clip_text and text.tooltip_text == text.text and screen_rect(text).size.x >= viewport_size.x * 0.40, "AI advisor detail exposes readable in-panel rationale instead of tooltip-only copy at %s" % viewport_size)
+	check(close_button == null or close_button.has_focus(), "AI advisor detail gives focus to its close route at %s" % viewport_size)
+	if close_button != null:
+		close_button.button_down.emit()
+	await settle_layout()
+	check(scene.find_child("AdvisorDetailPanel", true, false) == null and not scene.advisor_detail_open, "AI advisor detail closes cleanly at %s" % viewport_size)
 
 func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	var panel = scene.find_child("DangerDiscardConfirmationArt", true, false) as Control
@@ -1322,8 +1494,10 @@ func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
 	var baseline = scene.find_child("HandTrayTileBaseline", true, false) as Control
 	var hand_tile_samples = controls_with_name_prefix(scene, "HandTile_")
 	var hand_tile_sample = hand_tile_samples[0] if not hand_tile_samples.is_empty() else null
+	var shortcut_hint = scene.find_child("HandTrayShortcutHint", true, false) as Label
 	var realtime_3d_stage = null
 	check(hand != null and stage != null and ground_shadow != null and back_rail != null and baseline != null and hand_tile_sample != null, "hand tray exposes tile stage, 2D hand tiles, ground shadow, back rail, and baseline at %s" % viewport_size)
+	check(shortcut_hint != null and shortcut_hint.text != "", "hand tray exposes a dedicated keyboard or response shortcut line at %s" % viewport_size)
 	if hand == null:
 		return
 	var hand_rect = screen_rect(hand)
@@ -1442,9 +1616,13 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 			var group_rect := screen_rect(meld_group)
 			check(meld_rect.grow(1.0).encloses(group_rect), "battle meld group %d/%d stays inside its assigned lane at %s" % [meld_seat, group_count, viewport_size])
 			var expected_vertical: bool = bool(scene.seat_meld_is_vertical(meld_seat))
+			check(str(meld_area.get_meta("orientation", "")) == ("vertical" if expected_vertical else "horizontal") and int(meld_area.get_meta("seat", -1)) == meld_seat, "battle meld area %d exposes its seat-facing orientation metadata at %s" % [meld_seat, viewport_size])
+			var lane_tile_size = meld_area.get_meta("tile_size", Vector2.ZERO)
+			check(lane_tile_size is Vector2 and lane_tile_size.x >= 18.0 and lane_tile_size.y >= 28.0, "battle meld area %d exposes a stable tile-size contract at %s" % [meld_seat, viewport_size])
 			var meld_tiles = meld_group.find_child("MeldTiles", true, false) as Control
 			var lane_orientation_ok: bool = bool(meld_tiles is VBoxContainer if expected_vertical else meld_tiles is HBoxContainer)
 			check(lane_orientation_ok and meld_tiles.get_child_count() >= 3, "battle meld group %d/%d keeps the seat-facing %s tile lane at %s" % [meld_seat, group_count, "vertical" if expected_vertical else "horizontal", viewport_size])
+			check(str(meld_group.get_meta("orientation", "")) == ("vertical" if expected_vertical else "horizontal") and int(meld_group.get_meta("tile_count", 0)) == meld_tiles.get_child_count(), "battle meld group %d/%d keeps its direction and tile-count metadata at %s" % [meld_seat, group_count, viewport_size])
 			if meld_tiles != null:
 				for holder in meld_tiles.get_children():
 					if not (holder is Control) or holder.get_child_count() == 0:
@@ -2099,6 +2277,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 	check(codex_front != null and codex_shadow != null and reading_inset == null, "rules exposes one front surface and shadow without a duplicate reading inset at %s" % viewport_size)
 	var guide = scene.find_child("RulesGuideArt", true, false) as Control
 	var content_backplate = scene.find_child("RulesContentReadabilityBackplate", true, false) as Control
+	var content_surface = scene.find_child("RulesContentLowFrequencySurface", true, false) as Control
 	var content_scroll = scene.find_child("RulesContentScroll", true, false) as ScrollContainer
 	var content_scrollbar = scene.find_child("RulesContentScrollBar", true, false) as VScrollBar
 	var scroll_gutter = scene.find_child("RulesContentScrollGutter", true, false) as Control
@@ -2107,6 +2286,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 	var content_list = scene.find_child("RulesContentList", true, false) as Control
 	var back_button = first_button_with_text(scene, "返回")
 	check(guide != null and content_backplate != null and content_scroll != null and content_list != null and back_button != null, "rules screen exposes guide, content backplate, scroll list, and back button at %s" % viewport_size)
+	check(content_surface == null, "rules reading content does not add a duplicate full reading surface at %s" % viewport_size)
 	if guide == null or content_backplate == null or content_scroll == null or content_list == null:
 		return
 	var guide_rect = screen_rect(guide)
