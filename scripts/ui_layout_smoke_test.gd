@@ -652,6 +652,15 @@ func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> 
 	check(scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "diagnostic uses vertical-only native scrolling at %s" % viewport_size)
 	check(content_list.size_flags_horizontal == Control.SIZE_EXPAND_FILL and list_rect.size.x <= scroll_rect.size.x + 1.0, "diagnostic wrapped content fits the scroll width at %s" % viewport_size)
 	check(close_button.focus_mode == Control.FOCUS_ALL and close_button.has_focus(), "diagnostic close action owns modal keyboard focus at %s" % viewport_size)
+	check(scroll_rect.end.y + 12.0 <= close_rect.position.y, "diagnostic reading lane leaves a visual buffer before the close action at %s" % viewport_size)
+	if scroll.scroll_vertical <= 1:
+		for child in content_list.get_children():
+			if not child is Label:
+				continue
+			var row_rect := screen_rect(child as Control)
+			var row_intersects_viewport: bool = row_rect.end.y > scroll_rect.position.y and row_rect.position.y < scroll_rect.end.y
+			if row_intersects_viewport:
+				check(row_rect.position.y >= scroll_rect.position.y - 1.0 and row_rect.end.y <= scroll_rect.end.y + 1.0, "diagnostic initial viewport shows complete text rows at %s" % viewport_size)
 	var scroll_bar := scroll.get_v_scroll_bar()
 	check(scroll_bar != null and scroll_bar.max_value > scroll_bar.page, "full diagnostic report creates a vertical scroll range at %s" % viewport_size)
 	if scroll_bar == null or scroll_bar.max_value <= scroll_bar.page:

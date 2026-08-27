@@ -190,8 +190,13 @@ func selected_screen_names() -> Array:
 
 func capture_screen(scene: Node, screen_name: String, output_dir_res: String) -> void:
 	apply_static_capture_mode(scene)
+	reset_update_fixture_state(scene, screen_name)
 	build_screen(scene, screen_name)
 	apply_static_capture_mode(scene)
+	if not validate_update_fixture(scene, screen_name):
+		printerr("update dialog fixture contract failed for %s" % screen_name)
+		quit(1)
+		return
 	if ["03_offline_battle", "13_round_summary", "14_danger_discard", "15_pending_claim_full", "16_win_detail"].has(screen_name):
 		if not validate_preview_meld_fixture(scene):
 			printerr("capture fixture contract failed for %s" % screen_name)
@@ -229,6 +234,23 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		scene.shutdown_runtime_tweens()
 	await process_frame
 	await process_frame
+
+func reset_update_fixture_state(scene: Node, screen_name: String) -> void:
+	if scene == null or screen_name == "18_update_dialog":
+		return
+	# The update overlay is modal runtime state. Screenshot pages are isolated
+	# fixtures, so a prior update page must not leak into the next capture.
+	scene.update_state = "idle"
+	scene.update_message = ""
+	if scene.has_method("refresh_update_dialog"):
+		scene.refresh_update_dialog()
+
+func validate_update_fixture(scene: Node, screen_name: String) -> bool:
+	var overlay = scene.find_child("UpdateDialogOverlay", true, false) if scene != null else null
+	var expected := screen_name == "18_update_dialog"
+	if expected:
+		return overlay != null and str(scene.update_state) != "idle"
+	return overlay == null and str(scene.update_state) == "idle"
 
 func validate_preview_meld_fixture(scene: Node) -> bool:
 	var fixture = scene.get_meta("ui_capture_meld_fixture", {})

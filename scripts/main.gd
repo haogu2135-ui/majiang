@@ -26171,7 +26171,9 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	content_scroll.scroll_deadzone = 8
 	content_scroll.clip_contents = true
 	panel.add_child(content_scroll)
-	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.755))
+	# Leave a visual buffer before the fixed action so the first visible row is
+	# never clipped by the scroll viewport or the close button.
+	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.790))
 	content_scroll.get_v_scroll_bar().name = "DiagnosticContentScrollBar"
 
 	var vbox = VBoxContainer.new()
@@ -26211,7 +26213,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	close_button.focus_mode = Control.FOCUS_ALL
 	close_button.custom_minimum_size = Vector2(128, 44)
 	panel.add_child(close_button)
-	apply_rect(close_button, rect_full(0.385, 0.780, 0.615, 0.900))
+	apply_rect(close_button, rect_full(0.385, 0.835, 0.615, 0.940))
 	var cancel_shortcut = Shortcut.new()
 	cancel_shortcut.events = InputMap.action_get_events("ui_cancel")
 	close_button.shortcut = cancel_shortcut
