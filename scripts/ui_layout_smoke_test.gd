@@ -1526,8 +1526,14 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	var dock = scene.find_child("ActionButtonDock", true, false) as Control
 	var next_button = first_button_with_text(scene.action_bar, "下一局")
 	var menu_button = first_button_with_text(scene.action_bar, "菜单")
+	var replay_button = scene.find_child("CopyReplayCodeButton", true, false) as Button
 	check(panel != null and title != null and body != null and top_status != null and detail_panel != null and winner_label != null and score_label != null and win_tile != null and rank_header != null, "round summary exposes title, score body, compact top status, win detail, winning tile, and rank header at %s" % viewport_size)
 	check(next_button != null and menu_button != null, "round summary exposes clear next-hand and menu routes at %s" % viewport_size)
+	var expected_replay_label := "回放码" if viewport_size.x < 1100.0 or viewport_size.y <= 560.0 else "复制回放码"
+	check(replay_button != null and replay_button.text == expected_replay_label and not replay_button.text.contains("...") and not replay_button.text.contains("…"), "round summary keeps the replay-copy CTA readable at %s" % viewport_size)
+	check(replay_button != null and replay_button.tooltip_text.contains("复制本局回放码") and replay_button.tooltip_text.contains("回放"), "round summary exposes the full replay-copy instruction in status feedback at %s" % viewport_size)
+	if replay_button != null:
+		check(screen_rect(replay_button).size.y >= 44.0, "round summary replay-copy action keeps a usable touch target at %s" % viewport_size)
 	check(scene.find_child("ActionIntentDock", true, false) == null, "round summary omits the live action intent strip at %s" % viewport_size)
 	if top_status != null:
 		check(top_status.text == "本局结算 · 你自摸 8番 16分" and not top_status.text.contains("..."), "round summary top HUD uses a complete short settlement status at %s" % viewport_size)

@@ -255,6 +255,7 @@ func run() -> void:
 	check(replay_payload.get("valid", false) and scene.validate_round_replay(scene.round_event_history) and scene.round_event_history.size() == scene.ROUND_EVENT_HISTORY_LIMIT, "bounded replay keeps a valid digest chain after older events are evicted")
 	var imported_replay: Dictionary = scene.import_round_replay_share_code(replay_code)
 	check(replay_code != "", "replay export produces a bounded share code")
+	check(scene.round_replay_status_text().contains("回放校验通过"), "replay status exposes a human-readable verified state")
 	check(not imported_replay.is_empty(), "replay import accepts a freshly exported share code")
 	check(imported_replay.get("digest", "") == replay_payload.get("digest", ""), "replay import preserves the chain digest")
 	check(imported_replay.get("event_counts", {}).get("qa_event", 0) == scene.ROUND_EVENT_HISTORY_LIMIT, "replay import preserves event counts")
@@ -264,6 +265,11 @@ func run() -> void:
 	var tampered_payload := replay_payload.duplicate(true)
 	tampered_payload["events"] = tampered_events
 	check(scene.import_round_replay_share_code(Marshalls.raw_to_base64(JSON.stringify(tampered_payload).to_utf8_buffer())).is_empty(), "replay import rejects payloads whose event content no longer matches its digest")
+	var verified_history: Array = scene.round_event_history.duplicate(true)
+	if not scene.round_event_history.is_empty():
+		(scene.round_event_history[0] as Dictionary)["type"] = "tampered"
+	check(scene.round_replay_status_text().contains("回放校验失败") and not scene.copy_round_replay_share_code(), "replay sharing rejects a locally tampered event chain")
+	scene.round_event_history = verified_history
 	scene.active_round_id = saved_round_id
 	scene.round_event_history = saved_event_history
 	scene.round_event_sequence = saved_event_sequence

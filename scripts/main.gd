@@ -9351,6 +9351,17 @@ func draw_actions(parent: Control) -> void:
 
 	if mode == "offline":
 		if offline_phase == "ended":
+			var replay_code_available := round_replay_digest() != "" and validate_round_replay(round_event_history) and round_replay_share_code() != ""
+			# The compact action lane cannot fit the full five-character CTA beside
+			# the other settlement actions. Keep a specific three-character label on
+			# narrow screens; the tooltip retains the complete copy instruction.
+			var replay_label := "回放码" if effective_viewport_size().x < 1100.0 or effective_viewport_size().y <= 560.0 else "复制回放码"
+			var replay_button = make_action_button(replay_label, Color(0.52, 0.62, 0.42), Callable(self, "copy_round_replay_share_code"))
+			replay_button.name = "CopyReplayCodeButton"
+			replay_button.set_meta("action_priority", "secondary")
+			replay_button.disabled = not replay_code_available
+			replay_button.tooltip_text = "复制本局回放码，便于分享或复盘 · %s" % round_replay_status_text()
+			action_bar.add_child(replay_button)
 			if not is_offline_match_finished():
 				var next_hand_button = make_action_button("下一局", Color(0.32, 0.72, 0.60), func() -> void:
 					start_next_offline_hand()
@@ -25938,7 +25949,11 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		elif is_current:
 			fill_color = Color(0.88, 0.72, 0.28, 0.92)
 			border_color = GOLD_BRIGHT
-			text_color = Color(0.12, 0.10, 0.08)
+			# Keep the current-day text dark on the gold card in standard mode,
+			# while leaving enough source luminance for high-contrast mode to
+			# promote it above the readable threshold instead of landing in the
+			# low-contrast middle range.
+			text_color = Color(0.22, 0.19, 0.16)
 		else:
 			fill_color = Color(0.16, 0.22, 0.20, 0.92)
 			border_color = Color(0.52, 0.58, 0.48, 0.68)
@@ -30421,6 +30436,10 @@ func action_button_tooltip(text: String) -> String:
 		return "结束当前对局并开始新的比赛"
 	if clean == "菜单":
 		return "返回主菜单"
+	if clean == "回放码":
+		return "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
+	if clean == "复制回放码":
+		return "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
 	if clean == "取消":
 		return "取消当前确认，不打出这张牌 · 快捷键 Esc"
 	if clean == "语音" or clean == "闭麦":
@@ -33906,6 +33925,8 @@ func action_button_visual_role(text: String) -> String:
 		return "menu"
 	if text.contains("下一局"):
 		return "next"
+	if text.contains("回放"):
+		return "replay"
 	if text.contains("新赛") or text.contains("重开"):
 		return "refresh"
 	return "action"
@@ -33954,6 +33975,8 @@ func action_button_fallback_icon_text(role: String, text: String) -> String:
 			return "目"
 		"next":
 			return "续"
+		"replay":
+			return "录"
 		"refresh":
 			return "循"
 		"action":
@@ -36881,6 +36904,26 @@ func round_replay_share_code() -> String:
 	if bytes.size() <= 0 or bytes.size() > REPLAY_SHARE_MAX_BYTES:
 		return ""
 	return Marshalls.raw_to_base64(bytes)
+
+func round_replay_status_text() -> String:
+	var digest := round_replay_digest()
+	if digest == "":
+		return "本局暂无回放记录"
+	if not validate_round_replay(round_event_history):
+		return "回放校验失败 · 请勿分享"
+	return "回放校验通过 · %s" % digest.left(10).to_upper()
+
+func copy_round_replay_share_code() -> bool:
+	if round_replay_digest() == "" or not validate_round_replay(round_event_history):
+		show_toast("本局回放校验失败 · 暂不可分享")
+		return false
+	var code := round_replay_share_code()
+	if code == "":
+		show_toast("本局暂无可分享的回放记录")
+		return false
+	DisplayServer.clipboard_set(code)
+	show_toast("回放码已复制 · 校验 %s" % round_replay_digest().left(10).to_upper(), 2200)
+	return true
 
 func import_round_replay_share_code(code: String) -> Dictionary:
 	var clean := code.strip_edges()

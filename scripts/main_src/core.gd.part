@@ -2735,6 +2735,10 @@ func action_button_tooltip(text: String) -> String:
 		return "结束当前对局并开始新的比赛"
 	if clean == "菜单":
 		return "返回主菜单"
+	if clean == "回放码":
+		return "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
+	if clean == "复制回放码":
+		return "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
 	if clean == "取消":
 		return "取消当前确认，不打出这张牌 · 快捷键 Esc"
 	if clean == "语音" or clean == "闭麦":
@@ -6220,6 +6224,8 @@ func action_button_visual_role(text: String) -> String:
 		return "menu"
 	if text.contains("下一局"):
 		return "next"
+	if text.contains("回放"):
+		return "replay"
 	if text.contains("新赛") or text.contains("重开"):
 		return "refresh"
 	return "action"
@@ -6268,6 +6274,8 @@ func action_button_fallback_icon_text(role: String, text: String) -> String:
 			return "目"
 		"next":
 			return "续"
+		"replay":
+			return "录"
 		"refresh":
 			return "循"
 		"action":

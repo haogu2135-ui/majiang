@@ -132,6 +132,26 @@ func round_replay_share_code() -> String:
 		return ""
 	return Marshalls.raw_to_base64(bytes)
 
+func round_replay_status_text() -> String:
+	var digest := round_replay_digest()
+	if digest == "":
+		return "本局暂无回放记录"
+	if not validate_round_replay(round_event_history):
+		return "回放校验失败 · 请勿分享"
+	return "回放校验通过 · %s" % digest.left(10).to_upper()
+
+func copy_round_replay_share_code() -> bool:
+	if round_replay_digest() == "" or not validate_round_replay(round_event_history):
+		show_toast("本局回放校验失败 · 暂不可分享")
+		return false
+	var code := round_replay_share_code()
+	if code == "":
+		show_toast("本局暂无可分享的回放记录")
+		return false
+	DisplayServer.clipboard_set(code)
+	show_toast("回放码已复制 · 校验 %s" % round_replay_digest().left(10).to_upper(), 2200)
+	return true
+
 func import_round_replay_share_code(code: String) -> Dictionary:
 	var clean := code.strip_edges()
 	if clean == "":
