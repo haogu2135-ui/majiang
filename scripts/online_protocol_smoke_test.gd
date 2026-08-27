@@ -146,7 +146,7 @@ func run() -> void:
 	await pump(scene, 12)
 	check(scene.mode == "online_game", "gameState switches the client into online_game mode")
 	check(str(scene.online_game.get("phase", "")) == "pendingClaim", "gameState aliases normalize claim phase")
-	check(str(scene.online_game.get("lastDiscard", "")) == "m4" and int(scene.online_game.get("lastDiscardSeat", -1)) == 1, "nested discard aliases normalize tile and source seat")
+	check(str(scene.online_game.get("lastDiscard", "")) == "4W" and int(scene.online_game.get("lastDiscardSeat", -1)) == 1, "nested discard aliases normalize tile and source seat")
 	check((scene.online_game.get("pending", {}) as Dictionary).get("options", []).has("chi"), "claim aliases normalize Chinese actions")
 
 	scene.send_online_action({"type": "discard", "tile": "m3"}, "打出m3")
@@ -156,7 +156,16 @@ func run() -> void:
 		var parsed = JSON.parse_string(raw)
 		if typeof(parsed) == TYPE_DICTIONARY and str(parsed.get("type", "")) == "discard" and str(parsed.get("tile", "")) == "m3":
 			discard_seen = true
-	check(discard_seen, "client emits a discard action after receiving a normalized game state")
+	check(not discard_seen and scene.online_feedback.find("出牌阶段") >= 0, "client blocks discard actions outside the current phase")
+	await send_fragmented({"type": "gameState", "game": {"room_code": "QA180", "seat": 0, "turnSeat": 0, "remainingTiles": 67, "state": "awaitDiscard", "yourHand": ["m1", "m2", "m3"], "players": [{"seat": 0, "nickname": "协议测试者", "tiles": ["m1", "m2", "m3"], "tileCount": 3}]}})
+	await pump(scene, 12)
+	scene.send_online_action({"type": "discard", "tile": "m3"}, "打出m3")
+	await pump(scene, 8)
+	for raw in received_lines:
+		var parsed_valid = JSON.parse_string(raw)
+		if typeof(parsed_valid) == TYPE_DICTIONARY and str(parsed_valid.get("type", "")) == "discard" and str(parsed_valid.get("tile", "")) == "3W":
+			discard_seen = true
+	check(discard_seen, "client canonicalizes and emits a discard only during its turn")
 
 	server_peer.disconnect_from_host()
 	await pump(scene, 14)

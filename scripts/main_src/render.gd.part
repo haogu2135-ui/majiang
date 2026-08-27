@@ -657,15 +657,26 @@ func draw_action_dock(parent: Control) -> void:
 		var label_alpha := 0.54 if pending_claim_mode else 0.76
 		var focus_label = make_label(dock, first_button.text, 10, Color(0.92, 0.90, 0.72, label_alpha), true)
 		focus_label.name = "ActionDockFocusLabel"
+		focus_label.text = "当前焦点 · %s" % first_button.text
+		focus_label.tooltip_text = "方向键按空间位置移动焦点"
 		apply_rect(focus_label, rect_full(0.055, 0.035, 0.425, 0.225))
 		focus_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(focus_label)
+		for focus_button in action_buttons:
+			if focus_button is Button:
+				(focus_button as Button).focus_entered.connect(Callable(self, "update_action_dock_focus_label").bind((focus_button as Button).get_instance_id()))
 	if mode == "online_game" and online_waiting_for_server:
 		var waiting_label = make_label(dock, "同步中 · 等待服务器确认", 9, Color(0.76, 0.86, 0.82, 0.86), true)
 		waiting_label.name = "ActionDockWaitingStatus"
 		apply_rect(waiting_label, rect_full(0.440, 0.035, 0.945, 0.225))
 		waiting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(waiting_label)
+	elif mode == "online_game" and online_retry_available:
+		var retry_label = make_label(dock, "未响应 · 可重试", 9, Color(0.90, 0.76, 0.46, 0.92), true)
+		retry_label.name = "ActionDockRetryStatus"
+		apply_rect(retry_label, rect_full(0.440, 0.035, 0.945, 0.225))
+		retry_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		configure_clipped_label(retry_label)
 	parent.move_child(dock_shadow, max(0, action_bar.get_index()))
 	parent.move_child(dock, max(0, action_bar.get_index()))
 
@@ -951,6 +962,24 @@ func draw_actions(parent: Control) -> void:
 		pending_claim_tail_bar.add_child(voice)
 	else:
 		action_bar.add_child(voice)
+	if mode == "online_game" and online_waiting_for_server:
+		var cancel_sync_button := make_action_button("取消等待", Color(0.46, 0.50, 0.52), Callable(self, "cancel_online_pending_action"))
+		cancel_sync_button.name = "OnlineCancelSyncButton"
+		cancel_sync_button.tooltip_text = "停止本地等待并恢复操作入口"
+		if pending_claim_tail_bar != null:
+			cancel_sync_button.set_meta("pending_tail", true)
+			pending_claim_tail_bar.add_child(cancel_sync_button)
+		else:
+			action_bar.add_child(cancel_sync_button)
+	elif mode == "online_game" and online_retry_available:
+		var retry_sync_button := make_action_button("重试", Color(0.36, 0.62, 0.72), Callable(self, "retry_online_last_action"))
+		retry_sync_button.name = "OnlineRetrySyncButton"
+		retry_sync_button.tooltip_text = "重新提交上一次操作"
+		if pending_claim_tail_bar != null:
+			retry_sync_button.set_meta("pending_tail", true)
+			pending_claim_tail_bar.add_child(retry_sync_button)
+		else:
+			action_bar.add_child(retry_sync_button)
 	draw_action_dock(parent)
 	finalize_action_bar_layout()
 
@@ -1072,9 +1101,10 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	if not force_visible and (mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled()):
 		return
 	# The narrow center-left HUD slot sits between the left river and the center
-	# surface, above the player river; it stays clear of every discard zone,
-	# action dock, and hand tray at all supported aspect ratios.
-	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, 0.405, 0.650), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
+	# surface, above the player river. During a response window the action dock
+	# moves left, so reserve a dedicated right-side gap for it.
+	var advisor_right := 0.620 if has_pending_claim_window() else 0.690
+	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, advisor_right, 0.650), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
 	panel.set_name("AdvisorPanel")
 	parent.add_child(panel)
 	var advisor_texture = add_illustration_texture(panel, "advisor_map", rect_full(0.010, 0.035, 0.990, 0.965), 0.12, false)
@@ -1107,9 +1137,11 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	draw_advisor_panel_priority_sweep(panel)
 	draw_advisor_panel_decision_bridge(panel)
 	draw_advisor_panel_analysis_scan(panel)
-	var advisor_card_rect_a := rect_full(0.03, 0.34, 0.97, 0.53)
-	var advisor_card_rect_b := rect_full(0.03, 0.55, 0.97, 0.74)
-	var advisor_card_rect_c := rect_full(0.03, 0.76, 0.97, 0.95)
+	# Three horizontal reading lanes keep recommendation, shape and defense visible
+	# together at compact widths; the panel remains between the river and action dock.
+	var advisor_card_rect_a := rect_full(0.025, 0.255, 0.325, 0.955)
+	var advisor_card_rect_b := rect_full(0.340, 0.255, 0.660, 0.955)
+	var advisor_card_rect_c := rect_full(0.675, 0.255, 0.975, 0.955)
 	if offline_phase == "pending_claim":
 		draw_advisor_info_card(panel, advisor_card_rect_a, "响应", "%s" % tile_label(str(offline_pending_claim.get("tile", ""))), "%s" % claim_options_text(offline_pending_claim), Color(0.86, 0.78, 0.56))
 		draw_advisor_info_card(panel, advisor_card_rect_b, "牌局", advisor_turn_line(), current_status_text(), Color(0.62, 0.78, 0.82))
@@ -1166,9 +1198,17 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	var detail_fill = make_gpt_meter_fill(rect_full(0.020, 0.250, 0.720, 0.750), Color(0.74, 0.64, 0.38, 0.30))
 	detail_fill.name = "AdvisorDetailRouteFill"
 	detail_route.add_child(detail_fill)
-	var detail_text = make_label(panel, advisor_detail_text(), 13, Color(0.86, 0.90, 0.84), false)
+	var detail_scroll := ScrollContainer.new()
+	detail_scroll.name = "AdvisorDetailScroll"
+	detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	detail_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	detail_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	apply_rect(detail_scroll, rect_full(0.070, 0.315, 0.930, 0.875))
+	panel.add_child(detail_scroll)
+	var detail_text = make_label(detail_scroll, advisor_detail_text(), 13, Color(0.86, 0.90, 0.84), false)
 	detail_text.name = "AdvisorDetailText"
-	apply_rect(detail_text, rect_full(0.070, 0.315, 0.930, 0.875))
+	detail_text.custom_minimum_size = Vector2(0.0, 340.0)
+	detail_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	detail_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	detail_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2516,10 +2556,14 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	# r209: GPT chrome conversion
 	var dock_rect = action_bar_dock_layout_rect()
 	var bar_rect = action_bar_layout_rect()
-	var panel_left = dock_rect.position.x + 0.008
-	var panel_top = dock_rect.position.y + 0.008
-	var panel_right = maxf(bar_rect.position.x - 0.006, dock_rect.position.x + 0.114)
-	var panel_bottom = dock_rect.size.y - 0.008
+	# The confirmation is a central decision surface. Keep it above the bottom
+	# river and away from both side meld lanes instead of squeezing it beside CTA buttons.
+	# Use the central console lane. This avoids the actual tile footprints in
+	# both horizontal rivers and leaves the side meld lanes untouched.
+	var panel_left := 0.355
+	var panel_top := 0.355
+	var panel_right := 0.645
+	var panel_bottom := 0.535
 	var panel = make_gpt_route_rail(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.040, 0.018, 0.016, 0.94))
 	panel.name = "DangerDiscardConfirmationArt"
 	panel.z_index = 20
@@ -2544,7 +2588,7 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	var danger_risk_strip = add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.120, 0.430, 0.760, 0.600), 0.34, false)
 	if danger_risk_strip != null:
 		danger_risk_strip.name = "DangerDiscardGptRiskStrip"
-		danger_risk_strip.visible = false
+		danger_risk_strip.visible = true
 	panel.add_child(make_gpt_edge_rail(rect_full(0.0, 0.0, 0.014, 1.0), Color(0.96, 0.38, 0.24, 0.64)))
 	var danger_tile = make_tile_view(tile, Vector2(32, 44), false, Callable(), true, "高", "")
 	danger_tile.name = "DangerDiscardTile"
@@ -2562,11 +2606,11 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		var node_active = risk >= (float(i) + 1.0) / 4.0
 		var node = make_gpt_gate(rect_full(node_left, 0.405, node_left + 0.026, 0.615), Color(0.96, 0.38, 0.24, 0.34 if node_active else 0.12))
 		node.name = "DangerDiscardRiskNode_%d" % i
-		node.visible = false
+		node.visible = true
 		panel.add_child(node)
 	var alert = make_gpt_plate_rect(rect_full(0.532, 0.570, 0.718, 0.885), Color(0.92, 0.32, 0.24, 0.12), "ui_jade_reading_plate")
 	alert.name = "DangerDiscardAlertHalo"
-	alert.visible = false
+	alert.visible = true
 	panel.add_child(alert)
 	for i in range(3):
 		var ring = make_gpt_plate_rect(rect_full(0.090 + float(i) * 0.085, 0.170 - float(i) * 0.015, 0.910 - float(i) * 0.085, 0.830 + float(i) * 0.015), Color(0.94, 0.34, 0.24, 0.030), "ui_jade_reading_plate")
@@ -2584,7 +2628,12 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	var seal = make_badge(panel, rect_full(0.750, 0.145, 0.855, 0.855), risk_badge_text(label_text), 11, Color(0.54, 0.16, 0.12, 0.94), Color(0.96, 0.50, 0.34, 0.34), Color(0.98, 0.90, 0.78))
 	seal.name = "DangerDiscardRiskSeal"
 	seal.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	seal.visible = false
+	seal.visible = true
+	var risk_caption = make_label(panel, "风险等级：%s" % label_text, 9, Color(0.98, 0.72, 0.48, 0.92), true)
+	risk_caption.name = "DangerDiscardRiskLevelText"
+	apply_rect(risk_caption, rect_full(0.380, 0.300, 0.735, 0.420))
+	risk_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(risk_caption)
 	var compact_reason = "牌路危险"
 	var danger_source = report.get("danger_source", {})
 	if typeof(danger_source) == TYPE_DICTIONARY and str(danger_source.get("reason", "")) != "":
@@ -2599,27 +2648,27 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	configure_clipped_label(detail)
 	var source_trace = make_gpt_route_rail(rect_full(0.252, 0.305, 0.560, 0.350), Color(0.006, 0.016, 0.018, 0.44))
 	source_trace.name = "DangerDiscardSourceTrace"
-	source_trace.visible = false
+	source_trace.visible = true
 	panel.add_child(source_trace)
 	var source_fill = make_gpt_meter_fill(rect_full(0.252, 0.312, 0.252 + 0.308 * risk, 0.343), Color(0.94, 0.34, 0.24, 0.28))
 	source_fill.name = "DangerDiscardSourceFill"
-	source_fill.visible = false
+	source_fill.visible = true
 	panel.add_child(source_fill)
 	var source_gate = make_gpt_gate(rect_full(0.546, 0.245, 0.580, 0.395), Color(0.98, 0.70, 0.42, 0.22))
 	source_gate.name = "DangerDiscardSourceGate"
-	source_gate.visible = false
+	source_gate.visible = true
 	panel.add_child(source_gate)
 	for i in range(3):
 		var left = 0.310 + float(i) * 0.068
 		var active = risk >= (float(i) + 1.0) / 4.0
 		var trace_node = make_gpt_tick_strip(rect_full(left, 0.250, left + 0.016, 0.405), Color(0.94, 0.34, 0.24, 0.24 if active else 0.10))
 		trace_node.name = "DangerDiscardSourceNode_%d" % i
-		trace_node.visible = false
+		trace_node.visible = true
 		panel.add_child(trace_node)
 	var confirm = make_badge(panel, rect_full(0.875, 0.145, 0.975, 0.855), "确认", 10, Color(0.60, 0.20, 0.15, 0.94), Color(0.96, 0.54, 0.34, 0.34), Color(0.98, 0.90, 0.78))
 	confirm.name = "DangerDiscardConfirmSeal"
 	confirm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	confirm.visible = false
+	confirm.visible = true
 	var confirm_route = make_gpt_route_rail(rect_full(0.575, 0.760, 0.735, 0.840), Color(0.006, 0.016, 0.018, 0.46))
 	confirm_route.name = "DangerDiscardConfirmRoute"
 	confirm_route.visible = false
@@ -2633,22 +2682,27 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	panel.add_child(confirm_gate)
 	var safe_rail = make_gpt_route_rail(rect_full(0.758, 0.145, 0.965, 0.855), Color(0.020, 0.042, 0.040, 0.74))
 	safe_rail.name = "DangerDiscardSafeRail"
-	safe_rail.visible = false
+	safe_rail.visible = not alternatives.is_empty()
 	panel.add_child(safe_rail)
 	var lattice_texture = add_illustration_texture(safe_rail, "danger_choice_lattice", rect_full(-0.060, -0.110, 1.060, 1.110), 0.14, false)
 	if lattice_texture != null:
 		lattice_texture.name = "DangerChoiceLatticeTexture"
 	var safe_route = make_gpt_route_rail(rect_full(0.748, 0.880, 0.965, 0.940), Color(0.006, 0.016, 0.018, 0.42))
 	safe_route.name = "DangerDiscardAlternativeRoute"
-	safe_route.visible = false
+	safe_route.visible = not alternatives.is_empty()
 	panel.add_child(safe_route)
 	var safe_fill = make_gpt_meter_fill(rect_full(0.035, 0.260, 0.720, 0.740), Color(0.42, 0.76, 0.58, 0.28))
 	safe_fill.name = "DangerDiscardAlternativeFill"
 	safe_route.add_child(safe_fill)
 	var decision_bridge = draw_danger_discard_decision_bridge(panel, risk, alternatives)
-	decision_bridge.visible = false
+	decision_bridge.visible = true
 	var final_choice_art = draw_danger_discard_final_choice_art(panel, risk, alternatives)
-	final_choice_art.visible = false
+	final_choice_art.visible = true
+	var decision_label = make_label(panel, "危险牌 → 确认　替代牌 → 改打", 8, Color(0.92, 0.78, 0.62, 0.88), true)
+	decision_label.name = "DangerDiscardDecisionText"
+	apply_rect(decision_label, rect_full(0.380, 0.810, 0.748, 0.955))
+	decision_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(decision_label)
 	for i in range(min(2, alternatives.size())):
 		var alt_report: Dictionary = alternatives[i]
 		var alt_tile = str(alt_report.get("tile", ""))
@@ -3991,6 +4045,13 @@ func draw_hand(parent: Control) -> void:
 	var suggested_tile = suggest_human_discard() if assist_enabled else ""
 	var hand_reports = discard_report_map_for_hand() if assist_enabled else {}
 	var pending_tile = pending_danger_discard_tile if assist_enabled and has_pending_danger_discard() else ""
+	var suggested_index := hand_tile_index_for_advice(hand, suggested_tile) if suggested_tile != "" else -1
+	var pending_index: int = pending_danger_discard_index if pending_tile != "" else -1
+	if pending_index < 0 or pending_index >= hand.size() or str(hand[pending_index]) != pending_tile:
+		pending_index = hand_tile_index_for_advice(hand, pending_tile)
+	if interactive_guide_active and interactive_guide_type == "discard":
+		if interactive_guide_target_index < 0 or interactive_guide_target_index >= hand.size() or not hand_keyboard_tile_selectable(interactive_guide_target_index, hand):
+			interactive_guide_target_index = suggested_index if suggested_index >= 0 else hand_tile_index_for_advice(hand, str(hand[0])) if not hand.is_empty() else -1
 	var tile_width = float(hand_layout.get("tile_width", HAND_TILE_MAX_WIDTH))
 	var tile_height = float(hand_layout.get("tile_height", tile_width * HAND_TILE_ASPECT))
 	var group_gap_width = maxf(4.0, float(hand_layout.get("group_gap_width", 4.0)))
@@ -4036,20 +4097,30 @@ func draw_hand(parent: Control) -> void:
 		var clickable = can_self_discard() and not is_claim_discard_banned(0, tile)
 		var keyboard_selected := clickable and i == hand_keyboard_selection
 		# 新手引导高亮：可点击时添加视觉提示
-		var should_highlight = clickable and ((suggested_tile != "" and tile == suggested_tile) or (pending_tile != "" and tile == pending_tile))
-		var guide_highlight = interactive_guide_active and interactive_guide_type == "discard" and clickable
+		var should_highlight = clickable and (i == suggested_index or i == pending_index)
+		var guide_highlight = interactive_guide_active and interactive_guide_type == "discard" and clickable and i == interactive_guide_target_index
 		var highlighted = should_highlight or guide_highlight or keyboard_selected
-		var report: Dictionary = hand_reports.get(tile, {})
+		var report: Dictionary = hand_reports.get(tile, {}) if i == suggested_index or i == pending_index else {}
 		var risk = str(report.get("safety_label", report.get("risk_label", ""))) if assist_enabled and clickable else ""
 		var is_drawn_tile_marker := i == stable_drawn_index
-		var hint_badge = hand_tile_hint_badge(tile, suggested_tile, pending_tile, is_drawn_tile_marker) if assist_enabled and clickable else ""
+		var hint_badge := ""
+		if assist_enabled and clickable:
+			if i == pending_index:
+				hint_badge = "确认"
+			elif i == suggested_index:
+				hint_badge = "荐"
+			elif is_drawn_tile_marker:
+				hint_badge = "摸"
 		if keyboard_selected and hint_badge == "":
 			hint_badge = "选"
 		var callback = func() -> void:
 			# 玩家执行操作时关闭引导
 			if interactive_guide_active:
+				if interactive_guide_type == "discard" and interactive_guide_target_index >= 0 and index != interactive_guide_target_index:
+					set_status("教学目标是第%d张牌，当前牌仍可正常出牌。" % (interactive_guide_target_index + 1))
 				interactive_guide_active = false
 				interactive_guide_type = ""
+				interactive_guide_target_index = -1
 			if mode == "offline":
 				human_discard(index)
 			else:
@@ -4059,7 +4130,9 @@ func draw_hand(parent: Control) -> void:
 		tile_node.set_meta("hand_source_index", i)
 		tile_node.set_meta("hand_tile_code", tile)
 		tile_node.set_meta("drawn_tile", i == stable_drawn_index)
-		tile_node.set_meta("danger_pending", pending_tile != "" and tile == pending_tile)
+		tile_node.set_meta("danger_pending", i == pending_index)
+		tile_node.set_meta("advisor_target", i == suggested_index)
+		tile_node.set_meta("guide_target", i == interactive_guide_target_index)
 		tile_node.set_meta("keyboard_selected", keyboard_selected)
 		tile_node.tooltip_text = hand_tile_interaction_tooltip(tile, report, hint_badge, is_drawn_tile_marker)
 		if keyboard_selected and hint_badge != "选":
@@ -5048,13 +5121,14 @@ func draw_meld_lane_art(parent: Control, seat: int, rect: Rect2, meld_count: int
 	art.name = "MeldLaneArt_%d" % seat
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.z_index = 2
+	art.clip_contents = true
 	apply_rect(art, rect)
 	parent.add_child(art)
-	var wash = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(-0.04, -0.08, 1.04, 1.08), 0.10 if meld_count > 0 else 0.05, false)  # r181 restrained river wash
+	var wash = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(0.0, 0.0, 1.0, 1.0), 0.10 if meld_count > 0 else 0.05, false)  # r181 restrained river wash
 	if wash != null:
 		wash.name = "MeldLaneSoftWash_%d" % seat
 	if meld_count > 0:
-		var pad = add_optional_gpt_illustration_texture(art, "ui_meld_pad", rect_full(-0.02, -0.05, 1.02, 1.05), 0.10, false)
+		var pad = add_optional_gpt_illustration_texture(art, "ui_meld_pad", rect_full(0.0, 0.0, 1.0, 1.0), 0.10, false)
 		if pad != null:
 			pad.name = "MeldLanePad_%d" % seat
 	return art
@@ -5199,7 +5273,21 @@ func draw_melds(parent: Control) -> void:
 		parent.add_child(area)
 		var meld_tile_size := Vector2.ZERO
 		if vertical and compact_melds:
-			meld_tile_size = Vector2(21, 28)
+			# Spend the side lane height across its actual grid rows. This keeps the
+			# 2D faces readable when three/four groups share a narrow viewport.
+			var lane_height_px := safe_content_pixel_size().y * float(layout[1].size.y - layout[1].position.y)
+			var lane_width_px := safe_content_pixel_size().x * float(layout[1].size.x - layout[1].position.x)
+			var grid_rows := maxi(1, int(ceil(float(meld_list.size()) / 2.0)))
+			var row_gap_px := float(maxi(0, grid_rows - 1)) * 3.0
+			var group_height_px := maxf(32.0, (lane_height_px - row_gap_px) / float(grid_rows))
+			var compact_tile_width := floorf((group_height_px - 6.0 - 4.0) / 3.0)
+			# Two compact groups share the side grid. Bound the face width by
+			# the lane itself so Container minimum sizes cannot push into the
+			# adjacent HUD or river at 960px.
+			var max_compact_tile_width := floorf(((lane_width_px - 12.0 - 3.0) * 0.5 - 6.0) / HAND_TILE_ASPECT)
+			max_compact_tile_width = maxf(18.0, max_compact_tile_width)
+			compact_tile_width = clampf(minf(compact_tile_width, max_compact_tile_width), 18.0, 26.0)
+			meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * HAND_TILE_ASPECT)))
 		elif not vertical and compact_melds:
 			# Keep horizontal melds readable on 960px screens. Use the actual lane
 			# width to spend space on tile faces before falling back to a smaller
@@ -6173,7 +6261,6 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 
 
 func draw_pending_claim_action_exit_art(parent: Control, options: Array) -> Control:
-	return null
 	var art = Control.new()
 	art.name = "PendingClaimActionExitArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6194,7 +6281,6 @@ func draw_pending_claim_action_exit_art(parent: Control, options: Array) -> Cont
 
 func draw_pending_claim_flow_art(parent: Control, source_seat: int) -> Control:
 	# r214: bulk GPT chrome sweep
-	return null
 	var flow = Control.new()
 	flow.name = "PendingClaimFlowArt"
 	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6210,6 +6296,11 @@ func draw_pending_claim_flow_art(parent: Control, source_seat: int) -> Control:
 	arrow.name = "PendingClaimFlowArrow"
 	apply_rect(arrow, rect_full(0.780, 0.080, 0.980, 0.920))
 	arrow.modulate = Color(1, 1, 1, 0.82)
+	var flow_label = make_label(flow, pending_claim_source_badge_text(source_seat) + " → 你的响应", 8, Color(0.86, 0.80, 0.62, 0.82), true)
+	flow_label.name = "PendingClaimFlowLabel"
+	apply_rect(flow_label, rect_full(0.020, 0.060, 0.790, 0.360))
+	flow_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(flow_label)
 	return flow
 
 
@@ -6267,6 +6358,10 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	apply_rect(focus, rect_full(0.345, 0.550, 0.970, 0.940))
 	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(focus, 2)
+	draw_pending_claim_flow_art(panel, source_seat)
+	draw_pending_claim_priority_art(panel, pending.get("options", []))
+	draw_pending_claim_response_pulse(panel, pending.get("options", []))
+	draw_pending_claim_timer_art(panel)
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_top = 10.0
@@ -6287,7 +6382,6 @@ func draw_pending_claim_option_spark(parent: Control, left: float, color: Color,
 
 func draw_pending_claim_priority_art(parent: Control, options: Array) -> Control:
 	# r214: bulk GPT chrome sweep
-	return null
 	var art = Control.new()
 	art.name = "PendingClaimPriorityArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6311,13 +6405,17 @@ func draw_pending_claim_priority_art(parent: Control, options: Array) -> Control
 	pass_node.name = "PendingClaimPriorityPassNode"
 	art.add_child(pass_node)
 	var tick = add_gpt_tick_strip(art, rect_full(0.705, 0.145, (0.730) + float(2) * (0.043), 0.315), Color(0.92, 0.70, 0.32, 0.22), "PendingClaimPriorityTick_0")
+	var priority_label = make_label(art, pending_claim_priority_text(options), 8, Color(0.86, 0.80, 0.62, 0.88), true)
+	priority_label.name = "PendingClaimPriorityText"
+	apply_rect(priority_label, rect_full(0.035, 0.520, 0.790, 0.720))
+	priority_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(priority_label)
 	fill.modulate = Color(1, 1, 1, 0.82)
 	return art
 
 
 func draw_pending_claim_response_pulse(parent: Control, options: Array) -> Control:
 	# r214: bulk GPT chrome sweep
-	return null
 	var pulse = Control.new()
 	pulse.name = "PendingClaimResponsePulse"
 	pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6343,7 +6441,6 @@ func draw_pending_claim_response_pulse(parent: Control, options: Array) -> Contr
 
 
 func draw_pending_claim_timer_art(parent: Control) -> Control:
-	return null
 	var timer = Control.new()
 	timer.name = "PendingClaimTimerArt"
 	timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6352,13 +6449,19 @@ func draw_pending_claim_timer_art(parent: Control) -> Control:
 	var rail = make_gpt_route_rail(rect_full(0.020, 0.365, 0.940, 0.455), Color(0.006, 0.016, 0.018, 0.46))
 	rail.name = "PendingClaimTimerRail"
 	timer.add_child(rail)
-	var fill = make_gpt_meter_fill(rect_full(0.025, 0.260, 0.705, 0.740), Color(0.92, 0.70, 0.32, 0.28))
+	var remaining_ratio := pending_claim_remaining_ratio()
+	var fill = make_gpt_meter_fill(rect_full(0.025, 0.260, 0.025 + 0.950 * remaining_ratio, 0.740), Color(0.92, 0.70, 0.32, 0.28))
 	fill.name = "PendingClaimTimerFill"
 	rail.add_child(fill)
 	var gate = make_gpt_gate(rect_full(0.906, 0.195, 0.952, 0.650), Color(0.96, 0.78, 0.38, 0.24))
 	gate.name = "PendingClaimTimerGate"
 	timer.add_child(gate)
 	var tick = add_gpt_tick_strip(timer, rect_full(0.165, 0.185, (0.165) + float(3) * (0.155) + (0.018), 0.670), Color(0.92, 0.70, 0.32, 0.24), "PendingClaimTimerTick_0")
+	var timer_label = make_label(timer, pending_claim_timer_text(), 9, Color(0.98, 0.88, 0.58, 0.94), true)
+	timer_label.name = "PendingClaimTimerText"
+	apply_rect(timer_label, rect_full(0.040, 0.020, 0.900, 0.340))
+	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(timer_label)
 	fill.modulate = Color(1, 1, 1, 0.82)
 	gate.modulate = Color(1, 1, 1, 0.80)
 	return timer
@@ -6493,6 +6596,8 @@ func draw_reset_progress_confirm_art(parent: Control, accent: Color) -> Control:
 func round_summary_compact_body_text() -> String:
 	if last_win_score.is_empty():
 		return round_summary
+	if bool(last_win_score.get("wall_draw", false)):
+		return round_summary if round_summary != "" else "荒庄，牌墙已空。"
 	var winner := clampi(int(last_win_score.get("winner", offline_last_winner)), 0, players.size() - 1)
 	var win_tile := str(last_win_score.get("win_tile", ""))
 	var action_text := "自摸" if bool(last_win_score.get("self_draw", false)) else "胡"
@@ -6552,7 +6657,8 @@ func draw_round_summary(parent: Control) -> void:
 	draw_round_summary_ambience(panel)
 
 	# 标题 - 始终显示
-	var title = make_label(panel, "本局结算" if not is_offline_match_finished() else "全场结算", 26, Color(0.94, 0.86, 0.48), true)
+	var summary_title := "荒庄结算" if round_result_kind == "wall_draw" else ("本局结算" if not is_offline_match_finished() else "全场结算")
+	var title = make_label(panel, summary_title, 26, Color(0.94, 0.86, 0.48), true)
 	title.name = "RoundSummaryTitle"
 	apply_rect(title, ROUND_SUMMARY_TITLE_RECT)
 
@@ -6584,9 +6690,17 @@ func draw_round_summary(parent: Control) -> void:
 		lines.append("")
 		lines.append_array(package_lines)
 	var full_summary_text := "\n".join(lines)
-	var body = make_label(panel, round_summary_compact_body_text(), 12 if compact_summary else 14, Color(0.94, 0.96, 0.90), false)
+	var body_scroll := ScrollContainer.new()
+	body_scroll.name = "RoundSummaryBodyScroll"
+	body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	body_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	apply_rect(body_scroll, ROUND_SUMMARY_TEXT_RECT)
+	panel.add_child(body_scroll)
+	var body = make_label(body_scroll, round_summary_compact_body_text(), 12 if compact_summary else 14, Color(0.94, 0.96, 0.90), false)
 	body.name = "RoundSummaryBody"
-	apply_rect(body, ROUND_SUMMARY_TEXT_RECT)
+	body.custom_minimum_size = Vector2(0.0, 132.0 if compact_summary else 116.0)
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	body.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.92))
@@ -10102,16 +10216,16 @@ func draw_table_log(parent: Control) -> void:
 	archive_button.tooltip_text = "查看完整牌桌记录 · 最近记录可滚动查看"
 	apply_rect(archive_button, rect_full(0.690, 0.025, 0.950, 0.240))
 	ledger_panel.add_child(archive_button)
-	var log_recent = table_log_tail(1 if compact_log else 2)
+	var log_recent = table_log_tail(2)
 	if log_recent.is_empty():
 		var waiting = make_label(ledger_panel, "等待开局", 12, Color(0.74, 0.66, 0.44), true)
 		apply_rect(waiting, rect_full(0.080, 0.330, 0.920, 0.710))
 		waiting.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		return
-	for log_i in range(log_recent.size()):
+	for log_i in range(1 if compact_log else log_recent.size()):
 		var row_top = 0.300 + float(log_i) * 0.265
-		var log_text = str(log_recent[log_i])
-		var row_tag = table_log_tag(log_text)
+		var log_text = "\n".join(log_recent) if compact_log else str(log_recent[log_i])
+		var row_tag = table_log_tag(str(log_recent.back()))
 		var row_color = table_log_tag_color(row_tag)
 		var row_bottom = 0.840 if compact_log else row_top + 0.205
 		var row_panel = make_gpt_plate_rect(rect_full(0.075, row_top, 0.940, row_bottom), Color(0.052, 0.044, 0.030, 0.54), "ui_jade_reading_plate")
@@ -10191,6 +10305,23 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 			row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			row.clip_text = false
 			row.tooltip_text = full_text
+	if not round_history.is_empty():
+		var history_title := make_label(list, "最近对局战报", 12, Color(0.90, 0.78, 0.52), true)
+		history_title.name = "RoundHistoryArchiveSection"
+		history_title.custom_minimum_size = Vector2(0, 32)
+		var history_entries := latest_round_history(5)
+		for history_index in range(history_entries.size() - 1, -1, -1):
+			var entry = history_entries[history_index]
+			if typeof(entry) != TYPE_DICTIONARY:
+				continue
+			var history_text := str((entry as Dictionary).get("summary", "已完成一局"))
+			var history_row := make_label(list, "对局 %02d  ·  %s" % [int((entry as Dictionary).get("hand_number", 0)), history_text], 11, Color(0.80, 0.86, 0.76), false)
+			history_row.name = "RoundHistoryArchiveRow_%d" % history_index
+			history_row.custom_minimum_size = Vector2(0, 48)
+			history_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			history_row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			history_row.clip_text = false
+			history_row.tooltip_text = history_text
 	call_deferred("scroll_table_log_archive_to_end")
 
 
@@ -12512,13 +12643,13 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	var tile_size: Vector2 = tile_size_override if tile_size_override.x > 0.0 and tile_size_override.y > 0.0 else (Vector2(28, 38) if vertical else Vector2(26, 36))
 	var tile_count: int = maxi(1, meld.size())
 	var compact_tiles := tile_size_override.x > 0.0 and tile_size_override.y > 0.0
-	var sep: int = (2 if compact_tiles else 3) if vertical else (1 if compact_tiles and tile_size.x <= 18.0 else 2)
-	var group_padding := 6.0 if compact_tiles else 8.0
+	var sep: int = (1 if compact_tiles else 3) if vertical else (1 if compact_tiles and tile_size.x <= 18.0 else 2)
+	var group_padding := 2.0 if compact_tiles else 8.0
 	# After ±90° rotation, visual footprint swaps width/height.
 	var cell_w: float = tile_size.y if vertical else tile_size.x
 	var cell_h: float = tile_size.x if vertical else tile_size.y
 	if vertical:
-		var minimum_width := 34.0 if compact_tiles else 40.0
+		var minimum_width := 30.0 if compact_tiles else 40.0
 		group.custom_minimum_size = Vector2(maxf(minimum_width, cell_w + group_padding), float(tile_count) * (cell_h + float(sep)) + group_padding)
 	else:
 		var minimum_height := 30.0 if compact_tiles else 44.0
@@ -12527,9 +12658,9 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	# r180: GPT meld pad host — no StyleBox frame paint under tiles.
 	var empty_meld := StyleBoxEmpty.new()
 	group.add_theme_stylebox_override("panel", empty_meld)
-	var meld_pad = add_optional_gpt_illustration_texture(group, "ui_meld_pad", rect_full(-0.04, -0.06, 1.04, 1.06), 0.46, false)  # r181 denser meld group pad
+	var meld_pad = add_optional_gpt_illustration_texture(group, "ui_meld_pad", rect_full(0.0, 0.0, 1.0, 1.0), 0.46, false)  # r181 denser meld group pad
 	if meld_pad == null:
-		meld_pad = add_optional_gpt_illustration_texture(group, "ui_river_soft_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.28, false)
+		meld_pad = add_optional_gpt_illustration_texture(group, "ui_river_soft_wash", rect_full(0.0, 0.0, 1.0, 1.0), 0.28, false)
 	if meld_pad != null:
 		meld_pad.name = "MeldGroupGptPad"
 		meld_pad.modulate = Color(

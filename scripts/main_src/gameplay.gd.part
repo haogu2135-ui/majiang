@@ -219,6 +219,7 @@ func start_offline(instant: bool = false) -> void:
 
 func _start_offline_impl() -> void:
 	hand_keyboard_selection = -1
+	interactive_guide_target_index = -1
 	last_game_keyboard_input_msec = 0
 	if voice_enabled:
 		stop_voice_chat(false)
@@ -273,7 +274,7 @@ func _start_offline_impl() -> void:
 		ui_enhancements.create_floating_spirit(ambient_layer, ambient_layer.get_rect() if ambient_layer.get_rect().size.x > 0 else Rect2(Vector2.ZERO, get_viewport().size), 4)
 
 func start_next_offline_hand(auto_run_ai: bool = true) -> void:
-	if mode != "offline":
+	if mode != "offline" or offline_phase != "ended":
 		return
 	if is_offline_match_finished():
 		return
@@ -304,6 +305,7 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 		if is_flower_tile(tile):
 			players[seat]["flowers"] = int(players[seat].get("flowers", 0)) + 1
 			players[seat]["flower_tiles"].append(tile)
+			record_round_event("draw_flower", {"seat": seat, "tile": normalize_tile_code(tile), "source": source})
 			if announce:
 				add_log("%s补花%s。" % [players[seat]["name"], tile_label(tile)])
 				play_sfx("draw", -7.0)
@@ -321,6 +323,7 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 			"announce": announce,
 			"serial": offline_draw_serial,
 		}
+		record_round_event("draw", {"seat": seat, "tile": normalize_tile_code(tile), "source": source, "wall_count": wall.size(), "serial": offline_draw_serial})
 		# 与“最近摸牌”历史分开：只有尚未出牌或副露的当前摸牌可以自摸。
 		offline_self_draw_ready = {
 			"seat": seat,
@@ -619,6 +622,14 @@ func human_discard_by_tile(tile: String) -> void:
 func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 	if mode != "offline" or offline_phase != "pending_claim":
 		return
+	# A tap can arrive between two countdown frames. Expired claims always pass.
+	if pending_claim_remaining_seconds() == 0:
+		if claim != "pass":
+			human_claim("pass")
+		return
+	interactive_guide_active = false
+	interactive_guide_type = ""
+	interactive_guide_target_index = -1
 	clear_pending_danger_discard()
 	hand_keyboard_selection = -1
 	var from_seat = int(offline_pending_claim.get("from_seat", -1))
@@ -686,12 +697,12 @@ func current_self_draw_tile(seat: int) -> String:
 	# must also prove this seat has not discarded or called since that draw.
 	if not offline_self_draw_ready.is_empty():
 		var ready_seat = int(offline_self_draw_ready.get("seat", -1))
-		var ready_tile = str(offline_self_draw_ready.get("tile", ""))
+		var ready_tile = normalize_tile_code(str(offline_self_draw_ready.get("tile", "")))
 		var ready_serial = int(offline_self_draw_ready.get("serial", -1))
 		if ready_seat != seat or ready_tile == "" or ready_serial < 0:
 			return ""
 		if int(offline_last_draw.get("seat", -1)) != seat \
-			or str(offline_last_draw.get("tile", "")) != ready_tile \
+			or normalize_tile_code(str(offline_last_draw.get("tile", ""))) != ready_tile \
 			or int(offline_last_draw.get("serial", -2)) != ready_serial \
 			or count_tile(hand, ready_tile) <= 0:
 			return ""
@@ -699,7 +710,7 @@ func current_self_draw_tile(seat: int) -> String:
 	# Imported pre-R47 snapshots do not have an explicit draw-readiness marker.
 	# Keep their historical fallback, while every live draw writes the marker.
 	var legacy_drawn_seat = int(offline_last_draw.get("seat", -1))
-	var legacy_drawn_tile = str(offline_last_draw.get("tile", ""))
+	var legacy_drawn_tile = normalize_tile_code(str(offline_last_draw.get("tile", "")))
 	if legacy_drawn_seat == seat and legacy_drawn_tile != "" and count_tile(hand, legacy_drawn_tile) > 0:
 		return legacy_drawn_tile
 	return str(hand.back())
@@ -2102,6 +2113,7 @@ func is_valid_offline_discard(seat: int, tile: String) -> bool:
 	return count_tile(players[seat].get("hand", []), tile) > 0
 
 func commit_discard(seat: int, tile: String) -> bool:
+	tile = normalize_tile_code(tile)
 	if not is_valid_offline_discard(seat, tile):
 		return false
 	var hand: Array = players[seat]["hand"]
@@ -2123,9 +2135,11 @@ func commit_discard(seat: int, tile: String) -> bool:
 	play_fx_discard_ripple(seat)
 	speak_tile_call(tile)
 	add_log("%s打出%s。" % [players[seat]["name"], tile_label(tile)])
+	record_round_event("discard", {"seat": seat, "tile": normalize_tile_code(tile), "discard_count": players[seat]["discards"].size()})
 	return true
 
 func resolve_after_discard(from_seat: int, tile: String) -> void:
+	tile = normalize_tile_code(tile)
 	if mode != "offline" or offline_phase == "ended":
 		return
 	var ai_claim = choose_ai_claim(from_seat, tile)
@@ -2140,6 +2154,7 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 				"options": visible_human_options,
 				"chi_choices": get_chi_choices_from_counts(human_hand_counts, tile) if visible_human_options.has("chi") else [],
 				"ai_claim": ai_claim,
+				"deadline_msec": Time.get_ticks_msec() + PENDING_CLAIM_TIMEOUT_MSEC,
 			}
 			offline_phase = "pending_claim"
 			add_log("你可响应%s。" % tile_label(tile))
@@ -2154,6 +2169,7 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 	resolve_ai_or_advance(from_seat, tile, ai_claim)
 
 func resolve_ai_or_advance(from_seat: int, tile: String, prepared_claim: Dictionary = {}) -> void:
+	tile = normalize_tile_code(tile)
 	if mode != "offline" or offline_phase != "resolving" or from_seat < 0 or from_seat >= players.size() or tile == "":
 		return
 	var discards: Array = players[from_seat]["discards"]
@@ -2231,6 +2247,7 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 	return options
 
 func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> bool:
+	tile = normalize_tile_code(tile)
 	if mode != "offline" or seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or tile == "":
 		return false
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
@@ -2267,6 +2284,7 @@ func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: Stri
 	return false
 
 func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> void:
+	tile = normalize_tile_code(tile)
 	if not is_valid_offline_claim(seat, from_seat, tile, claim, chi_choice):
 		return
 	if claim == "hu":
@@ -2311,6 +2329,12 @@ func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String,
 			pass_discard_to_next(from_seat)
 			return
 	players[seat]["melds"].append(meld)
+	record_round_event("claim", {"seat": seat, "from_seat": from_seat, "claim": claim, "tile": normalize_tile_code(tile), "meld": normalize_tile_array(meld)})
+	if seat == 0 and not offline_sim_quiet:
+		if claim == "peng":
+			update_task_progress("peng_3", 1)
+		elif claim == "gang":
+			update_task_progress("gang_1", 1)
 	record_claim_source(seat, from_seat, claim)
 	if seat != 0:
 		play_ai_claim_choice_confirmation_fx(seat, from_seat, tile, claim)
@@ -2332,6 +2356,7 @@ func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String,
 
 func pass_discard_to_next(from_seat: int) -> void:
 	var passed_tile = last_discard
+	record_round_event("pass", {"from_seat": from_seat, "tile": normalize_tile_code(passed_tile), "next_seat": (from_seat + 1) % 4})
 	current_seat = (from_seat + 1) % 4
 	offline_turn_needs_draw = true
 	offline_phase = "await_discard"
@@ -2352,19 +2377,25 @@ func is_valid_offline_self_gang_turn(seat: int) -> bool:
 	return is_valid_offline_discard_turn(seat)
 
 func is_valid_offline_concealed_gang(seat: int, tile: String) -> bool:
+	tile = normalize_tile_code(tile)
 	return is_valid_offline_self_gang_turn(seat) and tile != "" and count_tile(players[seat].get("hand", []), tile) >= 4
 
 func is_valid_offline_added_gang(seat: int, tile: String) -> bool:
+	tile = normalize_tile_code(tile)
 	return is_valid_offline_self_gang_turn(seat) and can_added_gang(seat, tile)
 
 func perform_concealed_gang(seat: int, tile: String) -> bool:
+	tile = normalize_tile_code(tile)
 	if not is_valid_offline_concealed_gang(seat, tile):
 		return false
 	var hand: Array = players[seat]["hand"]
 	if not remove_tiles(hand, tile, 4):
 		return false
 	players[seat]["melds"].append([tile, tile, tile, tile])
+	record_round_event("concealed_gang", {"seat": seat, "tile": normalize_tile_code(tile)})
 	record_concealed_gang_meld(seat, tile)
+	if seat == 0 and not offline_sim_quiet:
+		update_task_progress("gang_1", 1)
 	play_sfx("gang", -2.0)
 	speak_action_call("暗杠", tile)
 	add_log("%s暗杠%s。" % [players[seat]["name"], tile_label(tile)])
@@ -2374,6 +2405,7 @@ func perform_concealed_gang(seat: int, tile: String) -> bool:
 	return true
 
 func perform_added_gang(seat: int, tile: String) -> bool:
+	tile = normalize_tile_code(tile)
 	if not is_valid_offline_added_gang(seat, tile):
 		return false
 	if begin_rob_gang_resolution(seat, tile):
@@ -2389,8 +2421,11 @@ func resolve_after_rob_gang_pass(gang_seat: int, tile: String, prepared_ai_claim
 	render_game()
 
 func finish_wall_draw() -> void:
+	if mode != "offline" or offline_phase == "ended":
+		return
 	invalidate_self_draw_readiness()
 	offline_phase = "ended"
+	round_result_kind = "wall_draw"
 	offline_turn_needs_draw = false
 	offline_pending_claim.clear()
 	offline_last_winner = -1
@@ -2404,14 +2439,19 @@ func finish_wall_draw() -> void:
 		for i in range(mini(4, (settled_deltas as Array).size())):
 			next_deltas[i] = int((settled_deltas as Array)[i])
 	last_score_deltas = next_deltas
+	if not offline_sim_quiet:
+		record_game_result(false, int(next_deltas[0]), 1, active_round_id)
 	last_win_score = {
 		"wall_draw": true,
+		"round_id": active_round_id,
+		"seed": offline_hand_seed,
 		"fan": 0,
 		"points": 0,
 		"tenpai_seats": settlement.get("tenpai_seats", []),
 		"noten_seats": settlement.get("noten_seats", []),
 		"ba": int(settlement.get("ba", 0)),
 		"reasons": ["荒庄查听"],
+		"result_kind": "wall_draw",
 	}
 	var tenpai_seats: Array = settlement.get("tenpai_seats", [])
 	var noten_seats: Array = settlement.get("noten_seats", [])
@@ -2433,7 +2473,25 @@ func finish_wall_draw() -> void:
 			int(settlement.get("ba", WALL_DRAW_NOTEN_BA)),
 		]
 	round_summary = summary
+	record_round_event("wall_draw", {"dealer": dealer_seat, "deltas": next_deltas.duplicate(), "tenpai_seats": tenpai_seats.duplicate(), "noten_seats": noten_seats.duplicate()})
+	if is_offline_match_finished():
+		last_match_summary = build_match_summary()
+		round_summary += " 冠军：%s（%d分）。" % [str(last_match_summary.get("champion_name", "")), int(last_match_summary.get("champion_score", 0))]
 	add_log(round_summary)
+	if not offline_sim_quiet:
+		record_round_history({
+		"round_id": active_round_id,
+		"hand_number": offline_hand_number,
+		"rule_variant": active_rule_variant(),
+		"result_kind": "wall_draw",
+		"winner": -1,
+		"points": 0,
+		"deltas": next_deltas.duplicate(),
+		"summary": round_summary,
+		"seed": offline_hand_seed,
+		"events": round_replay_snapshot(),
+		"match_summary": last_match_summary.duplicate(true),
+	})
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
 	play_wall_draw_resolution_fx(dealer_seat)
 	save_offline_progress()
@@ -2500,6 +2558,7 @@ func win_fx_type_for_score(score_data: Dictionary, self_draw: bool) -> String:
 	return "self_draw" if self_draw else "normal"
 
 func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> bool:
+	win_tile = normalize_tile_code(win_tile)
 	# 离线结算固定按四家支付/记账。先拒绝畸形导入桌面，避免通过
 	# winner/payer 的局部校验后在 finish_offline_round 的四座循环中越界。
 	if mode != "offline" or offline_phase == "ended" or players.size() != 4 or winner < 0 or winner >= players.size():
@@ -2559,6 +2618,7 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 	return can_ron_for_seat(winner, win_tile)
 
 func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> void:
+	win_tile = normalize_tile_code(win_tile)
 	# Keep the state transition as strict as scoring: an invalid external or
 	# stale resolver result must not play a win effect or terminate the hand.
 	if not can_finish_offline_round(winner, win_tile, self_draw, from_seat, win_context):
@@ -2601,7 +2661,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var player_score_delta = int(last_score_deltas[0]) if not last_score_deltas.is_empty() else 0
 	var player_won = winner == 0
 	if not offline_sim_quiet:
-		record_game_result(player_won, player_score_delta, offline_hand_number)
+		record_game_result(player_won, player_score_delta, offline_hand_number, active_round_id)
 
 	# 解锁成就
 	if (not offline_sim_quiet) and player_won:
@@ -2644,6 +2704,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 			unlock_achievement("ten_wins")
 
 	offline_phase = "ended"
+	round_result_kind = "win"
 	offline_turn_needs_draw = false
 	offline_pending_claim.clear()
 	current_seat = winner
@@ -2664,18 +2725,41 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		round_summary += " 包三搭：%s包赔。" % players[package_payer]["name"]
 	if is_offline_match_finished():
 		round_summary += " 全场结束。"
+		last_match_summary = build_match_summary()
+		round_summary += " 冠军：%s（%d分）。" % [str(last_match_summary.get("champion_name", "")), int(last_match_summary.get("champion_score", 0))]
 
 	# 保存详细得分数据用于结算页
 	last_win_score = score_data.duplicate()
 	last_win_score["winner"] = winner
+	last_win_score["round_id"] = active_round_id
+	last_win_score["seed"] = offline_hand_seed
 	last_win_score["win_tile"] = win_tile
 	last_win_score["self_draw"] = self_draw
 	last_win_score["from_seat"] = -1 if self_draw else from_seat
 	last_win_score["multi_ron"] = false
 	last_win_score["package_payer"] = package_payer if has_package_payment else -1
 	last_win_score["package_payment"] = has_package_payment
+	last_win_score["result_kind"] = "win"
+	record_round_event("win", {"winner": winner, "from_seat": from_seat, "tile": normalize_tile_code(win_tile), "self_draw": self_draw, "fan": int(score_data.get("fan", 0)), "points": points, "deltas": last_score_deltas.duplicate()})
 
 	add_log(round_summary)
+	if not offline_sim_quiet:
+		record_round_history({
+		"round_id": active_round_id,
+		"hand_number": offline_hand_number,
+		"rule_variant": active_rule_variant(),
+		"result_kind": "win",
+		"winner": winner,
+		"self_draw": self_draw,
+		"win_tile": win_tile,
+		"fan": int(score_data.get("fan", 0)),
+		"points": points,
+		"deltas": last_score_deltas.duplicate(),
+		"summary": round_summary,
+		"seed": offline_hand_seed,
+		"events": round_replay_snapshot(),
+		"match_summary": last_match_summary.duplicate(true),
+		})
 	save_offline_progress()
 	render_game()
 
@@ -2683,6 +2767,7 @@ func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size():
 		return false
 	var tiles: Array = players[seat]["hand"].duplicate()
+	extra_tile = normalize_tile_code(extra_tile)
 	if extra_tile != "":
 		tiles.append(extra_tile)
 	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, tiles):
@@ -2693,6 +2778,7 @@ func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 
 
 func record_passed_win_tile(seat: int, tile: String) -> void:
+	tile = normalize_tile_code(tile)
 	if seat < 0 or seat >= players.size() or tile == "":
 		return
 	var passed: Dictionary = offline_passed_win_tiles.get(seat, {})
@@ -2719,16 +2805,16 @@ func set_claim_discard_bans(seat: int, tiles) -> void:
 	var banned: Dictionary = {}
 	if typeof(tiles) == TYPE_DICTIONARY:
 		for key in tiles.keys():
-			var code = str(key)
+			var code = normalize_tile_code(str(key))
 			if code != "" and TILE_CODES.has(code):
 				banned[code] = true
 	elif typeof(tiles) == TYPE_ARRAY:
 		for item in tiles:
-			var code = str(item)
+			var code = normalize_tile_code(str(item))
 			if code != "" and TILE_CODES.has(code):
 				banned[code] = true
 	else:
-		var code = str(tiles)
+		var code = normalize_tile_code(str(tiles))
 		if code != "" and TILE_CODES.has(code):
 			banned[code] = true
 	if banned.is_empty():
@@ -2745,6 +2831,7 @@ func claim_discard_ban_tiles(claim: String, tile: String, meld: Array = []) -> A
 	# 1) 吃/碰后本拍不得立刻打出刚副露的同名张；
 	# 2) 边张吃时不得立刻打出另一端可“换位”的同花色张（例如吃 4 成 234 禁打 1）。
 	var bans: Array = []
+	tile = normalize_tile_code(tile)
 	if tile == "" or not TILE_CODES.has(tile):
 		return bans
 	if claim == "peng" or claim == "chi":
@@ -2916,6 +3003,7 @@ func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_cou
 
 
 func can_ron_for_seat(seat: int, tile: String) -> bool:
+	tile = normalize_tile_code(tile)
 	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
 	var hand_counts = tile_counts(players[seat].get("hand", []))
@@ -2925,6 +3013,7 @@ func can_ron_for_seat(seat: int, tile: String) -> bool:
 
 
 func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -> bool:
+	tile = normalize_tile_code(tile)
 	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
 	if not can_win_for_seat_from_counts(seat, hand_counts, tile):
@@ -2933,6 +3022,7 @@ func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -
 
 
 func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "") -> bool:
+	extra_tile = normalize_tile_code(extra_tile)
 	if seat < 0 or seat >= players.size() or hand_counts.is_empty():
 		return false
 	var counts = hand_counts
@@ -2970,7 +3060,10 @@ func has_pending_danger_discard() -> bool:
 		return false
 	if mode != "offline" or not can_self_discard():
 		return false
-	return count_tile(players[0]["hand"], pending_danger_discard_tile) > 0
+	var hand: Array = players[0]["hand"]
+	if pending_danger_discard_index >= 0 and pending_danger_discard_index < hand.size():
+		return str(hand[pending_danger_discard_index]) == pending_danger_discard_tile
+	return count_tile(hand, pending_danger_discard_tile) > 0
 
 func clear_pending_danger_discard() -> void:
 	pending_danger_discard_index = -1
@@ -3273,9 +3366,10 @@ func render_seat_threat_reports(viewer: int, eval_context: Dictionary = {}) -> D
 	return reports
 
 func best_chi_choice(hand: Array, tile: String) -> Dictionary:
-	return best_chi_choice_from_counts(tile_counts(hand), tile)
+	return best_chi_choice_from_counts(tile_counts(hand), normalize_tile_code(tile))
 
 func best_chi_choice_from_counts(hand_counts: Array, tile: String) -> Dictionary:
+	tile = normalize_tile_code(tile)
 	var choices = get_chi_choices_from_counts(hand_counts, tile)
 	var best: Dictionary = {}
 	var best_score = -100000.0
@@ -3292,10 +3386,11 @@ func best_chi_choice_from_counts(hand_counts: Array, tile: String) -> Dictionary
 	return best
 
 func get_chi_choices(hand: Array, tile: String) -> Array:
-	return get_chi_choices_from_counts(tile_counts(hand), tile)
+	return get_chi_choices_from_counts(tile_counts(hand), normalize_tile_code(tile))
 
 func get_chi_choices_from_counts(hand_counts: Array, tile: String) -> Array:
 	var choices: Array = []
+	tile = normalize_tile_code(tile)
 	var index = tile_index(tile)
 	if index < 0 or index >= 27 or hand_counts.is_empty():
 		return choices

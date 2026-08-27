@@ -11,10 +11,18 @@ const ONLINE_HOST_MAX_LENGTH := 253
 const ONLINE_ROOM_CODE_MAX_LENGTH := 32
 const ONLINE_LOG_HISTORY_LIMIT := 14
 const ONLINE_LOG_ENTRY_MAX_LENGTH := 240
+const ONLINE_CHAT_COOLDOWN_MSEC := 650
+const ONLINE_VOICE_PACKET_MAX_BYTES := 16384
+const ONLINE_VOICE_MIN_SAMPLE_RATE := 8000
+const ONLINE_VOICE_MAX_SAMPLE_RATE := 48000
+const ONLINE_SEEN_EVENT_LIMIT := 128
+const ONLINE_PROTOCOL_VERSION := 1
 const CHAT_MESSAGE_MAX_LENGTH := 64
 const CHAT_QUICK_MESSAGES := ["准备好了", "收到", "过牌"]
 const GAME_KEYBOARD_REPEAT_GUARD_MSEC := 90
 const ONLINE_SLOW_NOTICE_MSEC := 1800
+const PENDING_CLAIM_TIMEOUT_MSEC := 12000
+const ONLINE_ACTION_TIMEOUT_MSEC := 12000
 const ONLINE_TCP_READ_CHUNK_BYTES := 64 * 1024
 const ONLINE_MESSAGE_MAX_BYTES := 256 * 1024
 const APP_VERSION := "1.0.180-godot"
@@ -24,6 +32,7 @@ const UPDATE_FILE_PATH := "user://updates/YunzhuoMahjongGodot-v1.0.180-godot.apk
 const SETTINGS_PATH := "user://settings.cfg"
 const PROGRESS_PATH := "user://offline_progress.cfg"
 const STATS_PATH := "user://game_stats.cfg"
+const HISTORY_PATH := "user://round_history.cfg"
 const TUTORIAL_PATH := "user://tutorial.cfg"
 const ACHIEVEMENTS_PATH := "user://achievements.cfg"
 const LOGIN_PATH := "user://login.cfg"
@@ -419,6 +428,10 @@ const DAILY_TASKS := [
 	{"id": "play_5", "desc": "完成5局游戏", "target": 5, "reward_coins": 60},
 	{"id": "score_plus", "desc": "单局正分", "target": 1, "reward_coins": 25},
 ]
+const TASK_SCHEMA_VERSION := 2
+const ROUND_HISTORY_LIMIT := 20
+const ROUND_EVENT_HISTORY_LIMIT := 180
+const RESULT_TRANSACTION_HISTORY_LIMIT := 64
 const ITEM_TYPES := {
 	"swap_card": {"name": "换牌卡", "desc": "重新摸一张牌", "icon": "🔄", "cost_gems": 5},
 	"peek_card": {"name": "偷看卡", "desc": "查看对手一张手牌", "icon": "👁", "cost_gems": 8},
@@ -498,6 +511,7 @@ var tutorial_panel: Control = null
 var show_hand_hint = true  # 是否显示手牌操作提示
 var interactive_guide_active = false  # 交互式引导是否激活
 var interactive_guide_type = ""  # 当前引导类型：discard/claim/self_win
+var interactive_guide_target_index := -1  # 教学目标绑定到具体手牌实例
 var game_stats = {
 	"games_played": 0,
 	"games_won": 0,
@@ -535,11 +549,21 @@ var season_data = {
 	"highest_rank": 0,
 	"wins": 0,
 	"games": 0,
+	"win_streak": 0,
+	"best_win_streak": 0,
 }
 # 任务系统
 var daily_tasks = []  # 当日任务列表
 var task_progress = {}  # 任务进度
+var task_claimed = {}  # 当日任务奖励是否已领取
 var last_task_reset_date = ""  # 上次任务重置日期
+var round_history: Array = []  # 最近对局战报，最多保留 ROUND_HISTORY_LIMIT 条
+var round_event_history: Array = []  # 当前牌局结构化事件，用于战报复盘
+var round_event_sequence := 0
+var active_round_id := ""
+var applied_result_transactions: Dictionary = {}
+var offline_hand_seed := 0
+var last_match_summary: Dictionary = {}
 # 道具系统
 var inventory = {}  # 道具库存 {"swap_card": 2, "peek_card": 1, ...}
 # 虚拟货币
@@ -588,6 +612,7 @@ var table_logs: Array[String] = []
 var offline_phase = "idle"
 var offline_turn_needs_draw = false
 var offline_pending_claim: Dictionary = {}
+var offline_pending_claim_deadline_msec := 0
 var offline_claim_counts: Dictionary = {}
 var offline_package_liability: Dictionary = {}
 var offline_passed_win_tiles: Dictionary = {}  # seat -> {tile: true} 同张过水
@@ -608,6 +633,7 @@ var ai_profile_seat_map: Array = [0, 1, 2, 3]
 var ai_sim_stats: Dictionary = {}
 var ai_sim_trace_enabled := false  # 仅基准诊断：记录紧凑弃牌链路，不进入正常对局
 var round_summary = ""
+var round_result_kind := "playing"  # playing / win / wall_draw
 var last_score_deltas: Array[int] = []
 var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
 var current_human_advice: Array = []
@@ -677,7 +703,19 @@ var online_waiting_for_server = false
 var online_last_sent_action = ""
 var online_last_sent_type = ""
 var online_last_sent_msec = 0
+var online_last_sent_payload: Dictionary = {}
 var online_slow_notice_shown := false
+var online_retry_available := false
+var online_action_sequence := 0
+var online_session_id := 0
+var online_room_revision := -1
+var online_game_revision := -1
+var online_resume_context: Dictionary = {}
+var online_seen_message_ids: Dictionary = {}
+var online_seen_voice_sequences: Dictionary = {}
+var online_last_chat_sent_msec := 0
+var online_last_snapshot_fingerprint := ""
+var online_last_room_snapshot_fingerprint := ""
 var online_announced_discard_key = ""
 var online_pending_local_discard_identity = ""
 var sent_hello = false
@@ -779,9 +817,9 @@ const DISCARD_ZONES := [
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
-	[1, Rect2(Vector2(0.775, 0.240), Vector2(0.857, 0.680))],
+	[1, Rect2(Vector2(0.780, 0.240), Vector2(0.852, 0.680))],
 	[2, Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))],
-	[3, Rect2(Vector2(0.143, 0.240), Vector2(0.225, 0.680))],
+	[3, Rect2(Vector2(0.148, 0.240), Vector2(0.220, 0.680))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
 const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.345), Vector2(0.595, 0.635))
@@ -1822,6 +1860,29 @@ func set_button_focus_feedback_by_id(button_id: int, focused: bool) -> void:
 		return
 	focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.82 if focused else 0.0)
 
+func focus_button_neighbor(button: Button, focusable: Array[Button], direction: Vector2) -> Button:
+	if button == null or focusable.is_empty():
+		return button
+	var origin_rect := button.get_global_rect()
+	var origin := origin_rect.position + origin_rect.size * 0.5
+	var best: Button = null
+	var best_score := INF
+	for candidate in focusable:
+		if candidate == null or candidate == button:
+			continue
+		var candidate_rect := candidate.get_global_rect()
+		var delta := candidate_rect.position + candidate_rect.size * 0.5 - origin
+		var forward := delta.dot(direction)
+		if forward <= 1.0:
+			continue
+		var cross_distance := absf(delta.x if absf(direction.y) > 0.5 else delta.y)
+		var score := forward + cross_distance * 1.8
+		if score < best_score:
+			best_score = score
+			best = candidate
+	return best if best != null else button
+
+
 func configure_button_focus_navigation(root: Control, default_focus_name: String = "", grab_default_focus: bool = true) -> void:
 	if root == null or not is_instance_valid(root):
 		return
@@ -1838,12 +1899,16 @@ func configure_button_focus_navigation(root: Control, default_focus_name: String
 		var button := focusable[index]
 		var previous := focusable[(index - 1 + focusable.size()) % focusable.size()]
 		var next := focusable[(index + 1) % focusable.size()]
+		var left := focus_button_neighbor(button, focusable, Vector2.LEFT)
+		var right := focus_button_neighbor(button, focusable, Vector2.RIGHT)
+		var top := focus_button_neighbor(button, focusable, Vector2.UP)
+		var bottom := focus_button_neighbor(button, focusable, Vector2.DOWN)
 		button.focus_previous = previous.get_path()
 		button.focus_next = next.get_path()
-		button.focus_neighbor_left = previous.get_path()
-		button.focus_neighbor_right = next.get_path()
-		button.focus_neighbor_top = previous.get_path()
-		button.focus_neighbor_bottom = next.get_path()
+		button.focus_neighbor_left = left.get_path()
+		button.focus_neighbor_right = right.get_path()
+		button.focus_neighbor_top = top.get_path()
+		button.focus_neighbor_bottom = bottom.get_path()
 	if not grab_default_focus:
 		return
 	var requested: Button = null
@@ -2606,6 +2671,7 @@ func load_game_stats() -> void:
 			"win_rate": 0.0,
 			"total_hands": 0,
 		}
+		load_round_history()
 		return
 	game_stats = {
 		"games_played": int(config.get_value("stats", "games_played", 0)),
@@ -2615,6 +2681,7 @@ func load_game_stats() -> void:
 		"win_rate": float(config.get_value("stats", "win_rate", 0.0)),
 		"total_hands": int(config.get_value("stats", "total_hands", 0)),
 	}
+	load_round_history()
 
 func save_game_stats() -> void:
 	var config = ConfigFile.new()
@@ -2625,6 +2692,46 @@ func save_game_stats() -> void:
 	config.set_value("stats", "win_rate", game_stats.get("win_rate", 0.0))
 	config.set_value("stats", "total_hands", game_stats.get("total_hands", 0))
 	config.save(STATS_PATH)
+	save_round_history()
+
+func load_round_history() -> void:
+	var config = ConfigFile.new()
+	round_history = []
+	if config.load(HISTORY_PATH) != OK:
+		return
+	var stored = config.get_value("history", "entries", [])
+	if typeof(stored) != TYPE_ARRAY:
+		return
+	for entry in (stored as Array):
+		if typeof(entry) == TYPE_DICTIONARY:
+			round_history.append((entry as Dictionary).duplicate(true))
+	while round_history.size() > ROUND_HISTORY_LIMIT:
+		round_history.pop_front()
+
+func save_round_history() -> void:
+	var config = ConfigFile.new()
+	config.set_value("history", "entries", round_history.slice(maxi(0, round_history.size() - ROUND_HISTORY_LIMIT)))
+	config.save(HISTORY_PATH)
+
+func record_round_history(entry: Dictionary) -> void:
+	if entry.is_empty():
+		return
+	var normalized := entry.duplicate(true)
+	var round_id := str(normalized.get("round_id", normalized.get("roundId", ""))).strip_edges()
+	if round_id != "":
+		for existing in round_history:
+			if typeof(existing) == TYPE_DICTIONARY and str(existing.get("round_id", existing.get("roundId", ""))) == round_id:
+				return
+		normalized["round_id"] = round_id
+	normalized["saved_at"] = int(Time.get_unix_time_from_system())
+	round_history.append(normalized)
+	while round_history.size() > ROUND_HISTORY_LIMIT:
+		round_history.pop_front()
+	save_round_history()
+
+func latest_round_history(limit: int = 5) -> Array:
+	var count := clampi(limit, 0, ROUND_HISTORY_LIMIT)
+	return round_history.slice(maxi(0, round_history.size() - count))
 
 func load_tutorial_state() -> void:
 	var config = ConfigFile.new()
@@ -2760,21 +2867,40 @@ func claim_daily_login_reward() -> Dictionary:
 
 func load_season_data() -> void:
 	var config = ConfigFile.new()
+	var current_season_id := Time.get_date_string_from_system().substr(0, 7)
 	if config.load(SEASON_PATH) == OK:
+		var stored_season_id := str(config.get_value("season", "season_id", "")).strip_edges()
+		if stored_season_id != current_season_id:
+			# 赛季按自然月切换；历史战报仍保留，当前赛季进度从青铜重新开始。
+			season_data = {
+				"season_id": current_season_id,
+				"points": 0,
+				"highest_rank": 0,
+				"wins": 0,
+				"games": 0,
+				"win_streak": 0,
+				"best_win_streak": 0,
+			}
+			save_season_data()
+			return
 		season_data = {
-			"season_id": str(config.get_value("season", "season_id", "")),
-			"points": int(config.get_value("season", "points", 0)),
-			"highest_rank": int(config.get_value("season", "highest_rank", 0)),
-			"wins": int(config.get_value("season", "wins", 0)),
-			"games": int(config.get_value("season", "games", 0)),
+			"season_id": current_season_id,
+			"points": maxi(0, int(config.get_value("season", "points", 0))),
+			"highest_rank": maxi(0, int(config.get_value("season", "highest_rank", 0))),
+			"wins": maxi(0, int(config.get_value("season", "wins", 0))),
+			"games": maxi(0, int(config.get_value("season", "games", 0))),
+			"win_streak": maxi(0, int(config.get_value("season", "win_streak", 0))),
+			"best_win_streak": maxi(0, int(config.get_value("season", "best_win_streak", 0))),
 		}
 	else:
 		season_data = {
-			"season_id": Time.get_date_string_from_system().substr(0, 7),  # YYYY-MM
+			"season_id": current_season_id,
 			"points": 0,
 			"highest_rank": 0,
 			"wins": 0,
 			"games": 0,
+			"win_streak": 0,
+			"best_win_streak": 0,
 		}
 
 func save_season_data() -> void:
@@ -2784,6 +2910,8 @@ func save_season_data() -> void:
 	config.set_value("season", "highest_rank", season_data.get("highest_rank", 0))
 	config.set_value("season", "wins", season_data.get("wins", 0))
 	config.set_value("season", "games", season_data.get("games", 0))
+	config.set_value("season", "win_streak", season_data.get("win_streak", 0))
+	config.set_value("season", "best_win_streak", season_data.get("best_win_streak", 0))
 	config.save(SEASON_PATH)
 
 func get_current_rank() -> int:
@@ -2798,14 +2926,37 @@ func get_rank_name(rank: int = -1) -> String:
 	return SEASON_RANKS[r] if r >= 0 and r < SEASON_RANKS.size() else "青铜"
 
 func add_season_points(points: int, won: bool) -> void:
-	season_data["points"] = int(season_data.get("points", 0)) + points
+	var previous_rank := get_current_rank()
+	season_data["points"] = maxi(0, int(season_data.get("points", 0)) + points)
 	season_data["games"] = int(season_data.get("games", 0)) + 1
 	if won:
 		season_data["wins"] = int(season_data.get("wins", 0)) + 1
+		season_data["win_streak"] = int(season_data.get("win_streak", 0)) + 1
+		season_data["best_win_streak"] = maxi(int(season_data.get("best_win_streak", 0)), int(season_data.get("win_streak", 0)))
+	else:
+		season_data["win_streak"] = 0
 	var current = get_current_rank()
 	if current > int(season_data.get("highest_rank", 0)):
 		season_data["highest_rank"] = current
 	save_season_data()
+	if current > previous_rank and (mode != "offline" or not offline_sim_quiet):
+		# UI feedback lives in the assembled child script; keep this base script
+		# independently parsable for headless validation and lightweight tests.
+		call("show_toast", "段位晋升：%s" % get_rank_name(current), 2600)
+
+func season_points_for_result(won: bool, score_delta: int, wall_draw: bool = false) -> int:
+	if wall_draw:
+		return 4 if score_delta > 0 else 2
+	var base := 12 if won else 3
+	return clampi(base + int(round(float(score_delta) / 1200.0)), 1, 30)
+
+func season_next_rank_progress() -> Dictionary:
+	var rank := get_current_rank()
+	if rank >= SEASON_RANK_POINTS.size() - 1:
+		return {"rank": rank, "next_rank": rank, "current": int(season_data.get("points", 0)), "target": int(season_data.get("points", 0)), "remaining": 0, "complete": true}
+	var current_points := int(season_data.get("points", 0))
+	var target := int(SEASON_RANK_POINTS[rank + 1])
+	return {"rank": rank, "next_rank": rank + 1, "current": current_points, "target": target, "remaining": maxi(0, target - current_points), "complete": false}
 
 # ============================================================
 # 任务系统
@@ -2818,15 +2969,26 @@ func load_tasks() -> void:
 		var progress = config.get_value("tasks", "progress", {})
 		if typeof(progress) == TYPE_DICTIONARY:
 			task_progress = progress.duplicate()
+		var claimed = config.get_value("tasks", "claimed", {})
+		if typeof(claimed) == TYPE_DICTIONARY:
+			task_claimed = claimed.duplicate()
 	else:
 		task_progress = {}
+		task_claimed = {}
 		last_task_reset_date = ""
+	for task in DAILY_TASKS:
+		var task_id := str(task.get("id", ""))
+		if task_id != "":
+			task_progress[task_id] = maxi(0, int(task_progress.get(task_id, 0)))
+			task_claimed[task_id] = bool(task_claimed.get(task_id, false))
 	reset_daily_tasks()
 
 func save_tasks() -> void:
 	var config = ConfigFile.new()
 	config.set_value("tasks", "last_reset", last_task_reset_date)
 	config.set_value("tasks", "progress", task_progress)
+	config.set_value("tasks", "claimed", task_claimed)
+	config.set_value("tasks", "schema_version", TASK_SCHEMA_VERSION)
 	config.save(TASKS_PATH)
 
 func reset_daily_tasks() -> void:
@@ -2834,10 +2996,14 @@ func reset_daily_tasks() -> void:
 	if last_task_reset_date != today:
 		last_task_reset_date = today
 		task_progress.clear()
+		task_claimed.clear()
 		for task in DAILY_TASKS:
 			task_progress[task.id] = 0
+			task_claimed[task.id] = false
 		daily_tasks = DAILY_TASKS.duplicate()
 		save_tasks()
+	elif daily_tasks.is_empty():
+		daily_tasks = DAILY_TASKS.duplicate()
 
 
 func get_task_status(task_id: String) -> Dictionary:
@@ -2845,14 +3011,43 @@ func get_task_status(task_id: String) -> Dictionary:
 		if task.id == task_id:
 			var progress = int(task_progress.get(task_id, 0))
 			var target = int(task.get("target", 1))
+			var claimed := bool(task_claimed.get(task_id, false))
 			return {
 				"desc": task.get("desc", ""),
 				"progress": progress,
 				"target": target,
 				"reward": int(task.get("reward_coins", 0)),
 				"completed": progress >= target,
+				"claimed": claimed,
+				"claimable": progress >= target and not claimed,
 			}
 	return {}
+
+func daily_task_summary() -> Dictionary:
+	var completed := 0
+	var claimed := 0
+	var claimable := 0
+	for task in DAILY_TASKS:
+		var status := get_task_status(str(task.get("id", "")))
+		if bool(status.get("completed", false)):
+			completed += 1
+		if bool(status.get("claimed", false)):
+			claimed += 1
+		if bool(status.get("claimable", false)):
+			claimable += 1
+	return {"total": DAILY_TASKS.size(), "completed": completed, "claimed": claimed, "claimable": claimable}
+
+func task_progress_text(task_id: String) -> String:
+	var status := get_task_status(task_id)
+	if status.is_empty():
+		return ""
+	var progress := mini(int(status.get("progress", 0)), int(status.get("target", 1)))
+	var target := int(status.get("target", 1))
+	if bool(status.get("claimed", false)):
+		return "已领取 %d/%d" % [progress, target]
+	if bool(status.get("claimable", false)):
+		return "可领取 %d/%d" % [progress, target]
+	return "%d/%d" % [progress, target]
 
 # ============================================================
 # 道具系统
@@ -2860,21 +3055,37 @@ func get_task_status(task_id: String) -> Dictionary:
 
 func load_inventory() -> void:
 	var config = ConfigFile.new()
-	if config.load(INVENTORY_PATH) == OK:
+	var load_error := config.load(INVENTORY_PATH)
+	if load_error == OK:
 		var inv = config.get_value("inventory", "items", {})
-		if typeof(inv) == TYPE_DICTIONARY:
-			inventory = inv.duplicate()
+		inventory = sanitize_inventory(inv)
 	else:
 		inventory = {}
+	if load_error == OK:
+		save_inventory()
+
+func sanitize_inventory(value) -> Dictionary:
+	var result: Dictionary = {}
+	if typeof(value) != TYPE_DICTIONARY:
+		return result
+	for item_id in ITEM_TYPES.keys():
+		var count := clampi(int((value as Dictionary).get(item_id, 0)), 0, 999999)
+		if count > 0:
+			result[item_id] = count
+	return result
 
 func save_inventory() -> void:
+	inventory = sanitize_inventory(inventory)
 	var config = ConfigFile.new()
 	config.set_value("inventory", "items", inventory)
 	config.save(INVENTORY_PATH)
 
-func add_item(item_id: String, count: int = 1) -> void:
-	inventory[item_id] = int(inventory.get(item_id, 0)) + count
+func add_item(item_id: String, count: int = 1) -> bool:
+	if not ITEM_TYPES.has(item_id) or count <= 0:
+		return false
+	inventory[item_id] = clampi(int(inventory.get(item_id, 0)) + count, 0, 999999)
 	save_inventory()
+	return true
 
 func get_item_count(item_id: String) -> int:
 	return int(inventory.get(item_id, 0))
@@ -2892,31 +3103,46 @@ func load_currency() -> void:
 	var config = ConfigFile.new()
 	if config.load(CURRENCY_PATH) == OK:
 		currency = {
-			"coins": int(config.get_value("currency", "coins", 0)),
-			"gems": int(config.get_value("currency", "gems", 0)),
+			"coins": maxi(0, int(config.get_value("currency", "coins", 0))),
+			"gems": maxi(0, int(config.get_value("currency", "gems", 0))),
 		}
+		save_currency()
 	else:
 		currency = {"coins": 500, "gems": 10}  # 初始货币
 
 func save_currency() -> void:
+	currency["coins"] = maxi(0, int(currency.get("coins", 0)))
+	currency["gems"] = maxi(0, int(currency.get("gems", 0)))
 	var config = ConfigFile.new()
 	config.set_value("currency", "coins", currency.get("coins", 0))
 	config.set_value("currency", "gems", currency.get("gems", 0))
 	config.save(CURRENCY_PATH)
 
 func can_afford_gems(amount: int) -> bool:
-	return int(currency.get("gems", 0)) >= amount
+	return amount > 0 and int(currency.get("gems", 0)) >= amount
 
 func spend_gems(amount: int) -> bool:
-	if not can_afford_gems(amount):
+	if amount <= 0 or not can_afford_gems(amount):
 		return false
 	currency["gems"] = int(currency.get("gems", 0)) - amount
 	save_currency()
 	return true
 
-func record_game_result(won: bool, score: int, hands_played: int) -> void:
+func record_game_result(won: bool, score: int, hands_played: int, result_key: String = "") -> void:
+	var transaction_key := result_key.strip_edges()
+	if transaction_key != "":
+		if applied_result_transactions.has(transaction_key):
+			return
+		for history_entry in round_history:
+			if typeof(history_entry) == TYPE_DICTIONARY and str(history_entry.get("round_id", "")) == transaction_key:
+				applied_result_transactions[transaction_key] = int(history_entry.get("saved_at", Time.get_unix_time_from_system()))
+				return
+		applied_result_transactions[transaction_key] = int(Time.get_unix_time_from_system())
+		while applied_result_transactions.size() > RESULT_TRANSACTION_HISTORY_LIMIT:
+			var oldest_key = applied_result_transactions.keys()[0]
+			applied_result_transactions.erase(oldest_key)
 	game_stats["games_played"] = int(game_stats.get("games_played", 0)) + 1
-	game_stats["total_hands"] = int(game_stats.get("total_hands", 0)) + hands_played
+	game_stats["total_hands"] = int(game_stats.get("total_hands", 0)) + maxi(0, hands_played)
 	game_stats["total_score"] = int(game_stats.get("total_score", 0)) + score
 	if won:
 		game_stats["games_won"] = int(game_stats.get("games_won", 0)) + 1
@@ -2924,25 +3150,63 @@ func record_game_result(won: bool, score: int, hands_played: int) -> void:
 		game_stats["best_score"] = score
 	var played = int(game_stats.get("games_played", 0))
 	game_stats["win_rate"] = float(game_stats.get("games_won", 0)) / float(max(1, played))
+	if not offline_sim_quiet:
+		# Every completed hand feeds the daily loop and season ladder exactly once.
+		call("update_task_progress", "play_5", 1)
+		if won:
+			call("update_task_progress", "win_3", 1)
+		if score > 0:
+			call("update_task_progress", "score_plus", 1)
+		add_season_points(season_points_for_result(won, score), won)
+		grant_round_coins(won, score)
 	save_game_stats()
+
+func grant_round_coins(won: bool, score: int) -> int:
+	var reward := 8 + (25 if won else 5) + maxi(0, int(score / 1200))
+	var doubled := int(inventory.get("double_coins", 0)) > 0
+	if doubled:
+		reward *= 2
+		inventory["double_coins"] = int(inventory.get("double_coins", 0)) - 1
+		save_inventory()
+	currency["coins"] = maxi(0, int(currency.get("coins", 0)) + reward)
+	save_currency()
+	call("show_toast", "本局奖励：+%d金币%s" % [reward, "（双倍卡已消耗）" if doubled else ""], 2200)
+	return reward
 
 func load_offline_progress() -> bool:
 	var config = ConfigFile.new()
 	if config.load(PROGRESS_PATH) != OK:
 		return false
-	dealer_seat = int(config.get_value("progress", "dealer_seat", 0))
-	offline_hand_number = int(config.get_value("progress", "hand_number", 1))
+	if not config.has_section("progress"):
+		set_status("本地进度缺少核心数据，已创建新赛季")
+		return false
+	var loaded_dealer := int(config.get_value("progress", "dealer_seat", -1))
+	var loaded_hand := int(config.get_value("progress", "hand_number", -1))
+	if loaded_dealer < 0 or loaded_dealer >= 4 or loaded_hand < 1 or loaded_hand > MATCH_MAX_HANDS:
+		set_status("本地进度已损坏，已创建新赛季")
+		return false
+	dealer_seat = loaded_dealer
+	offline_hand_number = loaded_hand
 	players.clear()
 	for i in range(4):
 		var section = "player_%d" % i
+		if not config.has_section(section):
+			set_status("本地进度缺少玩家数据，已创建新赛季")
+			players.clear()
+			return false
+		var loaded_score := int(config.get_value(section, "score", MATCH_START_SCORE))
+		if loaded_score < -1000000 or loaded_score > 1000000:
+			set_status("本地进度分数异常，已创建新赛季")
+			players.clear()
+			return false
 		players.append({
-			"name": str(config.get_value(section, "name", SEAT_NAMES[i])) if config.has_section(section) else SEAT_NAMES[i],
+			"name": str(config.get_value(section, "name", SEAT_NAMES[i])),
 			"hand": [],
 			"discards": [],
 			"melds": [],
 			"flowers": 0,
 			"flower_tiles": [],
-			"score": int(config.get_value(section, "score", MATCH_START_SCORE)) if config.has_section(section) else MATCH_START_SCORE,
+			"score": loaded_score,
 			"bot": i != 0,
 		})
 	return true
@@ -2960,7 +3224,10 @@ func save_offline_progress() -> void:
 		var section = "player_%d" % i
 		config.set_value(section, "name", players[i].get("name", SEAT_NAMES[i]))
 		config.set_value(section, "score", players[i].get("score", MATCH_START_SCORE))
-	config.save(PROGRESS_PATH)
+	var save_error := config.save(PROGRESS_PATH)
+	if save_error != OK:
+		set_status("进度保存失败：%s" % error_string(save_error))
+		return
 	set_status("进度已保存 (第%d局)" % offline_hand_number)
 
 func reset_offline_progress() -> void:
@@ -3321,26 +3588,47 @@ func attach_audio_node(node: Node) -> void:
 func normalize_tile_code(code: String) -> String:
 	# Map legacy aliases so river/meld never fall through to tile_back.
 	# Canonical suits: W=万 T=条 B=筒; honors E/S/N/R/Z/F/P.
-	var c := str(code).strip_edges()
+	var c := str(code).strip_edges().to_upper()
 	if c.is_empty():
 		return c
-	if is_flower_tile(c):
+	if FLOWER_CODES.has(c):
 		return c
+	if c.length() == 2:
+		var prefix := c.substr(0, 1)
+		var rank := c.substr(1, 1)
+		if rank >= "1" and rank <= "9":
+			match prefix:
+				"M":
+					return rank + "W" # Legacy man prefix -> 万
+				"S":
+					return rank + "T" # Legacy sou prefix -> 条
+				"P":
+					return rank + "B" # Legacy pin prefix -> 筒
 	if c.length() == 2 and c[0] >= "1" and c[0] <= "9":
 		var suit := c.substr(1, 1)
-		if suit == "S":
+		if suit == "M" or suit == "W":
+			return c[0] + "W"
+		if suit == "S" or suit == "T":
 			# Legacy sou (条) suffix → T
 			return c[0] + "T"
-		if suit == "P":
+		if suit == "P" or suit == "B":
 			# Legacy pin (筒) suffix → B (honor 白 is bare "P")
 			return c[0] + "B"
 	match c:
-		"W":
+		"W", "WEST", "XI":
 			return "N"  # 西
-		"C":
+		"C", "ZHONG":
 			return "Z"  # 中
-		"B":
+		"B", "BAI", "WHITE":
 			return "P"  # 白 (bare B alias)
+		"GREEN":
+			return "F"
+		"EAST":
+			return "E"
+		"SOUTH":
+			return "S"
+		"NORTH":
+			return "R"
 		_:
 			pass
 	return c
@@ -3407,11 +3695,12 @@ func suit_label(suit: String) -> String:
 func tile_index(tile: String) -> int:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	return int(tile_order.get(tile, -1))
+	return int(tile_order.get(normalize_tile_code(tile), -1))
 
 func tile_sort_index(tile: String) -> int:
 	if not tile_metadata_ready:
 		setup_tile_order()
+	tile = normalize_tile_code(tile)
 	if tile_sort_order.has(tile):
 		return int(tile_sort_order[tile])
 	var flower_index = FLOWER_CODES.find(tile)
@@ -3425,17 +3714,19 @@ func tile_sort_index(tile: String) -> int:
 func is_flower_tile(tile: String) -> bool:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_flower_cache.has(tile):
-		return bool(tile_flower_cache[tile])
-	return FLOWER_CODES.has(tile)
+	var normalized := str(tile).strip_edges().to_upper()
+	if tile_flower_cache.has(normalized):
+		return bool(tile_flower_cache[normalized])
+	return FLOWER_CODES.has(normalized)
 
 # ===== Shared tile collection helpers =====
 func is_number_tile(tile: String) -> bool:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_number_cache.has(tile):
-		return bool(tile_number_cache[tile])
-	return tile.ends_with("W") or tile.ends_with("T") or tile.ends_with("B")
+	var normalized := normalize_tile_code(tile)
+	if tile_number_cache.has(normalized):
+		return bool(tile_number_cache[normalized])
+	return normalized.ends_with("W") or normalized.ends_with("T") or normalized.ends_with("B")
 
 
 func tile_counts(tiles: Array) -> Array:
@@ -3458,7 +3749,7 @@ func tile_count_from_counts(tile: String, counts: Array) -> int:
 func tile_presence_set(tiles: Array) -> Dictionary:
 	var result: Dictionary = {}
 	for tile in tiles:
-		var code = str(tile)
+		var code = normalize_tile_code(str(tile))
 		if code != "":
 			result[code] = true
 	return result
@@ -3544,7 +3835,7 @@ func has_tile_list_counts(counts: Array, tiles: Array) -> bool:
 
 func remove_known_tile_list(hand: Array, tiles: Array) -> bool:
 	for tile in tiles:
-		var index = find_tile_in_hand(hand, str(tile))
+		var index = find_tile_in_hand(hand, normalize_tile_code(str(tile)))
 		if index < 0:
 			return false
 		hand.remove_at(index)
@@ -3554,7 +3845,7 @@ func remove_known_tiles(hand: Array, tile: String, amount: int) -> bool:
 	if amount <= 0:
 		return false
 	for n in range(amount):
-		var index = find_tile_in_hand(hand, tile)
+		var index = find_tile_in_hand(hand, normalize_tile_code(tile))
 		if index < 0:
 			return false
 		hand.remove_at(index)
@@ -3580,15 +3871,17 @@ func remove_tiles(hand: Array, tile: String, amount: int) -> bool:
 	return true
 
 func find_tile_in_hand(hand: Array, tile: String) -> int:
+	var normalized := normalize_tile_code(tile)
 	for i in range(hand.size()):
-		if str(hand[i]) == tile:
+		if normalize_tile_code(str(hand[i])) == normalized:
 			return i
 	return -1
 
 func count_tile(hand: Array, tile: String) -> int:
+	var normalized := normalize_tile_code(tile)
 	var count = 0
 	for item in hand:
-		if str(item) == tile:
+		if normalize_tile_code(str(item)) == normalized:
 			count += 1
 	return count
 

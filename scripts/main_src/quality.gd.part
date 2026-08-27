@@ -1,0 +1,52 @@
+## Round quality helpers: deterministic dealing, compact replay events, and stable match summaries.
+
+func shuffle_wall_with_seed(items: Array, seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(seed)
+	for index in range(items.size() - 1, 0, -1):
+		var swap_index := rng.randi_range(0, index)
+		var value = items[index]
+		items[index] = items[swap_index]
+		items[swap_index] = value
+
+func record_round_event(event_type: String, payload: Dictionary = {}) -> void:
+	if offline_sim_quiet or active_round_id == "" or event_type.strip_edges() == "":
+		return
+	round_event_sequence += 1
+	var event := payload.duplicate(true)
+	event["round_id"] = active_round_id
+	event["sequence"] = round_event_sequence
+	event["type"] = event_type.strip_edges()
+	round_event_history.append(event)
+	while round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
+		round_event_history.pop_front()
+
+func round_replay_snapshot() -> Array:
+	return round_event_history.duplicate(true)
+
+func build_match_summary() -> Dictionary:
+	var ranking: Array = []
+	for seat in range(mini(players.size(), 4)):
+		var player: Dictionary = players[seat] if typeof(players[seat]) == TYPE_DICTIONARY else {}
+		ranking.append({
+			"seat": seat,
+			"name": str(player.get("name", SEAT_NAMES[seat])),
+			"score": int(player.get("score", MATCH_START_SCORE)),
+		})
+	ranking.sort_custom(func(a, b):
+		if int(a.get("score", 0)) == int(b.get("score", 0)):
+			return int(a.get("seat", 0)) < int(b.get("seat", 0))
+		return int(a.get("score", 0)) > int(b.get("score", 0))
+	)
+	for index in range(ranking.size()):
+		ranking[index]["rank"] = index + 1
+	var champion: Dictionary = ranking[0] if not ranking.is_empty() else {}
+	return {
+		"completed": ranking.size() == 4,
+		"champion_seat": int(champion.get("seat", -1)),
+		"champion_name": str(champion.get("name", "")),
+		"champion_score": int(champion.get("score", 0)),
+		"rankings": ranking,
+		"rounds": MATCH_MAX_HANDS,
+	}
+

@@ -422,12 +422,16 @@ func refresh_online_lobby_action_states() -> void:
 
 func _show_online_lobby_impl() -> void:
 	# r215: GPT chrome conversion
+	var was_online_lobby: bool = mode == "online_lobby"
 	mode = "online_lobby"
 	emit_ui_qa_marker("page|online_lobby")
 	recover_audio_after_screen_change()
 	clear_screen()
-	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and not online_waiting_for_server:
-		clear_online_room_snapshot()
+	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and (not online_waiting_for_server or was_online_lobby):
+		if was_online_lobby:
+			online_waiting_for_server = false
+			online_retry_available = false
+		clear_online_room_snapshot(not was_online_lobby)
 
 	# 主面板 - 统一的全屏面板
 	# The disconnected lobby is an operational form, so its full-page substrate
@@ -1950,7 +1954,7 @@ func show_chat_panel() -> void:
 		return
 	chat_panel_open = true
 	# r215: GPT chrome conversion
-	var compact_chat := chat_panel_rect().size.x < 0.250
+	var compact_chat := chat_panel_rect().size.x < 0.300
 	var chat_panel = make_gpt_plate_rect(chat_panel_rect(), Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
 	chat_panel.name = "ChatPanel"
 	chat_panel.z_index = 45
@@ -1959,22 +1963,31 @@ func show_chat_panel() -> void:
 	chat_panel.clip_contents = true
 	root_layer.add_child(chat_panel)
 	draw_chat_panel_art(chat_panel)
-	var chat_text = "\n".join(chat_messages.slice(-3 if compact_chat else -8))
+	var chat_text = "\n".join(chat_messages)
 	if chat_text.strip_edges() == "":
 		chat_text = "等待房间消息"
-	var chat_label = make_label(chat_panel, chat_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
+	var chat_scroll := ScrollContainer.new()
+	chat_scroll.name = "ChatPanelMessageScroll"
+	chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	chat_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	chat_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	apply_rect(chat_scroll, rect_full(0.060, 0.465 if compact_chat else 0.285, 0.940, 0.690 if compact_chat else 0.775))
+	chat_panel.add_child(chat_scroll)
+	var chat_label = make_label(chat_scroll, chat_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
 	chat_label.name = "ChatPanelMessageText"
-	apply_rect(chat_label, rect_full(0.060, 0.465 if compact_chat else 0.285, 0.940, 0.690 if compact_chat else 0.775))
+	chat_label.custom_minimum_size = Vector2(0.0, maxf(64.0, float(chat_messages.size()) * (18.0 if compact_chat else 24.0)))
+	chat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	chat_label.clip_text = true
+	chat_label.clip_text = false
 	chat_label.tooltip_text = chat_text
+	call_deferred("scroll_chat_panel_to_end")
 
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_chat_panel"))
 	close_button.name = "ChatPanelCloseButton"
 	close_button.tooltip_text = "关闭聊天面板 · 快捷键 Esc"
 	close_button.custom_minimum_size = Vector2(34, 34)
-	apply_rect(close_button, rect_full(0.820, 0.055, 0.950, 0.190))
+	apply_rect(close_button, rect_full(0.780 if compact_chat else 0.820, 0.055, 0.950, 0.190))
 	chat_panel.add_child(close_button)
 
 	var quick_row := HBoxContainer.new()
@@ -2012,7 +2025,7 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
-	apply_rect(chat_input, rect_full(0.060, 0.720 if compact_chat else 0.805, 0.690, 0.955 if compact_chat else 0.945))
+	apply_rect(chat_input, rect_full(0.060, 0.720 if compact_chat else 0.805, 0.665 if compact_chat else 0.690, 0.955 if compact_chat else 0.945))
 	chat_panel.add_child(chat_input)
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
@@ -2020,7 +2033,7 @@ func show_chat_panel() -> void:
 	send_button.custom_minimum_size = Vector2(42 if compact_chat else 62, 28 if compact_chat else 42)
 	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
-	apply_rect(send_button, rect_full(0.710, 0.720 if compact_chat else 0.805, 0.940, 0.955 if compact_chat else 0.945))
+	apply_rect(send_button, rect_full(0.685 if compact_chat else 0.710, 0.720 if compact_chat else 0.805, 0.940, 0.955 if compact_chat else 0.945))
 	chat_panel.add_child(send_button)
 
 	configure_button_focus_navigation(chat_panel, "ChatInput")
@@ -2176,7 +2189,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 		# 已签到的天数添加对勾
 		if is_claimed:
-			add_lucide_icon(indicator, "check", rect_full(0.25, 0.15, 0.75, 0.65), text_color)
+			var claimed_check = add_lucide_icon(indicator, "check", rect_full(0.735, 0.075, 0.930, 0.300), text_color)
+			if claimed_check != null:
+				claimed_check.name = "DailyLoginClaimCheck_%d" % day_num
 
 		if is_current:
 			indicator.modulate = Color(1, 1, 1, 0.96)
@@ -2246,19 +2261,21 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		claim_state["claimed"] = true
 		if fx_enabled_effective():
 			_play_reward_claim_animation(panel, "今日奖励：" + str(claim_result.get("detail", "")))
-		reward_label.text = "今日奖励已入账：%s" % str(claim_result.get("detail", ""))
-		confirm_btn.text = "已领取"
-		confirm_btn.disabled = true
-		confirm_btn.modulate = Color(0.72, 0.76, 0.68, 0.72)
-		var current_indicator = day_indicators_container.find_child("DailyLoginDayNode_%d" % current_day_in_cycle, true, false) as Control
-		if current_indicator != null:
-			var current_reward_label = current_indicator.find_child("DailyLoginRewardLabel_%d" % current_day_in_cycle, true, false) as Label
-			if current_reward_label != null:
-				current_reward_label.text = "已领"
-			if current_indicator.find_child("DailyLoginCurrentClaimCheck", true, false) == null:
-				var check_icon = add_lucide_icon(current_indicator, "check", rect_full(0.25, 0.15, 0.75, 0.65), Color(0.96, 0.96, 0.92))
-				if check_icon != null:
-					check_icon.name = "DailyLoginCurrentClaimCheck"
+			reward_label.text = "今日奖励已入账：%s" % str(claim_result.get("detail", ""))
+			confirm_btn.text = "已领取"
+			confirm_btn.disabled = true
+			confirm_btn.modulate = Color(0.72, 0.76, 0.68, 0.72)
+			configure_button_focus_navigation(panel, "DailyLoginBackButton")
+			call_deferred("focus_named_control", "DailyLoginBackButton")
+			var current_indicator = day_indicators_container.find_child("DailyLoginDayNode_%d" % current_day_in_cycle, true, false) as Control
+			if current_indicator != null:
+				var current_reward_label = current_indicator.find_child("DailyLoginRewardLabel_%d" % current_day_in_cycle, true, false) as Label
+				if current_reward_label != null:
+					current_reward_label.text = "已领"
+				if current_indicator.find_child("DailyLoginCurrentClaimCheck", true, false) == null:
+					var check_icon = add_lucide_icon(current_indicator, "check", rect_full(0.735, 0.075, 0.930, 0.300), Color(0.96, 0.96, 0.92))
+					if check_icon != null:
+						check_icon.name = "DailyLoginCurrentClaimCheck"
 		var forecast_badge_node = panel.find_child("DailyLoginForecastBadge", true, false) as Label
 		if forecast_badge_node != null:
 			forecast_badge_node.text = "已领取"
@@ -2870,6 +2887,7 @@ func toggle_ai_assist_setting() -> void:
 func toggle_fast_mode_setting() -> void:
 	fast_mode_enabled = not fast_mode_enabled
 	save_settings()
+	show_toast("快节奏模式已%s" % ("开启" if fast_mode_enabled else "关闭"))
 	refresh_current_screen()
 
 func ai_difficulty_label(short: bool = false) -> String:
@@ -2908,6 +2926,7 @@ func toggle_fx_setting() -> void:
 	save_settings()
 	if not fx_enabled:
 		clear_fx_overlays()
+	show_toast("桌面动效已%s" % ("开启" if fx_enabled else "关闭"))
 	refresh_current_screen()
 
 func graphics_quality_label(short: bool = false) -> String:
@@ -2933,6 +2952,7 @@ func toggle_music_setting() -> void:
 	music_enabled = not music_enabled
 	apply_audio_settings()
 	save_settings()
+	show_toast("背景音乐已%s" % ("开启" if music_enabled else "关闭"))
 	refresh_current_screen()
 
 func toggle_settings_panel() -> void:
@@ -2944,11 +2964,13 @@ func toggle_settings_panel() -> void:
 func toggle_sfx_setting() -> void:
 	sfx_enabled = not sfx_enabled
 	save_settings()
+	show_toast("操作音效已%s" % ("开启" if sfx_enabled else "关闭"))
 	refresh_current_screen()
 
 func toggle_tts_setting() -> void:
 	tts_enabled = not tts_enabled
 	save_settings()
+	show_toast("语音播报已%s" % ("开启" if tts_enabled else "关闭"))
 	refresh_current_screen()
 
 func toggle_voice_chat() -> void:

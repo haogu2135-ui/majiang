@@ -41,6 +41,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"MeldGroup3DCastShadow",
 	"MeldGroup3DTopRim",
 	"ActionButtonSeal",
+	"ChatPanelMessageScroll",
 	"CenterDiceSimpleSeal",
 	"CenterGPTCompassTexture",
 	"CenterLastTileInkWash",
@@ -178,6 +179,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"MenuHeroWindPathTick_0",
 	"MoonGptGlow",
 	"OnlineLobbyGptHeaderStrip",
+	"PendingClaimFlowLabel",
 	"RiskBadgeGptChip",
 	"RulesCodexRearGPTTexture",
 	"RulesGptTitleStrip",
@@ -4111,6 +4113,14 @@ func run() -> void:
 	check(scene.normalize_online_message_kind({"event": "actionRejected"}) == "error", "online rejected event alias is normalized")
 	check(scene.normalize_online_message_kind({"type": "actionAck"}) == "ack", "online ack type alias is normalized")
 	check(scene.normalize_online_message_kind({"type": "message"}) == "info", "online plain message type is treated as info")
+	check(scene.normalize_tile_code("m3") == "3W" and scene.normalize_tile_code("s7") == "7T" and scene.normalize_tile_code("p9") == "9B", "legacy m/s/p tile prefixes map to canonical suits")
+	var validation_mode := scene.mode
+	var validation_game := scene.online_game
+	scene.mode = "online_game"
+	scene.online_game = online_state
+	check(scene.online_action_validation_error({"type": "discard", "tile": "1W"}) == "" and scene.online_action_validation_error({"type": "discard", "tile": "z9"}) != "" and scene.online_action_validation_error({"type": "discard", "tile": "m3"}) != "", "online discard validation enforces phase, hand ownership, and canonical tile codes")
+	scene.mode = validation_mode
+	scene.online_game = validation_game
 	scene.online_last_sent_action = "打出五条"
 	scene.online_waiting_for_server = true
 	scene.handle_online_message(JSON.stringify({"type": "actionAck"}))
@@ -4296,6 +4306,55 @@ func run() -> void:
 	check(scene.is_offline_match_finished(), "match finishes after final non-repeat hand")
 	scene.start_next_offline_hand(false)
 	check(scene.offline_hand_number == 8, "finished match does not advance")
+	var saved_task_progress: Dictionary = scene.task_progress.duplicate(true)
+	var saved_task_claimed: Dictionary = scene.task_claimed.duplicate(true)
+	var saved_currency: Dictionary = scene.currency.duplicate(true)
+	var saved_season_data: Dictionary = scene.season_data.duplicate(true)
+	var saved_round_history: Array = scene.round_history.duplicate(true)
+	scene.task_progress.clear()
+	scene.task_claimed.clear()
+	for task in scene.DAILY_TASKS:
+		var task_id := str(task.get("id", ""))
+		if task_id != "":
+			scene.task_progress[task_id] = 0
+			scene.task_claimed[task_id] = false
+	var task_coins_before := int(scene.currency.get("coins", 0))
+	scene.update_task_progress("win_3", 2)
+	check(int(scene.task_progress.get("win_3", -1)) == 2 and not bool(scene.task_claimed.get("win_3", false)), "daily task progress increments without early completion")
+	scene.update_task_progress("win_3", 5)
+	var task_coins_after_completion := int(scene.currency.get("coins", 0))
+	check(int(scene.task_progress.get("win_3", -1)) == 3 and bool(scene.task_claimed.get("win_3", false)) and task_coins_after_completion - task_coins_before == 50, "daily task progress caps at its target and claims its reward once")
+	scene.update_task_progress("win_3", 9)
+	check(int(scene.task_progress.get("win_3", -1)) == 3 and int(scene.currency.get("coins", 0)) == task_coins_after_completion, "completed daily task ignores later duplicate progress and reward claims")
+	scene.season_data = {"season_id": "smoke", "points": 0, "highest_rank": 0, "wins": 0, "games": 0, "win_streak": 0, "best_win_streak": 0}
+	scene.add_season_points(12, true)
+	scene.add_season_points(12, true)
+	scene.add_season_points(3, false)
+	check(int(scene.season_data.get("games", 0)) == 3 and int(scene.season_data.get("wins", 0)) == 2 and int(scene.season_data.get("win_streak", -1)) == 0 and int(scene.season_data.get("best_win_streak", 0)) == 2, "season ladder tracks wins and preserves the best streak after a loss")
+	check(scene.season_points_for_result(true, 2400) == 14 and scene.season_points_for_result(false, -1200) == 2 and scene.season_points_for_result(false, 0, true) == 2, "season result points reflect win score and wall-draw outcomes")
+	scene.round_history.clear()
+	for i in range(scene.ROUND_HISTORY_LIMIT + 2):
+		scene.record_round_history({"hand_number": i + 1, "result_kind": "win", "summary": "战报测试%02d" % (i + 1)})
+	var report_history: Array = scene.latest_round_history(scene.ROUND_HISTORY_LIMIT)
+	check(scene.round_history.size() == scene.ROUND_HISTORY_LIMIT and int(report_history.front().get("hand_number", -1)) == 3 and int(report_history.back().get("hand_number", -1)) == scene.ROUND_HISTORY_LIMIT + 2, "round history keeps a bounded recent report window")
+	check(scene.latest_round_history(3).size() == 3 and str(scene.latest_round_history(3).front().get("summary", "")) == "战报测试20", "round history exposes the newest report slice")
+	scene.table_log_archive_open = false
+	scene.render_game()
+	await process_frame
+	await process_frame
+	scene.toggle_table_log_archive()
+	await process_frame
+	check(scene.find_child("RoundHistoryArchiveSection", true, false) != null and scene.find_child("RoundHistoryArchiveRow_0", true, false) != null, "table history drawer renders the recent round report section")
+	scene.close_table_log_archive()
+	scene.task_progress = saved_task_progress
+	scene.task_claimed = saved_task_claimed
+	scene.currency = saved_currency
+	scene.season_data = saved_season_data
+	scene.round_history = saved_round_history
+	scene.save_tasks()
+	scene.save_currency()
+	scene.save_season_data()
+	scene.save_round_history()
 	scene.shutdown_runtime()
 	await process_frame
 	await process_frame

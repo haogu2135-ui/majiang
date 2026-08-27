@@ -72,7 +72,18 @@ func connect_online() -> void:
 	if host == "":
 		set_online_feedback("请输入服务器 IP 或域名。", false)
 		return
+	var resume_room: String = str(selected_room)
+	if is_instance_valid(online_room_edit) and online_room_edit.text.strip_edges() != "":
+		resume_room = online_room_code_input()
+	online_resume_context = {
+		"host": host,
+		"name": online_name_input(),
+		"room": bounded_online_input(resume_room, ONLINE_ROOM_CODE_MAX_LENGTH),
+	}
 	online_connection_host = host
+	online_session_id += 1
+	online_room_revision = -1
+	online_game_revision = -1
 	if is_instance_valid(online_host_edit):
 		online_host_edit.text = host
 	tcp.disconnect_from_host()
@@ -90,6 +101,7 @@ func connect_online() -> void:
 
 func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
 	var should_show_lobby := return_to_lobby and mode == "online_game"
+	remember_online_resume_context()
 	tcp.disconnect_from_host()
 	tcp_status = tcp.get_status()
 	tcp_buffer.clear()
@@ -119,26 +131,261 @@ func join_online_room() -> void:
 		online_name_edit.text = player_name
 	send_online_action({"type": "joinRoom", "roomCode": room_code, "name": player_name}, "加入房间")
 
-func clear_online_room_snapshot() -> void:
+func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
+	var resume_room: String = bounded_online_input(str(online_resume_context.get("room", selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH) if preserve_resume_draft else ""
 	online_room.clear()
 	online_game.clear()
 	online_log_seen_count = 0
-	selected_room = ""
+	selected_room = resume_room
 	if is_instance_valid(online_room_edit):
-		online_room_edit.text = ""
+		online_room_edit.text = selected_room
 	online_announced_discard_key = ""
 	online_pending_local_discard_identity = ""
+	online_room_revision = -1
+	online_game_revision = -1
+	online_seen_message_ids.clear()
+	online_seen_voice_sequences.clear()
+	online_last_chat_sent_msec = 0
+	online_last_snapshot_fingerprint = ""
+	online_last_room_snapshot_fingerprint = ""
 	if mode == "online_lobby":
 		render_room_log()
 		refresh_online_lobby_state()
 
+
+func remember_online_resume_context() -> void:
+	var room_code: String = str(selected_room)
+	if is_instance_valid(online_room_edit) and online_room_edit.text.strip_edges() != "":
+		room_code = online_room_code_input()
+	online_resume_context = {
+		"host": online_connection_host,
+		"name": online_player_name,
+		"room": bounded_online_input(room_code, ONLINE_ROOM_CODE_MAX_LENGTH),
+	}
+
+
+func online_message_protocol_version(data: Dictionary) -> int:
+	var value = first_present(data, ["protocolVersion", "protocol_version", "protocol"], -1)
+	var text := str(value).strip_edges()
+	return int(text) if text.is_valid_int() else -1
+
+
+func online_message_revision(data: Dictionary, kind: String) -> int:
+	var source = data
+	if kind == "roomState" and typeof(data.get("room", null)) == TYPE_DICTIONARY:
+		source = data.get("room", data)
+	elif kind == "gameState" and typeof(data.get("game", null)) == TYPE_DICTIONARY:
+		source = data.get("game", data)
+	if typeof(source) != TYPE_DICTIONARY:
+		source = data
+	var value = first_present(source, ["revision", "stateVersion", "state_version", "sequence", "seq"], first_present(data, ["revision", "stateVersion", "state_version", "sequence", "seq"], -1))
+	var text := str(value).strip_edges()
+	return int(text) if text.is_valid_int() else -1
+
+func online_message_identity(data: Dictionary) -> String:
+	var value = first_present(data, ["messageId", "message_id", "eventId", "event_id", "id"], "")
+	var identity := str(value).strip_edges()
+	return identity
+
+func remember_online_message_identity(identity: String) -> bool:
+	if identity == "":
+		return true
+	if online_seen_message_ids.has(identity):
+		return false
+	online_seen_message_ids[identity] = true
+	while online_seen_message_ids.size() > ONLINE_SEEN_EVENT_LIMIT:
+		online_seen_message_ids.erase(online_seen_message_ids.keys()[0])
+	return true
+
+func accept_online_message(data: Dictionary, kind: String) -> bool:
+	if not remember_online_message_identity(online_message_identity(data)):
+		return false
+	var protocol_version := online_message_protocol_version(data)
+	if protocol_version >= 0 and protocol_version != ONLINE_PROTOCOL_VERSION:
+		if protocol_version > ONLINE_PROTOCOL_VERSION:
+			close_online_transport("服务器协议版本过高，请更新客户端。")
+		else:
+			set_online_feedback("服务器协议版本过旧，请更新服务端。", false)
+		return false
+	var revision := online_message_revision(data, kind)
+	if kind == "roomState" and revision >= 0:
+		if revision < online_room_revision:
+			return false
+	elif kind == "gameState" and revision >= 0:
+		if revision < online_game_revision:
+			return false
+	return true
+
+func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
+	if snapshot.is_empty():
+		return ""
+	var stable: Array = [kind]
+	if kind == "roomState":
+		stable.append(str(first_present(snapshot, ["code", "roomCode", "room_code"], "")))
+		var players_snapshot: Array = []
+		for item in snapshot.get("players", []):
+			if typeof(item) != TYPE_DICTIONARY:
+				continue
+			players_snapshot.append([
+				int(first_present(item, ["seat", "index", "position"], players_snapshot.size())),
+				str(first_present(item, ["name", "nickname", "userName"], "")),
+				bool(first_present(item, ["ready"], false)),
+			])
+		stable.append(players_snapshot)
+		var logs_snapshot: Array = snapshot.get("logs", []) if typeof(snapshot.get("logs", [])) == TYPE_ARRAY else []
+		stable.append(logs_snapshot.slice(maxi(0, logs_snapshot.size() - ONLINE_LOG_HISTORY_LIMIT)))
+	else:
+		stable.append(str(snapshot.get("roomCode", "")))
+		stable.append(int(snapshot.get("revision", snapshot.get("stateVersion", -1))))
+		stable.append(int(snapshot.get("youSeat", -1)))
+		stable.append(int(snapshot.get("currentSeat", -1)))
+		stable.append(str(snapshot.get("phase", "")))
+		stable.append(int(snapshot.get("wallCount", 0)))
+		stable.append(str(snapshot.get("lastDiscard", "")))
+		stable.append(int(snapshot.get("lastDiscardSeat", -1)))
+		stable.append(snapshot.get("hand", []))
+		stable.append(snapshot.get("pending", {}))
+		var players_snapshot: Array = []
+		for item in snapshot.get("players", []):
+			if typeof(item) != TYPE_DICTIONARY:
+				continue
+			players_snapshot.append([
+				int(item.get("seat", -1)), int(item.get("handCount", 0)), int(item.get("flowerCount", 0)),
+				int(item.get("score", 0)), (item.get("discards", []) as Array).size(), (item.get("melds", []) as Array).size(),
+			])
+		stable.append(players_snapshot)
+	return JSON.stringify(stable)
+
+func online_game_snapshot_validation_error(game: Dictionary) -> String:
+	if game.is_empty():
+		return "缺少牌局数据。"
+	if bool(game.get("ruleVariantInvalid", false)):
+		return "地方规则标识无效。"
+	var variant := str(game.get("ruleVariant", ""))
+	var allowed_tiles: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
+	var you_seat := int(game.get("youSeat", -1))
+	if you_seat < -1 or you_seat >= 4:
+		return "玩家座位越界。"
+	var current_seat := int(game.get("currentSeat", -1))
+	if current_seat < 0 or current_seat >= 4:
+		return "当前行动座位越界。"
+	var wall_count := int(game.get("wallCount", -1))
+	var wall_total := int(game.get("wallTotal", 0))
+	if wall_count < 0 or wall_total < 0 or (wall_total > 0 and wall_count > wall_total):
+		return "牌墙数量异常。"
+	var hand: Array = game.get("hand", [])
+	if hand.size() > 14:
+		return "手牌数量异常。"
+	for tile in hand:
+		if not allowed_tiles.has(str(tile)) and not (variant != "" and rule_flower_codes(variant).has(str(tile))) and not (variant == "" and FLOWER_CODES.has(str(tile))):
+			return "手牌包含未知牌码。"
+	var seen_seats: Dictionary = {}
+	var players_value = game.get("players", [])
+	if typeof(players_value) != TYPE_ARRAY or (players_value as Array).size() > 4:
+		return "玩家列表数量异常。"
+	for player in players_value:
+		if typeof(player) != TYPE_DICTIONARY:
+			return "玩家数据格式异常。"
+		var seat := int(player.get("seat", -1))
+		if seat < 0 or seat >= 4 or seen_seats.has(seat):
+			return "玩家座位数据异常。"
+		seen_seats[seat] = true
+		var hand_count := int(player.get("handCount", 0))
+		var flower_count := int(player.get("flowerCount", 0))
+		if hand_count < 0 or hand_count > 14 or flower_count < 0 or flower_count > FLOWER_CODES.size():
+			return "玩家手牌数量异常。"
+		if int(player.get("score", 0)) < -10000000 or int(player.get("score", 0)) > 10000000:
+			return "玩家积分异常。"
+		var discards = player.get("discards", [])
+		if typeof(discards) != TYPE_ARRAY or (discards as Array).size() > 100:
+			return "弃牌数量异常。"
+		var melds = player.get("melds", [])
+		if typeof(melds) != TYPE_ARRAY or (melds as Array).size() > 8:
+			return "副露数量异常。"
+	var last_tile := str(game.get("lastDiscard", ""))
+	var last_seat := int(game.get("lastDiscardSeat", -1))
+	if last_tile != "" and (not allowed_tiles.has(last_tile) or last_seat < 0 or last_seat >= 4):
+		return "最近弃牌数据异常。"
+	return ""
+
+
+func online_response_matches_current_action(data: Dictionary) -> bool:
+	var response_id := str(first_present(data, ["requestId", "request_id", "actionId", "action_id"], "")).strip_edges()
+	if response_id == "":
+		return true
+	var current_id := str(online_last_sent_payload.get("requestId", "")).strip_edges()
+	return current_id != "" and response_id == current_id
+
+
+func online_action_validation_error(payload: Dictionary) -> String:
+	var action_type := str(payload.get("type", "")).strip_edges()
+	if action_type == "":
+		return "缺少操作类型。"
+	if not ["createRoom", "joinRoom", "startGame", "discard", "claim", "chat", "voiceState", "voiceMessage"].has(action_type):
+		return "不支持的联机操作。"
+	if action_type == "createRoom":
+		return "昵称不能为空。" if online_name_input() == "" else ""
+	if action_type == "joinRoom":
+		if bounded_online_input(str(payload.get("roomCode", "")), ONLINE_ROOM_CODE_MAX_LENGTH) == "":
+			return "房间号不能为空。"
+		return "昵称不能为空。" if online_name_input() == "" else ""
+	if action_type == "discard":
+		var tile := normalize_tile_code(str(payload.get("tile", "")))
+		if tile == "":
+			return "请选择一张牌。"
+		if not rule_tile_codes().has(normalize_tile_code(tile)):
+			return "这张牌不在当前牌谱中。"
+		if mode != "online_game":
+			return "请先进入联机牌局。"
+		if str(online_game.get("phase", "")) != "awaitDiscard" or int(online_game.get("currentSeat", -1)) != int(online_game.get("youSeat", -2)):
+			return "当前不是你的出牌阶段。"
+		var visible_hand: Array = online_game.get("hand", [])
+		if not visible_hand.is_empty() and not visible_hand.has(tile):
+			return "这张牌不在你的手牌中。"
+	if action_type == "claim":
+		var claim := str(payload.get("claim", "")).strip_edges().to_lower()
+		if not ["chi", "peng", "gang", "hu", "pass"].has(claim):
+			return "无效的响应动作。"
+		if mode != "online_game":
+			return "请先进入联机牌局。"
+		if str(online_game.get("phase", "")) != "pendingClaim" or int(online_game.get("currentSeat", -1)) != int(online_game.get("youSeat", -2)):
+			return "当前没有你的响应窗口。"
+		var pending: Dictionary = online_game.get("pending", {})
+		var options: Array = pending.get("options", []) if typeof(pending) == TYPE_DICTIONARY else []
+		if not options.has(claim):
+			return "该响应已失效。"
+	if action_type == "chat":
+		var message := str(payload.get("message", "")).strip_edges()
+		if message == "":
+			return "消息不能为空。"
+		if message.length() > CHAT_MESSAGE_MAX_LENGTH:
+			return "消息过长。"
+	if action_type == "voiceState" and typeof(payload.get("speaking", null)) != TYPE_BOOL:
+		return "语音状态无效。"
+	if action_type == "voiceMessage":
+		if str(payload.get("format", "pcm16")).to_lower() != "pcm16":
+			return "语音格式不受支持。"
+		var sample_rate := int(payload.get("sampleRate", 0))
+		var channels := int(payload.get("channels", 0))
+		var audio_base64 := str(payload.get("audio", "")).strip_edges()
+		if sample_rate < ONLINE_VOICE_MIN_SAMPLE_RATE or sample_rate > ONLINE_VOICE_MAX_SAMPLE_RATE or not [1, 2].has(channels) or audio_base64 == "":
+			return "语音参数无效。"
+		var decoded := Marshalls.base64_to_raw(audio_base64)
+		if decoded.is_empty() or decoded.size() > ONLINE_VOICE_PACKET_MAX_BYTES or decoded.size() % 2 != 0:
+			return "语音包大小无效。"
+	return ""
+
 func handle_online_ack(data: Dictionary) -> void:
+	if not online_response_matches_current_action(data):
+		return
 	var message = online_server_message_text(data, "")
 	if message == "":
 		message = "%s已确认" % (online_last_sent_action if online_last_sent_action != "" else "操作")
 	set_online_feedback("服务器确认：%s" % message, false)
 
 func handle_online_error(data: Dictionary) -> void:
+	if not online_response_matches_current_action(data):
+		return
 	var message = online_server_message_text(data, "操作被服务器拒绝")
 	set_online_feedback("服务器拒绝：%s" % message, false)
 
@@ -180,6 +427,8 @@ func handle_online_message(line: String) -> void:
 		set_status("服务器消息解析失败")
 		return
 	var kind = normalize_online_message_kind(data)
+	if not accept_online_message(data, kind):
+		return
 	if kind == "welcome":
 		var server_name = str(data.get("name", "")).strip_edges()
 		set_online_feedback("已连接%s，可建房或入房。" % (("：" + server_name) if server_name != "" else "服务器"), false)
@@ -194,9 +443,17 @@ func handle_online_message(line: String) -> void:
 	elif kind == "log":
 		handle_online_log(data)
 	elif kind == "roomState":
-		clear_online_feedback()
 		var room_value = data.get("room", data)
-		online_room = (room_value as Dictionary).duplicate(true) if typeof(room_value) == TYPE_DICTIONARY else {}
+		var next_room: Dictionary = (room_value as Dictionary).duplicate(true) if typeof(room_value) == TYPE_DICTIONARY else {}
+		var room_fingerprint := online_snapshot_fingerprint("roomState", next_room)
+		if room_fingerprint != "" and room_fingerprint == online_last_room_snapshot_fingerprint:
+			return
+		online_last_room_snapshot_fingerprint = room_fingerprint
+		var room_revision := online_message_revision(data, kind)
+		if room_revision >= 0:
+			online_room_revision = room_revision
+		clear_online_feedback()
+		online_room = next_room
 		selected_room = bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var room_logs = online_room.get("logs", [])
 		if typeof(room_logs) == TYPE_ARRAY:
@@ -210,8 +467,19 @@ func handle_online_message(line: String) -> void:
 			online_room_edit.text = selected_room
 		refresh_online_lobby_state()
 	elif kind == "gameState":
-		clear_online_feedback()
 		var next_game = normalize_online_game_state(data)
+		var snapshot_error := online_game_snapshot_validation_error(next_game)
+		if snapshot_error != "":
+			set_online_feedback("服务器状态无效：%s" % snapshot_error, false)
+			return
+		var game_fingerprint := online_snapshot_fingerprint("gameState", next_game)
+		if game_fingerprint != "" and game_fingerprint == online_last_snapshot_fingerprint:
+			return
+		online_last_snapshot_fingerprint = game_fingerprint
+		var game_revision := online_message_revision(data, kind)
+		if game_revision >= 0:
+			online_game_revision = game_revision
+		clear_online_feedback()
 		announce_online_game_audio(next_game)
 		online_game = next_game
 		mode = "online_game"
@@ -230,10 +498,11 @@ func normalize_last_discard_seat(value, fallback: int) -> int:
 
 func normalize_last_discard_tile(value) -> String:
 	if typeof(value) == TYPE_DICTIONARY:
-		return str(first_present(value, ["tile", "code", "id"], ""))
-	return str(value)
+		return normalize_tile_code(str(first_present(value, ["tile", "code", "id"], "")))
+	return normalize_tile_code(str(value))
 
 func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary:
+	claimed_tile = normalize_tile_code(claimed_tile)
 	var meld: Array = []
 	var needed: Array = []
 	if typeof(value) == TYPE_DICTIONARY:
@@ -250,6 +519,12 @@ func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary
 		needed.erase(claimed_tile)
 	if meld.size() < 3:
 		return {}
+	for tile in meld:
+		if not TILE_CODES.has(str(tile)):
+			return {}
+	for tile in needed:
+		if not TILE_CODES.has(str(tile)):
+			return {}
 	return {"meld": meld, "needed": needed}
 
 func normalize_online_chi_choices(value, claimed_tile: String = "") -> Array:
@@ -273,6 +548,7 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	game["wallCount"] = int(first_present(game, ["wallCount", "wallRemaining", "remainingTiles"], game.get("wallCount", 0)))
 	var server_variant := str(first_present(game, ["ruleVariant", "rule_variant", "variant"], game.get("ruleVariant", ""))).strip_edges().to_lower()
 	game["ruleVariant"] = server_variant if RULE_VARIANT_PROFILES.has(server_variant) else ""
+	game["ruleVariantInvalid"] = server_variant != "" and not RULE_VARIANT_PROFILES.has(server_variant)
 	var server_wall_total := int(first_present(game, ["wallTotal", "wallSize", "totalTiles", "deckSize"], game.get("wallTotal", 0)))
 	game["wallTotal"] = maxi(0, server_wall_total)
 	game["phase"] = normalize_online_phase(str(first_present(game, ["phase", "state", "status"], "")))
@@ -341,6 +617,12 @@ func normalize_online_pending(value, game: Dictionary) -> Dictionary:
 	pending["chi_choices"] = normalize_online_chi_choices(first_present(pending, ["chi_choices", "chiChoices", "choices", "chi"], game.get("chiChoices", [])), str(pending.get("tile", "")))
 	if pending["chi_choices"].size() > 0 and not options.has("chi"):
 		options.append("chi")
+	var deadline_msec := int(first_present(pending, ["deadline_msec", "deadlineMsec"], 0))
+	if deadline_msec <= 0:
+		var remaining_seconds := float(first_present(pending, ["remainingSeconds", "remaining_seconds", "timeoutSeconds", "timeout_seconds"], 0.0))
+		if remaining_seconds > 0.0:
+			deadline_msec = Time.get_ticks_msec() + int(remaining_seconds * 1000.0)
+	pending["deadline_msec"] = deadline_msec
 	return pending
 
 func normalize_online_phase(value: String) -> String:
@@ -379,7 +661,7 @@ func normalize_online_players(value) -> Array:
 func online_action_label(payload: Dictionary) -> String:
 	var kind = str(payload.get("type", "操作"))
 	if kind == "discard":
-		return "打出%s" % tile_label(str(payload.get("tile", "")))
+		return "打出%s" % tile_label(normalize_tile_code(str(payload.get("tile", ""))))
 	if kind == "claim":
 		return claim_label(str(payload.get("claim", "操作")))
 	if kind == "createRoom":
@@ -391,11 +673,11 @@ func online_action_label(payload: Dictionary) -> String:
 	return "操作"
 
 func online_claim_payload(claim: String, choice: Dictionary = {}) -> Dictionary:
-	var payload: Dictionary = {"type": "claim", "claim": claim}
+	var payload: Dictionary = {"type": "claim", "claim": claim.strip_edges().to_lower()}
 	if not choice.is_empty():
 		var meld = normalize_tile_array(choice.get("meld", choice.get("tiles", [])))
 		var needed = normalize_tile_array(choice.get("needed", []))
-		payload["choice"] = choice
+		payload["choice"] = {"meld": meld, "needed": needed}
 		payload["meld"] = meld
 		payload["tiles"] = meld
 		payload["needed"] = needed
@@ -420,7 +702,7 @@ func online_discard_audio_key(game: Dictionary) -> String:
 func online_discard_identity(seat: int, tile: String) -> String:
 	if seat < 0 or tile == "":
 		return ""
-	return "%d:%s" % [seat, tile]
+	return "%d:%s" % [seat, normalize_tile_code(tile)]
 
 func online_feedback_accent() -> Color:
 	if online_waiting_for_server:
@@ -464,7 +746,26 @@ func send_online(payload: Dictionary) -> bool:
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
 		set_online_feedback("请先连接服务器。", false)
 		return false
-	var text = JSON.stringify(payload) + "\n"
+	var outbound := payload.duplicate(true)
+	var outbound_type := str(outbound.get("type", "")).strip_edges()
+	if outbound_type != "" and outbound_type != "hello":
+		var validation_error := online_action_validation_error(outbound)
+		if validation_error != "":
+			set_online_feedback(validation_error, false)
+			return false
+	if not outbound.has("protocolVersion"):
+		outbound["protocolVersion"] = ONLINE_PROTOCOL_VERSION
+	if not outbound.has("clientVersion"):
+		outbound["clientVersion"] = APP_VERSION
+	outbound["sessionId"] = online_session_id
+	if online_room_revision >= 0:
+		outbound["roomRevision"] = online_room_revision
+	if online_game_revision >= 0:
+		outbound["gameRevision"] = online_game_revision
+	for context_key in ["gameId", "roundId"]:
+		if online_game.has(context_key):
+			outbound[context_key] = online_game.get(context_key)
+	var text = JSON.stringify(outbound) + "\n"
 	var write_error := tcp.put_data(text.to_utf8_buffer())
 	if write_error != OK:
 		close_online_transport("发送失败，请重新连接。")
@@ -472,8 +773,26 @@ func send_online(payload: Dictionary) -> bool:
 	return true
 
 func send_online_action(payload: Dictionary, label: String = "") -> bool:
+	var normalized_payload := payload.duplicate(true)
+	var normalized_type := str(normalized_payload.get("type", "")).strip_edges()
+	if normalized_type == "discard":
+		normalized_payload["tile"] = normalize_tile_code(str(normalized_payload.get("tile", "")))
+	elif normalized_type == "claim":
+		normalized_payload["claim"] = str(normalized_payload.get("claim", "")).strip_edges().to_lower()
+	elif normalized_type == "chat":
+		normalized_payload["message"] = str(normalized_payload.get("message", "")).strip_edges().left(CHAT_MESSAGE_MAX_LENGTH)
+	payload = normalized_payload
 	var action_label = label if label.strip_edges() != "" else online_action_label(payload)
 	var action_type := str(payload.get("type", "")).strip_edges()
+	var validation_error := online_action_validation_error(payload)
+	if validation_error != "":
+		set_online_feedback(validation_error, false)
+		return false
+	if action_type == "chat":
+		var now_msec := Time.get_ticks_msec()
+		if online_last_chat_sent_msec > 0 and now_msec - online_last_chat_sent_msec < ONLINE_CHAT_COOLDOWN_MSEC:
+			set_online_feedback("消息发送过快，请稍后再试。", false)
+			return false
 	var repeated_request := online_waiting_for_server and (
 		(action_type != "" and action_type == online_last_sent_type) or
 		(action_type == "" and action_label == online_last_sent_action)
@@ -481,11 +800,18 @@ func send_online_action(payload: Dictionary, label: String = "") -> bool:
 	if repeated_request:
 		set_online_feedback("正在等待上一次%s的服务器确认。" % action_label, true)
 		return false
-	if send_online(payload):
-		play_outgoing_online_action_audio(payload)
+	var outbound := payload.duplicate(true)
+	online_action_sequence += 1
+	outbound["requestId"] = "%d-%d" % [online_session_id, online_action_sequence]
+	if send_online(outbound):
+		play_outgoing_online_action_audio(outbound)
 		online_last_sent_action = action_label
 		online_last_sent_type = action_type
 		online_last_sent_msec = Time.get_ticks_msec()
+		online_last_sent_payload = outbound
+		if action_type == "chat":
+			online_last_chat_sent_msec = Time.get_ticks_msec()
+		online_retry_available = false
 		set_online_feedback("已发送%s，等待服务器确认。" % action_label, true)
 		return true
 	return false
@@ -509,3 +835,29 @@ func update_online_slow_response_notice(now_msec: int) -> void:
 	online_slow_notice_shown = true
 	var action_label: String = online_last_sent_action if online_last_sent_action != "" else "操作"
 	set_online_feedback("服务器响应较慢，仍在等待%s确认。" % action_label, true)
+
+
+func retry_online_last_action() -> void:
+	if online_last_sent_payload.is_empty():
+		set_status("没有可重试的操作。")
+		return
+	var payload := online_last_sent_payload.duplicate(true)
+	var label: String = online_last_sent_action
+	online_waiting_for_server = false
+	online_retry_available = false
+	send_online_action(payload, label)
+
+
+func cancel_online_pending_action() -> void:
+	if not online_waiting_for_server and not online_retry_available:
+		return
+	online_waiting_for_server = false
+	online_retry_available = false
+	online_last_sent_msec = 0
+	online_last_sent_action = ""
+	online_last_sent_type = ""
+	online_last_sent_payload.clear()
+	online_feedback = "已取消等待，可重新提交操作。"
+	set_status(online_feedback)
+	if mode == "online_game":
+		request_game_render()
