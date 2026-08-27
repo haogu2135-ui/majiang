@@ -7432,7 +7432,11 @@ func finish_wall_draw() -> void:
 			next_deltas[i] = int((settled_deltas as Array)[i])
 	last_score_deltas = next_deltas
 	if not offline_sim_quiet:
-		record_game_result(false, int(next_deltas[0]), 1, active_round_id)
+		record_game_result(false, int(next_deltas[0]), 1, active_round_id, {
+			"result_kind": "wall_draw",
+			"wall_draw": true,
+			"rule_variant": active_rule_variant(),
+		})
 	last_win_score = {
 		"wall_draw": true,
 		"round_id": active_round_id,
@@ -7482,6 +7486,8 @@ func finish_wall_draw() -> void:
 		"summary": round_summary,
 		"seed": offline_hand_seed,
 		"events": round_replay_snapshot(),
+		"replay_digest": round_replay_digest(),
+		"replay_valid": validate_round_replay(round_event_history),
 		"match_summary": last_match_summary.duplicate(true),
 	})
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
@@ -7653,7 +7659,13 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var player_score_delta = int(last_score_deltas[0]) if not last_score_deltas.is_empty() else 0
 	var player_won = winner == 0
 	if not offline_sim_quiet:
-		record_game_result(player_won, player_score_delta, offline_hand_number, active_round_id)
+		record_game_result(player_won, player_score_delta, offline_hand_number, active_round_id, {
+			"result_kind": "win",
+			"fan": int(score_data.get("fan", 0)),
+			"self_draw": self_draw,
+			"deal_in": not self_draw and from_seat == 0 and winner != 0,
+			"rule_variant": active_rule_variant(),
+		})
 
 	# 解锁成就
 	if (not offline_sim_quiet) and player_won:
@@ -7750,6 +7762,8 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		"summary": round_summary,
 		"seed": offline_hand_seed,
 		"events": round_replay_snapshot(),
+		"replay_digest": round_replay_digest(),
+		"replay_valid": validate_round_replay(round_event_history),
 		"match_summary": last_match_summary.duplicate(true),
 		})
 	save_offline_progress()
@@ -9656,7 +9670,10 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 
 func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# r214: bulk GPT chrome sweep
-	if not force_visible and (mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled()):
+	# A pending claim already has one focused response surface. Hiding the general
+	# advisor here prevents a second reading lane from competing with the claim
+	# buttons and keeps keyboard focus within the legal response actions.
+	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or not player_ai_assist_enabled()):
 		return
 	# The narrow center-left HUD slot sits between the left river and the center
 	# surface, above the player river. During a response window the action dock
@@ -11118,16 +11135,32 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	# river and away from both side meld lanes instead of squeezing it beside CTA buttons.
 	# Use the central console lane. This avoids the actual tile footprints in
 	# both horizontal rivers and leaves the side meld lanes untouched.
-	var panel_left := 0.355
+	var panel_left := 0.360
 	var panel_top := 0.355
-	var panel_right := 0.645
+	var panel_right := 0.640
 	var panel_bottom := 0.535
 	var panel = make_gpt_route_rail(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.040, 0.018, 0.016, 0.94))
 	panel.name = "DangerDiscardConfirmationArt"
 	panel.z_index = 20
 	panel.clip_contents = true
+	panel.set_meta("modal_input_shield", true)
 	parent.add_child(panel)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# This is a modal decision surface. It has no duplicate visual CTA, but it
+	# must consume clicks so the table behind it cannot receive an accidental
+	# discard. A click returns focus to the real confirmation action in the dock.
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.gui_input.connect(func(event: InputEvent) -> void:
+		var pressed := false
+		if event is InputEventMouseButton:
+			pressed = (event as InputEventMouseButton).pressed
+		elif event is InputEventScreenTouch:
+			pressed = (event as InputEventScreenTouch).pressed
+		if not pressed:
+			return
+		focus_danger_discard_confirm()
+		call_deferred("focus_danger_discard_confirm")
+		get_viewport().set_input_as_handled()
+	)
 	var seal_texture = add_illustration_texture(panel, "danger_decision_seal", rect_full(0.015, -1.080, 0.515, 2.000), 0.16, true)
 	if seal_texture != null:
 		seal_texture.name = "DangerDecisionSealTexture"
@@ -13657,6 +13690,7 @@ func draw_meld_group_art(parent: Control, kind: String, accent: Color, meld_size
 	var art = Control.new()
 	art.name = "MeldGroupArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.clip_contents = true
 	apply_rect(art, rect_full(0.000, 0.000, 1.000, 1.000))
 	parent.add_child(art)
 	parent.move_child(art, 0)
@@ -14876,8 +14910,9 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var panel = make_gpt_route_rail(context_rect, Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
 	panel.name = "PendingClaimIllustration"
 	panel.z_index = 20
+	panel.clip_contents = true
 	parent.add_child(panel)
-	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(-0.025, -0.120, 1.025, 1.120), 0.62, false)
+	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
 	if status_strip != null:
 		status_strip.name = "PendingClaimStatusStripTexture"
 		panel.move_child(status_strip, 0)
@@ -17388,11 +17423,11 @@ func draw_settings_overlay(parent: Control) -> void:
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
 	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
 	if compact_settings:
-		# 540px 高度仍保留每行 48px 的点击目标：扩大模态可用高度，再让
-		# 上方两区容纳完整设置行，底部系统区维持一行双列。
+		# 540px 高度仍保留每行 48px 的点击目标：上下分区改为全宽双列，
+		# 让声音、体验和系统都拥有足够的横向按钮空间。
 		panel_rect = rect_full(0.145, 0.010, 0.855, 0.990)
-		audio_section_rect = rect_full(0.040, 0.250, 0.488, 0.837)
-		play_section_rect = rect_full(0.512, 0.250, 0.960, 0.837)
+		audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.490)
+		play_section_rect = rect_full(0.040, 0.500, 0.960, 0.837)
 		maint_section_rect = rect_full(0.040, 0.855, 0.960, 0.989)
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
@@ -17508,7 +17543,7 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 声音设置
 	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)
-	audio_grid.columns = 1
+	audio_grid.columns = 2 if compact_settings else 1
 	make_setting_row(audio_grid, "背景音乐", "当前: %s" % ("开启" if music_enabled else "关闭"), make_setting_button("音乐", music_enabled, func() -> void:
 		toggle_music_setting()
 	))
@@ -17524,7 +17559,7 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 体验设置
 	var play_grid = make_settings_section(panel, play_section_rect, "体验", compact_settings)
-	play_grid.columns = 1
+	play_grid.columns = 2 if compact_settings else 1
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_selector_button("快速" if fast_mode_enabled else "标准", "AI 节奏", func() -> void:
 		toggle_fast_mode_setting()
 	))
@@ -17533,6 +17568,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 	make_setting_row(play_grid, "桌面特效", "当前: %s" % ("开启" if fx_enabled else "关闭"), make_setting_button("特效", fx_enabled, func() -> void:
 		toggle_fx_setting()
+	))
+	make_setting_row(play_grid, "阅读辅助", "当前: %s" % accessibility_profile_label(), make_setting_selector_button(accessibility_profile_label(), "阅读辅助", func() -> void:
+		cycle_accessibility_profile_setting()
 	))
 	make_setting_row(play_grid, "出牌辅助", "危险提示: %s" % ("开启" if ai_assist_enabled else "关闭"), make_setting_button("辅助", ai_assist_enabled, func() -> void:
 		toggle_ai_assist_setting()
@@ -17550,7 +17588,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(system_grid, "本地进度", "清空统计与离线记录", make_reset_progress_button(func() -> void:
 		request_reset_progress_from_settings()
 	))
-	configure_button_focus_navigation(panel, "SettingsCloseButton")
+	var settings_default_focus := settings_focus_restore_name if settings_focus_restore_name != "" else "SettingsCloseButton"
+	settings_focus_restore_name = ""
+	configure_button_focus_navigation(panel, settings_default_focus)
 
 
 func draw_settings_overview_art(parent: Control) -> Control:
@@ -20875,7 +20915,7 @@ func make_audio_test_button(callback: Callable) -> Button:
 	var button = make_small_button("试音", Color(0.28, 0.42, 0.56), callback)
 	ensure_button_gpt_face_plate(button, Color(0.28, 0.42, 0.56, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	draw_audio_test_button_art(button)
 	button.button_down.connect(func() -> void:
 		play_settings_action_feedback(button, "AudioTest", Color(0.42, 0.68, 0.86))
@@ -20962,7 +21002,7 @@ func make_bgm_switch_button(callback: Callable) -> Button:
 	var button = make_small_button("切歌", Color(0.38, 0.40, 0.56), callback)
 	ensure_button_gpt_face_plate(button, Color(0.38, 0.40, 0.56, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	draw_bgm_switch_button_art(button)
@@ -21196,7 +21236,10 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	var face_rot: float = seat_meld_face_rotation(seat)
 	group.name = "MeldGroup_%s" % kind
 	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	group.clip_contents = false
+	# Pad, seal and raised-tile art must stay within the assigned lane. The
+	# holder dimensions already account for the seat-facing rotation, so clipping
+	# here does not cut the authored 2D tile faces.
+	group.clip_contents = true
 	# Natural upright art size; rotation handles table-facing orientation.
 	var tile_size: Vector2 = tile_size_override if tile_size_override.x > 0.0 and tile_size_override.y > 0.0 else (Vector2(28, 38) if vertical else Vector2(26, 36))
 	var tile_count: int = maxi(1, meld.size())
@@ -21510,7 +21553,7 @@ func make_reset_progress_button(callback: Callable) -> Button:
 	var button = make_small_button(label, color, callback)
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.40))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	draw_reset_progress_button_art(button)
@@ -21544,7 +21587,7 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 	button.tooltip_text = "%s：当前%s，点击切换" % [label, "开启" if enabled else "关闭"]
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", label)
@@ -21561,7 +21604,7 @@ func make_setting_selector_button(value_text: String, setting_label: String, cal
 	button.tooltip_text = "%s：当前%s，点击切换选项" % [setting_label, value_text]
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", setting_label)
@@ -21580,7 +21623,7 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 	var quality_color: Color = quality_colors[color_index]
 	ensure_button_gpt_face_plate(button, Color(quality_color.r, quality_color.g, quality_color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", "3D 画质")
@@ -21622,7 +21665,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.name = "SettingRowButton_%s" % title
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.add_theme_font_size_override("font_size", min(button.get_theme_font_size("font_size"), 15))
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.custom_minimum_size = Vector2(0, 0)
 	apply_rect(button, SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)
@@ -21664,7 +21707,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	section.add_child(grid)
 	# Compact settings reserve the same 48px row target while tightening only
 	# the decorative title/chrome clearance inside each physical section.
-	apply_rect(grid, rect_full(0.035, 0.150, 0.965, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
+	apply_rect(grid, rect_full(0.035, 0.120, 0.965, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 
@@ -25557,6 +25600,7 @@ func _show_stats_screen_impl() -> void:
 
 func close_settings_panel() -> void:
 	settings_panel_open = false
+	settings_focus_restore_name = ""
 	emit_ui_qa_marker("settings|closed")
 	reset_progress_confirming = false
 	refresh_current_screen()
@@ -25684,11 +25728,13 @@ func show_chat_panel() -> void:
 		return
 	chat_panel_open = true
 	# r215: GPT chrome conversion
-	var compact_chat := chat_panel_rect().size.x < 0.300
-	var chat_panel = make_gpt_plate_rect(chat_panel_rect(), Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
+	var panel_rect := chat_panel_rect()
+	var compact_chat := mode == "online_game" and (panel_rect.size.x - panel_rect.position.x) < 0.300
+	var chat_panel = make_gpt_plate_rect(panel_rect, Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
 	chat_panel.name = "ChatPanel"
 	chat_panel.z_index = 45
-	chat_panel.set_meta("layout_role", "top_safe_drawer" if mode == "online_game" else "lobby_drawer")
+	chat_panel.set_meta("layout_role", chat_panel_route_name())
+	chat_panel.set_meta("compact_chat", compact_chat)
 	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	chat_panel.clip_contents = true
 	root_layer.add_child(chat_panel)
@@ -25701,7 +25747,7 @@ func show_chat_panel() -> void:
 	chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	chat_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	chat_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(chat_scroll, rect_full(0.060, 0.465 if compact_chat else 0.285, 0.940, 0.690 if compact_chat else 0.775))
+	apply_rect(chat_scroll, rect_full(0.060, 0.070 if compact_chat else 0.285, 0.720 if compact_chat else 0.940, 0.300 if compact_chat else 0.775))
 	chat_panel.add_child(chat_scroll)
 	var chat_label = make_label(chat_scroll, chat_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
 	chat_label.name = "ChatPanelMessageText"
@@ -25717,7 +25763,7 @@ func show_chat_panel() -> void:
 	close_button.name = "ChatPanelCloseButton"
 	close_button.tooltip_text = "关闭聊天面板 · 快捷键 Esc"
 	close_button.custom_minimum_size = Vector2(34, 34)
-	apply_rect(close_button, rect_full(0.780 if compact_chat else 0.820, 0.055, 0.950, 0.190))
+	apply_rect(close_button, rect_full(0.800 if compact_chat else 0.820, 0.015, 0.965 if compact_chat else 0.950, 0.325 if compact_chat else 0.190))
 	chat_panel.add_child(close_button)
 
 	var quick_row := HBoxContainer.new()
@@ -25725,7 +25771,7 @@ func show_chat_panel() -> void:
 	quick_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	quick_row.add_theme_constant_override("separation", 3)
 	configure_passive_container(quick_row)
-	apply_rect(quick_row, rect_full(0.060, 0.205 if not compact_chat else 0.235, 0.940, 0.270 if not compact_chat else 0.450))
+	apply_rect(quick_row, rect_full(0.060, 0.340 if compact_chat else 0.205, 0.940, 0.610 if compact_chat else 0.270))
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -25755,15 +25801,15 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
-	apply_rect(chat_input, rect_full(0.060, 0.720 if compact_chat else 0.805, 0.665 if compact_chat else 0.690, 0.955 if compact_chat else 0.945))
+	apply_rect(chat_input, rect_full(0.060, 0.640 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(chat_input)
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
 	send_button.name = "ChatSendButton"
-	send_button.custom_minimum_size = Vector2(42 if compact_chat else 62, 28 if compact_chat else 42)
+	send_button.custom_minimum_size = Vector2(42 if compact_chat else 62, 36 if compact_chat else 42)
 	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
-	apply_rect(send_button, rect_full(0.685 if compact_chat else 0.710, 0.720 if compact_chat else 0.805, 0.940, 0.955 if compact_chat else 0.945))
+	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.640 if compact_chat else 0.805, 0.940, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(send_button)
 
 	configure_button_focus_navigation(chat_panel, "ChatInput")
@@ -26659,6 +26705,49 @@ func toggle_fx_setting() -> void:
 	show_toast("桌面动效已%s" % ("开启" if fx_enabled else "关闭"))
 	refresh_current_screen()
 
+func cycle_accessibility_profile_setting() -> void:
+	var current := accessibility_profile_label()
+	var next := "标准"
+	match current:
+		"标准":
+			next = "大字"
+			large_text_enabled = true
+			high_contrast_enabled = false
+			reduce_motion_enabled = false
+		"大字":
+			next = "高对比"
+			large_text_enabled = false
+			high_contrast_enabled = true
+			reduce_motion_enabled = false
+		"高对比":
+			next = "减动效"
+			large_text_enabled = false
+			high_contrast_enabled = false
+			reduce_motion_enabled = true
+		"减动效":
+			next = "专注"
+			large_text_enabled = true
+			high_contrast_enabled = true
+			reduce_motion_enabled = true
+		"专注":
+			next = "清晰"
+			large_text_enabled = true
+			high_contrast_enabled = true
+			reduce_motion_enabled = false
+		"清晰":
+			next = "标准"
+			large_text_enabled = false
+			high_contrast_enabled = false
+			reduce_motion_enabled = false
+		_:
+			large_text_enabled = false
+			high_contrast_enabled = false
+			reduce_motion_enabled = false
+	settings_focus_restore_name = "SettingRowButton_阅读辅助"
+	save_settings()
+	show_toast("阅读辅助：%s" % next)
+	refresh_current_screen()
+
 func graphics_quality_label(short: bool = false) -> String:
 	match graphics_quality:
 		Commercial3DStage.QUALITY_LOW:
@@ -26689,6 +26778,8 @@ func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
 	emit_ui_qa_marker("settings|%s" % ("open" if settings_panel_open else "closed"))
 	reset_progress_confirming = false
+	if settings_panel_open:
+		settings_focus_restore_name = ""
 	refresh_current_screen()
 
 func toggle_sfx_setting() -> void:
@@ -27877,6 +27968,11 @@ func focus_named_control(control_name: String) -> void:
 		control.focus_mode = Control.FOCUS_ALL
 	control.grab_focus()
 
+func focus_danger_discard_confirm() -> void:
+	if mode == "offline" and has_pending_danger_discard():
+		focus_named_control("DangerDiscardConfirmButton")
+		call_deferred("focus_named_control", "DangerDiscardConfirmButton")
+
 func handle_ui_cancel() -> bool:
 	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 		hide_exit_confirm()
@@ -27895,6 +27991,11 @@ func handle_ui_cancel() -> bool:
 		return true
 	if chat_panel_open:
 		close_chat_panel()
+		return true
+	if mode == "offline" and has_pending_danger_discard():
+		clear_pending_danger_discard()
+		set_status(current_status_text())
+		render_game()
 		return true
 	if settings_panel_open:
 		close_settings_panel()
@@ -35266,10 +35367,25 @@ func chat_panel_rect() -> Rect2:
 	# The lobby gets a taller reading area because it has no table geometry.
 	if mode == "online_lobby":
 		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
-	# The root layer is inset by the device safe area. A 0.810 anchor keeps
-	# the drawer's actual screen edge at or beyond the 76% upper-right lane
-	# and leaves the top meld lane a visible gutter even after that inset.
-	return Rect2(Vector2(0.810, 0.118), Vector2(0.985, 0.282))
+	# Both exposed meld states use the same wide upper-left gutter. The old
+	# right-meld branch was too narrow for touch controls and could intersect the
+	# right vertical meld lane; the left gutter clears the top river, side seat,
+	# and both meld layouts while keeping a stable drawer size.
+	if chat_panel_route_name() != "top_safe_drawer":
+		return Rect2(Vector2(0.015, 0.120), Vector2(0.273, 0.320))
+	# The root layer is inset by the device safe area. Keep an 8px+ gutter from
+	# the top river at the smallest supported viewport.
+	return Rect2(Vector2(0.727, 0.120), Vector2(0.985, 0.320))
+
+
+func chat_panel_route_name() -> String:
+	if mode == "online_lobby":
+		return "lobby_drawer"
+	if not get_melds(2).is_empty():
+		return "top_meld_safe_drawer"
+	if not get_melds(1).is_empty():
+		return "right_meld_safe_drawer"
+	return "top_safe_drawer"
 
 
 func add_chat_message(text: String) -> void:
@@ -36651,12 +36767,172 @@ func record_round_event(event_type: String, payload: Dictionary = {}) -> void:
 	event["round_id"] = active_round_id
 	event["sequence"] = round_event_sequence
 	event["type"] = event_type.strip_edges()
+	event["prev_digest"] = str(round_event_history.back().get("digest", "")) if not round_event_history.is_empty() else ""
+	event["digest"] = replay_event_digest(event)
 	round_event_history.append(event)
 	while round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
 		round_event_history.pop_front()
 
 func round_replay_snapshot() -> Array:
 	return round_event_history.duplicate(true)
+
+func replay_event_digest(event: Dictionary) -> String:
+	var canonical := event.duplicate(true)
+	canonical.erase("digest")
+	var context := HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK:
+		return ""
+	context.update(JSON.stringify(canonicalize_replay_value(canonical)).to_utf8_buffer())
+	return context.finish().hex_encode()
+
+func canonicalize_replay_value(value):
+	if typeof(value) == TYPE_DICTIONARY:
+		var source: Dictionary = value
+		var keys: Array = source.keys()
+		keys.sort()
+		var ordered: Dictionary = {}
+		for key in keys:
+			ordered[str(key)] = canonicalize_replay_value(source[key])
+		return ordered
+	if typeof(value) == TYPE_ARRAY:
+		var ordered_array: Array = []
+		for item in value:
+			ordered_array.append(canonicalize_replay_value(item))
+		return ordered_array
+	if typeof(value) == TYPE_FLOAT:
+		var numeric_value: float = float(value)
+		if is_finite(numeric_value) and is_equal_approx(numeric_value, round(numeric_value)):
+			return int(round(numeric_value))
+	return value
+
+func validate_round_replay(events: Array) -> bool:
+	if events.is_empty():
+		return true
+	var previous := ""
+	var expected_sequence := -1
+	var expected_round_id := ""
+	for raw_event in events:
+		if typeof(raw_event) != TYPE_DICTIONARY:
+			return false
+		var event: Dictionary = raw_event
+		var round_id := str(event.get("round_id", ""))
+		var sequence := int(event.get("sequence", -1))
+		if round_id == "" or sequence < 1:
+			return false
+		if expected_sequence < 0:
+			expected_sequence = sequence
+			expected_round_id = round_id
+			# A bounded replay may begin after older events were evicted. In that
+			# case the first retained event carries the digest of the omitted
+			# predecessor and can still be checked from the second event onward.
+			var first_prev_digest := str(event.get("prev_digest", ""))
+			if (sequence == 1 and first_prev_digest != "") or (sequence > 1 and first_prev_digest == ""):
+				return false
+		else:
+			if sequence != expected_sequence or round_id != expected_round_id:
+				return false
+			if str(event.get("prev_digest", "")) != previous:
+				return false
+		if digest_is_missing_or_invalid(event):
+			return false
+		var digest := str(event.get("digest", ""))
+		previous = digest
+		expected_sequence = sequence + 1
+	return true
+
+func digest_is_missing_or_invalid(event: Dictionary) -> bool:
+	var digest := str(event.get("digest", ""))
+	return digest == "" or digest != replay_event_digest(event)
+
+func round_replay_digest(events: Array = []) -> String:
+	var source := events if not events.is_empty() else round_event_history
+	if source.is_empty():
+		return ""
+	var last = source.back()
+	return str(last.get("digest", "")) if typeof(last) == TYPE_DICTIONARY else ""
+
+func replay_event_counts(events: Array = []) -> Dictionary:
+	var counts: Dictionary = {}
+	var source := events if not events.is_empty() else round_event_history
+	for raw_event in source:
+		if typeof(raw_event) != TYPE_DICTIONARY:
+			continue
+		var kind := str((raw_event as Dictionary).get("type", "")).strip_edges()
+		if kind != "":
+			counts[kind] = int(counts.get(kind, 0)) + 1
+	return counts
+
+func export_round_replay_payload() -> Dictionary:
+	var events := round_replay_snapshot()
+	return {
+		"schema": REPLAY_SCHEMA_VERSION,
+		"app_version": APP_VERSION,
+		"round_id": active_round_id,
+		"seed": offline_hand_seed,
+		"rule_variant": active_rule_variant(),
+		"events": events,
+		"digest": round_replay_digest(events),
+		"valid": validate_round_replay(events),
+		"event_counts": replay_event_counts(events),
+	}
+
+func round_replay_share_code() -> String:
+	var bytes := JSON.stringify(export_round_replay_payload()).to_utf8_buffer()
+	if bytes.size() <= 0 or bytes.size() > REPLAY_SHARE_MAX_BYTES:
+		return ""
+	return Marshalls.raw_to_base64(bytes)
+
+func import_round_replay_share_code(code: String) -> Dictionary:
+	var clean := code.strip_edges()
+	if clean == "":
+		return {}
+	var decoded := Marshalls.base64_to_raw(clean)
+	if decoded.is_empty() or decoded.size() > REPLAY_SHARE_MAX_BYTES:
+		return {}
+	var parsed = JSON.parse_string(decoded.get_string_from_utf8())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return {}
+	var payload: Dictionary = parsed
+	var events = payload.get("events", [])
+	if typeof(events) != TYPE_ARRAY or not validate_round_replay(events as Array):
+		return {}
+	if int(payload.get("schema", 0)) != REPLAY_SCHEMA_VERSION:
+		return {}
+	if str(payload.get("digest", "")) != round_replay_digest(events as Array):
+		return {}
+	return payload.duplicate(true)
+
+func match_progress_report() -> Dictionary:
+	var current_hand := clampi(offline_hand_number, 1, MATCH_MAX_HANDS)
+	var completed := current_hand - (0 if offline_phase == "ended" else 1)
+	return {
+		"current_hand": current_hand,
+		"completed_hands": clampi(completed, 0, MATCH_MAX_HANDS),
+		"total_hands": MATCH_MAX_HANDS,
+		"remaining_hands": maxi(0, MATCH_MAX_HANDS - clampi(completed, 0, MATCH_MAX_HANDS)),
+		"dealer": dealer_seat,
+		"finished": is_offline_match_finished() if has_method("is_offline_match_finished") else false,
+	}
+
+func score_delta_breakdown(deltas: Array, winner: int = -1) -> Dictionary:
+	var gains: Array = []
+	var losses: Array = []
+	for index in range(deltas.size()):
+		var delta := int(deltas[index])
+		if delta > 0:
+			gains.append({"seat": index, "amount": delta})
+		elif delta < 0:
+			losses.append({"seat": index, "amount": abs(delta)})
+	return {"winner": winner, "gains": gains, "losses": losses, "conserved": deltas.reduce(func(a, b): return int(a) + int(b), 0) == 0}
+
+func ai_decision_explanation(report: Dictionary) -> String:
+	if report.is_empty():
+		return "暂无建议"
+	var tile := tile_label(str(report.get("tile", ""))) if has_method("tile_label") else str(report.get("tile", ""))
+	var shanten := int(report.get("shanten", 8))
+	var ukeire := int(report.get("ukeire", report.get("effective_remaining", 0)))
+	var reason := str(report.get("reason_label", report.get("shape_label", "保持牌型"))).strip_edges()
+	return "打%s：%s，%s张进张" % [tile, reason if reason != "" else "保持牌型", ukeire] if shanten > 0 else "打%s：已听牌，%s" % [tile, reason if reason != "" else "保留高价值听口"]
 
 func build_match_summary() -> Dictionary:
 	var ranking: Array = []
@@ -36682,4 +36958,6 @@ func build_match_summary() -> Dictionary:
 		"champion_score": int(champion.get("score", 0)),
 		"rankings": ranking,
 		"rounds": MATCH_MAX_HANDS,
+		"progress": match_progress_report(),
+		"replay_digest": round_replay_digest(),
 	}

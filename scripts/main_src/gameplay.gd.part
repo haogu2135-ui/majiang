@@ -2440,7 +2440,11 @@ func finish_wall_draw() -> void:
 			next_deltas[i] = int((settled_deltas as Array)[i])
 	last_score_deltas = next_deltas
 	if not offline_sim_quiet:
-		record_game_result(false, int(next_deltas[0]), 1, active_round_id)
+		record_game_result(false, int(next_deltas[0]), 1, active_round_id, {
+			"result_kind": "wall_draw",
+			"wall_draw": true,
+			"rule_variant": active_rule_variant(),
+		})
 	last_win_score = {
 		"wall_draw": true,
 		"round_id": active_round_id,
@@ -2490,6 +2494,8 @@ func finish_wall_draw() -> void:
 		"summary": round_summary,
 		"seed": offline_hand_seed,
 		"events": round_replay_snapshot(),
+		"replay_digest": round_replay_digest(),
+		"replay_valid": validate_round_replay(round_event_history),
 		"match_summary": last_match_summary.duplicate(true),
 	})
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
@@ -2661,7 +2667,13 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var player_score_delta = int(last_score_deltas[0]) if not last_score_deltas.is_empty() else 0
 	var player_won = winner == 0
 	if not offline_sim_quiet:
-		record_game_result(player_won, player_score_delta, offline_hand_number, active_round_id)
+		record_game_result(player_won, player_score_delta, offline_hand_number, active_round_id, {
+			"result_kind": "win",
+			"fan": int(score_data.get("fan", 0)),
+			"self_draw": self_draw,
+			"deal_in": not self_draw and from_seat == 0 and winner != 0,
+			"rule_variant": active_rule_variant(),
+		})
 
 	# 解锁成就
 	if (not offline_sim_quiet) and player_won:
@@ -2758,6 +2770,8 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		"summary": round_summary,
 		"seed": offline_hand_seed,
 		"events": round_replay_snapshot(),
+		"replay_digest": round_replay_digest(),
+		"replay_valid": validate_round_replay(round_event_history),
 		"match_summary": last_match_summary.duplicate(true),
 		})
 	save_offline_progress()

@@ -548,6 +548,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.draw_settings_overlay(scene.root_layer)
 	await process_frame
 	check_settings_overlay(scene, actual_viewport)
+	await check_accessibility_profile_cycle(scene, actual_viewport)
 	var rule_variant_button = scene.find_child("SettingsRuleVariantButton", true, false) as Button
 	if rule_variant_button != null:
 		rule_variant_button.button_down.emit()
@@ -1128,6 +1129,13 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 			check(dock_rect.grow(1.0).encloses(dock_texture_rect), "pending claim GPT dock texture stays inside action dock at %s" % viewport_size)
 			check(not rects_overlap(summary_rect.grow(-1.0), dock_texture_rect.grow(-1.0)), "pending claim GPT dock texture clears summary strip at %s" % viewport_size)
 			check(dock_texture_rect.end.y <= hand_rect.position.y - 10.0, "pending claim GPT dock texture clears hand tray at %s" % viewport_size)
+		check(summary.clip_contents, "pending claim context clips decorative artwork to its decision lane at %s" % viewport_size)
+		var pending_decorations: Array[Control] = []
+		collect_controls_with_name_prefix(summary, "PendingClaim", pending_decorations)
+		for decoration in pending_decorations:
+			if decoration == summary or decoration is Label:
+				continue
+			check(summary_rect.grow(1.0).encloses(screen_rect(decoration)), "pending claim decorative child %s stays inside the context lane at %s" % [decoration.name, viewport_size])
 	if context_tile != null:
 		var context_tile_rect = screen_rect(context_tile)
 		check(context_tile_rect.size.x >= 32.0 and context_tile_rect.size.y >= 44.0, "pending claim target tile keeps a readable 32x44 preview at %s" % viewport_size)
@@ -1201,6 +1209,8 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	scene.online_feedback = ""
 	scene.render_game()
 	await settle_layout()
+
+
 	var waiting_status = scene.find_child("TopHudStatus", true, false) as Label
 	var waiting_action = scene.find_child("ActionDockWaitingStatus", true, false) as Label
 	check(scene.current_status_text() == "操作已提交 · 等待服务器确认" and waiting_status != null and waiting_status.text == scene.current_status_text(), "online submitted state is explicit in the top HUD at %s" % viewport_size)
@@ -1217,6 +1227,42 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	scene.render_game()
 	await settle_layout()
 
+
+func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
+	var saved_large := bool(scene.large_text_enabled)
+	var saved_contrast := bool(scene.high_contrast_enabled)
+	var saved_motion := bool(scene.reduce_motion_enabled)
+	scene.large_text_enabled = false
+	scene.high_contrast_enabled = false
+	scene.reduce_motion_enabled = false
+	scene.settings_focus_restore_name = ""
+	scene.refresh_current_screen()
+	await settle_layout()
+	var expected_profiles := ["标准", "大字", "高对比", "减动效", "专注", "清晰"]
+	for index in range(expected_profiles.size()):
+		var button := scene.find_child("SettingRowButton_阅读辅助", true, false) as Button
+		var expected := str(expected_profiles[index])
+		check(button != null and button.text == expected, "accessibility profile reaches %s at %s" % [expected, viewport_size])
+		if button == null:
+			continue
+		if index > 0:
+			check(button.has_focus(), "accessibility profile restores focus after selecting %s at %s" % [expected, viewport_size])
+		if expected == "大字":
+			for title in ["AI 难度", "阅读辅助", "3D 画质"]:
+				var large_button := scene.find_child("SettingRowButton_%s" % title, true, false) as Button
+				check(large_button != null and large_button.get_theme_font_size("font_size") >= 17 and screen_rect(large_button).size.y >= 46.0, "large-text setting button %s scales with the profile at %s" % [title, viewport_size])
+		button.button_down.emit()
+		await settle_layout()
+	var final_button := scene.find_child("SettingRowButton_阅读辅助", true, false) as Button
+	check(final_button != null and final_button.text == "标准" and final_button.has_focus(), "accessibility profile wraps to standard while preserving focus at %s" % viewport_size)
+	scene.large_text_enabled = saved_large
+	scene.high_contrast_enabled = saved_contrast
+	scene.reduce_motion_enabled = saved_motion
+	scene.save_settings()
+	scene.settings_focus_restore_name = ""
+	scene.refresh_current_screen()
+	await settle_layout()
+
 func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	scene.show_chat_panel()
 	await settle_layout(0.04)
@@ -1227,9 +1273,15 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	check(panel != null and input != null and close_button != null and send_button != null, "online chat exposes drawer, input, close, and send controls at %s" % viewport_size)
 	if panel != null:
 		var panel_rect = screen_rect(panel)
-		check(panel.get_meta("layout_role", "") == "top_safe_drawer", "online game chat uses the top-safe drawer route at %s" % viewport_size)
+		var route := str(panel.get_meta("layout_role", ""))
+		check(route == scene.chat_panel_route_name(), "online game chat exposes the state-specific drawer route at %s" % viewport_size)
 		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "online game chat drawer stays inside viewport at %s" % viewport_size)
-		check(panel_rect.position.x >= viewport_size.x * 0.76 and panel_rect.end.y <= viewport_size.y * 0.29, "online game chat drawer stays in the upper-right safe lane at %s" % viewport_size)
+		if route == "top_safe_drawer":
+			check(panel_rect.position.x >= viewport_size.x * 0.70, "online game chat default route stays in the upper-right safe lane at %s" % viewport_size)
+		else:
+			check(panel_rect.end.x <= viewport_size.x * 0.30, "online game chat meld route stays in the upper-left gutter at %s" % viewport_size)
+		check(panel_rect.size.x >= 180.0 and panel_rect.end.y <= viewport_size.y * 0.33, "online game chat drawer keeps a wide compact touch lane at %s" % viewport_size)
+		check(panel.get_meta("compact_chat", false), "online game chat marks the narrow route as compact at %s" % viewport_size)
 		for seat in range(4):
 			var seat_panel = scene.find_child("SeatPanel_%d" % seat, true, false) as Control
 			var meld_area = scene.find_child("MeldArea_%d" % seat, true, false) as Control
@@ -1242,11 +1294,62 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 				check(not rects_overlap(panel_rect, screen_rect(discard_grid)), "online chat clears discard river %d at %s" % [seat, viewport_size])
 	if input != null and panel != null:
 		check(screen_rect(panel).grow(1.0).encloses(screen_rect(input)) and input.max_length == scene.CHAT_MESSAGE_MAX_LENGTH, "online chat input stays inside the drawer and preserves its length boundary at %s" % viewport_size)
-	if close_button != null and send_button != null:
+	if close_button != null and send_button != null and panel != null:
 		check(close_button.tooltip_text.contains("关闭") and send_button.tooltip_text.contains("Enter"), "online chat close/send controls expose complete action hints at %s" % viewport_size)
+		check(screen_rect(panel).grow(1.0).encloses(screen_rect(close_button)), "online chat close action stays inside the drawer at %s" % viewport_size)
+		check(screen_rect(send_button).size.x >= 42.0 and screen_rect(send_button).size.y >= 36.0, "online chat send action keeps a 42x36 touch target at %s" % viewport_size)
+		check(screen_rect(panel).grow(1.0).encloses(screen_rect(send_button)), "online chat send action stays inside the drawer at %s" % viewport_size)
+	var quick_row := scene.find_child("ChatPanelQuickMessages", true, false) as Control
+	var quick_buttons: Array[Button] = []
+	if quick_row != null:
+		collect_buttons(quick_row, quick_buttons)
+	check(quick_row != null and quick_buttons.size() == scene.CHAT_QUICK_MESSAGES.size(), "online chat keeps every quick-message action in its compact lane at %s" % viewport_size)
+	if panel != null:
+		for quick_button in quick_buttons:
+			var quick_rect := screen_rect(quick_button)
+			check(screen_rect(panel).grow(1.0).encloses(quick_rect) and quick_rect.size.x >= 46.0 and quick_rect.size.y >= 26.0, "online chat quick action %s stays readable and touchable at %s" % [quick_button.text, viewport_size])
+	check(input != null and input.has_focus(), "online chat opens with focus in the message input at %s" % viewport_size)
 	scene.close_chat_panel()
 	await settle_layout()
 	check(scene.find_child("ChatPanel", true, false) == null and not scene.chat_panel_open, "online chat closes cleanly and clears its open state at %s" % viewport_size)
+	await check_chat_panel_meld_route(scene, viewport_size, 2, "top_meld_safe_drawer")
+	await check_chat_panel_meld_route(scene, viewport_size, 1, "right_meld_safe_drawer")
+
+
+func check_chat_panel_meld_route(scene, viewport_size: Vector2, seat: int, expected_route: String) -> void:
+	var online_players: Array = scene.online_game.get("players", [])
+	var target_player: Dictionary = {}
+	for player_value in online_players:
+		var player: Dictionary = player_value
+		if int(player.get("seat", -1)) == seat:
+			target_player = player
+			break
+	if target_player.is_empty():
+		check(false, "chat route fixture finds seat %d player at %s" % [seat, viewport_size])
+		return
+	var saved_melds: Array = target_player.get("melds", []).duplicate(true)
+	target_player["melds"] = [["1W", "1W", "1W"]]
+	scene.render_game()
+	await settle_layout()
+	scene.show_chat_panel()
+	await settle_layout(0.04)
+	var panel := scene.find_child("ChatPanel", true, false) as Control
+	check(panel != null and str(panel.get_meta("layout_role", "")) == expected_route, "online chat routes seat %d meld state to a named safe lane at %s" % [seat, viewport_size])
+	if panel != null:
+		var panel_rect := screen_rect(panel)
+		check(panel_rect.end.x <= viewport_size.x * 0.30 and panel_rect.size.x >= 180.0, "online chat seat %d meld route keeps a wide upper-left gutter at %s" % [seat, viewport_size])
+		for other_seat in range(4):
+			var meld_area = scene.find_child("MeldArea_%d" % other_seat, true, false) as Control
+			var discard_grid = scene.find_child("DiscardGrid_%d" % other_seat, true, false) as Control
+			if meld_area != null:
+				check(not rects_overlap(panel_rect.grow(-1.0), screen_rect(meld_area)), "online chat seat %d route clears meld lane %d at %s" % [seat, other_seat, viewport_size])
+			if discard_grid != null:
+				check(not rects_overlap(panel_rect.grow(-1.0), screen_rect(discard_grid)), "online chat seat %d route clears river %d at %s" % [seat, other_seat, viewport_size])
+	scene.close_chat_panel()
+	await settle_layout()
+	target_player["melds"] = saved_melds
+	scene.render_game()
+	await settle_layout()
 
 func check_table_log_archive_layout(scene, viewport_size: Vector2) -> void:
 	var saved_logs: Array = scene.table_logs.duplicate()
@@ -1292,6 +1395,16 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	var panel = scene.find_child("AdvisorPanel", true, false) as Control
 	var dock = scene.find_child("ActionButtonDock", true, false) as Control
 	var hand = scene.find_child("HandTray", true, false) as Control
+	if scene.offline_phase == "pending_claim":
+		var pending_context = scene.find_child("PendingClaimIllustration", true, false) as Control
+		var pending_source = scene.find_child("PendingClaimSourceText", true, false) as Label
+		var pending_focus = scene.find_child("PendingClaimFocusText", true, false) as Label
+		check(panel == null, "pending claim hides the general AI advisor to preserve one response focus lane at %s" % viewport_size)
+		check(pending_context != null and pending_source != null and pending_focus != null, "pending claim keeps its dedicated response context when advisor is hidden at %s" % viewport_size)
+		check(pending_source.text.contains("打出") and pending_focus.text.contains("H胡") and pending_focus.text.contains("X过"), "pending claim context preserves the source and keyboard response route at %s" % viewport_size)
+		if pending_context != null and dock != null:
+			check(screen_rect(pending_context).end.y <= screen_rect(dock).position.y - 5.0, "pending claim context clears the action dock after advisor collapse at %s" % viewport_size)
+		return
 	check(panel != null and dock != null and hand != null, "AI advisor exposes panel, action dock, and hand context at %s" % viewport_size)
 	if panel == null:
 		return
@@ -1315,7 +1428,7 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 func check_advisor_detail_layout(scene, viewport_size: Vector2) -> void:
 	var detail_button = scene.find_child("AdvisorDetailButton", true, false) as Button
 	if detail_button == null:
-		check(false, "AI advisor detail action is available before expansion at %s" % viewport_size)
+		check(scene.offline_phase == "pending_claim" and scene.find_child("PendingClaimIllustration", true, false) != null, "pending claim keeps detail focus in its single response context at %s" % viewport_size)
 		return
 	detail_button.button_down.emit()
 	await settle_layout(0.04)
@@ -1359,6 +1472,8 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	if panel == null:
 		return
 	var panel_rect = screen_rect(panel)
+	check(panel.mouse_filter == Control.MOUSE_FILTER_STOP and panel.clip_contents and bool(panel.get_meta("modal_input_shield", false)), "danger discard warning is a clipped modal input surface at %s" % viewport_size)
+	check(confirm_button != null and confirm_button.has_focus(), "danger discard defaults focus to the real confirm action at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "danger discard warning stays inside the viewport safe bounds at %s" % viewport_size)
 	check(panel_rect.size.y >= 32.0, "danger discard warning keeps a readable compact height at %s" % viewport_size)
 	for seat in range(4):
@@ -1396,6 +1511,7 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	check(first_button_with_text(scene.action_bar, "重开") == null and first_button_with_text(scene.action_bar, "提示") == null and scene.find_child("VoiceActionButton", true, false) == null, "danger discard dedicated dock hides secondary global actions at %s" % viewport_size)
 	if dock != null:
 		check(screen_rect(dock).end.y <= viewport_size.y - 44.0, "danger discard action dock leaves room for the hand tray at %s" % viewport_size)
+	check(confirm_button != null and confirm_button.focus_mode == Control.FOCUS_ALL and str(confirm_button.focus_neighbor_left) != "", "danger discard confirm action remains in the keyboard focus loop at %s" % viewport_size)
 
 func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	var panel = scene.find_child("RoundSummaryPanel", true, false) as Control
@@ -1826,6 +1942,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		"AI 节奏": ["快速", "标准"],
 		"AI 难度": ["简单", "标准", "困难"],
 		"桌面特效": ["已开", "已关"],
+		"阅读辅助": ["标准", "大字", "高对比", "减动效", "专注", "清晰"],
 		"3D 画质": ["自动", "省电", "标准", "精细"],
 		"出牌辅助": ["已开", "已关"],
 		"播放曲目": "切歌",
@@ -1833,7 +1950,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	}
 	var settings_sections := {
 		"声音": ["背景音乐", "音效反馈", "语音报牌", "播放测试"],
-		"体验": ["AI 节奏", "AI 难度", "桌面特效", "出牌辅助", "播放曲目"],
+		"体验": ["AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目"],
 		"系统": ["3D 画质", "本地进度"],
 	}
 	var section_rects: Array = []

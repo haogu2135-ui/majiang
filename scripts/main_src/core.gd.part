@@ -282,6 +282,11 @@ func focus_named_control(control_name: String) -> void:
 		control.focus_mode = Control.FOCUS_ALL
 	control.grab_focus()
 
+func focus_danger_discard_confirm() -> void:
+	if mode == "offline" and has_pending_danger_discard():
+		focus_named_control("DangerDiscardConfirmButton")
+		call_deferred("focus_named_control", "DangerDiscardConfirmButton")
+
 func handle_ui_cancel() -> bool:
 	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 		hide_exit_confirm()
@@ -300,6 +305,11 @@ func handle_ui_cancel() -> bool:
 		return true
 	if chat_panel_open:
 		close_chat_panel()
+		return true
+	if mode == "offline" and has_pending_danger_discard():
+		clear_pending_danger_discard()
+		set_status(current_status_text())
+		render_game()
 		return true
 	if settings_panel_open:
 		close_settings_panel()
@@ -7671,10 +7681,25 @@ func chat_panel_rect() -> Rect2:
 	# The lobby gets a taller reading area because it has no table geometry.
 	if mode == "online_lobby":
 		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
-	# The root layer is inset by the device safe area. A 0.810 anchor keeps
-	# the drawer's actual screen edge at or beyond the 76% upper-right lane
-	# and leaves the top meld lane a visible gutter even after that inset.
-	return Rect2(Vector2(0.810, 0.118), Vector2(0.985, 0.282))
+	# Both exposed meld states use the same wide upper-left gutter. The old
+	# right-meld branch was too narrow for touch controls and could intersect the
+	# right vertical meld lane; the left gutter clears the top river, side seat,
+	# and both meld layouts while keeping a stable drawer size.
+	if chat_panel_route_name() != "top_safe_drawer":
+		return Rect2(Vector2(0.015, 0.120), Vector2(0.273, 0.320))
+	# The root layer is inset by the device safe area. Keep an 8px+ gutter from
+	# the top river at the smallest supported viewport.
+	return Rect2(Vector2(0.727, 0.120), Vector2(0.985, 0.320))
+
+
+func chat_panel_route_name() -> String:
+	if mode == "online_lobby":
+		return "lobby_drawer"
+	if not get_melds(2).is_empty():
+		return "top_meld_safe_drawer"
+	if not get_melds(1).is_empty():
+		return "right_meld_safe_drawer"
+	return "top_safe_drawer"
 
 
 func add_chat_message(text: String) -> void:

@@ -432,6 +432,13 @@ const TASK_SCHEMA_VERSION := 2
 const ROUND_HISTORY_LIMIT := 20
 const ROUND_EVENT_HISTORY_LIMIT := 180
 const RESULT_TRANSACTION_HISTORY_LIMIT := 64
+const STATS_SCHEMA_VERSION := 3
+const REPLAY_SCHEMA_VERSION := 2
+const REPLAY_SHARE_MAX_BYTES := 96 * 1024
+const ONLINE_HEARTBEAT_INTERVAL_MSEC := 10000
+const ONLINE_RECONNECT_BASE_DELAY_MSEC := 800
+const ONLINE_RECONNECT_MAX_DELAY_MSEC := 12000
+const ONLINE_VOICE_SILENCE_THRESHOLD := 0.018
 const ITEM_TYPES := {
 	"swap_card": {"name": "换牌卡", "desc": "重新摸一张牌", "icon": "🔄", "cost_gems": 5},
 	"peek_card": {"name": "偷看卡", "desc": "查看对手一张手牌", "icon": "👁", "cost_gems": 8},
@@ -489,6 +496,9 @@ var music_enabled = true
 var sfx_enabled = true
 var tts_enabled = true
 var fast_mode_enabled = true
+var large_text_enabled := false
+var high_contrast_enabled := false
+var reduce_motion_enabled := false
 var ai_difficulty := AI_DIFFICULTY_NORMAL
 var ai_benchmark_base_difficulty := -1
 var ai_benchmark_probe_seat := -1
@@ -498,6 +508,7 @@ var graphics_quality = Commercial3DStage.QUALITY_AUTO
 var ai_assist_enabled = false  # 出牌辅助（推荐/危险提示），玩家可在设置中开启
 var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
+var settings_focus_restore_name := ""
 var reset_progress_confirming = false
 var exit_confirm_panel: Control = null
 var exit_confirm_focus_restore_id := 0
@@ -519,6 +530,13 @@ var game_stats = {
 	"best_score": 0,
 	"win_rate": 0.0,
 	"total_hands": 0,
+	"best_fan": 0,
+	"total_fan": 0,
+	"self_draws": 0,
+	"wall_draws": 0,
+	"deal_ins": 0,
+	"last_result_kind": "",
+	"by_rule": {},
 }
 var achievements = {
 	"first_win": false,  # 首次胡牌
@@ -714,6 +732,11 @@ var online_resume_context: Dictionary = {}
 var online_seen_message_ids: Dictionary = {}
 var online_seen_voice_sequences: Dictionary = {}
 var online_last_chat_sent_msec := 0
+var online_last_receive_msec := 0
+var online_last_heartbeat_msec := 0
+var online_reconnect_attempts := 0
+var online_messages_received := 0
+var online_messages_rejected := 0
 var online_last_snapshot_fingerprint := ""
 var online_last_room_snapshot_fingerprint := ""
 var online_announced_discard_key = ""
@@ -999,10 +1022,10 @@ const SETTINGS_PANEL_RECT := Rect2(Vector2(0.145, 0.055), Vector2(0.855, 0.955))
 const SETTINGS_TITLE_RECT := Rect2(Vector2(0.06, 0.045), Vector2(0.34, 0.155))
 const SETTINGS_CLOSE_RECT := Rect2(Vector2(0.830, 0.055), Vector2(0.965, 0.165))
 const SETTINGS_AUDIO_SECTION_RECT := Rect2(Vector2(0.040, 0.255), Vector2(0.488, 0.785))
-const SETTINGS_PLAY_SECTION_RECT := Rect2(Vector2(0.512, 0.255), Vector2(0.960, 0.785))
+const SETTINGS_PLAY_SECTION_RECT := Rect2(Vector2(0.512, 0.240), Vector2(0.960, 0.805))
 const SETTINGS_MAINT_SECTION_RECT := Rect2(Vector2(0.040, 0.805), Vector2(0.960, 0.955))
-const SETTINGS_SECTION_TITLE_RECT := Rect2(Vector2(0.035, 0.045), Vector2(0.300, 0.300))
-const SETTINGS_SECTION_GRID_RECT := Rect2(Vector2(0.035, 0.165), Vector2(0.965, 0.970))
+const SETTINGS_SECTION_TITLE_RECT := Rect2(Vector2(0.035, 0.018), Vector2(0.300, 0.100))
+const SETTINGS_SECTION_GRID_RECT := Rect2(Vector2(0.035, 0.120), Vector2(0.965, 0.985))
 const SETTINGS_ROW_STATUS_RECT := Rect2(Vector2(0.045, 0.145), Vector2(0.510, 0.855))
 const SETTINGS_ROW_BUTTON_RECT := Rect2(Vector2(0.595, 0.020), Vector2(0.975, 0.980))
 const UI_BACKGROUND_TINT := Color(0.112, 0.086, 0.052, 0.800)
@@ -1638,8 +1661,8 @@ func make_label(parent: Control, text: String, font_size: int, color: Color, bol
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_font_override("font", ui_cjk_font())
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
+	label.add_theme_font_size_override("font_size", accessibility_font_size(font_size))
+	label.add_theme_color_override("font_color", accessible_text_color(color))
 	if bold:
 		label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 		label.add_theme_constant_override("shadow_offset_x", 1)
@@ -1695,7 +1718,7 @@ func set_label_text_by_id(label_id: int, text: String) -> void:
 func make_small_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
 	button.custom_minimum_size = Vector2(104, 44)
-	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(18))
 	apply_button_style(button, color, 12, 2, 4)
 	return button
 
@@ -1795,7 +1818,7 @@ func make_base_button(text: String, callback: Callable) -> Button:
 	button.text = text
 	configure_touch_button(button)
 	button.add_theme_font_override("font", ui_cjk_font())
-	button.add_theme_color_override("font_color", Color(0.95, 0.93, 0.82))
+	button.add_theme_color_override("font_color", accessible_text_color(Color(0.95, 0.93, 0.82)))
 	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.50))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.92))
 	button.add_theme_constant_override("shadow_offset_x", 1)
@@ -2319,7 +2342,33 @@ func numeric_count(value, fallback: int = 0) -> int:
 func fx_enabled_effective() -> bool:
 	if offline_sim_quiet:
 		return false
-	return fx_enabled and fx_layer != null and is_instance_valid(fx_layer)
+	return fx_enabled and not reduce_motion_enabled and fx_layer != null and is_instance_valid(fx_layer)
+
+func accessibility_profile_label() -> String:
+	if large_text_enabled and high_contrast_enabled and reduce_motion_enabled:
+		return "专注"
+	if large_text_enabled and high_contrast_enabled:
+		return "清晰"
+	if large_text_enabled:
+		return "大字"
+	if high_contrast_enabled:
+		return "高对比"
+	if reduce_motion_enabled:
+		return "减动效"
+	return "标准"
+
+func accessibility_font_size(font_size: int) -> int:
+	return font_size + (2 if large_text_enabled else 0)
+
+func accessible_text_color(color: Color) -> Color:
+	if not high_contrast_enabled:
+		return color
+	return Color(
+		clampf(color.r * 0.35 + 0.65, 0.0, 1.0),
+		clampf(color.g * 0.35 + 0.65, 0.0, 1.0),
+		clampf(color.b * 0.35 + 0.65, 0.0, 1.0),
+		color.a
+	)
 
 func get_shader_material(shader_name: String) -> ShaderMaterial:
 	var base_mat = shader_materials.get(shader_name, null)
@@ -2631,6 +2680,9 @@ func load_settings() -> void:
 	sfx_enabled = bool(config.get_value("audio", "sfx_enabled", sfx_enabled))
 	tts_enabled = bool(config.get_value("audio", "tts_enabled", tts_enabled))
 	fast_mode_enabled = bool(config.get_value("gameplay", "fast_mode_enabled", fast_mode_enabled))
+	large_text_enabled = bool(config.get_value("accessibility", "large_text_enabled", large_text_enabled))
+	high_contrast_enabled = bool(config.get_value("accessibility", "high_contrast_enabled", high_contrast_enabled))
+	reduce_motion_enabled = bool(config.get_value("accessibility", "reduce_motion_enabled", reduce_motion_enabled))
 	fx_enabled = bool(config.get_value("gameplay", "fx_enabled", fx_enabled))
 	graphics_quality = clampi(int(config.get_value("gameplay", "graphics_quality", graphics_quality)), Commercial3DStage.QUALITY_AUTO, Commercial3DStage.QUALITY_HIGH)
 	ai_assist_enabled = bool(config.get_value("gameplay", "ai_assist_enabled", ai_assist_enabled))
@@ -2651,6 +2703,9 @@ func save_settings() -> void:
 	config.set_value("audio", "tts_enabled", tts_enabled)
 	config.set_value("audio", "defaults_version", AUDIO_DEFAULTS_VERSION)
 	config.set_value("gameplay", "fast_mode_enabled", fast_mode_enabled)
+	config.set_value("accessibility", "large_text_enabled", large_text_enabled)
+	config.set_value("accessibility", "high_contrast_enabled", high_contrast_enabled)
+	config.set_value("accessibility", "reduce_motion_enabled", reduce_motion_enabled)
 	config.set_value("gameplay", "fx_enabled", fx_enabled)
 	config.set_value("gameplay", "graphics_quality", graphics_quality)
 	config.set_value("gameplay", "ai_assist_enabled", ai_assist_enabled)
@@ -2670,6 +2725,13 @@ func load_game_stats() -> void:
 			"best_score": 0,
 			"win_rate": 0.0,
 			"total_hands": 0,
+			"best_fan": 0,
+			"total_fan": 0,
+			"self_draws": 0,
+			"wall_draws": 0,
+			"deal_ins": 0,
+			"last_result_kind": "",
+			"by_rule": {},
 		}
 		load_round_history()
 		return
@@ -2680,10 +2742,19 @@ func load_game_stats() -> void:
 		"best_score": int(config.get_value("stats", "best_score", 0)),
 		"win_rate": float(config.get_value("stats", "win_rate", 0.0)),
 		"total_hands": int(config.get_value("stats", "total_hands", 0)),
+		"best_fan": maxi(0, int(config.get_value("stats", "best_fan", 0))),
+		"total_fan": maxi(0, int(config.get_value("stats", "total_fan", 0))),
+		"self_draws": maxi(0, int(config.get_value("stats", "self_draws", 0))),
+		"wall_draws": maxi(0, int(config.get_value("stats", "wall_draws", 0))),
+		"deal_ins": maxi(0, int(config.get_value("stats", "deal_ins", 0))),
+		"last_result_kind": str(config.get_value("stats", "last_result_kind", "")),
+		"by_rule": config.get_value("stats", "by_rule", {}) if typeof(config.get_value("stats", "by_rule", {})) == TYPE_DICTIONARY else {},
 	}
+	normalize_game_stats()
 	load_round_history()
 
 func save_game_stats() -> void:
+	normalize_game_stats()
 	var config = ConfigFile.new()
 	config.set_value("stats", "games_played", game_stats.get("games_played", 0))
 	config.set_value("stats", "games_won", game_stats.get("games_won", 0))
@@ -2691,8 +2762,90 @@ func save_game_stats() -> void:
 	config.set_value("stats", "best_score", game_stats.get("best_score", 0))
 	config.set_value("stats", "win_rate", game_stats.get("win_rate", 0.0))
 	config.set_value("stats", "total_hands", game_stats.get("total_hands", 0))
+	config.set_value("stats", "best_fan", game_stats.get("best_fan", 0))
+	config.set_value("stats", "total_fan", game_stats.get("total_fan", 0))
+	config.set_value("stats", "self_draws", game_stats.get("self_draws", 0))
+	config.set_value("stats", "wall_draws", game_stats.get("wall_draws", 0))
+	config.set_value("stats", "deal_ins", game_stats.get("deal_ins", 0))
+	config.set_value("stats", "last_result_kind", game_stats.get("last_result_kind", ""))
+	config.set_value("stats", "by_rule", game_stats.get("by_rule", {}))
+	config.set_value("stats", "schema_version", STATS_SCHEMA_VERSION)
 	config.save(STATS_PATH)
 	save_round_history()
+
+func normalize_game_stats() -> void:
+	var defaults := {
+		"games_played": 0,
+		"games_won": 0,
+		"total_score": 0,
+		"best_score": 0,
+		"win_rate": 0.0,
+		"total_hands": 0,
+		"best_fan": 0,
+		"total_fan": 0,
+		"self_draws": 0,
+		"wall_draws": 0,
+		"deal_ins": 0,
+		"last_result_kind": "",
+		"by_rule": {},
+	}
+	for key in defaults.keys():
+		if not game_stats.has(key):
+			game_stats[key] = defaults[key]
+	game_stats["games_played"] = maxi(0, int(game_stats.get("games_played", 0)))
+	game_stats["games_won"] = clampi(int(game_stats.get("games_won", 0)), 0, int(game_stats["games_played"]))
+	game_stats["total_hands"] = maxi(0, int(game_stats.get("total_hands", 0)))
+	game_stats["total_fan"] = maxi(0, int(game_stats.get("total_fan", 0)))
+	game_stats["best_fan"] = maxi(0, int(game_stats.get("best_fan", 0)))
+	game_stats["self_draws"] = clampi(int(game_stats.get("self_draws", 0)), 0, int(game_stats["games_played"]))
+	game_stats["wall_draws"] = clampi(int(game_stats.get("wall_draws", 0)), 0, int(game_stats["games_played"]))
+	game_stats["deal_ins"] = clampi(int(game_stats.get("deal_ins", 0)), 0, int(game_stats["games_played"]))
+	game_stats["win_rate"] = float(game_stats.get("games_won", 0)) / float(maxi(1, int(game_stats["games_played"])))
+	if typeof(game_stats.get("by_rule", {})) != TYPE_DICTIONARY:
+		game_stats["by_rule"] = {}
+
+func record_round_statistics(metrics: Dictionary) -> void:
+	if metrics.is_empty():
+		return
+	normalize_game_stats()
+	var rule_key := str(metrics.get("rule_variant", rule_variant)).strip_edges().to_lower()
+	if not RULE_VARIANT_PROFILES.has(rule_key):
+		rule_key = RULE_VARIANT_YANGZHOU
+	var by_rule: Dictionary = game_stats.get("by_rule", {})
+	var row: Dictionary = by_rule.get(rule_key, {}) if typeof(by_rule.get(rule_key, {})) == TYPE_DICTIONARY else {}
+	row["games"] = maxi(0, int(row.get("games", 0))) + 1
+	row["wins"] = maxi(0, int(row.get("wins", 0))) + (1 if bool(metrics.get("won", false)) else 0)
+	row["score"] = int(row.get("score", 0)) + int(metrics.get("score", 0))
+	row["fan_total"] = maxi(0, int(row.get("fan_total", 0))) + maxi(0, int(metrics.get("fan", 0)))
+	row["self_draws"] = maxi(0, int(row.get("self_draws", 0))) + (1 if bool(metrics.get("self_draw", false)) else 0)
+	row["wall_draws"] = maxi(0, int(row.get("wall_draws", 0))) + (1 if bool(metrics.get("wall_draw", false)) else 0)
+	row["deal_ins"] = maxi(0, int(row.get("deal_ins", 0))) + (1 if bool(metrics.get("deal_in", false)) else 0)
+	by_rule[rule_key] = row
+	game_stats["by_rule"] = by_rule
+	var fan := maxi(0, int(metrics.get("fan", 0)))
+	game_stats["total_fan"] = int(game_stats.get("total_fan", 0)) + fan
+	game_stats["best_fan"] = maxi(int(game_stats.get("best_fan", 0)), fan)
+	if bool(metrics.get("self_draw", false)):
+		game_stats["self_draws"] = int(game_stats.get("self_draws", 0)) + 1
+	if bool(metrics.get("wall_draw", false)):
+		game_stats["wall_draws"] = int(game_stats.get("wall_draws", 0)) + 1
+	if bool(metrics.get("deal_in", false)):
+		game_stats["deal_ins"] = int(game_stats.get("deal_ins", 0)) + 1
+	game_stats["last_result_kind"] = str(metrics.get("result_kind", ""))
+	save_game_stats()
+
+func game_stats_insight() -> Dictionary:
+	normalize_game_stats()
+	var games := maxi(1, int(game_stats.get("games_played", 0)))
+	return {
+		"win_rate": float(game_stats.get("games_won", 0)) / float(games),
+		"average_fan": float(game_stats.get("total_fan", 0)) / float(games),
+		"self_draw_rate": float(game_stats.get("self_draws", 0)) / float(games),
+		"wall_draw_rate": float(game_stats.get("wall_draws", 0)) / float(games),
+		"deal_in_rate": float(game_stats.get("deal_ins", 0)) / float(games),
+		"best_fan": int(game_stats.get("best_fan", 0)),
+		"last_result_kind": str(game_stats.get("last_result_kind", "")),
+	}
 
 func load_round_history() -> void:
 	var config = ConfigFile.new()
@@ -3128,7 +3281,7 @@ func spend_gems(amount: int) -> bool:
 	save_currency()
 	return true
 
-func record_game_result(won: bool, score: int, hands_played: int, result_key: String = "") -> void:
+func record_game_result(won: bool, score: int, hands_played: int, result_key: String = "", metrics: Dictionary = {}) -> void:
 	var transaction_key := result_key.strip_edges()
 	if transaction_key != "":
 		if applied_result_transactions.has(transaction_key):
@@ -3160,6 +3313,11 @@ func record_game_result(won: bool, score: int, hands_played: int, result_key: St
 		add_season_points(season_points_for_result(won, score), won)
 		grant_round_coins(won, score)
 	save_game_stats()
+	if not offline_sim_quiet and not metrics.is_empty():
+		var normalized_metrics := metrics.duplicate(true)
+		normalized_metrics["won"] = won
+		normalized_metrics["score"] = score
+		record_round_statistics(normalized_metrics)
 
 func grant_round_coins(won: bool, score: int) -> int:
 	var reward := 8 + (25 if won else 5) + maxi(0, int(score / 1200))

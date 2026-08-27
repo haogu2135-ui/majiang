@@ -229,6 +229,49 @@ func run() -> void:
 	await process_frame
 	check(scene.app_version() == "1.0.180-godot", "project version matches exported app version")
 	check(scene.AUDIO_DEFAULTS_VERSION == "1.0.159-godot", "audio defaults migrate for this release")
+	var saved_accessibility_profile := [scene.large_text_enabled, scene.high_contrast_enabled, scene.reduce_motion_enabled]
+	scene.large_text_enabled = false
+	scene.high_contrast_enabled = false
+	scene.reduce_motion_enabled = false
+	check(scene.accessibility_profile_label() == "标准" and scene.accessibility_font_size(14) == 14, "accessibility profile starts in the standard readable mode")
+	scene.large_text_enabled = true
+	check(scene.accessibility_profile_label() == "大字" and scene.accessibility_font_size(14) == 16, "large-text accessibility mode scales shared label sizes")
+	scene.high_contrast_enabled = true
+	scene.reduce_motion_enabled = true
+	check(scene.accessibility_profile_label() == "专注" and scene.accessible_text_color(Color(0.2, 0.2, 0.2)).r > 0.65, "focused accessibility mode combines contrast and reduced-motion preferences")
+	scene.large_text_enabled = bool(saved_accessibility_profile[0])
+	scene.high_contrast_enabled = bool(saved_accessibility_profile[1])
+	scene.reduce_motion_enabled = bool(saved_accessibility_profile[2])
+	var saved_round_id: String = str(scene.active_round_id)
+	var saved_event_history: Array = scene.round_event_history.duplicate(true)
+	var saved_event_sequence: int = int(scene.round_event_sequence)
+	scene.active_round_id = "QA-REPLAY"
+	scene.round_event_history.clear()
+	scene.round_event_sequence = 0
+	for event_index in range(scene.ROUND_EVENT_HISTORY_LIMIT + 3):
+		scene.record_round_event("qa_event", {"index": event_index})
+	var replay_payload: Dictionary = scene.export_round_replay_payload()
+	var replay_code: String = str(scene.round_replay_share_code())
+	check(replay_payload.get("valid", false) and scene.validate_round_replay(scene.round_event_history) and scene.round_event_history.size() == scene.ROUND_EVENT_HISTORY_LIMIT, "bounded replay keeps a valid digest chain after older events are evicted")
+	var imported_replay: Dictionary = scene.import_round_replay_share_code(replay_code)
+	check(replay_code != "", "replay export produces a bounded share code")
+	check(not imported_replay.is_empty(), "replay import accepts a freshly exported share code")
+	check(imported_replay.get("digest", "") == replay_payload.get("digest", ""), "replay import preserves the chain digest")
+	check(imported_replay.get("event_counts", {}).get("qa_event", 0) == scene.ROUND_EVENT_HISTORY_LIMIT, "replay import preserves event counts")
+	var tampered_events: Array = replay_payload.get("events", []).duplicate(true)
+	if not tampered_events.is_empty():
+		(tampered_events[0] as Dictionary)["type"] = "tampered"
+	var tampered_payload := replay_payload.duplicate(true)
+	tampered_payload["events"] = tampered_events
+	check(scene.import_round_replay_share_code(Marshalls.raw_to_base64(JSON.stringify(tampered_payload).to_utf8_buffer())).is_empty(), "replay import rejects payloads whose event content no longer matches its digest")
+	scene.active_round_id = saved_round_id
+	scene.round_event_history = saved_event_history
+	scene.round_event_sequence = saved_event_sequence
+	var delta_report: Dictionary = scene.score_delta_breakdown([100, -40, -60, 0], 0)
+	check(delta_report.get("conserved", false) and delta_report.get("gains", []).size() == 1 and delta_report.get("losses", []).size() == 2, "score breakdown exposes conserved gains and losses by seat")
+	check(scene.ai_decision_explanation({"tile": "5T", "shanten": 2, "ukeire": 8, "reason_label": "保留两面"}).contains("8张进张"), "AI advice can explain its recommended discard and effective tiles")
+	var progress_report: Dictionary = scene.match_progress_report()
+	check(progress_report.get("completed_hands", -1) == 0 and progress_report.get("remaining_hands", 0) == scene.MATCH_MAX_HANDS, "match progress report exposes remaining hands before the first deal")
 	var original_rule_variant := str(scene.rule_variant)
 	var expected_rule_wall_sizes := {
 		scene.RULE_VARIANT_GUANGDONG: 136,
@@ -1764,12 +1807,13 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_声音_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_体验_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_系统_") == 0 and ((scene.optional_gpt_illustration_texture("settings_section_signal_panel") == null) or (count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPanelTexture_") == 3)), "settings overlay replaces section signal pulses with optional GPT signal panel plate")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusArt_") == 10 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusRail_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusFill_") == 0, "settings rows keep status art but omit obsolete row rails and fills")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusDot_") == 0, "settings rows omit compact status dots that competed with text")
-	check(count_nodes_with_name_prefix(settings_parent, "SettingRowTextReadabilityPanel_") == 11, "settings rows expose local text readability panels")
+	var settings_row_titles := ["背景音乐", "音效反馈", "语音报牌", "播放测试", "AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目", "3D 画质", "本地进度"]
+	check(count_nodes_with_name_prefix(settings_parent, "SettingRowTextReadabilityPanel_") == settings_row_titles.size(), "settings rows expose local text readability panels")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchArt") == 6 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchRail") == 6, "settings toggle buttons render compact switch art and rails")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmGate") == 0, "settings toggle buttons omit obsolete route/state/knob confirmation clutter")
 	for section_name in ["声音", "体验", "系统"]:
 		check(settings_parent.find_child("SettingsSection_%s" % section_name, true, false) != null and settings_parent.find_child("SettingsSectionGrid_%s" % section_name, true, false) != null, "settings section %s exposes stable section and grid nodes" % section_name)
-	for title in ["背景音乐", "音效反馈", "语音报牌", "播放测试", "AI 节奏", "桌面特效", "出牌辅助", "播放曲目", "3D 画质", "本地进度"]:
+	for title in settings_row_titles:
 		check(settings_parent.find_child("SettingRow_%s" % title, true, false) != null, "settings row %s exposes a stable row node" % title)
 		var compact_button = settings_parent.find_child("SettingRowButton_%s" % title, true, false) as Button
 		check(compact_button != null and compact_button.text.length() <= 4 and compact_button.clip_text and compact_button.get_theme_font_size("font_size") <= 15, "settings row %s exposes compact safe button" % title)
@@ -4114,8 +4158,8 @@ func run() -> void:
 	check(scene.normalize_online_message_kind({"type": "actionAck"}) == "ack", "online ack type alias is normalized")
 	check(scene.normalize_online_message_kind({"type": "message"}) == "info", "online plain message type is treated as info")
 	check(scene.normalize_tile_code("m3") == "3W" and scene.normalize_tile_code("s7") == "7T" and scene.normalize_tile_code("p9") == "9B", "legacy m/s/p tile prefixes map to canonical suits")
-	var validation_mode := scene.mode
-	var validation_game := scene.online_game
+	var validation_mode: String = str(scene.mode)
+	var validation_game: Dictionary = scene.online_game.duplicate(true)
 	scene.mode = "online_game"
 	scene.online_game = online_state
 	check(scene.online_action_validation_error({"type": "discard", "tile": "1W"}) == "" and scene.online_action_validation_error({"type": "discard", "tile": "z9"}) != "" and scene.online_action_validation_error({"type": "discard", "tile": "m3"}) != "", "online discard validation enforces phase, hand ownership, and canonical tile codes")

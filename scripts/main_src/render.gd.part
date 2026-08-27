@@ -1098,7 +1098,10 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 
 func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# r214: bulk GPT chrome sweep
-	if not force_visible and (mode != "offline" or offline_phase == "ended" or not player_ai_assist_enabled()):
+	# A pending claim already has one focused response surface. Hiding the general
+	# advisor here prevents a second reading lane from competing with the claim
+	# buttons and keeps keyboard focus within the legal response actions.
+	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or not player_ai_assist_enabled()):
 		return
 	# The narrow center-left HUD slot sits between the left river and the center
 	# surface, above the player river. During a response window the action dock
@@ -2560,16 +2563,32 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	# river and away from both side meld lanes instead of squeezing it beside CTA buttons.
 	# Use the central console lane. This avoids the actual tile footprints in
 	# both horizontal rivers and leaves the side meld lanes untouched.
-	var panel_left := 0.355
+	var panel_left := 0.360
 	var panel_top := 0.355
-	var panel_right := 0.645
+	var panel_right := 0.640
 	var panel_bottom := 0.535
 	var panel = make_gpt_route_rail(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.040, 0.018, 0.016, 0.94))
 	panel.name = "DangerDiscardConfirmationArt"
 	panel.z_index = 20
 	panel.clip_contents = true
+	panel.set_meta("modal_input_shield", true)
 	parent.add_child(panel)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# This is a modal decision surface. It has no duplicate visual CTA, but it
+	# must consume clicks so the table behind it cannot receive an accidental
+	# discard. A click returns focus to the real confirmation action in the dock.
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.gui_input.connect(func(event: InputEvent) -> void:
+		var pressed := false
+		if event is InputEventMouseButton:
+			pressed = (event as InputEventMouseButton).pressed
+		elif event is InputEventScreenTouch:
+			pressed = (event as InputEventScreenTouch).pressed
+		if not pressed:
+			return
+		focus_danger_discard_confirm()
+		call_deferred("focus_danger_discard_confirm")
+		get_viewport().set_input_as_handled()
+	)
 	var seal_texture = add_illustration_texture(panel, "danger_decision_seal", rect_full(0.015, -1.080, 0.515, 2.000), 0.16, true)
 	if seal_texture != null:
 		seal_texture.name = "DangerDecisionSealTexture"
@@ -5099,6 +5118,7 @@ func draw_meld_group_art(parent: Control, kind: String, accent: Color, meld_size
 	var art = Control.new()
 	art.name = "MeldGroupArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.clip_contents = true
 	apply_rect(art, rect_full(0.000, 0.000, 1.000, 1.000))
 	parent.add_child(art)
 	parent.move_child(art, 0)
@@ -6318,8 +6338,9 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var panel = make_gpt_route_rail(context_rect, Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
 	panel.name = "PendingClaimIllustration"
 	panel.z_index = 20
+	panel.clip_contents = true
 	parent.add_child(panel)
-	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(-0.025, -0.120, 1.025, 1.120), 0.62, false)
+	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
 	if status_strip != null:
 		status_strip.name = "PendingClaimStatusStripTexture"
 		panel.move_child(status_strip, 0)
@@ -8830,11 +8851,11 @@ func draw_settings_overlay(parent: Control) -> void:
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
 	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
 	if compact_settings:
-		# 540px 高度仍保留每行 48px 的点击目标：扩大模态可用高度，再让
-		# 上方两区容纳完整设置行，底部系统区维持一行双列。
+		# 540px 高度仍保留每行 48px 的点击目标：上下分区改为全宽双列，
+		# 让声音、体验和系统都拥有足够的横向按钮空间。
 		panel_rect = rect_full(0.145, 0.010, 0.855, 0.990)
-		audio_section_rect = rect_full(0.040, 0.250, 0.488, 0.837)
-		play_section_rect = rect_full(0.512, 0.250, 0.960, 0.837)
+		audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.490)
+		play_section_rect = rect_full(0.040, 0.500, 0.960, 0.837)
 		maint_section_rect = rect_full(0.040, 0.855, 0.960, 0.989)
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
@@ -8950,7 +8971,7 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 声音设置
 	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)
-	audio_grid.columns = 1
+	audio_grid.columns = 2 if compact_settings else 1
 	make_setting_row(audio_grid, "背景音乐", "当前: %s" % ("开启" if music_enabled else "关闭"), make_setting_button("音乐", music_enabled, func() -> void:
 		toggle_music_setting()
 	))
@@ -8966,7 +8987,7 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 体验设置
 	var play_grid = make_settings_section(panel, play_section_rect, "体验", compact_settings)
-	play_grid.columns = 1
+	play_grid.columns = 2 if compact_settings else 1
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_selector_button("快速" if fast_mode_enabled else "标准", "AI 节奏", func() -> void:
 		toggle_fast_mode_setting()
 	))
@@ -8975,6 +8996,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 	make_setting_row(play_grid, "桌面特效", "当前: %s" % ("开启" if fx_enabled else "关闭"), make_setting_button("特效", fx_enabled, func() -> void:
 		toggle_fx_setting()
+	))
+	make_setting_row(play_grid, "阅读辅助", "当前: %s" % accessibility_profile_label(), make_setting_selector_button(accessibility_profile_label(), "阅读辅助", func() -> void:
+		cycle_accessibility_profile_setting()
 	))
 	make_setting_row(play_grid, "出牌辅助", "危险提示: %s" % ("开启" if ai_assist_enabled else "关闭"), make_setting_button("辅助", ai_assist_enabled, func() -> void:
 		toggle_ai_assist_setting()
@@ -8992,7 +9016,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(system_grid, "本地进度", "清空统计与离线记录", make_reset_progress_button(func() -> void:
 		request_reset_progress_from_settings()
 	))
-	configure_button_focus_navigation(panel, "SettingsCloseButton")
+	var settings_default_focus := settings_focus_restore_name if settings_focus_restore_name != "" else "SettingsCloseButton"
+	settings_focus_restore_name = ""
+	configure_button_focus_navigation(panel, settings_default_focus)
 
 
 func draw_settings_overview_art(parent: Control) -> Control:
@@ -12317,7 +12343,7 @@ func make_audio_test_button(callback: Callable) -> Button:
 	var button = make_small_button("试音", Color(0.28, 0.42, 0.56), callback)
 	ensure_button_gpt_face_plate(button, Color(0.28, 0.42, 0.56, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	draw_audio_test_button_art(button)
 	button.button_down.connect(func() -> void:
 		play_settings_action_feedback(button, "AudioTest", Color(0.42, 0.68, 0.86))
@@ -12404,7 +12430,7 @@ func make_bgm_switch_button(callback: Callable) -> Button:
 	var button = make_small_button("切歌", Color(0.38, 0.40, 0.56), callback)
 	ensure_button_gpt_face_plate(button, Color(0.38, 0.40, 0.56, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	draw_bgm_switch_button_art(button)
@@ -12638,7 +12664,10 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	var face_rot: float = seat_meld_face_rotation(seat)
 	group.name = "MeldGroup_%s" % kind
 	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	group.clip_contents = false
+	# Pad, seal and raised-tile art must stay within the assigned lane. The
+	# holder dimensions already account for the seat-facing rotation, so clipping
+	# here does not cut the authored 2D tile faces.
+	group.clip_contents = true
 	# Natural upright art size; rotation handles table-facing orientation.
 	var tile_size: Vector2 = tile_size_override if tile_size_override.x > 0.0 and tile_size_override.y > 0.0 else (Vector2(28, 38) if vertical else Vector2(26, 36))
 	var tile_count: int = maxi(1, meld.size())
@@ -12952,7 +12981,7 @@ func make_reset_progress_button(callback: Callable) -> Button:
 	var button = make_small_button(label, color, callback)
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.40))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	draw_reset_progress_button_art(button)
@@ -12986,7 +13015,7 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 	button.tooltip_text = "%s：当前%s，点击切换" % [label, "开启" if enabled else "关闭"]
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", label)
@@ -13003,7 +13032,7 @@ func make_setting_selector_button(value_text: String, setting_label: String, cal
 	button.tooltip_text = "%s：当前%s，点击切换选项" % [setting_label, value_text]
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", setting_label)
@@ -13022,7 +13051,7 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 	var quality_color: Color = quality_colors[color_index]
 	ensure_button_gpt_face_plate(button, Color(quality_color.r, quality_color.g, quality_color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", "3D 画质")
@@ -13064,7 +13093,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.name = "SettingRowButton_%s" % title
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.add_theme_font_size_override("font_size", min(button.get_theme_font_size("font_size"), 15))
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.custom_minimum_size = Vector2(0, 0)
 	apply_rect(button, SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)
@@ -13106,7 +13135,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	section.add_child(grid)
 	# Compact settings reserve the same 48px row target while tightening only
 	# the decorative title/chrome clearance inside each physical section.
-	apply_rect(grid, rect_full(0.035, 0.150, 0.965, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
+	apply_rect(grid, rect_full(0.035, 0.120, 0.965, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 

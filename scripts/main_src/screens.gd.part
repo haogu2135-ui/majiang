@@ -1827,6 +1827,7 @@ func _show_stats_screen_impl() -> void:
 
 func close_settings_panel() -> void:
 	settings_panel_open = false
+	settings_focus_restore_name = ""
 	emit_ui_qa_marker("settings|closed")
 	reset_progress_confirming = false
 	refresh_current_screen()
@@ -1954,11 +1955,13 @@ func show_chat_panel() -> void:
 		return
 	chat_panel_open = true
 	# r215: GPT chrome conversion
-	var compact_chat := chat_panel_rect().size.x < 0.300
-	var chat_panel = make_gpt_plate_rect(chat_panel_rect(), Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
+	var panel_rect := chat_panel_rect()
+	var compact_chat := mode == "online_game" and (panel_rect.size.x - panel_rect.position.x) < 0.300
+	var chat_panel = make_gpt_plate_rect(panel_rect, Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
 	chat_panel.name = "ChatPanel"
 	chat_panel.z_index = 45
-	chat_panel.set_meta("layout_role", "top_safe_drawer" if mode == "online_game" else "lobby_drawer")
+	chat_panel.set_meta("layout_role", chat_panel_route_name())
+	chat_panel.set_meta("compact_chat", compact_chat)
 	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	chat_panel.clip_contents = true
 	root_layer.add_child(chat_panel)
@@ -1971,7 +1974,7 @@ func show_chat_panel() -> void:
 	chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	chat_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	chat_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(chat_scroll, rect_full(0.060, 0.465 if compact_chat else 0.285, 0.940, 0.690 if compact_chat else 0.775))
+	apply_rect(chat_scroll, rect_full(0.060, 0.070 if compact_chat else 0.285, 0.720 if compact_chat else 0.940, 0.300 if compact_chat else 0.775))
 	chat_panel.add_child(chat_scroll)
 	var chat_label = make_label(chat_scroll, chat_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
 	chat_label.name = "ChatPanelMessageText"
@@ -1987,7 +1990,7 @@ func show_chat_panel() -> void:
 	close_button.name = "ChatPanelCloseButton"
 	close_button.tooltip_text = "关闭聊天面板 · 快捷键 Esc"
 	close_button.custom_minimum_size = Vector2(34, 34)
-	apply_rect(close_button, rect_full(0.780 if compact_chat else 0.820, 0.055, 0.950, 0.190))
+	apply_rect(close_button, rect_full(0.800 if compact_chat else 0.820, 0.015, 0.965 if compact_chat else 0.950, 0.325 if compact_chat else 0.190))
 	chat_panel.add_child(close_button)
 
 	var quick_row := HBoxContainer.new()
@@ -1995,7 +1998,7 @@ func show_chat_panel() -> void:
 	quick_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	quick_row.add_theme_constant_override("separation", 3)
 	configure_passive_container(quick_row)
-	apply_rect(quick_row, rect_full(0.060, 0.205 if not compact_chat else 0.235, 0.940, 0.270 if not compact_chat else 0.450))
+	apply_rect(quick_row, rect_full(0.060, 0.340 if compact_chat else 0.205, 0.940, 0.610 if compact_chat else 0.270))
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -2025,15 +2028,15 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
-	apply_rect(chat_input, rect_full(0.060, 0.720 if compact_chat else 0.805, 0.665 if compact_chat else 0.690, 0.955 if compact_chat else 0.945))
+	apply_rect(chat_input, rect_full(0.060, 0.640 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(chat_input)
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
 	send_button.name = "ChatSendButton"
-	send_button.custom_minimum_size = Vector2(42 if compact_chat else 62, 28 if compact_chat else 42)
+	send_button.custom_minimum_size = Vector2(42 if compact_chat else 62, 36 if compact_chat else 42)
 	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
-	apply_rect(send_button, rect_full(0.685 if compact_chat else 0.710, 0.720 if compact_chat else 0.805, 0.940, 0.955 if compact_chat else 0.945))
+	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.640 if compact_chat else 0.805, 0.940, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(send_button)
 
 	configure_button_focus_navigation(chat_panel, "ChatInput")
@@ -2929,6 +2932,49 @@ func toggle_fx_setting() -> void:
 	show_toast("桌面动效已%s" % ("开启" if fx_enabled else "关闭"))
 	refresh_current_screen()
 
+func cycle_accessibility_profile_setting() -> void:
+	var current := accessibility_profile_label()
+	var next := "标准"
+	match current:
+		"标准":
+			next = "大字"
+			large_text_enabled = true
+			high_contrast_enabled = false
+			reduce_motion_enabled = false
+		"大字":
+			next = "高对比"
+			large_text_enabled = false
+			high_contrast_enabled = true
+			reduce_motion_enabled = false
+		"高对比":
+			next = "减动效"
+			large_text_enabled = false
+			high_contrast_enabled = false
+			reduce_motion_enabled = true
+		"减动效":
+			next = "专注"
+			large_text_enabled = true
+			high_contrast_enabled = true
+			reduce_motion_enabled = true
+		"专注":
+			next = "清晰"
+			large_text_enabled = true
+			high_contrast_enabled = true
+			reduce_motion_enabled = false
+		"清晰":
+			next = "标准"
+			large_text_enabled = false
+			high_contrast_enabled = false
+			reduce_motion_enabled = false
+		_:
+			large_text_enabled = false
+			high_contrast_enabled = false
+			reduce_motion_enabled = false
+	settings_focus_restore_name = "SettingRowButton_阅读辅助"
+	save_settings()
+	show_toast("阅读辅助：%s" % next)
+	refresh_current_screen()
+
 func graphics_quality_label(short: bool = false) -> String:
 	match graphics_quality:
 		Commercial3DStage.QUALITY_LOW:
@@ -2959,6 +3005,8 @@ func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
 	emit_ui_qa_marker("settings|%s" % ("open" if settings_panel_open else "closed"))
 	reset_progress_confirming = false
+	if settings_panel_open:
+		settings_focus_restore_name = ""
 	refresh_current_screen()
 
 func toggle_sfx_setting() -> void:

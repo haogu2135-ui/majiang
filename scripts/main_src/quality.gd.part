@@ -17,12 +17,172 @@ func record_round_event(event_type: String, payload: Dictionary = {}) -> void:
 	event["round_id"] = active_round_id
 	event["sequence"] = round_event_sequence
 	event["type"] = event_type.strip_edges()
+	event["prev_digest"] = str(round_event_history.back().get("digest", "")) if not round_event_history.is_empty() else ""
+	event["digest"] = replay_event_digest(event)
 	round_event_history.append(event)
 	while round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
 		round_event_history.pop_front()
 
 func round_replay_snapshot() -> Array:
 	return round_event_history.duplicate(true)
+
+func replay_event_digest(event: Dictionary) -> String:
+	var canonical := event.duplicate(true)
+	canonical.erase("digest")
+	var context := HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK:
+		return ""
+	context.update(JSON.stringify(canonicalize_replay_value(canonical)).to_utf8_buffer())
+	return context.finish().hex_encode()
+
+func canonicalize_replay_value(value):
+	if typeof(value) == TYPE_DICTIONARY:
+		var source: Dictionary = value
+		var keys: Array = source.keys()
+		keys.sort()
+		var ordered: Dictionary = {}
+		for key in keys:
+			ordered[str(key)] = canonicalize_replay_value(source[key])
+		return ordered
+	if typeof(value) == TYPE_ARRAY:
+		var ordered_array: Array = []
+		for item in value:
+			ordered_array.append(canonicalize_replay_value(item))
+		return ordered_array
+	if typeof(value) == TYPE_FLOAT:
+		var numeric_value: float = float(value)
+		if is_finite(numeric_value) and is_equal_approx(numeric_value, round(numeric_value)):
+			return int(round(numeric_value))
+	return value
+
+func validate_round_replay(events: Array) -> bool:
+	if events.is_empty():
+		return true
+	var previous := ""
+	var expected_sequence := -1
+	var expected_round_id := ""
+	for raw_event in events:
+		if typeof(raw_event) != TYPE_DICTIONARY:
+			return false
+		var event: Dictionary = raw_event
+		var round_id := str(event.get("round_id", ""))
+		var sequence := int(event.get("sequence", -1))
+		if round_id == "" or sequence < 1:
+			return false
+		if expected_sequence < 0:
+			expected_sequence = sequence
+			expected_round_id = round_id
+			# A bounded replay may begin after older events were evicted. In that
+			# case the first retained event carries the digest of the omitted
+			# predecessor and can still be checked from the second event onward.
+			var first_prev_digest := str(event.get("prev_digest", ""))
+			if (sequence == 1 and first_prev_digest != "") or (sequence > 1 and first_prev_digest == ""):
+				return false
+		else:
+			if sequence != expected_sequence or round_id != expected_round_id:
+				return false
+			if str(event.get("prev_digest", "")) != previous:
+				return false
+		if digest_is_missing_or_invalid(event):
+			return false
+		var digest := str(event.get("digest", ""))
+		previous = digest
+		expected_sequence = sequence + 1
+	return true
+
+func digest_is_missing_or_invalid(event: Dictionary) -> bool:
+	var digest := str(event.get("digest", ""))
+	return digest == "" or digest != replay_event_digest(event)
+
+func round_replay_digest(events: Array = []) -> String:
+	var source := events if not events.is_empty() else round_event_history
+	if source.is_empty():
+		return ""
+	var last = source.back()
+	return str(last.get("digest", "")) if typeof(last) == TYPE_DICTIONARY else ""
+
+func replay_event_counts(events: Array = []) -> Dictionary:
+	var counts: Dictionary = {}
+	var source := events if not events.is_empty() else round_event_history
+	for raw_event in source:
+		if typeof(raw_event) != TYPE_DICTIONARY:
+			continue
+		var kind := str((raw_event as Dictionary).get("type", "")).strip_edges()
+		if kind != "":
+			counts[kind] = int(counts.get(kind, 0)) + 1
+	return counts
+
+func export_round_replay_payload() -> Dictionary:
+	var events := round_replay_snapshot()
+	return {
+		"schema": REPLAY_SCHEMA_VERSION,
+		"app_version": APP_VERSION,
+		"round_id": active_round_id,
+		"seed": offline_hand_seed,
+		"rule_variant": active_rule_variant(),
+		"events": events,
+		"digest": round_replay_digest(events),
+		"valid": validate_round_replay(events),
+		"event_counts": replay_event_counts(events),
+	}
+
+func round_replay_share_code() -> String:
+	var bytes := JSON.stringify(export_round_replay_payload()).to_utf8_buffer()
+	if bytes.size() <= 0 or bytes.size() > REPLAY_SHARE_MAX_BYTES:
+		return ""
+	return Marshalls.raw_to_base64(bytes)
+
+func import_round_replay_share_code(code: String) -> Dictionary:
+	var clean := code.strip_edges()
+	if clean == "":
+		return {}
+	var decoded := Marshalls.base64_to_raw(clean)
+	if decoded.is_empty() or decoded.size() > REPLAY_SHARE_MAX_BYTES:
+		return {}
+	var parsed = JSON.parse_string(decoded.get_string_from_utf8())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return {}
+	var payload: Dictionary = parsed
+	var events = payload.get("events", [])
+	if typeof(events) != TYPE_ARRAY or not validate_round_replay(events as Array):
+		return {}
+	if int(payload.get("schema", 0)) != REPLAY_SCHEMA_VERSION:
+		return {}
+	if str(payload.get("digest", "")) != round_replay_digest(events as Array):
+		return {}
+	return payload.duplicate(true)
+
+func match_progress_report() -> Dictionary:
+	var current_hand := clampi(offline_hand_number, 1, MATCH_MAX_HANDS)
+	var completed := current_hand - (0 if offline_phase == "ended" else 1)
+	return {
+		"current_hand": current_hand,
+		"completed_hands": clampi(completed, 0, MATCH_MAX_HANDS),
+		"total_hands": MATCH_MAX_HANDS,
+		"remaining_hands": maxi(0, MATCH_MAX_HANDS - clampi(completed, 0, MATCH_MAX_HANDS)),
+		"dealer": dealer_seat,
+		"finished": is_offline_match_finished() if has_method("is_offline_match_finished") else false,
+	}
+
+func score_delta_breakdown(deltas: Array, winner: int = -1) -> Dictionary:
+	var gains: Array = []
+	var losses: Array = []
+	for index in range(deltas.size()):
+		var delta := int(deltas[index])
+		if delta > 0:
+			gains.append({"seat": index, "amount": delta})
+		elif delta < 0:
+			losses.append({"seat": index, "amount": abs(delta)})
+	return {"winner": winner, "gains": gains, "losses": losses, "conserved": deltas.reduce(func(a, b): return int(a) + int(b), 0) == 0}
+
+func ai_decision_explanation(report: Dictionary) -> String:
+	if report.is_empty():
+		return "暂无建议"
+	var tile := tile_label(str(report.get("tile", ""))) if has_method("tile_label") else str(report.get("tile", ""))
+	var shanten := int(report.get("shanten", 8))
+	var ukeire := int(report.get("ukeire", report.get("effective_remaining", 0)))
+	var reason := str(report.get("reason_label", report.get("shape_label", "保持牌型"))).strip_edges()
+	return "打%s：%s，%s张进张" % [tile, reason if reason != "" else "保持牌型", ukeire] if shanten > 0 else "打%s：已听牌，%s" % [tile, reason if reason != "" else "保留高价值听口"]
 
 func build_match_summary() -> Dictionary:
 	var ranking: Array = []
@@ -48,5 +208,6 @@ func build_match_summary() -> Dictionary:
 		"champion_score": int(champion.get("score", 0)),
 		"rankings": ranking,
 		"rounds": MATCH_MAX_HANDS,
+		"progress": match_progress_report(),
+		"replay_digest": round_replay_digest(),
 	}
-
