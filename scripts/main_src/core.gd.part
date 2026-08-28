@@ -2827,6 +2827,10 @@ func pending_claim_action_columns(count: int) -> int:
 		var compact_separation := action_button_separation_for_count(count)
 		var compact_button_width := action_button_width_for_available(count, compact_width, compact_separation)
 		var compact_capacity := maxi(1, int(floor((compact_width + float(compact_separation)) / maxf(1.0, compact_button_width + float(compact_separation)))))
+		# Keep the legal response choices in one scan row on compact screens;
+		# the pass/cancel lane is intentionally the only secondary row.
+		if response_count >= 5:
+			compact_capacity = maxi(5, compact_capacity)
 		return mini(response_count, compact_capacity)
 	var bar_rect = pending_claim_action_base_rect()
 	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
@@ -2844,10 +2848,14 @@ func pending_claim_action_content_height(count: int) -> float:
 func pending_claim_action_dock_rect_for_count(count: int) -> Rect2:
 	var base_rect = pending_claim_action_dock_base_rect()
 	var content_height = maxf(1.0, safe_content_pixel_size().y)
-	var dock_height = (8.0 + pending_claim_action_content_height(count) + 14.0) / content_height
+	var compact_headroom := 8.0 if effective_viewport_size().y <= 560.0 else 0.0
+	var dock_height = (8.0 + pending_claim_action_content_height(count) + 14.0 + compact_headroom) / content_height
 	# Keep the dock bottom in its established hand-safe lane, but let taller
 	# response stacks grow upward instead of forcing their containers below it.
-	var top = maxf(0.30, base_rect.size.y - dock_height)
+	var compact_min_top: float = base_rect.position.y + 0.035 if effective_viewport_size().y <= 560.0 else 0.30
+	# On 960x540 the side river ends immediately above this lane. The small
+	# lower reserve prevents the first response row from touching its last tile.
+	var top = maxf(compact_min_top, base_rect.size.y - dock_height)
 	return Rect2(Vector2(base_rect.position.x, top), base_rect.size)
 
 func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
@@ -2995,6 +3003,11 @@ func finalize_action_bar_layout() -> void:
 	else:
 		action_bar.add_theme_constant_override("separation", separation)
 	apply_rect(action_bar, action_bar_layout_rect())
+	if compact_claim_mode and effective_viewport_size().y <= 560.0:
+		# Leave the dock bottom channel available for the hand tray while lifting
+		# the fixed-height response content by a few pixels inside its shell.
+		action_bar.offset_top = -5.0
+		action_bar.offset_bottom = -5.0
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)

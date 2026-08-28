@@ -87,7 +87,7 @@ run_low_resource_godot() {
 	fi
 	timeout --foreground --signal=TERM --kill-after="${GODOT_KILL_GRACE_SECONDS}s" "${GODOT_TIMEOUT_SECONDS}s" \
 		env GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=1 \
-		nice -n 10 ionice -c 2 -n 7 "$GODOT_BIN" "$@"
+		nice -n 10 ionice -c 2 -n 7 "$GODOT_BIN" --audio-driver Dummy "$@"
 }
 
 run_low_resource_xvfb_godot() {

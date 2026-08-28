@@ -1126,7 +1126,7 @@ func run() -> void:
 		dispose_node(curtain_strips)
 	scene.play_screen_transition(func() -> void:
 		pass
-		, false, "ink_wash")
+	, false, "ink_wash")
 	check(scene.find_child("InkWashTransitionArt", true, false) != null and scene.find_child("InkWashBrushBar", true, false) != null and scene.find_child("InkWashSpine", true, false) != null and scene.find_child("InkWashFill", true, false) != null and scene.find_child("InkWashCompletionGate", true, false) != null, "ink wash transition renders brush spine fill and completion gate")
 	check(count_nodes_with_name_prefix(scene, "InkWashBlot_") == 4 and count_nodes_with_name_prefix(scene, "InkWashTick_") == 3, "ink wash transition renders blot rhythm art")
 	scene.spawn_transition_complete_sparks()

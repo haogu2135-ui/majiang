@@ -1165,6 +1165,12 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		check(scene.find_child("ActionIntentDock", true, false) == null, "pending claim omits extra action intent strip at %s" % viewport_size)
 	var primary_claim = scene.find_child("PendingClaimPrimaryButton", true, false) as Button
 	check(primary_claim != null and primary_claim.has_focus(), "pending claim gives keyboard focus to the first legal response at %s" % viewport_size)
+	var compact_pending_grid := scene.find_child("PendingClaimResponseGrid", true, false) as GridContainer
+	for response_button in compact_pending_grid.get_children() if compact_pending_grid != null else []:
+		if response_button is Button:
+			var response_rect := screen_rect(response_button as Button)
+			var required_response_width: float = float(scene.PENDING_CLAIM_BUTTON_MIN_WIDTH if viewport_size.y <= 560.0 and scene.mode == "offline" else scene.ACTION_BUTTON_MIN_TOUCH_WIDTH)
+			check(response_rect.size.x >= required_response_width - 0.5 and response_rect.size.y >= 44.0, "pending claim response keeps a readable touch target at %s" % viewport_size)
 
 func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var pending = scene.pending_claim_state()

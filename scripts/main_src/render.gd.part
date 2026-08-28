@@ -741,7 +741,10 @@ func draw_actions(parent: Control) -> void:
 	if has_pending_claim_window():
 		var pending_root := VBoxContainer.new()
 		pending_root.name = "PendingClaimActionStack"
-		pending_root.alignment = BoxContainer.ALIGNMENT_END
+		# Keep the response stack anchored at the top of its reserved lane. The
+		# remaining space becomes deliberate bottom breathing room instead of
+		# pushing the tail action against the dock edge on 960x540.
+		pending_root.alignment = BoxContainer.ALIGNMENT_BEGIN
 		pending_root.add_theme_constant_override("separation", 4)
 		var grid_bar := GridContainer.new()
 		grid_bar.name = "PendingClaimResponseGrid"

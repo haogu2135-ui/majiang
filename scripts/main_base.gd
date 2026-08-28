@@ -833,10 +833,13 @@ const DISCARD_ZONES := [
 	# Four independent rivers form a clean ring around the center panel. Horizontal
 	# seats keep two dense rows; side seats use four columns without crossing into
 	# the top/bottom rivers or covering the center decision surface.
-	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.630, 0.875)), 8],
+	# The right edge follows the authored bottom-river footprint. The extra
+	# reserve at 0.630 used to classify the adjacent action lane as river space
+	# on 960px layouts, even though no discard tile occupied that area.
+	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.600, 0.875)), 8],
 	[2, Rect2(Vector2(0.285, 0.100), Vector2(0.715, 0.325)), 8],
-	[3, Rect2(Vector2(0.100, 0.325), Vector2(0.280, 0.590)), 3],
-	[1, Rect2(Vector2(0.720, 0.325), Vector2(0.900, 0.590)), 3],
+	[3, Rect2(Vector2(0.100, 0.300), Vector2(0.280, 0.550)), 3],
+	[1, Rect2(Vector2(0.720, 0.300), Vector2(0.900, 0.550)), 3],
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
@@ -936,14 +939,16 @@ const ACTION_BUTTON_MAX_WIDTH := 148.0
 const ACTION_BUTTON_MEDIUM_MAX_WIDTH := 124.0
 const ACTION_BUTTON_COMPACT_MAX_WIDTH := 88.0
 const ACTION_BUTTON_MIN_TOUCH_WIDTH := 50.0
-const PENDING_CLAIM_BUTTON_MIN_WIDTH := 50.0
+# Compact response choices need a finger-sized label lane while still fitting
+# the two-row response budget at 960x540.
+const PENDING_CLAIM_BUTTON_MIN_WIDTH := 52.0
 const ACTION_BUTTON_HEIGHT := 44.0
 const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const ACTION_BAR_RECT := Rect2(Vector2(0.534, 0.698), Vector2(0.960, 0.782))
 const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.632, 0.588), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.972, 0.790))
-const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.635, 0.558), Vector2(0.972, 0.790))
-const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.645, 0.568), Vector2(0.972, 0.790))
+const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.615, 0.558), Vector2(0.972, 0.790))
+const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.625, 0.568), Vector2(0.972, 0.790))
 const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
 const CHAT_ACTION_BUTTON_RECT := Rect2(Vector2(0.430, 0.698), Vector2(0.520, 0.782))
