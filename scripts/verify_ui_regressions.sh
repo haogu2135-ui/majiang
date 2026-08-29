@@ -40,7 +40,9 @@ FAIL=0
 ROWS=()
 GODOT_TIMEOUT_SECONDS=180
 GODOT_KILL_GRACE_SECONDS=15
-RUNTIME_CLEAR_RETRIES=20
+# Godot can print a passing result before its process has released imported
+# resources; allow the previous serial run to finish its teardown cleanly.
+RUNTIME_CLEAR_RETRIES=60
 RUNTIME_CLEAR_RETRY_SECONDS=0.25
 
 active_godot_processes() {
