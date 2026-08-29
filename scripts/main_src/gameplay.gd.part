@@ -151,7 +151,7 @@ func clear_screen() -> void:
 	loading_screen_active = false
 	telemetry_sheet_open = false
 	tutorial_panel = null
-	if mode != "online_lobby" and mode != "online_game":
+	if mode != "online_lobby" and (mode != "online_game" or online_game_disconnected()):
 		chat_panel_open = false
 	if mode != "offline" and mode != "online_game":
 		advisor_detail_open = false

@@ -848,14 +848,18 @@ func _show_online_lobby_impl() -> void:
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
 	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
-	room_badge.gui_input.connect(func(event: InputEvent) -> void:
-		if online_detail_press_event(event):
-			show_online_room_code_detail()
-	)
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
 		room_badge_label.tooltip_text = room_badge_text
+	var room_touch_target := add_online_detail_touch_target(room_badge, "OnlineLobbyRoomBadgeTouchTarget", "查看完整房间号", func() -> void:
+		show_online_room_code_detail()
+	)
+	room_touch_target.visible = room_snapshot_visible
+	room_touch_target.disabled = not room_snapshot_visible
+	room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
+	if room_badge_label != null:
+		room_badge.move_child(room_touch_target, room_badge_label.get_index())
 	draw_online_lobby_room_art(log_panel)
 	draw_online_lobby_roster_panel(log_panel)
 	draw_online_lobby_log_stream_art(log_panel)
@@ -982,10 +986,14 @@ func refresh_online_lobby_state() -> void:
 		state_label.add_theme_color_override("font_color", state_tint.lightened(0.08))
 	var room_badge = root_layer.find_child("OnlineLobbyRoomBadge", true, false)
 	if room_badge != null:
-		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
+		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		if room_badge_label != null:
 			room_badge.visible = show_room_snapshot
 			room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
+			var room_touch_target = room_badge.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+			if room_touch_target != null:
+				room_touch_target.visible = show_room_snapshot
+				room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
 			room_badge_label.text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
 			room_badge_label.tooltip_text = room_badge_label.text
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
@@ -1060,6 +1068,10 @@ func refresh_online_room_content() -> void:
 			slot_state_label.text = online_lobby_slot_state(entry, slot)
 		if roster_row != null:
 			roster_row.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.76)
+			var roster_touch_target = roster_row.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+			if roster_touch_target != null:
+				roster_touch_target.disabled = not active
+				roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 		if seat_panel != null:
 			seat_panel.modulate = Color(0.92, 1.0, 0.92, 1.0) if active else Color(0.72, 0.76, 0.74, 0.52)
 	var logs_value = online_room.get("logs", [])
@@ -1076,6 +1088,25 @@ func online_detail_press_event(event: InputEvent) -> bool:
 	if event is InputEventScreenTouch:
 		return (event as InputEventScreenTouch).pressed
 	return false
+
+
+func handle_online_detail_touch(event: InputEvent) -> bool:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return false
+	if not event is InputEventScreenTouch or not (event as InputEventScreenTouch).pressed:
+		return false
+	var touch := event as InputEventScreenTouch
+	var room_target := root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+	if room_target != null and room_target.visible and not room_target.disabled and room_target.get_global_rect().has_point(touch.position):
+		show_online_room_code_detail()
+		return true
+	for slot in range(4):
+		var roster_target := root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+		if roster_target != null and roster_target.visible and not roster_target.disabled and roster_target.get_global_rect().has_point(touch.position):
+			show_online_roster_detail(slot)
+			return true
+	return false
+
 
 func show_online_room_code_detail() -> void:
 	var room_code := bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
@@ -1360,10 +1391,10 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 	var viewport_height := content_scroll.size.y
 	if viewport_height <= 1.0:
 		viewport_height = effective_viewport_size().y * 0.814
-	# Let the authored text height define the chapter. A small viewport-relative
-	# floor keeps short chapters tappable without turning every chapter into a
-	# mostly empty full-screen black sheet.
-	var section_min_height := maxf(136.0, viewport_height * 0.38)
+	# Each chapter owns one complete reading viewport. The ten-pixel inter-section
+	# gap then places the next chapter exactly below the fold instead of exposing a
+	# clipped paragraph at the bottom of the default position.
+	var section_min_height := maxf(136.0, viewport_height - 10.0)
 	for child in content.get_children():
 		var section := child as Control
 		if section == null or not section.has_meta("rules_section_index"):
@@ -2195,6 +2226,11 @@ func show_achievements_screen(instant: bool = false) -> void:
 
 func show_chat_panel() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	if mode == "online_game" and online_game_disconnected():
+		# A disconnected table is read-only; never remount a stale chat input
+		# after the reconnect CTA has taken ownership of keyboard focus.
+		chat_panel_open = false
 		return
 	var existing := root_layer.find_child("ChatPanel", true, false) as Control
 	if existing != null and is_instance_valid(existing):

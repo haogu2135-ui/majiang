@@ -15,6 +15,26 @@ const CONTINUOUS_RESIZE_VIEWPORTS := [
 
 var failed := false
 
+func enter_smoke_standard_accessibility(scene) -> Dictionary:
+	var saved := {
+		"large_text_enabled": bool(scene.large_text_enabled),
+		"high_contrast_enabled": bool(scene.high_contrast_enabled),
+		"reduce_motion_enabled": bool(scene.reduce_motion_enabled),
+	}
+	scene.large_text_enabled = false
+	scene.high_contrast_enabled = false
+	scene.reduce_motion_enabled = false
+	return saved
+
+func restore_smoke_accessibility(scene, saved: Dictionary, persist: bool = false) -> void:
+	if saved.is_empty():
+		return
+	scene.large_text_enabled = bool(saved.get("large_text_enabled", false))
+	scene.high_contrast_enabled = bool(saved.get("high_contrast_enabled", false))
+	scene.reduce_motion_enabled = bool(saved.get("reduce_motion_enabled", false))
+	if persist:
+		scene.save_settings()
+
 func _initialize() -> void:
 	call_deferred("run")
 
@@ -98,6 +118,9 @@ func seed_online_pending_claim_layout_state(scene) -> void:
 	scene.table_logs.append("北海若打出三万，等待响应")
 	scene.table_logs.append("在线房间 QA7 已同步")
 	scene.ai_assist_enabled = false
+	# This is a static layout fixture; keep transport polling from replacing it
+	# with a real disconnected state while the drawer is being measured.
+	scene.set_process(false)
 
 func seed_danger_discard_layout_state(scene) -> void:
 	seed_offline_battle_layout_state(scene)
@@ -208,6 +231,7 @@ func run_continuous_resize_capacity_probe() -> void:
 	root.add_child(scene)
 	await settle_layout()
 	scene.fx_enabled = false
+	var saved_accessibility := enter_smoke_standard_accessibility(scene)
 	seed_battle_capacity_layout_state(scene)
 	scene.render_game()
 	await settle_layout()
@@ -312,6 +336,7 @@ func run_continuous_resize_capacity_probe() -> void:
 	check(update_overlay != null and update_secondary != null and update_secondary.has_focus(), "update modal remains mounted with focus through a live resize")
 	scene.update_state = "idle"
 	scene.refresh_update_dialog()
+	restore_smoke_accessibility(scene, saved_accessibility)
 	scene.queue_free()
 	await settle_layout()
 
@@ -443,6 +468,7 @@ func run_safe_area_layout_probe(viewport_size: Vector2, margins: Vector4) -> voi
 	var scene = load("res://Main.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
+	var saved_accessibility := enter_smoke_standard_accessibility(scene)
 	scene.fx_enabled = false
 	scene.safe_area_test_margins_override = margins
 	scene.show_menu(true)
@@ -472,6 +498,7 @@ func run_safe_area_layout_probe(viewport_size: Vector2, margins: Vector4) -> voi
 	scene._show_online_lobby_impl()
 	await process_frame
 	check_safe_area_layout(scene, viewport_size, "online lobby")
+	restore_smoke_accessibility(scene, saved_accessibility)
 	scene.queue_free()
 	await process_frame
 
@@ -485,6 +512,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	root.add_child(scene)
 	await process_frame
 	var original_rule_variant := str(scene.rule_variant)
+	var saved_accessibility := enter_smoke_standard_accessibility(scene)
 	var actual_viewport = scene.effective_viewport_size()
 	scene.fx_enabled = false
 	scene.show_loading_screen()
@@ -517,8 +545,9 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.draw_actions(scene.root_layer)
 	await process_frame
 	check_pending_claim_action_bar(scene, actual_viewport)
-	check_online_pending_claim_layout(scene, actual_viewport)
+	await check_online_pending_claim_layout(scene, actual_viewport)
 	await check_chat_panel_layout(scene, actual_viewport)
+	scene.set_process(true)
 	seed_offline_battle_layout_state(scene)
 	scene.render_game()
 	await process_frame
@@ -559,7 +588,6 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	# The selector callback intentionally persists. Restore the pre-smoke profile
 	# so layout QA cannot alter later gameplay tests or the developer's settings.
 	scene.rule_variant = original_rule_variant
-	scene.save_settings()
 	scene.settings_panel_open = false
 	scene.selected_room = "ROOM7"
 	scene.online_room = {"code": "ROOM7", "players": [{"name": "甲"}, {"name": "乙"}], "logs": ["甲加入房间", "乙准备"]}
@@ -640,6 +668,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await check_tutorial_flow(scene, actual_viewport)
 	check_menu_card_layout(scene, actual_viewport)
 	check_menu_footer_layout(scene, actual_viewport)
+	restore_smoke_accessibility(scene, saved_accessibility, true)
 	scene.queue_free()
 	await process_frame
 
@@ -889,6 +918,8 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 				check(header.get_index() > commercial_stage.get_index(), "menu product title draws above the commercial stage at %s" % viewport_size)
 	check(commercial_stage == null, "menu does not mount an executable 3D tile showcase at %s" % viewport_size)
 	check(menu_scrim != null and stage_overlay != null, "menu keeps one GPT background scrim and one full-screen scene at %s" % viewport_size)
+	if stage_overlay != null:
+		check(stage_overlay.modulate.a <= 0.30, "menu full-screen scene stays subdued behind the foreground navigation at %s" % viewport_size)
 	check(scene.find_child("MenuHeroGPTBackdropTexture", true, false) == null and scene.find_child("MenuLobbyGeneratedUIOverlay", true, false) == null and scene.find_child("GuofengPaperSceneryBackdrop", true, false) == null, "menu omits duplicate full-screen hero and generic scenery layers at %s" % viewport_size)
 	var quick_actions := {
 		"Rules": "规则",
@@ -1470,6 +1501,8 @@ func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
 	await settle_layout()
 
 func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
+	var previous_quiet := bool(scene.offline_sim_quiet)
+	scene.offline_sim_quiet = true
 	scene.show_chat_panel()
 	await settle_layout(0.04)
 	var panel = scene.find_child("ChatPanel", true, false) as Control
@@ -1529,6 +1562,7 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	scene.close_chat_panel()
 	await settle_layout()
 	check(scene.find_child("ChatPanel", true, false) == null and not scene.chat_panel_open, "online chat closes cleanly and clears its open state at %s" % viewport_size)
+	scene.offline_sim_quiet = previous_quiet
 	await check_chat_panel_meld_route(scene, viewport_size, 2, "upper_meld_safe_drawer")
 	await check_chat_panel_meld_route(scene, viewport_size, 1, "upper_meld_safe_drawer")
 
@@ -1711,6 +1745,11 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	check(confirm_button != null and confirm_button.has_focus(), "danger discard defaults focus to the real confirm action at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "danger discard warning stays inside the viewport safe bounds at %s" % viewport_size)
 	check(panel_rect.size.y >= 32.0, "danger discard warning keeps a readable compact height at %s" % viewport_size)
+	var action_surface := scene.action_bar as Control
+	if action_surface != null:
+		var action_surface_rect := screen_rect(action_surface)
+		check(absf(panel_rect.position.x - action_surface_rect.position.x) <= 2.0 and absf(panel_rect.end.x - action_surface_rect.end.x) <= 2.0, "danger discard warning and its CTA share one aligned decision column at %s" % viewport_size)
+		check(panel_rect.end.y <= action_surface_rect.position.y - 6.0 and not rects_overlap(panel_rect, action_surface_rect), "danger discard warning sits directly above, without colliding with, its CTA lane at %s" % viewport_size)
 	for seat in range(4):
 		var discard_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
 		if discard_grid != null:
@@ -1847,6 +1886,8 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 
 func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
 	var hand = scene.find_child("HandTray", true, false) as Control
+	var hand_tiles = scene.find_child("HandTrayTiles", true, false) as Control
+	var tutorial_hint = scene.find_child("HandTrayTutorialHint", true, false) as Control
 	var stage = scene.find_child("HandTrayTileStage", true, false) as Control
 	var ground_shadow = scene.find_child("HandTrayTileGroundShadow", true, false) as Control
 	var back_rail = scene.find_child("HandTrayTileBackRail", true, false) as Control
@@ -1867,6 +1908,17 @@ func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
 		check(hand_rect.grow(1.0).encloses(screen_rect(stage)), "hand tile stage stays inside hand tray at %s" % viewport_size)
 	if hand_tile_sample != null:
 		check(hand_rect.grow(2.0).encloses(screen_rect(hand_tile_sample)), "2D hand tile stays inside hand tray at %s" % viewport_size)
+	if tutorial_hint != null:
+		check(hand_tiles != null, "hand tutorial exposes a named tile lane for hit-target separation at %s" % viewport_size)
+		check(tutorial_hint.mouse_filter == Control.MOUSE_FILTER_IGNORE and tutorial_hint.clip_contents, "hand tutorial prompt is a clipped non-blocking top lane at %s" % viewport_size)
+		var tutorial_text := tutorial_hint.find_child("HandTrayTutorialHintText", true, false) as Label
+		check(tutorial_text != null and tutorial_text.tooltip_text != "" and tutorial_text.clip_text, "hand tutorial prompt keeps complete copy in a compact readable label at %s" % viewport_size)
+		if hand_tiles != null:
+			var tutorial_rect := screen_rect(tutorial_hint)
+			var tiles_rect := screen_rect(hand_tiles)
+			check(not rects_overlap(tutorial_rect, tiles_rect) and tutorial_rect.end.y <= tiles_rect.position.y - 1.0, "hand tutorial prompt clears the complete clickable tile lane at %s" % viewport_size)
+		var tutorial_art := tutorial_hint.find_child("HandTrayTutorialHintArt", true, false) as Control
+		check(tutorial_art != null and tutorial_art.mouse_filter == Control.MOUSE_FILTER_IGNORE, "hand tutorial illustration cannot intercept tile input at %s" % viewport_size)
 	var battle_commercial = scene.find_child("OfflineCommercial3DStage", true, false) as CanvasItem
 	check(battle_commercial == null, "offline battle does not mount an executable 3D tile stage at %s" % viewport_size)
 	var visible_walls := 0
@@ -1895,6 +1947,12 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 	var hand = scene.find_child("HandTray", true, false) as Control
 	var dock = scene.find_child("ActionButtonDock", true, false) as Control
 	check(hand != null and dock != null, "battle screen exposes hand tray and action dock at %s" % viewport_size)
+	var battle_backdrop := scene.find_child("OfflineBattleGuofengBackdrop", true, false) as CanvasItem
+	var living_illustration := scene.find_child("TableLivingIllustration", true, false) as CanvasItem
+	if battle_backdrop != null:
+		check(battle_backdrop.modulate.a <= 0.24, "battle room backdrop stays subdued behind table information at %s" % viewport_size)
+	if living_illustration != null:
+		check(living_illustration.modulate.a <= 0.04, "battle living ornament stays below the information contrast budget at %s" % viewport_size)
 	var hand_rect = screen_rect(hand) if hand != null else Rect2()
 	var dock_rect = screen_rect(dock) if dock != null else Rect2()
 	if hand != null and dock != null:
@@ -2673,6 +2731,10 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 	check(content_rect.grow(1.0).encloses(scroll_rect), "rules content scroll stays inside the readability backplate at %s" % viewport_size)
 	if viewport_size.x <= 960.0:
 		check(content_list.get_combined_minimum_size().y >= scroll_rect.size.y + 54.0, "rules content list exposes extra scrollable reading depth on compact viewport at %s" % viewport_size)
+	var first_section := scene.find_child("RuleSection_0", true, false) as Control
+	var second_section := scene.find_child("RuleSection_1", true, false) as Control
+	if first_section != null and second_section != null:
+		check(screen_rect(second_section).position.y >= scroll_rect.end.y - 1.0, "rules default position keeps the next chapter below the fold at %s" % viewport_size)
 	if content_scrollbar != null:
 		check(not content_scrollbar.visible and content_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "rules screen hides the default bright scrollbar at %s" % viewport_size)
 	if scroll_gutter != null and scroll_thumb != null:

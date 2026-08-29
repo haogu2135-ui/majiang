@@ -99,7 +99,7 @@ REQUIRED_INTERACTIVE_STATE_CONTRACTS = {
     "30_online_game_disconnect": {
         "fixture_seed": "seed_preview_online_game:awaitDiscard+seed_preview_online_game_disconnect",
         "required_nodes": ["TopHudStatus", "HandTray", "ActionButtonDock"],
-        "default_focus": "",
+        "default_focus": "OnlineReconnectGameButton",
         "state_text": "连接已断开",
     },
     "31_telemetry_default": {

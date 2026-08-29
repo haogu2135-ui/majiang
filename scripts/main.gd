@@ -5143,7 +5143,7 @@ func clear_screen() -> void:
 	loading_screen_active = false
 	telemetry_sheet_open = false
 	tutorial_panel = null
-	if mode != "online_lobby" and mode != "online_game":
+	if mode != "online_lobby" and (mode != "online_game" or online_game_disconnected()):
 		chat_panel_open = false
 	if mode != "offline" and mode != "online_game":
 		advisor_detail_open = false
@@ -9375,6 +9375,7 @@ func draw_actions(parent: Control) -> void:
 		action_bar.add_child(reconnect_button)
 		draw_action_dock(parent)
 		finalize_action_bar_layout()
+		call_deferred("focus_named_control", "OnlineReconnectGameButton")
 		return
 	if has_pending_claim_window():
 		var pending_root := VBoxContainer.new()
@@ -11209,17 +11210,9 @@ func draw_daily_login_streak_art(parent: Control, days: int, current_day_in_cycl
 
 func draw_danger_discard_confirmation_art(parent: Control, tile: String, report: Dictionary = {}, alternatives: Array = []) -> Control:
 	# r209: GPT chrome conversion
-	var dock_rect = action_bar_dock_layout_rect()
-	var bar_rect = action_bar_layout_rect()
-	# The confirmation is a central decision surface. Keep it above the bottom
-	# river and away from both side meld lanes instead of squeezing it beside CTA buttons.
-	# Use the central console lane. This avoids the actual tile footprints in
-	# both horizontal rivers and leaves the side meld lanes untouched.
-	var panel_left := 0.360
-	var panel_top := 0.355
-	var panel_right := 0.640
-	var panel_bottom := 0.535
-	var panel = make_gpt_route_rail(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.040, 0.018, 0.016, 0.94))
+	# The warning and its real CTA share one right-side decision column. Keep the
+	# authored warning art above the dock so the player reads and acts in one scan.
+	var panel = make_gpt_route_rail(DANGER_DISCARD_CONFIRMATION_RECT, Color(0.040, 0.018, 0.016, 0.94))
 	panel.name = "DangerDiscardConfirmationArt"
 	panel.z_index = 20
 	panel.clip_contents = true
@@ -12665,12 +12658,13 @@ func draw_hand(parent: Control) -> void:
 
 	# 状态文本与操作提示分成两条稳定的阅读线，避免长状态在窄屏挤压牌面。
 	var shortcut_hint_text := hand_shortcut_hint_text()
+	var tutorial_hint_visible := show_hand_hint and can_self_discard() and (tutorial_step == TUTORIAL_STEP_NEW or tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_WIN)
 	var tray_text = make_label(tray, hand_tray_text(), 14, Color(0.92, 0.82, 0.56), true)
 	tray_text.clip_text = true
 	apply_rect(tray_text, rect_full(0.030, 0.030, 0.760, 0.096) if shortcut_hint_text != "" else HAND_TRAY_TEXT_RECT)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(tray_text)
-	if has_pending_claim_window() or has_pending_danger_discard():
+	if has_pending_claim_window() or has_pending_danger_discard() or tutorial_hint_visible:
 		tray_text.visible = false
 	if shortcut_hint_text != "":
 		var shortcut_label = make_label(tray, shortcut_hint_text, 9, Color(0.68, 0.76, 0.70, 0.88), false)
@@ -12687,34 +12681,43 @@ func draw_hand(parent: Control) -> void:
 	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_tray_state_text(), 12, hand_tray_state_fill(), hand_tray_state_border(), Color(0.92, 0.92, 0.84))
 	state_badge.name = "HandTrayStateBadge"
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if has_pending_claim_window():
+	if has_pending_claim_window() or tutorial_hint_visible:
 		state_badge.visible = false
 
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
-	if show_hand_hint and can_self_discard() and (tutorial_step == TUTORIAL_STEP_NEW or tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_WIN):
-		var hint_panel = make_gpt_plate_rect(rect_full(0.02, 0.50, 0.98, 0.92), Color(0.020, 0.042, 0.048, 0.94), "ui_button_face_plate")
+	if tutorial_hint_visible:
+		# The prompt owns the tray's top lane; it never sits above a tile hit target.
+		var hint_panel = make_gpt_plate_rect(rect_full(0.02, 0.012, 0.98, 0.235), Color(0.020, 0.042, 0.048, 0.94), "ui_button_face_plate")
 		hint_panel.name = "HandTrayTutorialHint"
 		tray.add_child(hint_panel)
 		hint_panel.z_index = 8
+		hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hint_panel.clip_contents = true
 		hint_panel.add_child(make_gpt_edge_rail(rect_full(0.0, 0.0, 0.014, 1.0), Color(0.30, 0.62, 0.52, 0.56)))
 		draw_hand_tutorial_hint_art(hint_panel)
 		var hint_text = tutorial_hand_hint_text()
-		var hint_label = make_label(hint_panel, hint_text, 14, Color(0.94, 0.96, 0.92), false)
+		var hint_label = make_label(hint_panel, hint_text, 10, Color(0.94, 0.96, 0.92), false)
 		hint_label.name = "HandTrayTutorialHintText"
-		apply_rect(hint_label, rect_full(0.190, 0.125, 0.820, 0.470))
+		apply_rect(hint_label, rect_full(0.155, 0.080, 0.720, 0.920))
 		hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hint_label.tooltip_text = hint_text
+		configure_clipped_label(hint_label)
 		if tutorial_step == TUTORIAL_STEP_WIN:
-			var finish_tutorial_button = make_small_button("完成教学", Color(0.42, 0.68, 0.52), Callable(self, "complete_tutorial"))
+			var finish_tutorial_button = make_small_button("完成", Color(0.42, 0.68, 0.52), Callable(self, "complete_tutorial"))
 			finish_tutorial_button.name = "HandTutorialCompleteButton"
-			finish_tutorial_button.custom_minimum_size = Vector2(116, 42)
+			finish_tutorial_button.custom_minimum_size = Vector2(58, 20)
+			finish_tutorial_button.add_theme_font_size_override("font_size", 9)
 			finish_tutorial_button.tooltip_text = "保存教学完成状态并关闭提示"
-			apply_rect(finish_tutorial_button, rect_full(0.680, 0.535, 0.925, 0.900))
+			apply_rect(finish_tutorial_button, rect_full(0.735, 0.060, 0.895, 0.940))
 			hint_panel.add_child(finish_tutorial_button)
 		else:
 			var skip_tutorial_button = make_icon_button("x", Color(0.58, 0.38, 0.30), 14, Callable(self, "skip_tutorial"))
 			skip_tutorial_button.name = "HandTutorialSkipButton"
+			skip_tutorial_button.custom_minimum_size = Vector2(22, 20)
 			skip_tutorial_button.tooltip_text = "跳过教学；之后可从菜单入口重新开始"
-			apply_rect(skip_tutorial_button, rect_full(0.885, 0.080, 0.975, 0.340))
+			apply_rect(skip_tutorial_button, rect_full(0.905, 0.060, 0.975, 0.940))
 			hint_panel.add_child(skip_tutorial_button)
 		# 激活交互式引导
 		interactive_guide_active = true
@@ -12754,6 +12757,7 @@ func draw_hand(parent: Control) -> void:
 	# Pure 2D hand: authored assets/tiles faces via make_tile_view (no realtime 3D stage).
 
 	var hand_box = HBoxContainer.new()
+	hand_box.name = "HandTrayTiles"
 	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	configure_passive_container(hand_box)
 	hand_box.add_theme_constant_override("separation", maxi(0, int(hand_layout.get("separation", 4))))
@@ -12823,9 +12827,25 @@ func draw_hand(parent: Control) -> void:
 		if i == stable_drawn_index and tile_node.get_child_count() > 0:
 			var drawn_body = tile_node.get_child(0) as Control
 			if drawn_body != null:
+				# The mount above shifts the whole hit frame; keep the body centered
+				# inside that frame so its authored face remains fully bounded.
 				drawn_body.offset_top -= 4.0
 				drawn_body.offset_bottom -= 4.0
-		hand_box.add_child(tile_node)
+		if is_drawn_tile_marker:
+			# The HBox owns the stable row height; this inner mount lets the drawn
+			# tile rise without moving its hit frame outside the tray.
+			var drawn_mount := Control.new()
+			drawn_mount.name = "HandDrawnTileMount"
+			drawn_mount.custom_minimum_size = Vector2(tile_width, tile_height)
+			drawn_mount.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			drawn_mount.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			drawn_mount.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			hand_box.add_child(drawn_mount)
+			drawn_mount.add_child(tile_node)
+			tile_node.size = Vector2(tile_width, tile_height)
+			tile_node.position = Vector2(0.0, -4.0)
+		else:
+			hand_box.add_child(tile_node)
 		if is_drawn_tile:
 			# Run the one-shot entry effect for normal and replacement draws.
 			draw_state_assigned = true
@@ -13265,17 +13285,18 @@ func draw_hand_tutorial_hint_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(art)
-	var scroll_texture = add_illustration_texture(art, "hand_tutorial_scroll", rect_full(-0.045, -0.180, 1.045, 1.180), 0.14, false)
+	var scroll_texture = add_illustration_texture(art, "hand_tutorial_scroll", rect_full(0.0, 0.0, 1.0, 1.0), 0.14, false)
 	if scroll_texture != null:
 		scroll_texture.name = "HandTrayTutorialScrollTexture"
 	var hand_tutorial_gpt_key := "hand_tutorial_gpt_hint"
-	var hand_tutorial_gpt_texture = add_optional_gpt_illustration_texture(art, hand_tutorial_gpt_key, rect_full(-0.045, -0.180, 1.045, 1.180), 0.24, false)  # r221 denser tutorial
+	var hand_tutorial_gpt_texture = add_optional_gpt_illustration_texture(art, hand_tutorial_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.24, false)  # r221 denser tutorial
 	if hand_tutorial_gpt_texture != null:
 		hand_tutorial_gpt_texture.name = "HandTutorialGPTTexture"
 	var guide_texture = add_optional_gpt_illustration_texture(art, "guide_pointing_finger", rect_full(0.790, 0.120, 0.970, 0.720), 0.32, true)
 	if guide_texture != null:
 		guide_texture.name = "HandTutorialPointingFingerTexture"
-		art.move_child(hand_tutorial_gpt_texture, min(1, art.get_child_count() - 1))
+		if hand_tutorial_gpt_texture != null:
+			art.move_child(hand_tutorial_gpt_texture, min(1, art.get_child_count() - 1))
 	var accent = Color(0.38, 0.76, 0.60)
 	var seal = make_gpt_gate(rect_full(0.036, 0.150, 0.145, 0.700), Color(accent.r, accent.g, accent.b, 0.24))
 	seal.name = "HandTrayTutorialSeal"
@@ -13931,14 +13952,20 @@ func seat_meld_face_rotation(seat: int) -> float:
 
 func draw_melds(parent: Control) -> void:
 	var proxy_order := 1000
-	var compact_melds := effective_viewport_size().y <= 560.0
+	var compact_melds := effective_viewport_size().y <= 560.0 or (mode == "offline" and has_pending_danger_discard())
 	for layout in MELD_LAYOUTS:
 		var seat = int(layout[0])
 		var meld_list = get_melds(seat)
 		if meld_list.is_empty():
 			continue
+		var meld_rect: Rect2 = layout[1]
+		if mode == "offline" and seat == 1 and has_pending_danger_discard():
+			# The danger confirmation owns the lower-right decision column. Pull the
+			# right-side meld shelf upward for this modal state so its authored faces
+			# remain visible without crossing the warning surface.
+			meld_rect = Rect2(Vector2(0.780, 0.205), Vector2(0.852, 0.435))
 		# Soft seat lane; melds sit next to the player plaque.
-		draw_meld_lane_art(parent, seat, layout[1], meld_list.size())
+		draw_meld_lane_art(parent, seat, meld_rect, meld_list.size())
 		var vertical: bool = seat_meld_is_vertical(seat)
 		var area: Container
 		if vertical:
@@ -13957,14 +13984,14 @@ func draw_melds(parent: Control) -> void:
 		area.set_meta("layout_role", "meld_lane")
 		if area is BoxContainer:
 			(area as BoxContainer).alignment = BoxContainer.ALIGNMENT_BEGIN
-		apply_rect(area, layout[1])
+		apply_rect(area, meld_rect)
 		parent.add_child(area)
 		var meld_tile_size := Vector2.ZERO
 		if vertical and compact_melds:
 			# Spend the side lane height across its actual grid rows. This keeps the
 			# 2D faces readable when three/four groups share a narrow viewport.
-			var lane_height_px := safe_content_pixel_size().y * float(layout[1].size.y - layout[1].position.y)
-			var lane_width_px := safe_content_pixel_size().x * float(layout[1].size.x - layout[1].position.x)
+			var lane_height_px := safe_content_pixel_size().y * float(meld_rect.size.y - meld_rect.position.y)
+			var lane_width_px := safe_content_pixel_size().x * float(meld_rect.size.x - meld_rect.position.x)
 			var grid_rows := maxi(1, int(ceil(float(meld_list.size()) / 2.0)))
 			var row_gap_px := float(maxi(0, grid_rows - 1)) * 3.0
 			var group_height_px := maxf(32.0, (lane_height_px - row_gap_px) / float(grid_rows))
@@ -13987,9 +14014,9 @@ func draw_melds(parent: Control) -> void:
 					horizontal_tile_count += (horizontal_meld as Array).size()
 					horizontal_group_count += 1
 			if horizontal_tile_count > 0:
-				var lane_width_fraction := float(layout[1].size.x - layout[1].position.x)
+				var lane_width_fraction := float(meld_rect.size.x - meld_rect.position.x)
 				var lane_width_px := safe_content_pixel_size().x * lane_width_fraction
-				var lane_height_px := safe_content_pixel_size().y * float(layout[1].size.y - layout[1].position.y)
+				var lane_height_px := safe_content_pixel_size().y * float(meld_rect.size.y - meld_rect.position.y)
 				var group_padding_px := float(horizontal_group_count) * 6.0
 				var group_gap_px := float(maxi(0, horizontal_group_count - 1)) * 3.0
 				# make_meld_group_view reserves one compact separator per tile. Try
@@ -14089,13 +14116,13 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 
 func draw_menu_primary_3d_stage(parent: Control) -> Control:
 	var has_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
-	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.38, false)
+	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.28, false)
 	if stage_overlay != null:
 		stage_overlay.name = "MenuPrimary3DStageGPTOverlay"
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			stage_overlay.modulate.a = 0.0
 			var overlay_tw := create_screen_tween()
-			overlay_tw.tween_property(stage_overlay, "modulate:a", 0.38, 0.36).from(0.0).set_delay(0.02).set_ease(Tween.EASE_OUT)
+			overlay_tw.tween_property(stage_overlay, "modulate:a", 0.28, 0.36).from(0.0).set_delay(0.02).set_ease(Tween.EASE_OUT)
 	var stage = Control.new()
 	stage.name = "MenuPrimary3DStage"
 	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -14806,6 +14833,27 @@ func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 		return "已准备"
 	return "房主" if slot == 0 else "已入席"
 
+
+func add_online_detail_touch_target(parent: Control, target_name: String, tooltip: String, callback: Callable) -> Button:
+	# Use a native button for reliable screen-touch dispatch; the parent keeps the authored visual face.
+	var target := Button.new()
+	target.name = target_name
+	target.text = ""
+	target.tooltip_text = tooltip
+	target.flat = true
+	target.focus_mode = Control.FOCUS_NONE
+	target.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	target.mouse_filter = Control.MOUSE_FILTER_STOP
+	target.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var empty_style := StyleBoxEmpty.new()
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		target.add_theme_stylebox_override(state, empty_style)
+	apply_rect(target, rect_full(0.0, 0.0, 1.0, 1.0))
+	parent.add_child(target)
+	target.pressed.connect(callback)
+	return target
+
+
 func draw_online_lobby_roster_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
 	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.50), "ui_dark_scrim")
@@ -14850,6 +14898,11 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		state.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		state.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(state)
+		var roster_touch_target := add_online_detail_touch_target(row, "OnlineLobbyRosterTouchTarget_%d" % i, "查看完整玩家昵称", func() -> void:
+			show_online_roster_detail(detail_slot)
+		)
+		roster_touch_target.disabled = not active
+		roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 	return roster
 
 
@@ -17301,6 +17354,9 @@ func draw_seat_turn_handoff_art(parent: Control, seat: int, active: bool) -> Con
 
 func draw_secondary_back_button_art(button: Control, screen_id: String, color: Color) -> Control:
 	# r213: GPT chrome conversion
+	if button is Button:
+		# Keep the authored face as a direct child behind native Button text.
+		ensure_button_gpt_face_plate(button as Button, color)
 	var back_plate = add_optional_gpt_illustration_texture(button, "ui_seat_info_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.36, false)
 	if back_plate != null:
 		back_plate.name = "SecondaryBackGptPlate"
@@ -17397,19 +17453,8 @@ func draw_setting_row_status_art(row: Control, title: String, status: String) ->
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	row.add_child(art)
-	return art
-	var accent = Color(0.54, 0.68, 0.58)
-	var rail = make_gpt_route_rail(rect_full(0.050, 0.760, 0.640, 0.850), Color(0.006, 0.016, 0.018, 0.42))
-	rail.name = "SettingRowStatusRail_%s" % title
-	art.add_child(rail)
-	var fill_ratio = clamp((float(status.length()) + float(title.length()) * 0.35) / 24.0, 0.22, 0.95)
-	var fill = make_gpt_meter_fill(rect_full(0.030, 0.260, 0.030 + 0.920 * fill_ratio, 0.740), Color(accent.r, accent.g, accent.b, 0.24))
-	fill.name = "SettingRowStatusFill_%s" % title
-	rail.add_child(fill)
-	for i in range(3):
-		var dot = make_gpt_gate(rect_full(0.055 + float(i) * 0.045, 0.555, 0.078 + float(i) * 0.045, 0.690), Color(accent.r, accent.g, accent.b, 0.20 - float(i) * 0.035))
-		dot.name = "SettingRowStatusDot_%s_%d" % [title, i]
-		art.add_child(dot)
+	# The row already has a bitmap plate and a local readability panel. Keep this
+	# structural hook for callers without adding a competing status ornament.
 	return art
 
 
@@ -17522,18 +17567,20 @@ func draw_settings_overlay(parent: Control) -> void:
 	# r210: GPT chrome conversion
 	if not settings_panel_open:
 		return
-	var compact_settings = effective_viewport_size().y <= 560.0
+	# At 720px high the three settings sections still need two-column rows to
+	# keep every control inside its authored section. The 1080px layout remains
+	# the spacious one-column desktop presentation.
+	var compact_settings = effective_viewport_size().y <= 720.0
 	var panel_rect = SETTINGS_PANEL_RECT
 	var audio_section_rect = SETTINGS_AUDIO_SECTION_RECT
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
 	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
 	if compact_settings:
-		# 540px 高度仍保留每行 48px 的点击目标：上下分区改为全宽双列，
+		# 540px 高度仍保留每行 48px 的点击目标：紧凑分区改为全宽多列，
 		# 让声音、体验和系统都拥有足够的横向按钮空间。
-		panel_rect = rect_full(0.145, 0.010, 0.855, 0.990)
 		audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.490)
 		play_section_rect = rect_full(0.040, 0.500, 0.960, 0.837)
-		maint_section_rect = rect_full(0.040, 0.855, 0.960, 0.989)
+		maint_section_rect = rect_full(0.040, 0.855, 0.960, 0.995)
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -17667,7 +17714,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel.add_child(rule_setting_button)
 	var rule_variant_status = make_label(panel, rule_variant_activation_status_text(), 11, Color(0.82, 0.86, 0.70, 0.94), true)
 	rule_variant_status.name = "SettingsRuleVariantStatus"
-	apply_rect(rule_variant_status, rect_full(0.550, 0.125, 0.815, 0.165))
+	apply_rect(rule_variant_status, rect_full(0.550, 0.145 if compact_settings else 0.125, 0.815, 0.185 if compact_settings else 0.165))
 	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(rule_variant_status)
 
@@ -17689,7 +17736,8 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 体验设置
 	var play_grid = make_settings_section(panel, play_section_rect, "体验", compact_settings)
-	play_grid.columns = 2 if compact_settings else 1
+	# Six compact controls need two rows to preserve the 48px row target.
+	play_grid.columns = 3 if compact_settings else 1
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_selector_button("快速" if fast_mode_enabled else "标准", "AI 节奏", func() -> void:
 		toggle_fast_mode_setting()
 	))
@@ -18910,7 +18958,7 @@ func draw_table_living_illustration(parent: Control) -> Control:
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(layer)
-	layer.modulate = Color(1.0, 1.0, 1.0, 0.055)
+	layer.modulate = Color(1.0, 1.0, 1.0, 0.030)
 	draw_table_last_discard_ripple(layer)
 	return layer
 
@@ -21768,7 +21816,7 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 
 func make_setting_row(parent: Control, title: String, status: String, button: Button) -> void:
 	# r214: bulk GPT chrome sweep
-	var compact_settings := effective_viewport_size().y <= 560.0
+	var compact_settings := effective_viewport_size().y <= 720.0
 	var row = Panel.new()
 	row.name = "SettingRow_%s" % title
 	configure_passive_container(row)
@@ -21819,7 +21867,7 @@ func compact_setting_status(title: String, status: String) -> String:
 	if title == "播放测试":
 		return "可试听"
 	if status.begins_with("当前: "):
-		return status.substr(4)
+		return status
 	if status.begins_with("对手强度: "):
 		return status.substr(5)
 	if title == "播放曲目":
@@ -24777,14 +24825,18 @@ func _show_online_lobby_impl() -> void:
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
 	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
-	room_badge.gui_input.connect(func(event: InputEvent) -> void:
-		if online_detail_press_event(event):
-			show_online_room_code_detail()
-	)
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
 		room_badge_label.tooltip_text = room_badge_text
+	var room_touch_target := add_online_detail_touch_target(room_badge, "OnlineLobbyRoomBadgeTouchTarget", "查看完整房间号", func() -> void:
+		show_online_room_code_detail()
+	)
+	room_touch_target.visible = room_snapshot_visible
+	room_touch_target.disabled = not room_snapshot_visible
+	room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
+	if room_badge_label != null:
+		room_badge.move_child(room_touch_target, room_badge_label.get_index())
 	draw_online_lobby_room_art(log_panel)
 	draw_online_lobby_roster_panel(log_panel)
 	draw_online_lobby_log_stream_art(log_panel)
@@ -24911,10 +24963,14 @@ func refresh_online_lobby_state() -> void:
 		state_label.add_theme_color_override("font_color", state_tint.lightened(0.08))
 	var room_badge = root_layer.find_child("OnlineLobbyRoomBadge", true, false)
 	if room_badge != null:
-		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
+		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		if room_badge_label != null:
 			room_badge.visible = show_room_snapshot
 			room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
+			var room_touch_target = room_badge.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+			if room_touch_target != null:
+				room_touch_target.visible = show_room_snapshot
+				room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
 			room_badge_label.text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
 			room_badge_label.tooltip_text = room_badge_label.text
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
@@ -24989,6 +25045,10 @@ func refresh_online_room_content() -> void:
 			slot_state_label.text = online_lobby_slot_state(entry, slot)
 		if roster_row != null:
 			roster_row.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.76)
+			var roster_touch_target = roster_row.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+			if roster_touch_target != null:
+				roster_touch_target.disabled = not active
+				roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 		if seat_panel != null:
 			seat_panel.modulate = Color(0.92, 1.0, 0.92, 1.0) if active else Color(0.72, 0.76, 0.74, 0.52)
 	var logs_value = online_room.get("logs", [])
@@ -25289,10 +25349,10 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 	var viewport_height := content_scroll.size.y
 	if viewport_height <= 1.0:
 		viewport_height = effective_viewport_size().y * 0.814
-	# Let the authored text height define the chapter. A small viewport-relative
-	# floor keeps short chapters tappable without turning every chapter into a
-	# mostly empty full-screen black sheet.
-	var section_min_height := maxf(136.0, viewport_height * 0.38)
+	# Each chapter owns one complete reading viewport. The ten-pixel inter-section
+	# gap then places the next chapter exactly below the fold instead of exposing a
+	# clipped paragraph at the bottom of the default position.
+	var section_min_height := maxf(136.0, viewport_height - 10.0)
 	for child in content.get_children():
 		var section := child as Control
 		if section == null or not section.has_meta("rules_section_index"):
@@ -26124,6 +26184,11 @@ func show_achievements_screen(instant: bool = false) -> void:
 
 func show_chat_panel() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	if mode == "online_game" and online_game_disconnected():
+		# A disconnected table is read-only; never remount a stale chat input
+		# after the reconnect CTA has taken ownership of keyboard focus.
+		chat_panel_open = false
 		return
 	var existing := root_layer.find_child("ChatPanel", true, false) as Control
 	if existing != null and is_instance_valid(existing):
@@ -27714,6 +27779,9 @@ func reconnect_online_game() -> void:
 		request_game_render()
 
 func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
+	# A real transport loss owns the chat lifecycle; a transient status copy
+	# must not make clear_screen infer that the drawer should disappear.
+	chat_panel_open = false
 	var preserve_game_board := mode == "online_game" and not online_game.is_empty()
 	var should_show_lobby := return_to_lobby and mode == "online_game" and not preserve_game_board
 	var had_resume_pending := online_resume_pending

@@ -122,6 +122,9 @@ func reconnect_online_game() -> void:
 		request_game_render()
 
 func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
+	# A real transport loss owns the chat lifecycle; a transient status copy
+	# must not make clear_screen infer that the drawer should disappear.
+	chat_panel_open = false
 	var preserve_game_board := mode == "online_game" and not online_game.is_empty()
 	var should_show_lobby := return_to_lobby and mode == "online_game" and not preserve_game_board
 	var had_resume_pending := online_resume_pending

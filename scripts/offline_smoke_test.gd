@@ -1,5 +1,7 @@
 extends SceneTree
 
+const AnimationEffects = preload("res://scripts/animation_effects.gd")
+
 const NAMED_VISUAL_NODE_KEYWORDS := [
 	"Arc",
 	"Art",
@@ -1882,6 +1884,10 @@ func run() -> void:
 	check(exit_leave_button.find_child("ExitConfirmButtonPressSeal_leave", true, false) != null and exit_leave_button.find_child("ExitConfirmButtonPressGlyph_leave", true, false) != null and count_nodes_with_name_prefix(exit_leave_button, "ExitConfirmButtonPressTick_leave_") == 3, "exit confirm leave press feedback renders seal glyph and rhythm ticks")
 	scene.hide_exit_confirm()
 	await process_frame
+	var settings_accessibility_profile := [scene.large_text_enabled, scene.high_contrast_enabled, scene.reduce_motion_enabled]
+	scene.large_text_enabled = false
+	scene.high_contrast_enabled = false
+	scene.reduce_motion_enabled = false
 	var settings_parent = Control.new()
 	root.add_child(settings_parent)
 	scene.settings_panel_open = true
@@ -1987,6 +1993,9 @@ func run() -> void:
 	check(reset_armed_button.find_child("ResetProgressPressSeal_armed", true, false) != null and reset_armed_button.find_child("ResetProgressPressGlyph_armed", true, false) != null and reset_armed_button.find_child("ResetProgressPressCommitSeal", true, false) != null and count_nodes_with_name_prefix(reset_armed_button, "ResetProgressPressTick_armed_") == 3, "settings reset armed press feedback renders commit seal glyph and ticks")
 	dispose_node(reset_confirm_parent)
 	scene.reset_progress_confirming = false
+	scene.large_text_enabled = bool(settings_accessibility_profile[0])
+	scene.high_contrast_enabled = bool(settings_accessibility_profile[1])
+	scene.reduce_motion_enabled = bool(settings_accessibility_profile[2])
 	scene.settings_panel_open = true
 	scene.request_reset_progress_from_settings()
 	check(scene.reset_progress_confirming, "settings reset progress first press arms confirmation instead of clearing immediately")

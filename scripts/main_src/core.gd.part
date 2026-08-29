@@ -394,6 +394,9 @@ func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int) ->
 
 
 func _input(event: InputEvent) -> void:
+	if handle_online_detail_touch(event):
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") and handle_ui_cancel():
 		get_viewport().set_input_as_handled()
 		return

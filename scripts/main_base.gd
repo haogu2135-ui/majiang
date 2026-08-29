@@ -980,7 +980,9 @@ const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.1
 const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.145), Vector2(0.988, 0.170))
 const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
 const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.795, 0.040), Vector2(0.970, 0.145))
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.15), Vector2(0.985, 0.96))
+# Keep a dedicated top prompt lane above the clickable tile row. The 0.255
+# boundary still preserves the minimum touch width at the compact 960x540 gate.
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.255), Vector2(0.985, 0.96))
 const HAND_LAYOUT_CANDIDATES := [
 	[8.0, 5],
 	[6.0, 4],
@@ -1004,6 +1006,9 @@ const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.615, 0.558),
 const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.625, 0.568), Vector2(0.972, 0.790))
 const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
+# Keep the warning and its real CTA in one right-side decision column. The
+# panel clears the right seat lane above and the hand tray below.
+const DANGER_DISCARD_CONFIRMATION_RECT := Rect2(Vector2(0.640, 0.510), Vector2(0.960, 0.685))
 const CHAT_ACTION_BUTTON_RECT := Rect2(Vector2(0.430, 0.698), Vector2(0.520, 0.782))
 const TOP_HUD_BUTTON_SIZE := Vector2(56, 38)
 const TOP_HUD_MODE_BADGE_RECT := Rect2(Vector2(0.018, 0.14), Vector2(0.100, 0.44))
@@ -1208,6 +1213,10 @@ const AMBIENT_FIREWORK_COUNT := 6
 func create_screen_tween() -> Tween:
 	var tween := create_tween()
 	screen_tweens.append(tween)
+	# Reduced motion keeps the feedback node and its completion callback, but
+	# resolves the visual transition immediately instead of hiding the event.
+	if reduce_motion_enabled:
+		tween.set_speed_scale(1000.0)
 	tween.finished.connect(Callable(self, "_forget_screen_tween").bind(tween))
 	return tween
 
@@ -1260,7 +1269,7 @@ func add_battle_background(parent: Control) -> void:
 	# Normal battle renders own one authored room plate. Keep the dark plate only as a
 	# fallback under a missing/transparent asset, so two full-screen textures do not
 	# compete beneath the HUD.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.30, false)
+	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
 	if battle_scene != null:
 		battle_scene.name = "OfflineBattleGuofengBackdrop"
 	else:
@@ -2434,7 +2443,7 @@ func numeric_count(value, fallback: int = 0) -> int:
 func fx_enabled_effective() -> bool:
 	if offline_sim_quiet:
 		return false
-	if not fx_enabled or reduce_motion_enabled:
+	if not fx_enabled:
 		return false
 	# Animation entry points are also exercised independently by smoke fixtures.
 	# Lazily restore the persistent layer so the first effect is not silently lost
