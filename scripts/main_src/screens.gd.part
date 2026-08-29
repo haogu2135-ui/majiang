@@ -219,6 +219,43 @@ func _show_menu_impl() -> void:
 	title_rule.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(title_rule, 2)
 
+	# 教学入口始终可见；完成或跳过后只保留轻量复习入口，不打扰老用户。
+	var tutorial_button = make_small_button(tutorial_menu_button_text(), Color(0.34, 0.58, 0.48), Callable(self, "open_tutorial_entry_sheet"))
+	tutorial_button.name = "MenuTutorialButton"
+	tutorial_button.custom_minimum_size = Vector2(112, 44)
+	tutorial_button.tooltip_text = "查看教学进度：" + tutorial_entry_detail_text()
+	root_layer.add_child(tutorial_button)
+	apply_rect(tutorial_button, rect_full(0.445, 0.075, 0.625, 0.175))
+	ensure_button_gpt_face_plate(tutorial_button, Color(0.34, 0.58, 0.48, 0.42))
+	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.92, 0.96, 0.82, 0.90))
+
+	if tutorial_is_available():
+		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.014, 0.034, 0.034, 0.88), "ui_jade_reading_plate")
+		tutorial_banner.name = "MenuTutorialEntryBanner"
+		tutorial_banner.mouse_filter = Control.MOUSE_FILTER_STOP
+		root_layer.add_child(tutorial_banner)
+		draw_menu_tutorial_hint_art(tutorial_banner)
+		var tutorial_title = make_label(tutorial_banner, "新手教学", 14, Color(0.96, 0.90, 0.66), true)
+		tutorial_title.name = "MenuTutorialEntryTitle"
+		apply_rect(tutorial_title, rect_full(0.105, 0.095, 0.390, 0.360))
+		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var tutorial_detail = make_label(tutorial_banner, tutorial_entry_detail_text(), 11, Color(0.78, 0.88, 0.78), false)
+		tutorial_detail.name = "MenuTutorialEntryStatus"
+		apply_rect(tutorial_detail, rect_full(0.105, 0.390, 0.560, 0.670))
+		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		configure_clipped_label(tutorial_detail)
+		var tutorial_action = make_small_button("开始教学" if tutorial_step == TUTORIAL_STEP_NEW else "继续", Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
+		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
+		tutorial_action.custom_minimum_size = Vector2(112, 44)
+		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
+		apply_rect(tutorial_action, rect_full(0.620, 0.205, 0.885, 0.800))
+		tutorial_banner.add_child(tutorial_action)
+		var tutorial_skip = make_icon_button("x", Color(0.58, 0.38, 0.30), 14, Callable(self, "skip_tutorial"))
+		tutorial_skip.name = "MenuTutorialSkipButton"
+		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
+		apply_rect(tutorial_skip, rect_full(0.905, 0.190, 0.985, 0.810))
+		tutorial_banner.add_child(tutorial_skip)
+
 	# 主菜单卡片区域 - 按安全区宽度收缩，避免移动端溢出。
 	draw_menu_primary_3d_stage(root_layer)
 	var row = HBoxContainer.new()
@@ -343,6 +380,119 @@ func _show_menu_impl() -> void:
 	schedule_ui_qa_page_ready("menu", ["MenuTitleLabel", "MenuSettingsButton", "MenuQuickRulesButton"])
 	if settings_panel_open:
 		schedule_ui_qa_page_ready("settings", ["SettingsPanel", "SettingsTitleLabel", "SettingsRuleVariantButton", "SettingsCloseButton"])
+
+
+func open_tutorial_entry_sheet() -> void:
+	if tutorial_panel != null and is_instance_valid(tutorial_panel):
+		close_tutorial_entry_sheet()
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var overlay := Control.new()
+	overlay.name = "TutorialEntryOverlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.z_index = 60
+	overlay.set_meta("modal_input_shield", true)
+	root_layer.add_child(overlay)
+	tutorial_panel = overlay
+	var shield := add_optional_gpt_illustration_texture(overlay, "ui_dark_scrim", rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
+	if shield != null:
+		shield.name = "TutorialEntryScrim"
+	var panel := make_gpt_plate_rect(rect_full(0.190, 0.150, 0.810, 0.850), Color(0.012, 0.030, 0.032, 0.98), "ui_jade_reading_plate")
+	panel.name = "TutorialEntryPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(panel)
+	draw_menu_tutorial_hint_art(panel)
+	var title := make_label(panel, "新手教学", 26, Color(1.0, 0.90, 0.60), true)
+	title.name = "TutorialEntryTitle"
+	apply_rect(title, rect_full(0.085, 0.075, 0.680, 0.180))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var subtitle := make_label(panel, "四步完成一局基础操作 · 进度会自动保存", 12, Color(0.74, 0.84, 0.76), false)
+	subtitle.name = "TutorialEntrySubtitle"
+	apply_rect(subtitle, rect_full(0.090, 0.190, 0.760, 0.250))
+	configure_clipped_label(subtitle)
+	var progress := make_label(panel, tutorial_step_text(), 15, Color(0.94, 0.84, 0.56), true)
+	progress.name = "TutorialEntryProgress"
+	apply_rect(progress, rect_full(0.090, 0.300, 0.760, 0.390))
+	progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var checkpoint := make_label(panel, tutorial_entry_detail_text(), 13, Color(0.82, 0.90, 0.82), false)
+	checkpoint.name = "TutorialEntryCheckpoint"
+	apply_rect(checkpoint, rect_full(0.090, 0.405, 0.760, 0.535))
+	checkpoint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(checkpoint)
+	var primary_text := "开始教学" if tutorial_step == TUTORIAL_STEP_NEW else ("继续教学" if tutorial_is_active() else "重新开始")
+	var primary := make_small_button(primary_text, Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
+	primary.name = "TutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else ("TutorialContinueButton" if tutorial_is_active() else "TutorialRestartButton")
+	primary.custom_minimum_size = Vector2(132, 48)
+	primary.tooltip_text = "进入本地教学；离开牌桌后可从断点继续"
+	apply_rect(primary, rect_full(0.090, 0.650, 0.445, 0.785))
+	panel.add_child(primary)
+	if tutorial_is_available():
+		var skip := make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
+		skip.name = "TutorialSkipButton"
+		skip.custom_minimum_size = Vector2(104, 48)
+		skip.tooltip_text = "跳过教学；之后可从菜单入口重新开始"
+		apply_rect(skip, rect_full(0.475, 0.650, 0.760, 0.785))
+		panel.add_child(skip)
+	var close := make_icon_button("x", Color(0.64, 0.46, 0.30), 16, Callable(self, "close_tutorial_entry_sheet"))
+	close.name = "TutorialCloseButton"
+	close.tooltip_text = "关闭教学面板 · Esc"
+	apply_rect(close, rect_full(0.875, 0.065, 0.955, 0.175))
+	panel.add_child(close)
+	overlay.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventKey and (event as InputEventKey).pressed and event.is_action_pressed("ui_cancel"):
+			close_tutorial_entry_sheet()
+			get_viewport().set_input_as_handled()
+	)
+	call_deferred("focus_named_control", primary.name)
+
+
+func close_tutorial_entry_sheet() -> void:
+	if tutorial_panel != null and is_instance_valid(tutorial_panel):
+		tutorial_panel.queue_free()
+	tutorial_panel = null
+	if mode == "menu":
+		call_deferred("focus_named_control", "MenuTutorialButton")
+
+
+func resume_tutorial() -> void:
+	close_tutorial_entry_sheet()
+	if tutorial_step == TUTORIAL_STEP_COMPLETE or tutorial_step == TUTORIAL_STEP_SKIPPED or tutorial_step == TUTORIAL_STEP_NEW:
+		set_tutorial_checkpoint(TUTORIAL_STEP_DISCARD, "用户开始教学")
+	show_hand_hint = true
+	interactive_guide_active = false
+	interactive_guide_type = ""
+	interactive_guide_target_index = -1
+	if mode == "offline":
+		render_game()
+	else:
+		start_offline()
+
+
+func skip_tutorial() -> void:
+	set_tutorial_checkpoint(TUTORIAL_STEP_SKIPPED, "用户跳过教学")
+	show_hand_hint = false
+	interactive_guide_active = false
+	interactive_guide_type = ""
+	interactive_guide_target_index = -1
+	close_tutorial_entry_sheet()
+	show_toast("教学已跳过，可从菜单入口重新开始")
+	if mode == "offline":
+		render_game()
+	else:
+		refresh_current_screen()
+
+
+func complete_tutorial(reason: String = "基础操作已完成") -> void:
+	if tutorial_step == TUTORIAL_STEP_COMPLETE:
+		return
+	set_tutorial_checkpoint(TUTORIAL_STEP_COMPLETE, reason)
+	show_hand_hint = false
+	interactive_guide_active = false
+	interactive_guide_type = ""
+	interactive_guide_target_index = -1
+	show_toast("教学完成 · %s" % reason)
 
 
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
@@ -1175,9 +1325,7 @@ func _show_rules_screen_impl() -> void:
 			sections.append(child)
 		AnimationEffects.list_items_stagger_in(sections, 0.28, 0.08)
 
-	# 记录已查看教程
-	tutorial_step = -1
-	save_tutorial_state()
+	# 阅读规则不会代替交互式教学完成；教程 checkpoint 只由实际操作推进。
 	schedule_ui_qa_page_ready("rules", ["RulesCodexFrontPanel", "RulesContentScroll", "RulesContentScrollHitTarget", "RulesContentScrollThumb"])
 
 
@@ -1943,6 +2091,7 @@ func refresh_update_dialog() -> void:
 	if update_status_label == null or not is_instance_valid(update_status_label):
 		return
 	update_status_label.text = update_message
+	update_status_label.tooltip_text = update_message
 	if update_progress != null and is_instance_valid(update_progress):
 		var target_progress_value := 0.0
 		if update_total_bytes > 0:
@@ -1957,11 +2106,13 @@ func refresh_update_dialog() -> void:
 			update_progress.value = target_progress_value
 	if update_progress_label != null and is_instance_valid(update_progress_label):
 		update_progress_label.text = update_progress_text()
+		update_progress_label.tooltip_text = update_progress_text()
 	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
 		var notes_text = update_release_notes_summary_line()
 		update_release_notes_art.visible = notes_text != ""
 		if update_release_notes_label != null and is_instance_valid(update_release_notes_label):
 			update_release_notes_label.text = notes_text
+			update_release_notes_label.tooltip_text = update_release_notes
 	refresh_update_dialog_art()
 	if update_primary_button != null and is_instance_valid(update_primary_button):
 		var primary_blocked := update_state == "checking" or update_state == "downloading" or update_state == "current" or update_state == "installing"
@@ -2131,6 +2282,7 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
+	chat_input.focus_mode = Control.FOCUS_ALL
 	apply_rect(chat_input, rect_full(0.060, 0.640 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(chat_input)
 
@@ -2141,6 +2293,13 @@ func show_chat_panel() -> void:
 	send_button.tooltip_text = "发送当前消息 · Enter"
 	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.640 if compact_chat else 0.805, 0.940, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(send_button)
+	if mode == "online_game":
+		var table_log_button := make_icon_button("book-open", Color(0.40, 0.58, 0.46), 15, Callable(self, "open_table_log_from_chat"))
+		table_log_button.name = "ChatPanelTableLogButton"
+		table_log_button.custom_minimum_size = Vector2(34, 34)
+		table_log_button.tooltip_text = "查看牌桌记录 · 关闭聊天后打开完整历史"
+		apply_rect(table_log_button, rect_full(0.585, 0.015, 0.775, 0.325) if compact_chat else rect_full(0.700, 0.035, 0.805, 0.190))
+		chat_panel.add_child(table_log_button)
 
 	configure_button_focus_navigation(chat_panel, "ChatInput")
 	call_deferred("focus_named_control", "ChatInput")

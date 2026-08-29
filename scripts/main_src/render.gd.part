@@ -677,6 +677,12 @@ func draw_action_dock(parent: Control) -> void:
 		apply_rect(retry_label, rect_full(0.440, 0.035, 0.945, 0.225))
 		retry_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(retry_label)
+	elif mode == "online_game" and online_game_disconnected():
+		var disconnected_label = make_label(dock, "已断线 · 牌桌只读", 9, Color(0.92, 0.76, 0.46, 0.92), true)
+		disconnected_label.name = "ActionDockDisconnectedStatus"
+		apply_rect(disconnected_label, rect_full(0.440, 0.035, 0.945, 0.225))
+		disconnected_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		configure_clipped_label(disconnected_label)
 	parent.move_child(dock_shadow, max(0, action_bar.get_index()))
 	parent.move_child(dock, max(0, action_bar.get_index()))
 
@@ -736,8 +742,22 @@ func draw_action_intent_flow(parent: Control, count: int, color: Color) -> Contr
 func draw_actions(parent: Control) -> void:
 	var pending_claim_response_bar: Control = null
 	var pending_claim_tail_bar: HBoxContainer = null
-	if mode == "online_game":
+	if mode == "online_game" and not online_game_disconnected():
 		draw_chat_action_button(parent)
+	if online_game_disconnected():
+		var reconnect_button := make_action_button("重连", Color(0.36, 0.62, 0.72), Callable(self, "reconnect_online_game"))
+		reconnect_button.name = "OnlineReconnectGameButton"
+		reconnect_button.tooltip_text = "重新连接房间并恢复当前牌局"
+		reconnect_button.set_meta("action_priority", "primary")
+		action_bar = HBoxContainer.new()
+		action_bar.alignment = BoxContainer.ALIGNMENT_END
+		configure_passive_container(action_bar)
+		apply_rect(action_bar, action_bar_layout_rect())
+		parent.add_child(action_bar)
+		action_bar.add_child(reconnect_button)
+		draw_action_dock(parent)
+		finalize_action_bar_layout()
+		return
 	if has_pending_claim_window():
 		var pending_root := VBoxContainer.new()
 		pending_root.name = "PendingClaimActionStack"
@@ -3931,10 +3951,12 @@ func draw_game_top_hud(parent: Control) -> void:
 	configure_clipped_label(title)
 
 	# 状态
-	var status = make_label(hud, top_hud_status_text(), 15 if mode == "offline" else 16, Color(0.92, 0.94, 0.86), true)
+	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
+	var status = make_label(hud, top_hud_status_text(), 15 if mode == "offline" else (12 if compact_disconnect_status else 16), Color(0.92, 0.94, 0.86), true)
 	status.name = "TopHudStatus"
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
+	status.tooltip_text = online_feedback if compact_disconnect_status else status.text
 	# Keep transient gameplay feedback connected to the visible HUD instance.
 	# The shared reference is also used by set_status() for immediate errors.
 	status_label = status
@@ -4050,24 +4072,32 @@ func draw_hand(parent: Control) -> void:
 	if has_pending_claim_window():
 		state_badge.visible = false
 
-	# 新手提示：首次出牌时显示
-	if show_hand_hint and tutorial_step == 0 and can_self_discard():
+	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
+	if show_hand_hint and can_self_discard() and (tutorial_step == TUTORIAL_STEP_NEW or tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_WIN):
 		var hint_panel = make_gpt_plate_rect(rect_full(0.02, 0.50, 0.98, 0.92), Color(0.020, 0.042, 0.048, 0.94), "ui_button_face_plate")
 		hint_panel.name = "HandTrayTutorialHint"
 		tray.add_child(hint_panel)
 		hint_panel.z_index = 8
 		hint_panel.add_child(make_gpt_edge_rail(rect_full(0.0, 0.0, 0.014, 1.0), Color(0.30, 0.62, 0.52, 0.56)))
 		draw_hand_tutorial_hint_art(hint_panel)
-		var hint_text = "💡 点击手牌即可打出 · 出牌后等待对手响应"
+		var hint_text = tutorial_hand_hint_text()
 		var hint_label = make_label(hint_panel, hint_text, 14, Color(0.94, 0.96, 0.92), false)
 		hint_label.name = "HandTrayTutorialHintText"
-		apply_rect(hint_label, rect_full(0.190, 0.125, 0.940, 0.470))
+		apply_rect(hint_label, rect_full(0.190, 0.125, 0.820, 0.470))
 		hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		# 首次出牌后关闭提示
-		var close_hint = func() -> void:
-			show_hand_hint = false
-		if not tray.is_connected("tree_exiting", close_hint):
-			tray.connect("tree_exiting", close_hint)
+		if tutorial_step == TUTORIAL_STEP_WIN:
+			var finish_tutorial_button = make_small_button("完成教学", Color(0.42, 0.68, 0.52), Callable(self, "complete_tutorial"))
+			finish_tutorial_button.name = "HandTutorialCompleteButton"
+			finish_tutorial_button.custom_minimum_size = Vector2(116, 42)
+			finish_tutorial_button.tooltip_text = "保存教学完成状态并关闭提示"
+			apply_rect(finish_tutorial_button, rect_full(0.680, 0.535, 0.925, 0.900))
+			hint_panel.add_child(finish_tutorial_button)
+		else:
+			var skip_tutorial_button = make_icon_button("x", Color(0.58, 0.38, 0.30), 14, Callable(self, "skip_tutorial"))
+			skip_tutorial_button.name = "HandTutorialSkipButton"
+			skip_tutorial_button.tooltip_text = "跳过教学；之后可从菜单入口重新开始"
+			apply_rect(skip_tutorial_button, rect_full(0.885, 0.080, 0.975, 0.340))
+			hint_panel.add_child(skip_tutorial_button)
 		# 激活交互式引导
 		interactive_guide_active = true
 		interactive_guide_type = "discard"
@@ -5999,7 +6029,10 @@ func draw_menu_tutorial_hint_art(parent: Control) -> Control:
 	var entry_gate = make_gpt_gate(rect_full(0.585, 0.325, 0.620, 0.545), Color(0.72, 0.86, 0.58, 0.22))
 	entry_gate.name = "MenuTutorialHintEntryGate"
 	art.add_child(entry_gate)
-	if add_lucide_icon(art, "book-open", rect_full(0.075, 0.275, 0.135, 0.680), Color(0.94, 0.96, 0.80, 0.80)) == null:
+	var menu_tutorial_glyph = add_lucide_icon(art, "book-open", rect_full(0.075, 0.275, 0.135, 0.680), Color(0.94, 0.96, 0.80, 0.80))
+	if menu_tutorial_glyph != null:
+		menu_tutorial_glyph.name = "MenuTutorialHintGlyph"
+	else:
 		var glyph = make_label(art, "规", 9, Color(0.94, 0.96, 0.80, 0.80), true)
 		glyph.name = "MenuTutorialHintGlyph"
 		apply_rect(glyph, rect_full(0.075, 0.245, 0.135, 0.690))
@@ -11201,7 +11234,7 @@ func draw_update_dialog_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "UpdateDialogArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.070, 0.420, 0.930, 0.585))
+	apply_rect(art, rect_full(0.070, 0.225, 0.930, 0.315) if update_dialog_compact_layout() else rect_full(0.070, 0.420, 0.930, 0.585))
 	parent.add_child(art)
 	var rail = make_gpt_route_rail(rect_full(0.045, 0.380, 0.955, 0.620), Color(0.014, 0.034, 0.038, 0.90))
 	rail.name = "UpdateDialogArtRail"
@@ -11311,7 +11344,7 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	var map = Control.new()
 	map.name = "UpdateDialogStageMap"
 	map.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(map, rect_full(0.120, 0.720, 0.880, 0.815))
+	apply_rect(map, rect_full(0.120, 0.495, 0.880, 0.575) if update_dialog_compact_layout() else rect_full(0.120, 0.720, 0.880, 0.815))
 	parent.add_child(map)
 	var canopy_texture = add_illustration_texture(map, "update_stage_canopy", rect_full(-0.020, -0.620, 1.020, 1.360), 0.13, false)
 	if canopy_texture != null:
@@ -11349,7 +11382,7 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	update_release_notes_art = Control.new()
 	update_release_notes_art.name = "UpdateReleaseNotesArt"
 	update_release_notes_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(update_release_notes_art, rect_full(0.080, 0.675, 0.920, 0.755))
+	apply_rect(update_release_notes_art, rect_full(0.080, 0.590, 0.920, 0.720) if update_dialog_compact_layout() else rect_full(0.080, 0.675, 0.920, 0.755))
 	parent.add_child(update_release_notes_art)
 	var notes_texture = add_illustration_texture(update_release_notes_art, "update_notes_strip", rect_full(-0.020, -0.700, 1.020, 1.320), 0.16, false)
 	if notes_texture != null:
@@ -11381,9 +11414,11 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	var tick_2 = add_gpt_tick_strip(update_release_notes_art, rect_full(0.845, 0.475, (0.845) + float(1) * (0.043) + (0.016), 0.610), Color(0.72, 0.88, 0.62, 0.20), "UpdateReleaseNotesStageTick_0")
 	update_release_notes_label = make_label(update_release_notes_art, "", 10, Color(0.84, 0.88, 0.74), true)
 	update_release_notes_label.name = "UpdateReleaseNotesLabel"
-	apply_rect(update_release_notes_label, rect_full(0.145, 0.010, 0.790, 0.580))
+	apply_rect(update_release_notes_label, rect_full(0.145, 0.060, 0.790, 0.900) if update_dialog_compact_layout() else rect_full(0.145, 0.010, 0.790, 0.580))
 	update_release_notes_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(update_release_notes_label)
+	if update_dialog_compact_layout():
+		update_release_notes_label.tooltip_text = update_release_notes
 	return update_release_notes_art
 
 func draw_update_status_convergence_art(parent: Control) -> Control:
@@ -11391,7 +11426,8 @@ func draw_update_status_convergence_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "UpdateStatusConvergenceArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.080, 0.585, 0.920, 0.675))
+	apply_rect(art, rect_full(0.080, 0.490, 0.920, 0.570) if update_dialog_compact_layout() else rect_full(0.080, 0.585, 0.920, 0.675))
+	art.visible = not update_dialog_compact_layout()
 	parent.add_child(art)
 	var stage_index = update_stage_index()
 	var ready = update_state == "ready"
@@ -13139,8 +13175,10 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	apply_rect(title_label, rect_full(0.052, 0.130, text_right - 0.020, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
-	var status_label = make_label(row, status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
+	var visible_status := compact_setting_status(title, status) if compact_settings else status
+	var status_label = make_label(row, visible_status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
+	status_label.tooltip_text = status
 	apply_rect(status_label, rect_full(0.052, 0.500, text_right - 0.015, 0.860))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.56))
@@ -13154,6 +13192,21 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.custom_minimum_size = Vector2(0, 0)
 	apply_rect(button, rect_full(button_left, SETTINGS_ROW_BUTTON_RECT.position.y, SETTINGS_ROW_BUTTON_RECT.size.x, SETTINGS_ROW_BUTTON_RECT.size.y) if compact_settings else SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)
+
+func compact_setting_status(title: String, status: String) -> String:
+	if title == "本地进度":
+		return "可清空"
+	if title == "隐私诊断":
+		return "已同意" if status.contains("已同意") else "未同意"
+	if title == "播放测试":
+		return "可试听"
+	if status.begins_with("当前: "):
+		return status.substr(4)
+	if status.begins_with("对手强度: "):
+		return status.substr(5)
+	if title == "播放曲目":
+		return status.left(4)
+	return status
 
 
 func make_settings_section(parent: Control, rect: Rect2, title_text: String, compact: bool = false) -> GridContainer:

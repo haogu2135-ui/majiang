@@ -305,6 +305,7 @@ func run_continuous_resize_capacity_probe() -> void:
 	scene.update_message = "更新服务器暂时不可用，请稍后重试。"
 	scene.ensure_update_dialog()
 	await settle_layout()
+	await check_update_dialog_layout(scene, scene.effective_viewport_size())
 	await apply_runtime_resize(scene, Vector2(1280, 720))
 	var update_overlay = scene.find_child("UpdateDialogOverlay", true, false) as Control
 	var update_secondary = scene.find_child("UpdateSecondaryButton", true, false) as Button
@@ -636,6 +637,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.tutorial_step = 1
 	scene.show_menu(true)
 	await process_frame
+	await check_tutorial_flow(scene, actual_viewport)
 	check_menu_card_layout(scene, actual_viewport)
 	check_menu_footer_layout(scene, actual_viewport)
 	scene.queue_free()
@@ -931,6 +933,115 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			check(screen_rect(card).end.y <= screen_rect(quick_rail).position.y + 26.0, "menu card clears the quick action rail at %s" % viewport_size)
 		if footer != null:
 			check(screen_rect(card).end.y <= screen_rect(footer).position.y - 8.0, "menu card clears the footer status bar at %s" % viewport_size)
+
+func check_tutorial_flow(scene, viewport_size: Vector2) -> void:
+	var saved_step := int(scene.tutorial_step)
+	var saved_round_id := str(scene.tutorial_checkpoint_round_id)
+	var saved_phase := str(scene.tutorial_checkpoint_phase)
+	var saved_reason := str(scene.tutorial_checkpoint_reason)
+	var saved_at := int(scene.tutorial_last_saved_unix)
+	var saved_mode := str(scene.mode)
+	var saved_round := str(scene.active_round_id)
+	var saved_offline_phase := str(scene.offline_phase)
+	scene.mode = "menu"
+	scene.active_round_id = "UI-TUTORIAL-ROUND"
+	scene.offline_phase = "await_discard"
+	scene.tutorial_step = scene.TUTORIAL_STEP_NEW
+	scene.show_menu(true)
+	await settle_layout()
+	var menu_button := scene.find_child("MenuTutorialButton", true, false) as Button
+	var banner := scene.find_child("MenuTutorialEntryBanner", true, false) as Control
+	var banner_status := scene.find_child("MenuTutorialEntryStatus", true, false) as Label
+	check(menu_button != null and banner != null and banner_status != null, "menu exposes the first-run tutorial entry and progress status at %s" % viewport_size)
+	check(menu_button != null and menu_button.tooltip_text.contains("教学"), "tutorial menu entry explains its saved progress route at %s" % viewport_size)
+	if banner != null:
+		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(screen_rect(banner)), "tutorial menu banner stays inside the viewport at %s" % viewport_size)
+	scene.open_tutorial_entry_sheet()
+	await settle_layout()
+	var tutorial_panel := scene.find_child("TutorialEntryPanel", true, false) as Control
+	var tutorial_progress := scene.find_child("TutorialEntryProgress", true, false) as Label
+	var start_button := scene.find_child("TutorialStartButton", true, false) as Button
+	var skip_button := scene.find_child("TutorialSkipButton", true, false) as Button
+	var close_button := scene.find_child("TutorialCloseButton", true, false) as Button
+	check(tutorial_panel != null and tutorial_progress != null and start_button != null and skip_button != null and close_button != null, "tutorial sheet exposes progress start skip and close controls at %s" % viewport_size)
+	check(tutorial_progress != null and tutorial_progress.text == scene.tutorial_step_text(), "tutorial sheet progress matches the checkpoint state at %s" % viewport_size)
+	if tutorial_panel != null:
+		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(screen_rect(tutorial_panel)), "tutorial sheet stays inside the viewport at %s" % viewport_size)
+	scene.close_tutorial_entry_sheet()
+	await settle_layout()
+	scene._show_rules_screen_impl()
+	await settle_layout()
+	check(scene.tutorial_step == scene.TUTORIAL_STEP_NEW, "opening the rules screen does not mark the interactive tutorial complete at %s" % viewport_size)
+	scene.set_tutorial_checkpoint(scene.TUTORIAL_STEP_RESPONSE, "smoke checkpoint")
+	var checkpoint_config := ConfigFile.new()
+	var checkpoint_load := checkpoint_config.load(scene.TUTORIAL_PATH)
+	check(checkpoint_load == OK and int(checkpoint_config.get_value("tutorial", "schema", 0)) == scene.TUTORIAL_SCHEMA_VERSION and int(checkpoint_config.get_value("tutorial", "step", -9)) == scene.TUTORIAL_STEP_RESPONSE, "tutorial checkpoint persists its v2 schema and active step at %s" % viewport_size)
+	check(checkpoint_load == OK and str(checkpoint_config.get_value("tutorial", "round_id", "")) == "UI-TUTORIAL-ROUND" and str(checkpoint_config.get_value("tutorial", "phase", "")) == "await_discard" and str(checkpoint_config.get_value("tutorial", "reason", "")) == "smoke checkpoint", "tutorial checkpoint persists round phase and reason fields at %s" % viewport_size)
+	scene.show_menu(true)
+	await settle_layout()
+	scene.skip_tutorial()
+	await settle_layout()
+	var skipped_config := ConfigFile.new()
+	var skipped_load := skipped_config.load(scene.TUTORIAL_PATH)
+	check(scene.tutorial_step == scene.TUTORIAL_STEP_SKIPPED and skipped_load == OK and int(skipped_config.get_value("tutorial", "step", 0)) == scene.TUTORIAL_STEP_SKIPPED, "tutorial skip persists the explicit skipped state at %s" % viewport_size)
+	scene.tutorial_step = scene.TUTORIAL_STEP_NEW
+	scene.complete_tutorial("smoke completion")
+	var completed_config := ConfigFile.new()
+	var completed_load := completed_config.load(scene.TUTORIAL_PATH)
+	check(scene.tutorial_step == scene.TUTORIAL_STEP_COMPLETE and completed_load == OK and int(completed_config.get_value("tutorial", "step", 0)) == scene.TUTORIAL_STEP_COMPLETE, "tutorial completion persists the explicit complete state at %s" % viewport_size)
+	scene.mode = saved_mode
+	scene.active_round_id = saved_round
+	scene.offline_phase = saved_offline_phase
+	scene.tutorial_step = saved_step
+	scene.tutorial_checkpoint_round_id = saved_round_id
+	scene.tutorial_checkpoint_phase = saved_phase
+	scene.tutorial_checkpoint_reason = saved_reason
+	scene.tutorial_last_saved_unix = saved_at
+	scene.save_tutorial_state()
+	scene.refresh_current_screen()
+	await settle_layout()
+
+func check_update_dialog_layout(scene, viewport_size: Vector2) -> void:
+	var states := ["checking", "downloading", "ready", "current", "error"]
+	for state in states:
+		scene.update_state = state
+		scene.update_message = "更新状态：%s" % state
+		scene.update_remote_version = "1.0.181"
+		scene.update_downloaded_bytes = 512
+		scene.update_total_bytes = 1024
+		scene.update_release_notes = "修复对局可读性；优化设置与更新弹窗。"
+		scene.refresh_update_dialog()
+		await settle_layout()
+		var panel := scene.find_child("UpdateDialogPanel", true, false) as Control
+		var title := scene.find_child("UpdateDialogTitle", true, false) as Label
+		var status := scene.find_child("UpdateStatusLabel", true, false) as Label
+		var progress := scene.find_child("UpdateProgressLabel", true, false) as Label
+		var track := scene.find_child("UpdateProgressGptTrack", true, false) as Control
+		var progress_bar := scene.find_child("ProgressBar", true, false) as ProgressBar
+		var convergence := scene.find_child("UpdateStatusConvergenceArt", true, false) as Control
+		var notes := scene.find_child("UpdateReleaseNotesArt", true, false) as Control
+		var notes_label := scene.find_child("UpdateReleaseNotesLabel", true, false) as Label
+		var buttons := scene.find_child("UpdateDialogButtonRow", true, false) as Control
+		var primary := scene.find_child("UpdatePrimaryButton", true, false) as Button
+		var secondary := scene.find_child("UpdateSecondaryButton", true, false) as Button
+		check(panel != null and title != null and status != null and progress != null and convergence != null and notes != null and buttons != null and primary != null and secondary != null, "update %s state exposes independent compact reading lanes at %s" % [state, viewport_size])
+		if panel == null:
+			continue
+		var panel_rect := screen_rect(panel)
+		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "update %s panel stays inside the viewport at %s" % [state, viewport_size])
+		if title != null and status != null and progress != null and convergence != null and notes != null and buttons != null:
+			var content_nodes: Array[Control] = [title, status, progress, convergence, notes, buttons]
+			for content_node in content_nodes:
+				check(panel_rect.grow(1.0).encloses(screen_rect(content_node)), "update %s content lane %s stays inside the panel at %s" % [state, content_node.name, viewport_size])
+			for i in range(content_nodes.size()):
+				for j in range(i + 1, content_nodes.size()):
+					check(not rects_overlap(screen_rect(content_nodes[i]).grow(-1.0), screen_rect(content_nodes[j]).grow(-1.0)), "update %s lanes %s and %s do not overlap at %s" % [state, content_nodes[i].name, content_nodes[j].name, viewport_size])
+		check(status != null and not status.text.contains("...") and status.tooltip_text == scene.update_message, "update %s status keeps full state text and its detail tooltip at %s" % [state, viewport_size])
+		check(progress != null and not progress.text.contains("...") and progress.tooltip_text == progress.text, "update %s progress keeps a compact readable label at %s" % [state, viewport_size])
+		if notes_label != null and scene.update_release_notes != "":
+			check(notes_label.tooltip_text == scene.update_release_notes, "update %s release notes expose the full detail value at %s" % [state, viewport_size])
+		if progress_bar != null and track != null:
+			check(not rects_overlap(screen_rect(progress_bar).grow(-1.0), screen_rect(convergence).grow(-1.0)), "update %s progress bar clears the convergence art at %s" % [state, viewport_size])
 
 func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 	var panel := scene.find_child("ReplayImportPanel", true, false) as Control
@@ -1285,6 +1396,7 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 		check(screen_rect(summary).end.y <= screen_rect(action_dock).position.y - 5.0, "online pending context clears the action dock at %s" % viewport_size)
 	var waiting_state_before: bool = bool(scene.online_waiting_for_server)
 	var waiting_feedback_before: String = str(scene.online_feedback)
+	var retry_available_before: bool = bool(scene.online_retry_available)
 	scene.online_waiting_for_server = true
 	scene.online_feedback = ""
 	scene.render_game()
@@ -1295,17 +1407,31 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var waiting_action = scene.find_child("ActionDockWaitingStatus", true, false) as Label
 	check(scene.current_status_text() == "操作已提交 · 等待服务器确认" and waiting_status != null and waiting_status.text == scene.current_status_text(), "online submitted state is explicit in the top HUD at %s" % viewport_size)
 	check(waiting_action != null and waiting_action.text.contains("等待服务器"), "online submitted state is explicit in the action dock at %s" % viewport_size)
+	scene.online_feedback = "连接已断开，请重新连接。"
+	scene.online_waiting_for_server = false
+	scene.online_retry_available = true
+	scene.render_game()
+	await settle_layout()
+	var disconnected_status := scene.find_child("TopHudStatus", true, false) as Label
+	check(disconnected_status != null and disconnected_status.text == "已断线 · 请重连" and disconnected_status.tooltip_text == "连接已断开，请重新连接。", "online disconnect HUD keeps a complete reconnect action and full detail tooltip at %s" % viewport_size)
+	if disconnected_status != null:
+		check(not disconnected_status.text.contains("...") and label_text_width(disconnected_status, disconnected_status.text) <= screen_rect(disconnected_status).size.x + 1.0, "online disconnect HUD status fits its compact lane at %s" % viewport_size)
+	var reconnect_button := scene.find_child("OnlineReconnectGameButton", true, false) as Button
+	check(reconnect_button != null and reconnect_button.tooltip_text.contains("恢复当前牌局") and reconnect_button.has_focus(), "online disconnect exposes a focused reconnect CTA and keeps the board read-only at %s" % viewport_size)
+	check(scene.find_child("ChatActionButton", true, false) == null and scene.find_child("PendingClaimResponseGrid", true, false) == null, "online disconnect hides network actions until reconnection at %s" % viewport_size)
+	scene.online_feedback = waiting_feedback_before
+	scene.online_waiting_for_server = waiting_state_before
+	scene.online_retry_available = retry_available_before
+	scene.render_game()
+	await settle_layout()
 	var online_chat_button := scene.find_child("ChatActionButton", true, false) as Button
+	pending_grid = scene.find_child("PendingClaimResponseGrid", true, false) as GridContainer
 	var online_response_buttons: Array[Button] = []
 	if pending_grid != null:
 		collect_buttons(pending_grid, online_response_buttons)
 	var waiting_voice := scene.find_child("VoiceActionButton", true, false) as Button
 	var online_first_action: Button = waiting_voice if scene.online_waiting_for_server else (online_response_buttons[0] if not online_response_buttons.is_empty() else waiting_voice)
 	check(online_chat_button != null and online_first_action != null and online_chat_button.focus_neighbor_right == online_first_action.get_path(), "online chat is reachable from the response action lane via directional focus at %s" % viewport_size)
-	scene.online_waiting_for_server = waiting_state_before
-	scene.online_feedback = waiting_feedback_before
-	scene.render_game()
-	await settle_layout()
 
 
 func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
@@ -1350,7 +1476,9 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	var input = scene.find_child("ChatInput", true, false) as LineEdit
 	var close_button = scene.find_child("ChatPanelCloseButton", true, false) as Button
 	var send_button = scene.find_child("ChatSendButton", true, false) as Button
+	var table_log_button = scene.find_child("ChatPanelTableLogButton", true, false) as Button
 	check(panel != null and input != null and close_button != null and send_button != null, "online chat exposes drawer, input, close, and send controls at %s" % viewport_size)
+	check(table_log_button != null and table_log_button.tooltip_text.contains("牌桌记录"), "online chat keeps a discoverable table-records route at %s" % viewport_size)
 	if panel != null:
 		var panel_rect = screen_rect(panel)
 		var route := str(panel.get_meta("layout_role", ""))
@@ -1381,6 +1509,8 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 				check(not rects_overlap(panel_rect, screen_rect(top_hud)), "online chat clears the top HUD at %s" % viewport_size)
 	if input != null and panel != null:
 		check(screen_rect(panel).grow(1.0).encloses(screen_rect(input)) and input.max_length == scene.CHAT_MESSAGE_MAX_LENGTH, "online chat input stays inside the drawer and preserves its length boundary at %s" % viewport_size)
+		if table_log_button != null:
+			check(screen_rect(panel).grow(1.0).encloses(screen_rect(table_log_button)) and screen_rect(table_log_button).size.x >= 34.0 and screen_rect(table_log_button).size.y >= 30.0, "online chat table-records route stays inside the drawer with a touch target at %s" % viewport_size)
 	if close_button != null and send_button != null and panel != null:
 		check(close_button.tooltip_text.contains("关闭") and send_button.tooltip_text.contains("Enter"), "online chat close/send controls expose complete action hints at %s" % viewport_size)
 		check(screen_rect(panel).grow(1.0).encloses(screen_rect(close_button)), "online chat close action stays inside the drawer at %s" % viewport_size)
@@ -1435,6 +1565,17 @@ func check_chat_panel_meld_route(scene, viewport_size: Vector2, seat: int, expec
 		var ledger := scene.find_child("TableLogLedgerPanel", true, false) as Control
 		if ledger != null:
 			check(not ledger.visible or not rects_overlap(panel_rect.grow(-1.0), screen_rect(ledger)), "online chat seat %d clears or hides table ledger at %s" % [seat, viewport_size])
+		var table_log_button := scene.find_child("ChatPanelTableLogButton", true, false) as Button
+		check(table_log_button != null and table_log_button.tooltip_text.contains("牌桌记录"), "online chat seat %d keeps a discoverable table-records route at %s" % [seat, viewport_size])
+		if table_log_button != null:
+			scene.open_table_log_from_chat()
+			await settle_layout()
+			var archive_panel := scene.find_child("TableLogArchivePanel", true, false) as Control
+			var archive_list := scene.find_child("TableLogArchiveList", true, false) as VBoxContainer
+			var restored_ledger := scene.find_child("TableLogLedgerPanel", true, false) as Control
+			check(scene.find_child("ChatPanel", true, false) == null and archive_panel != null and archive_list != null and restored_ledger != null and restored_ledger.visible, "online chat table-records route preserves the ledger and opens its full history at %s" % viewport_size)
+			scene.close_table_log_archive()
+			await settle_layout()
 		var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
 		var hand_tray := scene.find_child("HandTray", true, false) as Control
 		check(action_dock == null or not rects_overlap(panel_rect.grow(-1.0), screen_rect(action_dock)), "online chat seat %d route clears action dock at %s" % [seat, viewport_size])

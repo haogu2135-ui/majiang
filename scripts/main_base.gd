@@ -40,6 +40,14 @@ const REPLAY_ARCHIVE_PATH := "user://replay_archive.cfg"
 const REPLAY_ARCHIVE_SCHEMA_VERSION := 1
 const REPLAY_ARCHIVE_LIMIT := 60
 const TUTORIAL_PATH := "user://tutorial.cfg"
+const TUTORIAL_SCHEMA_VERSION := 2
+const TUTORIAL_STEP_NEW := 0
+const TUTORIAL_STEP_DISCARD := 1
+const TUTORIAL_STEP_RESPONSE := 2
+const TUTORIAL_STEP_CLAIM := 3
+const TUTORIAL_STEP_WIN := 4
+const TUTORIAL_STEP_COMPLETE := -1
+const TUTORIAL_STEP_SKIPPED := -2
 const ACHIEVEMENTS_PATH := "user://achievements.cfg"
 const LOGIN_PATH := "user://login.cfg"
 const TELEMETRY_PATH := "user://telemetry.cfg"
@@ -540,8 +548,12 @@ var daily_login_view_state: Dictionary = {}
 var loading_screen_active := false
 var loading_view_state: Dictionary = {}
 var discard_window_start_by_seat: Dictionary = {}
-var tutorial_step = 0  # 新手教程步骤：0=未开始，1-5=各步骤，-1=已完成
+var tutorial_step = TUTORIAL_STEP_NEW  # 新手教程步骤；负值表示已完成或已跳过
 var tutorial_panel: Control = null
+var tutorial_checkpoint_round_id := ""
+var tutorial_checkpoint_phase := ""
+var tutorial_checkpoint_reason := ""
+var tutorial_last_saved_unix := 0
 var show_hand_hint = true  # 是否显示手牌操作提示
 var interactive_guide_active = false  # 交互式引导是否激活
 var interactive_guide_type = ""  # 当前引导类型：discard/claim/self_win
@@ -2014,10 +2026,10 @@ func configure_button_focus_navigation(root: Control, default_focus_name: String
 		button.focus_neighbor_bottom = bottom.get_path()
 	if not grab_default_focus:
 		return
-	var requested: Button = null
+	var requested: Control = null
 	if default_focus_name != "":
-		requested = root.find_child(default_focus_name, true, false) as Button
-	if requested == null or requested.disabled or not requested.visible:
+		requested = root.find_child(default_focus_name, true, false) as Control
+	if requested == null or not requested.visible or requested.focus_mode == Control.FOCUS_NONE or (requested is Button and (requested as Button).disabled):
 		requested = focusable[0]
 	if requested.is_inside_tree():
 		requested.grab_focus()
@@ -2981,14 +2993,97 @@ func latest_round_history(limit: int = 5) -> Array:
 func load_tutorial_state() -> void:
 	var config = ConfigFile.new()
 	if config.load(TUTORIAL_PATH) == OK:
-		tutorial_step = int(config.get_value("tutorial", "step", 0))
+		var stored_version := int(config.get_value("tutorial", "schema", 0))
+		var stored_step := int(config.get_value("tutorial", "step", TUTORIAL_STEP_NEW))
+		if stored_version < TUTORIAL_SCHEMA_VERSION:
+			# v1 marked the rules screen as complete. Reading rules is useful,
+			# but it is not proof that the interactive lesson was completed.
+			tutorial_step = TUTORIAL_STEP_NEW if stored_step == TUTORIAL_STEP_COMPLETE else clampi(stored_step, TUTORIAL_STEP_NEW, TUTORIAL_STEP_CLAIM)
+			tutorial_checkpoint_round_id = ""
+			tutorial_checkpoint_phase = ""
+			tutorial_checkpoint_reason = ""
+		else:
+			tutorial_step = normalized_tutorial_step(stored_step)
+			tutorial_checkpoint_round_id = str(config.get_value("tutorial", "round_id", ""))
+			tutorial_checkpoint_phase = str(config.get_value("tutorial", "phase", ""))
+			tutorial_checkpoint_reason = str(config.get_value("tutorial", "reason", ""))
+		tutorial_last_saved_unix = int(config.get_value("tutorial", "saved_at", 0))
 	else:
-		tutorial_step = 0
+		tutorial_step = TUTORIAL_STEP_NEW
+		tutorial_checkpoint_round_id = ""
+		tutorial_checkpoint_phase = ""
+		tutorial_checkpoint_reason = ""
+		tutorial_last_saved_unix = 0
 
 func save_tutorial_state() -> void:
 	var config = ConfigFile.new()
+	config.set_value("tutorial", "schema", TUTORIAL_SCHEMA_VERSION)
 	config.set_value("tutorial", "step", tutorial_step)
+	config.set_value("tutorial", "round_id", tutorial_checkpoint_round_id)
+	config.set_value("tutorial", "phase", tutorial_checkpoint_phase)
+	config.set_value("tutorial", "reason", tutorial_checkpoint_reason)
+	config.set_value("tutorial", "saved_at", tutorial_last_saved_unix)
 	config.save(TUTORIAL_PATH)
+
+func normalized_tutorial_step(step: int) -> int:
+	if step == TUTORIAL_STEP_COMPLETE or step == TUTORIAL_STEP_SKIPPED:
+		return step
+	return clampi(step, TUTORIAL_STEP_NEW, TUTORIAL_STEP_WIN)
+
+func set_tutorial_checkpoint(step: int, reason: String = "") -> void:
+	tutorial_step = normalized_tutorial_step(step)
+	tutorial_checkpoint_round_id = active_round_id
+	tutorial_checkpoint_phase = offline_phase
+	tutorial_checkpoint_reason = reason.strip_edges().left(80)
+	tutorial_last_saved_unix = int(Time.get_unix_time_from_system())
+	save_tutorial_state()
+
+func tutorial_is_available() -> bool:
+	return tutorial_step != TUTORIAL_STEP_COMPLETE and tutorial_step != TUTORIAL_STEP_SKIPPED
+
+func tutorial_is_active() -> bool:
+	return tutorial_step >= TUTORIAL_STEP_DISCARD and tutorial_step <= TUTORIAL_STEP_WIN
+
+func tutorial_step_text() -> String:
+	match tutorial_step:
+		TUTORIAL_STEP_NEW:
+			return "尚未开始"
+		TUTORIAL_STEP_DISCARD:
+			return "第1步/4 · 摸牌后出牌"
+		TUTORIAL_STEP_RESPONSE:
+			return "第2步/4 · 等待响应"
+		TUTORIAL_STEP_CLAIM:
+			return "第3步/4 · 吃碰杠胡"
+		TUTORIAL_STEP_WIN:
+			return "第4步/4 · 牌势与结算"
+		TUTORIAL_STEP_COMPLETE:
+			return "已完成"
+		TUTORIAL_STEP_SKIPPED:
+			return "已跳过"
+	return "教学进度"
+
+func tutorial_menu_button_text() -> String:
+	if tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_RESPONSE or tutorial_step == TUTORIAL_STEP_CLAIM or tutorial_step == TUTORIAL_STEP_WIN:
+		return "继续教学"
+	return "新手教学"
+
+func tutorial_entry_detail_text() -> String:
+	if tutorial_step == TUTORIAL_STEP_COMPLETE:
+		return "已完成，可随时复习"
+	if tutorial_step == TUTORIAL_STEP_SKIPPED:
+		return "已跳过，可随时重新开始"
+	if tutorial_step == TUTORIAL_STEP_NEW:
+		return "学会摸切、响应与胡牌"
+	return tutorial_step_text()
+
+func tutorial_hand_hint_text() -> String:
+	match tutorial_step:
+		TUTORIAL_STEP_WIN:
+			return "最后一步 · 观察牌势后出牌，或点击完成教学"
+		TUTORIAL_STEP_RESPONSE:
+			return "等待响应窗口 · 有吃碰杠胡时选择动作"
+		_:
+			return "第1步 · 点击一张手牌，将它打入牌河"
 
 func load_achievements() -> void:
 	var config = ConfigFile.new()

@@ -67,14 +67,22 @@ func online_connection_endpoint_text() -> String:
 		host = DEFAULT_HOST
 	return "%s:%d" % [host, DEFAULT_PORT]
 
+func online_game_disconnected() -> bool:
+	if mode != "online_game":
+		return false
+	return online_resume_pending or online_feedback.find("连接已断开") >= 0 or online_feedback.find("重新连接") >= 0
+
 func connect_online() -> void:
 	var host := online_host_input()
 	if host == "":
 		set_online_feedback("请输入服务器 IP 或域名。", false)
 		return
 	var resume_room: String = str(selected_room)
+	if resume_room.strip_edges() == "" and mode == "online_game":
+		resume_room = str(online_game.get("roomCode", ""))
 	if is_instance_valid(online_room_edit) and online_room_edit.text.strip_edges() != "":
 		resume_room = online_room_code_input()
+	var preserve_game_board := mode == "online_game" and not online_game.is_empty()
 	online_resume_context = {
 		"host": host,
 		"name": online_name_input(),
@@ -90,7 +98,8 @@ func connect_online() -> void:
 	tcp = StreamPeerTCP.new()
 	tcp_buffer.clear()
 	next_online_poll_msec = 0
-	clear_online_room_snapshot()
+	if not preserve_game_board:
+		clear_online_room_snapshot()
 	clear_online_feedback()
 	sent_hello = false
 	online_resume_join_sent = false
@@ -101,8 +110,20 @@ func connect_online() -> void:
 		telemetry_record_event("online_connection", {"result": "error"})
 		set_online_feedback("连接失败：%s" % error_string(err), false)
 
+func reconnect_online_game() -> void:
+	if mode != "online_game":
+		return
+	remember_online_resume_context()
+	online_resume_pending = true
+	online_resume_join_sent = false
+	connect_online()
+	if mode == "online_game":
+		set_online_feedback("正在重新连接房间，请稍候。", false)
+		request_game_render()
+
 func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
-	var should_show_lobby := return_to_lobby and mode == "online_game"
+	var preserve_game_board := mode == "online_game" and not online_game.is_empty()
+	var should_show_lobby := return_to_lobby and mode == "online_game" and not preserve_game_board
 	var had_resume_pending := online_resume_pending
 	telemetry_record_event("online_disconnection", {"reason": "error" if message.contains("失败") or message.contains("出错") else "closed"})
 	remember_online_resume_context()
@@ -113,11 +134,22 @@ func close_online_transport(message: String, return_to_lobby: bool = true) -> vo
 	tcp_status = tcp.get_status()
 	tcp_buffer.clear()
 	sent_hello = false
-	clear_online_room_snapshot()
+	if preserve_game_board:
+		online_room.clear()
+		online_log_seen_count = 0
+		online_last_snapshot_fingerprint = ""
+		online_last_room_snapshot_fingerprint = ""
+		online_seen_message_ids.clear()
+		online_seen_voice_sequences.clear()
+	else:
+		clear_online_room_snapshot()
 	if should_show_lobby:
 		show_online_lobby(true)
 	set_online_feedback(message, false)
-	refresh_online_lobby_state()
+	if preserve_game_board:
+		request_game_render()
+	else:
+		refresh_online_lobby_state()
 
 func create_online_room() -> void:
 	var player_name := online_name_input()
@@ -162,6 +194,8 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 
 func remember_online_resume_context() -> void:
 	var room_code: String = str(selected_room)
+	if room_code.strip_edges() == "" and mode == "online_game":
+		room_code = str(online_game.get("roomCode", ""))
 	if is_instance_valid(online_room_edit) and online_room_edit.text.strip_edges() != "":
 		room_code = online_room_code_input()
 	online_resume_context = {

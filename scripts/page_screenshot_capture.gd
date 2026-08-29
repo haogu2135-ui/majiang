@@ -170,7 +170,7 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 			"27_online_game": {"fixture_seed": "seed_preview_online_game:awaitDiscard", "required_nodes": ["TopHudStatus", "TopHudWallText", "HandTray", "ActionButtonDock"], "default_focus": "HandTile_", "state_text": "轮到你出牌"},
 			"28_online_game_pending": {"fixture_seed": "seed_preview_online_game:pendingClaim", "required_nodes": ["TopHudStatus", "PendingClaimIllustration", "PendingClaimResponseGrid", "ActionButtonDock"], "default_focus": "PendingClaimPrimaryButton", "state_text": "等待响应"},
 			"29_online_game_chat": {"fixture_seed": "seed_preview_online_game:awaitDiscard+seed_preview_online_game_chat", "required_nodes": ["TopHudStatus", "HandTray", "ActionButtonDock", "ChatPanel", "ChatPanelCloseButton", "ChatInput", "ChatSendButton"], "default_focus": "ChatInput", "state_text": "房间消息"},
-			"30_online_game_disconnect": {"fixture_seed": "seed_preview_online_game:awaitDiscard+seed_preview_online_game_disconnect", "required_nodes": ["TopHudStatus", "HandTray", "ActionButtonDock"], "default_focus": "", "state_text": "连接已断开"},
+		"30_online_game_disconnect": {"fixture_seed": "seed_preview_online_game:awaitDiscard+seed_preview_online_game_disconnect", "required_nodes": ["TopHudStatus", "HandTray", "ActionButtonDock", "OnlineReconnectGameButton"], "default_focus": "OnlineReconnectGameButton", "state_text": "连接已断开"},
 			"31_telemetry_default": {"fixture_seed": "seed_preview_telemetry:default", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryConsentButton", "state_text": "未同意 · 默认不记录"},
 			"32_telemetry_consented": {"fixture_seed": "seed_preview_telemetry:consented", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryConsentButton", "state_text": "已同意 · 本地队列"},
 			"33_telemetry_revoked": {"fixture_seed": "seed_preview_telemetry:revoked", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryConsentButton", "state_text": "已关闭 · 不记录"},
@@ -317,6 +317,8 @@ func validate_online_game_fixture(scene: Node, screen_name: String) -> bool:
 	if screen_name == "29_online_game_chat" and scene.find_child("ChatPanel", true, false) == null:
 		return false
 	if screen_name == "30_online_game_disconnect" and scene.online_feedback.find("断开") < 0:
+		return false
+	if screen_name == "30_online_game_disconnect" and scene.find_child("OnlineReconnectGameButton", true, false) == null:
 		return false
 	return scene.find_child("TopHudStatus", true, false) != null and scene.find_child("HandTray", true, false) != null and scene.find_child("ActionButtonDock", true, false) != null
 

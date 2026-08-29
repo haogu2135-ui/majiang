@@ -150,6 +150,7 @@ func should_yield_before_ai_discard() -> bool:
 func clear_screen() -> void:
 	loading_screen_active = false
 	telemetry_sheet_open = false
+	tutorial_panel = null
 	if mode != "online_lobby" and mode != "online_game":
 		chat_panel_open = false
 	if mode != "offline" and mode != "online_game":
@@ -221,6 +222,7 @@ func start_offline(instant: bool = false) -> void:
 		play_screen_transition(_build, false, "ink_wash")
 
 func _start_offline_impl() -> void:
+	var should_begin_tutorial: bool = tutorial_step == TUTORIAL_STEP_NEW
 	hand_keyboard_selection = -1
 	interactive_guide_target_index = -1
 	last_game_keyboard_input_msec = 0
@@ -277,6 +279,10 @@ func _start_offline_impl() -> void:
 	if not loaded or not offline_progress_loaded_state:
 		deal_offline_hand()
 	else:
+		render_game()
+	if should_begin_tutorial and tutorial_step == TUTORIAL_STEP_NEW:
+		set_tutorial_checkpoint(TUTORIAL_STEP_DISCARD, "首次进入牌桌")
+		show_hand_hint = true
 		render_game()
 	# 启动环境氛围动画
 	start_ambient_animation("default")
@@ -619,6 +625,10 @@ func human_discard(index: int) -> void:
 	if tile == "":
 		return
 	hand_keyboard_selection = -1
+	if tutorial_step == TUTORIAL_STEP_DISCARD:
+		set_tutorial_checkpoint(TUTORIAL_STEP_RESPONSE, "已完成首次出牌")
+	elif tutorial_step == TUTORIAL_STEP_WIN:
+		complete_tutorial("已完成摸切与响应练习")
 	render_game()
 	get_tree().process_frame.connect(Callable(self, "resolve_human_discard_after_frame").bind(tile), CONNECT_ONE_SHOT)
 
@@ -679,6 +689,8 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 			resolve_ai_or_advance(from_seat, tile, prepared_ai_claim)
 			if offline_phase == "await_discard":
 				schedule_ai_until_human()
+			if tutorial_step == TUTORIAL_STEP_CLAIM:
+				set_tutorial_checkpoint(TUTORIAL_STEP_WIN, "已完成响应选择")
 			return
 	var options: Array = offline_pending_claim.get("options", [])
 	if not options.has(claim):
@@ -695,6 +707,11 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 		offline_pending_claim.clear()
 		offline_phase = "resolving"
 		apply_offline_claim(0, from_seat, tile, claim, chi_choice)
+	if tutorial_step == TUTORIAL_STEP_CLAIM:
+		if claim == "hu":
+			complete_tutorial("已完成响应并胡牌")
+		else:
+			set_tutorial_checkpoint(TUTORIAL_STEP_WIN, "已完成响应选择")
 	render_game()
 
 func human_self_win() -> void:
@@ -706,6 +723,8 @@ func human_self_win() -> void:
 	play_human_action_choice_confirmation_fx("self_win", win_tile)
 	hand_keyboard_selection = -1
 	finish_offline_round(0, win_tile, true, -1)
+	if tutorial_step == TUTORIAL_STEP_WIN:
+		complete_tutorial("已完成自摸与结算练习")
 
 
 func current_self_draw_tile(seat: int) -> String:
@@ -2181,14 +2200,15 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 			offline_phase = "pending_claim"
 			add_log("你可响应%s。" % tile_label(tile))
 			# 新手引导：首次吃碰杠时显示提示
-			if tutorial_step >= 0 and tutorial_step < 5:
+			if tutorial_is_active() and tutorial_step <= TUTORIAL_STEP_RESPONSE:
 				interactive_guide_active = true
 				interactive_guide_type = "claim"
-				tutorial_step = 5
-				save_tutorial_state()
+				set_tutorial_checkpoint(TUTORIAL_STEP_CLAIM, "已进入响应窗口")
 			render_game()
 			return
 	resolve_ai_or_advance(from_seat, tile, ai_claim)
+	if tutorial_step == TUTORIAL_STEP_RESPONSE and offline_phase != "pending_claim":
+		set_tutorial_checkpoint(TUTORIAL_STEP_WIN, "本次出牌无响应")
 
 func resolve_ai_or_advance(from_seat: int, tile: String, prepared_claim: Dictionary = {}) -> void:
 	tile = normalize_tile_code(tile)
