@@ -9343,7 +9343,8 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 	apply_rect(text, rect_full(0.130, 0.10, 0.845, 0.90))
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(text)
-	var count_badge = make_badge(intent, rect_full(0.858, 0.18, 0.982, 0.82), "%d项" % count, 10, color.darkened(0.20), color.lightened(0.12), Color(0.96, 0.95, 0.84))
+	var intent_count_text := "重连" if mode == "online_game" and online_game_disconnected() else "%d项" % count
+	var count_badge = make_badge(intent, rect_full(0.858, 0.18, 0.982, 0.82), intent_count_text, 10, color.darkened(0.20), color.lightened(0.12), Color(0.96, 0.95, 0.84))
 	count_badge.name = "ActionIntentCount"
 	rail.modulate = Color(1, 1, 1, 0.80)
 	return intent
@@ -14834,30 +14835,43 @@ func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 	return "房主" if slot == 0 else "已入席"
 
 
-func add_online_detail_touch_target(parent: Control, target_name: String, tooltip: String, callback: Callable) -> Button:
+func add_online_detail_touch_target(parent: Control, target_name: String, tooltip: String, callback: Callable, target_rect: Rect2 = Rect2(0.0, 0.0, 1.0, 1.0)) -> Button:
 	# Use a native button for reliable screen-touch dispatch; the parent keeps the authored visual face.
 	var target := Button.new()
 	target.name = target_name
 	target.text = ""
 	target.tooltip_text = tooltip
 	target.flat = true
-	target.focus_mode = Control.FOCUS_NONE
-	target.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	configure_touch_button(target)
 	target.mouse_filter = Control.MOUSE_FILTER_STOP
 	target.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var empty_style := StyleBoxEmpty.new()
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		target.add_theme_stylebox_override(state, empty_style)
-	apply_rect(target, rect_full(0.0, 0.0, 1.0, 1.0))
+	apply_rect(target, target_rect)
 	parent.add_child(target)
 	target.pressed.connect(callback)
 	return target
+
+
+func normalized_rect_in_parent(global_rect: Rect2, parent: Control) -> Rect2:
+	var parent_rect := parent.get_global_rect()
+	if parent_rect.size.x <= 0.0 or parent_rect.size.y <= 0.0:
+		return rect_full(0.0, 0.0, 1.0, 1.0)
+	var local_rect := Rect2(global_rect.position - parent_rect.position, global_rect.size)
+	return rect_full(
+		local_rect.position.x / parent_rect.size.x,
+		local_rect.position.y / parent_rect.size.y,
+		(local_rect.position.x + local_rect.size.x) / parent_rect.size.x,
+		(local_rect.position.y + local_rect.size.y) / parent_rect.size.y
+	)
 
 
 func draw_online_lobby_roster_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
 	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.50), "ui_dark_scrim")
 	roster.name = "OnlineLobbyRosterPanel"
+	roster.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(roster)
 	var title = make_label(roster, "玩家席位", 13, Color(0.94, 0.94, 0.80), true)
 	title.name = "OnlineLobbyRosterTitle"
@@ -14872,12 +14886,8 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		row_fill.a *= 0.82
 		var row = make_gpt_center_crop_plate_rect(rect_full(0.035, top, 0.965, top + 0.165), row_fill, "ui_dark_scrim")
 		row.name = "OnlineLobbyRosterRow_%d" % i
-		row.mouse_filter = Control.MOUSE_FILTER_STOP
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var detail_slot := i
-		row.gui_input.connect(func(event: InputEvent) -> void:
-			if online_detail_press_event(event):
-				show_online_roster_detail(detail_slot)
-		)
 		roster.add_child(row)
 		var seal = make_gpt_gate(rect_full(0.020, 0.145, 0.092, 0.855), Color(0.42, 0.68, 0.50, 0.20 if active else 0.10))
 		seal.name = "OnlineLobbyRosterSeatSeal_%d" % i
@@ -14898,9 +14908,10 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		state.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		state.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(state)
-		var roster_touch_target := add_online_detail_touch_target(row, "OnlineLobbyRosterTouchTarget_%d" % i, "查看完整玩家昵称", func() -> void:
+		var roster_touch_rect := normalized_rect_in_parent(row.get_global_rect(), root_layer)
+		var roster_touch_target := add_online_detail_touch_target(root_layer, "OnlineLobbyRosterTouchTarget_%d" % i, "查看完整玩家昵称", func() -> void:
 			show_online_roster_detail(detail_slot)
-		)
+		, roster_touch_rect)
 		roster_touch_target.disabled = not active
 		roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 	return roster
@@ -17997,14 +18008,29 @@ func draw_shop_item_count_badge_art(parent: Control, item_color: Color, count: i
 	return art
 
 
-func texture_has_transparent_edge(texture: Texture2D) -> bool:
+func texture_has_transparent_edge(texture: Texture2D, source_path: String = "") -> bool:
 	if texture == null:
 		return false
-	var image = texture.get_image()
+	# VRAM-compressed textures cannot be sampled through get_image() on every
+	# renderer. Inspect the authored source PNG when it is available instead.
+	var image: Image = null
+	if source_path != "" and FileAccess.file_exists(source_path):
+		var source_file := FileAccess.open(source_path, FileAccess.READ)
+		if source_file != null:
+			var source_image := ClassDB.instantiate("Image") as Image
+			if source_image != null and source_image.load_png_from_buffer(source_file.get_buffer(source_file.get_length())) == OK:
+				image = source_image
+	if image == null:
+		if texture is CompressedTexture2D:
+			return false
+		image = texture.get_image()
 	if image == null or image.is_empty():
 		return false
-	if image.is_compressed() and image.decompress() != OK:
-		return false
+	if image.is_compressed():
+		var decompressed: Image = image.duplicate()
+		if decompressed.decompress() != OK:
+			return false
+		image = decompressed
 	var width = image.get_width()
 	var height = image.get_height()
 	if width <= 1 or height <= 1:
@@ -18018,8 +18044,10 @@ func texture_has_transparent_edge(texture: Texture2D) -> bool:
 	return false
 
 func shop_charm_texture_is_safe(item_id: String) -> bool:
-	var texture = optional_gpt_illustration_texture(shop_charm_gpt_key(item_id))
-	return texture_has_transparent_edge(texture)
+	var charm_key := shop_charm_gpt_key(item_id)
+	var texture = optional_gpt_illustration_texture(charm_key)
+	var source_path := str(GPT_ILLUSTRATION_ASSET_PATHS.get(charm_key, ""))
+	return texture_has_transparent_edge(texture, source_path)
 
 func draw_shop_native_charm_art(row: Control, item_color: Color, item_id: String, icon_name: String) -> Control:
 	# r213: GPT chrome conversion
@@ -21860,6 +21888,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	row.add_child(button)
 
 func compact_setting_status(title: String, status: String) -> String:
+	if title == "出牌辅助":
+		return "风险: 开" if status.contains("开启") else "风险: 关"
 	if title == "本地进度":
 		return "可清空"
 	if title == "隐私诊断":
@@ -24824,19 +24854,17 @@ func _show_online_lobby_impl() -> void:
 	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
-	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
+	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
 		room_badge_label.tooltip_text = room_badge_text
-	var room_touch_target := add_online_detail_touch_target(room_badge, "OnlineLobbyRoomBadgeTouchTarget", "查看完整房间号", func() -> void:
+	var room_touch_target := add_online_detail_touch_target(root_layer, "OnlineLobbyRoomBadgeTouchTarget", "查看完整房间号", func() -> void:
 		show_online_room_code_detail()
-	)
+	, normalized_rect_in_parent(room_badge.get_global_rect(), root_layer))
 	room_touch_target.visible = room_snapshot_visible
 	room_touch_target.disabled = not room_snapshot_visible
 	room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
-	if room_badge_label != null:
-		room_badge.move_child(room_touch_target, room_badge_label.get_index())
 	draw_online_lobby_room_art(log_panel)
 	draw_online_lobby_roster_panel(log_panel)
 	draw_online_lobby_log_stream_art(log_panel)
@@ -24964,13 +24992,13 @@ func refresh_online_lobby_state() -> void:
 	var room_badge = root_layer.find_child("OnlineLobbyRoomBadge", true, false)
 	if room_badge != null:
 		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
+		room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		room_badge.visible = show_room_snapshot
+		var room_touch_target = root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+		if room_touch_target != null:
+			room_touch_target.visible = show_room_snapshot
+			room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
 		if room_badge_label != null:
-			room_badge.visible = show_room_snapshot
-			room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
-			var room_touch_target = room_badge.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
-			if room_touch_target != null:
-				room_touch_target.visible = show_room_snapshot
-				room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
 			room_badge_label.text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
 			room_badge_label.tooltip_text = room_badge_label.text
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
@@ -25045,7 +25073,7 @@ func refresh_online_room_content() -> void:
 			slot_state_label.text = online_lobby_slot_state(entry, slot)
 		if roster_row != null:
 			roster_row.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.76)
-			var roster_touch_target = roster_row.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+			var roster_touch_target = root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
 			if roster_touch_target != null:
 				roster_touch_target.disabled = not active
 				roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
@@ -25058,13 +25086,73 @@ func refresh_online_room_content() -> void:
 		log_count_label.text = "%d条" % log_count
 	render_room_log()
 
-func online_detail_press_event(event: InputEvent) -> bool:
-	if event is InputEventMouseButton:
-		var mouse_event := event as InputEventMouseButton
-		return mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
+
+func online_detail_target_list() -> Array[Button]:
+	var targets: Array[Button] = []
+	if root_layer == null or not is_instance_valid(root_layer):
+		return targets
+	var room_target := root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+	if room_target != null:
+		targets.append(room_target)
+	for slot in range(4):
+		var roster_target := root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+		if roster_target != null:
+			targets.append(roster_target)
+	return targets
+
+
+func online_detail_target_at(position: Vector2) -> Button:
+	for target in online_detail_target_list():
+		if target.visible and not target.disabled and target.get_global_rect().has_point(position):
+			return target
+	return null
+
+
+func online_detail_pressed_target() -> Button:
+	for target in online_detail_target_list():
+		if bool(target.get_meta("online_detail_pressed", false)):
+			return target
+	return null
+
+
+func handle_online_detail_touch(event: InputEvent) -> bool:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return false
+	var position := Vector2.ZERO
+	var pressed := false
+	var is_pointer_event := false
 	if event is InputEventScreenTouch:
-		return (event as InputEventScreenTouch).pressed
-	return false
+		var touch := event as InputEventScreenTouch
+		if touch.index != 0:
+			return false
+		position = touch.position
+		pressed = touch.pressed
+		is_pointer_event = true
+	elif event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		position = mouse_event.position
+		pressed = mouse_event.pressed
+		is_pointer_event = true
+	if not is_pointer_event:
+		return false
+	var target := online_detail_target_at(position) if pressed else online_detail_pressed_target()
+	if target == null:
+		return false
+	if pressed:
+		if bool(target.get_meta("online_detail_pressed", false)):
+			return true
+		target.set_meta("online_detail_pressed", true)
+		target.grab_focus()
+		target.emit_signal("button_down")
+		return true
+	target.set_meta("online_detail_pressed", false)
+	target.emit_signal("button_up")
+	if target.visible and not target.disabled and target.get_global_rect().has_point(position):
+		target.emit_signal("pressed")
+	return true
+
 
 func show_online_room_code_detail() -> void:
 	var room_code := bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
@@ -27451,8 +27539,17 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
 	var stay_dur := float(duration_msec) / 1000.0
 	var fade_dur := 0.28
-	var tw := create_screen_tween()
+	var tw := create_screen_tween(true)
 	toast_tween = tw
+	if reduce_motion_enabled:
+		# Reduced motion removes movement and fade, but keeps the message readable
+		# for its full dwell time so feedback is not effectively skipped.
+		toast_bg.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		toast_bg.offset_top = 0.0
+		toast_bg.scale = Vector2.ONE
+		tw.tween_interval(stay_dur)
+		tw.tween_callback(Callable(self, "cleanup_toast_by_id").bind(toast_bg.get_instance_id(), toast_container.get_instance_id()))
+		return
 	# 入场 - 从上方弹出 + 缩放弹跳
 	tw.tween_property(toast_bg, "modulate:a", 1.0, slide_dur).from(0.0)
 	tw.parallel().tween_property(toast_bg, "offset_top", 0.0, slide_dur).from(-28.0).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -27778,11 +27875,11 @@ func reconnect_online_game() -> void:
 		set_online_feedback("正在重新连接房间，请稍候。", false)
 		request_game_render()
 
-func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
+func close_online_transport(message: String, return_to_lobby: bool = true, preserve_game_for_reconnect: bool = true) -> void:
 	# A real transport loss owns the chat lifecycle; a transient status copy
 	# must not make clear_screen infer that the drawer should disappear.
 	chat_panel_open = false
-	var preserve_game_board := mode == "online_game" and not online_game.is_empty()
+	var preserve_game_board := preserve_game_for_reconnect and mode == "online_game" and not online_game.is_empty()
 	var should_show_lobby := return_to_lobby and mode == "online_game" and not preserve_game_board
 	var had_resume_pending := online_resume_pending
 	telemetry_record_event("online_disconnection", {"reason": "error" if message.contains("失败") or message.contains("出错") else "closed"})
@@ -27881,10 +27978,24 @@ func resume_online_room_after_welcome() -> void:
 		online_resume_join_sent = true
 
 
-func online_message_protocol_version(data: Dictionary) -> int:
-	var value = first_present(data, ["protocolVersion", "protocol_version", "protocol"], -1)
+func online_integer_value(value, fallback: int = -1) -> int:
+	if typeof(value) == TYPE_INT:
+		return int(value)
+	if typeof(value) == TYPE_FLOAT:
+		var numeric_value: float = float(value)
+		return int(round(numeric_value)) if is_finite(numeric_value) and is_equal_approx(numeric_value, round(numeric_value)) else fallback
 	var text := str(value).strip_edges()
-	return int(text) if text.is_valid_int() else -1
+	if text.is_valid_int():
+		return int(text)
+	if text.is_valid_float():
+		var parsed_value := text.to_float()
+		if is_finite(parsed_value) and is_equal_approx(parsed_value, round(parsed_value)):
+			return int(round(parsed_value))
+	return fallback
+
+
+func online_message_protocol_version(data: Dictionary) -> int:
+	return online_integer_value(first_present(data, ["protocolVersion", "protocol_version", "protocol"], -1))
 
 
 func online_message_revision(data: Dictionary, kind: String) -> int:
@@ -27896,8 +28007,7 @@ func online_message_revision(data: Dictionary, kind: String) -> int:
 	if typeof(source) != TYPE_DICTIONARY:
 		source = data
 	var value = first_present(source, ["revision", "stateVersion", "state_version", "sequence", "seq"], first_present(data, ["revision", "stateVersion", "state_version", "sequence", "seq"], -1))
-	var text := str(value).strip_edges()
-	return int(text) if text.is_valid_int() else -1
+	return online_integer_value(value)
 
 func online_message_identity(data: Dictionary) -> String:
 	var value = first_present(data, ["messageId", "message_id", "eventId", "event_id", "id"], "")
@@ -27919,10 +28029,10 @@ func accept_online_message(data: Dictionary, kind: String) -> bool:
 		return false
 	var protocol_version := online_message_protocol_version(data)
 	if protocol_version >= 0 and protocol_version != ONLINE_PROTOCOL_VERSION:
-		if protocol_version > ONLINE_PROTOCOL_VERSION:
-			close_online_transport("服务器协议版本过高，请更新客户端。")
-		else:
-			set_online_feedback("服务器协议版本过旧，请更新服务端。", false)
+		var protocol_message := "服务器协议版本过高，请更新客户端。" if protocol_version > ONLINE_PROTOCOL_VERSION else "服务器协议版本过旧，请更新服务端。"
+		close_online_transport(protocol_message, true, false)
+		online_resume_pending = false
+		online_resume_join_sent = false
 		return false
 	var revision := online_message_revision(data, kind)
 	if kind == "roomState" and revision >= 0:
@@ -28040,6 +28150,8 @@ func online_action_validation_error(payload: Dictionary) -> String:
 		return "缺少操作类型。"
 	if not ["createRoom", "joinRoom", "startGame", "discard", "claim", "chat", "voiceState", "voiceMessage"].has(action_type):
 		return "不支持的联机操作。"
+	if mode == "online_game" and online_game_disconnected() and action_type != "joinRoom":
+		return "牌桌已断线，请先重连。"
 	if action_type == "createRoom":
 		return "昵称不能为空。" if online_name_input() == "" else ""
 	if action_type == "joinRoom":
@@ -28984,6 +29096,9 @@ func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int) ->
 
 
 func _input(event: InputEvent) -> void:
+	if handle_online_detail_touch(event):
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") and handle_ui_cancel():
 		get_viewport().set_input_as_handled()
 		return
@@ -29034,6 +29149,8 @@ func game_keyboard_focus_is_hand_tile(control: Control) -> bool:
 
 func game_keyboard_input_allowed() -> bool:
 	if mode != "offline" and mode != "online_game":
+		return false
+	if mode == "online_game" and online_game_disconnected():
 		return false
 	if chat_panel_open or game_keyboard_focus_is_text_input():
 		return false
@@ -29103,6 +29220,8 @@ func keyboard_extended_number_index(event: InputEventKey, hand_size: int) -> int
 func hand_keyboard_tile_selectable(index: int, hand: Array = []) -> bool:
 	var source := hand if not hand.is_empty() else get_self_hand()
 	if index < 0 or index >= source.size():
+		return false
+	if not can_self_discard():
 		return false
 	var tile := str(source[index])
 	if tile == "":
@@ -29745,7 +29864,7 @@ func poll_online(now_msec: int = -1) -> void:
 		var raw_line := tcp_buffer.slice(0, split_at)
 		tcp_buffer = tcp_buffer.slice(split_at + 1)
 		if raw_line.size() > ONLINE_MESSAGE_MAX_BYTES:
-			close_online_transport("服务器消息过大，已断开连接。")
+			close_online_transport("服务器消息过大，已断开连接。", true, false)
 			return
 		if not raw_line.is_empty() and raw_line[raw_line.size() - 1] == 13:
 			raw_line.resize(raw_line.size() - 1)
@@ -29753,7 +29872,7 @@ func poll_online(now_msec: int = -1) -> void:
 		if line.length() > 0:
 			handle_online_message(line)
 	if tcp_buffer.size() > ONLINE_MESSAGE_MAX_BYTES:
-		close_online_transport("服务器消息过大，已断开连接。")
+		close_online_transport("服务器消息过大，已断开连接。", true, false)
 		return
 	refresh_online_lobby_state()
 
@@ -30873,6 +30992,8 @@ func hand_group_label(tile: String) -> String:
 
 
 func hand_tray_text() -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "牌桌只读 · 点击重连"
 	if has_pending_danger_discard():
 		# 顶部 HUD 和确认 dock 负责完整风险说明；托盘只展示牌面与高亮目标。
 		return "目标牌已标记" if player_ai_assist_enabled() else "选择出牌"
@@ -30905,6 +31026,8 @@ func hand_tray_text() -> String:
 
 
 func hand_shortcut_hint_text() -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "点击重连 · 手牌不可操作"
 	if has_pending_danger_discard():
 		return "Enter 确认 · Esc 取消"
 	if has_pending_claim_window():
@@ -31027,6 +31150,8 @@ func hand_tray_state_text() -> String:
 			return "出牌"
 		return "等待"
 	if mode == "online_game":
+		if online_game_disconnected():
+			return "只读"
 		if has_pending_claim_window():
 			return "响应"
 		if online_waiting_for_server:
@@ -31046,6 +31171,8 @@ func hand_tray_state_fill() -> Color:
 			return Color(0.30, 0.28, 0.24, 0.68)
 		"同步":
 			return Color(0.30, 0.46, 0.58, 0.72)
+		"只读":
+			return Color(0.48, 0.38, 0.28, 0.72)
 	return Color(0.34, 0.30, 0.24, 0.68)
 
 func hand_tray_state_border() -> Color:
@@ -31115,6 +31242,8 @@ func pending_claim_state() -> Dictionary:
 			return {}
 		return offline_pending_claim.duplicate(true)
 	if mode != "online_game":
+		return {}
+	if online_game_disconnected():
 		return {}
 	var online_pending = online_game.get("pending", null)
 	if typeof(online_pending) != TYPE_DICTIONARY:
@@ -31270,6 +31399,8 @@ func action_intent_rect_for_count(count: int) -> Rect2:
 	return Rect2(Vector2(left, 0.604), Vector2(0.975, 0.650))  # r437 above dock (height unchanged)
 
 func action_intent_text(count: int) -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "已断线 · 点击重连"
 	if has_pending_claim_window():
 		return "响应 · 选择动作或过"
 	if mode == "offline" and offline_phase == "ended":
@@ -31283,6 +31414,8 @@ func action_intent_text(count: int) -> String:
 	return "可用操作 · %d项" % count
 
 func action_intent_color() -> Color:
+	if mode == "online_game" and online_game_disconnected():
+		return Color(0.72, 0.48, 0.30)
 	if has_pending_claim_window():
 		return Color(0.86, 0.62, 0.32)
 	if mode == "offline" and has_pending_danger_discard():
@@ -31294,6 +31427,8 @@ func action_intent_color() -> Color:
 	return Color(0.66, 0.58, 0.38)
 
 func action_intent_icon_name() -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "refresh-cw"
 	if mode == "offline" and has_pending_danger_discard():
 		return "alert-triangle"
 	if mode == "offline" and can_self_discard():
@@ -31305,6 +31440,8 @@ func action_intent_icon_name() -> String:
 	return "info"
 
 func action_intent_fallback_icon_text() -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "↻"
 	if mode == "offline" and has_pending_danger_discard():
 		return "!"
 	if mode == "offline" and can_self_discard():

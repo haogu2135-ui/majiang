@@ -725,7 +725,8 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 	apply_rect(text, rect_full(0.130, 0.10, 0.845, 0.90))
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(text)
-	var count_badge = make_badge(intent, rect_full(0.858, 0.18, 0.982, 0.82), "%d项" % count, 10, color.darkened(0.20), color.lightened(0.12), Color(0.96, 0.95, 0.84))
+	var intent_count_text := "重连" if mode == "online_game" and online_game_disconnected() else "%d项" % count
+	var count_badge = make_badge(intent, rect_full(0.858, 0.18, 0.982, 0.82), intent_count_text, 10, color.darkened(0.20), color.lightened(0.12), Color(0.96, 0.95, 0.84))
 	count_badge.name = "ActionIntentCount"
 	rail.modulate = Color(1, 1, 1, 0.80)
 	return intent
@@ -6216,30 +6217,43 @@ func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 	return "房主" if slot == 0 else "已入席"
 
 
-func add_online_detail_touch_target(parent: Control, target_name: String, tooltip: String, callback: Callable) -> Button:
+func add_online_detail_touch_target(parent: Control, target_name: String, tooltip: String, callback: Callable, target_rect: Rect2 = Rect2(0.0, 0.0, 1.0, 1.0)) -> Button:
 	# Use a native button for reliable screen-touch dispatch; the parent keeps the authored visual face.
 	var target := Button.new()
 	target.name = target_name
 	target.text = ""
 	target.tooltip_text = tooltip
 	target.flat = true
-	target.focus_mode = Control.FOCUS_NONE
-	target.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	configure_touch_button(target)
 	target.mouse_filter = Control.MOUSE_FILTER_STOP
 	target.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var empty_style := StyleBoxEmpty.new()
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		target.add_theme_stylebox_override(state, empty_style)
-	apply_rect(target, rect_full(0.0, 0.0, 1.0, 1.0))
+	apply_rect(target, target_rect)
 	parent.add_child(target)
 	target.pressed.connect(callback)
 	return target
+
+
+func normalized_rect_in_parent(global_rect: Rect2, parent: Control) -> Rect2:
+	var parent_rect := parent.get_global_rect()
+	if parent_rect.size.x <= 0.0 or parent_rect.size.y <= 0.0:
+		return rect_full(0.0, 0.0, 1.0, 1.0)
+	var local_rect := Rect2(global_rect.position - parent_rect.position, global_rect.size)
+	return rect_full(
+		local_rect.position.x / parent_rect.size.x,
+		local_rect.position.y / parent_rect.size.y,
+		(local_rect.position.x + local_rect.size.x) / parent_rect.size.x,
+		(local_rect.position.y + local_rect.size.y) / parent_rect.size.y
+	)
 
 
 func draw_online_lobby_roster_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
 	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.50), "ui_dark_scrim")
 	roster.name = "OnlineLobbyRosterPanel"
+	roster.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(roster)
 	var title = make_label(roster, "玩家席位", 13, Color(0.94, 0.94, 0.80), true)
 	title.name = "OnlineLobbyRosterTitle"
@@ -6254,12 +6268,8 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		row_fill.a *= 0.82
 		var row = make_gpt_center_crop_plate_rect(rect_full(0.035, top, 0.965, top + 0.165), row_fill, "ui_dark_scrim")
 		row.name = "OnlineLobbyRosterRow_%d" % i
-		row.mouse_filter = Control.MOUSE_FILTER_STOP
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var detail_slot := i
-		row.gui_input.connect(func(event: InputEvent) -> void:
-			if online_detail_press_event(event):
-				show_online_roster_detail(detail_slot)
-		)
 		roster.add_child(row)
 		var seal = make_gpt_gate(rect_full(0.020, 0.145, 0.092, 0.855), Color(0.42, 0.68, 0.50, 0.20 if active else 0.10))
 		seal.name = "OnlineLobbyRosterSeatSeal_%d" % i
@@ -6280,9 +6290,10 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		state.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		state.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(state)
-		var roster_touch_target := add_online_detail_touch_target(row, "OnlineLobbyRosterTouchTarget_%d" % i, "查看完整玩家昵称", func() -> void:
+		var roster_touch_rect := normalized_rect_in_parent(row.get_global_rect(), root_layer)
+		var roster_touch_target := add_online_detail_touch_target(root_layer, "OnlineLobbyRosterTouchTarget_%d" % i, "查看完整玩家昵称", func() -> void:
 			show_online_roster_detail(detail_slot)
-		)
+		, roster_touch_rect)
 		roster_touch_target.disabled = not active
 		roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 	return roster
@@ -9379,14 +9390,29 @@ func draw_shop_item_count_badge_art(parent: Control, item_color: Color, count: i
 	return art
 
 
-func texture_has_transparent_edge(texture: Texture2D) -> bool:
+func texture_has_transparent_edge(texture: Texture2D, source_path: String = "") -> bool:
 	if texture == null:
 		return false
-	var image = texture.get_image()
+	# VRAM-compressed textures cannot be sampled through get_image() on every
+	# renderer. Inspect the authored source PNG when it is available instead.
+	var image: Image = null
+	if source_path != "" and FileAccess.file_exists(source_path):
+		var source_file := FileAccess.open(source_path, FileAccess.READ)
+		if source_file != null:
+			var source_image := ClassDB.instantiate("Image") as Image
+			if source_image != null and source_image.load_png_from_buffer(source_file.get_buffer(source_file.get_length())) == OK:
+				image = source_image
+	if image == null:
+		if texture is CompressedTexture2D:
+			return false
+		image = texture.get_image()
 	if image == null or image.is_empty():
 		return false
-	if image.is_compressed() and image.decompress() != OK:
-		return false
+	if image.is_compressed():
+		var decompressed: Image = image.duplicate()
+		if decompressed.decompress() != OK:
+			return false
+		image = decompressed
 	var width = image.get_width()
 	var height = image.get_height()
 	if width <= 1 or height <= 1:
@@ -9400,8 +9426,10 @@ func texture_has_transparent_edge(texture: Texture2D) -> bool:
 	return false
 
 func shop_charm_texture_is_safe(item_id: String) -> bool:
-	var texture = optional_gpt_illustration_texture(shop_charm_gpt_key(item_id))
-	return texture_has_transparent_edge(texture)
+	var charm_key := shop_charm_gpt_key(item_id)
+	var texture = optional_gpt_illustration_texture(charm_key)
+	var source_path := str(GPT_ILLUSTRATION_ASSET_PATHS.get(charm_key, ""))
+	return texture_has_transparent_edge(texture, source_path)
 
 func draw_shop_native_charm_art(row: Control, item_color: Color, item_id: String, icon_name: String) -> Control:
 	# r213: GPT chrome conversion
@@ -13242,6 +13270,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	row.add_child(button)
 
 func compact_setting_status(title: String, status: String) -> String:
+	if title == "出牌辅助":
+		return "风险: 开" if status.contains("开启") else "风险: 关"
 	if title == "本地进度":
 		return "可清空"
 	if title == "隐私诊断":

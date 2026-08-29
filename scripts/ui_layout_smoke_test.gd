@@ -1450,6 +1450,25 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var reconnect_button := scene.find_child("OnlineReconnectGameButton", true, false) as Button
 	check(reconnect_button != null and reconnect_button.tooltip_text.contains("恢复当前牌局") and reconnect_button.has_focus(), "online disconnect exposes a focused reconnect CTA and keeps the board read-only at %s" % viewport_size)
 	check(scene.find_child("ChatActionButton", true, false) == null and scene.find_child("PendingClaimResponseGrid", true, false) == null, "online disconnect hides network actions until reconnection at %s" % viewport_size)
+	check(not scene.can_self_discard() and not scene.has_pending_claim_window(), "online disconnect closes stale discard and response gates at %s" % viewport_size)
+	check(scene.hand_tray_text() == "牌桌只读 · 点击重连" and scene.hand_shortcut_hint_text() == "点击重连 · 手牌不可操作", "online disconnect hand copy is read-only and points to reconnect at %s" % viewport_size)
+	check(scene.hand_tray_state_text() == "只读", "online disconnect hand state badge identifies the tray as read-only at %s" % viewport_size)
+	var disconnected_hand_tiles := controls_with_name_prefix(scene, "HandTile_")
+	var disconnected_tile_buttons := 0
+	for hand_tile in disconnected_hand_tiles:
+		disconnected_tile_buttons += hand_tile.find_children("*", "Button", true, false).size()
+	check(disconnected_hand_tiles.size() == scene.get_self_hand().size() and disconnected_tile_buttons == 0, "online disconnect renders every hand tile without a clickable Button at %s" % viewport_size)
+	var intent_text := scene.find_child("ActionIntentText", true, false) as Label
+	var intent_count := scene.find_child("ActionIntentCount", true, false) as Control
+	var intent_count_label: Label = null
+	if intent_count != null:
+		var intent_count_labels := intent_count.find_children("*", "Label", true, false)
+		if not intent_count_labels.is_empty():
+			intent_count_label = intent_count_labels[0] as Label
+	check(intent_text != null and intent_text.text == "已断线 · 点击重连" and not intent_text.text.contains("等待") and not intent_text.text.contains("提交响应"), "online disconnect intent matches the sole recovery action at %s" % viewport_size)
+	check(intent_count_label != null and intent_count_label.text == "重连" and scene.action_bar_button_count() == 1, "online disconnect intent badge and action count expose only reconnect at %s" % viewport_size)
+	check(scene.find_child("PendingClaimIllustration", true, false) == null and scene.hand_keyboard_selection == -1 and not scene.hand_keyboard_tile_selectable(0, scene.get_self_hand()), "online disconnect clears stale response art and keyboard selection at %s" % viewport_size)
+	check(scene.online_action_validation_error({"type": "discard", "tile": "3W"}).contains("断线"), "online disconnect rejects programmatic discard submission at %s" % viewport_size)
 	scene.online_feedback = waiting_feedback_before
 	scene.online_waiting_for_server = waiting_state_before
 	scene.online_retry_available = retry_available_before
@@ -2314,6 +2333,9 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			check(not rects_overlap(screen_rect(title_label), button_rect), "settings row %s title clears the button lane at %s" % [title, viewport_size])
 		if status_label != null:
 			check(status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and status_label.get_theme_font_size("font_size") >= 13 and relative_luma(status_label.get_theme_color("font_color")) >= 0.94, "settings row %s status stays bright clipped and readable at %s" % [title, viewport_size])
+			if viewport_size.y <= 720.0 and title == "出牌辅助":
+				check(status_label.text == ("风险: 开" if scene.ai_assist_enabled else "风险: 关"), "compact discard-assist status keeps the risk toggle readable at %s" % viewport_size)
+				check(not status_label.text.contains("...") and not status_label.text.contains("…"), "compact discard-assist status avoids visible truncation at %s" % viewport_size)
 			check(not rects_overlap(screen_rect(status_label), button_rect), "settings row %s status clears the button lane at %s" % [title, viewport_size])
 		if text_panel != null:
 			var text_panel_rect = screen_rect(text_panel)
@@ -2452,6 +2474,13 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label
 		check(room_badge_label != null and room_badge_label.text == "房间号 连接后显示", "disconnected lobby replaces the room badge with a connection-state hint at %s" % viewport_size)
 		check(not room_badge.visible and room_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE, "disconnected lobby hides the room detail target until a room snapshot exists at %s" % viewport_size)
+		var room_touch_target := scene.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+		check(room_touch_target != null and room_touch_target.get_parent() == scene.root_layer, "disconnected lobby keeps the room detail target on the safe content layer at %s" % viewport_size)
+		if room_touch_target != null:
+			var room_target_rect := screen_rect(room_touch_target)
+			var room_badge_rect := screen_rect(room_badge)
+			check(room_target_rect.grow(1.0).encloses(room_badge_rect) and room_badge_rect.grow(1.0).encloses(room_target_rect), "room detail target stays aligned with the room badge at %s" % viewport_size)
+			check(room_touch_target.disabled and room_touch_target.mouse_filter == Control.MOUSE_FILTER_IGNORE, "disconnected room detail target remains inert at %s" % viewport_size)
 	check(endpoint_badge != null and endpoint_label != null and state_badge != null and connection_state_label != null, "online lobby exposes top endpoint and connection-state badges at %s" % viewport_size)
 	check(name_edit != null and name_edit.max_length == scene.ONLINE_NAME_MAX_LENGTH, "online lobby nickname input enforces its client boundary at %s" % viewport_size)
 	check(host_edit != null and host_edit.max_length == scene.ONLINE_HOST_MAX_LENGTH and host_edit.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_URL, "online lobby host input enforces its boundary and URL keyboard at %s" % viewport_size)
@@ -2559,7 +2588,12 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 				var row_rect = screen_rect(row)
 				check(roster_rect.grow(1.0).encloses(row_rect), "online lobby roster row %d stays inside roster panel at %s" % [i, viewport_size])
 				check(row_rect.size.y >= max(18.0, roster_rect.size.y * 0.14), "online lobby roster row %d keeps readable height at %s" % [i, viewport_size])
-				check(row.mouse_filter == Control.MOUSE_FILTER_STOP, "online lobby roster row %d exposes a touch detail target at %s" % [i, viewport_size])
+				var roster_touch_target := scene.find_child("OnlineLobbyRosterTouchTarget_%d" % i, true, false) as Button
+				check(roster_touch_target != null and roster_touch_target.get_parent() == scene.root_layer, "online lobby roster row %d keeps a root-layer detail target at %s" % [i, viewport_size])
+				if roster_touch_target != null:
+					var roster_target_rect := screen_rect(roster_touch_target)
+					check(roster_target_rect.grow(1.0).encloses(row_rect) and row_rect.grow(1.0).encloses(roster_target_rect), "online lobby roster row %d detail target aligns with its visual row at %s" % [i, viewport_size])
+					check(roster_touch_target.disabled and roster_touch_target.mouse_filter == Control.MOUSE_FILTER_IGNORE, "disconnected lobby roster row %d detail target remains inert at %s" % [i, viewport_size])
 			var name_label = scene.find_child("OnlineLobbyRosterName_%d" % i, true, false) as Label
 			var state_label = scene.find_child("OnlineLobbyRosterState_%d" % i, true, false) as Label
 			check(name_label != null and state_label != null, "online lobby roster row %d exposes name and state labels at %s" % [i, viewport_size])

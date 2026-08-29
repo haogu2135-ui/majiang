@@ -455,31 +455,41 @@ func run() -> void:
 	check(long_name_label != null and long_name_label.tooltip_text == long_name and long_room_label != null and long_room_label.tooltip_text.contains(long_room), "clipped roster and room labels retain their complete source values")
 	var roster_row = scene.find_child("OnlineLobbyRosterRow_0", true, false) as Control
 	if roster_row != null:
-		var roster_touch_target := roster_row.find_child("OnlineLobbyRosterTouchTarget_0", true, false) as Button
-		var roster_touch_probe := {"pressed": 0}
+		var roster_touch_target := scene.find_child("OnlineLobbyRosterTouchTarget_0", true, false) as Button
+		var roster_touch_probe := {"down": 0, "pressed": 0}
 		if roster_touch_target != null:
+			roster_touch_target.button_down.connect(func() -> void:
+				roster_touch_probe["down"] = int(roster_touch_probe.get("down", 0)) + 1
+			)
 			roster_touch_target.pressed.connect(func() -> void:
 				roster_touch_probe["pressed"] = int(roster_touch_probe.get("pressed", 0)) + 1
 			)
-		print("DEBUG roster target exists=%s visible=%s disabled=%s filter=%s rect=%s" % [roster_touch_target != null, roster_touch_target.visible if roster_touch_target != null else false, roster_touch_target.disabled if roster_touch_target != null else true, roster_touch_target.mouse_filter if roster_touch_target != null else -1, roster_touch_target.get_global_rect() if roster_touch_target != null else Rect2()])
-		await send_screen_touch(roster_row.get_global_rect().get_center(), true)
-		await send_screen_touch(roster_row.get_global_rect().get_center(), false)
+		check(roster_touch_target != null and not roster_touch_target.disabled, "active roster row exposes a native detail touch target")
+		var roster_center := roster_touch_target.get_global_rect().get_center() if roster_touch_target != null else roster_row.get_global_rect().get_center()
+		await send_screen_touch(roster_center, true)
+		check(int(roster_touch_probe.get("down", 0)) == 1, "screen touch reaches the active roster detail target")
+		await send_screen_touch(roster_center, false)
 		await settle(0.05)
-		print("DEBUG roster target pressed=%d toast=%s" % [int(roster_touch_probe.get("pressed", 0)), scene.toast_current != null])
+		check(int(roster_touch_probe.get("pressed", 0)) == 1, "screen-touch release activates the roster detail target")
 		check(scene.toast_current != null and has_label_text(scene.toast_current, "玩家 1：%s" % long_name), "single-finger roster press reveals the complete nickname")
 	var room_badge_touch = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
 	if room_badge_touch != null:
-		var room_touch_target := room_badge_touch.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
-		var room_touch_probe := {"pressed": 0}
+		var room_touch_target := scene.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+		var room_touch_probe := {"down": 0, "pressed": 0}
 		if room_touch_target != null:
+			room_touch_target.button_down.connect(func() -> void:
+				room_touch_probe["down"] = int(room_touch_probe.get("down", 0)) + 1
+			)
 			room_touch_target.pressed.connect(func() -> void:
 				room_touch_probe["pressed"] = int(room_touch_probe.get("pressed", 0)) + 1
 			)
-		print("DEBUG room target exists=%s visible=%s disabled=%s filter=%s rect=%s" % [room_touch_target != null, room_touch_target.visible if room_touch_target != null else false, room_touch_target.disabled if room_touch_target != null else true, room_touch_target.mouse_filter if room_touch_target != null else -1, room_touch_target.get_global_rect() if room_touch_target != null else Rect2()])
-		await send_screen_touch(room_badge_touch.get_global_rect().get_center(), true)
-		await send_screen_touch(room_badge_touch.get_global_rect().get_center(), false)
+		check(room_touch_target != null and not room_touch_target.disabled, "room badge exposes a native detail touch target")
+		var room_center := room_touch_target.get_global_rect().get_center() if room_touch_target != null else room_badge_touch.get_global_rect().get_center()
+		await send_screen_touch(room_center, true)
+		check(int(room_touch_probe.get("down", 0)) == 1, "screen touch reaches the room detail target")
+		await send_screen_touch(room_center, false)
 		await settle(0.05)
-		print("DEBUG room target pressed=%d toast=%s" % [int(room_touch_probe.get("pressed", 0)), scene.toast_current != null])
+		check(int(room_touch_probe.get("pressed", 0)) == 1, "screen-touch release activates the room detail target")
 		check(scene.toast_current != null and has_label_text(scene.toast_current, "房间号：%s" % long_room), "single-finger room-badge press reveals the complete room code")
 
 	print("--- F) diagnostic report scroll and modal dismiss paths ---")

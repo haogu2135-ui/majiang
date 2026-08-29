@@ -121,11 +121,11 @@ func reconnect_online_game() -> void:
 		set_online_feedback("正在重新连接房间，请稍候。", false)
 		request_game_render()
 
-func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
+func close_online_transport(message: String, return_to_lobby: bool = true, preserve_game_for_reconnect: bool = true) -> void:
 	# A real transport loss owns the chat lifecycle; a transient status copy
 	# must not make clear_screen infer that the drawer should disappear.
 	chat_panel_open = false
-	var preserve_game_board := mode == "online_game" and not online_game.is_empty()
+	var preserve_game_board := preserve_game_for_reconnect and mode == "online_game" and not online_game.is_empty()
 	var should_show_lobby := return_to_lobby and mode == "online_game" and not preserve_game_board
 	var had_resume_pending := online_resume_pending
 	telemetry_record_event("online_disconnection", {"reason": "error" if message.contains("失败") or message.contains("出错") else "closed"})
@@ -224,10 +224,24 @@ func resume_online_room_after_welcome() -> void:
 		online_resume_join_sent = true
 
 
-func online_message_protocol_version(data: Dictionary) -> int:
-	var value = first_present(data, ["protocolVersion", "protocol_version", "protocol"], -1)
+func online_integer_value(value, fallback: int = -1) -> int:
+	if typeof(value) == TYPE_INT:
+		return int(value)
+	if typeof(value) == TYPE_FLOAT:
+		var numeric_value: float = float(value)
+		return int(round(numeric_value)) if is_finite(numeric_value) and is_equal_approx(numeric_value, round(numeric_value)) else fallback
 	var text := str(value).strip_edges()
-	return int(text) if text.is_valid_int() else -1
+	if text.is_valid_int():
+		return int(text)
+	if text.is_valid_float():
+		var parsed_value := text.to_float()
+		if is_finite(parsed_value) and is_equal_approx(parsed_value, round(parsed_value)):
+			return int(round(parsed_value))
+	return fallback
+
+
+func online_message_protocol_version(data: Dictionary) -> int:
+	return online_integer_value(first_present(data, ["protocolVersion", "protocol_version", "protocol"], -1))
 
 
 func online_message_revision(data: Dictionary, kind: String) -> int:
@@ -239,8 +253,7 @@ func online_message_revision(data: Dictionary, kind: String) -> int:
 	if typeof(source) != TYPE_DICTIONARY:
 		source = data
 	var value = first_present(source, ["revision", "stateVersion", "state_version", "sequence", "seq"], first_present(data, ["revision", "stateVersion", "state_version", "sequence", "seq"], -1))
-	var text := str(value).strip_edges()
-	return int(text) if text.is_valid_int() else -1
+	return online_integer_value(value)
 
 func online_message_identity(data: Dictionary) -> String:
 	var value = first_present(data, ["messageId", "message_id", "eventId", "event_id", "id"], "")
@@ -262,10 +275,10 @@ func accept_online_message(data: Dictionary, kind: String) -> bool:
 		return false
 	var protocol_version := online_message_protocol_version(data)
 	if protocol_version >= 0 and protocol_version != ONLINE_PROTOCOL_VERSION:
-		if protocol_version > ONLINE_PROTOCOL_VERSION:
-			close_online_transport("服务器协议版本过高，请更新客户端。")
-		else:
-			set_online_feedback("服务器协议版本过旧，请更新服务端。", false)
+		var protocol_message := "服务器协议版本过高，请更新客户端。" if protocol_version > ONLINE_PROTOCOL_VERSION else "服务器协议版本过旧，请更新服务端。"
+		close_online_transport(protocol_message, true, false)
+		online_resume_pending = false
+		online_resume_join_sent = false
 		return false
 	var revision := online_message_revision(data, kind)
 	if kind == "roomState" and revision >= 0:
@@ -383,6 +396,8 @@ func online_action_validation_error(payload: Dictionary) -> String:
 		return "缺少操作类型。"
 	if not ["createRoom", "joinRoom", "startGame", "discard", "claim", "chat", "voiceState", "voiceMessage"].has(action_type):
 		return "不支持的联机操作。"
+	if mode == "online_game" and online_game_disconnected() and action_type != "joinRoom":
+		return "牌桌已断线，请先重连。"
 	if action_type == "createRoom":
 		return "昵称不能为空。" if online_name_input() == "" else ""
 	if action_type == "joinRoom":

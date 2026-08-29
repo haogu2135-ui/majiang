@@ -847,19 +847,17 @@ func _show_online_lobby_impl() -> void:
 	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
-	room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
+	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
 		room_badge_label.tooltip_text = room_badge_text
-	var room_touch_target := add_online_detail_touch_target(room_badge, "OnlineLobbyRoomBadgeTouchTarget", "查看完整房间号", func() -> void:
+	var room_touch_target := add_online_detail_touch_target(root_layer, "OnlineLobbyRoomBadgeTouchTarget", "查看完整房间号", func() -> void:
 		show_online_room_code_detail()
-	)
+	, normalized_rect_in_parent(room_badge.get_global_rect(), root_layer))
 	room_touch_target.visible = room_snapshot_visible
 	room_touch_target.disabled = not room_snapshot_visible
 	room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
-	if room_badge_label != null:
-		room_badge.move_child(room_touch_target, room_badge_label.get_index())
 	draw_online_lobby_room_art(log_panel)
 	draw_online_lobby_roster_panel(log_panel)
 	draw_online_lobby_log_stream_art(log_panel)
@@ -987,13 +985,13 @@ func refresh_online_lobby_state() -> void:
 	var room_badge = root_layer.find_child("OnlineLobbyRoomBadge", true, false)
 	if room_badge != null:
 		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
+		room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		room_badge.visible = show_room_snapshot
+		var room_touch_target = root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+		if room_touch_target != null:
+			room_touch_target.visible = show_room_snapshot
+			room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
 		if room_badge_label != null:
-			room_badge.visible = show_room_snapshot
-			room_badge.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
-			var room_touch_target = room_badge.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
-			if room_touch_target != null:
-				room_touch_target.visible = show_room_snapshot
-				room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
 			room_badge_label.text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
 			room_badge_label.tooltip_text = room_badge_label.text
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
@@ -1068,7 +1066,7 @@ func refresh_online_room_content() -> void:
 			slot_state_label.text = online_lobby_slot_state(entry, slot)
 		if roster_row != null:
 			roster_row.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.76)
-			var roster_touch_target = roster_row.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+			var roster_touch_target = root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
 			if roster_touch_target != null:
 				roster_touch_target.disabled = not active
 				roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
@@ -1081,31 +1079,72 @@ func refresh_online_room_content() -> void:
 		log_count_label.text = "%d条" % log_count
 	render_room_log()
 
-func online_detail_press_event(event: InputEvent) -> bool:
-	if event is InputEventMouseButton:
-		var mouse_event := event as InputEventMouseButton
-		return mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
-	if event is InputEventScreenTouch:
-		return (event as InputEventScreenTouch).pressed
-	return false
+
+func online_detail_target_list() -> Array[Button]:
+	var targets: Array[Button] = []
+	if root_layer == null or not is_instance_valid(root_layer):
+		return targets
+	var room_target := root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+	if room_target != null:
+		targets.append(room_target)
+	for slot in range(4):
+		var roster_target := root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+		if roster_target != null:
+			targets.append(roster_target)
+	return targets
+
+
+func online_detail_target_at(position: Vector2) -> Button:
+	for target in online_detail_target_list():
+		if target.visible and not target.disabled and target.get_global_rect().has_point(position):
+			return target
+	return null
+
+
+func online_detail_pressed_target() -> Button:
+	for target in online_detail_target_list():
+		if bool(target.get_meta("online_detail_pressed", false)):
+			return target
+	return null
 
 
 func handle_online_detail_touch(event: InputEvent) -> bool:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return false
-	if not event is InputEventScreenTouch or not (event as InputEventScreenTouch).pressed:
+	var position := Vector2.ZERO
+	var pressed := false
+	var is_pointer_event := false
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.index != 0:
+			return false
+		position = touch.position
+		pressed = touch.pressed
+		is_pointer_event = true
+	elif event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		position = mouse_event.position
+		pressed = mouse_event.pressed
+		is_pointer_event = true
+	if not is_pointer_event:
 		return false
-	var touch := event as InputEventScreenTouch
-	var room_target := root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
-	if room_target != null and room_target.visible and not room_target.disabled and room_target.get_global_rect().has_point(touch.position):
-		show_online_room_code_detail()
-		return true
-	for slot in range(4):
-		var roster_target := root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
-		if roster_target != null and roster_target.visible and not roster_target.disabled and roster_target.get_global_rect().has_point(touch.position):
-			show_online_roster_detail(slot)
+	var target := online_detail_target_at(position) if pressed else online_detail_pressed_target()
+	if target == null:
+		return false
+	if pressed:
+		if bool(target.get_meta("online_detail_pressed", false)):
 			return true
-	return false
+		target.set_meta("online_detail_pressed", true)
+		target.grab_focus()
+		target.emit_signal("button_down")
+		return true
+	target.set_meta("online_detail_pressed", false)
+	target.emit_signal("button_up")
+	if target.visible and not target.disabled and target.get_global_rect().has_point(position):
+		target.emit_signal("pressed")
+	return true
 
 
 func show_online_room_code_detail() -> void:
@@ -3493,8 +3532,17 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
 	var stay_dur := float(duration_msec) / 1000.0
 	var fade_dur := 0.28
-	var tw := create_screen_tween()
+	var tw := create_screen_tween(true)
 	toast_tween = tw
+	if reduce_motion_enabled:
+		# Reduced motion removes movement and fade, but keeps the message readable
+		# for its full dwell time so feedback is not effectively skipped.
+		toast_bg.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		toast_bg.offset_top = 0.0
+		toast_bg.scale = Vector2.ONE
+		tw.tween_interval(stay_dur)
+		tw.tween_callback(Callable(self, "cleanup_toast_by_id").bind(toast_bg.get_instance_id(), toast_container.get_instance_id()))
+		return
 	# 入场 - 从上方弹出 + 缩放弹跳
 	tw.tween_property(toast_bg, "modulate:a", 1.0, slide_dur).from(0.0)
 	tw.parallel().tween_property(toast_bg, "offset_top", 0.0, slide_dur).from(-28.0).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

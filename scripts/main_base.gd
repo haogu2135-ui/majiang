@@ -1210,12 +1210,12 @@ const AMBIENT_RAINDROP_COUNT := 28
 const AMBIENT_FIREWORK_COUNT := 6
 
 # ===== Shared UI helpers =====
-func create_screen_tween() -> Tween:
+func create_screen_tween(preserve_timing: bool = false) -> Tween:
 	var tween := create_tween()
 	screen_tweens.append(tween)
 	# Reduced motion keeps the feedback node and its completion callback, but
 	# resolves the visual transition immediately instead of hiding the event.
-	if reduce_motion_enabled:
+	if reduce_motion_enabled and not preserve_timing:
 		tween.set_speed_scale(1000.0)
 	tween.finished.connect(Callable(self, "_forget_screen_tween").bind(tween))
 	return tween
@@ -1243,7 +1243,7 @@ func ui_cjk_font() -> Font:
 func add_background(parent: Control) -> void:
 	# Utility pages own their reading surface. Keep this shared authored wash quiet
 	# so a page panel does not become a second opaque full-screen scrim.
-	var base = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.10, false)
+	var base = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.04, false)
 	if base == null:
 		base = make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
 		parent.add_child(base)
@@ -1259,7 +1259,7 @@ func add_menu_background(parent: Control) -> void:
 func add_rules_background(parent: Control) -> void:
 	# The codex panel owns the reading frame; the page-level layer remains a quiet
 	# authored wash instead of another full-screen dark bitmap.
-	var codex = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.10, false)
+	var codex = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.04, false)
 	if codex == null:
 		codex = make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
 		parent.add_child(codex)
@@ -1269,7 +1269,7 @@ func add_battle_background(parent: Control) -> void:
 	# Normal battle renders own one authored room plate. Keep the dark plate only as a
 	# fallback under a missing/transparent asset, so two full-screen textures do not
 	# compete beneath the HUD.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
+	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.15, false)
 	if battle_scene != null:
 		battle_scene.name = "OfflineBattleGuofengBackdrop"
 	else:
@@ -4583,6 +4583,8 @@ func get_last_discard_seat() -> int:
 func can_self_discard() -> bool:
 	if mode == "offline":
 		return offline_phase == "await_discard" and current_seat == 0 and not offline_turn_needs_draw
+	if online_resume_pending or online_feedback.find("连接已断开") >= 0 or online_feedback.find("重新连接") >= 0:
+		return false
 	return str(online_game.get("phase", "")) == "awaitDiscard" and int(online_game.get("currentSeat", -1)) == int(online_game.get("youSeat", -2))
 
 func discard_preview(seat: int) -> String:

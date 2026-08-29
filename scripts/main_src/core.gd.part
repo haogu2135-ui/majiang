@@ -448,6 +448,8 @@ func game_keyboard_focus_is_hand_tile(control: Control) -> bool:
 func game_keyboard_input_allowed() -> bool:
 	if mode != "offline" and mode != "online_game":
 		return false
+	if mode == "online_game" and online_game_disconnected():
+		return false
 	if chat_panel_open or game_keyboard_focus_is_text_input():
 		return false
 	return true
@@ -516,6 +518,8 @@ func keyboard_extended_number_index(event: InputEventKey, hand_size: int) -> int
 func hand_keyboard_tile_selectable(index: int, hand: Array = []) -> bool:
 	var source := hand if not hand.is_empty() else get_self_hand()
 	if index < 0 or index >= source.size():
+		return false
+	if not can_self_discard():
 		return false
 	var tile := str(source[index])
 	if tile == "":
@@ -1158,7 +1162,7 @@ func poll_online(now_msec: int = -1) -> void:
 		var raw_line := tcp_buffer.slice(0, split_at)
 		tcp_buffer = tcp_buffer.slice(split_at + 1)
 		if raw_line.size() > ONLINE_MESSAGE_MAX_BYTES:
-			close_online_transport("服务器消息过大，已断开连接。")
+			close_online_transport("服务器消息过大，已断开连接。", true, false)
 			return
 		if not raw_line.is_empty() and raw_line[raw_line.size() - 1] == 13:
 			raw_line.resize(raw_line.size() - 1)
@@ -1166,7 +1170,7 @@ func poll_online(now_msec: int = -1) -> void:
 		if line.length() > 0:
 			handle_online_message(line)
 	if tcp_buffer.size() > ONLINE_MESSAGE_MAX_BYTES:
-		close_online_transport("服务器消息过大，已断开连接。")
+		close_online_transport("服务器消息过大，已断开连接。", true, false)
 		return
 	refresh_online_lobby_state()
 
@@ -2286,6 +2290,8 @@ func hand_group_label(tile: String) -> String:
 
 
 func hand_tray_text() -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "牌桌只读 · 点击重连"
 	if has_pending_danger_discard():
 		# 顶部 HUD 和确认 dock 负责完整风险说明；托盘只展示牌面与高亮目标。
 		return "目标牌已标记" if player_ai_assist_enabled() else "选择出牌"
@@ -2318,6 +2324,8 @@ func hand_tray_text() -> String:
 
 
 func hand_shortcut_hint_text() -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "点击重连 · 手牌不可操作"
 	if has_pending_danger_discard():
 		return "Enter 确认 · Esc 取消"
 	if has_pending_claim_window():
@@ -2440,6 +2448,8 @@ func hand_tray_state_text() -> String:
 			return "出牌"
 		return "等待"
 	if mode == "online_game":
+		if online_game_disconnected():
+			return "只读"
 		if has_pending_claim_window():
 			return "响应"
 		if online_waiting_for_server:
@@ -2459,6 +2469,8 @@ func hand_tray_state_fill() -> Color:
 			return Color(0.30, 0.28, 0.24, 0.68)
 		"同步":
 			return Color(0.30, 0.46, 0.58, 0.72)
+		"只读":
+			return Color(0.48, 0.38, 0.28, 0.72)
 	return Color(0.34, 0.30, 0.24, 0.68)
 
 func hand_tray_state_border() -> Color:
@@ -2528,6 +2540,8 @@ func pending_claim_state() -> Dictionary:
 			return {}
 		return offline_pending_claim.duplicate(true)
 	if mode != "online_game":
+		return {}
+	if online_game_disconnected():
 		return {}
 	var online_pending = online_game.get("pending", null)
 	if typeof(online_pending) != TYPE_DICTIONARY:
@@ -2683,6 +2697,8 @@ func action_intent_rect_for_count(count: int) -> Rect2:
 	return Rect2(Vector2(left, 0.604), Vector2(0.975, 0.650))  # r437 above dock (height unchanged)
 
 func action_intent_text(count: int) -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "已断线 · 点击重连"
 	if has_pending_claim_window():
 		return "响应 · 选择动作或过"
 	if mode == "offline" and offline_phase == "ended":
@@ -2696,6 +2712,8 @@ func action_intent_text(count: int) -> String:
 	return "可用操作 · %d项" % count
 
 func action_intent_color() -> Color:
+	if mode == "online_game" and online_game_disconnected():
+		return Color(0.72, 0.48, 0.30)
 	if has_pending_claim_window():
 		return Color(0.86, 0.62, 0.32)
 	if mode == "offline" and has_pending_danger_discard():
@@ -2707,6 +2725,8 @@ func action_intent_color() -> Color:
 	return Color(0.66, 0.58, 0.38)
 
 func action_intent_icon_name() -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "refresh-cw"
 	if mode == "offline" and has_pending_danger_discard():
 		return "alert-triangle"
 	if mode == "offline" and can_self_discard():
@@ -2718,6 +2738,8 @@ func action_intent_icon_name() -> String:
 	return "info"
 
 func action_intent_fallback_icon_text() -> String:
+	if mode == "online_game" and online_game_disconnected():
+		return "↻"
 	if mode == "offline" and has_pending_danger_discard():
 		return "!"
 	if mode == "offline" and can_self_discard():

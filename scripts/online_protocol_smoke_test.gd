@@ -92,6 +92,8 @@ func run() -> void:
 	check(scene.online_connection_host == "127.0.0.1", "connect freezes the normalized host as the active endpoint")
 	check(scene.online_connection_endpoint_text() == "127.0.0.1:%d" % PORT, "endpoint helper reports the actual connected host and fixed port")
 	check(scene.bounded_online_input("  ABCDE  ", 3) == "ABC", "bounded online input trims and limits client text")
+	check(scene.online_message_protocol_version({"protocolVersion": 0.0}) == 0, "JSON float protocol versions normalize as integers")
+	check(scene.online_message_revision({"revision": 7.0}, "gameState") == 7, "JSON float state revisions normalize as integers")
 
 	await pump(scene, 12)
 	check(server_peer != null, "client establishes a real StreamPeerTCP connection")
@@ -169,20 +171,19 @@ func run() -> void:
 
 	server_peer.disconnect_from_host()
 	await pump(scene, 14)
-	check(scene.online_room.is_empty() and scene.online_game.is_empty(), "disconnect clears room and game snapshots")
+	check(scene.online_room.is_empty() and not scene.online_game.is_empty(), "disconnect clears the room snapshot but preserves the game snapshot for recovery")
 	check(not scene.online_waiting_for_server, "disconnect clears the waiting-for-server state")
-	check(scene.mode == "online_lobby", "an in-game disconnect returns the player to the online lobby")
-	check(scene.online_feedback.contains("连接已断开"), "the returned lobby explains why the online game ended")
+	check(scene.mode == "online_game", "an in-game disconnect keeps the recovery view in the online game")
+	check(scene.online_feedback.contains("连接已断开"), "the recovery view explains why the online game was interrupted")
 
-	# Reconnect on the same listening fixture and exercise server feedback after
-	# the client has returned to a clean lobby state.
+	# Reconnect on the same listening fixture and exercise server feedback while
+	# the preserved game snapshot remains available behind the recovery CTA.
 	received_lines.clear()
 	server_peer = null
-	scene.mode = "online_lobby"
 	if not is_instance_valid(scene.online_name_edit):
 		scene.online_name_edit = LineEdit.new()
 		scene.add_child(scene.online_name_edit)
-	check(scene.online_name_edit.text == expected_name, "disconnect recovery preserves the normalized player identity")
+	check(scene.online_player_name == expected_name, "disconnect recovery preserves the normalized player identity")
 	scene.online_name_edit.text = "协议测试者"
 	if not is_instance_valid(scene.online_host_edit):
 		scene.online_host_edit = LineEdit.new()
@@ -241,6 +242,28 @@ func run() -> void:
 	check(scene.tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED, "oversized unterminated frames are rejected with a transport disconnect")
 	check(scene.tcp_buffer.is_empty() and scene.online_room.is_empty() and scene.online_game.is_empty(), "protocol rejection clears buffered bytes and stale online snapshots")
 	check(scene.online_feedback.contains("消息过大"), "protocol rejection exposes an actionable lobby error")
+
+	# An old server must follow the same terminal cleanup path as a future server:
+	# return to the lobby and discard any stale in-game snapshot instead of leaving
+	# a transport that can continue receiving incompatible state.
+	server_peer = null
+	received_lines.clear()
+	scene.mode = "online_game"
+	scene.selected_room = "QA180"
+	scene.online_resume_context = {"room": "QA180", "host": "127.0.0.1", "name": expected_name}
+	scene.online_resume_pending = false
+	scene.online_game = {"roomCode": "QA180", "phase": "awaitDiscard", "youSeat": 0, "currentSeat": 0, "hand": ["3W"]}
+	scene.online_host_edit.text = "127.0.0.1"
+	scene.connect_online()
+	await pump(scene, 12)
+	check(server_peer != null and server_peer.get_status() == StreamPeerTCP.STATUS_CONNECTED, "client reconnects before testing an old protocol server")
+	var old_protocol_hello := await wait_for_line(scene, "hello")
+	check(not old_protocol_hello.is_empty(), "old protocol fixture receives the fresh client hello")
+	await send_fragmented({"type": "welcome", "protocolVersion": scene.ONLINE_PROTOCOL_VERSION - 1})
+	await pump(scene, 12)
+	check(scene.tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and scene.mode == "online_lobby", "old protocol version closes transport and returns to the lobby")
+	check(scene.tcp_buffer.is_empty() and scene.online_room.is_empty() and scene.online_game.is_empty() and not scene.online_resume_pending, "old protocol rejection clears stale snapshots and resume markers")
+	check(scene.online_feedback.contains("协议版本过旧"), "old protocol rejection explains the required server update")
 
 	scene.shutdown_runtime()
 	scene.queue_free()
