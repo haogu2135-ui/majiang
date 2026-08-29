@@ -93,15 +93,22 @@ func connect_online() -> void:
 	clear_online_room_snapshot()
 	clear_online_feedback()
 	sent_hello = false
+	online_resume_join_sent = false
 	var err = tcp.connect_to_host(host, DEFAULT_PORT)
 	set_status("正在连接 %s ..." % online_connection_endpoint_text())
 	refresh_online_lobby_state()
 	if err != OK:
+		telemetry_record_event("online_connection", {"result": "error"})
 		set_online_feedback("连接失败：%s" % error_string(err), false)
 
 func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
 	var should_show_lobby := return_to_lobby and mode == "online_game"
+	var had_resume_pending := online_resume_pending
+	telemetry_record_event("online_disconnection", {"reason": "error" if message.contains("失败") or message.contains("出错") else "closed"})
 	remember_online_resume_context()
+	var resume_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+	online_resume_pending = had_resume_pending or (resume_room != "" and (mode == "online_game" or not online_room.is_empty()))
+	online_resume_join_sent = false
 	tcp.disconnect_from_host()
 	tcp_status = tcp.get_status()
 	tcp_buffer.clear()
@@ -162,6 +169,22 @@ func remember_online_resume_context() -> void:
 		"name": online_player_name,
 		"room": bounded_online_input(room_code, ONLINE_ROOM_CODE_MAX_LENGTH),
 	}
+
+
+func resume_online_room_after_welcome() -> void:
+	if not online_resume_pending or online_resume_join_sent:
+		return
+	var room_code := bounded_online_input(str(online_resume_context.get("room", selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
+	if room_code == "":
+		online_resume_pending = false
+		return
+	var player_name := online_name_input()
+	selected_room = room_code
+	if is_instance_valid(online_room_edit):
+		online_room_edit.text = room_code
+	var sent := send_online_action({"type": "joinRoom", "roomCode": room_code, "name": player_name}, "恢复房间")
+	if sent:
+		online_resume_join_sent = true
 
 
 func online_message_protocol_version(data: Dictionary) -> int:
@@ -386,7 +409,11 @@ func handle_online_ack(data: Dictionary) -> void:
 func handle_online_error(data: Dictionary) -> void:
 	if not online_response_matches_current_action(data):
 		return
+	var resume_join_rejected := online_resume_pending and online_resume_join_sent and online_last_sent_type == "joinRoom"
 	var message = online_server_message_text(data, "操作被服务器拒绝")
+	if resume_join_rejected:
+		online_resume_pending = false
+		online_resume_join_sent = false
 	set_online_feedback("服务器拒绝：%s" % message, false)
 
 func handle_online_log(data: Dictionary) -> void:
@@ -432,6 +459,7 @@ func handle_online_message(line: String) -> void:
 	if kind == "welcome":
 		var server_name = str(data.get("name", "")).strip_edges()
 		set_online_feedback("已连接%s，可建房或入房。" % (("：" + server_name) if server_name != "" else "服务器"), false)
+		resume_online_room_after_welcome()
 	elif kind == "info":
 		set_online_feedback(online_server_message_text(data, "服务器提示"), false)
 	elif kind == "error":
@@ -455,6 +483,10 @@ func handle_online_message(line: String) -> void:
 		clear_online_feedback()
 		online_room = next_room
 		selected_room = bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var resumed_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		if online_resume_pending and selected_room != "" and (resumed_room == "" or selected_room == resumed_room):
+			online_resume_pending = false
+			online_resume_join_sent = false
 		var room_logs = online_room.get("logs", [])
 		if typeof(room_logs) == TYPE_ARRAY:
 			var bounded_logs: Array = []

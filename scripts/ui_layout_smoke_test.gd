@@ -616,6 +616,16 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_daily_login_layout(scene, actual_viewport)
 	scene.show_menu(true)
 	var diagnostic_lines := diagnostic_layout_lines()
+	scene.active_round_id = "UI-REPLAY"
+	scene.round_event_history.clear()
+	scene.round_event_sequence = 0
+	scene.record_round_event("discard", {"seat": 0, "tile": "5W"})
+	scene.record_round_event("claim", {"seat": 1, "from_seat": 0, "claim": "chi", "tile": "5W"})
+	scene.show_replay_import_screen(true)
+	await process_frame
+	await check_replay_import_layout(scene, actual_viewport)
+	scene.show_menu(true)
+	await process_frame
 	scene.show_diagnostic_dialog(diagnostic_lines)
 	await process_frame
 	await check_diagnostic_layout(scene, actual_viewport, diagnostic_lines.size())
@@ -883,6 +893,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 		"Stats": "战绩",
 		"Achievements": "成就",
 		"Shop": "商店",
+		"Replay": "回放",
 	}
 	var quick_rects: Array[Rect2] = []
 	for quick_id in quick_actions:
@@ -920,6 +931,60 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			check(screen_rect(card).end.y <= screen_rect(quick_rail).position.y + 26.0, "menu card clears the quick action rail at %s" % viewport_size)
 		if footer != null:
 			check(screen_rect(card).end.y <= screen_rect(footer).position.y - 8.0, "menu card clears the footer status bar at %s" % viewport_size)
+
+func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
+	var panel := scene.find_child("ReplayImportPanel", true, false) as Control
+	var input := scene.find_child("ReplayImportCodeInput", true, false) as LineEdit
+	var import_button := scene.find_child("ReplayImportButton", true, false) as Button
+	var back_button := scene.find_child("ReplayImportBackButton", true, false) as Button
+	var timeline := scene.find_child("ReplayImportTimeline", true, false) as Control
+	var timeline_scroll := scene.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
+	var archive_pane := scene.find_child("ReplayArchivePane", true, false) as Control
+	var archive_scroll := scene.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
+	var archive_list := scene.find_child("ReplayArchiveList", true, false) as VBoxContainer
+	var archive_search := scene.find_child("ReplayArchiveSearchInput", true, false) as LineEdit
+	var status := scene.find_child("ReplayImportStatus", true, false) as Label
+	check(panel != null and input != null and import_button != null and back_button != null and timeline != null and status != null, "replay import exposes code input action status and timeline at %s" % viewport_size)
+	if panel == null:
+		return
+	var panel_rect := screen_rect(panel)
+	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "replay import panel stays inside the viewport at %s" % viewport_size)
+	check(screen_rect(panel).grow(1.0).encloses(screen_rect(input)) and screen_rect(panel).grow(1.0).encloses(screen_rect(import_button)) and screen_rect(panel).grow(1.0).encloses(screen_rect(timeline)) and screen_rect(panel).grow(1.0).encloses(screen_rect(archive_pane)), "replay import controls stay inside the reading panel at %s" % viewport_size)
+	check(input != null and input.custom_minimum_size.y >= 48.0 and input.placeholder_text == "粘贴回放码", "replay import keeps a touch-sized paste field at %s" % viewport_size)
+	check(import_button != null and screen_rect(import_button).size.x >= 100.0 and screen_rect(import_button).size.y >= 44.0 and import_button.tooltip_text.contains("校验"), "replay import action keeps an explicit verification target at %s" % viewport_size)
+	check(back_button != null and back_button.tooltip_text.contains("Esc"), "replay import exposes an Escape-labelled return action at %s" % viewport_size)
+	check(timeline != null and timeline.find_child("ReplayImportTimelineTitle", true, false) != null and timeline.find_child("ReplayImportTimelineEmpty", true, false) != null, "replay import timeline has an empty-state reading lane at %s" % viewport_size)
+	check(timeline_scroll != null and timeline_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "replay import timeline provides a native vertical scroll for long records at %s" % viewport_size)
+	check(archive_pane != null and archive_search != null and archive_search.placeholder_text.contains("日期") and archive_scroll != null and archive_list != null, "replay import exposes searchable scrollable local replay archive controls at %s" % viewport_size)
+	if archive_pane != null and archive_scroll != null:
+		check(archive_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and archive_scroll.clip_contents, "replay archive keeps a clipped vertical scroll viewport inside its pane at %s" % viewport_size)
+		check(screen_rect(archive_pane).grow(1.0).encloses(screen_rect(archive_scroll)), "replay archive scroll viewport stays inside its fixed pane at %s" % viewport_size)
+	if archive_scroll != null and archive_list != null:
+		check(screen_rect(archive_list).size.x <= screen_rect(archive_scroll).size.x + 1.0 and archive_list.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "replay archive list fills the scroll viewport without horizontal overflow at %s" % viewport_size)
+	if input != null and import_button != null:
+		check(input.has_focus(), "replay import opens with focus in the code field at %s" % viewport_size)
+		input.text = scene.round_replay_share_code()
+		scene.import_replay_from_input()
+		var event_text := scene.find_child("ReplayImportEventText", true, false) as Label
+		check(status.text.contains("校验通过") and scene.replay_import_payload.size() > 0 and event_text != null and event_text.visible and event_text.text.contains("弃牌") and event_text.text.contains("吃") and not event_text.text.contains("discard"), "replay import verifies the digest and renders localized event names at %s" % viewport_size)
+		var saved_round_id: String = scene.active_round_id
+		var saved_events: Array = scene.round_event_history.duplicate(true)
+		var saved_sequence: int = scene.round_event_sequence
+		scene.active_round_id = "UI-REPLAY-LONG"
+		scene.round_event_history.clear()
+		scene.round_event_sequence = 0
+		for event_index in range(scene.ROUND_EVENT_HISTORY_LIMIT):
+			scene.record_round_event("draw", {"seat": event_index % 4})
+		input.text = scene.round_replay_share_code()
+		scene.import_replay_from_input()
+		var long_event_text := scene.find_child("ReplayImportEventText", true, false) as Label
+		check(status.text.contains("180 条事件") and long_event_text != null and long_event_text.custom_minimum_size.y >= 3600.0 and long_event_text.text.contains("001  摸牌") and long_event_text.text.contains("180  摸牌"), "replay import keeps both ends of a 180-event timeline available through its scroll child at %s" % viewport_size)
+		scene.active_round_id = saved_round_id
+		scene.round_event_history = saved_events
+		scene.round_event_sequence = saved_sequence
+		input.text = "invalid-replay-code"
+		scene.import_replay_from_input()
+		check(status.text.contains("无效") and scene.replay_import_payload.is_empty(), "replay import gives explicit feedback for an invalid code at %s" % viewport_size)
 
 func check_menu_footer_layout(scene, viewport_size: Vector2) -> void:
 	var footer = scene.find_child("MenuFooterTextLayer", true, false) as Control
@@ -1294,19 +1359,26 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		if route == "top_safe_drawer":
 			check(panel_rect.position.x >= viewport_size.x * 0.70, "online game chat default route stays in the upper-right safe lane at %s" % viewport_size)
 		else:
-			check(panel_rect.end.x <= viewport_size.x * 0.30, "online game chat meld route stays in the upper-left gutter at %s" % viewport_size)
-		check(panel_rect.size.x >= 180.0 and panel_rect.end.y <= viewport_size.y * 0.33, "online game chat drawer keeps a wide compact touch lane at %s" % viewport_size)
+			check(panel_rect.position.x <= viewport_size.x * 0.34 and panel_rect.position.y <= viewport_size.y * 0.26, "online game chat meld route stays in the upper-left table-safe lane at %s" % viewport_size)
+		var route_bottom_limit := 0.42 if route == "top_safe_drawer" else 0.28
+		check(panel_rect.size.x >= 180.0 and panel_rect.end.y <= viewport_size.y * route_bottom_limit, "online game chat drawer keeps a wide compact touch lane at %s" % viewport_size)
 		check(panel.get_meta("compact_chat", false), "online game chat marks the narrow route as compact at %s" % viewport_size)
 		for seat in range(4):
 			var seat_panel = scene.find_child("SeatPanel_%d" % seat, true, false) as Control
 			var meld_area = scene.find_child("MeldArea_%d" % seat, true, false) as Control
 			var discard_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as Control
+			var top_hud := scene.find_child("TopHud3DShell", true, false) as Control
 			if seat_panel != null:
 				check(not rects_overlap(panel_rect, screen_rect(seat_panel)), "online chat clears seat HUD %d at %s" % [seat, viewport_size])
 			if meld_area != null:
 				check(not rects_overlap(panel_rect, screen_rect(meld_area)), "online chat clears meld lane %d at %s" % [seat, viewport_size])
-			if discard_grid != null:
-				check(not rects_overlap(panel_rect, screen_rect(discard_grid)), "online chat clears discard river %d at %s" % [seat, viewport_size])
+				if discard_grid != null:
+					check(not rects_overlap(panel_rect, screen_rect(discard_grid)), "online chat clears discard river %d at %s" % [seat, viewport_size])
+				var ledger := scene.find_child("TableLogLedgerPanel", true, false) as Control
+				if ledger != null:
+					check(not ledger.visible or not rects_overlap(panel_rect, screen_rect(ledger)), "online chat clears or hides table ledger at %s" % viewport_size)
+			if top_hud != null:
+				check(not rects_overlap(panel_rect, screen_rect(top_hud)), "online chat clears the top HUD at %s" % viewport_size)
 	if input != null and panel != null:
 		check(screen_rect(panel).grow(1.0).encloses(screen_rect(input)) and input.max_length == scene.CHAT_MESSAGE_MAX_LENGTH, "online chat input stays inside the drawer and preserves its length boundary at %s" % viewport_size)
 	if close_button != null and send_button != null and panel != null:
@@ -1327,8 +1399,8 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	scene.close_chat_panel()
 	await settle_layout()
 	check(scene.find_child("ChatPanel", true, false) == null and not scene.chat_panel_open, "online chat closes cleanly and clears its open state at %s" % viewport_size)
-	await check_chat_panel_meld_route(scene, viewport_size, 2, "top_meld_safe_drawer")
-	await check_chat_panel_meld_route(scene, viewport_size, 1, "right_meld_safe_drawer")
+	await check_chat_panel_meld_route(scene, viewport_size, 2, "upper_meld_safe_drawer")
+	await check_chat_panel_meld_route(scene, viewport_size, 1, "upper_meld_safe_drawer")
 
 
 func check_chat_panel_meld_route(scene, viewport_size: Vector2, seat: int, expected_route: String) -> void:
@@ -1352,7 +1424,7 @@ func check_chat_panel_meld_route(scene, viewport_size: Vector2, seat: int, expec
 	check(panel != null and str(panel.get_meta("layout_role", "")) == expected_route, "online chat routes seat %d meld state to a named safe lane at %s" % [seat, viewport_size])
 	if panel != null:
 		var panel_rect := screen_rect(panel)
-		check(panel_rect.end.x <= viewport_size.x * 0.30 and panel_rect.size.x >= 180.0, "online chat seat %d meld route keeps a wide upper-left gutter at %s" % [seat, viewport_size])
+		check(panel_rect.position.x <= viewport_size.x * 0.34 and panel_rect.position.y <= viewport_size.y * 0.26 and panel_rect.size.x >= 180.0, "online chat seat %d meld route uses an upper-left safe reading lane at %s" % [seat, viewport_size])
 		for other_seat in range(4):
 			var meld_area = scene.find_child("MeldArea_%d" % other_seat, true, false) as Control
 			var discard_grid = scene.find_child("DiscardGrid_%d" % other_seat, true, false) as Control
@@ -1360,6 +1432,13 @@ func check_chat_panel_meld_route(scene, viewport_size: Vector2, seat: int, expec
 				check(not rects_overlap(panel_rect.grow(-1.0), screen_rect(meld_area)), "online chat seat %d route clears meld lane %d at %s" % [seat, other_seat, viewport_size])
 			if discard_grid != null:
 				check(not rects_overlap(panel_rect.grow(-1.0), screen_rect(discard_grid)), "online chat seat %d route clears river %d at %s" % [seat, other_seat, viewport_size])
+		var ledger := scene.find_child("TableLogLedgerPanel", true, false) as Control
+		if ledger != null:
+			check(not ledger.visible or not rects_overlap(panel_rect.grow(-1.0), screen_rect(ledger)), "online chat seat %d clears or hides table ledger at %s" % [seat, viewport_size])
+		var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+		var hand_tray := scene.find_child("HandTray", true, false) as Control
+		check(action_dock == null or not rects_overlap(panel_rect.grow(-1.0), screen_rect(action_dock)), "online chat seat %d route clears action dock at %s" % [seat, viewport_size])
+		check(hand_tray == null or not rects_overlap(panel_rect.grow(-1.0), screen_rect(hand_tray)), "online chat seat %d route clears hand tray at %s" % [seat, viewport_size])
 	scene.close_chat_panel()
 	await settle_layout()
 	target_player["melds"] = saved_melds
@@ -1770,6 +1849,7 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 					check(tile_view != null and absf(tile_view.rotation - scene.seat_meld_face_rotation(meld_seat)) <= 0.001, "battle meld group %d/%d faces toward the table center at %s" % [meld_seat, group_count, viewport_size])
 					if not expected_vertical and viewport_size.y <= 560.0 and tile_view != null:
 						check(tile_view.size.x >= 18.0, "compact horizontal meld group %d/%d keeps an 18px tile face minimum at %s" % [meld_seat, group_count, viewport_size])
+						check(float(lane_tile_size.y) <= meld_rect.size.y + 1.0, "compact horizontal meld group %d/%d fits its face height inside the lane at %s" % [meld_seat, group_count, viewport_size])
 		check(group_count == 4, "battle meld area %d fits all four groups at %s" % [meld_seat, viewport_size])
 	var table_log = scene.find_child("TableLogLedgerPanel", true, false) as Control
 	check(table_log != null, "battle renders named table log ledger at %s" % viewport_size)
@@ -1884,6 +1964,8 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		else:
 			scrim_ok = scrim.visible and scrim.modulate.a >= 0.55
 		check(scrim_ok, "settings scrim darkens background controls enough at %s" % viewport_size)
+		var expected_scrim_alpha := 0.78 if scene.high_contrast_enabled else 0.62
+		check(absf(float(scrim.get_meta("modal_scrim_alpha", 0.0)) - expected_scrim_alpha) <= 0.01, "settings scrim uses the profile-specific isolation level at %s" % viewport_size)
 	var panel = overlay_control.find_child("SettingsPanel", true, false) as Control
 	var panel_shadow = overlay_control.find_child("SettingsConsole3DCastShadow", true, false) as Control
 	var rear_shell = overlay_control.find_child("SettingsConsole3DRearShell", true, false) as Control
@@ -1892,6 +1974,13 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	var panel_rect := Rect2()
 	if panel != null:
 		panel_rect = screen_rect(panel)
+		var expected_panel_alpha := 0.96 if scene.high_contrast_enabled else 0.82
+		check(absf(float(panel.get_meta("reading_surface_alpha", 0.0)) - expected_panel_alpha) <= 0.01, "settings panel uses an opaque reading surface at %s" % viewport_size)
+		var contrast_frame := overlay_control.find_child("SettingsHighContrastFrame", true, false) as Control
+		if scene.high_contrast_enabled:
+			check(contrast_frame != null and overlay_control.find_child("SettingsHighContrastTopEdge", true, false) != null and overlay_control.find_child("SettingsHighContrastBottomEdge", true, false) != null and overlay_control.find_child("SettingsHighContrastLeftEdge", true, false) != null and overlay_control.find_child("SettingsHighContrastRightEdge", true, false) != null, "high-contrast settings exposes a four-edge authored focus frame at %s" % viewport_size)
+		else:
+			check(contrast_frame == null, "standard settings keeps the high-contrast frame off at %s" % viewport_size)
 		check(Rect2(Vector2.ZERO, viewport_size).grow(-4.0).encloses(panel_rect), "settings modal stays fully inside viewport with visible margin at %s" % viewport_size)
 		if scrim != null:
 			check(panel.get_index() > scrim.get_index(), "settings modal renders above the background scrim at %s" % viewport_size)
@@ -1970,11 +2059,12 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		"出牌辅助": ["已开", "已关"],
 		"播放曲目": "切歌",
 		"本地进度": "重置",
+		"隐私诊断": "查看",
 	}
 	var settings_sections := {
 		"声音": ["背景音乐", "音效反馈", "语音报牌", "播放测试"],
 		"体验": ["AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目"],
-		"系统": ["3D 画质", "本地进度"],
+		"系统": ["3D 画质", "本地进度", "隐私诊断"],
 	}
 	var section_rects: Array = []
 	for section_name in settings_sections.keys():
@@ -2002,7 +2092,8 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			row_rect = screen_rect(row)
 		var button_rect = screen_rect(button)
 		if row != null:
-			check(row_rect.size.y >= 48.0 and row_rect.size.x >= button_rect.size.x + 96.0, "settings row %s keeps 960-safe row rhythm and width at %s" % [title, viewport_size])
+			var expected_row_height := 56.0 if scene.large_text_enabled else 48.0
+			check(row_rect.size.y >= expected_row_height - 1.0 and row_rect.size.x >= button_rect.size.x + 96.0, "settings row %s keeps profile-aware row rhythm and width at %s" % [title, viewport_size])
 			check(row_rect.grow(1.0).encloses(button_rect), "settings row %s encloses its button at %s" % [title, viewport_size])
 		check(button_rect.size.x >= 92.0 and button_rect.size.y >= 32.0, "settings row %s keeps a practical button target at %s" % [title, viewport_size])
 		var expected_text = expected_setting_buttons[title]
@@ -2013,7 +2104,8 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			matches_expected_text = button.text == str(expected_text)
 		check(matches_expected_text or (title == "本地进度" and button.text == "清空"), "settings row %s uses compact button text at %s" % [title, viewport_size])
 		check(button.text.length() <= 4 and button.clip_text and button.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS, "settings row %s clips compact text safely at %s" % [title, viewport_size])
-		check(button.get_theme_font_size("font_size") <= 15, "settings row %s caps button font size at %s" % [title, viewport_size])
+		var expected_button_font_max := 19 if scene.large_text_enabled else 15
+		check(button.get_theme_font_size("font_size") <= expected_button_font_max, "settings row %s caps button font size at %s" % [title, viewport_size])
 		var title_label = overlay_control.find_child("SettingRowTitle_%s" % title, true, false) as Label
 		var status_label = overlay_control.find_child("SettingRowStatus_%s" % title, true, false) as Label
 		var text_panel = overlay_control.find_child("SettingRowTextReadabilityPanel_%s" % title, true, false) as Control

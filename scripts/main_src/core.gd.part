@@ -11,7 +11,11 @@ func _ready() -> void:
 	if not ui_capture_mode:
 		verify_audio_assets()
 	load_settings()
+	load_telemetry_state()
+	telemetry_record_event("app_started", {"platform": OS.get_name(), "app_version": APP_VERSION})
 	load_game_stats()
+	load_replay_archive()
+	migrate_round_history_to_replay_archive()
 	load_tutorial_state()
 	load_achievements()
 	load_login_state()
@@ -213,6 +217,7 @@ func _process(_delta: float) -> void:
 		update_online_slow_response_notice(now)
 	update_pending_claim_live_state()
 	update_online_action_live_state(now)
+	flush_offline_progress_autosave()
 
 
 func update_pending_claim_live_state() -> void:
@@ -256,6 +261,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		recover_audio_after_screen_change()
 		update_safe_area_layout()
+	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		flush_offline_progress_autosave(true)
 	elif what == NOTIFICATION_WM_SIZE_CHANGED or what == NOTIFICATION_WM_DPI_CHANGE:
 		update_safe_area_layout()
 		call_deferred("refresh_current_screen")
@@ -303,6 +310,9 @@ func handle_ui_cancel() -> bool:
 	if table_log_archive_open:
 		close_table_log_archive()
 		return true
+	if telemetry_sheet_open:
+		close_telemetry_data_sheet()
+		return true
 	if chat_panel_open:
 		close_chat_panel()
 		return true
@@ -315,7 +325,7 @@ func handle_ui_cancel() -> bool:
 		close_settings_panel()
 		return true
 	match mode:
-		"shop", "daily_login", "rules", "stats", "achievements", "online_lobby":
+		"shop", "daily_login", "rules", "stats", "achievements", "online_lobby", "replay_import":
 			show_menu(true)
 			return true
 		"offline", "online_game":
@@ -913,6 +923,8 @@ func menu_quick_button_glyph(quick_id: String) -> String:
 			return "成"
 		"shop":
 			return "店"
+		"replay":
+			return "录"
 	return quick_id.substr(0, 1) if quick_id != "" else "捷"
 
 
@@ -1108,6 +1120,7 @@ func poll_online(now_msec: int = -1) -> void:
 	if status != tcp_status:
 		tcp_status = status
 		if status == StreamPeerTCP.STATUS_CONNECTED:
+			telemetry_record_event("online_connection", {"result": "connected"})
 			set_online_feedback("已连接服务器，可建房或入房。", false)
 			if not sent_hello:
 				sent_hello = true
@@ -1477,6 +1490,7 @@ func deal_offline_hand() -> void:
 		players[seat]["flowers"] = 0
 		players[seat]["flower_tiles"] = []
 	record_round_event("round_start", {"dealer": dealer_seat, "seed": offline_hand_seed, "rule_variant": offline_active_rule_variant})
+	telemetry_record_event("round_started", {"rule_variant": offline_active_rule_variant, "difficulty": ai_difficulty_label(), "hand_number": offline_hand_number})
 	wall = make_wall()
 	shuffle_wall_with_seed(wall, offline_hand_seed)
 	for round_index in range(13):
@@ -1497,6 +1511,7 @@ func deal_offline_hand() -> void:
 	render_game()
 	play_fx_deal_start(dealer_seat)
 	play_fx_deal_cascade(dealer_seat)
+	save_offline_progress(false)
 
 
 func player_ai_assist_enabled() -> bool:
@@ -7702,12 +7717,11 @@ func chat_panel_rect() -> Rect2:
 	# The lobby gets a taller reading area because it has no table geometry.
 	if mode == "online_lobby":
 		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
-	# Both exposed meld states use the same wide upper-left gutter. The old
-	# right-meld branch was too narrow for touch controls and could intersect the
-	# right vertical meld lane; the left gutter clears the top river, side seat,
-	# and both meld layouts while keeping a stable drawer size.
+	# A top/right meld consumes the usual upper-right lane. Use the narrow upper
+	# left gutter below the HUD instead; it clears the top river's x=0.285 edge,
+	# the side rivers, the action dock, and the hand tray at compact sizes.
 	if chat_panel_route_name() != "top_safe_drawer":
-		return Rect2(Vector2(0.015, 0.120), Vector2(0.273, 0.320))
+		return Rect2(Vector2(0.015, 0.115), Vector2(0.275, 0.275))
 	# The root layer is inset by the device safe area. Keep an 8px+ gutter from
 	# the top river at the smallest supported viewport.
 	return Rect2(Vector2(0.727, 0.120), Vector2(0.985, 0.320))
@@ -7716,10 +7730,8 @@ func chat_panel_rect() -> Rect2:
 func chat_panel_route_name() -> String:
 	if mode == "online_lobby":
 		return "lobby_drawer"
-	if not get_melds(2).is_empty():
-		return "top_meld_safe_drawer"
-	if not get_melds(1).is_empty():
-		return "right_meld_safe_drawer"
+	if not get_melds(2).is_empty() or not get_melds(1).is_empty():
+		return "upper_meld_safe_drawer"
 	return "top_safe_drawer"
 
 
@@ -7782,6 +7794,10 @@ func close_chat_panel() -> void:
 	if panel != null and is_instance_valid(panel):
 		root_layer.remove_child(panel)
 		panel.queue_free()
+	var ledger := root_layer.find_child("TableLogLedgerPanel", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if ledger != null and bool(ledger.get_meta("hidden_for_chat", false)):
+		ledger.visible = true
+		ledger.remove_meta("hidden_for_chat")
 	chat_input = null
 	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if chat_button != null and not chat_button.disabled:

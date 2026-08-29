@@ -802,7 +802,7 @@ func draw_actions(parent: Control) -> void:
 				next_hand_button.tooltip_text = "继续当前牌局，进入下一局"
 				action_bar.add_child(next_hand_button)
 			var new_match_button = make_action_button("新赛", Color(0.86, 0.42, 0.32), func() -> void:
-				start_offline()
+				start_new_offline_match()
 			)
 			new_match_button.name = "NewMatchSecondaryButton"
 			new_match_button.set_meta("action_priority", "primary" if is_offline_match_finished() else "secondary")
@@ -3901,7 +3901,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	# 标题
 	var dealer_wind: String = str(CENTER_WIND_LABELS[clampi(dealer_seat, 0, CENTER_WIND_LABELS.size() - 1)]) if mode == "offline" else ""
 	var compact_top_hud := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
-	var title_text = ("第%d局 · 庄%s" if compact_top_hud else "修炼场 · 第%d局 · 庄%s") % [offline_hand_number, dealer_wind] if mode == "offline" else "房间 " + str(online_game.get("roomCode", selected_room))
+	var room_code := str(online_game.get("roomCode", selected_room))
+	var title_text = ("第%d局 · 庄%s" if compact_top_hud else "修炼场 · 第%d局 · 庄%s") % [offline_hand_number, dealer_wind] if mode == "offline" else "房间 " + room_code
 	var title_rect := TOP_HUD_TITLE_RECT
 	var status_rect := TOP_HUD_STATUS_RECT
 	var wall_rect := TOP_HUD_WALL_RECT
@@ -3916,7 +3917,14 @@ func draw_game_top_hud(parent: Control) -> void:
 	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.58, 0.74, 0.64, 0.16), "ui_dark_scrim")
 	status_back.name = "TopHudStatusBack"
 	hud.add_child(status_back)
-	var title = make_label(hud, title_text, 15 if mode == "offline" else 16, Color(0.96, 0.80, 0.48), true)
+	var online_title_size := 16
+	if mode == "online_game":
+		# Room codes are server data and must remain intact; reduce only the title
+		# glyph size for unusually long codes inside the dedicated header lane.
+		online_title_size = 14 if room_code.length() > 14 else 16
+		online_title_size = 12 if room_code.length() > 22 else online_title_size
+		online_title_size = 10 if room_code.length() > 28 else online_title_size
+	var title = make_label(hud, title_text, 15 if mode == "offline" else online_title_size, Color(0.96, 0.80, 0.48), true)
 	title.name = "TopHudTitle"
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -4096,13 +4104,6 @@ func draw_hand(parent: Control) -> void:
 	var should_animate_drawn_tile = mode == "offline" and fx_enabled_effective() and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
 	var draw_state_assigned := false
 	# Pure 2D hand: authored assets/tiles faces via make_tile_view (no realtime 3D stage).
-	for i in range(hand.size()):
-		var tile := str(hand[i])
-		var is_drawn_tile := should_animate_drawn_tile and not draw_state_assigned and tile == drawn_tile
-		if is_drawn_tile:
-			draw_state_assigned = true
-	if draw_state_assigned:
-		fx_last_animated_draw_serial = drawn_serial
 
 	var hand_box = HBoxContainer.new()
 	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -4136,6 +4137,7 @@ func draw_hand(parent: Control) -> void:
 		var report: Dictionary = hand_reports.get(tile, {}) if i == suggested_index or i == pending_index else {}
 		var risk = str(report.get("safety_label", report.get("risk_label", ""))) if assist_enabled and clickable else ""
 		var is_drawn_tile_marker := i == stable_drawn_index
+		var is_drawn_tile := should_animate_drawn_tile and ((stable_drawn_index >= 0 and i == stable_drawn_index) or (stable_drawn_index < 0 and not draw_state_assigned and tile == drawn_tile))
 		var hint_badge := ""
 		if assist_enabled and clickable:
 			if i == pending_index:
@@ -4176,9 +4178,13 @@ func draw_hand(parent: Control) -> void:
 				drawn_body.offset_top -= 4.0
 				drawn_body.offset_bottom -= 4.0
 		hand_box.add_child(tile_node)
-		if should_animate_drawn_tile and tile == drawn_tile and bool(tile_node.get_meta("drawn_anim_pending", true)):
-			# one-shot draw pop for the newest self tile when available
-			pass
+		if is_drawn_tile:
+			# Run the one-shot entry effect for normal and replacement draws.
+			draw_state_assigned = true
+			tile_node.set_meta("drawn_anim_pending", false)
+			play_hand_draw_tile_animation(tile_node, str(offline_last_draw.get("source", "normal")))
+	if draw_state_assigned:
+		fx_last_animated_draw_serial = drawn_serial
 
 
 func draw_hand_progress_wall_sync(parent: Control, accent: Color) -> Control:
@@ -5335,6 +5341,7 @@ func draw_melds(parent: Control) -> void:
 			if horizontal_tile_count > 0:
 				var lane_width_fraction := float(layout[1].size.x - layout[1].position.x)
 				var lane_width_px := safe_content_pixel_size().x * lane_width_fraction
+				var lane_height_px := safe_content_pixel_size().y * float(layout[1].size.y - layout[1].position.y)
 				var group_padding_px := float(horizontal_group_count) * 6.0
 				var group_gap_px := float(maxi(0, horizontal_group_count - 1)) * 3.0
 				# make_meld_group_view reserves one compact separator per tile. Try
@@ -5343,8 +5350,12 @@ func draw_melds(parent: Control) -> void:
 				var compact_tile_width := floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count) * 2.0) / float(horizontal_tile_count))
 				if compact_tile_width <= 18.0:
 					compact_tile_width = floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count)) / float(horizontal_tile_count))
-					compact_tile_width = clampf(compact_tile_width, 18.0, 20.0)
-				meld_tile_size = Vector2(compact_tile_width, floorf(compact_tile_width * 1.5))
+				# Horizontal faces keep their upright 1.5 aspect ratio after the
+				# top-seat rotation. Bound width by lane height as well as lane width,
+				# otherwise a short 960px lane can produce a 100px-wide face.
+				var max_horizontal_tile_width := floorf(maxf(18.0, (lane_height_px - 10.0) / 1.5))
+				compact_tile_width = clampf(minf(compact_tile_width, max_horizontal_tile_width), 18.0, 28.0)
+				meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * 1.5)))
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
 		area.set_meta("tile_size", meld_tile_size if meld_tile_size != Vector2.ZERO else Vector2(26, 36) if not vertical else Vector2(28, 38))
@@ -5745,13 +5756,14 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	var rail = Control.new()
 	rail.name = "MenuQuickActionRail"
 	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(rail, rect_full(0.250, 0.704, 0.750, 0.804))
+	apply_rect(rail, rect_full(0.180, 0.704, 0.820, 0.804))
 	parent.add_child(rail)
 	var items := [
 		["rules", "规则", "help-circle", Color(0.30, 0.58, 0.50), Callable(self, "show_rules_screen")],
 		["stats", "战绩", "trophy", Color(0.56, 0.46, 0.72), Callable(self, "show_stats_screen")],
 		["achievements", "成就", "medal", Color(0.70, 0.54, 0.28), Callable(self, "show_achievements_screen")],
 		["shop", "商店", "gift", Color(0.62, 0.38, 0.30), Callable(self, "show_shop_screen")],
+		["replay", "回放", "book-open", Color(0.36, 0.60, 0.62), Callable(self, "show_replay_import_screen")],
 	]
 	var surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.010, 0.020, 0.022, 0.72), "ui_dark_scrim", 0.18)
 	surface.name = "MenuQuickActionSurface"
@@ -8876,8 +8888,12 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
-	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.44), "ui_dark_scrim")
+	var settings_is_high_contrast := high_contrast_enabled
+	var scrim_alpha := 0.78 if settings_is_high_contrast else 0.62
+	var panel_alpha := 0.96 if settings_is_high_contrast else 0.82
+	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, scrim_alpha), "ui_dark_scrim")
 	scrim.name = "SettingsOverlayScrim"
+	scrim.set_meta("modal_scrim_alpha", scrim_alpha)
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
 
@@ -8888,9 +8904,30 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.32), "ui_dark_scrim", 0.20)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, panel_alpha), "ui_dark_scrim", 0.20)
 	panel.name = "SettingsPanel"
+	panel.set_meta("reading_surface_alpha", panel_alpha)
+	panel.set_meta("high_contrast_surface", settings_is_high_contrast)
 	overlay.add_child(panel)
+	if settings_is_high_contrast:
+		var contrast_frame := Control.new()
+		contrast_frame.name = "SettingsHighContrastFrame"
+		contrast_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		contrast_frame.z_index = 2
+		apply_rect(contrast_frame, panel_rect)
+		overlay.add_child(contrast_frame)
+		var contrast_top := make_gpt_ribbon(rect_full(0.0, 0.0, 1.0, 0.018), Color(0.96, 0.84, 0.46, 0.72))
+		contrast_top.name = "SettingsHighContrastTopEdge"
+		contrast_frame.add_child(contrast_top)
+		var contrast_bottom := make_gpt_ribbon(rect_full(0.0, 0.982, 1.0, 1.0), Color(0.96, 0.84, 0.46, 0.72))
+		contrast_bottom.name = "SettingsHighContrastBottomEdge"
+		contrast_frame.add_child(contrast_bottom)
+		var contrast_left := make_gpt_edge_rail(rect_full(0.0, 0.0, 0.018, 1.0), Color(0.96, 0.84, 0.46, 0.72))
+		contrast_left.name = "SettingsHighContrastLeftEdge"
+		contrast_frame.add_child(contrast_left)
+		var contrast_right := make_gpt_edge_rail(rect_full(0.982, 0.0, 1.0, 1.0), Color(0.96, 0.84, 0.46, 0.72))
+		contrast_right.name = "SettingsHighContrastRightEdge"
+		contrast_frame.add_child(contrast_right)
 	overlay.gui_input.connect(func(event: InputEvent) -> void:
 		var should_close := false
 		if event is InputEventKey and (event as InputEventKey).pressed and event.is_action_pressed("ui_cancel"):
@@ -9023,12 +9060,15 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 系统设置
 	var system_grid = make_settings_section(panel, maint_section_rect, "系统", compact_settings)
-	system_grid.columns = 2
+	system_grid.columns = 3
 	make_setting_row(system_grid, "3D 画质", "当前: %s" % graphics_quality_label(), make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
 	))
 	make_setting_row(system_grid, "本地进度", "清空统计与离线记录", make_reset_progress_button(func() -> void:
 		request_reset_progress_from_settings()
+	))
+	make_setting_row(system_grid, "隐私诊断", telemetry_consent_status_text(), make_setting_selector_button("查看", "隐私诊断", func() -> void:
+		show_telemetry_data_sheet()
 	))
 	var settings_default_focus := settings_focus_restore_name if settings_focus_restore_name != "" else "SettingsCloseButton"
 	settings_focus_restore_name = ""
@@ -13074,10 +13114,11 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 
 func make_setting_row(parent: Control, title: String, status: String, button: Button) -> void:
 	# r214: bulk GPT chrome sweep
+	var compact_settings := effective_viewport_size().y <= 560.0
 	var row = Panel.new()
 	row.name = "SettingRow_%s" % title
 	configure_passive_container(row)
-	row.custom_minimum_size = Vector2(0, 48)
+	row.custom_minimum_size = Vector2(0, 56 if large_text_enabled else 48)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# r180: GPT settings plate only — no solid StyleBox row paint.
 	var empty_row := StyleBoxEmpty.new()
@@ -13088,17 +13129,19 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	row.add_child(row_plate)
 	row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
+	var text_right := 0.430 if compact_settings else 0.565
+	var button_left := 0.495 if compact_settings else 0.595
+	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, text_right, 0.890), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
 	var title_label = make_label(row, title, 14, Color(1.0, 0.97, 0.88, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
-	apply_rect(title_label, rect_full(0.052, 0.130, 0.545, 0.455))
+	apply_rect(title_label, rect_full(0.052, 0.130, text_right - 0.020, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
 	var status_label = make_label(row, status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
-	apply_rect(status_label, rect_full(0.052, 0.500, 0.550, 0.860))
+	apply_rect(status_label, rect_full(0.052, 0.500, text_right - 0.015, 0.860))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.56))
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -13109,7 +13152,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.custom_minimum_size = Vector2(0, 0)
-	apply_rect(button, SETTINGS_ROW_BUTTON_RECT)
+	apply_rect(button, rect_full(button_left, SETTINGS_ROW_BUTTON_RECT.position.y, SETTINGS_ROW_BUTTON_RECT.size.x, SETTINGS_ROW_BUTTON_RECT.size.y) if compact_settings else SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)
 
 
@@ -13144,12 +13187,12 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	grid.name = "SettingsSectionGrid_%s" % title_text
 	configure_passive_container(grid)
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("h_separation", 4 if compact else 16)
 	grid.add_theme_constant_override("v_separation", 3 if compact else 5)
 	section.add_child(grid)
 	# Compact settings reserve the same 48px row target while tightening only
 	# the decorative title/chrome clearance inside each physical section.
-	apply_rect(grid, rect_full(0.035, 0.120, 0.965, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
+	apply_rect(grid, rect_full(0.035, 0.120, 0.995, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 

@@ -216,6 +216,18 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"draw_hand_tray_completion_bus_art_GptStrip",
 	"draw_hand_tray_momentum_art_GptStrip",
 	"draw_hand_tray_suit_flow_GptStrip",
+	"ReplayImportPanel",
+	"ReplayArchiveCount",
+	"ReplayArchiveEmpty",
+	"ReplayArchiveList",
+	"ReplayArchivePane",
+	"ReplayArchiveScroll",
+	"ReplayArchiveScrollBar",
+	"ReplayArchiveRowPlate",
+	"ReplayArchiveRowPrimary",
+	"ReplayArchiveRowSecondary",
+	"ReplayArchiveSearchInput",
+	"ReplayArchiveTitle",
 ]
 
 var failed := false
@@ -235,7 +247,7 @@ func run() -> void:
 	scene.reduce_motion_enabled = false
 	check(scene.accessibility_profile_label() == "标准" and scene.accessibility_font_size(14) == 14, "accessibility profile starts in the standard readable mode")
 	scene.large_text_enabled = true
-	check(scene.accessibility_profile_label() == "大字" and scene.accessibility_font_size(14) == 16, "large-text accessibility mode scales shared label sizes")
+	check(scene.accessibility_profile_label() == "大字" and scene.accessibility_font_size(14) == 18, "large-text accessibility mode scales shared label sizes")
 	scene.high_contrast_enabled = true
 	scene.reduce_motion_enabled = true
 	check(scene.accessibility_profile_label() == "专注" and scene.accessible_text_color(Color(0.2, 0.2, 0.2)).r > 0.65, "focused accessibility mode combines contrast and reduced-motion preferences")
@@ -270,6 +282,49 @@ func run() -> void:
 		(scene.round_event_history[0] as Dictionary)["type"] = "tampered"
 	check(scene.round_replay_status_text().contains("回放校验失败") and not scene.copy_round_replay_share_code(), "replay sharing rejects a locally tampered event chain")
 	scene.round_event_history = verified_history
+	var saved_replay_archive: Array = scene.replay_archive.duplicate(true)
+	var archive_fixture := {
+		"round_id": "QA-ARCHIVE",
+		"rule_variant": scene.RULE_VARIANT_YANGZHOU,
+		"result_kind": "win",
+		"summary": "QA 回放归档",
+		"seed": 180180,
+		"events": (replay_payload.get("events", []) as Array).duplicate(true),
+		"replay_digest": str(replay_payload.get("digest", "")),
+		"replay_valid": true,
+		"source": "local",
+		"saved_at": 180180,
+		"archived_at": 180180,
+	}
+	scene.replay_archive = []
+	check(scene.upsert_replay_archive_entry(archive_fixture), "replay archive accepts a verified local entry")
+	scene.replay_archive = []
+	scene.load_replay_archive()
+	var loaded_archive_entry: Dictionary = scene.replay_archive_entry("digest:%s" % str(replay_payload.get("digest", "")))
+	check(loaded_archive_entry.get("round_id", "") == "QA-ARCHIVE" and scene.replay_archive_share_code(loaded_archive_entry.get("archive_id", "")) != "", "replay archive persists and reloads a verified entry")
+	scene.replay_archive = saved_replay_archive
+	scene.save_replay_archive()
+	var saved_telemetry_consent := bool(scene.telemetry_consent)
+	var saved_telemetry_consent_decided := bool(scene.telemetry_consent_decided)
+	var saved_telemetry_outbox: Array = scene.telemetry_outbox.duplicate(true)
+	var saved_telemetry_sequence := int(scene.telemetry_event_sequence)
+	scene.telemetry_consent = true
+	scene.telemetry_consent_decided = true
+	scene.telemetry_outbox = []
+	scene.telemetry_event_sequence = 0
+	check(scene.telemetry_record_event("round_started", {"rule_variant": scene.RULE_VARIANT_YANGZHOU, "difficulty": "QA", "hand_number": 1, "room_code": "SHOULD_DROP"}), "telemetry records an allowed event only after consent")
+	var telemetry_fixture: Dictionary = scene.telemetry_outbox.back()
+	check(telemetry_fixture.get("payload", {}).get("rule_variant", "") == scene.RULE_VARIANT_YANGZHOU and not telemetry_fixture.get("payload", {}).has("room_code"), "telemetry stores only the event whitelist fields")
+	scene.telemetry_outbox = []
+	scene.telemetry_event_sequence = 0
+	scene.load_telemetry_state()
+	check(scene.telemetry_outbox.size() == 1 and int(scene.telemetry_outbox[0].get("event_id", 0)) == 1, "telemetry persists and reloads its local outbox")
+	scene.telemetry_consent = saved_telemetry_consent
+	scene.telemetry_consent_decided = saved_telemetry_consent_decided
+	scene.telemetry_outbox = saved_telemetry_outbox
+	scene.telemetry_event_sequence = saved_telemetry_sequence
+	scene.save_telemetry_state()
+	scene.save_settings()
 	scene.active_round_id = saved_round_id
 	scene.round_event_history = saved_event_history
 	scene.round_event_sequence = saved_event_sequence
@@ -440,6 +495,53 @@ func run() -> void:
 	scene.start_offline(false)
 	check(scene.mode == "offline", "starts offline mode")
 	check(scene.can_self_discard(), "human can discard after deal")
+	# Schema-v2 persistence must resume the exact live table, including a pending
+	# response window, rather than dealing a replacement hand on next launch.
+	scene.offline_phase = "pending_claim"
+	scene.offline_pending_claim = {
+		"from_seat": 1,
+		"tile": "1W",
+		"options": ["hu", "peng"],
+		"deadline_msec": Time.get_ticks_msec() + 4500,
+	}
+	var progress_snapshot: Dictionary = scene.offline_progress_state_payload()
+	var snapshot_players: Array = progress_snapshot.get("players", [])
+	var snapshot_hand: Array = (snapshot_players[0] as Dictionary).get("hand", []).duplicate()
+	var snapshot_wall: Array = (progress_snapshot.get("wall", []) as Array).duplicate()
+	var snapshot_discards: Array = ((snapshot_players[0] as Dictionary).get("discards", []) as Array).duplicate()
+	var snapshot_phase := str(progress_snapshot.get("offline_phase", ""))
+	var snapshot_digest: String = str(scene.round_replay_digest(progress_snapshot.get("round_event_history", [])))
+	var pending_snapshot: Dictionary = progress_snapshot.get("offline_pending_claim", {})
+	check(int(progress_snapshot.get("schema_version", 0)) == scene.OFFLINE_PROGRESS_SCHEMA_VERSION and scene.offline_progress_state_validation_error(progress_snapshot) == "", "offline schema-v2 snapshot validates after a real deal")
+	check(snapshot_phase == "pending_claim" and not pending_snapshot.has("deadline_msec") and int(pending_snapshot.get("remaining_msec", 0)) > 0, "offline snapshot stores a pending claim as remaining time instead of a process-local deadline")
+	check(scene.offline_tile_ledger_report().get("ok", false), "offline snapshot fixture has a complete tile ledger")
+	scene.save_offline_progress(false)
+	scene.players[0]["hand"] = []
+	scene.wall.clear()
+	scene.round_event_history.clear()
+	scene.offline_phase = "await_discard"
+	check(scene.restore_offline_progress_state(progress_snapshot), "offline restore accepts the intact live snapshot")
+	check(scene.players[0]["hand"] == snapshot_hand and scene.wall == snapshot_wall and scene.players[0]["discards"] == snapshot_discards and scene.offline_phase == snapshot_phase, "offline restore preserves hand wall river and phase")
+	check(scene.round_replay_digest() == snapshot_digest and scene.offline_tile_ledger_report().get("ok", false), "offline restore preserves replay digest and complete tile ledger")
+	check(scene.offline_pending_claim.has("deadline_msec") and scene.pending_claim_remaining_seconds() > 0 and scene.pending_claim_remaining_seconds() <= 5, "offline restore rebuilds the pending claim countdown")
+	var unknown_snapshot: Dictionary = progress_snapshot.duplicate(true)
+	var unknown_players: Array = unknown_snapshot["players"]
+	var unknown_player: Dictionary = unknown_players[0]
+	var unknown_hand: Array = unknown_player["hand"]
+	unknown_hand[0] = "ZZ"
+	check(scene.offline_progress_state_validation_error(unknown_snapshot) != "" and not scene.restore_offline_progress_state(unknown_snapshot), "offline restore rejects unknown tiles")
+	var duplicate_snapshot: Dictionary = progress_snapshot.duplicate(true)
+	var duplicate_wall: Array = duplicate_snapshot["wall"]
+	duplicate_wall[0] = "1W" if str(duplicate_wall[0]) != "1W" else "2W"
+	check(scene.offline_progress_state_validation_error(duplicate_snapshot) != "" and not scene.restore_offline_progress_state(duplicate_snapshot), "offline restore rejects duplicated or missing tile counts")
+	check(scene.load_offline_progress() and scene.offline_progress_loaded_state and scene.players[0]["hand"] == snapshot_hand and scene.offline_phase == snapshot_phase, "saved offline snapshot reloads from the progress file")
+	var old_round_id: String = str(scene.active_round_id)
+	var saved_fx := bool(scene.fx_enabled)
+	scene.fx_enabled = false
+	scene.transition_active = false
+	scene.start_new_offline_match()
+	check(not scene.offline_progress_loaded_state and scene.offline_hand_number == 1 and scene.active_round_id != old_round_id and scene.round_event_sequence == 1, "starting a new offline match clears the old snapshot before dealing")
+	scene.fx_enabled = saved_fx
 	check(count_nodes_with_name_prefix(scene, "SeatCompactTextBack_") == 4 and count_nodes_with_name_prefix(scene, "SeatAvatarWindMark_") == 4 and count_nodes_with_name_prefix(scene, "SeatAvatarShortName_") == 4, "seat panels expose avatar wind marks short names and readable text backplates")
 	check(scene.find_child("TopHudHandProgress", true, false) != null and scene.find_child("HandProgressRail", true, false) != null and scene.find_child("HandProgressDealerBadge", true, false) != null and scene.find_child("HandProgressLabel", true, false) != null and count_nodes_with_name_prefix(scene, "HandProgressPip_") == scene.MATCH_MAX_HANDS, "top HUD renders hand progress rail dealer badge label and match pips")
 	check(scene.find_child("HandProgressRouteFill", true, false) != null and scene.find_child("HandProgressActiveGlow", true, false) != null and scene.find_child("HandProgressCurrentCursor", true, false) != null and count_nodes_with_name_prefix(scene, "HandProgressRhythmTick_") == 3, "top HUD hand progress renders route fill active glow current cursor and rhythm ticks")
@@ -1813,7 +1915,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_声音_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_体验_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_系统_") == 0 and ((scene.optional_gpt_illustration_texture("settings_section_signal_panel") == null) or (count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPanelTexture_") == 3)), "settings overlay replaces section signal pulses with optional GPT signal panel plate")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusArt_") == 10 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusRail_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusFill_") == 0, "settings rows keep status art but omit obsolete row rails and fills")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusDot_") == 0, "settings rows omit compact status dots that competed with text")
-	var settings_row_titles := ["背景音乐", "音效反馈", "语音报牌", "播放测试", "AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目", "3D 画质", "本地进度"]
+	var settings_row_titles := ["背景音乐", "音效反馈", "语音报牌", "播放测试", "AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目", "3D 画质", "本地进度", "隐私诊断"]
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowTextReadabilityPanel_") == settings_row_titles.size(), "settings rows expose local text readability panels")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchArt") == 6 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchRail") == 6, "settings toggle buttons render compact switch art and rails")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmGate") == 0, "settings toggle buttons omit obsolete route/state/knob confirmation clutter")

@@ -42,7 +42,91 @@ EXPECTED_SCREENS = [
     "22_advisor.png",
     "23_online_lobby_connected.png",
     "24_online_lobby_disconnect_recovery.png",
+    "25_replay_import_empty.png",
+    "26_replay_import.png",
+    "27_online_game.png",
+    "28_online_game_pending.png",
+    "29_online_game_chat.png",
+    "30_online_game_disconnect.png",
+    "31_telemetry_default.png",
+    "32_telemetry_consented.png",
+    "33_telemetry_revoked.png",
+    "34_telemetry_exported.png",
 ]
+REQUIRED_INTERACTIVE_STATE_CONTRACTS = {
+    "23_online_lobby_connected": {
+        "fixture_seed": "seed_preview_online_lobby_connected",
+        "required_nodes": ["OnlineLobbyLowFrequencyPagePlate", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit", "OnlineLobbyConnectButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbyStatusLabel"],
+        "default_focus": "OnlineLobbyConnectButton",
+        "state_text": "房间同步完成",
+    },
+    "24_online_lobby_disconnect_recovery": {
+        "fixture_seed": "seed_preview_online_lobby_disconnect_recovery",
+        "required_nodes": ["OnlineLobbyLowFrequencyPagePlate", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit", "OnlineLobbyConnectButton", "OnlineLobbyStatusLabel"],
+        "default_focus": "OnlineLobbyConnectButton",
+        "state_text": "连接已断开",
+    },
+    "25_replay_import_empty": {
+        "fixture_seed": "show_replay_import_screen",
+        "required_nodes": ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline", "ReplayImportTimelineScroll"],
+        "default_focus": "ReplayImportCodeInput",
+        "state_text": "等待导入",
+    },
+    "26_replay_import": {
+        "fixture_seed": "seed_preview_replay_import",
+        "required_nodes": ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline", "ReplayImportTimelineScroll", "ReplayArchivePane", "ReplayArchiveScroll", "ReplayImportEventText"],
+        "default_focus": "ReplayImportCodeInput",
+        "state_text": "校验通过",
+    },
+    "27_online_game": {
+        "fixture_seed": "seed_preview_online_game:awaitDiscard",
+        "required_nodes": ["TopHudStatus", "TopHudWallText", "HandTray", "ActionButtonDock"],
+        "default_focus": "HandTile_",
+        "state_text": "轮到你出牌",
+    },
+    "28_online_game_pending": {
+        "fixture_seed": "seed_preview_online_game:pendingClaim",
+        "required_nodes": ["TopHudStatus", "PendingClaimIllustration", "PendingClaimResponseGrid", "ActionButtonDock"],
+        "default_focus": "PendingClaimPrimaryButton",
+        "state_text": "等待响应",
+    },
+    "29_online_game_chat": {
+        "fixture_seed": "seed_preview_online_game:awaitDiscard+seed_preview_online_game_chat",
+        "required_nodes": ["TopHudStatus", "HandTray", "ActionButtonDock", "ChatPanel", "ChatPanelCloseButton", "ChatInput", "ChatSendButton"],
+        "default_focus": "ChatInput",
+        "state_text": "房间消息",
+    },
+    "30_online_game_disconnect": {
+        "fixture_seed": "seed_preview_online_game:awaitDiscard+seed_preview_online_game_disconnect",
+        "required_nodes": ["TopHudStatus", "HandTray", "ActionButtonDock"],
+        "default_focus": "",
+        "state_text": "连接已断开",
+    },
+    "31_telemetry_default": {
+        "fixture_seed": "seed_preview_telemetry:default",
+        "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"],
+        "default_focus": "TelemetryConsentButton",
+        "state_text": "未同意 · 默认不记录",
+    },
+    "32_telemetry_consented": {
+        "fixture_seed": "seed_preview_telemetry:consented",
+        "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"],
+        "default_focus": "TelemetryConsentButton",
+        "state_text": "已同意 · 本地队列",
+    },
+    "33_telemetry_revoked": {
+        "fixture_seed": "seed_preview_telemetry:revoked",
+        "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"],
+        "default_focus": "TelemetryConsentButton",
+        "state_text": "已关闭 · 不记录",
+    },
+    "34_telemetry_exported": {
+        "fixture_seed": "seed_preview_telemetry:exported",
+        "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"],
+        "default_focus": "TelemetryExportButton",
+        "state_text": "匿名诊断数据已复制",
+    },
+}
 DEFAULT_EXPECTED_SIZE = (1280, 720)
 CONTACT_SHEET_COLUMNS = 2
 CONTACT_SHEET_THUMB_SIZE = (480, 270)
@@ -191,6 +275,11 @@ def validate_capture_metadata(pages_dir: Path, expected_size: tuple[int, int]) -
         actual_value = str(metadata.get(key, ""))
         if actual_value != expected_value:
             issues.append(f"{key} expected `{expected_value}` got `{actual_value}`")
+    contract = metadata.get("interactive_state_contract")
+    if not isinstance(contract, dict):
+        issues.append("interactive_state_contract is missing or not an object")
+    else:
+        issues.extend(validate_interactive_state_contract(contract))
     capture_batch_id = str(metadata.get("capture_batch_id", ""))
     expected_batch_id = os.environ.get("YUNZHUO_CAPTURE_BATCH_ID", "")
     if not capture_batch_id:
@@ -198,6 +287,25 @@ def validate_capture_metadata(pages_dir: Path, expected_size: tuple[int, int]) -
     elif expected_batch_id and capture_batch_id != expected_batch_id:
         issues.append(f"capture_batch_id expected `{expected_batch_id}` got `{capture_batch_id}`")
     return not issues, issues
+
+
+def validate_interactive_state_contract(contract: dict[object, object]) -> list[str]:
+    issues: list[str] = []
+    for screen_name, expected in REQUIRED_INTERACTIVE_STATE_CONTRACTS.items():
+        actual = contract.get(screen_name)
+        if not isinstance(actual, dict):
+            issues.append(f"interactive_state_contract missing `{screen_name}`")
+            continue
+        for key in ("fixture_seed", "default_focus", "state_text"):
+            expected_value = expected[key]
+            actual_value = actual.get(key, "")
+            if actual_value != expected_value:
+                issues.append(f"{screen_name}.{key} expected `{expected_value}` got `{actual_value}`")
+        expected_nodes = set(expected["required_nodes"])
+        actual_nodes = actual.get("required_nodes", [])
+        if not isinstance(actual_nodes, list) or not expected_nodes.issubset({str(node) for node in actual_nodes}):
+            issues.append(f"{screen_name}.required_nodes is incomplete")
+    return issues
 
 
 def write_report(

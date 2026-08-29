@@ -193,6 +193,25 @@ func run() -> void:
 	check(server_peer != null, "client can reconnect after a dropped TCP session")
 	var hello_again := await wait_for_line(scene, "hello")
 	check(str(hello_again.get("name", "")) == "协议测试者", "reconnect sends a fresh hello instead of reusing stale framing")
+	await send_fragmented({"type": "welcome", "name": "本地房间服务"})
+	await pump(scene, 8)
+	var resumed_join_count := 0
+	for raw in received_lines:
+		var resumed_action = JSON.parse_string(raw)
+		if typeof(resumed_action) == TYPE_DICTIONARY and str(resumed_action.get("type", "")) == "joinRoom" and str(resumed_action.get("roomCode", "")) == "QA180":
+			resumed_join_count += 1
+	check(resumed_join_count == 1, "welcome resumes the saved room with exactly one idempotent join action")
+	await send_fragmented({"type": "welcome", "name": "本地房间服务"})
+	await pump(scene, 4)
+	var duplicate_resumed_join_count := 0
+	for raw in received_lines:
+		var duplicate_action = JSON.parse_string(raw)
+		if typeof(duplicate_action) == TYPE_DICTIONARY and str(duplicate_action.get("type", "")) == "joinRoom" and str(duplicate_action.get("roomCode", "")) == "QA180":
+			duplicate_resumed_join_count += 1
+	check(duplicate_resumed_join_count == 1, "duplicate welcome does not replay the room join")
+	await send_fragmented({"type": "roomState", "room": {"roomCode": "QA180", "players": [{"seat": 0, "nickname": "协议测试者", "ready": true}], "logs": ["恢复成功"]}})
+	await pump(scene, 8)
+	check(str(scene.selected_room) == "QA180" and not scene.online_resume_pending and not scene.online_resume_join_sent, "resumed roomState clears the one-shot recovery marker")
 	var burst_wire := ""
 	for i in range(BURST_LOG_COUNT):
 		burst_wire += JSON.stringify({"type": "log", "text": "突发日志%04d" % (i + 1)}) + "\n"

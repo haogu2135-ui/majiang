@@ -31,11 +31,34 @@ const UPDATE_URL := "http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.180-godot.a
 const UPDATE_FILE_PATH := "user://updates/YunzhuoMahjongGodot-v1.0.180-godot.apk"
 const SETTINGS_PATH := "user://settings.cfg"
 const PROGRESS_PATH := "user://offline_progress.cfg"
+const OFFLINE_PROGRESS_SCHEMA_VERSION := 2
+const OFFLINE_PROGRESS_AUTOSAVE_INTERVAL_MSEC := 1500
+const OFFLINE_PROGRESS_MAX_BYTES := 512 * 1024
 const STATS_PATH := "user://game_stats.cfg"
 const HISTORY_PATH := "user://round_history.cfg"
+const REPLAY_ARCHIVE_PATH := "user://replay_archive.cfg"
+const REPLAY_ARCHIVE_SCHEMA_VERSION := 1
+const REPLAY_ARCHIVE_LIMIT := 60
 const TUTORIAL_PATH := "user://tutorial.cfg"
 const ACHIEVEMENTS_PATH := "user://achievements.cfg"
 const LOGIN_PATH := "user://login.cfg"
+const TELEMETRY_PATH := "user://telemetry.cfg"
+const TELEMETRY_SCHEMA_VERSION := 1
+const TELEMETRY_OUTBOX_LIMIT := 128
+const TELEMETRY_EVENT_MAX_BYTES := 1024
+const TELEMETRY_UPLOAD_URL := ""
+const TELEMETRY_ALLOWED_EVENT_NAMES := [
+	"app_started",
+	"consent_granted",
+	"consent_revoked",
+	"round_started",
+	"round_completed",
+	"round_abandoned",
+	"replay_imported",
+	"replay_exported",
+	"online_connection",
+	"online_disconnection",
+]
 const AUDIO_DEFAULTS_VERSION := "1.0.159-godot"
 const BGM_STREAM_PATH := "res://assets/audio/mobile/bgm_guofeng2.mp3"
 const UI_CJK_FONT_PATH := "res://assets/fonts/DroidSansFallbackFull.ttf"
@@ -576,12 +599,28 @@ var task_progress = {}  # 任务进度
 var task_claimed = {}  # 当日任务奖励是否已领取
 var last_task_reset_date = ""  # 上次任务重置日期
 var round_history: Array = []  # 最近对局战报，最多保留 ROUND_HISTORY_LIMIT 条
+var replay_archive: Array = []  # 可检索、可收藏的本地回放归档
+var replay_search_query := ""
+var replay_delete_target_id := ""
+var replay_delete_confirming := false
 var round_event_history: Array = []  # 当前牌局结构化事件，用于战报复盘
+var replay_import_payload: Dictionary = {}
+var replay_import_input: LineEdit
 var round_event_sequence := 0
 var active_round_id := ""
+var telemetry_consent := false
+var telemetry_consent_decided := false
+var telemetry_outbox: Array = []
+var telemetry_event_sequence := 0
+var telemetry_upload_status := "本地队列"
+var telemetry_export_status := "未导出"
+var telemetry_sheet_open := false
 var applied_result_transactions: Dictionary = {}
 var offline_hand_seed := 0
 var last_match_summary: Dictionary = {}
+var offline_progress_loaded_state := false
+var offline_progress_dirty := false
+var offline_progress_last_save_msec := 0
 # 道具系统
 var inventory = {}  # 道具库存 {"swap_card": 2, "peek_card": 1, ...}
 # 虚拟货币
@@ -729,6 +768,8 @@ var online_session_id := 0
 var online_room_revision := -1
 var online_game_revision := -1
 var online_resume_context: Dictionary = {}
+var online_resume_pending := false
+var online_resume_join_sent := false
 var online_seen_message_ids: Dictionary = {}
 var online_seen_voice_sequences: Dictionary = {}
 var online_last_chat_sent_msec := 0
@@ -959,8 +1000,8 @@ const SAFE_CONTENT_MAX_SIDE_FRACTION := 0.16
 const SAFE_CONTENT_MAX_TOP_FRACTION := 0.16
 const SAFE_CONTENT_MAX_BOTTOM_FRACTION := 0.18
 const TOP_HUD_RECT := Rect2(Vector2(0.014, 0.014), Vector2(0.986, 0.105))
-const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.106, 0.10), Vector2(0.208, 0.88))
-const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.212, 0.10), Vector2(0.432, 0.50))
+const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.106, 0.10), Vector2(0.300, 0.88))
+const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.310, 0.10), Vector2(0.432, 0.50))
 const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.212, 0.565), Vector2(0.432, 0.890))
 const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.442, 0.15), Vector2(0.712, 0.85))
 const TOP_HUD_WALL_RECT := Rect2(Vector2(0.692, 0.14), Vector2(0.764, 0.86))
@@ -2381,7 +2422,15 @@ func numeric_count(value, fallback: int = 0) -> int:
 func fx_enabled_effective() -> bool:
 	if offline_sim_quiet:
 		return false
-	return fx_enabled and not reduce_motion_enabled and fx_layer != null and is_instance_valid(fx_layer)
+	if not fx_enabled or reduce_motion_enabled:
+		return false
+	# Animation entry points are also exercised independently by smoke fixtures.
+	# Lazily restore the persistent layer so the first effect is not silently lost
+	# when a fixture or a screen teardown has cleared it.
+	if fx_layer == null or not is_instance_valid(fx_layer):
+		if has_method("ensure_fx_layer"):
+			call("ensure_fx_layer")
+	return fx_layer != null and is_instance_valid(fx_layer)
 
 func accessibility_profile_label() -> String:
 	if large_text_enabled and high_contrast_enabled and reduce_motion_enabled:
@@ -2397,7 +2446,7 @@ func accessibility_profile_label() -> String:
 	return "标准"
 
 func accessibility_font_size(font_size: int) -> int:
-	return font_size + (2 if large_text_enabled else 0)
+	return font_size + (4 if large_text_enabled else 0)
 
 func accessible_text_color(color: Color) -> Color:
 	if not high_contrast_enabled:
@@ -2726,6 +2775,8 @@ func load_settings() -> void:
 	graphics_quality = clampi(int(config.get_value("gameplay", "graphics_quality", graphics_quality)), Commercial3DStage.QUALITY_AUTO, Commercial3DStage.QUALITY_HIGH)
 	ai_assist_enabled = bool(config.get_value("gameplay", "ai_assist_enabled", ai_assist_enabled))
 	ai_difficulty = clampi(int(config.get_value("gameplay", "ai_difficulty", ai_difficulty)), AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	telemetry_consent = bool(config.get_value("privacy", "telemetry_consent", telemetry_consent))
+	telemetry_consent_decided = bool(config.get_value("privacy", "telemetry_consent_decided", telemetry_consent))
 	var saved_rule_variant := str(config.get_value("gameplay", "rule_variant", rule_variant)).strip_edges().to_lower()
 	rule_variant = saved_rule_variant if RULE_VARIANT_PROFILES.has(saved_rule_variant) else RULE_VARIANT_YANGZHOU
 	current_bgm_index = int(config.get_value("gameplay", "current_bgm_index", 0))
@@ -2752,6 +2803,8 @@ func save_settings() -> void:
 	var saved_rule_variant := rule_variant if RULE_VARIANT_PROFILES.has(rule_variant) else RULE_VARIANT_YANGZHOU
 	config.set_value("gameplay", "rule_variant", saved_rule_variant)
 	config.set_value("gameplay", "current_bgm_index", current_bgm_index)
+	config.set_value("privacy", "telemetry_consent", telemetry_consent)
+	config.set_value("privacy", "telemetry_consent_decided", telemetry_consent_decided)
 	config.save(SETTINGS_PATH)
 
 func load_game_stats() -> void:
@@ -3370,13 +3423,204 @@ func grant_round_coins(won: bool, score: int) -> int:
 	call("show_toast", "本局奖励：+%d金币%s" % [reward, "（双倍卡已消耗）" if doubled else ""], 2200)
 	return reward
 
+func offline_progress_state_payload() -> Dictionary:
+	var snapshot_players: Array = []
+	for i in range(mini(players.size(), 4)):
+		var source: Dictionary = players[i] if typeof(players[i]) == TYPE_DICTIONARY else {}
+		snapshot_players.append({
+			"name": str(source.get("name", SEAT_NAMES[i])),
+			"hand": (source.get("hand", []) as Array).duplicate(),
+			"discards": (source.get("discards", []) as Array).duplicate(),
+			"melds": (source.get("melds", []) as Array).duplicate(true),
+			"flowers": int(source.get("flowers", 0)),
+			"flower_tiles": (source.get("flower_tiles", []) as Array).duplicate(),
+			"score": int(source.get("score", MATCH_START_SCORE)),
+			"bot": bool(source.get("bot", i != 0)),
+		})
+	var pending := offline_pending_claim.duplicate(true)
+	if pending.has("deadline_msec"):
+		pending["remaining_msec"] = maxi(0, int(pending.get("deadline_msec", 0)) - Time.get_ticks_msec())
+		pending.erase("deadline_msec")
+	return {
+		"schema_version": OFFLINE_PROGRESS_SCHEMA_VERSION,
+		"saved_at": int(Time.get_unix_time_from_system()),
+		"dealer_seat": dealer_seat,
+		"hand_number": offline_hand_number,
+		"current_seat": current_seat,
+		"offline_phase": offline_phase,
+		"offline_turn_needs_draw": offline_turn_needs_draw,
+		"offline_active_rule_variant": str(call("active_rule_variant")),
+		"offline_hand_seed": offline_hand_seed,
+		"active_round_id": active_round_id,
+		"offline_draw_serial": offline_draw_serial,
+		"offline_last_draw": offline_last_draw.duplicate(true),
+		"offline_self_draw_ready": offline_self_draw_ready.duplicate(true),
+		"offline_pending_claim": pending,
+		"offline_claim_counts": offline_claim_counts.duplicate(true),
+		"offline_package_liability": offline_package_liability.duplicate(true),
+		"offline_passed_win_tiles": offline_passed_win_tiles.duplicate(true),
+		"offline_claim_discard_bans": offline_claim_discard_bans.duplicate(true),
+		"offline_concealed_gang_tiles": offline_concealed_gang_tiles.duplicate(true),
+		"wall": wall.duplicate(),
+		"players": snapshot_players,
+		"last_discard": last_discard,
+		"last_discard_seat": last_discard_seat,
+		"round_summary": round_summary,
+		"round_result_kind": round_result_kind,
+		"last_score_deltas": last_score_deltas.duplicate(),
+		"last_win_score": last_win_score.duplicate(true),
+		"offline_last_winner": offline_last_winner,
+		"offline_dealer_repeat": offline_dealer_repeat,
+		"table_logs": table_logs.duplicate(),
+		"round_event_history": round_event_history.duplicate(true),
+		"round_event_sequence": round_event_sequence,
+		"ai_profile_seat_map": ai_profile_seat_map.duplicate(),
+	}
+
+
+func offline_progress_state_validation_error(state: Dictionary) -> String:
+	if int(state.get("schema_version", 0)) != OFFLINE_PROGRESS_SCHEMA_VERSION:
+		return "本地进度版本不兼容。"
+	var loaded_dealer := int(state.get("dealer_seat", -1))
+	var loaded_hand := int(state.get("hand_number", -1))
+	if loaded_dealer < 0 or loaded_dealer >= 4 or loaded_hand < 1 or loaded_hand > MATCH_MAX_HANDS:
+		return "本地进度的局数或庄位异常。"
+	var loaded_current := int(state.get("current_seat", -1))
+	if loaded_current < 0 or loaded_current >= 4:
+		return "本地进度的行动座位异常。"
+	var phase := str(state.get("offline_phase", ""))
+	if not ["await_discard", "pending_claim", "resolving", "ended"].has(phase):
+		return "本地进度的牌局阶段异常。"
+	var variant: String = str(call("normalized_rule_variant", str(state.get("offline_active_rule_variant", rule_variant))))
+	var allowed: Array = (call("rule_tile_codes", variant) as Array) + (call("rule_flower_codes", variant) as Array)
+	var actual_counts: Dictionary = {}
+	var check_tiles := func(value, label: String, max_count: int = 100) -> String:
+		if typeof(value) != TYPE_ARRAY:
+			return "%s格式异常。" % label
+		if (value as Array).size() > max_count:
+			return "%s数量异常。" % label
+		for raw_tile in value:
+			var tile := str(raw_tile)
+			if not allowed.has(tile):
+				return "%s包含未知牌。" % label
+			actual_counts[tile] = int(actual_counts.get(tile, 0)) + 1
+		return ""
+	var wall_error: String = str(check_tiles.call(state.get("wall", []), "牌墙", int(call("rule_wall_size", variant))))
+	if wall_error != "":
+		return wall_error
+	var players_value = state.get("players", [])
+	if typeof(players_value) != TYPE_ARRAY or (players_value as Array).size() != 4:
+		return "本地进度缺少四家玩家。"
+	for i in range(4):
+		if typeof((players_value as Array)[i]) != TYPE_DICTIONARY:
+			return "玩家%d数据格式异常。" % i
+		var player: Dictionary = (players_value as Array)[i]
+		var hand_error: String = str(check_tiles.call(player.get("hand", []), "玩家%d手牌" % i, 14))
+		if hand_error != "":
+			return hand_error
+		var discard_error: String = str(check_tiles.call(player.get("discards", []), "玩家%d弃牌" % i))
+		if discard_error != "":
+			return discard_error
+		var flower_error: String = str(check_tiles.call(player.get("flower_tiles", []), "玩家%d花牌" % i, FLOWER_CODES.size()))
+		if flower_error != "":
+			return flower_error
+		var melds = player.get("melds", [])
+		if typeof(melds) != TYPE_ARRAY or (melds as Array).size() > 8:
+			return "玩家%d副露数据异常。" % i
+		for meld in melds:
+			var meld_error: String = str(check_tiles.call(meld, "玩家%d副露" % i, 4))
+			if meld_error != "":
+				return meld_error
+		var score := int(player.get("score", MATCH_START_SCORE))
+		if score < -1000000 or score > 1000000:
+			return "玩家%d分数异常。" % i
+	var expected_counts: Dictionary = {}
+	for tile in call("rule_tile_codes", variant):
+		expected_counts[str(tile)] = 4
+	for tile in call("rule_flower_codes", variant):
+		expected_counts[str(tile)] = 1
+	for tile in expected_counts:
+		if int(actual_counts.get(tile, 0)) != int(expected_counts[tile]):
+			return "本地进度牌账异常。"
+	return ""
+
+
+func restore_offline_progress_state(state: Dictionary) -> bool:
+	var validation_error := offline_progress_state_validation_error(state)
+	if validation_error != "":
+		set_status("本地进度无法恢复：%s" % validation_error)
+		return false
+	mode = "offline"
+	dealer_seat = int(state.get("dealer_seat", 0))
+	offline_hand_number = int(state.get("hand_number", 1))
+	current_seat = int(state.get("current_seat", dealer_seat))
+	offline_phase = str(state.get("offline_phase", "await_discard"))
+	offline_turn_needs_draw = bool(state.get("offline_turn_needs_draw", false))
+	offline_active_rule_variant = str(call("normalized_rule_variant", str(state.get("offline_active_rule_variant", rule_variant))))
+	offline_hand_seed = int(state.get("offline_hand_seed", 0))
+	active_round_id = str(state.get("active_round_id", ""))
+	offline_draw_serial = int(state.get("offline_draw_serial", 0))
+	offline_last_draw = state.get("offline_last_draw", {}).duplicate(true) if typeof(state.get("offline_last_draw", {})) == TYPE_DICTIONARY else {}
+	offline_self_draw_ready = state.get("offline_self_draw_ready", {}).duplicate(true) if typeof(state.get("offline_self_draw_ready", {})) == TYPE_DICTIONARY else {}
+	offline_pending_claim = state.get("offline_pending_claim", {}).duplicate(true) if typeof(state.get("offline_pending_claim", {})) == TYPE_DICTIONARY else {}
+	if offline_pending_claim.has("remaining_msec"):
+		offline_pending_claim["deadline_msec"] = Time.get_ticks_msec() + maxi(0, int(offline_pending_claim.get("remaining_msec", 0)))
+		offline_pending_claim.erase("remaining_msec")
+	offline_claim_counts = state.get("offline_claim_counts", {}).duplicate(true) if typeof(state.get("offline_claim_counts", {})) == TYPE_DICTIONARY else {}
+	offline_package_liability = state.get("offline_package_liability", {}).duplicate(true) if typeof(state.get("offline_package_liability", {})) == TYPE_DICTIONARY else {}
+	offline_passed_win_tiles = state.get("offline_passed_win_tiles", {}).duplicate(true) if typeof(state.get("offline_passed_win_tiles", {})) == TYPE_DICTIONARY else {}
+	offline_claim_discard_bans = state.get("offline_claim_discard_bans", {}).duplicate(true) if typeof(state.get("offline_claim_discard_bans", {})) == TYPE_DICTIONARY else {}
+	offline_concealed_gang_tiles = state.get("offline_concealed_gang_tiles", {}).duplicate(true) if typeof(state.get("offline_concealed_gang_tiles", {})) == TYPE_DICTIONARY else {}
+	wall = []
+	for raw_tile in state.get("wall", []):
+		wall.append(str(raw_tile))
+	players = (state.get("players", []) as Array).duplicate(true)
+	last_discard = str(state.get("last_discard", ""))
+	last_discard_seat = int(state.get("last_discard_seat", -1))
+	round_summary = str(state.get("round_summary", ""))
+	round_result_kind = str(state.get("round_result_kind", "playing"))
+	last_score_deltas = []
+	for delta in state.get("last_score_deltas", []):
+		last_score_deltas.append(int(delta))
+	last_win_score = state.get("last_win_score", {}).duplicate(true) if typeof(state.get("last_win_score", {})) == TYPE_DICTIONARY else {}
+	offline_last_winner = int(state.get("offline_last_winner", -1))
+	offline_dealer_repeat = bool(state.get("offline_dealer_repeat", false))
+	table_logs = []
+	for log_entry in state.get("table_logs", []):
+		table_logs.append(str(log_entry))
+	round_event_history = state.get("round_event_history", []).duplicate(true) if typeof(state.get("round_event_history", [])) == TYPE_ARRAY else []
+	round_event_sequence = int(state.get("round_event_sequence", 0))
+	ai_profile_seat_map = state.get("ai_profile_seat_map", [0, 1, 2, 3]).duplicate() if typeof(state.get("ai_profile_seat_map", [])) == TYPE_ARRAY else [0, 1, 2, 3]
+	if has_method("offline_tile_ledger_report"):
+		var ledger: Dictionary = call("offline_tile_ledger_report") as Dictionary
+		if not bool(ledger.get("ok", false)):
+			set_status("本地进度牌账不完整，已创建新赛季")
+			return false
+	offline_progress_loaded_state = true
+	offline_progress_dirty = false
+	offline_progress_last_save_msec = Time.get_ticks_msec()
+	return true
+
+
 func load_offline_progress() -> bool:
+	offline_progress_loaded_state = false
 	var config = ConfigFile.new()
 	if config.load(PROGRESS_PATH) != OK:
 		return false
 	if not config.has_section("progress"):
 		set_status("本地进度缺少核心数据，已创建新赛季")
 		return false
+	var state_json := str(config.get_value("progress", "state_json", ""))
+	if state_json != "":
+		if state_json.to_utf8_buffer().size() > OFFLINE_PROGRESS_MAX_BYTES:
+			set_status("本地进度文件过大，已创建新赛季")
+			return false
+		var parsed = JSON.parse_string(state_json)
+		if typeof(parsed) == TYPE_DICTIONARY and restore_offline_progress_state(parsed as Dictionary):
+			return true
+		set_status("本地进度已损坏，已创建新赛季")
+		return false
+	# Backward-compatible migration for v1 files that only stored match scores.
 	var loaded_dealer := int(config.get_value("progress", "dealer_seat", -1))
 	var loaded_hand := int(config.get_value("progress", "hand_number", -1))
 	if loaded_dealer < 0 or loaded_dealer >= 4 or loaded_hand < 1 or loaded_hand > MATCH_MAX_HANDS:
@@ -3408,30 +3652,71 @@ func load_offline_progress() -> bool:
 		})
 	return true
 
-func save_offline_progress() -> void:
-	if offline_sim_quiet:
+
+func save_offline_progress(announce: bool = true) -> void:
+	if offline_sim_quiet or mode != "offline" or players.size() != 4:
 		return
-	if mode != "offline":
+	# Never persist the brief resolving phase. The last stable snapshot can be
+	# resumed safely; saving between discard and arbitration would be ambiguous.
+	if offline_phase == "resolving":
+		return
+	var state := offline_progress_state_payload()
+	var validation_error := offline_progress_state_validation_error(state)
+	if validation_error != "":
+		if announce:
+			set_status("进度保存跳过：%s" % validation_error)
 		return
 	var config = ConfigFile.new()
+	config.set_value("progress", "schema_version", OFFLINE_PROGRESS_SCHEMA_VERSION)
 	config.set_value("progress", "dealer_seat", dealer_seat)
 	config.set_value("progress", "hand_number", offline_hand_number)
 	config.set_value("progress", "saved_time", Time.get_unix_time_from_system())
+	config.set_value("progress", "state_json", JSON.stringify(state))
 	for i in range(4):
 		var section = "player_%d" % i
 		config.set_value(section, "name", players[i].get("name", SEAT_NAMES[i]))
 		config.set_value(section, "score", players[i].get("score", MATCH_START_SCORE))
 	var save_error := config.save(PROGRESS_PATH)
 	if save_error != OK:
-		set_status("进度保存失败：%s" % error_string(save_error))
+		if announce:
+			set_status("进度保存失败：%s" % error_string(save_error))
 		return
-	set_status("进度已保存 (第%d局)" % offline_hand_number)
+	offline_progress_dirty = false
+	offline_progress_last_save_msec = Time.get_ticks_msec()
+	if announce:
+		set_status("进度已保存 (第%d局)" % offline_hand_number)
+
+
+func mark_offline_progress_dirty() -> void:
+	if not offline_sim_quiet and mode == "offline":
+		offline_progress_dirty = true
+
+
+func flush_offline_progress_autosave(force: bool = false) -> void:
+	if not offline_progress_dirty or offline_sim_quiet or mode != "offline":
+		return
+	var now := Time.get_ticks_msec()
+	if not force and now - offline_progress_last_save_msec < OFFLINE_PROGRESS_AUTOSAVE_INTERVAL_MSEC:
+		return
+	save_offline_progress(false)
+
+
+func offline_progress_status_text() -> String:
+	if offline_progress_dirty:
+		return "保存中"
+	if offline_progress_last_save_msec <= 0:
+		return "未保存"
+	return "已保存"
+
 
 func reset_offline_progress() -> void:
 	var dir = DirAccess.open("user://")
 	if dir != null and dir.file_exists("offline_progress.cfg"):
 		dir.remove("offline_progress.cfg")
 	reset_progress_confirming = false
+	offline_progress_loaded_state = false
+	offline_progress_dirty = false
+	offline_progress_last_save_msec = 0
 	set_status("进度已重置")
 
 # ===== Shared startup assets and tile metadata =====

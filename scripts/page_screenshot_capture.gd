@@ -27,6 +27,16 @@ const SCREEN_NAMES := [
 	"22_advisor",
 	"23_online_lobby_connected",
 	"24_online_lobby_disconnect_recovery",
+	"25_replay_import_empty",
+	"26_replay_import",
+	"27_online_game",
+	"28_online_game_pending",
+	"29_online_game_chat",
+	"30_online_game_disconnect",
+	"31_telemetry_default",
+	"32_telemetry_consented",
+	"33_telemetry_revoked",
+	"34_telemetry_exported",
 ]
 
 class ConnectedLobbyCaptureTransport:
@@ -153,6 +163,18 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 			"19_reset_progress": {"required_nodes": ["SettingsPanel", "SettingsCloseButton", "ResetProgressConfirmArt"], "default_focus": "SettingsCloseButton", "state_text": "再次点击确认清空本地进度"},
 			"20_chat_panel": {"required_nodes": ["ChatPanel", "ChatPanelCloseButton", "ChatInput", "ChatSendButton"], "default_focus": "ChatInput", "state_text": "房间消息"},
 			"22_advisor": {"required_nodes": ["AdvisorPanel", "AdvisorDetailButton"], "default_focus": "AdvisorDetailButton", "state_text": "牌势"},
+			"23_online_lobby_connected": {"fixture_seed": "seed_preview_online_lobby_connected", "required_nodes": ["OnlineLobbyLowFrequencyPagePlate", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit", "OnlineLobbyConnectButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbyStatusLabel"], "default_focus": "OnlineLobbyConnectButton", "state_text": "房间同步完成"},
+			"24_online_lobby_disconnect_recovery": {"fixture_seed": "seed_preview_online_lobby_disconnect_recovery", "required_nodes": ["OnlineLobbyLowFrequencyPagePlate", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit", "OnlineLobbyConnectButton", "OnlineLobbyStatusLabel"], "default_focus": "OnlineLobbyConnectButton", "state_text": "连接已断开"},
+			"25_replay_import_empty": {"fixture_seed": "show_replay_import_screen", "required_nodes": ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline", "ReplayImportTimelineScroll"], "default_focus": "ReplayImportCodeInput", "state_text": "等待导入"},
+			"26_replay_import": {"fixture_seed": "seed_preview_replay_import", "required_nodes": ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline", "ReplayImportTimelineScroll", "ReplayArchivePane", "ReplayArchiveScroll", "ReplayImportEventText"], "default_focus": "ReplayImportCodeInput", "state_text": "校验通过"},
+			"27_online_game": {"fixture_seed": "seed_preview_online_game:awaitDiscard", "required_nodes": ["TopHudStatus", "TopHudWallText", "HandTray", "ActionButtonDock"], "default_focus": "HandTile_", "state_text": "轮到你出牌"},
+			"28_online_game_pending": {"fixture_seed": "seed_preview_online_game:pendingClaim", "required_nodes": ["TopHudStatus", "PendingClaimIllustration", "PendingClaimResponseGrid", "ActionButtonDock"], "default_focus": "PendingClaimPrimaryButton", "state_text": "等待响应"},
+			"29_online_game_chat": {"fixture_seed": "seed_preview_online_game:awaitDiscard+seed_preview_online_game_chat", "required_nodes": ["TopHudStatus", "HandTray", "ActionButtonDock", "ChatPanel", "ChatPanelCloseButton", "ChatInput", "ChatSendButton"], "default_focus": "ChatInput", "state_text": "房间消息"},
+			"30_online_game_disconnect": {"fixture_seed": "seed_preview_online_game:awaitDiscard+seed_preview_online_game_disconnect", "required_nodes": ["TopHudStatus", "HandTray", "ActionButtonDock"], "default_focus": "", "state_text": "连接已断开"},
+			"31_telemetry_default": {"fixture_seed": "seed_preview_telemetry:default", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryConsentButton", "state_text": "未同意 · 默认不记录"},
+			"32_telemetry_consented": {"fixture_seed": "seed_preview_telemetry:consented", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryConsentButton", "state_text": "已同意 · 本地队列"},
+			"33_telemetry_revoked": {"fixture_seed": "seed_preview_telemetry:revoked", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryConsentButton", "state_text": "已关闭 · 不记录"},
+			"34_telemetry_exported": {"fixture_seed": "seed_preview_telemetry:exported", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryExportButton", "state_text": "匿名诊断数据已复制"},
 		},
 		"capture_time_utc": Time.get_datetime_string_from_system(true),
 	}
@@ -200,6 +222,16 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 	if ["03_offline_battle", "13_round_summary", "14_danger_discard", "15_pending_claim_full", "16_win_detail"].has(screen_name):
 		if not validate_preview_meld_fixture(scene):
 			printerr("capture fixture contract failed for %s" % screen_name)
+			quit(1)
+			return
+	if ["27_online_game", "28_online_game_pending", "29_online_game_chat", "30_online_game_disconnect"].has(screen_name):
+		if not validate_online_game_fixture(scene, screen_name):
+			printerr("online game fixture contract failed for %s" % screen_name)
+			quit(1)
+			return
+	if ["31_telemetry_default", "32_telemetry_consented", "33_telemetry_revoked", "34_telemetry_exported"].has(screen_name):
+		if not validate_telemetry_fixture(scene, screen_name):
+			printerr("telemetry fixture contract failed for %s" % screen_name)
 			quit(1)
 			return
 	if scene.has_method("clear_fx_overlays"):
@@ -275,6 +307,32 @@ func validate_preview_meld_fixture(scene: Node) -> bool:
 			printerr("meld fixture orientation mismatch at seat %d: got=%s expected=%s" % [seat, scene.seat_meld_is_vertical(seat), expected_vertical])
 			return false
 	return true
+
+func validate_online_game_fixture(scene: Node, screen_name: String) -> bool:
+	if scene.mode != "online_game" or scene.online_game.is_empty():
+		return false
+	var required_phase := "pendingClaim" if screen_name == "28_online_game_pending" else "awaitDiscard"
+	if str(scene.online_game.get("phase", "")) != required_phase:
+		return false
+	if screen_name == "29_online_game_chat" and scene.find_child("ChatPanel", true, false) == null:
+		return false
+	if screen_name == "30_online_game_disconnect" and scene.online_feedback.find("断开") < 0:
+		return false
+	return scene.find_child("TopHudStatus", true, false) != null and scene.find_child("HandTray", true, false) != null and scene.find_child("ActionButtonDock", true, false) != null
+
+func validate_telemetry_fixture(scene: Node, screen_name: String) -> bool:
+	if not scene.settings_panel_open or not scene.telemetry_sheet_open:
+		return false
+	var status := scene.find_child("TelemetryDataStatus", true, false) as Label
+	var consent := scene.find_child("TelemetryConsentButton", true, false) as Button
+	if status == null or consent == null:
+		return false
+	if screen_name == "31_telemetry_default":
+		return status.text == "未同意 · 默认不记录" and consent.text == "同意记录"
+	if screen_name == "33_telemetry_revoked":
+		return status.text == "已关闭 · 不记录" and consent.text == "同意记录"
+	return status.text.begins_with("已同意 · 本地队列") and consent.text == "关闭记录"
+
 
 func apply_static_capture_mode(scene: Node) -> void:
 	scene.set("fx_enabled", false)
@@ -381,6 +439,28 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		"24_online_lobby_disconnect_recovery":
 			seed_preview_online_lobby_disconnect_recovery(scene)
 			scene._show_online_lobby_impl()
+		"25_replay_import_empty":
+			scene.show_replay_import_screen(true)
+		"26_replay_import":
+			seed_preview_replay_import(scene)
+		"27_online_game":
+			seed_preview_online_game(scene, "awaitDiscard")
+		"28_online_game_pending":
+			seed_preview_online_game(scene, "pendingClaim")
+		"29_online_game_chat":
+			seed_preview_online_game(scene, "awaitDiscard")
+			seed_preview_online_game_chat(scene)
+		"30_online_game_disconnect":
+			seed_preview_online_game(scene, "awaitDiscard")
+			seed_preview_online_game_disconnect(scene)
+		"31_telemetry_default":
+			seed_preview_telemetry(scene, "default")
+		"32_telemetry_consented":
+			seed_preview_telemetry(scene, "consented")
+		"33_telemetry_revoked":
+			seed_preview_telemetry(scene, "revoked")
+		"34_telemetry_exported":
+			seed_preview_telemetry(scene, "exported")
 		"17_hand_tutorial":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
@@ -787,3 +867,104 @@ func seed_preview_chat_panel(scene: Node) -> void:
 	]
 	if scene.has_method("show_chat_panel"):
 		scene.show_chat_panel()
+
+func seed_preview_replay_import(scene: Node) -> void:
+	scene.show_replay_import_screen(true)
+	scene.active_round_id = "CAPTURE-REPLAY-LONG"
+	scene.round_event_history.clear()
+	scene.round_event_sequence = 0
+	scene.record_round_event("round_start", {"dealer": 0})
+	for event_index in range(scene.ROUND_EVENT_HISTORY_LIMIT - 2):
+		var kind := "draw"
+		var fields := {"seat": event_index % 4}
+		if event_index % 7 == 1:
+			kind = "discard"
+			fields = {"seat": event_index % 4, "tile": "3W"}
+		elif event_index % 11 == 3:
+			kind = "claim"
+			fields = {"seat": event_index % 4, "claim": "peng"}
+		scene.record_round_event(kind, fields)
+	scene.record_round_event("win", {"seat": 0, "points": 16})
+	var input := scene.find_child("ReplayImportCodeInput", true, false) as LineEdit
+	if input != null:
+		input.text = scene.round_replay_share_code()
+		scene.import_replay_from_input()
+
+func seed_preview_online_game(scene: Node, phase: String) -> void:
+	scene.mode = "online_game"
+	scene.online_feedback = ""
+	scene.online_waiting_for_server = false
+	scene.online_retry_available = false
+	scene.current_seat = 0
+	scene.online_game = {
+		"roomCode": "CAPTURE7",
+		"phase": phase,
+		"youSeat": 0,
+		"currentSeat": 0,
+		"wallCount": 55,
+		"wallTotal": 108,
+		"ruleVariant": "sichuan",
+		"hand": ["1W", "2W", "3W", "3W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "R"],
+		"lastDiscard": "3W",
+		"lastDiscardSeat": 3,
+		"players": [
+			{"seat": 0, "name": "你", "handCount": 14, "flowerCount": 0, "score": 26400, "discards": ["1W", "2W"], "melds": []},
+			{"seat": 1, "name": "东风夜放", "handCount": 13, "flowerCount": 1, "score": 23800, "discards": ["1T", "2T", "3T"], "melds": [["5T", "5T", "5T"]]},
+			{"seat": 2, "name": "南山客", "handCount": 13, "flowerCount": 0, "score": 27200, "discards": ["1B", "2B", "3B"], "melds": [["2W", "3W", "4W"]]},
+			{"seat": 3, "name": "北海若", "handCount": 13, "flowerCount": 0, "score": 22600, "discards": ["Z", "F", "P"], "melds": []},
+		],
+	}
+	if phase == "pendingClaim":
+		scene.online_game["pending"] = {
+			"tile": "3W",
+			"fromSeat": 3,
+			"options": ["hu", "gang", "peng", "chi"],
+			"chi_choices": [
+				{"meld": ["1W", "2W", "3W"]},
+				{"meld": ["2W", "3W", "4W"]},
+				{"meld": ["3W", "4W", "5W"]},
+			],
+		}
+	scene.table_logs.clear()
+	scene.table_logs.append("北海若打出三万，等待响应")
+	scene.table_logs.append("在线房间 CAPTURE7 已同步")
+	scene.render_game()
+	scene.clear_fx_overlays()
+
+func seed_preview_online_game_chat(scene: Node) -> void:
+	scene.chat_messages = ["甲: 这局稳了", "乙: 注意三万", "你: 收到，准备响应", "丙: 等服务器同步"]
+	scene.show_chat_panel()
+
+func seed_preview_online_game_disconnect(scene: Node) -> void:
+	scene.online_feedback = "连接已断开，请重新连接。"
+	scene.online_waiting_for_server = false
+	scene.online_retry_available = true
+	scene.render_game()
+	scene.clear_fx_overlays()
+
+
+func seed_preview_telemetry(scene: Node, state: String) -> void:
+	if scene.has_method("dismiss_active_toast"):
+		scene.dismiss_active_toast()
+	scene.settings_panel_open = false
+	scene.telemetry_sheet_open = false
+	scene.telemetry_outbox = []
+	scene.telemetry_event_sequence = 0
+	scene.telemetry_export_status = "未导出"
+	scene.telemetry_consent = state == "consented" or state == "exported"
+	scene.telemetry_consent_decided = state != "default"
+	if scene.telemetry_consent:
+		scene.telemetry_outbox = [{
+			"schema": scene.TELEMETRY_SCHEMA_VERSION,
+			"event_id": 1,
+			"name": "round_started",
+			"occurred_at": 1,
+			"payload": {"rule_variant": "yangzhou", "difficulty": "标准", "hand_number": 1},
+		}]
+		scene.telemetry_event_sequence = 1
+	scene.show_menu(true)
+	scene.settings_panel_open = true
+	scene.refresh_current_screen()
+	scene.show_telemetry_data_sheet()
+	if state == "exported":
+		scene.export_telemetry_data()

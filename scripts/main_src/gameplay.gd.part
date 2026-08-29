@@ -118,6 +118,8 @@ func refresh_current_screen() -> void:
 		show_shop_screen(true)
 	elif mode == "daily_login":
 		show_daily_login_panel(daily_login_view_state)
+	elif mode == "replay_import":
+		show_replay_import_screen(true)
 	elif mode == "offline" or mode == "online_game":
 		request_game_render()
 
@@ -147,6 +149,7 @@ func should_yield_before_ai_discard() -> bool:
 
 func clear_screen() -> void:
 	loading_screen_active = false
+	telemetry_sheet_open = false
 	if mode != "online_lobby" and mode != "online_game":
 		chat_panel_open = false
 	if mode != "offline" and mode != "online_game":
@@ -249,29 +252,47 @@ func _start_offline_impl() -> void:
 				"bot": i != 0,
 			})
 	else:
-		# 加载了进度，继续之前的游戏
-		set_status("已加载进度：第%d局" % offline_hand_number)
-		offline_last_winner = -1
-		offline_dealer_repeat = false
-		table_logs.clear()
-		# 确保players数组已经有4个玩家
-		while players.size() < 4:
-			players.append({
-				"name": SEAT_NAMES[players.size()],
-				"hand": [],
-				"discards": [],
-				"melds": [],
-				"flowers": 0,
-				"flower_tiles": [],
-				"score": MATCH_START_SCORE,
-				"bot": players.size() != 0,
-			})
-	deal_offline_hand()
+		if offline_progress_loaded_state:
+			# A schema-v2 snapshot contains the live hand. Keep its timer, event
+			# chain, and settlement intact instead of dealing a replacement hand.
+			set_status("已恢复进度：第%d局 · %s" % [offline_hand_number, offline_progress_status_text()])
+		else:
+			# Backward-compatible v1 files only contain match scores.
+			set_status("已加载进度：第%d局" % offline_hand_number)
+			offline_last_winner = -1
+			offline_dealer_repeat = false
+			table_logs.clear()
+			# 确保players数组已经有4个玩家
+			while players.size() < 4:
+				players.append({
+					"name": SEAT_NAMES[players.size()],
+					"hand": [],
+					"discards": [],
+					"melds": [],
+					"flowers": 0,
+					"flower_tiles": [],
+					"score": MATCH_START_SCORE,
+					"bot": players.size() != 0,
+				})
+	if not loaded or not offline_progress_loaded_state:
+		deal_offline_hand()
+	else:
+		render_game()
 	# 启动环境氛围动画
 	start_ambient_animation("default")
 	# Add floating ambient spirits to table scene
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null and is_instance_valid(ui_enhancements) and ambient_layer != null and is_instance_valid(ambient_layer):
 		ui_enhancements.create_floating_spirit(ambient_layer, ambient_layer.get_rect() if ambient_layer.get_rect().size.x > 0 else Rect2(Vector2.ZERO, get_viewport().size), 4)
+	if offline_progress_loaded_state and offline_phase == "await_discard" and current_seat != 0:
+		schedule_ai_until_human()
+
+
+func start_new_offline_match() -> void:
+	if transition_active:
+		return
+	reset_offline_progress()
+	offline_progress_loaded_state = false
+	start_offline()
 
 func start_next_offline_hand(auto_run_ai: bool = true) -> void:
 	if mode != "offline" or offline_phase != "ended":
@@ -360,6 +381,7 @@ func render_game() -> void:
 	if offline_sim_quiet:
 		game_render_queued = false
 		return
+	mark_offline_progress_dirty()
 	# r215: GPT chrome conversion
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
@@ -2496,8 +2518,10 @@ func finish_wall_draw() -> void:
 		"events": round_replay_snapshot(),
 		"replay_digest": round_replay_digest(),
 		"replay_valid": validate_round_replay(round_event_history),
-		"match_summary": last_match_summary.duplicate(true),
-	})
+			"match_summary": last_match_summary.duplicate(true),
+		})
+		archive_latest_round_history_entry()
+		telemetry_record_event("round_completed", {"rule_variant": active_rule_variant(), "result_kind": "wall_draw", "points_bucket": 0, "fan_bucket": 0})
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
 	play_wall_draw_resolution_fx(dealer_seat)
 	save_offline_progress()
@@ -2774,6 +2798,8 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		"replay_valid": validate_round_replay(round_event_history),
 		"match_summary": last_match_summary.duplicate(true),
 		})
+		archive_latest_round_history_entry()
+		telemetry_record_event("round_completed", {"rule_variant": active_rule_variant(), "result_kind": "win", "points_bucket": int(floor(float(points) / 100.0)) * 100, "fan_bucket": int(score_data.get("fan", 0))})
 	save_offline_progress()
 	render_game()
 

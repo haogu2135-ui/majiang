@@ -132,7 +132,7 @@ func check_profile_state(scene: Node, profile: Dictionary) -> void:
 	check(bool(scene.large_text_enabled) == bool(profile["large"]), "%s large-text state matches" % expected_label)
 	check(bool(scene.high_contrast_enabled) == bool(profile["contrast"]), "%s contrast state matches" % expected_label)
 	check(bool(scene.reduce_motion_enabled) == bool(profile["reduce_motion"]), "%s reduced-motion state matches" % expected_label)
-	check(scene.accessibility_font_size(15) == (17 if bool(profile["large"]) else 15), "%s shared label size matches" % expected_label)
+	check(scene.accessibility_font_size(15) == (19 if bool(profile["large"]) else 15), "%s shared label size matches" % expected_label)
 	check(button != null and button.has_focus() and focus_owner == button, "%s restores keyboard focus to the profile control" % expected_label)
 	var focus_plate := button.find_child("ButtonFocusPlate", true, false) as CanvasItem if button != null else null
 	check(focus_plate != null and focus_plate.modulate.a >= 0.50, "%s exposes visible focus feedback" % expected_label)

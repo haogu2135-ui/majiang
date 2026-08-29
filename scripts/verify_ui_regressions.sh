@@ -123,10 +123,10 @@ capture_pages_for_size() {
 		--screens=01_menu,02_menu_settings,03_offline_battle,04_rules,05_stats || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
-		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading,11_exit_confirm,12_toast,17_hand_tutorial,18_update_dialog,19_reset_progress,20_chat_panel,22_advisor,23_online_lobby_connected,24_online_lobby_disconnect_recovery || return 1
+		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading,11_exit_confirm,12_toast,17_hand_tutorial,18_update_dialog,19_reset_progress,20_chat_panel,22_advisor,23_online_lobby_connected,24_online_lobby_disconnect_recovery,25_replay_import_empty,26_replay_import,31_telemetry_default,32_telemetry_consented,33_telemetry_revoked,34_telemetry_exported || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
-		--screens=13_round_summary,14_danger_discard,15_pending_claim_full,16_win_detail,21_diagnostic
+		--screens=13_round_summary,14_danger_discard,15_pending_claim_full,16_win_detail,21_diagnostic,27_online_game,28_online_game_pending,29_online_game_chat,30_online_game_disconnect
 }
 
 capture_accessibility_profiles_for_size() {
@@ -268,6 +268,9 @@ run_check "Accessibility profile manifest 1920x1080" "accessibility_manifest_192
 run_check "Offline gameplay smoke" "offline_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/offline_smoke_test.gd
 
+run_check "Telemetry consent and data controls smoke" "ui_telemetry_smoke.log" \
+	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_telemetry_smoke_test.gd
+
 run_check "Capture UI screenshots 1280x720 (3 serial batches)" "capture_pages_1280x720.log" \
 	capture_pages_for_size 1280x720
 
@@ -300,6 +303,7 @@ run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 	"$LOG_DIR/ui_accessibility_960x540.log" \
 	"$LOG_DIR/ui_accessibility_1920x1080.log" \
 	"$LOG_DIR/offline_smoke.log" \
+	"$LOG_DIR/ui_telemetry_smoke.log" \
 	"$LOG_DIR/capture_pages_1280x720.log" \
 	"$LOG_DIR/capture_pages_960x540.log" \
 	"$LOG_DIR/capture_pages_1920x1080.log"
@@ -312,6 +316,7 @@ run_check "Runtime error log scan" "runtime_error_scan.log" \
 	"$LOG_DIR/ui_accessibility_960x540.log" \
 	"$LOG_DIR/ui_accessibility_1920x1080.log" \
 	"$LOG_DIR/offline_smoke.log" \
+	"$LOG_DIR/ui_telemetry_smoke.log" \
 	"$LOG_DIR/capture_pages_1280x720.log" \
 	"$LOG_DIR/capture_pages_960x540.log" \
 	"$LOG_DIR/capture_pages_1920x1080.log"

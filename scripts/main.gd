@@ -5110,6 +5110,8 @@ func refresh_current_screen() -> void:
 		show_shop_screen(true)
 	elif mode == "daily_login":
 		show_daily_login_panel(daily_login_view_state)
+	elif mode == "replay_import":
+		show_replay_import_screen(true)
 	elif mode == "offline" or mode == "online_game":
 		request_game_render()
 
@@ -5139,6 +5141,7 @@ func should_yield_before_ai_discard() -> bool:
 
 func clear_screen() -> void:
 	loading_screen_active = false
+	telemetry_sheet_open = false
 	if mode != "online_lobby" and mode != "online_game":
 		chat_panel_open = false
 	if mode != "offline" and mode != "online_game":
@@ -5241,29 +5244,47 @@ func _start_offline_impl() -> void:
 				"bot": i != 0,
 			})
 	else:
-		# 加载了进度，继续之前的游戏
-		set_status("已加载进度：第%d局" % offline_hand_number)
-		offline_last_winner = -1
-		offline_dealer_repeat = false
-		table_logs.clear()
-		# 确保players数组已经有4个玩家
-		while players.size() < 4:
-			players.append({
-				"name": SEAT_NAMES[players.size()],
-				"hand": [],
-				"discards": [],
-				"melds": [],
-				"flowers": 0,
-				"flower_tiles": [],
-				"score": MATCH_START_SCORE,
-				"bot": players.size() != 0,
-			})
-	deal_offline_hand()
+		if offline_progress_loaded_state:
+			# A schema-v2 snapshot contains the live hand. Keep its timer, event
+			# chain, and settlement intact instead of dealing a replacement hand.
+			set_status("已恢复进度：第%d局 · %s" % [offline_hand_number, offline_progress_status_text()])
+		else:
+			# Backward-compatible v1 files only contain match scores.
+			set_status("已加载进度：第%d局" % offline_hand_number)
+			offline_last_winner = -1
+			offline_dealer_repeat = false
+			table_logs.clear()
+			# 确保players数组已经有4个玩家
+			while players.size() < 4:
+				players.append({
+					"name": SEAT_NAMES[players.size()],
+					"hand": [],
+					"discards": [],
+					"melds": [],
+					"flowers": 0,
+					"flower_tiles": [],
+					"score": MATCH_START_SCORE,
+					"bot": players.size() != 0,
+				})
+	if not loaded or not offline_progress_loaded_state:
+		deal_offline_hand()
+	else:
+		render_game()
 	# 启动环境氛围动画
 	start_ambient_animation("default")
 	# Add floating ambient spirits to table scene
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null and is_instance_valid(ui_enhancements) and ambient_layer != null and is_instance_valid(ambient_layer):
 		ui_enhancements.create_floating_spirit(ambient_layer, ambient_layer.get_rect() if ambient_layer.get_rect().size.x > 0 else Rect2(Vector2.ZERO, get_viewport().size), 4)
+	if offline_progress_loaded_state and offline_phase == "await_discard" and current_seat != 0:
+		schedule_ai_until_human()
+
+
+func start_new_offline_match() -> void:
+	if transition_active:
+		return
+	reset_offline_progress()
+	offline_progress_loaded_state = false
+	start_offline()
 
 func start_next_offline_hand(auto_run_ai: bool = true) -> void:
 	if mode != "offline" or offline_phase != "ended":
@@ -5352,6 +5373,7 @@ func render_game() -> void:
 	if offline_sim_quiet:
 		game_render_queued = false
 		return
+	mark_offline_progress_dirty()
 	# r215: GPT chrome conversion
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
@@ -7488,8 +7510,10 @@ func finish_wall_draw() -> void:
 		"events": round_replay_snapshot(),
 		"replay_digest": round_replay_digest(),
 		"replay_valid": validate_round_replay(round_event_history),
-		"match_summary": last_match_summary.duplicate(true),
-	})
+			"match_summary": last_match_summary.duplicate(true),
+		})
+		archive_latest_round_history_entry()
+		telemetry_record_event("round_completed", {"rule_variant": active_rule_variant(), "result_kind": "wall_draw", "points_bucket": 0, "fan_bucket": 0})
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
 	play_wall_draw_resolution_fx(dealer_seat)
 	save_offline_progress()
@@ -7766,6 +7790,8 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		"replay_valid": validate_round_replay(round_event_history),
 		"match_summary": last_match_summary.duplicate(true),
 		})
+		archive_latest_round_history_entry()
+		telemetry_record_event("round_completed", {"rule_variant": active_rule_variant(), "result_kind": "win", "points_bucket": int(floor(float(points) / 100.0)) * 100, "fan_bucket": int(score_data.get("fan", 0))})
 	save_offline_progress()
 	render_game()
 
@@ -9374,7 +9400,7 @@ func draw_actions(parent: Control) -> void:
 				next_hand_button.tooltip_text = "继续当前牌局，进入下一局"
 				action_bar.add_child(next_hand_button)
 			var new_match_button = make_action_button("新赛", Color(0.86, 0.42, 0.32), func() -> void:
-				start_offline()
+				start_new_offline_match()
 			)
 			new_match_button.name = "NewMatchSecondaryButton"
 			new_match_button.set_meta("action_priority", "primary" if is_offline_match_finished() else "secondary")
@@ -12473,7 +12499,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	# 标题
 	var dealer_wind: String = str(CENTER_WIND_LABELS[clampi(dealer_seat, 0, CENTER_WIND_LABELS.size() - 1)]) if mode == "offline" else ""
 	var compact_top_hud := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
-	var title_text = ("第%d局 · 庄%s" if compact_top_hud else "修炼场 · 第%d局 · 庄%s") % [offline_hand_number, dealer_wind] if mode == "offline" else "房间 " + str(online_game.get("roomCode", selected_room))
+	var room_code := str(online_game.get("roomCode", selected_room))
+	var title_text = ("第%d局 · 庄%s" if compact_top_hud else "修炼场 · 第%d局 · 庄%s") % [offline_hand_number, dealer_wind] if mode == "offline" else "房间 " + room_code
 	var title_rect := TOP_HUD_TITLE_RECT
 	var status_rect := TOP_HUD_STATUS_RECT
 	var wall_rect := TOP_HUD_WALL_RECT
@@ -12488,7 +12515,14 @@ func draw_game_top_hud(parent: Control) -> void:
 	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.58, 0.74, 0.64, 0.16), "ui_dark_scrim")
 	status_back.name = "TopHudStatusBack"
 	hud.add_child(status_back)
-	var title = make_label(hud, title_text, 15 if mode == "offline" else 16, Color(0.96, 0.80, 0.48), true)
+	var online_title_size := 16
+	if mode == "online_game":
+		# Room codes are server data and must remain intact; reduce only the title
+		# glyph size for unusually long codes inside the dedicated header lane.
+		online_title_size = 14 if room_code.length() > 14 else 16
+		online_title_size = 12 if room_code.length() > 22 else online_title_size
+		online_title_size = 10 if room_code.length() > 28 else online_title_size
+	var title = make_label(hud, title_text, 15 if mode == "offline" else online_title_size, Color(0.96, 0.80, 0.48), true)
 	title.name = "TopHudTitle"
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -12668,13 +12702,6 @@ func draw_hand(parent: Control) -> void:
 	var should_animate_drawn_tile = mode == "offline" and fx_enabled_effective() and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
 	var draw_state_assigned := false
 	# Pure 2D hand: authored assets/tiles faces via make_tile_view (no realtime 3D stage).
-	for i in range(hand.size()):
-		var tile := str(hand[i])
-		var is_drawn_tile := should_animate_drawn_tile and not draw_state_assigned and tile == drawn_tile
-		if is_drawn_tile:
-			draw_state_assigned = true
-	if draw_state_assigned:
-		fx_last_animated_draw_serial = drawn_serial
 
 	var hand_box = HBoxContainer.new()
 	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -12708,6 +12735,7 @@ func draw_hand(parent: Control) -> void:
 		var report: Dictionary = hand_reports.get(tile, {}) if i == suggested_index or i == pending_index else {}
 		var risk = str(report.get("safety_label", report.get("risk_label", ""))) if assist_enabled and clickable else ""
 		var is_drawn_tile_marker := i == stable_drawn_index
+		var is_drawn_tile := should_animate_drawn_tile and ((stable_drawn_index >= 0 and i == stable_drawn_index) or (stable_drawn_index < 0 and not draw_state_assigned and tile == drawn_tile))
 		var hint_badge := ""
 		if assist_enabled and clickable:
 			if i == pending_index:
@@ -12748,9 +12776,13 @@ func draw_hand(parent: Control) -> void:
 				drawn_body.offset_top -= 4.0
 				drawn_body.offset_bottom -= 4.0
 		hand_box.add_child(tile_node)
-		if should_animate_drawn_tile and tile == drawn_tile and bool(tile_node.get_meta("drawn_anim_pending", true)):
-			# one-shot draw pop for the newest self tile when available
-			pass
+		if is_drawn_tile:
+			# Run the one-shot entry effect for normal and replacement draws.
+			draw_state_assigned = true
+			tile_node.set_meta("drawn_anim_pending", false)
+			play_hand_draw_tile_animation(tile_node, str(offline_last_draw.get("source", "normal")))
+	if draw_state_assigned:
+		fx_last_animated_draw_serial = drawn_serial
 
 
 func draw_hand_progress_wall_sync(parent: Control, accent: Color) -> Control:
@@ -13907,6 +13939,7 @@ func draw_melds(parent: Control) -> void:
 			if horizontal_tile_count > 0:
 				var lane_width_fraction := float(layout[1].size.x - layout[1].position.x)
 				var lane_width_px := safe_content_pixel_size().x * lane_width_fraction
+				var lane_height_px := safe_content_pixel_size().y * float(layout[1].size.y - layout[1].position.y)
 				var group_padding_px := float(horizontal_group_count) * 6.0
 				var group_gap_px := float(maxi(0, horizontal_group_count - 1)) * 3.0
 				# make_meld_group_view reserves one compact separator per tile. Try
@@ -13915,8 +13948,12 @@ func draw_melds(parent: Control) -> void:
 				var compact_tile_width := floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count) * 2.0) / float(horizontal_tile_count))
 				if compact_tile_width <= 18.0:
 					compact_tile_width = floorf((lane_width_px - group_padding_px - group_gap_px - float(horizontal_tile_count)) / float(horizontal_tile_count))
-					compact_tile_width = clampf(compact_tile_width, 18.0, 20.0)
-				meld_tile_size = Vector2(compact_tile_width, floorf(compact_tile_width * 1.5))
+				# Horizontal faces keep their upright 1.5 aspect ratio after the
+				# top-seat rotation. Bound width by lane height as well as lane width,
+				# otherwise a short 960px lane can produce a 100px-wide face.
+				var max_horizontal_tile_width := floorf(maxf(18.0, (lane_height_px - 10.0) / 1.5))
+				compact_tile_width = clampf(minf(compact_tile_width, max_horizontal_tile_width), 18.0, 28.0)
+				meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * 1.5)))
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
 		area.set_meta("tile_size", meld_tile_size if meld_tile_size != Vector2.ZERO else Vector2(26, 36) if not vertical else Vector2(28, 38))
@@ -14317,13 +14354,14 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	var rail = Control.new()
 	rail.name = "MenuQuickActionRail"
 	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(rail, rect_full(0.250, 0.704, 0.750, 0.804))
+	apply_rect(rail, rect_full(0.180, 0.704, 0.820, 0.804))
 	parent.add_child(rail)
 	var items := [
 		["rules", "规则", "help-circle", Color(0.30, 0.58, 0.50), Callable(self, "show_rules_screen")],
 		["stats", "战绩", "trophy", Color(0.56, 0.46, 0.72), Callable(self, "show_stats_screen")],
 		["achievements", "成就", "medal", Color(0.70, 0.54, 0.28), Callable(self, "show_achievements_screen")],
 		["shop", "商店", "gift", Color(0.62, 0.38, 0.30), Callable(self, "show_shop_screen")],
+		["replay", "回放", "book-open", Color(0.36, 0.60, 0.62), Callable(self, "show_replay_import_screen")],
 	]
 	var surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.010, 0.020, 0.022, 0.72), "ui_dark_scrim", 0.18)
 	surface.name = "MenuQuickActionSurface"
@@ -17448,8 +17486,12 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
-	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.44), "ui_dark_scrim")
+	var settings_is_high_contrast := high_contrast_enabled
+	var scrim_alpha := 0.78 if settings_is_high_contrast else 0.62
+	var panel_alpha := 0.96 if settings_is_high_contrast else 0.82
+	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, scrim_alpha), "ui_dark_scrim")
 	scrim.name = "SettingsOverlayScrim"
+	scrim.set_meta("modal_scrim_alpha", scrim_alpha)
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
 
@@ -17460,9 +17502,30 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, 0.32), "ui_dark_scrim", 0.20)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, panel_alpha), "ui_dark_scrim", 0.20)
 	panel.name = "SettingsPanel"
+	panel.set_meta("reading_surface_alpha", panel_alpha)
+	panel.set_meta("high_contrast_surface", settings_is_high_contrast)
 	overlay.add_child(panel)
+	if settings_is_high_contrast:
+		var contrast_frame := Control.new()
+		contrast_frame.name = "SettingsHighContrastFrame"
+		contrast_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		contrast_frame.z_index = 2
+		apply_rect(contrast_frame, panel_rect)
+		overlay.add_child(contrast_frame)
+		var contrast_top := make_gpt_ribbon(rect_full(0.0, 0.0, 1.0, 0.018), Color(0.96, 0.84, 0.46, 0.72))
+		contrast_top.name = "SettingsHighContrastTopEdge"
+		contrast_frame.add_child(contrast_top)
+		var contrast_bottom := make_gpt_ribbon(rect_full(0.0, 0.982, 1.0, 1.0), Color(0.96, 0.84, 0.46, 0.72))
+		contrast_bottom.name = "SettingsHighContrastBottomEdge"
+		contrast_frame.add_child(contrast_bottom)
+		var contrast_left := make_gpt_edge_rail(rect_full(0.0, 0.0, 0.018, 1.0), Color(0.96, 0.84, 0.46, 0.72))
+		contrast_left.name = "SettingsHighContrastLeftEdge"
+		contrast_frame.add_child(contrast_left)
+		var contrast_right := make_gpt_edge_rail(rect_full(0.982, 0.0, 1.0, 1.0), Color(0.96, 0.84, 0.46, 0.72))
+		contrast_right.name = "SettingsHighContrastRightEdge"
+		contrast_frame.add_child(contrast_right)
 	overlay.gui_input.connect(func(event: InputEvent) -> void:
 		var should_close := false
 		if event is InputEventKey and (event as InputEventKey).pressed and event.is_action_pressed("ui_cancel"):
@@ -17595,12 +17658,15 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 系统设置
 	var system_grid = make_settings_section(panel, maint_section_rect, "系统", compact_settings)
-	system_grid.columns = 2
+	system_grid.columns = 3
 	make_setting_row(system_grid, "3D 画质", "当前: %s" % graphics_quality_label(), make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
 	))
 	make_setting_row(system_grid, "本地进度", "清空统计与离线记录", make_reset_progress_button(func() -> void:
 		request_reset_progress_from_settings()
+	))
+	make_setting_row(system_grid, "隐私诊断", telemetry_consent_status_text(), make_setting_selector_button("查看", "隐私诊断", func() -> void:
+		show_telemetry_data_sheet()
 	))
 	var settings_default_focus := settings_focus_restore_name if settings_focus_restore_name != "" else "SettingsCloseButton"
 	settings_focus_restore_name = ""
@@ -21646,10 +21712,11 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 
 func make_setting_row(parent: Control, title: String, status: String, button: Button) -> void:
 	# r214: bulk GPT chrome sweep
+	var compact_settings := effective_viewport_size().y <= 560.0
 	var row = Panel.new()
 	row.name = "SettingRow_%s" % title
 	configure_passive_container(row)
-	row.custom_minimum_size = Vector2(0, 48)
+	row.custom_minimum_size = Vector2(0, 56 if large_text_enabled else 48)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# r180: GPT settings plate only — no solid StyleBox row paint.
 	var empty_row := StyleBoxEmpty.new()
@@ -21660,17 +21727,19 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	row.add_child(row_plate)
 	row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, 0.565, 0.890), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
+	var text_right := 0.430 if compact_settings else 0.565
+	var button_left := 0.495 if compact_settings else 0.595
+	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, text_right, 0.890), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
 	var title_label = make_label(row, title, 14, Color(1.0, 0.97, 0.88, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
-	apply_rect(title_label, rect_full(0.052, 0.130, 0.545, 0.455))
+	apply_rect(title_label, rect_full(0.052, 0.130, text_right - 0.020, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
 	var status_label = make_label(row, status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
-	apply_rect(status_label, rect_full(0.052, 0.500, 0.550, 0.860))
+	apply_rect(status_label, rect_full(0.052, 0.500, text_right - 0.015, 0.860))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.56))
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -21681,7 +21750,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.custom_minimum_size = Vector2(0, 0)
-	apply_rect(button, SETTINGS_ROW_BUTTON_RECT)
+	apply_rect(button, rect_full(button_left, SETTINGS_ROW_BUTTON_RECT.position.y, SETTINGS_ROW_BUTTON_RECT.size.x, SETTINGS_ROW_BUTTON_RECT.size.y) if compact_settings else SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)
 
 
@@ -21716,12 +21785,12 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	grid.name = "SettingsSectionGrid_%s" % title_text
 	configure_passive_container(grid)
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("h_separation", 4 if compact else 16)
 	grid.add_theme_constant_override("v_separation", 3 if compact else 5)
 	section.add_child(grid)
 	# Compact settings reserve the same 48px row target while tightening only
 	# the decorative title/chrome clearance inside each physical section.
-	apply_rect(grid, rect_full(0.035, 0.120, 0.965, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
+	apply_rect(grid, rect_full(0.035, 0.120, 0.995, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 
@@ -25614,6 +25683,7 @@ func _show_stats_screen_impl() -> void:
 
 func close_settings_panel() -> void:
 	settings_panel_open = false
+	telemetry_sheet_open = false
 	settings_focus_restore_name = ""
 	emit_ui_qa_marker("settings|closed")
 	reset_progress_confirming = false
@@ -25621,6 +25691,101 @@ func close_settings_panel() -> void:
 	if mode == "menu" or mode == "offline" or mode == "online_game":
 		var restore_name := "MenuSettingsButton" if mode == "menu" else "TopHudSettingsButton"
 		call_deferred("focus_named_control", restore_name)
+
+
+func show_telemetry_data_sheet() -> void:
+	if not settings_panel_open or root_layer == null or not is_instance_valid(root_layer):
+		return
+	var existing := root_layer.find_child("TelemetryDataSheet", true, false) as Control
+	if existing != null and is_instance_valid(existing):
+		telemetry_sheet_open = true
+		return
+	var overlay := root_layer.find_child("SettingsOverlay", true, false) as Control
+	if overlay == null:
+		return
+	telemetry_sheet_open = true
+	var sheet := Control.new()
+	sheet.name = "TelemetryDataSheet"
+	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sheet.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(sheet)
+	var sheet_scrim := make_fullrect_overlay(Color(0.004, 0.010, 0.012, 0.42), "ui_dark_scrim")
+	sheet_scrim.name = "TelemetryDataSheetScrim"
+	sheet_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sheet.add_child(sheet_scrim)
+	var card := make_gpt_center_crop_plate_rect(rect_full(0.205, 0.160, 0.795, 0.840), Color(0.018, 0.030, 0.028, 0.98), "ui_jade_reading_plate", 0.20)
+	card.name = "TelemetryDataSheetCard"
+	sheet.add_child(card)
+	var title := make_label(card, "隐私与诊断数据", 22, Color(1.0, 0.92, 0.58), true)
+	title.name = "TelemetryDataSheetTitle"
+	apply_rect(title, rect_full(0.075, 0.070, 0.925, 0.175))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var body := make_label(card, "默认不记录。开启后只保存匿名、最小化的本地事件；不含昵称、房间号、聊天内容或牌面。", 12, Color(0.86, 0.90, 0.82), false)
+	body.name = "TelemetryDataSheetBody"
+	apply_rect(body, rect_full(0.075, 0.205, 0.925, 0.365))
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.clip_text = true
+	var status := make_label(card, telemetry_consent_status_text(), 13, Color(0.72, 0.86, 0.74), true)
+	status.name = "TelemetryDataStatus"
+	apply_rect(status, rect_full(0.075, 0.405, 0.925, 0.485))
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 11, Color(0.68, 0.78, 0.72), false)
+	export_status.name = "TelemetryExportStatus"
+	apply_rect(export_status, rect_full(0.075, 0.710, 0.925, 0.765))
+	export_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(export_status)
+	var consent := make_small_button("关闭记录" if telemetry_consent else "同意记录", Color(0.30, 0.58, 0.48), Callable(self, "toggle_telemetry_consent"))
+	consent.name = "TelemetryConsentButton"
+	consent.tooltip_text = "允许或停止记录匿名诊断事件"
+	consent.custom_minimum_size = Vector2(120, 44)
+	apply_rect(consent, rect_full(0.075, 0.555, 0.320, 0.700))
+	card.add_child(consent)
+	var export := make_small_button("导出", Color(0.30, 0.48, 0.60), Callable(self, "export_telemetry_data"))
+	export.name = "TelemetryExportButton"
+	export.tooltip_text = "复制本机匿名诊断数据"
+	export.custom_minimum_size = Vector2(100, 44)
+	apply_rect(export, rect_full(0.350, 0.555, 0.610, 0.700))
+	card.add_child(export)
+	var clear := make_small_button("清除", Color(0.62, 0.34, 0.28), Callable(self, "clear_telemetry_data"))
+	clear.name = "TelemetryClearButton"
+	clear.tooltip_text = "清除本机匿名诊断数据"
+	clear.custom_minimum_size = Vector2(100, 44)
+	apply_rect(clear, rect_full(0.640, 0.555, 0.925, 0.700))
+	card.add_child(clear)
+	var close := make_small_button("关闭", Color(0.30, 0.34, 0.36), Callable(self, "close_telemetry_data_sheet"))
+	close.name = "TelemetryDataSheetCloseButton"
+	close.tooltip_text = "关闭隐私数据页 · Esc"
+	close.custom_minimum_size = Vector2(100, 42)
+	apply_rect(close, rect_full(0.390, 0.770, 0.610, 0.900))
+	card.add_child(close)
+	configure_button_focus_navigation(sheet, "TelemetryConsentButton")
+
+
+func refresh_telemetry_data_sheet() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var sheet := root_layer.find_child("TelemetryDataSheet", true, false) as Control
+	if sheet == null:
+		return
+	var status := sheet.find_child("TelemetryDataStatus", true, false) as Label
+	if status != null:
+		status.text = telemetry_consent_status_text()
+	var consent := sheet.find_child("TelemetryConsentButton", true, false) as Button
+	if consent != null:
+		consent.text = "关闭记录" if telemetry_consent else "同意记录"
+		consent.tooltip_text = "停止记录并清除本地匿名事件" if telemetry_consent else "允许记录匿名诊断事件"
+	var export_status := sheet.find_child("TelemetryExportStatus", true, false) as Label
+	if export_status != null:
+		export_status.text = "导出：%s" % telemetry_export_status
+
+
+func close_telemetry_data_sheet() -> void:
+	var sheet := root_layer.find_child("TelemetryDataSheet", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if sheet != null and is_instance_valid(sheet):
+		sheet.queue_free()
+	telemetry_sheet_open = false
+	settings_focus_restore_name = "SettingRowButton_隐私诊断"
+	refresh_current_screen()
 
 func refresh_update_dialog() -> void:
 	if update_state == "idle":
@@ -25743,7 +25908,7 @@ func show_chat_panel() -> void:
 	chat_panel_open = true
 	# r215: GPT chrome conversion
 	var panel_rect := chat_panel_rect()
-	var compact_chat := mode == "online_game" and (panel_rect.size.x - panel_rect.position.x) < 0.300
+	var compact_chat := mode == "online_game" and ((panel_rect.size.x - panel_rect.position.x) < 0.300 or (panel_rect.size.y - panel_rect.position.y) < 0.340)
 	var chat_panel = make_gpt_plate_rect(panel_rect, Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
 	chat_panel.name = "ChatPanel"
 	chat_panel.z_index = 45
@@ -25752,6 +25917,13 @@ func show_chat_panel() -> void:
 	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	chat_panel.clip_contents = true
 	root_layer.add_child(chat_panel)
+	var ledger := root_layer.find_child("TableLogLedgerPanel", true, false) as Control
+	if ledger != null and chat_panel_route_name() == "upper_meld_safe_drawer":
+		# The compact meld-safe lane shares the ledger's upper-left footprint. Hide
+		# that secondary reading surface while chat owns the lane, then restore it
+		# when the drawer closes.
+		ledger.visible = false
+		ledger.set_meta("hidden_for_chat", true)
 	draw_chat_panel_art(chat_panel)
 	var chat_text = "\n".join(chat_messages)
 	if chat_text.strip_edges() == "":
@@ -25773,7 +25945,7 @@ func show_chat_panel() -> void:
 	chat_label.tooltip_text = chat_text
 	call_deferred("scroll_chat_panel_to_end")
 
-	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_chat_panel"))
+	var close_button := make_icon_button("cross", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_chat_panel"))
 	close_button.name = "ChatPanelCloseButton"
 	close_button.tooltip_text = "关闭聊天面板 · 快捷键 Esc"
 	close_button.custom_minimum_size = Vector2(34, 34)
@@ -26542,6 +26714,8 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 func show_menu(instant: bool = false) -> void:
 	if transition_active and not instant:
 		return
+	if mode == "offline":
+		flush_offline_progress_autosave(true)
 	menu_parallax_enabled = false
 	var _build_menu = func() -> void:
 		_show_menu_impl()
@@ -26591,6 +26765,350 @@ func show_stats_screen(instant: bool = false) -> void:
 		_build.call()
 	else:
 		play_screen_transition(_build, false, "curtain")
+
+
+func show_replay_import_screen(instant: bool = false) -> void:
+	if transition_active and not instant:
+		return
+	var _build = func() -> void:
+		_show_replay_import_screen_impl()
+	if instant or not fx_enabled_effective():
+		_build.call()
+	else:
+		play_screen_transition(_build, false, "ink_wash")
+
+
+func _show_replay_import_screen_impl() -> void:
+	mode = "replay_import"
+	emit_ui_qa_marker("page|replay_import")
+	clear_screen()
+	replay_import_payload = {}
+	var panel := make_gpt_plate_rect(rect_full(0.120, 0.120, 0.880, 0.880), Color(0.014, 0.030, 0.030, 0.96), "ui_jade_reading_plate")
+	panel.name = "ReplayImportPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	root_layer.add_child(panel)
+	draw_secondary_screen_texture(panel, "table_log_gpt_scroll", "ReplayImportBackdrop", 0.10)
+	var title := make_label(panel, "回放复盘", 30, Color(1.0, 0.92, 0.60), true)
+	title.name = "ReplayImportTitle"
+	apply_rect(title, rect_full(0.065, 0.055, 0.520, 0.145))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var digest_hint := make_label(panel, "校验链 · SHA-256", 12, Color(0.68, 0.80, 0.72), false)
+	digest_hint.name = "ReplayImportDigestHint"
+	apply_rect(digest_hint, rect_full(0.065, 0.145, 0.520, 0.205))
+	configure_clipped_label(digest_hint)
+	var back := make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
+		show_menu(true)
+	)
+	back.name = "ReplayImportBackButton"
+	back.custom_minimum_size = Vector2(100, 46)
+	back.tooltip_text = "返回主菜单 · Esc"
+	draw_secondary_back_button_art(back, "replay_import", Color(0.36, 0.26, 0.16))
+	apply_rect(back, rect_full(0.805, 0.055, 0.945, 0.145))
+	panel.add_child(back)
+	var input_label := make_label(panel, "回放码", 13, Color(0.92, 0.84, 0.62), true)
+	input_label.name = "ReplayImportInputLabel"
+	apply_rect(input_label, rect_full(0.065, 0.205, 0.220, 0.265))
+	var input := LineEdit.new()
+	input.name = "ReplayImportCodeInput"
+	input.placeholder_text = "粘贴回放码"
+	input.clear_button_enabled = true
+	input.custom_minimum_size = Vector2(0, 48)
+	input.add_theme_font_override("font", ui_cjk_font())
+	input.add_theme_font_size_override("font_size", commercial_ui_font_size(15, 1))
+	var input_styles := input_style_set()
+	input.add_theme_stylebox_override("normal", input_styles["normal"])
+	input.add_theme_stylebox_override("focus", input_styles["focus"])
+	input.add_theme_stylebox_override("read_only", input_styles["read_only"])
+	input.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
+	input.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
+	draw_line_edit_input_art(input, "回放码")
+	apply_rect(input, rect_full(0.065, 0.265, 0.705, 0.360))
+	panel.add_child(input)
+	replay_import_input = input
+	var import_button := make_small_button("导入", Color(0.42, 0.66, 0.50), Callable(self, "import_replay_from_input"))
+	import_button.name = "ReplayImportButton"
+	import_button.custom_minimum_size = Vector2(116, 48)
+	import_button.tooltip_text = "校验并打开回放时间线"
+	apply_rect(import_button, rect_full(0.730, 0.265, 0.935, 0.360))
+	panel.add_child(import_button)
+	var status := make_label(panel, "等待导入", 14, Color(0.76, 0.84, 0.76), true)
+	status.name = "ReplayImportStatus"
+	apply_rect(status, rect_full(0.065, 0.380, 0.935, 0.435))
+	configure_clipped_label(status)
+	var archive_pane := make_gpt_plate_rect(rect_full(0.065, 0.470, 0.480, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
+	archive_pane.name = "ReplayArchivePane"
+	panel.add_child(archive_pane)
+	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.88, 0.78, 0.56), true)
+	archive_title.name = "ReplayArchiveTitle"
+	apply_rect(archive_title, rect_full(0.050, 0.045, 0.430, 0.180))
+	var archive_count := make_label(archive_pane, "%d 条" % replay_archive_entries(replay_search_query).size(), 11, Color(0.70, 0.78, 0.70), false)
+	archive_count.name = "ReplayArchiveCount"
+	apply_rect(archive_count, rect_full(0.570, 0.055, 0.950, 0.180))
+	archive_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var search := LineEdit.new()
+	search.name = "ReplayArchiveSearchInput"
+	search.placeholder_text = "按日期、规则或结果搜索"
+	search.text = replay_search_query
+	search.clear_button_enabled = true
+	search.custom_minimum_size = Vector2(0, 38)
+	search.add_theme_font_override("font", ui_cjk_font())
+	search.add_theme_font_size_override("font_size", commercial_ui_font_size(12, 1))
+	var search_styles := input_style_set()
+	search.add_theme_stylebox_override("normal", search_styles["normal"])
+	search.add_theme_stylebox_override("focus", search_styles["focus"])
+	search.add_theme_stylebox_override("read_only", search_styles["read_only"])
+	search.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
+	search.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
+	draw_line_edit_input_art(search, "搜索")
+	apply_rect(search, rect_full(0.050, 0.195, 0.950, 0.390))
+	archive_pane.add_child(search)
+	search.text_changed.connect(Callable(self, "set_replay_search_query"))
+	var archive_scroll := ScrollContainer.new()
+	archive_scroll.name = "ReplayArchiveScroll"
+	archive_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	archive_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	archive_scroll.scroll_deadzone = 8
+	archive_scroll.clip_contents = true
+	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	apply_rect(archive_scroll, rect_full(0.050, 0.425, 0.950, 0.965))
+	archive_pane.add_child(archive_scroll)
+	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
+	if archive_scrollbar != null:
+		archive_scrollbar.name = "ReplayArchiveScrollBar"
+	var archive_list := VBoxContainer.new()
+	archive_list.name = "ReplayArchiveList"
+	archive_list.mouse_filter = Control.MOUSE_FILTER_PASS
+	archive_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	archive_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	archive_list.add_theme_constant_override("separation", 5)
+	archive_scroll.add_child(archive_list)
+	var timeline := make_gpt_plate_rect(rect_full(0.505, 0.470, 0.935, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
+	timeline.name = "ReplayImportTimeline"
+	panel.add_child(timeline)
+	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.88, 0.78, 0.56), true)
+	timeline_title.name = "ReplayImportTimelineTitle"
+	apply_rect(timeline_title, rect_full(0.035, 0.045, 0.500, 0.130))
+	var empty := make_label(timeline, "导入后显示已验证事件", 12, Color(0.62, 0.72, 0.68), false)
+	empty.name = "ReplayImportTimelineEmpty"
+	apply_rect(empty, rect_full(0.035, 0.220, 0.965, 0.360))
+	configure_clipped_label(empty)
+	var event_scroll := ScrollContainer.new()
+	event_scroll.name = "ReplayImportTimelineScroll"
+	event_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	event_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	event_scroll.clip_contents = true
+	event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	apply_rect(event_scroll, rect_full(0.035, 0.165, 0.965, 0.945))
+	timeline.add_child(event_scroll)
+	var event_text := make_label(event_scroll, "", 11, Color(0.80, 0.86, 0.80), false)
+	event_text.name = "ReplayImportEventText"
+	event_text.custom_minimum_size = Vector2(0, 64)
+	event_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	event_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	event_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	event_text.clip_text = false
+	event_text.visible = false
+	configure_button_focus_navigation(panel, "ReplayImportCodeInput")
+	call_deferred("focus_named_control", "ReplayImportCodeInput")
+	render_replay_archive_list()
+	schedule_ui_qa_page_ready("replay_import", ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline"])
+
+
+func refresh_replay_archive_view() -> void:
+	var pane := root_layer.find_child("ReplayArchivePane", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if pane == null:
+		return
+	var search := pane.find_child("ReplayArchiveSearchInput", true, false) as LineEdit
+	if search != null and search.text != replay_search_query:
+		search.text = replay_search_query
+	render_replay_archive_list()
+
+
+func render_replay_archive_list() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var list := root_layer.find_child("ReplayArchiveList", true, false) as VBoxContainer
+	var count := root_layer.find_child("ReplayArchiveCount", true, false) as Label
+	if list == null:
+		return
+	for child in list.get_children():
+		list.remove_child(child)
+		child.queue_free()
+	var entries := replay_archive_entries(replay_search_query)
+	if count != null:
+		count.text = "%d 条" % entries.size()
+	if entries.is_empty():
+		var empty := make_label(list, "暂无匹配回放", 12, Color(0.62, 0.72, 0.68), false)
+		empty.name = "ReplayArchiveEmpty"
+		empty.custom_minimum_size = Vector2(0, 44)
+		return
+	for entry_variant in entries:
+		if typeof(entry_variant) == TYPE_DICTIONARY:
+			list.add_child(make_replay_archive_row(entry_variant as Dictionary))
+
+
+func make_replay_archive_row(entry: Dictionary) -> Control:
+	var archive_id := str(entry.get("archive_id", ""))
+	var row := Control.new()
+	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
+	row.custom_minimum_size = Vector2(0, 62 if large_text_enabled else 56)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var plate := make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.026, 0.024, 0.44), "ui_button_face_plate")
+	plate.name = "ReplayArchiveRowPlate"
+	row.add_child(plate)
+	var primary := make_label(row, "%s · %s" % [replay_archive_date_text(entry), replay_archive_result_label(entry)], 11, Color(0.92, 0.88, 0.74), true)
+	primary.name = "ReplayArchiveRowPrimary"
+	apply_rect(primary, rect_full(0.035, 0.100, 0.590, 0.500))
+	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(primary)
+	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
+	secondary.name = "ReplayArchiveRowSecondary"
+	apply_rect(secondary, rect_full(0.035, 0.515, 0.590, 0.900))
+	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(secondary)
+	var favorite := make_icon_button("star", Color(0.96, 0.82, 0.38) if bool(entry.get("favorite", false)) else Color(0.62, 0.68, 0.60), 14, func() -> void:
+		toggle_replay_archive_favorite(archive_id)
+	)
+	favorite.name = "ReplayArchiveFavoriteButton_%s" % archive_id.left(8)
+	favorite.tooltip_text = "收藏此回放" if not bool(entry.get("favorite", false)) else "取消收藏"
+	apply_rect(favorite, rect_full(0.560, 0.130, 0.645, 0.870))
+	row.add_child(favorite)
+	var open := make_small_button("查看", Color(0.34, 0.56, 0.52), func() -> void:
+		open_replay_archive(archive_id)
+	)
+	open.name = "ReplayArchiveOpenButton_%s" % archive_id.left(8)
+	open.tooltip_text = "打开这条已验证回放"
+	open.custom_minimum_size = Vector2(52, 36)
+	open.add_theme_font_size_override("font_size", accessibility_font_size(12))
+	apply_rect(open, rect_full(0.645, 0.155, 0.765, 0.845))
+	row.add_child(open)
+	var copy := make_small_button("复制", Color(0.30, 0.52, 0.54), func() -> void:
+		copy_replay_archive_share_code(archive_id)
+	)
+	copy.name = "ReplayArchiveCopyButton_%s" % archive_id.left(8)
+	copy.tooltip_text = "复制已验证回放码"
+	copy.custom_minimum_size = Vector2(58, 36)
+	copy.add_theme_font_size_override("font_size", accessibility_font_size(12))
+	apply_rect(copy, rect_full(0.765, 0.155, 0.890, 0.845))
+	row.add_child(copy)
+	var delete := make_icon_button("cross", Color(0.90, 0.46, 0.38), 14, func() -> void:
+		request_delete_replay_archive(archive_id)
+	)
+	delete.name = "ReplayArchiveDeleteButton_%s" % archive_id.left(8)
+	delete.tooltip_text = "再次点击确认删除此回放" if replay_delete_confirming and replay_delete_target_id == archive_id else "删除此回放"
+	apply_rect(delete, rect_full(0.890, 0.130, 0.975, 0.870))
+	row.add_child(delete)
+	return row
+
+
+func open_replay_archive(archive_id: String) -> void:
+	var entry := replay_archive_entry(archive_id)
+	var payload := replay_archive_payload_from_entry(entry)
+	if payload.is_empty():
+		show_toast("该回放已损坏或不兼容")
+		return
+	replay_import_payload = payload.duplicate(true)
+	var input := root_layer.find_child("ReplayImportCodeInput", true, false) as LineEdit
+	var status := root_layer.find_child("ReplayImportStatus", true, false) as Label
+	var empty := root_layer.find_child("ReplayImportTimelineEmpty", true, false) as Label
+	var events_label := root_layer.find_child("ReplayImportEventText", true, false) as Label
+	if input != null:
+		input.text = replay_archive_share_code(archive_id)
+	if status != null:
+		status.text = "归档已打开 · 校验通过 · %d 条事件 · %s" % [(payload.get("events", []) as Array).size(), str(payload.get("digest", "")).left(12).to_upper()]
+		status.modulate = Color(0.64, 0.90, 0.70)
+	if empty != null:
+		empty.visible = false
+	if events_label != null:
+		events_label.text = replay_import_event_text(payload)
+		events_label.custom_minimum_size = Vector2(0, maxf(64.0, float((payload.get("events", []) as Array).size()) * 20.0))
+		events_label.visible = true
+	var event_scroll := root_layer.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
+	if event_scroll != null:
+		event_scroll.scroll_vertical = 0
+	show_toast("已打开归档回放")
+
+
+func replay_import_event_text(payload: Dictionary) -> String:
+	var events = payload.get("events", [])
+	if typeof(events) != TYPE_ARRAY or (events as Array).is_empty():
+		return "暂无事件"
+	var lines: Array[String] = []
+	for raw_event in events:
+		if typeof(raw_event) != TYPE_DICTIONARY:
+			continue
+		var event: Dictionary = raw_event
+		var kind := str(event.get("type", "事件"))
+		var sequence := int(event.get("sequence", 0))
+		var detail := ""
+		var display_kind := replay_event_display_name(kind, event)
+		if kind == "discard":
+			detail = " · " + tile_label(str(event.get("tile", "")))
+		elif kind == "draw" or kind == "draw_flower":
+			detail = " · 座位%d" % int(event.get("seat", -1))
+		elif kind == "claim":
+			detail = " · " + claim_display_label(str(event.get("claim", "")))
+		elif kind == "win":
+			detail = " · " + str(event.get("points", 0)) + "分"
+		lines.append("%03d  %s%s" % [sequence, display_kind, detail])
+	return "\n".join(lines)
+
+
+func replay_event_display_name(kind: String, event: Dictionary = {}) -> String:
+	match kind:
+		"round_start":
+			return "开局"
+		"draw":
+			return "摸牌"
+		"draw_flower":
+			return "补花"
+		"discard":
+			return "弃牌"
+		"claim":
+			var claim := claim_display_label(str(event.get("claim", "")))
+			return "响应%s" % (claim if claim != "" else "动作")
+		"win":
+			return "胡牌"
+		"wall_draw":
+			return "荒庄"
+	return "事件"
+
+
+func import_replay_from_input() -> void:
+	var input := replay_import_input
+	if input == null or not is_instance_valid(input):
+		return
+	var payload := import_round_replay_share_code(input.text)
+	var status := root_layer.find_child("ReplayImportStatus", true, false) as Label
+	var empty := root_layer.find_child("ReplayImportTimelineEmpty", true, false) as Label
+	var events_label := root_layer.find_child("ReplayImportEventText", true, false) as Label
+	if payload.is_empty():
+		replay_import_payload = {}
+		if status != null:
+			status.text = "回放码无效或校验失败"
+			status.modulate = Color(0.96, 0.48, 0.36)
+		if events_label != null:
+			events_label.visible = false
+		if empty != null:
+			empty.visible = true
+		return
+	replay_import_payload = payload.duplicate(true)
+	archive_imported_replay(payload)
+	refresh_replay_archive_view()
+	var events: Array = payload.get("events", [])
+	var digest := str(payload.get("digest", ""))
+	if status != null:
+		status.text = "校验通过 · %d 条事件 · %s" % [events.size(), digest.left(12).to_upper()]
+		status.modulate = Color(0.64, 0.90, 0.70)
+	if empty != null:
+		empty.visible = false
+	if events_label != null:
+		events_label.text = replay_import_event_text(payload)
+		events_label.custom_minimum_size = Vector2(0, maxf(64.0, float(events.size()) * 20.0))
+		events_label.visible = true
+	var event_scroll := root_layer.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
+	if event_scroll != null:
+		event_scroll.scroll_vertical = 0
 
 func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) -> void:
 	"""显示临时Toast提示"""
@@ -26935,15 +27453,22 @@ func connect_online() -> void:
 	clear_online_room_snapshot()
 	clear_online_feedback()
 	sent_hello = false
+	online_resume_join_sent = false
 	var err = tcp.connect_to_host(host, DEFAULT_PORT)
 	set_status("正在连接 %s ..." % online_connection_endpoint_text())
 	refresh_online_lobby_state()
 	if err != OK:
+		telemetry_record_event("online_connection", {"result": "error"})
 		set_online_feedback("连接失败：%s" % error_string(err), false)
 
 func close_online_transport(message: String, return_to_lobby: bool = true) -> void:
 	var should_show_lobby := return_to_lobby and mode == "online_game"
+	var had_resume_pending := online_resume_pending
+	telemetry_record_event("online_disconnection", {"reason": "error" if message.contains("失败") or message.contains("出错") else "closed"})
 	remember_online_resume_context()
+	var resume_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+	online_resume_pending = had_resume_pending or (resume_room != "" and (mode == "online_game" or not online_room.is_empty()))
+	online_resume_join_sent = false
 	tcp.disconnect_from_host()
 	tcp_status = tcp.get_status()
 	tcp_buffer.clear()
@@ -27004,6 +27529,22 @@ func remember_online_resume_context() -> void:
 		"name": online_player_name,
 		"room": bounded_online_input(room_code, ONLINE_ROOM_CODE_MAX_LENGTH),
 	}
+
+
+func resume_online_room_after_welcome() -> void:
+	if not online_resume_pending or online_resume_join_sent:
+		return
+	var room_code := bounded_online_input(str(online_resume_context.get("room", selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
+	if room_code == "":
+		online_resume_pending = false
+		return
+	var player_name := online_name_input()
+	selected_room = room_code
+	if is_instance_valid(online_room_edit):
+		online_room_edit.text = room_code
+	var sent := send_online_action({"type": "joinRoom", "roomCode": room_code, "name": player_name}, "恢复房间")
+	if sent:
+		online_resume_join_sent = true
 
 
 func online_message_protocol_version(data: Dictionary) -> int:
@@ -27228,7 +27769,11 @@ func handle_online_ack(data: Dictionary) -> void:
 func handle_online_error(data: Dictionary) -> void:
 	if not online_response_matches_current_action(data):
 		return
+	var resume_join_rejected := online_resume_pending and online_resume_join_sent and online_last_sent_type == "joinRoom"
 	var message = online_server_message_text(data, "操作被服务器拒绝")
+	if resume_join_rejected:
+		online_resume_pending = false
+		online_resume_join_sent = false
 	set_online_feedback("服务器拒绝：%s" % message, false)
 
 func handle_online_log(data: Dictionary) -> void:
@@ -27274,6 +27819,7 @@ func handle_online_message(line: String) -> void:
 	if kind == "welcome":
 		var server_name = str(data.get("name", "")).strip_edges()
 		set_online_feedback("已连接%s，可建房或入房。" % (("：" + server_name) if server_name != "" else "服务器"), false)
+		resume_online_room_after_welcome()
 	elif kind == "info":
 		set_online_feedback(online_server_message_text(data, "服务器提示"), false)
 	elif kind == "error":
@@ -27297,6 +27843,10 @@ func handle_online_message(line: String) -> void:
 		clear_online_feedback()
 		online_room = next_room
 		selected_room = bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var resumed_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		if online_resume_pending and selected_room != "" and (resumed_room == "" or selected_room == resumed_room):
+			online_resume_pending = false
+			online_resume_join_sent = false
 		var room_logs = online_room.get("logs", [])
 		if typeof(room_logs) == TYPE_ARRAY:
 			var bounded_logs: Array = []
@@ -27717,7 +28267,11 @@ func _ready() -> void:
 	if not ui_capture_mode:
 		verify_audio_assets()
 	load_settings()
+	load_telemetry_state()
+	telemetry_record_event("app_started", {"platform": OS.get_name(), "app_version": APP_VERSION})
 	load_game_stats()
+	load_replay_archive()
+	migrate_round_history_to_replay_archive()
 	load_tutorial_state()
 	load_achievements()
 	load_login_state()
@@ -27919,6 +28473,7 @@ func _process(_delta: float) -> void:
 		update_online_slow_response_notice(now)
 	update_pending_claim_live_state()
 	update_online_action_live_state(now)
+	flush_offline_progress_autosave()
 
 
 func update_pending_claim_live_state() -> void:
@@ -27962,6 +28517,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		recover_audio_after_screen_change()
 		update_safe_area_layout()
+	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		flush_offline_progress_autosave(true)
 	elif what == NOTIFICATION_WM_SIZE_CHANGED or what == NOTIFICATION_WM_DPI_CHANGE:
 		update_safe_area_layout()
 		call_deferred("refresh_current_screen")
@@ -28009,6 +28566,9 @@ func handle_ui_cancel() -> bool:
 	if table_log_archive_open:
 		close_table_log_archive()
 		return true
+	if telemetry_sheet_open:
+		close_telemetry_data_sheet()
+		return true
 	if chat_panel_open:
 		close_chat_panel()
 		return true
@@ -28021,7 +28581,7 @@ func handle_ui_cancel() -> bool:
 		close_settings_panel()
 		return true
 	match mode:
-		"shop", "daily_login", "rules", "stats", "achievements", "online_lobby":
+		"shop", "daily_login", "rules", "stats", "achievements", "online_lobby", "replay_import":
 			show_menu(true)
 			return true
 		"offline", "online_game":
@@ -28619,6 +29179,8 @@ func menu_quick_button_glyph(quick_id: String) -> String:
 			return "成"
 		"shop":
 			return "店"
+		"replay":
+			return "录"
 	return quick_id.substr(0, 1) if quick_id != "" else "捷"
 
 
@@ -28814,6 +29376,7 @@ func poll_online(now_msec: int = -1) -> void:
 	if status != tcp_status:
 		tcp_status = status
 		if status == StreamPeerTCP.STATUS_CONNECTED:
+			telemetry_record_event("online_connection", {"result": "connected"})
 			set_online_feedback("已连接服务器，可建房或入房。", false)
 			if not sent_hello:
 				sent_hello = true
@@ -29183,6 +29746,7 @@ func deal_offline_hand() -> void:
 		players[seat]["flowers"] = 0
 		players[seat]["flower_tiles"] = []
 	record_round_event("round_start", {"dealer": dealer_seat, "seed": offline_hand_seed, "rule_variant": offline_active_rule_variant})
+	telemetry_record_event("round_started", {"rule_variant": offline_active_rule_variant, "difficulty": ai_difficulty_label(), "hand_number": offline_hand_number})
 	wall = make_wall()
 	shuffle_wall_with_seed(wall, offline_hand_seed)
 	for round_index in range(13):
@@ -29203,6 +29767,7 @@ func deal_offline_hand() -> void:
 	render_game()
 	play_fx_deal_start(dealer_seat)
 	play_fx_deal_cascade(dealer_seat)
+	save_offline_progress(false)
 
 
 func player_ai_assist_enabled() -> bool:
@@ -35408,12 +35973,11 @@ func chat_panel_rect() -> Rect2:
 	# The lobby gets a taller reading area because it has no table geometry.
 	if mode == "online_lobby":
 		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
-	# Both exposed meld states use the same wide upper-left gutter. The old
-	# right-meld branch was too narrow for touch controls and could intersect the
-	# right vertical meld lane; the left gutter clears the top river, side seat,
-	# and both meld layouts while keeping a stable drawer size.
+	# A top/right meld consumes the usual upper-right lane. Use the narrow upper
+	# left gutter below the HUD instead; it clears the top river's x=0.285 edge,
+	# the side rivers, the action dock, and the hand tray at compact sizes.
 	if chat_panel_route_name() != "top_safe_drawer":
-		return Rect2(Vector2(0.015, 0.120), Vector2(0.273, 0.320))
+		return Rect2(Vector2(0.015, 0.115), Vector2(0.275, 0.275))
 	# The root layer is inset by the device safe area. Keep an 8px+ gutter from
 	# the top river at the smallest supported viewport.
 	return Rect2(Vector2(0.727, 0.120), Vector2(0.985, 0.320))
@@ -35422,10 +35986,8 @@ func chat_panel_rect() -> Rect2:
 func chat_panel_route_name() -> String:
 	if mode == "online_lobby":
 		return "lobby_drawer"
-	if not get_melds(2).is_empty():
-		return "top_meld_safe_drawer"
-	if not get_melds(1).is_empty():
-		return "right_meld_safe_drawer"
+	if not get_melds(2).is_empty() or not get_melds(1).is_empty():
+		return "upper_meld_safe_drawer"
 	return "top_safe_drawer"
 
 
@@ -35488,6 +36050,10 @@ func close_chat_panel() -> void:
 	if panel != null and is_instance_valid(panel):
 		root_layer.remove_child(panel)
 		panel.queue_free()
+	var ledger := root_layer.find_child("TableLogLedgerPanel", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if ledger != null and bool(ledger.get_meta("hidden_for_chat", false)):
+		ledger.visible = true
+		ledger.remove_meta("hidden_for_chat")
 	chat_input = null
 	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if chat_button != null and not chat_button.disabled:
@@ -36813,6 +37379,7 @@ func record_round_event(event_type: String, payload: Dictionary = {}) -> void:
 	round_event_history.append(event)
 	while round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
 		round_event_history.pop_front()
+	mark_offline_progress_dirty()
 
 func round_replay_snapshot() -> Array:
 	return round_event_history.duplicate(true)
@@ -36940,12 +37507,436 @@ func copy_round_replay_share_code() -> bool:
 		show_toast("本局暂无可分享的回放记录")
 		return false
 	DisplayServer.clipboard_set(code)
+	telemetry_record_event("replay_exported", {"verified": true, "event_count": round_event_history.size()})
 	show_toast("回放码已复制 · 校验 %s" % round_replay_digest().left(10).to_upper(), 2200)
 	return true
 
+
+func replay_archive_payload_from_entry(entry: Dictionary) -> Dictionary:
+	var events = entry.get("events", [])
+	if typeof(events) != TYPE_ARRAY or (events as Array).is_empty():
+		return {}
+	var event_array: Array = events as Array
+	if not validate_round_replay(event_array):
+		return {}
+	var digest := round_replay_digest(event_array)
+	if digest == "" or str(entry.get("replay_digest", digest)) != digest:
+		return {}
+	return {
+		"schema": REPLAY_SCHEMA_VERSION,
+		"app_version": str(entry.get("app_version", APP_VERSION)),
+		"round_id": str(entry.get("round_id", entry.get("roundId", ""))),
+		"seed": int(entry.get("seed", 0)),
+		"rule_variant": normalized_rule_variant(str(entry.get("rule_variant", rule_variant))),
+		"events": event_array.duplicate(true),
+		"digest": digest,
+		"valid": true,
+		"event_counts": replay_event_counts(event_array),
+	}
+
+
+func replay_archive_entry_id(entry: Dictionary) -> String:
+	var digest := str(entry.get("replay_digest", "")).strip_edges()
+	if digest != "":
+		return "digest:%s" % digest
+	var round_id := str(entry.get("round_id", entry.get("roundId", ""))).strip_edges()
+	if round_id != "":
+		return "round:%s" % round_id
+	return "archive:%d" % int(entry.get("saved_at", 0))
+
+
+func normalize_replay_archive_entry(entry: Dictionary) -> Dictionary:
+	var payload := replay_archive_payload_from_entry(entry)
+	if payload.is_empty():
+		return {}
+	var normalized := entry.duplicate(true)
+	normalized["archive_id"] = replay_archive_entry_id(entry)
+	normalized["round_id"] = str(payload.get("round_id", ""))
+	normalized["rule_variant"] = normalized_rule_variant(str(payload.get("rule_variant", rule_variant)))
+	normalized["seed"] = int(payload.get("seed", 0))
+	normalized["events"] = (payload.get("events", []) as Array).duplicate(true)
+	normalized["replay_digest"] = str(payload.get("digest", ""))
+	normalized["replay_valid"] = true
+	normalized["archive_schema"] = REPLAY_ARCHIVE_SCHEMA_VERSION
+	normalized["saved_at"] = maxi(1, int(entry.get("saved_at", entry.get("archived_at", Time.get_unix_time_from_system()))))
+	normalized["archived_at"] = maxi(1, int(entry.get("archived_at", normalized["saved_at"])))
+	normalized["favorite"] = bool(entry.get("favorite", false))
+	normalized["source"] = str(entry.get("source", "local")) if str(entry.get("source", "local")) in ["local", "imported"] else "local"
+	normalized["summary"] = str(entry.get("summary", "已验证回放" )).strip_edges().left(220)
+	return normalized
+
+
+func load_replay_archive() -> void:
+	replay_archive = []
+	var config := ConfigFile.new()
+	if config.load(REPLAY_ARCHIVE_PATH) != OK:
+		return
+	var stored = config.get_value("archive", "entries", [])
+	if typeof(stored) != TYPE_ARRAY:
+		return
+	for raw_entry in (stored as Array):
+		if typeof(raw_entry) != TYPE_DICTIONARY:
+			continue
+		var normalized := normalize_replay_archive_entry(raw_entry as Dictionary)
+		if normalized.is_empty():
+			continue
+		var duplicate := false
+		for existing in replay_archive:
+			if typeof(existing) == TYPE_DICTIONARY and str((existing as Dictionary).get("archive_id", "")) == str(normalized.get("archive_id", "")):
+				duplicate = true
+				break
+		if not duplicate:
+			replay_archive.append(normalized)
+	while replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
+		replay_archive.pop_front()
+
+
+func save_replay_archive() -> void:
+	var config := ConfigFile.new()
+	config.set_value("archive", "schema_version", REPLAY_ARCHIVE_SCHEMA_VERSION)
+	config.set_value("archive", "entries", replay_archive.slice(maxi(0, replay_archive.size() - REPLAY_ARCHIVE_LIMIT)))
+	config.save(REPLAY_ARCHIVE_PATH)
+
+
+func upsert_replay_archive_entry(entry: Dictionary, persist: bool = true) -> bool:
+	var normalized := normalize_replay_archive_entry(entry)
+	if normalized.is_empty():
+		return false
+	var archive_id := str(normalized.get("archive_id", ""))
+	for index in range(replay_archive.size()):
+		var existing = replay_archive[index]
+		if typeof(existing) != TYPE_DICTIONARY or str((existing as Dictionary).get("archive_id", "")) != archive_id:
+			continue
+		normalized["favorite"] = bool((existing as Dictionary).get("favorite", normalized.get("favorite", false)))
+		if (existing as Dictionary) == normalized:
+			return false
+		replay_archive[index] = normalized
+		if persist:
+			save_replay_archive()
+		return true
+	replay_archive.append(normalized)
+	while replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
+		replay_archive.pop_front()
+	if persist:
+		save_replay_archive()
+	return true
+
+
+func migrate_round_history_to_replay_archive() -> void:
+	var changed := false
+	for raw_entry in round_history:
+		if typeof(raw_entry) == TYPE_DICTIONARY:
+			changed = upsert_replay_archive_entry(raw_entry as Dictionary, false) or changed
+	if changed:
+		save_replay_archive()
+
+
+func archive_latest_round_history_entry() -> void:
+	if round_history.is_empty():
+		return
+	var latest = round_history.back()
+	if typeof(latest) == TYPE_DICTIONARY:
+		upsert_replay_archive_entry(latest as Dictionary)
+
+
+func replay_archive_entries(query: String = "") -> Array:
+	var needle := query.strip_edges().to_lower()
+	var filtered: Array = []
+	for index in range(replay_archive.size() - 1, -1, -1):
+		var raw_entry = replay_archive[index]
+		if typeof(raw_entry) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = raw_entry
+		var searchable := " ".join([
+			str(entry.get("summary", "")),
+			rule_variant_label(str(entry.get("rule_variant", ""))),
+			replay_archive_result_label(entry),
+			replay_archive_date_text(entry),
+			str(entry.get("replay_digest", "")),
+		]).to_lower()
+		if needle == "" or searchable.contains(needle):
+			filtered.append(entry.duplicate(true))
+	return filtered
+
+
+func replay_archive_result_label(entry: Dictionary) -> String:
+	if str(entry.get("result_kind", "")) == "wall_draw":
+		return "荒庄"
+	if str(entry.get("result_kind", "")) == "win":
+		return "胡牌"
+	return "对局"
+
+
+func replay_archive_date_text(entry: Dictionary) -> String:
+	var timestamp := int(entry.get("saved_at", entry.get("archived_at", 0)))
+	if timestamp <= 0:
+		return "未知时间"
+	return Time.get_datetime_string_from_unix_time(timestamp, true).replace("T", " ").left(16)
+
+
+func replay_archive_entry(archive_id: String) -> Dictionary:
+	for raw_entry in replay_archive:
+		if typeof(raw_entry) == TYPE_DICTIONARY and str((raw_entry as Dictionary).get("archive_id", "")) == archive_id:
+			return (raw_entry as Dictionary).duplicate(true)
+	return {}
+
+
+func replay_archive_share_code(archive_id: String) -> String:
+	var entry := replay_archive_entry(archive_id)
+	if entry.is_empty():
+		return ""
+	var payload := replay_archive_payload_from_entry(entry)
+	if payload.is_empty():
+		return ""
+	var bytes := JSON.stringify(payload).to_utf8_buffer()
+	if bytes.size() <= 0 or bytes.size() > REPLAY_SHARE_MAX_BYTES:
+		return ""
+	return Marshalls.raw_to_base64(bytes)
+
+
+func toggle_replay_archive_favorite(archive_id: String) -> void:
+	for index in range(replay_archive.size()):
+		if typeof(replay_archive[index]) == TYPE_DICTIONARY and str((replay_archive[index] as Dictionary).get("archive_id", "")) == archive_id:
+			var entry: Dictionary = replay_archive[index]
+			entry["favorite"] = not bool(entry.get("favorite", false))
+			replay_archive[index] = entry
+			save_replay_archive()
+			replay_delete_target_id = ""
+			replay_delete_confirming = false
+			refresh_replay_archive_view()
+			show_toast("已%s收藏" % ("加入" if bool(entry["favorite"]) else "取消"))
+			return
+
+
+func copy_replay_archive_share_code(archive_id: String) -> bool:
+	var code := replay_archive_share_code(archive_id)
+	if code == "":
+		show_toast("该回放已损坏或不兼容，无法分享")
+		return false
+	DisplayServer.clipboard_set(code)
+	telemetry_record_event("replay_exported", {"verified": true, "event_count": replay_archive_entry(archive_id).get("events", []).size()})
+	show_toast("已复制归档回放码")
+	return true
+
+
+func request_delete_replay_archive(archive_id: String) -> void:
+	if replay_delete_confirming and replay_delete_target_id == archive_id:
+		for index in range(replay_archive.size()):
+			if typeof(replay_archive[index]) == TYPE_DICTIONARY and str((replay_archive[index] as Dictionary).get("archive_id", "")) == archive_id:
+				replay_archive.remove_at(index)
+				save_replay_archive()
+				replay_delete_target_id = ""
+				replay_delete_confirming = false
+				refresh_replay_archive_view()
+				show_toast("回放已从本机删除")
+				return
+		replay_delete_target_id = archive_id
+	replay_delete_confirming = true
+	refresh_replay_archive_view()
+	show_toast("再次点击删除，确认移除这条回放")
+
+
+func set_replay_search_query(query: String) -> void:
+	replay_search_query = query.strip_edges()
+	replay_delete_target_id = ""
+	replay_delete_confirming = false
+	refresh_replay_archive_view()
+
+
+func archive_imported_replay(payload: Dictionary) -> bool:
+	var events = payload.get("events", [])
+	if typeof(events) != TYPE_ARRAY or (events as Array).is_empty():
+		return false
+	var entry := {
+		"round_id": str(payload.get("round_id", "")),
+		"rule_variant": normalized_rule_variant(str(payload.get("rule_variant", rule_variant))),
+		"result_kind": "imported",
+		"summary": "导入回放 · %s" % str(payload.get("digest", "")).left(12).to_upper(),
+		"seed": int(payload.get("seed", 0)),
+		"events": (events as Array).duplicate(true),
+		"replay_digest": str(payload.get("digest", "")),
+		"replay_valid": true,
+		"source": "imported",
+		"saved_at": Time.get_unix_time_from_system(),
+		"archived_at": Time.get_unix_time_from_system(),
+	}
+	return upsert_replay_archive_entry(entry)
+
+
+func telemetry_event_fields(event_name: String) -> Array:
+	match event_name:
+		"app_started":
+			return ["platform", "app_version"]
+		"consent_granted", "consent_revoked":
+			return []
+		"round_started":
+			return ["rule_variant", "difficulty", "hand_number"]
+		"round_completed":
+			return ["rule_variant", "result_kind", "points_bucket", "fan_bucket"]
+		"round_abandoned":
+			return ["phase", "hand_number"]
+		"replay_imported", "replay_exported":
+			return ["verified", "event_count"]
+		"online_connection":
+			return ["result"]
+		"online_disconnection":
+			return ["reason"]
+	return []
+
+
+func telemetry_sanitize_fields(event_name: String, fields: Dictionary) -> Dictionary:
+	var safe: Dictionary = {}
+	for key in telemetry_event_fields(event_name):
+		if not fields.has(key):
+			continue
+		var value = fields[key]
+		if typeof(value) == TYPE_BOOL:
+			safe[key] = bool(value)
+		elif typeof(value) == TYPE_INT:
+			safe[key] = clampi(int(value), -1000000, 1000000)
+		elif typeof(value) == TYPE_FLOAT:
+			safe[key] = clampf(float(value), -1000000.0, 1000000.0)
+		else:
+			safe[key] = str(value).strip_edges().left(32)
+	return safe
+
+
+func load_telemetry_state() -> void:
+	telemetry_outbox = []
+	telemetry_event_sequence = 0
+	var config := ConfigFile.new()
+	if config.load(TELEMETRY_PATH) != OK:
+		return
+	if int(config.get_value("telemetry", "schema_version", 0)) != TELEMETRY_SCHEMA_VERSION:
+		return
+	var stored = config.get_value("telemetry", "events", [])
+	if typeof(stored) == TYPE_ARRAY:
+		for raw_event in (stored as Array):
+			if typeof(raw_event) != TYPE_DICTIONARY:
+				continue
+			var event: Dictionary = raw_event
+			var event_name := str(event.get("name", ""))
+			if not TELEMETRY_ALLOWED_EVENT_NAMES.has(event_name) or typeof(event.get("payload", {})) != TYPE_DICTIONARY:
+				continue
+			if JSON.stringify(event).to_utf8_buffer().size() > TELEMETRY_EVENT_MAX_BYTES:
+				continue
+			telemetry_outbox.append({
+				"schema": TELEMETRY_SCHEMA_VERSION,
+				"event_id": maxi(1, int(event.get("event_id", 0))),
+				"name": event_name,
+				"occurred_at": maxi(1, int(event.get("occurred_at", 0))),
+				"payload": telemetry_sanitize_fields(event_name, event.get("payload", {})),
+			})
+			telemetry_event_sequence = maxi(telemetry_event_sequence, int(event.get("event_id", 0)))
+	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
+		telemetry_outbox.pop_front()
+	if not telemetry_consent:
+		telemetry_outbox.clear()
+
+
+func save_telemetry_state() -> void:
+	var config := ConfigFile.new()
+	config.set_value("telemetry", "schema_version", TELEMETRY_SCHEMA_VERSION)
+	config.set_value("telemetry", "events", telemetry_outbox.slice(maxi(0, telemetry_outbox.size() - TELEMETRY_OUTBOX_LIMIT)))
+	config.save(TELEMETRY_PATH)
+
+
+func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool:
+	if not telemetry_consent or not TELEMETRY_ALLOWED_EVENT_NAMES.has(event_name):
+		return false
+	var event := {
+		"schema": TELEMETRY_SCHEMA_VERSION,
+		"event_id": telemetry_event_sequence + 1,
+		"name": event_name,
+		"occurred_at": Time.get_unix_time_from_system(),
+		"payload": telemetry_sanitize_fields(event_name, fields),
+	}
+	if JSON.stringify(event).to_utf8_buffer().size() > TELEMETRY_EVENT_MAX_BYTES:
+		return false
+	telemetry_event_sequence += 1
+	telemetry_outbox.append(event)
+	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
+		telemetry_outbox.pop_front()
+	save_telemetry_state()
+	return true
+
+
+func telemetry_consent_status_text() -> String:
+	if telemetry_consent:
+		return "已同意 · 本地队列 %d 条" % telemetry_outbox.size()
+	if telemetry_consent_decided:
+		return "已关闭 · 不记录"
+	return "未同意 · 默认不记录"
+
+
+func toggle_telemetry_consent() -> void:
+	telemetry_consent_decided = true
+	telemetry_consent = not telemetry_consent
+	if telemetry_consent:
+		save_settings()
+		telemetry_record_event("consent_granted")
+		show_toast("已同意记录匿名诊断数据")
+	else:
+		clear_telemetry_data()
+		save_settings()
+		show_toast("已关闭诊断数据记录并清空本地队列")
+	if telemetry_sheet_open:
+		refresh_telemetry_data_sheet()
+	else:
+		refresh_current_screen()
+
+
+func clear_telemetry_data() -> void:
+	telemetry_outbox.clear()
+	telemetry_export_status = "未导出"
+	save_telemetry_state()
+	if telemetry_sheet_open:
+		refresh_telemetry_data_sheet()
+	show_toast("匿名诊断数据已清除")
+
+
+func export_telemetry_data() -> bool:
+	var export_payload := {"schema": TELEMETRY_SCHEMA_VERSION, "events": telemetry_outbox.duplicate(true)}
+	DisplayServer.clipboard_set(JSON.stringify(export_payload))
+	telemetry_export_status = "已复制 · %d 条" % telemetry_outbox.size()
+	if telemetry_sheet_open:
+		refresh_telemetry_data_sheet()
+	show_toast("匿名诊断数据已复制；不含昵称、房间号或牌面")
+	return true
+
+
+func telemetry_upload_available() -> bool:
+	return TELEMETRY_UPLOAD_URL.strip_edges() != ""
+
+
+func flush_telemetry_outbox() -> bool:
+	# The release has no configured endpoint yet. Keeping this explicit makes an
+	# unavailable uploader a fail-open condition instead of a gameplay dependency.
+	telemetry_upload_status = "本地队列" if not telemetry_upload_available() else "待上传"
+	return false
+
+
+func is_valid_replay_base64_shape(value: String) -> bool:
+	if value.is_empty() or value.length() % 4 == 1:
+		return false
+	var padding_start := value.length()
+	for index in range(value.length()):
+		var codepoint := value.unicode_at(index)
+		var is_alphabet := (codepoint >= 65 and codepoint <= 90) or (codepoint >= 97 and codepoint <= 122) or (codepoint >= 48 and codepoint <= 57) or codepoint == 43 or codepoint == 47
+		if codepoint == 61:
+			if padding_start == value.length():
+				padding_start = index
+		elif padding_start != value.length() or not is_alphabet:
+			return false
+	var padding_count := value.length() - padding_start
+	if padding_count > 2:
+		return false
+	return padding_count == 0 or value.length() % 4 == 0
+
+
 func import_round_replay_share_code(code: String) -> Dictionary:
 	var clean := code.strip_edges()
-	if clean == "":
+	if not is_valid_replay_base64_shape(clean):
 		return {}
 	var decoded := Marshalls.base64_to_raw(clean)
 	if decoded.is_empty() or decoded.size() > REPLAY_SHARE_MAX_BYTES:
@@ -36961,6 +37952,7 @@ func import_round_replay_share_code(code: String) -> Dictionary:
 		return {}
 	if str(payload.get("digest", "")) != round_replay_digest(events as Array):
 		return {}
+	telemetry_record_event("replay_imported", {"verified": true, "event_count": (events as Array).size()})
 	return payload.duplicate(true)
 
 func match_progress_report() -> Dictionary:

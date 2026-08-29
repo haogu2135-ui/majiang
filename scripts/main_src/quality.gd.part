@@ -22,6 +22,7 @@ func record_round_event(event_type: String, payload: Dictionary = {}) -> void:
 	round_event_history.append(event)
 	while round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
 		round_event_history.pop_front()
+	mark_offline_progress_dirty()
 
 func round_replay_snapshot() -> Array:
 	return round_event_history.duplicate(true)
@@ -149,12 +150,436 @@ func copy_round_replay_share_code() -> bool:
 		show_toast("本局暂无可分享的回放记录")
 		return false
 	DisplayServer.clipboard_set(code)
+	telemetry_record_event("replay_exported", {"verified": true, "event_count": round_event_history.size()})
 	show_toast("回放码已复制 · 校验 %s" % round_replay_digest().left(10).to_upper(), 2200)
 	return true
 
+
+func replay_archive_payload_from_entry(entry: Dictionary) -> Dictionary:
+	var events = entry.get("events", [])
+	if typeof(events) != TYPE_ARRAY or (events as Array).is_empty():
+		return {}
+	var event_array: Array = events as Array
+	if not validate_round_replay(event_array):
+		return {}
+	var digest := round_replay_digest(event_array)
+	if digest == "" or str(entry.get("replay_digest", digest)) != digest:
+		return {}
+	return {
+		"schema": REPLAY_SCHEMA_VERSION,
+		"app_version": str(entry.get("app_version", APP_VERSION)),
+		"round_id": str(entry.get("round_id", entry.get("roundId", ""))),
+		"seed": int(entry.get("seed", 0)),
+		"rule_variant": normalized_rule_variant(str(entry.get("rule_variant", rule_variant))),
+		"events": event_array.duplicate(true),
+		"digest": digest,
+		"valid": true,
+		"event_counts": replay_event_counts(event_array),
+	}
+
+
+func replay_archive_entry_id(entry: Dictionary) -> String:
+	var digest := str(entry.get("replay_digest", "")).strip_edges()
+	if digest != "":
+		return "digest:%s" % digest
+	var round_id := str(entry.get("round_id", entry.get("roundId", ""))).strip_edges()
+	if round_id != "":
+		return "round:%s" % round_id
+	return "archive:%d" % int(entry.get("saved_at", 0))
+
+
+func normalize_replay_archive_entry(entry: Dictionary) -> Dictionary:
+	var payload := replay_archive_payload_from_entry(entry)
+	if payload.is_empty():
+		return {}
+	var normalized := entry.duplicate(true)
+	normalized["archive_id"] = replay_archive_entry_id(entry)
+	normalized["round_id"] = str(payload.get("round_id", ""))
+	normalized["rule_variant"] = normalized_rule_variant(str(payload.get("rule_variant", rule_variant)))
+	normalized["seed"] = int(payload.get("seed", 0))
+	normalized["events"] = (payload.get("events", []) as Array).duplicate(true)
+	normalized["replay_digest"] = str(payload.get("digest", ""))
+	normalized["replay_valid"] = true
+	normalized["archive_schema"] = REPLAY_ARCHIVE_SCHEMA_VERSION
+	normalized["saved_at"] = maxi(1, int(entry.get("saved_at", entry.get("archived_at", Time.get_unix_time_from_system()))))
+	normalized["archived_at"] = maxi(1, int(entry.get("archived_at", normalized["saved_at"])))
+	normalized["favorite"] = bool(entry.get("favorite", false))
+	normalized["source"] = str(entry.get("source", "local")) if str(entry.get("source", "local")) in ["local", "imported"] else "local"
+	normalized["summary"] = str(entry.get("summary", "已验证回放" )).strip_edges().left(220)
+	return normalized
+
+
+func load_replay_archive() -> void:
+	replay_archive = []
+	var config := ConfigFile.new()
+	if config.load(REPLAY_ARCHIVE_PATH) != OK:
+		return
+	var stored = config.get_value("archive", "entries", [])
+	if typeof(stored) != TYPE_ARRAY:
+		return
+	for raw_entry in (stored as Array):
+		if typeof(raw_entry) != TYPE_DICTIONARY:
+			continue
+		var normalized := normalize_replay_archive_entry(raw_entry as Dictionary)
+		if normalized.is_empty():
+			continue
+		var duplicate := false
+		for existing in replay_archive:
+			if typeof(existing) == TYPE_DICTIONARY and str((existing as Dictionary).get("archive_id", "")) == str(normalized.get("archive_id", "")):
+				duplicate = true
+				break
+		if not duplicate:
+			replay_archive.append(normalized)
+	while replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
+		replay_archive.pop_front()
+
+
+func save_replay_archive() -> void:
+	var config := ConfigFile.new()
+	config.set_value("archive", "schema_version", REPLAY_ARCHIVE_SCHEMA_VERSION)
+	config.set_value("archive", "entries", replay_archive.slice(maxi(0, replay_archive.size() - REPLAY_ARCHIVE_LIMIT)))
+	config.save(REPLAY_ARCHIVE_PATH)
+
+
+func upsert_replay_archive_entry(entry: Dictionary, persist: bool = true) -> bool:
+	var normalized := normalize_replay_archive_entry(entry)
+	if normalized.is_empty():
+		return false
+	var archive_id := str(normalized.get("archive_id", ""))
+	for index in range(replay_archive.size()):
+		var existing = replay_archive[index]
+		if typeof(existing) != TYPE_DICTIONARY or str((existing as Dictionary).get("archive_id", "")) != archive_id:
+			continue
+		normalized["favorite"] = bool((existing as Dictionary).get("favorite", normalized.get("favorite", false)))
+		if (existing as Dictionary) == normalized:
+			return false
+		replay_archive[index] = normalized
+		if persist:
+			save_replay_archive()
+		return true
+	replay_archive.append(normalized)
+	while replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
+		replay_archive.pop_front()
+	if persist:
+		save_replay_archive()
+	return true
+
+
+func migrate_round_history_to_replay_archive() -> void:
+	var changed := false
+	for raw_entry in round_history:
+		if typeof(raw_entry) == TYPE_DICTIONARY:
+			changed = upsert_replay_archive_entry(raw_entry as Dictionary, false) or changed
+	if changed:
+		save_replay_archive()
+
+
+func archive_latest_round_history_entry() -> void:
+	if round_history.is_empty():
+		return
+	var latest = round_history.back()
+	if typeof(latest) == TYPE_DICTIONARY:
+		upsert_replay_archive_entry(latest as Dictionary)
+
+
+func replay_archive_entries(query: String = "") -> Array:
+	var needle := query.strip_edges().to_lower()
+	var filtered: Array = []
+	for index in range(replay_archive.size() - 1, -1, -1):
+		var raw_entry = replay_archive[index]
+		if typeof(raw_entry) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = raw_entry
+		var searchable := " ".join([
+			str(entry.get("summary", "")),
+			rule_variant_label(str(entry.get("rule_variant", ""))),
+			replay_archive_result_label(entry),
+			replay_archive_date_text(entry),
+			str(entry.get("replay_digest", "")),
+		]).to_lower()
+		if needle == "" or searchable.contains(needle):
+			filtered.append(entry.duplicate(true))
+	return filtered
+
+
+func replay_archive_result_label(entry: Dictionary) -> String:
+	if str(entry.get("result_kind", "")) == "wall_draw":
+		return "荒庄"
+	if str(entry.get("result_kind", "")) == "win":
+		return "胡牌"
+	return "对局"
+
+
+func replay_archive_date_text(entry: Dictionary) -> String:
+	var timestamp := int(entry.get("saved_at", entry.get("archived_at", 0)))
+	if timestamp <= 0:
+		return "未知时间"
+	return Time.get_datetime_string_from_unix_time(timestamp, true).replace("T", " ").left(16)
+
+
+func replay_archive_entry(archive_id: String) -> Dictionary:
+	for raw_entry in replay_archive:
+		if typeof(raw_entry) == TYPE_DICTIONARY and str((raw_entry as Dictionary).get("archive_id", "")) == archive_id:
+			return (raw_entry as Dictionary).duplicate(true)
+	return {}
+
+
+func replay_archive_share_code(archive_id: String) -> String:
+	var entry := replay_archive_entry(archive_id)
+	if entry.is_empty():
+		return ""
+	var payload := replay_archive_payload_from_entry(entry)
+	if payload.is_empty():
+		return ""
+	var bytes := JSON.stringify(payload).to_utf8_buffer()
+	if bytes.size() <= 0 or bytes.size() > REPLAY_SHARE_MAX_BYTES:
+		return ""
+	return Marshalls.raw_to_base64(bytes)
+
+
+func toggle_replay_archive_favorite(archive_id: String) -> void:
+	for index in range(replay_archive.size()):
+		if typeof(replay_archive[index]) == TYPE_DICTIONARY and str((replay_archive[index] as Dictionary).get("archive_id", "")) == archive_id:
+			var entry: Dictionary = replay_archive[index]
+			entry["favorite"] = not bool(entry.get("favorite", false))
+			replay_archive[index] = entry
+			save_replay_archive()
+			replay_delete_target_id = ""
+			replay_delete_confirming = false
+			refresh_replay_archive_view()
+			show_toast("已%s收藏" % ("加入" if bool(entry["favorite"]) else "取消"))
+			return
+
+
+func copy_replay_archive_share_code(archive_id: String) -> bool:
+	var code := replay_archive_share_code(archive_id)
+	if code == "":
+		show_toast("该回放已损坏或不兼容，无法分享")
+		return false
+	DisplayServer.clipboard_set(code)
+	telemetry_record_event("replay_exported", {"verified": true, "event_count": replay_archive_entry(archive_id).get("events", []).size()})
+	show_toast("已复制归档回放码")
+	return true
+
+
+func request_delete_replay_archive(archive_id: String) -> void:
+	if replay_delete_confirming and replay_delete_target_id == archive_id:
+		for index in range(replay_archive.size()):
+			if typeof(replay_archive[index]) == TYPE_DICTIONARY and str((replay_archive[index] as Dictionary).get("archive_id", "")) == archive_id:
+				replay_archive.remove_at(index)
+				save_replay_archive()
+				replay_delete_target_id = ""
+				replay_delete_confirming = false
+				refresh_replay_archive_view()
+				show_toast("回放已从本机删除")
+				return
+		replay_delete_target_id = archive_id
+	replay_delete_confirming = true
+	refresh_replay_archive_view()
+	show_toast("再次点击删除，确认移除这条回放")
+
+
+func set_replay_search_query(query: String) -> void:
+	replay_search_query = query.strip_edges()
+	replay_delete_target_id = ""
+	replay_delete_confirming = false
+	refresh_replay_archive_view()
+
+
+func archive_imported_replay(payload: Dictionary) -> bool:
+	var events = payload.get("events", [])
+	if typeof(events) != TYPE_ARRAY or (events as Array).is_empty():
+		return false
+	var entry := {
+		"round_id": str(payload.get("round_id", "")),
+		"rule_variant": normalized_rule_variant(str(payload.get("rule_variant", rule_variant))),
+		"result_kind": "imported",
+		"summary": "导入回放 · %s" % str(payload.get("digest", "")).left(12).to_upper(),
+		"seed": int(payload.get("seed", 0)),
+		"events": (events as Array).duplicate(true),
+		"replay_digest": str(payload.get("digest", "")),
+		"replay_valid": true,
+		"source": "imported",
+		"saved_at": Time.get_unix_time_from_system(),
+		"archived_at": Time.get_unix_time_from_system(),
+	}
+	return upsert_replay_archive_entry(entry)
+
+
+func telemetry_event_fields(event_name: String) -> Array:
+	match event_name:
+		"app_started":
+			return ["platform", "app_version"]
+		"consent_granted", "consent_revoked":
+			return []
+		"round_started":
+			return ["rule_variant", "difficulty", "hand_number"]
+		"round_completed":
+			return ["rule_variant", "result_kind", "points_bucket", "fan_bucket"]
+		"round_abandoned":
+			return ["phase", "hand_number"]
+		"replay_imported", "replay_exported":
+			return ["verified", "event_count"]
+		"online_connection":
+			return ["result"]
+		"online_disconnection":
+			return ["reason"]
+	return []
+
+
+func telemetry_sanitize_fields(event_name: String, fields: Dictionary) -> Dictionary:
+	var safe: Dictionary = {}
+	for key in telemetry_event_fields(event_name):
+		if not fields.has(key):
+			continue
+		var value = fields[key]
+		if typeof(value) == TYPE_BOOL:
+			safe[key] = bool(value)
+		elif typeof(value) == TYPE_INT:
+			safe[key] = clampi(int(value), -1000000, 1000000)
+		elif typeof(value) == TYPE_FLOAT:
+			safe[key] = clampf(float(value), -1000000.0, 1000000.0)
+		else:
+			safe[key] = str(value).strip_edges().left(32)
+	return safe
+
+
+func load_telemetry_state() -> void:
+	telemetry_outbox = []
+	telemetry_event_sequence = 0
+	var config := ConfigFile.new()
+	if config.load(TELEMETRY_PATH) != OK:
+		return
+	if int(config.get_value("telemetry", "schema_version", 0)) != TELEMETRY_SCHEMA_VERSION:
+		return
+	var stored = config.get_value("telemetry", "events", [])
+	if typeof(stored) == TYPE_ARRAY:
+		for raw_event in (stored as Array):
+			if typeof(raw_event) != TYPE_DICTIONARY:
+				continue
+			var event: Dictionary = raw_event
+			var event_name := str(event.get("name", ""))
+			if not TELEMETRY_ALLOWED_EVENT_NAMES.has(event_name) or typeof(event.get("payload", {})) != TYPE_DICTIONARY:
+				continue
+			if JSON.stringify(event).to_utf8_buffer().size() > TELEMETRY_EVENT_MAX_BYTES:
+				continue
+			telemetry_outbox.append({
+				"schema": TELEMETRY_SCHEMA_VERSION,
+				"event_id": maxi(1, int(event.get("event_id", 0))),
+				"name": event_name,
+				"occurred_at": maxi(1, int(event.get("occurred_at", 0))),
+				"payload": telemetry_sanitize_fields(event_name, event.get("payload", {})),
+			})
+			telemetry_event_sequence = maxi(telemetry_event_sequence, int(event.get("event_id", 0)))
+	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
+		telemetry_outbox.pop_front()
+	if not telemetry_consent:
+		telemetry_outbox.clear()
+
+
+func save_telemetry_state() -> void:
+	var config := ConfigFile.new()
+	config.set_value("telemetry", "schema_version", TELEMETRY_SCHEMA_VERSION)
+	config.set_value("telemetry", "events", telemetry_outbox.slice(maxi(0, telemetry_outbox.size() - TELEMETRY_OUTBOX_LIMIT)))
+	config.save(TELEMETRY_PATH)
+
+
+func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool:
+	if not telemetry_consent or not TELEMETRY_ALLOWED_EVENT_NAMES.has(event_name):
+		return false
+	var event := {
+		"schema": TELEMETRY_SCHEMA_VERSION,
+		"event_id": telemetry_event_sequence + 1,
+		"name": event_name,
+		"occurred_at": Time.get_unix_time_from_system(),
+		"payload": telemetry_sanitize_fields(event_name, fields),
+	}
+	if JSON.stringify(event).to_utf8_buffer().size() > TELEMETRY_EVENT_MAX_BYTES:
+		return false
+	telemetry_event_sequence += 1
+	telemetry_outbox.append(event)
+	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
+		telemetry_outbox.pop_front()
+	save_telemetry_state()
+	return true
+
+
+func telemetry_consent_status_text() -> String:
+	if telemetry_consent:
+		return "已同意 · 本地队列 %d 条" % telemetry_outbox.size()
+	if telemetry_consent_decided:
+		return "已关闭 · 不记录"
+	return "未同意 · 默认不记录"
+
+
+func toggle_telemetry_consent() -> void:
+	telemetry_consent_decided = true
+	telemetry_consent = not telemetry_consent
+	if telemetry_consent:
+		save_settings()
+		telemetry_record_event("consent_granted")
+		show_toast("已同意记录匿名诊断数据")
+	else:
+		clear_telemetry_data()
+		save_settings()
+		show_toast("已关闭诊断数据记录并清空本地队列")
+	if telemetry_sheet_open:
+		refresh_telemetry_data_sheet()
+	else:
+		refresh_current_screen()
+
+
+func clear_telemetry_data() -> void:
+	telemetry_outbox.clear()
+	telemetry_export_status = "未导出"
+	save_telemetry_state()
+	if telemetry_sheet_open:
+		refresh_telemetry_data_sheet()
+	show_toast("匿名诊断数据已清除")
+
+
+func export_telemetry_data() -> bool:
+	var export_payload := {"schema": TELEMETRY_SCHEMA_VERSION, "events": telemetry_outbox.duplicate(true)}
+	DisplayServer.clipboard_set(JSON.stringify(export_payload))
+	telemetry_export_status = "已复制 · %d 条" % telemetry_outbox.size()
+	if telemetry_sheet_open:
+		refresh_telemetry_data_sheet()
+	show_toast("匿名诊断数据已复制；不含昵称、房间号或牌面")
+	return true
+
+
+func telemetry_upload_available() -> bool:
+	return TELEMETRY_UPLOAD_URL.strip_edges() != ""
+
+
+func flush_telemetry_outbox() -> bool:
+	# The release has no configured endpoint yet. Keeping this explicit makes an
+	# unavailable uploader a fail-open condition instead of a gameplay dependency.
+	telemetry_upload_status = "本地队列" if not telemetry_upload_available() else "待上传"
+	return false
+
+
+func is_valid_replay_base64_shape(value: String) -> bool:
+	if value.is_empty() or value.length() % 4 == 1:
+		return false
+	var padding_start := value.length()
+	for index in range(value.length()):
+		var codepoint := value.unicode_at(index)
+		var is_alphabet := (codepoint >= 65 and codepoint <= 90) or (codepoint >= 97 and codepoint <= 122) or (codepoint >= 48 and codepoint <= 57) or codepoint == 43 or codepoint == 47
+		if codepoint == 61:
+			if padding_start == value.length():
+				padding_start = index
+		elif padding_start != value.length() or not is_alphabet:
+			return false
+	var padding_count := value.length() - padding_start
+	if padding_count > 2:
+		return false
+	return padding_count == 0 or value.length() % 4 == 0
+
+
 func import_round_replay_share_code(code: String) -> Dictionary:
 	var clean := code.strip_edges()
-	if clean == "":
+	if not is_valid_replay_base64_shape(clean):
 		return {}
 	var decoded := Marshalls.base64_to_raw(clean)
 	if decoded.is_empty() or decoded.size() > REPLAY_SHARE_MAX_BYTES:
@@ -170,6 +595,7 @@ func import_round_replay_share_code(code: String) -> Dictionary:
 		return {}
 	if str(payload.get("digest", "")) != round_replay_digest(events as Array):
 		return {}
+	telemetry_record_event("replay_imported", {"verified": true, "event_count": (events as Array).size()})
 	return payload.duplicate(true)
 
 func match_progress_report() -> Dictionary:
