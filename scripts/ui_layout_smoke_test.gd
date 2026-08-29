@@ -1566,7 +1566,9 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	var panel_rect = screen_rect(panel)
 	var panel_texture_path := ""
 	if panel is TextureRect and (panel as TextureRect).texture != null:
-		panel_texture_path = (panel as TextureRect).texture.resource_path
+		var panel_texture = (panel as TextureRect).texture
+		var panel_source = (panel_texture as AtlasTexture).atlas if panel_texture is AtlasTexture else panel_texture
+		panel_texture_path = str(panel_source.resource_path) if panel_source != null else ""
 	check(panel_texture_path.ends_with("/ui_dark_scrim.png") and panel.self_modulate.a >= 0.98, "round summary uses an opaque authored reading scrim at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "round summary panel stays inside the viewport safe bounds at %s" % viewport_size)
 	for node in [title, body, detail_panel, rank_header]:

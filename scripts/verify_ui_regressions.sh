@@ -129,6 +129,18 @@ capture_pages_for_size() {
 		--screens=13_round_summary,14_danger_discard,15_pending_claim_full,16_win_detail,21_diagnostic
 }
 
+capture_accessibility_profiles_for_size() {
+	local screen_size="$1"
+	export YUNZHUO_CAPTURE_REVISION="$REVISION"
+	export YUNZHUO_CAPTURE_BATCH_ID="$QA_BATCH_ID"
+	export YUNZHUO_CAPTURE_WORKTREE_STATE="$WORKTREE_STATE"
+	export YUNZHUO_CAPTURE_RUNTIME_SOURCE_STATE="$RUNTIME_SOURCE_STATE"
+	export YUNZHUO_CAPTURE_WORKTREE_DIFF_FINGERPRINT="$WORKTREE_DIFF_FINGERPRINT"
+	export YUNZHUO_CAPTURE_RUNTIME_SOURCE_DIFF_FINGERPRINT="$RUNTIME_SOURCE_DIFF_FINGERPRINT"
+	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_accessibility_smoke_test.gd -- \
+		--size="$screen_size"
+}
+
 run_check() {
 	local name="$1"
 	local log_name="$2"
@@ -197,7 +209,8 @@ check_no_runtime_generated_bitmap_textures() {
 run_check "Python QA tools compile" "py_compile.log" \
 	python3 -m py_compile \
 	tools/assemble_main.py \
-	scripts/ui_screenshot_manifest_check.py
+	scripts/ui_screenshot_manifest_check.py \
+	scripts/ui_accessibility_manifest_check.py
 
 if [ -f "$ROOT_DIR/tools/generate_grok_image.py" ]; then
 	run_check "Optional Grok image tool compile" "generate_grok_image_py_compile.log" \
@@ -224,6 +237,33 @@ run_check "UI layout regression smoke" "ui_layout_smoke.log" \
 
 run_check "UI hover pressed focus and connected-lobby smoke" "ui_interaction_smoke.log" \
 	run_low_resource_xvfb_godot 960x540 --path "$ROOT_DIR" -s scripts/ui_interaction_smoke_test.gd
+
+run_check "Accessibility profiles and focus smoke 1280x720" "ui_accessibility_1280x720.log" \
+	capture_accessibility_profiles_for_size 1280x720
+
+run_check "Accessibility profile manifest 1280x720" "accessibility_manifest_1280x720.log" \
+	python3 scripts/ui_accessibility_manifest_check.py \
+	--profiles-dir build/qa/accessibility_profiles \
+	--report build/qa/ui_accessibility_manifest_report.md \
+	--expected-size 1280x720
+
+run_check "Accessibility profiles and focus smoke 960x540" "ui_accessibility_960x540.log" \
+	capture_accessibility_profiles_for_size 960x540
+
+run_check "Accessibility profile manifest 960x540" "accessibility_manifest_960x540.log" \
+	python3 scripts/ui_accessibility_manifest_check.py \
+	--profiles-dir build/qa/accessibility_profiles_960x540 \
+	--report build/qa/ui_accessibility_manifest_report_960x540.md \
+	--expected-size 960x540
+
+run_check "Accessibility profiles and focus smoke 1920x1080" "ui_accessibility_1920x1080.log" \
+	capture_accessibility_profiles_for_size 1920x1080
+
+run_check "Accessibility profile manifest 1920x1080" "accessibility_manifest_1920x1080.log" \
+	python3 scripts/ui_accessibility_manifest_check.py \
+	--profiles-dir build/qa/accessibility_profiles_1920x1080 \
+	--report build/qa/ui_accessibility_manifest_report_1920x1080.md \
+	--expected-size 1920x1080
 
 run_check "Offline gameplay smoke" "offline_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/offline_smoke_test.gd
@@ -256,6 +296,9 @@ run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 	check_no_runtime_leaks \
 	"$LOG_DIR/ui_layout_smoke.log" \
 	"$LOG_DIR/ui_interaction_smoke.log" \
+	"$LOG_DIR/ui_accessibility_1280x720.log" \
+	"$LOG_DIR/ui_accessibility_960x540.log" \
+	"$LOG_DIR/ui_accessibility_1920x1080.log" \
 	"$LOG_DIR/offline_smoke.log" \
 	"$LOG_DIR/capture_pages_1280x720.log" \
 	"$LOG_DIR/capture_pages_960x540.log" \
@@ -265,6 +308,9 @@ run_check "Runtime error log scan" "runtime_error_scan.log" \
 	check_no_runtime_errors \
 	"$LOG_DIR/ui_layout_smoke.log" \
 	"$LOG_DIR/ui_interaction_smoke.log" \
+	"$LOG_DIR/ui_accessibility_1280x720.log" \
+	"$LOG_DIR/ui_accessibility_960x540.log" \
+	"$LOG_DIR/ui_accessibility_1920x1080.log" \
 	"$LOG_DIR/offline_smoke.log" \
 	"$LOG_DIR/capture_pages_1280x720.log" \
 	"$LOG_DIR/capture_pages_960x540.log" \
@@ -322,6 +368,7 @@ fi
 	echo "| 规则滚动条触控命中过窄 | UI layout smoke 44px hit target + 04_rules 三分辨率截图 |"
 	echo "| 结算、危险弃牌、完整响应、胡牌详情缺正式证据 | 13～16 三分辨率截图 + manifest |"
 	echo "| 位图导入缓存缺失时运行时 ImageTexture 兜底并刷资源错误 | imported bitmap policy + runtime error log scan |"
+	echo "| 六档阅读辅助、键盘焦点留存与返回焦点 | accessibility profile/focus smoke + three-resolution manifests |"
 	echo ""
 	echo "## Screenshot Artifacts"
 	echo ""
@@ -331,6 +378,8 @@ fi
 	echo "- 1280x720 manifest: \`$ROOT_DIR/build/qa/ui_screenshot_manifest_report.md\`"
 	echo "- 960x540 manifest: \`$ROOT_DIR/build/qa/ui_screenshot_manifest_report_960x540.md\`"
 	echo "- 1920x1080 manifest: \`$ROOT_DIR/build/qa/ui_screenshot_manifest_report_1920x1080.md\`"
+	echo "- accessibility profile contact sheets: \`$ROOT_DIR/build/qa/accessibility_profiles*/contact_sheet.jpg\`"
+	echo "- accessibility profile manifests: \`$ROOT_DIR/build/qa/ui_accessibility_manifest_report*.md\`"
 	echo ""
 	echo "This report is a gate over the known UI regression set. It still complements, rather than replaces, manual visual review for newly introduced aesthetic issues."
 } >"$REPORT"

@@ -1318,6 +1318,40 @@ func make_layout_host(rect: Rect2) -> Control:
 	return host
 
 
+func _gpt_plate_texture_for_rect(texture: Texture2D, plate_key: String, rect: Rect2) -> Texture2D:
+	# Wide information surfaces need a quiet center from the authored bitmap;
+	# stretching the decorative border into every small card makes text noisy.
+	# Narrow rails and seals keep their full artwork so their edge language remains.
+	var width := absf(rect.size.x - rect.position.x)
+	var height := absf(rect.size.y - rect.position.y)
+	if texture == null or width <= 0.0 or height <= 0.0:
+		return texture
+	var aspect := width / height
+	var quiet_plate_keys := [
+		"ui_dark_scrim",
+		"ui_jade_reading_plate",
+		"ui_seat_info_plate",
+		"ui_button_face_plate",
+		"ui_confirm_sheet_plate",
+		"ui_menu_card_face",
+		"ui_shop_row_plate",
+		"ui_settings_section_plate",
+		"ui_online_form_field",
+		"ui_meld_pad",
+	]
+	if not quiet_plate_keys.has(plate_key) or aspect < 0.58 or aspect > 2.85 or maxf(width, height) < 0.16:
+		return texture
+	var crop_fraction := 0.16 if plate_key == "ui_dark_scrim" else 0.22
+	var source_size := texture.get_size()
+	if source_size.x <= 1.0 or source_size.y <= 1.0:
+		return texture
+	var crop_size := source_size * crop_fraction
+	var atlas := AtlasTexture.new()
+	atlas.atlas = texture
+	atlas.region = Rect2((source_size - crop_size) * 0.5, crop_size)
+	return atlas
+
+
 func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> Control:
 	# GPT plate (or invisible host). Never program ColorRect paint for chrome.
 	if plate_key == "":
@@ -1333,7 +1367,7 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> C
 		apply_rect(host, rect)
 		return host
 	var tex = TextureRect.new()
-	tex.texture = texture
+	tex.texture = _gpt_plate_texture_for_rect(texture, plate_key, rect)
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_SCALE
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1549,7 +1583,7 @@ func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border:
 	if texture != null:
 		var tex = TextureRect.new()
 		tex.name = "GptPanelPlate"
-		tex.texture = texture
+		tex.texture = _gpt_plate_texture_for_rect(texture, plate_key, rect)
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_SCALE
 		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
