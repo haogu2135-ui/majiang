@@ -520,7 +520,7 @@ func toggle_telemetry_consent() -> void:
 		telemetry_record_event("consent_granted")
 		show_toast("已同意记录匿名诊断数据")
 	else:
-		clear_telemetry_data()
+		clear_telemetry_data(true)
 		save_settings()
 		show_toast("已关闭诊断数据记录并清空本地队列")
 	if telemetry_sheet_open:
@@ -529,7 +529,13 @@ func toggle_telemetry_consent() -> void:
 		refresh_current_screen()
 
 
-func clear_telemetry_data() -> void:
+func clear_telemetry_data(confirmed: bool = false) -> void:
+	if not confirmed and not telemetry_clear_confirming:
+		telemetry_clear_confirming = true
+		refresh_telemetry_data_sheet()
+		show_toast("再次点击清除，确认删除本地匿名数据")
+		return
+	telemetry_clear_confirming = false
 	telemetry_outbox.clear()
 	telemetry_export_status = "未导出"
 	save_telemetry_state()

@@ -11,6 +11,7 @@ const ONLINE_HOST_MAX_LENGTH := 253
 const ONLINE_ROOM_CODE_MAX_LENGTH := 32
 const ONLINE_LOG_HISTORY_LIMIT := 14
 const ONLINE_LOG_ENTRY_MAX_LENGTH := 240
+const UI_MIN_TOUCH_TARGET := 44.0
 const ONLINE_CHAT_COOLDOWN_MSEC := 650
 const ONLINE_VOICE_PACKET_MAX_BYTES := 16384
 const ONLINE_VOICE_MIN_SAMPLE_RATE := 8000
@@ -540,6 +541,8 @@ var ai_assist_enabled = false  # 出牌辅助（推荐/危险提示），玩家�
 var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
 var settings_focus_restore_name := ""
+var shop_scroll_restore_value := -1.0
+var shop_focus_restore_name := ""
 var reset_progress_confirming = false
 var exit_confirm_panel: Control = null
 var exit_confirm_focus_restore_id := 0
@@ -627,6 +630,7 @@ var telemetry_event_sequence := 0
 var telemetry_upload_status := "本地队列"
 var telemetry_export_status := "未导出"
 var telemetry_sheet_open := false
+var telemetry_clear_confirming := false
 var applied_result_transactions: Dictionary = {}
 var offline_hand_seed := 0
 var last_match_summary: Dictionary = {}
@@ -644,6 +648,8 @@ var mode = "menu"
 var screen_layer: Control
 var root_layer: Control
 var status_label: Label
+var last_status_text := ""
+var status_last_updated_msec := 0
 var logs_label: RichTextLabel
 var action_bar: Container
 var update_request: HTTPRequest
@@ -896,7 +902,9 @@ const DISCARD_ZONES := [
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
-	[1, Rect2(Vector2(0.780, 0.240), Vector2(0.852, 0.680))],
+	# The third rect is the active danger-state shelf. It occupies the narrow
+	# clear channel between the center panel, right river, and danger CTA.
+	[1, Rect2(Vector2(0.780, 0.240), Vector2(0.852, 0.680)), Rect2(Vector2(0.595, 0.200), Vector2(0.715, 0.500))],
 	[2, Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))],
 	[3, Rect2(Vector2(0.148, 0.240), Vector2(0.220, 0.680))],
 ]
@@ -998,18 +1006,18 @@ const ACTION_BUTTON_MIN_TOUCH_WIDTH := 50.0
 # the two-row response budget at 960x540.
 const PENDING_CLAIM_BUTTON_MIN_WIDTH := 52.0
 const ACTION_BUTTON_HEIGHT := 44.0
-const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
-const ACTION_BAR_RECT := Rect2(Vector2(0.534, 0.698), Vector2(0.960, 0.782))
+const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.528, 0.688), Vector2(0.972, 0.792))
+const ACTION_BAR_RECT := Rect2(Vector2(0.542, 0.698), Vector2(0.960, 0.782))
 const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.632, 0.588), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.615, 0.558), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.625, 0.568), Vector2(0.972, 0.790))
-const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.520, 0.688), Vector2(0.972, 0.792))
+const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.528, 0.688), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
 # Keep the warning and its real CTA in one right-side decision column. The
 # panel clears the right seat lane above and the hand tray below.
 const DANGER_DISCARD_CONFIRMATION_RECT := Rect2(Vector2(0.640, 0.510), Vector2(0.960, 0.685))
-const CHAT_ACTION_BUTTON_RECT := Rect2(Vector2(0.430, 0.698), Vector2(0.520, 0.782))
+const CHAT_ACTION_BUTTON_RECT := Rect2(Vector2(0.420, 0.698), Vector2(0.508, 0.782))
 const TOP_HUD_BUTTON_SIZE := Vector2(56, 38)
 const TOP_HUD_MODE_BADGE_RECT := Rect2(Vector2(0.018, 0.14), Vector2(0.100, 0.44))
 const SAFE_CONTENT_MIN_MARGIN := Vector4(12.0, 8.0, 12.0, 10.0)
@@ -1020,8 +1028,8 @@ const TOP_HUD_RECT := Rect2(Vector2(0.014, 0.014), Vector2(0.986, 0.105))
 const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.106, 0.10), Vector2(0.300, 0.88))
 const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.310, 0.10), Vector2(0.432, 0.50))
 const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.212, 0.565), Vector2(0.432, 0.890))
-const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.442, 0.15), Vector2(0.712, 0.85))
-const TOP_HUD_WALL_RECT := Rect2(Vector2(0.692, 0.14), Vector2(0.764, 0.86))
+const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.442, 0.15), Vector2(0.680, 0.85))
+const TOP_HUD_WALL_RECT := Rect2(Vector2(0.700, 0.14), Vector2(0.764, 0.86))
 const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.775, 0.16), Vector2(0.838, 0.84))
 const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.848, 0.16), Vector2(0.911, 0.84))
 const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.921, 0.16), Vector2(0.984, 0.84))
@@ -1243,7 +1251,7 @@ func ui_cjk_font() -> Font:
 func add_background(parent: Control) -> void:
 	# Utility pages own their reading surface. Keep this shared authored wash quiet
 	# so a page panel does not become a second opaque full-screen scrim.
-	var base = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.04, false)
+	var base = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.028, false)
 	if base == null:
 		base = make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
 		parent.add_child(base)
@@ -1259,7 +1267,7 @@ func add_menu_background(parent: Control) -> void:
 func add_rules_background(parent: Control) -> void:
 	# The codex panel owns the reading frame; the page-level layer remains a quiet
 	# authored wash instead of another full-screen dark bitmap.
-	var codex = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.04, false)
+	var codex = add_optional_gpt_illustration_texture(parent, "ui_soft_flash", rect_full(0.0, 0.0, 1.0, 1.0), 0.028, false)
 	if codex == null:
 		codex = make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
 		parent.add_child(codex)
@@ -1269,7 +1277,7 @@ func add_battle_background(parent: Control) -> void:
 	# Normal battle renders own one authored room plate. Keep the dark plate only as a
 	# fallback under a missing/transparent asset, so two full-screen textures do not
 	# compete beneath the HUD.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.15, false)
+	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.11, false)
 	if battle_scene != null:
 		battle_scene.name = "OfflineBattleGuofengBackdrop"
 	else:
@@ -1277,7 +1285,7 @@ func add_battle_background(parent: Control) -> void:
 		base.name = "OfflineBattleGuofengBase"
 		parent.add_child(base)
 		# Fallback to menu hero scenery if table plate missing.
-		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.16, false)
+		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.12, false)
 		if garden_scene != null:
 			garden_scene.name = "OfflineBattleGuofengBackdrop"
 		else:
@@ -1769,6 +1777,9 @@ func make_label(parent: Control, text: String, font_size: int, color: Color, bol
 		label.add_theme_constant_override("shadow_offset_x", 1)
 		label.add_theme_constant_override("shadow_offset_y", 1)
 	parent.add_child(label)
+	# Labels share one truncation policy so dynamic status, currency, and page copy
+	# never silently lose their only identifying suffix.
+	configure_clipped_label(label)
 	return label
 
 func make_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color, plate_key: String = "") -> Control:
@@ -1782,9 +1793,13 @@ func make_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill
 	return badge
 
 func configure_clipped_label(label: Label) -> void:
+	if label == null or not is_instance_valid(label):
+		return
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	if label.tooltip_text == "" and label.text.strip_edges() != "":
+		label.tooltip_text = label.text
 
 func node_from_instance_id(node_id: int) -> Node:
 	if node_id == 0:
@@ -1815,6 +1830,37 @@ func set_label_text_by_id(label_id: int, text: String) -> void:
 	var label = node_from_instance_id(label_id) as Label
 	if label != null:
 		label.text = text
+		configure_clipped_label(label)
+		label.tooltip_text = text if text.strip_edges() != "" else ""
+
+func configure_line_edit_input(edit: LineEdit, field_label: String = "", max_length: int = -1, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> void:
+	if edit == null or not is_instance_valid(edit):
+		return
+	edit.focus_mode = Control.FOCUS_ALL
+	edit.virtual_keyboard_type = keyboard_type
+	edit.clear_button_enabled = true
+	edit.select_all_on_focus = false
+	edit.context_menu_enabled = true
+	if max_length > 0:
+		edit.max_length = max_length
+	if edit.tooltip_text == "" and field_label != "":
+		edit.tooltip_text = "编辑%s" % field_label
+	edit.set_meta("ui_input_field", field_label)
+	edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+	if edit.custom_minimum_size.y < UI_MIN_TOUCH_TARGET:
+		edit.custom_minimum_size.y = UI_MIN_TOUCH_TARGET
+
+func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = "") -> void:
+	if scroll == null or not is_instance_valid(scroll):
+		return
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.scroll_deadzone = max(6, int(UI_MIN_TOUCH_TARGET * 0.16))
+	scroll.clip_contents = true
+	scroll.focus_mode = Control.FOCUS_ALL
+	if scroll_label != "":
+		scroll.tooltip_text = scroll_label
+	scroll.set_meta("ui_scroll_view", scroll_label)
 
 func make_small_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
@@ -1917,6 +1963,11 @@ func play_top_hud_button_press_feedback_by_id(button_id: int, text: String, colo
 func make_base_button(text: String, callback: Callable) -> Button:
 	var button = Button.new()
 	button.text = text
+	button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
+	button.clip_text = true
+	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	button.tooltip_text = text
+	button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	configure_touch_button(button)
 	button.add_theme_font_override("font", ui_cjk_font())
 	button.add_theme_color_override("font_color", accessible_text_color(Color(0.95, 0.93, 0.82)))
@@ -1965,12 +2016,11 @@ func add_button_focus_feedback(button: Button) -> void:
 	if button == null or not is_instance_valid(button):
 		return
 	var focus_plate = add_optional_gpt_illustration_texture(button, "ui_button_face_plate", rect_full(-0.025, -0.025, 1.025, 1.025), 0.0, false)
-	if focus_plate == null:
-		return
-	focus_plate.name = "ButtonFocusPlate"
-	focus_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	focus_plate.show_behind_parent = true
-	focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.0)
+	if focus_plate != null:
+		focus_plate.name = "ButtonFocusPlate"
+		focus_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		focus_plate.show_behind_parent = true
+		focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.0)
 	var button_id := button.get_instance_id()
 	button.focus_entered.connect(Callable(self, "set_button_focus_feedback_by_id").bind(button_id, true))
 	button.focus_exited.connect(Callable(self, "set_button_focus_feedback_by_id").bind(button_id, false))
@@ -1980,9 +2030,11 @@ func set_button_focus_feedback_by_id(button_id: int, focused: bool) -> void:
 	if button == null or not is_instance_valid(button):
 		return
 	var focus_plate = button.get_node_or_null("ButtonFocusPlate") as CanvasItem
-	if focus_plate == null:
-		return
-	focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.82 if focused else 0.0)
+	if focus_plate != null:
+		focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.82 if focused else 0.0)
+	# Text color remains a reliable focus signal even when the optional authored
+	# focus plate is unavailable or failed to import.
+	button.add_theme_color_override("font_color", Color(1.0, 0.94, 0.62) if focused else accessible_text_color(Color(0.95, 0.93, 0.82)))
 
 func focus_button_neighbor(button: Button, focusable: Array[Button], direction: Vector2) -> Button:
 	if button == null or focusable.is_empty():
@@ -2302,8 +2354,11 @@ func apply_centered_rect(control: Control, center: Vector2, size: Vector2) -> vo
 	control.offset_bottom = size.y * 0.5
 
 func set_status(text: String) -> void:
+	last_status_text = text
+	status_last_updated_msec = Time.get_ticks_msec()
 	if status_label:
 		status_label.text = text
+		status_label.tooltip_text = text
 
 
 # ============================================================
@@ -2361,7 +2416,9 @@ func make_icon_button(icon_name: String, color: Color, size: int = 24, callback:
 	"""创建图标按钮"""
 	var button = Button.new()
 	button.text = ICON_CODES.get(icon_name, "")
-	button.custom_minimum_size = Vector2(size * 1.8, size * 1.8)
+	var touch_size := maxf(UI_MIN_TOUCH_TARGET, float(size) * 1.8)
+	button.custom_minimum_size = Vector2(touch_size, touch_size)
+	button.tooltip_text = icon_name
 	configure_touch_button(button)
 	button.add_theme_font_override("font", ui_cjk_font())
 	button.add_theme_font_size_override("font_size", size)
@@ -2452,6 +2509,9 @@ func fx_enabled_effective() -> bool:
 		if has_method("ensure_fx_layer"):
 			call("ensure_fx_layer")
 	return fx_layer != null and is_instance_valid(fx_layer)
+
+func ui_motion_enabled() -> bool:
+	return fx_enabled_effective() and not reduce_motion_enabled
 
 func accessibility_profile_label() -> String:
 	if large_text_enabled and high_contrast_enabled and reduce_motion_enabled:
@@ -2735,7 +2795,7 @@ func animation_preview_accent(animation_name: String) -> Color:
 			return GOLD_LIGHT
 
 func animate_animation_preview(preview: Control, animation_name: String) -> void:
-	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+	if not ui_motion_enabled() or DisplayServer.get_name().to_lower() == "headless":
 		return
 	var duration = clamp(animation_duration_seconds(animation_name), 0.6, 2.4)
 	var tw := preview.create_tween()

@@ -284,10 +284,31 @@ func focus_named_control(control_name: String) -> void:
 		return
 	var control = root_layer.find_child(control_name, true, false) as Control
 	if control == null or not control.is_visible_in_tree():
+		control = first_visible_focusable_control(root_layer)
+	if control is BaseButton and (control as BaseButton).disabled:
+		control = first_visible_focusable_control(root_layer)
+	if control == null or not control.is_visible_in_tree():
 		return
 	if control.focus_mode == Control.FOCUS_NONE:
 		control.focus_mode = Control.FOCUS_ALL
 	control.grab_focus()
+
+func first_visible_focusable_control(root: Control) -> Control:
+	var controls := collect_visible_focusable_controls(root)
+	return controls[0] if not controls.is_empty() else null
+
+func collect_visible_focusable_controls(root: Control) -> Array[Control]:
+	var controls: Array[Control] = []
+	if root == null or not is_instance_valid(root):
+		return controls
+	for node in root.find_children("*", "Control", true, false):
+		var control := node as Control
+		if control == null or not control.is_visible_in_tree() or control.focus_mode == Control.FOCUS_NONE:
+			continue
+		if control is BaseButton and (control as BaseButton).disabled:
+			continue
+		controls.append(control)
+	return controls
 
 func focus_danger_discard_confirm() -> void:
 	if mode == "offline" and has_pending_danger_discard():
@@ -450,7 +471,16 @@ func game_keyboard_input_allowed() -> bool:
 		return false
 	if mode == "online_game" and online_game_disconnected():
 		return false
-	if chat_panel_open or game_keyboard_focus_is_text_input():
+	# Table shortcuts must never compete with a modal/page control. Button focus is
+	# still handled by Godot's normal UI navigation in these states.
+	var modal_open := settings_panel_open or exit_confirm_panel != null or tutorial_panel != null or telemetry_sheet_open or advisor_detail_open or table_log_archive_open or chat_panel_open
+	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
+		modal_open = true
+	if root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+		modal_open = true
+	if modal_open or game_keyboard_focus_is_text_input():
+		return false
+	if offline_phase == "ended" or online_waiting_for_server:
 		return false
 	return true
 
@@ -960,6 +990,8 @@ func add_line_edit(parent: Control, label_text: String, value: String) -> LineEd
 	edit.add_theme_color_override("font_selected_color", Color(0.10, 0.12, 0.10))
 	edit.add_theme_color_override("selection_color", Color(0.56, 0.70, 0.48, 0.72))
 	edit.add_theme_color_override("caret_color", Color(0.94, 0.86, 0.54))
+	configure_line_edit_input(edit, label_text)
+	edit.placeholder_text = "请输入%s" % label_text
 	draw_line_edit_input_art(edit, label_text)
 	var art_id := line_edit_art_id(label_text)
 	edit.focus_entered.connect(func() -> void:
@@ -2868,12 +2900,10 @@ func pending_claim_action_columns(count: int) -> int:
 		var compact_rect := pending_claim_action_base_rect()
 		var compact_width := safe_content_pixel_size().x * maxf(0.001, compact_rect.size.x - compact_rect.position.x)
 		var compact_separation := action_button_separation_for_count(count)
-		var compact_button_width := action_button_width_for_available(count, compact_width, compact_separation)
-		var compact_capacity := maxi(1, int(floor((compact_width + float(compact_separation)) / maxf(1.0, compact_button_width + float(compact_separation)))))
-		# Keep the legal response choices in one scan row on compact screens;
-		# the pass/cancel lane is intentionally the only secondary row.
-		if response_count >= 5:
-			compact_capacity = maxi(5, compact_capacity)
+		# The grid may use several columns only when the real compact width can
+		# carry every button's minimum touch target. Never force a column count that
+		# makes GridContainer shrink or clip a response label.
+		var compact_capacity := maxi(1, int(floor((compact_width + float(compact_separation)) / maxf(1.0, float(PENDING_CLAIM_BUTTON_MIN_WIDTH) + float(compact_separation)))))
 		return mini(response_count, compact_capacity)
 	var bar_rect = pending_claim_action_base_rect()
 	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
@@ -2895,11 +2925,12 @@ func pending_claim_action_dock_rect_for_count(count: int) -> Rect2:
 	var dock_height = (8.0 + pending_claim_action_content_height(count) + 14.0 + compact_headroom) / content_height
 	# Keep the dock bottom in its established hand-safe lane, but let taller
 	# response stacks grow upward instead of forcing their containers below it.
-	var compact_min_top: float = base_rect.position.y + 0.035 if effective_viewport_size().y <= 560.0 else 0.30
+	var compact_min_top: float = 0.46 if effective_viewport_size().y <= 560.0 else 0.30
 	# On 960x540 the side river ends immediately above this lane. The small
 	# lower reserve prevents the first response row from touching its last tile.
-	var top = maxf(compact_min_top, base_rect.size.y - dock_height)
-	return Rect2(Vector2(base_rect.position.x, top), base_rect.size)
+	var dock_bottom := minf(base_rect.size.y, HAND_TRAY_RECT.position.y - 10.0 / content_height)
+	var top = maxf(compact_min_top, dock_bottom - dock_height)
+	return Rect2(Vector2(base_rect.position.x, top), Vector2(base_rect.size.x, dock_bottom))
 
 func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 	var dock_rect = pending_claim_action_dock_rect_for_count(count)
@@ -3000,7 +3031,8 @@ func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: floa
 			table_top + zone_rect.size.y * table_height
 		))
 	for meld_layout in MELD_LAYOUTS:
-		var meld_rect: Rect2 = meld_layout[1]
+		var meld_seat := int(meld_layout[0])
+		var meld_rect: Rect2 = seat_meld_rect(meld_seat)
 		occupied.append(rect_full(
 			table_left + meld_rect.position.x * table_width,
 			table_top + meld_rect.position.y * table_height,
@@ -3047,10 +3079,11 @@ func finalize_action_bar_layout() -> void:
 		action_bar.add_theme_constant_override("separation", separation)
 	apply_rect(action_bar, action_bar_layout_rect())
 	if compact_claim_mode and effective_viewport_size().y <= 560.0:
-		# Leave the dock bottom channel available for the hand tray while lifting
-		# the fixed-height response content by a few pixels inside its shell.
-		action_bar.offset_top = -5.0
-		action_bar.offset_bottom = -5.0
+		# Keep the response stack aligned with the shell. The shell already reserves
+		# its hand-tray gutter, so an extra negative offset would create a false
+		# bottom gap and make the last row look detached from the action surface.
+		action_bar.offset_top = 0.0
+		action_bar.offset_bottom = 0.0
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
@@ -3102,6 +3135,12 @@ func finalize_action_bar_layout() -> void:
 	configure_button_focus_navigation(action_bar, default_focus_name, default_focus_name != "")
 	configure_pending_claim_spatial_focus_navigation()
 	configure_chat_action_focus_navigation()
+	if mode == "online_game" and online_game_disconnected():
+		var reconnect_button := action_bar.find_child("OnlineReconnectGameButton", true, false) as Button
+		var lobby_button := root_layer.find_child("OnlineDisconnectedLobbyButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
+		if reconnect_button != null and lobby_button != null:
+			set_action_focus_neighbor(reconnect_button, "left", lobby_button)
+			set_action_focus_neighbor(lobby_button, "right", reconnect_button)
 
 
 func set_action_focus_neighbor(button: Button, direction: String, target: Button) -> void:
@@ -6235,13 +6274,12 @@ func tile_art_alpha(tile: String, size: Vector2) -> float:
 
 func tile_texture_bleed(size: Vector2, lightweight_static_tile: bool) -> Vector2:
 	# r453: keep compact river faces close to their authored porcelain edge while
-	# leaving a small dark gutter between adjacent grid cells. Hand tiles retain
-	# their fuller bleed because they are not lightweight static river faces.
-	var expand_ratio := 0.138
+	# leaving a small dark gutter between adjacent grid cells. The same bounded
+	# expansion is used by hand cells so a large face cannot bleed into its hit
+	# neighbor; assets/tiles remain untouched.
+	var expand_ratio := 0.118
 	if lightweight_static_tile:
-		expand_ratio = 0.100 if size.x >= 52.0 else 0.075
-	elif size.x >= 52.0:
-		expand_ratio = 0.155
+		expand_ratio = 0.090 if size.x >= 52.0 else 0.070
 	var expand := Vector2(max(1.5, size.x * expand_ratio), max(1.5, size.y * expand_ratio))
 	return expand
 
@@ -7374,7 +7412,10 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var wide_typography := effective_viewport_size().x >= 1600.0
 	var line_height := 25.0 if wide_typography else 22.0
 	var line_gap := 6.0 if wide_typography else 5.0
-	var required_text_height := (26.0 if wide_typography else 24.0) + float(line_count) * line_height + float(line_count) * line_gap + (38.0 if wide_typography else 34.0)
+	# Reserve a second line in compact layouts. Long local rule clauses wrap in
+	# place instead of being reduced to an unexplained ellipsis.
+	var line_box_height := line_height * (1.65 if wide_typography else 1.85)
+	var required_text_height := (26.0 if wide_typography else 24.0) + float(line_count) * line_box_height + float(line_count) * line_gap + (38.0 if wide_typography else 34.0)
 	section.custom_minimum_size.y = max(136.0, required_text_height)
 	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.018), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
@@ -7414,10 +7455,13 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	for line in lines:
 		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
 		line_label.name = "RuleSectionLine_%d" % section_index if section_index >= 0 else "RuleSectionLine"
-		line_label.custom_minimum_size = Vector2(0, line_height)
+		line_label.custom_minimum_size = Vector2(0, line_box_height)
 		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(line_label)
-		line_label.clip_contents = true
+		line_label.clip_text = true
+		line_label.clip_contents = false
+		line_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		line_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
 
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String, row_height: float = 52.0) -> void:
@@ -8434,18 +8478,17 @@ func seat_discard_rect(seat: int) -> Rect2:
 # 弃牌落水溅射动画 / Discard Splash Animation
 
 func seat_meld_rect(seat: int) -> Rect2:
-	# Mirror MELD_LAYOUTS — melds in front of each seat, facing table center.
-	match seat:
-		0:
-			return Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))
-		1:
-			return Rect2(Vector2(0.775, 0.240), Vector2(0.857, 0.680))
-		2:
-			return Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))
-		3:
-			return Rect2(Vector2(0.143, 0.240), Vector2(0.225, 0.680))
-		_:
-			return Rect2(Vector2(0.40, 0.40), Vector2(0.60, 0.50))
+	# MELD_LAYOUTS is the canonical base geometry. The danger shelf is a stateful
+	# variant of that same rect and is consumed by drawing, hit/layout checks, and
+	# pending-context collision tests.
+	for layout in MELD_LAYOUTS:
+		if int(layout[0]) != seat:
+			continue
+		var rect: Rect2 = layout[1]
+		if mode == "offline" and has_pending_danger_discard() and layout.size() > 2 and layout[2] is Rect2:
+			return layout[2]
+		return rect
+	return Rect2(Vector2(0.40, 0.40), Vector2(0.60, 0.50))
 
 
 func rect_center_screen_position(rect: Rect2) -> Vector2:
@@ -8639,7 +8682,7 @@ func _call_ui_enhancement(method_name: String, arg1 = null, arg2 = null, arg3 = 
 
 func start_ambient_animation(theme: String = "default", force_headless: bool = false) -> void:
 	"""启动环境氛围动画 - 支持四季自动主题"""
-	if not fx_enabled_effective() or (DisplayServer.get_name().to_lower() == "headless" and not force_headless):
+	if not ui_motion_enabled() or (DisplayServer.get_name().to_lower() == "headless" and not force_headless):
 		return
 
 	stop_ambient_animation()

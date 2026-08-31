@@ -67,6 +67,14 @@ func online_connection_endpoint_text() -> String:
 		host = DEFAULT_HOST
 	return "%s:%d" % [host, DEFAULT_PORT]
 
+func online_endpoint_summary(endpoint: String) -> String:
+	var clean := endpoint.strip_edges()
+	if clean.length() <= 24:
+		return clean
+	# Keep the host's beginning and port visible in the fixed header badge; the
+	# full endpoint remains available through the label tooltip and input field.
+	return "%s...%s" % [clean.left(13), clean.right(8)]
+
 func online_game_disconnected() -> bool:
 	if mode != "online_game":
 		return false
