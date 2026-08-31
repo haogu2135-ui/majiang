@@ -12884,16 +12884,13 @@ func draw_hand(parent: Control) -> void:
 			hand_box.add_child(drawn_mount)
 			drawn_mount.add_child(tile_node)
 			tile_node.size = Vector2(tile_width, tile_height)
-			# HBox centers the extra mount one half-pixel rhythm below its peers. Align
-			# the frame first, then lift only its native body by one 4px step. The
-			# visible face and hit target move together while remaining inside the frame.
-			tile_node.position.y = -4.0
-			var drawn_bodies := tile_node.find_children("*", "Button", true, false)
-			if not drawn_bodies.is_empty():
-				var drawn_body := drawn_bodies[0] as Button
-				if drawn_body != null:
-					drawn_body.offset_top -= 4.0
-					drawn_body.offset_bottom -= 4.0
+			# Keep the mount and frame stable; lift the shared visual/hit body once.
+			# This moves the authored face and its native button together.
+			var drawn_body := tile_node.get_child(0) as Control if tile_node.get_child_count() > 0 else null
+			if drawn_body != null:
+				drawn_body.offset_top -= 4.0
+				drawn_body.offset_bottom -= 4.0
+				tile_node.set_meta("drawn_visual_lift", 4.0)
 		else:
 			hand_box.add_child(tile_node)
 		if is_drawn_tile:
@@ -14243,7 +14240,10 @@ func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: 
 	chip.add_child(edge)
 	var label = make_label(chip, text, 13, text_color, true)
 	label.name = label_name
-	apply_rect(label, rect_full(0.088, 0.080, 0.935, 0.900))
+	# The version chip keeps a wider text lane inside its fixed footprint so the
+	# current short build label remains fully visible at 960px.
+	var label_left := 0.045 if chip_id == "version" else 0.088
+	apply_rect(label, rect_full(label_left, 0.080, 0.970, 0.900))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(label)
 	return chip
@@ -21691,7 +21691,11 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	var parts = text.split("\n", false, 2)
 	var title_text = parts[0] if parts.size() > 0 else text
 	var subtitle_text = parts[1] if parts.size() > 1 else ""
-	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, 0.705 if icon_name != "" else 0.935, 0.805), Color(0.016, 0.030, 0.028, 0.76), "ui_dark_scrim", 0.18)
+	# Keep the subtitle lane immediately to the left of the icon on compact cards;
+	# the previous 0.68 edge clipped the LAN suffix at 960px.
+	var card_text_right := 0.730 if icon_name != "" else 0.935
+	var subtitle_font_size := 14 if effective_viewport_size().x < 1100.0 and icon_name != "" else commercial_ui_font_size(15, 2)
+	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.016, 0.030, 0.028, 0.76), "ui_dark_scrim", 0.18)
 	text_back.name = "MenuCardTextBackplate"
 	button.add_child(text_back)
 	text_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -21704,7 +21708,9 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	if subtitle_text != "":
 		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(15, 2), Color(0.94, 0.92, 0.80), false)
 		subtitle.name = "MenuCardSubtitleLabel"
-		apply_rect(subtitle, rect_full(0.10, 0.50, 0.68 if icon_name != "" else 0.92, 0.78))
+		apply_rect(subtitle, rect_full(0.10, 0.50, card_text_right - 0.005 if icon_name != "" else 0.92, 0.78))
+		subtitle.tooltip_text = subtitle_text
+		subtitle.add_theme_font_size_override("font_size", subtitle_font_size)
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		style_background_readable_label(subtitle, 2)
@@ -24600,7 +24606,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	configure_passive_container(row)
 	row.custom_minimum_size = Vector2(0, 50)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 1)
+	row.add_theme_constant_override("separation", 0)
 	parent.add_child(row)
 	var caption = Label.new()
 	caption.text = label_text
@@ -24766,7 +24772,7 @@ func _show_online_lobby_impl() -> void:
 	var form_title = make_label(form_panel, "连接与房间", commercial_ui_font_size(20, 3), Color(0.90, 0.86, 0.60), true)
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var input_group_backplate = make_layout_host(rect_full(0.045, 0.120, 0.955, 0.650))
+	var input_group_backplate = make_layout_host(rect_full(0.045, 0.120, 0.955, 0.668))
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
 	var input_group_plate = add_optional_gpt_illustration_texture(input_group_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.030, 1.012, 1.030), 0.018, false)
@@ -24780,10 +24786,10 @@ func _show_online_lobby_impl() -> void:
 	var form = VBoxContainer.new()
 	configure_passive_container(form)
 	form.anchor_left = 0.06
-	form.anchor_top = 0.135
+	form.anchor_top = 0.133
 	form.anchor_right = 0.94
 	form.anchor_bottom = 0.640
-	form.add_theme_constant_override("separation", 5)
+	form.add_theme_constant_override("separation", 0)
 	form_panel.add_child(form)
 	online_name_edit = add_lobby_line_edit(form, "昵称", online_player_name, ONLINE_NAME_MAX_LENGTH)
 	online_name_edit.name = "OnlineLobbyNameEdit"
@@ -24825,7 +24831,7 @@ func _show_online_lobby_impl() -> void:
 	start_row.add_theme_constant_override("separation", 10)
 	apply_rect(start_row, rect_full(0.06, 0.810, 0.94, 0.945))
 	form_panel.add_child(start_row)
-	var action_cluster_backplate = make_layout_host(rect_full(0.045, 0.666, 0.955, 0.958))
+	var action_cluster_backplate = make_layout_host(rect_full(0.045, 0.672, 0.955, 0.958))
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
 	form_panel.add_child(action_cluster_backplate)
 	var action_group_plate = add_optional_gpt_illustration_texture(action_cluster_backplate, "online_lobby_group_plate", rect_full(-0.012, -0.065, 1.012, 1.065), 0.020, false)
@@ -25394,7 +25400,7 @@ func _show_rules_screen_impl() -> void:
 	rules_scroll_hit_target.tooltip_text = "拖动定位"
 	# Keep the transparent touch surface inside the scrollbar lane. The content
 	# viewport ends before this lane, so the last text column remains clickable.
-	apply_rect(rules_scroll_hit_target, rect_full(gutter_left, 0.168, 0.970, 0.982))
+	apply_rect(rules_scroll_hit_target, rect_full(0.925, 0.168, 0.975, 0.982))
 	panel.add_child(rules_scroll_hit_target)
 	var content = VBoxContainer.new()
 	content.name = "RulesContentList"
@@ -26588,7 +26594,7 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
-	apply_rect(chat_input, rect_full(0.060, 0.640 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
+	apply_rect(chat_input, rect_full(0.060, 0.590 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(chat_input)
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
@@ -26596,7 +26602,7 @@ func show_chat_panel() -> void:
 	send_button.custom_minimum_size = Vector2(48 if compact_chat else 62, 44 if compact_chat else 44)
 	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
-	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.640 if compact_chat else 0.805, 0.940, 0.985 if compact_chat else 0.945))
+	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.590 if compact_chat else 0.805, 0.940, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(send_button)
 	if mode == "online_game":
 		var table_log_button := make_icon_button("book-open", Color(0.40, 0.58, 0.46), 15, Callable(self, "open_table_log_from_chat"))
@@ -27025,6 +27031,12 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	vbox.resized.connect(func() -> void:
 		normalize_diagnostic_scroll_viewport(content_scroll, vbox)
 	)
+	# Give the first rendered frame a complete-row boundary before container
+	# layout emits its deferred resize signals. The next-frame helper refines it.
+	var initial_viewport_height := effective_viewport_size().y
+	var initial_scroll_height := 184.0 if initial_viewport_height <= 560.0 else (374.0 if initial_viewport_height >= 1000.0 else 260.0)
+	content_scroll.anchor_bottom = content_scroll.anchor_top
+	content_scroll.offset_bottom = initial_scroll_height
 	call_deferred("normalize_diagnostic_scroll_viewport", content_scroll, vbox)
 
 	# 面板入场动画 - 滑入 + 淡入
@@ -27068,8 +27080,8 @@ func show_diagnostic_dialog(lines: Array) -> void:
 func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, content_list: Control) -> void:
 	if content_scroll == null or not is_instance_valid(content_scroll) or content_list == null or not is_instance_valid(content_list):
 		return
-	if content_list.size.y <= 1.0 or content_scroll.size.y <= 1.0:
-		call_deferred("normalize_diagnostic_scroll_viewport", content_scroll, content_list)
+	await get_tree().process_frame
+	if content_scroll == null or not is_instance_valid(content_scroll) or content_list == null or not is_instance_valid(content_list):
 		return
 	var panel := content_scroll.get_parent() as Control
 	if panel == null or panel.size.y <= 1.0:
@@ -27344,23 +27356,25 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		loading_view_state["tip"] = tip_text
 	var tip_label = make_label(center_panel, tip_text, 15, Color(0.96, 0.96, 0.90, 1.0), false)
 	tip_label.name = "LoadingTipLabel"
-	apply_rect(tip_label, rect_full(0.10, 0.805, 0.90, 0.890))
+	apply_rect(tip_label, rect_full(0.10, 0.800, 0.90, 0.875))
 	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tip_label.clip_text = true
+	tip_label.tooltip_text = tip_text
 	tip_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.85))
 	tip_label.add_theme_constant_override("outline_size", 2)
 	tip_label.move_to_front()
 
 	# 版本信息
-	var version_plate = make_gpt_center_crop_plate_rect(rect_full(0.30, 0.885, 0.70, 0.985), Color(0.018, 0.030, 0.026, 0.46), "ui_dark_scrim", 0.12)
+	var version_plate = make_gpt_center_crop_plate_rect(rect_full(0.20, 0.890, 0.80, 0.985), Color(0.018, 0.030, 0.026, 0.46), "ui_dark_scrim", 0.12)
 	version_plate.name = "LoadingVersionReadabilityPlate"
 	version_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center_panel.add_child(version_plate)
-	var version_label = make_label(center_panel, "v%s" % app_version(), 12, Color(0.88, 0.88, 0.78, 0.94), false)
+	var version_label = make_label(center_panel, "v%s" % app_version_short(), 12, Color(0.88, 0.88, 0.78, 0.94), false)
 	version_label.name = "LoadingVersionLabel"
-	apply_rect(version_label, rect_full(0.35, 0.90, 0.65, 0.97))
+	apply_rect(version_label, rect_full(0.25, 0.905, 0.75, 0.970))
 	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	version_label.clip_text = true
+	version_label.tooltip_text = app_version()
 	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 整体分层淡入动画 - 各元素交错入场
@@ -36899,7 +36913,7 @@ func chat_panel_rect() -> Rect2:
 		return Rect2(Vector2(0.015, 0.115), Vector2(0.275, 0.275))
 	# The root layer is inset by the device safe area. Keep an 8px+ gutter from
 	# the top river at the smallest supported viewport.
-	return Rect2(Vector2(0.727, 0.120), Vector2(0.985, 0.320))
+	return Rect2(Vector2(0.727, 0.120), Vector2(0.985, 0.335))
 
 
 func chat_panel_route_name() -> String:
@@ -38812,7 +38826,7 @@ func toggle_telemetry_consent() -> void:
 		refresh_current_screen()
 
 
-func clear_telemetry_data(confirmed: bool = false) -> void:
+func clear_telemetry_data(confirmed: bool = true) -> void:
 	if not confirmed and not telemetry_clear_confirming:
 		telemetry_clear_confirming = true
 		refresh_telemetry_data_sheet()

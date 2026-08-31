@@ -181,6 +181,7 @@ func seed_battle_capacity_layout_state(scene) -> void:
 	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "5T", "9T", "E", "R"]
 	scene.offline_last_draw = {"seat": 0, "tile": "R", "source": "normal", "announce": false, "serial": 901}
 	scene.offline_self_draw_ready = {"seat": 0, "tile": "R", "serial": 901}
+	scene.hand_keyboard_selection = -1
 	var river_codes := ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T", "9T", "1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B", "E", "S", "W", "N", "Z", "F", "P", "R"]
 	var meld_sets := [
 		["1W", "1W", "1W"],
@@ -388,7 +389,7 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 			if bool(tile.get_meta("drawn_tile", false)):
 				drawn_count += 1
 				drawn_button_y = screen_rect(hit_button).position.y
-			else:
+			elif not bool(tile.get_meta("keyboard_selected", false)) and not bool(tile.get_meta("advisor_target", false)) and not bool(tile.get_meta("danger_pending", false)) and not bool(tile.get_meta("guide_target", false)):
 				regular_button_y.append(screen_rect(hit_button).position.y)
 		if i > 0:
 			var previous_rect := screen_rect(hand_tiles[i - 1])
@@ -720,6 +721,7 @@ func check_loading_layout(scene, viewport_size: Vector2) -> void:
 	var status = scene.find_child("LoadingStatusLabel", true, false) as Label
 	var tip = scene.find_child("LoadingTipLabel", true, false) as Label
 	var version = scene.find_child("LoadingVersionLabel", true, false) as Label
+	var version_plate = scene.find_child("LoadingVersionReadabilityPlate", true, false) as Control
 	var shuffle_art = scene.find_child("LoadingShuffleArt", true, false) as Control
 	var progress_art = scene.find_child("LoadingProgressFeedback", true, false) as Control
 	var progress_route = scene.find_child("LoadingProgressRoute", true, false) as Control
@@ -733,7 +735,7 @@ func check_loading_layout(scene, viewport_size: Vector2) -> void:
 	var moon_glow = scene.find_child("MoonGlowBloom", true, false) as Control
 	var far_mountain = scene.find_child("LoadingFarMountain", true, false) as Control
 	var water = scene.find_child("LoadingWater", true, false) as Control
-	check(center_panel != null and title != null and subtitle != null and status != null and tip != null and version != null, "loading screen exposes named readable text nodes at %s" % viewport_size)
+	check(center_panel != null and title != null and subtitle != null and status != null and tip != null and version != null and version_plate != null, "loading screen exposes named readable text nodes and version plate at %s" % viewport_size)
 	check(shuffle_art != null and progress_art != null and progress_route != null and progress_fill != null and progress_gate != null and tip_art != null and tip_rail != null and tip_fill != null, "loading screen renders progress and tip route art for layout audit at %s" % viewport_size)
 	var loading_face_count := 0
 	for i in range(5):
@@ -766,6 +768,11 @@ func check_loading_layout(scene, viewport_size: Vector2) -> void:
 	check(status != null and status.get_theme_font_size("font_size") >= 19 and relative_luma(status.get_theme_color("font_color")) >= 0.82, "loading status text remains readable at %s" % viewport_size)
 	check(tip != null and tip.get_theme_font_size("font_size") >= 13 and relative_luma(tip.get_theme_color("font_color")) >= 0.66, "loading tip text remains readable at %s" % viewport_size)
 	check(version != null and version.get_theme_font_size("font_size") >= 11 and relative_luma(version.get_theme_color("font_color")) >= 0.50, "loading version text remains visible but quiet at %s" % viewport_size)
+	if tip != null and version != null:
+		check(not rects_overlap(screen_rect(tip), screen_rect(version)), "loading tip and version keep an independent reading lane at %s" % viewport_size)
+		check(version.text == "v" + scene.app_version_short() and not version.text.contains("...") and version.tooltip_text == scene.app_version(), "loading version uses the short readable build label with full tooltip detail at %s" % viewport_size)
+	if version_plate != null and version != null:
+		check(screen_rect(version_plate).grow(1.0).encloses(screen_rect(version)), "loading version label stays inside its authored readability plate at %s" % viewport_size)
 	for node in [shuffle_art, progress_art, progress_route, progress_fill, progress_gate, tip_art, tip_rail, tip_fill]:
 		if node == null:
 			continue
@@ -958,6 +965,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			var subtitle_rect = screen_rect(subtitle)
 			check(back_rect.grow(1.0).encloses(title_rect) and back_rect.grow(1.0).encloses(subtitle_rect), "menu card labels stay inside text backplate at %s" % viewport_size)
 			check(title.clip_text and subtitle.clip_text and title.get_theme_font_size("font_size") >= 21 and subtitle.get_theme_font_size("font_size") >= 14, "menu card text clips safely and keeps readable size at %s" % viewport_size)
+			check(not str(subtitle.text).contains("...") and not str(subtitle.text).contains("…") and label_text_width(subtitle, str(subtitle.text)) <= subtitle_rect.size.x + 1.0, "menu card subtitle fits without rendered truncation at %s" % viewport_size)
 			check(relative_luma(title.get_theme_color("font_color")) >= 0.86 and relative_luma(subtitle.get_theme_color("font_color")) >= 0.86, "menu card title and subtitle keep readable contrast at %s" % viewport_size)
 			check(not rects_overlap(title_rect, subtitle_rect), "menu card title and subtitle do not overlap at %s" % viewport_size)
 		if quick_rail != null:
@@ -2105,6 +2113,14 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		check(viewport_rect.encloses(rect), "battle visible text/button %s stays inside viewport at %s" % [control.name, viewport_size])
 	for hand_tile in controls_with_name_prefix(scene, "HandTile_"):
 		check(hand_tile.tooltip_text != "", "hand tile %s exposes its tile and action meaning on hover at %s" % [hand_tile.name, viewport_size])
+	var drawn_mounts := controls_with_name_prefix(scene, "HandDrawnTileMount")
+	if not drawn_mounts.is_empty():
+		check(drawn_mounts.size() == 1, "battle keeps one stable mount for the drawn tile at %s" % viewport_size)
+		for drawn_mount in drawn_mounts:
+			var drawn_tile := drawn_mount.get_child(0) as Control if drawn_mount.get_child_count() > 0 else null
+			check(drawn_tile != null and bool(drawn_tile.get_meta("drawn_tile", false)) and absf(float(drawn_tile.get_meta("drawn_visual_lift", 0.0)) - 4.0) <= 0.5, "drawn tile lifts its authored body once inside the stable mount at %s" % viewport_size)
+			if drawn_tile != null:
+				check(screen_rect(drawn_mount).grow(1.0).encloses(screen_rect(drawn_tile)), "drawn tile frame remains inside its stable mount at %s" % viewport_size)
 
 func battle_discard_zone_screen_rects(scene) -> Array[Rect2]:
 	var root_rect = screen_rect(scene.root_layer)

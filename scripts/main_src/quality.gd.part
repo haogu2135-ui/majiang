@@ -529,7 +529,7 @@ func toggle_telemetry_consent() -> void:
 		refresh_current_screen()
 
 
-func clear_telemetry_data(confirmed: bool = false) -> void:
+func clear_telemetry_data(confirmed: bool = true) -> void:
 	if not confirmed and not telemetry_clear_confirming:
 		telemetry_clear_confirming = true
 		refresh_telemetry_data_sheet()
