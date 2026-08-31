@@ -230,6 +230,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"ReplayArchiveScrollBar",
 	"ReplayArchiveRowPlate",
 	"ReplayArchiveRowPrimary",
+	"ReplayArchiveRowResult",
 	"ReplayArchiveRowSecondary",
 	"ReplayArchiveSearchInput",
 	"ReplayArchiveTitle",

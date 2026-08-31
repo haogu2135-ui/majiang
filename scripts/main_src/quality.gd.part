@@ -317,6 +317,13 @@ func replay_archive_date_text(entry: Dictionary) -> String:
 	return Time.get_datetime_string_from_unix_time(timestamp, true).replace("T", " ").left(16)
 
 
+func replay_archive_display_date_text(entry: Dictionary) -> String:
+	var full_date := replay_archive_date_text(entry)
+	if full_date.length() >= 16 and full_date[4] == "-":
+		return full_date.substr(5, 11)
+	return full_date
+
+
 func replay_archive_entry(archive_id: String) -> Dictionary:
 	for raw_entry in replay_archive:
 		if typeof(raw_entry) == TYPE_DICTIONARY and str((raw_entry as Dictionary).get("archive_id", "")) == archive_id:

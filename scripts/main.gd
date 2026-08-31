@@ -24722,7 +24722,8 @@ func _show_online_lobby_impl() -> void:
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.92))
 	title.add_theme_constant_override("outline_size", 4)
 	var subtitle = make_label(panel, "连接本机或局域网，先连接再创建或加入房间。", commercial_ui_font_size(15, 2), Color(0.96, 0.96, 0.90), false)
-	apply_rect(subtitle, rect_full(0.04, 0.095, 0.48, 0.14))
+	subtitle.name = "OnlineLobbySubtitle"
+	apply_rect(subtitle, rect_full(0.04, 0.095, 0.58, 0.14))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	# 服务器和状态徽章
@@ -25440,9 +25441,14 @@ func _show_rules_screen_impl() -> void:
 	var current_profile := rule_profile()
 	var chi_text := "允许吃牌（仅限下家弃牌）" if rule_allows_chi() else "不允许吃牌，仅可碰、杠、胡"
 	var flower_text := "含8张花牌，补花后计番" if bool(current_profile.get("include_flowers", true)) else "不含花牌"
+	var wall_rule_text := "牌墙：%d张 · %s · %s" % [rule_wall_size(), flower_text, chi_text]
+	if effective_viewport_size().x <= 960.0:
+		# Keep the long CJK clause visible even on Godot builds where arbitrary
+		# label wrapping does not break text inside a VBoxContainer.
+		wall_rule_text = wall_rule_text.replace(" · 允许", "\n允许")
 	add_rule_section(content, "和牌与响应", [
 		"当前档案：%s" % rule_variant_label(),
-		"牌墙：%d张 · %s · %s" % [rule_wall_size(), flower_text, chi_text],
+		wall_rule_text,
 		"4组面子 + 1对将牌即可胡牌",
 		"摸牌、打牌、碰杠来组合手牌；" + ("吃牌" if rule_allows_chi() else "本档案禁吃"),
 		"可自摸，也可点炮胡牌；过水后整组听口摸前不可再荣和",
@@ -27562,6 +27568,8 @@ func _show_replay_import_screen_impl() -> void:
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
 		archive_scrollbar.name = "ReplayArchiveScrollBar"
+		archive_scrollbar.custom_minimum_size.x = UI_MIN_TOUCH_TARGET
+		archive_scrollbar.mouse_filter = Control.MOUSE_FILTER_STOP
 	var archive_list := VBoxContainer.new()
 	archive_list.name = "ReplayArchiveList"
 	archive_list.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -27659,11 +27667,20 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	var plate := make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.026, 0.024, 0.44), "ui_button_face_plate")
 	plate.name = "ReplayArchiveRowPlate"
 	row.add_child(plate)
-	var primary := make_label(row, "%s · %s" % [replay_archive_date_text(entry), replay_archive_result_label(entry)], 11, Color(0.92, 0.88, 0.74), true)
+	var result_label := replay_archive_result_label(entry)
+	var primary := make_label(row, replay_archive_display_date_text(entry), 11, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
-	apply_rect(primary, rect_full(0.035, 0.100, 0.535, 0.500))
+	apply_rect(primary, rect_full(0.035, 0.100, 0.385, 0.500))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
+	primary.tooltip_text = replay_archive_date_text(entry)
+	var result_display := "· %s" % result_label
+	var result := make_label(row, result_display, 11, Color(0.72, 0.90, 0.68), true)
+	result.name = "ReplayArchiveRowResult"
+	apply_rect(result, rect_full(0.385, 0.100, 0.555, 0.500))
+	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(result)
+	result.tooltip_text = result_label
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
 	secondary.name = "ReplayArchiveRowSecondary"
 	apply_rect(secondary, rect_full(0.035, 0.515, 0.535, 0.900))
@@ -36492,9 +36509,9 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var wide_typography := effective_viewport_size().x >= 1600.0
 	var line_height := 25.0 if wide_typography else 22.0
 	var line_gap := 6.0 if wide_typography else 5.0
-	# Reserve a second line in compact layouts. Long local rule clauses wrap in
-	# place instead of being reduced to an unexplained ellipsis.
-	var line_box_height := line_height * (1.65 if wide_typography else 1.85)
+	# Reserve two rendered lines for local CJK clauses. Arbitrary wrapping is
+	# required because word-smart wrapping does not reliably break Chinese text.
+	var line_box_height := line_height * 2.5
 	var required_text_height := (26.0 if wide_typography else 24.0) + float(line_count) * line_box_height + float(line_count) * line_gap + (38.0 if wide_typography else 34.0)
 	section.custom_minimum_size.y = max(136.0, required_text_height)
 	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.018), "ui_button_face_plate")
@@ -36540,8 +36557,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		configure_clipped_label(line_label)
 		line_label.clip_text = true
 		line_label.clip_contents = false
-		line_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		line_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		line_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+		line_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 
 
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String, row_height: float = 52.0) -> void:
@@ -38612,6 +38629,13 @@ func replay_archive_date_text(entry: Dictionary) -> String:
 	if timestamp <= 0:
 		return "未知时间"
 	return Time.get_datetime_string_from_unix_time(timestamp, true).replace("T", " ").left(16)
+
+
+func replay_archive_display_date_text(entry: Dictionary) -> String:
+	var full_date := replay_archive_date_text(entry)
+	if full_date.length() >= 16 and full_date[4] == "-":
+		return full_date.substr(5, 11)
+	return full_date
 
 
 func replay_archive_entry(archive_id: String) -> Dictionary:

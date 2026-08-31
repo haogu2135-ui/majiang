@@ -1092,6 +1092,7 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 	var archive_pane := scene.find_child("ReplayArchivePane", true, false) as Control
 	var archive_scroll := scene.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
 	var archive_list := scene.find_child("ReplayArchiveList", true, false) as VBoxContainer
+	var archive_scrollbar := scene.find_child("ReplayArchiveScrollBar", true, false) as VScrollBar
 	var archive_search := scene.find_child("ReplayArchiveSearchInput", true, false) as LineEdit
 	var status := scene.find_child("ReplayImportStatus", true, false) as Label
 	check(panel != null and input != null and import_button != null and back_button != null and timeline != null and status != null, "replay import exposes code input action status and timeline at %s" % viewport_size)
@@ -1105,12 +1106,29 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 	check(back_button != null and back_button.tooltip_text.contains("Esc"), "replay import exposes an Escape-labelled return action at %s" % viewport_size)
 	check(timeline != null and timeline.find_child("ReplayImportTimelineTitle", true, false) != null and timeline.find_child("ReplayImportTimelineEmpty", true, false) != null, "replay import timeline has an empty-state reading lane at %s" % viewport_size)
 	check(timeline_scroll != null and timeline_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "replay import timeline provides a native vertical scroll for long records at %s" % viewport_size)
-	check(archive_pane != null and archive_search != null and archive_search.placeholder_text.contains("日期") and archive_scroll != null and archive_list != null, "replay import exposes searchable scrollable local replay archive controls at %s" % viewport_size)
+	check(archive_pane != null and archive_search != null and archive_search.placeholder_text.contains("日期") and archive_scroll != null and archive_scrollbar != null and archive_list != null, "replay import exposes searchable scrollable local replay archive controls at %s" % viewport_size)
 	if archive_pane != null and archive_scroll != null:
 		check(archive_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and archive_scroll.clip_contents, "replay archive keeps a clipped vertical scroll viewport inside its pane at %s" % viewport_size)
 		check(screen_rect(archive_pane).grow(1.0).encloses(screen_rect(archive_scroll)), "replay archive scroll viewport stays inside its fixed pane at %s" % viewport_size)
+	if archive_scrollbar != null and archive_scroll != null:
+		check(archive_scrollbar.custom_minimum_size.x >= scene.UI_MIN_TOUCH_TARGET and archive_scrollbar.mouse_filter == Control.MOUSE_FILTER_STOP, "replay archive scrollbar keeps a 44px native drag target at %s" % viewport_size)
+		check(screen_rect(archive_scrollbar).size.x >= scene.UI_MIN_TOUCH_TARGET - 1.0, "replay archive scrollbar exposes its full touch width at %s" % viewport_size)
+		check(screen_rect(archive_scroll).grow(1.0).encloses(screen_rect(archive_scrollbar)), "replay archive scrollbar stays inside the scroll viewport at %s" % viewport_size)
 	if archive_scroll != null and archive_list != null:
 		check(screen_rect(archive_list).size.x <= screen_rect(archive_scroll).size.x + 1.0 and archive_list.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "replay archive list fills the scroll viewport without horizontal overflow at %s" % viewport_size)
+		var archive_rows := controls_with_name_prefix(archive_list, "ReplayArchiveRow_")
+		check(archive_rows.size() > 0, "replay archive exposes visible rows for result scanning at %s" % viewport_size)
+		for archive_row in archive_rows:
+			var primary := archive_row.find_child("ReplayArchiveRowPrimary", true, false) as Label
+			var result := archive_row.find_child("ReplayArchiveRowResult", true, false) as Label
+			if primary == null:
+				continue
+			var has_result := result != null and (result.text.contains("胡牌") or result.text.contains("荒庄") or result.text.contains("对局"))
+			check(has_result and not primary.text.contains("...") and not primary.text.contains("…") and result.tooltip_text != "", "replay archive row keeps its date and result visible in separate lanes at %s" % viewport_size)
+			check(label_text_width(primary, primary.text) <= screen_rect(primary).size.x + 1.0, "replay archive row date fits its compact lane at %s" % viewport_size)
+			if result != null:
+				check(not result.text.contains("...") and not result.text.contains("…") and label_text_width(result, result.text) <= screen_rect(result).size.x + 1.0, "replay archive row result fits its dedicated lane at %s" % viewport_size)
+				check(screen_rect(primary).end.x <= screen_rect(result).position.x + 1.0 and screen_rect(result).end.x <= screen_rect(archive_row).end.x + 1.0, "replay archive row date and result lanes stay ordered and contained at %s" % viewport_size)
 	if input != null and import_button != null:
 		check(input.has_focus(), "replay import opens with focus in the code field at %s" % viewport_size)
 		input.text = scene.round_replay_share_code()
@@ -2471,6 +2489,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var endpoint_label = scene.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
 	var state_badge = scene.find_child("OnlineLobbyConnectionStateBadge", true, false) as Control
 	var connection_state_label = scene.find_child("OnlineLobbyConnectionStateLabel", true, false) as Label
+	var subtitle := scene.find_child("OnlineLobbySubtitle", true, false) as Label
 	check(page_plate != null and form_panel != null and log_panel != null, "online lobby exposes a low-frequency page plate and named split panels at %s" % viewport_size)
 	if page_plate != null:
 		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
@@ -2497,7 +2516,13 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 			var room_badge_rect := screen_rect(room_badge)
 			check(room_target_rect.grow(1.0).encloses(room_badge_rect) and room_badge_rect.grow(1.0).encloses(room_target_rect), "room detail target stays aligned with the room badge at %s" % viewport_size)
 			check(room_touch_target.disabled and room_touch_target.mouse_filter == Control.MOUSE_FILTER_IGNORE, "disconnected room detail target remains inert at %s" % viewport_size)
-	check(endpoint_badge != null and endpoint_label != null and state_badge != null and connection_state_label != null, "online lobby exposes top endpoint and connection-state badges at %s" % viewport_size)
+	check(endpoint_badge != null and endpoint_label != null and state_badge != null and connection_state_label != null and subtitle != null, "online lobby exposes top badges and complete subtitle at %s" % viewport_size)
+	if subtitle != null and endpoint_badge != null:
+		var subtitle_rect := screen_rect(subtitle)
+		var endpoint_rect := screen_rect(endpoint_badge)
+		check(subtitle.text == "连接本机或局域网，先连接再创建或加入房间。" and not subtitle.text.contains("...") and not subtitle.text.contains("…"), "online lobby subtitle keeps its complete connection guidance at %s" % viewport_size)
+		check(label_text_width(subtitle, subtitle.text) <= subtitle_rect.size.x + 1.0, "online lobby subtitle fits its expanded header lane at %s" % viewport_size)
+		check(subtitle_rect.end.x <= endpoint_rect.position.x - 8.0, "online lobby subtitle clears the endpoint badge at %s" % viewport_size)
 	check(name_edit != null and name_edit.max_length == scene.ONLINE_NAME_MAX_LENGTH, "online lobby nickname input enforces its client boundary at %s" % viewport_size)
 	check(host_edit != null and host_edit.max_length == scene.ONLINE_HOST_MAX_LENGTH and host_edit.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_URL, "online lobby host input enforces its boundary and URL keyboard at %s" % viewport_size)
 	check(room_edit != null and room_edit.max_length == scene.ONLINE_ROOM_CODE_MAX_LENGTH, "online lobby room input enforces its client boundary at %s" % viewport_size)
@@ -2840,6 +2865,9 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		if title_label != null:
 			check(title_label.text.begins_with("%02d ·" % (i + 1)) and title_label.tooltip_text != "", "rules section %d exposes numbered title and full-title tooltip at %s" % [i, viewport_size])
 		check(line_labels.size() >= 3, "rules section %d exposes named body labels at %s" % [i, viewport_size])
+		if i == 0 and viewport_size.x <= 960.0 and line_labels.size() > 1:
+			var compact_wall_line := line_labels[1] as Label
+			check(compact_wall_line != null and compact_wall_line.text.contains("\n"), "compact rules wall clause uses an explicit readable line break at %s" % viewport_size)
 		if text_backplate != null and example_strip != null:
 			var text_rect = screen_rect(text_backplate)
 			var strip_rect = screen_rect(example_strip)
@@ -2853,12 +2881,12 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 				check(screen_rect(text_backplate).grow(1.0).encloses(screen_rect(title_label)), "rules section %d title stays inside text backplate at %s" % [i, viewport_size])
 		for line_control in line_labels:
 			var line_label = line_control as Label
-			check(line_label != null and line_label.clip_text and line_label.get_theme_font_size("font_size") >= 15 and line_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and relative_luma(line_label.get_theme_color("font_color")) >= 0.90, "rules section %d body text is clipped bright and large enough at %s" % [i, viewport_size])
+			check(line_label != null and line_label.clip_text and line_label.get_theme_font_size("font_size") >= 15 and line_label.autowrap_mode == TextServer.AUTOWRAP_ARBITRARY and line_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING and relative_luma(line_label.get_theme_color("font_color")) >= 0.90, "rules section %d body text wraps CJK without ellipsis and remains bright and large enough at %s" % [i, viewport_size])
 			if line_label != null and text_backplate != null:
 				var line_rect = screen_rect(line_label)
 				var text_back_rect = screen_rect(text_backplate)
 				check(text_back_rect.grow(1.0).encloses(line_rect), "rules section %d body label %s stays inside text backplate at %s" % [i, line_label.name, viewport_size])
-				check(label_text_width(line_label, line_label.text) <= line_rect.size.x + 1.0, "rules section %d body label %s fits without ellipsis at %s" % [i, line_label.name, viewport_size])
+				check(line_label.get_line_count() >= 1 and line_label.get_visible_line_count() == line_label.get_line_count(), "rules section %d body label %s shows every wrapped line at %s" % [i, line_label.name, viewport_size])
 		var section_plate = example_strip.find_child("RuleSectionArtGPTPlate_%d" % i, true, false) as Control if example_strip != null else null
 		var has_section_plate := section_plate != null
 		if has_section_plate:
