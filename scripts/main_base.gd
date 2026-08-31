@@ -1018,7 +1018,7 @@ const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.78
 # panel clears the right seat lane above and the hand tray below.
 const DANGER_DISCARD_CONFIRMATION_RECT := Rect2(Vector2(0.640, 0.510), Vector2(0.960, 0.685))
 const CHAT_ACTION_BUTTON_RECT := Rect2(Vector2(0.420, 0.698), Vector2(0.508, 0.782))
-const TOP_HUD_BUTTON_SIZE := Vector2(56, 38)
+const TOP_HUD_BUTTON_SIZE := Vector2(56, 44)
 const TOP_HUD_MODE_BADGE_RECT := Rect2(Vector2(0.018, 0.14), Vector2(0.100, 0.44))
 const SAFE_CONTENT_MIN_MARGIN := Vector4(12.0, 8.0, 12.0, 10.0)
 const SAFE_CONTENT_MAX_SIDE_FRACTION := 0.16
@@ -1030,9 +1030,9 @@ const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.310, 0.10), Vector2(0.432, 0.50))
 const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.212, 0.565), Vector2(0.432, 0.890))
 const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.442, 0.15), Vector2(0.680, 0.85))
 const TOP_HUD_WALL_RECT := Rect2(Vector2(0.700, 0.14), Vector2(0.764, 0.86))
-const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.775, 0.16), Vector2(0.838, 0.84))
-const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.848, 0.16), Vector2(0.911, 0.84))
-const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.921, 0.16), Vector2(0.984, 0.84))
+const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.775, 0.05), Vector2(0.838, 0.95))
+const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.848, 0.05), Vector2(0.911, 0.95))
+const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.921, 0.05), Vector2(0.984, 0.95))
 const SCORE_STRIP_CHIP_RECTS := [
 	Rect2(Vector2(0.006, 0.0), Vector2(0.244, 1.0)),
 	Rect2(Vector2(0.256, 0.0), Vector2(0.494, 1.0)),

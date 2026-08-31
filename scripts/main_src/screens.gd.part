@@ -840,10 +840,11 @@ func _show_online_lobby_impl() -> void:
 		toggle_chat_panel()
 	)
 	lobby_chat_button.name = "ChatLobbyButton"
-	lobby_chat_button.custom_minimum_size = Vector2(72, 34)
+	lobby_chat_button.custom_minimum_size = Vector2(72, UI_MIN_TOUCH_TARGET)
 	lobby_chat_button.add_theme_font_size_override("font_size", 12)
 	lobby_chat_button.tooltip_text = "打开或关闭房间聊天"
-	apply_rect(lobby_chat_button, rect_full(0.500, 0.030, 0.640, 0.105))
+	# Reserve a full touch lane between the room title and the room summary.
+	apply_rect(lobby_chat_button, rect_full(0.500, 0.015, 0.640, 0.135))
 	log_panel.add_child(lobby_chat_button)
 	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	var room_badge_text = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
@@ -877,7 +878,7 @@ func _show_online_lobby_impl() -> void:
 	var log_scroll := ScrollContainer.new()
 	log_scroll.name = "OnlineLobbyLogScroll"
 	configure_scroll_container(log_scroll, "上下滚动查看房间日志；新日志到达时自动跟随底部")
-	apply_rect(log_scroll, rect_full(0.045, 0.180, 0.955, 0.990))
+	apply_rect(log_scroll, rect_full(0.045, 0.430, 0.955, 0.990))
 	log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	log_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	log_scroll.scroll_deadzone = 6
@@ -1343,7 +1344,7 @@ func _show_rules_screen_impl() -> void:
 	if effective_viewport_size().x <= 960.0:
 		# Keep the long CJK clause visible even on Godot builds where arbitrary
 		# label wrapping does not break text inside a VBoxContainer.
-		wall_rule_text = wall_rule_text.replace(" · 允许", "\n允许")
+		wall_rule_text = "牌墙：%d张 · %s\n%s" % [rule_wall_size(), flower_text, chi_text]
 	add_rule_section(content, "和牌与响应", [
 		"当前档案：%s" % rule_variant_label(),
 		wall_rule_text,
@@ -2433,25 +2434,29 @@ func show_chat_panel() -> void:
 		# when the drawer closes.
 		ledger.visible = false
 		ledger.set_meta("hidden_for_chat", true)
-	draw_chat_panel_art(chat_panel)
+	draw_chat_panel_art(chat_panel, compact_chat)
 	var chat_text = "\n".join(chat_messages)
 	if chat_text.strip_edges() == "":
 		chat_text = "等待房间消息"
+	var chat_display_text: String = chat_text
+	if compact_chat:
+		var latest_message := str(chat_messages[chat_messages.size() - 1]) if not chat_messages.is_empty() else "暂无消息"
+		chat_display_text = "消息 · %s" % latest_message
 	var chat_scroll := ScrollContainer.new()
 	chat_scroll.name = "ChatPanelMessageScroll"
 	configure_scroll_container(chat_scroll, "上下滚动查看聊天记录")
 	chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	chat_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	chat_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(chat_scroll, rect_full(0.060, 0.070 if compact_chat else 0.285, 0.720 if compact_chat else 0.940, 0.300 if compact_chat else 0.775))
+	apply_rect(chat_scroll, rect_full(0.060, 0.020 if compact_chat else 0.285, 0.720 if compact_chat else 0.940, 0.160 if compact_chat else 0.775))
 	chat_panel.add_child(chat_scroll)
-	var chat_label = make_label(chat_scroll, chat_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
+	var chat_label = make_label(chat_scroll, chat_display_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
 	chat_label.name = "ChatPanelMessageText"
-	chat_label.custom_minimum_size = Vector2(0.0, maxf(64.0, float(chat_messages.size()) * (18.0 if compact_chat else 24.0)))
+	chat_label.custom_minimum_size = Vector2(0.0, 18.0 if compact_chat else maxf(64.0, float(chat_messages.size()) * 24.0))
 	chat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	chat_label.clip_text = false
+	chat_label.clip_text = compact_chat
 	chat_label.tooltip_text = chat_text
 	call_deferred("scroll_chat_panel_to_end")
 
@@ -2459,7 +2464,7 @@ func show_chat_panel() -> void:
 	close_button.name = "ChatPanelCloseButton"
 	close_button.tooltip_text = "关闭聊天面板 · 快捷键 Esc"
 	close_button.custom_minimum_size = Vector2(44, 44)
-	apply_rect(close_button, rect_full(0.800 if compact_chat else 0.820, 0.015, 0.965 if compact_chat else 0.950, 0.325 if compact_chat else 0.190))
+	apply_rect(close_button, rect_full(0.755 if compact_chat else 0.820, 0.000 if compact_chat else 0.015, 1.000 if compact_chat else 0.950, 0.500 if compact_chat else 0.190))
 	chat_panel.add_child(close_button)
 
 	var quick_row := HBoxContainer.new()
@@ -2467,7 +2472,7 @@ func show_chat_panel() -> void:
 	quick_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	quick_row.add_theme_constant_override("separation", 3)
 	configure_passive_container(quick_row)
-	apply_rect(quick_row, rect_full(0.060, 0.340 if compact_chat else 0.205, 0.940, 0.610 if compact_chat else 0.270))
+	apply_rect(quick_row, rect_full(0.060, 0.180 if compact_chat else 0.205, 0.940, 0.580 if compact_chat else 0.270))
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -2498,7 +2503,12 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
-	apply_rect(chat_input, rect_full(0.060, 0.590 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
+	apply_rect(chat_input, rect_full(0.060, 0.600 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.980 if compact_chat else 0.945))
+	if compact_chat:
+		# The normalized row is intentionally just under the panel edge; this
+		# one-pixel reserve brings the smallest safe-area viewport back to a
+		# full 44px input without changing its hit lane.
+		chat_input.offset_bottom = 1.0
 	chat_panel.add_child(chat_input)
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
@@ -2506,14 +2516,16 @@ func show_chat_panel() -> void:
 	send_button.custom_minimum_size = Vector2(48 if compact_chat else 62, 44 if compact_chat else 44)
 	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
-	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.590 if compact_chat else 0.805, 0.940, 0.985 if compact_chat else 0.945))
+	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.600 if compact_chat else 0.805, 0.940, 0.980 if compact_chat else 0.945))
+	if compact_chat:
+		send_button.offset_bottom = 1.0
 	chat_panel.add_child(send_button)
 	if mode == "online_game":
 		var table_log_button := make_icon_button("book-open", Color(0.40, 0.58, 0.46), 15, Callable(self, "open_table_log_from_chat"))
 		table_log_button.name = "ChatPanelTableLogButton"
 		table_log_button.custom_minimum_size = Vector2(44, 44)
 		table_log_button.tooltip_text = "查看牌桌记录 · 关闭聊天后打开完整历史"
-		apply_rect(table_log_button, rect_full(0.585, 0.015, 0.775, 0.325) if compact_chat else rect_full(0.700, 0.035, 0.805, 0.190))
+		apply_rect(table_log_button, rect_full(0.505, 0.000, 0.750, 0.500) if compact_chat else rect_full(0.700, 0.035, 0.805, 0.190))
 		chat_panel.add_child(table_log_button)
 
 	configure_button_focus_navigation(chat_panel, "ChatInput")
@@ -3560,7 +3572,9 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	var archive_id := str(entry.get("archive_id", ""))
 	var row := Control.new()
 	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
-	row.custom_minimum_size = Vector2(0, 62 if large_text_enabled else 56)
+	# Keep metadata on its own line so every action can retain a full touch lane
+	# even when the archive pane is only a few hundred pixels wide.
+	row.custom_minimum_size = Vector2(0, 98 if large_text_enabled else 90)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var plate := make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.026, 0.024, 0.44), "ui_button_face_plate")
 	plate.name = "ReplayArchiveRowPlate"
@@ -3568,28 +3582,31 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	var result_label := replay_archive_result_label(entry)
 	var primary := make_label(row, replay_archive_display_date_text(entry), 11, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
-	apply_rect(primary, rect_full(0.035, 0.100, 0.385, 0.500))
+	apply_rect(primary, rect_full(0.035, 0.050, 0.520, 0.285))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
 	primary.tooltip_text = replay_archive_date_text(entry)
-	var result_display := "· %s" % result_label
-	var result := make_label(row, result_display, 11, Color(0.72, 0.90, 0.68), true)
+	var result := make_label(row, result_label, 11, Color(0.72, 0.90, 0.68), true)
 	result.name = "ReplayArchiveRowResult"
-	apply_rect(result, rect_full(0.385, 0.100, 0.555, 0.500))
+	apply_rect(result, rect_full(0.520, 0.050, 0.965, 0.285))
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(result)
 	result.tooltip_text = result_label
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
 	secondary.name = "ReplayArchiveRowSecondary"
-	apply_rect(secondary, rect_full(0.035, 0.515, 0.535, 0.900))
+	apply_rect(secondary, rect_full(0.035, 0.295, 0.965, 0.425))
 	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(secondary)
+	var action_top := 0.475
+	var action_bottom := 0.970
+	var action_slot_width := 0.238
+	var action_step := 0.245
 	var favorite := make_icon_button("star", Color(0.96, 0.82, 0.38) if bool(entry.get("favorite", false)) else Color(0.62, 0.68, 0.60), 14, func() -> void:
 		toggle_replay_archive_favorite(archive_id)
 	)
 	favorite.name = "ReplayArchiveFavoriteButton_%s" % archive_id.left(8)
 	favorite.tooltip_text = "收藏此回放" if not bool(entry.get("favorite", false)) else "取消收藏"
-	apply_rect(favorite, rect_full(0.560, 0.130, 0.645, 0.870))
+	apply_rect(favorite, rect_full(0.006, action_top, 0.006 + action_slot_width, action_bottom))
 	row.add_child(favorite)
 	var open := make_small_button("查看", Color(0.34, 0.56, 0.52), func() -> void:
 		open_replay_archive(archive_id)
@@ -3598,7 +3615,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	open.tooltip_text = "打开这条已验证回放"
 	open.custom_minimum_size = Vector2(52, 36)
 	open.add_theme_font_size_override("font_size", accessibility_font_size(12))
-	apply_rect(open, rect_full(0.645, 0.155, 0.765, 0.845))
+	apply_rect(open, rect_full(0.006 + action_step, action_top, 0.006 + action_step + action_slot_width, action_bottom))
 	row.add_child(open)
 	var copy := make_small_button("复制", Color(0.30, 0.52, 0.54), func() -> void:
 		copy_replay_archive_share_code(archive_id)
@@ -3607,14 +3624,14 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	copy.tooltip_text = "复制已验证回放码"
 	copy.custom_minimum_size = Vector2(58, 36)
 	copy.add_theme_font_size_override("font_size", accessibility_font_size(12))
-	apply_rect(copy, rect_full(0.765, 0.155, 0.890, 0.845))
+	apply_rect(copy, rect_full(0.006 + action_step * 2.0, action_top, 0.006 + action_step * 2.0 + action_slot_width, action_bottom))
 	row.add_child(copy)
 	var delete := make_icon_button("cross", Color(0.90, 0.46, 0.38), 14, func() -> void:
 		request_delete_replay_archive(archive_id)
 	)
 	delete.name = "ReplayArchiveDeleteButton_%s" % archive_id.left(8)
 	delete.tooltip_text = "再次点击确认删除此回放" if replay_delete_confirming and replay_delete_target_id == archive_id else "删除此回放"
-	apply_rect(delete, rect_full(0.890, 0.130, 0.975, 0.870))
+	apply_rect(delete, rect_full(0.006 + action_step * 3.0, action_top, 0.006 + action_step * 3.0 + action_slot_width, action_bottom))
 	row.add_child(delete)
 	return row
 
@@ -3780,8 +3797,10 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	if root_layer != null and is_instance_valid(root_layer):
 		var modal_present := root_layer.find_child("DiagnosticDialogPanel", true, false) != null or root_layer.find_child("TelemetryDataSheetCard", true, false) != null or root_layer.find_child("ExitConfirmDialog", true, false) != null
 		if modal_present:
-			toast_top = 0.095
-			toast_bottom = 0.145
+			# Modal cards own the middle of the screen. Keep transient feedback in
+			# the top safety band so it never masks a title, close action, or body.
+			toast_top = 0.020
+			toast_bottom = 0.070
 	toast_bg.anchor_top = toast_top
 	toast_bg.anchor_bottom = toast_bottom
 	toast_bg.offset_left = 0

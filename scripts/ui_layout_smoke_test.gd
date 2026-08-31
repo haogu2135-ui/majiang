@@ -39,10 +39,15 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
-	for viewport_size in VIEWPORTS:
+	# Keep a focused 960px entry point for local geometry iteration. The normal
+	# invocation still covers every viewport, safe-area probe, and live resize.
+	var quick_smoke := OS.get_environment("YUNZHUO_UI_SMOKE_QUICK") == "1"
+	var smoke_viewports := [Vector2(960, 540)] if quick_smoke else VIEWPORTS
+	for viewport_size in smoke_viewports:
 		await run_layout_checks_for_viewport(viewport_size)
-	await run_safe_area_layout_probe(SAFE_AREA_PROBE_VIEWPORT, SAFE_AREA_PROBE_MARGINS)
-	await run_continuous_resize_capacity_probe()
+	if not quick_smoke:
+		await run_safe_area_layout_probe(SAFE_AREA_PROBE_VIEWPORT, SAFE_AREA_PROBE_MARGINS)
+		await run_continuous_resize_capacity_probe()
 	if failed:
 		quit(1)
 	else:
@@ -121,6 +126,16 @@ func seed_online_pending_claim_layout_state(scene) -> void:
 	# This is a static layout fixture; keep transport polling from replacing it
 	# with a real disconnected state while the drawer is being measured.
 	scene.set_process(false)
+
+func draw_smoke_center(scene) -> Control:
+	var outer: Control = scene.make_layout_host(scene.TABLE_OUTER_RECT)
+	outer.name = "SmokeTableOuter"
+	scene.root_layer.add_child(outer)
+	var table: Control = scene.make_layout_host(scene.TABLE_INNER_RECT)
+	table.name = "SmokeTableInner"
+	outer.add_child(table)
+	scene.draw_center(table)
+	return table
 
 func seed_danger_discard_layout_state(scene) -> void:
 	seed_offline_battle_layout_state(scene)
@@ -483,9 +498,10 @@ func run_safe_area_layout_probe(viewport_size: Vector2, margins: Vector4) -> voi
 	seed_offline_battle_layout_state(scene)
 	scene.clear_screen()
 	scene.draw_game_top_hud(scene.root_layer)
+	var smoke_table: Control = draw_smoke_center(scene)
 	for seat_layout in scene.SEAT_LAYOUTS:
 		scene.draw_seat(scene.root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), {})
-	scene.draw_discards(scene.root_layer)
+	scene.draw_discards(smoke_table)
 	scene.draw_melds(scene.root_layer)
 	scene.draw_table_log(scene.root_layer)
 	scene.draw_hand(scene.root_layer)
@@ -522,9 +538,10 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	seed_offline_battle_layout_state(scene)
 	scene.clear_screen()
 	scene.draw_game_top_hud(scene.root_layer)
+	var smoke_table: Control = draw_smoke_center(scene)
 	for seat_layout in scene.SEAT_LAYOUTS:
 		scene.draw_seat(scene.root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), {})
-	scene.draw_discards(scene.root_layer)
+	scene.draw_discards(smoke_table)
 	scene.draw_melds(scene.root_layer)
 	scene.draw_table_log(scene.root_layer)
 	scene.draw_hand(scene.root_layer)
@@ -537,9 +554,10 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	seed_online_pending_claim_layout_state(scene)
 	scene.clear_screen()
 	scene.draw_game_top_hud(scene.root_layer)
+	var online_smoke_table: Control = draw_smoke_center(scene)
 	for seat_layout in scene.SEAT_LAYOUTS:
 		scene.draw_seat(scene.root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), {})
-	scene.draw_discards(scene.root_layer)
+	scene.draw_discards(online_smoke_table)
 	scene.draw_melds(scene.root_layer)
 	scene.draw_table_log(scene.root_layer)
 	scene.draw_hand(scene.root_layer)
@@ -589,6 +607,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	# The selector callback intentionally persists. Restore the pre-smoke profile
 	# so layout QA cannot alter later gameplay tests or the developer's settings.
 	scene.rule_variant = original_rule_variant
+	await check_telemetry_toast_layout(scene, actual_viewport)
 	scene.settings_panel_open = false
 	scene.selected_room = "ROOM7"
 	scene.online_room = {"code": "ROOM7", "players": [{"name": "甲"}, {"name": "乙"}], "logs": ["甲加入房间", "乙准备"]}
@@ -671,6 +690,44 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_menu_footer_layout(scene, actual_viewport)
 	restore_smoke_accessibility(scene, saved_accessibility, true)
 	scene.queue_free()
+	await process_frame
+
+
+func check_telemetry_toast_layout(scene, viewport_size: Vector2) -> void:
+	var saved_mode := str(scene.mode)
+	scene.settings_panel_open = false
+	scene.show_menu(true)
+	await process_frame
+	scene.settings_panel_open = true
+	scene.show_menu(true)
+	await process_frame
+	scene.show_telemetry_data_sheet()
+	await process_frame
+	var card := scene.find_child("TelemetryDataSheetCard", true, false) as Control
+	var title := scene.find_child("TelemetryDataSheetTitle", true, false) as Control
+	var body := scene.find_child("TelemetryDataSheetBody", true, false) as Control
+	var close := scene.find_child("TelemetryDataSheetCloseButton", true, false) as Control
+	check(card != null and title != null and body != null and close != null, "telemetry data sheet exposes its modal reading lanes at %s" % viewport_size)
+	if card == null or title == null or body == null or close == null:
+		return
+	scene.export_telemetry_data()
+	await process_frame
+	var toast := scene.toast_current as Control
+	check(toast != null and scene.toast_mode == scene.mode, "telemetry export exposes a live feedback toast at %s" % viewport_size)
+	if toast != null:
+		var toast_rect := screen_rect(toast)
+		check(not rects_overlap(toast_rect.grow(-1.0), screen_rect(card).grow(-1.0)), "telemetry export toast stays outside the modal card at %s" % viewport_size)
+		check(not rects_overlap(toast_rect.grow(-1.0), screen_rect(title).grow(-1.0)) and not rects_overlap(toast_rect.grow(-1.0), screen_rect(body).grow(-1.0)) and not rects_overlap(toast_rect.grow(-1.0), screen_rect(close).grow(-1.0)), "telemetry export toast clears modal title body and close action at %s" % viewport_size)
+	var export_status := scene.find_child("TelemetryExportStatus", true, false) as Label
+	check(export_status != null and export_status.text.contains("已复制"), "telemetry export keeps an in-card persistent status at %s" % viewport_size)
+	scene.close_telemetry_data_sheet()
+	scene.dismiss_active_toast()
+	scene.settings_panel_open = false
+	scene.mode = saved_mode
+	if saved_mode == "offline" or saved_mode == "online_game":
+		scene.render_game()
+	else:
+		scene.refresh_current_screen()
 	await process_frame
 
 
@@ -878,8 +935,10 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 		check(button.tooltip_text != label_text and button.tooltip_text != "", "top HUD %s tooltip explains the full action at %s" % [label_text, viewport_size])
 		var rect = screen_rect(button)
 		rects.append(rect)
-		check(rect.size.x >= 44.0 and rect.size.y >= 36.0, "top HUD %s keeps practical touch target at %s" % [label_text, viewport_size])
+		check(rect.size.x >= 44.0 and rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5, "top HUD %s keeps a 44px touch target at %s" % [label_text, viewport_size])
 		check(rect.position.x >= -0.5 and rect.end.x <= viewport_size.x + 0.5, "top HUD %s stays inside viewport at %s" % [label_text, viewport_size])
+		if hud != null:
+			check(screen_rect(hud).grow(1.0).encloses(rect), "top HUD %s stays inside its shell at %s" % [label_text, viewport_size])
 		if wall_back != null:
 			check(screen_rect(wall_back).end.x <= rect.position.x - 2.0 or label_text != "设置", "top HUD wall badge clears settings button at %s" % viewport_size)
 		var icon_back = button.find_child("TopHudButtonIconBack_%s" % label_text, true, false) as Control
@@ -1129,6 +1188,22 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 			if result != null:
 				check(not result.text.contains("...") and not result.text.contains("…") and label_text_width(result, result.text) <= screen_rect(result).size.x + 1.0, "replay archive row result fits its dedicated lane at %s" % viewport_size)
 				check(screen_rect(primary).end.x <= screen_rect(result).position.x + 1.0 and screen_rect(result).end.x <= screen_rect(archive_row).end.x + 1.0, "replay archive row date and result lanes stay ordered and contained at %s" % viewport_size)
+				var favorite_buttons := controls_with_name_prefix(archive_row, "ReplayArchiveFavoriteButton_")
+				if favorite_buttons.size() > 0:
+					check(not rects_overlap(screen_rect(result).grow(-1.0), screen_rect(favorite_buttons[0]).grow(-1.0)), "replay archive result clears the first action target at %s" % viewport_size)
+			var action_prefixes := ["ReplayArchiveFavoriteButton_", "ReplayArchiveOpenButton_", "ReplayArchiveCopyButton_", "ReplayArchiveDeleteButton_"]
+			var archive_actions: Array[Button] = []
+			for action_prefix in action_prefixes:
+				var action_nodes := controls_with_name_prefix(archive_row, action_prefix)
+				if action_nodes.size() > 0 and action_nodes[0] is Button:
+					archive_actions.append(action_nodes[0] as Button)
+			check(archive_actions.size() == action_prefixes.size(), "replay archive row exposes four independent action targets at %s" % viewport_size)
+			for action_index in range(archive_actions.size()):
+				var action_rect := screen_rect(archive_actions[action_index])
+				check(action_rect.size.x >= scene.UI_MIN_TOUCH_TARGET - 0.5 and action_rect.size.y >= 44.0, "replay archive action %s keeps a 44px touch target at %s" % [action_prefixes[action_index], viewport_size])
+				check(screen_rect(archive_row).grow(1.0).encloses(action_rect), "replay archive action %s stays inside its row at %s" % [action_prefixes[action_index], viewport_size])
+				for other_index in range(action_index):
+					check(not rects_overlap(action_rect.grow(-1.0), screen_rect(archive_actions[other_index]).grow(-1.0)), "replay archive action targets remain distinct at %s" % viewport_size)
 	if input != null and import_button != null:
 		check(input.has_focus(), "replay import opens with focus in the code field at %s" % viewport_size)
 		input.text = scene.round_replay_share_code()
@@ -1346,6 +1421,10 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		var summary_rect = screen_rect(summary)
 		var dock_rect = screen_rect(dock)
 		var hand_rect = screen_rect(hand)
+		var center_console = scene.find_child("CenterConsole3DShell", true, false) as Control
+		check(center_console != null, "pending claim renders the center wall and wind console at %s" % viewport_size)
+		if center_console != null:
+			check(not rects_overlap(summary_rect.grow(-1.0), screen_rect(center_console).grow(-1.0)), "pending claim context clears the center wall and wind console at %s" % viewport_size)
 		for zone in scene.DISCARD_ZONES:
 			var discard_grid = scene.find_child("DiscardGrid_%d" % int(zone[0]), true, false) as Control
 			if discard_grid != null:
@@ -1566,7 +1645,7 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 			check(panel_rect.position.x >= viewport_size.x * 0.70, "online game chat default route stays in the upper-right safe lane at %s" % viewport_size)
 		else:
 			check(panel_rect.position.x <= viewport_size.x * 0.34 and panel_rect.position.y <= viewport_size.y * 0.26, "online game chat meld route stays in the upper-left table-safe lane at %s" % viewport_size)
-		var route_bottom_limit := 0.42 if route == "top_safe_drawer" else 0.28
+		var route_bottom_limit := 0.42 if route == "top_safe_drawer" else 0.35
 		check(panel_rect.size.x >= 180.0 and panel_rect.end.y <= viewport_size.y * route_bottom_limit, "online game chat drawer keeps a wide compact touch lane at %s" % viewport_size)
 		check(panel.get_meta("compact_chat", false), "online game chat marks the narrow route as compact at %s" % viewport_size)
 		for seat in range(4):
@@ -1591,7 +1670,9 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 			check(screen_rect(panel).grow(1.0).encloses(screen_rect(table_log_button)) and screen_rect(table_log_button).size.x >= 34.0 and screen_rect(table_log_button).size.y >= 30.0, "online chat table-records route stays inside the drawer with a touch target at %s" % viewport_size)
 	if close_button != null and send_button != null and panel != null:
 		check(close_button.tooltip_text.contains("关闭") and send_button.tooltip_text.contains("Enter"), "online chat close/send controls expose complete action hints at %s" % viewport_size)
-		check(screen_rect(panel).grow(1.0).encloses(screen_rect(close_button)), "online chat close action stays inside the drawer at %s" % viewport_size)
+		var close_rect := screen_rect(close_button)
+		check(close_rect.size.x >= 44.0 and close_rect.size.y >= 44.0, "online chat close action keeps its minimum touch target at %s" % viewport_size)
+		check(screen_rect(panel).grow(1.0).encloses(close_rect), "online chat close action stays inside the drawer at %s" % viewport_size)
 		check(screen_rect(send_button).size.x >= 42.0 and screen_rect(send_button).size.y >= 36.0, "online chat send action keeps a 42x36 touch target at %s" % viewport_size)
 		check(screen_rect(panel).grow(1.0).encloses(screen_rect(send_button)), "online chat send action stays inside the drawer at %s" % viewport_size)
 	var quick_row := scene.find_child("ChatPanelQuickMessages", true, false) as Control
@@ -1603,6 +1684,13 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		for quick_button in quick_buttons:
 			var quick_rect := screen_rect(quick_button)
 			check(screen_rect(panel).grow(1.0).encloses(quick_rect) and quick_rect.size.x >= 46.0 and quick_rect.size.y >= 26.0, "online chat quick action %s stays readable and touchable at %s" % [quick_button.text, viewport_size])
+	if panel != null and input != null and quick_row != null:
+		var input_rect := screen_rect(input)
+		var quick_row_rect := screen_rect(quick_row)
+		check(not rects_overlap(input_rect.grow(-1.0), quick_row_rect.grow(-1.0)), "online chat input clears the quick-message row at %s" % viewport_size)
+		check(input_rect.size.y >= 42.0, "online chat input keeps a finger-sized compact row at %s" % viewport_size)
+		for quick_button in quick_buttons:
+			check(not rects_overlap(input_rect.grow(-1.0), screen_rect(quick_button).grow(-1.0)), "online chat input clears quick action %s at %s" % [quick_button.text, viewport_size])
 	check(input != null and input.has_focus(), "online chat opens with focus in the message input at %s" % viewport_size)
 	scene.close_chat_panel()
 	await settle_layout()
@@ -1673,6 +1761,14 @@ func check_table_log_archive_layout(scene, viewport_size: Vector2) -> void:
 	await settle_layout()
 	var archive_button = scene.find_child("TableLogArchiveButton", true, false) as Button
 	check(archive_button != null and archive_button.text == "历史" and archive_button.tooltip_text.contains("完整"), "table log keeps an explicit history action in the compact ledger at %s" % viewport_size)
+	var ledger = scene.find_child("TableLogLedgerPanel", true, false) as Control
+	if archive_button != null and ledger != null:
+		var ledger_rect := screen_rect(ledger)
+		var archive_rect := screen_rect(archive_button)
+		check(archive_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5 and archive_rect.size.x >= 44.0, "table log history keeps a 44px touch target at %s" % viewport_size)
+		check(ledger_rect.grow(1.0).encloses(archive_rect), "table log history stays inside the ledger at %s" % viewport_size)
+		var recent_row := scene.find_child("TableLogLedgerRow_0", true, false) as Control
+		check(recent_row == null or not archive_rect.intersects(screen_rect(recent_row), true), "table log history clears the recent record at %s" % viewport_size)
 	scene.toggle_table_log_archive()
 	await settle_layout(0.04)
 	var panel = scene.find_child("TableLogArchivePanel", true, false) as Control
@@ -2482,6 +2578,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var log_list_title = scene.find_child("OnlineLobbyLogListTitle", true, false) as Label
 	var log_count_badge = scene.find_child("OnlineLobbyLogCountBadge", true, false) as Control
 	var log_latest_button = scene.find_child("OnlineLobbyLogLatestButton", true, false) as Button
+	var chat_button = scene.find_child("ChatLobbyButton", true, false) as Button
 	var log_unread_label = scene.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label
 	var room_badge = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
 	var room_offline_state = scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Label
@@ -2495,7 +2592,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
 		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.35 and page_plate.self_modulate.a <= 0.60, "disconnected lobby uses a restrained low-frequency authored bitmap substrate at %s" % viewport_size)
 	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
-	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null and log_latest_button != null and log_unread_label != null, "online lobby exposes room summary roster log list and latest-log controls at %s" % viewport_size)
+	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null and chat_button != null and log_latest_button != null and log_unread_label != null, "online lobby exposes room summary roster chat log list and latest-log controls at %s" % viewport_size)
 	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
 	var log_list_texture = (log_list_panel as TextureRect).texture if log_list_panel is TextureRect else null
 	var roster_source = (roster_texture as AtlasTexture).atlas if roster_texture is AtlasTexture else roster_texture
@@ -2544,6 +2641,12 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var log_rect = screen_rect(log_panel)
 	check(not form_rect.intersects(log_rect, true), "online lobby form and log panels do not overlap at %s" % viewport_size)
 	check(form_rect.position.x >= -0.5 and log_rect.end.x <= viewport_size.x + 0.5, "online lobby split panels stay inside viewport at %s" % viewport_size)
+	if chat_button != null:
+		var chat_rect := screen_rect(chat_button)
+		check(chat_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5 and chat_rect.size.x >= 44.0, "online lobby chat keeps a 44px touch target at %s" % viewport_size)
+		check(log_rect.grow(1.0).encloses(chat_rect), "online lobby chat stays inside the room panel at %s" % viewport_size)
+		if room_status_art != null:
+			check(chat_rect.end.y <= screen_rect(room_status_art).position.y - 1.0, "online lobby chat clears the room summary at %s" % viewport_size)
 	if endpoint_badge != null and endpoint_label != null and state_badge != null:
 		var expected_endpoint: String = str(scene.online_connection_endpoint_text())
 		var endpoint_rect = screen_rect(endpoint_badge)
@@ -2620,7 +2723,11 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 			if log_count_badge != null:
 				check(log_list_rect.grow(1.0).encloses(screen_rect(log_count_badge)), "online lobby log count badge stays inside log panel at %s" % viewport_size)
 			if log_latest_button != null and log_unread_label != null:
-				check(log_list_rect.grow(1.0).encloses(screen_rect(log_latest_button)) and log_latest_button.tooltip_text.contains("最新"), "online lobby latest-log button stays inside the log header and explains its route at %s" % viewport_size)
+				var latest_rect := screen_rect(log_latest_button)
+				check(latest_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5 and latest_rect.size.x >= 44.0, "online lobby latest-log button keeps a 44px touch target at %s" % viewport_size)
+				check(log_list_rect.grow(1.0).encloses(latest_rect) and log_latest_button.tooltip_text.contains("最新"), "online lobby latest-log button stays inside the log header and explains its route at %s" % viewport_size)
+				check(log_scroll == null or not latest_rect.intersects(screen_rect(log_scroll), true), "online lobby latest-log button clears the native log scroll at %s" % viewport_size)
+				check(log_count_badge == null or not latest_rect.intersects(screen_rect(log_count_badge), true), "online lobby latest-log button clears the log count at %s" % viewport_size)
 				check(log_list_rect.grow(1.0).encloses(screen_rect(log_unread_label)), "online lobby unread-log indicator stays inside the log header at %s" % viewport_size)
 		for i in range(4):
 			var row = scene.find_child("OnlineLobbyRosterRow_%d" % i, true, false) as Control

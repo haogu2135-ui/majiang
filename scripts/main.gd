@@ -10788,7 +10788,7 @@ func draw_chat_empty_state_art(parent: Control) -> Control:
 	return art
 
 
-func draw_chat_panel_art(parent: Control) -> Control:
+func draw_chat_panel_art(parent: Control, compact_chat: bool = false) -> Control:
 	# r209: GPT chrome conversion
 	var art = Control.new()
 	art.name = "ChatPanelArt"
@@ -10823,6 +10823,10 @@ func draw_chat_panel_art(parent: Control) -> Control:
 	var header = make_gpt_route_rail(rect_full(0.055, 0.055, 0.945, 0.190), Color(0.020, 0.044, 0.050, 0.78))
 	header.name = "ChatPanelHeader"
 	art.add_child(header)
+	if compact_chat:
+		# The compact drawer uses its first line for the latest message. Keep the
+		# decorative header rail, but remove its duplicate title from that lane.
+		header.visible = false
 	add_lucide_icon(header, "users", rect_full(0.035, 0.190, 0.155, 0.810), Color(0.76, 0.88, 0.72, 0.86))
 	var title = make_label(header, "房间消息", 12, Color(0.88, 0.92, 0.80), true)
 	apply_rect(title, rect_full(0.170, 0.080, 0.575, 0.920))
@@ -14986,10 +14990,11 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	title.add_theme_constant_override("outline_size", 1)
 	var latest_button = make_small_button("最新", Color(0.34, 0.42, 0.34), Callable(self, "scroll_online_log_to_end"))
 	latest_button.name = "OnlineLobbyLogLatestButton"
-	latest_button.custom_minimum_size = Vector2(76, 28)
+	latest_button.custom_minimum_size = Vector2(76, UI_MIN_TOUCH_TARGET)
 	latest_button.add_theme_font_size_override("font_size", 10)
 	latest_button.tooltip_text = "跳到最新房间日志"
-	apply_rect(latest_button, rect_full(0.535, 0.025, 0.745, 0.175))
+	# The header owns a full touch lane; the native log scroll starts below it.
+	apply_rect(latest_button, rect_full(0.535, 0.025, 0.745, 0.405))
 	list.add_child(latest_button)
 	var unread_label = make_label(list, "已到最新", 9, Color(0.72, 0.84, 0.66, 0.86), false)
 	unread_label.name = "OnlineLobbyLogUnreadLabel"
@@ -15136,6 +15141,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.z_index = 20
 	panel.clip_contents = true
 	parent.add_child(panel)
+	var compact_context_layout := effective_viewport_size().x <= 1280.0
 	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
 	if status_strip != null:
 		status_strip.name = "PendingClaimStatusStripTexture"
@@ -15152,29 +15158,37 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	tile_preview.name = "PendingClaimTile"
 	tile_preview.tooltip_text = "%s打出的%s · 点击下方按钮选择响应" % [source_name, tile_label(tile)]
 	panel.add_child(tile_preview)
-	apply_rect(tile_preview, rect_full(0.170, 0.020, 0.315, 0.980))
+	apply_rect(tile_preview, rect_full(0.030, 0.020, 0.255, 0.980) if compact_context_layout else rect_full(0.170, 0.020, 0.315, 0.980))
 	var title = make_label(panel, "%s 打出" % source_name, 13, Color(0.92, 0.88, 0.72, 0.96), true)
 	title.name = "PendingClaimSourceText"
-	apply_rect(title, rect_full(0.345, 0.060, 0.790, 0.535))
+	apply_rect(title, rect_full(0.300, 0.050, 0.965, 0.340) if compact_context_layout else rect_full(0.345, 0.060, 0.790, 0.535))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.tooltip_text = "%s打出%s，正在等待你的响应" % [source_name, tile_label(tile)]
 	style_background_readable_label(title, 2)
 	var tile_name = make_label(panel, tile_label(tile), 14, Color(0.98, 0.88, 0.58, 1.0), true)
 	tile_name.name = "PendingClaimTileName"
-	apply_rect(tile_name, rect_full(0.790, 0.060, 0.970, 0.535))
+	apply_rect(tile_name, rect_full(0.300, 0.380, 0.490, 0.620) if compact_context_layout else rect_full(0.790, 0.060, 0.970, 0.535))
 	tile_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(tile_name, 2)
 	var urgency = make_label(panel, pending_claim_urgency_text(), 9, Color(0.98, 0.70, 0.42, 0.92), true)
 	urgency.name = "PendingClaimUrgencyText"
-	apply_rect(urgency, rect_full(0.345, 0.455, 0.970, 0.535))
+	apply_rect(urgency, rect_full(0.500, 0.380, 0.965, 0.620) if compact_context_layout else rect_full(0.345, 0.455, 0.970, 0.535))
 	urgency.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if compact_context_layout:
+		urgency.add_theme_font_size_override("font_size", 8)
 	configure_clipped_label(urgency)
 	urgency.tooltip_text = "响应窗口提示：" + pending_claim_urgency_text()
 	var focus = make_label(panel, pending_claim_focus_text(), 11, Color(0.88, 0.86, 0.72, 0.88), true)
 	focus.name = "PendingClaimFocusText"
-	apply_rect(focus, rect_full(0.345, 0.550, 0.970, 0.940))
+	apply_rect(focus, rect_full(0.300, 0.650, 0.965, 0.950) if compact_context_layout else rect_full(0.345, 0.550, 0.970, 0.940))
 	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if compact_context_layout:
+		focus.add_theme_font_size_override("font_size", 9)
 	style_background_readable_label(focus, 2)
+	if compact_context_layout:
+		# The source text already names the discarder; reserve the narrow edge for
+		# the real tile preview instead of duplicating a clipped badge.
+		source_badge.visible = false
 	draw_pending_claim_flow_art(panel, source_seat)
 	draw_pending_claim_priority_art(panel, pending.get("options", []))
 	draw_pending_claim_response_pulse(panel, pending.get("options", []))
@@ -19072,8 +19086,10 @@ func draw_table_log(parent: Control) -> void:
 	# The compact ledger sits below the side seat card, so it can grow rightward
 	# without touching the side river. This gives the latest event a real reading
 	# lane instead of relying on a tooltip for every long sentence.
-	var ledger_right := 0.340 if compact_log else 0.260
-	var ledger_bottom := 0.225
+	# Keep the ledger above the left meld lane. The history action gets its own
+	# fixed-height right column so the reading surface does not cover table art.
+	var ledger_right := 0.340
+	var ledger_bottom := 0.235
 	var ledger_rect := rect_full(0.018, 0.128, ledger_right, ledger_bottom)
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
@@ -19095,9 +19111,12 @@ func draw_table_log(parent: Control) -> void:
 	var archive_button := make_small_button("历史", Color(0.48, 0.42, 0.28), Callable(self, "toggle_table_log_archive"))
 	archive_button.name = "TableLogArchiveButton"
 	archive_button.custom_minimum_size = Vector2(48 if compact_log else 54, 28 if compact_log else 32)
+	archive_button.custom_minimum_size.y = UI_MIN_TOUCH_TARGET
 	archive_button.add_theme_font_size_override("font_size", 10 if compact_log else 11)
 	archive_button.tooltip_text = "查看完整牌桌记录 · 最近记录可滚动查看"
-	apply_rect(archive_button, rect_full(0.690, 0.025, 0.950, 0.240))
+	apply_rect(archive_button, rect_full(0.690, 0.0, 0.950, 0.0))
+	archive_button.offset_top = 4.0
+	archive_button.offset_bottom = 48.0
 	ledger_panel.add_child(archive_button)
 	var log_recent = table_log_tail(2)
 	if log_recent.is_empty():
@@ -19110,8 +19129,8 @@ func draw_table_log(parent: Control) -> void:
 		var log_text = "\n".join(log_recent) if compact_log else str(log_recent[log_i])
 		var row_tag = table_log_tag(str(log_recent.back()))
 		var row_color = table_log_tag_color(row_tag)
-		var row_bottom = 0.840 if compact_log else row_top + 0.205
-		var row_panel = make_gpt_plate_rect(rect_full(0.075, row_top, 0.940, row_bottom), Color(0.052, 0.044, 0.030, 0.54), "ui_jade_reading_plate")
+		var row_bottom = 0.950 if compact_log else row_top + 0.205
+		var row_panel = make_gpt_plate_rect(rect_full(0.075, row_top, 0.650, row_bottom), Color(0.052, 0.044, 0.030, 0.54), "ui_jade_reading_plate")
 		row_panel.name = "TableLogLedgerRow_%d" % log_i
 		ledger_panel.add_child(row_panel)
 		var row_badge = make_gpt_gate(rect_full(0.025, 0.190, 0.170, 0.800), Color(row_color.r, row_color.g, row_color.b, 0.24))
@@ -24942,10 +24961,11 @@ func _show_online_lobby_impl() -> void:
 		toggle_chat_panel()
 	)
 	lobby_chat_button.name = "ChatLobbyButton"
-	lobby_chat_button.custom_minimum_size = Vector2(72, 34)
+	lobby_chat_button.custom_minimum_size = Vector2(72, UI_MIN_TOUCH_TARGET)
 	lobby_chat_button.add_theme_font_size_override("font_size", 12)
 	lobby_chat_button.tooltip_text = "打开或关闭房间聊天"
-	apply_rect(lobby_chat_button, rect_full(0.500, 0.030, 0.640, 0.105))
+	# Reserve a full touch lane between the room title and the room summary.
+	apply_rect(lobby_chat_button, rect_full(0.500, 0.015, 0.640, 0.135))
 	log_panel.add_child(lobby_chat_button)
 	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	var room_badge_text = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
@@ -24979,7 +24999,7 @@ func _show_online_lobby_impl() -> void:
 	var log_scroll := ScrollContainer.new()
 	log_scroll.name = "OnlineLobbyLogScroll"
 	configure_scroll_container(log_scroll, "上下滚动查看房间日志；新日志到达时自动跟随底部")
-	apply_rect(log_scroll, rect_full(0.045, 0.180, 0.955, 0.990))
+	apply_rect(log_scroll, rect_full(0.045, 0.430, 0.955, 0.990))
 	log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	log_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	log_scroll.scroll_deadzone = 6
@@ -25445,7 +25465,7 @@ func _show_rules_screen_impl() -> void:
 	if effective_viewport_size().x <= 960.0:
 		# Keep the long CJK clause visible even on Godot builds where arbitrary
 		# label wrapping does not break text inside a VBoxContainer.
-		wall_rule_text = wall_rule_text.replace(" · 允许", "\n允许")
+		wall_rule_text = "牌墙：%d张 · %s\n%s" % [rule_wall_size(), flower_text, chi_text]
 	add_rule_section(content, "和牌与响应", [
 		"当前档案：%s" % rule_variant_label(),
 		wall_rule_text,
@@ -26535,25 +26555,29 @@ func show_chat_panel() -> void:
 		# when the drawer closes.
 		ledger.visible = false
 		ledger.set_meta("hidden_for_chat", true)
-	draw_chat_panel_art(chat_panel)
+	draw_chat_panel_art(chat_panel, compact_chat)
 	var chat_text = "\n".join(chat_messages)
 	if chat_text.strip_edges() == "":
 		chat_text = "等待房间消息"
+	var chat_display_text: String = chat_text
+	if compact_chat:
+		var latest_message := str(chat_messages[chat_messages.size() - 1]) if not chat_messages.is_empty() else "暂无消息"
+		chat_display_text = "消息 · %s" % latest_message
 	var chat_scroll := ScrollContainer.new()
 	chat_scroll.name = "ChatPanelMessageScroll"
 	configure_scroll_container(chat_scroll, "上下滚动查看聊天记录")
 	chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	chat_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	chat_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(chat_scroll, rect_full(0.060, 0.070 if compact_chat else 0.285, 0.720 if compact_chat else 0.940, 0.300 if compact_chat else 0.775))
+	apply_rect(chat_scroll, rect_full(0.060, 0.020 if compact_chat else 0.285, 0.720 if compact_chat else 0.940, 0.160 if compact_chat else 0.775))
 	chat_panel.add_child(chat_scroll)
-	var chat_label = make_label(chat_scroll, chat_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
+	var chat_label = make_label(chat_scroll, chat_display_text, 10 if compact_chat else 12, Color(0.82, 0.86, 0.80), false)
 	chat_label.name = "ChatPanelMessageText"
-	chat_label.custom_minimum_size = Vector2(0.0, maxf(64.0, float(chat_messages.size()) * (18.0 if compact_chat else 24.0)))
+	chat_label.custom_minimum_size = Vector2(0.0, 18.0 if compact_chat else maxf(64.0, float(chat_messages.size()) * 24.0))
 	chat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	chat_label.clip_text = false
+	chat_label.clip_text = compact_chat
 	chat_label.tooltip_text = chat_text
 	call_deferred("scroll_chat_panel_to_end")
 
@@ -26561,7 +26585,7 @@ func show_chat_panel() -> void:
 	close_button.name = "ChatPanelCloseButton"
 	close_button.tooltip_text = "关闭聊天面板 · 快捷键 Esc"
 	close_button.custom_minimum_size = Vector2(44, 44)
-	apply_rect(close_button, rect_full(0.800 if compact_chat else 0.820, 0.015, 0.965 if compact_chat else 0.950, 0.325 if compact_chat else 0.190))
+	apply_rect(close_button, rect_full(0.755 if compact_chat else 0.820, 0.000 if compact_chat else 0.015, 1.000 if compact_chat else 0.950, 0.500 if compact_chat else 0.190))
 	chat_panel.add_child(close_button)
 
 	var quick_row := HBoxContainer.new()
@@ -26569,7 +26593,7 @@ func show_chat_panel() -> void:
 	quick_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	quick_row.add_theme_constant_override("separation", 3)
 	configure_passive_container(quick_row)
-	apply_rect(quick_row, rect_full(0.060, 0.340 if compact_chat else 0.205, 0.940, 0.610 if compact_chat else 0.270))
+	apply_rect(quick_row, rect_full(0.060, 0.180 if compact_chat else 0.205, 0.940, 0.580 if compact_chat else 0.270))
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -26600,7 +26624,12 @@ func show_chat_panel() -> void:
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
 	)
-	apply_rect(chat_input, rect_full(0.060, 0.590 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
+	apply_rect(chat_input, rect_full(0.060, 0.600 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.980 if compact_chat else 0.945))
+	if compact_chat:
+		# The normalized row is intentionally just under the panel edge; this
+		# one-pixel reserve brings the smallest safe-area viewport back to a
+		# full 44px input without changing its hit lane.
+		chat_input.offset_bottom = 1.0
 	chat_panel.add_child(chat_input)
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
@@ -26608,14 +26637,16 @@ func show_chat_panel() -> void:
 	send_button.custom_minimum_size = Vector2(48 if compact_chat else 62, 44 if compact_chat else 44)
 	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
-	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.590 if compact_chat else 0.805, 0.940, 0.985 if compact_chat else 0.945))
+	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.600 if compact_chat else 0.805, 0.940, 0.980 if compact_chat else 0.945))
+	if compact_chat:
+		send_button.offset_bottom = 1.0
 	chat_panel.add_child(send_button)
 	if mode == "online_game":
 		var table_log_button := make_icon_button("book-open", Color(0.40, 0.58, 0.46), 15, Callable(self, "open_table_log_from_chat"))
 		table_log_button.name = "ChatPanelTableLogButton"
 		table_log_button.custom_minimum_size = Vector2(44, 44)
 		table_log_button.tooltip_text = "查看牌桌记录 · 关闭聊天后打开完整历史"
-		apply_rect(table_log_button, rect_full(0.585, 0.015, 0.775, 0.325) if compact_chat else rect_full(0.700, 0.035, 0.805, 0.190))
+		apply_rect(table_log_button, rect_full(0.505, 0.000, 0.750, 0.500) if compact_chat else rect_full(0.700, 0.035, 0.805, 0.190))
 		chat_panel.add_child(table_log_button)
 
 	configure_button_focus_navigation(chat_panel, "ChatInput")
@@ -27662,7 +27693,9 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	var archive_id := str(entry.get("archive_id", ""))
 	var row := Control.new()
 	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
-	row.custom_minimum_size = Vector2(0, 62 if large_text_enabled else 56)
+	# Keep metadata on its own line so every action can retain a full touch lane
+	# even when the archive pane is only a few hundred pixels wide.
+	row.custom_minimum_size = Vector2(0, 98 if large_text_enabled else 90)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var plate := make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.026, 0.024, 0.44), "ui_button_face_plate")
 	plate.name = "ReplayArchiveRowPlate"
@@ -27670,28 +27703,31 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	var result_label := replay_archive_result_label(entry)
 	var primary := make_label(row, replay_archive_display_date_text(entry), 11, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
-	apply_rect(primary, rect_full(0.035, 0.100, 0.385, 0.500))
+	apply_rect(primary, rect_full(0.035, 0.050, 0.520, 0.285))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
 	primary.tooltip_text = replay_archive_date_text(entry)
-	var result_display := "· %s" % result_label
-	var result := make_label(row, result_display, 11, Color(0.72, 0.90, 0.68), true)
+	var result := make_label(row, result_label, 11, Color(0.72, 0.90, 0.68), true)
 	result.name = "ReplayArchiveRowResult"
-	apply_rect(result, rect_full(0.385, 0.100, 0.555, 0.500))
+	apply_rect(result, rect_full(0.520, 0.050, 0.965, 0.285))
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(result)
 	result.tooltip_text = result_label
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
 	secondary.name = "ReplayArchiveRowSecondary"
-	apply_rect(secondary, rect_full(0.035, 0.515, 0.535, 0.900))
+	apply_rect(secondary, rect_full(0.035, 0.295, 0.965, 0.425))
 	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(secondary)
+	var action_top := 0.475
+	var action_bottom := 0.970
+	var action_slot_width := 0.238
+	var action_step := 0.245
 	var favorite := make_icon_button("star", Color(0.96, 0.82, 0.38) if bool(entry.get("favorite", false)) else Color(0.62, 0.68, 0.60), 14, func() -> void:
 		toggle_replay_archive_favorite(archive_id)
 	)
 	favorite.name = "ReplayArchiveFavoriteButton_%s" % archive_id.left(8)
 	favorite.tooltip_text = "收藏此回放" if not bool(entry.get("favorite", false)) else "取消收藏"
-	apply_rect(favorite, rect_full(0.560, 0.130, 0.645, 0.870))
+	apply_rect(favorite, rect_full(0.006, action_top, 0.006 + action_slot_width, action_bottom))
 	row.add_child(favorite)
 	var open := make_small_button("查看", Color(0.34, 0.56, 0.52), func() -> void:
 		open_replay_archive(archive_id)
@@ -27700,7 +27736,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	open.tooltip_text = "打开这条已验证回放"
 	open.custom_minimum_size = Vector2(52, 36)
 	open.add_theme_font_size_override("font_size", accessibility_font_size(12))
-	apply_rect(open, rect_full(0.645, 0.155, 0.765, 0.845))
+	apply_rect(open, rect_full(0.006 + action_step, action_top, 0.006 + action_step + action_slot_width, action_bottom))
 	row.add_child(open)
 	var copy := make_small_button("复制", Color(0.30, 0.52, 0.54), func() -> void:
 		copy_replay_archive_share_code(archive_id)
@@ -27709,14 +27745,14 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	copy.tooltip_text = "复制已验证回放码"
 	copy.custom_minimum_size = Vector2(58, 36)
 	copy.add_theme_font_size_override("font_size", accessibility_font_size(12))
-	apply_rect(copy, rect_full(0.765, 0.155, 0.890, 0.845))
+	apply_rect(copy, rect_full(0.006 + action_step * 2.0, action_top, 0.006 + action_step * 2.0 + action_slot_width, action_bottom))
 	row.add_child(copy)
 	var delete := make_icon_button("cross", Color(0.90, 0.46, 0.38), 14, func() -> void:
 		request_delete_replay_archive(archive_id)
 	)
 	delete.name = "ReplayArchiveDeleteButton_%s" % archive_id.left(8)
 	delete.tooltip_text = "再次点击确认删除此回放" if replay_delete_confirming and replay_delete_target_id == archive_id else "删除此回放"
-	apply_rect(delete, rect_full(0.890, 0.130, 0.975, 0.870))
+	apply_rect(delete, rect_full(0.006 + action_step * 3.0, action_top, 0.006 + action_step * 3.0 + action_slot_width, action_bottom))
 	row.add_child(delete)
 	return row
 
@@ -27882,8 +27918,10 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	if root_layer != null and is_instance_valid(root_layer):
 		var modal_present := root_layer.find_child("DiagnosticDialogPanel", true, false) != null or root_layer.find_child("TelemetryDataSheetCard", true, false) != null or root_layer.find_child("ExitConfirmDialog", true, false) != null
 		if modal_present:
-			toast_top = 0.095
-			toast_bottom = 0.145
+			# Modal cards own the middle of the screen. Keep transient feedback in
+			# the top safety band so it never masks a title, close action, or body.
+			toast_top = 0.020
+			toast_bottom = 0.070
 	toast_bg.anchor_top = toast_top
 	toast_bg.anchor_bottom = toast_bottom
 	toast_bg.offset_left = 0
@@ -32041,9 +32079,9 @@ func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 	)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
-	# Keep the response context in the root-layer lane between the transformed
-	# side rivers. Its lower edge also stays above the transformed bottom river
-	# and the action dock, so this remains valid when table chrome is nested.
+	# Keep the response context in a dedicated top-right decision lane. The old
+	# center-ring lane looked close to the action dock but competed with the wall,
+	# winds, and last-discard state at every compact breakpoint.
 	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
 	var safe_width = maxf(1.0, resolved_size.x)
 	var safe_height = maxf(1.0, resolved_size.y)
@@ -32053,6 +32091,13 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var table_top = TABLE_OUTER_RECT.position.y + TABLE_INNER_RECT.position.y * outer_height
 	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
 	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
+	var context_height_px := 64.0 if effective_viewport_size().y <= 560.0 else (72.0 if effective_viewport_size().y < 900.0 else 84.0)
+	# This narrow top-right channel sits below the top meld and above the right
+	# river/seat. It remains outside the center console while preserving a
+	# dedicated reading lane on compact screens.
+	var header_candidate := rect_full(0.862, 0.205, 0.990, 0.205 + context_height_px / safe_height)
+	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height):
+		return header_candidate
 	var left_river = seat_discard_rect(3)
 	var right_river = seat_discard_rect(1)
 	var bottom_river = seat_discard_rect(0)
@@ -32121,23 +32166,28 @@ func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: floa
 	var occupied: Array[Rect2] = []
 	for zone in DISCARD_ZONES:
 		var zone_rect: Rect2 = zone[1]
-		occupied.append(rect_full(
-			table_left + zone_rect.position.x * table_width,
-			table_top + zone_rect.position.y * table_height,
-			table_left + zone_rect.size.x * table_width,
-			table_top + zone_rect.size.y * table_height
-		))
+		var zone_left := table_left + zone_rect.position.x * table_width
+		var zone_top := table_top + zone_rect.position.y * table_height
+		var zone_right := table_left + zone_rect.size.x * table_width
+		var zone_bottom := table_top + zone_rect.size.y * table_height
+		occupied.append(Rect2(Vector2(zone_left, zone_top), Vector2(zone_right - zone_left, zone_bottom - zone_top)))
 	for meld_layout in MELD_LAYOUTS:
 		var meld_seat := int(meld_layout[0])
 		var meld_rect: Rect2 = seat_meld_rect(meld_seat)
-		occupied.append(rect_full(
-			table_left + meld_rect.position.x * table_width,
-			table_top + meld_rect.position.y * table_height,
-			table_left + meld_rect.size.x * table_width,
-			table_top + meld_rect.size.y * table_height
-		))
+		# Melds are mounted directly on root_layer, unlike rivers and the center
+		# console which are nested in the transformed table host.
+		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
+	# The entire center console is a reading surface: its plate, compass, wall
+	# count, winds, dice, and last-discard trace must remain visible together.
+	var center_rect: Rect2 = CENTER_PANEL_RECT
+	var center_left := table_left + center_rect.position.x * table_width
+	var center_top := table_top + center_rect.position.y * table_height
+	var center_right := table_left + center_rect.size.x * table_width
+	var center_bottom := table_top + center_rect.size.y * table_height
+	occupied.append(Rect2(Vector2(center_left, center_top), Vector2(center_right - center_left, center_bottom - center_top)))
+	var candidate_geometry := Rect2(candidate.position, candidate.size - candidate.position)
 	for occupied_rect in occupied:
-		if candidate.intersects(occupied_rect.grow(0.004), true):
+		if candidate_geometry.intersects(occupied_rect.grow(0.004), true):
 			return false
 	return true
 
@@ -36923,14 +36973,15 @@ func chat_panel_rect() -> Rect2:
 	# The lobby gets a taller reading area because it has no table geometry.
 	if mode == "online_lobby":
 		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
-	# A top/right meld consumes the usual upper-right lane. Use the narrow upper
-	# left gutter below the HUD instead; it clears the top river's x=0.285 edge,
-	# the side rivers, the action dock, and the hand tray at compact sizes.
+	# A top/right meld consumes the usual upper-right lane. Use a narrow upper
+	# left gutter below the HUD instead; stopping before the left river's x edge
+	# leaves enough vertical room for two real 44px chat action rows.
 	if chat_panel_route_name() != "top_safe_drawer":
-		return Rect2(Vector2(0.015, 0.115), Vector2(0.275, 0.275))
-	# The root layer is inset by the device safe area. Keep an 8px+ gutter from
-	# the top river at the smallest supported viewport.
-	return Rect2(Vector2(0.727, 0.120), Vector2(0.985, 0.335))
+		return Rect2(Vector2(0.015, 0.115), Vector2(0.220, 0.335))
+	# The root layer is inset by the device safe area. Shift the default drawer
+	# slightly inward from the right river and seat so the compact rows can keep
+	# their full height without touching table geometry.
+	return Rect2(Vector2(0.790, 0.120), Vector2(0.985, 0.330))
 
 
 func chat_panel_route_name() -> String:

@@ -2170,7 +2170,7 @@ func draw_chat_empty_state_art(parent: Control) -> Control:
 	return art
 
 
-func draw_chat_panel_art(parent: Control) -> Control:
+func draw_chat_panel_art(parent: Control, compact_chat: bool = false) -> Control:
 	# r209: GPT chrome conversion
 	var art = Control.new()
 	art.name = "ChatPanelArt"
@@ -2205,6 +2205,10 @@ func draw_chat_panel_art(parent: Control) -> Control:
 	var header = make_gpt_route_rail(rect_full(0.055, 0.055, 0.945, 0.190), Color(0.020, 0.044, 0.050, 0.78))
 	header.name = "ChatPanelHeader"
 	art.add_child(header)
+	if compact_chat:
+		# The compact drawer uses its first line for the latest message. Keep the
+		# decorative header rail, but remove its duplicate title from that lane.
+		header.visible = false
 	add_lucide_icon(header, "users", rect_full(0.035, 0.190, 0.155, 0.810), Color(0.76, 0.88, 0.72, 0.86))
 	var title = make_label(header, "房间消息", 12, Color(0.88, 0.92, 0.80), true)
 	apply_rect(title, rect_full(0.170, 0.080, 0.575, 0.920))
@@ -6368,10 +6372,11 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	title.add_theme_constant_override("outline_size", 1)
 	var latest_button = make_small_button("最新", Color(0.34, 0.42, 0.34), Callable(self, "scroll_online_log_to_end"))
 	latest_button.name = "OnlineLobbyLogLatestButton"
-	latest_button.custom_minimum_size = Vector2(76, 28)
+	latest_button.custom_minimum_size = Vector2(76, UI_MIN_TOUCH_TARGET)
 	latest_button.add_theme_font_size_override("font_size", 10)
 	latest_button.tooltip_text = "跳到最新房间日志"
-	apply_rect(latest_button, rect_full(0.535, 0.025, 0.745, 0.175))
+	# The header owns a full touch lane; the native log scroll starts below it.
+	apply_rect(latest_button, rect_full(0.535, 0.025, 0.745, 0.405))
 	list.add_child(latest_button)
 	var unread_label = make_label(list, "已到最新", 9, Color(0.72, 0.84, 0.66, 0.86), false)
 	unread_label.name = "OnlineLobbyLogUnreadLabel"
@@ -6518,6 +6523,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.z_index = 20
 	panel.clip_contents = true
 	parent.add_child(panel)
+	var compact_context_layout := effective_viewport_size().x <= 1280.0
 	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
 	if status_strip != null:
 		status_strip.name = "PendingClaimStatusStripTexture"
@@ -6534,29 +6540,37 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	tile_preview.name = "PendingClaimTile"
 	tile_preview.tooltip_text = "%s打出的%s · 点击下方按钮选择响应" % [source_name, tile_label(tile)]
 	panel.add_child(tile_preview)
-	apply_rect(tile_preview, rect_full(0.170, 0.020, 0.315, 0.980))
+	apply_rect(tile_preview, rect_full(0.030, 0.020, 0.255, 0.980) if compact_context_layout else rect_full(0.170, 0.020, 0.315, 0.980))
 	var title = make_label(panel, "%s 打出" % source_name, 13, Color(0.92, 0.88, 0.72, 0.96), true)
 	title.name = "PendingClaimSourceText"
-	apply_rect(title, rect_full(0.345, 0.060, 0.790, 0.535))
+	apply_rect(title, rect_full(0.300, 0.050, 0.965, 0.340) if compact_context_layout else rect_full(0.345, 0.060, 0.790, 0.535))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.tooltip_text = "%s打出%s，正在等待你的响应" % [source_name, tile_label(tile)]
 	style_background_readable_label(title, 2)
 	var tile_name = make_label(panel, tile_label(tile), 14, Color(0.98, 0.88, 0.58, 1.0), true)
 	tile_name.name = "PendingClaimTileName"
-	apply_rect(tile_name, rect_full(0.790, 0.060, 0.970, 0.535))
+	apply_rect(tile_name, rect_full(0.300, 0.380, 0.490, 0.620) if compact_context_layout else rect_full(0.790, 0.060, 0.970, 0.535))
 	tile_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(tile_name, 2)
 	var urgency = make_label(panel, pending_claim_urgency_text(), 9, Color(0.98, 0.70, 0.42, 0.92), true)
 	urgency.name = "PendingClaimUrgencyText"
-	apply_rect(urgency, rect_full(0.345, 0.455, 0.970, 0.535))
+	apply_rect(urgency, rect_full(0.500, 0.380, 0.965, 0.620) if compact_context_layout else rect_full(0.345, 0.455, 0.970, 0.535))
 	urgency.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if compact_context_layout:
+		urgency.add_theme_font_size_override("font_size", 8)
 	configure_clipped_label(urgency)
 	urgency.tooltip_text = "响应窗口提示：" + pending_claim_urgency_text()
 	var focus = make_label(panel, pending_claim_focus_text(), 11, Color(0.88, 0.86, 0.72, 0.88), true)
 	focus.name = "PendingClaimFocusText"
-	apply_rect(focus, rect_full(0.345, 0.550, 0.970, 0.940))
+	apply_rect(focus, rect_full(0.300, 0.650, 0.965, 0.950) if compact_context_layout else rect_full(0.345, 0.550, 0.970, 0.940))
 	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if compact_context_layout:
+		focus.add_theme_font_size_override("font_size", 9)
 	style_background_readable_label(focus, 2)
+	if compact_context_layout:
+		# The source text already names the discarder; reserve the narrow edge for
+		# the real tile preview instead of duplicating a clipped badge.
+		source_badge.visible = false
 	draw_pending_claim_flow_art(panel, source_seat)
 	draw_pending_claim_priority_art(panel, pending.get("options", []))
 	draw_pending_claim_response_pulse(panel, pending.get("options", []))
@@ -10454,8 +10468,10 @@ func draw_table_log(parent: Control) -> void:
 	# The compact ledger sits below the side seat card, so it can grow rightward
 	# without touching the side river. This gives the latest event a real reading
 	# lane instead of relying on a tooltip for every long sentence.
-	var ledger_right := 0.340 if compact_log else 0.260
-	var ledger_bottom := 0.225
+	# Keep the ledger above the left meld lane. The history action gets its own
+	# fixed-height right column so the reading surface does not cover table art.
+	var ledger_right := 0.340
+	var ledger_bottom := 0.235
 	var ledger_rect := rect_full(0.018, 0.128, ledger_right, ledger_bottom)
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
@@ -10477,9 +10493,12 @@ func draw_table_log(parent: Control) -> void:
 	var archive_button := make_small_button("历史", Color(0.48, 0.42, 0.28), Callable(self, "toggle_table_log_archive"))
 	archive_button.name = "TableLogArchiveButton"
 	archive_button.custom_minimum_size = Vector2(48 if compact_log else 54, 28 if compact_log else 32)
+	archive_button.custom_minimum_size.y = UI_MIN_TOUCH_TARGET
 	archive_button.add_theme_font_size_override("font_size", 10 if compact_log else 11)
 	archive_button.tooltip_text = "查看完整牌桌记录 · 最近记录可滚动查看"
-	apply_rect(archive_button, rect_full(0.690, 0.025, 0.950, 0.240))
+	apply_rect(archive_button, rect_full(0.690, 0.0, 0.950, 0.0))
+	archive_button.offset_top = 4.0
+	archive_button.offset_bottom = 48.0
 	ledger_panel.add_child(archive_button)
 	var log_recent = table_log_tail(2)
 	if log_recent.is_empty():
@@ -10492,8 +10511,8 @@ func draw_table_log(parent: Control) -> void:
 		var log_text = "\n".join(log_recent) if compact_log else str(log_recent[log_i])
 		var row_tag = table_log_tag(str(log_recent.back()))
 		var row_color = table_log_tag_color(row_tag)
-		var row_bottom = 0.840 if compact_log else row_top + 0.205
-		var row_panel = make_gpt_plate_rect(rect_full(0.075, row_top, 0.940, row_bottom), Color(0.052, 0.044, 0.030, 0.54), "ui_jade_reading_plate")
+		var row_bottom = 0.950 if compact_log else row_top + 0.205
+		var row_panel = make_gpt_plate_rect(rect_full(0.075, row_top, 0.650, row_bottom), Color(0.052, 0.044, 0.030, 0.54), "ui_jade_reading_plate")
 		row_panel.name = "TableLogLedgerRow_%d" % log_i
 		ledger_panel.add_child(row_panel)
 		var row_badge = make_gpt_gate(rect_full(0.025, 0.190, 0.170, 0.800), Color(row_color.r, row_color.g, row_color.b, 0.24))

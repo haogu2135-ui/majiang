@@ -2944,9 +2944,9 @@ func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 	)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
-	# Keep the response context in the root-layer lane between the transformed
-	# side rivers. Its lower edge also stays above the transformed bottom river
-	# and the action dock, so this remains valid when table chrome is nested.
+	# Keep the response context in a dedicated top-right decision lane. The old
+	# center-ring lane looked close to the action dock but competed with the wall,
+	# winds, and last-discard state at every compact breakpoint.
 	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
 	var safe_width = maxf(1.0, resolved_size.x)
 	var safe_height = maxf(1.0, resolved_size.y)
@@ -2956,6 +2956,13 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var table_top = TABLE_OUTER_RECT.position.y + TABLE_INNER_RECT.position.y * outer_height
 	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
 	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
+	var context_height_px := 64.0 if effective_viewport_size().y <= 560.0 else (72.0 if effective_viewport_size().y < 900.0 else 84.0)
+	# This narrow top-right channel sits below the top meld and above the right
+	# river/seat. It remains outside the center console while preserving a
+	# dedicated reading lane on compact screens.
+	var header_candidate := rect_full(0.862, 0.205, 0.990, 0.205 + context_height_px / safe_height)
+	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height):
+		return header_candidate
 	var left_river = seat_discard_rect(3)
 	var right_river = seat_discard_rect(1)
 	var bottom_river = seat_discard_rect(0)
@@ -3024,23 +3031,28 @@ func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: floa
 	var occupied: Array[Rect2] = []
 	for zone in DISCARD_ZONES:
 		var zone_rect: Rect2 = zone[1]
-		occupied.append(rect_full(
-			table_left + zone_rect.position.x * table_width,
-			table_top + zone_rect.position.y * table_height,
-			table_left + zone_rect.size.x * table_width,
-			table_top + zone_rect.size.y * table_height
-		))
+		var zone_left := table_left + zone_rect.position.x * table_width
+		var zone_top := table_top + zone_rect.position.y * table_height
+		var zone_right := table_left + zone_rect.size.x * table_width
+		var zone_bottom := table_top + zone_rect.size.y * table_height
+		occupied.append(Rect2(Vector2(zone_left, zone_top), Vector2(zone_right - zone_left, zone_bottom - zone_top)))
 	for meld_layout in MELD_LAYOUTS:
 		var meld_seat := int(meld_layout[0])
 		var meld_rect: Rect2 = seat_meld_rect(meld_seat)
-		occupied.append(rect_full(
-			table_left + meld_rect.position.x * table_width,
-			table_top + meld_rect.position.y * table_height,
-			table_left + meld_rect.size.x * table_width,
-			table_top + meld_rect.size.y * table_height
-		))
+		# Melds are mounted directly on root_layer, unlike rivers and the center
+		# console which are nested in the transformed table host.
+		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
+	# The entire center console is a reading surface: its plate, compass, wall
+	# count, winds, dice, and last-discard trace must remain visible together.
+	var center_rect: Rect2 = CENTER_PANEL_RECT
+	var center_left := table_left + center_rect.position.x * table_width
+	var center_top := table_top + center_rect.position.y * table_height
+	var center_right := table_left + center_rect.size.x * table_width
+	var center_bottom := table_top + center_rect.size.y * table_height
+	occupied.append(Rect2(Vector2(center_left, center_top), Vector2(center_right - center_left, center_bottom - center_top)))
+	var candidate_geometry := Rect2(candidate.position, candidate.size - candidate.position)
 	for occupied_rect in occupied:
-		if candidate.intersects(occupied_rect.grow(0.004), true):
+		if candidate_geometry.intersects(occupied_rect.grow(0.004), true):
 			return false
 	return true
 
@@ -7826,14 +7838,15 @@ func chat_panel_rect() -> Rect2:
 	# The lobby gets a taller reading area because it has no table geometry.
 	if mode == "online_lobby":
 		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
-	# A top/right meld consumes the usual upper-right lane. Use the narrow upper
-	# left gutter below the HUD instead; it clears the top river's x=0.285 edge,
-	# the side rivers, the action dock, and the hand tray at compact sizes.
+	# A top/right meld consumes the usual upper-right lane. Use a narrow upper
+	# left gutter below the HUD instead; stopping before the left river's x edge
+	# leaves enough vertical room for two real 44px chat action rows.
 	if chat_panel_route_name() != "top_safe_drawer":
-		return Rect2(Vector2(0.015, 0.115), Vector2(0.275, 0.275))
-	# The root layer is inset by the device safe area. Keep an 8px+ gutter from
-	# the top river at the smallest supported viewport.
-	return Rect2(Vector2(0.727, 0.120), Vector2(0.985, 0.335))
+		return Rect2(Vector2(0.015, 0.115), Vector2(0.220, 0.335))
+	# The root layer is inset by the device safe area. Shift the default drawer
+	# slightly inward from the right river and seat so the compact rows can keep
+	# their full height without touching table geometry.
+	return Rect2(Vector2(0.790, 0.120), Vector2(0.985, 0.330))
 
 
 func chat_panel_route_name() -> String:
