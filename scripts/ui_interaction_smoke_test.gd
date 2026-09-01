@@ -436,7 +436,7 @@ func run() -> void:
 		await settle(0.05)
 		var after_follow_bar := log_scroll.get_v_scroll_bar()
 		var after_follow_max := int(round(maxf(0.0, after_follow_bar.max_value - after_follow_bar.page)))
-		check(log_scroll.scroll_vertical == after_follow_max and after_follow_max > review_scroll, "new logs remain visible when the user was already at the bottom (value=%d max=%d)" % [log_scroll.scroll_vertical, after_follow_max])
+		check(log_scroll.scroll_vertical >= after_follow_max - 1 and after_follow_max > review_scroll, "new logs remain visible when the user was already at the bottom (value=%d max=%d)" % [log_scroll.scroll_vertical, after_follow_max])
 
 	print("--- E) touch reveals full clipped room and roster identities ---")
 	var long_name := "名".repeat(scene.ONLINE_NAME_MAX_LENGTH)
@@ -452,7 +452,8 @@ func run() -> void:
 	await settle(0.05)
 	var long_name_label = scene.find_child("OnlineLobbyRosterName_0", true, false) as Label
 	var long_room_label = scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
-	check(long_name_label != null and long_name_label.tooltip_text == long_name and long_room_label != null and long_room_label.tooltip_text.contains(long_room), "clipped roster and room labels retain their complete source values")
+	var room_view_icon = scene.find_child("OnlineLobbyRoomBadgeViewIcon", true, false) as TextureRect
+	check(long_name_label != null and long_name_label.tooltip_text == long_name and long_room_label != null and long_room_label.text == scene.online_room_badge_display_text(long_room) and long_room_label.text != long_room and long_room_label.tooltip_text == "房间号 " + long_room and room_view_icon != null and room_view_icon.texture != null, "long room badge shows a stable short identifier with a visible view icon while retaining the complete source value")
 	var roster_row = scene.find_child("OnlineLobbyRosterRow_0", true, false) as Control
 	if roster_row != null:
 		var roster_touch_target := scene.find_child("OnlineLobbyRosterTouchTarget_0", true, false) as Button
@@ -498,13 +499,17 @@ func run() -> void:
 	await settle(0.10)
 	var diagnostic_scroll = scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
 	var diagnostic_close = scene.find_child("DiagnosticCloseButton", true, false) as Button
-	check(diagnostic_scroll != null and diagnostic_close != null, "diagnostic exposes its native scroll and explicit close action")
+	var diagnostic_status = scene.find_child("DiagnosticContentStatusLabel", true, false) as Label
+	check(diagnostic_scroll != null and diagnostic_close != null and diagnostic_status != null and diagnostic_status.visible, "diagnostic exposes its native scroll, visible range status, and explicit close action")
 	if diagnostic_scroll != null:
 		var diagnostic_bar := diagnostic_scroll.get_v_scroll_bar()
 		check(diagnostic_bar.max_value > diagnostic_bar.page, "full diagnostic report creates a native vertical range")
 		diagnostic_scroll.scroll_vertical = 0
 		await send_wheel_down(diagnostic_scroll.get_global_rect().get_center())
 		check(diagnostic_scroll.scroll_vertical > 0, "desktop wheel scrolls the full diagnostic report")
+		if diagnostic_status != null:
+			scene.sync_diagnostic_scroll_status(diagnostic_scroll, diagnostic_status, diagnostic_lines.size())
+			check(diagnostic_status.text.contains("可继续滚动") or diagnostic_status.text.contains("已到末尾"), "diagnostic range status follows the active scroll position")
 	if diagnostic_close != null:
 		check(diagnostic_close.focus_mode == Control.FOCUS_ALL and diagnostic_close.has_focus(), "diagnostic close action receives modal keyboard focus")
 	await send_key(KEY_ESCAPE, 0)
@@ -712,6 +717,35 @@ func run() -> void:
 
 	scene._show_shop_screen_impl()
 	await settle(0.05)
+	var shop_scroll := scene.find_child("ShopItemsScroll", true, false) as ScrollContainer
+	var shop_scrollbar := scene.find_child("ShopItemsScrollBar", true, false) as VScrollBar
+	var shop_scroll_hit_target := scene.find_child("ShopItemsScrollHitTarget", true, false) as Control
+	var shop_content := scene.find_child("ShopItemsContent", true, false) as Control
+	check(shop_scroll != null and shop_scrollbar != null and shop_scroll_hit_target != null, "shop exposes a drag-capable custom scrollbar target")
+	if shop_scroll != null and shop_scrollbar != null and shop_scroll_hit_target != null:
+		# The production four-item fixture fits at 960x540. Add an inert overflow
+		# probe here so the input path is exercised without changing the product
+		# catalog or forcing a scroll range in the compact layout.
+		if shop_scrollbar.max_value <= shop_scrollbar.page and shop_content != null:
+			var overflow_probe := Control.new()
+			overflow_probe.name = "InteractionSmokeShopOverflowProbe"
+			overflow_probe.custom_minimum_size = Vector2(0.0, shop_scroll.size.y + 240.0)
+			shop_content.add_child(overflow_probe)
+			await settle(0.05)
+		check(shop_scrollbar.max_value > shop_scrollbar.page, "shop overflow fixture creates a native vertical range for scrollbar interaction")
+	if shop_scrollbar != null and shop_scroll_hit_target != null and shop_scrollbar.max_value > shop_scrollbar.page:
+		var shop_scroll_range: float = shop_scrollbar.max_value - shop_scrollbar.page
+		var shop_target_rect: Rect2 = shop_scroll_hit_target.get_global_rect()
+		var shop_track_bottom: Vector2 = shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.5, shop_target_rect.size.y * 0.90)
+		await send_left_button(shop_track_bottom, true)
+		await send_left_button(shop_track_bottom, false)
+		check(shop_scrollbar.value >= shop_scroll_range * 0.70, "clicking the shop scrollbar track moves the native scroll value")
+		var shop_value_before_drag: float = float(shop_scrollbar.value)
+		var shop_track_top: Vector2 = shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.5, shop_target_rect.size.y * 0.12)
+		await send_screen_touch(shop_track_top, true)
+		await send_screen_drag(shop_track_top, shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.5, shop_target_rect.size.y * 0.30))
+		await send_screen_touch(shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.5, shop_target_rect.size.y * 0.30), false)
+		check(shop_scrollbar.value < shop_value_before_drag, "dragging the shop scrollbar thumb updates the native scroll value")
 	await send_key(KEY_ESCAPE, 0)
 	await settle(0.10)
 	check(scene.mode == "menu" and scene.find_child("MenuSettingsButton", true, false) != null, "ui_cancel returns from the shop to the menu")

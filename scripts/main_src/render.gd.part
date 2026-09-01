@@ -403,7 +403,6 @@ func draw_achievements_row_collection_bus_art(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.055, 0.325, 0.945, 0.935))
 	parent.add_child(art)
 	parent.move_child(art, max(0, art.get_index() - 1))
-	return art
 	var gold = Color(0.90, 0.70, 0.30)
 	var jade = Color(0.72, 0.56, 0.32)
 	var spine = make_gpt_edge_rail(rect_full(0.955, 0.030, 0.982, 0.900), Color(0.006, 0.016, 0.018, 0.42))
@@ -1246,9 +1245,9 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	configure_clipped_label(context)
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_advisor_detail_panel"))
 	close_button.name = "AdvisorDetailCloseButton"
-	close_button.custom_minimum_size = Vector2(36, 36)
+	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 	close_button.tooltip_text = "收起牌势详解 · Esc"
-	apply_rect(close_button, rect_full(0.910, 0.045, 0.970, 0.175))
+	apply_rect(close_button, rect_full(0.895, 0.020, 0.985, 0.225))
 	panel.add_child(close_button)
 	var detail_route = make_gpt_route_rail(rect_full(0.060, 0.255, 0.940, 0.275), Color(0.006, 0.016, 0.018, 0.48))
 	detail_route.name = "AdvisorDetailRoute"
@@ -4139,7 +4138,7 @@ func draw_hand(parent: Control) -> void:
 		if tutorial_step == TUTORIAL_STEP_WIN:
 			var finish_tutorial_button = make_small_button("完成", Color(0.42, 0.68, 0.52), Callable(self, "complete_tutorial"))
 			finish_tutorial_button.name = "HandTutorialCompleteButton"
-			finish_tutorial_button.custom_minimum_size = Vector2(58, 20)
+			finish_tutorial_button.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
 			finish_tutorial_button.add_theme_font_size_override("font_size", 9)
 			finish_tutorial_button.tooltip_text = "保存教学完成状态并关闭提示"
 			apply_rect(finish_tutorial_button, rect_full(0.735, 0.060, 0.895, 0.940))
@@ -4147,7 +4146,7 @@ func draw_hand(parent: Control) -> void:
 		else:
 			var skip_tutorial_button = make_icon_button("x", Color(0.58, 0.38, 0.30), 14, Callable(self, "skip_tutorial"))
 			skip_tutorial_button.name = "HandTutorialSkipButton"
-			skip_tutorial_button.custom_minimum_size = Vector2(22, 20)
+			skip_tutorial_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 			skip_tutorial_button.tooltip_text = "跳过教学；之后可从菜单入口重新开始"
 			apply_rect(skip_tutorial_button, rect_full(0.905, 0.060, 0.975, 0.940))
 			hint_panel.add_child(skip_tutorial_button)
@@ -9167,7 +9166,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		close_settings_panel()
 	)
 	ensure_button_gpt_face_plate(close, Color(0.30, 0.34, 0.36, 0.40))
-	close.custom_minimum_size = Vector2(88, 42)
+	close.custom_minimum_size = Vector2(88, UI_MIN_TOUCH_TARGET)
 	close.name = "SettingsCloseButton"
 	close.tooltip_text = "关闭设置（Esc）"
 	close.focus_mode = Control.FOCUS_ALL
@@ -9853,7 +9852,6 @@ func draw_stat_row_art(parent: Control, label_text: String, value_text: String) 
 	var stat_divider = make_gpt_plate_rect(rect_full(0.505, 0.205, 0.510, 0.795), Color(accent.r, accent.g, accent.b, 0.22))
 	stat_divider.name = "StatsRowValueDivider_%s" % label_text
 	art.add_child(stat_divider)
-	return art
 	var marker = make_gpt_gate(rect_full(0.020, 0.260, 0.036, 0.740), Color(accent.r, accent.g, accent.b, 0.34))
 	marker.name = "StatsRowMarker_%s" % label_text
 	art.add_child(marker)
@@ -10015,7 +10013,6 @@ func draw_stats_data_scan_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.080, 0.112, 0.920, 0.330))
 	parent.add_child(art)
-	return art
 	var accent = Color(0.72, 0.56, 0.32)
 	var source = make_gpt_edge_rail(rect_full(0.020, 0.245, 0.070, 0.700), Color(accent.r, accent.g, accent.b, 0.20))
 	source.name = "StatsDataScanSource"
@@ -10074,7 +10071,6 @@ func draw_stats_insight_convergence_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.430, 0.125, 0.915, 0.318))
 	parent.add_child(art)
-	return art
 	var gold = Color(0.88, 0.70, 0.32)
 	var jade = Color(0.72, 0.56, 0.32)
 	var source = make_gpt_edge_rail(rect_full(0.020, 0.270, 0.088, 0.700), Color(jade.r, jade.g, jade.b, 0.16 + summary_score * 0.08))
@@ -10133,7 +10129,6 @@ func draw_stats_mastery_route(parent: Control, win_rate: float, games_fill: floa
 	mastery.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(mastery, rect_full(0.185, 0.565, 0.665, 0.705))
 	parent.add_child(mastery)
-	return mastery
 	var accent = Color(0.74, 0.64, 0.36)
 	var rail = make_gpt_route_rail(rect_full(0.050, 0.435, 0.940, 0.565), Color(0.006, 0.016, 0.018, 0.42))
 	rail.name = "StatsMasteryRail"
@@ -10175,7 +10170,6 @@ func draw_stats_row_summary_bus_art(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.080, 0.330, 0.920, 0.930))
 	parent.add_child(art)
 	parent.move_child(art, max(0, art.get_index() - 1))
-	return art
 	var accent = Color(0.72, 0.56, 0.32)
 	var gold = Color(0.86, 0.68, 0.32)
 	var spine = make_gpt_edge_rail(rect_full(0.955, 0.035, 0.982, 0.900), Color(0.006, 0.016, 0.018, 0.42))
@@ -10555,9 +10549,9 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_table_log_archive"))
 	close_button.name = "TableLogArchiveCloseButton"
-	close_button.custom_minimum_size = Vector2(36, 36)
+	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 	close_button.tooltip_text = "关闭牌桌记录 · Esc"
-	apply_rect(close_button, rect_full(0.900, 0.045, 0.970, 0.175))
+	apply_rect(close_button, rect_full(0.865, 0.005, 0.985, 0.215))
 	panel.add_child(close_button)
 	var route = make_gpt_route_rail(rect_full(0.060, 0.180, 0.940, 0.205), Color(0.006, 0.016, 0.018, 0.48))
 	route.name = "TableLogArchiveRoute"
@@ -12913,11 +12907,11 @@ func make_lobby_action_button(text: String, color: Color, callback: Callable, in
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	button.set_meta("menu_motion_intro_alpha", clampf(intro_alpha, 0.0, 1.0))
-	button.add_theme_font_size_override("font_size", commercial_ui_font_size(17, 2))
-	button.add_theme_color_override("font_color", Color(0.97, 0.95, 0.84))
-	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90))
-	button.add_theme_color_override("font_pressed_color", Color(0.98, 0.90, 0.66))
-	button.add_theme_color_override("font_disabled_color", Color(0.66, 0.70, 0.62))
+	button.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(17, 2)))
+	button.add_theme_color_override("font_color", accessible_text_color(Color(0.97, 0.95, 0.84)))
+	button.add_theme_color_override("font_hover_color", accessible_text_color(Color(1.0, 0.98, 0.90)))
+	button.add_theme_color_override("font_pressed_color", accessible_text_color(Color(0.98, 0.90, 0.66)))
+	button.add_theme_color_override("font_disabled_color", accessible_text_color(Color(0.80, 0.84, 0.78)))
 	draw_lobby_action_button_art(button, text, color)
 	configure_menu_button_motion(button, intro_delay, 1.045, deg_to_rad(0.25))
 	button.button_down.connect(func() -> void:

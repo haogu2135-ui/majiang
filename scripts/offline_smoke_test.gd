@@ -487,11 +487,14 @@ func run() -> void:
 	scene._start_depth_layered_dust()
 	check(depth_dust_parent.find_child("DepthDustLayer_z2", true, false) != null and depth_dust_parent.find_child("DepthDustLayer_z0", true, false) != null and depth_dust_parent.find_child("DepthDustLayer_z-2", true, false) != null and count_descendants(depth_dust_parent) >= 33, "ambient depth dust renders three parallax particle layers")
 	scene.stop_ambient_animation()
+	var ambient_reduce_motion: bool = scene.reduce_motion_enabled
+	scene.reduce_motion_enabled = false
 	scene.fx_enabled = true
 	scene.ensure_fx_layer()
 	scene.start_ambient_animation("winter", true)
 	check(scene.find_child("AmbientLayer", true, false) != null and scene.find_child("DepthDustLayer_z2", true, false) != null, "ambient animation smoke creates named ambient layer and depth dust through entry point")
 	scene.stop_ambient_animation()
+	scene.reduce_motion_enabled = ambient_reduce_motion
 	scene.ai_difficulty = scene.AI_DIFFICULTY_NORMAL
 	scene.reset_ai_profile_seat_map()
 	var copied_profile = scene.ai_profile(1)
@@ -1024,7 +1027,15 @@ func run() -> void:
 		check(scene.voice_streams.get(voice_key, null) != null, "bundled voice stream loads: " + str(voice_key))
 	check(scene.bgm_player != null and scene.sfx_player != null and scene.action_sfx_player != null and scene.find_child("BackgroundMusic", true, false) != null and scene.find_child("TileSfx", true, false) != null and scene.find_child("ActionSfx", true, false) != null, "audio players are initialized with named persistent nodes")
 	check(scene.audio_layer != null and scene.find_child("PersistentAudio", true, false) == scene.audio_layer and scene.audio_layer.process_mode == Node.PROCESS_MODE_ALWAYS and scene.bgm_player.get_parent() == scene.audio_layer, "persistent audio layer owns background music")
+	var audio_schedule_start := 100000
+	scene.next_audio_health_check_msec = 0
+	check(scene.audio_health_check_due(audio_schedule_start) and not scene.audio_health_check_due(audio_schedule_start + scene.AUDIO_HEALTH_CHECK_INTERVAL_MSEC - 1) and scene.audio_health_check_due(audio_schedule_start + scene.AUDIO_HEALTH_CHECK_INTERVAL_MSEC), "audio health checks use a monotonic millisecond interval instead of a frame-rate assumption")
 	check(scene.BGM_STREAM_PATH.ends_with("bgm_guofeng2.mp3") and scene.audio_streams.get("bgm", null) is AudioStreamMP3, "background music uses the current MP3 default track")
+	var plate_source: Texture2D = scene.optional_gpt_illustration_texture("ui_button_face_plate")
+	if plate_source != null:
+		var plate_a: Texture2D = scene._gpt_plate_texture_for_rect(plate_source, "ui_button_face_plate", scene.rect_full(0.0, 0.0, 1.0, 0.4))
+		var plate_b: Texture2D = scene._gpt_plate_texture_for_rect(plate_source, "ui_button_face_plate", scene.rect_full(0.0, 0.0, 1.0, 0.4))
+		check(plate_a == plate_b and scene.gpt_plate_atlas_cache.size() <= scene.GPT_PLATE_ATLAS_CACHE_LIMIT, "GPT plate crops reuse a bounded atlas cache")
 	check(scene.lucide_icon_texture("settings") != null and scene.lucide_icon_texture("play") != null, "lucide SVG icons load for UI illustration")
 	var coin_animation = scene.animation_asset_spec("coin_spin")
 	var victory_animation = scene.animation_asset_spec("victory_sparkle")
@@ -1079,11 +1090,15 @@ func run() -> void:
 	check(scene.tile_speech_label("5W") == "五万" and scene.tile_speech_label("7T") == "七条", "number tile speech names are localized")
 	check(scene.tile_speech_label("P") == "白板" and scene.tile_speech_label("F") == "发财", "honor tile speech names are complete")
 	check(scene.tts_voice_identifier({"id": "zh-cn-default", "name": "fallback"}) == "zh-cn-default", "tts voice dictionaries use stable ids")
+	# Speech queue assertions use the bundled clips even when the developer's
+	# persisted audio preference disables spoken feedback in the app.
+	scene.tts_enabled = true
 	scene.speech_queue.clear()
 	scene.speech_queue_active = false
 	scene.speak_tile_call("5W")
 	check(scene.speech_queue.size() == 1 and scene.speech_queue[0].has("clips") and str(scene.speech_queue[0].get("clips", [])[0]) == "tile_5W" and not scene.speech_queue[0].has("text"), "tile speech uses bundled voice clips instead of direct TTS text")
-	check(float(scene.speech_queue[0].get("delay", 1.0)) <= 0.13, "tile speech is queued after the discard sound without being dropped")
+	var tile_speech_item: Dictionary = scene.speech_queue[0] if scene.speech_queue.size() > 0 else {}
+	check(float(tile_speech_item.get("delay", 1.0)) <= 0.13, "tile speech is queued after the discard sound without being dropped")
 	scene.speak_action_call("碰", "5W")
 	check(scene.speech_queue.size() == 1 and scene.speech_queue[0].has("clips") and scene.speech_queue[0].get("clips", []) == ["action_peng", "tile_5W"] and not scene.speech_queue[0].has("text"), "action speech interrupts stale tile speech and queues bundled action plus tile clips")
 	scene.speech_queue.clear()
@@ -1906,6 +1921,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsCloseTick_") == 2, "settings close button renders dismiss rhythm ticks")
 	var settings_close_button = settings_parent.find_child("SettingsCloseButton", true, false) as Button
 	check(settings_close_button != null, "settings overlay exposes close button for press feedback")
+	check(settings_close_button == null or settings_close_button.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET, "settings close action declares a 44px minimum touch target")
 	scene.play_settings_close_button_feedback(settings_close_button)
 	check(settings_close_button.find_child("SettingsClosePressFeedback", true, false) != null and settings_close_button.find_child("SettingsClosePressSource", true, false) != null and settings_close_button.find_child("SettingsClosePressRoute", true, false) != null and settings_close_button.find_child("SettingsClosePressFill", true, false) != null and settings_close_button.find_child("SettingsClosePressGate", true, false) != null, "settings close press feedback renders dismiss route")
 	check(settings_close_button.find_child("SettingsClosePressSeal", true, false) != null and settings_close_button.find_child("SettingsClosePressGlyph", true, false) != null and count_nodes_with_name_prefix(settings_close_button, "SettingsClosePressTick_") == 3, "settings close press feedback renders seal glyph and rhythm ticks")
@@ -2321,7 +2337,7 @@ func run() -> void:
 	scene._show_online_lobby_impl()
 	check(scene.mode == "online_lobby" and scene.find_child("OnlineLobbyRoomArt", true, false) != null and scene.find_child("OnlineLobbyRoomFanOverlay", true, false) != null and scene.find_child("OnlineLobbyRoomNode", true, false) != null, "online lobby renders room status illustration with reusable fan overlay")
 	check(scene.find_child("OnlineLobbyLowFrequencyPagePlate", true, false) != null, "online lobby exposes its low-frequency authored page substrate")
-	check(scene.find_child("OnlineLobbyRoomBadge", true, false) != null and scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) != null, "online lobby exposes a named room badge and label for connection-state refresh")
+	check(scene.find_child("OnlineLobbyRoomBadge", true, false) != null and scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) != null and scene.find_child("OnlineLobbyRoomBadgeViewIcon", true, false) != null, "online lobby exposes a named room badge, label, and visible view icon for connection-state refresh")
 	check(scene.find_child("OnlineLobbyRoomSummaryPanel", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryOccupancy", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryReady", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryState", true, false) != null, "online lobby renders compact room state summary chips")
 	check(scene.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) != null and scene.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) != null, "online lobby room summary exposes readable native labels")
 	check(has_label_text(scene, "入席 2/4") and has_label_text(scene, "已备 0") and has_label_text(scene, "未连接"), "online lobby room summary reports occupancy ready count and connection state")
@@ -4278,6 +4294,9 @@ func run() -> void:
 	check(scene.normalize_online_message_kind({"event": "actionRejected"}) == "error", "online rejected event alias is normalized")
 	check(scene.normalize_online_message_kind({"type": "actionAck"}) == "ack", "online ack type alias is normalized")
 	check(scene.normalize_online_message_kind({"type": "message"}) == "info", "online plain message type is treated as info")
+	var bounded_online_state: Dictionary = scene.normalize_online_game_state({"roomCode": "  ROOM-THIS-IS-LONGER-THAN-THE-LIMIT-123456  ", "players": [{"seat": 0, "nickname": "  ", "handCount": 13}]})
+	check(str(bounded_online_state.get("roomCode", "")).length() == scene.ONLINE_ROOM_CODE_MAX_LENGTH and str(bounded_online_state.get("roomCode", "")).begins_with("ROOM-"), "online game room codes are trimmed to the protocol display bound")
+	check(str(bounded_online_state.get("players", [])[0].get("name", "")) == "玩家", "online player names use a visible fallback after trimming")
 	check(scene.normalize_tile_code("m3") == "3W" and scene.normalize_tile_code("s7") == "7T" and scene.normalize_tile_code("p9") == "9B", "legacy m/s/p tile prefixes map to canonical suits")
 	var validation_mode: String = str(scene.mode)
 	var validation_game: Dictionary = scene.online_game.duplicate(true)

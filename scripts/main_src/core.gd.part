@@ -204,9 +204,7 @@ func _process(_delta: float) -> void:
 	var now = Time.get_ticks_msec()
 	keep_background_music_alive(now)
 	# 音频系统健康检查 - 每5秒检查一次
-	audio_health_check_counter += 1
-	if audio_health_check_counter >= 300:  # 60fps * 5秒 = 300帧
-		audio_health_check_counter = 0
+	if audio_health_check_due(now):
 		check_audio_health(now)
 	if update_state == "downloading":
 		update_download_progress(now)
@@ -264,8 +262,24 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		flush_offline_progress_autosave(true)
 	elif what == NOTIFICATION_WM_SIZE_CHANGED or what == NOTIFICATION_WM_DPI_CHANGE:
-		update_safe_area_layout()
-		call_deferred("refresh_current_screen")
+		schedule_resize_refresh()
+
+func audio_health_check_due(now_msec: int) -> bool:
+	if now_msec < next_audio_health_check_msec:
+		return false
+	next_audio_health_check_msec = now_msec + AUDIO_HEALTH_CHECK_INTERVAL_MSEC
+	return true
+
+func schedule_resize_refresh() -> void:
+	update_safe_area_layout()
+	if resize_refresh_pending:
+		return
+	resize_refresh_pending = true
+	call_deferred("run_scheduled_resize_refresh")
+
+func run_scheduled_resize_refresh() -> void:
+	resize_refresh_pending = false
+	refresh_current_screen()
 
 func focused_control_instance_id() -> int:
 	var focus_owner := get_viewport().gui_get_focus_owner()
@@ -1437,7 +1451,12 @@ func render_room_log() -> void:
 		call_deferred("restore_online_log_scroll", previous_scroll)
 
 func defer_online_log_scroll_to_end() -> void:
-	call_deferred("scroll_online_log_to_end")
+	# RichTextLabel fitting can update the scroll range one frame after the
+	# lobby refresh. Wait for the container to settle before taking the final
+	# bottom position, otherwise a newly wrapped line leaves a one-pixel gap.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	scroll_online_log_to_end()
 
 func scroll_online_log_to_end() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
@@ -3749,9 +3768,9 @@ func update_progress_text() -> String:
 			return "%s / %s  %d%%" % [format_bytes(update_downloaded_bytes), format_bytes(update_total_bytes), percent]
 		return "已下载 %s\n%s" % [format_bytes(update_downloaded_bytes), update_download_url]
 	if update_state == "ready":
-		return "已保存 v%s 升级包%s%s" % [update_remote_version, update_manifest_detail_text(), update_release_notes_summary()]
+		return "已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "current":
-		return "远端版本 v%s%s%s" % [update_remote_version, update_manifest_detail_text(), update_release_notes_summary()]
+		return "远端版本 v%s%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "error":
 		return "下载地址 " + update_download_url
 	return ""

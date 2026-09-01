@@ -321,7 +321,11 @@ func run_continuous_resize_capacity_probe() -> void:
 	await settle_layout()
 	await apply_runtime_resize(scene, Vector2(1280, 720))
 	var exit_dialog = scene.find_child("ExitConfirmDialog", true, false) as Control
+	var exit_overlay := scene.exit_confirm_panel as Control
+	var continue_button := scene.find_child("ExitConfirmContinueButton", true, false) as Button
+	var leave_button := scene.find_child("ExitConfirmLeaveButton", true, false) as Button
 	check(exit_dialog != null and Rect2(Vector2.ZERO, Vector2(1280, 720)).grow(1.0).encloses(screen_rect(exit_dialog)), "exit confirmation remains mounted and bounded through a live resize")
+	check(exit_overlay != null and exit_overlay.z_index >= scene.UI_MODAL_Z_INDEX and continue_button != null and leave_button != null and continue_button.visible and leave_button.visible, "exit confirmation keeps both decisions visible above board content at %s" % Vector2(1280, 720))
 	scene.hide_exit_confirm()
 	await settle_layout(0.20)
 
@@ -710,6 +714,10 @@ func check_telemetry_toast_layout(scene, viewport_size: Vector2) -> void:
 	check(card != null and title != null and body != null and close != null, "telemetry data sheet exposes its modal reading lanes at %s" % viewport_size)
 	if card == null or title == null or body == null or close == null:
 		return
+	var card_rect := screen_rect(card)
+	var close_rect := screen_rect(close)
+	check(card_rect.grow(1.0).encloses(close_rect) and close_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5, "telemetry data sheet close action keeps a 44px target inside the card at %s" % viewport_size)
+	check(not rects_overlap(close_rect.grow(-1.0), screen_rect(title).grow(-1.0)) and not rects_overlap(close_rect.grow(-1.0), screen_rect(body).grow(-1.0)), "telemetry data sheet close action clears the reading copy at %s" % viewport_size)
 	scene.export_telemetry_data()
 	await process_frame
 	var toast := scene.toast_current as Control
@@ -736,14 +744,16 @@ func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> 
 	var scroll = scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
 	var content_list = scene.find_child("DiagnosticContentList", true, false) as VBoxContainer
 	var close_button = scene.find_child("DiagnosticCloseButton", true, false) as Button
+	var content_status = scene.find_child("DiagnosticContentStatusLabel", true, false) as Label
 	var last_line = scene.find_child("DiagnosticContentLine_%02d" % (line_count - 1), true, false) as Label
-	check(panel != null and scroll != null and content_list != null and close_button != null and last_line != null, "diagnostic exposes panel, native content scroll, complete list, and close action at %s" % viewport_size)
+	check(panel != null and scroll != null and content_list != null and close_button != null and content_status != null and last_line != null, "diagnostic exposes panel, native content scroll, complete list, browse status, and close action at %s" % viewport_size)
 	if panel == null or scroll == null or content_list == null or close_button == null or last_line == null:
 		return
 	var panel_rect = screen_rect(panel)
 	var scroll_rect = screen_rect(scroll)
 	var list_rect = screen_rect(content_list)
 	var close_rect = screen_rect(close_button)
+	var content_status_rect := screen_rect(content_status) if content_status != null else Rect2()
 	check(Rect2(Vector2.ZERO, viewport_size).grow(1.0).encloses(panel_rect), "diagnostic panel stays inside viewport at %s" % viewport_size)
 	check(panel_rect.grow(1.0).encloses(scroll_rect) and panel_rect.grow(1.0).encloses(close_rect), "diagnostic scroll and fixed close action stay inside panel at %s" % viewport_size)
 	check(scroll_rect.size.y >= 44.0 and close_rect.size.x >= 104.0 and close_rect.size.y >= 44.0, "diagnostic scroll and close action retain usable hit areas at %s" % viewport_size)
@@ -752,6 +762,11 @@ func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> 
 	check(content_list.size_flags_horizontal == Control.SIZE_EXPAND_FILL and list_rect.size.x <= scroll_rect.size.x + 1.0, "diagnostic wrapped content fits the scroll width at %s" % viewport_size)
 	check(close_button.focus_mode == Control.FOCUS_ALL and close_button.has_focus(), "diagnostic close action owns modal keyboard focus at %s" % viewport_size)
 	check(scroll_rect.end.y + 12.0 <= close_rect.position.y, "diagnostic reading lane leaves a visual buffer before the close action at %s" % viewport_size)
+	if content_status != null:
+		check(content_status.visible and content_status.text.contains("诊断内容") and content_status.text.contains("/"), "diagnostic keeps a visible current-range status at %s" % viewport_size)
+		check(content_status_rect.position.y >= scroll_rect.end.y - 1.0, "diagnostic range status starts after the scroll viewport at %s (status=%s scroll_end=%s)" % [viewport_size, content_status_rect, scroll_rect.end.y])
+		check(content_status_rect.end.y + 2.0 <= close_rect.position.y, "diagnostic range status clears the fixed actions at %s (status_end=%s close_top=%s)" % [viewport_size, content_status_rect.end.y, close_rect.position.y])
+		check(label_text_width(content_status, content_status.text) <= content_status_rect.size.x + 1.0, "diagnostic range status fits its lane at %s" % viewport_size)
 	if scroll.scroll_vertical <= 1:
 		for child in content_list.get_children():
 			if not child is Label:
@@ -767,6 +782,9 @@ func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> 
 	scroll.scroll_vertical = int(ceil(scroll_bar.max_value - scroll_bar.page))
 	await process_frame
 	await process_frame
+	if content_status != null:
+		scene.sync_diagnostic_scroll_status(scroll, content_status, line_count)
+		check(content_status.text.contains("已到末尾") and content_status.text.contains("余 0"), "diagnostic range status reports the end of the report at %s" % viewport_size)
 	var last_rect = screen_rect(last_line)
 	check(last_rect.position.y >= scroll_rect.position.y - 1.0 and last_rect.end.y <= scroll_rect.end.y + 1.0, "diagnostic final line is reachable at the bottom of the scroll range at %s" % viewport_size)
 
@@ -1054,6 +1072,20 @@ func check_tutorial_flow(scene, viewport_size: Vector2) -> void:
 	check(menu_button != null and menu_button.tooltip_text.contains("教学"), "tutorial menu entry explains its saved progress route at %s" % viewport_size)
 	if banner != null:
 		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(screen_rect(banner)), "tutorial menu banner stays inside the viewport at %s" % viewport_size)
+	var saved_reduce_motion := bool(scene.reduce_motion_enabled)
+	scene.reduce_motion_enabled = true
+	scene.show_toast("菜单教学占位测试", 60000)
+	await settle_layout()
+	var menu_toast := scene.toast_current as Control
+	var menu_title := scene.find_child("MenuTitleLabel", true, false) as Control
+	var menu_tutorial_action := scene.find_child("MenuTutorialStartButton", true, false) as Control
+	check(menu_toast != null and menu_toast.visible, "menu toast remains visible while the first-run tutorial banner is mounted at %s" % viewport_size)
+	if menu_toast != null:
+		check(menu_title == null or not rects_overlap(screen_rect(menu_toast), screen_rect(menu_title)), "menu toast clears the title lane when the tutorial banner is mounted at %s" % viewport_size)
+		check(banner == null or not rects_overlap(screen_rect(menu_toast), screen_rect(banner)), "menu toast clears the tutorial banner at %s" % viewport_size)
+		check(menu_tutorial_action == null or not rects_overlap(screen_rect(menu_toast), screen_rect(menu_tutorial_action)), "menu toast clears the tutorial entry action at %s" % viewport_size)
+	scene.dismiss_active_toast()
+	scene.reduce_motion_enabled = saved_reduce_motion
 	scene.open_tutorial_entry_sheet()
 	await settle_layout()
 	var tutorial_panel := scene.find_child("TutorialEntryPanel", true, false) as Control
@@ -1083,10 +1115,27 @@ func check_tutorial_flow(scene, viewport_size: Vector2) -> void:
 	var skipped_load := skipped_config.load(scene.TUTORIAL_PATH)
 	check(scene.tutorial_step == scene.TUTORIAL_STEP_SKIPPED and skipped_load == OK and int(skipped_config.get_value("tutorial", "step", 0)) == scene.TUTORIAL_STEP_SKIPPED, "tutorial skip persists the explicit skipped state at %s" % viewport_size)
 	scene.tutorial_step = scene.TUTORIAL_STEP_NEW
+	scene.mode = "offline"
+	scene.offline_phase = "await_discard"
+	scene.show_hand_hint = true
+	scene.tutorial_step = scene.TUTORIAL_STEP_WIN
+	scene.render_game()
+	await settle_layout()
+	var completion_button := scene.find_child("HandTutorialCompleteButton", true, false) as Button
+	check(completion_button != null, "tutorial finish checkpoint exposes an explicit completion action at %s" % viewport_size)
+	check(completion_button == null or completion_button.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET, "tutorial finish action declares a 44px minimum touch target at %s" % viewport_size)
 	scene.complete_tutorial("smoke completion")
+	await settle_layout()
 	var completed_config := ConfigFile.new()
 	var completed_load := completed_config.load(scene.TUTORIAL_PATH)
 	check(scene.tutorial_step == scene.TUTORIAL_STEP_COMPLETE and completed_load == OK and int(completed_config.get_value("tutorial", "step", 0)) == scene.TUTORIAL_STEP_COMPLETE, "tutorial completion persists the explicit complete state at %s" % viewport_size)
+	check(scene.find_child("HandTrayTutorialHint", true, false) == null and scene.find_child("HandTutorialCompleteButton", true, false) == null and not scene.show_hand_hint, "tutorial completion redraws the current frame without leaving the hint or finish action mounted at %s" % viewport_size)
+	scene.tutorial_step = scene.TUTORIAL_STEP_DISCARD
+	scene.show_hand_hint = true
+	scene.render_game()
+	await settle_layout()
+	var skip_action := scene.find_child("HandTutorialSkipButton", true, false) as Button
+	check(skip_action != null and skip_action.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET and skip_action.custom_minimum_size.x >= scene.UI_MIN_TOUCH_TARGET, "tutorial skip action declares a square 44px minimum touch target at %s" % viewport_size)
 	scene.mode = saved_mode
 	scene.active_round_id = saved_round
 	scene.offline_phase = saved_offline_phase
@@ -1137,7 +1186,9 @@ func check_update_dialog_layout(scene, viewport_size: Vector2) -> void:
 		check(status != null and not status.text.contains("...") and status.tooltip_text == scene.update_message, "update %s status keeps full state text and its detail tooltip at %s" % [state, viewport_size])
 		check(progress != null and not progress.text.contains("...") and progress.tooltip_text == progress.text, "update %s progress keeps a compact readable label at %s" % [state, viewport_size])
 		if notes_label != null and scene.update_release_notes != "":
-			check(notes_label.tooltip_text == scene.update_release_notes, "update %s release notes expose the full detail value at %s" % [state, viewport_size])
+			check(notes_label.text == scene.update_release_notes_summary_line() and notes_label.tooltip_text == scene.update_release_notes, "update %s release notes have one dedicated readable summary lane at %s" % [state, viewport_size])
+			if state == "ready" or state == "current":
+				check(not progress.text.contains(scene.update_release_notes_summary_line()) and not progress.text.contains("更新说明"), "update %s progress line stays free of duplicated release notes at %s" % [state, viewport_size])
 		if progress_bar != null and track != null:
 			check(not rects_overlap(screen_rect(progress_bar).grow(-1.0), screen_rect(convergence).grow(-1.0)), "update %s progress bar clears the convergence art at %s" % [state, viewport_size])
 
@@ -1166,6 +1217,7 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 	check(timeline != null and timeline.find_child("ReplayImportTimelineTitle", true, false) != null and timeline.find_child("ReplayImportTimelineEmpty", true, false) != null, "replay import timeline has an empty-state reading lane at %s" % viewport_size)
 	check(timeline_scroll != null and timeline_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "replay import timeline provides a native vertical scroll for long records at %s" % viewport_size)
 	check(archive_pane != null and archive_search != null and archive_search.placeholder_text.contains("日期") and archive_scroll != null and archive_scrollbar != null and archive_list != null, "replay import exposes searchable scrollable local replay archive controls at %s" % viewport_size)
+	check(archive_search == null or screen_rect(archive_search).size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5, "replay archive search keeps a 44px touch target at %s" % viewport_size)
 	if archive_pane != null and archive_scroll != null:
 		check(archive_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and archive_scroll.clip_contents, "replay archive keeps a clipped vertical scroll viewport inside its pane at %s" % viewport_size)
 		check(screen_rect(archive_pane).grow(1.0).encloses(screen_rect(archive_scroll)), "replay archive scroll viewport stays inside its fixed pane at %s" % viewport_size)
@@ -1201,6 +1253,7 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 			for action_index in range(archive_actions.size()):
 				var action_rect := screen_rect(archive_actions[action_index])
 				check(action_rect.size.x >= scene.UI_MIN_TOUCH_TARGET - 0.5 and action_rect.size.y >= 44.0, "replay archive action %s keeps a 44px touch target at %s" % [action_prefixes[action_index], viewport_size])
+				check(archive_actions[action_index].custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET, "replay archive action %s declares a 44px minimum touch target at %s" % [action_prefixes[action_index], viewport_size])
 				check(screen_rect(archive_row).grow(1.0).encloses(action_rect), "replay archive action %s stays inside its row at %s" % [action_prefixes[action_index], viewport_size])
 				for other_index in range(action_index):
 					check(not rects_overlap(action_rect.grow(-1.0), screen_rect(archive_actions[other_index]).grow(-1.0)), "replay archive action targets remain distinct at %s" % viewport_size)
@@ -1780,6 +1833,11 @@ func check_table_log_archive_layout(scene, viewport_size: Vector2) -> void:
 	if panel != null:
 		var panel_rect = screen_rect(panel)
 		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "table log archive stays inside viewport at %s" % viewport_size)
+		if close_button != null:
+			var close_rect := screen_rect(close_button)
+			check(close_rect.size.x >= 44.0 and close_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5, "table log archive close action keeps a 44px touch target at %s" % viewport_size)
+			check(panel_rect.grow(1.0).encloses(close_rect), "table log archive close action stays inside its panel at %s" % viewport_size)
+			check(not rects_overlap(close_rect.grow(-1.0), screen_rect(title).grow(-1.0)) and not rects_overlap(close_rect.grow(-1.0), screen_rect(scroll).grow(-1.0)), "table log archive close action clears the title and scroll lanes at %s" % viewport_size)
 		var dock = scene.find_child("ActionButtonDock", true, false) as Control
 		var hand = scene.find_child("HandTray", true, false) as Control
 		check((dock == null or not rects_overlap(panel_rect, screen_rect(dock))) and (hand == null or not rects_overlap(panel_rect, screen_rect(hand))), "table log archive clears action dock and hand tray at %s" % viewport_size)
@@ -1855,7 +1913,7 @@ func check_advisor_detail_layout(scene, viewport_size: Vector2) -> void:
 		check((dock == null or not rects_overlap(panel_rect, screen_rect(dock))) and (hand == null or not rects_overlap(panel_rect, screen_rect(hand))), "AI advisor detail clears action dock and hand tray at %s" % viewport_size)
 	if text != null:
 		check(text.text.contains("响应目标") and text.clip_text and text.tooltip_text == text.text and screen_rect(text).size.x >= viewport_size.x * 0.40, "AI advisor detail exposes readable in-panel rationale instead of tooltip-only copy at %s" % viewport_size)
-	check(close_button == null or close_button.has_focus(), "AI advisor detail gives focus to its close route at %s" % viewport_size)
+	check(close_button == null or (close_button.has_focus() and screen_rect(close_button).size.x >= scene.UI_MIN_TOUCH_TARGET - 0.5 and screen_rect(close_button).size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5), "AI advisor detail gives focus to a full touch-sized close route at %s" % viewport_size)
 	if close_button != null:
 		close_button.button_down.emit()
 	await settle_layout()
@@ -2582,17 +2640,21 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var log_unread_label = scene.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label
 	var room_badge = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
 	var room_offline_state = scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Label
+	var connect_button = scene.find_child("OnlineLobbyConnectButton", true, false) as Button
+	var create_button = scene.find_child("OnlineLobbyCreateButton", true, false) as Button
+	var join_button = scene.find_child("OnlineLobbyJoinButton", true, false) as Button
 	var endpoint_badge = scene.find_child("OnlineLobbyServerEndpointBadge", true, false) as Control
 	var endpoint_label = scene.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
 	var state_badge = scene.find_child("OnlineLobbyConnectionStateBadge", true, false) as Control
 	var connection_state_label = scene.find_child("OnlineLobbyConnectionStateLabel", true, false) as Label
 	var subtitle := scene.find_child("OnlineLobbySubtitle", true, false) as Label
+	var room_badge_view_icon := scene.find_child("OnlineLobbyRoomBadgeViewIcon", true, false) as TextureRect
 	check(page_plate != null and form_panel != null and log_panel != null, "online lobby exposes a low-frequency page plate and named split panels at %s" % viewport_size)
 	if page_plate != null:
 		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
 		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.35 and page_plate.self_modulate.a <= 0.60, "disconnected lobby uses a restrained low-frequency authored bitmap substrate at %s" % viewport_size)
 	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
-	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null and chat_button != null and log_latest_button != null and log_unread_label != null, "online lobby exposes room summary roster chat log list and latest-log controls at %s" % viewport_size)
+	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null and chat_button != null and log_latest_button != null and log_unread_label != null and room_badge_view_icon != null and room_badge_view_icon.texture != null, "online lobby exposes room summary roster chat log list latest-log controls and a visible room-view affordance at %s" % viewport_size)
 	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
 	var log_list_texture = (log_list_panel as TextureRect).texture if log_list_panel is TextureRect else null
 	var roster_source = (roster_texture as AtlasTexture).atlas if roster_texture is AtlasTexture else roster_texture
@@ -2603,7 +2665,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	check(room_offline_state != null and not room_status_art.visible and not roster_panel.visible and not log_list_panel.visible, "disconnected lobby hides stale room, roster, and log content behind an explicit empty state at %s" % viewport_size)
 	check(scene.online_room.is_empty() and room_offline_state != null and room_offline_state.text == "连接后显示房间、席位和日志", "disconnected lobby clears the room snapshot and explains the empty state at %s" % viewport_size)
 	if room_badge != null and room_badge.get_child_count() > 0:
-		var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label
+		var room_badge_label = scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		check(room_badge_label != null and room_badge_label.text == "房间号 连接后显示", "disconnected lobby replaces the room badge with a connection-state hint at %s" % viewport_size)
 		check(not room_badge.visible and room_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE, "disconnected lobby hides the room detail target until a room snapshot exists at %s" % viewport_size)
 		var room_touch_target := scene.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
@@ -2623,6 +2685,12 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	check(name_edit != null and name_edit.max_length == scene.ONLINE_NAME_MAX_LENGTH, "online lobby nickname input enforces its client boundary at %s" % viewport_size)
 	check(host_edit != null and host_edit.max_length == scene.ONLINE_HOST_MAX_LENGTH and host_edit.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_URL, "online lobby host input enforces its boundary and URL keyboard at %s" % viewport_size)
 	check(room_edit != null and room_edit.max_length == scene.ONLINE_ROOM_CODE_MAX_LENGTH, "online lobby room input enforces its client boundary at %s" % viewport_size)
+	var lobby_action_font_min: int = scene.accessibility_font_size(scene.commercial_ui_font_size(17, 2))
+	for action_button in [connect_button, create_button, join_button]:
+		check(action_button != null and action_button.get_theme_font_size("font_size") >= lobby_action_font_min, "online lobby action button keeps the shared accessible font size at %s" % viewport_size)
+		if action_button != null and action_button.disabled:
+			var disabled_color: Color = action_button.get_theme_color("font_disabled_color")
+			check(disabled_color.a >= 0.95 and relative_luma(disabled_color) >= 0.78 and action_button.modulate.a >= 0.98 and relative_luma(action_button.modulate) >= 0.80, "online lobby disabled action remains readable instead of being dimmed away at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("online_lobby_panel_frame") == null or (scene.find_child("OnlineLobbyFormGPTPanelFrameTexture", true, false) != null and scene.find_child("OnlineLobbyLogGPTPanelFrameTexture", true, false) != null), "online lobby consumes GPT panel-frame textures at %s" % viewport_size)
 	check(scene.optional_gpt_illustration_texture("online_lobby_group_plate") == null or (scene.find_child("OnlineLobbyInputGPTGroupPlateTexture", true, false) != null and scene.find_child("OnlineLobbyActionGPTGroupPlateTexture", true, false) != null), "online lobby consumes GPT group-plate textures at %s" % viewport_size)
 	var form_gpt_frame = scene.find_child("OnlineLobbyFormGPTPanelFrameTexture", true, false) as CanvasItem
@@ -2673,6 +2741,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 			var room_input_may_be_empty: bool = input_id == "room" and scene.lobby_connection_state_text() != "已连接" and not scene.online_waiting_for_server
 			check((input_edit.text.strip_edges() != "" or room_input_may_be_empty) and input_edit.get_theme_font_size("font_size") >= 18, "online lobby %s input keeps a visible value or an intentional disconnected empty state at %s" % [input_id, viewport_size])
 			var edit_rect = screen_rect(input_edit)
+			check(edit_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5, "online lobby %s input keeps a 44px touch target at %s" % [input_id, viewport_size])
 			check(edit_rect.position.y >= input_rect.position.y - 1.0 and edit_rect.end.y <= input_rect.end.y + 1.0, "online lobby %s input stays inside input group at %s" % [input_id, viewport_size])
 			check(edit_rect.end.y <= action_rect.position.y - 2.0, "online lobby %s input clears action group at %s" % [input_id, viewport_size])
 			var focus_glow = input_edit.find_child("LineEditInputFocusGlow_%s" % input_id, true, false) as Control
@@ -3016,6 +3085,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		var gutter_rect = screen_rect(scroll_gutter)
 		var thumb_rect = screen_rect(scroll_thumb)
 		var max_scroll = maxf(0.0, content_scrollbar.max_value - content_scrollbar.page)
+		check(not scroll_gutter is Panel and not scroll_thumb is Panel and scroll_gutter is TextureRect and scroll_thumb is TextureRect and (scroll_gutter as TextureRect).texture != null and (scroll_thumb as TextureRect).texture != null, "rules custom scrollbar uses authored bitmap gutter and thumb visuals instead of runtime panels at %s" % viewport_size)
 		check(scroll_thumb.mouse_filter == Control.MOUSE_FILTER_IGNORE and scroll_hit_target != null and scroll_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP and scroll_hit_target.mouse_default_cursor_shape == Control.CURSOR_VSIZE, "rules custom scrollbar routes vertical drag input through its wide hit target at %s" % viewport_size)
 		check(thumb_rect.size.y <= gutter_rect.size.y + 1.0, "rules custom thumb stays within its gutter height at %s" % viewport_size)
 		if max_scroll > 1.0:
@@ -3043,16 +3113,27 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 	var lane = scene.find_child("AchievementRowReadabilityLane", true, false) as Control
 	var bottom_spacer = scene.find_child("AchievementsBottomSafeSpacer", true, false) as Control
 	var bottom_fade = scene.find_child("AchievementsBottomFadePanel", true, false) as Control
+	var browse_status = scene.find_child("AchievementsBrowseStatusLabel", true, false) as Label
+	var collection_bus = scene.find_child("AchievementsRowCollectionBusArt", true, false) as Control
+	var collection_spine = scene.find_child("AchievementsRowCollectionSpine", true, false) as Control
+	var collection_progress = scene.find_child("AchievementsRowCollectionProgressRoute", true, false) as Control
+	var collection_archive = scene.find_child("AchievementsRowCollectionArchiveGate", true, false) as Control
 	var gallery_texture = scene.find_child("AchievementGPTGalleryTexture", true, false) as CanvasItem
-	check(scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null and grid != null and lane != null and bottom_spacer != null and bottom_fade != null, "achievements screen exposes scroll lane custom gutter safe spacer and bottom fade at %s" % viewport_size)
+	check(scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null and grid != null and lane != null and bottom_spacer != null and bottom_fade != null and browse_status != null and collection_bus != null and collection_spine != null and collection_progress != null and collection_archive != null, "achievements screen exposes scroll lane custom gutter bottom fade browse status and collection bus art at %s" % viewport_size)
 	check(gallery_texture == null or gallery_texture.modulate.a <= 0.26, "achievements generated gallery remains a subdued backdrop below native rows at %s" % viewport_size)
 	if scroll == null or lane == null:
 		return
 	var scroll_rect = screen_rect(scroll)
 	var lane_rect = screen_rect(lane)
+	if browse_status != null:
+		var browse_status_rect := screen_rect(browse_status)
+		check(browse_status.visible and browse_status.text.contains("浏览") and browse_status.text.contains("/"), "achievements keeps a visible browse-range status at %s" % viewport_size)
+		check(browse_status_rect.end.y <= scroll_rect.position.y + 1.0 and label_text_width(browse_status, browse_status.text) <= browse_status_rect.size.x + 1.0, "achievements browse status clears the list and fits its header lane at %s" % viewport_size)
 	check(scroll.clip_contents, "achievements scroll clips row content at %s" % viewport_size)
 	check(lane_rect.grow(1.0).encloses(scroll_rect), "achievements scroll stays inside readability lane at %s" % viewport_size)
 	check(scroll_rect.end.y <= viewport_size.y * 0.890 + 1.0, "achievements scroll leaves a bottom safe band at %s" % viewport_size)
+	if collection_bus != null:
+		check(collection_bus.mouse_filter == Control.MOUSE_FILTER_IGNORE and screen_rect(collection_bus).position.y >= lane_rect.position.y - 2.0 and screen_rect(collection_bus).end.y <= viewport_size.y, "achievements collection bus remains a bounded non-interactive visual layer at %s" % viewport_size)
 	var gutter_rect := Rect2()
 	if scrollbar != null and scroll_gutter != null and scroll_thumb != null:
 		gutter_rect = screen_rect(scroll_gutter)
@@ -3062,9 +3143,16 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 		check(gutter_rect.size.x <= max(14.0, viewport_size.x * 0.016) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "achievements custom scrollbar gutter is narrow and outside rows at %s" % viewport_size)
 		check(gutter_rect.grow(1.0).encloses(thumb_rect), "achievements custom scrollbar thumb stays inside gutter at %s" % viewport_size)
 		check(not rects_overlap(scrollbar_rect, gutter_rect) or not scrollbar.visible, "achievements hidden system scrollbar does not become the visible gutter at %s" % viewport_size)
-		var gutter_style = scroll_gutter.get_theme_stylebox("panel") as StyleBoxFlat
-		var thumb_style = scroll_thumb.get_theme_stylebox("panel") as StyleBoxFlat
-		check(gutter_style != null and thumb_style != null and relative_luma(gutter_style.bg_color) <= 0.20 and relative_luma(thumb_style.bg_color) <= 0.54, "achievements custom scrollbar avoids default bright white styling at %s" % viewport_size)
+		check(not scroll_gutter is Panel and not scroll_thumb is Panel and scroll_gutter is TextureRect and scroll_thumb is TextureRect and (scroll_gutter as TextureRect).texture != null and (scroll_thumb as TextureRect).texture != null, "achievements custom scrollbar uses authored bitmap gutter and thumb visuals instead of runtime panels at %s" % viewport_size)
+	if scrollbar != null and browse_status != null:
+		var saved_scroll: float = float(scrollbar.value)
+		var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page)
+		if max_scroll > 1.0:
+			scrollbar.value = max_scroll
+			scene.sync_achievements_scroll_status(scroll, browse_status, scene.achievements.size())
+			check(browse_status.text.contains("已全部看完") and browse_status.text.contains("余 0"), "achievements browse status reports the end of the catalogue at %s" % viewport_size)
+			scrollbar.value = saved_scroll
+			scene.sync_achievements_scroll_status(scroll, browse_status, scene.achievements.size())
 	if bottom_spacer != null:
 		check(bottom_spacer.custom_minimum_size.y >= 72.0, "achievements list has enough bottom spacer for final rows at %s" % viewport_size)
 	if bottom_fade != null:
@@ -3198,8 +3286,17 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 	var lane = scene.find_child("StatsRowReadabilityLane", true, false) as Control
 	var rows = scene.find_child("StatsRows", true, false) as Control
 	var dash = scene.find_child("StatsDashboardArt", true, false) as Control
+	var data_scan = scene.find_child("StatsDataScanArt", true, false) as Control
+	var insight = scene.find_child("StatsInsightConvergenceArt", true, false) as Control
+	var mastery = scene.find_child("StatsMasteryRoute", true, false) as Control
+	var summary_bus = scene.find_child("StatsRowSummaryBusArt", true, false) as Control
 	var backplate = scene.find_child("StatsReadabilityBackplate", true, false) as Control
 	check(lane != null and rows != null and dash != null and backplate != null, "stats screen exposes dashboard rows and readability plates at %s" % viewport_size)
+	check(data_scan != null and insight != null and mastery != null and summary_bus != null, "stats screen mounts every dashboard route layer after its host is created at %s" % viewport_size)
+	if dash != null and data_scan != null and insight != null and mastery != null and summary_bus != null:
+		check(data_scan.visible and insight.visible and mastery.visible and summary_bus.visible, "stats dashboard route layers remain visible after mounting at %s" % viewport_size)
+		check(data_scan.get_parent() == console_front and insight.get_parent() == console_front and mastery.get_parent() == console_front and summary_bus.get_parent() == console_front, "stats dashboard route layers attach to the statistics front panel without detached overlays at %s" % viewport_size)
+		check(backplate != null and screen_rect(backplate).grow(6.0).encloses(screen_rect(data_scan)) and screen_rect(backplate).grow(6.0).encloses(screen_rect(insight)) and screen_rect(backplate).grow(6.0).encloses(screen_rect(mastery)) and screen_rect(backplate).grow(6.0).encloses(screen_rect(summary_bus)), "stats dashboard route layers stay inside the readable statistics surface at %s" % viewport_size)
 	if lane == null or rows == null:
 		return
 	var lane_rect = screen_rect(lane)
@@ -3281,6 +3378,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	var scrollbar = scene.find_child("ShopItemsScrollBar", true, false) as VScrollBar
 	var scroll_gutter = scene.find_child("ShopItemsScrollGutter", true, false) as Control
 	var scroll_thumb = scene.find_child("ShopItemsScrollThumb", true, false) as Control
+	var scroll_hit_target = scene.find_child("ShopItemsScrollHitTarget", true, false) as Control
 	var content = scene.find_child("ShopItemsContent", true, false) as Control
 	var footer_panel = scene.find_child("ShopCabinetFooterPanel", true, false) as Control
 	var footer_title = scene.find_child("ShopCabinetFooterTitle", true, false) as Label
@@ -3288,7 +3386,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	var footer_inventory = scene.find_child("ShopCabinetFooterInventoryBadge", true, false) as Control
 	var footer_state = scene.find_child("ShopCabinetFooterStateBadge", true, false) as Control
 	var row_rects: Array[Rect2] = []
-	check(scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null and content != null, "shop exposes named item scroll content and custom scrollbar gutter at %s" % viewport_size)
+	check(scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null and scroll_hit_target != null and content != null, "shop exposes named item scroll content and custom scrollbar gutter at %s" % viewport_size)
 	check(footer_panel != null and footer_title != null and footer_body != null and footer_inventory != null and footer_state != null, "shop exposes cabinet footer information panel at %s" % viewport_size)
 	for meter_kind in ["coins", "gems"]:
 		var meter_texture = scene.find_child("ShopCurrencyMeterPanelTexture_%s" % meter_kind, true, false) as CanvasItem
@@ -3370,9 +3468,11 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 		check(not scrollbar.visible and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "shop hides default bright system scrollbar at %s" % viewport_size)
 		check(gutter_rect.size.x <= max(14.0, viewport_size.x * 0.016) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "shop custom scrollbar gutter is narrow and separate from rows at %s" % viewport_size)
 		check(gutter_rect.grow(1.0).encloses(thumb_rect), "shop custom scrollbar thumb stays inside gutter at %s" % viewport_size)
-		var gutter_style = scroll_gutter.get_theme_stylebox("panel") as StyleBoxFlat
-		var thumb_style = scroll_thumb.get_theme_stylebox("panel") as StyleBoxFlat
-		check(gutter_style != null and thumb_style != null and relative_luma(gutter_style.bg_color) <= 0.20 and relative_luma(thumb_style.bg_color) <= 0.52, "shop custom scrollbar avoids default bright white styling at %s" % viewport_size)
+		check(not scroll_gutter is Panel and not scroll_thumb is Panel and scroll_gutter is TextureRect and scroll_thumb is TextureRect and (scroll_gutter as TextureRect).texture != null and (scroll_thumb as TextureRect).texture != null, "shop custom scrollbar uses authored bitmap gutter and thumb visuals instead of runtime panels at %s" % viewport_size)
+		if scroll_hit_target != null:
+			var hit_rect: Rect2 = screen_rect(scroll_hit_target)
+			check(scroll_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP and scroll_hit_target.mouse_default_cursor_shape == Control.CURSOR_VSIZE and hit_rect.size.x >= scene.UI_MIN_TOUCH_TARGET - 1.0, "shop custom scrollbar exposes a wide drag hit target at %s" % viewport_size)
+			check(hit_rect.position.x <= gutter_rect.position.x + 1.0 and hit_rect.end.x >= gutter_rect.end.x - 1.0 and hit_rect.position.y <= gutter_rect.position.y + 1.0 and hit_rect.end.y >= gutter_rect.end.y - 1.0, "shop scrollbar hit target covers the authored gutter without moving it into the item rows at %s" % viewport_size)
 		for item_id in item_ids:
 			var name_label = scene.find_child("ShopItemName_%s" % item_id, true, false) as Label
 			var desc_label = scene.find_child("ShopItemDescription_%s" % item_id, true, false) as Label

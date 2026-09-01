@@ -634,7 +634,7 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	if typeof(source) != TYPE_DICTIONARY:
 		source = {}
 	var game: Dictionary = (source as Dictionary).duplicate(true)
-	game["roomCode"] = str(first_present(game, ["roomCode", "room_code", "code"], selected_room))
+	game["roomCode"] = bounded_online_input(str(first_present(game, ["roomCode", "room_code", "code"], selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
 	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
 	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
 	game["wallCount"] = int(first_present(game, ["wallCount", "wallRemaining", "remainingTiles"], game.get("wallCount", 0)))
@@ -741,7 +741,9 @@ func normalize_online_players(value) -> Array:
 		var hand_value = first_present(player, ["hand", "tiles"], [])
 		var normalized_hand = normalize_tile_array(hand_value)
 		player["seat"] = int(first_present(player, ["seat", "index", "position"], result.size()))
-		player["name"] = str(first_present(player, ["name", "nickname", "userName"], "玩家"))
+		player["name"] = bounded_online_input(str(first_present(player, ["name", "nickname", "userName"], "玩家")), ONLINE_NAME_MAX_LENGTH)
+		if player["name"] == "":
+			player["name"] = "玩家"
 		player["handCount"] = numeric_count(first_present(player, ["handCount", "hand_count", "tileCount"], normalized_hand), normalized_hand.size())
 		player["flowerCount"] = numeric_count(first_present(player, ["flowerCount", "flowers", "flower_count"], 0), 0)
 		player["score"] = int(first_present(player, ["score", "points"], 0))

@@ -12,6 +12,8 @@ const ONLINE_ROOM_CODE_MAX_LENGTH := 32
 const ONLINE_LOG_HISTORY_LIMIT := 14
 const ONLINE_LOG_ENTRY_MAX_LENGTH := 240
 const UI_MIN_TOUCH_TARGET := 44.0
+const AUDIO_HEALTH_CHECK_INTERVAL_MSEC := 5000
+const GPT_PLATE_ATLAS_CACHE_LIMIT := 64
 const ONLINE_CHAT_COOLDOWN_MSEC := 650
 const ONLINE_VOICE_PACKET_MAX_BYTES := 16384
 const ONLINE_VOICE_MIN_SAMPLE_RATE := 8000
@@ -492,6 +494,8 @@ var felt_texture: Texture2D
 var wood_texture: Texture2D
 var illustration_textures: Dictionary = {}
 var optional_gpt_illustration_textures: Dictionary = {}
+var gpt_plate_atlas_cache: Dictionary = {}
+var gpt_plate_atlas_cache_order: Array[String] = []
 var shader_materials: Dictionary = {}
 const SHADER_PATHS := {
 	"ink_wash_bg": "res://shaders/ink_wash_bg.gdshader",
@@ -518,8 +522,9 @@ var tts_voice_id = ""
 var tts_utterance_id = 1
 var next_bgm_retry_msec = 0
 var audio_touch_unlocked = false
-var audio_health_check_counter = 0
+var next_audio_health_check_msec = 0
 var last_bgm_health_check = 0
+var resize_refresh_pending = false
 var speech_queue: Array = []
 var speech_queue_active = false
 var speech_queue_generation = 0
@@ -1176,6 +1181,8 @@ const FX_TURN_PULSE_PERIOD_MSEC := 1700
 const FX_WIN_RING_COUNT := 3
 const FX_BURST_LABEL_FONT_SIZE := 58
 const FX_LAYER_Z_INDEX := 16
+# Modal decisions must sit above board tiles, action docks, and transient FX.
+const UI_MODAL_Z_INDEX := 70
 const TRANSITION_DURATION_MSEC := 280
 const HAND_SLIDE_IN_DURATION_MSEC := 220
 const TOAST_DEFAULT_DURATION_MSEC := 1800
@@ -1415,10 +1422,18 @@ func _gpt_plate_texture_for_rect(texture: Texture2D, plate_key: String, rect: Re
 	var source_size := texture.get_size()
 	if source_size.x <= 1.0 or source_size.y <= 1.0:
 		return texture
+	var cache_key: String = "%s|%s|%.3f" % [str(texture.get_instance_id()), plate_key, crop_fraction]
+	if gpt_plate_atlas_cache.has(cache_key):
+		return gpt_plate_atlas_cache[cache_key] as Texture2D
 	var crop_size := source_size * crop_fraction
 	var atlas := AtlasTexture.new()
 	atlas.atlas = texture
 	atlas.region = Rect2((source_size - crop_size) * 0.5, crop_size)
+	while gpt_plate_atlas_cache_order.size() >= GPT_PLATE_ATLAS_CACHE_LIMIT:
+		var oldest_key: String = str(gpt_plate_atlas_cache_order.pop_front())
+		gpt_plate_atlas_cache.erase(oldest_key)
+	gpt_plate_atlas_cache_order.append(cache_key)
+	gpt_plate_atlas_cache[cache_key] = atlas
 	return atlas
 
 

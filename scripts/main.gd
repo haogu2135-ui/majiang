@@ -9021,7 +9021,6 @@ func draw_achievements_row_collection_bus_art(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.055, 0.325, 0.945, 0.935))
 	parent.add_child(art)
 	parent.move_child(art, max(0, art.get_index() - 1))
-	return art
 	var gold = Color(0.90, 0.70, 0.30)
 	var jade = Color(0.72, 0.56, 0.32)
 	var spine = make_gpt_edge_rail(rect_full(0.955, 0.030, 0.982, 0.900), Color(0.006, 0.016, 0.018, 0.42))
@@ -9864,9 +9863,9 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	configure_clipped_label(context)
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_advisor_detail_panel"))
 	close_button.name = "AdvisorDetailCloseButton"
-	close_button.custom_minimum_size = Vector2(36, 36)
+	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 	close_button.tooltip_text = "收起牌势详解 · Esc"
-	apply_rect(close_button, rect_full(0.910, 0.045, 0.970, 0.175))
+	apply_rect(close_button, rect_full(0.895, 0.020, 0.985, 0.225))
 	panel.add_child(close_button)
 	var detail_route = make_gpt_route_rail(rect_full(0.060, 0.255, 0.940, 0.275), Color(0.006, 0.016, 0.018, 0.48))
 	detail_route.name = "AdvisorDetailRoute"
@@ -12757,7 +12756,7 @@ func draw_hand(parent: Control) -> void:
 		if tutorial_step == TUTORIAL_STEP_WIN:
 			var finish_tutorial_button = make_small_button("完成", Color(0.42, 0.68, 0.52), Callable(self, "complete_tutorial"))
 			finish_tutorial_button.name = "HandTutorialCompleteButton"
-			finish_tutorial_button.custom_minimum_size = Vector2(58, 20)
+			finish_tutorial_button.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
 			finish_tutorial_button.add_theme_font_size_override("font_size", 9)
 			finish_tutorial_button.tooltip_text = "保存教学完成状态并关闭提示"
 			apply_rect(finish_tutorial_button, rect_full(0.735, 0.060, 0.895, 0.940))
@@ -12765,7 +12764,7 @@ func draw_hand(parent: Control) -> void:
 		else:
 			var skip_tutorial_button = make_icon_button("x", Color(0.58, 0.38, 0.30), 14, Callable(self, "skip_tutorial"))
 			skip_tutorial_button.name = "HandTutorialSkipButton"
-			skip_tutorial_button.custom_minimum_size = Vector2(22, 20)
+			skip_tutorial_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 			skip_tutorial_button.tooltip_text = "跳过教学；之后可从菜单入口重新开始"
 			apply_rect(skip_tutorial_button, rect_full(0.905, 0.060, 0.975, 0.940))
 			hint_panel.add_child(skip_tutorial_button)
@@ -17785,7 +17784,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		close_settings_panel()
 	)
 	ensure_button_gpt_face_plate(close, Color(0.30, 0.34, 0.36, 0.40))
-	close.custom_minimum_size = Vector2(88, 42)
+	close.custom_minimum_size = Vector2(88, UI_MIN_TOUCH_TARGET)
 	close.name = "SettingsCloseButton"
 	close.tooltip_text = "关闭设置（Esc）"
 	close.focus_mode = Control.FOCUS_ALL
@@ -18471,7 +18470,6 @@ func draw_stat_row_art(parent: Control, label_text: String, value_text: String) 
 	var stat_divider = make_gpt_plate_rect(rect_full(0.505, 0.205, 0.510, 0.795), Color(accent.r, accent.g, accent.b, 0.22))
 	stat_divider.name = "StatsRowValueDivider_%s" % label_text
 	art.add_child(stat_divider)
-	return art
 	var marker = make_gpt_gate(rect_full(0.020, 0.260, 0.036, 0.740), Color(accent.r, accent.g, accent.b, 0.34))
 	marker.name = "StatsRowMarker_%s" % label_text
 	art.add_child(marker)
@@ -18633,7 +18631,6 @@ func draw_stats_data_scan_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.080, 0.112, 0.920, 0.330))
 	parent.add_child(art)
-	return art
 	var accent = Color(0.72, 0.56, 0.32)
 	var source = make_gpt_edge_rail(rect_full(0.020, 0.245, 0.070, 0.700), Color(accent.r, accent.g, accent.b, 0.20))
 	source.name = "StatsDataScanSource"
@@ -18692,7 +18689,6 @@ func draw_stats_insight_convergence_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.430, 0.125, 0.915, 0.318))
 	parent.add_child(art)
-	return art
 	var gold = Color(0.88, 0.70, 0.32)
 	var jade = Color(0.72, 0.56, 0.32)
 	var source = make_gpt_edge_rail(rect_full(0.020, 0.270, 0.088, 0.700), Color(jade.r, jade.g, jade.b, 0.16 + summary_score * 0.08))
@@ -18751,7 +18747,6 @@ func draw_stats_mastery_route(parent: Control, win_rate: float, games_fill: floa
 	mastery.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(mastery, rect_full(0.185, 0.565, 0.665, 0.705))
 	parent.add_child(mastery)
-	return mastery
 	var accent = Color(0.74, 0.64, 0.36)
 	var rail = make_gpt_route_rail(rect_full(0.050, 0.435, 0.940, 0.565), Color(0.006, 0.016, 0.018, 0.42))
 	rail.name = "StatsMasteryRail"
@@ -18793,7 +18788,6 @@ func draw_stats_row_summary_bus_art(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.080, 0.330, 0.920, 0.930))
 	parent.add_child(art)
 	parent.move_child(art, max(0, art.get_index() - 1))
-	return art
 	var accent = Color(0.72, 0.56, 0.32)
 	var gold = Color(0.86, 0.68, 0.32)
 	var spine = make_gpt_edge_rail(rect_full(0.955, 0.035, 0.982, 0.900), Color(0.006, 0.016, 0.018, 0.42))
@@ -19173,9 +19167,9 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_table_log_archive"))
 	close_button.name = "TableLogArchiveCloseButton"
-	close_button.custom_minimum_size = Vector2(36, 36)
+	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 	close_button.tooltip_text = "关闭牌桌记录 · Esc"
-	apply_rect(close_button, rect_full(0.900, 0.045, 0.970, 0.175))
+	apply_rect(close_button, rect_full(0.865, 0.005, 0.985, 0.215))
 	panel.add_child(close_button)
 	var route = make_gpt_route_rail(rect_full(0.060, 0.180, 0.940, 0.205), Color(0.006, 0.016, 0.018, 0.48))
 	route.name = "TableLogArchiveRoute"
@@ -21531,11 +21525,11 @@ func make_lobby_action_button(text: String, color: Color, callback: Callable, in
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	button.set_meta("menu_motion_intro_alpha", clampf(intro_alpha, 0.0, 1.0))
-	button.add_theme_font_size_override("font_size", commercial_ui_font_size(17, 2))
-	button.add_theme_color_override("font_color", Color(0.97, 0.95, 0.84))
-	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90))
-	button.add_theme_color_override("font_pressed_color", Color(0.98, 0.90, 0.66))
-	button.add_theme_color_override("font_disabled_color", Color(0.66, 0.70, 0.62))
+	button.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(17, 2)))
+	button.add_theme_color_override("font_color", accessible_text_color(Color(0.97, 0.95, 0.84)))
+	button.add_theme_color_override("font_hover_color", accessible_text_color(Color(1.0, 0.98, 0.90)))
+	button.add_theme_color_override("font_pressed_color", accessible_text_color(Color(0.98, 0.90, 0.66)))
+	button.add_theme_color_override("font_disabled_color", accessible_text_color(Color(0.80, 0.84, 0.78)))
 	draw_lobby_action_button_art(button, text, color)
 	configure_menu_button_motion(button, intro_delay, 1.045, deg_to_rad(0.25))
 	button.button_down.connect(func() -> void:
@@ -24228,16 +24222,17 @@ func _show_achievements_screen_impl() -> void:
 		achievements_scrollbar.name = "AchievementsScrollBar"
 		achievements_scrollbar.visible = false
 		achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Panel StyleBoxFlat retained for scrollbar luma probes; visual via GPT plate child
-	var achievements_scroll_gutter = make_panel(panel, rect_full(0.946, achievement_scroll_top + 0.012, 0.962, achievement_scroll_bottom - 0.012), Color(0.030, 0.048, 0.044, 0.74), 999, Color(0.40, 0.50, 0.40, 0.38), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
+	var achievements_scroll_gutter = make_gpt_plate_rect(rect_full(0.946, achievement_scroll_top + 0.012, 0.962, achievement_scroll_bottom - 0.012), Color(0.030, 0.048, 0.044, 0.74), "ui_ornament_tick_strip")
 	achievements_scroll_gutter.name = "AchievementsScrollGutter"
 	achievements_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(achievements_scroll_gutter)
 	var achievements_scroll_up = add_lucide_icon(achievements_scroll_gutter, "chevron-up", rect_full(0.15, 0.008, 0.85, 0.145), Color(0.80, 0.88, 0.74, 0.88))
 	if achievements_scroll_up != null:
 		achievements_scroll_up.name = "AchievementsScrollUpIcon"
-	var achievements_scroll_thumb = make_panel(achievements_scroll_gutter, rect_full(0.200, 0.055, 0.800, 0.520), Color(0.72, 0.62, 0.34, 0.88), 999, Color(0.90, 0.82, 0.54, 0.38), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var achievements_scroll_thumb = make_gpt_plate_rect(rect_full(0.200, 0.055, 0.800, 0.520), Color(0.72, 0.62, 0.34, 0.88), "ui_progress_signal_strip")
 	achievements_scroll_thumb.name = "AchievementsScrollThumb"
 	achievements_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	achievements_scroll_gutter.add_child(achievements_scroll_thumb)
 	var achievements_scroll_down = add_lucide_icon(achievements_scroll_gutter, "chevron-down", rect_full(0.15, 0.855, 0.85, 0.992), Color(0.80, 0.88, 0.74, 0.88))
 	if achievements_scroll_down != null:
 		achievements_scroll_down.name = "AchievementsScrollDownIcon"
@@ -24248,6 +24243,15 @@ func _show_achievements_screen_impl() -> void:
 	achievements_scroll_hit_target.tooltip_text = "拖动查看全部成就"
 	apply_rect(achievements_scroll_hit_target, rect_full(0.938, achievement_scroll_top - 0.005, 0.990, achievement_scroll_bottom + 0.005))
 	panel.add_child(achievements_scroll_hit_target)
+	var achievement_total_count := achievements.size()
+	var achievement_initial_last := mini(achievement_total_count, maxi(1, visible_row_count))
+	var achievements_browse_status = make_label(panel, "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count], 11, Color(0.86, 0.92, 0.78), true)
+	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
+	apply_rect(achievements_browse_status, rect_full(0.055, 0.297, 0.880, 0.322))
+	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	achievements_browse_status.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
+	achievements_browse_status.add_theme_constant_override("outline_size", 2)
+	configure_clipped_label(achievements_browse_status)
 
 	var grid = VBoxContainer.new()
 	configure_passive_container(grid)
@@ -24274,14 +24278,17 @@ func _show_achievements_screen_impl() -> void:
 	if achievements_scrollbar != null:
 		achievements_scrollbar.value_changed.connect(func(_value: float) -> void:
 			sync_achievements_scroll_thumb(scroll, achievements_scroll_thumb)
+			sync_achievements_scroll_status(scroll, achievements_browse_status, achievement_total_count)
 		)
 	scroll.resized.connect(func() -> void:
 		sync_achievements_scroll_thumb(scroll, achievements_scroll_thumb)
 	)
 	grid.resized.connect(func() -> void:
 		sync_achievements_scroll_thumb(scroll, achievements_scroll_thumb)
+		sync_achievements_scroll_status(scroll, achievements_browse_status, achievement_total_count)
 	)
 	call_deferred("sync_achievements_scroll_thumb", scroll, achievements_scroll_thumb)
+	call_deferred("sync_achievements_scroll_status", scroll, achievements_browse_status, achievement_total_count)
 	draw_achievements_row_collection_bus_art(panel)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.list_items_stagger_in(rows, 0.22, 0.035)
@@ -24291,6 +24298,47 @@ func sync_achievements_scroll_thumb(content_scroll: ScrollContainer, thumb: Cont
 	if content_scroll == null or thumb == null:
 		return
 	sync_rules_scroll_thumb(content_scroll, thumb)
+
+
+func sync_achievements_scroll_status(content_scroll: ScrollContainer, status_label: Label, total_count: int) -> void:
+	if content_scroll == null or status_label == null or not is_instance_valid(content_scroll) or not is_instance_valid(status_label):
+		return
+	var scrollbar := content_scroll.get_v_scroll_bar()
+	var content_list := content_scroll.find_child("AchievementsGrid", true, false) as Control
+	if scrollbar == null or content_list == null:
+		return
+	var total := maxi(0, total_count)
+	if total == 0:
+		status_label.text = "浏览 0-0 / 0 · 暂无成就"
+		status_label.tooltip_text = "当前没有可浏览的成就"
+		return
+	var viewport_top := scrollbar.value
+	var viewport_height := maxf(scrollbar.page, content_scroll.size.y)
+	var viewport_bottom := viewport_top + viewport_height
+	var first_visible := -1
+	var last_visible := -1
+	var row_index := 0
+	for child in content_list.get_children():
+		if not child is Control or not str(child.name).begins_with("AchievementRow_"):
+			continue
+		row_index += 1
+		var row := child as Control
+		var row_top := row.position.y
+		var row_bottom := row_top + row.size.y
+		if row_bottom > viewport_top + 1.0 and row_top < viewport_bottom - 1.0:
+			if first_visible < 0:
+				first_visible = row_index
+			last_visible = row_index
+	if first_visible < 0:
+		var fallback_stride := 94.0 if effective_viewport_size().x < 1600.0 else 116.0
+		first_visible = clampi(int(floor(viewport_top / fallback_stride)) + 1, 1, total)
+		last_visible = mini(total, first_visible + maxi(1, int(ceil(viewport_height / fallback_stride))) - 1)
+	first_visible = clampi(first_visible, 1, total)
+	last_visible = clampi(maxi(first_visible, last_visible), first_visible, total)
+	var remaining := maxi(0, total - last_visible)
+	var tail := "余 0 · 已全部看完" if remaining == 0 else "余 %d · 继续下滑" % remaining
+	status_label.text = "浏览 %d-%d / %d · %s" % [first_visible, last_visible, total, tail]
+	status_label.tooltip_text = "当前显示第%d至%d项，共%d项；%s" % [first_visible, last_visible, total, ("已到列表末尾" if remaining == 0 else "还可继续滚动")]
 
 
 func _show_menu_impl() -> void:
@@ -24618,12 +24666,18 @@ func complete_tutorial(reason: String = "基础操作已完成") -> void:
 	interactive_guide_type = ""
 	interactive_guide_target_index = -1
 	show_toast("教学完成 · %s" % reason)
+	if mode == "offline":
+		render_game()
+	else:
+		refresh_current_screen()
 
 
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
 	var row = VBoxContainer.new()
 	configure_passive_container(row)
-	row.custom_minimum_size = Vector2(0, 50)
+	# Reserve one full touch lane below each caption; the old 38px field was
+	# difficult to hit on compact landscape screens.
+	row.custom_minimum_size = Vector2(0, UI_MIN_TOUCH_TARGET + 16.0)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", 0)
 	parent.add_child(row)
@@ -24640,7 +24694,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	edit.max_length = max_length
 	edit.add_theme_font_override("font", ui_cjk_font())
 	edit.virtual_keyboard_type = keyboard_type
-	edit.custom_minimum_size = Vector2(240, 38)
+	edit.custom_minimum_size = Vector2(240, UI_MIN_TOUCH_TARGET)
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	edit.add_theme_font_size_override("font_size", commercial_ui_font_size(18, 2))
 	var input_styles = input_style_set()
@@ -24677,15 +24731,15 @@ func refresh_online_lobby_action_states() -> void:
 	if connect_button != null:
 		connect_button.disabled = connected or connecting
 		connect_button.tooltip_text = "已连接当前服务器" if connected else ("正在连接服务器" if connecting else "连接服务器")
-		connect_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if connect_button.disabled else Color.WHITE
+		connect_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.84, 0.88, 0.84, 1.0) if connect_button.disabled else Color.WHITE)
 	if create_button != null:
 		create_button.disabled = not connected
 		create_button.tooltip_text = "连接后创建房间" if not connected else "创建新房间"
-		create_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if create_button.disabled else Color.WHITE
+		create_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.84, 0.88, 0.84, 1.0) if create_button.disabled else Color.WHITE)
 	if join_button != null:
 		join_button.disabled = not connected or room_code == ""
 		join_button.tooltip_text = "连接后输入房间号" if not connected else ("输入房间号后加入" if room_code == "" else "加入指定房间")
-		join_button.modulate = Color(0.70, 0.74, 0.70, 0.62) if join_button.disabled else Color.WHITE
+		join_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.84, 0.88, 0.84, 1.0) if join_button.disabled else Color.WHITE)
 	var current_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	if current_status != null and online_feedback.strip_edges() == "":
 		if not connected:
@@ -24968,7 +25022,8 @@ func _show_online_lobby_impl() -> void:
 	apply_rect(lobby_chat_button, rect_full(0.500, 0.015, 0.640, 0.135))
 	log_panel.add_child(lobby_chat_button)
 	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
-	var room_badge_text = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
+	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
+	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
@@ -24979,7 +25034,12 @@ func _show_online_lobby_impl() -> void:
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
-		room_badge_label.tooltip_text = room_badge_text
+		apply_rect(room_badge_label, rect_full(0.045, 0.040, 0.780, 0.960))
+		room_badge_label.tooltip_text = room_badge_full_text
+	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.800, 0.205, 0.955, 0.795), Color(0.92, 0.88, 0.64, 0.92))
+	if room_badge_info_icon != null:
+		room_badge_info_icon.name = "OnlineLobbyRoomBadgeViewIcon"
+		room_badge.move_child(room_badge_info_icon, room_badge_label.get_index() if room_badge_label != null else room_badge.get_child_count() - 1)
 	var room_touch_target := add_online_detail_touch_target(root_layer, "OnlineLobbyRoomBadgeTouchTarget", "查看完整房间号", func() -> void:
 		show_online_room_code_detail()
 	, normalized_rect_in_parent(room_badge.get_global_rect(), root_layer))
@@ -25121,8 +25181,8 @@ func refresh_online_lobby_state() -> void:
 			room_touch_target.visible = show_room_snapshot
 			room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
 		if room_badge_label != null:
-			room_badge_label.text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
-			room_badge_label.tooltip_text = room_badge_label.text
+			room_badge_label.text = online_room_badge_display_text(selected_room) if show_room_snapshot and selected_room != "" else "房间号 连接后显示"
+			room_badge_label.tooltip_text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
 	var roster = root_layer.find_child("OnlineLobbyRosterPanel", true, false) as CanvasItem
 	var log_list = root_layer.find_child("OnlineLobbyLogListPanel", true, false) as CanvasItem
@@ -25281,6 +25341,15 @@ func show_online_room_code_detail() -> void:
 	if room_code != "":
 		show_toast("房间号：%s" % room_code, 3600)
 
+func online_room_badge_display_text(room_code: String) -> String:
+	var bounded_code := bounded_online_input(room_code, ONLINE_ROOM_CODE_MAX_LENGTH)
+	if bounded_code == "":
+		return "房间号 连接后显示"
+	# Keep a stable, scan-friendly identifier in the fixed header slot. The
+	# complete value remains available through the label tooltip and detail target.
+	var short_code := bounded_code if bounded_code.length() <= 8 else "%s…%s" % [bounded_code.left(3), bounded_code.right(2)]
+	return "房间号 %s" % short_code
+
 func show_online_roster_detail(slot: int) -> void:
 	var entry := online_lobby_player_for_slot(online_lobby_player_entries(), slot)
 	if entry.is_empty():
@@ -25392,18 +25461,20 @@ func _show_rules_screen_impl() -> void:
 	var compact_rules_scroll := effective_viewport_size().y <= 560.0
 	var gutter_left := 0.930
 	var gutter_right := 0.948
-	var rules_scroll_gutter = make_panel(panel, rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.05, 0.043, 0.035, 0.96), 999, Color(0.42, 0.35, 0.22, 0.62), 0, "ui_dark_scrim")  # r227 authored dark track
+	var rules_scroll_gutter = make_gpt_plate_rect(rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.05, 0.043, 0.035, 0.96), "ui_dark_scrim")
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(rules_scroll_gutter)
 	# Solve the fraction from a pixel target so the grip remains discoverable on
 	# 960/1280/1920 captures and still has a stable touch target on Android.
 	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * effective_viewport_size().x)
 	var thumb_span_frac := clampf(16.0 / gutter_span_px, 0.20, 0.96)
 	var thumb_left := 0.5 - thumb_span_frac * 0.5
 	var thumb_right := 0.5 + thumb_span_frac * 0.5
-	var rules_scroll_thumb = make_panel(rules_scroll_gutter, rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), 999, Color(1.0, 0.92, 0.64, 0.92), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	var rules_scroll_thumb = make_gpt_plate_rect(rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), "ui_progress_signal_strip")
 	rules_scroll_thumb.name = "RulesContentScrollThumb"
 	rules_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rules_scroll_gutter.add_child(rules_scroll_thumb)
 	rules_scroll_thumb.set_meta("track_left", thumb_left)
 	rules_scroll_thumb.set_meta("track_right", thumb_right)
 	var scroll_icon_left := 0.080 if compact_rules_scroll else 0.205
@@ -25711,7 +25782,7 @@ func scroll_rules_to_section(content_scroll: ScrollContainer, section_index: int
 		sync_rules_guide_state(content_scroll, guide)
 
 
-func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null) -> void:
+func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, gutter: Control, drag_state: Dictionary, input_target: Control = null, sync_callback: Callable = Callable()) -> void:
 	if scrollbar == null or thumb == null or gutter == null:
 		return
 	var event_target = input_target if input_target != null else thumb
@@ -25723,27 +25794,27 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 				var wheel_scroll_range = maxf(0.0, scrollbar.max_value - scrollbar.page)
 				scrollbar.value = clampf(scrollbar.value + direction * maxf(24.0, scrollbar.page * 0.12), 0.0, wheel_scroll_range)
 				content_scroll.scroll_vertical = int(round(scrollbar.value))
-				sync_rules_scroll_thumb(content_scroll, thumb)
+				sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
 				event_target.accept_event()
 			return
 		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
 			return
 		drag_state["active"] = mouse_button.pressed
 		if mouse_button.pressed:
-			set_rules_scroll_from_track_position(content_scroll, scrollbar, thumb, event_target, mouse_button.position.y)
+			set_rules_scroll_from_track_position(content_scroll, scrollbar, thumb, event_target, mouse_button.position.y, sync_callback)
 			drag_state["active"] = true
 		if not mouse_button.pressed:
-			sync_rules_scroll_thumb(content_scroll, thumb)
+			sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
 		event_target.accept_event()
 		return
 	if event is InputEventScreenTouch:
 		var touch = event as InputEventScreenTouch
 		drag_state["active"] = touch.pressed
 		if touch.pressed:
-			set_rules_scroll_from_track_position(content_scroll, scrollbar, thumb, event_target, touch.position.y)
+			set_rules_scroll_from_track_position(content_scroll, scrollbar, thumb, event_target, touch.position.y, sync_callback)
 			drag_state["active"] = true
 		if not touch.pressed:
-			sync_rules_scroll_thumb(content_scroll, thumb)
+			sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
 		event_target.accept_event()
 		return
 	if not bool(drag_state.get("active", false)):
@@ -25760,11 +25831,18 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 	if scroll_range > 0.0:
 		scrollbar.value = clampf(scrollbar.value + relative_y / track_height * scroll_range, 0.0, scroll_range)
 		content_scroll.scroll_vertical = int(round(scrollbar.value))
-		sync_rules_scroll_thumb(content_scroll, thumb)
+		sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
 	event_target.accept_event()
 
 
-func set_rules_scroll_from_track_position(content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, target: Control, local_y: float) -> void:
+func sync_scroll_thumb_for_input(content_scroll: ScrollContainer, thumb: Control, sync_callback: Callable = Callable()) -> void:
+	if sync_callback.is_valid():
+		sync_callback.call(content_scroll, thumb)
+	else:
+		sync_rules_scroll_thumb(content_scroll, thumb)
+
+
+func set_rules_scroll_from_track_position(content_scroll: ScrollContainer, scrollbar: VScrollBar, thumb: Control, target: Control, local_y: float, sync_callback: Callable = Callable()) -> void:
 	if content_scroll == null or scrollbar == null or thumb == null or target == null:
 		return
 	var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
@@ -25779,7 +25857,7 @@ func set_rules_scroll_from_track_position(content_scroll: ScrollContainer, scrol
 	var value := progress * scroll_range
 	scrollbar.value = value
 	content_scroll.scroll_vertical = int(round(value))
-	sync_rules_scroll_thumb(content_scroll, thumb)
+	sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
 
 
 func _show_shop_screen_impl() -> void:
@@ -25899,14 +25977,29 @@ func _show_shop_screen_impl() -> void:
 		shop_scrollbar.name = "ShopItemsScrollBar"
 		shop_scrollbar.visible = false
 		shop_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var shop_scroll_gutter = make_panel(panel, rect_full(0.948, 0.135, 0.960, 0.750), Color(0.022, 0.030, 0.026, 0.54), 999, Color(0.28, 0.24, 0.16, 0.20), 0, "ui_ornament_tick_strip")  # r227 GPT gutter
+	var shop_scroll_gutter = make_gpt_plate_rect(rect_full(0.948, 0.135, 0.960, 0.750), Color(0.022, 0.030, 0.026, 0.54), "ui_ornament_tick_strip")
 	shop_scroll_gutter.name = "ShopItemsScrollGutter"
 	shop_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var shop_scroll_thumb = make_panel(shop_scroll_gutter, rect_full(0.190, 0.050, 0.810, 0.900), Color(0.54, 0.46, 0.28, 0.66), 999, Color(0.72, 0.62, 0.36, 0.24), 0, "ui_progress_signal_strip")  # r227 GPT thumb
+	panel.add_child(shop_scroll_gutter)
+	var shop_scroll_thumb = make_gpt_plate_rect(rect_full(0.190, 0.050, 0.810, 0.900), Color(0.54, 0.46, 0.28, 0.66), "ui_progress_signal_strip")
 	shop_scroll_thumb.name = "ShopItemsScrollThumb"
 	shop_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shop_scroll_gutter.add_child(shop_scroll_thumb)
 	shop_scroll_thumb.set_meta("track_top", 0.050)
 	shop_scroll_thumb.set_meta("track_height", 0.900)
+	var shop_scroll_hit_target := Control.new()
+	shop_scroll_hit_target.name = "ShopItemsScrollHitTarget"
+	shop_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
+	shop_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
+	shop_scroll_hit_target.tooltip_text = "拖动定位商品列表"
+	shop_scroll_hit_target.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, 0.0)
+	shop_scroll_hit_target.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+	apply_rect(shop_scroll_hit_target, rect_full(0.925, 0.120, 0.975, 0.765))
+	panel.add_child(shop_scroll_hit_target)
+	var shop_scroll_drag_state: Dictionary = {"active": false}
+	shop_scroll_hit_target.gui_input.connect(func(event: InputEvent) -> void:
+		handle_rules_scroll_thumb_input(event, scroll, shop_scrollbar, shop_scroll_thumb, shop_scroll_gutter, shop_scroll_drag_state, shop_scroll_hit_target, Callable(self, "sync_shop_scroll_thumb"))
+	)
 
 	var shop_wide_layout := effective_viewport_size().x >= 1600.0
 	var content: Control
@@ -26272,6 +26365,11 @@ func _show_stats_screen_impl() -> void:
 	draw_stats_dashboard_art(panel)
 	draw_stats_data_scan_art(panel)
 	draw_stats_insight_convergence_art(panel)
+	var stats_win_rate: float = clampf(float(game_stats.get("win_rate", 0.0)), 0.0, 1.0)
+	var stats_games_fill: float = clampf(float(int(game_stats.get("games_played", 0))) / 20.0, 0.05, 1.0)
+	var stats_best_score_strength: float = clampf(float(int(game_stats.get("best_score", 0))) / 12000.0, 0.08, 1.0)
+	var stats_summary_score: float = clampf((stats_win_rate + stats_games_fill + stats_best_score_strength) / 3.0, 0.06, 1.0)
+	draw_stats_mastery_route(panel, stats_win_rate, stats_games_fill, stats_best_score_strength, stats_summary_score)
 
 	# 统计数据
 	var content = VBoxContainer.new()
@@ -26374,8 +26472,8 @@ func show_telemetry_data_sheet() -> void:
 	var close := make_small_button("关闭", Color(0.30, 0.34, 0.36), Callable(self, "close_telemetry_data_sheet"))
 	close.name = "TelemetryDataSheetCloseButton"
 	close.tooltip_text = "关闭隐私数据页 · Esc"
-	close.custom_minimum_size = Vector2(100, 42)
-	apply_rect(close, rect_full(0.390, 0.770, 0.610, 0.900))
+	close.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
+	apply_rect(close, rect_full(0.390, 0.770, 0.610, 0.960))
 	card.add_child(close)
 	configure_button_focus_navigation(sheet, "TelemetryConsentButton")
 
@@ -27001,7 +27099,9 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	# Leave a visual buffer before the fixed action so the first visible row is
 	# never clipped by the scroll viewport or the close button.
 	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.790))
-	content_scroll.get_v_scroll_bar().name = "DiagnosticContentScrollBar"
+	var diagnostic_scrollbar := content_scroll.get_v_scroll_bar()
+	if diagnostic_scrollbar != null:
+		diagnostic_scrollbar.name = "DiagnosticContentScrollBar"
 
 	var vbox = VBoxContainer.new()
 	vbox.name = "DiagnosticContentList"
@@ -27036,6 +27136,13 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		else:
 			label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.91))
 		vbox.add_child(label)
+	var content_status = make_label(panel, "诊断内容 1-%d / %d · 可继续滚动" % [mini(5, lines.size()), lines.size()], 11, Color(0.86, 0.92, 0.84), true)
+	content_status.name = "DiagnosticContentStatusLabel"
+	apply_rect(content_status, rect_full(0.05, 0.785, 0.95, 0.820))
+	content_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	content_status.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.05, 0.94))
+	content_status.add_theme_constant_override("outline_size", 2)
+	configure_clipped_label(content_status)
 
 	var copy_button = make_small_button("复制报告", Color(0.30, 0.52, 0.54), Callable(self, "copy_diagnostic_report").bind(lines))
 	copy_button.name = "DiagnosticCopyButton"
@@ -27064,10 +27171,16 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	close_button.grab_focus()
 	content_scroll.resized.connect(func() -> void:
 		normalize_diagnostic_scroll_viewport(content_scroll, vbox)
+		sync_diagnostic_scroll_status(content_scroll, content_status, lines.size())
 	)
 	vbox.resized.connect(func() -> void:
 		normalize_diagnostic_scroll_viewport(content_scroll, vbox)
+		sync_diagnostic_scroll_status(content_scroll, content_status, lines.size())
 	)
+	if diagnostic_scrollbar != null:
+		diagnostic_scrollbar.value_changed.connect(func(_value: float) -> void:
+			sync_diagnostic_scroll_status(content_scroll, content_status, lines.size())
+		)
 	# Give the first rendered frame a complete-row boundary before container
 	# layout emits its deferred resize signals. The next-frame helper refines it.
 	var initial_viewport_height := effective_viewport_size().y
@@ -27075,6 +27188,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	content_scroll.anchor_bottom = content_scroll.anchor_top
 	content_scroll.offset_bottom = initial_scroll_height
 	call_deferred("normalize_diagnostic_scroll_viewport", content_scroll, vbox)
+	call_deferred("sync_diagnostic_scroll_status", content_scroll, content_status, lines.size())
 
 	# 面板入场动画 - 滑入 + 淡入
 	if ui_motion_enabled():
@@ -27141,6 +27255,47 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	content_scroll.offset_bottom = complete_height
 
 
+func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label: Label, total_count: int) -> void:
+	if content_scroll == null or status_label == null or not is_instance_valid(content_scroll) or not is_instance_valid(status_label):
+		return
+	var scrollbar := content_scroll.get_v_scroll_bar()
+	var content_list := content_scroll.find_child("DiagnosticContentList", true, false) as Control
+	if scrollbar == null or content_list == null:
+		return
+	var total := maxi(0, total_count)
+	if total == 0:
+		status_label.text = "诊断内容 0-0 / 0 · 无内容"
+		status_label.tooltip_text = "当前诊断报告没有内容"
+		return
+	var viewport_top := scrollbar.value
+	var viewport_height := maxf(scrollbar.page, content_scroll.size.y)
+	var viewport_bottom := viewport_top + viewport_height
+	var first_visible := -1
+	var last_visible := -1
+	var line_index := 0
+	for child in content_list.get_children():
+		if not child is Label:
+			continue
+		line_index += 1
+		var line := child as Label
+		var line_top := line.position.y
+		var line_bottom := line_top + line.size.y
+		if line_bottom > viewport_top + 1.0 and line_top < viewport_bottom - 1.0:
+			if first_visible < 0:
+				first_visible = line_index
+			last_visible = line_index
+	if first_visible < 0:
+		var fallback_line_height := 38.0 if large_text_enabled else 30.0
+		first_visible = clampi(int(floor(viewport_top / fallback_line_height)) + 1, 1, total)
+		last_visible = mini(total, first_visible + maxi(1, int(ceil(viewport_height / fallback_line_height))) - 1)
+	first_visible = clampi(first_visible, 1, total)
+	last_visible = clampi(maxi(first_visible, last_visible), first_visible, total)
+	var remaining := maxi(0, total - last_visible)
+	var tail := "余 0 · 已到末尾" if remaining == 0 else "可继续滚动 · 余 %d" % remaining
+	status_label.text = "诊断内容 %d-%d / %d · %s" % [first_visible, last_visible, total, tail]
+	status_label.tooltip_text = "当前显示第%d至%d行，共%d行；%s" % [first_visible, last_visible, total, ("已到报告末尾" if remaining == 0 else "可继续滚动查看完整报告")]
+
+
 func dismiss_diagnostic_dialog() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
@@ -27170,6 +27325,7 @@ func show_exit_confirm() -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.modulate = Color(1, 1, 1, 0)
+	overlay.z_index = UI_MODAL_Z_INDEX
 	root_layer.add_child(overlay)
 	exit_confirm_panel = overlay
 
@@ -27572,7 +27728,7 @@ func _show_replay_import_screen_impl() -> void:
 	search.placeholder_text = "按日期、规则或结果搜索"
 	search.text = replay_search_query
 	search.clear_button_enabled = true
-	search.custom_minimum_size = Vector2(0, 38)
+	search.custom_minimum_size = Vector2(0, UI_MIN_TOUCH_TARGET)
 	search.add_theme_font_override("font", ui_cjk_font())
 	search.add_theme_font_size_override("font_size", commercial_ui_font_size(12, 1))
 	var search_styles := input_style_set()
@@ -27583,7 +27739,7 @@ func _show_replay_import_screen_impl() -> void:
 	search.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
 	configure_line_edit_input(search, "搜索", 64)
 	draw_line_edit_input_art(search, "搜索")
-	apply_rect(search, rect_full(0.050, 0.195, 0.950, 0.390))
+	apply_rect(search, rect_full(0.050, 0.180, 0.950, 0.435))
 	archive_pane.add_child(search)
 	search.text_changed.connect(Callable(self, "set_replay_search_query"))
 	var archive_scroll := ScrollContainer.new()
@@ -27594,7 +27750,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.050, 0.425, 0.950, 0.965))
+	apply_rect(archive_scroll, rect_full(0.050, 0.455, 0.950, 0.965))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -27734,7 +27890,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	)
 	open.name = "ReplayArchiveOpenButton_%s" % archive_id.left(8)
 	open.tooltip_text = "打开这条已验证回放"
-	open.custom_minimum_size = Vector2(52, 36)
+	open.custom_minimum_size = Vector2(52, UI_MIN_TOUCH_TARGET)
 	open.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	apply_rect(open, rect_full(0.006 + action_step, action_top, 0.006 + action_step + action_slot_width, action_bottom))
 	row.add_child(open)
@@ -27743,7 +27899,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	)
 	copy.name = "ReplayArchiveCopyButton_%s" % archive_id.left(8)
 	copy.tooltip_text = "复制已验证回放码"
-	copy.custom_minimum_size = Vector2(58, 36)
+	copy.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
 	copy.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	apply_rect(copy, rect_full(0.006 + action_step * 2.0, action_top, 0.006 + action_step * 2.0 + action_slot_width, action_bottom))
 	row.add_child(copy)
@@ -27910,11 +28066,17 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_bg.anchor_right = 0.82
 	var toast_top := 0.06
 	var toast_bottom := 0.12
-	# Keep menu notices between the header and the tutorial banner. Modal cards
-	# begin below this lane, so diagnostic/settings toasts never cover their top.
-	if mode == "menu" and (tutorial_panel == null or not is_instance_valid(tutorial_panel)):
-		toast_top = 0.190
-		toast_bottom = 0.235
+	# Keep menu notices out of the title and tutorial entry lanes. The first-run
+	# banner is a real menu node rather than tutorial_panel, so reserve a separate
+	# top slot whenever it is present.
+	if mode == "menu":
+		var menu_tutorial_banner := root_layer.find_child("MenuTutorialEntryBanner", true, false) if root_layer != null and is_instance_valid(root_layer) else null
+		if menu_tutorial_banner != null and is_instance_valid(menu_tutorial_banner):
+			toast_top = 0.018
+			toast_bottom = 0.065
+		elif tutorial_panel == null or not is_instance_valid(tutorial_panel):
+			toast_top = 0.190
+			toast_bottom = 0.235
 	if root_layer != null and is_instance_valid(root_layer):
 		var modal_present := root_layer.find_child("DiagnosticDialogPanel", true, false) != null or root_layer.find_child("TelemetryDataSheetCard", true, false) != null or root_layer.find_child("ExitConfirmDialog", true, false) != null
 		if modal_present:
@@ -28813,7 +28975,7 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	if typeof(source) != TYPE_DICTIONARY:
 		source = {}
 	var game: Dictionary = (source as Dictionary).duplicate(true)
-	game["roomCode"] = str(first_present(game, ["roomCode", "room_code", "code"], selected_room))
+	game["roomCode"] = bounded_online_input(str(first_present(game, ["roomCode", "room_code", "code"], selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
 	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
 	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
 	game["wallCount"] = int(first_present(game, ["wallCount", "wallRemaining", "remainingTiles"], game.get("wallCount", 0)))
@@ -28920,7 +29082,9 @@ func normalize_online_players(value) -> Array:
 		var hand_value = first_present(player, ["hand", "tiles"], [])
 		var normalized_hand = normalize_tile_array(hand_value)
 		player["seat"] = int(first_present(player, ["seat", "index", "position"], result.size()))
-		player["name"] = str(first_present(player, ["name", "nickname", "userName"], "玩家"))
+		player["name"] = bounded_online_input(str(first_present(player, ["name", "nickname", "userName"], "玩家")), ONLINE_NAME_MAX_LENGTH)
+		if player["name"] == "":
+			player["name"] = "玩家"
 		player["handCount"] = numeric_count(first_present(player, ["handCount", "hand_count", "tileCount"], normalized_hand), normalized_hand.size())
 		player["flowerCount"] = numeric_count(first_present(player, ["flowerCount", "flowers", "flower_count"], 0), 0)
 		player["score"] = int(first_present(player, ["score", "points"], 0))
@@ -29339,9 +29503,7 @@ func _process(_delta: float) -> void:
 	var now = Time.get_ticks_msec()
 	keep_background_music_alive(now)
 	# 音频系统健康检查 - 每5秒检查一次
-	audio_health_check_counter += 1
-	if audio_health_check_counter >= 300:  # 60fps * 5秒 = 300帧
-		audio_health_check_counter = 0
+	if audio_health_check_due(now):
 		check_audio_health(now)
 	if update_state == "downloading":
 		update_download_progress(now)
@@ -29399,8 +29561,24 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		flush_offline_progress_autosave(true)
 	elif what == NOTIFICATION_WM_SIZE_CHANGED or what == NOTIFICATION_WM_DPI_CHANGE:
-		update_safe_area_layout()
-		call_deferred("refresh_current_screen")
+		schedule_resize_refresh()
+
+func audio_health_check_due(now_msec: int) -> bool:
+	if now_msec < next_audio_health_check_msec:
+		return false
+	next_audio_health_check_msec = now_msec + AUDIO_HEALTH_CHECK_INTERVAL_MSEC
+	return true
+
+func schedule_resize_refresh() -> void:
+	update_safe_area_layout()
+	if resize_refresh_pending:
+		return
+	resize_refresh_pending = true
+	call_deferred("run_scheduled_resize_refresh")
+
+func run_scheduled_resize_refresh() -> void:
+	resize_refresh_pending = false
+	refresh_current_screen()
 
 func focused_control_instance_id() -> int:
 	var focus_owner := get_viewport().gui_get_focus_owner()
@@ -30572,7 +30750,12 @@ func render_room_log() -> void:
 		call_deferred("restore_online_log_scroll", previous_scroll)
 
 func defer_online_log_scroll_to_end() -> void:
-	call_deferred("scroll_online_log_to_end")
+	# RichTextLabel fitting can update the scroll range one frame after the
+	# lobby refresh. Wait for the container to settle before taking the final
+	# bottom position, otherwise a newly wrapped line leaves a one-pixel gap.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	scroll_online_log_to_end()
 
 func scroll_online_log_to_end() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
@@ -32884,9 +33067,9 @@ func update_progress_text() -> String:
 			return "%s / %s  %d%%" % [format_bytes(update_downloaded_bytes), format_bytes(update_total_bytes), percent]
 		return "已下载 %s\n%s" % [format_bytes(update_downloaded_bytes), update_download_url]
 	if update_state == "ready":
-		return "已保存 v%s 升级包%s%s" % [update_remote_version, update_manifest_detail_text(), update_release_notes_summary()]
+		return "已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "current":
-		return "远端版本 v%s%s%s" % [update_remote_version, update_manifest_detail_text(), update_release_notes_summary()]
+		return "远端版本 v%s%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "error":
 		return "下载地址 " + update_download_url
 	return ""
