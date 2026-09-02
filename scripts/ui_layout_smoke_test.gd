@@ -1947,8 +1947,7 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	var action_surface := scene.action_bar as Control
 	if action_surface != null:
 		var action_surface_rect := screen_rect(action_surface)
-		check(absf(panel_rect.position.x - action_surface_rect.position.x) <= 2.0 and absf(panel_rect.end.x - action_surface_rect.end.x) <= 2.0, "danger discard warning and its CTA share one aligned decision column at %s" % viewport_size)
-		check(panel_rect.end.y <= action_surface_rect.position.y - 6.0 and not rects_overlap(panel_rect, action_surface_rect), "danger discard warning sits directly above, without colliding with, its CTA lane at %s" % viewport_size)
+		check(panel_rect.end.y <= action_surface_rect.position.y - 6.0 and not rects_overlap(panel_rect, action_surface_rect), "danger discard warning clears the full-width CTA lane at %s" % viewport_size)
 	for seat in range(4):
 		var discard_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
 		if discard_grid != null:
@@ -1957,6 +1956,16 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 					check(not rects_overlap(panel_rect, screen_rect(discard_tile as Control)), "danger discard warning clears visible river tile %d/%s at %s" % [seat, discard_tile.name, viewport_size])
 		var meld_area = scene.find_child("MeldArea_%d" % seat, true, false) as Control
 		if meld_area != null:
+			var canonical_layout: Array = []
+			for meld_layout in scene.MELD_LAYOUTS:
+				if int(meld_layout[0]) == seat:
+					canonical_layout = meld_layout
+					break
+			if not canonical_layout.is_empty():
+				var expected_lane := anchor_rect_in_parent(screen_rect(scene.root_layer), canonical_layout[1])
+				var actual_lane := screen_rect(meld_area)
+				check(actual_lane.position.distance_to(expected_lane.position) <= 1.0 and actual_lane.size.distance_to(expected_lane.size) <= 1.0, "danger discard keeps seat %d melds in the canonical seat lane at %s" % [seat, viewport_size])
+				check(str(meld_area.get_meta("orientation", "")) == ("vertical" if scene.seat_meld_is_vertical(seat) else "horizontal"), "danger discard keeps seat %d meld orientation stable at %s" % [seat, viewport_size])
 			for meld_group in meld_area.get_children():
 				if meld_group is Control and str(meld_group.name).begins_with("MeldGroup_"):
 					check(not rects_overlap(panel_rect, screen_rect(meld_group as Control)), "danger discard warning clears meld %d/%s at %s" % [seat, meld_group.name, viewport_size])

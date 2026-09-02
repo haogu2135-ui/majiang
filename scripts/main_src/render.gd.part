@@ -1153,9 +1153,9 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# r214: bulk GPT chrome sweep
 	# A pending claim already has one focused response surface. Hiding the general
-	# advisor here prevents a second reading lane from competing with the claim
-	# buttons and keeps keyboard focus within the legal response actions.
-	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or not player_ai_assist_enabled()):
+	# advisor here prevents a second reading lane from competing with the claim or
+	# danger decision surfaces and keeps keyboard focus within the active action.
+	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or has_pending_danger_discard() or not player_ai_assist_enabled()):
 		return
 	# The narrow center-left HUD slot sits between the left river and the center
 	# surface, above the player river. During a response window the action dock

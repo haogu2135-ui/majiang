@@ -8510,16 +8510,12 @@ func seat_discard_rect(seat: int) -> Rect2:
 # 弃牌落水溅射动画 / Discard Splash Animation
 
 func seat_meld_rect(seat: int) -> Rect2:
-	# MELD_LAYOUTS is the canonical base geometry. The danger shelf is a stateful
-	# variant of that same rect and is consumed by drawing, hit/layout checks, and
-	# pending-context collision tests.
+	# MELD_LAYOUTS is the single source of truth for meld geometry. Gameplay state
+	# may change the surrounding decision surfaces, but never the seat-facing lane.
 	for layout in MELD_LAYOUTS:
 		if int(layout[0]) != seat:
 			continue
-		var rect: Rect2 = layout[1]
-		if mode == "offline" and has_pending_danger_discard() and layout.size() > 2 and layout[2] is Rect2:
-			return layout[2]
-		return rect
+		return layout[1]
 	return Rect2(Vector2(0.40, 0.40), Vector2(0.60, 0.50))
 
 

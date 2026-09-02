@@ -9771,9 +9771,9 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# r214: bulk GPT chrome sweep
 	# A pending claim already has one focused response surface. Hiding the general
-	# advisor here prevents a second reading lane from competing with the claim
-	# buttons and keeps keyboard focus within the legal response actions.
-	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or not player_ai_assist_enabled()):
+	# advisor here prevents a second reading lane from competing with the claim or
+	# danger decision surfaces and keeps keyboard focus within the active action.
+	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or has_pending_danger_discard() or not player_ai_assist_enabled()):
 		return
 	# The narrow center-left HUD slot sits between the left river and the center
 	# surface, above the player river. During a response window the action dock
@@ -37809,16 +37809,12 @@ func seat_discard_rect(seat: int) -> Rect2:
 # 弃牌落水溅射动画 / Discard Splash Animation
 
 func seat_meld_rect(seat: int) -> Rect2:
-	# MELD_LAYOUTS is the canonical base geometry. The danger shelf is a stateful
-	# variant of that same rect and is consumed by drawing, hit/layout checks, and
-	# pending-context collision tests.
+	# MELD_LAYOUTS is the single source of truth for meld geometry. Gameplay state
+	# may change the surrounding decision surfaces, but never the seat-facing lane.
 	for layout in MELD_LAYOUTS:
 		if int(layout[0]) != seat:
 			continue
-		var rect: Rect2 = layout[1]
-		if mode == "offline" and has_pending_danger_discard() and layout.size() > 2 and layout[2] is Rect2:
-			return layout[2]
-		return rect
+		return layout[1]
 	return Rect2(Vector2(0.40, 0.40), Vector2(0.60, 0.50))
 
 

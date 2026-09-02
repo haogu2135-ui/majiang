@@ -907,9 +907,7 @@ const DISCARD_ZONES := [
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
-	# The third rect is the active danger-state shelf. It occupies the narrow
-	# clear channel between the center panel, right river, and danger CTA.
-	[1, Rect2(Vector2(0.780, 0.240), Vector2(0.852, 0.680)), Rect2(Vector2(0.595, 0.200), Vector2(0.715, 0.500))],
+	[1, Rect2(Vector2(0.780, 0.240), Vector2(0.852, 0.680))],
 	[2, Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))],
 	[3, Rect2(Vector2(0.148, 0.240), Vector2(0.220, 0.680))],
 ]
@@ -1019,9 +1017,9 @@ const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.615, 0.558),
 const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.625, 0.568), Vector2(0.972, 0.790))
 const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.528, 0.688), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
-# Keep the warning and its real CTA in one right-side decision column. The
-# panel clears the right seat lane above and the hand tray below.
-const DANGER_DISCARD_CONFIRMATION_RECT := Rect2(Vector2(0.640, 0.510), Vector2(0.960, 0.685))
+# Keep the warning in the clear channel between the center surface and the
+# right-seat meld lane. The full-width CTA remains below it, above the hand.
+const DANGER_DISCARD_CONFIRMATION_RECT := Rect2(Vector2(0.595, 0.510), Vector2(0.770, 0.685))
 const CHAT_ACTION_BUTTON_RECT := Rect2(Vector2(0.420, 0.698), Vector2(0.508, 0.782))
 const TOP_HUD_BUTTON_SIZE := Vector2(56, 44)
 const TOP_HUD_MODE_BADGE_RECT := Rect2(Vector2(0.018, 0.14), Vector2(0.100, 0.44))
