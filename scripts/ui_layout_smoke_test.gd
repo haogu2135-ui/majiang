@@ -587,9 +587,16 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_battle_viewport_bounds(scene, actual_viewport)
 	check_discard_tile_original_rgb(scene, actual_viewport)
 	seed_danger_discard_layout_state(scene)
+	scene.advisor_detail_open = true
+	scene.begin_danger_discard_confirmation(scene.pending_danger_discard_index, scene.pending_danger_discard_tile, scene.pending_danger_discard_report)
+	check(not scene.advisor_detail_open, "starting danger confirmation closes an already-open advisor detail panel at %s" % actual_viewport)
 	scene.render_game()
 	await process_frame
 	check_danger_discard_layout(scene, actual_viewport)
+	scene.advisor_detail_open = true
+	check(scene.handle_ui_cancel(), "Esc is consumed by the active danger confirmation before stale advisor detail at %s" % actual_viewport)
+	await process_frame
+	check(not scene.has_pending_danger_discard() and not scene.advisor_detail_open and scene.exit_confirm_panel == null, "danger cancel clears the decision and does not open exit confirmation at %s" % actual_viewport)
 	seed_win_detail_layout_state(scene)
 	scene.render_game()
 	await process_frame
@@ -977,6 +984,28 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 			for j in range(i + 1, rects.size()):
 				check(not rects[i].intersects(rects[j], true), "top HUD buttons do not overlap at %s" % viewport_size)
 
+func check_focus_route(scene, control_names: Array, default_focus_name: String, route_label: String, viewport_size: Vector2) -> void:
+	var focusable: Array[Control] = []
+	for control_name in control_names:
+		var control := scene.find_child(str(control_name), true, false) as Control
+		check(control != null, "%s exposes %s at %s" % [route_label, control_name, viewport_size])
+		if control == null:
+			continue
+		var is_disabled := control is BaseButton and (control as BaseButton).disabled
+		if control.is_visible_in_tree() and control.focus_mode != Control.FOCUS_NONE and not is_disabled:
+			focusable.append(control)
+			check(control.focus_mode == Control.FOCUS_ALL, "%s keeps %s keyboard focusable at %s" % [route_label, control_name, viewport_size])
+	if focusable.is_empty():
+		return
+	for index in range(focusable.size()):
+		var control := focusable[index]
+		var previous := focusable[(index - 1 + focusable.size()) % focusable.size()]
+		var next := focusable[(index + 1) % focusable.size()]
+		check(str(control.focus_previous) == str(previous.get_path()), "%s previous route reaches %s from %s at %s" % [route_label, previous.name, control.name, viewport_size])
+		check(str(control.focus_next) == str(next.get_path()), "%s next route reaches %s from %s at %s" % [route_label, next.name, control.name, viewport_size])
+	var default_control := scene.find_child(default_focus_name, true, false) as Control
+	check(default_control != null and default_control.has_focus(), "%s assigns default focus to %s at %s" % [route_label, default_focus_name, viewport_size])
+
 func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 	var text_backplates = controls_with_name_prefix(scene, "MenuCardTextBackplate")
 	var title_labels = controls_with_name_prefix(scene, "MenuCardTitleLabel")
@@ -989,6 +1018,14 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 	var stage_overlay = scene.find_child("MenuPrimary3DStageGPTOverlay", true, false) as CanvasItem
 	var commercial_stage = scene.find_child("MenuCommercial3DStage", true, false) as CanvasItem
 	var menu_scrim = scene.find_child("MenuBackgroundReadabilityScrim", true, false) as CanvasItem
+	var menu_cards := [
+		scene.find_child("MenuPrimaryOfflineCard", true, false) as Button,
+		scene.find_child("MenuPrimaryOnlineCard", true, false) as Button,
+		scene.find_child("MenuPrimaryShopCard", true, false) as Button,
+	]
+	for menu_card in menu_cards:
+		check(menu_card != null and menu_card.focus_mode == Control.FOCUS_ALL and str(menu_card.focus_next) != "" and str(menu_card.focus_previous) != "", "menu primary card %s joins the keyboard focus graph at %s" % [menu_card.name if menu_card != null else "<missing>", viewport_size])
+	check(menu_cards[0] != null and menu_cards[0].has_focus(), "menu assigns default keyboard focus to the offline primary card at %s" % viewport_size)
 	check(text_backplates.size() == 3 and title_labels.size() == 3 and subtitle_labels.size() == 3, "menu primary cards expose readable title subtitle and text backplates at %s" % viewport_size)
 	check(header != null and product_title != null and rule_summary != null, "menu exposes named foreground title and current-rule summary at %s" % viewport_size)
 	if header != null and product_title != null:
@@ -1035,6 +1072,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 		var back_rect = screen_rect(backplate)
 		var title = card.find_child("MenuCardTitleLabel", true, false) as Label
 		var subtitle = card.find_child("MenuCardSubtitleLabel", true, false) as Label
+		check(title != null and subtitle != null and card.tooltip_text == "%s · %s" % [title.text, subtitle.text], "menu card exposes its complete action label to the native interactive surface at %s" % viewport_size)
 		check(card_rect.grow(1.0).encloses(back_rect), "menu card text backplate stays inside card at %s" % viewport_size)
 		check(back_rect.size.x >= card_rect.size.x * 0.58 and back_rect.size.y >= card_rect.size.y * 0.52, "menu card text backplate gives labels a stable reading lane at %s" % viewport_size)
 		if title != null and subtitle != null:
@@ -1491,7 +1529,12 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		var horizontal_gap = maxf(0.0, maxf(dock_rect.position.x - summary_rect.end.x, summary_rect.position.x - dock_rect.end.x))
 		var reference_button = first_button_with_text(scene.action_bar, "过")
 		var reference_width = screen_rect(reference_button).size.x if reference_button != null else scene.ACTION_BUTTON_MAX_WIDTH
-		check(horizontal_gap <= reference_width + 1.0, "pending claim summary stays within one action-button width of the dock at %s" % viewport_size)
+		var compact_top_channel: bool = viewport_size.x <= 960.0 \
+			and summary_rect.position.x >= viewport_size.x * 0.015 - 2.0 \
+			and summary_rect.end.x <= viewport_size.x * 0.30 \
+			and summary_rect.position.y >= viewport_size.y * 0.10 \
+			and summary_rect.end.y <= viewport_size.y * 0.22
+		check(horizontal_gap <= reference_width + 1.0 or compact_top_channel, "pending claim summary stays near the dock or uses the dedicated compact top channel at %s" % viewport_size)
 		check(dock.clip_contents, "pending claim action dock clips decorative artwork at %s" % viewport_size)
 		check(dock_rect.end.y <= hand_rect.position.y - 10.0, "pending claim action dock keeps a clear channel above hand tray at %s" % viewport_size)
 		if pending_last_button_bottom >= 0.0:
@@ -1540,6 +1583,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var pending = scene.pending_claim_state()
 	check(scene.mode == "online_game" and not pending.is_empty(), "online pending fixture exposes a real response window at %s" % viewport_size)
+	check(scene.online_action_validation_error({"type": "claim", "claim": "pass"}) == "", "online response window treats pass as an implicit legal action at %s" % viewport_size)
 	check(scene.action_bar is VBoxContainer, "online pending actions use a stacked response and secondary action lane at %s" % viewport_size)
 	var pending_grid := scene.find_child("PendingClaimResponseGrid", true, false) as GridContainer
 	var action_count: int = scene.action_bar_button_count()
@@ -1583,6 +1627,18 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	check(action_dock != null and summary != null, "online pending mounts context and action dock together at %s" % viewport_size)
 	if action_dock != null and summary != null:
 		check(screen_rect(summary).end.y <= screen_rect(action_dock).position.y - 5.0, "online pending context clears the action dock at %s" % viewport_size)
+	if summary != null and viewport_size.x <= 960.0:
+		var context_rect := screen_rect(summary)
+		check(context_rect.size.x >= viewport_size.x * 0.24 and context_rect.size.y <= viewport_size.y * 0.11, "960px pending context widens while staying above the right river at %s" % viewport_size)
+		var compact_ledger := scene.find_child("TableLogLedgerPanel", true, false) as Control
+		check(compact_ledger == null or not compact_ledger.visible or not rects_overlap(context_rect, screen_rect(compact_ledger)), "960px pending context owns its top lane without covering the table ledger at %s" % viewport_size)
+		for context_label in [source_text, tile_name, urgency_text, focus_text]:
+			if context_label == null:
+				continue
+			var label_rect := screen_rect(context_label)
+			check(context_rect.grow(1.0).encloses(label_rect) and label_text_width(context_label, context_label.text) <= label_rect.size.x + 1.0, "960px pending context label %s fits its dedicated row at %s" % [context_label.name, viewport_size])
+		if source_text != null and tile_name != null and urgency_text != null and focus_text != null:
+			check(not rects_overlap(screen_rect(source_text), screen_rect(tile_name)) and not rects_overlap(screen_rect(urgency_text), screen_rect(focus_text)), "960px pending context keeps identity and response rows separated at %s" % viewport_size)
 	var waiting_state_before: bool = bool(scene.online_waiting_for_server)
 	var waiting_feedback_before: String = str(scene.online_feedback)
 	var retry_available_before: bool = bool(scene.online_retry_available)
@@ -1596,6 +1652,8 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var waiting_action = scene.find_child("ActionDockWaitingStatus", true, false) as Label
 	check(scene.current_status_text() == "操作已提交 · 等待服务器确认" and waiting_status != null and waiting_status.text == scene.current_status_text(), "online submitted state is explicit in the top HUD at %s" % viewport_size)
 	check(waiting_action != null and waiting_action.text.contains("等待服务器"), "online submitted state is explicit in the action dock at %s" % viewport_size)
+	check(scene.handle_ui_cancel(), "Esc is consumed by online server waiting at %s" % viewport_size)
+	check(not scene.online_waiting_for_server and scene.exit_confirm_panel == null and scene.mode == "online_game", "Esc cancels online waiting without leaving the table at %s" % viewport_size)
 	scene.online_feedback = "连接已断开，请重新连接。"
 	scene.online_waiting_for_server = false
 	scene.online_retry_available = true
@@ -1882,6 +1940,9 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 		check(not rects_overlap(panel_rect, screen_rect(dock)), "AI advisor panel clears the action dock at %s" % viewport_size)
 	if hand != null:
 		check(not rects_overlap(panel_rect, screen_rect(hand)), "AI advisor panel clears the hand tray at %s" % viewport_size)
+	var bottom_river = scene.find_child("DiscardGrid_0", true, false) as Control
+	if bottom_river != null:
+		check(not rects_overlap(panel_rect, screen_rect(bottom_river)), "AI advisor panel clears the bottom player's discard river at %s" % viewport_size)
 	for heading in ["响应", "牌局", "防守"]:
 		var card = panel.find_child("AdvisorInfoCard_%s" % heading, true, false) as Control
 		check(card != null and panel_rect.grow(1.0).encloses(screen_rect(card)), "AI advisor %s card stays inside the panel at %s" % [heading, viewport_size])
@@ -2664,6 +2725,25 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.35 and page_plate.self_modulate.a <= 0.60, "disconnected lobby uses a restrained low-frequency authored bitmap substrate at %s" % viewport_size)
 	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
 	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null and chat_button != null and log_latest_button != null and log_unread_label != null and room_badge_view_icon != null and room_badge_view_icon.texture != null, "online lobby exposes room summary roster chat log list latest-log controls and a visible room-view affordance at %s" % viewport_size)
+	check_focus_route(scene, [
+		"OnlineLobbyNameEdit",
+		"OnlineLobbyHostEdit",
+		"OnlineLobbyRoomEdit",
+		"OnlineLobbyConnectButton",
+		"OnlineLobbyCreateButton",
+		"OnlineLobbyJoinButton",
+		"OnlineLobbyPrimaryStartButton",
+		"OnlineLobbySecondaryReturnButton",
+		"ChatLobbyButton",
+		"OnlineLobbyLogLatestButton",
+		"OnlineLobbyRoomBadgeTouchTarget",
+		"OnlineLobbyRosterTouchTarget_0",
+		"OnlineLobbyRosterTouchTarget_1",
+		"OnlineLobbyRosterTouchTarget_2",
+		"OnlineLobbyRosterTouchTarget_3",
+	], "OnlineLobbyNameEdit", "online lobby", viewport_size)
+	check(create_button != null and create_button.disabled and str(create_button.focus_next) != str(create_button.get_path()), "disconnected lobby skips disabled create action in its focus route at %s" % viewport_size)
+	check(join_button != null and join_button.disabled and str(join_button.focus_next) != str(join_button.get_path()), "disconnected lobby skips disabled join action in its focus route at %s" % viewport_size)
 	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
 	var log_list_texture = (log_list_panel as TextureRect).texture if log_list_panel is TextureRect else null
 	var roster_source = (roster_texture as AtlasTexture).atlas if roster_texture is AtlasTexture else roster_texture
@@ -2997,6 +3077,8 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		check(screen_rect(second_section).position.y >= scroll_rect.end.y - 1.0, "rules default position keeps the next chapter below the fold at %s" % viewport_size)
 	if content_scrollbar != null:
 		check(not content_scrollbar.visible and content_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "rules screen hides the default bright scrollbar at %s" % viewport_size)
+	check(content_scroll.focus_mode == Control.FOCUS_ALL and content_scroll.get_meta("ui_scroll_view", "") != "" and content_scroll.tooltip_text != "", "rules scroll is keyboard focusable and exposes its reading context at %s" % viewport_size)
+	check_focus_route(scene, ["RulesBackButton", "RulesContentScroll", "RulesGuideStepButton_0", "RulesGuideStepButton_1", "RulesGuideStepButton_2", "RulesGuideStepButton_3"], "RulesBackButton", "rules", viewport_size)
 	if scroll_gutter != null and scroll_thumb != null:
 		var gutter_rect = screen_rect(scroll_gutter)
 		check(content_rect.grow(1.0).encloses(gutter_rect) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "rules custom scroll gutter stays outside the text viewport at %s" % viewport_size)
@@ -3129,6 +3211,7 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 	var collection_archive = scene.find_child("AchievementsRowCollectionArchiveGate", true, false) as Control
 	var gallery_texture = scene.find_child("AchievementGPTGalleryTexture", true, false) as CanvasItem
 	check(scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null and grid != null and lane != null and bottom_spacer != null and bottom_fade != null and browse_status != null and collection_bus != null and collection_spine != null and collection_progress != null and collection_archive != null, "achievements screen exposes scroll lane custom gutter bottom fade browse status and collection bus art at %s" % viewport_size)
+	check_focus_route(scene, ["AchievementsBackButton", "AchievementsScroll"], "AchievementsBackButton", "achievements", viewport_size)
 	check(gallery_texture == null or gallery_texture.modulate.a <= 0.26, "achievements generated gallery remains a subdued backdrop below native rows at %s" % viewport_size)
 	if scroll == null or lane == null:
 		return
@@ -3287,6 +3370,7 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 
 func check_stats_layout(scene, viewport_size: Vector2) -> void:
 	check_secondary_back_button_art(scene, "stats", viewport_size)
+	check_focus_route(scene, ["StatsBackButton"], "StatsBackButton", "stats", viewport_size)
 	var console_front = scene.find_child("StatsConsoleFrontPanel", true, false) as Control
 	var console_rear = scene.find_child("StatsConsole3DRearShell", true, false) as Control
 	var console_shadow = scene.find_child("StatsConsole3DCastShadow", true, false) as Control
@@ -3375,6 +3459,7 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 
 func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	check_secondary_back_button_art(scene, "shop", viewport_size)
+	check_focus_route(scene, ["ShopBackButton", "ShopItemsScroll", "ShopItemBuyButton_swap_card", "ShopItemBuyButton_peek_card", "ShopItemBuyButton_lucky_charm", "ShopItemBuyButton_double_coins"], "ShopBackButton", "shop", viewport_size)
 	var cabinet_front = scene.find_child("ShopCabinetFrontPanel", true, false) as Control
 	var cabinet_rear = scene.find_child("ShopCabinet3DRearShell", true, false) as Control
 	var cabinet_shadow = scene.find_child("ShopCabinet3DCastShadow", true, false) as Control
@@ -3475,6 +3560,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 		check(scroll.clip_contents, "shop item scroll clips row content at %s" % viewport_size)
 		check(scroll_rect.end.y <= viewport_size.y * 0.78 and scroll_rect.end.x <= viewport_size.x * 0.955, "shop item scroll leaves room for footer and gutter at %s" % viewport_size)
 		check(not scrollbar.visible and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "shop hides default bright system scrollbar at %s" % viewport_size)
+		check(scroll.focus_mode == Control.FOCUS_ALL and scroll.get_meta("ui_scroll_view", "") != "" and scroll.tooltip_text != "", "shop scroll is keyboard focusable and exposes its item-list context at %s" % viewport_size)
 		check(gutter_rect.size.x <= max(14.0, viewport_size.x * 0.016) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "shop custom scrollbar gutter is narrow and separate from rows at %s" % viewport_size)
 		check(gutter_rect.grow(1.0).encloses(thumb_rect), "shop custom scrollbar thumb stays inside gutter at %s" % viewport_size)
 		check(not scroll_gutter is Panel and not scroll_thumb is Panel and scroll_gutter is TextureRect and scroll_thumb is TextureRect and (scroll_gutter as TextureRect).texture != null and (scroll_thumb as TextureRect).texture != null, "shop custom scrollbar uses authored bitmap gutter and thumb visuals instead of runtime panels at %s" % viewport_size)

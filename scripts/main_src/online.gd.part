@@ -435,7 +435,9 @@ func online_action_validation_error(payload: Dictionary) -> String:
 			return "当前没有你的响应窗口。"
 		var pending: Dictionary = online_game.get("pending", {})
 		var options: Array = pending.get("options", []) if typeof(pending) == TYPE_DICTIONARY else []
-		if not options.has(claim):
+		# Passing is implicit in every visible response window; the server options
+		# list enumerates positive claims while the UI always exposes the pass route.
+		if claim != "pass" and not options.has(claim):
 			return "该响应已失效。"
 	if action_type == "chat":
 		var message := str(payload.get("message", "")).strip_edges()

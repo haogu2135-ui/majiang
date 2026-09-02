@@ -66,6 +66,15 @@ func has_label_text(scope: Node, expected: String) -> bool:
 	return false
 
 
+func label_text_width(label: Label, text: String) -> float:
+	if label == null:
+		return 0.0
+	var font := label.get_theme_font("font")
+	if font == null:
+		return 0.0
+	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, label.get_theme_font_size("font_size")).x
+
+
 func node_is_descendant_of(node: Node, ancestor: Node) -> bool:
 	var cursor := node
 	while cursor != null:
@@ -152,6 +161,33 @@ func connected_room_fixture() -> Dictionary:
 	}
 
 
+func online_pending_game_fixture() -> Dictionary:
+	return {
+		"roomCode": "QA7",
+		"phase": "pendingClaim",
+		"youSeat": 0,
+		"currentSeat": 0,
+		"wallCount": 55,
+		"wallTotal": 108,
+		"ruleVariant": "sichuan",
+		"hand": ["1W", "2W", "3W", "3W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "R"],
+		"lastDiscard": "3W",
+		"lastDiscardSeat": 3,
+		"players": [
+			{"seat": 0, "name": "你", "handCount": 14, "flowerCount": 0, "score": 26400, "discards": ["1W", "2W"], "melds": []},
+			{"seat": 1, "name": "东风夜放", "handCount": 13, "flowerCount": 1, "score": 23800, "discards": ["1T", "2T"], "melds": []},
+			{"seat": 2, "name": "南山客", "handCount": 13, "flowerCount": 0, "score": 27200, "discards": ["1B", "2B"], "melds": []},
+			{"seat": 3, "name": "北海若", "handCount": 13, "flowerCount": 0, "score": 22600, "discards": ["Z", "F", "P", "3W"], "melds": []},
+		],
+		"pending": {
+			"tile": "3W",
+			"fromSeat": 3,
+			"options": ["hu", "gang", "peng", "chi"],
+			"chi_choices": [{"meld": ["1W", "2W", "3W"]}],
+		},
+	}
+
+
 func diagnostic_interaction_lines() -> Array[String]:
 	return [
 		"【音频系统诊断 1.0.180-godot】", "",
@@ -195,6 +231,11 @@ func run() -> void:
 	await settle(0.10)
 	scene._show_online_lobby_impl()
 	await settle(0.65)
+	var initial_name_edit := scene.online_name_edit as LineEdit
+	check(initial_name_edit != null and initial_name_edit.has_focus(), "lobby assigns default keyboard focus to its nickname editor")
+	if initial_name_edit != null:
+		initial_name_edit.release_focus()
+		await process_frame
 
 	print("--- A) pointer hover and press drive the real lobby button ---")
 	var connect_button := first_button_with_text(scene, "连接")
@@ -279,7 +320,7 @@ func run() -> void:
 		await send_screen_touch(name_edit.get_global_rect().get_center(), true)
 		await send_screen_touch(name_edit.get_global_rect().get_center(), false)
 		check(name_edit.has_focus(), "screen touch enters the native line-edit focus state")
-		check(name_edit.find_child("LineEditInputFeedback_name", false, false) != null, "focus-entered signal produces authored input feedback")
+		check(name_edit.find_child("LineEditInputFeedback_name", true, false) != null, "focus-entered signal produces authored input feedback")
 		name_edit.caret_column = name_edit.text.length()
 		await send_key(KEY_1, "1".unicode_at(0))
 		check(name_edit.text.ends_with("1"), "focused line edit accepts a dispatched keyboard character")
@@ -332,6 +373,12 @@ func run() -> void:
 	var room_badge = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge != null and room_badge.get_child_count() > 0 else null
 	check(room_badge_label != null and room_badge_label.text == "房间号 ROOM7", "connected lobby displays the active room code")
+	if room_badge != null and room_badge_label != null:
+		var room_badge_rect := room_badge.get_global_rect()
+		var room_badge_label_rect := room_badge_label.get_global_rect()
+		check(room_badge_rect.size.x >= 128.0 and room_badge_rect.end.x <= viewport_size.x + 1.0, "compact connected lobby reserves a readable room-code badge lane")
+		var room_code_text_width := label_text_width(room_badge_label, room_badge_label.text)
+		check(room_code_text_width <= room_badge_label_rect.size.x + 1.0, "compact connected lobby renders the complete short room code without label overrun (text=%.1f lane=%.1f badge=%.1f)" % [room_code_text_width, room_badge_label_rect.size.x, room_badge_rect.size.x])
 	var occupancy = scene.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
 	var ready = scene.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
 	check(occupancy != null and occupancy.text == "入席 3/4" and ready != null and ready.text == "已备 2", "connected summary reflects player and ready counts")
@@ -715,6 +762,35 @@ func run() -> void:
 	await settle(0.10)
 	check(scene.mode == "menu" and scene.find_child("MenuSettingsButton", true, false) != null, "ui_cancel returns from daily login to the menu")
 
+	scene._show_rules_screen_impl()
+	await settle(0.05)
+	var rules_scroll := scene.find_child("RulesContentScroll", true, false) as ScrollContainer
+	var rules_scrollbar := scene.find_child("RulesContentScrollBar", true, false) as VScrollBar
+	check(rules_scroll != null and rules_scrollbar != null and rules_scroll.focus_mode == Control.FOCUS_ALL and rules_scroll.has_meta("ui_scroll_view"), "rules exposes a keyboard-focusable native scroll view")
+	if rules_scroll != null and rules_scrollbar != null:
+		check(rules_scrollbar.max_value > rules_scrollbar.page, "rules content creates a native vertical range for keyboard scrolling")
+		if rules_scrollbar.max_value > rules_scrollbar.page:
+			rules_scroll.scroll_vertical = 0
+			rules_scrollbar.value = 0.0
+			rules_scroll.grab_focus()
+			check(rules_scroll.has_focus(), "rules scroll accepts keyboard focus before paging")
+			await send_key(KEY_PAGEDOWN, 0)
+			var rules_page_value := float(rules_scrollbar.value)
+			check(rules_page_value > 0.0, "PageDown moves the rules scroll value")
+			await send_key(KEY_END, 0)
+			var rules_end_value := float(rules_scrollbar.value)
+			var rules_scroll_range := rules_scrollbar.max_value - rules_scrollbar.page
+			check(rules_end_value >= rules_scroll_range - 1.0, "End moves the rules scroll to its bottom boundary")
+			await send_key(KEY_HOME, 0)
+			check(rules_scrollbar.value <= 1.0, "Home returns the rules scroll to its top boundary")
+			await send_key(KEY_PAGEDOWN, 0)
+			var rules_before_page_up := float(rules_scrollbar.value)
+			await send_key(KEY_PAGEUP, 0)
+			check(rules_scrollbar.value < rules_before_page_up, "PageUp reverses the rules scroll direction")
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.10)
+	check(scene.mode == "menu" and scene.find_child("MenuSettingsButton", true, false) != null, "ui_cancel returns from the rules to the menu")
+
 	scene._show_shop_screen_impl()
 	await settle(0.05)
 	var shop_scroll := scene.find_child("ShopItemsScroll", true, false) as ScrollContainer
@@ -733,6 +809,25 @@ func run() -> void:
 			shop_content.add_child(overflow_probe)
 			await settle(0.05)
 		check(shop_scrollbar.max_value > shop_scrollbar.page, "shop overflow fixture creates a native vertical range for scrollbar interaction")
+	if shop_scroll != null and shop_scrollbar != null and shop_scrollbar.max_value > shop_scrollbar.page:
+		check(shop_scroll.focus_mode == Control.FOCUS_ALL and shop_scroll.has_meta("ui_scroll_view"), "shop scroll accepts keyboard focus for the item list")
+		shop_scroll.scroll_vertical = 0
+		shop_scrollbar.value = 0.0
+		shop_scroll.grab_focus()
+		check(shop_scroll.has_focus(), "shop scroll receives keyboard focus before paging")
+		await send_key(KEY_PAGEDOWN, 0)
+		var shop_page_value := float(shop_scrollbar.value)
+		check(shop_page_value > 0.0, "PageDown moves the shop scroll value")
+		await send_key(KEY_END, 0)
+		var shop_end_value := float(shop_scrollbar.value)
+		var shop_scroll_range := shop_scrollbar.max_value - shop_scrollbar.page
+		check(shop_end_value >= shop_scroll_range - 1.0, "End moves the shop scroll to its bottom boundary")
+		await send_key(KEY_HOME, 0)
+		check(shop_scrollbar.value <= 1.0, "Home returns the shop scroll to its top boundary")
+		await send_key(KEY_PAGEDOWN, 0)
+		var shop_before_page_up := float(shop_scrollbar.value)
+		await send_key(KEY_PAGEUP, 0)
+		check(shop_scrollbar.value < shop_before_page_up, "PageUp reverses the shop scroll direction")
 	if shop_scrollbar != null and shop_scroll_hit_target != null and shop_scrollbar.max_value > shop_scrollbar.page:
 		var shop_scroll_range: float = shop_scrollbar.max_value - shop_scrollbar.page
 		var shop_target_rect: Rect2 = shop_scroll_hit_target.get_global_rect()
@@ -749,6 +844,27 @@ func run() -> void:
 	await send_key(KEY_ESCAPE, 0)
 	await settle(0.10)
 	check(scene.mode == "menu" and scene.find_child("MenuSettingsButton", true, false) != null, "ui_cancel returns from the shop to the menu")
+
+	print("--- K) table Esc routes active response and network-wait states ---")
+	var game_transport := ConnectedLobbyTransport.new()
+	scene.tcp = game_transport
+	scene.mode = "online_game"
+	scene.online_game = online_pending_game_fixture()
+	scene.online_feedback = ""
+	scene.online_waiting_for_server = false
+	scene.online_retry_available = false
+	scene.online_last_sent_payload.clear()
+	scene.online_last_sent_action = ""
+	scene.online_last_sent_type = ""
+	scene.render_game()
+	await settle(0.10)
+	check(scene.find_child("PendingClaimResponseGrid", true, false) != null and scene.exit_confirm_panel == null, "online table fixture exposes the response lane before Esc routing")
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.10)
+	check(game_transport.writes.size() == 1 and game_transport.writes[0].contains("\"claim\":\"pass\"") and scene.online_waiting_for_server and scene.exit_confirm_panel == null, "Esc submits the implicit online pass instead of opening exit confirmation")
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.10)
+	check(not scene.online_waiting_for_server and scene.online_retry_available == false and scene.exit_confirm_panel == null and scene.mode == "online_game", "a second Esc cancels the online wait and keeps the table open")
 
 	if scene.has_method("shutdown_runtime"):
 		scene.shutdown_runtime()

@@ -1148,6 +1148,7 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 	secondary.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	secondary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	secondary.clip_text = true
+	secondary.tooltip_text = secondary.text
 
 
 func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
@@ -1161,7 +1162,7 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# surface, above the player river. During a response window the action dock
 	# moves left, so reserve a dedicated right-side gap for it.
 	var advisor_right := 0.620 if has_pending_claim_window() else 0.690
-	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, advisor_right, 0.650), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
+	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, advisor_right, 0.635), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
 	panel.set_name("AdvisorPanel")
 	parent.add_child(panel)
 	var advisor_texture = add_illustration_texture(panel, "advisor_map", rect_full(0.010, 0.035, 0.990, 0.965), 0.12, false)
@@ -1212,9 +1213,13 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 			draw_advisor_info_card(panel, advisor_card_rect_c, "守", "观测", opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 			return
 		var best: Dictionary = reports[0]
-		draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "打%s · %s" % [tile_label(str(best.get("tile", ""))), advisor_confidence_text(reports)], advisor_recommendation_reason_text(best), Color(0.86, 0.78, 0.56))
-		draw_advisor_info_card(panel, advisor_card_rect_b, "势", advisor_progress_text(best), advisor_value_short_text(best), Color(0.62, 0.78, 0.82))
-		draw_advisor_info_card(panel, advisor_card_rect_c, "守", discard_safety_short_text(best), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+		var narrow_advisor_layout := effective_viewport_size().x <= 960.0
+		var reason_text := advisor_compact_reason_text(best) if narrow_advisor_layout else advisor_recommendation_reason_text(best)
+		var value_text := advisor_compact_value_text(best) if narrow_advisor_layout else advisor_value_short_text(best)
+		var threat_text := advisor_compact_threat_text(0) if narrow_advisor_layout else opponent_threat_summary(0)
+		draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "打%s · %s" % [tile_label(str(best.get("tile", ""))), advisor_confidence_text(reports)], reason_text, Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, advisor_card_rect_b, "势", advisor_progress_text(best), value_text, Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, advisor_card_rect_c, "守", discard_safety_short_text(best), threat_text, Color(0.84, 0.62, 0.54))
 		return
 	draw_advisor_info_card(panel, advisor_card_rect_a, "局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
 	draw_advisor_info_card(panel, advisor_card_rect_b, "势", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
@@ -1222,7 +1227,7 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 
 
 func draw_advisor_detail_panel(parent: Control) -> void:
-	if not advisor_detail_open or mode != "offline" or not player_ai_assist_enabled():
+	if not advisor_detail_open or mode != "offline" or not player_ai_assist_enabled() or has_pending_danger_discard():
 		return
 	var panel = make_gpt_plate_rect(rect_full(0.160, 0.130, 0.840, 0.545), Color(0.014, 0.034, 0.040, 0.96), "ui_jade_reading_plate")
 	panel.name = "AdvisorDetailPanel"
@@ -6523,6 +6528,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.clip_contents = true
 	parent.add_child(panel)
 	var compact_context_layout := effective_viewport_size().x <= 1280.0
+	var narrow_context_layout := effective_viewport_size().x <= 960.0
 	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
 	if status_strip != null:
 		status_strip.name = "PendingClaimStatusStripTexture"
@@ -6539,21 +6545,33 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	tile_preview.name = "PendingClaimTile"
 	tile_preview.tooltip_text = "%s打出的%s · 点击下方按钮选择响应" % [source_name, tile_label(tile)]
 	panel.add_child(tile_preview)
-	apply_rect(tile_preview, rect_full(0.030, 0.020, 0.255, 0.980) if compact_context_layout else rect_full(0.170, 0.020, 0.315, 0.980))
+	var tile_rect := rect_full(0.030, 0.020, 0.255, 0.980) if compact_context_layout else rect_full(0.170, 0.020, 0.315, 0.980)
+	if narrow_context_layout:
+		tile_rect = rect_full(0.025, 0.040, 0.165, 0.960)
+	apply_rect(tile_preview, tile_rect)
 	var title = make_label(panel, "%s 打出" % source_name, 13, Color(0.92, 0.88, 0.72, 0.96), true)
 	title.name = "PendingClaimSourceText"
-	apply_rect(title, rect_full(0.300, 0.050, 0.965, 0.340) if compact_context_layout else rect_full(0.345, 0.060, 0.790, 0.535))
+	var title_rect := rect_full(0.300, 0.050, 0.965, 0.340) if compact_context_layout else rect_full(0.345, 0.060, 0.790, 0.535)
+	if narrow_context_layout:
+		title_rect = rect_full(0.190, 0.060, 0.560, 0.455)
+	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.tooltip_text = "%s打出%s，正在等待你的响应" % [source_name, tile_label(tile)]
 	style_background_readable_label(title, 2)
 	var tile_name = make_label(panel, tile_label(tile), 14, Color(0.98, 0.88, 0.58, 1.0), true)
 	tile_name.name = "PendingClaimTileName"
-	apply_rect(tile_name, rect_full(0.300, 0.380, 0.490, 0.620) if compact_context_layout else rect_full(0.790, 0.060, 0.970, 0.535))
+	var tile_name_rect := rect_full(0.300, 0.380, 0.490, 0.620) if compact_context_layout else rect_full(0.790, 0.060, 0.970, 0.535)
+	if narrow_context_layout:
+		tile_name_rect = rect_full(0.585, 0.060, 0.965, 0.455)
+	apply_rect(tile_name, tile_name_rect)
 	tile_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(tile_name, 2)
 	var urgency = make_label(panel, pending_claim_urgency_text(), 9, Color(0.98, 0.70, 0.42, 0.92), true)
 	urgency.name = "PendingClaimUrgencyText"
-	apply_rect(urgency, rect_full(0.500, 0.380, 0.965, 0.620) if compact_context_layout else rect_full(0.345, 0.455, 0.970, 0.535))
+	var urgency_rect := rect_full(0.500, 0.380, 0.965, 0.620) if compact_context_layout else rect_full(0.345, 0.455, 0.970, 0.535)
+	if narrow_context_layout:
+		urgency_rect = rect_full(0.190, 0.505, 0.560, 0.790)
+	apply_rect(urgency, urgency_rect)
 	urgency.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if compact_context_layout:
 		urgency.add_theme_font_size_override("font_size", 8)
@@ -6561,18 +6579,25 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	urgency.tooltip_text = "响应窗口提示：" + pending_claim_urgency_text()
 	var focus = make_label(panel, pending_claim_focus_text(), 11, Color(0.88, 0.86, 0.72, 0.88), true)
 	focus.name = "PendingClaimFocusText"
-	apply_rect(focus, rect_full(0.300, 0.650, 0.965, 0.950) if compact_context_layout else rect_full(0.345, 0.550, 0.970, 0.940))
+	if narrow_context_layout:
+		focus.text = pending_claim_compact_focus_text()
+	var focus_rect := rect_full(0.300, 0.650, 0.965, 0.950) if compact_context_layout else rect_full(0.345, 0.550, 0.970, 0.940)
+	if narrow_context_layout:
+		focus_rect = rect_full(0.585, 0.505, 0.965, 0.790)
+	apply_rect(focus, focus_rect)
 	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if compact_context_layout:
-		focus.add_theme_font_size_override("font_size", 9)
+		focus.add_theme_font_size_override("font_size", 8 if narrow_context_layout else 9)
+		configure_clipped_label(focus)
 	style_background_readable_label(focus, 2)
 	if compact_context_layout:
 		# The source text already names the discarder; reserve the narrow edge for
 		# the real tile preview instead of duplicating a clipped badge.
 		source_badge.visible = false
-	draw_pending_claim_flow_art(panel, source_seat)
-	draw_pending_claim_priority_art(panel, pending.get("options", []))
-	draw_pending_claim_response_pulse(panel, pending.get("options", []))
+	if not narrow_context_layout:
+		draw_pending_claim_flow_art(panel, source_seat)
+		draw_pending_claim_priority_art(panel, pending.get("options", []))
+		draw_pending_claim_response_pulse(panel, pending.get("options", []))
 	draw_pending_claim_timer_art(panel)
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
@@ -6656,7 +6681,8 @@ func draw_pending_claim_timer_art(parent: Control) -> Control:
 	var timer = Control.new()
 	timer.name = "PendingClaimTimerArt"
 	timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(timer, rect_full(0.420, 0.852, 0.958, 0.962))
+	var narrow_context_layout := effective_viewport_size().x <= 960.0
+	apply_rect(timer, rect_full(0.620, 0.800, 0.970, 0.985) if narrow_context_layout else rect_full(0.420, 0.852, 0.958, 0.962))
 	parent.add_child(timer)
 	var rail = make_gpt_route_rail(rect_full(0.020, 0.365, 0.940, 0.455), Color(0.006, 0.016, 0.018, 0.46))
 	rail.name = "PendingClaimTimerRail"
@@ -6669,7 +6695,7 @@ func draw_pending_claim_timer_art(parent: Control) -> Control:
 	gate.name = "PendingClaimTimerGate"
 	timer.add_child(gate)
 	var tick = add_gpt_tick_strip(timer, rect_full(0.165, 0.185, (0.165) + float(3) * (0.155) + (0.018), 0.670), Color(0.92, 0.70, 0.32, 0.24), "PendingClaimTimerTick_0")
-	var timer_label = make_label(timer, pending_claim_timer_text(), 9, Color(0.98, 0.88, 0.58, 0.94), true)
+	var timer_label = make_label(timer, pending_claim_timer_text(), 8 if narrow_context_layout else 9, Color(0.98, 0.88, 0.58, 0.94), true)
 	timer_label.name = "PendingClaimTimerText"
 	apply_rect(timer_label, rect_full(0.040, 0.020, 0.900, 0.340))
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -8137,6 +8163,8 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		if compact_side:
 			# Keep all three scan-critical counters in one short, non-truncating lane.
 			side_meta_text = "手%d/花%d/弃%d" % [int(p.get("hand_count", 0)), int(p.get("flowers", 0)), side_discard_count]
+			side_stats.add_theme_font_size_override("font_size", 9)
+			side_stats.tooltip_text = "手牌%d · 花牌%d · 弃牌%d" % [int(p.get("hand_count", 0)), int(p.get("flowers", 0)), side_discard_count]
 		else:
 			side_meta_text = "手%d" % int(p.get("hand_count", 0))
 			if int(p.get("flowers", 0)) > 0:
@@ -10459,6 +10487,11 @@ func draw_table_living_illustration(parent: Control) -> Control:
 func draw_table_log(parent: Control) -> void:
 	# r213: GPT chrome conversion
 	var compact_log := effective_viewport_size().y <= 560.0
+	# At 960x540 the response context owns the only readable left-top reserve.
+	# Hide the secondary ledger for this short decision window; its complete
+	# history remains available through the chat/history routes after the action.
+	var hide_compact_ledger_for_pending: bool = effective_viewport_size().x <= 960.0 \
+		and has_pending_claim_window() and not table_log_archive_open
 	# The compact ledger sits below the side seat card, so it can grow rightward
 	# without touching the side river. This gives the latest event a real reading
 	# lane instead of relying on a tooltip for every long sentence.
@@ -10469,6 +10502,7 @@ func draw_table_log(parent: Control) -> void:
 	var ledger_rect := rect_full(0.018, 0.128, ledger_right, ledger_bottom)
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
+	ledger_panel.visible = not hide_compact_ledger_for_pending
 	parent.add_child(ledger_panel)
 	var ledger_texture = add_illustration_texture(ledger_panel, "table_log_scroll", rect_full(0.010, 0.018, 0.990, 0.982), 0.075, false)
 	if ledger_texture != null:
@@ -13068,6 +13102,9 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# r214: bulk GPT chrome sweep
 	var button = Button.new()
 	button.text = ""
+	# The card is the native interactive surface, so keep its complete action
+	# label available even though the visible title/subtitle are separate labels.
+	button.tooltip_text = text.replace("\n", " · ")
 	button.custom_minimum_size = Vector2(310, 210)
 	configure_touch_button(button)
 	# r180: menu card face is GPT plate; StyleBox hosts stay empty.

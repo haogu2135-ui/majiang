@@ -1874,6 +1874,41 @@ func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = 
 	if scroll_label != "":
 		scroll.tooltip_text = scroll_label
 	scroll.set_meta("ui_scroll_view", scroll_label)
+	scroll.gui_input.connect(func(event: InputEvent) -> void:
+		handle_scroll_container_keyboard_input(event, scroll)
+	)
+
+func handle_scroll_container_keyboard_input(event: InputEvent, scroll: ScrollContainer) -> void:
+	if scroll == null or not is_instance_valid(scroll) or not event is InputEventKey:
+		return
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	var keycode: int = key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
+	var scrollbar := scroll.get_v_scroll_bar()
+	if scrollbar == null:
+		return
+	var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
+	if scroll_range <= 0.0:
+		return
+	var target := scrollbar.value
+	match keycode:
+		KEY_PAGEUP:
+			target -= maxf(1.0, scrollbar.page)
+		KEY_PAGEDOWN:
+			target += maxf(1.0, scrollbar.page)
+		KEY_HOME:
+			target = 0.0
+		KEY_END:
+			target = scroll_range
+		_:
+			return
+	target = clampf(target, 0.0, scroll_range)
+	if is_equal_approx(target, scrollbar.value):
+		return
+	scrollbar.value = target
+	scroll.scroll_vertical = int(round(target))
+	scroll.accept_event()
 
 func make_small_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
@@ -2070,6 +2105,72 @@ func focus_button_neighbor(button: Button, focusable: Array[Button], direction: 
 			best_score = score
 			best = candidate
 	return best if best != null else button
+
+
+func focus_control_neighbor(control: Control, focusable: Array[Control], direction: Vector2) -> Control:
+	if control == null or focusable.is_empty():
+		return control
+	var origin_rect := control.get_global_rect()
+	var origin := origin_rect.position + origin_rect.size * 0.5
+	var best: Control = null
+	var best_score := INF
+	for candidate in focusable:
+		if candidate == null or candidate == control:
+			continue
+		var candidate_rect := candidate.get_global_rect()
+		var delta := candidate_rect.position + candidate_rect.size * 0.5 - origin
+		var forward := delta.dot(direction)
+		if forward <= 1.0:
+			continue
+		var cross_distance := absf(delta.x if absf(direction.y) > 0.5 else delta.y)
+		var score := forward + cross_distance * 1.8
+		if score < best_score:
+			best_score = score
+			best = candidate
+	return best if best != null else control
+
+
+func configure_ordered_focus_navigation(root: Control, controls: Array, default_focus_name: String = "", grab_default_focus: bool = true) -> void:
+	if root == null or not is_instance_valid(root):
+		return
+	var focusable: Array[Control] = []
+	for candidate in controls:
+		var control := candidate as Control
+		if control == null or not is_instance_valid(control) or not control.is_inside_tree() or not control.is_visible_in_tree() or control.focus_mode == Control.FOCUS_NONE:
+			continue
+		if control is BaseButton and (control as BaseButton).disabled:
+			continue
+		control.focus_mode = Control.FOCUS_ALL
+		focusable.append(control)
+	if focusable.is_empty():
+		return
+	for index in range(focusable.size()):
+		var control := focusable[index]
+		var previous := focusable[(index - 1 + focusable.size()) % focusable.size()]
+		var next := focusable[(index + 1) % focusable.size()]
+		var left := focus_control_neighbor(control, focusable, Vector2.LEFT)
+		var right := focus_control_neighbor(control, focusable, Vector2.RIGHT)
+		var top := focus_control_neighbor(control, focusable, Vector2.UP)
+		var bottom := focus_control_neighbor(control, focusable, Vector2.DOWN)
+		control.focus_previous = previous.get_path()
+		control.focus_next = next.get_path()
+		# A linear fallback keeps arrow navigation usable at the ends of a
+		# mixed-control route when no geometric neighbor exists.
+		control.focus_neighbor_left = (left if left != control else previous).get_path()
+		control.focus_neighbor_right = (right if right != control else next).get_path()
+		control.focus_neighbor_top = (top if top != control else previous).get_path()
+		control.focus_neighbor_bottom = (bottom if bottom != control else next).get_path()
+		control.set_meta("ui_focus_navigation_order", index)
+		control.set_meta("ui_focus_navigation_group", root.get_path())
+	if not grab_default_focus:
+		return
+	var requested: Control = null
+	if default_focus_name != "":
+		requested = root.find_child(default_focus_name, true, false) as Control
+	if requested == null or not requested.is_visible_in_tree() or requested.focus_mode == Control.FOCUS_NONE or (requested is BaseButton and (requested as BaseButton).disabled):
+		requested = focusable[0]
+	if requested.is_inside_tree():
+		requested.grab_focus()
 
 
 func configure_button_focus_navigation(root: Control, default_focus_name: String = "", grab_default_focus: bool = true) -> void:

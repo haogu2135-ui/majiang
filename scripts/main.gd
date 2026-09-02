@@ -9766,6 +9766,7 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 	secondary.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	secondary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	secondary.clip_text = true
+	secondary.tooltip_text = secondary.text
 
 
 func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
@@ -9779,7 +9780,7 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# surface, above the player river. During a response window the action dock
 	# moves left, so reserve a dedicated right-side gap for it.
 	var advisor_right := 0.620 if has_pending_claim_window() else 0.690
-	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, advisor_right, 0.650), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
+	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, advisor_right, 0.635), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
 	panel.set_name("AdvisorPanel")
 	parent.add_child(panel)
 	var advisor_texture = add_illustration_texture(panel, "advisor_map", rect_full(0.010, 0.035, 0.990, 0.965), 0.12, false)
@@ -9830,9 +9831,13 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 			draw_advisor_info_card(panel, advisor_card_rect_c, "守", "观测", opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
 			return
 		var best: Dictionary = reports[0]
-		draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "打%s · %s" % [tile_label(str(best.get("tile", ""))), advisor_confidence_text(reports)], advisor_recommendation_reason_text(best), Color(0.86, 0.78, 0.56))
-		draw_advisor_info_card(panel, advisor_card_rect_b, "势", advisor_progress_text(best), advisor_value_short_text(best), Color(0.62, 0.78, 0.82))
-		draw_advisor_info_card(panel, advisor_card_rect_c, "守", discard_safety_short_text(best), opponent_threat_summary(0), Color(0.84, 0.62, 0.54))
+		var narrow_advisor_layout := effective_viewport_size().x <= 960.0
+		var reason_text := advisor_compact_reason_text(best) if narrow_advisor_layout else advisor_recommendation_reason_text(best)
+		var value_text := advisor_compact_value_text(best) if narrow_advisor_layout else advisor_value_short_text(best)
+		var threat_text := advisor_compact_threat_text(0) if narrow_advisor_layout else opponent_threat_summary(0)
+		draw_advisor_info_card(panel, advisor_card_rect_a, "荐", "打%s · %s" % [tile_label(str(best.get("tile", ""))), advisor_confidence_text(reports)], reason_text, Color(0.86, 0.78, 0.56))
+		draw_advisor_info_card(panel, advisor_card_rect_b, "势", advisor_progress_text(best), value_text, Color(0.62, 0.78, 0.82))
+		draw_advisor_info_card(panel, advisor_card_rect_c, "守", discard_safety_short_text(best), threat_text, Color(0.84, 0.62, 0.54))
 		return
 	draw_advisor_info_card(panel, advisor_card_rect_a, "局", advisor_turn_line(), current_status_text(), Color(0.86, 0.78, 0.56))
 	draw_advisor_info_card(panel, advisor_card_rect_b, "势", score_strategy_text(0), "余牌%d" % get_wall_count(), Color(0.62, 0.78, 0.82))
@@ -9840,7 +9845,7 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 
 
 func draw_advisor_detail_panel(parent: Control) -> void:
-	if not advisor_detail_open or mode != "offline" or not player_ai_assist_enabled():
+	if not advisor_detail_open or mode != "offline" or not player_ai_assist_enabled() or has_pending_danger_discard():
 		return
 	var panel = make_gpt_plate_rect(rect_full(0.160, 0.130, 0.840, 0.545), Color(0.014, 0.034, 0.040, 0.96), "ui_jade_reading_plate")
 	panel.name = "AdvisorDetailPanel"
@@ -15141,6 +15146,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.clip_contents = true
 	parent.add_child(panel)
 	var compact_context_layout := effective_viewport_size().x <= 1280.0
+	var narrow_context_layout := effective_viewport_size().x <= 960.0
 	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
 	if status_strip != null:
 		status_strip.name = "PendingClaimStatusStripTexture"
@@ -15157,21 +15163,33 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	tile_preview.name = "PendingClaimTile"
 	tile_preview.tooltip_text = "%s打出的%s · 点击下方按钮选择响应" % [source_name, tile_label(tile)]
 	panel.add_child(tile_preview)
-	apply_rect(tile_preview, rect_full(0.030, 0.020, 0.255, 0.980) if compact_context_layout else rect_full(0.170, 0.020, 0.315, 0.980))
+	var tile_rect := rect_full(0.030, 0.020, 0.255, 0.980) if compact_context_layout else rect_full(0.170, 0.020, 0.315, 0.980)
+	if narrow_context_layout:
+		tile_rect = rect_full(0.025, 0.040, 0.165, 0.960)
+	apply_rect(tile_preview, tile_rect)
 	var title = make_label(panel, "%s 打出" % source_name, 13, Color(0.92, 0.88, 0.72, 0.96), true)
 	title.name = "PendingClaimSourceText"
-	apply_rect(title, rect_full(0.300, 0.050, 0.965, 0.340) if compact_context_layout else rect_full(0.345, 0.060, 0.790, 0.535))
+	var title_rect := rect_full(0.300, 0.050, 0.965, 0.340) if compact_context_layout else rect_full(0.345, 0.060, 0.790, 0.535)
+	if narrow_context_layout:
+		title_rect = rect_full(0.190, 0.060, 0.560, 0.455)
+	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.tooltip_text = "%s打出%s，正在等待你的响应" % [source_name, tile_label(tile)]
 	style_background_readable_label(title, 2)
 	var tile_name = make_label(panel, tile_label(tile), 14, Color(0.98, 0.88, 0.58, 1.0), true)
 	tile_name.name = "PendingClaimTileName"
-	apply_rect(tile_name, rect_full(0.300, 0.380, 0.490, 0.620) if compact_context_layout else rect_full(0.790, 0.060, 0.970, 0.535))
+	var tile_name_rect := rect_full(0.300, 0.380, 0.490, 0.620) if compact_context_layout else rect_full(0.790, 0.060, 0.970, 0.535)
+	if narrow_context_layout:
+		tile_name_rect = rect_full(0.585, 0.060, 0.965, 0.455)
+	apply_rect(tile_name, tile_name_rect)
 	tile_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(tile_name, 2)
 	var urgency = make_label(panel, pending_claim_urgency_text(), 9, Color(0.98, 0.70, 0.42, 0.92), true)
 	urgency.name = "PendingClaimUrgencyText"
-	apply_rect(urgency, rect_full(0.500, 0.380, 0.965, 0.620) if compact_context_layout else rect_full(0.345, 0.455, 0.970, 0.535))
+	var urgency_rect := rect_full(0.500, 0.380, 0.965, 0.620) if compact_context_layout else rect_full(0.345, 0.455, 0.970, 0.535)
+	if narrow_context_layout:
+		urgency_rect = rect_full(0.190, 0.505, 0.560, 0.790)
+	apply_rect(urgency, urgency_rect)
 	urgency.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if compact_context_layout:
 		urgency.add_theme_font_size_override("font_size", 8)
@@ -15179,18 +15197,25 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	urgency.tooltip_text = "响应窗口提示：" + pending_claim_urgency_text()
 	var focus = make_label(panel, pending_claim_focus_text(), 11, Color(0.88, 0.86, 0.72, 0.88), true)
 	focus.name = "PendingClaimFocusText"
-	apply_rect(focus, rect_full(0.300, 0.650, 0.965, 0.950) if compact_context_layout else rect_full(0.345, 0.550, 0.970, 0.940))
+	if narrow_context_layout:
+		focus.text = pending_claim_compact_focus_text()
+	var focus_rect := rect_full(0.300, 0.650, 0.965, 0.950) if compact_context_layout else rect_full(0.345, 0.550, 0.970, 0.940)
+	if narrow_context_layout:
+		focus_rect = rect_full(0.585, 0.505, 0.965, 0.790)
+	apply_rect(focus, focus_rect)
 	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if compact_context_layout:
-		focus.add_theme_font_size_override("font_size", 9)
+		focus.add_theme_font_size_override("font_size", 8 if narrow_context_layout else 9)
+		configure_clipped_label(focus)
 	style_background_readable_label(focus, 2)
 	if compact_context_layout:
 		# The source text already names the discarder; reserve the narrow edge for
 		# the real tile preview instead of duplicating a clipped badge.
 		source_badge.visible = false
-	draw_pending_claim_flow_art(panel, source_seat)
-	draw_pending_claim_priority_art(panel, pending.get("options", []))
-	draw_pending_claim_response_pulse(panel, pending.get("options", []))
+	if not narrow_context_layout:
+		draw_pending_claim_flow_art(panel, source_seat)
+		draw_pending_claim_priority_art(panel, pending.get("options", []))
+		draw_pending_claim_response_pulse(panel, pending.get("options", []))
 	draw_pending_claim_timer_art(panel)
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
@@ -15274,7 +15299,8 @@ func draw_pending_claim_timer_art(parent: Control) -> Control:
 	var timer = Control.new()
 	timer.name = "PendingClaimTimerArt"
 	timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(timer, rect_full(0.420, 0.852, 0.958, 0.962))
+	var narrow_context_layout := effective_viewport_size().x <= 960.0
+	apply_rect(timer, rect_full(0.620, 0.800, 0.970, 0.985) if narrow_context_layout else rect_full(0.420, 0.852, 0.958, 0.962))
 	parent.add_child(timer)
 	var rail = make_gpt_route_rail(rect_full(0.020, 0.365, 0.940, 0.455), Color(0.006, 0.016, 0.018, 0.46))
 	rail.name = "PendingClaimTimerRail"
@@ -15287,7 +15313,7 @@ func draw_pending_claim_timer_art(parent: Control) -> Control:
 	gate.name = "PendingClaimTimerGate"
 	timer.add_child(gate)
 	var tick = add_gpt_tick_strip(timer, rect_full(0.165, 0.185, (0.165) + float(3) * (0.155) + (0.018), 0.670), Color(0.92, 0.70, 0.32, 0.24), "PendingClaimTimerTick_0")
-	var timer_label = make_label(timer, pending_claim_timer_text(), 9, Color(0.98, 0.88, 0.58, 0.94), true)
+	var timer_label = make_label(timer, pending_claim_timer_text(), 8 if narrow_context_layout else 9, Color(0.98, 0.88, 0.58, 0.94), true)
 	timer_label.name = "PendingClaimTimerText"
 	apply_rect(timer_label, rect_full(0.040, 0.020, 0.900, 0.340))
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -16755,6 +16781,8 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		if compact_side:
 			# Keep all three scan-critical counters in one short, non-truncating lane.
 			side_meta_text = "手%d/花%d/弃%d" % [int(p.get("hand_count", 0)), int(p.get("flowers", 0)), side_discard_count]
+			side_stats.add_theme_font_size_override("font_size", 9)
+			side_stats.tooltip_text = "手牌%d · 花牌%d · 弃牌%d" % [int(p.get("hand_count", 0)), int(p.get("flowers", 0)), side_discard_count]
 		else:
 			side_meta_text = "手%d" % int(p.get("hand_count", 0))
 			if int(p.get("flowers", 0)) > 0:
@@ -19077,6 +19105,11 @@ func draw_table_living_illustration(parent: Control) -> Control:
 func draw_table_log(parent: Control) -> void:
 	# r213: GPT chrome conversion
 	var compact_log := effective_viewport_size().y <= 560.0
+	# At 960x540 the response context owns the only readable left-top reserve.
+	# Hide the secondary ledger for this short decision window; its complete
+	# history remains available through the chat/history routes after the action.
+	var hide_compact_ledger_for_pending: bool = effective_viewport_size().x <= 960.0 \
+		and has_pending_claim_window() and not table_log_archive_open
 	# The compact ledger sits below the side seat card, so it can grow rightward
 	# without touching the side river. This gives the latest event a real reading
 	# lane instead of relying on a tooltip for every long sentence.
@@ -19087,6 +19120,7 @@ func draw_table_log(parent: Control) -> void:
 	var ledger_rect := rect_full(0.018, 0.128, ledger_right, ledger_bottom)
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
+	ledger_panel.visible = not hide_compact_ledger_for_pending
 	parent.add_child(ledger_panel)
 	var ledger_texture = add_illustration_texture(ledger_panel, "table_log_scroll", rect_full(0.010, 0.018, 0.990, 0.982), 0.075, false)
 	if ledger_texture != null:
@@ -21686,6 +21720,9 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# r214: bulk GPT chrome sweep
 	var button = Button.new()
 	button.text = ""
+	# The card is the native interactive surface, so keep its complete action
+	# label available even though the visible title/subtitle are separate labels.
+	button.tooltip_text = text.replace("\n", " · ")
 	button.custom_minimum_size = Vector2(310, 210)
 	configure_touch_button(button)
 	# r180: menu card face is GPT plate; StyleBox hosts stay empty.
@@ -24197,6 +24234,7 @@ func _show_achievements_screen_impl() -> void:
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu()
 	)
+	back.name = "AchievementsBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
 	draw_secondary_back_button_art(back, "achievements", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
@@ -24289,6 +24327,7 @@ func _show_achievements_screen_impl() -> void:
 	)
 	call_deferred("sync_achievements_scroll_thumb", scroll, achievements_scroll_thumb)
 	call_deferred("sync_achievements_scroll_status", scroll, achievements_browse_status, achievement_total_count)
+	configure_ordered_focus_navigation(panel, [back, scroll], "AchievementsBackButton")
 	draw_achievements_row_collection_bus_art(panel)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.list_items_stagger_in(rows, 0.22, 0.035)
@@ -24449,16 +24488,19 @@ func _show_menu_impl() -> void:
 	# 三个主功能卡片 - 更大更醒目，使用国风配色
 	var cards: Array = []
 	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.78, 0.56, 0.28), func() -> void: start_offline(), "play")
+	card1.name = "MenuPrimaryOfflineCard"
 	card1.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card1)
 	cards.append(card1)
 
 	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", AZURE, func() -> void: show_online_lobby(), "users")
+	card2.name = "MenuPrimaryOnlineCard"
 	card2.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card2)
 	cards.append(card2)
 
 	var card3 = make_menu_card("商店\n道具和货币", VERMILION, func() -> void: show_shop_screen(), "gift")
+	card3.name = "MenuPrimaryShopCard"
 	card3.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card3)
 	cards.append(card3)
@@ -24529,6 +24571,7 @@ func _show_menu_impl() -> void:
 		var tutorial_hint = quick_rail.find_child("MenuQuickRulesButton", true, false) if quick_rail != null else null
 		if tutorial_hint != null and is_instance_valid(tutorial_hint) and ui_motion_enabled():
 			tutorial_hint.modulate.a = 0.92
+	configure_button_focus_navigation(root_layer, "MenuPrimaryOfflineCard")
 
 	# Keep the product title above the full-screen menu stages while leaving modal
 	# overlays free to cover it when settings/update UI is intentionally open.
@@ -24748,6 +24791,30 @@ func refresh_online_lobby_action_states() -> void:
 			current_status.text = "已连接 · 可创建房间；输入房间号后可加入"
 		else:
 			current_status.text = "已连接 · 可创建或加入房间"
+	configure_online_lobby_focus_navigation(false)
+
+
+func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	# Keep the operational route stable across connection-state refreshes. Disabled
+	# actions are filtered by the shared helper, while visible detail targets join
+	# the same keyboard/gamepad path as the form and primary actions.
+	var controls: Array = [
+		root_layer.find_child("OnlineLobbyNameEdit", true, false),
+		root_layer.find_child("OnlineLobbyHostEdit", true, false),
+		root_layer.find_child("OnlineLobbyRoomEdit", true, false),
+		root_layer.find_child("OnlineLobbyConnectButton", true, false),
+		root_layer.find_child("OnlineLobbyCreateButton", true, false),
+		root_layer.find_child("OnlineLobbyJoinButton", true, false),
+		root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false),
+		root_layer.find_child("OnlineLobbySecondaryReturnButton", true, false),
+		root_layer.find_child("ChatLobbyButton", true, false),
+		root_layer.find_child("OnlineLobbyLogLatestButton", true, false),
+	]
+	for target in online_detail_target_list():
+		controls.append(target)
+	configure_ordered_focus_navigation(root_layer, controls, "OnlineLobbyNameEdit", grab_default_focus)
 
 
 func _show_online_lobby_impl() -> void:
@@ -25024,19 +25091,21 @@ func _show_online_lobby_impl() -> void:
 	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
+	var compact_room_badge := effective_viewport_size().x <= 960.0
+	var room_badge_rect := rect_full(0.670, 0.030, 0.985, 0.100) if compact_room_badge else rect_full(0.670, 0.030, 0.945, 0.100)
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
-	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
+	var room_badge = make_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
 	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
-		apply_rect(room_badge_label, rect_full(0.045, 0.040, 0.780, 0.960))
+		apply_rect(room_badge_label, rect_full(0.015, 0.040, 0.895 if compact_room_badge else 0.780, 0.960))
 		room_badge_label.tooltip_text = room_badge_full_text
-	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.800, 0.205, 0.955, 0.795), Color(0.92, 0.88, 0.64, 0.92))
+	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.910 if compact_room_badge else 0.800, 0.205, 0.980 if compact_room_badge else 0.955, 0.795), Color(0.92, 0.88, 0.64, 0.92))
 	if room_badge_info_icon != null:
 		room_badge_info_icon.name = "OnlineLobbyRoomBadgeViewIcon"
 		room_badge.move_child(room_badge_info_icon, room_badge_label.get_index() if room_badge_label != null else room_badge.get_child_count() - 1)
@@ -25089,6 +25158,7 @@ func _show_online_lobby_impl() -> void:
 	draw_online_lobby_feedback_sync_art(panel)
 	ensure_update_dialog()
 	refresh_online_lobby_state()
+	configure_online_lobby_focus_navigation(true)
 	schedule_ui_qa_page_ready("online_lobby", ["OnlineLobbyFormPanel", "OnlineLobbyNameEdit", "OnlineLobbyLogPanel", "OnlineLobbyLogScroll"])
 
 
@@ -25417,6 +25487,7 @@ func _show_rules_screen_impl() -> void:
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu()
 	)
+	back.name = "RulesBackButton"
 	back.custom_minimum_size = Vector2(92, 44)
 	back.add_theme_font_size_override("font_size", commercial_ui_font_size(16, 2))
 	draw_secondary_back_button_art(back, "rules", Color(0.36, 0.26, 0.16))
@@ -25443,6 +25514,7 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.add_child(content_sheen)
 	var content_scroll = ScrollContainer.new()
 	content_scroll.name = "RulesContentScroll"
+	configure_scroll_container(content_scroll, "上下滚动查看完整规则说明")
 	content_scroll.anchor_left = 0.058
 	content_scroll.anchor_top = 0.168
 	# Reserve a small stable gap for the custom scroll lane instead of letting its
@@ -25490,6 +25562,8 @@ func _show_rules_screen_impl() -> void:
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
 	rules_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	rules_scroll_hit_target.tooltip_text = "拖动定位"
+	rules_scroll_hit_target.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, 0.0)
+	rules_scroll_hit_target.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	# Keep the transparent touch surface inside the scrollbar lane. The content
 	# viewport ends before this lane, so the last text column remains clickable.
 	apply_rect(rules_scroll_hit_target, rect_full(0.925, 0.168, 0.975, 0.982))
@@ -25594,6 +25668,12 @@ func _show_rules_screen_impl() -> void:
 	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
 	call_deferred("sync_rules_guide_state", content_scroll, rules_guide)
 	call_deferred("normalize_rules_section_heights", content_scroll)
+	var rules_focus_controls: Array[Control] = [back, content_scroll]
+	for i in range(4):
+		var rules_step_button := rules_guide.find_child("RulesGuideStepButton_%d" % i, true, false) as Control
+		if rules_step_button != null:
+			rules_focus_controls.append(rules_step_button)
+	configure_ordered_focus_navigation(panel, rules_focus_controls, "RulesBackButton")
 
 	# 规则段落逐一滑入
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
@@ -25747,7 +25827,7 @@ func wire_rules_guide_navigation(guide: Control, content_scroll: ScrollContainer
 		button.tooltip_text = "跳转到规则第%d段" % (int(target_sections[i]) + 1)
 		button.flat = true
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
-		button.focus_mode = Control.FOCUS_ALL
+		configure_touch_button(button)
 		var empty_style := StyleBoxEmpty.new()
 		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 			button.add_theme_stylebox_override(state, empty_style)
@@ -25801,6 +25881,7 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 			return
 		drag_state["active"] = mouse_button.pressed
 		if mouse_button.pressed:
+			content_scroll.grab_focus()
 			set_rules_scroll_from_track_position(content_scroll, scrollbar, thumb, event_target, mouse_button.position.y, sync_callback)
 			drag_state["active"] = true
 		if not mouse_button.pressed:
@@ -25811,6 +25892,7 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 		var touch = event as InputEventScreenTouch
 		drag_state["active"] = touch.pressed
 		if touch.pressed:
+			content_scroll.grab_focus()
 			set_rules_scroll_from_track_position(content_scroll, scrollbar, thumb, event_target, touch.position.y, sync_callback)
 			drag_state["active"] = true
 		if not touch.pressed:
@@ -25945,6 +26027,7 @@ func _show_shop_screen_impl() -> void:
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu()
 	)
+	back.name = "ShopBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
 	draw_secondary_back_button_art(back, "shop", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
@@ -25964,6 +26047,7 @@ func _show_shop_screen_impl() -> void:
 	display_shell.add_child(display_shelf)
 	var scroll = ScrollContainer.new()
 	scroll.name = "ShopItemsScroll"
+	configure_scroll_container(scroll, "上下滚动查看完整商品列表")
 	scroll.anchor_left = 0.04
 	scroll.anchor_top = 0.12
 	scroll.anchor_right = 0.930
@@ -26227,6 +26311,12 @@ func _show_shop_screen_impl() -> void:
 			sync_shop_scroll_thumb(scroll, shop_scroll_thumb)
 		)
 	call_deferred("restore_shop_scroll_state", scroll, shop_scroll_thumb)
+	var shop_focus_controls: Array[Control] = [back, scroll]
+	for item_id in ITEM_TYPES.keys():
+		var shop_buy_button := content.find_child("ShopItemBuyButton_%s" % item_id, true, false) as Control
+		if shop_buy_button != null:
+			shop_focus_controls.append(shop_buy_button)
+	configure_ordered_focus_navigation(panel, shop_focus_controls, "ShopBackButton")
 
 	# 面板弹出动画
 	if ui_motion_enabled():
@@ -26358,6 +26448,7 @@ func _show_stats_screen_impl() -> void:
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu()
 	)
+	back.name = "StatsBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
 	draw_secondary_back_button_art(back, "stats", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
@@ -26388,6 +26479,7 @@ func _show_stats_screen_impl() -> void:
 	add_stat_row(content, "单局最佳", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))), stats_row_height)
 	add_stat_row(content, "总手牌数", "%d 手" % int(game_stats.get("total_hands", 0)), stats_row_height)
 	draw_stats_row_summary_bus_art(panel)
+	configure_ordered_focus_navigation(panel, [back], "StatsBackButton")
 
 	# 统计行依次滑入动画
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
@@ -28776,7 +28868,9 @@ func online_action_validation_error(payload: Dictionary) -> String:
 			return "当前没有你的响应窗口。"
 		var pending: Dictionary = online_game.get("pending", {})
 		var options: Array = pending.get("options", []) if typeof(pending) == TYPE_DICTIONARY else []
-		if not options.has(claim):
+		# Passing is implicit in every visible response window; the server options
+		# list enumerates positive claims while the UI always exposes the pass route.
+		if claim != "pass" and not options.has(claim):
 			return "该响应已失效。"
 	if action_type == "chat":
 		var message := str(payload.get("message", "")).strip_edges()
@@ -29641,6 +29735,20 @@ func handle_ui_cancel() -> bool:
 	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
 		on_update_secondary_pressed()
 		return true
+	# Active table decisions own Esc before stale reading panels or page-exit
+	# routes. This keeps each reversible decision in a single keypress.
+	if mode == "offline" and has_pending_danger_discard():
+		advisor_detail_open = false
+		clear_pending_danger_discard()
+		set_status(current_status_text())
+		render_game()
+		return true
+	if mode == "online_game" and (online_waiting_for_server or online_retry_available):
+		cancel_online_pending_action()
+		return true
+	if has_pending_claim_window():
+		keyboard_claim_action("pass")
+		return true
 	if advisor_detail_open:
 		close_advisor_detail_panel()
 		return true
@@ -29652,11 +29760,6 @@ func handle_ui_cancel() -> bool:
 		return true
 	if chat_panel_open:
 		close_chat_panel()
-		return true
-	if mode == "offline" and has_pending_danger_discard():
-		clear_pending_danger_discard()
-		set_status(current_status_text())
-		render_game()
 		return true
 	if settings_panel_open:
 		close_settings_panel()
@@ -30325,11 +30428,14 @@ func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed:
 	if resolved_id == "":
 		resolved_id = "generic"
 	var accent := line_edit_accent(resolved_id)
-	var previous = edit.find_child("LineEditInputFeedback_%s" % resolved_id, false, false)
+	var feedback_name := "LineEditInputFeedback_%s" % resolved_id
+	var previous = edit.find_child(feedback_name, false, false)
 	if previous != null and is_instance_valid(previous):
-		previous.queue_free()
+		# Focus and text changes can arrive in the same frame. Release the old
+		# transient synchronously so the authored name remains stable.
+		previous.free()
 	var feedback = Control.new()
-	feedback.name = "LineEditInputFeedback_%s" % resolved_id
+	feedback.name = feedback_name
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	edit.add_child(feedback)
@@ -31742,6 +31848,37 @@ func advisor_recommendation_reason_text(report: Dictionary) -> String:
 	return " · ".join(parts) if not parts.is_empty() else "保持牌形效率"
 
 
+func advisor_compact_reason_text(report: Dictionary) -> String:
+	var reason := str(report.get("reason_label", "")).strip_edges()
+	if reason != "":
+		var separator := reason.find(" · ")
+		if separator >= 0:
+			reason = reason.left(separator)
+	var safety := discard_safety_short_text(report)
+	if reason == "":
+		return safety if safety != "" else "保持牌形"
+	if safety != "" and safety != reason:
+		return "%s · %s" % [reason, safety]
+	return reason
+
+
+func advisor_compact_value_text(report: Dictionary) -> String:
+	var shape := str(report.get("shape_label", "")).strip_edges()
+	var ukeire := int(report.get("ukeire", 0))
+	if shape == "":
+		return "%d进" % ukeire
+	return "%s · %d进" % [shape, ukeire]
+
+
+func advisor_compact_threat_text(seat: int) -> String:
+	var report := opponent_threat_report(seat)
+	if report.is_empty():
+		return "防守待评估"
+	var level := str(report.get("level", "中"))
+	var avoid := str(report.get("avoid", "")).strip_edges()
+	return "%s · 慎放%s" % [level, avoid] if avoid != "" else "%s · 注意安全" % level
+
+
 func advisor_detail_text() -> String:
 	var lines: Array[String] = []
 	if offline_phase == "pending_claim":
@@ -31967,6 +32104,31 @@ func pending_claim_focus_text() -> String:
 			focus_text = "吃牌机会 · 选择顺子组合"
 	var shortcut_text := pending_claim_shortcut_text(pending.get("options", []))
 	return focus_text + " · " + shortcut_text if shortcut_text != "" else focus_text
+
+
+func pending_claim_compact_focus_text() -> String:
+	var pending := pending_claim_state()
+	if pending.is_empty():
+		return "响应窗口 · X过"
+	var options: Array = pending.get("options", [])
+	var focus := "响应窗口"
+	var shortcut := "X过"
+	if bool(pending.get("rob_gang", false)):
+		focus = "抢杠胡牌"
+		shortcut = "H胡 · X过"
+	elif options.has("hu"):
+		focus = "胡牌机会"
+		shortcut = "H胡 · X过"
+	elif options.has("gang"):
+		focus = "杠牌机会"
+		shortcut = "G杠 · X过"
+	elif options.has("peng"):
+		focus = "碰牌机会"
+		shortcut = "P碰 · X过"
+	elif options.has("chi"):
+		focus = "吃牌机会"
+		shortcut = "C吃 · X过"
+	return "%s · %s" % [focus, shortcut]
 
 
 func pending_claim_urgency_text() -> String:
@@ -32262,9 +32424,8 @@ func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 	)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
-	# Keep the response context in a dedicated top-right decision lane. The old
-	# center-ring lane looked close to the action dock but competed with the wall,
-	# winds, and last-discard state at every compact breakpoint.
+	# Keep the response context in a dedicated decision lane. The standard lane
+	# stays top-right; the compact lane moves to the left-top reserve below the HUD.
 	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
 	var safe_width = maxf(1.0, resolved_size.x)
 	var safe_height = maxf(1.0, resolved_size.y)
@@ -32275,10 +32436,17 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
 	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
 	var context_height_px := 64.0 if effective_viewport_size().y <= 560.0 else (72.0 if effective_viewport_size().y < 900.0 else 84.0)
-	# This narrow top-right channel sits below the top meld and above the right
-	# river/seat. It remains outside the center console while preserving a
-	# dedicated reading lane on compact screens.
-	var header_candidate := rect_full(0.862, 0.205, 0.990, 0.205 + context_height_px / safe_height)
+	# The compact channel sits under the top HUD at the left edge of the table.
+	# It clears the top river/meld and stays above the left river and side meld.
+	var narrow_context := effective_viewport_size().x <= 960.0
+	if narrow_context:
+		# Use the independent left-top slot so the panel can keep readable source
+		# and tile labels without covering the right-seat meld lane.
+		context_height_px = 48.0
+	var header_left := 0.015 if narrow_context else 0.862
+	var header_top := 0.110 if narrow_context else 0.205
+	var header_right := 0.280 if narrow_context else 0.990
+	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height):
 		return header_candidate
 	var left_river = seat_discard_rect(3)
@@ -33966,6 +34134,9 @@ func danger_discard_needs_confirmation(report: Dictionary) -> bool:
 	return risk >= 34.0 or feed_risk >= 36.0
 
 func begin_danger_discard_confirmation(index: int, tile: String, report: Dictionary) -> void:
+	# The danger confirmation is the active decision surface; clear any detail
+	# panel state before rendering so focus cannot target hidden content.
+	advisor_detail_open = false
 	pending_danger_discard_index = index
 	pending_danger_discard_tile = tile
 	pending_danger_discard_report = duplicate_ai_report(report, true)
@@ -37255,7 +37426,7 @@ func scroll_chat_panel_to_end() -> void:
 
 
 func toggle_advisor_detail_panel() -> void:
-	if mode != "offline" or not player_ai_assist_enabled():
+	if mode != "offline" or not player_ai_assist_enabled() or has_pending_danger_discard():
 		return
 	advisor_detail_open = not advisor_detail_open
 	request_game_render()

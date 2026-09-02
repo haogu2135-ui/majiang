@@ -342,6 +342,20 @@ func handle_ui_cancel() -> bool:
 	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
 		on_update_secondary_pressed()
 		return true
+	# Active table decisions own Esc before stale reading panels or page-exit
+	# routes. This keeps each reversible decision in a single keypress.
+	if mode == "offline" and has_pending_danger_discard():
+		advisor_detail_open = false
+		clear_pending_danger_discard()
+		set_status(current_status_text())
+		render_game()
+		return true
+	if mode == "online_game" and (online_waiting_for_server or online_retry_available):
+		cancel_online_pending_action()
+		return true
+	if has_pending_claim_window():
+		keyboard_claim_action("pass")
+		return true
 	if advisor_detail_open:
 		close_advisor_detail_panel()
 		return true
@@ -353,11 +367,6 @@ func handle_ui_cancel() -> bool:
 		return true
 	if chat_panel_open:
 		close_chat_panel()
-		return true
-	if mode == "offline" and has_pending_danger_discard():
-		clear_pending_danger_discard()
-		set_status(current_status_text())
-		render_game()
 		return true
 	if settings_panel_open:
 		close_settings_panel()
@@ -1026,11 +1035,14 @@ func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed:
 	if resolved_id == "":
 		resolved_id = "generic"
 	var accent := line_edit_accent(resolved_id)
-	var previous = edit.find_child("LineEditInputFeedback_%s" % resolved_id, false, false)
+	var feedback_name := "LineEditInputFeedback_%s" % resolved_id
+	var previous = edit.find_child(feedback_name, false, false)
 	if previous != null and is_instance_valid(previous):
-		previous.queue_free()
+		# Focus and text changes can arrive in the same frame. Release the old
+		# transient synchronously so the authored name remains stable.
+		previous.free()
 	var feedback = Control.new()
-	feedback.name = "LineEditInputFeedback_%s" % resolved_id
+	feedback.name = feedback_name
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
 	edit.add_child(feedback)
@@ -2443,6 +2455,37 @@ func advisor_recommendation_reason_text(report: Dictionary) -> String:
 	return " · ".join(parts) if not parts.is_empty() else "保持牌形效率"
 
 
+func advisor_compact_reason_text(report: Dictionary) -> String:
+	var reason := str(report.get("reason_label", "")).strip_edges()
+	if reason != "":
+		var separator := reason.find(" · ")
+		if separator >= 0:
+			reason = reason.left(separator)
+	var safety := discard_safety_short_text(report)
+	if reason == "":
+		return safety if safety != "" else "保持牌形"
+	if safety != "" and safety != reason:
+		return "%s · %s" % [reason, safety]
+	return reason
+
+
+func advisor_compact_value_text(report: Dictionary) -> String:
+	var shape := str(report.get("shape_label", "")).strip_edges()
+	var ukeire := int(report.get("ukeire", 0))
+	if shape == "":
+		return "%d进" % ukeire
+	return "%s · %d进" % [shape, ukeire]
+
+
+func advisor_compact_threat_text(seat: int) -> String:
+	var report := opponent_threat_report(seat)
+	if report.is_empty():
+		return "防守待评估"
+	var level := str(report.get("level", "中"))
+	var avoid := str(report.get("avoid", "")).strip_edges()
+	return "%s · 慎放%s" % [level, avoid] if avoid != "" else "%s · 注意安全" % level
+
+
 func advisor_detail_text() -> String:
 	var lines: Array[String] = []
 	if offline_phase == "pending_claim":
@@ -2668,6 +2711,31 @@ func pending_claim_focus_text() -> String:
 			focus_text = "吃牌机会 · 选择顺子组合"
 	var shortcut_text := pending_claim_shortcut_text(pending.get("options", []))
 	return focus_text + " · " + shortcut_text if shortcut_text != "" else focus_text
+
+
+func pending_claim_compact_focus_text() -> String:
+	var pending := pending_claim_state()
+	if pending.is_empty():
+		return "响应窗口 · X过"
+	var options: Array = pending.get("options", [])
+	var focus := "响应窗口"
+	var shortcut := "X过"
+	if bool(pending.get("rob_gang", false)):
+		focus = "抢杠胡牌"
+		shortcut = "H胡 · X过"
+	elif options.has("hu"):
+		focus = "胡牌机会"
+		shortcut = "H胡 · X过"
+	elif options.has("gang"):
+		focus = "杠牌机会"
+		shortcut = "G杠 · X过"
+	elif options.has("peng"):
+		focus = "碰牌机会"
+		shortcut = "P碰 · X过"
+	elif options.has("chi"):
+		focus = "吃牌机会"
+		shortcut = "C吃 · X过"
+	return "%s · %s" % [focus, shortcut]
 
 
 func pending_claim_urgency_text() -> String:
@@ -2963,9 +3031,8 @@ func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 	)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
-	# Keep the response context in a dedicated top-right decision lane. The old
-	# center-ring lane looked close to the action dock but competed with the wall,
-	# winds, and last-discard state at every compact breakpoint.
+	# Keep the response context in a dedicated decision lane. The standard lane
+	# stays top-right; the compact lane moves to the left-top reserve below the HUD.
 	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
 	var safe_width = maxf(1.0, resolved_size.x)
 	var safe_height = maxf(1.0, resolved_size.y)
@@ -2976,10 +3043,17 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
 	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
 	var context_height_px := 64.0 if effective_viewport_size().y <= 560.0 else (72.0 if effective_viewport_size().y < 900.0 else 84.0)
-	# This narrow top-right channel sits below the top meld and above the right
-	# river/seat. It remains outside the center console while preserving a
-	# dedicated reading lane on compact screens.
-	var header_candidate := rect_full(0.862, 0.205, 0.990, 0.205 + context_height_px / safe_height)
+	# The compact channel sits under the top HUD at the left edge of the table.
+	# It clears the top river/meld and stays above the left river and side meld.
+	var narrow_context := effective_viewport_size().x <= 960.0
+	if narrow_context:
+		# Use the independent left-top slot so the panel can keep readable source
+		# and tile labels without covering the right-seat meld lane.
+		context_height_px = 48.0
+	var header_left := 0.015 if narrow_context else 0.862
+	var header_top := 0.110 if narrow_context else 0.205
+	var header_right := 0.280 if narrow_context else 0.990
+	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height):
 		return header_candidate
 	var left_river = seat_discard_rect(3)
@@ -4667,6 +4741,9 @@ func danger_discard_needs_confirmation(report: Dictionary) -> bool:
 	return risk >= 34.0 or feed_risk >= 36.0
 
 func begin_danger_discard_confirmation(index: int, tile: String, report: Dictionary) -> void:
+	# The danger confirmation is the active decision surface; clear any detail
+	# panel state before rendering so focus cannot target hidden content.
+	advisor_detail_open = false
 	pending_danger_discard_index = index
 	pending_danger_discard_tile = tile
 	pending_danger_discard_report = duplicate_ai_report(report, true)
@@ -7956,7 +8033,7 @@ func scroll_chat_panel_to_end() -> void:
 
 
 func toggle_advisor_detail_panel() -> void:
-	if mode != "offline" or not player_ai_assist_enabled():
+	if mode != "offline" or not player_ai_assist_enabled() or has_pending_danger_discard():
 		return
 	advisor_detail_open = not advisor_detail_open
 	request_game_render()

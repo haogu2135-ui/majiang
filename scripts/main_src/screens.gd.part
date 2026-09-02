@@ -82,6 +82,7 @@ func _show_achievements_screen_impl() -> void:
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu()
 	)
+	back.name = "AchievementsBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
 	draw_secondary_back_button_art(back, "achievements", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
@@ -174,6 +175,7 @@ func _show_achievements_screen_impl() -> void:
 	)
 	call_deferred("sync_achievements_scroll_thumb", scroll, achievements_scroll_thumb)
 	call_deferred("sync_achievements_scroll_status", scroll, achievements_browse_status, achievement_total_count)
+	configure_ordered_focus_navigation(panel, [back, scroll], "AchievementsBackButton")
 	draw_achievements_row_collection_bus_art(panel)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.list_items_stagger_in(rows, 0.22, 0.035)
@@ -334,16 +336,19 @@ func _show_menu_impl() -> void:
 	# 三个主功能卡片 - 更大更醒目，使用国风配色
 	var cards: Array = []
 	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.78, 0.56, 0.28), func() -> void: start_offline(), "play")
+	card1.name = "MenuPrimaryOfflineCard"
 	card1.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card1)
 	cards.append(card1)
 
 	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", AZURE, func() -> void: show_online_lobby(), "users")
+	card2.name = "MenuPrimaryOnlineCard"
 	card2.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card2)
 	cards.append(card2)
 
 	var card3 = make_menu_card("商店\n道具和货币", VERMILION, func() -> void: show_shop_screen(), "gift")
+	card3.name = "MenuPrimaryShopCard"
 	card3.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card3)
 	cards.append(card3)
@@ -414,6 +419,7 @@ func _show_menu_impl() -> void:
 		var tutorial_hint = quick_rail.find_child("MenuQuickRulesButton", true, false) if quick_rail != null else null
 		if tutorial_hint != null and is_instance_valid(tutorial_hint) and ui_motion_enabled():
 			tutorial_hint.modulate.a = 0.92
+	configure_button_focus_navigation(root_layer, "MenuPrimaryOfflineCard")
 
 	# Keep the product title above the full-screen menu stages while leaving modal
 	# overlays free to cover it when settings/update UI is intentionally open.
@@ -633,6 +639,30 @@ func refresh_online_lobby_action_states() -> void:
 			current_status.text = "已连接 · 可创建房间；输入房间号后可加入"
 		else:
 			current_status.text = "已连接 · 可创建或加入房间"
+	configure_online_lobby_focus_navigation(false)
+
+
+func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	# Keep the operational route stable across connection-state refreshes. Disabled
+	# actions are filtered by the shared helper, while visible detail targets join
+	# the same keyboard/gamepad path as the form and primary actions.
+	var controls: Array = [
+		root_layer.find_child("OnlineLobbyNameEdit", true, false),
+		root_layer.find_child("OnlineLobbyHostEdit", true, false),
+		root_layer.find_child("OnlineLobbyRoomEdit", true, false),
+		root_layer.find_child("OnlineLobbyConnectButton", true, false),
+		root_layer.find_child("OnlineLobbyCreateButton", true, false),
+		root_layer.find_child("OnlineLobbyJoinButton", true, false),
+		root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false),
+		root_layer.find_child("OnlineLobbySecondaryReturnButton", true, false),
+		root_layer.find_child("ChatLobbyButton", true, false),
+		root_layer.find_child("OnlineLobbyLogLatestButton", true, false),
+	]
+	for target in online_detail_target_list():
+		controls.append(target)
+	configure_ordered_focus_navigation(root_layer, controls, "OnlineLobbyNameEdit", grab_default_focus)
 
 
 func _show_online_lobby_impl() -> void:
@@ -909,19 +939,21 @@ func _show_online_lobby_impl() -> void:
 	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
+	var compact_room_badge := effective_viewport_size().x <= 960.0
+	var room_badge_rect := rect_full(0.670, 0.030, 0.985, 0.100) if compact_room_badge else rect_full(0.670, 0.030, 0.945, 0.100)
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
 		room_gate_texture.name = "LobbyRoomGateTokenTexture"
-	var room_badge = make_badge(log_panel, rect_full(0.67, 0.030, 0.945, 0.100), room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
+	var room_badge = make_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
 	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var room_badge_label = room_badge.get_child(room_badge.get_child_count() - 1) as Label if room_badge.get_child_count() > 0 else null
 	if room_badge_label != null:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
-		apply_rect(room_badge_label, rect_full(0.045, 0.040, 0.780, 0.960))
+		apply_rect(room_badge_label, rect_full(0.015, 0.040, 0.895 if compact_room_badge else 0.780, 0.960))
 		room_badge_label.tooltip_text = room_badge_full_text
-	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.800, 0.205, 0.955, 0.795), Color(0.92, 0.88, 0.64, 0.92))
+	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.910 if compact_room_badge else 0.800, 0.205, 0.980 if compact_room_badge else 0.955, 0.795), Color(0.92, 0.88, 0.64, 0.92))
 	if room_badge_info_icon != null:
 		room_badge_info_icon.name = "OnlineLobbyRoomBadgeViewIcon"
 		room_badge.move_child(room_badge_info_icon, room_badge_label.get_index() if room_badge_label != null else room_badge.get_child_count() - 1)
@@ -974,6 +1006,7 @@ func _show_online_lobby_impl() -> void:
 	draw_online_lobby_feedback_sync_art(panel)
 	ensure_update_dialog()
 	refresh_online_lobby_state()
+	configure_online_lobby_focus_navigation(true)
 	schedule_ui_qa_page_ready("online_lobby", ["OnlineLobbyFormPanel", "OnlineLobbyNameEdit", "OnlineLobbyLogPanel", "OnlineLobbyLogScroll"])
 
 
@@ -1302,6 +1335,7 @@ func _show_rules_screen_impl() -> void:
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu()
 	)
+	back.name = "RulesBackButton"
 	back.custom_minimum_size = Vector2(92, 44)
 	back.add_theme_font_size_override("font_size", commercial_ui_font_size(16, 2))
 	draw_secondary_back_button_art(back, "rules", Color(0.36, 0.26, 0.16))
@@ -1328,6 +1362,7 @@ func _show_rules_screen_impl() -> void:
 	content_backplate.add_child(content_sheen)
 	var content_scroll = ScrollContainer.new()
 	content_scroll.name = "RulesContentScroll"
+	configure_scroll_container(content_scroll, "上下滚动查看完整规则说明")
 	content_scroll.anchor_left = 0.058
 	content_scroll.anchor_top = 0.168
 	# Reserve a small stable gap for the custom scroll lane instead of letting its
@@ -1375,6 +1410,8 @@ func _show_rules_screen_impl() -> void:
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
 	rules_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	rules_scroll_hit_target.tooltip_text = "拖动定位"
+	rules_scroll_hit_target.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, 0.0)
+	rules_scroll_hit_target.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	# Keep the transparent touch surface inside the scrollbar lane. The content
 	# viewport ends before this lane, so the last text column remains clickable.
 	apply_rect(rules_scroll_hit_target, rect_full(0.925, 0.168, 0.975, 0.982))
@@ -1479,6 +1516,12 @@ func _show_rules_screen_impl() -> void:
 	call_deferred("sync_rules_scroll_thumb", content_scroll, rules_scroll_thumb)
 	call_deferred("sync_rules_guide_state", content_scroll, rules_guide)
 	call_deferred("normalize_rules_section_heights", content_scroll)
+	var rules_focus_controls: Array[Control] = [back, content_scroll]
+	for i in range(4):
+		var rules_step_button := rules_guide.find_child("RulesGuideStepButton_%d" % i, true, false) as Control
+		if rules_step_button != null:
+			rules_focus_controls.append(rules_step_button)
+	configure_ordered_focus_navigation(panel, rules_focus_controls, "RulesBackButton")
 
 	# 规则段落逐一滑入
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
@@ -1632,7 +1675,7 @@ func wire_rules_guide_navigation(guide: Control, content_scroll: ScrollContainer
 		button.tooltip_text = "跳转到规则第%d段" % (int(target_sections[i]) + 1)
 		button.flat = true
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
-		button.focus_mode = Control.FOCUS_ALL
+		configure_touch_button(button)
 		var empty_style := StyleBoxEmpty.new()
 		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 			button.add_theme_stylebox_override(state, empty_style)
@@ -1686,6 +1729,7 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 			return
 		drag_state["active"] = mouse_button.pressed
 		if mouse_button.pressed:
+			content_scroll.grab_focus()
 			set_rules_scroll_from_track_position(content_scroll, scrollbar, thumb, event_target, mouse_button.position.y, sync_callback)
 			drag_state["active"] = true
 		if not mouse_button.pressed:
@@ -1696,6 +1740,7 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 		var touch = event as InputEventScreenTouch
 		drag_state["active"] = touch.pressed
 		if touch.pressed:
+			content_scroll.grab_focus()
 			set_rules_scroll_from_track_position(content_scroll, scrollbar, thumb, event_target, touch.position.y, sync_callback)
 			drag_state["active"] = true
 		if not touch.pressed:
@@ -1830,6 +1875,7 @@ func _show_shop_screen_impl() -> void:
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu()
 	)
+	back.name = "ShopBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
 	draw_secondary_back_button_art(back, "shop", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
@@ -1849,6 +1895,7 @@ func _show_shop_screen_impl() -> void:
 	display_shell.add_child(display_shelf)
 	var scroll = ScrollContainer.new()
 	scroll.name = "ShopItemsScroll"
+	configure_scroll_container(scroll, "上下滚动查看完整商品列表")
 	scroll.anchor_left = 0.04
 	scroll.anchor_top = 0.12
 	scroll.anchor_right = 0.930
@@ -2112,6 +2159,12 @@ func _show_shop_screen_impl() -> void:
 			sync_shop_scroll_thumb(scroll, shop_scroll_thumb)
 		)
 	call_deferred("restore_shop_scroll_state", scroll, shop_scroll_thumb)
+	var shop_focus_controls: Array[Control] = [back, scroll]
+	for item_id in ITEM_TYPES.keys():
+		var shop_buy_button := content.find_child("ShopItemBuyButton_%s" % item_id, true, false) as Control
+		if shop_buy_button != null:
+			shop_focus_controls.append(shop_buy_button)
+	configure_ordered_focus_navigation(panel, shop_focus_controls, "ShopBackButton")
 
 	# 面板弹出动画
 	if ui_motion_enabled():
@@ -2243,6 +2296,7 @@ func _show_stats_screen_impl() -> void:
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu()
 	)
+	back.name = "StatsBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
 	draw_secondary_back_button_art(back, "stats", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
@@ -2273,6 +2327,7 @@ func _show_stats_screen_impl() -> void:
 	add_stat_row(content, "单局最佳", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))), stats_row_height)
 	add_stat_row(content, "总手牌数", "%d 手" % int(game_stats.get("total_hands", 0)), stats_row_height)
 	draw_stats_row_summary_bus_art(panel)
+	configure_ordered_focus_navigation(panel, [back], "StatsBackButton")
 
 	# 统计行依次滑入动画
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
