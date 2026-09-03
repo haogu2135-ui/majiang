@@ -2354,7 +2354,7 @@ func hand_group_label(tile: String) -> String:
 
 func hand_tray_text() -> String:
 	if mode == "online_game" and online_game_disconnected():
-		return "牌桌只读 · 点击重连"
+		return "已断线 · 点击重连 · 手牌只读"
 	if has_pending_danger_discard():
 		# 顶部 HUD 和确认 dock 负责完整风险说明；托盘只展示牌面与高亮目标。
 		return "目标牌已标记" if player_ai_assist_enabled() else "选择出牌"
@@ -2388,7 +2388,9 @@ func hand_tray_text() -> String:
 
 func hand_shortcut_hint_text() -> String:
 	if mode == "online_game" and online_game_disconnected():
-		return "点击重连 · 手牌不可操作"
+		# The reconnect instruction is already part of the dedicated one-line
+		# recovery status; avoid a duplicate line above the hand tiles.
+		return ""
 	if has_pending_danger_discard():
 		return "Enter 确认 · Esc 取消"
 	if has_pending_claim_window():
@@ -2813,11 +2815,14 @@ func action_intent_rect_for_count(count: int) -> Rect2:
 	var left = max(0.580, dock_rect.position.x)
 	if has_pending_claim_window():
 		return Rect2(Vector2(left, 0.558), Vector2(0.975, 0.606))
-	return Rect2(Vector2(left, 0.604), Vector2(0.975, 0.650))  # r437 above dock (height unchanged)
+	# Keep the regular intent strip below the advisor's compact panel and above
+	# the action dock. The previous .604-.650 slot overlapped the advisor's
+	# .330-.635 panel at 960x540.
+	return Rect2(Vector2(left, 0.642), Vector2(0.975, 0.682))
 
 func action_intent_text(count: int) -> String:
 	if mode == "online_game" and online_game_disconnected():
-		return "已断线 · 点击重连"
+		return "已断线 · 重连" if effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0 else "已断线 · 点击重连"
 	if has_pending_claim_window():
 		return "响应 · 选择动作或过"
 	if mode == "offline" and offline_phase == "ended":
@@ -7493,6 +7498,13 @@ func top_hud_status_text() -> String:
 	if mode == "online_game" and online_feedback.find("连接已断开") >= 0:
 		return "已断线 · 请重连"
 	return current_status_text()
+
+
+func top_hud_status_tooltip_text() -> String:
+	if mode == "online_game" and has_pending_claim_window() and not online_waiting_for_server and online_feedback == "":
+		var pending := pending_claim_state()
+		return "等待你响应%s" % tile_label(str(pending.get("tile", "")))
+	return top_hud_status_text()
 
 
 func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, section_index: int = -1) -> void:

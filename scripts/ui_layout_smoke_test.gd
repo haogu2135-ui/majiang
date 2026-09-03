@@ -1381,6 +1381,10 @@ func check_score_strip_layout(scope: Node, viewport_size: Vector2) -> void:
 	check(score_strip != null, "online top HUD exposes score strip at %s" % viewport_size)
 	if score_strip != null:
 		var strip_rect = screen_rect(score_strip)
+		var expected_winds := ["东", "南", "西", "北"]
+		var expected_names := ["南屏听雨阁主", "东风夜放花千树", "南山有鸟", "北海若"]
+		var expected_scores := ["2.6万", "2.4万", "2.7万", "2.3万"]
+		var compact_score_strip := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 		check(count_nodes_with_name_prefix(score_strip, "ScoreStripChip_") == 4 and count_nodes_with_name_prefix(score_strip, "ScoreStripSeatSeal_") == 4, "score strip keeps four quiet seat chips at %s" % viewport_size)
 		check(count_nodes_with_name_prefix(score_strip, "ScoreStripName_") == 4 and count_nodes_with_name_prefix(score_strip, "ScoreStripScore_") == 4, "score strip keeps four clipped names and scores at %s" % viewport_size)
 		check(count_nodes_with_name_prefix(score_strip, "ScoreStripDeltaRoute_") == 0 and count_nodes_with_name_prefix(score_strip, "ScoreStripChaseRoute_") == 0 and count_nodes_with_name_prefix(score_strip, "ScoreStripLeaderRoute_") == 0, "score strip omits route clutter at %s" % viewport_size)
@@ -1394,13 +1398,21 @@ func check_score_strip_layout(scope: Node, viewport_size: Vector2) -> void:
 			if chip == null:
 				continue
 			var chip_rect = screen_rect(chip)
+			var name_rect := screen_rect(name) if name != null else Rect2()
+			var score_rect := screen_rect(score) if score != null else Rect2()
 			check(strip_rect.grow(1.0).encloses(chip_rect), "score strip seat %d chip stays inside strip at %s" % [seat, viewport_size])
 			if name != null:
-				check(chip_rect.grow(1.0).encloses(screen_rect(name)) and name.clip_text, "score strip seat %d name clips inside chip at %s" % [seat, viewport_size])
+				check(chip_rect.grow(1.0).encloses(name_rect) and name.clip_text, "score strip seat %d name clips inside chip at %s" % [seat, viewport_size])
 				check(str(name.text).length() <= 3, "score strip seat %d name stays compact (<=3) at %s" % [seat, viewport_size])
 				check(relative_luma(name.get_theme_color("font_color")) >= 0.90, "score strip seat %d name stays bright at %s" % [seat, viewport_size])
+				check(str(name.tooltip_text) == expected_names[seat], "score strip seat %d keeps the full player name in its tooltip at %s" % [seat, viewport_size])
+				check(str(name.text) == expected_winds[seat] and label_text_width(name, name.text) <= name_rect.size.x + 1.0, "score strip seat %d shows a readable stable wind identity at %s" % [seat, viewport_size])
 			if score != null:
-				check(chip_rect.grow(1.0).encloses(screen_rect(score)) and score.clip_text, "score strip seat %d score clips inside chip at %s" % [seat, viewport_size])
+				check(chip_rect.grow(1.0).encloses(score_rect) and score.clip_text, "score strip seat %d score clips inside chip at %s" % [seat, viewport_size])
+				check(str(score.text) == expected_scores[seat] and str(score.text).contains("万") and not str(score.text).contains("...") and not str(score.text).contains("…") and label_text_width(score, score.text) <= score_rect.size.x + 1.0, "score strip seat %d keeps the complete unit-bearing score without overrun at %s" % [seat, viewport_size])
+				check(name_rect.end.x <= score_rect.position.x - 1.0, "score strip seat %d identity and score lanes do not overlap at %s" % [seat, viewport_size])
+				if compact_score_strip:
+					check(score.get_theme_font_size("font_size") == 9, "score strip seat %d uses the fixed compact score size at %s" % [seat, viewport_size])
 			if momentum != null:
 				var momentum_rect = screen_rect(momentum)
 				check(momentum_rect.size.y <= chip_rect.size.y * 0.16 and momentum_rect.position.y >= chip_rect.position.y + chip_rect.size.y * 0.62, "score strip seat %d momentum stays a bottom detail at %s" % [seat, viewport_size])
@@ -1418,8 +1430,12 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 			continue
 		found += 1
 		var rect = screen_rect(button)
-		check(rect.size.x >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH - 0.5 and rect.size.y >= 40.0, "pending claim %s keeps touch target at %s" % [text, viewport_size])
+		check(rect.size.x >= scene.PENDING_CLAIM_BUTTON_MIN_WIDTH - 0.5 and rect.size.y >= 40.0, "pending claim %s keeps touch target at %s" % [text, viewport_size])
 		check(button.get_theme_font_size("font_size") >= 14, "pending claim %s keeps readable native action text at %s" % [text, viewport_size])
+		var text_width: float = button_text_width(button, text)
+		var text_lane_width: float = float(rect.size.x) - button_text_horizontal_padding(button)
+		check(text_width <= text_lane_width + 1.0, "pending claim %s keeps its complete label inside the native text lane at %s (text=%.1f lane=%.1f)" % [text, viewport_size, text_width, text_lane_width])
+		check(not button.text.contains("...") and not button.text.contains("…"), "pending claim %s has no visible text ellipsis at %s" % [text, viewport_size])
 		check_button_face_behind_native_text(button, "pending claim action %s" % text, viewport_size)
 		for decoration_name in ["ActionButtonArt", "ActionButton3DDepthEdge", "ActionButton3DTopRim", "ActionButton3DSideBevel", "ActionButtonSheen", "ActionButtonPanelPlate"]:
 			var decoration = button.find_child(decoration_name, false, false) as CanvasItem
@@ -1462,7 +1478,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		var widest_row := 0
 		for row_count in response_rows.values():
 			widest_row = maxi(widest_row, int(row_count))
-		check(widest_row >= mini(5, response_buttons.size()), "compact pending claim responses keep the widened primary row at %s" % viewport_size)
+		check(widest_row >= mini(5, response_buttons.size()), "compact pending claim responses keep a widened primary row at %s" % viewport_size)
 	check(tail_lane != null and tail_buttons.size() == scene.pending_claim_tail_button_count(), "pending claim actions expose the expected buttons inside one secondary lane at %s" % viewport_size)
 	if tail_lane != null:
 		var tail_lane_rect = screen_rect(tail_lane)
@@ -1577,7 +1593,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 	for response_button in compact_pending_grid.get_children() if compact_pending_grid != null else []:
 		if response_button is Button:
 			var response_rect := screen_rect(response_button as Button)
-			var required_response_width: float = float(scene.PENDING_CLAIM_BUTTON_MIN_WIDTH if viewport_size.y <= 560.0 and scene.mode == "offline" else scene.ACTION_BUTTON_MIN_TOUCH_WIDTH)
+			var required_response_width: float = float(scene.PENDING_CLAIM_BUTTON_MIN_WIDTH if scene.has_pending_claim_window() else scene.ACTION_BUTTON_MIN_TOUCH_WIDTH)
 			check(response_rect.size.x >= required_response_width - 0.5 and response_rect.size.y >= 44.0, "pending claim response keeps a readable touch target at %s" % viewport_size)
 
 func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
@@ -1617,6 +1633,8 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	check(mode_badge != null and mode_label != null and mode_label.text == "联机 · 四川" and mode_badge.tooltip_text.contains("108张"), "online HUD displays the server rule profile instead of the local setting at %s" % viewport_size)
 	check(wall_text != null and wall_text.text.contains("55/108") and wall_text.tooltip_text.contains("55/108"), "online HUD scales the wall meter and tooltip to the server total at %s" % viewport_size)
 	var live_status = scene.find_child("TopHudStatus", true, false) as Label
+	var expected_pending_status := "响应 · 3万" if viewport_size.x <= 960.0 or viewport_size.y <= 560.0 else "等待你响应3万"
+	check(live_status != null and live_status.text == expected_pending_status and not live_status.text.contains("...") and not live_status.text.contains("…") and label_text_width(live_status, live_status.text) <= screen_rect(live_status).size.x + 1.0 and live_status.tooltip_text == "等待你响应3万", "online pending top HUD status keeps the full response context in a readable lane at %s" % viewport_size)
 	var status_before: String = live_status.text if live_status != null else ""
 	scene.set_status("即时反馈：联机操作已送达")
 	check(live_status != null and live_status.text == "即时反馈：联机操作已送达", "online gameplay feedback updates the visible top HUD status immediately at %s" % viewport_size)
@@ -1667,8 +1685,20 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	check(reconnect_button != null and reconnect_button.tooltip_text.contains("恢复当前牌局") and reconnect_button.has_focus(), "online disconnect exposes a focused reconnect CTA and keeps the board read-only at %s" % viewport_size)
 	check(scene.find_child("ChatActionButton", true, false) == null and scene.find_child("PendingClaimResponseGrid", true, false) == null, "online disconnect hides network actions until reconnection at %s" % viewport_size)
 	check(not scene.can_self_discard() and not scene.has_pending_claim_window(), "online disconnect closes stale discard and response gates at %s" % viewport_size)
-	check(scene.hand_tray_text() == "牌桌只读 · 点击重连" and scene.hand_shortcut_hint_text() == "点击重连 · 手牌不可操作", "online disconnect hand copy is read-only and points to reconnect at %s" % viewport_size)
+	check(scene.hand_tray_text() == "已断线 · 点击重连 · 手牌只读" and scene.hand_shortcut_hint_text() == "", "online disconnect hand copy uses one dedicated reconnect status line at %s" % viewport_size)
 	check(scene.hand_tray_state_text() == "只读", "online disconnect hand state badge identifies the tray as read-only at %s" % viewport_size)
+	var disconnected_tray := scene.find_child("HandTray", true, false) as Control
+	var disconnected_status_text := scene.find_child("HandTrayStatusText", true, false) as Label
+	var disconnected_shortcut := scene.find_child("HandTrayShortcutHint", true, false) as Control
+	var disconnected_tiles_box := scene.find_child("HandTrayTiles", true, false) as Control
+	var disconnected_state_badge := scene.find_child("HandTrayStateBadge", true, false) as Control
+	check(disconnected_tray != null and disconnected_status_text != null and disconnected_status_text.visible and disconnected_shortcut == null, "online disconnect keeps one visible hand recovery line and removes the duplicate shortcut lane at %s" % viewport_size)
+	if disconnected_tray != null and disconnected_status_text != null and disconnected_tiles_box != null and disconnected_state_badge != null:
+		var disconnected_status_rect := screen_rect(disconnected_status_text)
+		var disconnected_tiles_rect := screen_rect(disconnected_tiles_box)
+		var disconnected_badge_rect := screen_rect(disconnected_state_badge)
+		check(disconnected_status_rect.size.y >= 14.0 and label_text_width(disconnected_status_text, disconnected_status_text.text) <= disconnected_status_rect.size.x + 1.0 and not disconnected_status_text.text.contains("..."), "online disconnect recovery line has readable height and no text overrun at %s" % viewport_size)
+		check(not rects_overlap(disconnected_status_rect, disconnected_tiles_rect) and not rects_overlap(disconnected_status_rect, disconnected_badge_rect), "online disconnect recovery line clears the hand tiles and read-only badge at %s" % viewport_size)
 	var disconnected_hand_tiles := controls_with_name_prefix(scene, "HandTile_")
 	var disconnected_tile_buttons := 0
 	for hand_tile in disconnected_hand_tiles:
@@ -1681,7 +1711,11 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 		var intent_count_labels := intent_count.find_children("*", "Label", true, false)
 		if not intent_count_labels.is_empty():
 			intent_count_label = intent_count_labels[0] as Label
-	check(intent_text != null and intent_text.text == "已断线 · 点击重连" and not intent_text.text.contains("等待") and not intent_text.text.contains("提交响应"), "online disconnect intent matches the sole recovery action at %s" % viewport_size)
+	var compact_disconnect_intent := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
+	var expected_disconnect_intent := "已断线 · 重连" if compact_disconnect_intent else "已断线 · 点击重连"
+	check(intent_text != null and intent_text.text == expected_disconnect_intent and not intent_text.text.contains("等待") and not intent_text.text.contains("提交响应"), "online disconnect intent matches the sole recovery action at %s" % viewport_size)
+	if intent_text != null:
+		check(not intent_text.text.contains("...") and not intent_text.text.contains("…") and label_text_width(intent_text, intent_text.text) <= screen_rect(intent_text).size.x + 1.0 and intent_text.tooltip_text == "已断线 · 点击重连 · 手牌只读", "online disconnect intent keeps a readable compact label and complete recovery tooltip at %s" % viewport_size)
 	check(intent_count_label != null and intent_count_label.text == "重连" and scene.action_bar_button_count() == 1, "online disconnect intent badge and action count expose only reconnect at %s" % viewport_size)
 	check(scene.find_child("PendingClaimIllustration", true, false) == null and scene.hand_keyboard_selection == -1 and not scene.hand_keyboard_tile_selectable(0, scene.get_self_hand()), "online disconnect clears stale response art and keyboard selection at %s" % viewport_size)
 	check(scene.online_action_validation_error({"type": "discard", "tile": "3W"}).contains("断线"), "online disconnect rejects programmatic discard submission at %s" % viewport_size)
@@ -1938,6 +1972,9 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "AI advisor panel stays inside viewport at %s" % viewport_size)
 	if dock != null:
 		check(not rects_overlap(panel_rect, screen_rect(dock)), "AI advisor panel clears the action dock at %s" % viewport_size)
+	var intent_dock := scene.find_child("ActionIntentDock", true, false) as Control
+	if intent_dock != null:
+		check(not rects_overlap(panel_rect, screen_rect(intent_dock)), "AI advisor panel clears the action intent dock at %s" % viewport_size)
 	if hand != null:
 		check(not rects_overlap(panel_rect, screen_rect(hand)), "AI advisor panel clears the hand tray at %s" % viewport_size)
 	var bottom_river = scene.find_child("DiscardGrid_0", true, false) as Control
@@ -3869,6 +3906,22 @@ func label_text_width(label: Label, text: String) -> float:
 	if font == null:
 		return 0.0
 	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, label.get_theme_font_size("font_size")).x
+
+func button_text_width(button: Button, text: String) -> float:
+	if button == null:
+		return 0.0
+	var font = button.get_theme_font("font")
+	if font == null:
+		return 0.0
+	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, button.get_theme_font_size("font_size")).x
+
+func button_text_horizontal_padding(button: Button) -> float:
+	if button == null:
+		return 0.0
+	var style_box := button.get_theme_stylebox("normal")
+	if style_box == null:
+		return 0.0
+	return style_box.get_content_margin(SIDE_LEFT) + style_box.get_content_margin(SIDE_RIGHT)
 
 func vertical_overlap(a: Rect2, b: Rect2) -> float:
 	return max(0.0, min(a.end.y, b.end.y) - max(a.position.y, b.position.y))

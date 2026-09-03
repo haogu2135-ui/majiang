@@ -1031,7 +1031,7 @@ const TOP_HUD_RECT := Rect2(Vector2(0.014, 0.014), Vector2(0.986, 0.105))
 const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.106, 0.10), Vector2(0.300, 0.88))
 const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.310, 0.10), Vector2(0.432, 0.50))
 const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.212, 0.565), Vector2(0.432, 0.890))
-const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.442, 0.15), Vector2(0.680, 0.85))
+const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.438, 0.15), Vector2(0.698, 0.85))
 const TOP_HUD_WALL_RECT := Rect2(Vector2(0.700, 0.14), Vector2(0.764, 0.86))
 const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.775, 0.05), Vector2(0.838, 0.95))
 const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.848, 0.05), Vector2(0.911, 0.95))
@@ -1045,6 +1045,10 @@ const SCORE_STRIP_CHIP_RECTS := [
 const SCORE_STRIP_ACCENT_RECT := Rect2(Vector2(0.0, 0.0), Vector2(0.035, 1.0))
 const SCORE_STRIP_NAME_RECT := Rect2(Vector2(0.065, 0.20), Vector2(0.405, 0.80))
 const SCORE_STRIP_SCORE_RECT := Rect2(Vector2(0.430, 0.08), Vector2(0.970, 0.92))
+# Narrow chips show the stable seat identity instead of a clipped player name.
+# The compact score lane still fits a signed value such as -2.6万 at 960px.
+const SCORE_STRIP_NARROW_NAME_RECT := Rect2(Vector2(0.110, 0.18), Vector2(0.350, 0.82))
+const SCORE_STRIP_NARROW_SCORE_RECT := Rect2(Vector2(0.380, 0.08), Vector2(0.985, 0.92))
 const SEAT_STAT_RECTS := [
 	Rect2(Vector2(0.39, 0.38), Vector2(0.535, 0.505)),
 	Rect2(Vector2(0.550, 0.38), Vector2(0.695, 0.505)),

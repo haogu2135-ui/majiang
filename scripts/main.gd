@@ -8626,7 +8626,7 @@ func action_button_width_for_available(count: int, available_width: float, separ
 	if has_pending_claim_window():
 		# Keep authored touch targets intact; the FlowContainer supplies the second
 		# row when a compact viewport cannot fit the full response set.
-		var pending_min_width := PENDING_CLAIM_BUTTON_MIN_WIDTH if mode == "offline" and effective_viewport_size().y <= 560.0 else float(ACTION_BUTTON_MIN_TOUCH_WIDTH)
+		var pending_min_width := PENDING_CLAIM_BUTTON_MIN_WIDTH
 		return maxf(pending_min_width, width)
 	return width
 
@@ -9358,6 +9358,8 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 		apply_rect(fallback, rect_full(0.045, 0.16, 0.118, 0.84))
 	var text = make_label(intent, action_intent_text(count), 11, Color(0.84, 0.90, 0.84), true)
 	text.name = "ActionIntentText"
+	if mode == "online_game" and online_game_disconnected():
+		text.tooltip_text = "已断线 · 点击重连 · 手牌只读"
 	apply_rect(text, rect_full(0.130, 0.10, 0.845, 0.90))
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(text)
@@ -12618,9 +12620,11 @@ func draw_game_top_hud(parent: Control) -> void:
 	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
 	var status = make_label(hud, top_hud_status_text(), 15 if mode == "offline" else (12 if compact_disconnect_status else 16), Color(0.92, 0.94, 0.86), true)
 	status.name = "TopHudStatus"
+	if mode == "online_game" and has_pending_claim_window() and not online_waiting_for_server and online_feedback == "" and (effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0):
+		status.text = "响应 · %s" % tile_label(str(pending_claim_state().get("tile", "")))
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
-	status.tooltip_text = online_feedback if compact_disconnect_status else status.text
+	status.tooltip_text = online_feedback if compact_disconnect_status else top_hud_status_tooltip_text()
 	# Keep transient gameplay feedback connected to the visible HUD instance.
 	# The shared reference is also used by set_status() for immediate errors.
 	status_label = status
@@ -12710,12 +12714,16 @@ func draw_hand(parent: Control) -> void:
 	tile_stage.add_child(tile_baseline)
 	tray.move_child(tile_stage, min(2, tray.get_child_count() - 1))
 
-	# 状态文本与操作提示分成两条稳定的阅读线，避免长状态在窄屏挤压牌面。
+	# Keep the disconnect state as one dedicated recovery line. Its old duplicate
+	# shortcut row was too short at 960x540 and competed with the first tile row.
 	var shortcut_hint_text := hand_shortcut_hint_text()
+	var disconnected_hand_state := mode == "online_game" and online_game_disconnected()
 	var tutorial_hint_visible := show_hand_hint and can_self_discard() and (tutorial_step == TUTORIAL_STEP_NEW or tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_WIN)
 	var tray_text = make_label(tray, hand_tray_text(), 14, Color(0.92, 0.82, 0.56), true)
+	tray_text.name = "HandTrayStatusText"
 	tray_text.clip_text = true
-	apply_rect(tray_text, rect_full(0.030, 0.030, 0.760, 0.096) if shortcut_hint_text != "" else HAND_TRAY_TEXT_RECT)
+	var tray_text_rect := rect_full(0.030, 0.025, 0.745, 0.205) if disconnected_hand_state else (rect_full(0.030, 0.030, 0.760, 0.096) if shortcut_hint_text != "" else HAND_TRAY_TEXT_RECT)
+	apply_rect(tray_text, tray_text_rect)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(tray_text)
 	if has_pending_claim_window() or has_pending_danger_discard() or tutorial_hint_visible:
@@ -16484,36 +16492,33 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		accent_bar.name = "ScoreStripAccent_%d" % seat
 		chip.add_child(accent_bar)
 		draw_score_strip_chip_art(chip, seat, int(player.get("score", 0)), active)
-		var name_text := ""
+		var viewport_size := effective_viewport_size()
+		var narrow_score_strip := viewport_size.x <= 1280.0 or viewport_size.y <= 560.0
+		var compact_score_strip := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
+		var full_name_text := ""
 		if mode == "offline":
-			name_text = "我" if seat == 0 else ai_profile_short_label(seat)
+			full_name_text = "我" if seat == 0 else ai_profile_short_label(seat)
 		else:
-			name_text = str(player.get("name", "玩家")).strip_edges()
-		if name_text == "":
-			name_text = "我" if seat == 0 else ("位%d" % (seat + 1))
-		if name_text.length() > 3:
-			name_text = name_text.substr(0, 3)
-		var name = make_label(chip, name_text, 10, Color(0.99, 0.97, 0.92), true)
+			full_name_text = str(player.get("name", "玩家")).strip_edges()
+		if full_name_text == "":
+			full_name_text = "我" if seat == 0 else ("位%d" % (seat + 1))
+		# A wind glyph is the stable visible identity at every width; the full
+		# player name remains available from the chip tooltip.
+		var name_text := seat_wind_label(seat)
+		var name = make_label(chip, name_text, 9 if compact_score_strip else 10, Color(0.99, 0.97, 0.92), true)
 		name.name = "ScoreStripName_%d" % seat
+		name.z_index = 2
+		name.tooltip_text = full_name_text
 		# r180: transparent label host; GPT chip paints the name badge.
 		var empty_name := StyleBoxEmpty.new()
-		empty_name.set_content_margin_all(4)
+		empty_name.set_content_margin_all(0 if narrow_score_strip else 4)
 		name.add_theme_stylebox_override("normal", empty_name)
-		var name_chip = add_optional_gpt_illustration_texture(name, "ui_hand_tray_state_chip", rect_full(-0.08, -0.10, 1.08, 1.10), 0.70, false)
-		if name_chip != null:
-			name_chip.name = "SeatNameGptChip_%d" % seat
-			name_chip.modulate = Color(
-				clampf(0.35 + SEAT_NAME_BADGE_COLORS[seat].r * 0.65, 0.20, 1.2),
-				clampf(0.35 + SEAT_NAME_BADGE_COLORS[seat].g * 0.65, 0.20, 1.2),
-				clampf(0.35 + SEAT_NAME_BADGE_COLORS[seat].b * 0.65, 0.20, 1.2),
-				0.78
-			)
-			name.move_child(name_chip, 0)
-		apply_rect(name, SCORE_STRIP_NAME_RECT)
+		apply_rect(name, SCORE_STRIP_NARROW_NAME_RECT if narrow_score_strip else SCORE_STRIP_NAME_RECT)
 		configure_clipped_label(name)
-		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 12, Color(0.96, 0.94, 0.88), true)
+		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 9 if compact_score_strip else 12, Color(0.96, 0.94, 0.88), true)
 		score.name = "ScoreStripScore_%d" % seat
-		apply_rect(score, SCORE_STRIP_SCORE_RECT)
+		score.z_index = 2
+		apply_rect(score, SCORE_STRIP_NARROW_SCORE_RECT if narrow_score_strip else SCORE_STRIP_SCORE_RECT)
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(score)
 
@@ -16530,8 +16535,6 @@ func draw_score_strip_chip_art(parent: Control, seat: int, score: int, active: b
 	var seal = make_gpt_gate(rect_full(0.045, 0.165, 0.170, 0.835), seal_fill)
 	seal.name = "ScoreStripSeatSeal_%d" % seat
 	art.add_child(seal)
-	var wind = make_label(seal, seat_wind_label(seat), 9, Color(0.96, 0.88, 0.62, 0.86), true)
-	apply_rect(wind, rect_full(0.0, 0.0, 1.0, 1.0))
 	var brush = make_gpt_ribbon(rect_full(0.210, 0.785, 0.915, 0.835), Color(0.78, 0.58, 0.28, 0.16 if active else 0.10))
 	brush.name = "ScoreStripBrushLine_%d" % seat
 	art.add_child(brush)
@@ -21244,11 +21247,11 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	var shadow_size := 1 if compact_claim_mode and role != "pass" else (0 if role == "pass" else (2 if is_focus_action else 1))
 	# r180: empty StyleBox hit host + GPT button face (no program StyleBox paint).
 	var empty_normal := StyleBoxEmpty.new()
-	empty_normal.set_content_margin_all(8)
+	empty_normal.set_content_margin_all(4 if compact_claim_mode else 8)
 	var empty_hover := StyleBoxEmpty.new()
-	empty_hover.set_content_margin_all(8)
+	empty_hover.set_content_margin_all(4 if compact_claim_mode else 8)
 	var empty_pressed := StyleBoxEmpty.new()
-	empty_pressed.set_content_margin_all(7)
+	empty_pressed.set_content_margin_all(3 if compact_claim_mode else 7)
 	button.add_theme_stylebox_override("normal", empty_normal)
 	button.add_theme_stylebox_override("hover", empty_hover)
 	button.add_theme_stylebox_override("pressed", empty_pressed)
@@ -31747,7 +31750,7 @@ func hand_group_label(tile: String) -> String:
 
 func hand_tray_text() -> String:
 	if mode == "online_game" and online_game_disconnected():
-		return "牌桌只读 · 点击重连"
+		return "已断线 · 点击重连 · 手牌只读"
 	if has_pending_danger_discard():
 		# 顶部 HUD 和确认 dock 负责完整风险说明；托盘只展示牌面与高亮目标。
 		return "目标牌已标记" if player_ai_assist_enabled() else "选择出牌"
@@ -31781,7 +31784,9 @@ func hand_tray_text() -> String:
 
 func hand_shortcut_hint_text() -> String:
 	if mode == "online_game" and online_game_disconnected():
-		return "点击重连 · 手牌不可操作"
+		# The reconnect instruction is already part of the dedicated one-line
+		# recovery status; avoid a duplicate line above the hand tiles.
+		return ""
 	if has_pending_danger_discard():
 		return "Enter 确认 · Esc 取消"
 	if has_pending_claim_window():
@@ -32206,11 +32211,14 @@ func action_intent_rect_for_count(count: int) -> Rect2:
 	var left = max(0.580, dock_rect.position.x)
 	if has_pending_claim_window():
 		return Rect2(Vector2(left, 0.558), Vector2(0.975, 0.606))
-	return Rect2(Vector2(left, 0.604), Vector2(0.975, 0.650))  # r437 above dock (height unchanged)
+	# Keep the regular intent strip below the advisor's compact panel and above
+	# the action dock. The previous .604-.650 slot overlapped the advisor's
+	# .330-.635 panel at 960x540.
+	return Rect2(Vector2(left, 0.642), Vector2(0.975, 0.682))
 
 func action_intent_text(count: int) -> String:
 	if mode == "online_game" and online_game_disconnected():
-		return "已断线 · 点击重连"
+		return "已断线 · 重连" if effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0 else "已断线 · 点击重连"
 	if has_pending_claim_window():
 		return "响应 · 选择动作或过"
 	if mode == "offline" and offline_phase == "ended":
@@ -36886,6 +36894,13 @@ func top_hud_status_text() -> String:
 	if mode == "online_game" and online_feedback.find("连接已断开") >= 0:
 		return "已断线 · 请重连"
 	return current_status_text()
+
+
+func top_hud_status_tooltip_text() -> String:
+	if mode == "online_game" and has_pending_claim_window() and not online_waiting_for_server and online_feedback == "":
+		var pending := pending_claim_state()
+		return "等待你响应%s" % tile_label(str(pending.get("tile", "")))
+	return top_hud_status_text()
 
 
 func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, section_index: int = -1) -> void:
