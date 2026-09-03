@@ -219,6 +219,10 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		printerr("update dialog fixture contract failed for %s" % screen_name)
 		quit(1)
 		return
+	if screen_name == "22_advisor" and not validate_advisor_fixture(scene):
+		printerr("advisor fixture contract failed for %s" % screen_name)
+		quit(1)
+		return
 	if ["03_offline_battle", "13_round_summary", "14_danger_discard", "15_pending_claim_full", "16_win_detail"].has(screen_name):
 		if not validate_preview_meld_fixture(scene):
 			printerr("capture fixture contract failed for %s" % screen_name)
@@ -321,6 +325,18 @@ func validate_online_game_fixture(scene: Node, screen_name: String) -> bool:
 	if screen_name == "30_online_game_disconnect" and scene.find_child("OnlineReconnectGameButton", true, false) == null:
 		return false
 	return scene.find_child("TopHudStatus", true, false) != null and scene.find_child("HandTray", true, false) != null and scene.find_child("ActionButtonDock", true, false) != null
+
+func validate_advisor_fixture(scene: Node) -> bool:
+	var panels := scene.find_children("AdvisorPanel", "Control", true, false)
+	if panels.size() != 1:
+		printerr("advisor panel count mismatch: got=%d expected=1" % panels.size())
+		return false
+	for heading in ["荐", "势", "守"]:
+		var cards := scene.find_children("AdvisorInfoCard_%s" % heading, "Control", true, false)
+		if cards.size() != 1:
+			printerr("advisor card count mismatch for %s: got=%d expected=1" % [heading, cards.size()])
+			return false
+	return true
 
 func validate_telemetry_fixture(scene: Node, screen_name: String) -> bool:
 	if not scene.settings_panel_open or not scene.telemetry_sheet_open:
@@ -508,8 +524,9 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			seed_preview_discards(scene)
 			scene.render_game()
 			scene.clear_fx_overlays()
-			# Force advisor panel for pure densify capture (even if phase not discard).
-			if scene.has_method("draw_advisor_panel"):
+			# render_game() normally creates the advisor through its refresh path. Only
+			# backfill it for a fixture that did not expose the panel.
+			if scene.has_method("draw_advisor_panel") and scene.find_child("AdvisorPanel", true, false) == null:
 				scene.draw_advisor_panel(scene.root_layer, true)
 		"23_score_strip":
 			# Online HUD shows ScoreStrip; offline intentionally omits it.

@@ -8821,8 +8821,13 @@ func draw_achievements_completion_convergence_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.430, 0.118, 0.935, 0.300))
 	parent.add_child(art)
+	var compact_completion_lane := effective_viewport_size().x <= 1280.0 or effective_viewport_size().y <= 560.0
 	var label = make_label(art, "收集进度 %d%%" % int(round(ratio * 100.0)), 13, Color(0.88, 0.84, 0.64, 0.86), true)
-	apply_rect(label, rect_full(0.410, 0.090, 0.940, 0.380))
+	label.name = "AchievementsCompletionLabel"
+	label.tooltip_text = label.text
+	# Compact screens get a dedicated slot immediately left of the medal; wide
+	# screens keep the progress readout to the medal's right.
+	apply_rect(label, rect_full(0.020, 0.090, 0.530, 0.380) if compact_completion_lane else rect_full(0.490, 0.090, 1.000, 0.380))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	return art
 	var gold = Color(0.90, 0.70, 0.30)
@@ -16165,19 +16170,21 @@ func draw_rule_line_bullets(section: Control, lines: Array, section_index: int =
 	guide.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	guide.set_anchors_preset(Control.PRESET_FULL_RECT)
 	section.add_child(guide)
-	return guide
-	var rail = make_gpt_route_rail(rect_full(0.046, 0.355, 0.052, 0.850), Color(accent.r, accent.g, accent.b, 0.16))
+	var rail = make_gpt_route_rail(rect_full(0.027, 0.300, 0.033, 0.950), Color(accent.r, accent.g, accent.b, 0.16))
 	rail.name = "RuleLineRail_%d" % section_index
 	guide.add_child(rail)
-	for i in range(min(4, lines.size())):
-		var top = 0.338 + float(i) * 0.155
-		var bullet = make_gpt_plate_rect(rect_full(0.041, top, 0.058, top + 0.070), Color(accent.r, accent.g, accent.b, 0.34 - float(i) * 0.035), "ui_jade_reading_plate")
+	var line_count := maxi(1, lines.size())
+	var slot_height := 0.650 / float(line_count)
+	for i in range(lines.size()):
+		var top = 0.285 + float(i) * slot_height + slot_height * 0.24
+		var bullet_height = min(0.045, slot_height * 0.48)
+		var bullet = make_gpt_plate_rect(rect_full(0.020, top, 0.038, top + bullet_height), Color(accent.r, accent.g, accent.b, maxf(0.12, 0.34 - float(i) * 0.020)), "ui_jade_reading_plate")
 		bullet.name = "RuleLineBullet_%d_%d" % [section_index, i]
 		guide.add_child(bullet)
-		var pulse = make_gpt_tick_strip(rect_full(0.062, top + 0.022, 0.094, top + 0.048), Color(accent.r, accent.g, accent.b, 0.13))
+		var pulse = make_gpt_tick_strip(rect_full(0.040, top + bullet_height * 0.30, 0.052, top + bullet_height * 0.70), Color(accent.r, accent.g, accent.b, 0.13))
 		pulse.name = "RuleLinePulse_%d_%d" % [section_index, i]
 		guide.add_child(pulse)
-	var lead = make_gpt_edge_rail(rect_full(0.036, 0.210, 0.064, 0.310), Color(accent.r, accent.g, accent.b, 0.18))
+	var lead = make_gpt_edge_rail(rect_full(0.018, 0.210, 0.036, 0.270), Color(accent.r, accent.g, accent.b, 0.18))
 	lead.name = "RuleLineLead_%d" % section_index
 	guide.add_child(lead)
 	return guide
@@ -36951,6 +36958,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var text_backplate = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.030, 0.730 if section_index >= 0 else 0.940, 0.990), Color(0.018, 0.032, 0.030, 0.14), "ui_dark_scrim", 0.22)
 	text_backplate.name = "RuleSectionTextBackplate_%d" % section_index if section_index >= 0 else "RuleSectionTextBackplate"
 	section.add_child(text_backplate)
+	# Keep the authored clause guide behind native text and inside the left gutter.
+	draw_rule_line_bullets(section, lines, section_index)
 
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.058

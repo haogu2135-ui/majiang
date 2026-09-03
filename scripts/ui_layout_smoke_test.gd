@@ -1968,6 +1968,7 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	check(panel != null and dock != null and hand != null, "AI advisor exposes panel, action dock, and hand context at %s" % viewport_size)
 	if panel == null:
 		return
+	check(count_named_nodes(scene, "AdvisorPanel") == 1, "AI advisor keeps exactly one mounted panel instance at %s" % viewport_size)
 	var panel_rect = screen_rect(panel)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "AI advisor panel stays inside viewport at %s" % viewport_size)
 	if dock != null:
@@ -3163,9 +3164,21 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		var example_plinth = section.find_child("RuleSection3DExamplePlinth_%d" % i, true, false) as Control
 		var line_labels: Array[Control] = []
 		collect_controls_with_name_prefix(section, "RuleSectionLine_", line_labels)
+		var line_guide := section.find_child("RuleLineGuide_%d" % i, true, false) as Control
+		var line_bullets := controls_with_name_prefix(section, "RuleLineBullet_%d_" % i)
 		check(marker != null and example_strip != null and section_depth != null and example_plinth != null, "rules section %d renders physical card depth, marker, and example plinth at %s" % [i, viewport_size])
 		check(text_backplate != null, "rules section %d renders text readability backplate at %s" % [i, viewport_size])
 		check(title_label != null, "rules section %d exposes named title label at %s" % [i, viewport_size])
+		check(line_guide != null and line_bullets.size() == line_labels.size(), "rules section %d exposes one authored guide bullet per body clause at %s" % [i, viewport_size])
+		if line_guide != null:
+			var line_guide_rect := screen_rect(line_guide)
+			check(rect.grow(1.0).encloses(line_guide_rect), "rules section %d line guide stays inside its section frame at %s" % [i, viewport_size])
+			for guide_child in line_guide.get_children():
+				if not guide_child is Control:
+					continue
+				var guide_control := guide_child as Control
+				for line_control in line_labels:
+					check(not rects_overlap(screen_rect(guide_control), screen_rect(line_control)), "rules section %d guide %s stays outside body text at %s" % [i, guide_control.name, viewport_size])
 		if title_label != null:
 			check(title_label.text.begins_with("%02d ·" % (i + 1)) and title_label.tooltip_text != "", "rules section %d exposes numbered title and full-title tooltip at %s" % [i, viewport_size])
 		check(line_labels.size() >= 3, "rules section %d exposes named body labels at %s" % [i, viewport_size])
@@ -3288,6 +3301,8 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 		var fade_rect = screen_rect(bottom_fade)
 		check(fade_rect.position.y >= scroll_rect.end.y - 2.0, "achievements bottom fade begins below the scroll viewport at %s" % viewport_size)
 	var dashboard = scene.find_child("AchievementsDashboardArt", true, false) as Control
+	var completion_art = scene.find_child("AchievementsCompletionConvergenceArt", true, false) as Control
+	var completion_label = scene.find_child("AchievementsCompletionLabel", true, false) as Label
 	var progress_label = scene.find_child("AchievementsProgressLabel", true, false) as Label
 	var progress_detail = scene.find_child("AchievementsProgressDetailLabel", true, false) as Label
 	var medal_glyph = scene.find_child("AchievementsMedalGlyph", true, false) as Label
@@ -3301,7 +3316,20 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 	var medal_node = scene.find_child("AchievementsMedalNode", true, false) as Control
 	var dashboard_depth = scene.find_child("AchievementsDashboard3DDepthEdge", true, false) as Control
 	var dashboard_pedestal = scene.find_child("AchievementsDashboard3DMedalPedestal", true, false) as Control
-	check(dashboard != null and progress_label != null and progress_detail != null and medal_glyph != null and progress_rail != null and progress_fill != null and progress_gate != null and unlock_route != null and unlock_fill != null and unlock_source != null and summary_backplate != null and medal_node != null and dashboard_depth != null and dashboard_pedestal != null, "achievements dashboard exposes readable summary, physical medal pedestal, and progress parts at %s" % viewport_size)
+	check(dashboard != null and completion_art != null and completion_label != null and progress_label != null and progress_detail != null and medal_glyph != null and progress_rail != null and progress_fill != null and progress_gate != null and unlock_route != null and unlock_fill != null and unlock_source != null and summary_backplate != null and medal_node != null and dashboard_depth != null and dashboard_pedestal != null, "achievements dashboard exposes readable summary, completion label, physical medal pedestal, and progress parts at %s" % viewport_size)
+	if completion_art != null and completion_label != null and medal_node != null:
+		var completion_label_rect := screen_rect(completion_label)
+		var completion_text := str(completion_label.text)
+		var completion_text_width := label_text_width(completion_label, completion_text)
+		var completion_ink_rect := Rect2(Vector2(completion_label_rect.end.x - completion_text_width, completion_label_rect.position.y), Vector2(completion_text_width, completion_label_rect.size.y))
+		var medal_rect := screen_rect(medal_node)
+		var compact_completion_lane := viewport_size.x <= 1280.0 or viewport_size.y <= 560.0
+		check(completion_art.get_parent() != null and completion_label.get_parent() == completion_art, "achievements completion label remains attached to its authored convergence art at %s" % viewport_size)
+		check(completion_label.visible and completion_text == "收集进度 24%" and completion_label.tooltip_text == completion_text and not completion_text.contains("...") and not completion_text.contains("…") and completion_text_width <= completion_label_rect.size.x + 1.0, "achievements completion label is fully readable without rendered truncation at %s" % viewport_size)
+		if compact_completion_lane:
+			check(completion_ink_rect.end.x <= medal_rect.position.x - 8.0, "compact achievements completion text owns a left-of-medal safety slot at %s" % viewport_size)
+		else:
+			check(completion_ink_rect.position.x >= medal_rect.end.x + 8.0, "wide achievements completion text owns a right-of-medal safety slot at %s" % viewport_size)
 	if dashboard != null:
 		var dashboard_rect = screen_rect(dashboard)
 		for node in [progress_label, progress_detail, medal_glyph, progress_rail, progress_gate, summary_backplate, medal_node]:
