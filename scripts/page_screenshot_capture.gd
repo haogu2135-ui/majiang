@@ -223,6 +223,14 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		printerr("advisor fixture contract failed for %s" % screen_name)
 		quit(1)
 		return
+	if screen_name == "17_hand_tutorial" and not validate_hand_tutorial_fixture(scene):
+		printerr("hand tutorial fixture contract failed for %s" % screen_name)
+		quit(1)
+		return
+	if screen_name == "19_reset_progress" and not validate_reset_progress_fixture(scene):
+		printerr("reset progress fixture contract failed for %s" % screen_name)
+		quit(1)
+		return
 	if ["03_offline_battle", "13_round_summary", "14_danger_discard", "15_pending_claim_full", "16_win_detail"].has(screen_name):
 		if not validate_preview_meld_fixture(scene):
 			printerr("capture fixture contract failed for %s" % screen_name)
@@ -337,6 +345,17 @@ func validate_advisor_fixture(scene: Node) -> bool:
 			printerr("advisor card count mismatch for %s: got=%d expected=1" % [heading, cards.size()])
 			return false
 	return true
+
+func validate_hand_tutorial_fixture(scene: Node) -> bool:
+	var hint := scene.find_child("HandTrayTutorialHint", true, false) as Control
+	var target := scene.find_child("HandTrayTutorialTargetTile", true, false) as Control
+	var hand := scene.find_child("HandTrayTiles", true, false) as Control
+	return hint != null and target != null and hand != null and scene.show_hand_hint and scene.tutorial_step == scene.TUTORIAL_STEP_DISCARD and scene.can_self_discard() and scene.players.size() > 0 and scene.players[0].get("hand", []).size() == 14
+
+func validate_reset_progress_fixture(scene: Node) -> bool:
+	var row_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
+	var reset_button := scene.find_child("SettingRowButton_本地进度", true, false) as Button
+	return scene.reset_progress_confirming and row_status != null and row_status.tooltip_text.contains("再次点击确认") and (row_status.text == "再次确认" or row_status.text.contains("再次点击确认")) and reset_button != null and reset_button.text == "清空" and reset_button.tooltip_text.contains("再次点击确认")
 
 func validate_telemetry_fixture(scene: Node, screen_name: String) -> bool:
 	if not scene.settings_panel_open or not scene.telemetry_sheet_open:
@@ -493,8 +512,10 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		"19_reset_progress":
 			scene.show_menu(true)
 			scene.settings_panel_open = true
-			scene.reset_progress_confirming = true
 			scene.refresh_current_screen()
+			# Exercise the same confirmation path as a user click so the row
+			# status, button label, and toast all describe the armed state.
+			scene.request_reset_progress_from_settings()
 			# Force fully-visible static settings overlay under capture.
 			var settings_panel = scene.find_child("SettingsPanel", true, false)
 			if settings_panel is Control:
@@ -852,9 +873,12 @@ func seed_preview_hand_tutorial(scene: Node) -> void:
 	scene.ai_assist_enabled = false
 	scene.offline_phase = "await_discard"
 	scene.current_seat = 0
-	scene.tutorial_step = 0
+	scene.tutorial_step = scene.TUTORIAL_STEP_DISCARD
 	scene.show_hand_hint = true
-	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "S", "S"]
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 0, "tile": "S", "source": "normal", "announce": false, "serial": 913}
+	scene.offline_self_draw_ready = {"seat": 0, "tile": "S", "serial": 913}
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "S", "S", "S"]
 	scene.offline_pending_claim.clear()
 	scene.clear_pending_danger_discard()
 	scene.add_log("预览：新手出牌提示。")
@@ -906,7 +930,7 @@ func seed_preview_replay_import(scene: Node) -> void:
 	scene.record_round_event("win", {"seat": 0, "points": 16})
 	var input := scene.find_child("ReplayImportCodeInput", true, false) as LineEdit
 	if input != null:
-		input.text = scene.round_replay_share_code()
+		scene.set_replay_import_input_text(scene.round_replay_share_code())
 		scene.import_replay_from_input()
 
 func seed_preview_online_game(scene: Node, phase: String) -> void:

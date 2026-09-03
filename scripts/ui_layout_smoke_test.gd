@@ -650,6 +650,8 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await process_frame
 	check(scene.toast_current == null and scene.toast_mode == "" and not scene.toast_container.visible, "leaving the lobby clears its toast before rules at %s" % actual_viewport)
 	check_rules_layout(scene, actual_viewport)
+	for achievement_key in scene.achievements.keys():
+		scene.achievements[achievement_key] = false
 	scene.achievements["first_win"] = true
 	scene.achievements["seven_pairs"] = true
 	scene.achievements["thirteen_orphans"] = false
@@ -771,6 +773,7 @@ func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> 
 	check(scroll_rect.end.y + 12.0 <= close_rect.position.y, "diagnostic reading lane leaves a visual buffer before the close action at %s" % viewport_size)
 	if content_status != null:
 		check(content_status.visible and content_status.text.contains("诊断内容") and content_status.text.contains("/"), "diagnostic keeps a visible current-range status at %s" % viewport_size)
+		check(content_status_rect.position.y - scroll_rect.end.y >= 7.0, "diagnostic status lane keeps at least an 8px visual gap below the scroll viewport at %s" % viewport_size)
 		check(content_status_rect.position.y >= scroll_rect.end.y - 1.0, "diagnostic range status starts after the scroll viewport at %s (status=%s scroll_end=%s)" % [viewport_size, content_status_rect, scroll_rect.end.y])
 		check(content_status_rect.end.y + 2.0 <= close_rect.position.y, "diagnostic range status clears the fixed actions at %s (status_end=%s close_top=%s)" % [viewport_size, content_status_rect.end.y, close_rect.position.y])
 		check(label_text_width(content_status, content_status.text) <= content_status_rect.size.x + 1.0, "diagnostic range status fits its lane at %s" % viewport_size)
@@ -1243,13 +1246,17 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 	var archive_scrollbar := scene.find_child("ReplayArchiveScrollBar", true, false) as VScrollBar
 	var archive_search := scene.find_child("ReplayArchiveSearchInput", true, false) as LineEdit
 	var status := scene.find_child("ReplayImportStatus", true, false) as Label
-	check(panel != null and input != null and import_button != null and back_button != null and timeline != null and status != null, "replay import exposes code input action status and timeline at %s" % viewport_size)
+	var code_summary := scene.find_child("ReplayImportCodeSummary", true, false) as Label
+	check(panel != null and input != null and import_button != null and back_button != null and timeline != null and status != null and code_summary != null, "replay import exposes code input action status summary and timeline at %s" % viewport_size)
 	if panel == null:
 		return
 	var panel_rect := screen_rect(panel)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "replay import panel stays inside the viewport at %s" % viewport_size)
 	check(screen_rect(panel).grow(1.0).encloses(screen_rect(input)) and screen_rect(panel).grow(1.0).encloses(screen_rect(import_button)) and screen_rect(panel).grow(1.0).encloses(screen_rect(timeline)) and screen_rect(panel).grow(1.0).encloses(screen_rect(archive_pane)), "replay import controls stay inside the reading panel at %s" % viewport_size)
 	check(input != null and input.custom_minimum_size.y >= 48.0 and input.placeholder_text == "粘贴回放码", "replay import keeps a touch-sized paste field at %s" % viewport_size)
+	check(code_summary != null and code_summary.text.contains("0/") and code_summary.text.contains("字符") and code_summary.tooltip_text.contains("上限"), "replay import exposes an idle character count and input consequence at %s" % viewport_size)
+	if code_summary != null:
+		check(screen_rect(code_summary).position.y >= screen_rect(status).end.y and screen_rect(code_summary).end.y <= screen_rect(archive_pane).position.y + 1.0, "replay import code summary owns a separate lane before the archive pane at %s (status=%s summary=%s archive=%s)" % [viewport_size, screen_rect(status), screen_rect(code_summary), screen_rect(archive_pane)])
 	check(import_button != null and screen_rect(import_button).size.x >= 100.0 and screen_rect(import_button).size.y >= 44.0 and import_button.tooltip_text.contains("校验"), "replay import action keeps an explicit verification target at %s" % viewport_size)
 	check(back_button != null and back_button.tooltip_text.contains("Esc"), "replay import exposes an Escape-labelled return action at %s" % viewport_size)
 	check(timeline != null and timeline.find_child("ReplayImportTimelineTitle", true, false) != null and timeline.find_child("ReplayImportTimelineEmpty", true, false) != null, "replay import timeline has an empty-state reading lane at %s" % viewport_size)
@@ -1297,7 +1304,9 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 					check(not rects_overlap(action_rect.grow(-1.0), screen_rect(archive_actions[other_index]).grow(-1.0)), "replay archive action targets remain distinct at %s" % viewport_size)
 	if input != null and import_button != null:
 		check(input.has_focus(), "replay import opens with focus in the code field at %s" % viewport_size)
-		input.text = scene.round_replay_share_code()
+		scene.set_replay_import_input_text(scene.round_replay_share_code())
+		if code_summary != null:
+			check(code_summary.text.contains("/") and code_summary.text.contains("字符") and code_summary.text.contains(input.text.left(8)), "replay import summary exposes the live length and stable prefix after paste at %s (summary=%s input_prefix=%s)" % [viewport_size, code_summary.text, input.text.left(8)])
 		scene.import_replay_from_input()
 		var event_text := scene.find_child("ReplayImportEventText", true, false) as Label
 		check(status.text.contains("校验通过") and scene.replay_import_payload.size() > 0 and event_text != null and event_text.visible and event_text.text.contains("弃牌") and event_text.text.contains("吃") and not event_text.text.contains("discard"), "replay import verifies the digest and renders localized event names at %s" % viewport_size)
@@ -1309,7 +1318,7 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 		scene.round_event_sequence = 0
 		for event_index in range(scene.ROUND_EVENT_HISTORY_LIMIT):
 			scene.record_round_event("draw", {"seat": event_index % 4})
-		input.text = scene.round_replay_share_code()
+		scene.set_replay_import_input_text(scene.round_replay_share_code())
 		scene.import_replay_from_input()
 		var long_event_text := scene.find_child("ReplayImportEventText", true, false) as Label
 		check(status.text.contains("180 条事件") and long_event_text != null and long_event_text.custom_minimum_size.y >= 3600.0 and long_event_text.text.contains("001  摸牌") and long_event_text.text.contains("180  摸牌"), "replay import keeps both ends of a 180-event timeline available through its scroll child at %s" % viewport_size)
@@ -2678,6 +2687,12 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 				"BgmSwitchPlaybackTick_",
 			], title, viewport_size)
 		if title == "本地进度":
+			var reset_status := row.find_child("SettingRowStatus_本地进度", true, false) as Label
+			var reset_button := row.find_child("SettingRowButton_本地进度", true, false) as Button
+			check(reset_status != null and reset_button != null and reset_status.tooltip_text != "" and reset_button.tooltip_text != "", "settings reset row exposes confirmation status and consequence tooltips at %s" % viewport_size)
+			if reset_status != null and reset_button != null:
+				var expected_reset_status := ("再次确认" if scene.reset_progress_confirming else "可清空") if viewport_size.y <= 720.0 else ("再次点击确认清空本地进度" if scene.reset_progress_confirming else "清空统计与离线记录")
+				check(reset_status.text == expected_reset_status, "settings reset row mirrors its layout-aware state at %s (got=%s expected=%s)" % [viewport_size, reset_status.text, expected_reset_status])
 			var reset_texture = button.find_child("ResetDangerSealTexture", true, false) as CanvasItem
 			check(reset_texture == null or reset_texture.modulate.a <= 0.12, "settings reset row keeps full-button texture subdued at %s" % viewport_size)
 			check_settings_button_art_text_safe_zone(button, [
@@ -2811,7 +2826,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		check(subtitle_rect.end.x <= endpoint_rect.position.x - 8.0, "online lobby subtitle clears the endpoint badge at %s" % viewport_size)
 	check(name_edit != null and name_edit.max_length == scene.ONLINE_NAME_MAX_LENGTH, "online lobby nickname input enforces its client boundary at %s" % viewport_size)
 	check(host_edit != null and host_edit.max_length == scene.ONLINE_HOST_MAX_LENGTH and host_edit.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_URL, "online lobby host input enforces its boundary and URL keyboard at %s" % viewport_size)
-	check(room_edit != null and room_edit.max_length == scene.ONLINE_ROOM_CODE_MAX_LENGTH, "online lobby room input enforces its client boundary at %s" % viewport_size)
+	check(room_edit != null and room_edit.max_length == scene.ONLINE_ROOM_CODE_MAX_LENGTH and room_edit.placeholder_text == "输入房间码，如 ROOM7" and room_edit.tooltip_text.contains("最多"), "online lobby room input exposes a format example and length consequence at %s" % viewport_size)
 	var lobby_action_font_min: int = scene.accessibility_font_size(scene.commercial_ui_font_size(17, 2))
 	for action_button in [connect_button, create_button, join_button]:
 		check(action_button != null and action_button.get_theme_font_size("font_size") >= lobby_action_font_min, "online lobby action button keeps the shared accessible font size at %s" % viewport_size)
@@ -3324,8 +3339,9 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 		var completion_ink_rect := Rect2(Vector2(completion_label_rect.end.x - completion_text_width, completion_label_rect.position.y), Vector2(completion_text_width, completion_label_rect.size.y))
 		var medal_rect := screen_rect(medal_node)
 		var compact_completion_lane := viewport_size.x <= 1280.0 or viewport_size.y <= 560.0
+		var expected_completion_text := "收集进度 %d%%" % int(round(float(scene.unlocked_achievement_count()) / maxf(1.0, float(scene.achievements.size())) * 100.0))
 		check(completion_art.get_parent() != null and completion_label.get_parent() == completion_art, "achievements completion label remains attached to its authored convergence art at %s" % viewport_size)
-		check(completion_label.visible and completion_text == "收集进度 24%" and completion_label.tooltip_text == completion_text and not completion_text.contains("...") and not completion_text.contains("…") and completion_text_width <= completion_label_rect.size.x + 1.0, "achievements completion label is fully readable without rendered truncation at %s" % viewport_size)
+		check(completion_label.visible and completion_text == expected_completion_text and completion_label.tooltip_text == completion_text and not completion_text.contains("...") and not completion_text.contains("…") and completion_text_width <= completion_label_rect.size.x + 1.0, "achievements completion label is fully readable without rendered truncation at %s" % viewport_size)
 		if compact_completion_lane:
 			check(completion_ink_rect.end.x <= medal_rect.position.x - 8.0, "compact achievements completion text owns a left-of-medal safety slot at %s" % viewport_size)
 		else:

@@ -380,7 +380,7 @@ func request_delete_replay_archive(archive_id: String) -> void:
 				refresh_replay_archive_view()
 				show_toast("回放已从本机删除")
 				return
-		replay_delete_target_id = archive_id
+	replay_delete_target_id = archive_id
 	replay_delete_confirming = true
 	refresh_replay_archive_view()
 	show_toast("再次点击删除，确认移除这条回放")

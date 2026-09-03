@@ -5126,15 +5126,36 @@ func request_game_render() -> void:
 	call_deferred("flush_game_render")
 
 func flush_game_render() -> void:
-	var elapsed = Time.get_ticks_msec() - last_game_render_msec
-	if last_game_render_msec > 0 and elapsed < UI_RENDER_MIN_INTERVAL_MSEC:
-		await wait_for_runtime_delay(float(UI_RENDER_MIN_INTERVAL_MSEC - elapsed) / 1000.0)
 	if runtime_shutdown_requested:
 		game_render_queued = false
+		return
+	var elapsed = Time.get_ticks_msec() - last_game_render_msec
+	if last_game_render_msec > 0 and elapsed < UI_RENDER_MIN_INTERVAL_MSEC:
+		schedule_game_render_flush(float(UI_RENDER_MIN_INTERVAL_MSEC - elapsed) / 1000.0)
 		return
 	game_render_queued = false
 	if mode == "offline" or mode == "online_game":
 		render_game()
+
+func schedule_game_render_flush(delay_seconds: float) -> void:
+	var timer := Timer.new()
+	timer.name = "GameRenderDelayTimer"
+	timer.one_shot = true
+	timer.wait_time = maxf(0.001, delay_seconds)
+	timer.process_callback = Timer.TIMER_PROCESS_IDLE
+	runtime_delay_timers.append(timer)
+	timer.timeout.connect(Callable(self, "_on_game_render_delay_timeout").bind(timer), CONNECT_ONE_SHOT)
+	add_child(timer)
+	timer.start()
+
+func _on_game_render_delay_timeout(timer: Timer) -> void:
+	runtime_delay_timers.erase(timer)
+	if timer != null and is_instance_valid(timer) and not timer.is_queued_for_deletion():
+		timer.queue_free()
+	if runtime_shutdown_requested:
+		game_render_queued = false
+		return
+	flush_game_render()
 
 func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
@@ -14535,7 +14556,9 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		var item: Array = items[i]
 		var quick_id := str(item[0])
 		var quick_color: Color = item[3]
-		var button = make_small_button(str(item[1]), item[3], item[4])
+		var quick_source_name := "MenuQuick%sButton" % quick_id.capitalize()
+		var quick_action: Callable = item[4]
+		var button = make_small_button(str(item[1]), item[3], Callable(self, "activate_menu_entry").bind(quick_source_name, quick_action))
 		button.name = "MenuQuick%sButton" % quick_id.capitalize()
 		button.custom_minimum_size = Vector2(96, 44)
 		# Keep quick navigation calm enough for the hero artwork and readable at 960px.
@@ -17901,7 +17924,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(system_grid, "3D 画质", "当前: %s" % graphics_quality_label(), make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
 	))
-	make_setting_row(system_grid, "本地进度", "清空统计与离线记录", make_reset_progress_button(func() -> void:
+	make_setting_row(system_grid, "本地进度", "再次点击确认清空本地进度" if reset_progress_confirming else "清空统计与离线记录", make_reset_progress_button(func() -> void:
 		request_reset_progress_from_settings()
 	))
 	make_setting_row(system_grid, "隐私诊断", telemetry_consent_status_text(), make_setting_selector_button("查看", "隐私诊断", func() -> void:
@@ -21918,6 +21941,7 @@ func make_reset_progress_button(callback: Callable) -> Button:
 	var color = Color(0.72, 0.24, 0.18) if reset_progress_confirming else Color(0.56, 0.36, 0.30)
 	var armed = reset_progress_confirming
 	var button = make_small_button(label, color, callback)
+	button.tooltip_text = "再次点击确认清空本地进度" if armed else "进入二次确认，清空统计与离线记录"
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.40))
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
@@ -22046,7 +22070,7 @@ func compact_setting_status(title: String, status: String) -> String:
 	if title == "出牌辅助":
 		return "风险: 开" if status.contains("开启") else "风险: 关"
 	if title == "本地进度":
-		return "可清空"
+		return "再次确认" if reset_progress_confirming else "可清空"
 	if title == "隐私诊断":
 		return "已同意" if status.contains("已同意") else "未同意"
 	if title == "播放测试":
@@ -24497,19 +24521,28 @@ func _show_menu_impl() -> void:
 
 	# 三个主功能卡片 - 更大更醒目，使用国风配色
 	var cards: Array = []
-	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.78, 0.56, 0.28), func() -> void: start_offline(), "play")
+	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.78, 0.56, 0.28), func() -> void:
+		menu_focus_restore_name = "MenuPrimaryOfflineCard"
+		start_offline()
+	, "play")
 	card1.name = "MenuPrimaryOfflineCard"
 	card1.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card1)
 	cards.append(card1)
 
-	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", AZURE, func() -> void: show_online_lobby(), "users")
+	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", AZURE, func() -> void:
+		menu_focus_restore_name = "MenuPrimaryOnlineCard"
+		show_online_lobby()
+	, "users")
 	card2.name = "MenuPrimaryOnlineCard"
 	card2.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card2)
 	cards.append(card2)
 
-	var card3 = make_menu_card("商店\n道具和货币", VERMILION, func() -> void: show_shop_screen(), "gift")
+	var card3 = make_menu_card("商店\n道具和货币", VERMILION, func() -> void:
+		menu_focus_restore_name = "MenuPrimaryShopCard"
+		show_shop_screen()
+	, "gift")
 	card3.name = "MenuPrimaryShopCard"
 	card3.custom_minimum_size = Vector2(card_width, card_height)
 	row.add_child(card3)
@@ -24564,6 +24597,7 @@ func _show_menu_impl() -> void:
 
 	# 设置按钮 - 更大的触摸目标
 	var settings = make_small_button("设置", Color(0.26, 0.44, 0.58), func() -> void:
+		menu_focus_restore_name = "MenuSettingsButton"
 		toggle_settings_panel()
 	)
 	ensure_button_gpt_face_plate(settings, Color(0.26, 0.44, 0.58, 0.40))
@@ -24581,7 +24615,9 @@ func _show_menu_impl() -> void:
 		var tutorial_hint = quick_rail.find_child("MenuQuickRulesButton", true, false) if quick_rail != null else null
 		if tutorial_hint != null and is_instance_valid(tutorial_hint) and ui_motion_enabled():
 			tutorial_hint.modulate.a = 0.92
-	configure_button_focus_navigation(root_layer, "MenuPrimaryOfflineCard")
+	var menu_default_focus := menu_focus_restore_name
+	menu_focus_restore_name = ""
+	configure_button_focus_navigation(root_layer, menu_default_focus if menu_default_focus != "" else "MenuPrimaryOfflineCard")
 
 	# Keep the product title above the full-screen menu stages while leaving modal
 	# overlays free to cover it when settings/update UI is intentionally open.
@@ -24608,6 +24644,12 @@ func _show_menu_impl() -> void:
 		schedule_ui_qa_page_ready("settings", ["SettingsPanel", "SettingsTitleLabel", "SettingsRuleVariantButton", "SettingsCloseButton"])
 
 
+func activate_menu_entry(source_name: String, action: Callable) -> void:
+	menu_focus_restore_name = source_name
+	if action.is_valid():
+		action.call()
+
+
 func open_tutorial_entry_sheet() -> void:
 	if tutorial_panel != null and is_instance_valid(tutorial_panel):
 		close_tutorial_entry_sheet()
@@ -24627,7 +24669,7 @@ func open_tutorial_entry_sheet() -> void:
 		shield.name = "TutorialEntryScrim"
 	var panel := make_gpt_plate_rect(rect_full(0.190, 0.150, 0.810, 0.850), Color(0.012, 0.030, 0.032, 0.98), "ui_jade_reading_plate")
 	panel.name = "TutorialEntryPanel"
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	overlay.add_child(panel)
 	draw_menu_tutorial_hint_art(panel)
 	var title := make_label(panel, "新手教学", 26, Color(1.0, 0.90, 0.60), true)
@@ -24760,6 +24802,8 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	edit.add_theme_color_override("selection_color", Color(0.56, 0.70, 0.48, 0.72))
 	edit.add_theme_color_override("caret_color", Color(0.94, 0.86, 0.54))
 	configure_line_edit_input(edit, label_text, max_length, keyboard_type)
+	if value.strip_edges() == "":
+		edit.placeholder_text = "请输入%s" % label_text
 	draw_line_edit_input_art(edit, label_text)
 	var art_id := line_edit_art_id(label_text)
 	edit.focus_entered.connect(func() -> void:
@@ -24795,12 +24839,14 @@ func refresh_online_lobby_action_states() -> void:
 		join_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.84, 0.88, 0.84, 1.0) if join_button.disabled else Color.WHITE)
 	var current_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	if current_status != null and online_feedback.strip_edges() == "":
+		var next_status := ""
 		if not connected:
-			current_status.text = "下一步 · 先连接，再建房或入房"
+			next_status = "下一步 · 先连接，再建房或入房"
 		elif room_code == "":
-			current_status.text = "已连接 · 可创建房间；输入房间号后可加入"
+			next_status = "已连接 · 可创建房间；输入房间号后可加入"
 		else:
-			current_status.text = "已连接 · 可创建或加入房间"
+			next_status = "已连接 · 可创建或加入房间"
+		set_dynamic_label_text(current_status, next_status, "联机大厅当前状态：" + next_status)
 	configure_online_lobby_focus_navigation(false)
 
 
@@ -24948,6 +24994,8 @@ func _show_online_lobby_impl() -> void:
 	online_host_edit.name = "OnlineLobbyHostEdit"
 	online_room_edit = add_lobby_line_edit(form, "房间号", selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 	online_room_edit.name = "OnlineLobbyRoomEdit"
+	online_room_edit.placeholder_text = "输入房间码，如 ROOM7"
+	online_room_edit.tooltip_text = "输入房间码：最多 %d 个字符，可含字母、数字和连字符" % ONLINE_ROOM_CODE_MAX_LENGTH
 	online_room_edit.text_changed.connect(func(value: String) -> void:
 		selected_room = bounded_online_input(value, ONLINE_ROOM_CODE_MAX_LENGTH)
 		refresh_online_lobby_action_states()
@@ -25291,15 +25339,16 @@ func refresh_online_lobby_state() -> void:
 		return_button.modulate = Color(0.82, 0.84, 0.82, 0.80) if connected else Color(1.0, 1.0, 1.0, 1.0)
 	var lobby_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	if lobby_status != null:
+		var lobby_status_text := ""
 		if state == "已连接":
-			lobby_status.text = str(online_lobby_start_gate().get("reason", "可建房或入房"))
+			lobby_status_text = str(online_lobby_start_gate().get("reason", "可建房或入房"))
 		elif state == "连接中":
-			lobby_status.text = "正在连接服务器，请稍候"
+			lobby_status_text = "正在连接服务器，请稍候"
 		elif state == "异常":
-			lobby_status.text = "连接异常，请重试"
+			lobby_status_text = "连接异常，请重试"
 		else:
-			lobby_status.text = "下一步 · 先连接，再建房或入房"
-		configure_clipped_label(lobby_status)
+			lobby_status_text = "下一步 · 先连接，再建房或入房"
+		set_dynamic_label_text(lobby_status, lobby_status_text, "联机大厅当前状态：" + lobby_status_text)
 	refresh_online_room_content()
 	refresh_online_lobby_action_states()
 
@@ -25316,11 +25365,12 @@ func refresh_online_room_content() -> void:
 	var ready_label = root_layer.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
 	var state_label = root_layer.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
 	if occupancy_label != null:
-		occupancy_label.text = "入席 %d/4" % player_count
+		set_dynamic_label_text(occupancy_label, "入席 %d/4" % player_count, "当前已入席 %d/4 位玩家" % player_count)
 	if ready_label != null:
-		ready_label.text = "已备 %d" % ready_count
+		set_dynamic_label_text(ready_label, "已备 %d" % ready_count, "当前已准备 %d/4 位玩家" % ready_count)
 	if state_label != null:
-		state_label.text = lobby_connection_state_text()
+		var room_state := lobby_connection_state_text()
+		set_dynamic_label_text(state_label, room_state, "房间同步状态：" + room_state)
 	for slot in range(4):
 		var entry := online_lobby_player_for_slot(entries, slot)
 		var active := not entry.is_empty()
@@ -25332,20 +25382,22 @@ func refresh_online_room_content() -> void:
 			name_label.text = online_lobby_slot_name(entry)
 			name_label.tooltip_text = name_label.text
 		if slot_state_label != null:
-			slot_state_label.text = online_lobby_slot_state(entry, slot)
+			var slot_state := online_lobby_slot_state(entry, slot)
+			set_dynamic_label_text(slot_state_label, slot_state, "第%d席状态：%s" % [slot + 1, slot_state])
 		if roster_row != null:
 			roster_row.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.76)
 			var roster_touch_target = root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
 			if roster_touch_target != null:
 				roster_touch_target.disabled = not active
 				roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
+				roster_touch_target.tooltip_text = "查看第%d席：%s" % [slot + 1, online_lobby_slot_name(entry)] if active else "第%d席暂未入席" % (slot + 1)
 		if seat_panel != null:
 			seat_panel.modulate = Color(0.92, 1.0, 0.92, 1.0) if active else Color(0.72, 0.76, 0.74, 0.52)
 	var logs_value = online_room.get("logs", [])
 	var log_count := (logs_value as Array).size() if typeof(logs_value) == TYPE_ARRAY else 0
 	var log_count_label = root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	if log_count_label != null:
-		log_count_label.text = "%d条" % log_count
+		set_dynamic_label_text(log_count_label, "%d条" % log_count, "房间日志共 %d 条" % log_count)
 	render_room_log()
 
 
@@ -27175,6 +27227,9 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	# 创建诊断信息面板
 	var panel = make_gpt_plate_rect(rect_full(0.1, 0.15, 0.9, 0.85), Color(0.026, 0.058, 0.060, 0.95), "ui_jade_reading_plate")
 	panel.name = "DiagnosticDialogPanel"
+	# The GPT plate is normally an input-ignoring visual host. Make this modal
+	# surface an explicit input boundary so its child actions receive mouse input.
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	root_layer.add_child(panel)
 	var diagnostic_gpt_key := "diagnostic_gpt_panel"
 	var diagnostic_gpt_texture = add_optional_gpt_illustration_texture(panel, diagnostic_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.14, false)
@@ -27200,7 +27255,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	panel.add_child(content_scroll)
 	# Leave a visual buffer before the fixed action so the first visible row is
 	# never clipped by the scroll viewport or the close button.
-	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.790))
+	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.760))
 	var diagnostic_scrollbar := content_scroll.get_v_scroll_bar()
 	if diagnostic_scrollbar != null:
 		diagnostic_scrollbar.name = "DiagnosticContentScrollBar"
@@ -27333,15 +27388,14 @@ func show_diagnostic_dialog(lines: Array) -> void:
 func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, content_list: Control) -> void:
 	if content_scroll == null or not is_instance_valid(content_scroll) or content_list == null or not is_instance_valid(content_list):
 		return
-	await get_tree().process_frame
-	if content_scroll == null or not is_instance_valid(content_scroll) or content_list == null or not is_instance_valid(content_list):
-		return
 	var panel := content_scroll.get_parent() as Control
 	if panel == null or panel.size.y <= 1.0:
 		return
 	# Snap the viewport to a complete row while keeping a fixed visual buffer
 	# before the close lane. This prevents the first frame from bisecting text.
-	var maximum_height := maxf(44.0, panel.size.y * 0.620 - 12.0)
+	# The list starts at 21.5% and the status lane starts at 78.5%. Keep the
+	# complete-row viewport eight pixels above that status lane at every size.
+	var maximum_height := maxf(44.0, panel.size.y * 0.570 - 8.0)
 	var complete_height := 0.0
 	for child in content_list.get_children():
 		if not child is Control:
@@ -27366,8 +27420,7 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 		return
 	var total := maxi(0, total_count)
 	if total == 0:
-		status_label.text = "诊断内容 0-0 / 0 · 无内容"
-		status_label.tooltip_text = "当前诊断报告没有内容"
+		set_dynamic_label_text(status_label, "诊断内容 0-0 / 0 · 无内容", "当前诊断报告没有内容")
 		return
 	var viewport_top := scrollbar.value
 	var viewport_height := maxf(scrollbar.page, content_scroll.size.y)
@@ -27394,7 +27447,7 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	last_visible = clampi(maxi(first_visible, last_visible), first_visible, total)
 	var remaining := maxi(0, total - last_visible)
 	var tail := "余 0 · 已到末尾" if remaining == 0 else "可继续滚动 · 余 %d" % remaining
-	status_label.text = "诊断内容 %d-%d / %d · %s" % [first_visible, last_visible, total, tail]
+	set_dynamic_label_text(status_label, "诊断内容 %d-%d / %d · %s" % [first_visible, last_visible, total, tail], "当前诊断报告范围")
 	status_label.tooltip_text = "当前显示第%d至%d行，共%d行；%s" % [first_visible, last_visible, total, ("已到报告末尾" if remaining == 0 else "可继续滚动查看完整报告")]
 
 
@@ -27805,6 +27858,10 @@ func _show_replay_import_screen_impl() -> void:
 	apply_rect(input, rect_full(0.065, 0.265, 0.705, 0.360))
 	panel.add_child(input)
 	replay_import_input = input
+	input.text_changed.connect(func(_value: String) -> void:
+		update_replay_import_input_feedback(input)
+	)
+	update_replay_import_input_feedback(input)
 	var import_button := make_small_button("导入", Color(0.42, 0.66, 0.50), Callable(self, "import_replay_from_input"))
 	import_button.name = "ReplayImportButton"
 	import_button.custom_minimum_size = Vector2(116, 48)
@@ -27813,10 +27870,20 @@ func _show_replay_import_screen_impl() -> void:
 	panel.add_child(import_button)
 	var status := make_label(panel, "等待导入", 14, Color(0.76, 0.84, 0.76), true)
 	status.name = "ReplayImportStatus"
-	apply_rect(status, rect_full(0.065, 0.380, 0.935, 0.435))
+	apply_rect(status, rect_full(0.065, 0.380, 0.935, 0.415))
 	configure_clipped_label(status)
+	var code_summary := make_label(panel, "回放码 0/%d 字符 · 等待粘贴" % (REPLAY_SHARE_MAX_BYTES * 2), 11, Color(0.70, 0.80, 0.72), false)
+	code_summary.name = "ReplayImportCodeSummary"
+	apply_rect(code_summary, rect_full(0.065, 0.430, 0.935, 0.460))
+	code_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(code_summary)
+	update_replay_import_input_feedback(input)
 	var archive_pane := make_gpt_plate_rect(rect_full(0.065, 0.470, 0.480, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
 	archive_pane.name = "ReplayArchivePane"
+	# This GPT plate is also the parent of the archive controls and scroll view.
+	# Let input reach those child actions instead of treating the visual host as
+	# an isolated, input-ignoring texture.
+	archive_pane.mouse_filter = Control.MOUSE_FILTER_PASS
 	panel.add_child(archive_pane)
 	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.88, 0.78, 0.56), true)
 	archive_title.name = "ReplayArchiveTitle"
@@ -27912,6 +27979,39 @@ func _show_replay_import_screen_impl() -> void:
 	render_replay_archive_list()
 	call_deferred("update_replay_timeline_status", event_scroll)
 	schedule_ui_qa_page_ready("replay_import", ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline"])
+
+
+func replay_import_code_summary_text(value: String) -> String:
+	var max_chars := REPLAY_SHARE_MAX_BYTES * 2
+	var code := value.strip_edges()
+	if code == "":
+		return "回放码 0/%d 字符 · 等待粘贴" % max_chars
+	if code.length() <= 16:
+		return "回放码 %d/%d 字符 · 完整值" % [code.length(), max_chars]
+	return "回放码 %d/%d 字符 · %s / %s" % [code.length(), max_chars, code.left(8), code.right(8)]
+
+
+func set_replay_import_input_text(value: String) -> void:
+	if replay_import_input == null or not is_instance_valid(replay_import_input):
+		return
+	replay_import_input.text = value
+	# LineEdit.text assignment is intentionally silent in Godot 4.4. Keep
+	# programmatic archive/fixture loads on the same live summary path as typing.
+	update_replay_import_input_feedback(replay_import_input)
+
+
+func update_replay_import_input_feedback(input: LineEdit) -> void:
+	if input == null or not is_instance_valid(input):
+		return
+	var summary := root_layer.find_child("ReplayImportCodeSummary", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
+	if summary == null:
+		return
+	var code := input.text.strip_edges()
+	var max_chars := REPLAY_SHARE_MAX_BYTES * 2
+	var detail := "当前已输入 %d 个字符，上限 %d" % [code.length(), max_chars]
+	if code != "":
+		detail += "；首尾摘要：%s / %s" % [code.left(8), code.right(8)] if code.length() > 16 else "；当前内容未超过摘要长度"
+	set_dynamic_label_text(summary, replay_import_code_summary_text(input.text), detail)
 
 
 func refresh_replay_archive_view() -> void:
@@ -28027,7 +28127,7 @@ func open_replay_archive(archive_id: String) -> void:
 	var empty := root_layer.find_child("ReplayImportTimelineEmpty", true, false) as Label
 	var events_label := root_layer.find_child("ReplayImportEventText", true, false) as Label
 	if input != null:
-		input.text = replay_archive_share_code(archive_id)
+		set_replay_import_input_text(replay_archive_share_code(archive_id))
 	if status != null:
 		status.text = "归档已打开 · 校验通过 · %d 条事件 · %s" % [(payload.get("events", []) as Array).size(), str(payload.get("digest", "")).left(12).to_upper()]
 		status.modulate = Color(0.64, 0.90, 0.70)
@@ -30866,12 +30966,9 @@ func render_room_log() -> void:
 		call_deferred("restore_online_log_scroll", previous_scroll)
 
 func defer_online_log_scroll_to_end() -> void:
-	# RichTextLabel fitting can update the scroll range one frame after the
-	# lobby refresh. Wait for the container to settle before taking the final
-	# bottom position, otherwise a newly wrapped line leaves a one-pixel gap.
-	await get_tree().process_frame
-	await get_tree().process_frame
-	scroll_online_log_to_end()
+	# Keep two layout passes for wrapped log text without awaiting from a
+	# deferred callback, so screen teardown cannot leave an await state behind.
+	call_deferred("scroll_online_log_to_end")
 
 func scroll_online_log_to_end() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
@@ -39119,7 +39216,7 @@ func request_delete_replay_archive(archive_id: String) -> void:
 				refresh_replay_archive_view()
 				show_toast("回放已从本机删除")
 				return
-		replay_delete_target_id = archive_id
+	replay_delete_target_id = archive_id
 	replay_delete_confirming = true
 	refresh_replay_archive_view()
 	show_toast("再次点击删除，确认移除这条回放")

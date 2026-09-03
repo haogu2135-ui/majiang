@@ -5917,7 +5917,9 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		var item: Array = items[i]
 		var quick_id := str(item[0])
 		var quick_color: Color = item[3]
-		var button = make_small_button(str(item[1]), item[3], item[4])
+		var quick_source_name := "MenuQuick%sButton" % quick_id.capitalize()
+		var quick_action: Callable = item[4]
+		var button = make_small_button(str(item[1]), item[3], Callable(self, "activate_menu_entry").bind(quick_source_name, quick_action))
 		button.name = "MenuQuick%sButton" % quick_id.capitalize()
 		button.custom_minimum_size = Vector2(96, 44)
 		# Keep quick navigation calm enough for the hero artwork and readable at 960px.
@@ -9283,7 +9285,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(system_grid, "3D 画质", "当前: %s" % graphics_quality_label(), make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
 	))
-	make_setting_row(system_grid, "本地进度", "清空统计与离线记录", make_reset_progress_button(func() -> void:
+	make_setting_row(system_grid, "本地进度", "再次点击确认清空本地进度" if reset_progress_confirming else "清空统计与离线记录", make_reset_progress_button(func() -> void:
 		request_reset_progress_from_settings()
 	))
 	make_setting_row(system_grid, "隐私诊断", telemetry_consent_status_text(), make_setting_selector_button("查看", "隐私诊断", func() -> void:
@@ -13300,6 +13302,7 @@ func make_reset_progress_button(callback: Callable) -> Button:
 	var color = Color(0.72, 0.24, 0.18) if reset_progress_confirming else Color(0.56, 0.36, 0.30)
 	var armed = reset_progress_confirming
 	var button = make_small_button(label, color, callback)
+	button.tooltip_text = "再次点击确认清空本地进度" if armed else "进入二次确认，清空统计与离线记录"
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.40))
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
@@ -13428,7 +13431,7 @@ func compact_setting_status(title: String, status: String) -> String:
 	if title == "出牌辅助":
 		return "风险: 开" if status.contains("开启") else "风险: 关"
 	if title == "本地进度":
-		return "可清空"
+		return "再次确认" if reset_progress_confirming else "可清空"
 	if title == "隐私诊断":
 		return "已同意" if status.contains("已同意") else "未同意"
 	if title == "播放测试":

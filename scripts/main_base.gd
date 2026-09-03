@@ -546,6 +546,7 @@ var ai_assist_enabled = false  # 出牌辅助（推荐/危险提示），玩家�
 var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
 var settings_focus_restore_name := ""
+var menu_focus_restore_name := ""
 var shop_scroll_restore_value := -1.0
 var shop_focus_restore_name := ""
 var reset_progress_confirming = false
@@ -1846,9 +1847,15 @@ func queue_free_named_children_by_prefix(parent_id: int, prefix: String) -> void
 func set_label_text_by_id(label_id: int, text: String) -> void:
 	var label = node_from_instance_id(label_id) as Label
 	if label != null:
-		label.text = text
-		configure_clipped_label(label)
-		label.tooltip_text = text if text.strip_edges() != "" else ""
+		set_dynamic_label_text(label, text)
+
+func set_dynamic_label_text(label: Label, text: String, detail: String = "") -> void:
+	if label == null or not is_instance_valid(label):
+		return
+	label.text = text
+	configure_clipped_label(label)
+	var resolved_detail := detail.strip_edges() if detail.strip_edges() != "" else text.strip_edges()
+	label.tooltip_text = resolved_detail
 
 func configure_line_edit_input(edit: LineEdit, field_label: String = "", max_length: int = -1, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> void:
 	if edit == null or not is_instance_valid(edit):
@@ -1877,10 +1884,17 @@ func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = 
 	scroll.focus_mode = Control.FOCUS_ALL
 	if scroll_label != "":
 		scroll.tooltip_text = scroll_label
+	elif scroll.tooltip_text == "":
+		scroll.tooltip_text = "上下滚动查看更多内容"
 	scroll.set_meta("ui_scroll_view", scroll_label)
-	scroll.gui_input.connect(func(event: InputEvent) -> void:
-		handle_scroll_container_keyboard_input(event, scroll)
-	)
+	# Screens can refresh in place. Keep the shared keyboard route idempotent so a
+	# second configuration does not multiply PageUp/PageDown handling.
+	if not bool(scroll.get_meta("ui_scroll_keyboard_route_connected", false)):
+		scroll.gui_input.connect(func(event: InputEvent) -> void:
+			handle_scroll_container_keyboard_input(event, scroll)
+		)
+		scroll.set_meta("ui_scroll_keyboard_route_connected", true)
+	scroll.set_meta("ui_scroll_keyboard_commands", "PageUp/PageDown/Home/End")
 
 func handle_scroll_container_keyboard_input(event: InputEvent, scroll: ScrollContainer) -> void:
 	if scroll == null or not is_instance_valid(scroll) or not event is InputEventKey:
@@ -1912,6 +1926,7 @@ func handle_scroll_container_keyboard_input(event: InputEvent, scroll: ScrollCon
 		return
 	scrollbar.value = target
 	scroll.scroll_vertical = int(round(target))
+	scroll.grab_focus()
 	scroll.accept_event()
 
 func make_small_button(text: String, color: Color, callback: Callable) -> Button:

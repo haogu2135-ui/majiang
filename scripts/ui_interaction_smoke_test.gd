@@ -56,6 +56,88 @@ func first_button_with_text(scope: Node, text: String) -> Button:
 	return null
 
 
+func first_button_with_text_prefix(scope: Node, prefix: String) -> Button:
+	for candidate in scope.find_children("*", "Button", true, false):
+		var button := candidate as Button
+		if button != null and button.text.begins_with(prefix):
+			return button
+	return null
+
+
+func first_button_in(scope: Node) -> Button:
+	if scope == null:
+		return null
+	for candidate in scope.find_children("*", "Button", true, false):
+		var button := candidate as Button
+		if button != null:
+			return button
+	return null
+
+
+func buttons_in(scope: Node) -> Array[Button]:
+	var buttons: Array[Button] = []
+	if scope == null:
+		return buttons
+	for candidate in scope.find_children("*", "Button", true, false):
+		var button := candidate as Button
+		if button != null:
+			buttons.append(button)
+	return buttons
+
+
+func valid_replay_events(scene: Node, round_id: String) -> Array:
+	var events: Array = []
+	var previous_digest := ""
+	var definitions := [
+		["round_start", {"dealer": 0}],
+		["draw", {"seat": 0}],
+		["discard", {"seat": 0, "tile": "3W"}],
+		["claim", {"seat": 1, "claim": "peng"}],
+	]
+	var sequence := 1
+	for definition in definitions:
+		var event: Dictionary = (definition[1] as Dictionary).duplicate(true)
+		event["round_id"] = round_id
+		event["sequence"] = sequence
+		event["type"] = str(definition[0])
+		event["prev_digest"] = previous_digest
+		event["digest"] = scene.replay_event_digest(event)
+		events.append(event)
+		previous_digest = str(event["digest"])
+		sequence += 1
+	return events
+
+
+func set_offline_pending_claim_fixture(scene: Node, claim: String) -> void:
+	var hands := {
+		"chi": ["1W", "2W", "4W", "5W", "6W", "7B", "8B", "9B", "E", "E", "E", "1T", "1T"],
+		"peng": ["1W", "2W", "4W", "5W", "6W", "7B", "8B", "9B", "E", "E", "E", "3W", "3W"],
+		"gang": ["1W", "2W", "4W", "5W", "6W", "7B", "8B", "9B", "E", "E", "E", "3W", "3W", "3W"],
+		"hu": ["1W", "2W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "E", "1T", "1T"],
+	}
+	var hand: Array = (hands.get(claim, hands["peng"]) as Array).duplicate()
+	var chi_choices: Array = scene.get_chi_choices(hand, "3W") if claim == "chi" else []
+	scene.mode = "offline"
+	scene.ai_assist_enabled = false
+	scene.current_seat = 0
+	scene.offline_phase = "pending_claim"
+	scene.offline_turn_needs_draw = false
+	scene.offline_pending_claim = {
+		"from_seat": 3,
+		"tile": "3W",
+		"options": [claim],
+		"chi_choices": chi_choices,
+		"deadline_msec": Time.get_ticks_msec() + 10000,
+	}
+	scene.players[0]["bot"] = false
+	scene.players[0]["hand"] = hand
+	scene.players[0]["melds"] = []
+	scene.players[3]["discards"] = ["3W"]
+	scene.last_discard = "3W"
+	scene.last_discard_seat = 3
+	scene.render_game()
+
+
 func has_label_text(scope: Node, expected: String) -> bool:
 	if scope == null:
 		return false
@@ -98,6 +180,7 @@ func send_left_button(position: Vector2, pressed: bool) -> void:
 	event.position = position
 	event.global_position = position
 	event.button_index = MOUSE_BUTTON_LEFT
+	event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
 	event.pressed = pressed
 	Input.parse_input_event(event)
 	await process_frame
@@ -130,6 +213,14 @@ func send_wheel_down(position: Vector2) -> void:
 	event.factor = 1.0
 	event.pressed = true
 	Input.parse_input_event(event)
+	await process_frame
+	var release_event := InputEventMouseButton.new()
+	release_event.position = position
+	release_event.global_position = position
+	release_event.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	release_event.factor = 1.0
+	release_event.pressed = false
+	Input.parse_input_event(release_event)
 	await process_frame
 
 
@@ -559,6 +650,48 @@ func run() -> void:
 			check(diagnostic_status.text.contains("可继续滚动") or diagnostic_status.text.contains("已到末尾"), "diagnostic range status follows the active scroll position")
 	if diagnostic_close != null:
 		check(diagnostic_close.focus_mode == Control.FOCUS_ALL and diagnostic_close.has_focus(), "diagnostic close action receives modal keyboard focus")
+	var diagnostic_copy_mouse := scene.find_child("DiagnosticCopyButton", true, false) as Button
+	var diagnostic_report_text := "\n".join(diagnostic_lines)
+	check(diagnostic_copy_mouse != null and not diagnostic_copy_mouse.disabled, "diagnostic exposes an active copy-report button")
+	if diagnostic_copy_mouse != null:
+		var diagnostic_mouse_pressed := {"value": false}
+		var diagnostic_mouse_gui_input := {"value": false}
+		diagnostic_copy_mouse.button_down.connect(func() -> void:
+			diagnostic_mouse_pressed["value"] = true
+		)
+		diagnostic_copy_mouse.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton:
+				diagnostic_mouse_gui_input["value"] = true
+		)
+		var diagnostic_copy_mouse_center := diagnostic_copy_mouse.get_global_rect().get_center()
+		await move_pointer(diagnostic_copy_mouse_center)
+		DisplayServer.clipboard_set("")
+		await send_left_button(diagnostic_copy_mouse_center, true)
+		await send_left_button(diagnostic_copy_mouse_center, false)
+		await settle(0.04)
+		check(bool(diagnostic_mouse_gui_input.get("value", false)), "mouse copy reaches the button gui input")
+		check(bool(diagnostic_mouse_pressed.get("value", false)), "mouse copy reaches the native button-down signal")
+		check(DisplayServer.clipboard_get() == diagnostic_report_text, "mouse copy writes the complete diagnostic report")
+		check(scene.find_child("DiagnosticDialogPanel", true, false) != null and scene.toast_current != null and has_label_text(scene.toast_current, "诊断报告已复制"), "mouse copy keeps the dialog open and shows feedback")
+	scene.show_diagnostic_dialog(diagnostic_lines)
+	await settle(0.05)
+	var diagnostic_copy_touch := scene.find_child("DiagnosticCopyButton", true, false) as Button
+	if diagnostic_copy_touch != null:
+		await send_screen_touch(diagnostic_copy_touch.get_global_rect().get_center(), true)
+		await send_screen_touch(diagnostic_copy_touch.get_global_rect().get_center(), false)
+		await settle(0.04)
+	check(DisplayServer.clipboard_get() == diagnostic_report_text and scene.find_child("DiagnosticDialogPanel", true, false) != null and scene.toast_current != null and has_label_text(scene.toast_current, "诊断报告已复制"), "single-finger copy writes the same complete diagnostic report without dismissing the dialog")
+	scene.show_diagnostic_dialog(diagnostic_lines)
+	await settle(0.05)
+	var diagnostic_copy_keyboard := scene.find_child("DiagnosticCopyButton", true, false) as Button
+	if diagnostic_copy_keyboard != null:
+		diagnostic_copy_keyboard.grab_focus()
+		await send_key(KEY_ENTER, 0)
+		await settle(0.04)
+	check(DisplayServer.clipboard_get() == diagnostic_report_text and scene.find_child("DiagnosticDialogPanel", true, false) != null and scene.toast_current != null and has_label_text(scene.toast_current, "诊断报告已复制"), "keyboard copy writes the same complete diagnostic report without dismissing the dialog")
+	diagnostic_close = scene.find_child("DiagnosticCloseButton", true, false) as Button
+	if diagnostic_close != null:
+		check(diagnostic_close.focus_mode == Control.FOCUS_ALL and scene.find_child("DiagnosticDialogPanel", true, false) != null, "diagnostic close action remains available after copy")
 	await send_key(KEY_ESCAPE, 0)
 	await settle(0.10)
 	check(scene.find_child("DiagnosticDialogPanel", true, false) == null and scene.find_child("OnlineLobbyFormPanel", true, false) != null, "ui_cancel closes the diagnostic and restores the source page")
@@ -866,8 +999,473 @@ func run() -> void:
 	await settle(0.10)
 	check(not scene.online_waiting_for_server and scene.online_retry_available == false and scene.exit_confirm_panel == null and scene.mode == "online_game", "a second Esc cancels the online wait and keeps the table open")
 
+	print("--- L) achievements use real wheel, touch, keyboard, and return focus ---")
+	scene.show_menu(true)
+	await settle(0.10)
+	var achievements_entry := scene.find_child("MenuQuickAchievementsButton", true, false) as Button
+	check(achievements_entry != null and not achievements_entry.disabled, "menu exposes the real achievements quick-entry button")
+	if achievements_entry != null:
+		var achievements_entry_center := achievements_entry.get_global_rect().get_center()
+		await send_screen_touch(achievements_entry_center, true)
+		await send_screen_touch(achievements_entry_center, false)
+	await settle(0.65)
+	var achievements_interaction_scroll := scene.find_child("AchievementsScroll", true, false) as ScrollContainer
+	var achievements_interaction_bar := scene.find_child("AchievementsScrollBar", true, false) as VScrollBar
+	var achievements_interaction_status := scene.find_child("AchievementsBrowseStatusLabel", true, false) as Label
+	var achievements_interaction_hit_target := scene.find_child("AchievementsScrollHitTarget", true, false) as Control
+	check(scene.mode == "achievements" and achievements_interaction_scroll != null and achievements_interaction_bar != null and achievements_interaction_status != null, "achievements opens through the menu entry with a native scroll view and range status")
+	if achievements_interaction_scroll != null and achievements_interaction_bar != null and achievements_interaction_status != null:
+		var achievements_interaction_range := maxf(0.0, achievements_interaction_bar.max_value - achievements_interaction_bar.page)
+		check(achievements_interaction_range > 1.0, "achievements catalogue has reachable content beyond the first viewport")
+		achievements_interaction_scroll.scroll_vertical = 0
+		await send_wheel_down(achievements_interaction_scroll.get_global_rect().get_center())
+		await send_wheel_down(achievements_interaction_scroll.get_global_rect().get_center())
+		check(achievements_interaction_scroll.scroll_vertical > 0 and achievements_interaction_status.text.contains("浏览") and achievements_interaction_status.text.contains("余"), "mouse wheel advances the real achievements list and range status")
+		var achievements_drag_start := achievements_interaction_scroll.get_global_rect().get_center() + Vector2(0.0, 24.0)
+		var achievements_drag_end := achievements_drag_start - Vector2(0.0, 112.0)
+		achievements_interaction_scroll.scroll_vertical = 0
+		await send_screen_touch(achievements_drag_start, true)
+		await send_screen_drag(achievements_drag_start, achievements_drag_end)
+		await send_screen_touch(achievements_drag_end, false)
+		await settle(0.05)
+		if DisplayServer.is_touchscreen_available():
+			check(achievements_interaction_scroll.scroll_vertical > 0, "single-finger drag advances the achievements list on a touchscreen")
+		else:
+			check(achievements_interaction_hit_target != null and achievements_interaction_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP, "achievements keeps a native drag hit target for touchscreen verification")
+		achievements_interaction_scroll.scroll_vertical = 0
+		achievements_interaction_scroll.grab_focus()
+		check(achievements_interaction_scroll.has_focus(), "achievements scroll receives keyboard focus before paging")
+		await send_key(KEY_PAGEDOWN, 0)
+		var achievements_page_value := float(achievements_interaction_bar.value)
+		check(achievements_page_value > 0.0, "PageDown advances the achievements catalogue")
+		await send_key(KEY_END, 0)
+		var achievements_end_value := float(achievements_interaction_bar.value)
+		check(achievements_end_value >= achievements_interaction_range - 1.0 and achievements_interaction_status.text.contains("余 0") and achievements_interaction_status.text.contains("已全部看完"), "End reaches the catalogue tail and reports all achievements viewed")
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.20)
+	var restored_achievements_entry := scene.find_child("MenuQuickAchievementsButton", true, false) as Button
+	check(scene.mode == "menu" and restored_achievements_entry != null and restored_achievements_entry.has_focus(), "returning from achievements restores focus to its source entry")
+
+	print("--- M) rule chapters activate through mouse and touch and keep active state ---")
+	var rules_interaction_entry := scene.find_child("MenuQuickRulesButton", true, false) as Button
+	check(rules_interaction_entry != null and not rules_interaction_entry.disabled, "menu exposes the real rules quick-entry button")
+	if rules_interaction_entry != null:
+		var rules_interaction_entry_center := rules_interaction_entry.get_global_rect().get_center()
+		await send_left_button(rules_interaction_entry_center, true)
+		await send_left_button(rules_interaction_entry_center, false)
+	await settle(0.65)
+	var rules_interaction_scroll := scene.find_child("RulesContentScroll", true, false) as ScrollContainer
+	var rules_interaction_bar := scene.find_child("RulesContentScrollBar", true, false) as VScrollBar
+	var rules_interaction_status := scene.find_child("RulesReadingStatus", true, false) as Label
+	check(scene.mode == "rules" and rules_interaction_scroll != null and rules_interaction_bar != null and rules_interaction_status != null, "rules opens through the menu entry with chapter status")
+	if rules_interaction_scroll != null and rules_interaction_bar != null and rules_interaction_status != null:
+		var rules_interaction_targets := [0, 2, 4, 5]
+		for rules_interaction_index in range(rules_interaction_targets.size()):
+			var rules_target_section := int(rules_interaction_targets[rules_interaction_index])
+			var rules_target_button := scene.find_child("RulesGuideStepButton_%d" % rules_interaction_index, true, false) as Button
+			check(rules_target_button != null and not rules_target_button.disabled, "rules exposes chapter target %d as a native button" % (rules_interaction_index + 1))
+			if rules_target_button == null:
+				continue
+			var rules_target_center := rules_target_button.get_global_rect().get_center()
+			if rules_interaction_index % 2 == 0:
+				await send_left_button(rules_target_center, true)
+				await send_left_button(rules_target_center, false)
+			else:
+				await send_screen_touch(rules_target_center, true)
+				await send_screen_touch(rules_target_center, false)
+			await settle(0.04)
+			var rules_target_value := float(rules_interaction_bar.value)
+			var rules_target_top := 0.0
+			for rules_anchor in scene.rules_section_anchors(rules_interaction_scroll):
+				if int(rules_anchor.get("index", -1)) == rules_target_section:
+					rules_target_top = float(rules_anchor.get("top", 0.0))
+					break
+			var rules_target_expected := clampf(rules_target_top, 0.0, maxf(0.0, rules_interaction_bar.max_value - rules_interaction_bar.page))
+			check(absf(rules_target_value - rules_target_expected) <= 1.5 and rules_interaction_status.text == "阅读 %d/6" % (rules_target_section + 1), "chapter button %d reaches section %d and updates reading status" % [rules_interaction_index, rules_target_section + 1])
+			var rules_step := scene.find_child("RulesGuideStep_%d" % rules_interaction_index, true, false) as Control
+			check(rules_step != null and bool(rules_step.get_meta("active", false)), "chapter button %d marks its guide step active" % (rules_interaction_index + 1))
+	await send_key(KEY_ESCAPE, 0)
+	await settle(0.20)
+	var restored_rules_entry := scene.find_child("MenuQuickRulesButton", true, false) as Button
+	check(scene.mode == "menu" and restored_rules_entry != null and restored_rules_entry.has_focus(), "returning from rules restores focus to its source entry")
+
+	print("--- N) table actions use real hand, danger, and claim controls ---")
+	scene.start_offline(true)
+	await settle(0.10)
+	scene.mode = "offline"
+	scene.ai_assist_enabled = false
+	scene.interactive_guide_active = false
+	scene.interactive_guide_type = ""
+	scene.offline_active_rule_variant = "yangzhou"
+	scene.current_seat = 0
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_pending_claim.clear()
+	scene.clear_pending_danger_discard()
+	scene.players[0]["bot"] = false
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "S", "S", "S"]
+	scene.render_game()
+	await settle(0.08)
+	var normal_discard_tile := scene.find_child("HandTile_00_1W", true, false) as Control
+	var normal_discard_button := first_button_in(normal_discard_tile)
+	var normal_hand_size := (scene.players[0]["hand"] as Array).size()
+	check(normal_discard_tile != null and normal_discard_button != null and not normal_discard_button.disabled, "a legal hand tile exposes a native discard hit target")
+	if normal_discard_button != null:
+		var normal_discard_center := normal_discard_button.get_global_rect().get_center()
+		await send_left_button(normal_discard_center, true)
+		await send_left_button(normal_discard_center, false)
+		await settle(0.04)
+	check((scene.players[0]["hand"] as Array).size() == normal_hand_size - 1 and not (scene.players[0]["hand"] as Array).has("1W"), "mouse activation removes only the selected hand tile")
+
+	var danger_report := {
+		"tile": "S",
+		"risk": 52.0,
+		"feed_risk": 48.0,
+		"risk_label": "高",
+		"safety_label": "",
+		"feed_text": "对家听口偏高",
+		"danger_source": {"reason": "牌路危险", "seat": 2},
+	}
+	scene.ai_assist_enabled = true
+	scene.current_seat = 0
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_pending_claim.clear()
+	scene.clear_pending_danger_discard()
+	scene.current_human_advice = [danger_report]
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "5T", "6T", "7T", "E", "E", "P", "P", "S"]
+	scene.render_game()
+	await settle(0.08)
+	# render_game() may finish an asynchronous AI refresh after the fixture is
+	# rendered. Re-apply the deterministic advice once that refresh has settled.
+	scene.current_human_advice = [danger_report]
+	var danger_tile_node := scene.find_child("HandTile_12_S", true, false) as Control
+	var danger_tile_button := first_button_in(danger_tile_node)
+	var danger_hand_size := (scene.players[0]["hand"] as Array).size()
+	check(danger_tile_button != null and not danger_tile_button.disabled, "high-risk hand tile remains a real input target before confirmation")
+	if danger_tile_button != null:
+		var danger_tile_center := danger_tile_button.get_global_rect().get_center()
+		await send_left_button(danger_tile_center, true)
+		await send_left_button(danger_tile_center, false)
+		await settle(0.04)
+	check(scene.has_pending_danger_discard() and (scene.players[0]["hand"] as Array).size() == danger_hand_size and scene.find_child("DangerDiscardConfirmButton", true, false) != null, "touching a dangerous discard opens confirmation without changing the hand")
+	var danger_cancel_button := first_button_with_text(scene, "取消")
+	if danger_cancel_button != null:
+		var danger_cancel_center := danger_cancel_button.get_global_rect().get_center()
+		await send_screen_touch(danger_cancel_center, true)
+		await send_screen_touch(danger_cancel_center, false)
+		await settle(0.04)
+	check(not scene.has_pending_danger_discard() and (scene.players[0]["hand"] as Array).size() == danger_hand_size, "touch activation of danger cancel preserves the hand and clears confirmation")
+	scene.offline_phase = "await_discard"
+	scene.clear_pending_danger_discard()
+	scene.current_human_advice = [danger_report]
+	scene.render_game()
+	await settle(0.05)
+	scene.current_human_advice = [danger_report]
+	danger_tile_node = scene.find_child("HandTile_12_S", true, false) as Control
+	danger_tile_button = first_button_in(danger_tile_node)
+	if danger_tile_button != null:
+		var danger_repeat_center := danger_tile_button.get_global_rect().get_center()
+		await send_left_button(danger_repeat_center, true)
+		await send_left_button(danger_repeat_center, false)
+		await settle(0.04)
+	var danger_confirm_button := scene.find_child("DangerDiscardConfirmButton", true, false) as Button
+	check(danger_confirm_button != null, "danger flow exposes the explicit confirmation action")
+	if danger_confirm_button != null:
+		var danger_confirm_center := danger_confirm_button.get_global_rect().get_center()
+		await send_left_button(danger_confirm_center, true)
+		await send_left_button(danger_confirm_center, false)
+		await settle(0.04)
+	check(not scene.has_pending_danger_discard() and not (scene.players[0]["hand"] as Array).has("S") and str(scene.last_discard) == "S", "mouse confirmation commits exactly one dangerous discard")
+
+	var claim_interaction_names := ["chi", "peng", "gang", "hu"]
+	for claim_interaction_index in range(claim_interaction_names.size()):
+		var claim_interaction_name := str(claim_interaction_names[claim_interaction_index])
+		set_offline_pending_claim_fixture(scene, claim_interaction_name)
+		await settle(0.05)
+		var claim_interaction_grid := scene.find_child("PendingClaimResponseGrid", true, false) as Control
+		var claim_interaction_button := first_button_with_text_prefix(claim_interaction_grid, "吃") if claim_interaction_name == "chi" else first_button_with_text(claim_interaction_grid, scene.claim_label(claim_interaction_name))
+		check(claim_interaction_button != null and not claim_interaction_button.disabled, "pending claim exposes a real %s response button" % claim_interaction_name)
+		if claim_interaction_button != null:
+			var claim_interaction_center := claim_interaction_button.get_global_rect().get_center()
+			if claim_interaction_index % 2 == 0:
+				await send_left_button(claim_interaction_center, true)
+				await send_left_button(claim_interaction_center, false)
+			else:
+				await send_screen_touch(claim_interaction_center, true)
+				await send_screen_touch(claim_interaction_center, false)
+			await settle(0.05)
+		if claim_interaction_name == "hu":
+			check(scene.offline_phase == "ended" and scene.offline_pending_claim.is_empty(), "胡 response commits the pending win through the real action button")
+		else:
+			check(scene.offline_pending_claim.is_empty() and (scene.players[0]["melds"] as Array).size() == 1, "%s response commits one real meld and closes the response window" % claim_interaction_name)
+
+	print("--- O) chat input handles empty, bounded, mouse, touch, and Enter sends ---")
+	var chat_interaction_transport := ConnectedLobbyTransport.new()
+	scene.tcp = chat_interaction_transport
+	scene.tcp_status = StreamPeerTCP.STATUS_CONNECTED
+	scene.mode = "online_lobby"
+	scene.online_room = connected_room_fixture()
+	scene.online_feedback = ""
+	scene.online_waiting_for_server = false
+	scene.online_last_chat_sent_msec = 0
+	scene.chat_messages = ["甲: 初始消息"]
+	scene.chat_panel_open = false
+	scene._show_online_lobby_impl()
+	await settle(0.12)
+	scene.show_chat_panel()
+	await settle(0.08)
+	var chat_interaction_input := scene.find_child("ChatInput", true, false) as LineEdit
+	var chat_interaction_send := scene.find_child("ChatSendButton", true, false) as Button
+	var chat_interaction_text := scene.find_child("ChatPanelMessageText", true, false) as Label
+	var chat_initial_count: int = scene.chat_messages.size()
+	check(chat_interaction_input != null and chat_interaction_send != null and chat_interaction_input.has_focus(), "chat panel opens with its real input focused")
+	if chat_interaction_input != null:
+		chat_interaction_input.grab_focus()
+		chat_interaction_input.text = ""
+		chat_interaction_transport.writes.clear()
+		scene.online_last_chat_sent_msec = 0
+		await send_key(KEY_ENTER, 0)
+		check(chat_interaction_transport.writes.is_empty() and scene.chat_messages.size() == chat_initial_count and chat_interaction_input.text == "", "empty chat submission is rejected without appending a message")
+		chat_interaction_input.text = "鼠标消息"
+		scene.online_last_chat_sent_msec = 0
+		var chat_mouse_send_center := chat_interaction_send.get_global_rect().get_center()
+		await send_left_button(chat_mouse_send_center, true)
+		await send_left_button(chat_mouse_send_center, false)
+		await settle(0.04)
+		check(chat_interaction_transport.writes.size() == 1 and chat_interaction_transport.writes[0].contains("鼠标消息") and scene.chat_messages.back() == "你: 鼠标消息" and scene.find_child("ChatInput", true, false) is LineEdit and (scene.find_child("ChatInput", true, false) as LineEdit).text == "", "mouse send appends once, writes the transport message, and clears the input")
+		chat_interaction_input = scene.find_child("ChatInput", true, false) as LineEdit
+		chat_interaction_send = scene.find_child("ChatSendButton", true, false) as Button
+		chat_interaction_input.text = "触控消息"
+		scene.online_waiting_for_server = false
+		scene.online_last_chat_sent_msec = 0
+		var chat_touch_send_center := chat_interaction_send.get_global_rect().get_center()
+		await send_screen_touch(chat_touch_send_center, true)
+		await send_screen_touch(chat_touch_send_center, false)
+		await settle(0.04)
+		check(chat_interaction_transport.writes.size() == 2 and scene.chat_messages.back() == "你: 触控消息", "single-finger send appends the next chat message")
+		chat_interaction_input = scene.find_child("ChatInput", true, false) as LineEdit
+		chat_interaction_input.text = "回车消息"
+		chat_interaction_input.grab_focus()
+		scene.online_waiting_for_server = false
+		scene.online_last_chat_sent_msec = 0
+		await send_key(KEY_ENTER, 0)
+		await settle(0.04)
+		check(chat_interaction_transport.writes.size() == 3 and scene.chat_messages.back() == "你: 回车消息", "Enter sends the focused chat input through the same production path")
+		chat_interaction_input = scene.find_child("ChatInput", true, false) as LineEdit
+		chat_interaction_input.text = "长".repeat(scene.CHAT_MESSAGE_MAX_LENGTH + 20)
+		check(chat_interaction_input.text.length() == scene.CHAT_MESSAGE_MAX_LENGTH, "chat input enforces the native message length boundary")
+		if chat_interaction_text != null:
+			check(chat_interaction_text.tooltip_text.contains("初始消息") and chat_interaction_text.tooltip_text.contains("鼠标消息") and chat_interaction_text.tooltip_text.contains("回车消息"), "chat panel retains the complete appended message history in its tooltip")
+	scene.close_chat_panel()
+	await settle(0.05)
+
+	print("--- P) replay archive actions are real, reversible, and confirmed ---")
+	var replay_archive_saved_fixture: Array = scene.replay_archive.duplicate(true)
+	var replay_archive_first_events := valid_replay_events(scene, "UI-SMOKE-ARCHIVE-A")
+	var replay_archive_second_events := valid_replay_events(scene, "UI-SMOKE-ARCHIVE-B")
+	var replay_archive_fixture_entries: Array = []
+	for replay_fixture_data in [["UI-SMOKE-ARCHIVE-A", replay_archive_first_events, "win", "交互归档甲", 180], ["UI-SMOKE-ARCHIVE-B", replay_archive_second_events, "wall_draw", "交互归档乙", 181]]:
+		var replay_fixture_events: Array = replay_fixture_data[1] as Array
+		var replay_fixture_entry := {
+			"round_id": str(replay_fixture_data[0]),
+			"rule_variant": "yangzhou",
+			"result_kind": str(replay_fixture_data[2]),
+			"summary": str(replay_fixture_data[3]),
+			"seed": int(replay_fixture_data[4]),
+			"events": replay_fixture_events,
+			"replay_digest": scene.round_replay_digest(replay_fixture_events),
+			"saved_at": int(replay_fixture_data[4]),
+			"archived_at": int(replay_fixture_data[4]),
+			"favorite": false,
+			"source": "local",
+		}
+		replay_archive_fixture_entries.append(scene.normalize_replay_archive_entry(replay_fixture_entry))
+	scene.replay_archive = replay_archive_fixture_entries
+	scene.replay_search_query = ""
+	scene.replay_delete_confirming = false
+	scene.replay_delete_target_id = ""
+	scene.show_replay_import_screen(true)
+	await settle(0.10)
+	var replay_archive_rows := scene.find_child("ReplayArchiveList", true, false) as Control
+	var replay_archive_entry_a := replay_archive_fixture_entries[0] as Dictionary
+	var replay_archive_id_a := str(replay_archive_entry_a.get("archive_id", ""))
+	var replay_archive_node_key := replay_archive_id_a.left(12).replace(":", "_")
+	var replay_archive_button_key := replay_archive_id_a.left(8).replace(":", "_")
+	var replay_archive_row_a := scene.find_child("ReplayArchiveRow_%s" % replay_archive_node_key, true, false) as Control
+	var replay_archive_buttons := buttons_in(replay_archive_row_a)
+	var replay_archive_favorite := replay_archive_row_a.find_child("ReplayArchiveFavoriteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+	var replay_archive_open := replay_archive_row_a.find_child("ReplayArchiveOpenButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+	var replay_archive_copy := replay_archive_row_a.find_child("ReplayArchiveCopyButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+	var replay_archive_delete := replay_archive_row_a.find_child("ReplayArchiveDeleteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+	check(replay_archive_rows != null and replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_favorite != null and replay_archive_open != null and replay_archive_copy != null and replay_archive_delete != null, "replay archive renders four real action targets for the fixture row (entries=%d id=%s rows=%s)" % [scene.replay_archive.size(), replay_archive_id_a, replay_archive_rows != null])
+	var replay_archive_scroll := scene.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
+	if replay_archive_scroll != null:
+		var replay_archive_scrollbar := replay_archive_scroll.get_v_scroll_bar()
+		if replay_archive_scrollbar != null and replay_archive_scrollbar.max_value > replay_archive_scrollbar.page:
+			replay_archive_scroll.scroll_vertical = int(ceil(replay_archive_scrollbar.max_value))
+			await settle(0.04)
+	check(replay_archive_scroll != null and replay_archive_favorite != null and replay_archive_scroll.get_global_rect().encloses(replay_archive_favorite.get_global_rect()), "archive scroll reveals the target action lane before action testing")
+	if replay_archive_favorite != null:
+		var replay_archive_favorite_probe := {"gui": 0, "down": 0}
+		replay_archive_favorite.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton or event is InputEventScreenTouch:
+				replay_archive_favorite_probe["gui"] = int(replay_archive_favorite_probe.get("gui", 0)) + 1
+		)
+		replay_archive_favorite.button_down.connect(func() -> void:
+			replay_archive_favorite_probe["down"] = int(replay_archive_favorite_probe.get("down", 0)) + 1
+		)
+		var replay_archive_favorite_mouse_center := replay_archive_favorite.get_global_rect().get_center()
+		await move_pointer(replay_archive_favorite_mouse_center, 0.04)
+		await send_left_button(replay_archive_favorite_mouse_center, true)
+		await send_left_button(replay_archive_favorite_mouse_center, false)
+		await settle(0.04)
+		check(bool(scene.replay_archive_entry(replay_archive_id_a).get("favorite", false)), "mouse activation adds the archive to favorites")
+		replay_archive_row_a = scene.find_child("ReplayArchiveRow_%s" % replay_archive_node_key, true, false) as Control
+		replay_archive_buttons = buttons_in(replay_archive_row_a)
+		replay_archive_favorite = replay_archive_row_a.find_child("ReplayArchiveFavoriteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		replay_archive_open = replay_archive_row_a.find_child("ReplayArchiveOpenButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		replay_archive_copy = replay_archive_row_a.find_child("ReplayArchiveCopyButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		replay_archive_delete = replay_archive_row_a.find_child("ReplayArchiveDeleteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		check(replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_favorite != null and replay_archive_open != null and replay_archive_copy != null and replay_archive_delete != null, "archive refresh preserves all four action targets")
+		if replay_archive_scroll != null:
+			var replay_archive_scrollbar_after_favorite := replay_archive_scroll.get_v_scroll_bar()
+			if replay_archive_scrollbar_after_favorite != null and replay_archive_scrollbar_after_favorite.max_value > replay_archive_scrollbar_after_favorite.page:
+				replay_archive_scroll.scroll_vertical = int(ceil(replay_archive_scrollbar_after_favorite.max_value))
+				await settle(0.04)
+		if replay_archive_favorite != null:
+			var replay_archive_favorite_touch_center := replay_archive_favorite.get_global_rect().get_center()
+			await send_screen_touch(replay_archive_favorite_touch_center, true)
+			await send_screen_touch(replay_archive_favorite_touch_center, false)
+			await settle(0.04)
+		check(not bool(scene.replay_archive_entry(replay_archive_id_a).get("favorite", false)), "single-finger activation reverses the archive favorite state")
+		replay_archive_row_a = scene.find_child("ReplayArchiveRow_%s" % replay_archive_node_key, true, false) as Control
+		replay_archive_buttons = buttons_in(replay_archive_row_a)
+		replay_archive_favorite = replay_archive_row_a.find_child("ReplayArchiveFavoriteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		replay_archive_open = replay_archive_row_a.find_child("ReplayArchiveOpenButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		replay_archive_copy = replay_archive_row_a.find_child("ReplayArchiveCopyButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		replay_archive_delete = replay_archive_row_a.find_child("ReplayArchiveDeleteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		check(replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_favorite != null and replay_archive_open != null and replay_archive_copy != null and replay_archive_delete != null, "touch refresh preserves all four archive action targets")
+		if replay_archive_scroll != null:
+			var replay_archive_scrollbar_after_touch := replay_archive_scroll.get_v_scroll_bar()
+			if replay_archive_scrollbar_after_touch != null and replay_archive_scrollbar_after_touch.max_value > replay_archive_scrollbar_after_touch.page:
+				replay_archive_scroll.scroll_vertical = int(ceil(replay_archive_scrollbar_after_touch.max_value))
+				await settle(0.04)
+	if replay_archive_open != null:
+		var replay_archive_open_probe := {"gui": 0, "down": 0}
+		replay_archive_open.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventScreenTouch:
+				replay_archive_open_probe["gui"] = int(replay_archive_open_probe.get("gui", 0)) + 1
+		)
+		replay_archive_open.button_down.connect(func() -> void:
+			replay_archive_open_probe["down"] = int(replay_archive_open_probe.get("down", 0)) + 1
+		)
+		await send_screen_touch(replay_archive_open.get_global_rect().get_center(), true)
+		await send_screen_touch(replay_archive_open.get_global_rect().get_center(), false)
+		await settle(0.04)
+		var replay_archive_open_input := scene.find_child("ReplayImportCodeInput", true, false) as LineEdit
+		var replay_archive_open_status := scene.find_child("ReplayImportStatus", true, false) as Label
+		check(replay_archive_open_input != null and replay_archive_open_input.text == scene.replay_archive_share_code(replay_archive_id_a) and replay_archive_open_status != null and replay_archive_open_status.text.contains("归档已打开") and scene.replay_import_payload.size() > 0, "single-finger archive view loads and verifies the selected replay")
+	if replay_archive_copy != null:
+		replay_archive_copy.grab_focus()
+		await send_key(KEY_ENTER, 0)
+		await settle(0.04)
+		check(DisplayServer.clipboard_get() == scene.replay_archive_share_code(replay_archive_id_a) and scene.toast_current != null and has_label_text(scene.toast_current, "已复制归档回放码"), "keyboard activation copies the complete archive replay code and shows feedback")
+	var replay_archive_count_before_delete: int = scene.replay_archive.size()
+	if replay_archive_delete != null:
+		var replay_archive_delete_mouse_center := replay_archive_delete.get_global_rect().get_center()
+		await move_pointer(replay_archive_delete_mouse_center, 0.04)
+		await send_left_button(replay_archive_delete_mouse_center, true)
+		await send_left_button(replay_archive_delete_mouse_center, false)
+		await settle(0.04)
+		check(scene.replay_archive.size() == replay_archive_count_before_delete and scene.replay_delete_confirming and scene.replay_delete_target_id == replay_archive_id_a, "first archive delete activation only arms the confirmation")
+		replay_archive_row_a = scene.find_child("ReplayArchiveRow_%s" % replay_archive_node_key, true, false) as Control
+		replay_archive_buttons = buttons_in(replay_archive_row_a)
+		replay_archive_delete = replay_archive_row_a.find_child("ReplayArchiveDeleteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
+		check(replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_delete != null, "delete confirmation refresh preserves the target action")
+		if replay_archive_scroll != null:
+			var replay_archive_scrollbar_after_delete := replay_archive_scroll.get_v_scroll_bar()
+			if replay_archive_scrollbar_after_delete != null and replay_archive_scrollbar_after_delete.max_value > replay_archive_scrollbar_after_delete.page:
+				replay_archive_scroll.scroll_vertical = int(ceil(replay_archive_scrollbar_after_delete.max_value))
+				await settle(0.04)
+		if replay_archive_delete != null:
+			var replay_archive_delete_touch_center := replay_archive_delete.get_global_rect().get_center()
+			await send_screen_touch(replay_archive_delete_touch_center, true)
+			await send_screen_touch(replay_archive_delete_touch_center, false)
+			await settle(0.04)
+		check(scene.replay_archive.size() == replay_archive_count_before_delete - 1 and scene.replay_archive_entry(replay_archive_id_a).is_empty() and not scene.replay_delete_confirming, "second single-finger delete activation removes only the confirmed archive")
+	scene.replay_archive = replay_archive_saved_fixture
+	scene.replay_delete_confirming = false
+	scene.replay_delete_target_id = ""
+	scene.save_replay_archive()
+
+	print("--- Q) menu cards, quick entries, and settings use real input with focus recovery ---")
+	scene.show_menu(true)
+	await settle(0.10)
+	var menu_interaction_card_names := ["MenuPrimaryOfflineCard", "MenuPrimaryOnlineCard", "MenuPrimaryShopCard"]
+	for menu_interaction_index in range(menu_interaction_card_names.size()):
+		var menu_interaction_card := scene.find_child(str(menu_interaction_card_names[menu_interaction_index]), true, false) as Button
+		check(menu_interaction_card != null and not menu_interaction_card.disabled, "menu exposes primary card %d as a native button" % (menu_interaction_index + 1))
+		if menu_interaction_card == null:
+			continue
+		var menu_interaction_card_center := menu_interaction_card.get_global_rect().get_center()
+		if menu_interaction_index == 1:
+			await send_screen_touch(menu_interaction_card_center, true)
+			await send_screen_touch(menu_interaction_card_center, false)
+		else:
+			await send_left_button(menu_interaction_card_center, true)
+			await send_left_button(menu_interaction_card_center, false)
+		await settle(0.30)
+		var menu_card_expected_mode := "offline" if menu_interaction_index == 0 else ("online_lobby" if menu_interaction_index == 1 else "shop")
+		check(scene.mode == menu_card_expected_mode, "primary card %d opens its production destination" % (menu_interaction_index + 1))
+		if menu_interaction_index == 0:
+			await send_key(KEY_ESCAPE, 0)
+			await settle(0.05)
+			var menu_card_leave_button := first_button_with_text(scene.exit_confirm_panel, "退出游戏")
+			if menu_card_leave_button != null:
+				var menu_card_leave_center := menu_card_leave_button.get_global_rect().get_center()
+				await send_screen_touch(menu_card_leave_center, true)
+				await send_screen_touch(menu_card_leave_center, false)
+		else:
+			await send_key(KEY_ESCAPE, 0)
+		await settle(0.20)
+		var menu_card_restored := scene.find_child(str(menu_interaction_card_names[menu_interaction_index]), true, false) as Button
+		check(scene.mode == "menu" and menu_card_restored != null and menu_card_restored.has_focus(), "returning from primary card %d restores its focus" % (menu_interaction_index + 1))
+	var menu_interaction_quick_ids := ["stats", "replay"]
+	for menu_quick_interaction_index in range(menu_interaction_quick_ids.size()):
+		var menu_quick_interaction_id := str(menu_interaction_quick_ids[menu_quick_interaction_index])
+		var menu_quick_interaction_button := scene.find_child("MenuQuick%sButton" % menu_quick_interaction_id.capitalize(), true, false) as Button
+		check(menu_quick_interaction_button != null and not menu_quick_interaction_button.disabled, "menu exposes quick entry %s as a native button" % menu_quick_interaction_id)
+		if menu_quick_interaction_button == null:
+			continue
+		var menu_quick_interaction_center := menu_quick_interaction_button.get_global_rect().get_center()
+		await send_screen_touch(menu_quick_interaction_center, true)
+		await send_screen_touch(menu_quick_interaction_center, false)
+		await settle(0.45)
+		check(scene.mode == ("stats" if menu_quick_interaction_id == "stats" else "replay_import"), "quick entry %s opens its production destination" % menu_quick_interaction_id)
+		await send_key(KEY_ESCAPE, 0)
+		await settle(0.20)
+		var menu_quick_restored := scene.find_child("MenuQuick%sButton" % menu_quick_interaction_id.capitalize(), true, false) as Button
+		check(scene.mode == "menu" and menu_quick_restored != null and menu_quick_restored.has_focus(), "returning from quick entry %s restores its focus" % menu_quick_interaction_id)
+	var menu_settings_interaction := scene.find_child("MenuSettingsButton", true, false) as Button
+	check(menu_settings_interaction != null and not menu_settings_interaction.disabled, "menu settings is a real native input target")
+	if menu_settings_interaction != null:
+		var menu_settings_interaction_center := menu_settings_interaction.get_global_rect().get_center()
+		await send_screen_touch(menu_settings_interaction_center, true)
+		await send_screen_touch(menu_settings_interaction_center, false)
+		await settle(0.10)
+		var menu_settings_interaction_close := scene.find_child("SettingsCloseButton", true, false) as Button
+		check(scene.settings_panel_open and menu_settings_interaction_close != null and menu_settings_interaction_close.has_focus(), "touch activation opens settings and transfers focus to the modal")
+		await send_key(KEY_ESCAPE, 0)
+		await settle(0.20)
+		var menu_settings_interaction_restored := scene.find_child("MenuSettingsButton", true, false) as Button
+		check(not scene.settings_panel_open and menu_settings_interaction_restored != null and menu_settings_interaction_restored.has_focus(), "closing touch-opened settings restores the source focus")
+
 	if scene.has_method("shutdown_runtime"):
 		scene.shutdown_runtime()
+	# Let shutdown-emitted runtime timers resume their callers before freeing the
+	# scene. Godot 4.6 reports a leaked function state otherwise.
+	await settle(0.10)
 	scene.queue_free()
 	await settle(0.05)
 	if failed:

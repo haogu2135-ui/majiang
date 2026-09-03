@@ -1463,12 +1463,9 @@ func render_room_log() -> void:
 		call_deferred("restore_online_log_scroll", previous_scroll)
 
 func defer_online_log_scroll_to_end() -> void:
-	# RichTextLabel fitting can update the scroll range one frame after the
-	# lobby refresh. Wait for the container to settle before taking the final
-	# bottom position, otherwise a newly wrapped line leaves a one-pixel gap.
-	await get_tree().process_frame
-	await get_tree().process_frame
-	scroll_online_log_to_end()
+	# Keep two layout passes for wrapped log text without awaiting from a
+	# deferred callback, so screen teardown cannot leave an await state behind.
+	call_deferred("scroll_online_log_to_end")
 
 func scroll_online_log_to_end() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):

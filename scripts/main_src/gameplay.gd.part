@@ -134,15 +134,36 @@ func request_game_render() -> void:
 	call_deferred("flush_game_render")
 
 func flush_game_render() -> void:
-	var elapsed = Time.get_ticks_msec() - last_game_render_msec
-	if last_game_render_msec > 0 and elapsed < UI_RENDER_MIN_INTERVAL_MSEC:
-		await wait_for_runtime_delay(float(UI_RENDER_MIN_INTERVAL_MSEC - elapsed) / 1000.0)
 	if runtime_shutdown_requested:
 		game_render_queued = false
+		return
+	var elapsed = Time.get_ticks_msec() - last_game_render_msec
+	if last_game_render_msec > 0 and elapsed < UI_RENDER_MIN_INTERVAL_MSEC:
+		schedule_game_render_flush(float(UI_RENDER_MIN_INTERVAL_MSEC - elapsed) / 1000.0)
 		return
 	game_render_queued = false
 	if mode == "offline" or mode == "online_game":
 		render_game()
+
+func schedule_game_render_flush(delay_seconds: float) -> void:
+	var timer := Timer.new()
+	timer.name = "GameRenderDelayTimer"
+	timer.one_shot = true
+	timer.wait_time = maxf(0.001, delay_seconds)
+	timer.process_callback = Timer.TIMER_PROCESS_IDLE
+	runtime_delay_timers.append(timer)
+	timer.timeout.connect(Callable(self, "_on_game_render_delay_timeout").bind(timer), CONNECT_ONE_SHOT)
+	add_child(timer)
+	timer.start()
+
+func _on_game_render_delay_timeout(timer: Timer) -> void:
+	runtime_delay_timers.erase(timer)
+	if timer != null and is_instance_valid(timer) and not timer.is_queued_for_deletion():
+		timer.queue_free()
+	if runtime_shutdown_requested:
+		game_render_queued = false
+		return
+	flush_game_render()
 
 func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
