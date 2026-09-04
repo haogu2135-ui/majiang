@@ -439,7 +439,7 @@ func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> v
 	for _step in range(maximum_page_steps):
 		if int(archive_button.get_meta("window_start", -1)) <= 0:
 			break
-		archive_button.button_down.emit()
+		archive_button.pressed.emit()
 		await settle_layout(0.06)
 		archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
 		if archive_button == null:
@@ -452,7 +452,7 @@ func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> v
 	check(archive_button != null and archive_button.text == scene.discard_archive_button_text(discards.size(), 0, earliest_capacity) and earliest_source == 0, "river %d archive navigation reaches the first public discard at %s (start=%d capacity=%d source=%d)" % [seat, viewport_size, earliest_start, earliest_capacity, earliest_source])
 	if archive_button == null:
 		return
-	archive_button.button_down.emit()
+	archive_button.pressed.emit()
 	await settle_layout(0.06)
 	var latest_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
 	var latest_last = latest_grid.get_child(latest_grid.get_child_count() - 1) as Control if latest_grid != null and latest_grid.get_child_count() > 0 else null
@@ -611,7 +611,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await check_accessibility_profile_cycle(scene, actual_viewport)
 	var rule_variant_button = scene.find_child("SettingsRuleVariantButton", true, false) as Button
 	if rule_variant_button != null:
-		rule_variant_button.button_down.emit()
+		rule_variant_button.pressed.emit()
 		var refreshed_rule_status = scene.find_child("SettingsRuleVariantStatus", true, false) as Label
 		var refreshed_rule_text: String = str(refreshed_rule_status.text) if refreshed_rule_status != null else "<missing>"
 		check(refreshed_rule_text == "当前局：扬州 · 下一局：南京", "settings local-rule state refreshes after cycling the queued profile at %s (got %s)" % [actual_viewport, refreshed_rule_text])
@@ -1766,7 +1766,7 @@ func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
 			for title in ["AI 难度", "阅读辅助", "3D 画质"]:
 				var large_button := scene.find_child("SettingRowButton_%s" % title, true, false) as Button
 				check(large_button != null and large_button.get_theme_font_size("font_size") >= 17 and screen_rect(large_button).size.y >= 46.0, "large-text setting button %s scales with the profile at %s" % [title, viewport_size])
-		button.button_down.emit()
+		button.pressed.emit()
 		await settle_layout()
 	var final_button := scene.find_child("SettingRowButton_阅读辅助", true, false) as Button
 	check(final_button != null and final_button.text == "标准" and final_button.has_focus(), "accessibility profile wraps to standard while preserving focus at %s" % viewport_size)
@@ -2006,7 +2006,7 @@ func check_advisor_detail_layout(scene, viewport_size: Vector2) -> void:
 	if detail_button == null:
 		check(scene.offline_phase == "pending_claim" and scene.find_child("PendingClaimIllustration", true, false) != null, "pending claim keeps detail focus in its single response context at %s" % viewport_size)
 		return
-	detail_button.button_down.emit()
+	detail_button.pressed.emit()
 	await settle_layout(0.04)
 	var panel = scene.find_child("AdvisorDetailPanel", true, false) as Control
 	var text = scene.find_child("AdvisorDetailText", true, false) as Label
@@ -2023,7 +2023,7 @@ func check_advisor_detail_layout(scene, viewport_size: Vector2) -> void:
 		check(text.text.contains("响应目标") and text.clip_text and text.tooltip_text == text.text and screen_rect(text).size.x >= viewport_size.x * 0.40, "AI advisor detail exposes readable in-panel rationale instead of tooltip-only copy at %s" % viewport_size)
 	check(close_button == null or (close_button.has_focus() and screen_rect(close_button).size.x >= scene.UI_MIN_TOUCH_TARGET - 0.5 and screen_rect(close_button).size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5), "AI advisor detail gives focus to a full touch-sized close route at %s" % viewport_size)
 	if close_button != null:
-		close_button.button_down.emit()
+		close_button.pressed.emit()
 	await settle_layout()
 	check(scene.find_child("AdvisorDetailPanel", true, false) == null and not scene.advisor_detail_open, "AI advisor detail closes cleanly at %s" % viewport_size)
 
@@ -3504,6 +3504,8 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 			check(panel_rect.grow(1.0).encloses(value_rect), "stats row %s value uses local backplate at %s" % [label_text, viewport_size])
 			check(name_label.clip_text and value_label.clip_text, "stats row %s labels clip safely at %s" % [label_text, viewport_size])
 			check(relative_luma(name_label.get_theme_color("font_color")) >= 0.88 and relative_luma(value_label.get_theme_color("font_color")) >= 0.90, "stats row %s text keeps readable contrast at %s" % [label_text, viewport_size])
+			if label_text == "累计净分":
+				check(str(value_label.text).contains("负向") and value_label.tooltip_text.contains("损失") and scene.stat_row_numeric_value("-7600 分") < 0.0, "negative cumulative score keeps visible loss semantics beyond color at %s" % viewport_size)
 	var chip_ids := ["winrate", "games", "best"]
 	var narrative = scene.find_child("StatsSummaryNarrativePanel", true, false) as Control
 	var narrative_title = scene.find_child("StatsSummaryNarrativeTitle", true, false) as Label

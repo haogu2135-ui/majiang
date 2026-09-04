@@ -654,7 +654,9 @@ func move_hand_keyboard_selection(delta: int) -> bool:
 	var direction := 1 if delta >= 0 else -1
 	var current := normalized_hand_keyboard_selection(hand)
 	if current < 0:
-		current = 0 if direction > 0 else hand.size() - 1
+		# With no active selection, the first move should land on the edge tile
+		# indicated by the direction instead of skipping it.
+		current = -1 if direction > 0 else hand.size()
 	var steps := maxi(1, abs(delta))
 	var next := current
 	for _step in range(steps):
@@ -7711,13 +7713,16 @@ func stat_row_metric_fraction(label_text: String, value_text: String) -> float:
 
 func stat_row_numeric_value(value_text: String) -> float:
 	var cleaned = ""
+	var is_negative := false
 	for i in range(value_text.length()):
 		var ch = value_text.substr(i, 1)
+		if ch == "-" and cleaned == "":
+			is_negative = true
 		if (ch >= "0" and ch <= "9") or ch == ".":
 			cleaned += ch
 	if cleaned == "":
 		return 0.0
-	return float(cleaned)
+	return -float(cleaned) if is_negative else float(cleaned)
 
 # ============================================================
 # 成就系统界面

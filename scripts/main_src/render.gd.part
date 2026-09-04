@@ -859,6 +859,8 @@ func draw_actions(parent: Control) -> void:
 			)
 			summary_menu_button.name = "SummaryMenuSecondaryButton"
 			summary_menu_button.set_meta("action_priority", "secondary")
+			summary_menu_button.mouse_filter = Control.MOUSE_FILTER_STOP
+			summary_menu_button.z_index = 2
 			action_bar.add_child(summary_menu_button)
 			draw_action_dock(parent)
 			finalize_action_bar_layout()
@@ -6991,6 +6993,11 @@ func draw_round_summary(parent: Control) -> void:
 		var next = make_badge(panel, ROUND_SUMMARY_NEXT_DEALER_RECT, "下一局庄家  %s" % players[next_dealer]["name"], 13, Color(0.030, 0.046, 0.048, 0.90), Color(0.46, 0.40, 0.24, 0.36), Color(0.82, 0.86, 0.76))
 		next.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		next.tooltip_text = "下一局由%s坐庄" % players[next_dealer]["name"]
+	# The summary shield is intentionally full-screen. Keep the real action bar
+	# above the newly-built modal in the tree as well as by z-index, so touch hit
+	# testing cannot stop at the shield before reaching settlement CTAs.
+	if action_bar != null and is_instance_valid(action_bar):
+		parent.move_child(action_bar, parent.get_child_count() - 1)
 
 
 func draw_round_summary_rank_header(parent: Control, compact_summary: bool) -> Control:

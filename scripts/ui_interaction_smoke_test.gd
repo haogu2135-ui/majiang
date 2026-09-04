@@ -435,6 +435,580 @@ func run_optimization_contract_checks(scene: Node) -> void:
 	check(scene.online_player_for_seat(2).get("name", "") == "缓存测试" and scene.online_players_by_seat.has(2), "online seat lookup builds a reusable player index")
 
 
+func run_extended_ui_contracts(scene: Node) -> void:
+	print("--- extended UI contracts: lobby, online table, persistence, and completion flows ---")
+
+	print("--- F-191/F-192/F-193) lobby availability, start gate, and input modalities ---")
+	var lobby_transport := ConnectedLobbyTransport.new()
+	scene.mode = "online_lobby"
+	scene.tcp = lobby_transport
+	scene.selected_room = ""
+	scene.online_room.clear()
+	scene.online_feedback = ""
+	scene.online_waiting_for_server = false
+	scene._show_online_lobby_impl()
+	await settle(0.10)
+	var lobby_chat_button := scene.find_child("ChatLobbyButton", true, false) as Button
+	var lobby_chat_probe := {"pressed": 0}
+	if lobby_chat_button != null:
+		lobby_chat_button.pressed.connect(func() -> void:
+			lobby_chat_probe["pressed"] = int(lobby_chat_probe.get("pressed", 0)) + 1
+		)
+	check(lobby_chat_button != null and lobby_chat_button.disabled and lobby_chat_button.tooltip_text.contains("进入房间"), "unconnected lobby disables chat until a room context exists")
+	if lobby_chat_button != null:
+		await send_left_button(lobby_chat_button.get_global_rect().get_center(), true)
+		await send_left_button(lobby_chat_button.get_global_rect().get_center(), false)
+		check(int(lobby_chat_probe.get("pressed", 0)) == 0 and not scene.chat_panel_open, "disabled lobby chat does not open the panel or emit an action")
+
+	var gate_rooms := [
+		[{"code": "GATE3", "players": [{"seat": 0, "name": "甲", "ready": true}, {"seat": 1, "name": "乙", "ready": true}, {"seat": 2, "name": "丙", "ready": true}], "hostSeat": 0, "youSeat": 0}, "等满员", false],
+		[{"code": "GATE4", "players": [{"seat": 0, "name": "甲", "ready": true}, {"seat": 1, "name": "乙", "ready": true}, {"seat": 2, "name": "丙", "ready": true}, {"seat": 3, "name": "丁", "ready": false}], "hostSeat": 0, "youSeat": 0}, "等准备", false],
+		[{"code": "GATE5", "players": [{"seat": 0, "name": "甲", "ready": true}, {"seat": 1, "name": "乙", "ready": true}, {"seat": 2, "name": "丙", "ready": true}, {"seat": 3, "name": "丁", "ready": true}], "hostSeat": 0, "youSeat": 0}, "开始游戏", true],
+	]
+	for gate_case in gate_rooms:
+		var gate_room: Dictionary = gate_case[0] as Dictionary
+		scene.online_room = gate_room.duplicate(true)
+		scene.selected_room = str(gate_room.get("code", ""))
+		scene.online_waiting_for_server = false
+		scene.online_feedback = ""
+		scene.refresh_online_lobby_state()
+		await settle(0.03)
+		var gate_button := scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+		var expected_gate_text := str(gate_case[1])
+		var expected_gate_enabled := bool(gate_case[2])
+		check(gate_button != null and gate_button.text == expected_gate_text and gate_button.disabled == not expected_gate_enabled and gate_button.tooltip_text != "", "start gate explains %s state in the primary action" % expected_gate_text)
+
+	var start_button := scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+	if start_button != null:
+		for modality in ["mouse", "touch", "key"]:
+			lobby_transport.writes.clear()
+			scene.online_waiting_for_server = false
+			scene.online_last_sent_msec = 0
+			scene.online_feedback = ""
+			scene.online_last_sent_payload.clear()
+			scene.online_last_sent_action = ""
+			scene.online_last_sent_type = ""
+			scene.online_room["canStart"] = true
+			scene.refresh_online_lobby_state()
+			await settle(0.03)
+			start_button = scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+			await activate_button(start_button, modality)
+			var start_payload = JSON.parse_string(lobby_transport.writes[0]) if lobby_transport.writes.size() == 1 else null
+			check(lobby_transport.writes.size() == 1 and typeof(start_payload) == TYPE_DICTIONARY and start_payload.get("type", "") == "startGame" and scene.online_waiting_for_server and start_button.disabled, "startGame sends once through %s input and enters server-wait state" % modality)
+
+	print("--- F-194/F-196) disconnect, reconnect, welcome, roomState, and gameState recovery ---")
+	var recovery_transport := ConnectedLobbyTransport.new()
+	scene.tcp = recovery_transport
+	scene.mode = "online_game"
+	scene.online_connection_host = "qa.lobby.internal"
+	scene.online_player_name = "恢复玩家"
+	scene.selected_room = "RECOVER7"
+	scene.online_room = {"code": "RECOVER7", "players": [{"seat": 0, "name": "恢复玩家", "ready": true}], "logs": ["已入房"]}
+	scene.online_game = online_pending_game_fixture()
+	scene.online_game["roomCode"] = "RECOVER7"
+	scene.online_game["phase"] = "awaitDiscard"
+	scene.online_game["pending"] = {}
+	scene.online_feedback = ""
+	scene.online_waiting_for_server = false
+	scene.online_resume_pending = false
+	scene.online_resume_join_sent = false
+	scene.render_game()
+	await settle(0.08)
+	scene.close_online_transport("连接已断开，请重新连接。", false, true)
+	await settle(0.08)
+	var disconnected_reconnect := scene.find_child("OnlineReconnectGameButton", true, false) as Button
+	check(scene.online_game_disconnected() and disconnected_reconnect != null and not disconnected_reconnect.disabled, "disconnected online table keeps the board and exposes reconnect")
+	var disconnected_hand_tile := scene.find_child("HandTile_00_1W", true, false) as Control
+	var disconnected_hand_button := first_button_in(disconnected_hand_tile)
+	var recovery_write_count := recovery_transport.writes.size()
+	if disconnected_hand_button != null:
+		await send_left_button(disconnected_hand_button.get_global_rect().get_center(), true)
+		await send_left_button(disconnected_hand_button.get_global_rect().get_center(), false)
+	check(disconnected_hand_button == null or disconnected_hand_button.disabled or recovery_transport.writes.size() == recovery_write_count, "disconnected hand input cannot write an online discard")
+
+	scene.tcp = recovery_transport
+	scene.online_next_reconnect_msec = 0
+	scene.online_reconnect_attempts = 0
+	scene.reconnect_online_game()
+	check(scene.online_resume_pending and scene.online_resume_context.get("room", "") == "RECOVER7", "reconnect records the original room context before dialing")
+	scene.tcp = recovery_transport
+	scene.handle_online_message(JSON.stringify({"type": "welcome", "sessionId": scene.online_session_id, "name": "QA服务器"}))
+	await settle(0.05)
+	var resume_join_payload = JSON.parse_string(recovery_transport.writes.back()) if not recovery_transport.writes.is_empty() else null
+	check(typeof(resume_join_payload) == TYPE_DICTIONARY and resume_join_payload.get("type", "") == "joinRoom" and resume_join_payload.get("roomCode", "") == "RECOVER7", "welcome resumes the saved room with one join request")
+	var recovery_room_message := {"type": "roomState", "sessionId": scene.online_session_id, "revision": 4, "room": {"roomCode": "RECOVER7", "players": [{"seat": 0, "nickname": "恢复玩家", "isReady": true}, {"seat": 1, "nickname": "乙", "isReady": true}], "logs": ["恢复成功"]}}
+	scene.handle_online_message(JSON.stringify(recovery_room_message))
+	await settle(0.04)
+	check(scene.selected_room == "RECOVER7" and scene.online_room.get("players", []).size() == 2 and not scene.online_resume_pending, "roomState restores the room roster and clears the resume gate")
+	var recovery_game := online_pending_game_fixture()
+	recovery_game["roomCode"] = "RECOVER7"
+	recovery_game["phase"] = "awaitDiscard"
+	recovery_game["pending"] = {}
+	recovery_game["revision"] = 5
+	scene.handle_online_message(JSON.stringify({"type": "gameState", "sessionId": scene.online_session_id, "revision": 5, "game": recovery_game}))
+	await settle(0.08)
+	check(scene.mode == "online_game" and scene.online_game.get("phase", "") == "awaitDiscard" and scene.find_child("HandTray", true, false) != null, "reconnected gameState restores the playable board")
+	scene.online_resume_pending = true
+	scene.online_resume_join_sent = true
+	scene.online_last_sent_type = "joinRoom"
+	scene.online_last_sent_payload = {"requestId": "resume-failure"}
+	scene.handle_online_message(JSON.stringify({"type": "error", "sessionId": scene.online_session_id, "requestId": "resume-failure", "message": "房间不存在"}))
+	check(not scene.online_resume_pending and scene.online_feedback.contains("服务器拒绝"), "failed resume clears the pending flag and exposes retry feedback")
+
+	print("--- F-195/F-197) online response buttons, payloads, duplicate guard, and modal wait ---")
+	var online_claim_names := ["chi", "peng", "gang", "hu"]
+	for claim_index in range(online_claim_names.size()):
+		var online_claim_name := str(online_claim_names[claim_index])
+		var online_claim_fixture := online_pending_game_fixture()
+		scene.mode = "online_game"
+		scene.online_game = online_claim_fixture
+		scene.online_feedback = ""
+		scene.online_waiting_for_server = false
+		scene.online_last_sent_payload.clear()
+		scene.online_last_sent_action = ""
+		scene.online_last_sent_type = ""
+		recovery_transport.writes.clear()
+		scene.tcp = recovery_transport
+		scene.render_game()
+		await settle(0.07)
+		var response_grid := scene.find_child("PendingClaimResponseGrid", true, false) as Control
+		var response_button := first_button_with_text_prefix(response_grid, "吃") if online_claim_name == "chi" else first_button_with_text(response_grid, scene.claim_label(online_claim_name))
+		check(response_button != null and not response_button.disabled, "online pending fixture exposes a real %s response button" % online_claim_name)
+		if response_button != null:
+			await activate_button(response_button, "key" if claim_index == 2 else ("touch" if claim_index == 1 else "mouse"))
+			var response_payload = JSON.parse_string(recovery_transport.writes[0]) if recovery_transport.writes.size() == 1 else null
+			check(recovery_transport.writes.size() == 1 and typeof(response_payload) == TYPE_DICTIONARY and response_payload.get("claim", "") == online_claim_name and scene.online_waiting_for_server, "online %s action sends its canonical claim payload once" % online_claim_name)
+			var response_writes_before_repeat := recovery_transport.writes.size()
+			await send_left_button(response_button.get_global_rect().get_center(), true)
+			await send_left_button(response_button.get_global_rect().get_center(), false)
+			check(recovery_transport.writes.size() == response_writes_before_repeat, "repeated online %s activation is blocked while waiting" % online_claim_name)
+			scene.cancel_online_pending_action()
+			check(not scene.online_waiting_for_server and scene.online_feedback.contains("已取消"), "online wait exposes a local cancel path without leaving the table")
+	var online_pass_payload: Dictionary = scene.online_claim_payload("pass")
+	check(online_pass_payload.get("claim", "") == "pass" and online_pass_payload.get("type", "") == "claim", "online pass uses the same normalized claim payload contract")
+
+	print("--- F-198/F-199/F-200/F-201) table events, meld lanes, marker migration, and log modal ---")
+	var table_players: Array = []
+	for seat in range(4):
+		table_players.append({"name": "座位%d" % seat, "hand": ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T"], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": seat != 0})
+	table_players[0]["melds"] = [["1W", "2W", "3W"]]
+	table_players[1]["melds"] = [["E", "E", "E"]]
+	table_players[2]["melds"] = [["1T", "2T", "3T"]]
+	table_players[3]["melds"] = [["P", "P", "P", "P"]]
+	scene.mode = "offline"
+	scene.players = table_players
+	var smoke_wall: Array[String] = ["8W", "9W"]
+	scene.wall = smoke_wall
+	scene.current_seat = 0
+	scene.dealer_seat = 0
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_pending_claim.clear()
+	scene.ai_assist_enabled = false
+	scene.last_discard = ""
+	scene.last_discard_seat = -1
+	var smoke_table_logs: Array[String] = []
+	scene.table_logs = smoke_table_logs
+	scene.render_game()
+	await settle(0.08)
+	var wall_before_draw: int = int(scene.get_wall_count())
+	var hand_before_draw := (scene.players[0]["hand"] as Array).size()
+	var drawn_tile: String = str(scene.draw_turn_tile_or_finish(0, false, "ui_smoke"))
+	scene.render_game()
+	await settle(0.05)
+	check(drawn_tile != "" and scene.get_wall_count() == wall_before_draw - 1 and (scene.players[0]["hand"] as Array).size() == hand_before_draw + 1, "draw event decrements the wall and increments the active hand once")
+	var wall_label := scene.find_child("TopHudWallText", true, false) as Label
+	check(wall_label != null and wall_label.text == scene.top_hud_wall_text(), "wall HUD text is synchronized with the event state")
+	check(scene.commit_discard(0, drawn_tile), "discard event accepts the newly drawn tile")
+	scene.render_game()
+	await settle(0.05)
+	var first_marker := scene.find_child("LastDiscardFocusMarker", true, false) as Control
+	check(scene.last_discard == drawn_tile and scene.last_discard_seat == 0 and (scene.players[0]["hand"] as Array).size() == hand_before_draw, "discard event updates hand count, river tail, and source seat together")
+	check(first_marker != null and first_marker.get_meta("discard_tile_code", "") == drawn_tile, "latest discard marker follows the first river tail")
+	scene.offline_phase = "await_discard"
+	scene.players[0]["hand"].append("7B")
+	check(scene.commit_discard(0, "7B"), "second discard event is accepted after the turn state is restored")
+	scene.render_game()
+	await settle(0.05)
+	var marker_nodes: Array[Node] = scene.root_layer.find_children("LastDiscardFocusMarker", "Control", true, false) if scene.root_layer != null else []
+	var second_marker := scene.find_child("LastDiscardFocusMarker", true, false) as Control
+	check(marker_nodes.size() == 1 and second_marker != null and second_marker.get_meta("discard_tile_code", "") == "7B", "old last-discard marker is replaced by exactly one marker for the new tail")
+	for seat in range(4):
+		var meld_area := scene.find_child("MeldArea_%d" % seat, true, false) as Control
+		var meld_group := scene.find_child("MeldGroup_0_%s" % scene.meld_kind_label(scene.players[seat]["melds"][0]), true, false) as Control
+		check(meld_area != null and meld_area.get_meta("orientation", "") == ("vertical" if seat == 1 or seat == 3 else "horizontal") and is_equal_approx(float(meld_area.get_meta("face_rotation", 99.0)), scene.seat_meld_face_rotation(seat)), "seat %d meld lane preserves orientation and center-facing rotation" % seat)
+		check(meld_group != null and int(meld_group.get_meta("tile_count", 0)) == (scene.players[seat]["melds"][0] as Array).size(), "seat %d meld group preserves its tile count" % seat)
+	smoke_table_logs.clear()
+	for log_index in range(20):
+		smoke_table_logs.append("牌桌事件%02d" % (log_index + 1))
+	scene.table_log_archive_open = false
+	scene.render_game()
+	await settle(0.06)
+	var table_log_button := scene.find_child("TableLogArchiveButton", true, false) as Button
+	check(table_log_button != null and not table_log_button.disabled, "table log exposes a real archive button")
+	if table_log_button != null:
+		await activate_button(table_log_button, "mouse")
+		await settle(0.06)
+	var table_archive_scroll := scene.find_child("TableLogArchiveScroll", true, false) as ScrollContainer
+	var table_archive_close := scene.find_child("TableLogArchiveCloseButton", true, false) as Button
+	check(scene.table_log_archive_open and table_archive_scroll != null and table_archive_close != null and table_archive_close.has_focus(), "table log opens as a focused modal with a native scroll view")
+	if table_archive_scroll != null:
+		var archive_bar := table_archive_scroll.get_v_scroll_bar()
+		await send_wheel_down(table_archive_scroll.get_global_rect().get_center())
+		check(archive_bar.max_value > archive_bar.page and table_archive_scroll.scroll_vertical > 0, "table log wheel reaches later history entries")
+	if table_archive_close != null:
+		await activate_button(table_archive_close, "touch")
+		await settle(0.06)
+	check(not scene.table_log_archive_open, "table log close input returns to the board")
+
+	print("--- F-204/F-205) advisor detail and chat-to-log-to-chat return path ---")
+	scene.ai_assist_enabled = true
+	scene.offline_phase = "await_discard"
+	scene.current_human_advice = [{"tile": "1W", "shanten": 1, "ukeire": 4, "reason_label": "保留多面听", "risk": 10.0}]
+	scene.advisor_detail_open = false
+	scene.render_game()
+	await settle(0.08)
+	var advisor_button := scene.find_child("AdvisorDetailButton", true, false) as Button
+	check(advisor_button != null and not advisor_button.disabled, "advisor exposes a real detail action")
+	if advisor_button != null:
+		await activate_button(advisor_button, "mouse")
+		await settle(0.07)
+	var advisor_close := scene.find_child("AdvisorDetailCloseButton", true, false) as Button
+	check(scene.advisor_detail_open and advisor_close != null and advisor_close.has_focus() and scene.find_child("AdvisorDetailText", true, false) != null, "advisor detail opens with readable content and modal focus")
+	if advisor_close != null:
+		await activate_button(advisor_close, "touch")
+		await settle(0.05)
+	check(not scene.advisor_detail_open and scene.find_child("AdvisorDetailPanel", true, false) == null, "advisor detail closes through its native close control")
+
+	var nested_chat_transport := ConnectedLobbyTransport.new()
+	scene.tcp = nested_chat_transport
+	scene.mode = "online_game"
+	scene.online_game = recovery_game.duplicate(true)
+	scene.online_game["phase"] = "awaitDiscard"
+	scene.online_feedback = ""
+	scene.online_waiting_for_server = false
+	var nested_table_logs: Array[String] = ["摸牌", "打出一万", "等待响应", "最新事件"]
+	scene.table_logs = nested_table_logs
+	scene.chat_messages = ["甲: 历史"]
+	scene.chat_panel_open = false
+	scene.table_log_archive_open = false
+	scene.render_game()
+	await settle(0.06)
+	scene.show_chat_panel()
+	await settle(0.06)
+	var nested_chat_input := scene.find_child("ChatInput", true, false) as LineEdit
+	var nested_log_button := scene.find_child("ChatPanelTableLogButton", true, false) as Button
+	if nested_chat_input != null:
+		nested_chat_input.text = "保留草稿"
+	check(nested_log_button != null and nested_chat_input != null, "online chat exposes the table-log bridge and a draft input")
+	if nested_log_button != null:
+		await activate_button(nested_log_button, "touch")
+		await settle(0.08)
+	var nested_log_close := scene.find_child("TableLogArchiveCloseButton", true, false) as Button
+	check(scene.table_log_archive_open and not scene.chat_panel_open and nested_log_close != null, "chat log bridge closes chat before opening the archive modal")
+	if nested_log_close != null:
+		await activate_button(nested_log_close, "key")
+		await settle(0.08)
+		nested_chat_input = scene.find_child("ChatInput", true, false) as LineEdit
+	check(scene.chat_panel_open and nested_chat_input != null and nested_chat_input.text == "保留草稿", "closing the archive restores chat and preserves its draft")
+	scene.close_chat_panel()
+	scene.get_viewport().gui_release_focus()
+	scene.last_game_keyboard_input_msec = 0
+	scene.current_seat = 0
+	await process_frame
+
+	print("--- F-202/F-203) keyboard selection, Enter discard, and danger alternatives ---")
+	scene.mode = "offline"
+	scene.ai_assist_enabled = false
+	scene.current_human_advice = []
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_pending_claim.clear()
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T", "5T"]
+	scene.hand_keyboard_selection = -1
+	scene.render_game()
+	await settle(0.06)
+	await send_key(KEY_RIGHT, 0)
+	await settle(0.04)
+	var selected_index := int(scene.hand_keyboard_selection)
+	var selected_tile := str(scene.players[0]["hand"][selected_index]) if selected_index >= 0 else ""
+	check(selected_index == 0 and selected_tile == "1W", "keyboard right starts at the first legal hand tile")
+	await send_key(KEY_RIGHT, 0)
+	await settle(0.04)
+	check(scene.hand_keyboard_selection == 1, "keyboard right advances exactly one hand position")
+	var keyboard_hand_count := (scene.players[0]["hand"] as Array).size()
+	await send_key(KEY_ENTER, 0)
+	await settle(0.05)
+	check((scene.players[0]["hand"] as Array).size() == keyboard_hand_count - 1 and not (scene.players[0]["hand"] as Array).has("2W"), "Enter discards only the currently selected hand tile")
+	var danger_alt_report := {"tile": "S", "risk": 55.0, "feed_risk": 45.0, "risk_label": "高", "safety_label": "", "feed_text": "危险", "danger_source": {"reason": "牌路危险", "seat": 2}}
+	var danger_safe_alternative := {"tile": "1W", "risk": 4.0, "feed_risk": 2.0, "risk_label": "低", "safety_label": "安", "feed_text": "安全替代", "shanten": 1, "ukeire": 3}
+	scene.ai_assist_enabled = true
+	scene.current_seat = 0
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_pending_claim.clear()
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "5T", "6T", "7T", "E", "E", "P", "P", "S"]
+	scene.render_game()
+	await settle(0.05)
+	# render_game clears deferred AI advice; install the deterministic fixture after
+	# the render so the danger branch consumes the intended reports.
+	scene.current_human_advice = [danger_alt_report, danger_safe_alternative]
+	var danger_tile := scene.find_child("HandTile_12_S", true, false) as Control
+	var danger_button := first_button_in(danger_tile)
+	if danger_button != null:
+		await activate_button(danger_button, "mouse")
+		await settle(0.04)
+	var danger_actions := buttons_in(scene.action_bar)
+	var danger_has_alternative := false
+	for danger_action in danger_actions:
+		danger_has_alternative = danger_has_alternative or danger_action.text.begins_with("改打")
+	var alternative_button: Button = null
+	for action_button in danger_actions:
+		if action_button.text.begins_with("改打"):
+			alternative_button = action_button
+			break
+	check(alternative_button != null, "danger confirmation exposes a real alternative discard target")
+	if alternative_button != null:
+		var alternative_tile_code := str(alternative_button.text).replace("改打", "")
+		var alternative_count_before := (scene.players[0]["hand"] as Array).size()
+		await activate_button(alternative_button, "touch")
+		await settle(0.05)
+		check(not scene.has_pending_danger_discard() and (scene.players[0]["hand"] as Array).size() == alternative_count_before - 1 and str(scene.last_discard) != "S", "alternative danger action commits its selected tile and closes confirmation")
+
+	print("--- F-206/F-207/F-208) settings persistence and telemetry actions ---")
+	scene.show_menu(true)
+	await settle(0.07)
+	scene.settings_panel_open = true
+	scene.refresh_current_screen()
+	await settle(0.07)
+	var music_button := scene.find_child("SettingRowButton_背景音乐", true, false) as Button
+	var music_before := bool(scene.music_enabled)
+	check(music_button != null and not music_button.disabled, "settings exposes the real background-music selector")
+	if music_button != null:
+		await activate_button(music_button, "mouse")
+		await settle(0.05)
+	check(scene.music_enabled != music_before and scene.settings_panel_open, "music selector changes state while retaining the settings modal")
+	var accessibility_button := scene.find_child("SettingRowButton_阅读辅助", true, false) as Button
+	var accessibility_before: String = str(scene.accessibility_profile_label())
+	if accessibility_button != null:
+		await activate_button(accessibility_button, "touch")
+		await settle(0.05)
+	check(scene.accessibility_profile_label() != accessibility_before, "reading-assistance selector updates its profile through native input")
+	var rule_button := scene.find_child("SettingsRuleVariantButton", true, false) as Button
+	var rule_before := str(scene.rule_variant)
+	if rule_button != null:
+		await activate_button(rule_button, "key")
+		await settle(0.05)
+	var rule_button_after := scene.find_child("SettingsRuleVariantButton", true, false) as Button
+	check(str(scene.rule_variant) != rule_before and rule_button_after != null and rule_button_after.text == scene.rule_variant_short_label(), "rule selector refreshes its label and persisted value")
+	var telemetry_entry := scene.find_child("SettingRowButton_隐私诊断", true, false) as Button
+	if telemetry_entry != null:
+		await activate_button(telemetry_entry, "mouse")
+		await settle(0.05)
+	var telemetry_consent_button := scene.find_child("TelemetryConsentButton", true, false) as Button
+	var telemetry_export_button := scene.find_child("TelemetryExportButton", true, false) as Button
+	var telemetry_clear_button := scene.find_child("TelemetryClearButton", true, false) as Button
+	check(scene.telemetry_sheet_open and telemetry_consent_button != null and telemetry_export_button != null and telemetry_clear_button != null, "telemetry sheet exposes consent, export, and clear actions")
+	var telemetry_consent_before := bool(scene.telemetry_consent)
+	if telemetry_consent_button != null:
+		print("TRACE telemetry consent before")
+		await activate_button(telemetry_consent_button, "touch")
+		print("TRACE telemetry consent after")
+		await settle(0.04)
+		print("TRACE telemetry consent settled")
+	check(scene.telemetry_consent != telemetry_consent_before and scene.telemetry_consent_decided, "telemetry consent toggles through a touch action")
+	if telemetry_export_button != null:
+		await activate_button(telemetry_export_button, "key")
+		await settle(0.04)
+	check(scene.telemetry_export_status.begins_with("已复制") and JSON.parse_string(DisplayServer.clipboard_get()) != null, "telemetry export updates status and clipboard with structured data")
+	if telemetry_clear_button != null:
+		await activate_button(telemetry_clear_button, "mouse")
+		await settle(0.03)
+		if not scene.telemetry_outbox.is_empty() or scene.telemetry_clear_confirming:
+			await activate_button(telemetry_clear_button, "mouse")
+			await settle(0.03)
+		check(scene.telemetry_outbox.is_empty() and not scene.telemetry_clear_confirming, "telemetry clear is idempotent and leaves an empty local queue")
+	var telemetry_close := scene.find_child("TelemetryDataSheetCloseButton", true, false) as Button
+	if telemetry_close != null:
+		await activate_button(telemetry_close, "touch")
+		await settle(0.05)
+	check(not scene.telemetry_sheet_open and scene.settings_panel_open, "closing telemetry returns to the settings sheet")
+	scene.close_settings_panel()
+	await settle(0.05)
+	scene.settings_panel_open = true
+	scene.refresh_current_screen()
+	await settle(0.05)
+	var music_reopened := scene.find_child("SettingRowButton_背景音乐", true, false) as Button
+	check(music_reopened != null and music_reopened.get_meta("setting_label", "") == "音乐" and music_reopened.get_meta("setting_state", "") == ("on" if scene.music_enabled else "off") and music_reopened.text in ["已开", "已关"], "settings rebuild retains the changed audio control")
+	scene.close_settings_panel()
+
+	print("--- F-209/F-210/F-211/F-212) stats empty state, latest result, and signed semantics ---")
+	var stats_saved: Dictionary = scene.game_stats.duplicate(true)
+	var history_saved: Array = scene.round_history.duplicate(true)
+	scene.game_stats = {"games_played": 0, "games_won": 0, "win_rate": 0.0, "total_score": 0, "best_score": 0, "total_hands": 0}
+	scene.round_history = []
+	scene.show_stats_screen(true)
+	await settle(0.07)
+	var stats_empty := scene.find_child("StatsEmptyState", true, false) as Label
+	var stats_first_game := scene.find_child("StatsStartFirstGameButton", true, false) as Button
+	var stats_back := scene.find_child("StatsBackButton", true, false) as Button
+	check(stats_empty != null and stats_empty.text.contains("暂无对局") and stats_first_game != null and stats_back != null, "empty stats retains an explicit next-step action and return button")
+	if stats_back != null:
+		await activate_button(stats_back, "touch")
+		await settle(0.06)
+	check(scene.mode == "menu", "stats back button returns to menu through touch input")
+	scene.game_stats = stats_saved
+	scene.round_history = history_saved
+	var games_before_result := int(scene.game_stats.get("games_played", 0))
+	scene.record_game_result(true, 1200, 5, "UI-SMOKE-STATS")
+	scene.record_game_result(true, 1200, 5, "UI-SMOKE-STATS")
+	check(int(scene.game_stats.get("games_played", 0)) == games_before_result + 1, "latest result transaction updates stats once despite duplicate settlement calls")
+	scene.show_stats_screen(true)
+	await settle(0.06)
+	check(has_label_text(scene, "%d 局" % int(scene.game_stats.get("games_played", 0))) and scene.find_child("StatsBackButton", true, false) != null, "stats page renders the latest committed result")
+	check(scene.round_summary_delta_text(-120) == "-120" and scene.round_summary_delta_text(120) == "+120" and scene.round_summary_delta_text(0) == "+0", "positive, zero, and negative score text carries explicit sign semantics")
+	check(bool(scene.score_delta_breakdown([120, -120, 0, 0]).get("conserved", false)) and (scene.score_delta_breakdown([120, -120, 0, 0]).get("losses", []) as Array).size() == 1, "score breakdown distinguishes losses without relying on color")
+	if scene.find_child("StatsBackButton", true, false) != null:
+		await activate_button(scene.find_child("StatsBackButton", true, false) as Button, "mouse")
+		await settle(0.05)
+
+	print("--- F-213/F-214) real shop purchase, balance/inventory feedback, and end-row hit ---")
+	var shop_item_ids: Array = scene.ITEM_TYPES.keys()
+	var shop_item_id := str(shop_item_ids[0]) if not shop_item_ids.is_empty() else "swap_card"
+	var shop_cost := int((scene.ITEM_TYPES.get(shop_item_id, {}) as Dictionary).get("cost_gems", 10))
+	scene.currency = {"coins": 0, "gems": shop_cost}
+	scene.inventory = {}
+	scene._show_shop_screen_impl()
+	await settle(0.08)
+	var shop_buy := scene.find_child("ShopItemBuyButton_%s" % shop_item_id, true, false) as Button
+	var inventory_before_buy: int = int(scene.get_item_count(shop_item_id))
+	if shop_buy != null:
+		await activate_button(shop_buy, "mouse")
+		await settle(0.08)
+	check(scene.get_item_count(shop_item_id) == inventory_before_buy + 1 and int(scene.currency.get("gems", 0)) == 0 and scene.toast_current != null, "real shop purchase updates balance, inventory, and feedback once")
+	var shop_buy_after := scene.find_child("ShopItemBuyButton_%s" % shop_item_id, true, false) as Button
+	if shop_buy_after != null:
+		var inventory_after_buy: int = int(scene.get_item_count(shop_item_id))
+		await activate_button(shop_buy_after, "touch")
+		await settle(0.04)
+		check(scene.get_item_count(shop_item_id) == inventory_after_buy and shop_buy_after.disabled, "insufficient balance blocks a repeated shop activation")
+	var shop_scroll_extended := scene.find_child("ShopItemsScroll", true, false) as ScrollContainer
+	var shop_content_extended := scene.find_child("ShopItemsContent", true, false) as Control
+	if shop_scroll_extended != null and shop_content_extended != null:
+		var real_shop_rows := shop_content_extended.find_children("ShopItemRow_*", "Panel", true, false)
+		if not real_shop_rows.is_empty():
+			var end_shop_row := real_shop_rows[real_shop_rows.size() - 1] as Control
+			end_shop_row.custom_minimum_size.y = maxf(end_shop_row.custom_minimum_size.y, shop_scroll_extended.size.y + 220.0)
+			await settle(0.06)
+			shop_scroll_extended.scroll_vertical = int(round(maxf(0.0, shop_scroll_extended.get_v_scroll_bar().max_value - shop_scroll_extended.get_v_scroll_bar().page)))
+			await settle(0.04)
+			var end_shop_button := first_button_in(end_shop_row)
+			var end_shop_button_rect := end_shop_button.get_global_rect() if end_shop_button != null else Rect2()
+			var shop_view_rect := shop_scroll_extended.get_global_rect()
+			var end_shop_cta_visible := end_shop_button != null and shop_view_rect.intersects(end_shop_button_rect) and shop_view_rect.has_point(end_shop_button_rect.get_center())
+			check(end_shop_cta_visible, "real final shop row CTA is visible and reachable after scrolling")
+
+	print("--- F-215/F-216) daily login claim state, reward, and idempotency ---")
+	var today := Time.get_date_string_from_system()
+	scene.last_login_date = today
+	scene.login_reward_claimed_date = ""
+	scene.consecutive_login_days = 3
+	var coins_before_claim := int(scene.currency.get("coins", 0))
+	scene.show_daily_login_panel({"consecutive_days": 3, "claimed_today": false})
+	await settle(0.08)
+	var daily_claim := scene.find_child("DailyLoginClaimButton", true, false) as Button
+	check(daily_claim != null and not daily_claim.disabled and scene.find_child("DailyLoginProgressText", true, false) != null, "daily login exposes an active claim action and progress state")
+	if daily_claim != null:
+		await activate_button(daily_claim, "touch")
+		await settle(0.08)
+	var daily_claim_again := scene.find_child("DailyLoginClaimButton", true, false) as Button
+	check(int(scene.currency.get("coins", 0)) == coins_before_claim + 100 and scene.login_reward_claimed_date == today and daily_claim_again != null and daily_claim_again.disabled, "daily claim credits the reward, marks the day, and disables repeats")
+	scene.show_menu(true)
+
+	print("--- F-217) tutorial checkpoint, skip, and complete routes ---")
+	scene.tutorial_step = scene.TUTORIAL_STEP_NEW
+	scene.active_round_id = "UI-SMOKE-TUTORIAL"
+	scene.offline_phase = "await_discard"
+	scene.open_tutorial_entry_sheet()
+	await settle(0.05)
+	var tutorial_start := scene.find_child("TutorialStartButton", true, false) as Button
+	check(tutorial_start != null and not tutorial_start.disabled, "new tutorial opens with a native start action")
+	scene.set_tutorial_checkpoint(scene.TUTORIAL_STEP_DISCARD, "smoke checkpoint")
+	check(scene.tutorial_step == scene.TUTORIAL_STEP_DISCARD and scene.tutorial_checkpoint_reason == "smoke checkpoint", "tutorial checkpoint persists its step and reason")
+	scene.close_tutorial_entry_sheet()
+	scene.open_tutorial_entry_sheet()
+	await settle(0.04)
+	check(scene.find_child("TutorialContinueButton", true, false) != null, "tutorial reopen exposes continue from the saved checkpoint")
+	scene.skip_tutorial()
+	check(scene.tutorial_step == scene.TUTORIAL_STEP_SKIPPED and scene.tutorial_panel == null, "tutorial skip closes the entry sheet and persists skipped state")
+	scene.tutorial_step = scene.TUTORIAL_STEP_WIN
+	scene.complete_tutorial("smoke complete")
+	check(scene.tutorial_step == scene.TUTORIAL_STEP_COMPLETE and not scene.show_hand_hint, "tutorial completion clears the hint and persists complete state")
+	scene.show_menu(true)
+
+	print("--- F-218/F-219/F-220) settlement, replay copy, update states, and toast replacement ---")
+	scene.mode = "offline"
+	scene.offline_phase = "ended"
+	scene.offline_hand_number = 1
+	scene.offline_last_winner = 0
+	scene.offline_dealer_repeat = true
+	scene.round_result_kind = "win"
+	scene.round_summary = "座位0胡一万，2番 1200分。"
+	var settlement_deltas: Array[int] = [1200, -400, -400, -400]
+	scene.last_score_deltas = settlement_deltas
+	scene.last_win_score = {"winner": 0, "win_tile": "1W", "self_draw": false, "fan": 2, "points": 1200, "reasons": ["平胡"]}
+	scene.active_round_id = "UI-SMOKE-SETTLEMENT"
+	scene.round_event_history = valid_replay_events(scene, scene.active_round_id)
+	scene.render_game()
+	await settle(0.08)
+	var summary_panel := scene.find_child("RoundSummaryPanel", true, false) as Control
+	var win_detail_panel := scene.find_child("WinDetailPanel", true, false) as Control
+	var replay_copy_button := scene.find_child("CopyReplayCodeButton", true, false) as Button
+	check(summary_panel != null and win_detail_panel != null and replay_copy_button != null and not replay_copy_button.disabled, "ended table renders settlement and win detail with a valid replay action")
+	if replay_copy_button != null:
+		DisplayServer.clipboard_set("")
+		await activate_button(replay_copy_button, "key")
+		check(DisplayServer.clipboard_get() == scene.round_replay_share_code() and scene.toast_current != null, "settlement replay action copies the current verified code")
+	var summary_menu := scene.find_child("SummaryMenuSecondaryButton", true, false) as Button
+	if summary_menu != null:
+		await activate_button(summary_menu, "touch")
+		await settle(0.72)
+	check(scene.mode == "menu", "settlement menu route leaves the ended table")
+	scene.update_state = "checking"
+	scene.update_message = "正在检查更新。"
+	scene.update_remote_version = "1.0.181"
+	scene.ensure_update_dialog()
+	await settle(0.05)
+	var update_primary := scene.find_child("UpdatePrimaryButton", true, false) as Button
+	var update_secondary := scene.find_child("UpdateSecondaryButton", true, false) as Button
+	check(update_primary != null and update_primary.disabled and update_primary.text == "检查中" and update_secondary != null and update_secondary.text == "取消", "update checking state disables install and exposes cancel")
+	scene.update_state = "downloading"
+	scene.update_message = "正在下载升级包。"
+	scene.update_downloaded_bytes = 50
+	scene.update_total_bytes = 100
+	scene.refresh_update_dialog()
+	check(scene.update_progress_label != null and scene.update_progress_label.text.contains("50%"), "update downloading state synchronizes its progress label")
+	scene.update_state = "ready"
+	scene.update_message = "升级包已保存。"
+	scene.update_file_path = "user://updates/ui-smoke-missing.apk"
+	scene.refresh_update_dialog()
+	update_primary = scene.find_child("UpdatePrimaryButton", true, false) as Button
+	if update_primary != null:
+		await activate_button(update_primary, "mouse")
+		await settle(0.03)
+	check(scene.update_state == "error" and scene.update_message.contains("安装包不存在"), "ready state refuses to open a missing package with explicit error feedback")
+	scene.update_state = "idle"
+	scene.refresh_update_dialog()
+	scene.show_menu(true)
+	scene.show_toast("toast-A", 1000)
+	var first_toast_id: int = scene.toast_current.get_instance_id() if scene.toast_current != null else 0
+	scene.show_toast("toast-B", 1000)
+	check(scene.toast_current != null and scene.toast_current.get_instance_id() != first_toast_id and has_label_text(scene.toast_current, "toast-B"), "new toast replaces the previous message without stacking stale content")
+	scene.show_toast("长消息".repeat(80), 100)
+	await settle(1.00)
+	check(scene.toast_current == null, "expired long toast is cleaned up after its dwell and fade interval")
+
+
 func diagnostic_interaction_lines() -> Array[String]:
 	return [
 		"【音频系统诊断 1.0.180-godot】", "",
@@ -476,6 +1050,7 @@ func run() -> void:
 	scene.voice_enabled = false
 	root.add_child(scene)
 	await settle(0.10)
+	var initial_smoke_snapshot := capture_smoke_state(scene)
 	run_optimization_contract_checks(scene)
 	scene._show_online_lobby_impl()
 	await settle(0.65)
@@ -1089,16 +1664,16 @@ func run() -> void:
 	var shop_content := scene.find_child("ShopItemsContent", true, false) as Control
 	check(shop_scroll != null and shop_scrollbar != null and shop_scroll_hit_target != null, "shop exposes a drag-capable custom scrollbar target")
 	if shop_scroll != null and shop_scrollbar != null and shop_scroll_hit_target != null:
-		# The production four-item fixture fits at 960x540. Add an inert overflow
-		# probe here so the input path is exercised without changing the product
-		# catalog or forcing a scroll range in the compact layout.
+		# The production four-item fixture fits at 960x540. Expand a real catalog
+		# row so the scroll path exercises the same row and button hit targets.
 		if shop_scrollbar.max_value <= shop_scrollbar.page and shop_content != null:
-			var overflow_probe := Control.new()
-			overflow_probe.name = "InteractionSmokeShopOverflowProbe"
-			overflow_probe.custom_minimum_size = Vector2(0.0, shop_scroll.size.y + 240.0)
-			shop_content.add_child(overflow_probe)
+			var shop_rows := shop_content.find_children("ShopItemRow_*", "Panel", true, false)
+			if not shop_rows.is_empty():
+				var real_overflow_row := shop_rows[shop_rows.size() - 1] as Control
+				if real_overflow_row != null:
+					real_overflow_row.custom_minimum_size.y = maxf(real_overflow_row.custom_minimum_size.y, shop_scroll.size.y + 240.0)
 			await settle(0.05)
-		check(shop_scrollbar.max_value > shop_scrollbar.page, "shop overflow fixture creates a native vertical range for scrollbar interaction")
+		check(shop_scrollbar.max_value > shop_scrollbar.page and shop_content.find_children("ShopItemRow_*", "Panel", true, false).size() >= 1, "real shop item rows create a native vertical range for scrollbar interaction")
 	if shop_scroll != null and shop_scrollbar != null and shop_scrollbar.max_value > shop_scrollbar.page:
 		check(shop_scroll.focus_mode == Control.FOCUS_ALL and shop_scroll.has_meta("ui_scroll_view"), "shop scroll accepts keyboard focus for the item list")
 		shop_scroll.scroll_vertical = 0
@@ -1419,21 +1994,30 @@ func run() -> void:
 
 	print("--- P) replay archive actions are real, reversible, and confirmed ---")
 	var replay_archive_saved_fixture: Array = scene.replay_archive.duplicate(true)
-	var replay_archive_first_events := valid_replay_events(scene, "UI-SMOKE-ARCHIVE-A")
-	var replay_archive_second_events := valid_replay_events(scene, "UI-SMOKE-ARCHIVE-B")
 	var replay_archive_fixture_entries: Array = []
-	for replay_fixture_data in [["UI-SMOKE-ARCHIVE-A", replay_archive_first_events, "win", "交互归档甲", 180], ["UI-SMOKE-ARCHIVE-B", replay_archive_second_events, "wall_draw", "交互归档乙", 181]]:
-		var replay_fixture_events: Array = replay_fixture_data[1] as Array
+	var replay_archive_fixture_specs := [
+		["UI-SMOKE-ARCHIVE-A", "win", "交互归档甲", 180],
+		["UI-SMOKE-ARCHIVE-B", "wall_draw", "交互归档乙", 181],
+		["UI-SMOKE-ARCHIVE-C", "win", "交互归档丙", 182],
+		["UI-SMOKE-ARCHIVE-D", "wall_draw", "交互归档丁", 183],
+		["UI-SMOKE-ARCHIVE-E", "win", "交互归档戊", 184],
+		["UI-SMOKE-ARCHIVE-F", "wall_draw", "交互归档己", 185],
+		["UI-SMOKE-ARCHIVE-G", "win", "交互归档庚", 186],
+		["UI-SMOKE-ARCHIVE-H", "wall_draw", "交互归档辛", 187],
+	]
+	for replay_fixture_spec in replay_archive_fixture_specs:
+		var replay_fixture_round_id := str(replay_fixture_spec[0])
+		var replay_fixture_events: Array = valid_replay_events(scene, replay_fixture_round_id)
 		var replay_fixture_entry := {
-			"round_id": str(replay_fixture_data[0]),
+			"round_id": replay_fixture_round_id,
 			"rule_variant": "yangzhou",
-			"result_kind": str(replay_fixture_data[2]),
-			"summary": str(replay_fixture_data[3]),
-			"seed": int(replay_fixture_data[4]),
+			"result_kind": str(replay_fixture_spec[1]),
+			"summary": str(replay_fixture_spec[2]),
+			"seed": int(replay_fixture_spec[3]),
 			"events": replay_fixture_events,
 			"replay_digest": scene.round_replay_digest(replay_fixture_events),
-			"saved_at": int(replay_fixture_data[4]),
-			"archived_at": int(replay_fixture_data[4]),
+			"saved_at": int(replay_fixture_spec[3]),
+			"archived_at": int(replay_fixture_spec[3]),
 			"favorite": false,
 			"source": "local",
 		}
@@ -1455,14 +2039,41 @@ func run() -> void:
 	var replay_archive_open := replay_archive_row_a.find_child("ReplayArchiveOpenButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
 	var replay_archive_copy := replay_archive_row_a.find_child("ReplayArchiveCopyButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
 	var replay_archive_delete := replay_archive_row_a.find_child("ReplayArchiveDeleteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
-	check(replay_archive_rows != null and replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_favorite != null and replay_archive_open != null and replay_archive_copy != null and replay_archive_delete != null, "replay archive renders four real action targets for the fixture row (entries=%d id=%s rows=%s)" % [scene.replay_archive.size(), replay_archive_id_a, replay_archive_rows != null])
+	var replay_archive_row_nodes := replay_archive_rows.find_children("ReplayArchiveRow_*", "Control", true, false) if replay_archive_rows != null else []
+	check(replay_archive_rows != null and replay_archive_row_nodes.size() == 8 and replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_favorite != null and replay_archive_open != null and replay_archive_copy != null and replay_archive_delete != null, "replay archive renders eight rows with four real action targets for the fixture row (entries=%d id=%s rows=%d)" % [scene.replay_archive.size(), replay_archive_id_a, replay_archive_row_nodes.size()])
 	var replay_archive_scroll := scene.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
 	if replay_archive_scroll != null:
 		var replay_archive_scrollbar := replay_archive_scroll.get_v_scroll_bar()
+		check(replay_archive_scrollbar != null and replay_archive_scrollbar.max_value > replay_archive_scrollbar.page, "eight archive rows create a native vertical range")
 		if replay_archive_scrollbar != null and replay_archive_scrollbar.max_value > replay_archive_scrollbar.page:
-			replay_archive_scroll.scroll_vertical = int(ceil(replay_archive_scrollbar.max_value))
+			replay_archive_scroll.scroll_vertical = 0
+			await send_wheel_down(replay_archive_scroll.get_global_rect().get_center())
+			check(replay_archive_scroll.scroll_vertical > 0, "mouse wheel advances the real archive list")
+			replay_archive_scroll.scroll_vertical = 0
+			replay_archive_scroll.grab_focus()
+			await send_key(KEY_PAGEDOWN, 0)
+			check(replay_archive_scroll.scroll_vertical > 0, "PageDown advances the focused archive list")
+			await send_key(KEY_END, 0)
+			var archive_scroll_range := replay_archive_scrollbar.max_value - replay_archive_scrollbar.page
+			check(replay_archive_scroll.scroll_vertical >= archive_scroll_range - 1.0, "End reaches the archive list tail")
+			var archive_drag_start := replay_archive_scroll.get_global_rect().get_center() + Vector2(0.0, 22.0)
+			var archive_drag_end := archive_drag_start - Vector2(0.0, 96.0)
+			replay_archive_scroll.scroll_vertical = 0
+			await send_screen_touch(archive_drag_start, true)
+			await send_screen_drag(archive_drag_start, archive_drag_end)
+			await send_screen_touch(archive_drag_end, false)
 			await settle(0.04)
-	check(replay_archive_scroll != null and replay_archive_favorite != null and replay_archive_scroll.get_global_rect().encloses(replay_archive_favorite.get_global_rect()), "archive scroll reveals the target action lane before action testing")
+			if DisplayServer.is_touchscreen_available():
+				check(replay_archive_scroll.scroll_vertical > 0, "single-finger drag advances the archive list on a touchscreen")
+			else:
+				check(replay_archive_scroll.has_meta("ui_scroll_view"), "archive exposes a native touch scroll surface for real-device validation")
+			replay_archive_scroll.scroll_vertical = int(ceil(archive_scroll_range))
+			await settle(0.04)
+	var replay_archive_view_rect := replay_archive_scroll.get_global_rect() if replay_archive_scroll != null else Rect2()
+	var replay_archive_oldest_row_rect := replay_archive_row_a.get_global_rect() if replay_archive_row_a != null else Rect2()
+	var replay_archive_oldest_action_rect := replay_archive_favorite.get_global_rect() if replay_archive_favorite != null else Rect2()
+	check(replay_archive_scroll != null and replay_archive_row_a != null and replay_archive_view_rect.encloses(replay_archive_oldest_row_rect.grow(-1.0)), "archive End state reveals the complete oldest row content (view=%s row=%s)" % [replay_archive_view_rect, replay_archive_oldest_row_rect])
+	check(replay_archive_scroll != null and replay_archive_favorite != null and replay_archive_view_rect.encloses(replay_archive_oldest_action_rect), "archive End state reveals the oldest row action lane (view=%s action=%s)" % [replay_archive_view_rect, replay_archive_oldest_action_rect])
 	if replay_archive_favorite != null:
 		var replay_archive_favorite_probe := {"gui": 0, "down": 0}
 		replay_archive_favorite.gui_input.connect(func(event: InputEvent) -> void:
@@ -1473,11 +2084,13 @@ func run() -> void:
 			replay_archive_favorite_probe["down"] = int(replay_archive_favorite_probe.get("down", 0)) + 1
 		)
 		var replay_archive_favorite_mouse_center := replay_archive_favorite.get_global_rect().get_center()
+		var replay_archive_scroll_before_favorite := replay_archive_scroll.scroll_vertical if replay_archive_scroll != null else -1
 		await move_pointer(replay_archive_favorite_mouse_center, 0.04)
 		await send_left_button(replay_archive_favorite_mouse_center, true)
 		await send_left_button(replay_archive_favorite_mouse_center, false)
 		await settle(0.04)
 		check(bool(scene.replay_archive_entry(replay_archive_id_a).get("favorite", false)), "mouse activation adds the archive to favorites")
+		check(replay_archive_scroll == null or absf(replay_archive_scroll.scroll_vertical - replay_archive_scroll_before_favorite) <= 1.0, "favorite refresh preserves the archive reading position")
 		replay_archive_row_a = scene.find_child("ReplayArchiveRow_%s" % replay_archive_node_key, true, false) as Control
 		replay_archive_buttons = buttons_in(replay_archive_row_a)
 		replay_archive_favorite = replay_archive_row_a.find_child("ReplayArchiveFavoriteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
@@ -1485,17 +2098,14 @@ func run() -> void:
 		replay_archive_copy = replay_archive_row_a.find_child("ReplayArchiveCopyButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
 		replay_archive_delete = replay_archive_row_a.find_child("ReplayArchiveDeleteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
 		check(replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_favorite != null and replay_archive_open != null and replay_archive_copy != null and replay_archive_delete != null, "archive refresh preserves all four action targets")
-		if replay_archive_scroll != null:
-			var replay_archive_scrollbar_after_favorite := replay_archive_scroll.get_v_scroll_bar()
-			if replay_archive_scrollbar_after_favorite != null and replay_archive_scrollbar_after_favorite.max_value > replay_archive_scrollbar_after_favorite.page:
-				replay_archive_scroll.scroll_vertical = int(ceil(replay_archive_scrollbar_after_favorite.max_value))
-				await settle(0.04)
+		var replay_archive_scroll_before_touch := replay_archive_scroll.scroll_vertical if replay_archive_scroll != null else -1
 		if replay_archive_favorite != null:
 			var replay_archive_favorite_touch_center := replay_archive_favorite.get_global_rect().get_center()
 			await send_screen_touch(replay_archive_favorite_touch_center, true)
 			await send_screen_touch(replay_archive_favorite_touch_center, false)
 			await settle(0.04)
 		check(not bool(scene.replay_archive_entry(replay_archive_id_a).get("favorite", false)), "single-finger activation reverses the archive favorite state")
+		check(replay_archive_scroll == null or absf(replay_archive_scroll.scroll_vertical - replay_archive_scroll_before_touch) <= 1.0, "touch favorite refresh preserves the archive reading position")
 		replay_archive_row_a = scene.find_child("ReplayArchiveRow_%s" % replay_archive_node_key, true, false) as Control
 		replay_archive_buttons = buttons_in(replay_archive_row_a)
 		replay_archive_favorite = replay_archive_row_a.find_child("ReplayArchiveFavoriteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
@@ -1503,11 +2113,6 @@ func run() -> void:
 		replay_archive_copy = replay_archive_row_a.find_child("ReplayArchiveCopyButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
 		replay_archive_delete = replay_archive_row_a.find_child("ReplayArchiveDeleteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
 		check(replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_favorite != null and replay_archive_open != null and replay_archive_copy != null and replay_archive_delete != null, "touch refresh preserves all four archive action targets")
-		if replay_archive_scroll != null:
-			var replay_archive_scrollbar_after_touch := replay_archive_scroll.get_v_scroll_bar()
-			if replay_archive_scrollbar_after_touch != null and replay_archive_scrollbar_after_touch.max_value > replay_archive_scrollbar_after_touch.page:
-				replay_archive_scroll.scroll_vertical = int(ceil(replay_archive_scrollbar_after_touch.max_value))
-				await settle(0.04)
 	if replay_archive_open != null:
 		var replay_archive_open_probe := {"gui": 0, "down": 0}
 		replay_archive_open.gui_input.connect(func(event: InputEvent) -> void:
@@ -1531,20 +2136,17 @@ func run() -> void:
 	var replay_archive_count_before_delete: int = scene.replay_archive.size()
 	if replay_archive_delete != null:
 		var replay_archive_delete_mouse_center := replay_archive_delete.get_global_rect().get_center()
+		var replay_archive_scroll_before_delete := replay_archive_scroll.scroll_vertical if replay_archive_scroll != null else -1
 		await move_pointer(replay_archive_delete_mouse_center, 0.04)
 		await send_left_button(replay_archive_delete_mouse_center, true)
 		await send_left_button(replay_archive_delete_mouse_center, false)
 		await settle(0.04)
 		check(scene.replay_archive.size() == replay_archive_count_before_delete and scene.replay_delete_confirming and scene.replay_delete_target_id == replay_archive_id_a, "first archive delete activation only arms the confirmation")
+		check(replay_archive_scroll == null or absf(replay_archive_scroll.scroll_vertical - replay_archive_scroll_before_delete) <= 1.0, "delete confirmation refresh preserves the archive reading position")
 		replay_archive_row_a = scene.find_child("ReplayArchiveRow_%s" % replay_archive_node_key, true, false) as Control
 		replay_archive_buttons = buttons_in(replay_archive_row_a)
 		replay_archive_delete = replay_archive_row_a.find_child("ReplayArchiveDeleteButton_%s" % replay_archive_button_key, true, false) as Button if replay_archive_row_a != null else null
 		check(replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_delete != null, "delete confirmation refresh preserves the target action")
-		if replay_archive_scroll != null:
-			var replay_archive_scrollbar_after_delete := replay_archive_scroll.get_v_scroll_bar()
-			if replay_archive_scrollbar_after_delete != null and replay_archive_scrollbar_after_delete.max_value > replay_archive_scrollbar_after_delete.page:
-				replay_archive_scroll.scroll_vertical = int(ceil(replay_archive_scrollbar_after_delete.max_value))
-				await settle(0.04)
 		if replay_archive_delete != null:
 			var replay_archive_delete_touch_center := replay_archive_delete.get_global_rect().get_center()
 			await send_screen_touch(replay_archive_delete_touch_center, true)
@@ -1628,6 +2230,8 @@ func run() -> void:
 		var menu_settings_interaction_restored := scene.find_child("MenuSettingsButton", true, false) as Button
 		check(not scene.settings_panel_open and menu_settings_interaction_restored != null and menu_settings_interaction_restored.has_focus(), "closing touch-opened settings restores the source focus")
 
+	await run_extended_ui_contracts(scene)
+
 	# Stop any AI coroutine started by the real discard path before freeing the
 	# scene. Its active delay must finish while the owner is still alive.
 	scene.mode = "shutdown"
@@ -1638,6 +2242,7 @@ func run() -> void:
 	# Let shutdown-emitted runtime timers resume their callers before freeing the
 	# scene. Godot 4.6 reports a leaked function state otherwise.
 	await settle(0.10)
+	restore_smoke_state(scene, initial_smoke_snapshot)
 	scene.queue_free()
 	await settle(0.05)
 	if failed:

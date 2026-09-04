@@ -9518,6 +9518,8 @@ func draw_actions(parent: Control) -> void:
 			)
 			summary_menu_button.name = "SummaryMenuSecondaryButton"
 			summary_menu_button.set_meta("action_priority", "secondary")
+			summary_menu_button.mouse_filter = Control.MOUSE_FILTER_STOP
+			summary_menu_button.z_index = 2
 			action_bar.add_child(summary_menu_button)
 			draw_action_dock(parent)
 			finalize_action_bar_layout()
@@ -15650,6 +15652,11 @@ func draw_round_summary(parent: Control) -> void:
 		var next = make_badge(panel, ROUND_SUMMARY_NEXT_DEALER_RECT, "下一局庄家  %s" % players[next_dealer]["name"], 13, Color(0.030, 0.046, 0.048, 0.90), Color(0.46, 0.40, 0.24, 0.36), Color(0.82, 0.86, 0.76))
 		next.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		next.tooltip_text = "下一局由%s坐庄" % players[next_dealer]["name"]
+	# The summary shield is intentionally full-screen. Keep the real action bar
+	# above the newly-built modal in the tree as well as by z-index, so touch hit
+	# testing cannot stop at the shield before reaching settlement CTAs.
+	if action_bar != null and is_instance_valid(action_bar):
+		parent.move_child(action_bar, parent.get_child_count() - 1)
 
 
 func draw_round_summary_rank_header(parent: Control, compact_summary: bool) -> Control:
@@ -27201,6 +27208,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 	# 确认按钮 - 一次性入账，领取后保留页面并明确显示已领取。
 	var claim_state := {"claimed": claimed_today}
+	var confirm_button_ref := {"button": null}
 	var confirm_btn: Button
 	confirm_btn = make_small_button("已领取" if claimed_today else "领取奖励", Color(0.78, 0.56, 0.28), func() -> void:
 		if bool(claim_state.get("claimed", false)):
@@ -27213,21 +27221,25 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		claim_state["claimed"] = true
 		if fx_enabled_effective():
 			_play_reward_claim_animation(panel, "今日奖励：" + str(claim_result.get("detail", "")))
-			reward_label.text = "今日奖励已入账：%s" % str(claim_result.get("detail", ""))
-			confirm_btn.text = "已领取"
-			confirm_btn.disabled = true
-			confirm_btn.modulate = Color(0.72, 0.76, 0.68, 0.72)
-			configure_button_focus_navigation(panel, "DailyLoginBackButton")
-			call_deferred("focus_named_control", "DailyLoginBackButton")
-			var current_indicator = day_indicators_container.find_child("DailyLoginDayNode_%d" % current_day_in_cycle, true, false) as Control
-			if current_indicator != null:
-				var current_reward_label = current_indicator.find_child("DailyLoginRewardLabel_%d" % current_day_in_cycle, true, false) as Label
-				if current_reward_label != null:
-					current_reward_label.text = "已领"
-				if current_indicator.find_child("DailyLoginCurrentClaimCheck", true, false) == null:
-					var check_icon = add_lucide_icon(current_indicator, "check", rect_full(0.735, 0.075, 0.930, 0.300), Color(0.96, 0.96, 0.92))
-					if check_icon != null:
-						check_icon.name = "DailyLoginCurrentClaimCheck"
+		var claimed_reward_label := panel.find_child("DailyLoginRewardTextLabel", true, false) as Label
+		if claimed_reward_label != null:
+			claimed_reward_label.text = "今日奖励已入账：%s" % str(claim_result.get("detail", ""))
+		var claimed_button := confirm_button_ref.get("button") as Button
+		if claimed_button != null and is_instance_valid(claimed_button):
+			claimed_button.text = "已领取"
+			claimed_button.disabled = true
+			claimed_button.modulate = Color(0.72, 0.76, 0.68, 0.72)
+		configure_button_focus_navigation(panel, "DailyLoginBackButton")
+		call_deferred("focus_named_control", "DailyLoginBackButton")
+		var current_indicator = day_indicators_container.find_child("DailyLoginDayNode_%d" % current_day_in_cycle, true, false) as Control
+		if current_indicator != null:
+			var current_reward_label = current_indicator.find_child("DailyLoginRewardLabel_%d" % current_day_in_cycle, true, false) as Label
+			if current_reward_label != null:
+				current_reward_label.text = "已领"
+			if current_indicator.find_child("DailyLoginCurrentClaimCheck", true, false) == null:
+				var check_icon = add_lucide_icon(current_indicator, "check", rect_full(0.735, 0.075, 0.930, 0.300), Color(0.96, 0.96, 0.92))
+				if check_icon != null:
+					check_icon.name = "DailyLoginCurrentClaimCheck"
 		var forecast_badge_node = panel.find_child("DailyLoginForecastBadge", true, false) as Label
 		if forecast_badge_node != null:
 			forecast_badge_node.text = "已领取"
@@ -27238,6 +27250,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	)
 	confirm_btn.custom_minimum_size = Vector2(220, 50)
 	confirm_btn.name = "DailyLoginClaimButton"
+	confirm_button_ref["button"] = confirm_btn
 	draw_daily_login_claim_button_art(confirm_btn)
 	panel.add_child(confirm_btn)
 	apply_rect(confirm_btn, rect_full(0.315, 0.675, 0.685, 0.790))
@@ -28114,6 +28127,13 @@ func render_replay_archive_list() -> void:
 	var count := root_layer.find_child("ReplayArchiveCount", true, false) as Label
 	if list == null:
 		return
+	var archive_scroll := root_layer.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
+	var previous_scroll_value := float(archive_scroll.scroll_vertical) if archive_scroll != null else -1.0
+	var previous_focus_name := ""
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	var archive_pane := root_layer.find_child("ReplayArchivePane", true, false) as Control
+	if focus_owner != null and archive_pane != null and archive_pane.is_ancestor_of(focus_owner):
+		previous_focus_name = str(focus_owner.name)
 	for child in list.get_children():
 		list.remove_child(child)
 		child.queue_free()
@@ -28124,10 +28144,32 @@ func render_replay_archive_list() -> void:
 		var empty := make_label(list, "暂无匹配回放", 12, Color(0.62, 0.72, 0.68), false)
 		empty.name = "ReplayArchiveEmpty"
 		empty.custom_minimum_size = Vector2(0, 44)
+		call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name)
 		return
 	for entry_variant in entries:
 		if typeof(entry_variant) == TYPE_DICTIONARY:
 			list.add_child(make_replay_archive_row(entry_variant as Dictionary))
+	call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name)
+
+
+func restore_replay_archive_view_state(scroll_value: float, focus_name: String) -> void:
+	# Wait for the VBoxContainer and ScrollContainer to recalculate their ranges
+	# before restoring the user's reading position after an archive refresh.
+	await get_tree().process_frame
+	if root_layer == null or not is_instance_valid(root_layer) or mode != "replay_import":
+		return
+	var archive_scroll := root_layer.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
+	if archive_scroll != null and scroll_value >= 0.0:
+		var scrollbar := archive_scroll.get_v_scroll_bar()
+		if scrollbar != null:
+			var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
+			archive_scroll.scroll_vertical = int(round(clampf(scroll_value, 0.0, scroll_range)))
+	if focus_name != "":
+		var focus_target := root_layer.find_child(focus_name, true, false) as Control
+		var focus_button := focus_target as Button if focus_target != null else null
+		var focus_is_enabled := focus_button == null or not focus_button.disabled
+		if focus_target != null and focus_target.visible and focus_is_enabled and focus_target.focus_mode != Control.FOCUS_NONE:
+			focus_target.grab_focus()
 
 
 func make_replay_archive_row(entry: Dictionary) -> Control:
@@ -30320,7 +30362,9 @@ func move_hand_keyboard_selection(delta: int) -> bool:
 	var direction := 1 if delta >= 0 else -1
 	var current := normalized_hand_keyboard_selection(hand)
 	if current < 0:
-		current = 0 if direction > 0 else hand.size() - 1
+		# With no active selection, the first move should land on the edge tile
+		# indicated by the direction instead of skipping it.
+		current = -1 if direction > 0 else hand.size()
 	var steps := maxi(1, abs(delta))
 	var next := current
 	for _step in range(steps):
@@ -37377,13 +37421,16 @@ func stat_row_metric_fraction(label_text: String, value_text: String) -> float:
 
 func stat_row_numeric_value(value_text: String) -> float:
 	var cleaned = ""
+	var is_negative := false
 	for i in range(value_text.length()):
 		var ch = value_text.substr(i, 1)
+		if ch == "-" and cleaned == "":
+			is_negative = true
 		if (ch >= "0" and ch <= "9") or ch == ".":
 			cleaned += ch
 	if cleaned == "":
 		return 0.0
-	return float(cleaned)
+	return -float(cleaned) if is_negative else float(cleaned)
 
 # ============================================================
 # 成就系统界面

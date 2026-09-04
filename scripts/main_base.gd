@@ -2290,7 +2290,10 @@ func play_touch_button_up_by_id(button_id: int) -> void:
 func connect_immediate_button_action(button: Button, callback: Callable) -> void:
 	if button == null or not callback.is_valid():
 		return
-	button.button_down.connect(callback)
+	# `pressed` is the native activation signal for mouse, touch, and keyboard.
+	# Keep the button in BUTTON_PRESS mode so activation remains immediate while
+	# allowing release-based input paths to reach the production callback.
+	button.pressed.connect(callback)
 
 func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 	if button == null or not is_instance_valid(button):
