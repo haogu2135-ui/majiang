@@ -9,9 +9,8 @@ func announce_online_game_audio(next_game: Dictionary) -> void:
 	if online_game.is_empty():
 		online_announced_discard_key = next_key
 		return
-	var identity = online_discard_identity(seat, tile)
-	if identity != "" and identity == online_pending_local_discard_identity:
-		online_pending_local_discard_identity = ""
+	if online_discard_matches_pending_local(next_game):
+		clear_pending_local_discard_identity()
 		online_announced_discard_key = next_key
 		return
 	online_announced_discard_key = next_key
@@ -157,6 +156,7 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 	if preserve_game_board:
 		online_room.clear()
 		online_log_seen_count = 0
+		online_log_total_count = 0
 		online_last_snapshot_fingerprint = ""
 		online_last_room_snapshot_fingerprint = ""
 		online_seen_message_ids.clear()
@@ -196,11 +196,12 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_game.clear()
 	online_players_by_seat.clear()
 	online_log_seen_count = 0
+	online_log_total_count = 0
 	selected_room = resume_room
 	if is_instance_valid(online_room_edit):
 		online_room_edit.text = selected_room
 	online_announced_discard_key = ""
-	online_pending_local_discard_identity = ""
+	clear_pending_local_discard_identity()
 	online_room_revision = -1
 	online_game_revision = -1
 	online_seen_message_ids.clear()
@@ -359,6 +360,8 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 		stable.append(int(snapshot.get("wallCount", 0)))
 		stable.append(str(snapshot.get("lastDiscard", "")))
 		stable.append(int(snapshot.get("lastDiscardSeat", -1)))
+		stable.append(int(snapshot.get("lastDiscardHandIndex", -1)))
+		stable.append(str(snapshot.get("lastDiscardSerial", "")))
 		stable.append(snapshot.get("hand", []))
 		stable.append(snapshot.get("pending", {}))
 		var players_snapshot: Array = []
@@ -372,11 +375,36 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 		stable.append(players_snapshot)
 	return JSON.stringify(stable)
 
+
+func online_log_entry_text(value) -> String:
+	var raw := str(first_present(value, ["text", "message", "content"], "")) if typeof(value) == TYPE_DICTIONARY else str(value)
+	return raw.strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
+
+
+func online_log_snapshot_increment(previous_logs: Array, next_logs: Array) -> int:
+	if next_logs.is_empty():
+		return 0
+	if previous_logs.is_empty():
+		return next_logs.size()
+	var max_overlap := mini(previous_logs.size(), next_logs.size())
+	for overlap in range(max_overlap, 0, -1):
+		var matches := true
+		for offset in range(overlap):
+			var previous_index := previous_logs.size() - overlap + offset
+			if online_log_entry_text(previous_logs[previous_index]) != online_log_entry_text(next_logs[offset]):
+				matches = false
+				break
+		if matches:
+			return maxi(0, next_logs.size() - overlap)
+	return next_logs.size()
+
 func online_game_snapshot_validation_error(game: Dictionary) -> String:
 	if game.is_empty():
 		return "缺少牌局数据。"
 	if bool(game.get("ruleVariantInvalid", false)):
 		return "地方规则标识无效。"
+	if str(game.get("phase", "")) == "unknown":
+		return "服务器返回了不受支持的牌局状态。"
 	var variant := str(game.get("ruleVariant", ""))
 	var allowed_tiles: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
 	var allowed_flowers: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
@@ -498,6 +526,10 @@ func online_action_validation_error(payload: Dictionary) -> String:
 		var visible_hand: Array = online_game.get("hand", [])
 		if not visible_hand.is_empty() and not visible_hand.has(tile):
 			return "这张牌不在你的手牌中。"
+		var hand_index := int(payload.get("handIndex", -1))
+		if hand_index >= 0 and not visible_hand.is_empty():
+			if hand_index >= visible_hand.size() or normalize_tile_code(str(visible_hand[hand_index])) != tile:
+				return "这张牌的手牌位置已变化，请重新选择。"
 	if action_type == "claim":
 		var claim := str(payload.get("claim", "")).strip_edges().to_lower()
 		if not ["chi", "peng", "gang", "hu", "pass"].has(claim):
@@ -552,6 +584,8 @@ func handle_online_error(data: Dictionary) -> void:
 		online_resume_pending = false
 		online_resume_join_sent = false
 	set_online_feedback("服务器拒绝：%s" % message, false)
+	if online_last_sent_type == "discard":
+		clear_pending_local_discard_identity()
 	online_retry_available = false
 	online_last_sent_payload.clear()
 
@@ -562,10 +596,12 @@ func handle_online_log(data: Dictionary) -> void:
 	if typeof(online_room.get("logs", [])) != TYPE_ARRAY:
 		online_room["logs"] = []
 	var logs: Array = online_room.get("logs", [])
+	var previous_total := maxi(online_log_total_count, logs.size())
 	logs.append(message)
 	while logs.size() > ONLINE_LOG_HISTORY_LIMIT:
 		logs.remove_at(0)
 	online_room["logs"] = logs
+	online_log_total_count = previous_total + 1
 	set_online_feedback(message, false)
 	refresh_online_lobby_state()
 
@@ -622,6 +658,13 @@ func handle_online_message(line: String) -> void:
 		if room_revision >= 0:
 			online_room_revision = room_revision
 		clear_online_feedback()
+		var previous_room_code := bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var next_room_code := bounded_online_input(str(first_present(next_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var previous_logs_value = online_room.get("logs", [])
+		var previous_logs: Array = (previous_logs_value as Array).duplicate(true) if typeof(previous_logs_value) == TYPE_ARRAY else []
+		if previous_room_code != "" and next_room_code != "" and previous_room_code != next_room_code:
+			online_log_seen_count = 0
+			online_log_total_count = 0
 		online_room = next_room
 		selected_room = bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var resumed_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
@@ -636,12 +679,26 @@ func handle_online_message(line: String) -> void:
 				if bounded_log != "":
 					bounded_logs.append(bounded_log)
 			online_room["logs"] = bounded_logs
+			var explicit_total = first_present(next_room, ["logCount", "logTotal", "logsTotal", "totalLogs"], null)
+			if explicit_total != null:
+				online_log_total_count = maxi(online_log_total_count, int(explicit_total))
+			else:
+				online_log_total_count = maxi(online_log_total_count, bounded_logs.size())
+				if not previous_logs.is_empty() and (previous_room_code == "" or previous_room_code == next_room_code):
+					online_log_total_count = maxi(online_log_total_count, online_log_total_count + online_log_snapshot_increment(previous_logs, bounded_logs))
 		if is_instance_valid(online_room_edit):
 			online_room_edit.text = selected_room
 		refresh_online_lobby_state()
 	elif kind == "gameState":
 		var next_game = normalize_online_game_state(data)
 		var snapshot_error := online_game_snapshot_validation_error(next_game)
+		if str(next_game.get("phase", "")) == "unknown":
+			online_game = next_game
+			rebuild_online_player_index(next_game)
+			mode = "online_game"
+			set_online_feedback("服务器状态不受支持，牌局已锁定；请重试或返回大厅。", false)
+			request_game_render()
+			return
 		if snapshot_error != "":
 			set_online_feedback("服务器状态无效：%s" % snapshot_error, false)
 			return
@@ -730,6 +787,13 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	var last_discard_value = first_present(game, ["lastDiscard", "discard", "lastTile"], "")
 	game["lastDiscard"] = normalize_last_discard_tile(last_discard_value)
 	game["lastDiscardSeat"] = normalize_last_discard_seat(last_discard_value, int(first_present(game, ["lastDiscardSeat", "discardSeat", "lastDiscarder", "fromSeat"], -1)))
+	var discard_index_value = first_present(game, ["lastDiscardHandIndex", "last_discard_hand_index", "lastDiscardIndex", "discardIndex", "discard_index"], null)
+	var discard_serial_value = first_present(game, ["lastDiscardSerial", "last_discard_serial", "discardSerial", "discard_serial", "tileSerial", "tile_serial"], null)
+	if typeof(last_discard_value) == TYPE_DICTIONARY:
+		discard_index_value = first_present(last_discard_value, ["handIndex", "hand_index", "index", "discardIndex", "discard_index"], discard_index_value)
+		discard_serial_value = first_present(last_discard_value, ["serial", "tileSerial", "tile_serial", "discardSerial", "discard_serial"], discard_serial_value)
+	game["lastDiscardHandIndex"] = int(discard_index_value) if discard_index_value != null else -1
+	game["lastDiscardSerial"] = str(discard_serial_value).strip_edges() if discard_serial_value != null else ""
 	game["players"] = normalize_online_players(first_present(game, ["players", "seats"], []))
 	game["pending"] = normalize_online_pending(first_present(game, ["pending", "pendingClaim", "claim"], {}), game)
 	if str(game.get("phase", "")) == "" and typeof(game.get("pending", null)) == TYPE_DICTIONARY and game["pending"].get("options", []).size() > 0:
@@ -810,7 +874,7 @@ func normalize_online_phase(value: String) -> String:
 		return "ended"
 	if compact == "ready" or compact == "waiting":
 		return compact
-	return phase
+	return "unknown"
 
 func normalize_online_players(value) -> Array:
 	var result: Array = []
@@ -874,12 +938,50 @@ func online_discard_audio_key(game: Dictionary) -> String:
 			if typeof(discards) == TYPE_ARRAY:
 				discard_count = discards.size()
 			break
-	return "%s:%d" % [online_discard_identity(seat, tile), discard_count]
+	return "%s:%d:%d:%s" % [online_discard_identity(seat, tile), discard_count, int(game.get("lastDiscardHandIndex", -1)), str(game.get("lastDiscardSerial", ""))]
 
-func online_discard_identity(seat: int, tile: String) -> String:
+func online_discard_identity(seat: int, tile: String, hand_index: int = -1, hand_serial: String = "") -> String:
 	if seat < 0 or tile == "":
 		return ""
-	return "%d:%s" % [seat, normalize_tile_code(tile)]
+	var base := "%d:%s" % [seat, normalize_tile_code(tile)]
+	if hand_serial.strip_edges() != "":
+		return "%s:serial:%s" % [base, hand_serial.strip_edges()]
+	if hand_index >= 0:
+		return "%s:index:%d" % [base, hand_index]
+	return base
+
+func online_discard_matches_pending_local(game: Dictionary) -> bool:
+	if online_pending_local_discard_identity == "":
+		return false
+	var tile := normalize_tile_code(str(game.get("lastDiscard", "")))
+	var seat := int(game.get("lastDiscardSeat", -1))
+	var base_identity := online_discard_identity(seat, tile)
+	var pending_parts := online_pending_local_discard_identity.split(":")
+	var pending_base := "%s:%s" % [pending_parts[0], pending_parts[1]] if pending_parts.size() >= 2 else ""
+	if base_identity == "" or pending_base != base_identity:
+		return false
+	var server_index := int(game.get("lastDiscardHandIndex", -1))
+	var server_serial := str(game.get("lastDiscardSerial", "")).strip_edges()
+	if online_pending_local_discard_serial != "":
+		return server_serial != "" and server_serial == online_pending_local_discard_serial
+	if online_pending_local_discard_index >= 0:
+		return server_index >= 0 and server_index == online_pending_local_discard_index
+	if online_pending_local_discard_count > 0:
+		var discard_count := 0
+		for player in game.get("players", []):
+			if typeof(player) == TYPE_DICTIONARY and int((player as Dictionary).get("seat", -1)) == seat:
+				var discards = (player as Dictionary).get("discards", [])
+				if typeof(discards) == TYPE_ARRAY:
+					discard_count = (discards as Array).size()
+				break
+		return discard_count > 0 and discard_count == online_pending_local_discard_count
+	return true
+
+func clear_pending_local_discard_identity() -> void:
+	online_pending_local_discard_identity = ""
+	online_pending_local_discard_index = -1
+	online_pending_local_discard_serial = ""
+	online_pending_local_discard_count = -1
 
 func online_feedback_accent() -> Color:
 	if online_waiting_for_server:
@@ -1038,6 +1140,7 @@ func cancel_online_pending_action() -> void:
 	online_last_sent_action = ""
 	online_last_sent_type = ""
 	online_last_sent_payload.clear()
+	clear_pending_local_discard_identity()
 	online_feedback = "已取消等待，可重新提交操作。"
 	set_status(online_feedback)
 	refresh_online_feedback_art()

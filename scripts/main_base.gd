@@ -808,6 +808,7 @@ var tcp_buffer := PackedByteArray()
 var online_room: Dictionary = {}
 var online_game: Dictionary = {}
 var online_log_seen_count := 0
+var online_log_total_count := 0
 var online_feedback = ""
 var online_waiting_for_server = false
 var online_last_sent_action = ""
@@ -839,6 +840,10 @@ var online_players_by_seat: Dictionary = {}
 var online_player_index_token := 0
 var online_announced_discard_key = ""
 var online_pending_local_discard_identity = ""
+var online_pending_local_discard_index := -1
+var online_pending_local_discard_serial := ""
+var online_pending_local_discard_count := -1
+var meld_window_start_by_seat: Dictionary = {}
 var sent_hello = false
 var voice_capture_effect: AudioEffectCapture
 var voice_mic_player: AudioStreamPlayer
@@ -2055,9 +2060,8 @@ func handle_scroll_container_keyboard_input(event: InputEvent, scroll: ScrollCon
 	if scrollbar == null:
 		return
 	var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
-	if scroll_range <= 0.0:
-		return
 	var target := scrollbar.value
+	var handled := true
 	match keycode:
 		KEY_PAGEUP:
 			target -= maxf(1.0, scrollbar.page)
@@ -2068,12 +2072,16 @@ func handle_scroll_container_keyboard_input(event: InputEvent, scroll: ScrollCon
 		KEY_END:
 			target = scroll_range
 		_:
-			return
-	target = clampf(target, 0.0, scroll_range)
-	if is_equal_approx(target, scrollbar.value):
+			handled = false
+	if not handled:
 		return
-	scrollbar.value = target
-	scroll.scroll_vertical = int(round(target))
+	target = clampf(target, 0.0, scroll_range)
+	if not is_equal_approx(target, scrollbar.value):
+		scrollbar.value = target
+		scroll.scroll_vertical = int(round(target))
+	scroll.set_meta("ui_scroll_position", int(round(target)))
+	scroll.set_meta("ui_scroll_range", int(round(scroll_range)))
+	scroll.set_meta("ui_scroll_boundary", "top" if target <= 0.0 else ("bottom" if target >= scroll_range else "middle"))
 	scroll.grab_focus()
 	scroll.accept_event()
 
@@ -2184,6 +2192,8 @@ func make_base_button(text: String, callback: Callable) -> Button:
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.tooltip_text = text
+	button.set_meta("accessible_name", text)
+	button.set_meta("ui_action_name", text)
 	button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	configure_touch_button(button)
 	button.add_theme_font_override("font", ui_cjk_font())
@@ -2303,10 +2313,15 @@ func configure_ordered_focus_navigation(root: Control, controls: Array, default_
 	if root == null or not is_instance_valid(root):
 		return
 	var focusable: Array[Control] = []
+	var seen_control_ids: Dictionary = {}
 	for candidate in controls:
 		var control := candidate as Control
 		if control == null or not is_instance_valid(control) or not control.is_inside_tree() or not control.is_visible_in_tree() or control.focus_mode == Control.FOCUS_NONE:
 			continue
+		var control_id := control.get_instance_id()
+		if seen_control_ids.has(control_id):
+			continue
+		seen_control_ids[control_id] = true
 		if control is BaseButton and (control as BaseButton).disabled:
 			continue
 		control.focus_mode = Control.FOCUS_ALL
@@ -2346,10 +2361,15 @@ func configure_button_focus_navigation(root: Control, default_focus_name: String
 	if root == null or not is_instance_valid(root):
 		return
 	var focusable: Array[Button] = []
+	var seen_button_ids: Dictionary = {}
 	for node in root.find_children("*", "Button", true, false):
 		var button := node as Button
 		if button == null or not button.visible or button.disabled:
 			continue
+		var button_id := button.get_instance_id()
+		if seen_button_ids.has(button_id):
+			continue
+		seen_button_ids[button_id] = true
 		button.focus_mode = Control.FOCUS_ALL
 		focusable.append(button)
 	if focusable.is_empty():
@@ -2364,10 +2384,10 @@ func configure_button_focus_navigation(root: Control, default_focus_name: String
 		var bottom := focus_button_neighbor(button, focusable, Vector2.DOWN)
 		button.focus_previous = previous.get_path()
 		button.focus_next = next.get_path()
-		button.focus_neighbor_left = left.get_path()
-		button.focus_neighbor_right = right.get_path()
-		button.focus_neighbor_top = top.get_path()
-		button.focus_neighbor_bottom = bottom.get_path()
+		button.focus_neighbor_left = (left if left != button else previous).get_path()
+		button.focus_neighbor_right = (right if right != button else next).get_path()
+		button.focus_neighbor_top = (top if top != button else previous).get_path()
+		button.focus_neighbor_bottom = (bottom if bottom != button else next).get_path()
 	if not grab_default_focus:
 		return
 	var requested: Control = null
@@ -2390,6 +2410,8 @@ func play_touch_button_down_by_id(button_id: int) -> void:
 	center_touch_button_pivot_by_id(button_id)
 	if OS.has_feature("mobile") and fx_enabled:
 		Input.vibrate_handheld(18, 0.22)
+	if not ui_motion_enabled():
+		return
 	var tw := button.create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(button, "scale", Vector2(0.96, 0.96), 0.08).from(Vector2(1.0, 1.0)).set_ease(Tween.EASE_OUT)
@@ -2651,7 +2673,7 @@ func apply_centered_rect(control: Control, center: Vector2, size: Vector2) -> vo
 func set_status(text: String) -> void:
 	last_status_text = text
 	status_last_updated_msec = Time.get_ticks_msec()
-	if status_label:
+	if status_label != null and is_instance_valid(status_label):
 		status_label.text = text
 		status_label.tooltip_text = text
 
@@ -2710,10 +2732,13 @@ func make_icon_label(parent: Control, icon_name: String, size: int, color: Color
 func make_icon_button(icon_name: String, color: Color, size: int = 24, callback: Callable = Callable()) -> Button:
 	"""创建图标按钮"""
 	var button = Button.new()
-	button.text = ICON_CODES.get(icon_name, "")
+	button.text = ICON_CODES.get(icon_name, icon_button_fallback_glyph(icon_name))
 	var touch_size := maxf(UI_MIN_TOUCH_TARGET, float(size) * 1.8)
 	button.custom_minimum_size = Vector2(touch_size, touch_size)
-	button.tooltip_text = icon_name
+	button.tooltip_text = icon_button_action_label(icon_name)
+	button.set_meta("accessible_name", icon_button_action_label(icon_name))
+	button.set_meta("ui_action_name", icon_button_action_label(icon_name))
+	button.set_meta("ui_icon_name", icon_name)
 	configure_touch_button(button)
 	button.add_theme_font_override("font", ui_cjk_font())
 	button.add_theme_font_size_override("font_size", size)
@@ -2726,6 +2751,38 @@ func make_icon_button(icon_name: String, color: Color, size: int = 24, callback:
 		connect_immediate_button_action(button, callback)
 
 	return button
+
+func icon_button_action_label(icon_name: String) -> String:
+	match icon_name.strip_edges().to_lower():
+		"x", "cross":
+			return "关闭"
+		"chevron-left", "arrow-left":
+			return "返回上一页"
+		"chevron-right", "arrow-right":
+			return "进入下一页"
+		"book-open":
+			return "打开记录"
+		"info":
+			return "查看详情"
+		"refresh-cw", "rotate-ccw":
+			return "重新加载"
+	return icon_name.strip_edges()
+
+func icon_button_fallback_glyph(icon_name: String) -> String:
+	match icon_name.strip_edges().to_lower():
+		"x", "cross":
+			return "×"
+		"chevron-left", "arrow-left":
+			return "‹"
+		"chevron-right", "arrow-right":
+			return "›"
+		"book-open":
+			return "▤"
+		"info":
+			return "i"
+		"refresh-cw", "rotate-ccw":
+			return "↻"
+	return "?"
 
 func make_icon_badge(parent: Control, rect: Rect2, icon_name: String, bg_color: Color, icon_color: Color) -> Control:
 	"""创建图标徽章"""

@@ -1120,6 +1120,16 @@ func online_lobby_start_gate() -> Dictionary:
 	return {"enabled": false, "text": "等房主", "reason": "等待房主开始游戏"}
 
 
+func online_lobby_room_snapshot_is_stale() -> bool:
+	return mode == "online_lobby" and online_waiting_for_server and ["createRoom", "joinRoom"].has(online_last_sent_type)
+
+
+func online_lobby_room_snapshot_status_text() -> String:
+	if not online_lobby_room_snapshot_is_stale():
+		return ""
+	return "同步中 · 以下数据为上次房间快照" if not online_room.is_empty() else "等待服务器确认 · 暂无当前快照"
+
+
 func refresh_online_lobby_state() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
@@ -1233,6 +1243,15 @@ func refresh_online_room_content() -> void:
 	var occupancy_label = root_layer.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
 	var ready_label = root_layer.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
 	var state_label = root_layer.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
+	var snapshot_status_label = root_layer.find_child("OnlineLobbyRoomSummarySnapshotStatus", true, false) as Label
+	var snapshot_is_stale := online_lobby_room_snapshot_is_stale()
+	var snapshot_status_text := online_lobby_room_snapshot_status_text()
+	if snapshot_status_label != null:
+		snapshot_status_label.visible = snapshot_is_stale
+		set_dynamic_label_text(snapshot_status_label, snapshot_status_text, "房间数据状态：" + snapshot_status_text)
+	var summary_headline = root_layer.find_child("OnlineLobbyRoomSummaryHeadline", true, false) as Label
+	if summary_headline != null:
+		summary_headline.visible = not snapshot_is_stale
 	if occupancy_label != null:
 		set_dynamic_label_text(occupancy_label, "入席 %d/4" % player_count, "当前已入席 %d/4 位玩家" % player_count)
 	if ready_label != null:
@@ -1265,8 +1284,7 @@ func refresh_online_room_content() -> void:
 				roster_touch_target.tooltip_text = "查看第%d席：%s" % [slot + 1, online_lobby_slot_name(entry)] if active else "第%d席暂未入席" % (slot + 1)
 		if seat_panel != null:
 			seat_panel.modulate = Color(0.92, 1.0, 0.92, 1.0) if active else Color(0.72, 0.76, 0.74, 0.52)
-	var logs_value = online_room.get("logs", [])
-	var log_count := (logs_value as Array).size() if typeof(logs_value) == TYPE_ARRAY else 0
+	var log_count := online_lobby_retained_log_count()
 	var log_count_label = root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	if log_count_label != null:
 		set_dynamic_label_text(log_count_label, "%d条" % log_count, "房间日志共 %d 条" % log_count)
@@ -3011,6 +3029,17 @@ func show_chat_panel() -> void:
 	if compact_chat:
 		send_button.offset_bottom = 1.0
 	chat_panel.add_child(send_button)
+	var cooldown_label := make_label(chat_panel, "", 9, Color(1.0, 0.82, 0.48), true)
+	cooldown_label.name = "ChatSendCooldownLabel"
+	apply_rect(cooldown_label, rect_full(0.720 if compact_chat else 0.710, 0.600 if compact_chat else 0.805, 0.940, 0.980 if compact_chat else 0.945))
+	if compact_chat:
+		cooldown_label.offset_bottom = 1.0
+	cooldown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cooldown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cooldown_label.visible = false
+	cooldown_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cooldown_label.z_index = 3
+	cooldown_label.tooltip_text = ""
 	var table_log_button: Button = null
 	if mode == "online_game":
 		table_log_button = make_icon_button("book-open", Color(0.40, 0.58, 0.46), 15, Callable(self, "open_table_log_from_chat"))
@@ -3030,6 +3059,7 @@ func show_chat_panel() -> void:
 	chat_focus_controls.append(chat_input)
 	chat_focus_controls.append(send_button)
 	configure_ordered_focus_navigation(chat_panel, chat_focus_controls, "ChatPanelCloseButton")
+	update_chat_send_cooldown(Time.get_ticks_msec())
 	call_deferred("focus_named_control", "ChatPanelCloseButton")
 
 

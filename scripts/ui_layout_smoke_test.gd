@@ -371,7 +371,16 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 		var grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
 		var visible_capacity := int(grid.get_meta("visible_capacity", 0)) if grid != null else 0
 		var expected_visible := mini(scene.get_discards(seat).size(), visible_capacity)
-		check(grid != null and grid.get_child_count() == expected_visible, "river %d exposes its full %d-tile visible window at %s" % [seat, expected_visible, viewport_size])
+		var real_tile_count := 0
+		var reserved_cell_count := 0
+		if grid != null:
+			for grid_child in grid.get_children():
+				if bool(grid_child.get_meta("archive_reserved", false)):
+					reserved_cell_count += 1
+				else:
+					real_tile_count += 1
+		check(grid != null and real_tile_count == expected_visible, "river %d exposes its full %d-tile visible window at %s" % [seat, expected_visible, viewport_size])
+		check(grid == null or reserved_cell_count == maxi(0, int(grid.get_meta("raw_visible_capacity", 0)) - expected_visible), "river %d declares only its explicit archive reservation cells at %s" % [seat, viewport_size])
 		var latest_start: int = int(scene.tail_window_start(scene.get_discards(seat).size(), visible_capacity))
 		var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
 		check(archive_button != null and int(archive_button.get_meta("hidden_count", -1)) == latest_start and archive_button.text == scene.discard_archive_button_text(scene.get_discards(seat).size(), latest_start, visible_capacity), "river %d exposes an accurate authored archive entry for %d older tiles at %s" % [seat, latest_start, viewport_size])
@@ -455,7 +464,13 @@ func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> v
 	archive_button.pressed.emit()
 	await settle_layout(0.06)
 	var latest_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
-	var latest_last = latest_grid.get_child(latest_grid.get_child_count() - 1) as Control if latest_grid != null and latest_grid.get_child_count() > 0 else null
+	var latest_last: Control = null
+	if latest_grid != null:
+		for grid_index in range(latest_grid.get_child_count() - 1, -1, -1):
+			var grid_child := latest_grid.get_child(grid_index) as Control
+			if grid_child != null and not bool(grid_child.get_meta("archive_reserved", false)):
+				latest_last = grid_child
+				break
 	var latest_start := int(scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false).get_meta("window_start", -1)) if scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) != null else -1
 	var latest_source := int(latest_last.get_meta("discard_source_index", -1)) if latest_last != null else -1
 	check(latest_last != null and latest_source == discards.size() - 1, "river %d archive navigation returns to the true latest discard at %s (start=%d source=%d expected=%d)" % [seat, viewport_size, latest_start, latest_source, discards.size() - 1])
@@ -1785,8 +1800,9 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	var input = scene.find_child("ChatInput", true, false) as LineEdit
 	var close_button = scene.find_child("ChatPanelCloseButton", true, false) as Button
 	var send_button = scene.find_child("ChatSendButton", true, false) as Button
+	var cooldown_label = scene.find_child("ChatSendCooldownLabel", true, false) as Label
 	var table_log_button = scene.find_child("ChatPanelTableLogButton", true, false) as Button
-	check(panel != null and input != null and close_button != null and send_button != null, "online chat exposes drawer, input, close, and send controls at %s" % viewport_size)
+	check(panel != null and input != null and close_button != null and send_button != null and cooldown_label != null, "online chat exposes drawer, input, send, and cooldown controls at %s" % viewport_size)
 	check(table_log_button != null and table_log_button.tooltip_text.contains("牌桌记录"), "online chat keeps a discoverable table-records route at %s" % viewport_size)
 	if panel != null:
 		var panel_rect = screen_rect(panel)
@@ -1827,6 +1843,7 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		check(screen_rect(panel).grow(1.0).encloses(close_rect), "online chat close action stays inside the drawer at %s" % viewport_size)
 		check(screen_rect(send_button).size.x >= 42.0 and screen_rect(send_button).size.y >= 36.0, "online chat send action keeps a 42x36 touch target at %s" % viewport_size)
 		check(screen_rect(panel).grow(1.0).encloses(screen_rect(send_button)), "online chat send action stays inside the drawer at %s" % viewport_size)
+		check(screen_rect(panel).grow(1.0).encloses(screen_rect(cooldown_label)) and not cooldown_label.visible, "online chat cooldown label starts hidden inside the send lane at %s" % viewport_size)
 	var quick_row := scene.find_child("ChatPanelQuickMessages", true, false) as Control
 	var quick_buttons: Array[Button] = []
 	if quick_row != null:
@@ -1843,6 +1860,14 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		check(input_rect.size.y >= 42.0, "online chat input keeps a finger-sized compact row at %s" % viewport_size)
 		for quick_button in quick_buttons:
 			check(not rects_overlap(input_rect.grow(-1.0), screen_rect(quick_button).grow(-1.0)), "online chat input clears quick action %s at %s" % [quick_button.text, viewport_size])
+	var saved_chat_timestamp: int = int(scene.online_last_chat_sent_msec)
+	scene.online_last_chat_sent_msec = Time.get_ticks_msec()
+	scene.update_chat_send_cooldown(scene.online_last_chat_sent_msec + 100)
+	check(cooldown_label != null and cooldown_label.visible and cooldown_label.text.contains("s") and send_button != null and send_button.disabled and quick_buttons.all(func(button: Button) -> bool: return button.disabled), "online chat exposes and enforces the send cooldown at %s" % viewport_size)
+	scene.update_chat_send_cooldown(scene.online_last_chat_sent_msec + scene.ONLINE_CHAT_COOLDOWN_MSEC + 1)
+	check(cooldown_label == null or not cooldown_label.visible, "online chat clears the cooldown indicator after the wait at %s" % viewport_size)
+	scene.online_last_chat_sent_msec = saved_chat_timestamp
+	scene.update_chat_send_cooldown()
 	check(close_button != null and close_button.has_focus(), "online chat opens with focus in the close action at %s" % viewport_size)
 	scene.close_chat_panel()
 	await settle_layout()
@@ -2215,7 +2240,7 @@ func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
 	if hand == null:
 		return
 	var hand_rect = screen_rect(hand)
-	check(hand.clip_contents, "hand tray clips decorative artwork at %s" % viewport_size)
+	check(not hand.clip_contents, "hand tray leaves a hover gutter outside its decorative shell at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(1.0).encloses(hand_rect), "hand tray stays inside viewport at %s" % viewport_size)
 	check(hand_rect.end.y <= viewport_size.y - max(8.0, viewport_size.y * 0.015), "hand tray leaves a visible bottom margin at %s" % viewport_size)
 	if stage != null:
@@ -2363,7 +2388,12 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 					if not expected_vertical and viewport_size.y <= 560.0 and tile_view != null:
 						check(tile_view.size.x >= 18.0, "compact horizontal meld group %d/%d keeps an 18px tile face minimum at %s" % [meld_seat, group_count, viewport_size])
 						check(float(lane_tile_size.y) <= meld_rect.size.y + 1.0, "compact horizontal meld group %d/%d fits its face height inside the lane at %s" % [meld_seat, group_count, viewport_size])
-		check(group_count == 4, "battle meld area %d fits all four groups at %s" % [meld_seat, viewport_size])
+		var visible_group_count := int(meld_area.get_meta("visible_group_count", -1))
+		var declared_group_count := int(meld_area.get_meta("group_count", -1))
+		var page_count := int(meld_area.get_meta("page_count", 1))
+		var lane_capacity := int(meld_area.get_meta("lane_capacity", 0))
+		check(visible_group_count == group_count and declared_group_count >= visible_group_count and lane_capacity >= visible_group_count and visible_group_count <= 4, "battle meld area %d exposes its visible group capacity at %s" % [meld_seat, viewport_size])
+		check(page_count == maxi(1, ceili(float(declared_group_count) / float(maxi(1, lane_capacity)))), "battle meld area %d declares accurate pagination metadata at %s" % [meld_seat, viewport_size])
 	var table_log = scene.find_child("TableLogLedgerPanel", true, false) as Control
 	check(table_log != null, "battle renders named table log ledger at %s" % viewport_size)
 	if table_log != null:
@@ -2746,6 +2776,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var room_summary_occupancy_label = scene.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
 	var room_summary_ready_label = scene.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
 	var room_summary_state_label = scene.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
+	var room_summary_snapshot_status = scene.find_child("OnlineLobbyRoomSummarySnapshotStatus", true, false) as Label
 	var roster_panel = scene.find_child("OnlineLobbyRosterPanel", true, false) as Control
 	var log_list_panel = scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
 	var log_scroll = scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
@@ -2775,7 +2806,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
 		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.35 and page_plate.self_modulate.a <= 0.60, "disconnected lobby uses a restrained low-frequency authored bitmap substrate at %s" % viewport_size)
 	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
-	check(room_status_art != null and room_summary_panel != null and roster_panel != null and log_list_panel != null and log_list_text != null and chat_button != null and log_latest_button != null and log_unread_label != null and room_badge_view_icon != null and room_badge_view_icon.texture != null, "online lobby exposes room summary roster chat log list latest-log controls and a visible room-view affordance at %s" % viewport_size)
+	check(room_status_art != null and room_summary_panel != null and room_summary_snapshot_status != null and roster_panel != null and log_list_panel != null and log_list_text != null and chat_button != null and log_latest_button != null and log_unread_label != null and room_badge_view_icon != null and room_badge_view_icon.texture != null, "online lobby exposes room summary roster chat log list latest-log controls and a visible room-view affordance at %s" % viewport_size)
 	check_focus_route(scene, [
 		"OnlineLobbyNameEdit",
 		"OnlineLobbyHostEdit",
@@ -2925,6 +2956,8 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 					var label_rect = screen_rect(label)
 					check(summary_rect.grow(1.0).encloses(label_rect), "online lobby room summary label stays inside summary panel at %s" % viewport_size)
 					check(label_text_width(label, str(label.text)) <= label_rect.size.x + 1.0, "online lobby room summary label text fits its lane at %s" % viewport_size)
+			if room_summary_snapshot_status != null:
+				check(room_summary_snapshot_status.clip_text and room_summary_snapshot_status.get_theme_font_size("font_size") >= 9 and relative_luma(room_summary_snapshot_status.get_theme_color("font_color")) >= 0.78, "online lobby room summary exposes a readable stale-snapshot status lane at %s" % viewport_size)
 		if roster_title != null:
 			check(roster_rect.grow(1.0).encloses(screen_rect(roster_title)) and roster_title.get_theme_font_size("font_size") >= 13 and relative_luma(roster_title.get_theme_color("font_color")) >= 0.88, "online lobby roster title is readable and contained at %s" % viewport_size)
 		if log_list_title != null:
@@ -2969,7 +3002,22 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		# the disconnected fixture so this probe cannot leak room state downstream.
 		var saved_room: Dictionary = scene.online_room.duplicate(true)
 		var saved_seen: int = int(scene.online_log_seen_count)
+		var saved_total: int = int(scene.online_log_total_count)
+		var saved_waiting: bool = bool(scene.online_waiting_for_server)
+		var saved_sent_type: String = str(scene.online_last_sent_type)
+		scene.online_room = {"code": "ROOM7", "players": [{"seat": 0, "name": "上次快照", "ready": true}]}
+		scene.online_waiting_for_server = true
+		scene.online_last_sent_type = "joinRoom"
+		scene.refresh_online_room_content()
+		check(room_summary_snapshot_status != null and room_summary_snapshot_status.visible and room_summary_snapshot_status.text.contains("上次房间快照") and room_summary_snapshot_status.tooltip_text.contains("房间数据状态"), "online lobby marks the retained roster as a stale room snapshot while join is pending at %s" % viewport_size)
+		scene.online_room = saved_room
+		scene.online_log_seen_count = saved_seen
+		scene.online_log_total_count = saved_total
+		scene.online_waiting_for_server = saved_waiting
+		scene.online_last_sent_type = saved_sent_type
+		scene.refresh_online_lobby_state()
 		scene.online_room = {"logs": ["第一条", "第二条", "第三条"]}
+		scene.online_log_total_count = 3
 		scene.online_log_seen_count = 1
 		scene.refresh_online_log_navigation()
 		check(log_latest_button != null and log_latest_button.text == "最新 2" and log_unread_label != null and log_unread_label.visible and log_unread_label.text == "未读 2", "online lobby exposes an accurate unread-log count at %s" % viewport_size)
@@ -2977,6 +3025,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		check(scene.online_log_seen_count == 3 and log_latest_button != null and log_latest_button.text == "最新" and log_unread_label != null and not log_unread_label.visible, "online lobby latest-log route clears unread state at %s" % viewport_size)
 		scene.online_room = saved_room
 		scene.online_log_seen_count = saved_seen
+		scene.online_log_total_count = saved_total
 		scene.render_room_log()
 		scene.refresh_online_log_navigation()
 	var feedback_rect := Rect2()

@@ -40,6 +40,8 @@ const GENERATED_GPT_ILLUSTRATION_CANDIDATE_PNGS := [
 	"wall_strip_material_reference_v1.png",
 ]
 const VISUAL_NODE_REFERENCE_BACKFILL := [
+	"MeldKindBadge",
+	"MeldKindBadgeLabel",
 	"MeldGroup3DCastShadow",
 	"MeldGroup3DTopRim",
 	"ActionButtonSeal",

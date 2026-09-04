@@ -321,7 +321,7 @@ func capture_smoke_state(scene: Node) -> Dictionary:
 		"daily_login_view_state", "tutorial_step", "tutorial_checkpoint_round_id", "tutorial_checkpoint_phase", "tutorial_checkpoint_reason", "tutorial_last_saved_unix", "show_hand_hint", "interactive_guide_active", "interactive_guide_type", "interactive_guide_target_index",
 		"music_enabled", "sfx_enabled", "tts_enabled", "voice_enabled", "fast_mode_enabled", "large_text_enabled", "high_contrast_enabled", "reduce_motion_enabled", "ai_difficulty", "fx_enabled", "graphics_quality", "ai_assist_enabled", "current_bgm_index", "rule_variant",
 		"players", "wall", "current_seat", "dealer_seat", "offline_hand_number", "offline_last_winner", "offline_dealer_repeat", "last_discard", "last_discard_seat", "table_logs", "offline_phase", "offline_turn_needs_draw", "offline_pending_claim", "offline_pending_claim_deadline_msec", "offline_claim_counts", "offline_package_liability", "offline_passed_win_tiles", "offline_claim_discard_bans", "offline_concealed_gang_tiles", "offline_last_draw", "offline_self_draw_ready", "offline_ai_active", "offline_ai_run_queued", "offline_all_bot_mode", "offline_sim_quiet", "offline_match_briefing_shown", "offline_skip_ai_profile_reshuffle", "offline_active_rule_variant", "round_summary", "round_result_kind", "last_score_deltas", "last_win_score", "current_human_advice", "current_seat_threat_reports", "advisor_detail_open", "table_log_archive_open", "table_log_chat_restore_pending", "table_log_chat_draft", "pending_danger_discard_index", "pending_danger_discard_tile", "pending_danger_discard_report", "hand_keyboard_selection",
-		"selected_room", "online_connection_host", "online_player_name", "online_room", "online_game", "online_log_seen_count", "online_feedback", "online_waiting_for_server", "online_last_sent_action", "online_last_sent_type", "online_last_sent_msec", "online_last_sent_payload", "online_slow_notice_shown", "online_retry_available", "online_action_sequence", "online_session_id", "online_room_revision", "online_game_revision", "online_resume_context", "online_resume_pending", "online_resume_join_sent", "online_seen_message_ids", "online_seen_voice_sequences", "online_last_chat_sent_msec", "online_last_receive_msec", "online_last_heartbeat_msec", "online_reconnect_attempts", "online_next_reconnect_msec", "online_last_malformed_notice_msec", "online_messages_received", "online_messages_rejected", "online_last_snapshot_fingerprint", "online_last_room_snapshot_fingerprint", "online_players_by_seat", "online_player_index_token", "online_announced_discard_key", "online_pending_local_discard_identity", "sent_hello", "chat_messages", "chat_panel_open", "table_log_chat_restore_pending", "table_log_chat_draft", "safe_area_test_margins_override"
+		"selected_room", "online_connection_host", "online_player_name", "online_room", "online_game", "online_log_seen_count", "online_log_total_count", "online_feedback", "online_waiting_for_server", "online_last_sent_action", "online_last_sent_type", "online_last_sent_msec", "online_last_sent_payload", "online_slow_notice_shown", "online_retry_available", "online_action_sequence", "online_session_id", "online_room_revision", "online_game_revision", "online_resume_context", "online_resume_pending", "online_resume_join_sent", "online_seen_message_ids", "online_seen_voice_sequences", "online_last_chat_sent_msec", "online_last_receive_msec", "online_last_heartbeat_msec", "online_reconnect_attempts", "online_next_reconnect_msec", "online_last_malformed_notice_msec", "online_messages_received", "online_messages_rejected", "online_last_snapshot_fingerprint", "online_last_room_snapshot_fingerprint", "online_players_by_seat", "online_player_index_token", "online_announced_discard_key", "online_pending_local_discard_identity", "sent_hello", "chat_messages", "chat_panel_open", "table_log_chat_restore_pending", "table_log_chat_draft", "safe_area_test_margins_override"
 	]
 	var fields: Dictionary = {}
 	for field_name in field_names:
@@ -1014,6 +1014,7 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	scene.update_state = "idle"
 	scene.refresh_update_dialog()
 	scene.show_menu(true)
+	scene.dismiss_active_toast()
 	scene.show_toast("toast-A", 1000)
 	var first_toast_id: int = scene.toast_current.get_instance_id() if scene.toast_current != null else 0
 	scene.show_toast("toast-B", 1000)
@@ -1840,6 +1841,14 @@ func run() -> void:
 
 	print("--- N) table actions use real hand, danger, and claim controls ---")
 	scene.start_offline(true)
+	# A previous fixture may have left run_ai_until_human() awaiting a delay. Give
+	# that coroutine a non-offline boundary before installing this deterministic
+	# hand, otherwise it can mutate the new fixture between input assertions.
+	scene.mode = "menu"
+	scene.offline_phase = "ended"
+	scene.offline_ai_active = false
+	scene.offline_ai_run_queued = false
+	await settle()
 	await settle(0.10)
 	scene.mode = "offline"
 	scene.ai_assist_enabled = false
@@ -1920,12 +1929,20 @@ func run() -> void:
 		await settle(0.04)
 	var danger_confirm_button := scene.find_child("DangerDiscardConfirmButton", true, false) as Button
 	check(danger_confirm_button != null, "danger flow exposes the explicit confirmation action")
+	var danger_discard_event_before := 0
+	for raw_event in scene.round_event_history:
+		if typeof(raw_event) == TYPE_DICTIONARY and str(raw_event.get("type", "")) == "discard" and int(raw_event.get("seat", -1)) == 0 and str(raw_event.get("tile", "")) == "S":
+			danger_discard_event_before += 1
 	if danger_confirm_button != null:
 		var danger_confirm_center := danger_confirm_button.get_global_rect().get_center()
 		await send_left_button(danger_confirm_center, true)
 		await send_left_button(danger_confirm_center, false)
 		await settle(0.18)
-	var danger_commit_ok: bool = not scene.has_pending_danger_discard() and not (scene.players[0]["hand"] as Array).has("S") and str(scene.last_discard) == "S"
+	var danger_discard_event_after := 0
+	for raw_event in scene.round_event_history:
+		if typeof(raw_event) == TYPE_DICTIONARY and str(raw_event.get("type", "")) == "discard" and int(raw_event.get("seat", -1)) == 0 and str(raw_event.get("tile", "")) == "S":
+			danger_discard_event_after += 1
+	var danger_commit_ok: bool = not scene.has_pending_danger_discard() and not (scene.players[0]["hand"] as Array).has("S") and danger_discard_event_after == danger_discard_event_before + 1
 	check(danger_commit_ok, "mouse confirmation commits exactly one dangerous discard (pending=%s hand_has_s=%s last=%s phase=%s)" % [scene.has_pending_danger_discard(), (scene.players[0]["hand"] as Array).has("S"), str(scene.last_discard), str(scene.offline_phase)])
 
 	var claim_interaction_names := ["chi", "peng", "gang", "hu"]

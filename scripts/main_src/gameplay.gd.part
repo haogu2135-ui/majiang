@@ -587,6 +587,25 @@ func update_hand_ai_hints() -> void:
 	var old_tray = root_layer.get_node_or_null("HandTray")
 	if old_tray == null or not is_instance_valid(old_tray):
 		return
+	var preserved_selection := hand_keyboard_selection
+	var focused_source_index := -1
+	var hovered_source_index := -1
+	for old_tile_value in old_tray.find_children("HandTile_*", "Control", true, false):
+		var old_tile := old_tile_value as Control
+		if old_tile == null:
+			continue
+		var source_index := int(old_tile.get_meta("hand_source_index", -1))
+		if source_index < 0:
+			continue
+		for old_button_value in old_tile.find_children("*", "Button", true, false):
+			var old_button := old_button_value as Button
+			if old_button == null or old_button.disabled:
+				continue
+			if old_button.has_focus():
+				focused_source_index = source_index
+			if old_button.is_hovered():
+				hovered_source_index = source_index
+			break
 	var old_tray_index := old_tray.get_index()
 	root_layer.remove_child(old_tray)
 	old_tray.queue_free()
@@ -594,6 +613,17 @@ func update_hand_ai_hints() -> void:
 	var new_tray = root_layer.get_node_or_null("HandTray")
 	if new_tray != null:
 		root_layer.move_child(new_tray, mini(old_tray_index, root_layer.get_child_count() - 1))
+	# AI suggestions can arrive while a player is reading the hand. Restore the
+	# stable selection/focus and pointer highlight after the replacement tree is
+	# mounted so the refresh cannot silently move the interaction target.
+	if preserved_selection >= 0 and hand_keyboard_tile_selectable(preserved_selection):
+		hand_keyboard_selection = preserved_selection
+	if focused_source_index >= 0:
+		call_deferred("focus_hand_tile_control", focused_source_index)
+	else:
+		call_deferred("focus_hand_keyboard_control")
+	if hovered_source_index >= 0:
+		call_deferred("restore_hand_tile_hover_visual", hovered_source_index)
 	refresh_ai_advisor_panel()
 
 func refresh_ai_advisor_panel() -> void:
@@ -3220,6 +3250,18 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 func discard_report_for_tile(tile: String, hand_index: int = -1) -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard() or tile == "":
 		return {}
+	# A danger confirmation owns a stable report snapshot. AI refreshes can replace
+	# current_human_advice while the confirmation surface is still open, so use
+	# the snapshot for the selected tile and its explicitly offered alternatives.
+	if pending_danger_discard_tile == tile and not pending_danger_discard_report.is_empty():
+		var pending_index := int(pending_danger_discard_report.get("hand_index", pending_danger_discard_index))
+		if hand_index < 0 or pending_index < 0 or hand_index == pending_index:
+			return pending_danger_discard_report
+		var pending_alternatives = pending_danger_discard_report.get("alternative_reports", [])
+		if typeof(pending_alternatives) == TYPE_ARRAY:
+			for raw_alternative in pending_alternatives:
+				if typeof(raw_alternative) == TYPE_DICTIONARY and str(raw_alternative.get("tile", "")) == tile:
+					return raw_alternative
 	var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
 	for report in reports:
 		if typeof(report) == TYPE_DICTIONARY and str(report.get("tile", "")) == tile and (hand_index < 0 or int(report.get("hand_index", -1)) == hand_index):
