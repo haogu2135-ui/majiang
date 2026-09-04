@@ -219,6 +219,16 @@ func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 
 func _process(_delta: float) -> void:
 	var now = Time.get_ticks_msec()
+	if reset_progress_confirming and reset_progress_confirm_deadline_msec > 0 and now >= reset_progress_confirm_deadline_msec:
+		reset_progress_confirming = false
+		reset_progress_confirm_deadline_msec = 0
+		if settings_panel_open:
+			refresh_current_screen()
+	if telemetry_clear_confirming and telemetry_clear_confirm_deadline_msec > 0 and now >= telemetry_clear_confirm_deadline_msec:
+		telemetry_clear_confirming = false
+		telemetry_clear_confirm_deadline_msec = 0
+		if telemetry_sheet_open:
+			refresh_telemetry_data_sheet()
 	keep_background_music_alive(now)
 	# 音频系统健康检查 - 每5秒检查一次
 	if audio_health_check_due(now):
@@ -378,6 +388,15 @@ func handle_ui_cancel() -> bool:
 		return true
 	if has_pending_claim_window():
 		keyboard_claim_action("pass")
+		return true
+	if reset_progress_confirming:
+		reset_progress_confirming = false
+		reset_progress_confirm_deadline_msec = 0
+		if settings_panel_open:
+			refresh_current_screen()
+		return true
+	if loading_screen_active:
+		cancel_loading_screen()
 		return true
 	if advisor_detail_open:
 		close_advisor_detail_panel()
@@ -1594,6 +1613,7 @@ func deal_offline_hand() -> void:
 			reshuffle_ai_profiles_for_hand()
 	for seat in range(players.size()):
 		players[seat]["hand"] = []
+		players[seat]["hand_instance_serials"] = []
 		players[seat]["discards"] = []
 		players[seat]["melds"] = []
 		players[seat]["flowers"] = 0
@@ -1607,7 +1627,7 @@ func deal_offline_hand() -> void:
 			draw_tile_for(seat, false)
 	draw_tile_for(dealer_seat, false)
 	for seat in range(4):
-		sort_hand(players[seat]["hand"])
+		sort_player_hand(seat)
 	add_log("第%d局开始，%s坐庄。" % [offline_hand_number, players[dealer_seat]["name"]])
 	if not offline_sim_quiet:
 		var briefing = offline_hand_ai_briefing_text()
@@ -1666,8 +1686,9 @@ func score_strip_leader_score() -> int:
 func request_reset_progress_from_settings() -> void:
 	if not reset_progress_confirming:
 		reset_progress_confirming = true
-		set_status("再次点击确认清空本地进度")
-		show_toast("再次点击确认清空本地进度")
+		reset_progress_confirm_deadline_msec = Time.get_ticks_msec() + 5000
+		set_status("确认清空：将删除统计与离线记录（5秒内再次点击）")
+		show_toast("确认清空统计与离线记录：5秒内再次点击")
 		refresh_current_screen()
 		return
 	reset_offline_progress()
@@ -1901,6 +1922,32 @@ func effective_viewport_size() -> Vector2:
 			float(ProjectSettings.get_setting("display/window/size/viewport_height", 720))
 		)
 	return viewport_size
+
+
+func ui_layout_density() -> String:
+	# Keep responsive decisions discrete so text, touch targets, and authored
+	# plates change together instead of drifting at arbitrary window widths.
+	var viewport := effective_viewport_size()
+	if viewport.x <= 1100.0 or viewport.y <= 560.0:
+		return "compact"
+	if viewport.x >= 1600.0:
+		return "wide"
+	return "standard"
+
+
+func ui_is_compact() -> bool:
+	return ui_layout_density() == "compact"
+
+
+func ui_is_wide() -> bool:
+	return ui_layout_density() == "wide"
+
+
+func ui_compact_copy(full_text: String, compact_text: String, limit: int = 0) -> String:
+	var resolved := compact_text if ui_is_compact() else full_text
+	if limit > 0:
+		return resolved.left(limit)
+	return resolved
 
 
 func commercial_ui_font_size(base_size: int, wide_increment: int = 0) -> int:
@@ -3050,6 +3097,14 @@ func pending_claim_action_columns(count: int) -> int:
 	var capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, width + float(separation)))))
 	return mini(response_count, maxi(1, capacity))
 
+func pending_claim_response_button_width(count: int, separation: int) -> float:
+	var columns := maxi(1, pending_claim_action_columns(count))
+	var base_rect := pending_claim_action_base_rect()
+	var available_width := safe_content_pixel_size().x * maxf(0.001, base_rect.size.x - base_rect.position.x)
+	var width := floorf((available_width - float(maxi(0, columns - 1) * separation)) / float(columns))
+	width = minf(action_button_max_width_for_viewport(), width)
+	return maxf(float(PENDING_CLAIM_BUTTON_MIN_WIDTH), width)
+
 func pending_claim_action_content_height(count: int) -> float:
 	var rows = pending_claim_action_row_count(count)
 	var button_height = maxf(44.0, ACTION_BUTTON_HEIGHT)
@@ -3082,8 +3137,9 @@ func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 	)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
-	# Keep the response context in a dedicated decision lane. The standard lane
-	# stays top-right; the compact lane moves to the left-top reserve below the HUD.
+	# Keep the response context in one predictable upper-left decision lane. The
+	# table ledger is suppressed while a response is pending, leaving this slot
+	# available at every supported viewport without covering the center console.
 	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
 	var safe_width = maxf(1.0, resolved_size.x)
 	var safe_height = maxf(1.0, resolved_size.y)
@@ -3101,9 +3157,13 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 		# Use the independent left-top slot so the panel can keep readable source
 		# and tile labels without covering the right-seat meld lane.
 		context_height_px = 48.0
-	var header_left := 0.015 if narrow_context else 0.862
-	var header_top := 0.110 if narrow_context else 0.205
-	var header_right := 0.280 if narrow_context else 0.990
+	if not narrow_context:
+		# The wide/medium channel sits between the top river and the right-side
+		# meld lane, ending beside the action dock instead of floating at the HUD.
+		context_height_px = 48.0
+	var header_left := 0.015 if narrow_context else 0.400
+	var header_top := 0.110 if narrow_context else 0.195
+	var header_right := 0.280 if narrow_context else 0.670
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height):
 		return header_candidate
@@ -3242,6 +3302,7 @@ func finalize_action_bar_layout() -> void:
 		action_bar.offset_bottom = 0.0
 	var width = action_button_width_for_count(count, separation)
 	var font_size = action_button_font_size(width)
+	var response_width: float = pending_claim_response_button_width(count, separation) if compact_claim_mode else float(width)
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	var ended_widths: Array[float] = []
@@ -3257,6 +3318,9 @@ func finalize_action_bar_layout() -> void:
 	for button in buttons:
 		var button_width: float = float(width)
 		var button_font_size: int = int(font_size)
+		if compact_claim_mode and not bool(button.get_meta("pending_tail", false)):
+			button_width = response_width
+			button_font_size = action_button_font_size(response_width)
 		if compact_claim_mode and bool(button.get_meta("pending_tail", false)):
 			# Pass/cancel/voice share one full-width lane below the response choices.
 			button_width = (full_width - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
@@ -3933,6 +3997,8 @@ func on_update_primary_pressed() -> void:
 		start_update_download()
 
 func on_update_secondary_pressed() -> void:
+	if update_state == "installing":
+		return
 	if update_state == "checking" or update_state == "downloading":
 		update_request.cancel_request()
 		update_request.download_file = ""
@@ -4165,7 +4231,7 @@ func complete_added_gang(seat: int, tile: String) -> bool:
 	speak_action_call("补杠", tile)
 	add_log("%s补杠%s。" % [players[seat]["name"], tile_label(tile)])
 	play_fx_gang_burst("added", seat)
-	sort_hand(hand)
+	sort_player_hand(seat)
 	offline_pending_claim.clear()
 	draw_after_gang(seat)
 	return true
@@ -6626,16 +6692,27 @@ func configure_action_button_size(button: Button, width: float, height: float, f
 		return
 	var resolved_width := maxf(width, float(ACTION_BUTTON_MIN_TOUCH_WIDTH))
 	var resolved_font_size := maxi(12, font_size)
-	# Action labels are short Chinese CTAs, so a compact estimate is enough to
-	# choose a readable font before the container performs its final layout. This
-	# keeps the complete action visible without allowing one long label to push
-	# neighboring touch targets outside the dock.
-	var text_width := float(button.text.strip_edges().length()) * float(resolved_font_size) * 0.98
-	while text_width + 18.0 > resolved_width and resolved_font_size > 12:
-		resolved_font_size -= 1
+	# Measure the actual CJK font before reducing the label. Character-count
+	# estimates overstate mixed labels such as 吃1-3 and unnecessarily drop
+	# compact response actions below the readable 14px floor.
+	var text_width: float = 0.0
+	var action_font = button.get_theme_font("font")
+	if action_font != null:
+		text_width = action_font.get_string_size(button.text.strip_edges(), HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved_font_size).x
+	else:
 		text_width = float(button.text.strip_edges().length()) * float(resolved_font_size) * 0.98
-	if text_width + 18.0 > resolved_width:
-		resolved_width = text_width + 18.0
+	var horizontal_padding: float = 18.0
+	var normal_style := button.get_theme_stylebox("normal")
+	if normal_style != null:
+		horizontal_padding = maxf(8.0, normal_style.get_content_margin(SIDE_LEFT) + normal_style.get_content_margin(SIDE_RIGHT))
+	while text_width + horizontal_padding > resolved_width and resolved_font_size > 12:
+		resolved_font_size -= 1
+		if action_font != null:
+			text_width = action_font.get_string_size(button.text.strip_edges(), HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved_font_size).x
+		else:
+			text_width = float(button.text.strip_edges().length()) * float(resolved_font_size) * 0.98
+	if text_width + horizontal_padding > resolved_width:
+		resolved_width = text_width + horizontal_padding
 	button.custom_minimum_size = Vector2(resolved_width, maxf(height, 44.0))
 	button.clip_text = false
 	button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
@@ -8040,7 +8117,7 @@ func chat_panel_rect() -> Rect2:
 	# keeps the reading surface and its 44px controls away from active table data.
 	var candidates: Array[Rect2] = [
 		rect_full(0.790, 0.120, 0.985, 0.330),
-		rect_full(0.015, 0.115, 0.220, 0.335),
+		rect_full(0.015, 0.115, 0.220, 0.320),
 		rect_full(0.015, 0.535, 0.220, 0.720),
 		rect_full(0.790, 0.535, 0.985, 0.720),
 	]
@@ -8059,6 +8136,9 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 	for layout in SEAT_LAYOUTS:
 		occupied.append(Rect2((layout[1] as Rect2).position, (layout[1] as Rect2).size - (layout[1] as Rect2).position))
 	for layout in MELD_LAYOUTS:
+		var meld_seat := int(layout[0])
+		if get_melds(meld_seat).is_empty():
+			continue
 		var meld_rect: Rect2 = layout[1]
 		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
 	for zone in DISCARD_ZONES:
@@ -8066,10 +8146,12 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 		occupied.append(Rect2(river_rect.position, river_rect.size - river_rect.position))
 	var action_rect := action_bar_dock_layout_rect()
 	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
-	# The compact ledger is a separate text lane and is hidden only when a selected
-	# drawer actually shares its footprint.
+	# The upper-left route intentionally takes ownership of the compact ledger
+	# footprint while open; score it as available so a side meld cannot force the
+	# drawer into the lower river lanes.
 	var ledger_rect := rect_full(0.018, 0.128, 0.340, 0.235)
-	occupied.append(Rect2(ledger_rect.position, ledger_rect.size - ledger_rect.position))
+	if not (candidate.position.x < 0.30 and candidate.position.y < 0.40):
+		occupied.append(Rect2(ledger_rect.position, ledger_rect.size - ledger_rect.position))
 	var score := 0.0
 	for occupied_rect in occupied:
 		if candidate_geometry.intersects(occupied_rect, true):
@@ -8082,10 +8164,12 @@ func chat_panel_route_name() -> String:
 		return "lobby_drawer"
 	var rect := chat_panel_rect()
 	if rect.position.x < 0.30:
+		if rect.position.y < 0.40:
+			return "upper_meld_safe_drawer"
 		return "left_safe_drawer"
 	if rect.position.y > 0.45:
 		return "lower_safe_drawer"
-	return "right_safe_drawer"
+	return "top_safe_drawer"
 
 
 func add_chat_message(text: String) -> void:

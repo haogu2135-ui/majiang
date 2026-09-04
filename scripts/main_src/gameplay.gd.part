@@ -290,6 +290,7 @@ func _start_offline_impl() -> void:
 			players.append({
 				"name": SEAT_NAMES[i],
 				"hand": [],
+				"hand_instance_serials": [],
 				"discards": [],
 				"melds": [],
 				"flowers": 0,
@@ -313,6 +314,7 @@ func _start_offline_impl() -> void:
 				players.append({
 					"name": SEAT_NAMES[players.size()],
 					"hand": [],
+					"hand_instance_serials": [],
 					"discards": [],
 					"melds": [],
 					"flowers": 0,
@@ -390,6 +392,13 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 		if announce:
 			play_sfx("draw", -8.0)
 		offline_draw_serial += 1
+		var hand_instance_serials: Array = players[seat].get("hand_instance_serials", [])
+		if hand_instance_serials.size() != players[seat]["hand"].size() - 1:
+			hand_instance_serials.clear()
+			for _i in range(players[seat]["hand"].size() - 1):
+				hand_instance_serials.append(-1)
+		hand_instance_serials.append(offline_draw_serial)
+		players[seat]["hand_instance_serials"] = hand_instance_serials
 		offline_last_draw = {
 			"seat": seat,
 			"tile": tile,
@@ -397,6 +406,7 @@ func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") 
 			"wall_empty": wall.is_empty(),
 			"announce": announce,
 			"serial": offline_draw_serial,
+			"hand_index": players[seat]["hand"].size() - 1,
 		}
 		record_round_event("draw", {"seat": seat, "tile": normalize_tile_code(tile), "source": source, "wall_count": wall.size(), "serial": offline_draw_serial})
 		# 与“最近摸牌”历史分开：只有尚未出牌或副露的当前摸牌可以自摸。
@@ -432,6 +442,38 @@ func draw_turn_tile_or_finish(seat: int, announce: bool = true, source: String =
 
 func sort_hand(hand: Array) -> void:
 	hand.sort_custom(func(a, b): return tile_sort_index(str(a)) < tile_sort_index(str(b)))
+
+func sort_player_hand(seat: int) -> void:
+	if seat < 0 or seat >= players.size():
+		return
+	var hand: Array = players[seat].get("hand", [])
+	var serials: Array = players[seat].get("hand_instance_serials", [])
+	if serials.size() != hand.size():
+		serials.clear()
+		for _i in range(hand.size()):
+			serials.append(-1)
+	var entries: Array = []
+	for i in range(hand.size()):
+		entries.append({"tile": str(hand[i]), "serial": int(serials[i])})
+	entries.sort_custom(func(a, b):
+		var tile_a := str(a.get("tile", ""))
+		var tile_b := str(b.get("tile", ""))
+		var order_a := tile_sort_index(tile_a)
+		var order_b := tile_sort_index(tile_b)
+		if order_a == order_b:
+			return int(a.get("serial", -1)) < int(b.get("serial", -1))
+		return order_a < order_b
+	)
+	hand.clear()
+	serials.clear()
+	for entry in entries:
+		hand.append(str(entry.get("tile", "")))
+		serials.append(int(entry.get("serial", -1)))
+	players[seat]["hand"] = hand
+	players[seat]["hand_instance_serials"] = serials
+	var drawn_serial := int(offline_last_draw.get("serial", -1))
+	if int(offline_last_draw.get("seat", -1)) == seat and drawn_serial >= 0:
+		offline_last_draw["hand_index"] = serials.find(drawn_serial)
 
 func render_game() -> void:
 	if offline_sim_quiet:
@@ -652,8 +694,17 @@ func discard_report_map_for_hand() -> Dictionary:
 	var result: Dictionary = {}
 	for report in reports:
 		if typeof(report) == TYPE_DICTIONARY:
-			result[str(report.get("tile", ""))] = report
+			var hand_index := int(report.get("hand_index", -1))
+			if hand_index >= 0:
+				result[hand_index] = report
 	return result
+
+func discard_report_index_for_tile(reports: Dictionary, tile: String) -> int:
+	for raw_index in reports.keys():
+		var report = reports.get(raw_index, {})
+		if typeof(report) == TYPE_DICTIONARY and str(report.get("tile", "")) == tile:
+			return int(raw_index)
+	return -1
 
 func human_discard(index: int) -> void:
 	if not can_self_discard():
@@ -1263,7 +1314,7 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				finish_wall_draw()
 				ai_sim_stats["wall_ends"] = int(ai_sim_stats.get("wall_ends", 0)) + 1
 				break
-			sort_hand(players[seat]["hand"])
+			sort_player_hand(seat)
 			offline_turn_needs_draw = false
 			if can_win_for_seat(seat):
 				var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
@@ -1382,6 +1433,7 @@ func ensure_ai_benchmark_players() -> void:
 			players.append({
 				"name": SEAT_NAMES[i],
 				"hand": [],
+				"hand_instance_serials": [],
 				"discards": [],
 				"melds": [],
 				"flowers": 0,
@@ -1391,6 +1443,7 @@ func ensure_ai_benchmark_players() -> void:
 			})
 	for i in range(4):
 		players[i]["hand"] = []
+		players[i]["hand_instance_serials"] = []
 		players[i]["discards"] = []
 		players[i]["melds"] = []
 		players[i]["flowers"] = 0
@@ -2101,7 +2154,7 @@ func run_ai_until_human() -> void:
 			if drawn == "":
 				break
 			play_ai_draw_tile_animation(seat, drawn)
-			sort_hand(players[seat]["hand"])
+			sort_player_hand(seat)
 			offline_turn_needs_draw = false
 			if can_win_for_seat(seat):
 				var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
@@ -2161,7 +2214,7 @@ func run_ai_until_human() -> void:
 			if mode == "offline" and offline_phase == "await_discard" and current_seat == 0:
 				var drawn = draw_turn_tile_or_finish(0)
 				if drawn != "":
-					sort_hand(players[0]["hand"])
+					sort_player_hand(0)
 					offline_turn_needs_draw = false
 					if can_win_for_seat(0):
 						add_log("你摸到%s，可以自摸。" % tile_label(drawn))
@@ -2218,6 +2271,12 @@ func commit_discard(seat: int, tile: String) -> bool:
 	if index < 0:
 		return false
 	hand.remove_at(index)
+	var hand_instance_serials: Array = players[seat].get("hand_instance_serials", [])
+	if index < hand_instance_serials.size():
+		hand_instance_serials.remove_at(index)
+	players[seat]["hand_instance_serials"] = hand_instance_serials
+	if seat == 0:
+		offline_last_draw = {}
 	if seat == 0:
 		clear_pending_danger_discard()
 	invalidate_self_draw_readiness()
@@ -2439,7 +2498,7 @@ func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String,
 	if seat != 0:
 		play_ai_claim_choice_confirmation_fx(seat, from_seat, tile, claim)
 	play_claim_animation(claim, tile, from_seat, seat)
-	sort_hand(hand)
+	sort_player_hand(seat)
 	last_discard = ""
 	last_discard_seat = -1
 	current_seat = seat
@@ -2500,7 +2559,7 @@ func perform_concealed_gang(seat: int, tile: String) -> bool:
 	speak_action_call("暗杠", tile)
 	add_log("%s暗杠%s。" % [players[seat]["name"], tile_label(tile)])
 	play_fx_gang_burst("concealed", seat)
-	sort_hand(hand)
+	sort_player_hand(seat)
 	draw_after_gang(seat)
 	return true
 
@@ -3158,16 +3217,16 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 		return false
 	return rule_minimum_met_for_tiles(seat, tiles_from_counts(counts), false)
 
-func discard_report_for_tile(tile: String) -> Dictionary:
+func discard_report_for_tile(tile: String, hand_index: int = -1) -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard() or tile == "":
 		return {}
 	var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
 	for report in reports:
-		if typeof(report) == TYPE_DICTIONARY and str(report.get("tile", "")) == tile:
+		if typeof(report) == TYPE_DICTIONARY and str(report.get("tile", "")) == tile and (hand_index < 0 or int(report.get("hand_index", -1)) == hand_index):
 			return report
 	if not current_human_advice.is_empty():
 		for report in get_ai_discard_reports(0):
-			if typeof(report) == TYPE_DICTIONARY and str(report.get("tile", "")) == tile:
+			if typeof(report) == TYPE_DICTIONARY and str(report.get("tile", "")) == tile and (hand_index < 0 or int(report.get("hand_index", -1)) == hand_index):
 				return report
 	return {}
 

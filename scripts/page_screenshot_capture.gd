@@ -355,7 +355,7 @@ func validate_hand_tutorial_fixture(scene: Node) -> bool:
 func validate_reset_progress_fixture(scene: Node) -> bool:
 	var row_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
 	var reset_button := scene.find_child("SettingRowButton_本地进度", true, false) as Button
-	return scene.reset_progress_confirming and row_status != null and row_status.tooltip_text.contains("再次点击确认") and (row_status.text == "再次确认" or row_status.text.contains("再次点击确认")) and reset_button != null and reset_button.text == "清空" and reset_button.tooltip_text.contains("再次点击确认")
+	return scene.reset_progress_confirming and row_status != null and row_status.tooltip_text.contains("再次点击确认") and (row_status.text == "再次确认" or row_status.text.contains("再次点击确认")) and reset_button != null and reset_button.text == "确认清空" and reset_button.tooltip_text.contains("再次点击确认")
 
 func validate_telemetry_fixture(scene: Node, screen_name: String) -> bool:
 	if not scene.settings_panel_open or not scene.telemetry_sheet_open:

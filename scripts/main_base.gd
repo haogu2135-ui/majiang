@@ -558,13 +558,16 @@ var settings_focus_restore_name := ""
 var menu_focus_restore_name := ""
 var shop_scroll_restore_value := -1.0
 var shop_focus_restore_name := ""
+var stats_selected_rule := ""
 var reset_progress_confirming = false
+var reset_progress_confirm_deadline_msec := 0
 var exit_confirm_panel: Control = null
 var exit_confirm_focus_restore_id := 0
 var update_dialog_focus_restore_id := 0
 var daily_login_view_state: Dictionary = {}
 var loading_screen_active := false
 var loading_view_state: Dictionary = {}
+var loading_started_msec := 0
 var discard_window_start_by_seat: Dictionary = {}
 var tutorial_step = TUTORIAL_STEP_NEW  # 新手教程步骤；负值表示已完成或已跳过
 var tutorial_panel: Control = null
@@ -653,6 +656,7 @@ var telemetry_upload_status := "本地队列"
 var telemetry_export_status := "未导出"
 var telemetry_sheet_open := false
 var telemetry_clear_confirming := false
+var telemetry_clear_confirm_deadline_msec := 0
 var applied_result_transactions: Dictionary = {}
 var applied_result_transaction_order: Array[String] = []
 var offline_hand_seed := 0
@@ -871,6 +875,8 @@ var toast_container: Control
 var toast_tween: Tween
 var toast_current: Control
 var toast_mode := ""
+var toast_queue: Array = []
+var toast_active_minimum_dwell_msec := 0
 var game_render_delay_timer: Timer = null
 
 # 牌面动画系统变量 / Tile Animation System Variables
@@ -929,14 +935,14 @@ const DISCARD_ZONES := [
 		# between seat, meld, and river so visual z-order can never hide a nameplate
 		# or turn an adjacent lane into a surprising click target.
 	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.600, 0.875)), 8],
-	[2, Rect2(Vector2(0.285, 0.205), Vector2(0.715, 0.335)), 8],
-	[3, Rect2(Vector2(0.225, 0.300), Vector2(0.385, 0.550)), 3],
-	[1, Rect2(Vector2(0.615, 0.300), Vector2(0.775, 0.550)), 3],
+	[2, Rect2(Vector2(0.285, 0.205), Vector2(0.715, 0.290)), 8],
+	[3, Rect2(Vector2(0.225, 0.310), Vector2(0.385, 0.550)), 3],
+	[1, Rect2(Vector2(0.615, 0.310), Vector2(0.775, 0.550)), 3],
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
 	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.875, 0.740))],
-	[2, Rect2(Vector2(0.735, 0.105), Vector2(0.965, 0.195))],
+	[2, Rect2(Vector2(0.680, 0.105), Vector2(0.965, 0.195))],
 	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.205, 0.740))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
@@ -1931,6 +1937,7 @@ func set_dynamic_label_text(label: Label, text: String, detail: String = "") -> 
 		configure_clipped_label(label)
 	var resolved_detail := detail.strip_edges() if detail.strip_edges() != "" else text.strip_edges()
 	label.tooltip_text = resolved_detail
+	label.set_meta("ui_full_text", resolved_detail)
 
 func estimate_wrapped_text_height(text: String, available_width: float, font_size: int, line_gap: float = 4.0) -> float:
 	var width := maxf(1.0, available_width)
@@ -1989,9 +1996,11 @@ func fit_label_font_size(label: Label, available_width: float, preferred_size: i
 		return preferred_size
 	var resolved := maxi(minimum_size, preferred_size)
 	var width := maxf(1.0, available_width)
-	var text_length := float(label.text.strip_edges().length())
-	while text_length * float(resolved) * 0.98 + 8.0 > width and resolved > minimum_size:
+	var font := label.get_theme_font("font")
+	var measured_width := font.get_string_size(label.text.strip_edges(), HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved).x if font != null else float(label.text.strip_edges().length()) * float(resolved) * 0.98
+	while measured_width + 8.0 > width and resolved > minimum_size:
 		resolved -= 1
+		measured_width = font.get_string_size(label.text.strip_edges(), HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved).x if font != null else float(label.text.strip_edges().length()) * float(resolved) * 0.98
 	label.add_theme_font_size_override("font_size", resolved)
 	label.set_meta("fitted_font_size", resolved)
 	return resolved
@@ -2088,6 +2097,8 @@ func top_hud_button_tooltip(text: String) -> String:
 func make_top_hud_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
 	button.tooltip_text = top_hud_button_tooltip(text)
+	button.set_meta("accessible_name", text)
+	button.set_meta("ui_action_name", text)
 	button.text = ""
 	button.custom_minimum_size = TOP_HUD_BUTTON_SIZE
 	button.clip_text = true
@@ -4095,6 +4106,7 @@ func load_offline_progress() -> bool:
 		players.append({
 			"name": str(config.get_value(section, "name", SEAT_NAMES[i])),
 			"hand": [],
+			"hand_instance_serials": [],
 			"discards": [],
 			"melds": [],
 			"flowers": 0,
@@ -4166,6 +4178,7 @@ func reset_offline_progress() -> void:
 	if dir != null and dir.file_exists("offline_progress.cfg"):
 		dir.remove("offline_progress.cfg")
 	reset_progress_confirming = false
+	reset_progress_confirm_deadline_msec = 0
 	offline_progress_loaded_state = false
 	offline_progress_dirty = false
 	offline_progress_last_save_msec = 0

@@ -1015,16 +1015,17 @@ func draw_actions(parent: Control) -> void:
 					online_pass_button.set_meta("pending_tail", true)
 					pending_claim_tail_bar.add_child(online_pass_button)
 			draw_pending_claim_illustration(parent)
-	var voice = make_action_button("闭麦" if voice_enabled else "麦克风", Color(0.74, 0.24, 0.24) if voice_enabled else Color(0.24, 0.52, 0.72), func() -> void:
-		toggle_voice_chat()
-	)
-	voice.name = "VoiceActionButton"
-	draw_voice_button_art(voice, voice_enabled, voice_peak)
-	if has_pending_claim_window():
-		voice.set_meta("pending_tail", true)
-		pending_claim_tail_bar.add_child(voice)
-	else:
-		action_bar.add_child(voice)
+		if mode == "online_game":
+			var voice = make_action_button("闭麦" if voice_enabled else "麦克风", Color(0.74, 0.24, 0.24) if voice_enabled else Color(0.24, 0.52, 0.72), func() -> void:
+				toggle_voice_chat()
+			)
+			voice.name = "VoiceActionButton"
+			draw_voice_button_art(voice, voice_enabled, voice_peak)
+			if has_pending_claim_window():
+				voice.set_meta("pending_tail", true)
+				pending_claim_tail_bar.add_child(voice)
+			else:
+				action_bar.add_child(voice)
 	if mode == "online_game" and online_waiting_for_server:
 		var cancel_sync_button := make_action_button("取消等待", Color(0.46, 0.50, 0.52), Callable(self, "cancel_online_pending_action"))
 		cancel_sync_button.name = "OnlineCancelSyncButton"
@@ -1279,12 +1280,11 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	panel.add_child(detail_scroll)
 	var detail_text = make_label(detail_scroll, advisor_detail_text(), 13, Color(0.86, 0.90, 0.84), false)
 	detail_text.name = "AdvisorDetailText"
-	detail_text.custom_minimum_size = Vector2(0.0, 340.0)
 	detail_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	detail_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	detail_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_text.clip_text = true
+	configure_wrapped_label(detail_text, maxf(220.0, effective_viewport_size().x * 0.700), 0.0, 5.0)
+	detail_text.clip_text = false
+	detail_text.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	detail_text.tooltip_text = detail_text.text
 	var hint = make_label(panel, "", 10, Color(0.66, 0.72, 0.64), false)
 	hint.name = "AdvisorDetailHint"
@@ -1434,7 +1434,7 @@ func draw_after_gang(seat: int) -> void:
 	var drawn = draw_turn_tile_or_finish(seat, true, "gang")
 	if drawn == "":
 		return
-	sort_hand(players[seat]["hand"])
+	sort_player_hand(seat)
 	offline_turn_needs_draw = false
 	offline_phase = "await_discard"
 	add_log("%s杠后补牌。" % players[seat]["name"])
@@ -3965,7 +3965,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	var dealer_wind: String = str(CENTER_WIND_LABELS[clampi(dealer_seat, 0, CENTER_WIND_LABELS.size() - 1)]) if mode == "offline" else ""
 	var compact_top_hud := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
 	var room_code := str(online_game.get("roomCode", selected_room))
-	var title_text = ("第%d局 · 庄%s" if compact_top_hud else "修炼场 · 第%d局 · 庄%s") % [offline_hand_number, dealer_wind] if mode == "offline" else "房间 " + room_code
+	var title_text = ("第%d局 · 庄%s" if compact_top_hud else "修炼场 · 第%d局 · 庄%s") % [offline_hand_number, dealer_wind] if mode == "offline" else "房间 " + online_room_code_summary(room_code)
 	var title_rect := TOP_HUD_TITLE_RECT
 	var status_rect := TOP_HUD_STATUS_RECT
 	var wall_rect := TOP_HUD_WALL_RECT
@@ -3992,6 +3992,15 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
+	if mode == "online_game" and room_code != "":
+		title.tooltip_text = "完整房间号：%s" % room_code
+		title.set_meta("room_code", room_code)
+		var room_copy := make_icon_button("info", Color(0.94, 0.84, 0.54), 13, Callable(self, "show_online_room_code_detail"))
+		room_copy.name = "TopHudRoomCodeCopyButton"
+		room_copy.tooltip_text = "复制完整房间号"
+		room_copy.set_meta("accessible_name", "复制完整房间号")
+		apply_rect(room_copy, rect_full(0.275, 0.110, 0.305, 0.650))
+		hud.add_child(room_copy)
 
 	# 状态
 	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
@@ -4178,10 +4187,12 @@ func draw_hand(parent: Control) -> void:
 	var suggested_tile = suggest_human_discard() if assist_enabled else ""
 	var hand_reports = discard_report_map_for_hand() if assist_enabled else {}
 	var pending_tile = pending_danger_discard_tile if assist_enabled and has_pending_danger_discard() else ""
-	var suggested_index := hand_tile_index_for_advice(hand, suggested_tile) if suggested_tile != "" else -1
+	var suggested_index := discard_report_index_for_tile(hand_reports, suggested_tile) if suggested_tile != "" else -1
+	if suggested_index < 0 or suggested_index >= hand.size() or str(hand[suggested_index]) != suggested_tile:
+		suggested_index = -1
 	var pending_index: int = pending_danger_discard_index if pending_tile != "" else -1
 	if pending_index < 0 or pending_index >= hand.size() or str(hand[pending_index]) != pending_tile:
-		pending_index = hand_tile_index_for_advice(hand, pending_tile)
+		pending_index = -1
 	if interactive_guide_active and interactive_guide_type == "discard":
 		if interactive_guide_target_index < 0 or interactive_guide_target_index >= hand.size() or not hand_keyboard_tile_selectable(interactive_guide_target_index, hand):
 			interactive_guide_target_index = suggested_index if suggested_index >= 0 else hand_tile_index_for_advice(hand, str(hand[0])) if not hand.is_empty() else -1
@@ -4190,9 +4201,9 @@ func draw_hand(parent: Control) -> void:
 	var group_gap_width = maxf(4.0, float(hand_layout.get("group_gap_width", 4.0)))
 	var drawn_tile = str(offline_last_draw.get("tile", ""))
 	var drawn_serial = int(offline_last_draw.get("serial", -1))
-	var stable_drawn_index := -1
-	if mode == "offline" and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and hand.size() % 3 == 2:
-		stable_drawn_index = hand.rfind(drawn_tile)
+	var stable_drawn_index := int(offline_last_draw.get("hand_index", -1))
+	if mode != "offline" or int(offline_last_draw.get("seat", -1)) != 0 or drawn_tile == "" or hand.size() % 3 != 2 or stable_drawn_index < 0 or stable_drawn_index >= hand.size() or str(hand[stable_drawn_index]) != drawn_tile:
+		stable_drawn_index = -1
 	var should_animate_drawn_tile = mode == "offline" and fx_enabled_effective() and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
 	var draw_state_assigned := false
 	# Pure 2D hand: authored assets/tiles faces via make_tile_view (no realtime 3D stage).
@@ -4227,10 +4238,10 @@ func draw_hand(parent: Control) -> void:
 		var should_highlight = clickable and (i == suggested_index or i == pending_index)
 		var guide_highlight = interactive_guide_active and interactive_guide_type == "discard" and clickable and i == interactive_guide_target_index
 		var highlighted = should_highlight or guide_highlight or keyboard_selected
-		var report: Dictionary = hand_reports.get(tile, {}) if i == suggested_index or i == pending_index else {}
+		var report: Dictionary = hand_reports.get(i, {}) if i == suggested_index or i == pending_index else {}
 		var risk = str(report.get("safety_label", report.get("risk_label", ""))) if assist_enabled and clickable else ""
 		var is_drawn_tile_marker := i == stable_drawn_index
-		var is_drawn_tile := should_animate_drawn_tile and ((stable_drawn_index >= 0 and i == stable_drawn_index) or (stable_drawn_index < 0 and not draw_state_assigned and tile == drawn_tile))
+		var is_drawn_tile := should_animate_drawn_tile and stable_drawn_index >= 0 and i == stable_drawn_index
 		var hint_badge := ""
 		if assist_enabled and clickable:
 			if i == pending_index:
@@ -5062,7 +5073,7 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 	return art
 
 
-func draw_loading_progress_feedback(parent: Control, progress_ratio: float = 0.72) -> Control:
+func draw_loading_progress_feedback(parent: Control, progress_ratio: float = -1.0) -> Control:
 	# r212: GPT chrome conversion
 	var art = Control.new()
 	art.name = "LoadingProgressFeedback"
@@ -5078,6 +5089,7 @@ func draw_loading_progress_feedback(parent: Control, progress_ratio: float = 0.7
 	art.add_child(route)
 	var fill = make_gpt_meter_fill(rect_full(0.025, 0.260, clampf(progress_ratio, 0.08, 0.98), 0.740), Color(accent.r, accent.g, accent.b, 0.18))
 	fill.name = "LoadingProgressFill"
+	fill.visible = progress_ratio >= 0.0
 	route.add_child(fill)
 	var gate = make_gpt_gate(rect_full(0.850, 0.250, 0.915, 0.620), Color(accent.r, accent.g, accent.b, 0.13))
 	gate.name = "LoadingProgressGate"
@@ -5093,7 +5105,7 @@ func draw_loading_progress_feedback(parent: Control, progress_ratio: float = 0.7
 		var pip = make_gpt_gate(rect_full(0.720 + float(i) * 0.045, 0.090, 0.742 + float(i) * 0.045, 0.205), Color(0.78, 0.62, 0.36, 0.08 - float(i) * 0.016))
 		pip.name = "LoadingProgressReadyPip_%d" % i
 		art.add_child(pip)
-	if fx_enabled_effective():
+	if fx_enabled_effective() and progress_ratio >= 0.0:
 		fill.modulate = Color(1, 1, 1, 0.86)
 		var tw := art.create_tween()
 		tw.set_loops(8)
@@ -5617,6 +5629,10 @@ func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: 
 	# r214: bulk GPT chrome sweep
 	var chip = make_gpt_center_crop_plate_rect(rect, Color(0.014, 0.024, 0.024, 0.86), "ui_dark_scrim", 0.18)
 	chip.name = "MenuFooterStatusChip_%s" % chip_id
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.focus_mode = Control.FOCUS_NONE
+	chip.set_meta("ui_role", "passive_status")
+	chip.tooltip_text = "状态信息：" + text
 	parent.add_child(chip)
 	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.010, 0.018, 0.018, 0.24), "ui_dark_scrim", 0.18)
 	inner.name = "MenuFooterStatusInner_%s" % chip_id
@@ -6279,12 +6295,26 @@ func online_lobby_slot_name(entry: Dictionary) -> String:
 
 func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 	if entry.is_empty():
-		return "空位"
+		return "空席"
+	if first_present(entry, ["connected", "online", "isConnected"], true) == false:
+		return "断线"
 	if bool(entry.get("bot", false)):
-		return "AI"
+		return "AI · 已准备" if bool(entry.get("ready", false)) else "AI · 未准备"
 	if bool(entry.get("ready", false)):
 		return "已准备"
-	return "房主" if slot == 0 else "已入席"
+	return "房主 · 未准备" if slot == 0 else "已入席 · 未准备"
+
+
+func online_lobby_slot_state_icon(entry: Dictionary, slot: int) -> String:
+	if entry.is_empty():
+		return "circle"
+	if first_present(entry, ["connected", "online", "isConnected"], true) == false:
+		return "alert-triangle"
+	if bool(entry.get("bot", false)):
+		return "cpu"
+	if bool(entry.get("ready", false)):
+		return "check"
+	return "user" if slot != 0 else "crown"
 
 
 func add_online_detail_touch_target(parent: Control, target_name: String, tooltip: String, callback: Callable, target_rect: Rect2 = Rect2(0.0, 0.0, 1.0, 1.0)) -> Button:
@@ -6293,6 +6323,8 @@ func add_online_detail_touch_target(parent: Control, target_name: String, toolti
 	target.name = target_name
 	target.text = ""
 	target.tooltip_text = tooltip
+	target.set_meta("accessible_name", tooltip)
+	target.set_meta("single_action_surface", true)
 	target.flat = true
 	configure_touch_button(target)
 	target.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -6353,9 +6385,12 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		name.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		name.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(name)
+		var state_icon = add_lucide_icon(row, online_lobby_slot_state_icon(entry, i), rect_full(0.635, 0.205, 0.695, 0.795), Color(0.76, 0.90, 0.70, 0.92 if active else 0.54))
+		if state_icon != null:
+			state_icon.name = "OnlineLobbyRosterStateIcon_%d" % i
 		var state = make_label(row, online_lobby_slot_state(entry, i), 11, Color(0.82, 0.94, 0.74, 0.96 if active else 0.74), false)
 		state.name = "OnlineLobbyRosterState_%d" % i
-		apply_rect(state, rect_full(0.640, 0.080, 0.940, 0.920))
+		apply_rect(state, rect_full(0.700, 0.080, 0.940, 0.920))
 		state.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		state.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		state.add_theme_constant_override("outline_size", 1)
@@ -7794,6 +7829,12 @@ func draw_rules_guide_art(parent: Control) -> Control:
 		var label = make_label(node, str(step.get("label", "")), 11, Color(0.96, 0.94, 0.82), true)
 		label.name = "RulesGuideStepLabel_%d" % i
 		apply_rect(label, rect_full(0.06, 0.570, 0.94, 0.940))
+		label.set_meta("guide_name", str(step.get("label", "")))
+		label.text = "%s · %s" % [str(step.get("label", "")), "当前" if i == 0 else "待读"]
+		var focus_plate := add_optional_gpt_illustration_texture(node, "ui_button_face_plate", rect_full(-0.08, -0.08, 1.08, 1.08), 0.0, false)
+		if focus_plate != null:
+			focus_plate.name = "RulesGuideStepFocusPlate_%d" % i
+			focus_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return art
 
 
@@ -8127,7 +8168,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var top_avatar = make_avatar_view(seat, active)
 		panel.add_child(top_avatar)
 		apply_rect(top_avatar, rect_full(0.035, 0.175, 0.185, 0.825))
-		var top_text_back = make_gpt_center_crop_plate_rect(rect_full(0.205, 0.050, 0.955, 0.945), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
+		var top_text_back = make_gpt_center_crop_plate_rect(rect_full(0.205, 0.050, 0.955, 0.990), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
 		top_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(top_text_back)
 		var top_name = make_label(panel, seat_compact_display_name(seat, p, 3), 12, Color(1.0, 0.98, 0.90), true)
@@ -8800,18 +8841,6 @@ func draw_seat_turn_handoff_art(parent: Control, seat: int, active: bool) -> Con
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
 	if not active:
 		return null
-	var simple_art = Control.new()
-	simple_art.name = "SeatTurnHandoffArt_%d" % seat
-	simple_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(simple_art, rect_full(0.720, 0.070, 0.955, 0.265))
-	parent.add_child(simple_art)
-	var simple_seal = make_gpt_gate(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.66, 0.52, 0.22, 0.42))
-	simple_seal.name = "SeatTurnHandoffSeal_%d" % seat
-	simple_art.add_child(simple_seal)
-	var simple_glyph = make_label(simple_seal, "行动中", 8, Color(0.16, 0.13, 0.08, 0.92), true)
-	simple_glyph.tooltip_text = "当前行动座位"
-	apply_rect(simple_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	return simple_art
 	var art = Control.new()
 	art.name = "SeatTurnHandoffArt_%d" % seat
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -9076,8 +9105,8 @@ func draw_settings_overlay(parent: Control) -> void:
 		# 540px 高度仍保留每行 48px 的点击目标：紧凑分区改为全宽多列，
 		# 让声音、体验和系统都拥有足够的横向按钮空间。
 		audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.490)
-		play_section_rect = rect_full(0.040, 0.500, 0.960, 0.837)
-		maint_section_rect = rect_full(0.040, 0.855, 0.960, 0.995)
+		play_section_rect = rect_full(0.040, 0.490, 0.960, 0.832)
+		maint_section_rect = rect_full(0.040, 0.850, 0.960, 0.995)
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -9257,7 +9286,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	# 系统设置
 	var system_grid = make_settings_section(panel, maint_section_rect, "系统", compact_settings)
 	system_grid.columns = 3
-	make_setting_row(system_grid, "3D 画质", "当前: %s" % graphics_quality_label(), make_graphics_quality_button(func() -> void:
+	make_setting_row(system_grid, "画面质量", "仅影响背景、动效和资源质量；牌面保持 2D", make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
 	))
 	make_setting_row(system_grid, "本地进度", "再次点击确认清空本地进度" if reset_progress_confirming else "清空统计与离线记录", make_reset_progress_button(func() -> void:
@@ -10549,7 +10578,8 @@ func draw_table_log(parent: Control) -> void:
 func draw_table_log_archive_panel(parent: Control) -> void:
 	if not table_log_archive_open or (mode != "offline" and mode != "online_game"):
 		return
-	var panel = make_gpt_plate_rect(rect_full(0.230, 0.120, 0.870, 0.545), Color(0.014, 0.034, 0.040, 0.96), "ui_jade_reading_plate")
+	var archive_bottom := 0.420 if effective_viewport_size().y <= 560.0 and has_pending_claim_window() else 0.545
+	var panel = make_gpt_plate_rect(rect_full(0.230, 0.120, 0.870, archive_bottom), Color(0.014, 0.034, 0.040, 0.96), "ui_jade_reading_plate")
 	panel.name = "TableLogArchivePanel"
 	panel.z_index = 43
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -10588,7 +10618,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(scroll, rect_full(0.060, 0.225, 0.940, 0.925))
+	apply_rect(scroll, rect_full(0.060, 0.300, 0.940, 0.925))
 	panel.add_child(scroll)
 	var list := VBoxContainer.new()
 	list.name = "TableLogArchiveList"
@@ -13288,11 +13318,11 @@ func make_plum_blossom(parent: Control, rect: Rect2, count: int = 3, petal_color
 
 
 func make_reset_progress_button(callback: Callable) -> Button:
-	var label = "清空" if reset_progress_confirming else "重置"
+	var label = "确认清空" if reset_progress_confirming else "重置"
 	var color = Color(0.72, 0.24, 0.18) if reset_progress_confirming else Color(0.56, 0.36, 0.30)
 	var armed = reset_progress_confirming
 	var button = make_small_button(label, color, callback)
-	button.tooltip_text = "再次点击确认清空本地进度" if armed else "进入二次确认，清空统计与离线记录"
+	button.tooltip_text = "确认清空统计与离线记录（5秒内有效）" if armed else "进入二次确认，将清空统计与离线记录"
 	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.40))
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
@@ -13361,14 +13391,14 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 	var quality_colors := [Color(0.32, 0.46, 0.34), Color(0.30, 0.48, 0.42), Color(0.34, 0.46, 0.58), Color(0.56, 0.42, 0.22)]
 	var color_index := clampi(graphics_quality + 1, 0, quality_colors.size() - 1)
 	var button = make_small_button(graphics_quality_label(true), quality_colors[color_index], callback)
-	button.tooltip_text = "3D画质：当前%s，点击切换" % graphics_quality_label(true)
+	button.tooltip_text = "画面质量：当前%s，仅影响背景、动效和资源质量；牌面保持 2D" % graphics_quality_label(true)
 	var quality_color: Color = quality_colors[color_index]
 	ensure_button_gpt_face_plate(button, Color(quality_color.r, quality_color.g, quality_color.b, 0.38))
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.set_meta("setting_label", "3D 画质")
+	button.set_meta("setting_label", "画面质量")
 	button.set_meta("setting_state", str(graphics_quality))
 	return button
 
@@ -13424,6 +13454,8 @@ func compact_setting_status(title: String, status: String) -> String:
 		return "再次确认" if reset_progress_confirming else "可清空"
 	if title == "隐私诊断":
 		return "已同意" if status.contains("已同意") else "未同意"
+	if title == "画面质量":
+		return graphics_quality_label(true)
 	if title == "播放测试":
 		return "可试听"
 	if status.begins_with("当前: "):
@@ -13467,11 +13499,11 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	configure_passive_container(grid)
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 4 if compact else 16)
-	grid.add_theme_constant_override("v_separation", 3 if compact else 5)
+	grid.add_theme_constant_override("v_separation", 1 if compact else 5)
 	section.add_child(grid)
 	# Compact settings reserve the same 48px row target while tightening only
 	# the decorative title/chrome clearance inside each physical section.
-	apply_rect(grid, rect_full(0.035, 0.120, 0.995, 0.985) if compact else SETTINGS_SECTION_GRID_RECT)
+	apply_rect(grid, rect_full(0.035, 0.105, 0.995, 0.995) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 
@@ -13699,7 +13731,6 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		texture.texture = tile_texture
 		texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		texture.stretch_mode = TextureRect.STRETCH_SCALE
-		texture.modulate = Color(1.0, 1.0, 1.0, tile_art_alpha(tile, size))
 		texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		texture.set_anchors_preset(Control.PRESET_FULL_RECT)
 		var bleed = tile_texture_bleed(size, lightweight_static_tile)

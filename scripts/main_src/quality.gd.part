@@ -576,10 +576,12 @@ func toggle_telemetry_consent() -> void:
 func clear_telemetry_data(confirmed: bool = true) -> void:
 	if not confirmed and not telemetry_clear_confirming:
 		telemetry_clear_confirming = true
+		telemetry_clear_confirm_deadline_msec = Time.get_ticks_msec() + 5000
 		refresh_telemetry_data_sheet()
 		show_toast("再次点击清除，确认删除本地匿名数据")
 		return
 	telemetry_clear_confirming = false
+	telemetry_clear_confirm_deadline_msec = 0
 	telemetry_outbox.clear()
 	telemetry_export_status = "未导出"
 	save_telemetry_state()

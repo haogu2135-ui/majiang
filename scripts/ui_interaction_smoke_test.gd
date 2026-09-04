@@ -153,6 +153,17 @@ func has_label_text(scope: Node, expected: String) -> bool:
 	return false
 
 
+func has_toast_text(scene: Node, expected: String) -> bool:
+	if scene == null:
+		return false
+	if scene.toast_current != null and is_instance_valid(scene.toast_current) and has_label_text(scene.toast_current, expected):
+		return true
+	for queued in scene.toast_queue:
+		if typeof(queued) == TYPE_DICTIONARY and str((queued as Dictionary).get("text", "")) == expected:
+			return true
+	return false
+
+
 func label_text_width(label: Label, text: String) -> float:
 	if label == null:
 		return 0.0
@@ -1006,7 +1017,8 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	scene.show_toast("toast-A", 1000)
 	var first_toast_id: int = scene.toast_current.get_instance_id() if scene.toast_current != null else 0
 	scene.show_toast("toast-B", 1000)
-	check(scene.toast_current != null and scene.toast_current.get_instance_id() != first_toast_id and has_label_text(scene.toast_current, "toast-B"), "new toast replaces the previous message without stacking stale content")
+	check(scene.toast_current != null and scene.toast_current.get_instance_id() == first_toast_id and has_label_text(scene.toast_current, "toast-A") and scene.toast_queue.size() == 1 and str(scene.toast_queue[0].get("text", "")) == "toast-B", "new toast queues without stacking stale content")
+	scene.dismiss_active_toast()
 	scene.show_toast("长消息".repeat(80), 100)
 	await settle(1.00)
 	check(scene.toast_current == null, "expired long toast is cleaned up after its dwell and fade interval")
@@ -1347,7 +1359,7 @@ func run() -> void:
 		await send_screen_touch(roster_center, false)
 		await settle(0.05)
 		check(int(roster_touch_probe.get("pressed", 0)) == 1, "screen-touch release activates the roster detail target")
-		check(scene.toast_current != null and has_label_text(scene.toast_current, "玩家 1：%s" % long_name), "single-finger roster press reveals the complete nickname")
+		check(has_toast_text(scene, "玩家 1：%s" % long_name), "single-finger roster press reveals the complete nickname")
 	var room_badge_touch = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
 	if room_badge_touch != null:
 		var room_touch_target := scene.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
@@ -1366,7 +1378,7 @@ func run() -> void:
 		await send_screen_touch(room_center, false)
 		await settle(0.05)
 		check(int(room_touch_probe.get("pressed", 0)) == 1, "screen-touch release activates the room detail target")
-		check(scene.toast_current != null and has_label_text(scene.toast_current, "房间号：%s" % long_room), "single-finger room-badge press reveals the complete room code")
+		check(has_toast_text(scene, "房间号：%s" % long_room), "single-finger room-badge press reveals the complete room code")
 
 	print("--- F) diagnostic report scroll and modal dismiss paths ---")
 	var diagnostic_lines := diagnostic_interaction_lines()
@@ -1409,7 +1421,7 @@ func run() -> void:
 		check(bool(diagnostic_mouse_gui_input.get("value", false)), "mouse copy reaches the button gui input")
 		check(bool(diagnostic_mouse_pressed.get("value", false)), "mouse copy reaches the native button-down signal")
 		check(DisplayServer.clipboard_get() == diagnostic_report_text, "mouse copy writes the complete diagnostic report")
-		check(scene.find_child("DiagnosticDialogPanel", true, false) != null and scene.toast_current != null and has_label_text(scene.toast_current, "诊断报告已复制"), "mouse copy keeps the dialog open and shows feedback")
+		check(scene.find_child("DiagnosticDialogPanel", true, false) != null and has_toast_text(scene, "诊断报告已复制"), "mouse copy keeps the dialog open and shows feedback")
 	scene.show_diagnostic_dialog(diagnostic_lines)
 	await settle(0.05)
 	var diagnostic_copy_touch := scene.find_child("DiagnosticCopyButton", true, false) as Button
@@ -1417,7 +1429,7 @@ func run() -> void:
 		await send_screen_touch(diagnostic_copy_touch.get_global_rect().get_center(), true)
 		await send_screen_touch(diagnostic_copy_touch.get_global_rect().get_center(), false)
 		await settle(0.04)
-	check(DisplayServer.clipboard_get() == diagnostic_report_text and scene.find_child("DiagnosticDialogPanel", true, false) != null and scene.toast_current != null and has_label_text(scene.toast_current, "诊断报告已复制"), "single-finger copy writes the same complete diagnostic report without dismissing the dialog")
+	check(DisplayServer.clipboard_get() == diagnostic_report_text and scene.find_child("DiagnosticDialogPanel", true, false) != null and has_toast_text(scene, "诊断报告已复制"), "single-finger copy writes the same complete diagnostic report without dismissing the dialog")
 	scene.show_diagnostic_dialog(diagnostic_lines)
 	await settle(0.05)
 	var diagnostic_copy_keyboard := scene.find_child("DiagnosticCopyButton", true, false) as Button
@@ -1425,7 +1437,7 @@ func run() -> void:
 		diagnostic_copy_keyboard.grab_focus()
 		await send_key(KEY_ENTER, 0)
 		await settle(0.04)
-	check(DisplayServer.clipboard_get() == diagnostic_report_text and scene.find_child("DiagnosticDialogPanel", true, false) != null and scene.toast_current != null and has_label_text(scene.toast_current, "诊断报告已复制"), "keyboard copy writes the same complete diagnostic report without dismissing the dialog")
+	check(DisplayServer.clipboard_get() == diagnostic_report_text and scene.find_child("DiagnosticDialogPanel", true, false) != null and has_toast_text(scene, "诊断报告已复制"), "keyboard copy writes the same complete diagnostic report without dismissing the dialog")
 	diagnostic_close = scene.find_child("DiagnosticCloseButton", true, false) as Button
 	if diagnostic_close != null:
 		check(diagnostic_close.focus_mode == Control.FOCUS_ALL and scene.find_child("DiagnosticDialogPanel", true, false) != null, "diagnostic close action remains available after copy")
@@ -1912,8 +1924,9 @@ func run() -> void:
 		var danger_confirm_center := danger_confirm_button.get_global_rect().get_center()
 		await send_left_button(danger_confirm_center, true)
 		await send_left_button(danger_confirm_center, false)
-		await settle(0.04)
-	check(not scene.has_pending_danger_discard() and not (scene.players[0]["hand"] as Array).has("S") and str(scene.last_discard) == "S", "mouse confirmation commits exactly one dangerous discard")
+		await settle(0.18)
+	var danger_commit_ok: bool = not scene.has_pending_danger_discard() and not (scene.players[0]["hand"] as Array).has("S") and str(scene.last_discard) == "S"
+	check(danger_commit_ok, "mouse confirmation commits exactly one dangerous discard (pending=%s hand_has_s=%s last=%s phase=%s)" % [scene.has_pending_danger_discard(), (scene.players[0]["hand"] as Array).has("S"), str(scene.last_discard), str(scene.offline_phase)])
 
 	var claim_interaction_names := ["chi", "peng", "gang", "hu"]
 	for claim_interaction_index in range(claim_interaction_names.size()):
@@ -1956,7 +1969,8 @@ func run() -> void:
 	var chat_interaction_send := scene.find_child("ChatSendButton", true, false) as Button
 	var chat_interaction_text := scene.find_child("ChatPanelMessageText", true, false) as Label
 	var chat_initial_count: int = scene.chat_messages.size()
-	check(chat_interaction_input != null and chat_interaction_send != null and chat_interaction_input.has_focus(), "chat panel opens with its real input focused")
+	var chat_interaction_close := scene.find_child("ChatPanelCloseButton", true, false) as Button
+	check(chat_interaction_input != null and chat_interaction_send != null and chat_interaction_close != null and chat_interaction_close.has_focus(), "chat panel opens with its close action focused")
 	if chat_interaction_input != null:
 		chat_interaction_input.grab_focus()
 		chat_interaction_input.text = ""

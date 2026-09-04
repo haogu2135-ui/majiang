@@ -234,6 +234,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"ReplayArchiveRowSecondary",
 	"ReplayArchiveSearchInput",
 	"ReplayArchiveTitle",
+	"ReplayArchiveDeleteConfirmBadge",
 	"ReplayArchiveDeleteConfirmLabel",
 ]
 
@@ -1943,7 +1944,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_声音_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_体验_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPulse_系统_") == 0 and ((scene.optional_gpt_illustration_texture("settings_section_signal_panel") == null) or (count_nodes_with_name_prefix(settings_parent, "SettingsSectionSignalPanelTexture_") == 3)), "settings overlay replaces section signal pulses with optional GPT signal panel plate")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusArt_") == 10 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusRail_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusFill_") == 0, "settings rows keep status art but omit obsolete row rails and fills")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusDot_") == 0, "settings rows omit compact status dots that competed with text")
-	var settings_row_titles := ["背景音乐", "音效反馈", "语音报牌", "播放测试", "AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目", "3D 画质", "本地进度", "隐私诊断"]
+	var settings_row_titles := ["背景音乐", "音效反馈", "语音报牌", "播放测试", "AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目", "画面质量", "本地进度", "隐私诊断"]
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowTextReadabilityPanel_") == settings_row_titles.size(), "settings rows expose local text readability panels")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchArt") == 6 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchRail") == 6, "settings toggle buttons render compact switch art and rails")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmGate") == 0, "settings toggle buttons omit obsolete route/state/knob confirmation clutter")
@@ -1997,7 +1998,7 @@ func run() -> void:
 	scene.reset_progress_confirming = true
 	scene.settings_panel_open = true
 	scene.draw_settings_overlay(reset_confirm_parent)
-	check(has_button_text(reset_confirm_parent, "清空"), "settings reset progress button changes to compact armed label")
+	check(has_button_text(reset_confirm_parent, "确认清空"), "settings reset progress button changes to compact armed label")
 	check(reset_confirm_parent.find_child("ResetProgressConfirmArt", true, false) != null and reset_confirm_parent.find_child("ResetProgressConfirmRoute", true, false) != null and reset_confirm_parent.find_child("ResetProgressConfirmFill", true, false) != null and reset_confirm_parent.find_child("ResetProgressConfirmGate", true, false) != null, "settings reset progress armed state renders confirm route art")
 	check(scene.optional_gpt_illustration_texture("reset_gpt_warning") == null or reset_confirm_parent.find_child("ResetGPTWarningTexture", true, false) != null, "settings reset confirmation consumes optional GPT warning texture when generated")
 	check(reset_confirm_parent.find_child("ResetProgressConfirmSeal", true, false) != null and reset_confirm_parent.find_child("ResetProgressConfirmGlyph", true, false) != null and count_nodes_with_name_prefix(reset_confirm_parent, "ResetProgressConfirmNode_") == 3 and count_nodes_with_name_prefix(reset_confirm_parent, "ResetProgressConfirmPulse_") == 2, "settings reset progress armed state renders warning seal glyph nodes and pulses")
@@ -2005,7 +2006,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(reset_confirm_parent, "ResetProgressCommitTick_") == 2, "settings reset progress armed state renders commit rhythm ticks")
 	var reset_confirm_hold_fill = reset_confirm_parent.find_child("ResetProgressHoldFill", true, false) as Control
 	check(reset_confirm_hold_fill != null and reset_confirm_hold_fill.anchor_right > 0.85, "settings reset progress armed state extends the hold fill")
-	var reset_armed_button = first_button_with_text(reset_confirm_parent, "清空")
+	var reset_armed_button = first_button_with_text(reset_confirm_parent, "确认清空")
 	check(reset_armed_button != null, "settings exposes armed reset progress button for commit press feedback")
 	scene.play_reset_progress_button_feedback(reset_armed_button, true)
 	check(reset_armed_button.find_child("ResetProgressPressFeedback_armed", true, false) != null and reset_armed_button.find_child("ResetProgressPressSource_armed", true, false) != null and reset_armed_button.find_child("ResetProgressPressRoute_armed", true, false) != null and reset_armed_button.find_child("ResetProgressPressFill_armed", true, false) != null and reset_armed_button.find_child("ResetProgressPressGate_armed", true, false) != null, "settings reset armed press feedback renders commit route")
@@ -2092,7 +2093,7 @@ func run() -> void:
 	scene._show_shop_screen_impl()
 	var low_gem_swap_command = scene.find_child("ShopBuyButtonCommand_swap_card", true, false) as Label
 	var low_gem_swap_price = scene.find_child("ShopBuyButtonPrice_swap_card", true, false) as Label
-	check(low_gem_swap_command != null and low_gem_swap_command.text == "不足 5玉" and low_gem_swap_price != null and low_gem_swap_price.text == "5玉" and not low_gem_swap_price.visible, "low-gem shop item exposes single-line shortage CTA and hidden gem price anchor")
+	check(low_gem_swap_command != null and low_gem_swap_command.text == "不足 2玉" and low_gem_swap_price != null and low_gem_swap_price.text == "5玉" and not low_gem_swap_price.visible, "low-gem shop item exposes single-line shortage CTA and hidden gem price anchor")
 	check(scene.find_child("ShopCurrencyLowRoute_coins", true, false) != null and scene.find_child("ShopCurrencyLowFill_coins", true, false) != null and scene.find_child("ShopCurrencyLowGate_coins", true, false) != null and scene.find_child("ShopCurrencyEmptyWarning_coins", true, false) != null, "shop coins balance renders low-resource route and empty warning")
 	check(scene.find_child("ShopCurrencyLowRoute_gems", true, false) != null and scene.find_child("ShopCurrencyLowFill_gems", true, false) != null and scene.find_child("ShopCurrencyLowGate_gems", true, false), "shop gems balance renders low-resource route")
 	check(count_nodes_with_name_prefix(scene, "ShopCurrencyLowTick_") == 6, "shop low-resource meters render rhythm ticks")
@@ -2353,9 +2354,9 @@ func run() -> void:
 	check(scene.online_host_edit.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_URL, "online lobby requests the URL keyboard for server host entry")
 	var online_lobby_status_label = scene.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	var online_lobby_start_button = scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
-	check(online_lobby_status_label != null and has_label_text(scene, "下一步 · 先连接，再建房或入房"), "online lobby lower status gives a concise connection next-step hint")
+	check(online_lobby_status_label != null and scene.find_child("OnlineLobbyStartGateReason", true, false) != null and has_label_text(scene, "下一步 · 先连接，再建房或入房"), "online lobby lower status and start condition expose concise connection guidance")
 	check(online_lobby_status_label != null and not str(online_lobby_status_label.text).contains(str(scene.DEFAULT_HOST)) and not str(online_lobby_status_label.text).contains(":"), "online lobby lower status does not repeat raw endpoint details")
-	check(online_lobby_start_button != null and online_lobby_start_button.disabled and online_lobby_start_button.text == "待连接", "online lobby start button shows disabled waiting state until server connection succeeds")
+	check(online_lobby_start_button != null and online_lobby_start_button.disabled and online_lobby_start_button.text == "连接后开始", "online lobby start button shows disabled waiting state until server connection succeeds")
 	check(scene.find_child("OnlineLobbyFormPanel", true, false) != null and scene.find_child("OnlineLobbyLogPanel", true, false) != null and scene.find_child("OnlineLobbyInputGroupBackplate", true, false) != null and scene.find_child("OnlineLobbyActionClusterBackplate", true, false) != null and scene.find_child("OnlineLobbyStatusReadabilityBackplate", true, false) != null and scene.find_child("OnlineLobbyLogReadabilityBackplate", true, false) != null, "online lobby keeps named readability backplates for form action status and log areas")
 
 	check(scene.find_child("OnlineLobby3DCastShadow", true, false) != null and scene.find_child("OnlineLobby3DRearShell", true, false) != null and scene.find_child("OnlineLobby3DTopGlint", true, false) != null and scene.find_child("OnlineLobby3DLowerEdge", true, false) != null, "online lobby renders commercial 3D lacquer shell")
@@ -4147,7 +4148,7 @@ func run() -> void:
 	check(scene.action_bar_button_count() == 8, "action bar layout counts buttons without building a button list")
 	scene.finalize_action_bar_layout()
 	var crowded_action_button = first_button(action_layout_parent)
-	check(crowded_action_button != null and crowded_action_button.custom_minimum_size.x <= scene.ACTION_BUTTON_MAX_WIDTH and crowded_action_button.clip_text, "crowded action buttons are sized and clipped by final layout")
+	check(crowded_action_button != null and crowded_action_button.custom_minimum_size.x <= scene.ACTION_BUTTON_MAX_WIDTH and not crowded_action_button.clip_text and crowded_action_button.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "crowded action buttons are sized and keep complete labels by final layout")
 	crowded_action_button.pressed.emit()
 	check(int(action_press_count.get("value", 0)) == 1, "finalized action buttons still run callbacks on native activation")
 	dispose_node(action_layout_parent)

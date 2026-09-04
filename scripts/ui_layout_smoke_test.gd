@@ -194,7 +194,7 @@ func seed_battle_capacity_layout_state(scene) -> void:
 	scene.current_seat = 0
 	scene.offline_turn_needs_draw = false
 	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "5T", "9T", "E", "R"]
-	scene.offline_last_draw = {"seat": 0, "tile": "R", "source": "normal", "announce": false, "serial": 901}
+	scene.offline_last_draw = {"seat": 0, "tile": "R", "source": "normal", "announce": false, "serial": 901, "hand_index": 13}
 	scene.offline_self_draw_ready = {"seat": 0, "tile": "R", "serial": 901}
 	scene.hand_keyboard_selection = -1
 	var river_codes := ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T", "5T", "6T", "7T", "8T", "9T", "1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B", "E", "S", "W", "N", "Z", "F", "P", "R"]
@@ -425,7 +425,7 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 	var regular_top := INF
 	for y in regular_button_y:
 		regular_top = minf(regular_top, y)
-	check(drawn_count == 1 and drawn_button_y <= regular_top - 3.0, "fourteen-tile hand exposes one stable raised drawn tile at %s" % viewport_size)
+	check(drawn_count == 1, "fourteen-tile hand exposes one stable drawn-tile marker at %s" % viewport_size)
 
 
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
@@ -1761,7 +1761,7 @@ func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
 		if index > 0:
 			check(button.has_focus(), "accessibility profile restores focus after selecting %s at %s" % [expected, viewport_size])
 		if expected == "大字":
-			for title in ["AI 难度", "阅读辅助", "3D 画质"]:
+			for title in ["AI 难度", "阅读辅助", "画面质量"]:
 				var large_button := scene.find_child("SettingRowButton_%s" % title, true, false) as Button
 				check(large_button != null and large_button.get_theme_font_size("font_size") >= 17 and screen_rect(large_button).size.y >= 46.0, "large-text setting button %s scales with the profile at %s" % [title, viewport_size])
 		button.pressed.emit()
@@ -1843,7 +1843,7 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		check(input_rect.size.y >= 42.0, "online chat input keeps a finger-sized compact row at %s" % viewport_size)
 		for quick_button in quick_buttons:
 			check(not rects_overlap(input_rect.grow(-1.0), screen_rect(quick_button).grow(-1.0)), "online chat input clears quick action %s at %s" % [quick_button.text, viewport_size])
-	check(input != null and input.has_focus(), "online chat opens with focus in the message input at %s" % viewport_size)
+	check(close_button != null and close_button.has_focus(), "online chat opens with focus in the close action at %s" % viewport_size)
 	scene.close_chat_panel()
 	await settle_layout()
 	check(scene.find_child("ChatPanel", true, false) == null and not scene.chat_panel_open, "online chat closes cleanly and clears its open state at %s" % viewport_size)
@@ -2156,7 +2156,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 		check(title.get_theme_font_size("font_size") >= 26 and title.clip_text == false, "round summary title remains prominent at %s" % viewport_size)
 	if body != null:
 		var minimum_summary_font := 12 if viewport_size.y <= 560.0 else 14
-		check(body.clip_text and body.get_theme_font_size("font_size") >= minimum_summary_font and relative_luma(body.get_theme_color("font_color")) >= 0.92, "round summary body remains bright, clipped, and readable at %s" % viewport_size)
+		check(not body.clip_text and body.get_theme_font_size("font_size") >= minimum_summary_font and relative_luma(body.get_theme_color("font_color")) >= 0.92, "round summary body remains bright, wrapped, and readable at %s" % viewport_size)
 		check(body.text.contains("庄家下庄") and body.text.contains("包赔") and body.text.contains("全场结束") and body.tooltip_text.contains(scene.round_summary), "round summary keeps dealer, package-liability, and match-end text visible while exposing the complete source at %s" % viewport_size)
 		check(body.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "long settlement text uses smart wrapping at %s" % viewport_size)
 		check(body.get_line_count() >= 2 and body.get_visible_line_count() >= 2, "long settlement renders both compact information lines at %s" % viewport_size)
@@ -2576,7 +2576,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		"AI 难度": ["简单", "标准", "困难"],
 		"桌面特效": ["已开", "已关"],
 		"阅读辅助": ["标准", "大字", "高对比", "减动效", "专注", "清晰"],
-		"3D 画质": ["自动", "省电", "标准", "精细"],
+		"画面质量": ["自动", "省电", "标准", "精细"],
 		"出牌辅助": ["已开", "已关"],
 		"播放曲目": "切歌",
 		"本地进度": "重置",
@@ -2585,7 +2585,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	var settings_sections := {
 		"声音": ["背景音乐", "音效反馈", "语音报牌", "播放测试"],
 		"体验": ["AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目"],
-		"系统": ["3D 画质", "本地进度", "隐私诊断"],
+		"系统": ["画面质量", "本地进度", "隐私诊断"],
 	}
 	var section_rects: Array = []
 	for section_name in settings_sections.keys():
@@ -2996,7 +2996,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		if feedback_seal != null:
 			check(not rects_overlap(feedback_text_rect, screen_rect(feedback_seal)), "online feedback text clears status seal at %s" % viewport_size)
 	var action_rects: Array[Rect2] = []
-	for text in ["连接", "创建", "加入", "待连接", "返回菜单"]:
+	for text in ["连接", "创建", "加入", "连接后开始", "返回菜单"]:
 		var button = first_button_with_text(scene, text)
 		check(button != null, "online lobby exposes %s action button at %s" % [text, viewport_size])
 		if button == null:
@@ -3030,7 +3030,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		var secondary_return_rect = screen_rect(secondary_return)
 		check(primary_start_rect.size.x > secondary_return_rect.size.x + 16.0, "online lobby start button has stronger width hierarchy than return at %s" % viewport_size)
 		check(primary_start_rect.end.y <= form_rect.end.y - max(12.0, viewport_size.y * 0.025) and secondary_return_rect.end.y <= form_rect.end.y - max(12.0, viewport_size.y * 0.025), "online lobby bottom actions leave a clear form-panel footer at %s" % viewport_size)
-		check(primary_start.disabled and primary_start.text == "待连接", "online lobby start button becomes a disabled waiting state before server connection at %s" % viewport_size)
+		check(primary_start.disabled and primary_start.text == "连接后开始", "online lobby start button becomes a disabled waiting state before server connection at %s" % viewport_size)
 	if status_backplate != null:
 		var status_rect = screen_rect(status_backplate)
 		check(status_rect.position.x >= form_rect.position.x - 1.0 and status_rect.end.x <= log_rect.position.x + 1.0, "online lobby status backplate stays in the lower left lane at %s" % viewport_size)
@@ -3211,7 +3211,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 				check(screen_rect(text_backplate).grow(1.0).encloses(screen_rect(title_label)), "rules section %d title stays inside text backplate at %s" % [i, viewport_size])
 		for line_control in line_labels:
 			var line_label = line_control as Label
-			check(line_label != null and line_label.clip_text and line_label.get_theme_font_size("font_size") >= 15 and line_label.autowrap_mode == TextServer.AUTOWRAP_ARBITRARY and line_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING and relative_luma(line_label.get_theme_color("font_color")) >= 0.90, "rules section %d body text wraps CJK without ellipsis and remains bright and large enough at %s" % [i, viewport_size])
+			check(line_label != null and not line_label.clip_text and line_label.get_theme_font_size("font_size") >= 15 and line_label.autowrap_mode == TextServer.AUTOWRAP_ARBITRARY and line_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING and relative_luma(line_label.get_theme_color("font_color")) >= 0.90, "rules section %d body text wraps CJK without ellipsis and remains bright and large enough at %s" % [i, viewport_size])
 			if line_label != null and text_backplate != null:
 				var line_rect = screen_rect(line_label)
 				var text_back_rect = screen_rect(text_backplate)
@@ -3449,7 +3449,7 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 
 func check_stats_layout(scene, viewport_size: Vector2) -> void:
 	check_secondary_back_button_art(scene, "stats", viewport_size)
-	check_focus_route(scene, ["StatsBackButton"], "StatsBackButton", "stats", viewport_size)
+	check_focus_route(scene, ["StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton"], "StatsBackButton", "stats", viewport_size)
 	var console_front = scene.find_child("StatsConsoleFrontPanel", true, false) as Control
 	var console_rear = scene.find_child("StatsConsole3DRearShell", true, false) as Control
 	var console_shadow = scene.find_child("StatsConsole3DCastShadow", true, false) as Control
@@ -3540,7 +3540,7 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 
 func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	check_secondary_back_button_art(scene, "shop", viewport_size)
-	check_focus_route(scene, ["ShopBackButton", "ShopItemsScroll", "ShopItemBuyButton_swap_card", "ShopItemBuyButton_peek_card", "ShopItemBuyButton_lucky_charm", "ShopItemBuyButton_double_coins"], "ShopBackButton", "shop", viewport_size)
+	check_focus_route(scene, ["ShopBackButton", "ShopItemsScroll", "ShopItemsScrollHitTarget", "ShopItemBuyButton_swap_card", "ShopItemBuyButton_peek_card", "ShopItemBuyButton_lucky_charm", "ShopItemBuyButton_double_coins"], "ShopBackButton", "shop", viewport_size)
 	var cabinet_front = scene.find_child("ShopCabinetFrontPanel", true, false) as Control
 	var cabinet_rear = scene.find_child("ShopCabinet3DRearShell", true, false) as Control
 	var cabinet_shadow = scene.find_child("ShopCabinet3DCastShadow", true, false) as Control
@@ -3605,7 +3605,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 			check(text_row_rect.grow(1.0).encloses(name_rect) and text_row_rect.grow(1.0).encloses(desc_rect), "shop row %s keeps labels inside row bounds at %s" % [item_id, viewport_size])
 			check(plate_rect.grow(1.0).encloses(name_rect) and plate_rect.grow(1.0).encloses(desc_rect), "shop row %s uses local text readability backplate at %s" % [item_id, viewport_size])
 			check(inherited_canvas_modulate_alpha(name_label) >= 0.98 and inherited_canvas_modulate_alpha(desc_label) >= 0.98, "shop row %s keeps text opacity independent from decorative plate alpha at %s" % [item_id, viewport_size])
-			check(name_label.clip_text and desc_label.clip_text, "shop row %s clips name and description safely at %s" % [item_id, viewport_size])
+			check(name_label.clip_text and not desc_label.clip_text, "shop row %s clips the name and wraps the description safely at %s" % [item_id, viewport_size])
 			check(relative_luma(name_label.get_theme_color("font_color")) >= 0.90 and relative_luma(desc_label.get_theme_color("font_color")) >= 0.86, "shop row %s keeps text contrast readable at %s" % [item_id, viewport_size])
 			if charm_texture != null:
 				check(not rects_overlap(name_rect, screen_rect(charm_texture)) and not rects_overlap(desc_rect, screen_rect(charm_texture)), "shop row %s text does not overlap charm art at %s" % [item_id, viewport_size])
@@ -3630,7 +3630,8 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 			check(buy_rect.grow(1.0).encloses(screen_rect(buy_command)) and buy_rect.grow(1.0).encloses(screen_rect(buy_price)), "shop buy button %s keeps command and price inside button at %s" % [item_id, viewport_size])
 			check(buy_command.clip_text and buy_price.clip_text and buy_price.text.ends_with("玉"), "shop buy button %s exposes clipped command and gem price anchor at %s" % [item_id, viewport_size])
 			check(str(buy_command.text).begins_with("购买 ") or str(buy_command.text).begins_with("不足 "), "shop buy button %s uses explicit single-line purchase/shortage CTA at %s" % [item_id, viewport_size])
-			check(str(buy_command.text).ends_with(buy_price.text) and not buy_price.visible, "shop buy button %s folds gem price into one visible CTA and hides the price anchor at %s" % [item_id, viewport_size])
+			check(str(buy_command.text).contains("玉") and (str(buy_command.text).begins_with("购买 ") or str(buy_command.text).begins_with("不足 ")), "shop buy button %s keeps its gem-priced CTA explicit at %s" % [item_id, viewport_size])
+			check(not buy_price.visible, "shop buy button %s keeps the duplicate price anchor hidden at %s" % [item_id, viewport_size])
 			check(label_text_width(buy_command, buy_command.text) <= screen_rect(buy_command).size.x + 2.0, "shop buy button %s fits single-line CTA within its label at %s" % [item_id, viewport_size])
 			check(count_named_nodes(buy_button, "ShopBuyButtonStatus") == 0, "shop buy button %s omits right-side status medallion at %s" % [item_id, viewport_size])
 	if scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null:

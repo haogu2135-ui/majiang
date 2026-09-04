@@ -77,7 +77,7 @@ func run() -> void:
 	check(viewport_rect.grow(-2.0).encloses(card_rect), "telemetry reading card stays inside the viewport")
 	for control in [title, body, status, export_status, consent_button, export_button, clear_button, close_button]:
 		check(card_rect.grow(1.0).encloses(screen_rect(control)), "telemetry control %s stays inside the reading card" % control.name)
-	check(body.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and body.clip_text, "telemetry explanation wraps and clips safely")
+	check(body.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and not body.clip_text and body.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "telemetry explanation wraps without trimming in its scroll surface")
 	check(consent_button.custom_minimum_size.y >= 44.0 and export_button.custom_minimum_size.y >= 44.0 and clear_button.custom_minimum_size.y >= 44.0, "telemetry actions retain touch-sized minimum heights")
 	check(status.text == "未同意 · 默认不记录" and export_status.text == "导出：未导出" and consent_button.text == "同意记录", "telemetry defaults to an explicit no-record state")
 
