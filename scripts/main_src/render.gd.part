@@ -1608,7 +1608,7 @@ func draw_center(parent: Control) -> void:
 
 	# 上张牌
 	var last = get_last_discard()
-	if last != "" and not (mode == "offline" and offline_phase == "pending_claim"):
+	if last != "":
 		var last_label = make_label(center, "上张", 13, Color(0.72, 0.70, 0.58), false)
 		apply_rect(last_label, CENTER_LAST_LABEL_RECT)
 		draw_center_last_tile_trace(center, last)
@@ -1643,9 +1643,8 @@ func draw_center_dice_plate(parent: Control) -> Control:
 	apply_rect(simple_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	return plate
 
-func draw_center_last_discard_response_window(parent: Control, accent: Color) -> Control:
+func draw_center_last_discard_response_window(parent: Control, accent: Color, tile: String = "") -> Control:
 	# r213: GPT chrome conversion
-	return null
 	var window = Control.new()
 	window.name = "CenterLastDiscardResponseWindow"
 	window.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1669,6 +1668,12 @@ func draw_center_last_discard_response_window(parent: Control, accent: Color) ->
 	var glyph = make_label(seal, "应", 9, Color(0.98, 0.92, 0.72, 0.84), true)
 	glyph.name = "CenterLastDiscardResponseWindowGlyph"
 	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+	var response_label_text := "响应 · %s" % tile_label(tile) if tile != "" else "响应窗口"
+	var response_label = make_label(window, response_label_text, 8, Color(0.86, 0.84, 0.72, 0.86), true)
+	response_label.name = "CenterLastDiscardResponseWindowLabel"
+	apply_rect(response_label, rect_full(0.110, 0.060, 0.610, 0.385))
+	response_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(response_label)
 	var tick = add_gpt_tick_strip(window, rect_full(0.270, 0.250, (0.270) + float(2) * (0.135) + (0.026), 0.760), Color(accent.r, accent.g, accent.b, 0.22), "CenterLastDiscardResponseWindowTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_screen_tween()
@@ -1682,24 +1687,6 @@ func draw_center_last_discard_response_window(parent: Control, accent: Color) ->
 
 func draw_center_last_tile_trace(parent: Control, tile: String) -> Control:
 	# r208: GPT chrome conversion
-	var simple_trace = Control.new()
-	simple_trace.name = "CenterLastTileTrace"
-	simple_trace.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(simple_trace, rect_full(0.285, 0.650, 0.715, 0.900))
-	parent.add_child(simple_trace)
-	var accent_simple = tile_accent(tile)
-	var wash = make_gpt_plate_rect(rect_full(0.100, 0.430, 0.900, 0.640), Color(0.68, 0.50, 0.24, 0.10), "ui_button_face_plate")
-	wash.name = "CenterLastTileInkWash"
-	simple_trace.add_child(wash)
-	var seal = make_gpt_gate(rect_full(0.735, 0.250, 0.860, 0.760), Color(0.50, 0.16, 0.12, 0.18))
-	seal.name = "CenterLastTileSeal"
-	simple_trace.add_child(seal)
-	var glyph = make_label(seal, "张", 8, Color(0.94, 0.84, 0.60, 0.72), true)
-	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var dot = make_gpt_gate(rect_full(0.170, 0.370, 0.230, 0.700), Color(accent_simple.r, accent_simple.g, accent_simple.b, 0.14))
-	dot.name = "CenterLastTileAccentDot"
-	simple_trace.add_child(dot)
-	return simple_trace
 	var accent = tile_accent(tile)
 	var trace = Control.new()
 	trace.name = "CenterLastTileTrace"
@@ -3725,7 +3712,8 @@ func draw_exit_confirm_choice_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "ExitConfirmChoiceArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.120, 0.675, 0.880, 0.945))
+	# Keep the choice illustration in the label-free rail above the real button row.
+	apply_rect(art, rect_full(0.120, 0.635, 0.880, 0.705))
 	parent.add_child(art)
 	var exit_plate = add_optional_gpt_illustration_texture(art, "ui_confirm_sheet_plate", rect_full(-0.02, -0.02, 1.02, 1.02), 0.48, false)
 	if exit_plate == null:
@@ -3822,7 +3810,7 @@ func draw_exit_confirm_choice_commit_feedback(parent: Control, route_id: String,
 	var feedback = Control.new()
 	feedback.name = "ExitConfirmChoiceCommitFeedback_%s" % route_id
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(feedback, rect_full(0.120, 0.675, 0.880, 0.945))
+	apply_rect(feedback, rect_full(0.120, 0.635, 0.880, 0.705))
 	parent.add_child(feedback)
 	var source_left = 0.070 if route_id == "keep" else 0.855
 	var source = make_gpt_plate_rect(rect_full(source_left, 0.365, source_left + 0.075, 0.635), Color(color.r, color.g, color.b, 0.22), "ui_jade_reading_plate")
@@ -5419,9 +5407,7 @@ func draw_melds(parent: Control) -> void:
 		var vertical: bool = seat_meld_is_vertical(seat)
 		var area: Container
 		if vertical:
-			var side_grid := GridContainer.new()
-			side_grid.columns = 2
-			area = side_grid
+			area = VBoxContainer.new()
 		else:
 			area = HBoxContainer.new()
 		area.name = "MeldArea_%d" % seat
@@ -5438,26 +5424,25 @@ func draw_melds(parent: Control) -> void:
 		parent.add_child(area)
 		var meld_tile_size := Vector2.ZERO
 		if vertical and compact_melds:
-			# Spend the side lane height across its actual grid rows. This keeps the
-			# 2D faces readable when three/four groups share a narrow viewport.
+			# Spend the side lane height across one vertical group per row. This keeps
+			# every chi/peng/gang in the seat-facing lane instead of creating a second
+			# column that can drift into the river.
 			var lane_height_px := safe_content_pixel_size().y * float(meld_rect.size.y - meld_rect.position.y)
 			var lane_width_px := safe_content_pixel_size().x * float(meld_rect.size.x - meld_rect.position.x)
-			var grid_rows := maxi(1, int(ceil(float(meld_list.size()) / 2.0)))
-			var row_gap_px := float(maxi(0, grid_rows - 1)) * 3.0
-			var group_height_px := maxf(32.0, (lane_height_px - row_gap_px) / float(grid_rows))
-			# Size each group from the largest tile count in its grid row. A four-tile
-			# kong must not inherit the three-tile estimate and overflow the danger
-			# panel's lower edge on compact screens.
+			var group_rows := maxi(1, meld_list.size())
+			var row_gap_px := float(maxi(0, group_rows - 1)) * 3.0
+			var group_height_px := maxf(32.0, (lane_height_px - row_gap_px) / float(group_rows))
+			# Size each group from the largest tile count in the lane. A four-tile
+			# kong must fit without pushing later groups into the adjacent river.
 			var compact_tile_width := floorf((group_height_px - 2.0) / 3.0 - 1.0)
 			for vertical_meld in meld_list:
 				if typeof(vertical_meld) == TYPE_ARRAY:
 					var vertical_tile_count := maxi(1, (vertical_meld as Array).size())
 					var group_tile_width := floorf((group_height_px - 2.0) / float(vertical_tile_count) - 1.0)
 					compact_tile_width = minf(compact_tile_width, group_tile_width)
-			# Two compact groups share the side grid. Bound the face width by
-			# the lane itself so Container minimum sizes cannot push into the
-			# adjacent HUD or river at 960px.
-			var max_compact_tile_width := floorf(((lane_width_px - 12.0 - 3.0) * 0.5 - 6.0) / HAND_TILE_ASPECT)
+			# Bound the face width by the single lane itself so Container minimum
+			# sizes cannot push into the adjacent HUD or river at 960px.
+			var max_compact_tile_width := floorf((lane_width_px - 12.0) / HAND_TILE_ASPECT)
 			max_compact_tile_width = maxf(18.0, max_compact_tile_width)
 			compact_tile_width = clampf(minf(compact_tile_width, max_compact_tile_width), 18.0, 26.0)
 			meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * HAND_TILE_ASPECT)))
@@ -5504,6 +5489,11 @@ func draw_melds(parent: Control) -> void:
 				meld_group.set_meta("orientation", "vertical" if vertical else "horizontal")
 				meld_group.set_meta("tile_count", meld_tiles.size())
 				meld_group.set_meta("face_rotation", seat_meld_face_rotation(seat))
+				if vertical and compact_melds:
+					# The authored 2D faces remain at their minimum touch size, while
+					# the lane container owns the four-row height budget.
+					meld_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+					meld_group.custom_minimum_size.y = 30.0
 				area.add_child(meld_group)
 				proxy_order += meld_tiles.size() + 1
 
@@ -6971,18 +6961,19 @@ func draw_round_summary(parent: Control) -> void:
 	body_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	apply_rect(body_scroll, ROUND_SUMMARY_TEXT_RECT)
 	panel.add_child(body_scroll)
-	var body = make_label(body_scroll, round_summary_compact_body_text(), 12 if compact_summary else 14, Color(0.94, 0.96, 0.90), false)
+	var body = make_label(body_scroll, full_summary_text, 12 if compact_summary else 14, Color(0.94, 0.96, 0.90), false)
 	body.name = "RoundSummaryBody"
-	body.custom_minimum_size = Vector2(0.0, 132.0 if compact_summary else 116.0)
+	body.custom_minimum_size = Vector2(0.0, 0.0)
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	body.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.92))
 	body.add_theme_constant_override("outline_size", 2)
-	body.clip_text = true
+	configure_wrapped_label(body, maxf(220.0, content_size.x * 0.425), 0.0, 5.0)
+	# The label is allowed to clip only at its measured, scrollable bounds; the
+	# full source text remains intact and no ellipsis is used.
+	body.clip_text = false
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	body.tooltip_text = full_summary_text
 	draw_round_summary_rank_header(panel, compact_summary)
 	var rank = 1
 	for seat in ranked_seats_by_score():
@@ -6997,7 +6988,10 @@ func draw_round_summary(parent: Control) -> void:
 	# above the newly-built modal in the tree as well as by z-index, so touch hit
 	# testing cannot stop at the shield before reaching settlement CTAs.
 	if action_bar != null and is_instance_valid(action_bar):
-		parent.move_child(action_bar, parent.get_child_count() - 1)
+		if action_bar.get_parent() == parent:
+			parent.move_child(action_bar, parent.get_child_count() - 1)
+		else:
+			action_bar.move_to_front()
 
 
 func draw_round_summary_rank_header(parent: Control, compact_summary: bool) -> Control:
@@ -8380,21 +8374,6 @@ func get_last_discard_for_seat(seat: int) -> String:
 func draw_seat_status_summary_band(parent: Control, seat: int, text: String, package_driven: bool) -> Control:
 	# r213: GPT chrome conversion
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
-	var simple_band = make_gpt_ribbon(rect_full(0.390, 0.295, 0.960, 0.360), Color(0.070, 0.056, 0.038, 0.48))
-	simple_band.name = "SeatStatusSummaryBand_%d" % seat
-	parent.add_child(simple_band)
-	var simple_seal = make_gpt_gate(rect_full(0.020, 0.185, 0.100, 0.815), Color(accent.r, accent.g, accent.b, 0.16))
-	simple_seal.name = "SeatStatusSummarySeal_%d" % seat
-	simple_band.add_child(simple_seal)
-	var simple_glyph = make_label(simple_seal, "包" if package_driven else "势", 8, Color(0.90, 0.84, 0.66, 0.78), true)
-	simple_glyph.name = "SeatStatusSummaryGlyph_%d" % seat
-	apply_rect(simple_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var simple_label = make_label(simple_band, text, 10, Color(0.84, 0.84, 0.72, 0.84), false)
-	simple_label.name = "SeatStatusSummaryLabel_%d" % seat
-	apply_rect(simple_label, rect_full(0.125, 0.040, 0.940, 0.960))
-	simple_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	style_background_readable_label(simple_label, 2)
-	return simple_band
 	var band = make_gpt_ribbon(rect_full(0.390, 0.295, 0.960, 0.360), Color(0.006, 0.016, 0.018, 0.70))
 	band.name = "SeatStatusSummaryBand_%d" % seat
 	parent.add_child(band)
@@ -8655,19 +8634,6 @@ func draw_seat_score_momentum_ribbon(parent: Control, seat: int) -> bool:
 	if report.is_empty():
 		return false
 	var accent = score_momentum_color(report)
-	var simple_ribbon = make_gpt_ribbon(rect_full(0.39, 0.600, 0.96, 0.705), Color(0.072, 0.052, 0.034, 0.46))
-	simple_ribbon.name = "SeatScoreMomentumRibbon"
-	parent.add_child(simple_ribbon)
-	var simple_seal = make_gpt_gate(rect_full(0.025, 0.20, 0.112, 0.80), Color(accent.r, accent.g, accent.b, 0.16))
-	simple_seal.name = "SeatScoreMomentumSeal"
-	simple_ribbon.add_child(simple_seal)
-	var simple_glyph = make_label(simple_seal, "局", 8, Color(0.92, 0.86, 0.66, 0.80), true)
-	apply_rect(simple_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	var simple_label = make_label(simple_ribbon, score_momentum_label(report), 10, Color(0.90, 0.86, 0.70, 0.86), true)
-	simple_label.name = "SeatScoreMomentumLabel"
-	apply_rect(simple_label, rect_full(0.130, 0.05, 0.940, 0.95))
-	configure_clipped_label(simple_label)
-	return true
 	var ribbon = make_gpt_ribbon(rect_full(0.39, 0.600, 0.96, 0.705), Color(accent.r * 0.16, accent.g * 0.16, accent.b * 0.16, 0.84))
 	ribbon.name = "SeatScoreMomentumRibbon"
 	parent.add_child(ribbon)
@@ -8718,18 +8684,6 @@ func draw_seat_score_momentum_ribbon(parent: Control, seat: int) -> bool:
 
 func draw_seat_stat_pill(parent: Control, rect: Rect2, label_text: String, value_text: String, accent: Color) -> void:
 	# r213: GPT chrome conversion
-	var simple_pill = make_gpt_plate_rect(rect, Color(0.070, 0.056, 0.038, 0.54), "ui_jade_reading_plate")
-	simple_pill.name = "SeatStatPill_%s" % label_text
-	parent.add_child(simple_pill)
-	simple_pill.add_child(make_gpt_edge_rail(rect_full(0.0, 0.0, 0.040, 1.0), Color(accent.r, accent.g, accent.b, 0.24)))
-	var simple_label = make_label(simple_pill, label_text, 9, Color(0.72, 0.70, 0.58, 0.84), false)
-	apply_rect(simple_label, rect_full(0.090, 0.08, 0.360, 0.92))
-	simple_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var simple_value = make_label(simple_pill, value_text, 10, Color(0.92, 0.88, 0.70, 0.90), true)
-	apply_rect(simple_value, rect_full(0.340, 0.08, 0.940, 0.92))
-	simple_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	configure_clipped_label(simple_value)
-	return
 	var pill = make_gpt_plate_rect(rect, Color(0.010, 0.018, 0.022, 0.92), "ui_jade_reading_plate")
 	pill.name = "SeatStatPill_%s" % label_text
 	parent.add_child(pill)
@@ -10610,10 +10564,15 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	title.name = "TableLogArchiveTitle"
 	apply_rect(title, rect_full(0.060, 0.045, 0.650, 0.150))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var count = make_label(panel, "%d条" % table_logs.size(), 11, Color(0.70, 0.76, 0.66), false)
+	var visible_log_count := mini(table_logs.size(), ONLINE_LOG_HISTORY_LIMIT)
+	var count_text := "%d条" % table_logs.size()
+	if table_logs.size() > ONLINE_LOG_HISTORY_LIMIT:
+		count_text = "最近%d/%d条" % [visible_log_count, table_logs.size()]
+	var count = make_label(panel, count_text, 11, Color(0.70, 0.76, 0.66), false)
 	count.name = "TableLogArchiveCount"
 	apply_rect(count, rect_full(0.680, 0.060, 0.820, 0.145))
 	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	count.tooltip_text = "显示最近%d/%d条牌桌记录" % [visible_log_count, table_logs.size()] if table_logs.size() > ONLINE_LOG_HISTORY_LIMIT else "共%d条牌桌记录" % table_logs.size()
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_table_log_archive"))
 	close_button.name = "TableLogArchiveCloseButton"
 	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
@@ -10646,10 +10605,11 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 			var full_text := table_log_display_text(str(table_logs[log_i]))
 			var row := make_label(list, "%02d  %s" % [log_i + 1, full_text], 13, Color(0.84, 0.88, 0.80), false)
 			row.name = "TableLogArchiveRow_%d" % log_i
-			row.custom_minimum_size = Vector2(0, 42)
+			var row_width := maxf(260.0, effective_viewport_size().x * 0.820)
+			var row_height := estimate_wrapped_text_height(row.text, row_width, accessibility_font_size(13), 5.0)
+			row.custom_minimum_size = Vector2(0, row_height)
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			row.clip_text = false
+			configure_wrapped_label(row, row_width, row_height, 5.0)
 			row.tooltip_text = full_text
 	if not round_history.is_empty():
 		var history_title := make_label(list, "最近对局战报", 12, Color(0.90, 0.78, 0.52), true)
@@ -10663,10 +10623,9 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 			var history_text := str((entry as Dictionary).get("summary", "已完成一局"))
 			var history_row := make_label(list, "对局 %02d  ·  %s" % [int((entry as Dictionary).get("hand_number", 0)), history_text], 11, Color(0.80, 0.86, 0.76), false)
 			history_row.name = "RoundHistoryArchiveRow_%d" % history_index
-			history_row.custom_minimum_size = Vector2(0, 48)
+			history_row.custom_minimum_size = Vector2(0, estimate_wrapped_text_height(history_row.text, maxf(240.0, effective_viewport_size().x * 0.640), accessibility_font_size(11), 5.0))
 			history_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			history_row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			history_row.clip_text = false
+			configure_wrapped_label(history_row, maxf(240.0, effective_viewport_size().x * 0.640), history_row.custom_minimum_size.y, 5.0)
 			history_row.tooltip_text = history_text
 	call_deferred("scroll_table_log_archive_to_end")
 
@@ -11476,7 +11435,7 @@ func draw_update_dialog_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "UpdateDialogArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.070, 0.225, 0.930, 0.315) if update_dialog_compact_layout() else rect_full(0.070, 0.420, 0.930, 0.585))
+	apply_rect(art, rect_full(0.070, 0.295, 0.930, 0.365) if update_dialog_compact_layout() else rect_full(0.070, 0.420, 0.930, 0.585))
 	parent.add_child(art)
 	var rail = make_gpt_route_rail(rect_full(0.045, 0.380, 0.955, 0.620), Color(0.014, 0.034, 0.038, 0.90))
 	rail.name = "UpdateDialogArtRail"
@@ -11586,7 +11545,7 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	var map = Control.new()
 	map.name = "UpdateDialogStageMap"
 	map.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(map, rect_full(0.120, 0.495, 0.880, 0.575) if update_dialog_compact_layout() else rect_full(0.120, 0.720, 0.880, 0.815))
+	apply_rect(map, rect_full(0.120, 0.515, 0.880, 0.595) if update_dialog_compact_layout() else rect_full(0.120, 0.720, 0.880, 0.815))
 	parent.add_child(map)
 	var canopy_texture = add_illustration_texture(map, "update_stage_canopy", rect_full(-0.020, -0.620, 1.020, 1.360), 0.13, false)
 	if canopy_texture != null:
@@ -11624,7 +11583,7 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	update_release_notes_art = Control.new()
 	update_release_notes_art.name = "UpdateReleaseNotesArt"
 	update_release_notes_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(update_release_notes_art, rect_full(0.080, 0.590, 0.920, 0.720) if update_dialog_compact_layout() else rect_full(0.080, 0.675, 0.920, 0.755))
+	apply_rect(update_release_notes_art, rect_full(0.080, 0.610, 0.920, 0.735) if update_dialog_compact_layout() else rect_full(0.080, 0.675, 0.920, 0.755))
 	parent.add_child(update_release_notes_art)
 	var notes_texture = add_illustration_texture(update_release_notes_art, "update_notes_strip", rect_full(-0.020, -0.700, 1.020, 1.320), 0.16, false)
 	if notes_texture != null:
@@ -11654,13 +11613,19 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	var tick = add_gpt_tick_strip(update_release_notes_art, rect_full(0.820, 0.150, (0.820) + float(2) * (0.045) + (0.016), 0.380), Color(0.82, 0.70, 0.36, 0.24), "UpdateReleaseNotesTick_0")
 	var node = add_gpt_tick_strip(update_release_notes_art, rect_full(0.070, 0.240, (0.070) + float(1) * (0.050) + (0.024), 0.520), Color(0.82, 0.70, 0.36, 0.20), "UpdateReleaseNotesNode_0")
 	var tick_2 = add_gpt_tick_strip(update_release_notes_art, rect_full(0.845, 0.475, (0.845) + float(1) * (0.043) + (0.016), 0.610), Color(0.72, 0.88, 0.62, 0.20), "UpdateReleaseNotesStageTick_0")
-	update_release_notes_label = make_label(update_release_notes_art, "", 10, Color(0.84, 0.88, 0.74), true)
+	var notes_scroll := ScrollContainer.new()
+	notes_scroll.name = "UpdateReleaseNotesScroll"
+	configure_scroll_container(notes_scroll, "上下滚动查看完整更新说明")
+	notes_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	notes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	notes_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	apply_rect(notes_scroll, rect_full(0.145, 0.060, 0.790, 0.900) if update_dialog_compact_layout() else rect_full(0.145, 0.010, 0.790, 0.580))
+	update_release_notes_art.add_child(notes_scroll)
+	update_release_notes_label = make_label(notes_scroll, "", 10, Color(0.84, 0.88, 0.74), true)
 	update_release_notes_label.name = "UpdateReleaseNotesLabel"
-	apply_rect(update_release_notes_label, rect_full(0.145, 0.060, 0.790, 0.900) if update_dialog_compact_layout() else rect_full(0.145, 0.010, 0.790, 0.580))
+	update_release_notes_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	update_release_notes_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	configure_clipped_label(update_release_notes_label)
-	if update_dialog_compact_layout():
-		update_release_notes_label.tooltip_text = update_release_notes
+	configure_wrapped_label(update_release_notes_label, maxf(220.0, effective_viewport_size().x * 0.420), 0.0, 4.0)
 	return update_release_notes_art
 
 func draw_update_status_convergence_art(parent: Control) -> Control:
@@ -11668,7 +11633,7 @@ func draw_update_status_convergence_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "UpdateStatusConvergenceArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.080, 0.490, 0.920, 0.570) if update_dialog_compact_layout() else rect_full(0.080, 0.585, 0.920, 0.675))
+	apply_rect(art, rect_full(0.080, 0.525, 0.920, 0.605) if update_dialog_compact_layout() else rect_full(0.080, 0.585, 0.920, 0.675))
 	art.visible = not update_dialog_compact_layout()
 	parent.add_child(art)
 	var stage_index = update_stage_index()
@@ -12622,14 +12587,18 @@ func make_achievement_row(key: String, index: int) -> Control:
 	apply_rect(goal_label, rect_full(0.140, 0.360, 0.660, 0.570))
 	goal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(goal_label)
-	var progress_back = make_gpt_gate(rect_full(0.135, 0.660, 0.390, 0.910), Color(accent.r, accent.g, accent.b, 0.24 if unlocked else 0.18))
+	var progress_back = make_gpt_gate(rect_full(0.135, 0.660, 0.475, 0.910), Color(accent.r, accent.g, accent.b, 0.24 if unlocked else 0.18))
 	progress_back.name = "AchievementRowProgressTextBackplate_%s" % key
 	row.add_child(progress_back)
 	var progress_text = make_label(row, achievement_progress_text(key), 13, Color(0.98, 0.88, 0.56, 0.98) if unlocked else Color(0.86, 0.96, 0.92, 0.98), true)
 	progress_text.name = "AchievementRowProgressText_%s" % key
-	apply_rect(progress_text, rect_full(0.146, 0.660, 0.378, 0.910))
+	apply_rect(progress_text, rect_full(0.146, 0.660, 0.460, 0.910))
 	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	configure_clipped_label(progress_text)
+	fit_label_font_size(progress_text, maxf(72.0, effective_viewport_size().x * 0.285), 13, 10)
+	progress_text.clip_text = true
+	progress_text.clip_contents = false
+	progress_text.autowrap_mode = TextServer.AUTOWRAP_OFF
+	progress_text.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	var state_label = make_label(row, achievement_state_text(key), 13, Color(1.00, 0.90, 0.58) if unlocked else Color(0.92, 1.00, 0.96), true)
 	state_label.name = "AchievementRowState_%s" % key
 	apply_rect(state_label, rect_full(0.830, 0.220, 0.940, 0.780))
@@ -13981,7 +13950,6 @@ func play_center_dice_turn_feedback(parent: Control, active_index: int = -1, acc
 
 func play_center_last_discard_feedback(parent: Control, tile: String, seat: int = -1) -> Control:
 	# r211: GPT chrome conversion
-	return null
 	if parent == null or not is_instance_valid(parent) or tile == "":
 		return null
 	var previous = parent.find_child("CenterLastDiscardFeedback", false, false)
@@ -14028,7 +13996,7 @@ func play_center_last_discard_feedback(parent: Control, tile: String, seat: int 
 	var response_fill = make_gpt_meter_fill(rect_full(0.040, 0.240, 0.700, 0.760), Color(accent.r, accent.g, accent.b, 0.22))
 	response_fill.name = "CenterLastDiscardFeedbackResponseFill"
 	response.add_child(response_fill)
-	draw_center_last_discard_response_window(feedback, accent)
+	draw_center_last_discard_response_window(feedback, accent, tile)
 	for i in range(3):
 		var t = 0.300 + float(i) * 0.170
 		var tick_pos = source_pos.lerp(target_pos, t)
@@ -15541,27 +15509,33 @@ func tile_face_font_size(size: Vector2) -> int:
 func tile_face_main(tile: String) -> String:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_face_main_cache.has(tile):
-		return str(tile_face_main_cache[tile])
-	if is_number_tile(tile):
-		return tile.left(tile.length() - 1)
-	return tile_label(tile)
+	var normalized := normalize_tile_code(tile)
+	if tile_face_main_cache.has(normalized):
+		return str(tile_face_main_cache[normalized])
+	var result := normalized.left(normalized.length() - 1) if is_number_tile(normalized) else tile_label(normalized)
+	if normalized != "" and tile_face_main_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_face_main_cache[normalized] = result
+	return result
 
 func tile_face_sub(tile: String) -> String:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_face_sub_cache.has(tile):
-		return str(tile_face_sub_cache[tile])
-	if tile.ends_with("W"):
-		return "万"
-	if tile.ends_with("T"):
-		return "条"
-	if tile.ends_with("B"):
-		return "筒"
-	if is_flower_tile(tile):
-		return "花"
-	if ["E", "S", "N", "R"].has(tile):
-		return "风"
-	if ["Z", "F", "P"].has(tile):
-		return "箭"
-	return ""
+	var normalized := normalize_tile_code(tile)
+	if tile_face_sub_cache.has(normalized):
+		return str(tile_face_sub_cache[normalized])
+	var result := ""
+	if normalized.ends_with("W"):
+		result = "万"
+	elif normalized.ends_with("T"):
+		result = "条"
+	elif normalized.ends_with("B"):
+		result = "筒"
+	elif is_flower_tile(normalized):
+		result = "花"
+	elif ["E", "S", "N", "R"].has(normalized):
+		result = "风"
+	elif ["Z", "F", "P"].has(normalized):
+		result = "箭"
+	if normalized != "" and tile_face_sub_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_face_sub_cache[normalized] = result
+	return result

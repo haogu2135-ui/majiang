@@ -14,6 +14,7 @@ const ONLINE_LOG_ENTRY_MAX_LENGTH := 240
 const UI_MIN_TOUCH_TARGET := 44.0
 const AUDIO_HEALTH_CHECK_INTERVAL_MSEC := 5000
 const GPT_PLATE_ATLAS_CACHE_LIMIT := 64
+const GPT_CENTER_CROP_CACHE_LIMIT := 64
 const ONLINE_CHAT_COOLDOWN_MSEC := 650
 const ONLINE_VOICE_PACKET_MAX_BYTES := 16384
 const ONLINE_VOICE_MIN_SAMPLE_RATE := 8000
@@ -501,6 +502,9 @@ var illustration_textures: Dictionary = {}
 var optional_gpt_illustration_textures: Dictionary = {}
 var gpt_plate_atlas_cache: Dictionary = {}
 var gpt_plate_atlas_cache_order: Array[String] = []
+var gpt_center_crop_cache: Dictionary = {}
+var gpt_center_crop_cache_order: Array[String] = []
+var loaded_texture_cache: Dictionary = {}
 var shader_materials: Dictionary = {}
 const SHADER_PATHS := {
 	"ink_wash_bg": "res://shaders/ink_wash_bg.gdshader",
@@ -635,6 +639,7 @@ var replay_delete_target_id := ""
 var replay_delete_confirming := false
 var round_event_history: Array = []  # 当前牌局结构化事件，用于战报复盘
 var replay_import_payload: Dictionary = {}
+var replay_import_code_draft := ""
 var replay_import_input: LineEdit
 var round_event_sequence := 0
 var active_round_id := ""
@@ -649,6 +654,7 @@ var telemetry_export_status := "未导出"
 var telemetry_sheet_open := false
 var telemetry_clear_confirming := false
 var applied_result_transactions: Dictionary = {}
+var applied_result_transaction_order: Array[String] = []
 var offline_hand_seed := 0
 var last_match_summary: Dictionary = {}
 var offline_progress_loaded_state := false
@@ -865,6 +871,7 @@ var toast_container: Control
 var toast_tween: Tween
 var toast_current: Control
 var toast_mode := ""
+var game_render_delay_timer: Timer = null
 
 # 牌面动画系统变量 / Tile Animation System Variables
 var tile_flip_animations: Dictionary = {}  # 进行中的翻转动画
@@ -918,22 +925,19 @@ const WALL_LAYOUTS := [
 	[Vector2(0.906, 0.165), Vector2(0.954, 0.795), 12, false],
 ]
 const DISCARD_ZONES := [
-	# Four independent rivers form a clean ring around the center panel. Horizontal
-	# seats keep two dense rows; side seats use four columns without crossing into
-	# the top/bottom rivers or covering the center decision surface.
-	# The right edge follows the authored bottom-river footprint. The extra
-	# reserve at 0.630 used to classify the adjacent action lane as river space
-	# on 960px layouts, even though no discard tile occupied that area.
+		# Each river owns the inner side of its seat lane. Keep a measurable gap
+		# between seat, meld, and river so visual z-order can never hide a nameplate
+		# or turn an adjacent lane into a surprising click target.
 	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.600, 0.875)), 8],
-	[2, Rect2(Vector2(0.285, 0.100), Vector2(0.715, 0.325)), 8],
-	[3, Rect2(Vector2(0.100, 0.300), Vector2(0.280, 0.550)), 3],
-	[1, Rect2(Vector2(0.720, 0.300), Vector2(0.900, 0.550)), 3],
+	[2, Rect2(Vector2(0.285, 0.205), Vector2(0.715, 0.335)), 8],
+	[3, Rect2(Vector2(0.225, 0.300), Vector2(0.385, 0.550)), 3],
+	[1, Rect2(Vector2(0.615, 0.300), Vector2(0.775, 0.550)), 3],
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
-	[1, Rect2(Vector2(0.780, 0.240), Vector2(0.852, 0.680))],
-	[2, Rect2(Vector2(0.615, 0.100), Vector2(0.945, 0.195))],
-	[3, Rect2(Vector2(0.148, 0.240), Vector2(0.220, 0.680))],
+	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.875, 0.740))],
+	[2, Rect2(Vector2(0.735, 0.105), Vector2(0.965, 0.195))],
+	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.205, 0.740))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
 const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.345), Vector2(0.595, 0.635))
@@ -985,9 +989,9 @@ const TABLE_OUTER_TEXTURE_RECT := Rect2(Vector2(0.008, 0.012), Vector2(0.992, 0.
 const TABLE_INNER_RECT := Rect2(Vector2(0.035, 0.045), Vector2(0.965, 0.955))
 const TABLE_INNER_TEXTURE_RECT := Rect2(Vector2(0.012, 0.016), Vector2(0.988, 0.984))
 const SEAT_LAYOUTS := [
-	[2, Rect2(Vector2(0.390, 0.108), Vector2(0.610, 0.200)), "top"],
-	[3, Rect2(Vector2(0.020, 0.335), Vector2(0.140, 0.505)), "left"],
-	[1, Rect2(Vector2(0.860, 0.335), Vector2(0.980, 0.505)), "right"],
+	[2, Rect2(Vector2(0.395, 0.050), Vector2(0.605, 0.125)), "top"],
+	[3, Rect2(Vector2(0.020, 0.335), Vector2(0.115, 0.505)), "left"],
+	[1, Rect2(Vector2(0.885, 0.335), Vector2(0.980, 0.505)), "right"],
 	[0, Rect2(Vector2(0.020, 0.745), Vector2(0.180, 0.950)), "bottom"],
 ]
 const TABLE_ORNAMENT_EDGES := [
@@ -1213,6 +1217,9 @@ const TRANSITION_DURATION_MSEC := 280
 const HAND_SLIDE_IN_DURATION_MSEC := 220
 const TOAST_DEFAULT_DURATION_MSEC := 1800
 const TOAST_SLIDE_DURATION_MSEC := 220
+const TOAST_MIN_DURATION_MSEC := 700
+const TOAST_MAX_DURATION_MSEC := 12000
+const TOAST_MAX_TEXT_LENGTH := 160
 const FX_TILE_FLIP_DURATION_MSEC := 180
 const FX_SCORE_CHANGE_DURATION_MSEC := 320
 const FX_CLAIM_FLY_DURATION_MSEC := 280
@@ -1343,10 +1350,17 @@ func optional_gpt_illustration_texture(name: String) -> Texture2D:
 	return optional_gpt_illustration_textures.get(name, null)
 
 func load_illustration_texture(path: String) -> Texture2D:
+	if path.strip_edges() == "":
+		return null
+	if loaded_texture_cache.has(path):
+		return loaded_texture_cache[path] as Texture2D
 	if not imported_texture_artifact_ready(path):
 		return null
 	var imported = ResourceLoader.load(path, "Texture2D")
-	return imported as Texture2D if imported is Texture2D else null
+	var texture := imported as Texture2D if imported is Texture2D else null
+	if texture != null:
+		loaded_texture_cache[path] = texture
+	return texture
 
 func imported_texture_artifact_ready(path: String) -> bool:
 	if not ResourceLoader.exists(path):
@@ -1450,6 +1464,7 @@ func _gpt_plate_texture_for_rect(texture: Texture2D, plate_key: String, rect: Re
 		return texture
 	var cache_key: String = "%s|%s|%.3f" % [str(texture.get_instance_id()), plate_key, crop_fraction]
 	if gpt_plate_atlas_cache.has(cache_key):
+		touch_cache_key(gpt_plate_atlas_cache_order, cache_key)
 		return gpt_plate_atlas_cache[cache_key] as Texture2D
 	var crop_size := source_size * crop_fraction
 	var atlas := AtlasTexture.new()
@@ -1458,7 +1473,7 @@ func _gpt_plate_texture_for_rect(texture: Texture2D, plate_key: String, rect: Re
 	while gpt_plate_atlas_cache_order.size() >= GPT_PLATE_ATLAS_CACHE_LIMIT:
 		var oldest_key: String = str(gpt_plate_atlas_cache_order.pop_front())
 		gpt_plate_atlas_cache.erase(oldest_key)
-	gpt_plate_atlas_cache_order.append(cache_key)
+	touch_cache_key(gpt_plate_atlas_cache_order, cache_key)
 	gpt_plate_atlas_cache[cache_key] = atlas
 	return atlas
 
@@ -1495,16 +1510,34 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> C
 	return tex
 
 
-func make_gpt_center_crop_plate_rect(rect: Rect2, color: Color, plate_key: String, crop_fraction: float = 0.30) -> Control:
-	var source: Texture2D = optional_gpt_illustration_texture(plate_key)
+func gpt_center_crop_texture(source: Texture2D, plate_key: String, crop_fraction: float) -> Texture2D:
 	if source == null:
-		return make_layout_host(rect)
+		return null
 	var fraction := clampf(crop_fraction, 0.10, 0.80)
 	var source_size := source.get_size()
+	if source_size.x <= 1.0 or source_size.y <= 1.0:
+		return source
+	var cache_key := "%s|%s|%.3f" % [str(source.get_instance_id()), plate_key, fraction]
+	if gpt_center_crop_cache.has(cache_key):
+		touch_cache_key(gpt_center_crop_cache_order, cache_key)
+		return gpt_center_crop_cache[cache_key] as Texture2D
 	var crop_size := source_size * fraction
 	var atlas := AtlasTexture.new()
 	atlas.atlas = source
 	atlas.region = Rect2((source_size - crop_size) * 0.5, crop_size)
+	while gpt_center_crop_cache_order.size() >= GPT_CENTER_CROP_CACHE_LIMIT:
+		var oldest_key: String = str(gpt_center_crop_cache_order.pop_front())
+		gpt_center_crop_cache.erase(oldest_key)
+	touch_cache_key(gpt_center_crop_cache_order, cache_key)
+	gpt_center_crop_cache[cache_key] = atlas
+	return atlas
+
+
+func make_gpt_center_crop_plate_rect(rect: Rect2, color: Color, plate_key: String, crop_fraction: float = 0.30) -> Control:
+	var source: Texture2D = optional_gpt_illustration_texture(plate_key)
+	if source == null:
+		return make_layout_host(rect)
+	var atlas := gpt_center_crop_texture(source, plate_key, crop_fraction)
 	var tex := TextureRect.new()
 	tex.texture = atlas
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -1802,6 +1835,14 @@ func make_gpt_spark(size: Vector2, color: Color, plate_key: String = "ui_soft_fl
 func configure_passive_container(container: Control) -> void:
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+func touch_cache_key(order: Array, key: String) -> void:
+	# Every bounded cache uses the same MRU policy so hot UI/AI entries are not
+	# evicted merely because an older screen was rebuilt.
+	if key == "":
+		return
+	order.erase(key)
+	order.append(key)
+
 func make_label(parent: Control, text: String, font_size: int, color: Color, bold: bool) -> Label:
 	var label = Label.new()
 	label.text = text
@@ -1876,9 +1917,84 @@ func set_dynamic_label_text(label: Label, text: String, detail: String = "") -> 
 	if label == null or not is_instance_valid(label):
 		return
 	label.text = text
-	configure_clipped_label(label)
+	# Dynamic body labels must keep their wrapped policy when their state changes.
+	# Reapplying the compact badge policy here used to turn a readable scrollable
+	# paragraph into a single ellipsized line after the first refresh.
+	if bool(label.get_meta("dynamic_wrapped_label", false)):
+		label.clip_text = false
+		label.clip_contents = false
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		call_deferred("refresh_wrapped_label_height", label, float(label.get_meta("wrapped_minimum_height", 0.0)), float(label.get_meta("wrapped_line_gap", 4.0)))
+	else:
+		configure_clipped_label(label)
 	var resolved_detail := detail.strip_edges() if detail.strip_edges() != "" else text.strip_edges()
 	label.tooltip_text = resolved_detail
+
+func estimate_wrapped_text_height(text: String, available_width: float, font_size: int, line_gap: float = 4.0) -> float:
+	var width := maxf(1.0, available_width)
+	var glyph_width := maxf(8.0, float(font_size) * 0.98)
+	var chars_per_line := maxi(1, int(floor(width / glyph_width)))
+	var line_count := 0
+	for paragraph in text.replace("\r", "").split("\n", true):
+		line_count += maxi(1, int(ceil(float(str(paragraph).length()) / float(chars_per_line))))
+	var line_height := maxf(18.0, float(font_size) * 1.42)
+	return float(line_count) * line_height + float(maxi(0, line_count - 1)) * line_gap + 4.0
+
+func configure_wrapped_label(label: Label, available_width: float = 0.0, minimum_height: float = 0.0, line_gap: float = 4.0) -> void:
+	if label == null or not is_instance_valid(label):
+		return
+	label.clip_text = false
+	label.clip_contents = false
+	label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	label.set_meta("dynamic_wrapped_label", true)
+	label.set_meta("wrapped_minimum_height", minimum_height)
+	label.set_meta("wrapped_line_gap", line_gap)
+	if label.tooltip_text == "" and label.text.strip_edges() != "":
+		label.tooltip_text = label.text
+	var width := available_width
+	if width <= 1.0:
+		width = label.size.x
+	if width > 1.0:
+		var font_size := label.get_theme_font_size("font_size")
+		label.custom_minimum_size.y = maxf(minimum_height, estimate_wrapped_text_height(label.text, width, font_size, line_gap))
+	else:
+		label.custom_minimum_size.y = maxf(label.custom_minimum_size.y, minimum_height)
+		call_deferred("refresh_wrapped_label_height", label, minimum_height, line_gap)
+
+func refresh_wrapped_label_height(label: Label, minimum_height: float = 0.0, line_gap: float = 4.0) -> void:
+	if label == null or not is_instance_valid(label) or not bool(label.get_meta("dynamic_wrapped_label", false)):
+		return
+	var width := label.size.x
+	if width <= 1.0 and label.get_parent() is Control:
+		width = (label.get_parent() as Control).size.x
+	if width <= 1.0:
+		return
+	var font_size := label.get_theme_font_size("font_size")
+	label.custom_minimum_size.y = maxf(minimum_height, estimate_wrapped_text_height(label.text, width, font_size, line_gap))
+
+func make_body_label(parent: Control, text: String, font_size: int, color: Color, bold: bool, available_width: float = 0.0, minimum_height: float = 0.0, line_gap: float = 4.0) -> Label:
+	# Long-form copy has an explicit, measurable layout contract. Callers can pass
+	# zero width when the parent is container-managed; the deferred refresh then
+	# measures the final width after anchors have resolved.
+	var label := make_label(parent, text, font_size, color, bold)
+	configure_wrapped_label(label, available_width, minimum_height, line_gap)
+	return label
+
+func fit_label_font_size(label: Label, available_width: float, preferred_size: int, minimum_size: int = 10) -> int:
+	if label == null or not is_instance_valid(label):
+		return preferred_size
+	var resolved := maxi(minimum_size, preferred_size)
+	var width := maxf(1.0, available_width)
+	var text_length := float(label.text.strip_edges().length())
+	while text_length * float(resolved) * 0.98 + 8.0 > width and resolved > minimum_size:
+		resolved -= 1
+	label.add_theme_font_size_override("font_size", resolved)
+	label.set_meta("fitted_font_size", resolved)
+	return resolved
 
 func configure_line_edit_input(edit: LineEdit, field_label: String = "", max_length: int = -1, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> void:
 	if edit == null or not is_instance_valid(edit):
@@ -2385,6 +2501,7 @@ func button_style_set(color: Color, radius: int, border_width: int = 2, shadow_s
 	# Cache still returns StyleBoxFlat hosts, but alpha=0 — GPT button face paints the chrome.
 	var key = button_style_set_cache_key(color, radius, border_width, shadow_size)
 	if button_style_set_cache.has(key):
+		touch_cache_key(button_style_set_cache_order, key)
 		return button_style_set_cache[key]
 	var fill = soften_button_color(color)
 	var cached_set = {
@@ -2400,6 +2517,7 @@ func input_style_set() -> Dictionary:
 	# GPT ui_online_form_field paints the field face.
 	var key = "default"
 	if input_style_set_cache.has(key):
+		touch_cache_key(input_style_set_cache_order, key)
 		return input_style_set_cache[key]
 	var normal = style(Color(0.120, 0.134, 0.112, 0.0), 10, Color(0.62, 0.54, 0.34, 0.0), 0, 0)
 	var focus = style(Color(0.145, 0.160, 0.130, 0.0), 10, Color(0.82, 0.68, 0.34, 0.0), 0, 0)
@@ -2418,7 +2536,9 @@ func button_style_set_cache_key(color: Color, radius: int, border_width: int = 2
 func store_button_style_set_cache(key: String, cached_set: Dictionary) -> void:
 	if key == "" or cached_set.is_empty():
 		return
-	if not button_style_set_cache.has(key):
+	if button_style_set_cache.has(key):
+		touch_cache_key(button_style_set_cache_order, key)
+	else:
 		button_style_set_cache_order.append(key)
 	button_style_set_cache[key] = cached_set
 	while button_style_set_cache_order.size() > BUTTON_STYLE_SET_CACHE_LIMIT:
@@ -2428,7 +2548,9 @@ func store_button_style_set_cache(key: String, cached_set: Dictionary) -> void:
 func store_input_style_set_cache(key: String, cached_set: Dictionary) -> void:
 	if key == "" or cached_set.is_empty():
 		return
-	if not input_style_set_cache.has(key):
+	if input_style_set_cache.has(key):
+		touch_cache_key(input_style_set_cache_order, key)
+	else:
 		input_style_set_cache_order.append(key)
 	input_style_set_cache[key] = cached_set
 	while input_style_set_cache_order.size() > INPUT_STYLE_SET_CACHE_LIMIT:
@@ -2441,6 +2563,7 @@ func style(color: Color, radius: int, border: Color, border_width: int, shadow_s
 	var safe_border = Color(border.r, border.g, border.b, 0.0)
 	var key = style_cache_key(safe_color, radius, safe_border, 0, 0)
 	if style_cache.has(key):
+		touch_cache_key(style_cache_order, key)
 		return style_cache[key]
 	var box = StyleBoxFlat.new()
 	box.bg_color = safe_color
@@ -2482,7 +2605,9 @@ func style_cache_key(color: Color, radius: int, border: Color, border_width: int
 func store_style_cache(key: String, box: StyleBoxFlat) -> void:
 	if key == "" or box == null:
 		return
-	if not style_cache.has(key):
+	if style_cache.has(key):
+		touch_cache_key(style_cache_order, key)
+	else:
 		style_cache_order.append(key)
 	style_cache[key] = box
 	while style_cache_order.size() > STYLE_CACHE_LIMIT:
@@ -3216,7 +3341,7 @@ func record_round_history(entry: Dictionary) -> void:
 
 func latest_round_history(limit: int = 5) -> Array:
 	var count := clampi(limit, 0, ROUND_HISTORY_LIMIT)
-	return round_history.slice(maxi(0, round_history.size() - count))
+	return round_history.slice(maxi(0, round_history.size() - count)).duplicate(true)
 
 func load_tutorial_state() -> void:
 	var config = ConfigFile.new()
@@ -3656,7 +3781,7 @@ func add_item(item_id: String, count: int = 1) -> bool:
 	return true
 
 func get_item_count(item_id: String) -> int:
-	return int(inventory.get(item_id, 0))
+	return clampi(int(inventory.get(item_id, 0)), 0, 999999)
 
 func item_display_name(item_id: String) -> String:
 	if ITEM_TYPES.has(item_id):
@@ -3677,6 +3802,7 @@ func load_currency() -> void:
 		save_currency()
 	else:
 		currency = {"coins": 500, "gems": 10}  # 初始货币
+		save_currency()
 
 func save_currency() -> void:
 	currency["coins"] = maxi(0, int(currency.get("coins", 0)))
@@ -3704,10 +3830,12 @@ func record_game_result(won: bool, score: int, hands_played: int, result_key: St
 		for history_entry in round_history:
 			if typeof(history_entry) == TYPE_DICTIONARY and str(history_entry.get("round_id", "")) == transaction_key:
 				applied_result_transactions[transaction_key] = int(history_entry.get("saved_at", Time.get_unix_time_from_system()))
+				touch_cache_key(applied_result_transaction_order, transaction_key)
 				return
 		applied_result_transactions[transaction_key] = int(Time.get_unix_time_from_system())
-		while applied_result_transactions.size() > RESULT_TRANSACTION_HISTORY_LIMIT:
-			var oldest_key = applied_result_transactions.keys()[0]
+		touch_cache_key(applied_result_transaction_order, transaction_key)
+		while applied_result_transaction_order.size() > RESULT_TRANSACTION_HISTORY_LIMIT:
+			var oldest_key: String = applied_result_transaction_order.pop_front()
 			applied_result_transactions.erase(oldest_key)
 	game_stats["games_played"] = int(game_stats.get("games_played", 0)) + 1
 	game_stats["total_hands"] = int(game_stats.get("total_hands", 0)) + maxi(0, hands_played)
@@ -3727,12 +3855,13 @@ func record_game_result(won: bool, score: int, hands_played: int, result_key: St
 			call("update_task_progress", "score_plus", 1)
 		add_season_points(season_points_for_result(won, score), won)
 		grant_round_coins(won, score)
-	save_game_stats()
 	if not offline_sim_quiet and not metrics.is_empty():
 		var normalized_metrics := metrics.duplicate(true)
 		normalized_metrics["won"] = won
 		normalized_metrics["score"] = score
 		record_round_statistics(normalized_metrics)
+	else:
+		save_game_stats()
 
 func grant_round_coins(won: bool, score: int) -> int:
 	var reward := 8 + (25 if won else 5) + maxi(0, int(score / 1200))
@@ -4712,7 +4841,10 @@ func count_tile(hand: Array, tile: String) -> int:
 func add_log(text: String) -> void:
 	if offline_sim_quiet:
 		return
-	table_logs.append(text)
+	var clean := text.strip_edges()
+	if clean == "":
+		return
+	table_logs.append(clean.left(ONLINE_LOG_ENTRY_MAX_LENGTH))
 	while table_logs.size() > 10:
 		table_logs.pop_front()
 

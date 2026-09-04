@@ -1455,6 +1455,7 @@ func get_ai_discard_reports(seat: int) -> Array:
 	var cache_key = ai_report_cache_key(seat) if use_report_cache else ""
 	if use_report_cache and ai_report_cache.has(cache_key):
 		ai_report_cache_hits += 1
+		touch_cache_key(ai_report_cache_order, cache_key)
 		return duplicate_report_array(ai_report_cache[cache_key])
 	if use_report_cache:
 		ai_report_cache_misses += 1
@@ -1817,7 +1818,9 @@ func ai_context_cache_key(tile: String, seat: int) -> String:
 func store_ai_report_cache(key: String, reports: Array) -> void:
 	if key == "":
 		return
-	if not ai_report_cache.has(key):
+	if ai_report_cache.has(key):
+		touch_cache_key(ai_report_cache_order, key)
+	else:
 		ai_report_cache_order.append(key)
 	ai_report_cache[key] = duplicate_report_array(reports, true)
 	while ai_report_cache_order.size() > AI_REPORT_CACHE_LIMIT:
@@ -2884,6 +2887,7 @@ func calculate_min_shanten_from_counts(counts: Array, open_melds: int = 0) -> in
 	var cache_key = shanten_cache_key(counts, open_melds)
 	if shanten_cache.has(cache_key):
 		shanten_cache_hits += 1
+		touch_cache_key(shanten_cache_order, cache_key)
 		return int(shanten_cache[cache_key])
 	shanten_cache_misses += 1
 	var memo: Dictionary = {}
@@ -2913,7 +2917,7 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 		# 移到最近使用
 		effective_tiles_cache_order.erase(cache_key)
 		effective_tiles_cache_order.append(cache_key)
-		return effective_tiles_cache[cache_key]
+		return (effective_tiles_cache[cache_key] as Dictionary).duplicate(true)
 
 	effective_tiles_cache_misses += 1
 	var next_tile_count = hand.size() + 1
@@ -2943,7 +2947,7 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 	var result = {"count": total, "variety": variety, "tiles": tiles, "remaining_by_tile": remaining_by_tile}
 
 	# 存入缓存
-	effective_tiles_cache[cache_key] = result
+	effective_tiles_cache[cache_key] = result.duplicate(true)
 	effective_tiles_cache_order.append(cache_key)
 	while effective_tiles_cache_order.size() > EFFECTIVE_TILES_CACHE_LIMIT:
 		var old_key = effective_tiles_cache_order.pop_front()
@@ -3598,6 +3602,7 @@ func opponent_seat_threat_report(viewer: int, opponent: int, eval_context: Dicti
 		return {}
 	var cache_key = threat_report_cache_key(viewer, opponent, eval_context)
 	if cache_key != "" and threat_report_cache.has(cache_key):
+		touch_cache_key(threat_report_cache_order, cache_key)
 		return duplicate_threat_report(threat_report_cache[cache_key])
 	var best_score = 0.0
 	var best_label = ""

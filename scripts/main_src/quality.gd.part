@@ -405,7 +405,7 @@ func request_delete_replay_archive(archive_id: String) -> void:
 
 
 func set_replay_search_query(query: String) -> void:
-	replay_search_query = query.strip_edges()
+	replay_search_query = query.strip_edges().left(64)
 	replay_delete_target_id = ""
 	replay_delete_confirming = false
 	refresh_replay_archive_view()

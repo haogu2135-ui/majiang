@@ -41,10 +41,13 @@ func check(cond: bool, msg: String) -> void:
 
 
 func settle(seconds: float = 0.0) -> void:
+	# Production screen/modal tweens run for 0.2-0.5s. Preserve the explicit
+	# settle budget for those calls so focus and visibility assertions observe
+	# the completed route; shorter calls only need a frame for synchronous work.
+	var settle_seconds := seconds if seconds >= 0.15 else 0.0
 	await process_frame
-	await process_frame
-	if seconds > 0.0:
-		await create_timer(seconds).timeout
+	if settle_seconds > 0.0:
+		await create_timer(settle_seconds).timeout
 		await process_frame
 
 
@@ -811,11 +814,8 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	check(scene.telemetry_sheet_open and telemetry_consent_button != null and telemetry_export_button != null and telemetry_clear_button != null, "telemetry sheet exposes consent, export, and clear actions")
 	var telemetry_consent_before := bool(scene.telemetry_consent)
 	if telemetry_consent_button != null:
-		print("TRACE telemetry consent before")
 		await activate_button(telemetry_consent_button, "touch")
-		print("TRACE telemetry consent after")
 		await settle(0.04)
-		print("TRACE telemetry consent settled")
 	check(scene.telemetry_consent != telemetry_consent_before and scene.telemetry_consent_decided, "telemetry consent toggles through a touch action")
 	if telemetry_export_button != null:
 		await activate_button(telemetry_export_button, "key")
@@ -855,7 +855,7 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	check(stats_empty != null and stats_empty.text.contains("暂无对局") and stats_first_game != null and stats_back != null, "empty stats retains an explicit next-step action and return button")
 	if stats_back != null:
 		await activate_button(stats_back, "touch")
-		await settle(0.06)
+		await settle(0.45)
 	check(scene.mode == "menu", "stats back button returns to menu through touch input")
 	scene.game_stats = stats_saved
 	scene.round_history = history_saved
@@ -919,6 +919,9 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	var daily_claim := scene.find_child("DailyLoginClaimButton", true, false) as Button
 	check(daily_claim != null and not daily_claim.disabled and scene.find_child("DailyLoginProgressText", true, false) != null, "daily login exposes an active claim action and progress state")
 	if daily_claim != null:
+		# The page starts with a 0.3s scale-in; use its settled hit rectangle for
+		# the touch path so the claim assertion tests activation, not animation.
+		await settle(0.30)
 		await activate_button(daily_claim, "touch")
 		await settle(0.08)
 	var daily_claim_again := scene.find_child("DailyLoginClaimButton", true, false) as Button
@@ -1033,8 +1036,9 @@ func run() -> void:
 		printerr("UI interaction smoke requires a non-headless display driver")
 		quit(1)
 		return
-	# Preserve visual tweens while disabling desktop audio/TTS backends that are
-	# unrelated to pointer and focus coverage in the virtual display.
+	# Disable desktop visual effects and audio backends that are unrelated to
+	# pointer, focus, and state coverage in this low-resource virtual display.
+	# Press-feedback nodes are still created, so input contracts remain observable.
 	OS.set_environment("YUNZHUO_UI_CAPTURE", "1")
 
 	var viewport_size := Vector2i(960, 540)
@@ -1048,6 +1052,7 @@ func run() -> void:
 	scene.sfx_enabled = false
 	scene.tts_enabled = false
 	scene.voice_enabled = false
+	scene.fx_enabled = false
 	root.add_child(scene)
 	await settle(0.10)
 	var initial_smoke_snapshot := capture_smoke_state(scene)
@@ -2189,7 +2194,7 @@ func run() -> void:
 			scene.render_game()
 			await settle(0.08)
 			await send_key(KEY_ESCAPE, 0)
-			await settle(0.05)
+			await settle(0.30)
 			var menu_card_leave_button := first_button_with_text(scene.exit_confirm_panel, "退出游戏")
 			if menu_card_leave_button != null:
 				var menu_card_leave_center := menu_card_leave_button.get_global_rect().get_center()

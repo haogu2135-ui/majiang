@@ -132,7 +132,7 @@ func refresh_current_screen() -> void:
 		request_game_render()
 
 func request_game_render() -> void:
-	if offline_sim_quiet:
+	if offline_sim_quiet or runtime_shutdown_requested:
 		return
 	if mode != "offline" and mode != "online_game":
 		return
@@ -154,18 +154,25 @@ func flush_game_render() -> void:
 		render_game()
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
-	var timer := Timer.new()
-	timer.name = "GameRenderDelayTimer"
-	timer.one_shot = true
-	timer.wait_time = maxf(0.001, delay_seconds)
-	timer.process_callback = Timer.TIMER_PROCESS_IDLE
-	runtime_delay_timers.append(timer)
-	timer.timeout.connect(Callable(self, "_on_game_render_delay_timeout").bind(timer), CONNECT_ONE_SHOT)
-	add_child(timer)
+	var timer := game_render_delay_timer
+	if timer == null or not is_instance_valid(timer) or timer.is_queued_for_deletion():
+		timer = Timer.new()
+		timer.name = "GameRenderDelayTimer"
+		timer.one_shot = true
+		timer.process_callback = Timer.TIMER_PROCESS_IDLE
+		runtime_delay_timers.append(timer)
+		timer.timeout.connect(Callable(self, "_on_game_render_delay_timeout").bind(timer))
+		add_child(timer)
+		game_render_delay_timer = timer
+	else:
+		timer.stop()
+	timer.wait_time = clampf(delay_seconds, 0.001, 1.0)
 	timer.start()
 
 func _on_game_render_delay_timeout(timer: Timer) -> void:
 	runtime_delay_timers.erase(timer)
+	if timer == game_render_delay_timer:
+		game_render_delay_timer = null
 	if timer != null and is_instance_valid(timer) and not timer.is_queued_for_deletion():
 		timer.queue_free()
 	if runtime_shutdown_requested:
@@ -364,6 +371,10 @@ func make_wall() -> Array[String]:
 	return next_wall
 
 func draw_tile_for(seat: int, announce: bool = true, source: String = "normal") -> String:
+	if seat < 0 or seat >= players.size():
+		return ""
+	if not players[seat].has("flower_tiles") or typeof(players[seat].get("flower_tiles", [])) != TYPE_ARRAY:
+		players[seat]["flower_tiles"] = []
 	while not wall.is_empty():
 		var tile = wall.pop_back()
 		if is_flower_tile(tile):
@@ -410,6 +421,8 @@ func invalidate_self_draw_readiness() -> void:
 
 
 func draw_turn_tile_or_finish(seat: int, announce: bool = true, source: String = "normal") -> String:
+	if seat < 0 or seat >= players.size():
+		return ""
 	var drawn = draw_tile_for(seat, announce, source)
 	# 牌墙可能只剩花牌：draw_tile_for 会完成补花后返回空串。此时没有
 	# 可供出牌的实牌，必须立刻荒庄，不能继续以少一张手牌进入 await_discard。
@@ -586,7 +599,8 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 
 func table_log_tail(limit: int) -> Array[String]:
 	var result: Array[String] = []
-	var start = max(0, table_logs.size() - limit)
+	var safe_limit := clampi(limit, 0, 10)
+	var start = max(0, table_logs.size() - safe_limit)
 	for i in range(start, table_logs.size()):
 		result.append(str(table_logs[i]))
 	return result
@@ -677,6 +691,7 @@ func resolve_human_discard_after_frame(tile: String) -> void:
 		schedule_ai_until_human()
 
 func human_discard_by_tile(tile: String) -> void:
+	tile = normalize_tile_code(tile)
 	if not can_self_discard() or tile == "":
 		return
 	var index = find_tile_in_hand(players[0]["hand"], tile)
@@ -689,6 +704,7 @@ func human_discard_by_tile(tile: String) -> void:
 	human_discard(index)
 
 func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
+	claim = claim.strip_edges().to_lower()
 	if mode != "offline" or offline_phase != "pending_claim":
 		return
 	# A tap can arrive between two countdown frames. Expired claims always pass.
@@ -2330,6 +2346,7 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 
 func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> bool:
 	tile = normalize_tile_code(tile)
+	claim = claim.strip_edges().to_lower()
 	if mode != "offline" or seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or tile == "":
 		return false
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
@@ -2367,6 +2384,7 @@ func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: Stri
 
 func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> void:
 	tile = normalize_tile_code(tile)
+	claim = claim.strip_edges().to_lower()
 	if not is_valid_offline_claim(seat, from_seat, tile, claim, chi_choice):
 		return
 	if claim == "hu":

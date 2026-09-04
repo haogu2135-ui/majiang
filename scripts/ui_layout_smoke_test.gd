@@ -797,8 +797,6 @@ func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> 
 		check(content_status.text.contains("已到末尾") and content_status.text.contains("余 0"), "diagnostic range status reports the end of the report at %s" % viewport_size)
 	var last_rect = screen_rect(last_line)
 	check(last_rect.position.y >= scroll_rect.position.y - 1.0 and last_rect.end.y <= scroll_rect.end.y + 1.0, "diagnostic final line is reachable at the bottom of the scroll range at %s" % viewport_size)
-
-
 func check_loading_layout(scene, viewport_size: Vector2) -> void:
 	var center_panel = scene.find_child("LoadingCenterPanel", true, false) as Control
 	var title = scene.find_child("LoadingTitleLabel", true, false) as Label
@@ -3405,7 +3403,7 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 			if row_progress_text != null and row_progress_back != null:
 				var progress_back_rect = screen_rect(row_progress_back)
 				check(row_rect.grow(1.0).encloses(progress_back_rect) and progress_back_rect.grow(1.0).encloses(screen_rect(row_progress_text)), "achievement row %s keeps progress text inside a compact chip at %s" % [str(key), viewport_size])
-				check(row_progress_text.get_theme_font_size("font_size") >= 13 and row_progress_text.clip_text and row_progress_text.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS, "achievement row %s progress chip text remains readable and clipped at %s" % [str(key), viewport_size])
+				check(row_progress_text.get_theme_font_size("font_size") >= 13 and row_progress_text.clip_text and row_progress_text.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "achievement row %s progress chip text remains readable without ellipsis at %s" % [str(key), viewport_size])
 				check(label_text_width(row_progress_text, row_progress_text.text) <= screen_rect(row_progress_text).size.x - 2.0, "achievement row %s progress chip text fits its lane at %s" % [str(key), viewport_size])
 				if row_goal != null:
 					check(not rects_overlap(progress_back_rect.grow(-1.0), screen_rect(row_goal).grow(-1.0)), "achievement row %s progress chip clears goal text at %s" % [str(key), viewport_size])

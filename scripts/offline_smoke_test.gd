@@ -234,6 +234,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"ReplayArchiveRowSecondary",
 	"ReplayArchiveSearchInput",
 	"ReplayArchiveTitle",
+	"ReplayArchiveDeleteConfirmLabel",
 ]
 
 var failed := false
@@ -1404,8 +1405,8 @@ func run() -> void:
 	scene.play_button_press_animation(quick_button)
 	check(quick_button.find_child("ButtonPressFeedback", true, false) != null and quick_button.find_child("ButtonPressFeedbackRail", true, false) != null and quick_button.find_child("ButtonPressFeedbackFill", true, false) != null and quick_button.find_child("ButtonPressFeedbackGate", true, false) != null, "button press animation renders feedback rail fill and gate")
 	check(count_nodes_with_name_prefix(quick_button, "ButtonPressFeedbackTick_") == 2, "button press animation renders rhythm ticks")
-	quick_button.emit_signal("button_down")
-	check(int(quick_press_count.get("value", 0)) == 1, "buttons run callbacks on button down for mobile responsiveness")
+	quick_button.pressed.emit()
+	check(int(quick_press_count.get("value", 0)) == 1, "buttons run callbacks on native activation")
 	dispose_node(quick_button)
 	var hud_press_count := {"value": 0}
 	var top_button = scene.make_top_hud_button("设置", Color(0.22, 0.42, 0.54), func() -> void:
@@ -1419,8 +1420,8 @@ func run() -> void:
 	check(top_button.find_child("TopHudButtonPressFeedback_设置", true, false) != null and top_button.find_child("TopHudButtonPressWash_设置", true, false) != null and top_button.find_child("TopHudButtonPressGlow_设置", true, false) != null, "top HUD button press feedback renders compact wash and glow")
 	check(top_button.find_child("TopHudButtonPressSeal_设置", true, false) != null and top_button.find_child("TopHudButtonPressGlyph_设置", true, false) != null and count_nodes_with_name_prefix(top_button, "TopHudButtonPressTick_设置_") == 0, "top HUD button press feedback renders seal glyph and omits rhythm ticks")
 	check(top_button.find_child("TopHudButtonPressSource_设置", true, false) == null and top_button.find_child("TopHudButtonPressRoute_设置", true, false) == null and top_button.find_child("TopHudButtonPressFill_设置", true, false) == null and top_button.find_child("TopHudButtonPressGate_设置", true, false) == null, "top HUD button press feedback omits source route fill and gate")
-	top_button.emit_signal("button_down")
-	check(int(hud_press_count.get("value", 0)) == 1, "top HUD buttons trigger on button down")
+	top_button.pressed.emit()
+	check(int(hud_press_count.get("value", 0)) == 1, "top HUD buttons trigger on native activation")
 	dispose_node(top_button)
 	var back_button = scene.make_small_button("返回", Color(0.32, 0.38, 0.40), func() -> void:
 		pass
@@ -1434,8 +1435,8 @@ func run() -> void:
 	var menu_callback = func() -> void:
 		menu_press_count["value"] = int(menu_press_count.get("value", 0)) + 1
 	var menu_card = scene.make_menu_card("测试", Color(0.30, 0.50, 0.70), menu_callback, "play", true)
-	menu_card.emit_signal("button_down")
-	check(int(menu_press_count.get("value", 0)) == 1, "menu cards run callbacks on button down")
+	menu_card.pressed.emit()
+	check(int(menu_press_count.get("value", 0)) == 1, "menu cards run callbacks on native activation")
 	check(count_texture_rects(menu_card) >= 1, "menu cards render lucide SVG illustration icons")
 	check(menu_card.find_child("MenuCardEntryArt", true, false) != null and menu_card.find_child("MenuCardSurface", true, false) != null and menu_card.find_child("MenuCardInner", true, false) != null and menu_card.find_child("MenuCardAccent", true, false) != null and menu_card.find_child("MenuCardEntryFocus", true, false) != null and menu_card.find_child("MenuCardEntryArrow", true, false) != null, "menu cards render clean commercial surface layers")
 	check(menu_card.find_child("MenuCardEntryRail", true, false) == null and menu_card.find_child("MenuCardEntryFill", true, false) == null and count_nodes_with_name_prefix(menu_card, "MenuCardEntryNode_") == 0 and count_nodes_with_name_prefix(menu_card, "MenuCardEntrySpark_") == 0, "menu cards omit legacy entry route nodes and sparks")
@@ -2597,8 +2598,8 @@ func run() -> void:
 	check(clickable_tile_view.find_child("ClickableTilePressSheen", true, false) != null and clickable_tile_view.find_child("ClickableTileTapDot", true, false) != null, "clickable tiles render press sheen and tap ripple art")
 	check(clickable_tile_view.find_child("ClickableTileReleaseRoute", true, false) != null and clickable_tile_view.find_child("ClickableTileReleaseFill", true, false) != null and clickable_tile_view.find_child("ClickableTileReleaseGate", true, false) != null, "clickable tiles render release route and gate")
 	check(count_nodes_with_name_prefix(clickable_tile_view, "ClickableTileReleaseTick_") == 2, "clickable tiles render release rhythm ticks")
-	clickable_tile_button.emit_signal("button_down")
-	check(int(tile_press_count.get("value", 0)) == 1, "tile callbacks run on button down")
+	clickable_tile_button.pressed.emit()
+	check(int(tile_press_count.get("value", 0)) == 1, "tile callbacks run on native activation")
 	check(clickable_tile_view.find_child("ClickableTileCommitFeedback", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitSource", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitRoute", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitFill", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitGate", true, false) != null, "clickable tile press renders commit route feedback")
 	check(clickable_tile_view.find_child("ClickableTileCommitSeal", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitGlyph", true, false) != null and count_nodes_with_name_prefix(clickable_tile_view, "ClickableTileCommitTick_") == 3, "clickable tile commit feedback renders seal glyph and rhythm ticks")
 	await create_timer(0.40).timeout
@@ -4147,8 +4148,8 @@ func run() -> void:
 	scene.finalize_action_bar_layout()
 	var crowded_action_button = first_button(action_layout_parent)
 	check(crowded_action_button != null and crowded_action_button.custom_minimum_size.x <= scene.ACTION_BUTTON_MAX_WIDTH and crowded_action_button.clip_text, "crowded action buttons are sized and clipped by final layout")
-	crowded_action_button.emit_signal("button_down")
-	check(int(action_press_count.get("value", 0)) == 1, "finalized action buttons still run callbacks on button down")
+	crowded_action_button.pressed.emit()
+	check(int(action_press_count.get("value", 0)) == 1, "finalized action buttons still run callbacks on native activation")
 	dispose_node(action_layout_parent)
 	scene.action_bar = null
 

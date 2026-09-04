@@ -540,6 +540,8 @@ func handle_online_ack(data: Dictionary) -> void:
 	if message == "":
 		message = "%s已确认" % (online_last_sent_action if online_last_sent_action != "" else "操作")
 	set_online_feedback("服务器确认：%s" % message, false)
+	online_retry_available = false
+	online_last_sent_payload.clear()
 
 func handle_online_error(data: Dictionary) -> void:
 	if not online_response_matches_current_action(data):
@@ -550,6 +552,8 @@ func handle_online_error(data: Dictionary) -> void:
 		online_resume_pending = false
 		online_resume_join_sent = false
 	set_online_feedback("服务器拒绝：%s" % message, false)
+	online_retry_available = false
+	online_last_sent_payload.clear()
 
 func handle_online_log(data: Dictionary) -> void:
 	var message = online_server_message_text(data, "").left(ONLINE_LOG_ENTRY_MAX_LENGTH)
@@ -985,6 +989,7 @@ func send_online_action(payload: Dictionary, label: String = "") -> bool:
 		if action_type == "chat":
 			online_last_chat_sent_msec = Time.get_ticks_msec()
 		online_retry_available = false
+		online_slow_notice_shown = false
 		set_online_feedback("已发送%s，等待服务器确认。" % action_label, true)
 		return true
 	return false
@@ -1014,8 +1019,8 @@ func update_online_slow_response_notice(now_msec: int) -> void:
 
 
 func retry_online_last_action() -> void:
-	if online_last_sent_payload.is_empty():
-		set_status("没有可重试的操作。")
+	if not online_retry_available or online_last_sent_payload.is_empty():
+		set_online_feedback("没有可重试的操作。", false)
 		return
 	var payload := online_last_sent_payload.duplicate(true)
 	var label: String = online_last_sent_action
@@ -1035,5 +1040,6 @@ func cancel_online_pending_action() -> void:
 	online_last_sent_payload.clear()
 	online_feedback = "已取消等待，可重新提交操作。"
 	set_status(online_feedback)
+	refresh_online_feedback_art()
 	if mode == "online_game":
 		request_game_render()

@@ -1880,8 +1880,18 @@ func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Ve
 
 
 func game_table_pixel_size() -> Vector2:
-	var content_size = safe_content_pixel_size()
-	return Vector2(content_size.x * 0.710 * 0.910, content_size.y * 0.657 * 0.890)
+	# Rivers are children of TABLE_INNER_RECT. Derive their sizing from the same
+	# nested anchors used by the table host so tile density and visible geometry
+	# stay aligned at every viewport instead of relying on the old 3D multipliers.
+	var content_size := safe_content_pixel_size()
+	var outer_size := Vector2(
+		content_size.x * maxf(0.001, TABLE_OUTER_RECT.size.x - TABLE_OUTER_RECT.position.x),
+		content_size.y * maxf(0.001, TABLE_OUTER_RECT.size.y - TABLE_OUTER_RECT.position.y)
+	)
+	return Vector2(
+		outer_size.x * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x),
+		outer_size.y * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
+	)
 
 func effective_viewport_size() -> Vector2:
 	var viewport_size = get_viewport_rect().size
@@ -3714,12 +3724,12 @@ func ensure_update_dialog() -> void:
 	draw_update_dialog_art(panel)
 	update_status_label = make_label(panel, "", 18, Color(0.84, 1.0, 0.90), false)
 	update_status_label.name = "UpdateStatusLabel"
-	apply_rect(update_status_label, rect_full(0.07, 0.135, 0.93, 0.205) if compact_update_dialog else rect_full(0.08, 0.25, 0.92, 0.42))
+	# Reserve a second compact line for network/error states. The progress rail
+	# starts below this lane instead of relying on a clipped one-line status.
+	apply_rect(update_status_label, rect_full(0.07, 0.135, 0.93, 0.315) if compact_update_dialog else rect_full(0.08, 0.25, 0.92, 0.42))
 	update_status_label.tooltip_text = update_message
 	if compact_update_dialog:
-		update_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		update_status_label.clip_text = true
-		update_status_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		configure_wrapped_label(update_status_label, maxf(260.0, effective_viewport_size().x * 0.500), 0.0, 4.0)
 	update_progress = ProgressBar.new()
 	update_progress.min_value = 0.0
 	update_progress.max_value = 100.0
@@ -3730,7 +3740,7 @@ func ensure_update_dialog() -> void:
 	update_progress.add_theme_stylebox_override("background", style(Color(0.014, 0.034, 0.038, 0.0), 10, Color(0.22, 0.30, 0.30, 0.0), 0, 0))
 	update_progress.add_theme_stylebox_override("fill", style(Color(0.16, 0.48, 0.36, 0.0), 10, Color(0.54, 0.76, 0.60, 0.0), 0, 0))
 	panel.add_child(update_progress)
-	var progress_rect := rect_full(0.08, 0.335, 0.92, 0.385) if compact_update_dialog else rect_full(0.08, 0.45, 0.92, 0.55)
+	var progress_rect := rect_full(0.08, 0.365, 0.92, 0.425) if compact_update_dialog else rect_full(0.08, 0.45, 0.92, 0.55)
 	apply_rect(update_progress, progress_rect)
 	var update_track = add_optional_gpt_illustration_texture(panel, "ui_meter_rail_plate", progress_rect, 0.55, false)
 	if update_track != null:
@@ -3743,7 +3753,7 @@ func ensure_update_dialog() -> void:
 	update_progress_label = make_label(panel, "", 15, Color(0.88, 0.90, 0.78), false)
 	update_progress_label.name = "UpdateProgressLabel"
 	update_progress_label.clip_contents = true
-	apply_rect(update_progress_label, rect_full(0.08, 0.400, 0.92, 0.450) if compact_update_dialog else rect_full(0.08, 0.57, 0.92, 0.685))
+	apply_rect(update_progress_label, rect_full(0.08, 0.435, 0.92, 0.500) if compact_update_dialog else rect_full(0.08, 0.57, 0.92, 0.685))
 	if compact_update_dialog:
 		update_progress_label.tooltip_text = update_progress_text()
 	draw_update_status_convergence_art(panel)
@@ -3755,7 +3765,7 @@ func ensure_update_dialog() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
 	panel.add_child(row)
-	apply_rect(row, rect_full(0.08, 0.755, 0.92, 0.91) if compact_update_dialog else rect_full(0.08, 0.76, 0.92, 0.94))
+	apply_rect(row, rect_full(0.08, 0.765, 0.92, 0.925) if compact_update_dialog else rect_full(0.08, 0.76, 0.92, 0.94))
 	update_primary_button = make_small_button("安装", Color(0.18, 0.42, 0.34), func() -> void:
 		on_update_primary_pressed()
 	)
@@ -4588,6 +4598,7 @@ func clear_ai_report_cache() -> void:
 	effective_tiles_cache_order.clear()
 	effective_tiles_cache_hits = 0
 	effective_tiles_cache_misses = 0
+	clear_threat_report_cache()
 
 
 func tile_array_key(tiles: Array) -> String:
@@ -5129,7 +5140,9 @@ func counts_compact_key(counts: Array) -> String:
 func store_shanten_cache(key: String, value: int) -> void:
 	if key == "":
 		return
-	if not shanten_cache.has(key):
+	if shanten_cache.has(key):
+		touch_cache_key(shanten_cache_order, key)
+	else:
 		shanten_cache_order.append(key)
 	shanten_cache[key] = value
 	while shanten_cache_order.size() > SHANTEN_CACHE_LIMIT:
@@ -5660,7 +5673,9 @@ func threat_report_cache_key(viewer: int, opponent: int, eval_context: Dictionar
 func store_threat_report_cache(key: String, report: Dictionary) -> void:
 	if key == "":
 		return
-	if not threat_report_cache.has(key):
+	if threat_report_cache.has(key):
+		touch_cache_key(threat_report_cache_order, key)
+	else:
 		threat_report_cache_order.append(key)
 	threat_report_cache[key] = duplicate_threat_report(report)
 	while threat_report_cache_order.size() > THREAT_REPORT_CACHE_LIMIT:
@@ -5793,12 +5808,14 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 func tile_suit_index(tile: String) -> int:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_suit_cache.has(tile):
-		return int(tile_suit_cache[tile])
-	var index = tile_index(tile)
-	if index < 0 or index >= 27:
-		return -1
-	return int(index / 9)
+	var normalized := normalize_tile_code(tile)
+	if tile_suit_cache.has(normalized):
+		return int(tile_suit_cache[normalized])
+	var index = tile_index(normalized)
+	var result := -1 if index < 0 or index >= 27 else int(index / 9)
+	if normalized != "" and tile_suit_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_suit_cache[normalized] = result
+	return result
 
 
 func should_ai_gang_claim(seat: int, tile: String) -> bool:
@@ -6605,10 +6622,25 @@ func action_button_pulse_strength(role: String) -> float:
 
 
 func configure_action_button_size(button: Button, width: float, height: float, font_size: int) -> void:
-	button.custom_minimum_size = Vector2(width, height)
-	button.clip_text = true
-	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.add_theme_font_size_override("font_size", font_size)
+	if button == null or not is_instance_valid(button):
+		return
+	var resolved_width := maxf(width, float(ACTION_BUTTON_MIN_TOUCH_WIDTH))
+	var resolved_font_size := maxi(12, font_size)
+	# Action labels are short Chinese CTAs, so a compact estimate is enough to
+	# choose a readable font before the container performs its final layout. This
+	# keeps the complete action visible without allowing one long label to push
+	# neighboring touch targets outside the dock.
+	var text_width := float(button.text.strip_edges().length()) * float(resolved_font_size) * 0.98
+	while text_width + 18.0 > resolved_width and resolved_font_size > 12:
+		resolved_font_size -= 1
+		text_width = float(button.text.strip_edges().length()) * float(resolved_font_size) * 0.98
+	if text_width + 18.0 > resolved_width:
+		resolved_width = text_width + 18.0
+	button.custom_minimum_size = Vector2(resolved_width, maxf(height, 44.0))
+	button.clip_text = false
+	button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	button.add_theme_font_size_override("font_size", resolved_font_size)
+	button.set_meta("action_text_width", text_width)
 
 
 func seat_wind_label(seat: int) -> String:
@@ -7578,13 +7610,17 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.add_child(section_plate)
 	var line_count := int(lines.size())
 	var wide_typography := effective_viewport_size().x >= 1600.0
-	var line_height := 25.0 if wide_typography else 22.0
 	var line_gap := 6.0 if wide_typography else 5.0
-	# Reserve two rendered lines for local CJK clauses. Arbitrary wrapping is
-	# required because word-smart wrapping does not reliably break Chinese text.
-	var line_box_height := line_height * 2.5
-	var required_text_height := (26.0 if wide_typography else 24.0) + float(line_count) * line_box_height + float(line_count) * line_gap + (38.0 if wide_typography else 34.0)
-	section.custom_minimum_size.y = max(136.0, required_text_height)
+	var line_font_size := accessibility_font_size(commercial_ui_font_size(15, 2))
+	var text_width := maxf(180.0, effective_viewport_size().x * (0.640 if section_index >= 0 else 0.880))
+	var measured_line_heights: Array[float] = []
+	var required_text_height := 26.0 if wide_typography else 24.0
+	for line in lines:
+		var line_height := estimate_wrapped_text_height(str(line), text_width, line_font_size, line_gap)
+		measured_line_heights.append(line_height)
+		required_text_height += line_height + line_gap
+	required_text_height += 38.0 if wide_typography else 34.0
+	section.custom_minimum_size.y = maxf(136.0, required_text_height)
 	var section_depth = make_gpt_plate_rect(rect_full(0.006, 0.190, 0.994, 0.988), Color(0.0, 0.0, 0.0, 0.018), "ui_button_face_plate")
 	section_depth.name = "RuleSection3DDepthEdge_%d" % section_index if section_index >= 0 else "RuleSection3DDepthEdge"
 	section.add_child(section_depth)
@@ -7622,15 +7658,14 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
 
-	for line in lines:
+	for line_index in range(lines.size()):
+		var line = lines[line_index]
 		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
 		line_label.name = "RuleSectionLine_%d" % section_index if section_index >= 0 else "RuleSectionLine"
-		line_label.custom_minimum_size = Vector2(0, line_box_height)
+		line_label.custom_minimum_size = Vector2(0, measured_line_heights[line_index])
 		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		configure_clipped_label(line_label)
-		line_label.clip_text = true
-		line_label.clip_contents = false
-		line_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+		configure_wrapped_label(line_label, text_width, measured_line_heights[line_index], line_gap)
+		line_label.clip_text = false
 		line_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 
 
@@ -7998,27 +8033,59 @@ var chat_panel_open := false
 
 
 func chat_panel_rect() -> Rect2:
-	# Keep the in-game drawer below the top HUD and above the right seat lane.
-	# The lobby gets a taller reading area because it has no table geometry.
 	if mode == "online_lobby":
 		return Rect2(Vector2(0.690, 0.130), Vector2(0.975, 0.720))
-	# A top/right meld consumes the usual upper-right lane. Use a narrow upper
-	# left gutter below the HUD instead; stopping before the left river's x edge
-	# leaves enough vertical room for two real 44px chat action rows.
-	if chat_panel_route_name() != "top_safe_drawer":
-		return Rect2(Vector2(0.015, 0.115), Vector2(0.220, 0.335))
-	# The root layer is inset by the device safe area. Shift the default drawer
-	# slightly inward from the right river and seat so the compact rows can keep
-	# their full height without touching table geometry.
-	return Rect2(Vector2(0.790, 0.120), Vector2(0.985, 0.330))
+	# The drawer is selected from several authored safe lanes. A fixed choice used
+	# to cover whichever side happened to contain a meld; scoring the candidates
+	# keeps the reading surface and its 44px controls away from active table data.
+	var candidates: Array[Rect2] = [
+		rect_full(0.790, 0.120, 0.985, 0.330),
+		rect_full(0.015, 0.115, 0.220, 0.335),
+		rect_full(0.015, 0.535, 0.220, 0.720),
+		rect_full(0.790, 0.535, 0.985, 0.720),
+	]
+	var best := candidates[0]
+	var best_score := INF
+	for candidate in candidates:
+		var score := chat_panel_candidate_overlap_score(candidate)
+		if score < best_score:
+			best_score = score
+			best = candidate
+	return best
+
+func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
+	var candidate_geometry := Rect2(candidate.position, candidate.size - candidate.position)
+	var occupied: Array[Rect2] = []
+	for layout in SEAT_LAYOUTS:
+		occupied.append(Rect2((layout[1] as Rect2).position, (layout[1] as Rect2).size - (layout[1] as Rect2).position))
+	for layout in MELD_LAYOUTS:
+		var meld_rect: Rect2 = layout[1]
+		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
+	for zone in DISCARD_ZONES:
+		var river_rect: Rect2 = zone[1]
+		occupied.append(Rect2(river_rect.position, river_rect.size - river_rect.position))
+	var action_rect := action_bar_dock_layout_rect()
+	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
+	# The compact ledger is a separate text lane and is hidden only when a selected
+	# drawer actually shares its footprint.
+	var ledger_rect := rect_full(0.018, 0.128, 0.340, 0.235)
+	occupied.append(Rect2(ledger_rect.position, ledger_rect.size - ledger_rect.position))
+	var score := 0.0
+	for occupied_rect in occupied:
+		if candidate_geometry.intersects(occupied_rect, true):
+			score += 1.0
+	return score
 
 
 func chat_panel_route_name() -> String:
 	if mode == "online_lobby":
 		return "lobby_drawer"
-	if not get_melds(2).is_empty() or not get_melds(1).is_empty():
-		return "upper_meld_safe_drawer"
-	return "top_safe_drawer"
+	var rect := chat_panel_rect()
+	if rect.position.x < 0.30:
+		return "left_safe_drawer"
+	if rect.position.y > 0.45:
+		return "lower_safe_drawer"
+	return "right_safe_drawer"
 
 
 func add_chat_message(text: String) -> void:
