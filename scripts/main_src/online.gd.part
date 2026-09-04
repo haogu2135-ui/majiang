@@ -121,6 +121,13 @@ func connect_online() -> void:
 func reconnect_online_game() -> void:
 	if mode != "online_game":
 		return
+	var now_msec := Time.get_ticks_msec()
+	if now_msec < online_next_reconnect_msec:
+		var remaining_seconds := maxi(1, int(ceil(float(online_next_reconnect_msec - now_msec) / 1000.0)))
+		set_online_feedback("请稍候%d秒再重连。" % remaining_seconds, false)
+		return
+	online_reconnect_attempts += 1
+	online_next_reconnect_msec = now_msec + online_reconnect_delay_msec(online_reconnect_attempts)
 	remember_online_resume_context()
 	online_resume_pending = true
 	online_resume_join_sent = false
@@ -133,6 +140,8 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 	# A real transport loss owns the chat lifecycle; a transient status copy
 	# must not make clear_screen infer that the drawer should disappear.
 	chat_panel_open = false
+	table_log_chat_restore_pending = false
+	table_log_chat_draft = ""
 	var preserve_game_board := preserve_game_for_reconnect and mode == "online_game" and not online_game.is_empty()
 	var should_show_lobby := return_to_lobby and mode == "online_game" and not preserve_game_board
 	var had_resume_pending := online_resume_pending
@@ -185,6 +194,7 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	var resume_room: String = bounded_online_input(str(online_resume_context.get("room", selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH) if preserve_resume_draft else ""
 	online_room.clear()
 	online_game.clear()
+	online_players_by_seat.clear()
 	online_log_seen_count = 0
 	selected_room = resume_room
 	if is_instance_valid(online_room_edit):
@@ -196,6 +206,7 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_seen_message_ids.clear()
 	online_seen_voice_sequences.clear()
 	online_last_chat_sent_msec = 0
+	online_next_reconnect_msec = 0
 	online_last_snapshot_fingerprint = ""
 	online_last_room_snapshot_fingerprint = ""
 	if mode == "online_lobby":
@@ -230,6 +241,12 @@ func resume_online_room_after_welcome() -> void:
 	var sent := send_online_action({"type": "joinRoom", "roomCode": room_code, "name": player_name}, "恢复房间")
 	if sent:
 		online_resume_join_sent = true
+
+
+func online_reconnect_delay_msec(attempt: int = -1) -> int:
+	var attempt_count := online_reconnect_attempts if attempt < 0 else attempt
+	var exponent := clampi(attempt_count - 1, 0, 5)
+	return mini(ONLINE_RECONNECT_MAX_DELAY_MSEC, ONLINE_RECONNECT_BASE_DELAY_MSEC * (1 << exponent))
 
 
 func online_integer_value(value, fallback: int = -1) -> int:
@@ -268,6 +285,22 @@ func online_message_identity(data: Dictionary) -> String:
 	var identity := str(value).strip_edges()
 	return identity
 
+
+func online_message_session_matches(data: Dictionary) -> bool:
+	var raw_session = first_present(data, ["sessionId", "session_id", "connectionId", "connection_id"], null)
+	if raw_session == null:
+		return true
+	return online_integer_value(raw_session, -2) == online_session_id
+
+
+func register_online_message_rejection(feedback: String = "") -> void:
+	online_messages_rejected += 1
+	var now_msec := Time.get_ticks_msec()
+	if feedback == "" or now_msec - online_last_malformed_notice_msec < ONLINE_MALFORMED_NOTICE_INTERVAL_MSEC:
+		return
+	online_last_malformed_notice_msec = now_msec
+	set_status(feedback)
+
 func remember_online_message_identity(identity: String) -> bool:
 	if identity == "":
 		return true
@@ -279,6 +312,8 @@ func remember_online_message_identity(identity: String) -> bool:
 	return true
 
 func accept_online_message(data: Dictionary, kind: String) -> bool:
+	if not online_message_session_matches(data):
+		return false
 	if not remember_online_message_identity(online_message_identity(data)):
 		return false
 	var protocol_version := online_message_protocol_version(data)
@@ -344,6 +379,11 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 		return "地方规则标识无效。"
 	var variant := str(game.get("ruleVariant", ""))
 	var allowed_tiles: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
+	var allowed_flowers: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	var allowed_codes: Array = allowed_tiles.duplicate()
+	for flower in allowed_flowers:
+		if not allowed_codes.has(flower):
+			allowed_codes.append(flower)
 	var you_seat := int(game.get("youSeat", -1))
 	if you_seat < -1 or you_seat >= 4:
 		return "玩家座位越界。"
@@ -354,12 +394,17 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 	var wall_total := int(game.get("wallTotal", 0))
 	if wall_count < 0 or wall_total < 0 or (wall_total > 0 and wall_count > wall_total):
 		return "牌墙数量异常。"
+	if variant != "" and wall_total > 0 and wall_total != rule_wall_size(variant):
+		return "牌墙规则数量不一致。"
 	var hand: Array = game.get("hand", [])
 	if hand.size() > 14:
 		return "手牌数量异常。"
+	var visible_counts: Dictionary = {}
 	for tile in hand:
-		if not allowed_tiles.has(str(tile)) and not (variant != "" and rule_flower_codes(variant).has(str(tile))) and not (variant == "" and FLOWER_CODES.has(str(tile))):
+		var normalized_hand_tile := normalize_tile_code(str(tile))
+		if not allowed_codes.has(normalized_hand_tile):
 			return "手牌包含未知牌码。"
+		visible_counts[normalized_hand_tile] = int(visible_counts.get(normalized_hand_tile, 0)) + 1
 	var seen_seats: Dictionary = {}
 	var players_value = game.get("players", [])
 	if typeof(players_value) != TYPE_ARRAY or (players_value as Array).size() > 4:
@@ -375,18 +420,46 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 		var flower_count := int(player.get("flowerCount", 0))
 		if hand_count < 0 or hand_count > 14 or flower_count < 0 or flower_count > FLOWER_CODES.size():
 			return "玩家手牌数量异常。"
+		var player_hand_value = first_present(player, ["hand", "tiles"], null)
+		if player_hand_value != null and typeof(player_hand_value) == TYPE_ARRAY and hand_count != (player_hand_value as Array).size():
+			return "玩家手牌统计不一致。"
 		if int(player.get("score", 0)) < -10000000 or int(player.get("score", 0)) > 10000000:
 			return "玩家积分异常。"
 		var discards = player.get("discards", [])
 		if typeof(discards) != TYPE_ARRAY or (discards as Array).size() > 100:
 			return "弃牌数量异常。"
+		for discard in discards:
+			var normalized_discard := normalize_tile_code(str(discard))
+			if not allowed_codes.has(normalized_discard):
+				return "弃牌包含未知牌码。"
+			visible_counts[normalized_discard] = int(visible_counts.get(normalized_discard, 0)) + 1
 		var melds = player.get("melds", [])
 		if typeof(melds) != TYPE_ARRAY or (melds as Array).size() > 8:
 			return "副露数量异常。"
+		for meld in melds:
+			if typeof(meld) != TYPE_ARRAY or (meld as Array).size() > 4:
+				return "副露牌组格式异常。"
+			for meld_tile in meld:
+				var normalized_meld_tile := normalize_tile_code(str(meld_tile))
+				if not allowed_codes.has(normalized_meld_tile):
+					return "副露包含未知牌码。"
+				visible_counts[normalized_meld_tile] = int(visible_counts.get(normalized_meld_tile, 0)) + 1
+	for tile_key in visible_counts.keys():
+		if int(visible_counts[tile_key]) > 4 and not allowed_flowers.has(tile_key):
+			return "同种牌数量超过四张。"
 	var last_tile := str(game.get("lastDiscard", ""))
 	var last_seat := int(game.get("lastDiscardSeat", -1))
-	if last_tile != "" and (not allowed_tiles.has(last_tile) or last_seat < 0 or last_seat >= 4):
+	if last_tile != "" and (not allowed_codes.has(normalize_tile_code(last_tile)) or last_seat < 0 or last_seat >= 4):
 		return "最近弃牌数据异常。"
+	if str(game.get("phase", "")) == "pendingClaim":
+		var pending_value = game.get("pending", null)
+		if typeof(pending_value) != TYPE_DICTIONARY:
+			return "响应窗口格式异常。"
+		var pending: Dictionary = pending_value
+		if str(pending.get("tile", "")) == "" or int(pending.get("fromSeat", -1)) < 0 or int(pending.get("fromSeat", -1)) >= 4:
+			return "响应目标数据异常。"
+		if typeof(pending.get("options", [])) != TYPE_ARRAY:
+			return "响应选项格式异常。"
 	return ""
 
 
@@ -513,10 +586,12 @@ func handle_online_chat(data: Dictionary) -> void:
 func handle_online_message(line: String) -> void:
 	var data = JSON.parse_string(line)
 	if typeof(data) != TYPE_DICTIONARY:
-		set_status("服务器消息解析失败")
+		register_online_message_rejection("服务器消息解析失败")
 		return
+	online_messages_received += 1
 	var kind = normalize_online_message_kind(data)
 	if not accept_online_message(data, kind):
+		register_online_message_rejection()
 		return
 	if kind == "welcome":
 		var server_name = str(data.get("name", "")).strip_edges()
@@ -576,6 +651,7 @@ func handle_online_message(line: String) -> void:
 		clear_online_feedback()
 		announce_online_game_audio(next_game)
 		online_game = next_game
+		rebuild_online_player_index(next_game)
 		mode = "online_game"
 		request_game_render()
 	elif kind == "voiceMessage":
@@ -754,6 +830,7 @@ func normalize_online_players(value) -> Array:
 		result.append(player)
 	return result
 
+
 func online_action_label(payload: Dictionary) -> String:
 	var kind = str(payload.get("type", "操作"))
 	if kind == "discard":
@@ -920,6 +997,9 @@ func set_online_feedback(text: String, waiting: bool = false) -> void:
 		online_slow_notice_shown = false
 	set_status(text)
 	refresh_online_feedback_art()
+	if mode == "online_lobby":
+		# Feedback changes can gate Start/Chat without reconstructing the lobby.
+		refresh_online_lobby_action_states()
 
 
 func update_online_slow_response_notice(now_msec: int) -> void:

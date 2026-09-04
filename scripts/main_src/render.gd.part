@@ -6445,6 +6445,20 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	var summary_panel = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.54), "ui_dark_scrim")
 	summary_panel.name = "OnlineLobbyRoomSummaryPanel"
 	art.add_child(summary_panel)
+	var summary_headline_text := "等待连接"
+	if lobby_connection_state_text() == "已连接":
+		if player_count < 4:
+			summary_headline_text = "还差 %d 人入席" % (4 - player_count)
+		elif ready_count < 4:
+			summary_headline_text = "等待 %d 人准备" % (4 - ready_count)
+		else:
+			summary_headline_text = "全员已准备 · 房主可开始"
+	var summary_headline = make_label(summary_panel, summary_headline_text, 10, Color(0.98, 0.92, 0.66), true)
+	summary_headline.name = "OnlineLobbyRoomSummaryHeadline"
+	apply_rect(summary_headline, rect_full(0.035, 0.015, 0.965, 0.145))
+	summary_headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	summary_headline.tooltip_text = "房间下一步：" + summary_headline_text
+	configure_clipped_label(summary_headline)
 	var occupancy_chip = make_gpt_gate(rect_full(0.030, 0.140, 0.315, 0.860), Color(0.030, 0.060, 0.050, 0.72))
 	occupancy_chip.name = "OnlineLobbyRoomSummaryOccupancy"
 	summary_panel.add_child(occupancy_chip)

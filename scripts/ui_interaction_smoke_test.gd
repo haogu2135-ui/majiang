@@ -49,6 +49,8 @@ func settle(seconds: float = 0.0) -> void:
 
 
 func first_button_with_text(scope: Node, text: String) -> Button:
+	if scope == null:
+		return null
 	for candidate in scope.find_children("*", "Button", true, false):
 		var button := candidate as Button
 		if button != null and button.text == text:
@@ -239,6 +241,118 @@ func send_key(keycode: Key, unicode_value: int) -> void:
 	await process_frame
 
 
+func activate_button(button: Button, modality: String = "mouse") -> void:
+	if button == null or not is_instance_valid(button) or button.disabled or not button.visible:
+		return
+	var center := button.get_global_rect().get_center()
+	match modality:
+		"touch":
+			await send_screen_touch(center, true)
+			await send_screen_touch(center, false)
+		"key":
+			button.grab_focus()
+			await process_frame
+			await send_key(KEY_ENTER, 0)
+		_:
+			await send_left_button(center, true)
+			await send_left_button(center, false)
+	await settle(0.04)
+
+
+func duplicate_smoke_value(value):
+	if typeof(value) == TYPE_DICTIONARY:
+		return (value as Dictionary).duplicate(true)
+	if typeof(value) == TYPE_ARRAY:
+		return (value as Array).duplicate(true)
+	return value
+
+
+func capture_smoke_file(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {"exists": false, "data": PackedByteArray()}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {"exists": false, "data": PackedByteArray()}
+	return {"exists": true, "data": file.get_buffer(file.get_length())}
+
+
+func capture_smoke_update_files() -> Dictionary:
+	var files: Dictionary = {}
+	var directory := DirAccess.open("user://updates")
+	if directory == null:
+		return files
+	directory.list_dir_begin()
+	while true:
+		var entry := directory.get_next()
+		if entry == "":
+			break
+		if directory.current_is_dir() or entry == "." or entry == "..":
+			continue
+		var path := "user://updates/%s" % entry
+		files[path] = capture_smoke_file(path)
+	directory.list_dir_end()
+	return files
+
+
+func capture_smoke_state(scene: Node) -> Dictionary:
+	var field_names := [
+		"mode", "currency", "inventory", "game_stats", "achievements", "round_history", "replay_archive",
+		"replay_search_query", "replay_archive_generation", "replay_search_cache_generation", "replay_search_cache_query", "replay_search_cache_results",
+		"round_event_history", "replay_import_payload", "round_event_sequence", "active_round_id", "last_match_summary", "applied_result_transactions",
+		"settings_panel_open", "settings_focus_restore_name", "menu_focus_restore_name", "shop_scroll_restore_value", "shop_focus_restore_name", "reset_progress_confirming",
+		"update_state", "update_request_mode", "update_message", "update_download_url", "update_remote_version", "update_release_notes", "update_remote_sha256", "update_remote_size", "update_file_path", "update_downloaded_bytes", "update_total_bytes", "next_update_progress_msec",
+		"telemetry_consent", "telemetry_consent_decided", "telemetry_outbox", "telemetry_event_sequence", "telemetry_save_pending", "telemetry_save_due_msec",
+		"telemetry_upload_status", "telemetry_export_status", "telemetry_sheet_open", "telemetry_clear_confirming",
+		"last_login_date", "consecutive_login_days", "login_reward_claimed_date", "season_data", "daily_tasks", "task_progress", "task_claimed", "last_task_reset_date",
+		"daily_login_view_state", "tutorial_step", "tutorial_checkpoint_round_id", "tutorial_checkpoint_phase", "tutorial_checkpoint_reason", "tutorial_last_saved_unix", "show_hand_hint", "interactive_guide_active", "interactive_guide_type", "interactive_guide_target_index",
+		"music_enabled", "sfx_enabled", "tts_enabled", "voice_enabled", "fast_mode_enabled", "large_text_enabled", "high_contrast_enabled", "reduce_motion_enabled", "ai_difficulty", "fx_enabled", "graphics_quality", "ai_assist_enabled", "current_bgm_index", "rule_variant",
+		"players", "wall", "current_seat", "dealer_seat", "offline_hand_number", "offline_last_winner", "offline_dealer_repeat", "last_discard", "last_discard_seat", "table_logs", "offline_phase", "offline_turn_needs_draw", "offline_pending_claim", "offline_pending_claim_deadline_msec", "offline_claim_counts", "offline_package_liability", "offline_passed_win_tiles", "offline_claim_discard_bans", "offline_concealed_gang_tiles", "offline_last_draw", "offline_self_draw_ready", "offline_ai_active", "offline_ai_run_queued", "offline_all_bot_mode", "offline_sim_quiet", "offline_match_briefing_shown", "offline_skip_ai_profile_reshuffle", "offline_active_rule_variant", "round_summary", "round_result_kind", "last_score_deltas", "last_win_score", "current_human_advice", "current_seat_threat_reports", "advisor_detail_open", "table_log_archive_open", "table_log_chat_restore_pending", "table_log_chat_draft", "pending_danger_discard_index", "pending_danger_discard_tile", "pending_danger_discard_report", "hand_keyboard_selection",
+		"selected_room", "online_connection_host", "online_player_name", "online_room", "online_game", "online_log_seen_count", "online_feedback", "online_waiting_for_server", "online_last_sent_action", "online_last_sent_type", "online_last_sent_msec", "online_last_sent_payload", "online_slow_notice_shown", "online_retry_available", "online_action_sequence", "online_session_id", "online_room_revision", "online_game_revision", "online_resume_context", "online_resume_pending", "online_resume_join_sent", "online_seen_message_ids", "online_seen_voice_sequences", "online_last_chat_sent_msec", "online_last_receive_msec", "online_last_heartbeat_msec", "online_reconnect_attempts", "online_next_reconnect_msec", "online_last_malformed_notice_msec", "online_messages_received", "online_messages_rejected", "online_last_snapshot_fingerprint", "online_last_room_snapshot_fingerprint", "online_players_by_seat", "online_player_index_token", "online_announced_discard_key", "online_pending_local_discard_identity", "sent_hello", "chat_messages", "chat_panel_open", "table_log_chat_restore_pending", "table_log_chat_draft", "safe_area_test_margins_override"
+	]
+	var fields: Dictionary = {}
+	for field_name in field_names:
+		fields[field_name] = duplicate_smoke_value(scene.get(field_name))
+	var paths := [
+		str(scene.SETTINGS_PATH), str(scene.PROGRESS_PATH), str(scene.STATS_PATH), str(scene.HISTORY_PATH), str(scene.REPLAY_ARCHIVE_PATH),
+		str(scene.TUTORIAL_PATH), str(scene.ACHIEVEMENTS_PATH), str(scene.LOGIN_PATH), str(scene.TELEMETRY_PATH), str(scene.INVENTORY_PATH), str(scene.CURRENCY_PATH),
+		str(scene.SEASON_PATH), str(scene.TASKS_PATH), str(scene.UPDATE_FILE_PATH)
+	]
+	var files: Dictionary = {}
+	for path in paths:
+		files[path] = capture_smoke_file(path)
+	return {"fields": fields, "files": files, "update_files": capture_smoke_update_files(), "tcp": scene.get("tcp")}
+
+
+func restore_smoke_state(scene: Node, snapshot: Dictionary) -> void:
+	var current_tcp = scene.get("tcp")
+	var saved_tcp = snapshot.get("tcp", null)
+	if current_tcp != null and current_tcp != saved_tcp and current_tcp.has_method("disconnect_from_host"):
+		current_tcp.disconnect_from_host()
+	for field_name in (snapshot.get("fields", {}) as Dictionary).keys():
+		scene.set(str(field_name), duplicate_smoke_value((snapshot["fields"] as Dictionary)[field_name]))
+	if saved_tcp != null:
+		scene.set("tcp", saved_tcp)
+	for path in (snapshot.get("files", {}) as Dictionary).keys():
+		var file_snapshot: Dictionary = (snapshot["files"] as Dictionary)[path]
+		if bool(file_snapshot.get("exists", false)):
+			var file := FileAccess.open(str(path), FileAccess.WRITE)
+			if file != null:
+				file.store_buffer(file_snapshot.get("data", PackedByteArray()))
+		elif FileAccess.file_exists(str(path)):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(str(path)))
+	var saved_update_files: Dictionary = snapshot.get("update_files", {})
+	var current_update_files := capture_smoke_update_files()
+	for path in current_update_files.keys():
+		if not saved_update_files.has(path) and FileAccess.file_exists(str(path)):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(str(path)))
+	for path in saved_update_files.keys():
+		var update_snapshot: Dictionary = saved_update_files[path]
+		if bool(update_snapshot.get("exists", false)):
+			var update_file := FileAccess.open(str(path), FileAccess.WRITE)
+			if update_file != null:
+				update_file.store_buffer(update_snapshot.get("data", PackedByteArray()))
+
+
 func connected_room_fixture() -> Dictionary:
 	return {
 		"code": "ROOM7",
@@ -277,6 +391,48 @@ func online_pending_game_fixture() -> Dictionary:
 			"chi_choices": [{"meld": ["1W", "2W", "3W"]}],
 		},
 	}
+
+
+func run_optimization_contract_checks(scene: Node) -> void:
+	print("--- optimization contracts: cache, transport, and state guards ---")
+	var profile: Dictionary = scene.rule_profile(scene.RULE_VARIANT_SICHUAN)
+	var tile_codes: Array = scene.rule_tile_codes(scene.RULE_VARIANT_SICHUAN)
+	var flower_codes: Array = scene.rule_flower_codes(scene.RULE_VARIANT_SICHUAN)
+	check(profile.get("include_honors", true) == false and tile_codes.size() == 27 and flower_codes.is_empty(), "rule profile and derived tile lists preserve the Sichuan deck")
+	check(scene.rule_profile_cache.has(scene.RULE_VARIANT_SICHUAN) and scene.rule_tile_codes_cache.has(scene.RULE_VARIANT_SICHUAN) and scene.rule_flower_codes_cache.has(scene.RULE_VARIANT_SICHUAN), "rule metadata caches are populated after the first lookup")
+	check(scene.normalize_tile_code(" m1 ") == "1W" and scene.normalize_tile_code("white") == "P" and scene.normalize_tile_code("north") == "R", "tile normalization canonicalizes legacy aliases")
+	check(scene.is_number_tile("m1") and scene.is_honor_tile("white") and scene.is_terminal_or_honor("m1") and scene.is_simple_number_tile("m2"), "tile classification accepts normalized aliases and caches misses")
+	check(scene.is_tile_enabled_for_rule("m1", scene.RULE_VARIANT_SICHUAN) and not scene.is_tile_enabled_for_rule("E", scene.RULE_VARIANT_SICHUAN), "rule membership cache follows the active tile profile")
+	var valid_game := online_pending_game_fixture()
+	valid_game["ruleVariant"] = "yangzhou"
+	valid_game["wallTotal"] = 144
+	check(scene.online_game_snapshot_validation_error(valid_game) == "", "complete online snapshot passes cross-field validation")
+	var overfull_game := {"ruleVariant": "yangzhou", "youSeat": 0, "currentSeat": 0, "wallCount": 120, "wallTotal": 144, "phase": "awaitDiscard", "hand": ["1W", "1W", "1W", "1W", "1W"]}
+	check(scene.online_game_snapshot_validation_error(overfull_game).contains("四张"), "online snapshot rejects more than four copies of one tile")
+	var wrong_wall_game := overfull_game.duplicate(true)
+	wrong_wall_game["hand"] = ["1W"]
+	wrong_wall_game["wallCount"] = 100
+	wrong_wall_game["wallTotal"] = 108
+	check(scene.online_game_snapshot_validation_error(wrong_wall_game).contains("规则数量"), "online snapshot rejects a wall size that disagrees with the rule profile")
+	scene.online_session_id = 42
+	check(scene.online_message_session_matches({"sessionId": 42}) and not scene.online_message_session_matches({"sessionId": 41}) and scene.online_message_session_matches({}), "stale online messages are isolated by connection session")
+	check(scene.online_frame_line_is_safe(PackedByteArray([123, 125])) and not scene.online_frame_line_is_safe(PackedByteArray([0, 123])), "TCP frames reject embedded NUL bytes before JSON parsing")
+	check(scene.online_reconnect_delay_msec(1) == scene.ONLINE_RECONNECT_BASE_DELAY_MSEC and scene.online_reconnect_delay_msec(99) == scene.ONLINE_RECONNECT_MAX_DELAY_MSEC, "reconnect delay uses bounded exponential backoff")
+	scene.telemetry_save_pending = false
+	scene.schedule_telemetry_save()
+	check(scene.telemetry_save_pending and scene.telemetry_save_due_msec > Time.get_ticks_msec(), "telemetry writes are coalesced behind a short deferred save")
+	var saved_archive: Array = scene.replay_archive.duplicate(true)
+	scene.replay_archive = [{"summary": "contract probe", "rule_variant": "yangzhou", "result_kind": "win", "saved_at": 1, "replay_digest": "ABC"}]
+	scene.replay_archive_generation += 1
+	var first_search: Array = scene.replay_archive_entries("contract")
+	var second_search: Array = scene.replay_archive_entries("contract")
+	check(first_search.size() == 1 and second_search.size() == 1 and scene.replay_search_cache_generation == scene.replay_archive_generation, "replay search reuses a generation-keyed result cache")
+	scene.replay_archive = saved_archive
+	scene.replay_archive_generation += 1
+	scene.replay_search_cache_generation = -1
+	scene.online_game = {"players": [{"seat": 2, "name": "缓存测试", "handCount": 13, "flowerCount": 0, "score": 25000, "discards": [], "melds": []}]}
+	scene.online_players_by_seat.clear()
+	check(scene.online_player_for_seat(2).get("name", "") == "缓存测试" and scene.online_players_by_seat.has(2), "online seat lookup builds a reusable player index")
 
 
 func diagnostic_interaction_lines() -> Array[String]:
@@ -320,6 +476,7 @@ func run() -> void:
 	scene.voice_enabled = false
 	root.add_child(scene)
 	await settle(0.10)
+	run_optimization_contract_checks(scene)
 	scene._show_online_lobby_impl()
 	await settle(0.65)
 	var initial_name_edit := scene.online_name_edit as LineEdit
@@ -1419,6 +1576,16 @@ func run() -> void:
 		var menu_card_expected_mode := "offline" if menu_interaction_index == 0 else ("online_lobby" if menu_interaction_index == 1 else "shop")
 		check(scene.mode == menu_card_expected_mode, "primary card %d opens its production destination" % (menu_interaction_index + 1))
 		if menu_interaction_index == 0:
+			# The production entry starts an AI coroutine. Freeze this fixture at a
+			# clean, ended table state before exercising page-exit routing so a
+			# background decision cannot own Esc.
+			scene.offline_pending_claim.clear()
+			scene.offline_pending_claim_deadline_msec = 0
+			scene.clear_pending_danger_discard()
+			scene.offline_phase = "ended"
+			scene.offline_turn_needs_draw = false
+			scene.render_game()
+			await settle(0.08)
 			await send_key(KEY_ESCAPE, 0)
 			await settle(0.05)
 			var menu_card_leave_button := first_button_with_text(scene.exit_confirm_panel, "退出游戏")
@@ -1428,7 +1595,7 @@ func run() -> void:
 				await send_screen_touch(menu_card_leave_center, false)
 		else:
 			await send_key(KEY_ESCAPE, 0)
-		await settle(0.20)
+		await settle(0.50)
 		var menu_card_restored := scene.find_child(str(menu_interaction_card_names[menu_interaction_index]), true, false) as Button
 		check(scene.mode == "menu" and menu_card_restored != null and menu_card_restored.has_focus(), "returning from primary card %d restores its focus" % (menu_interaction_index + 1))
 	var menu_interaction_quick_ids := ["stats", "replay"]
@@ -1461,6 +1628,11 @@ func run() -> void:
 		var menu_settings_interaction_restored := scene.find_child("MenuSettingsButton", true, false) as Button
 		check(not scene.settings_panel_open and menu_settings_interaction_restored != null and menu_settings_interaction_restored.has_focus(), "closing touch-opened settings restores the source focus")
 
+	# Stop any AI coroutine started by the real discard path before freeing the
+	# scene. Its active delay must finish while the owner is still alive.
+	scene.mode = "shutdown"
+	scene.offline_phase = "ended"
+	await settle(0.50)
 	if scene.has_method("shutdown_runtime"):
 		scene.shutdown_runtime()
 	# Let shutdown-emitted runtime timers resume their callers before freeing the

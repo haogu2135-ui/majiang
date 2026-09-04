@@ -81,13 +81,21 @@ func wait_for_runtime_delay(delay_seconds: float) -> void:
 
 
 func pace_after_human_discard_response() -> void:
+	if runtime_shutdown_requested:
+		return
 	await get_tree().process_frame
+	if runtime_shutdown_requested:
+		return
 	var delay = human_discard_response_gap_delay()
 	if delay > 0.0:
 		await wait_for_runtime_delay(delay)
 
 func pace_after_visible_ai_action(returning_to_human: bool = false) -> void:
+	if runtime_shutdown_requested:
+		return
 	await get_tree().process_frame
+	if runtime_shutdown_requested:
+		return
 	var delay = ai_return_to_human_gap_delay() if returning_to_human else ai_action_gap_delay()
 	if delay > 0.0:
 		await wait_for_runtime_delay(delay)
@@ -172,6 +180,9 @@ func clear_screen() -> void:
 	loading_screen_active = false
 	telemetry_sheet_open = false
 	tutorial_panel = null
+	if mode != "online_game":
+		table_log_chat_restore_pending = false
+		table_log_chat_draft = ""
 	if mode != "online_lobby" and (mode != "online_game" or online_game_disconnected()):
 		chat_panel_open = false
 	if mode != "offline" and mode != "online_game":
@@ -181,6 +192,10 @@ func clear_screen() -> void:
 	clear_toast_on_mode_change()
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
+			continue
+		if child is Timer and runtime_delay_timers.has(child):
+			# Runtime AI/render delays outlive a page rebuild; their awaiters own
+			# cleanup after the timer resumes.
 			continue
 		if child == update_request:
 			continue
@@ -198,6 +213,7 @@ func clear_screen() -> void:
 	status_label = null
 	logs_label = null
 	action_bar = null
+	exit_confirm_panel = null
 	update_dialog = null
 	update_status_label = null
 	update_progress_label = null
@@ -2035,13 +2051,16 @@ func schedule_ai_until_human() -> void:
 
 func run_ai_until_human() -> void:
 	offline_ai_run_queued = false
-	if offline_ai_active:
+	if runtime_shutdown_requested or offline_ai_active:
 		return
 	if mode != "offline":
 		return
 	offline_ai_active = true
 	if last_discard_seat == 0:
 		await pace_after_human_discard_response()
+		if runtime_shutdown_requested:
+			offline_ai_active = false
+			return
 	while mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
 		var seat = current_seat
 		var tsumo_continue_discard = ""

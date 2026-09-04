@@ -211,6 +211,9 @@ func normalize_replay_archive_entry(entry: Dictionary) -> Dictionary:
 
 func load_replay_archive() -> void:
 	replay_archive = []
+	replay_archive_generation += 1
+	replay_search_cache_generation = -1
+	replay_search_cache_results.clear()
 	var config := ConfigFile.new()
 	if config.load(REPLAY_ARCHIVE_PATH) != OK:
 		return
@@ -238,7 +241,9 @@ func save_replay_archive() -> void:
 	var config := ConfigFile.new()
 	config.set_value("archive", "schema_version", REPLAY_ARCHIVE_SCHEMA_VERSION)
 	config.set_value("archive", "entries", replay_archive.slice(maxi(0, replay_archive.size() - REPLAY_ARCHIVE_LIMIT)))
-	config.save(REPLAY_ARCHIVE_PATH)
+	var save_error := config.save(REPLAY_ARCHIVE_PATH)
+	if save_error != OK:
+		set_status("回放归档保存失败：%s" % error_string(save_error))
 
 
 func upsert_replay_archive_entry(entry: Dictionary, persist: bool = true) -> bool:
@@ -254,10 +259,14 @@ func upsert_replay_archive_entry(entry: Dictionary, persist: bool = true) -> boo
 		if (existing as Dictionary) == normalized:
 			return false
 		replay_archive[index] = normalized
+		replay_archive_generation += 1
+		replay_search_cache_generation = -1
 		if persist:
 			save_replay_archive()
 		return true
 	replay_archive.append(normalized)
+	replay_archive_generation += 1
+	replay_search_cache_generation = -1
 	while replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
 		replay_archive.pop_front()
 	if persist:
@@ -284,6 +293,8 @@ func archive_latest_round_history_entry() -> void:
 
 func replay_archive_entries(query: String = "") -> Array:
 	var needle := query.strip_edges().to_lower()
+	if replay_search_cache_generation == replay_archive_generation and replay_search_cache_query == needle:
+		return replay_search_cache_results.duplicate(true)
 	var filtered: Array = []
 	for index in range(replay_archive.size() - 1, -1, -1):
 		var raw_entry = replay_archive[index]
@@ -299,6 +310,9 @@ func replay_archive_entries(query: String = "") -> Array:
 		]).to_lower()
 		if needle == "" or searchable.contains(needle):
 			filtered.append(entry.duplicate(true))
+	replay_search_cache_query = needle
+	replay_search_cache_generation = replay_archive_generation
+	replay_search_cache_results = filtered.duplicate(true)
 	return filtered
 
 
@@ -350,6 +364,8 @@ func toggle_replay_archive_favorite(archive_id: String) -> void:
 			var entry: Dictionary = replay_archive[index]
 			entry["favorite"] = not bool(entry.get("favorite", false))
 			replay_archive[index] = entry
+			replay_archive_generation += 1
+			replay_search_cache_generation = -1
 			save_replay_archive()
 			replay_delete_target_id = ""
 			replay_delete_confirming = false
@@ -374,6 +390,8 @@ func request_delete_replay_archive(archive_id: String) -> void:
 		for index in range(replay_archive.size()):
 			if typeof(replay_archive[index]) == TYPE_DICTIONARY and str((replay_archive[index] as Dictionary).get("archive_id", "")) == archive_id:
 				replay_archive.remove_at(index)
+				replay_archive_generation += 1
+				replay_search_cache_generation = -1
 				save_replay_archive()
 				replay_delete_target_id = ""
 				replay_delete_confirming = false
@@ -454,6 +472,8 @@ func telemetry_sanitize_fields(event_name: String, fields: Dictionary) -> Dictio
 func load_telemetry_state() -> void:
 	telemetry_outbox = []
 	telemetry_event_sequence = 0
+	telemetry_save_pending = false
+	telemetry_save_due_msec = 0
 	var config := ConfigFile.new()
 	if config.load(TELEMETRY_PATH) != OK:
 		return
@@ -485,10 +505,27 @@ func load_telemetry_state() -> void:
 
 
 func save_telemetry_state() -> void:
+	telemetry_save_pending = false
+	telemetry_save_due_msec = 0
 	var config := ConfigFile.new()
 	config.set_value("telemetry", "schema_version", TELEMETRY_SCHEMA_VERSION)
 	config.set_value("telemetry", "events", telemetry_outbox.slice(maxi(0, telemetry_outbox.size() - TELEMETRY_OUTBOX_LIMIT)))
-	config.save(TELEMETRY_PATH)
+	var save_error := config.save(TELEMETRY_PATH)
+	if save_error != OK:
+		set_status("匿名诊断数据保存失败：%s" % error_string(save_error))
+
+
+func schedule_telemetry_save() -> void:
+	telemetry_save_pending = true
+	telemetry_save_due_msec = Time.get_ticks_msec() + TELEMETRY_SAVE_DEBOUNCE_MSEC
+
+
+func flush_telemetry_save(force: bool = false) -> void:
+	if not telemetry_save_pending:
+		return
+	if not force and Time.get_ticks_msec() < telemetry_save_due_msec:
+		return
+	save_telemetry_state()
 
 
 func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool:
@@ -507,7 +544,7 @@ func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool
 	telemetry_outbox.append(event)
 	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
 		telemetry_outbox.pop_front()
-	save_telemetry_state()
+	schedule_telemetry_save()
 	return true
 
 

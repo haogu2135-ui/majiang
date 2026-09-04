@@ -635,10 +635,12 @@ func refresh_online_lobby_action_states() -> void:
 	var connection_state := lobby_connection_state_text()
 	var connected := connection_state == "已连接"
 	var connecting := connection_state == "连接中"
+	var has_room_context := not online_room.is_empty() and (connected or online_waiting_for_server)
 	var room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 	var connect_button = root_layer.find_child("OnlineLobbyConnectButton", true, false) as Button
 	var create_button = root_layer.find_child("OnlineLobbyCreateButton", true, false) as Button
 	var join_button = root_layer.find_child("OnlineLobbyJoinButton", true, false) as Button
+	var chat_button = root_layer.find_child("ChatLobbyButton", true, false) as Button
 	if connect_button != null:
 		connect_button.disabled = connected or connecting
 		connect_button.tooltip_text = "已连接当前服务器" if connected else ("正在连接服务器" if connecting else "连接服务器")
@@ -651,6 +653,17 @@ func refresh_online_lobby_action_states() -> void:
 		join_button.disabled = not connected or room_code == ""
 		join_button.tooltip_text = "连接后输入房间号" if not connected else ("输入房间号后加入" if room_code == "" else "加入指定房间")
 		join_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.84, 0.88, 0.84, 1.0) if join_button.disabled else Color.WHITE)
+	if chat_button != null:
+		chat_button.disabled = not has_room_context
+		chat_button.tooltip_text = "进入房间后可聊天" if not has_room_context else "打开或关闭房间聊天"
+		chat_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.72, 0.76, 0.72, 0.78) if chat_button.disabled else Color.WHITE)
+	var start_button = root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+	if start_button != null:
+		var start_gate := online_lobby_start_gate()
+		start_button.text = str(start_gate.get("text", "待连接"))
+		start_button.disabled = not bool(start_gate.get("enabled", false))
+		start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
+		start_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if not start_button.disabled else Color(0.82, 0.84, 0.80, 0.88)
 	var current_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	if current_status != null and online_feedback.strip_edges() == "":
 		var next_status := ""
@@ -1061,6 +1074,8 @@ func online_connection_state_tint(state: String) -> Color:
 func online_lobby_start_gate() -> Dictionary:
 	if lobby_connection_state_text() != "已连接":
 		return {"enabled": false, "text": "待连接", "reason": "下一步 · 先连接服务器"}
+	if online_waiting_for_server:
+		return {"enabled": false, "text": "同步中", "reason": "已提交请求，等待服务器确认"}
 	var explicit_permission = first_present(online_room, ["canStart", "can_start", "startAllowed"], null)
 	if explicit_permission != null:
 		if bool(explicit_permission):
@@ -1175,6 +1190,17 @@ func refresh_online_room_content() -> void:
 	for entry_value in entries:
 		if typeof(entry_value) == TYPE_DICTIONARY and bool((entry_value as Dictionary).get("ready", false)):
 			ready_count += 1
+	var room_summary_headline := root_layer.find_child("OnlineLobbyRoomSummaryHeadline", true, false) as Label
+	if room_summary_headline != null:
+		var headline := "等待连接"
+		if lobby_connection_state_text() == "已连接":
+			if player_count < 4:
+				headline = "还差 %d 人入席" % (4 - player_count)
+			elif ready_count < 4:
+				headline = "等待 %d 人准备" % (4 - ready_count)
+			else:
+				headline = "全员已准备 · 房主可开始"
+		set_dynamic_label_text(room_summary_headline, headline, "房间下一步：" + headline)
 	var occupancy_label = root_layer.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
 	var ready_label = root_layer.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
 	var state_label = root_layer.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
@@ -2347,15 +2373,34 @@ func _show_stats_screen_impl() -> void:
 	content.anchor_bottom = stats_content_bottom
 	content.add_theme_constant_override("separation", int(round(stats_row_gap)))
 	panel.add_child(content)
-
-	add_stat_row(content, "总场次", "%d 局" % int(game_stats.get("games_played", 0)), stats_row_height)
-	add_stat_row(content, "胜场", "%d 局" % int(game_stats.get("games_won", 0)), stats_row_height)
-	add_stat_row(content, "胜率", "%.1f%%" % (float(game_stats.get("win_rate", 0.0)) * 100.0), stats_row_height)
-	add_stat_row(content, "累计净分", "%s 分" % compact_score_text(int(game_stats.get("total_score", 0))), stats_row_height)
-	add_stat_row(content, "单局最佳", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))), stats_row_height)
-	add_stat_row(content, "总手牌数", "%d 手" % int(game_stats.get("total_hands", 0)), stats_row_height)
+	var stats_games_played := int(game_stats.get("games_played", 0))
+	if stats_games_played <= 0 and round_history.is_empty():
+		content.visible = false
+		var empty_state := make_label(panel, "暂无对局\n开始一局后，战绩会显示在这里", commercial_ui_font_size(18, 2), Color(0.90, 0.94, 0.84), true)
+		empty_state.name = "StatsEmptyState"
+		apply_rect(empty_state, rect_full(0.16, 0.405, 0.84, 0.555))
+		empty_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_state.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		empty_state.tooltip_text = "暂无对局记录"
+		var start_first_game := make_small_button("开始一局", Color(0.30, 0.62, 0.48), func() -> void:
+			start_offline(true)
+		)
+		start_first_game.name = "StatsStartFirstGameButton"
+		start_first_game.custom_minimum_size = Vector2(140, UI_MIN_TOUCH_TARGET)
+		start_first_game.tooltip_text = "开始第一局单机麻将"
+		apply_rect(start_first_game, rect_full(0.36, 0.590, 0.64, 0.745))
+		panel.add_child(start_first_game)
+		configure_ordered_focus_navigation(panel, [back, start_first_game], "StatsBackButton")
+	else:
+		add_stat_row(content, "总场次", "%d 局" % stats_games_played, stats_row_height)
+		add_stat_row(content, "胜场", "%d 局" % int(game_stats.get("games_won", 0)), stats_row_height)
+		add_stat_row(content, "胜率", "%.1f%%" % (float(game_stats.get("win_rate", 0.0)) * 100.0), stats_row_height)
+		add_stat_row(content, "累计净分", "%s 分" % compact_score_text(int(game_stats.get("total_score", 0))), stats_row_height)
+		add_stat_row(content, "单局最佳", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))), stats_row_height)
+		add_stat_row(content, "总手牌数", "%d 手" % int(game_stats.get("total_hands", 0)), stats_row_height)
 	draw_stats_row_summary_bus_art(panel)
-	configure_ordered_focus_navigation(panel, [back], "StatsBackButton")
+	if stats_games_played > 0 or not round_history.is_empty():
+		configure_ordered_focus_navigation(panel, [back], "StatsBackButton")
 
 	# 统计行依次滑入动画
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
@@ -2697,6 +2742,10 @@ func show_chat_panel() -> void:
 		# full 44px input without changing its hit lane.
 		chat_input.offset_bottom = 1.0
 	chat_panel.add_child(chat_input)
+	if table_log_chat_restore_pending:
+		chat_input.text = table_log_chat_draft
+		table_log_chat_restore_pending = false
+		table_log_chat_draft = ""
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
 	send_button.name = "ChatSendButton"

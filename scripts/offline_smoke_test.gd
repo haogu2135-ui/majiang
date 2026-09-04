@@ -321,6 +321,7 @@ func run() -> void:
 	check(scene.telemetry_record_event("round_started", {"rule_variant": scene.RULE_VARIANT_YANGZHOU, "difficulty": "QA", "hand_number": 1, "room_code": "SHOULD_DROP"}), "telemetry records an allowed event only after consent")
 	var telemetry_fixture: Dictionary = scene.telemetry_outbox.back()
 	check(telemetry_fixture.get("payload", {}).get("rule_variant", "") == scene.RULE_VARIANT_YANGZHOU and not telemetry_fixture.get("payload", {}).has("room_code"), "telemetry stores only the event whitelist fields")
+	scene.flush_telemetry_save(true)
 	scene.telemetry_outbox = []
 	scene.telemetry_event_sequence = 0
 	scene.load_telemetry_state()

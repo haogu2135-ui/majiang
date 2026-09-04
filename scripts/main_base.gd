@@ -28,6 +28,11 @@ const PENDING_CLAIM_TIMEOUT_MSEC := 12000
 const ONLINE_ACTION_TIMEOUT_MSEC := 12000
 const ONLINE_TCP_READ_CHUNK_BYTES := 64 * 1024
 const ONLINE_MESSAGE_MAX_BYTES := 256 * 1024
+const ONLINE_MAX_FRAMES_PER_POLL := 8
+const ONLINE_MALFORMED_NOTICE_INTERVAL_MSEC := 1500
+const ONLINE_PLAYER_INDEX_TOKEN_KEY := "_online_player_index_token"
+const TILE_CODE_NORMALIZATION_CACHE_LIMIT := 128
+const TELEMETRY_SAVE_DEBOUNCE_MSEC := 750
 const APP_VERSION := "1.0.180-godot"
 const UPDATE_MANIFEST_URL := "http://127.0.0.1:18081/YunzhuoMahjongGodot-update.json"
 const UPDATE_URL := "http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk"
@@ -622,6 +627,10 @@ var last_task_reset_date = ""  # 上次任务重置日期
 var round_history: Array = []  # 最近对局战报，最多保留 ROUND_HISTORY_LIMIT 条
 var replay_archive: Array = []  # 可检索、可收藏的本地回放归档
 var replay_search_query := ""
+var replay_archive_generation := 0
+var replay_search_cache_generation := -1
+var replay_search_cache_query := ""
+var replay_search_cache_results: Array = []
 var replay_delete_target_id := ""
 var replay_delete_confirming := false
 var round_event_history: Array = []  # 当前牌局结构化事件，用于战报复盘
@@ -633,6 +642,8 @@ var telemetry_consent := false
 var telemetry_consent_decided := false
 var telemetry_outbox: Array = []
 var telemetry_event_sequence := 0
+var telemetry_save_pending := false
+var telemetry_save_due_msec := 0
 var telemetry_upload_status := "本地队列"
 var telemetry_export_status := "未导出"
 var telemetry_sheet_open := false
@@ -721,6 +732,8 @@ var current_human_advice: Array = []
 var current_seat_threat_reports: Dictionary = {}
 var advisor_detail_open := false
 var table_log_archive_open := false
+var table_log_chat_restore_pending := false
+var table_log_chat_draft := ""
 var tile_order: Dictionary = {}
 var tile_sort_order: Dictionary = {}
 var tile_metadata_ready = false
@@ -738,6 +751,12 @@ var tile_face_main_cache: Dictionary = {}
 var tile_face_sub_cache: Dictionary = {}
 var tile_corner_cache: Dictionary = {}
 var tile_accent_cache: Dictionary = {}
+var tile_code_normalization_cache: Dictionary = {}
+var tile_code_normalization_cache_order: Array[String] = []
+var rule_profile_cache: Dictionary = {}
+var rule_tile_codes_cache: Dictionary = {}
+var rule_flower_codes_cache: Dictionary = {}
+var rule_tile_membership_cache: Dictionary = {}
 var style_cache: Dictionary = {}
 var style_cache_order: Array[String] = []
 var button_style_set_cache: Dictionary = {}
@@ -800,10 +819,14 @@ var online_last_chat_sent_msec := 0
 var online_last_receive_msec := 0
 var online_last_heartbeat_msec := 0
 var online_reconnect_attempts := 0
+var online_next_reconnect_msec := 0
+var online_last_malformed_notice_msec := 0
 var online_messages_received := 0
 var online_messages_rejected := 0
 var online_last_snapshot_fingerprint := ""
 var online_last_room_snapshot_fingerprint := ""
+var online_players_by_seat: Dictionary = {}
+var online_player_index_token := 0
 var online_announced_discard_key = ""
 var online_pending_local_discard_identity = ""
 var sent_hello = false
@@ -4365,6 +4388,19 @@ func attach_audio_node(node: Node) -> void:
 	layer.add_child(node)
 
 func normalize_tile_code(code: String) -> String:
+	var cache_key := str(code).strip_edges().to_upper()
+	if tile_code_normalization_cache.has(cache_key):
+		return str(tile_code_normalization_cache[cache_key])
+	var normalized := _normalize_tile_code_uncached(cache_key)
+	tile_code_normalization_cache[cache_key] = normalized
+	tile_code_normalization_cache_order.append(cache_key)
+	while tile_code_normalization_cache_order.size() > TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		var oldest: String = str(tile_code_normalization_cache_order.pop_front())
+		tile_code_normalization_cache.erase(oldest)
+	return normalized
+
+
+func _normalize_tile_code_uncached(code: String) -> String:
 	# Map legacy aliases so river/meld never fall through to tile_back.
 	# Canonical suits: W=万 T=条 B=筒; honors E/S/N/R/Z/F/P.
 	var c := str(code).strip_edges().to_upper()
@@ -4493,10 +4529,13 @@ func tile_sort_index(tile: String) -> int:
 func is_flower_tile(tile: String) -> bool:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	var normalized := str(tile).strip_edges().to_upper()
+	var normalized := normalize_tile_code(tile)
 	if tile_flower_cache.has(normalized):
 		return bool(tile_flower_cache[normalized])
-	return FLOWER_CODES.has(normalized)
+	var result := FLOWER_CODES.has(normalized)
+	if tile_flower_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_flower_cache[normalized] = result
+	return result
 
 # ===== Shared tile collection helpers =====
 func is_number_tile(tile: String) -> bool:
@@ -4505,7 +4544,10 @@ func is_number_tile(tile: String) -> bool:
 	var normalized := normalize_tile_code(tile)
 	if tile_number_cache.has(normalized):
 		return bool(tile_number_cache[normalized])
-	return normalized.ends_with("W") or normalized.ends_with("T") or normalized.ends_with("B")
+	var result: bool = normalized.ends_with("W") or normalized.ends_with("T") or normalized.ends_with("B")
+	if tile_number_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_number_cache[normalized] = result
+	return result
 
 
 func tile_counts(tiles: Array) -> Array:
@@ -4721,19 +4763,44 @@ func get_self_hand() -> Array:
 func get_discards(seat: int) -> Array:
 	if mode == "offline":
 		return players[seat]["discards"]
-	var result = []
-	for p in online_game.get("players", []):
-		if int(p.get("seat", -1)) == seat:
-			result = p.get("discards", [])
-	return result
+	var player := online_player_for_seat(seat)
+	var discards = player.get("discards", [])
+	return discards if typeof(discards) == TYPE_ARRAY else []
 
 func get_melds(seat: int) -> Array:
 	if mode == "offline":
 		return players[seat]["melds"]
-	for p in online_game.get("players", []):
-		if int(p.get("seat", -1)) == seat:
-			return p.get("melds", [])
-	return []
+	var player := online_player_for_seat(seat)
+	var melds = player.get("melds", [])
+	return melds if typeof(melds) == TYPE_ARRAY else []
+
+
+func online_player_for_seat(seat: int) -> Dictionary:
+	if int(online_game.get(ONLINE_PLAYER_INDEX_TOKEN_KEY, -1)) != online_player_index_token:
+		rebuild_online_player_index(online_game)
+	if online_players_by_seat.has(seat):
+		return online_players_by_seat[seat]
+	for raw_player in online_game.get("players", []):
+		if typeof(raw_player) == TYPE_DICTIONARY and int((raw_player as Dictionary).get("seat", -1)) == seat:
+			online_players_by_seat[seat] = raw_player as Dictionary
+			return raw_player as Dictionary
+	return {}
+
+
+func rebuild_online_player_index(game: Dictionary) -> void:
+	online_player_index_token += 1
+	game[ONLINE_PLAYER_INDEX_TOKEN_KEY] = online_player_index_token
+	online_players_by_seat.clear()
+	var players_value = game.get("players", [])
+	if typeof(players_value) != TYPE_ARRAY:
+		return
+	for raw_player in players_value:
+		if typeof(raw_player) != TYPE_DICTIONARY:
+			continue
+		var player: Dictionary = raw_player
+		var seat := int(player.get("seat", -1))
+		if seat >= 0 and seat < 4:
+			online_players_by_seat[seat] = player
 
 func get_player_info(seat: int) -> Dictionary:
 	if mode == "offline":
@@ -4747,14 +4814,14 @@ func get_player_info(seat: int) -> Dictionary:
 			"flower_tiles": player.get("flower_tiles", []),
 			"score": int(player.get("score", 0)),
 		}
-	for p in online_game.get("players", []):
-		if int(p.get("seat", -1)) == seat:
-			return {
-				"name": str(p.get("name", "玩家")),
-				"hand_count": int(p.get("handCount", 0)),
-				"flowers": int(p.get("flowerCount", 0)),
-				"score": int(p.get("score", 0)),
-			}
+	var online_player := online_player_for_seat(seat)
+	if not online_player.is_empty():
+		return {
+			"name": str(online_player.get("name", "玩家")),
+			"hand_count": int(online_player.get("handCount", 0)),
+			"flowers": int(online_player.get("flowerCount", 0)),
+			"score": int(online_player.get("score", 0)),
+		}
 	return {"name": "空位", "hand_count": 0, "flowers": 0, "score": 0}
 
 func get_current_seat() -> int:

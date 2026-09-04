@@ -54,6 +54,7 @@ func shutdown_runtime() -> void:
 	if not runtime_shutdown_requested:
 		runtime_shutdown_requested = true
 		mode = "shutdown"
+		flush_telemetry_save(true)
 		game_render_queued = false
 		offline_ai_active = false
 		offline_ai_run_queued = false

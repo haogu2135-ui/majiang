@@ -66,6 +66,7 @@ func shutdown_runtime() -> void:
 	if not runtime_shutdown_requested:
 		runtime_shutdown_requested = true
 		mode = "shutdown"
+		flush_telemetry_save(true)
 		game_render_queued = false
 		offline_ai_active = false
 		offline_ai_run_queued = false
@@ -5073,13 +5074,21 @@ func wait_for_runtime_delay(delay_seconds: float) -> void:
 
 
 func pace_after_human_discard_response() -> void:
+	if runtime_shutdown_requested:
+		return
 	await get_tree().process_frame
+	if runtime_shutdown_requested:
+		return
 	var delay = human_discard_response_gap_delay()
 	if delay > 0.0:
 		await wait_for_runtime_delay(delay)
 
 func pace_after_visible_ai_action(returning_to_human: bool = false) -> void:
+	if runtime_shutdown_requested:
+		return
 	await get_tree().process_frame
+	if runtime_shutdown_requested:
+		return
 	var delay = ai_return_to_human_gap_delay() if returning_to_human else ai_action_gap_delay()
 	if delay > 0.0:
 		await wait_for_runtime_delay(delay)
@@ -5164,6 +5173,9 @@ func clear_screen() -> void:
 	loading_screen_active = false
 	telemetry_sheet_open = false
 	tutorial_panel = null
+	if mode != "online_game":
+		table_log_chat_restore_pending = false
+		table_log_chat_draft = ""
 	if mode != "online_lobby" and (mode != "online_game" or online_game_disconnected()):
 		chat_panel_open = false
 	if mode != "offline" and mode != "online_game":
@@ -5173,6 +5185,10 @@ func clear_screen() -> void:
 	clear_toast_on_mode_change()
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
+			continue
+		if child is Timer and runtime_delay_timers.has(child):
+			# Runtime AI/render delays outlive a page rebuild; their awaiters own
+			# cleanup after the timer resumes.
 			continue
 		if child == update_request:
 			continue
@@ -5190,6 +5206,7 @@ func clear_screen() -> void:
 	status_label = null
 	logs_label = null
 	action_bar = null
+	exit_confirm_panel = null
 	update_dialog = null
 	update_status_label = null
 	update_progress_label = null
@@ -7027,13 +7044,16 @@ func schedule_ai_until_human() -> void:
 
 func run_ai_until_human() -> void:
 	offline_ai_run_queued = false
-	if offline_ai_active:
+	if runtime_shutdown_requested or offline_ai_active:
 		return
 	if mode != "offline":
 		return
 	offline_ai_active = true
 	if last_discard_seat == 0:
 		await pace_after_human_discard_response()
+		if runtime_shutdown_requested:
+			offline_ai_active = false
+			return
 	while mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
 		var seat = current_seat
 		var tsumo_continue_discard = ""
@@ -15084,6 +15104,20 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	var summary_panel = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.085, 0.970, 0.610), Color(0.008, 0.020, 0.022, 0.54), "ui_dark_scrim")
 	summary_panel.name = "OnlineLobbyRoomSummaryPanel"
 	art.add_child(summary_panel)
+	var summary_headline_text := "等待连接"
+	if lobby_connection_state_text() == "已连接":
+		if player_count < 4:
+			summary_headline_text = "还差 %d 人入席" % (4 - player_count)
+		elif ready_count < 4:
+			summary_headline_text = "等待 %d 人准备" % (4 - ready_count)
+		else:
+			summary_headline_text = "全员已准备 · 房主可开始"
+	var summary_headline = make_label(summary_panel, summary_headline_text, 10, Color(0.98, 0.92, 0.66), true)
+	summary_headline.name = "OnlineLobbyRoomSummaryHeadline"
+	apply_rect(summary_headline, rect_full(0.035, 0.015, 0.965, 0.145))
+	summary_headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	summary_headline.tooltip_text = "房间下一步：" + summary_headline_text
+	configure_clipped_label(summary_headline)
 	var occupancy_chip = make_gpt_gate(rect_full(0.030, 0.140, 0.315, 0.860), Color(0.030, 0.060, 0.050, 0.72))
 	occupancy_chip.name = "OnlineLobbyRoomSummaryOccupancy"
 	summary_panel.add_child(occupancy_chip)
@@ -24821,10 +24855,12 @@ func refresh_online_lobby_action_states() -> void:
 	var connection_state := lobby_connection_state_text()
 	var connected := connection_state == "已连接"
 	var connecting := connection_state == "连接中"
+	var has_room_context := not online_room.is_empty() and (connected or online_waiting_for_server)
 	var room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 	var connect_button = root_layer.find_child("OnlineLobbyConnectButton", true, false) as Button
 	var create_button = root_layer.find_child("OnlineLobbyCreateButton", true, false) as Button
 	var join_button = root_layer.find_child("OnlineLobbyJoinButton", true, false) as Button
+	var chat_button = root_layer.find_child("ChatLobbyButton", true, false) as Button
 	if connect_button != null:
 		connect_button.disabled = connected or connecting
 		connect_button.tooltip_text = "已连接当前服务器" if connected else ("正在连接服务器" if connecting else "连接服务器")
@@ -24837,6 +24873,17 @@ func refresh_online_lobby_action_states() -> void:
 		join_button.disabled = not connected or room_code == ""
 		join_button.tooltip_text = "连接后输入房间号" if not connected else ("输入房间号后加入" if room_code == "" else "加入指定房间")
 		join_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.84, 0.88, 0.84, 1.0) if join_button.disabled else Color.WHITE)
+	if chat_button != null:
+		chat_button.disabled = not has_room_context
+		chat_button.tooltip_text = "进入房间后可聊天" if not has_room_context else "打开或关闭房间聊天"
+		chat_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.72, 0.76, 0.72, 0.78) if chat_button.disabled else Color.WHITE)
+	var start_button = root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+	if start_button != null:
+		var start_gate := online_lobby_start_gate()
+		start_button.text = str(start_gate.get("text", "待连接"))
+		start_button.disabled = not bool(start_gate.get("enabled", false))
+		start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
+		start_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if not start_button.disabled else Color(0.82, 0.84, 0.80, 0.88)
 	var current_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	if current_status != null and online_feedback.strip_edges() == "":
 		var next_status := ""
@@ -25247,6 +25294,8 @@ func online_connection_state_tint(state: String) -> Color:
 func online_lobby_start_gate() -> Dictionary:
 	if lobby_connection_state_text() != "已连接":
 		return {"enabled": false, "text": "待连接", "reason": "下一步 · 先连接服务器"}
+	if online_waiting_for_server:
+		return {"enabled": false, "text": "同步中", "reason": "已提交请求，等待服务器确认"}
 	var explicit_permission = first_present(online_room, ["canStart", "can_start", "startAllowed"], null)
 	if explicit_permission != null:
 		if bool(explicit_permission):
@@ -25361,6 +25410,17 @@ func refresh_online_room_content() -> void:
 	for entry_value in entries:
 		if typeof(entry_value) == TYPE_DICTIONARY and bool((entry_value as Dictionary).get("ready", false)):
 			ready_count += 1
+	var room_summary_headline := root_layer.find_child("OnlineLobbyRoomSummaryHeadline", true, false) as Label
+	if room_summary_headline != null:
+		var headline := "等待连接"
+		if lobby_connection_state_text() == "已连接":
+			if player_count < 4:
+				headline = "还差 %d 人入席" % (4 - player_count)
+			elif ready_count < 4:
+				headline = "等待 %d 人准备" % (4 - ready_count)
+			else:
+				headline = "全员已准备 · 房主可开始"
+		set_dynamic_label_text(room_summary_headline, headline, "房间下一步：" + headline)
 	var occupancy_label = root_layer.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
 	var ready_label = root_layer.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
 	var state_label = root_layer.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
@@ -26533,15 +26593,34 @@ func _show_stats_screen_impl() -> void:
 	content.anchor_bottom = stats_content_bottom
 	content.add_theme_constant_override("separation", int(round(stats_row_gap)))
 	panel.add_child(content)
-
-	add_stat_row(content, "总场次", "%d 局" % int(game_stats.get("games_played", 0)), stats_row_height)
-	add_stat_row(content, "胜场", "%d 局" % int(game_stats.get("games_won", 0)), stats_row_height)
-	add_stat_row(content, "胜率", "%.1f%%" % (float(game_stats.get("win_rate", 0.0)) * 100.0), stats_row_height)
-	add_stat_row(content, "累计净分", "%s 分" % compact_score_text(int(game_stats.get("total_score", 0))), stats_row_height)
-	add_stat_row(content, "单局最佳", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))), stats_row_height)
-	add_stat_row(content, "总手牌数", "%d 手" % int(game_stats.get("total_hands", 0)), stats_row_height)
+	var stats_games_played := int(game_stats.get("games_played", 0))
+	if stats_games_played <= 0 and round_history.is_empty():
+		content.visible = false
+		var empty_state := make_label(panel, "暂无对局\n开始一局后，战绩会显示在这里", commercial_ui_font_size(18, 2), Color(0.90, 0.94, 0.84), true)
+		empty_state.name = "StatsEmptyState"
+		apply_rect(empty_state, rect_full(0.16, 0.405, 0.84, 0.555))
+		empty_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_state.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		empty_state.tooltip_text = "暂无对局记录"
+		var start_first_game := make_small_button("开始一局", Color(0.30, 0.62, 0.48), func() -> void:
+			start_offline(true)
+		)
+		start_first_game.name = "StatsStartFirstGameButton"
+		start_first_game.custom_minimum_size = Vector2(140, UI_MIN_TOUCH_TARGET)
+		start_first_game.tooltip_text = "开始第一局单机麻将"
+		apply_rect(start_first_game, rect_full(0.36, 0.590, 0.64, 0.745))
+		panel.add_child(start_first_game)
+		configure_ordered_focus_navigation(panel, [back, start_first_game], "StatsBackButton")
+	else:
+		add_stat_row(content, "总场次", "%d 局" % stats_games_played, stats_row_height)
+		add_stat_row(content, "胜场", "%d 局" % int(game_stats.get("games_won", 0)), stats_row_height)
+		add_stat_row(content, "胜率", "%.1f%%" % (float(game_stats.get("win_rate", 0.0)) * 100.0), stats_row_height)
+		add_stat_row(content, "累计净分", "%s 分" % compact_score_text(int(game_stats.get("total_score", 0))), stats_row_height)
+		add_stat_row(content, "单局最佳", "%s 分" % compact_score_text(int(game_stats.get("best_score", 0))), stats_row_height)
+		add_stat_row(content, "总手牌数", "%d 手" % int(game_stats.get("total_hands", 0)), stats_row_height)
 	draw_stats_row_summary_bus_art(panel)
-	configure_ordered_focus_navigation(panel, [back], "StatsBackButton")
+	if stats_games_played > 0 or not round_history.is_empty():
+		configure_ordered_focus_navigation(panel, [back], "StatsBackButton")
 
 	# 统计行依次滑入动画
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
@@ -26883,6 +26962,10 @@ func show_chat_panel() -> void:
 		# full 44px input without changing its hit lane.
 		chat_input.offset_bottom = 1.0
 	chat_panel.add_child(chat_input)
+	if table_log_chat_restore_pending:
+		chat_input.text = table_log_chat_draft
+		table_log_chat_restore_pending = false
+		table_log_chat_draft = ""
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
 	send_button.name = "ChatSendButton"
@@ -28664,6 +28747,13 @@ func connect_online() -> void:
 func reconnect_online_game() -> void:
 	if mode != "online_game":
 		return
+	var now_msec := Time.get_ticks_msec()
+	if now_msec < online_next_reconnect_msec:
+		var remaining_seconds := maxi(1, int(ceil(float(online_next_reconnect_msec - now_msec) / 1000.0)))
+		set_online_feedback("请稍候%d秒再重连。" % remaining_seconds, false)
+		return
+	online_reconnect_attempts += 1
+	online_next_reconnect_msec = now_msec + online_reconnect_delay_msec(online_reconnect_attempts)
 	remember_online_resume_context()
 	online_resume_pending = true
 	online_resume_join_sent = false
@@ -28676,6 +28766,8 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 	# A real transport loss owns the chat lifecycle; a transient status copy
 	# must not make clear_screen infer that the drawer should disappear.
 	chat_panel_open = false
+	table_log_chat_restore_pending = false
+	table_log_chat_draft = ""
 	var preserve_game_board := preserve_game_for_reconnect and mode == "online_game" and not online_game.is_empty()
 	var should_show_lobby := return_to_lobby and mode == "online_game" and not preserve_game_board
 	var had_resume_pending := online_resume_pending
@@ -28728,6 +28820,7 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	var resume_room: String = bounded_online_input(str(online_resume_context.get("room", selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH) if preserve_resume_draft else ""
 	online_room.clear()
 	online_game.clear()
+	online_players_by_seat.clear()
 	online_log_seen_count = 0
 	selected_room = resume_room
 	if is_instance_valid(online_room_edit):
@@ -28739,6 +28832,7 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_seen_message_ids.clear()
 	online_seen_voice_sequences.clear()
 	online_last_chat_sent_msec = 0
+	online_next_reconnect_msec = 0
 	online_last_snapshot_fingerprint = ""
 	online_last_room_snapshot_fingerprint = ""
 	if mode == "online_lobby":
@@ -28773,6 +28867,12 @@ func resume_online_room_after_welcome() -> void:
 	var sent := send_online_action({"type": "joinRoom", "roomCode": room_code, "name": player_name}, "恢复房间")
 	if sent:
 		online_resume_join_sent = true
+
+
+func online_reconnect_delay_msec(attempt: int = -1) -> int:
+	var attempt_count := online_reconnect_attempts if attempt < 0 else attempt
+	var exponent := clampi(attempt_count - 1, 0, 5)
+	return mini(ONLINE_RECONNECT_MAX_DELAY_MSEC, ONLINE_RECONNECT_BASE_DELAY_MSEC * (1 << exponent))
 
 
 func online_integer_value(value, fallback: int = -1) -> int:
@@ -28811,6 +28911,22 @@ func online_message_identity(data: Dictionary) -> String:
 	var identity := str(value).strip_edges()
 	return identity
 
+
+func online_message_session_matches(data: Dictionary) -> bool:
+	var raw_session = first_present(data, ["sessionId", "session_id", "connectionId", "connection_id"], null)
+	if raw_session == null:
+		return true
+	return online_integer_value(raw_session, -2) == online_session_id
+
+
+func register_online_message_rejection(feedback: String = "") -> void:
+	online_messages_rejected += 1
+	var now_msec := Time.get_ticks_msec()
+	if feedback == "" or now_msec - online_last_malformed_notice_msec < ONLINE_MALFORMED_NOTICE_INTERVAL_MSEC:
+		return
+	online_last_malformed_notice_msec = now_msec
+	set_status(feedback)
+
 func remember_online_message_identity(identity: String) -> bool:
 	if identity == "":
 		return true
@@ -28822,6 +28938,8 @@ func remember_online_message_identity(identity: String) -> bool:
 	return true
 
 func accept_online_message(data: Dictionary, kind: String) -> bool:
+	if not online_message_session_matches(data):
+		return false
 	if not remember_online_message_identity(online_message_identity(data)):
 		return false
 	var protocol_version := online_message_protocol_version(data)
@@ -28887,6 +29005,11 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 		return "地方规则标识无效。"
 	var variant := str(game.get("ruleVariant", ""))
 	var allowed_tiles: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
+	var allowed_flowers: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	var allowed_codes: Array = allowed_tiles.duplicate()
+	for flower in allowed_flowers:
+		if not allowed_codes.has(flower):
+			allowed_codes.append(flower)
 	var you_seat := int(game.get("youSeat", -1))
 	if you_seat < -1 or you_seat >= 4:
 		return "玩家座位越界。"
@@ -28897,12 +29020,17 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 	var wall_total := int(game.get("wallTotal", 0))
 	if wall_count < 0 or wall_total < 0 or (wall_total > 0 and wall_count > wall_total):
 		return "牌墙数量异常。"
+	if variant != "" and wall_total > 0 and wall_total != rule_wall_size(variant):
+		return "牌墙规则数量不一致。"
 	var hand: Array = game.get("hand", [])
 	if hand.size() > 14:
 		return "手牌数量异常。"
+	var visible_counts: Dictionary = {}
 	for tile in hand:
-		if not allowed_tiles.has(str(tile)) and not (variant != "" and rule_flower_codes(variant).has(str(tile))) and not (variant == "" and FLOWER_CODES.has(str(tile))):
+		var normalized_hand_tile := normalize_tile_code(str(tile))
+		if not allowed_codes.has(normalized_hand_tile):
 			return "手牌包含未知牌码。"
+		visible_counts[normalized_hand_tile] = int(visible_counts.get(normalized_hand_tile, 0)) + 1
 	var seen_seats: Dictionary = {}
 	var players_value = game.get("players", [])
 	if typeof(players_value) != TYPE_ARRAY or (players_value as Array).size() > 4:
@@ -28918,18 +29046,46 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 		var flower_count := int(player.get("flowerCount", 0))
 		if hand_count < 0 or hand_count > 14 or flower_count < 0 or flower_count > FLOWER_CODES.size():
 			return "玩家手牌数量异常。"
+		var player_hand_value = first_present(player, ["hand", "tiles"], null)
+		if player_hand_value != null and typeof(player_hand_value) == TYPE_ARRAY and hand_count != (player_hand_value as Array).size():
+			return "玩家手牌统计不一致。"
 		if int(player.get("score", 0)) < -10000000 or int(player.get("score", 0)) > 10000000:
 			return "玩家积分异常。"
 		var discards = player.get("discards", [])
 		if typeof(discards) != TYPE_ARRAY or (discards as Array).size() > 100:
 			return "弃牌数量异常。"
+		for discard in discards:
+			var normalized_discard := normalize_tile_code(str(discard))
+			if not allowed_codes.has(normalized_discard):
+				return "弃牌包含未知牌码。"
+			visible_counts[normalized_discard] = int(visible_counts.get(normalized_discard, 0)) + 1
 		var melds = player.get("melds", [])
 		if typeof(melds) != TYPE_ARRAY or (melds as Array).size() > 8:
 			return "副露数量异常。"
+		for meld in melds:
+			if typeof(meld) != TYPE_ARRAY or (meld as Array).size() > 4:
+				return "副露牌组格式异常。"
+			for meld_tile in meld:
+				var normalized_meld_tile := normalize_tile_code(str(meld_tile))
+				if not allowed_codes.has(normalized_meld_tile):
+					return "副露包含未知牌码。"
+				visible_counts[normalized_meld_tile] = int(visible_counts.get(normalized_meld_tile, 0)) + 1
+	for tile_key in visible_counts.keys():
+		if int(visible_counts[tile_key]) > 4 and not allowed_flowers.has(tile_key):
+			return "同种牌数量超过四张。"
 	var last_tile := str(game.get("lastDiscard", ""))
 	var last_seat := int(game.get("lastDiscardSeat", -1))
-	if last_tile != "" and (not allowed_tiles.has(last_tile) or last_seat < 0 or last_seat >= 4):
+	if last_tile != "" and (not allowed_codes.has(normalize_tile_code(last_tile)) or last_seat < 0 or last_seat >= 4):
 		return "最近弃牌数据异常。"
+	if str(game.get("phase", "")) == "pendingClaim":
+		var pending_value = game.get("pending", null)
+		if typeof(pending_value) != TYPE_DICTIONARY:
+			return "响应窗口格式异常。"
+		var pending: Dictionary = pending_value
+		if str(pending.get("tile", "")) == "" or int(pending.get("fromSeat", -1)) < 0 or int(pending.get("fromSeat", -1)) >= 4:
+			return "响应目标数据异常。"
+		if typeof(pending.get("options", [])) != TYPE_ARRAY:
+			return "响应选项格式异常。"
 	return ""
 
 
@@ -29056,10 +29212,12 @@ func handle_online_chat(data: Dictionary) -> void:
 func handle_online_message(line: String) -> void:
 	var data = JSON.parse_string(line)
 	if typeof(data) != TYPE_DICTIONARY:
-		set_status("服务器消息解析失败")
+		register_online_message_rejection("服务器消息解析失败")
 		return
+	online_messages_received += 1
 	var kind = normalize_online_message_kind(data)
 	if not accept_online_message(data, kind):
+		register_online_message_rejection()
 		return
 	if kind == "welcome":
 		var server_name = str(data.get("name", "")).strip_edges()
@@ -29119,6 +29277,7 @@ func handle_online_message(line: String) -> void:
 		clear_online_feedback()
 		announce_online_game_audio(next_game)
 		online_game = next_game
+		rebuild_online_player_index(next_game)
 		mode = "online_game"
 		request_game_render()
 	elif kind == "voiceMessage":
@@ -29297,6 +29456,7 @@ func normalize_online_players(value) -> Array:
 		result.append(player)
 	return result
 
+
 func online_action_label(payload: Dictionary) -> String:
 	var kind = str(payload.get("type", "操作"))
 	if kind == "discard":
@@ -29463,6 +29623,9 @@ func set_online_feedback(text: String, waiting: bool = false) -> void:
 		online_slow_notice_shown = false
 	set_status(text)
 	refresh_online_feedback_art()
+	if mode == "online_lobby":
+		# Feedback changes can gate Start/Chat without reconstructing the lobby.
+		refresh_online_lobby_action_states()
 
 
 func update_online_slow_response_notice(now_msec: int) -> void:
@@ -29548,7 +29711,9 @@ func active_rule_variant() -> String:
 
 func rule_profile(variant: String = "") -> Dictionary:
 	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
-	return (RULE_VARIANT_PROFILES.get(key, RULE_VARIANT_PROFILES[RULE_VARIANT_YANGZHOU]) as Dictionary).duplicate(true)
+	if not rule_profile_cache.has(key):
+		rule_profile_cache[key] = (RULE_VARIANT_PROFILES.get(key, RULE_VARIANT_PROFILES[RULE_VARIANT_YANGZHOU]) as Dictionary).duplicate(true)
+	return (rule_profile_cache[key] as Dictionary).duplicate(true)
 
 func rule_variant_label(variant: String = "") -> String:
 	return str(rule_profile(variant).get("label", "扬州麻将"))
@@ -29569,19 +29734,27 @@ func rule_variant_activation_status_text() -> String:
 	return "下次开局：" + rule_variant_short_label()
 
 func rule_tile_codes(variant: String = "") -> Array[String]:
-	var profile := rule_profile(variant)
+	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
+	if rule_tile_codes_cache.has(key):
+		return rule_tile_codes_cache[key].duplicate()
+	var profile := rule_profile(key)
 	var codes: Array[String] = []
 	for index in range(TILE_CODES.size()):
 		if not bool(profile.get("include_honors", true)) and index >= 27:
 			continue
 		codes.append(str(TILE_CODES[index]))
+	rule_tile_codes_cache[key] = codes.duplicate()
 	return codes
 
 func rule_flower_codes(variant: String = "") -> Array[String]:
+	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
+	if rule_flower_codes_cache.has(key):
+		return rule_flower_codes_cache[key].duplicate()
 	var flowers: Array[String] = []
-	if bool(rule_profile(variant).get("include_flowers", true)):
+	if bool(rule_profile(key).get("include_flowers", true)):
 		for code in FLOWER_CODES:
 			flowers.append(str(code))
+	rule_flower_codes_cache[key] = flowers.duplicate()
 	return flowers
 
 func rule_wall_size(variant: String = "") -> int:
@@ -29646,7 +29819,14 @@ func rule_uses_package_liability(variant: String = "") -> bool:
 	return bool(rule_profile(variant).get("package_liability", false))
 
 func is_tile_enabled_for_rule(tile: String, variant: String = "") -> bool:
-	return rule_tile_codes(variant).has(tile)
+	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
+	var normalized := normalize_tile_code(tile)
+	var membership_key := "%s|%s" % [key, normalized]
+	if rule_tile_membership_cache.has(membership_key):
+		return bool(rule_tile_membership_cache[membership_key])
+	var enabled := rule_tile_codes(key).has(normalized) or rule_flower_codes(key).has(normalized)
+	rule_tile_membership_cache[membership_key] = enabled
+	return enabled
 
 func tiles_from_counts(counts: Array) -> Array:
 	var tiles: Array = []
@@ -29718,11 +29898,16 @@ func _process(_delta: float) -> void:
 		update_online_slow_response_notice(now)
 	update_pending_claim_live_state()
 	update_online_action_live_state(now)
+	flush_telemetry_save()
 	flush_offline_progress_autosave()
 
 
 func update_pending_claim_live_state() -> void:
-	if mode == "offline" and offline_phase == "pending_claim":
+	var has_offline_pending := mode == "offline" and offline_phase == "pending_claim"
+	var has_online_pending := mode == "online_game" and typeof(online_game.get("pending", null)) == TYPE_DICTIONARY and not (online_game.get("pending", {}) as Dictionary).is_empty()
+	if not has_offline_pending and not has_online_pending:
+		return
+	if has_offline_pending:
 		if not offline_pending_claim.has("deadline_msec"):
 			offline_pending_claim["deadline_msec"] = Time.get_ticks_msec() + PENDING_CLAIM_TIMEOUT_MSEC
 		var remaining := pending_claim_remaining_seconds()
@@ -29737,9 +29922,9 @@ func update_pending_claim_live_state() -> void:
 		var timer_fill := root_layer.find_child("PendingClaimTimerFill", true, false) as Control
 		if timer_fill != null:
 			apply_rect(timer_fill, rect_full(0.025, 0.260, 0.025 + 0.950 * remaining_ratio, 0.740))
-		var priority_label := root_layer.find_child("PendingClaimPriorityText", true, false) as Label
-		if priority_label != null:
-			priority_label.text = pending_claim_priority_text(pending_claim_state().get("options", []))
+			var priority_label := root_layer.find_child("PendingClaimPriorityText", true, false) as Label
+			if priority_label != null:
+				priority_label.text = pending_claim_priority_text(pending_claim_state().get("options", []))
 
 
 func update_online_action_live_state(now_msec: int) -> void:
@@ -29763,6 +29948,7 @@ func _notification(what: int) -> void:
 		recover_audio_after_screen_change()
 		update_safe_area_layout()
 	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		flush_telemetry_save(true)
 		flush_offline_progress_autosave(true)
 	elif what == NOTIFICATION_WM_SIZE_CHANGED or what == NOTIFICATION_WM_DPI_CHANGE:
 		schedule_resize_refresh()
@@ -30691,6 +30877,8 @@ func poll_online(now_msec: int = -1) -> void:
 	if status != tcp_status:
 		tcp_status = status
 		if status == StreamPeerTCP.STATUS_CONNECTED:
+			online_reconnect_attempts = 0
+			online_next_reconnect_msec = 0
 			telemetry_record_event("online_connection", {"result": "connected"})
 			set_online_feedback("已连接服务器，可建房或入房。", false)
 			if not sent_hello:
@@ -30718,11 +30906,14 @@ func poll_online(now_msec: int = -1) -> void:
 		close_online_transport("接收失败，请重新连接。")
 		return
 	tcp_buffer.append_array(read_result[1] as PackedByteArray)
-	while tcp_buffer.find(10) >= 0:
+	online_last_receive_msec = Time.get_ticks_msec()
+	var frames_processed := 0
+	while tcp_buffer.find(10) >= 0 and frames_processed < ONLINE_MAX_FRAMES_PER_POLL:
 		var split_at := tcp_buffer.find(10)
 		var raw_line := tcp_buffer.slice(0, split_at)
 		tcp_buffer = tcp_buffer.slice(split_at + 1)
-		if raw_line.size() > ONLINE_MESSAGE_MAX_BYTES:
+		frames_processed += 1
+		if not online_frame_line_is_safe(raw_line):
 			close_online_transport("服务器消息过大，已断开连接。", true, false)
 			return
 		if not raw_line.is_empty() and raw_line[raw_line.size() - 1] == 13:
@@ -30734,6 +30925,15 @@ func poll_online(now_msec: int = -1) -> void:
 		close_online_transport("服务器消息过大，已断开连接。", true, false)
 		return
 	refresh_online_lobby_state()
+
+
+func online_frame_line_is_safe(raw_line: PackedByteArray) -> bool:
+	if raw_line.size() > ONLINE_MESSAGE_MAX_BYTES:
+		return false
+	for byte_value in raw_line:
+		if int(byte_value) == 0:
+			return false
+	return true
 
 
 func play_outgoing_online_action_audio(payload: Dictionary) -> void:
@@ -35403,34 +35603,46 @@ func same_suit_pressure(seat: int, tile: String, eval_context: Dictionary = {}) 
 func is_honor_tile(tile: String) -> bool:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_honor_cache.has(tile):
-		return bool(tile_honor_cache[tile])
-	var index = tile_index(tile)
-	return index >= 27
+	var normalized := normalize_tile_code(tile)
+	if tile_honor_cache.has(normalized):
+		return bool(tile_honor_cache[normalized])
+	var index = tile_index(normalized)
+	var result: bool = index >= 27
+	if tile_honor_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_honor_cache[normalized] = result
+	return result
 
 func is_terminal_or_honor(tile: String) -> bool:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_terminal_or_honor_cache.has(tile):
-		return bool(tile_terminal_or_honor_cache[tile])
-	var index = tile_index(tile)
+	var normalized := normalize_tile_code(tile)
+	if tile_terminal_or_honor_cache.has(normalized):
+		return bool(tile_terminal_or_honor_cache[normalized])
+	var index = tile_index(normalized)
+	var result: bool = false
 	if index >= 27:
-		return true
-	if index < 0:
-		return false
-	var rank = index % 9
-	return rank == 0 or rank == 8
+		result = true
+	elif index >= 0:
+		var rank = index % 9
+		result = rank == 0 or rank == 8
+	if tile_terminal_or_honor_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_terminal_or_honor_cache[normalized] = result
+	return result
 
 func is_simple_number_tile(tile: String) -> bool:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_simple_number_cache.has(tile):
-		return bool(tile_simple_number_cache[tile])
-	var index = tile_index(tile)
-	if index < 0 or index >= 27:
-		return false
-	var rank = index % 9
-	return rank >= 1 and rank <= 7
+	var normalized := normalize_tile_code(tile)
+	if tile_simple_number_cache.has(normalized):
+		return bool(tile_simple_number_cache[normalized])
+	var index = tile_index(normalized)
+	var result: bool = false
+	if index >= 0 and index < 27:
+		var rank = index % 9
+		result = rank >= 1 and rank <= 7
+	if tile_simple_number_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_simple_number_cache[normalized] = result
+	return result
 
 func visible_tile_counts() -> Array:
 	var counts = make_empty_tile_counts()
@@ -37126,10 +37338,13 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(label)
 
-	var value = make_label(row, value_text, value_font_size, Color(1.00, 0.94, 0.68), true)
+	var numeric_value := stat_row_numeric_value(value_text)
+	var display_value_text := ("负向 " + value_text) if numeric_value < 0.0 else value_text
+	var value = make_label(row, display_value_text, value_font_size, Color(1.00, 0.94, 0.68), true)
 	value.name = "StatsRowValueLabel_%s" % label_text
 	apply_rect(value, rect_full(value_left + 0.030, 0.120, value_right - 0.030, 0.880))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value.tooltip_text = "负向 · 损失：%s" % value_text if numeric_value < 0.0 else ("零值：%s" % value_text if is_zero_approx(numeric_value) else value_text)
 	configure_clipped_label(value)
 
 
@@ -37589,6 +37804,9 @@ func toggle_table_log_archive() -> void:
 func open_table_log_from_chat() -> void:
 	if mode != "online_game":
 		return
+	if chat_panel_open:
+		table_log_chat_draft = chat_input.text if is_instance_valid(chat_input) else ""
+		table_log_chat_restore_pending = true
 	close_chat_panel()
 	table_log_archive_open = true
 	request_game_render()
@@ -37599,8 +37817,12 @@ func close_table_log_archive() -> void:
 	if not table_log_archive_open:
 		return
 	table_log_archive_open = false
+	var restore_chat := table_log_chat_restore_pending and mode == "online_game" and not online_game_disconnected()
+	if restore_chat:
+		chat_panel_open = true
 	request_game_render()
-	call_deferred("focus_named_control", "TableLogArchiveButton")
+	if not restore_chat:
+		call_deferred("focus_named_control", "TableLogArchiveButton")
 
 
 func scroll_table_log_archive_to_end() -> void:
@@ -39047,6 +39269,9 @@ func normalize_replay_archive_entry(entry: Dictionary) -> Dictionary:
 
 func load_replay_archive() -> void:
 	replay_archive = []
+	replay_archive_generation += 1
+	replay_search_cache_generation = -1
+	replay_search_cache_results.clear()
 	var config := ConfigFile.new()
 	if config.load(REPLAY_ARCHIVE_PATH) != OK:
 		return
@@ -39074,7 +39299,9 @@ func save_replay_archive() -> void:
 	var config := ConfigFile.new()
 	config.set_value("archive", "schema_version", REPLAY_ARCHIVE_SCHEMA_VERSION)
 	config.set_value("archive", "entries", replay_archive.slice(maxi(0, replay_archive.size() - REPLAY_ARCHIVE_LIMIT)))
-	config.save(REPLAY_ARCHIVE_PATH)
+	var save_error := config.save(REPLAY_ARCHIVE_PATH)
+	if save_error != OK:
+		set_status("回放归档保存失败：%s" % error_string(save_error))
 
 
 func upsert_replay_archive_entry(entry: Dictionary, persist: bool = true) -> bool:
@@ -39090,10 +39317,14 @@ func upsert_replay_archive_entry(entry: Dictionary, persist: bool = true) -> boo
 		if (existing as Dictionary) == normalized:
 			return false
 		replay_archive[index] = normalized
+		replay_archive_generation += 1
+		replay_search_cache_generation = -1
 		if persist:
 			save_replay_archive()
 		return true
 	replay_archive.append(normalized)
+	replay_archive_generation += 1
+	replay_search_cache_generation = -1
 	while replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
 		replay_archive.pop_front()
 	if persist:
@@ -39120,6 +39351,8 @@ func archive_latest_round_history_entry() -> void:
 
 func replay_archive_entries(query: String = "") -> Array:
 	var needle := query.strip_edges().to_lower()
+	if replay_search_cache_generation == replay_archive_generation and replay_search_cache_query == needle:
+		return replay_search_cache_results.duplicate(true)
 	var filtered: Array = []
 	for index in range(replay_archive.size() - 1, -1, -1):
 		var raw_entry = replay_archive[index]
@@ -39135,6 +39368,9 @@ func replay_archive_entries(query: String = "") -> Array:
 		]).to_lower()
 		if needle == "" or searchable.contains(needle):
 			filtered.append(entry.duplicate(true))
+	replay_search_cache_query = needle
+	replay_search_cache_generation = replay_archive_generation
+	replay_search_cache_results = filtered.duplicate(true)
 	return filtered
 
 
@@ -39186,6 +39422,8 @@ func toggle_replay_archive_favorite(archive_id: String) -> void:
 			var entry: Dictionary = replay_archive[index]
 			entry["favorite"] = not bool(entry.get("favorite", false))
 			replay_archive[index] = entry
+			replay_archive_generation += 1
+			replay_search_cache_generation = -1
 			save_replay_archive()
 			replay_delete_target_id = ""
 			replay_delete_confirming = false
@@ -39210,6 +39448,8 @@ func request_delete_replay_archive(archive_id: String) -> void:
 		for index in range(replay_archive.size()):
 			if typeof(replay_archive[index]) == TYPE_DICTIONARY and str((replay_archive[index] as Dictionary).get("archive_id", "")) == archive_id:
 				replay_archive.remove_at(index)
+				replay_archive_generation += 1
+				replay_search_cache_generation = -1
 				save_replay_archive()
 				replay_delete_target_id = ""
 				replay_delete_confirming = false
@@ -39290,6 +39530,8 @@ func telemetry_sanitize_fields(event_name: String, fields: Dictionary) -> Dictio
 func load_telemetry_state() -> void:
 	telemetry_outbox = []
 	telemetry_event_sequence = 0
+	telemetry_save_pending = false
+	telemetry_save_due_msec = 0
 	var config := ConfigFile.new()
 	if config.load(TELEMETRY_PATH) != OK:
 		return
@@ -39321,10 +39563,27 @@ func load_telemetry_state() -> void:
 
 
 func save_telemetry_state() -> void:
+	telemetry_save_pending = false
+	telemetry_save_due_msec = 0
 	var config := ConfigFile.new()
 	config.set_value("telemetry", "schema_version", TELEMETRY_SCHEMA_VERSION)
 	config.set_value("telemetry", "events", telemetry_outbox.slice(maxi(0, telemetry_outbox.size() - TELEMETRY_OUTBOX_LIMIT)))
-	config.save(TELEMETRY_PATH)
+	var save_error := config.save(TELEMETRY_PATH)
+	if save_error != OK:
+		set_status("匿名诊断数据保存失败：%s" % error_string(save_error))
+
+
+func schedule_telemetry_save() -> void:
+	telemetry_save_pending = true
+	telemetry_save_due_msec = Time.get_ticks_msec() + TELEMETRY_SAVE_DEBOUNCE_MSEC
+
+
+func flush_telemetry_save(force: bool = false) -> void:
+	if not telemetry_save_pending:
+		return
+	if not force and Time.get_ticks_msec() < telemetry_save_due_msec:
+		return
+	save_telemetry_state()
 
 
 func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool:
@@ -39343,7 +39602,7 @@ func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool
 	telemetry_outbox.append(event)
 	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
 		telemetry_outbox.pop_front()
-	save_telemetry_state()
+	schedule_telemetry_save()
 	return true
 
 
