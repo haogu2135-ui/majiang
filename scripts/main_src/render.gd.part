@@ -211,7 +211,9 @@ func draw_achievements_completion_convergence_art(parent: Control) -> Control:
 	# screens keep the progress readout to the medal's right.
 	apply_rect(label, rect_full(0.020, 0.090, 0.530, 0.380) if compact_completion_lane else rect_full(0.490, 0.090, 1.000, 0.380))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	return art
+	set_ui_full_text(label, label.text, "成就收集进度")
+	mark_ui_optimization(art, "F-527")
+	mark_ui_optimization(label, "F-528")
 	var gold = Color(0.90, 0.70, 0.30)
 	var jade = Color(0.72, 0.56, 0.32)
 	var source = make_gpt_edge_rail(rect_full(0.025, 0.250, 0.090, 0.680), Color(gold.r, gold.g, gold.b, 0.16 + ratio * 0.08))
@@ -328,6 +330,7 @@ func draw_achievements_dashboard_art(parent: Control) -> Control:
 	var unlock_route = make_gpt_plate_rect(rect_full(0.180, 0.900, 0.700, 0.955), Color(0.08, 0.12, 0.10, 0.36), "ui_meter_rail_plate")
 	unlock_route.name = "AchievementsUnlockRoute"
 	art.add_child(unlock_route)
+	mark_ui_optimization(unlock_route, "F-529")
 	var unlock_fill = make_gpt_plate_rect(rect_full(0.180, 0.900, 0.180 + 0.520 * max(0.08, ratio), 0.955), Color(0.36, 0.58, 0.46, 0.28), "ui_meter_rail_plate")
 	unlock_fill.name = "AchievementsUnlockFill"
 	art.add_child(unlock_fill)
@@ -674,40 +677,24 @@ func draw_action_dock(parent: Control) -> void:
 		auto_pass_label.tooltip_text = "响应窗口已结束，系统已提交“过”"
 		auto_pass_label.set_meta("accessible_name", pending_claim_auto_pass_feedback)
 		configure_clipped_label(auto_pass_label)
-	var focus_label: Label = null
-	if not pending_claim_mode and not danger_confirm_mode and not action_buttons.is_empty():
-		var first_button := action_buttons[0] as Button
-		var label_alpha := 0.54 if pending_claim_mode else 0.76
-		focus_label = make_label(dock, first_button.text, 10, Color(0.92, 0.90, 0.72, label_alpha), true)
-		focus_label.name = "ActionDockFocusLabel"
-		focus_label.text = "当前焦点 · %s" % first_button.text
-		focus_label.tooltip_text = "方向键按空间位置移动焦点"
-		apply_rect(focus_label, rect_full(0.055, 0.035, 0.425, 0.225))
-		focus_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		configure_clipped_label(focus_label)
 	for focus_button in action_buttons:
 		if focus_button is Button:
 			(focus_button as Button).focus_entered.connect(Callable(self, "update_action_dock_focus_label").bind((focus_button as Button).get_instance_id()))
 			mark_ui_optimization(focus_button as Control, "F-479")
-	var online_status_priority := mode == "online_game" and (online_waiting_for_server or online_retry_available or online_game_disconnected())
-	if focus_label != null:
-		# Recovery status is the actionable message; never paint the generic focus
-		# hint underneath it in the same header slot.
-		focus_label.visible = not online_status_priority
+	var status_text := ""
+	var status_tooltip := ""
+	var status_color := Color(0.92, 0.90, 0.72, 0.76)
+	var status_priority := false
 	if mode == "online_game" and online_waiting_for_server:
-		var waiting_label = make_label(dock, "同步中 · 等待服务器确认 · 语音/聊天可用", 10, Color(0.76, 0.86, 0.82, 0.86), true)
-		waiting_label.name = "ActionDockWaitingStatus"
-		apply_rect(waiting_label, rect_full(0.055, 0.035, 0.945, 0.225))
-		waiting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		waiting_label.tooltip_text = "牌局动作已锁定；语音和聊天仍可用"
-		configure_clipped_label(waiting_label)
+		status_text = "同步中 · 等待服务器确认 · 语音/聊天可用"
+		status_tooltip = "牌局动作已锁定；语音和聊天仍可用"
+		status_color = Color(0.76, 0.86, 0.82, 0.86)
+		status_priority = true
 	elif mode == "online_game" and online_game_disconnected():
-		var disconnected_label = make_label(dock, online_recovery_status_text() + " · 牌桌只读", 10, Color(0.92, 0.76, 0.46, 0.92), true)
-		disconnected_label.name = "ActionDockDisconnectedStatus"
-		apply_rect(disconnected_label, rect_full(0.055, 0.035, 0.945, 0.225))
-		disconnected_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		disconnected_label.tooltip_text = online_recovery_detail_text()
-		configure_clipped_label(disconnected_label)
+		status_text = online_recovery_status_text() + " · 牌桌只读"
+		status_tooltip = online_recovery_detail_text()
+		status_color = Color(0.92, 0.76, 0.46, 0.92)
+		status_priority = true
 		# Keep a stable escape route in the same recovery dock without adding it to
 		# the game action count. The board remains read-only until the user reconnects.
 		var lobby_button := make_action_button("大厅", Color(0.46, 0.52, 0.56), Callable(self, "show_online_lobby").bind(true))
@@ -719,12 +706,26 @@ func draw_action_dock(parent: Control) -> void:
 		dock.z_index = max(19, action_bar.z_index + 1)
 		lobby_button.z_index = 1
 	elif mode == "online_game" and online_retry_available:
-		var retry_label = make_label(dock, "未响应 · 可重试", 10, Color(0.90, 0.76, 0.46, 0.92), true)
-		retry_label.name = "ActionDockRetryStatus"
-		apply_rect(retry_label, rect_full(0.055, 0.035, 0.945, 0.225))
-		retry_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		retry_label.tooltip_text = "服务器暂未响应，可以重试上一次操作"
-		configure_clipped_label(retry_label)
+		status_text = "未响应 · 可重试"
+		status_tooltip = "服务器暂未响应，可以重试上一次操作"
+		status_color = Color(0.90, 0.76, 0.46, 0.92)
+		status_priority = true
+	elif not pending_claim_mode and not danger_confirm_mode and not action_buttons.is_empty():
+		var first_button := action_buttons[0] as Button
+		status_text = "当前焦点 · %s" % first_button.text
+		status_tooltip = "方向键按空间位置移动焦点"
+	# All action-dock status variants own this one header slot. This keeps a
+	# focus hint and a network recovery message mutually exclusive.
+	if status_text != "":
+		var status_slot := make_label(dock, status_text, 10, status_color, true)
+		status_slot.name = "ActionDockStatusLabel"
+		status_slot.set_meta("ui_action_status_slot", true)
+		status_slot.set_meta("ui_action_status_priority", status_priority)
+		apply_rect(status_slot, rect_full(0.055, 0.035, 0.945, 0.225))
+		status_slot.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		status_slot.tooltip_text = status_tooltip
+		set_ui_full_text(status_slot, status_text, status_tooltip if status_tooltip != "" else status_text)
+		configure_clipped_label(status_slot)
 	parent.move_child(dock_shadow, max(0, action_bar.get_index()))
 	parent.move_child(dock, max(0, action_bar.get_index()))
 
@@ -766,12 +767,14 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 		apply_rect(fallback, rect_full(0.045, 0.16, 0.118, 0.84))
 	var text = make_label(intent, action_intent_text(count), 11, Color(0.84, 0.90, 0.84), true)
 	text.name = "ActionIntentText"
+	var intent_detail := action_intent_text(count)
 	if mode == "online_game" and online_game_disconnected():
-		text.tooltip_text = online_recovery_detail_text()
+		intent_detail = online_recovery_detail_text()
+		text.tooltip_text = intent_detail
 	apply_rect(text, rect_full(0.130, 0.10, 0.845, 0.90))
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(text)
-	set_ui_full_text(text, action_intent_text(count), "当前行动提示")
+	set_ui_full_text(text, intent_detail, "当前行动提示")
 	mark_ui_optimization(text, "F-448")
 	var intent_count_text := "重连" if mode == "online_game" and online_game_disconnected() else "%d项" % count
 	var count_badge = make_badge(intent, rect_full(0.858, 0.18, 0.982, 0.82), intent_count_text, 10, color.darkened(0.20), color.lightened(0.12), Color(0.96, 0.95, 0.84))
@@ -4194,6 +4197,27 @@ func draw_game_top_hud(parent: Control) -> void:
 	# Keep transient gameplay feedback connected to the visible HUD instance.
 	# The shared reference is also used by set_status() for immediate errors.
 	status_label = status
+	if mode == "online_game":
+		var connection_status := online_connection_status_text()
+		var connection_color := Color(0.40, 0.78, 0.60) if connection_status == "已连接" else Color(0.92, 0.70, 0.34) if connection_status == "断线" or connection_status == "连接异常" else Color(0.52, 0.72, 0.78)
+		var connection_surface := make_gpt_plate_rect(rect_full(0.106, 0.580, 0.268, 0.940), Color(0.018, 0.036, 0.034, 0.62), "ui_dark_scrim")
+		connection_surface.name = "TopHudOnlineConnectionStatus"
+		connection_surface.set_meta("ui_state_source", "tcp_status")
+		connection_surface.set_meta("accessible_name", online_connection_status_detail())
+		connection_surface.set_meta("ui_full_text", online_connection_status_detail())
+		connection_surface.tooltip_text = online_connection_status_detail()
+		hud.add_child(connection_surface)
+		var connection_icon := add_lucide_icon(connection_surface, "wifi", rect_full(0.070, 0.180, 0.245, 0.820), connection_color)
+		if connection_icon != null:
+			connection_icon.name = "TopHudOnlineConnectionIcon"
+		var connection_label := make_label(connection_surface, connection_status, 9, connection_color, true)
+		connection_label.name = "TopHudOnlineConnectionLabel"
+		apply_rect(connection_label, rect_full(0.285, 0.120, 0.950, 0.880))
+		connection_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		configure_clipped_label(connection_label)
+		set_ui_full_text(connection_label, connection_status, online_connection_status_detail())
+		mark_ui_optimization(connection_surface, "F-560")
+		mark_ui_optimization(connection_surface, "F-561")
 	draw_top_hud_hand_progress(hud)
 
 	# 离线战斗中分数已在四家座位卡常驻显示，顶部不再重复铺一整条分数面板。
@@ -4517,9 +4541,9 @@ func draw_hand(parent: Control) -> void:
 			# This moves the authored face and its native button together.
 			var drawn_body := tile_node.get_child(0) as Control if tile_node.get_child_count() > 0 else null
 			if drawn_body != null:
-				drawn_body.offset_top -= 4.0
-				drawn_body.offset_bottom -= 4.0
-				tile_node.set_meta("drawn_visual_lift", 4.0)
+				# The draw animation provides the temporary lift; the settled face
+				# remains on the shared hand baseline with neighboring tiles.
+				tile_node.set_meta("drawn_visual_lift", 0.0)
 				var drawn_baseline := make_gpt_route_rail(rect_full(0.04, 0.93, 0.96, 0.985), Color(0.94, 0.78, 0.38, 0.28))
 				drawn_baseline.name = "HandDrawnTileBaseline"
 				drawn_baseline.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6242,7 +6266,7 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		["rules", "规则", "help-circle", Color(0.30, 0.58, 0.50), Callable(self, "show_rules_screen")],
 		["stats", "战绩", "trophy", Color(0.56, 0.46, 0.72), Callable(self, "show_stats_screen")],
 		["achievements", "成就", "medal", Color(0.70, 0.54, 0.28), Callable(self, "show_achievements_screen")],
-		["shop", "商店", "gift", Color(0.62, 0.38, 0.30), Callable(self, "show_shop_screen")],
+		["daily_login", "签到", "calendar-check", Color(0.62, 0.48, 0.28), Callable(self, "open_daily_login_from_menu")],
 		["replay", "回放", "book-open", Color(0.36, 0.60, 0.62), Callable(self, "show_replay_import_screen")],
 	]
 	var surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.010, 0.020, 0.022, 0.72), "ui_dark_scrim", 0.18)
@@ -6263,10 +6287,11 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		var item: Array = items[i]
 		var quick_id := str(item[0])
 		var quick_color: Color = item[3]
-		var quick_source_name := "MenuQuick%sButton" % quick_id.capitalize()
+		var quick_suffix := "DailyLogin" if quick_id == "daily_login" else quick_id.capitalize()
+		var quick_source_name := "MenuQuick%sButton" % quick_suffix
 		var quick_action: Callable = item[4]
 		var button = make_small_button(str(item[1]), item[3], Callable(self, "activate_menu_entry").bind(quick_source_name, quick_action))
-		button.name = "MenuQuick%sButton" % quick_id.capitalize()
+		button.name = "MenuQuick%sButton" % quick_suffix
 		button.custom_minimum_size = Vector2(96, 44)
 		set_ui_full_text(button, "%s：打开%s页面" % [str(item[1]), str(item[1])], "快捷入口：" + str(item[1]))
 		mark_ui_optimization(button, "F-454")
@@ -6702,15 +6727,19 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 	apply_rect(title, rect_full(0.035, 0.030, 0.360, 0.155))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var entries = online_lobby_player_entries()
+	var roster_first_row_top := 0.185
+	var roster_row_height := 0.165
+	var roster_row_step := (0.930 - roster_first_row_top - roster_row_height) / 3.0
 	for i in range(4):
 		var entry = online_lobby_player_for_slot(entries, i)
 		var active := not entry.is_empty()
-		var top = 0.185 + float(i) * 0.192
+		var top = roster_first_row_top + float(i) * roster_row_step
 		var row_fill = Color(0.024, 0.048, 0.044, 0.92) if active else Color(0.014, 0.026, 0.026, 0.82)
 		row_fill.a *= 0.82
-		var row = make_gpt_center_crop_plate_rect(rect_full(0.035, top, 0.965, top + 0.165), row_fill, "ui_dark_scrim")
+		var row = make_gpt_center_crop_plate_rect(rect_full(0.035, top, 0.965, top + roster_row_height), row_fill, "ui_dark_scrim")
 		row.name = "OnlineLobbyRosterRow_%d" % i
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mark_ui_optimization(row, "F-541")
 		var detail_slot := i
 		roster.add_child(row)
 		var seal = make_gpt_gate(rect_full(0.020, 0.145, 0.092, 0.855), Color(0.42, 0.68, 0.50, 0.20 if active else 0.10))
@@ -6741,6 +6770,9 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		, roster_touch_rect)
 		roster_touch_target.disabled = not active
 		roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
+		roster_touch_target.set_meta("detail_rect_source", row.name)
+		roster_touch_target.set_meta("detail_rect_synced", true)
+		mark_ui_optimization(roster_touch_target, "F-542")
 	return roster
 
 
@@ -6831,6 +6863,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	summary_context.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	summary_context.tooltip_text = "当前房间摘要：" + summary_context_full
 	summary_context.set_meta("ui_full_text", summary_context_full)
+	summary_context.visible = not online_lobby_room_snapshot_is_stale()
 	configure_clipped_label(summary_context)
 	var snapshot_status_text := online_lobby_room_snapshot_status_text()
 	var snapshot_status = make_label(summary_panel, snapshot_status_text, 9, Color(1.0, 0.80, 0.48), true)
@@ -6862,6 +6895,8 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	state_label.name = "OnlineLobbyRoomSummaryStateLabel"
 	apply_rect(state_label, rect_full(0.060, 0.0, 0.940, 1.0))
 	configure_clipped_label(state_label)
+	set_ui_full_text(state_label, state_label.text, "房间同步状态")
+	mark_ui_optimization(state_label, "F-545")
 	var simple_room_node = make_gpt_gate(rect_full(0.452, 0.655, 0.548, 0.955), Color(0.050, 0.040, 0.026, 0.42))
 	simple_room_node.name = "OnlineLobbyRoomNode"
 	art.add_child(simple_room_node)
@@ -8212,6 +8247,8 @@ func draw_rules_guide_art(parent: Control) -> Control:
 		apply_rect(label, rect_full(0.06, 0.570, 0.94, 0.940))
 		label.set_meta("guide_name", str(step.get("label", "")))
 		label.text = "%s · %s" % [str(step.get("label", "")), "当前" if i == 0 else "待读"]
+		set_ui_full_text(label, str(step.get("label", "")), "规则导航步骤：" + str(step.get("label", "")))
+		mark_ui_optimization(label, "F-533")
 		var focus_plate := add_optional_gpt_illustration_texture(node, "ui_button_face_plate", rect_full(-0.08, -0.08, 1.08, 1.08), 0.0, false)
 		if focus_plate != null:
 			focus_plate.name = "RulesGuideStepFocusPlate_%d" % i
@@ -8240,7 +8277,7 @@ func draw_rules_section_summary_bus_art(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.060, 0.325, 0.940, 0.935))
 	parent.add_child(art)
 	parent.move_child(art, max(0, art.get_index() - 1))
-	return art
+	mark_ui_optimization(art, "F-534")
 	var gold = Color(0.86, 0.68, 0.32)
 	var jade = Color(0.72, 0.56, 0.32)
 	var spine = make_gpt_edge_rail(rect_full(0.955, 0.045, 0.982, 0.900), Color(0.006, 0.016, 0.018, 0.42))
@@ -9507,12 +9544,13 @@ func draw_settings_overlay(parent: Control) -> void:
 	var audio_section_rect = SETTINGS_AUDIO_SECTION_RECT
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
 	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
+	var settings_content_parent: Control = null
 	if compact_settings:
 		# 540px 高度仍保留每行 48px 的点击目标：紧凑分区改为全宽两列，
 		# 让声音、体验和系统都拥有足够的横向按钮空间。
-			audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.455)
-			play_section_rect = rect_full(0.040, 0.473, 0.960, 0.780)
-			maint_section_rect = rect_full(0.040, 0.798, 0.960, 0.995)
+		audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.455)
+		play_section_rect = rect_full(0.040, 0.473, 0.960, 0.780)
+		maint_section_rect = rect_full(0.040, 0.798, 0.960, 0.995)
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -9651,8 +9689,31 @@ func draw_settings_overlay(parent: Control) -> void:
 	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(rule_variant_status)
 
+	# Large text needs a real scroll viewport: the three authored sections cannot
+	# all fit in the compact panel while preserving readable setting rows.
+	if compact_settings and large_text_enabled:
+		var settings_scroll := ScrollContainer.new()
+		settings_scroll.name = "SettingsLargeTextScroll"
+		configure_scroll_container(settings_scroll, "上下滚动查看全部设置项")
+		settings_scroll.set_meta("ui_scroll_role", "settings_sections")
+		settings_scroll.set_meta("ui_minimum_row_height", 56.0)
+		mark_ui_optimization(settings_scroll, "F-557")
+		apply_rect(settings_scroll, rect_full(0.035, 0.205, 0.965, 0.895))
+		panel.add_child(settings_scroll)
+		var settings_content := Control.new()
+		settings_content.name = "SettingsLargeTextContent"
+		settings_content.custom_minimum_size = Vector2(maxf(360.0, settings_viewport.x * 0.680), 690.0)
+		settings_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		settings_scroll.add_child(settings_content)
+		settings_content_parent = settings_content
+		audio_section_rect = rect_full(0.025, 0.000, 0.975, 0.275)
+		play_section_rect = rect_full(0.025, 0.305, 0.975, 0.700)
+		maint_section_rect = rect_full(0.025, 0.730, 0.975, 0.995)
+	else:
+		settings_content_parent = panel
+
 	# 声音设置
-	var audio_grid = make_settings_section(panel, audio_section_rect, "声音", compact_settings)
+	var audio_grid = make_settings_section(settings_content_parent, audio_section_rect, "声音", compact_settings)
 	audio_grid.columns = 2 if compact_settings else 1
 	make_setting_row(audio_grid, "背景音乐", "当前: %s" % ("开启" if music_enabled else "关闭"), make_setting_button("音乐", music_enabled, func() -> void:
 		toggle_music_setting()
@@ -9668,7 +9729,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 
 	# 体验设置
-	var play_grid = make_settings_section(panel, play_section_rect, "体验", compact_settings)
+	var play_grid = make_settings_section(settings_content_parent, play_section_rect, "体验", compact_settings)
 	# Six compact controls need two rows to preserve the 48px row target.
 	play_grid.columns = 2 if compact_settings else 1
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_selector_button("快速" if fast_mode_enabled else "标准", "AI 节奏", func() -> void:
@@ -9691,7 +9752,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 
 	# 系统设置
-	var system_grid = make_settings_section(panel, maint_section_rect, "系统", compact_settings)
+	var system_grid = make_settings_section(settings_content_parent, maint_section_rect, "系统", compact_settings)
 	system_grid.columns = 2 if compact_settings else 3
 	make_setting_row(system_grid, "画面质量", "牌面保持 2D · 仅影响背景和动效", make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
@@ -12817,14 +12878,32 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 		var yaku_track = draw_win_detail_yaku_track(detail_panel, reasons)
 		yaku_track.visible = false
 		var compact_yaku := effective_viewport_size().y <= 560.0
+		var yaku_scroll := ScrollContainer.new()
+		yaku_scroll.name = "WinDetailYakuScroll"
+		configure_scroll_container(yaku_scroll, "上下滚动查看全部番种")
+		yaku_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		yaku_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		yaku_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+		yaku_scroll.clip_contents = true
+		yaku_scroll.set_meta("ui_scroll_role", "win_detail_yaku")
+		yaku_scroll.set_meta("ui_full_text", "番种详情共%d项，可上下滚动查看" % reasons.size())
+		yaku_scroll.set_meta("accessible_name", "番种详情滚动区")
+		apply_rect(yaku_scroll, rect_full(0.04, 0.30, 0.70, 0.94))
+		detail_panel.add_child(yaku_scroll)
+		var yaku_scrollbar := yaku_scroll.get_v_scroll_bar()
+		if yaku_scrollbar != null:
+			yaku_scrollbar.name = "WinDetailYakuScrollBar"
+			yaku_scrollbar.custom_minimum_size.x = 10.0
+			yaku_scrollbar.set_meta("accessible_name", "番种详情滚动位置")
 		var badge_container = HFlowContainer.new()
 		badge_container.name = "WinDetailYakuBadges"
 		badge_container.alignment = BoxContainer.ALIGNMENT_BEGIN
 		badge_container.add_theme_constant_override("h_separation", 3 if compact_yaku else 5)
 		badge_container.add_theme_constant_override("v_separation", 2 if compact_yaku else 3)
-		badge_container.clip_contents = true
-		apply_rect(badge_container, rect_full(0.04, 0.30, 0.70, 0.94))
-		detail_panel.add_child(badge_container)
+		badge_container.clip_contents = false
+		badge_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		badge_container.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		yaku_scroll.add_child(badge_container)
 
 		for i in range(reasons.size()):
 			var reason_str = str(reasons[i])
@@ -13004,6 +13083,8 @@ func make_achievement_row(key: String, index: int) -> Control:
 	progress_text.clip_contents = false
 	progress_text.autowrap_mode = TextServer.AUTOWRAP_OFF
 	progress_text.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	set_ui_full_text(progress_text, progress_text.text, "成就进度：" + achievement_display_name(key))
+	mark_ui_optimization(progress_text, "F-530")
 	var state_label = make_label(row, achievement_state_text(key), 13, Color(1.00, 0.90, 0.58) if unlocked else Color(0.92, 1.00, 0.96), true)
 	state_label.name = "AchievementRowState_%s" % key
 	apply_rect(state_label, rect_full(0.830, 0.220, 0.940, 0.780))
@@ -13838,6 +13919,7 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 	button.set_meta("setting_state", str(graphics_quality))
 	button.set_meta("accessible_name", "画面质量：" + graphics_quality_label(true))
 	button.set_meta("ui_full_text", button.tooltip_text)
+	set_ui_full_text(button, button.tooltip_text, "画面质量设置；牌面保持 2D")
 	return button
 
 func make_setting_row(parent: Control, title: String, status: String, button: Button) -> void:
@@ -13872,6 +13954,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	title_label.name = "SettingRowTitle_%s" % title
 	apply_rect(title_label, rect_full(0.052, 0.130, text_right - 0.020, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(title_label, title, "设置项标题：" + title)
+	fit_label_font_size(title_label, maxf(82.0, effective_viewport_size().x * (text_right - 0.075)), 14, 10)
 	configure_clipped_label(title_label)
 	# Preserve the full explanation in the tooltip/accessibility metadata while
 	# showing a scan-friendly status whenever large text would make the detail
@@ -13892,6 +13976,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.set_meta("ui_full_text", status)
 	button.set_meta("accessible_name", title + "：" + status)
+	set_ui_full_text(button, title + "：" + status, title + "设置")
+	button.set_meta("ui_state_source", "settings_model")
 	button.custom_minimum_size = Vector2(0, 44 if compact_settings else 46)
 	apply_rect(button, rect_full(button_left, SETTINGS_ROW_BUTTON_RECT.position.y, SETTINGS_ROW_BUTTON_RECT.size.x, SETTINGS_ROW_BUTTON_RECT.size.y) if compact_settings else SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)

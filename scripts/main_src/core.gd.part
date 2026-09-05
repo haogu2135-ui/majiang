@@ -3784,6 +3784,25 @@ func action_bar_default_focus_name() -> String:
 		return "PendingClaimPrimaryButton"
 	return ""
 
+
+func online_connection_status_text() -> String:
+	if mode != "online_game":
+		return ""
+	if online_game_disconnected():
+		return "断线"
+	match tcp_status:
+		StreamPeerTCP.STATUS_CONNECTED:
+			return "已连接"
+		StreamPeerTCP.STATUS_CONNECTING:
+			return "连接中"
+		StreamPeerTCP.STATUS_ERROR:
+			return "连接异常"
+	return "待同步" if not online_game.is_empty() else "未连接"
+
+
+func online_connection_status_detail() -> String:
+	return "在线连接状态：%s · %s" % [online_connection_status_text(), online_connection_endpoint_text()]
+
 func action_button_separation_for_count(count: int) -> int:
 	if mode == "offline" and has_pending_danger_discard():
 		return 3
@@ -4234,26 +4253,32 @@ func refresh_top_hud_update_button(button: Button = null) -> void:
 	button.modulate = Color(1.0, 1.0, 1.0, 0.70 if blocked else 1.0)
 
 func update_progress_text() -> String:
+	var downloaded := format_bytes(maxi(0, update_downloaded_bytes))
+	var total := format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"
+	var percent := 0
+	if update_total_bytes > 0:
+		percent = clampi(int(round(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes))), 0, 100)
+	elif update_state == "ready" or update_state == "current":
+		percent = 100
+	var transfer := "%s / %s" % [downloaded, total]
 	if update_dialog_compact_layout():
 		match update_state:
 			"checking":
-				return "检查更新来源"
+				return "检查中 · 0%% · %s" % transfer
 			"downloading":
-				if update_total_bytes > 0:
-					return "下载进度 %d%%" % int(round(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes)))
-				return "正在接收升级包"
+				return "下载中 · %d%% · %s" % [percent, transfer]
 			"ready":
-				return "已保存 v%s · 已校验" % update_remote_version
+				return "已校验 · 100%% · %s" % transfer
 			"current":
-				return "当前已是最新版本"
+				return "已是最新 · 100%% · 无需下载 (%s)" % transfer
 			"error":
-				return "下载未完成 · 请重试"
+				return "失败 · %d%% · %s · 请重试" % [percent, transfer]
 	if update_state == "checking":
 		return "manifest " + UPDATE_MANIFEST_URL
 	if update_state == "downloading":
 		if update_total_bytes > 0:
-			var percent = int(round(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes)))
-			return "%s / %s  %d%%" % [format_bytes(update_downloaded_bytes), format_bytes(update_total_bytes), percent]
+			var wide_percent = int(round(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes)))
+			return "%s / %s  %d%%" % [format_bytes(update_downloaded_bytes), format_bytes(update_total_bytes), wide_percent]
 		return "已下载 %s\n%s" % [format_bytes(update_downloaded_bytes), update_download_url]
 	if update_state == "ready":
 		return "已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
@@ -8083,7 +8108,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	for line_index in range(lines.size()):
 		var line = lines[line_index]
 		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
-		line_label.name = "RuleSectionLine_%d" % section_index if section_index >= 0 else "RuleSectionLine"
+		line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
 		line_label.custom_minimum_size = Vector2(0, measured_line_heights[line_index])
 		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_wrapped_label(line_label, text_width, measured_line_heights[line_index], line_gap)
@@ -8091,6 +8116,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		line_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		set_ui_full_text(line_label, str(line), "规则条款：" + str(line))
 		mark_ui_optimization(line_label, "F-473")
+		mark_ui_optimization(line_label, "F-531")
 
 
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String, row_height: float = 52.0) -> void:
@@ -8141,9 +8167,10 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	value.name = "StatsRowValueLabel_%s" % label_text
 	apply_rect(value, rect_full(value_left + 0.030, 0.120, value_right - 0.030, 0.880))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	value.tooltip_text = "负向 · 损失：%s" % value_text if numeric_value < 0.0 else ("零值：%s" % value_text if is_zero_approx(numeric_value) else value_text)
+	var value_detail := "负向 · 损失：%s" % value_text if numeric_value < 0.0 else ("零值：%s" % value_text if is_zero_approx(numeric_value) else value_text)
+	value.tooltip_text = value_detail
 	configure_clipped_label(value)
-	set_ui_full_text(value, value_text, label_text + "数值")
+	set_ui_full_text(value, value_detail, label_text + "数值")
 	mark_ui_optimization(value, "F-475")
 
 
@@ -8467,10 +8494,10 @@ func chat_panel_rect() -> Rect2:
 	# to cover whichever side happened to contain a meld; scoring the candidates
 	# keeps the reading surface and its 44px controls away from active table data.
 	var candidates: Array[Rect2] = [
-		rect_full(0.790, 0.100, 0.985, 0.350),
-		rect_full(0.015, 0.115, 0.220, 0.333),
-		rect_full(0.015, 0.535, 0.220, 0.720),
-		rect_full(0.790, 0.535, 0.985, 0.720),
+		rect_full(0.690, 0.110, 0.885, 0.420),
+		rect_full(0.015, 0.110, 0.305, 0.420),
+		rect_full(0.015, 0.455, 0.305, 0.765),
+		rect_full(0.660, 0.455, 0.985, 0.765),
 	]
 	var best := candidates[0]
 	var best_score := INF
@@ -8494,7 +8521,9 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
 	for zone in DISCARD_ZONES:
 		var river_rect: Rect2 = zone[1]
-		occupied.append(Rect2(river_rect.position, river_rect.size - river_rect.position))
+		occupied.append(chat_panel_table_anchor_rect(river_rect))
+	var center_rect := chat_panel_table_anchor_rect(CENTER_PANEL_RECT)
+	occupied.append(center_rect)
 	var action_rect := action_bar_dock_layout_rect()
 	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
 	# The upper-left route intentionally takes ownership of the compact ledger
@@ -8508,6 +8537,23 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 		if candidate_geometry.intersects(occupied_rect, true):
 			score += 1.0
 	return score
+
+
+func chat_panel_table_anchor_rect(table_rect: Rect2) -> Rect2:
+	# Rivers and the center console are nested inside TABLE_OUTER/INNER, while
+	# chat candidates are anchored directly to root_layer. Convert them before
+	# scoring so a safe drawer cannot be chosen on top of a public river.
+	var outer_width := maxf(0.001, TABLE_OUTER_RECT.size.x - TABLE_OUTER_RECT.position.x)
+	var outer_height := maxf(0.001, TABLE_OUTER_RECT.size.y - TABLE_OUTER_RECT.position.y)
+	var table_left := TABLE_OUTER_RECT.position.x + TABLE_INNER_RECT.position.x * outer_width
+	var table_top := TABLE_OUTER_RECT.position.y + TABLE_INNER_RECT.position.y * outer_height
+	var table_width := outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
+	var table_height := outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
+	var left := table_left + table_rect.position.x * table_width
+	var top := table_top + table_rect.position.y * table_height
+	var right := table_left + table_rect.size.x * table_width
+	var bottom := table_top + table_rect.size.y * table_height
+	return Rect2(Vector2(left, top), Vector2(right - left, bottom - top))
 
 
 func chat_panel_route_name() -> String:
@@ -8674,11 +8720,14 @@ func update_action_dock_focus_label(button_id: int) -> void:
 	var button := node_from_instance_id(button_id) as Button
 	if button == null or not is_instance_valid(button):
 		return
-	var focus_label := root_layer.find_child("ActionDockFocusLabel", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
-	if focus_label == null:
+	var status_slot := root_layer.find_child("ActionDockStatusLabel", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
+	if status_slot == null:
 		return
-	focus_label.text = "当前焦点 · %s" % button.text
-	focus_label.tooltip_text = "%s · %s" % [button.tooltip_text if button.tooltip_text != "" else button.text, action_button_shortcut_hint(button.text)]
+	if bool(status_slot.get_meta("ui_action_status_priority", false)):
+		return
+	status_slot.text = "当前焦点 · %s" % button.text
+	status_slot.tooltip_text = "%s · %s" % [button.tooltip_text if button.tooltip_text != "" else button.text, action_button_shortcut_hint(button.text)]
+	set_ui_full_text(status_slot, status_slot.text, status_slot.tooltip_text)
 
 
 func toggle_table_log_archive() -> void:

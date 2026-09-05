@@ -931,6 +931,8 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 	var wall_text = scene.find_child("TopHudWallText", true, false) as Label
 	var wall_meter = scene.find_child("TopHudWallMeter", true, false) as Control
 	var score_strip = scene.find_child("ScoreStrip", true, false) as Control
+	var connection_surface = scene.find_child("TopHudOnlineConnectionStatus", true, false) as Control
+	var connection_label = scene.find_child("TopHudOnlineConnectionLabel", true, false) as Label
 	check(hud != null and hud.clip_contents, "top HUD clips decorative artwork at %s" % viewport_size)
 	check(title != null and status != null and title_back != null and status_back != null and wall_back != null and wall_text != null and wall_meter != null, "top HUD exposes readable title status and wall groups at %s" % viewport_size)
 	check(scene.rule_wall_size("guangdong") == 136 and scene.rule_wall_size("sichuan") == 108 and scene.rule_wall_size("yangzhou") == 144, "rule profiles expose their actual wall totals at %s" % viewport_size)
@@ -967,6 +969,14 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 			check(screen_rect(status).end.x <= wall_back_rect.position.x - 2.0, "top HUD status clears wall badge at %s" % viewport_size)
 	if scene.mode == "offline":
 		check(score_strip == null, "offline top HUD keeps duplicate score strip off at %s" % viewport_size)
+		check(connection_surface == null, "offline top HUD omits the online connection lane at %s" % viewport_size)
+	else:
+		check(connection_surface != null and connection_label != null, "online top HUD exposes a dedicated connection status lane at %s" % viewport_size)
+		if connection_surface != null and hud != null:
+			check(screen_rect(hud).grow(1.0).encloses(screen_rect(connection_surface)), "online connection status stays inside the top HUD shell at %s" % viewport_size)
+			check(connection_surface.get_meta("ui_state_source", "") == "tcp_status" and connection_surface.tooltip_text.contains("在线连接状态"), "online connection lane exposes its transport source and full detail at %s" % viewport_size)
+		if connection_label != null:
+			check(connection_label.text == scene.online_connection_status_text() and connection_label.clip_text and connection_label.tooltip_text.contains(scene.online_connection_status_text()), "online connection lane keeps the current state visible and inspectable at %s" % viewport_size)
 	var labels := ["设置", "返回", "更新"]
 	var rects: Array[Rect2] = []
 	for label_text in labels:
@@ -1063,7 +1073,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 		"Rules": "规则",
 		"Stats": "战绩",
 		"Achievements": "成就",
-		"Shop": "商店",
+		"DailyLogin": "签到",
 		"Replay": "回放",
 	}
 	var quick_rects: Array[Rect2] = []
@@ -1239,7 +1249,7 @@ func check_update_dialog_layout(scene, viewport_size: Vector2) -> void:
 				for j in range(i + 1, content_nodes.size()):
 					check(not rects_overlap(screen_rect(content_nodes[i]).grow(-1.0), screen_rect(content_nodes[j]).grow(-1.0)), "update %s lanes %s and %s do not overlap at %s" % [state, content_nodes[i].name, content_nodes[j].name, viewport_size])
 		check(status != null and not status.text.contains("...") and status.tooltip_text == scene.update_message, "update %s status keeps full state text and its detail tooltip at %s" % [state, viewport_size])
-		check(progress != null and not progress.text.contains("...") and progress.tooltip_text == progress.text, "update %s progress keeps a compact readable label at %s" % [state, viewport_size])
+		check(progress != null and not progress.text.contains("...") and progress.tooltip_text == progress.text and progress.text.contains("%") and progress.text.contains("/") and (progress.text.contains("检查") or progress.text.contains("下载") or progress.text.contains("校验") or progress.text.contains("最新") or progress.text.contains("失败")), "update %s progress keeps stage, percentage, and byte status in one compact readable label at %s" % [state, viewport_size])
 		if notes_label != null and scene.update_release_notes != "":
 			check(notes_label.text == scene.update_release_notes_summary_line() and notes_label.tooltip_text == scene.update_release_notes, "update %s release notes have one dedicated readable summary lane at %s" % [state, viewport_size])
 			if state == "ready" or state == "current":
@@ -1707,10 +1717,10 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 
 
 	var waiting_status = scene.find_child("TopHudStatus", true, false) as Label
-	var waiting_action = scene.find_child("ActionDockWaitingStatus", true, false) as Label
+	var waiting_action = scene.find_child("ActionDockStatusLabel", true, false) as Label
 	var compact_waiting_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	check(scene.current_status_text() == "操作已提交 · 等待服务器确认" and waiting_status != null and waiting_status.text == scene.top_hud_short_status_text(compact_waiting_hud), "online submitted state is explicit in the top HUD at %s" % viewport_size)
-	check(waiting_action != null and waiting_action.text.contains("等待服务器"), "online submitted state is explicit in the action dock at %s" % viewport_size)
+	check(waiting_action != null and waiting_action.text.contains("等待服务器") and scene.find_child("ActionDockWaitingStatus", true, false) == null and scene.find_child("ActionDockRetryStatus", true, false) == null, "online submitted state owns the single action-dock status slot at %s" % viewport_size)
 	check(scene.handle_ui_cancel(), "Esc is consumed by online server waiting at %s" % viewport_size)
 	check(not scene.online_waiting_for_server and scene.exit_confirm_panel == null and scene.mode == "online_game", "Esc cancels online waiting without leaving the table at %s" % viewport_size)
 	scene.online_feedback = "连接已断开，请重新连接。"
@@ -1719,9 +1729,11 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	scene.render_game()
 	await settle_layout()
 	var disconnected_status := scene.find_child("TopHudStatus", true, false) as Label
+	var disconnected_action := scene.find_child("ActionDockStatusLabel", true, false) as Label
 	check(disconnected_status != null and disconnected_status.text == "断线 · 重连" and disconnected_status.tooltip_text.contains("使用右侧重连"), "online disconnect HUD keeps one compact recovery state and a full detail tooltip at %s" % viewport_size)
 	if disconnected_status != null:
 		check(not disconnected_status.text.contains("...") and label_text_width(disconnected_status, disconnected_status.text) <= screen_rect(disconnected_status).size.x + 1.0, "online disconnect HUD status fits its compact lane at %s" % viewport_size)
+	check(disconnected_action != null and disconnected_action.text.contains("断线") and scene.find_child("ActionDockDisconnectedStatus", true, false) == null, "online disconnect owns the single action-dock status slot at %s" % viewport_size)
 	var reconnect_button := scene.find_child("OnlineReconnectGameButton", true, false) as Button
 	check(reconnect_button != null and reconnect_button.tooltip_text.contains("恢复当前牌局") and reconnect_button.has_focus(), "online disconnect exposes a focused reconnect CTA and keeps the board read-only at %s" % viewport_size)
 	check(scene.find_child("ChatActionButton", true, false) == null and scene.find_child("PendingClaimResponseGrid", true, false) == null, "online disconnect hides network actions until reconnection at %s" % viewport_size)
@@ -1831,10 +1843,14 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		check(route == scene.chat_panel_route_name(), "online game chat exposes the state-specific drawer route at %s" % viewport_size)
 		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "online game chat drawer stays inside viewport at %s" % viewport_size)
 		if route == "top_safe_drawer":
-			check(panel_rect.position.x >= viewport_size.x * 0.70, "online game chat default route stays in the upper-right safe lane at %s" % viewport_size)
-		else:
+			check(panel_rect.position.x >= viewport_size.x * 0.68, "online game chat default route stays in the upper-right safe lane at %s" % viewport_size)
+		elif route == "upper_meld_safe_drawer":
 			check(panel_rect.position.x <= viewport_size.x * 0.34 and panel_rect.position.y <= viewport_size.y * 0.26, "online game chat meld route stays in the upper-left table-safe lane at %s" % viewport_size)
-		var route_bottom_limit := 0.42 if route == "top_safe_drawer" else 0.35
+		elif route == "left_safe_drawer":
+			check(panel_rect.position.x <= viewport_size.x * 0.34 and panel_rect.position.y >= viewport_size.y * 0.42, "online game chat left route stays in the lower-left safe lane at %s" % viewport_size)
+		else:
+			check(panel_rect.position.x >= viewport_size.x * 0.64 and panel_rect.position.y >= viewport_size.y * 0.42, "online game chat lower route stays in the lower-right safe lane at %s" % viewport_size)
+		var route_bottom_limit := 0.43 if route == "top_safe_drawer" or route == "upper_meld_safe_drawer" else 0.78
 		check(panel_rect.size.x >= 180.0 and panel_rect.end.y <= viewport_size.y * route_bottom_limit, "online game chat drawer keeps a wide compact touch lane at %s" % viewport_size)
 		check(panel.get_meta("compact_chat", false), "online game chat marks the narrow route as compact at %s" % viewport_size)
 		for seat in range(4):
@@ -2217,16 +2233,27 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 		for node in [winner_label, score_label, win_tile]:
 			if node != null:
 				check(detail_rect.grow(1.0).encloses(screen_rect(node)), "win detail keeps %s inside its panel at %s" % [node.name, viewport_size])
-		var yaku_badges = scene.find_child("WinDetailYakuBadges", true, false) as Container
-		check(yaku_badges != null and yaku_badges.get_child_count() == scene.last_win_score.get("reasons", []).size(), "win detail retains every long-fixture yaku entry at %s" % viewport_size)
+		var yaku_scroll = scene.find_child("WinDetailYakuScroll", true, false) as ScrollContainer
+		var yaku_badges = yaku_scroll.find_child("WinDetailYakuBadges", true, false) as Container if yaku_scroll != null else null
+		var yaku_scroll_rect := screen_rect(yaku_scroll) if yaku_scroll != null else Rect2()
+		check(yaku_scroll != null and yaku_badges != null and yaku_badges.get_child_count() == scene.last_win_score.get("reasons", []).size(), "win detail keeps every long-fixture yaku entry in its scroll flow at %s" % viewport_size)
+		if yaku_scroll != null:
+			check(detail_rect.grow(1.0).encloses(yaku_scroll_rect), "win detail yaku scroll viewport stays inside its panel at %s" % viewport_size)
+			check(yaku_scroll.clip_contents and yaku_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and yaku_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "win detail yaku uses a clipped vertical scroll viewport at %s" % viewport_size)
+			check(yaku_scroll.tooltip_text.contains("滚动") and yaku_scroll.get_meta("ui_scroll_role", "") == "win_detail_yaku", "win detail yaku scroll exposes its reading affordance at %s" % viewport_size)
 		if yaku_badges != null:
-			check(detail_rect.grow(1.0).encloses(screen_rect(yaku_badges)), "win detail yaku container stays inside its panel at %s" % viewport_size)
+			check(yaku_scroll.is_ancestor_of(yaku_badges), "win detail yaku badges remain children of the scroll content flow at %s" % viewport_size)
 			for badge in yaku_badges.get_children():
 				if badge is Control:
-					check(detail_rect.grow(1.0).encloses(screen_rect(badge as Control)), "win detail yaku entry %s stays visible inside the panel at %s" % [badge.name, viewport_size])
+					var badge_label: Label = null
+					for badge_child in (badge as Control).get_children():
+						if badge_child is Label:
+							badge_label = badge_child as Label
+							break
+					check((badge as Control).get_parent() == yaku_badges and badge_label != null and (badge as Control).tooltip_text == badge_label.tooltip_text and badge_label.get_meta("ui_full_text", "") == badge_label.text, "win detail yaku entry %s keeps its own full text in the content flow at %s" % [badge.name, viewport_size])
 			var limit_badge = scene.find_child("WinDetailLimitBadge", true, false) as Control
 			if limit_badge != null:
-				check(not rects_overlap(screen_rect(limit_badge), screen_rect(yaku_badges)), "win detail limit badge clears the yaku lane at %s" % viewport_size)
+				check(not rects_overlap(screen_rect(limit_badge), yaku_scroll_rect), "win detail limit badge clears the yaku scroll viewport at %s" % viewport_size)
 	for seat in range(4):
 		var row = scene.find_child("RoundSummaryRankRow_%d" % seat, true, false) as Control
 		if row != null and detail_panel != null:
@@ -2459,7 +2486,7 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		check(drawn_mounts.size() == 1, "battle keeps one stable mount for the drawn tile at %s" % viewport_size)
 		for drawn_mount in drawn_mounts:
 			var drawn_tile := drawn_mount.get_child(0) as Control if drawn_mount.get_child_count() > 0 else null
-			check(drawn_tile != null and bool(drawn_tile.get_meta("drawn_tile", false)) and absf(float(drawn_tile.get_meta("drawn_visual_lift", 0.0)) - 4.0) <= 0.5, "drawn tile lifts its authored body once inside the stable mount at %s" % viewport_size)
+			check(drawn_tile != null and bool(drawn_tile.get_meta("drawn_tile", false)) and absf(float(drawn_tile.get_meta("drawn_visual_lift", 0.0))) <= 0.5, "drawn tile keeps its authored body aligned inside the stable mount at %s" % viewport_size)
 			if drawn_tile != null:
 				check(screen_rect(drawn_mount).grow(1.0).encloses(screen_rect(drawn_tile)), "drawn tile frame remains inside its stable mount at %s" % viewport_size)
 
@@ -3383,7 +3410,7 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 		if max_scroll > 1.0:
 			scrollbar.value = max_scroll
 			scene.sync_achievements_scroll_status(scroll, browse_status, scene.achievements.size())
-			check(browse_status.text.contains("已全部看完") and browse_status.text.contains("余 0"), "achievements browse status reports the end of the catalogue at %s" % viewport_size)
+			check(browse_status.text.contains("已完成") and browse_status.text.contains("余0"), "achievements browse status reports the end of the catalogue at %s" % viewport_size)
 			scrollbar.value = saved_scroll
 			scene.sync_achievements_scroll_status(scroll, browse_status, scene.achievements.size())
 	if bottom_spacer != null:
@@ -3782,9 +3809,10 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 	for i in range(1, 8):
 		var day_node = scene.find_child("DailyLoginDayNode_%d" % i, true, false) as Control
 		var day_label = scene.find_child("DailyLoginDayLabel_%d" % i, true, false) as Label
+		var day_state_label = scene.find_child("DailyLoginDayStateLabel_%d" % i, true, false) as Label
 		var reward_label = scene.find_child("DailyLoginRewardLabel_%d" % i, true, false) as Label
 		var text_back = scene.find_child("DailyLoginDayTextBack_%d" % i, true, false) as Control
-		check(day_node != null and day_label != null and reward_label != null and text_back != null, "daily login day %d exposes node labels and text backplate at %s" % [i, viewport_size])
+		check(day_node != null and day_label != null and day_state_label != null and reward_label != null and text_back != null, "daily login day %d exposes node, state, reward labels and text backplate at %s" % [i, viewport_size])
 		if day_node == null:
 			continue
 		var node_rect = screen_rect(day_node)
@@ -3793,9 +3821,9 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 		if i > 1:
 			check(node_rect.position.x >= previous_rect.end.x + 3.0, "daily login day %d has stable separation at %s" % [i, viewport_size])
 		previous_rect = node_rect
-		if text_back != null and day_label != null and reward_label != null:
+		if text_back != null and day_label != null and day_state_label != null and reward_label != null:
 			var back_rect = screen_rect(text_back)
-			check(back_rect.grow(1.0).encloses(screen_rect(day_label)) and back_rect.grow(1.0).encloses(screen_rect(reward_label)), "daily login day %d text backplate covers both labels at %s" % [i, viewport_size])
+			check(back_rect.grow(1.0).encloses(screen_rect(day_label)) and back_rect.grow(1.0).encloses(screen_rect(day_state_label)) and back_rect.grow(1.0).encloses(screen_rect(reward_label)), "daily login day %d text backplate covers its state and reward labels at %s" % [i, viewport_size])
 		if day_label != null:
 			var day_luma = relative_luma(day_label.get_theme_color("font_color"))
 			check(day_label.clip_text and day_label.get_theme_font_size("font_size") >= 11, "daily login day %d title clips and keeps readable font at %s" % [i, viewport_size])
@@ -3804,6 +3832,8 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 			var reward_luma = relative_luma(reward_label.get_theme_color("font_color"))
 			check(reward_label.clip_text and reward_label.get_theme_font_size("font_size") >= 11, "daily login day %d reward clips and keeps readable font at %s" % [i, viewport_size])
 			check(reward_luma >= 0.70 or reward_luma <= 0.24, "daily login day %d reward color has deliberate contrast at %s" % [i, viewport_size])
+		if day_state_label != null:
+			check(day_state_label.text in ["已领取", "今日", "待领"] and day_state_label.clip_text and day_state_label.tooltip_text != "", "daily login day %d exposes a visible state label without clipping its semantic value at %s" % [i, viewport_size])
 	var reward_rect = screen_rect(reward_panel)
 	var progress_rect = screen_rect(progress_panel)
 	var claim_rect = screen_rect(claim_button)
@@ -3811,7 +3841,14 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 	var reward_text = scene.find_child("DailyLoginRewardTextLabel", true, false) as Label
 	var reward_text_back = scene.find_child("DailyLoginRewardTextBack", true, false) as Control
 	var reward_icon_back = scene.find_child("DailyLoginRewardIconBack", true, false) as Control
+	var claimed_status = scene.find_child("DailyLoginClaimedStatusSurface", true, false) as Control
+	var claimed_status_label = scene.find_child("DailyLoginClaimedStatusLabel", true, false) as Label
 	check(reward_text != null and reward_text_back != null and reward_icon_back != null, "daily login reward row exposes readable text and icon backplates at %s" % viewport_size)
+	if bool(scene.daily_login_view_state.get("claimed_today", false)):
+		check(claimed_status != null and claimed_status.visible and claimed_status_label != null and claimed_status_label.text.contains("今日已领取") and claimed_status_label.text.contains("明日可领"), "daily login claimed state uses a non-button status surface at %s" % viewport_size)
+		check(not claim_button.visible and claim_button.disabled and claim_button.focus_mode == Control.FOCUS_NONE, "daily login claimed state hides and disables the claim CTA at %s" % viewport_size)
+	else:
+		check(claimed_status == null or not claimed_status.visible, "daily login unclaimed state keeps the claimed status surface hidden at %s" % viewport_size)
 	if reward_text != null:
 		check(reward_text.clip_text and reward_text.get_theme_font_size("font_size") >= 20 and relative_luma(reward_text.get_theme_color("font_color")) >= 0.88, "daily login reward text is bright and clipped at %s" % viewport_size)
 		check(reward_rect.grow(1.0).encloses(screen_rect(reward_text)), "daily login reward text stays inside reward panel at %s" % viewport_size)

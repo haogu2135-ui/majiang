@@ -817,6 +817,12 @@ func run_extended_ui_contracts(scene: Node) -> void:
 		await settle(0.05)
 	var rule_button_after := scene.find_child("SettingsRuleVariantButton", true, false) as Button
 	check(str(scene.rule_variant) != rule_before and rule_button_after != null and rule_button_after.text == scene.rule_variant_short_label(), "rule selector refreshes its label and persisted value")
+	var settings_large_scroll := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
+	if settings_large_scroll != null:
+		var settings_scrollbar := settings_large_scroll.get_v_scroll_bar()
+		if settings_scrollbar != null:
+			settings_large_scroll.scroll_vertical = int(round(maxf(0.0, settings_scrollbar.max_value - settings_scrollbar.page)))
+			await settle(0.04)
 	var telemetry_entry := scene.find_child("SettingRowButton_隐私诊断", true, false) as Button
 	if telemetry_entry != null:
 		await activate_button(telemetry_entry, "mouse")
@@ -1910,7 +1916,7 @@ func run() -> void:
 		check(achievements_page_value > 0.0, "PageDown advances the achievements catalogue")
 		await send_key(KEY_END, 0)
 		var achievements_end_value := float(achievements_interaction_bar.value)
-		check(achievements_end_value >= achievements_interaction_range - 1.0 and achievements_interaction_status.text.contains("余 0") and achievements_interaction_status.text.contains("已全部看完"), "End reaches the catalogue tail and reports all achievements viewed")
+		check(achievements_end_value >= achievements_interaction_range - 1.0 and achievements_interaction_status.text.contains("余0") and achievements_interaction_status.text.contains("已完成"), "End reaches the catalogue tail and reports all achievements viewed")
 	await send_key(KEY_ESCAPE, 0)
 	await settle(0.20)
 	var restored_achievements_entry := scene.find_child("MenuQuickAchievementsButton", true, false) as Button

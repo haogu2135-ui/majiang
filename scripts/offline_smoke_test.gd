@@ -45,6 +45,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"MeldGroup3DCastShadow",
 	"MeldGroup3DTopRim",
 	"ActionButtonSeal",
+	"ChatPanelTitle",
 	"ChatPanelMessageScroll",
 	"ChatPanelTableLogButton",
 	"CenterDiceSimpleSeal",
