@@ -2836,6 +2836,7 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	apply_rect(title, rect_full(0.380, 0.060, 0.735, 0.265))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.tooltip_text = pending_danger_discard_text()
+	set_ui_full_text(title, pending_danger_discard_text(), "危险弃牌标题")
 	configure_clipped_label(title)
 	var seal = make_badge(panel, rect_full(0.750, 0.145, 0.855, 0.855), risk_badge_text(label_text), 11, Color(0.54, 0.16, 0.12, 0.94), Color(0.96, 0.50, 0.34, 0.34), Color(0.98, 0.90, 0.78))
 	seal.name = "DangerDiscardRiskSeal"
@@ -2852,11 +2853,17 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		compact_reason = str(danger_source.get("reason", ""))
 	elif str(report.get("feed_text", "")) != "":
 		compact_reason = str(report.get("feed_text", ""))
-	var detail = make_label(panel, compact_reason, 12, Color(0.92, 0.86, 0.72), true)
+	# The detail slot is deliberately short. The full reason remains available on
+	# hover/focus, so a long AI explanation cannot consume the action lane.
+	var detail_text := danger_discard_detail_display_text(compact_reason)
+	var detail = make_label(panel, detail_text, 12, Color(0.92, 0.86, 0.72), true)
 	detail.name = "DangerDiscardDetailText"
 	apply_rect(detail, rect_full(0.380, 0.410, 0.735, 0.700))
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	detail.tooltip_text = pending_danger_discard_text()
+	set_ui_full_text(detail, pending_danger_discard_text(), "危险弃牌完整说明")
+	detail.set_meta("text_slot_role", "danger_discard_detail")
+	detail.set_meta("text_slot_full_reason", compact_reason)
+	mark_ui_optimization(detail, "F-575")
 	configure_clipped_label(detail)
 	var source_trace = make_gpt_route_rail(rect_full(0.252, 0.305, 0.560, 0.350), Color(0.006, 0.016, 0.018, 0.44))
 	source_trace.name = "DangerDiscardSourceTrace"
@@ -2953,6 +2960,17 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		if seal_texture != null:
 			seal_texture.modulate.a = 0.10
 	return panel
+
+
+func danger_discard_detail_display_text(reason: String) -> String:
+	var clean := reason.strip_edges()
+	if clean == "":
+		return "牌路危险"
+	# Keep the visible slot to one scan-friendly line. The report itself is exposed
+	# through the control metadata and tooltip configured by the caller.
+	if clean.length() > 12:
+		return "牌路危险"
+	return clean
 
 
 func draw_danger_discard_decision_bridge(parent: Control, risk: float, alternatives: Array) -> Control:
@@ -3141,6 +3159,8 @@ func draw_diagnostic_dialog_art(parent: Control, lines: Array) -> Control:
 	var art = Control.new()
 	art.name = "DiagnosticDialogArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.clip_contents = true
+	art.set_meta("diagnostic_visual_scope", "header")
 	apply_rect(art, rect_full(0.045, 0.035, 0.955, 0.175))
 	parent.add_child(art)
 	var diagnostic_texture = add_illustration_texture(art, "diagnostic_wave", rect_full(-0.012, -0.360, 1.012, 1.360), 0.13, false)
@@ -9545,6 +9565,8 @@ func draw_settings_overlay(parent: Control) -> void:
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
 	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
 	var settings_content_parent: Control = null
+	var settings_large_text_scroll: ScrollContainer = null
+	var settings_large_text_status: Label = null
 	if compact_settings:
 		# 540px 高度仍保留每行 48px 的点击目标：紧凑分区改为全宽两列，
 		# 让声音、体验和系统都拥有足够的横向按钮空间。
@@ -9698,6 +9720,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.set_meta("ui_scroll_role", "settings_sections")
 		settings_scroll.set_meta("ui_minimum_row_height", 56.0)
 		mark_ui_optimization(settings_scroll, "F-557")
+		mark_ui_optimization(settings_scroll, "F-563")
 		apply_rect(settings_scroll, rect_full(0.035, 0.205, 0.965, 0.895))
 		panel.add_child(settings_scroll)
 		var settings_content := Control.new()
@@ -9706,6 +9729,27 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		settings_scroll.add_child(settings_content)
 		settings_content_parent = settings_content
+		settings_large_text_scroll = settings_scroll
+		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 下方还有内容", 10, Color(0.78, 0.88, 0.80), true)
+		settings_large_text_status.name = "SettingsLargeTextScrollStatus"
+		apply_rect(settings_large_text_status, rect_full(0.040, 0.902, 0.790, 0.942))
+		settings_large_text_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		settings_large_text_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		configure_clipped_label(settings_large_text_status)
+		set_ui_full_text(settings_large_text_status, "当前显示声音、体验和系统设置；向下滚动可查看未显示的设置项", "大字设置滚动位置")
+		mark_ui_optimization(settings_large_text_status, "F-563")
+		var settings_scrollbar := settings_scroll.get_v_scroll_bar()
+		if settings_scrollbar != null:
+			settings_scrollbar.value_changed.connect(func(_value: float) -> void:
+				sync_settings_large_text_scroll_status(settings_scroll, settings_large_text_status)
+			)
+		settings_scroll.resized.connect(func() -> void:
+			sync_settings_large_text_scroll_status(settings_scroll, settings_large_text_status)
+		)
+		settings_content.resized.connect(func() -> void:
+			sync_settings_large_text_scroll_status(settings_scroll, settings_large_text_status)
+		)
+		call_deferred("sync_settings_large_text_scroll_status", settings_scroll, settings_large_text_status)
 		audio_section_rect = rect_full(0.025, 0.000, 0.975, 0.275)
 		play_section_rect = rect_full(0.025, 0.305, 0.975, 0.700)
 		maint_section_rect = rect_full(0.025, 0.730, 0.975, 0.995)
@@ -9770,6 +9814,48 @@ func draw_settings_overlay(parent: Control) -> void:
 	# tree has resolved its compact grid geometry. Restore once more after layout
 	# so the selector remains the active keyboard target.
 	call_deferred("focus_named_control", settings_default_focus)
+	if settings_large_text_scroll != null and settings_large_text_status != null:
+		call_deferred("sync_settings_large_text_scroll_status", settings_large_text_scroll, settings_large_text_status)
+
+
+func sync_settings_large_text_scroll_status(settings_scroll: ScrollContainer, status_label: Label) -> void:
+	if settings_scroll == null or status_label == null or not is_instance_valid(settings_scroll) or not is_instance_valid(status_label):
+		return
+	var scrollbar := settings_scroll.get_v_scroll_bar()
+	var content := settings_scroll.find_child("SettingsLargeTextContent", true, false) as Control
+	if scrollbar == null or content == null:
+		return
+	var page := maxf(scrollbar.page, settings_scroll.size.y)
+	var scroll_range := maxf(0.0, scrollbar.max_value - page)
+	var value := clampf(scrollbar.value, 0.0, scroll_range)
+	var first_section := 1
+	var last_section := 1
+	var section_index := 0
+	for child in content.get_children():
+		var section := child as Control
+		if section == null:
+			continue
+		section_index += 1
+		var section_top := section.position.y
+		var section_bottom := section_top + section.size.y
+		if section_bottom > value + 1.0 and section_top < value + page - 1.0:
+			if first_section == 1 and section_index > 1:
+				first_section = section_index
+			last_section = section_index
+	if scroll_range <= 0.5:
+		first_section = 1
+		last_section = mini(3, maxi(1, section_index))
+	var at_end := value >= scroll_range - 0.5
+	var state_text := "已到末端" if at_end else "下方还有内容"
+	var detail := "当前显示第%d至%d个设置分区，共%d个" % [first_section, last_section, maxi(3, section_index)]
+	if at_end:
+		detail += "；已到设置末端"
+	else:
+		detail += "；继续向下滚动可查看未显示的设置项"
+	set_dynamic_label_text(status_label, "设置区 %d-%d/3 · %s" % [first_section, last_section, state_text], detail)
+	status_label.set_meta("settings_first_section", first_section)
+	status_label.set_meta("settings_last_section", last_section)
+	status_label.set_meta("settings_scroll_range", scroll_range)
 
 
 func draw_settings_overview_art(parent: Control) -> Control:

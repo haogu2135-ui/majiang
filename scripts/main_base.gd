@@ -560,6 +560,7 @@ var shop_scroll_restore_value := -1.0
 var shop_scroll_restore_progress := -1.0
 var shop_focus_restore_name := ""
 var telemetry_sheet_focus_restore_name := ""
+var telemetry_sheet_focus_restore_id := 0
 var replay_archive_focus_restore_id := ""
 var achievement_focused_index := -1
 var ui_optimization_ids: Array[String] = []
@@ -2771,8 +2772,10 @@ func set_status(text: String) -> void:
 	last_status_text = text
 	status_last_updated_msec = Time.get_ticks_msec()
 	if status_label != null and is_instance_valid(status_label):
-		status_label.text = text
-		status_label.tooltip_text = text
+		# The shared status bus is refreshed by many screens. Keep its compact
+		# display and its full semantic value in sync on every update.
+		set_dynamic_label_text(status_label, text, "状态：" + text.strip_edges())
+		status_label.set_meta("ui_state_source", "status_bus")
 
 
 # ============================================================

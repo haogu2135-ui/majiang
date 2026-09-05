@@ -45,6 +45,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"MeldGroup3DCastShadow",
 	"MeldGroup3DTopRim",
 	"ActionButtonSeal",
+	"ChatPanelInputShield",
 	"ChatPanelTitle",
 	"ChatPanelMessageScroll",
 	"ChatPanelTableLogButton",
@@ -1849,7 +1850,8 @@ func run() -> void:
 	scene.show_chat_panel()
 	check(scene.find_child("ChatPanelBrocadeTexture", true, false) != null and scene.find_child("ChatStreamTexture", true, false) != null, "chat panel renders reusable brocade and stream PNG textures")
 	check(scene.optional_gpt_illustration_texture("chat_gpt_panel") == null or scene.find_child("ChatGPTPanelTexture", true, false) != null, "chat panel consumes optional GPT panel texture when generated")
-	check(scene.find_child("ChatPanel", true, false) != null and scene.find_child("ChatPanelArt", true, false) != null and scene.find_child("ChatPanelHeader", true, false) != null and scene.find_child("ChatPanelCountBadge", true, false) != null, "chat panel renders illustrated header and count badge")
+	var chat_input_shield = scene.find_child("ChatPanelInputShield", true, false) as Control
+	check(scene.find_child("ChatPanel", true, false) != null and scene.find_child("ChatPanelArt", true, false) != null and scene.find_child("ChatPanelHeader", true, false) != null and scene.find_child("ChatPanelCountBadge", true, false) != null and chat_input_shield != null and chat_input_shield.mouse_filter == Control.MOUSE_FILTER_STOP and bool(chat_input_shield.get_meta("modal_input_shield", false)), "chat panel renders illustrated header and count badge with a modal background input shield")
 	check(scene.find_child("ChatPanelCloseButton", true, false) != null and scene.find_child("ChatPanelMessageText", true, false) != null and scene.find_child("ChatPanelQuickMessages", true, false) != null and scene.find_child("ChatPanelQuickMessagesLabel", true, false) != null and scene.find_child("ChatPanelCustomMessageLabel", true, false) != null, "chat panel exposes close message quick-message and custom-message controls")
 	check(scene.find_child("ChatPanelHeaderBridge", true, false) != null and scene.find_child("ChatPanelHeaderBridgeFill", true, false) != null and scene.find_child("ChatPanelHeaderBridgeGate", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelHeaderBridgeTick_") == 2, "chat panel renders header-to-feed bridge route")
 	check(scene.find_child("ChatPanelActivityRail", true, false) != null and scene.find_child("ChatPanelLatestGlow", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelMessageNode_") == 3, "chat panel renders activity rail and one visible node per recent message")

@@ -11620,6 +11620,7 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	apply_rect(title, rect_full(0.380, 0.060, 0.735, 0.265))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.tooltip_text = pending_danger_discard_text()
+	set_ui_full_text(title, pending_danger_discard_text(), "危险弃牌标题")
 	configure_clipped_label(title)
 	var seal = make_badge(panel, rect_full(0.750, 0.145, 0.855, 0.855), risk_badge_text(label_text), 11, Color(0.54, 0.16, 0.12, 0.94), Color(0.96, 0.50, 0.34, 0.34), Color(0.98, 0.90, 0.78))
 	seal.name = "DangerDiscardRiskSeal"
@@ -11636,11 +11637,17 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		compact_reason = str(danger_source.get("reason", ""))
 	elif str(report.get("feed_text", "")) != "":
 		compact_reason = str(report.get("feed_text", ""))
-	var detail = make_label(panel, compact_reason, 12, Color(0.92, 0.86, 0.72), true)
+	# The detail slot is deliberately short. The full reason remains available on
+	# hover/focus, so a long AI explanation cannot consume the action lane.
+	var detail_text := danger_discard_detail_display_text(compact_reason)
+	var detail = make_label(panel, detail_text, 12, Color(0.92, 0.86, 0.72), true)
 	detail.name = "DangerDiscardDetailText"
 	apply_rect(detail, rect_full(0.380, 0.410, 0.735, 0.700))
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	detail.tooltip_text = pending_danger_discard_text()
+	set_ui_full_text(detail, pending_danger_discard_text(), "危险弃牌完整说明")
+	detail.set_meta("text_slot_role", "danger_discard_detail")
+	detail.set_meta("text_slot_full_reason", compact_reason)
+	mark_ui_optimization(detail, "F-575")
 	configure_clipped_label(detail)
 	var source_trace = make_gpt_route_rail(rect_full(0.252, 0.305, 0.560, 0.350), Color(0.006, 0.016, 0.018, 0.44))
 	source_trace.name = "DangerDiscardSourceTrace"
@@ -11737,6 +11744,17 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		if seal_texture != null:
 			seal_texture.modulate.a = 0.10
 	return panel
+
+
+func danger_discard_detail_display_text(reason: String) -> String:
+	var clean := reason.strip_edges()
+	if clean == "":
+		return "牌路危险"
+	# Keep the visible slot to one scan-friendly line. The report itself is exposed
+	# through the control metadata and tooltip configured by the caller.
+	if clean.length() > 12:
+		return "牌路危险"
+	return clean
 
 
 func draw_danger_discard_decision_bridge(parent: Control, risk: float, alternatives: Array) -> Control:
@@ -11925,6 +11943,8 @@ func draw_diagnostic_dialog_art(parent: Control, lines: Array) -> Control:
 	var art = Control.new()
 	art.name = "DiagnosticDialogArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.clip_contents = true
+	art.set_meta("diagnostic_visual_scope", "header")
 	apply_rect(art, rect_full(0.045, 0.035, 0.955, 0.175))
 	parent.add_child(art)
 	var diagnostic_texture = add_illustration_texture(art, "diagnostic_wave", rect_full(-0.012, -0.360, 1.012, 1.360), 0.13, false)
@@ -18329,6 +18349,8 @@ func draw_settings_overlay(parent: Control) -> void:
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
 	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
 	var settings_content_parent: Control = null
+	var settings_large_text_scroll: ScrollContainer = null
+	var settings_large_text_status: Label = null
 	if compact_settings:
 		# 540px 高度仍保留每行 48px 的点击目标：紧凑分区改为全宽两列，
 		# 让声音、体验和系统都拥有足够的横向按钮空间。
@@ -18482,6 +18504,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.set_meta("ui_scroll_role", "settings_sections")
 		settings_scroll.set_meta("ui_minimum_row_height", 56.0)
 		mark_ui_optimization(settings_scroll, "F-557")
+		mark_ui_optimization(settings_scroll, "F-563")
 		apply_rect(settings_scroll, rect_full(0.035, 0.205, 0.965, 0.895))
 		panel.add_child(settings_scroll)
 		var settings_content := Control.new()
@@ -18490,6 +18513,27 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		settings_scroll.add_child(settings_content)
 		settings_content_parent = settings_content
+		settings_large_text_scroll = settings_scroll
+		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 下方还有内容", 10, Color(0.78, 0.88, 0.80), true)
+		settings_large_text_status.name = "SettingsLargeTextScrollStatus"
+		apply_rect(settings_large_text_status, rect_full(0.040, 0.902, 0.790, 0.942))
+		settings_large_text_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		settings_large_text_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		configure_clipped_label(settings_large_text_status)
+		set_ui_full_text(settings_large_text_status, "当前显示声音、体验和系统设置；向下滚动可查看未显示的设置项", "大字设置滚动位置")
+		mark_ui_optimization(settings_large_text_status, "F-563")
+		var settings_scrollbar := settings_scroll.get_v_scroll_bar()
+		if settings_scrollbar != null:
+			settings_scrollbar.value_changed.connect(func(_value: float) -> void:
+				sync_settings_large_text_scroll_status(settings_scroll, settings_large_text_status)
+			)
+		settings_scroll.resized.connect(func() -> void:
+			sync_settings_large_text_scroll_status(settings_scroll, settings_large_text_status)
+		)
+		settings_content.resized.connect(func() -> void:
+			sync_settings_large_text_scroll_status(settings_scroll, settings_large_text_status)
+		)
+		call_deferred("sync_settings_large_text_scroll_status", settings_scroll, settings_large_text_status)
 		audio_section_rect = rect_full(0.025, 0.000, 0.975, 0.275)
 		play_section_rect = rect_full(0.025, 0.305, 0.975, 0.700)
 		maint_section_rect = rect_full(0.025, 0.730, 0.975, 0.995)
@@ -18554,6 +18598,48 @@ func draw_settings_overlay(parent: Control) -> void:
 	# tree has resolved its compact grid geometry. Restore once more after layout
 	# so the selector remains the active keyboard target.
 	call_deferred("focus_named_control", settings_default_focus)
+	if settings_large_text_scroll != null and settings_large_text_status != null:
+		call_deferred("sync_settings_large_text_scroll_status", settings_large_text_scroll, settings_large_text_status)
+
+
+func sync_settings_large_text_scroll_status(settings_scroll: ScrollContainer, status_label: Label) -> void:
+	if settings_scroll == null or status_label == null or not is_instance_valid(settings_scroll) or not is_instance_valid(status_label):
+		return
+	var scrollbar := settings_scroll.get_v_scroll_bar()
+	var content := settings_scroll.find_child("SettingsLargeTextContent", true, false) as Control
+	if scrollbar == null or content == null:
+		return
+	var page := maxf(scrollbar.page, settings_scroll.size.y)
+	var scroll_range := maxf(0.0, scrollbar.max_value - page)
+	var value := clampf(scrollbar.value, 0.0, scroll_range)
+	var first_section := 1
+	var last_section := 1
+	var section_index := 0
+	for child in content.get_children():
+		var section := child as Control
+		if section == null:
+			continue
+		section_index += 1
+		var section_top := section.position.y
+		var section_bottom := section_top + section.size.y
+		if section_bottom > value + 1.0 and section_top < value + page - 1.0:
+			if first_section == 1 and section_index > 1:
+				first_section = section_index
+			last_section = section_index
+	if scroll_range <= 0.5:
+		first_section = 1
+		last_section = mini(3, maxi(1, section_index))
+	var at_end := value >= scroll_range - 0.5
+	var state_text := "已到末端" if at_end else "下方还有内容"
+	var detail := "当前显示第%d至%d个设置分区，共%d个" % [first_section, last_section, maxi(3, section_index)]
+	if at_end:
+		detail += "；已到设置末端"
+	else:
+		detail += "；继续向下滚动可查看未显示的设置项"
+	set_dynamic_label_text(status_label, "设置区 %d-%d/3 · %s" % [first_section, last_section, state_text], detail)
+	status_label.set_meta("settings_first_section", first_section)
+	status_label.set_meta("settings_last_section", last_section)
+	status_label.set_meta("settings_scroll_range", scroll_range)
 
 
 func draw_settings_overview_art(parent: Control) -> Control:
@@ -27917,8 +28003,10 @@ func show_telemetry_data_sheet() -> void:
 		return
 	var previous_focus := get_viewport().gui_get_focus_owner()
 	telemetry_sheet_focus_restore_name = "SettingRowButton_隐私诊断"
+	telemetry_sheet_focus_restore_id = 0
 	if previous_focus is Control and root_layer.is_ancestor_of(previous_focus):
 		telemetry_sheet_focus_restore_name = str((previous_focus as Control).name)
+		telemetry_sheet_focus_restore_id = (previous_focus as Control).get_instance_id()
 	var overlay := root_layer.find_child("SettingsOverlay", true, false) as Control
 	if overlay == null:
 		return
@@ -27928,6 +28016,8 @@ func show_telemetry_data_sheet() -> void:
 	sheet.name = "TelemetryDataSheet"
 	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
 	sheet.mouse_filter = Control.MOUSE_FILTER_STOP
+	sheet.set_meta("modal_input_shield", true)
+	mark_ui_optimization(sheet, "F-590")
 	overlay.add_child(sheet)
 	var sheet_scrim := make_fullrect_overlay(Color(0.004, 0.010, 0.012, 0.68), "ui_dark_scrim")
 	sheet_scrim.name = "TelemetryDataSheetScrim"
@@ -28076,8 +28166,13 @@ func close_telemetry_data_sheet() -> void:
 	telemetry_sheet_open = false
 	telemetry_clear_confirming = false
 	telemetry_clear_confirm_deadline_msec = 0
-	settings_focus_restore_name = telemetry_sheet_focus_restore_name if telemetry_sheet_focus_restore_name != "" else "SettingRowButton_隐私诊断"
+	var restored_control := node_from_instance_id(telemetry_sheet_focus_restore_id) as Control
+	if restored_control != null and is_instance_valid(restored_control) and root_layer != null and root_layer.is_ancestor_of(restored_control) and restored_control.focus_mode != Control.FOCUS_NONE:
+		settings_focus_restore_name = str(restored_control.name)
+	else:
+		settings_focus_restore_name = telemetry_sheet_focus_restore_name if telemetry_sheet_focus_restore_name != "" else "SettingRowButton_隐私诊断"
 	telemetry_sheet_focus_restore_name = ""
+	telemetry_sheet_focus_restore_id = 0
 	refresh_current_screen()
 
 func refresh_update_dialog() -> void:
@@ -28222,13 +28317,28 @@ func show_chat_panel() -> void:
 	# r215: GPT chrome conversion
 	var panel_rect := chat_panel_rect()
 	var compact_chat := mode == "online_game" and ((panel_rect.size.x - panel_rect.position.x) < 0.300 or (panel_rect.size.y - panel_rect.position.y) < 0.340)
+	# The drawer is modal for the table: keep a transparent root-level hit target
+	# behind it so clicks cannot reach rivers, hand tiles, or the action dock.
+	var input_shield := Control.new()
+	input_shield.name = "ChatPanelInputShield"
+	input_shield.set_anchors_preset(Control.PRESET_FULL_RECT)
+	input_shield.mouse_filter = Control.MOUSE_FILTER_STOP
+	input_shield.z_index = 44
+	input_shield.set_meta("modal_input_shield", true)
+	input_shield.set_meta("layout_role", "chat_modal_background")
+	input_shield.gui_input.connect(func(_event: InputEvent) -> void:
+		input_shield.accept_event()
+	)
+	root_layer.add_child(input_shield)
 	var chat_panel = make_gpt_plate_rect(panel_rect, Color(0.008, 0.018, 0.022, 0.95), "ui_jade_reading_plate")
 	chat_panel.name = "ChatPanel"
 	chat_panel.z_index = 45
 	chat_panel.set_meta("layout_role", chat_panel_route_name())
 	chat_panel.set_meta("compact_chat", compact_chat)
+	chat_panel.set_meta("modal_input_shield", true)
 	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	chat_panel.clip_contents = true
+	mark_ui_optimization(chat_panel, "F-579")
 	root_layer.add_child(chat_panel)
 	var ledger := root_layer.find_child("TableLogLedgerPanel", true, false) as Control
 	if ledger != null and chat_panel_route_name() == "upper_meld_safe_drawer":
@@ -28787,20 +28897,28 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	draw_diagnostic_dismiss_art(bg)
 
 	# 创建诊断信息面板
-	var panel = make_gpt_plate_rect(rect_full(0.1, 0.15, 0.9, 0.85), Color(0.026, 0.058, 0.060, 0.95), "ui_jade_reading_plate")
+	# The report body uses a quiet cropped scrim; textured diagnostic artwork is
+	# reserved for the header so long reports remain easy to scan.
+	var panel = make_gpt_center_crop_plate_rect(rect_full(0.1, 0.15, 0.9, 0.85), Color(0.026, 0.058, 0.060, 0.95), "ui_dark_scrim", 0.30)
 	panel.name = "DiagnosticDialogPanel"
 	# The GPT plate is normally an input-ignoring visual host. Make this modal
 	# surface an explicit input boundary so its child actions receive mouse input.
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	root_layer.add_child(panel)
 	var diagnostic_gpt_key := "diagnostic_gpt_panel"
-	var diagnostic_gpt_texture = add_optional_gpt_illustration_texture(panel, diagnostic_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.14, false)
+	# Keep the authored panel texture in the header only. The report body is a
+	# quiet reading surface and must remain clear while it scrolls.
+	var diagnostic_gpt_texture = add_optional_gpt_illustration_texture(panel, diagnostic_gpt_key, rect_full(0.018, 0.018, 0.982, 0.210), 0.14, false)
 	if diagnostic_gpt_texture != null:
 		diagnostic_gpt_texture.name = "DiagnosticGPTPanelTexture"
+		diagnostic_gpt_texture.set_meta("diagnostic_visual_scope", "header")
+		mark_ui_optimization(diagnostic_gpt_texture, "F-588")
 		panel.move_child(diagnostic_gpt_texture, 0)
 	var diagnostic_wave_hero = add_optional_gpt_illustration_texture(panel, "diagnostic_wave_hero", rect_full(0.080, 0.085, 0.920, 0.210), 0.20, false)
 	if diagnostic_wave_hero != null:
 		diagnostic_wave_hero.name = "DiagnosticWaveHeroTexture"
+		diagnostic_wave_hero.set_meta("diagnostic_visual_scope", "header")
+		mark_ui_optimization(diagnostic_wave_hero, "F-588")
 		panel.move_child(diagnostic_wave_hero, min(1, panel.get_child_count() - 1))
 	draw_diagnostic_dialog_art(panel, lines)
 	draw_diagnostic_result_sync_art(panel, lines)
@@ -28861,7 +28979,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 			label.custom_minimum_size.y = 12.0
 		else:
 			var diagnostic_font_size := accessibility_font_size(26 if line.begins_with("【") else 20)
-			var diagnostic_width := maxf(260.0, effective_viewport_size().x * 0.720)
+			var diagnostic_width := diagnostic_content_viewport_width(content_scroll, null)
 			var diagnostic_height := estimate_wrapped_text_height(line, diagnostic_width, diagnostic_font_size, 6.0)
 			configure_wrapped_label(label, diagnostic_width, diagnostic_height, 6.0)
 		vbox.add_child(label)
@@ -28972,6 +29090,7 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	var panel := content_scroll.get_parent() as Control
 	if panel == null or panel.size.y <= 1.0:
 		return
+	refresh_diagnostic_line_measurements(content_scroll, content_list)
 	# Snap the viewport to a complete row while keeping a fixed visual buffer
 	# before the close lane. This prevents the first frame from bisecting text.
 	# The list starts at 21.5% and the status lane starts at 78.5%. Keep the
@@ -28994,6 +29113,44 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	# reported as one pixel clipped after the ScrollContainer rounds its size.
 	content_scroll.offset_bottom = complete_height + 2.0
 	queue_diagnostic_layout_retry(content_scroll, content_list)
+
+
+func diagnostic_content_viewport_width(content_scroll: ScrollContainer, content_list: Control = null) -> float:
+	var width := 0.0
+	if content_list != null and is_instance_valid(content_list) and content_list.size.x > 1.0:
+		# The scroll child width is the post-scrollbar content width, which is the
+		# width the wrapped labels actually receive.
+		width = content_list.size.x
+	elif content_scroll != null and is_instance_valid(content_scroll) and content_scroll.size.x > 1.0:
+		width = content_scroll.size.x
+		var scrollbar := content_scroll.get_v_scroll_bar()
+		if scrollbar != null and scrollbar.visible:
+			width -= scrollbar.size.x
+	if width <= 1.0:
+		# Conservative first pass; the deferred measurement replaces this once
+		# anchors and the native scrollbar have resolved.
+		width = effective_viewport_size().x * 0.640
+	return maxf(180.0, width - 6.0)
+
+
+func refresh_diagnostic_line_measurements(content_scroll: ScrollContainer, content_list: Control) -> void:
+	if content_scroll == null or not is_instance_valid(content_scroll) or content_list == null or not is_instance_valid(content_list):
+		return
+	var measured_width := diagnostic_content_viewport_width(content_scroll, content_list)
+	for child in content_list.get_children():
+		var label := child as Label
+		if label == null or not is_instance_valid(label):
+			continue
+		var line := label.text
+		if line == "":
+			label.custom_minimum_size.y = 12.0
+			continue
+		var font_size := label.get_theme_font_size("font_size")
+		var line_gap := float(label.get_meta("wrapped_line_gap", 6.0))
+		var minimum_height := 50.0 if line.begins_with("【") and large_text_enabled else (38.0 if line.begins_with("【") else 30.0)
+		label.custom_minimum_size.y = maxf(minimum_height, estimate_wrapped_text_height(line, measured_width, font_size, line_gap))
+		label.set_meta("diagnostic_measurement_width", measured_width)
+		label.set_meta("diagnostic_measurement_source", "scroll_viewport_content_width")
 
 
 func queue_diagnostic_layout_retry(content_scroll: ScrollContainer, content_list: Control) -> void:
@@ -29174,14 +29331,16 @@ func show_exit_confirm() -> void:
 	exit_btn.custom_minimum_size = Vector2(140, 52)
 	draw_exit_confirm_button_art(exit_btn, "leave", Color(0.56, 0.36, 0.30))
 	button_row.add_child(exit_btn)
-	continue_btn.focus_neighbor_left = continue_btn.get_path()
+	continue_btn.focus_neighbor_left = exit_btn.get_path()
 	continue_btn.focus_neighbor_right = exit_btn.get_path()
 	continue_btn.focus_next = exit_btn.get_path()
 	continue_btn.focus_previous = exit_btn.get_path()
 	exit_btn.focus_neighbor_left = continue_btn.get_path()
-	exit_btn.focus_neighbor_right = exit_btn.get_path()
+	exit_btn.focus_neighbor_right = continue_btn.get_path()
 	exit_btn.focus_next = continue_btn.get_path()
 	exit_btn.focus_previous = continue_btn.get_path()
+	mark_ui_optimization(continue_btn, "F-589")
+	mark_ui_optimization(exit_btn, "F-589")
 	continue_btn.grab_focus()
 
 	# 弹窗入场动画 - 使用AnimationEffects增强
@@ -29337,49 +29496,55 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	# 加载动画区域
 	var loading_area = Control.new()
 	loading_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(loading_area, rect_full(0.18, 0.590, 0.82, 0.700))
+	apply_rect(loading_area, rect_full(0.18, 0.570 if loading_error else 0.590, 0.82, 0.665 if loading_error else 0.700))
 	center_panel.add_child(loading_area)
 
 	# 加载文字
 	var loading_status_text := str(loading_view_state.get("status", "正在加载中"))
 	if loading_error and loading_status_text.strip_edges() == "":
 		loading_status_text = "加载失败，请选择恢复动作"
-	var loading_text = make_label(loading_area, loading_status_text, 20, Color(1.0, 0.98, 0.92, 1.0), true)
+	var loading_status_display := "加载失败，请选择恢复动作" if loading_error else loading_status_text
+	var loading_text = make_label(loading_area, loading_status_display, 20, Color(1.0, 0.98, 0.92, 1.0), true)
 	loading_text.name = "LoadingStatusLabel"
 	apply_rect(loading_text, rect_full(0.0, 0.0, 1.0, 1.0))
 	loading_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	loading_text.tooltip_text = loading_status_text
 	configure_wrapped_label(loading_text, maxf(260.0, effective_viewport_size().x * 0.300), 0.0, 3.0)
-	loading_text.set_meta("accessible_name", "加载状态：" + loading_status_text)
+	set_ui_full_text(loading_text, loading_status_text, "加载状态：" + loading_status_text)
 	mark_ui_optimization(loading_text, "F-430")
 	loading_text.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
 	loading_text.add_theme_constant_override("outline_size", 3)
 	loading_area.move_to_front()
 	if loading_error:
-		var error_hint := make_label(center_panel, "加载未完成 · 可重试或返回主菜单", 12, Color(1.0, 0.76, 0.62), false)
+		var error_hint := make_label(center_panel, "加载失败 · 可重试或返回主菜单", 12, Color(1.0, 0.76, 0.62), false)
 		error_hint.name = "LoadingErrorHint"
-		apply_rect(error_hint, rect_full(0.120, 0.705, 0.880, 0.735))
+		apply_rect(error_hint, rect_full(0.120, 0.675, 0.880, 0.720))
 		error_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		error_hint.tooltip_text = "加载失败后仍可重试；返回不会删除本地进度"
+		error_hint.tooltip_text = loading_status_text
 		configure_clipped_label(error_hint)
-		set_ui_full_text(error_hint, "加载未完成 · 可重试或返回主菜单；返回不会删除本地进度", "加载错误恢复提示")
+		set_ui_full_text(error_hint, "加载失败：%s；可重试或返回主菜单，返回不会删除本地进度" % loading_status_text, "加载错误恢复提示")
 		mark_ui_optimization(error_hint, "F-495")
+		var error_action_lane := Control.new()
+		error_action_lane.name = "LoadingErrorActionLane"
+		error_action_lane.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		apply_rect(error_action_lane, rect_full(0.120, 0.730, 0.880, 0.890))
+		center_panel.add_child(error_action_lane)
 		var retry_button := make_small_button("重试", Color(0.34, 0.62, 0.48), Callable(self, "retry_loading_screen"))
 		retry_button.name = "LoadingRetryButton"
 		retry_button.custom_minimum_size = Vector2(116, UI_MIN_TOUCH_TARGET)
 		retry_button.tooltip_text = "重新尝试加载"
 		set_ui_full_text(retry_button, retry_button.tooltip_text, "重试加载")
 		mark_ui_optimization(retry_button, "F-496")
-		apply_rect(retry_button, rect_full(0.220, 0.750, 0.480, 0.825))
-		center_panel.add_child(retry_button)
+		apply_rect(retry_button, rect_full(0.0, 0.030, 0.460, 0.970))
+		error_action_lane.add_child(retry_button)
 		var return_button := make_small_button("返回", Color(0.46, 0.34, 0.28), Callable(self, "cancel_loading_screen"))
 		return_button.name = "LoadingReturnButton"
 		return_button.custom_minimum_size = Vector2(116, UI_MIN_TOUCH_TARGET)
 		return_button.tooltip_text = "返回主菜单，不删除本地进度"
 		set_ui_full_text(return_button, return_button.tooltip_text, "返回主菜单")
 		mark_ui_optimization(return_button, "F-497")
-		apply_rect(return_button, rect_full(0.520, 0.750, 0.780, 0.825))
-		center_panel.add_child(return_button)
+		apply_rect(return_button, rect_full(0.540, 0.030, 1.000, 0.970))
+		error_action_lane.add_child(return_button)
 		configure_ordered_focus_navigation(center_panel, [retry_button, return_button], "LoadingRetryButton")
 
 	# 底部游戏提示
@@ -29405,6 +29570,11 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	tip_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.85))
 	tip_label.add_theme_constant_override("outline_size", 2)
 	tip_label.move_to_front()
+	if loading_error:
+		tip_label.visible = false
+		var error_tip_art := center_panel.find_child("LoadingTipArt", true, false) as Control
+		if error_tip_art != null:
+			error_tip_art.visible = false
 
 	# 版本信息
 	var version_plate = make_gpt_center_crop_plate_rect(rect_full(0.20, 0.890, 0.80, 0.985), Color(0.018, 0.030, 0.026, 0.46), "ui_dark_scrim", 0.12)
@@ -30113,21 +30283,62 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		event_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		event_button.add_theme_font_size_override("font_size", accessibility_font_size(11))
 		event_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		event_button.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+		event_button.clip_text = false
+		event_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		event_button.tooltip_text = "第%d条事件：%s · 点击选择，方向键逐条移动" % [index + 1, event_text]
 		event_button.set_meta("timeline_event_index", index)
 		event_button.set_meta("timeline_sequence", int(event.get("sequence", index + 1)))
 		event_button.set_meta("accessible_name", "回放第%d条：%s" % [index + 1, event_text])
 		event_button.set_meta("ui_full_text", event_text)
+		event_button.set_meta("timeline_text_slot", "measured_wrapped_row")
+		event_button.set_meta("timeline_full_event_text", event_text)
+		mark_ui_optimization(event_button, "F-586")
 		mark_ui_optimization(event_button, "F-411")
 		event_button.focus_entered.connect(func() -> void:
 			set_replay_timeline_selection(selected_index, false)
 		)
 		event_list.add_child(event_button)
 	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, float(event_list.get_child_count() * 47)))
+	call_deferred("normalize_replay_timeline_rows", event_list)
 	if replay_timeline_selected_index < 0 or replay_timeline_selected_index >= event_list.get_child_count():
 		replay_timeline_selected_index = 0
 	configure_replay_timeline_focus_navigation(focus_first)
 	set_replay_timeline_selection(replay_timeline_selected_index, false)
+
+
+func normalize_replay_timeline_rows(event_list: VBoxContainer) -> void:
+	if event_list == null or not is_instance_valid(event_list):
+		return
+	var event_scroll := event_list.get_parent() as ScrollContainer
+	if event_scroll == null or not is_instance_valid(event_scroll):
+		return
+	var measured_width := event_list.size.x
+	if measured_width <= 1.0:
+		measured_width = event_scroll.size.x
+		var scrollbar := event_scroll.get_v_scroll_bar()
+		if scrollbar != null and scrollbar.visible:
+			measured_width -= scrollbar.size.x
+	measured_width = maxf(180.0, measured_width - 18.0)
+	var total_height := 0.0
+	var row_count := 0
+	for child in event_list.get_children():
+		var row := child as Button
+		if row == null or not is_instance_valid(row):
+			continue
+		row_count += 1
+		var font_size := row.get_theme_font_size("font_size")
+		var row_height := estimate_wrapped_text_height(row.text, measured_width, font_size, 4.0) + 12.0
+		row.custom_minimum_size = Vector2(0.0, maxf(44.0, row_height))
+		row.set_meta("timeline_measured_width", measured_width)
+		row.set_meta("timeline_measured_height", row.custom_minimum_size.y)
+		total_height += row.custom_minimum_size.y
+	var separation := 3.0
+	if row_count > 1:
+		total_height += float(row_count - 1) * separation
+	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, total_height))
+	event_list.set_meta("timeline_measured_width", measured_width)
+	event_list.set_meta("timeline_measurement_source", "timeline_scroll_viewport_width")
 
 
 func configure_replay_timeline_focus_navigation(focus_first: bool = false) -> void:
@@ -34770,9 +34981,9 @@ func pending_claim_source_name(source_seat: int) -> String:
 
 func ordered_pending_claim_options(options: Array, recommendation: Dictionary = {}) -> Array:
 	var ordered: Array = []
-	var preferred := str(recommendation.get("claim", ""))
-	if preferred != "" and preferred != "pass" and options.has(preferred):
-		ordered.append(preferred)
+	# Recommendations are expressed by styling and metadata. Keep the visual order
+	# stable so a refreshed recommendation cannot move a button under the pointer or
+	# change the keyboard scan order.
 	for claim in ["hu", "gang", "peng", "chi"]:
 		if options.has(claim) and not ordered.has(claim):
 			ordered.append(claim)
@@ -35375,11 +35586,22 @@ func finalize_action_bar_layout() -> void:
 					if action_key == "":
 						var response_text := response.text.strip_edges()
 						action_key = "chi" if response_text.begins_with("吃") else ("peng" if response_text.begins_with("碰") else ("gang" if response_text.begins_with("杠") else ("hu" if response_text.begins_with("胡") else "action")))
-					response.set_meta("pending_claim_action", action_key)
-					response.set_meta("pending_claim_response_index", response_index)
-					response.name = "PendingClaimPrimaryButton" if response_index == 0 else "PendingClaimButton_%s_%02d" % [action_key, response_index]
-					response.set_meta("pending_claim_default", response_index == 0)
-					response_index += 1
+						response.set_meta("pending_claim_action", action_key)
+						response.set_meta("pending_claim_response_index", response_index)
+						response.set_meta("pending_claim_visual_order", response_index)
+						response.name = "PendingClaimPrimaryButton" if response_index == 0 else "PendingClaimButton_%s_%02d" % [action_key, response_index]
+						response.set_meta("pending_claim_default", response_index == 0)
+						var response_shortcut := action_button_shortcut_hint(response.text)
+						set_ui_full_text(response, response.text + ("；快捷键 " + response_shortcut if response_shortcut != "" else ""), "响应动作：" + response.text)
+						mark_ui_optimization(response, "F-574")
+						response_index += 1
+		if response_grid != null:
+			response_grid.set_meta("visual_order", "胡 > 杠 > 碰 > 吃；过在末端辅助栏")
+			mark_ui_optimization(response_grid, "F-574")
+		var pending_tail_lane := action_bar.get_node_or_null("PendingClaimSecondaryLane") as Control
+		if pending_tail_lane != null:
+			pending_tail_lane.set_meta("visual_order", "过/取消/语音")
+			mark_ui_optimization(pending_tail_lane, "F-574")
 	var default_focus_name := action_bar_default_focus_name()
 	configure_button_focus_navigation(action_bar, default_focus_name, default_focus_name != "")
 	configure_pending_claim_spatial_focus_navigation()
@@ -40421,6 +40643,10 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 	if panel != null and is_instance_valid(panel):
 		root_layer.remove_child(panel)
 		panel.queue_free()
+	var input_shield := root_layer.find_child("ChatPanelInputShield", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if input_shield != null and is_instance_valid(input_shield):
+		root_layer.remove_child(input_shield)
+		input_shield.queue_free()
 	var ledger := root_layer.find_child("TableLogLedgerPanel", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
 	if ledger != null and bool(ledger.get_meta("hidden_for_chat", false)):
 		ledger.visible = true

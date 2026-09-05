@@ -2977,9 +2977,9 @@ func pending_claim_source_name(source_seat: int) -> String:
 
 func ordered_pending_claim_options(options: Array, recommendation: Dictionary = {}) -> Array:
 	var ordered: Array = []
-	var preferred := str(recommendation.get("claim", ""))
-	if preferred != "" and preferred != "pass" and options.has(preferred):
-		ordered.append(preferred)
+	# Recommendations are expressed by styling and metadata. Keep the visual order
+	# stable so a refreshed recommendation cannot move a button under the pointer or
+	# change the keyboard scan order.
 	for claim in ["hu", "gang", "peng", "chi"]:
 		if options.has(claim) and not ordered.has(claim):
 			ordered.append(claim)
@@ -3582,11 +3582,22 @@ func finalize_action_bar_layout() -> void:
 					if action_key == "":
 						var response_text := response.text.strip_edges()
 						action_key = "chi" if response_text.begins_with("吃") else ("peng" if response_text.begins_with("碰") else ("gang" if response_text.begins_with("杠") else ("hu" if response_text.begins_with("胡") else "action")))
-					response.set_meta("pending_claim_action", action_key)
-					response.set_meta("pending_claim_response_index", response_index)
-					response.name = "PendingClaimPrimaryButton" if response_index == 0 else "PendingClaimButton_%s_%02d" % [action_key, response_index]
-					response.set_meta("pending_claim_default", response_index == 0)
-					response_index += 1
+						response.set_meta("pending_claim_action", action_key)
+						response.set_meta("pending_claim_response_index", response_index)
+						response.set_meta("pending_claim_visual_order", response_index)
+						response.name = "PendingClaimPrimaryButton" if response_index == 0 else "PendingClaimButton_%s_%02d" % [action_key, response_index]
+						response.set_meta("pending_claim_default", response_index == 0)
+						var response_shortcut := action_button_shortcut_hint(response.text)
+						set_ui_full_text(response, response.text + ("；快捷键 " + response_shortcut if response_shortcut != "" else ""), "响应动作：" + response.text)
+						mark_ui_optimization(response, "F-574")
+						response_index += 1
+		if response_grid != null:
+			response_grid.set_meta("visual_order", "胡 > 杠 > 碰 > 吃；过在末端辅助栏")
+			mark_ui_optimization(response_grid, "F-574")
+		var pending_tail_lane := action_bar.get_node_or_null("PendingClaimSecondaryLane") as Control
+		if pending_tail_lane != null:
+			pending_tail_lane.set_meta("visual_order", "过/取消/语音")
+			mark_ui_optimization(pending_tail_lane, "F-574")
 	var default_focus_name := action_bar_default_focus_name()
 	configure_button_focus_navigation(action_bar, default_focus_name, default_focus_name != "")
 	configure_pending_claim_spatial_focus_navigation()
@@ -8628,6 +8639,10 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 	if panel != null and is_instance_valid(panel):
 		root_layer.remove_child(panel)
 		panel.queue_free()
+	var input_shield := root_layer.find_child("ChatPanelInputShield", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if input_shield != null and is_instance_valid(input_shield):
+		root_layer.remove_child(input_shield)
+		input_shield.queue_free()
 	var ledger := root_layer.find_child("TableLogLedgerPanel", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
 	if ledger != null and bool(ledger.get_meta("hidden_for_chat", false)):
 		ledger.visible = true
