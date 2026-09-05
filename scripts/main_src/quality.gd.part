@@ -401,6 +401,7 @@ func request_delete_replay_archive(archive_id: String) -> void:
 	replay_delete_target_id = archive_id
 	replay_delete_confirming = true
 	refresh_replay_archive_view()
+	call_deferred("focus_named_control", "ReplayArchiveDeleteButton_%s" % archive_id.left(8))
 	show_toast("再次点击删除，确认移除这条回放")
 
 
@@ -556,15 +557,22 @@ func telemetry_consent_status_text() -> String:
 	return "未同意 · 默认不记录"
 
 
+func telemetry_permission_summary_text() -> String:
+	var permission := "开启" if telemetry_consent else ("关闭" if telemetry_consent_decided else "未设置")
+	return "数据收集：%s · 本地队列 %d 条" % [permission, telemetry_outbox.size()]
+
+
 func toggle_telemetry_consent() -> void:
 	telemetry_consent_decided = true
 	telemetry_consent = not telemetry_consent
 	if telemetry_consent:
+		telemetry_last_action = "已同意记录匿名诊断数据"
 		save_settings()
 		telemetry_record_event("consent_granted")
 		show_toast("已同意记录匿名诊断数据")
 	else:
 		clear_telemetry_data(true)
+		telemetry_last_action = "已关闭记录并清空本地队列"
 		save_settings()
 		show_toast("已关闭诊断数据记录并清空本地队列")
 	if telemetry_sheet_open:
@@ -577,13 +585,17 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 	if not confirmed and not telemetry_clear_confirming:
 		telemetry_clear_confirming = true
 		telemetry_clear_confirm_deadline_msec = Time.get_ticks_msec() + 5000
+		telemetry_last_action = "等待确认清除本地匿名数据"
 		refresh_telemetry_data_sheet()
+		mark_ui_optimization(root_layer.find_child("TelemetryClearButton", true, false) as Control, "F-405")
+		call_deferred("focus_named_control", "TelemetryClearButton")
 		show_toast("再次点击清除，确认删除本地匿名数据")
 		return
 	telemetry_clear_confirming = false
 	telemetry_clear_confirm_deadline_msec = 0
 	telemetry_outbox.clear()
 	telemetry_export_status = "未导出"
+	telemetry_last_action = "已清除本地匿名数据"
 	save_telemetry_state()
 	if telemetry_sheet_open:
 		refresh_telemetry_data_sheet()
@@ -594,6 +606,7 @@ func export_telemetry_data() -> bool:
 	var export_payload := {"schema": TELEMETRY_SCHEMA_VERSION, "events": telemetry_outbox.duplicate(true)}
 	DisplayServer.clipboard_set(JSON.stringify(export_payload))
 	telemetry_export_status = "已复制 · %d 条" % telemetry_outbox.size()
+	telemetry_last_action = "已导出并复制 %d 条匿名事件" % telemetry_outbox.size()
 	if telemetry_sheet_open:
 		refresh_telemetry_data_sheet()
 	show_toast("匿名诊断数据已复制；不含昵称、房间号或牌面")

@@ -74,7 +74,7 @@ REQUIRED_INTERACTIVE_STATE_CONTRACTS = {
     },
     "26_replay_import": {
         "fixture_seed": "seed_preview_replay_import",
-        "required_nodes": ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline", "ReplayImportTimelineScroll", "ReplayArchivePane", "ReplayArchiveScroll", "ReplayImportEventText"],
+        "required_nodes": ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline", "ReplayImportTimelineScroll", "ReplayArchivePane", "ReplayArchiveScroll", "ReplayImportEventList"],
         "default_focus": "ReplayImportCodeInput",
         "state_text": "校验通过",
     },

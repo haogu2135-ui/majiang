@@ -557,13 +557,24 @@ var settings_panel_open = false
 var settings_focus_restore_name := ""
 var menu_focus_restore_name := ""
 var shop_scroll_restore_value := -1.0
+var shop_scroll_restore_progress := -1.0
 var shop_focus_restore_name := ""
+var telemetry_sheet_focus_restore_name := ""
+var replay_archive_focus_restore_id := ""
+var achievement_focused_index := -1
+var ui_optimization_ids: Array[String] = []
 var stats_selected_rule := ""
 var reset_progress_confirming = false
 var reset_progress_confirm_deadline_msec := 0
 var exit_confirm_panel: Control = null
 var exit_confirm_focus_restore_id := 0
 var update_dialog_focus_restore_id := 0
+var chat_focus_restore_id := 0
+var chat_focus_restore_name := ""
+var chat_focus_restore_hand_index := -1
+var advisor_focus_restore_id := 0
+var advisor_focus_restore_name := ""
+var advisor_focus_restore_hand_index := -1
 var daily_login_view_state: Dictionary = {}
 var loading_screen_active := false
 var loading_view_state: Dictionary = {}
@@ -644,6 +655,7 @@ var round_event_history: Array = []  # 当前牌局结构化事件，用于战�
 var replay_import_payload: Dictionary = {}
 var replay_import_code_draft := ""
 var replay_import_input: LineEdit
+var replay_timeline_selected_index := -1
 var round_event_sequence := 0
 var active_round_id := ""
 var telemetry_consent := false
@@ -654,6 +666,7 @@ var telemetry_save_pending := false
 var telemetry_save_due_msec := 0
 var telemetry_upload_status := "本地队列"
 var telemetry_export_status := "未导出"
+var telemetry_last_action := "尚未操作"
 var telemetry_sheet_open := false
 var telemetry_clear_confirming := false
 var telemetry_clear_confirm_deadline_msec := 0
@@ -744,6 +757,9 @@ var advisor_detail_open := false
 var table_log_archive_open := false
 var table_log_chat_restore_pending := false
 var table_log_chat_draft := ""
+var diagnostic_copy_feedback := ""
+var pending_claim_auto_pass_feedback := ""
+var pending_claim_auto_pass_feedback_until_msec := 0
 var tile_order: Dictionary = {}
 var tile_sort_order: Dictionary = {}
 var tile_metadata_ready = false
@@ -2049,9 +2065,20 @@ func configure_line_edit_input(edit: LineEdit, field_label: String = "", max_len
 	if field_label != "":
 		edit.set_meta("accessible_name", field_label)
 		edit.set_meta("ui_full_text", edit.text)
+		edit.set_meta("ui_input_caption", field_label)
+		edit.set_meta("ui_value_length", edit.text.length())
 	edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	if edit.custom_minimum_size.y < UI_MIN_TOUCH_TARGET:
 		edit.custom_minimum_size.y = UI_MIN_TOUCH_TARGET
+	if not bool(edit.get_meta("ui_input_metrics_connected", false)):
+		edit.text_changed.connect(func(value: String) -> void:
+			if not is_instance_valid(edit):
+				return
+			edit.set_meta("ui_value_length", value.length())
+			edit.set_meta("ui_value_has_text", not value.strip_edges().is_empty())
+		)
+		edit.set_meta("ui_input_metrics_connected", true)
+	mark_ui_optimization(edit, "F-385")
 
 func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = "") -> void:
 	if scroll == null or not is_instance_valid(scroll):
@@ -2066,6 +2093,8 @@ func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = 
 	elif scroll.tooltip_text == "":
 		scroll.tooltip_text = "上下滚动查看更多内容"
 	scroll.set_meta("ui_scroll_view", scroll_label)
+	scroll.set_meta("ui_scroll_boundary", "top")
+	mark_ui_optimization(scroll, "F-386")
 	# Screens can refresh in place. Keep the shared keyboard route idempotent so a
 	# second configuration does not multiply PageUp/PageDown handling.
 	if not bool(scroll.get_meta("ui_scroll_keyboard_route_connected", false)):
@@ -2073,7 +2102,28 @@ func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = 
 			handle_scroll_container_keyboard_input(event, scroll)
 		)
 		scroll.set_meta("ui_scroll_keyboard_route_connected", true)
+	var scroll_bar := scroll.get_v_scroll_bar()
+	if scroll_bar != null and not bool(scroll.get_meta("ui_scroll_metrics_connected", false)):
+		scroll_bar.value_changed.connect(func(value: float) -> void:
+			if not is_instance_valid(scroll):
+				return
+			var range_value := maxf(0.0, scroll_bar.max_value - scroll_bar.page)
+			scroll.set_meta("ui_scroll_position", int(round(value)))
+			scroll.set_meta("ui_scroll_range", int(round(range_value)))
+			scroll.set_meta("ui_scroll_boundary", "top" if value <= 0.5 else ("bottom" if value >= range_value - 0.5 else "middle"))
+		)
+		scroll.set_meta("ui_scroll_metrics_connected", true)
 	scroll.set_meta("ui_scroll_keyboard_commands", "PageUp/PageDown/Home/End")
+
+func mark_ui_optimization(control: Control, finding_id: String) -> void:
+	if control == null or not is_instance_valid(control) or finding_id.strip_edges() == "":
+		return
+	var ids: Array = control.get_meta("ui_optimization_ids", [])
+	if not ids.has(finding_id):
+		ids.append(finding_id)
+		control.set_meta("ui_optimization_ids", ids)
+	if not ui_optimization_ids.has(finding_id):
+		ui_optimization_ids.append(finding_id)
 
 func handle_scroll_container_keyboard_input(event: InputEvent, scroll: ScrollContainer) -> void:
 	if scroll == null or not is_instance_valid(scroll) or not event is InputEventKey:

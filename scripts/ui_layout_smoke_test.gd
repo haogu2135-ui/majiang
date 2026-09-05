@@ -1321,8 +1321,14 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 		if code_summary != null:
 			check(code_summary.text.contains("/") and code_summary.text.contains("字符") and code_summary.text.contains(input.text.left(8)), "replay import summary exposes the live length and stable prefix after paste at %s (summary=%s input_prefix=%s)" % [viewport_size, code_summary.text, input.text.left(8)])
 		scene.import_replay_from_input()
-		var event_text := scene.find_child("ReplayImportEventText", true, false) as Label
-		check(status.text.contains("校验通过") and scene.replay_import_payload.size() > 0 and event_text != null and event_text.visible and event_text.text.contains("弃牌") and event_text.text.contains("吃") and not event_text.text.contains("discard"), "replay import verifies the digest and renders localized event names at %s" % viewport_size)
+		var event_list := scene.find_child("ReplayImportEventList", true, false) as VBoxContainer
+		var event_rows := controls_with_name_prefix(event_list, "ReplayImportEventRow_") if event_list != null else []
+		check(status.text.contains("校验通过") and scene.replay_import_payload.size() > 0 and event_list != null and event_rows.size() >= 2 and (event_rows[0] as Button).text.contains("弃牌") and (event_rows[1] as Button).text.contains("吃") and not (event_rows[0] as Button).text.contains("discard"), "replay import verifies the digest and renders localized event rows at %s" % viewport_size)
+		if not event_rows.is_empty():
+			var first_event_row := event_rows[0] as Button
+			check(first_event_row.focus_mode == Control.FOCUS_ALL and first_event_row.tooltip_text.contains("点击选择"), "replay timeline gives each event a keyboard-readable selection target at %s" % viewport_size)
+			first_event_row.pressed.emit()
+			check(first_event_row.has_focus() and scene.replay_timeline_selected_index == 0, "replay timeline selection keeps the first event focused after archive import at %s" % viewport_size)
 		var saved_round_id: String = scene.active_round_id
 		var saved_events: Array = scene.round_event_history.duplicate(true)
 		var saved_sequence: int = scene.round_event_sequence
@@ -1333,8 +1339,14 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 			scene.record_round_event("draw", {"seat": event_index % 4})
 		scene.set_replay_import_input_text(scene.round_replay_share_code())
 		scene.import_replay_from_input()
-		var long_event_text := scene.find_child("ReplayImportEventText", true, false) as Label
-		check(status.text.contains("180 条事件") and long_event_text != null and long_event_text.custom_minimum_size.y >= 3600.0 and long_event_text.text.contains("001  摸牌") and long_event_text.text.contains("180  摸牌"), "replay import keeps both ends of a 180-event timeline available through its scroll child at %s" % viewport_size)
+		var long_event_list := scene.find_child("ReplayImportEventList", true, false) as VBoxContainer
+		var long_event_rows := controls_with_name_prefix(long_event_list, "ReplayImportEventRow_") if long_event_list != null else []
+		var first_long_event := long_event_rows[0] as Button if not long_event_rows.is_empty() else null
+		var last_long_event := long_event_rows[long_event_rows.size() - 1] as Button if not long_event_rows.is_empty() else null
+		check(status.text.contains("180 条事件") and long_event_list != null and long_event_rows.size() == 180 and long_event_list.custom_minimum_size.y >= 3600.0 and first_long_event != null and last_long_event != null and first_long_event.text.contains("001  摸牌") and last_long_event.text.contains("180  摸牌"), "replay import keeps both ends of a 180-event row timeline available through its scroll child at %s" % viewport_size)
+		if last_long_event != null:
+			last_long_event.pressed.emit()
+			check(last_long_event.has_focus() and scene.replay_timeline_selected_index == 179, "replay timeline can select a late event without collapsing the row list at %s" % viewport_size)
 		scene.active_round_id = saved_round_id
 		scene.round_event_history = saved_events
 		scene.round_event_sequence = saved_sequence
@@ -1652,6 +1664,11 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	check(focus_text != null and focus_text.text.contains("胡牌机会"), "online pending context explains the response priority at %s" % viewport_size)
 	check(focus_text != null and focus_text.text.contains("H胡") and focus_text.text.contains("X过"), "online pending context exposes response keyboard shortcuts at %s" % viewport_size)
 	check(urgency_text != null and urgency_text.text.contains("紧迫度高") and urgency_text.clip_text, "online pending context exposes a visible urgency cue at %s" % viewport_size)
+	if typeof(scene.online_game.get("pending", null)) == TYPE_DICTIONARY:
+		(scene.online_game["pending"] as Dictionary)["deadline_msec"] = Time.get_ticks_msec() + 3000
+		scene.update_pending_claim_live_state()
+		var auto_pass_warning := scene.find_child("PendingClaimAutoPassWarning", true, false) as Label
+		check(auto_pass_warning != null and auto_pass_warning.visible and auto_pass_warning.text.contains("将自动过") and auto_pass_warning.text.contains("秒"), "online pending response exposes a readable final-three-second auto-pass warning at %s" % viewport_size)
 	check(mode_badge != null and mode_label != null and mode_label.text == "联机 · 四川" and mode_badge.tooltip_text.contains("108张"), "online HUD displays the server rule profile instead of the local setting at %s" % viewport_size)
 	check(wall_text != null and wall_text.text.contains("55/108") and wall_text.tooltip_text.contains("55/108"), "online HUD scales the wall meter and tooltip to the server total at %s" % viewport_size)
 	var live_status = scene.find_child("TopHudStatus", true, false) as Label
@@ -1700,14 +1717,14 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	scene.render_game()
 	await settle_layout()
 	var disconnected_status := scene.find_child("TopHudStatus", true, false) as Label
-	check(disconnected_status != null and disconnected_status.text == "已断线 · 请重连" and disconnected_status.tooltip_text == "连接已断开，请重新连接。", "online disconnect HUD keeps a complete reconnect action and full detail tooltip at %s" % viewport_size)
+	check(disconnected_status != null and disconnected_status.text == "断线 · 重连" and disconnected_status.tooltip_text.contains("使用右侧重连"), "online disconnect HUD keeps one compact recovery state and a full detail tooltip at %s" % viewport_size)
 	if disconnected_status != null:
 		check(not disconnected_status.text.contains("...") and label_text_width(disconnected_status, disconnected_status.text) <= screen_rect(disconnected_status).size.x + 1.0, "online disconnect HUD status fits its compact lane at %s" % viewport_size)
 	var reconnect_button := scene.find_child("OnlineReconnectGameButton", true, false) as Button
 	check(reconnect_button != null and reconnect_button.tooltip_text.contains("恢复当前牌局") and reconnect_button.has_focus(), "online disconnect exposes a focused reconnect CTA and keeps the board read-only at %s" % viewport_size)
 	check(scene.find_child("ChatActionButton", true, false) == null and scene.find_child("PendingClaimResponseGrid", true, false) == null, "online disconnect hides network actions until reconnection at %s" % viewport_size)
 	check(not scene.can_self_discard() and not scene.has_pending_claim_window(), "online disconnect closes stale discard and response gates at %s" % viewport_size)
-	check(scene.hand_tray_text() == "已断线 · 点击重连 · 手牌只读" and scene.hand_shortcut_hint_text() == "", "online disconnect hand copy uses one dedicated reconnect status line at %s" % viewport_size)
+	check(scene.hand_tray_text() == "牌桌只读 · 请使用右侧重连" and scene.hand_shortcut_hint_text() == "", "online disconnect hand copy points to the single recovery CTA without a duplicate shortcut line at %s" % viewport_size)
 	check(scene.hand_tray_state_text() == "只读", "online disconnect hand state badge identifies the tray as read-only at %s" % viewport_size)
 	var disconnected_tray := scene.find_child("HandTray", true, false) as Control
 	var disconnected_status_text := scene.find_child("HandTrayStatusText", true, false) as Label
@@ -1734,10 +1751,10 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 		if not intent_count_labels.is_empty():
 			intent_count_label = intent_count_labels[0] as Label
 	var compact_disconnect_intent := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
-	var expected_disconnect_intent := "已断线 · 重连" if compact_disconnect_intent else "已断线 · 点击重连"
-	check(intent_text != null and intent_text.text == expected_disconnect_intent and not intent_text.text.contains("等待") and not intent_text.text.contains("提交响应"), "online disconnect intent matches the sole recovery action at %s" % viewport_size)
+	var expected_disconnect_intent := "断线 · 重连"
+	check(intent_text != null and intent_text.text == expected_disconnect_intent and not intent_text.text.contains("等待") and not intent_text.text.contains("提交响应"), "online disconnect intent points to the sole recovery action at %s" % viewport_size)
 	if intent_text != null:
-		check(not intent_text.text.contains("...") and not intent_text.text.contains("…") and label_text_width(intent_text, intent_text.text) <= screen_rect(intent_text).size.x + 1.0 and intent_text.tooltip_text == "已断线 · 点击重连 · 手牌只读", "online disconnect intent keeps a readable compact label and complete recovery tooltip at %s" % viewport_size)
+		check(not intent_text.text.contains("...") and not intent_text.text.contains("…") and label_text_width(intent_text, intent_text.text) <= screen_rect(intent_text).size.x + 1.0 and intent_text.tooltip_text.contains("使用右侧重连"), "online disconnect intent keeps a readable compact label and complete recovery tooltip at %s (text=%s width=%.1f lane=%.1f tooltip=%s)" % [viewport_size, intent_text.text, label_text_width(intent_text, intent_text.text), screen_rect(intent_text).size.x, intent_text.tooltip_text])
 	check(intent_count_label != null and intent_count_label.text == "重连" and scene.action_bar_button_count() == 1, "online disconnect intent badge and action count expose only reconnect at %s" % viewport_size)
 	check(scene.find_child("PendingClaimIllustration", true, false) == null and scene.hand_keyboard_selection == -1 and not scene.hand_keyboard_tile_selectable(0, scene.get_self_hand()), "online disconnect clears stale response art and keyboard selection at %s" % viewport_size)
 	check(scene.online_action_validation_error({"type": "discard", "tile": "3W"}).contains("断线"), "online disconnect rejects programmatic discard submission at %s" % viewport_size)
@@ -1794,6 +1811,8 @@ func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
 func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	var previous_quiet := bool(scene.offline_sim_quiet)
 	scene.offline_sim_quiet = true
+	var previous_focus := scene.get_viewport().gui_get_focus_owner() as Control
+	var previous_focus_name: String = str(previous_focus.name) if previous_focus != null else ""
 	scene.show_chat_panel()
 	await settle_layout(0.04)
 	var panel = scene.find_child("ChatPanel", true, false) as Control
@@ -1843,7 +1862,8 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		check(screen_rect(panel).grow(1.0).encloses(close_rect), "online chat close action stays inside the drawer at %s" % viewport_size)
 		check(screen_rect(send_button).size.x >= 42.0 and screen_rect(send_button).size.y >= 36.0, "online chat send action keeps a 42x36 touch target at %s" % viewport_size)
 		check(screen_rect(panel).grow(1.0).encloses(screen_rect(send_button)), "online chat send action stays inside the drawer at %s" % viewport_size)
-		check(screen_rect(panel).grow(1.0).encloses(screen_rect(cooldown_label)) and not cooldown_label.visible, "online chat cooldown label starts hidden inside the send lane at %s" % viewport_size)
+		check(screen_rect(panel).grow(1.0).encloses(screen_rect(cooldown_label)) and cooldown_label.visible and cooldown_label.text.contains("可用"), "online chat keeps a stable send-status lane before cooldown at %s" % viewport_size)
+		check(not rects_overlap(screen_rect(cooldown_label).grow(-1.0), screen_rect(send_button).grow(-1.0)), "online chat send-status lane stays separate from the send target at %s" % viewport_size)
 	var quick_row := scene.find_child("ChatPanelQuickMessages", true, false) as Control
 	var quick_buttons: Array[Button] = []
 	if quick_row != null:
@@ -1863,15 +1883,17 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	var saved_chat_timestamp: int = int(scene.online_last_chat_sent_msec)
 	scene.online_last_chat_sent_msec = Time.get_ticks_msec()
 	scene.update_chat_send_cooldown(scene.online_last_chat_sent_msec + 100)
-	check(cooldown_label != null and cooldown_label.visible and cooldown_label.text.contains("s") and send_button != null and send_button.disabled and quick_buttons.all(func(button: Button) -> bool: return button.disabled), "online chat exposes and enforces the send cooldown at %s" % viewport_size)
+	check(cooldown_label != null and cooldown_label.visible and cooldown_label.text.contains("冷却") and cooldown_label.tooltip_text.contains("冷却") and send_button != null and send_button.disabled and quick_buttons.all(func(button: Button) -> bool: return button.disabled), "online chat exposes and enforces the send cooldown in a stable status lane at %s" % viewport_size)
 	scene.update_chat_send_cooldown(scene.online_last_chat_sent_msec + scene.ONLINE_CHAT_COOLDOWN_MSEC + 1)
-	check(cooldown_label == null or not cooldown_label.visible, "online chat clears the cooldown indicator after the wait at %s" % viewport_size)
+	check(cooldown_label != null and cooldown_label.visible and cooldown_label.text.contains("可用"), "online chat keeps the status lane readable after the wait at %s" % viewport_size)
 	scene.online_last_chat_sent_msec = saved_chat_timestamp
 	scene.update_chat_send_cooldown()
 	check(close_button != null and close_button.has_focus(), "online chat opens with focus in the close action at %s" % viewport_size)
 	scene.close_chat_panel()
 	await settle_layout()
 	check(scene.find_child("ChatPanel", true, false) == null and not scene.chat_panel_open, "online chat closes cleanly and clears its open state at %s" % viewport_size)
+	if previous_focus_name != "":
+		check(scene.get_viewport().gui_get_focus_owner() != null and scene.get_viewport().gui_get_focus_owner().name == previous_focus_name, "online chat restores the pre-drawer focus context at %s" % viewport_size)
 	scene.offline_sim_quiet = previous_quiet
 	await check_chat_panel_meld_route(scene, viewport_size, 2, "upper_meld_safe_drawer")
 	await check_chat_panel_meld_route(scene, viewport_size, 1, "upper_meld_safe_drawer")
@@ -2666,7 +2688,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			check(not rects_overlap(screen_rect(title_label), button_rect), "settings row %s title clears the button lane at %s" % [title, viewport_size])
 		if status_label != null:
 			check(status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and status_label.get_theme_font_size("font_size") >= 13 and relative_luma(status_label.get_theme_color("font_color")) >= 0.94, "settings row %s status stays bright clipped and readable at %s" % [title, viewport_size])
-			if viewport_size.y <= 720.0 and title == "出牌辅助":
+			if (viewport_size.y <= 560.0 or viewport_size.x <= 960.0) and title == "出牌辅助":
 				check(status_label.text == ("风险: 开" if scene.ai_assist_enabled else "风险: 关"), "compact discard-assist status keeps the risk toggle readable at %s" % viewport_size)
 				check(not status_label.text.contains("...") and not status_label.text.contains("…"), "compact discard-assist status avoids visible truncation at %s" % viewport_size)
 			check(not rects_overlap(screen_rect(status_label), button_rect), "settings row %s status clears the button lane at %s" % [title, viewport_size])
@@ -2719,7 +2741,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			var reset_button := row.find_child("SettingRowButton_本地进度", true, false) as Button
 			check(reset_status != null and reset_button != null and reset_status.tooltip_text != "" and reset_button.tooltip_text != "", "settings reset row exposes confirmation status and consequence tooltips at %s" % viewport_size)
 			if reset_status != null and reset_button != null:
-				var expected_reset_status := ("再次确认" if scene.reset_progress_confirming else "可清空") if viewport_size.y <= 720.0 else ("再次点击确认清空本地进度" if scene.reset_progress_confirming else "清空统计与离线记录")
+				var expected_reset_status := ("再次确认" if scene.reset_progress_confirming else "可清空") if (viewport_size.y <= 560.0 or viewport_size.x <= 960.0) else ("再次点击确认清空本地进度" if scene.reset_progress_confirming else "清空统计与离线记录")
 				check(reset_status.text == expected_reset_status, "settings reset row mirrors its layout-aware state at %s (got=%s expected=%s)" % [viewport_size, reset_status.text, expected_reset_status])
 			var reset_texture = button.find_child("ResetDangerSealTexture", true, false) as CanvasItem
 			check(reset_texture == null or reset_texture.modulate.a <= 0.12, "settings reset row keeps full-button texture subdued at %s" % viewport_size)
@@ -2823,7 +2845,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		"OnlineLobbyRosterTouchTarget_1",
 		"OnlineLobbyRosterTouchTarget_2",
 		"OnlineLobbyRosterTouchTarget_3",
-	], "OnlineLobbyNameEdit", "online lobby", viewport_size)
+	], "OnlineLobbyConnectButton", "online lobby", viewport_size)
 	check(create_button != null and create_button.disabled and str(create_button.focus_next) != str(create_button.get_path()), "disconnected lobby skips disabled create action in its focus route at %s" % viewport_size)
 	check(join_button != null and join_button.disabled and str(join_button.focus_next) != str(join_button.get_path()), "disconnected lobby skips disabled join action in its focus route at %s" % viewport_size)
 	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null

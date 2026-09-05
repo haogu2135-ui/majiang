@@ -845,6 +845,123 @@ func run_extended_ui_contracts(scene: Node) -> void:
 		await settle(0.05)
 	check(not scene.telemetry_sheet_open and scene.settings_panel_open, "closing telemetry returns to the settings sheet")
 	scene.close_settings_panel()
+
+
+func run_new_ui_optimization_contracts(scene: Node) -> void:
+	print("--- F-383/F-412) refreshed UI focus, state labels, and timeline contracts ---")
+	scene.ui_optimization_ids.clear()
+
+	scene.show_achievements_screen(true)
+	await settle(0.08)
+	var achievement_rows := scene.find_child("AchievementsGrid", true, false).find_children("AchievementRowFocusTarget", "Button", true, false) if scene.find_child("AchievementsGrid", true, false) != null else []
+	var achievement_scroll := scene.find_child("AchievementsScroll", true, false) as ScrollContainer
+	check(achievement_rows.size() >= 2 and achievement_scroll != null, "achievement gallery exposes individually focusable rows and a scroll host")
+	if achievement_rows.size() >= 2:
+		var first_achievement := achievement_rows[0] as Control
+		var second_achievement := achievement_rows[1] as Control
+		first_achievement.grab_focus()
+		await process_frame
+		scene.restore_control_focus_by_id(first_achievement.get_instance_id())
+		await process_frame
+		check(first_achievement.focus_next == second_achievement.get_path() and first_achievement.focus_neighbor_bottom == second_achievement.get_path(), "achievement keyboard focus advances row by row")
+		check(scene.achievement_focused_index == 0 and int(scene.find_child("AchievementsBrowseStatusLabel", true, false).get_meta("focused_item", 0)) == 1, "achievement browse status follows the focused row")
+		check(bool(first_achievement.get_meta("ui_optimization_ids", []).has("F-388")), "achievement focus marks the auto-scroll contract")
+	check(achievement_scroll != null and bool(achievement_scroll.get_meta("ui_scroll_keyboard_commands", "").contains("Home")), "achievement scroll exposes complete keyboard commands")
+
+	var lobby_transport := ConnectedLobbyTransport.new()
+	scene.tcp = lobby_transport
+	scene.online_feedback = ""
+	scene.online_room.clear()
+	scene.selected_room = ""
+	scene._show_online_lobby_impl()
+	await settle(0.08)
+	var host_edit := scene.find_child("OnlineLobbyHostEdit", true, false) as LineEdit
+	var host_caption: Label = null
+	for candidate in scene.find_children("LobbyFieldCaption_*", "Label", true, false):
+		var candidate_label := candidate as Label
+		if candidate_label != null and str(candidate_label.get_meta("label_for", "")) == "服务器 IP/域名":
+			host_caption = candidate_label
+	var room_target := scene.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+	check(host_edit != null and host_edit.get_meta("label_node_name", "") == host_caption.name if host_edit != null and host_caption != null else false, "lobby fields expose an explicit caption-to-input relationship")
+	check(room_target != null and bool(room_target.get_meta("detail_rect_synced", false)), "room detail hit target is synchronized after layout settles")
+	scene.online_feedback = "房间号格式不正确"
+	scene.refresh_online_lobby_state()
+	scene.configure_online_lobby_focus_navigation(true)
+	await process_frame
+	check(scene.get_viewport().gui_get_focus_owner() != null and scene.get_viewport().gui_get_focus_owner().name == "OnlineLobbyRoomEdit", "lobby validation focuses the field that needs correction")
+
+	scene.currency = {"coins": 0, "gems": 0}
+	scene._show_shop_screen_impl()
+	await settle(0.08)
+	var insufficient_shop_buy := scene.find_child("ShopItemBuyButton_swap_card", true, false) as Button
+	var shop_end := scene.find_child("ShopItemsEndMarker", true, false) as Label
+	check(insufficient_shop_buy != null and str(insufficient_shop_buy.get_meta("shop_item_id", "")) == "swap_card" and insufficient_shop_buy.tooltip_text.contains("缺少"), "shop purchase state exposes the item id and insufficient-balance reason")
+	check(shop_end != null and shop_end.get_meta("shop_list_end", false), "shop list exposes an explicit end marker")
+
+	scene.game_stats = {"games_played": 0, "games_won": 0, "win_rate": 0.0, "total_score": 0, "best_score": 0, "total_hands": 0}
+	scene.round_history = []
+	scene.show_stats_screen(true)
+	await settle(0.08)
+	var stats_filter := scene.find_child("StatsRuleFilterButton", true, false) as Button
+	var stats_copy := scene.find_child("StatsCopyButton", true, false) as Button
+	check(stats_filter != null and stats_filter.disabled and stats_filter.focus_mode == Control.FOCUS_NONE and stats_copy != null and stats_copy.disabled, "empty stats removes dead-end header actions from keyboard focus")
+	scene.game_stats = {"games_played": 1, "games_won": 1, "win_rate": 1.0, "total_score": 120, "best_score": 120, "total_hands": 13}
+	scene.round_history = [{"summary": "新 UI smoke"}]
+	scene.show_stats_screen(true)
+	await settle(0.08)
+
+	scene.show_menu(true)
+	await settle(0.05)
+	scene.settings_panel_open = true
+	scene.refresh_current_screen()
+	await settle(0.08)
+	var telemetry_entry := scene.find_child("SettingRowButton_隐私诊断", true, false) as Button
+	if telemetry_entry != null:
+		telemetry_entry.grab_focus()
+		await process_frame
+	scene.show_telemetry_data_sheet()
+	await settle(0.04)
+	var telemetry_clear := scene.find_child("TelemetryClearButton", true, false) as Button
+	if telemetry_clear != null:
+		scene.telemetry_clear_confirming = false
+		scene.clear_telemetry_data(false)
+		await process_frame
+		await process_frame
+	var telemetry_hint := scene.find_child("TelemetryClearConfirmHint", true, false) as Label
+	check(telemetry_hint != null and telemetry_hint.visible and telemetry_clear != null and telemetry_clear.has_focus(), "telemetry destructive action exposes inline confirmation and keeps focus on the action")
+	check(scene.telemetry_sheet_focus_restore_name == "SettingRowButton_隐私诊断", "telemetry sheet records its source focus for close restoration")
+	scene.close_telemetry_data_sheet()
+
+	scene.show_daily_login_panel({"consecutive_days": 3, "claimed_today": false})
+	await settle(0.08)
+	var daily_progress := scene.find_child("DailyLoginProgressText", true, false) as Label
+	var daily_node := scene.find_child("DailyLoginDayNode_3", true, false) as Control
+	check(daily_progress != null and daily_progress.get_meta("accessible_name", "").contains("签到进度") and daily_node != null and daily_node.get_meta("accessible_name", "").contains("第3天"), "daily login exposes text-equivalent progress and day state")
+
+	scene.show_replay_import_screen(true)
+	await settle(0.08)
+	var replay_events := valid_replay_events(scene, "NEW-UI")
+	scene.replay_import_payload = {"events": replay_events}
+	scene.render_replay_timeline_events(scene.replay_import_payload, true)
+	await settle(0.04)
+	var replay_event_list := scene.find_child("ReplayImportEventList", true, false) as VBoxContainer
+	var replay_event_scroll := scene.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
+	check(replay_event_list != null and replay_event_list.get_child_count() == replay_events.size() and replay_event_list.get_child(0).get_meta("ui_optimization_ids", []).has("F-411"), "replay timeline keeps each event as a native focusable row")
+	scene.select_replay_timeline_event(2)
+	var selected_before_scroll: int = int(scene.replay_timeline_selected_index)
+	if replay_event_scroll != null:
+		replay_event_scroll.scroll_vertical = int(round(maxf(0.0, replay_event_scroll.get_v_scroll_bar().max_value - replay_event_scroll.get_v_scroll_bar().page)))
+		scene.update_replay_timeline_status(replay_event_scroll)
+	check(scene.replay_timeline_selected_index == selected_before_scroll and replay_event_scroll.get_meta("timeline_selected_index", -1) == selected_before_scroll, "manual timeline scrolling preserves the selected event")
+	check(scene.replay_import_shape_error_text("@").contains("第1个字符"), "replay validation identifies the first invalid character")
+
+	var expected_ids: Array[String] = []
+	for id_number in range(383, 413):
+		expected_ids.append("F-%d" % id_number)
+	for finding_id in expected_ids:
+		check(scene.ui_optimization_ids.has(finding_id), "optimization registry records %s" % finding_id)
+	await settle(0.05)
+	scene.show_menu(true)
 	await settle(0.05)
 	scene.settings_panel_open = true
 	scene.refresh_current_screen()
@@ -1072,10 +1189,10 @@ func run() -> void:
 	run_optimization_contract_checks(scene)
 	scene._show_online_lobby_impl()
 	await settle(0.65)
-	var initial_name_edit := scene.online_name_edit as LineEdit
-	check(initial_name_edit != null and initial_name_edit.has_focus(), "lobby assigns default keyboard focus to its nickname editor")
-	if initial_name_edit != null:
-		initial_name_edit.release_focus()
+	var initial_connect_button := first_button_with_text(scene, "连接")
+	check(initial_connect_button != null and initial_connect_button.has_focus(), "lobby assigns default keyboard focus to its connection action")
+	if initial_connect_button != null:
+		initial_connect_button.release_focus()
 		await process_frame
 
 	print("--- A) pointer hover and press drive the real lobby button ---")
@@ -2267,6 +2384,7 @@ func run() -> void:
 		check(not scene.settings_panel_open and menu_settings_interaction_restored != null and menu_settings_interaction_restored.has_focus(), "closing touch-opened settings restores the source focus")
 
 	await run_extended_ui_contracts(scene)
+	await run_new_ui_optimization_contracts(scene)
 
 	# Stop any AI coroutine started by the real discard path before freeing the
 	# scene. Its active delay must finish while the owner is still alive.

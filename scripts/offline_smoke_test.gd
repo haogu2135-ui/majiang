@@ -1710,7 +1710,7 @@ func run() -> void:
 	scene.ai_assist_enabled = true
 	scene.advisor_detail_open = true
 	scene.draw_advisor_detail_panel(advisor_panel_parent)
-	check(advisor_panel_parent.find_child("AdvisorDetailPanel", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailMapTexture", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailRoute", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailRouteFill", true, false) != null, "advisor detail panel renders a wide in-panel rationale route")
+	check(advisor_panel_parent.find_child("AdvisorDetailPanel", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailMapTexture", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailRoute", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailRouteFill", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailReadOnlyBadge", true, false) != null, "advisor detail panel renders a wide in-panel rationale route and read-only badge")
 	scene.mode = advisor_detail_previous_mode
 	scene.ai_assist_enabled = advisor_detail_previous_assist
 	scene.advisor_detail_open = advisor_detail_previous_open
@@ -1849,7 +1849,7 @@ func run() -> void:
 	check(scene.find_child("ChatPanelBrocadeTexture", true, false) != null and scene.find_child("ChatStreamTexture", true, false) != null, "chat panel renders reusable brocade and stream PNG textures")
 	check(scene.optional_gpt_illustration_texture("chat_gpt_panel") == null or scene.find_child("ChatGPTPanelTexture", true, false) != null, "chat panel consumes optional GPT panel texture when generated")
 	check(scene.find_child("ChatPanel", true, false) != null and scene.find_child("ChatPanelArt", true, false) != null and scene.find_child("ChatPanelHeader", true, false) != null and scene.find_child("ChatPanelCountBadge", true, false) != null, "chat panel renders illustrated header and count badge")
-	check(scene.find_child("ChatPanelCloseButton", true, false) != null and scene.find_child("ChatPanelMessageText", true, false) != null and scene.find_child("ChatPanelQuickMessages", true, false) != null, "chat panel exposes close message and quick-message controls")
+	check(scene.find_child("ChatPanelCloseButton", true, false) != null and scene.find_child("ChatPanelMessageText", true, false) != null and scene.find_child("ChatPanelQuickMessages", true, false) != null and scene.find_child("ChatPanelQuickMessagesLabel", true, false) != null and scene.find_child("ChatPanelCustomMessageLabel", true, false) != null, "chat panel exposes close message quick-message and custom-message controls")
 	check(scene.find_child("ChatPanelHeaderBridge", true, false) != null and scene.find_child("ChatPanelHeaderBridgeFill", true, false) != null and scene.find_child("ChatPanelHeaderBridgeGate", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelHeaderBridgeTick_") == 2, "chat panel renders header-to-feed bridge route")
 	check(scene.find_child("ChatPanelActivityRail", true, false) != null and scene.find_child("ChatPanelLatestGlow", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelMessageNode_") == 3, "chat panel renders activity rail and one visible node per recent message")
 	check(count_nodes_with_name_prefix(scene, "ChatPanelSenderChip_") == 3 and count_nodes_with_name_prefix(scene, "ChatPanelUnreadBead_") == 3, "chat panel renders sender chips and unread beads")

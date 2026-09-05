@@ -79,6 +79,17 @@ func online_game_disconnected() -> bool:
 		return false
 	return online_resume_pending or online_feedback.find("连接已断开") >= 0 or online_feedback.find("重新连接") >= 0
 
+func online_recovery_connecting() -> bool:
+	if not online_game_disconnected():
+		return false
+	return online_feedback.find("正在重新连接") >= 0 or online_feedback.find("正在连接") >= 0
+
+func online_recovery_status_text() -> String:
+	return "重连中" if online_recovery_connecting() else "断线 · 重连"
+
+func online_recovery_detail_text() -> String:
+	return "连接已断开，牌局暂时只读；使用右侧重连恢复当前牌局，或返回大厅"
+
 func connect_online() -> void:
 	var host := online_host_input()
 	if host == "":

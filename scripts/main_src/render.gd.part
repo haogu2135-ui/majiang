@@ -664,6 +664,14 @@ func draw_action_dock(parent: Control) -> void:
 		if track_texture != null:
 			track_texture.name = "ActionDockTrackPanelTexture"
 			dock.move_child(track_texture, dock.get_child_count() - 1)
+	if pending_claim_auto_pass_feedback != "" and pending_claim_auto_pass_feedback_until_msec > Time.get_ticks_msec():
+		var auto_pass_label := make_label(dock, pending_claim_auto_pass_feedback, 10, Color(1.0, 0.84, 0.52), true)
+		auto_pass_label.name = "PendingClaimAutoPassFeedback"
+		apply_rect(auto_pass_label, rect_full(0.055, 0.035, 0.945, 0.225))
+		auto_pass_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		auto_pass_label.tooltip_text = "响应窗口已结束，系统已提交“过”"
+		auto_pass_label.set_meta("accessible_name", pending_claim_auto_pass_feedback)
+		configure_clipped_label(auto_pass_label)
 	var focus_label: Label = null
 	if not pending_claim_mode and not danger_confirm_mode and not action_buttons.is_empty():
 		var first_button := action_buttons[0] as Button
@@ -690,19 +698,12 @@ func draw_action_dock(parent: Control) -> void:
 		waiting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		waiting_label.tooltip_text = "牌局动作已锁定；语音和聊天仍可用"
 		configure_clipped_label(waiting_label)
-	elif mode == "online_game" and online_retry_available:
-		var retry_label = make_label(dock, "未响应 · 可重试", 10, Color(0.90, 0.76, 0.46, 0.92), true)
-		retry_label.name = "ActionDockRetryStatus"
-		apply_rect(retry_label, rect_full(0.055, 0.035, 0.945, 0.225))
-		retry_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		retry_label.tooltip_text = "服务器暂未响应，可以重试上一次操作"
-		configure_clipped_label(retry_label)
 	elif mode == "online_game" and online_game_disconnected():
-		var disconnected_label = make_label(dock, "已断线 · 牌桌只读", 10, Color(0.92, 0.76, 0.46, 0.92), true)
+		var disconnected_label = make_label(dock, online_recovery_status_text() + " · 牌桌只读", 10, Color(0.92, 0.76, 0.46, 0.92), true)
 		disconnected_label.name = "ActionDockDisconnectedStatus"
 		apply_rect(disconnected_label, rect_full(0.055, 0.035, 0.945, 0.225))
 		disconnected_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		disconnected_label.tooltip_text = "连接已断开，牌桌暂时只读；可重连或返回大厅"
+		disconnected_label.tooltip_text = online_recovery_detail_text()
 		configure_clipped_label(disconnected_label)
 		# Keep a stable escape route in the same recovery dock without adding it to
 		# the game action count. The board remains read-only until the user reconnects.
@@ -714,6 +715,13 @@ func draw_action_dock(parent: Control) -> void:
 		dock.add_child(lobby_button)
 		dock.z_index = max(19, action_bar.z_index + 1)
 		lobby_button.z_index = 1
+	elif mode == "online_game" and online_retry_available:
+		var retry_label = make_label(dock, "未响应 · 可重试", 10, Color(0.90, 0.76, 0.46, 0.92), true)
+		retry_label.name = "ActionDockRetryStatus"
+		apply_rect(retry_label, rect_full(0.055, 0.035, 0.945, 0.225))
+		retry_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		retry_label.tooltip_text = "服务器暂未响应，可以重试上一次操作"
+		configure_clipped_label(retry_label)
 	parent.move_child(dock_shadow, max(0, action_bar.get_index()))
 	parent.move_child(dock, max(0, action_bar.get_index()))
 
@@ -756,7 +764,7 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 	var text = make_label(intent, action_intent_text(count), 11, Color(0.84, 0.90, 0.84), true)
 	text.name = "ActionIntentText"
 	if mode == "online_game" and online_game_disconnected():
-		text.tooltip_text = "已断线 · 点击重连 · 手牌只读"
+		text.tooltip_text = online_recovery_detail_text()
 	apply_rect(text, rect_full(0.130, 0.10, 0.845, 0.90))
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(text)
@@ -781,9 +789,11 @@ func draw_actions(parent: Control) -> void:
 	if mode == "online_game" and not online_game_disconnected():
 		draw_chat_action_button(parent)
 	if online_game_disconnected():
-		var reconnect_button := make_action_button("重连", Color(0.36, 0.62, 0.72), Callable(self, "reconnect_online_game"))
+		var reconnecting := online_recovery_connecting()
+		var reconnect_button := make_action_button("重连中" if reconnecting else "重连", Color(0.36, 0.62, 0.72), Callable(self, "reconnect_online_game"))
 		reconnect_button.name = "OnlineReconnectGameButton"
-		reconnect_button.tooltip_text = "重新连接房间并恢复当前牌局"
+		reconnect_button.disabled = reconnecting
+		reconnect_button.tooltip_text = "正在重新连接房间，请稍候" if reconnecting else "重新连接房间并恢复当前牌局"
 		reconnect_button.set_meta("action_priority", "primary")
 		action_bar = HBoxContainer.new()
 		action_bar.alignment = BoxContainer.ALIGNMENT_END
@@ -1317,6 +1327,15 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 func draw_advisor_detail_panel(parent: Control) -> void:
 	if not advisor_detail_open or mode != "offline" or not player_ai_assist_enabled() or has_pending_danger_discard():
 		return
+	# Advisor details are an inspect surface. Consume pointer input across the
+	# table so a player cannot accidentally discard while reading a recommendation.
+	var input_shield := Control.new()
+	input_shield.name = "AdvisorDetailModalShield"
+	input_shield.set_anchors_preset(Control.PRESET_FULL_RECT)
+	input_shield.mouse_filter = Control.MOUSE_FILTER_STOP
+	input_shield.z_index = 43
+	input_shield.set_meta("layout_role", "advisor_read_only_inspect_shield")
+	parent.add_child(input_shield)
 	var panel = make_gpt_plate_rect(rect_full(0.160, 0.130, 0.840, 0.545), Color(0.014, 0.034, 0.040, 0.96), "ui_jade_reading_plate")
 	panel.name = "AdvisorDetailPanel"
 	panel.z_index = 44
@@ -1333,9 +1352,37 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var context = make_label(panel, advisor_context_line(), 11, Color(0.66, 0.76, 0.70), false)
 	context.name = "AdvisorDetailContext"
-	apply_rect(context, rect_full(0.060, 0.145, 0.72, 0.235))
+	apply_rect(context, rect_full(0.060, 0.145, 0.560, 0.235))
 	context.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(context)
+	var read_only_badge := make_label(panel, "只读分析", 10, Color(0.72, 0.88, 0.78), true)
+	read_only_badge.name = "AdvisorDetailReadOnlyBadge"
+	apply_rect(read_only_badge, rect_full(0.600, 0.055, 0.855, 0.135))
+	read_only_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	read_only_badge.tooltip_text = "分析层已锁定牌桌操作；关闭后恢复出牌焦点"
+	read_only_badge.set_meta("accessible_name", "牌势详解只读分析")
+	configure_clipped_label(read_only_badge)
+	var recommended_tile := ""
+	var recommended_index := -1
+	if can_self_discard():
+		var reports := current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
+		if not reports.is_empty() and typeof(reports[0]) == TYPE_DICTIONARY:
+			recommended_tile = str((reports[0] as Dictionary).get("tile", ""))
+			recommended_index = hand_tile_index_for_advice(get_self_hand(), recommended_tile)
+	var recommended_button := make_small_button("定位推荐牌" if recommended_tile != "" else "暂无推荐", Color(0.40, 0.60, 0.48), func() -> void:
+		if recommended_index >= 0:
+			set_hand_keyboard_selection(recommended_index, false)
+			focus_hand_tile_control(recommended_index)
+			show_toast("已定位推荐牌：%s" % tile_label(recommended_tile), 1800)
+	)
+	recommended_button.name = "AdvisorDetailRecommendedTileButton"
+	recommended_button.custom_minimum_size = Vector2(120, 44)
+	recommended_button.add_theme_font_size_override("font_size", 10)
+	recommended_button.disabled = recommended_index < 0
+	recommended_button.tooltip_text = "定位到手牌中的推荐%s；分析仍保持只读" % tile_label(recommended_tile) if recommended_tile != "" else "当前没有可定位的推荐牌"
+	recommended_button.set_meta("accessible_name", recommended_button.tooltip_text)
+	apply_rect(recommended_button, rect_full(0.555, 0.145, 0.855, 0.235))
+	panel.add_child(recommended_button)
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_advisor_detail_panel"))
 	close_button.name = "AdvisorDetailCloseButton"
 	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
@@ -4132,7 +4179,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		status.text = "响应 · %s" % tile_label(str(pending_claim_state().get("tile", "")))
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
-	set_ui_full_text(status, online_feedback if compact_disconnect_status else top_hud_status_tooltip_text(), "牌桌状态")
+	set_ui_full_text(status, top_hud_status_tooltip_text(), "牌桌状态")
 	# Keep transient gameplay feedback connected to the visible HUD instance.
 	# The shared reference is also used by set_status() for immediate errors.
 	status_label = status
@@ -6713,10 +6760,19 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 			summary_headline_text = "全员已准备 · 房主可开始"
 	var summary_headline = make_label(summary_panel, summary_headline_text, 10, Color(0.98, 0.92, 0.66), true)
 	summary_headline.name = "OnlineLobbyRoomSummaryHeadline"
-	apply_rect(summary_headline, rect_full(0.035, 0.015, 0.965, 0.145))
-	summary_headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	apply_rect(summary_headline, rect_full(0.035, 0.015, 0.475, 0.145))
+	summary_headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	summary_headline.tooltip_text = "房间下一步：" + summary_headline_text
 	configure_clipped_label(summary_headline)
+	var summary_context_text := "%s · %s" % [online_endpoint_summary(online_connection_endpoint_text()), online_room_code_summary(selected_room)]
+	var summary_context_full := "服务器 %s · 房间 %s" % [online_connection_endpoint_text(), bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH) if selected_room != "" else "未创建"]
+	var summary_context := make_label(summary_panel, summary_context_text, 8, Color(0.72, 0.84, 0.76), false)
+	summary_context.name = "OnlineLobbyRoomSummaryContext"
+	apply_rect(summary_context, rect_full(0.500, 0.015, 0.965, 0.145))
+	summary_context.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	summary_context.tooltip_text = "当前房间摘要：" + summary_context_full
+	summary_context.set_meta("ui_full_text", summary_context_full)
+	configure_clipped_label(summary_context)
 	var snapshot_status_text := online_lobby_room_snapshot_status_text()
 	var snapshot_status = make_label(summary_panel, snapshot_status_text, 9, Color(1.0, 0.80, 0.48), true)
 	snapshot_status.name = "OnlineLobbyRoomSummarySnapshotStatus"
@@ -6996,6 +7052,15 @@ func draw_pending_claim_timer_art(parent: Control) -> Control:
 	apply_rect(timer_label, rect_full(0.040, 0.020, 0.900, 0.340))
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(timer_label)
+	var warning_label := make_label(timer, pending_claim_auto_pass_text(), 8 if narrow_context_layout else 9, Color(1.0, 0.74, 0.42), true)
+	warning_label.name = "PendingClaimAutoPassWarning"
+	apply_rect(warning_label, rect_full(0.040, 0.700, 0.900, 0.985))
+	warning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	warning_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	warning_label.visible = warning_label.text != ""
+	warning_label.tooltip_text = warning_label.text
+	warning_label.set_meta("accessible_name", warning_label.text)
+	configure_clipped_label(warning_label)
 	fill.modulate = Color(1, 1, 1, 0.82)
 	gate.modulate = Color(1, 1, 1, 0.80)
 	return timer
@@ -7159,6 +7224,7 @@ func draw_round_summary(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
 	if mode != "offline" or offline_phase != "ended":
 		return
+	lock_round_summary_background_controls(parent)
 	var content_size = safe_content_pixel_size()
 	var panel_width_px = clampf(content_size.x * 0.500, 480.0, 720.0)
 	var compact_summary := effective_viewport_size().y <= 560.0
@@ -7267,6 +7333,22 @@ func draw_round_summary(parent: Control) -> void:
 			parent.move_child(action_bar, parent.get_child_count() - 1)
 		else:
 			action_bar.move_to_front()
+		call_deferred("focus_named_control", action_bar_default_focus_name())
+
+
+func lock_round_summary_background_controls(parent: Control) -> void:
+	if parent == null or not is_instance_valid(parent):
+		return
+	for node_value in parent.find_children("*", "Control", true, false):
+		var control := node_value as Control
+		if control == null or control == action_bar:
+			continue
+		if action_bar != null and is_instance_valid(action_bar) and action_bar.is_ancestor_of(control):
+			continue
+		if control is BaseButton or control is LineEdit or control is ScrollContainer:
+			control.focus_mode = Control.FOCUS_NONE
+			control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			control.set_meta("settlement_background_locked", true)
 
 
 func draw_round_summary_rank_header(parent: Control, compact_summary: bool) -> Control:
@@ -9358,7 +9440,10 @@ func draw_settings_overlay(parent: Control) -> void:
 	# At 720px high the three settings sections still need two-column rows to
 	# keep every control inside its authored section. The 1080px layout remains
 	# the spacious one-column desktop presentation.
-	var compact_settings = effective_viewport_size().y <= 720.0
+	var settings_viewport := effective_viewport_size()
+	# The compact grid is for the 540px gate. At 720px the standard sections have
+	# enough measured height for their rows and avoid a visible 720/721 jump.
+	var compact_settings := settings_viewport.y <= 560.0 or settings_viewport.x <= 960.0
 	var panel_rect = SETTINGS_PANEL_RECT
 	var audio_section_rect = SETTINGS_AUDIO_SECTION_RECT
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
@@ -9561,6 +9646,10 @@ func draw_settings_overlay(parent: Control) -> void:
 	var settings_default_focus := settings_focus_restore_name if settings_focus_restore_name != "" else "SettingsCloseButton"
 	settings_focus_restore_name = ""
 	configure_button_focus_navigation(panel, settings_default_focus)
+	# Rebuilds triggered by a setting selector can finish before the new control
+	# tree has resolved its compact grid geometry. Restore once more after layout
+	# so the selector remains the active keyboard target.
+	call_deferred("focus_named_control", settings_default_focus)
 
 
 func draw_settings_overview_art(parent: Control) -> Control:
@@ -13400,13 +13489,18 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	var title = make_label(button, title_text, commercial_ui_font_size(24, 4), Color(1.00, 0.91, 0.60), true)
 	title.name = "MenuCardTitleLabel"
 	apply_rect(title, rect_full(0.10, 0.13, 0.68 if icon_name != "" else 0.92, 0.48))
+	title.set_meta("layout_role", "menu_card_title_slot")
+	title.set_meta("slot_rect", "title:0.10..0.48")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	configure_clipped_label(title)
+	title.tooltip_text = title_text
 	if subtitle_text != "":
 		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(15, 2), Color(0.94, 0.92, 0.80), false)
 		subtitle.name = "MenuCardSubtitleLabel"
 		apply_rect(subtitle, rect_full(0.10, 0.50, card_text_right - 0.005 if icon_name != "" else 0.92, 0.78))
+		subtitle.set_meta("layout_role", "menu_card_subtitle_slot")
+		subtitle.set_meta("slot_rect", "subtitle:0.50..0.78")
 		subtitle.tooltip_text = subtitle_text
 		subtitle.add_theme_font_size_override("font_size", subtitle_font_size)
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -13644,7 +13738,8 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 
 func make_setting_row(parent: Control, title: String, status: String, button: Button) -> void:
 	# r214: bulk GPT chrome sweep
-	var compact_settings := effective_viewport_size().y <= 720.0
+	var setting_viewport := effective_viewport_size()
+	var compact_settings := setting_viewport.y <= 560.0 or setting_viewport.x <= 960.0
 	var row = Panel.new()
 	row.name = "SettingRow_%s" % title
 	configure_passive_container(row)
