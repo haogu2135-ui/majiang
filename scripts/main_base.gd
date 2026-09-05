@@ -1870,6 +1870,9 @@ func make_label(parent: Control, text: String, font_size: int, color: Color, bol
 		label.add_theme_constant_override("shadow_offset_x", 1)
 		label.add_theme_constant_override("shadow_offset_y", 1)
 	parent.add_child(label)
+	if text.strip_edges() != "":
+		label.set_meta("accessible_name", text.strip_edges())
+		label.set_meta("ui_full_text", text.strip_edges())
 	# Labels share one truncation policy so dynamic status, currency, and page copy
 	# never silently lose their only identifying suffix.
 	configure_clipped_label(label)
@@ -1943,6 +1946,19 @@ func set_dynamic_label_text(label: Label, text: String, detail: String = "") -> 
 	var resolved_detail := detail.strip_edges() if detail.strip_edges() != "" else text.strip_edges()
 	label.tooltip_text = resolved_detail
 	label.set_meta("ui_full_text", resolved_detail)
+	label.set_meta("accessible_name", resolved_detail)
+
+func set_ui_full_text(control: Control, detail: String, accessible_name: String = "") -> void:
+	if control == null or not is_instance_valid(control):
+		return
+	var resolved_detail := detail.strip_edges()
+	if resolved_detail != "":
+		control.tooltip_text = resolved_detail
+		control.set_meta("ui_full_text", resolved_detail)
+	if accessible_name.strip_edges() != "":
+		control.set_meta("accessible_name", accessible_name.strip_edges())
+	elif not control.has_meta("accessible_name") and resolved_detail != "":
+		control.set_meta("accessible_name", resolved_detail)
 
 func estimate_wrapped_text_height(text: String, available_width: float, font_size: int, line_gap: float = 4.0) -> float:
 	var width := maxf(1.0, available_width)
@@ -1965,6 +1981,7 @@ func configure_wrapped_label(label: Label, available_width: float = 0.0, minimum
 	label.set_meta("dynamic_wrapped_label", true)
 	label.set_meta("wrapped_minimum_height", minimum_height)
 	label.set_meta("wrapped_line_gap", line_gap)
+	label.set_meta("wrapped_text_length", label.text.length())
 	if label.tooltip_text == "" and label.text.strip_edges() != "":
 		label.tooltip_text = label.text
 	var width := available_width
@@ -1987,6 +2004,12 @@ func refresh_wrapped_label_height(label: Label, minimum_height: float = 0.0, lin
 		return
 	var font_size := label.get_theme_font_size("font_size")
 	label.custom_minimum_size.y = maxf(minimum_height, estimate_wrapped_text_height(label.text, width, font_size, line_gap))
+	var glyph_width := maxf(8.0, float(font_size) * 0.98)
+	var chars_per_line := maxi(1, int(floor(width / glyph_width)))
+	var wrapped_lines := 0
+	for paragraph in label.text.replace("\r", "").split("\n", true):
+		wrapped_lines += maxi(1, int(ceil(float(str(paragraph).length()) / float(chars_per_line))))
+	label.set_meta("wrapped_line_count", wrapped_lines)
 
 func make_body_label(parent: Control, text: String, font_size: int, color: Color, bold: bool, available_width: float = 0.0, minimum_height: float = 0.0, line_gap: float = 4.0) -> Label:
 	# Long-form copy has an explicit, measurable layout contract. Callers can pass
@@ -2023,6 +2046,9 @@ func configure_line_edit_input(edit: LineEdit, field_label: String = "", max_len
 	if edit.tooltip_text == "" and field_label != "":
 		edit.tooltip_text = "编辑%s" % field_label
 	edit.set_meta("ui_input_field", field_label)
+	if field_label != "":
+		edit.set_meta("accessible_name", field_label)
+		edit.set_meta("ui_full_text", edit.text)
 	edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	if edit.custom_minimum_size.y < UI_MIN_TOUCH_TARGET:
 		edit.custom_minimum_size.y = UI_MIN_TOUCH_TARGET
@@ -2063,6 +2089,10 @@ func handle_scroll_container_keyboard_input(event: InputEvent, scroll: ScrollCon
 	var target := scrollbar.value
 	var handled := true
 	match keycode:
+		KEY_UP:
+			target -= maxf(1.0, float(UI_MIN_TOUCH_TARGET))
+		KEY_DOWN:
+			target += maxf(1.0, float(UI_MIN_TOUCH_TARGET))
 		KEY_PAGEUP:
 			target -= maxf(1.0, scrollbar.page)
 		KEY_PAGEDOWN:
@@ -2089,6 +2119,7 @@ func make_small_button(text: String, color: Color, callback: Callable) -> Button
 	var button = make_base_button(text, callback)
 	button.custom_minimum_size = Vector2(104, 44)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(18))
+	button.set_meta("ui_button_role", "secondary_action")
 	apply_button_style(button, color, 12, 2, 4)
 	return button
 
@@ -2229,6 +2260,8 @@ func configure_touch_button(button: Button) -> void:
 	# style hosts intentionally do not provide.
 	button.focus_mode = Control.FOCUS_ALL
 	button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	button.set_meta("hit_rect_stable", true)
+	button.set_meta("focus_visual_gutter_px", 4.0)
 	button.add_theme_color_override("font_focus_color", Color(1.0, 0.98, 0.78, 1.0))
 	button.add_theme_color_override("font_hover_focus_color", Color(1.0, 1.0, 0.92, 1.0))
 	button.add_theme_color_override("font_pressed_color", Color(1.0, 0.90, 0.58, 1.0))

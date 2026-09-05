@@ -1612,10 +1612,14 @@ func refresh_online_log_navigation() -> void:
 	if latest_button != null:
 		latest_button.text = "最新" if unread <= 0 else "最新 %d" % unread
 		latest_button.tooltip_text = "跳到最新房间日志" if unread <= 0 else "还有 %d 条未读日志，跳到最新" % unread
+		latest_button.set_meta("accessible_name", "房间日志：" + latest_button.text)
+		latest_button.set_meta("ui_full_text", latest_button.tooltip_text)
 		latest_button.modulate = Color(1.0, 0.95, 0.72, 1.0) if unread > 0 else Color(0.88, 0.90, 0.82, 0.82)
 	if unread_label != null:
 		unread_label.text = "未读 %d" % unread if unread > 0 else "已到最新"
 		unread_label.visible = unread > 0
+		unread_label.set_meta("accessible_name", unread_label.text)
+		unread_label.set_meta("ui_full_text", unread_label.text)
 
 
 func update_chat_send_cooldown(now_msec: int = -1) -> void:
@@ -1652,10 +1656,27 @@ func update_chat_send_cooldown(now_msec: int = -1) -> void:
 			button.tooltip_text = "聊天发送冷却中，请稍候 %.1f 秒" % (float(remaining_msec) / 1000.0)
 		else:
 			if bool(button.get_meta("chat_cooldown_owned", false)):
-				button.disabled = false
-				button.tooltip_text = str(button.get_meta("chat_cooldown_previous_tooltip", button.tooltip_text))
-				button.remove_meta("chat_cooldown_owned")
-				button.remove_meta("chat_cooldown_previous_tooltip")
+					button.disabled = false
+					button.tooltip_text = str(button.get_meta("chat_cooldown_previous_tooltip", button.tooltip_text))
+					button.remove_meta("chat_cooldown_owned")
+					button.remove_meta("chat_cooldown_previous_tooltip")
+	refresh_chat_send_button_state()
+
+func refresh_chat_send_button_state() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var button := root_layer.find_child("ChatSendButton", true, false) as Button
+	var input := root_layer.find_child("ChatInput", true, false) as LineEdit
+	if button == null or input == null:
+		return
+	var empty := input.text.strip_edges() == ""
+	var cooling := bool(button.get_meta("chat_cooldown_owned", false))
+	if not cooling:
+		button.disabled = empty
+		button.tooltip_text = "请输入消息后发送 · Enter" if empty else "发送当前消息 · Enter"
+	button.set_meta("chat_empty", empty)
+	button.set_meta("accessible_name", "发送：" + ("等待输入" if empty else "发送当前消息"))
+	button.set_meta("ui_full_text", button.tooltip_text)
 
 
 func deal_offline_hand() -> void:
@@ -2081,6 +2102,8 @@ func update_safe_area_layout() -> void:
 	safe_area_margins = current_safe_area_margins()
 	if root_layer != null and is_instance_valid(root_layer):
 		apply_safe_area_offsets(root_layer)
+	if toast_container != null and is_instance_valid(toast_container):
+		apply_safe_area_offsets(toast_container)
 
 func apply_safe_area_offsets(control: Control) -> void:
 	if control == null:
@@ -4051,7 +4074,8 @@ func update_stage_index() -> int:
 	return 3
 
 func update_dialog_compact_layout() -> bool:
-	return effective_viewport_size().y <= 560.0
+	var viewport := effective_viewport_size()
+	return viewport.y <= 560.0 or viewport.x <= 960.0
 
 func update_state_color() -> Color:
 	match update_state:
@@ -4064,6 +4088,46 @@ func update_state_color() -> Color:
 		"current":
 			return Color(0.42, 0.62, 0.76, 1.0)
 	return Color(0.60, 0.66, 0.58, 1.0)
+
+func refresh_top_hud_update_button(button: Button = null) -> void:
+	if button == null and root_layer != null and is_instance_valid(root_layer):
+		button = root_layer.find_child("TopHudUpdateButton", true, false) as Button
+	if button == null or not is_instance_valid(button):
+		return
+	var state: String = str(update_state)
+	var label := "更新"
+	var detail := "检查游戏更新"
+	var blocked := false
+	match state:
+		"checking":
+			label = "检查中"
+			detail = "正在检查更新，请稍候"
+			blocked = true
+		"downloading":
+			label = "下载中"
+			detail = "升级包正在下载，请稍候"
+			blocked = true
+		"installing":
+			label = "安装中"
+			detail = "安装包正在处理，请稍候"
+			blocked = true
+		"ready":
+			label = "安装"
+			detail = "升级包已校验，打开系统安装"
+		"current":
+			label = "最新"
+			detail = "当前版本已是最新版本"
+			blocked = true
+		"error":
+			label = "重试"
+			detail = update_message if update_message.strip_edges() != "" else "更新失败，点击重试"
+	button.text = label
+	button.disabled = blocked
+	button.tooltip_text = detail
+	button.set_meta("update_state", state)
+	button.set_meta("accessible_name", "更新状态：" + label)
+	button.set_meta("ui_full_text", detail)
+	button.modulate = Color(1.0, 1.0, 1.0, 0.70 if blocked else 1.0)
 
 func update_progress_text() -> String:
 	if update_dialog_compact_layout():
@@ -6656,15 +6720,10 @@ func tile_art_alpha(tile: String, size: Vector2) -> float:
 	return 1.0
 
 func tile_texture_bleed(size: Vector2, lightweight_static_tile: bool) -> Vector2:
-	# r453: keep compact river faces close to their authored porcelain edge while
-	# leaving a small dark gutter between adjacent grid cells. The same bounded
-	# expansion is used by hand cells so a large face cannot bleed into its hit
-	# neighbor; assets/tiles remain untouched.
-	var expand_ratio := 0.118
-	if lightweight_static_tile:
-		expand_ratio = 0.090 if size.x >= 52.0 else 0.070
-	var expand := Vector2(max(1.5, size.x * expand_ratio), max(1.5, size.y * expand_ratio))
-	return expand
+	# Tile faces use the authored asset at its native cell bounds. Focus and hover
+	# visuals live in sibling gutters, so texture expansion cannot be clipped back
+	# into the face or bleed into an adjacent hit cell.
+	return Vector2.ZERO
 
 func risk_badge_text(risk: String) -> String:
 	return RISK_BADGE_TEXT.get(risk, "")
@@ -7546,6 +7605,8 @@ func _build_fx_toast() -> void:
 	toast_container.name = "ToastContainer"
 	toast_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	toast_container.set_meta("safe_area_inset", true)
+	apply_safe_area_offsets(toast_container)
 	toast_container.visible = false
 	fx_layer.add_child(toast_container)
 

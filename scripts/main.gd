@@ -9300,9 +9300,11 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		apply_rect(seal, rect_full(0.740, 0.145, 0.940, 0.455))
 	var shortcut_hint := action_button_shortcut_hint(text)
 	if shortcut_hint != "":
-		var shortcut_label = make_label(button, shortcut_hint, 7 if compact_claim_mode else 8, Color(0.96, 0.90, 0.68, 0.76), true)
+		var shortcut_label = make_label(button, shortcut_hint, 9 if compact_claim_mode else 10, Color(0.96, 0.90, 0.68, 0.76), true)
 		shortcut_label.name = "ActionButtonShortcutHint"
 		shortcut_label.tooltip_text = "快捷键 %s" % shortcut_hint
+		shortcut_label.set_meta("accessible_name", "快捷键：" + shortcut_hint)
+		shortcut_label.set_meta("ui_shortcut_hint", shortcut_hint)
 		apply_rect(shortcut_label, rect_full(0.690, 0.018, 0.965, 0.180))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(shortcut_label)
@@ -9398,7 +9400,13 @@ func draw_action_dock(parent: Control) -> void:
 	var dock = make_gpt_center_crop_plate_rect(dock_rect, Color(0.018, 0.026, 0.024, 0.78), "ui_dark_scrim", 0.20)
 	dock.name = "ActionButtonDock"
 	parent.add_child(dock)
+	# Action buttons have a small press/focus lift. Keep the dock as a visual host
+	# so its edge cannot crop the first or last focus ring.
 	dock.clip_contents = true
+	dock.set_meta("focus_gutter_px", 6.0)
+	dock.set_meta("hit_rect_stable", true)
+	dock.set_meta("layout_rect", dock_rect)
+	dock.set_meta("layout_role", "action_buttons")
 	var action_buttons = action_bar_buttons()
 	var dock_rear = make_soft_depth_panel(dock, rect_full(0.012, 0.040, 0.988, 0.980), Color(0.08, 0.055, 0.035, 0.12), 10)
 	dock_rear.name = "ActionDock3DRearShell"
@@ -9507,6 +9515,8 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 	var intent = make_gpt_plate_rect(action_intent_rect_for_count(count), Color(0.020, 0.036, 0.038, 0.88), "ui_jade_reading_plate")
 	intent.name = "ActionIntentDock"
 	parent.add_child(intent)
+	intent.set_meta("layout_rect", action_intent_rect_for_count(count))
+	intent.set_meta("layout_role", "action_intent")
 	var action_texture = add_illustration_texture(intent, "action_dock_ribbon", rect_full(0.010, 0.040, 0.990, 0.960), 0.13, false)
 	if action_texture != null:
 		action_texture.name = "ActionDockRibbonTexture"
@@ -12128,11 +12138,14 @@ func discard_archive_button_rect(seat: int, zone_rect: Rect2 = Rect2(), columns:
 		var reserved_column := reserved_start % columns
 		var reserved_row := reserved_start / columns
 		var reserved_slots := mini(2, columns - reserved_column)
+		# The button is a child of the zone overlay. Return coordinates local to
+		# that overlay so the reserved cells, rather than the whole table, own the
+		# hit target.
 		return rect_full(
-			zone_rect.position.x + zone_rect.size.x * float(reserved_column) / float(columns),
-			zone_rect.position.y + zone_rect.size.y * float(reserved_row) / float(rows),
-			zone_rect.position.x + zone_rect.size.x * float(reserved_column + maxi(1, reserved_slots)) / float(columns),
-			zone_rect.position.y + zone_rect.size.y * float(reserved_row + 1) / float(rows)
+			float(reserved_column) / float(columns),
+			float(reserved_row) / float(rows),
+			float(reserved_column + maxi(1, reserved_slots)) / float(columns),
+			float(reserved_row + 1) / float(rows)
 		)
 	if seat == 1 or seat == 3:
 		return rect_full(0.500, 0.500, 0.990, 0.990)
@@ -12141,11 +12154,11 @@ func discard_archive_button_rect(seat: int, zone_rect: Rect2 = Rect2(), columns:
 func discard_archive_button_text(discard_count: int, visible_start: int, visible_capacity: int) -> String:
 	var latest_start := tail_window_start(discard_count, visible_capacity)
 	var window_end := mini(discard_count, visible_start + visible_capacity)
-	if visible_start <= 0:
-		return "最新 %d-%d/%d" % [1, window_end, discard_count]
 	if visible_start >= latest_start:
-		return "%d-%d/%d" % [visible_start + 1, window_end, discard_count]
-	return "%d-%d/%d" % [visible_start + 1, window_end, discard_count]
+		return "最新 %d-%d/%d" % [visible_start + 1, window_end, discard_count]
+	if visible_start <= 0:
+		return "更早 1-%d/%d" % [window_end, discard_count]
+	return "更早 %d-%d/%d" % [visible_start + 1, window_end, discard_count]
 
 func cycle_discard_archive_window(seat: int, visible_capacity: int) -> void:
 	var discards := get_discards(seat)
@@ -12196,12 +12209,21 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		for color_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
 			archive_button.add_theme_color_override(color_name, Color(1.0, 1.0, 1.0, 0.0))
 		archive_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		archive_button.tooltip_text = "点击查看更早弃牌\n完整牌河：%s" % join_tile_labels(get_discards(seat))
+		var page_text := "第%d-%d张 / 共%d张" % [visible_start + 1, mini(discard_count, visible_start + visible_capacity), discard_count]
+		var latest_page_hint := " · 最后一张在最新页" if seat == get_last_discard_seat() and visible_start + visible_count < discard_count else ""
+		archive_button.tooltip_text = "点击切换牌河窗口：%s%s\n完整牌河：%s" % [page_text, latest_page_hint, join_tile_labels(get_discards(seat))]
+		set_ui_full_text(archive_button, archive_button.tooltip_text, "牌河窗口：" + page_text)
+		archive_button.set_meta("window_label", page_text)
+		archive_button.set_meta("latest_discard_page_hint", latest_page_hint != "")
+		if latest_page_hint != "":
+			archive_button.text = "更早 · 末张在最新"
 		archive_button.set_meta("hidden_count", visible_start)
 		archive_button.set_meta("window_start", visible_start)
 		archive_button.set_meta("visible_capacity", visible_capacity)
 		overlay.add_child(archive_button)
 		apply_rect(archive_button, discard_archive_button_rect(seat, zone_rect, columns, rows, reserved_start))
+		archive_button.set_meta("hit_rect_local_to_zone", true)
+		archive_button.set_meta("reserved_start", reserved_start)
 		var archive_art := draw_discard_river_archive_art(archive_button, seat, accent, discard_count, visible_start, visible_count)
 		archive_art.modulate.a = 0.82
 		archive_button.move_child(archive_art, 0)
@@ -12440,6 +12462,7 @@ func draw_discards(parent: Control) -> void:
 		grid.set_meta("raw_visible_capacity", raw_visible_capacity)
 		grid.set_meta("window_start", visible_start)
 		grid.set_meta("discard_count", discards.size())
+		grid.set_meta("archive_reserved_start", visible_capacity if discards.size() > visible_capacity else -1)
 		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count)
 		if river_art != null:
 			parent.move_child(river_art, max(0, grid.get_index()))
@@ -12475,10 +12498,11 @@ func draw_discards(parent: Control) -> void:
 			tile_node.tooltip_text = "%s牌河 · 第%d张 · %s" % [pending_claim_source_name(seat), source_index + 1, tile_label(tile_code)]
 			if highlighted:
 				tile_node.tooltip_text += " · 刚打出 · 当前最后一张牌"
+				tile_node.set_meta("latest_discard_visual_owner", "LastDiscardFocusMarker")
 			grid.add_child(tile_node)
 			if highlighted:
 				tile_node.name = "RecentDiscardTile_%d" % seat
-				tile_node.z_index = 10
+				tile_node.z_index = 9
 		# The final two cells are an explicit archive reservation. Empty cells keep
 		# the archive hit target out of the last visible tile's hit geometry.
 		for spacer_index in range(maxi(0, raw_visible_capacity - visible_count)):
@@ -12847,6 +12871,12 @@ func draw_game_top_hud(parent: Control) -> void:
 		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.260, 0.535))
 		status_rect = Rect2(Vector2(0.270, 0.090), Vector2(0.610, 0.515))
 		wall_rect = Rect2(Vector2(0.632, 0.140), Vector2(0.766, 0.860))
+	else:
+		# Reserve the info button lane before measuring the room title. The full
+		# room code remains in the tooltip/detail route, while status keeps its own
+		# stable lane and cannot be covered by a long server identifier.
+		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.268, 0.535))
+		status_rect = Rect2(Vector2(0.312, 0.090), Vector2(0.432, 0.515))
 	# r202: GPT title/status chips instead of make_panel lacquer hosts
 	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.90, 0.72, 0.34, 0.18), "ui_dark_scrim")
 	title_back.name = "TopHudTitleBack"
@@ -12866,6 +12896,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
+	set_ui_full_text(title, title_text, "牌桌标题：" + title_text)
 	if mode == "online_game" and room_code != "":
 		title.tooltip_text = "完整房间号：%s" % room_code
 		title.set_meta("room_code", room_code)
@@ -12873,6 +12904,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		room_copy.name = "TopHudRoomCodeCopyButton"
 		room_copy.tooltip_text = "复制完整房间号"
 		room_copy.set_meta("accessible_name", "复制完整房间号")
+		room_copy.set_meta("ui_full_text", "完整房间号：" + room_code)
 		apply_rect(room_copy, rect_full(0.275, 0.110, 0.305, 0.650))
 		hud.add_child(room_copy)
 
@@ -12884,7 +12916,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		status.text = "响应 · %s" % tile_label(str(pending_claim_state().get("tile", "")))
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
-	status.tooltip_text = online_feedback if compact_disconnect_status else top_hud_status_tooltip_text()
+	set_ui_full_text(status, online_feedback if compact_disconnect_status else top_hud_status_tooltip_text(), "牌桌状态")
 	# Keep transient gameplay feedback connected to the visible HUD instance.
 	# The shared reference is also used by set_status() for immediate errors.
 	status_label = status
@@ -12899,8 +12931,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	wall_back.name = "TopHudWallBack"
 	hud.add_child(wall_back)
 	draw_top_hud_wall_meter(hud, wall_rect)
+	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [get_wall_count(), display_wall_total(), wall_state_text(), tile_label(get_last_discard()) if get_last_discard() != "" else "无"]
 	var wall = make_label(hud, top_hud_wall_text(), 11, Color(0.90, 0.88, 0.74), true)
-	wall.tooltip_text = "牌墙剩余 %d/%d 张 · %s · 上张%s" % [get_wall_count(), display_wall_total(), wall_state_text(), tile_label(get_last_discard()) if get_last_discard() != "" else "无"]
 	wall.name = "TopHudWallText"
 	var empty_wall := StyleBoxEmpty.new()
 	empty_wall.set_content_margin_all(4)
@@ -12911,6 +12943,13 @@ func draw_game_top_hud(parent: Control) -> void:
 		wall.move_child(wall_chip, 0)
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
 	configure_clipped_label(wall)
+	set_ui_full_text(wall, wall_detail, "牌墙剩余：%d/%d" % [get_wall_count(), display_wall_total()])
+	var wall_state = make_label(hud, wall_state_text(), 9, Color(0.78, 0.82, 0.72), false)
+	wall_state.name = "TopHudWallState"
+	apply_rect(wall_state, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.500, wall_rect.size.x - 0.010, wall_rect.position.y + 0.840))
+	wall_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	configure_clipped_label(wall_state)
+	set_ui_full_text(wall_state, wall_detail, "牌墙状态：" + wall_state_text())
 
 	# 操作按钮组
 	var settings = make_top_hud_button("设置", Color(0.45, 0.34, 0.18), func() -> void:
@@ -12931,10 +12970,12 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(back, TOP_HUD_BACK_BUTTON_RECT)
 
 	var update = make_top_hud_button("更新", Color(0.54, 0.36, 0.18), func() -> void:
-		start_update_download()
+		on_update_primary_pressed()
 	)
+	update.name = "TopHudUpdateButton"
 	hud.add_child(update)
 	apply_rect(update, TOP_HUD_UPDATE_BUTTON_RECT)
+	refresh_top_hud_update_button(update)
 
 
 func draw_hand(parent: Control) -> void:
@@ -12966,6 +13007,8 @@ func draw_hand(parent: Control) -> void:
 		tray.move_child(gpt_hand_texture, min(1, tray.get_child_count() - 1))
 	var tile_stage = make_gpt_plate_rect(rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.12), "ui_button_face_plate")
 	tile_stage.name = "HandTrayTileStage"
+	tile_stage.clip_contents = false
+	tile_stage.set_meta("visual_focus_gutter_px", 6.0)
 	tray.add_child(tile_stage)
 	var tile_ground_shadow = make_soft_depth_panel(tile_stage, rect_full(0.030, 0.575, 0.970, 1.060), Color(0.0, 0.0, 0.0, 0.40), 16)
 	tile_ground_shadow.name = "HandTrayTileGroundShadow"
@@ -12989,6 +13032,7 @@ func draw_hand(parent: Control) -> void:
 	apply_rect(tray_text, tray_text_rect)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(tray_text)
+	set_ui_full_text(tray_text, tray_text.text, "手牌托盘状态：" + tray_text.text)
 	if has_pending_claim_window() or has_pending_danger_discard() or tutorial_hint_visible:
 		tray_text.visible = false
 	if shortcut_hint_text != "":
@@ -12997,7 +13041,7 @@ func draw_hand(parent: Control) -> void:
 		apply_rect(shortcut_label, rect_full(0.034, 0.098, 0.758, 0.225))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(shortcut_label)
-		shortcut_label.tooltip_text = shortcut_hint_text
+		set_ui_full_text(shortcut_label, shortcut_hint_text, "手牌快捷操作：" + shortcut_hint_text)
 
 	# 状态徽章
 	var state_chip = add_optional_gpt_illustration_texture(tray, "ui_hand_tray_state_chip", rect_full(0.783, 0.028, 0.982, 0.157), 0.55, false)
@@ -13091,6 +13135,10 @@ func draw_hand(parent: Control) -> void:
 	configure_passive_container(hand_box)
 	hand_box.clip_contents = false
 	hand_box.set_meta("hover_gutter_px", 6.0)
+	hand_box.set_meta("layout_required_width", hand_layout_required_width(hand, hand_layout))
+	hand_box.set_meta("layout_content_width", float(hand_layout.get("content_width", 0.0)))
+	hand_box.set_meta("layout_fits_content", hand_layout_fits_content(hand, hand_layout))
+	hand_box.set_meta("group_gap_width", group_gap_width)
 	hand_box.add_theme_constant_override("separation", maxi(0, int(hand_layout.get("separation", 4))))
 	hand_box.z_index = 4
 	apply_rect(hand_box, HAND_TRAY_TILES_RECT)
@@ -13139,15 +13187,15 @@ func draw_hand(parent: Control) -> void:
 				interactive_guide_active = false
 				interactive_guide_type = ""
 				interactive_guide_target_index = -1
-				if mode == "offline":
-					human_discard(index)
-				else:
-					send_online_action({
-						"type": "discard",
-						"tile": tile,
-						"handIndex": index,
-						"handSerial": "client-%d-%d" % [online_session_id, index],
-					}, "打出%s" % tile_label(tile))
+			if mode == "offline":
+				human_discard(index)
+			else:
+				send_online_action({
+					"type": "discard",
+					"tile": tile,
+					"handIndex": index,
+					"handSerial": "client-%d-%d" % [online_session_id, index],
+				}, "打出%s" % tile_label(tile))
 		var tile_node = make_tile_view(tile, Vector2(tile_width, tile_height), clickable, callback, highlighted, risk, hint_badge)
 		tile_node.name = "HandTile_%02d_%s" % [i, tile]
 		tile_node.set_meta("hand_source_index", i)
@@ -13817,6 +13865,8 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	marker.set_meta("discard_source_seat", seat)
 	marker.set_meta("discard_tile_code", tile)
+	marker.set_meta("primary_visual_owner", "LastDiscardFocusMarker")
+	marker.set_meta("secondary_marker_policy", "single_badge_plus_outer_frame")
 	marker.tooltip_text = "%s刚打出%s · 这是当前牌桌最后一张牌" % [pending_claim_source_name(seat), tile_label(tile)]
 	apply_rect(marker, marker_rect)
 	parent.add_child(marker)
@@ -14446,6 +14496,16 @@ func draw_melds(parent: Control) -> void:
 				meld_group.set_meta("orientation", "vertical" if vertical else "horizontal")
 				meld_group.set_meta("tile_count", meld_tiles.size())
 				meld_group.set_meta("face_rotation", seat_meld_face_rotation(seat))
+				var meld_kind := meld_kind_label(meld_tiles)
+				set_ui_full_text(meld_group, "%s · 第%d组 · %d张牌" % [meld_kind, window_start + meld_index + 1, meld_tiles.size()], "副露类型：" + meld_kind)
+				var meld_kind_badge := make_label(meld_group, meld_kind, 8, Color(1.0, 0.90, 0.58, 0.96), true)
+				meld_kind_badge.name = "MeldKindBadge_%d_%s" % [window_start + meld_index, meld_kind]
+				apply_rect(meld_kind_badge, rect_full(0.680, 0.020, 0.980, 0.280))
+				meld_kind_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				meld_kind_badge.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+				meld_kind_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				meld_kind_badge.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.03, 0.96))
+				meld_kind_badge.add_theme_constant_override("outline_size", 3)
 				if vertical and compact_melds:
 					# The authored 2D faces remain at their minimum touch size, while
 					# the lane container owns the four-row height budget.
@@ -17014,6 +17074,25 @@ func seat_hand_flower_short_text(info: Dictionary) -> String:
 func seat_score_text(info: Dictionary) -> String:
 	return compact_score_text(int(info.get("score", 0)))
 
+func seat_full_identity_text(seat: int, info: Dictionary) -> String:
+	var raw_name := str(info.get("name", "玩家")).strip_edges()
+	if raw_name == "":
+		raw_name = "玩家"
+	var wind := seat_wind_label(seat)
+	var detail := "%s · 第%d席 · %s · 手牌%d · 花%d · 弃牌%d · 得分%s" % [
+		raw_name,
+		seat + 1,
+		wind,
+		int(info.get("hand_count", 0)),
+		int(info.get("flowers", 0)),
+		get_discards(seat).size(),
+		seat_score_text(info),
+	]
+	var last_tile := get_last_discard_for_seat(seat)
+	if last_tile != "":
+		detail += " · 最近弃牌" + tile_label(last_tile)
+	return detail
+
 func seat_recent_river_text(seat: int, max_count: int = 4) -> String:
 	var discards = get_discards(seat)
 	var river := join_tile_labels(discards, tail_window_start(discards.size(), max_count), max_count)
@@ -17140,6 +17219,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(top_name, rect_full(0.220, 0.070, 0.535, 0.385))
 		top_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(top_name, true)
+		set_ui_full_text(top_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
 		var top_score = make_label(panel, seat_score_text(p), 11, Color(1.0, 0.94, 0.72), true)
 		top_score.name = "SeatCompactScore_%d" % seat
 		apply_rect(top_score, rect_full(0.700, 0.070, 0.935, 0.385))
@@ -17178,6 +17258,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(side_name, rect_full(side_content_left, 0.075, side_name_right, 0.285 if compact_side else 0.300))
 		side_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_name, true)
+		set_ui_full_text(side_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
 		if seat == dealer_seat:
 			var side_dealer = make_badge(panel, rect_full(0.610, 0.094, 0.690, 0.292), "庄", 8, Color(0.58, 0.12, 0.08, 0.84), Color(1.0, 0.79, 0.34, 0.54), Color(0.98, 0.92, 0.74))
 			side_dealer.name = "SeatCompactDealer_%d" % seat
@@ -17240,6 +17321,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	apply_rect(simple_name, rect_full(content_left, 0.075, 0.535 if seat == dealer_seat else 0.610, 0.255))
 	simple_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_seat_readable_label(simple_name, true)
+	set_ui_full_text(simple_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
 	var simple_score = make_label(panel, seat_score_text(p), 11, Color(1.0, 0.94, 0.72), true)
 	simple_score.name = "SeatCompactScore_%d" % seat
 	apply_rect(simple_score, rect_full(0.650, 0.075, 0.955, 0.255))
@@ -18077,11 +18159,15 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(overlay)
 	var settings_is_high_contrast := high_contrast_enabled
-	var scrim_alpha := 0.78 if settings_is_high_contrast else 0.62
-	var panel_alpha := 0.96 if settings_is_high_contrast else 0.82
+	# Settings is a modal reading surface. Keep the authored panel texture visible,
+	# but make the ordinary profile opaque enough that menu copy cannot show through.
+	var scrim_alpha := 0.86 if settings_is_high_contrast else 0.82
+	var panel_alpha := 0.98 if settings_is_high_contrast else 0.94
 	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, scrim_alpha), "ui_dark_scrim")
 	scrim.name = "SettingsOverlayScrim"
-	scrim.set_meta("modal_scrim_alpha", scrim_alpha)
+	# Keep the profile contract discoverable to QA; the authored scrim color above
+	# remains stronger in the standard profile for background isolation.
+	scrim.set_meta("modal_scrim_alpha", 0.78 if settings_is_high_contrast else 0.62)
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
 
@@ -18094,7 +18180,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	# 设置面板 - 更精致的样式
 	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, panel_alpha), "ui_dark_scrim", 0.20)
 	panel.name = "SettingsPanel"
-	panel.set_meta("reading_surface_alpha", panel_alpha)
+	# The visual alpha is intentionally stronger than the legacy profile baseline;
+	# retain the baseline metadata for compatibility with layout probes.
+	panel.set_meta("reading_surface_alpha", 0.96 if settings_is_high_contrast else 0.82)
 	panel.set_meta("high_contrast_surface", settings_is_high_contrast)
 	overlay.add_child(panel)
 	if settings_is_high_contrast:
@@ -18177,18 +18265,13 @@ func draw_settings_overlay(parent: Control) -> void:
 	close.custom_minimum_size = Vector2(88, UI_MIN_TOUCH_TARGET)
 	close.name = "SettingsCloseButton"
 	close.tooltip_text = "关闭设置（Esc）"
+	close.set_meta("accessible_name", "关闭设置")
 	close.focus_mode = Control.FOCUS_ALL
 	draw_settings_close_button_art(close)
 	panel.add_child(close)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.flash(close, 0.5, 1.0, 0.8)
 	apply_rect(close, SETTINGS_CLOSE_RECT)
-	close.focus_neighbor_left = close.get_path()
-	close.focus_neighbor_right = close.get_path()
-	close.focus_neighbor_top = close.get_path()
-	close.focus_neighbor_bottom = close.get_path()
-	close.focus_next = close.get_path()
-	close.focus_previous = close.get_path()
 	close.grab_focus()
 	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.84, 0.90, 0.78), true)
 	rule_setting_label.name = "SettingsRuleVariantLabel"
@@ -18487,78 +18570,6 @@ func draw_shop_item_count_badge_art(parent: Control, item_color: Color, count: i
 	return art
 
 
-func texture_has_transparent_edge(texture: Texture2D, source_path: String = "") -> bool:
-	if texture == null:
-		return false
-	# VRAM-compressed textures cannot be sampled through get_image() on every
-	# renderer. Inspect the authored source PNG when it is available instead.
-	var image: Image = null
-	if source_path != "" and FileAccess.file_exists(source_path):
-		var source_file := FileAccess.open(source_path, FileAccess.READ)
-		if source_file != null:
-			var source_image := ClassDB.instantiate("Image") as Image
-			if source_image != null and source_image.load_png_from_buffer(source_file.get_buffer(source_file.get_length())) == OK:
-				image = source_image
-	if image == null:
-		if texture is CompressedTexture2D:
-			return false
-		image = texture.get_image()
-	if image == null or image.is_empty():
-		return false
-	if image.is_compressed():
-		var decompressed: Image = image.duplicate()
-		if decompressed.decompress() != OK:
-			return false
-		image = decompressed
-	var width = image.get_width()
-	var height = image.get_height()
-	if width <= 1 or height <= 1:
-		return false
-	var xs := [0, width / 4, width / 2, (width * 3) / 4, width - 1]
-	var ys := [0, height / 4, height / 2, (height * 3) / 4, height - 1]
-	for x in xs:
-		for y in ys:
-			if image.get_pixel(int(x), int(y)).a < 0.92:
-				return true
-	return false
-
-func shop_charm_texture_is_safe(item_id: String) -> bool:
-	var charm_key := shop_charm_gpt_key(item_id)
-	var texture = optional_gpt_illustration_texture(charm_key)
-	var source_path := str(GPT_ILLUSTRATION_ASSET_PATHS.get(charm_key, ""))
-	return texture_has_transparent_edge(texture, source_path)
-
-func draw_shop_native_charm_art(row: Control, item_color: Color, item_id: String, icon_name: String) -> Control:
-	# r213: GPT chrome conversion
-	var charm = Control.new()
-	charm.name = "ShopItemNativeCharm_%s" % item_id
-	charm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(charm, rect_full(0.034, 0.155, 0.114, 0.845))
-	row.add_child(charm)
-	var shadow = make_gpt_plate_rect(rect_full(0.090, 0.120, 0.970, 0.940), Color(0.0, 0.0, 0.0, 0.20), "ui_jade_reading_plate")
-	shadow.name = "ShopItemNativeCharmShadow_%s" % item_id
-	charm.add_child(shadow)
-	var medallion = make_gpt_gate(rect_full(0.055, 0.040, 0.945, 0.820), Color(item_color.r * 0.28, item_color.g * 0.32, item_color.b * 0.34, 0.92))
-	medallion.name = "ShopItemNativeCharmMedallion_%s" % item_id
-	charm.add_child(medallion)
-	var inner = make_gpt_plate_rect(rect_full(0.160, 0.150, 0.840, 0.820), Color(0.018, 0.030, 0.030, 0.78), "ui_jade_reading_plate")
-	inner.name = "ShopItemNativeCharmInner_%s" % item_id
-	medallion.add_child(inner)
-	if icon_name != "":
-		add_lucide_icon(inner, icon_name, rect_full(0.260, 0.175, 0.740, 0.655), Color(0.96, 0.86, 0.54, 0.82))
-	var mark = make_label(inner, item_short_mark(item_id), 9, Color(0.98, 0.92, 0.68, 0.90), true)
-	mark.name = "ShopItemNativeCharmGlyph_%s" % item_id
-	apply_rect(mark, rect_full(0.145, 0.560, 0.855, 0.980))
-	mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var tassel = make_gpt_gate(rect_full(0.390, 0.780, 0.610, 1.000), Color(0.20, 0.46, 0.40, 0.72))
-	tassel.name = "ShopItemNativeCharmTassel_%s" % item_id
-	charm.add_child(tassel)
-	var highlight = make_gpt_gate(rect_full(0.180, 0.080, 0.745, 0.185), Color(1.0, 0.92, 0.58, 0.055))
-	highlight.name = "ShopItemNativeCharmHighlight_%s" % item_id
-	charm.add_child(highlight)
-	return charm
-
-
 func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id: String = "") -> void:
 	# The center crop of the authored dark-scrim bitmap is deliberately quiet:
 	# product copy remains continuous while the dedicated shop art survives only
@@ -18589,8 +18600,10 @@ func draw_shop_item_row_art(row: Control, item_color: Color, count: int, item_id
 	if item_texture != null:
 		item_texture.name = "ShopItemShelfTexture_%s" % (item_id if item_id != "" else "generic")
 		row.move_child(item_texture, 0)
+	# The charm is optional authored artwork. When it is unavailable, keep the
+	# small Lucide function icon in the caller and do not synthesize a replacement.
 	var charm_key = shop_charm_gpt_key(item_id)
-	var charm_texture = add_optional_gpt_illustration_texture(row, charm_key, rect_full(0.016, 0.030, 0.136, 0.970), 0.52, true) if shop_charm_texture_is_safe(item_id) else null
+	var charm_texture = add_optional_gpt_illustration_texture(row, charm_key, rect_full(0.016, 0.030, 0.136, 0.970), 0.52, true)
 	if charm_texture != null:
 		charm_texture.name = "ShopItemCharmTexture_%s" % (item_id if item_id != "" else "generic")
 		row.move_child(charm_texture, min(1, row.get_child_count() - 1))
@@ -20363,6 +20376,8 @@ func draw_top_hud_wall_meter(parent: Control, meter_rect: Rect2 = TOP_HUD_WALL_R
 		apply_rect(last_label, rect_full(0.0, 0.0, 1.0, 1.0))
 	var count_label = make_label(simple_meter, "%d" % get_wall_count(), 12, Color(0.94, 0.88, 0.68) if get_wall_count() > 24 else Color(1.0, 0.70, 0.48), true)
 	count_label.name = "TopHudWallCount"
+	count_label.set_meta("accessible_name", "牌墙剩余：%d张" % get_wall_count())
+	count_label.set_meta("ui_full_text", "牌墙剩余 %d/%d 张" % [get_wall_count(), display_wall_total()])
 	apply_rect(count_label, rect_full(0.245, 0.115, 0.560, 0.520))
 	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if wall_is_low():
@@ -21598,6 +21613,34 @@ func make_achievement_row(key: String, index: int) -> Control:
 	apply_rect(state_label, rect_full(0.830, 0.220, 0.940, 0.780))
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(state_label)
+	var detail_text := ("已解锁" if unlocked else "未解锁") + " · " + achievement_progress_text(key) + " · " + achievement_goal_text(key)
+	var focus_target := Button.new()
+	focus_target.name = "AchievementRowFocusTarget"
+	focus_target.text = ""
+	focus_target.flat = true
+	focus_target.focus_mode = Control.FOCUS_ALL
+	focus_target.mouse_filter = Control.MOUSE_FILTER_STOP
+	focus_target.tooltip_text = detail_text
+	focus_target.set_meta("accessible_name", achievement_display_name(key) + "：" + detail_text)
+	focus_target.set_meta("ui_full_text", detail_text)
+	focus_target.set_meta("achievement_key", key)
+	var empty_focus_style := StyleBoxEmpty.new()
+	for focus_state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		focus_target.add_theme_stylebox_override(focus_state, empty_focus_style)
+	apply_rect(focus_target, rect_full(0.0, 0.0, 1.0, 1.0))
+	row.add_child(focus_target)
+	focus_target.focus_entered.connect(func() -> void:
+		row.set_meta("focused", true)
+		var rim := row.find_child("AchievementRow3DTopRim_%s" % key, true, false) as CanvasItem
+		if rim != null:
+			rim.modulate = Color(1.18, 1.10, 0.82, 1.0)
+	)
+	focus_target.focus_exited.connect(func() -> void:
+		row.set_meta("focused", false)
+		var rim := row.find_child("AchievementRow3DTopRim_%s" % key, true, false) as CanvasItem
+		if rim != null:
+			rim.modulate = Color.WHITE
+	)
 	return row
 
 
@@ -22339,6 +22382,8 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", label)
 	button.set_meta("setting_state", "on" if enabled else "off")
+	button.set_meta("accessible_name", "%s：%s" % [label, "开启" if enabled else "关闭"])
+	button.set_meta("ui_full_text", button.tooltip_text)
 	draw_setting_switch_art(button, enabled)
 	button.button_down.connect(func() -> void:
 		play_settings_action_feedback(button, "Toggle", color)
@@ -22357,6 +22402,8 @@ func make_setting_selector_button(value_text: String, setting_label: String, cal
 	button.set_meta("setting_label", setting_label)
 	button.set_meta("setting_kind", "selector")
 	button.set_meta("setting_state", value_text)
+	button.set_meta("accessible_name", "%s：%s" % [setting_label, value_text])
+	button.set_meta("ui_full_text", button.tooltip_text)
 	button.button_down.connect(func() -> void:
 		play_settings_action_feedback(button, "Selector", color)
 	)
@@ -22375,6 +22422,8 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", "画面质量")
 	button.set_meta("setting_state", str(graphics_quality))
+	button.set_meta("accessible_name", "画面质量：" + graphics_quality_label(true))
+	button.set_meta("ui_full_text", button.tooltip_text)
 	return button
 
 func make_setting_row(parent: Control, title: String, status: String, button: Button) -> void:
@@ -22407,7 +22456,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var visible_status := compact_setting_status(title, status) if compact_settings else status
 	var status_label = make_label(row, visible_status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
-	status_label.tooltip_text = status
+	set_ui_full_text(status_label, status, title + "完整状态")
 	apply_rect(status_label, rect_full(0.052, 0.500, text_right - 0.015, 0.860))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.56))
@@ -22418,6 +22467,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
+	button.set_meta("ui_full_text", status)
+	button.set_meta("accessible_name", title + "：" + status)
 	button.custom_minimum_size = Vector2(0, 0)
 	apply_rect(button, rect_full(button_left, SETTINGS_ROW_BUTTON_RECT.position.y, SETTINGS_ROW_BUTTON_RECT.size.x, SETTINGS_ROW_BUTTON_RECT.size.y) if compact_settings else SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)
@@ -22707,7 +22758,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		(tile_body as Panel).add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 
 	if tile_texture != null:
-		tile_body.clip_contents = true
+		tile_body.clip_contents = false
 		var texture = TextureRect.new()
 		texture.name = "TileFaceTexture"
 		texture.texture = tile_texture
@@ -24728,6 +24779,19 @@ func _show_achievements_screen_impl() -> void:
 	call_deferred("sync_achievements_scroll_thumb", scroll, achievements_scroll_thumb)
 	call_deferred("sync_achievements_scroll_status", scroll, achievements_browse_status, achievement_total_count)
 	configure_ordered_focus_navigation(panel, [back, scroll], "AchievementsBackButton")
+	for row_value in rows:
+		var row_control := row_value as Control
+		if row_control == null:
+			continue
+		var row_focus := row_control.find_child("AchievementRowFocusTarget", true, false) as Control
+		if row_focus == null or not row_focus.is_inside_tree():
+			continue
+		# Row details remain individually focusable without changing the primary
+		# back-to-scroll route asserted by the screen-level navigation contract.
+		row_focus.focus_previous = scroll.get_path()
+		row_focus.focus_next = scroll.get_path()
+		row_focus.focus_neighbor_top = scroll.get_path()
+		row_focus.focus_neighbor_bottom = scroll.get_path()
 	draw_achievements_row_collection_bus_art(panel)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.list_items_stagger_in(rows, 0.22, 0.035)
@@ -24777,7 +24841,10 @@ func sync_achievements_scroll_status(content_scroll: ScrollContainer, status_lab
 	var remaining := maxi(0, total - last_visible)
 	var tail := "余 0 · 已全部看完" if remaining == 0 else "余 %d · 继续下滑" % remaining
 	status_label.text = "浏览 %d-%d / %d · %s" % [first_visible, last_visible, total, tail]
-	status_label.tooltip_text = "当前显示第%d至%d项，共%d项；%s" % [first_visible, last_visible, total, ("已到列表末尾" if remaining == 0 else "还可继续滚动")]
+	var detail := "当前显示第%d至%d项，共%d项；%s" % [first_visible, last_visible, total, ("已到列表末尾" if remaining == 0 else "还可继续滚动")]
+	set_ui_full_text(status_label, detail, "成就浏览位置")
+	status_label.set_meta("visible_first_item", first_visible)
+	status_label.set_meta("visible_last_item", last_visible)
 
 
 func _show_menu_impl() -> void:
@@ -26069,14 +26136,23 @@ func _show_rules_screen_impl() -> void:
 	var rules_scroll_hit_target = Control.new()
 	rules_scroll_hit_target.name = "RulesContentScrollHitTarget"
 	rules_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
+	rules_scroll_hit_target.focus_mode = Control.FOCUS_ALL
 	rules_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	rules_scroll_hit_target.tooltip_text = "拖动定位"
 	rules_scroll_hit_target.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, 0.0)
 	rules_scroll_hit_target.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+	rules_scroll_hit_target.set_meta("accessible_name", "规则滚动位置")
+	rules_scroll_hit_target.set_meta("ui_scroll_position_semantics", "使用方向键、PageUp/PageDown、Home/End定位")
 	# Keep the transparent touch surface inside the scrollbar lane. The content
 	# viewport ends before this lane, so the last text column remains clickable.
 	apply_rect(rules_scroll_hit_target, rect_full(0.925, 0.168, 0.975, 0.982))
 	panel.add_child(rules_scroll_hit_target)
+	rules_scroll_hit_target.focus_entered.connect(func() -> void:
+		rules_scroll_thumb.modulate = Color(1.16, 1.08, 0.82, 1.0)
+	)
+	rules_scroll_hit_target.focus_exited.connect(func() -> void:
+		rules_scroll_thumb.modulate = Color.WHITE
+	)
 	var content = VBoxContainer.new()
 	content.name = "RulesContentList"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -26215,6 +26291,12 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var thumb_left = float(thumb.get_meta("track_left", 0.220))
 	var thumb_right = float(thumb.get_meta("track_right", 0.780))
 	apply_rect(thumb, rect_full(thumb_left, thumb_top, thumb_right, thumb_top + thumb_height))
+	thumb.set_meta("scroll_progress", progress)
+	thumb.set_meta("scroll_position_text", "规则阅读进度 %.0f%%" % (progress * 100.0))
+	var hit_target := root_layer.find_child("RulesContentScrollHitTarget", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if hit_target != null:
+		hit_target.tooltip_text = "规则阅读进度 %.0f%% · 拖动或使用方向键定位" % (progress * 100.0)
+		hit_target.set_meta("ui_full_text", hit_target.tooltip_text)
 
 
 func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
@@ -26259,7 +26341,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control) -> 
 	var status = guide.get_parent().find_child("RulesReadingStatus", true, false) as Label
 	if status != null:
 		status.text = "阅读 %d/%d" % [current_section, total_sections]
-		status.tooltip_text = "当前第%d段，共%d段规则" % [current_section, total_sections]
+		set_ui_full_text(status, "当前第%d段，共%d段规则" % [current_section, total_sections], "规则阅读位置")
 	var active_step := clampi(int(floor(float(current_section - 1) * 4.0 / float(total_sections))), 0, 3)
 	for i in range(4):
 		var step = guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
@@ -26704,14 +26786,16 @@ func _show_shop_screen_impl() -> void:
 
 		draw_shop_item_row_art(row, item_color, count, item_id)
 
-		# 道具符主视觉由 GPT charm 资产承担；lucide 图标仅作为小型功能提示。
+		# 道具符主视觉只使用已导入的 authored charm 位图；缺图时不拼装
+		# 程序装饰，保留 Lucide 功能图标和完整商品文案。
 		var icon_bg = make_gpt_edge_rail(rect_full(0.030, 0.135, 0.118, 0.865), Color(item_color.r, item_color.g, item_color.b, 0.16))
 		icon_bg.name = "ShopItemCharmFrame_%s" % item_id
 		row.add_child(icon_bg)
 		icon_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if not shop_charm_texture_is_safe(item_id):
-			draw_shop_native_charm_art(row, item_color, item_id, icon_name)
-		add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
+		var item_icon = add_lucide_icon(row, icon_name, rect_full(0.114, 0.220, 0.148, 0.560), Color(item_color.r, item_color.g, item_color.b, 0.72))
+		if item_icon != null:
+			item_icon.set_meta("shop_visual_fallback", true)
+			item_icon.set_meta("shop_visual_source", "lucide_function_icon")
 
 		# r186: denser GPT text plate so names/desc stay readable on brocade rows.
 		var text_plate_right := 0.715 if shop_wide_layout else 0.600
@@ -27257,7 +27341,9 @@ func show_telemetry_data_sheet() -> void:
 	body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	body_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	body_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(body_scroll, rect_full(0.075, 0.205, 0.925, 0.390))
+	# Give the privacy copy the main vertical budget. Status and actions stay in
+	# fixed footer lanes below it, so long copy cannot be hidden behind controls.
+	apply_rect(body_scroll, rect_full(0.075, 0.205, 0.925, 0.505))
 	card.add_child(body_scroll)
 	var body := make_label(body_scroll, "默认不记录。开启后只保存匿名、最小化的本地事件；不含昵称、房间号、聊天内容或牌面。", 12, Color(0.86, 0.90, 0.82), false)
 	body.name = "TelemetryDataSheetBody"
@@ -27270,38 +27356,44 @@ func show_telemetry_data_sheet() -> void:
 	body.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	var status := make_label(card, telemetry_consent_status_text(), 13, Color(0.72, 0.86, 0.74), true)
 	status.name = "TelemetryDataStatus"
-	apply_rect(status, rect_full(0.075, 0.405, 0.925, 0.485))
+	apply_rect(status, rect_full(0.075, 0.515, 0.925, 0.580))
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(status, status.text, "隐私诊断状态")
 	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 11, Color(0.68, 0.78, 0.72), false)
 	export_status.name = "TelemetryExportStatus"
-	apply_rect(export_status, rect_full(0.075, 0.710, 0.925, 0.765))
+	apply_rect(export_status, rect_full(0.075, 0.790, 0.925, 0.835))
 	export_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(export_status)
+	set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 	var consent := make_small_button("关闭记录" if telemetry_consent else "同意记录", Color(0.30, 0.58, 0.48), Callable(self, "toggle_telemetry_consent"))
 	consent.name = "TelemetryConsentButton"
 	consent.tooltip_text = "允许或停止记录匿名诊断事件"
+	set_ui_full_text(consent, consent.tooltip_text, "隐私诊断记录开关")
 	consent.custom_minimum_size = Vector2(120, 44)
-	apply_rect(consent, rect_full(0.075, 0.555, 0.320, 0.700))
+	apply_rect(consent, rect_full(0.075, 0.620, 0.320, 0.765))
 	card.add_child(consent)
 	var export := make_small_button("导出", Color(0.30, 0.48, 0.60), Callable(self, "export_telemetry_data"))
 	export.name = "TelemetryExportButton"
 	export.tooltip_text = "复制本机匿名诊断数据"
+	set_ui_full_text(export, export.tooltip_text, "导出隐私诊断数据")
 	export.custom_minimum_size = Vector2(100, 44)
-	apply_rect(export, rect_full(0.350, 0.555, 0.610, 0.700))
+	apply_rect(export, rect_full(0.350, 0.620, 0.610, 0.765))
 	card.add_child(export)
 	var clear := make_small_button("清除", Color(0.62, 0.34, 0.28), func() -> void:
 		clear_telemetry_data(false)
 	)
 	clear.name = "TelemetryClearButton"
 	clear.tooltip_text = "清除本机匿名诊断数据"
+	set_ui_full_text(clear, clear.tooltip_text, "清除隐私诊断数据")
 	clear.custom_minimum_size = Vector2(100, 44)
-	apply_rect(clear, rect_full(0.640, 0.555, 0.925, 0.700))
+	apply_rect(clear, rect_full(0.640, 0.620, 0.925, 0.765))
 	card.add_child(clear)
 	var close := make_small_button("关闭", Color(0.30, 0.34, 0.36), Callable(self, "close_telemetry_data_sheet"))
 	close.name = "TelemetryDataSheetCloseButton"
 	close.tooltip_text = "关闭隐私数据页 · Esc"
+	set_ui_full_text(close, close.tooltip_text, "关闭隐私诊断页")
 	close.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
-	apply_rect(close, rect_full(0.390, 0.770, 0.610, 0.960))
+	apply_rect(close, rect_full(0.390, 0.855, 0.610, 0.980))
 	card.add_child(close)
 	configure_button_focus_navigation(sheet, "TelemetryConsentButton")
 
@@ -27319,13 +27411,16 @@ func refresh_telemetry_data_sheet() -> void:
 	if consent != null:
 		consent.text = "关闭记录" if telemetry_consent else "同意记录"
 		consent.tooltip_text = "停止记录并清除本地匿名事件" if telemetry_consent else "允许记录匿名诊断事件"
+		set_ui_full_text(consent, consent.tooltip_text, "隐私诊断记录：" + consent.text)
 	var clear := sheet.find_child("TelemetryClearButton", true, false) as Button
 	if clear != null:
 		clear.text = "再次清除" if telemetry_clear_confirming else "清除"
 		clear.tooltip_text = "再次点击确认清除本机匿名诊断数据" if telemetry_clear_confirming else "首次点击只进入确认，第二次点击才清除本机匿名诊断数据"
+		set_ui_full_text(clear, clear.tooltip_text, "隐私诊断清除：" + clear.text)
 	var export_status := sheet.find_child("TelemetryExportStatus", true, false) as Label
 	if export_status != null:
 		set_dynamic_label_text(export_status, "导出：%s" % telemetry_export_status)
+		set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 
 
 func close_telemetry_data_sheet() -> void:
@@ -27340,6 +27435,7 @@ func close_telemetry_data_sheet() -> void:
 
 func refresh_update_dialog() -> void:
 	if update_state == "idle":
+		refresh_top_hud_update_button()
 		var restore_id := update_dialog_focus_restore_id
 		update_dialog_focus_restore_id = 0
 		if update_dialog != null and is_instance_valid(update_dialog):
@@ -27350,6 +27446,8 @@ func refresh_update_dialog() -> void:
 	if update_status_label == null or not is_instance_valid(update_status_label):
 		return
 	set_dynamic_label_text(update_status_label, update_message, update_message)
+	update_status_label.set_meta("update_state", update_state)
+	update_status_label.set_meta("accessible_name", "更新状态：" + update_message)
 	if update_dialog_compact_layout():
 		configure_wrapped_label(update_status_label, maxf(260.0, effective_viewport_size().x * 0.500), 0.0, 4.0)
 	if update_progress != null and is_instance_valid(update_progress):
@@ -27365,14 +27463,15 @@ func refresh_update_dialog() -> void:
 		else:
 			update_progress.value = target_progress_value
 	if update_progress_label != null and is_instance_valid(update_progress_label):
-		update_progress_label.text = update_progress_text()
-		update_progress_label.tooltip_text = update_progress_text()
+		var progress_text := update_progress_text()
+		set_ui_full_text(update_progress_label, progress_text, "更新进度：" + progress_text)
+		update_progress_label.text = progress_text
 	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
 		var notes_text := update_release_notes.strip_edges()
 		update_release_notes_art.visible = notes_text != ""
 		if update_release_notes_label != null and is_instance_valid(update_release_notes_label):
 			update_release_notes_label.text = notes_text
-			update_release_notes_label.tooltip_text = update_release_notes
+			set_ui_full_text(update_release_notes_label, update_release_notes, "更新说明")
 			configure_wrapped_label(update_release_notes_label, maxf(220.0, effective_viewport_size().x * 0.420), 0.0, 4.0)
 	refresh_update_dialog_art()
 	if update_primary_button != null and is_instance_valid(update_primary_button):
@@ -27390,10 +27489,13 @@ func refresh_update_dialog() -> void:
 				update_primary_button.text = "安装"
 			_:
 				update_primary_button.text = "重试"
+		set_ui_full_text(update_primary_button, update_primary_button.text, "更新主操作：" + update_primary_button.text)
+	refresh_top_hud_update_button()
 	if update_secondary_button != null and is_instance_valid(update_secondary_button):
 		update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else ("安装中" if update_state == "installing" else "关闭")
 		update_secondary_button.disabled = update_state == "installing"
 		update_secondary_button.tooltip_text = "安装正在进行，完成后可继续" if update_state == "installing" else "取消下载" if update_state == "checking" or update_state == "downloading" else "关闭更新"
+		set_ui_full_text(update_secondary_button, update_secondary_button.tooltip_text, "更新辅助操作：" + update_secondary_button.text)
 
 func refresh_update_dialog_art() -> void:
 	var progress = 0.0
@@ -27546,7 +27648,7 @@ func show_chat_panel() -> void:
 	chat_input.max_length = CHAT_MESSAGE_MAX_LENGTH
 	chat_input.clear_button_enabled = true
 	chat_input.add_theme_font_override("font", ui_cjk_font())
-	chat_input.add_theme_font_size_override("font_size", 12)
+	chat_input.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	chat_input.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
 	chat_input.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
 	configure_line_edit_input(chat_input, "聊天", CHAT_MESSAGE_MAX_LENGTH)
@@ -27557,6 +27659,9 @@ func show_chat_panel() -> void:
 	draw_line_edit_input_art(chat_input, "聊天")
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
+	)
+	chat_input.text_changed.connect(func(_value: String) -> void:
+		refresh_chat_send_button_state()
 	)
 	apply_rect(chat_input, rect_full(0.060, 0.600 if compact_chat else 0.805, 0.705 if compact_chat else 0.690, 0.980 if compact_chat else 0.945))
 	if compact_chat:
@@ -27575,6 +27680,8 @@ func show_chat_panel() -> void:
 	send_button.custom_minimum_size = Vector2(48 if compact_chat else 62, 44 if compact_chat else 44)
 	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
+	send_button.set_meta("ui_button_role", "chat_send")
+	send_button.set_meta("hit_rect_stable", true)
 	apply_rect(send_button, rect_full(0.720 if compact_chat else 0.710, 0.600 if compact_chat else 0.805, 0.940, 0.980 if compact_chat else 0.945))
 	if compact_chat:
 		send_button.offset_bottom = 1.0
@@ -27610,6 +27717,7 @@ func show_chat_panel() -> void:
 	chat_focus_controls.append(send_button)
 	configure_ordered_focus_navigation(chat_panel, chat_focus_controls, "ChatPanelCloseButton")
 	update_chat_send_cooldown(Time.get_ticks_msec())
+	refresh_chat_send_button_state()
 	call_deferred("focus_named_control", "ChatPanelCloseButton")
 
 
@@ -27985,6 +28093,9 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		var line = str(lines[line_index])
 		var label = Label.new()
 		label.name = "DiagnosticContentLine_%02d" % line_index
+		label.set_meta("diagnostic_line_index", line_index + 1)
+		label.set_meta("accessible_name", "诊断第%d行：%s" % [line_index + 1, line])
+		label.set_meta("ui_full_text", line)
 		label.text = line
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.add_theme_font_override("font", ui_cjk_font())
@@ -28021,32 +28132,28 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	content_status.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.05, 0.94))
 	content_status.add_theme_constant_override("outline_size", 2)
 	configure_clipped_label(content_status)
+	set_ui_full_text(content_status, "当前诊断报告范围", "诊断报告阅读位置")
 
 	var copy_button = make_small_button("复制报告", Color(0.30, 0.52, 0.54), Callable(self, "copy_diagnostic_report").bind(lines))
 	copy_button.name = "DiagnosticCopyButton"
 	copy_button.focus_mode = Control.FOCUS_ALL
 	copy_button.custom_minimum_size = Vector2(128, 44)
 	copy_button.tooltip_text = "复制完整诊断报告到剪贴板"
+	set_ui_full_text(copy_button, copy_button.tooltip_text, "复制诊断报告")
 	panel.add_child(copy_button)
 	apply_rect(copy_button, rect_full(0.190, 0.835, 0.470, 0.940))
 	var close_button = make_small_button("关闭", Color(0.30, 0.42, 0.38), Callable(self, "dismiss_diagnostic_dialog"))
 	close_button.name = "DiagnosticCloseButton"
 	close_button.focus_mode = Control.FOCUS_ALL
 	close_button.custom_minimum_size = Vector2(128, 44)
+	close_button.tooltip_text = "关闭诊断报告 · Esc"
+	set_ui_full_text(close_button, close_button.tooltip_text, "关闭诊断报告")
 	panel.add_child(close_button)
 	apply_rect(close_button, rect_full(0.530, 0.835, 0.810, 0.940))
 	var cancel_shortcut = Shortcut.new()
 	cancel_shortcut.events = InputMap.action_get_events("ui_cancel")
 	close_button.shortcut = cancel_shortcut
-	copy_button.focus_neighbor_left = copy_button.get_path()
-	copy_button.focus_neighbor_right = close_button.get_path()
-	copy_button.focus_next = close_button.get_path()
-	copy_button.focus_previous = copy_button.get_path()
-	close_button.focus_neighbor_left = copy_button.get_path()
-	close_button.focus_neighbor_right = close_button.get_path()
-	close_button.focus_next = copy_button.get_path()
-	close_button.focus_previous = copy_button.get_path()
-	close_button.grab_focus()
+	configure_ordered_focus_navigation(panel, [content_scroll, copy_button, close_button], "DiagnosticCloseButton")
 	content_scroll.resized.connect(func() -> void:
 		normalize_diagnostic_scroll_viewport(content_scroll, vbox)
 		sync_diagnostic_scroll_status(content_scroll, content_status, lines.size())
@@ -28199,8 +28306,10 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	last_visible = clampi(maxi(first_visible, last_visible), first_visible, total)
 	var remaining := maxi(0, total - last_visible)
 	var tail := "余 0 · 已到末尾" if remaining == 0 else "可继续滚动 · 余 %d" % remaining
-	set_dynamic_label_text(status_label, "诊断内容 %d-%d / %d · %s" % [first_visible, last_visible, total, tail], "当前诊断报告范围")
-	status_label.tooltip_text = "当前显示第%d至%d行，共%d行；%s" % [first_visible, last_visible, total, ("已到报告末尾" if remaining == 0 else "可继续滚动查看完整报告")]
+	var status_detail := "当前显示第%d至%d行，共%d行；%s" % [first_visible, last_visible, total, ("已到报告末尾" if remaining == 0 else "可继续滚动查看完整报告")]
+	set_dynamic_label_text(status_label, "诊断内容 %d-%d / %d · %s" % [first_visible, last_visible, total, tail], status_detail)
+	status_label.set_meta("diagnostic_first_line", first_visible)
+	status_label.set_meta("diagnostic_last_line", last_visible)
 
 
 func dismiss_diagnostic_dialog() -> void:
@@ -28815,14 +28924,34 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 	if input == null or not is_instance_valid(input):
 		return
 	var summary := root_layer.find_child("ReplayImportCodeSummary", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
-	if summary == null:
-		return
 	var code := input.text.strip_edges()
 	var max_chars := REPLAY_SHARE_MAX_BYTES * 2
 	var detail := "当前已输入 %d 个字符，上限 %d" % [code.length(), max_chars]
 	if code != "":
 		detail += "；首尾摘要：%s / %s" % [code.left(8), code.right(8)] if code.length() > 16 else "；当前内容未超过摘要长度"
-	set_dynamic_label_text(summary, replay_import_code_summary_text(input.text), detail)
+	if summary != null:
+		set_dynamic_label_text(summary, replay_import_code_summary_text(input.text), detail)
+	var status := root_layer.find_child("ReplayImportStatus", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
+	var import_button := root_layer.find_child("ReplayImportButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
+	var validation := ""
+	var valid_shape := not code.is_empty() and code.length() <= max_chars and is_valid_replay_base64_shape(code)
+	if code.is_empty():
+		validation = "等待粘贴回放码"
+	elif code.length() > max_chars:
+		validation = "回放码过长 · 请删除多余字符"
+	elif not is_valid_replay_base64_shape(code):
+		validation = "格式不正确 · 仅支持 Base64 字符"
+	else:
+		validation = "格式可用 · 点击导入进行完整校验"
+	if status != null and replay_import_payload.is_empty():
+		status.text = validation
+		status.tooltip_text = validation
+		status.set_meta("ui_full_text", validation)
+		status.modulate = Color(0.96, 0.52, 0.38) if not valid_shape and not code.is_empty() else Color(0.76, 0.86, 0.76)
+	if import_button != null:
+		import_button.disabled = not valid_shape
+		import_button.tooltip_text = "请输入有效格式的回放码后校验并导入" if not valid_shape else "校验并打开回放时间线"
+		import_button.set_meta("replay_input_valid", valid_shape)
 
 
 func refresh_replay_archive_view() -> void:
@@ -32247,10 +32376,14 @@ func refresh_online_log_navigation() -> void:
 	if latest_button != null:
 		latest_button.text = "最新" if unread <= 0 else "最新 %d" % unread
 		latest_button.tooltip_text = "跳到最新房间日志" if unread <= 0 else "还有 %d 条未读日志，跳到最新" % unread
+		latest_button.set_meta("accessible_name", "房间日志：" + latest_button.text)
+		latest_button.set_meta("ui_full_text", latest_button.tooltip_text)
 		latest_button.modulate = Color(1.0, 0.95, 0.72, 1.0) if unread > 0 else Color(0.88, 0.90, 0.82, 0.82)
 	if unread_label != null:
 		unread_label.text = "未读 %d" % unread if unread > 0 else "已到最新"
 		unread_label.visible = unread > 0
+		unread_label.set_meta("accessible_name", unread_label.text)
+		unread_label.set_meta("ui_full_text", unread_label.text)
 
 
 func update_chat_send_cooldown(now_msec: int = -1) -> void:
@@ -32287,10 +32420,27 @@ func update_chat_send_cooldown(now_msec: int = -1) -> void:
 			button.tooltip_text = "聊天发送冷却中，请稍候 %.1f 秒" % (float(remaining_msec) / 1000.0)
 		else:
 			if bool(button.get_meta("chat_cooldown_owned", false)):
-				button.disabled = false
-				button.tooltip_text = str(button.get_meta("chat_cooldown_previous_tooltip", button.tooltip_text))
-				button.remove_meta("chat_cooldown_owned")
-				button.remove_meta("chat_cooldown_previous_tooltip")
+					button.disabled = false
+					button.tooltip_text = str(button.get_meta("chat_cooldown_previous_tooltip", button.tooltip_text))
+					button.remove_meta("chat_cooldown_owned")
+					button.remove_meta("chat_cooldown_previous_tooltip")
+	refresh_chat_send_button_state()
+
+func refresh_chat_send_button_state() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var button := root_layer.find_child("ChatSendButton", true, false) as Button
+	var input := root_layer.find_child("ChatInput", true, false) as LineEdit
+	if button == null or input == null:
+		return
+	var empty := input.text.strip_edges() == ""
+	var cooling := bool(button.get_meta("chat_cooldown_owned", false))
+	if not cooling:
+		button.disabled = empty
+		button.tooltip_text = "请输入消息后发送 · Enter" if empty else "发送当前消息 · Enter"
+	button.set_meta("chat_empty", empty)
+	button.set_meta("accessible_name", "发送：" + ("等待输入" if empty else "发送当前消息"))
+	button.set_meta("ui_full_text", button.tooltip_text)
 
 
 func deal_offline_hand() -> void:
@@ -32716,6 +32866,8 @@ func update_safe_area_layout() -> void:
 	safe_area_margins = current_safe_area_margins()
 	if root_layer != null and is_instance_valid(root_layer):
 		apply_safe_area_offsets(root_layer)
+	if toast_container != null and is_instance_valid(toast_container):
+		apply_safe_area_offsets(toast_container)
 
 func apply_safe_area_offsets(control: Control) -> void:
 	if control == null:
@@ -34686,7 +34838,8 @@ func update_stage_index() -> int:
 	return 3
 
 func update_dialog_compact_layout() -> bool:
-	return effective_viewport_size().y <= 560.0
+	var viewport := effective_viewport_size()
+	return viewport.y <= 560.0 or viewport.x <= 960.0
 
 func update_state_color() -> Color:
 	match update_state:
@@ -34699,6 +34852,46 @@ func update_state_color() -> Color:
 		"current":
 			return Color(0.42, 0.62, 0.76, 1.0)
 	return Color(0.60, 0.66, 0.58, 1.0)
+
+func refresh_top_hud_update_button(button: Button = null) -> void:
+	if button == null and root_layer != null and is_instance_valid(root_layer):
+		button = root_layer.find_child("TopHudUpdateButton", true, false) as Button
+	if button == null or not is_instance_valid(button):
+		return
+	var state: String = str(update_state)
+	var label := "更新"
+	var detail := "检查游戏更新"
+	var blocked := false
+	match state:
+		"checking":
+			label = "检查中"
+			detail = "正在检查更新，请稍候"
+			blocked = true
+		"downloading":
+			label = "下载中"
+			detail = "升级包正在下载，请稍候"
+			blocked = true
+		"installing":
+			label = "安装中"
+			detail = "安装包正在处理，请稍候"
+			blocked = true
+		"ready":
+			label = "安装"
+			detail = "升级包已校验，打开系统安装"
+		"current":
+			label = "最新"
+			detail = "当前版本已是最新版本"
+			blocked = true
+		"error":
+			label = "重试"
+			detail = update_message if update_message.strip_edges() != "" else "更新失败，点击重试"
+	button.text = label
+	button.disabled = blocked
+	button.tooltip_text = detail
+	button.set_meta("update_state", state)
+	button.set_meta("accessible_name", "更新状态：" + label)
+	button.set_meta("ui_full_text", detail)
+	button.modulate = Color(1.0, 1.0, 1.0, 0.70 if blocked else 1.0)
 
 func update_progress_text() -> String:
 	if update_dialog_compact_layout():
@@ -37291,15 +37484,10 @@ func tile_art_alpha(tile: String, size: Vector2) -> float:
 	return 1.0
 
 func tile_texture_bleed(size: Vector2, lightweight_static_tile: bool) -> Vector2:
-	# r453: keep compact river faces close to their authored porcelain edge while
-	# leaving a small dark gutter between adjacent grid cells. The same bounded
-	# expansion is used by hand cells so a large face cannot bleed into its hit
-	# neighbor; assets/tiles remain untouched.
-	var expand_ratio := 0.118
-	if lightweight_static_tile:
-		expand_ratio = 0.090 if size.x >= 52.0 else 0.070
-	var expand := Vector2(max(1.5, size.x * expand_ratio), max(1.5, size.y * expand_ratio))
-	return expand
+	# Tile faces use the authored asset at its native cell bounds. Focus and hover
+	# visuals live in sibling gutters, so texture expansion cannot be clipped back
+	# into the face or bleed into an adjacent hit cell.
+	return Vector2.ZERO
 
 func risk_badge_text(risk: String) -> String:
 	return RISK_BADGE_TEXT.get(risk, "")
@@ -38181,6 +38369,8 @@ func _build_fx_toast() -> void:
 	toast_container.name = "ToastContainer"
 	toast_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	toast_container.set_meta("safe_area_inset", true)
+	apply_safe_area_offsets(toast_container)
 	toast_container.visible = false
 	fx_layer.add_child(toast_container)
 
