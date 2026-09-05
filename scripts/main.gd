@@ -9407,6 +9407,8 @@ func draw_action_dock(parent: Control) -> void:
 	dock.set_meta("hit_rect_stable", true)
 	dock.set_meta("layout_rect", dock_rect)
 	dock.set_meta("layout_role", "action_buttons")
+	set_ui_full_text(dock, "行动区：当前可执行操作会显示在下方按钮；焦点可用方向键移动", "牌桌行动区")
+	mark_ui_optimization(dock, "F-478")
 	var action_buttons = action_bar_buttons()
 	var dock_rear = make_soft_depth_panel(dock, rect_full(0.012, 0.040, 0.988, 0.980), Color(0.08, 0.055, 0.035, 0.12), 10)
 	dock_rear.name = "ActionDock3DRearShell"
@@ -9467,9 +9469,10 @@ func draw_action_dock(parent: Control) -> void:
 		apply_rect(focus_label, rect_full(0.055, 0.035, 0.425, 0.225))
 		focus_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(focus_label)
-		for focus_button in action_buttons:
-			if focus_button is Button:
-				(focus_button as Button).focus_entered.connect(Callable(self, "update_action_dock_focus_label").bind((focus_button as Button).get_instance_id()))
+	for focus_button in action_buttons:
+		if focus_button is Button:
+			(focus_button as Button).focus_entered.connect(Callable(self, "update_action_dock_focus_label").bind((focus_button as Button).get_instance_id()))
+			mark_ui_optimization(focus_button as Control, "F-479")
 	var online_status_priority := mode == "online_game" and (online_waiting_for_server or online_retry_available or online_game_disconnected())
 	if focus_label != null:
 		# Recovery status is the actionable message; never paint the generic focus
@@ -9552,9 +9555,13 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 	apply_rect(text, rect_full(0.130, 0.10, 0.845, 0.90))
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(text)
+	set_ui_full_text(text, action_intent_text(count), "当前行动提示")
+	mark_ui_optimization(text, "F-448")
 	var intent_count_text := "重连" if mode == "online_game" and online_game_disconnected() else "%d项" % count
 	var count_badge = make_badge(intent, rect_full(0.858, 0.18, 0.982, 0.82), intent_count_text, 10, color.darkened(0.20), color.lightened(0.12), Color(0.96, 0.95, 0.84))
 	count_badge.name = "ActionIntentCount"
+	set_ui_full_text(count_badge, "%d 个可执行操作" % count, "可执行操作数量")
+	mark_ui_optimization(count_badge, "F-449")
 	rail.modulate = Color(1, 1, 1, 0.80)
 	return intent
 
@@ -9627,6 +9634,7 @@ func draw_actions(parent: Control) -> void:
 		pending_root.add_child(pending_claim_tail_bar)
 		action_bar = pending_root
 		pending_claim_response_bar = grid_bar
+		mark_ui_optimization(pending_root, "F-480")
 	else:
 		var row_bar := HBoxContainer.new()
 		row_bar.alignment = BoxContainer.ALIGNMENT_END
@@ -10523,6 +10531,11 @@ func draw_center(parent: Control) -> void:
 		draw_center_last_tile_trace(center, last)
 		play_center_last_discard_feedback(center, last, get_last_discard_seat())
 		var tile = make_tile_view(last, CENTER_LAST_TILE_SIZE, false, Callable(), true)
+		tile.name = "CenterLastDiscardTile"
+		tile.set_meta("latest_visual_owner", "CenterLastDiscardTile")
+		tile.set_meta("discard_tile_code", last)
+		tile.tooltip_text = "当前最后一张牌：%s · 来源：%s" % [tile_label(last), pending_claim_source_name(get_last_discard_seat())]
+		mark_ui_optimization(tile, "F-482")
 		center.add_child(tile)
 		apply_rect(tile, CENTER_LAST_TILE_RECT)
 
@@ -12202,10 +12215,10 @@ func discard_archive_button_text(discard_count: int, visible_start: int, visible
 	var latest_start := tail_window_start(discard_count, visible_capacity)
 	var window_end := mini(discard_count, visible_start + visible_capacity)
 	if visible_start >= latest_start:
-		return "最新 %d-%d/%d" % [visible_start + 1, window_end, discard_count]
+		return "查看更早 · %d-%d/%d" % [visible_start + 1, window_end, discard_count]
 	if visible_start <= 0:
-		return "更早 1-%d/%d" % [window_end, discard_count]
-	return "更早 %d-%d/%d" % [visible_start + 1, window_end, discard_count]
+		return "回到最新 · %d-%d/%d" % [visible_start + 1, window_end, discard_count]
+	return "继续查看更早 · %d-%d/%d" % [visible_start + 1, window_end, discard_count]
 
 func cycle_discard_archive_window(seat: int, visible_capacity: int) -> void:
 	var discards := get_discards(seat)
@@ -12213,8 +12226,14 @@ func cycle_discard_archive_window(seat: int, visible_capacity: int) -> void:
 	if latest_start <= 0:
 		discard_window_start_by_seat.erase(seat)
 		return
+	var has_archived_window := discard_window_start_by_seat.has(seat)
 	var current_start := clampi(int(discard_window_start_by_seat.get(seat, latest_start)), 0, latest_start)
-	if current_start <= 0:
+	# Browse older pages one page at a time. Once the first page is visible, the
+	# same control returns to the live tail; the owner overlay exposes the
+	# off-page latest state while an old page is open.
+	if not has_archived_window:
+		discard_window_start_by_seat[seat] = maxi(0, current_start - visible_capacity)
+	elif current_start <= 0:
 		discard_window_start_by_seat.erase(seat)
 	else:
 		discard_window_start_by_seat[seat] = maxi(0, current_start - visible_capacity)
@@ -12238,6 +12257,8 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	# Keep the current window and total visible in the owner badge itself. The
 	# archive control is still needed for navigation, but the tail window is no
 	# longer an implicit loss of history when its button is not focused.
+	var latest_start := tail_window_start(discard_count, visible_capacity)
+	var latest_off_page := seat == get_last_discard_seat() and visible_start < latest_start
 	var owner_copy := "%s %d-%d/%d" % [discard_river_owner_text(seat), visible_start + 1, window_end, discard_count]
 	var owner = make_badge(overlay, discard_river_owner_badge_rect(seat), owner_copy, 8, Color(0.010, 0.024, 0.026, fill_alpha), Color(accent.r, accent.g, accent.b, border_alpha), Color(0.92, 0.88, 0.70, 0.78))
 	owner.name = "DiscardRiverOwnerBadge_%d" % seat
@@ -12246,6 +12267,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	owner.set_meta("window_start", visible_start)
 	owner.set_meta("window_end", window_end)
 	owner.set_meta("discard_count", discard_count)
+	owner.set_meta("latest_discard_off_page", latest_off_page)
 	if discard_count > visible_capacity:
 		var archive_button = make_small_button(discard_archive_button_text(discard_count, visible_start, visible_capacity), Color(accent.r, accent.g, accent.b, 0.44), Callable(self, "cycle_discard_archive_window").bind(seat, visible_capacity))
 		archive_button.name = "DiscardRiverArchiveButton_%d" % seat
@@ -12257,13 +12279,13 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			archive_button.add_theme_color_override(color_name, Color(1.0, 1.0, 1.0, 0.0))
 		archive_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		var page_text := "第%d-%d张 / 共%d张" % [visible_start + 1, mini(discard_count, visible_start + visible_capacity), discard_count]
-		var latest_page_hint := " · 最后一张在最新页" if seat == get_last_discard_seat() and visible_start + visible_count < discard_count else ""
+		var latest_page_hint := " · 最后一张在最新页" if latest_off_page else ""
 		archive_button.tooltip_text = "点击切换牌河窗口：%s%s\n完整牌河：%s" % [page_text, latest_page_hint, join_tile_labels(get_discards(seat))]
 		set_ui_full_text(archive_button, archive_button.tooltip_text, "牌河窗口：" + page_text)
 		archive_button.set_meta("window_label", page_text)
 		archive_button.set_meta("latest_discard_page_hint", latest_page_hint != "")
-		if latest_page_hint != "":
-			archive_button.text = "更早 · 末张在最新"
+		mark_ui_optimization(archive_button, "F-419")
+		mark_ui_optimization(archive_button, "F-420")
 		archive_button.set_meta("hidden_count", visible_start)
 		archive_button.set_meta("window_start", visible_start)
 		archive_button.set_meta("visible_capacity", visible_capacity)
@@ -12550,15 +12572,6 @@ func draw_discards(parent: Control) -> void:
 			if highlighted:
 				tile_node.name = "RecentDiscardTile_%d" % seat
 				tile_node.z_index = 9
-		# The final two cells are an explicit archive reservation. Empty cells keep
-		# the archive hit target out of the last visible tile's hit geometry.
-		for spacer_index in range(maxi(0, raw_visible_capacity - visible_count)):
-			var spacer := Control.new()
-			spacer.name = "DiscardArchiveReservedCell_%d_%d" % [seat, spacer_index]
-			spacer.custom_minimum_size = tile_size
-			spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			spacer.set_meta("archive_reserved", true)
-			grid.add_child(spacer)
 		var owner_overlay := draw_discard_river_owner_overlay(parent, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), visible_capacity)
 		if owner_overlay != null:
 			owner_overlay.set_meta("table_3d_foreground", true)
@@ -12957,10 +12970,8 @@ func draw_game_top_hud(parent: Control) -> void:
 
 	# 状态
 	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
-	var status = make_label(hud, top_hud_status_text(), 15 if mode == "offline" else (12 if compact_disconnect_status else 16), Color(0.92, 0.94, 0.86), true)
+	var status = make_label(hud, top_hud_short_status_text(compact_top_hud), 15 if mode == "offline" else (15 if compact_disconnect_status else 16), Color(0.92, 0.94, 0.86), true)
 	status.name = "TopHudStatus"
-	if mode == "online_game" and has_pending_claim_window() and not online_waiting_for_server and online_feedback == "" and (effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0):
-		status.text = "响应 · %s" % tile_label(str(pending_claim_state().get("tile", "")))
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
 	set_ui_full_text(status, top_hud_status_tooltip_text(), "牌桌状态")
@@ -12979,7 +12990,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.add_child(wall_back)
 	draw_top_hud_wall_meter(hud, wall_rect)
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [get_wall_count(), display_wall_total(), wall_state_text(), tile_label(get_last_discard()) if get_last_discard() != "" else "无"]
-	var wall = make_label(hud, top_hud_wall_text(), 11, Color(0.90, 0.88, 0.74), true)
+	var wall = make_label(hud, "余牌 %d/%d" % [get_wall_count(), display_wall_total()], 11, Color(0.90, 0.88, 0.74), true)
 	wall.name = "TopHudWallText"
 	var empty_wall := StyleBoxEmpty.new()
 	empty_wall.set_content_margin_all(4)
@@ -12991,7 +13002,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
 	configure_clipped_label(wall)
 	set_ui_full_text(wall, wall_detail, "牌墙剩余：%d/%d" % [get_wall_count(), display_wall_total()])
-	var wall_state = make_label(hud, wall_state_text(), 9, Color(0.78, 0.82, 0.72), false)
+	var wall_state = make_label(hud, "状态 · %s · 上张%s" % [wall_state_text().replace("牌墙", ""), tile_label(get_last_discard()) if get_last_discard() != "" else "无"], 9, Color(0.78, 0.82, 0.72), false)
 	wall_state.name = "TopHudWallState"
 	apply_rect(wall_state, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.500, wall_rect.size.x - 0.010, wall_rect.position.y + 0.840))
 	wall_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -13031,9 +13042,11 @@ func draw_hand(parent: Control) -> void:
 	var hand := get_self_hand()
 	normalized_hand_keyboard_selection(hand)
 	var compact_hand_art := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
-	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.018, 0.026, 0.024, 0.94), "ui_dark_scrim", 0.20)
+	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.018, 0.026, 0.024, 0.97), "ui_dark_scrim", 0.20)
 	tray.name = "HandTray"
 	parent.add_child(tray)
+	set_ui_full_text(tray, "手牌区：点击或按 Enter 打出选中的牌；当前状态和教学提示位于上方", "玩家手牌区")
+	mark_ui_optimization(tray, "F-483")
 	# Keep the tile lane's one-tile gutter available for hover/focus art. The
 	# stage and tile hit frames remain bounded; only the visual lift may cross the
 	# tray edge by a few pixels.
@@ -13050,9 +13063,9 @@ func draw_hand(parent: Control) -> void:
 	if gpt_hand_texture != null:
 		gpt_hand_texture.name = "HandGPTTrayTexture"
 		# Keep the authored tray material as a quiet edge texture beneath the tiles.
-		gpt_hand_texture.modulate = Color(1.20, 1.12, 1.02, 0.28)
+		gpt_hand_texture.modulate = Color(1.20, 1.12, 1.02, 0.18)
 		tray.move_child(gpt_hand_texture, min(1, tray.get_child_count() - 1))
-	var tile_stage = make_gpt_plate_rect(rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.12), "ui_button_face_plate")
+	var tile_stage = make_gpt_plate_rect(rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.22), "ui_button_face_plate")
 	tile_stage.name = "HandTrayTileStage"
 	tile_stage.clip_contents = false
 	tile_stage.set_meta("visual_focus_gutter_px", 6.0)
@@ -13094,32 +13107,41 @@ func draw_hand(parent: Control) -> void:
 	var state_chip = add_optional_gpt_illustration_texture(tray, "ui_hand_tray_state_chip", rect_full(0.783, 0.028, 0.982, 0.157), 0.55, false)
 	if state_chip != null:
 		state_chip.name = "HandTrayStateChip"
-	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_tray_state_text(), 12, hand_tray_state_fill(), hand_tray_state_border(), Color(0.92, 0.92, 0.84))
+	var hand_state_text := hand_tray_state_text()
+	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_state_text, 12, hand_tray_state_fill(), hand_tray_state_border(), Color(0.92, 0.92, 0.84))
 	state_badge.name = "HandTrayStateBadge"
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	state_badge.tooltip_text = "手牌状态：%s · %s" % [hand_state_text, hand_tray_text()]
+	set_ui_full_text(state_badge, hand_tray_text(), "手牌状态：" + hand_state_text)
+	mark_ui_optimization(state_badge, "F-417")
 	if has_pending_claim_window() or tutorial_hint_visible:
 		state_badge.visible = false
 
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
 	if tutorial_hint_visible:
 		# The prompt owns the tray's top lane; it never sits above a tile hit target.
-		var hint_panel = make_gpt_plate_rect(rect_full(0.02, 0.012, 0.98, 0.235), Color(0.020, 0.042, 0.048, 0.94), "ui_button_face_plate")
+		var hint_panel = make_gpt_plate_rect(rect_full(0.02, 0.012, 0.98, 0.250), Color(0.020, 0.042, 0.048, 0.96), "ui_button_face_plate")
 		hint_panel.name = "HandTrayTutorialHint"
 		tray.add_child(hint_panel)
 		hint_panel.z_index = 8
 		hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hint_panel.clip_contents = true
+		hint_panel.clip_contents = false
 		hint_panel.add_child(make_gpt_edge_rail(rect_full(0.0, 0.0, 0.014, 1.0), Color(0.30, 0.62, 0.52, 0.56)))
 		draw_hand_tutorial_hint_art(hint_panel)
 		var hint_text = tutorial_hand_hint_text()
 		var hint_label = make_label(hint_panel, hint_text, 10, Color(0.94, 0.96, 0.92), false)
 		hint_label.name = "HandTrayTutorialHintText"
-		apply_rect(hint_label, rect_full(0.155, 0.080, 0.720, 0.920))
+		apply_rect(hint_label, rect_full(0.155, 0.055, 0.720, 0.945))
 		hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hint_label.tooltip_text = hint_text
-		configure_clipped_label(hint_label)
+		hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint_label.clip_text = false
+		hint_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		configure_wrapped_label(hint_label, maxf(180.0, effective_viewport_size().x * 0.360), 0.0, 3.0)
+		mark_ui_optimization(hint_panel, "F-416")
+		mark_ui_optimization(hint_label, "F-416")
 		if tutorial_step == TUTORIAL_STEP_WIN:
 			var finish_tutorial_button = make_small_button("完成", Color(0.42, 0.68, 0.52), Callable(self, "complete_tutorial"))
 			finish_tutorial_button.name = "HandTutorialCompleteButton"
@@ -13186,9 +13208,15 @@ func draw_hand(parent: Control) -> void:
 	hand_box.set_meta("layout_content_width", float(hand_layout.get("content_width", 0.0)))
 	hand_box.set_meta("layout_fits_content", hand_layout_fits_content(hand, hand_layout))
 	hand_box.set_meta("group_gap_width", group_gap_width)
+	hand_box.set_meta("keyboard_navigation", "左右方向键选择，Enter出牌")
+	mark_ui_optimization(hand_box, "F-484")
 	hand_box.add_theme_constant_override("separation", maxi(0, int(hand_layout.get("separation", 4))))
 	hand_box.z_index = 4
 	apply_rect(hand_box, HAND_TRAY_TILES_RECT)
+	# Keep the 46px compact hit target clear of the tray's bottom lip while
+	# retaining a one-pixel separation from the tutorial lane above it.
+	hand_box.offset_top = -2.0
+	hand_box.offset_bottom = -2.0
 	tray.add_child(hand_box)
 
 	# 手牌滑入动画
@@ -13253,6 +13281,8 @@ func draw_hand(parent: Control) -> void:
 		tile_node.set_meta("guide_target", i == interactive_guide_target_index)
 		tile_node.set_meta("keyboard_selected", keyboard_selected)
 		tile_node.tooltip_text = hand_tile_interaction_tooltip(tile, report, hint_badge, is_drawn_tile_marker)
+		tile_node.set_meta("accessible_name", "手牌第%d张：%s" % [i + 1, tile_label(tile)])
+		mark_ui_optimization(tile_node, "F-485")
 		if keyboard_selected and hint_badge != "选":
 			tile_node.tooltip_text += " · 键盘已选 · Enter确认出牌"
 		if is_drawn_tile_marker:
@@ -13274,6 +13304,11 @@ func draw_hand(parent: Control) -> void:
 				drawn_body.offset_top -= 4.0
 				drawn_body.offset_bottom -= 4.0
 				tile_node.set_meta("drawn_visual_lift", 4.0)
+				var drawn_baseline := make_gpt_route_rail(rect_full(0.04, 0.93, 0.96, 0.985), Color(0.94, 0.78, 0.38, 0.28))
+				drawn_baseline.name = "HandDrawnTileBaseline"
+				drawn_baseline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				drawn_mount.add_child(drawn_baseline)
+				mark_ui_optimization(drawn_mount, "F-415")
 		else:
 			hand_box.add_child(tile_node)
 		if is_drawn_tile:
@@ -13915,6 +13950,8 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	marker.set_meta("primary_visual_owner", "LastDiscardFocusMarker")
 	marker.set_meta("secondary_marker_policy", "single_badge_plus_outer_frame")
 	marker.tooltip_text = "%s刚打出%s · 这是当前牌桌最后一张牌" % [pending_claim_source_name(seat), tile_label(tile)]
+	set_ui_full_text(marker, marker.tooltip_text, "最后一张弃牌：" + tile_label(tile))
+	mark_ui_optimization(marker, "F-486")
 	apply_rect(marker, marker_rect)
 	parent.add_child(marker)
 	marker.z_index = 1
@@ -13982,21 +14019,21 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 		for ripple_node in marker.get_children():
 			if ripple_node is Control and str(ripple_node.name).begins_with("LastDiscardFocusRipple_"):
 				(ripple_node as Control).visible = false
-	# The center console already renders the last tile outside the claim window.
-	# Keep the enlarged duplicate only while a claim response needs a focal tile.
-	var center_already_shows_last := true
-	if not center_already_shows_last:
-		var focus_tile_size = Vector2(44, 60)
-		var focus_tile = make_tile_view(tile, focus_tile_size, false, Callable(), true)
-		focus_tile.name = "LastDiscardFocusActualTile"
-		focus_tile.z_index = 8
-		marker.add_child(focus_tile)
-		apply_centered_rect(focus_tile, Vector2(0.50, 0.48), focus_tile_size)
-	var badge = make_badge(marker, rect_full(0.020, -0.190, 1.020, 0.060), "%s 刚打 %s" % [pending_claim_source_badge_text(seat), tile_label(tile)], 8, Color(0.018, 0.036, 0.038, 0.72), Color(0.88, 0.68, 0.32, 0.28), Color(0.96, 0.92, 0.76))
+	# The center console owns the only latest tile face. This marker supplies
+	# location and source context without creating a competing duplicate face.
+	marker.set_meta("latest_visual_owner", "CenterLastDiscardTile")
+	marker.set_meta("marker_role", "latest_discard_frame")
+	marker.clip_contents = true
+	var badge = make_badge(marker, rect_full(0.080, 0.055, 0.920, 0.295), "%s 刚打 %s" % [pending_claim_source_badge_text(seat), tile_label(tile)], 8, Color(0.018, 0.036, 0.038, 0.72), Color(0.88, 0.68, 0.32, 0.28), Color(0.96, 0.92, 0.76))
 	badge.name = "LastDiscardFocusBadge"
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.tooltip_text = marker.tooltip_text
-	add_lucide_icon(marker, "sparkles", rect_full(0.68, -0.28, 1.10, 0.22), Color(0.98, 0.86, 0.42, 0.72))
+	badge.set_meta("latest_visual_owner", "CenterLastDiscardTile")
+	mark_ui_optimization(badge, "F-488")
+	var badge_icon := add_lucide_icon(marker, "sparkles", rect_full(0.735, 0.065, 0.895, 0.255), Color(0.98, 0.86, 0.42, 0.72))
+	if badge_icon != null:
+		badge_icon.name = "LastDiscardFocusBadgeIcon"
+		badge_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if fx_enabled_effective():
 		marker.modulate = Color(1, 1, 1, 0)
 		marker.scale = Vector2(0.92, 0.92)
@@ -14061,7 +14098,18 @@ func draw_loading_progress_feedback(parent: Control, progress_ratio: float = -1.
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.190, 0.730, 0.810, 0.770))
 	parent.add_child(art)
+	mark_ui_optimization(art, "F-429")
 	var accent = Color(0.78, 0.64, 0.30)
+	var progress_status := "准备中 · 等待资源" if progress_ratio < 0.0 else "%d%% · 正在加载" % int(round(clampf(progress_ratio, 0.0, 1.0) * 100.0))
+	var progress_label := make_label(art, progress_status, 10, Color(0.92, 0.88, 0.72), true)
+	progress_label.name = "LoadingProgressStatusLabel"
+	apply_rect(progress_label, rect_full(0.120, 0.000, 0.880, 0.330))
+	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	progress_label.tooltip_text = "加载进度：" + progress_status
+	progress_label.set_meta("progress_ratio", progress_ratio)
+	configure_clipped_label(progress_label)
+	mark_ui_optimization(progress_label, "F-487")
 	var source = make_gpt_edge_rail(rect_full(0.075, 0.250, 0.130, 0.590), Color(accent.r, accent.g, accent.b, 0.12))
 	source.name = "LoadingProgressSource"
 	art.add_child(source)
@@ -14099,7 +14147,7 @@ func draw_loading_progress_feedback(parent: Control, progress_ratio: float = -1.
 
 func draw_loading_shuffle_art(parent: Control) -> Control:
 	# r211: GPT chrome conversion
-	var art = make_gpt_route_rail(rect_full(0.160, 0.485, 0.840, 0.605), Color(0.010, 0.022, 0.026, 0.66))
+	var art = make_gpt_route_rail(rect_full(0.160, 0.470, 0.840, 0.565), Color(0.010, 0.022, 0.026, 0.66))
 	art.name = "LoadingShuffleArt"
 	parent.add_child(art)
 	var rail = make_gpt_route_rail(rect_full(0.095, 0.730, 0.905, 0.840), Color(0.006, 0.016, 0.018, 0.50))
@@ -14385,7 +14433,7 @@ func seat_meld_face_rotation(seat: int) -> float:
 
 func meld_lane_group_footprint(seat: int, meld: Array, compact_melds: bool) -> float:
 	var vertical := seat_meld_is_vertical(seat)
-	var tile_width := 18.0 if compact_melds else (28.0 if vertical else 26.0)
+	var tile_width := 20.0 if compact_melds else (28.0 if vertical else 26.0)
 	var separation := 1.0 if compact_melds else 3.0
 	var padding := 2.0 if compact_melds else 8.0
 	var tile_count := maxi(1, meld.size())
@@ -14412,9 +14460,13 @@ func meld_lane_capacity_for_list(seat: int, meld_list: Array, compact_melds: boo
 	return maxi(1, capacity)
 
 func meld_lane_pager_rect(seat: int, meld_rect: Rect2) -> Rect2:
+	var lane_left := meld_rect.position.x
+	var lane_top := meld_rect.position.y
+	var lane_right := meld_rect.size.x
+	var lane_bottom := meld_rect.size.y
 	if seat_meld_is_vertical(seat):
-		return rect_full(meld_rect.position.x, meld_rect.size.y - 0.085, meld_rect.size.x, meld_rect.size.y - 0.005)
-	return rect_full(meld_rect.size.x - 0.060, meld_rect.position.y, meld_rect.size.x - 0.005, meld_rect.size.y)
+		return rect_full(lane_left, lane_bottom - 0.085, lane_right, lane_bottom - 0.005)
+	return rect_full(lane_right - 0.060, lane_top, lane_right - 0.005, lane_bottom)
 
 func cycle_meld_window(seat: int, page_capacity: int) -> void:
 	var meld_list := get_melds(seat)
@@ -14498,8 +14550,8 @@ func draw_melds(parent: Control) -> void:
 			# Bound the face width by the single lane itself so Container minimum
 			# sizes cannot push into the adjacent HUD or river at 960px.
 			var max_compact_tile_width := floorf((lane_width_px - 12.0) / HAND_TILE_ASPECT)
-			max_compact_tile_width = maxf(18.0, max_compact_tile_width)
-			compact_tile_width = clampf(minf(compact_tile_width, max_compact_tile_width), 18.0, 26.0)
+			max_compact_tile_width = maxf(20.0, max_compact_tile_width)
+			compact_tile_width = clampf(minf(compact_tile_width, max_compact_tile_width), 20.0, 26.0)
 			meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * HAND_TILE_ASPECT)))
 		elif not vertical and compact_melds:
 			# Keep horizontal melds readable on 960px screens. Use the actual lane
@@ -14527,7 +14579,7 @@ func draw_melds(parent: Control) -> void:
 				# top-seat rotation. Bound width by lane height as well as lane width,
 				# otherwise a short 960px lane can produce a 100px-wide face.
 				var max_horizontal_tile_width := floorf(maxf(18.0, (lane_height_px - 10.0) / 1.5))
-				compact_tile_width = clampf(minf(compact_tile_width, max_horizontal_tile_width), 18.0, 28.0)
+				compact_tile_width = clampf(minf(compact_tile_width, max_horizontal_tile_width), 20.0, 28.0)
 				meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * 1.5)))
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
@@ -14551,6 +14603,9 @@ func draw_melds(parent: Control) -> void:
 				meld_kind_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 				meld_kind_badge.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 				meld_kind_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				meld_kind_badge.set_meta("meld_kind", meld_kind)
+				meld_kind_badge.set_meta("accessible_name", "副露类型：" + meld_kind)
+				mark_ui_optimization(meld_kind_badge, "F-424")
 				meld_kind_badge.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.03, 0.96))
 				meld_kind_badge.add_theme_constant_override("outline_size", 3)
 				if vertical and compact_melds:
@@ -14566,6 +14621,8 @@ func draw_melds(parent: Control) -> void:
 			page_button.custom_minimum_size = Vector2(50, 40)
 			page_button.add_theme_font_size_override("font_size", 11)
 			page_button.tooltip_text = "副露第%d/%d页 · 显示第%d-%d组 · 点击查看下一页" % [int(window_start / maxi(1, lane_capacity)) + 1, page_count, window_start + 1, window_start + visible_melds.size()]
+			set_ui_full_text(page_button, page_button.tooltip_text, "座位%d副露翻页" % seat)
+			mark_ui_optimization(page_button, "F-481")
 			page_button.set_meta("seat", seat)
 			page_button.set_meta("window_start", window_start)
 			page_button.set_meta("page_count", page_count)
@@ -14995,6 +15052,8 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		var button = make_small_button(str(item[1]), item[3], Callable(self, "activate_menu_entry").bind(quick_source_name, quick_action))
 		button.name = "MenuQuick%sButton" % quick_id.capitalize()
 		button.custom_minimum_size = Vector2(96, 44)
+		set_ui_full_text(button, "%s：打开%s页面" % [str(item[1]), str(item[1])], "快捷入口：" + str(item[1]))
+		mark_ui_optimization(button, "F-454")
 		# Keep quick navigation calm enough for the hero artwork and readable at 960px.
 		ensure_button_gpt_face_plate(button, Color(quick_color.r, quick_color.g, quick_color.b, 0.38))
 		button.button_down.connect(Callable(self, "play_menu_quick_button_press_feedback").bind(button, quick_id, quick_color))
@@ -18233,11 +18292,11 @@ func draw_settings_overlay(parent: Control) -> void:
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
 	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
 	if compact_settings:
-		# 540px 高度仍保留每行 48px 的点击目标：紧凑分区改为全宽多列，
+		# 540px 高度仍保留每行 48px 的点击目标：紧凑分区改为全宽两列，
 		# 让声音、体验和系统都拥有足够的横向按钮空间。
-		audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.490)
-		play_section_rect = rect_full(0.040, 0.490, 0.960, 0.832)
-		maint_section_rect = rect_full(0.040, 0.850, 0.960, 0.995)
+			audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.455)
+			play_section_rect = rect_full(0.040, 0.473, 0.960, 0.780)
+			maint_section_rect = rect_full(0.040, 0.798, 0.960, 0.995)
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -18395,7 +18454,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	# 体验设置
 	var play_grid = make_settings_section(panel, play_section_rect, "体验", compact_settings)
 	# Six compact controls need two rows to preserve the 48px row target.
-	play_grid.columns = 3 if compact_settings else 1
+	play_grid.columns = 2 if compact_settings else 1
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_selector_button("快速" if fast_mode_enabled else "标准", "AI 节奏", func() -> void:
 		toggle_fast_mode_setting()
 	))
@@ -18417,8 +18476,8 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 系统设置
 	var system_grid = make_settings_section(panel, maint_section_rect, "系统", compact_settings)
-	system_grid.columns = 3
-	make_setting_row(system_grid, "画面质量", "仅影响背景、动效和资源质量；牌面保持 2D", make_graphics_quality_button(func() -> void:
+	system_grid.columns = 2 if compact_settings else 3
+	make_setting_row(system_grid, "画面质量", "牌面保持 2D · 仅影响背景和动效", make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
 	))
 	make_setting_row(system_grid, "本地进度", "再次点击确认清空本地进度" if reset_progress_confirming else "清空统计与离线记录", make_reset_progress_button(func() -> void:
@@ -19597,15 +19656,21 @@ func draw_table_log(parent: Control) -> void:
 	var ledger_title = make_label(ledger_panel, "牌桌记录", 10 if compact_log else 12, Color(0.90, 0.78, 0.52), true)
 	apply_rect(ledger_title, rect_full(0.085, 0.030, 0.430 if compact_log else 0.500, 0.230))
 	ledger_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(ledger_title, "牌桌记录", "当前牌桌最近事件")
+	mark_ui_optimization(ledger_title, "F-517")
 	var ledger_count = make_label(ledger_panel, "%d条" % table_logs.size(), 8 if compact_log else 10, Color(0.72, 0.66, 0.48), false)
 	apply_rect(ledger_count, rect_full(0.455 if compact_log else 0.520, 0.040, 0.650, 0.220))
 	ledger_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	set_ui_full_text(ledger_count, "%d 条牌桌记录" % table_logs.size(), "牌桌记录数量")
+	mark_ui_optimization(ledger_count, "F-518")
 	var archive_button := make_small_button("历史", Color(0.48, 0.42, 0.28), Callable(self, "toggle_table_log_archive"))
 	archive_button.name = "TableLogArchiveButton"
 	archive_button.custom_minimum_size = Vector2(48 if compact_log else 54, 28 if compact_log else 32)
 	archive_button.custom_minimum_size.y = UI_MIN_TOUCH_TARGET
 	archive_button.add_theme_font_size_override("font_size", 10 if compact_log else 11)
 	archive_button.tooltip_text = "查看完整牌桌记录 · 最近记录可滚动查看"
+	set_ui_full_text(archive_button, archive_button.tooltip_text, "打开牌桌历史记录")
+	mark_ui_optimization(archive_button, "F-519")
 	apply_rect(archive_button, rect_full(0.690, 0.0, 0.950, 0.0))
 	archive_button.offset_top = 4.0
 	archive_button.offset_bottom = 48.0
@@ -19615,6 +19680,8 @@ func draw_table_log(parent: Control) -> void:
 		var waiting = make_label(ledger_panel, "等待开局", 12, Color(0.74, 0.66, 0.44), true)
 		apply_rect(waiting, rect_full(0.080, 0.330, 0.920, 0.710))
 		waiting.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		set_ui_full_text(waiting, "等待开局", "牌桌记录为空")
+		mark_ui_optimization(waiting, "F-520")
 		return
 	for log_i in range(1 if compact_log else log_recent.size()):
 		var row_top = 0.300 + float(log_i) * 0.265
@@ -19638,6 +19705,8 @@ func draw_table_log(parent: Control) -> void:
 		row_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		configure_clipped_label(row_body)
 		row_body.tooltip_text = row_body.text
+		set_ui_full_text(row_body, row_body.text, "牌桌最近事件")
+		mark_ui_optimization(row_body, "F-521")
 	return
 
 
@@ -19660,6 +19729,8 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	title.name = "TableLogArchiveTitle"
 	apply_rect(title, rect_full(0.060, 0.045, 0.650, 0.150))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(title, "牌桌记录·历史", "完整牌桌历史记录")
+	mark_ui_optimization(title, "F-522")
 	var visible_log_count := mini(table_logs.size(), ONLINE_LOG_HISTORY_LIMIT)
 	var count_text := "%d条" % table_logs.size()
 	if table_logs.size() > ONLINE_LOG_HISTORY_LIMIT:
@@ -19669,10 +19740,14 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	apply_rect(count, rect_full(0.680, 0.060, 0.820, 0.145))
 	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	count.tooltip_text = "显示最近%d/%d条牌桌记录" % [visible_log_count, table_logs.size()] if table_logs.size() > ONLINE_LOG_HISTORY_LIMIT else "共%d条牌桌记录" % table_logs.size()
+	set_ui_full_text(count, count.tooltip_text, "牌桌历史记录数量")
+	mark_ui_optimization(count, "F-523")
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_table_log_archive"))
 	close_button.name = "TableLogArchiveCloseButton"
 	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 	close_button.tooltip_text = "关闭牌桌记录 · Esc"
+	set_ui_full_text(close_button, close_button.tooltip_text, "关闭牌桌历史记录")
+	mark_ui_optimization(close_button, "F-524")
 	apply_rect(close_button, rect_full(0.865, 0.005, 0.985, 0.215))
 	panel.add_child(close_button)
 	var route = make_gpt_route_rail(rect_full(0.060, 0.180, 0.940, 0.205), Color(0.006, 0.016, 0.018, 0.48))
@@ -20716,9 +20791,17 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	configure_scroll_container(notes_scroll, "上下滚动查看完整更新说明")
 	notes_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	notes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	notes_scroll.clip_contents = true
 	notes_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	apply_rect(notes_scroll, rect_full(0.145, 0.060, 0.790, 0.900) if update_dialog_compact_layout() else rect_full(0.145, 0.010, 0.790, 0.580))
+	notes_scroll.set_meta("fixed_action_lane", true)
+	notes_scroll.set_meta("max_reading_height", 0.840 if update_dialog_compact_layout() else 0.570)
+	mark_ui_optimization(notes_scroll, "F-442")
 	update_release_notes_art.add_child(notes_scroll)
+	var notes_scrollbar := notes_scroll.get_v_scroll_bar()
+	if notes_scrollbar != null:
+		notes_scrollbar.visible = false
+		notes_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	update_release_notes_label = make_label(notes_scroll, "", 10, Color(0.84, 0.88, 0.74), true)
 	update_release_notes_label.name = "UpdateReleaseNotesLabel"
 	update_release_notes_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -21652,6 +21735,8 @@ func make_achievement_row(key: String, index: int) -> Control:
 	var row = Panel.new()
 	row.name = "AchievementRow_%s" % key
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	set_ui_full_text(row, achievement_display_name(key) + "：" + achievement_goal_text(key), "成就条目：" + achievement_display_name(key))
+	mark_ui_optimization(row, "F-476")
 	var achievement_row_height: float = 104.0 if effective_viewport_size().x >= 1600.0 else 84.0
 	row.custom_minimum_size = Vector2(0, achievement_row_height)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -21674,6 +21759,9 @@ func make_achievement_row(key: String, index: int) -> Control:
 	name_label.name = "AchievementRowName_%s" % key
 	apply_rect(name_label, rect_full(0.135, 0.080, 0.665, 0.305))
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(name_label, achievement_display_name(key), "成就名称：" + achievement_display_name(key))
+	name_label.set_meta("achievement_field", "name")
+	fit_label_font_size(name_label, maxf(120.0, effective_viewport_size().x * 0.500), 16, 11)
 	name_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
 	name_label.add_theme_constant_override("outline_size", 3)
 	configure_clipped_label(name_label)
@@ -21684,6 +21772,9 @@ func make_achievement_row(key: String, index: int) -> Control:
 	goal_label.name = "AchievementRowGoal_%s" % key
 	apply_rect(goal_label, rect_full(0.140, 0.360, 0.660, 0.570))
 	goal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(goal_label, achievement_goal_text(key), "成就目标：" + achievement_goal_text(key))
+	goal_label.set_meta("achievement_field", "goal")
+	fit_label_font_size(goal_label, maxf(120.0, effective_viewport_size().x * 0.500), 13, 10)
 	configure_clipped_label(goal_label)
 	var progress_back = make_gpt_gate(rect_full(0.135, 0.660, 0.475, 0.910), Color(accent.r, accent.g, accent.b, 0.24 if unlocked else 0.18))
 	progress_back.name = "AchievementRowProgressTextBackplate_%s" % key
@@ -21702,6 +21793,8 @@ func make_achievement_row(key: String, index: int) -> Control:
 	apply_rect(state_label, rect_full(0.830, 0.220, 0.940, 0.780))
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(state_label)
+	set_ui_full_text(state_label, achievement_state_text(key) + " · " + achievement_progress_text(key), "成就状态：" + achievement_display_name(key))
+	mark_ui_optimization(state_label, "F-477")
 	var detail_text := ("已解锁" if unlocked else "未解锁") + " · " + achievement_progress_text(key) + " · " + achievement_goal_text(key)
 	var focus_target := Button.new()
 	focus_target.name = "AchievementRowFocusTarget"
@@ -21941,6 +22034,10 @@ func make_hand_group_spacer(height: float, width: float = 10.0, label_text: Stri
 	spacer.name = "HandGroupDivider"
 	spacer.custom_minimum_size = Vector2(width, height)
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spacer.tooltip_text = "%s组" % label_text if label_text != "" else "手牌分组边界"
+	spacer.set_meta("hand_group_label", label_text)
+	spacer.set_meta("accessible_name", "%s组分隔" % label_text if label_text != "" else "手牌分组分隔")
+	mark_ui_optimization(spacer, "F-418")
 	var line = make_gpt_ribbon(rect_full(0.44, 0.12, 0.56, 0.88), Color(1.0, 0.78, 0.30, 0.38))
 	line.name = "HandGroupDividerLine"
 	spacer.add_child(line)
@@ -21960,7 +22057,9 @@ func make_hand_group_spacer(height: float, width: float = 10.0, label_text: Stri
 	if label_text != "" and width >= 8.0:
 		var label = make_label(spacer, label_text, 8, Color(0.98, 0.88, 0.58, 0.92), true)
 		label.name = "HandGroupDividerLabel_%s" % label_text
-		apply_rect(label, rect_full(0.0, 0.78, 1.0, 0.99))
+		apply_rect(label, rect_full(0.0, 0.330, 1.0, 0.690))
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		configure_clipped_label(label)
 	return spacer
 
@@ -22091,15 +22190,14 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	var face_rot: float = seat_meld_face_rotation(seat)
 	group.name = "MeldGroup_%s" % kind
 	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Pad, seal and raised-tile art must stay within the assigned lane. The
-	# holder dimensions already account for the seat-facing rotation, so clipping
-	# here does not cut the authored 2D tile faces.
-	group.clip_contents = true
+	# Holder dimensions account for the seat-facing rotation. Keep the group open
+	# so the compact type badge remains visible at the edge of a narrow group.
+	group.clip_contents = false
 	# Natural upright art size; rotation handles table-facing orientation.
 	var tile_size: Vector2 = tile_size_override if tile_size_override.x > 0.0 and tile_size_override.y > 0.0 else (Vector2(28, 38) if vertical else Vector2(26, 36))
 	var tile_count: int = maxi(1, meld.size())
 	var compact_tiles := tile_size_override.x > 0.0 and tile_size_override.y > 0.0
-	var sep: int = (1 if compact_tiles else 3) if vertical else (1 if compact_tiles and tile_size.x <= 18.0 else 2)
+	var sep: int = (1 if compact_tiles else 3) if vertical else (1 if compact_tiles else 2)
 	var group_padding := 2.0 if compact_tiles else 8.0
 	# After ±90° rotation, visual footprint swaps width/height.
 	var cell_w: float = tile_size.y if vertical else tile_size.x
@@ -22177,6 +22275,8 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	apply_rect(kind_label, rect_full(0.0, 0.0, 1.0, 1.0))
 	group.set_meta("meld_kind", kind)
 	group.set_meta("meld_semantic_label", "%s · %d张" % [kind, meld.size()])
+	group.set_meta("badge_clip_safe", true)
+	mark_ui_optimization(group, "F-424")
 	group.tooltip_text = "%s副露 · %d张牌" % [kind, meld.size()]
 	# Hidden structural markers keep offline smoke name probes stable while UI stays pure tiles.
 	var art: Control = draw_meld_group_art(group, kind, accent, meld.size())
@@ -22244,6 +22344,8 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# The card is the native interactive surface, so keep its complete action
 	# label available even though the visible title/subtitle are separate labels.
 	button.tooltip_text = text.replace("\n", " · ")
+	button.set_meta("ui_action_summary", text.replace("\n", " · "))
+	mark_ui_optimization(button, "F-445")
 	button.custom_minimum_size = Vector2(310, 210)
 	configure_touch_button(button)
 	# r180: menu card face is GPT plate; StyleBox hosts stay empty.
@@ -22279,6 +22381,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	configure_clipped_label(title)
 	title.tooltip_text = title_text
+	mark_ui_optimization(title, "F-446")
 	if subtitle_text != "":
 		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(15, 2), Color(0.94, 0.92, 0.80), false)
 		subtitle.name = "MenuCardSubtitleLabel"
@@ -22291,6 +22394,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		style_background_readable_label(subtitle, 2)
 		configure_clipped_label(subtitle)
+		mark_ui_optimization(subtitle, "F-447")
 	configure_menu_button_motion(button, 0.08, 1.035, deg_to_rad(0.45))
 	var menu_button_ref = weakref(button)
 	button.button_down.connect(func() -> void:
@@ -22524,11 +22628,13 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	# r214: bulk GPT chrome sweep
 	var setting_viewport := effective_viewport_size()
 	var compact_settings := setting_viewport.y <= 560.0 or setting_viewport.x <= 960.0
+	var large_text_settings := large_text_enabled
 	var row = Panel.new()
 	row.name = "SettingRow_%s" % title
 	configure_passive_container(row)
-	row.custom_minimum_size = Vector2(0, 56 if large_text_enabled else 48)
+	row.custom_minimum_size = Vector2(0, 56 if large_text_enabled else (44 if compact_settings else 48))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mark_ui_optimization(row, "F-413")
 	# r180: GPT settings plate only — no solid StyleBox row paint.
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
@@ -22538,7 +22644,10 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	row.add_child(row_plate)
 	row.move_child(row_plate, 0)
 	draw_setting_row_status_art(row, title, status)
-	var text_right := 0.430 if compact_settings else 0.565
+	# Large text needs a little more room for four-character setting names on
+	# the compact three-column grid. Keep the button lane fixed so its target
+	# size and focus geometry remain stable.
+	var text_right := 0.465 if compact_settings and large_text_settings else (0.430 if compact_settings else 0.565)
 	var button_left := 0.495 if compact_settings else 0.595
 	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, text_right, 0.890), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
@@ -22548,7 +22657,10 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	apply_rect(title_label, rect_full(0.052, 0.130, text_right - 0.020, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
-	var visible_status := compact_setting_status(title, status) if compact_settings else status
+	# Preserve the full explanation in the tooltip/accessibility metadata while
+	# showing a scan-friendly status whenever large text would make the detail
+	# collide with the compact row geometry.
+	var visible_status := compact_setting_status(title, status) if compact_settings or large_text_settings else status
 	var status_label = make_label(row, visible_status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
 	set_ui_full_text(status_label, status, title + "完整状态")
@@ -22564,7 +22676,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.set_meta("ui_full_text", status)
 	button.set_meta("accessible_name", title + "：" + status)
-	button.custom_minimum_size = Vector2(0, 0)
+	button.custom_minimum_size = Vector2(0, 44 if compact_settings else 46)
 	apply_rect(button, rect_full(button_left, SETTINGS_ROW_BUTTON_RECT.position.y, SETTINGS_ROW_BUTTON_RECT.size.x, SETTINGS_ROW_BUTTON_RECT.size.y) if compact_settings else SETTINGS_ROW_BUTTON_RECT)
 	row.add_child(button)
 
@@ -22576,7 +22688,7 @@ func compact_setting_status(title: String, status: String) -> String:
 	if title == "隐私诊断":
 		return "已同意" if status.contains("已同意") else "未同意"
 	if title == "画面质量":
-		return graphics_quality_label(true)
+		return "2D牌面"
 	if title == "播放测试":
 		return "可试听"
 	if status.begins_with("当前: "):
@@ -22620,11 +22732,11 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	configure_passive_container(grid)
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 4 if compact else 16)
-	grid.add_theme_constant_override("v_separation", 1 if compact else 5)
+	grid.add_theme_constant_override("v_separation", 0 if compact else 5)
 	section.add_child(grid)
 	# Compact settings reserve the same 48px row target while tightening only
 	# the decorative title/chrome clearance inside each physical section.
-	apply_rect(grid, rect_full(0.035, 0.105, 0.995, 0.995) if compact else SETTINGS_SECTION_GRID_RECT)
+	apply_rect(grid, rect_full(0.035, 0.050, 0.995, 0.995) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 
@@ -24772,6 +24884,10 @@ func _show_achievements_screen_impl() -> void:
 	var title = make_label(panel, "成就图鉴", 30, Color(1.0, 0.94, 0.62), true)
 	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(title, title.text, "规则指南标题")
+	mark_ui_optimization(title, "F-469")
+	set_ui_full_text(title, "云桌麻将", "云桌麻将主菜单")
+	mark_ui_optimization(title, "F-450")
 	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
 	title.add_theme_constant_override("outline_size", 4)
 
@@ -25024,6 +25140,8 @@ func _show_menu_impl() -> void:
 	apply_rect(title_rule, rect_full(0.018, 0.650, 0.940, 0.950))
 	title_rule.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_background_readable_label(title_rule, 2)
+	set_ui_full_text(title_rule, title_rule.text, "当前地方规则")
+	mark_ui_optimization(title_rule, "F-451")
 
 	# 教学入口始终可见；完成或跳过后只保留轻量复习入口，不打扰老用户。
 	var tutorial_button = make_small_button(tutorial_menu_button_text(), Color(0.34, 0.58, 0.48), Callable(self, "open_tutorial_entry_sheet"))
@@ -25033,6 +25151,8 @@ func _show_menu_impl() -> void:
 	tutorial_button.visible = not tutorial_is_available()
 	tutorial_button.custom_minimum_size = Vector2(112, 44)
 	tutorial_button.tooltip_text = "查看教学进度：" + tutorial_entry_detail_text()
+	set_ui_full_text(tutorial_button, tutorial_button.tooltip_text, "打开新手教学")
+	mark_ui_optimization(tutorial_button, "F-452")
 	root_layer.add_child(tutorial_button)
 	apply_rect(tutorial_button, rect_full(0.445, 0.075, 0.625, 0.175))
 	ensure_button_gpt_face_plate(tutorial_button, Color(0.34, 0.58, 0.48, 0.42))
@@ -25055,6 +25175,8 @@ func _show_menu_impl() -> void:
 		apply_rect(tutorial_detail, rect_full(0.105, 0.390, 0.560, 0.670))
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(tutorial_detail)
+		set_ui_full_text(tutorial_detail, tutorial_entry_detail_text(), "新手教学进度详情")
+		mark_ui_optimization(tutorial_detail, "F-453")
 		var tutorial_action = make_small_button("开始教学" if tutorial_step == TUTORIAL_STEP_NEW else "继续", Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(112, 44)
@@ -25143,11 +25265,15 @@ func _show_menu_impl() -> void:
 		footer_tw.tween_property(footer, "offset_top", 0.0, 0.28).from(12.0).set_delay(0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(0.030, 0.185, 0.190, 0.830), Color(0.58, 0.54, 0.42), Color(0.92, 0.88, 0.70))
+	set_ui_full_text(_version_chip, "当前版本：" + app_version(), "应用版本")
+	mark_ui_optimization(_version_chip, "F-455")
 
 	# 货币显示 - 使用国风配色
 	var coins_text = "铜钱 %d" % int(currency.get("coins", 0))
 	var gems_text = "玉符 %d" % int(currency.get("gems", 0))
 	var currency_chip = make_menu_footer_status_chip(footer, "currency", "MenuCurrencyBadge", "%s   %s" % [coins_text, gems_text], rect_full(0.205, 0.185, 0.390, 0.830), Color(0.82, 0.62, 0.28), Color(1.00, 0.88, 0.56))
+	set_ui_full_text(currency_chip, "铜钱：%d；玉符：%d" % [int(currency.get("coins", 0)), int(currency.get("gems", 0))], "当前货币")
+	mark_ui_optimization(currency_chip, "F-456")
 	draw_menu_currency_badge_art(currency_chip)
 
 	# 赛季段位与积分
@@ -25161,6 +25287,7 @@ func _show_menu_impl() -> void:
 	if rank_label != null:
 		rank_label.tooltip_text = rank_chip.tooltip_text
 		rank_label.set_meta("ui_full_text", rank_full_text)
+	mark_ui_optimization(rank_chip, "F-457")
 
 	# 统计概览 - 显示胜率等信息
 	var stats_text = "%d局 · 胜率%d%%" % [
@@ -25175,6 +25302,7 @@ func _show_menu_impl() -> void:
 	if stats_label != null:
 		stats_label.tooltip_text = stats_chip.tooltip_text
 		stats_label.set_meta("ui_full_text", stats_text)
+	mark_ui_optimization(stats_chip, "F-458")
 	draw_menu_stats_badge_art(stats_chip)
 
 	# 设置按钮 - 更大的触摸目标
@@ -25186,6 +25314,8 @@ func _show_menu_impl() -> void:
 	settings.custom_minimum_size = Vector2(88, 48)
 	settings.name = "MenuSettingsButton"
 	settings.add_theme_font_size_override("font_size", 15)
+	set_ui_full_text(settings, "打开设置、音频和辅助选项", "菜单设置")
+	mark_ui_optimization(settings, "F-459")
 	footer.add_child(settings)
 	apply_rect(settings, rect_full(0.800, 0.155, 0.965, 0.875))
 
@@ -25935,6 +26065,8 @@ func refresh_online_lobby_state() -> void:
 	if state_label != null:
 		state_label.text = state
 		state_label.tooltip_text = "服务器连接状态：%s" % state
+		set_ui_full_text(state_label, "服务器连接状态：" + state, "联机连接状态")
+		mark_ui_optimization(state_label, "F-460")
 	var state_badge = root_layer.find_child("OnlineLobbyConnectionStateBadge", true, false) as CanvasItem
 	if state_badge != null:
 		tint_panel_gpt_plate(state_badge as Control, Color(state_tint.r, state_tint.g, state_tint.b, 0.92), "ui_dark_scrim")
@@ -25943,6 +26075,8 @@ func refresh_online_lobby_state() -> void:
 	if endpoint_label != null:
 		endpoint_label.text = online_connection_endpoint_text()
 		endpoint_label.tooltip_text = endpoint_label.text
+		set_ui_full_text(endpoint_label, online_connection_endpoint_text(), "服务器地址")
+		mark_ui_optimization(endpoint_label, "F-461")
 	var state_icon = root_layer.find_child("OnlineLobbyConnectionStateIcon", true, false) as TextureRect
 	if state_icon != null:
 		state_icon.texture = lucide_icon_texture(online_connection_state_icon(state))
@@ -25965,6 +26099,8 @@ func refresh_online_lobby_state() -> void:
 		if room_badge_label != null:
 			room_badge_label.text = online_room_badge_display_text(selected_room) if show_room_snapshot and selected_room != "" else "房间号 连接后显示"
 			room_badge_label.tooltip_text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
+			set_ui_full_text(room_badge_label, room_badge_label.tooltip_text, "当前房间号")
+			mark_ui_optimization(room_badge_label, "F-462")
 	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
 	var roster = root_layer.find_child("OnlineLobbyRosterPanel", true, false) as CanvasItem
 	var log_list = root_layer.find_child("OnlineLobbyLogListPanel", true, false) as CanvasItem
@@ -25987,6 +26123,8 @@ func refresh_online_lobby_state() -> void:
 		start_button.disabled = not bool(start_gate.get("enabled", false))
 		start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
 		start_button.set_meta("accessible_name", "开始游戏：" + str(start_gate.get("reason", "等待服务器确认开局条件")))
+		set_ui_full_text(start_button, str(start_gate.get("reason", "等待服务器确认开局条件")), "开始游戏：" + str(start_gate.get("text", "待连接")))
+		mark_ui_optimization(start_button, "F-463")
 		start_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if not start_button.disabled else Color(0.82, 0.84, 0.80, 0.88)
 		ensure_button_gpt_face_plate(start_button, Color(0.74, 0.48, 0.16) if not start_button.disabled else Color(0.38, 0.34, 0.28))
 	var start_reason := root_layer.find_child("OnlineLobbyStartGateReason", true, false) as Label
@@ -26008,6 +26146,7 @@ func refresh_online_lobby_state() -> void:
 		else:
 			lobby_status_text = "下一步 · 先连接，再建房或入房"
 		set_dynamic_label_text(lobby_status, lobby_status_text, "联机大厅当前状态：" + lobby_status_text)
+		mark_ui_optimization(lobby_status, "F-464")
 	refresh_online_room_content()
 	refresh_online_lobby_action_states()
 
@@ -26031,11 +26170,13 @@ func refresh_online_room_content() -> void:
 			else:
 				headline = "全员已准备 · 房主可开始"
 		set_dynamic_label_text(room_summary_headline, headline, "房间下一步：" + headline)
+		mark_ui_optimization(room_summary_headline, "F-465")
 	var summary_context := root_layer.find_child("OnlineLobbyRoomSummaryContext", true, false) as Label
 	if summary_context != null:
 		var full_context := "服务器 %s · 房间 %s" % [online_connection_endpoint_text(), bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH) if selected_room != "" else "未创建"]
 		var short_context := "%s · %s" % [online_endpoint_summary(online_connection_endpoint_text()), online_room_code_summary(selected_room)]
 		set_dynamic_label_text(summary_context, short_context, "当前房间摘要：" + full_context)
+		mark_ui_optimization(summary_context, "F-466")
 	var occupancy_label = root_layer.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
 	var ready_label = root_layer.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
 	var state_label = root_layer.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
@@ -26050,8 +26191,10 @@ func refresh_online_room_content() -> void:
 		summary_headline.visible = not snapshot_is_stale
 	if occupancy_label != null:
 		set_dynamic_label_text(occupancy_label, "入席 %d/4" % player_count, "当前已入席 %d/4 位玩家" % player_count)
+		mark_ui_optimization(occupancy_label, "F-467")
 	if ready_label != null:
 		set_dynamic_label_text(ready_label, "已备 %d" % ready_count, "当前已准备 %d/4 位玩家" % ready_count)
+		mark_ui_optimization(ready_label, "F-468")
 	if state_label != null:
 		var room_state := lobby_connection_state_text()
 		set_dynamic_label_text(state_label, room_state, "房间同步状态：" + room_state)
@@ -26271,6 +26414,8 @@ func _show_rules_screen_impl() -> void:
 	rules_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	configure_clipped_label(rules_status)
 	rules_status.tooltip_text = "当前规则阅读位置"
+	set_ui_full_text(rules_status, "当前规则阅读位置", "规则阅读位置")
+	mark_ui_optimization(rules_status, "F-470")
 
 	# 内容区域
 	var content_backplate = make_layout_host(rect_full(0.050, 0.154, 0.950, 0.986))
@@ -26882,17 +27027,21 @@ func _show_shop_screen_impl() -> void:
 		shop_scrollbar.name = "ShopItemsScrollBar"
 		shop_scrollbar.visible = false
 		shop_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var shop_scroll_gutter = make_gpt_plate_rect(rect_full(0.948, 0.135, 0.960, 0.750), Color(0.022, 0.030, 0.026, 0.54), "ui_ornament_tick_strip")
+	var shop_scroll_gutter = make_gpt_plate_rect(rect_full(0.942, 0.135, 0.958, 0.750), Color(0.022, 0.030, 0.026, 0.66), "ui_ornament_tick_strip")
 	shop_scroll_gutter.name = "ShopItemsScrollGutter"
 	shop_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(shop_scroll_gutter)
-	var shop_scroll_thumb = make_gpt_plate_rect(rect_full(0.190, 0.050, 0.810, 0.900), Color(0.54, 0.46, 0.28, 0.66), "ui_progress_signal_strip")
+	var shop_scroll_thumb = make_gpt_plate_rect(rect_full(0.220, 0.050, 0.780, 0.900), Color(0.54, 0.46, 0.28, 0.82), "ui_progress_signal_strip")
 	shop_scroll_thumb.name = "ShopItemsScrollThumb"
 	shop_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shop_scroll_gutter.add_child(shop_scroll_thumb)
 	shop_scroll_thumb.set_meta("track_top", 0.050)
 	shop_scroll_thumb.set_meta("track_height", 0.900)
+	shop_scroll_thumb.set_meta("track_left", 0.220)
+	shop_scroll_thumb.set_meta("track_right", 0.780)
 	shop_scroll_thumb.set_meta("shop_total_items", ITEM_TYPES.size())
+	mark_ui_optimization(shop_scroll_gutter, "F-439")
+	mark_ui_optimization(shop_scroll_thumb, "F-439")
 	var shop_scroll_hit_target := Control.new()
 	shop_scroll_hit_target.name = "ShopItemsScrollHitTarget"
 	shop_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -27243,7 +27392,9 @@ func sync_shop_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> 
 	var thumb_height := track_height * visible_ratio
 	var progress := 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
 	var thumb_top := track_top + (track_height - thumb_height) * progress
-	apply_rect(thumb, rect_full(0.190, thumb_top, 0.810, thumb_top + thumb_height))
+	var track_left := float(thumb.get_meta("track_left", 0.220))
+	var track_right := float(thumb.get_meta("track_right", 0.780))
+	apply_rect(thumb, rect_full(track_left, thumb_top, track_right, thumb_top + thumb_height))
 	var total_items := int(thumb.get_meta("shop_total_items", 0))
 	if total_items <= 0:
 		var content := content_scroll.find_child("ShopItemsContent", true, false) as Control
@@ -27512,14 +27663,25 @@ func _show_stats_screen_impl() -> void:
 	draw_stats_mastery_route(panel, stats_win_rate, stats_games_fill, stats_best_score_strength, stats_summary_score)
 
 	# 统计数据
-	var content = VBoxContainer.new()
-	content.name = "StatsRows"
-	content.anchor_left = 0.08
-	content.anchor_top = stats_content_top
-	content.anchor_right = 0.92
-	content.anchor_bottom = stats_content_bottom
+	var content_scroll := ScrollContainer.new()
+	content_scroll.name = "StatsRows"
+	content_scroll.anchor_left = 0.08
+	content_scroll.anchor_top = stats_content_top
+	content_scroll.anchor_right = 0.92
+	content_scroll.anchor_bottom = stats_content_bottom
+	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	content_scroll.clip_contents = true
+	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	configure_scroll_container(content_scroll, "上下滚动查看完整统计")
+	content_scroll.set_meta("ui_scroll_view", "stats_rows")
+	mark_ui_optimization(content_scroll, "F-437")
+	panel.add_child(content_scroll)
+	var content := VBoxContainer.new()
+	content.name = "StatsRowsContent"
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", int(round(stats_row_gap)))
-	panel.add_child(content)
+	content_scroll.add_child(content)
 	var stats_empty_state := stats_games_played <= 0 and (stats_selected_rule != "" or round_history.is_empty())
 	if stats_empty_state:
 		content.visible = false
@@ -27655,13 +27817,13 @@ func show_telemetry_data_sheet() -> void:
 	mark_ui_optimization(permission_summary, "F-404")
 	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 11, Color(0.68, 0.78, 0.72), false)
 	export_status.name = "TelemetryExportStatus"
-	apply_rect(export_status, rect_full(0.075, 0.785, 0.925, 0.825))
+	apply_rect(export_status, rect_full(0.075, 0.805, 0.925, 0.845))
 	export_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(export_status)
 	set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 	var recent_action := make_label(card, "最近操作：%s" % telemetry_last_action, 11, Color(0.74, 0.82, 0.74), false)
 	recent_action.name = "TelemetryRecentAction"
-	apply_rect(recent_action, rect_full(0.075, 0.825, 0.925, 0.860))
+	apply_rect(recent_action, rect_full(0.075, 0.850, 0.925, 0.890))
 	recent_action.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	recent_action.tooltip_text = telemetry_last_action
 	recent_action.set_meta("accessible_name", "最近操作：" + telemetry_last_action)
@@ -27672,6 +27834,7 @@ func show_telemetry_data_sheet() -> void:
 	set_ui_full_text(consent, consent.tooltip_text, "隐私诊断记录开关")
 	consent.custom_minimum_size = Vector2(120, 44)
 	apply_rect(consent, rect_full(0.075, 0.620, 0.320, 0.765))
+	consent.set_meta("telemetry_action", "consent")
 	card.add_child(consent)
 	var export := make_small_button("导出", Color(0.30, 0.48, 0.60), Callable(self, "export_telemetry_data"))
 	export.name = "TelemetryExportButton"
@@ -27679,6 +27842,7 @@ func show_telemetry_data_sheet() -> void:
 	set_ui_full_text(export, export.tooltip_text, "导出隐私诊断数据")
 	export.custom_minimum_size = Vector2(100, 44)
 	apply_rect(export, rect_full(0.350, 0.620, 0.610, 0.765))
+	export.set_meta("telemetry_action", "export")
 	card.add_child(export)
 	var clear := make_small_button("清除", Color(0.62, 0.34, 0.28), func() -> void:
 		clear_telemetry_data(false)
@@ -27688,10 +27852,12 @@ func show_telemetry_data_sheet() -> void:
 	set_ui_full_text(clear, clear.tooltip_text, "清除隐私诊断数据")
 	clear.custom_minimum_size = Vector2(100, 44)
 	apply_rect(clear, rect_full(0.640, 0.620, 0.925, 0.765))
+	clear.set_meta("telemetry_action", "clear")
+	clear.set_meta("confirm_hint_target", "TelemetryClearConfirmHint")
 	card.add_child(clear)
 	var clear_hint := make_label(card, "", 10, Color(1.0, 0.72, 0.54), true)
 	clear_hint.name = "TelemetryClearConfirmHint"
-	apply_rect(clear_hint, rect_full(0.640, 0.755, 0.925, 0.785))
+	apply_rect(clear_hint, rect_full(0.075, 0.755, 0.925, 0.795))
 	clear_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	clear_hint.visible = telemetry_clear_confirming
 	clear_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -27702,7 +27868,7 @@ func show_telemetry_data_sheet() -> void:
 	close.tooltip_text = "关闭隐私数据页 · Esc"
 	set_ui_full_text(close, close.tooltip_text, "关闭隐私诊断页")
 	close.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
-	apply_rect(close, rect_full(0.390, 0.875, 0.610, 0.980))
+	apply_rect(close, rect_full(0.390, 0.835, 0.610, 0.975))
 	card.add_child(close)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
 
@@ -28154,6 +28320,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	days_label.add_theme_constant_override("outline_size", 3)
 	set_ui_full_text(days_label, days_text, "连续签到状态：" + days_text)
 	mark_ui_optimization(days_label, "F-407")
+	mark_ui_optimization(days_label, "F-489")
 
 	# 7天签到指示器 - 使用短卡片，避免程序点线装饰
 	var day_indicators_container = Control.new()
@@ -28162,9 +28329,13 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	apply_rect(day_indicators_container, rect_full(0.105, 0.305, 0.895, 0.425))
 	panel.add_child(day_indicators_container)
 
-	var current_day_in_cycle = days % 7
+	var current_day_in_cycle = 1 if days <= 0 else days % 7
 	if current_day_in_cycle == 0:
 		current_day_in_cycle = 7
+	day_indicators_container.set_meta("current_day", current_day_in_cycle)
+	day_indicators_container.set_meta("claimed_today", claimed_today)
+	set_ui_full_text(day_indicators_container, "当前第%d天；%s" % [current_day_in_cycle, "今日已领取" if claimed_today else "今日可领取"], "七日签到进度")
+	mark_ui_optimization(day_indicators_container, "F-490")
 
 	for i in range(7):
 		var day_num = i + 1
@@ -28260,6 +28431,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	apply_rect(reward_label, rect_full(0.180, 0.150, 0.880, 0.850))
 	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	configure_clipped_label(reward_label)
+	set_ui_full_text(reward_label, reward_text, "今日签到奖励")
+	mark_ui_optimization(reward_label, "F-491")
 	add_lucide_icon(reward_icon_back, reward_icon_name, rect_full(0.180, 0.180, 0.820, 0.820), Color(0.96, 0.84, 0.46, 0.92))
 	draw_daily_login_reward_art(reward_panel, days)
 
@@ -28342,6 +28515,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	confirm_btn.name = "DailyLoginClaimButton"
 	set_ui_full_text(confirm_btn, "今日奖励已领取" if claimed_today else "领取今日签到奖励", "签到奖励操作：" + ("已领取" if claimed_today else "可领取"))
 	mark_ui_optimization(confirm_btn, "F-409")
+	mark_ui_optimization(confirm_btn, "F-492")
 	confirm_button_ref["button"] = confirm_btn
 	draw_daily_login_claim_button_art(confirm_btn)
 	panel.add_child(confirm_btn)
@@ -28499,6 +28673,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	content_status.add_theme_constant_override("outline_size", 2)
 	configure_clipped_label(content_status)
 	set_ui_full_text(content_status, "当前诊断报告范围", "诊断报告阅读位置")
+	mark_ui_optimization(content_status, "F-499")
 	var copy_feedback := make_label(panel, diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "复制结果：尚未复制", 11, Color(0.76, 0.86, 0.78), false)
 	copy_feedback.name = "DiagnosticCopyFeedbackLabel"
 	# Keep copy feedback in the quiet header gap; the report range status owns
@@ -28508,6 +28683,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	copy_feedback.tooltip_text = copy_feedback.text
 	copy_feedback.set_meta("accessible_name", copy_feedback.text)
 	configure_clipped_label(copy_feedback)
+	mark_ui_optimization(copy_feedback, "F-500")
 
 	var copy_button = make_small_button("复制报告", Color(0.30, 0.52, 0.54), Callable(self, "copy_diagnostic_report").bind(lines))
 	copy_button.name = "DiagnosticCopyButton"
@@ -28515,6 +28691,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	copy_button.custom_minimum_size = Vector2(128, 44)
 	copy_button.tooltip_text = "复制完整诊断报告到剪贴板"
 	set_ui_full_text(copy_button, copy_button.tooltip_text, "复制诊断报告")
+	mark_ui_optimization(copy_button, "F-501")
 	panel.add_child(copy_button)
 	apply_rect(copy_button, rect_full(0.190, 0.835, 0.470, 0.940))
 	var close_button = make_small_button("关闭", Color(0.30, 0.42, 0.38), Callable(self, "dismiss_diagnostic_dialog"))
@@ -28523,6 +28700,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	close_button.custom_minimum_size = Vector2(128, 44)
 	close_button.tooltip_text = "关闭诊断报告 · Esc"
 	set_ui_full_text(close_button, close_button.tooltip_text, "关闭诊断报告")
+	mark_ui_optimization(close_button, "F-502")
 	panel.add_child(close_button)
 	apply_rect(close_button, rect_full(0.530, 0.835, 0.810, 0.940))
 	var cancel_shortcut = Shortcut.new()
@@ -28934,6 +29112,9 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	apply_rect(title, rect_full(0.10, 0.150, 0.90, 0.365))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.clip_text = true
+	fit_label_font_size(title, maxf(260.0, effective_viewport_size().x * 0.360), 52, 38)
+	set_ui_full_text(title, "云桌麻将", "加载页标题：云桌麻将")
+	mark_ui_optimization(title, "F-493")
 	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.95))
 	title.add_theme_constant_override("outline_size", 5)
 
@@ -28943,6 +29124,8 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	apply_rect(subtitle, rect_full(0.15, 0.365, 0.85, 0.460))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.clip_text = true
+	set_ui_full_text(subtitle, "国风雅韵 · 智慧博弈", "加载页副标题")
+	mark_ui_optimization(subtitle, "F-494")
 	subtitle.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
 	subtitle.add_theme_constant_override("outline_size", 3)
 	var loading_shuffle_art := draw_loading_shuffle_art(center_panel)
@@ -28954,7 +29137,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	# 加载动画区域
 	var loading_area = Control.new()
 	loading_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(loading_area, rect_full(0.22, 0.620, 0.78, 0.675))
+	apply_rect(loading_area, rect_full(0.18, 0.590, 0.82, 0.700))
 	center_panel.add_child(loading_area)
 
 	# 加载文字
@@ -28965,28 +29148,37 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	loading_text.name = "LoadingStatusLabel"
 	apply_rect(loading_text, rect_full(0.0, 0.0, 1.0, 1.0))
 	loading_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	loading_text.clip_text = true
+	loading_text.tooltip_text = loading_status_text
+	configure_wrapped_label(loading_text, maxf(260.0, effective_viewport_size().x * 0.300), 0.0, 3.0)
+	loading_text.set_meta("accessible_name", "加载状态：" + loading_status_text)
+	mark_ui_optimization(loading_text, "F-430")
 	loading_text.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
 	loading_text.add_theme_constant_override("outline_size", 3)
 	loading_area.move_to_front()
 	if loading_error:
 		var error_hint := make_label(center_panel, "加载未完成 · 可重试或返回主菜单", 12, Color(1.0, 0.76, 0.62), false)
 		error_hint.name = "LoadingErrorHint"
-		apply_rect(error_hint, rect_full(0.120, 0.680, 0.880, 0.725))
+		apply_rect(error_hint, rect_full(0.120, 0.705, 0.880, 0.735))
 		error_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		error_hint.tooltip_text = "加载失败后仍可重试；返回不会删除本地进度"
 		configure_clipped_label(error_hint)
+		set_ui_full_text(error_hint, "加载未完成 · 可重试或返回主菜单；返回不会删除本地进度", "加载错误恢复提示")
+		mark_ui_optimization(error_hint, "F-495")
 		var retry_button := make_small_button("重试", Color(0.34, 0.62, 0.48), Callable(self, "retry_loading_screen"))
 		retry_button.name = "LoadingRetryButton"
 		retry_button.custom_minimum_size = Vector2(116, UI_MIN_TOUCH_TARGET)
 		retry_button.tooltip_text = "重新尝试加载"
-		apply_rect(retry_button, rect_full(0.220, 0.735, 0.480, 0.805))
+		set_ui_full_text(retry_button, retry_button.tooltip_text, "重试加载")
+		mark_ui_optimization(retry_button, "F-496")
+		apply_rect(retry_button, rect_full(0.220, 0.750, 0.480, 0.825))
 		center_panel.add_child(retry_button)
 		var return_button := make_small_button("返回", Color(0.46, 0.34, 0.28), Callable(self, "cancel_loading_screen"))
 		return_button.name = "LoadingReturnButton"
 		return_button.custom_minimum_size = Vector2(116, UI_MIN_TOUCH_TARGET)
 		return_button.tooltip_text = "返回主菜单，不删除本地进度"
-		apply_rect(return_button, rect_full(0.520, 0.735, 0.780, 0.805))
+		set_ui_full_text(return_button, return_button.tooltip_text, "返回主菜单")
+		mark_ui_optimization(return_button, "F-497")
+		apply_rect(return_button, rect_full(0.520, 0.750, 0.780, 0.825))
 		center_panel.add_child(return_button)
 		configure_ordered_focus_navigation(center_panel, [retry_button, return_button], "LoadingRetryButton")
 
@@ -29004,10 +29196,12 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		loading_view_state["tip"] = tip_text
 	var tip_label = make_label(center_panel, tip_text, 15, Color(0.96, 0.96, 0.90, 1.0), false)
 	tip_label.name = "LoadingTipLabel"
-	apply_rect(tip_label, rect_full(0.10, 0.800, 0.90, 0.875))
+	apply_rect(tip_label, rect_full(0.10, 0.785, 0.90, 0.900))
 	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tip_label.clip_text = true
 	tip_label.tooltip_text = tip_text
+	configure_wrapped_label(tip_label, maxf(260.0, effective_viewport_size().x * 0.340), 0.0, 3.0)
+	tip_label.set_meta("accessible_name", "加载提示：" + tip_text)
+	mark_ui_optimization(tip_label, "F-431")
 	tip_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.85))
 	tip_label.add_theme_constant_override("outline_size", 2)
 	tip_label.move_to_front()
@@ -29024,6 +29218,8 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	version_label.clip_text = true
 	version_label.tooltip_text = app_version()
 	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	set_ui_full_text(version_label, app_version(), "应用版本")
+	mark_ui_optimization(version_label, "F-498")
 
 	# 整体分层淡入动画 - 各元素交错入场
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
@@ -29125,22 +29321,30 @@ func _show_replay_import_screen_impl() -> void:
 	title.name = "ReplayImportTitle"
 	apply_rect(title, rect_full(0.065, 0.055, 0.520, 0.145))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(title, "回放复盘", "回放复盘页标题")
+	mark_ui_optimization(title, "F-503")
 	var digest_hint := make_label(panel, "校验链 · SHA-256", 12, Color(0.68, 0.80, 0.72), false)
 	digest_hint.name = "ReplayImportDigestHint"
 	apply_rect(digest_hint, rect_full(0.065, 0.145, 0.520, 0.205))
 	configure_clipped_label(digest_hint)
+	set_ui_full_text(digest_hint, "校验链 · SHA-256", "回放完整性校验方式")
+	mark_ui_optimization(digest_hint, "F-504")
 	var back := make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu(true)
 	)
 	back.name = "ReplayImportBackButton"
 	back.custom_minimum_size = Vector2(100, 46)
 	back.tooltip_text = "返回主菜单 · Esc"
+	set_ui_full_text(back, back.tooltip_text, "返回主菜单")
+	mark_ui_optimization(back, "F-505")
 	draw_secondary_back_button_art(back, "replay_import", Color(0.36, 0.26, 0.16))
 	apply_rect(back, rect_full(0.805, 0.055, 0.945, 0.145))
 	panel.add_child(back)
 	var input_label := make_label(panel, "回放码", 13, Color(0.92, 0.84, 0.62), true)
 	input_label.name = "ReplayImportInputLabel"
 	apply_rect(input_label, rect_full(0.065, 0.205, 0.220, 0.265))
+	set_ui_full_text(input_label, "回放码", "回放码输入字段")
+	mark_ui_optimization(input_label, "F-506")
 	var input := LineEdit.new()
 	input.name = "ReplayImportCodeInput"
 	input.placeholder_text = "粘贴回放码"
@@ -29159,6 +29363,8 @@ func _show_replay_import_screen_impl() -> void:
 	# truncate a valid long replay before the digest can be checked.
 	configure_line_edit_input(input, "回放码", REPLAY_SHARE_MAX_BYTES * 2)
 	draw_line_edit_input_art(input, "回放码")
+	set_ui_full_text(input, "请输入或粘贴完整回放码", "回放码输入框")
+	mark_ui_optimization(input, "F-507")
 	apply_rect(input, rect_full(0.065, 0.265, 0.520, 0.360))
 	panel.add_child(input)
 	replay_import_input = input
@@ -29197,17 +29403,23 @@ func _show_replay_import_screen_impl() -> void:
 	import_button.name = "ReplayImportButton"
 	import_button.custom_minimum_size = Vector2(116, 48)
 	import_button.tooltip_text = "校验并打开回放时间线"
+	set_ui_full_text(import_button, import_button.tooltip_text, "导入并校验回放")
+	mark_ui_optimization(import_button, "F-508")
 	apply_rect(import_button, rect_full(0.730, 0.265, 0.935, 0.360))
 	panel.add_child(import_button)
 	var status := make_label(panel, "等待导入", 14, Color(0.76, 0.84, 0.76), true)
 	status.name = "ReplayImportStatus"
 	apply_rect(status, rect_full(0.065, 0.375, 0.935, 0.415))
 	configure_clipped_label(status)
+	set_ui_full_text(status, "等待导入", "回放导入状态")
+	mark_ui_optimization(status, "F-509")
 	var code_summary := make_label(panel, "回放码 0/%d 字符 · 等待粘贴" % (REPLAY_SHARE_MAX_BYTES * 2), 11, Color(0.70, 0.80, 0.72), false)
 	code_summary.name = "ReplayImportCodeSummary"
 	apply_rect(code_summary, rect_full(0.065, 0.425, 0.680, 0.465))
 	code_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(code_summary)
+	set_ui_full_text(code_summary, "回放码长度与当前输入摘要", "回放码输入进度")
+	mark_ui_optimization(code_summary, "F-510")
 	var copy_code_button := make_small_button("复制完整码", Color(0.30, 0.52, 0.54), func() -> void:
 		var code := input.text.strip_edges()
 		if code == "":
@@ -29234,10 +29446,14 @@ func _show_replay_import_screen_impl() -> void:
 	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.88, 0.78, 0.56), true)
 	archive_title.name = "ReplayArchiveTitle"
 	apply_rect(archive_title, rect_full(0.050, 0.045, 0.430, 0.180))
+	set_ui_full_text(archive_title, "本地归档", "本地回放归档")
+	mark_ui_optimization(archive_title, "F-511")
 	var archive_count := make_label(archive_pane, "%d 条" % replay_archive_entries(replay_search_query).size(), 11, Color(0.70, 0.78, 0.70), false)
 	archive_count.name = "ReplayArchiveCount"
 	apply_rect(archive_count, rect_full(0.570, 0.055, 0.950, 0.180))
 	archive_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	set_ui_full_text(archive_count, "本地归档数量", "本地回放归档数量")
+	mark_ui_optimization(archive_count, "F-512")
 	var search := LineEdit.new()
 	search.name = "ReplayArchiveSearchInput"
 	search.placeholder_text = "按日期、规则或结果搜索"
@@ -29254,8 +29470,10 @@ func _show_replay_import_screen_impl() -> void:
 	search.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
 	configure_line_edit_input(search, "搜索", 64)
 	draw_line_edit_input_art(search, "搜索")
-	apply_rect(search, rect_full(0.050, 0.180, 0.950, 0.435))
+	apply_rect(search, rect_full(0.050, 0.180, 0.950, 0.365))
 	archive_pane.add_child(search)
+	set_ui_full_text(search, "按日期、规则或结果搜索本地回放", "本地回放搜索框")
+	mark_ui_optimization(search, "F-513")
 	search.text_changed.connect(Callable(self, "set_replay_search_query"))
 	var archive_scroll := ScrollContainer.new()
 	archive_scroll.name = "ReplayArchiveScroll"
@@ -29265,7 +29483,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.050, 0.455, 0.950, 0.965))
+	apply_rect(archive_scroll, rect_full(0.050, 0.390, 0.950, 0.965))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -29285,15 +29503,21 @@ func _show_replay_import_screen_impl() -> void:
 	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.88, 0.78, 0.56), true)
 	timeline_title.name = "ReplayImportTimelineTitle"
 	apply_rect(timeline_title, rect_full(0.035, 0.045, 0.500, 0.130))
+	set_ui_full_text(timeline_title, "事件时间线", "已验证回放事件时间线")
+	mark_ui_optimization(timeline_title, "F-514")
 	var timeline_position := make_label(timeline, "0 / 0 条事件", 11, Color(0.70, 0.82, 0.74), false)
 	timeline_position.name = "ReplayImportTimelinePosition"
 	apply_rect(timeline_position, rect_full(0.535, 0.045, 0.950, 0.130))
 	timeline_position.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(timeline_position)
+	set_ui_full_text(timeline_position, "当前事件与可见范围", "回放时间线位置")
+	mark_ui_optimization(timeline_position, "F-515")
 	var empty := make_label(timeline, "导入后显示已验证事件", 12, Color(0.62, 0.72, 0.68), false)
 	empty.name = "ReplayImportTimelineEmpty"
 	apply_rect(empty, rect_full(0.035, 0.220, 0.965, 0.360))
 	configure_clipped_label(empty)
+	set_ui_full_text(empty, "导入后显示已验证事件", "回放时间线空状态")
+	mark_ui_optimization(empty, "F-516")
 	var event_scroll := ScrollContainer.new()
 	event_scroll.name = "ReplayImportTimelineScroll"
 	configure_scroll_container(event_scroll, "上下滚动查看回放事件时间线")
@@ -29376,6 +29600,7 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 		status.text = validation
 		status.tooltip_text = validation
 		status.set_meta("ui_full_text", validation)
+		status.set_meta("accessible_name", "回放导入状态：" + validation)
 		status.modulate = Color(0.96, 0.52, 0.38) if not valid_shape and not code.is_empty() else Color(0.76, 0.86, 0.76)
 	if import_button != null:
 		import_button.disabled = not valid_shape
@@ -29490,6 +29715,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	plate.name = "ReplayArchiveRowPlate"
 	row.add_child(plate)
 	var result_label := replay_archive_result_label(entry)
+	var archive_context := "归档：" + replay_archive_display_date_text(entry)
 	var primary := make_label(row, replay_archive_display_date_text(entry), 11, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
 	apply_rect(primary, rect_full(0.035, 0.040, 0.520, 0.260))
@@ -29519,8 +29745,10 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 		toggle_replay_archive_favorite(archive_id)
 	)
 	favorite.name = "ReplayArchiveFavoriteButton_%s" % archive_id.left(8)
-	favorite.tooltip_text = "取消收藏" if is_favorite else "收藏此回放"
+	favorite.tooltip_text = archive_context + " · " + ("取消收藏" if is_favorite else "收藏此回放")
 	favorite.set_meta("accessible_name", favorite.tooltip_text)
+	favorite.set_meta("archive_row_context", archive_context)
+	favorite.set_meta("archive_action", "favorite")
 	favorite.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
 	favorite.add_theme_font_size_override("font_size", accessibility_font_size(11))
 	apply_rect(favorite, rect_full(0.006, action_top, 0.006 + action_slot_width, action_bottom))
@@ -29530,7 +29758,10 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 		open_replay_archive(archive_id)
 	)
 	open.name = "ReplayArchiveOpenButton_%s" % archive_id.left(8)
-	open.tooltip_text = "打开这条已验证回放"
+	open.tooltip_text = archive_context + " · 打开这条已验证回放"
+	open.set_meta("accessible_name", open.tooltip_text)
+	open.set_meta("archive_row_context", archive_context)
+	open.set_meta("archive_action", "open")
 	open.custom_minimum_size = Vector2(52, UI_MIN_TOUCH_TARGET)
 	open.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	apply_rect(open, rect_full(0.006 + action_step, action_top, 0.006 + action_step + action_slot_width, action_bottom))
@@ -29540,7 +29771,10 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 		copy_replay_archive_share_code(archive_id)
 	)
 	copy.name = "ReplayArchiveCopyButton_%s" % archive_id.left(8)
-	copy.tooltip_text = "复制已验证回放码"
+	copy.tooltip_text = archive_context + " · 复制已验证回放码"
+	copy.set_meta("accessible_name", copy.tooltip_text)
+	copy.set_meta("archive_row_context", archive_context)
+	copy.set_meta("archive_action", "copy")
 	copy.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
 	copy.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	apply_rect(copy, rect_full(0.006 + action_step * 2.0, action_top, 0.006 + action_step * 2.0 + action_slot_width, action_bottom))
@@ -29553,7 +29787,10 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	delete.name = "ReplayArchiveDeleteButton_%s" % archive_id.left(8)
 	delete.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
 	delete.add_theme_font_size_override("font_size", accessibility_font_size(11))
-	delete.tooltip_text = "再次点击确认删除此回放" if delete_confirming else "删除此回放"
+	delete.tooltip_text = archive_context + " · " + ("再次点击确认删除此回放" if delete_confirming else "删除此回放")
+	delete.set_meta("accessible_name", delete.tooltip_text)
+	delete.set_meta("archive_row_context", archive_context)
+	delete.set_meta("archive_action", "delete")
 	delete.set_meta("delete_confirming", delete_confirming)
 	apply_rect(delete, rect_full(0.006 + action_step * 3.0, action_top, 0.006 + action_step * 3.0 + action_slot_width, action_bottom))
 	row.add_child(delete)
@@ -29803,6 +30040,7 @@ func import_replay_from_input() -> void:
 		if status != null:
 			status.text = "回放码无效或校验失败"
 			status.modulate = Color(0.96, 0.48, 0.36)
+			set_ui_full_text(status, "回放码无效或校验失败", "回放导入失败：请检查回放码完整性")
 		if empty != null:
 			empty.visible = true
 		return
@@ -29814,6 +30052,7 @@ func import_replay_from_input() -> void:
 	if status != null:
 		status.text = "校验通过 · %d 条事件 · %s" % [events.size(), digest.left(12).to_upper()]
 		status.modulate = Color(0.64, 0.90, 0.70)
+		set_ui_full_text(status, status.text, "回放导入成功：已通过完整性校验")
 	if empty != null:
 		empty.visible = false
 	var event_scroll := root_layer.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
@@ -29831,7 +30070,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	"""显示临时Toast提示"""
 	if fx_layer == null or not is_instance_valid(fx_layer):
 		return
-	var safe_text := text.strip_edges().left(TOAST_MAX_TEXT_LENGTH)
+	var safe_text := text.strip_edges()
 	if safe_text == "":
 		return
 	duration_msec = clampi(duration_msec, 1, TOAST_MAX_DURATION_MSEC)
@@ -29845,11 +30084,12 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	if toast_current != null and is_instance_valid(toast_current):
 		for queued in toast_queue:
 			if typeof(queued) == TYPE_DICTIONARY and str((queued as Dictionary).get("text", "")) == safe_text:
+				(queued as Dictionary)["count"] = int((queued as Dictionary).get("count", 1)) + 1
 				(queued as Dictionary)["duration_msec"] = maxi(int((queued as Dictionary).get("duration_msec", duration_msec)), duration_msec)
+				refresh_toast_queue_indicator()
 				return
-		toast_queue.append({"text": safe_text, "duration_msec": duration_msec})
-		while toast_queue.size() > 8:
-			toast_queue.pop_front()
+		toast_queue.append({"text": safe_text, "duration_msec": duration_msec, "count": 1})
+		refresh_toast_queue_indicator()
 		return
 	# 创建toast节点
 	var toast_bg = Panel.new()
@@ -29891,10 +30131,12 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_bg.offset_left = 0
 	toast_bg.offset_top = 0
 	toast_bg.offset_right = 0
-	# Keep two-line feedback inside a stable touch-sized lane even when the
-	# top safety slot is only a few dozen pixels tall at 960x540.
+	# Give long errors a bounded multi-line lane. The anchor position remains
+	# stable, while the height grows enough to expose the first complete message.
+	var toast_width := maxf(240.0, effective_viewport_size().x * (toast_right - toast_left))
+	var toast_height := clampf(estimate_wrapped_text_height(safe_text, toast_width - 56.0, 16, 3.0) + 16.0, float(UI_MIN_TOUCH_TARGET), 132.0)
 	var anchor_height := effective_viewport_size().y * (toast_bottom - toast_top)
-	toast_bg.offset_bottom = maxf(0.0, UI_MIN_TOUCH_TARGET - anchor_height)
+	toast_bg.offset_bottom = maxf(0.0, toast_height - anchor_height)
 	# Host style transparent; GPT toast banner is the visual face.
 	var toast_host := StyleBoxEmpty.new()
 	toast_host.set_content_margin_all(8)
@@ -29908,18 +30150,28 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_bg.add_child(make_gpt_plate_rect(rect_full(0.0, 0.0, 0.018, 1.0), Color(0.90, 0.76, 0.36, 0.55), "ui_action_role_rail"))
 	draw_toast_illustration(toast_bg, safe_text)
 	var label = make_label(toast_bg, safe_text, 16, Color(0.96, 0.96, 0.92), true)
-	apply_rect(label, rect_full(0.12, 0.04, 0.94, 0.96))
+	apply_rect(label, rect_full(0.12, 0.04, 0.78, 0.96))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.clip_text = false
-	label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	configure_wrapped_label(label, toast_width - 56.0, toast_height - 12.0, 3.0)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	set_ui_full_text(label, safe_text, "通知：" + safe_text)
+	mark_ui_optimization(label, "F-525")
 	toast_bg.modulate = Color(1, 1, 1, 0)
+	var pending_label := make_label(toast_bg, "", 10, Color(1.0, 0.88, 0.60), true)
+	pending_label.name = "ToastPendingLabel"
+	apply_rect(pending_label, rect_full(0.780, 0.700, 0.950, 0.950))
+	pending_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	pending_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pending_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pending_label.set_meta("toast_queue_indicator", true)
+	mark_ui_optimization(pending_label, "F-526")
 	toast_bg.offset_top = -28.0
 	toast_container.add_child(toast_bg)
 	toast_container.visible = true
 	toast_current = toast_bg
 	toast_mode = mode
 	toast_active_minimum_dwell_msec = minimum_dwell
+	refresh_toast_queue_indicator()
 	# 动画：弹跳滑入 → 停留 → 下滑淡出
 	var slide_dur := float(TOAST_SLIDE_DURATION_MSEC) / 1000.0
 	var stay_dur := float(maxi(duration_msec, toast_active_minimum_dwell_msec)) / 1000.0
@@ -29944,6 +30196,20 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	tw.parallel().tween_property(toast_bg, "offset_top", 14.0, fade_dur).set_delay(stay_dur)
 	tw.tween_callback(Callable(self, "cleanup_toast_by_id").bind(toast_bg.get_instance_id(), toast_container.get_instance_id())).set_delay(stay_dur + fade_dur + 0.02)
 
+func refresh_toast_queue_indicator() -> void:
+	if toast_current == null or not is_instance_valid(toast_current):
+		return
+	var pending_label := toast_current.find_child("ToastPendingLabel", true, false) as Label
+	if pending_label == null:
+		return
+	var pending_count := 0
+	for queued in toast_queue:
+		if typeof(queued) == TYPE_DICTIONARY:
+			pending_count += maxi(1, int((queued as Dictionary).get("count", 1)))
+	pending_label.text = "还有%d条" % pending_count if pending_count > 0 else ""
+	pending_label.tooltip_text = "还有%d条通知待显示" % pending_count if pending_count > 0 else ""
+	pending_label.set_meta("pending_count", pending_count)
+
 func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
 	var is_current := toast_current != null and is_instance_valid(toast_current) and toast_current.get_instance_id() == toast_id
 	queue_free_node_by_id(toast_id)
@@ -29959,7 +30225,11 @@ func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
 	if not toast_queue.is_empty():
 		var next_toast = toast_queue.pop_front()
 		if typeof(next_toast) == TYPE_DICTIONARY:
-			show_toast(str((next_toast as Dictionary).get("text", "")), int((next_toast as Dictionary).get("duration_msec", TOAST_DEFAULT_DURATION_MSEC)))
+			var next_text := str((next_toast as Dictionary).get("text", ""))
+			var repeat_count := int((next_toast as Dictionary).get("count", 1))
+			if repeat_count > 1:
+				next_text += "（×%d）" % repeat_count
+			show_toast(next_text, int((next_toast as Dictionary).get("duration_msec", TOAST_DEFAULT_DURATION_MSEC)))
 
 func dismiss_active_toast() -> void:
 	if toast_tween != null and is_instance_valid(toast_tween):
@@ -39281,6 +39551,39 @@ func top_hud_status_text() -> String:
 	return current_status_text()
 
 
+func top_hud_short_status_text(compact: bool = false) -> String:
+	# Reserve the visible HUD slot for a mutually exclusive state. Full server
+	# text remains available through the status tooltip and the action dock.
+	if mode == "online_game":
+		if online_game_disconnected():
+			return online_recovery_status_text()
+		if online_waiting_for_server:
+			return "等待服务器" if compact else "等待服务器确认"
+		if online_feedback != "":
+			var feedback_lower := online_feedback.to_lower()
+			if feedback_lower.contains("失败") or feedback_lower.contains("拒绝") or feedback_lower.contains("断开"):
+				return "连接失败 · 可重试"
+			if feedback_lower.contains("恢复") or feedback_lower.contains("已连接"):
+				return "已恢复"
+			return "服务器已反馈" if compact else "服务器反馈"
+		if has_pending_claim_window():
+			var pending := pending_claim_state()
+			var pending_tile := tile_label(str(pending.get("tile", "")))
+			return "响应 · %s" % pending_tile if compact else "等待你响应%s" % pending_tile
+		if str(online_game.get("phase", "")) == "unknown":
+			return "状态异常 · 重试"
+		return "轮到你出牌" if can_self_discard() else "等待对家行牌"
+	if has_pending_danger_discard():
+		return "风险确认 · %s" % tile_label(pending_danger_discard_tile)
+	if offline_phase == "pending_claim":
+		return "响应 · %s" % tile_label(str(offline_pending_claim.get("tile", "")))
+	if offline_phase == "ended":
+		return ended_top_hud_status_text()
+	if current_seat == 0:
+		return "轮到你出牌"
+	return "等待对家行牌"
+
+
 func top_hud_status_tooltip_text() -> String:
 	if mode == "online_game" and online_game_disconnected():
 		return online_recovery_detail_text()
@@ -39306,6 +39609,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	section.set_meta("rules_section_index", section_index)
+	set_ui_full_text(section, title_text + "：" + "；".join(PackedStringArray(lines)), "规则章节：" + title_text)
+	mark_ui_optimization(section, "F-471")
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.035), "ui_button_face_plate")
@@ -39360,6 +39665,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	title_label.custom_minimum_size = Vector2(0, 26 if wide_typography else 24)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
+	set_ui_full_text(title_label, title_text, "规则章节标题：" + title_text)
+	mark_ui_optimization(title_label, "F-472")
 
 	for line_index in range(lines.size()):
 		var line = lines[line_index]
@@ -39370,6 +39677,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		configure_wrapped_label(line_label, text_width, measured_line_heights[line_index], line_gap)
 		line_label.clip_text = false
 		line_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		set_ui_full_text(line_label, str(line), "规则条款：" + str(line))
+		mark_ui_optimization(line_label, "F-473")
 
 
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String, row_height: float = 52.0) -> void:
@@ -39411,6 +39720,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	apply_rect(label, rect_full(0.080, 0.120, 0.480, 0.880))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(label)
+	set_ui_full_text(label, label_text, "统计项目：" + label_text)
+	mark_ui_optimization(label, "F-474")
 
 	var numeric_value := stat_row_numeric_value(value_text)
 	var display_value_text := ("负向 " + value_text) if numeric_value < 0.0 else value_text
@@ -39420,6 +39731,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value.tooltip_text = "负向 · 损失：%s" % value_text if numeric_value < 0.0 else ("零值：%s" % value_text if is_zero_approx(numeric_value) else value_text)
 	configure_clipped_label(value)
+	set_ui_full_text(value, value_text, label_text + "数值")
+	mark_ui_optimization(value, "F-475")
 
 
 func stat_row_accent(label_text: String) -> Color:

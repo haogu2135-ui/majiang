@@ -632,7 +632,9 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	await settle(0.05)
 	check(drawn_tile != "" and scene.get_wall_count() == wall_before_draw - 1 and (scene.players[0]["hand"] as Array).size() == hand_before_draw + 1, "draw event decrements the wall and increments the active hand once")
 	var wall_label := scene.find_child("TopHudWallText", true, false) as Label
-	check(wall_label != null and wall_label.text == scene.top_hud_wall_text(), "wall HUD text is synchronized with the event state")
+	var expected_wall_label := "余牌 %d/%d" % [scene.get_wall_count(), scene.display_wall_total()]
+	var wall_count_token := "%d/%d" % [scene.get_wall_count(), scene.display_wall_total()]
+	check(wall_label != null and wall_label.text == expected_wall_label and wall_label.tooltip_text.contains(wall_count_token) and wall_label.tooltip_text.contains("牌墙"), "wall HUD text is synchronized with the event state")
 	check(scene.commit_discard(0, drawn_tile), "discard event accepts the newly drawn tile")
 	scene.render_game()
 	await settle(0.05)
@@ -848,7 +850,7 @@ func run_extended_ui_contracts(scene: Node) -> void:
 
 
 func run_new_ui_optimization_contracts(scene: Node) -> void:
-	print("--- F-383/F-412) refreshed UI focus, state labels, and timeline contracts ---")
+	print("--- F-383/F-413) refreshed UI focus, state labels, and timeline contracts ---")
 	scene.ui_optimization_ids.clear()
 
 	scene.show_achievements_screen(true)
@@ -958,6 +960,7 @@ func run_new_ui_optimization_contracts(scene: Node) -> void:
 	var expected_ids: Array[String] = []
 	for id_number in range(383, 413):
 		expected_ids.append("F-%d" % id_number)
+	expected_ids.append("F-413")
 	for finding_id in expected_ids:
 		check(scene.ui_optimization_ids.has(finding_id), "optimization registry records %s" % finding_id)
 	await settle(0.05)

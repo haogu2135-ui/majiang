@@ -974,8 +974,8 @@ const CENTER_STATUS_RECT := Rect2(Vector2(0.15, 0.13), Vector2(0.85, 0.27))
 const CENTER_WALL_LABEL_RECT := Rect2(Vector2(0.38, 0.30), Vector2(0.62, 0.42))
 const CENTER_WALL_COUNT_RECT := Rect2(Vector2(0.35, 0.39), Vector2(0.65, 0.58))
 const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.38, 0.60), Vector2(0.62, 0.69))
-const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.430, 0.700), Vector2(0.570, 0.920))
-const CENTER_LAST_TILE_SIZE := Vector2(38, 52)
+const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.675), Vector2(0.595, 0.935))
+const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
 	Rect2(Vector2(0.43, 0.05), Vector2(0.57, 0.22)),
 	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
@@ -1045,10 +1045,10 @@ const HAND_TRAY_RECT := Rect2(Vector2(0.185, 0.815), Vector2(0.985, 0.985))
 const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
 const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.145), Vector2(0.988, 0.170))
 const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
-const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.795, 0.040), Vector2(0.970, 0.145))
-# Keep a dedicated top prompt lane above the clickable tile row. The 0.255
+const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.760, 0.040), Vector2(0.970, 0.145))
+# Keep a dedicated top prompt lane above the clickable tile row. The 0.250
 # boundary still preserves the minimum touch width at the compact 960x540 gate.
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.255), Vector2(0.985, 0.96))
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.285), Vector2(0.985, 0.99))
 const HAND_LAYOUT_CANDIDATES := [
 	[8.0, 5],
 	[6.0, 4],
@@ -1087,7 +1087,7 @@ const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.106, 0.10), Vector2(0.300, 0.88))
 const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.310, 0.10), Vector2(0.432, 0.50))
 const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.212, 0.565), Vector2(0.432, 0.890))
 const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.438, 0.15), Vector2(0.698, 0.85))
-const TOP_HUD_WALL_RECT := Rect2(Vector2(0.700, 0.14), Vector2(0.764, 0.86))
+const TOP_HUD_WALL_RECT := Rect2(Vector2(0.690, 0.14), Vector2(0.790, 0.86))
 const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.775, 0.05), Vector2(0.838, 0.95))
 const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.848, 0.05), Vector2(0.911, 0.95))
 const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.921, 0.05), Vector2(0.984, 0.95))
@@ -1975,6 +1975,20 @@ func set_ui_full_text(control: Control, detail: String, accessible_name: String 
 		control.set_meta("accessible_name", accessible_name.strip_edges())
 	elif not control.has_meta("accessible_name") and resolved_detail != "":
 		control.set_meta("accessible_name", resolved_detail)
+
+func configure_ui_status(control: Control, short_text: String, detail: String, accessible_name: String, finding_id: String) -> void:
+	# Dynamic status surfaces keep a compact first-frame value while retaining the
+	# complete explanation for focus, touch, and assistive technology.
+	if control == null or not is_instance_valid(control):
+		return
+	var visible_text := short_text.strip_edges()
+	if control is Label or control is Button:
+		if visible_text != "":
+			control.text = visible_text
+	set_ui_full_text(control, detail, accessible_name)
+	control.set_meta("ui_short_text", visible_text)
+	control.set_meta("ui_detail_available", detail.strip_edges() != "")
+	mark_ui_optimization(control, finding_id)
 
 func estimate_wrapped_text_height(text: String, available_width: float, font_size: int, line_gap: float = 4.0) -> float:
 	var width := maxf(1.0, available_width)

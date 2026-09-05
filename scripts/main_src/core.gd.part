@@ -7963,6 +7963,39 @@ func top_hud_status_text() -> String:
 	return current_status_text()
 
 
+func top_hud_short_status_text(compact: bool = false) -> String:
+	# Reserve the visible HUD slot for a mutually exclusive state. Full server
+	# text remains available through the status tooltip and the action dock.
+	if mode == "online_game":
+		if online_game_disconnected():
+			return online_recovery_status_text()
+		if online_waiting_for_server:
+			return "等待服务器" if compact else "等待服务器确认"
+		if online_feedback != "":
+			var feedback_lower := online_feedback.to_lower()
+			if feedback_lower.contains("失败") or feedback_lower.contains("拒绝") or feedback_lower.contains("断开"):
+				return "连接失败 · 可重试"
+			if feedback_lower.contains("恢复") or feedback_lower.contains("已连接"):
+				return "已恢复"
+			return "服务器已反馈" if compact else "服务器反馈"
+		if has_pending_claim_window():
+			var pending := pending_claim_state()
+			var pending_tile := tile_label(str(pending.get("tile", "")))
+			return "响应 · %s" % pending_tile if compact else "等待你响应%s" % pending_tile
+		if str(online_game.get("phase", "")) == "unknown":
+			return "状态异常 · 重试"
+		return "轮到你出牌" if can_self_discard() else "等待对家行牌"
+	if has_pending_danger_discard():
+		return "风险确认 · %s" % tile_label(pending_danger_discard_tile)
+	if offline_phase == "pending_claim":
+		return "响应 · %s" % tile_label(str(offline_pending_claim.get("tile", "")))
+	if offline_phase == "ended":
+		return ended_top_hud_status_text()
+	if current_seat == 0:
+		return "轮到你出牌"
+	return "等待对家行牌"
+
+
 func top_hud_status_tooltip_text() -> String:
 	if mode == "online_game" and online_game_disconnected():
 		return online_recovery_detail_text()
@@ -7988,6 +8021,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	section.set_meta("rules_section_index", section_index)
+	set_ui_full_text(section, title_text + "：" + "；".join(PackedStringArray(lines)), "规则章节：" + title_text)
+	mark_ui_optimization(section, "F-471")
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var section_plate = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.345, 0.425, 0.355, 0.035), "ui_button_face_plate")
@@ -8042,6 +8077,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	title_label.custom_minimum_size = Vector2(0, 26 if wide_typography else 24)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
+	set_ui_full_text(title_label, title_text, "规则章节标题：" + title_text)
+	mark_ui_optimization(title_label, "F-472")
 
 	for line_index in range(lines.size()):
 		var line = lines[line_index]
@@ -8052,6 +8089,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		configure_wrapped_label(line_label, text_width, measured_line_heights[line_index], line_gap)
 		line_label.clip_text = false
 		line_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		set_ui_full_text(line_label, str(line), "规则条款：" + str(line))
+		mark_ui_optimization(line_label, "F-473")
 
 
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String, row_height: float = 52.0) -> void:
@@ -8093,6 +8132,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	apply_rect(label, rect_full(0.080, 0.120, 0.480, 0.880))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(label)
+	set_ui_full_text(label, label_text, "统计项目：" + label_text)
+	mark_ui_optimization(label, "F-474")
 
 	var numeric_value := stat_row_numeric_value(value_text)
 	var display_value_text := ("负向 " + value_text) if numeric_value < 0.0 else value_text
@@ -8102,6 +8143,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value.tooltip_text = "负向 · 损失：%s" % value_text if numeric_value < 0.0 else ("零值：%s" % value_text if is_zero_approx(numeric_value) else value_text)
 	configure_clipped_label(value)
+	set_ui_full_text(value, value_text, label_text + "数值")
+	mark_ui_optimization(value, "F-475")
 
 
 func stat_row_accent(label_text: String) -> Color:

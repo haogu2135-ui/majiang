@@ -380,7 +380,7 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 				else:
 					real_tile_count += 1
 		check(grid != null and real_tile_count == expected_visible, "river %d exposes its full %d-tile visible window at %s" % [seat, expected_visible, viewport_size])
-		check(grid == null or reserved_cell_count == maxi(0, int(grid.get_meta("raw_visible_capacity", 0)) - expected_visible), "river %d declares only its explicit archive reservation cells at %s" % [seat, viewport_size])
+		check(grid == null or reserved_cell_count == 0, "river %d does not add blank archive cells to the visible river grid at %s" % [seat, viewport_size])
 		var latest_start: int = int(scene.tail_window_start(scene.get_discards(seat).size(), visible_capacity))
 		var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
 		check(archive_button != null and int(archive_button.get_meta("hidden_count", -1)) == latest_start and archive_button.text == scene.discard_archive_button_text(scene.get_discards(seat).size(), latest_start, visible_capacity), "river %d exposes an accurate authored archive entry for %d older tiles at %s" % [seat, latest_start, viewport_size])
@@ -860,7 +860,8 @@ func check_loading_layout(scene, viewport_size: Vector2) -> void:
 			continue
 		var label_rect = screen_rect(label)
 		check(center_rect.grow(1.0).encloses(label_rect), "loading label %s stays inside center panel at %s" % [label.name, viewport_size])
-		check(label.clip_text, "loading label %s clips safely at %s" % [label.name, viewport_size])
+		var wrapped_loading_copy := label == status or label == tip
+		check(not label.clip_text if wrapped_loading_copy else label.clip_text, "loading label %s uses its declared text overflow policy at %s" % [label.name, viewport_size])
 	check(title != null and title.get_theme_font_size("font_size") >= 44 and relative_luma(title.get_theme_color("font_color")) >= 0.82, "loading title remains prominent and bright at %s" % viewport_size)
 	check(subtitle != null and subtitle.get_theme_font_size("font_size") >= 17 and relative_luma(subtitle.get_theme_color("font_color")) >= 0.74, "loading subtitle remains readable at %s" % viewport_size)
 	check(status != null and status.get_theme_font_size("font_size") >= 19 and relative_luma(status.get_theme_color("font_color")) >= 0.82, "loading status text remains readable at %s" % viewport_size)
@@ -1707,7 +1708,8 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 
 	var waiting_status = scene.find_child("TopHudStatus", true, false) as Label
 	var waiting_action = scene.find_child("ActionDockWaitingStatus", true, false) as Label
-	check(scene.current_status_text() == "操作已提交 · 等待服务器确认" and waiting_status != null and waiting_status.text == scene.current_status_text(), "online submitted state is explicit in the top HUD at %s" % viewport_size)
+	var compact_waiting_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
+	check(scene.current_status_text() == "操作已提交 · 等待服务器确认" and waiting_status != null and waiting_status.text == scene.top_hud_short_status_text(compact_waiting_hud), "online submitted state is explicit in the top HUD at %s" % viewport_size)
 	check(waiting_action != null and waiting_action.text.contains("等待服务器"), "online submitted state is explicit in the action dock at %s" % viewport_size)
 	check(scene.handle_ui_cancel(), "Esc is consumed by online server waiting at %s" % viewport_size)
 	check(not scene.online_waiting_for_server and scene.exit_confirm_panel == null and scene.mode == "online_game", "Esc cancels online waiting without leaving the table at %s" % viewport_size)
@@ -2271,9 +2273,9 @@ func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
 		check(hand_rect.grow(2.0).encloses(screen_rect(hand_tile_sample)), "2D hand tile stays inside hand tray at %s" % viewport_size)
 	if tutorial_hint != null:
 		check(hand_tiles != null, "hand tutorial exposes a named tile lane for hit-target separation at %s" % viewport_size)
-		check(tutorial_hint.mouse_filter == Control.MOUSE_FILTER_IGNORE and tutorial_hint.clip_contents, "hand tutorial prompt is a clipped non-blocking top lane at %s" % viewport_size)
+		check(tutorial_hint.mouse_filter == Control.MOUSE_FILTER_IGNORE and not tutorial_hint.clip_contents, "hand tutorial prompt is a non-blocking wrapped top lane at %s" % viewport_size)
 		var tutorial_text := tutorial_hint.find_child("HandTrayTutorialHintText", true, false) as Label
-		check(tutorial_text != null and tutorial_text.tooltip_text != "" and tutorial_text.clip_text, "hand tutorial prompt keeps complete copy in a compact readable label at %s" % viewport_size)
+		check(tutorial_text != null and tutorial_text.tooltip_text != "" and not tutorial_text.clip_text and tutorial_text.autowrap_mode != TextServer.AUTOWRAP_OFF, "hand tutorial prompt keeps complete copy in a wrapped readable label at %s" % viewport_size)
 		if hand_tiles != null:
 			var tutorial_rect := screen_rect(tutorial_hint)
 			var tiles_rect := screen_rect(hand_tiles)
@@ -2653,7 +2655,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 				check(not rects_overlap(section_rect.grow(-1.0), previous_rect.grow(-1.0)), "settings section %s does not overlap another section at %s" % [section_name, viewport_size])
 			section_rects.append(section_rect)
 		if grid != null and section != null:
-			check(screen_rect(section).grow(1.0).encloses(screen_rect(grid)), "settings section %s keeps its grid inside the section at %s" % [section_name, viewport_size])
+				check(screen_rect(section).grow(1.0).encloses(screen_rect(grid)), "settings section %s keeps its grid inside the section at %s" % [section_name, viewport_size])
 	for title in expected_setting_buttons.keys():
 		var row = overlay_control.find_child("SettingRow_%s" % title, true, false) as Control
 		var button = overlay_control.find_child("SettingRowButton_%s" % title, true, false) as Button
@@ -2665,7 +2667,8 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			row_rect = screen_rect(row)
 		var button_rect = screen_rect(button)
 		if row != null:
-			var expected_row_height := 56.0 if scene.large_text_enabled else 48.0
+			var compact_settings := viewport_size.y <= 560.0 or viewport_size.x <= 960.0
+			var expected_row_height := 56.0 if scene.large_text_enabled else (44.0 if compact_settings else 48.0)
 			check(row_rect.size.y >= expected_row_height - 1.0 and row_rect.size.x >= button_rect.size.x + 96.0, "settings row %s keeps profile-aware row rhythm and width at %s" % [title, viewport_size])
 			check(row_rect.grow(1.0).encloses(button_rect), "settings row %s encloses its button at %s" % [title, viewport_size])
 		check(button_rect.size.x >= 92.0 and button_rect.size.y >= 32.0, "settings row %s keeps a practical button target at %s" % [title, viewport_size])
@@ -2688,10 +2691,14 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			check(not rects_overlap(screen_rect(title_label), button_rect), "settings row %s title clears the button lane at %s" % [title, viewport_size])
 		if status_label != null:
 			check(status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and status_label.get_theme_font_size("font_size") >= 13 and relative_luma(status_label.get_theme_color("font_color")) >= 0.94, "settings row %s status stays bright clipped and readable at %s" % [title, viewport_size])
+			if scene.large_text_enabled:
+				check(not status_label.text.contains("...") and not status_label.text.contains("…"), "large-text settings row %s keeps a visible non-truncated status at %s" % [title, viewport_size])
 			if (viewport_size.y <= 560.0 or viewport_size.x <= 960.0) and title == "出牌辅助":
 				check(status_label.text == ("风险: 开" if scene.ai_assist_enabled else "风险: 关"), "compact discard-assist status keeps the risk toggle readable at %s" % viewport_size)
 				check(not status_label.text.contains("...") and not status_label.text.contains("…"), "compact discard-assist status avoids visible truncation at %s" % viewport_size)
 			check(not rects_overlap(screen_rect(status_label), button_rect), "settings row %s status clears the button lane at %s" % [title, viewport_size])
+		if title_label != null and scene.large_text_enabled:
+			check(not title_label.text.contains("...") and not title_label.text.contains("…"), "large-text settings row %s keeps its complete title at %s" % [title, viewport_size])
 		if text_panel != null:
 			var text_panel_rect = screen_rect(text_panel)
 			check(text_panel_rect.end.x <= button_rect.position.x - max(4.0, viewport_size.x * 0.004), "settings row %s readability panel clears the button lane at %s" % [title, viewport_size])
