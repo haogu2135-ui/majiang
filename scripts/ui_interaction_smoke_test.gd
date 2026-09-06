@@ -1935,7 +1935,7 @@ func run() -> void:
 	var rules_interaction_status := scene.find_child("RulesReadingStatus", true, false) as Label
 	check(scene.mode == "rules" and rules_interaction_scroll != null and rules_interaction_bar != null and rules_interaction_status != null, "rules opens through the menu entry with chapter status")
 	if rules_interaction_scroll != null and rules_interaction_bar != null and rules_interaction_status != null:
-		var rules_interaction_targets := [0, 2, 4, 5]
+		var rules_interaction_targets := [0, 2, 4, 5, 1, 3]
 		for rules_interaction_index in range(rules_interaction_targets.size()):
 			var rules_target_section := int(rules_interaction_targets[rules_interaction_index])
 			var rules_target_button := scene.find_child("RulesGuideStepButton_%d" % rules_interaction_index, true, false) as Button

@@ -826,6 +826,12 @@ var online_room: Dictionary = {}
 var online_game: Dictionary = {}
 var online_log_seen_count := 0
 var online_log_total_count := 0
+var online_log_initialized := false
+var online_log_at_latest := false
+var stats_focus_restore_name := ""
+var stats_scroll_restore_value := -1.0
+var stats_scroll_restore_progress := -1.0
+var ui_page_generation := 0
 var online_feedback = ""
 var online_waiting_for_server = false
 var online_last_sent_action = ""
@@ -2113,6 +2119,7 @@ func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = 
 		scroll.tooltip_text = "上下滚动查看更多内容"
 	scroll.set_meta("ui_scroll_view", scroll_label)
 	scroll.set_meta("ui_scroll_boundary", "top")
+	scroll.set_meta("ui_page_generation", ui_page_generation)
 	mark_ui_optimization(scroll, "F-386")
 	# Screens can refresh in place. Keep the shared keyboard route idempotent so a
 	# second configuration does not multiply PageUp/PageDown handling.

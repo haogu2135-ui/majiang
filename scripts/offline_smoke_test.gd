@@ -239,6 +239,10 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"ReplayArchiveSearchInput",
 	"ReplayArchiveClearSearchButton",
 	"ReplayArchiveTitle",
+	"ReplayArchiveCopyCaption",
+	"ReplayArchiveDeleteCaption",
+	"ReplayArchiveFavoriteCaption",
+	"ReplayArchiveOpenCaption",
 	"ReplayArchiveDeleteConfirmBadge",
 	"ReplayArchiveDeleteConfirmLabel",
 ]
@@ -2312,7 +2316,7 @@ func run() -> void:
 	check(scene.find_child("SecondaryBackConfirmRoute_rules", true, false) != null and scene.find_child("SecondaryBackConfirmFill_rules", true, false) != null and scene.find_child("SecondaryBackConfirmGate_rules", true, false) != null and count_nodes_with_name_prefix(scene, "SecondaryBackConfirmTick_rules_") == 2, "rules back button renders return confirmation route")
 	check(scene.find_child("SecondaryBackSourceNode_rules", true, false) != null and scene.find_child("SecondaryBackDestinationNode_rules", true, false) != null and count_nodes_with_name_prefix(scene, "SecondaryBackNodeTick_rules_") == 2, "rules back button renders source destination and node rhythm ticks")
 	check(scene.find_child("SecondaryBackReturnFlow_rules", true, false) != null and scene.find_child("SecondaryBackReturnFill_rules", true, false) != null and scene.find_child("SecondaryBackReturnGate_rules", true, false) != null and count_nodes_with_name_prefix(scene, "SecondaryBackReturnTick_rules_") == 3, "rules back button renders return flow route")
-	check(count_nodes_with_name_prefix(scene, "RulesGuideStep_") == 4 and count_nodes_with_name_prefix(scene, "RulesGuideConnector_") == 0, "rules guide renders four steps over GPT plate without code-drawn connectors")
+	check(count_nodes_with_name_prefix(scene, "RulesGuideStep_") == 6 and count_nodes_with_name_prefix(scene, "RulesGuideConnector_") == 0 and count_nodes_with_name_prefix(scene, "RulesGuideStepButton_") == 6, "rules guide renders six chapter steps and direct targets over GPT plate without code-drawn connectors")
 	check(count_named_nodes(scene, "RuleSectionMarker") == rules_section_count, "rules screen renders one section marker per local rules section")
 	check(count_nodes_with_name_prefix(scene, "RuleSectionArtStrip_") == rules_section_count and count_nodes_with_name_prefix(scene, "RuleSectionPathGlyph_") == rules_section_count, "rules sections render one semantic side lane and title glyph per section")
 	check(count_nodes_with_name_prefix(scene, "RuleSectionPathRail_") == 0 and count_nodes_with_name_prefix(scene, "RuleSectionPathNode_") == 0 and count_nodes_with_name_prefix(scene, "RuleSectionPathFill_") == 0 and count_nodes_with_name_prefix(scene, "RuleSectionPathGate_") == 0, "rules sections omit obsolete path rails nodes fills and gates")

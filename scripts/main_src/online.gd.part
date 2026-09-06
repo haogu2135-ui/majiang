@@ -168,6 +168,8 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 		online_room.clear()
 		online_log_seen_count = 0
 		online_log_total_count = 0
+		online_log_initialized = false
+		online_log_at_latest = false
 		online_last_snapshot_fingerprint = ""
 		online_last_room_snapshot_fingerprint = ""
 		online_seen_message_ids.clear()
@@ -208,6 +210,8 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_players_by_seat.clear()
 	online_log_seen_count = 0
 	online_log_total_count = 0
+	online_log_initialized = false
+	online_log_at_latest = false
 	selected_room = resume_room
 	if is_instance_valid(online_room_edit):
 		online_room_edit.text = selected_room
@@ -673,9 +677,13 @@ func handle_online_message(line: String) -> void:
 		var next_room_code := bounded_online_input(str(first_present(next_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var previous_logs_value = online_room.get("logs", [])
 		var previous_logs: Array = (previous_logs_value as Array).duplicate(true) if typeof(previous_logs_value) == TYPE_ARRAY else []
+		var previous_log_total := online_log_total_count
 		if previous_room_code != "" and next_room_code != "" and previous_room_code != next_room_code:
 			online_log_seen_count = 0
 			online_log_total_count = 0
+			online_log_initialized = false
+			online_log_at_latest = false
+			previous_log_total = 0
 		online_room = next_room
 		selected_room = bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var resumed_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
@@ -694,9 +702,10 @@ func handle_online_message(line: String) -> void:
 			if explicit_total != null:
 				online_log_total_count = maxi(online_log_total_count, int(explicit_total))
 			else:
-				online_log_total_count = maxi(online_log_total_count, bounded_logs.size())
+				var inferred_total := bounded_logs.size()
 				if not previous_logs.is_empty() and (previous_room_code == "" or previous_room_code == next_room_code):
-					online_log_total_count = maxi(online_log_total_count, online_log_total_count + online_log_snapshot_increment(previous_logs, bounded_logs))
+					inferred_total = maxi(inferred_total, previous_log_total + online_log_snapshot_increment(previous_logs, bounded_logs))
+				online_log_total_count = maxi(online_log_total_count, inferred_total)
 		if is_instance_valid(online_room_edit):
 			online_room_edit.text = selected_room
 		refresh_online_lobby_state()

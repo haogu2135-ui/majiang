@@ -1124,7 +1124,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			check(relative_luma(title.get_theme_color("font_color")) >= 0.86 and relative_luma(subtitle.get_theme_color("font_color")) >= 0.86, "menu card title and subtitle keep readable contrast at %s" % viewport_size)
 			check(not rects_overlap(title_rect, subtitle_rect), "menu card title and subtitle do not overlap at %s" % viewport_size)
 		if quick_rail != null:
-			check(screen_rect(card).end.y <= screen_rect(quick_rail).position.y + 26.0, "menu card clears the quick action rail at %s" % viewport_size)
+				check(screen_rect(card).end.y <= screen_rect(quick_rail).position.y - 8.0, "menu card keeps an 8px clearance before the quick action rail at %s" % viewport_size)
 		if footer != null:
 			check(screen_rect(card).end.y <= screen_rect(footer).position.y - 8.0, "menu card clears the footer status bar at %s" % viewport_size)
 
@@ -3326,7 +3326,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 	if content_scrollbar != null:
 		check(not content_scrollbar.visible and content_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "rules screen hides the default bright scrollbar at %s" % viewport_size)
 	check(content_scroll.focus_mode == Control.FOCUS_ALL and content_scroll.get_meta("ui_scroll_view", "") != "" and content_scroll.tooltip_text != "", "rules scroll is keyboard focusable and exposes its reading context at %s" % viewport_size)
-	check_focus_route(scene, ["RulesBackButton", "RulesContentScroll", "RulesGuideStepButton_0", "RulesGuideStepButton_1", "RulesGuideStepButton_2", "RulesGuideStepButton_3"], "RulesBackButton", "rules", viewport_size)
+	check_focus_route(scene, ["RulesBackButton", "RulesContentScroll", "RulesGuideStepButton_0", "RulesGuideStepButton_1", "RulesGuideStepButton_2", "RulesGuideStepButton_3", "RulesGuideStepButton_4", "RulesGuideStepButton_5"], "RulesBackButton", "rules", viewport_size)
 	if scroll_gutter != null and scroll_thumb != null:
 		var gutter_rect = screen_rect(scroll_gutter)
 		check(content_rect.grow(1.0).encloses(gutter_rect) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "rules custom scroll gutter stays outside the text viewport at %s" % viewport_size)
@@ -3465,12 +3465,15 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 	var bottom_spacer = scene.find_child("AchievementsBottomSafeSpacer", true, false) as Control
 	var bottom_fade = scene.find_child("AchievementsBottomFadePanel", true, false) as Control
 	var browse_status = scene.find_child("AchievementsBrowseStatusLabel", true, false) as Label
+	var achievements_hit_target = scene.find_child("AchievementsScrollHitTarget", true, false) as Control
 	var collection_bus = scene.find_child("AchievementsRowCollectionBusArt", true, false) as Control
 	var collection_spine = scene.find_child("AchievementsRowCollectionSpine", true, false) as Control
 	var collection_progress = scene.find_child("AchievementsRowCollectionProgressRoute", true, false) as Control
 	var collection_archive = scene.find_child("AchievementsRowCollectionArchiveGate", true, false) as Control
 	var gallery_texture = scene.find_child("AchievementGPTGalleryTexture", true, false) as CanvasItem
-	check(scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null and grid != null and lane != null and bottom_spacer != null and bottom_fade != null and browse_status != null and collection_bus != null and collection_spine != null and collection_progress != null and collection_archive != null, "achievements screen exposes scroll lane custom gutter bottom fade browse status and collection bus art at %s" % viewport_size)
+	check(scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null and achievements_hit_target != null and grid != null and lane != null and bottom_spacer != null and bottom_fade != null and browse_status != null and collection_bus != null and collection_spine != null and collection_progress != null and collection_archive != null, "achievements screen exposes scroll lane custom gutter hit target bottom fade browse status and collection bus art at %s" % viewport_size)
+	if achievements_hit_target != null:
+		check(achievements_hit_target.get_meta("scroll_page_role", "achievements") == "achievements", "achievements scroll hit target keeps a page-specific routing contract at %s" % viewport_size)
 	check_focus_route(scene, ["AchievementsBackButton", "AchievementsScroll"], "AchievementsBackButton", "achievements", viewport_size)
 	check(gallery_texture == null or gallery_texture.modulate.a <= 0.26, "achievements generated gallery remains a subdued backdrop below native rows at %s" % viewport_size)
 	if scroll == null or lane == null:
@@ -3654,13 +3657,14 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 	check(console_front != null and console_rear != null and console_shadow != null and data_inset != null, "stats exposes a physical console front, rear shell, shadow, and data inset at %s" % viewport_size)
 	var lane = scene.find_child("StatsRowReadabilityLane", true, false) as Control
 	var rows = scene.find_child("StatsRows", true, false) as Control
+	var stats_scroll_status = scene.find_child("StatsRowsScrollStatus", true, false) as Label
 	var dash = scene.find_child("StatsDashboardArt", true, false) as Control
 	var data_scan = scene.find_child("StatsDataScanArt", true, false) as Control
 	var insight = scene.find_child("StatsInsightConvergenceArt", true, false) as Control
 	var mastery = scene.find_child("StatsMasteryRoute", true, false) as Control
 	var summary_bus = scene.find_child("StatsRowSummaryBusArt", true, false) as Control
 	var backplate = scene.find_child("StatsReadabilityBackplate", true, false) as Control
-	check(lane != null and rows != null and dash != null and backplate != null, "stats screen exposes dashboard rows and readability plates at %s" % viewport_size)
+	check(lane != null and rows != null and stats_scroll_status != null and dash != null and backplate != null, "stats screen exposes dashboard rows scroll status and readability plates at %s" % viewport_size)
 	check(data_scan != null and insight != null and mastery != null and summary_bus != null, "stats screen mounts every dashboard route layer after its host is created at %s" % viewport_size)
 	if dash != null and data_scan != null and insight != null and mastery != null and summary_bus != null:
 		check(data_scan.visible and insight.visible and mastery.visible and summary_bus.visible, "stats dashboard route layers remain visible after mounting at %s" % viewport_size)

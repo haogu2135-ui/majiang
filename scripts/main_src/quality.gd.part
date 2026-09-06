@@ -586,6 +586,11 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 		telemetry_clear_confirming = true
 		telemetry_clear_confirm_deadline_msec = Time.get_ticks_msec() + 5000
 		telemetry_last_action = "等待确认清除本地匿名数据"
+		var clear_button := root_layer.find_child("TelemetryClearButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
+		if clear_button != null:
+			clear_button.set_meta("confirm_state", "armed")
+			clear_button.set_meta("confirm_deadline_msec", telemetry_clear_confirm_deadline_msec)
+			clear_button.set_meta("first_click_is_non_destructive", true)
 		refresh_telemetry_data_sheet()
 		mark_ui_optimization(root_layer.find_child("TelemetryClearButton", true, false) as Control, "F-405")
 		call_deferred("focus_named_control", "TelemetryClearButton")
@@ -593,6 +598,10 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 		return
 	telemetry_clear_confirming = false
 	telemetry_clear_confirm_deadline_msec = 0
+	var clear_button := root_layer.find_child("TelemetryClearButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
+	if clear_button != null:
+		clear_button.set_meta("confirm_state", "executed")
+		clear_button.set_meta("first_click_is_non_destructive", true)
 	telemetry_outbox.clear()
 	telemetry_export_status = "未导出"
 	telemetry_last_action = "已清除本地匿名数据"
