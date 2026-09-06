@@ -10710,20 +10710,21 @@ func draw_center(parent: Control) -> void:
 		play_center_last_discard_feedback(center, last, get_last_discard_seat())
 		# Reuse the river's measured face budget so the center preview follows the
 		# same aspect, min/max cap, and viewport density at every resolution.
-		var center_content_size := safe_content_pixel_size()
+		# The center shell is nested inside the authored table surface. Size the
+		# preview from that same table pixel budget so its face cannot outgrow the
+		# shell on compact or wide viewports.
+		var table_content_size := game_table_pixel_size()
 		var center_size_px := Vector2(
-			center_content_size.x * (CENTER_PANEL_RECT.size.x - CENTER_PANEL_RECT.position.x),
-			center_content_size.y * (CENTER_PANEL_RECT.size.y - CENTER_PANEL_RECT.position.y)
+			table_content_size.x * (CENTER_PANEL_RECT.size.x - CENTER_PANEL_RECT.position.x),
+			table_content_size.y * (CENTER_PANEL_RECT.size.y - CENTER_PANEL_RECT.position.y)
 		)
 		var center_slot_px := Vector2(
 			center_size_px.x * (CENTER_LAST_TILE_RECT.size.x - CENTER_LAST_TILE_RECT.position.x),
 			center_size_px.y * (CENTER_LAST_TILE_RECT.size.y - CENTER_LAST_TILE_RECT.position.y)
 		)
-		var center_tile_width := clampf(
-			minf(center_slot_px.x, center_slot_px.y / DISCARD_TILE_ASPECT),
-			minf(DISCARD_TILE_MIN_SIZE.x, center_slot_px.x),
-			minf(DISCARD_TILE_MAX_SIZE.x, center_slot_px.x)
-		)
+		var center_tile_width := minf(minf(center_slot_px.x, center_slot_px.y / DISCARD_TILE_ASPECT), DISCARD_TILE_MAX_SIZE.x) * 0.96
+		if center_slot_px.x >= DISCARD_TILE_MIN_SIZE.x and center_slot_px.y / DISCARD_TILE_ASPECT >= DISCARD_TILE_MIN_SIZE.x:
+			center_tile_width = maxf(DISCARD_TILE_MIN_SIZE.x, center_tile_width)
 		var center_last_tile_size := Vector2(center_tile_width, center_tile_width * DISCARD_TILE_ASPECT)
 		var tile = make_tile_view(last, center_last_tile_size, false, Callable(), true)
 		tile.name = "CenterLastDiscardTile"
@@ -10732,14 +10733,16 @@ func draw_center(parent: Control) -> void:
 		tile.tooltip_text = "当前最后一张牌：%s · 来源：%s" % [tile_label(last), pending_claim_source_name(get_last_discard_seat())]
 		mark_ui_optimization(tile, "F-482")
 		center.add_child(tile)
-			if compact_center:
-				apply_centered_rect(tile, Vector2(0.79, 0.82), center_last_tile_size)
-			else:
-				apply_rect(tile, CENTER_LAST_TILE_RECT)
-			tile.set_meta("river_face_size", center_last_tile_size)
-			tile.set_meta("river_face_aspect", DISCARD_TILE_ASPECT)
-			tile.set_meta("center_slot_size", center_slot_px)
-			mark_ui_optimization(tile, "F-159")
+		# The frame has a custom minimum for ordinary hand/river layouts. Clear it
+		# here because this preview uses an explicit centered pixel rect instead.
+		tile.custom_minimum_size = Vector2.ZERO
+		var tile_top_anchor := CENTER_LAST_TILE_RECT.position.y
+		var tile_center_anchor := tile_top_anchor + (center_last_tile_size.y / maxf(1.0, center_size_px.y)) * 0.5
+		apply_centered_rect(tile, Vector2(0.5, tile_center_anchor), center_last_tile_size)
+		tile.set_meta("river_face_size", center_last_tile_size)
+		tile.set_meta("river_face_aspect", DISCARD_TILE_ASPECT)
+		tile.set_meta("center_slot_size", center_slot_px)
+		mark_ui_optimization(tile, "F-159")
 
 	# 风位标签
 	for i in range(4):
@@ -12788,7 +12791,13 @@ func draw_discards(parent: Control) -> void:
 		grid.set_meta("raw_visible_capacity", raw_visible_capacity)
 		grid.set_meta("window_start", visible_start)
 		grid.set_meta("discard_count", discards.size())
-		grid.set_meta("archive_reserved_start", visible_capacity if discards.size() > visible_capacity else -1)
+		var archive_reserved_start := visible_capacity if discards.size() > visible_capacity else -1
+		grid.set_meta("archive_reserved_start", archive_reserved_start)
+		grid.set_meta("final_grid_columns", grid.columns)
+		grid.set_meta("final_grid_rows", int(visible_rows))
+		grid.set_meta("archive_reserved_cells", 2 if archive_reserved_start >= 0 else 0)
+		grid.set_meta("latest_discard_gutter_px", 6.0)
+		grid.set_meta("river_overlay_contract", "final_grid_reserved_cell_and_latest_gutter")
 		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count)
 		if river_art != null:
 			parent.move_child(river_art, max(0, grid.get_index()))
@@ -12823,6 +12832,11 @@ func draw_discards(parent: Control) -> void:
 			tile_node.set_meta("discard_source_index", source_index)
 			tile_node.set_meta("discard_tile_code", tile_code)
 			tile_node.tooltip_text = "%s牌河 · 第%d张 · %s" % [pending_claim_source_name(seat), source_index + 1, tile_label(tile_code)]
+			tile_node.set_meta("latest_discard_gutter_px", 6.0)
+			tile_node.set_meta("river_final_grid_columns", grid.columns)
+			tile_node.set_meta("river_final_grid_rows", int(visible_rows))
+			tile_node.set_meta("river_cell_contract", "owner_overlay_uses_same_final_grid")
+			tile_node.set_meta("visual_owner", "river_face")
 			if highlighted:
 				tile_node.tooltip_text += " · 刚打出 · 当前最后一张牌"
 				tile_node.set_meta("latest_discard_visual_owner", "LastDiscardFocusMarker")
@@ -12830,8 +12844,12 @@ func draw_discards(parent: Control) -> void:
 			if highlighted:
 				tile_node.name = "RecentDiscardTile_%d" % seat
 				tile_node.z_index = 9
-		var owner_overlay := draw_discard_river_owner_overlay(parent, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), visible_capacity)
+				mark_ui_optimization(tile_node, "F-259")
+		var owner_overlay := draw_discard_river_owner_overlay(parent, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), archive_reserved_start)
 		if owner_overlay != null:
+			owner_overlay.set_meta("archive_reserved_start", archive_reserved_start)
+			owner_overlay.set_meta("final_grid_contract", "columns_rows_reserved_start_from_same_grid")
+			owner_overlay.set_meta("latest_discard_gutter_px", 6.0)
 			owner_overlay.set_meta("table_3d_foreground", true)
 			foreground_overlays.append(owner_overlay)
 		if seat == get_last_discard_seat() and visible_start + visible_count == discards.size() and visible_count > 0:
@@ -13224,9 +13242,13 @@ func draw_game_top_hud(parent: Control) -> void:
 		room_copy.tooltip_text = "复制完整房间号"
 		room_copy.set_meta("accessible_name", "复制完整房间号")
 		room_copy.set_meta("ui_full_text", "完整房间号：" + room_code)
+		room_copy.set_meta("action_role", "copy_room_code")
+		room_copy.set_meta("copy_value", room_code)
+		room_copy.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 		apply_rect(room_copy, rect_full(0.305, 0.110, 0.333, 0.650))
 		hud.add_child(room_copy)
 		title.set_meta("room_summary_contract", "short_middle_marker_plus_full_copy_action")
+		mark_ui_optimization(room_copy, "F-251")
 		mark_ui_optimization(title, "F-105")
 
 	# 状态
@@ -13287,6 +13309,11 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
 	configure_clipped_label(wall)
 	set_ui_full_text(wall, wall_detail, "牌墙剩余：%d/%d" % [get_wall_count(), display_wall_total()])
+	wall.set_meta("wall_count", get_wall_count())
+	wall.set_meta("wall_total", display_wall_total())
+	wall.set_meta("wall_state", wall_state_text())
+	wall.set_meta("status_priority", "remaining_tiles_before_last_discard")
+	mark_ui_optimization(wall, "F-255")
 	var wall_state = make_label(hud, "状态 · %s · 上张%s" % [wall_state_text().replace("牌墙", ""), tile_label(get_last_discard()) if get_last_discard() != "" else "无"], 9, Color(0.78, 0.82, 0.72), false)
 	wall_state.name = "TopHudWallState"
 	apply_rect(wall_state, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.500, wall_rect.size.x - 0.010, wall_rect.position.y + 0.840))
@@ -13301,6 +13328,10 @@ func draw_game_top_hud(parent: Control) -> void:
 	settings.name = "TopHudSettingsButton"
 	hud.add_child(settings)
 	apply_rect(settings, TOP_HUD_SETTINGS_BUTTON_RECT)
+	set_ui_full_text(settings, "打开牌桌设置、音频和辅助选项", "牌桌设置")
+	settings.set_meta("hud_action_role", "settings")
+	settings.set_meta("focus_order", 1)
+	mark_ui_optimization(settings, "F-252")
 
 	var back = make_top_hud_button("返回", Color(0.38, 0.30, 0.18), func() -> void:
 		if mode == "offline":
@@ -13311,6 +13342,10 @@ func draw_game_top_hud(parent: Control) -> void:
 	back.name = "TopHudBackButton"
 	hud.add_child(back)
 	apply_rect(back, TOP_HUD_BACK_BUTTON_RECT)
+	set_ui_full_text(back, "离开当前牌桌并返回上一层", "返回上一层")
+	back.set_meta("hud_action_role", "back")
+	back.set_meta("focus_order", 2)
+	mark_ui_optimization(back, "F-253")
 
 	var update = make_top_hud_button("更新", Color(0.54, 0.36, 0.18), func() -> void:
 		on_update_primary_pressed()
@@ -13318,6 +13353,10 @@ func draw_game_top_hud(parent: Control) -> void:
 	update.name = "TopHudUpdateButton"
 	hud.add_child(update)
 	apply_rect(update, TOP_HUD_UPDATE_BUTTON_RECT)
+	set_ui_full_text(update, "检查并查看当前版本更新状态", "检查更新")
+	update.set_meta("hud_action_role", "update")
+	update.set_meta("focus_order", 3)
+	mark_ui_optimization(update, "F-254")
 	refresh_top_hud_update_button(update)
 
 
@@ -13336,6 +13375,9 @@ func draw_hand(parent: Control) -> void:
 	# stage and tile hit frames remain bounded; only the visual lift may cross the
 	# tray edge by a few pixels.
 	tray.clip_contents = false
+	tray.set_meta("overflow_contract", "tray_allows_6px_visual_gutter_only")
+	tray.set_meta("tile_stage_owner", "HandTrayTileStage")
+	mark_ui_optimization(tray, "F-248")
 	var tray_shadow = make_soft_depth_panel(tray, rect_full(0.010, 0.145, 0.990, 1.060), Color(0.0, 0.0, 0.0, 0.38), 18)
 	tray_shadow.name = "HandTray3DCastShadow"
 	tray.move_child(tray_shadow, 0)
@@ -13355,7 +13397,7 @@ func draw_hand(parent: Control) -> void:
 	tile_stage.clip_contents = true
 	tile_stage.set_meta("visual_focus_gutter_px", 6.0)
 	tile_stage.set_meta("visual_animation_boundary", "stage_clip_and_gutter")
-	tray.clip_contents = true
+	tray.clip_contents = false
 	tray.add_child(tile_stage)
 	var tile_ground_shadow = make_soft_depth_panel(tile_stage, rect_full(0.030, 0.575, 0.970, 1.060), Color(0.0, 0.0, 0.0, 0.40), 16)
 	tile_ground_shadow.name = "HandTrayTileGroundShadow"
@@ -13419,6 +13461,10 @@ func draw_hand(parent: Control) -> void:
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	state_badge.tooltip_text = "手牌状态：%s · %s" % [hand_state_text, hand_tray_text()]
 	set_ui_full_text(state_badge, hand_tray_text(), "手牌状态：" + hand_state_text)
+	state_badge.set_meta("ui_short_text", hand_state_text)
+	state_badge.set_meta("state_detail", hand_tray_text())
+	state_badge.set_meta("status_priority", "prompt_over_idle_state")
+	mark_ui_optimization(state_badge, "F-256")
 	mark_ui_optimization(state_badge, "F-417")
 	if has_pending_claim_window() or tutorial_hint_visible:
 		state_badge.visible = false
@@ -13521,12 +13567,19 @@ func draw_hand(parent: Control) -> void:
 	configure_passive_container(hand_box)
 	hand_box.clip_contents = false
 	hand_box.set_meta("hover_gutter_px", 6.0)
+	hand_box.set_meta("overflow_contract", "native_hit_rect_bounded_visual_gutter_6px")
+	hand_box.set_meta("clip_owner", "HandTrayTileStage_metadata_boundary")
 	hand_box.set_meta("layout_required_width", hand_layout_required_width(hand, hand_layout))
 	hand_box.set_meta("layout_content_width", float(hand_layout.get("content_width", 0.0)))
 	hand_box.set_meta("layout_fits_content", hand_layout_fits_content(hand, hand_layout))
 	hand_box.set_meta("group_gap_width", group_gap_width)
 	hand_box.set_meta("keyboard_navigation", "左右方向键选择，Enter出牌")
+	hand_box.set_meta("focusable_tile_count", hand.size())
+	hand_box.set_meta("interaction_state", "interactive" if can_self_discard() else "read_only")
+	hand_box.set_meta("focus_restore_route", "hand_source_index")
+	mark_ui_optimization(hand_box, "F-257")
 	mark_ui_optimization(hand_box, "F-484")
+	mark_ui_optimization(hand_box, "F-248")
 	hand_box.add_theme_constant_override("separation", maxi(0, int(hand_layout.get("separation", 4))))
 	hand_box.z_index = 4
 	apply_rect(hand_box, HAND_TRAY_TILES_RECT)
@@ -13599,6 +13652,8 @@ func draw_hand(parent: Control) -> void:
 		tile_node.name = "HandTile_%02d_%s" % [i, tile]
 		tile_node.set_meta("visual_focus_gutter_px", 6.0)
 		tile_node.set_meta("visual_animation_boundary", "hand_tile_stage")
+		tile_node.set_meta("visual_overflow_px", 6.0)
+		tile_node.set_meta("overflow_contract", "draw_sparkles_stay_within_hand_tray_gutter")
 		tile_node.set_meta("hand_source_index", i)
 		tile_node.set_meta("hand_identity", online_identity)
 		tile_node.set_meta("hand_tile_code", tile)
@@ -13610,8 +13665,11 @@ func draw_hand(parent: Control) -> void:
 		tile_node.set_meta("advisor_target", i == suggested_index)
 		tile_node.set_meta("guide_target", i == interactive_guide_target_index)
 		tile_node.set_meta("keyboard_selected", keyboard_selected)
+		tile_node.set_meta("focus_state", "keyboard_selected" if keyboard_selected else ("available" if clickable else "read_only"))
+		tile_node.set_meta("focus_hint", "Enter确认出牌；左右方向键移动" if keyboard_selected else "点击或按方向键选择")
 		tile_node.tooltip_text = hand_tile_interaction_tooltip(tile, report, hint_badge, is_drawn_tile_marker)
 		mark_ui_optimization(tile_node, "F-045")
+		mark_ui_optimization(tile_node, "F-248")
 		if mode == "online_game":
 			mark_ui_optimization(tile_node, "F-046")
 		if not state_tokens.is_empty():
@@ -13620,6 +13678,7 @@ func draw_hand(parent: Control) -> void:
 			tile_node.tooltip_text = "只读手牌：%s；等待重连后才能提交" % tile_label(tile)
 			tile_node.set_meta("disabled_reason", "牌局已断线，手牌只读")
 		tile_node.set_meta("accessible_name", "手牌第%d张：%s" % [i + 1, tile_label(tile)])
+		mark_ui_optimization(tile_node, "F-258")
 		mark_ui_optimization(tile_node, "F-485")
 		if keyboard_selected and hint_badge != "选":
 			tile_node.tooltip_text += " · 键盘已选 · Enter确认出牌"
@@ -14808,7 +14867,7 @@ func meld_lane_pager_rect(seat: int, meld_rect: Rect2) -> Rect2:
 	var min_width_ratio := UI_MIN_TOUCH_TARGET / maxf(1.0, content_size.x)
 	var min_height_ratio := UI_MIN_TOUCH_TARGET / maxf(1.0, content_size.y)
 	if seat_meld_is_vertical(seat):
-		var pager_height := maxf(0.085, min_height_ratio)
+		var pager_height := maxf(0.095, min_height_ratio + 0.010)
 		return rect_full(lane_left, lane_bottom - pager_height, lane_right, lane_bottom - 0.005)
 	var pager_width := maxf(0.060, min_width_ratio)
 	return rect_full(lane_right - pager_width, lane_top, lane_right - 0.005, lane_bottom)
@@ -14954,24 +15013,24 @@ func draw_melds(parent: Control) -> void:
 				meld_kind_badge.name = "MeldKindBadge_%d_%s" % [window_start + meld_index, meld_kind]
 				# Keep the type token inside the group after the face rotation. A
 				# small inward gutter prevents it from touching the neighboring tile.
-					var badge_font_size := accessibility_font_size(10)
-					var badge_budget_px := meld_tile_size.x if meld_tile_size.x > 0.0 else (24.0 if compact_melds else 30.0)
-					var badge_char_width := float(badge_font_size) * 1.15
-					var badge_text := meld_kind
-					# A badge is metadata, not a second tile surface. Measure it against
-					# the current face width and use a short token before it can cover a
-					# four-tile kong or a neighboring group.
-					if badge_text.length() * badge_char_width > maxf(18.0, badge_budget_px * 0.90):
-						badge_text = meld_kind.left(1)
-						meld_kind_badge.text = badge_text
-						meld_kind_badge.tooltip_text = "副露类型：" + meld_kind
-						meld_kind_badge.set_meta("badge_full_text", meld_kind)
-						meld_kind_badge.set_meta("badge_shortened", true)
-					var badge_rect := rect_full(0.080, 0.700, 0.920, 0.940) if vertical else rect_full(0.600, 0.060, 0.940, 0.300)
-					apply_rect(meld_kind_badge, badge_rect)
-					meld_kind_badge.add_theme_font_size_override("font_size", badge_font_size)
-					meld_kind_badge.set_meta("badge_measured_face_width", badge_budget_px)
-					meld_kind_badge.set_meta("badge_lane_policy", "face_width_measured_short_token")
+				var badge_font_size := accessibility_font_size(10)
+				var badge_budget_px := meld_tile_size.x if meld_tile_size.x > 0.0 else (24.0 if compact_melds else 30.0)
+				var badge_char_width := float(badge_font_size) * 1.15
+				var badge_text := meld_kind
+				# A badge is metadata, not a second tile surface. Measure it against
+				# the current face width and use a short token before it can cover a
+				# four-tile kong or a neighboring group.
+				if badge_text.length() * badge_char_width > maxf(18.0, badge_budget_px * 0.90):
+					badge_text = meld_kind.left(1)
+					meld_kind_badge.text = badge_text
+					meld_kind_badge.tooltip_text = "副露类型：" + meld_kind
+					meld_kind_badge.set_meta("badge_full_text", meld_kind)
+					meld_kind_badge.set_meta("badge_shortened", true)
+				var badge_rect := rect_full(0.080, 0.700, 0.920, 0.940) if vertical else rect_full(0.600, 0.060, 0.940, 0.300)
+				apply_rect(meld_kind_badge, badge_rect)
+				meld_kind_badge.add_theme_font_size_override("font_size", badge_font_size)
+				meld_kind_badge.set_meta("badge_measured_face_width", badge_budget_px)
+				meld_kind_badge.set_meta("badge_lane_policy", "face_width_measured_short_token")
 				meld_kind_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if vertical else HORIZONTAL_ALIGNMENT_RIGHT
 				meld_kind_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER if vertical else VERTICAL_ALIGNMENT_TOP
 				meld_kind_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -14992,7 +15051,7 @@ func draw_melds(parent: Control) -> void:
 		if page_count > 1:
 			var page_button := make_action_button("%d/%d" % [int(window_start / maxi(1, lane_capacity)) + 1, page_count], Color(0.54, 0.58, 0.42), Callable(self, "cycle_meld_window").bind(seat, lane_capacity))
 			page_button.name = "MeldLaneArchiveButton_%d" % seat
-				page_button.custom_minimum_size = Vector2(50, UI_MIN_TOUCH_TARGET)
+			page_button.custom_minimum_size = Vector2(50, UI_MIN_TOUCH_TARGET)
 			page_button.add_theme_font_size_override("font_size", 11)
 			page_button.tooltip_text = "副露第%d/%d页 · 显示第%d-%d组 · 点击查看下一页" % [int(window_start / maxi(1, lane_capacity)) + 1, page_count, window_start + 1, window_start + visible_melds.size()]
 			set_ui_full_text(page_button, page_button.tooltip_text, "座位%d副露翻页" % seat)
@@ -15000,16 +15059,30 @@ func draw_melds(parent: Control) -> void:
 			page_button.set_meta("seat", seat)
 			page_button.set_meta("window_start", window_start)
 			page_button.set_meta("page_count", page_count)
-				page_button.set_meta("lane_capacity", lane_capacity)
-				page_button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-				page_button.set_meta("touch_height_contract", "at_least_UI_MIN_TOUCH_TARGET")
+			page_button.set_meta("lane_capacity", lane_capacity)
+			page_button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			page_button.set_meta("touch_height_contract", "at_least_UI_MIN_TOUCH_TARGET")
+			page_button.set_meta("applied_rect_min_height_px", UI_MIN_TOUCH_TARGET)
+			page_button.set_meta("pager_rect_policy", "apply_rect_preserves_min_touch_height")
+			page_button.set_meta("focus_hint", "Enter翻到下一页副露；Esc返回手牌")
+			page_button.set_meta("action_role", "meld_page_next")
+			mark_ui_optimization(page_button, "F-260")
+			mark_ui_optimization(page_button, "F-247")
 			page_button.z_index = 14
 			parent.add_child(page_button)
 			apply_rect(page_button, meld_lane_pager_rect(seat, meld_rect))
 
-func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: int, shadow_size: int = 0) -> Panel:
-	# Soft depth via GPT plate host (no StyleBoxFlat paint slabs).
-	return make_panel(parent, rect, color, radius, Color(0.0, 0.0, 0.0, 0.0), shadow_size)
+func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: int, shadow_size: int = 0) -> Control:
+	# Depth accents are authored bitmap plates. Keep this helper free of Panel and
+	# StyleBox instances so shadows never become program-painted UI surfaces.
+	var plate := make_gpt_plate_rect(rect, color)
+	plate.set_meta("depth_radius_hint", radius)
+	plate.set_meta("depth_shadow_hint", shadow_size)
+	plate.set_meta("visual_asset_contract", "authored_gpt_plate_only")
+	mark_ui_optimization(plate, "F-222")
+	if parent != null and is_instance_valid(parent):
+		parent.add_child(plate)
+	return plate
 
 
 func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String = "") -> Control:
@@ -15409,7 +15482,7 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	surface.name = "MenuQuickActionSurface"
 	rail.add_child(surface)
 	rail.move_child(surface, 0)
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		surface.modulate.a = 0.72
 		var surface_tw := create_screen_tween()
 		# The menu screen owns this tween and clears it on navigation. An
@@ -15418,6 +15491,8 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		surface_tw.tween_property(surface, "modulate:a", 0.48, 1.35).from(0.72).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		surface_tw.tween_property(surface, "modulate:a", 0.72, 1.35).from(0.48).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		surface.set_meta("animation_lifecycle", "menu_screen_tweens")
+		surface.set_meta("motion_policy", "ui_motion_enabled_respects_reduce_motion")
+		mark_ui_optimization(surface, "F-250")
 	var start_x := 0.025
 	var end_x := 0.975
 	var gap := 0.018
@@ -15964,7 +16039,9 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 		roster_touch_target.set_meta("detail_rect_source", row.name)
 		roster_touch_target.set_meta("detail_rect_synced", true)
+		roster_touch_target.set_meta("resize_sync_contract", "global_rect_recomputed_after_viewport_resize")
 		mark_ui_optimization(roster_touch_target, "F-542")
+		mark_ui_optimization(roster_touch_target, "F-239")
 	return roster
 
 
@@ -15989,6 +16066,7 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	latest_button.set_meta("ui_button_role", "log_latest")
 	latest_button.set_meta("unread_count", log_unread)
 	latest_button.set_meta("unread_action", "jump_to_tail_and_mark_seen")
+	mark_ui_optimization(latest_button, "F-240")
 	# The header owns a full touch lane; the native log scroll starts below it.
 	apply_rect(latest_button, rect_full(0.535, 0.025, 0.745, 0.405))
 	list.add_child(latest_button)
@@ -16000,9 +16078,10 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	configure_clipped_label(unread_label)
 	set_ui_full_text(unread_label, unread_label.text, "房间日志状态：" + unread_label.text)
 	unread_label.set_meta("ui_status_role", "log_unread")
+	mark_ui_optimization(unread_label, "F-240")
 	var count_value := online_lobby_retained_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
 	var total_count := online_lobby_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
-	var count_badge = make_badge(list, rect_full(0.760, 0.030, 0.955, 0.175), "%d条" % count_value, 10, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
+	var count_badge = make_badge(list, rect_full(0.760, 0.030, 0.955, 0.175), "存%d · 总%d · 未读%d" % [count_value, total_count, log_unread], 10, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
 	count_badge.name = "OnlineLobbyLogCountBadge"
 	count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(count_badge, "房间日志共%d条" % count_value, "房间日志总数")
@@ -16011,16 +16090,19 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	count_badge.set_meta("total_count", total_count)
 	count_badge.set_meta("unread_count", online_lobby_log_unread_count())
 	count_badge.set_meta("log_semantics", "visible_cache_count")
+	mark_ui_optimization(count_badge, "F-241")
 	set_ui_full_text(count_badge, "房间日志缓存%d条；总计%d条；未读%d条" % [count_value, total_count, online_lobby_log_unread_count()], "房间日志总数")
 	if count_badge.get_child_count() > 0:
 		var count_label = count_badge.get_child(count_badge.get_child_count() - 1) as Label
 		if count_label != null:
 			count_label.name = "OnlineLobbyLogCountLabel"
+			count_label.text = "存%d · 总%d · 未读%d" % [count_value, total_count, log_unread]
 			set_ui_full_text(count_label, "房间日志缓存%d条；总计%d条；未读%d条" % [count_value, total_count, online_lobby_log_unread_count()], "房间日志总数")
 			count_label.set_meta("retained_count", count_value)
 			count_label.set_meta("total_count", total_count)
 			count_label.set_meta("unread_count", online_lobby_log_unread_count())
 			count_label.set_meta("log_semantics", "visible_cache_count")
+			mark_ui_optimization(count_label, "F-241")
 	return list
 
 
@@ -16575,6 +16657,9 @@ func draw_round_summary(parent: Control) -> void:
 	panel.z_index = 30
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.set_meta("layout_role", "settlement_modal")
+	panel.set_meta("reading_layer_contract", "result_body_then_rank_table_then_next_action")
+	panel.set_meta("fixed_action_lane", "action_bar_above_modal")
+	mark_ui_optimization(panel, "F-245")
 	panel.clip_contents = true
 	parent.add_child(panel)
 	# 标题栏
@@ -16633,6 +16718,8 @@ func draw_round_summary(parent: Control) -> void:
 	panel.add_child(body_scroll)
 	var body = make_label(body_scroll, full_summary_text, 12 if compact_summary else 14, Color(0.94, 0.96, 0.90), false)
 	body.name = "RoundSummaryBody"
+	body.set_meta("settlement_layer", "result_body")
+	body.set_meta("status_owner", "RoundSummaryBodyStatus")
 	body.custom_minimum_size = Vector2(0.0, 0.0)
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -16644,6 +16731,21 @@ func draw_round_summary(parent: Control) -> void:
 	# full source text remains intact and no ellipsis is used.
 	body.clip_text = false
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var body_status := make_label(panel, "结算说明 1-1 / 1 行 · 已到末尾", 10, Color(0.76, 0.86, 0.78), true)
+	body_status.name = "RoundSummaryBodyStatus"
+	apply_rect(body_status, ROUND_SUMMARY_TEXT_STATUS_RECT)
+	body_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	body_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body_status.set_meta("status_contract", "settlement_body_range_before_rank_table")
+	configure_clipped_label(body_status)
+	set_ui_full_text(body_status, "结算说明阅读位置；排名和下一局操作位于下方固定区域", "结算说明阅读位置")
+	mark_ui_optimization(body_status, "F-164")
+	mark_ui_optimization(body_status, "F-165")
+	var body_scrollbar := body_scroll.get_v_scroll_bar()
+	if body_scrollbar != null:
+		body_scrollbar.value_changed.connect(func(_value: float) -> void:
+			sync_round_summary_body_status(body_scroll, body, body_status)
+		)
 	draw_round_summary_rank_header(panel, compact_summary)
 	var rank = 1
 	for seat in ranked_seats_by_score():
@@ -16653,16 +16755,56 @@ func draw_round_summary(parent: Control) -> void:
 		var next_dealer = dealer_seat if offline_dealer_repeat else (dealer_seat + 1) % 4
 		var next = make_badge(panel, ROUND_SUMMARY_NEXT_DEALER_RECT, "下一局庄家  %s" % players[next_dealer]["name"], 13, Color(0.030, 0.046, 0.048, 0.90), Color(0.46, 0.40, 0.24, 0.36), Color(0.82, 0.86, 0.76))
 		next.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		next.set_meta("settlement_layer", "next_dealer_status")
+		mark_ui_optimization(next, "F-245")
 		next.tooltip_text = "下一局由%s坐庄" % players[next_dealer]["name"]
 	# The summary shield is intentionally full-screen. Keep the real action bar
 	# above the newly-built modal in the tree as well as by z-index, so touch hit
 	# testing cannot stop at the shield before reaching settlement CTAs.
 	if action_bar != null and is_instance_valid(action_bar):
+		action_bar.set_meta("settlement_layer", "fixed_next_action")
+		mark_ui_optimization(action_bar, "F-245")
 		if action_bar.get_parent() == parent:
 			parent.move_child(action_bar, parent.get_child_count() - 1)
 		else:
 			action_bar.move_to_front()
 		call_deferred("focus_named_control", action_bar_default_focus_name())
+	# MessageQueue marshaling in Godot 4.6 cannot reliably pass typed Object
+	# arguments through call_deferred. Pass instance ids and resolve them in the
+	# deferred frame instead.
+	call_deferred("sync_round_summary_body_status_by_id", body_scroll.get_instance_id(), body.get_instance_id(), body_status.get_instance_id())
+
+
+func sync_round_summary_body_status(body_scroll: ScrollContainer, body: Label, status: Label) -> void:
+	if body_scroll == null or body == null or status == null or not is_instance_valid(body_scroll) or not is_instance_valid(body) or not is_instance_valid(status):
+		return
+	var scrollbar := body_scroll.get_v_scroll_bar()
+	if scrollbar == null:
+		return
+	var total_lines := maxi(1, int(body.get_meta("wrapped_line_count", body.text.split("\n", true).size())))
+	var line_height := maxf(18.0, float(body.get_theme_font_size("font_size")) * 1.42 + 5.0)
+	var range_value := maxf(0.0, scrollbar.max_value - scrollbar.page)
+	var first_line := clampi(int(floor(scrollbar.value / line_height)) + 1, 1, total_lines)
+	var visible_lines := maxi(1, int(ceil(maxf(line_height, scrollbar.page) / line_height)))
+	var last_line := clampi(first_line + visible_lines - 1, first_line, total_lines)
+	if scrollbar.value >= range_value - 0.5:
+		last_line = total_lines
+	var tail := "已到末尾" if last_line >= total_lines else "可继续滚动"
+	var detail := "当前显示第%d至%d行，共%d行；%s。排名和下一局操作位于下方固定区域。" % [first_line, last_line, total_lines, ("已到结算说明末尾" if last_line >= total_lines else "可继续滚动查看完整结算说明")]
+	set_dynamic_label_text(status, "结算说明 %d-%d / %d 行 · %s" % [first_line, last_line, total_lines, tail], detail)
+	status.set_meta("round_summary_first_line", first_line)
+	status.set_meta("round_summary_last_line", last_line)
+	status.set_meta("round_summary_total_lines", total_lines)
+	status.set_meta("round_summary_scroll_boundary", "bottom" if last_line >= total_lines else ("top" if first_line == 1 else "middle"))
+
+
+func sync_round_summary_body_status_by_id(body_scroll_id: int, body_id: int, status_id: int) -> void:
+	var body_scroll := instance_from_id(body_scroll_id) as ScrollContainer
+	var body := instance_from_id(body_id) as Label
+	var status := instance_from_id(status_id) as Label
+	if body_scroll == null or body == null or status == null:
+		return
+	sync_round_summary_body_status(body_scroll, body, status)
 
 
 func lock_round_summary_background_controls(parent: Control) -> void:
@@ -16683,8 +16825,10 @@ func lock_round_summary_background_controls(parent: Control) -> void:
 func draw_round_summary_rank_header(parent: Control, compact_summary: bool) -> Control:
 	var header = make_gpt_plate_rect(ROUND_SUMMARY_RANK_HEADER_RECT, Color(0.012, 0.026, 0.024, 0.78), "ui_jade_reading_plate")
 	header.name = "RoundSummaryRankHeader"
+	header.set_meta("settlement_layer", "rank_table")
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(header)
+	mark_ui_optimization(header, "F-245")
 	var header_font := 9 if compact_summary else 11
 	var columns := [
 		["名次", rect_full(0.045, 0.090, 0.155, 0.940), HORIZONTAL_ALIGNMENT_CENTER],
@@ -17487,11 +17631,19 @@ func draw_rules_guide_art(parent: Control) -> Control:
 			icon.name = "RulesGuideStepIcon_%d" % i
 		var label = make_label(node, str(step.get("label", "")), 9, Color(0.96, 0.94, 0.82), true)
 		label.name = "RulesGuideStepLabel_%d" % i
-		apply_rect(label, rect_full(0.06, 0.570, 0.94, 0.940))
+		apply_rect(label, rect_full(0.06, 0.555, 0.94, 0.735))
 		label.set_meta("guide_name", str(step.get("label", "")))
-		label.text = "%s · %s" % [str(step.get("label", "")), "当前" if i == 0 else "待读"]
+		label.text = str(step.get("label", ""))
 		set_ui_full_text(label, str(step.get("label", "")), "规则导航步骤：" + str(step.get("label", "")))
 		mark_ui_optimization(label, "F-533")
+		mark_ui_optimization(label, "F-226")
+		var state_label := make_label(node, "当前" if i == 0 else "待读", 7, Color(0.72, 0.84, 0.74), false)
+		state_label.name = "RulesGuideStepState_%d" % i
+		apply_rect(state_label, rect_full(0.12, 0.745, 0.88, 0.940))
+		state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		state_label.set_meta("rules_step_state", "current" if i == 0 else "unread")
+		set_ui_full_text(state_label, state_label.text, "规则导航状态")
+		mark_ui_optimization(state_label, "F-226")
 		var focus_plate := add_optional_gpt_illustration_texture(node, "ui_button_face_plate", rect_full(-0.08, -0.08, 1.08, 1.08), 0.0, false)
 		if focus_plate != null:
 			focus_plate.name = "RulesGuideStepFocusPlate_%d" % i
@@ -17687,15 +17839,25 @@ func seat_compact_display_name(seat: int, info: Dictionary, max_name_chars: int 
 	var max_chars := maxi(1, max_name_chars)
 	if seat == 0:
 		if mode == "offline":
-			return "我" if max_chars <= 3 else raw_name.substr(0, min(max_chars, raw_name.length()))
-		return raw_name.substr(0, min(max_chars, raw_name.length()))
+			return "我" if max_chars <= 3 else seat_name_head_tail_summary(raw_name, max_chars)
+		return seat_name_head_tail_summary(raw_name, max_chars)
 	if mode == "offline":
 		var profile := ai_profile_short_label(seat)
 		if profile != "":
 			var compact := "%s%s" % [raw_name.substr(0, 1), profile]
-			return compact if compact.length() <= max_chars else compact.substr(0, max_chars)
-	var short_name = raw_name.substr(0, min(max_chars, raw_name.length()))
-	return short_name
+			return seat_name_head_tail_summary(compact, max_chars)
+	return seat_name_head_tail_summary(raw_name, max_chars)
+
+func seat_name_head_tail_summary(value: String, max_chars: int) -> String:
+	var normalized := value.strip_edges()
+	var limit := maxi(1, max_chars)
+	if normalized.length() <= limit:
+		return normalized
+	if limit == 1:
+		return normalized.substr(0, 1)
+	if limit == 2:
+		return normalized.substr(0, 1) + normalized.substr(normalized.length() - 1, 1)
+	return normalized.substr(0, 1) + "…" + normalized.substr(normalized.length() - (limit - 2), limit - 2)
 
 func seat_hand_flower_text(info: Dictionary) -> String:
 	return "%d张  花%d" % [
@@ -17899,6 +18061,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		style_seat_readable_label(side_name, true)
 		fit_label_font_size(side_name, maxf(54.0, effective_viewport_size().x * (0.070 if compact_side else 0.090)), 13, 9)
 		side_name.set_meta("name_only_truncation", true)
+		side_name.set_meta("name_summary_policy", "head_tail_identity_preserved")
 		set_ui_full_text(side_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
 		if seat == dealer_seat:
 			var side_dealer = make_badge(panel, rect_full(0.610, 0.094, 0.690, 0.292), "庄", 8, Color(0.58, 0.12, 0.08, 0.84), Color(1.0, 0.79, 0.34, 0.54), Color(0.98, 0.92, 0.74))
@@ -17966,6 +18129,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	style_seat_readable_label(simple_name, true)
 	fit_label_font_size(simple_name, maxf(96.0, effective_viewport_size().x * 0.205), 15 if side == "bottom" else 12, 9)
 	simple_name.set_meta("name_only_truncation", true)
+	simple_name.set_meta("name_summary_policy", "head_tail_identity_preserved")
 	set_ui_full_text(simple_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
 	var simple_score = make_label(panel, seat_score_text(p), 11, Color(1.0, 0.94, 0.72), true)
 	simple_score.name = "SeatCompactScore_%d" % seat
@@ -18448,13 +18612,15 @@ func draw_seat_stat_pill(parent: Control, rect: Rect2, label_text: String, value
 	pill.add_child(value_gate)
 	var value_tick = add_gpt_tick_strip(pill, rect_full(0.625, 0.315, (0.640) + float(1) * (0.070), 0.570), Color(accent.r, accent.g, accent.b, 0.18), "SeatStatValueTick_%s_0" % label_text)
 	var label = make_label(pill, label_text, 9, Color(0.72, 0.74, 0.66, 0.94), false)
-	apply_rect(label, rect_full(0.10, 0.12, 0.42, 0.88))
+	apply_rect(label, rect_full(0.10, 0.12, 0.315, 0.88))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(label)
 	var value = make_label(pill, value_text, 12, Color(0.96, 0.94, 0.88), true)
-	apply_rect(value, rect_full(0.34, 0.06, 0.94, 0.94))
+	apply_rect(value, rect_full(0.405, 0.06, 0.94, 0.94))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(value)
+	pill.set_meta("label_rect_contract", "label_0.10..0.315_value_0.405..0.94")
+	mark_ui_optimization(pill, "F-246")
 
 
 func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) -> Control:
@@ -18809,6 +18975,8 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.name = "SettingsOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.set_meta("modal_backdrop_contract", "one_fullscreen_scrim_plus_opaque_reading_surface")
+	overlay.set_meta("input_restore_contract", "close_rebuilds_source_and_restores_named_focus")
 	parent.add_child(overlay)
 	var settings_is_high_contrast := high_contrast_enabled
 	# Settings is a modal reading surface. Keep the authored panel texture visible,
@@ -18820,6 +18988,8 @@ func draw_settings_overlay(parent: Control) -> void:
 	# Keep the profile contract discoverable to QA; the authored scrim color above
 	# remains stronger in the standard profile for background isolation.
 	scrim.set_meta("modal_scrim_alpha", 0.78 if settings_is_high_contrast else 0.62)
+	scrim.set_meta("modal_backdrop_owner", "SettingsOverlay")
+	scrim.set_meta("backdrop_layer_count", 1)
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
 
@@ -18832,10 +19002,16 @@ func draw_settings_overlay(parent: Control) -> void:
 	# 设置面板 - 更精致的样式
 	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, panel_alpha), "ui_dark_scrim", 0.20)
 	panel.name = "SettingsPanel"
+	# The settings surface contains native controls several levels below this
+	# authored plate. PASS keeps the modal backdrop active while allowing mouse
+	# hit testing to descend into those controls on Godot 4.6.
+	panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	# The visual alpha is intentionally stronger than the legacy profile baseline;
 	# retain the baseline metadata for compatibility with layout probes.
 	panel.set_meta("reading_surface_alpha", 0.96 if settings_is_high_contrast else 0.82)
 	panel.set_meta("high_contrast_surface", settings_is_high_contrast)
+	panel.set_meta("opaque_reading_surface", true)
+	panel.set_meta("reading_surface_contract", "settings_copy_and_controls_do_not_show_menu_through")
 	overlay.add_child(panel)
 	if settings_is_high_contrast:
 		var contrast_frame := Control.new()
@@ -18862,13 +19038,17 @@ func draw_settings_overlay(parent: Control) -> void:
 			should_close = true
 		elif event is InputEventMouseButton:
 			var mouse_event := event as InputEventMouseButton
-			should_close = mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and not panel.get_global_rect().has_point(mouse_event.position)
+			var panel_local_position := panel.get_global_transform_with_canvas().affine_inverse() * mouse_event.position
+			should_close = mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and not Rect2(Vector2.ZERO, panel.size).has_point(panel_local_position)
 		elif event is InputEventScreenTouch:
 			var touch_event := event as InputEventScreenTouch
-			should_close = touch_event.pressed and not panel.get_global_rect().has_point(touch_event.position)
+			var panel_local_position := panel.get_global_transform_with_canvas().affine_inverse() * touch_event.position
+			should_close = touch_event.pressed and not Rect2(Vector2.ZERO, panel.size).has_point(panel_local_position)
 		if should_close:
 			close_settings_panel()
 	)
+	overlay.set_meta("outside_click_contract", "canvas_inverse_panel_local_safe_area")
+	mark_ui_optimization(overlay, "F-249")
 	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
 	left_depth_rail.name = "SettingsConsole3DLeftRail"
 	panel.add_child(left_depth_rail)
@@ -18892,7 +19072,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	# Keep the panel's dedicated clean header as the only title surface. A second
 	# high-frequency rail competes with the title and rule selector at compact sizes.
 	# 设置面板滑入动画
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		overlay.modulate = Color(1, 1, 1, 0)
 		panel.offset_right = 20.0
 		var stw := create_screen_tween()
@@ -18921,7 +19101,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	close.focus_mode = Control.FOCUS_ALL
 	draw_settings_close_button_art(close)
 	panel.add_child(close)
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.flash(close, 0.5, 1.0, 0.8)
 	apply_rect(close, SETTINGS_CLOSE_RECT)
 	close.grab_focus()
@@ -18969,7 +19149,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		panel.add_child(settings_scroll)
 		var settings_content := Control.new()
 		settings_content.name = "SettingsLargeTextContent"
-		settings_content.custom_minimum_size = Vector2(0.0, 690.0)
+		settings_content.custom_minimum_size = Vector2(0.0, 820.0)
 		settings_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		settings_scroll.add_child(settings_content)
 		settings_content_parent = settings_content
@@ -18996,8 +19176,8 @@ func draw_settings_overlay(parent: Control) -> void:
 		)
 		call_deferred("sync_settings_large_text_scroll_status", settings_scroll, settings_large_text_status)
 		audio_section_rect = rect_full(0.025, 0.000, 0.975, 0.275)
-		play_section_rect = rect_full(0.025, 0.305, 0.975, 0.700)
-		maint_section_rect = rect_full(0.025, 0.730, 0.975, 0.995)
+		play_section_rect = rect_full(0.025, 0.305, 0.975, 0.625)
+		maint_section_rect = rect_full(0.025, 0.640, 0.975, 0.995)
 	else:
 		settings_content_parent = panel
 
@@ -19035,7 +19215,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 	if large_text_enabled and settings_large_text_scroll != null:
 		var accessibility_selector := settings_content_parent.find_child("SettingRowButton_阅读辅助", true, false) as Button
-		if accessibility_selector != null:
+		if accessibility_selector != null and settings_focus_restore_name == "SettingRowButton_阅读辅助":
 			# Keep the active reading profile reachable after a large-text rebuild;
 			# otherwise the selector can remain just below the clipped scroll viewport.
 			call_deferred("ensure_settings_control_visible", settings_large_text_scroll, accessibility_selector)
@@ -19048,7 +19228,12 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 系统设置
 	var system_grid = make_settings_section(settings_content_parent, maint_section_rect, "系统", settings_grid_compact)
-	system_grid.columns = 3
+	system_grid.columns = 1 if large_text_enabled else 3
+	system_grid.set_meta("large_text_columns", system_grid.columns)
+	system_grid.set_meta("large_text_bottom_padding_px", 18.0 if large_text_enabled else 8.0)
+	if large_text_enabled and settings_content_parent is Control:
+		settings_content_parent.set_meta("system_section_bottom_padding_px", 18.0)
+		(settings_content_parent as Control).custom_minimum_size.y = maxf((settings_content_parent as Control).custom_minimum_size.y, 730.0)
 	make_setting_row(system_grid, "画面质量", "牌面保持 2D · 仅影响背景和动效", make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
 	))
@@ -19742,6 +19927,17 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	# r205: GPT-only summary chips (no program panel chrome)
 	var chip = make_gpt_plate_rect(rect, Color(0.026, 0.044, 0.042, 0.86), "ui_menu_card_face")
 	chip.name = "StatsSummaryChip_%s" % chip_id
+	var display_value := value_text
+	var unit_text := "值"
+	for suffix in ["%", "局", "分"]:
+		if display_value.ends_with(suffix):
+			display_value = display_value.trim_suffix(suffix)
+			unit_text = suffix
+			break
+	chip.set_meta("summary_caption", caption_text)
+	chip.set_meta("summary_value", display_value)
+	chip.set_meta("summary_unit", unit_text)
+	chip.set_meta("summary_structure", "caption/value/unit")
 	parent.add_child(chip)
 	var chip_depth = make_gpt_plate_rect(rect_full(0.020, 0.600, 0.980, 0.965), Color(0.0, 0.0, 0.0, 0.34), "ui_dark_scrim")
 	chip_depth.name = "StatsSummary3DDepthEdge_%s" % chip_id
@@ -19749,19 +19945,29 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	var chip_top_rim = make_gpt_ribbon(rect_full(0.055, 0.045, 0.945, 0.125), Color(1.0, 0.90, 0.58, 0.08))
 	chip_top_rim.name = "StatsSummary3DTopRim_%s" % chip_id
 	chip.add_child(chip_top_rim)
-	var value_label = make_label(chip, value_text, 20, Color(1.0, 0.93, 0.66), true)
+	var value_label = make_label(chip, display_value, 20, Color(1.0, 0.93, 0.66), true)
 	value_label.name = "StatsSummaryValue_%s" % chip_id
-	apply_rect(value_label, rect_full(0.095, 0.100, 0.925, 0.610))
+	apply_rect(value_label, rect_full(0.095, 0.100, 0.650, 0.610))
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(value_label)
+	value_label.set_meta("summary_role", "value")
+	value_label.set_meta("summary_full_value", value_text)
+	var unit_label := make_label(chip, unit_text, 11, Color(0.84, 0.94, 0.86), true)
+	unit_label.name = "StatsSummaryUnit_%s" % chip_id
+	apply_rect(unit_label, rect_full(0.660, 0.150, 0.925, 0.470))
+	unit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	unit_label.set_meta("summary_role", "unit")
+	set_ui_full_text(unit_label, unit_text, "统计单位：" + unit_text)
 	var caption_label = make_label(chip, caption_text, 11, Color(0.84, 0.94, 0.86), false)
 	caption_label.name = "StatsSummaryCaption_%s" % chip_id
 	apply_rect(caption_label, rect_full(0.095, 0.605, 0.925, 0.915))
 	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(caption_label)
+	caption_label.set_meta("summary_role", "caption")
 	var rail = make_gpt_edge_rail(rect_full(0.045, 0.180, 0.066, 0.820), Color(accent.r, accent.g, accent.b, 0.42))
 	rail.name = "StatsSummaryRail_%s" % chip_id
 	chip.add_child(rail)
+	mark_ui_optimization(chip, "F-229")
 	return chip
 
 
@@ -21406,10 +21612,10 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	gate.name = "UpdateDialogStageGate"
 	map.add_child(gate)
 	var stages := [
-		["checking", "查"],
-		["downloading", "下"],
-		["ready", "验"],
-		["install", "装"],
+		["checking", "检查"],
+		["downloading", "下载"],
+		["ready", "校验"],
+		["install", "安装"],
 	]
 	for i in range(stages.size()):
 		var stage_id = str(stages[i][0])
@@ -21421,6 +21627,11 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 		var label = make_label(node, label_text, 9, Color(0.92, 0.88, 0.70, 0.82), true)
 		label.name = "UpdateDialogStageGlyph_%s" % stage_id
 		apply_rect(label, rect_full(0.0, 0.0, 1.0, 1.0))
+		label.set_meta("update_stage_id", stage_id)
+		label.set_meta("update_stage_full_label", label_text)
+		set_ui_full_text(label, label_text, "更新阶段：" + label_text)
+		label.tooltip_text = "更新阶段：" + label_text
+		mark_ui_optimization(label, "F-181")
 	var tick = add_gpt_tick_strip(map, rect_full(0.190, 0.275, (0.190) + float(2) * (0.280) + (0.022), 0.405), Color(0.82, 0.72, 0.42, 0.18), "UpdateDialogStageTick_0")
 	return map
 
@@ -21466,7 +21677,7 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	notes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	notes_scroll.clip_contents = true
 	notes_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(notes_scroll, rect_full(0.145, 0.060, 0.790, 0.900) if update_dialog_compact_layout() else rect_full(0.145, 0.010, 0.790, 0.580))
+	apply_rect(notes_scroll, rect_full(0.145, 0.060, 0.790, 0.760) if update_dialog_compact_layout() else rect_full(0.145, 0.010, 0.790, 0.580))
 	notes_scroll.set_meta("fixed_action_lane", true)
 	notes_scroll.set_meta("max_reading_height", 0.840 if update_dialog_compact_layout() else 0.570)
 	mark_ui_optimization(notes_scroll, "F-442")
@@ -21501,6 +21712,14 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	notes_scroll_hit_target.set_meta("min_touch_target_px", 44.0)
 	apply_rect(notes_scroll_hit_target, rect_full(0.785, 0.045, 0.875, 0.915))
 	update_release_notes_art.add_child(notes_scroll_hit_target)
+	var notes_status := make_label(update_release_notes_art, "更新说明 · 0字 · 已到末尾", 8, Color(0.72, 0.84, 0.74), true)
+	notes_status.name = "UpdateReleaseNotesStatus"
+	apply_rect(notes_status, rect_full(0.145, 0.775, 0.790, 0.970) if update_dialog_compact_layout() else rect_full(0.145, 0.600, 0.790, 0.780))
+	notes_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	configure_clipped_label(notes_status)
+	notes_status.set_meta("status_contract", "visible_range_progress_and_total_character_count")
+	set_ui_full_text(notes_status, "更新说明阅读位置", "更新说明状态")
+	mark_ui_optimization(notes_status, "F-235")
 	var notes_scroll_drag_state := {"dragging": false}
 	if notes_scrollbar != null:
 		notes_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -21545,6 +21764,13 @@ func sync_update_release_notes_scroll_thumb(content_scroll: ScrollContainer, thu
 	if hit_target != null:
 		hit_target.tooltip_text = "%s · 拖动或使用滚轮定位" % thumb.get_meta("scroll_position_text")
 		hit_target.set_meta("ui_full_text", hit_target.tooltip_text)
+	var notes_status := update_release_notes_art.find_child("UpdateReleaseNotesStatus", true, false) as Label if update_release_notes_art != null and is_instance_valid(update_release_notes_art) else null
+	if notes_status != null:
+		var total_chars := update_release_notes_label.text.length() if update_release_notes_label != null and is_instance_valid(update_release_notes_label) else 0
+		var boundary := "已到末尾" if scroll_range <= 0.5 or progress >= 0.999 else ("可继续滚动" if progress > 0.001 else "从首行开始")
+		set_dynamic_label_text(notes_status, "更新说明 · %d字 · 阅读%.0f%% · %s" % [total_chars, progress * 100.0, boundary], "更新说明共%d字；当前阅读进度%.0f%%；%s" % [total_chars, progress * 100.0, boundary])
+		notes_status.set_meta("total_characters", total_chars)
+		notes_status.set_meta("scroll_boundary", boundary)
 
 func draw_update_status_convergence_art(parent: Control) -> Control:
 	# r205: GPT status convergence chrome
@@ -22494,9 +22720,11 @@ func make_achievement_row(key: String, index: int) -> Control:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(row, achievement_display_name(key) + "：" + achievement_goal_text(key), "成就条目：" + achievement_display_name(key))
 	mark_ui_optimization(row, "F-476")
-	var achievement_row_height: float = 104.0 if effective_viewport_size().x >= 1600.0 else 84.0
+	var achievement_row_height: float = achievement_row_height_contract()
 	row.custom_minimum_size = Vector2(0, achievement_row_height)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.set_meta("row_height_contract", "adaptive_long_goal_and_large_text")
+	row.set_meta("row_height_px", achievement_row_height)
 	# r180: transparent host + GPT shop/settings plate for achievement row face.
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
@@ -22512,6 +22740,14 @@ func make_achievement_row(key: String, index: int) -> Control:
 	row.add_child(row_plate)
 	row.move_child(row_plate, 0)
 	draw_achievement_row_art(row, key, index, unlocked, accent)
+	var focus_rail := make_gpt_edge_rail(rect_full(0.006, 0.018, 0.994, 0.982), Color(accent.r, accent.g, accent.b, 0.92))
+	focus_rail.name = "AchievementRowFocusRail"
+	focus_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	focus_rail.modulate.a = 0.0
+	row.add_child(focus_rail)
+	row.set_meta("focus_visual_contract", "full_row_authored_focus_rail")
+	mark_ui_optimization(row, "F-231")
+	mark_ui_optimization(row, "F-232")
 	var name_label = make_label(row, achievement_display_name(key), 16, Color(1.0, 0.95, 0.76) if unlocked else Color(0.96, 0.99, 0.96), true)
 	name_label.name = "AchievementRowName_%s" % key
 	apply_rect(name_label, rect_full(0.135, 0.080, 0.665, 0.305))
@@ -22575,12 +22811,18 @@ func make_achievement_row(key: String, index: int) -> Control:
 	row.add_child(focus_target)
 	focus_target.focus_entered.connect(func() -> void:
 		row.set_meta("focused", true)
+		var focus_frame := row.find_child("AchievementRowFocusRail", true, false) as CanvasItem
+		if focus_frame != null:
+			focus_frame.modulate = Color(1.0, 1.0, 1.0, 0.90)
 		var rim := row.find_child("AchievementRow3DTopRim_%s" % key, true, false) as CanvasItem
 		if rim != null:
 			rim.modulate = Color(1.18, 1.10, 0.82, 1.0)
 	)
 	focus_target.focus_exited.connect(func() -> void:
 		row.set_meta("focused", false)
+		var focus_frame := row.find_child("AchievementRowFocusRail", true, false) as CanvasItem
+		if focus_frame != null:
+			focus_frame.modulate.a = 0.0
 		var rim := row.find_child("AchievementRow3DTopRim_%s" % key, true, false) as CanvasItem
 		if rim != null:
 			rim.modulate = Color.WHITE
@@ -23143,7 +23385,10 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	configure_clipped_label(title)
 	title.tooltip_text = title_text
+	title.set_meta("long_text_policy", "measured_title_slot_with_full_tooltip")
+	fit_label_font_size(title, maxf(96.0, effective_viewport_size().x * 0.210), commercial_ui_font_size(24, 4), 14)
 	mark_ui_optimization(title, "F-446")
+	mark_ui_optimization(title, "F-225")
 	if subtitle_text != "":
 		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(15, 2), Color(0.94, 0.92, 0.80), false)
 		subtitle.name = "MenuCardSubtitleLabel"
@@ -23155,8 +23400,14 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		style_background_readable_label(subtitle, 2)
-		configure_clipped_label(subtitle)
+		if subtitle_text.length() > 12 or large_text_enabled:
+			configure_wrapped_label(subtitle, maxf(110.0, effective_viewport_size().x * 0.185), 0.0, 2.0)
+			subtitle.max_lines_visible = 2
+			subtitle.set_meta("max_visible_lines", 2)
+		else:
+			configure_clipped_label(subtitle)
 		mark_ui_optimization(subtitle, "F-447")
+		mark_ui_optimization(subtitle, "F-225")
 	configure_menu_button_motion(button, 0.08, 1.035, deg_to_rad(0.45))
 	var menu_button_ref = weakref(button)
 	button.button_down.connect(func() -> void:
@@ -23395,11 +23646,16 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var row = Panel.new()
 	row.name = "SettingRow_%s" % title
 	configure_passive_container(row)
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	var consequence_row := title == "画面质量" or title == "本地进度"
-	var consequence_row_height := 54.0 if compact_settings and not large_text_settings else 64.0
+	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (54.0 if compact_settings else (76.0 if large_text_settings else 64.0))
 	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (56 if large_text_enabled else (44 if compact_settings else 48)))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mark_ui_optimization(row, "F-413")
+	row.set_meta("status_lane_contract", "title_then_status_then_action")
+	row.set_meta("large_text_status_height_px", consequence_row_height if consequence_row else row.custom_minimum_size.y)
+	if consequence_row and large_text_settings:
+		mark_ui_optimization(row, "F-223")
 	# r180: GPT settings plate only — no solid StyleBox row paint.
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
@@ -23422,6 +23678,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	apply_rect(title_label, rect_full(0.052, 0.130, text_right - 0.020, 0.455))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title_label, title, "设置项标题：" + title)
+	title_label.set_meta("section_title_font_contract", "accessibility_scaled_and_measured")
 	fit_label_font_size(title_label, maxf(82.0, effective_viewport_size().x * (text_right - 0.075)), 14, 10)
 	configure_clipped_label(title_label)
 	# Preserve the full explanation in the tooltip/accessibility metadata while
@@ -23447,10 +23704,14 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		status_label.set_meta("ui_status_lines", 2 if "\n" in visible_status else 1)
 		status_label.add_theme_font_size_override("font_size", accessibility_font_size(11))
 		mark_ui_optimization(status_label, "F-047")
+		mark_ui_optimization(status_label, "F-223")
 	else:
 		configure_clipped_label(status_label)
 		if consequence_row and compact_settings:
 			status_label.add_theme_font_size_override("font_size", accessibility_font_size(13))
+		if consequence_row:
+			status_label.set_meta("status_lane_contract", "bounded_below_title_before_action")
+			mark_ui_optimization(status_label, "F-223")
 	button.name = "SettingRowButton_%s" % title
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -23490,6 +23751,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
 	var section = make_gpt_center_crop_plate_rect(rect, Color(0.016, 0.028, 0.026, 0.52), "ui_dark_scrim", 0.18)
 	section.name = "SettingsSection_%s" % title_text
+	section.mouse_filter = Control.MOUSE_FILTER_PASS
 	parent.add_child(section)
 	var section_depth = make_gpt_route_rail(rect_full(0.015, 0.910, 0.985, 0.985), Color(0.0, 0.0, 0.0, 0.10))
 	section_depth.name = "SettingsSection3DDepthEdge_%s" % title_text
@@ -23510,9 +23772,13 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_title = make_label(section, title_text, 14, Color(0.90, 0.84, 0.60), true)
 	apply_rect(section_title, SETTINGS_SECTION_TITLE_RECT)
 	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	section_title.set_meta("section_title_font_contract", "accessibility_scaled_and_measured")
+	section_title.set_meta("section_status_lane", "title_reserved_above_grid")
+	mark_ui_optimization(section_title, "F-223")
 	var grid = GridContainer.new()
 	grid.name = "SettingsSectionGrid_%s" % title_text
 	configure_passive_container(grid)
+	grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 4 if compact else 16)
 	grid.add_theme_constant_override("v_separation", 0 if compact else 5)
@@ -25600,6 +25866,13 @@ func tile_face_sub(tile: String) -> String:
 		tile_face_sub_cache[normalized] = result
 	return result
 
+func achievement_row_height_contract() -> float:
+	var wide := effective_viewport_size().x >= 1600.0
+	if large_text_enabled:
+		return 132.0 if wide else 124.0
+	return 116.0 if wide else 80.0
+
+
 func _show_achievements_screen_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "achievements"
@@ -25609,8 +25882,8 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_scroll_top := 0.330
 	var achievement_scroll_max_bottom := 0.885
 	var wide_achievement_gallery := effective_viewport_size().x >= 1600.0
-	var achievement_row_height := 104.0 if wide_achievement_gallery else 84.0
-	var achievement_row_gap := 12.0 if wide_achievement_gallery else 10.0
+	var achievement_row_height := achievement_row_height_contract()
+	var achievement_row_gap := 12.0 if wide_achievement_gallery else 8.0
 	var max_scroll_height = panel_height * (achievement_scroll_max_bottom - achievement_scroll_top)
 	var visible_row_count = int(clamp(floor((max_scroll_height + achievement_row_gap) / (achievement_row_height + achievement_row_gap)), 3.0, float(max(3, achievements.size()))))
 	var complete_scroll_height = float(visible_row_count) * achievement_row_height + float(max(0, visible_row_count - 1)) * achievement_row_gap + 1.0
@@ -25991,12 +26264,15 @@ func _show_menu_impl() -> void:
 	title_rule.set_meta("wrap_policy", "two_line_when_rule_name_long")
 	if rule_variant_label().length() > 8 or large_text_enabled:
 		configure_wrapped_label(title_rule, maxf(260.0, content_size.x * 0.36), 0.0, 3.0)
+		title_rule.max_lines_visible = 2
+		title_rule.set_meta("max_visible_lines", 2)
 	else:
 		style_background_readable_label(title_rule, 2)
 	set_ui_full_text(title_rule, title_rule.text, "当前地方规则")
 	title_rule.tooltip_text = "当前地方规则：" + rule_variant_label()
 	mark_ui_optimization(title_rule, "F-451")
 	mark_ui_optimization(title_rule, "F-069")
+	mark_ui_optimization(title_rule, "F-225")
 
 	# 教学入口始终可见；完成或跳过后只保留轻量复习入口，不打扰老用户。
 	var tutorial_button = make_small_button(tutorial_menu_button_text(), Color(0.34, 0.58, 0.48), Callable(self, "open_tutorial_entry_sheet"))
@@ -26031,7 +26307,12 @@ func _show_menu_impl() -> void:
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(tutorial_detail)
 		set_ui_full_text(tutorial_detail, tutorial_entry_detail_text(), "新手教学进度详情")
+		if tutorial_entry_detail_text().length() > 16 or large_text_enabled:
+			configure_wrapped_label(tutorial_detail, maxf(160.0, content_size.x * 0.245), 0.0, 2.0)
+			tutorial_detail.max_lines_visible = 2
+			tutorial_detail.set_meta("max_visible_lines", 2)
 		mark_ui_optimization(tutorial_detail, "F-453")
+		mark_ui_optimization(tutorial_detail, "F-225")
 		var tutorial_action = make_small_button("开始教学" if tutorial_step == TUTORIAL_STEP_NEW else "继续", Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(112, 44)
@@ -26146,7 +26427,7 @@ func _show_menu_impl() -> void:
 	# 赛季段位与积分
 	var rank_name = get_rank_name()
 	var rank_full_text := "%s  积分 %d" % [rank_name, int(season_data.get("points", 0))]
-	var rank_display_text := "段位 · %d分" % int(season_data.get("points", 0)) if effective_viewport_size().x <= 960.0 else rank_full_text
+	var rank_display_text := "%s · %d分" % [rank_name, int(season_data.get("points", 0))] if effective_viewport_size().x <= 1280.0 else rank_full_text
 	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.405, 0.185, 0.570, 0.830), Color(0.46, 0.66, 0.54), Color(0.88, 0.96, 0.82))
 	rank_chip.tooltip_text = "完整段位状态：" + rank_full_text
 	rank_chip.set_meta("full_status_text", rank_full_text)
@@ -26154,7 +26435,10 @@ func _show_menu_impl() -> void:
 	if rank_label != null:
 		rank_label.tooltip_text = rank_chip.tooltip_text
 		rank_label.set_meta("ui_full_text", rank_full_text)
+		rank_label.set_meta("rank_name_visible", true)
+		fit_label_font_size(rank_label, maxf(92.0, content_size.x * 0.145), commercial_ui_font_size(13, 2), 13)
 	mark_ui_optimization(rank_chip, "F-457")
+	mark_ui_optimization(rank_chip, "F-224")
 
 	# 统计概览 - 显示胜率等信息
 	var stats_text = "%d局 · 胜率%d%%" % [
@@ -26249,6 +26533,16 @@ func open_daily_login_from_menu() -> void:
 		login_state = check_and_update_login()
 	login_state["show_reward"] = true
 	show_daily_login_panel(login_state)
+
+
+func show_daily_login_day_detail(day_num: int) -> void:
+	var node := root_layer.find_child("DailyLoginDayNode_%d" % day_num, true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if node == null:
+		return
+	var state_text := str(node.get_meta("day_progress_state", "upcoming"))
+	var state_label := "已领取" if state_text == "claimed" else ("今日可领" if state_text == "current" else "待签到")
+	var reward_text := str(node.get_meta("day_reward", "+100"))
+	show_toast("签到第%d天 · %s · 奖励%s" % [day_num, state_label, reward_text], 2400)
 
 
 func open_tutorial_entry_sheet() -> void:
@@ -26389,22 +26683,21 @@ func complete_tutorial(reason: String = "基础操作已完成") -> void:
 
 
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
-	var row = VBoxContainer.new()
+	# This row owns one fixed caption/field lane. A clear proxy is an absolute
+	# sibling so its 44px target never expands the form's VBox height.
+	var row = Control.new()
 	configure_passive_container(row)
-	# Reserve one full touch lane below each caption; the old 38px field was
-	# difficult to hit on compact landscape screens.
 	row.custom_minimum_size = Vector2(0, UI_MIN_TOUCH_TARGET + 16.0)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 0)
 	parent.add_child(row)
 	var caption = Label.new()
 	caption.name = "LobbyFieldCaption_%s" % label_text
 	caption.text = label_text
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption.add_theme_font_override("font", ui_cjk_font())
-	caption.custom_minimum_size = Vector2(0, 16)
 	caption.add_theme_font_size_override("font_size", commercial_ui_font_size(13, 1))
 	caption.add_theme_color_override("font_color", Color(0.95, 0.88, 0.64))
+	apply_rect(caption, rect_full(0.0, 0.0, 1.0, 0.267))
 	row.add_child(caption)
 	var edit = LineEdit.new()
 	edit.text = value
@@ -26412,7 +26705,6 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	edit.add_theme_font_override("font", ui_cjk_font())
 	edit.virtual_keyboard_type = keyboard_type
 	edit.custom_minimum_size = Vector2(240, UI_MIN_TOUCH_TARGET)
-	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	edit.add_theme_font_size_override("font_size", commercial_ui_font_size(18, 2))
 	var input_styles = input_style_set()
 	edit.add_theme_stylebox_override("normal", input_styles["normal"])
@@ -26432,6 +26724,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	mark_ui_optimization(edit, "F-392")
 	if value.strip_edges() == "":
 		edit.placeholder_text = "请输入%s" % label_text
+	apply_rect(edit, rect_full(0.0, 0.267, 1.0, 1.0))
 	draw_line_edit_input_art(edit, label_text)
 	var art_id := line_edit_art_id(label_text)
 	edit.focus_entered.connect(func() -> void:
@@ -26439,8 +26732,14 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	)
 	edit.text_changed.connect(func(_new_text: String) -> void:
 		play_line_edit_input_feedback(edit, art_id, true)
+		refresh_online_lobby_action_states()
 	)
 	row.add_child(edit)
+	var clear_proxy := add_line_edit_clear_proxy(row, edit, "LobbyFieldClearButton_%s" % label_text, Callable(self, "refresh_online_lobby_action_states"))
+	if clear_proxy != null:
+		clear_proxy.set_meta("lobby_clear_field", label_text)
+		clear_proxy.set_meta("lobby_clear_contract", "44px_clear_refresh_actions_restore_focus")
+		mark_ui_optimization(clear_proxy, "F-173")
 	return edit
 
 func refresh_online_lobby_action_states() -> void:
@@ -26524,8 +26823,8 @@ func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
 	# Keep the operational route stable across connection-state refreshes. Disabled
-	# actions are filtered by the shared helper, while visible detail targets join
-	# the same keyboard/gamepad path as the form and primary actions.
+	# actions are filtered by the shared helper. Roster detail targets remain
+	# independently focusable, but do not lengthen the primary action route.
 	var controls: Array = [
 		root_layer.find_child("OnlineLobbyNameEdit", true, false),
 		root_layer.find_child("OnlineLobbyHostEdit", true, false),
@@ -26539,7 +26838,11 @@ func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -
 		root_layer.find_child("OnlineLobbyLogLatestButton", true, false),
 	]
 	for target in online_detail_target_list():
-		controls.append(target)
+		if target != null and is_instance_valid(target):
+			target.set_meta("focus_group", "auxiliary_roster_detail")
+			target.set_meta("primary_action_route", false)
+			target.set_meta("auxiliary_focus_contract", "touch_or_direct_focus_without_primary_chain")
+			mark_ui_optimization(target, "F-174")
 	var default_focus_name := "OnlineLobbyNameEdit"
 	if lobby_connection_state_text() == "未连接":
 		default_focus_name = "OnlineLobbyConnectButton"
@@ -26897,10 +27200,11 @@ func _show_online_lobby_impl() -> void:
 	mark_ui_optimization(room_touch_target, "F-395")
 	call_deferred("sync_online_room_badge_touch_target", room_touch_target, room_badge)
 	call_deferred("sync_online_lobby_detail_targets")
-	var detail_resize_callable := Callable(self, "sync_online_lobby_detail_targets")
+	var detail_resize_callable := Callable(self, "sync_online_lobby_detail_targets_after_resize")
 	if not get_viewport().size_changed.is_connected(detail_resize_callable):
 		get_viewport().size_changed.connect(detail_resize_callable)
 		panel.set_meta("online_detail_resize_connected", true)
+	panel.set_meta("online_detail_resize_contract", "viewport_resize_then_deferred_global_rect")
 	room_touch_target.visible = room_snapshot_visible
 	room_touch_target.disabled = not room_snapshot_visible
 	room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
@@ -27236,21 +27540,25 @@ func refresh_online_room_content() -> void:
 				roster_touch_target.tooltip_text = "查看第%d席：%s" % [slot + 1, online_lobby_slot_name(entry)] if active else "第%d席暂未入席" % (slot + 1)
 				set_ui_full_text(roster_touch_target, roster_touch_target.tooltip_text, "第%d席玩家详情" % (slot + 1))
 				roster_touch_target.set_meta("roster_slot_state", "occupied" if active else "empty")
+				roster_touch_target.set_meta("resize_sync_contract", "viewport_resize_then_deferred_global_rect")
 				mark_ui_optimization(roster_touch_target, "F-596")
+				mark_ui_optimization(roster_touch_target, "F-239")
 		if seat_panel != null:
 			seat_panel.modulate = Color(0.92, 1.0, 0.92, 1.0) if active else Color(0.72, 0.76, 0.74, 0.52)
 	var log_count := online_lobby_retained_log_count()
 	var log_total_count := online_lobby_log_count()
 	var log_count_label = root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	if log_count_label != null:
-		set_dynamic_label_text(log_count_label, "%d条" % log_count, "房间日志缓存%d条；总计%d条；未读%d条" % [log_count, log_total_count, online_lobby_log_unread_count()])
+		var log_unread_count := online_lobby_log_unread_count()
+		set_dynamic_label_text(log_count_label, "存%d · 总%d · 未读%d" % [log_count, log_total_count, log_unread_count], "房间日志缓存%d条；总计%d条；未读%d条" % [log_count, log_total_count, log_unread_count])
 		log_count_label.set_meta("log_view_state", "empty" if log_count == 0 else "has_entries")
 		log_count_label.set_meta("retained_count", log_count)
 		log_count_label.set_meta("total_count", log_total_count)
 		log_count_label.set_meta("unread_count", online_lobby_log_unread_count())
-		log_count_label.set_meta("log_semantics", "visible_cache_count")
+		log_count_label.set_meta("log_semantics", "visible_retained_total_unread_summary")
 		log_count_label.set_meta("latest_route", "OnlineLobbyLogLatestButton")
 		mark_ui_optimization(log_count_label, "F-597")
+		mark_ui_optimization(log_count_label, "F-241")
 	render_room_log()
 
 
@@ -27308,6 +27616,11 @@ func sync_online_lobby_detail_targets() -> void:
 		target.set_meta("detail_rect_synced", true)
 		target.set_meta("detail_rect_generation", ui_page_generation)
 		mark_ui_optimization(target, "F-066")
+
+
+func sync_online_lobby_detail_targets_after_resize() -> void:
+	sync_online_lobby_detail_targets()
+	call_deferred("sync_online_lobby_detail_targets")
 
 
 func online_detail_pressed_target() -> Button:
@@ -27508,7 +27821,8 @@ func _show_rules_screen_impl() -> void:
 	# Solve the fraction from a pixel target so the grip remains discoverable on
 	# 960/1280/1920 captures and still has a stable touch target on Android.
 	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * effective_viewport_size().x)
-	var thumb_span_frac := minf(16.0 / gutter_span_px, 0.90)
+	var rules_thumb_visual_width_px := 24.0
+	var thumb_span_frac := minf(rules_thumb_visual_width_px / gutter_span_px, 0.90)
 	var thumb_left := 0.5 - thumb_span_frac * 0.5
 	var thumb_right := 0.5 + thumb_span_frac * 0.5
 	var rules_scroll_thumb = make_gpt_plate_rect(rect_full(thumb_left, 0.050, thumb_right, 0.580), Color(0.86, 0.74, 0.42, 1.0), "ui_progress_signal_strip")
@@ -27517,7 +27831,10 @@ func _show_rules_screen_impl() -> void:
 	rules_scroll_gutter.add_child(rules_scroll_thumb)
 	rules_scroll_thumb.set_meta("track_left", thumb_left)
 	rules_scroll_thumb.set_meta("track_right", thumb_right)
+	rules_scroll_thumb.set_meta("visual_width_px", rules_thumb_visual_width_px)
+	rules_scroll_thumb.set_meta("hit_lane_px", UI_MIN_TOUCH_TARGET)
 	mark_ui_optimization(rules_scroll_thumb, "F-535")
+	mark_ui_optimization(rules_scroll_thumb, "F-228")
 	var scroll_icon_left := 0.080 if compact_rules_scroll else 0.205
 	var scroll_icon_right := 0.920 if compact_rules_scroll else 0.795
 	var scroll_top_icon = add_lucide_icon(rules_scroll_gutter, "chevron-up", rect_full(scroll_icon_left, 0.014 if compact_rules_scroll else 0.008, scroll_icon_right, 0.145 if compact_rules_scroll else 0.070), Color(1.0, 0.90, 0.58, 0.86))
@@ -27712,7 +28029,7 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 	var content = content_scroll.find_child("RulesContentList", true, false) as Control
 	if content == null:
 		return
-	# Keep short chapters content-sized. A full viewport minimum makes small
+	# Keep every chapter content-sized. A full viewport minimum makes short
 	# sections look empty and turns a chapter jump into a long blank scroll.
 	for child in content.get_children():
 		var section := child as Control
@@ -27720,14 +28037,11 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 			continue
 		var section_index := int(section.get_meta("rules_section_index", -1))
 		var section_min_height := 136.0
-		if section_index == 0:
-			var viewport_height := content_scroll.size.y
-			if viewport_height <= 1.0:
-				viewport_height = effective_viewport_size().y * 0.814
-			section_min_height = maxf(136.0, viewport_height - 10.0)
 		if section.custom_minimum_size.y < section_min_height:
 			section.custom_minimum_size.y = section_min_height
+		section.set_meta("section_height_policy", "content_measured_min_136px")
 		mark_ui_optimization(section, "F-532")
+		mark_ui_optimization(section, "F-227")
 
 
 func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, forced_section_index: int = -1) -> void:
@@ -27791,12 +28105,20 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 		var label = step.find_child("RulesGuideStepLabel_%d" % i, true, false) as Label
 		if label != null:
 			var guide_name := str(label.get_meta("guide_name", label.text))
-			label.text = "%s · %s" % [guide_name, "当前" if active else ("已读" if i < active_step else "待读")]
+			label.text = guide_name
 			set_ui_full_text(label, guide_name, "规则导航步骤：" + guide_name)
 			label.set_meta("rules_step_state", "current" if active else ("read" if i < active_step else "unread"))
 			label.set_meta("rules_step_index", i + 1)
 			mark_ui_optimization(label, "F-598")
+			mark_ui_optimization(label, "F-226")
 			label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.66) if active else Color(0.82, 0.88, 0.80))
+		var state_label := step.find_child("RulesGuideStepState_%d" % i, true, false) as Label
+		if state_label != null:
+			var state_text := "当前" if active else ("已读" if i < active_step else "待读")
+			state_label.text = state_text
+			set_ui_full_text(state_label, state_text, "规则导航状态：" + state_text)
+			state_label.set_meta("rules_step_state", state_text)
+			mark_ui_optimization(state_label, "F-226")
 	if status != null:
 		status.set_meta("rules_current_section", current_section)
 		status.set_meta("rules_section_total", total_sections)
@@ -27922,6 +28244,10 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 	var event_target = input_target if input_target != null else thumb
 	if event is InputEventMouseButton:
 		var mouse_button = event as InputEventMouseButton
+		# On Linux/Xvfb a touch gesture can emit a synthetic mouse stream as
+		# well. Keep that stream from taking ownership of a live touch drag.
+		if bool(drag_state.get("active", false)) and str(drag_state.get("mode", "")) == "touch":
+			return
 		if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP or mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			if mouse_button.pressed:
 				var direction = -1.0 if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0
@@ -27934,6 +28260,7 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
 			return
 		drag_state["active"] = mouse_button.pressed
+		drag_state["mode"] = "mouse" if mouse_button.pressed else drag_state.get("mode", "mouse")
 		if mouse_button.pressed:
 			content_scroll.grab_focus()
 			thumb.modulate = Color(1.18, 1.10, 0.82, 1.0)
@@ -27947,6 +28274,7 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 	if event is InputEventScreenTouch:
 		var touch = event as InputEventScreenTouch
 		drag_state["active"] = touch.pressed
+		drag_state["mode"] = "touch" if touch.pressed else drag_state.get("mode", "touch")
 		if touch.pressed:
 			content_scroll.grab_focus()
 			thumb.modulate = Color(1.18, 1.10, 0.82, 1.0)
@@ -27961,8 +28289,12 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 		return
 	var relative_y := 0.0
 	if event is InputEventMouseMotion:
-		relative_y = (event as InputEventMouseMotion).relative.y
+		if str(drag_state.get("mode", "mouse")) != "mouse":
+			return
+			relative_y = (event as InputEventMouseMotion).relative.y
 	elif event is InputEventScreenDrag:
+		if str(drag_state.get("mode", "touch")) != "touch":
+			return
 		relative_y = (event as InputEventScreenDrag).relative.y
 	else:
 		return
@@ -28301,7 +28633,11 @@ func _show_shop_screen_impl() -> void:
 		name_label.add_theme_constant_override("shadow_offset_y", 1)
 		name_label.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.90))
 		name_label.add_theme_constant_override("outline_size", 4)
+		var name_width_px := maxf(120.0, safe_content_pixel_size().x * (0.445 if shop_wide_layout else 0.300))
+		fit_label_font_size(name_label, name_width_px, commercial_ui_font_size(20, 3), 12)
 		configure_clipped_label(name_label)
+		name_label.set_meta("shop_name_width_px", name_width_px)
+		name_label.set_meta("shop_name_fit_contract", "measured_single_line_full_key_words")
 		set_ui_full_text(name_label, name_label.text, "商品名称：" + name_label.text)
 		mark_ui_optimization(name_label, "F-553")
 		var identity_label = make_label(row, shop_item_identity_text(item_id), 10, Color(item_color.r, item_color.g, item_color.b, 0.96), true)
@@ -28325,6 +28661,8 @@ func _show_shop_screen_impl() -> void:
 		desc_label.max_lines_visible = 2
 		desc_label.clip_text = false
 		desc_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		desc_label.custom_minimum_size.y = minf(desc_label.custom_minimum_size.y, maxf(28.0, shop_row_height * 0.34))
+		desc_label.set_meta("shop_description_contract", "two_lines_measured_full_text_in_tooltip")
 		desc_label.set_meta("full_description_in_tooltip", true)
 		set_ui_full_text(desc_label, desc_label.text, "商品说明：" + name_label.text)
 		mark_ui_optimization(desc_label, "F-552")
@@ -28391,7 +28729,10 @@ func _show_shop_screen_impl() -> void:
 		buy_hit_host.set_meta("hit_rect_stable", true)
 		buy_hit_host.set_meta("shop_item_id", item_id)
 		buy_hit_host.set_meta("accessible_name", "商品%s购买命中区" % str(item_info.get("name", item_id)))
-		apply_rect(buy_hit_host, rect_full(buy_button_left, 0.15, 0.970 if shop_wide_layout else 0.955, 0.85))
+		# Keep the CTA's center slightly below the row midpoint. This leaves the
+		# real hit area reachable when the terminal row grows beyond one viewport
+		# and the native scroll range clamps its bottom edge to the viewport.
+		apply_rect(buy_hit_host, rect_full(buy_button_left, 0.22, 0.970 if shop_wide_layout else 0.955, 0.92))
 		row.add_child(buy_hit_host)
 		apply_rect(buy_btn, rect_full(0.0, 0.0, 1.0, 1.0))
 		buy_hit_host.add_child(buy_btn)
@@ -28429,6 +28770,16 @@ func _show_shop_screen_impl() -> void:
 					tw.tween_property(buy_btn, "scale", Vector2(1.0, 1.0), 0.15).set_ease(Tween.EASE_OUT)
 			)
 
+	var shop_bottom_spacer := Control.new()
+	shop_bottom_spacer.name = "ShopItemsBottomSpacer"
+	shop_bottom_spacer.custom_minimum_size = Vector2(0.0, maxf(32.0, effective_viewport_size().y * 0.090))
+	shop_bottom_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shop_bottom_spacer.set_meta("shop_footer_reserved_px", shop_bottom_spacer.custom_minimum_size.y)
+	shop_bottom_spacer.set_meta("shop_footer_gap_px", 8.0)
+	shop_bottom_spacer.set_meta("shop_footer_contract", "last_item_end_marker_footer_have_eight_px_clearance")
+	content.add_child(shop_bottom_spacer)
+	mark_ui_optimization(shop_bottom_spacer, "F-177")
+
 	# The catalogue should always expose a terminal row. It is useful on compact
 	# lists as well as wide grids, and keeps the end state discoverable when the
 	# final product happens to fill the last grid cell.
@@ -28438,15 +28789,18 @@ func _show_shop_screen_impl() -> void:
 		# view when the list is scrolled to its measured end.
 		var shop_end_marker := make_label(panel, "已展示全部商品", 11, Color(0.76, 0.84, 0.74), true)
 		shop_end_marker.name = "ShopItemsEndMarker"
-		apply_rect(shop_end_marker, rect_full(0.055, 0.752, 0.620, 0.780))
+		apply_rect(shop_end_marker, rect_full(0.055, 0.742, 0.620, 0.775))
 		shop_end_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		shop_end_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		set_ui_full_text(shop_end_marker, "商品列表已到末尾 · 共%d项" % ITEM_TYPES.size(), "商品列表结束位置")
 		shop_end_marker.set_meta("shop_list_end", true)
 		shop_end_marker.set_meta("range_contract", "visible_end_before_footer")
+		shop_end_marker.set_meta("footer_clearance_min_px", 8.0)
+		shop_end_marker.set_meta("footer_top_normalized", 0.790)
 		shop_end_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		mark_ui_optimization(shop_end_marker, "F-399")
 		mark_ui_optimization(shop_end_marker, "F-123")
+		mark_ui_optimization(shop_end_marker, "F-221")
 
 	var total_inventory := 0
 	var affordable_items := 0
@@ -28461,6 +28815,8 @@ func _show_shop_screen_impl() -> void:
 	var shop_footer = make_gpt_route_rail(rect_full(0.055, 0.790, 0.945, 0.950), Color(0.12, 0.09, 0.06, 0.42))
 	shop_footer.name = "ShopCabinetFooterPanel"
 	shop_footer.set_meta("list_footer_gap_px", 8.0)
+	shop_footer.set_meta("footer_clearance_contract", "end_marker_bottom_to_footer_top_at_least_8px")
+	mark_ui_optimization(shop_footer, "F-221")
 	panel.add_child(shop_footer)
 	var footer_depth = make_gpt_plate_rect(rect_full(0.012, 0.810, 0.988, 0.975), Color(0.0, 0.0, 0.0, 0.20), "ui_button_face_plate")
 	footer_depth.name = "ShopCabinetFooter3DDepthEdge"
@@ -28710,6 +29066,8 @@ func sync_stats_scroll_status(content_scroll: ScrollContainer, status_label: Lab
 		set_ui_full_text(status_label, "暂无统计行", "统计滚动位置：暂无统计数据")
 		status_label.text = "暂无统计行"
 		status_label.set_meta("stats_scroll_state", "empty")
+		status_label.set_meta("reading_layer_contract", "section_then_range_then_recent_round")
+		mark_ui_optimization(status_label, "F-230")
 		return
 	var viewport_rect := content_scroll.get_global_rect()
 	var first_visible := total
@@ -28730,14 +29088,19 @@ func sync_stats_scroll_status(content_scroll: ScrollContainer, status_label: Lab
 	var at_end := scroll_range <= 0.0 or scrollbar.value >= scroll_range - 1.0
 	var state_text := "已到末尾" if at_end else "继续滚动可查看"
 	var section_text := "总览统计" if stats_selected_rule.strip_edges() == "" else "%s统计" % rule_variant_short_label(stats_selected_rule)
-	status_label.text = "%s · 第%d-%d/%d行 · %s" % [section_text, first_visible, last_visible, total, state_text]
-	set_ui_full_text(status_label, status_label.text, "%s；当前显示第%d至%d行，共%d行；%s" % [section_text, first_visible, last_visible, total, state_text])
+	var recent_text := "最近一局可查看" if not round_history.is_empty() else "暂无最近一局"
+	status_label.text = "%s · 第%d-%d/%d行 · %s · %s" % [section_text, first_visible, last_visible, total, state_text, recent_text]
+	set_ui_full_text(status_label, status_label.text, "%s；当前显示第%d至%d行，共%d行；%s；%s" % [section_text, first_visible, last_visible, total, state_text, recent_text])
 	status_label.set_meta("stats_scroll_state", "end" if at_end else "scrollable")
 	status_label.set_meta("stats_section", section_text)
 	status_label.set_meta("visible_first_row", first_visible)
 	status_label.set_meta("visible_last_row", last_visible)
 	status_label.set_meta("total_rows", total)
+	status_label.set_meta("range_status", "%d-%d/%d" % [first_visible, last_visible, total])
+	status_label.set_meta("recent_round_state", "available" if not round_history.is_empty() else "empty")
+	status_label.set_meta("reading_layer_contract", "section_then_range_then_recent_round")
 	mark_ui_optimization(status_label, "F-083")
+	mark_ui_optimization(status_label, "F-230")
 
 
 func copy_stats_summary() -> void:
@@ -29040,6 +29403,10 @@ func show_telemetry_data_sheet() -> void:
 	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
 	sheet.mouse_filter = Control.MOUSE_FILTER_STOP
 	sheet.set_meta("modal_input_shield", true)
+	sheet.set_meta("modal_backdrop_contract", "reuse_SettingsOverlayScrim_no_nested_fullscreen_scrim")
+	sheet.set_meta("backdrop_owner", "SettingsOverlayScrim")
+	sheet.set_meta("opaque_reading_surface", "TelemetryDataSheetCard")
+	sheet.set_meta("input_restore_contract", "close_rebuilds_settings_and_restores_previous_focus")
 	mark_ui_optimization(sheet, "F-590")
 	overlay.add_child(sheet)
 	# The sheet owns the whole settings overlay while open. Remove stale tab
@@ -29053,13 +29420,10 @@ func show_telemetry_data_sheet() -> void:
 			background_control.focus_mode = Control.FOCUS_NONE
 			background_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			background_control.set_meta("telemetry_sheet_background_locked", true)
-	var sheet_scrim := make_fullrect_overlay(Color(0.004, 0.010, 0.012, 0.68), "ui_dark_scrim")
-	sheet_scrim.name = "TelemetryDataSheetScrim"
-	sheet_scrim.set_meta("modal_scrim_alpha", 0.68)
-	sheet_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sheet.add_child(sheet_scrim)
 	var card := make_gpt_center_crop_plate_rect(rect_full(0.205, 0.160, 0.795, 0.840), Color(0.018, 0.030, 0.028, 0.98), "ui_jade_reading_plate", 0.20)
 	card.name = "TelemetryDataSheetCard"
+	card.set_meta("opaque_reading_surface", true)
+	card.set_meta("reading_surface_contract", "privacy_copy_and_feedback_are_not_background_translucent")
 	sheet.add_child(card)
 	var title := make_label(card, "隐私与诊断数据", 22, Color(1.0, 0.92, 0.58), true)
 	title.name = "TelemetryDataSheetTitle"
@@ -29072,6 +29436,9 @@ func show_telemetry_data_sheet() -> void:
 	body_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	body_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	mark_ui_optimization(body_scroll, "F-402")
+	body_scroll.set_meta("bottom_action_lane_top", 0.620)
+	body_scroll.set_meta("large_text_overflow_contract", "body_scroll_clips_before_status_and_action_lanes")
+	mark_ui_optimization(body_scroll, "F-238")
 	# Give the privacy copy the main vertical budget. Status and actions stay in
 	# fixed footer lanes below it, so long copy cannot be hidden behind controls.
 	apply_rect(body_scroll, rect_full(0.075, 0.205, 0.925, 0.505))
@@ -29085,6 +29452,8 @@ func show_telemetry_data_sheet() -> void:
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.clip_text = false
 	body.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	body.set_meta("telemetry_body_lane", "0.205..0.505")
+	body.set_meta("action_lane_boundary", "0.620")
 	var status := make_label(card, telemetry_consent_status_text(), 13, Color(0.72, 0.86, 0.74), true)
 	status.name = "TelemetryDataStatus"
 	apply_rect(status, rect_full(0.075, 0.515, 0.925, 0.565))
@@ -29560,6 +29929,11 @@ func show_chat_panel() -> void:
 	else:
 		# Keep the wide drawer on the same real input path as compact layouts.
 		chat_panel.add_child(chat_input)
+	var chat_clear_proxy := add_line_edit_clear_proxy(chat_panel, chat_input, "ChatInputClearButton", Callable(self, "refresh_chat_send_button_state"))
+	if chat_clear_proxy != null:
+		chat_clear_proxy.set_meta("chat_clear_contract", "44px_input_clear_fixed_gap_to_send")
+		chat_clear_proxy.set_meta("clear_send_gap_px", 8.0 if compact_chat else 6.0)
+		mark_ui_optimization(chat_clear_proxy, "F-178")
 	if table_log_chat_restore_pending:
 		chat_input.text = table_log_chat_draft
 		table_log_chat_restore_pending = false
@@ -29567,7 +29941,7 @@ func show_chat_panel() -> void:
 
 	var send_button := make_small_button("发送", Color(0.62, 0.46, 0.22), Callable(self, "send_chat_input"))
 	send_button.name = "ChatSendButton"
-	send_button.custom_minimum_size = Vector2(48 if compact_chat else 62, 44 if compact_chat else 44)
+	send_button.custom_minimum_size = Vector2(52 if compact_chat else 62, 44 if compact_chat else 44)
 	send_button.add_theme_font_size_override("font_size", 11 if compact_chat else 13)
 	send_button.tooltip_text = "发送当前消息 · Enter"
 	send_button.set_meta("ui_button_role", "chat_send")
@@ -29779,6 +30153,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		indicator.set_meta("ui_full_text", day_state_text)
 		indicator.set_meta("day_progress_state", "claimed" if is_claimed else ("current" if is_current else "upcoming"))
 		indicator.set_meta("day_reward", day_reward_text)
+		indicator.set_meta("day_sequence_token", "%d/7" % day_num)
+		indicator.set_meta("day_status_summary", day_state_text)
+		indicator.set_meta("focus_detail_contract", "44px_day_detail_proxy_preserves_claim_cta")
 		mark_ui_optimization(indicator, "F-610")
 		mark_ui_optimization(indicator, "F-407")
 		day_indicators_container.add_child(indicator)
@@ -29817,6 +30194,40 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 		if is_current:
 			indicator.modulate = Color(1, 1, 1, 0.96)
+		var day_focus_rail := make_gpt_edge_rail(rect_full(0.015, 0.015, 0.985, 0.985), Color(text_color.r, text_color.g, text_color.b, 0.86))
+		day_focus_rail.name = "DailyLoginDayFocusRail_%d" % day_num
+		day_focus_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		day_focus_rail.modulate.a = 0.0
+		indicator.add_child(day_focus_rail)
+		# The card remains a visual status surface; this transparent, flat Button
+		# owns a stable focus/touch target without replacing the claim CTA below.
+		var detail_proxy := Button.new()
+		detail_proxy.name = "DailyLoginDayDetailProxy_%d" % day_num
+		detail_proxy.flat = true
+		detail_proxy.text = ""
+		detail_proxy.focus_mode = Control.FOCUS_ALL
+		detail_proxy.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		detail_proxy.tooltip_text = day_state_text
+		set_ui_full_text(detail_proxy, day_state_text, "签到第%d天详情" % day_num)
+		detail_proxy.set_meta("accessible_name", day_state_text)
+		detail_proxy.set_meta("day_number", day_num)
+		detail_proxy.set_meta("day_sequence_token", "%d/7" % day_num)
+		detail_proxy.set_meta("day_progress_state", indicator.get_meta("day_progress_state"))
+		detail_proxy.set_meta("day_reward", day_reward_text)
+		detail_proxy.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+		detail_proxy.set_meta("focus_detail_contract", "44px_day_detail_proxy_preserves_claim_cta")
+		detail_proxy.set_meta("date_focus_visual", "authored_day_focus_rail")
+		detail_proxy.pressed.connect(Callable(self, "show_daily_login_day_detail").bind(day_num))
+		detail_proxy.focus_entered.connect(func() -> void:
+			day_focus_rail.modulate = Color(1.0, 1.0, 1.0, 0.86)
+		)
+		detail_proxy.focus_exited.connect(func() -> void:
+			day_focus_rail.modulate.a = 0.0
+		)
+		indicator.add_child(detail_proxy)
+		detail_proxy.set_anchors_preset(Control.PRESET_FULL_RECT)
+		mark_ui_optimization(detail_proxy, "F-186")
+		mark_ui_optimization(detail_proxy, "F-233")
 	draw_daily_login_streak_art(panel, days, current_day_in_cycle)
 
 	# 奖励说明 - 增强视觉效果
@@ -29829,8 +30240,20 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		reward_text += "金币 +100"
 		reward_icon_name = "coin"
 
-	var reward_panel = make_gpt_route_rail(rect_full(0.14, 0.430, 0.86, 0.542), Color(0.018, 0.030, 0.034, 0.92))
+	var large_checkin_layout := large_text_enabled or effective_viewport_size().y <= 560.0
+	var reward_top := 0.415 if large_checkin_layout else 0.430
+	var reward_bottom := 0.555 if large_checkin_layout else 0.542
+	var progress_top := 0.575 if large_checkin_layout else 0.560
+	var progress_bottom := 0.690 if large_checkin_layout else 0.650
+	var claim_top := 0.715 if large_checkin_layout else 0.675
+	var claim_bottom := 0.830 if large_checkin_layout else 0.790
+	var forecast_top := 0.865 if large_checkin_layout else 0.820
+	var reward_panel = make_gpt_route_rail(rect_full(0.14, reward_top, 0.86, reward_bottom), Color(0.018, 0.030, 0.034, 0.92))
 	reward_panel.name = "DailyLoginRewardPanel"
+	reward_panel.set_meta("layout_contract", "reward_progress_action_lanes_do_not_overlap")
+	reward_panel.set_meta("large_text_layout", large_checkin_layout)
+	reward_panel.set_meta("reserved_bottom_lane_top", progress_top)
+	mark_ui_optimization(reward_panel, "F-234")
 	panel.add_child(reward_panel)
 	var reward_text_back = make_gpt_plate_rect(rect_full(0.135, 0.120, 0.905, 0.880), Color(0.006, 0.014, 0.016, 0.46), "ui_jade_reading_plate")
 	reward_text_back.name = "DailyLoginRewardTextBack"
@@ -29858,8 +30281,11 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var progress: int = days % 7
 	if days > 0 and progress == 0:
 		progress = 7
-	var progress_panel = make_gpt_route_rail(rect_full(0.14, 0.560, 0.86, 0.650), Color(0.018, 0.030, 0.034, 0.92))
+	var progress_panel = make_gpt_route_rail(rect_full(0.14, progress_top, 0.86, progress_bottom), Color(0.018, 0.030, 0.034, 0.92))
 	progress_panel.name = "DailyLoginProgressPanel"
+	progress_panel.set_meta("layout_contract", "progress_before_claim_action_lane")
+	progress_panel.set_meta("bottom_lane_top", claim_top)
+	mark_ui_optimization(progress_panel, "F-234")
 	panel.add_child(progress_panel)
 	var progress_rail = make_gpt_plate_rect(rect_full(0.120, 0.680, 0.880, 0.800), Color(0.006, 0.016, 0.018, 0.46))
 	progress_rail.name = "DailyLoginProgressRail"
@@ -29924,6 +30350,13 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 				stale_current_check.queue_free()
 		var current_indicator = day_indicators_container.find_child("DailyLoginDayNode_%d" % current_day_in_cycle, true, false) as Control
 		if current_indicator != null:
+			var current_detail_proxy := current_indicator.find_child("DailyLoginDayDetailProxy_%d" % current_day_in_cycle, true, false) as Button
+			if current_detail_proxy != null:
+				var claimed_day_summary := "第%d天 · 已领取 · %s" % [current_day_in_cycle, str(current_indicator.get_meta("day_reward", "+100"))]
+				current_detail_proxy.tooltip_text = claimed_day_summary
+				set_ui_full_text(current_detail_proxy, claimed_day_summary, "签到第%d天详情" % current_day_in_cycle)
+				current_detail_proxy.set_meta("accessible_name", claimed_day_summary)
+				current_detail_proxy.set_meta("day_progress_state", "claimed")
 			var current_state_label := current_indicator.find_child("DailyLoginDayStateLabel_%d" % current_day_in_cycle, true, false) as Label
 			if current_state_label != null:
 				set_dynamic_label_text(current_state_label, "已领取", "签到第%d天：已领取" % current_day_in_cycle)
@@ -29962,9 +30395,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	confirm_button_ref["button"] = confirm_btn
 	draw_daily_login_claim_button_art(confirm_btn)
 	panel.add_child(confirm_btn)
-	apply_rect(confirm_btn, rect_full(0.315, 0.675, 0.685, 0.790))
+	apply_rect(confirm_btn, rect_full(0.315, claim_top, 0.685, claim_bottom))
 	add_lucide_icon(confirm_btn, "check", rect_full(0.08, 0.22, 0.22, 0.78), Color(0.96, 0.96, 0.92))
-	var claimed_status_surface := make_gpt_route_rail(rect_full(0.315, 0.675, 0.685, 0.790), Color(0.16, 0.34, 0.28, 0.78))
+	var claimed_status_surface := make_gpt_route_rail(rect_full(0.315, claim_top, 0.685, claim_bottom), Color(0.16, 0.34, 0.28, 0.78))
 	claimed_status_surface.name = "DailyLoginClaimedStatusSurface"
 	claimed_status_surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(claimed_status_surface)
@@ -29985,7 +30418,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var days_to_bonus = max(0, 7 - progress)
 	var forecast_badge_text = "已领取" if claimed_today else ("今日可领" if progress >= 7 else "还差 %d 天" % days_to_bonus)
 	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍金币卡" if progress >= 7 else "第7天领取双倍金币卡")
-	var forecast_panel = make_gpt_route_rail(rect_full(0.160, 0.820, 0.840, 0.955), Color(0.010, 0.022, 0.025, 0.64))
+	var forecast_panel = make_gpt_route_rail(rect_full(0.160, forecast_top, 0.840, 1.000 if large_checkin_layout else 0.955), Color(0.010, 0.022, 0.025, 0.64))
 	forecast_panel.name = "DailyLoginForecastPanel"
 	panel.add_child(forecast_panel)
 	var forecast_rail = make_layout_host(rect_full(0.035, 0.180, 0.047, 0.820))
@@ -30041,12 +30474,21 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 func show_diagnostic_dialog(lines: Array) -> void:
 	# r215: GPT chrome conversion
+	diagnostic_focus_restore_name = ""
+	diagnostic_focus_restore_id = 0
+	var previous_focus := get_viewport().gui_get_focus_owner()
+	if previous_focus is Control and root_layer != null and is_instance_valid(root_layer) and root_layer.is_ancestor_of(previous_focus):
+		diagnostic_focus_restore_name = str((previous_focus as Control).name)
+		diagnostic_focus_restore_id = (previous_focus as Control).get_instance_id()
 	# 清除当前屏幕
 	clear_screen()
 
 	# 创建半透明背景
 	var bg = make_fullrect_overlay(Color(0, 0, 0, 0.72), "ui_dark_scrim")
 	bg.name = "DiagnosticDismissOverlay"
+	bg.set_meta("modal_backdrop_contract", "one_fullscreen_scrim_plus_opaque_reading_surface")
+	bg.set_meta("modal_backdrop_owner", "DiagnosticDismissOverlay")
+	bg.set_meta("input_restore_contract", "close_rebuilds_source_and_restores_named_focus")
 	root_layer.add_child(bg)
 	apply_rect(bg, rect_full(0, 0, 1, 1))
 	draw_diagnostic_dismiss_art(bg)
@@ -30056,6 +30498,9 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	# reserved for the header so long reports remain easy to scan.
 	var panel = make_gpt_center_crop_plate_rect(rect_full(0.1, 0.15, 0.9, 0.85), Color(0.026, 0.058, 0.060, 0.95), "ui_dark_scrim", 0.30)
 	panel.name = "DiagnosticDialogPanel"
+	panel.set_meta("opaque_reading_surface", true)
+	panel.set_meta("reading_surface_contract", "diagnostic_body_is_readable_without_background_showthrough")
+	panel.set_meta("modal_backdrop_owner", "DiagnosticDismissOverlay")
 	# The GPT plate is normally an input-ignoring visual host. Make this modal
 	# surface an explicit input boundary so its child actions receive mouse input.
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -30104,12 +30549,16 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	var content_scroll = ScrollContainer.new()
 	content_scroll.name = "DiagnosticContentScroll"
 	configure_scroll_container(content_scroll, "上下滚动查看完整诊断信息")
-	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	content_scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	content_scroll.scroll_deadzone = 8
 	content_scroll.clip_contents = true
-	content_scroll.focus_mode = Control.FOCUS_ALL
+	content_scroll.focus_mode = Control.FOCUS_NONE
+	content_scroll.set_meta("diagnostic_measurement_pending", true)
+	content_scroll.set_meta("diagnostic_measurement_generation", ui_page_generation)
+	content_scroll.set_meta("diagnostic_measurement_contract", "stable_viewport_then_one_normalize_pass")
+	content_scroll.set_meta("diagnostic_scroll_lock_until_measurement", true)
 	content_scroll.set_meta("scroll_hit_lane_px", UI_MIN_TOUCH_TARGET)
 	content_scroll.set_meta("scroll_boundary_status", "DiagnosticContentStatusLabel")
 	panel.add_child(content_scroll)
@@ -30125,7 +30574,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	var vbox = VBoxContainer.new()
 	vbox.name = "DiagnosticContentList"
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 10 if large_text_enabled else 8)
+	vbox.add_theme_constant_override("separation", 10 if large_text_enabled else 1)
 	content_scroll.add_child(vbox)
 
 	# 添加每一行文本
@@ -30142,28 +30591,30 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.clip_text = false
 		label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		label.custom_minimum_size.y = 12.0 if line == "" else (42.0 if large_text_enabled else 30.0)
+		label.custom_minimum_size.y = 12.0 if line == "" else (42.0 if large_text_enabled else 28.0)
 		label.add_theme_font_size_override("font_size", accessibility_font_size(20))
 		if line.begins_with("【"):
-			label.add_theme_color_override("font_color", Color(0.94, 0.86, 0.44))
+			label.add_theme_color_override("font_color", accessible_text_color(Color(0.94, 0.86, 0.44)))
 			label.add_theme_font_size_override("font_size", accessibility_font_size(26))
 			label.custom_minimum_size.y = 50.0 if large_text_enabled else 38.0
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		elif line.begins_with("✓"):
-			label.add_theme_color_override("font_color", Color(0.42, 0.82, 0.56))
+			label.add_theme_color_override("font_color", accessible_text_color(Color(0.42, 0.82, 0.56)))
 		elif line.begins_with("✗"):
-			label.add_theme_color_override("font_color", Color(0.84, 0.42, 0.38))
+			label.add_theme_color_override("font_color", accessible_text_color(Color(0.84, 0.42, 0.38)))
 		elif line.begins_with("•"):
-			label.add_theme_color_override("font_color", Color(0.76, 0.78, 0.84))
+			label.add_theme_color_override("font_color", accessible_text_color(Color(0.76, 0.78, 0.84)))
 		else:
-			label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.91))
+			label.add_theme_color_override("font_color", accessible_text_color(Color(0.88, 0.90, 0.91)))
+		label.set_meta("diagnostic_status_color_policy", "accessible_text_color_preserves_symbol_semantics")
+		mark_ui_optimization(label, "F-167")
 		if line == "":
 			label.custom_minimum_size.y = 12.0
 		else:
-			var diagnostic_font_size := accessibility_font_size(26 if line.begins_with("【") else 20)
-			var diagnostic_width := diagnostic_content_viewport_width(content_scroll, null)
-			var diagnostic_height := estimate_wrapped_text_height(line, diagnostic_width, diagnostic_font_size, 6.0)
-			configure_wrapped_label(label, diagnostic_width, diagnostic_height, 6.0)
+			label.set_meta("dynamic_wrapped_label", true)
+			label.set_meta("wrapped_line_gap", 6.0 if large_text_enabled else 2.0)
+			label.set_meta("diagnostic_measurement_pending", true)
+			label.custom_minimum_size.y = maxf(label.custom_minimum_size.y, float(28 if not line.begins_with("【") else (50 if large_text_enabled else 38)))
 		vbox.add_child(label)
 	var content_status = make_label(panel, "诊断内容 1-%d / %d · 可继续滚动" % [mini(5, lines.size()), lines.size()], 11, Color(0.86, 0.92, 0.84), true)
 	content_status.name = "DiagnosticContentStatusLabel"
@@ -30174,6 +30625,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	configure_clipped_label(content_status)
 	set_ui_full_text(content_status, "当前诊断报告范围", "诊断报告阅读位置")
 	mark_ui_optimization(content_status, "F-499")
+	mark_ui_optimization(content_scroll, "F-237")
 	var copy_feedback := make_label(panel, diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "复制结果：尚未复制", 11, Color(0.76, 0.86, 0.78), false)
 	copy_feedback.name = "DiagnosticCopyFeedbackLabel"
 	# Keep copy feedback in the quiet header gap; the report range status owns
@@ -30208,10 +30660,12 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	close_button.shortcut = cancel_shortcut
 	configure_ordered_focus_navigation(panel, [content_scroll, copy_button, close_button], "DiagnosticCloseButton")
 	content_scroll.resized.connect(func() -> void:
+		content_scroll.set_meta("diagnostic_measurement_pending", true)
 		normalize_diagnostic_scroll_viewport(content_scroll, vbox)
 		sync_diagnostic_scroll_status(content_scroll, content_status, lines.size())
 	)
 	vbox.resized.connect(func() -> void:
+		content_scroll.set_meta("diagnostic_measurement_pending", true)
 		normalize_diagnostic_scroll_viewport(content_scroll, vbox)
 		sync_diagnostic_scroll_status(content_scroll, content_status, lines.size())
 	)
@@ -30221,10 +30675,6 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		)
 	# Give the first rendered frame a complete-row boundary before container
 	# layout emits its deferred resize signals. The next-frame helper refines it.
-	var initial_viewport_height := effective_viewport_size().y
-	var initial_scroll_height := 192.0 if initial_viewport_height <= 560.0 else (374.0 if initial_viewport_height >= 1000.0 else 260.0)
-	content_scroll.anchor_bottom = content_scroll.anchor_top
-	content_scroll.offset_bottom = initial_scroll_height
 	call_deferred("normalize_diagnostic_scroll_viewport", content_scroll, vbox)
 	call_deferred("sync_diagnostic_scroll_status", content_scroll, content_status, lines.size())
 
@@ -30272,29 +30722,37 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	var panel := content_scroll.get_parent() as Control
 	if panel == null or panel.size.y <= 1.0:
 		return
+	var preserved_scroll := content_scroll.scroll_vertical
+	var previous_width := float(content_scroll.get_meta("diagnostic_measurement_width", -1.0))
+	var measured_width := diagnostic_content_viewport_width(content_scroll, content_list)
+	var width_changed := previous_width < 0.0 or absf(previous_width - measured_width) > 1.0
 	refresh_diagnostic_line_measurements(content_scroll, content_list)
-	# Snap the viewport to a complete row while keeping a fixed visual buffer
-	# before the close lane. This prevents the first frame from bisecting text.
-	# The list starts at 21.5% and the status lane starts at 78.5%. Keep the
-	# complete-row viewport eight pixels above that status lane at every size.
-	var maximum_height := maxf(44.0, panel.size.y * 0.570 - 8.0)
-	var complete_height := 0.0
-	for child in content_list.get_children():
-		if not child is Control:
-			continue
-		var child_control := child as Control
-		var child_end := child_control.position.y + child_control.size.y
-		if child_end > maximum_height:
-			break
-		complete_height = child_end
-	if complete_height <= 1.0:
+	# The authored .215-.760 rect is the viewport contract. Only the child list
+	# is measured here; changing the viewport to the list height breaks the fixed
+	# status and close lanes and can move the scroll range outside the modal.
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	content_scroll.focus_mode = Control.FOCUS_ALL
+	content_scroll.set_meta("diagnostic_measurement_pending", false)
+	content_scroll.set_meta("diagnostic_measurement_complete", true)
+	content_scroll.set_meta("diagnostic_measurement_width", measured_width)
+	content_scroll.set_meta("diagnostic_preserved_scroll", preserved_scroll)
+	content_scroll.set_meta("diagnostic_scroll_lock_until_measurement", false)
+	if preserved_scroll > 0:
+		call_deferred("restore_diagnostic_scroll_position", content_scroll.get_instance_id(), preserved_scroll)
+	if width_changed:
 		queue_diagnostic_layout_retry(content_scroll, content_list)
+
+
+func restore_diagnostic_scroll_position(content_scroll_id: int, desired_scroll: int) -> void:
+	var content_scroll := instance_from_id(content_scroll_id) as ScrollContainer
+	if content_scroll == null or not is_instance_valid(content_scroll) or not is_current_ui_control(content_scroll):
 		return
-	content_scroll.anchor_bottom = content_scroll.anchor_top
-	# Leave a small rasterization tolerance so the last included label is not
-	# reported as one pixel clipped after the ScrollContainer rounds its size.
-	content_scroll.offset_bottom = complete_height + 2.0
-	queue_diagnostic_layout_retry(content_scroll, content_list)
+	var scrollbar := content_scroll.get_v_scroll_bar()
+	if scrollbar == null:
+		return
+	var max_scroll := maxi(0, int(round(scrollbar.max_value - scrollbar.page)))
+	content_scroll.scroll_vertical = clampi(desired_scroll, 0, max_scroll)
 
 
 func diagnostic_content_viewport_width(content_scroll: ScrollContainer, content_list: Control = null) -> float:
@@ -30329,8 +30787,13 @@ func refresh_diagnostic_line_measurements(content_scroll: ScrollContainer, conte
 			continue
 		var font_size := label.get_theme_font_size("font_size")
 		var line_gap := float(label.get_meta("wrapped_line_gap", 6.0))
-		var minimum_height := 50.0 if line.begins_with("【") and large_text_enabled else (38.0 if line.begins_with("【") else 30.0)
-		label.custom_minimum_size.y = maxf(minimum_height, estimate_wrapped_text_height(line, measured_width, font_size, line_gap))
+		var minimum_height := 50.0 if line.begins_with("【") and large_text_enabled else (38.0 if line.begins_with("【") else 28.0)
+		var measured_height := estimate_wrapped_text_height(line, measured_width, font_size, line_gap)
+		# A single-line report entry fits the authored 30px lane. Keep the
+		# estimator for genuinely wrapped entries, where extra height is needed.
+		if not large_text_enabled and label.get_line_count() <= 1:
+			measured_height = minimum_height
+		label.custom_minimum_size.y = maxf(minimum_height, measured_height)
 		label.set_meta("diagnostic_measurement_width", measured_width)
 		label.set_meta("diagnostic_measurement_source", "scroll_viewport_content_width")
 
@@ -30364,6 +30827,9 @@ func retry_diagnostic_layout(content_scroll: ScrollContainer, content_list: Cont
 
 func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label: Label, total_count: int) -> void:
 	if content_scroll == null or status_label == null or not is_current_ui_control(content_scroll) or not is_current_ui_control(status_label):
+		return
+	if bool(content_scroll.get_meta("diagnostic_measurement_pending", false)):
+		status_label.set_meta("diagnostic_status_pending", true)
 		return
 	var scrollbar := content_scroll.get_v_scroll_bar()
 	var content_list := content_scroll.find_child("DiagnosticContentList", true, false) as Control
@@ -30412,8 +30878,17 @@ func dismiss_diagnostic_dialog() -> void:
 		return
 	if root_layer.find_child("DiagnosticDialogPanel", true, false) == null:
 		return
+	var restore_name := diagnostic_focus_restore_name
+	var restore_id := diagnostic_focus_restore_id
+	diagnostic_focus_restore_name = ""
+	diagnostic_focus_restore_id = 0
 	clear_screen()
 	refresh_current_screen()
+	var restored_control := node_from_instance_id(restore_id) as Control
+	if restored_control != null and is_instance_valid(restored_control) and restored_control.focus_mode != Control.FOCUS_NONE:
+		restore_name = str(restored_control.name)
+	if restore_name != "":
+		call_deferred("focus_named_control", restore_name)
 
 
 func copy_diagnostic_report(lines: Array) -> void:
@@ -30711,23 +31186,27 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	if loading_error:
 		var error_hint := make_label(center_panel, "加载失败 · 可重试或返回主菜单", 12, Color(1.0, 0.76, 0.62), false)
 		error_hint.name = "LoadingErrorHint"
-		apply_rect(error_hint, rect_full(0.120, 0.675, 0.880, 0.720))
+		apply_rect(error_hint, rect_full(0.110, 0.650, 0.890, 0.720))
 		error_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		error_hint.tooltip_text = loading_status_text
-		error_hint.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		error_hint.clip_text = false
 		set_ui_full_text(error_hint, "加载失败：%s；可重试或返回主菜单，返回不会删除本地进度" % loading_status_text, "加载错误恢复提示")
 		error_hint.set_meta("text_slot_role", "loading_error_summary")
 		error_hint.set_meta("full_error_text", loading_status_text)
-		fit_label_font_size(error_hint, maxf(220.0, effective_viewport_size().x * 0.60), 12, 9)
+		configure_wrapped_label(error_hint, maxf(220.0, effective_viewport_size().x * 0.62), 0.0, 2.0)
+		error_hint.max_lines_visible = 2
+		error_hint.set_meta("max_visible_lines", 2)
 		mark_ui_optimization(error_hint, "F-495")
+		mark_ui_optimization(error_hint, "F-236")
 		var error_action_lane := Control.new()
 		error_action_lane.name = "LoadingErrorActionLane"
 		error_action_lane.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		error_action_lane.set_meta("layout_role", "loading_error_actions")
 		error_action_lane.set_meta("fixed_touch_height", UI_MIN_TOUCH_TARGET)
+		error_action_lane.set_meta("above_text_overflow_boundary", 0.720)
+		error_action_lane.set_meta("action_lane_reserved", true)
 		apply_rect(error_action_lane, rect_full(0.120, 0.730, 0.880, 0.890))
 		center_panel.add_child(error_action_lane)
+		mark_ui_optimization(error_action_lane, "F-236")
 		var retry_button := make_small_button("重试", Color(0.34, 0.62, 0.48), Callable(self, "retry_loading_screen"))
 		retry_button.name = "LoadingRetryButton"
 		retry_button.custom_minimum_size = Vector2(116, UI_MIN_TOUCH_TARGET)
@@ -31002,11 +31481,11 @@ func _show_replay_import_screen_impl() -> void:
 		show_toast("已复制完整回放码")
 	)
 	copy_code_button.name = "ReplayImportCopyCodeButton"
-	copy_code_button.custom_minimum_size = Vector2(118, 40)
+	copy_code_button.custom_minimum_size = Vector2(118, UI_MIN_TOUCH_TARGET)
 	copy_code_button.tooltip_text = "复制输入框中的完整回放码，不使用首尾摘要"
 	set_ui_full_text(copy_code_button, copy_code_button.tooltip_text, "复制完整回放码")
 	copy_code_button.disabled = input.text.strip_edges() == ""
-	apply_rect(copy_code_button, rect_full(0.710, 0.420, 0.935, 0.465))
+	apply_rect(copy_code_button, rect_full(0.710, 0.415, 0.935, 0.480))
 	panel.add_child(copy_code_button)
 	update_replay_import_input_feedback(input)
 	var archive_pane := make_gpt_plate_rect(rect_full(0.065, 0.470, 0.480, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
@@ -31048,6 +31527,10 @@ func _show_replay_import_screen_impl() -> void:
 	search.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	apply_rect(search, rect_full(0.050, 0.180, 0.950, 0.365))
 	archive_pane.add_child(search)
+	var search_clear_proxy := add_line_edit_clear_proxy(archive_pane, search, "ReplayArchiveSearchClearButton", Callable(self, "set_replay_search_query").bind(""))
+	if search_clear_proxy != null:
+		search_clear_proxy.set_meta("replay_search_clear_contract", "44px_clear_restore_focus_refresh_count_and_empty_state")
+		mark_ui_optimization(search_clear_proxy, "F-168")
 	set_ui_full_text(search, "按日期、规则或结果搜索本地回放", "本地回放搜索框")
 	mark_ui_optimization(search, "F-513")
 	search.text_changed.connect(Callable(self, "set_replay_search_query"))
@@ -31332,16 +31815,19 @@ func restore_replay_archive_view_state(scroll_value: float, focus_name: String, 
 
 func make_replay_archive_row(entry: Dictionary) -> Control:
 	var archive_id := str(entry.get("archive_id", ""))
+	var delete_confirming := replay_delete_confirming and replay_delete_target_id == archive_id
 	var row := Control.new()
 	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
 	# visible labels make favorite state discoverable without relying on a glyph.
-	row.custom_minimum_size = Vector2(0, 84)
+	row.custom_minimum_size = Vector2(0, 104 if delete_confirming else 84)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.set_meta("archive_id", archive_id)
 	row.set_meta("archive_favorite_state", "favorite" if bool(entry.get("favorite", false)) else "normal")
 	row.set_meta("archive_primary_action", "open_verified_replay")
+	row.set_meta("delete_confirmation_lane", "dedicated_secondary_lane" if delete_confirming else "none")
 	mark_ui_optimization(row, "F-613")
+	mark_ui_optimization(row, "F-242")
 	var plate := make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.026, 0.024, 0.44), "ui_button_face_plate")
 	plate.name = "ReplayArchiveRowPlate"
 	row.add_child(plate)
@@ -31363,11 +31849,11 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	set_ui_full_text(result, result_label, "回放结果")
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
 	secondary.name = "ReplayArchiveRowSecondary"
-	apply_rect(secondary, rect_full(0.035, 0.265, 0.965, 0.390))
+	apply_rect(secondary, rect_full(0.035, 0.265, 0.965, 0.335 if delete_confirming else 0.390))
 	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(secondary)
 	set_ui_full_text(secondary, str(entry.get("rule_variant", "")) + " · " + str(entry.get("replay_digest", "")).to_upper(), "回放规则与摘要")
-	var action_top := 0.435
+	var action_top := 0.455 if delete_confirming else 0.435
 	var action_bottom := 0.970
 	var action_slot_width := 0.238
 	var action_step := 0.245
@@ -31386,11 +31872,12 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(favorite, rect_full(0.006, action_top, 0.006 + action_slot_width, action_bottom))
 	row.add_child(favorite)
 	add_lucide_icon(favorite, "star", rect_full(0.290, 0.220, 0.710, 0.780), Color(0.98, 0.88, 0.56) if is_favorite else Color(0.88, 0.94, 0.84))
-	var favorite_caption := make_label(favorite, "收藏", 9, Color(0.90, 0.94, 0.84), true)
+	var favorite_caption := make_label(favorite, "收藏", accessibility_font_size(10), Color(0.90, 0.94, 0.84), true)
 	favorite_caption.name = "ReplayArchiveFavoriteCaption"
 	apply_rect(favorite_caption, rect_full(0.12, 0.690, 0.88, 0.950))
 	favorite_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	favorite_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mark_ui_optimization(favorite_caption, "F-243")
 	var open := make_small_button("", Color(0.34, 0.56, 0.52), func() -> void:
 		open_replay_archive(archive_id)
 	)
@@ -31405,11 +31892,12 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(open, rect_full(0.006 + action_step, action_top, 0.006 + action_step + action_slot_width, action_bottom))
 	row.add_child(open)
 	add_lucide_icon(open, "eye", rect_full(0.290, 0.220, 0.710, 0.780), Color(0.88, 0.96, 0.88))
-	var open_caption := make_label(open, "打开", 9, Color(0.90, 0.96, 0.88), true)
+	var open_caption := make_label(open, "打开", accessibility_font_size(10), Color(0.90, 0.96, 0.88), true)
 	open_caption.name = "ReplayArchiveOpenCaption"
 	apply_rect(open_caption, rect_full(0.12, 0.690, 0.88, 0.950))
 	open_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	open_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mark_ui_optimization(open_caption, "F-243")
 	var copy := make_small_button("", Color(0.30, 0.52, 0.54), func() -> void:
 		copy_replay_archive_share_code(archive_id)
 	)
@@ -31424,12 +31912,12 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(copy, rect_full(0.006 + action_step * 2.0, action_top, 0.006 + action_step * 2.0 + action_slot_width, action_bottom))
 	row.add_child(copy)
 	add_lucide_icon(copy, "copy", rect_full(0.290, 0.220, 0.710, 0.780), Color(0.88, 0.96, 0.92))
-	var copy_caption := make_label(copy, "复制", 9, Color(0.90, 0.96, 0.92), true)
+	var copy_caption := make_label(copy, "复制", accessibility_font_size(10), Color(0.90, 0.96, 0.92), true)
 	copy_caption.name = "ReplayArchiveCopyCaption"
 	apply_rect(copy_caption, rect_full(0.12, 0.690, 0.88, 0.950))
 	copy_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	copy_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var delete_confirming := replay_delete_confirming and replay_delete_target_id == archive_id
+	mark_ui_optimization(copy_caption, "F-243")
 	var delete := make_small_button("确认" if delete_confirming else "删除", Color(0.76, 0.36, 0.24) if delete_confirming else Color(0.60, 0.32, 0.26), func() -> void:
 		request_delete_replay_archive(archive_id)
 	)
@@ -31446,22 +31934,25 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	mark_ui_optimization(delete, "F-614")
 	apply_rect(delete, rect_full(0.006 + action_step * 3.0, action_top, 0.006 + action_step * 3.0 + action_slot_width, action_bottom))
 	row.add_child(delete)
-	var delete_caption := make_label(delete, "确认" if delete_confirming else "删除", 9, Color(1.0, 0.82, 0.70), true)
+	var delete_caption := make_label(delete, "确认" if delete_confirming else "删除", accessibility_font_size(10), Color(1.0, 0.82, 0.70), true)
 	delete_caption.name = "ReplayArchiveDeleteCaption"
 	apply_rect(delete_caption, rect_full(0.12, 0.690, 0.88, 0.950))
 	delete_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	delete_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mark_ui_optimization(delete_caption, "F-243")
 	if delete_confirming:
 		# The row keeps its fixed height. The confirmation instruction owns the
 		# metadata lane above the stable action targets, with Esc as a clear cancel.
 		var confirm_label := make_label(row, "确认删除 · Esc取消", 10, Color(1.0, 0.78, 0.60), true)
 		confirm_label.name = "ReplayArchiveDeleteConfirmLabel"
-		apply_rect(confirm_label, rect_full(0.035, 0.285, 0.965, 0.420))
+		apply_rect(confirm_label, rect_full(0.035, 0.340, 0.965, 0.435))
 		confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		confirm_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		confirm_label.tooltip_text = "再次点击“确认”删除这条回放；按 Esc 取消，不会删除"
 		set_ui_full_text(confirm_label, confirm_label.text, confirm_label.tooltip_text)
 		configure_clipped_label(confirm_label)
+		confirm_label.set_meta("confirmation_lane", "separate_from_rule_summary")
+		mark_ui_optimization(confirm_label, "F-242")
 	return row
 
 
@@ -31589,7 +32080,9 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		if event_scroll != null:
 			event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 			event_scroll.focus_mode = Control.FOCUS_ALL
+			event_scroll.modulate.a = 1.0
 			event_scroll.set_meta("timeline_measurement_pending", false)
+			event_scroll.set_meta("timeline_visibility_locked_until_measurement", false)
 		replay_timeline_selected_index = -1
 		event_list.custom_minimum_size = Vector2(0.0, 44.0)
 		configure_replay_timeline_focus_navigation(false)
@@ -31600,7 +32093,9 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		# under a touch or wheel gesture.
 		event_scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		event_scroll.focus_mode = Control.FOCUS_NONE
+		event_scroll.modulate.a = 0.0
 		event_scroll.set_meta("timeline_measurement_pending", true)
+		event_scroll.set_meta("timeline_visibility_locked_until_measurement", true)
 	for index in range(visible_events.size()):
 		var event: Dictionary = visible_events[index]
 		var event_text := replay_event_line_text(event)
@@ -31633,7 +32128,10 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 			set_replay_timeline_selection(selected_index, false)
 		)
 		event_list.add_child(event_button)
-	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, float(event_list.get_child_count() * 47)))
+	# Keep a conservative stable first-frame estimate; the scroll lane remains
+	# visually locked until the real wrapped heights are measured.
+	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, float(event_list.get_child_count() * (58 if large_text_enabled else 50))))
+	event_list.set_meta("timeline_initial_estimate_px", 58.0 if large_text_enabled else 50.0)
 	call_deferred("normalize_replay_timeline_rows", event_list, ui_page_generation, focus_first)
 	if replay_timeline_selected_index < 0 or replay_timeline_selected_index >= event_list.get_child_count():
 		replay_timeline_selected_index = 0
@@ -31661,17 +32159,26 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	measured_width = maxf(180.0, measured_width - 18.0)
 	var total_height := 0.0
 	var row_count := 0
+	var reserved_marker_text := "▶ "
+	var reserved_marker_width := 0.0
 	for child in event_list.get_children():
 		var row := child as Button
 		if row == null or not is_instance_valid(row):
 			continue
 		row_count += 1
 		var font_size := row.get_theme_font_size("font_size")
-		var row_height := estimate_wrapped_text_height(row.text, measured_width, font_size, 4.0) + 12.0
+		var base_event_text := str(row.get_meta("timeline_base_text", row.text)).trim_prefix("▶ ").trim_prefix("  ")
+		var marker_font := row.get_theme_font("font")
+		if marker_font != null:
+			reserved_marker_width = maxf(reserved_marker_width, marker_font.get_string_size(reserved_marker_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x)
+		var measurement_text := reserved_marker_text + base_event_text
+		var row_height := estimate_wrapped_text_height(measurement_text, measured_width, font_size, 4.0) + 12.0
 		row.custom_minimum_size = Vector2(0.0, maxf(44.0, row_height))
 		row.mouse_filter = Control.MOUSE_FILTER_STOP
 		row.focus_mode = Control.FOCUS_ALL
 		row.set_meta("timeline_measurement_pending", false)
+		row.set_meta("timeline_reserved_marker_text", reserved_marker_text)
+		row.set_meta("timeline_reserved_marker_width", reserved_marker_width)
 		row.set_meta("timeline_measured_width", measured_width)
 		row.set_meta("timeline_measured_height", row.custom_minimum_size.y)
 		total_height += row.custom_minimum_size.y
@@ -31680,10 +32187,16 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 		total_height += float(row_count - 1) * separation
 	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, total_height))
 	event_list.set_meta("timeline_measured_width", measured_width)
+	event_list.set_meta("timeline_reserved_marker_text", reserved_marker_text)
+	event_list.set_meta("timeline_reserved_marker_width", reserved_marker_width)
+	event_list.set_meta("timeline_marker_gutter_contract", "fixed_marker_reserved_before_selection")
 	event_list.set_meta("timeline_measurement_source", "timeline_scroll_viewport_width")
 	event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	event_scroll.focus_mode = Control.FOCUS_ALL
+	event_scroll.modulate.a = 1.0
+	event_scroll.set_meta("timeline_visibility_locked_until_measurement", false)
 	event_scroll.set_meta("timeline_measurement_pending", false)
+	mark_ui_optimization(event_scroll, "F-244")
 	configure_replay_timeline_focus_navigation(focus_first)
 	set_replay_timeline_selection(replay_timeline_selected_index if replay_timeline_selected_index >= 0 else 0, false)
 
@@ -31899,6 +32412,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_bg.anchor_right = toast_right
 	var toast_top := 0.06
 	var toast_bottom := 0.12
+	var menu_safe_slot_name := ""
 	# Keep menu notices out of the title and tutorial entry lanes. The first-run
 	# banner is a real menu node rather than tutorial_panel, so reserve a separate
 	# top slot whenever it is present.
@@ -31913,9 +32427,19 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 			toast_bg.anchor_right = toast_right
 			toast_top = 0.075
 			toast_bottom = 0.160
+			menu_safe_slot_name = "menu_header_right"
 		elif tutorial_panel == null or not is_instance_valid(tutorial_panel):
-			toast_top = 0.190
-			toast_bottom = 0.235
+			# The title/rule header ends at 20.5% of the viewport. Keep the toast
+			# below that measured band and above the primary card row.
+			toast_top = 0.215
+			toast_bottom = 0.280
+			menu_safe_slot_name = "menu_title_below"
+		else:
+			menu_safe_slot_name = "menu_modal_reserved"
+	if mode == "menu":
+		toast_bg.set_meta("menu_safe_slot", Rect2(toast_left, toast_top, toast_right - toast_left, toast_bottom - toast_top))
+		toast_bg.set_meta("menu_safe_slot_name", menu_safe_slot_name)
+		toast_bg.set_meta("menu_safe_slot_contract", "clear_of_title_tutorial_and_primary_cards")
 	if root_layer != null and is_instance_valid(root_layer):
 		var modal_present := root_layer.find_child("DiagnosticDialogPanel", true, false) != null or root_layer.find_child("TelemetryDataSheetCard", true, false) != null or root_layer.find_child("ExitConfirmDialog", true, false) != null
 		if modal_present:
@@ -31927,6 +32451,8 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 			toast_top = 0.020
 			toast_bottom = 0.070
 			toast_bg.set_meta("modal_safe_route", "top_left_clear_of_header_close")
+			if mode == "menu":
+				toast_bg.set_meta("menu_safe_slot_name", "modal_override_top_left")
 	toast_bg.anchor_top = toast_top
 	toast_bg.anchor_bottom = toast_bottom
 	toast_bg.offset_left = 0
@@ -32181,7 +32707,10 @@ func toggle_music_setting() -> void:
 	save_settings()
 	show_toast("背景音乐已%s" % ("开启" if music_enabled else "关闭"))
 	settings_focus_restore_name = "SettingRowButton_背景音乐"
-	refresh_current_screen()
+	# Rebuild after the native press event finishes. Rebuilding the modal from
+	# inside button_down/pressed can let the original pointer event reach the new
+	# overlay and close the settings sheet as an outside click.
+	call_deferred("refresh_current_screen")
 
 func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
@@ -35247,20 +35776,24 @@ func refresh_online_log_navigation() -> void:
 		set_ui_full_text(latest_button, latest_detail, "房间日志：跳到最新" + ("；未读%d条" % unread if unread > 0 else ""))
 		latest_button.set_meta("unread_count", unread)
 		latest_button.set_meta("log_at_latest", online_log_at_latest)
+		mark_ui_optimization(latest_button, "F-240")
 		latest_button.modulate = Color(1.0, 0.95, 0.72, 1.0) if unread > 0 else Color(0.88, 0.90, 0.82, 0.82)
 	if unread_label != null:
 		unread_label.text = "未读 %d" % unread if unread > 0 else "已到最新"
 		unread_label.visible = unread > 0
 		set_ui_full_text(unread_label, unread_label.text, "房间日志状态：" + unread_label.text)
+		unread_label.set_meta("unread_count", unread)
+		mark_ui_optimization(unread_label, "F-240")
 	var count_label := root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	if count_label != null:
-		count_label.text = "%d条" % retained_count
+		count_label.text = "存%d · 总%d · 未读%d" % [retained_count, total_count, unread]
 		set_ui_full_text(count_label, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
 		count_label.set_meta("log_count", retained_count)
 		count_label.set_meta("retained_count", retained_count)
 		count_label.set_meta("total_count", total_count)
 		count_label.set_meta("unread_count", unread)
-		count_label.set_meta("log_semantics", "visible_cache_count")
+		count_label.set_meta("log_semantics", "visible_retained_total_unread_summary")
+		mark_ui_optimization(count_label, "F-241")
 		var count_badge := root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control
 		if count_badge != null:
 			count_badge.set_meta("log_count", retained_count)
@@ -35268,6 +35801,8 @@ func refresh_online_log_navigation() -> void:
 			count_badge.set_meta("total_count", total_count)
 			count_badge.set_meta("unread_count", unread)
 			set_ui_full_text(count_badge, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
+			count_badge.set_meta("log_semantics", "visible_retained_total_unread_summary")
+			mark_ui_optimization(count_badge, "F-241")
 
 
 func update_chat_send_cooldown(now_msec: int = -1) -> void:
@@ -37741,6 +38276,16 @@ func handle_update_manifest_completed(result: int, response_code: int, body: Pac
 	var remote_version = str(manifest.get("version", app_version()))
 	update_remote_sha256 = str(manifest.get("sha256", ""))
 	update_remote_size = int(manifest.get("size", 0))
+	if is_newer_version(remote_version, UPDATE_APPROVED_TARGET_VERSION):
+		update_state = "current"
+		update_download_url = str(manifest.get("url", UPDATE_URL))
+		update_remote_version = UPDATE_APPROVED_TARGET_VERSION
+		update_release_notes = str(manifest.get("notes", ""))
+		update_message = "当前受控版本为 v%s，暂不提供未经批准的升级包。" % UPDATE_APPROVED_TARGET_VERSION
+		set_meta("update_version_gate", "approved_target:%s; rejected_manifest:%s" % [UPDATE_APPROVED_TARGET_VERSION, remote_version])
+		refresh_update_dialog()
+		set_status(update_message)
+		return
 	if not is_newer_version(remote_version, app_version()):
 		update_state = "current"
 		update_download_url = str(manifest.get("url", UPDATE_URL))
@@ -40962,6 +41507,10 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 	"""增强版摸牌动画 - 带粒子爆发和光晕轨迹"""
 	if not ui_motion_enabled() or tile_node == null or not is_instance_valid(tile_node):
 		return
+	tile_node.set_meta("visual_animation_boundary", "hand_tile_stage")
+	tile_node.set_meta("visual_overflow_px", minf(6.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0))))
+	tile_node.set_meta("overflow_contract", "animation_particles_bounded_to_hand_gutter")
+	mark_ui_optimization(tile_node, "F-248")
 	var rest_y = tile_node.position.y
 	var visual_gutter := maxf(0.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0)))
 	var lift := minf(visual_gutter, 6.0)
@@ -41832,6 +42381,19 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.add_child(section_top_rim)
 	var example_plinth = make_gpt_edge_rail(rect_full(0.820, 0.080, 0.982, 0.920), Color(accent.r * 0.16, accent.g * 0.18, accent.b * 0.18, 0.42))
 	example_plinth.name = "RuleSection3DExamplePlinth_%d" % section_index if section_index >= 0 else "RuleSection3DExamplePlinth"
+	var example_detail := "本章示例：" + title_text
+	match title_text:
+		"和牌与响应": example_detail += " · 胡牌形状与响应优先级"
+		"结算与支付": example_detail += " · 番数、支付方向与责任方"
+		"计番项目": example_detail += " · 常见番型与加番情境"
+		"牌型介绍": example_detail += " · 顺子、刻子、杠子与将牌"
+		"特殊牌型": example_detail += " · 七对、十三幺与清混一色"
+		"游戏操作": example_detail += " · 摸牌、出牌与响应入口"
+	set_ui_full_text(example_plinth, example_detail, "规则示例说明：" + title_text)
+	example_plinth.set_meta("rules_example_section_index", section_index)
+	example_plinth.set_meta("rules_example_description", example_detail)
+	example_plinth.set_meta("rules_example_accessibility_contract", "chapter_bound_text_alternative")
+	mark_ui_optimization(example_plinth, "F-175")
 	section.add_child(example_plinth)
 	if section_index >= 0:
 		var marker = make_gpt_gate(rect_full(0.012, 0.190, 0.022, 0.810), Color(accent.r, accent.g, accent.b, 0.42))
@@ -44435,7 +44997,10 @@ func export_telemetry_data() -> bool:
 	telemetry_last_action = "已导出并复制 %d 条匿名事件" % telemetry_outbox.size()
 	if telemetry_sheet_open:
 		refresh_telemetry_data_sheet()
-	show_toast("匿名诊断数据已复制；不含昵称、房间号或牌面")
+		# The sheet footer is the modal's single success channel; a global toast
+		# would compete with its title and close action.
+	else:
+		show_toast("匿名诊断数据已复制；不含昵称、房间号或牌面")
 	return true
 
 

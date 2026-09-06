@@ -1739,20 +1739,24 @@ func refresh_online_log_navigation() -> void:
 		set_ui_full_text(latest_button, latest_detail, "房间日志：跳到最新" + ("；未读%d条" % unread if unread > 0 else ""))
 		latest_button.set_meta("unread_count", unread)
 		latest_button.set_meta("log_at_latest", online_log_at_latest)
+		mark_ui_optimization(latest_button, "F-240")
 		latest_button.modulate = Color(1.0, 0.95, 0.72, 1.0) if unread > 0 else Color(0.88, 0.90, 0.82, 0.82)
 	if unread_label != null:
 		unread_label.text = "未读 %d" % unread if unread > 0 else "已到最新"
 		unread_label.visible = unread > 0
 		set_ui_full_text(unread_label, unread_label.text, "房间日志状态：" + unread_label.text)
+		unread_label.set_meta("unread_count", unread)
+		mark_ui_optimization(unread_label, "F-240")
 	var count_label := root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	if count_label != null:
-		count_label.text = "%d条" % retained_count
+		count_label.text = "存%d · 总%d · 未读%d" % [retained_count, total_count, unread]
 		set_ui_full_text(count_label, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
 		count_label.set_meta("log_count", retained_count)
 		count_label.set_meta("retained_count", retained_count)
 		count_label.set_meta("total_count", total_count)
 		count_label.set_meta("unread_count", unread)
-		count_label.set_meta("log_semantics", "visible_cache_count")
+		count_label.set_meta("log_semantics", "visible_retained_total_unread_summary")
+		mark_ui_optimization(count_label, "F-241")
 		var count_badge := root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control
 		if count_badge != null:
 			count_badge.set_meta("log_count", retained_count)
@@ -1760,6 +1764,8 @@ func refresh_online_log_navigation() -> void:
 			count_badge.set_meta("total_count", total_count)
 			count_badge.set_meta("unread_count", unread)
 			set_ui_full_text(count_badge, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
+			count_badge.set_meta("log_semantics", "visible_retained_total_unread_summary")
+			mark_ui_optimization(count_badge, "F-241")
 
 
 func update_chat_send_cooldown(now_msec: int = -1) -> void:
@@ -7464,6 +7470,10 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 	"""增强版摸牌动画 - 带粒子爆发和光晕轨迹"""
 	if not ui_motion_enabled() or tile_node == null or not is_instance_valid(tile_node):
 		return
+	tile_node.set_meta("visual_animation_boundary", "hand_tile_stage")
+	tile_node.set_meta("visual_overflow_px", minf(6.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0))))
+	tile_node.set_meta("overflow_contract", "animation_particles_bounded_to_hand_gutter")
+	mark_ui_optimization(tile_node, "F-248")
 	var rest_y = tile_node.position.y
 	var visual_gutter := maxf(0.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0)))
 	var lift := minf(visual_gutter, 6.0)

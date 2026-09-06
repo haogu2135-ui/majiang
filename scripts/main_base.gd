@@ -562,6 +562,8 @@ var shop_scroll_restore_progress := -1.0
 var shop_focus_restore_name := ""
 var telemetry_sheet_focus_restore_name := ""
 var telemetry_sheet_focus_restore_id := 0
+var diagnostic_focus_restore_name := ""
+var diagnostic_focus_restore_id := 0
 var replay_archive_focus_restore_id := ""
 var achievement_focused_index := -1
 var ui_optimization_ids: Array[String] = []
@@ -1530,9 +1532,13 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> C
 	if texture == null:
 		var host = Control.new()
 		host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		host.set_meta("shadowless_visual_host", true)
+		host.set_meta("visual_asset_contract", "authored_gpt_plate_or_layout_host")
 		apply_rect(host, rect)
 		return host
 	var tex = TextureRect.new()
+	tex.set_meta("shadowless_visual_host", true)
+	tex.set_meta("visual_asset_contract", "authored_gpt_plate_texture")
 	tex.texture = _gpt_plate_texture_for_rect(texture, plate_key, rect)
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_SCALE

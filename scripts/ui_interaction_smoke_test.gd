@@ -806,6 +806,10 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	check(scene.music_enabled != music_before and scene.settings_panel_open, "music selector changes state while retaining the settings modal")
 	var accessibility_button := scene.find_child("SettingRowButton_阅读辅助", true, false) as Button
 	var accessibility_before: String = str(scene.accessibility_profile_label())
+	var settings_large_scroll_before_access := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
+	if settings_large_scroll_before_access != null and accessibility_button != null:
+		scene.ensure_settings_control_visible(settings_large_scroll_before_access, accessibility_button)
+		await settle(0.05)
 	if accessibility_button != null:
 		await activate_button(accessibility_button, "touch")
 		await settle(0.05)
@@ -1412,7 +1416,7 @@ func run() -> void:
 	logs = scene.find_child("OnlineLobbyLogListText", true, false) as RichTextLabel
 	var log_count_label = scene.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	check(logs != null and logs.text.contains("实时日志01") and logs.text.contains("实时日志14"), "all fourteen retained room logs remain accessible")
-	check(log_count_label != null and log_count_label.text == "14条", "live log count stays synchronized with retained history")
+	check(log_count_label != null and int(log_count_label.get_meta("retained_count", -1)) == 14 and int(log_count_label.get_meta("total_count", -1)) == 14 and str(log_count_label.text).begins_with("存14 · 总14 · 未读"), "live log count stays synchronized with retained, total, and unread history")
 	var log_scroll = scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
 	var review_scroll := 0
 	if log_scroll != null:
@@ -1440,7 +1444,7 @@ func run() -> void:
 	scene.handle_online_message(JSON.stringify({"type": "log", "text": "实时日志15"}))
 	await settle(0.05)
 	check((scene.online_room.get("logs", []) as Array).size() == scene.ONLINE_LOG_HISTORY_LIMIT, "appended logs stay within the fourteen-entry history limit")
-	check(logs != null and not logs.text.contains("实时日志01") and logs.text.contains("实时日志15") and log_count_label != null and log_count_label.text == "14条", "log append evicts the oldest line and refreshes text and count")
+	check(logs != null and not logs.text.contains("实时日志01") and logs.text.contains("实时日志15") and log_count_label != null and int(log_count_label.get_meta("retained_count", -1)) == 14 and int(log_count_label.get_meta("total_count", -1)) == 15 and str(log_count_label.text).begins_with("存14 · 总15 · 未读"), "log append evicts the oldest line and refreshes retained, total, and unread state")
 	if log_scroll != null:
 		check(log_scroll.scroll_vertical == review_scroll, "new logs preserve the scroll offset while the user reviews history")
 		var before_follow_bar := log_scroll.get_v_scroll_bar()
@@ -1845,10 +1849,15 @@ func run() -> void:
 		await send_left_button(shop_track_bottom, false)
 		check(shop_scrollbar.value >= shop_scroll_range * 0.70, "clicking the shop scrollbar track moves the native scroll value")
 		var shop_value_before_drag: float = float(shop_scrollbar.value)
-		var shop_track_top: Vector2 = shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.5, shop_target_rect.size.y * 0.12)
-		await send_screen_touch(shop_track_top, true)
-		await send_screen_drag(shop_track_top, shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.5, shop_target_rect.size.y * 0.30))
-		await send_screen_touch(shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.5, shop_target_rect.size.y * 0.30), false)
+		# Start in the middle of the custom track, then drag upward. The native
+		# thumb can legitimately fill most of a short scroll range, so a top-to-
+		# bottom gesture may clamp to the same endpoint and hide whether dragging
+		# actually changed the value.
+		var shop_track_drag_start: Vector2 = shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.5, shop_target_rect.size.y * 0.50)
+		var shop_track_drag_end: Vector2 = shop_target_rect.position + Vector2(shop_target_rect.size.x * 0.50, shop_target_rect.size.y * 0.30)
+		await send_screen_touch(shop_track_drag_start, true)
+		await send_screen_drag(shop_track_drag_start, shop_track_drag_end)
+		await send_screen_touch(shop_track_drag_end, false)
 		check(shop_scrollbar.value < shop_value_before_drag, "dragging the shop scrollbar thumb updates the native scroll value")
 	await send_key(KEY_ESCAPE, 0)
 	await settle(0.10)

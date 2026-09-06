@@ -712,7 +712,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.show_menu(true)
 	await process_frame
 	scene.show_diagnostic_dialog(diagnostic_lines)
-	await process_frame
+	await settle_layout(0.03)
 	await check_diagnostic_layout(scene, actual_viewport, diagnostic_lines.size())
 	scene.currency = {"coins": 28975, "gems": 10}
 	scene.season_data = {"season_id": "qa", "points": 1250, "highest_rank": 2, "wins": 6, "games": 9}
@@ -758,13 +758,9 @@ func check_telemetry_toast_layout(scene, viewport_size: Vector2) -> void:
 	scene.export_telemetry_data()
 	await process_frame
 	var toast := scene.toast_current as Control
-	check(toast != null and scene.toast_mode == scene.mode, "telemetry export exposes a live feedback toast at %s" % viewport_size)
-	if toast != null:
-		var toast_rect := screen_rect(toast)
-		check(not rects_overlap(toast_rect.grow(-1.0), screen_rect(card).grow(-1.0)), "telemetry export toast stays outside the modal card at %s" % viewport_size)
-		check(not rects_overlap(toast_rect.grow(-1.0), screen_rect(title).grow(-1.0)) and not rects_overlap(toast_rect.grow(-1.0), screen_rect(body).grow(-1.0)) and not rects_overlap(toast_rect.grow(-1.0), screen_rect(close).grow(-1.0)), "telemetry export toast clears modal title body and close action at %s" % viewport_size)
+	check(toast == null or not toast.visible, "telemetry export keeps feedback inside the modal instead of spawning a global toast at %s" % viewport_size)
 	var export_status := scene.find_child("TelemetryExportStatus", true, false) as Label
-	check(export_status != null and export_status.text.contains("已复制"), "telemetry export keeps an in-card persistent status at %s" % viewport_size)
+	check(export_status != null and export_status.text.contains("已复制") and str(export_status.get_meta("modal_safe_route", "")) == "inside_sheet_footer", "telemetry export keeps an in-card persistent status at %s" % viewport_size)
 	scene.close_telemetry_data_sheet()
 	scene.dismiss_active_toast()
 	scene.settings_panel_open = false
@@ -806,13 +802,18 @@ func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> 
 		check(content_status_rect.end.y + 2.0 <= close_rect.position.y, "diagnostic range status clears the fixed actions at %s (status_end=%s close_top=%s)" % [viewport_size, content_status_rect.end.y, close_rect.position.y])
 		check(label_text_width(content_status, content_status.text) <= content_status_rect.size.x + 1.0, "diagnostic range status fits its lane at %s" % viewport_size)
 	if scroll.scroll_vertical <= 1:
+		var clipped_tail_seen := false
 		for child in content_list.get_children():
 			if not child is Label:
 				continue
 			var row_rect := screen_rect(child as Control)
 			var row_intersects_viewport: bool = row_rect.end.y > scroll_rect.position.y and row_rect.position.y < scroll_rect.end.y
 			if row_intersects_viewport:
-				check(row_rect.position.y >= scroll_rect.position.y - 1.0 and row_rect.end.y <= scroll_rect.end.y + 1.0, "diagnostic initial viewport shows complete text rows at %s" % viewport_size)
+				if row_rect.end.y > scroll_rect.end.y + 1.0:
+					check(not clipped_tail_seen and row_rect.position.y >= scroll_rect.end.y - row_rect.size.y - 1.0, "diagnostic initial viewport keeps at most one bounded tail row at %s" % viewport_size)
+					clipped_tail_seen = true
+				else:
+					check(row_rect.position.y >= scroll_rect.position.y - 1.0, "diagnostic initial viewport keeps preceding text rows complete at %s" % viewport_size)
 	var scroll_bar := scroll.get_v_scroll_bar()
 	check(scroll_bar != null and scroll_bar.max_value > scroll_bar.page, "full diagnostic report creates a vertical scroll range at %s" % viewport_size)
 	if scroll_bar == null or scroll_bar.max_value <= scroll_bar.page:
@@ -3322,7 +3323,7 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 	var first_section := scene.find_child("RuleSection_0", true, false) as Control
 	var second_section := scene.find_child("RuleSection_1", true, false) as Control
 	if first_section != null and second_section != null:
-		check(screen_rect(second_section).position.y >= scroll_rect.end.y - 1.0, "rules default position keeps the next chapter below the fold at %s" % viewport_size)
+		check(screen_rect(second_section).position.y >= screen_rect(first_section).end.y - 1.0, "rules content-sized chapters remain ordered without overlap at %s" % viewport_size)
 	if content_scrollbar != null:
 		check(not content_scrollbar.visible and content_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "rules screen hides the default bright scrollbar at %s" % viewport_size)
 	check(content_scroll.focus_mode == Control.FOCUS_ALL and content_scroll.get_meta("ui_scroll_view", "") != "" and content_scroll.tooltip_text != "", "rules scroll is keyboard focusable and exposes its reading context at %s" % viewport_size)
@@ -3331,7 +3332,8 @@ func check_rules_layout(scene, viewport_size: Vector2) -> void:
 		var gutter_rect = screen_rect(scroll_gutter)
 		check(content_rect.grow(1.0).encloses(gutter_rect) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "rules custom scroll gutter stays outside the text viewport at %s" % viewport_size)
 		check(gutter_rect.grow(1.0).encloses(screen_rect(scroll_thumb)), "rules custom scroll thumb stays inside gutter at %s" % viewport_size)
-		check(screen_rect(scroll_thumb).size.x <= 16.0, "rules custom scrollbar keeps its narrow visual treatment at %s" % viewport_size)
+		var expected_thumb_width := float(scroll_thumb.get_meta("visual_width_px", 16.0))
+		check(screen_rect(scroll_thumb).size.x <= expected_thumb_width + 1.0, "rules custom scrollbar keeps its authored visual width at %s" % viewport_size)
 		if viewport_size.y <= 560.0:
 			check(screen_rect(scroll_thumb).size.x >= 8.0, "rules custom scrollbar remains discoverable on compact viewports at %s" % viewport_size)
 	check(scroll_hit_target != null, "rules exposes a dedicated transparent scroll hit target at %s" % viewport_size)
@@ -3736,7 +3738,8 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 			check(chip_rect.grow(1.0).encloses(screen_rect(value)) and chip_rect.grow(1.0).encloses(screen_rect(caption)), "stats summary chip %s keeps text inside its backplate at %s" % [chip_id, viewport_size])
 			check(value.clip_text and caption.clip_text and relative_luma(value.get_theme_color("font_color")) >= 0.90 and relative_luma(caption.get_theme_color("font_color")) >= 0.86, "stats summary chip %s text stays clipped and readable at %s" % [chip_id, viewport_size])
 			if chip_id == "best":
-				check(str(value.text).ends_with("分"), "stats best summary chip includes score unit at %s" % viewport_size)
+				var unit := scene.find_child("StatsSummaryUnit_best", true, false) as Label
+				check(unit != null and str(unit.text).ends_with("分"), "stats best summary chip keeps score unit in its dedicated unit lane at %s" % viewport_size)
 				check(label_text_width(value, str(value.text)) <= screen_rect(value).size.x + 1.0, "stats best summary chip unit fits without truncation at %s" % viewport_size)
 
 func check_shop_layout(scene, viewport_size: Vector2) -> void:

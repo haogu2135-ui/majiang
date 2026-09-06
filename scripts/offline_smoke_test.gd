@@ -170,6 +170,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"FireflyGlowOuter",
 	"FireworkGlow",
 	"GptPanelHost",
+	"AchievementRowFocusRail",
 	"Hand3DRiskBadge",
 	"HintBadgeGptChip",
 	"KoiGptPlate",
@@ -1999,8 +2000,8 @@ func run() -> void:
 	scene.play_reset_progress_button_feedback(reset_prepare_button, false)
 	check(reset_prepare_button.find_child("ResetProgressPressFeedback_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressSource_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressRoute_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressFill_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressGate_prepare", true, false) != null, "settings reset prepare press feedback renders warning route")
 	check(reset_prepare_button.find_child("ResetProgressPressSeal_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressGlyph_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressWarningLock", true, false) != null and count_nodes_with_name_prefix(reset_prepare_button, "ResetProgressPressTick_prepare_") == 3, "settings reset prepare press feedback renders warning seal lock and ticks")
-	check(panels_ignore_mouse(settings_parent), "settings overlay panels skip mouse hit testing while buttons remain interactive")
-	check(containers_ignore_mouse(settings_parent), "settings overlay layout containers skip mouse hit testing")
+	check(panels_ignore_mouse(settings_parent), "settings overlay keeps decorative panels passive while setting rows pass mouse hit testing")
+	check(containers_ignore_mouse(settings_parent), "settings overlay keeps non-interactive containers passive while setting grids pass mouse hit testing")
 	dispose_node(settings_parent)
 	scene.settings_panel_open = false
 	var reset_confirm_parent = Control.new()
@@ -2152,7 +2153,13 @@ func run() -> void:
 	var stats_best_score_fill = scene.find_child("StatsBestScoreRouteFill", true, false) as Control
 	check(stats_best_score_fill != null and stats_best_score_fill.anchor_right > 0.70, "stats best-score route fill tracks best score strength")
 	check(scene.find_child("StatsSummaryChip_winrate", true, false) != null and scene.find_child("StatsSummaryChip_games", true, false) != null and scene.find_child("StatsSummaryChip_best", true, false) != null, "stats dashboard renders compact summary chips")
-	check(has_label_text(scene, "58%") and has_label_text(scene, "12局") and has_label_text(scene, "9600分"), "stats dashboard labels win rate played games and best score unit in summary chips")
+	var stats_winrate_value := scene.find_child("StatsSummaryValue_winrate", true, false) as Label
+	var stats_winrate_unit := scene.find_child("StatsSummaryUnit_winrate", true, false) as Label
+	var stats_games_value := scene.find_child("StatsSummaryValue_games", true, false) as Label
+	var stats_games_unit := scene.find_child("StatsSummaryUnit_games", true, false) as Label
+	var stats_best_value := scene.find_child("StatsSummaryValue_best", true, false) as Label
+	var stats_best_unit := scene.find_child("StatsSummaryUnit_best", true, false) as Label
+	check(stats_winrate_value != null and stats_winrate_value.text == "58" and stats_winrate_unit != null and stats_winrate_unit.text == "%" and stats_games_value != null and stats_games_value.text == "12" and stats_games_unit != null and stats_games_unit.text == "局" and stats_best_value != null and stats_best_value.text == scene.compact_score_text(9600) and stats_best_unit != null and stats_best_unit.text == "分", "stats dashboard keeps summary value and unit labels structurally separate")
 	check(count_nodes_with_name_prefix(scene, "StatsRowArt_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowRail_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowFill_") == 6, "stats rows render illustrated metric rails and fills")
 	check(scene.find_child("StatsRow_总场次", true, false) != null and scene.find_child("StatsRow_胜场", true, false) != null and scene.find_child("StatsRow_胜率", true, false) != null and scene.find_child("StatsRow_累计净分", true, false) != null and scene.find_child("StatsRow_单局最佳", true, false) != null and scene.find_child("StatsRow_总手牌数", true, false) != null, "stats rows render concrete named metric rows")
 	check(count_nodes_with_name_prefix(scene, "StatsRowValuePanel_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowValueSheen_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowValueDivider_") == 6, "stats rows expose high contrast native value readouts")
@@ -4763,7 +4770,8 @@ func labels_ignore_mouse(node: Node) -> bool:
 	return true
 
 func panels_ignore_mouse(node: Node) -> bool:
-	if node is Panel and (node as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+	var interactive_setting_row := node is Panel and str(node.name).begins_with("SettingRow_")
+	if node is Panel and not interactive_setting_row and (node as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
 		return false
 	for child in node.get_children():
 		if not panels_ignore_mouse(child):
@@ -4771,7 +4779,8 @@ func panels_ignore_mouse(node: Node) -> bool:
 	return true
 
 func containers_ignore_mouse(node: Node) -> bool:
-	if (node is HBoxContainer or node is VBoxContainer or node is GridContainer) and (node as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+	var interactive_setting_grid := node is GridContainer and str(node.name).begins_with("SettingsSectionGrid_")
+	if (node is HBoxContainer or node is VBoxContainer or node is GridContainer) and not interactive_setting_grid and (node as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
 		return false
 	for child in node.get_children():
 		if not containers_ignore_mouse(child):
@@ -4904,7 +4913,9 @@ func count_panel_shadow_size(node: Node, shadow_size: int) -> int:
 
 func count_shadowless_visual_hosts(node: Node) -> int:
 	var total = 0
-	if node is Panel and panel_shadow_size(node) == 0:
+	if bool(node.get_meta("shadowless_visual_host", false)):
+		total += 1
+	elif node is Panel and panel_shadow_size(node) == 0:
 		total += 1
 	elif str(node.name).begins_with("GptPanelHost") or str(node.name).find("Plate") >= 0:
 		total += 1
