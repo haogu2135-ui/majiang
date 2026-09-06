@@ -2765,6 +2765,22 @@ func hand_tray_text() -> String:
 	return "等待对家"
 
 
+func compact_battle_view() -> bool:
+	var viewport := effective_viewport_size()
+	return viewport.x <= 960.0 or viewport.y <= 560.0
+
+
+func hand_tray_visible_text() -> String:
+	var detail := hand_tray_text()
+	if not compact_battle_view():
+		return detail
+	if detail == "点击手牌出牌":
+		return "点击手牌 · 出牌"
+	if detail.contains(" · Enter确认出牌"):
+		return detail.replace(" · Enter确认出牌", " · Enter出牌")
+	return detail
+
+
 func hand_shortcut_hint_text() -> String:
 	if mode == "online_game" and online_game_disconnected():
 		# The reconnect instruction is already part of the dedicated one-line
@@ -2777,6 +2793,8 @@ func hand_shortcut_hint_text() -> String:
 	if mode == "online_game" and online_waiting_for_server:
 		return "操作已提交 · 等待服务器确认"
 	if can_self_discard():
+		if compact_battle_view():
+			return "方向键选牌 · 1-0直选 · Enter出牌"
 		var hand := get_self_hand()
 		if hand.size() > 10:
 			return "方向键选牌 · 1-0 / QWER选第11-14张 · Enter出牌"
@@ -3159,7 +3177,7 @@ func pending_claim_remaining_ratio() -> float:
 
 func pending_claim_timer_text() -> String:
 	var remaining := pending_claim_remaining_seconds()
-	return "剩余 %d 秒" % remaining if remaining >= 0 else "等待服务器计时"
+	return "响应窗口 · 剩余 %d 秒" % remaining if remaining >= 0 else "响应窗口 · 等待服务器计时"
 
 
 func pending_claim_auto_pass_text() -> String:
@@ -3196,6 +3214,20 @@ func pending_claim_shortcut_text(options: Array) -> String:
 	if not options.is_empty():
 		shortcuts.append("X过")
 	return " · ".join(shortcuts)
+
+
+func pending_claim_response_summary(action_key: String, visible_label: String) -> String:
+	var action_name := visible_label.strip_edges()
+	if action_name == "":
+		match action_key:
+			"chi": action_name = "吃牌组合"
+			"peng": action_name = "碰牌"
+			"gang": action_name = "杠牌"
+			"hu": action_name = "胡牌"
+			"pass": action_name = "过"
+	if action_key == "":
+		return action_name
+	return "%s · 快捷键%s" % [action_name, pending_claim_shortcut_text([action_key])]
 
 
 func action_intent_rect_for_count(count: int) -> Rect2:
@@ -3347,6 +3379,21 @@ func action_bar_layout_rect() -> Rect2:
 		return pending_claim_action_bar_rect_for_count(action_bar_button_count())
 	return ACTION_BAR_RECT
 
+func battle_ui_lane_contract() -> Dictionary:
+	# Keep cross-layer exclusions inspectable by layout smoke and future overlays.
+	# These are root-normalized edge rects, matching apply_rect().
+	var meld_exclusions: Array[Rect2] = []
+	for layout in MELD_LAYOUTS:
+		meld_exclusions.append(layout[1])
+	return {
+		"action": action_bar_layout_rect(),
+		"action_dock": action_bar_dock_layout_rect(),
+		"hand": HAND_TRAY_RECT,
+		"meld": meld_exclusions,
+		"minimum_clearance_px": 6.0,
+		"contract": "action_above_hand_and_clear_of_melds"
+	}
+
 func pending_claim_action_base_rect() -> Rect2:
 	# A single, wide bottom channel gives response choices enough columns to keep
 	# every real button at a readable touch width. It begins after the side rivers
@@ -3472,6 +3519,9 @@ func advisor_panel_candidate_is_clear(candidate: Rect2) -> bool:
 	occupied.append(Rect2(center_rect.position, center_rect.size - center_rect.position))
 	occupied.append(Rect2(TOP_HUD_RECT.position, TOP_HUD_RECT.size - TOP_HUD_RECT.position))
 	occupied.append(Rect2(HAND_TRAY_RECT.position, HAND_TRAY_RECT.size - HAND_TRAY_RECT.position))
+	var action_rect := action_bar_dock_layout_rect()
+	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
+	occupied.append(Rect2(CHAT_ACTION_BUTTON_RECT.position, CHAT_ACTION_BUTTON_RECT.size - CHAT_ACTION_BUTTON_RECT.position))
 	for occupied_rect in occupied:
 		if geometry.intersects(occupied_rect.grow(0.004), true):
 			return false
@@ -3707,12 +3757,24 @@ func finalize_action_bar_layout() -> void:
 		for waiting_button in buttons:
 			if waiting_button.name == "VoiceActionButton":
 				waiting_button.set_meta("non_game_action", true)
+				waiting_button.set_meta("online_wait_state", "non_game_action_available")
 				waiting_button.tooltip_text = "语音仍可用，不会改变牌局 · 当前正在等待服务器确认"
 			elif waiting_button.name not in ["OnlineCancelSyncButton", "OnlineRetrySyncButton"]:
 				waiting_button.disabled = true
 				waiting_button.tooltip_text = "正在等待服务器确认本次操作"
 				waiting_button.set_meta("disabled_reason", waiting_button.tooltip_text)
+				waiting_button.set_meta("online_wait_state", "waiting_for_server")
 				set_ui_full_text(waiting_button, waiting_button.tooltip_text, "操作暂不可用：" + waiting_button.tooltip_text)
+				mark_ui_optimization(waiting_button, "F-109")
+		for network_button in buttons:
+			if network_button.name == "OnlineCancelSyncButton":
+				network_button.set_meta("online_wait_state", "cancel_available")
+				network_button.set_meta("network_action_contract", "cancel_wait_without_leaving_table")
+				mark_ui_optimization(network_button, "F-109")
+			elif network_button.name == "OnlineRetrySyncButton":
+				network_button.set_meta("online_wait_state", "retry_available")
+				network_button.set_meta("network_action_contract", "retry_last_payload")
+				mark_ui_optimization(network_button, "F-109")
 	if compact_claim_mode:
 		var response_grid := action_bar.get_node_or_null("PendingClaimResponseGrid") as GridContainer
 		if response_grid != null:
@@ -3729,11 +3791,15 @@ func finalize_action_bar_layout() -> void:
 						response.set_meta("pending_claim_visual_order", response_index)
 						response.name = "PendingClaimPrimaryButton" if response_index == 0 else "PendingClaimButton_%s_%02d" % [action_key, response_index]
 						response.set_meta("pending_claim_default", response_index == 0)
+						response.set_meta("pending_claim_response_summary", pending_claim_response_summary(action_key, response.text))
+						response.set_meta("shortcut_visibility", "native_button_metadata_and_tooltip")
 						response.set_meta("min_touch_size", Vector2(PENDING_CLAIM_BUTTON_MIN_WIDTH, ACTION_BUTTON_HEIGHT))
 						response.set_meta("keyboard_visual_order", response_index)
 						var response_shortcut := action_button_shortcut_hint(response.text)
 						set_ui_full_text(response, response.text + ("；快捷键 " + response_shortcut if response_shortcut != "" else ""), "响应动作：" + response.text)
 						mark_ui_optimization(response, "F-574")
+						mark_ui_optimization(response, "F-102")
+						mark_ui_optimization(response, "F-104")
 						response_index += 1
 		if response_grid != null:
 			response_grid.set_meta("visual_order", "胡 > 杠 > 碰 > 吃；过在末端辅助栏")
@@ -3741,7 +3807,9 @@ func finalize_action_bar_layout() -> void:
 		var pending_tail_lane := action_bar.get_node_or_null("PendingClaimSecondaryLane") as Control
 		if pending_tail_lane != null:
 			pending_tail_lane.set_meta("visual_order", "过/取消/语音")
+			pending_tail_lane.set_meta("pass_action_contract", "safe_exit_last_stable_slot")
 			mark_ui_optimization(pending_tail_lane, "F-574")
+			mark_ui_optimization(pending_tail_lane, "F-103")
 	var default_focus_name := action_bar_default_focus_name()
 	configure_button_focus_navigation(action_bar, default_focus_name, default_focus_name != "")
 	configure_pending_claim_spatial_focus_navigation()
@@ -4165,6 +4233,16 @@ func handle_update_manifest_completed(result: int, response_code: int, body: Pac
 	var remote_version = str(manifest.get("version", app_version()))
 	update_remote_sha256 = str(manifest.get("sha256", ""))
 	update_remote_size = int(manifest.get("size", 0))
+	if is_newer_version(remote_version, UPDATE_APPROVED_TARGET_VERSION):
+		update_state = "current"
+		update_download_url = str(manifest.get("url", UPDATE_URL))
+		update_remote_version = UPDATE_APPROVED_TARGET_VERSION
+		update_release_notes = str(manifest.get("notes", ""))
+		update_message = "当前受控版本为 v%s，暂不提供未经批准的升级包。" % UPDATE_APPROVED_TARGET_VERSION
+		set_meta("update_version_gate", "approved_target:%s; rejected_manifest:%s" % [UPDATE_APPROVED_TARGET_VERSION, remote_version])
+		refresh_update_dialog()
+		set_status(update_message)
+		return
 	if not is_newer_version(remote_version, app_version()):
 		update_state = "current"
 		update_download_url = str(manifest.get("url", UPDATE_URL))
@@ -4397,7 +4475,8 @@ func refresh_top_hud_update_button(button: Button = null) -> void:
 			detail = "正在检查更新，请稍候"
 			blocked = true
 		"downloading":
-			label = "下载中"
+			var download_percent := 0 if update_total_bytes <= 0 else clampi(int(round(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes))), 0, 100)
+			label = "下载 %d%%" % download_percent
 			detail = "升级包正在下载，请稍候"
 			blocked = true
 		"installing":
@@ -4420,6 +4499,8 @@ func refresh_top_hud_update_button(button: Button = null) -> void:
 	button.set_meta("update_state", state)
 	button.set_meta("accessible_name", "更新状态：" + label)
 	button.set_meta("ui_full_text", detail)
+	button.set_meta("visible_state_summary", label)
+	mark_ui_optimization(button, "F-084")
 	button.modulate = Color(1.0, 1.0, 1.0, 0.70 if blocked else 1.0)
 
 func update_progress_text() -> String:
@@ -4466,21 +4547,27 @@ func update_release_notes_summary() -> String:
 	return "\n更新说明: %s" % summary
 
 func update_release_notes_summary_line() -> String:
-	var first_line = ""
-	var count = 0
+	var lines: Array[String] = []
 	for raw_line in update_release_notes.split("\n", false):
 		var line = str(raw_line).strip_edges()
 		if line == "":
 			continue
-		count += 1
-		if first_line == "":
-			first_line = line
-	if count <= 0:
+		lines.append(line)
+	if lines.is_empty():
 		return ""
-	if first_line.length() > UPDATE_NOTES_PREVIEW_CHARS:
-		first_line = first_line.substr(0, UPDATE_NOTES_PREVIEW_CHARS).strip_edges() + "..."
-	var suffix = " 等%d项" % count if count > 1 else ""
-	return "%s%s" % [first_line, suffix]
+	# Risk-bearing notes outrank the first ordinary bullet in the compact preview.
+	# The full source remains in the scroll view and tooltip.
+	var preview := lines[0]
+	for line in lines:
+		if line.contains("强制") or line.contains("必须") or line.contains("需重启") or line.contains("风险") or line.contains("安全"):
+			preview = line
+			break
+	var suffix := " · 等%d项" % lines.size() if lines.size() > 1 else ""
+	var prefix := "重点：" if preview != lines[0] else ""
+	var budget := maxi(8, UPDATE_NOTES_PREVIEW_CHARS - prefix.length() - suffix.length())
+	if preview.length() > budget:
+		preview = preview.substr(0, budget).strip_edges()
+	return "%s%s%s" % [prefix, preview, suffix]
 
 func on_update_primary_pressed() -> void:
 	if update_state == "checking" or update_state == "downloading" or update_state == "current" or update_state == "installing":
@@ -7375,9 +7462,12 @@ func _hide_fx_ripple() -> void:
 
 func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal") -> void:
 	"""增强版摸牌动画 - 带粒子爆发和光晕轨迹"""
-	if not fx_enabled_effective() or tile_node == null or not is_instance_valid(tile_node):
+	if not ui_motion_enabled() or tile_node == null or not is_instance_valid(tile_node):
 		return
 	var rest_y = tile_node.position.y
+	var visual_gutter := maxf(0.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0)))
+	var lift := minf(visual_gutter, 6.0)
+	var peak_scale := 1.01
 	var accent = Color(0.66, 0.58, 0.92) if source == "gang" else GOLD_PRIMARY
 	var glow = Panel.new()
 	glow.name = "DrawTileGlow"
@@ -7402,7 +7492,7 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 		sp.add_child(dot)
 		tile_node.add_child(sp)
 		var angle = randf() * TAU
-		var dist = randf_range(18.0, 42.0)
+		var dist = randf_range(5.0, maxf(6.0, visual_gutter))
 		var target_pos = tile_center + Vector2(cos(angle), sin(angle)) * dist
 		var sp_tw := create_screen_tween()
 		sp_tw.set_parallel(true)
@@ -7417,14 +7507,14 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 		).set_delay(0.35)
 
 	tile_node.pivot_offset = tile_node.custom_minimum_size * 0.5
-	tile_node.position.y = rest_y - 18.0
-	tile_node.scale = Vector2(0.92, 0.92)
+	tile_node.position.y = rest_y - lift
+	tile_node.scale = Vector2(0.98, 0.98)
 	tile_node.modulate = Color(1.0, 1.0, 1.0, 0.78)
 	var tw := tile_node.create_tween()
 	tw.set_parallel(true)
-	tw.tween_property(tile_node, "position:y", rest_y, 0.22).from(rest_y - 18.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(tile_node, "scale", Vector2(1.02, 1.02), 0.18).from(Vector2(0.92, 0.92)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(tile_node, "scale", Vector2(1.0, 1.0), 0.10).from(Vector2(1.02, 1.02)).set_delay(0.18).set_ease(Tween.EASE_IN)
+	tw.tween_property(tile_node, "position:y", rest_y, 0.22).from(rest_y - lift).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(tile_node, "scale", Vector2(peak_scale, peak_scale), 0.18).from(Vector2(0.98, 0.98)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(tile_node, "scale", Vector2(1.0, 1.0), 0.10).from(Vector2(peak_scale, peak_scale)).set_delay(0.18).set_ease(Tween.EASE_IN)
 	tw.tween_property(tile_node, "modulate:a", 1.0, 0.16).from(0.78)
 	tw.tween_property(glow, "modulate:a", 1.0, 0.12).from(0.0)
 	tw.tween_property(glow, "modulate:a", 0.0, 0.28).set_delay(0.14)
@@ -8244,6 +8334,19 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section.add_child(section_top_rim)
 	var example_plinth = make_gpt_edge_rail(rect_full(0.820, 0.080, 0.982, 0.920), Color(accent.r * 0.16, accent.g * 0.18, accent.b * 0.18, 0.42))
 	example_plinth.name = "RuleSection3DExamplePlinth_%d" % section_index if section_index >= 0 else "RuleSection3DExamplePlinth"
+	var example_detail := "本章示例：" + title_text
+	match title_text:
+		"和牌与响应": example_detail += " · 胡牌形状与响应优先级"
+		"结算与支付": example_detail += " · 番数、支付方向与责任方"
+		"计番项目": example_detail += " · 常见番型与加番情境"
+		"牌型介绍": example_detail += " · 顺子、刻子、杠子与将牌"
+		"特殊牌型": example_detail += " · 七对、十三幺与清混一色"
+		"游戏操作": example_detail += " · 摸牌、出牌与响应入口"
+	set_ui_full_text(example_plinth, example_detail, "规则示例说明：" + title_text)
+	example_plinth.set_meta("rules_example_section_index", section_index)
+	example_plinth.set_meta("rules_example_description", example_detail)
+	example_plinth.set_meta("rules_example_accessibility_contract", "chapter_bound_text_alternative")
+	mark_ui_optimization(example_plinth, "F-175")
 	section.add_child(example_plinth)
 	if section_index >= 0:
 		var marker = make_gpt_gate(rect_full(0.012, 0.190, 0.022, 0.810), Color(accent.r, accent.g, accent.b, 0.42))
@@ -8289,6 +8392,17 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		mark_ui_optimization(line_label, "F-531")
 
 
+func stat_row_short_label(label_text: String) -> String:
+	match label_text:
+		"累计净分":
+			return "净分"
+		"总手牌数":
+			return "手牌数"
+		"累计番数":
+			return "番数"
+	return label_text
+
+
 func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String, row_height: float = 52.0) -> void:
 	# r215: GPT chrome conversion
 	var row = Panel.new()
@@ -8298,6 +8412,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	row.set_meta("metric_identity", label_text)
 	row.set_meta("metric_value_text", value_text)
 	row.set_meta("metric_row_height", row_height)
+	row.set_meta("metric_label_contract", "short_title_visible_full_title_in_detail")
 	mark_ui_optimization(row, "F-606")
 	var accent = stat_row_accent(label_text)
 	row.add_theme_stylebox_override("panel", StyleBoxEmpty.new())  # GPT plates from draw_stat_row_art
@@ -8326,15 +8441,18 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 
 	var compact_row := row_height < 48.0
 	var label_font_size := 16 if compact_row else 18
-	var value_font_size := 19 if compact_row else 21
-	var label = make_label(row, label_text, label_font_size, Color(0.96, 0.92, 0.80), true)  # r392
+	var value_font_size := 17 if value_text.length() > 8 else (19 if compact_row else 21)
+	var label = make_label(row, stat_row_short_label(label_text), label_font_size, Color(0.96, 0.92, 0.80), true)  # r392
 	label.name = "StatsRowLabel_%s" % label_text
 	apply_rect(label, rect_full(0.080, 0.120, 0.480, 0.880))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	label.set_meta("stats_column", "label")
 	configure_clipped_label(label)
 	set_ui_full_text(label, label_text, "统计项目：" + label_text)
+	label.set_meta("full_metric_label", label_text)
+	label.set_meta("short_metric_label", label.text)
 	mark_ui_optimization(label, "F-474")
+	mark_ui_optimization(label, "F-086")
 
 	var numeric_value := stat_row_numeric_value(value_text)
 	var display_value_text := ("负向 " + value_text) if numeric_value < 0.0 else value_text
@@ -8348,6 +8466,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	configure_clipped_label(value)
 	set_ui_full_text(value, value_detail, label_text + "数值")
 	mark_ui_optimization(value, "F-475")
+	mark_ui_optimization(value, "F-086")
 
 
 func stat_row_accent(label_text: String) -> Color:
@@ -8680,6 +8799,13 @@ func chat_panel_rect() -> Rect2:
 		rect_full(0.015, 0.455, 0.305, 0.765),
 		rect_full(0.660, 0.455, 0.985, 0.765),
 	]
+	var has_active_meld := false
+	for layout in MELD_LAYOUTS:
+		if not get_melds(int(layout[0])).is_empty():
+			has_active_meld = true
+			break
+	if not has_active_meld:
+		return candidates[0]
 	var best := candidates[0]
 	var best_score := INF
 	for candidate in candidates:
@@ -8694,17 +8820,17 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 	var occupied: Array[Rect2] = []
 	for layout in SEAT_LAYOUTS:
 		var seat_rect: Rect2 = layout[1]
-		occupied.append(Rect2(seat_rect.position, seat_rect.size - seat_rect.position))
+		occupied.append(Rect2(seat_rect.position, seat_rect.size - seat_rect.position).grow(0.006))
 	for layout in MELD_LAYOUTS:
 		var meld_seat := int(layout[0])
 		if get_melds(meld_seat).is_empty():
 			continue
 		var meld_rect: Rect2 = layout[1]
-		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
+		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position).grow(0.006))
 	for zone in DISCARD_ZONES:
 		var river_rect: Rect2 = zone[1]
 		var river_anchor := chat_panel_table_anchor_rect(river_rect)
-		occupied.append(Rect2(river_anchor.position, river_anchor.size - river_anchor.position))
+		occupied.append(Rect2(river_anchor.position, river_anchor.size - river_anchor.position).grow(0.006))
 	var center_rect := chat_panel_table_anchor_rect(CENTER_PANEL_RECT)
 	occupied.append(Rect2(center_rect.position, center_rect.size - center_rect.position))
 	occupied.append(Rect2(TOP_HUD_RECT.position, TOP_HUD_RECT.size - TOP_HUD_RECT.position))
@@ -8778,6 +8904,12 @@ func send_quick_chat(message: String) -> void:
 	if not send_online_action({"type": "chat", "message": clean}, "发送消息"):
 		return
 	add_chat_message("你: %s" % clean)
+	var chat_state := root_layer.find_child("ChatPanelMessageText", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
+	if chat_state != null:
+		chat_state.set_meta("last_message_state", "sent")
+		chat_state.set_meta("last_message_text", clean)
+		chat_state.set_meta("last_message_status_text", "已发送")
+		mark_ui_optimization(chat_state, "F-089")
 	play_chat_send_panel_feedback(clean)
 	show_toast("已发送：%s" % clean, 1500)
 	if is_instance_valid(chat_input):

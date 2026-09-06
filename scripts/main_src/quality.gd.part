@@ -582,6 +582,13 @@ func toggle_telemetry_consent() -> void:
 
 
 func clear_telemetry_data(confirmed: bool = true) -> void:
+	if not confirmed and telemetry_clear_confirming and Time.get_ticks_msec() > telemetry_clear_confirm_deadline_msec:
+		telemetry_clear_confirming = false
+		telemetry_clear_confirm_deadline_msec = 0
+		telemetry_last_action = "清除确认已超时，未删除任何数据"
+		refresh_telemetry_data_sheet()
+		show_toast("清除确认已超时，数据未删除")
+		return
 	if not confirmed and not telemetry_clear_confirming:
 		telemetry_clear_confirming = true
 		telemetry_clear_confirm_deadline_msec = Time.get_ticks_msec() + 5000
@@ -593,6 +600,7 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 			clear_button.set_meta("first_click_is_non_destructive", true)
 		refresh_telemetry_data_sheet()
 		mark_ui_optimization(root_layer.find_child("TelemetryClearButton", true, false) as Control, "F-405")
+		mark_ui_optimization(root_layer.find_child("TelemetryClearButton", true, false) as Control, "F-050")
 		call_deferred("focus_named_control", "TelemetryClearButton")
 		show_toast("再次点击清除，确认删除本地匿名数据")
 		return
@@ -618,7 +626,10 @@ func export_telemetry_data() -> bool:
 	telemetry_last_action = "已导出并复制 %d 条匿名事件" % telemetry_outbox.size()
 	if telemetry_sheet_open:
 		refresh_telemetry_data_sheet()
-	show_toast("匿名诊断数据已复制；不含昵称、房间号或牌面")
+		# The sheet footer is the modal's single success channel; a global toast
+		# would compete with its title and close action.
+	else:
+		show_toast("匿名诊断数据已复制；不含昵称、房间号或牌面")
 	return true
 
 

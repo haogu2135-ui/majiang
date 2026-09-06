@@ -35,6 +35,7 @@ const ONLINE_PLAYER_INDEX_TOKEN_KEY := "_online_player_index_token"
 const TILE_CODE_NORMALIZATION_CACHE_LIMIT := 128
 const TELEMETRY_SAVE_DEBOUNCE_MSEC := 750
 const APP_VERSION := "1.0.180-godot"
+const UPDATE_APPROVED_TARGET_VERSION := APP_VERSION
 const UPDATE_MANIFEST_URL := "http://127.0.0.1:18081/YunzhuoMahjongGodot-update.json"
 const UPDATE_URL := "http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk"
 const UPDATE_FILE_PATH := "user://updates/YunzhuoMahjongGodot-v1.0.180-godot.apk"
@@ -1017,10 +1018,11 @@ const ROUND_SUMMARY_PANEL_RECT := Rect2(Vector2(0.245, 0.155), Vector2(0.755, 0.
 const ROUND_SUMMARY_HEADER_RECT := Rect2(Vector2(0.0, 0.0), Vector2(1.0, 0.14))
 const ROUND_SUMMARY_TITLE_RECT := Rect2(Vector2(0.06, 0.025), Vector2(0.94, 0.125))
 const ROUND_SUMMARY_TEXT_RECT := Rect2(Vector2(0.06, 0.385), Vector2(0.94, 0.520))
-const ROUND_SUMMARY_RANK_HEADER_RECT := Rect2(Vector2(0.08, 0.535), Vector2(0.92, 0.575))
-const ROUND_SUMMARY_RANK_START_Y := 0.585
-const ROUND_SUMMARY_RANK_ROW_HEIGHT := 0.065
-const ROUND_SUMMARY_RANK_ROW_GAP := 0.006
+const ROUND_SUMMARY_TEXT_STATUS_RECT := Rect2(Vector2(0.06, 0.525), Vector2(0.94, 0.555))
+const ROUND_SUMMARY_RANK_HEADER_RECT := Rect2(Vector2(0.08, 0.570), Vector2(0.92, 0.610))
+const ROUND_SUMMARY_RANK_START_Y := 0.620
+const ROUND_SUMMARY_RANK_ROW_HEIGHT := 0.055
+const ROUND_SUMMARY_RANK_ROW_GAP := 0.005
 const ROUND_SUMMARY_NEXT_DEALER_RECT := Rect2(Vector2(0.08, 0.885), Vector2(0.92, 0.955))
 const TABLE_OUTER_RECT := Rect2(Vector2(0.135, 0.115), Vector2(0.865, 0.790))
 const TABLE_OUTER_TEXTURE_RECT := Rect2(Vector2(0.008, 0.012), Vector2(0.992, 0.988))
@@ -1059,7 +1061,7 @@ const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
 const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.760, 0.040), Vector2(0.970, 0.145))
 # Keep a dedicated top prompt lane above the clickable tile row. The 0.250
 # boundary still preserves the minimum touch width at the compact 960x540 gate.
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.250), Vector2(0.985, 0.99))
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.285), Vector2(0.985, 0.99))
 const HAND_LAYOUT_CANDIDATES := [
 	[8.0, 5],
 	[6.0, 4],
@@ -2104,6 +2106,45 @@ func configure_line_edit_input(edit: LineEdit, field_label: String = "", max_len
 		)
 		edit.set_meta("ui_input_metrics_connected", true)
 	mark_ui_optimization(edit, "F-385")
+
+func add_line_edit_clear_proxy(parent: Control, edit: LineEdit, proxy_name: String, clear_callback: Callable = Callable()) -> Button:
+	if parent == null or edit == null or not is_instance_valid(parent) or not is_instance_valid(edit):
+		return null
+	# Native clear glyphs do not provide a stable touch rect across themes. The
+	# proxy owns the full target while the LineEdit keeps text selection/focus.
+	edit.clear_button_enabled = false
+	var proxy := make_icon_button("x", Color(0.78, 0.72, 0.58), 14)
+	proxy.name = proxy_name
+	proxy.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
+	proxy.tooltip_text = "清空%s" % str(edit.get_meta("ui_input_field", "输入内容"))
+	set_ui_full_text(proxy, proxy.tooltip_text, proxy.tooltip_text)
+	proxy.set_meta("clear_proxy_for", edit.name)
+	proxy.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+	proxy.set_meta("clear_proxy_contract", "44px_sibling_target_restore_focus")
+	proxy.focus_mode = Control.FOCUS_ALL
+	parent.add_child(proxy)
+	proxy.pressed.connect(func() -> void:
+		if not is_instance_valid(edit):
+			return
+		edit.clear()
+		edit.grab_focus()
+		if clear_callback.is_valid():
+			clear_callback.call()
+	)
+	var sync_proxy := func() -> void:
+		if not is_instance_valid(proxy) or not is_instance_valid(edit):
+			return
+		var height := maxf(float(UI_MIN_TOUCH_TARGET), edit.size.y)
+		proxy.position = edit.position + Vector2(maxf(0.0, edit.size.x - UI_MIN_TOUCH_TARGET), maxf(0.0, (height - UI_MIN_TOUCH_TARGET) * 0.5))
+		proxy.size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
+		proxy.visible = not edit.text.strip_edges().is_empty()
+		proxy.disabled = not proxy.visible
+	edit.resized.connect(sync_proxy)
+	parent.resized.connect(sync_proxy)
+	edit.text_changed.connect(func(_value: String) -> void: sync_proxy.call())
+	sync_proxy.call_deferred()
+	mark_ui_optimization(proxy, "F-168")
+	return proxy
 
 func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = "") -> void:
 	if scroll == null or not is_instance_valid(scroll):

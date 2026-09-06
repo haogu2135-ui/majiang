@@ -85,10 +85,23 @@ func online_recovery_connecting() -> bool:
 	return online_feedback.find("正在重新连接") >= 0 or online_feedback.find("正在连接") >= 0
 
 func online_recovery_status_text() -> String:
-	return "重连中" if online_recovery_connecting() else "断线 · 重连"
+	# The HUD/action-intent lane has a stable one-line contract. Attempt count and
+	# ETA live in the recovery CTA and its detail text, so the compact status does
+	# not resize or compete with the table state.
+	return "断线 · 重连"
+
+func online_recovery_button_text() -> String:
+	var attempt := maxi(online_reconnect_attempts, 1)
+	if online_recovery_connecting():
+		return "连接中 · 第%d次" % attempt
+	var remaining := maxi(0, int(ceil(float(online_next_reconnect_msec - Time.get_ticks_msec()) / 1000.0)))
+	return "重连 · 第%d次 · %d秒后" % [attempt, remaining] if remaining > 0 else "重连 · 第%d次" % attempt
 
 func online_recovery_detail_text() -> String:
-	return "连接已断开，牌局暂时只读；使用右侧重连恢复当前牌局，或返回大厅"
+	var attempt := maxi(online_reconnect_attempts, 1)
+	var remaining := maxi(0, int(ceil(float(online_next_reconnect_msec - Time.get_ticks_msec()) / 1000.0)))
+	var wait_text := "约%d秒后可重试" % remaining if remaining > 0 else "现在可以重试"
+	return "连接已断开，牌局暂时只读；第%d次恢复，%s；使用右侧重连恢复当前牌局，或返回大厅" % [attempt, wait_text]
 
 func connect_online() -> void:
 	var host := online_host_input()
@@ -1104,6 +1117,25 @@ func online_feedback_icon_name() -> String:
 	if online_feedback.find("确认") >= 0 or online_feedback.find("已连接") >= 0:
 		return "check"
 	return "message-circle"
+
+
+func online_feedback_requires_recovery() -> bool:
+	if online_waiting_for_server:
+		return false
+	for marker in ["连接失败", "连接异常", "服务器拒绝", "协议", "状态无效", "失败", "拒绝"]:
+		if online_feedback.find(marker) >= 0:
+			return true
+	return false
+
+
+func online_feedback_next_step_text() -> String:
+	if online_feedback.find("连接") >= 0:
+		return "下一步：检查服务器地址后点击“连接”重试"
+	if online_feedback.find("房间") >= 0 or online_feedback.find("房间号") >= 0:
+		return "下一步：检查房间号后重新加入"
+	if online_feedback.find("协议") >= 0 or online_feedback.find("状态无效") >= 0:
+		return "下一步：更新服务端或返回大厅"
+	return "下一步：检查输入后重试"
 
 
 func online_waiting_response_is_slow() -> bool:
