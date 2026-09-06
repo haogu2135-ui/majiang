@@ -786,6 +786,9 @@ func draw_action_intent_flow(parent: Control, count: int, color: Color) -> Contr
 func draw_actions(parent: Control) -> void:
 	var pending_claim_response_bar: Control = null
 	var pending_claim_tail_bar: HBoxContainer = null
+	var pending_claim_response_tail_lane: HBoxContainer = null
+	var pending_claim_network_lane: HBoxContainer = null
+	var pending_claim_voice_lane: HBoxContainer = null
 	if mode == "online_game" and not online_game_disconnected():
 		draw_chat_action_button(parent)
 	if online_game_disconnected():
@@ -794,6 +797,9 @@ func draw_actions(parent: Control) -> void:
 		reconnect_button.name = "OnlineReconnectGameButton"
 		reconnect_button.disabled = reconnecting
 		reconnect_button.tooltip_text = "正在重新连接房间，请稍候" if reconnecting else "重新连接房间并恢复当前牌局"
+		reconnect_button.set_meta("focus_fallback_name", "OnlineDisconnectedLobbyButton")
+		reconnect_button.set_meta("disabled_reason", "正在重新连接房间，请稍候" if reconnecting else "")
+		set_ui_full_text(reconnect_button, reconnect_button.tooltip_text, "恢复当前牌局：" + reconnect_button.tooltip_text)
 		reconnect_button.set_meta("action_priority", "primary")
 		action_bar = HBoxContainer.new()
 		action_bar.alignment = BoxContainer.ALIGNMENT_END
@@ -806,6 +812,7 @@ func draw_actions(parent: Control) -> void:
 		var lobby_button := make_action_button("大厅", Color(0.46, 0.52, 0.56), Callable(self, "show_online_lobby").bind(true))
 		lobby_button.name = "OnlineDisconnectedLobbyButton"
 		lobby_button.tooltip_text = "返回联机大厅，保留当前牌局以便稍后重连"
+		set_ui_full_text(lobby_button, lobby_button.tooltip_text, "断线恢复：返回联机大厅")
 		lobby_button.set_meta("recovery_route", true)
 		lobby_button.set_meta("action_priority", "secondary")
 		lobby_button.set_meta("non_game_action", true)
@@ -856,6 +863,21 @@ func draw_actions(parent: Control) -> void:
 		pending_claim_tail_bar.custom_minimum_size = Vector2(0.0, ACTION_BUTTON_HEIGHT)
 		pending_claim_tail_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		configure_passive_container(pending_claim_tail_bar)
+		pending_claim_response_tail_lane = HBoxContainer.new()
+		pending_claim_response_tail_lane.name = "PendingClaimResponseTailLane"
+		pending_claim_response_tail_lane.add_theme_constant_override("separation", 3)
+		configure_passive_container(pending_claim_response_tail_lane)
+		pending_claim_network_lane = HBoxContainer.new()
+		pending_claim_network_lane.name = "PendingClaimNetworkLane"
+		pending_claim_network_lane.add_theme_constant_override("separation", 3)
+		configure_passive_container(pending_claim_network_lane)
+		pending_claim_voice_lane = HBoxContainer.new()
+		pending_claim_voice_lane.name = "PendingClaimVoiceLane"
+		pending_claim_voice_lane.add_theme_constant_override("separation", 3)
+		configure_passive_container(pending_claim_voice_lane)
+		pending_claim_tail_bar.add_child(pending_claim_response_tail_lane)
+		pending_claim_tail_bar.add_child(pending_claim_network_lane)
+		pending_claim_tail_bar.add_child(pending_claim_voice_lane)
 		pending_root.add_child(pending_claim_tail_bar)
 		action_bar = pending_root
 		pending_claim_response_bar = grid_bar
@@ -948,7 +970,7 @@ func draw_actions(parent: Control) -> void:
 			)
 			if offline_pass_button != null:
 				offline_pass_button.set_meta("pending_tail", true)
-				pending_claim_tail_bar.add_child(offline_pass_button)
+				pending_claim_response_tail_lane.add_child(offline_pass_button)
 			draw_pending_claim_illustration(parent)
 			draw_action_dock(parent)
 			finalize_action_bar_layout()
@@ -1065,7 +1087,14 @@ func draw_actions(parent: Control) -> void:
 				)
 				if online_pass_button != null:
 					online_pass_button.set_meta("pending_tail", true)
-					pending_claim_tail_bar.add_child(online_pass_button)
+					pending_claim_response_tail_lane.add_child(online_pass_button)
+				var network_menu_button := make_action_button("网络", Color(0.42, 0.50, 0.54), Callable(self, "open_pending_network_menu"))
+				network_menu_button.name = "PendingClaimNetworkMenuButton"
+				network_menu_button.set_meta("pending_tail", true)
+				network_menu_button.set_meta("pending_lane", "network")
+				network_menu_button.tooltip_text = "网络控制：打开取消等待或重试菜单"
+				set_ui_full_text(network_menu_button, network_menu_button.tooltip_text, "网络控制")
+				pending_claim_network_lane.add_child(network_menu_button)
 			draw_pending_claim_illustration(parent)
 		if mode == "online_game":
 			var voice = make_action_button("闭麦" if voice_enabled else "麦克风", Color(0.74, 0.24, 0.24) if voice_enabled else Color(0.24, 0.52, 0.72), func() -> void:
@@ -1075,30 +1104,51 @@ func draw_actions(parent: Control) -> void:
 			draw_voice_button_art(voice, voice_enabled, voice_peak)
 			if has_pending_claim_window():
 				voice.set_meta("pending_tail", true)
-				pending_claim_tail_bar.add_child(voice)
+				voice.set_meta("pending_lane", "voice")
+				pending_claim_voice_lane.add_child(voice)
 			else:
 				action_bar.add_child(voice)
 	if mode == "online_game" and online_waiting_for_server:
-		var cancel_sync_button := make_action_button("取消等待", Color(0.46, 0.50, 0.52), Callable(self, "cancel_online_pending_action"))
-		cancel_sync_button.name = "OnlineCancelSyncButton"
-		cancel_sync_button.tooltip_text = "停止本地等待并恢复操作入口"
-		if pending_claim_tail_bar != null:
-			cancel_sync_button.set_meta("pending_tail", true)
-			pending_claim_tail_bar.add_child(cancel_sync_button)
-		else:
+		if pending_claim_network_lane == null:
+			var cancel_sync_button := make_action_button("取消等待", Color(0.46, 0.50, 0.52), Callable(self, "cancel_online_pending_action"))
+			cancel_sync_button.name = "OnlineCancelSyncButton"
+			cancel_sync_button.tooltip_text = "停止本地等待并恢复操作入口"
 			action_bar.add_child(cancel_sync_button)
 	elif mode == "online_game" and online_retry_available:
-		var retry_sync_button := make_action_button("重试", Color(0.36, 0.62, 0.72), Callable(self, "retry_online_last_action"))
-		retry_sync_button.name = "OnlineRetrySyncButton"
-		retry_sync_button.tooltip_text = "重新提交上一次操作"
-		if pending_claim_tail_bar != null:
-			retry_sync_button.set_meta("pending_tail", true)
-			pending_claim_tail_bar.add_child(retry_sync_button)
-		else:
+		if pending_claim_network_lane == null:
+			var retry_sync_button := make_action_button("重试", Color(0.36, 0.62, 0.72), Callable(self, "retry_online_last_action"))
+			retry_sync_button.name = "OnlineRetrySyncButton"
+			retry_sync_button.tooltip_text = "重新提交上一次操作"
 			action_bar.add_child(retry_sync_button)
 	prepare_ended_action_overflow(parent)
 	draw_action_dock(parent)
 	finalize_action_bar_layout()
+
+func open_pending_network_menu(anchor: Control = null) -> void:
+	var menu := PopupMenu.new()
+	menu.name = "PendingClaimNetworkMenu"
+	menu.set_meta("layout_role", "pending_network_controls")
+	menu.add_item("网络控制", 0)
+	menu.set_item_disabled(0, true)
+	if online_waiting_for_server:
+		menu.add_item("取消等待", 1)
+	if online_retry_available:
+		menu.add_item("重试上一次操作", 2)
+	if not online_waiting_for_server and not online_retry_available:
+		menu.add_item("当前无需网络恢复", 3)
+		menu.set_item_disabled(menu.item_count - 1, true)
+	menu.id_pressed.connect(func(item_id: int) -> void:
+		match item_id:
+			1:
+				cancel_online_pending_action()
+			2:
+				retry_online_last_action()
+		menu.queue_free()
+	)
+	root_layer.add_child(menu)
+	if anchor != null and is_instance_valid(anchor):
+		menu.position = anchor.get_global_rect().position
+	menu.popup()
 
 func prepare_ended_action_overflow(parent: Control) -> void:
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
@@ -1158,6 +1208,8 @@ func draw_chat_action_button(parent: Control) -> void:
 	)
 	chat_button.name = "ChatActionButton"
 	chat_button.tooltip_text = "打开或关闭房间聊天 · 快捷键 Esc关闭"
+	set_ui_full_text(chat_button, chat_button.tooltip_text, "房间聊天开关")
+	chat_button.set_meta("ui_action_role", "chat_toggle")
 	chat_button.custom_minimum_size = Vector2(82, 44)
 	chat_button.add_theme_font_size_override("font_size", 14)
 	chat_button.z_index = 18
@@ -1267,6 +1319,11 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 	secondary.set_meta("advisor_text_role", "secondary")
 	secondary.set_meta("advisor_detail_route", "AdvisorDetailButton")
 	set_ui_full_text(secondary, secondary.text, "牌势%s完整说明；可打开详解" % heading)
+	if secondary.text.length() > 28:
+		var secondary_summary: String = secondary.text.left(26).strip_edges() + "…"
+		secondary.text = secondary_summary
+		secondary.set_meta("ui_visual_summary", secondary_summary)
+		secondary.set_meta("ui_visual_summary_source", "advisor_detail_route")
 	apply_rect(secondary, rect_full(0.13, 0.58, 0.93, 0.92))
 	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	secondary.vertical_alignment = VERTICAL_ALIGNMENT_TOP
@@ -1282,12 +1339,14 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# danger decision surfaces and keeps keyboard focus within the active action.
 	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or has_pending_danger_discard() or not player_ai_assist_enabled()):
 		return
-	# The narrow center-left HUD slot sits between the left river and the center
-	# surface, above the player river. During a response window the action dock
-	# moves left, so reserve a dedicated right-side gap for it.
-	var advisor_right := 0.620 if has_pending_claim_window() else 0.690
-	var panel = make_gpt_plate_rect(rect_full(0.285, 0.330, advisor_right, 0.635), Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
+	# The advisor owns an authored side channel selected against the live table
+	# geometry. It must not cover the center wind, wall count, last discard, or a
+	# seat-facing river/meld lane just because the viewport is compact.
+	var advisor_rect := advisor_panel_layout_rect()
+	var panel = make_gpt_plate_rect(advisor_rect, Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
 	panel.set_name("AdvisorPanel")
+	panel.set_meta("layout_rect", advisor_rect)
+	panel.set_meta("layout_role", "advisor_safe_side_channel")
 	parent.add_child(panel)
 	var advisor_texture = add_illustration_texture(panel, "advisor_map", rect_full(0.010, 0.035, 0.990, 0.965), 0.12, false)
 	if advisor_texture != null:
@@ -3547,6 +3606,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		var latest_page_hint := " · 最后一张在最新页" if latest_off_page else ""
 		archive_button.tooltip_text = "点击切换牌河窗口：%s%s\n完整牌河：%s" % [page_text, latest_page_hint, join_tile_labels(get_discards(seat))]
 		set_ui_full_text(archive_button, archive_button.tooltip_text, "牌河窗口：" + page_text)
+		archive_button.set_meta("visible_summary", "历史\n%d-%d" % [visible_start + 1, mini(discard_count, visible_start + visible_capacity)])
 		archive_button.set_meta("window_label", page_text)
 		archive_button.set_meta("latest_discard_page_hint", latest_page_hint != "")
 		mark_ui_optimization(archive_button, "F-419")
@@ -3562,9 +3622,14 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		archive_art.modulate.a = 0.82
 		archive_button.move_child(archive_art, 0)
 		add_lucide_icon(archive_button, "book-open", rect_full(0.08, 0.07, 0.30, 0.34), Color(1.0, 0.92, 0.62, 0.92))
-		var archive_label = make_label(archive_button, "历史\n%s" % archive_button.text, 10, Color(1.0, 0.94, 0.66, 1.0), true)
+		# The full range remains available to focus and tooltip semantics, while the
+		# painted label stays to two short lines at compact resolutions.
+		var archive_label = make_label(archive_button, str(archive_button.get_meta("visible_summary", "历史")), 10, Color(1.0, 0.94, 0.66, 1.0), true)
 		archive_label.name = "DiscardRiverArchiveLabel_%d" % seat
 		archive_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		archive_label.tooltip_text = archive_button.tooltip_text
+		archive_label.set_meta("ui_full_text", archive_button.tooltip_text)
+		archive_label.set_meta("window_range_text", page_text)
 		archive_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.98))
 		archive_label.add_theme_constant_override("outline_size", 3)
 		archive_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -4378,6 +4443,12 @@ func draw_hand(parent: Control) -> void:
 	var tray_text = make_label(tray, hand_tray_text(), 14, Color(0.92, 0.82, 0.56), true)
 	tray_text.name = "HandTrayStatusText"
 	tray_text.clip_text = true
+	if disconnected_hand_state:
+		tray.set_meta("interaction_state", "read_only")
+		tray.set_meta("disabled_reason", "牌局已断线，手牌只读；请先重连")
+		tray_text.text = "只读 · 等待重连；手牌不会提交"
+		set_ui_full_text(tray_text, tray_text.text, "断线牌桌状态：手牌只读；请使用重连入口")
+		tray.modulate = Color(0.84, 0.88, 0.82, 0.82)
 	var tray_text_rect := rect_full(0.030, 0.025, 0.745, 0.205) if disconnected_hand_state else (rect_full(0.030, 0.030, 0.760, 0.096) if shortcut_hint_text != "" else HAND_TRAY_TEXT_RECT)
 	apply_rect(tray_text, tray_text_rect)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -4535,15 +4606,22 @@ func draw_hand(parent: Control) -> void:
 		var is_drawn_tile_marker := i == stable_drawn_index
 		var is_drawn_tile := should_animate_drawn_tile and stable_drawn_index >= 0 and i == stable_drawn_index
 		var hint_badge := ""
+		var state_tokens: Array[String] = []
 		if assist_enabled and clickable:
 			if i == pending_index:
 				hint_badge = "确认"
+				state_tokens.append("确认")
 			elif i == suggested_index:
 				hint_badge = "荐"
+				state_tokens.append("推荐")
 			elif is_drawn_tile_marker:
 				hint_badge = "摸"
+				state_tokens.append("刚摸")
 		if keyboard_selected and hint_badge == "":
 			hint_badge = "选"
+		if keyboard_selected:
+			state_tokens.append("键盘选中")
+		var online_identity := online_hand_identity_at(index, tile) if mode == "online_game" else ""
 		var callback = func() -> void:
 			# 玩家执行操作时关闭引导
 			if interactive_guide_active:
@@ -4555,22 +4633,24 @@ func draw_hand(parent: Control) -> void:
 			if mode == "offline":
 				human_discard(index)
 			else:
-				send_online_action({
-					"type": "discard",
-					"tile": tile,
-					"handIndex": index,
-					"handSerial": "client-%d-%d" % [online_session_id, index],
-				}, "打出%s" % tile_label(tile))
+				send_online_discard_by_identity(online_identity, tile, "打出%s" % tile_label(tile))
 		var tile_node = make_tile_view(tile, Vector2(tile_width, tile_height), clickable, callback, highlighted, risk, hint_badge)
 		tile_node.name = "HandTile_%02d_%s" % [i, tile]
 		tile_node.set_meta("hand_source_index", i)
+		tile_node.set_meta("hand_identity", online_identity)
 		tile_node.set_meta("hand_tile_code", tile)
+		tile_node.set_meta("state_summary", "、".join(state_tokens) if not state_tokens.is_empty() else "普通可出牌")
 		tile_node.set_meta("drawn_tile", i == stable_drawn_index)
 		tile_node.set_meta("danger_pending", i == pending_index)
 		tile_node.set_meta("advisor_target", i == suggested_index)
 		tile_node.set_meta("guide_target", i == interactive_guide_target_index)
 		tile_node.set_meta("keyboard_selected", keyboard_selected)
 		tile_node.tooltip_text = hand_tile_interaction_tooltip(tile, report, hint_badge, is_drawn_tile_marker)
+		if not state_tokens.is_empty():
+			tile_node.tooltip_text += " · 状态：" + "、".join(state_tokens)
+		if disconnected_hand_state:
+			tile_node.tooltip_text = "只读手牌：%s；等待重连后才能提交" % tile_label(tile)
+			tile_node.set_meta("disabled_reason", "牌局已断线，手牌只读")
 		tile_node.set_meta("accessible_name", "手牌第%d张：%s" % [i + 1, tile_label(tile)])
 		mark_ui_optimization(tile_node, "F-485")
 		if keyboard_selected and hint_badge != "选":
@@ -4594,7 +4674,7 @@ func draw_hand(parent: Control) -> void:
 				# The draw animation provides the temporary lift; the settled face
 				# remains on the shared hand baseline with neighboring tiles.
 				tile_node.set_meta("drawn_visual_lift", 0.0)
-				var drawn_baseline := make_gpt_route_rail(rect_full(0.04, 0.93, 0.96, 0.985), Color(0.94, 0.78, 0.38, 0.28))
+				var drawn_baseline := make_gpt_route_rail(rect_full(0.04, 0.90, 0.96, 0.985), Color(0.94, 0.78, 0.38, 0.46))
 				drawn_baseline.name = "HandDrawnTileBaseline"
 				drawn_baseline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				drawn_mount.add_child(drawn_baseline)
@@ -5840,8 +5920,8 @@ func draw_melds(parent: Control) -> void:
 			# Bound the face width by the single lane itself so Container minimum
 			# sizes cannot push into the adjacent HUD or river at 960px.
 			var max_compact_tile_width := floorf((lane_width_px - 12.0) / HAND_TILE_ASPECT)
-			max_compact_tile_width = maxf(20.0, max_compact_tile_width)
-			compact_tile_width = clampf(minf(compact_tile_width, max_compact_tile_width), 20.0, 26.0)
+			max_compact_tile_width = maxf(24.0, max_compact_tile_width)
+			compact_tile_width = clampf(minf(compact_tile_width, max_compact_tile_width), 24.0, 30.0)
 			meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * HAND_TILE_ASPECT)))
 		elif not vertical and compact_melds:
 			# Keep horizontal melds readable on 960px screens. Use the actual lane
@@ -5887,11 +5967,12 @@ func draw_melds(parent: Control) -> void:
 				meld_group.set_meta("face_rotation", seat_meld_face_rotation(seat))
 				var meld_kind := meld_kind_label(meld_tiles)
 				set_ui_full_text(meld_group, "%s · 第%d组 · %d张牌" % [meld_kind, window_start + meld_index + 1, meld_tiles.size()], "副露类型：" + meld_kind)
-				var meld_kind_badge := make_label(meld_group, meld_kind, 8, Color(1.0, 0.90, 0.58, 0.96), true)
+				var meld_kind_badge := make_label(meld_group, meld_kind, 10, Color(1.0, 0.90, 0.58, 0.96), true)
 				meld_kind_badge.name = "MeldKindBadge_%d_%s" % [window_start + meld_index, meld_kind]
-				apply_rect(meld_kind_badge, rect_full(0.680, 0.020, 0.980, 0.280))
-				meld_kind_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-				meld_kind_badge.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+				var badge_rect := rect_full(0.050, 0.700, 0.950, 0.980) if vertical else rect_full(0.680, 0.020, 0.980, 0.280)
+				apply_rect(meld_kind_badge, badge_rect)
+				meld_kind_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if vertical else HORIZONTAL_ALIGNMENT_RIGHT
+				meld_kind_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER if vertical else VERTICAL_ALIGNMENT_TOP
 				meld_kind_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				meld_kind_badge.set_meta("meld_kind", meld_kind)
 				meld_kind_badge.set_meta("accessible_name", "副露类型：" + meld_kind)
@@ -6844,7 +6925,9 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	latest_button.name = "OnlineLobbyLogLatestButton"
 	latest_button.custom_minimum_size = Vector2(76, UI_MIN_TOUCH_TARGET)
 	latest_button.add_theme_font_size_override("font_size", 10)
-	latest_button.tooltip_text = "跳到最新房间日志"
+	set_ui_full_text(latest_button, "跳到最新房间日志", "房间日志：跳到最新")
+	latest_button.set_meta("ui_button_role", "log_latest")
+	latest_button.set_meta("unread_count", 0)
 	# The header owns a full touch lane; the native log scroll starts below it.
 	apply_rect(latest_button, rect_full(0.535, 0.025, 0.745, 0.405))
 	list.add_child(latest_button)
@@ -6854,14 +6937,19 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	unread_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	unread_label.visible = false
 	configure_clipped_label(unread_label)
+	set_ui_full_text(unread_label, "已到最新", "房间日志状态：已到最新")
+	unread_label.set_meta("ui_status_role", "log_unread")
 	var count_value := online_lobby_retained_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
 	var count_badge = make_badge(list, rect_full(0.760, 0.030, 0.955, 0.175), "%d条" % count_value, 10, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
 	count_badge.name = "OnlineLobbyLogCountBadge"
 	count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	set_ui_full_text(count_badge, "房间日志共%d条" % count_value, "房间日志总数")
+	count_badge.set_meta("log_count", count_value)
 	if count_badge.get_child_count() > 0:
 		var count_label = count_badge.get_child(count_badge.get_child_count() - 1) as Label
 		if count_label != null:
 			count_label.name = "OnlineLobbyLogCountLabel"
+			set_ui_full_text(count_label, "房间日志共%d条" % count_value, "房间日志总数")
 	return list
 
 
@@ -12221,9 +12309,12 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	var notes_scroll_hit_target := Control.new()
 	notes_scroll_hit_target.name = "UpdateReleaseNotesScrollHitTarget"
 	notes_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
+	notes_scroll_hit_target.focus_mode = Control.FOCUS_ALL
 	notes_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	notes_scroll_hit_target.custom_minimum_size = Vector2(44.0, 0.0)
 	notes_scroll_hit_target.tooltip_text = "更新说明阅读进度 · 拖动或使用滚轮定位"
+	notes_scroll_hit_target.set_meta("accessible_name", "更新说明阅读进度")
+	notes_scroll_hit_target.set_meta("ui_full_text", notes_scroll_hit_target.tooltip_text)
 	notes_scroll_hit_target.set_meta("ui_scroll_role", "update_release_notes")
 	notes_scroll_hit_target.set_meta("min_touch_target_px", 44.0)
 	apply_rect(notes_scroll_hit_target, rect_full(0.785, 0.045, 0.875, 0.915))
@@ -12245,6 +12336,7 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	update_release_notes_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	update_release_notes_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_wrapped_label(update_release_notes_label, maxf(220.0, effective_viewport_size().x * 0.420), 0.0, 4.0)
+	update_release_notes_label.set_meta("ui_scroll_content", true)
 	return update_release_notes_art
 
 
@@ -14148,7 +14240,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	# Preserve the full explanation in the tooltip/accessibility metadata while
 	# showing a scan-friendly status whenever large text would make the detail
 	# collide with the compact row geometry.
-	var visible_status := compact_setting_status(title, status) if compact_settings or large_text_settings or title == "画面质量" or title == "本地进度" else status
+	var show_full_status := large_text_settings and (title == "画面质量" or title == "本地进度")
+	var visible_status := status if show_full_status else (compact_setting_status(title, status) if compact_settings or large_text_settings or title == "画面质量" or title == "本地进度" else status)
 	var status_label = make_label(row, visible_status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
 	set_ui_full_text(status_label, status, title + "完整状态")
@@ -14157,7 +14250,11 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.56))
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
-	configure_clipped_label(status_label)
+	if show_full_status:
+		configure_wrapped_label(status_label, 0.0, 0.0, 2.0)
+		status_label.set_meta("ui_status_priority", "high_consequence")
+	else:
+		configure_clipped_label(status_label)
 	button.name = "SettingRowButton_%s" % title
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -14178,7 +14275,7 @@ func compact_setting_status(title: String, status: String) -> String:
 	if title == "隐私诊断":
 		return "已同意" if status.contains("已同意") else "未同意"
 	if title == "画面质量":
-		return "2D牌面·影响背景/动效"
+		return graphics_quality_label(true)
 	if title == "播放测试":
 		return "可试听"
 	if status.begins_with("当前: "):
@@ -14279,6 +14376,9 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 	button.name = "Hand3DHitTarget_%02d" % tile_index
 	button.text = ""
 	button.tooltip_text = tile_label(tile)
+	set_ui_full_text(button, "打出" + tile_label(tile) if clickable else tile_label(tile), "手牌牌面：" + tile_label(tile))
+	button.set_meta("tile_code", normalize_tile_code(tile))
+	button.set_meta("tile_click_role", "play_tile" if clickable else "tile_preview")
 	button.custom_minimum_size = size
 	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -14400,6 +14500,11 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			tile_body.clip_contents = false
 			tile_body.offset_top -= 4.0
 			tile_body.offset_bottom -= 4.0
+	if button != null:
+		var tile_detail := "打出" + tile_label(tile) if clickable else tile_label(tile)
+		set_ui_full_text(button, tile_detail, "牌面：" + tile_label(tile))
+		button.set_meta("tile_code", normalize_tile_code(tile))
+		button.set_meta("tile_click_role", "play_tile" if clickable else "tile_preview")
 	if button != null and callback.is_valid():
 		# Bind the hit action before loading the authored face. A valid tile hit
 		# target must remain actionable even while its texture is loading or absent.

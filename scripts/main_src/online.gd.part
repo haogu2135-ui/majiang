@@ -794,7 +794,9 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	var server_wall_total := int(first_present(game, ["wallTotal", "wallSize", "totalTiles", "deckSize"], game.get("wallTotal", 0)))
 	game["wallTotal"] = maxi(0, server_wall_total)
 	game["phase"] = normalize_online_phase(str(first_present(game, ["phase", "state", "status"], "")))
-	game["hand"] = normalize_tile_array(first_present(game, ["hand", "tiles", "yourHand", "selfHand"], []))
+	var raw_hand_value = first_present(game, ["hand", "tiles", "yourHand", "selfHand"], [])
+	game["hand"] = normalize_tile_array(raw_hand_value)
+	game["handIdentities"] = normalize_online_hand_identities(game, raw_hand_value, game["hand"])
 	var last_discard_value = first_present(game, ["lastDiscard", "discard", "lastTile"], "")
 	game["lastDiscard"] = normalize_last_discard_tile(last_discard_value)
 	game["lastDiscardSeat"] = normalize_last_discard_seat(last_discard_value, int(first_present(game, ["lastDiscardSeat", "discardSeat", "lastDiscarder", "fromSeat"], -1)))
@@ -908,6 +910,77 @@ func normalize_online_players(value) -> Array:
 		player["melds"] = normalize_online_melds(first_present(player, ["melds", "openMelds", "sets"], []))
 		result.append(player)
 	return result
+
+func normalize_online_hand_identities(game: Dictionary, raw_hand, normalized_hand: Array) -> Array:
+	var identities: Array = []
+	var identity_value = first_present(game, ["handSerials", "handIds", "handIdentities", "handIdentity"], [])
+	if typeof(identity_value) == TYPE_ARRAY:
+		for item in identity_value:
+			identities.append(str(item).strip_edges())
+	if identities.size() != normalized_hand.size() and typeof(raw_hand) == TYPE_ARRAY:
+		identities.clear()
+		for item in raw_hand:
+			if typeof(item) == TYPE_DICTIONARY:
+				identities.append(str(first_present(item, ["serial", "id", "identity", "handSerial"], "")).strip_edges())
+	if identities.size() != normalized_hand.size():
+		identities.clear()
+		var occurrences: Dictionary = {}
+		for tile in normalized_hand:
+			var tile_code := normalize_tile_code(str(tile))
+			var occurrence := int(occurrences.get(tile_code, 0))
+			occurrences[tile_code] = occurrence + 1
+			identities.append("client-%d-%s-%d" % [online_session_id, tile_code, occurrence])
+	for i in range(identities.size()):
+		if str(identities[i]).strip_edges() == "":
+			identities[i] = "client-%d-%s-%d" % [online_session_id, normalize_tile_code(str(normalized_hand[i])), i]
+	return identities
+
+func online_hand_identity_at(index: int, tile: String = "") -> String:
+	var hand: Array = online_game.get("hand", [])
+	var identities: Array = online_game.get("handIdentities", [])
+	if index >= 0 and index < identities.size() and str(identities[index]).strip_edges() != "":
+		return str(identities[index]).strip_edges()
+	var normalized_tile := normalize_tile_code(tile if tile != "" else (str(hand[index]) if index >= 0 and index < hand.size() else ""))
+	if normalized_tile == "":
+		return ""
+	var occurrence := 0
+	for i in range(mini(index, hand.size())):
+		if normalize_tile_code(str(hand[i])) == normalized_tile:
+			occurrence += 1
+	return "client-%d-%s-%d" % [online_session_id, normalized_tile, occurrence]
+
+func online_hand_index_for_identity(identity: String, tile: String) -> int:
+	var hand: Array = online_game.get("hand", [])
+	var identities: Array = online_game.get("handIdentities", [])
+	var normalized_tile := normalize_tile_code(tile)
+	for i in range(mini(hand.size(), identities.size())):
+		if str(identities[i]).strip_edges() == identity and normalize_tile_code(str(hand[i])) == normalized_tile:
+			return i
+	# A server may omit identity fields in older snapshots. The deterministic
+	# client identity still resolves by tile and occurrence without guessing a
+	# neighboring index after the hand is re-sorted.
+	if identity.begins_with("client-%d-%s-" % [online_session_id, normalized_tile]):
+		var occurrence := int(identity.rsplit("-", 1)[1])
+		var seen := 0
+		for i in range(hand.size()):
+			if normalize_tile_code(str(hand[i])) != normalized_tile:
+				continue
+			if seen == occurrence:
+				return i
+			seen += 1
+	return -1
+
+func send_online_discard_by_identity(identity: String, tile: String, label: String = "") -> bool:
+	var resolved_index := online_hand_index_for_identity(identity, tile)
+	if resolved_index < 0:
+		set_online_feedback("手牌已同步变化，请重新选择要打出的牌。", false)
+		return false
+	return send_online_action({
+		"type": "discard",
+		"tile": normalize_tile_code(tile),
+		"handIndex": resolved_index,
+		"handSerial": identity,
+	}, label if label != "" else "打出%s" % tile_label(tile))
 
 
 func online_action_label(payload: Dictionary) -> String:

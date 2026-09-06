@@ -958,14 +958,18 @@ const DISCARD_ZONES := [
 		# or turn an adjacent lane into a surprising click target.
 	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.600, 0.875)), 8],
 	[2, Rect2(Vector2(0.285, 0.205), Vector2(0.715, 0.290)), 8],
-	[3, Rect2(Vector2(0.225, 0.310), Vector2(0.385, 0.550)), 3],
-	[1, Rect2(Vector2(0.615, 0.310), Vector2(0.775, 0.550)), 3],
+		# Side rivers stop before the dedicated bottom action channel. The gap is
+		# intentional: response controls must never sit on the last discard row.
+		[3, Rect2(Vector2(0.225, 0.310), Vector2(0.385, 0.535)), 3],
+		[1, Rect2(Vector2(0.615, 0.310), Vector2(0.775, 0.535)), 3],
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
-	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.875, 0.740))],
+	# Keep the vertical lanes beside the seat plaques. Their lower edge leaves a
+	# separate bottom action channel while pagination preserves full meld access.
+	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.875, 0.510))],
 	[2, Rect2(Vector2(0.680, 0.105), Vector2(0.965, 0.195))],
-	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.205, 0.740))],
+	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.205, 0.510))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
 const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.300), Vector2(0.595, 0.635))
@@ -2292,6 +2296,7 @@ func make_base_button(text: String, callback: Callable) -> Button:
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.tooltip_text = text
 	button.set_meta("accessible_name", text)
+	button.set_meta("ui_full_text", text)
 	button.set_meta("ui_action_name", text)
 	button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	configure_touch_button(button)

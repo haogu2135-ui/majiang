@@ -78,7 +78,7 @@ func _show_achievements_screen_impl() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title, title.text, "规则指南标题")
 	mark_ui_optimization(title, "F-469")
-	set_ui_full_text(title, "云桌麻将", "云桌麻将主菜单")
+	set_ui_full_text(title, "成就图鉴", "成就图鉴页面标题")
 	mark_ui_optimization(title, "F-450")
 	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
 	title.add_theme_constant_override("outline_size", 4)
@@ -88,6 +88,8 @@ func _show_achievements_screen_impl() -> void:
 	)
 	back.name = "AchievementsBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
+	set_ui_full_text(back, "返回主菜单 · Esc关闭成就图鉴", "返回主菜单")
+	back.set_meta("ui_navigation_role", "page_back")
 	draw_secondary_back_button_art(back, "achievements", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
@@ -135,6 +137,7 @@ func _show_achievements_screen_impl() -> void:
 	achievements_scroll_hit_target.focus_mode = Control.FOCUS_ALL
 	achievements_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	achievements_scroll_hit_target.tooltip_text = "拖动查看全部成就"
+	set_ui_full_text(achievements_scroll_hit_target, "拖动或使用滚轮查看全部成就", "成就列表滚动位置")
 	achievements_scroll_hit_target.set_meta("accessible_name", "成就列表滚动位置")
 	achievements_scroll_hit_target.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, 0.0)
 	achievements_scroll_hit_target.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
@@ -1645,6 +1648,8 @@ func _show_rules_screen_impl() -> void:
 	)
 	back.name = "RulesBackButton"
 	back.custom_minimum_size = Vector2(92, 44)
+	set_ui_full_text(back, "返回主菜单 · Esc关闭规则指南", "返回主菜单")
+	back.set_meta("ui_navigation_role", "page_back")
 	back.add_theme_font_size_override("font_size", commercial_ui_font_size(16, 2))
 	draw_secondary_back_button_art(back, "rules", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
@@ -1722,6 +1727,7 @@ func _show_rules_screen_impl() -> void:
 	rules_scroll_hit_target.focus_mode = Control.FOCUS_ALL
 	rules_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 	rules_scroll_hit_target.tooltip_text = "拖动定位"
+	set_ui_full_text(rules_scroll_hit_target, "拖动或使用滚轮定位规则阅读进度", "规则滚动位置")
 	rules_scroll_hit_target.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, 0.0)
 	rules_scroll_hit_target.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	rules_scroll_hit_target.set_meta("accessible_name", "规则滚动位置")
@@ -2233,6 +2239,7 @@ func _show_shop_screen_impl() -> void:
 	var coins_label = make_label(coins_panel, str(int(currency.get("coins", 0))), commercial_ui_font_size(16, 2), Color(0.96, 0.92, 0.68), true)
 	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(coins_label, "金币余额：%d" % int(currency.get("coins", 0)), "金币余额")
 
 	var gems_panel = make_gpt_plate_rect(rect_full(0.635, 0.035, 0.785, 0.090), Color(0.110, 0.145, 0.160, 0.28), "ui_button_face_plate")
 	gems_panel.name = "ShopCurrencyPanel_gems"
@@ -2245,6 +2252,7 @@ func _show_shop_screen_impl() -> void:
 	var gems_label = make_label(gems_panel, str(int(currency.get("gems", 0))), commercial_ui_font_size(16, 2), Color(0.96, 0.92, 0.68), true)
 	apply_rect(gems_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	gems_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_ui_full_text(gems_label, "玉石余额：%d" % int(currency.get("gems", 0)), "玉石余额")
 
 	# 返回按钮
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
@@ -2252,6 +2260,8 @@ func _show_shop_screen_impl() -> void:
 	)
 	back.name = "ShopBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
+	set_ui_full_text(back, "返回主菜单 · Esc关闭宝阁", "返回主菜单")
+	back.set_meta("ui_navigation_role", "page_back")
 	draw_secondary_back_button_art(back, "shop", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.84, 0.025, 0.96, 0.095))
@@ -2383,12 +2393,15 @@ func _show_shop_screen_impl() -> void:
 		var item_info = ITEM_TYPES[item_id]
 		var count = get_item_count(item_id)
 		var cost = int(item_info.get("cost_gems", 10))
+		var description := str(item_info.get("desc", ""))
 		var item_color = item_color_map.get(item_id, Color(0.42, 0.48, 0.44))
 		var icon_name = item_icon_map.get(item_id, "gift")
 
 		# 道具行面板
 		var row = Panel.new()
 		row.name = "ShopItemRow_%s" % item_id
+		set_ui_full_text(row, "%s：%s；库存%d；价格%d玉" % [str(item_info.get("name", item_id)), description, count, cost], "商品条目：" + str(item_info.get("name", item_id)))
+		row.set_meta("shop_item_id", item_id)
 		row.custom_minimum_size = Vector2(0, shop_row_height)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.clip_contents = true
@@ -2509,6 +2522,7 @@ func _show_shop_screen_impl() -> void:
 		buy_btn.name = "ShopItemBuyButton_%s" % item_id
 		buy_btn.disabled = not can_afford
 		buy_btn.tooltip_text = "购买%s，花费%d玉" % [str(item_info.get("name", item_id)), cost] if can_afford else "缺少%d玉：需要%d玉，当前%d玉" % [maxi(0, cost - int(currency.get("gems", 0))), cost, int(currency.get("gems", 0))]
+		buy_btn.set_meta("disabled_reason", "" if can_afford else buy_btn.tooltip_text)
 		set_ui_full_text(buy_btn, buy_btn.tooltip_text, "商品%s：%s" % [str(item_info.get("name", item_id)), buy_btn.tooltip_text])
 		buy_btn.set_meta("shop_item_id", item_id)
 		buy_btn.set_meta("shop_cost_gems", cost)
@@ -2573,7 +2587,7 @@ func _show_shop_screen_impl() -> void:
 		apply_rect(shop_end_marker, rect_full(0.055, 0.748, 0.620, 0.775))
 		shop_end_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		shop_end_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		shop_end_marker.tooltip_text = "商品列表已到末尾 · 共%d项" % ITEM_TYPES.size()
+		set_ui_full_text(shop_end_marker, "商品列表已到末尾 · 共%d项" % ITEM_TYPES.size(), "商品列表结束位置")
 		shop_end_marker.set_meta("shop_list_end", true)
 		shop_end_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		mark_ui_optimization(shop_end_marker, "F-399")
@@ -2922,6 +2936,8 @@ func _show_stats_screen_impl() -> void:
 	)
 	back.name = "StatsBackButton"
 	back.custom_minimum_size = Vector2(100, 48)
+	set_ui_full_text(back, "返回主菜单 · Esc关闭统计", "返回主菜单")
+	back.set_meta("ui_navigation_role", "page_back")
 	draw_secondary_back_button_art(back, "stats", Color(0.36, 0.26, 0.16))
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
@@ -2985,6 +3001,7 @@ func _show_stats_screen_impl() -> void:
 		start_first_game.name = "StatsStartFirstGameButton"
 		start_first_game.custom_minimum_size = Vector2(140, UI_MIN_TOUCH_TARGET)
 		start_first_game.tooltip_text = "开始第一局单机麻将"
+		set_ui_full_text(start_first_game, start_first_game.tooltip_text, "统计空状态：开始第一局")
 		apply_rect(start_first_game, rect_full(0.36, 0.590, 0.64, 0.745))
 		panel.add_child(start_first_game)
 		configure_ordered_focus_navigation(panel, [back, start_first_game], "StatsBackButton")
@@ -3247,10 +3264,14 @@ func refresh_update_dialog() -> void:
 			AnimationEffects.animate_progress_bar(update_progress, target_progress_value, 0.3)
 		else:
 			update_progress.value = target_progress_value
+		update_progress.set_meta("progress_percent", int(round(target_progress_value)))
+		update_progress.set_meta("progress_bytes", "%s / %s" % [format_bytes(maxi(0, update_downloaded_bytes)), format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"])
+		update_progress.set_meta("accessible_name", "更新下载进度：%d%%" % int(round(target_progress_value)))
 	if update_progress_label != null and is_instance_valid(update_progress_label):
 		var progress_text := update_progress_text()
 		set_ui_full_text(update_progress_label, progress_text, "更新进度：" + progress_text)
 		update_progress_label.text = progress_text
+		update_progress_label.set_meta("progress_percent", int(round(update_progress.value)) if update_progress != null and is_instance_valid(update_progress) else 0)
 	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
 		var notes_text := update_release_notes.strip_edges()
 		update_release_notes_art.visible = notes_text != ""
@@ -3263,6 +3284,7 @@ func refresh_update_dialog() -> void:
 		var primary_blocked := update_state == "checking" or update_state == "downloading" or update_state == "current" or update_state == "installing"
 		update_primary_button.visible = update_state != "current"
 		update_primary_button.disabled = primary_blocked
+		var primary_reason := ""
 		match update_state:
 			"checking":
 				update_primary_button.text = "检查中"
@@ -3274,13 +3296,30 @@ func refresh_update_dialog() -> void:
 				update_primary_button.text = "安装"
 			_:
 				update_primary_button.text = "重试"
-		set_ui_full_text(update_primary_button, update_primary_button.text, "更新主操作：" + update_primary_button.text)
+		match update_state:
+			"checking":
+				primary_reason = "正在检查更新，请稍候"
+			"downloading":
+				primary_reason = "正在下载升级包，请稍候"
+			"current":
+				primary_reason = "当前已经是最新版本"
+			"installing":
+				primary_reason = "安装正在进行，请稍候"
+		set_ui_full_text(update_primary_button, primary_reason if primary_blocked else update_primary_button.text, "更新主操作：" + (primary_reason if primary_blocked else update_primary_button.text))
+		if primary_blocked:
+			update_primary_button.set_meta("disabled_reason", primary_reason)
+		else:
+			update_primary_button.remove_meta("disabled_reason")
 	refresh_top_hud_update_button()
 	if update_secondary_button != null and is_instance_valid(update_secondary_button):
 		update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else ("安装中" if update_state == "installing" else "关闭")
 		update_secondary_button.disabled = update_state == "installing"
 		update_secondary_button.tooltip_text = "安装正在进行，完成后可继续" if update_state == "installing" else "取消下载" if update_state == "checking" or update_state == "downloading" else "关闭更新"
 		set_ui_full_text(update_secondary_button, update_secondary_button.tooltip_text, "更新辅助操作：" + update_secondary_button.text)
+		if update_secondary_button.disabled:
+			update_secondary_button.set_meta("disabled_reason", update_secondary_button.tooltip_text)
+		else:
+			update_secondary_button.remove_meta("disabled_reason")
 
 func refresh_update_dialog_art() -> void:
 	var progress = 0.0
@@ -3432,6 +3471,8 @@ func show_chat_panel() -> void:
 	var close_button := make_icon_button("cross", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_chat_panel"))
 	close_button.name = "ChatPanelCloseButton"
 	close_button.tooltip_text = "关闭聊天面板 · 快捷键 Esc"
+	set_ui_full_text(close_button, close_button.tooltip_text, "关闭房间聊天面板")
+	close_button.set_meta("ui_navigation_role", "modal_close")
 	close_button.custom_minimum_size = Vector2(44, 44)
 	apply_rect(close_button, rect_full(0.760 if compact_chat else 0.820, 0.010 if compact_chat else 0.015, 1.000 if compact_chat else 0.950, 0.390 if compact_chat else 0.190))
 	chat_panel.add_child(close_button)
@@ -3448,7 +3489,7 @@ func show_chat_panel() -> void:
 	quick_title.tooltip_text = "点击一条快捷消息立即发送"
 	quick_title.set_meta("accessible_name", "快捷消息分组")
 	configure_clipped_label(quick_title)
-	apply_rect(quick_row, rect_full(0.060, 0.405 if compact_chat else 0.270, 0.940, 0.615 if compact_chat else 0.350))
+	apply_rect(quick_row, rect_full(0.060, 0.405 if compact_chat else 0.270, 0.940, 0.665 if compact_chat else 0.350))
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -3461,10 +3502,12 @@ func show_chat_panel() -> void:
 		# The narrow safe drawer has one compact row for quick actions. Keep a
 		# stable 32px lane there so the custom message field can retain its full
 		# input height inside the same surface.
-		quick_button.custom_minimum_size = Vector2(quick_width, 32 if compact_chat else 44)
+		quick_button.custom_minimum_size = Vector2(quick_width, UI_MIN_TOUCH_TARGET if compact_chat else 44)
 		quick_button.add_theme_font_size_override("font_size", quick_font_size)
 		quick_button.tooltip_text = "发送快捷消息：%s" % quick_message
 		quick_button.set_meta("accessible_name", "发送快捷消息：" + quick_message)
+		quick_button.set_meta("ui_full_text", quick_button.tooltip_text)
+		quick_button.set_meta("chat_action_role", "quick_message")
 		quick_row.add_child(quick_button)
 
 	chat_input = LineEdit.new()
@@ -3477,6 +3520,8 @@ func show_chat_panel() -> void:
 	chat_input.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
 	chat_input.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
 	configure_line_edit_input(chat_input, "聊天", CHAT_MESSAGE_MAX_LENGTH)
+	chat_input.tooltip_text = "输入聊天消息，最多%d字；Enter发送" % CHAT_MESSAGE_MAX_LENGTH
+	chat_input.set_meta("ui_full_text", chat_input.tooltip_text)
 	var input_styles := input_style_set()
 	chat_input.add_theme_stylebox_override("normal", input_styles["normal"])
 	chat_input.add_theme_stylebox_override("focus", input_styles["focus"])
@@ -3490,11 +3535,11 @@ func show_chat_panel() -> void:
 	)
 	var custom_input_title := make_label(chat_panel, "自定义消息", 9, Color(0.74, 0.86, 0.76), true)
 	custom_input_title.name = "ChatPanelCustomMessageLabel"
-	apply_rect(custom_input_title, rect_full(0.060, 0.630, 0.400, 0.690) if compact_chat else rect_full(0.400, 0.735, 0.680, 0.765))
+	apply_rect(custom_input_title, rect_full(0.060, 0.670, 0.400, 0.720) if compact_chat else rect_full(0.400, 0.735, 0.680, 0.765))
 	custom_input_title.tooltip_text = "输入自定义消息后按 Enter 或点击发送"
 	custom_input_title.set_meta("accessible_name", "自定义消息分组")
 	configure_clipped_label(custom_input_title)
-	apply_rect(chat_input, rect_full(0.045, 0.700 if compact_chat else 0.805, 0.725 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
+	apply_rect(chat_input, rect_full(0.045, 0.720 if compact_chat else 0.805, 0.725 if compact_chat else 0.690, 0.985 if compact_chat else 0.945))
 	if compact_chat:
 		# The compact drawer can be only about 110px tall. Give the input its
 		# full 44px lane inside that fixed-height surface instead of relying on
@@ -3515,13 +3560,13 @@ func show_chat_panel() -> void:
 	send_button.tooltip_text = "发送当前消息 · Enter"
 	send_button.set_meta("ui_button_role", "chat_send")
 	send_button.set_meta("hit_rect_stable", true)
-	apply_rect(send_button, rect_full(0.730 if compact_chat else 0.710, 0.700 if compact_chat else 0.805, 0.995 if compact_chat else 0.940, 0.985 if compact_chat else 0.945))
+	apply_rect(send_button, rect_full(0.730 if compact_chat else 0.710, 0.720 if compact_chat else 0.805, 0.995 if compact_chat else 0.940, 0.985 if compact_chat else 0.945))
 	chat_panel.add_child(send_button)
 	var cooldown_label := make_label(chat_panel, "发送 · 可用", 9, Color(1.0, 0.82, 0.48), true)
 	cooldown_label.name = "ChatSendCooldownLabel"
 	# Keep send status in its own stable slot instead of painting it on top of the
 	# disabled send button. The header slot remains visible throughout cooldown.
-	apply_rect(cooldown_label, rect_full(0.410, 0.630, 0.680, 0.690) if compact_chat else rect_full(0.060, 0.720, 0.680, 0.790))
+	apply_rect(cooldown_label, rect_full(0.410, 0.670, 0.680, 0.720) if compact_chat else rect_full(0.060, 0.720, 0.680, 0.790))
 	cooldown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cooldown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	cooldown_label.visible = true
@@ -3621,6 +3666,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	back.name = "DailyLoginBackButton"
 	back.custom_minimum_size = Vector2(100, 46)
 	back.add_theme_font_size_override("font_size", 15)
+	set_ui_full_text(back, "返回主菜单 · Esc关闭每日签到", "返回主菜单")
+	back.set_meta("ui_navigation_role", "page_back")
 	draw_secondary_back_button_art(back, "daily_login", Color(0.36, 0.26, 0.16))
 	for child in back.get_children():
 		if child is CanvasItem:
@@ -3825,6 +3872,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		if claimed_button != null and is_instance_valid(claimed_button):
 			claimed_button.text = "已领取"
 			claimed_button.disabled = true
+			claimed_button.tooltip_text = "今日奖励已领取；明日可继续签到"
+			claimed_button.set_meta("claim_state", "claimed")
+			claimed_button.set_meta("ui_full_text", claimed_button.tooltip_text)
 			claimed_button.visible = false
 			claimed_button.focus_mode = Control.FOCUS_NONE
 			claimed_button.modulate = Color(0.72, 0.76, 0.68, 0.72)
@@ -3865,6 +3915,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	confirm_btn.custom_minimum_size = Vector2(220, 50)
 	confirm_btn.name = "DailyLoginClaimButton"
 	set_ui_full_text(confirm_btn, "今日奖励已领取" if claimed_today else "领取今日签到奖励", "签到奖励操作：" + ("已领取" if claimed_today else "可领取"))
+	confirm_btn.set_meta("claim_state", "claimed" if claimed_today else "available")
+	confirm_btn.tooltip_text = "今日奖励已领取" if claimed_today else "领取今日签到奖励；领取后奖励立即入账"
 	mark_ui_optimization(confirm_btn, "F-409")
 	mark_ui_optimization(confirm_btn, "F-492")
 	confirm_button_ref["button"] = confirm_btn
@@ -5113,6 +5165,15 @@ func render_replay_archive_list() -> void:
 		var empty := make_label(list, empty_text, 12, Color(0.62, 0.72, 0.68), false)
 		empty.name = "ReplayArchiveEmpty"
 		empty.custom_minimum_size = Vector2(0, 44)
+		set_ui_full_text(empty, empty_text, "本地回放归档空状态")
+		if replay_search_query != "":
+			var clear_search := make_small_button("清空搜索", Color(0.42, 0.34, 0.30), func() -> void:
+				set_replay_search_query("")
+			)
+			clear_search.name = "ReplayArchiveClearSearchButton"
+			clear_search.custom_minimum_size = Vector2(120, UI_MIN_TOUCH_TARGET)
+			set_ui_full_text(clear_search, "清空搜索并显示全部本地回放", "清空本地回放搜索")
+			list.add_child(clear_search)
 		if previous_focus_name != "":
 			previous_focus_name = "ReplayArchiveSearchInput"
 		configure_button_focus_navigation(archive_pane, "", false)

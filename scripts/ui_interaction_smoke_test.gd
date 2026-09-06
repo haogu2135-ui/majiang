@@ -2191,6 +2191,15 @@ func run() -> void:
 	scene.show_replay_import_screen(true)
 	await settle(0.10)
 	var replay_archive_rows := scene.find_child("ReplayArchiveList", true, false) as Control
+	scene.set_replay_search_query("UI-SMOKE-NO-MATCH")
+	await settle(0.05)
+	var replay_archive_clear_search := scene.find_child("ReplayArchiveClearSearchButton", true, false) as Button
+	check(replay_archive_clear_search != null and replay_archive_clear_search.custom_minimum_size.y >= 44.0 and replay_archive_clear_search.tooltip_text.contains("清空搜索") and str(replay_archive_clear_search.get_meta("ui_full_text", "")).contains("显示全部"), "empty replay search exposes a touch-sized clear-search action with a complete recovery description")
+	if replay_archive_clear_search != null:
+		replay_archive_clear_search.pressed.emit()
+		await settle(0.05)
+	var restored_replay_archive_rows := replay_archive_rows.find_children("ReplayArchiveRow_*", "Control", true, false) if replay_archive_rows != null else []
+	check(scene.replay_search_query == "" and scene.find_child("ReplayArchiveClearSearchButton", true, false) == null and restored_replay_archive_rows.size() == replay_archive_fixture_entries.size(), "clear-search action restores the complete replay archive list")
 	var replay_archive_entry_a := replay_archive_fixture_entries[0] as Dictionary
 	var replay_archive_id_a := str(replay_archive_entry_a.get("archive_id", ""))
 	var replay_archive_node_key := replay_archive_id_a.left(12).replace(":", "_")

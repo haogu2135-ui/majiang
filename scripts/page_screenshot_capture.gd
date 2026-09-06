@@ -356,7 +356,9 @@ func validate_reset_progress_fixture(scene: Node) -> bool:
 	var row_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
 	var reset_button := scene.find_child("SettingRowButton_本地进度", true, false) as Button
 	var confirm_art := scene.find_child("ResetProgressConfirmArt", true, false)
-	var valid: bool = scene.reset_progress_confirming and row_status != null and row_status.tooltip_text.contains("再次点击确认") and (row_status.text == "再次确认" or row_status.text.contains("再次点击确认")) and reset_button != null and reset_button.text == "确认清空" and reset_button.tooltip_text.contains("确认清空") and confirm_art != null
+	var compact_status_valid := row_status != null and (row_status.text == "再次确认" or row_status.text.contains("再次点击确认") or row_status.text.contains("点击确认清空"))
+	var full_status_valid := row_status != null and row_status.tooltip_text.contains("再次点击确认") and str(row_status.get_meta("ui_full_text", "")).contains("再次点击确认")
+	var valid: bool = scene.reset_progress_confirming and compact_status_valid and full_status_valid and reset_button != null and reset_button.text == "确认清空" and reset_button.tooltip_text.contains("确认清空") and confirm_art != null
 	return valid
 
 func validate_telemetry_fixture(scene: Node, screen_name: String) -> bool:

@@ -237,6 +237,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"ReplayArchiveRowResult",
 	"ReplayArchiveRowSecondary",
 	"ReplayArchiveSearchInput",
+	"ReplayArchiveClearSearchButton",
 	"ReplayArchiveTitle",
 	"ReplayArchiveDeleteConfirmBadge",
 	"ReplayArchiveDeleteConfirmLabel",

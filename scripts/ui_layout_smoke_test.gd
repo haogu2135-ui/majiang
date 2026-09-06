@@ -48,6 +48,10 @@ func run() -> void:
 	if not quick_smoke:
 		await run_safe_area_layout_probe(SAFE_AREA_PROBE_VIEWPORT, SAFE_AREA_PROBE_MARGINS)
 		await run_continuous_resize_capacity_probe()
+	# Scene teardown is deferred in Godot. Drain the delete queue before quitting
+	# so detached page fixtures cannot be mistaken for runtime resource leaks.
+	for _drain_step in range(4):
+		await process_frame
 	if failed:
 		quit(1)
 	else:
@@ -392,7 +396,7 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 			var archive_rect := screen_rect(archive_button)
 			var archive_label = archive_button.find_child("DiscardRiverArchiveLabel_%d" % seat, true, false) as Label
 			check(archive_rect.size.x >= 44.0 and archive_rect.size.y >= 44.0 and archive_button.get_combined_minimum_size().x <= archive_rect.size.x + 1.0, "river %d archive entry remains a readable 44px target at %s" % [seat, viewport_size])
-			check(archive_label != null and str(archive_label.text).contains("历史") and str(archive_label.text).contains(archive_button.text) and relative_luma(archive_label.get_theme_color("font_color")) >= 0.88 and archive_rect.grow(1.0).encloses(screen_rect(archive_label)), "river %d archive entry exposes a labelled history action above the authored art at %s" % [seat, viewport_size])
+			check(archive_label != null and str(archive_label.text) == str(archive_button.get_meta("visible_summary", "")) and not str(archive_label.text).contains("查看") and archive_label.tooltip_text == archive_button.tooltip_text and relative_luma(archive_label.get_theme_color("font_color")) >= 0.88 and archive_rect.grow(1.0).encloses(screen_rect(archive_label)), "river %d archive entry keeps a short visible window summary with the full history detail available on focus at %s" % [seat, viewport_size])
 		if seat == scene.get_last_discard_seat():
 			var recent = scene.find_child("RecentDiscardTile_%d" % seat, true, false) as Control
 			check(recent != null and int(recent.get_meta("discard_source_index", -1)) == scene.get_discards(seat).size() - 1 and str(recent.get_meta("discard_tile_code", "")) == str(scene.get_discards(seat)[-1]), "river %d retains one accurate latest-discard marker at capacity at %s" % [seat, viewport_size])
@@ -1259,6 +1263,10 @@ func check_update_dialog_layout(scene, viewport_size: Vector2) -> void:
 					check(not rects_overlap(screen_rect(content_nodes[i]).grow(-1.0), screen_rect(content_nodes[j]).grow(-1.0)), "update %s lanes %s and %s do not overlap at %s" % [state, content_nodes[i].name, content_nodes[j].name, viewport_size])
 		check(status != null and not status.text.contains("...") and status.tooltip_text == scene.update_message, "update %s status keeps full state text and its detail tooltip at %s" % [state, viewport_size])
 		check(progress != null and not progress.text.contains("...") and progress.tooltip_text == progress.text and progress.text.contains("%") and progress.text.contains("/") and (progress.text.contains("检查") or progress.text.contains("下载") or progress.text.contains("校验") or progress.text.contains("最新") or progress.text.contains("失败")), "update %s progress keeps stage, percentage, and byte status in one compact readable label at %s" % [state, viewport_size])
+		if progress_bar != null:
+			check(int(progress_bar.get_meta("progress_percent", -1)) == int(round(progress_bar.value)) and str(progress_bar.get_meta("progress_bytes", "")).contains("/") and str(progress_bar.get_meta("accessible_name", "")).contains("更新下载进度"), "update %s progress bar exposes the same percentage and byte source as its visible progress label at %s" % [state, viewport_size])
+		if primary != null and (state == "checking" or state == "downloading" or state == "current"):
+			check(primary.disabled and str(primary.get_meta("disabled_reason", "")) != "", "update %s primary action explains why it is disabled at %s" % [state, viewport_size])
 		if notes_label != null and scene.update_release_notes != "":
 			check(notes_label.text == scene.update_release_notes_summary_line() and notes_label.tooltip_text == scene.update_release_notes, "update %s release notes have one dedicated readable summary lane at %s" % [state, viewport_size])
 			if state == "ready" or state == "current":
@@ -1940,7 +1948,7 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	if panel != null:
 		for quick_button in quick_buttons:
 			var quick_rect := screen_rect(quick_button)
-			check(screen_rect(panel).grow(1.0).encloses(quick_rect) and quick_rect.size.x >= 46.0 and quick_rect.size.y >= 26.0, "online chat quick action %s stays readable and touchable at %s" % [quick_button.text, viewport_size])
+			check(screen_rect(panel).grow(1.0).encloses(quick_rect) and quick_rect.size.x >= 46.0 and quick_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5 and str(quick_button.get_meta("chat_action_role", "")) == "quick_message" and quick_button.get_meta("ui_full_text", "") != "", "online chat quick action %s keeps its full touch target and message semantics at %s" % [quick_button.text, viewport_size])
 	if panel != null and input != null and quick_row != null:
 		var input_rect := screen_rect(input)
 		var quick_row_rect := screen_rect(quick_row)
@@ -1951,9 +1959,9 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	var saved_chat_timestamp: int = int(scene.online_last_chat_sent_msec)
 	scene.online_last_chat_sent_msec = Time.get_ticks_msec()
 	scene.update_chat_send_cooldown(scene.online_last_chat_sent_msec + 100)
-	check(cooldown_label != null and cooldown_label.visible and cooldown_label.text.contains("冷却") and cooldown_label.tooltip_text.contains("冷却") and send_button != null and send_button.disabled and quick_buttons.all(func(button: Button) -> bool: return button.disabled), "online chat exposes and enforces the send cooldown in a stable status lane at %s" % viewport_size)
+	check(cooldown_label != null and cooldown_label.visible and cooldown_label.text.contains("冷却") and cooldown_label.tooltip_text.contains("冷却") and send_button != null and send_button.disabled and str(send_button.get_meta("disabled_reason", "")).contains("冷却") and quick_buttons.all(func(button: Button) -> bool: return button.disabled and str(button.get_meta("disabled_reason", "")).contains("冷却")), "online chat exposes and enforces the send cooldown with an explicit disabled reason at %s" % viewport_size)
 	scene.update_chat_send_cooldown(scene.online_last_chat_sent_msec + scene.ONLINE_CHAT_COOLDOWN_MSEC + 1)
-	check(cooldown_label != null and cooldown_label.visible and cooldown_label.text.contains("可用"), "online chat keeps the status lane readable after the wait at %s" % viewport_size)
+	check(cooldown_label != null and cooldown_label.visible and cooldown_label.text.contains("可用") and send_button != null and send_button.disabled and str(send_button.get_meta("disabled_reason", "")).contains("请输入"), "online chat restores the empty-input disabled state after the wait at %s" % viewport_size)
 	scene.online_last_chat_sent_msec = saved_chat_timestamp
 	scene.update_chat_send_cooldown()
 	check(close_button != null and close_button.has_focus(), "online chat opens with focus in the close action at %s" % viewport_size)
@@ -2972,6 +2980,9 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	check(roster_texture_path.ends_with("ui_dark_scrim.png") and log_list_texture_path.ends_with("ui_dark_scrim.png"), "online lobby reading panels use the low-frequency dark bitmap substrate at %s" % viewport_size)
 	check(room_offline_state != null and not room_status_art.visible and not roster_panel.visible and not log_list_panel.visible, "disconnected lobby hides stale room, roster, and log content behind an explicit empty state at %s" % viewport_size)
 	check(scene.online_room.is_empty() and room_offline_state != null and room_offline_state.text == "连接后显示房间、席位和日志", "disconnected lobby clears the room snapshot and explains the empty state at %s" % viewport_size)
+	check(log_latest_button != null and log_latest_button.text == "最新" and str(log_latest_button.get_meta("ui_button_role", "")) == "log_latest" and str(log_latest_button.get_meta("ui_full_text", "")).contains("最新"), "online lobby keeps the latest-log CTA visually stable while preserving its full action detail at %s" % viewport_size)
+	check(log_unread_label != null and str(log_unread_label.get_meta("ui_status_role", "")) == "log_unread" and str(log_unread_label.get_meta("ui_full_text", "")) != "", "online lobby exposes a separate unread status lane instead of growing the latest button label at %s" % viewport_size)
+	check(log_count_badge != null and int(log_count_badge.get_meta("log_count", -1)) >= 0 and str(log_count_badge.get_meta("ui_full_text", "")).contains("房间日志"), "online lobby count badge keeps its total-log meaning independent of the unread state at %s" % viewport_size)
 	if room_badge != null and room_badge.get_child_count() > 0:
 		var room_badge_label = scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		check(room_badge_label != null and room_badge_label.text == "房间号 连接后显示", "disconnected lobby replaces the room badge with a connection-state hint at %s" % viewport_size)
