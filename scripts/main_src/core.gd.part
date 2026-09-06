@@ -2110,14 +2110,22 @@ func game_table_pixel_size() -> Vector2:
 	# nested anchors used by the table host so tile density and visible geometry
 	# stay aligned at every viewport instead of relying on the old 3D multipliers.
 	var content_size := safe_content_pixel_size()
+	var table_outer := table_outer_rect_for_viewport()
 	var outer_size := Vector2(
-		content_size.x * maxf(0.001, TABLE_OUTER_RECT.size.x - TABLE_OUTER_RECT.position.x),
-		content_size.y * maxf(0.001, TABLE_OUTER_RECT.size.y - TABLE_OUTER_RECT.position.y)
+		content_size.x * maxf(0.001, table_outer.size.x - table_outer.position.x),
+		content_size.y * maxf(0.001, table_outer.size.y - table_outer.position.y)
 	)
 	return Vector2(
 		outer_size.x * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x),
 		outer_size.y * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
 	)
+
+func table_outer_rect_for_viewport() -> Rect2:
+	# Give 16:9 desktop viewports more of the authored table surface while
+	# retaining the compact safe area used by 960/1280 captures.
+	if effective_viewport_size().x >= 1600.0:
+		return Rect2(Vector2(0.095, 0.085), Vector2(0.905, 0.820))
+	return TABLE_OUTER_RECT
 
 func effective_viewport_size() -> Vector2:
 	var viewport_size = get_viewport_rect().size
@@ -3367,10 +3375,11 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
 	var safe_width = maxf(1.0, resolved_size.x)
 	var safe_height = maxf(1.0, resolved_size.y)
-	var outer_width = maxf(0.001, TABLE_OUTER_RECT.size.x - TABLE_OUTER_RECT.position.x)
-	var outer_height = maxf(0.001, TABLE_OUTER_RECT.size.y - TABLE_OUTER_RECT.position.y)
-	var table_left = TABLE_OUTER_RECT.position.x + TABLE_INNER_RECT.position.x * outer_width
-	var table_top = TABLE_OUTER_RECT.position.y + TABLE_INNER_RECT.position.y * outer_height
+	var table_outer := table_outer_rect_for_viewport()
+	var outer_width = maxf(0.001, table_outer.size.x - table_outer.position.x)
+	var outer_height = maxf(0.001, table_outer.size.y - table_outer.position.y)
+	var table_left = table_outer.position.x + TABLE_INNER_RECT.position.x * outer_width
+	var table_top = table_outer.position.y + TABLE_INNER_RECT.position.y * outer_height
 	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
 	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
 	var context_height_px := 64.0 if effective_viewport_size().y <= 560.0 else (72.0 if effective_viewport_size().y < 900.0 else 84.0)
@@ -3587,6 +3596,8 @@ func finalize_action_bar_layout() -> void:
 						response.set_meta("pending_claim_visual_order", response_index)
 						response.name = "PendingClaimPrimaryButton" if response_index == 0 else "PendingClaimButton_%s_%02d" % [action_key, response_index]
 						response.set_meta("pending_claim_default", response_index == 0)
+						response.set_meta("min_touch_size", Vector2(PENDING_CLAIM_BUTTON_MIN_WIDTH, ACTION_BUTTON_HEIGHT))
+						response.set_meta("keyboard_visual_order", response_index)
 						var response_shortcut := action_button_shortcut_hint(response.text)
 						set_ui_full_text(response, response.text + ("；快捷键 " + response_shortcut if response_shortcut != "" else ""), "响应动作：" + response.text)
 						mark_ui_optimization(response, "F-574")
@@ -3753,7 +3764,11 @@ func ended_action_bar_required_width(count: int) -> float:
 	return required
 
 func action_bar_button_count() -> int:
-	return action_bar_buttons().size()
+	var count := 0
+	for button in action_bar_buttons():
+		if button != null and not bool(button.get_meta("non_game_action", false)):
+			count += 1
+	return count
 
 func action_bar_buttons() -> Array[Button]:
 	var buttons: Array[Button] = []
@@ -8152,8 +8167,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	row.move_child(stats_row_plate, 0)
 	draw_stat_row_art(row, label_text, value_text)
 	var wide_stats_row := effective_viewport_size().x >= 1600.0
-	var value_left := 0.565 if wide_stats_row else 0.545
-	var value_right := 0.835 if wide_stats_row else 0.955
+	var value_left := 0.535 if wide_stats_row else 0.545
+	var value_right := 0.940 if wide_stats_row else 0.955
 	var value_plate = make_gpt_center_crop_plate_rect(rect_full(value_left, 0.090, value_right, 0.910), Color(0.016, 0.030, 0.028, 0.58), "ui_dark_scrim", 0.18)
 	value_plate.name = "StatsRowValuePanel_%s" % label_text
 	row.add_child(value_plate)
@@ -8168,6 +8183,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	label.name = "StatsRowLabel_%s" % label_text
 	apply_rect(label, rect_full(0.080, 0.120, 0.480, 0.880))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	label.set_meta("stats_column", "label")
 	configure_clipped_label(label)
 	set_ui_full_text(label, label_text, "统计项目：" + label_text)
 	mark_ui_optimization(label, "F-474")
@@ -8178,6 +8194,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	value.name = "StatsRowValueLabel_%s" % label_text
 	apply_rect(value, rect_full(value_left + 0.030, 0.120, value_right - 0.030, 0.880))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value.set_meta("stats_column", "value")
 	var value_detail := "负向 · 损失：%s" % value_text if numeric_value < 0.0 else ("零值：%s" % value_text if is_zero_approx(numeric_value) else value_text)
 	value.tooltip_text = value_detail
 	configure_clipped_label(value)
@@ -8504,9 +8521,11 @@ func chat_panel_rect() -> Rect2:
 	# The drawer is selected from several authored safe lanes. A fixed choice used
 	# to cover whichever side happened to contain a meld; scoring the candidates
 	# keeps the reading surface and its 44px controls away from active table data.
+	var upper_left_right := 0.280 if effective_viewport_size().x >= 1600.0 else 0.305
+	var upper_left_bottom := 0.320 if effective_viewport_size().x >= 1600.0 else 0.420
 	var candidates: Array[Rect2] = [
 		rect_full(0.690, 0.110, 0.885, 0.420),
-		rect_full(0.015, 0.110, 0.305, 0.420),
+		rect_full(0.015, 0.110, upper_left_right, upper_left_bottom),
 		rect_full(0.015, 0.455, 0.305, 0.765),
 		rect_full(0.660, 0.455, 0.985, 0.765),
 	]
@@ -8523,7 +8542,8 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 	var candidate_geometry := Rect2(candidate.position, candidate.size - candidate.position)
 	var occupied: Array[Rect2] = []
 	for layout in SEAT_LAYOUTS:
-		occupied.append(Rect2((layout[1] as Rect2).position, (layout[1] as Rect2).size - (layout[1] as Rect2).position))
+		var seat_rect: Rect2 = layout[1]
+		occupied.append(Rect2(seat_rect.position, seat_rect.size - seat_rect.position))
 	for layout in MELD_LAYOUTS:
 		var meld_seat := int(layout[0])
 		if get_melds(meld_seat).is_empty():
@@ -8554,10 +8574,11 @@ func chat_panel_table_anchor_rect(table_rect: Rect2) -> Rect2:
 	# Rivers and the center console are nested inside TABLE_OUTER/INNER, while
 	# chat candidates are anchored directly to root_layer. Convert them before
 	# scoring so a safe drawer cannot be chosen on top of a public river.
-	var outer_width := maxf(0.001, TABLE_OUTER_RECT.size.x - TABLE_OUTER_RECT.position.x)
-	var outer_height := maxf(0.001, TABLE_OUTER_RECT.size.y - TABLE_OUTER_RECT.position.y)
-	var table_left := TABLE_OUTER_RECT.position.x + TABLE_INNER_RECT.position.x * outer_width
-	var table_top := TABLE_OUTER_RECT.position.y + TABLE_INNER_RECT.position.y * outer_height
+	var table_outer := table_outer_rect_for_viewport()
+	var outer_width := maxf(0.001, table_outer.size.x - table_outer.position.x)
+	var outer_height := maxf(0.001, table_outer.size.y - table_outer.position.y)
+	var table_left := table_outer.position.x + TABLE_INNER_RECT.position.x * outer_width
+	var table_top := table_outer.position.y + TABLE_INNER_RECT.position.y * outer_height
 	var table_width := outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
 	var table_height := outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
 	var left := table_left + table_rect.position.x * table_width

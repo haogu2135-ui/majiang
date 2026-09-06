@@ -503,7 +503,7 @@ func render_game() -> void:
 	# The battle background already supplies the authored table surface. Keep the
 	# table nodes as geometry hosts so board children retain their coordinates,
 	# but do not repaint a second full-size high-frequency plate over the room.
-	var outer = make_layout_host(TABLE_OUTER_RECT)
+	var outer = make_layout_host(table_outer_rect_for_viewport())
 	outer.name = "OfflineTable3DOuterShell"
 	root_layer.add_child(outer)
 	var table = make_layout_host(TABLE_INNER_RECT)

@@ -968,14 +968,14 @@ const MELD_LAYOUTS := [
 	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.205, 0.740))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
-const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.345), Vector2(0.595, 0.635))
+const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.300), Vector2(0.595, 0.635))
 const CENTER_INNER_RECT := Rect2(Vector2(0.17, 0.14), Vector2(0.83, 0.78))
 const CENTER_PHASE_RIBBON_RECT := Rect2(Vector2(0.20, 0.040), Vector2(0.80, 0.125))
 const CENTER_STATUS_RECT := Rect2(Vector2(0.15, 0.13), Vector2(0.85, 0.27))
-const CENTER_WALL_LABEL_RECT := Rect2(Vector2(0.38, 0.30), Vector2(0.62, 0.42))
-const CENTER_WALL_COUNT_RECT := Rect2(Vector2(0.35, 0.39), Vector2(0.65, 0.58))
-const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.38, 0.60), Vector2(0.62, 0.69))
-const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.675), Vector2(0.595, 0.935))
+const CENTER_WALL_LABEL_RECT := Rect2(Vector2(0.34, 0.255), Vector2(0.66, 0.345))
+const CENTER_WALL_COUNT_RECT := Rect2(Vector2(0.33, 0.350), Vector2(0.67, 0.500))
+const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635))
+const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
 	Rect2(Vector2(0.43, 0.05), Vector2(0.57, 0.22)),
@@ -1044,12 +1044,12 @@ const HAND_TILE_ASPECT := 1.36
 const HAND_MIN_GROUP_GAP := 6.0
 const HAND_TRAY_RECT := Rect2(Vector2(0.185, 0.815), Vector2(0.985, 0.985))
 const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
-const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.145), Vector2(0.988, 0.170))
+const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.190), Vector2(0.988, 0.218))
 const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
 const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.760, 0.040), Vector2(0.970, 0.145))
 # Keep a dedicated top prompt lane above the clickable tile row. The 0.250
 # boundary still preserves the minimum touch width at the compact 960x540 gate.
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.285), Vector2(0.985, 0.99))
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.250), Vector2(0.985, 0.99))
 const HAND_LAYOUT_CANDIDATES := [
 	[8.0, 5],
 	[6.0, 4],
@@ -2205,6 +2205,9 @@ func make_top_hud_button(text: String, color: Color, callback: Callable) -> Butt
 	button.set_meta("ui_action_name", text)
 	button.text = ""
 	button.custom_minimum_size = TOP_HUD_BUTTON_SIZE
+	button.set_meta("ui_min_touch_target", TOP_HUD_BUTTON_SIZE)
+	button.set_meta("layout_role", "top_hud_action")
+	button.set_meta("visual_hit_rect_contract", "single_rect_56x44")
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.add_theme_font_size_override("font_size", 1)

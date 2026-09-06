@@ -695,16 +695,6 @@ func draw_action_dock(parent: Control) -> void:
 		status_tooltip = online_recovery_detail_text()
 		status_color = Color(0.92, 0.76, 0.46, 0.92)
 		status_priority = true
-		# Keep a stable escape route in the same recovery dock without adding it to
-		# the game action count. The board remains read-only until the user reconnects.
-		var lobby_button := make_action_button("大厅", Color(0.46, 0.52, 0.56), Callable(self, "show_online_lobby").bind(true))
-		lobby_button.name = "OnlineDisconnectedLobbyButton"
-		lobby_button.tooltip_text = "返回联机大厅，保留当前牌局以便稍后重连"
-		lobby_button.set_meta("recovery_route", true)
-		apply_rect(lobby_button, rect_full(0.055, 0.300, 0.405, 0.950))
-		dock.add_child(lobby_button)
-		dock.z_index = max(19, action_bar.z_index + 1)
-		lobby_button.z_index = 1
 	elif mode == "online_game" and online_retry_available:
 		status_text = "未响应 · 可重试"
 		status_tooltip = "服务器暂未响应，可以重试上一次操作"
@@ -811,8 +801,24 @@ func draw_actions(parent: Control) -> void:
 		apply_rect(action_bar, action_bar_layout_rect())
 		parent.add_child(action_bar)
 		action_bar.add_child(reconnect_button)
+		reconnect_button.set_meta("recovery_route", true)
+		reconnect_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
+		var lobby_button := make_action_button("大厅", Color(0.46, 0.52, 0.56), Callable(self, "show_online_lobby").bind(true))
+		lobby_button.name = "OnlineDisconnectedLobbyButton"
+		lobby_button.tooltip_text = "返回联机大厅，保留当前牌局以便稍后重连"
+		lobby_button.set_meta("recovery_route", true)
+		lobby_button.set_meta("action_priority", "secondary")
+		lobby_button.set_meta("non_game_action", true)
+		lobby_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
+		action_bar.add_child(lobby_button)
 		draw_action_dock(parent)
 		finalize_action_bar_layout()
+		action_bar.set_meta("layout_role", "online_recovery_actions")
+		var recovery_dock := parent.find_child("ActionButtonDock", true, false) as Control
+		action_bar.z_index = 20
+		if recovery_dock != null:
+			action_bar.z_index = max(20, recovery_dock.z_index + 1)
+		configure_ordered_focus_navigation(action_bar, [reconnect_button, lobby_button], "OnlineReconnectGameButton")
 		call_deferred("focus_named_control", "OnlineReconnectGameButton")
 		return
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
@@ -1244,20 +1250,29 @@ func draw_advisor_info_card(parent: Control, rect: Rect2, heading: String, main_
 	draw_advisor_card_signal_route(card, heading, main_text, sub_text, accent)
 	draw_advisor_card_meter(card, heading, main_text, sub_text, accent)
 	var label = make_label(card, heading, 10, accent, true)
+	label.name = "AdvisorCardHeading_%s" % heading
+	label.set_meta("advisor_text_role", "heading")
 	apply_rect(label, rect_full(0.13, 0.07, 0.93, 0.26))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(label)
 	var primary = make_label(card, main_text if main_text != "" else "--", 12, Color(0.86, 0.91, 0.84), true)
+	primary.name = "AdvisorCardPrimary_%s" % heading
+	primary.set_meta("advisor_text_role", "primary")
+	set_ui_full_text(primary, primary.text, "牌势%s主结论" % heading)
 	apply_rect(primary, rect_full(0.13, 0.30, 0.93, 0.56))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
 	var secondary = make_label(card, sub_text if sub_text != "" else "暂无", 10, Color(0.66, 0.74, 0.70), false)
+	secondary.name = "AdvisorCardSecondary_%s" % heading
+	secondary.set_meta("advisor_text_role", "secondary")
+	secondary.set_meta("advisor_detail_route", "AdvisorDetailButton")
+	set_ui_full_text(secondary, secondary.text, "牌势%s完整说明；可打开详解" % heading)
 	apply_rect(secondary, rect_full(0.13, 0.58, 0.93, 0.92))
 	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	secondary.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	secondary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	secondary.clip_text = true
-	secondary.tooltip_text = secondary.text
+	secondary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
 
 func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
@@ -1734,29 +1749,40 @@ func draw_center(parent: Control) -> void:
 	var center_wall_count = get_wall_count()
 	var center_wall_low = wall_is_low(center_wall_count)
 	var center_wall_alpha = 0.72 if center_wall_low else 0.38
+	var compact_center := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 720.0
 	var wall_label_text := wall_state_text(center_wall_count)
-	var wall_label = make_label(center, wall_label_text, 10 if not wall_is_critical(center_wall_count) else 9, Color(0.68, 0.66, 0.54, center_wall_alpha), false)
+	var wall_label = make_label(center, wall_label_text, 9 if compact_center else (10 if not wall_is_critical(center_wall_count) else 9), Color(0.68, 0.66, 0.54, center_wall_alpha), false)
 	wall_label.name = "CenterWallStatusLabel"
+	wall_label.set_meta("layout_role", "center_wall_status")
+	wall_label.set_meta("content_slot", "wall_label")
 	wall_label.tooltip_text = "牌墙剩余 %d/%d 张 · %s" % [center_wall_count, display_wall_total(), wall_state_text(center_wall_count)]
-	apply_rect(wall_label, CENTER_WALL_LABEL_RECT)
-	var wall_text = make_label(center, "%d" % center_wall_count, 19 if center_wall_low else 16, Color(0.86, 0.72, 0.46, 0.78 if center_wall_low else 0.36), true)
-	apply_rect(wall_text, CENTER_WALL_COUNT_RECT)
+	apply_rect(wall_label, rect_full(0.34, 0.220, 0.66, 0.320) if compact_center else CENTER_WALL_LABEL_RECT)
+	var wall_text = make_label(center, "%d" % center_wall_count, 12 if compact_center else (19 if center_wall_low else 16), Color(0.86, 0.72, 0.46, 0.78 if center_wall_low else 0.36), true)
+	wall_text.name = "CenterWallCount"
+	wall_text.set_meta("layout_role", "center_wall_count")
+	apply_rect(wall_text, rect_full(0.33, 0.350, 0.67, 0.490) if compact_center else CENTER_WALL_COUNT_RECT)
 
 	# 上张牌
 	var last = get_last_discard()
 	if last != "":
-		var last_label = make_label(center, "上张", 13, Color(0.72, 0.70, 0.58), false)
-		apply_rect(last_label, CENTER_LAST_LABEL_RECT)
+		var last_label = make_label(center, "上张", 11 if compact_center else 13, Color(0.72, 0.70, 0.58), false)
+		last_label.name = "CenterLastDiscardLabel"
+		last_label.set_meta("layout_role", "center_last_discard_label")
+		apply_rect(last_label, rect_full(0.34, 0.510, 0.66, 0.610) if compact_center else CENTER_LAST_LABEL_RECT)
 		draw_center_last_tile_trace(center, last)
 		play_center_last_discard_feedback(center, last, get_last_discard_seat())
-		var tile = make_tile_view(last, CENTER_LAST_TILE_SIZE, false, Callable(), true)
+		var center_last_tile_size := Vector2(28.0, 38.0) if compact_center else CENTER_LAST_TILE_SIZE
+		var tile = make_tile_view(last, center_last_tile_size, false, Callable(), true)
 		tile.name = "CenterLastDiscardTile"
 		tile.set_meta("latest_visual_owner", "CenterLastDiscardTile")
 		tile.set_meta("discard_tile_code", last)
 		tile.tooltip_text = "当前最后一张牌：%s · 来源：%s" % [tile_label(last), pending_claim_source_name(get_last_discard_seat())]
 		mark_ui_optimization(tile, "F-482")
 		center.add_child(tile)
-		apply_rect(tile, CENTER_LAST_TILE_RECT)
+		if compact_center:
+			apply_centered_rect(tile, Vector2(0.79, 0.82), center_last_tile_size)
+		else:
+			apply_rect(tile, CENTER_LAST_TILE_RECT)
 
 	# 风位标签
 	for i in range(4):
@@ -3781,9 +3807,10 @@ func draw_discards(parent: Control) -> void:
 			# The single river focus marker owns the latest-discard frame; keep the
 			# authored face clean instead of stacking a second per-tile frame.
 			var tile_node = make_tile_view(tile_code, tile_size, false, Callable(), false)
-			# r452: all rivers expand into grid cells for dense porcelain coverage.
-			tile_node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			tile_node.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			# Keep each river face at the measured authored size. The grid may add
+			# empty gutter, but must not stretch one face differently from its peers.
+			tile_node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			tile_node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			tile_node.custom_minimum_size = tile_size
 			# r449: river porcelain must never keep a wall-back fallback texture.
 			var face_tex := tile_node.find_child("TileFaceTexture", true, false) as TextureRect
@@ -3820,7 +3847,10 @@ func draw_discards(parent: Control) -> void:
 			if focus_marker != null:
 				var focus_tile := focus_marker.find_child("LastDiscardFocusActualTile", true, false) as CanvasItem
 				if focus_tile != null:
-					focus_tile.modulate.a = 1.0
+					# Legacy marker fixtures can still contain a face child. The river
+					# tile remains the single visual owner for the latest discard.
+					focus_tile.visible = false
+					focus_tile.modulate.a = 0.0
 	# Pure 2D river tiles: keep ownership overlays above discards without realtime 3D stage.
 	for overlay in foreground_overlays:
 		if overlay != null and is_instance_valid(overlay) and overlay.get_parent() == parent:
@@ -4380,7 +4410,7 @@ func draw_hand(parent: Control) -> void:
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
 	if tutorial_hint_visible:
 		# The prompt owns the tray's top lane; it never sits above a tile hit target.
-		var hint_panel = make_gpt_plate_rect(rect_full(0.02, 0.012, 0.98, 0.250), Color(0.020, 0.042, 0.048, 0.96), "ui_button_face_plate")
+		var hint_panel = make_gpt_plate_rect(rect_full(0.02, 0.012, 0.98, 0.225), Color(0.020, 0.042, 0.048, 0.96), "ui_button_face_plate")
 		hint_panel.name = "HandTrayTutorialHint"
 		tray.add_child(hint_panel)
 		hint_panel.z_index = 8
@@ -4474,9 +4504,9 @@ func draw_hand(parent: Control) -> void:
 	hand_box.z_index = 4
 	apply_rect(hand_box, HAND_TRAY_TILES_RECT)
 	# Keep the 46px compact hit target clear of the tray's bottom lip while
-	# retaining a one-pixel separation from the tutorial lane above it.
-	hand_box.offset_top = -2.0
-	hand_box.offset_bottom = -2.0
+	# retaining a visible separation from the tutorial lane above it.
+	hand_box.offset_top = -0.5
+	hand_box.offset_bottom = -3.0
 	tray.add_child(hand_box)
 
 	# 手牌滑入动画
@@ -5693,7 +5723,7 @@ func seat_meld_face_rotation(seat: int) -> float:
 
 func meld_lane_group_footprint(seat: int, meld: Array, compact_melds: bool) -> float:
 	var vertical := seat_meld_is_vertical(seat)
-	var tile_width := 20.0 if compact_melds else (28.0 if vertical else 26.0)
+	var tile_width := (24.0 if vertical else 22.0) if compact_melds else (28.0 if vertical else 26.0)
 	var separation := 1.0 if compact_melds else 3.0
 	var padding := 2.0 if compact_melds else 8.0
 	var tile_count := maxi(1, meld.size())
@@ -6587,7 +6617,9 @@ func draw_online_feedback_art(parent: Control) -> Control:
 	if online_feedback.strip_edges() == "" and not online_waiting_for_server:
 		return null
 	var accent = online_feedback_accent()
-	var art = make_gpt_route_rail(rect_full(0.505, 0.886, 0.965, 0.946), Color(0.012, 0.030, 0.034, 0.31))
+	var feedback_left := 0.525 if effective_viewport_size().x >= 1600.0 else 0.505
+	var feedback_right := 0.885 if effective_viewport_size().x >= 1600.0 else 0.965
+	var art = make_gpt_route_rail(rect_full(feedback_left, 0.886, feedback_right, 0.946), Color(0.012, 0.030, 0.034, 0.31))
 	art.name = "OnlineFeedbackArt"
 	parent.add_child(art)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -8234,8 +8266,10 @@ func draw_rules_completion_convergence_art(parent: Control) -> Control:
 
 func draw_rules_guide_art(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
-	var art = make_gpt_route_rail(rect_full(0.05, 0.086, 0.820, 0.146), Color(0.030, 0.050, 0.046, 0.84))
+	var guide_right := 0.700 if effective_viewport_size().x >= 1600.0 else 0.820
+	var art = make_gpt_route_rail(rect_full(0.05, 0.086, guide_right, 0.146), Color(0.030, 0.050, 0.046, 0.84))
 	art.name = "RulesGuideArt"
+	art.set_meta("wide_layout_policy", "compact_guide_keep_body_primary")
 	parent.add_child(art)
 	# 国风底板插画替代原 rail/fill/gate/tick/connector/lead_glow 代码自绘装饰
 	var guide_plate = add_optional_gpt_illustration_texture(art, "rules_guide_panel", rect_full(-0.02, -0.05, 1.02, 1.05), 0.20, false)
@@ -8250,7 +8284,7 @@ func draw_rules_guide_art(parent: Control) -> Control:
 	]
 	for i in range(steps.size()):
 		var step = steps[i]
-		var center_x = 0.105 + float(i) * 0.265
+		var center_x = 0.105 + float(i) * ((guide_right - 0.105) / 3.0)
 		var col: Color = step.get("color", Color(0.62, 0.62, 0.42))
 		var node = make_gpt_gate(rect_full(center_x - 0.042, 0.155, center_x + 0.042, 0.825), Color(col.r, col.g, col.b, 0.24))
 		node.name = "RulesGuideStep_%d" % i
@@ -8630,13 +8664,13 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		panel.add_child(top_text_back)
 		var top_name = make_label(panel, seat_compact_display_name(seat, p, 3), 12, Color(1.0, 0.98, 0.90), true)
 		top_name.name = "SeatCompactName_%d" % seat
-		apply_rect(top_name, rect_full(0.220, 0.070, 0.535, 0.385))
+		apply_rect(top_name, rect_full(0.220, 0.070, 0.510 if seat == dealer_seat else 0.610, 0.385))
 		top_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(top_name, true)
 		set_ui_full_text(top_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
 		var top_score = make_label(panel, seat_score_text(p), 11, Color(1.0, 0.94, 0.72), true)
 		top_score.name = "SeatCompactScore_%d" % seat
-		apply_rect(top_score, rect_full(0.700, 0.070, 0.935, 0.385))
+		apply_rect(top_score, rect_full(0.680 if seat == dealer_seat else 0.700, 0.070, 0.935, 0.385))
 		top_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(top_score, true)
 		var top_stats = make_label(panel, seat_hand_flower_text(p), 11, Color(0.96, 0.94, 0.84), false)
@@ -8716,6 +8750,8 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			var side_status_right := 0.500 if side_has_threat else 0.940
 			apply_rect(side_status, rect_full(side_content_left, 0.690 if compact_side else 0.565, side_status_right, 0.800 if compact_side else 0.720))
 			side_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			fit_label_font_size(side_status, maxf(68.0, effective_viewport_size().x * (0.105 if compact_side else 0.130)), 11, 8)
+			set_ui_full_text(side_status, side_status_text, "座位%d最近弃牌状态" % (seat + 1))
 			style_seat_readable_label(side_status, false)
 		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
 		return
@@ -9565,14 +9601,15 @@ func draw_settings_overlay(parent: Control) -> void:
 	var play_section_rect = SETTINGS_PLAY_SECTION_RECT
 	var maint_section_rect = SETTINGS_MAINT_SECTION_RECT
 	var settings_content_parent: Control = null
+	var settings_grid_compact := compact_settings or large_text_enabled
 	var settings_large_text_scroll: ScrollContainer = null
 	var settings_large_text_status: Label = null
 	if compact_settings:
 		# 540px 高度仍保留每行 48px 的点击目标：紧凑分区改为全宽两列，
 		# 让声音、体验和系统都拥有足够的横向按钮空间。
-		audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.455)
-		play_section_rect = rect_full(0.040, 0.473, 0.960, 0.780)
-		maint_section_rect = rect_full(0.040, 0.798, 0.960, 0.995)
+		audio_section_rect = rect_full(0.040, 0.250, 0.960, 0.480)
+		play_section_rect = rect_full(0.040, 0.495, 0.960, 0.835)
+		maint_section_rect = rect_full(0.040, 0.854, 0.960, 0.995)
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -9713,10 +9750,13 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# Large text needs a real scroll viewport: the three authored sections cannot
 	# all fit in the compact panel while preserving readable setting rows.
-	if compact_settings and large_text_enabled:
+	if large_text_enabled:
 		var settings_scroll := ScrollContainer.new()
 		settings_scroll.name = "SettingsLargeTextScroll"
 		configure_scroll_container(settings_scroll, "上下滚动查看全部设置项")
+		settings_scroll.focus_mode = Control.FOCUS_ALL
+		settings_scroll.set_meta("accessible_name", "大字设置滚动区域")
+		settings_scroll.set_meta("focus_contract", "header_to_scroll_to_footer")
 		settings_scroll.set_meta("ui_scroll_role", "settings_sections")
 		settings_scroll.set_meta("ui_minimum_row_height", 56.0)
 		mark_ui_optimization(settings_scroll, "F-557")
@@ -9725,7 +9765,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		panel.add_child(settings_scroll)
 		var settings_content := Control.new()
 		settings_content.name = "SettingsLargeTextContent"
-		settings_content.custom_minimum_size = Vector2(maxf(360.0, settings_viewport.x * 0.680), 690.0)
+		settings_content.custom_minimum_size = Vector2(0.0, 690.0)
 		settings_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		settings_scroll.add_child(settings_content)
 		settings_content_parent = settings_content
@@ -9757,8 +9797,8 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_content_parent = panel
 
 	# 声音设置
-	var audio_grid = make_settings_section(settings_content_parent, audio_section_rect, "声音", compact_settings)
-	audio_grid.columns = 2 if compact_settings else 1
+	var audio_grid = make_settings_section(settings_content_parent, audio_section_rect, "声音", settings_grid_compact)
+	audio_grid.columns = 2 if settings_grid_compact else 1
 	make_setting_row(audio_grid, "背景音乐", "当前: %s" % ("开启" if music_enabled else "关闭"), make_setting_button("音乐", music_enabled, func() -> void:
 		toggle_music_setting()
 	))
@@ -9773,9 +9813,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 
 	# 体验设置
-	var play_grid = make_settings_section(settings_content_parent, play_section_rect, "体验", compact_settings)
+	var play_grid = make_settings_section(settings_content_parent, play_section_rect, "体验", settings_grid_compact)
 	# Six compact controls need two rows to preserve the 48px row target.
-	play_grid.columns = 2 if compact_settings else 1
+	play_grid.columns = 2 if settings_grid_compact else 1
 	make_setting_row(play_grid, "AI 节奏", "当前: %s" % ("快速" if fast_mode_enabled else "标准"), make_setting_selector_button("快速" if fast_mode_enabled else "标准", "AI 节奏", func() -> void:
 		toggle_fast_mode_setting()
 	))
@@ -9796,8 +9836,8 @@ func draw_settings_overlay(parent: Control) -> void:
 	))
 
 	# 系统设置
-	var system_grid = make_settings_section(settings_content_parent, maint_section_rect, "系统", compact_settings)
-	system_grid.columns = 2 if compact_settings else 3
+	var system_grid = make_settings_section(settings_content_parent, maint_section_rect, "系统", settings_grid_compact)
+	system_grid.columns = 3
 	make_setting_row(system_grid, "画面质量", "牌面保持 2D · 仅影响背景和动效", make_graphics_quality_button(func() -> void:
 		cycle_graphics_quality_setting()
 	))
@@ -12165,12 +12205,72 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	if notes_scrollbar != null:
 		notes_scrollbar.visible = false
 		notes_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var notes_scroll_gutter := make_gpt_plate_rect(rect_full(0.805, 0.060, 0.850, 0.900), Color(0.014, 0.030, 0.032, 0.46), "ui_dark_scrim")
+	notes_scroll_gutter.name = "UpdateReleaseNotesScrollGutter"
+	notes_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	update_release_notes_art.add_child(notes_scroll_gutter)
+	var notes_scroll_thumb := make_gpt_plate_rect(rect_full(0.175, 0.050, 0.825, 0.220), Color(0.72, 0.62, 0.34, 0.88), "ui_progress_signal_strip")
+	notes_scroll_thumb.name = "UpdateReleaseNotesScrollThumb"
+	notes_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	notes_scroll_thumb.set_meta("track_top", 0.050)
+	notes_scroll_thumb.set_meta("track_height", 0.900)
+	notes_scroll_thumb.set_meta("track_left", 0.175)
+	notes_scroll_thumb.set_meta("track_right", 0.825)
+	mark_ui_optimization(notes_scroll_thumb, "F-598")
+	notes_scroll_gutter.add_child(notes_scroll_thumb)
+	var notes_scroll_hit_target := Control.new()
+	notes_scroll_hit_target.name = "UpdateReleaseNotesScrollHitTarget"
+	notes_scroll_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
+	notes_scroll_hit_target.mouse_default_cursor_shape = Control.CURSOR_VSIZE
+	notes_scroll_hit_target.custom_minimum_size = Vector2(44.0, 0.0)
+	notes_scroll_hit_target.tooltip_text = "更新说明阅读进度 · 拖动或使用滚轮定位"
+	notes_scroll_hit_target.set_meta("ui_scroll_role", "update_release_notes")
+	notes_scroll_hit_target.set_meta("min_touch_target_px", 44.0)
+	apply_rect(notes_scroll_hit_target, rect_full(0.785, 0.045, 0.875, 0.915))
+	update_release_notes_art.add_child(notes_scroll_hit_target)
+	var notes_scroll_drag_state := {"dragging": false}
+	if notes_scrollbar != null:
+		notes_scrollbar.value_changed.connect(func(_value: float) -> void:
+			sync_update_release_notes_scroll_thumb(notes_scroll, notes_scroll_thumb)
+		)
+		notes_scroll_hit_target.gui_input.connect(func(event: InputEvent) -> void:
+				handle_rules_scroll_thumb_input(event, notes_scroll, notes_scrollbar, notes_scroll_thumb, notes_scroll_gutter, notes_scroll_drag_state, notes_scroll_hit_target, Callable(self, "sync_update_release_notes_scroll_thumb"))
+		)
+	notes_scroll.resized.connect(func() -> void:
+		sync_update_release_notes_scroll_thumb(notes_scroll, notes_scroll_thumb)
+		)
+	call_deferred("sync_update_release_notes_scroll_thumb", notes_scroll, notes_scroll_thumb)
 	update_release_notes_label = make_label(notes_scroll, "", 10, Color(0.84, 0.88, 0.74), true)
 	update_release_notes_label.name = "UpdateReleaseNotesLabel"
 	update_release_notes_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	update_release_notes_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_wrapped_label(update_release_notes_label, maxf(220.0, effective_viewport_size().x * 0.420), 0.0, 4.0)
 	return update_release_notes_art
+
+
+func sync_update_release_notes_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
+	if content_scroll == null or thumb == null:
+		return
+	var scrollbar := content_scroll.get_v_scroll_bar()
+	if scrollbar == null:
+		return
+	var page := maxf(0.0, scrollbar.page)
+	var max_value := maxf(page, scrollbar.max_value)
+	var scroll_range := maxf(0.0, scrollbar.max_value - page)
+	var track_top := float(thumb.get_meta("track_top", 0.050))
+	var track_height := float(thumb.get_meta("track_height", 0.900))
+	var visible_ratio := 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
+	var thumb_height := track_height * visible_ratio
+	var progress := 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
+	var thumb_top := track_top + (track_height - thumb_height) * progress
+	apply_rect(thumb, rect_full(float(thumb.get_meta("track_left", 0.175)), thumb_top, float(thumb.get_meta("track_right", 0.825)), thumb_top + thumb_height))
+	thumb.set_meta("scroll_progress", progress)
+	thumb.set_meta("scroll_position_text", "更新说明阅读进度 %.0f%%" % (progress * 100.0))
+	thumb.tooltip_text = thumb.get_meta("scroll_position_text")
+	var hit_target := update_release_notes_art.find_child("UpdateReleaseNotesScrollHitTarget", true, false) as Control if update_release_notes_art != null and is_instance_valid(update_release_notes_art) else null
+	if hit_target != null:
+		hit_target.tooltip_text = "%s · 拖动或使用滚轮定位" % thumb.get_meta("scroll_position_text")
+		hit_target.set_meta("ui_full_text", hit_target.tooltip_text)
 
 func draw_update_status_convergence_art(parent: Control) -> Control:
 	# r205: GPT status convergence chrome
@@ -12974,6 +13074,8 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 		yaku_scroll.set_meta("ui_scroll_role", "win_detail_yaku")
 		yaku_scroll.set_meta("ui_full_text", "番种详情共%d项，可上下滚动查看" % reasons.size())
 		yaku_scroll.set_meta("accessible_name", "番种详情滚动区")
+		yaku_scroll.set_meta("footer_inset_contract", "detail_panel_footer_reserved")
+		yaku_scroll.set_meta("measurement_source", "detail_panel_content_width_minus_scrollbar")
 		apply_rect(yaku_scroll, rect_full(0.04, 0.30, 0.70, 0.94))
 		detail_panel.add_child(yaku_scroll)
 		var yaku_scrollbar := yaku_scroll.get_v_scroll_bar()
@@ -14046,7 +14148,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	# Preserve the full explanation in the tooltip/accessibility metadata while
 	# showing a scan-friendly status whenever large text would make the detail
 	# collide with the compact row geometry.
-	var visible_status := compact_setting_status(title, status) if compact_settings or large_text_settings else status
+	var visible_status := compact_setting_status(title, status) if compact_settings or large_text_settings or title == "画面质量" or title == "本地进度" else status
 	var status_label = make_label(row, visible_status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
 	set_ui_full_text(status_label, status, title + "完整状态")
@@ -14072,11 +14174,11 @@ func compact_setting_status(title: String, status: String) -> String:
 	if title == "出牌辅助":
 		return "风险: 开" if status.contains("开启") else "风险: 关"
 	if title == "本地进度":
-		return "再次确认" if reset_progress_confirming else "可清空"
+		return "点击确认清空" if reset_progress_confirming else "清空统计/离线记录"
 	if title == "隐私诊断":
 		return "已同意" if status.contains("已同意") else "未同意"
 	if title == "画面质量":
-		return "2D牌面"
+		return "2D牌面·影响背景/动效"
 	if title == "播放测试":
 		return "可试听"
 	if status.begins_with("当前: "):
@@ -14124,7 +14226,10 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	section.add_child(grid)
 	# Compact settings reserve the same 48px row target while tightening only
 	# the decorative title/chrome clearance inside each physical section.
-	apply_rect(grid, rect_full(0.035, 0.050, 0.995, 0.995) if compact else SETTINGS_SECTION_GRID_RECT)
+	# Keep the title in its own lane. The extra compact gap prevents the first
+	# setting row from reading as a continuation of the section heading.
+	var compact_grid_top := 0.195 if large_text_enabled else 0.170
+	apply_rect(grid, rect_full(0.035, compact_grid_top, 0.995, 0.995) if compact else SETTINGS_SECTION_GRID_RECT)
 	return grid
 
 

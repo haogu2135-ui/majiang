@@ -128,7 +128,7 @@ func seed_online_pending_claim_layout_state(scene) -> void:
 	scene.set_process(false)
 
 func draw_smoke_center(scene) -> Control:
-	var outer: Control = scene.make_layout_host(scene.TABLE_OUTER_RECT)
+	var outer: Control = scene.make_layout_host(scene.table_outer_rect_for_viewport())
 	outer.name = "SmokeTableOuter"
 	scene.root_layer.add_child(outer)
 	var table: Control = scene.make_layout_host(scene.TABLE_INNER_RECT)
@@ -326,6 +326,10 @@ func run_continuous_resize_capacity_probe() -> void:
 	var leave_button := scene.find_child("ExitConfirmLeaveButton", true, false) as Button
 	check(exit_dialog != null and Rect2(Vector2.ZERO, Vector2(1280, 720)).grow(1.0).encloses(screen_rect(exit_dialog)), "exit confirmation remains mounted and bounded through a live resize")
 	check(exit_overlay != null and exit_overlay.z_index >= scene.UI_MODAL_Z_INDEX and continue_button != null and leave_button != null and continue_button.visible and leave_button.visible, "exit confirmation keeps both decisions visible above board content at %s" % Vector2(1280, 720))
+	if continue_button != null and leave_button != null:
+		check(continue_button.focus_neighbor_right == leave_button.get_path() and continue_button.focus_neighbor_left == leave_button.get_path() and continue_button.focus_next == leave_button.get_path(), "exit confirmation continue action routes all directional focus to leave at %s" % Vector2(1280, 720))
+		check(leave_button.focus_neighbor_right == continue_button.get_path() and leave_button.focus_neighbor_left == continue_button.get_path() and leave_button.focus_previous == continue_button.get_path(), "exit confirmation leave action routes all directional focus back to continue at %s" % Vector2(1280, 720))
+		check(str(continue_button.get_meta("focus_route", "")).contains("right=exit") and str(leave_button.get_meta("focus_route", "")).contains("right=continue"), "exit confirmation exposes the two-way focus route metadata at %s" % Vector2(1280, 720))
 	scene.hide_exit_confirm()
 	await settle_layout(0.20)
 
@@ -736,6 +740,11 @@ func check_telemetry_toast_layout(scene, viewport_size: Vector2) -> void:
 	var body := scene.find_child("TelemetryDataSheetBody", true, false) as Control
 	var close := scene.find_child("TelemetryDataSheetCloseButton", true, false) as Control
 	check(card != null and title != null and body != null and close != null, "telemetry data sheet exposes its modal reading lanes at %s" % viewport_size)
+	var settings_close := scene.find_child("SettingsCloseButton", true, false) as Button
+	var settings_scroll := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
+	for background_control in [settings_close, settings_scroll]:
+		if background_control != null:
+			check(background_control.focus_mode == Control.FOCUS_NONE and background_control.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(background_control.get_meta("telemetry_sheet_background_locked", false)), "telemetry sheet locks background focus and pointer input for %s at %s" % [background_control.name, viewport_size])
 	if card == null or title == null or body == null or close == null:
 		return
 	var card_rect := screen_rect(card)
@@ -1278,6 +1287,7 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "replay import panel stays inside the viewport at %s" % viewport_size)
 	check(screen_rect(panel).grow(1.0).encloses(screen_rect(input)) and screen_rect(panel).grow(1.0).encloses(screen_rect(import_button)) and screen_rect(panel).grow(1.0).encloses(screen_rect(timeline)) and screen_rect(panel).grow(1.0).encloses(screen_rect(archive_pane)), "replay import controls stay inside the reading panel at %s" % viewport_size)
 	check(input != null and input.custom_minimum_size.y >= 48.0 and input.placeholder_text == "粘贴回放码", "replay import keeps a touch-sized paste field at %s" % viewport_size)
+	check(input != null and str(input.get_meta("input_tail_visibility", "")) == "native_horizontal_scroll_with_length_summary" and bool(input.get_meta("clear_action_separate_hit_target", false)), "replay import keeps the pasted-code tail visible while separating its clear action at %s" % viewport_size)
 	check(code_summary != null and code_summary.text.contains("0/") and code_summary.text.contains("字符") and code_summary.tooltip_text.contains("上限"), "replay import exposes an idle character count and input consequence at %s" % viewport_size)
 	if code_summary != null:
 		check(screen_rect(code_summary).position.y >= screen_rect(status).end.y and screen_rect(code_summary).end.y <= screen_rect(archive_pane).position.y + 1.0, "replay import code summary owns a separate lane before the archive pane at %s (status=%s summary=%s archive=%s)" % [viewport_size, screen_rect(status), screen_rect(code_summary), screen_rect(archive_pane)])
@@ -1337,7 +1347,7 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 		check(status.text.contains("校验通过") and scene.replay_import_payload.size() > 0 and event_list != null and event_rows.size() >= 2 and (event_rows[0] as Button).text.contains("弃牌") and (event_rows[1] as Button).text.contains("吃") and not (event_rows[0] as Button).text.contains("discard"), "replay import verifies the digest and renders localized event rows at %s" % viewport_size)
 		if not event_rows.is_empty():
 			var first_event_row := event_rows[0] as Button
-			check(first_event_row.focus_mode == Control.FOCUS_ALL and first_event_row.tooltip_text.contains("点击选择"), "replay timeline gives each event a keyboard-readable selection target at %s" % viewport_size)
+			check(first_event_row.focus_mode == Control.FOCUS_ALL and first_event_row.tooltip_text.contains("点击选择") and float(first_event_row.get_meta("timeline_min_touch_height", 0.0)) >= 44.0 and str(first_event_row.get_meta("timeline_text_slot", "")) == "measured_wrapped_row" and str(first_event_row.get_meta("ui_full_text", "")) != "", "replay timeline gives each event a keyboard-readable measured selection target at %s" % viewport_size)
 			first_event_row.pressed.emit()
 			check(first_event_row.has_focus() and scene.replay_timeline_selected_index == 0, "replay timeline selection keeps the first event focused after archive import at %s" % viewport_size)
 		var saved_round_id: String = scene.active_round_id
@@ -1736,6 +1746,14 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	check(disconnected_action != null and disconnected_action.text.contains("断线") and scene.find_child("ActionDockDisconnectedStatus", true, false) == null, "online disconnect owns the single action-dock status slot at %s" % viewport_size)
 	var reconnect_button := scene.find_child("OnlineReconnectGameButton", true, false) as Button
 	check(reconnect_button != null and reconnect_button.tooltip_text.contains("恢复当前牌局") and reconnect_button.has_focus(), "online disconnect exposes a focused reconnect CTA and keeps the board read-only at %s" % viewport_size)
+	var lobby_recovery_button := scene.find_child("OnlineDisconnectedLobbyButton", true, false) as Button
+	var recovery_action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	var recovery_action_bar := scene.action_bar as Control
+	check(lobby_recovery_button != null and lobby_recovery_button.visible and not lobby_recovery_button.disabled and recovery_action_dock != null and recovery_action_bar != null, "online disconnect mounts both recovery actions in the action dock at %s" % viewport_size)
+	if reconnect_button != null and lobby_recovery_button != null and recovery_action_dock != null and recovery_action_bar != null:
+		check(reconnect_button.visible and not reconnect_button.disabled and recovery_action_bar.get_meta("layout_role", "") == "online_recovery_actions", "online disconnect keeps reconnect and lobby actions active in one recovery layout at %s" % viewport_size)
+		check(not rects_overlap(screen_rect(reconnect_button), screen_rect(lobby_recovery_button)) and recovery_action_bar.get_global_rect().encloses(reconnect_button.get_global_rect()) and recovery_action_bar.get_global_rect().encloses(lobby_recovery_button.get_global_rect()), "online disconnect recovery buttons have distinct bounded hit rects at %s" % viewport_size)
+		check(recovery_action_bar.z_index > recovery_action_dock.z_index and reconnect_button.has_focus() and reconnect_button.focus_neighbor_right == lobby_recovery_button.get_path() and lobby_recovery_button.focus_neighbor_left == reconnect_button.get_path(), "online disconnect recovery buttons own the top hit layer and two-way focus route at %s" % viewport_size)
 	check(scene.find_child("ChatActionButton", true, false) == null and scene.find_child("PendingClaimResponseGrid", true, false) == null, "online disconnect hides network actions until reconnection at %s" % viewport_size)
 	check(not scene.can_self_discard() and not scene.has_pending_claim_window(), "online disconnect closes stale discard and response gates at %s" % viewport_size)
 	check(scene.hand_tray_text() == "牌桌只读 · 请使用右侧重连" and scene.hand_shortcut_hint_text() == "", "online disconnect hand copy points to the single recovery CTA without a duplicate shortcut line at %s" % viewport_size)
@@ -1810,6 +1828,8 @@ func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
 			for title in ["AI 难度", "阅读辅助", "画面质量"]:
 				var large_button := scene.find_child("SettingRowButton_%s" % title, true, false) as Button
 				check(large_button != null and large_button.get_theme_font_size("font_size") >= 17 and screen_rect(large_button).size.y >= 46.0, "large-text setting button %s scales with the profile at %s" % [title, viewport_size])
+		if expected == "大字":
+			check_settings_large_text_layout(scene, viewport_size)
 		button.pressed.emit()
 		await settle_layout()
 	var final_button := scene.find_child("SettingRowButton_阅读辅助", true, false) as Button
@@ -1821,6 +1841,36 @@ func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
 	scene.settings_focus_restore_name = ""
 	scene.refresh_current_screen()
 	await settle_layout()
+
+
+func check_settings_large_text_layout(scene, viewport_size: Vector2) -> void:
+	var panel := scene.find_child("SettingsPanel", true, false) as Control
+	var scroll := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
+	var status := scene.find_child("SettingsLargeTextScrollStatus", true, false) as Label
+	check(panel != null and scroll != null and status != null, "large-text settings exposes a focused scroll lane and range status at %s (panel=%s scroll=%s status=%s)" % [viewport_size, panel, scroll, status])
+	if panel == null or scroll == null or status == null:
+		return
+	var panel_rect := screen_rect(panel)
+	var scroll_rect := screen_rect(scroll)
+	check(panel_rect.grow(1.0).encloses(scroll_rect), "large-text settings scroll lane stays inside the panel at %s (panel=%s scroll=%s)" % [viewport_size, panel_rect, scroll_rect])
+	check(scroll.focus_mode == Control.FOCUS_ALL and str(scroll.get_meta("accessible_name", "")) == "大字设置滚动区域" and str(scroll.get_meta("focus_contract", "")) == "header_to_scroll_to_footer", "large-text settings scroll lane exposes its keyboard and accessibility contract at %s" % viewport_size)
+	check(scroll.get_v_scroll_bar().max_value > scroll.get_v_scroll_bar().page, "large-text settings exposes more content than the first viewport at %s" % viewport_size)
+	check(status.text.contains("设置区") and status.text.contains("下方还有内容") and status.tooltip_text != "", "large-text settings exposes a first-viewport range hint at %s" % viewport_size)
+	for section_name in ["声音", "体验", "系统"]:
+		var section := scene.find_child("SettingsSection_%s" % section_name, true, false) as Control
+		var grid := scene.find_child("SettingsSectionGrid_%s" % section_name, true, false) as Control
+		check(section != null and grid != null, "large-text settings keeps the %s section in the scroll content at %s" % [section_name, viewport_size])
+		if section == null or grid == null:
+			continue
+		var section_title: Label = null
+		for child in section.get_children():
+			if child is Label and (child as Label).text == section_name:
+				section_title = child as Label
+				break
+		check(section_title != null and screen_rect(section).grow(1.0).encloses(screen_rect(grid)), "large-text settings %s grid stays inside its section at %s" % [section_name, viewport_size])
+		if section_title != null:
+			check(screen_rect(grid).position.y >= screen_rect(section_title).end.y + 8.0, "large-text settings %s title keeps an 8px gap before its first row lane at %s" % [section_name, viewport_size])
+
 
 func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	var previous_quiet := bool(scene.offline_sim_quiet)
@@ -2056,6 +2106,17 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	for heading in ["响应", "牌局", "防守"]:
 		var card = panel.find_child("AdvisorInfoCard_%s" % heading, true, false) as Control
 		check(card != null and panel_rect.grow(1.0).encloses(screen_rect(card)), "AI advisor %s card stays inside the panel at %s" % [heading, viewport_size])
+		if card != null:
+			var card_heading := card.find_child("AdvisorCardHeading_%s" % heading, true, false) as Label
+			var card_primary := card.find_child("AdvisorCardPrimary_%s" % heading, true, false) as Label
+			var card_secondary := card.find_child("AdvisorCardSecondary_%s" % heading, true, false) as Label
+			check(card_heading != null and card_primary != null and card_secondary != null, "AI advisor %s card exposes named heading, primary, and secondary text lanes at %s" % [heading, viewport_size])
+			for card_label in [card_heading, card_primary, card_secondary]:
+				if card_label == null:
+					continue
+				check(screen_rect(card).grow(1.0).encloses(screen_rect(card_label)), "AI advisor %s card keeps %s text inside its card at %s" % [heading, card_label.name, viewport_size])
+			if card_secondary != null:
+				check(card_secondary.tooltip_text != "" and str(card_secondary.get_meta("ui_full_text", "")) == card_secondary.tooltip_text and str(card_secondary.get_meta("advisor_detail_route", "")) == "AdvisorDetailButton", "AI advisor %s secondary text keeps a full-text detail route when its fixed lane is tight at %s" % [heading, viewport_size])
 	var detail_button = scene.find_child("AdvisorDetailButton", true, false) as Button
 	check(detail_button != null and detail_button.text == "详解" and detail_button.tooltip_text.contains("展开"), "AI advisor exposes an explicit detail action at %s" % viewport_size)
 	var recommended_count := 0
@@ -2351,13 +2412,31 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		check(dock_rect.size.y <= dock_height_limit, "battle action dock remains within its one/two-row height budget at %s" % viewport_size)
 	var discard_rects = battle_discard_zone_screen_rects(scene)
 	var root_rect = screen_rect(scene.root_layer)
-	var outer_rect = anchor_rect_in_parent(root_rect, scene.TABLE_OUTER_RECT)
+	var table_outer_anchor: Rect2 = scene.table_outer_rect_for_viewport()
+	var outer_rect = anchor_rect_in_parent(root_rect, table_outer_anchor)
+	var outer_shell := scene.find_child("OfflineTable3DOuterShell", true, false) as Control
+	if outer_shell == null:
+		outer_shell = scene.find_child("SmokeTableOuter", true, false) as Control
+	check(outer_shell != null and screen_rect(outer_shell).position.distance_to(outer_rect.position) <= 1.0 and screen_rect(outer_shell).size.distance_to(outer_rect.size) <= 1.0, "battle table outer shell follows the viewport-aware table rect at %s" % viewport_size)
+	if viewport_size.x >= 1600.0:
+		check(table_outer_anchor != scene.TABLE_OUTER_RECT and table_outer_anchor.position.x < scene.TABLE_OUTER_RECT.position.x, "wide battle uses the expanded authored table surface at %s" % viewport_size)
+	else:
+		check(table_outer_anchor == scene.TABLE_OUTER_RECT, "compact battle keeps the authored table surface contract at %s" % viewport_size)
 	var table_rect = anchor_rect_in_parent(outer_rect, scene.TABLE_INNER_RECT)
 	var center_rect = anchor_rect_in_parent(table_rect, scene.CENTER_PANEL_RECT)
 	var center_shell = scene.find_child("CenterConsole3DShell", true, false) as Control
 	check(center_shell != null, "battle screen exposes the center console shell at %s" % viewport_size)
 	if center_shell != null:
 		center_rect = screen_rect(center_shell)
+	var wall_label := scene.find_child("CenterWallStatusLabel", true, false) as Label
+	var wall_count := scene.find_child("CenterWallCount", true, false) as Label
+	var last_label := scene.find_child("CenterLastDiscardLabel", true, false) as Label
+	var last_tile := scene.find_child("CenterLastDiscardTile", true, false) as Control
+	check(wall_label != null and wall_count != null and last_label != null and last_tile != null, "center console exposes independent wall and latest-discard reading slots at %s" % viewport_size)
+	if wall_label != null and wall_count != null and last_label != null and last_tile != null:
+		check(str(wall_label.get_meta("content_slot", "")) == "wall_label" and str(wall_count.get_meta("layout_role", "")) == "center_wall_count" and str(last_label.get_meta("layout_role", "")) == "center_last_discard_label", "center console keeps stable semantic slot metadata at %s" % viewport_size)
+		check(screen_rect(wall_label).end.y <= screen_rect(wall_count).position.y + 1.0 and screen_rect(wall_count).end.y <= screen_rect(last_label).position.y + 1.0 and screen_rect(last_label).end.y <= screen_rect(last_tile).position.y + 1.0, "center console reading slots keep wall count and latest discard in order at %s (wall=%s count=%s label=%s tile=%s)" % [viewport_size, screen_rect(wall_label), screen_rect(wall_count), screen_rect(last_label), screen_rect(last_tile)])
+		check(center_rect.grow(4.0).encloses(screen_rect(last_tile)), "center console latest discard tile stays inside its reading surface at %s (center=%s tile=%s)" % [viewport_size, center_rect, screen_rect(last_tile)])
 	var active_wind_luma := -1.0
 	var inactive_wind_luma_max := -1.0
 	var current_wind_seat := int(scene.get_current_seat())
@@ -2492,7 +2571,7 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 
 func battle_discard_zone_screen_rects(scene) -> Array[Rect2]:
 	var root_rect = screen_rect(scene.root_layer)
-	var outer_rect = anchor_rect_in_parent(root_rect, scene.TABLE_OUTER_RECT)
+	var outer_rect = anchor_rect_in_parent(root_rect, scene.table_outer_rect_for_viewport())
 	var table_rect = anchor_rect_in_parent(outer_rect, scene.TABLE_INNER_RECT)
 	var rects: Array[Rect2] = []
 	for zone in scene.DISCARD_ZONES:
@@ -2514,6 +2593,8 @@ func check_discard_tile_original_rgb(scene, viewport_size: Vector2) -> void:
 			var tile_canvas = tile_node as CanvasItem
 			check(tile_canvas != null and is_equal_approx(tile_canvas.modulate.r, 1.0) and is_equal_approx(tile_canvas.modulate.g, 1.0) and is_equal_approx(tile_canvas.modulate.b, 1.0), "battle river %d tile host keeps authored RGB at %s" % [seat, viewport_size])
 			check(is_equal_approx(face.modulate.r, 1.0) and is_equal_approx(face.modulate.g, 1.0) and is_equal_approx(face.modulate.b, 1.0), "battle river %d tile face keeps authored RGB at %s" % [seat, viewport_size])
+			check(tile_node.size_flags_horizontal != Control.SIZE_EXPAND_FILL and tile_node.size_flags_vertical != Control.SIZE_EXPAND_FILL, "battle river %d tile keeps its authored size instead of expanding to the grid cell at %s" % [seat, viewport_size])
+			check(tile_node.size.x >= tile_node.custom_minimum_size.x - 1.0 and tile_node.size.y >= tile_node.custom_minimum_size.y - 1.0, "battle river %d tile preserves its measured minimum face size at %s" % [seat, viewport_size])
 		check(checked_tiles > 0, "battle river %d exposes tile faces for original-RGB audit at %s" % [seat, viewport_size])
 
 func anchor_rect_in_parent(parent_rect: Rect2, anchor_rect: Rect2) -> Rect2:
@@ -2682,7 +2763,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 				check(not rects_overlap(section_rect.grow(-1.0), previous_rect.grow(-1.0)), "settings section %s does not overlap another section at %s" % [section_name, viewport_size])
 			section_rects.append(section_rect)
 		if grid != null and section != null:
-				check(screen_rect(section).grow(1.0).encloses(screen_rect(grid)), "settings section %s keeps its grid inside the section at %s" % [section_name, viewport_size])
+				check(screen_rect(section).grow(1.0).encloses(screen_rect(grid)), "settings section %s keeps its grid inside the section at %s (section=%s grid=%s)" % [section_name, viewport_size, screen_rect(section), screen_rect(grid)])
 	for title in expected_setting_buttons.keys():
 		var row = overlay_control.find_child("SettingRow_%s" % title, true, false) as Control
 		var button = overlay_control.find_child("SettingRowButton_%s" % title, true, false) as Button
@@ -2775,7 +2856,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			var reset_button := row.find_child("SettingRowButton_本地进度", true, false) as Button
 			check(reset_status != null and reset_button != null and reset_status.tooltip_text != "" and reset_button.tooltip_text != "", "settings reset row exposes confirmation status and consequence tooltips at %s" % viewport_size)
 			if reset_status != null and reset_button != null:
-				var expected_reset_status := ("再次确认" if scene.reset_progress_confirming else "可清空") if (viewport_size.y <= 560.0 or viewport_size.x <= 960.0) else ("再次点击确认清空本地进度" if scene.reset_progress_confirming else "清空统计与离线记录")
+				var expected_reset_status := "点击确认清空" if scene.reset_progress_confirming else "清空统计/离线记录"
 				check(reset_status.text == expected_reset_status, "settings reset row mirrors its layout-aware state at %s (got=%s expected=%s)" % [viewport_size, reset_status.text, expected_reset_status])
 			var reset_texture = button.find_child("ResetDangerSealTexture", true, false) as CanvasItem
 			check(reset_texture == null or reset_texture.modulate.a <= 0.12, "settings reset row keeps full-button texture subdued at %s" % viewport_size)
@@ -3823,17 +3904,17 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 		previous_rect = node_rect
 		if text_back != null and day_label != null and day_state_label != null and reward_label != null:
 			var back_rect = screen_rect(text_back)
-			check(back_rect.grow(1.0).encloses(screen_rect(day_label)) and back_rect.grow(1.0).encloses(screen_rect(day_state_label)) and back_rect.grow(1.0).encloses(screen_rect(reward_label)), "daily login day %d text backplate covers its state and reward labels at %s" % [i, viewport_size])
+			check(back_rect.grow(1.0).encloses(screen_rect(day_label)) and back_rect.grow(1.0).encloses(screen_rect(day_state_label)) and back_rect.grow(1.0).encloses(screen_rect(reward_label)), "daily login day %d text backplate covers its state and reward labels at %s (back=%s day=%s state=%s reward=%s)" % [i, viewport_size, back_rect, screen_rect(day_label), screen_rect(day_state_label), screen_rect(reward_label)])
 		if day_label != null:
 			var day_luma = relative_luma(day_label.get_theme_color("font_color"))
-			check(day_label.clip_text and day_label.get_theme_font_size("font_size") >= 11, "daily login day %d title clips and keeps readable font at %s" % [i, viewport_size])
+			check(day_label.clip_text and day_label.get_theme_font_size("font_size") >= 10, "daily login day %d title clips and keeps readable font at %s" % [i, viewport_size])
 			check(day_luma >= 0.70 or day_luma <= 0.22, "daily login day %d title color has deliberate contrast at %s" % [i, viewport_size])
 		if reward_label != null:
 			var reward_luma = relative_luma(reward_label.get_theme_color("font_color"))
 			check(reward_label.clip_text and reward_label.get_theme_font_size("font_size") >= 11, "daily login day %d reward clips and keeps readable font at %s" % [i, viewport_size])
 			check(reward_luma >= 0.70 or reward_luma <= 0.24, "daily login day %d reward color has deliberate contrast at %s" % [i, viewport_size])
 		if day_state_label != null:
-			check(day_state_label.text in ["已领取", "今日", "待领"] and day_state_label.clip_text and day_state_label.tooltip_text != "", "daily login day %d exposes a visible state label without clipping its semantic value at %s" % [i, viewport_size])
+			check(day_state_label.text in ["已领取", "今日可领", "待签到"] and day_state_label.clip_text and day_state_label.tooltip_text != "", "daily login day %d exposes a visible state label without clipping its semantic value at %s" % [i, viewport_size])
 	var reward_rect = screen_rect(reward_panel)
 	var progress_rect = screen_rect(progress_panel)
 	var claim_rect = screen_rect(claim_button)

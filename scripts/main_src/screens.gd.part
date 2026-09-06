@@ -119,9 +119,12 @@ func _show_achievements_screen_impl() -> void:
 	var achievements_scroll_up = add_lucide_icon(achievements_scroll_gutter, "chevron-up", rect_full(0.15, 0.008, 0.85, 0.145), Color(0.80, 0.88, 0.74, 0.88))
 	if achievements_scroll_up != null:
 		achievements_scroll_up.name = "AchievementsScrollUpIcon"
-	var achievements_scroll_thumb = make_gpt_plate_rect(rect_full(0.200, 0.055, 0.800, 0.520), Color(0.72, 0.62, 0.34, 0.88), "ui_progress_signal_strip")
+	var achievements_scroll_thumb = make_gpt_plate_rect(rect_full(0.100, 0.055, 0.900, 0.520), Color(0.72, 0.62, 0.34, 0.88), "ui_progress_signal_strip")
 	achievements_scroll_thumb.name = "AchievementsScrollThumb"
 	achievements_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	achievements_scroll_thumb.custom_minimum_size = Vector2(8.0, 16.0)
+	achievements_scroll_thumb.set_meta("min_visible_width_px", 8.0)
+	achievements_scroll_thumb.set_meta("scroll_position_owner", "AchievementsScroll")
 	achievements_scroll_gutter.add_child(achievements_scroll_thumb)
 	var achievements_scroll_down = add_lucide_icon(achievements_scroll_gutter, "chevron-down", rect_full(0.15, 0.855, 0.85, 0.992), Color(0.80, 0.88, 0.74, 0.88))
 	if achievements_scroll_down != null:
@@ -930,10 +933,16 @@ func _show_online_lobby_impl() -> void:
 		state_badge.move_child(state_badge_icon, 0)
 
 	# 表单面板 - 连接与房间设置
-	var online_split_divider = make_layout_host(rect_full(0.488, 0.185, 0.491, 0.855))
+	var wide_lobby_layout := effective_viewport_size().x >= 1600.0
+	var lobby_form_left := 0.115 if wide_lobby_layout else 0.035
+	var lobby_form_right := 0.475 if wide_lobby_layout else 0.475
+	var lobby_log_left := 0.525 if wide_lobby_layout else 0.505
+	var lobby_log_right := 0.885 if wide_lobby_layout else 0.965
+	var online_split_divider = make_layout_host(rect_full(0.495 if wide_lobby_layout else 0.488, 0.185, 0.505 if wide_lobby_layout else 0.491, 0.855))
 	online_split_divider.name = "OnlineLobbySplitDivider"
+	online_split_divider.set_meta("wide_content_policy", "bounded_operational_columns" if wide_lobby_layout else "full_safe_width")
 	panel.add_child(online_split_divider)
-	var form_panel = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.17, 0.475, 0.87), Color(0.026, 0.036, 0.034, 0.14), "ui_dark_scrim", 0.18)
+	var form_panel = make_gpt_center_crop_plate_rect(rect_full(lobby_form_left, 0.17, lobby_form_right, 0.87), Color(0.026, 0.036, 0.034, 0.14), "ui_dark_scrim", 0.18)
 	form_panel.name = "OnlineLobbyFormPanel"
 	panel.add_child(form_panel)
 	if form_panel is CanvasItem:
@@ -1056,13 +1065,15 @@ func _show_online_lobby_impl() -> void:
 	# r187: warm ivory status text + denser GPT plate for secondary readability.
 	status_label = make_label(panel, lobby_status_text, commercial_ui_font_size(14, 2), Color(0.96, 0.92, 0.80), false)
 	status_label.name = "OnlineLobbyStatusLabel"
-	apply_rect(status_label, rect_full(0.045, 0.896, 0.480, 0.936))
+	var status_left := 0.125 if wide_lobby_layout else 0.045
+	var status_right := 0.460 if wide_lobby_layout else 0.480
+	apply_rect(status_label, rect_full(status_left, 0.896, status_right, 0.936))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(status_label)
-	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.035, 0.886, 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.12), "ui_dark_scrim", 0.20)
+	var status_backplate = make_gpt_center_crop_plate_rect(rect_full(0.115 if wide_lobby_layout else 0.035, 0.886, 0.475 if wide_lobby_layout else 0.492, 0.946), Color(0.024, 0.036, 0.034, 0.12), "ui_dark_scrim", 0.20)
 	status_backplate.name = "OnlineLobbyStatusReadabilityBackplate"
 	panel.add_child(status_backplate)
 	panel.move_child(status_backplate, max(0, panel.get_child_count() - 2))
@@ -1080,8 +1091,9 @@ func _show_online_lobby_impl() -> void:
 			ui_enhancements.animate_panel_breath(form_panel, Vector2(0.0, -2.0), 3.2, 0.96)
 
 	# 房间状态面板
-	var log_panel = make_gpt_center_crop_plate_rect(rect_full(0.505, 0.17, 0.965, 0.87), Color(0.026, 0.036, 0.034, 0.14), "ui_dark_scrim", 0.18)
+	var log_panel = make_gpt_center_crop_plate_rect(rect_full(lobby_log_left, 0.17, lobby_log_right, 0.87), Color(0.026, 0.036, 0.034, 0.14), "ui_dark_scrim", 0.18)
 	log_panel.name = "OnlineLobbyLogPanel"
+	log_panel.set_meta("wide_content_policy", "bounded_operational_columns" if wide_lobby_layout else "full_safe_width")
 	panel.add_child(log_panel)
 	if log_panel is CanvasItem:
 		# Do not recursively dim the room title and empty-state copy.
@@ -3039,6 +3051,17 @@ func show_telemetry_data_sheet() -> void:
 	sheet.set_meta("modal_input_shield", true)
 	mark_ui_optimization(sheet, "F-590")
 	overlay.add_child(sheet)
+	# The sheet owns the whole settings overlay while open. Remove stale tab
+	# stops from the background; the screen is rebuilt on close, so no mode reset
+	# bookkeeping is needed for those transient controls.
+	for background_node in overlay.find_children("*", "Control", true, false):
+		var background_control := background_node as Control
+		if background_control == null or background_control == sheet:
+			continue
+		if background_control is BaseButton or background_control is LineEdit or background_control is ScrollContainer:
+			background_control.focus_mode = Control.FOCUS_NONE
+			background_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			background_control.set_meta("telemetry_sheet_background_locked", true)
 	var sheet_scrim := make_fullrect_overlay(Color(0.004, 0.010, 0.012, 0.68), "ui_dark_scrim")
 	sheet_scrim.name = "TelemetryDataSheetScrim"
 	sheet_scrim.set_meta("modal_scrim_alpha", 0.68)
@@ -3267,6 +3290,14 @@ func refresh_update_dialog_art() -> void:
 		progress = 1.0
 	if update_art_fill != null and is_instance_valid(update_art_fill):
 		apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
+	var progress_face := update_dialog.find_child("UpdateProgressGptFillFace", true, false) as Control if update_dialog != null and is_instance_valid(update_dialog) else null
+	if progress_face != null:
+		var progress_left := 0.08
+		var progress_top := 0.365 if update_dialog_compact_layout() else 0.45
+		var progress_right := 0.92
+		progress_face.set_meta("progress_ratio", progress)
+		progress_face.set_meta("progress_source", "update_progress")
+		apply_rect(progress_face, rect_full(progress_left, progress_top, lerpf(progress_left, progress_right, progress), progress_top + (0.060 if update_dialog_compact_layout() else 0.100)))
 	if update_art_status_light != null and is_instance_valid(update_art_status_light):
 		var color = update_state_color()
 		tint_panel_gpt_plate(update_art_status_light, Color(color.r, color.g, color.b, 0.42), "ui_hand_tray_state_chip")
@@ -3641,8 +3672,10 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		var is_current = day_num == current_day_in_cycle
 		var is_milestone = day_num == 7
 
-		var x_pos = 0.012 + float(i) * 0.141
-		var indicator_rect = rect_full(x_pos, 0.050, x_pos + 0.110, 0.950)
+		var indicator_gap := 0.010
+		var indicator_width := (0.976 - indicator_gap * 6.0) / 7.0
+		var x_pos = 0.012 + float(i) * (indicator_width + indicator_gap)
+		var indicator_rect = rect_full(x_pos, 0.050, x_pos + indicator_width, 0.950)
 
 		# 选择颜色
 		var fill_color: Color
@@ -3673,28 +3706,31 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		indicator.set_meta("ui_full_text", day_state_text)
 		mark_ui_optimization(indicator, "F-407")
 		day_indicators_container.add_child(indicator)
-		var text_back = make_gpt_plate_rect(rect_full(0.040, 0.040, 0.960, 0.960), Color(0.006, 0.014, 0.016, 0.32 if is_current else 0.54), "ui_jade_reading_plate")
+		var text_back = make_gpt_plate_rect(rect_full(0.020, 0.020, 0.980, 1.020), Color(0.006, 0.014, 0.016, 0.32 if is_current else 0.54), "ui_jade_reading_plate")
 		text_back.name = "DailyLoginDayTextBack_%d" % day_num
 		indicator.add_child(text_back)
 
-		var day_label = make_label(indicator, "第%d天" % day_num, 11, text_color, true)
+		var day_label = make_label(indicator, "第%d天" % day_num, 10, text_color, true)
 		day_label.name = "DailyLoginDayLabel_%d" % day_num
 		apply_rect(day_label, rect_full(0.070, 0.070, 0.930, 0.350))
 		set_ui_full_text(day_label, day_state_text, "签到第%d天" % day_num)
+		fit_label_font_size(day_label, maxf(28.0, effective_viewport_size().x * 0.045), 10, 8)
 		configure_clipped_label(day_label)
-		var day_state_label := make_label(indicator, "已领取" if is_claimed else ("今日" if is_current else "待领"), 8, text_color, true)
+		var day_state_label := make_label(indicator, "已领取" if is_claimed else ("今日可领" if is_current else "待签到"), 8, text_color, true)
 		day_state_label.name = "DailyLoginDayStateLabel_%d" % day_num
 		apply_rect(day_state_label, rect_full(0.070, 0.355, 0.930, 0.610))
 		day_state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		set_ui_full_text(day_state_label, day_state_label.text, day_state_text)
+		fit_label_font_size(day_state_label, maxf(30.0, effective_viewport_size().x * 0.050), 9, 7)
 		configure_clipped_label(day_state_label)
 
 		var reward_icon = "双倍" if is_milestone else "+100"
 		var reward_color = text_color.darkened(0.18) if is_current else text_color.lightened(0.06)
-		var icon_label = make_label(indicator, reward_icon, 11, reward_color, true)
+		var icon_label = make_label(indicator, reward_icon, 12, reward_color, true)
 		icon_label.name = "DailyLoginRewardLabel_%d" % day_num
 		apply_rect(icon_label, rect_full(0.070, 0.625, 0.930, 0.920))
 		set_ui_full_text(icon_label, day_state_text, "第%d天奖励" % day_num)
+		fit_label_font_size(icon_label, maxf(30.0, effective_viewport_size().x * 0.050), 12, 8)
 		configure_clipped_label(icon_label)
 
 		# 已签到的天数添加对勾
@@ -4361,6 +4397,9 @@ func show_exit_confirm() -> void:
 	exit_btn.focus_previous = continue_btn.get_path()
 	mark_ui_optimization(continue_btn, "F-589")
 	mark_ui_optimization(exit_btn, "F-589")
+	configure_ordered_focus_navigation(dialog, [continue_btn, exit_btn], "ExitConfirmContinueButton")
+	continue_btn.set_meta("focus_route", "left=exit;right=exit;tab=exit")
+	exit_btn.set_meta("focus_route", "left=continue;right=continue;tab=continue")
 	continue_btn.grab_focus()
 
 	# 弹窗入场动画 - 使用AnimationEffects增强
@@ -4425,9 +4464,11 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	bg.name = "LoadingPanel"
 	root_layer.add_child(bg)
 	var loading_gpt_key := "loading_scene_gpt_backdrop"
-	var gpt_loading_texture = add_optional_gpt_illustration_texture(bg, loading_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.78, false)
+	var gpt_loading_texture = add_optional_gpt_illustration_texture(bg, loading_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.78, true)
 	if gpt_loading_texture != null:
 		gpt_loading_texture.name = "LoadingGPTBackdropTexture"
+		gpt_loading_texture.set_meta("aspect_policy", "keep_aspect_centered")
+		gpt_loading_texture.set_meta("safe_content_owner", "loading_center_panel")
 		bg.move_child(gpt_loading_texture, 0)
 	var loading_meter = add_optional_gpt_illustration_texture(bg, "ui_loading_progress_plate", rect_full(0.16, 0.76, 0.84, 0.88), 0.74, false)
 	if loading_meter == null:
@@ -4541,12 +4582,18 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		apply_rect(error_hint, rect_full(0.120, 0.675, 0.880, 0.720))
 		error_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		error_hint.tooltip_text = loading_status_text
-		configure_clipped_label(error_hint)
+		error_hint.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		error_hint.clip_text = false
 		set_ui_full_text(error_hint, "加载失败：%s；可重试或返回主菜单，返回不会删除本地进度" % loading_status_text, "加载错误恢复提示")
+		error_hint.set_meta("text_slot_role", "loading_error_summary")
+		error_hint.set_meta("full_error_text", loading_status_text)
+		fit_label_font_size(error_hint, maxf(220.0, effective_viewport_size().x * 0.60), 12, 9)
 		mark_ui_optimization(error_hint, "F-495")
 		var error_action_lane := Control.new()
 		error_action_lane.name = "LoadingErrorActionLane"
 		error_action_lane.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		error_action_lane.set_meta("layout_role", "loading_error_actions")
+		error_action_lane.set_meta("fixed_touch_height", UI_MIN_TOUCH_TARGET)
 		apply_rect(error_action_lane, rect_full(0.120, 0.730, 0.880, 0.890))
 		center_panel.add_child(error_action_lane)
 		var retry_button := make_small_button("重试", Color(0.34, 0.62, 0.48), Callable(self, "retry_loading_screen"))
@@ -4740,6 +4787,8 @@ func _show_replay_import_screen_impl() -> void:
 	input.placeholder_text = "粘贴回放码"
 	input.text = replay_import_code_draft
 	input.clear_button_enabled = true
+	input.set_meta("input_tail_visibility", "native_horizontal_scroll_with_length_summary")
+	input.set_meta("clear_action_separate_hit_target", true)
 	input.custom_minimum_size = Vector2(0, 48)
 	input.add_theme_font_override("font", ui_cjk_font())
 	input.add_theme_font_size_override("font_size", commercial_ui_font_size(15, 1))
@@ -5313,6 +5362,7 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		event_button.set_meta("ui_full_text", event_text)
 		event_button.set_meta("timeline_text_slot", "measured_wrapped_row")
 		event_button.set_meta("timeline_full_event_text", event_text)
+		event_button.set_meta("timeline_min_touch_height", 44.0)
 		mark_ui_optimization(event_button, "F-586")
 		mark_ui_optimization(event_button, "F-411")
 		event_button.focus_entered.connect(func() -> void:
