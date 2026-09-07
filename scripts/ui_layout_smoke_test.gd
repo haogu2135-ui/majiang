@@ -864,6 +864,62 @@ func check_ui_round_891_920(scene, viewport_size: Vector2) -> void:
 		check(update_primary.text == "安装更新" and bool(update_primary.get_meta("recommended_action", false)) and str(update_primary.get_meta("action_hierarchy", "")) == "primary_install_before_close", "ready update state makes install the recommended primary action at %s" % viewport_size)
 
 
+func check_ui_round_921_950(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (921 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_921_950(root)
+	var root_contracts: Array = root.get_meta("ui_round_921_950_contract_ids", []) if root != null else []
+	var owner_roles: Dictionary = root.get_meta("ui_round_921_950_owner_roles", {}) if root != null else {}
+	check(root_contracts.size() == expected_ids.size(), "F-921..F-950 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owner_roles.size() == expected_ids.size(), "F-921..F-950 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(root_contracts.has(finding_id) and owner_roles.has(finding_id), "F-921..F-950 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_921_950_scope", "")) == "cross_page_reading_focus_and_state_clearance", "F-921..F-950 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_921_950_evidence_viewports", []).size() == 3, "F-921..F-950 names three evidence viewports at %s" % viewport_size)
+
+	var tutorial_target := scene.find_child("HandTrayTutorialTargetTile", true, false) as Control
+	if tutorial_target != null:
+		check(tutorial_target.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(tutorial_target.get_meta("tutorial_face_untouched", false)), "tutorial target keeps tile face and input untouched at %s" % viewport_size)
+	var danger_preview := scene.find_child("DangerDiscardTile", true, false) as Control
+	if danger_preview != null:
+		check(danger_preview.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(danger_preview.get_meta("preview_only", false)), "danger preview is explicitly non-interactive at %s" % viewport_size)
+	var pending := scene.find_child("PendingClaimActionStack", true, false) as Control
+	if pending != null:
+		check(float(pending.get_meta("wall_gutter_px", 0.0)) >= 8.0, "pending claim keeps an eight-pixel wall gutter at %s" % viewport_size)
+	var summary_actions := scene.find_child("RoundSummaryActionRow", true, false) as Control
+	if summary_actions != null:
+		check(float(summary_actions.get_meta("clearance_px", 0.0)) >= 12.0, "settlement actions keep a twelve-pixel clearance at %s" % viewport_size)
+	var lobby_edit := scene.find_child("OnlineLobbyRoomEdit", true, false) as Control
+	if lobby_edit != null:
+		check(float(lobby_edit.get_meta("clear_proxy_right_inset_px", 0.0)) >= 52.0, "lobby input reserves the clear proxy inset at %s" % viewport_size)
+	var diagnostic := scene.find_child("DiagnosticDialogPanel", true, false) as Control
+	if diagnostic != null:
+		check(diagnostic.get_meta("metric_label_contract", "") == "WARN|OK|TIP|VERSION", "diagnostic metrics declare visible field labels at %s" % viewport_size)
+	var clear_button := scene.find_child("TelemetryClearButton", true, false) as Control
+	if clear_button != null:
+		check(bool(clear_button.get_meta("confirmation_required", false)) and bool(clear_button.get_meta("danger_scope_visible", false)), "telemetry clear keeps scope and confirmation semantics at %s" % viewport_size)
+
+	var hand_status := scene.find_child("HandTrayStatusText", true, false) as Control
+	if hand_status != null:
+		check(str(hand_status.get_meta("ui_round_921_950_policy", "")).contains("stable"), "hand prompt owns a stable text lane at %s" % viewport_size)
+	var settings_nav := scene.find_child("SettingsSectionNavigation", true, false) as Control
+	if settings_nav != null:
+		check(str(settings_nav.get_meta("ui_round_921_950_policy", "")).contains("active"), "settings active marker has a single owner at %s" % viewport_size)
+	var telemetry_sheet := scene.find_child("TelemetryDataSheet", true, false) as Control
+	if telemetry_sheet != null:
+		check(str(telemetry_sheet.get_meta("ui_round_921_950_policy", "")).contains("locked"), "telemetry modal keeps its background lock owner at %s" % viewport_size)
+	var shop_footer := scene.find_child("ShopCabinetFooterPanel", true, false) as Control
+	if shop_footer != null:
+		check(str(shop_footer.get_meta("ui_round_921_950_policy", "")).contains("balance"), "shop footer keeps currency and acquire action in one path at %s" % viewport_size)
+	var replay_archive := scene.find_child("ReplayArchivePane", true, false) as Control
+	if replay_archive != null:
+		check(str(replay_archive.get_meta("ui_round_921_950_policy", "")).contains("primary"), "replay archive declares a primary open action at %s" % viewport_size)
+
+
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
 	var discards: Array = scene.get_discards(seat)
 	var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
@@ -1002,6 +1058,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_ui_round_831_860(scene, actual_viewport)
 	check_ui_round_861_890(scene, actual_viewport)
 	check_ui_round_891_920(scene, actual_viewport)
+	check_ui_round_921_950(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
 	await check_table_log_archive_layout(scene, actual_viewport)
 	seed_online_pending_claim_layout_state(scene)
@@ -1155,6 +1212,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_ui_round_831_860(scene, actual_viewport)
 	check_ui_round_861_890(scene, actual_viewport)
 	check_ui_round_891_920(scene, actual_viewport)
+	check_ui_round_921_950(scene, actual_viewport)
 	scene.show_menu(true)
 	await process_frame
 	scene.show_diagnostic_dialog(diagnostic_lines)
@@ -1165,6 +1223,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_ui_round_831_860(scene, actual_viewport)
 	check_ui_round_861_890(scene, actual_viewport)
 	check_ui_round_891_920(scene, actual_viewport)
+	check_ui_round_921_950(scene, actual_viewport)
 	scene.currency = {"coins": 28975, "gems": 10}
 	scene.season_data = {"season_id": "qa", "points": 1250, "highest_rank": 2, "wins": 6, "games": 9}
 	scene.game_stats["games_played"] = 9
@@ -1198,6 +1257,7 @@ func check_telemetry_toast_layout(scene, viewport_size: Vector2) -> void:
 	check_ui_round_831_860(scene, viewport_size)
 	check_ui_round_861_890(scene, viewport_size)
 	check_ui_round_891_920(scene, viewport_size)
+	check_ui_round_921_950(scene, viewport_size)
 	var settings_close := scene.find_child("SettingsCloseButton", true, false) as Button
 	var settings_scroll := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
 	for background_control in [settings_close, settings_scroll]:

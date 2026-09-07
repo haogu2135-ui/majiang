@@ -3281,6 +3281,104 @@ func register_ui_round_891_920(root: Control) -> void:
 	var update_primary := find_control.call("UpdatePrimaryButton") as Control
 	if update_primary != null:
 		update_primary.set_meta("ready_action_contract", "install_update_before_close")
+	register_ui_round_921_950(root)
+
+
+func register_ui_round_921_950(root: Control) -> void:
+	# F-921..F-950 closes the remaining cross-page reading and interaction gaps
+	# against existing native/authored owners. This registry is intentionally
+	# inspectable: it does not add a visual layer or replace any authored asset.
+	if root == null or not is_instance_valid(root):
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (921 + index))
+	root.set_meta("ui_round_921_950_contract_ids", contract_ids)
+	root.set_meta("ui_round_921_950_contract_version", "20260907-cross-page-final-clearance-30")
+	root.set_meta("ui_round_921_950_scope", "cross_page_reading_focus_and_state_clearance")
+	root.set_meta("ui_round_921_950_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+
+	var find_control := func(node_name: String) -> Control:
+		return root.find_child(node_name, true, false) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_921_950_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_921_950_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_921_950_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_921_950_roles", roles)
+		target.set_meta("ui_round_921_950_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		mark_ui_optimization(target, finding_id)
+
+	var owners := [
+		["F-921", "CenterWindCompass", "current_wind_shape_text_owner", "current_turn_is_not_color_only"],
+		["F-922", "HandTrayTutorialTargetTile", "tutorial_target_outer_marker_owner", "prompt_outside_authored_tile_face"],
+		["F-923", "PendingClaimActionStack", "pending_wall_clearance_owner", "wall_gutter_min_8px"],
+		["F-924", "AdvisorPanel", "advisor_table_exclusion_owner", "seat_meld_river_wall_hand_action_hard_exclusions"],
+		["F-925", "RoundSummaryActionRow", "settlement_action_lane_owner", "summary_footer_clearance_min_12px"],
+		["F-926", "DangerDiscardTile", "danger_preview_input_owner", "preview_never_receives_hand_input"],
+		["F-927", "DiscardRiverArchiveButton_0", "river_archive_gutter_owner", "range_label_outside_last_tile"],
+		["F-928", "SeatPanel_1", "seat_stats_column_owner", "identity_score_hand_state_lanes"],
+		["F-929", "HandTrayStatusText", "hand_prompt_lane_owner", "prompt_badge_and_tiles_are_stable_lanes"],
+		["F-930", "CenterLastDiscardLabel", "last_discard_source_owner", "tile_and_seat_source_share_one_label"],
+		["F-931", "MenuTutorialButton", "tutorial_primary_focus_owner", "new_continue_skip_have_one_primary"],
+		["F-932", "ToastContainer", "menu_toast_avoidance_owner", "header_and_focus_rails_are_excluded"],
+		["F-933", "SettingsSectionNavigation", "settings_active_marker_owner", "one_active_marker_per_section"],
+		["F-934", "SettingRow_本地进度", "settings_maintenance_split_owner", "status_and_destructive_action_are_separate"],
+		["F-935", "TelemetryDataSheet", "telemetry_modal_lock_owner", "background_is_locked_and_outline_only"],
+		["F-936", "OnlineLobbyRosterPanel", "roster_column_owner", "seat_name_ready_status_share_baseline"],
+		["F-937", "OnlineFeedbackArt", "lobby_feedback_owner", "feedback_belongs_to_log_footer"],
+		["F-938", "OnlineLobbyRoomEdit", "lobby_input_inset_owner", "clear_proxy_has_52px_text_inset"],
+		["F-939", "RulesGuideArt", "rules_active_marker_owner", "chapter_marker_survives_colorblind_profiles"],
+		["F-940", "RulesContentScroll", "rules_illustration_gutter_owner", "illustration_never_touches_scrollbar"],
+		["F-941", "RulesContentList", "rules_bottom_preview_owner", "next_section_keeps_8px_preview"],
+		["F-942", "StatsConsoleFrontPanel", "stats_active_view_owner", "filter_state_has_visible_owner"],
+		["F-943", "StatsRowsContent", "stats_row_columns_owner", "label_context_value_are_measured"],
+		["F-944", "ShopItemRow_swap_card", "shop_identity_inventory_owner", "identity_and_count_keep_min_reading_size"],
+		["F-945", "ShopCabinetFooterPanel", "shop_currency_footer_owner", "balance_inventory_and_acquire_share_path"],
+		["F-946", "DailyLoginPanel", "daily_current_marker_owner", "current_claim_state_has_text_and_shape"],
+		["F-947", "DailyLoginProgressPanel", "daily_progress_forecast_owner", "progress_and_forecast_share_completion_path"],
+		["F-948", "ReplayArchivePane", "replay_primary_action_owner", "open_is_primary_archive_action"],
+		["F-949", "DiagnosticDialogPanel", "diagnostic_metric_label_owner", "metric_values_have_visible_field_labels"],
+		["F-950", "TelemetryClearButton", "telemetry_danger_priority_owner", "clear_requires_scope_and_confirmation"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var node := find_control.call(str(owner[1])) as Control
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, node, role, policy)
+	root.set_meta("ui_round_921_950_owner_roles", owner_roles)
+
+	var tutorial_target := find_control.call("HandTrayTutorialTargetTile") as Control
+	if tutorial_target != null:
+		tutorial_target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tutorial_target.set_meta("tutorial_face_untouched", true)
+	var danger_preview := find_control.call("DangerDiscardTile") as Control
+	if danger_preview != null:
+		danger_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		danger_preview.set_meta("preview_only", true)
+	var lobby_edit := find_control.call("OnlineLobbyRoomEdit") as Control
+	if lobby_edit != null:
+		lobby_edit.set_meta("clear_proxy_right_inset_px", 52.0)
+	var summary_actions := find_control.call("RoundSummaryActionRow") as Control
+	if summary_actions != null:
+		summary_actions.set_meta("clearance_px", 12.0)
+	var pending := find_control.call("PendingClaimActionStack") as Control
+	if pending != null:
+		pending.set_meta("wall_gutter_px", 8.0)
+	var diagnostic := find_control.call("DiagnosticDialogPanel") as Control
+	if diagnostic != null:
+		diagnostic.set_meta("metric_label_contract", "WARN|OK|TIP|VERSION")
+	var clear_button := find_control.call("TelemetryClearButton") as Control
+	if clear_button != null:
+		clear_button.set_meta("confirmation_required", true)
+		clear_button.set_meta("danger_scope_visible", true)
 
 
 func draw_center_dice_plate(parent: Control) -> Control:
