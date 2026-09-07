@@ -85,23 +85,43 @@ func online_recovery_connecting() -> bool:
 	return online_feedback.find("正在重新连接") >= 0 or online_feedback.find("正在连接") >= 0
 
 func online_recovery_status_text() -> String:
-	# The HUD/action-intent lane has a stable one-line contract. Attempt count and
-	# ETA live in the recovery CTA and its detail text, so the compact status does
-	# not resize or compete with the table state.
-	return "断线 · 重连"
+	# Keep one short state sentence in the HUD while the action lane carries the
+	# full reason and route. The phase word is intentionally visible so a disabled
+	# retry cannot be mistaken for an active connection attempt.
+	var compact := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+	if online_recovery_connecting():
+		return "断线·连接中" if compact else "断线 · 连接中 · 第%d次" % maxi(online_reconnect_attempts, 1)
+	var remaining := maxi(0, int(ceil(float(online_next_reconnect_msec - Time.get_ticks_msec()) / 1000.0)))
+	if remaining > 0:
+		return "断线·%d秒后重连" % remaining if compact else "断线 · %d秒后可重连" % remaining
+	return "断线·重连" if compact else "断线 · 可立即重连"
+
+func online_recovery_phase_text() -> String:
+	if online_recovery_connecting():
+		return "正在连接 · 第%d次" % maxi(online_reconnect_attempts, 1)
+	var remaining := maxi(0, int(ceil(float(online_next_reconnect_msec - Time.get_ticks_msec()) / 1000.0)))
+	if remaining > 0:
+		return "等待重试 · %d秒后可重连" % remaining
+	return "可立即重连"
+
+func online_recovery_reason_text() -> String:
+	var feedback := online_feedback.strip_edges()
+	if feedback == "" or feedback.find("正在重新连接") >= 0 or feedback.find("正在连接") >= 0:
+		return "连接已断开"
+	return feedback
 
 func online_recovery_button_text() -> String:
 	var attempt := maxi(online_reconnect_attempts, 1)
 	if online_recovery_connecting():
 		return "连接中 · 第%d次" % attempt
 	var remaining := maxi(0, int(ceil(float(online_next_reconnect_msec - Time.get_ticks_msec()) / 1000.0)))
-	return "重连 · 第%d次 · %d秒后" % [attempt, remaining] if remaining > 0 else "重连 · 第%d次" % attempt
+	return "%d秒后可重连" % remaining if remaining > 0 else "立即重连 · 第%d次" % attempt
 
 func online_recovery_detail_text() -> String:
 	var attempt := maxi(online_reconnect_attempts, 1)
 	var remaining := maxi(0, int(ceil(float(online_next_reconnect_msec - Time.get_ticks_msec()) / 1000.0)))
 	var wait_text := "约%d秒后可重试" % remaining if remaining > 0 else "现在可以重试"
-	return "连接已断开，牌局暂时只读；第%d次恢复，%s；使用右侧重连恢复当前牌局，或返回大厅" % [attempt, wait_text]
+	return "%s；牌局暂时只读；第%d次恢复，%s；使用重连恢复当前牌局，或返回大厅" % [online_recovery_reason_text(), attempt, wait_text]
 
 func connect_online() -> void:
 	var host := online_host_input()

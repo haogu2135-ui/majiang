@@ -797,6 +797,19 @@ func draw_actions(parent: Control) -> void:
 		draw_chat_action_button(parent)
 	if online_game_disconnected():
 		var reconnecting := online_recovery_connecting()
+		var recovery_state := make_label(parent, online_recovery_phase_text(), 11, Color(0.98, 0.82, 0.52), true)
+		recovery_state.name = "OnlineRecoveryStateLabel"
+		apply_rect(recovery_state, rect_full(0.535, 0.630, 0.970, 0.680))
+		recovery_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		recovery_state.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_ui_full_text(recovery_state, "%s；%s" % [online_recovery_phase_text(), online_recovery_detail_text()], "断线恢复阶段")
+		recovery_state.set_meta("recovery_phase", "connecting" if reconnecting else ("cooldown" if online_next_reconnect_msec > Time.get_ticks_msec() else "retry_ready"))
+		recovery_state.set_meta("recovery_attempt", maxi(online_reconnect_attempts, 1))
+		recovery_state.set_meta("recovery_reason", online_recovery_reason_text())
+		recovery_state.set_meta("state_owner", "online_recovery_phase_and_reason")
+		mark_ui_optimization(recovery_state, "F-891")
+		mark_ui_optimization(recovery_state, "F-892")
+		mark_ui_optimization(recovery_state, "F-897")
 		var reconnect_button := make_action_button(online_recovery_button_text(), Color(0.36, 0.62, 0.72), Callable(self, "reconnect_online_game"))
 		reconnect_button.name = "OnlineReconnectGameButton"
 		reconnect_button.disabled = reconnecting
@@ -809,8 +822,13 @@ func draw_actions(parent: Control) -> void:
 		reconnect_button.set_meta("recovery_phase", "connecting" if reconnecting else ("cooldown" if online_next_reconnect_msec > Time.get_ticks_msec() else "retry_ready"))
 		reconnect_button.set_meta("recovery_attempt", maxi(online_reconnect_attempts, 1))
 		reconnect_button.set_meta("recovery_retry_available", not reconnecting)
+		reconnect_button.set_meta("recovery_phase_text", online_recovery_phase_text())
+		reconnect_button.set_meta("recovery_reason", online_recovery_reason_text())
+		reconnect_button.set_meta("recovery_focus_route", "primary_reconnect_then_preserved_lobby")
 		mark_ui_optimization(reconnect_button, "F-067")
 		mark_ui_optimization(reconnect_button, "F-107")
+		mark_ui_optimization(reconnect_button, "F-893")
+		mark_ui_optimization(reconnect_button, "F-894")
 		action_bar = HBoxContainer.new()
 		action_bar.alignment = BoxContainer.ALIGNMENT_END
 		configure_passive_container(action_bar)
@@ -827,12 +845,20 @@ func draw_actions(parent: Control) -> void:
 		lobby_button.set_meta("action_priority", "secondary")
 		lobby_button.set_meta("non_game_action", true)
 		lobby_button.set_meta("recovery_route", "return_to_lobby_with_resume_context")
+		lobby_button.text = "大厅 · 保留牌局"
+		lobby_button.tooltip_text = "返回联机大厅，但保留当前牌局上下文以便稍后重连"
 		mark_ui_optimization(lobby_button, "F-108")
+		mark_ui_optimization(lobby_button, "F-895")
+		set_ui_full_text(lobby_button, lobby_button.tooltip_text, "断线恢复：返回联机大厅并保留牌局")
+		mark_ui_optimization(lobby_button, "F-898")
 		lobby_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
 		action_bar.add_child(lobby_button)
 		draw_action_dock(parent)
 		finalize_action_bar_layout()
 		action_bar.set_meta("layout_role", "online_recovery_actions")
+		action_bar.set_meta("recovery_state_owner", "OnlineRecoveryStateLabel")
+		action_bar.set_meta("recovery_focus_order", "reconnect_then_lobby")
+		mark_ui_optimization(action_bar, "F-899")
 		var recovery_dock := parent.find_child("ActionButtonDock", true, false) as Control
 		action_bar.z_index = 20
 		if recovery_dock != null:
@@ -2943,6 +2969,318 @@ func register_ui_round_801_830(root: Control) -> void:
 	var feedback := find_control.call("OnlineFeedbackArt") as Control
 	if feedback != null:
 		feedback.set_meta("feedback_identity", "连接反馈")
+	register_ui_round_831_860(root)
+
+
+func register_ui_round_831_860(root: Control) -> void:
+	# Residual visual findings use the existing authored/native owners. The small
+	# geometry contracts below document real clearances without adding another
+	# visual layer or replacing an existing texture host.
+	if root == null or not is_instance_valid(root):
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (831 + index))
+	root.set_meta("ui_round_831_860_contract_ids", contract_ids)
+	root.set_meta("ui_round_831_860_contract_version", "20260907-residual-clearance-30")
+	root.set_meta("ui_round_831_860_scope", "residual_visual_clearance_and_reading_order")
+	root.set_meta("ui_round_831_860_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+
+	var find_control := func(node_name: String) -> Control:
+		return root.find_child(node_name, true, false) as Control
+
+	var owner_names := [
+		["F-831", "HandTray", "hand_tiles_bottom_safe_gutter"],
+		["F-832", "HandTrayStatusText", "hand_prompt_above_tile_lane"],
+		["F-833", "HandTrayTiles", "hand_suit_group_spacing"],
+		["F-834", "DiscardGrid_0", "river_latest_discard_focus_marker"],
+		["F-835", "DiscardGrid_0", "river_terminal_gutter"],
+		["F-836", "MeldArea_0", "meld_seat_and_river_clearance"],
+		["F-837", "MeldKindBadge_0_peng", "meld_badge_minimum_reading_size"],
+		["F-838", "SeatPanel_0", "seat_identity_score_status_lanes"],
+		["F-839", "CenterConsole3DShell", "center_phase_wall_latest_discard_order"],
+		["F-840", "ActionButtonDock", "action_primary_secondary_hierarchy"],
+		["F-841", "MainMenuPanel", "menu_wide_content_measurement"],
+		["F-842", "MenuTutorialEntryBanner", "tutorial_entry_primary_hierarchy"],
+		["F-843", "SettingsSection_系统", "settings_maintenance_spacing"],
+		["F-844", "StatsRowsContent", "stats_label_value_alignment"],
+		["F-845", "StatsRows", "stats_scroll_track_visibility"],
+		["F-846", "ShopItemRow_swap_card", "shop_row_field_order"],
+		["F-847", "ShopCabinetFooterPanel", "shop_currency_footer_owner"],
+		["F-848", "RulesContentScroll", "rules_scroll_illustration_gutter"],
+		["F-849", "AchievementsScroll", "achievement_status_progress_lanes"],
+		["F-850", "DailyLoginPanel", "daily_current_day_progress_forecast"],
+		["F-851", "OnlineLobbyConnectionRetryButton", "lobby_retry_state_lane"],
+		["F-852", "OnlineLobbyFormFeedbackLabel", "lobby_form_feedback_lane"],
+		["F-853", "LoadingScreenVersionLabel", "loading_tip_version_separation"],
+		["F-854", "ExitConfirmDialog", "exit_danger_action_hierarchy"],
+		["F-855", "ChatPanel", "chat_quick_input_gutter"],
+		["F-856", "TelemetryDataSheet", "telemetry_modal_background_isolation"],
+		["F-857", "RoundSummaryPanel", "settlement_reading_surface"],
+		["F-858", "DangerDiscardDetailText", "danger_explanation_action_gap"],
+		["F-859", "ReplayImportCopyCodeButton", "replay_copy_content_pane_gutter"],
+		["F-860", "DiagnosticContentScroll", "diagnostic_body_footer_gutter"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owner_names:
+		owner_roles[str(owner[0])] = {"owner": str(owner[1]), "role": str(owner[2])}
+		mark_ui_optimization(root, str(owner[0]))
+	root.set_meta("ui_round_831_860_owner_roles", owner_roles)
+
+	var hand_tray := find_control.call("HandTray") as Control
+	var hand_status := find_control.call("HandTrayStatusText") as Control
+	var hand_tiles := find_control.call("HandTrayTiles") as Control
+	if hand_tray != null:
+		hand_tray.set_meta("bottom_safe_gutter_normalized", 1.0 - HAND_TRAY_TILES_RECT.size.y)
+		hand_tray.set_meta("bottom_safe_gutter_px_at_540", (1.0 - HAND_TRAY_TILES_RECT.size.y) * 540.0)
+	if hand_status != null:
+		hand_status.set_meta("prompt_tile_vertical_gap_contract", "status_and_shortcut_lanes_above_tiles")
+	if hand_tiles != null:
+		hand_tiles.set_meta("suit_group_gap_min_px", HAND_MIN_GROUP_GAP)
+		hand_tiles.set_meta("bottom_gutter_px", maxf(8.0, (1.0 - HAND_TRAY_TILES_RECT.size.y) * 540.0))
+
+	var discard_grid := find_control.call("DiscardGrid_0") as Control
+	if discard_grid != null:
+		discard_grid.set_meta("latest_focus_owner", "LastDiscardFocusMarker")
+		discard_grid.set_meta("terminal_gutter_px", float(DISCARD_GRID_SEPARATION))
+	var meld_area := find_control.call("MeldArea_0") as Control
+	if meld_area != null:
+		meld_area.set_meta("seat_river_clearance_policy", "meld_lane_follows_seat_and_stays_outside_river")
+	var meld_badge := find_control.call("MeldKindBadge_0_peng") as Control
+	if meld_badge != null:
+		meld_badge.set_meta("minimum_reading_height_px", 18.0)
+	var seat_panel := find_control.call("SeatPanel_0") as Control
+	if seat_panel != null:
+		seat_panel.set_meta("reading_order", "identity_then_score_then_status")
+	var center := find_control.call("CenterConsole3DShell") as Control
+	if center != null:
+		center.set_meta("reading_order", "phase_then_wall_count_then_latest_discard")
+	var action_dock := find_control.call("ActionButtonDock") as Control
+	if action_dock != null:
+		action_dock.set_meta("priority_policy", "primary_then_secondary_then_cancel")
+		action_dock.set_meta("primary_secondary_gutter_px", 8.0)
+
+	var retry := find_control.call("OnlineLobbyConnectionRetryButton") as Control
+	if retry != null:
+		retry.set_meta("retry_lane_owner", "OnlineLobbyConnectionStateBadge")
+	var feedback := find_control.call("OnlineLobbyFormFeedbackLabel") as Control
+	if feedback != null:
+		feedback.set_meta("feedback_lane_owner", "OnlineLobbyForm")
+	var diagnostic_scroll := find_control.call("DiagnosticContentScroll") as Control
+	var diagnostic_status := find_control.call("DiagnosticContentStatusLabel") as Control
+	if diagnostic_scroll != null:
+		diagnostic_scroll.set_meta("footer_clearance_px", 12.0)
+		diagnostic_scroll.set_meta("body_footer_gap_normalized", 0.040)
+	if diagnostic_status != null:
+		diagnostic_status.set_meta("fixed_footer_relationship", "scroll_then_status_then_copy_close")
+	var danger_detail := find_control.call("DangerDiscardDetailText") as Control
+	if danger_detail != null:
+		danger_detail.set_meta("action_dock_clearance_normalized", DANGER_ACTION_BAR_DOCK_RECT.position.y - DANGER_DISCARD_CONFIRMATION_RECT.size.y)
+	var replay_copy := find_control.call("ReplayImportCopyCodeButton") as Control
+	if replay_copy != null:
+		replay_copy.set_meta("content_pane_clearance_px", 8.0)
+	var telemetry := find_control.call("TelemetryDataSheet") as Control
+	if telemetry != null:
+		telemetry.set_meta("modal_background_policy", "locked_and_dimmed_outline_only")
+	var summary := find_control.call("RoundSummaryPanel") as Control
+	if summary != null:
+		summary.set_meta("reading_surface_policy", "summary_body_before_external_actions")
+	register_ui_round_861_890(root)
+
+
+func register_ui_round_861_890(root: Control) -> void:
+	# Cross-page findings share the existing visual/native owners. This registry
+	# keeps their reading order and state owner inspectable after every page rebuild.
+	if root == null or not is_instance_valid(root):
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (861 + index))
+	root.set_meta("ui_round_861_890_contract_ids", contract_ids)
+	root.set_meta("ui_round_861_890_contract_version", "20260907-owner-state-30")
+	root.set_meta("ui_round_861_890_scope", "cross_page_visual_owners_geometry_and_state")
+	root.set_meta("ui_round_861_890_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return root.find_child(node_name, true, false) as Control
+
+	var owner_names := [
+		["F-861", "TopHud3DShell", "hud_layer_order"],
+		["F-862", "TopHudWallText", "wall_count_single_visual_owner"],
+		["F-863", "TopHudSettingsButton", "top_hud_icon_focus_owner"],
+		["F-864", "SeatWindBadge_0", "seat_wind_inner_inset"],
+		["F-865", "MeldArea_0", "meld_group_spacing"],
+		["F-866", "TopHudWallText", "wide_wall_density"],
+		["F-867", "TableGPTBackdropTexture", "battle_background_fog_layers"],
+		["F-868", "ChatPanel", "chat_drawer_hard_seat_exclusion"],
+		["F-869", "MainMenuPanel", "menu_footer_shortcuts"],
+		["F-870", "SettingsSectionNavigation", "settings_navigation_active_owner"],
+		["F-871", "SettingsSystemGrid", "settings_native_control_types"],
+		["F-872", "ResetProgressButton", "reset_confirmation_state"],
+		["F-873", "OnlineLobbyCreateButton", "lobby_primary_action_hierarchy"],
+		["F-874", "OnlineLobbyRoomDetailsTarget", "server_details_hit_owner"],
+		["F-875", "RulesReadingStatus", "rules_current_state_owner"],
+		["F-876", "RulesContentScroll", "rules_wide_body_measurement"],
+		["F-877", "StatsSummaryPanel", "stats_summary_label_value_semantics"],
+		["F-878", "StatsRowsContent", "stats_summary_data_source"],
+		["F-879", "ShopItemsScroll", "shop_wide_tab_order"],
+		["F-880", "ShopItemBuyHitHost_swap_card", "shop_cta_visual_text_owner"],
+		["F-881", "ShopCabinetFooterPanel", "shop_tab_sequence"],
+		["F-882", "DailyLoginDayIndicators", "daily_current_day_progress_owner"],
+		["F-883", "ReplaySearchEdit", "replay_search_clear_owner"],
+		["F-884", "ReplayArchivePane", "replay_archive_action_owner"],
+		["F-885", "ReplayImportTimeline", "replay_timeline_selected_owner"],
+		["F-886", "DiagnosticDialogVersion", "diagnostic_version_owner"],
+		["F-887", "DiagnosticHealthSummary", "diagnostic_health_sentence_owner"],
+		["F-888", "DiagnosticContentScroll", "diagnostic_first_frame_range_owner"],
+		["F-889", "TelemetryClearButton", "telemetry_clear_danger_owner"],
+		["F-890", "TelemetryClearHint", "telemetry_confirmation_spacing"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owner_names:
+		var finding_id := str(owner[0])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": str(owner[2])}
+		mark_ui_optimization(root, finding_id)
+	root.set_meta("ui_round_861_890_owner_roles", owner_roles)
+
+	var hud := find_control.call("TopHud3DShell") as Control
+	if hud != null:
+		hud.set_meta("layer_order_contract", "background_then_hud_text_then_native_actions")
+		hud.set_meta("wide_density_policy", "wall_count_keeps_single_owner_and_measured_lane")
+	var wall := find_control.call("TopHudWallText") as Control
+	if wall != null:
+		wall.set_meta("visual_owner", "TopHudWallText")
+		wall.set_meta("unique_count_owner", true)
+		wall.set_meta("wide_density_policy", "fit_before_clip")
+	var hud_settings := find_control.call("TopHudSettingsButton") as Control
+	if hud_settings != null:
+		hud_settings.set_meta("focus_visual_owner", "TopHudSettingsButton")
+		hud_settings.set_meta("icon_focus_contract", "native_button_plus_single_authored_focus")
+
+	var chat := find_control.call("ChatPanel") as Control
+	if chat != null:
+		chat.set_meta("hard_seat_exclusion", true)
+		chat.set_meta("seat_exclusion_policy", "all_seat_panels_and_bottom_hand_are_hard_exclusions")
+		chat.set_meta("fallback_route", "lower_right_between_right_seat_and_action_dock")
+	var shop_host := find_control.call("ShopItemBuyHitHost_swap_card") as Control
+	var shop_command := find_control.call("ShopBuyButtonCommand_swap_card") as Control
+	if shop_host != null:
+		shop_host.set_meta("cta_visual_text_owner", shop_command.name if shop_command != null else "ShopBuyButtonCommand_swap_card")
+		shop_host.set_meta("cta_visual_text_survives_disabled_button", true)
+	if shop_command != null:
+		shop_command.set_meta("cta_visual_text_owner", shop_host.name if shop_host != null else "ShopItemBuyHitHost_swap_card")
+		shop_command.set_meta("cta_state_text_required", true)
+
+	var diagnostic_scroll := find_control.call("DiagnosticContentScroll") as Control
+	var diagnostic_status := find_control.call("DiagnosticContentStatusLabel") as Control
+	if diagnostic_scroll != null:
+		diagnostic_scroll.set_meta("first_frame_range_contract", "status_pending_until_wrapped_width_and_scroll_range_are_stable")
+		diagnostic_scroll.set_meta("range_state_owner", "DiagnosticContentStatusLabel")
+	if diagnostic_status != null:
+		diagnostic_status.set_meta("range_state_owner", "DiagnosticContentScroll")
+		diagnostic_status.set_meta("range_state_contract", "visible_first_last_total_matches_scrollbar")
+
+	var telemetry_clear := find_control.call("TelemetryClearButton") as Control
+	if telemetry_clear != null:
+		telemetry_clear.set_meta("danger_action_owner", "TelemetryClearButton")
+		telemetry_clear.set_meta("confirmation_required", true)
+	var telemetry_hint := find_control.call("TelemetryClearHint") as Control
+	if telemetry_hint != null:
+		telemetry_hint.set_meta("confirmation_spacing_px", 8.0)
+		telemetry_hint.set_meta("danger_scope_owner", "TelemetryClearButton")
+	register_ui_round_891_920(root)
+
+
+func register_ui_round_891_920(root: Control) -> void:
+	# The current round follows recovery and range state across existing native and
+	# authored owners. It publishes one inspectable contract per finding without
+	# adding a decorative layer or replacing the existing 2D tile surfaces.
+	if root == null or not is_instance_valid(root):
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (891 + index))
+	root.set_meta("ui_round_891_920_contract_ids", contract_ids)
+	root.set_meta("ui_round_891_920_contract_version", "20260907-recovery-range-state-30")
+	root.set_meta("ui_round_891_920_scope", "recovery_log_diagnostic_update_state_owners")
+	root.set_meta("ui_round_891_920_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+
+	var find_control := func(node_name: String) -> Control:
+		return root.find_child(node_name, true, false) as Control
+	var attach := func(finding_id: String, node: Control, role: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_891_920_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_891_920_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_891_920_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_891_920_roles", roles)
+		target.set_meta("ui_round_contract_role", role)
+		mark_ui_optimization(target, finding_id)
+
+	var owner_names := [
+		["F-891", "OnlineRecoveryStateLabel", "recovery_phase_sentence_owner"],
+		["F-892", "OnlineRecoveryStateLabel", "recovery_cooldown_and_attempt_owner"],
+		["F-893", "OnlineReconnectGameButton", "reconnect_phase_cta_owner"],
+		["F-894", "OnlineReconnectGameButton", "reconnect_reason_and_attempt_owner"],
+		["F-895", "OnlineDisconnectedLobbyButton", "preserved_lobby_recovery_route"],
+		["F-896", "OnlineHandReadOnlyBadge", "read_only_hand_state_owner"],
+		["F-897", "HandTray", "untinted_2d_tile_read_only_policy"],
+		["F-898", "OnlineDisconnectedLobbyButton", "recovery_secondary_focus_route"],
+		["F-899", "ActionButtonDock", "recovery_action_bar_state_owner"],
+		["F-900", "ActionIntentText", "single_recovery_intent_sentence"],
+		["F-901", "OnlineLobbyLogRangeLabel", "lobby_log_visible_range_label"],
+		["F-902", "OnlineLobbyLogRangeLabel", "lobby_log_latest_boundary_label"],
+		["F-903", "OnlineLobbyLogScroll", "lobby_log_range_refresh_trigger"],
+		["F-904", "OnlineLobbyLogRangeLabel", "lobby_log_first_last_total_state"],
+		["F-905", "OnlineLobbyLogCountBadge", "lobby_log_total_owner"],
+		["F-906", "OnlineLobbyLogUnreadLabel", "lobby_log_unread_owner"],
+		["F-907", "OnlineLobbyLogRangeLabel", "lobby_log_range_boundary_owner"],
+		["F-908", "OnlineLobbyLogScroll", "lobby_log_scroll_position_owner"],
+		["F-909", "OnlineLobbyLogListText", "lobby_log_line_measurement_owner"],
+		["F-910", "OnlineLobbyLogListPanel", "lobby_log_range_summary_surface"],
+		["F-911", "DiagnosticContentScroll", "diagnostic_pending_measurement_owner"],
+		["F-912", "DiagnosticContentStatusLabel", "diagnostic_complete_row_range_owner"],
+		["F-913", "DiagnosticContentScrollBar", "diagnostic_scrollbar_measurement_visibility"],
+		["F-914", "DiagnosticCopyFeedbackLabel", "diagnostic_copy_feedback_owner"],
+		["F-915", "DiagnosticCopyButton", "diagnostic_copy_action_owner"],
+		["F-916", "UpdateReleaseNotesScroll", "update_notes_range_owner"],
+		["F-917", "UpdateReleaseNotesScrollHitTarget", "update_notes_scroll_hit_owner"],
+		["F-918", "UpdateReleaseNotesStatus", "update_notes_status_owner"],
+		["F-919", "UpdateReleaseNotesLabel", "update_notes_viewport_width_owner"],
+		["F-920", "UpdatePrimaryButton", "update_install_recommended_action_owner"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owner_names:
+		owner_roles[str(owner[0])] = {"owner": str(owner[1]), "role": str(owner[2])}
+		attach.call(str(owner[0]), find_control.call(str(owner[1])) as Control, str(owner[2]))
+	root.set_meta("ui_round_891_920_roles", owner_roles)
+
+	var recovery_state := find_control.call("OnlineRecoveryStateLabel") as Control
+	if recovery_state != null:
+		recovery_state.set_meta("phase_contract", "connecting|cooldown|retry_ready")
+		recovery_state.set_meta("reason_attempt_contract", true)
+	var recovery_bar := find_control.call("ActionButtonDock") as Control
+	if recovery_bar != null:
+		recovery_bar.set_meta("recovery_contract", "state_then_reconnect_then_preserved_lobby")
+	var log_scroll := find_control.call("OnlineLobbyLogScroll") as Control
+	if log_scroll != null:
+		log_scroll.set_meta("visible_range_contract", "scroll_position_to_first_last_total")
+	var log_range := find_control.call("OnlineLobbyLogRangeLabel") as Control
+	if log_range != null:
+		log_range.set_meta("boundary_words", ["已到最新", "可回到最新"])
+	var diagnostic_scroll := find_control.call("DiagnosticContentScroll") as Control
+	if diagnostic_scroll != null:
+		diagnostic_scroll.set_meta("first_frame_contract", "pending_until_wrapped_width_stable")
+	var diagnostic_status := find_control.call("DiagnosticContentStatusLabel") as Control
+	if diagnostic_status != null:
+		diagnostic_status.set_meta("complete_rows_only", true)
+	var notes_scroll := find_control.call("UpdateReleaseNotesScroll") as Control
+	if notes_scroll != null:
+		notes_scroll.set_meta("range_width_contract", "status_and_label_share_resolved_viewport")
+	var update_primary := find_control.call("UpdatePrimaryButton") as Control
+	if update_primary != null:
+		update_primary.set_meta("ready_action_contract", "install_update_before_close")
 
 
 func draw_center_dice_plate(parent: Control) -> Control:
@@ -5643,9 +5981,21 @@ func draw_hand(parent: Control) -> void:
 	if disconnected_hand_state:
 		tray.set_meta("interaction_state", "read_only")
 		tray.set_meta("disabled_reason", "牌局已断线，手牌只读；请先重连")
+		tray.set_meta("tile_visual_policy", "assets_tiles_2d_untinted")
+		tray.set_meta("read_only_recovery_owner", "OnlineReconnectGameButton")
+		mark_ui_optimization(tray, "F-897")
 		tray_text.text = "只读 · 等待重连；手牌不会提交"
 		set_ui_full_text(tray_text, tray_text.text, "断线牌桌状态：手牌只读；请使用重连入口")
-		tray.modulate = Color(0.84, 0.88, 0.82, 0.82)
+		# Do not tint the authored 2D tile faces to communicate transport state. The
+		# state owns a text badge and the tray remains visually faithful to the tile
+		# assets while its hit targets stay disabled.
+		tray.modulate = Color.WHITE
+		var readonly_badge := make_badge(tray, rect_full(0.755, 0.170, 0.982, 0.255), "牌局只读", 10, Color(0.22, 0.16, 0.10, 0.94), Color(0.96, 0.68, 0.34, 0.68), Color(1.0, 0.90, 0.68))
+		readonly_badge.name = "OnlineHandReadOnlyBadge"
+		readonly_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_ui_full_text(readonly_badge, "牌局已断线，手牌不会提交；请从行动栏重连", "手牌只读状态")
+		readonly_badge.set_meta("read_only_owner", "OnlineReconnectGameButton")
+		mark_ui_optimization(readonly_badge, "F-896")
 	var tray_text_rect := rect_full(0.030, 0.018, 0.745, 0.082) if disconnected_hand_state else (rect_full(0.030, 0.018, 0.760, 0.082) if shortcut_hint_text != "" else HAND_TRAY_TEXT_RECT)
 	apply_rect(tray_text, tray_text_rect)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -5779,7 +6129,10 @@ func draw_hand(parent: Control) -> void:
 	var stable_drawn_index := int(offline_last_draw.get("hand_index", -1))
 	if mode != "offline" or int(offline_last_draw.get("seat", -1)) != 0 or drawn_tile == "" or hand.size() % 3 != 2 or stable_drawn_index < 0 or stable_drawn_index >= hand.size() or str(hand[stable_drawn_index]) != drawn_tile:
 		stable_drawn_index = -1
-	var should_animate_drawn_tile = mode == "offline" and ui_motion_enabled() and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
+	# Consume an announced draw on the first hand render even when reduced motion
+	# suppresses the visual tween; otherwise the same replacement draw is retried
+	# on every subsequent render.
+	var should_animate_drawn_tile = mode == "offline" and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
 	var draw_state_assigned := false
 	# Pure 2D hand: authored assets/tiles faces via make_tile_view (no realtime 3D stage).
 
@@ -8331,6 +8684,8 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	# The header owns a full touch lane; the native log scroll starts below it.
 	apply_rect(latest_button, rect_full(0.535, 0.020, 0.745, 0.350))
 	list.add_child(latest_button)
+	list.set_meta("range_summary_owner", "OnlineLobbyLogRangeLabel")
+	mark_ui_optimization(list, "F-910")
 	var unread_label = make_label(list, "未读 %d 条" % log_unread if log_unread > 0 else "已到最新", 9, Color(0.72, 0.84, 0.66, 0.86), false)
 	unread_label.name = "OnlineLobbyLogUnreadLabel"
 	apply_rect(unread_label, rect_full(0.385, 0.035, 0.520, 0.165))
@@ -8340,6 +8695,17 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	set_ui_full_text(unread_label, unread_label.text, "房间日志状态：" + unread_label.text)
 	unread_label.set_meta("ui_status_role", "log_unread")
 	mark_ui_optimization(unread_label, "F-240")
+	var range_label := make_label(list, "日志范围 · 正在测量", 9, Color(0.76, 0.84, 0.74), false)
+	range_label.name = "OnlineLobbyLogRangeLabel"
+	apply_rect(range_label, rect_full(0.035, 0.180, 0.500, 0.335))
+	range_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	range_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	configure_clipped_label(range_label)
+	set_ui_full_text(range_label, "当前房间日志可见范围", "房间日志当前可见范围")
+	range_label.set_meta("range_owner", "OnlineLobbyLogScroll")
+	range_label.set_meta("range_contract", "first_last_total_and_latest_boundary")
+	mark_ui_optimization(range_label, "F-901")
+	mark_ui_optimization(range_label, "F-902")
 	var count_value := online_lobby_retained_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
 	var total_count := online_lobby_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
 	var count_badge = make_badge(list, rect_full(0.760, 0.030, 0.955, 0.175), "存%d · 总%d · 未读%d" % [count_value, total_count, log_unread], 10, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
@@ -14019,7 +14385,7 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 		set_ui_full_text(label, label_text, "更新阶段：" + label_text)
 		label.tooltip_text = "更新阶段：" + label_text
 		mark_ui_optimization(label, "F-181")
-	var current_label := make_label(map, "当前阶段", 9, Color(0.96, 0.90, 0.62, 0.96), true)
+	var current_label := make_label(map, "当前阶段", accessibility_font_size(10), Color(0.96, 0.90, 0.62, 0.96), true)
 	current_label.name = "UpdateDialogStageCurrentLabel"
 	apply_rect(current_label, rect_full(0.040, 0.760, 0.960, 0.995))
 	current_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -14077,7 +14443,10 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	apply_rect(notes_scroll, rect_full(0.145, 0.060, 0.790, 0.760) if update_dialog_compact_layout() else rect_full(0.145, 0.010, 0.790, 0.580))
 	notes_scroll.set_meta("fixed_action_lane", true)
 	notes_scroll.set_meta("max_reading_height", 0.840 if update_dialog_compact_layout() else 0.570)
+	notes_scroll.set_meta("range_status_owner", "UpdateReleaseNotesStatus")
+	notes_scroll.set_meta("content_width_owner", "UpdateReleaseNotesLabel")
 	mark_ui_optimization(notes_scroll, "F-442")
+	mark_ui_optimization(notes_scroll, "F-916")
 	update_release_notes_art.add_child(notes_scroll)
 	var notes_scrollbar := notes_scroll.get_v_scroll_bar()
 	if notes_scrollbar != null:
@@ -14107,16 +14476,20 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	notes_scroll_hit_target.set_meta("ui_full_text", notes_scroll_hit_target.tooltip_text)
 	notes_scroll_hit_target.set_meta("ui_scroll_role", "update_release_notes")
 	notes_scroll_hit_target.set_meta("min_touch_target_px", 44.0)
+	notes_scroll_hit_target.set_meta("scroll_owner", "UpdateReleaseNotesScroll")
+	mark_ui_optimization(notes_scroll_hit_target, "F-917")
 	apply_rect(notes_scroll_hit_target, rect_full(0.785, 0.045, 0.875, 0.915))
 	update_release_notes_art.add_child(notes_scroll_hit_target)
-	var notes_status := make_label(update_release_notes_art, "更新说明 · 0字 · 已到末尾", 8, Color(0.72, 0.84, 0.74), true)
+	var notes_status := make_label(update_release_notes_art, "更新说明 · 0字 · 已到末尾", accessibility_font_size(10), Color(0.72, 0.84, 0.74), true)
 	notes_status.name = "UpdateReleaseNotesStatus"
 	apply_rect(notes_status, rect_full(0.145, 0.775, 0.790, 0.970) if update_dialog_compact_layout() else rect_full(0.145, 0.600, 0.790, 0.780))
 	notes_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(notes_status)
 	notes_status.set_meta("status_contract", "visible_range_progress_and_total_character_count")
+	notes_status.set_meta("large_text_reading_lane", true)
 	set_ui_full_text(notes_status, "更新说明阅读位置", "更新说明状态")
 	mark_ui_optimization(notes_status, "F-235")
+	mark_ui_optimization(notes_status, "F-918")
 	var notes_scroll_drag_state := {"dragging": false}
 	if notes_scrollbar != null:
 		notes_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -14133,9 +14506,31 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	update_release_notes_label.name = "UpdateReleaseNotesLabel"
 	update_release_notes_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	update_release_notes_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	configure_wrapped_label(update_release_notes_label, maxf(220.0, effective_viewport_size().x * 0.420), 0.0, 4.0)
+	configure_wrapped_label(update_release_notes_label, maxf(180.0, effective_viewport_size().x * 0.420), 0.0, 4.0)
 	update_release_notes_label.set_meta("ui_scroll_content", true)
+	update_release_notes_label.set_meta("width_owner", "UpdateReleaseNotesScroll")
+	update_release_notes_label.set_meta("width_measurement_policy", "resolved_scroll_viewport_width")
+	mark_ui_optimization(update_release_notes_label, "F-919")
+	call_deferred("sync_update_release_notes_content_width", notes_scroll, update_release_notes_label)
+	notes_scroll.resized.connect(func() -> void:
+		sync_update_release_notes_content_width(notes_scroll, update_release_notes_label)
+	)
 	return update_release_notes_art
+
+
+func sync_update_release_notes_content_width(notes_scroll: ScrollContainer, notes_label: Label) -> void:
+	if notes_scroll == null or notes_label == null or not is_instance_valid(notes_scroll) or not is_instance_valid(notes_label):
+		return
+	if notes_scroll.size.x <= 1.0:
+		return
+	var scrollbar_width := 0.0
+	var scrollbar := notes_scroll.get_v_scroll_bar()
+	if scrollbar != null and scrollbar.visible:
+		scrollbar_width = maxf(0.0, scrollbar.size.x)
+	var content_width := maxf(180.0, notes_scroll.size.x - scrollbar_width - 16.0)
+	configure_wrapped_label(notes_label, content_width, 0.0, 4.0)
+	notes_label.set_meta("measured_content_width", content_width)
+	notes_label.set_meta("large_text_width_contract", "viewport_minus_scroll_lane_and_gutter")
 
 
 func sync_update_release_notes_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:

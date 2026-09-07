@@ -65,6 +65,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"HandTrayActionPathStream",
 	"HandTrayActionPathStreamFill",
 	"HandTrayActionPathTarget",
+	"OnlineHandReadOnlyBadge",
 	"HandProgressInkFill",
 	"HandProgressInkRail",
 	"HandProgressRoundSeal",

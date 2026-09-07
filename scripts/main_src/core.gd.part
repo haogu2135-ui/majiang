@@ -1730,6 +1730,24 @@ func online_lobby_retained_log_count() -> int:
 	var logs = online_room.get("logs", [])
 	return (logs as Array).size() if typeof(logs) == TYPE_ARRAY else 0
 
+func online_lobby_log_visible_range_text() -> String:
+	var total := online_lobby_retained_log_count()
+	if total <= 0:
+		return "日志范围 · 暂无记录"
+	var scroll := root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer if root_layer != null and is_instance_valid(root_layer) else null
+	if scroll == null:
+		return "日志范围 · 1-%d/%d" % [mini(total, 1), total]
+	var scrollbar := scroll.get_v_scroll_bar()
+	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page) if scrollbar != null else 0.0
+	var progress := 0.0 if max_scroll <= 0.5 else clampf(float(scroll.scroll_vertical) / max_scroll, 0.0, 1.0)
+	var line_height := 19.0 if effective_viewport_size().y <= 560.0 else 21.0
+	var visible_count := maxi(1, int(floor(maxf(1.0, scroll.size.y - 8.0) / line_height)))
+	visible_count = mini(visible_count, total)
+	var first := 1 if max_scroll <= 0.5 else clampi(int(round(progress * float(maxi(0, total - visible_count)))) + 1, 1, maxi(1, total))
+	var last := mini(total, first + visible_count - 1)
+	var boundary := "已到最新" if online_log_at_latest else "可回到最新"
+	return "日志范围 · %d-%d/%d · %s" % [first, last, total, boundary]
+
 func online_lobby_log_unread_count() -> int:
 	if not online_log_initialized:
 		return 0
@@ -1781,6 +1799,36 @@ func refresh_online_log_navigation() -> void:
 			set_ui_full_text(count_badge, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
 			count_badge.set_meta("log_semantics", "visible_retained_total_unread_summary")
 			mark_ui_optimization(count_badge, "F-241")
+	var range_text := online_lobby_log_visible_range_text()
+	var range_label := root_layer.find_child("OnlineLobbyLogRangeLabel", true, false) as Label
+	if range_label != null:
+		set_dynamic_label_text(range_label, range_text, "房间日志可见范围；" + range_text)
+		range_label.set_meta("log_range_text", range_text)
+		range_label.set_meta("log_at_latest", online_log_at_latest)
+		range_label.set_meta("unread_count", unread)
+		range_label.set_meta("range_first_last_total", range_text)
+		range_label.set_meta("range_boundary_owner", "OnlineLobbyLogScroll")
+		mark_ui_optimization(range_label, "F-901")
+		mark_ui_optimization(range_label, "F-902")
+		mark_ui_optimization(range_label, "F-904")
+		mark_ui_optimization(range_label, "F-907")
+	var log_scroll := root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	if log_scroll != null:
+		log_scroll.set_meta("range_text_snapshot", range_text if range_label != null else "")
+		log_scroll.set_meta("range_boundary", "latest" if online_log_at_latest else "historical")
+		mark_ui_optimization(log_scroll, "F-903")
+		mark_ui_optimization(log_scroll, "F-908")
+	if unread_label != null:
+		unread_label.set_meta("range_unread_owner", "OnlineLobbyLogRangeLabel")
+		mark_ui_optimization(unread_label, "F-906")
+	var range_count_badge := root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control
+	if range_count_badge != null:
+		range_count_badge.set_meta("range_total_owner", "OnlineLobbyLogRangeLabel")
+		mark_ui_optimization(range_count_badge, "F-905")
+	var log_list := root_layer.find_child("OnlineLobbyLogListPanel", true, false) as Control
+	if log_list != null:
+		log_list.set_meta("visible_range_owner", "OnlineLobbyLogRangeLabel")
+		mark_ui_optimization(log_list, "F-910")
 
 
 func update_chat_send_cooldown(now_msec: int = -1) -> void:
@@ -3556,7 +3604,7 @@ func advisor_panel_candidate_is_clear(candidate: Rect2) -> bool:
 		var meld_rect: Rect2 = layout[1]
 		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
 	for layout in WALL_LAYOUTS:
-		var wall_rect := Rect2(layout[0], layout[1])
+		var wall_rect := battle_table_anchor_root_rect(Rect2(layout[0], layout[1]))
 		# Reserve a physical gutter around the authored wall lane.
 		occupied.append(Rect2(wall_rect.position, wall_rect.size - wall_rect.position).grow(0.008))
 	for zone in DISCARD_ZONES:
@@ -3586,9 +3634,10 @@ func advisor_panel_layout_rect() -> Rect2:
 	for candidate in candidates:
 		if advisor_panel_candidate_is_clear(candidate):
 			return candidate
-	# A dynamic table state can occupy every preferred side channel. Keep the
-	# fallback hard-safe: an empty rect is preferable to covering a seat or tile.
-	return Rect2()
+	# A dynamic table state can occupy every preferred side channel. Keep a real
+	# bounded fallback instead of returning a zero rect whose children spill at
+	# the viewport edge and become unreadable.
+	return rect_full(0.015, 0.525, 0.350, 0.805)
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
 	# Keep the response context in one predictable upper-left decision lane. The
@@ -8857,32 +8906,35 @@ func chat_panel_rect() -> Rect2:
 	# The drawer is selected from several authored safe lanes. A fixed choice used
 	# to cover whichever side happened to contain a meld; scoring the candidates
 	# keeps the reading surface and its 44px controls away from active table data.
-	var upper_left_right := 0.280 if effective_viewport_size().x >= 1600.0 else 0.285
-	var left_safe_right := 0.280 if effective_viewport_size().x >= 1600.0 else 0.305
+	var upper_left_right := 0.320
+	var left_route_right := 0.295 if effective_viewport_size().x >= 1600.0 else 0.320
 	# Keep the compact drawer above the left-seat plaque. The previous .420
 	# bottom edge crossed that plaque at 960px and hid the seat identity while
 	# the modal was open.
-	var upper_left_bottom := 0.320 if effective_viewport_size().x >= 1600.0 else 0.320
+	var upper_left_bottom := 0.400
 	var candidates: Array[Rect2] = [
-		rect_full(0.690, 0.110, 0.885, 0.420),
-		rect_full(0.015, 0.110, upper_left_right, upper_left_bottom),
-		rect_full(0.015, 0.455, left_safe_right, 0.765),
-		rect_full(0.660, 0.455, 0.985, 0.765),
+		# Leave a gap below the top seat plaque; the occupancy score rejects this
+		# lane when the right meld area is active.
+		rect_full(0.620, 0.120, 0.880, 0.430),
+		rect_full(0.115, 0.110, upper_left_right, upper_left_bottom),
+		# When the upper-left reading lane is reserved by an active meld, keep the
+		# same-height compact controls in the clear left channel above the bottom
+		# seat and below the side river.
+		rect_full(0.115, 0.430, left_route_right, 0.720),
+		rect_full(0.645, 0.400, 0.985, 0.680),
 	]
-	var has_active_meld := false
-	for layout in MELD_LAYOUTS:
-		if not get_melds(int(layout[0])).is_empty():
-			has_active_meld = true
-			break
-	if not has_active_meld:
-		return candidates[0]
-	var best := candidates[0]
+	var best := candidates[2]
 	var best_score := INF
 	for candidate in candidates:
 		var score := chat_panel_candidate_overlap_score(candidate)
 		if score < best_score:
 			best_score = score
 			best = candidate
+	if best_score == INF:
+		# Every preferred lane can be occupied by a live seat/meld/river. Keep the
+		# last resort in the bounded left channel instead of covering the bottom
+		# river, seat plaque, or hand tray.
+		return rect_full(0.115, 0.430, left_route_right, 0.720)
 	return best
 
 func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
@@ -8890,17 +8942,17 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 	var occupied: Array[Rect2] = []
 	for layout in SEAT_LAYOUTS:
 		var seat_rect: Rect2 = layout[1]
-		occupied.append(Rect2(seat_rect.position, seat_rect.size - seat_rect.position).grow(0.006))
+		occupied.append(Rect2(seat_rect.position, seat_rect.size - seat_rect.position))
 	for layout in MELD_LAYOUTS:
 		var meld_seat := int(layout[0])
 		if get_melds(meld_seat).is_empty():
 			continue
 		var meld_rect: Rect2 = layout[1]
-		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position).grow(0.006))
+		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
 	for zone in DISCARD_ZONES:
 		var river_rect: Rect2 = zone[1]
 		var river_anchor := chat_panel_table_anchor_rect(river_rect)
-		occupied.append(Rect2(river_anchor.position, river_anchor.size - river_anchor.position).grow(0.006))
+		occupied.append(Rect2(river_anchor.position, river_anchor.size - river_anchor.position))
 	var center_rect := chat_panel_table_anchor_rect(CENTER_PANEL_RECT)
 	occupied.append(Rect2(center_rect.position, center_rect.size - center_rect.position))
 	occupied.append(Rect2(TOP_HUD_RECT.position, TOP_HUD_RECT.size - TOP_HUD_RECT.position))
@@ -8909,20 +8961,29 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 	occupied.append(Rect2(intent_rect.position, intent_rect.size - intent_rect.position))
 	var action_rect := action_bar_dock_layout_rect()
 	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
+	var hand_rect := HAND_TRAY_RECT
+	occupied.append(Rect2(hand_rect.position, hand_rect.size - hand_rect.position).grow(0.006))
 	var ledger_rect := rect_full(0.018, 0.128, 0.340, 0.235)
 	var ledger_geometry := Rect2(ledger_rect.position, ledger_rect.size - ledger_rect.position)
-	var upper_left_route := candidate.position.x < 0.30 and candidate.position.y < 0.40
-	if upper_left_route and candidate_geometry.intersects(ledger_geometry, true):
-		return INF
-	occupied.append(ledger_geometry)
-	var score := 0.0
+	# The upper-left route hides the ledger before mounting the drawer, so the
+	# ledger is only a hard exclusion for candidates that leave it visible.
+	if candidate.position.x >= 0.35 or candidate.position.y >= 0.45:
+		occupied.append(ledger_geometry)
+	# Once any meld is visible, keep the modal out of the upper-left reading lane.
+	# That lane hides the ledger and is only safe for a clean table state; the
+	# bounded left candidate below it preserves the same compact control height.
+	if candidate.position.x < 0.30 and candidate.position.y < 0.40:
+		for layout in MELD_LAYOUTS:
+			if not get_melds(int(layout[0])).is_empty():
+				return INF
+	# A drawer that barely overlaps a seat or hand is still unusable. Treat every
+	# occupied table lane as a hard exclusion instead of ranking the smallest
+	# collision as the "best" route.
 	for occupied_rect in occupied:
 		if not candidate_geometry.intersects(occupied_rect, true):
 			continue
-		var overlap := candidate_geometry.intersection(occupied_rect)
-		var overlap_area := maxf(0.0, overlap.size.x) * maxf(0.0, overlap.size.y)
-		score += 1.0 + overlap_area * 100.0
-	return score
+		return INF
+	return 0.0
 
 
 func chat_panel_table_anchor_rect(table_rect: Rect2) -> Rect2:

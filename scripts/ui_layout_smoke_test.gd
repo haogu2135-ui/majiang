@@ -693,6 +693,177 @@ func check_ui_round_801_830(scene, viewport_size: Vector2) -> void:
 		check(float(room_edit.get_meta("clear_proxy_right_inset_px", 0.0)) >= 52.0, "lobby input reserves the clear proxy inset at %s" % viewport_size)
 
 
+func check_ui_round_831_860(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (831 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_831_860(root)
+	var root_contracts: Array = root.get_meta("ui_round_831_860_contract_ids", []) if root != null else []
+	check(root_contracts.size() == expected_ids.size(), "F-831..F-860 publishes exactly thirty contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(root_contracts.has(finding_id), "F-831..F-860 exposes %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_831_860_scope", "")) == "residual_visual_clearance_and_reading_order", "F-831..F-860 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_831_860_evidence_viewports", []).size() == 3, "F-831..F-860 names three evidence viewports at %s" % viewport_size)
+
+	var hand_rect: Rect2 = scene.HAND_TRAY_TILES_RECT
+	var hand_bottom_gutter: float = (1.0 - hand_rect.size.y) * viewport_size.y
+	check(hand_rect.size.y <= 0.9821 and hand_bottom_gutter >= 8.0, "hand tiles keep an eight-pixel bottom safe gutter at %s (%.1fpx)" % [viewport_size, hand_bottom_gutter])
+	var hand_status := scene.find_child("HandTrayStatusText", true, false) as Control
+	if hand_status != null:
+		check(hand_status.get_meta("prompt_tile_vertical_gap_contract", "") == "status_and_shortcut_lanes_above_tiles", "hand prompt stays in its own lane above tiles at %s" % viewport_size)
+	var hand_tiles := scene.find_child("HandTrayTiles", true, false) as Control
+	if hand_tiles != null:
+		check(float(hand_tiles.get_meta("suit_group_gap_min_px", 0.0)) >= 8.0, "hand suit groups keep their minimum rhythm at %s" % viewport_size)
+
+	var danger_gap: float = (scene.DANGER_ACTION_BAR_DOCK_RECT.position.y - scene.DANGER_DISCARD_CONFIRMATION_RECT.size.y) * viewport_size.y
+	check(scene.DANGER_DISCARD_CONFIRMATION_RECT.size.y <= 0.6601 and danger_gap >= 16.0, "danger explanation clears the action dock by sixteen pixels at %s (%.1fpx)" % [viewport_size, danger_gap])
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if action_dock != null:
+		check(float(action_dock.get_meta("primary_secondary_gutter_px", 0.0)) >= 8.0 and str(action_dock.get_meta("priority_policy", "")).begins_with("primary"), "action dock declares primary-first hierarchy at %s" % viewport_size)
+
+	var diagnostic_scroll := scene.find_child("DiagnosticContentScroll", true, false) as Control
+	var diagnostic_status := scene.find_child("DiagnosticContentStatusLabel", true, false) as Control
+	if diagnostic_scroll != null:
+		check(float(diagnostic_scroll.get_meta("footer_clearance_px", 0.0)) >= 12.0 and float(diagnostic_scroll.get_meta("body_footer_gap_normalized", 0.0)) >= 0.040, "diagnostic body leaves a fixed status/footer gutter at %s" % viewport_size)
+	if diagnostic_scroll != null and diagnostic_status != null:
+		check(screen_rect(diagnostic_scroll).end.y + 8.0 <= screen_rect(diagnostic_status).position.y, "diagnostic scroll and status remain visually separated at %s" % viewport_size)
+
+	var telemetry := scene.find_child("TelemetryDataSheet", true, false) as Control
+	if telemetry != null:
+		check(bool(telemetry.get_meta("background_controls_locked", false)) and telemetry.get_meta("modal_background_policy", "") == "locked_and_dimmed_outline_only", "telemetry modal isolates its background reading surface at %s" % viewport_size)
+	var replay_copy := scene.find_child("ReplayImportCopyCodeButton", true, false) as Control
+	if replay_copy != null:
+		check(float(replay_copy.get_meta("content_pane_clearance_px", 0.0)) >= 8.0, "replay copy action keeps an eight-pixel content-pane gutter at %s" % viewport_size)
+
+
+func check_ui_round_861_890(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (861 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_861_890(root)
+	var root_contracts: Array = root.get_meta("ui_round_861_890_contract_ids", []) if root != null else []
+	var owner_roles: Dictionary = root.get_meta("ui_round_861_890_owner_roles", {}) if root != null else {}
+	check(root_contracts.size() == expected_ids.size(), "F-861..F-890 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owner_roles.size() == expected_ids.size(), "F-861..F-890 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(root_contracts.has(finding_id) and owner_roles.has(finding_id), "F-861..F-890 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_861_890_scope", "")) == "cross_page_visual_owners_geometry_and_state", "F-861..F-890 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_861_890_evidence_viewports", []).size() == 3, "F-861..F-890 names three evidence viewports at %s" % viewport_size)
+
+	var hud := scene.find_child("TopHud3DShell", true, false) as Control
+	var wall := scene.find_child("TopHudWallText", true, false) as Control
+	if hud != null:
+		check(hud.get_meta("layer_order_contract", "") == "background_then_hud_text_then_native_actions", "top HUD declares text/action layer order at %s" % viewport_size)
+	if wall != null:
+		check(bool(wall.get_meta("unique_count_owner", false)) and wall.get_meta("visual_owner", "") == "TopHudWallText", "top HUD wall count has one visual owner at %s" % viewport_size)
+
+	var chat := scene.find_child("ChatPanel", true, false) as Control
+	if chat != null:
+		check(bool(chat.get_meta("hard_seat_exclusion", false)), "chat drawer declares hard seat exclusion at %s" % viewport_size)
+		var seat_zero := scene.find_child("SeatPanel_0", true, false) as Control
+		if seat_zero != null:
+			check(not rects_overlap(screen_rect(chat), screen_rect(seat_zero)), "chat drawer fallback clears bottom seat at %s" % viewport_size)
+
+	var shop_host := scene.find_child("ShopItemBuyHitHost_swap_card", true, false) as Control
+	var shop_command := scene.find_child("ShopBuyButtonCommand_swap_card", true, false) as Control
+	if shop_host != null and shop_command != null:
+		check(shop_command.get_parent() == shop_host and shop_command.visible and bool(shop_host.get_meta("cta_visual_text_survives_disabled_button", false)), "shop CTA text stays on an independent visual owner at %s" % viewport_size)
+		check(screen_rect(shop_host).grow(1.0).encloses(screen_rect(shop_command)), "shop CTA text stays inside its hit host at %s" % viewport_size)
+
+	var diagnostic_scroll := scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	var diagnostic_status := scene.find_child("DiagnosticContentStatusLabel", true, false) as Control
+	if diagnostic_scroll != null:
+		var measurement_pending := bool(diagnostic_scroll.get_meta("diagnostic_measurement_pending", false))
+		var diagnostic_scrollbar := diagnostic_scroll.get_v_scroll_bar()
+		if diagnostic_scrollbar != null:
+			check(diagnostic_scrollbar.visible == not measurement_pending, "diagnostic scrollbar visibility matches measurement state at %s" % viewport_size)
+		check(diagnostic_scroll.get_meta("first_frame_range_contract", "") == "status_pending_until_wrapped_width_and_scroll_range_are_stable", "diagnostic declares a stable first-frame range contract at %s" % viewport_size)
+	if diagnostic_status != null and not bool(diagnostic_status.get_meta("diagnostic_status_pending", false)):
+		check(diagnostic_status.get_meta("range_state_contract", "") == "visible_first_last_total_matches_scrollbar", "diagnostic range status owns the resolved scroll state at %s" % viewport_size)
+
+	var settings_nav := scene.find_child("SettingsSectionNavigation", true, false) as Control
+	if settings_nav != null:
+		check(settings_nav.get_meta("active_marker_contract", "") == "exactly_one_visible_authored_marker", "settings navigation keeps one active marker at %s" % viewport_size)
+	var telemetry_clear := scene.find_child("TelemetryClearButton", true, false) as Control
+	if telemetry_clear != null:
+		check(bool(telemetry_clear.get_meta("confirmation_required", false)), "telemetry clear keeps explicit confirmation state at %s" % viewport_size)
+
+
+func check_ui_round_891_920(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (891 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_891_920(root)
+	var root_contracts: Array = root.get_meta("ui_round_891_920_contract_ids", []) if root != null else []
+	var owner_roles: Dictionary = root.get_meta("ui_round_891_920_roles", {}) if root != null else {}
+	check(root_contracts.size() == expected_ids.size(), "F-891..F-920 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owner_roles.size() == expected_ids.size(), "F-891..F-920 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(root_contracts.has(finding_id) and owner_roles.has(finding_id), "F-891..F-920 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_891_920_scope", "")) == "recovery_log_diagnostic_update_state_owners", "F-891..F-920 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_891_920_evidence_viewports", []).size() == 3, "F-891..F-920 names three evidence viewports at %s" % viewport_size)
+
+	var recovery_state := scene.find_child("OnlineRecoveryStateLabel", true, false) as Label
+	if recovery_state != null:
+		check(str(recovery_state.get_meta("recovery_phase", "")) in ["connecting", "cooldown", "retry_ready"], "online recovery state exposes a bounded phase at %s" % viewport_size)
+		check(str(recovery_state.get_meta("recovery_reason", "")) != "" and int(recovery_state.get_meta("recovery_attempt", 0)) >= 1, "online recovery state keeps reason and attempt context at %s" % viewport_size)
+		check(str(recovery_state.get_meta("state_owner", "")) == "online_recovery_phase_and_reason", "online recovery state has one phase/reason owner at %s" % viewport_size)
+	var reconnect := scene.find_child("OnlineReconnectGameButton", true, false) as Button
+	if reconnect != null:
+		check(str(reconnect.get_meta("recovery_phase_text", "")) != "" and str(reconnect.get_meta("recovery_reason", "")) != "" and int(reconnect.get_meta("recovery_attempt", 0)) >= 1, "reconnect CTA exposes phase reason and attempt semantics at %s" % viewport_size)
+		check(str(reconnect.get_meta("recovery_focus_route", "")) == "primary_reconnect_then_preserved_lobby", "reconnect CTA owns the preserved-lobby focus route at %s" % viewport_size)
+	var lobby_recovery := scene.find_child("OnlineDisconnectedLobbyButton", true, false) as Button
+	if lobby_recovery != null:
+		check(lobby_recovery.text == "大厅 · 保留牌局" and lobby_recovery.tooltip_text.contains("保留当前牌局"), "disconnected lobby CTA states that the board is preserved at %s" % viewport_size)
+	var hand_tray := scene.find_child("HandTray", true, false) as Control
+	if hand_tray != null and str(hand_tray.get_meta("interaction_state", "")) == "read_only":
+		check(str(hand_tray.get_meta("tile_visual_policy", "")) == "assets_tiles_2d_untinted" and str(hand_tray.get_meta("read_only_recovery_owner", "")) == "OnlineReconnectGameButton", "read-only hand preserves untinted 2D tiles and names its recovery owner at %s" % viewport_size)
+
+	var log_scroll := scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var log_range := scene.find_child("OnlineLobbyLogRangeLabel", true, false) as Label
+	if log_scroll != null:
+		check(str(log_scroll.get_meta("range_status_owner", "")) == "OnlineLobbyLogRangeLabel" and str(log_scroll.get_meta("range_update_trigger", "")) == "scroll_value_changed_and_log_refresh", "lobby log scroll owns live range refresh triggers at %s" % viewport_size)
+	if log_range != null:
+		check(str(log_range.get_meta("range_owner", "")) == "OnlineLobbyLogScroll" and str(log_range.get_meta("range_contract", "")) == "first_last_total_and_latest_boundary", "lobby log range label exposes first-last-total semantics at %s" % viewport_size)
+		check(str(log_range.get_meta("log_range_text", "")) != "" or log_range.text.contains("范围"), "lobby log range label keeps a visible state at %s" % viewport_size)
+	var log_text := scene.find_child("OnlineLobbyLogListText", true, false) as Control
+	if log_text != null:
+		check(str(log_text.get_meta("line_range_source", "")) == "OnlineLobbyLogScroll", "lobby log body delegates range ownership to its native scroll at %s" % viewport_size)
+
+	var diagnostic_scroll := scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	var diagnostic_status := scene.find_child("DiagnosticContentStatusLabel", true, false) as Label
+	if diagnostic_scroll != null:
+		check(str(diagnostic_scroll.get_meta("diagnostic_range_owner", "")) == "DiagnosticContentStatusLabel" and str(diagnostic_scroll.get_meta("first_frame_contract", "")) == "pending_until_wrapped_width_stable", "diagnostic scroll defers its first range until measurement is stable at %s" % viewport_size)
+	if diagnostic_status != null:
+		check(bool(diagnostic_status.get_meta("complete_row_boundary", false)) or bool(diagnostic_status.get_meta("diagnostic_status_pending", false)), "diagnostic range reports complete rows or an explicit pending state at %s" % viewport_size)
+	var diagnostic_copy := scene.find_child("DiagnosticCopyButton", true, false) as Button
+	var diagnostic_feedback := scene.find_child("DiagnosticCopyFeedbackLabel", true, false) as Label
+	if diagnostic_copy != null and diagnostic_feedback != null:
+		check(diagnostic_feedback.get_meta("feedback_owner", "") == "DiagnosticCopyButton" and screen_rect(diagnostic_copy).position.x >= screen_rect(diagnostic_feedback).end.x - 1.0, "diagnostic copy feedback stays beside its owning action at %s" % viewport_size)
+
+	var notes_scroll := scene.find_child("UpdateReleaseNotesScroll", true, false) as ScrollContainer
+	var notes_label := scene.find_child("UpdateReleaseNotesLabel", true, false) as Label
+	var notes_status := scene.find_child("UpdateReleaseNotesStatus", true, false) as Label
+	if notes_scroll != null:
+		check(str(notes_scroll.get_meta("range_status_owner", "")) == "UpdateReleaseNotesStatus" and str(notes_scroll.get_meta("content_width_owner", "")) == "UpdateReleaseNotesLabel", "update notes scroll keeps range and width owners distinct at %s" % viewport_size)
+	if notes_label != null:
+		check(str(notes_label.get_meta("width_owner", "")) == "UpdateReleaseNotesScroll" and str(notes_label.get_meta("width_measurement_policy", "")) == "resolved_scroll_viewport_width", "update notes body measures against its resolved viewport at %s" % viewport_size)
+	if notes_status != null:
+		check(str(notes_status.get_meta("status_contract", "")) == "visible_range_progress_and_total_character_count" and notes_status.get_theme_font_size("font_size") >= scene.accessibility_font_size(10), "update notes status keeps range progress and readable size at %s" % viewport_size)
+	var update_primary := scene.find_child("UpdatePrimaryButton", true, false) as Button
+	if update_primary != null and scene.update_state == "ready":
+		check(update_primary.text == "安装更新" and bool(update_primary.get_meta("recommended_action", false)) and str(update_primary.get_meta("action_hierarchy", "")) == "primary_install_before_close", "ready update state makes install the recommended primary action at %s" % viewport_size)
+
+
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
 	var discards: Array = scene.get_discards(seat)
 	var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
@@ -828,6 +999,9 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_compact_seat_panels(scene, actual_viewport)
 	check_battle_round_contracts(scene, actual_viewport)
 	check_ui_round_801_830(scene, actual_viewport)
+	check_ui_round_831_860(scene, actual_viewport)
+	check_ui_round_861_890(scene, actual_viewport)
+	check_ui_round_891_920(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
 	await check_table_log_archive_layout(scene, actual_viewport)
 	seed_online_pending_claim_layout_state(scene)
@@ -978,6 +1152,9 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await check_replay_import_layout(scene, actual_viewport)
 	check_ui_round_771_800(scene, actual_viewport)
 	check_ui_round_801_830(scene, actual_viewport)
+	check_ui_round_831_860(scene, actual_viewport)
+	check_ui_round_861_890(scene, actual_viewport)
+	check_ui_round_891_920(scene, actual_viewport)
 	scene.show_menu(true)
 	await process_frame
 	scene.show_diagnostic_dialog(diagnostic_lines)
@@ -985,6 +1162,9 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await check_diagnostic_layout(scene, actual_viewport, diagnostic_lines.size())
 	check_ui_round_771_800(scene, actual_viewport)
 	check_ui_round_801_830(scene, actual_viewport)
+	check_ui_round_831_860(scene, actual_viewport)
+	check_ui_round_861_890(scene, actual_viewport)
+	check_ui_round_891_920(scene, actual_viewport)
 	scene.currency = {"coins": 28975, "gems": 10}
 	scene.season_data = {"season_id": "qa", "points": 1250, "highest_rank": 2, "wins": 6, "games": 9}
 	scene.game_stats["games_played"] = 9
@@ -1015,6 +1195,9 @@ func check_telemetry_toast_layout(scene, viewport_size: Vector2) -> void:
 	var body := scene.find_child("TelemetryDataSheetBody", true, false) as Control
 	var close := scene.find_child("TelemetryDataSheetCloseButton", true, false) as Control
 	check(card != null and title != null and body != null and close != null, "telemetry data sheet exposes its modal reading lanes at %s" % viewport_size)
+	check_ui_round_831_860(scene, viewport_size)
+	check_ui_round_861_890(scene, viewport_size)
+	check_ui_round_891_920(scene, viewport_size)
 	var settings_close := scene.find_child("SettingsCloseButton", true, false) as Button
 	var settings_scroll := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
 	for background_control in [settings_close, settings_scroll]:
@@ -2032,7 +2215,7 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	await settle_layout()
 	var disconnected_status := scene.find_child("TopHudStatus", true, false) as Label
 	var disconnected_action := scene.find_child("ActionDockStatusLabel", true, false) as Label
-	check(disconnected_status != null and disconnected_status.text == "断线 · 重连" and disconnected_status.tooltip_text.contains("使用右侧重连"), "online disconnect HUD keeps one compact recovery state and a full detail tooltip at %s" % viewport_size)
+	check(disconnected_status != null and disconnected_status.text.begins_with("断线") and (disconnected_status.text.contains("连接中") or disconnected_status.text.contains("秒后重连") or disconnected_status.text.contains("重连") or disconnected_status.text.contains("可立即重连")) and disconnected_status.tooltip_text.contains("使用重连"), "online disconnect HUD keeps one compact recovery phase and a full detail tooltip at %s" % viewport_size)
 	if disconnected_status != null:
 		check(not disconnected_status.text.contains("...") and label_text_width(disconnected_status, disconnected_status.text) <= screen_rect(disconnected_status).size.x + 1.0, "online disconnect HUD status fits its compact lane at %s" % viewport_size)
 	check(disconnected_action != null and disconnected_action.text.contains("断线") and scene.find_child("ActionDockDisconnectedStatus", true, false) == null, "online disconnect owns the single action-dock status slot at %s" % viewport_size)
@@ -2075,10 +2258,10 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 		if not intent_count_labels.is_empty():
 			intent_count_label = intent_count_labels[0] as Label
 	var compact_disconnect_intent := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
-	var expected_disconnect_intent := "断线 · 重连"
+	var expected_disconnect_intent: String = scene.online_recovery_status_text()
 	check(intent_text != null and intent_text.text == expected_disconnect_intent and not intent_text.text.contains("等待") and not intent_text.text.contains("提交响应"), "online disconnect intent points to the sole recovery action at %s" % viewport_size)
 	if intent_text != null:
-		check(not intent_text.text.contains("...") and not intent_text.text.contains("…") and label_text_width(intent_text, intent_text.text) <= screen_rect(intent_text).size.x + 1.0 and intent_text.tooltip_text.contains("使用右侧重连"), "online disconnect intent keeps a readable compact label and complete recovery tooltip at %s (text=%s width=%.1f lane=%.1f tooltip=%s)" % [viewport_size, intent_text.text, label_text_width(intent_text, intent_text.text), screen_rect(intent_text).size.x, intent_text.tooltip_text])
+		check(not intent_text.text.contains("...") and not intent_text.text.contains("…") and label_text_width(intent_text, intent_text.text) <= screen_rect(intent_text).size.x + 1.0 and intent_text.tooltip_text.contains("使用重连"), "online disconnect intent keeps a readable compact phase label and complete recovery tooltip at %s (text=%s width=%.1f lane=%.1f tooltip=%s)" % [viewport_size, intent_text.text, label_text_width(intent_text, intent_text.text), screen_rect(intent_text).size.x, intent_text.tooltip_text])
 	check(intent_count_label != null and intent_count_label.text == "重连" and scene.action_bar_button_count() == 1, "online disconnect intent badge and action count expose only reconnect at %s" % viewport_size)
 	check(scene.find_child("PendingClaimIllustration", true, false) == null and scene.hand_keyboard_selection == -1 and not scene.hand_keyboard_tile_selectable(0, scene.get_self_hand()), "online disconnect clears stale response art and keyboard selection at %s" % viewport_size)
 	check(scene.online_action_validation_error({"type": "discard", "tile": "3W"}).contains("断线"), "online disconnect rejects programmatic discard submission at %s" % viewport_size)

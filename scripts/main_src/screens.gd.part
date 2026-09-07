@@ -1428,8 +1428,12 @@ func _show_online_lobby_impl() -> void:
 	log_scroll.set_meta("footer_clearance_px", 12.0)
 	log_scroll.set_meta("footer_owner", "OnlineFeedbackArt")
 	log_scroll.set_meta("touch_contract", "44px_hit_lane_preserve_scroll_position")
+	log_scroll.set_meta("range_status_owner", "OnlineLobbyLogRangeLabel")
+	log_scroll.set_meta("range_update_trigger", "scroll_value_changed_and_log_refresh")
 	mark_ui_optimization(log_scroll, "F-543")
 	mark_ui_optimization(log_scroll, "F-057")
+	mark_ui_optimization(log_scroll, "F-903")
+	mark_ui_optimization(log_scroll, "F-908")
 	log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	log_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	log_scroll.scroll_deadzone = 6
@@ -1453,7 +1457,15 @@ func _show_online_lobby_impl() -> void:
 	logs_label.add_theme_constant_override("shadow_offset_y", 1)
 	logs_label.add_theme_constant_override("line_spacing", -2 if compact_lobby_log else 0)
 	logs_label.custom_minimum_size = Vector2.ZERO
+	logs_label.set_meta("line_range_source", "OnlineLobbyLogScroll")
+	mark_ui_optimization(logs_label, "F-909")
 	log_scroll.add_child(logs_label)
+	var log_scrollbar := log_scroll.get_v_scroll_bar()
+	if log_scrollbar != null:
+		log_scrollbar.value_changed.connect(func(_value: float) -> void:
+			refresh_online_log_navigation()
+		)
+		log_scroll.set_meta("range_status_updates_on_scroll", true)
 	render_room_log()
 	draw_online_feedback_art(log_panel)
 	draw_online_lobby_connection_route(panel)
@@ -2981,6 +2993,15 @@ func _show_shop_screen_impl() -> void:
 		configure_clipped_label(command_label)
 		set_ui_full_text(command_label, command_label.text, "购买操作：" + name_label.text)
 		mark_ui_optimization(command_label, "F-555")
+		# Disabled Button nodes inherit the theme's muted canvas state. Keep the
+		# actual CTA copy on the hit host so an unavailable purchase still reads as
+		# a deliberate action with a reason instead of an empty gray block.
+		buy_btn.remove_child(command_label)
+		buy_hit_host.add_child(command_label)
+		command_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		command_label.z_index = 2
+		command_label.set_meta("visual_text_owner", "ShopItemBuyHitHost_%s" % item_id)
+		buy_hit_host.set_meta("visual_text_owner", "ShopBuyButtonCommand_%s" % item_id)
 		var price_label = make_label(buy_btn, "%d玉" % cost, 14, Color(0.96, 0.90, 0.70) if can_afford else Color(0.98, 0.72, 0.62), true)
 		price_label.name = "ShopBuyButtonPrice_%s" % item_id
 		apply_rect(price_label, rect_full(0.270, 0.220, 0.950, 0.780))
@@ -3978,7 +3999,7 @@ func refresh_update_dialog() -> void:
 			"installing":
 				update_primary_button.text = "安装中"
 			"ready":
-				update_primary_button.text = "安装"
+				update_primary_button.text = "安装更新"
 			_:
 				update_primary_button.text = "重试"
 		match update_state:
@@ -3995,6 +4016,13 @@ func refresh_update_dialog() -> void:
 			update_primary_button.set_meta("disabled_reason", primary_reason)
 		else:
 			update_primary_button.remove_meta("disabled_reason")
+		if update_state == "ready":
+			update_primary_button.set_meta("recommended_action", true)
+			update_primary_button.set_meta("action_hierarchy", "primary_install_before_close")
+			mark_ui_optimization(update_primary_button, "F-920")
+		else:
+			update_primary_button.remove_meta("recommended_action")
+			update_primary_button.remove_meta("action_hierarchy")
 	refresh_top_hud_update_button()
 	if update_secondary_button != null and is_instance_valid(update_secondary_button):
 		update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else ("安装中" if update_state == "installing" else "关闭")
@@ -4971,6 +4999,8 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	configure_scroll_container(content_scroll, "上下滚动查看完整诊断信息")
 	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	# Keep the first frame honest: until wrapped rows have a resolved width, the
+	# scrollbar and range label must not claim a stable scroll extent.
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	content_scroll.scroll_deadzone = 8
 	content_scroll.clip_contents = true
@@ -4979,16 +5009,18 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	content_scroll.set_meta("diagnostic_measurement_generation", ui_page_generation)
 	content_scroll.set_meta("diagnostic_measurement_contract", "stable_viewport_then_one_normalize_pass")
 	content_scroll.set_meta("diagnostic_scroll_lock_until_measurement", true)
+	content_scroll.set_meta("diagnostic_range_owner", "DiagnosticContentStatusLabel")
 	content_scroll.set_meta("scroll_hit_lane_px", UI_MIN_TOUCH_TARGET)
 	content_scroll.set_meta("scroll_boundary_status", "DiagnosticContentStatusLabel")
+	mark_ui_optimization(content_scroll, "F-911")
 	panel.add_child(content_scroll)
 	# Leave a visual buffer before the fixed action so the first visible row is
 	# never clipped by the scroll viewport or the close button.
-	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.738))
+	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.720))
 	var diagnostic_scrollbar := content_scroll.get_v_scroll_bar()
 	if diagnostic_scrollbar != null:
 		diagnostic_scrollbar.name = "DiagnosticContentScrollBar"
-		diagnostic_scrollbar.visible = true
+		diagnostic_scrollbar.visible = false
 		diagnostic_scrollbar.mouse_filter = Control.MOUSE_FILTER_STOP
 		diagnostic_scrollbar.focus_mode = Control.FOCUS_ALL
 		diagnostic_scrollbar.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, 0.0)
@@ -4996,6 +5028,8 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		diagnostic_scrollbar.set_meta("accessible_name", "诊断报告阅读进度")
 		diagnostic_scrollbar.set_meta("ui_full_text", diagnostic_scrollbar.tooltip_text)
 		diagnostic_scrollbar.set_meta("touch_lane_px", UI_MIN_TOUCH_TARGET)
+		diagnostic_scrollbar.set_meta("visibility_contract", "hidden_until_measurement_complete")
+		mark_ui_optimization(diagnostic_scrollbar, "F-913")
 
 	var vbox = VBoxContainer.new()
 	vbox.name = "DiagnosticContentList"
@@ -5045,7 +5079,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 			label.set_meta("diagnostic_measurement_pending", true)
 			label.custom_minimum_size.y = maxf(label.custom_minimum_size.y, float(28 if not line.begins_with("【") else (50 if large_text_enabled else 38)))
 		vbox.add_child(label)
-	var content_status = make_label(panel, "诊断内容 · 正在测量可见范围", 11, Color(0.86, 0.92, 0.84), true)
+	var content_status = make_label(panel, "诊断内容 · 正在测量可见范围", accessibility_font_size(11), Color(0.86, 0.92, 0.84), true)
 	content_status.name = "DiagnosticContentStatusLabel"
 	apply_rect(content_status, rect_full(0.05, 0.760, 0.95, 0.805))
 	content_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -5054,18 +5088,23 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	configure_clipped_label(content_status)
 	set_ui_full_text(content_status, "当前诊断报告范围尚在测量", "诊断报告阅读位置")
 	content_status.set_meta("diagnostic_status_pending", true)
+	content_status.set_meta("range_owner", "DiagnosticContentScroll")
 	mark_ui_optimization(content_status, "F-499")
+	mark_ui_optimization(content_status, "F-913")
 	mark_ui_optimization(content_scroll, "F-237")
 	var copy_feedback := make_label(panel, diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "复制结果：尚未复制", 11, Color(0.76, 0.86, 0.78), false)
 	copy_feedback.name = "DiagnosticCopyFeedbackLabel"
-	# Keep copy feedback in the quiet header gap; the report range status owns
-	# the dedicated lane below the scroll viewport.
-	apply_rect(copy_feedback, rect_full(0.05, 0.175, 0.50, 0.210))
+	# Keep copy feedback beside its action. The report range status owns the lane
+	# above the footer, so a copy result cannot be mistaken for health status.
+	apply_rect(copy_feedback, rect_full(0.05, 0.825, 0.180, 0.940))
 	copy_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	copy_feedback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	copy_feedback.tooltip_text = copy_feedback.text
 	copy_feedback.set_meta("accessible_name", copy_feedback.text)
+	copy_feedback.set_meta("feedback_owner", "DiagnosticCopyButton")
 	configure_clipped_label(copy_feedback)
 	mark_ui_optimization(copy_feedback, "F-500")
+	mark_ui_optimization(copy_feedback, "F-914")
 
 	var copy_button = make_small_button("复制报告", Color(0.30, 0.52, 0.54), Callable(self, "copy_diagnostic_report").bind(lines))
 	copy_button.name = "DiagnosticCopyButton"
@@ -5074,6 +5113,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	copy_button.tooltip_text = "复制完整诊断报告到剪贴板"
 	set_ui_full_text(copy_button, copy_button.tooltip_text, "复制诊断报告")
 	mark_ui_optimization(copy_button, "F-501")
+	mark_ui_optimization(copy_button, "F-915")
 	panel.add_child(copy_button)
 	apply_rect(copy_button, rect_full(0.190, 0.825, 0.470, 0.940))
 	var close_button = make_small_button("关闭", Color(0.30, 0.42, 0.38), Callable(self, "dismiss_diagnostic_dialog"))
@@ -5162,6 +5202,11 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	# is measured here; changing the viewport to the list height breaks the fixed
 	# status and close lanes and can move the scroll range outside the modal.
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	var diagnostic_scrollbar := content_scroll.get_v_scroll_bar()
+	if diagnostic_scrollbar != null:
+		diagnostic_scrollbar.visible = true
+		diagnostic_scrollbar.mouse_filter = Control.MOUSE_FILTER_STOP
+		diagnostic_scrollbar.focus_mode = Control.FOCUS_ALL
 	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	content_scroll.focus_mode = Control.FOCUS_ALL
 	content_scroll.set_meta("diagnostic_measurement_pending", false)
@@ -5274,6 +5319,8 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	var viewport_top := scrollbar.value
 	var viewport_height := maxf(scrollbar.page, content_scroll.size.y)
 	var viewport_bottom := viewport_top + viewport_height
+	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page)
+	var at_bottom := scrollbar.value >= max_scroll - 0.5
 	var first_visible := -1
 	var last_visible := -1
 	var line_index := 0
@@ -5284,10 +5331,18 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 		var line := child as Label
 		var line_top := line.position.y
 		var line_bottom := line_top + line.size.y
-		if line_bottom > viewport_top + 1.0 and line_top < viewport_bottom - 1.0:
+		# Count only complete rows. A partially clipped last row is not a reliable
+		# reading range and made large-text mode report content the user could not
+		# actually read.
+		if line_top >= viewport_top + 1.0 and line_bottom <= viewport_bottom - 1.0:
 			if first_visible < 0:
 				first_visible = line_index
 			last_visible = line_index
+	# Native scrollbars can leave the last row exactly on the clip edge. Once the
+	# user is at the actual end, the end state is authoritative even if that edge
+	# loses a fractional pixel during layout; the row remains the scroll target.
+	if at_bottom:
+		last_visible = total
 	if first_visible < 0:
 		var fallback_line_height := 38.0 if large_text_enabled else 30.0
 		first_visible = clampi(int(floor(viewport_top / fallback_line_height)) + 1, 1, total)
@@ -5302,7 +5357,9 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	status_label.set_meta("diagnostic_last_line", last_visible)
 	status_label.set_meta("diagnostic_scroll_boundary", "bottom" if remaining == 0 else ("top" if first_visible == 1 else "middle"))
 	status_label.set_meta("diagnostic_remaining_lines", remaining)
+	status_label.set_meta("complete_row_boundary", true)
 	mark_ui_optimization(status_label, "F-608")
+	mark_ui_optimization(status_label, "F-912")
 
 
 func dismiss_diagnostic_dialog() -> void:

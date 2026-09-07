@@ -1063,9 +1063,9 @@ const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.1
 const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.190), Vector2(0.988, 0.218))
 const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
 const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.760, 0.040), Vector2(0.970, 0.145))
-# Keep a dedicated top prompt lane above the clickable tile row. The 0.250
-# boundary still preserves the minimum touch width at the compact 960x540 gate.
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.285), Vector2(0.985, 0.997))
+# Keep a dedicated top prompt lane above the clickable tile row while moving the
+# row upward enough to preserve the minimum touch width at the compact gate.
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.270), Vector2(0.985, 0.982))
 const HAND_LAYOUT_CANDIDATES := [
 	[8.0, 2],
 	[6.0, 4],
@@ -1091,7 +1091,7 @@ const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.528, 0.700), Vector2(0.972,
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.710), Vector2(0.960, 0.782))
 # Keep the warning in the clear channel between the center surface and the
 # right-seat meld lane. The full-width CTA remains below it, above the hand.
-const DANGER_DISCARD_CONFIRMATION_RECT := Rect2(Vector2(0.595, 0.510), Vector2(0.770, 0.685))
+const DANGER_DISCARD_CONFIRMATION_RECT := Rect2(Vector2(0.595, 0.510), Vector2(0.770, 0.660))
 const CHAT_ACTION_BUTTON_RECT := Rect2(Vector2(0.420, 0.698), Vector2(0.508, 0.782))
 const TOP_HUD_BUTTON_SIZE := Vector2(56, 44)
 const TOP_HUD_MODE_BADGE_RECT := Rect2(Vector2(0.018, 0.14), Vector2(0.100, 0.44))
