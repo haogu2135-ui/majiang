@@ -956,7 +956,7 @@ const WALL_VISUAL_FULL_COUNT := 92
 const DISCARD_TILE_MAX_SIZE := Vector2(88, 116)  # r452 denser bottom/side porcelain cap
 const DISCARD_TILE_MIN_SIZE := Vector2(34, 46)  # r451 denser floor
 const DISCARD_TILE_ASPECT := 52.0 / 38.0
-const DISCARD_GRID_SEPARATION := 2  # r453 tiny authored-face gutter keeps river cells legible
+const DISCARD_GRID_SEPARATION := 3  # r771 reserve a stable pixel gutter between river faces
 const WALL_LAYOUTS := [
 	[Vector2(0.255, 0.050), Vector2(0.745, 0.095), 16, true],
 	[Vector2(0.255, 0.850), Vector2(0.745, 0.895), 16, true],
@@ -971,16 +971,16 @@ const DISCARD_ZONES := [
 	[2, Rect2(Vector2(0.285, 0.205), Vector2(0.715, 0.290)), 8],
 		# Side rivers stop before the dedicated bottom action channel. The gap is
 		# intentional: response controls must never sit on the last discard row.
-		[3, Rect2(Vector2(0.225, 0.310), Vector2(0.385, 0.535)), 3],
-		[1, Rect2(Vector2(0.615, 0.310), Vector2(0.775, 0.535)), 3],
+	[3, Rect2(Vector2(0.235, 0.300), Vector2(0.380, 0.530)), 3],
+	[1, Rect2(Vector2(0.620, 0.300), Vector2(0.765, 0.530)), 3],
 ]
 const MELD_LAYOUTS := [
 	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
 	# Keep the vertical lanes beside the seat plaques. Their lower edge leaves a
 	# separate bottom action channel while pagination preserves full meld access.
-	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.875, 0.510))],
+	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.865, 0.510))],
 	[2, Rect2(Vector2(0.680, 0.105), Vector2(0.965, 0.195))],
-	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.205, 0.510))],
+	[3, Rect2(Vector2(0.135, 0.240), Vector2(0.205, 0.510))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
 const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.300), Vector2(0.595, 0.635))
@@ -1057,7 +1057,7 @@ const TABLE_CORNER_RECTS := [
 const HAND_TILE_MAX_WIDTH := 68.0
 const HAND_TILE_MIN_TOUCH_WIDTH := 46.0
 const HAND_TILE_ASPECT := 1.36
-const HAND_MIN_GROUP_GAP := 6.0
+const HAND_MIN_GROUP_GAP := 8.0
 const HAND_TRAY_RECT := Rect2(Vector2(0.185, 0.815), Vector2(0.985, 0.985))
 const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
 const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.190), Vector2(0.988, 0.218))
@@ -1065,9 +1065,9 @@ const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
 const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.760, 0.040), Vector2(0.970, 0.145))
 # Keep a dedicated top prompt lane above the clickable tile row. The 0.250
 # boundary still preserves the minimum touch width at the compact 960x540 gate.
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.285), Vector2(0.985, 0.99))
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.285), Vector2(0.985, 0.997))
 const HAND_LAYOUT_CANDIDATES := [
-	[8.0, 5],
+	[8.0, 2],
 	[6.0, 4],
 	[4.0, 4],
 	[3.0, 3],
@@ -1087,8 +1087,8 @@ const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.632, 0.588), Vector2
 const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.615, 0.558), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.625, 0.568), Vector2(0.972, 0.790))
-const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.528, 0.688), Vector2(0.972, 0.792))
-const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.698), Vector2(0.960, 0.782))
+const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.528, 0.700), Vector2(0.972, 0.792))
+const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.710), Vector2(0.960, 0.782))
 # Keep the warning in the clear channel between the center surface and the
 # right-seat meld lane. The full-width CTA remains below it, above the hand.
 const DANGER_DISCARD_CONFIRMATION_RECT := Rect2(Vector2(0.595, 0.510), Vector2(0.770, 0.685))

@@ -1858,7 +1858,7 @@ func run() -> void:
 	check(scene.optional_gpt_illustration_texture("chat_gpt_panel") == null or scene.find_child("ChatGPTPanelTexture", true, false) != null, "chat panel consumes optional GPT panel texture when generated")
 	var chat_input_shield = scene.find_child("ChatPanelInputShield", true, false) as Control
 	check(scene.find_child("ChatPanel", true, false) != null and scene.find_child("ChatPanelArt", true, false) != null and scene.find_child("ChatPanelHeader", true, false) != null and scene.find_child("ChatPanelCountBadge", true, false) != null and chat_input_shield != null and chat_input_shield.mouse_filter == Control.MOUSE_FILTER_STOP and bool(chat_input_shield.get_meta("modal_input_shield", false)), "chat panel renders illustrated header and count badge with a modal background input shield")
-	check(scene.find_child("ChatPanelCloseButton", true, false) != null and scene.find_child("ChatPanelMessageText", true, false) != null and scene.find_child("ChatPanelQuickMessages", true, false) != null and scene.find_child("ChatPanelQuickMessagesLabel", true, false) != null and scene.find_child("ChatPanelCustomMessageLabel", true, false) != null, "chat panel exposes close message quick-message and custom-message controls")
+	check(scene.find_child("ChatPanelCloseButton", true, false) != null and scene.find_child("ChatPanelMessageText", true, false) != null and scene.find_child("ChatPanelMessageRangeLabel", true, false) != null and scene.find_child("ChatPanelQuickMessages", true, false) != null and scene.find_child("ChatPanelQuickMessagesLabel", true, false) != null and scene.find_child("ChatPanelCustomMessageLabel", true, false) != null, "chat panel exposes close message range quick-message and custom-message controls")
 	check(scene.find_child("ChatPanelHeaderBridge", true, false) != null and scene.find_child("ChatPanelHeaderBridgeFill", true, false) != null and scene.find_child("ChatPanelHeaderBridgeGate", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelHeaderBridgeTick_") == 2, "chat panel renders header-to-feed bridge route")
 	check(scene.find_child("ChatPanelActivityRail", true, false) != null and scene.find_child("ChatPanelLatestGlow", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelMessageNode_") == 3, "chat panel renders activity rail and one visible node per recent message")
 	check(count_nodes_with_name_prefix(scene, "ChatPanelSenderChip_") == 3 and count_nodes_with_name_prefix(scene, "ChatPanelUnreadBead_") == 3, "chat panel renders sender chips and unread beads")
@@ -2083,8 +2083,8 @@ func run() -> void:
 	var shop_swap_price = scene.find_child("ShopBuyButtonPrice_swap_card", true, false) as Label
 	var shop_double_command = scene.find_child("ShopBuyButtonCommand_double_coins", true, false) as Label
 	var shop_double_price = scene.find_child("ShopBuyButtonPrice_double_coins", true, false) as Label
-	check(shop_swap_command != null and shop_swap_command.text == "购买 5玉" and shop_swap_price != null and shop_swap_price.text == "5玉" and not shop_swap_price.visible, "affordable shop item exposes single-line purchase CTA and hidden gem price anchor")
-	check(shop_double_command != null and shop_double_command.text == "购买 15玉" and shop_double_price != null and shop_double_price.text == "15玉" and not shop_double_price.visible, "high-gem shop item exposes single-line purchase CTA and hidden gem price anchor")
+	check(shop_swap_command != null and shop_swap_command.text == "购买 5玉符" and shop_swap_price != null and shop_swap_price.text == "5玉" and not shop_swap_price.visible, "affordable shop item exposes single-line purchase CTA and hidden gem price anchor")
+	check(shop_double_command != null and shop_double_command.text == "购买 15玉符" and shop_double_price != null and shop_double_price.text == "15玉" and not shop_double_price.visible, "high-gem shop item exposes single-line purchase CTA and hidden gem price anchor")
 	check(count_named_nodes(scene, "ShopBuyButtonAffordRail") == 0 and count_named_nodes(scene, "ShopBuyButtonCommandRoute") == 0 and count_named_nodes(scene, "ShopBuyButtonSettlementRoute") == 0, "shop buy buttons omit old rail and route clutter")
 	check(count_nodes_with_name_prefix(scene, "ShopBuyButtonCommandTick_") == 0 and count_nodes_with_name_prefix(scene, "ShopBuyButtonSettlementTick_") == 0 and count_nodes_with_name_prefix(scene, "ShopBuyButtonPriceSettlementTick_") == 0, "shop buy buttons omit old rhythm ticks")
 	var purchase_feedback_row = scene.find_child("ShopItemRow_swap_card", true, false) as Control
@@ -2104,7 +2104,7 @@ func run() -> void:
 	scene._show_shop_screen_impl()
 	var low_gem_swap_command = scene.find_child("ShopBuyButtonCommand_swap_card", true, false) as Label
 	var low_gem_swap_price = scene.find_child("ShopBuyButtonPrice_swap_card", true, false) as Label
-	check(low_gem_swap_command != null and low_gem_swap_command.text == "不足 2玉" and low_gem_swap_price != null and low_gem_swap_price.text == "5玉" and not low_gem_swap_price.visible, "low-gem shop item exposes single-line shortage CTA and hidden gem price anchor")
+	check(low_gem_swap_command != null and low_gem_swap_command.text == "不足 2玉符" and low_gem_swap_price != null and low_gem_swap_price.text == "5玉" and not low_gem_swap_price.visible, "low-gem shop item exposes single-line shortage CTA and hidden gem price anchor")
 	check(scene.find_child("ShopCurrencyLowRoute_coins", true, false) != null and scene.find_child("ShopCurrencyLowFill_coins", true, false) != null and scene.find_child("ShopCurrencyLowGate_coins", true, false) != null and scene.find_child("ShopCurrencyEmptyWarning_coins", true, false) != null, "shop coins balance renders low-resource route and empty warning")
 	check(scene.find_child("ShopCurrencyLowRoute_gems", true, false) != null and scene.find_child("ShopCurrencyLowFill_gems", true, false) != null and scene.find_child("ShopCurrencyLowGate_gems", true, false), "shop gems balance renders low-resource route")
 	check(count_nodes_with_name_prefix(scene, "ShopCurrencyLowTick_") == 6, "shop low-resource meters render rhythm ticks")
@@ -4149,7 +4149,7 @@ func run() -> void:
 	var crowded_hand_layout = scene.hand_layout_metrics_for_content(crowded_hand, narrow_hand_content)
 	check(scene.hand_layout_fits_content(crowded_hand, crowded_hand_layout), "crowded 14-tile hand layout fits a narrow landscape tray")
 	check(float(crowded_hand_layout.get("tile_width", 0.0)) >= scene.HAND_TILE_MIN_TOUCH_WIDTH, "crowded hand keeps a practical touch width on narrow landscape")
-	check(int(crowded_hand_layout.get("separation", 9)) <= 4 and float(crowded_hand_layout.get("group_gap_width", 99.0)) <= 6.0, "crowded hand reduces spacing before shrinking tiles too far")
+	check(int(crowded_hand_layout.get("separation", 9)) <= 4 and float(crowded_hand_layout.get("group_gap_width", 99.0)) <= 8.0, "crowded hand preserves group rhythm before shrinking tiles too far")
 	var narrow_action_width = 960.0 * (0.975 - 0.305)
 	check(scene.action_buttons_fit_available(8, narrow_action_width), "eight action buttons fit inside a narrow action bar")
 	check(scene.action_button_width_for_available(8, narrow_action_width) >= scene.ACTION_BUTTON_MIN_TOUCH_WIDTH, "crowded action bar keeps practical button width")

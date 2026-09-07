@@ -3555,6 +3555,10 @@ func advisor_panel_candidate_is_clear(candidate: Rect2) -> bool:
 	for layout in MELD_LAYOUTS:
 		var meld_rect: Rect2 = layout[1]
 		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
+	for layout in WALL_LAYOUTS:
+		var wall_rect := Rect2(layout[0], layout[1])
+		# Reserve a physical gutter around the authored wall lane.
+		occupied.append(Rect2(wall_rect.position, wall_rect.size - wall_rect.position).grow(0.008))
 	for zone in DISCARD_ZONES:
 		var river_rect := battle_table_anchor_root_rect(zone[1])
 		occupied.append(Rect2(river_rect.position, river_rect.size - river_rect.position))
@@ -3582,7 +3586,9 @@ func advisor_panel_layout_rect() -> Rect2:
 	for candidate in candidates:
 		if advisor_panel_candidate_is_clear(candidate):
 			return candidate
-	return candidates[0]
+	# A dynamic table state can occupy every preferred side channel. Keep the
+	# fallback hard-safe: an empty rect is preferable to covering a seat or tile.
+	return Rect2()
 
 func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
 	# Keep the response context in one predictable upper-left decision lane. The
@@ -3610,9 +3616,12 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.
 		context_height_px = 48.0
-	var header_left := 0.015 if narrow_context else 0.400
-	var header_top := 0.110 if narrow_context else 0.195
-	var header_right := 0.280 if narrow_context else 0.670
+	# Keep every viewport in the same upper-left reading lane. It sits below the
+	# HUD and left of the transformed top wall, so the wall gutter remains real
+	# screen space instead of depending on a center candidate that can collapse.
+	var header_left := 0.015
+	var header_top := 0.108
+	var header_right := 0.280
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height):
 		return header_candidate
@@ -3695,6 +3704,15 @@ func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: floa
 		# Melds are mounted directly on root_layer, unlike rivers and the center
 		# console which are nested in the transformed table host.
 		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
+	for wall_layout in WALL_LAYOUTS:
+		var wall_rect := Rect2(wall_layout[0], wall_layout[1])
+		var wall_left := table_left + wall_rect.position.x * table_width
+		var wall_top := table_top + wall_rect.position.y * table_height
+		var wall_right := table_left + wall_rect.size.x * table_width
+		var wall_bottom := table_top + wall_rect.size.y * table_height
+		# Pending response copy must stay visibly separated from tile backs.
+		var wall_gutter := maxf(8.0 / maxf(1.0, safe_content_pixel_size().x), 8.0 / maxf(1.0, safe_content_pixel_size().y))
+		occupied.append(Rect2(Vector2(wall_left, wall_top), Vector2(wall_right - wall_left, wall_bottom - wall_top)).grow(wall_gutter))
 	# The entire center console is a reading surface: its plate, compass, wall
 	# count, winds, dice, and last-discard trace must remain visible together.
 	var center_rect: Rect2 = CENTER_PANEL_RECT

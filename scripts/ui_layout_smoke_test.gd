@@ -549,6 +549,150 @@ func check_ui_round_711_740(scene, viewport_size: Vector2) -> void:
 		check(action_intent.get_meta("single_sentence_priority", "") == "recovery_or_pending_action_not_both", "battle action intent keeps one priority sentence at %s" % viewport_size)
 
 
+func check_ui_round_741_770(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (741 + index))
+	var root_contracts: Array = scene.root_layer.get_meta("ui_round_741_770_contract_ids", []) if scene.root_layer != null else []
+	check(root_contracts.size() == expected_ids.size(), "page capacity round publishes exactly thirty contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(root_contracts.has(finding_id), "page capacity round exposes %s at %s" % [finding_id, viewport_size])
+	var root := scene.root_layer as Control
+	if root != null:
+		check(str(root.get_meta("ui_round_741_770_scope", "")) == "cross_page_capacity_focus_and_long_copy", "page capacity scope is explicit at %s" % viewport_size)
+		check(root.get_meta("page_capacity_viewports", []).size() == 3, "page capacity names all evidence viewports at %s" % viewport_size)
+	var settings_navigation := scene.find_child("SettingsSectionNavigation", true, false) as Control
+	if settings_navigation != null:
+		check(settings_navigation.mouse_filter == Control.MOUSE_FILTER_IGNORE, "settings navigation shell leaves native children as hit owners at %s" % viewport_size)
+	var stats_rows := scene.find_child("StatsRows", true, false) as Control
+	if stats_rows != null:
+		check(float(stats_rows.get_meta("scroll_status_clearance_px", 0.0)) == 8.0, "stats range status keeps an eight-pixel clearance at %s" % viewport_size)
+	var shop_scroll := scene.find_child("ShopItemsScroll", true, false) as Control
+	if shop_scroll != null:
+		check(bool(shop_scroll.get_meta("terminal_marker_outside_content_rows", false)), "shop terminal marker stays outside content rows at %s" % viewport_size)
+	var replay_input := scene.find_child("ReplayImportCodeInput", true, false) as Control
+	if replay_input != null:
+		check(replay_input.get_meta("overflow_policy", "") == "horizontal_input_scroll_plus_copy_full_value", "replay input preserves the full value route at %s" % viewport_size)
+	var diagnostic_scroll := scene.find_child("DiagnosticContentScroll", true, false) as Control
+	if diagnostic_scroll != null:
+		check(float(diagnostic_scroll.get_meta("fixed_action_footer_clearance_px", 0.0)) == 12.0 and diagnostic_scroll.clip_contents, "diagnostic viewport clears the fixed footer at %s" % viewport_size)
+	var chat_input := scene.find_child("ChatInput", true, false) as Control
+	if chat_input != null:
+		check(chat_input.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET, "chat input keeps a finger-sized lane at %s" % viewport_size)
+	var hud := scene.find_child("TopHud3DShell", true, false) as Control
+	if hud != null:
+		check(bool(hud.get_meta("reading_order", "").contains("phase")) and hud.clip_contents, "battle HUD declares phase ordering and clips to its shell at %s" % viewport_size)
+
+
+func check_ui_round_771_800(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (771 + index))
+	var root := scene.root_layer as Control
+	var root_contracts: Array = root.get_meta("ui_round_771_800_contract_ids", []) if root != null else []
+	check(root_contracts.size() == expected_ids.size(), "lane-clearance round publishes exactly thirty contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(root_contracts.has(finding_id), "lane-clearance round exposes %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_771_800_scope", "")) == "cross_page_lane_clearance_and_compact_fit", "lane-clearance scope is explicit at %s" % viewport_size)
+
+	var hand_tray := scene.find_child("HandTray", true, false) as Control
+	var hand_tiles := scene.find_child("HandTrayTiles", true, false) as Control
+	if hand_tray != null:
+		check(float(hand_tray.get_meta("bottom_gutter_px", 0.0)) >= 8.0 and float(hand_tray.get_meta("tile_bottom_clearance_px", 0.0)) >= 8.0, "hand tile lane preserves an eight-pixel bottom gutter at %s" % viewport_size)
+	if hand_tiles != null:
+		check(float(hand_tiles.get_meta("group_gap_min_px", 0.0)) >= 8.0 and hand_tiles.get_meta("tile_texture_bleed", Vector2.ONE) == Vector2.ZERO, "hand group rhythm and authored tile sampling stay stable at %s" % viewport_size)
+
+	var retry := scene.find_child("OnlineLobbyConnectionRetryButton", true, false) as Control
+	var state_badge := scene.find_child("OnlineLobbyConnectionStateBadge", true, false) as Control
+	var lobby_log := scene.find_child("OnlineLobbyLogPanel", true, false) as Control
+	if retry != null and state_badge != null:
+		check(not rects_overlap(screen_rect(retry), screen_rect(state_badge)) and screen_rect(retry).position.y >= screen_rect(state_badge).end.y - 1.0, "lobby retry stays below the connection state badge at %s" % viewport_size)
+	if retry != null and lobby_log != null:
+		check(screen_rect(retry).end.y + 6.0 <= screen_rect(lobby_log).position.y, "lobby retry clears the room-state panel by six pixels at %s" % viewport_size)
+	var form_feedback := scene.find_child("OnlineLobbyFormFeedbackLabel", true, false) as Control
+	var form_actions := scene.find_child("OnlineLobbyActionButtonRow", true, false) as Control
+	if form_feedback != null and form_actions != null:
+		check(not rects_overlap(screen_rect(form_feedback), screen_rect(form_actions)) and screen_rect(form_feedback).end.y + 3.0 <= screen_rect(form_actions).position.y, "lobby field feedback keeps a separate lane before actions at %s" % viewport_size)
+
+	var diagnostic_scroll := scene.find_child("DiagnosticContentScroll", true, false) as Control
+	var diagnostic_status := scene.find_child("DiagnosticContentStatusLabel", true, false) as Control
+	var diagnostic_close := scene.find_child("DiagnosticCloseButton", true, false) as Control
+	if diagnostic_scroll != null and diagnostic_status != null and diagnostic_close != null:
+		check(screen_rect(diagnostic_scroll).end.y + 6.0 <= screen_rect(diagnostic_status).position.y, "diagnostic scroll clears its range status lane at %s" % viewport_size)
+		check(screen_rect(diagnostic_status).end.y + 4.0 <= screen_rect(diagnostic_close).position.y, "diagnostic range status clears fixed actions at %s" % viewport_size)
+		check(float(diagnostic_scroll.get_meta("footer_clearance_px", 0.0)) >= 12.0, "diagnostic viewport records a twelve-pixel footer clearance at %s" % viewport_size)
+
+	var replay_copy := scene.find_child("ReplayImportCopyCodeButton", true, false) as Control
+	var replay_archive := scene.find_child("ReplayArchivePane", true, false) as Control
+	var replay_timeline := scene.find_child("ReplayImportTimeline", true, false) as Control
+	if replay_copy != null and replay_archive != null and replay_timeline != null:
+		check(screen_rect(replay_copy).end.y + 4.0 <= screen_rect(replay_archive).position.y and screen_rect(replay_copy).end.y + 4.0 <= screen_rect(replay_timeline).position.y, "replay copy action clears both content panes at %s" % viewport_size)
+
+	var danger_panel := scene.find_child("DangerDiscardConfirmationArt", true, false) as Control
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if danger_panel != null and action_dock != null and danger_panel.visible:
+		check(screen_rect(danger_panel).end.y + 6.0 <= screen_rect(action_dock).position.y, "danger warning keeps a visible gap before the action dock at %s" % viewport_size)
+	var hud := scene.find_child("TopHud3DShell", true, false) as Control
+	var hud_status := scene.find_child("TopHudStatus", true, false) as Control
+	if hud != null:
+		check(bool(hud.get_meta("compact_fit_policy", "").contains("fit_before_clip")) or bool(hud.get_meta("compact_fit_policy", "").contains("mode_title")), "compact HUD declares a measured fit policy at %s" % viewport_size)
+		check(float(hud.get_meta("button_lane_start", 0.0)) > 0.0, "compact HUD reserves a stable button lane at %s" % viewport_size)
+	if hud_status != null:
+		check(bool(hud_status.get_meta("fit_before_clip", false)), "compact HUD status fits before clipping at %s" % viewport_size)
+
+
+func check_ui_round_801_830(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (801 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		# Page rebuilds can replace all visual children while retaining the root;
+		# refresh the finding-owner contract at the observation point.
+		scene.register_ui_round_801_830(root)
+	var root_contracts: Array = root.get_meta("ui_round_801_830_contract_ids", []) if root != null else []
+	check(root_contracts.size() == expected_ids.size(), "F-801..F-830 publishes exactly thirty contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(root_contracts.has(finding_id), "F-801..F-830 exposes %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_801_830_scope", "")) == "battle_page_readability_and_interaction_owners", "F-801..F-830 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_801_830_evidence_viewports", []).size() == 3, "F-801..F-830 names three evidence viewports at %s" % viewport_size)
+	var wind := scene.find_child("CenterWindCompass", true, false) as Control
+	if wind != null:
+		check(wind.get_meta("current_wind_contract", "") == "shape_and_text_not_color_only", "current wind has a non-color marker contract at %s" % viewport_size)
+	var tutorial_target := scene.find_child("HandTrayTutorialTargetTile", true, false) as Control
+	if tutorial_target != null:
+		check(bool(tutorial_target.get_meta("prompt_only", false)) and tutorial_target.get_meta("tile_surface", "") == "none", "tutorial target is prompt-only at %s" % viewport_size)
+	var pending := scene.find_child("PendingClaimActionStack", true, false) as Control
+	if pending != null:
+		check(float(pending.get_meta("wall_gutter_px", 0.0)) >= 8.0, "pending context reserves an 8px wall gutter at %s" % viewport_size)
+	var advisor := scene.find_child("AdvisorPanel", true, false) as Control
+	if advisor != null:
+		check(str(advisor.get_meta("hard_exclusion_policy", "")).contains("seat") and str(advisor.get_meta("hard_exclusion_policy", "")).contains("wall"), "advisor hard exclusion includes seats and wall at %s" % viewport_size)
+	var summary_actions := scene.find_child("RoundSummaryActionRow", true, false) as Control
+	if summary_actions != null:
+		check(bool(summary_actions.get_meta("external_action_lane", false)) and float(summary_actions.get_meta("clearance_px", 0.0)) >= 12.0, "settlement actions stay in an external 12px lane at %s" % viewport_size)
+	var danger_preview := scene.find_child("DangerDiscardTile", true, false) as Control
+	if danger_preview != null:
+		check(bool(danger_preview.get_meta("preview_only", false)) and danger_preview.mouse_filter == Control.MOUSE_FILTER_IGNORE, "danger discard preview is non-interactive at %s" % viewport_size)
+	var settings_nav := scene.find_child("SettingsSectionNavigation", true, false) as Control
+	if settings_nav != null:
+		check(settings_nav.get_meta("active_marker_contract", "") == "exactly_one_visible_authored_marker", "settings navigation declares one active marker at %s" % viewport_size)
+	var telemetry := scene.find_child("TelemetryDataSheet", true, false) as Control
+	if telemetry != null:
+		check(bool(telemetry.get_meta("background_controls_locked", false)) and telemetry.get_meta("background_visual_policy", "") == "dimmed_outline_only", "telemetry locks and dims background controls at %s" % viewport_size)
+	var roster := scene.find_child("OnlineLobbyRosterPanel", true, false) as Control
+	if roster != null:
+		check(roster.get_meta("column_contract", "") == "seat|name|ready|status", "online roster publishes four fixed columns at %s" % viewport_size)
+	var feedback := scene.find_child("OnlineFeedbackArt", true, false) as Control
+	if feedback != null:
+		check(feedback.get_meta("feedback_identity", "") == "连接反馈" and feedback.get_meta("footer_owner", "") == "OnlineLobbyLogPanel", "online feedback owns the log footer at %s" % viewport_size)
+	var room_edit := scene.find_child("OnlineLobbyRoomEdit", true, false) as LineEdit
+	if room_edit != null:
+		check(float(room_edit.get_meta("clear_proxy_right_inset_px", 0.0)) >= 52.0, "lobby input reserves the clear proxy inset at %s" % viewport_size)
+
+
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
 	var discards: Array = scene.get_discards(seat)
 	var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
@@ -683,6 +827,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_top_hud_buttons(scene, actual_viewport)
 	check_compact_seat_panels(scene, actual_viewport)
 	check_battle_round_contracts(scene, actual_viewport)
+	check_ui_round_801_830(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
 	await check_table_log_archive_layout(scene, actual_viewport)
 	seed_online_pending_claim_layout_state(scene)
@@ -714,6 +859,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await process_frame
 	check(scene.find_child("AdvisorPanel", true, false) == null, "disabling AI advisor removes the panel at %s" % actual_viewport)
 	check_hand_tray_layout(scene, actual_viewport)
+	check_ui_round_771_800(scene, actual_viewport)
 	check_battle_viewport_bounds(scene, actual_viewport)
 	check_discard_tile_original_rgb(scene, actual_viewport)
 	seed_danger_discard_layout_state(scene)
@@ -723,6 +869,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.render_game()
 	await process_frame
 	check_danger_discard_layout(scene, actual_viewport)
+	check_ui_round_771_800(scene, actual_viewport)
 	scene.advisor_detail_open = true
 	check(scene.handle_ui_cancel(), "Esc is consumed by the active danger confirmation before stale advisor detail at %s" % actual_viewport)
 	await process_frame
@@ -740,6 +887,9 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_settings_overlay(scene, actual_viewport)
 	check_ui_round_681_710(scene, actual_viewport)
 	check_ui_round_711_740(scene, actual_viewport)
+	check_ui_round_741_770(scene, actual_viewport)
+	check_ui_round_771_800(scene, actual_viewport)
+	check_ui_round_801_830(scene, actual_viewport)
 	await check_accessibility_profile_cycle(scene, actual_viewport)
 	var rule_variant_button = scene.find_child("SettingsRuleVariantButton", true, false) as Button
 	if rule_variant_button != null:
@@ -778,10 +928,13 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.refresh_online_lobby_state()
 	await process_frame
 	check_online_lobby_layout(scene, actual_viewport)
+	check_ui_round_771_800(scene, actual_viewport)
+	check_ui_round_801_830(scene, actual_viewport)
 	scene._show_rules_screen_impl()
 	await process_frame
 	check(scene.toast_current == null and scene.toast_mode == "" and not scene.toast_container.visible, "leaving the lobby clears its toast before rules at %s" % actual_viewport)
 	check_rules_layout(scene, actual_viewport)
+	check_ui_round_801_830(scene, actual_viewport)
 	for achievement_key in scene.achievements.keys():
 		scene.achievements[achievement_key] = false
 	scene.achievements["first_win"] = true
@@ -802,13 +955,17 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene._show_stats_screen_impl()
 	await process_frame
 	check_stats_layout(scene, actual_viewport)
+	check_ui_round_801_830(scene, actual_viewport)
 	scene._show_shop_screen_impl()
 	await process_frame
 	check_shop_layout(scene, actual_viewport)
 	check_ui_round_681_710(scene, actual_viewport)
+	check_ui_round_741_770(scene, actual_viewport)
+	check_ui_round_771_800(scene, actual_viewport)
 	scene.show_daily_login_panel({"consecutive_days": 5, "show_reward": true})
 	await process_frame
 	check_daily_login_layout(scene, actual_viewport)
+	check_ui_round_801_830(scene, actual_viewport)
 	scene.show_menu(true)
 	var diagnostic_lines := diagnostic_layout_lines()
 	scene.active_round_id = "UI-REPLAY"
@@ -819,11 +976,15 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.show_replay_import_screen(true)
 	await process_frame
 	await check_replay_import_layout(scene, actual_viewport)
+	check_ui_round_771_800(scene, actual_viewport)
+	check_ui_round_801_830(scene, actual_viewport)
 	scene.show_menu(true)
 	await process_frame
 	scene.show_diagnostic_dialog(diagnostic_lines)
 	await settle_layout(0.03)
 	await check_diagnostic_layout(scene, actual_viewport, diagnostic_lines.size())
+	check_ui_round_771_800(scene, actual_viewport)
+	check_ui_round_801_830(scene, actual_viewport)
 	scene.currency = {"coins": 28975, "gems": 10}
 	scene.season_data = {"season_id": "qa", "points": 1250, "highest_rank": 2, "wins": 6, "games": 9}
 	scene.game_stats["games_played"] = 9
@@ -1732,8 +1893,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		var horizontal_gap = maxf(0.0, maxf(dock_rect.position.x - summary_rect.end.x, summary_rect.position.x - dock_rect.end.x))
 		var reference_button = first_button_with_text(scene.action_bar, "过")
 		var reference_width = screen_rect(reference_button).size.x if reference_button != null else scene.ACTION_BUTTON_MAX_WIDTH
-		var compact_top_channel: bool = viewport_size.x <= 960.0 \
-			and summary_rect.position.x >= viewport_size.x * 0.015 - 2.0 \
+		var compact_top_channel: bool = summary_rect.position.x >= viewport_size.x * 0.015 - 2.0 \
 			and summary_rect.end.x <= viewport_size.x * 0.30 \
 			and summary_rect.position.y >= viewport_size.y * 0.10 \
 			and summary_rect.end.y <= viewport_size.y * 0.22
@@ -3364,8 +3524,10 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var feedback_rect := Rect2()
 	if feedback != null:
 		feedback_rect = screen_rect(feedback)
-		check(feedback_rect.position.x >= log_rect.position.x - 1.0 and feedback_rect.end.x <= log_rect.end.x + 1.0, "online feedback strip aligns with the room panel at %s" % viewport_size)
-		check(feedback_rect.position.y >= log_rect.end.y + max(6.0, viewport_size.y * 0.012) and feedback_rect.end.y <= viewport_size.y + 0.5, "online feedback strip clears the room panel and stays inside viewport at %s" % viewport_size)
+		check(feedback.get_parent() == log_panel and log_rect.grow(1.0).encloses(feedback_rect), "online feedback footer stays owned and contained by the room panel at %s" % viewport_size)
+		if log_scroll != null:
+			var log_scroll_rect := screen_rect(log_scroll)
+			check(feedback_rect.position.y >= log_scroll_rect.end.y + max(12.0, viewport_size.y * 0.012) and feedback_rect.end.y <= log_rect.end.y + 0.5, "online feedback footer follows the log scroll with clearance and stays inside the room panel at %s" % viewport_size)
 		check(feedback_rect.size.y <= viewport_size.y * 0.064, "online feedback strip stays thin at the bottom edge at %s" % viewport_size)
 		check(scene.optional_gpt_illustration_texture("online_feedback_gpt_strip") == null or feedback.find_child("OnlineFeedbackGPTStripTexture", true, false) != null, "online feedback strip consumes GPT v2 texture at %s" % viewport_size)
 	check(feedback_text != null and feedback_text_backplate != null and feedback_seal != null, "online feedback strip exposes text safety backplate and status seal at %s" % viewport_size)
@@ -3419,7 +3581,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		check(status_rect.position.y >= form_rect.end.y + max(6.0, viewport_size.y * 0.012) and status_rect.size.y <= viewport_size.y * 0.064, "online lobby lower status reads as a thin strip below the form panel at %s" % viewport_size)
 		if feedback != null:
 			var feedback_rect_for_status = screen_rect(feedback)
-			check(abs(status_rect.position.y - feedback_rect_for_status.position.y) <= 2.0 and abs(status_rect.size.y - feedback_rect_for_status.size.y) <= 2.0, "online lobby lower status and feedback strips share a calm baseline at %s" % viewport_size)
+			check(not status_rect.intersects(feedback_rect_for_status, true), "online lobby lower status stays separate from the log-owned feedback footer at %s" % viewport_size)
 		if status_label != null:
 			var status_label_rect = screen_rect(status_label)
 			check(status_rect.grow(1.0).encloses(status_label_rect), "online lobby status label stays inside lower status backplate at %s" % viewport_size)
