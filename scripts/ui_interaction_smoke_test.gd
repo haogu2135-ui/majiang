@@ -1944,7 +1944,7 @@ func run() -> void:
 	var rules_interaction_status := scene.find_child("RulesReadingStatus", true, false) as Label
 	check(scene.mode == "rules" and rules_interaction_scroll != null and rules_interaction_bar != null and rules_interaction_status != null, "rules opens through the menu entry with chapter status")
 	if rules_interaction_scroll != null and rules_interaction_bar != null and rules_interaction_status != null:
-		var rules_interaction_targets := [0, 2, 4, 5, 1, 3]
+		var rules_interaction_targets := [0, 1, 2, 3, 4, 5]
 		for rules_interaction_index in range(rules_interaction_targets.size()):
 			var rules_target_section := int(rules_interaction_targets[rules_interaction_index])
 			var rules_target_button := scene.find_child("RulesGuideStepButton_%d" % rules_interaction_index, true, false) as Button
@@ -1966,7 +1966,7 @@ func run() -> void:
 					rules_target_top = float(rules_anchor.get("top", 0.0))
 					break
 			var rules_target_expected := clampf(rules_target_top, 0.0, maxf(0.0, rules_interaction_bar.max_value - rules_interaction_bar.page))
-			check(absf(rules_target_value - rules_target_expected) <= 1.5 and rules_interaction_status.text == "阅读 %d/6" % (rules_target_section + 1), "chapter button %d reaches section %d and updates reading status" % [rules_interaction_index, rules_target_section + 1])
+			check(absf(rules_target_value - rules_target_expected) <= 1.5 and rules_interaction_status.text.begins_with("第%d/6 · " % (rules_target_section + 1)) and rules_interaction_status.get_meta("current_section_name", "") != "", "chapter button %d reaches section %d and updates named reading status" % [rules_interaction_index, rules_target_section + 1])
 			var rules_step := scene.find_child("RulesGuideStep_%d" % rules_interaction_index, true, false) as Control
 			check(rules_step != null and bool(rules_step.get_meta("active", false)), "chapter button %d marks its guide step active" % (rules_interaction_index + 1))
 	await send_key(KEY_ESCAPE, 0)

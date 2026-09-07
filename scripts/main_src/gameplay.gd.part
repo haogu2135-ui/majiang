@@ -539,6 +539,7 @@ func render_game() -> void:
 	draw_round_summary(root_layer)
 	if chat_panel_open:
 		show_chat_panel()
+	register_battle_ui_round_contracts(root_layer)
 
 	# 记录渲染性能
 	var render_elapsed = Time.get_ticks_msec() - render_start_time
@@ -550,6 +551,7 @@ func render_game() -> void:
 		call_deferred("update_ai_assistance_async")
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
+	register_ui_round_681_710(root_layer)
 	update_fx_turn_pulse()
 	if mode == "offline":
 		schedule_ui_qa_page_ready("offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
