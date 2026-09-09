@@ -279,12 +279,21 @@ func update_pending_claim_live_state() -> void:
 	var timer_label := root_layer.find_child("PendingClaimTimerText", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
 	if timer_label != null:
 		timer_label.text = pending_claim_timer_text()
-		var warning_label := root_layer.find_child("PendingClaimAutoPassWarning", true, false) as Label
-		if warning_label != null:
-			warning_label.text = pending_claim_auto_pass_text()
-			warning_label.visible = warning_label.text != ""
-			warning_label.tooltip_text = warning_label.text
-			warning_label.set_meta("accessible_name", warning_label.text)
+		var auto_pass_text := pending_claim_auto_pass_text()
+		var warning_labels := root_layer.find_children("PendingClaimAutoPassWarning", "Label", true, false)
+		if warning_labels.is_empty():
+			var fallback_warning := root_layer.find_child("PendingClaimAutoPassWarning", true, false) as Label
+			if fallback_warning != null:
+				warning_labels.append(fallback_warning)
+		for warning_node in warning_labels:
+			var warning_label := warning_node as Label
+			if warning_label == null:
+				continue
+			warning_label.text = auto_pass_text
+			warning_label.visible = auto_pass_text != ""
+			warning_label.tooltip_text = auto_pass_text
+			warning_label.set_meta("accessible_name", auto_pass_text)
+			warning_label.set_meta("live_state_owner", "pending_claim_auto_pass_warning")
 	var remaining_ratio := pending_claim_remaining_ratio()
 	var timer_fill := root_layer.find_child("PendingClaimTimerFill", true, false) as Control
 	if timer_fill != null:

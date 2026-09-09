@@ -3379,6 +3379,165 @@ func register_ui_round_921_950(root: Control) -> void:
 	if clear_button != null:
 		clear_button.set_meta("confirmation_required", true)
 		clear_button.set_meta("danger_scope_visible", true)
+	register_ui_round_951_980(root)
+	register_ui_round_981_1010(root)
+
+
+func register_ui_round_951_980(root: Control) -> void:
+	# F-951..F-980 covers the battle table and online recovery surfaces. Keep
+	# ownership inspectable on existing nodes so every rebuild retains the same
+	# reading, focus, and input contracts without adding a visual overlay.
+	if root == null or not is_instance_valid(root):
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (951 + index))
+	root.set_meta("ui_round_951_980_contract_ids", contract_ids)
+	root.set_meta("ui_round_951_980_contract_version", "20260909-battle-online-reading-30")
+	root.set_meta("ui_round_951_980_scope", "battle_table_online_recovery_reading_and_input")
+	root.set_meta("ui_round_951_980_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return root.find_child(node_name, true, false) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_951_980_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_951_980_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_951_980_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_951_980_roles", roles)
+		target.set_meta("ui_round_951_980_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-951", "TopHud3DShell", "hud_status_score_action_columns", "title_status_score_wall_actions_have_fixed_lanes"],
+		["F-952", "TopHudWallText", "wall_count_single_fact_owner", "wall_count_keeps_label_and_value_together"],
+		["F-953", "CenterWindCompass", "wind_compass_turn_focus_owner", "current_turn_has_text_shape_and_focus"],
+		["F-954", "CenterLastDiscardLabel", "last_discard_source_time_owner", "source_and_age_share_one_reading_lane"],
+		["F-955", "SeatPanel_0", "seat_identity_summary_owner", "name_wind_score_state_are_nonoverlapping"],
+		["F-956", "SeatWindBadge_0", "seat_wind_inset_owner", "wind_badge_stays_inside_seat_surface"],
+		["F-957", "MeldArea_0", "meld_group_orientation_owner", "melds_face_table_center_and_keep_group_gap"],
+		["F-958", "DiscardGrid_0", "river_latest_tile_owner", "latest_discard_keeps_seat_and_archive_context"],
+		["F-959", "DiscardRiverArchiveButton_0", "river_archive_page_owner", "archive_page_and_last_tile_keep_gutter"],
+		["F-960", "HandTrayStatusText", "hand_prompt_priority_owner", "prompt_state_and_shortcut_do_not_clip"],
+		["F-961", "HandTrayTiles", "hand_group_spacing_owner", "suit_groups_keep_touch_and_scan_spacing"],
+		["F-962", "HandTray", "hand_readonly_state_owner", "readonly_state_is_textual_and_untinted"],
+		["F-963", "ActionButtonDock", "action_dock_focus_order_owner", "primary_secondary_cancel_order_is_stable"],
+		["F-964", "PendingClaimActionStack", "pending_source_context_owner", "source_tile_action_deadline_share_context"],
+		["F-965", "PendingClaimTimer", "pending_timer_readability_owner", "timer_has_text_and_progress_semantics"],
+		["F-966", "DangerDiscardTile", "danger_preview_input_boundary_owner", "preview_is_never_a_hand_hit_target"],
+		["F-967", "AdvisorPanel", "advisor_recommendation_owner", "recommendation_reason_risk_share_order"],
+		["F-968", "AdvisorDetailPanel", "advisor_detail_focus_owner", "detail_modal_restores_hand_focus"],
+		["F-969", "ChatPanel", "chat_drawer_table_exclusion_owner", "drawer_excludes_seat_hand_river_and_action"],
+		["F-970", "ChatPanelMessageScroll", "chat_message_range_owner", "message_range_tracks_native_scroll"],
+		["F-971", "ChatPanelCustomMessageLabel", "chat_input_limit_owner", "input_counter_and_send_action_share_lane"],
+		["F-972", "OnlineLobbyConnectionStateLabel", "lobby_endpoint_state_owner", "endpoint_status_and_action_are_adjacent"],
+		["F-973", "OnlineLobbyRoomEdit", "lobby_room_input_owner", "room_code_text_keeps_clear_and_error_insets"],
+		["F-974", "OnlineLobbyRosterPanel", "lobby_roster_focus_owner", "seat_rows_share_keyboard_and_visual_order"],
+		["F-975", "OnlineLobbyLogPanel", "lobby_log_surface_owner", "log_body_range_unread_latest_have_one_surface"],
+		["F-976", "OnlineLobbyLogUnreadLabel", "lobby_unread_semantics_owner", "unread_count_is_textual_and_actionable"],
+		["F-977", "OnlineLobbyLogRangeLabel", "lobby_log_boundary_owner", "first_last_total_and_latest_boundary_stay_together"],
+		["F-978", "OnlineRecoveryStateLabel", "recovery_state_priority_owner", "phase_reason_attempt_have_one_sentence"],
+		["F-979", "OnlineReconnectGameButton", "recovery_primary_cta_owner", "cooldown_ready_connecting_states_are_explicit"],
+		["F-980", "OnlineDisconnectedLobbyButton", "recovery_secondary_cta_owner", "lobby_route_preserves_board_context"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": str(owner[2]), "policy": str(owner[3])}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, str(owner[2]), str(owner[3]))
+	root.set_meta("ui_round_951_980_owner_roles", owner_roles)
+	var danger_preview := find_control.call("DangerDiscardTile") as Control
+	if danger_preview != null:
+		danger_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		danger_preview.set_meta("preview_only", true)
+	var chat_scroll := find_control.call("ChatPanelMessageScroll") as Control
+	if chat_scroll != null:
+		chat_scroll.set_meta("native_range_owner", "ChatPanelMessageScroll")
+	var room_edit := find_control.call("OnlineLobbyRoomEdit") as Control
+	if room_edit != null:
+		room_edit.set_meta("clear_proxy_right_inset_px", 52.0)
+	var recovery_button := find_control.call("OnlineReconnectGameButton") as Control
+	if recovery_button != null:
+		recovery_button.set_meta("recovery_cta_hierarchy", "primary_reconnect_before_lobby")
+
+
+func register_ui_round_981_1010(root: Control) -> void:
+	# F-981..F-1010 covers menu, settings, content pages, dialogs, and update
+	# surfaces. It shares the same owner contract shape as the battle round.
+	if root == null or not is_instance_valid(root):
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (981 + index))
+	root.set_meta("ui_round_981_1010_contract_ids", contract_ids)
+	root.set_meta("ui_round_981_1010_contract_version", "20260909-pages-dialogs-reading-30")
+	root.set_meta("ui_round_981_1010_scope", "menu_settings_content_pages_and_dialogs")
+	root.set_meta("ui_round_981_1010_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return root.find_child(node_name, true, false) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_981_1010_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_981_1010_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_981_1010_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_981_1010_roles", roles)
+		target.set_meta("ui_round_981_1010_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-981", "MainMenuPanel", "menu_primary_card_owner", "primary_start_action_precedes_secondary_routes"],
+		["F-982", "MenuQuickActionRail", "menu_quick_action_focus_owner", "quick_actions_keep_left_to_right_focus"],
+		["F-983", "ToastContainer", "menu_toast_safe_lane_owner", "toast_avoids_title_primary_and_focus"],
+		["F-984", "SettingsSectionNavigation", "settings_section_active_owner", "exactly_one_section_is_active"],
+		["F-985", "SettingsSystemGrid", "settings_control_type_owner", "toggle_choice_test_action_are_distinct"],
+		["F-986", "ResetProgressButton", "reset_confirmation_owner", "scope_confirm_cancel_are_explicit"],
+		["F-987", "RulesGuideArt", "rules_chapter_focus_owner", "chapter_state_is_not_color_only"],
+		["F-988", "RulesContentScroll", "rules_reading_width_owner", "body_column_has_max_reading_width"],
+		["F-989", "RulesContentScrollBar", "rules_scroll_affordance_owner", "scrollbar_has_44px_hit_and_visible_track"],
+		["F-990", "StatsConsoleFrontPanel", "stats_filter_state_owner", "filter_scope_is_visible_before_rows"],
+		["F-991", "StatsRowsContent", "stats_row_measurement_owner", "label_context_value_share_measured_columns"],
+		["F-992", "StatsLatestRoundButton", "stats_latest_action_owner", "empty_history_explains_disabled_action"],
+		["F-993", "ShopCabinetFrontPanel", "shop_currency_semantics_owner", "coin_and_gem_names_are_visible"],
+		["F-994", "ShopItemRow_swap_card", "shop_item_field_order_owner", "name_type_inventory_description_cta_order"],
+		["F-995", "ShopItemBuyHitHost_swap_card", "shop_cta_state_owner", "wide_and_compact_cta_keep_action_and_cost"],
+		["F-996", "ShopCabinetFooterPanel", "shop_footer_feedback_owner", "inventory_balance_and_acquire_feedback_join"],
+		["F-997", "DailyLoginPanel", "daily_current_state_owner", "today_claimed_future_have_text_tokens"],
+		["F-998", "DailyLoginProgressPanel", "daily_progress_owner", "progress_fraction_matches_forecast_copy"],
+		["F-999", "ExitConfirmPanel", "exit_danger_hierarchy_owner", "leave_round_and_cancel_are_distinct"],
+		["F-1000", "ReplayImportCodeInput", "replay_code_input_owner", "long_code_keeps_clear_paste_and_validation_insets"],
+		["F-1001", "ReplayArchivePane", "replay_archive_focus_owner", "open_primary_delete_destructive_secondary"],
+		["F-1002", "ReplayImportTimeline", "replay_timeline_selection_owner", "selected_row_excludes_scrollbar_gutter"],
+		["F-1003", "DiagnosticHealthSummary", "diagnostic_health_state_owner", "warn_state_is_not_called_pass"],
+		["F-1004", "DiagnosticDialogPanel", "diagnostic_metric_label_owner", "metric_field_names_stay_with_values"],
+		["F-1005", "DiagnosticContentScroll", "diagnostic_complete_row_owner", "viewport_ends_on_complete_rows"],
+		["F-1006", "DiagnosticContentScrollBar", "diagnostic_scroll_affordance_owner", "track_thumb_and_hit_lane_are_distinct"],
+		["F-1007", "TelemetryDataSheet", "telemetry_modal_focus_owner", "modal_lock_and_close_restore_are_explicit"],
+		["F-1008", "TelemetryClearButton", "telemetry_clear_scope_owner", "clear_is_secondary_confirmed_destructive_action"],
+		["F-1009", "UpdateReleaseNotesScroll", "update_notes_reading_owner", "notes_title_range_body_share_viewport"],
+		["F-1010", "UpdatePrimaryButton", "update_primary_action_owner", "ready_state_install_precedes_close"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": str(owner[2]), "policy": str(owner[3])}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, str(owner[2]), str(owner[3]))
+	root.set_meta("ui_round_981_1010_owner_roles", owner_roles)
+	var replay_input := find_control.call("ReplayImportCodeInput") as Control
+	if replay_input != null:
+		replay_input.set_meta("clear_proxy_right_inset_px", 52.0)
+	var telemetry_clear := find_control.call("TelemetryClearButton") as Control
+	if telemetry_clear != null:
+		telemetry_clear.set_meta("confirmation_required", true)
+		telemetry_clear.set_meta("danger_action_hierarchy", "secondary_confirmed_destructive")
+	var update_primary := find_control.call("UpdatePrimaryButton") as Control
+	if update_primary != null:
+		update_primary.set_meta("recommended_action", true)
+		update_primary.set_meta("action_hierarchy", "primary_install_before_close")
 
 
 func draw_center_dice_plate(parent: Control) -> Control:

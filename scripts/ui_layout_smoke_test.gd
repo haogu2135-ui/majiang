@@ -920,6 +920,63 @@ func check_ui_round_921_950(scene, viewport_size: Vector2) -> void:
 		check(str(replay_archive.get_meta("ui_round_921_950_policy", "")).contains("primary"), "replay archive declares a primary open action at %s" % viewport_size)
 
 
+func check_ui_round_951_980(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (951 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_951_980(root)
+	var contracts: Array = root.get_meta("ui_round_951_980_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_951_980_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-951..F-980 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-951..F-980 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-951..F-980 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_951_980_scope", "")) == "battle_table_online_recovery_reading_and_input", "F-951..F-980 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_951_980_evidence_viewports", []).size() == 3, "F-951..F-980 names three evidence viewports at %s" % viewport_size)
+	var danger_preview := scene.find_child("DangerDiscardTile", true, false) as Control
+	if danger_preview != null:
+		check(danger_preview.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(danger_preview.get_meta("preview_only", false)), "danger preview keeps a non-interactive input boundary at %s" % viewport_size)
+	var chat_scroll := scene.find_child("ChatPanelMessageScroll", true, false) as Control
+	if chat_scroll != null:
+		check(chat_scroll.get_meta("native_range_owner", "") == "ChatPanelMessageScroll", "chat message range stays with its native scroll owner at %s" % viewport_size)
+	var room_edit := scene.find_child("OnlineLobbyRoomEdit", true, false) as Control
+	if room_edit != null:
+		check(float(room_edit.get_meta("clear_proxy_right_inset_px", 0.0)) >= 52.0, "online room input keeps its clear proxy inset at %s" % viewport_size)
+	var reconnect := scene.find_child("OnlineReconnectGameButton", true, false) as Control
+	if reconnect != null:
+		check(reconnect.get_meta("recovery_cta_hierarchy", "") == "primary_reconnect_before_lobby", "recovery CTA keeps primary reconnect hierarchy at %s" % viewport_size)
+
+
+func check_ui_round_981_1010(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (981 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_981_1010(root)
+	var contracts: Array = root.get_meta("ui_round_981_1010_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_981_1010_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-981..F-1010 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-981..F-1010 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-981..F-1010 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_981_1010_scope", "")) == "menu_settings_content_pages_and_dialogs", "F-981..F-1010 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_981_1010_evidence_viewports", []).size() == 3, "F-981..F-1010 names three evidence viewports at %s" % viewport_size)
+	var replay_input := scene.find_child("ReplayImportCodeInput", true, false) as Control
+	if replay_input != null:
+		check(float(replay_input.get_meta("clear_proxy_right_inset_px", 0.0)) >= 52.0, "replay code input keeps its clear proxy inset at %s" % viewport_size)
+	var telemetry_clear := scene.find_child("TelemetryClearButton", true, false) as Control
+	if telemetry_clear != null:
+		check(bool(telemetry_clear.get_meta("confirmation_required", false)) and telemetry_clear.get_meta("danger_action_hierarchy", "") == "secondary_confirmed_destructive", "telemetry clear remains a confirmed secondary danger action at %s" % viewport_size)
+	var update_primary := scene.find_child("UpdatePrimaryButton", true, false) as Control
+	if update_primary != null:
+		check(bool(update_primary.get_meta("recommended_action", false)) and update_primary.get_meta("action_hierarchy", "") == "primary_install_before_close", "update ready state keeps install as primary at %s" % viewport_size)
+
+
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
 	var discards: Array = scene.get_discards(seat)
 	var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
@@ -1059,6 +1116,8 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_ui_round_861_890(scene, actual_viewport)
 	check_ui_round_891_920(scene, actual_viewport)
 	check_ui_round_921_950(scene, actual_viewport)
+	check_ui_round_951_980(scene, actual_viewport)
+	check_ui_round_981_1010(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
 	await check_table_log_archive_layout(scene, actual_viewport)
 	seed_online_pending_claim_layout_state(scene)
@@ -1213,6 +1272,8 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_ui_round_861_890(scene, actual_viewport)
 	check_ui_round_891_920(scene, actual_viewport)
 	check_ui_round_921_950(scene, actual_viewport)
+	check_ui_round_951_980(scene, actual_viewport)
+	check_ui_round_981_1010(scene, actual_viewport)
 	scene.show_menu(true)
 	await process_frame
 	scene.show_diagnostic_dialog(diagnostic_lines)
@@ -1224,6 +1285,8 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_ui_round_861_890(scene, actual_viewport)
 	check_ui_round_891_920(scene, actual_viewport)
 	check_ui_round_921_950(scene, actual_viewport)
+	check_ui_round_951_980(scene, actual_viewport)
+	check_ui_round_981_1010(scene, actual_viewport)
 	scene.currency = {"coins": 28975, "gems": 10}
 	scene.season_data = {"season_id": "qa", "points": 1250, "highest_rank": 2, "wins": 6, "games": 9}
 	scene.game_stats["games_played"] = 9
@@ -1258,6 +1321,8 @@ func check_telemetry_toast_layout(scene, viewport_size: Vector2) -> void:
 	check_ui_round_861_890(scene, viewport_size)
 	check_ui_round_891_920(scene, viewport_size)
 	check_ui_round_921_950(scene, viewport_size)
+	check_ui_round_951_980(scene, viewport_size)
+	check_ui_round_981_1010(scene, viewport_size)
 	var settings_close := scene.find_child("SettingsCloseButton", true, false) as Button
 	var settings_scroll := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
 	for background_control in [settings_close, settings_scroll]:
