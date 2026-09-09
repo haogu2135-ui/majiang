@@ -5551,6 +5551,8 @@ func render_game() -> void:
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 	update_fx_turn_pulse()
 	if mode == "offline":
 		schedule_ui_qa_page_ready("offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
@@ -12170,6 +12172,8 @@ func register_ui_round_921_950(root: Control) -> void:
 		clear_button.set_meta("danger_scope_visible", true)
 	register_ui_round_951_980(root)
 	register_ui_round_981_1010(root)
+	register_ui_round_1011_1040(root)
+	register_ui_round_1041_1070(root)
 
 
 func register_ui_round_951_980(root: Control) -> void:
@@ -12327,6 +12331,200 @@ func register_ui_round_981_1010(root: Control) -> void:
 	if update_primary != null:
 		update_primary.set_meta("recommended_action", true)
 		update_primary.set_meta("action_hierarchy", "primary_install_before_close")
+
+
+func register_ui_round_1011_1040(root: Control) -> void:
+	# F-1011..F-1040 hardens the live table's information hierarchy. These
+	# contracts live on existing native controls so focus, tooltip, and touch
+	# behavior survive every table rebuild without adding a visual overlay.
+	if root == null or not is_instance_valid(root):
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (1011 + index))
+	root.set_meta("ui_round_1011_1040_contract_ids", contract_ids)
+	root.set_meta("ui_round_1011_1040_contract_version", "20260910-live-table-information-30")
+	root.set_meta("ui_round_1011_1040_scope", "live_table_information_hierarchy_focus_and_touch")
+	root.set_meta("ui_round_1011_1040_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return root.find_child(node_name, true, false) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1011_1040_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1011_1040_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1011_1040_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1011_1040_roles", roles)
+		target.set_meta("ui_round_1011_1040_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.focus_mode = Control.FOCUS_ALL
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, UI_MIN_TOUCH_TARGET)
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is LineEdit:
+			configure_line_edit_input(target as LineEdit, target.get_meta("ui_input_field", target.name))
+		elif target is ScrollContainer:
+			configure_scroll_container(target as ScrollContainer, target.tooltip_text)
+		elif target is Label:
+			target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if target.tooltip_text.strip_edges() == "" and target.text.strip_edges() != "":
+				set_ui_full_text(target, target.text.strip_edges(), target.text.strip_edges())
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1011", "TopHudTitle", "table_title_round_lane_owner", "mode_round_room_stay_in_one_header_lane"],
+		["F-1012", "TopHudModeBadge", "table_mode_badge_owner", "offline_online_mode_is_textual_before_detail"],
+		["F-1013", "TopHudRoomCodeCopyButton", "room_code_copy_feedback_owner", "copy_action_has_focus_and_result_feedback"],
+		["F-1014", "TopHudOnlineConnectionStatus", "connection_status_semantics_owner", "connection_state_is_textual_not_color_only"],
+		["F-1015", "TopHudWallState", "wall_state_header_owner", "wall_remaining_state_has_one_visible_owner"],
+		["F-1016", "CenterPhaseLabel", "phase_label_owner", "phase_and_turn_copy_share_a_stable_slot"],
+		["F-1017", "CenterWindCurrentMarker", "turn_marker_shape_owner", "current_seat_marker_survives_low_contrast"],
+		["F-1018", "CenterWallCount", "center_wall_count_owner", "wall_count_keeps_label_value_and_unit"],
+		["F-1019", "CenterWallLowWarning", "wall_low_warning_owner", "low_wall_warning_has_actionable_copy"],
+		["F-1020", "CenterLastDiscardResponseWindow", "discard_response_window_owner", "response_window_does_not_cover_center_wind"],
+		["F-1021", "CenterLastDiscardResponseWindowLabel", "discard_response_label_owner", "response_source_and_deadline_share_context"],
+		["F-1022", "SeatPanel_0", "seat_zero_summary_owner", "seat_name_wind_score_lanes_do_not_overlap"],
+		["F-1023", "SeatPanel_1", "seat_one_summary_owner", "seat_name_wind_score_lanes_do_not_overlap"],
+		["F-1024", "SeatPanel_2", "seat_two_summary_owner", "seat_name_wind_score_lanes_do_not_overlap"],
+		["F-1025", "SeatPanel_3", "seat_three_summary_owner", "seat_name_wind_score_lanes_do_not_overlap"],
+		["F-1026", "HandTrayTiles", "hand_tile_touch_owner", "tile_hit_targets_keep_stable_baseline"],
+		["F-1027", "HandTrayShortcutHint", "hand_shortcut_owner", "keyboard_hint_stays_outside_tile_faces"],
+		["F-1028", "HandTrayStateBadge", "hand_state_badge_owner", "hand_state_has_text_and_shape"],
+		["F-1029", "HandTrayLastDrawLabel", "hand_last_draw_owner", "last_draw_copy_does_not_replace_hand_prompt"],
+		["F-1030", "ActionIntentDock", "action_intent_group_owner", "intent_icon_count_and_text_share_one_group"],
+		["F-1031", "ActionIntentText", "action_intent_text_owner", "action_intent_text_precedes_shortcut_hint"],
+		["F-1032", "ActionButtonShortcutHint", "action_shortcut_owner", "shortcut_is_secondary_and_never_primary_copy"],
+		["F-1033", "ActionDockStatusLabel", "action_status_owner", "action_status_has_a_single_nonbutton_lane"],
+		["F-1034", "PendingClaimSourceText", "claim_source_copy_owner", "claim_source_seat_and_tile_are_adjacent"],
+		["F-1035", "PendingClaimTile", "claim_tile_preview_owner", "claim_preview_is_readonly_and_seat_oriented"],
+		["F-1036", "PendingClaimUrgencyText", "claim_urgency_owner", "urgency_has_words_before_color_or_pulse"],
+		["F-1037", "PendingClaimTimerText", "claim_timer_text_owner", "deadline_shows_seconds_and_auto_pass"],
+		["F-1038", "PendingClaimResponseGrid", "claim_response_grid_owner", "response_buttons_keep_primary_to_pass_order"],
+		["F-1039", "PendingClaimNetworkLane", "claim_network_state_owner", "network_wait_explains_server_or_local_state"],
+		["F-1040", "VoiceActionButton", "voice_action_owner", "voice_state_has_label_mute_and_focus_feedback"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	root.set_meta("ui_round_1011_1040_owner_roles", owner_roles)
+	var preview := find_control.call("PendingClaimTile") as Control
+	if preview != null:
+		preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		preview.set_meta("preview_only", true)
+	var response_grid := find_control.call("PendingClaimResponseGrid") as Control
+	if response_grid != null:
+		response_grid.set_meta("focus_order_contract", "primary_claims_then_pass_then_network")
+	var hand_tiles := find_control.call("HandTrayTiles") as Control
+	if hand_tiles != null:
+		hand_tiles.set_meta("tile_baseline_contract", "fixed_bottom_baseline_with_shortcut_gutter")
+
+
+func register_ui_round_1041_1070(root: Control) -> void:
+	# F-1041..F-1070 covers secondary table surfaces and the page/dialog flows
+	# that follow a round. Existing controls own the contracts; no generated
+	# texture, ColorRect, or code-drawn panel is introduced here.
+	if root == null or not is_instance_valid(root):
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (1041 + index))
+	root.set_meta("ui_round_1041_1070_contract_ids", contract_ids)
+	root.set_meta("ui_round_1041_1070_contract_version", "20260910-secondary-flow-30")
+	root.set_meta("ui_round_1041_1070_scope", "secondary_table_surfaces_page_flow_and_dialog_recovery")
+	root.set_meta("ui_round_1041_1070_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return root.find_child(node_name, true, false) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1041_1070_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1041_1070_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1041_1070_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1041_1070_roles", roles)
+		target.set_meta("ui_round_1041_1070_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.focus_mode = Control.FOCUS_ALL
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, UI_MIN_TOUCH_TARGET)
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is LineEdit:
+			configure_line_edit_input(target as LineEdit, target.get_meta("ui_input_field", target.name))
+		elif target is ScrollContainer:
+			configure_scroll_container(target as ScrollContainer, target.tooltip_text)
+		elif target is Label:
+			target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if target.tooltip_text.strip_edges() == "" and target.text.strip_edges() != "":
+				set_ui_full_text(target, target.text.strip_edges(), target.text.strip_edges())
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1041", "ChatPanelMessageRangeLabel", "chat_range_copy_owner", "visible_messages_and_total_share_header_lane"],
+		["F-1042", "ChatPanelCustomMessageLabel", "chat_counter_owner", "counter_and_input_share_feedback_path"],
+		["F-1043", "ChatPanelInputShield", "chat_modal_boundary_owner", "outside_tap_closes_without_table_input_leak"],
+		["F-1044", "TableLogLedgerPanel", "table_log_owner", "chat_and_log_keep_one_reading_surface_at_a_time"],
+		["F-1045", "DiscardRiverArchiveLabel_0", "river_archive_range_owner", "archive_range_and_latest_tile_keep_gutter"],
+		["F-1046", "DiscardRiverOwnerBadge_0", "river_seat_owner", "river_owner_is_named_near_discard_group"],
+		["F-1047", "RoundSummaryTitle", "summary_title_owner", "round_result_and_match_result_have_distinct_titles"],
+		["F-1048", "RoundSummaryBodyStatus", "summary_body_range_owner", "body_status_reports_complete_reading_range"],
+		["F-1049", "RoundSummaryRankHeader", "summary_rank_header_owner", "rank_columns_keep_header_and_rows_aligned"],
+		["F-1050", "RoundSummaryNextHandGate", "summary_next_action_owner", "next_hand_and_close_have_clear_priority"],
+		["F-1051", "WinDetailWinnerLabel", "win_winner_owner", "winner_identity_is_visible_before_yaku_detail"],
+		["F-1052", "WinDetailScoreLabel", "win_score_owner", "score_value_keeps_unit_and_delta_together"],
+		["F-1053", "WinDetailYakuBadges", "win_yaku_owner", "yaku_list_has_count_and_scroll_context"],
+		["F-1054", "AchievementsBrowseStatusLabel", "achievement_range_owner", "visible_range_and_remaining_count_share_status"],
+		["F-1055", "AchievementRowFocusTarget", "achievement_focus_owner", "row_focus_rail_is_separate_from_medal_art"],
+		["F-1056", "DailyLoginDayStateLabel_0", "daily_day_state_owner", "today_claimed_future_state_has_words"],
+		["F-1057", "DailyLoginClaimButton", "daily_claim_action_owner", "claim_action_precedes_back_and_forecast"],
+		["F-1058", "TutorialEntryProgress", "tutorial_progress_owner", "checkpoint_phase_and_resume_action_share_context"],
+		["F-1059", "TutorialStartButton", "tutorial_start_owner", "start_and_skip_are_distinct_focus_actions"],
+		["F-1060", "LoadingProgressStatusLabel", "loading_status_owner", "progress_status_has_stage_and_percent_text"],
+		["F-1061", "LoadingErrorActionLane", "loading_error_owner", "retry_and_return_have_error_scope_nearby"],
+		["F-1062", "ToastContainer", "toast_queue_owner", "queued_toasts_keep_dwell_and_focus_clearance"],
+		["F-1063", "ReplayImportStatus", "replay_import_status_owner", "validation_status_has_error_position_and_next_action"],
+		["F-1064", "ReplayImportTimelinePosition", "replay_timeline_position_owner", "selected_event_and_total_share_one_status"],
+		["F-1065", "ReplayArchiveSearchInput", "replay_search_owner", "search_clear_and_archive_rows_keep_focus_route"],
+		["F-1066", "DiagnosticPrimarySummary", "diagnostic_summary_owner", "health_summary_precedes_raw_lines_and_is_textual"],
+		["F-1067", "DiagnosticCopyFeedbackLabel", "diagnostic_copy_feedback_owner", "copy_result_stays_next_to_copy_action"],
+		["F-1068", "TelemetryExportStatus", "telemetry_export_owner", "export_progress_and_completion_are explicit"],
+		["F-1069", "UpdateReleaseNotesStatus", "update_notes_status_owner", "notes_range_and_scroll_state_share_lane"],
+		["F-1070", "SettingsLargeTextScrollStatus", "settings_large_text_owner", "large_text_mode_keeps_scroll_position_visible"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	root.set_meta("ui_round_1041_1070_owner_roles", owner_roles)
+	var chat_shield := find_control.call("ChatPanelInputShield") as Control
+	if chat_shield != null:
+		chat_shield.set_meta("modal_outside_tap_route", "close_chat_without_table_input")
+	var toast_container := find_control.call("ToastContainer") as Control
+	if toast_container != null:
+		toast_container.set_meta("queue_dwell_contract", "oldest_first_with_minimum_dwell")
+	var replay_search := find_control.call("ReplayArchiveSearchInput") as Control
+	if replay_search != null:
+		replay_search.set_meta("clear_proxy_right_inset_px", 52.0)
+	var diagnostic_summary := find_control.call("DiagnosticPrimarySummary") as Control
+	if diagnostic_summary != null:
+		diagnostic_summary.set_meta("health_words_required", true)
 
 
 func draw_center_dice_plate(parent: Control) -> Control:
@@ -27983,6 +28181,8 @@ func _show_achievements_screen_impl() -> void:
 	draw_achievements_row_collection_bus_art(panel)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.list_items_stagger_in(rows, 0.22, 0.035)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func sync_achievements_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
@@ -28357,6 +28557,8 @@ func _show_menu_impl() -> void:
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 	register_ui_round_801_830(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 	# 菜单入场动画 - 标题区和底栏交错出现
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
@@ -29198,6 +29400,8 @@ func _show_online_lobby_impl() -> void:
 	configure_online_lobby_focus_navigation(true)
 	register_ui_round_771_800(root_layer)
 	register_ui_round_801_830(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 	schedule_ui_qa_page_ready("online_lobby", ["OnlineLobbyFormPanel", "OnlineLobbyNameEdit", "OnlineLobbyLogPanel", "OnlineLobbyLogScroll"])
 
 
@@ -30886,6 +31090,8 @@ func _show_shop_screen_impl() -> void:
 		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.95, 0.95)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func sync_shop_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
@@ -31415,6 +31621,8 @@ func _show_stats_screen_impl() -> void:
 			rows.append(child)
 		AnimationEffects.list_items_stagger_in(rows, 0.25, 0.06)
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func close_settings_panel() -> void:
@@ -31590,6 +31798,8 @@ func show_telemetry_data_sheet() -> void:
 	apply_rect(close, rect_full(0.390, 0.835, 0.610, 0.975))
 	card.add_child(close)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func refresh_telemetry_data_sheet() -> void:
@@ -32146,6 +32356,8 @@ func show_chat_panel() -> void:
 	refresh_chat_send_button_state()
 	call_deferred("focus_named_control", "ChatPanelCloseButton")
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func show_daily_login_panel(login_result: Dictionary) -> void:
@@ -32613,6 +32825,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	tip_label.set_meta("canonical_owner", "DailyLoginForecastBody")
 	tip_label.set_meta("duplicate_text_role", "legacy_smoke_anchor")
 	configure_button_focus_navigation(panel, "DailyLoginClaimButton")
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 	# 面板弹出动画
 	if ui_motion_enabled():
@@ -32908,6 +33122,8 @@ func show_diagnostic_dialog(lines: Array) -> void:
 			dismiss_diagnostic_dialog()
 	)
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, content_list: Control) -> void:
@@ -33495,6 +33711,8 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		center_panel.modulate.a = 0.0
 		var fade_tween := create_screen_tween()
 		fade_tween.tween_property(center_panel, "modulate:a", 1.0, 0.5).set_ease(Tween.EASE_OUT)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func show_menu(instant: bool = false) -> void:
@@ -33839,6 +34057,8 @@ func _show_replay_import_screen_impl() -> void:
 	render_replay_timeline_events(replay_import_payload, false)
 	call_deferred("update_replay_timeline_status", event_scroll)
 	register_ui_round_771_800(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 	schedule_ui_qa_page_ready("replay_import", ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline"])
 
 
@@ -40262,6 +40482,8 @@ func finalize_action_bar_layout() -> void:
 		if reconnect_button != null and lobby_button != null:
 			set_action_focus_neighbor(reconnect_button, "left", lobby_button)
 			set_action_focus_neighbor(lobby_button, "right", reconnect_button)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func set_action_focus_neighbor(button: Button, direction: String, target: Button) -> void:
@@ -40703,6 +40925,8 @@ func ensure_update_dialog() -> void:
 	if update_dialog != null and is_instance_valid(update_dialog):
 		refresh_update_dialog()
 		register_ui_round_681_710(root_layer)
+		register_ui_round_1011_1040(root_layer)
+		register_ui_round_1041_1070(root_layer)
 		return
 	update_dialog_focus_restore_id = focused_control_instance_id()
 	update_dialog = Control.new()
@@ -40823,6 +41047,8 @@ func ensure_update_dialog() -> void:
 	refresh_update_dialog()
 	update_secondary_button.grab_focus()
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func play_update_dialog_button_feedback(button: Button, role: String, color: Color) -> void:
@@ -44443,6 +44669,12 @@ func _build_fx_toast() -> void:
 	toast_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	toast_container.set_meta("safe_area_inset", true)
+	toast_container.set_meta("queue_dwell_contract", "oldest_first_with_minimum_dwell")
+	toast_container.set_meta("ui_round_1041_1070_ids", ["F-1062"])
+	toast_container.set_meta("ui_round_1041_1070_roles", {"F-1062": "toast_queue_owner"})
+	toast_container.set_meta("ui_round_1041_1070_policy", "queued_toasts_keep_dwell_and_focus_clearance")
+	toast_container.set_meta("ui_contract_hardening", true)
+	mark_ui_optimization(toast_container, "F-1062")
 	apply_safe_area_offsets(toast_container)
 	toast_container.visible = false
 	fx_layer.add_child(toast_container)

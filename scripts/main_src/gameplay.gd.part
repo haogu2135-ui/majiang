@@ -552,6 +552,8 @@ func render_game() -> void:
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 	update_fx_turn_pulse()
 	if mode == "offline":
 		schedule_ui_qa_page_ready("offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])

@@ -260,6 +260,8 @@ func _show_achievements_screen_impl() -> void:
 	draw_achievements_row_collection_bus_art(panel)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.list_items_stagger_in(rows, 0.22, 0.035)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func sync_achievements_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
@@ -634,6 +636,8 @@ func _show_menu_impl() -> void:
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
 	register_ui_round_801_830(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 	# 菜单入场动画 - 标题区和底栏交错出现
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
@@ -1475,6 +1479,8 @@ func _show_online_lobby_impl() -> void:
 	configure_online_lobby_focus_navigation(true)
 	register_ui_round_771_800(root_layer)
 	register_ui_round_801_830(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 	schedule_ui_qa_page_ready("online_lobby", ["OnlineLobbyFormPanel", "OnlineLobbyNameEdit", "OnlineLobbyLogPanel", "OnlineLobbyLogScroll"])
 
 
@@ -3163,6 +3169,8 @@ func _show_shop_screen_impl() -> void:
 		tw.tween_property(panel, "modulate:a", 1.0, 0.25).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.95, 0.95)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func sync_shop_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> void:
@@ -3692,6 +3700,8 @@ func _show_stats_screen_impl() -> void:
 			rows.append(child)
 		AnimationEffects.list_items_stagger_in(rows, 0.25, 0.06)
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func close_settings_panel() -> void:
@@ -3867,6 +3877,8 @@ func show_telemetry_data_sheet() -> void:
 	apply_rect(close, rect_full(0.390, 0.835, 0.610, 0.975))
 	card.add_child(close)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func refresh_telemetry_data_sheet() -> void:
@@ -4423,6 +4435,8 @@ func show_chat_panel() -> void:
 	refresh_chat_send_button_state()
 	call_deferred("focus_named_control", "ChatPanelCloseButton")
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func show_daily_login_panel(login_result: Dictionary) -> void:
@@ -4890,6 +4904,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	tip_label.set_meta("canonical_owner", "DailyLoginForecastBody")
 	tip_label.set_meta("duplicate_text_role", "legacy_smoke_anchor")
 	configure_button_focus_navigation(panel, "DailyLoginClaimButton")
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 	# 面板弹出动画
 	if ui_motion_enabled():
@@ -5185,6 +5201,8 @@ func show_diagnostic_dialog(lines: Array) -> void:
 			dismiss_diagnostic_dialog()
 	)
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, content_list: Control) -> void:
@@ -5772,6 +5790,8 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		center_panel.modulate.a = 0.0
 		var fade_tween := create_screen_tween()
 		fade_tween.tween_property(center_panel, "modulate:a", 1.0, 0.5).set_ease(Tween.EASE_OUT)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func show_menu(instant: bool = false) -> void:
@@ -6116,6 +6136,8 @@ func _show_replay_import_screen_impl() -> void:
 	render_replay_timeline_events(replay_import_payload, false)
 	call_deferred("update_replay_timeline_status", event_scroll)
 	register_ui_round_771_800(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 	schedule_ui_qa_page_ready("replay_import", ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline"])
 
 

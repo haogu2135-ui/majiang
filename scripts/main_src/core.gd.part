@@ -3939,6 +3939,8 @@ func finalize_action_bar_layout() -> void:
 		if reconnect_button != null and lobby_button != null:
 			set_action_focus_neighbor(reconnect_button, "left", lobby_button)
 			set_action_focus_neighbor(lobby_button, "right", reconnect_button)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func set_action_focus_neighbor(button: Button, direction: String, target: Button) -> void:
@@ -4380,6 +4382,8 @@ func ensure_update_dialog() -> void:
 	if update_dialog != null and is_instance_valid(update_dialog):
 		refresh_update_dialog()
 		register_ui_round_681_710(root_layer)
+		register_ui_round_1011_1040(root_layer)
+		register_ui_round_1041_1070(root_layer)
 		return
 	update_dialog_focus_restore_id = focused_control_instance_id()
 	update_dialog = Control.new()
@@ -4500,6 +4504,8 @@ func ensure_update_dialog() -> void:
 	refresh_update_dialog()
 	update_secondary_button.grab_focus()
 	register_ui_round_681_710(root_layer)
+	register_ui_round_1011_1040(root_layer)
+	register_ui_round_1041_1070(root_layer)
 
 
 func play_update_dialog_button_feedback(button: Button, role: String, color: Color) -> void:
@@ -8120,6 +8126,12 @@ func _build_fx_toast() -> void:
 	toast_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	toast_container.set_meta("safe_area_inset", true)
+	toast_container.set_meta("queue_dwell_contract", "oldest_first_with_minimum_dwell")
+	toast_container.set_meta("ui_round_1041_1070_ids", ["F-1062"])
+	toast_container.set_meta("ui_round_1041_1070_roles", {"F-1062": "toast_queue_owner"})
+	toast_container.set_meta("ui_round_1041_1070_policy", "queued_toasts_keep_dwell_and_focus_clearance")
+	toast_container.set_meta("ui_contract_hardening", true)
+	mark_ui_optimization(toast_container, "F-1062")
 	apply_safe_area_offsets(toast_container)
 	toast_container.visible = false
 	fx_layer.add_child(toast_container)

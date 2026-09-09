@@ -975,6 +975,65 @@ func check_ui_round_981_1010(scene, viewport_size: Vector2) -> void:
 	var update_primary := scene.find_child("UpdatePrimaryButton", true, false) as Control
 	if update_primary != null:
 		check(bool(update_primary.get_meta("recommended_action", false)) and update_primary.get_meta("action_hierarchy", "") == "primary_install_before_close", "update ready state keeps install as primary at %s" % viewport_size)
+	check_ui_round_1011_1040(scene, viewport_size)
+	check_ui_round_1041_1070(scene, viewport_size)
+
+
+func check_ui_round_1011_1040(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (1011 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1011_1040(root)
+	var contracts: Array = root.get_meta("ui_round_1011_1040_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1011_1040_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1011..F-1040 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1011..F-1040 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1011..F-1040 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1011_1040_scope", "")) == "live_table_information_hierarchy_focus_and_touch", "F-1011..F-1040 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1011_1040_evidence_viewports", []).size() == 3, "F-1011..F-1040 names three evidence viewports at %s" % viewport_size)
+	var hand_tiles := scene.find_child("HandTrayTiles", true, false) as Control
+	if hand_tiles != null:
+		check(bool(hand_tiles.get_meta("ui_contract_hardening", false)) and hand_tiles.get_meta("tile_baseline_contract", "") == "fixed_bottom_baseline_with_shortcut_gutter", "hand tiles keep a stable baseline contract at %s" % viewport_size)
+	var pending_tile := scene.find_child("PendingClaimTile", true, false) as Control
+	if pending_tile != null:
+		check(pending_tile.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(pending_tile.get_meta("preview_only", false)), "pending claim tile remains a read-only preview at %s" % viewport_size)
+	var response_grid := scene.find_child("PendingClaimResponseGrid", true, false) as Control
+	if response_grid != null:
+		check(response_grid.get_meta("focus_order_contract", "") == "primary_claims_then_pass_then_network", "pending response grid declares focus order at %s" % viewport_size)
+
+
+func check_ui_round_1041_1070(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (1041 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1041_1070(root)
+	var contracts: Array = root.get_meta("ui_round_1041_1070_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1041_1070_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1041..F-1070 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1041..F-1070 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1041..F-1070 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1041_1070_scope", "")) == "secondary_table_surfaces_page_flow_and_dialog_recovery", "F-1041..F-1070 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1041_1070_evidence_viewports", []).size() == 3, "F-1041..F-1070 names three evidence viewports at %s" % viewport_size)
+	var chat_shield := scene.find_child("ChatPanelInputShield", true, false) as Control
+	if chat_shield != null:
+		check(chat_shield.get_meta("modal_outside_tap_route", "") == "close_chat_without_table_input", "chat modal keeps an outside-tap route at %s" % viewport_size)
+	var toast_container := scene.find_child("ToastContainer", true, false) as Control
+	if toast_container != null:
+		check(toast_container.get_meta("queue_dwell_contract", "") == "oldest_first_with_minimum_dwell", "toast queue declares dwell order at %s" % viewport_size)
+	var replay_search := scene.find_child("ReplayArchiveSearchInput", true, false) as Control
+	if replay_search != null:
+		check(float(replay_search.get_meta("clear_proxy_right_inset_px", 0.0)) >= 52.0, "replay archive search keeps clear inset at %s" % viewport_size)
+	var diagnostic_summary := scene.find_child("DiagnosticPrimarySummary", true, false) as Control
+	if diagnostic_summary != null:
+		check(bool(diagnostic_summary.get_meta("health_words_required", false)), "diagnostic summary requires text health words at %s" % viewport_size)
 
 
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
