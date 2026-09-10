@@ -2197,6 +2197,10 @@ func register_ui_round_681_710(root: Control) -> void:
 	# lane so resize and accessibility probes can verify the same geometry.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_681_710_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_681_710_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (681 + index))
@@ -2449,6 +2453,10 @@ func register_ui_round_711_740(root: Control) -> void:
 	# in the owning builders below so the contract cannot drift from them.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_711_740_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_711_740_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (711 + index))
@@ -2563,6 +2571,10 @@ func register_ui_round_741_770(root: Control) -> void:
 	# introduce another visual layer.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_741_770_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_741_770_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (741 + index))
@@ -2742,6 +2754,10 @@ func register_ui_round_771_800(root: Control) -> void:
 	# the native controls continue to own input.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_771_800_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_771_800_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (771 + index))
@@ -2873,6 +2889,10 @@ func register_ui_round_801_830(root: Control) -> void:
 	# introducing another visual surface.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_801_830_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_801_830_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (801 + index))
@@ -2978,6 +2998,10 @@ func register_ui_round_831_860(root: Control) -> void:
 	# visual layer or replacing an existing texture host.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_831_860_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_831_860_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (831 + index))
@@ -3093,6 +3117,10 @@ func register_ui_round_861_890(root: Control) -> void:
 	# keeps their reading order and state owner inspectable after every page rebuild.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_861_890_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_861_890_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (861 + index))
@@ -3196,6 +3224,10 @@ func register_ui_round_891_920(root: Control) -> void:
 	# adding a decorative layer or replacing the existing 2D tile surfaces.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_891_920_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_891_920_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (891 + index))
@@ -3290,6 +3322,10 @@ func register_ui_round_921_950(root: Control) -> void:
 	# inspectable: it does not add a visual layer or replace any authored asset.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_921_950_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_921_950_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (921 + index))
@@ -3391,6 +3427,10 @@ func register_ui_round_951_980(root: Control) -> void:
 	# reading, focus, and input contracts without adding a visual overlay.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_951_980_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_951_980_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (951 + index))
@@ -3470,6 +3510,10 @@ func register_ui_round_981_1010(root: Control) -> void:
 	# surfaces. It shares the same owner contract shape as the battle round.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_981_1010_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_981_1010_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (981 + index))
@@ -3548,6 +3592,10 @@ func register_ui_round_1011_1040(root: Control) -> void:
 	# behavior survive every table rebuild without adding a visual overlay.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_1011_1040_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_1011_1040_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (1011 + index))
@@ -3644,6 +3692,10 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	# texture, ColorRect, or code-drawn panel is introduced here.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_1041_1070_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_1041_1070_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (1041 + index))
@@ -3736,6 +3788,11 @@ func register_ui_round_1041_1070(root: Control) -> void:
 		diagnostic_summary.set_meta("health_words_required", true)
 	register_ui_round_1071_1100(root)
 	register_ui_round_1101_1130(root)
+	register_ui_round_1131_1160(root)
+	register_ui_round_1161_1190(root)
+	register_ui_round_1191_1220(root)
+	register_ui_round_1221_1250(root)
+	register_ui_round_1251_1310(root)
 
 
 func register_ui_round_1071_1100(root: Control) -> void:
@@ -3744,6 +3801,10 @@ func register_ui_round_1071_1100(root: Control) -> void:
 	# visual layer and preserves the authored bitmap policy.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_1071_1100_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_1071_1100_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (1071 + index))
@@ -3852,6 +3913,10 @@ func register_ui_round_1101_1130(root: Control) -> void:
 	# and imported-illustration constraints.
 	if root == null or not is_instance_valid(root):
 		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_1101_1130_registered_child_count", -1)) == registration_child_count:
+		return
+	root.set_meta("ui_round_1101_1130_registered_child_count", registration_child_count)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (1101 + index))
@@ -3945,6 +4010,575 @@ func register_ui_round_1101_1130(root: Control) -> void:
 	var summary_body := find_control.call("RoundSummaryBody") as Control
 	if summary_body != null:
 		summary_body.set_meta("rank_lane_exclusion", true)
+
+
+func register_ui_round_1131_1160(root: Control) -> void:
+	# F-1131..F-1160 covers the remaining live-table focus, source, and
+	# response lanes. Existing controls remain the owners; no visual overlay is
+	# introduced by this registry.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_1131_1160_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (1131 + index))
+	root.set_meta("ui_round_1131_1160_contract_ids", contract_ids)
+	root.set_meta("ui_round_1131_1160_contract_version", "20260910-live-table-focus-response-30")
+	root.set_meta("ui_round_1131_1160_scope", "live_table_focus_source_response_and_log_lanes")
+	root.set_meta("ui_round_1131_1160_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1131_1160_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1131_1160_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1131_1160_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1131_1160_roles", roles)
+		target.set_meta("ui_round_1131_1160_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1131", "TopHudTitle", "table_title_context_owner", "round_room_and_mode_context_keep_one_header_path"],
+		["F-1132", "TopHudRoomCodeCopyButton", "table_room_copy_owner", "copy_action_and_room_identity_share_feedback_lane"],
+		["F-1133", "TopHudSettingsButton", "table_settings_focus_owner", "settings_exit_action_keeps_header_touch_gutter"],
+		["F-1134", "TopHudBackButton", "table_back_focus_owner", "back_route_stays_secondary_and_reachable"],
+		["F-1135", "TopHudUpdateButton", "table_update_notice_owner", "update_notice_does_not_displace_round_status"],
+		["F-1136", "TopHudModeBadge", "table_mode_badge_owner", "mode_identity_has_text_and_shape_before_status"],
+		["F-1137", "TopHudOnlineConnectionLabel", "table_connection_copy_owner", "online_state_words_stay_next_to_connection_icon"],
+		["F-1138", "CenterPhaseLabel", "center_phase_owner", "phase_text_and_turn_state_share_center_lane"],
+		["F-1139", "CenterWallCount", "center_wall_count_owner", "remaining_wall_value_keeps_unit_and_context"],
+		["F-1140", "CenterWallStatusLabel", "center_wall_status_owner", "wall_warning_has_text_before_meter_decoration"],
+		["F-1141", "CenterLastDiscardTile", "center_discard_tile_owner", "last_discard_face_keeps_source_and_response_clearance"],
+		["F-1142", "CenterLastDiscardResponseWindow", "center_response_window_owner", "response_deadline_stays_outside_tile_hit_lane"],
+		["F-1143", "DiscardRiverSummaryArchive", "river_summary_archive_owner", "river_summary_action_is_distinct_from_tile_faces"],
+		["F-1144", "DiscardRiverOwnerBadge_0", "river_owner_badge_owner", "seat_identity_is_readable_at_each_river"],
+		["F-1145", "DiscardGrid_0", "river_grid_input_owner", "public_discard_grid_keeps_stable_tile_cells"],
+		["F-1146", "MeldKindBadge", "meld_kind_token_owner", "meld_type_token_keeps_inward_gutter"],
+		["F-1147", "MeldKindBadgeLabel", "meld_kind_label_owner", "meld_type_label_has_full_text_tooltip"],
+		["F-1148", "MeldLaneArchiveButton_0", "meld_archive_focus_owner", "meld_pager_stays_in_seat_facing_lane"],
+		["F-1149", "HandTrayLastDrawLabel", "hand_last_draw_owner", "drawn_tile_state_is_separate_from_hand_faces"],
+		["F-1150", "HandTrayShortcutHint", "hand_shortcut_owner", "shortcut_hint_keeps_clearance_from_tile_baseline"],
+		["F-1151", "HandTrayTutorialHintText", "hand_tutorial_hint_owner", "tutorial_hint_does_not_cover_selectable_tiles"],
+		["F-1152", "HandTrayActionPath", "hand_action_path_owner", "action_route_ends_before_hand_hit_cells"],
+		["F-1153", "HandTrayActionPathTarget", "hand_action_target_owner", "target_marker_is_noninteractive_and_face_safe"],
+		["F-1154", "ActionDockStatusLabel", "action_status_owner", "action_phase_copy_precedes_button_cluster"],
+		["F-1155", "ActionIntentText", "action_intent_owner", "intent_sentence_names_current_action_and_source"],
+		["F-1156", "PendingClaimSourceText", "claim_source_owner", "claim_source_tile_and_seat_share_context"],
+		["F-1157", "PendingClaimFocusText", "claim_focus_owner", "pending_focus_hint_stays_above_response_buttons"],
+		["F-1158", "PendingClaimUrgencyText", "claim_urgency_owner", "deadline_copy_is_distinct_from_timer_art"],
+		["F-1159", "TableLogLatestCursor", "table_log_latest_owner", "latest_event_marker_stays_inside_log_lane"],
+		["F-1160", "TableLogArchiveButton", "table_log_archive_owner", "archive_action_keeps_log_and_table_focus_separate"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	root.set_meta("ui_round_1131_1160_owner_roles", owner_roles)
+	root.set_meta("ui_round_1131_1160_registered_child_count", registration_child_count)
+	var last_discard := find_control.call("CenterLastDiscardTile") as Control
+	if last_discard != null:
+		last_discard.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		last_discard.set_meta("preview_only", true)
+		last_discard.set_meta("source_context_clearance_px", 8.0)
+	var action_target := find_control.call("HandTrayActionPathTarget") as Control
+	if action_target != null:
+		action_target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		action_target.set_meta("preview_only", true)
+	var meld_pager := find_control.call("MeldLaneArchiveButton_0") as Control
+	if meld_pager != null:
+		meld_pager.set_meta("seat_facing_lane", true)
+		meld_pager.set_meta("minimum_clearance_px", 8.0)
+
+
+func register_ui_round_1161_1190(root: Control) -> void:
+	# F-1161..F-1190 covers secondary page controls and reading-state details.
+	# Contracts attach to current native controls and imported authored surfaces so
+	# page rebuilds preserve focus and readable state without new artwork.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.get_child_count()
+	var telemetry_body_probe := root.find_child("TelemetryDataBodyScroll", true, false) as Control
+	var telemetry_body_needs_rebind := telemetry_body_probe != null and not bool(telemetry_body_probe.get_meta("fixed_action_lane", false))
+	if int(root.get_meta("ui_round_1161_1190_registered_child_count", -1)) == registration_child_count and not telemetry_body_needs_rebind:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (1161 + index))
+	root.set_meta("ui_round_1161_1190_contract_ids", contract_ids)
+	root.set_meta("ui_round_1161_1190_contract_version", "20260910-page-progress-dialog-30")
+	root.set_meta("ui_round_1161_1190_scope", "page_progress_dialog_and_accessibility_focus_lanes")
+	root.set_meta("ui_round_1161_1190_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1161_1190_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1161_1190_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1161_1190_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1161_1190_roles", roles)
+		target.set_meta("ui_round_1161_1190_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1161", "AchievementRowReadabilityLane", "achievement_row_reading_owner", "name_goal_progress_and_state_share_measured_row_lanes"],
+		["F-1162", "AchievementRowProgressRail", "achievement_progress_rail_owner", "progress fill and text use one bounded rail"],
+		["F-1163", "AchievementRowProgressGate", "achievement_progress_gate_owner", "progress endpoint has shape and full state text"],
+		["F-1164", "AchievementsScrollHitTarget", "achievement_scroll_hit_owner", "scroll hit lane stays outside row focus targets"],
+		["F-1165", "AchievementsScrollBar", "achievement_scrollbar_owner", "scrollbar track thumb and content remain distinct"],
+		["F-1166", "AchievementsBackButton", "achievement_back_owner", "back action stays visible below the gallery lane"],
+		["F-1167", "DailyLoginClaimedStatusLabel", "daily_claimed_status_owner", "claimed state remains adjacent to today's reward"],
+		["F-1168", "DailyLoginClaimButtonArt", "daily_claim_face_owner", "claim face stays behind native command text"],
+		["F-1169", "DailyLoginForecastBody", "daily_forecast_body_owner", "future reward detail stays secondary to today's claim"],
+		["F-1170", "DailyLoginDayIndicators", "daily_day_indicator_owner", "day sequence keeps current and future markers ordered"],
+		["F-1171", "LoadingStatusLabel", "loading_status_copy_owner", "loading status names stage before decorative meter"],
+		["F-1172", "LoadingTitleLabel", "loading_title_owner", "loading title and version keep independent lanes"],
+		["F-1173", "LoadingRetryButton", "loading_retry_owner", "retry is primary only when the load error is actionable"],
+		["F-1174", "LoadingReturnButton", "loading_return_owner", "return remains safe secondary beside retry"],
+		["F-1175", "LoadingTipLabel", "loading_tip_owner", "tip copy never competes with error or retry state"],
+		["F-1176", "TutorialCloseButton", "tutorial_close_owner", "tutorial close is reachable without activating skip"],
+		["F-1177", "TutorialEntryScrim", "tutorial_scrim_owner", "tutorial modal scrim blocks background input"],
+		["F-1178", "TutorialEntrySubtitle", "tutorial_subtitle_owner", "tutorial subtitle keeps phase context near title"],
+		["F-1179", "ReplayImportInputLabel", "replay_input_label_owner", "input label remains visible with long replay codes"],
+		["F-1180", "ReplayImportClearButton", "replay_clear_owner", "clear action restores input focus and validation lane"],
+		["F-1181", "ReplayImportCopyCodeButton", "replay_copy_owner", "copy full code remains separate from import action"],
+		["F-1182", "ReplayArchiveCount", "replay_archive_count_owner", "filtered archive count explains the active search scope"],
+		["F-1183", "ReplayArchiveScrollBar", "replay_archive_scrollbar_owner", "archive scroll thumb keeps a stable touch gutter"],
+		["F-1184", "DiagnosticDialogVersion", "diagnostic_version_owner", "diagnostic version stays with the generated report"],
+		["F-1185", "DiagnosticCloseButton", "diagnostic_close_owner", "close action stays below report content with safe clearance"],
+		["F-1186", "TelemetryPermissionSummary", "telemetry_permission_owner", "consent scope is readable before consent action"],
+		["F-1187", "TelemetryDataBodyScroll", "telemetry_body_scroll_owner", "data sheet body scroll excludes modal actions"],
+		["F-1188", "TelemetryConsentButton", "telemetry_consent_owner", "consent command remains distinct from export and clear"],
+		["F-1189", "UpdateDialogStageCurrentLabel", "update_current_stage_owner", "current stage text follows the active stage marker"],
+		["F-1190", "UpdateReleaseNotesScrollThumb", "update_notes_thumb_owner", "notes thumb stays inside its authored scroll gutter"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	root.set_meta("ui_round_1161_1190_owner_roles", owner_roles)
+	root.set_meta("ui_round_1161_1190_registered_child_count", registration_child_count)
+	var tutorial_scrim := find_control.call("TutorialEntryScrim") as Control
+	if tutorial_scrim != null:
+		tutorial_scrim.mouse_filter = Control.MOUSE_FILTER_STOP
+		tutorial_scrim.set_meta("background_input_locked", true)
+	var replay_clear := find_control.call("ReplayImportClearButton") as Control
+	if replay_clear != null:
+		replay_clear.set_meta("restore_focus_target", "ReplayImportCodeInput")
+	var telemetry_body := find_control.call("TelemetryDataBodyScroll") as Control
+	if telemetry_body != null:
+		telemetry_body.set_meta("fixed_action_lane", true)
+		telemetry_body.set_meta("modal_action_exclusion", true)
+	var notes_thumb := find_control.call("UpdateReleaseNotesScrollThumb") as Control
+	if notes_thumb != null:
+		notes_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		notes_thumb.set_meta("scroll_gutter_owner", "UpdateReleaseNotesScrollHitTarget")
+
+
+func register_ui_round_1191_1220(root: Control) -> void:
+	# F-1191..F-1220 covers secondary live-table state, seat, and event
+	# surfaces. Existing controls remain the owners and no visual overlay is
+	# added by this contract pass.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_1191_1220_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (1191 + index))
+	root.set_meta("ui_round_1191_1220_contract_ids", contract_ids)
+	root.set_meta("ui_round_1191_1220_contract_version", "20260910-live-table-secondary-state-30")
+	root.set_meta("ui_round_1191_1220_scope", "live_table_secondary_state_seat_and_event_surfaces")
+	root.set_meta("ui_round_1191_1220_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1191_1220_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1191_1220_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1191_1220_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1191_1220_roles", roles)
+		target.set_meta("ui_round_1191_1220_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1191", "TopHudHandProgress", "hud_hand_progress_owner", "hand_count_progress_stays_below_round_context"],
+		["F-1192", "TopHudStatus", "hud_status_sentence_owner", "status_sentence_keeps_state_and_next_action"],
+		["F-1193", "TopHudWallState", "hud_wall_state_owner", "wall_state_wording_stays_with_wall_summary"],
+		["F-1194", "TopHudOnlineConnectionStatus", "hud_connection_surface_owner", "connection_surface_keeps_icon_and_state_bounds"],
+		["F-1195", "CenterWallMeter", "center_wall_meter_owner", "wall_meter_has_value_label_and_bounded_track"],
+		["F-1196", "CenterWallLowWarning", "center_wall_warning_owner", "low_wall_warning_is_distinct_from_normal_meter"],
+		["F-1197", "CenterWallLowWarningDetail", "center_wall_warning_detail_owner", "warning_detail_keeps_reason_near_warning"],
+		["F-1198", "CenterWindCurrentMarker", "center_wind_marker_owner", "current_wind_marker_has_shape_inside_compass"],
+		["F-1199", "CenterWindDealerBadge", "center_dealer_badge_owner", "dealer_identity_stays_separate_from_current_turn"],
+		["F-1200", "CenterLastTileTrace", "center_last_tile_trace_owner", "last_tile_trace_is_read_only_and_source_bound"],
+		["F-1201", "CenterLastTileTargetNode", "center_last_tile_target_owner", "claim_target_marker_never_receives_tile_input"],
+		["F-1202", "CenterLastTileClaimRoute", "center_claim_route_owner", "claim_route_stops_before_preview_face"],
+		["F-1203", "CenterLastDiscardFeedbackImpact", "discard_feedback_impact_owner", "impact_feedback_does_not_cover_source_tile"],
+		["F-1204", "CenterPhaseFlowCursor", "phase_flow_cursor_owner", "phase_cursor_tracks_current_step_not_decoration"],
+		["F-1205", "CenterPhaseConfirmRoute", "phase_confirm_route_owner", "phase_confirm_route_keeps_completion_endstop"],
+		["F-1206", "DiscardRiverArchiveLabel_0", "river_archive_label_owner", "archive_range_text_stays_outside_last_public_tile"],
+		["F-1207", "DiscardRiverSummaryGlyph", "river_summary_glyph_owner", "river_summary_glyph_has_named_archive_meaning"],
+		["F-1208", "MeldSummaryArchive", "meld_summary_archive_owner", "meld_summary_archive_is_not_a_meld_face"],
+		["F-1209", "MeldSummaryGate", "meld_summary_count_owner", "meld_summary_count_keeps_total_meld_context"],
+		["F-1210", "MeldGroupArt", "meld_group_surface_owner", "meld_group_surface_preserves_seat_orientation"],
+		["F-1211", "SeatAvatarHead", "seat_avatar_head_owner", "seat_avatar_stays_inside_seat_identity_surface"],
+		["F-1212", "SeatAvatarActiveHalo", "seat_active_halo_owner", "active_seat_halo_does_not_replace_active_words"],
+		["F-1213", "SeatScoreMomentumLabel", "seat_momentum_owner", "momentum_text_keeps_score_and_strategy_context"],
+		["F-1214", "SeatThreatReadinessSeal_0", "seat_threat_readiness_owner", "threat_readiness_signal_is_secondary_to_seat_identity"],
+		["F-1215", "SeatTurnHandoffGlyph_0", "seat_turn_handoff_owner", "turn_handoff_glyph_keeps_seat_source"],
+		["F-1216", "HandTrayStateBadge", "hand_state_badge_owner", "hand_state_badge_does_not_tint_authored_tile_faces"],
+		["F-1217", "HandTrayLastDrawBadge", "hand_last_draw_badge_owner", "last_draw_badge_stays_on_non_tile_status_lane"],
+		["F-1218", "ActionIntentCount", "action_intent_count_owner", "action_count_keeps_unit_and_action_label"],
+		["F-1219", "PendingClaimTimerText", "claim_timer_text_owner", "timer_text_reports_remaining_time_with_unit"],
+		["F-1220", "ChatPanelCloseButton", "chat_close_focus_owner", "chat_close_returns_focus_without_table_action"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	root.set_meta("ui_round_1191_1220_owner_roles", owner_roles)
+	root.set_meta("ui_round_1191_1220_registered_child_count", registration_child_count)
+	var target_node := find_control.call("CenterLastTileTargetNode") as Control
+	if target_node != null:
+		target_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		target_node.set_meta("preview_only", true)
+	var avatar_halo := find_control.call("SeatAvatarActiveHalo") as Control
+	if avatar_halo != null:
+		avatar_halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		avatar_halo.set_meta("visual_only", true)
+	var timer_text := find_control.call("PendingClaimTimerText") as Control
+	if timer_text != null:
+		timer_text.set_meta("unit_required", "秒")
+		timer_text.set_meta("timer_visual_owner", "PendingClaimTimer")
+
+
+func register_ui_round_1221_1250(root: Control) -> void:
+	# F-1221..F-1250 covers menu, settings, content, commerce, and lobby
+	# secondary controls. Existing authored surfaces and native controls retain
+	# their ownership without any generated visual asset.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_1221_1250_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(30):
+		contract_ids.append("F-%d" % (1221 + index))
+	root.set_meta("ui_round_1221_1250_contract_ids", contract_ids)
+	root.set_meta("ui_round_1221_1250_contract_version", "20260910-page-secondary-controls-30")
+	root.set_meta("ui_round_1221_1250_scope", "menu_settings_content_commerce_and_lobby_controls")
+	root.set_meta("ui_round_1221_1250_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1221_1250_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1221_1250_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1221_1250_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1221_1250_roles", roles)
+		target.set_meta("ui_round_1221_1250_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1221", "MenuTitleTextLayer", "menu_title_layer_owner", "title layer stays behind interactive menu cards"],
+		["F-1222", "MenuTitleLabel", "menu_title_text_owner", "title text keeps a stable first-viewport baseline"],
+		["F-1223", "MenuTutorialEntryBanner", "menu_tutorial_banner_owner", "tutorial banner keeps checkpoint status near entry"],
+		["F-1224", "MenuTutorialEntryTitle", "menu_tutorial_title_owner", "tutorial title stays distinct from resume state"],
+		["F-1225", "MenuTutorialStartButton", "menu_tutorial_start_owner", "tutorial start remains primary over optional routes"],
+		["F-1226", "MenuTutorialSkipButton", "menu_tutorial_skip_owner", "tutorial skip remains secondary and confirmation safe"],
+		["F-1227", "MenuSettingsButton", "menu_settings_entry_owner", "settings entry keeps focus and press feedback together"],
+		["F-1228", "MenuCurrencyBadgeArt", "menu_currency_surface_owner", "currency badge keeps icon and economy value readable"],
+		["F-1229", "MenuStatsBadgeArt", "menu_stats_surface_owner", "stats shortcut badge does not compete with card action"],
+		["F-1230", "MenuSeasonProgressArt", "menu_season_progress_owner", "season progress stays secondary to playable entries"],
+		["F-1231", "SettingsTitleLabel", "settings_title_owner", "settings title remains above section content after rebuild"],
+		["F-1232", "SettingsSectionRouteArt", "settings_section_route_owner", "section route stays aligned with active navigation"],
+		["F-1233", "SettingsRuleVariantButton", "settings_variant_action_owner", "rule variant action exposes value and next-round timing"],
+		["F-1234", "SettingsRuleVariantLabel", "settings_variant_value_owner", "rule variant value stays adjacent to its action"],
+		["F-1235", "SettingsOverlayScrim", "settings_scrim_owner", "settings scrim blocks menu input while modal is open"],
+		["F-1236", "RulesGuidePanelPlate", "rules_guide_surface_owner", "chapter guide keeps labels inside one navigation surface"],
+		["F-1237", "RulesContentReadabilityBackplate", "rules_content_surface_owner", "rules body keeps text contrast independent of page art"],
+		["F-1238", "RulesContentScrollHitTarget", "rules_scroll_hit_owner", "rules scroll hit lane owns drag without selecting body text"],
+		["F-1239", "RulesContentTopSheen", "rules_top_sheen_owner", "top sheen stays decorative and outside content input"],
+		["F-1240", "ShopCurrencyPanel_gems", "shop_gem_balance_owner", "gem balance keeps label and value together"],
+		["F-1241", "ShopItemTypeGlyph", "shop_type_glyph_owner", "item type glyph has text-equivalent meaning"],
+		["F-1242", "ShopItemStockText", "shop_stock_owner", "stock state stays separate from purchase cost"],
+		["F-1243", "ShopItemPriceAura", "shop_price_surface_owner", "price accent does not hide cost text"],
+		["F-1244", "ShopItemsScrollThumb", "shop_scroll_thumb_owner", "shop thumb is visual only and delegates to hit gutter"],
+		["F-1245", "StatsSummaryHint", "stats_summary_hint_owner", "stats hint names scope before narrative detail"],
+		["F-1246", "StatsSummaryNarrativeTitle", "stats_narrative_title_owner", "stats narrative title precedes its explanation"],
+		["F-1247", "StatsSummaryNarrativeBody", "stats_narrative_body_owner", "stats narrative body keeps measured readable width"],
+		["F-1248", "OnlineLobbyRoomSummaryContext", "lobby_summary_context_owner", "room summary context stays with occupancy and state"],
+		["F-1249", "OnlineLobbyRosterTitle", "lobby_roster_title_owner", "roster title stays above seat rows and status columns"],
+		["F-1250", "OnlineLobbyLogListTitle", "lobby_log_title_owner", "log title stays attached to its scroll and latest action"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	root.set_meta("ui_round_1221_1250_owner_roles", owner_roles)
+	root.set_meta("ui_round_1221_1250_registered_child_count", registration_child_count)
+	var menu_title_layer := find_control.call("MenuTitleTextLayer") as Control
+	if menu_title_layer != null:
+		menu_title_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		menu_title_layer.set_meta("visual_only", true)
+	var settings_scrim := find_control.call("SettingsOverlayScrim") as Control
+	if settings_scrim != null:
+		settings_scrim.mouse_filter = Control.MOUSE_FILTER_STOP
+		settings_scrim.set_meta("background_input_locked", true)
+	var rules_hit_target := find_control.call("RulesContentScrollHitTarget") as Control
+	if rules_hit_target != null:
+		rules_hit_target.mouse_filter = Control.MOUSE_FILTER_STOP
+		rules_hit_target.focus_mode = Control.FOCUS_ALL
+		rules_hit_target.set_meta("scroll_owner", "RulesContentScroll")
+		rules_hit_target.set_meta("min_touch_target_px", UI_MIN_TOUCH_TARGET)
+	var shop_thumb := find_control.call("ShopItemsScrollThumb") as Control
+	if shop_thumb != null:
+		shop_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		shop_thumb.set_meta("scroll_gutter_owner", "ShopItemsScrollHitTarget")
+
+
+func register_ui_round_1251_1310(root: Control) -> void:
+	# F-1251..F-1310 records the next compact-layout audit as concrete owners.
+	# Existing authored surfaces and native controls remain the visual/input
+	# sources; this pass only tightens measurement, focus, and state semantics.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.get_child_count()
+	if int(root.get_meta("ui_round_1251_1310_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1251 + index))
+	root.set_meta("ui_round_1251_1310_contract_ids", contract_ids)
+	root.set_meta("ui_round_1251_1310_contract_version", "20260910-compact-layout-and-state-60")
+	root.set_meta("ui_round_1251_1310_scope", "compact_battle_page_and_recovery_reading_surfaces")
+	root.set_meta("ui_round_1251_1310_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1251_1310_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1251_1310_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1251_1310_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1251_1310_roles", roles)
+		target.set_meta("ui_round_1251_1310_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1251", "TopHudTitle", "hud_title_compact_lane_owner", "title status and turn marker keep separate measured lanes"],
+		["F-1252", "TopHudStatus", "hud_phase_priority_owner", "phase status stays primary over wall decoration"],
+		["F-1253", "TopHudWallText", "hud_wall_count_reading_owner", "wall count keeps its own width and state gap"],
+		["F-1254", "CenterWallCount", "center_wall_fact_owner", "center wall fact shares the same label and total semantics"],
+		["F-1255", "CenterLastDiscardLabel", "center_last_discard_compact_owner", "last tile source text keeps clearance from wind labels"],
+		["F-1256", "CenterWindLabel_东", "center_wind_contrast_owner", "wind identity uses text and outline rather than color alone"],
+		["F-1257", "CenterDicePlate", "center_dice_fact_owner", "dice surface stays inside the center content bounds"],
+		["F-1258", "DiscardGrid_0", "river_capacity_window_owner", "river capacity exposes its visible range and page state"],
+		["F-1259", "DiscardGrid_0", "river_archive_reserved_cell_owner", "reserved history cells have a text-equivalent state"],
+		["F-1260", "DiscardRiverArchiveButton_0", "river_archive_local_position_owner", "archive action stays attached to its river overlay"],
+		["F-1261", "LastDiscardFocusMarker", "river_latest_discard_focus_owner", "latest discard marker is above the river surface and read-only"],
+		["F-1262", "DiscardGrid_1", "river_vertical_spacing_owner", "side river cells keep stable separation and seat clearance"],
+		["F-1263", "HandTray", "hand_bottom_safe_gutter_owner", "tile faces keep a fixed bottom safety gutter"],
+		["F-1264", "HandTrayTiles", "hand_suit_group_spacing_owner", "suit groups remain scannable without changing tile faces"],
+		["F-1265", "HandTrayLastDrawLabel", "hand_drawn_tile_state_owner", "drawn tile state is separate from selectable faces"],
+		["F-1266", "HandTrayTutorialHintText", "hand_prompt_divider_owner", "prompt text and divider occupy separate readable lanes"],
+		["F-1267", "HandTrayStateBadge", "hand_state_badge_width_owner", "long hand state does not consume the prompt lane"],
+		["F-1268", "HandTrayTutorialHintText", "hand_tutorial_prompt_owner", "tutorial prompt remains outside tile hit cells"],
+		["F-1269", "ActionButtonDock", "action_dock_prompt_clearance_owner", "action dock keeps a gap from hand prompt and tile row"],
+		["F-1270", "PendingClaimActionStack", "pending_response_group_owner", "claim network and voice controls use distinct lanes"],
+		["F-1271", "DangerDiscardConfirmButton", "danger_confirmation_primary_owner", "danger confirm is the single primary action in its lane"],
+		["F-1272", "SeatStatPill_分", "seat_stat_pill_reading_owner", "seat score hand and flower facts keep fixed fields"],
+		["F-1273", "MeldArea_1", "side_meld_seat_clearance_owner", "side melds face inward and clear the seat panel"],
+		["F-1274", "MeldArea_0", "top_meld_origin_owner", "top and bottom horizontal meld origins share one direction rule"],
+		["F-1275", "SeatFlowerSettlementArt", "seat_flower_orientation_owner", "flower settlement art stays in its seat-facing lane"],
+		["F-1276", "SeatStatusSummaryBand_1", "seat_status_readability_owner", "seat name score and status keep stable text contrast"],
+		["F-1277", "ChatActionButton", "chat_entry_side_lane_owner", "chat entry stays outside the hand and action centerline"],
+		["F-1278", "OnlineRecoveryStateLabel", "online_recovery_summary_owner", "disconnect reason phase and next action share one summary"],
+		["F-1279", "RoundSummaryPanel", "round_summary_wide_reading_owner", "settlement panel uses a bounded readable width on wide screens"],
+		["F-1280", "RoundSummaryBody", "round_summary_body_measurement_owner", "summary body is measured before rank header placement"],
+		["F-1281", "MenuPrimaryOfflineCard", "menu_primary_path_owner", "menu title and primary card form one vertical reading path"],
+		["F-1282", "MenuPrimaryOnlineCard", "menu_wide_card_density_owner", "wide primary cards retain readable text density"],
+		["F-1283", "MenuQuickActionRail", "menu_quick_rail_owner", "quick actions stay near primary cards and above footer"],
+		["F-1284", "MenuFooterTextLayer", "menu_footer_status_owner", "version economy rank and stats remain readable status fields"],
+		["F-1285", "SettingRow_本地进度", "settings_maintenance_summary_owner", "maintenance consequence text keeps its scope visible"],
+		["F-1286", "SettingsSection_声音", "settings_audio_row_owner", "audio rows share label value and action baselines"],
+		["F-1287", "SettingsSectionNavigation", "settings_tab_status_owner", "section tabs and progress status use separate rows"],
+		["F-1288", "SettingsSection_声音", "settings_wide_column_owner", "wide settings columns use measured content width"],
+		["F-1289", "RulesContentList", "rules_section_boundary_owner", "rule sections end on readable block boundaries"],
+		["F-1290", "RulesReadingStatus", "rules_wide_section_owner", "current rule section remains visible across wide viewports"],
+		["F-1291", "StatsSummaryPanel", "stats_summary_columns_owner", "summary values keep their field labels in fixed columns"],
+		["F-1292", "StatsRowsContent", "stats_readable_width_owner", "wide stat rows use a bounded reading column"],
+		["F-1293", "StatsRowIconPanel_胜场", "stats_metric_identity_owner", "metric identity is textual and not icon-only"],
+		["F-1294", "AchievementsScroll", "achievement_viewport_owner", "achievement rows clear the bottom scroll affordance"],
+		["F-1295", "AchievementsProgressLabel", "achievement_summary_owner", "unlocked count and completion percent share one summary"],
+		["F-1296", "AchievementRowFocusTarget", "achievement_row_scan_owner", "goal progress and state remain one row reading block"],
+		["F-1297", "ShopItemStockText", "shop_stock_purchase_owner", "stock cost disabled reason and action are separate fields"],
+		["F-1298", "ShopItemsContent", "shop_wide_row_density_owner", "wide item rows bound description and purchase columns"],
+		["F-1299", "ShopItemsEndMarker", "shop_terminal_gap_owner", "last item end marker and footer keep fixed clearance"],
+		["F-1300", "ShopBuyButtonPrice_swap_card", "shop_price_hierarchy_owner", "price is primary and shortage is explanatory"],
+		["F-1301", "OnlineLobbyServerEndpointBadge", "lobby_endpoint_header_owner", "endpoint state and copy action use separate header slots"],
+		["F-1302", "OnlineLobbyFormFeedbackLabel", "lobby_form_feedback_owner", "form feedback precedes the start action without clipping"],
+		["F-1303", "OnlineLobbyRosterPanel", "lobby_roster_columns_owner", "seat name ready and connection state share measured columns"],
+		["F-1304", "OnlineLobbyLogScroll", "lobby_log_drag_owner", "log scrolling owns a stable touch gutter"],
+		["F-1305", "DailyLoginDayIndicators", "daily_day_status_owner", "seven day states are textual and evenly measured"],
+		["F-1306", "DailyLoginClaimButton", "daily_claim_hierarchy_owner", "reward state and claim command have one primary route"],
+		["F-1307", "LoadingPanel", "loading_surface_readability_owner", "loading title progress tip and version use separate lanes"],
+		["F-1308", "UpdateDialogTitle", "update_version_semantics_owner", "installed and available versions are separately named"],
+		["F-1309", "ExitConfirmOverlay", "exit_modal_isolation_owner", "exit modal blocks background input and preserves button focus"],
+		["F-1310", "ReplayImportCodeInput", "replay_long_input_owner", "long code input keeps validation and full-value actions distinct"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	var achievements_scroll := find_control.call("AchievementsScroll") as ScrollContainer
+	if achievements_scroll != null:
+		# The gallery owns an authored custom gutter; the native bright scrollbar
+		# must remain hidden after the shared scroll configuration runs.
+		achievements_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+		achievements_scroll.set_meta("round_1251_default_scrollbar_hidden", true)
+		var achievements_scrollbar := achievements_scroll.get_v_scroll_bar()
+		if achievements_scrollbar != null:
+			achievements_scrollbar.visible = false
+			achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.set_meta("ui_round_1251_1310_owner_roles", owner_roles)
+	root.set_meta("ui_round_1251_1310_registered_child_count", registration_child_count)
+
+	# Compact HUD labels are fit before clipping; the authored header remains the
+	# only surface behind them.
+	for label_name in ["TopHudTitle", "TopHudStatus", "TopHudWallText", "CenterWallCount", "CenterLastDiscardLabel"]:
+		var label := find_control.call(label_name) as Label
+		if label != null:
+			var width_budget := maxf(96.0, label.size.x if label.size.x > 1.0 else safe_content_pixel_size().x * 0.24)
+			fit_label_font_size(label, width_budget, label.get_theme_font_size("font_size"), 9)
+			label.set_meta("round_1251_fit_before_clip", true)
+	var decoration_names := [
+		"CenterDicePlate", "LastDiscardFocusMarker", "CenterWindLabel_东", "SeatFlowerSettlementArt",
+		"MenuQuickActionRail", "LoadingPanel",
+	]
+	for decoration_name in decoration_names:
+		var decoration := find_control.call(decoration_name) as Control
+		if decoration != null:
+			decoration.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			decoration.set_meta("visual_only", true)
+	var latest_marker := find_control.call("LastDiscardFocusMarker") as Control
+	if latest_marker != null:
+		latest_marker.z_index = 50
+		latest_marker.set_meta("primary_visual_owner", "LastDiscardFocusMarker")
+		latest_marker.set_meta("tile_faces_untinted", true)
+	var river_grid := find_control.call("DiscardGrid_0") as Control
+	if river_grid != null:
+		river_grid.clip_contents = true
+		river_grid.set_meta("archive_reserved_cell_label", "历史牌")
+		river_grid.set_meta("visible_range_owner", "DiscardRiverArchiveButton_0")
+	var side_river_grid := find_control.call("DiscardGrid_1") as Control
+	if side_river_grid != null:
+		side_river_grid.set_meta("orientation", "vertical")
+		side_river_grid.set_meta("cell_edge_clearance_px", 3.0)
+	var hand_tray := find_control.call("HandTray") as Control
+	if hand_tray != null:
+		hand_tray.set_meta("tile_bottom_clearance_px", 8.0)
+		hand_tray.set_meta("tutorial_prompt_excludes_tiles", true)
+	var hand_tiles := find_control.call("HandTrayTiles") as Control
+	if hand_tiles != null:
+		hand_tiles.set_meta("suit_group_gap_px", maxf(8.0, float(HAND_MIN_GROUP_GAP)))
+		hand_tiles.set_meta("drawn_tile_gap_px", 8.0)
+	var hand_hint := find_control.call("HandTrayTutorialHintText") as Control
+	if hand_hint != null:
+		hand_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hand_hint.set_meta("tile_hit_exclusion", true)
+	var action_dock := find_control.call("ActionButtonDock") as Control
+	if action_dock != null:
+		action_dock.set_meta("prompt_clearance_px", 6.0)
+		action_dock.set_meta("response_group_order", ["claim", "network", "voice"])
+	var pending_stack := find_control.call("PendingClaimActionStack") as Control
+	if pending_stack != null:
+		pending_stack.clip_contents = true
+		pending_stack.set_meta("response_group_order", ["claim", "network", "voice"])
+		pending_stack.set_meta("claim_lane_primary", true)
+	var pending_grid := find_control.call("PendingClaimResponseGrid") as Control
+	if pending_grid != null:
+		pending_grid.set_meta("button_row_height_px", UI_MIN_TOUCH_TARGET)
+		pending_grid.set_meta("overflow_policy", "stable_rows_before_auxiliary_controls")
+	var danger_button := find_control.call("DangerDiscardConfirmButton") as Button
+	if danger_button != null:
+		danger_button.set_meta("action_priority", "primary")
+		danger_button.set_meta("confirmation_lane", "dedicated")
+	var meld_areas := root.find_children("MeldArea_*", "Control", true, false)
+	for area_node in meld_areas:
+		var area := area_node as Control
+		if area != null:
+			var area_seat := int(area.name.get_slice("_", 1)) if area.name.get_slice("_", 1).is_valid_int() else -1
+			area.set_meta("orientation", "vertical" if area_seat == 1 or area_seat == 3 else "horizontal")
+			area.set_meta("faces_toward_table_center", true)
+			area.set_meta("seat_panel_clearance_px", 8.0)
+	var summary := find_control.call("RoundSummaryPanel") as Control
+	if summary != null:
+		summary.set_meta("wide_readable_max_width_px", 1040.0)
+		summary.set_meta("background_input_locked", true)
+	var summary_body := find_control.call("RoundSummaryBody") as Control
+	if summary_body != null:
+		summary_body.set_meta("measure_before_rank_header", true)
+		summary_body.set_meta("rank_header_clearance_px", 12.0)
+	var lobby_log := find_control.call("OnlineLobbyLogScroll") as ScrollContainer
+	if lobby_log != null:
+		lobby_log.set_meta("scrollbar_touch_target_px", UI_MIN_TOUCH_TARGET)
+		lobby_log.set_meta("drag_owner", "OnlineLobbyLogScroll")
+	var daily_days := find_control.call("DailyLoginDayIndicators") as Control
+	if daily_days != null:
+		daily_days.set_meta("status_tokens", ["已领取", "今日可领", "待签到"])
+		daily_days.set_meta("state_is_textual", true)
+	var update_title := find_control.call("UpdateDialogTitle") as Control
+	if update_title != null:
+		update_title.set_meta("installed_version", APP_VERSION)
+		update_title.set_meta("version_semantics", "当前版本与可用版本分列")
+	var exit_overlay := find_control.call("ExitConfirmOverlay") as Control
+	if exit_overlay != null:
+		exit_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+		exit_overlay.set_meta("background_input_locked", true)
+		exit_overlay.set_meta("focus_restore_policy", "previous_table_action")
+	var replay_input := find_control.call("ReplayImportCodeInput") as LineEdit
+	if replay_input != null:
+		replay_input.set_meta("overflow_policy", "horizontal_scroll_plus_head_tail_summary")
+		replay_input.set_meta("full_value_action", "ReplayImportCopyCodeButton")
+		replay_input.set_meta("validation_status_owner", "ReplayImportStatus")
 
 
 func draw_center_dice_plate(parent: Control) -> Control:

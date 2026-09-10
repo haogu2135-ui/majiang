@@ -2154,6 +2154,30 @@ func add_line_edit_clear_proxy(parent: Control, edit: LineEdit, proxy_name: Stri
 	mark_ui_optimization(proxy, "F-168")
 	return proxy
 
+func find_ui_contract_control(root: Control, node_name: String) -> Control:
+	if root == null or not is_instance_valid(root) or node_name.strip_edges() == "":
+		return null
+	var cache: Dictionary = root.get_meta("ui_contract_control_index", {})
+	if not bool(root.get_meta("ui_contract_control_index_built", false)):
+		for candidate_node in root.find_children("*", "Control", true, false):
+			var candidate := candidate_node as Control
+			if candidate != null and not cache.has(candidate.name):
+				cache[candidate.name] = candidate.get_instance_id()
+		root.set_meta("ui_contract_control_index", cache)
+		root.set_meta("ui_contract_control_index_built", true)
+	var cached_id := int(cache.get(node_name, 0))
+	if cached_id > 0:
+		var cached_node := instance_from_id(cached_id)
+		if cached_node != null and is_instance_valid(cached_node):
+			var cached := cached_node as Control
+			if cached != null and (cached == root or root.is_ancestor_of(cached)):
+				return cached
+	var found := root.find_child(node_name, true, false) as Control
+	if found != null:
+		cache[node_name] = found.get_instance_id()
+		root.set_meta("ui_contract_control_index", cache)
+	return found
+
 func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = "") -> void:
 	if scroll == null or not is_instance_valid(scroll):
 		return

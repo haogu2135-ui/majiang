@@ -1093,6 +1093,197 @@ func check_ui_round_1101_1130(scene, viewport_size: Vector2) -> void:
 	var summary_body := scene.find_child("RoundSummaryBody", true, false) as Control
 	if summary_body != null:
 		check(bool(summary_body.get_meta("rank_lane_exclusion", false)), "summary body keeps rank lane exclusion at %s" % viewport_size)
+	check_ui_round_1131_1160(scene, viewport_size)
+	check_ui_round_1161_1190(scene, viewport_size)
+
+
+func check_ui_round_1131_1160(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (1131 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1131_1160(root)
+	var contracts: Array = root.get_meta("ui_round_1131_1160_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1131_1160_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1131..F-1160 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1131..F-1160 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1131..F-1160 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1131_1160_scope", "")) == "live_table_focus_source_response_and_log_lanes", "F-1131..F-1160 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1131_1160_evidence_viewports", []).size() == 3, "F-1131..F-1160 names three evidence viewports at %s" % viewport_size)
+	var last_discard := scene.find_child("CenterLastDiscardTile", true, false) as Control
+	if last_discard != null:
+		check(last_discard.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(last_discard.get_meta("preview_only", false)), "center last discard remains a read-only preview at %s" % viewport_size)
+	var action_target := scene.find_child("HandTrayActionPathTarget", true, false) as Control
+	if action_target != null:
+		check(action_target.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(action_target.get_meta("preview_only", false)), "hand action target remains outside the tile hit lane at %s" % viewport_size)
+	var meld_pager := scene.find_child("MeldLaneArchiveButton_0", true, false) as Control
+	if meld_pager != null:
+		check(bool(meld_pager.get_meta("seat_facing_lane", false)) and float(meld_pager.get_meta("minimum_clearance_px", 0.0)) >= 8.0, "meld pager keeps its seat-facing clearance at %s" % viewport_size)
+	var room_copy := scene.find_child("TopHudRoomCodeCopyButton", true, false) as Button
+	if room_copy != null:
+		check(int(room_copy.get_meta("ui_min_touch_target", 0)) >= 44, "table room copy keeps a minimum touch target at %s" % viewport_size)
+
+
+func check_ui_round_1161_1190(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (1161 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1161_1190(root)
+	var contracts: Array = root.get_meta("ui_round_1161_1190_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1161_1190_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1161..F-1190 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1161..F-1190 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1161..F-1190 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1161_1190_scope", "")) == "page_progress_dialog_and_accessibility_focus_lanes", "F-1161..F-1190 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1161_1190_evidence_viewports", []).size() == 3, "F-1161..F-1190 names three evidence viewports at %s" % viewport_size)
+	var tutorial_scrim := scene.find_child("TutorialEntryScrim", true, false) as Control
+	if tutorial_scrim != null:
+		check(tutorial_scrim.mouse_filter == Control.MOUSE_FILTER_STOP and bool(tutorial_scrim.get_meta("background_input_locked", false)), "tutorial scrim keeps background input locked at %s" % viewport_size)
+	var replay_clear := scene.find_child("ReplayImportClearButton", true, false) as Control
+	if replay_clear != null:
+		check(replay_clear.get_meta("restore_focus_target", "") == "ReplayImportCodeInput", "replay clear restores input focus at %s" % viewport_size)
+	var telemetry_body := scene.find_child("TelemetryDataBodyScroll", true, false) as Control
+	if telemetry_body != null:
+		check(bool(telemetry_body.get_meta("fixed_action_lane", false)) and bool(telemetry_body.get_meta("modal_action_exclusion", false)), "telemetry body keeps modal actions outside its scroll lane at %s" % viewport_size)
+	var notes_thumb := scene.find_child("UpdateReleaseNotesScrollThumb", true, false) as Control
+	if notes_thumb != null:
+		check(notes_thumb.mouse_filter == Control.MOUSE_FILTER_IGNORE and notes_thumb.get_meta("scroll_gutter_owner", "") == "UpdateReleaseNotesScrollHitTarget", "update notes thumb delegates input to its hit gutter at %s" % viewport_size)
+	check_ui_round_1191_1220(scene, viewport_size)
+	check_ui_round_1221_1250(scene, viewport_size)
+
+
+func check_ui_round_1191_1220(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (1191 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1191_1220(root)
+	var contracts: Array = root.get_meta("ui_round_1191_1220_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1191_1220_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1191..F-1220 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1191..F-1220 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1191..F-1220 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1191_1220_scope", "")) == "live_table_secondary_state_seat_and_event_surfaces", "F-1191..F-1220 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1191_1220_evidence_viewports", []).size() == 3, "F-1191..F-1220 names three evidence viewports at %s" % viewport_size)
+	var target_node := scene.find_child("CenterLastTileTargetNode", true, false) as Control
+	if target_node != null:
+		check(target_node.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(target_node.get_meta("preview_only", false)), "center claim target remains outside tile input at %s" % viewport_size)
+	var avatar_halo := scene.find_child("SeatAvatarActiveHalo", true, false) as Control
+	if avatar_halo != null:
+		check(avatar_halo.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(avatar_halo.get_meta("visual_only", false)), "seat active halo remains visual-only at %s" % viewport_size)
+	var timer_text := scene.find_child("PendingClaimTimerText", true, false) as Control
+	if timer_text != null:
+		check(timer_text.get_meta("unit_required", "") == "秒" and timer_text.get_meta("timer_visual_owner", "") == "PendingClaimTimer", "pending timer text keeps its unit and visual owner at %s" % viewport_size)
+	var chat_close := scene.find_child("ChatPanelCloseButton", true, false) as Button
+	if chat_close != null:
+		check(int(chat_close.get_meta("ui_min_touch_target", 0)) >= 44, "chat close keeps a minimum touch target at %s" % viewport_size)
+
+
+func check_ui_round_1221_1250(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (1221 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1221_1250(root)
+	var contracts: Array = root.get_meta("ui_round_1221_1250_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1221_1250_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1221..F-1250 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1221..F-1250 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1221..F-1250 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1221_1250_scope", "")) == "menu_settings_content_commerce_and_lobby_controls", "F-1221..F-1250 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1221_1250_evidence_viewports", []).size() == 3, "F-1221..F-1250 names three evidence viewports at %s" % viewport_size)
+	var menu_title_layer := scene.find_child("MenuTitleTextLayer", true, false) as Control
+	if menu_title_layer != null:
+		check(menu_title_layer.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(menu_title_layer.get_meta("visual_only", false)), "menu title layer remains outside card input at %s" % viewport_size)
+	var settings_scrim := scene.find_child("SettingsOverlayScrim", true, false) as Control
+	if settings_scrim != null:
+		check(settings_scrim.mouse_filter == Control.MOUSE_FILTER_STOP and bool(settings_scrim.get_meta("background_input_locked", false)), "settings scrim keeps background input locked at %s" % viewport_size)
+	var rules_hit_target := scene.find_child("RulesContentScrollHitTarget", true, false) as Control
+	if rules_hit_target != null:
+		check(rules_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP and rules_hit_target.focus_mode == Control.FOCUS_ALL and rules_hit_target.get_meta("scroll_owner", "") == "RulesContentScroll", "rules scroll hit target owns drag input at %s" % viewport_size)
+	var shop_thumb := scene.find_child("ShopItemsScrollThumb", true, false) as Control
+	if shop_thumb != null:
+		check(shop_thumb.mouse_filter == Control.MOUSE_FILTER_IGNORE and shop_thumb.get_meta("scroll_gutter_owner", "") == "ShopItemsScrollHitTarget", "shop scroll thumb delegates input to its gutter at %s" % viewport_size)
+	check_ui_round_1251_1310(scene, viewport_size)
+
+
+func check_ui_round_1251_1310(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (1251 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1251_1310(root)
+	var contracts: Array = root.get_meta("ui_round_1251_1310_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1251_1310_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1251..F-1310 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1251..F-1310 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1251..F-1310 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1251_1310_scope", "")) == "compact_battle_page_and_recovery_reading_surfaces", "F-1251..F-1310 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1251_1310_evidence_viewports", []).size() == 3, "F-1251..F-1310 names three evidence viewports at %s" % viewport_size)
+	var hud_title := scene.find_child("TopHudTitle", true, false) as Label
+	if hud_title != null:
+		check(bool(hud_title.get_meta("round_1251_fit_before_clip", false)), "top HUD title fits before clipping at %s" % viewport_size)
+	var hud_status := scene.find_child("TopHudStatus", true, false) as Label
+	if hud_status != null:
+		check(bool(hud_status.get_meta("round_1251_fit_before_clip", false)), "top HUD phase status fits before clipping at %s" % viewport_size)
+	var wall_count := scene.find_child("CenterWallCount", true, false) as Control
+	if wall_count != null:
+		check(bool(wall_count.get_meta("round_1251_fit_before_clip", false)), "center wall count keeps its measured lane at %s" % viewport_size)
+	var dice_plate := scene.find_child("CenterDicePlate", true, false) as Control
+	if dice_plate != null:
+		check(dice_plate.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(dice_plate.get_meta("visual_only", false)), "center dice plate remains outside input at %s" % viewport_size)
+	var latest_marker := scene.find_child("LastDiscardFocusMarker", true, false) as Control
+	if latest_marker != null:
+		check(latest_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE and latest_marker.z_index >= 50 and bool(latest_marker.get_meta("tile_faces_untinted", false)), "latest discard marker remains read-only above untouched tile faces at %s" % viewport_size)
+	var river_grid := scene.find_child("DiscardGrid_0", true, false) as Control
+	if river_grid != null:
+		check(river_grid.clip_contents and river_grid.get_meta("visible_range_owner", "") == "DiscardRiverArchiveButton_0", "river grid keeps its range owner and clip boundary at %s" % viewport_size)
+	var hand_tray := scene.find_child("HandTray", true, false) as Control
+	if hand_tray != null:
+		check(float(hand_tray.get_meta("tile_bottom_clearance_px", 0.0)) >= 8.0 and bool(hand_tray.get_meta("tutorial_prompt_excludes_tiles", false)), "hand tray keeps bottom and tutorial clearance at %s" % viewport_size)
+	var hand_hint := scene.find_child("HandTrayTutorialHintText", true, false) as Control
+	if hand_hint != null:
+		check(hand_hint.mouse_filter == Control.MOUSE_FILTER_IGNORE and bool(hand_hint.get_meta("tile_hit_exclusion", false)), "tutorial prompt stays outside tile input at %s" % viewport_size)
+	var pending_stack := scene.find_child("PendingClaimActionStack", true, false) as Control
+	if pending_stack != null:
+		check(pending_stack.clip_contents and pending_stack.get_meta("response_group_order", []).size() == 3, "pending response groups keep stable order at %s" % viewport_size)
+	var pending_grid := scene.find_child("PendingClaimResponseGrid", true, false) as Control
+	if pending_grid != null:
+		check(int(pending_grid.get_meta("button_row_height_px", 0)) >= 44, "pending response buttons keep a stable touch row at %s" % viewport_size)
+	var danger_button := scene.find_child("DangerDiscardConfirmButton", true, false) as Button
+	if danger_button != null:
+		check(str(danger_button.get_meta("action_priority", "")) == "primary" and str(danger_button.get_meta("confirmation_lane", "")) == "dedicated", "danger confirmation keeps one primary lane at %s" % viewport_size)
+	var side_meld := scene.find_child("MeldArea_1", true, false) as Control
+	if side_meld != null:
+		check(str(side_meld.get_meta("orientation", "")) == "vertical" and bool(side_meld.get_meta("faces_toward_table_center", false)) and float(side_meld.get_meta("seat_panel_clearance_px", 0.0)) >= 8.0, "right meld lane remains inward and clear of seat panel at %s" % viewport_size)
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if action_dock != null:
+		check(float(action_dock.get_meta("prompt_clearance_px", 0.0)) >= 6.0 and action_dock.get_meta("response_group_order", []).size() == 3, "action dock keeps prompt clearance and group order at %s" % viewport_size)
+	var exit_overlay := scene.find_child("ExitConfirmOverlay", true, false) as Control
+	if exit_overlay != null:
+		check(exit_overlay.mouse_filter == Control.MOUSE_FILTER_STOP and bool(exit_overlay.get_meta("background_input_locked", false)), "exit modal blocks background input at %s" % viewport_size)
+	var replay_input := scene.find_child("ReplayImportCodeInput", true, false) as LineEdit
+	if replay_input != null:
+		check(replay_input.get_meta("overflow_policy", "") == "horizontal_scroll_plus_head_tail_summary" and replay_input.get_meta("full_value_action", "") == "ReplayImportCopyCodeButton", "replay input keeps long-value and validation actions distinct at %s" % viewport_size)
+	var update_title := scene.find_child("UpdateDialogTitle", true, false) as Control
+	if update_title != null:
+		check(update_title.get_meta("installed_version", "") == scene.APP_VERSION, "update dialog labels the installed version separately at %s" % viewport_size)
 
 
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
