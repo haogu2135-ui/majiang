@@ -2971,9 +2971,11 @@ func _show_shop_screen_impl() -> void:
 		buy_hit_host.name = "ShopItemBuyHitHost_%s" % item_id
 		buy_hit_host.mouse_filter = Control.MOUSE_FILTER_STOP
 		buy_hit_host.focus_mode = Control.FOCUS_NONE
+		buy_hit_host.z_index = 4
 		buy_hit_host.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		buy_hit_host.set_meta("hit_rect_stable", true)
 		buy_hit_host.set_meta("shop_item_id", item_id)
+		buy_hit_host.set_meta("cta_layer_contract", "host_above_disabled_button_art")
 		buy_hit_host.set_meta("accessible_name", "商品%s购买命中区" % str(item_info.get("name", item_id)))
 		# Keep the CTA's center slightly below the row midpoint. This leaves the
 		# real hit area reachable when the terminal row grows beyond one viewport
@@ -3005,7 +3007,9 @@ func _show_shop_screen_impl() -> void:
 		buy_btn.remove_child(command_label)
 		buy_hit_host.add_child(command_label)
 		command_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		command_label.z_index = 2
+		command_label.z_index = 5
+		command_label.visible = true
+		command_label.set_meta("disabled_visual_text_owner", true)
 		command_label.set_meta("visual_text_owner", "ShopItemBuyHitHost_%s" % item_id)
 		buy_hit_host.set_meta("visual_text_owner", "ShopBuyButtonCommand_%s" % item_id)
 		var price_label = make_label(buy_btn, "%d玉" % cost, 14, Color(0.96, 0.90, 0.70) if can_afford else Color(0.98, 0.72, 0.62), true)

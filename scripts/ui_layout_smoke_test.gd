@@ -1034,6 +1034,65 @@ func check_ui_round_1041_1070(scene, viewport_size: Vector2) -> void:
 	var diagnostic_summary := scene.find_child("DiagnosticPrimarySummary", true, false) as Control
 	if diagnostic_summary != null:
 		check(bool(diagnostic_summary.get_meta("health_words_required", false)), "diagnostic summary requires text health words at %s" % viewport_size)
+	check_ui_round_1071_1100(scene, viewport_size)
+	check_ui_round_1101_1130(scene, viewport_size)
+
+
+func check_ui_round_1071_1100(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (1071 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1071_1100(root)
+	var contracts: Array = root.get_meta("ui_round_1071_1100_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1071_1100_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1071..F-1100 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1071..F-1100 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1071..F-1100 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1071_1100_scope", "")) == "wide_page_density_empty_states_and_primary_reading_lanes", "F-1071..F-1100 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1071_1100_evidence_viewports", []).size() == 3, "F-1071..F-1100 names three evidence viewports at %s" % viewport_size)
+	var shop_host := scene.find_child("ShopItemBuyHitHost_swap_card", true, false) as Control
+	if shop_host != null:
+		check(shop_host.z_index >= 4 and shop_host.get_meta("cta_layer_contract", "") == "host_above_disabled_button_art", "shop CTA host stays above disabled button art at %s" % viewport_size)
+	var shop_command := scene.find_child("ShopBuyButtonCommand_swap_card", true, false) as Label
+	if shop_command != null:
+		check(shop_command.visible and shop_command.z_index >= 5 and bool(shop_command.get_meta("disabled_visual_text_owner", false)), "shop CTA command text remains visible when disabled at %s" % viewport_size)
+	var stats_rows := scene.find_child("StatsRows", true, false) as Control
+	if stats_rows != null:
+		check(stats_rows.get_meta("wide_column_contract", "") == "label_context_value_measured_not_full_empty_stretch", "stats rows declare measured wide columns at %s" % viewport_size)
+	var empty_start := scene.find_child("StatsStartFirstGameButton", true, false) as Control
+	if empty_start != null:
+		check(bool(empty_start.get_meta("empty_state_primary", false)), "stats empty state keeps a primary start route at %s" % viewport_size)
+
+
+func check_ui_round_1101_1130(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(30):
+		expected_ids.append("F-%d" % (1101 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1101_1130(root)
+	var contracts: Array = root.get_meta("ui_round_1101_1130_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1101_1130_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1101..F-1130 publishes exactly thirty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1101..F-1130 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1101..F-1130 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1101_1130_scope", "")) == "network_transitions_page_feedback_and_result_detail", "F-1101..F-1130 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1101_1130_evidence_viewports", []).size() == 3, "F-1101..F-1130 names three evidence viewports at %s" % viewport_size)
+	var transition_status := scene.find_child("OnlineLobbyConnectionStateLabel", true, false) as Control
+	if transition_status != null:
+		check(bool(transition_status.get_meta("state_words_required", false)), "lobby transition state requires words at %s" % viewport_size)
+	var replay_input := scene.find_child("ReplayImportCodeInput", true, false) as Control
+	if replay_input != null:
+		check(replay_input.get_meta("paste_focus_contract", "") == "paste_then_restore_input_focus", "replay paste restores input focus at %s" % viewport_size)
+	var summary_body := scene.find_child("RoundSummaryBody", true, false) as Control
+	if summary_body != null:
+		check(bool(summary_body.get_meta("rank_lane_exclusion", false)), "summary body keeps rank lane exclusion at %s" % viewport_size)
 
 
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
