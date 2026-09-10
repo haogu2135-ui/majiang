@@ -939,6 +939,7 @@ func refresh_online_lobby_action_states() -> void:
 		var start_gate := online_lobby_start_gate()
 		start_button.text = str(start_gate.get("text", "待连接"))
 		start_button.disabled = not bool(start_gate.get("enabled", false))
+		start_button.focus_mode = Control.FOCUS_ALL if start_button.visible else Control.FOCUS_NONE
 		start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
 		start_button.set_meta("accessible_name", "开始游戏：" + str(start_gate.get("reason", "等待服务器确认开局条件")))
 		start_button.set_meta("lobby_start_state", "ready" if bool(start_gate.get("enabled", false)) else "blocked")
@@ -1644,6 +1645,7 @@ func refresh_online_lobby_state() -> void:
 		var start_gate := online_lobby_start_gate()
 		start_button.text = str(start_gate.get("text", "待连接"))
 		start_button.disabled = not bool(start_gate.get("enabled", false))
+		start_button.focus_mode = Control.FOCUS_ALL if start_button.visible else Control.FOCUS_NONE
 		start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
 		start_button.set_meta("accessible_name", "开始游戏：" + str(start_gate.get("reason", "等待服务器确认开局条件")))
 		set_ui_full_text(start_button, str(start_gate.get("reason", "等待服务器确认开局条件")), "开始游戏：" + str(start_gate.get("text", "待连接")))

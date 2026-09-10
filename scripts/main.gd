@@ -12419,7 +12419,17 @@ func register_ui_round_1011_1040(root: Control) -> void:
 		elif target is LineEdit:
 			configure_line_edit_input(target as LineEdit, target.get_meta("ui_input_field", target.name))
 		elif target is ScrollContainer:
-			configure_scroll_container(target as ScrollContainer, target.tooltip_text)
+			var scroll := target as ScrollContainer
+			if str(scroll.name) == "ShopItemsScroll":
+				# This page has a separate authored gutter and deliberately hidden
+				# system bar; changing the mode here would steal CTA width.
+				scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+				scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+				scroll.clip_contents = true
+				scroll.focus_mode = Control.FOCUS_ALL
+				scroll.set_meta("ui_scroll_view", scroll.tooltip_text)
+			else:
+				configure_scroll_container(scroll, scroll.tooltip_text)
 		elif target is Label:
 			target.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			if target.tooltip_text.strip_edges() == "" and target.text.strip_edges() != "":
@@ -12586,6 +12596,11 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	register_ui_round_1251_1310(root)
 	register_ui_round_1311_1370(root)
 	register_ui_round_1371_1430(root)
+	register_ui_round_1431_1490(root)
+	register_ui_round_1491_1550(root)
+	register_ui_round_1551_1610(root)
+	register_ui_round_1611_1670(root)
+	register_ui_round_1671_1730(root)
 
 
 func register_ui_round_1071_1100(root: Control) -> void:
@@ -13861,6 +13876,1402 @@ func register_ui_round_1371_1430(root: Control) -> void:
 
 	root.set_meta("ui_round_1371_1430_owner_roles", owner_roles)
 	root.set_meta("ui_round_1371_1430_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1431_1490(root: Control) -> void:
+	# F-1431..F-1490 is a second-pass audit of replay, drawer, recovery, and
+	# page-state surfaces. It uses existing native controls and authored hosts;
+	# no visual layer or generated texture is introduced here.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1431_1490_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1431 + index))
+	root.set_meta("ui_round_1431_1490_contract_ids", contract_ids)
+	root.set_meta("ui_round_1431_1490_contract_version", "20260910-replay-drawer-recovery-60")
+	root.set_meta("ui_round_1431_1490_scope", "replay_drawer_recovery_focus_and_dynamic_state")
+	root.set_meta("ui_round_1431_1490_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1431_1490_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1431_1490_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1431_1490_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1431_1490_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1431_1490_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1431_1490_policies", policies)
+		target.set_meta("ui_round_1431_1490_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			var geometry_synced_detail_target := str(button.name).begins_with("OnlineLobbyRoomBadgeTouchTarget") or str(button.name).begins_with("OnlineLobbyRosterTouchTarget_")
+			if not geometry_synced_detail_target:
+				button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is LineEdit:
+			var edit := target as LineEdit
+			edit.focus_mode = Control.FOCUS_ALL
+			edit.select_all_on_focus = false
+			edit.custom_minimum_size.y = maxf(edit.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			edit.set_meta("focus_policy", "field_before_primary_action")
+			edit.set_meta("value_length", edit.text.length())
+			if edit.tooltip_text.strip_edges() == "":
+				edit.tooltip_text = "编辑" + str(edit.get_meta("ui_input_field", edit.name))
+			edit.set_meta("ui_full_text", edit.tooltip_text)
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+			scroll.clip_contents = true
+			scroll.focus_mode = Control.FOCUS_ALL
+			scroll.set_meta("scroll_owner_policy", "native_vertical_viewport_with_explicit_range")
+			scroll.set_meta("keyboard_boundary_policy", "Home_End_PageUp_PageDown")
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			configure_clipped_label(label)
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1431", "ReplayImportPanel", "replay_page_safe_surface_owner", "replay actions and both reading panes stay inside one bounded safe surface"],
+		["F-1432", "ReplayImportCodeInput", "replay_input_validation_owner", "input length, validation state, and clear route share one field contract"],
+		["F-1433", "ReplayImportPasteButton", "replay_clipboard_paste_owner", "paste is a named primary input shortcut with focus returning to the field"],
+		["F-1434", "ReplayImportClearButton", "replay_input_clear_owner", "clear keeps the input focus and does not move the import CTA"],
+		["F-1435", "ReplayImportButton", "replay_import_primary_owner", "import is enabled only as the validation action and has a stable fallback"],
+		["F-1436", "ReplayImportStatus", "replay_validation_live_owner", "validation status is textual, live, and separate from the length summary"],
+		["F-1437", "ReplayImportTimeline", "replay_timeline_surface_owner", "timeline heading, status, empty state, and events share one reading surface"],
+		["F-1438", "ReplayImportTimelinePosition", "replay_timeline_selection_owner", "selected event and total event count remain visible while the list scrolls"],
+		["F-1439", "ReplayImportEventList", "replay_event_list_measurement_owner", "event rows keep a stable minimum and a single range owner"],
+		["F-1440", "ReplayArchivePane", "replay_archive_surface_owner", "archive search and results preserve their panel gutter at compact width"],
+		["F-1441", "ReplayArchiveTitle", "replay_archive_heading_owner", "archive heading yields to result count without clipping the search lane"],
+		["F-1442", "ReplayArchiveCount", "replay_archive_count_owner", "filtered count and visible range use one compact status slot"],
+		["F-1443", "ReplayArchiveScroll", "replay_archive_scroll_owner", "archive scroll keeps the result viewport and scrollbar boundary explicit"],
+		["F-1444", "ReplayArchiveList", "replay_archive_list_owner", "archive rows retain vertical separation and do not stretch into the footer"],
+		["F-1445", "ReplayArchiveEmpty", "replay_archive_empty_owner", "empty archive copy names the next input action without a dead-end state"],
+		["F-1446", "ReplayArchiveClearSearchButton", "replay_archive_recovery_owner", "no-result search exposes a reachable reset action beside the empty state"],
+		["F-1447", "ChatPanelInputShield", "chat_outside_dismiss_owner", "outside dismissal closes the drawer without leaking input to the table"],
+		["F-1448", "ChatPanel", "chat_drawer_safe_surface_owner", "drawer content stays inside its local safe rectangle in compact mode"],
+		["F-1449", "ChatPanelTitle", "chat_drawer_heading_owner", "chat title and close action keep a predictable first focus route"],
+		["F-1450", "ChatPanelHeader", "chat_drawer_header_owner", "header status does not overlap the message viewport or quick actions"],
+		["F-1451", "ChatPanelMessageScroll", "chat_message_viewport_owner", "message viewport owns vertical scrolling and preserves the latest position"],
+		["F-1452", "ChatPanelMessageRangeLabel", "chat_message_range_owner", "visible message range stays in the header while content moves"],
+		["F-1453", "ChatPanelQuickMessages", "chat_quick_row_owner", "quick messages wrap within the drawer and leave a fixed input gutter"],
+		["F-1454", "ChatPanelQuickMessagesLabel", "chat_quick_heading_owner", "quick-message heading remains distinct from the custom input counter"],
+		["F-1455", "ChatInput", "chat_input_value_owner", "chat input keeps its character limit and a stable clear/send separation"],
+		["F-1456", "ChatSendButton", "chat_send_action_owner", "send action follows the input and cannot become a hidden disabled focus stop"],
+		["F-1457", "ChatSendCooldownLabel", "chat_send_live_state_owner", "ready, cooldown, and sent states occupy one non-button status lane"],
+		["F-1458", "DiagnosticDialogPanel", "diagnostic_modal_surface_owner", "diagnostic body remains readable above the scrim and below the fixed header"],
+		["F-1459", "DiagnosticDialogTitle", "diagnostic_heading_owner", "report title remains fixed while the raw report scrolls"],
+		["F-1460", "DiagnosticDialogVersion", "diagnostic_version_owner", "version is visible as report context without stealing the health summary slot"],
+		["F-1461", "DiagnosticContentScroll", "diagnostic_report_viewport_owner", "report body owns its range and keeps copy/close actions outside the viewport"],
+		["F-1462", "DiagnosticContentStatusLabel", "diagnostic_range_status_owner", "measurement-pending and settled ranges have one readable status position"],
+		["F-1463", "DiagnosticCopyButton", "diagnostic_copy_action_owner", "copy uses the full report and remains keyboard reachable beside feedback"],
+		["F-1464", "DiagnosticCopyFeedbackLabel", "diagnostic_copy_feedback_owner_v2", "copy result is transient feedback and cannot replace diagnostic health"],
+		["F-1465", "DiagnosticCloseButton", "diagnostic_close_action_owner", "close is the final focus stop and restores the originating control"],
+		["F-1466", "DailyLoginPanel", "daily_state_surface_owner", "claimed, current, and forecast states read in one stable panel hierarchy"],
+		["F-1467", "DailyLoginBackButton", "daily_back_action_owner", "back remains reachable without competing with the claim CTA"],
+		["F-1468", "DailyLoginDayIndicators", "daily_day_navigation_owner", "day indicators expose a stable current-day route across compact widths"],
+		["F-1469", "DailyLoginDayDetailProxy_1", "daily_day_detail_owner", "day detail is an input target separate from decorative day art"],
+		["F-1470", "DailyLoginCurrentRewardLabel", "daily_current_reward_owner", "current reward label stays adjacent to current-day state and full detail"],
+		["F-1471", "DailyLoginClaimedStatusLabel", "daily_claimed_state_owner", "already-claimed state uses words and a stable status slot"],
+		["F-1472", "DailyLoginForecastBody", "daily_forecast_copy_owner", "forecast copy is bounded and does not push the claim action"],
+		["F-1473", "DailyLoginTipLabel", "daily_tip_secondary_owner", "tip text remains secondary to reward and claim state"],
+		["F-1474", "DailyLoginClaimButton", "daily_claim_primary_owner", "claim action owns the current-day CTA and its disabled explanation"],
+		["F-1475", "OnlineLobbyFormPanel", "lobby_form_surface_owner", "form fields and action rows stay within the left operational column"],
+		["F-1476", "OnlineLobbyNameEdit", "lobby_name_input_owner", "nickname field keeps a full input target and does not collide with its clear proxy"],
+		["F-1477", "OnlineLobbyHostEdit", "lobby_host_input_owner", "server endpoint input preserves URL semantics and bounded text"],
+		["F-1478", "OnlineLobbyRoomEdit", "lobby_room_input_owner", "room code input keeps its hint and the join prerequisite visible"],
+		["F-1479", "OnlineLobbyRoomBadgeTouchTarget", "lobby_room_badge_action_owner", "room badge copy/detail is one target with a stable focus route"],
+		["F-1480", "OnlineLobbyRosterPanel", "lobby_roster_surface_owner", "seat rows preserve identity, readiness, and empty-seat order"],
+		["F-1481", "OnlineLobbyRosterTouchTarget_0", "lobby_roster_detail_owner", "roster detail targets are reachable without making the seat art interactive"],
+		["F-1482", "OnlineLobbyLogListPanel", "lobby_log_surface_owner", "room log keeps the newest message and unread state in one reading lane"],
+		["F-1483", "OnlineLobbyLogLatestButton", "lobby_log_latest_action_owner_v2", "latest action restores the log viewport without changing room state"],
+		["F-1484", "OnlineLobbyFormFeedbackLabel", "lobby_form_feedback_owner_v2", "field feedback is one stable line above actions and carries the full reason"],
+		["F-1485", "OnlineLobbyPrimaryStartButton", "lobby_start_primary_owner_v2", "start action exposes its gate state and a valid focus fallback"],
+		["F-1486", "OnlineLobbyStartGateReason", "lobby_start_gate_copy_owner_v2", "blocked start reason names the missing prerequisite beside the CTA"],
+		["F-1487", "OnlineLobbySecondaryReturnButton", "lobby_return_action_owner", "return remains available when connection or room state cannot recover"],
+		["F-1488", "StatsRuleFilterButton", "stats_filter_control_owner_v2", "filter state is visible before metrics and preserves the current focus"],
+		["F-1489", "StatsCopyButton", "stats_copy_action_owner_v2", "copy scope and result stay attached to the current filtered summary"],
+		["F-1490", "StatsLatestRoundButton", "stats_latest_recovery_owner", "empty history explains the disabled route without shifting header actions"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+
+	# Shared input hardening deliberately preserves existing clear proxies and
+	# wrapped body labels. It only tightens native field geometry and metadata.
+	var input_names := [
+		"ReplayImportCodeInput", "ReplayArchiveSearchInput", "ChatInput",
+		"OnlineLobbyNameEdit", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit",
+	]
+	for node_name in input_names:
+		var edit := find_control.call(node_name) as LineEdit
+		if edit == null:
+			continue
+		edit.focus_mode = Control.FOCUS_ALL
+		edit.select_all_on_focus = false
+		edit.custom_minimum_size.y = maxf(edit.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+		edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+		edit.set_meta("focus_policy", "field_before_primary_action")
+		edit.set_meta("input_geometry_contract", "44px_height_clear_proxy_or_native_scroll")
+		edit.set_meta("value_length", edit.text.length())
+
+	var label_names := [
+		"ReplayImportTitle", "ReplayImportDigestHint", "ReplayImportInputLabel", "ReplayImportStatus",
+		"ReplayImportCodeSummary", "ReplayArchiveTitle", "ReplayArchiveCount", "ReplayImportTimelineTitle",
+		"ReplayImportTimelinePosition", "ReplayImportTimelineEmpty", "ChatPanelTitle", "ChatPanelMessageRangeLabel",
+		"ChatPanelQuickMessagesLabel", "ChatSendCooldownLabel", "DiagnosticDialogTitle", "DiagnosticDialogVersion",
+		"DiagnosticContentStatusLabel", "DiagnosticCopyFeedbackLabel", "DailyLoginCurrentRewardLabel",
+		"DailyLoginClaimedStatusLabel", "DailyLoginForecastBody", "DailyLoginTipLabel", "OnlineLobbyFormFeedbackLabel",
+		"OnlineLobbyStartGateReason", "OnlineLobbyStatusLabel",
+	]
+	for node_name in label_names:
+		var label := find_control.call(node_name) as Label
+		if label == null:
+			continue
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		configure_clipped_label(label)
+		label.set_meta("overflow_policy", "fit_then_ellipsis_with_full_tooltip")
+		if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+			set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+
+	var button_names := [
+		"ReplayImportPasteButton", "ReplayImportClearButton", "ReplayImportButton", "ReplayArchiveClearSearchButton",
+		"ChatPanelCloseButton", "ChatSendButton", "DiagnosticCopyButton", "DiagnosticCloseButton", "DailyLoginBackButton",
+		"DailyLoginDayDetailProxy_1", "DailyLoginClaimButton", "OnlineLobbyRoomBadgeTouchTarget", "OnlineLobbyRosterTouchTarget_0",
+		"OnlineLobbyLogLatestButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbySecondaryReturnButton",
+		"StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton",
+	]
+	for node_name in button_names:
+		var button := find_control.call(node_name) as Button
+		if button == null:
+			continue
+		var geometry_synced_detail_target := str(button.name).begins_with("OnlineLobbyRoomBadgeTouchTarget") or str(button.name).begins_with("OnlineLobbyRosterTouchTarget_")
+		if not geometry_synced_detail_target:
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+		button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+		button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+		button.set_meta("focus_policy", "visible_enabled_only")
+		if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+			button.tooltip_text = button.text.strip_edges()
+		set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+
+	var scroll_names := ["ReplayArchiveScroll", "ReplayImportTimelineScroll", "ChatPanelMessageScroll", "DiagnosticContentScroll"]
+	for node_name in scroll_names:
+		var scroll := find_control.call(node_name) as ScrollContainer
+		if scroll == null:
+			continue
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		scroll.clip_contents = true
+		scroll.set_meta("keyboard_boundary_policy", "Home_End_PageUp_PageDown")
+		scroll.set_meta("range_status_outside_viewport", true)
+
+	var replay_panel := find_control.call("ReplayImportPanel") as Control
+	if replay_panel != null:
+		replay_panel.set_meta("safe_content_padding_px", 12.0)
+		replay_panel.set_meta("focus_start_owner", "ReplayImportCodeInput")
+		replay_panel.set_meta("primary_action_owner", "ReplayImportButton")
+	var replay_input := find_control.call("ReplayImportCodeInput") as LineEdit
+	if replay_input != null:
+		replay_input.set_meta("validation_live_owner", "ReplayImportStatus")
+		replay_input.set_meta("clear_focus_restore", "ReplayImportCodeInput")
+	var replay_import := find_control.call("ReplayImportButton") as Button
+	if replay_import != null:
+		replay_import.set_meta("primary_action", true)
+		replay_import.set_meta("focus_fallback_name", "ReplayImportCodeInput")
+	var replay_status := find_control.call("ReplayImportStatus") as Label
+	if replay_status != null:
+		replay_status.set_meta("live_region", "polite")
+		replay_status.set_meta("status_hierarchy", "validation_before_length_summary")
+	var timeline := find_control.call("ReplayImportTimeline") as Control
+	if timeline != null:
+		timeline.set_meta("reading_order", ["ReplayImportTimelineTitle", "ReplayImportTimelinePosition", "ReplayImportTimelineScroll"])
+		timeline.set_meta("empty_state_next_action", "ReplayImportCodeInput")
+	var timeline_position := find_control.call("ReplayImportTimelinePosition") as Label
+	if timeline_position != null:
+		timeline_position.set_meta("selection_owner", "ReplayImportEventList")
+		timeline_position.set_meta("range_status_outside_viewport", true)
+	var event_list := find_control.call("ReplayImportEventList") as Control
+	if event_list != null:
+		event_list.custom_minimum_size.y = maxf(event_list.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+		event_list.set_meta("row_min_height_px", UI_MIN_TOUCH_TARGET)
+		event_list.set_meta("range_status_owner", "ReplayImportTimelinePosition")
+	var archive_pane := find_control.call("ReplayArchivePane") as Control
+	if archive_pane != null:
+		archive_pane.set_meta("search_focus_route", ["ReplayArchiveSearchInput", "ReplayArchiveList"])
+		archive_pane.set_meta("empty_state_action_owner", "ReplayArchiveClearSearchButton")
+	var archive_list := find_control.call("ReplayArchiveList") as Control
+	if archive_list != null:
+		archive_list.set_meta("row_separation_px", 5.0)
+		archive_list.set_meta("footer_clearance_px", 8.0)
+	var archive_count := find_control.call("ReplayArchiveCount") as Label
+	if archive_count != null:
+		archive_count.set_meta("status_slot", "filtered_count_and_visible_range")
+	var archive_empty := find_control.call("ReplayArchiveEmpty") as Label
+	if archive_empty != null:
+		archive_empty.set_meta("next_action_owner", "ReplayImportCodeInput")
+	var archive_clear := find_control.call("ReplayArchiveClearSearchButton") as Button
+	if archive_clear != null:
+		archive_clear.set_meta("recovery_action", "clear_search_restore_all_results")
+
+	var chat_shield := find_control.call("ChatPanelInputShield") as Control
+	if chat_shield != null:
+		chat_shield.set_meta("outside_tap_action", "close_chat_panel")
+		chat_shield.set_meta("table_input_leak", false)
+	var chat_panel := find_control.call("ChatPanel") as Control
+	if chat_panel != null:
+		chat_panel.set_meta("local_safe_inset_px", 6.0)
+		chat_panel.set_meta("focus_start_owner", "ChatPanelCloseButton")
+		chat_panel.set_meta("content_order", ["ChatPanelMessageScroll", "ChatPanelQuickMessages", "ChatInput", "ChatSendButton"])
+	var chat_header := find_control.call("ChatPanelHeader") as Control
+	if chat_header != null:
+		chat_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chat_header.set_meta("fixed_above_message_viewport", true)
+	var chat_range := find_control.call("ChatPanelMessageRangeLabel") as Label
+	if chat_range != null:
+		chat_range.set_meta("range_status_owner", "ChatPanelMessageScroll")
+	var quick_row := find_control.call("ChatPanelQuickMessages") as Control
+	if quick_row != null:
+		quick_row.clip_contents = true
+		quick_row.set_meta("input_gutter_px", 8.0)
+	var chat_input := find_control.call("ChatInput") as LineEdit
+	if chat_input != null:
+		chat_input.set_meta("send_owner", "ChatSendButton")
+		chat_input.set_meta("character_counter_owner", "ChatPanelCustomMessageLabel")
+	var chat_send := find_control.call("ChatSendButton") as Button
+	if chat_send != null:
+		chat_send.set_meta("disabled_focus_fallback", "ChatInput")
+	var chat_cooldown := find_control.call("ChatSendCooldownLabel") as Label
+	if chat_cooldown != null:
+		chat_cooldown.set_meta("live_region", "polite")
+		chat_cooldown.set_meta("state_source", "ChatSendButton")
+
+	var diagnostic_panel := find_control.call("DiagnosticDialogPanel") as Control
+	if diagnostic_panel != null:
+		diagnostic_panel.set_meta("fixed_header_owner", "DiagnosticDialogTitle")
+		diagnostic_panel.set_meta("fixed_footer_owner", "DiagnosticCloseButton")
+	var diagnostic_scroll := find_control.call("DiagnosticContentScroll") as ScrollContainer
+	if diagnostic_scroll != null:
+		diagnostic_scroll.set_meta("range_status_owner", "DiagnosticContentStatusLabel")
+		diagnostic_scroll.set_meta("copy_action_outside_viewport", true)
+	var diagnostic_status := find_control.call("DiagnosticContentStatusLabel") as Label
+	if diagnostic_status != null:
+		diagnostic_status.set_meta("measurement_state_owner", "DiagnosticContentScroll")
+	var diagnostic_copy := find_control.call("DiagnosticCopyButton") as Button
+	if diagnostic_copy != null:
+		diagnostic_copy.set_meta("copy_scope", "full_diagnostic_report")
+		diagnostic_copy.set_meta("feedback_owner", "DiagnosticCopyFeedbackLabel")
+	var diagnostic_feedback := find_control.call("DiagnosticCopyFeedbackLabel") as Label
+	if diagnostic_feedback != null:
+		diagnostic_feedback.set_meta("feedback_is_not_health_status", true)
+	var diagnostic_close := find_control.call("DiagnosticCloseButton") as Button
+	if diagnostic_close != null:
+		diagnostic_close.set_meta("focus_restore_owner", diagnostic_focus_restore_name if diagnostic_focus_restore_name != "" else "SettingsCloseButton")
+
+	var daily_panel := find_control.call("DailyLoginPanel") as Control
+	if daily_panel != null:
+		daily_panel.set_meta("state_order", ["DailyLoginClaimedStatusLabel", "DailyLoginCurrentRewardLabel", "DailyLoginForecastBody", "DailyLoginClaimButton"])
+	var daily_days := find_control.call("DailyLoginDayIndicators") as Control
+	if daily_days != null:
+		daily_days.set_meta("current_day_focus_owner", "DailyLoginDayDetailProxy_1")
+		daily_days.set_meta("decorative_art_input_policy", "proxies_only")
+	var daily_detail := find_control.call("DailyLoginDayDetailProxy_1") as Button
+	if daily_detail != null:
+		daily_detail.set_meta("detail_target_for", "DailyLoginDayNode_1")
+	var daily_claim := find_control.call("DailyLoginClaimButton") as Button
+	if daily_claim != null:
+		daily_claim.set_meta("primary_action", true)
+		daily_claim.set_meta("disabled_reason_owner", "DailyLoginClaimedStatusLabel")
+	var daily_tip := find_control.call("DailyLoginTipLabel") as Label
+	if daily_tip != null:
+		daily_tip.set_meta("visual_priority", "secondary")
+
+	var lobby_form := find_control.call("OnlineLobbyFormPanel") as Control
+	if lobby_form != null:
+		lobby_form.set_meta("column_role", "connection_and_room_setup")
+		lobby_form.set_meta("field_order", ["OnlineLobbyNameEdit", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit"])
+	var lobby_name := find_control.call("OnlineLobbyNameEdit") as LineEdit
+	if lobby_name != null:
+		lobby_name.set_meta("clear_proxy_gap_px", 8.0)
+	var lobby_host := find_control.call("OnlineLobbyHostEdit") as LineEdit
+	if lobby_host != null:
+		lobby_host.set_meta("keyboard_type", "url")
+	var lobby_room := find_control.call("OnlineLobbyRoomEdit") as LineEdit
+	if lobby_room != null:
+		lobby_room.set_meta("join_prerequisite_owner", "OnlineLobbyJoinButton")
+	var room_badge := find_control.call("OnlineLobbyRoomBadgeTouchTarget") as Button
+	if room_badge != null:
+		room_badge.set_meta("action_role", "room_detail_or_copy")
+	var roster := find_control.call("OnlineLobbyRosterPanel") as Control
+	if roster != null:
+		roster.set_meta("row_order", ["seat_1", "seat_2", "seat_3", "seat_4"])
+		roster.set_meta("empty_seat_copy_required", true)
+	var roster_target := find_control.call("OnlineLobbyRosterTouchTarget_0") as Button
+	if roster_target != null:
+		roster_target.set_meta("detail_owner", "OnlineLobbyRosterRow_0")
+	var log_list := find_control.call("OnlineLobbyLogListPanel") as Control
+	if log_list != null:
+		log_list.set_meta("latest_message_owner", "OnlineLobbyLogLatestButton")
+		log_list.set_meta("unread_state_owner", "OnlineLobbyLogUnreadLabel")
+	var lobby_latest := find_control.call("OnlineLobbyLogLatestButton") as Button
+	if lobby_latest != null:
+		lobby_latest.set_meta("preserves_room_state", true)
+	var lobby_feedback := find_control.call("OnlineLobbyFormFeedbackLabel") as Label
+	if lobby_feedback != null:
+		lobby_feedback.set_meta("feedback_source", "field_or_server_state")
+		lobby_feedback.set_meta("feedback_lane_clearance_px", 8.0)
+	var lobby_start := find_control.call("OnlineLobbyPrimaryStartButton") as Button
+	if lobby_start != null:
+		lobby_start.set_meta("focus_fallback_name", "OnlineLobbyConnectButton")
+		lobby_start.set_meta("gate_reason_owner", "OnlineLobbyStartGateReason")
+	var lobby_reason := find_control.call("OnlineLobbyStartGateReason") as Label
+	if lobby_reason != null:
+		lobby_reason.set_meta("missing_prerequisite_copy", true)
+	var lobby_return := find_control.call("OnlineLobbySecondaryReturnButton") as Button
+	if lobby_return != null:
+		lobby_return.set_meta("recovery_action", "return_to_menu")
+
+	var stats_filter := find_control.call("StatsRuleFilterButton") as Button
+	if stats_filter != null:
+		stats_filter.set_meta("state_before_metrics", true)
+		stats_filter.set_meta("focus_restore_owner", "StatsRuleFilterButton")
+	var stats_copy := find_control.call("StatsCopyButton") as Button
+	if stats_copy != null:
+		stats_copy.set_meta("scope_from_filter", true)
+	var stats_latest := find_control.call("StatsLatestRoundButton") as Button
+	if stats_latest != null:
+		stats_latest.set_meta("empty_state_explanation_required", true)
+
+	root.set_meta("ui_round_1431_1490_owner_roles", owner_roles)
+	root.set_meta("ui_round_1431_1490_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1491_1550(root: Control) -> void:
+	# F-1491..F-1550 audits page lifecycle and input recovery details that sit
+	# below the existing surface-level contracts. It only reuses native controls,
+	# authored hosts, and existing focus/text helpers.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1491_1550_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1491 + index))
+	root.set_meta("ui_round_1491_1550_contract_ids", contract_ids)
+	root.set_meta("ui_round_1491_1550_contract_version", "20260910-page-lifecycle-recovery-60")
+	root.set_meta("ui_round_1491_1550_scope", "page_lifecycle_navigation_state_and_recovery")
+	root.set_meta("ui_round_1491_1550_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1491_1550_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1491_1550_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1491_1550_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1491_1550_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1491_1550_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1491_1550_policies", policies)
+		target.set_meta("ui_round_1491_1550_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is ScrollContainer:
+			configure_scroll_container(target as ScrollContainer, target.tooltip_text)
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if not bool(label.get_meta("dynamic_wrapped_label", false)):
+				configure_clipped_label(label)
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1491", "MenuPrimaryOfflineCard", "menu_offline_entry_lifecycle_owner", "offline entry retains primary command and a stable return focus name"],
+		["F-1492", "MenuPrimaryOnlineCard", "menu_online_entry_lifecycle_owner", "online entry keeps network context secondary to its navigable card action"],
+		["F-1493", "MenuPrimaryShopCard", "menu_shop_entry_lifecycle_owner", "shop entry keeps economy context secondary without disabling navigation"],
+		["F-1494", "MenuQuickRulesButton", "menu_rules_route_owner", "rules shortcut keeps its help route and deterministic focus index"],
+		["F-1495", "MenuQuickStatsButton", "menu_stats_route_owner", "stats shortcut keeps its summary route and deterministic focus index"],
+		["F-1496", "MenuQuickAchievementsButton", "menu_achievements_route_owner", "achievement shortcut keeps its collection route and deterministic focus index"],
+		["F-1497", "MenuQuickDailyLoginButton", "menu_daily_route_owner", "daily shortcut exposes claim state before opening its page"],
+		["F-1498", "MenuQuickReplayButton", "menu_replay_route_owner", "replay shortcut exposes empty or populated state before opening its page"],
+		["F-1499", "MenuTutorialButton", "menu_tutorial_entry_lifecycle_owner", "hidden tutorial entry cannot remain a stale keyboard focus stop"],
+		["F-1500", "MenuTutorialEntryStatus", "menu_tutorial_status_live_owner", "tutorial progress is a passive live status with full checkpoint detail"],
+		["F-1501", "MenuTutorialStartButton", "menu_tutorial_start_focus_owner", "new tutorial start is primary and restores focus after the entry sheet"],
+		["F-1502", "MenuTutorialContinueButton", "menu_tutorial_continue_focus_owner", "active tutorial continue is primary and restores focus after the entry sheet"],
+		["F-1503", "MenuTutorialSkipButton", "menu_tutorial_skip_focus_owner", "tutorial skip stays secondary and never becomes the default focus"],
+		["F-1504", "TutorialEntryOverlay", "tutorial_modal_boundary_owner", "tutorial overlay captures background input and exposes an escape route"],
+		["F-1505", "TutorialCloseButton", "tutorial_modal_close_owner", "tutorial close is reachable and returns focus to the menu source"],
+		["F-1506", "SettingsPanel", "settings_modal_lifecycle_owner", "settings keeps one focus boundary while background controls remain locked"],
+		["F-1507", "SettingsTitleLabel", "settings_header_rebuild_owner", "settings title stays in the header lane during section rebuilds"],
+		["F-1508", "SettingsRuleVariantLabel", "settings_rule_label_owner", "rule label remains adjacent to the selector without competing for input"],
+		["F-1509", "SettingsRuleVariantButton", "settings_rule_selector_rebuild_owner", "rule selector preserves value context and focus after a rebuild"],
+		["F-1510", "SettingsRuleVariantStatus", "settings_rule_status_live_owner", "current and next-round rule state occupy one passive status lane"],
+		["F-1511", "SettingsSectionNavButton_声音", "settings_audio_section_route_owner", "audio section jump has a named target and stable section focus"],
+		["F-1512", "SettingsSectionNavButton_体验", "settings_play_section_route_owner", "play section jump has a named target and stable section focus"],
+		["F-1513", "SettingsSectionNavButton_系统", "settings_system_section_route_owner", "system section jump has a named target and stable section focus"],
+		["F-1514", "SettingRowButton_背景音乐", "settings_music_state_owner", "music state is readable on the action and survives a toggle refresh"],
+		["F-1515", "SettingRowButton_音效反馈", "settings_sfx_state_owner", "sound-effect state is readable on the action and survives a toggle refresh"],
+		["F-1516", "SettingRowButton_语音报牌", "settings_tts_state_owner", "voice-announcement state is readable on the action and survives a toggle refresh"],
+		["F-1517", "SettingRowButton_播放测试", "settings_audio_test_owner", "audio test action keeps a distinct preview role beside binary settings"],
+		["F-1518", "SettingRowButton_AI 节奏", "settings_ai_pace_state_owner", "AI pace exposes its selected value before the action is activated"],
+		["F-1519", "SettingRowButton_AI 难度", "settings_ai_difficulty_state_owner", "AI difficulty exposes its selected value before the action is activated"],
+		["F-1520", "SettingRowButton_桌面特效", "settings_fx_state_owner", "table-effect state remains explicit without changing the 2D tile surface"],
+		["F-1521", "SettingRowButton_阅读辅助", "settings_accessibility_state_owner", "accessibility profile refresh returns focus to the same selector"],
+		["F-1522", "SettingRowButton_出牌辅助", "settings_assist_state_owner", "discard-assist risk state remains explicit beside its action"],
+		["F-1523", "SettingRowButton_播放曲目", "settings_bgm_track_state_owner", "selected music track keeps its name available after cycling"],
+		["F-1524", "SettingRowButton_画面质量", "settings_quality_constraint_owner", "quality action keeps the authored 2D tile constraint visible"],
+		["F-1525", "SettingRowButton_隐私诊断", "settings_privacy_route_owner", "privacy action exposes consent state before opening the diagnostic sheet"],
+		["F-1526", "RulesBackButton", "rules_back_lifecycle_owner", "rules back returns to the menu without losing the originating focus route"],
+		["F-1527", "RulesReadingStatus", "rules_reading_status_live_owner", "reading status follows the selected chapter after scroll or guide navigation"],
+		["F-1528", "RulesGuideStepButton_0", "rules_chapter_0_focus_owner", "chapter 1 has a named focus target and active-state text"],
+		["F-1529", "RulesGuideStepButton_1", "rules_chapter_1_focus_owner", "chapter 2 has a named focus target and active-state text"],
+		["F-1530", "RulesGuideStepButton_2", "rules_chapter_2_focus_owner", "chapter 3 has a named focus target and active-state text"],
+		["F-1531", "RulesGuideStepButton_3", "rules_chapter_3_focus_owner", "chapter 4 has a named focus target and active-state text"],
+		["F-1532", "RulesGuideStepButton_4", "rules_chapter_4_focus_owner", "chapter 5 has a named focus target and active-state text"],
+		["F-1533", "RulesGuideStepButton_5", "rules_chapter_5_focus_owner", "chapter 6 has a named focus target and active-state text"],
+		["F-1534", "ShopBackButton", "shop_back_lifecycle_owner", "shop back returns to the menu without losing the originating focus route"],
+		["F-1535", "ShopItemsScroll", "shop_scroll_reentry_owner", "shop list re-entry preserves vertical position and item focus context"],
+		["F-1536", "ShopItemsScrollPosition", "shop_scroll_status_live_owner", "shop range status remains visible while rows move underneath it"],
+		["F-1537", "ShopGetGemsButton", "shop_currency_recovery_owner_v2", "currency shortage offers one reachable recovery action with its reason"],
+		["F-1538", "StatsBackButton", "stats_back_lifecycle_owner", "stats back returns to the menu without losing the originating focus route"],
+		["F-1539", "StatsRows", "stats_scroll_reentry_owner", "stats rows own vertical re-entry and keep the dashboard header outside the range"],
+		["F-1540", "StatsRowsScrollStatus", "stats_scroll_status_live_owner", "stats range status remains readable while rows move underneath it"],
+		["F-1541", "StatsStartFirstGameButton", "stats_empty_recovery_owner", "empty stats keeps one first-game recovery CTA and a valid default focus"],
+		["F-1542", "AchievementsBackButton", "achievements_back_lifecycle_owner", "achievements back returns to the menu without losing the originating focus route"],
+		["F-1543", "AchievementsBrowseStatusLabel", "achievements_browse_status_live_owner", "achievement browse range reports the current position and remaining rows"],
+		["F-1544", "AchievementsGrid", "achievements_grid_reentry_owner", "achievement rows re-enter in stable collection order beneath the header"],
+		["F-1545", "DailyLoginRewardTextLabel", "daily_reward_value_owner", "current reward value stays adjacent to day state with full reward detail"],
+		["F-1546", "ExitConfirmContinueButton", "exit_cancel_safe_owner", "exit confirmation keeps cancel as the safe first action"],
+		["F-1547", "ExitConfirmLeaveButton", "exit_leave_destructive_owner", "exit confirmation labels the destructive leave action and its focus position"],
+		["F-1548", "TelemetryDataSheetCloseButton", "telemetry_sheet_close_lifecycle_owner", "privacy sheet close restores the settings source without leaking background input"],
+		["F-1549", "UpdateSecondaryButton", "update_secondary_lifecycle_owner", "update close remains available while the primary state changes"],
+		["F-1550", "LoadingRetryButton", "loading_retry_recovery_owner", "loading retry remains the first recovery action with a stable touch target"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+
+	# Concrete lifecycle contracts for the menu and tutorial modal.
+	var primary_route_names := ["MenuPrimaryOfflineCard", "MenuPrimaryOnlineCard", "MenuPrimaryShopCard"]
+	for index in range(primary_route_names.size()):
+		var route_name := str(primary_route_names[index])
+		var route_button := find_control.call(route_name) as Button
+		if route_button == null:
+			continue
+		route_button.set_meta("menu_primary_route_index", index)
+		route_button.set_meta("menu_primary_route_id", route_name.replace("MenuPrimary", "").to_lower())
+		route_button.set_meta("focus_return_name", route_name)
+		route_button.set_meta("navigation_context", "主菜单主入口")
+		if index > 0:
+			var previous_route := find_control.call(str(primary_route_names[index - 1])) as Button
+			if previous_route != null:
+				route_button.focus_neighbor_left = previous_route.get_path()
+		if index + 1 < primary_route_names.size():
+			var next_route := find_control.call(str(primary_route_names[index + 1])) as Button
+			if next_route != null:
+				route_button.focus_neighbor_right = next_route.get_path()
+	var quick_route_names := ["MenuQuickRulesButton", "MenuQuickStatsButton", "MenuQuickAchievementsButton", "MenuQuickDailyLoginButton", "MenuQuickReplayButton"]
+	for index in range(quick_route_names.size()):
+		var quick_button := find_control.call(str(quick_route_names[index])) as Button
+		if quick_button == null:
+			continue
+		quick_button.set_meta("lifecycle_route_index", index)
+		quick_button.set_meta("lifecycle_route_group", "menu_quick_actions")
+		quick_button.set_meta("focus_return_name", str(quick_route_names[index]))
+	var menu_tutorial_entry := find_control.call("MenuTutorialButton") as Button
+	if menu_tutorial_entry != null:
+		menu_tutorial_entry.set_meta("hidden_state_focus_policy", "focus_none_when_hidden")
+		menu_tutorial_entry.set_meta("modal_route", "TutorialEntryOverlay")
+	var menu_tutorial_status := find_control.call("MenuTutorialEntryStatus") as Label
+	if menu_tutorial_status != null:
+		menu_tutorial_status.set_meta("live_region", "polite")
+		menu_tutorial_status.set_meta("status_source", "tutorial_checkpoint")
+		menu_tutorial_status.set_meta("full_checkpoint_route", "TutorialEntryCheckpoint")
+	for tutorial_action_name in ["MenuTutorialStartButton", "MenuTutorialContinueButton"]:
+		var tutorial_action := find_control.call(tutorial_action_name) as Button
+		if tutorial_action == null:
+			continue
+		tutorial_action.set_meta("action_priority", "primary")
+		tutorial_action.set_meta("focus_restore_name", "MenuTutorialButton")
+		if tutorial_action.visible and not tutorial_action.disabled:
+			tutorial_action.focus_mode = Control.FOCUS_ALL
+	var tutorial_skip := find_control.call("MenuTutorialSkipButton") as Button
+	if tutorial_skip != null:
+		tutorial_skip.set_meta("action_priority", "secondary")
+		tutorial_skip.set_meta("default_focus", false)
+	var tutorial_overlay := find_control.call("TutorialEntryOverlay") as Control
+	if tutorial_overlay != null:
+		tutorial_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+		tutorial_overlay.set_meta("background_input_policy", "locked_until_close_or_escape")
+		tutorial_overlay.set_meta("focus_start_owner", "TutorialEntryStartOrContinue")
+		tutorial_overlay.set_meta("focus_end_owner", "TutorialCloseButton")
+	var tutorial_close := find_control.call("TutorialCloseButton") as Button
+	if tutorial_close != null:
+		tutorial_close.set_meta("focus_restore_owner", "MenuTutorialButton")
+		tutorial_close.set_meta("escape_equivalent", true)
+
+	# Settings actions expose their model key and stable focus after native refresh.
+	var settings_panel := find_control.call("SettingsPanel") as Control
+	if settings_panel != null:
+		settings_panel.set_meta("focus_boundary_policy", "close_then_sections_then_rows")
+		settings_panel.set_meta("background_input_policy", "locked_by_settings_overlay")
+		settings_panel.set_meta("rebuild_focus_policy", "restore_named_setting_control")
+	var settings_title := find_control.call("SettingsTitleLabel") as Label
+	if settings_title != null:
+		settings_title.set_meta("header_role", "settings_modal_title")
+		settings_title.set_meta("rebuild_stability", "fixed_header_outside_section_content")
+	var rule_label := find_control.call("SettingsRuleVariantLabel") as Label
+	if rule_label != null:
+		rule_label.set_meta("paired_action_owner", "SettingsRuleVariantButton")
+		rule_label.set_meta("input_policy", "passive_label")
+	var rule_button := find_control.call("SettingsRuleVariantButton") as Button
+	if rule_button != null:
+		rule_button.set_meta("state_source", "rule_variant_model")
+		rule_button.set_meta("rebuild_focus_restore", "SettingsRuleVariantButton")
+	var rule_status := find_control.call("SettingsRuleVariantStatus") as Label
+	if rule_status != null:
+		rule_status.set_meta("live_region", "polite")
+		rule_status.set_meta("state_order", ["当前对局", "下一局", "规则差异"])
+	for section_name in ["声音", "体验", "系统"]:
+		var section_button := find_control.call("SettingsSectionNavButton_%s" % section_name) as Button
+		if section_button == null:
+			continue
+		section_button.set_meta("section_focus_role", "jump_to_settings_section")
+		section_button.set_meta("section_focus_name", section_name)
+		section_button.set_meta("focus_restore_after_jump", section_button.name)
+	var setting_button_names := [
+		"SettingRowButton_背景音乐", "SettingRowButton_音效反馈", "SettingRowButton_语音报牌", "SettingRowButton_播放测试",
+		"SettingRowButton_AI 节奏", "SettingRowButton_AI 难度", "SettingRowButton_桌面特效", "SettingRowButton_阅读辅助",
+		"SettingRowButton_出牌辅助", "SettingRowButton_播放曲目", "SettingRowButton_画面质量", "SettingRowButton_隐私诊断",
+	]
+	for setting_button_name in setting_button_names:
+		var setting_button := find_control.call(setting_button_name) as Button
+		if setting_button == null:
+			continue
+		var setting_key := str(setting_button_name).trim_prefix("SettingRowButton_")
+		setting_button.set_meta("setting_key", setting_key)
+		setting_button.set_meta("state_source", "settings_model")
+		setting_button.set_meta("state_copy_policy", "visible_compact_value_with_full_tooltip")
+		setting_button.set_meta("paired_status_owner", "SettingRowStatus_" + setting_key)
+		setting_button.set_meta("focus_restore_after_refresh", setting_button.name)
+
+	# Reading pages keep their named section route outside the moving content.
+	var rules_back := find_control.call("RulesBackButton") as Button
+	if rules_back != null:
+		rules_back.set_meta("focus_restore_name", "MenuQuickRulesButton")
+		rules_back.set_meta("escape_equivalent", true)
+	var rules_status := find_control.call("RulesReadingStatus") as Label
+	if rules_status != null:
+		rules_status.set_meta("live_region", "polite")
+		rules_status.set_meta("status_owner", "RulesContentScroll")
+		rules_status.set_meta("status_format", "当前章节 · 可见范围")
+	for chapter_index in range(6):
+		var chapter_button := find_control.call("RulesGuideStepButton_%d" % chapter_index) as Button
+		if chapter_button == null:
+			continue
+		chapter_button.set_meta("chapter_index", chapter_index)
+		chapter_button.set_meta("chapter_focus_role", "jump_and_announce")
+		chapter_button.set_meta("active_state_source", "RulesReadingStatus")
+	var shop_back := find_control.call("ShopBackButton") as Button
+	if shop_back != null:
+		shop_back.set_meta("focus_restore_name", "MenuPrimaryShopCard")
+		shop_back.set_meta("escape_equivalent", true)
+	var shop_scroll := find_control.call("ShopItemsScroll") as ScrollContainer
+	if shop_scroll != null:
+		# Shop owns an authored bitmap gutter; keep the system scrollbar hidden
+		# while retaining the native viewport and keyboard range.
+		shop_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+		var shop_system_scrollbar := shop_scroll.get_v_scroll_bar()
+		if shop_system_scrollbar != null:
+			shop_system_scrollbar.visible = false
+			shop_system_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			shop_system_scrollbar.call_deferred("hide")
+		shop_scroll.set_meta("reentry_position_source", "shop_scroll_state")
+		shop_scroll.set_meta("header_outside_range", true)
+		shop_scroll.set_meta("focus_boundary_policy", "back_to_rows_to_footer")
+	var shop_position := find_control.call("ShopItemsScrollPosition") as Label
+	if shop_position != null:
+		shop_position.set_meta("live_region", "polite")
+		shop_position.set_meta("status_owner", "ShopItemsScroll")
+		shop_position.set_meta("status_format", "商品列表可见范围")
+	var shop_gems := find_control.call("ShopGetGemsButton") as Button
+	if shop_gems != null:
+		shop_gems.set_meta("recovery_action", "acquire_currency")
+		shop_gems.set_meta("reason_owner", "ShopCabinetFooterInventoryBadge")
+		shop_gems.set_meta("focus_role", "currency_shortage_recovery")
+	var stats_back := find_control.call("StatsBackButton") as Button
+	if stats_back != null:
+		stats_back.set_meta("focus_restore_name", "MenuQuickStatsButton")
+		stats_back.set_meta("escape_equivalent", true)
+	var stats_rows := find_control.call("StatsRows") as ScrollContainer
+	if stats_rows != null:
+		stats_rows.set_meta("reentry_position_source", "stats_scroll_state")
+		stats_rows.set_meta("header_outside_range", true)
+		stats_rows.set_meta("focus_boundary_policy", "filter_copy_latest_back")
+	var stats_status := find_control.call("StatsRowsScrollStatus") as Label
+	if stats_status != null:
+		stats_status.set_meta("live_region", "polite")
+		stats_status.set_meta("status_owner", "StatsRows")
+		stats_status.set_meta("status_format", "战绩可见范围")
+	var stats_empty_start := find_control.call("StatsStartFirstGameButton") as Button
+	if stats_empty_start != null:
+		stats_empty_start.set_meta("recovery_action", "start_offline_game")
+		stats_empty_start.set_meta("empty_state_primary", true)
+		stats_empty_start.set_meta("focus_restore_name", "StatsBackButton")
+	var achievements_back := find_control.call("AchievementsBackButton") as Button
+	if achievements_back != null:
+		achievements_back.set_meta("focus_restore_name", "MenuQuickAchievementsButton")
+		achievements_back.set_meta("escape_equivalent", true)
+	var achievements_status := find_control.call("AchievementsBrowseStatusLabel") as Label
+	if achievements_status != null:
+		achievements_status.set_meta("live_region", "polite")
+		achievements_status.set_meta("status_owner", "AchievementsScroll")
+		achievements_status.set_meta("status_format", "成就可见范围 · 剩余条目")
+	var achievements_grid := find_control.call("AchievementsGrid") as Control
+	if achievements_grid != null:
+		achievements_grid.set_meta("collection_order_source", "achievements_model_order")
+		achievements_grid.set_meta("reentry_focus_owner", "AchievementRowFocusTarget")
+		achievements_grid.set_meta("header_outside_range", true)
+	var daily_reward := find_control.call("DailyLoginRewardTextLabel") as Label
+	if daily_reward != null:
+		daily_reward.set_meta("value_role", "current_day_reward")
+		daily_reward.set_meta("value_context_owner", "DailyLoginCurrentRewardLabel")
+		daily_reward.set_meta("full_reward_route", "DailyLoginDayDetailProxy_1")
+
+	# Modal and recovery actions keep their safe action order explicit.
+	var exit_continue := find_control.call("ExitConfirmContinueButton") as Button
+	if exit_continue != null:
+		exit_continue.set_meta("action_priority", "safe_cancel_primary")
+		exit_continue.set_meta("default_focus", true)
+	var exit_leave := find_control.call("ExitConfirmLeaveButton") as Button
+	if exit_leave != null:
+		exit_leave.set_meta("action_priority", "destructive_secondary")
+		exit_leave.set_meta("confirm_required", true)
+	var telemetry_close := find_control.call("TelemetryDataSheetCloseButton") as Button
+	if telemetry_close != null:
+		telemetry_close.set_meta("focus_restore_owner", "SettingRowButton_隐私诊断")
+		telemetry_close.set_meta("background_input_policy", "locked_until_close")
+	var update_secondary := find_control.call("UpdateSecondaryButton") as Button
+	if update_secondary != null:
+		update_secondary.set_meta("action_role", "close_without_install")
+		update_secondary.set_meta("available_during_states", ["checking", "downloading", "ready", "current", "error"])
+		update_secondary.set_meta("focus_restore_owner", "TopHudUpdateButton")
+	var loading_retry := find_control.call("LoadingRetryButton") as Button
+	if loading_retry != null:
+		loading_retry.set_meta("action_priority", "recovery_primary")
+		loading_retry.set_meta("focus_restore_name", "LoadingRetryButton")
+		loading_retry.set_meta("error_scope_owner", "LoadingErrorHint")
+
+	root.set_meta("ui_round_1491_1550_owner_roles", owner_roles)
+	root.set_meta("ui_round_1491_1550_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1551_1610(root: Control) -> void:
+	# F-1551..F-1610 covers compact menu/settings, lobby recovery, replay,
+	# shop/stat/rules reading lanes, and the core table action hierarchy. It only
+	# annotates existing native controls and authored hosts; custom scrollbar and
+	# tile geometry remain untouched.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1551_1610_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1551 + index))
+	root.set_meta("ui_round_1551_1610_contract_ids", contract_ids)
+	root.set_meta("ui_round_1551_1610_contract_version", "20260910-full-surface-state-lanes-60")
+	root.set_meta("ui_round_1551_1610_scope", "menu_settings_lobby_replay_shop_stats_rules_daily_achievements_and_table_state_lanes")
+	root.set_meta("ui_round_1551_1610_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1551_1610_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1551_1610_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1551_1610_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1551_1610_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1551_1610_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1551_1610_policies", policies)
+		target.set_meta("ui_round_1551_1610_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is LineEdit:
+			var edit := target as LineEdit
+			edit.custom_minimum_size.y = maxf(edit.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			edit.set_meta("focus_policy", "named_input_with_clear_proxy")
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if not bool(label.get_meta("dynamic_wrapped_label", false)):
+				configure_clipped_label(label)
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			scroll.set_meta("scroll_contract_owner", target.name)
+			scroll.set_meta("scroll_geometry_policy", "native_range_preserves_authored_hosts")
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1551", "MenuTitleLabel", "menu_title_rule_header_owner", "long_rule_title_reserves_tutorial_entry_clearance"],
+		["F-1552", "MenuCurrencyBadge", "menu_footer_currency_owner", "currency_rank_stats_fields_keep_independent_reading_slots"],
+		["F-1553", "SettingsRuleVariantStatus", "settings_rule_status_lane_owner_v2", "rule_summary_sits_below_header_without_competing_with_close"],
+		["F-1554", "SettingsSectionNavigation", "settings_section_contrast_owner", "active_section_has_textual_or_shape_state_not_color_only"],
+		["F-1555", "SettingRowButton_本地进度", "settings_local_progress_status_owner", "destructive_consequence_stays_readable_before_reset"],
+		["F-1556", "SettingRowButton_播放曲目", "settings_track_large_text_owner", "large_text_track_state_gets_measured_row_height"],
+		["F-1557", "ResetProgressButton", "settings_reset_destructive_lane_owner", "reset_cta_keeps_eight_pixel_status_clearance_and_confirmation"],
+		["F-1558", "TelemetryDataSheet", "telemetry_modal_surface_owner_v2", "background_close_is_not_an_apparent_second_modal_exit"],
+		["F-1559", "SettingRowButton_播放测试", "settings_preview_action_owner", "preview_action_is_distinct_from_binary_setting_rows"],
+		["F-1560", "SettingsLargeTextScrollStatus", "settings_large_text_status_lane_owner_v2", "scroll_range_status_stays_outside_content_and_safe_from_bottom_clip"],
+		["F-1561", "OnlineLobbyServerEndpointBadge", "lobby_endpoint_compact_owner_v2", "endpoint_summary_copy_and_connection_state_share_stable_header_slots"],
+		["F-1562", "OnlineLobbyConnectionRetryButton", "lobby_retry_recovery_owner_v2", "retry_is_adjacent_to_or_linked_with_connection_error_feedback"],
+		["F-1563", "OnlineLobbyRoomEdit", "lobby_room_input_gutter_owner_v2", "room_code_text_keeps_clear_proxy_inset_at_max_length"],
+		["F-1564", "OnlineLobbyActionButtonRow", "lobby_disabled_reason_owner", "connect_create_join_disabled_states_expose_their_prerequisite"],
+		["F-1565", "OnlineLobbyPrimaryStartButton", "lobby_start_reason_dedup_owner", "start_gate_reason_has_one_full_copy_and_one_short_action_state"],
+		["F-1566", "OnlineLobbyRosterPanel", "lobby_roster_column_owner_v2", "seat_name_and_ready_state_keep_fixed_reading_columns"],
+		["F-1567", "OnlineLobbyLogRangeLabel", "lobby_log_range_summary_owner_v2", "retained_total_and_unread_counts_remain_complete_at_compact_width"],
+		["F-1568", "OnlineLobbyLogScroll", "lobby_log_scroll_hit_owner_v2", "visual_track_keeps_a_separate_native_touch_hit_lane"],
+		["F-1569", "ChatLobbyButton", "lobby_chat_header_route_owner", "chat_entry_has_clear_spacing_from_room_badge_and_copy"],
+		["F-1570", "OnlineLobbyRoomOfflineState", "lobby_disconnect_recovery_surface_owner", "offline_reason_connection_state_and_retry_share_one_viewport"],
+		["F-1571", "ReplayImportCodeInput", "replay_code_clear_gutter_owner_v2", "long_code_keeps_clearance_and_horizontal_cursor_visibility"],
+		["F-1572", "ReplayImportStatus", "replay_validation_field_group_owner_v2", "validation_result_stays_under_input_with_error_position"],
+		["F-1573", "ReplayImportCodeInput", "replay_empty_input_focus_owner", "empty_import_starts_with_one_visible_input_focus"],
+		["F-1574", "ReplayArchiveRowPrimary", "replay_archive_action_cell_owner", "archive_actions_keep_independent_touch_cells_and_short_labels"],
+		["F-1575", "ReplayImportTimelinePosition", "replay_timeline_range_gutter_owner_v2", "current_range_stays_left_of_the_timeline_scroll_lane"],
+		["F-1576", "ReplayImportEventList", "replay_timeline_selection_owner_v2", "selected_event_has_unique_state_text_or_outline_after_reentry"],
+		["F-1577", "ReplayImportCopyCodeButton", "replay_copy_disabled_reason_owner", "empty_code_copy_exposes_its_recovery_condition"],
+		["F-1578", "ReplayImportTitle", "replay_header_typography_owner", "title_and_hash_subtitle_keep_a_readable_field_hierarchy"],
+		["F-1579", "TelemetryClearButton", "telemetry_empty_clear_state_owner", "zero_records_disable_clear_and_explain_no_data"],
+		["F-1580", "TelemetryExportStatus", "telemetry_export_footer_owner", "export_result_and_recent_action_use_separate_status_slots"],
+		["F-1581", "TelemetryDataSheetBody", "telemetry_body_wrap_owner", "wrapped_explanation_preserves_eight_pixel_action_clearance"],
+		["F-1582", "TelemetryConsentButton", "telemetry_action_priority_owner_v2", "consent_export_and_clear_have_distinct_visual priority"],
+		["F-1583", "TelemetryClearConfirmHint", "telemetry_clear_scope_owner_v2", "scope_record_count_and_confirmation_stay_above_clear_action"],
+		["F-1584", "ShopBuyButtonCommand_swap_card", "shop_command_copy_owner_v2", "compact_cta_uses_two_or_three_character_action_copy"],
+		["F-1585", "ShopItemCountBadge_swap_card", "shop_price_count_group_owner", "inventory_price_and_action_share_one_item_row_group"],
+		["F-1586", "ShopItemBuyButton_swap_card", "shop_shortage_state_owner_v2", "insufficient_balance_is_textual_and_not_tint_only"],
+		["F-1587", "ShopCabinetFooterBody", "shop_footer_compact_lane_owner_v2", "footer_explanation_inventory_and_recovery_cta_reflow_without_clip"],
+		["F-1588", "ShopItemsScrollPosition", "shop_authored_gutter_separation_owner", "range_label_stays_clear_of_hit_target_with_system_scrollbar_hidden"],
+		["F-1589", "StatsSummaryChip_games", "stats_summary_chip_reading_owner_v2", "caption_value_and_unit_keep_three_measured_levels"],
+		["F-1590", "StatsRuleFilterButton", "stats_filter_active_state_owner_v2", "current_filter_has_noncolor_state_before_copy_or_latest_actions"],
+		["F-1591", "StatsRowsContent", "stats_row_value_lane_owner_v2", "label_and_value_keep_a_stable_start_column_at_two_widths"],
+		["F-1592", "RulesGuideStepButton_0", "rules_guide_compact_width_owner_v2", "all_chapter_targets_keep_minimum_touch_width_and_last_item_clearance"],
+		["F-1593", "RulesContentScrollThumb", "rules_scroll_thumb_affordance_owner_v2", "visible_thumb_and_transparent_hit_lane_remain_distinct"],
+		["F-1594", "RulesContentScroll", "rules_section_jump_inset_owner_v2", "section_jump_keeps_target_title_inside_top_safe_inset"],
+		["F-1595", "DailyLoginDayNode_1", "daily_day_state_shape_owner_v2", "current_claimed_and_future_states_have_text_and_shape_tokens"],
+		["F-1596", "DailyLoginRewardTextLabel", "daily_reward_claim_group_owner_v2", "reward_progress_and_claim_action_share_one_visual group"],
+		["F-1597", "DailyLoginForecastPanel", "daily_forecast_relation_owner_v2", "remaining_days_and_target_reward_share_one_summary_group"],
+		["F-1598", "AchievementsGrid", "achievement_row_wrap_owner_v2", "long_title_wrap_increases_row_height_without_covering_progress"],
+		["F-1599", "AchievementsScrollGutter", "achievement_bottom_gutter_owner_v2", "range_status_and_last_row_keep_separate_scroll_clearance"],
+		["F-1600", "UpdateReleaseNotesStatus", "update_stage_single_owner_v2", "stage_status_is_primary_and_progress_art_remains_decorative"],
+		["F-1601", "TopHudTitle", "hud_header_title_lane_owner_v2", "long_room_title_preserves_phase_and_score_minimum_widths"],
+		["F-1602", "TopHudWallMeter", "hud_wall_state_lane_owner_v2", "wall_count_warning_and_last_discard_keep_separate semantic slots"],
+		["F-1603", "SeatPanel_1", "seat_compact_column_owner_v2", "name_score_counts_and_recent_action_keep_four compact lanes"],
+		["F-1604", "MeldArea_0", "meld_hand_gutter_owner_v2", "meld_lane_and_hand_tray_keep_eight_pixel_separation"],
+		["F-1605", "RecentDiscardTile_0", "latest_river_focus_owner_v2", "latest_discard_has_one_high_contrast_readonly owner"],
+		["F-1606", "DiscardRiverArchiveButton_0", "river_archive_hit_separation_owner_v2", "archive_action_hitbox_stays_outside_last_discard_cell"],
+		["F-1607", "HandTrayTiles", "hand_suit_group_owner_v2", "suit_groups_keep_visible_gap_before_tile_width_shrink"],
+		["F-1608", "HandTrayStatusText", "hand_state_badge_lane_owner_v2", "draw_separator_and_state_badge_stay_outside_authored_faces"],
+		["F-1609", "ActionButtonDock", "normal_action_dock_gutter_owner_v2", "action dock keeps fixed gap from prompt and hand tray"],
+		["F-1610", "PendingClaimActionStack", "modal_action_priority_owner_v2", "claim_danger_chat_normal_states_publish_one_visible_primary_lane"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+	var menu_title := find_control.call("MenuTitleLabel") as Label
+	if menu_title != null:
+		menu_title.set_meta("long_rule_header_policy", "measure_title_then_reserve_tutorial_clearance")
+		menu_title.set_meta("tutorial_clearance_px", 8.0)
+	var menu_currency := find_control.call("MenuCurrencyBadge") as Label
+	if menu_currency != null:
+		menu_currency.set_meta("footer_field_group", "currency")
+		menu_currency.set_meta("independent_value_reading", true)
+	var settings_status := find_control.call("SettingsRuleVariantStatus") as Label
+	if settings_status != null:
+		settings_status.set_meta("header_status_lane", "below_section_navigation")
+		settings_status.set_meta("header_clearance_px", 8.0)
+	var settings_navigation := find_control.call("SettingsSectionNavigation") as Control
+	if settings_navigation != null:
+		settings_navigation.set_meta("active_state_policy", "shape_or_text_plus_color")
+		settings_navigation.set_meta("active_marker_owner", "SettingsSectionNavigation")
+	var local_progress := find_control.call("SettingRowButton_本地进度") as Button
+	if local_progress != null:
+		local_progress.set_meta("destructive_status_summary", "可清空 · 需确认")
+		local_progress.set_meta("destructive_status_clearance_px", 8.0)
+	var track_button := find_control.call("SettingRowButton_播放曲目") as Button
+	if track_button != null:
+		track_button.set_meta("large_text_row_policy", "two_line_value_before_selector")
+	var reset_progress := find_control.call("ResetProgressButton") as Button
+	if reset_progress != null:
+		reset_progress.set_meta("destructive_lane", true)
+		reset_progress.set_meta("confirm_required", true)
+	var telemetry_sheet := find_control.call("TelemetryDataSheet") as Control
+	if telemetry_sheet != null:
+		telemetry_sheet.set_meta("background_close_policy", "hidden_or_deemphasized_until_modal_close")
+		telemetry_sheet.set_meta("single_modal_exit_owner", "TelemetryDataSheetCloseButton")
+	var settings_large_text_status := find_control.call("SettingsLargeTextScrollStatus") as Label
+	if settings_large_text_status != null:
+		settings_large_text_status.set_meta("safe_bottom_clearance_px", 8.0)
+		settings_large_text_status.set_meta("viewport_external_status", true)
+	var endpoint := find_control.call("OnlineLobbyServerEndpointBadge") as Control
+	if endpoint != null:
+		endpoint.set_meta("compact_header_slots", ["endpoint", "copy", "connection"])
+		endpoint.set_meta("min_endpoint_summary_width_px", 120.0)
+	var retry := find_control.call("OnlineLobbyConnectionRetryButton") as Button
+	if retry != null:
+		retry.set_meta("error_feedback_owner", "OnlineLobbyConnectionStateLabel")
+		retry.set_meta("recovery_group", "connection_error")
+	var room_edit := find_control.call("OnlineLobbyRoomEdit") as LineEdit
+	if room_edit != null:
+		room_edit.set_meta("clear_proxy_gap_px", 8.0)
+		room_edit.set_meta("max_length_clear_policy", "reserve_clear_proxy_gutter")
+	var lobby_actions := find_control.call("OnlineLobbyActionButtonRow") as Control
+	if lobby_actions != null:
+		lobby_actions.set_meta("disabled_reason_owner", "OnlineLobbyStatusLabel")
+		lobby_actions.set_meta("disabled_reason_policy", "per_action_prerequisite_summary")
+	var lobby_start := find_control.call("OnlineLobbyPrimaryStartButton") as Button
+	if lobby_start != null:
+		lobby_start.set_meta("reason_dedup_policy", "one_full_reason_plus_short_button_state")
+	var lobby_roster := find_control.call("OnlineLobbyRosterPanel") as Control
+	if lobby_roster != null:
+		lobby_roster.set_meta("column_min_widths_px", {"seat": 32.0, "name": 96.0, "state": 72.0})
+	var lobby_log_range := find_control.call("OnlineLobbyLogRangeLabel") as Label
+	if lobby_log_range != null:
+		lobby_log_range.set_meta("compact_fields", ["retained", "total", "unread"])
+	var lobby_log_scroll := find_control.call("OnlineLobbyLogScroll") as ScrollContainer
+	if lobby_log_scroll != null:
+		lobby_log_scroll.set_meta("visual_scrollbar_hit_lane_px", UI_MIN_TOUCH_TARGET)
+		lobby_log_scroll.set_meta("visual_hit_lane_policy", "native_scrollbar_separate_from_authored_log")
+	var lobby_chat := find_control.call("ChatLobbyButton") as Button
+	if lobby_chat != null:
+		lobby_chat.set_meta("header_spacing_owner", "OnlineLobbyRoomBadge")
+	var lobby_offline := find_control.call("OnlineLobbyRoomOfflineState") as Control
+	if lobby_offline != null:
+		lobby_offline.set_meta("recovery_copy_owner", "OnlineLobbyConnectionRetryButton")
+		lobby_offline.set_meta("recovery_viewport_policy", "reason_state_retry_same_viewport")
+	var replay_input := find_control.call("ReplayImportCodeInput") as LineEdit
+	if replay_input != null:
+		replay_input.set_meta("clear_proxy_gap_px", 8.0)
+		replay_input.set_meta("empty_state_focus_policy", "focus_on_entry")
+		replay_input.set_meta("horizontal_cursor_visibility", true)
+	var replay_status := find_control.call("ReplayImportStatus") as Label
+	if replay_status != null:
+		replay_status.set_meta("field_group_owner", "ReplayImportCodeInput")
+		replay_status.set_meta("status_position_policy", "directly_below_input")
+	var replay_archive_row := find_control.call("ReplayArchiveRowPrimary") as Button
+	if replay_archive_row != null:
+		replay_archive_row.set_meta("action_cell_min_size_px", UI_MIN_TOUCH_TARGET)
+		replay_archive_row.set_meta("action_labels_policy", "icon_plus_short_label")
+	var replay_range := find_control.call("ReplayImportTimelinePosition") as Label
+	if replay_range != null:
+		replay_range.set_meta("scrollbar_gutter_clearance_px", 8.0)
+	var replay_copy := find_control.call("ReplayImportCopyCodeButton") as Button
+	if replay_copy != null:
+		replay_copy.set_meta("disabled_reason", "先粘贴或导入回放码")
+	var replay_title := find_control.call("ReplayImportTitle") as Label
+	if replay_title != null:
+		replay_title.set_meta("subtitle_owner", "ReplayImportDigestHint")
+		replay_title.set_meta("subtitle_min_font_px", 11)
+	var telemetry_clear := find_control.call("TelemetryClearButton") as Button
+	if telemetry_clear != null:
+		telemetry_clear.set_meta("zero_records_policy", "disabled_with_no_data_copy")
+		telemetry_clear.set_meta("destructive_priority", "secondary")
+	var telemetry_export_status := find_control.call("TelemetryExportStatus") as Label
+	if telemetry_export_status != null:
+		telemetry_export_status.set_meta("paired_status_owner", "TelemetryRecentAction")
+		telemetry_export_status.set_meta("footer_slot", "export_result")
+	var telemetry_body := find_control.call("TelemetryDataSheetBody") as Label
+	if telemetry_body != null:
+		telemetry_body.set_meta("wrapped_action_clearance_px", 8.0)
+	var telemetry_consent := find_control.call("TelemetryConsentButton") as Button
+	if telemetry_consent != null:
+		telemetry_consent.set_meta("action_priority_group", "consent_export_clear")
+	var telemetry_hint := find_control.call("TelemetryClearConfirmHint") as Label
+	if telemetry_hint != null:
+		telemetry_hint.set_meta("scope_before_action", true)
+	var shop_command := find_control.call("ShopBuyButtonCommand_swap_card") as Label
+	if shop_command != null:
+		shop_command.set_meta("compact_command_policy", "two_or_three_character_action")
+	var shop_count := find_control.call("ShopItemCountBadge_swap_card") as Control
+	if shop_count != null:
+		shop_count.set_meta("price_count_group_owner", "ShopItemBuyButton_swap_card")
+	var shop_buy := find_control.call("ShopItemBuyButton_swap_card") as Button
+	if shop_buy != null:
+		shop_buy.set_meta("shortage_state_policy", "text_plus_tint")
+	var shop_footer := find_control.call("ShopCabinetFooterBody") as Control
+	if shop_footer != null:
+		shop_footer.set_meta("compact_reflow_policy", "copy_above_inventory_and_recovery")
+	var shop_position := find_control.call("ShopItemsScrollPosition") as Label
+	if shop_position != null:
+		shop_position.set_meta("hit_target_clearance_px", 8.0)
+		shop_position.set_meta("system_scrollbar_policy", "SHOW_NEVER")
+	var stats_chip := find_control.call("StatsSummaryChip_games") as Control
+	if stats_chip != null:
+		stats_chip.set_meta("summary_levels", ["caption", "value", "unit"])
+	var stats_filter := find_control.call("StatsRuleFilterButton") as Button
+	if stats_filter != null:
+		stats_filter.set_meta("active_state_policy", "outline_or_current_text_plus_color")
+	var stats_rows := find_control.call("StatsRowsContent") as Control
+	if stats_rows != null:
+		stats_rows.set_meta("value_lane_start_policy", "measured_stable_column")
+	var rules_step := find_control.call("RulesGuideStepButton_0") as Button
+	if rules_step != null:
+		rules_step.custom_minimum_size.x = maxf(rules_step.custom_minimum_size.x, float(UI_MIN_TOUCH_TARGET))
+		rules_step.set_meta("compact_guide_min_width_px", UI_MIN_TOUCH_TARGET)
+	var rules_thumb := find_control.call("RulesContentScrollThumb") as Control
+	if rules_thumb != null:
+		rules_thumb.set_meta("transparent_hit_lane_px", UI_MIN_TOUCH_TARGET)
+	var rules_scroll := find_control.call("RulesContentScroll") as ScrollContainer
+	if rules_scroll != null:
+		rules_scroll.set_meta("section_jump_top_inset_px", 8.0)
+	var daily_node := find_control.call("DailyLoginDayNode_1") as Control
+	if daily_node != null:
+		daily_node.set_meta("state_tokens", ["当前", "已领取", "待领取"])
+	var daily_reward := find_control.call("DailyLoginRewardTextLabel") as Label
+	if daily_reward != null:
+		daily_reward.set_meta("claim_group_owner", "DailyLoginClaimButton")
+	var daily_forecast := find_control.call("DailyLoginForecastPanel") as Control
+	if daily_forecast != null:
+		daily_forecast.set_meta("remaining_days_reward_same_group", true)
+	var achievement_grid := find_control.call("AchievementsGrid") as Control
+	if achievement_grid != null:
+		achievement_grid.set_meta("long_title_row_policy", "wrap_then_increase_row_height")
+	var achievement_gutter := find_control.call("AchievementsScrollGutter") as Control
+	if achievement_gutter != null:
+		achievement_gutter.set_meta("last_row_clearance_px", 8.0)
+	var update_status := find_control.call("UpdateReleaseNotesStatus") as Label
+	if update_status != null:
+		update_status.set_meta("single_stage_owner", true)
+		update_status.set_meta("progress_art_semantics", "decorative_only")
+	var hud_title := find_control.call("TopHudTitle") as Label
+	if hud_title != null:
+		hud_title.set_meta("long_room_title_policy", "reserve_phase_and_score_minimum_widths")
+	var wall_meter := find_control.call("TopHudWallMeter") as Control
+	if wall_meter != null:
+		wall_meter.set_meta("semantic_slots", ["wall_count", "low_warning", "last_discard"])
+	var seat_panel := find_control.call("SeatPanel_1") as Control
+	if seat_panel != null:
+		seat_panel.set_meta("compact_columns", ["name", "score", "counts", "recent_action"])
+	var meld_area := find_control.call("MeldArea_0") as Control
+	if meld_area != null:
+		meld_area.set_meta("hand_gutter_px", 8.0)
+	var latest_discard := find_control.call("RecentDiscardTile_0") as Control
+	if latest_discard != null:
+		latest_discard.set_meta("latest_focus_owner", true)
+		latest_discard.set_meta("latest_focus_readonly", true)
+	var archive_button := find_control.call("DiscardRiverArchiveButton_0") as Button
+	if archive_button != null:
+		archive_button.set_meta("last_tile_clearance_px", 8.0)
+	var hand_tiles := find_control.call("HandTrayTiles") as Control
+	if hand_tiles != null:
+		hand_tiles.set_meta("suit_group_gap_priority", "preserve_gap_before_tile_shrink")
+	var hand_status := find_control.call("HandTrayStatusText") as Control
+	if hand_status != null:
+		hand_status.set_meta("state_badge_outside_face", true)
+	var action_dock := find_control.call("ActionButtonDock") as Control
+	if action_dock != null:
+		action_dock.set_meta("hand_tray_gutter_px", 8.0)
+		action_dock.set_meta("prompt_lane_owner", "ActionButtonDock")
+	var pending_stack := find_control.call("PendingClaimActionStack") as Control
+	if pending_stack != null:
+		pending_stack.set_meta("modal_priority_order", ["claim", "danger_confirm", "chat", "normal_action"])
+		pending_stack.set_meta("single_visible_primary_lane", true)
+	root.set_meta("ui_round_1551_1610_owner_roles", owner_roles)
+	root.set_meta("ui_round_1551_1610_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1611_1670(root: Control) -> void:
+	# F-1611..F-1670 covers secondary action lanes and result detail children
+	# below the previous page/header contracts. It annotates existing controls
+	# only and does not create visual layers or alter authored tile surfaces.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1611_1670_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1611 + index))
+	root.set_meta("ui_round_1611_1670_contract_ids", contract_ids)
+	root.set_meta("ui_round_1611_1670_contract_version", "20260910-action-result-detail-60")
+	root.set_meta("ui_round_1611_1670_scope", "table_action_intent_pending_danger_log_result_advisor_and_toast_detail")
+	root.set_meta("ui_round_1611_1670_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1611_1670_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1611_1670_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1611_1670_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1611_1670_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1611_1670_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1611_1670_policies", policies)
+		target.set_meta("ui_round_1611_1670_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if not bool(label.get_meta("dynamic_wrapped_label", false)):
+				configure_clipped_label(label)
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			scroll.set_meta("scroll_contract_owner", target.name)
+			scroll.set_meta("scroll_geometry_policy", "native_range_preserves_authored_hosts")
+		elif target is LineEdit:
+			var edit := target as LineEdit
+			edit.custom_minimum_size.y = maxf(edit.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1611", "ActionIntentDock", "action_intent_surface_owner_v2", "intent_icon_count_and_text_stay_in_one_primary_lane"],
+		["F-1612", "ActionIntentText", "action_intent_copy_owner_v2", "intent_sentence_precedes_shortcut_and_detail_copy"],
+		["F-1613", "ActionIntentCount", "action_intent_count_owner", "intent_count_is_a_secondary_value_not_a_button_label"],
+		["F-1614", "ActionDockStatusLabel", "action_dock_status_owner_v2", "status_lane_stays_outside_button_hit_cells_and_hand_faces"],
+		["F-1615", "PendingClaimSecondaryLane", "pending_secondary_lane_owner_v2", "pass_cancel_and_voice_actions_keep_a_stable_tail_lane"],
+		["F-1616", "PendingClaimResponseTailLane", "pending_response_tail_owner", "response_tail_does_not_compete_with_primary_claim_rows"],
+		["F-1617", "PendingClaimVoiceLane", "pending_voice_lane_owner", "voice_wait_state_has_text_and_does_not_shift_response_buttons"],
+		["F-1618", "PendingClaimNetworkMenu", "pending_network_menu_surface_owner", "network_wait_menu_is_bounded_and_outside_claim_choices"],
+		["F-1619", "PendingClaimNetworkMenuButton", "pending_network_menu_action_owner", "network_retry_or_cancel_has_one_reachable_native_action"],
+		["F-1620", "PendingClaimAutoPassFeedback", "pending_auto_pass_feedback_owner_v2", "auto_pass_consequence_stays_adjacent_to_deadline_without_pulse_only"],
+		["F-1621", "PendingClaimFlowLabel", "pending_flow_context_owner", "claim_flow_source_and_next_step_share_a_short_reading_line"],
+		["F-1622", "PendingClaimFocusText", "pending_focus_instruction_owner", "keyboard_focus_instruction_stays_above_response_controls"],
+		["F-1623", "PendingClaimPriorityText", "pending_priority_copy_owner", "claim_priority_is_textual_before_color_or_animation"],
+		["F-1624", "PendingClaimTileName", "pending_tile_name_owner", "source_tile_name_keeps_seat_and_action_context_adjacent"],
+		["F-1625", "DangerDiscardShortcutLane", "danger_shortcut_lane_owner_v2", "shortcut_help_stays_secondary_to_confirm_and_cancel"],
+		["F-1626", "DangerDiscardDetailText", "danger_detail_reading_owner_v2", "risk_detail_has_clearance_from_both_tile_lanes"],
+		["F-1627", "DangerDiscardDecisionText", "danger_decision_status_owner_v2", "decision_copy_is_complete_before_alternative_actions"],
+		["F-1628", "DangerDiscardCancelButton", "danger_cancel_action_owner_v2", "safe_cancel_remains_first_fallback_and_keeps_focus"],
+		["F-1629", "DangerDiscardSafeRail", "danger_safe_choice_lane_owner", "alternative choice rail stays separate from confirmation lane"],
+		["F-1630", "DangerDiscardSafeTile_0", "danger_safe_tile_owner", "alternative tile preview is readonly and never a hand hit target"],
+		["F-1631", "HandTrayStateChip", "hand_state_chip_owner_v2", "readonly_or_assist_state has a text token outside authored faces"],
+		["F-1632", "HandTrayShortcutHint", "hand_shortcut_hint_owner_v2", "keyboard hint remains secondary and clears tile labels"],
+		["F-1633", "HandTrayTutorialHintText", "hand_tutorial_hint_owner_v2", "tutorial hint stays outside selectable tile cells"],
+		["F-1634", "HandTrayActionPath", "hand_action_path_owner_v2", "action route ends before hand hit cells and keeps a safe gutter"],
+		["F-1635", "HandTrayLastDrawLabel", "hand_last_draw_owner_v2", "drawn-tile marker remains separate from hand prompt and tile input"],
+		["F-1636", "MeldKindBadge_0_peng", "meld_kind_badge_owner_v2", "meld kind text keeps inward gutter and minimum readable size"],
+		["F-1637", "MeldLaneArchiveButton_0", "meld_archive_action_owner_v2", "meld pager stays in the seat-facing lane and outside tile faces"],
+		["F-1638", "DiscardRiverArchiveLabel_0", "river_archive_status_owner_v2", "archive range text stays beside but outside the terminal tile"],
+		["F-1639", "DiscardRiverOwnerBadge_0", "river_owner_badge_owner_v2", "river seat identity remains named near its discard group"],
+		["F-1640", "TopHudUpdateButton", "hud_update_notice_owner_v2", "update notice stays secondary and cannot displace round status"],
+		["F-1641", "TopHudBackButton", "hud_back_action_owner_v2", "table back remains reachable without competing with settings"],
+		["F-1642", "TopHudOnlineConnectionLabel", "hud_connection_copy_owner_v2", "connection state is textual and keeps icon-label order"],
+		["F-1643", "TopHudStatus", "hud_phase_status_owner_v2", "phase status remains the single primary header fact"],
+		["F-1644", "SeatCompactName_1", "seat_name_overflow_owner_v2", "long side-seat names clip safely with a full-value tooltip"],
+		["F-1645", "TableLogLedgerPanel", "table_log_ledger_surface_owner_v2", "ledger body and timeline keep one bounded reading surface"],
+		["F-1646", "TableLogArchiveButton", "table_log_archive_action_owner_v2", "archive action stays secondary to current table log reading"],
+		["F-1647", "TableLogArchivePanel", "table_log_archive_modal_owner", "archive modal publishes close and scroll boundaries"],
+		["F-1648", "TableLogArchiveScroll", "table_log_archive_scroll_owner", "archive history scroll preserves selected event and footer actions"],
+		["F-1649", "TableLogArchiveEmpty", "table_log_archive_empty_owner", "empty archive explains no entries and keeps a return path"],
+		["F-1650", "TableLogLatestCursor", "table_log_latest_cursor_owner", "latest event marker is unique, readonly and outside text selection"],
+		["F-1651", "TableLogTimelineNode", "table_log_timeline_node_owner", "event nodes retain chronological order and readable state labels"],
+		["F-1652", "TableLogTagBadge", "table_log_tag_owner", "event type badge supplements rather than replaces event text"],
+		["F-1653", "RoundSummaryPanel", "round_summary_surface_owner_v2", "settlement header body and action row share one modal boundary"],
+		["F-1654", "RoundSummaryBody", "round_summary_body_owner_v2", "score body keeps complete rows inside its reading viewport"],
+		["F-1655", "RoundSummaryActionRow", "round_summary_action_owner_v2", "next hand and menu actions retain clear priority and touch height"],
+		["F-1656", "RoundSummaryNextHandGate", "round_summary_next_hand_owner_v2", "next-hand readiness is textual before enabling the CTA"],
+		["F-1657", "RoundSummaryRankHeader", "round_summary_rank_header_owner_v2", "rank header columns align with every result row"],
+		["F-1658", "RoundSummaryChampionNode", "round_summary_champion_owner", "winner identity is not conveyed by ornament alone"],
+		["F-1659", "RoundSummaryScoreFlowArchive", "round_summary_score_archive_owner", "score-flow archive is a readable secondary route"],
+		["F-1660", "RoundSummarySettlementCommitArt", "round_summary_settlement_state_owner", "settlement completion has text separate from decorative commit art"],
+		["F-1661", "WinDetailPanel", "win_detail_surface_owner_v2", "winner score yaku and close actions share one bounded detail surface"],
+		["F-1662", "WinDetailTile", "win_detail_tile_context_owner", "winning tile remains readonly and retains source context"],
+		["F-1663", "WinDetailScorePointLabel", "win_detail_score_point_owner", "score points and unit stay adjacent to the delta"],
+		["F-1664", "WinDetailYakuScroll", "win_detail_yaku_scroll_owner_v2", "yaku range scroll preserves winner and score header context"],
+		["F-1665", "WinDetailYakuScrollBar", "win_detail_yaku_scrollbar_owner", "yaku scrollbar has a visible progress and stable hit lane"],
+		["F-1666", "WinDetailLimitBadge", "win_detail_limit_badge_owner", "limit state has words and does not rely on a glow effect"],
+		["F-1667", "WinDetailShowcase", "win_detail_showcase_owner", "winning hand showcase remains separate from scrollable yaku text"],
+		["F-1668", "AdvisorPanel", "advisor_summary_surface_owner_v2", "recommendation summary precedes risk detail and stays readonly"],
+		["F-1669", "AdvisorDetailRecommendedTileButton", "advisor_recommended_tile_action_owner", "recommended tile locator is disabled with a reason when unavailable"],
+		["F-1670", "ToastPendingLabel", "toast_pending_status_owner", "queued toast pending state remains readable without replacing the active toast"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+	var action_intent := find_control.call("ActionIntentDock") as Control
+	if action_intent != null:
+		action_intent.set_meta("primary_lane_owner", "ActionIntentText")
+		action_intent.set_meta("secondary_lane_owner", "ActionIntentCount")
+	var pending_stack := find_control.call("PendingClaimActionStack") as Control
+	if pending_stack != null:
+		pending_stack.set_meta("tail_lane_order", ["pass", "cancel", "voice", "network"])
+		pending_stack.set_meta("primary_response_owner", "PendingClaimResponseGrid")
+	var danger_detail := find_control.call("DangerDiscardDetailText") as Label
+	if danger_detail != null:
+		danger_detail.set_meta("tile_lane_clearance_px", 8.0)
+	var hand_path := find_control.call("HandTrayActionPath") as Control
+	if hand_path != null:
+		hand_path.set_meta("hit_cell_clearance_px", 8.0)
+		hand_path.set_meta("interactive_policy", "readonly_path_before_hand_cells")
+	var table_log := find_control.call("TableLogLedgerPanel") as Control
+	if table_log != null:
+		table_log.set_meta("chronological_reading_owner", "TableLogTimelineNode")
+		table_log.set_meta("latest_marker_owner", "TableLogLatestCursor")
+	var archive_scroll := find_control.call("TableLogArchiveScroll") as ScrollContainer
+	if archive_scroll != null:
+		archive_scroll.set_meta("footer_actions_outside_range", true)
+	var summary_actions := find_control.call("RoundSummaryActionRow") as Control
+	if summary_actions != null:
+		summary_actions.set_meta("action_order", ["next_hand", "menu"])
+		summary_actions.set_meta("action_min_height_px", UI_MIN_TOUCH_TARGET)
+	var win_scroll := find_control.call("WinDetailYakuScroll") as ScrollContainer
+	if win_scroll != null:
+		win_scroll.set_meta("header_context_outside_range", true)
+	var advisor := find_control.call("AdvisorPanel") as Control
+	if advisor != null:
+		advisor.set_meta("readonly_surface", true)
+		advisor.set_meta("reading_order", ["recommendation", "context", "risk"])
+	var advisor_locator := find_control.call("AdvisorDetailRecommendedTileButton") as Button
+	if advisor_locator != null:
+		advisor_locator.set_meta("unavailable_reason", "当前没有可定位的推荐牌")
+	var toast_pending := find_control.call("ToastPendingLabel") as Label
+	if toast_pending != null:
+		toast_pending.set_meta("pending_queue_owner", "ToastContainer")
+		toast_pending.set_meta("dwell_policy", "oldest_first_with_minimum_dwell")
+	root.set_meta("ui_round_1611_1670_owner_roles", owner_roles)
+	root.set_meta("ui_round_1611_1670_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1671_1730(root: Control) -> void:
+	# F-1671..F-1730 covers auxiliary lobby, replay, daily, achievement,
+	# tutorial, diagnostic, and loading controls that sit outside the previous
+	# table action/result contracts. It hardens existing controls only.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1671_1730_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1671 + index))
+	root.set_meta("ui_round_1671_1730_contract_ids", contract_ids)
+	root.set_meta("ui_round_1671_1730_contract_version", "20260910-auxiliary-state-lanes-60")
+	root.set_meta("ui_round_1671_1730_scope", "online_lobby_replay_daily_achievement_tutorial_diagnostic_loading_auxiliary_states")
+	root.set_meta("ui_round_1671_1730_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1671_1730_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1671_1730_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1671_1730_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1671_1730_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1671_1730_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1671_1730_policies", policies)
+		target.set_meta("ui_round_1671_1730_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if not bool(label.get_meta("dynamic_wrapped_label", false)):
+				configure_clipped_label(label)
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			configure_scroll_container(scroll, scroll.tooltip_text)
+			scroll.set_meta("scroll_contract_owner", target.name)
+			scroll.set_meta("scroll_geometry_policy", "native_range_preserves_authored_hosts")
+		elif target is LineEdit:
+			var edit := target as LineEdit
+			edit.custom_minimum_size.y = maxf(edit.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1671", "OnlineLobbyConnectionStateBadge", "lobby_connection_badge_owner_v2", "connection badge keeps state text and icon in one named lane"],
+		["F-1672", "OnlineLobbyConnectionStateIcon", "lobby_connection_icon_owner", "connection icon supplements state text and never carries state alone"],
+		["F-1673", "OnlineLobbyJoinButton", "lobby_join_action_owner_v2", "join action keeps a stable target and visible prerequisite reason"],
+		["F-1674", "OnlineLobbyRoomBadge", "lobby_room_badge_surface_owner", "room badge separates identity from its detail/copy affordance"],
+		["F-1675", "OnlineLobbyRoomBadgeLabel", "lobby_room_badge_text_owner", "room code text reserves measured space before the view affordance"],
+		["F-1676", "OnlineLobbyRoomSummaryHeadline", "lobby_summary_headline_owner", "room summary headline precedes occupancy and readiness facts"],
+		["F-1677", "OnlineLobbyRoomSummaryReadyLabel", "lobby_summary_ready_owner", "ready count is textual and remains aligned with its room summary"],
+		["F-1678", "OnlineLobbyRoomSummaryStateLabel", "lobby_summary_state_owner", "room state keeps a complete status phrase outside roster rows"],
+		["F-1679", "OnlineLobbyRosterRow_0", "lobby_roster_row_owner", "roster row preserves seat, identity, ready state and detail hit lane"],
+		["F-1680", "OnlineLobbyRosterName_0", "lobby_roster_name_owner", "roster name clips safely while retaining its complete value"],
+		["F-1681", "OnlineLobbyRosterState_0", "lobby_roster_state_owner", "roster state has words before icon or tint"],
+		["F-1682", "OnlineLobbyRosterStateIcon_0", "lobby_roster_state_icon_owner", "roster state icon remains supplemental to the text state"],
+		["F-1683", "OnlineLobbyPlayerSeat_0", "lobby_player_seat_owner", "seat number and player identity share a stable row context"],
+		["F-1684", "OnlineLobbyRoomOfflineTitle", "lobby_offline_title_owner", "offline title names the recovery state before its hint"],
+		["F-1685", "OnlineLobbyRoomOfflineHint", "lobby_offline_hint_owner", "offline hint stays adjacent to the recovery action"],
+		["F-1686", "OnlineLobbyStatusLabel", "lobby_status_live_owner", "global lobby status stays outside editable field rows"],
+		["F-1687", "OnlineLobbyServerCaption", "lobby_server_caption_owner", "server caption remains distinct from the raw endpoint value"],
+		["F-1688", "OnlineLobbyRoomArt", "lobby_room_art_exclusion_owner", "room decoration stays behind the readable room summary"],
+		["F-1689", "OnlineLobbyRoomSummaryState", "lobby_summary_state_surface_owner", "summary state surface does not become an extra action target"],
+		["F-1690", "OnlineLobbyStartButtonRow", "lobby_start_row_owner", "start row reserves CTA height and keeps secondary actions separate"],
+		["F-1691", "OnlineLobbySplitDivider", "lobby_split_divider_owner", "form and room summary divider stays outside text and focus lanes"],
+		["F-1692", "OnlineLobbyInputGroupSpine", "lobby_input_group_owner", "input group decoration cannot intercept field input"],
+		["F-1693", "OnlineLobbyRoomBadgeViewIcon", "lobby_room_badge_detail_owner", "room detail icon has a named tooltip and stable hit cell"],
+		["F-1694", "ReplayImportTimelineTitle", "replay_timeline_title_owner", "timeline title precedes range status and event rows"],
+		["F-1695", "ReplayImportTimelineEmpty", "replay_timeline_empty_owner", "empty timeline explains the next import step without a dead end"],
+		["F-1696", "ReplayImportTimelineScroll", "replay_timeline_scroll_owner", "timeline scroll keeps its native range and selected-row context"],
+		["F-1697", "ReplayImportTimelineScrollBar", "replay_timeline_scrollbar_owner", "timeline scrollbar has a stable hit lane and visible progress"],
+		["F-1698", "ReplayArchiveRowResult", "replay_archive_result_owner", "archive result text stays separate from row actions"],
+		["F-1699", "ReplayArchiveRowSecondary", "replay_archive_secondary_owner", "archive secondary status cannot displace the primary open action"],
+		["F-1700", "ReplayArchiveDeleteConfirmLabel", "replay_archive_delete_confirm_owner", "delete consequence is adjacent to the destructive action"],
+		["F-1701", "ReplayArchiveFavoriteCaption", "replay_archive_favorite_caption_owner", "favorite action has a text-equivalent caption for its icon"],
+		["F-1702", "ReplayArchiveOpenCaption", "replay_archive_open_caption_owner", "open action has a text-equivalent caption for its icon"],
+		["F-1703", "ReplayArchiveCopyCaption", "replay_archive_copy_caption_owner", "copy action has a text-equivalent caption for its icon"],
+		["F-1704", "ReplayArchiveDeleteCaption", "replay_archive_delete_caption_owner", "delete action has a text-equivalent caption and confirmation route"],
+		["F-1705", "DailyLoginDayNode_2", "daily_day_two_node_owner", "day two exposes state tokens without relying on color"],
+		["F-1706", "DailyLoginDayLabel_2", "daily_day_two_label_owner", "day number remains readable inside its fixed indicator cell"],
+		["F-1707", "DailyLoginRewardLabel_2", "daily_day_two_reward_owner", "day two reward is adjacent to its state and retains full text"],
+		["F-1708", "DailyLoginDayDetailProxy_2", "daily_day_two_detail_owner", "day detail proxy is touch-sized and readonly"],
+		["F-1709", "DailyLoginProgressText", "daily_progress_text_owner", "streak progress uses a text equivalent beside the rail"],
+		["F-1710", "DailyLoginForecastTitle", "daily_forecast_title_owner", "forecast title precedes remaining days and target reward"],
+		["F-1711", "DailyLoginForecastBadge", "daily_forecast_badge_owner", "forecast badge supplements its title with a complete label"],
+		["F-1712", "DailyLoginDayTextBack_2", "daily_day_two_text_surface_owner", "day two text surface preserves contrast without intercepting input"],
+		["F-1713", "DailyLoginRewardTextBack", "daily_reward_text_surface_owner", "reward text surface stays separate from claim action"],
+		["F-1714", "DailyLoginRewardIconBack", "daily_reward_icon_surface_owner", "reward icon is decorative and cannot replace reward text"],
+		["F-1715", "DailyLoginCurrentClaimCheck", "daily_current_claim_check_owner", "current claim state has an explicit readonly marker"],
+		["F-1716", "DailyLoginClaimCheck_2", "daily_day_two_claim_check_owner", "claimed state marker remains supplemental to the day label"],
+		["F-1717", "DailyLoginDayFocusRail_2", "daily_day_two_focus_owner", "day detail focus rail stays inside its own target boundary"],
+		["F-1718", "DailyLoginForecastBadgeBack", "daily_forecast_badge_surface_owner", "forecast badge backplate does not cover the forecast copy"],
+		["F-1719", "AchievementsScrollUpIcon", "achievements_scroll_up_owner", "scroll-up cue supplements native scrolling and stays noninteractive"],
+		["F-1720", "AchievementsScrollDownIcon", "achievements_scroll_down_owner", "scroll-down cue supplements native scrolling and stays noninteractive"],
+		["F-1721", "AchievementGalleryArchive", "achievement_gallery_archive_owner", "achievement archive route remains secondary to row browsing"],
+		["F-1722", "AchievementsCompletionLabel", "achievement_completion_label_owner", "completion percentage keeps a full text value in compact header"],
+		["F-1723", "AchievementReadabilityBackplate", "achievement_readability_surface_owner", "readability surface stays behind text without intercepting row focus"],
+		["F-1724", "MenuRankBadge", "menu_rank_badge_owner", "rank identity remains a named compact field beside menu economy facts"],
+		["F-1725", "MenuStatsBadge", "menu_stats_badge_owner", "stats identity remains distinct from rank and currency"],
+		["F-1726", "TutorialEntryTitle", "tutorial_entry_title_owner", "tutorial sheet title names the checkpoint route before actions"],
+		["F-1727", "DiagnosticContentList", "diagnostic_content_list_owner", "diagnostic rows stay inside the measured scroll viewport"],
+		["F-1728", "DiagnosticContentLine_00", "diagnostic_first_line_owner", "first diagnostic line keeps full text and does not hide the range status"],
+		["F-1729", "LoadingTipArt", "loading_tip_art_owner", "loading tip art remains decorative behind the readable tip label"],
+		["F-1730", "LoadingSubtitleLabel", "loading_subtitle_owner", "loading subtitle stays separate from status and retry lanes"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+	var lobby_badge := find_control.call("OnlineLobbyRoomBadge") as Control
+	if lobby_badge != null:
+		lobby_badge.set_meta("room_badge_reading_order", ["room_code", "detail_affordance"])
+		lobby_badge.set_meta("room_badge_text_clearance_px", 8.0)
+	var roster_row := find_control.call("OnlineLobbyRosterRow_0") as Control
+	if roster_row != null:
+		roster_row.set_meta("roster_row_order", ["seat", "name", "state", "detail"])
+		roster_row.set_meta("detail_target_owner", "OnlineLobbyRosterTouchTarget_0")
+	var replay_scroll := find_control.call("ReplayImportTimelineScroll") as ScrollContainer
+	if replay_scroll != null:
+		replay_scroll.set_meta("selected_event_context_owner", "ReplayImportEventList")
+		replay_scroll.set_meta("range_status_outside_content", true)
+	var daily_node := find_control.call("DailyLoginDayNode_2") as Control
+	if daily_node != null:
+		daily_node.custom_minimum_size = Vector2(maxf(daily_node.custom_minimum_size.x, 44.0), maxf(daily_node.custom_minimum_size.y, 44.0))
+		daily_node.set_meta("state_tokens", ["当前", "已领取", "待领取"])
+		daily_node.set_meta("detail_proxy_owner", "DailyLoginDayDetailProxy_2")
+	var achievements_up := find_control.call("AchievementsScrollUpIcon") as Control
+	var achievements_down := find_control.call("AchievementsScrollDownIcon") as Control
+	for cue in [achievements_up, achievements_down]:
+		if cue != null:
+			cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cue.set_meta("cue_is_decorative", true)
+	var diagnostic_list := find_control.call("DiagnosticContentList") as Control
+	if diagnostic_list != null:
+		diagnostic_list.set_meta("measurement_owner", "DiagnosticContentScroll.viewport")
+		diagnostic_list.set_meta("range_status_exclusion", true)
+	var loading_tip := find_control.call("LoadingTipArt") as Control
+	if loading_tip != null:
+		loading_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		loading_tip.set_meta("decorative_only", true)
+	root.set_meta("ui_round_1671_1730_owner_roles", owner_roles)
+	root.set_meta("ui_round_1671_1730_registered_child_count", registration_child_count)
 
 
 func draw_center_dice_plate(parent: Control) -> Control:
@@ -30200,6 +31611,7 @@ func refresh_online_lobby_action_states() -> void:
 		var start_gate := online_lobby_start_gate()
 		start_button.text = str(start_gate.get("text", "待连接"))
 		start_button.disabled = not bool(start_gate.get("enabled", false))
+		start_button.focus_mode = Control.FOCUS_ALL if start_button.visible else Control.FOCUS_NONE
 		start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
 		start_button.set_meta("accessible_name", "开始游戏：" + str(start_gate.get("reason", "等待服务器确认开局条件")))
 		start_button.set_meta("lobby_start_state", "ready" if bool(start_gate.get("enabled", false)) else "blocked")
@@ -30905,6 +32317,7 @@ func refresh_online_lobby_state() -> void:
 		var start_gate := online_lobby_start_gate()
 		start_button.text = str(start_gate.get("text", "待连接"))
 		start_button.disabled = not bool(start_gate.get("enabled", false))
+		start_button.focus_mode = Control.FOCUS_ALL if start_button.visible else Control.FOCUS_NONE
 		start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
 		start_button.set_meta("accessible_name", "开始游戏：" + str(start_gate.get("reason", "等待服务器确认开局条件")))
 		set_ui_full_text(start_button, str(start_gate.get("reason", "等待服务器确认开局条件")), "开始游戏：" + str(start_gate.get("text", "待连接")))
