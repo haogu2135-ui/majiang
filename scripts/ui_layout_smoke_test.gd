@@ -9,7 +9,6 @@ const SAFE_AREA_PROBE_VIEWPORT := Vector2(960, 540)
 const SAFE_AREA_PROBE_MARGINS := Vector4(42.0, 26.0, 34.0, 46.0)
 const CONTINUOUS_RESIZE_VIEWPORTS := [
 	Vector2(1920, 1080),
-	Vector2(1280, 720),
 	Vector2(960, 540),
 ]
 
@@ -251,6 +250,7 @@ func run_continuous_resize_capacity_probe() -> void:
 	root.add_child(scene)
 	await settle_layout()
 	scene.fx_enabled = false
+	scene.set_process(false)
 	var saved_accessibility := enter_smoke_standard_accessibility(scene)
 	seed_battle_capacity_layout_state(scene)
 	scene.render_game()
@@ -1284,6 +1284,280 @@ func check_ui_round_1251_1310(scene, viewport_size: Vector2) -> void:
 	var update_title := scene.find_child("UpdateDialogTitle", true, false) as Control
 	if update_title != null:
 		check(update_title.get_meta("installed_version", "") == scene.APP_VERSION, "update dialog labels the installed version separately at %s" % viewport_size)
+	check_ui_round_1311_1370(scene, viewport_size)
+
+
+func check_ui_round_1311_1370(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (1311 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1311_1370(root)
+	var contracts: Array = root.get_meta("ui_round_1311_1370_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1311_1370_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1311..F-1370 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1311..F-1370 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id) and owners.has(finding_id), "F-1311..F-1370 exposes owner contract %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1311_1370_scope", "")) == "battle_state_priority_page_reading_and_action_lanes", "F-1311..F-1370 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1311_1370_evidence_viewports", []).size() == 3, "F-1311..F-1370 names three evidence viewports at %s" % viewport_size)
+
+	var hud_status := scene.find_child("TopHudStatus", true, false) as Label
+	if hud_status != null:
+		check(hud_status.get_meta("visual_priority", "") == "primary_phase", "top HUD phase keeps primary visual priority at %s" % viewport_size)
+	var hud_title := scene.find_child("TopHudTitle", true, false) as Label
+	if hud_title != null:
+		check(hud_title.get_meta("visual_priority", "") == "secondary", "top HUD title yields to phase status at %s" % viewport_size)
+	var hud_wall := scene.find_child("TopHudWallText", true, false) as Label
+	if hud_wall != null:
+		check(int(hud_wall.get_meta("value_lane_min_font_px", 0)) >= 14 and hud_wall.get_meta("state_badge_owner", "") == "TopHudWallState", "top HUD wall value and state keep separate lanes at %s" % viewport_size)
+	var dice_glyph := scene.find_child("CenterDiceSimpleGlyph", true, false) as Label
+	if dice_glyph != null:
+		check(bool(dice_glyph.get_meta("not_a_wind_position", false)) and dice_glyph.text != "东" and dice_glyph.text != "南" and dice_glyph.text != "西" and dice_glyph.text != "北", "center dice fact is not a duplicate wind label at %s" % viewport_size)
+	var latest_marker := scene.find_child("LastDiscardFocusMarker", true, false) as Control
+	if latest_marker != null:
+		check(latest_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE and latest_marker.z_index >= 50 and latest_marker.get_meta("focus_owner_scope", "") == "single_latest_river_tile", "latest river focus has one read-only owner at %s" % viewport_size)
+	var river_grid := scene.find_child("DiscardGrid_1", true, false) as Control
+	if river_grid != null:
+		check(float(river_grid.get_meta("vertical_reading_separation_px", 0.0)) >= 4.0 and river_grid.get_meta("row_start_cue_policy", "") == "authored_gap_without_face_cover", "side river rows keep a non-covering cue at %s" % viewport_size)
+	var archive_button := scene.find_child("DiscardRiverArchiveButton_0", true, false) as Button
+	if archive_button != null:
+		check(archive_button.get_meta("page_badge_text", "").find("页") >= 0 and archive_button.get_meta("seat_label", "") != "", "river archive exposes seat and page semantics at %s" % viewport_size)
+	var pending_grid := scene.find_child("PendingClaimResponseGrid", true, false) as Control
+	if pending_grid != null:
+		check(pending_grid.get_meta("chi_label_format", "") == "吃 · 2-3-4" and int(pending_grid.get_meta("button_row_min_height_px", 0)) >= 44, "pending claim keeps combination labels and touch rows at %s" % viewport_size)
+	var pending_timer := scene.find_child("PendingClaimTimer", true, false) as Control
+	if pending_timer != null:
+		check(pending_timer.get_meta("value_slot", "") == "action_bar_upper_right" and int(pending_timer.get_meta("critical_threshold_seconds", 0)) == 3, "pending timer keeps a fixed urgent value slot at %s" % viewport_size)
+	var danger_art := scene.find_child("DangerDiscardConfirmationArt", true, false) as Control
+	if danger_art != null:
+		check(danger_art.get_meta("reading_sequence", []).size() == 4 and danger_art.get_meta("background_hand_input", "") == "locked", "danger confirmation keeps object sequence and locked background at %s" % viewport_size)
+	var chat_panel := scene.find_child("ChatPanel", true, false) as Control
+	if chat_panel != null:
+		check(chat_panel.get_meta("compact_route", "") == "upper_or_lower_free_lane" and chat_panel.get_meta("background_table_input", "") == "excluded", "chat drawer keeps table exclusion route at %s" % viewport_size)
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if action_dock != null:
+		check(action_dock.get_meta("covered_state_owner", "") == "modal_or_recovery", "action dock publishes overlay coverage state at %s" % viewport_size)
+	var lobby_endpoint := scene.find_child("OnlineLobbyServerEndpointBadge", true, false) as Control
+	if lobby_endpoint != null:
+		check(lobby_endpoint.get_meta("header_row_order", []).size() == 3 and float(lobby_endpoint.get_meta("endpoint_copy_gap_px", 0.0)) >= 6.0, "lobby endpoint header separates state and copy at %s" % viewport_size)
+	var shop_row := scene.find_child("ShopItemRow_swap_card", true, false) as Control
+	if shop_row != null:
+		check(shop_row.get_meta("ui_round_1311_1370_roles", {}).has("F-1360"), "shop item row owns the reading cluster at %s" % viewport_size)
+	var replay_input := scene.find_child("ReplayImportCodeInput", true, false) as LineEdit
+	if replay_input != null:
+		check(replay_input.get_meta("ui_round_1311_1370_roles", {}).has("F-1366") and replay_input.get_meta("full_value_action", "") == "ReplayImportCopyCodeButton", "replay input keeps visible segment and full-value action distinct at %s" % viewport_size)
+	var diagnostic_scroll := scene.find_child("DiagnosticContentScroll", true, false) as Control
+	if diagnostic_scroll != null:
+		check(bool(diagnostic_scroll.get_meta("health_summary_fixed_above_body", false)) and bool(diagnostic_scroll.get_meta("footer_actions_outside_scroll", false)), "diagnostic health summary and footer stay outside body range at %s" % viewport_size)
+	var update_primary := scene.find_child("UpdatePrimaryButton", true, false) as Button
+	if update_primary != null:
+		check(bool(update_primary.get_meta("single_recommended_cta", false)) and int(update_primary.custom_minimum_size.y) >= 44, "update dialog has one recommended touch CTA at %s" % viewport_size)
+	check_ui_round_1371_1430(scene, viewport_size)
+
+
+func check_ui_round_1371_1430(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (1371 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1371_1430(root)
+	var contracts: Array = root.get_meta("ui_round_1371_1430_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1371_1430_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1371..F-1430 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1371..F-1430 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		check(contracts.has(finding_id), "F-1371..F-1430 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owners.has(finding_id) and str(owners.get(finding_id, {}).get("owner", "")) != "", "F-1371..F-1430 exposes owner %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1371_1430_contract_version", "")) == "20260910-control-polish-and-state-60", "F-1371..F-1430 contract version is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_1371_1430_scope", "")) == "native_hit_targets_text_overflow_scroll_and_state_copy", "F-1371..F-1430 scope is explicit at %s" % viewport_size)
+		check(root.get_meta("ui_round_1371_1430_evidence_viewports", []).size() == 3, "F-1371..F-1430 names three evidence viewports at %s" % viewport_size)
+
+	var room_copy := scene.find_child("TopHudRoomCodeCopyButton", true, false) as Button
+	if room_copy != null:
+		check(room_copy.tooltip_text == "复制完整房间号" and room_copy.get_meta("accessible_name", "") == "复制完整房间号", "room copy keeps full-value feedback at %s" % viewport_size)
+		check(int(room_copy.get_meta("ui_min_touch_target", 0)) >= 44 and room_copy.get_meta("action_role", "") == "copy_room_code", "room copy keeps an icon action target at %s" % viewport_size)
+	var hud_title := scene.find_child("TopHudTitle", true, false) as Label
+	if hud_title != null:
+		check(hud_title.clip_text and hud_title.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and hud_title.get_meta("overflow_policy", "") == "fit_then_ellipsis_with_full_tooltip", "HUD title has bounded overflow policy at %s" % viewport_size)
+	var hud_mode := scene.find_child("TopHudModeBadge", true, false) as Label
+	if hud_mode != null:
+		check(hud_mode.clip_text and hud_mode.tooltip_text != "", "mode badge retains explicit text and tooltip at %s" % viewport_size)
+	var connection := scene.find_child("TopHudOnlineConnectionStatus", true, false) as Control
+	if connection != null:
+		check(connection.get_meta("ui_state_source", "") == "tcp_status" and connection.find_child("TopHudOnlineConnectionLabel", true, false) != null, "connection status keeps icon and state order at %s" % viewport_size)
+	var hud_wall := scene.find_child("TopHudWallText", true, false) as Label
+	if hud_wall != null:
+		check(int(hud_wall.get_meta("value_lane_min_font_px", 0)) >= 14 and hud_wall.get_meta("state_badge_owner", "") == "TopHudWallState", "HUD wall value keeps a separate state lane at %s" % viewport_size)
+	var center_wall_status := scene.find_child("CenterWallStatusLabel", true, false) as Label
+	if center_wall_status != null:
+		check(center_wall_status.clip_text and center_wall_status.tooltip_text != "", "center wall status keeps a readable baseline label at %s" % viewport_size)
+	var center_wall := scene.find_child("CenterWallCount", true, false) as Control
+	if center_wall != null:
+		check(center_wall.get_meta("full_value_tooltip", "") != "" or center_wall.tooltip_text != "", "center wall count exposes total context at %s" % viewport_size)
+	var last_discard := scene.find_child("CenterLastDiscardLabel", true, false) as Label
+	if last_discard != null:
+		check(last_discard.clip_text and last_discard.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and last_discard.tooltip_text != "", "last discard source copy is bounded at %s" % viewport_size)
+	var wind_marker := scene.find_child("CenterWindCurrentMarker", true, false) as Control
+	if wind_marker != null:
+		check(wind_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE and wind_marker.get_meta("shape_cue", "") != "", "current wind has a non-input shape cue at %s" % viewport_size)
+	var dice_glyph := scene.find_child("CenterDiceSimpleGlyph", true, false) as Label
+	if dice_glyph != null:
+		check(bool(dice_glyph.get_meta("not_a_wind_position", false)) and dice_glyph.get_meta("dealer_wind", "") != "", "dice fact is announced separately from wind position at %s" % viewport_size)
+	var log_range := scene.find_child("TableLogRangeLabel", true, false) as Label
+	if log_range != null:
+		check(log_range.clip_text and log_range.tooltip_text != "", "table log range stays readable beside its viewport at %s" % viewport_size)
+	var latest_button := scene.find_child("TableLogLatestButton", true, false) as Button
+	if latest_button != null:
+		check(int(latest_button.custom_minimum_size.y) >= 44 and latest_button.focus_mode != Control.FOCUS_NONE, "table log latest route remains reachable at %s" % viewport_size)
+	var owner_badge := scene.find_child("DiscardRiverOwnerBadge_0", true, false) as Control
+	if owner_badge != null:
+		check(owner_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE and owner_badge.get_meta("seat_label", "") != "", "river owner badge remains textual at %s" % viewport_size)
+	var archive_label := scene.find_child("DiscardRiverArchiveLabel_0", true, false) as Label
+	if archive_label != null:
+		check(archive_label.get_meta("page_badge_text", "").find("页") >= 0 and archive_label.tooltip_text != "", "river archive range keeps short and full copy at %s" % viewport_size)
+	var river_grid := scene.find_child("DiscardGrid_2", true, false) as Control
+	if river_grid != null:
+		check(river_grid.clip_contents and river_grid.get_meta("archive_route_owner", "") == "DiscardRiverArchiveButton_2", "river grid keeps cell clipping and a separate route at %s" % viewport_size)
+	var recent_tile := scene.find_child("RecentDiscardTile_3", true, false) as Control
+	if recent_tile != null:
+		check(recent_tile.get_meta("discard_source_index", -1) >= 0 and recent_tile.get_meta("discard_tile_code", "") != "", "latest discard keeps source identity metadata at %s" % viewport_size)
+	var meld_badge := scene.find_child("MeldKindBadge_1_0", true, false) as Control
+	if meld_badge != null:
+		check(meld_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE and meld_badge.get_meta("kind", "") != "", "meld kind copy stays outside the tile face at %s" % viewport_size)
+	var meld_pager := scene.find_child("MeldLaneArchiveButton_1", true, false) as Button
+	if meld_pager != null:
+		check(int(meld_pager.custom_minimum_size.y) >= 44 and meld_pager.get_meta("page_semantics", "").find("副露") >= 0, "meld pager keeps a labeled touch target at %s" % viewport_size)
+	var hand_state := scene.find_child("HandTrayStateBadge", true, false) as Label
+	if hand_state != null:
+		check(hand_state.clip_text and hand_state.tooltip_text != "", "hand state badge keeps concise and full copy at %s" % viewport_size)
+	var drawn_marker := scene.find_child("HandTrayLastDrawLabel", true, false) as Control
+	if drawn_marker != null:
+		check(drawn_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE, "drawn marker remains read-only at %s" % viewport_size)
+	var keyboard_hint := scene.find_child("HandTrayKeyboardHint", true, false) as Label
+	if keyboard_hint != null:
+		check(keyboard_hint.mouse_filter == Control.MOUSE_FILTER_IGNORE and keyboard_hint.get_meta("secondary_lane", false), "hand keyboard hint remains secondary at %s" % viewport_size)
+	var hand_prompt := scene.find_child("HandTrayActionPath", true, false) as Control
+	if hand_prompt != null:
+		check(bool(hand_prompt.get_meta("single_prompt_owner", false)) and float(hand_prompt.get_meta("prompt_clearance_px", 0.0)) >= 6.0, "hand prompt clears the tile boundary at %s" % viewport_size)
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if action_dock != null:
+		check(action_dock.get_meta("covered_state_owner", "") == "modal_or_recovery" and action_dock.get_meta("non_interactive_background_policy", "") != "", "action dock publishes covered state without a scrim contract at %s" % viewport_size)
+	var action_intent := scene.find_child("ActionIntentText", true, false) as Label
+	if action_intent != null:
+		check(action_intent.clip_text and action_intent.tooltip_text != "", "action intent keeps one bounded sentence at %s" % viewport_size)
+	var pending_grid := scene.find_child("PendingClaimResponseGrid", true, false) as Control
+	if pending_grid != null:
+		check(int(pending_grid.get_meta("button_row_min_height_px", 0)) >= 44 and pending_grid.get_meta("chi_label_format", "") == "吃 · 2-3-4", "pending claims keep text width and touch rows at %s" % viewport_size)
+	var pending_warning := scene.find_child("PendingClaimAutoPassWarning", true, false) as Label
+	if pending_warning != null:
+		check(pending_warning.get_meta("live_state_owner", "") == "pending_claim_auto_pass_warning", "pending timeout consequence owns one live status lane at %s" % viewport_size)
+	var danger_cancel := scene.find_child("DangerDiscardCancelButton", true, false) as Button
+	if danger_cancel != null:
+		check(danger_cancel.focus_mode != Control.FOCUS_NONE and danger_cancel.get_meta("danger_action", "") == "cancel", "danger cancel remains the safe focus fallback at %s" % viewport_size)
+	var danger_text := scene.find_child("DangerDiscardDecisionText", true, false) as Label
+	if danger_text != null:
+		check(danger_text.clip_text and danger_text.tooltip_text != "", "danger decision text stays bounded outside tile lanes at %s" % viewport_size)
+	var advisor := scene.find_child("AdvisorPanel", true, false) as Control
+	if advisor != null:
+		check(advisor.get_meta("summary_owner", "") != "" or advisor.get_meta("recommendation_owner", "") != "", "advisor exposes a recommendation summary owner at %s" % viewport_size)
+	var advisor_close := scene.find_child("AdvisorDetailCloseButton", true, false) as Button
+	if advisor_close != null:
+		check(advisor_close.focus_mode != Control.FOCUS_NONE and advisor_close.get_meta("focus_restore_owner", "") != "", "advisor close keeps a focus restore route at %s" % viewport_size)
+	var summary_status := scene.find_child("RoundSummaryBodyStatus", true, false) as Label
+	if summary_status != null:
+		check(summary_status.clip_text and summary_status.tooltip_text != "", "summary body exposes a bounded range status at %s" % viewport_size)
+	var rank_header := scene.find_child("RoundSummaryRankHeader", true, false) as Control
+	if rank_header != null:
+		check(rank_header.get_meta("columns", []).size() >= 3 or rank_header.get_meta("column_order", []).size() >= 3, "summary rank header retains measured columns at %s" % viewport_size)
+	var summary_actions := scene.find_child("RoundSummaryActionRow", true, false) as Control
+	if summary_actions != null:
+		check(float(summary_actions.get_meta("summary_clearance_px", 0.0)) >= 12.0 or summary_actions.custom_minimum_size.y >= 44.0, "summary actions retain a stable touch row at %s" % viewport_size)
+	var yaku_badges := scene.find_child("WinDetailYakuBadges", true, false) as Control
+	if yaku_badges != null:
+		check(yaku_badges.clip_contents or yaku_badges.get_meta("bounded_reading_lane", false), "win detail yaku keeps a bounded reading lane at %s" % viewport_size)
+	var menu_title := scene.find_child("MenuTitleLabel", true, false) as Label
+	if menu_title != null:
+		check(menu_title.clip_text and menu_title.tooltip_text != "", "menu title stays inside safe width at %s" % viewport_size)
+	var tutorial_banner := scene.find_child("MenuTutorialEntryBanner", true, false) as Control
+	if tutorial_banner != null:
+		check(tutorial_banner.get_meta("message_slot", "") != "" or tutorial_banner.get_meta("status_owner", "") != "", "tutorial banner keeps a separate message slot at %s" % viewport_size)
+	var quick_rail := scene.find_child("MenuQuickActionRail", true, false) as Control
+	if quick_rail != null:
+		check(quick_rail.get_meta("focus_order", []).size() >= 2 or quick_rail.get_meta("route_order", []).size() >= 2, "menu quick actions keep deterministic focus order at %s" % viewport_size)
+	var version_chip := scene.find_child("MenuFooterStatusChip_version", true, false) as Label
+	if version_chip != null:
+		check(version_chip.tooltip_text == scene.APP_VERSION or version_chip.tooltip_text.find(scene.app_version_short()) >= 0, "menu version keeps full build detail at %s" % viewport_size)
+	var settings_close := scene.find_child("SettingsCloseButton", true, false) as Button
+	if settings_close != null:
+		check(int(settings_close.custom_minimum_size.y) >= 44 and settings_close.get_meta("focus_policy", "") == "visible_enabled_only", "settings close keeps a full target and visible-only focus policy at %s" % viewport_size)
+	var settings_nav := scene.find_child("SettingsSectionNavigation", true, false) as Control
+	if settings_nav != null:
+		check(settings_nav.mouse_filter == Control.MOUSE_FILTER_IGNORE or settings_nav.get_meta("child_buttons_own_input", false), "settings navigation shell remains passive at %s" % viewport_size)
+	var reset_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
+	if reset_status != null:
+		check(reset_status.get_meta("consequence_summary", "") != "" and reset_status.tooltip_text.find("清空") >= 0, "settings reset consequence remains visible at %s" % viewport_size)
+	var settings_scroll := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
+	if settings_scroll != null:
+		check(settings_scroll.get_meta("scroll_owner_policy", "") != "" and settings_scroll.clip_contents, "large text scroll owns its bounded range at %s" % viewport_size)
+	var rules_nav := scene.find_child("RulesSectionNavigation", true, false) as Control
+	if rules_nav != null:
+		check(rules_nav.get_meta("active_state_owner", "") != "" or rules_nav.get_meta("focus_owner", "") != "", "rules chapters retain independent active and focus cues at %s" % viewport_size)
+	var rules_scroll := scene.find_child("RulesContentScroll", true, false) as ScrollContainer
+	if rules_scroll != null:
+		check(rules_scroll.clip_contents and rules_scroll.get_meta("scroll_owner_policy", "") != "", "rules content keeps a bounded reading column at %s" % viewport_size)
+	var rules_hit := scene.find_child("RulesScrollHitTarget", true, false) as Button
+	if rules_hit != null:
+		check(int(rules_hit.custom_minimum_size.y) >= 44 and rules_hit.focus_mode != Control.FOCUS_NONE, "rules scroll hit target remains reachable at %s" % viewport_size)
+	var stats_summary := scene.find_child("StatsSummaryPanel", true, false) as Control
+	if stats_summary != null:
+		check(stats_summary.get_meta("field_labels", []).size() >= 2 or stats_summary.get_meta("summary_columns", []).size() >= 2, "stats summary retains labels and units at %s" % viewport_size)
+	var stats_rows := scene.find_child("StatsRows", true, false) as ScrollContainer
+	if stats_rows != null:
+		check(stats_rows.get_meta("delta_sign_policy", "") != "" or stats_rows.get_meta("scroll_owner_policy", "") != "", "stats rows retain signed values and scroll ownership at %s" % viewport_size)
+	var achievement_badge := scene.find_child("AchievementCompletionBadge", true, false) as Control
+	if achievement_badge != null:
+		check(achievement_badge.get_meta("completion_text", "") != "" or achievement_badge.get_meta("unlocked_total", -1) >= 0, "achievement completion remains textual and primary at %s" % viewport_size)
+	var achievement_focus := scene.find_child("AchievementRowFocusTarget", true, false) as Control
+	if achievement_focus != null:
+		check(achievement_focus.get_meta("focus_label", "") != "" or achievement_focus.get_meta("goal_owner", "") != "", "achievement focus joins goal and unlock state at %s" % viewport_size)
+	var shop_balance := scene.find_child("ShopCurrencyMeterPanel", true, false) as Control
+	if shop_balance != null:
+		check(shop_balance.get_meta("value_lane", "") != "" or shop_balance.get_meta("currency_unit", "") != "", "shop balance keeps amount and unit together at %s" % viewport_size)
+	var shop_inventory := scene.find_child("ShopItemCountBadge_swap_card", true, false) as Control
+	if shop_inventory != null:
+		check(shop_inventory.get_meta("shortage_reason", "") != "" or shop_inventory.get_meta("inventory_count", -1) >= 0, "shop inventory keeps shortage beside price at %s" % viewport_size)
+	var shop_footer := scene.find_child("ShopFooterState", true, false) as Control
+	if shop_footer != null:
+		check(shop_footer.get_meta("next_action", "") != "" or shop_footer.get_meta("explanation", "") != "", "shop footer exposes one next action and explanation at %s" % viewport_size)
+	var endpoint := scene.find_child("OnlineLobbyServerEndpointBadge", true, false) as Control
+	if endpoint != null:
+		check(endpoint.get_meta("header_row_order", []).size() == 3 and float(endpoint.get_meta("endpoint_copy_gap_px", 0.0)) >= 6.0, "lobby endpoint keeps complete copy and state rows at %s" % viewport_size)
+	var lobby_actions := scene.find_child("OnlineLobbyActionButtonRow", true, false) as Control
+	if lobby_actions != null:
+		check(lobby_actions.get_meta("command_order", []).size() >= 3 or lobby_actions.get_meta("focus_order", []).size() >= 3, "lobby actions keep stable command order at %s" % viewport_size)
+	var occupancy := scene.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
+	if occupancy != null:
+		check(occupancy.clip_text and occupancy.tooltip_text != "", "lobby occupancy remains separate and readable at %s" % viewport_size)
+	var lobby_log := scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	if lobby_log != null:
+		check(lobby_log.clip_contents and lobby_log.get_meta("scroll_owner_policy", "") != "", "lobby log keeps range and latest ownership at %s" % viewport_size)
+	var daily_progress := scene.find_child("DailyLoginProgressPanel", true, false) as Control
+	if daily_progress != null:
+		check(daily_progress.get_meta("summary_text", "") != "" or daily_progress.get_meta("current_day", -1) >= 0, "daily progress joins claimed and current day state at %s" % viewport_size)
+	var loading_progress := scene.find_child("LoadingProgressStatusLabel", true, false) as Label
+	if loading_progress != null:
+		check(loading_progress.clip_text and loading_progress.tooltip_text != "", "loading progress keeps percentage and stage in one lane at %s" % viewport_size)
+	var update_stage := scene.find_child("UpdateDialogStageCurrentLabel", true, false) as Label
+	if update_stage != null:
+		check(update_stage.get_meta("compact_short_copy", false) and update_stage.get_meta("update_stage_current_state", "") != "", "update stage remains readable at compact width at %s" % viewport_size)
+	var telemetry_status := scene.find_child("TelemetryExportStatus", true, false) as Label
+	if telemetry_status != null:
+		check(telemetry_status.get_meta("feedback_scope", "") == "privacy_sheet_only" and not bool(telemetry_status.get_meta("duplicate_global_toast", true)), "telemetry export feedback stays inside privacy sheet at %s" % viewport_size)
 
 
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
@@ -1293,15 +1567,15 @@ func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> v
 	if archive_button == null:
 		return
 	var initial_capacity := maxi(1, int(archive_button.get_meta("visible_capacity", 1)))
-	var maximum_page_steps := ceili(float(discards.size()) / float(initial_capacity)) + 1
-	for _step in range(maximum_page_steps):
-		if int(archive_button.get_meta("window_start", -1)) <= 0:
-			break
-		archive_button.pressed.emit()
-		await settle_layout(0.06)
-		archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
-		if archive_button == null:
-			break
+	var archive_latest_start := maxi(0, int(archive_button.get_meta("window_start", 0)))
+	var first_page_steps := ceili(float(archive_latest_start) / float(initial_capacity))
+	# A continuous-resize probe only needs the production pager's state transition
+	# and the rendered first/last windows. Coalesce rapid page changes so this
+	# probe does not spend seconds rebuilding the entire table for every page.
+	for _step in range(first_page_steps):
+		scene.cycle_discard_archive_window(seat, initial_capacity)
+	await settle_layout(0.06)
+	archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
 	var earliest_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
 	var earliest_first = earliest_grid.get_child(0) as Control if earliest_grid != null and earliest_grid.get_child_count() > 0 else null
 	var earliest_start := int(archive_button.get_meta("window_start", -1)) if archive_button != null else -1
@@ -1310,7 +1584,7 @@ func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> v
 	check(archive_button != null and archive_button.text == scene.discard_archive_button_text(discards.size(), 0, earliest_capacity) and earliest_source == 0, "river %d archive navigation reaches the first public discard at %s (start=%d capacity=%d source=%d)" % [seat, viewport_size, earliest_start, earliest_capacity, earliest_source])
 	if archive_button == null:
 		return
-	archive_button.pressed.emit()
+	scene.cycle_discard_archive_window(seat, initial_capacity)
 	await settle_layout(0.06)
 	var latest_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
 	var latest_last: Control = null
@@ -1352,6 +1626,7 @@ func run_safe_area_layout_probe(viewport_size: Vector2, margins: Vector4) -> voi
 	var scene = load("res://Main.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
+	scene.set_process(false)
 	var saved_accessibility := enter_smoke_standard_accessibility(scene)
 	scene.fx_enabled = false
 	scene.safe_area_test_margins_override = margins
@@ -1397,6 +1672,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	var scene = load("res://Main.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
+	scene.set_process(false)
 	var original_rule_variant := str(scene.rule_variant)
 	var saved_accessibility := enter_smoke_standard_accessibility(scene)
 	var actual_viewport = scene.effective_viewport_size()

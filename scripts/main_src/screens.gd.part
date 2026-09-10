@@ -426,6 +426,9 @@ func _show_menu_impl() -> void:
 	if tutorial_is_available():
 		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.014, 0.034, 0.034, 0.88), "ui_jade_reading_plate")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
+		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
+		tutorial_banner.set_meta("status_owner", "MenuTutorialEntryStatus")
+		tutorial_banner.set_meta("action_owner", "MenuTutorialStartButton")
 		# Only the two child buttons are actions. Let clicks on copy or ornament
 		# fall through instead of presenting a non-functional full-banner target.
 		tutorial_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
