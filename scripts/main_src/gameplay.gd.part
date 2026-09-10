@@ -263,7 +263,7 @@ func start_offline(instant: bool = false) -> void:
 		return
 	var _build = func() -> void:
 		_start_offline_impl()
-	if instant or not fx_enabled_effective():
+	if instant or not ui_motion_enabled():
 		_build.call()
 	else:
 		play_screen_transition(_build, false, "ink_wash")

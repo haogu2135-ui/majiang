@@ -2041,12 +2041,14 @@ func _show_rules_screen_impl() -> void:
 	var content_scroll = ScrollContainer.new()
 	content_scroll.name = "RulesContentScroll"
 	configure_scroll_container(content_scroll, "上下滚动查看完整规则说明")
+	var compact_rules_scroll := effective_viewport_size().y <= 560.0
+	var rules_content_bottom := 0.875 if compact_rules_scroll else 0.982
 	content_scroll.anchor_left = 0.058
 	content_scroll.anchor_top = 0.168
 	# Reserve a small stable gap for the custom scroll lane instead of letting its
 	# wider visual thumb overlap the last glyph column.
-	content_scroll.anchor_right = 0.915
-	content_scroll.anchor_bottom = 0.982
+	content_scroll.anchor_right = 0.910
+	content_scroll.anchor_bottom = rules_content_bottom
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	content_scroll.clip_contents = true
@@ -2056,10 +2058,9 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var compact_rules_scroll := effective_viewport_size().y <= 560.0
 	var gutter_left := 0.920
 	var gutter_right := 0.945
-	var rules_scroll_gutter = make_gpt_plate_rect(rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.05, 0.043, 0.035, 0.96), "ui_dark_scrim")
+	var rules_scroll_gutter = make_gpt_plate_rect(rect_full(gutter_left, 0.180, gutter_right, rules_content_bottom), Color(0.05, 0.043, 0.035, 0.96), "ui_dark_scrim")
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(rules_scroll_gutter)
@@ -2103,8 +2104,10 @@ func _show_rules_screen_impl() -> void:
 	mark_ui_optimization(rules_scroll_hit_target, "F-536")
 	# Keep the transparent touch surface inside the scrollbar lane. The content
 	# viewport ends before this lane, so the last text column remains clickable.
-	apply_rect(rules_scroll_hit_target, rect_full(0.915, 0.168, 0.975, 0.982))
+	apply_rect(rules_scroll_hit_target, rect_full(0.915, 0.168, 0.975, rules_content_bottom))
 	panel.add_child(rules_scroll_hit_target)
+	content_scroll.set_meta("compact_first_section_boundary", "first_complete_section_then_scroll")
+	content_scroll.set_meta("content_bottom_anchor", rules_content_bottom)
 	rules_scroll_hit_target.focus_entered.connect(func() -> void:
 		rules_scroll_thumb.modulate = Color(1.16, 1.08, 0.82, 1.0)
 	)
@@ -4199,6 +4202,10 @@ func show_chat_panel() -> void:
 	chat_panel.set_meta("table_info_preserved", chat_panel_route_name() == "upper_meld_safe_drawer")
 	chat_panel.set_meta("modal_scope", "table_context_read_only_behind_drawer")
 	chat_panel.set_meta("close_priority", "first_focus_and_escape")
+	chat_panel.set_meta("safe_exclusion_coordinate_space", "root_layer_normalized_edges")
+	chat_panel.set_meta("safe_exclusion_contract", "seat_and_meld_root_plus_river_and_center_table_anchor")
+	chat_panel.set_meta("safe_exclusion_sources", ["seat_panels", "meld_lanes", "discard_rivers", "center_panel", "hand_tray", "action_dock"])
+	chat_panel.set_meta("selected_route_rect", panel_rect)
 	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	chat_panel.clip_contents = true
 	mark_ui_optimization(chat_panel, "F-579")
@@ -5041,7 +5048,12 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	panel.add_child(content_scroll)
 	# Leave a visual buffer before the fixed action so the first visible row is
 	# never clipped by the scroll viewport or the close button.
-	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.720))
+	# Reserve an explicit status gutter and a separate footer boundary. The body
+	# must finish before the range label so its last visible row cannot read as a
+	# footer control or be hidden by the fixed action lane.
+	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.700))
+	content_scroll.set_meta("diagnostic_scroll_bottom_anchor", 0.700)
+	content_scroll.set_meta("diagnostic_footer_top_anchor", 0.805)
 	var diagnostic_scrollbar := content_scroll.get_v_scroll_bar()
 	if diagnostic_scrollbar != null:
 		diagnostic_scrollbar.name = "DiagnosticContentScrollBar"
@@ -5106,7 +5118,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		vbox.add_child(label)
 	var content_status = make_label(panel, "诊断内容 · 正在测量可见范围", accessibility_font_size(11), Color(0.86, 0.92, 0.84), true)
 	content_status.name = "DiagnosticContentStatusLabel"
-	apply_rect(content_status, rect_full(0.05, 0.760, 0.95, 0.805))
+	apply_rect(content_status, rect_full(0.05, 0.730, 0.95, 0.780))
 	content_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	content_status.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.05, 0.94))
 	content_status.add_theme_constant_override("outline_size", 2)
@@ -5121,7 +5133,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	copy_feedback.name = "DiagnosticCopyFeedbackLabel"
 	# Keep copy feedback beside its action. The report range status owns the lane
 	# above the footer, so a copy result cannot be mistaken for health status.
-	apply_rect(copy_feedback, rect_full(0.05, 0.825, 0.180, 0.940))
+	apply_rect(copy_feedback, rect_full(0.05, 0.805, 0.180, 0.940))
 	copy_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	copy_feedback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	copy_feedback.tooltip_text = copy_feedback.text
@@ -5140,7 +5152,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	mark_ui_optimization(copy_button, "F-501")
 	mark_ui_optimization(copy_button, "F-915")
 	panel.add_child(copy_button)
-	apply_rect(copy_button, rect_full(0.190, 0.825, 0.470, 0.940))
+	apply_rect(copy_button, rect_full(0.190, 0.805, 0.470, 0.940))
 	var close_button = make_small_button("关闭", Color(0.30, 0.42, 0.38), Callable(self, "dismiss_diagnostic_dialog"))
 	close_button.name = "DiagnosticCloseButton"
 	close_button.focus_mode = Control.FOCUS_ALL
@@ -5149,7 +5161,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	set_ui_full_text(close_button, close_button.tooltip_text, "关闭诊断报告")
 	mark_ui_optimization(close_button, "F-502")
 	panel.add_child(close_button)
-	apply_rect(close_button, rect_full(0.530, 0.825, 0.810, 0.940))
+	apply_rect(close_button, rect_full(0.530, 0.805, 0.810, 0.940))
 	var cancel_shortcut = Shortcut.new()
 	cancel_shortcut.events = InputMap.action_get_events("ui_cancel")
 	close_button.shortcut = cancel_shortcut
@@ -5225,7 +5237,7 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	var measured_width := diagnostic_content_viewport_width(content_scroll, content_list)
 	var width_changed := previous_width < 0.0 or absf(previous_width - measured_width) > 1.0
 	refresh_diagnostic_line_measurements(content_scroll, content_list)
-	# The authored .215-.738 rect is the viewport contract. Only the child list
+	# The authored .215-.700 rect is the viewport contract. Only the child list
 	# is measured here; changing the viewport to the list height breaks the fixed
 	# status and close lanes and can move the scroll range outside the modal.
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -6660,12 +6672,12 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		configure_replay_timeline_focus_navigation(false)
 		return
 	if event_scroll != null:
-		# Wrapped rows are not stable until the viewport width has been measured;
-		# keep the scroll lane inert for that one frame so its range cannot jump
-		# under a touch or wheel gesture.
-		event_scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		event_scroll.focus_mode = Control.FOCUS_NONE
-		event_scroll.modulate.a = 0.0
+		# Rows already have a conservative measured-height estimate. Keep the
+		# viewport visible and focusable while deferred measurement refines it so
+		# import completion never exposes a blank or unreachable first frame.
+		event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+		event_scroll.focus_mode = Control.FOCUS_ALL
+		event_scroll.modulate.a = 1.0
 		event_scroll.set_meta("timeline_measurement_pending", true)
 		event_scroll.set_meta("timeline_visibility_locked_until_measurement", true)
 	for index in range(visible_events.size()):

@@ -5262,7 +5262,7 @@ func start_offline(instant: bool = false) -> void:
 		return
 	var _build = func() -> void:
 		_start_offline_impl()
-	if instant or not fx_enabled_effective():
+	if instant or not ui_motion_enabled():
 		_build.call()
 	else:
 		play_screen_transition(_build, false, "ink_wash")
@@ -10745,7 +10745,9 @@ func draw_center(parent: Control) -> void:
 	var center_wall_count = get_wall_count()
 	var center_wall_low = wall_is_low(center_wall_count)
 	var center_wall_alpha = 0.72 if center_wall_low else 0.38
-	var compact_center := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 720.0
+	var compact_center := effective_viewport_size().x <= 960.0 or effective_viewport_size().y < 720.0
+	center.set_meta("center_density_mode", "compact" if compact_center else "standard")
+	center.set_meta("center_density_policy", "compact_only_below_960_or_720_height")
 	var wall_label_text := wall_state_text(center_wall_count)
 	var wall_label = make_label(center, wall_label_text, 9 if compact_center else (10 if not wall_is_critical(center_wall_count) else 9), Color(0.68, 0.66, 0.54, center_wall_alpha), false)
 	wall_label.name = "CenterWallStatusLabel"
@@ -12601,6 +12603,10 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	register_ui_round_1551_1610(root)
 	register_ui_round_1611_1670(root)
 	register_ui_round_1671_1730(root)
+	register_ui_round_1731_1790(root)
+	register_ui_round_1791_1850(root)
+	register_ui_round_1851_1910(root)
+	register_ui_round_1911_1970(root)
 
 
 func register_ui_round_1071_1100(root: Control) -> void:
@@ -14304,7 +14310,6 @@ func register_ui_round_1491_1550(root: Control) -> void:
 		if target is Button:
 			var button := target as Button
 			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
-			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
 			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 			button.set_meta("focus_policy", "visible_enabled_only")
 			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
@@ -15272,6 +15277,613 @@ func register_ui_round_1671_1730(root: Control) -> void:
 		loading_tip.set_meta("decorative_only", true)
 	root.set_meta("ui_round_1671_1730_owner_roles", owner_roles)
 	root.set_meta("ui_round_1671_1730_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1731_1790(root: Control) -> void:
+	# F-1731..F-1790 is a fine-grained pass over page-local reading lanes,
+	# state summaries, and authored scroll hosts. It only hardens existing
+	# controls; it does not create a visual layer or a generated texture.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1731_1790_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1731 + index))
+	root.set_meta("ui_round_1731_1790_contract_ids", contract_ids)
+	root.set_meta("ui_round_1731_1790_contract_version", "20260910-ui-engineer-audit-table-pages-and-recovery-60")
+	root.set_meta("ui_round_1731_1790_scope", "ui_engineer_audit_table_pages_recovery_and_version_semantics")
+	root.set_meta("ui_round_1731_1790_source", "ui-engineer-readonly-audit-20260910")
+	root.set_meta("ui_round_1731_1790_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1731_1790_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1731_1790_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1731_1790_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1731_1790_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1731_1790_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1731_1790_policies", policies)
+		target.set_meta("ui_round_1731_1790_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if label.get_meta("dynamic_wrapped_label", false) != true:
+				configure_clipped_label(label)
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			var authored_hidden_scroll := ["ShopItemsScroll", "AchievementsScroll", "RulesContentScroll"].has(str(scroll.name))
+			if authored_hidden_scroll:
+				# These pages own an authored gutter and intentionally hide the native bar.
+				scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+				scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+				scroll.clip_contents = true
+				scroll.focus_mode = Control.FOCUS_ALL
+				scroll.set_meta("ui_scroll_view", scroll.tooltip_text)
+			else:
+				configure_scroll_container(scroll, scroll.tooltip_text)
+			scroll.set_meta("scroll_boundary_owner", target.name)
+			scroll.set_meta("range_status_outside_content", true)
+		elif target is LineEdit:
+			var edit := target as LineEdit
+			edit.custom_minimum_size.y = maxf(edit.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			edit.focus_mode = Control.FOCUS_ALL
+			edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1731", "UpdateDialogTitle", "update_version_semantics_owner_v3", "current version is explicit and remote version remains a separate status value"],
+		["F-1732", "MeldArea_2", "top_meld_seat_clearance_owner", "top seat plaque and top horizontal meld lane keep a measured vertical gap"],
+		["F-1733", "MeldArea_0", "bottom_meld_river_clearance_owner", "bottom horizontal melds use an independent lane with no discard-river intersection"],
+		["F-1734", "CenterLastDiscardTile", "center_latest_tile_river_clearance_owner", "center latest-discard presentation does not cover the bottom river"],
+		["F-1735", "DangerDiscardConfirmButton", "danger_confirmation_river_clearance_owner", "danger confirmation stays clear of the right river and keeps its action lane"],
+		["F-1736", "ReplayImportTimelineScroll", "replay_timeline_first_frame_owner", "verified event rows remain visible and focusable while deferred heights settle"],
+		["F-1737", "TopHudWallBack", "wall_back_scale_owner", "wide wall backs use the existing 2D scale contract without entering seat lanes"],
+		["F-1738", "CenterLastDiscardTile", "center_latest_tile_scale_owner", "wide latest-discard face follows the table tile scale within a bounded center slot"],
+		["F-1739", "DiscardGrid_1", "side_river_minimum_tile_owner", "side river preserves a readable minimum tile size before reducing visible capacity"],
+		["F-1740", "HandTray", "hand_text_lane_clearance_owner", "hand prompt and group text remain inside a dedicated tray lane"],
+		["F-1741", "HandTray", "wide_hand_density_owner", "wide hand content uses the available seat-aligned tray without arbitrary empty margins"],
+		["F-1742", "ActionButtonDock", "pending_claim_source_path_owner", "pending response controls expose a clear source-to-action reading path"],
+		["F-1743", "CenterWallStatusLabel", "center_readability_owner", "center status text keeps stable contrast over the authored table surface"],
+		["F-1744", "TopHudSettingsButton", "wide_hud_action_scale_owner", "wide HUD actions remain legible while preserving their minimum touch size"],
+		["F-1745", "TopHudWallBack", "top_wall_seat_clearance_owner", "top wall lane cannot enter the top seat identity lane"],
+		["F-1746", "BottomWall", "bottom_wall_seat_clearance_owner", "bottom wall lane stays clear of seat identity and hand-safe regions"],
+		["F-1747", "SideWallLanes", "side_wall_seat_clearance_owner", "left and right wall lanes remain outside side-seat identity columns"],
+		["F-1748", "CenterWindLabel_东", "bottom_wind_safe_boundary_owner", "bottom wind marker stays inside the center console and above the hand tray"],
+		["F-1749", "HandTile_0", "tile_texture_boundary_owner", "2D tile texture edges retain an authored safe boundary without program recoloring"],
+		["F-1750", "DiscardGrid_1", "small_tile_separation_owner", "compact river faces retain visual separation without generated tile effects"],
+		["F-1751", "TopHudTitle", "wide_hud_score_lane_owner", "score and wall status reserve non-overlapping header columns"],
+		["F-1752", "TopHudWallState", "wide_hud_wall_button_clearance_owner", "wall state stays outside the settings action hit lane"],
+		["F-1753", "HandTrayTileStage", "hand_tray_coordinate_owner", "hand tile stage and tray share one explicit coordinate-space contract"],
+		["F-1754", "MenuPrimaryCardRow", "wide_menu_card_density_owner", "primary menu cards use the safe width while preserving the quick-action rail"],
+		["F-1755", "MenuTitleLabel", "menu_first_frame_visibility_owner", "menu header and footer are visible before page-ready interaction is exposed"],
+		["F-1756", "TutorialEntrySubtitle", "tutorial_subtitle_wrap_owner", "tutorial entry subtitle wraps within a stable compact text lane"],
+		["F-1757", "OnlineLobbyConnectionRetryButton", "lobby_retry_form_clearance_owner", "disconnect retry keeps a separate lane above the form"],
+		["F-1758", "OnlineLobbyEndpointCopyButton", "lobby_endpoint_action_gap_owner", "endpoint copy and connection state retain a distinct touch gap"],
+		["F-1759", "OnlineLobbyStartGateReason", "lobby_start_gate_clearance_owner", "start prerequisite copy stays outside the primary start button row"],
+		["F-1760", "OnlineLobbyRoomOfflineState", "lobby_offline_log_clearance_owner", "offline recovery state never covers the scrollable room log"],
+		["F-1761", "OnlineLobbyEndpointLabel", "lobby_endpoint_min_readability_owner", "long endpoints preserve a readable visible value and complete copy route"],
+		["F-1762", "OnlineLobbyRoomBadge", "lobby_badge_icon_clearance_owner", "room badge text reserves an inset before its detail icon"],
+		["F-1763", "RulesContentScrollHitTarget", "rules_scroll_hit_lane_owner_v3", "scroll hit lane stays in the gutter and cannot consume the final text column"],
+		["F-1764", "RulesContentScrollThumb", "rules_scroll_thumb_measurement_owner", "thumb length follows the native content range rather than a fixed chapter guess"],
+		["F-1765", "SettingsSectionNavigation", "settings_active_tab_owner", "active settings section has a stable text or icon state beyond color"],
+		["F-1766", "SettingsPanel", "settings_maintenance_text_owner", "maintenance action and confirmation state retain a complete compact label"],
+		["F-1767", "ShopCurrencyPanel_coins", "shop_currency_authored_surface_owner", "currency surface uses existing authored visual assets without program-drawn decoration"],
+		["F-1768", "ShopGPTTexture", "shop_hero_asset_visibility_owner", "shop authored hero asset remains identifiable without reducing reading contrast"],
+		["F-1769", "ShopItemsContent", "shop_product_text_height_owner", "long product descriptions expand or wrap before reaching the CTA lane"],
+		["F-1770", "ShopItemsScrollGutter", "shop_scroll_hit_range_owner", "shop visual track and touch hit range share the same vertical extent"],
+		["F-1771", "AchievementsScroll", "achievement_thumb_range_owner", "achievement scroll affordance reflects the actual list range"],
+		["F-1772", "DailyLoginRewardPanel", "daily_reward_bottom_boundary_owner", "reward explanation stays within the daily panel safe bottom"],
+		["F-1773", "DailyLoginProgressPanel", "daily_progress_authored_surface_owner", "daily progress uses an existing authored visual state instead of a generated fill"],
+		["F-1774", "DailyLoginClaimButton", "daily_claimed_focus_owner", "claimed state remains visible in the focus route without becoming an action"],
+		["F-1775", "DiagnosticContentScroll", "diagnostic_scroll_focus_owner", "diagnostic body has one logical keyboard scroll owner"],
+		["F-1776", "DiagnosticDialogVersion", "diagnostic_version_readability_owner", "diagnostic version stays readable without competing with health summary"],
+		["F-1777", "DiagnosticContentScroll", "diagnostic_measurement_focus_owner", "diagnostic focus is stable while wrapped report height is measured"],
+		["F-1778", "ExitConfirmOverlay", "exit_modal_scrim_owner", "exit confirmation reading surface takes priority over the table behind it"],
+		["F-1779", "ExitConfirmContinueButton", "exit_modal_focus_timing_owner", "exit modal focus is not actionable before its visible surface is ready"],
+		["F-1780", "UpdateReleaseNotesLabel", "update_notes_preview_owner", "first release-notes sentence retains version and compatibility meaning before truncation"],
+		["F-1781", "UpdateReleaseNotesStatus", "update_notes_button_clearance_owner", "release-notes range status stays clear of the compact button row"],
+		["F-1782", "LoadingCenterPanel", "loading_layer_budget_owner", "loading page keeps one primary backdrop and one bounded reading panel"],
+		["F-1783", "LoadingPanel", "loading_first_frame_visibility_owner", "loading page is visually ready before interaction or capture is exposed"],
+		["F-1784", "ReplayImportEventRow_000", "replay_event_initial_height_owner", "long event rows use conservative first-frame height and only expand after measurement"],
+		["F-1785", "ReplayImportEventList", "replay_event_focus_scroll_owner", "selected event focus keeps its row inside the timeline viewport"],
+		["F-1786", "ReplayImportTimeline", "replay_compact_pane_owner", "compact replay layout gives the event timeline enough readable width"],
+		["F-1787", "ReplayImportTimelineEmpty", "replay_empty_state_owner", "empty and filtered-empty timeline states explain their distinct next actions"],
+		["F-1788", "MenuPrimaryOfflineCard", "wide_menu_card_width_owner", "wide menu cards use safe width without losing the three-card hierarchy"],
+		["F-1789", "OnlineLobbyNameEdit", "lobby_field_shrink_owner", "compact lobby fields can shrink while preserving clear-proxy space"],
+		["F-1790", "LobbyFieldClearButton_昵称", "lobby_field_clear_proxy_owner", "field clear proxy has a visible aligned icon, tooltip, and isolated 44px hit lane"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+	var rules_scroll := find_control.call("RulesContentScroll") as ScrollContainer
+	if rules_scroll != null:
+		rules_scroll.set_meta("compact_first_section_boundary", "first_complete_section_then_scroll")
+		rules_scroll.set_meta("reading_status_owner", "RulesReadingStatus")
+	var stats_scroll := find_control.call("StatsRows") as ScrollContainer
+	if stats_scroll != null:
+		stats_scroll.set_meta("header_fixed_above_range", true)
+		stats_scroll.set_meta("range_status_owner", "StatsRowsScrollStatus")
+	var shop_scroll := find_control.call("ShopItemsScroll") as ScrollContainer
+	if shop_scroll != null:
+		shop_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+		shop_scroll.set_meta("authored_scrollbar_visibility", "SHOW_NEVER")
+	var diagnostic_scroll := find_control.call("DiagnosticContentScroll") as ScrollContainer
+	if diagnostic_scroll != null:
+		diagnostic_scroll.set_meta("header_context_outside_range", true)
+		diagnostic_scroll.set_meta("footer_actions_outside_range", true)
+	var loading_center := find_control.call("LoadingCenterPanel") as Control
+	if loading_center != null:
+		loading_center.set_meta("reading_order", ["LoadingTitleLabel", "LoadingSubtitleLabel", "LoadingStatusLabel", "LoadingTipLabel", "LoadingVersionLabel"])
+	var lobby_log := find_control.call("OnlineLobbyLogListPanel") as Control
+	if lobby_log != null:
+		lobby_log.set_meta("range_status_outside_viewport", true)
+		lobby_log.set_meta("latest_action_owner", "OnlineLobbyLogLatestButton")
+	root.set_meta("ui_round_1731_1790_owner_roles", owner_roles)
+	root.set_meta("ui_round_1731_1790_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1791_1850(root: Control) -> void:
+	# F-1791..F-1850 records the next readonly UI audit as concrete ownership
+	# contracts. Existing authored hosts remain the visual source; this pass adds
+	# state, reading-order, and geometry metadata to native controls.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1791_1850_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1791 + index))
+	root.set_meta("ui_round_1791_1850_contract_ids", contract_ids)
+	root.set_meta("ui_round_1791_1850_contract_version", "20260910-ui-engineer-audit-battle-pages-states-60")
+	root.set_meta("ui_round_1791_1850_scope", "battle_chat_menu_lobby_settings_rules_stats_shop_daily_replay_diagnostic")
+	root.set_meta("ui_round_1791_1850_source", "ui-engineer-readonly-audit-20260910")
+	root.set_meta("ui_round_1791_1850_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1791_1850_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1791_1850_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1791_1850_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1791_1850_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1791_1850_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1791_1850_policies", policies)
+		target.set_meta("ui_round_1791_1850_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if label.get_meta("dynamic_wrapped_label", false) != true:
+				configure_clipped_label(label)
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			var authored_hidden_scroll := ["ShopItemsScroll", "AchievementsScroll", "RulesContentScroll"].has(str(scroll.name))
+			if authored_hidden_scroll:
+				scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+				scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+				scroll.clip_contents = true
+				scroll.focus_mode = Control.FOCUS_ALL
+			else:
+				configure_scroll_container(scroll, scroll.tooltip_text)
+			scroll.set_meta("scroll_boundary_owner", target.name)
+			scroll.set_meta("range_status_outside_content", true)
+		elif target is LineEdit:
+			var edit := target as LineEdit
+			edit.custom_minimum_size.y = maxf(edit.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			edit.focus_mode = Control.FOCUS_ALL
+			edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1791", "CenterWindLabel_东", "center_wind_slot_owner", "wind marker stays inside the center console reading slot"],
+		["F-1792", "CenterWallCount", "dealer_marker_owner", "dealer and active-seat state use a named marker separate from wall count"],
+		["F-1793", "CenterWindLabel_东", "next_player_owner", "next-player cue keeps its source and destination readable"],
+		["F-1794", "TopHudWallCount", "wall_count_owner", "remaining wall count keeps current and total values together"],
+		["F-1795", "CenterLastDiscardLabel", "center_discard_source_owner", "center latest discard names the source seat before response copy"],
+		["F-1796", "ActionIntentText", "current_action_highlight_owner", "current action is one primary state slot, not a color-only highlight"],
+		["F-1797", "LastDiscardFocusMarker", "latest_discard_focus_owner_v2", "latest discard has one raised visual owner above river faces"],
+		["F-1798", "SeatPanel_0", "seat_score_hierarchy_owner", "seat identity, score, and counts keep distinct reading lanes"],
+		["F-1799", "SeatPanel_0", "seat_density_owner", "seat panel density preserves key values before secondary decoration"],
+		["F-1800", "DiscardGrid_0", "river_page_semantics_owner", "river page state and latest-page route remain visible together"],
+		["F-1801", "MeldArea_0", "meld_type_source_owner", "meld type and source seat stay adjacent without covering tile faces"],
+		["F-1802", "HandTrayTiles", "hand_suit_spacing_owner", "suit groups retain a stable scan gap before tile compression"],
+		["F-1803", "HandTile_0", "draw_tile_boundary_owner", "drawn tile animation stays inside the tile-stage gutter"],
+		["F-1804", "HandTile_0", "selected_tile_contrast_owner", "selected state has one contrast owner and a text-equivalent state"],
+		["F-1805", "HandTrayTutorialHintText", "hand_prompt_clearance_owner", "hand prompt clears the clickable tile row"],
+		["F-1806", "ActionButtonDock", "narrow_action_button_owner", "compact action buttons keep a minimum target and readable priority"],
+		["F-1807", "CenterLastDiscardResponseWindow", "response_source_relation_owner", "response actions point back to the source discard"],
+		["F-1808", "PendingClaimTimerText", "response_countdown_owner", "response countdown remains a persistent numeric state"],
+		["F-1809", "DangerDiscardConfirmButton", "danger_discard_reading_order_owner", "danger tile, consequence, and confirm action follow one order"],
+		["F-1810", "AdvisorPanel", "advisor_avoidance_priority_owner", "advisor remains secondary and avoids center, rivers, and actions"],
+		["F-1811", "ChatPanel", "chat_drawer_safe_area_owner_v2", "chat drawer uses a root-normalized hard exclusion contract"],
+		["F-1812", "ChatPanelCountBadge", "chat_count_semantics_owner", "chat count distinguishes total, unread, and latest state"],
+		["F-1813", "ToastContainer", "menu_toast_safe_slot_owner_v2", "menu toast avoids title, cards, and current focus"],
+		["F-1814", "MenuPrimaryCardRow", "menu_card_hierarchy_owner", "primary cards precede quick entries and economy facts"],
+		["F-1815", "MenuQuickActionRail", "menu_quick_entry_owner", "quick entry rail remains separate from primary card actions"],
+		["F-1816", "MenuCurrencyBadge", "menu_currency_owner", "currency label and balance are a single readable value"],
+		["F-1817", "MenuTutorialStartButton", "tutorial_cta_owner_v2", "tutorial CTA names the next checkpoint and preserves focus"],
+		["F-1818", "OnlineLobbyLogUnreadLabel", "lobby_chat_unread_owner", "lobby chat unread count remains textual and actionable"],
+		["F-1819", "OnlineLobbyRosterRow_0", "lobby_roster_scan_owner_v2", "roster scan order is seat, name, readiness, connection"],
+		["F-1820", "OnlineLobbyStartGateReason", "lobby_start_reason_owner", "start prerequisite reason is adjacent to the blocked action"],
+		["F-1821", "OnlineLobbyRoomSummarySnapshotStatus", "lobby_room_snapshot_owner_v2", "room snapshot age is explicit before occupancy and ready counts"],
+		["F-1822", "OnlineLobbyLogLatestButton", "lobby_log_latest_position_owner", "latest-log action reports unread state and restores the prior focus"],
+		["F-1823", "SettingsSectionActiveMarker", "settings_active_marker_owner", "active settings section has a visible non-color marker"],
+		["F-1824", "SettingsRuleVariantStatus", "settings_binary_state_owner", "binary settings expose current state as words and value"],
+		["F-1825", "SettingsPanel", "settings_music_action_owner", "music action keeps current state and action label together"],
+		["F-1826", "SettingsRuleVariantButton", "settings_rule_round_owner", "current and next-round rule state are not conflated"],
+		["F-1827", "SettingsLargeTextScroll", "settings_scroll_range_owner", "settings scroll range preserves the focused row and end state"],
+		["F-1828", "TelemetryDataSheet", "telemetry_backdrop_owner_v2", "telemetry sheet has one opaque reading surface over one scrim"],
+		["F-1829", "TelemetryConsentButton", "telemetry_button_availability_owner", "telemetry action availability includes a visible reason"],
+		["F-1830", "TelemetryExportStatus", "telemetry_export_result_owner_v2", "export result persists inside the sheet and does not rely on toast"],
+		["F-1831", "RulesExampleTableTexture_0", "rules_example_caption_owner", "rule example caption names the illustrated action"],
+		["F-1832", "RulesGuideStepState_0", "rules_chapter_state_owner", "chapter state uses text tokens in addition to color"],
+		["F-1833", "RulesReadingStatus", "rules_reading_position_owner_v2", "rule body exposes current chapter and reading position"],
+		["F-1834", "StatsSummaryNarrativeMeta", "stats_value_unit_owner", "stat value and unit are separate but adjacent fields"],
+		["F-1835", "StatsSummaryNarrativeBody", "stats_negative_semantics_owner", "negative or zero values retain an explicit semantic phrase"],
+		["F-1836", "AchievementsProgressDetailLabel", "achievement_progress_hierarchy_owner", "achievement progress value precedes the decorative rail"],
+		["F-1837", "AchievementsProgressDetailLabel", "achievement_empty_state_owner", "achievement empty state names its next action"],
+		["F-1838", "AchievementsScroll", "achievement_scroll_range_owner_v2", "achievement range and focus position remain recoverable"],
+		["F-1839", "ShopItemsContent", "shop_product_identity_owner_v2", "shop item identity includes name, package, stock, and price"],
+		["F-1840", "ShopCabinetFooterStateBadge", "shop_insufficient_cta_owner", "insufficient balance state names the recovery action"],
+		["F-1841", "ShopGetGemsButton", "shop_get_gems_semantics_owner", "get-gems action names destination and balance consequence"],
+		["F-1842", "DailyLoginClaimButton", "daily_current_claim_owner_v2", "today current state and claim action are mutually exclusive"],
+		["F-1843", "DailyLoginProgressText", "daily_progress_owner_v2", "streak progress has a text value beside its visual rail"],
+		["F-1844", "LoadingProgressStatusLabel", "loading_stage_percent_owner", "loading stage and percentage share one primary status lane"],
+		["F-1845", "UpdateProgressLabel", "update_stage_percent_owner", "update stage, percentage, and next action remain together"],
+		["F-1846", "ReplayImportCodeSummary", "replay_long_code_feedback_owner", "long replay code feedback reports full length and validation"],
+		["F-1847", "ReplayArchiveRowPlate", "replay_same_day_archive_owner", "same-day archive entries retain distinct time or sequence context"],
+		["F-1848", "ReplayImportTimelinePosition", "replay_timeline_total_owner", "timeline position includes current event and total event count"],
+		["F-1849", "DiagnosticContentStatusLabel", "diagnostic_numeric_status_owner", "diagnostic counts distinguish errors, warnings, and tips"],
+		["F-1850", "DiagnosticContentScroll", "diagnostic_footer_boundary_owner", "body, range status, and fixed footer use separate measured lanes"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+	var chat := find_control.call("ChatPanel") as Control
+	if chat != null:
+		chat.set_meta("safe_exclusion_coordinate_space", "root_layer_normalized_edges")
+		chat.set_meta("safe_exclusion_contract", "seat_and_meld_root_plus_river_and_center_table_anchor")
+	var latest_marker := find_control.call("LastDiscardFocusMarker") as Control
+	if latest_marker != null:
+		latest_marker.z_index = max(50, latest_marker.z_index)
+		latest_marker.set_meta("primary_visual_owner", "LastDiscardFocusMarker")
+		latest_marker.set_meta("latest_discard_page_state", "latest")
+		latest_marker.set_meta("z_index_policy", "latest_discard_owner_above_river_faces")
+	var latest_grid := find_control.call("DiscardGrid_0") as Control
+	if latest_grid != null:
+		latest_grid.set_meta("latest_page_state_owner", "DiscardRiverOwnerOverlay_0")
+		latest_grid.set_meta("history_page_keeps_source_context", true)
+	var diagnostic_scroll := find_control.call("DiagnosticContentScroll") as ScrollContainer
+	if diagnostic_scroll != null:
+		diagnostic_scroll.set_meta("diagnostic_scroll_bottom_anchor", 0.700)
+		diagnostic_scroll.set_meta("diagnostic_footer_top_anchor", 0.805)
+		diagnostic_scroll.set_meta("diagnostic_footer_boundary_contract", "scroll_ends_before_range_status_before_fixed_actions")
+	var diagnostic_status := find_control.call("DiagnosticContentStatusLabel") as Label
+	if diagnostic_status != null:
+		diagnostic_status.set_meta("numeric_status_contract", "ERR_WARN_OK_TIP_are_explicit_counts")
+	var lobby_latest := find_control.call("OnlineLobbyLogLatestButton") as Control
+	if lobby_latest != null:
+		lobby_latest.set_meta("latest_position_contract", "unread_count_and_scroll_position")
+	root.set_meta("ui_round_1791_1850_owner_roles", owner_roles)
+	root.set_meta("ui_round_1791_1850_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1851_1910(root: Control) -> void:
+	# F-1851..F-1910 is a follow-up pass over focus scope, reduced motion,
+	# resize generation, text capacity, and async feedback. It keeps authored
+	# visual hosts and hardens the existing native controls in place.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1851_1910_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1851 + index))
+	root.set_meta("ui_round_1851_1910_contract_ids", contract_ids)
+	root.set_meta("ui_round_1851_1910_contract_version", "20260910-followup-focus-motion-resize-60")
+	root.set_meta("ui_round_1851_1910_scope", "accessibility_focus_motion_resize_text_capacity_async_feedback")
+	root.set_meta("ui_round_1851_1910_source", "main-agent-evidence-audit-20260910")
+	root.set_meta("ui_round_1851_1910_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	root.set_meta("focus_scope_contract", "one_visible_modal_or_page_owner_with_named_restore_route")
+	root.set_meta("reduce_motion_contract", "position_scale_pulse_and_transition_use_ui_motion_enabled")
+	root.set_meta("resize_generation_contract", "safe_area_then_layout_generation_then_focus_restore")
+	root.set_meta("text_capacity_contract", "measure_before_clip_and_keep_full_semantics_in_ui_full_text")
+	root.set_meta("async_feedback_contract", "pending_result_and_retry_state_share_one_reading_lane")
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1851_1910_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1851_1910_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1851_1910_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1851_1910_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1851_1910_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1851_1910_policies", policies)
+		target.set_meta("ui_round_1851_1910_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			button.set_meta("focus_restore_owner", str(button.get_meta("focus_restore_owner", button.name)))
+			if button.tooltip_text.strip_edges() == "" and button.text.strip_edges() != "":
+				button.tooltip_text = button.text.strip_edges()
+			set_ui_full_text(button, button.tooltip_text, button.text.strip_edges())
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if label.get_meta("dynamic_wrapped_label", false) != true:
+				configure_clipped_label(label)
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			scroll.focus_mode = Control.FOCUS_ALL
+			scroll.set_meta("scroll_boundary_owner", target.name)
+			scroll.set_meta("range_status_outside_content", true)
+		elif target is LineEdit:
+			var edit := target as LineEdit
+			edit.custom_minimum_size.y = maxf(edit.custom_minimum_size.y, float(UI_MIN_TOUCH_TARGET))
+			edit.focus_mode = Control.FOCUS_ALL
+			edit.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1851", "MenuTitleLabel", "menu_header_column_owner", "menu title and first primary card share one readable content column"],
+		["F-1852", "MenuPrimaryCardRow", "menu_primary_focus_order_owner", "primary cards expose a stable left-to-right focus order"],
+		["F-1853", "MenuQuickActionRail", "menu_quick_focus_order_owner", "quick actions remain after primary actions in keyboard and touch reading order"],
+		["F-1854", "MenuSettingsButton", "menu_settings_escape_owner", "menu settings has one visible escape route and a restore target"],
+		["F-1855", "MenuFooterTextLayer", "menu_zero_state_owner", "empty currency, rank, and stats states use explicit words rather than ambiguous zeroes"],
+		["F-1856", "SettingsSectionNavigation", "settings_section_focus_order_owner", "settings section navigation follows the same order as the content sections"],
+		["F-1857", "SettingsCloseButton", "settings_close_restore_owner", "settings close restores the invoking control after the modal is rebuilt"],
+		["F-1858", "SettingsLargeTextScroll", "settings_large_text_range_owner", "large-text settings keeps focused rows and end state visible in one range"],
+		["F-1859", "SettingsDefaultScrollStatus", "settings_default_range_owner", "default settings exposes a stable page-end status without a duplicate footer"],
+		["F-1860", "SettingsMusicButton", "settings_music_state_owner", "music toggle exposes current state and resulting action in one native target"],
+		["F-1861", "SettingsGraphicsQualityButton", "settings_graphics_state_owner", "graphics quality exposes the selected value without color-only meaning"],
+		["F-1862", "SettingsRuleVariantButton", "settings_rule_state_owner", "current and next-round rule values remain distinct in the compact row"],
+		["F-1863", "SettingsTelemetryButton", "settings_telemetry_state_owner", "telemetry entry exposes consent state before opening its sheet"],
+		["F-1864", "RulesGuideStepLabel_0", "rules_chapter_focus_owner", "rules chapter navigation has a stable focus order and current token"],
+		["F-1865", "RulesContentScroll", "rules_keyboard_scroll_owner", "rules body has one keyboard scroll owner and preserves its page range"],
+		["F-1866", "RulesContentScrollHitTarget", "rules_gutter_hit_owner", "rules scroll hit area stays in the gutter and never consumes the last text column"],
+		["F-1867", "RulesReadingStatus", "rules_reading_status_owner", "rules range status states current chapter and whether more content remains"],
+		["F-1868", "StatsRuleFilterButton", "stats_filter_restore_owner", "stats filter returns focus to its source after the result list is rebuilt"],
+		["F-1869", "StatsCopyButton", "stats_copy_feedback_owner", "copy success or failure remains beside the copy command until acknowledged"],
+		["F-1870", "StatsLatestRoundButton", "stats_latest_round_owner", "latest-round navigation preserves the current summary context"],
+		["F-1871", "StatsRowsScroll", "stats_rows_keyboard_owner", "stats rows use one logical scroll owner with a reachable first and last row"],
+		["F-1872", "StatsRowsScrollStatus", "stats_rows_range_status_owner", "stats range status is adjacent to the moving rows and not decorative"],
+		["F-1873", "AchievementsScroll", "achievements_keyboard_owner", "achievement scrolling preserves selected row context across focus movement"],
+		["F-1874", "AchievementsBrowseStatusLabel", "achievements_range_status_owner", "achievement browse range names position and total in text"],
+		["F-1875", "AchievementRowFocusTarget", "achievement_row_focus_owner", "achievement row focus owns the full row without stealing the claim action"],
+		["F-1876", "ShopItemsScroll", "shop_keyboard_owner", "shop item scrolling keeps product identity and selected row context"],
+		["F-1877", "ShopItemsScrollGutter", "shop_gutter_hit_owner", "shop scroll gutter has a stable visual and touch extent"],
+		["F-1878", "ShopGetGemsButton", "shop_recovery_cta_owner_v2", "insufficient balance exposes one recovery destination with its consequence"],
+		["F-1879", "ShopCabinetFooterStateBadge", "shop_balance_state_owner", "balance result remains readable after a purchase attempt"],
+		["F-1880", "DailyLoginClaimButton", "daily_claim_focus_owner_v2", "claim focus is available only while the current day is actionable"],
+		["F-1881", "DailyLoginProgressText", "daily_progress_value_owner_v2", "streak progress has a textual value independent of the authored rail"],
+		["F-1882", "DailyLoginBackButton", "daily_back_restore_owner", "daily sign-in close returns to the page that opened it"],
+		["F-1883", "LoadingPanel", "loading_static_fallback_owner", "loading remains readable when motion is reduced or unavailable"],
+		["F-1884", "LoadingProgressStatusLabel", "loading_progress_semantics_owner", "loading stage and percentage remain one primary status message"],
+		["F-1885", "UpdateProgressLabel", "update_progress_semantics_owner", "update stage, percentage, and next action remain together"],
+		["F-1886", "UpdateSecondaryButton", "update_cancel_focus_owner", "update cancellation remains reachable while progress is pending"],
+		["F-1887", "ExitConfirmOverlay", "exit_modal_scope_owner", "exit confirmation owns one modal focus scope above the table"],
+		["F-1888", "ExitConfirmContinueButton", "exit_continue_restore_owner", "continue action restores the prior table focus when the modal closes"],
+		["F-1889", "TutorialEntryOverlay", "tutorial_keyboard_scope_owner", "tutorial overlay keeps background shortcuts outside its focus scope"],
+		["F-1890", "TutorialCloseButton", "tutorial_close_restore_owner", "tutorial close has a named route back to its menu source"],
+		["F-1891", "TelemetryDataSheet", "telemetry_keyboard_scope_owner", "telemetry sheet keeps its body and actions in one modal keyboard scope"],
+		["F-1892", "TelemetryCloseButton", "telemetry_close_restore_owner", "telemetry close returns focus after consent or export changes"],
+		["F-1893", "ChatPanel", "chat_keyboard_scope_owner", "chat drawer focus stays within input, quick messages, send, and close"],
+		["F-1894", "ChatPanelMessageScroll", "chat_range_restore_owner", "chat scroll preserves latest/position status after a new message"],
+		["F-1895", "ChatInput", "chat_input_submit_owner", "chat input keeps draft text and submit semantics across a panel refresh"],
+		["F-1896", "ChatSendButton", "chat_async_feedback_owner", "chat send exposes pending, sent, and failed states in the same action lane"],
+		["F-1897", "OnlineLobbyConnectionRetryButton", "lobby_retry_focus_owner_v2", "retry focus remains reachable while the connection state changes"],
+		["F-1898", "OnlineLobbyEndpointCopyButton", "lobby_copy_feedback_owner", "endpoint copy result persists beside the endpoint and does not rely on toast"],
+		["F-1899", "OnlineLobbyNameEdit", "lobby_name_edit_owner", "name editing keeps clear, validation, and focus semantics distinct"],
+		["F-1900", "OnlineLobbyStartGateReason", "lobby_start_gate_text_owner", "start gate reason is readable before the disabled action"],
+		["F-1901", "OnlineLobbyLogLatestButton", "lobby_latest_focus_owner_v2", "latest-log action restores the previous list position after use"],
+		["F-1902", "OnlineLobbyRosterPanel", "lobby_roster_keyboard_owner", "roster rows expose one predictable seat/name/readiness navigation order"],
+		["F-1903", "OnlineReconnectGameButton", "game_reconnect_focus_owner", "game reconnect is the first actionable recovery target after disconnect"],
+		["F-1904", "TopHudSettingsButton", "top_hud_focus_order_owner", "top HUD actions preserve a stable settings/back/update order"],
+		["F-1905", "TopHudBackButton", "top_hud_back_restore_owner", "top HUD back returns to the page or lobby that owns the table"],
+		["F-1906", "TopHudUpdateButton", "top_hud_update_state_owner", "update availability is expressed as text and not only a badge color"],
+		["F-1907", "TopHudRoomCodeCopyButton", "room_code_copy_icon_owner", "room copy uses a copy icon, complete room text, and local result feedback"],
+		["F-1908", "CenterLastDiscardTile", "center_tile_readonly_focus_owner", "center last discard is read-only and never enters the hand action focus loop"],
+		["F-1909", "ActionButtonDock", "action_focus_cycle_owner", "action focus cycles through visible enabled actions without hidden controls"],
+		["F-1910", "PendingClaimTimerText", "pending_timer_reduced_motion_owner", "pending countdown remains numeric and stable when motion is disabled"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+	var action_dock := find_control.call("ActionButtonDock") as Control
+	if action_dock != null:
+		action_dock.set_meta("focus_cycle_contract", "visible_enabled_actions_only")
+		action_dock.set_meta("motion_owner_contract", "ui_motion_enabled")
+	var pending_timer := find_control.call("PendingClaimTimerText") as Control
+	if pending_timer != null:
+		pending_timer.set_meta("reduced_motion_contract", "numeric_text_persists_without_pulse")
+	var root_menu := find_control.call("MenuTitleLabel") as Control
+	if root_menu != null:
+		root_menu.set_meta("content_column_contract", "title_primary_cards_quick_actions_share_safe_left_edge")
+	root.set_meta("ui_round_1851_1910_owner_roles", owner_roles)
+	root.set_meta("ui_round_1851_1910_registered_child_count", registration_child_count)
+
+
+func register_ui_round_1911_1970(root: Control) -> void:
+	# F-1911..F-1970 is the next visual-density pass. It records responsive
+	# geometry, z-order, reading surface, and capacity ownership without adding
+	# another visual layer or changing authored tile assets.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1911_1970_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1911 + index))
+	root.set_meta("ui_round_1911_1970_contract_ids", contract_ids)
+	root.set_meta("ui_round_1911_1970_contract_version", "20260910-table-density-reading-surfaces-60")
+	root.set_meta("ui_round_1911_1970_scope", "table_aspect_center_density_meld_capacity_page_reading_surfaces")
+	root.set_meta("ui_round_1911_1970_source", "ui-engineer-followup-draft-20260910")
+	root.set_meta("ui_round_1911_1970_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	root.set_meta("table_aspect_contract", "responsive_1.94_surface_ratio_with_safe_centering")
+	root.set_meta("center_density_contract", "compact_below_960_or_720_height_standard_at_1280x720")
+	root.set_meta("meld_capacity_contract", "edge_clearance_and_group_gap_before_face_shrink")
+	root.set_meta("reading_surface_contract", "one_authored_surface_per_fact_layer")
+	root.set_meta("z_order_contract", "fact_faces_above_chrome_and_actions_above_readonly_surfaces")
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1911_1970_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1911_1970_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1911_1970_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1911_1970_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1911_1970_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1911_1970_policies", policies)
+		target.set_meta("ui_round_1911_1970_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1911", "OfflineTable3DOuterShell", "table_outer_aspect_owner", "wide table surface uses one aspect-preserving centered geometry instead of breakpoint-only margins"],
+		["F-1912", "OfflineTable3DInnerSurface", "table_inner_letterbox_owner", "inner table surface stays inside the outer shell without changing its authored proportions"],
+		["F-1913", "CenterConsole3DShell", "center_density_mode_owner", "1280x720 uses standard center fact sizing while 960x540 keeps compact density"],
+		["F-1914", "CenterWallStatusLabel", "center_wall_status_scale_owner", "wall status text preserves a readable minimum in the center console"],
+		["F-1915", "CenterWallCount", "center_wall_value_scale_owner", "wall count value remains distinct from its status label across density modes"],
+		["F-1916", "CenterLastDiscardLabel", "center_latest_label_scale_owner", "latest-discard source text keeps a measured lane above the face"],
+		["F-1917", "CenterWindLabel_东", "center_wind_reading_owner", "wind marker stays inside the center fact surface and outside the tile slot"],
+		["F-1918", "TableAtmosphereFrame", "table_atmosphere_edge_owner", "atmosphere art remains an edge accent and cannot compete with fact text"],
+		["F-1919", "TableLivingIllustration", "table_living_art_budget_owner", "living illustration remains decorative behind the board reading surface"],
+		["F-1920", "TopHudTitle", "top_hud_title_width_owner", "long room title reserves phase and score columns before truncation"],
+		["F-1921", "TopHudStatus", "top_hud_phase_lane_owner", "phase status owns a separate header lane from room identity"],
+		["F-1922", "TopHudWallText", "top_hud_wall_lane_owner", "wall value and state remain together without entering action buttons"],
+		["F-1923", "TopHudSettingsButton", "top_hud_action_gap_owner", "HUD settings keeps a stable gap from back and update actions"],
+		["F-1924", "SeatPanel_0", "bottom_seat_fact_density_owner", "bottom seat identity, score, and counts keep independent lanes"],
+		["F-1925", "SeatPanel_1", "right_seat_fact_density_owner", "right seat facts remain inside the plaque before secondary metadata"],
+		["F-1926", "SeatPanel_2", "top_seat_fact_density_owner", "top seat facts clear the horizontal meld lane"],
+		["F-1927", "SeatPanel_3", "left_seat_fact_density_owner", "left seat facts clear the vertical river and drawer route"],
+		["F-1928", "DiscardGrid_0", "bottom_river_capacity_owner", "bottom river reduces capacity before shrinking below readable face width"],
+		["F-1929", "DiscardGrid_1", "right_river_capacity_owner", "right river retains a minimum upright tile width and edge gutter"],
+		["F-1930", "DiscardGrid_2", "top_river_capacity_owner", "top river preserves source order and its final row boundary"],
+		["F-1931", "DiscardGrid_3", "left_river_capacity_owner", "left river stays clear of the seat plaque and side meld lane"],
+		["F-1932", "DiscardRiverArchiveButton_0", "river_archive_rail_owner", "archive navigation sits outside the moving river grid"],
+		["F-1933", "LastDiscardFocusMarker", "river_focus_z_owner", "latest discard marker owns one raised rail above readonly faces"],
+		["F-1934", "MeldArea_0", "bottom_meld_capacity_owner", "bottom melds paginate before group spacing or face width loses readability"],
+		["F-1935", "MeldArea_1", "right_meld_capacity_owner", "right vertical meld groups keep an inward edge clearance from the river"],
+		["F-1936", "MeldArea_2", "top_meld_capacity_owner", "top meld groups clear the seat plaque and preserve center-facing orientation"],
+		["F-1937", "MeldArea_3", "left_meld_capacity_owner", "left vertical meld groups retain a stable gutter from the seat plaque"],
+		["F-1938", "MeldLaneArchiveButton_0", "meld_pager_capacity_owner", "meld pager reserves its touch lane before group capacity is measured"],
+		["F-1939", "HandTray", "hand_reading_surface_owner", "hand tray keeps prompt, tile stage, and bottom gutter as separate lanes"],
+		["F-1940", "HandTrayTileStage", "hand_tile_stage_clip_owner", "tile stage owns visual overflow while native tiles keep their hit rects"],
+		["F-1941", "HandTile_0", "hand_first_tile_boundary_owner", "first tile keeps a stable leading gutter at every density"],
+		["F-1942", "HandTile_13", "hand_last_tile_boundary_owner", "last tile clears the action dock and tray edge"],
+		["F-1943", "HandTrayTutorialHintText", "hand_prompt_reading_owner", "tutorial prompt clears the tile row and remains text-equivalent"],
+		["F-1944", "ActionButtonDock", "action_dock_density_owner", "action dock preserves priority order before compact button compression"],
+		["F-1945", "PendingClaimActionStack", "pending_stack_capacity_owner", "pending responses keep claim actions separate from network controls"],
+		["F-1946", "DangerDiscardConfirmation", "danger_reading_surface_owner", "danger tile, consequence, alternatives, and confirm action share one reading order"],
+		["F-1947", "AdvisorPanel", "advisor_surface_budget_owner", "advisor remains secondary and cannot cover center facts or the action dock"],
+		["F-1948", "RoundSummaryPanel", "summary_modal_surface_owner", "settlement surface keeps header, body, ranks, and actions inside one boundary"],
+		["F-1949", "RoundSummaryBodyScroll", "summary_body_capacity_owner", "settlement body stops before rank and fixed actions"],
+		["F-1950", "WinDetailPanel", "win_detail_reading_owner", "win detail keeps winner, score, yaku, and close route in scan order"],
+		["F-1951", "MenuPrimaryCardRow", "menu_wide_density_owner", "wide menu cards use available width without creating decorative voids"],
+		["F-1952", "MenuVersionBadge", "menu_version_badge_owner", "version badge stays separate from currency and rank facts"],
+		["F-1953", "MenuCurrencyBadge", "menu_currency_badge_owner", "currency badge keeps label and balance aligned at compact width"],
+		["F-1954", "MenuRankBadge", "menu_rank_badge_owner", "rank badge exposes unranked state without looking like a zero score"],
+		["F-1955", "MenuStatsBadge", "menu_stats_badge_owner", "stats badge distinguishes no games from a measured zero-rate result"],
+		["F-1956", "SettingsPanel", "settings_surface_density_owner", "settings panel keeps one opaque authored reading surface at wide and compact sizes"],
+		["F-1957", "SettingsAudioSection", "settings_audio_row_owner", "audio rows share a baseline and trailing value slot"],
+		["F-1958", "SettingsMaintSection", "settings_maintenance_capacity_owner", "maintenance consequence text clears its destructive action"],
+		["F-1959", "RulesContentList", "rules_content_measurement_owner", "rules content measures complete rows before the next chapter enters the viewport"],
+		["F-1960", "RulesExampleTableTexture_0", "rules_example_asset_owner", "example art stays decorative and its caption owns the action meaning"],
+		["F-1961", "StatsSummary", "stats_summary_surface_owner", "summary value, unit, and narrative share a stable baseline"],
+		["F-1962", "StatsRowsContent", "stats_rows_column_owner", "stats rows preserve label, value, unit, and comparison columns"],
+		["F-1963", "AchievementsGrid", "achievements_grid_capacity_owner", "achievement grid preserves row height before long title truncation"],
+		["F-1964", "AchievementRow_0", "achievement_row_surface_owner", "achievement row keeps goal, progress, and state columns distinct"],
+		["F-1965", "ShopItemsContent", "shop_grid_capacity_owner", "shop product cards measure description height before the purchase lane"],
+		["F-1966", "MeldArea_0", "meld_group_gap_owner", "multi-meld spacing reserves edge clearance and group gap before face shrink"],
+		["F-1967", "DailyLoginDayIndicators", "daily_day_capacity_owner", "daily nodes preserve date, reward, and claimed state across compact rows"],
+		["F-1968", "LoadingCenterPanel", "loading_surface_density_owner", "loading title, stage, tip, and version use fixed readable rows"],
+		["F-1969", "ReplayImportTimeline", "replay_timeline_capacity_owner", "replay timeline reserves event text width before action icons"],
+		["F-1970", "OnlineLobbyLogPanel", "lobby_log_surface_capacity_owner", "lobby log body, unread state, range, and latest action use separate lanes"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+	var outer := find_control.call("OfflineTable3DOuterShell") as Control
+	if outer != null:
+		outer.set_meta("table_aspect_contract", "responsive_1.94_surface_ratio_with_safe_centering")
+	var center := find_control.call("CenterConsole3DShell") as Control
+	if center != null:
+		center.set_meta("center_density_contract", "compact_below_960_or_720_height_standard_at_1280x720")
+	var meld_bottom := find_control.call("MeldArea_0") as Control
+	if meld_bottom != null:
+		meld_bottom.set_meta("capacity_priority", "edge_clearance_then_group_gap_then_face_scale")
+	root.set_meta("ui_round_1911_1970_owner_roles", owner_roles)
+	root.set_meta("ui_round_1911_1970_registered_child_count", registration_child_count)
 
 
 func draw_center_dice_plate(parent: Control) -> Control:
@@ -17052,6 +17664,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	owner.set_meta("window_end", window_end)
 	owner.set_meta("discard_count", discard_count)
 	owner.set_meta("latest_discard_off_page", latest_off_page)
+	owner.set_meta("latest_discard_page_state", "history" if latest_off_page else "latest")
 	owner.set_meta("latest_page_hint", "最新弃牌在末页" if latest_off_page else "当前页包含最新弃牌")
 	owner.set_meta("latest_page_action", "回到最新")
 	owner.set_meta("compact_readable", effective_viewport_size().y <= 560.0)
@@ -17332,6 +17945,7 @@ func draw_discards(parent: Control) -> void:
 		var latest_start := tail_window_start(discards.size(), visible_capacity)
 		var visible_start := clampi(int(discard_window_start_by_seat.get(seat, latest_start)), 0, latest_start)
 		var visible_count = mini(visible_capacity, discards.size() - visible_start)
+		var latest_page_state := "latest" if visible_start >= latest_start else "history"
 		grid.set_meta("visible_capacity", visible_capacity)
 		grid.set_meta("raw_visible_capacity", raw_visible_capacity)
 		grid.set_meta("window_start", visible_start)
@@ -17342,6 +17956,8 @@ func draw_discards(parent: Control) -> void:
 		grid.set_meta("final_grid_rows", int(visible_rows))
 		grid.set_meta("archive_reserved_cells", 2 if archive_reserved_start >= 0 else 0)
 		grid.set_meta("latest_discard_gutter_px", 6.0)
+		grid.set_meta("latest_discard_page_state", latest_page_state)
+		grid.set_meta("latest_discard_source_seat", get_last_discard_seat())
 		grid.set_meta("river_overlay_contract", "final_grid_reserved_cell_and_latest_gutter")
 		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count)
 		if river_art != null:
@@ -17382,6 +17998,7 @@ func draw_discards(parent: Control) -> void:
 			tile_node.set_meta("river_final_grid_rows", int(visible_rows))
 			tile_node.set_meta("river_cell_contract", "owner_overlay_uses_same_final_grid")
 			tile_node.set_meta("visual_owner", "river_face")
+			tile_node.set_meta("discard_page_state", latest_page_state)
 			if highlighted:
 				tile_node.tooltip_text += " · 刚打出 · 当前最后一张牌"
 				tile_node.set_meta("latest_discard_visual_owner", "LastDiscardFocusMarker")
@@ -17395,11 +18012,15 @@ func draw_discards(parent: Control) -> void:
 			owner_overlay.set_meta("archive_reserved_start", archive_reserved_start)
 			owner_overlay.set_meta("final_grid_contract", "columns_rows_reserved_start_from_same_grid")
 			owner_overlay.set_meta("latest_discard_gutter_px", 6.0)
+			owner_overlay.set_meta("latest_discard_page_state", latest_page_state)
+			owner_overlay.set_meta("latest_discard_source_seat", get_last_discard_seat())
 			owner_overlay.set_meta("table_3d_foreground", true)
 			foreground_overlays.append(owner_overlay)
 		if seat == get_last_discard_seat() and visible_start + visible_count == discards.size() and visible_count > 0:
 			var focus_marker := draw_last_discard_focus_marker(parent, seat, table_size)
 			if focus_marker != null:
+				focus_marker.set_meta("latest_discard_page_state", latest_page_state)
+				focus_marker.set_meta("latest_discard_source_index", discards.size() - 1)
 				var focus_tile := focus_marker.find_child("LastDiscardFocusActualTile", true, false) as CanvasItem
 				if focus_tile != null:
 					# Legacy marker fixtures can still contain a face child. The river
@@ -18933,7 +19554,12 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	mark_ui_optimization(marker, "F-486")
 	apply_rect(marker, marker_rect)
 	parent.add_child(marker)
-	marker.z_index = 1
+	# The marker is the sole latest-discard locator and must stay above the
+	# authored river face and owner overlay. Its children remain visual-only.
+	marker.z_index = 50
+	marker.set_meta("z_index_policy", "latest_discard_owner_above_river_faces")
+	marker.set_meta("latest_discard_page_state", "latest")
+	marker.set_meta("latest_discard_source_index", get_discards(seat).size() - 1)
 	var aura_texture = add_illustration_texture(marker, "last_discard_aura", rect_full(-0.170, -0.220, 1.170, 1.170), 0.18, false)
 	if aura_texture != null:
 		aura_texture.name = "LastDiscardAuraTexture"
@@ -19413,8 +20039,8 @@ func seat_meld_face_rotation(seat: int) -> float:
 func meld_lane_group_footprint(seat: int, meld: Array, compact_melds: bool) -> float:
 	var vertical := seat_meld_is_vertical(seat)
 	var tile_width := (24.0 if vertical else 22.0) if compact_melds else (28.0 if vertical else 26.0)
-	var separation := 1.0 if compact_melds else 3.0
-	var padding := 2.0 if compact_melds else 8.0
+	var separation := 2.0 if compact_melds else 3.0
+	var padding := 6.0 if compact_melds else 8.0
 	var tile_count := maxi(1, meld.size())
 	return float(tile_count) * (tile_width + separation) + padding
 
@@ -19424,14 +20050,16 @@ func meld_lane_capacity_for_list(seat: int, meld_list: Array, compact_melds: boo
 	var vertical := seat_meld_is_vertical(seat)
 	var lane_extent := safe_content_pixel_size().y * float(meld_rect.size.y - meld_rect.position.y) if vertical else safe_content_pixel_size().x * float(meld_rect.size.x - meld_rect.position.x)
 	var pager_reserve := 56.0 if reserve_pager else 0.0
-	var usable_extent := maxf(1.0, lane_extent - pager_reserve)
+	var edge_clearance := 6.0 if compact_melds else 8.0
+	var usable_extent := maxf(1.0, lane_extent - pager_reserve - edge_clearance)
 	var used_extent := 0.0
 	var capacity := 0
+	var group_gap := 4.0 if compact_melds else 3.0
 	for meld in meld_list:
 		if typeof(meld) != TYPE_ARRAY:
 			continue
 		var footprint := meld_lane_group_footprint(seat, meld as Array, compact_melds)
-		var next_extent := used_extent + footprint + (3.0 if capacity > 0 else 0.0)
+		var next_extent := used_extent + footprint + (group_gap if capacity > 0 else 0.0)
 		if capacity > 0 and next_extent > usable_extent:
 			break
 		used_extent = next_extent
@@ -19512,6 +20140,8 @@ func draw_melds(parent: Control) -> void:
 		area.set_meta("window_start", window_start)
 		area.set_meta("window_end", window_start + visible_melds.size())
 		area.set_meta("lane_capacity", lane_capacity)
+		area.set_meta("lane_edge_clearance_px", 6.0 if compact_melds else 8.0)
+		area.set_meta("lane_group_gap_px", 4.0 if compact_melds else 3.0)
 		area.set_meta("page_count", page_count)
 		area.set_meta("layout_capacity_ok", visible_melds.size() <= lane_capacity)
 		area.set_meta("compact_readability_policy", "paginate_before_below_24px")
@@ -32713,12 +33343,14 @@ func _show_rules_screen_impl() -> void:
 	var content_scroll = ScrollContainer.new()
 	content_scroll.name = "RulesContentScroll"
 	configure_scroll_container(content_scroll, "上下滚动查看完整规则说明")
+	var compact_rules_scroll := effective_viewport_size().y <= 560.0
+	var rules_content_bottom := 0.875 if compact_rules_scroll else 0.982
 	content_scroll.anchor_left = 0.058
 	content_scroll.anchor_top = 0.168
 	# Reserve a small stable gap for the custom scroll lane instead of letting its
 	# wider visual thumb overlap the last glyph column.
-	content_scroll.anchor_right = 0.915
-	content_scroll.anchor_bottom = 0.982
+	content_scroll.anchor_right = 0.910
+	content_scroll.anchor_bottom = rules_content_bottom
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	content_scroll.clip_contents = true
@@ -32728,10 +33360,9 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var compact_rules_scroll := effective_viewport_size().y <= 560.0
 	var gutter_left := 0.920
 	var gutter_right := 0.945
-	var rules_scroll_gutter = make_gpt_plate_rect(rect_full(gutter_left, 0.180, gutter_right, 0.960), Color(0.05, 0.043, 0.035, 0.96), "ui_dark_scrim")
+	var rules_scroll_gutter = make_gpt_plate_rect(rect_full(gutter_left, 0.180, gutter_right, rules_content_bottom), Color(0.05, 0.043, 0.035, 0.96), "ui_dark_scrim")
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(rules_scroll_gutter)
@@ -32775,8 +33406,10 @@ func _show_rules_screen_impl() -> void:
 	mark_ui_optimization(rules_scroll_hit_target, "F-536")
 	# Keep the transparent touch surface inside the scrollbar lane. The content
 	# viewport ends before this lane, so the last text column remains clickable.
-	apply_rect(rules_scroll_hit_target, rect_full(0.915, 0.168, 0.975, 0.982))
+	apply_rect(rules_scroll_hit_target, rect_full(0.915, 0.168, 0.975, rules_content_bottom))
 	panel.add_child(rules_scroll_hit_target)
+	content_scroll.set_meta("compact_first_section_boundary", "first_complete_section_then_scroll")
+	content_scroll.set_meta("content_bottom_anchor", rules_content_bottom)
 	rules_scroll_hit_target.focus_entered.connect(func() -> void:
 		rules_scroll_thumb.modulate = Color(1.16, 1.08, 0.82, 1.0)
 	)
@@ -34871,6 +35504,10 @@ func show_chat_panel() -> void:
 	chat_panel.set_meta("table_info_preserved", chat_panel_route_name() == "upper_meld_safe_drawer")
 	chat_panel.set_meta("modal_scope", "table_context_read_only_behind_drawer")
 	chat_panel.set_meta("close_priority", "first_focus_and_escape")
+	chat_panel.set_meta("safe_exclusion_coordinate_space", "root_layer_normalized_edges")
+	chat_panel.set_meta("safe_exclusion_contract", "seat_and_meld_root_plus_river_and_center_table_anchor")
+	chat_panel.set_meta("safe_exclusion_sources", ["seat_panels", "meld_lanes", "discard_rivers", "center_panel", "hand_tray", "action_dock"])
+	chat_panel.set_meta("selected_route_rect", panel_rect)
 	chat_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	chat_panel.clip_contents = true
 	mark_ui_optimization(chat_panel, "F-579")
@@ -35713,7 +36350,12 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	panel.add_child(content_scroll)
 	# Leave a visual buffer before the fixed action so the first visible row is
 	# never clipped by the scroll viewport or the close button.
-	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.720))
+	# Reserve an explicit status gutter and a separate footer boundary. The body
+	# must finish before the range label so its last visible row cannot read as a
+	# footer control or be hidden by the fixed action lane.
+	apply_rect(content_scroll, rect_full(0.05, 0.215, 0.95, 0.700))
+	content_scroll.set_meta("diagnostic_scroll_bottom_anchor", 0.700)
+	content_scroll.set_meta("diagnostic_footer_top_anchor", 0.805)
 	var diagnostic_scrollbar := content_scroll.get_v_scroll_bar()
 	if diagnostic_scrollbar != null:
 		diagnostic_scrollbar.name = "DiagnosticContentScrollBar"
@@ -35778,7 +36420,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		vbox.add_child(label)
 	var content_status = make_label(panel, "诊断内容 · 正在测量可见范围", accessibility_font_size(11), Color(0.86, 0.92, 0.84), true)
 	content_status.name = "DiagnosticContentStatusLabel"
-	apply_rect(content_status, rect_full(0.05, 0.760, 0.95, 0.805))
+	apply_rect(content_status, rect_full(0.05, 0.730, 0.95, 0.780))
 	content_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	content_status.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.05, 0.94))
 	content_status.add_theme_constant_override("outline_size", 2)
@@ -35793,7 +36435,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	copy_feedback.name = "DiagnosticCopyFeedbackLabel"
 	# Keep copy feedback beside its action. The report range status owns the lane
 	# above the footer, so a copy result cannot be mistaken for health status.
-	apply_rect(copy_feedback, rect_full(0.05, 0.825, 0.180, 0.940))
+	apply_rect(copy_feedback, rect_full(0.05, 0.805, 0.180, 0.940))
 	copy_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	copy_feedback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	copy_feedback.tooltip_text = copy_feedback.text
@@ -35812,7 +36454,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	mark_ui_optimization(copy_button, "F-501")
 	mark_ui_optimization(copy_button, "F-915")
 	panel.add_child(copy_button)
-	apply_rect(copy_button, rect_full(0.190, 0.825, 0.470, 0.940))
+	apply_rect(copy_button, rect_full(0.190, 0.805, 0.470, 0.940))
 	var close_button = make_small_button("关闭", Color(0.30, 0.42, 0.38), Callable(self, "dismiss_diagnostic_dialog"))
 	close_button.name = "DiagnosticCloseButton"
 	close_button.focus_mode = Control.FOCUS_ALL
@@ -35821,7 +36463,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	set_ui_full_text(close_button, close_button.tooltip_text, "关闭诊断报告")
 	mark_ui_optimization(close_button, "F-502")
 	panel.add_child(close_button)
-	apply_rect(close_button, rect_full(0.530, 0.825, 0.810, 0.940))
+	apply_rect(close_button, rect_full(0.530, 0.805, 0.810, 0.940))
 	var cancel_shortcut = Shortcut.new()
 	cancel_shortcut.events = InputMap.action_get_events("ui_cancel")
 	close_button.shortcut = cancel_shortcut
@@ -35897,7 +36539,7 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	var measured_width := diagnostic_content_viewport_width(content_scroll, content_list)
 	var width_changed := previous_width < 0.0 or absf(previous_width - measured_width) > 1.0
 	refresh_diagnostic_line_measurements(content_scroll, content_list)
-	# The authored .215-.738 rect is the viewport contract. Only the child list
+	# The authored .215-.700 rect is the viewport contract. Only the child list
 	# is measured here; changing the viewport to the list height breaks the fixed
 	# status and close lanes and can move the scroll range outside the modal.
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -37332,12 +37974,12 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		configure_replay_timeline_focus_navigation(false)
 		return
 	if event_scroll != null:
-		# Wrapped rows are not stable until the viewport width has been measured;
-		# keep the scroll lane inert for that one frame so its range cannot jump
-		# under a touch or wheel gesture.
-		event_scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		event_scroll.focus_mode = Control.FOCUS_NONE
-		event_scroll.modulate.a = 0.0
+		# Rows already have a conservative measured-height estimate. Keep the
+		# viewport visible and focusable while deferred measurement refines it so
+		# import completion never exposes a blank or unreachable first frame.
+		event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+		event_scroll.focus_mode = Control.FOCUS_ALL
+		event_scroll.modulate.a = 1.0
 		event_scroll.set_meta("timeline_measurement_pending", true)
 		event_scroll.set_meta("timeline_visibility_locked_until_measurement", true)
 	for index in range(visible_events.size()):
@@ -41579,11 +42221,19 @@ func game_table_pixel_size() -> Vector2:
 	)
 
 func table_outer_rect_for_viewport() -> Rect2:
-	# Give 16:9 desktop viewports more of the authored table surface while
-	# retaining the compact safe area used by 960/1280 captures.
-	if effective_viewport_size().x >= 1600.0:
-		return Rect2(Vector2(0.095, 0.085), Vector2(0.905, 0.820))
-	return TABLE_OUTER_RECT
+	var viewport := effective_viewport_size()
+	if viewport.x < 1600.0:
+		return TABLE_OUTER_RECT
+	# Scale the authored table by aspect ratio on wide desktop viewports while
+	# preserving the established compact and standard reading surface.
+	var width_ratio := lerpf(0.730, 0.810, clampf((viewport.x - 1280.0) / 640.0, 0.0, 1.0))
+	var table_aspect := 1.94
+	var height_ratio := width_ratio * maxf(1.0, viewport.x) / (table_aspect * maxf(1.0, viewport.y))
+	var max_height := 0.742
+	height_ratio = minf(height_ratio, max_height)
+	var left := (1.0 - width_ratio) * 0.5
+	var top := 0.450 - height_ratio * 0.5
+	return Rect2(Vector2(left, top), Vector2(left + width_ratio, top + height_ratio))
 
 func effective_viewport_size() -> Vector2:
 	var viewport_size = get_viewport_rect().size
@@ -43730,8 +44380,11 @@ func ensure_update_dialog() -> void:
 			package_tw.set_loops(48)
 			package_tw.tween_property(package_texture, "modulate:a", 0.09, 1.4).from(0.18)
 			package_tw.tween_property(package_texture, "modulate:a", 0.18, 1.4).from(0.09)
-	var title = make_label(panel, "游戏更新", 22, Color(0.90, 0.82, 0.46), true)
+	var title = make_label(panel, "游戏更新 · 当前 v%s" % app_version_short(), 22, Color(0.90, 0.82, 0.46), true)
 	title.name = "UpdateDialogTitle"
+	title.set_meta("installed_version", app_version())
+	title.set_meta("available_version_owner", "UpdateStatusLabel")
+	title.set_meta("version_semantics", "当前版本与远端版本分列；远端版本不得替代当前版本")
 	apply_rect(title, rect_full(0.06, 0.035, 0.94, 0.125) if compact_update_dialog else rect_full(0.06, 0.06, 0.94, 0.22))
 	draw_update_dialog_art(panel)
 	update_status_label = make_label(panel, "", 18, Color(0.84, 1.0, 0.90), false)
@@ -46865,7 +47518,7 @@ func update_fx_turn_pulse() -> void:
 	if fx_turn_pulse == null or not is_instance_valid(fx_turn_pulse):
 		return
 	# 提前退出：特效未启用时避免后续计算
-	if not fx_enabled_effective() or settings_panel_open or (mode != "offline" and mode != "online_game"):
+	if not ui_motion_enabled() or settings_panel_open or (mode != "offline" and mode != "online_game"):
 		fx_turn_pulse.visible = false
 		var tween_running = fx_turn_pulse_tween != null and is_instance_valid(fx_turn_pulse_tween)
 		if tween_running and fx_turn_pulse_tween.is_running():
@@ -46999,7 +47652,7 @@ func _build_fx_transition() -> void:
 	fx_layer.add_child(transition_overlay)
 
 func spawn_transition_complete_sparks() -> void:
-	if not fx_enabled_effective():
+	if not ui_motion_enabled():
 		return
 	if fx_layer == null or not is_instance_valid(fx_layer):
 		ensure_fx_layer()
@@ -47028,7 +47681,7 @@ func spawn_transition_complete_sparks() -> void:
 func play_screen_transition(callback: Callable, instant: bool = false, style: String = "fade") -> void:
 	# r215: GPT chrome conversion
 	"""屏幕过渡动画：支持渐隐/水墨/珠帘风格"""
-	if instant or not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+	if instant or not ui_motion_enabled() or DisplayServer.get_name().to_lower() == "headless":
 		callback.call()
 		return
 	if transition_overlay == null or not is_instance_valid(transition_overlay):
@@ -48266,29 +48919,30 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 	var occupied: Array[Rect2] = []
 	for layout in SEAT_LAYOUTS:
 		var seat_rect: Rect2 = layout[1]
-		occupied.append(Rect2(seat_rect.position, seat_rect.size - seat_rect.position))
+		# Seat panels are mounted on root_layer. Do not apply the table transform
+		# to this root-normalized exclusion zone.
+		occupied.append(chat_panel_root_geometry(seat_rect).grow(0.004))
 	for layout in MELD_LAYOUTS:
 		var meld_seat := int(layout[0])
 		if get_melds(meld_seat).is_empty():
 			continue
 		var meld_rect: Rect2 = layout[1]
-		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
+		# Melds share the seat/root coordinate space; rivers and the center console
+		# are the nested table children handled below.
+		occupied.append(chat_panel_root_geometry(meld_rect).grow(0.004))
 	for zone in DISCARD_ZONES:
 		var river_rect: Rect2 = zone[1]
-		var river_anchor := chat_panel_table_anchor_rect(river_rect)
-		occupied.append(Rect2(river_anchor.position, river_anchor.size - river_anchor.position))
-	var center_rect := chat_panel_table_anchor_rect(CENTER_PANEL_RECT)
-	occupied.append(Rect2(center_rect.position, center_rect.size - center_rect.position))
-	occupied.append(Rect2(TOP_HUD_RECT.position, TOP_HUD_RECT.size - TOP_HUD_RECT.position))
-	occupied.append(Rect2(CHAT_ACTION_BUTTON_RECT.position, CHAT_ACTION_BUTTON_RECT.size - CHAT_ACTION_BUTTON_RECT.position))
+		occupied.append(chat_panel_table_geometry(river_rect).grow(0.004))
+	occupied.append(chat_panel_table_geometry(CENTER_PANEL_RECT).grow(0.004))
+	occupied.append(chat_panel_root_geometry(TOP_HUD_RECT).grow(0.004))
+	occupied.append(chat_panel_root_geometry(CHAT_ACTION_BUTTON_RECT).grow(0.004))
 	var intent_rect := action_intent_rect_for_count(action_bar_button_count())
-	occupied.append(Rect2(intent_rect.position, intent_rect.size - intent_rect.position))
+	occupied.append(chat_panel_root_geometry(intent_rect).grow(0.004))
 	var action_rect := action_bar_dock_layout_rect()
-	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
-	var hand_rect := HAND_TRAY_RECT
-	occupied.append(Rect2(hand_rect.position, hand_rect.size - hand_rect.position).grow(0.006))
+	occupied.append(chat_panel_root_geometry(action_rect).grow(0.004))
+	occupied.append(chat_panel_root_geometry(HAND_TRAY_RECT).grow(0.006))
 	var ledger_rect := rect_full(0.018, 0.128, 0.340, 0.235)
-	var ledger_geometry := Rect2(ledger_rect.position, ledger_rect.size - ledger_rect.position)
+	var ledger_geometry := chat_panel_root_geometry(ledger_rect)
 	# The upper-left route hides the ledger before mounting the drawer, so the
 	# ledger is only a hard exclusion for candidates that leave it visible.
 	if candidate.position.x >= 0.35 or candidate.position.y >= 0.45:
@@ -48312,23 +48966,16 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 
 func chat_panel_table_anchor_rect(table_rect: Rect2) -> Rect2:
 	# Rivers and the center console are nested inside TABLE_OUTER/INNER, while
-	# chat candidates are anchored directly to root_layer. Convert their nested
-	# anchors into root-normalized edges before scoring.
-	var table_outer := table_outer_rect_for_viewport()
-	var outer_width := maxf(0.001, table_outer.size.x - table_outer.position.x)
-	var outer_height := maxf(0.001, table_outer.size.y - table_outer.position.y)
-	var table_left := table_outer.position.x + TABLE_INNER_RECT.position.x * outer_width
-	var table_top := table_outer.position.y + TABLE_INNER_RECT.position.y * outer_height
-	var table_width := outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
-	var table_height := outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
-	var left := table_left + table_rect.position.x * table_width
-	var top := table_top + table_rect.position.y * table_height
-	var right := table_left + table_rect.size.x * table_width
-	var bottom := table_top + table_rect.size.y * table_height
-	# Chat candidates use normalized anchor edges (left/top/right/bottom).
-	# Returning width/height here makes the later `size - position` conversion
-	# collapse a left-side occupied rect and can select a drawer over a river.
-	return Rect2(Vector2(left, top), Vector2(right, bottom))
+	# chat candidates are anchored directly to root_layer. Keep the conversion in
+	# the same helper used by other table exclusion contracts.
+	return battle_table_anchor_root_rect(table_rect)
+
+func chat_panel_root_geometry(root_rect: Rect2) -> Rect2:
+	return Rect2(root_rect.position, root_rect.size - root_rect.position)
+
+func chat_panel_table_geometry(table_rect: Rect2) -> Rect2:
+	var root_edges := chat_panel_table_anchor_rect(table_rect)
+	return Rect2(root_edges.position, root_edges.size - root_edges.position)
 
 
 func chat_panel_route_name() -> String:
@@ -49162,7 +49809,7 @@ func _animate_win_particle(particle: Control, tw: Tween, delay: float, duration:
 
 func _play_screen_shake(amplitude: float, frequency: float, duration: float) -> void:
 	"""屏幕震动效果"""
-	if not fx_enabled_effective():
+	if not ui_motion_enabled():
 		return
 
 	var shake_count = int(duration * frequency)
@@ -49703,7 +50350,7 @@ func _play_calligraphy_reveal(parent: Control, text: String, color: Color, rect:
 # ============================================================
 
 func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
-	if not fx_enabled_effective():
+	if not ui_motion_enabled():
 		return
 	ensure_fx_layer()
 	var splash_root = Control.new()

@@ -975,7 +975,9 @@ const DISCARD_ZONES := [
 	[1, Rect2(Vector2(0.620, 0.300), Vector2(0.765, 0.530)), 3],
 ]
 const MELD_LAYOUTS := [
-	[0, Rect2(Vector2(0.185, 0.742), Vector2(0.515, 0.812))],
+	# Bottom melds use a short horizontal lane above the bottom river. Keeping
+	# the lane left of the center console leaves a real gap from both surfaces.
+	[0, Rect2(Vector2(0.185, 0.545), Vector2(0.335, 0.615))],
 	# Keep the vertical lanes beside the seat plaques. Their lower edge leaves a
 	# separate bottom action channel while pagination preserves full meld access.
 	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.865, 0.510))],

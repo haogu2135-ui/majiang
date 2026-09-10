@@ -2276,11 +2276,19 @@ func game_table_pixel_size() -> Vector2:
 	)
 
 func table_outer_rect_for_viewport() -> Rect2:
-	# Give 16:9 desktop viewports more of the authored table surface while
-	# retaining the compact safe area used by 960/1280 captures.
-	if effective_viewport_size().x >= 1600.0:
-		return Rect2(Vector2(0.095, 0.085), Vector2(0.905, 0.820))
-	return TABLE_OUTER_RECT
+	var viewport := effective_viewport_size()
+	if viewport.x < 1600.0:
+		return TABLE_OUTER_RECT
+	# Scale the authored table by aspect ratio on wide desktop viewports while
+	# preserving the established compact and standard reading surface.
+	var width_ratio := lerpf(0.730, 0.810, clampf((viewport.x - 1280.0) / 640.0, 0.0, 1.0))
+	var table_aspect := 1.94
+	var height_ratio := width_ratio * maxf(1.0, viewport.x) / (table_aspect * maxf(1.0, viewport.y))
+	var max_height := 0.742
+	height_ratio = minf(height_ratio, max_height)
+	var left := (1.0 - width_ratio) * 0.5
+	var top := 0.450 - height_ratio * 0.5
+	return Rect2(Vector2(left, top), Vector2(left + width_ratio, top + height_ratio))
 
 func effective_viewport_size() -> Vector2:
 	var viewport_size = get_viewport_rect().size
@@ -4427,8 +4435,11 @@ func ensure_update_dialog() -> void:
 			package_tw.set_loops(48)
 			package_tw.tween_property(package_texture, "modulate:a", 0.09, 1.4).from(0.18)
 			package_tw.tween_property(package_texture, "modulate:a", 0.18, 1.4).from(0.09)
-	var title = make_label(panel, "游戏更新", 22, Color(0.90, 0.82, 0.46), true)
+	var title = make_label(panel, "游戏更新 · 当前 v%s" % app_version_short(), 22, Color(0.90, 0.82, 0.46), true)
 	title.name = "UpdateDialogTitle"
+	title.set_meta("installed_version", app_version())
+	title.set_meta("available_version_owner", "UpdateStatusLabel")
+	title.set_meta("version_semantics", "当前版本与远端版本分列；远端版本不得替代当前版本")
 	apply_rect(title, rect_full(0.06, 0.035, 0.94, 0.125) if compact_update_dialog else rect_full(0.06, 0.06, 0.94, 0.22))
 	draw_update_dialog_art(panel)
 	update_status_label = make_label(panel, "", 18, Color(0.84, 1.0, 0.90), false)
@@ -7562,7 +7573,7 @@ func update_fx_turn_pulse() -> void:
 	if fx_turn_pulse == null or not is_instance_valid(fx_turn_pulse):
 		return
 	# 提前退出：特效未启用时避免后续计算
-	if not fx_enabled_effective() or settings_panel_open or (mode != "offline" and mode != "online_game"):
+	if not ui_motion_enabled() or settings_panel_open or (mode != "offline" and mode != "online_game"):
 		fx_turn_pulse.visible = false
 		var tween_running = fx_turn_pulse_tween != null and is_instance_valid(fx_turn_pulse_tween)
 		if tween_running and fx_turn_pulse_tween.is_running():
@@ -7696,7 +7707,7 @@ func _build_fx_transition() -> void:
 	fx_layer.add_child(transition_overlay)
 
 func spawn_transition_complete_sparks() -> void:
-	if not fx_enabled_effective():
+	if not ui_motion_enabled():
 		return
 	if fx_layer == null or not is_instance_valid(fx_layer):
 		ensure_fx_layer()
@@ -7725,7 +7736,7 @@ func spawn_transition_complete_sparks() -> void:
 func play_screen_transition(callback: Callable, instant: bool = false, style: String = "fade") -> void:
 	# r215: GPT chrome conversion
 	"""屏幕过渡动画：支持渐隐/水墨/珠帘风格"""
-	if instant or not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+	if instant or not ui_motion_enabled() or DisplayServer.get_name().to_lower() == "headless":
 		callback.call()
 		return
 	if transition_overlay == null or not is_instance_valid(transition_overlay):
@@ -8963,29 +8974,30 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 	var occupied: Array[Rect2] = []
 	for layout in SEAT_LAYOUTS:
 		var seat_rect: Rect2 = layout[1]
-		occupied.append(Rect2(seat_rect.position, seat_rect.size - seat_rect.position))
+		# Seat panels are mounted on root_layer. Do not apply the table transform
+		# to this root-normalized exclusion zone.
+		occupied.append(chat_panel_root_geometry(seat_rect).grow(0.004))
 	for layout in MELD_LAYOUTS:
 		var meld_seat := int(layout[0])
 		if get_melds(meld_seat).is_empty():
 			continue
 		var meld_rect: Rect2 = layout[1]
-		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
+		# Melds share the seat/root coordinate space; rivers and the center console
+		# are the nested table children handled below.
+		occupied.append(chat_panel_root_geometry(meld_rect).grow(0.004))
 	for zone in DISCARD_ZONES:
 		var river_rect: Rect2 = zone[1]
-		var river_anchor := chat_panel_table_anchor_rect(river_rect)
-		occupied.append(Rect2(river_anchor.position, river_anchor.size - river_anchor.position))
-	var center_rect := chat_panel_table_anchor_rect(CENTER_PANEL_RECT)
-	occupied.append(Rect2(center_rect.position, center_rect.size - center_rect.position))
-	occupied.append(Rect2(TOP_HUD_RECT.position, TOP_HUD_RECT.size - TOP_HUD_RECT.position))
-	occupied.append(Rect2(CHAT_ACTION_BUTTON_RECT.position, CHAT_ACTION_BUTTON_RECT.size - CHAT_ACTION_BUTTON_RECT.position))
+		occupied.append(chat_panel_table_geometry(river_rect).grow(0.004))
+	occupied.append(chat_panel_table_geometry(CENTER_PANEL_RECT).grow(0.004))
+	occupied.append(chat_panel_root_geometry(TOP_HUD_RECT).grow(0.004))
+	occupied.append(chat_panel_root_geometry(CHAT_ACTION_BUTTON_RECT).grow(0.004))
 	var intent_rect := action_intent_rect_for_count(action_bar_button_count())
-	occupied.append(Rect2(intent_rect.position, intent_rect.size - intent_rect.position))
+	occupied.append(chat_panel_root_geometry(intent_rect).grow(0.004))
 	var action_rect := action_bar_dock_layout_rect()
-	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
-	var hand_rect := HAND_TRAY_RECT
-	occupied.append(Rect2(hand_rect.position, hand_rect.size - hand_rect.position).grow(0.006))
+	occupied.append(chat_panel_root_geometry(action_rect).grow(0.004))
+	occupied.append(chat_panel_root_geometry(HAND_TRAY_RECT).grow(0.006))
 	var ledger_rect := rect_full(0.018, 0.128, 0.340, 0.235)
-	var ledger_geometry := Rect2(ledger_rect.position, ledger_rect.size - ledger_rect.position)
+	var ledger_geometry := chat_panel_root_geometry(ledger_rect)
 	# The upper-left route hides the ledger before mounting the drawer, so the
 	# ledger is only a hard exclusion for candidates that leave it visible.
 	if candidate.position.x >= 0.35 or candidate.position.y >= 0.45:
@@ -9009,23 +9021,16 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 
 func chat_panel_table_anchor_rect(table_rect: Rect2) -> Rect2:
 	# Rivers and the center console are nested inside TABLE_OUTER/INNER, while
-	# chat candidates are anchored directly to root_layer. Convert their nested
-	# anchors into root-normalized edges before scoring.
-	var table_outer := table_outer_rect_for_viewport()
-	var outer_width := maxf(0.001, table_outer.size.x - table_outer.position.x)
-	var outer_height := maxf(0.001, table_outer.size.y - table_outer.position.y)
-	var table_left := table_outer.position.x + TABLE_INNER_RECT.position.x * outer_width
-	var table_top := table_outer.position.y + TABLE_INNER_RECT.position.y * outer_height
-	var table_width := outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
-	var table_height := outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
-	var left := table_left + table_rect.position.x * table_width
-	var top := table_top + table_rect.position.y * table_height
-	var right := table_left + table_rect.size.x * table_width
-	var bottom := table_top + table_rect.size.y * table_height
-	# Chat candidates use normalized anchor edges (left/top/right/bottom).
-	# Returning width/height here makes the later `size - position` conversion
-	# collapse a left-side occupied rect and can select a drawer over a river.
-	return Rect2(Vector2(left, top), Vector2(right, bottom))
+	# chat candidates are anchored directly to root_layer. Keep the conversion in
+	# the same helper used by other table exclusion contracts.
+	return battle_table_anchor_root_rect(table_rect)
+
+func chat_panel_root_geometry(root_rect: Rect2) -> Rect2:
+	return Rect2(root_rect.position, root_rect.size - root_rect.position)
+
+func chat_panel_table_geometry(table_rect: Rect2) -> Rect2:
+	var root_edges := chat_panel_table_anchor_rect(table_rect)
+	return Rect2(root_edges.position, root_edges.size - root_edges.position)
 
 
 func chat_panel_route_name() -> String:
@@ -9859,7 +9864,7 @@ func _animate_win_particle(particle: Control, tw: Tween, delay: float, duration:
 
 func _play_screen_shake(amplitude: float, frequency: float, duration: float) -> void:
 	"""屏幕震动效果"""
-	if not fx_enabled_effective():
+	if not ui_motion_enabled():
 		return
 
 	var shake_count = int(duration * frequency)
@@ -10400,7 +10405,7 @@ func _play_calligraphy_reveal(parent: Control, text: String, color: Color, rect:
 # ============================================================
 
 func _play_ink_splash_on_discard(target_pos: Vector2, color: Color) -> void:
-	if not fx_enabled_effective():
+	if not ui_motion_enabled():
 		return
 	ensure_fx_layer()
 	var splash_root = Control.new()

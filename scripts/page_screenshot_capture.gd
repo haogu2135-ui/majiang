@@ -159,7 +159,7 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 			"11_exit_confirm": {"required_nodes": ["ExitConfirmDialog", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"], "default_focus": "ExitConfirmContinueButton", "state_text": "确认退出"},
 			"12_toast": {"required_nodes": ["ToastContainer", "Toast"], "default_focus": "", "state_text": "成就解锁：初入牌桌"},
 			"17_hand_tutorial": {"required_nodes": ["HandTrayTutorialHint", "HandTrayTutorialTargetTile"], "default_focus": "", "state_text": "点击一张手牌，将它打入牌河"},
-			"18_update_dialog": {"required_nodes": ["UpdatePrimaryButton", "UpdateSecondaryButton"], "default_focus": "UpdateSecondaryButton", "state_text": "发现新版本 v1.0.181"},
+		"18_update_dialog": {"required_nodes": ["UpdatePrimaryButton", "UpdateSecondaryButton"], "default_focus": "UpdateSecondaryButton", "state_text": "远端版本 v1.0.181 · 当前版本 v1.0.180"},
 			"19_reset_progress": {"required_nodes": ["SettingsPanel", "SettingsCloseButton", "ResetProgressConfirmArt"], "default_focus": "SettingsCloseButton", "state_text": "再次点击确认清空本地进度"},
 			"20_chat_panel": {"required_nodes": ["ChatPanel", "ChatPanelCloseButton", "ChatInput", "ChatSendButton"], "default_focus": "ChatInput", "state_text": "房间消息"},
 			"22_advisor": {"required_nodes": ["AdvisorPanel", "AdvisorDetailButton"], "default_focus": "AdvisorDetailButton", "state_text": "牌势"},
@@ -890,7 +890,7 @@ func seed_preview_hand_tutorial(scene: Node) -> void:
 func seed_preview_update_dialog(scene: Node) -> void:
 	scene.update_state = "ready"
 	scene.update_remote_version = "1.0.181"
-	scene.update_message = "发现新版本 v1.0.181，校验通过，可安装。"
+	scene.update_message = "远端版本 v1.0.181 · 当前版本 v1.0.180 · 校验通过，可安装。"
 	scene.update_downloaded_bytes = 10485760
 	scene.update_total_bytes = 10485760
 	scene.update_release_notes = "修复对局可读性；优化设置与更新弹窗奶油字色。"
