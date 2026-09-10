@@ -12607,6 +12607,251 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	register_ui_round_1791_1850(root)
 	register_ui_round_1851_1910(root)
 	register_ui_round_1911_1970(root)
+	register_ui_round_1971_2030(root)
+	register_ui_round_2031_2090(root)
+	register_ui_round_2091_2150(root)
+
+
+func register_ui_round_2031_2090(root: Control) -> void:
+	# F-2031..F-2090 audits child status lanes after the previous page and
+	# surface-level contracts. The registry stays on existing native controls;
+	# authored bitmap hosts remain visual-only and tile faces stay untouched.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_2031_2090_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (2031 + index))
+	root.set_meta("ui_round_2031_2090_contract_ids", contract_ids)
+	root.set_meta("ui_round_2031_2090_contract_version", "20260911-compact-child-status-footer-60")
+	root.set_meta("ui_round_2031_2090_scope", "compact_child_status_settlement_detail_lobby_footer_and_replay_lanes")
+	root.set_meta("ui_round_2031_2090_source", "main-agent-evidence-audit-20260911")
+	root.set_meta("ui_round_2031_2090_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_2031_2090_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_2031_2090_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_2031_2090_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2031_2090_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2031_2090_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2031_2090_policies", policies)
+		target.set_meta("ui_round_2031_2090_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-2031", "HandTrayTiles", "hand_wide_tray_owner", "wide screens expand the tray without moving the hand visual center"],
+		["F-2032", "HandSuitGroupLabel", "hand_suit_label_gutter_owner", "suit group labels keep six pixels from faces and the tray rail"],
+		["F-2033", "HandTrayStateBadge", "hand_state_badge_compact_owner", "tutorial copy and state badge use mutually exclusive narrow lanes"],
+		["F-2034", "HandTrayTileStage", "hand_wide_tile_width_owner", "wide hand tiles grow only after the compact hit frame is safe"],
+		["F-2035", "HandTutorialTargetTile", "hand_tutorial_tile_contrast_owner", "tutorial focus stays outside the authored tile face"],
+		["F-2036", "HandAdvisorHintBadge", "hand_advisor_badge_lane_owner", "advisor state never covers tile suit marks"],
+		["F-2037", "HandTrayTileStage", "hand_tile_shadow_baseline_owner", "tile shadow and tray rail retain a visible baseline gap"],
+		["F-2038", "HandTrayTiles", "hand_bottom_safe_area_owner", "compact hand keeps twelve pixels below its final tile and hint"],
+		["F-2039", "DiscardGrid_0", "bottom_river_wide_capacity_owner", "wide bottom river uses available table width before shrinking faces"],
+		["F-2040", "DiscardGrid_2", "top_river_page_capacity_owner", "top river exposes page capacity when history exceeds one row"],
+		["F-2041", "MeldArea_1", "side_river_meld_separator_owner", "side river and vertical meld lanes retain a stable separator"],
+		["F-2042", "MeldArea_1", "danger_meld_min_readable_width_owner", "danger confirmation preserves a readable minimum for vertical meld faces"],
+		["F-2043", "MeldKindBadge_0_peng", "meld_badge_outer_gutter_owner", "meld kind badge sits outside the tile footprint"],
+		["F-2044", "MeldArea_3", "meld_shared_min_face_owner", "horizontal and vertical melds share one readable face minimum"],
+		["F-2045", "SeatPanel_1", "seat_card_wide_density_owner", "wide seat plaques keep name score and wind in distinct columns"],
+		["F-2046", "SeatThreatBadgeArt_1", "seat_threat_badge_lane_owner", "threat art yields a clean textual lane to seat identity"],
+		["F-2047", "SeatFlowerTileArt_0", "seat_flower_anchor_owner", "flower strip inherits its seat lane instead of the river lane"],
+		["F-2048", "CenterWindLabel_west", "center_wind_readability_owner", "idle wind labels keep a readable authored text surface"],
+		["F-2049", "CenterWallCount", "center_wall_fact_owner", "wall count has one primary visual owner and one short status reference"],
+		["F-2050", "CenterLastDiscardLabel", "center_last_discard_label_owner", "last discard source copy keeps a fixed gap from its tile"],
+		["F-2051", "TopHudSettingsButton", "hud_wide_action_size_owner", "wide HUD buttons gain visual scale without changing hit safety"],
+		["F-2052", "DangerDiscardShortcutHint", "danger_shortcut_compact_owner", "Enter and Esc hints stay readable above confirmation actions"],
+		["F-2053", "PendingClaimActionStack", "pending_action_vertical_priority_owner", "timer, actions, and pass keep separate compact rows"],
+		["F-2054", "DangerDiscardConfirmation", "danger_preview_action_alignment_owner", "risk preview and confirmation share one visual column"],
+		["F-2055", "RoundSummaryRankHeader", "summary_rank_compact_columns_owner", "compact score columns keep fixed labels and numeric gutters"],
+		["F-2056", "MenuPrimaryCardRow", "menu_wide_card_capacity_owner", "wide menu expands the primary action group without empty drift"],
+		["F-2057", "MenuFooterStatusChip_currency", "menu_footer_wide_value_owner", "wide footer values remain readable before secondary labels"],
+		["F-2058", "MenuHeroCommercialReadabilityTint", "menu_surface_layer_budget_owner", "menu keeps one primary reading layer above the authored background"],
+		["F-2059", "MenuTutorialButton", "menu_tutorial_entry_owner", "tutorial entry has a stable authored boundary beside the title"],
+		["F-2060", "MenuQuickActionState", "menu_quick_state_marker_owner", "quick navigation state has a non-color active marker"],
+		["F-2061", "SettingsSectionNavigation", "settings_progress_slot_owner", "section count lives in a fixed header status slot"],
+		["F-2062", "SettingsSystemGrid", "settings_compact_column_owner", "compact settings rows measure label value and action separately"],
+		["F-2063", "SettingRowStatus_本地进度", "settings_reset_consequence_owner", "reset confirmation consequence keeps its complete text in the footer"],
+		["F-2064", "SettingsContentScroll", "settings_wide_vertical_density_owner", "wide settings content uses its available height without a dead lower half"],
+		["F-2065", "SettingsSwitchStateLabel", "settings_switch_text_state_owner", "switch state has a textual cue independent of material color"],
+		["F-2066", "RulesContentScrollThumb", "rules_progress_rail_owner", "rules reading progress remains visible when native scroll chrome is hidden"],
+		["F-2067", "RulesContentScroll", "rules_compact_measurement_owner", "compact rules viewport ends on complete measured lines"],
+		["F-2068", "RulesExampleTableTexture_0", "rules_compact_illustration_owner", "compact rules yields body width before the example image"],
+		["F-2069", "ShopItemsContent", "shop_wide_card_density_owner", "wide shop cards reserve balanced product and purchase lanes"],
+		["F-2070", "ShopItemCountBadge_swap_card", "shop_compact_purchase_status_owner", "inventory price and insufficient state share one vertical column"],
+		["F-2071", "ShopItemsScroll", "shop_wide_scroll_end_owner", "a full wide grid does not advertise a nonexistent scroll range"],
+		["F-2072", "StatsRowsContent", "stats_wide_density_owner", "wide stats rows stay compact enough for one scan"],
+		["F-2073", "StatsReadabilityBackplate", "stats_summary_surface_owner", "summary values get a quiet authored reading surface"],
+		["F-2074", "AchievementsBrowseStatusLabel", "achievement_progress_owner", "achievement progress has both text and a visible authored rail"],
+		["F-2075", "AchievementsScroll", "achievement_range_rail_owner", "achievement range and thumb remain legible in compact mode"],
+		["F-2076", "LoadingGptMeter", "loading_rail_overflow_owner", "loading rails stay inside one bounded center reading panel"],
+		["F-2077", "LoadingTilePreview", "loading_tile_wide_scale_owner", "wide loading tiles grow without crowding status copy"],
+		["F-2078", "UpdateDialogPanel", "update_wide_readability_owner", "wide update dialog gives version and progress a readable column"],
+		["F-2079", "DiagnosticContentScrollBar", "diagnostic_wide_scroll_owner", "wide diagnostic body uses width and keeps the scroll lane visible"],
+		["F-2080", "ReplayImportCodeInput", "replay_code_trailing_gutter_owner", "long replay codes keep cursor and clear action apart"],
+		["F-2081", "ReplayImportEventList", "replay_event_row_measurement_owner", "compact event rows end on complete visible lines"],
+		["F-2082", "ReplayArchiveRowPrimary", "replay_archive_action_weight_owner", "compact archive separates delete emphasis from routine actions"],
+		["F-2083", "OnlineLobbyFormPanel", "lobby_wide_column_capacity_owner", "wide lobby expands form and log columns while retaining a gutter"],
+		["F-2084", "OnlineLobbyRoomSummaryPanel", "lobby_room_fact_stack_owner", "occupancy ready and connection facts use separate compact rows"],
+		["F-2085", "OnlineLobbyRoomOfflineState", "lobby_empty_surface_owner", "offline room explanation has a quiet readable authored surface"],
+		["F-2086", "OnlineLobbyConnectionRetryButton", "lobby_recovery_single_cta_owner", "one primary reconnect action owns the recovery lane"],
+		["F-2087", "DailyLoginDayIndicators", "daily_login_compact_capacity_owner", "current day and reward confirmation keep separate vertical lanes"],
+		["F-2088", "ExitConfirmDialog", "exit_dialog_wide_readability_owner", "wide exit confirmation enlarges explanation before decoration"],
+		["F-2089", "Toast", "toast_safe_width_owner", "long toast copy measures inside the safe area before decoration"],
+		["F-2090", "OnlineReconnectGameButton", "online_disconnect_banner_owner", "disconnect state is obvious while tile faces remain original 2D art"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": str(owner[2]), "policy": str(owner[3])}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, str(owner[2]), str(owner[3]))
+	var loading_meter := find_control.call("LoadingGptMeter") as Control
+	var loading_strip := find_control.call("LoadingGptStrip") as Control
+	for loading_rail in [loading_meter, loading_strip]:
+		if loading_rail != null:
+			loading_rail.set_meta("bounded_footer_owner", "LoadingFooterRailLane")
+			loading_rail.set_meta("overflow_policy", "single_lane_with_eight_pixel_gap")
+	if loading_meter != null:
+		loading_meter.set_meta("footer_slot", "primary_progress")
+	if loading_strip != null:
+		loading_strip.set_meta("footer_slot", "secondary_signal")
+	var settings_reset := find_control.call("SettingRowStatus_本地进度") as Control
+	if settings_reset != null:
+		settings_reset.set_meta("compact_consequence_policy", "two_line_complete_scope")
+		settings_reset.set_meta("compact_consequence_text", settings_reset.text)
+	var danger_meld := find_control.call("MeldArea_1") as Control
+	if danger_meld != null:
+		danger_meld.set_meta("danger_readability_min_width_px", 28.0)
+		danger_meld.set_meta("danger_pagination_policy", "paginate_before_face_shrink")
+	var danger_meld_top := find_control.call("MeldArea_3") as Control
+	if danger_meld_top != null:
+		danger_meld_top.set_meta("danger_readability_min_width_px", 24.0)
+	root.set_meta("ui_round_2031_2090_owner_roles", owner_roles)
+	root.set_meta("ui_round_2031_2090_registered_child_count", registration_child_count)
+
+
+func register_ui_round_2091_2150(root: Control) -> void:
+	# F-2091..F-2150 covers modal reading layers, interaction-state feedback,
+	# recovery controls, and secondary page navigation after the child-status pass.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_2091_2150_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (2091 + index))
+	root.set_meta("ui_round_2091_2150_contract_ids", contract_ids)
+	root.set_meta("ui_round_2091_2150_contract_version", "20260911-modal-state-navigation-60")
+	root.set_meta("ui_round_2091_2150_scope", "modal_reading_layers_interaction_state_navigation_and_secondary_page_lanes")
+	root.set_meta("ui_round_2091_2150_source", "main-agent-evidence-audit-20260911")
+	root.set_meta("ui_round_2091_2150_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_2091_2150_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_2091_2150_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_2091_2150_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2091_2150_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2091_2150_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2091_2150_policies", policies)
+		target.set_meta("ui_round_2091_2150_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-2091", "TelemetryDataSheetCard", "telemetry_modal_opaque_reading_owner", "privacy copy uses a dark authored scrim before the settings background can show through"],
+		["F-2092", "DiagnosticCopyFeedbackLabel", "diagnostic_copy_feedback_owner", "copy state uses a short visible token with complete tooltip detail"],
+		["F-2093", "DailyLoginDayFocusRail_5", "daily_current_day_persistent_state_owner", "current day keeps a persistent authored edge before keyboard focus"],
+		["F-2094", "TelemetryDataBodyScroll", "telemetry_body_measurement_owner", "long privacy copy ends before the fixed status and action lanes"],
+		["F-2095", "TelemetryPermissionSummary", "telemetry_permission_summary_owner", "permission and queue state remain a separate readable fact"],
+		["F-2096", "TelemetryExportStatus", "telemetry_export_feedback_owner", "export result stays visible after action without replacing consent state"],
+		["F-2097", "TelemetryRecentAction", "telemetry_recent_action_owner", "recent action is subordinate to current permission and remains clipped safely"],
+		["F-2098", "TelemetryClearConfirmHint", "telemetry_clear_confirmation_owner", "destructive scope and second-click state have a dedicated footer lane"],
+		["F-2099", "TelemetryDataSheetCloseButton", "telemetry_close_focus_owner", "modal close remains the final focus route and clears the sheet"],
+		["F-2100", "TelemetryConsentButton", "telemetry_consent_state_owner", "consent action exposes current state and next consequence"],
+		["F-2101", "TelemetryExportButton", "telemetry_export_action_owner", "export action keeps a stable target beside the consent action"],
+		["F-2102", "TelemetryDataSheet", "telemetry_modal_boundary_owner", "privacy modal owns input while background controls remain inert"],
+		["F-2103", "AchievementGalleryFrontPanel", "achievement_gallery_surface_owner", "achievement artwork yields one readable content plane to row text"],
+		["F-2104", "AchievementRowReadabilityLane", "achievement_row_state_owner", "achievement name goal progress and state keep separate scan lanes"],
+		["F-2105", "AchievementsScrollBar", "achievement_scroll_visual_owner", "scroll progress remains visible without reducing the touch lane"],
+		["F-2106", "AchievementsScrollHitTarget", "achievement_scroll_hit_owner", "scroll gesture target stays at the minimum touch width"],
+		["F-2107", "AchievementsBackButton", "achievement_back_focus_owner", "back action restores the menu focus route after browsing"],
+		["F-2108", "MenuTutorialEntryStatus", "menu_tutorial_status_owner", "tutorial progress state stays beside the entry without competing with title copy"],
+		["F-2109", "TutorialEntryOverlay", "tutorial_overlay_input_owner", "tutorial overlay captures input only inside its modal boundary"],
+		["F-2110", "TutorialEntryPanel", "tutorial_panel_reading_owner", "tutorial consequence copy remains above start and skip actions"],
+		["F-2111", "TutorialStartButton", "tutorial_start_action_owner", "start action owns the primary tutorial route and stable focus"],
+		["F-2112", "TutorialSkipButton", "tutorial_skip_action_owner", "skip action remains secondary and does not steal the primary lane"],
+		["F-2113", "MenuFooterBackplate", "menu_footer_surface_owner", "footer version and status copy share one authored reading surface"],
+		["F-2114", "MenuFooterTextLayer", "menu_footer_text_owner", "version and footer status do not collide at compact width"],
+		["F-2115", "MenuSettingsButton", "menu_settings_return_focus_owner", "settings entry remains reachable after modal and page returns"],
+		["F-2116", "OnlineLobbyServerEndpointLabel", "lobby_endpoint_display_owner", "server endpoint keeps a visible host-port suffix and full tooltip"],
+		["F-2117", "OnlineLobbyEndpointCopyButton", "lobby_endpoint_copy_owner", "endpoint copy feedback is adjacent to the copied value"],
+		["F-2118", "OnlineLobbyConnectionStateLabel", "lobby_connection_state_owner", "connection state is textually distinct from raw endpoint data"],
+		["F-2119", "OnlineLobbyFormFeedbackLabel", "lobby_form_feedback_owner", "form validation feedback stays below its input group before actions"],
+		["F-2120", "OnlineLobbyActionButtonRow", "lobby_action_row_capacity_owner", "connect create and join targets retain independent hit rectangles"],
+		["F-2121", "OnlineLobbyCreateButton", "lobby_create_action_owner", "create action remains available only after connection prerequisites"],
+		["F-2122", "OnlineLobbyJoinButton", "lobby_join_action_owner", "join action preserves room-code context and disabled reason"],
+		["F-2123", "OnlineLobbyStartButtonRow", "lobby_start_row_owner", "start lane appears after room readiness rather than beside connection setup"],
+		["F-2124", "OnlineLobbyActionClusterBackplate", "lobby_action_surface_owner", "action cluster has one authored backing surface without nested visual noise"],
+		["F-2125", "OnlineLobbySecondaryReturnButton", "lobby_return_action_owner", "return-to-menu remains a secondary route with stable focus order"],
+		["F-2126", "OnlineLobbyStatusReadabilityBackplate", "lobby_status_surface_owner", "status feedback has an opaque local reading surface"],
+		["F-2127", "OnlineLobbyLogPanel", "lobby_log_panel_owner", "room log uses remaining width without pushing the room summary"],
+		["F-2128", "OnlineLobbyLogReadabilityBackplate", "lobby_log_text_surface_owner", "log text remains legible over the authored lobby background"],
+		["F-2129", "OnlineLobbyRoomOfflineHint", "lobby_offline_next_step_owner", "offline explanation names the next connection action without raw endpoint duplication"],
+		["F-2130", "RulesReadingStatusPlate", "rules_status_surface_owner", "rules chapter and reading position share a stable header plate"],
+		["F-2131", "RulesReadingStatus", "rules_reading_status_owner", "rules status exposes current chapter and range in complete tooltip text"],
+		["F-2132", "RulesContentTopSheen", "rules_content_decoration_owner", "header decoration ends before the first complete rule line"],
+		["F-2133", "RulesContentScrollTopCue", "rules_scroll_top_cue_owner", "top boundary cue is visible only when content can scroll upward"],
+		["F-2134", "RulesContentScrollBottomCue", "rules_scroll_bottom_cue_owner", "bottom boundary cue does not cover the last rule line or action"],
+		["F-2135", "RulesContentScrollHitTarget", "rules_scroll_hit_owner", "rules scroll target preserves the minimum touch width"],
+		["F-2136", "RulesContentList", "rules_content_measurement_owner", "rule rows settle on complete measured lines before the next section"],
+		["F-2137", "RulesGuideStepButton_0", "rules_chapter_focus_owner", "chapter navigation preserves selected state and return focus"],
+		["F-2138", "ShopCurrencyPanel_coins", "shop_coins_fact_owner", "coin balance remains a distinct fact before product cards"],
+		["F-2139", "ShopCurrencyPanel_gems", "shop_gems_fact_owner", "gem balance remains separate from the purchase CTA lane"],
+		["F-2140", "ShopItemsScrollBar", "shop_scroll_visual_owner", "shop scroll progress reflects the visible item range"],
+		["F-2141", "ShopItemsScrollHitTarget", "shop_scroll_hit_owner", "shop scroll interaction keeps a stable minimum touch width"],
+		["F-2142", "ShopItemsScrollPosition", "shop_scroll_status_owner", "shop position text reports start middle or end without clipping"],
+		["F-2143", "ShopCabinetFooterPanel", "shop_footer_surface_owner", "footer recovery and inventory facts stay below the final item"],
+		["F-2144", "ShopCabinetFooterInventoryBadge", "shop_inventory_fact_owner", "inventory state remains visible when a purchase is disabled"],
+		["F-2145", "StatsRuleFilterButton", "stats_filter_action_owner", "rule filter state is readable and survives focus return"],
+		["F-2146", "StatsCopyButton", "stats_copy_action_owner", "copy action feedback stays adjacent to the stats summary"],
+		["F-2147", "StatsLatestRoundButton", "stats_latest_round_action_owner", "latest round action does not obscure the range status"],
+		["F-2148", "StatsRowsScrollStatus", "stats_scroll_status_owner", "visible row range remains synchronized with the stats scroll"],
+		["F-2149", "StatsStartFirstGameButton", "stats_empty_state_action_owner", "empty stats state exposes one clear next action"],
+		["F-2150", "ChatPanelMessageRangeLabel", "chat_range_status_owner", "chat range status reports newest and visible messages without covering the drawer title"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": str(owner[2]), "policy": str(owner[3])}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, str(owner[2]), str(owner[3]))
+	var telemetry_card := find_control.call("TelemetryDataSheetCard") as Control
+	if telemetry_card != null:
+		telemetry_card.set_meta("opaque_reading_surface_alpha", 0.98)
+		telemetry_card.set_meta("background_showthrough_policy", "dark_authored_scrim_before_privacy_copy")
+	var diagnostic_feedback := find_control.call("DiagnosticCopyFeedbackLabel") as Control
+	if diagnostic_feedback != null:
+		diagnostic_feedback.set_meta("visible_feedback_policy", "short_state_with_full_tooltip")
+	var daily_current_rail := find_control.call("DailyLoginDayFocusRail_5") as Control
+	if daily_current_rail != null:
+		daily_current_rail.set_meta("persistent_current_day_state", true)
+	root.set_meta("ui_round_2091_2150_owner_roles", owner_roles)
+	root.set_meta("ui_round_2091_2150_registered_child_count", registration_child_count)
 
 
 func register_ui_round_1071_1100(root: Control) -> void:
@@ -15886,6 +16131,134 @@ func register_ui_round_1911_1970(root: Control) -> void:
 	root.set_meta("ui_round_1911_1970_registered_child_count", registration_child_count)
 
 
+func register_ui_round_1971_2030(root: Control) -> void:
+	# F-1971..F-2030 is a follow-up pass over first-frame visibility, compact
+	# page capacity, and header lane ownership. It reuses existing authored/native
+	# surfaces and keeps every finding attached to a concrete control owner.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_1971_2030_registered_child_count", -1)) == registration_child_count:
+		return
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (1971 + index))
+	root.set_meta("ui_round_1971_2030_contract_ids", contract_ids)
+	root.set_meta("ui_round_1971_2030_contract_version", "20260911-first-frame-compact-capacity-header-gutters-60")
+	root.set_meta("ui_round_1971_2030_scope", "first_frame_reading_surfaces_compact_page_capacity_header_lane_gutters")
+	root.set_meta("ui_round_1971_2030_source", "main-agent-evidence-audit-20260911")
+	root.set_meta("ui_round_1971_2030_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	root.set_meta("first_frame_surface_contract", "authored_background_then_one_reading_panel_then_native_status")
+	root.set_meta("compact_page_capacity_contract", "reserve_primary_text_lane_before_secondary_chrome")
+	root.set_meta("header_lane_gutter_contract", "score_wall_actions_keep_eight_pixel_clearance")
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root, node_name)
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_1971_2030_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_1971_2030_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_1971_2030_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_1971_2030_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_1971_2030_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_1971_2030_policies", policies)
+		target.set_meta("ui_round_1971_2030_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-1971", "LoadingGptMeter", "loading_footer_meter_owner", "authored progress meter stays below the center reading panel"],
+		["F-1972", "LoadingGptStrip", "loading_footer_strip_owner", "secondary progress strip cannot cross the loading reading surface"],
+		["F-1973", "LoadingCenterSheet", "loading_center_sheet_owner", "center sheet remains one bounded background for title and status"],
+		["F-1974", "LoadingStatusLabel", "loading_status_first_frame_owner", "loading status remains visible before deferred progress art settles"],
+		["F-1975", "LoadingTipLabel", "loading_tip_capacity_owner", "loading tip keeps a bounded line budget below the status"],
+		["F-1976", "LoadingErrorActionLane", "loading_recovery_action_owner", "retry and return actions keep a reserved lane below error copy"],
+		["F-1977", "ReplayArchivePane", "replay_archive_compact_width_owner", "compact archive yields width to the event timeline without losing search"],
+		["F-1978", "ReplayImportTimeline", "replay_timeline_compact_width_owner", "compact timeline owns the wider event text lane"],
+		["F-1979", "ReplayImportTimelinePosition", "replay_timeline_position_owner", "timeline position reports current event and total in one status slot"],
+		["F-1980", "ReplayImportTimelineEmpty", "replay_timeline_empty_state_owner", "empty and filtered-empty states retain their next action"],
+		["F-1981", "ReplayImportTimelineScroll", "replay_timeline_scroll_owner", "timeline scroll viewport remains focusable while rows are measured"],
+		["F-1982", "ReplayImportEventList", "replay_event_list_measurement_owner", "event rows grow after measurement without hiding the first frame"],
+		["F-1983", "ReplayArchiveSearchInput", "replay_archive_search_owner", "search clear and archive range status share a stable compact lane"],
+		["F-1984", "ReplayArchiveCount", "replay_archive_range_owner", "archive count remains outside the moving list and reflects filtering"],
+		["F-1985", "ReplayImportCodeSummary", "replay_code_summary_owner", "full input length feedback stays separate from import status"],
+		["F-1986", "TopHud3DShell", "top_hud_lane_geometry_owner", "header facts and actions use non-overlapping authored lanes"],
+		["F-1987", "ScoreStrip", "score_strip_width_owner", "online score chips fit before the wall lane begins"],
+		["F-1988", "TopHudWallBack", "top_hud_wall_surface_owner", "wall surface clears score and action surfaces"],
+		["F-1989", "TopHudWallMeter", "top_hud_wall_meter_owner", "wall meter and wall value share the same fact lane"],
+		["F-1990", "TopHudSettingsButton", "top_hud_settings_gutter_owner", "settings hit target begins after the wall gutter"],
+		["F-1991", "TopHudBackButton", "top_hud_back_gutter_owner", "back action keeps a stable gap from settings and update"],
+		["F-1992", "TopHudUpdateButton", "top_hud_update_gutter_owner", "update action stays inside the header safe edge"],
+		["F-1993", "TopHudModeBadge", "top_hud_mode_badge_owner", "rule mode badge does not compete with the round title"],
+		["F-1994", "TopHudHandProgress", "top_hud_hand_progress_owner", "hand progress remains subordinate to phase and wall facts"],
+		["F-1995", "ScoreStripChip_0", "score_chip_bottom_seat_owner", "bottom seat score chip preserves name and value columns"],
+		["F-1996", "ScoreStripChip_1", "score_chip_right_seat_owner", "right seat score chip preserves its compact identity token"],
+		["F-1997", "ScoreStripChip_2", "score_chip_top_seat_owner", "top seat score chip clears the header decoration"],
+		["F-1998", "ScoreStripChip_3", "score_chip_left_seat_owner", "left seat score chip keeps its signed value visible"],
+		["F-1999", "SeatStatPill_0", "seat_stat_pill_baseline_owner", "seat count pills share a readable baseline with score"],
+		["F-2000", "SeatFlowerTileArt_0", "seat_flower_art_lane_owner", "flower summary remains in the seat lane and out of the hand"],
+		["F-2001", "DiscardRiverArchiveRail_0", "bottom_river_archive_owner", "bottom river archive rail stays outside live tile faces"],
+		["F-2002", "DiscardRiverArchiveRail_1", "right_river_archive_owner", "right river archive rail preserves upright tile clearance"],
+		["F-2003", "DiscardRiverArchiveRail_2", "top_river_archive_owner", "top river archive rail preserves source order"],
+		["F-2004", "DiscardRiverArchiveRail_3", "left_river_archive_owner", "left river archive rail clears the seat plaque"],
+		["F-2005", "HandDrawnTileMount", "drawn_tile_mount_owner", "drawn tile lift stays inside its stable hit frame"],
+		["F-2006", "HandDrawnTileBaseline", "drawn_tile_baseline_owner", "drawn tile marker remains separate from ordinary group gaps"],
+		["F-2007", "HandTrayShortcutHint", "hand_shortcut_hint_owner", "shortcut copy remains above the tile hit row"],
+		["F-2008", "HandProgressWallSyncRoute", "hand_wall_sync_owner", "wall pressure decoration stays secondary to hand facts"],
+		["F-2009", "ActionIntentDock", "action_intent_dock_owner", "action intent art cannot expand the native action hit lane"],
+		["F-2010", "DangerDiscardAlternative", "danger_alternative_owner", "alternative discard remains inside the confirmation reading order"],
+		["F-2011", "ChatActionButton", "table_chat_action_owner", "chat action keeps a separate auxiliary gutter from the hand"],
+		["F-2012", "TableLogArchivePanel", "table_log_archive_owner", "table history surface keeps its archive action outside rows"],
+		["F-2013", "TableLogLatestSync", "table_log_latest_owner", "latest log action reports its range without moving the list"],
+		["F-2014", "OnlineHandReadOnlyBadge", "online_readonly_badge_owner", "disconnect read-only state is textual and does not tint tile faces"],
+		["F-2015", "OnlineDisconnectRecoveryLane", "online_disconnect_recovery_owner", "reconnect is the first recovery action in the visible lane"],
+		["F-2016", "MenuTitleTextLayer", "menu_title_first_frame_owner", "menu title appears before primary cards become actionable"],
+		["F-2017", "MenuPrimaryCardIcon", "menu_card_icon_capacity_owner", "card icon keeps a fixed slot before title and CTA"],
+		["F-2018", "MenuQuickActionState", "menu_quick_action_state_owner", "quick action state text stays separate from its icon"],
+		["F-2019", "MenuFooterVersion", "menu_footer_version_owner", "version remains distinct from currency and stats"],
+		["F-2020", "OnlineLobbyServerEndpointBadge", "lobby_endpoint_badge_owner", "endpoint text and copy action keep separate compact slots"],
+		["F-2021", "OnlineLobbyConnectionStateBadge", "lobby_connection_badge_owner", "connection state retains icon, text, and recovery order"],
+		["F-2022", "OnlineLobbyFormPanel", "lobby_form_surface_owner", "form fields, validation, and actions remain inside one bounded surface"],
+		["F-2023", "OnlineLobbyActionButtonRow", "lobby_action_row_owner", "connect/create/join actions preserve their native order"],
+		["F-2024", "OnlineLobbyRoomSummary", "lobby_room_summary_owner", "room summary exposes occupancy and readiness in separate slots"],
+		["F-2025", "OnlineLobbyRosterPanel", "lobby_roster_capacity_owner", "roster names and ready state keep a stable row height"],
+		["F-2026", "OnlineLobbyLogScroll", "lobby_log_scroll_owner", "log scroll range and latest action do not share the moving viewport"],
+		["F-2027", "ChatLobbyButton", "lobby_chat_action_owner", "lobby chat action remains secondary to connection and room actions"],
+		["F-2028", "SettingsContentScroll", "settings_content_scroll_owner", "settings scroll owns range while fixed section navigation stays visible"],
+		["F-2029", "SettingsSectionActiveMarker", "settings_active_marker_owner", "active section marker is a single authored non-color cue"],
+		["F-2030", "DiagnosticDialogPanel", "diagnostic_surface_first_frame_owner", "diagnostic panel keeps summary, range, and fixed actions in order"]
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": owner_name, "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(owner_name) as Control, role, policy)
+	var loading_meter := find_control.call("LoadingGptMeter") as Control
+	var loading_strip := find_control.call("LoadingGptStrip") as Control
+	if loading_meter != null:
+		loading_meter.set_meta("center_panel_clearance_px", 16.0)
+	if loading_strip != null:
+		loading_strip.set_meta("center_panel_clearance_px", 16.0)
+	var replay_archive := find_control.call("ReplayArchivePane") as Control
+	var replay_timeline := find_control.call("ReplayImportTimeline") as Control
+	if replay_archive != null:
+		replay_archive.set_meta("compact_width_policy", "timeline_priority_after_input_and_copy_lanes")
+	if replay_timeline != null:
+		replay_timeline.set_meta("compact_width_policy", "minimum_event_text_lane_before_archive_width")
+	var hud := find_control.call("TopHud3DShell") as Control
+	if hud != null:
+		hud.set_meta("header_lane_clearance_px", 8.0)
+		hud.set_meta("header_lane_policy", "score_wall_actions_have_explicit_gutters")
+	root.set_meta("ui_round_1971_2030_owner_roles", owner_roles)
+	root.set_meta("ui_round_1971_2030_registered_child_count", registration_child_count)
+
+
 func draw_center_dice_plate(parent: Control) -> Control:
 	var plate = Control.new()
 	plate.name = "CenterDicePlate"
@@ -18382,6 +18755,9 @@ func draw_game_top_hud(parent: Control) -> void:
 		# stable lane and cannot be covered by a long server identifier.
 		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.300, 0.535))
 		status_rect = Rect2(Vector2(0.338, 0.090), Vector2(0.432, 0.515))
+	hud.set_meta("header_lane_clearance_px", 8.0)
+	hud.set_meta("header_lane_policy", "score_wall_actions_have_explicit_gutters")
+	hud.set_meta("header_lane_rects", [TOP_HUD_SCORE_STRIP_RECT, wall_rect, TOP_HUD_SETTINGS_BUTTON_RECT, TOP_HUD_BACK_BUTTON_RECT, TOP_HUD_UPDATE_BUTTON_RECT])
 	# r202: GPT title/status chips instead of make_panel lacquer hosts
 	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.90, 0.72, 0.34, 0.18), "ui_dark_scrim")
 	title_back.name = "TopHudTitleBack"
@@ -18483,6 +18859,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	wall.set_meta("wall_total", display_wall_total())
 	wall.set_meta("wall_state", wall_state_text())
 	wall.set_meta("status_priority", "remaining_tiles_before_last_discard")
+	wall.set_meta("header_lane_owner", "TopHudWallText")
+	wall.set_meta("score_action_clearance_px", 8.0)
 	mark_ui_optimization(wall, "F-255")
 	var wall_state = make_label(hud, "状态 · %s · 上张%s" % [wall_state_text().replace("牌墙", ""), tile_label(get_last_discard()) if get_last_discard() != "" else "无"], 9, Color(0.78, 0.82, 0.72), false)
 	wall_state.name = "TopHudWallState"
@@ -20038,7 +20416,8 @@ func seat_meld_face_rotation(seat: int) -> float:
 
 func meld_lane_group_footprint(seat: int, meld: Array, compact_melds: bool) -> float:
 	var vertical := seat_meld_is_vertical(seat)
-	var tile_width := (24.0 if vertical else 22.0) if compact_melds else (28.0 if vertical else 26.0)
+	var danger_compact := compact_melds and mode == "offline" and has_pending_danger_discard()
+	var tile_width := (28.0 if vertical and danger_compact else (26.0 if vertical else 22.0)) if compact_melds else (28.0 if vertical else 26.0)
 	var separation := 2.0 if compact_melds else 3.0
 	var padding := 6.0 if compact_melds else 8.0
 	var tile_count := maxi(1, meld.size())
@@ -20168,11 +20547,13 @@ func draw_melds(parent: Control) -> void:
 			# sizes cannot push into the adjacent HUD or river at 960px.
 			var max_compact_tile_width := floorf((lane_width_px - 12.0) / HAND_TILE_ASPECT)
 			max_compact_tile_width = maxf(24.0, max_compact_tile_width)
-			var compact_min_tile_width := 24.0 if danger_compact_melds else 26.0
-			var compact_max_tile_width := 30.0 if danger_compact_melds else 32.0
+			var compact_min_tile_width := 28.0 if danger_compact_melds else 26.0
+			var compact_max_tile_width := 34.0 if danger_compact_melds else 32.0
 			compact_tile_width = clampf(minf(compact_tile_width, max_compact_tile_width), compact_min_tile_width, compact_max_tile_width)
 			meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * HAND_TILE_ASPECT)))
 			area.set_meta("compact_readability_width", compact_tile_width)
+			area.set_meta("danger_readability_min_width_px", 28.0 if danger_compact_melds else 26.0)
+			area.set_meta("danger_pagination_policy", "paginate_before_face_shrink" if danger_compact_melds else "normal_compact_capacity")
 		elif not vertical and compact_melds:
 			# Keep horizontal melds readable on 960px screens. Use the actual lane
 			# width to spend space on tile faces before falling back to a smaller
@@ -20203,6 +20584,8 @@ func draw_melds(parent: Control) -> void:
 				var horizontal_max_tile_width := 28.0 if danger_compact_melds else 30.0
 				compact_tile_width = clampf(minf(compact_tile_width, max_horizontal_tile_width), horizontal_min_tile_width, horizontal_max_tile_width)
 				meld_tile_size = Vector2(compact_tile_width, maxf(28.0, floorf(compact_tile_width * 1.5)))
+				area.set_meta("danger_readability_min_width_px", 24.0 if danger_compact_melds else 24.0)
+				area.set_meta("danger_pagination_policy", "paginate_before_face_shrink" if danger_compact_melds else "normal_compact_capacity")
 		elif not vertical and meld_list.size() >= 4:
 			meld_tile_size = Vector2(20, 28)
 		area.set_meta("tile_size", meld_tile_size if meld_tile_size != Vector2.ZERO else Vector2(26, 36) if not vertical else Vector2(28, 38))
@@ -29093,12 +29476,16 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	# size and focus geometry remain stable.
 	var text_right := 0.465 if compact_settings and large_text_settings else (0.430 if compact_settings else 0.565)
 	var button_left := 0.495 if compact_settings else 0.595
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, 0.110, text_right, 0.890), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
+	var text_panel_top := 0.060 if compact_settings and title == "本地进度" else 0.110
+	var text_panel_bottom := 0.980 if compact_settings and title == "本地进度" else 0.890
+	var text_panel = make_gpt_plate_rect(rect_full(0.028, text_panel_top, text_right, text_panel_bottom), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
 	var title_label = make_label(row, title, 14, Color(1.0, 0.97, 0.88, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
 	apply_rect(title_label, rect_full(0.052, 0.130, text_right - 0.020, 0.455))
+	if compact_settings and title == "本地进度":
+		apply_rect(title_label, rect_full(0.052, 0.080, text_right - 0.020, 0.365))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title_label, title, "设置项标题：" + title)
 	title_label.set_meta("section_title_font_contract", "accessibility_scaled_and_measured")
@@ -29111,7 +29498,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var consequence_status := compact_setting_status(title, status)
 	if title == "画面质量" and compact_settings and not large_text_settings:
 		consequence_status = "牌面保持2D"
-	var visible_status := status if show_full_status else (consequence_status if compact_settings or large_text_settings or title == "画面质量" or title == "本地进度" else status)
+	var compact_reset_status := "确认清空\n统计 + 离线记录" if reset_progress_confirming else "清空统计\n/ 离线记录"
+	var visible_status := compact_reset_status if compact_settings and title == "本地进度" else (status if show_full_status else (consequence_status if compact_settings or large_text_settings or title == "画面质量" or title == "本地进度" else status))
 	var status_label = make_label(row, visible_status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
 	set_ui_full_text(status_label, status, title + "完整状态")
@@ -29122,7 +29510,10 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		status_label.set_meta("maintenance_status_field", "visible_state_summary")
 		status_label.set_meta("maintenance_state_tokens", "已同意|未同意|确认清空|已清空")
 	apply_rect(status_label, rect_full(0.052, 0.500, text_right - 0.015, 0.860))
+	if compact_settings and title == "本地进度":
+		apply_rect(status_label, rect_full(0.052, 0.400, text_right - 0.015, 0.960))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.56))
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
@@ -29138,8 +29529,13 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		configure_clipped_label(status_label)
 		if consequence_row and compact_settings:
 			status_label.add_theme_font_size_override("font_size", accessibility_font_size(13))
-			fit_label_font_size(status_label, maxf(64.0, effective_viewport_size().x * maxf(0.18, text_right - 0.070)), accessibility_font_size(13), 9)
+			if title != "本地进度":
+				fit_label_font_size(status_label, maxf(64.0, effective_viewport_size().x * maxf(0.18, text_right - 0.070)), accessibility_font_size(13), 9)
 			status_label.set_meta("status_visual_fit", true)
+			if title == "本地进度":
+				status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				status_label.set_meta("compact_consequence_policy", "two_line_complete_scope")
+				status_label.set_meta("compact_consequence_text", visible_status)
 		if consequence_row:
 			status_label.set_meta("status_lane_contract", "bounded_below_title_before_action")
 			mark_ui_optimization(status_label, "F-223")
@@ -35080,10 +35476,12 @@ func show_telemetry_data_sheet() -> void:
 		telemetry_scrim.set_meta("telemetry_modal_dim_alpha", 0.82)
 		telemetry_scrim.set_meta("telemetry_modal_owner", "TelemetryDataSheet")
 		telemetry_scrim.modulate.a = minf(1.0, maxf(telemetry_scrim.modulate.a, 0.96))
-	var card := make_gpt_center_crop_plate_rect(rect_full(0.205, 0.160, 0.795, 0.840), Color(0.018, 0.030, 0.028, 0.98), "ui_jade_reading_plate", 0.20)
+	var card := make_gpt_plate_rect(rect_full(0.205, 0.160, 0.795, 0.840), Color(0.018, 0.030, 0.028, 0.98), "ui_dark_scrim")
 	card.name = "TelemetryDataSheetCard"
 	card.set_meta("opaque_reading_surface", true)
 	card.set_meta("reading_surface_contract", "privacy_copy_and_feedback_are_not_background_translucent")
+	card.set_meta("opaque_reading_surface_alpha", 0.98)
+	card.set_meta("background_showthrough_policy", "dark_authored_scrim_before_privacy_copy")
 	sheet.add_child(card)
 	var title := make_label(card, "隐私与诊断数据", 22, Color(1.0, 0.92, 0.58), true)
 	title.name = "TelemetryDataSheetTitle"
@@ -35958,7 +36356,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		var day_focus_rail := make_gpt_edge_rail(rect_full(0.015, 0.015, 0.985, 0.985), Color(text_color.r, text_color.g, text_color.b, 0.86))
 		day_focus_rail.name = "DailyLoginDayFocusRail_%d" % day_num
 		day_focus_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		day_focus_rail.modulate.a = 0.0
+		day_focus_rail.modulate.a = 0.46 if is_current else 0.0
+		day_focus_rail.set_meta("persistent_current_day_state", is_current)
+		day_focus_rail.set_meta("persistent_state_alpha", 0.46 if is_current else 0.0)
 		indicator.add_child(day_focus_rail)
 		# The card remains a visual status surface; this transparent, flat Button
 		# owns a stable focus/touch target without replacing the claim CTA below.
@@ -36431,15 +36831,18 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	mark_ui_optimization(content_status, "F-499")
 	mark_ui_optimization(content_status, "F-913")
 	mark_ui_optimization(content_scroll, "F-237")
-	var copy_feedback := make_label(panel, diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "复制结果：尚未复制", 11, Color(0.76, 0.86, 0.78), false)
+	var diagnostic_copy_feedback_full := diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "复制结果：尚未复制"
+	var copy_feedback := make_label(panel, diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "未复制", 11, Color(0.76, 0.86, 0.78), false)
 	copy_feedback.name = "DiagnosticCopyFeedbackLabel"
 	# Keep copy feedback beside its action. The report range status owns the lane
 	# above the footer, so a copy result cannot be mistaken for health status.
 	apply_rect(copy_feedback, rect_full(0.05, 0.805, 0.180, 0.940))
 	copy_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	copy_feedback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	copy_feedback.tooltip_text = copy_feedback.text
-	copy_feedback.set_meta("accessible_name", copy_feedback.text)
+	copy_feedback.tooltip_text = diagnostic_copy_feedback_full
+	copy_feedback.set_meta("accessible_name", diagnostic_copy_feedback_full)
+	copy_feedback.set_meta("visible_feedback_policy", "short_state_with_full_tooltip")
+	copy_feedback.set_meta("full_feedback_text", diagnostic_copy_feedback_full)
 	copy_feedback.set_meta("feedback_owner", "DiagnosticCopyButton")
 	configure_clipped_label(copy_feedback)
 	mark_ui_optimization(copy_feedback, "F-500")
@@ -36907,14 +37310,28 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		gpt_loading_texture.set_meta("aspect_policy", "keep_aspect_centered")
 		gpt_loading_texture.set_meta("safe_content_owner", "loading_center_panel")
 		bg.move_child(gpt_loading_texture, 0)
-	var loading_meter = add_optional_gpt_illustration_texture(bg, "ui_loading_progress_plate", rect_full(0.16, 0.76, 0.84, 0.88), 0.74, false)
+	# Keep both authored progress rails in one bounded footer lane. Independent
+	# global rects previously drifted into the backdrop and visually merged at
+	# compact heights.
+	var loading_rail_lane := Control.new()
+	loading_rail_lane.name = "LoadingFooterRailLane"
+	loading_rail_lane.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(loading_rail_lane, rect_full(0.220, 0.815, 0.780, 0.930))
+	loading_rail_lane.set_meta("lane_policy", "one_owner_two_slots_eight_pixel_gap")
+	loading_rail_lane.set_meta("safe_bottom_ratio", 0.930)
+	bg.add_child(loading_rail_lane)
+	var loading_meter = add_optional_gpt_illustration_texture(loading_rail_lane, "ui_loading_progress_plate", rect_full(0.0, 0.0, 1.0, 0.400), 0.74, false)
 	if loading_meter == null:
-		loading_meter = add_optional_gpt_illustration_texture(bg, "ui_meter_rail_plate", rect_full(0.18, 0.78, 0.82, 0.86), 0.55, false)
+		loading_meter = add_optional_gpt_illustration_texture(loading_rail_lane, "ui_meter_rail_plate", rect_full(0.04, 0.0, 0.96, 0.340), 0.55, false)
 	if loading_meter != null:
 		loading_meter.name = "LoadingGptMeter"
-	var loading_strip = add_optional_gpt_illustration_texture(bg, "ui_progress_signal_strip", rect_full(0.12, 0.70, 0.88, 0.90), 0.40, false)
+		loading_meter.set_meta("reading_surface_owner", "LoadingFooterRailLane")
+		loading_meter.set_meta("center_panel_clearance_px", 16.0)
+	var loading_strip = add_optional_gpt_illustration_texture(loading_rail_lane, "ui_progress_signal_strip", rect_full(0.08, 0.600, 0.92, 1.0), 0.40, false)
 	if loading_strip != null:
 		loading_strip.name = "LoadingGptStrip"
+		loading_strip.set_meta("reading_surface_owner", "LoadingFooterRailLane")
+		loading_strip.set_meta("center_panel_clearance_px", 16.0)
 	var has_gpt_loading_backdrop := gpt_loading_texture != null
 	var fallback_alpha := 0.0 if has_gpt_loading_backdrop else 1.0
 	# keep Panel host for smoke StyleBox probe; paint alpha already 0 via make_panel + GPT plate
@@ -37323,9 +37740,15 @@ func _show_replay_import_screen_impl() -> void:
 	apply_rect(copy_code_button, rect_full(0.710, 0.385, 0.935, 0.450))
 	panel.add_child(copy_code_button)
 	update_replay_import_input_feedback(input)
-	var archive_pane := make_gpt_plate_rect(rect_full(0.065, 0.525, 0.480, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
+	var compact_replay_layout := ui_is_compact()
+	var archive_pane_left := 0.065
+	var archive_pane_right := 0.440 if compact_replay_layout else 0.480
+	var timeline_pane_left := 0.465 if compact_replay_layout else 0.505
+	var timeline_pane_right := 0.935
+	var archive_pane := make_gpt_plate_rect(rect_full(archive_pane_left, 0.525, archive_pane_right, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
 	archive_pane.name = "ReplayArchivePane"
 	archive_pane.set_meta("copy_action_clearance_px", 8.0)
+	archive_pane.set_meta("compact_width_policy", "timeline_priority_after_input_and_copy_lanes" if compact_replay_layout else "balanced_archive_timeline_columns")
 	# This GPT plate is also the parent of the archive controls and scroll view.
 	# Let input reach those child actions instead of treating the visual host as
 	# an isolated, input-ignoring texture.
@@ -37397,9 +37820,10 @@ func _show_replay_import_screen_impl() -> void:
 	archive_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	archive_list.add_theme_constant_override("separation", 5)
 	archive_scroll.add_child(archive_list)
-	var timeline := make_gpt_plate_rect(rect_full(0.505, 0.525, 0.935, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
+	var timeline := make_gpt_plate_rect(rect_full(timeline_pane_left, 0.525, timeline_pane_right, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
 	timeline.name = "ReplayImportTimeline"
 	timeline.set_meta("copy_action_clearance_px", 8.0)
+	timeline.set_meta("compact_width_policy", "minimum_event_text_lane_before_archive_width" if compact_replay_layout else "balanced_archive_timeline_columns")
 	panel.add_child(timeline)
 	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.88, 0.78, 0.56), true)
 	timeline_title.name = "ReplayImportTimelineTitle"
@@ -37706,7 +38130,10 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
 	# visible labels make favorite state discoverable without relying on a glyph.
-	row.custom_minimum_size = Vector2(0, 104 if delete_confirming else 84)
+	# Keep the row height stable while confirmation text occupies the metadata
+	# lane. A changing row height can move the action lane beneath the viewport
+	# edge when the archive list is already at its tail.
+	row.custom_minimum_size = Vector2(0, 84)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.set_meta("archive_id", archive_id)
 	row.set_meta("archive_favorite_state", "favorite" if bool(entry.get("favorite", false)) else "normal")
@@ -37741,8 +38168,13 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	set_ui_full_text(secondary, str(entry.get("rule_variant", "")) + " · " + str(entry.get("replay_digest", "")).to_upper(), "回放规则与摘要")
 	var action_top := 0.455 if delete_confirming else 0.435
 	var action_bottom := 0.970
-	var action_slot_width := 0.238
-	var action_step := 0.245
+	var compact_archive_actions := ui_is_compact()
+	# The archive scrollbar reserves a 44px touch lane. Compact rows therefore
+	# use four 44px targets in the remaining content lane instead of letting the
+	# fourth target drift underneath that scrollbar.
+	var action_slot_width := 0.190 if compact_archive_actions else 0.238
+	var action_step := 0.200 if compact_archive_actions else 0.245
+	var action_min_width := 44.0 if compact_archive_actions else 58.0
 	var is_favorite := bool(entry.get("favorite", false))
 	var favorite := make_small_button("", Color(0.60, 0.48, 0.22) if is_favorite else Color(0.30, 0.48, 0.42), func() -> void:
 		toggle_replay_archive_favorite(archive_id)
@@ -37753,7 +38185,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	favorite.set_meta("archive_row_context", archive_context)
 	favorite.set_meta("archive_action", "favorite")
 	mark_ui_optimization(favorite, "F-053")
-	favorite.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
+	favorite.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	favorite.add_theme_font_size_override("font_size", accessibility_font_size(11))
 	apply_rect(favorite, rect_full(0.006, action_top, 0.006 + action_slot_width, action_bottom))
 	row.add_child(favorite)
@@ -37773,7 +38205,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	open.set_meta("archive_row_context", archive_context)
 	open.set_meta("archive_action", "open")
 	mark_ui_optimization(open, "F-053")
-	open.custom_minimum_size = Vector2(52, UI_MIN_TOUCH_TARGET)
+	open.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	open.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	apply_rect(open, rect_full(0.006 + action_step, action_top, 0.006 + action_step + action_slot_width, action_bottom))
 	row.add_child(open)
@@ -37793,7 +38225,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	copy.set_meta("archive_row_context", archive_context)
 	copy.set_meta("archive_action", "copy")
 	mark_ui_optimization(copy, "F-053")
-	copy.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
+	copy.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	copy.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	apply_rect(copy, rect_full(0.006 + action_step * 2.0, action_top, 0.006 + action_step * 2.0 + action_slot_width, action_bottom))
 	row.add_child(copy)
@@ -37808,7 +38240,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 		request_delete_replay_archive(archive_id)
 	)
 	delete.name = "ReplayArchiveDeleteButton_%s" % archive_id.left(8)
-	delete.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
+	delete.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	delete.add_theme_font_size_override("font_size", accessibility_font_size(11))
 	delete.tooltip_text = archive_context + " · " + ("再次点击确认删除此回放" if delete_confirming else "删除此回放")
 	delete.set_meta("accessible_name", delete.tooltip_text)

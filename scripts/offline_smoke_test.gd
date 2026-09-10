@@ -177,6 +177,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"KoiGptPlate",
 	"LanternGptGlow",
 	"LoadingGptStrip",
+	"LoadingFooterRailLane",
 	"LoadingTitleGptPlate",
 	"MeldKindSealLabel",
 	"MeldSummaryArchive",

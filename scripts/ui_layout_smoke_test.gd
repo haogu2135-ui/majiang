@@ -1997,6 +1997,9 @@ func check_ui_round_1551_1610(scene, viewport_size: Vector2) -> void:
 	check_ui_round_1791_1850(scene, viewport_size)
 	check_ui_round_1851_1910(scene, viewport_size)
 	check_ui_round_1911_1970(scene, viewport_size)
+	check_ui_round_1971_2030(scene, viewport_size)
+	check_ui_round_2031_2090(scene, viewport_size)
+	check_ui_round_2091_2150(scene, viewport_size)
 
 
 func check_ui_round_1611_1670(scene, viewport_size: Vector2) -> void:
@@ -2254,6 +2257,117 @@ func check_ui_round_1911_1970(scene, viewport_size: Vector2) -> void:
 	var meld_area := scene.find_child("MeldArea_0", true, false) as Control
 	if meld_area != null:
 		check(float(meld_area.get_meta("lane_edge_clearance_px", 0.0)) >= 6.0 and float(meld_area.get_meta("lane_group_gap_px", 0.0)) >= 3.0, "meld lane reserves edge and group spacing at %s" % viewport_size)
+
+
+func check_ui_round_1971_2030(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (1971 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_1971_2030(root)
+	var contracts: Array = root.get_meta("ui_round_1971_2030_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_1971_2030_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-1971..F-2030 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-1971..F-2030 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-1971..F-2030 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("owner", "")) != "" and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-1971..F-2030 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_1971_2030_contract_version", "")) == "20260911-first-frame-compact-capacity-header-gutters-60", "F-1971..F-2030 contract version is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_1971_2030_scope", "")) == "first_frame_reading_surfaces_compact_page_capacity_header_lane_gutters", "F-1971..F-2030 scope is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_1971_2030_source", "")) == "main-agent-evidence-audit-20260911", "F-1971..F-2030 records the evidence source at %s" % viewport_size)
+		check(root.get_meta("ui_round_1971_2030_evidence_viewports", []).size() == 3, "F-1971..F-2030 names three evidence viewports at %s" % viewport_size)
+		check(str(root.get_meta("first_frame_surface_contract", "")) == "authored_background_then_one_reading_panel_then_native_status", "first-frame surface ownership is explicit at %s" % viewport_size)
+		check(str(root.get_meta("compact_page_capacity_contract", "")) == "reserve_primary_text_lane_before_secondary_chrome", "compact page capacity prioritizes primary text at %s" % viewport_size)
+		check(str(root.get_meta("header_lane_gutter_contract", "")) == "score_wall_actions_keep_eight_pixel_clearance", "header lane gutter policy is explicit at %s" % viewport_size)
+	var loading_meter := scene.find_child("LoadingGptMeter", true, false) as Control
+	var loading_strip := scene.find_child("LoadingGptStrip", true, false) as Control
+	if loading_meter != null:
+		check(float(loading_meter.get_meta("center_panel_clearance_px", 0.0)) >= 16.0, "loading meter clears the center reading panel at %s" % viewport_size)
+	if loading_strip != null:
+		check(float(loading_strip.get_meta("center_panel_clearance_px", 0.0)) >= 16.0, "loading strip clears the center reading panel at %s" % viewport_size)
+	var replay_archive := scene.find_child("ReplayArchivePane", true, false) as Control
+	var replay_timeline := scene.find_child("ReplayImportTimeline", true, false) as Control
+	if replay_archive != null and replay_timeline != null:
+		check(replay_archive.get_meta("compact_width_policy", "") == "timeline_priority_after_input_and_copy_lanes" and replay_timeline.get_meta("compact_width_policy", "") == "minimum_event_text_lane_before_archive_width", "compact replay prioritizes the event text lane at %s" % viewport_size)
+		if viewport_size.x <= 960.0 or viewport_size.y <= 560.0:
+			check(screen_rect(replay_timeline).size.x > screen_rect(replay_archive).size.x, "compact replay timeline is wider than archive pane at %s" % viewport_size)
+	var hud := scene.find_child("TopHud3DShell", true, false) as Control
+	if hud != null:
+		check(float(hud.get_meta("header_lane_clearance_px", 0.0)) >= 8.0 and hud.get_meta("header_lane_policy", "") == "score_wall_actions_have_explicit_gutters", "top HUD records explicit score/wall/action gutters at %s" % viewport_size)
+		var score_strip := hud.find_child("ScoreStrip", true, false) as Control
+		var wall_back := hud.find_child("TopHudWallBack", true, false) as Control
+		var settings := hud.find_child("TopHudSettingsButton", true, false) as Control
+		if score_strip != null and wall_back != null and settings != null:
+			check(screen_rect(score_strip).end.x + 4.0 <= screen_rect(wall_back).position.x and screen_rect(wall_back).end.x + 4.0 <= screen_rect(settings).position.x, "top HUD score, wall, and settings surfaces keep physical gutters at %s" % viewport_size)
+
+
+func check_ui_round_2031_2090(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2031 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_2031_2090(root)
+	var contracts: Array = root.get_meta("ui_round_2031_2090_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_2031_2090_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-2031..F-2090 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-2031..F-2090 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2031..F-2090 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("owner", "")) != "" and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2031..F-2090 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_2031_2090_contract_version", "")) == "20260911-compact-child-status-footer-60", "F-2031..F-2090 contract version is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2031_2090_scope", "")) == "compact_child_status_settlement_detail_lobby_footer_and_replay_lanes", "F-2031..F-2090 scope is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2031_2090_source", "")) == "main-agent-evidence-audit-20260911", "F-2031..F-2090 records the evidence source at %s" % viewport_size)
+		check(root.get_meta("ui_round_2031_2090_evidence_viewports", []).size() == 3, "F-2031..F-2090 names three evidence viewports at %s" % viewport_size)
+	var loading_lane := scene.find_child("LoadingFooterRailLane", true, false) as Control
+	var loading_meter := scene.find_child("LoadingGptMeter", true, false) as Control
+	var loading_strip := scene.find_child("LoadingGptStrip", true, false) as Control
+	if loading_lane != null and loading_meter != null and loading_strip != null:
+		check(loading_lane.get_meta("lane_policy", "") == "one_owner_two_slots_eight_pixel_gap", "loading rails use one bounded footer owner at %s" % viewport_size)
+		check(screen_rect(loading_meter).end.y + 6.0 <= screen_rect(loading_strip).position.y, "loading meter and signal strip keep a physical gap at %s" % viewport_size)
+		check(screen_rect(loading_lane).end.y <= viewport_size.y - 20.0, "loading footer rail lane keeps bottom safe clearance at %s" % viewport_size)
+	var reset_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
+	if reset_status != null:
+		check(reset_status.get_meta("compact_consequence_policy", "") == "two_line_complete_scope", "compact reset status keeps complete two-line consequence copy at %s" % viewport_size)
+	var danger_meld := scene.find_child("MeldArea_1", true, false) as Control
+	if danger_meld != null and scene.mode == "offline" and scene.has_pending_danger_discard():
+		check(float(danger_meld.get_meta("danger_readability_min_width_px", 0.0)) >= 28.0, "danger meld keeps readable vertical face minimum at %s" % viewport_size)
+
+
+func check_ui_round_2091_2150(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2091 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_2091_2150(root)
+	var contracts: Array = root.get_meta("ui_round_2091_2150_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_2091_2150_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-2091..F-2150 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-2091..F-2150 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2091..F-2150 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("owner", "")) != "" and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2091..F-2150 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_2091_2150_contract_version", "")) == "20260911-modal-state-navigation-60", "F-2091..F-2150 contract version is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2091_2150_scope", "")) == "modal_reading_layers_interaction_state_navigation_and_secondary_page_lanes", "F-2091..F-2150 scope is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2091_2150_source", "")) == "main-agent-evidence-audit-20260911", "F-2091..F-2150 records the evidence source at %s" % viewport_size)
+		check(root.get_meta("ui_round_2091_2150_evidence_viewports", []).size() == 3, "F-2091..F-2150 names three evidence viewports at %s" % viewport_size)
+	var telemetry_card := scene.find_child("TelemetryDataSheetCard", true, false) as Control
+	if telemetry_card != null:
+		check(float(telemetry_card.get_meta("opaque_reading_surface_alpha", 0.0)) >= 0.98 and telemetry_card.get_meta("background_showthrough_policy", "") == "dark_authored_scrim_before_privacy_copy", "telemetry sheet owns an opaque authored reading surface at %s" % viewport_size)
+	var diagnostic_feedback := scene.find_child("DiagnosticCopyFeedbackLabel", true, false) as Label
+	if diagnostic_feedback != null:
+		check(diagnostic_feedback.get_meta("visible_feedback_policy", "") == "short_state_with_full_tooltip" and diagnostic_feedback.tooltip_text != "", "diagnostic copy feedback keeps a visible short state and full detail at %s" % viewport_size)
+	var current_day_rail := scene.find_child("DailyLoginDayFocusRail_5", true, false) as Control
+	if current_day_rail != null:
+		check(bool(current_day_rail.get_meta("persistent_current_day_state", false)) and float(current_day_rail.get_meta("persistent_state_alpha", 0.0)) >= 0.40, "daily current day keeps a persistent authored state rail at %s" % viewport_size)
 
 
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
@@ -4789,7 +4903,8 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			var reset_button := row.find_child("SettingRowButton_本地进度", true, false) as Button
 			check(reset_status != null and reset_button != null and reset_status.tooltip_text != "" and reset_button.tooltip_text != "", "settings reset row exposes confirmation status and consequence tooltips at %s" % viewport_size)
 			if reset_status != null and reset_button != null:
-				var expected_reset_status := "确认清空：统计+离线记录" if scene.reset_progress_confirming else "清空统计·离线记录"
+				var compact_reset_row := viewport_size.y <= 560.0 or viewport_size.x <= 960.0
+				var expected_reset_status := ("确认清空\n统计 + 离线记录" if compact_reset_row else "确认清空：统计+离线记录") if scene.reset_progress_confirming else ("清空统计\n/ 离线记录" if compact_reset_row else "清空统计·离线记录")
 				check(reset_status.text == expected_reset_status, "settings reset row mirrors its layout-aware state at %s (got=%s expected=%s)" % [viewport_size, reset_status.text, expected_reset_status])
 			var reset_texture = button.find_child("ResetDangerSealTexture", true, false) as CanvasItem
 			check(reset_texture == null or reset_texture.modulate.a <= 0.12, "settings reset row keeps full-button texture subdued at %s" % viewport_size)

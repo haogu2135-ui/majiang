@@ -3778,10 +3778,12 @@ func show_telemetry_data_sheet() -> void:
 		telemetry_scrim.set_meta("telemetry_modal_dim_alpha", 0.82)
 		telemetry_scrim.set_meta("telemetry_modal_owner", "TelemetryDataSheet")
 		telemetry_scrim.modulate.a = minf(1.0, maxf(telemetry_scrim.modulate.a, 0.96))
-	var card := make_gpt_center_crop_plate_rect(rect_full(0.205, 0.160, 0.795, 0.840), Color(0.018, 0.030, 0.028, 0.98), "ui_jade_reading_plate", 0.20)
+	var card := make_gpt_plate_rect(rect_full(0.205, 0.160, 0.795, 0.840), Color(0.018, 0.030, 0.028, 0.98), "ui_dark_scrim")
 	card.name = "TelemetryDataSheetCard"
 	card.set_meta("opaque_reading_surface", true)
 	card.set_meta("reading_surface_contract", "privacy_copy_and_feedback_are_not_background_translucent")
+	card.set_meta("opaque_reading_surface_alpha", 0.98)
+	card.set_meta("background_showthrough_policy", "dark_authored_scrim_before_privacy_copy")
 	sheet.add_child(card)
 	var title := make_label(card, "隐私与诊断数据", 22, Color(1.0, 0.92, 0.58), true)
 	title.name = "TelemetryDataSheetTitle"
@@ -4656,7 +4658,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		var day_focus_rail := make_gpt_edge_rail(rect_full(0.015, 0.015, 0.985, 0.985), Color(text_color.r, text_color.g, text_color.b, 0.86))
 		day_focus_rail.name = "DailyLoginDayFocusRail_%d" % day_num
 		day_focus_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		day_focus_rail.modulate.a = 0.0
+		day_focus_rail.modulate.a = 0.46 if is_current else 0.0
+		day_focus_rail.set_meta("persistent_current_day_state", is_current)
+		day_focus_rail.set_meta("persistent_state_alpha", 0.46 if is_current else 0.0)
 		indicator.add_child(day_focus_rail)
 		# The card remains a visual status surface; this transparent, flat Button
 		# owns a stable focus/touch target without replacing the claim CTA below.
@@ -5129,15 +5133,18 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	mark_ui_optimization(content_status, "F-499")
 	mark_ui_optimization(content_status, "F-913")
 	mark_ui_optimization(content_scroll, "F-237")
-	var copy_feedback := make_label(panel, diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "复制结果：尚未复制", 11, Color(0.76, 0.86, 0.78), false)
+	var diagnostic_copy_feedback_full := diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "复制结果：尚未复制"
+	var copy_feedback := make_label(panel, diagnostic_copy_feedback if diagnostic_copy_feedback != "" else "未复制", 11, Color(0.76, 0.86, 0.78), false)
 	copy_feedback.name = "DiagnosticCopyFeedbackLabel"
 	# Keep copy feedback beside its action. The report range status owns the lane
 	# above the footer, so a copy result cannot be mistaken for health status.
 	apply_rect(copy_feedback, rect_full(0.05, 0.805, 0.180, 0.940))
 	copy_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	copy_feedback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	copy_feedback.tooltip_text = copy_feedback.text
-	copy_feedback.set_meta("accessible_name", copy_feedback.text)
+	copy_feedback.tooltip_text = diagnostic_copy_feedback_full
+	copy_feedback.set_meta("accessible_name", diagnostic_copy_feedback_full)
+	copy_feedback.set_meta("visible_feedback_policy", "short_state_with_full_tooltip")
+	copy_feedback.set_meta("full_feedback_text", diagnostic_copy_feedback_full)
 	copy_feedback.set_meta("feedback_owner", "DiagnosticCopyButton")
 	configure_clipped_label(copy_feedback)
 	mark_ui_optimization(copy_feedback, "F-500")
@@ -5605,14 +5612,28 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		gpt_loading_texture.set_meta("aspect_policy", "keep_aspect_centered")
 		gpt_loading_texture.set_meta("safe_content_owner", "loading_center_panel")
 		bg.move_child(gpt_loading_texture, 0)
-	var loading_meter = add_optional_gpt_illustration_texture(bg, "ui_loading_progress_plate", rect_full(0.16, 0.76, 0.84, 0.88), 0.74, false)
+	# Keep both authored progress rails in one bounded footer lane. Independent
+	# global rects previously drifted into the backdrop and visually merged at
+	# compact heights.
+	var loading_rail_lane := Control.new()
+	loading_rail_lane.name = "LoadingFooterRailLane"
+	loading_rail_lane.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(loading_rail_lane, rect_full(0.220, 0.815, 0.780, 0.930))
+	loading_rail_lane.set_meta("lane_policy", "one_owner_two_slots_eight_pixel_gap")
+	loading_rail_lane.set_meta("safe_bottom_ratio", 0.930)
+	bg.add_child(loading_rail_lane)
+	var loading_meter = add_optional_gpt_illustration_texture(loading_rail_lane, "ui_loading_progress_plate", rect_full(0.0, 0.0, 1.0, 0.400), 0.74, false)
 	if loading_meter == null:
-		loading_meter = add_optional_gpt_illustration_texture(bg, "ui_meter_rail_plate", rect_full(0.18, 0.78, 0.82, 0.86), 0.55, false)
+		loading_meter = add_optional_gpt_illustration_texture(loading_rail_lane, "ui_meter_rail_plate", rect_full(0.04, 0.0, 0.96, 0.340), 0.55, false)
 	if loading_meter != null:
 		loading_meter.name = "LoadingGptMeter"
-	var loading_strip = add_optional_gpt_illustration_texture(bg, "ui_progress_signal_strip", rect_full(0.12, 0.70, 0.88, 0.90), 0.40, false)
+		loading_meter.set_meta("reading_surface_owner", "LoadingFooterRailLane")
+		loading_meter.set_meta("center_panel_clearance_px", 16.0)
+	var loading_strip = add_optional_gpt_illustration_texture(loading_rail_lane, "ui_progress_signal_strip", rect_full(0.08, 0.600, 0.92, 1.0), 0.40, false)
 	if loading_strip != null:
 		loading_strip.name = "LoadingGptStrip"
+		loading_strip.set_meta("reading_surface_owner", "LoadingFooterRailLane")
+		loading_strip.set_meta("center_panel_clearance_px", 16.0)
 	var has_gpt_loading_backdrop := gpt_loading_texture != null
 	var fallback_alpha := 0.0 if has_gpt_loading_backdrop else 1.0
 	# keep Panel host for smoke StyleBox probe; paint alpha already 0 via make_panel + GPT plate
@@ -6021,9 +6042,15 @@ func _show_replay_import_screen_impl() -> void:
 	apply_rect(copy_code_button, rect_full(0.710, 0.385, 0.935, 0.450))
 	panel.add_child(copy_code_button)
 	update_replay_import_input_feedback(input)
-	var archive_pane := make_gpt_plate_rect(rect_full(0.065, 0.525, 0.480, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
+	var compact_replay_layout := ui_is_compact()
+	var archive_pane_left := 0.065
+	var archive_pane_right := 0.440 if compact_replay_layout else 0.480
+	var timeline_pane_left := 0.465 if compact_replay_layout else 0.505
+	var timeline_pane_right := 0.935
+	var archive_pane := make_gpt_plate_rect(rect_full(archive_pane_left, 0.525, archive_pane_right, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
 	archive_pane.name = "ReplayArchivePane"
 	archive_pane.set_meta("copy_action_clearance_px", 8.0)
+	archive_pane.set_meta("compact_width_policy", "timeline_priority_after_input_and_copy_lanes" if compact_replay_layout else "balanced_archive_timeline_columns")
 	# This GPT plate is also the parent of the archive controls and scroll view.
 	# Let input reach those child actions instead of treating the visual host as
 	# an isolated, input-ignoring texture.
@@ -6095,9 +6122,10 @@ func _show_replay_import_screen_impl() -> void:
 	archive_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	archive_list.add_theme_constant_override("separation", 5)
 	archive_scroll.add_child(archive_list)
-	var timeline := make_gpt_plate_rect(rect_full(0.505, 0.525, 0.935, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
+	var timeline := make_gpt_plate_rect(rect_full(timeline_pane_left, 0.525, timeline_pane_right, 0.905), Color(0.008, 0.020, 0.022, 0.78), "ui_dark_scrim")
 	timeline.name = "ReplayImportTimeline"
 	timeline.set_meta("copy_action_clearance_px", 8.0)
+	timeline.set_meta("compact_width_policy", "minimum_event_text_lane_before_archive_width" if compact_replay_layout else "balanced_archive_timeline_columns")
 	panel.add_child(timeline)
 	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.88, 0.78, 0.56), true)
 	timeline_title.name = "ReplayImportTimelineTitle"
@@ -6404,7 +6432,10 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
 	# visible labels make favorite state discoverable without relying on a glyph.
-	row.custom_minimum_size = Vector2(0, 104 if delete_confirming else 84)
+	# Keep the row height stable while confirmation text occupies the metadata
+	# lane. A changing row height can move the action lane beneath the viewport
+	# edge when the archive list is already at its tail.
+	row.custom_minimum_size = Vector2(0, 84)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.set_meta("archive_id", archive_id)
 	row.set_meta("archive_favorite_state", "favorite" if bool(entry.get("favorite", false)) else "normal")
@@ -6439,8 +6470,13 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	set_ui_full_text(secondary, str(entry.get("rule_variant", "")) + " · " + str(entry.get("replay_digest", "")).to_upper(), "回放规则与摘要")
 	var action_top := 0.455 if delete_confirming else 0.435
 	var action_bottom := 0.970
-	var action_slot_width := 0.238
-	var action_step := 0.245
+	var compact_archive_actions := ui_is_compact()
+	# The archive scrollbar reserves a 44px touch lane. Compact rows therefore
+	# use four 44px targets in the remaining content lane instead of letting the
+	# fourth target drift underneath that scrollbar.
+	var action_slot_width := 0.190 if compact_archive_actions else 0.238
+	var action_step := 0.200 if compact_archive_actions else 0.245
+	var action_min_width := 44.0 if compact_archive_actions else 58.0
 	var is_favorite := bool(entry.get("favorite", false))
 	var favorite := make_small_button("", Color(0.60, 0.48, 0.22) if is_favorite else Color(0.30, 0.48, 0.42), func() -> void:
 		toggle_replay_archive_favorite(archive_id)
@@ -6451,7 +6487,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	favorite.set_meta("archive_row_context", archive_context)
 	favorite.set_meta("archive_action", "favorite")
 	mark_ui_optimization(favorite, "F-053")
-	favorite.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
+	favorite.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	favorite.add_theme_font_size_override("font_size", accessibility_font_size(11))
 	apply_rect(favorite, rect_full(0.006, action_top, 0.006 + action_slot_width, action_bottom))
 	row.add_child(favorite)
@@ -6471,7 +6507,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	open.set_meta("archive_row_context", archive_context)
 	open.set_meta("archive_action", "open")
 	mark_ui_optimization(open, "F-053")
-	open.custom_minimum_size = Vector2(52, UI_MIN_TOUCH_TARGET)
+	open.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	open.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	apply_rect(open, rect_full(0.006 + action_step, action_top, 0.006 + action_step + action_slot_width, action_bottom))
 	row.add_child(open)
@@ -6491,7 +6527,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	copy.set_meta("archive_row_context", archive_context)
 	copy.set_meta("archive_action", "copy")
 	mark_ui_optimization(copy, "F-053")
-	copy.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
+	copy.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	copy.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	apply_rect(copy, rect_full(0.006 + action_step * 2.0, action_top, 0.006 + action_step * 2.0 + action_slot_width, action_bottom))
 	row.add_child(copy)
@@ -6506,7 +6542,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 		request_delete_replay_archive(archive_id)
 	)
 	delete.name = "ReplayArchiveDeleteButton_%s" % archive_id.left(8)
-	delete.custom_minimum_size = Vector2(58, UI_MIN_TOUCH_TARGET)
+	delete.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	delete.add_theme_font_size_override("font_size", accessibility_font_size(11))
 	delete.tooltip_text = archive_context + " · " + ("再次点击确认删除此回放" if delete_confirming else "删除此回放")
 	delete.set_meta("accessible_name", delete.tooltip_text)

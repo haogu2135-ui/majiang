@@ -1105,11 +1105,11 @@ const TOP_HUD_RECT := Rect2(Vector2(0.014, 0.014), Vector2(0.986, 0.105))
 const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.106, 0.10), Vector2(0.300, 0.88))
 const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.310, 0.10), Vector2(0.432, 0.50))
 const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.212, 0.565), Vector2(0.432, 0.890))
-const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.438, 0.15), Vector2(0.698, 0.85))
-const TOP_HUD_WALL_RECT := Rect2(Vector2(0.690, 0.14), Vector2(0.790, 0.86))
-const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.775, 0.05), Vector2(0.838, 0.95))
-const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.848, 0.05), Vector2(0.911, 0.95))
-const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.921, 0.05), Vector2(0.984, 0.95))
+const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.438, 0.15), Vector2(0.686, 0.85))
+const TOP_HUD_WALL_RECT := Rect2(Vector2(0.696, 0.14), Vector2(0.778, 0.86))
+const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.790, 0.05), Vector2(0.850, 0.95))
+const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.858, 0.05), Vector2(0.916, 0.95))
+const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.924, 0.05), Vector2(0.984, 0.95))
 const SCORE_STRIP_CHIP_RECTS := [
 	Rect2(Vector2(0.006, 0.0), Vector2(0.244, 1.0)),
 	Rect2(Vector2(0.256, 0.0), Vector2(0.494, 1.0)),
