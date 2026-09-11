@@ -574,6 +574,7 @@ var offline_restart_confirming := false
 var offline_restart_confirm_deadline_msec := 0
 var exit_confirm_panel: Control = null
 var exit_confirm_focus_restore_id := 0
+var exit_confirm_decision_locked := false
 var update_dialog_focus_restore_id := 0
 var chat_focus_restore_id := 0
 var chat_focus_restore_name := ""
@@ -683,6 +684,7 @@ var last_match_summary: Dictionary = {}
 var offline_progress_loaded_state := false
 var offline_progress_dirty := false
 var offline_progress_last_save_msec := 0
+var offline_progress_last_save_ok := false
 # 道具系统
 var inventory = {}  # 道具库存 {"swap_card": 2, "peek_card": 1, ...}
 # 虚拟货币
@@ -4365,7 +4367,9 @@ func load_offline_progress() -> bool:
 
 
 func save_offline_progress(announce: bool = true) -> void:
+	offline_progress_last_save_ok = false
 	if offline_sim_quiet or mode != "offline" or players.size() != 4:
+		offline_progress_last_save_ok = mode != "offline"
 		return
 	# Never persist the brief resolving phase. The last stable snapshot can be
 	# resumed safely; saving between discard and arbitration would be ambiguous.
@@ -4394,6 +4398,7 @@ func save_offline_progress(announce: bool = true) -> void:
 		return
 	offline_progress_dirty = false
 	offline_progress_last_save_msec = Time.get_ticks_msec()
+	offline_progress_last_save_ok = true
 	if announce:
 		set_status("进度已保存 (第%d局)" % offline_hand_number)
 

@@ -1158,6 +1158,9 @@ func hide_exit_confirm() -> void:
 	"""隐藏退出确认对话框"""
 	if exit_confirm_panel == null or not is_instance_valid(exit_confirm_panel):
 		return
+	# Keep the overlay locked until its exit animation has freed the old tree;
+	# repeated Enter/Esc/click input must not produce a second decision.
+	exit_confirm_decision_locked = true
 	emit_ui_qa_marker("exit_confirm|closed")
 	var panel = exit_confirm_panel
 	exit_confirm_panel = null
@@ -1176,6 +1179,7 @@ func hide_exit_confirm() -> void:
 
 func finish_exit_confirm_hide(panel_id: int, restore_id: int) -> void:
 	queue_free_node_by_id(panel_id)
+	exit_confirm_decision_locked = false
 	call_deferred("restore_control_focus_by_id", restore_id)
 	if mode == "offline":
 		call_deferred("schedule_ui_qa_page_ready", "offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
@@ -1865,6 +1869,7 @@ func update_chat_send_cooldown(now_msec: int = -1) -> void:
 		cooldown_label.set_meta("cooldown_active", cooling)
 		cooldown_label.set_meta("cooldown_remaining_msec", remaining_msec)
 		cooldown_label.set_meta("chat_send_state", "cooldown" if cooling else "ready")
+		fit_label_font_size(cooldown_label, maxf(120.0, effective_viewport_size().x * (0.240 if ui_is_compact() else 0.360)), 9, 8)
 		mark_ui_optimization(cooldown_label, "F-617")
 	for button in [send_button] + quick_buttons:
 		if button == null or not is_instance_valid(button):

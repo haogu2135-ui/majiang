@@ -2000,6 +2000,9 @@ func check_ui_round_1551_1610(scene, viewport_size: Vector2) -> void:
 	check_ui_round_1971_2030(scene, viewport_size)
 	check_ui_round_2031_2090(scene, viewport_size)
 	check_ui_round_2091_2150(scene, viewport_size)
+	check_ui_round_2151_2210(scene, viewport_size)
+	check_ui_round_2211_2270(scene, viewport_size)
+	check_ui_round_2271_2330(scene, viewport_size)
 
 
 func check_ui_round_1611_1670(scene, viewport_size: Vector2) -> void:
@@ -2368,6 +2371,108 @@ func check_ui_round_2091_2150(scene, viewport_size: Vector2) -> void:
 	var current_day_rail := scene.find_child("DailyLoginDayFocusRail_5", true, false) as Control
 	if current_day_rail != null:
 		check(bool(current_day_rail.get_meta("persistent_current_day_state", false)) and float(current_day_rail.get_meta("persistent_state_alpha", 0.0)) >= 0.40, "daily current day keeps a persistent authored state rail at %s" % viewport_size)
+
+
+func check_ui_round_2151_2210(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2151 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_2151_2210(root)
+	var contracts: Array = root.get_meta("ui_round_2151_2210_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_2151_2210_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-2151..F-2210 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-2151..F-2210 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2151..F-2210 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("owner", "")) != "" and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2151..F-2210 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_2151_2210_contract_version", "")) == "20260911-secondary-page-reading-60", "F-2151..F-2210 contract version is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2151_2210_scope", "")) == "menu_settings_rules_stats_achievements_shop_lobby_update_exit_toast_diagnostic_chat_replay", "F-2151..F-2210 scope is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2151_2210_source", "")) == "main-agent-screenshot-audit-20260911", "F-2151..F-2210 records the evidence source at %s" % viewport_size)
+		check(root.get_meta("ui_round_2151_2210_evidence_viewports", []).size() == 3, "F-2151..F-2210 names three evidence viewports at %s" % viewport_size)
+	var footer_body := scene.find_child("ShopCabinetFooterBody", true, false) as Control
+	if footer_body != null:
+		check(footer_body.get_meta("compact_fit_policy", "") == "measure_copy_before_inventory_badges", "shop footer copy owns a measured text lane at %s" % viewport_size)
+	var quick_messages := scene.find_child("ChatPanelQuickMessages", true, false) as Control
+	if quick_messages != null and bool(quick_messages.get_meta("compact_row_policy", "") == "single_bounded_row_before_input"):
+		check(quick_messages.custom_minimum_size.y >= 44.0, "compact chat quick messages keep a bounded row before input at %s" % viewport_size)
+	var archive_primary := scene.find_child("ReplayArchiveRowPrimary", true, false) as Control
+	if archive_primary != null:
+		check(archive_primary.get_meta("measured_column_policy", "") == "date_and_result_columns_keep_trailing_gutter", "replay archive primary text keeps measured columns at %s" % viewport_size)
+
+
+func check_ui_round_2211_2270(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2211 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_2211_2270(root)
+	var contracts: Array = root.get_meta("ui_round_2211_2270_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_2211_2270_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-2211..F-2270 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-2211..F-2270 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2211..F-2270 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("owner", "")) != "" and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2211..F-2270 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_2211_2270_contract_version", "")) == "20260911-battle-hud-lobby-60", "F-2211..F-2270 contract version is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2211_2270_scope", "")) == "table_log_seats_rivers_center_hud_actions_online_recovery_chat_replay_update_exit", "F-2211..F-2270 scope is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2211_2270_source", "")) == "main-agent-screenshot-audit-20260911", "F-2211..F-2270 records the evidence source at %s" % viewport_size)
+		check(root.get_meta("ui_round_2211_2270_evidence_viewports", []).size() == 3, "F-2211..F-2270 names three evidence viewports at %s" % viewport_size)
+	var ledger := scene.find_child("TableLogLedgerPanel", true, false) as Control
+	if ledger != null:
+		check(ledger.get_meta("compact_header_policy", "") == "title_then_count_then_history_with_measured_gutters", "table log header keeps measured title/count/history lanes at %s" % viewport_size)
+	var hud := scene.find_child("TopHud3DShell", true, false) as Control
+	if hud != null:
+		check(hud.get_meta("compact_lane_policy", "") == "mode_title_status_wall_then_actions" and float(hud.get_meta("minimum_lane_clearance_px", 0.0)) >= 8.0, "top HUD preserves explicit compact lane clearance at %s" % viewport_size)
+	var lobby_log := scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
+	if lobby_log != null:
+		check(lobby_log.get_meta("compact_count_policy", "") == "short_visible_count_full_tooltip", "lobby log count owns a compact visible summary at %s" % viewport_size)
+	var cooldown := scene.find_child("ChatSendCooldownLabel", true, false) as Label
+	if cooldown != null:
+		check(int(cooldown.get_meta("fitted_font_size", 0)) >= 8, "chat send state remains measurable beside the action at %s" % viewport_size)
+
+
+func check_ui_round_2271_2330(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2271 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_2271_2330(root)
+	var contracts: Array = root.get_meta("ui_round_2271_2330_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_2271_2330_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-2271..F-2330 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-2271..F-2330 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2271..F-2330 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("owner", "")) != "" and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2271..F-2330 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_2271_2330_contract_version", "")) == "20260911-secondary-interaction-state-60", "F-2271..F-2330 contract version is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2271_2330_scope", "")) == "settings_rules_stats_achievements_shop_daily_update_diagnostic_exit", "F-2271..F-2330 scope is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2271_2330_source", "")) == "ui-engineer-screenshot-audit-20260911", "F-2271..F-2330 records the evidence source at %s" % viewport_size)
+		check(root.get_meta("ui_round_2271_2330_evidence_viewports", []).size() == 3, "F-2271..F-2330 names three evidence viewports at %s" % viewport_size)
+	var settings_status := scene.find_child("SettingsLargeTextScrollStatus", true, false) as Label
+	if settings_status != null:
+		check(bool(settings_status.get_meta("first_frame_status_policy", "") == "visible_pending_then_measured"), "large-text settings status keeps a visible first-frame contract at %s" % viewport_size)
+	var rules_target := scene.find_child("RulesContentScrollHitTarget", true, false) as Control
+	if rules_target != null:
+		check(rules_target.get_meta("keyboard_scroll_contract", []).size() >= 6, "rules reader exposes keyboard scroll keys at %s" % viewport_size)
+	var daily_proxy := scene.find_child("DailyLoginDayDetailProxy_1", true, false) as Control
+	if daily_proxy != null:
+		check(daily_proxy.get_meta("detail_proxy_rect_contract", "") == "upper_detail_lane_only_claim_action_is_separate", "daily detail proxy clears the claim action lane at %s" % viewport_size)
+	var daily_claim := scene.find_child("DailyLoginClaimButton", true, false) as Button
+	if daily_claim != null:
+		check(daily_claim.get_meta("claimed_button_policy", "") == "visible_disabled_state_with_back_focus_fallback", "daily claimed state keeps a visible disabled action contract at %s" % viewport_size)
+	var exit_dialog := scene.find_child("ExitConfirmDialog", true, false) as Control
+	if exit_dialog != null:
+		check(exit_dialog.get_meta("save_failure_policy", "") == "stay_open_and_reenable_actions", "exit dialog publishes save failure recovery at %s" % viewport_size)
 
 
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:

@@ -1768,9 +1768,11 @@ func refresh_online_room_content() -> void:
 		if name_label != null:
 			name_label.text = online_lobby_slot_name(entry)
 			name_label.tooltip_text = name_label.text
+			fit_label_font_size(name_label, maxf(88.0, effective_viewport_size().x * 0.180), 12, 9)
 			if slot_state_label != null:
 				var slot_state := online_lobby_slot_state(entry, slot)
 				set_dynamic_label_text(slot_state_label, slot_state, "第%d席状态：%s" % [slot + 1, slot_state])
+				fit_label_font_size(slot_state_label, maxf(96.0, effective_viewport_size().x * 0.210), 11, 9)
 			var slot_state_icon := root_layer.find_child("OnlineLobbyRosterStateIcon_%d" % slot, true, false) as TextureRect
 			if slot_state_icon != null:
 				slot_state_icon.texture = lucide_icon_texture(online_lobby_slot_state_icon(entry, slot))
@@ -1795,7 +1797,11 @@ func refresh_online_room_content() -> void:
 	var log_count_label = root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	if log_count_label != null:
 		var log_unread_count := online_lobby_log_unread_count()
-		set_dynamic_label_text(log_count_label, "存%d · 总%d · 未读%d" % [log_count, log_total_count, log_unread_count], "房间日志缓存%d条；总计%d条；未读%d条" % [log_count, log_total_count, log_unread_count])
+		var compact_log_summary := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+		var visible_log_summary := "%d/%d · 未读%d" % [log_count, log_total_count, log_unread_count] if compact_log_summary else "存%d · 总%d · 未读%d" % [log_count, log_total_count, log_unread_count]
+		var full_log_summary := "房间日志缓存%d条；总计%d条；未读%d条" % [log_count, log_total_count, log_unread_count]
+		set_dynamic_label_text(log_count_label, visible_log_summary, full_log_summary)
+		fit_label_font_size(log_count_label, maxf(78.0, effective_viewport_size().x * (0.170 if compact_log_summary else 0.210)), 10, 8)
 		log_count_label.set_meta("log_view_state", "empty" if log_count == 0 else "has_entries")
 		log_count_label.set_meta("retained_count", log_count)
 		log_count_label.set_meta("total_count", log_total_count)
@@ -2496,6 +2502,33 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 	if scrollbar == null or thumb == null or gutter == null:
 		return
 	var event_target = input_target if input_target != null else thumb
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if not key_event.pressed or key_event.echo:
+			return
+		var key_scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
+		var key_page := maxf(32.0, scrollbar.page * 0.86)
+		var key_handled := true
+		match key_event.keycode:
+			KEY_HOME:
+				scrollbar.value = 0.0
+			KEY_END:
+				scrollbar.value = key_scroll_range
+			KEY_PAGEUP:
+				scrollbar.value = maxf(0.0, scrollbar.value - key_page)
+			KEY_PAGEDOWN:
+				scrollbar.value = minf(key_scroll_range, scrollbar.value + key_page)
+			KEY_UP:
+				scrollbar.value = maxf(0.0, scrollbar.value - 48.0)
+			KEY_DOWN:
+				scrollbar.value = minf(key_scroll_range, scrollbar.value + 48.0)
+			_:
+				key_handled = false
+		if key_handled:
+			content_scroll.scroll_vertical = int(round(scrollbar.value))
+			sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
+			event_target.accept_event()
+		return
 	if event is InputEventMouseButton:
 		var mouse_button = event as InputEventMouseButton
 		# On Linux/Xvfb a touch gesture can emit a synthetic mouse stream as
@@ -3107,6 +3140,8 @@ func _show_shop_screen_impl() -> void:
 	apply_rect(footer_body, rect_full(0.035, 0.515, 0.630, 0.850))
 	footer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_body)
+	fit_label_font_size(footer_body, maxf(180.0, effective_viewport_size().x * 0.540), commercial_ui_font_size(13, 2), 10)
+	footer_body.set_meta("compact_fit_policy", "measure_copy_before_inventory_badges")
 	var inventory_text := "库存 %d件" % total_inventory
 	var footer_inventory = make_badge(shop_footer, rect_full(0.650, 0.175, 0.790, 0.775), inventory_text, commercial_ui_font_size(13, 2), Color(0.060, 0.120, 0.110, 0.80), Color(0.42, 0.62, 0.50, 0.28), Color(0.90, 0.96, 0.84))
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
@@ -4300,6 +4335,9 @@ func show_chat_panel() -> void:
 	quick_title.set_meta("accessible_name", "快捷消息分组")
 	configure_clipped_label(quick_title)
 	apply_rect(quick_row, rect_full(0.020, 0.360, 0.980, 0.615) if compact_chat else rect_full(0.060, 0.270, 0.940, 0.350))
+	if compact_chat:
+		quick_row.custom_minimum_size = Vector2(0.0, 44.0)
+		quick_row.set_meta("compact_row_policy", "single_bounded_row_before_input")
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -4685,10 +4723,13 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			day_focus_rail.modulate = Color(1.0, 1.0, 1.0, 0.86)
 		)
 		detail_proxy.focus_exited.connect(func() -> void:
-			day_focus_rail.modulate.a = 0.0
+			day_focus_rail.modulate.a = 0.46 if is_current else 0.0
 		)
 		indicator.add_child(detail_proxy)
-		detail_proxy.set_anchors_preset(Control.PRESET_FULL_RECT)
+		# The day card owns detail only. The reward line remains passive, while
+		# the separate claim button below owns the only claim action.
+		apply_rect(detail_proxy, rect_full(0.035, 0.035, 0.965, 0.640))
+		detail_proxy.set_meta("detail_proxy_rect_contract", "upper_detail_lane_only_claim_action_is_separate")
 		mark_ui_optimization(detail_proxy, "F-186")
 		mark_ui_optimization(detail_proxy, "F-233")
 	draw_daily_login_streak_art(panel, days, current_day_in_cycle)
@@ -4799,7 +4840,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			claimed_button.tooltip_text = "今日奖励已领取；明日可继续签到"
 			claimed_button.set_meta("claim_state", "claimed")
 			claimed_button.set_meta("ui_full_text", claimed_button.tooltip_text)
-			claimed_button.visible = false
+			claimed_button.visible = true
 			claimed_button.focus_mode = Control.FOCUS_NONE
 			claimed_button.modulate = Color(0.72, 0.76, 0.68, 0.72)
 		var claimed_status := panel.find_child("DailyLoginClaimedStatusSurface", true, false) as Control
@@ -4873,9 +4914,13 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	claimed_status_surface.visible = claimed_today
 	if claimed_today:
 		confirm_btn.disabled = true
-		confirm_btn.visible = false
+		confirm_btn.visible = true
 		confirm_btn.focus_mode = Control.FOCUS_NONE
 		confirm_btn.modulate = Color(0.72, 0.76, 0.68, 0.72)
+		confirm_btn.set_meta("status_surface_policy", "disabled_claim_button_remains_visible")
+	# Keep the passive status plate behind the disabled native button so the
+	# visible "已领取" command remains the stable state owner.
+	panel.move_child(claimed_status_surface, confirm_btn.get_index())
 	draw_daily_login_claim_flow_art(panel, progress)
 	# 七日奖励预告
 	var days_to_bonus = max(0, 7 - progress)
@@ -5455,6 +5500,7 @@ func show_exit_confirm() -> void:
 		return
 	emit_ui_qa_marker("exit_confirm|open")
 	exit_confirm_focus_restore_id = focused_control_instance_id()
+	exit_confirm_decision_locked = false
 	var overlay = Control.new()
 	overlay.name = "ExitConfirmOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -5470,8 +5516,13 @@ func show_exit_confirm() -> void:
 	overlay.add_child(mask)
 
 	# 对话框面板 — r415: thin lacquer shell under GPT confirm plate.
-	var dialog = make_gpt_plate_rect(rect_full(0.28, 0.35, 0.72, 0.65), Color(0.18, 0.13, 0.08, 0.20), "ui_button_face_plate")
+	var compact_exit := effective_viewport_size().y <= 600.0 or effective_viewport_size().x <= 1000.0
+	var dialog_rect := rect_full(0.16, 0.22, 0.84, 0.78) if compact_exit else rect_full(0.28, 0.35, 0.72, 0.65)
+	var dialog = make_gpt_plate_rect(dialog_rect, Color(0.18, 0.13, 0.08, 0.20), "ui_button_face_plate")
 	dialog.name = "ExitConfirmDialog"
+	dialog.set_meta("compact_layout", compact_exit)
+	dialog.set_meta("reading_order", ["ExitConfirmTitle", "ExitConfirmMessage", "ExitConfirmSaveStatus", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"])
+	dialog.set_meta("save_guard_policy", "save_must_succeed_before_menu_transition")
 	overlay.add_child(dialog)
 	var exit_gpt_key := "exit_gpt_confirm"
 	var gpt_exit_texture = add_optional_gpt_illustration_texture(dialog, exit_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.72, false)
@@ -5488,22 +5539,32 @@ func show_exit_confirm() -> void:
 
 	# 标题
 	var title = make_label(dialog, "确认退出", 24, Color(0.94, 0.86, 0.48), true)
-	apply_rect(title, rect_full(0.08, 0.08, 0.92, 0.25))
+	apply_rect(title, rect_full(0.08, 0.07, 0.92, 0.23) if compact_exit else rect_full(0.08, 0.08, 0.92, 0.25))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 提示文本
 	var message = "是否退出当前游戏？\n进度将自动保存。"
 	var msg_label = make_label(dialog, message, 16, Color(0.92, 0.88, 0.76), false)  # r430 warm ink
-	apply_rect(msg_label, rect_full(0.10, 0.47, 0.90, 0.64))
+	apply_rect(msg_label, rect_full(0.10, 0.31, 0.90, 0.50) if compact_exit else rect_full(0.10, 0.47, 0.90, 0.64))
 	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	msg_label.name = "ExitConfirmMessage"
+	set_ui_full_text(msg_label, message, "退出后果")
+	var save_status := make_label(dialog, "保存状态：尚未提交", 11, Color(0.82, 0.90, 0.78), true)
+	save_status.name = "ExitConfirmSaveStatus"
+	apply_rect(save_status, rect_full(0.10, 0.51, 0.90, 0.62) if compact_exit else rect_full(0.10, 0.655, 0.90, 0.715))
+	save_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	save_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	save_status.set_meta("save_state", "idle")
+	set_ui_full_text(save_status, "退出前保存状态", "退出前保存状态")
+	configure_clipped_label(save_status)
 	draw_exit_confirm_choice_art(dialog)
 
 	# 按钮行
 	var button_row = HBoxContainer.new()
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	button_row.add_theme_constant_override("separation", 16)
-	apply_rect(button_row, rect_full(0.12, 0.72, 0.88, 0.92))
+	apply_rect(button_row, rect_full(0.10, 0.67, 0.90, 0.93) if compact_exit else rect_full(0.12, 0.72, 0.88, 0.92))
 	dialog.add_child(button_row)
 
 	# 继续游戏按钮
@@ -5517,9 +5578,34 @@ func show_exit_confirm() -> void:
 	button_row.add_child(continue_btn)
 
 	# 退出按钮
-	var exit_btn = make_small_button("退出游戏", Color(0.56, 0.36, 0.30), func() -> void:
+	var exit_btn: Button
+	exit_btn = make_small_button("退出游戏", Color(0.56, 0.36, 0.30), func() -> void:
+		if exit_confirm_decision_locked:
+			return
+		exit_confirm_decision_locked = true
+		var live_status := dialog.find_child("ExitConfirmSaveStatus", true, false) as Label
+		if live_status != null:
+			set_dynamic_label_text(live_status, "保存中…", "退出前正在保存当前牌局")
+			live_status.set_meta("save_state", "saving")
+		if continue_btn != null and is_instance_valid(continue_btn):
+			continue_btn.disabled = true
+		if exit_btn != null and is_instance_valid(exit_btn):
+			exit_btn.disabled = true
+		save_offline_progress(false)
+		if mode == "offline" and not offline_progress_last_save_ok:
+			exit_confirm_decision_locked = false
+			if live_status != null:
+				set_dynamic_label_text(live_status, "保存失败，请重试", "退出被阻止：当前牌局未能保存，请重试")
+				live_status.set_meta("save_state", "failed")
+			if continue_btn != null and is_instance_valid(continue_btn):
+				continue_btn.disabled = false
+			if exit_btn != null and is_instance_valid(exit_btn):
+				exit_btn.disabled = false
+			return
+		if live_status != null:
+			set_dynamic_label_text(live_status, "已保存，正在返回", "当前牌局已保存，正在返回主菜单")
+			live_status.set_meta("save_state", "saved")
 		hide_exit_confirm()
-		save_offline_progress()
 		# Exiting is an explicit modal decision. It must win over an in-flight
 		# table-entry transition instead of being rejected by its route guard.
 		show_menu(true)
@@ -6453,6 +6539,8 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(primary, rect_full(0.035, 0.040, 0.520, 0.260))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
+	fit_label_font_size(primary, maxf(96.0, effective_viewport_size().x * 0.430), 11, 9)
+	primary.set_meta("measured_column_policy", "date_and_result_columns_keep_trailing_gutter")
 	primary.tooltip_text = replay_archive_date_text(entry)
 	set_ui_full_text(primary, replay_archive_date_text(entry), "回放日期")
 	var result := make_label(row, result_label, 11, Color(0.72, 0.90, 0.68), true)
@@ -6460,6 +6548,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(result, rect_full(0.520, 0.040, 0.965, 0.260))
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(result)
+	fit_label_font_size(result, maxf(120.0, effective_viewport_size().x * 0.380), 11, 9)
 	result.tooltip_text = result_label
 	set_ui_full_text(result, result_label, "回放结果")
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
@@ -6938,6 +7027,7 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 	status.text = "当前 %d · 显示 %d-%d / %d 条已验证事件%s" % [selected_event, first_event, last_event, total, filtered_note]
 	status.tooltip_text = "当前第%d条；可见第%d至%d条，共%d条已验证事件%s" % [selected_event, first_event, last_event, total, filtered_note]
 	set_ui_full_text(status, status.tooltip_text, "回放时间线状态")
+	fit_label_font_size(status, maxf(120.0, effective_viewport_size().x * 0.360), 11, 8)
 	status.set_meta("timeline_status_contract", "current_status_event_count_and_visible_range")
 	status.set_meta("timeline_state", "populated")
 	status.set_meta("timeline_source_event_count", source_total)

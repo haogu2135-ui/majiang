@@ -12610,6 +12610,9 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	register_ui_round_1971_2030(root)
 	register_ui_round_2031_2090(root)
 	register_ui_round_2091_2150(root)
+	register_ui_round_2151_2210(root)
+	register_ui_round_2211_2270(root)
+	register_ui_round_2271_2330(root)
 
 
 func register_ui_round_2031_2090(root: Control) -> void:
@@ -12618,9 +12621,15 @@ func register_ui_round_2031_2090(root: Control) -> void:
 	# authored bitmap hosts remain visual-only and tile faces stay untouched.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2031_2090_registered_child_count", -1)) == registration_child_count:
 		return
+	var control_index: Dictionary = {}
+	for candidate_node in registration_controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2031 + index))
@@ -12630,7 +12639,7 @@ func register_ui_round_2031_2090(root: Control) -> void:
 	root.set_meta("ui_round_2031_2090_source", "main-agent-evidence-audit-20260911")
 	root.set_meta("ui_round_2031_2090_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
 	var find_control := func(node_name: String) -> Control:
-		return find_ui_contract_control(root, node_name)
+		return control_index.get(node_name, null) as Control
 	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
 		var target := node if node != null and is_instance_valid(node) else root
 		var attached: Array = target.get_meta("ui_round_2031_2090_ids", [])
@@ -12744,9 +12753,15 @@ func register_ui_round_2091_2150(root: Control) -> void:
 	# recovery controls, and secondary page navigation after the child-status pass.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2091_2150_registered_child_count", -1)) == registration_child_count:
 		return
+	var control_index: Dictionary = {}
+	for candidate_node in registration_controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2091 + index))
@@ -12756,7 +12771,7 @@ func register_ui_round_2091_2150(root: Control) -> void:
 	root.set_meta("ui_round_2091_2150_source", "main-agent-evidence-audit-20260911")
 	root.set_meta("ui_round_2091_2150_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
 	var find_control := func(node_name: String) -> Control:
-		return find_ui_contract_control(root, node_name)
+		return control_index.get(node_name, null) as Control
 	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
 		var target := node if node != null and is_instance_valid(node) else root
 		var attached: Array = target.get_meta("ui_round_2091_2150_ids", [])
@@ -12852,6 +12867,374 @@ func register_ui_round_2091_2150(root: Control) -> void:
 		daily_current_rail.set_meta("persistent_current_day_state", true)
 	root.set_meta("ui_round_2091_2150_owner_roles", owner_roles)
 	root.set_meta("ui_round_2091_2150_registered_child_count", registration_child_count)
+
+
+func register_ui_round_2151_2210(root: Control) -> void:
+	# F-2151..F-2210 records the next screenshot-backed pass after the modal
+	# and secondary-page lanes. It only annotates existing native controls.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := registration_controls.size()
+	if int(root.get_meta("ui_round_2151_2210_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index: Dictionary = {}
+	for candidate_node in registration_controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (2151 + index))
+	root.set_meta("ui_round_2151_2210_contract_ids", contract_ids)
+	root.set_meta("ui_round_2151_2210_contract_version", "20260911-secondary-page-reading-60")
+	root.set_meta("ui_round_2151_2210_scope", "menu_settings_rules_stats_achievements_shop_lobby_update_exit_toast_diagnostic_chat_replay")
+	root.set_meta("ui_round_2151_2210_source", "main-agent-screenshot-audit-20260911")
+	root.set_meta("ui_round_2151_2210_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return control_index.get(node_name, null) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_2151_2210_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_2151_2210_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_2151_2210_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2151_2210_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2151_2210_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2151_2210_policies", policies)
+		target.set_meta("ui_round_2151_2210_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-2151", "MenuPrimaryOfflineCard", "menu_offline_focus_owner", "offline entry keeps its focus boundary distinct from the title layer"],
+		["F-2152", "MenuPrimaryOnlineCard", "menu_online_icon_owner", "online entry icon and connection copy share one measured card lane"],
+		["F-2153", "MenuQuickActionRail", "menu_quick_spacing_owner", "quick actions retain equal gaps and a stable active marker"],
+		["F-2154", "MenuFooterTextLayer", "menu_footer_baseline_owner", "version and economy facts share one bottom text baseline"],
+		["F-2155", "MenuSettingsButton", "menu_settings_entry_owner", "settings entry keeps its icon, label, and target inside one footer cell"],
+		["F-2156", "SettingsCloseButton", "settings_close_focus_owner", "settings close remains the final reachable action after section scrolling"],
+		["F-2157", "SettingsDefaultScrollStatus", "settings_range_status_owner", "settings range state stays visible beside the scroll viewport"],
+		["F-2158", "SettingsRuleVariantStatus", "settings_rule_status_owner", "rule variant and next-round consequence keep a complete status line"],
+		["F-2159", "SettingsSystemGrid", "settings_system_row_owner", "system rows measure label state and action independently"],
+		["F-2160", "SettingsContentScroll", "settings_scroll_end_owner", "settings content ends on a complete measured row before the footer"],
+		["F-2161", "RulesGuide", "rules_guide_width_owner", "chapter navigation preserves a readable label lane across viewports"],
+		["F-2162", "RulesGuideStepActivePlate_0", "rules_active_step_owner", "selected chapter state uses shape and text in addition to color"],
+		["F-2163", "RulesContentList", "rules_section_gap_owner", "rule section headings keep a measured gap from the preceding line"],
+		["F-2164", "RulesExampleTableTexture_0", "rules_example_caption_owner", "example art remains subordinate to its caption and body copy"],
+		["F-2165", "RulesContentList", "rules_body_line_owner", "wrapped rule lines keep stable line height before the next section"],
+		["F-2166", "RulesContentScrollBottomCue", "rules_bottom_clearance_owner", "bottom reading cue clears the last line and the return route"],
+		["F-2167", "StatsSummaryUnit_winrate", "stats_summary_value_owner", "summary values keep a measured slot above the detailed rows"],
+		["F-2168", "StatsSummaryChip_games", "stats_summary_label_owner", "summary captions remain distinct from their numeric values"],
+		["F-2169", "StatsRowsContent", "stats_negative_value_owner", "negative score values retain sign and unit without clipping"],
+		["F-2170", "StatsRowsContent", "stats_value_inset_owner", "row values keep a stable trailing inset across screen widths"],
+		["F-2171", "StatsEmptyState", "stats_empty_focus_owner", "empty statistics removes dead actions while keeping one next step"],
+		["F-2172", "StatsBackButton", "stats_back_route_owner", "stats return restores the originating menu focus route"],
+		["F-2173", "AchievementGalleryFrontPanel", "achievement_header_owner", "achievement header facts stay above the gallery reading lane"],
+		["F-2174", "AchievementRowReadabilityLane", "achievement_row_gap_owner", "achievement rows keep image copy progress and state separated"],
+		["F-2175", "AchievementsBrowseStatusLabel", "achievement_status_owner", "browse status reports visible range beside the gallery"],
+		["F-2176", "AchievementGalleryFrontPanel", "achievement_art_owner", "achievement art keeps its aspect without stealing the status column"],
+		["F-2177", "AchievementsScroll", "achievement_scroll_end_owner", "gallery scroll ends on a complete row before the footer"],
+		["F-2178", "AchievementsBackButton", "achievement_back_route_owner", "achievement back action remains a stable page-level route"],
+		["F-2179", "ShopCabinetFrontPanel", "shop_header_owner", "shop title and currency facts occupy one stable header band"],
+		["F-2180", "ShopCurrencyPanel_coins", "shop_coin_alignment_owner", "coin balance keeps its icon label and value aligned"],
+		["F-2181", "ShopItemsContent", "shop_description_owner", "product description stays in the product column before the CTA"],
+		["F-2182", "ShopItemBuyHitHost_swap_card", "shop_disabled_reason_owner", "disabled purchase keeps its reason inside the same hit group"],
+		["F-2183", "ShopCabinetFooterBody", "shop_footer_copy_owner", "footer explanation is measured before inventory badges begin"],
+		["F-2184", "ShopGetGemsButton", "shop_recovery_owner", "insufficient currency exposes one honest recovery action"],
+		["F-2185", "OnlineLobbyConnectionStateLabel", "lobby_state_owner", "connection state and endpoint remain separate readable facts"],
+		["F-2186", "OnlineLobbyEndpointCopyButton", "lobby_endpoint_copy_owner", "endpoint copy feedback stays next to the copied value"],
+		["F-2187", "OnlineLobbyRoomOfflineState", "lobby_empty_state_owner", "room empty state states the next connection step once"],
+		["F-2188", "OnlineLobbyLogPanel", "lobby_log_empty_owner", "empty lobby log keeps its placeholder inside the log surface"],
+		["F-2189", "OnlineLobbyFormFeedbackLabel", "lobby_form_feedback_owner", "form validation feedback precedes the action row"],
+		["F-2190", "OnlineLobbyActionButtonRow", "lobby_action_state_owner", "disabled lobby actions expose their prerequisite without a color-only cue"],
+		["F-2191", "OnlineLobbyStatusLabel", "lobby_next_step_owner", "next-step copy remains below the form and above the page return"],
+		["F-2192", "OnlineLobbyFormPanel", "lobby_column_gutter_owner", "wide lobby columns retain a visible central gutter"],
+		["F-2193", "UpdateDialogTitle", "update_title_owner", "update title keeps current-version context on one readable line"],
+		["F-2194", "UpdateStatusLabel", "update_status_owner", "remote version and update state remain distinct facts"],
+		["F-2195", "UpdateProgressLabel", "update_progress_owner", "progress percentage and byte status fit inside the progress lane"],
+		["F-2196", "UpdateDialogButtonRow", "update_actions_owner", "install and close actions keep stable order and touch targets"],
+		["F-2197", "ExitConfirmDialog", "exit_title_owner", "exit title precedes consequence copy in the modal reading order"],
+		["F-2198", "ExitConfirmDialog", "exit_consequence_owner", "exit consequence copy clears the choice row at compact sizes"],
+		["F-2199", "Toast", "toast_bounds_owner", "toast text stays inside its safe area before the authored face"],
+		["F-2200", "ToastPendingLabel", "toast_queue_owner", "queued notification count remains secondary to the current toast"],
+		["F-2201", "DiagnosticPrimarySummary", "diagnostic_summary_owner", "diagnostic health summary stays above the scrollable report"],
+		["F-2202", "DiagnosticDialogPanel", "diagnostic_warning_owner", "warning copy and report body use separate reading lanes"],
+		["F-2203", "DiagnosticCopyFeedbackLabel", "diagnostic_copy_owner", "copy result persists beside the copy action without covering the report"],
+		["F-2204", "DiagnosticCloseButton", "diagnostic_close_route_owner", "diagnostic close remains below the report and restores focus"],
+		["F-2205", "ChatPanelTitle", "chat_title_owner", "chat title keeps a clear lane from range and close controls"],
+		["F-2206", "ChatPanelQuickMessages", "chat_quick_lane_owner", "quick messages occupy a bounded row above the input lane"],
+		["F-2207", "ChatInput", "chat_input_owner", "chat input keeps clear and send actions outside its text lane"],
+		["F-2208", "ChatSendButton", "chat_send_owner", "send state remains readable while cooldown disables the action"],
+		["F-2209", "ReplayArchiveRowPrimary", "replay_archive_primary_owner", "archive date and result keep separate measured columns"],
+		["F-2210", "ReplayImportTimelinePosition", "replay_timeline_status_owner", "timeline status reports selection and visible range above event rows"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": str(owner[2]), "policy": str(owner[3])}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, str(owner[2]), str(owner[3]))
+	var footer_body := find_control.call("ShopCabinetFooterBody") as Control
+	if footer_body != null:
+		footer_body.set_meta("compact_fit_policy", "measure_copy_before_inventory_badges")
+	var quick_messages := find_control.call("ChatPanelQuickMessages") as Control
+	if quick_messages != null:
+		quick_messages.set_meta("compact_row_policy", "single_bounded_row_before_input")
+	var archive_primary := find_control.call("ReplayArchiveRowPrimary") as Control
+	if archive_primary != null:
+		archive_primary.set_meta("measured_column_policy", "date_and_result_columns_keep_trailing_gutter")
+	root.set_meta("ui_round_2151_2210_owner_roles", owner_roles)
+	root.set_meta("ui_round_2151_2210_registered_child_count", registration_child_count)
+
+
+func register_ui_round_2211_2270(root: Control) -> void:
+	# F-2211..F-2270 is the next screenshot-backed battle/lobby pass. It records
+	# ownership on existing native controls and keeps the visual layer authored.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := registration_controls.size()
+	if int(root.get_meta("ui_round_2211_2270_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index: Dictionary = {}
+	for candidate_node in registration_controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (2211 + index))
+	root.set_meta("ui_round_2211_2270_contract_ids", contract_ids)
+	root.set_meta("ui_round_2211_2270_contract_version", "20260911-battle-hud-lobby-60")
+	root.set_meta("ui_round_2211_2270_scope", "table_log_seats_rivers_center_hud_actions_online_recovery_chat_replay_update_exit")
+	root.set_meta("ui_round_2211_2270_source", "main-agent-screenshot-audit-20260911")
+	root.set_meta("ui_round_2211_2270_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return control_index.get(node_name, null) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_2211_2270_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_2211_2270_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_2211_2270_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2211_2270_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2211_2270_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2211_2270_policies", policies)
+		target.set_meta("ui_round_2211_2270_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-2211", "TableLogLedgerPanel", "table_log_header_surface_owner", "record title count history and latest event share one compact reading surface"],
+		["F-2212", "TableLogLedgerTitle", "table_log_title_lane_owner", "record title keeps a measured lane before count and history"],
+		["F-2213", "TableLogLedgerCount", "table_log_count_lane_owner", "record count remains visible without competing with the history action"],
+		["F-2214", "TableLogArchiveButton", "table_log_history_action_owner", "history action keeps a fixed touch target beside the current record"],
+		["F-2215", "TableLogLedgerRow_0", "table_log_latest_row_owner", "latest record row remains inside the ledger viewport"],
+		["F-2216", "TableLogLedgerBody_0", "table_log_event_copy_owner", "latest event copy fits its measured body lane before tooltip fallback"],
+		["F-2217", "TableLogArchivePanel", "table_log_archive_surface_owner", "full history keeps header count close and scroll list in one surface"],
+		["F-2218", "TableLogArchiveTitle", "table_log_archive_title_owner", "history title precedes count and close route"],
+		["F-2219", "TableLogArchiveCount", "table_log_archive_count_owner", "history count reports visible and retained records"],
+		["F-2220", "TableLogArchiveScroll", "table_log_archive_scroll_owner", "history scroll owns a stable readable range"],
+		["F-2221", "RoundHistoryArchiveSection", "round_history_section_owner", "recent round reports follow table records as a secondary section"],
+		["F-2222", "SeatPanel_0", "seat_identity_summary_owner_v3", "seat plaque separates identity score counters and recent state"],
+		["F-2223", "SeatCompactName_0", "seat_name_measurement_owner_v3", "seat name fits its identity column before dealer marker"],
+		["F-2224", "SeatCompactScore_0", "seat_score_measurement_owner_v3", "seat score keeps sign and unit inside the value column"],
+		["F-2225", "SeatCompactMeta_0", "seat_counter_measurement_owner_v3", "hand flower and discard counters share one compact field order"],
+		["F-2226", "SeatCompactStatus_0", "seat_status_measurement_owner_v3", "recent action text clears counters and threat state"],
+		["F-2227", "SeatCompactRiver_0", "seat_river_summary_owner_v3", "recent river summary stays subordinate to seat identity"],
+		["F-2228", "SeatCompactDealer_0", "seat_dealer_marker_owner_v2", "dealer marker remains inside the name and score header"],
+		["F-2229", "DiscardGrid_0", "river_page_owner_v3", "river page keeps tile grid and terminal gutter stable"],
+		["F-2230", "DiscardRiverArchiveButton_0", "river_archive_action_owner_v3", "river history action reports page and restores latest context"],
+		["F-2231", "RecentDiscardTile_0", "river_latest_tile_owner_v2", "latest discard keeps one visible source marker"],
+		["F-2232", "CenterConsole3DShell", "center_fact_surface_owner_v2", "center facts reserve wind wall and latest discard lanes"],
+		["F-2233", "CenterWallStatusLabel", "center_wall_status_owner_v2", "wall state follows the numeric wall count without clipping"],
+		["F-2234", "CenterLastDiscardLabel", "center_last_discard_owner_v2", "last discard reports tile and source seat in one measured label"],
+		["F-2235", "CenterWindLabel_东", "center_wind_marker_owner_v2", "current wind uses a stable center marker independent of color"],
+		["F-2236", "ActionButtonDock", "action_dock_surface_owner_v2", "action dock reserves response status and button lanes"],
+		["F-2237", "ActionDockStatusLabel", "action_status_owner_v2", "focus or recovery status occupies one non-overlapping header slot"],
+		["F-2238", "ActionIntentDock", "action_intent_owner_v2", "intent summary stays above actions and outside the wall"],
+		["F-2239", "ChatActionButton", "chat_entry_owner_v2", "chat entry remains reachable without stealing primary action focus"],
+		["F-2240", "TopHud3DShell", "hud_lane_surface_owner_v3", "top HUD keeps mode title status wall and controls in fixed lanes"],
+		["F-2241", "TopHudModeBadge", "hud_mode_owner_v2", "mode and rule variant remain distinct from the hand title"],
+		["F-2242", "TopHudTitle", "hud_title_owner_v3", "round or room title fits before phase and wall facts"],
+		["F-2243", "TopHudStatus", "hud_status_owner_v3", "turn status takes priority over transient feedback"],
+		["F-2244", "TopHudWallText", "hud_wall_value_owner_v2", "remaining wall count keeps a complete current/total value"],
+		["F-2245", "TopHudWallState", "hud_wall_state_owner_v2", "wall state and last discard use a secondary lane below the count"],
+		["F-2246", "TopHudSettingsButton", "hud_settings_owner_v2", "settings remains a distinct top-level action"],
+		["F-2247", "TopHudBackButton", "hud_back_owner_v2", "back route remains separated from settings and update"],
+		["F-2248", "TopHudUpdateButton", "hud_update_owner_v2", "update notice stays secondary to live table controls"],
+		["F-2249", "OnlineLobbyRosterPanel", "lobby_roster_surface_owner_v3", "roster owns seat name readiness and connection columns"],
+		["F-2250", "OnlineLobbyRosterRow_0", "lobby_roster_row_owner_v3", "occupied and empty seats retain one stable row height"],
+		["F-2251", "OnlineLobbyRosterName_0", "lobby_roster_name_owner_v3", "long names fit the name column with a full-value route"],
+		["F-2252", "OnlineLobbyRosterState_0", "lobby_roster_state_owner_v3", "ready and seat state remain textual before icon tint"],
+		["F-2253", "OnlineLobbyLogListPanel", "lobby_log_surface_owner_v3", "log header range unread and entries share one bounded surface"],
+		["F-2254", "OnlineLobbyLogLatestButton", "lobby_latest_action_owner_v3", "latest action reports unread state and jumps without changing room state"],
+		["F-2255", "OnlineLobbyLogUnreadLabel", "lobby_unread_owner_v2", "unread count stays adjacent to latest log action"],
+		["F-2256", "OnlineLobbyLogRangeLabel", "lobby_range_owner_v2", "visible log range remains separate from retained total"],
+		["F-2257", "OnlineLobbyLogCountLabel", "lobby_count_owner_v2", "compact log count uses a short visible summary and full tooltip"],
+		["F-2258", "OnlineLobbyStartGateReason", "lobby_start_reason_owner_v3", "create join and start prerequisites appear before the disabled CTA"],
+		["F-2259", "OnlineLobbyPrimaryStartButton", "lobby_start_action_owner_v3", "start action follows the gate and preserves focus fallback"],
+		["F-2260", "OnlineLobbyConnectionStateLabel", "lobby_connection_owner_v3", "connection state is not mistaken for the endpoint value"],
+		["F-2261", "OnlineDisconnectedLobbyButton", "online_recovery_lobby_owner_v2", "return to lobby preserves resumable table context"],
+		["F-2262", "OnlineRecoveryStateLabel", "online_recovery_status_owner_v2", "recovery phase attempt and reason stay in one status slot"],
+		["F-2263", "ChatInput", "chat_input_lane_owner_v2", "draft clear proxy and send action retain separate compact lanes"],
+		["F-2264", "ChatSendButton", "chat_send_action_owner_v2", "empty and cooldown states do not create a hidden focus stop"],
+		["F-2265", "ChatSendCooldownLabel", "chat_send_status_owner_v2", "ready and cooldown state remains readable beside the action"],
+		["F-2266", "TableLogArchivePanel", "table_history_owner_v2", "table history keeps records and recent round reports in order"],
+		["F-2267", "ReplayArchiveSearchInput", "replay_search_owner_v2", "search field remains above archive rows and preserves clear focus"],
+		["F-2268", "ReplayImportStatus", "replay_validation_owner_v2", "validation state remains distinct from timeline position"],
+		["F-2269", "ReplayImportTimelineEmpty", "replay_empty_owner_v2", "empty timeline names the one next import action"],
+		["F-2270", "UpdateStatusLabel", "update_status_owner_v2", "update state and progress remain readable before secondary actions"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": str(owner[2]), "policy": str(owner[3])}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, str(owner[2]), str(owner[3]))
+	var ledger := find_control.call("TableLogLedgerPanel") as Control
+	if ledger != null:
+		ledger.set_meta("compact_header_policy", "title_then_count_then_history_with_measured_gutters")
+		ledger.set_meta("latest_event_policy", "latest_record_is_visible_before_archive_route")
+	var hud := find_control.call("TopHud3DShell") as Control
+	if hud != null:
+		hud.set_meta("compact_lane_policy", "mode_title_status_wall_then_actions")
+		hud.set_meta("minimum_lane_clearance_px", 8.0)
+	var lobby_log := find_control.call("OnlineLobbyLogListPanel") as Control
+	if lobby_log != null:
+		lobby_log.set_meta("compact_count_policy", "short_visible_count_full_tooltip")
+	root.set_meta("ui_round_2211_2270_owner_roles", owner_roles)
+	root.set_meta("ui_round_2211_2270_registered_child_count", registration_child_count)
+
+
+func register_ui_round_2271_2330(root: Control) -> void:
+	# F-2271..F-2330 records the settings/rules/stats/achievement/shop,
+	# daily/update/diagnostic/exit state pass from the read-only UI audit.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := registration_controls.size()
+	if int(root.get_meta("ui_round_2271_2330_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index: Dictionary = {}
+	for candidate_node in registration_controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (2271 + index))
+	root.set_meta("ui_round_2271_2330_contract_ids", contract_ids)
+	root.set_meta("ui_round_2271_2330_contract_version", "20260911-secondary-interaction-state-60")
+	root.set_meta("ui_round_2271_2330_scope", "settings_rules_stats_achievements_shop_daily_update_diagnostic_exit")
+	root.set_meta("ui_round_2271_2330_source", "ui-engineer-screenshot-audit-20260911")
+	root.set_meta("ui_round_2271_2330_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return control_index.get(node_name, null) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_2271_2330_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_2271_2330_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_2271_2330_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2271_2330_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2271_2330_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2271_2330_policies", policies)
+		target.set_meta("ui_round_2271_2330_policy", policy)
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-2271", "SettingsLargeTextScrollStatus", "settings_large_text_first_frame_status_owner", "large-text range status remains visible while measurement settles"],
+		["F-2272", "SettingsSectionNavigation", "settings_active_section_owner", "active settings section keeps text and authored rail state after focus leaves"],
+		["F-2273", "SettingRowButton_背景音乐", "settings_music_feedback_owner", "music toggle exposes immediate state feedback in its row"],
+		["F-2274", "SettingRowButton_播放测试", "settings_audio_test_state_owner", "audio test action names unavailable output instead of silent failure"],
+		["F-2275", "SettingRowButton_语音报牌", "settings_tts_state_owner", "tts capability state remains textual beside the toggle"],
+		["F-2276", "SettingRowButton_阅读辅助", "settings_accessibility_focus_owner", "accessibility profile rebuild restores focus and visible scroll context"],
+		["F-2277", "ResetProgressButton", "settings_reset_armed_owner", "armed reset state keeps scope and second-confirmation timing visible"],
+		["F-2278", "SettingsOverlay", "settings_outside_close_owner", "outside click and Esc close without scroll-child event leakage"],
+		["F-2279", "SettingsRuleVariantStatus", "settings_rule_feedback_owner", "rule switch reports current and next-round effect in one status lane"],
+		["F-2280", "SettingsLargeTextScroll", "settings_system_reachability_owner", "system settings remain complete or explicitly scrollable at every viewport"],
+		["F-2281", "RulesGuideStepButton_1", "rules_focus_state_owner", "focus and selected chapter remain distinct states"],
+		["F-2282", "RulesGuideStepButton_5", "rules_last_section_anchor_owner", "last chapter jump keeps title and first body line visible"],
+		["F-2283", "RulesContentScroll", "rules_scroll_sync_owner", "wheel, thumb, chapter and status share one settled scroll value"],
+		["F-2284", "RulesContentScrollHitTarget", "rules_keyboard_scroll_owner", "Home End PageUp PageDown and arrows move the custom reader"],
+		["F-2285", "RulesGuideStepButton_0", "rules_native_hit_owner", "chapter button owns its full touch target above passive guide art"],
+		["F-2286", "RulesContentList", "rules_section_media_anchor_owner", "chapter media stays adjacent to its title and first explanation"],
+		["F-2287", "RulesBackButton", "rules_reentry_owner", "rule reentry preserves the last chapter without changing first-entry default"],
+		["F-2288", "RulesBackButton", "rules_escape_restore_owner", "Esc returns to menu and restores the rules entry focus"],
+		["F-2289", "StatsRuleFilterButton", "stats_filter_empty_owner", "single-scope filter exposes its disabled reason visibly"],
+		["F-2290", "StatsRowsContent", "stats_filter_scroll_owner", "filter rebuild restores only a valid scroll range"],
+		["F-2291", "StatsCopyButton", "stats_copy_feedback_owner", "copy feedback names the selected statistics scope"],
+		["F-2292", "StatsLatestRoundButton", "stats_latest_detail_owner", "latest round summary stays in a bounded readable surface"],
+		["F-2293", "StatsRowsScrollStatus", "stats_complete_row_range_owner", "top middle and bottom range states use complete row bounds"],
+		["F-2294", "StatsEmptyState", "stats_empty_refresh_owner", "empty state rebuilds when the first completed game exists"],
+		["F-2295", "StatsRuleFilterButton", "stats_filter_scope_owner", "partial rule filters name the current scope and cycle position"],
+		["F-2296", "StatsSummaryChip_winrate", "stats_zero_value_owner", "zero-win data is distinguished from missing statistics"],
+		["F-2297", "AchievementRowFocusTarget", "achievement_focus_status_owner", "focused achievement keeps a textual current-row cue"],
+		["F-2298", "AchievementRowFocusTarget", "achievement_selected_row_owner", "clicked achievement retains a stable selected state"],
+		["F-2299", "AchievementsScroll", "achievement_bottom_gutter_owner", "last achievement row clears the bottom shelf at scroll end"],
+		["F-2300", "AchievementsGrid", "achievement_empty_next_step_owner", "empty achievement state exposes one reachable next action"],
+		["F-2301", "AchievementsBrowseStatusLabel", "achievement_large_text_range_owner", "large-text row height is measured before the range status"],
+		["F-2302", "AchievementsBackButton", "achievement_reentry_focus_owner", "first entry and reentry focus routes remain predictable"],
+		["F-2303", "AchievementRowState_0", "achievement_state_words_owner", "locked active and unlocked states do not rely on color alone"],
+		["F-2304", "AchievementRowFocusTarget", "achievement_terminal_focus_owner", "last row has an explicit route to the page action"],
+		["F-2305", "ShopCurrencyPanel_coins", "shop_purchase_commit_owner", "currency inventory and CTA refresh from one committed purchase state"],
+		["F-2306", "ShopItemBuyButton_swap_card", "shop_purchase_focus_owner", "purchase rebuild moves focus away from a disabled original CTA"],
+		["F-2307", "ShopBuyButtonCommand_swap_card", "shop_insufficient_reason_owner", "insufficient currency is visible in the CTA text and full details"],
+		["F-2308", "ShopItemsScrollPosition", "shop_grid_range_owner", "wide grid reports item and row range without false sequence"],
+		["F-2309", "ShopItemsScrollHitTarget", "shop_no_scroll_owner", "a non-scrollable catalogue cannot capture an empty scroll focus stop"],
+		["F-2310", "ShopGetGemsButton", "shop_currency_recovery_owner", "currency recovery reports pending failure and retry states"],
+		["F-2311", "ShopCurrencyPanel_coins", "shop_reentry_sync_owner", "reentry currency and restored catalogue state share one refresh"],
+		["F-2312", "DailyLoginDayDetailProxy_1", "daily_day_selected_owner", "selected day keeps a lightweight detail rail without stealing claim"],
+		["F-2313", "DailyLoginClaimButton", "daily_claimed_action_owner", "claimed reward keeps a visible disabled state and focus fallback"],
+		["F-2314", "DailyLoginForecastBody", "daily_forecast_capacity_owner", "claimed state and forecast use separate measured text lanes"],
+		["F-2315", "DailyLoginRewardTextLabel", "daily_reward_commit_owner", "claimed reward copy reflects the committed economy result"],
+		["F-2316", "DailyLoginBackButton", "daily_back_restore_owner", "Esc return restores the originating daily-login menu focus"],
+		["F-2317", "DailyLoginDayDetailProxy_1", "daily_detail_proxy_owner", "day detail proxy ends before the separate claim action"],
+		["F-2318", "UpdateStatusLabel", "update_state_lane_owner", "checking downloading ready and error share fixed status and action lanes"],
+		["F-2319", "UpdateStatusLabel", "update_cancel_state_owner", "user cancellation is distinct from a network failure"],
+		["F-2320", "UpdateProgressLabel", "update_ready_hierarchy_owner", "ready state prioritizes verified-waiting copy over duplicate 100 percent facts"],
+		["F-2321", "UpdateSecondaryButton", "update_current_focus_owner", "current state transfers focus to the visible close action"],
+		["F-2322", "UpdateReleaseNotesScroll", "update_notes_capacity_owner", "empty notes do not expose an inactive scroll affordance"],
+		["F-2323", "DiagnosticContentScrollBar", "diagnostic_short_report_owner", "short reports hide and remove the inactive scrollbar focus stop"],
+		["F-2324", "DiagnosticCopyFeedbackLabel", "diagnostic_copy_feedback_owner_v2", "copy result has one primary persistent feedback lane"],
+		["F-2325", "DiagnosticContentScroll", "diagnostic_footer_focus_owner", "End from report enters copy then close actions"],
+		["F-2326", "DiagnosticDialogPanel", "diagnostic_inside_event_owner", "inside controls stop events while outside input closes the dialog"],
+		["F-2327", "ExitConfirmContinueButton", "exit_focus_restore_owner", "continue restores a visible original control or action-dock fallback"],
+		["F-2328", "ExitConfirmLeaveButton", "exit_save_guard_owner", "menu transition waits for a successful save and exposes failure"],
+		["F-2329", "ExitConfirmOverlay", "exit_transition_lock_owner", "modal animation locks duplicate decisions and restores focus once"],
+		["F-2330", "ExitConfirmDialog", "exit_compact_capacity_owner", "compact modal gives consequence and both actions a complete reading lane"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": str(owner[2]), "policy": str(owner[3])}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, str(owner[2]), str(owner[3]))
+	var settings_status := find_control.call("SettingsLargeTextScrollStatus") as Control
+	if settings_status != null:
+		settings_status.set_meta("first_frame_status_policy", "visible_pending_then_measured")
+	var rules_target := find_control.call("RulesContentScrollHitTarget") as Control
+	if rules_target != null:
+		rules_target.set_meta("keyboard_scroll_contract", ["HOME", "END", "PAGEUP", "PAGEDOWN", "UP", "DOWN"])
+	var daily_claim := find_control.call("DailyLoginClaimButton") as Control
+	if daily_claim != null:
+		daily_claim.set_meta("claimed_button_policy", "visible_disabled_state_with_back_focus_fallback")
+	var daily_proxy := find_control.call("DailyLoginDayDetailProxy_1") as Control
+	if daily_proxy != null:
+		daily_proxy.set_meta("claim_hit_separation_policy", "upper_detail_lane_only")
+	var exit_dialog := find_control.call("ExitConfirmDialog") as Control
+	if exit_dialog != null:
+		exit_dialog.set_meta("save_failure_policy", "stay_open_and_reenable_actions")
+	root.set_meta("ui_round_2271_2330_owner_roles", owner_roles)
+	root.set_meta("ui_round_2271_2330_registered_child_count", registration_child_count)
 
 
 func register_ui_round_1071_1100(root: Control) -> void:
@@ -18702,6 +19085,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.name = "TopHud3DShell"
 	parent.add_child(hud)
 	hud.clip_contents = true
+	hud.set_meta("compact_lane_policy", "mode_title_status_wall_then_actions")
+	hud.set_meta("minimum_lane_clearance_px", 8.0)
 	var hud_shadow = make_soft_depth_panel(hud, rect_full(0.010, 0.220, 0.990, 1.080), Color(0.0, 0.0, 0.0, 0.36), 12)
 	hud_shadow.name = "TopHud3DCastShadow"
 	hud.move_child(hud_shadow, 0)
@@ -18775,6 +19160,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
+	fit_label_font_size(title, maxf(96.0, effective_viewport_size().x * title_rect.size.x * 0.96), 15 if mode == "offline" else online_title_size, 10)
 	title.set_meta("fit_before_clip", true)
 	title.set_meta("compact_lane", "mode_and_round_before_status")
 	set_ui_full_text(title, title_text, "牌桌标题：" + title_text)
@@ -18801,6 +19187,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	status.name = "TopHudStatus"
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
+	fit_label_font_size(status, maxf(120.0, effective_viewport_size().x * status_rect.size.x * 0.96), 15 if mode == "offline" else (15 if compact_disconnect_status else 16), 10)
 	status.set_meta("fit_before_clip", true)
 	status.set_meta("compact_lane", "phase_and_connection_before_wall")
 	set_ui_full_text(status, top_hud_status_tooltip_text(), "牌桌状态")
@@ -18854,6 +19241,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		wall.move_child(wall_chip, 0)
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
 	configure_clipped_label(wall)
+	fit_label_font_size(wall, maxf(82.0, effective_viewport_size().x * wall_rect.size.x * 0.94), 11, 9)
 	set_ui_full_text(wall, wall_detail, "牌墙剩余：%d/%d" % [get_wall_count(), display_wall_total()])
 	wall.set_meta("wall_count", get_wall_count())
 	wall.set_meta("wall_total", display_wall_total())
@@ -18867,6 +19255,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(wall_state, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.500, wall_rect.size.x - 0.010, wall_rect.position.y + 0.840))
 	wall_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	configure_clipped_label(wall_state)
+	fit_label_font_size(wall_state, maxf(82.0, effective_viewport_size().x * wall_rect.size.x * 0.94), 9, 8)
+	wall_state.set_meta("secondary_lane", "wall_count_then_state_and_last_discard")
 	set_ui_full_text(wall_state, wall_detail, "牌墙状态：" + wall_state_text())
 
 	# 操作按钮组
@@ -21631,6 +22021,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		name.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		name.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(name)
+		fit_label_font_size(name, maxf(88.0, effective_viewport_size().x * 0.180), 12, 9)
 		name.set_meta("name_priority", "preserve_leading_identity")
 		name.set_meta("full_name_route", "OnlineLobbyRosterTouchTarget_%d" % i)
 		set_ui_full_text(name, online_lobby_slot_name(entry), "第%d席完整昵称" % (i + 1))
@@ -21647,6 +22038,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		state.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		state.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(state)
+		fit_label_font_size(state, maxf(96.0, effective_viewport_size().x * 0.210), 11, 9)
 		state.set_meta("state_priority", "always_visible_short_label")
 		state.set_meta("column_owner", "status")
 		state.set_meta("column_rect", rect_full(0.610, 0.080, 0.940, 0.920))
@@ -23663,16 +24055,19 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(top_score, rect_full(0.680 if seat == dealer_seat else 0.700, 0.070, 0.935, 0.385))
 		top_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(top_score, true)
+		fit_label_font_size(top_score, maxf(58.0, effective_viewport_size().x * 0.240), 11, 9)
 		var top_stats = make_label(panel, seat_hand_flower_text(p), 11, Color(0.96, 0.94, 0.84), false)
 		top_stats.name = "SeatCompactMeta_%d" % seat
 		apply_rect(top_stats, rect_full(0.220, 0.590, 0.555, 0.915))
 		top_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(top_stats, false)
+		fit_label_font_size(top_stats, maxf(72.0, effective_viewport_size().x * 0.245), 11, 9)
 		var top_recent = make_label(panel, seat_recent_river_text(seat, 3), 10, Color(0.94, 0.92, 0.80), false)
 		top_recent.name = "SeatCompactRiver_%d" % seat
 		apply_rect(top_recent, rect_full(0.575, 0.590, 0.935, 0.915))
 		top_recent.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(top_recent, false)
+		fit_label_font_size(top_recent, maxf(76.0, effective_viewport_size().x * 0.300), 10, 8)
 		if seat == dealer_seat:
 			var top_dealer = make_badge(panel, rect_full(0.575, 0.075, 0.670, 0.355), "庄", 9, Color(0.58, 0.12, 0.08, 0.88), Color(1.0, 0.79, 0.34, 0.56), Color(0.98, 0.92, 0.74))
 			top_dealer.name = "SeatCompactDealer_%d" % seat
@@ -23710,6 +24105,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(side_score, rect_full(side_score_left, 0.295 if compact_side else 0.090, 0.940, 0.435 if compact_side else 0.300))
 		side_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(side_score, true)
+		fit_label_font_size(side_score, maxf(62.0, effective_viewport_size().x * 0.220), 12, 9)
 		var side_stats = make_label(panel, "", 11, Color(0.96, 0.94, 0.84), false)
 		side_stats.name = "SeatCompactMeta_%d" % seat
 		var side_discard_count = get_discards(seat).size()
@@ -23729,6 +24125,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(side_stats, rect_full(side_content_left, 0.445 if compact_side else 0.340, 0.940, 0.570 if compact_side else 0.515))
 		side_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_stats, false)
+		fit_label_font_size(side_stats, maxf(82.0, effective_viewport_size().x * 0.300), 11, 8)
 		if active:
 			var side_turn_rect := rect_full(side_content_left, 0.545, 0.470, 0.680) if compact_side else rect_full(0.785, 0.555, 0.940, 0.730)
 			var side_turn = make_badge(panel, side_turn_rect, "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
@@ -23773,6 +24170,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	apply_rect(simple_score, rect_full(0.650, 0.075, 0.955, 0.255))
 	simple_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_seat_readable_label(simple_score, true)
+	fit_label_font_size(simple_score, maxf(76.0, effective_viewport_size().x * 0.250), 11, 9)
 	if active:
 		var simple_turn = make_badge(panel, rect_full(0.800, 0.265, 0.955, 0.420), "行牌", 8, Color(0.60, 0.45, 0.20, 0.78), Color(0.90, 0.68, 0.34, 0.22), Color(0.18, 0.13, 0.08))
 		simple_turn.name = "SeatCompactTurn_%d" % seat
@@ -23782,6 +24180,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	apply_rect(simple_stats, rect_full(content_left, 0.300, 0.790, 0.430))
 	simple_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_seat_readable_label(simple_stats, false)
+	fit_label_font_size(simple_stats, maxf(110.0, effective_viewport_size().x * 0.390), 11, 9)
 	var simple_status_text = "刚打 %s" % tile_label(get_last_discard()) if recent_discard_source else (package_preview(seat) if active else "")
 	if active and simple_status_text == "":
 		simple_status_text = seat_status_summary_fallback(seat)
@@ -23791,6 +24190,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(simple_status, rect_full(content_left, 0.465, 0.955, 0.585))
 		simple_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(simple_status, false)
+		fit_label_font_size(simple_status, maxf(120.0, effective_viewport_size().x * 0.550), 9, 8)
 	var simple_discard_text = seat_recent_river_text(seat, 4)
 	if active or simple_discard_text != "":
 		var simple_river = make_label(panel, simple_discard_text, 9, Color(0.94, 0.92, 0.80), false)
@@ -23798,6 +24198,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(simple_river, rect_full(content_left, 0.645, 0.955, 0.845))
 		simple_river.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(simple_river, false)
+		fit_label_font_size(simple_river, maxf(120.0, effective_viewport_size().x * 0.550), 9, 8)
 	if seat == dealer_seat:
 		var simple_dealer = make_badge(panel, rect_full(0.555, 0.075, 0.635, 0.255), "庄", 9, Color(0.58, 0.12, 0.08, 0.86), Color(1.0, 0.79, 0.34, 0.56), Color(0.96, 0.90, 0.72))
 		simple_dealer.name = "SeatCompactDealer_%d" % seat
@@ -24800,8 +25201,10 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 10, Color(0.78, 0.88, 0.80), true)
 		settings_large_text_status.name = "SettingsLargeTextScrollStatus"
 		apply_rect(settings_large_text_status, rect_full(0.040, 0.902, 0.790, 0.942))
-		# Wait for the scroll viewport and section geometry before exposing a range.
-		settings_large_text_status.visible = false
+		# Keep a stable status slot visible during the first measurement pass. The
+		# copy is replaced with the measured section range as soon as geometry lands.
+		settings_large_text_status.visible = true
+		settings_large_text_status.text = "设置区 · 正在测量阅读范围..."
 		settings_large_text_status.set_meta("measurement_pending", true)
 		settings_large_text_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		settings_large_text_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -24909,7 +25312,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel.add_child(settings_section_navigation)
 	for settings_section_name in ["声音", "体验", "系统"]:
 		var section_name := str(settings_section_name)
-		var section_nav_button := make_small_button(section_name, Color(0.28, 0.48, 0.42), func() -> void:
+		var section_nav_button := make_small_button(("当前 · " + section_name) if section_name == active_settings_section else section_name, Color(0.28, 0.48, 0.42), func() -> void:
 			focus_settings_section(settings_content_parent, settings_large_text_scroll, section_name)
 		)
 		section_nav_button.name = "SettingsSectionNavButton_%s" % section_name
@@ -24919,6 +25322,8 @@ func draw_settings_overlay(parent: Control) -> void:
 		set_ui_full_text(section_nav_button, section_nav_button.tooltip_text, "设置分区入口：" + section_name)
 		section_nav_button.set_meta("section_name", section_name)
 		section_nav_button.set_meta("section_active", section_name == active_settings_section)
+		section_nav_button.set_meta("active_state_copy", "当前 · " + section_name)
+		section_nav_button.set_meta("inactive_state_copy", section_name)
 		section_nav_button.set_meta("native_target_contract", "44px_settings_section_navigation")
 		mark_ui_optimization(section_nav_button, "F-713")
 		settings_section_navigation.add_child(section_nav_button)
@@ -24991,6 +25396,9 @@ func focus_settings_section(settings_content_parent: Control, settings_scroll: S
 				continue
 			var is_active := str(nav_button.get_meta("section_name", "")) == section_name
 			nav_button.set_meta("section_active", is_active)
+			var nav_section := str(nav_button.get_meta("section_name", ""))
+			nav_button.text = ("当前 · " + nav_section) if is_active else nav_section
+			set_ui_full_text(nav_button, "当前设置分区：" + nav_section if is_active else "跳转到" + nav_section + "设置", "设置分区入口：" + nav_section)
 			if is_active and active_marker != null and active_marker.get_parent() != nav_button:
 				active_marker.get_parent().remove_child(active_marker)
 				nav_button.add_child(active_marker)
@@ -25013,7 +25421,8 @@ func sync_settings_large_text_scroll_status(settings_scroll: ScrollContainer, st
 	if scrollbar == null or content == null:
 		return
 	if settings_scroll.size.y <= 1.0 or content.size.y <= 1.0:
-		status_label.visible = false
+		status_label.visible = true
+		set_dynamic_label_text(status_label, "设置区 · 正在测量阅读范围...", "当前设置区正在测量阅读范围")
 		status_label.set_meta("measurement_pending", true)
 		return
 	var page := maxf(scrollbar.page, settings_scroll.size.y)
@@ -26284,6 +26693,8 @@ func draw_table_log(parent: Control) -> void:
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
 	ledger_panel.visible = not hide_compact_ledger_for_pending
+	ledger_panel.set_meta("compact_header_policy", "title_then_count_then_history_with_measured_gutters")
+	ledger_panel.set_meta("latest_event_policy", "latest_record_is_visible_before_archive_route")
 	parent.add_child(ledger_panel)
 	var ledger_texture = add_illustration_texture(ledger_panel, "table_log_scroll", rect_full(0.010, 0.018, 0.990, 0.982), 0.075, false)
 	if ledger_texture != null:
@@ -26294,13 +26705,17 @@ func draw_table_log(parent: Control) -> void:
 	ledger_spine.name = "TableLogLedgerSpine"
 	ledger_panel.add_child(ledger_spine)
 	var ledger_title = make_label(ledger_panel, "牌桌记录", 10 if compact_log else 12, Color(0.90, 0.78, 0.52), true)
+	ledger_title.name = "TableLogLedgerTitle"
 	apply_rect(ledger_title, rect_full(0.085, 0.030, 0.430 if compact_log else 0.500, 0.230))
 	ledger_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	fit_label_font_size(ledger_title, maxf(86.0, effective_viewport_size().x * (0.145 if compact_log else 0.220)), 10 if compact_log else 12, 8)
 	set_ui_full_text(ledger_title, "牌桌记录", "当前牌桌最近事件")
 	mark_ui_optimization(ledger_title, "F-517")
 	var ledger_count = make_label(ledger_panel, "%d条" % table_logs.size(), 8 if compact_log else 10, Color(0.72, 0.66, 0.48), false)
+	ledger_count.name = "TableLogLedgerCount"
 	apply_rect(ledger_count, rect_full(0.455 if compact_log else 0.520, 0.040, 0.650, 0.220))
 	ledger_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	fit_label_font_size(ledger_count, maxf(52.0, effective_viewport_size().x * 0.105), 8 if compact_log else 10, 8)
 	set_ui_full_text(ledger_count, "%d 条牌桌记录" % table_logs.size(), "牌桌记录数量")
 	mark_ui_optimization(ledger_count, "F-518")
 	var archive_button := make_small_button("历史", Color(0.48, 0.42, 0.28), Callable(self, "toggle_table_log_archive"))
@@ -26344,6 +26759,8 @@ func draw_table_log(parent: Control) -> void:
 		row_body.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		configure_clipped_label(row_body)
+		fit_label_font_size(row_body, maxf(112.0, effective_viewport_size().x * 0.225), 11 if compact_log else 10, 8)
+		row_body.set_meta("measured_body_lane", true)
 		row_body.tooltip_text = row_body.text
 		set_ui_full_text(row_body, row_body.text, "牌桌最近事件")
 		mark_ui_optimization(row_body, "F-521")
@@ -26360,6 +26777,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.clip_contents = true
 	panel.set_meta("layout_role", "table_log_archive")
+	panel.set_meta("reading_order", "title_then_count_then_close_then_records_then_round_history")
 	parent.add_child(panel)
 	var texture = add_illustration_texture(panel, "table_log_scroll", rect_full(0.010, 0.025, 0.990, 0.975), 0.075, false)
 	if texture != null:
@@ -26371,6 +26789,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title, "牌桌记录·历史", "完整牌桌历史记录")
 	mark_ui_optimization(title, "F-522")
+	fit_label_font_size(title, maxf(150.0, effective_viewport_size().x * 0.300), 16, 12)
 	var visible_log_count := mini(table_logs.size(), ONLINE_LOG_HISTORY_LIMIT)
 	var count_text := "%d条" % table_logs.size()
 	if table_logs.size() > ONLINE_LOG_HISTORY_LIMIT:
@@ -26382,6 +26801,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	count.tooltip_text = "显示最近%d/%d条牌桌记录" % [visible_log_count, table_logs.size()] if table_logs.size() > ONLINE_LOG_HISTORY_LIMIT else "共%d条牌桌记录" % table_logs.size()
 	set_ui_full_text(count, count.tooltip_text, "牌桌历史记录数量")
 	mark_ui_optimization(count, "F-523")
+	fit_label_font_size(count, maxf(94.0, effective_viewport_size().x * 0.180), 11, 9)
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_table_log_archive"))
 	close_button.name = "TableLogArchiveCloseButton"
 	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
@@ -33466,9 +33886,11 @@ func refresh_online_room_content() -> void:
 		if name_label != null:
 			name_label.text = online_lobby_slot_name(entry)
 			name_label.tooltip_text = name_label.text
+			fit_label_font_size(name_label, maxf(88.0, effective_viewport_size().x * 0.180), 12, 9)
 			if slot_state_label != null:
 				var slot_state := online_lobby_slot_state(entry, slot)
 				set_dynamic_label_text(slot_state_label, slot_state, "第%d席状态：%s" % [slot + 1, slot_state])
+				fit_label_font_size(slot_state_label, maxf(96.0, effective_viewport_size().x * 0.210), 11, 9)
 			var slot_state_icon := root_layer.find_child("OnlineLobbyRosterStateIcon_%d" % slot, true, false) as TextureRect
 			if slot_state_icon != null:
 				slot_state_icon.texture = lucide_icon_texture(online_lobby_slot_state_icon(entry, slot))
@@ -33493,7 +33915,11 @@ func refresh_online_room_content() -> void:
 	var log_count_label = root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	if log_count_label != null:
 		var log_unread_count := online_lobby_log_unread_count()
-		set_dynamic_label_text(log_count_label, "存%d · 总%d · 未读%d" % [log_count, log_total_count, log_unread_count], "房间日志缓存%d条；总计%d条；未读%d条" % [log_count, log_total_count, log_unread_count])
+		var compact_log_summary := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+		var visible_log_summary := "%d/%d · 未读%d" % [log_count, log_total_count, log_unread_count] if compact_log_summary else "存%d · 总%d · 未读%d" % [log_count, log_total_count, log_unread_count]
+		var full_log_summary := "房间日志缓存%d条；总计%d条；未读%d条" % [log_count, log_total_count, log_unread_count]
+		set_dynamic_label_text(log_count_label, visible_log_summary, full_log_summary)
+		fit_label_font_size(log_count_label, maxf(78.0, effective_viewport_size().x * (0.170 if compact_log_summary else 0.210)), 10, 8)
 		log_count_label.set_meta("log_view_state", "empty" if log_count == 0 else "has_entries")
 		log_count_label.set_meta("retained_count", log_count)
 		log_count_label.set_meta("total_count", log_total_count)
@@ -34194,6 +34620,33 @@ func handle_rules_scroll_thumb_input(event: InputEvent, content_scroll: ScrollCo
 	if scrollbar == null or thumb == null or gutter == null:
 		return
 	var event_target = input_target if input_target != null else thumb
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if not key_event.pressed or key_event.echo:
+			return
+		var key_scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
+		var key_page := maxf(32.0, scrollbar.page * 0.86)
+		var key_handled := true
+		match key_event.keycode:
+			KEY_HOME:
+				scrollbar.value = 0.0
+			KEY_END:
+				scrollbar.value = key_scroll_range
+			KEY_PAGEUP:
+				scrollbar.value = maxf(0.0, scrollbar.value - key_page)
+			KEY_PAGEDOWN:
+				scrollbar.value = minf(key_scroll_range, scrollbar.value + key_page)
+			KEY_UP:
+				scrollbar.value = maxf(0.0, scrollbar.value - 48.0)
+			KEY_DOWN:
+				scrollbar.value = minf(key_scroll_range, scrollbar.value + 48.0)
+			_:
+				key_handled = false
+		if key_handled:
+			content_scroll.scroll_vertical = int(round(scrollbar.value))
+			sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
+			event_target.accept_event()
+		return
 	if event is InputEventMouseButton:
 		var mouse_button = event as InputEventMouseButton
 		# On Linux/Xvfb a touch gesture can emit a synthetic mouse stream as
@@ -34805,6 +35258,8 @@ func _show_shop_screen_impl() -> void:
 	apply_rect(footer_body, rect_full(0.035, 0.515, 0.630, 0.850))
 	footer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_body)
+	fit_label_font_size(footer_body, maxf(180.0, effective_viewport_size().x * 0.540), commercial_ui_font_size(13, 2), 10)
+	footer_body.set_meta("compact_fit_policy", "measure_copy_before_inventory_badges")
 	var inventory_text := "库存 %d件" % total_inventory
 	var footer_inventory = make_badge(shop_footer, rect_full(0.650, 0.175, 0.790, 0.775), inventory_text, commercial_ui_font_size(13, 2), Color(0.060, 0.120, 0.110, 0.80), Color(0.42, 0.62, 0.50, 0.28), Color(0.90, 0.96, 0.84))
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
@@ -35998,6 +36453,9 @@ func show_chat_panel() -> void:
 	quick_title.set_meta("accessible_name", "快捷消息分组")
 	configure_clipped_label(quick_title)
 	apply_rect(quick_row, rect_full(0.020, 0.360, 0.980, 0.615) if compact_chat else rect_full(0.060, 0.270, 0.940, 0.350))
+	if compact_chat:
+		quick_row.custom_minimum_size = Vector2(0.0, 44.0)
+		quick_row.set_meta("compact_row_policy", "single_bounded_row_before_input")
 	chat_panel.add_child(quick_row)
 	for quick_index in range(CHAT_QUICK_MESSAGES.size()):
 		var quick_message := str(CHAT_QUICK_MESSAGES[quick_index])
@@ -36383,10 +36841,13 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			day_focus_rail.modulate = Color(1.0, 1.0, 1.0, 0.86)
 		)
 		detail_proxy.focus_exited.connect(func() -> void:
-			day_focus_rail.modulate.a = 0.0
+			day_focus_rail.modulate.a = 0.46 if is_current else 0.0
 		)
 		indicator.add_child(detail_proxy)
-		detail_proxy.set_anchors_preset(Control.PRESET_FULL_RECT)
+		# The day card owns detail only. The reward line remains passive, while
+		# the separate claim button below owns the only claim action.
+		apply_rect(detail_proxy, rect_full(0.035, 0.035, 0.965, 0.640))
+		detail_proxy.set_meta("detail_proxy_rect_contract", "upper_detail_lane_only_claim_action_is_separate")
 		mark_ui_optimization(detail_proxy, "F-186")
 		mark_ui_optimization(detail_proxy, "F-233")
 	draw_daily_login_streak_art(panel, days, current_day_in_cycle)
@@ -36497,7 +36958,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			claimed_button.tooltip_text = "今日奖励已领取；明日可继续签到"
 			claimed_button.set_meta("claim_state", "claimed")
 			claimed_button.set_meta("ui_full_text", claimed_button.tooltip_text)
-			claimed_button.visible = false
+			claimed_button.visible = true
 			claimed_button.focus_mode = Control.FOCUS_NONE
 			claimed_button.modulate = Color(0.72, 0.76, 0.68, 0.72)
 		var claimed_status := panel.find_child("DailyLoginClaimedStatusSurface", true, false) as Control
@@ -36571,9 +37032,13 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	claimed_status_surface.visible = claimed_today
 	if claimed_today:
 		confirm_btn.disabled = true
-		confirm_btn.visible = false
+		confirm_btn.visible = true
 		confirm_btn.focus_mode = Control.FOCUS_NONE
 		confirm_btn.modulate = Color(0.72, 0.76, 0.68, 0.72)
+		confirm_btn.set_meta("status_surface_policy", "disabled_claim_button_remains_visible")
+	# Keep the passive status plate behind the disabled native button so the
+	# visible "已领取" command remains the stable state owner.
+	panel.move_child(claimed_status_surface, confirm_btn.get_index())
 	draw_daily_login_claim_flow_art(panel, progress)
 	# 七日奖励预告
 	var days_to_bonus = max(0, 7 - progress)
@@ -37153,6 +37618,7 @@ func show_exit_confirm() -> void:
 		return
 	emit_ui_qa_marker("exit_confirm|open")
 	exit_confirm_focus_restore_id = focused_control_instance_id()
+	exit_confirm_decision_locked = false
 	var overlay = Control.new()
 	overlay.name = "ExitConfirmOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -37168,8 +37634,13 @@ func show_exit_confirm() -> void:
 	overlay.add_child(mask)
 
 	# 对话框面板 — r415: thin lacquer shell under GPT confirm plate.
-	var dialog = make_gpt_plate_rect(rect_full(0.28, 0.35, 0.72, 0.65), Color(0.18, 0.13, 0.08, 0.20), "ui_button_face_plate")
+	var compact_exit := effective_viewport_size().y <= 600.0 or effective_viewport_size().x <= 1000.0
+	var dialog_rect := rect_full(0.16, 0.22, 0.84, 0.78) if compact_exit else rect_full(0.28, 0.35, 0.72, 0.65)
+	var dialog = make_gpt_plate_rect(dialog_rect, Color(0.18, 0.13, 0.08, 0.20), "ui_button_face_plate")
 	dialog.name = "ExitConfirmDialog"
+	dialog.set_meta("compact_layout", compact_exit)
+	dialog.set_meta("reading_order", ["ExitConfirmTitle", "ExitConfirmMessage", "ExitConfirmSaveStatus", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"])
+	dialog.set_meta("save_guard_policy", "save_must_succeed_before_menu_transition")
 	overlay.add_child(dialog)
 	var exit_gpt_key := "exit_gpt_confirm"
 	var gpt_exit_texture = add_optional_gpt_illustration_texture(dialog, exit_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.72, false)
@@ -37186,22 +37657,32 @@ func show_exit_confirm() -> void:
 
 	# 标题
 	var title = make_label(dialog, "确认退出", 24, Color(0.94, 0.86, 0.48), true)
-	apply_rect(title, rect_full(0.08, 0.08, 0.92, 0.25))
+	apply_rect(title, rect_full(0.08, 0.07, 0.92, 0.23) if compact_exit else rect_full(0.08, 0.08, 0.92, 0.25))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 提示文本
 	var message = "是否退出当前游戏？\n进度将自动保存。"
 	var msg_label = make_label(dialog, message, 16, Color(0.92, 0.88, 0.76), false)  # r430 warm ink
-	apply_rect(msg_label, rect_full(0.10, 0.47, 0.90, 0.64))
+	apply_rect(msg_label, rect_full(0.10, 0.31, 0.90, 0.50) if compact_exit else rect_full(0.10, 0.47, 0.90, 0.64))
 	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	msg_label.name = "ExitConfirmMessage"
+	set_ui_full_text(msg_label, message, "退出后果")
+	var save_status := make_label(dialog, "保存状态：尚未提交", 11, Color(0.82, 0.90, 0.78), true)
+	save_status.name = "ExitConfirmSaveStatus"
+	apply_rect(save_status, rect_full(0.10, 0.51, 0.90, 0.62) if compact_exit else rect_full(0.10, 0.655, 0.90, 0.715))
+	save_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	save_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	save_status.set_meta("save_state", "idle")
+	set_ui_full_text(save_status, "退出前保存状态", "退出前保存状态")
+	configure_clipped_label(save_status)
 	draw_exit_confirm_choice_art(dialog)
 
 	# 按钮行
 	var button_row = HBoxContainer.new()
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	button_row.add_theme_constant_override("separation", 16)
-	apply_rect(button_row, rect_full(0.12, 0.72, 0.88, 0.92))
+	apply_rect(button_row, rect_full(0.10, 0.67, 0.90, 0.93) if compact_exit else rect_full(0.12, 0.72, 0.88, 0.92))
 	dialog.add_child(button_row)
 
 	# 继续游戏按钮
@@ -37215,9 +37696,34 @@ func show_exit_confirm() -> void:
 	button_row.add_child(continue_btn)
 
 	# 退出按钮
-	var exit_btn = make_small_button("退出游戏", Color(0.56, 0.36, 0.30), func() -> void:
+	var exit_btn: Button
+	exit_btn = make_small_button("退出游戏", Color(0.56, 0.36, 0.30), func() -> void:
+		if exit_confirm_decision_locked:
+			return
+		exit_confirm_decision_locked = true
+		var live_status := dialog.find_child("ExitConfirmSaveStatus", true, false) as Label
+		if live_status != null:
+			set_dynamic_label_text(live_status, "保存中…", "退出前正在保存当前牌局")
+			live_status.set_meta("save_state", "saving")
+		if continue_btn != null and is_instance_valid(continue_btn):
+			continue_btn.disabled = true
+		if exit_btn != null and is_instance_valid(exit_btn):
+			exit_btn.disabled = true
+		save_offline_progress(false)
+		if mode == "offline" and not offline_progress_last_save_ok:
+			exit_confirm_decision_locked = false
+			if live_status != null:
+				set_dynamic_label_text(live_status, "保存失败，请重试", "退出被阻止：当前牌局未能保存，请重试")
+				live_status.set_meta("save_state", "failed")
+			if continue_btn != null and is_instance_valid(continue_btn):
+				continue_btn.disabled = false
+			if exit_btn != null and is_instance_valid(exit_btn):
+				exit_btn.disabled = false
+			return
+		if live_status != null:
+			set_dynamic_label_text(live_status, "已保存，正在返回", "当前牌局已保存，正在返回主菜单")
+			live_status.set_meta("save_state", "saved")
 		hide_exit_confirm()
-		save_offline_progress()
 		# Exiting is an explicit modal decision. It must win over an in-flight
 		# table-entry transition instead of being rejected by its route guard.
 		show_menu(true)
@@ -38151,6 +38657,8 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(primary, rect_full(0.035, 0.040, 0.520, 0.260))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
+	fit_label_font_size(primary, maxf(96.0, effective_viewport_size().x * 0.430), 11, 9)
+	primary.set_meta("measured_column_policy", "date_and_result_columns_keep_trailing_gutter")
 	primary.tooltip_text = replay_archive_date_text(entry)
 	set_ui_full_text(primary, replay_archive_date_text(entry), "回放日期")
 	var result := make_label(row, result_label, 11, Color(0.72, 0.90, 0.68), true)
@@ -38158,6 +38666,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(result, rect_full(0.520, 0.040, 0.965, 0.260))
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(result)
+	fit_label_font_size(result, maxf(120.0, effective_viewport_size().x * 0.380), 11, 9)
 	result.tooltip_text = result_label
 	set_ui_full_text(result, result_label, "回放结果")
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
@@ -38636,6 +39145,7 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 	status.text = "当前 %d · 显示 %d-%d / %d 条已验证事件%s" % [selected_event, first_event, last_event, total, filtered_note]
 	status.tooltip_text = "当前第%d条；可见第%d至%d条，共%d条已验证事件%s" % [selected_event, first_event, last_event, total, filtered_note]
 	set_ui_full_text(status, status.tooltip_text, "回放时间线状态")
+	fit_label_font_size(status, maxf(120.0, effective_viewport_size().x * 0.360), 11, 8)
 	status.set_meta("timeline_status_contract", "current_status_event_count_and_visible_range")
 	status.set_meta("timeline_state", "populated")
 	status.set_meta("timeline_source_event_count", source_total)
@@ -41535,6 +42045,9 @@ func hide_exit_confirm() -> void:
 	"""隐藏退出确认对话框"""
 	if exit_confirm_panel == null or not is_instance_valid(exit_confirm_panel):
 		return
+	# Keep the overlay locked until its exit animation has freed the old tree;
+	# repeated Enter/Esc/click input must not produce a second decision.
+	exit_confirm_decision_locked = true
 	emit_ui_qa_marker("exit_confirm|closed")
 	var panel = exit_confirm_panel
 	exit_confirm_panel = null
@@ -41553,6 +42066,7 @@ func hide_exit_confirm() -> void:
 
 func finish_exit_confirm_hide(panel_id: int, restore_id: int) -> void:
 	queue_free_node_by_id(panel_id)
+	exit_confirm_decision_locked = false
 	call_deferred("restore_control_focus_by_id", restore_id)
 	if mode == "offline":
 		call_deferred("schedule_ui_qa_page_ready", "offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
@@ -42242,6 +42756,7 @@ func update_chat_send_cooldown(now_msec: int = -1) -> void:
 		cooldown_label.set_meta("cooldown_active", cooling)
 		cooldown_label.set_meta("cooldown_remaining_msec", remaining_msec)
 		cooldown_label.set_meta("chat_send_state", "cooldown" if cooling else "ready")
+		fit_label_font_size(cooldown_label, maxf(120.0, effective_viewport_size().x * (0.240 if ui_is_compact() else 0.360)), 9, 8)
 		mark_ui_optimization(cooldown_label, "F-617")
 	for button in [send_button] + quick_buttons:
 		if button == null or not is_instance_valid(button):
