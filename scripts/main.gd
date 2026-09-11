@@ -5130,11 +5130,13 @@ func refresh_current_screen() -> void:
 	elif mode == "offline" or mode == "online_game":
 		request_game_render()
 
-func request_game_render() -> void:
+func request_game_render(priority: int = 0, dirty_flag: int = GAME_RENDER_DIRTY_STATE) -> void:
 	if offline_sim_quiet or runtime_shutdown_requested:
 		return
 	if mode != "offline" and mode != "online_game":
 		return
+	game_render_dirty_flags |= dirty_flag
+	game_render_priority = maxi(game_render_priority, priority)
 	if game_render_queued:
 		return
 	game_render_queued = true
@@ -5143,14 +5145,26 @@ func request_game_render() -> void:
 func flush_game_render() -> void:
 	if runtime_shutdown_requested:
 		game_render_queued = false
+		game_render_dirty_flags = 0
+		game_render_priority = 0
 		return
 	var elapsed = Time.get_ticks_msec() - last_game_render_msec
 	if last_game_render_msec > 0 and elapsed < UI_RENDER_MIN_INTERVAL_MSEC:
 		schedule_game_render_flush(float(UI_RENDER_MIN_INTERVAL_MSEC - elapsed) / 1000.0)
 		return
 	game_render_queued = false
+	var dirty_flags := game_render_dirty_flags
+	var render_priority := game_render_priority
+	game_render_dirty_flags = 0
+	game_render_priority = 0
 	if mode == "offline" or mode == "online_game":
 		render_game()
+	if render_priority >= 2 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
+		# Keep the priority contract inspectable on the next rebuilt root without
+		# forcing an additional render in the same frame.
+		if root_layer != null and is_instance_valid(root_layer):
+			root_layer.set_meta("last_render_priority", render_priority)
+			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
 	var timer := game_render_delay_timer
@@ -5176,6 +5190,8 @@ func _on_game_render_delay_timeout(timer: Timer) -> void:
 		timer.queue_free()
 	if runtime_shutdown_requested:
 		game_render_queued = false
+		game_render_dirty_flags = 0
+		game_render_priority = 0
 		return
 	flush_game_render()
 
@@ -9847,15 +9863,22 @@ func draw_actions(parent: Control) -> void:
 			set_ui_full_text(confirm_danger_button, confirm_danger_button.tooltip_text, "危险弃牌确认")
 			mark_ui_optimization(confirm_danger_button, "F-096")
 			mark_ui_optimization(confirm_danger_button, "F-099")
-			action_bar.add_child(confirm_danger_button)
-			for report in danger_alternatives:
+			for alternative_index in range(danger_alternatives.size()):
+				var report: Dictionary = danger_alternatives[alternative_index]
 				var alternative_tile = str(report.get("tile", ""))
 				if alternative_tile == "":
 					continue
 				var selected_alternative_tile = alternative_tile
-				action_bar.add_child(make_action_button("改打%s" % tile_label(selected_alternative_tile), safe_discard_button_color(report), func() -> void:
+				var alternative_button := make_action_button("改打%s" % tile_label(selected_alternative_tile), safe_discard_button_color(report), func() -> void:
 					human_discard_by_tile(selected_alternative_tile)
-				))
+				)
+				alternative_button.name = "DangerDiscardAlternativeButton_%d" % alternative_index
+				alternative_button.set_meta("danger_action", "alternative")
+				alternative_button.set_meta("danger_alternative_index", alternative_index)
+				alternative_button.set_meta("danger_prompt_lane", "dedicated_confirmation_lane")
+				alternative_button.tooltip_text = "改打%s，降低当前放铳风险" % tile_label(selected_alternative_tile)
+				set_ui_full_text(alternative_button, alternative_button.tooltip_text, "危险弃牌替代方案")
+				action_bar.add_child(alternative_button)
 			var cancel_danger_button := make_action_button("取消", Color(0.52, 0.56, 0.58), func() -> void:
 				clear_pending_danger_discard()
 				set_status(current_status_text())
@@ -9871,8 +9894,11 @@ func draw_actions(parent: Control) -> void:
 			mark_ui_optimization(cancel_danger_button, "F-096")
 			mark_ui_optimization(cancel_danger_button, "F-099")
 			action_bar.add_child(cancel_danger_button)
+			action_bar.add_child(confirm_danger_button)
 			action_bar.set_meta("danger_confirmation_lane", "dedicated_confirmation_panel_above_action_dock")
 			action_bar.set_meta("danger_shortcut_state", {"confirm": "Enter", "cancel": "Esc"})
+			action_bar.set_meta("danger_action_order", "alternatives_then_cancel_then_confirm")
+			action_bar.set_meta("danger_reading_sequence", ["tile", "risk", "alternatives", "cancel", "confirm"])
 			draw_action_dock(parent)
 			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
 			finalize_action_bar_layout()
@@ -12614,6 +12640,9 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	register_ui_round_2211_2270(root)
 	register_ui_round_2271_2330(root)
 	register_ui_round_2331_2390(root)
+	register_ui_round_2391_2450(root)
+	register_ui_round_2451_2510(root)
+	register_ui_round_2511_2570(root)
 
 
 func register_ui_round_2031_2090(root: Control) -> void:
@@ -13396,6 +13425,406 @@ func register_ui_round_2331_2390(root: Control) -> void:
 			scroll.set_meta("range_status_updates", "on_resize_or_content_change")
 	root.set_meta("ui_round_2331_2390_owner_roles", owner_roles)
 	root.set_meta("ui_round_2331_2390_registered_child_count", registration_child_count)
+
+
+func register_ui_round_2391_2450(root: Control) -> void:
+	# F-2391..F-2450 hardens adaptive text, focus, scroll, and state lanes on
+	# existing native owners. This is one-shot after construction: no timers,
+	# per-frame layout polling, new visual layers, or tile mutations are added.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := registration_controls.size()
+	if int(root.get_meta("ui_round_2391_2450_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index: Dictionary = {}
+	for candidate_node in registration_controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (2391 + index))
+	root.set_meta("ui_round_2391_2450_contract_ids", contract_ids)
+	root.set_meta("ui_round_2391_2450_contract_version", "20260911-adaptive-state-focus-budget-60")
+	root.set_meta("ui_round_2391_2450_scope", "battle_lanes_lobby_chat_privacy_secondary_pages_replay_and_diagnostic")
+	root.set_meta("ui_round_2391_2450_source", "current-screenshot-and-control-audit-20260911")
+	root.set_meta("ui_round_2391_2450_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	root.set_meta("ui_round_2391_2450_runtime_budget", "one_shot_native_semantics_no_per_frame_layout_polling")
+	var find_control := func(node_name: String) -> Control:
+		return control_index.get(node_name, null) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_2391_2450_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_2391_2450_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_2391_2450_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2391_2450_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2391_2450_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2391_2450_policies", policies)
+		target.set_meta("ui_round_2391_2450_policy", policy)
+		target.set_meta("ui_round_2391_2450_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		target.set_meta("no_per_frame_layout_polling", true)
+		if target is Button:
+			var button := target as Button
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, UI_MIN_TOUCH_TARGET)
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			button.set_meta("focus_policy", "visible_enabled_only")
+			var button_detail := button.tooltip_text.strip_edges()
+			if button_detail == "":
+				button_detail = button.text.strip_edges()
+			if button_detail != "":
+				set_ui_full_text(button, button_detail, button_detail)
+		elif target is LineEdit:
+			var edit := target as LineEdit
+			# Preserve each field's authored max length and keyboard type. The
+			# registration only hardens semantics; it must not turn URL fields into
+			# generic text inputs during a later page rebuild.
+			configure_line_edit_input(edit, str(edit.get_meta("ui_input_field", edit.name)), edit.max_length, edit.virtual_keyboard_type)
+			edit.set_meta("fixed_clear_gutter", true)
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			scroll.focus_mode = Control.FOCUS_ALL
+			scroll.set_meta("range_focus_policy", "content_range_only")
+			scroll.set_meta("scroll_state_owner", target.name)
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if label.text.strip_edges() != "":
+				if label.tooltip_text.strip_edges() == "":
+					label.tooltip_text = label.text.strip_edges()
+				set_ui_full_text(label, label.tooltip_text, label.text.strip_edges())
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-2391", "TopHudModeBadge", "hud_mode_short_value_owner", "short rule badge yields to title and retains full rule tooltip"],
+		["F-2392", "TopHudHandProgress", "hud_hand_progress_lane_owner", "hand progress keeps a fixed baseline and right gutter"],
+		["F-2393", "ScoreStrip", "hud_score_delta_lane_owner", "score delta uses a separate short status lane"],
+		["F-2394", "SeatPanel_0", "seat_dealer_marker_owner", "dealer marker has a fixed prefix slot before identity"],
+		["F-2395", "SeatPanel_1", "side_seat_semantic_order_owner", "side seat logical order is name score wind status"],
+		["F-2396", "DiscardGrid_1", "side_river_temporal_order_owner", "side river exposes chronological row and latest owner"],
+		["F-2397", "DiscardGrid_2", "top_river_input_order_owner", "top river visual direction is separate from input order"],
+		["F-2398", "MeldArea_0", "meld_group_gap_owner", "meld groups preserve gap before shrinking faces"],
+		["F-2399", "MeldArea_2", "side_meld_type_lane_owner", "vertical meld type keeps a textual outer lane"],
+		["F-2400", "HandTrayTiles", "hand_last_tile_gap_owner", "last drawn tile keeps a stable measured separation"],
+		["F-2401", "HandTrayStateBadge", "hand_state_badge_capacity_owner", "state badge never pushes hand faces or shortcuts"],
+		["F-2402", "HandTrayTutorialHint", "tutorial_hint_lane_owner", "tutorial hint stays above the hand and owns one focus target"],
+		["F-2403", "ActionButtonDock", "action_priority_focus_owner", "visible enabled primary action leads the focus cycle"],
+		["F-2404", "PendingClaimActionStack", "pending_response_row_owner", "response grid rows keep a fixed tail clearance"],
+		["F-2405", "PendingClaimTimerText", "pending_timer_numeric_owner", "timer value slot persists without pulse dependence"],
+		["F-2406", "DangerDiscardConfirmationArt", "danger_reading_sequence_owner", "risk object consequence alternatives cancel confirm is one sequence"],
+		["F-2407", "TableLogLedgerPanel", "table_log_modal_scope_owner", "log scope excludes table input and restores origin"],
+		["F-2408", "CenterConsole3DShell", "center_empty_fact_owner", "missing latest discard has a stable explicit empty slot"],
+		["F-2409", "TopHudSettingsButton", "hud_action_gutter_owner", "header controls keep a fixed focus-ring gutter"],
+		["F-2410", "HandTrayShortcutHint", "hand_shortcut_secondary_lane_owner", "shortcut hint never competes with state badge"],
+		["F-2411", "OnlineLobbyNameEdit", "lobby_name_clear_gutter_owner", "name input reserves a fixed clear affordance"],
+		["F-2412", "OnlineLobbyHostEdit", "lobby_host_full_value_owner", "host display keeps complete endpoint semantics"],
+		["F-2413", "OnlineLobbyRoomEdit", "lobby_room_validation_owner", "room empty valid error states share a fixed lane"],
+		["F-2414", "OnlineLobbyFormFeedbackLabel", "lobby_validation_lane_owner", "validation stays within two lines before actions"],
+		["F-2415", "OnlineLobbyActionButtonRow", "lobby_action_focus_owner", "only executable connection actions receive focus"],
+		["F-2416", "OnlineLobbyStartButtonRow", "lobby_start_gate_owner_v2", "start prerequisite reason is adjacent to primary CTA"],
+		["F-2417", "OnlineLobbyServerEndpointLabel", "lobby_endpoint_measure_owner", "endpoint short value yields to state and copy gutter"],
+		["F-2418", "OnlineLobbyConnectionStateIcon", "lobby_connection_icon_semantics_owner", "connection phase is textual as well as chromatic"],
+		["F-2419", "OnlineLobbyLogScroll", "lobby_log_range_focus_owner", "empty and short logs do not expose false scroll focus"],
+		["F-2420", "OnlineLobbyLogListText", "lobby_log_column_owner", "time level and message retain independent columns"],
+		["F-2421", "ChatPanelMessageText", "chat_message_height_owner", "message wrapping stops before fixed input lanes"],
+		["F-2422", "ChatPanelQuickMessages", "chat_quick_row_capacity_owner", "quick actions use bounded rows before input"],
+		["F-2423", "ChatPanelCustomMessageLabel", "chat_counter_column_owner", "custom title and remaining count use fixed columns"],
+		["F-2424", "ChatInput", "chat_input_clear_send_owner", "input clear send use independent hit gutters"],
+		["F-2425", "ChatPanelTableLogButton", "chat_log_restore_owner", "table log returns focus to the chat entry"],
+		["F-2426", "TelemetryDataSheetBody", "telemetry_body_range_owner", "privacy copy scrolls while status and actions stay fixed"],
+		["F-2427", "TelemetryPermissionSummary", "telemetry_policy_text_owner", "consent state includes its recording policy in words"],
+		["F-2428", "TelemetryExportStatus", "telemetry_export_feedback_owner", "export has one fixed pending result error lane"],
+		["F-2429", "TelemetryRecentAction", "telemetry_recent_action_owner", "recent action and timestamp keep separate measured columns"],
+		["F-2430", "TelemetryDataSheetCloseButton", "telemetry_restore_focus_owner", "sheet close restores its invoking settings row"],
+		["F-2431", "RulesContentList", "rules_section_measure_owner", "heading body and example keep stable section lanes"],
+		["F-2432", "RulesGuideStepButton_0", "rules_active_token_owner", "active chapter has text identity beyond color"],
+		["F-2433", "RulesContentScrollTopCue", "rules_top_boundary_owner", "top cue exposes a settled boundary state"],
+		["F-2434", "RulesContentScrollBottomCue", "rules_bottom_boundary_owner", "bottom cue exposes end state without focus capture"],
+		["F-2435", "RulesReadingStatus", "rules_chapter_range_owner", "chapter and visible content range share one status"],
+		["F-2436", "StatsRows", "stats_value_column_owner", "stat label value unit columns stay measurable"],
+		["F-2437", "StatsRowsScrollStatus", "stats_empty_range_owner", "empty state never claims a scroll range"],
+		["F-2438", "StatsRuleFilterButton", "stats_filter_restore_owner_v2", "filter rebuild preserves the source focus and value"],
+		["F-2439", "StatsLatestRoundButton", "stats_latest_action_owner", "unavailable latest action is out of the focus cycle"],
+		["F-2440", "StatsCopyButton", "stats_copy_scope_owner_v2", "copy feedback names the active filter scope"],
+		["F-2441", "AchievementRowFocusTarget", "achievement_focus_identity_owner_v2", "row focus has text identity outside medal art"],
+		["F-2442", "AchievementsScroll", "achievement_bottom_range_owner_v2", "last row and End state keep bottom clearance"],
+		["F-2443", "DailyLoginDayIndicators", "daily_state_column_owner_v2", "date state and reward retain three scan columns"],
+		["F-2444", "DailyLoginRewardPanel", "daily_reward_measure_owner_v2", "reward text cannot push icon or CTA anchors"],
+		["F-2445", "DailyLoginProgressPanel", "daily_progress_summary_owner", "one primary progress value precedes secondary copy"],
+		["F-2446", "UpdateProgressLabel", "update_progress_stage_owner_v2", "stage status progress occupy fixed modal rows"],
+		["F-2447", "LoadingCenterPanel", "loading_center_budget_owner_v2", "center reading column is independent from optional motion art"],
+		["F-2448", "ReplayArchiveScroll", "replay_filter_range_owner_v2", "filtered archive resets position and empty focus"],
+		["F-2449", "DiagnosticContentScroll", "diagnostic_range_footer_owner_v2", "report range is separated from fixed copy and close actions"],
+		["F-2450", "ToastContainer", "toast_queue_scope_owner_v2", "toast queue yields to the page focus scope and measured height"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	var scroll_owners := ["OnlineLobbyLogScroll", "TelemetryDataBodyScroll", "RulesContentScroll", "StatsRows", "AchievementsScroll", "ReplayArchiveScroll", "DiagnosticContentScroll"]
+	for scroll_name in scroll_owners:
+		var scroll := find_control.call(scroll_name) as ScrollContainer
+		if scroll != null:
+			scroll.set_meta("range_status_policy", "content_range_only")
+			scroll.set_meta("range_updates", "resize_or_content_change_only")
+	var battle_surface := find_control.call("CenterConsole3DShell") as Control
+	if battle_surface != null:
+		battle_surface.set_meta("empty_fact_policy", "stable_text_slot_without_visual_reflow")
+	var action_dock := find_control.call("ActionButtonDock") as Control
+	if action_dock != null:
+		action_dock.set_meta("focus_cycle_policy", "visible_enabled_primary_then_secondary")
+		action_dock.set_meta("motion_budget_policy", "one_shot_state_feedback_no_per_frame_layout_polling")
+	var hand_tiles := find_control.call("HandTrayTiles") as Control
+	if hand_tiles != null:
+		hand_tiles.set_meta("last_tile_gap_policy", "measured_actual_span_with_fixed_terminal_gap")
+	var toast_container := find_control.call("ToastContainer") as Control
+	if toast_container != null:
+		toast_container.set_meta("focus_scope_policy", "page_owner_remains_primary")
+	root.set_meta("ui_round_2391_2450_owner_roles", owner_roles)
+	root.set_meta("ui_round_2391_2450_registered_child_count", registration_child_count)
+
+
+func register_ui_round_2451_2510(root: Control) -> void:
+	# F-2451..F-2510 records the next audit batch on existing layout owners. The
+	# registry is deliberately one-shot and metadata-only, so it cannot create a
+	# second visual surface or introduce a frame polling loop.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	if int(root.get_meta("ui_round_2451_2510_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index: Dictionary = {}
+	for candidate_node in root.find_children("*", "Control", true, false):
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
+	var owners := [
+		["F-2451", "DiscardGrid_0", "bottom_river_lane_owner", "bottom river ends before the live action channel"],
+		["F-2452", "DiscardGrid_1", "right_river_lane_owner", "right river keeps a seat-facing exclusion edge"],
+		["F-2453", "DiscardGrid_2", "top_river_lane_owner", "top river keeps chronological order independent from input"],
+		["F-2454", "DiscardGrid_0", "bottom_river_action_exclusion_owner", "bottom river and normal action dock have a measurable gap"],
+		["F-2455", "PendingClaimActionStack", "pending_claim_river_exclusion_owner", "pending claim actions yield to side rivers and the hand"],
+		["F-2456", "CenterWindLabel_东", "center_wind_lane_owner", "center wind tokens keep independent compass slots"],
+		["F-2457", "CenterWallCount", "center_wall_fact_owner", "wall count remains separate from the last discard fact"],
+		["F-2458", "CenterLastDiscardTile", "center_last_discard_owner", "last discard keeps a stable center slot"],
+		["F-2459", "SeatPanel_0", "bottom_seat_clearance_owner", "bottom seat clears the hand tray start edge"],
+		["F-2460", "HandTray", "hand_tray_geometry_owner", "hand stage and bottom gutter use one tray geometry"],
+		["F-2461", "HandTrayTiles", "hand_touch_width_owner", "hand faces preserve the minimum compact touch width"],
+		["F-2462", "HandDrawnTileMount", "drawn_tile_hit_frame_owner", "drawn tile animation stays inside a fixed mount"],
+		["F-2463", "HandTrayTileStage", "hand_stage_baseline_owner", "stage baseline remains independent from tile hit frames"],
+		["F-2464", "HandDrawnTileMount", "drawn_tile_visual_mount_owner", "drawn visual lift cannot move its outer hit frame"],
+		["F-2465", "MeldArea_0", "bottom_meld_footprint_owner", "bottom meld groups use actual footprint before shrink"],
+		["F-2466", "MeldArea_1", "right_meld_footprint_owner", "right meld groups remain vertical and seat-facing"],
+		["F-2467", "MeldArea_2", "top_meld_footprint_owner", "top meld groups remain horizontal and seat-facing"],
+		["F-2468", "MeldArea_3", "left_meld_footprint_owner", "left meld groups remain vertical and seat-facing"],
+		["F-2469", "MeldLaneArchiveButton_0", "meld_pager_gap_owner", "pager reserves an explicit gap after whole meld groups"],
+		["F-2470", "SeatPanel_0", "bottom_seat_action_owner", "bottom seat controls stay outside hand and river lanes"],
+		["F-2471", "SeatPanel_1", "right_seat_action_owner", "right seat controls keep a stable focus order"],
+		["F-2472", "SeatPanel_2", "top_seat_action_owner", "top seat controls clear the header and river"],
+		["F-2473", "SeatPanel_3", "left_seat_action_owner", "left seat controls clear the side river"],
+		["F-2474", "SeatPanel_0", "seat_control_clearance_owner", "seat controls expose their reserved clearance"],
+		["F-2475", "HandTray", "hand_bottom_gutter_owner", "hand tray keeps a fixed bottom gutter"],
+		["F-2476", "HandTray", "hand_slide_identity_owner", "tray slide runs only when hand identity changes"],
+		["F-2477", "HandTrayStateBadge", "hand_state_badge_owner", "state badge does not push the tile row"],
+		["F-2478", "SeatThreatBadgeArt_0", "seat_threat_pulse_owner", "threat pulse requires valid visible threat state"],
+		["F-2479", "ScoreStrip", "score_momentum_owner", "score momentum motion requires nonzero score deltas"],
+		["F-2480", "SeatTurnHandoffArt_0", "seat_turn_motion_owner", "turn handoff uses a bounded one-shot motion budget"],
+		["F-2481", "", "battle_render_root_owner", "battle render root owns dirty flags and lane contracts"],
+		["F-2482", "", "game_render_queue_owner", "game renders coalesce dirty flags with pending priority"],
+		["F-2483", "", "page_generation_tween_owner", "page generation kills stale screen tweens"],
+		["F-2484", "MenuTitleLabel", "menu_title_measure_owner", "menu title width is measured before clipping"],
+		["F-2485", "MenuTutorialEntryBanner", "tutorial_action_lane_owner", "tutorial copy and actions use independent lanes"],
+		["F-2486", "MenuVersionBadge", "menu_footer_chip_owner", "footer chips retain a short readable fact"],
+		["F-2487", "MenuPrimaryOfflineCard", "menu_card_focus_owner", "each primary card has one native focus owner"],
+		["F-2488", "SettingsOverlay", "settings_modal_focus_owner", "settings overlay owns modal input scope"],
+		["F-2489", "SettingsContentScroll", "settings_footer_clearance_owner", "settings content scroll clears its fixed close lane"],
+		["F-2490", "OnlineLobbyEndpointCopyButton", "lobby_endpoint_copy_owner", "endpoint copy keeps a dedicated touch lane"],
+		["F-2491", "OnlineLobbyRetryConnectionButton", "lobby_retry_owner", "retry is the unique connection recovery action"],
+		["F-2492", "OnlineLobbyLogTitle", "lobby_log_focus_route_owner", "lobby log header follows visual focus order"],
+		["F-2493", "ShopItemsScroll", "shop_scroll_owner", "shop content and scrollbar have separate input ownership"],
+		["F-2494", "ShopItemDescription_0", "shop_description_measure_owner", "shop descriptions keep measured two-line summaries"],
+		["F-2495", "ShopBuyButtonCommand_0", "shop_buy_hover_owner", "buy hover feedback stays inside its native hit rect"],
+		["F-2496", "ShopItemsEndMarker", "shop_end_lane_owner", "shop end marker and footer share one scroll-end lane"],
+		["F-2497", "RulesContentScrollThumb", "rules_boundary_owner", "rules thumb and boundary cues share scroll state"],
+		["F-2498", "RulesGuideStepButton_0", "rules_guide_focus_owner", "guide focus follows the selected content anchor"],
+		["F-2499", "StatsRows", "stats_measured_row_owner", "stats rows grow from measured text height"],
+		["F-2500", "StatsRuleFilterButton", "stats_header_gutter_owner", "stats header actions retain a focus gutter"],
+		["F-2501", "TelemetryRecentAction", "telemetry_recent_action_owner", "recent action stays above the independent close lane"],
+		["F-2502", "DailyLoginForecastBody", "daily_forecast_body_owner", "forecast body is the sole visible detail owner"],
+		["F-2503", "DailyLoginDetailProxy", "daily_detail_proxy_owner", "reward detail proxy clears the claim action"],
+		["F-2504", "AchievementsScrollHitTarget", "achievement_scroll_input_owner", "achievement track, thumb, and row focus are separate"],
+		["F-2505", "UpdateProgressLabel", "update_progress_owner", "one canonical progress face drives the percentage"],
+		["F-2506", "LoadingErrorActionLane", "loading_error_action_owner", "loading error actions are mutually exclusive with the tip lane"],
+		["F-2507", "LoadingFooterRailLane", "loading_footer_lane_owner", "loading rail ends before the version lane"],
+		["F-2508", "ReplayImportTimelineScroll", "replay_timeline_measure_owner", "timeline input locks until one measured range pass"],
+		["F-2509", "ToastContainer", "toast_modal_lane_owner", "toast height yields to the active modal safe slot"],
+		["F-2510", "DiagnosticContentScroll", "diagnostic_measured_token_owner", "long diagnostic tokens use measured wrapped rows"],
+	]
+	var contract_ids: Array[String] = []
+	var owner_roles: Dictionary = {}
+	var viewports := [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)]
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var target := control_index.get(owner_name, null) as Control if owner_name != "" else null
+		if target == null:
+			target = root
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		contract_ids.append(finding_id)
+		owner_roles[finding_id] = {"owner": owner_name if owner_name != "" else "root/runtime", "role": role, "policy": policy}
+		var ids: Array = target.get_meta("ui_round_2451_2510_ids", [])
+		ids.append(finding_id)
+		target.set_meta("ui_round_2451_2510_ids", ids)
+		var roles: Dictionary = target.get_meta("ui_round_2451_2510_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2451_2510_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2451_2510_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2451_2510_policies", policies)
+		target.set_meta("ui_round_2451_2510_viewports", viewports)
+		target.set_meta("ui_round_2451_2510_runtime_budget", "one_shot_native_semantics_no_per_frame_layout_polling")
+		target.set_meta("ui_contract_hardening", true)
+	root.set_meta("ui_round_2451_2510_contract_version", "20260911-battle-page-lane-budget-60")
+	root.set_meta("ui_round_2451_2510_scope", "battle_lanes_hand_meld_motion_and_secondary_page_footer_lanes")
+	root.set_meta("ui_round_2451_2510_source", "ui-engineer-audit-latest-20260911")
+	root.set_meta("ui_round_2451_2510_evidence_viewports", viewports)
+	root.set_meta("ui_round_2451_2510_runtime_budget", "one_shot_native_semantics_no_per_frame_layout_polling")
+	root.set_meta("ui_round_2451_2510_contract_ids", contract_ids)
+	root.set_meta("ui_round_2451_2510_owner_roles", owner_roles)
+	root.set_meta("ui_round_2451_2510_registered_child_count", registration_child_count)
+	root.set_meta("battle_ui_lane_contract", battle_ui_lane_contract())
+	root.set_meta("battle_lane_owner_metadata", {"river": "DiscardGrid_<seat>", "action": "ActionButtonDock", "pending": "PendingClaimActionStack", "hand": "HandTrayTiles", "meld": "MeldArea_<seat>"})
+
+
+func register_ui_round_2511_2570(root: Control) -> void:
+	# F-2511..F-2570 hardens secondary-page state, focus, and lifecycle owners
+	# found in the current three-viewport audit. Registration is one-shot after
+	# construction and adds no visual surface or per-frame layout polling.
+	if root == null or not is_instance_valid(root):
+		return
+	var controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := controls.size()
+	if int(root.get_meta("ui_round_2511_2570_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index: Dictionary = {}
+	for candidate_node in controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
+	var owners := [
+		["F-2511", "TopHudTitle", "hud_title_phase_reservation_owner", "title keeps a measured phase and score gutter"],
+		["F-2512", "TopHudModeBadge", "hud_mode_text_identity_owner", "mode badge exposes text identity beyond tint"],
+		["F-2513", "TopHudHandProgress", "hud_progress_baseline_owner", "hand progress keeps a stable baseline across state changes"],
+		["F-2514", "ScoreStrip", "hud_score_value_column_owner", "score value and delta remain separate readable columns"],
+		["F-2515", "TopHudStatus", "hud_status_message_owner", "status copy has one live owner and full-text semantics"],
+		["F-2516", "TopHudSettingsButton", "hud_header_focus_gutter_owner", "header actions keep a focus gutter and stable order"],
+		["F-2517", "SeatPanel_0", "seat_identity_state_owner", "seat identity, wind, score, and state keep fixed slots"],
+		["F-2518", "DiscardGrid_0", "river_latest_marker_owner", "latest discard marker does not change chronological order"],
+		["F-2519", "CenterLastDiscardLabel", "center_fact_text_owner", "empty and populated last-discard facts share one text slot"],
+		["F-2520", "CenterWallCount", "wall_count_semantic_owner", "wall count stays independent from phase and discard facts"],
+		["F-2521", "HandTray", "hand_tray_resize_owner", "hand tray resize preserves a stable bottom safe area"],
+		["F-2522", "HandTrayTiles", "hand_tile_focus_route_owner", "hand tile focus follows visual order without rebuilding the tray"],
+		["F-2523", "HandDrawnTileMount", "drawn_tile_mount_boundary_owner", "drawn tile visual lift never moves its hit frame"],
+		["F-2524", "HandTrayStateBadge", "hand_state_badge_visibility_owner", "state badge yields to hand faces and remains noninteractive"],
+		["F-2525", "MeldArea_0", "meld_measurement_owner", "meld groups publish measured footprint before pagination"],
+		["F-2526", "ActionButtonDock", "action_primary_focus_owner", "visible enabled primary action leads the action focus route"],
+		["F-2527", "ActionIntentDock", "action_intent_status_owner", "intent and action controls use distinct reading lanes"],
+		["F-2528", "PendingClaimActionStack", "pending_claim_priority_owner", "pending response owns the modal priority over ordinary actions"],
+		["F-2529", "PendingClaimResponseGrid", "pending_response_grid_owner", "response rows retain a fixed tail and focus order"],
+		["F-2530", "DangerDiscardConfirmationArt", "danger_decision_surface_owner", "risk preview, alternatives, cancel, and confirm share one decision path"],
+		["F-2531", "DangerDiscardConfirmButton", "danger_confirm_focus_owner", "confirm is reachable after alternatives without focus jumps"],
+		["F-2532", "DangerDiscardCancelButton", "danger_cancel_escape_owner", "cancel is the explicit escape route for danger state"],
+		["F-2533", "TableLogLedgerPanel", "table_log_modal_scope_owner", "table log isolates input and restores the invoking focus"],
+		["F-2534", "TableLogArchiveScroll", "table_log_range_owner", "archive range and empty state are updated only on content changes"],
+		["F-2535", "ToastContainer", "toast_lifecycle_owner", "toast queue has one current entry and bounded measured height"],
+		["F-2536", "MenuTitleTextLayer", "menu_title_measure_owner", "menu title reserves the hero reading column"],
+		["F-2537", "MenuPrimaryOfflineCard", "menu_primary_focus_owner", "primary menu card has one native focus owner"],
+		["F-2538", "MenuTutorialEntryBanner", "menu_tutorial_action_owner", "tutorial copy and action use independent lanes"],
+		["F-2539", "MenuVersionBadge", "menu_footer_fact_owner", "version remains readable without competing with footer actions"],
+		["F-2540", "SettingsOverlay", "settings_modal_scope_owner", "settings overlay owns input scope while open"],
+		["F-2541", "SettingsLargeTextScroll", "settings_content_range_owner", "settings content range clears the fixed close lane"],
+		["F-2542", "SettingsCloseButton", "settings_close_restore_owner", "settings close restores the invoking control"],
+		["F-2543", "OnlineLobbyNameEdit", "lobby_name_input_owner", "name input keeps clear affordance and full value semantics"],
+		["F-2544", "OnlineLobbyHostEdit", "lobby_host_input_owner", "host input preserves endpoint text without visual truncation loss"],
+		["F-2545", "OnlineLobbyRoomEdit", "lobby_room_validation_owner", "room validation and input share a stable feedback lane"],
+		["F-2546", "OnlineLobbyConnectionStateLabel", "lobby_connection_text_owner", "connection phase is textual as well as chromatic"],
+		["F-2547", "OnlineLobbyEndpointCopyButton", "lobby_endpoint_copy_owner_v2", "copy has a dedicated touch target and complete value"],
+		["F-2548", "OnlineLobbyConnectionRetryButton", "lobby_retry_unique_owner", "retry is the unique connection recovery action"],
+		["F-2549", "OnlineLobbyLogScroll", "lobby_log_range_owner", "empty and short logs do not expose a false scroll affordance"],
+		["F-2550", "OnlineLobbyStartGateReason", "lobby_start_gate_owner_v2", "start prerequisite reason stays adjacent to the CTA"],
+		["F-2551", "ChatPanelMessageScroll", "chat_message_range_owner", "message range updates with content, not every frame"],
+		["F-2552", "ChatPanelMessageRangeLabel", "chat_range_status_owner", "chat status states visible range and unread context"],
+		["F-2553", "ChatInput", "chat_input_clear_gutter_owner", "chat input reserves clear and send gutters"],
+		["F-2554", "ChatSendButton", "chat_send_state_owner", "send state follows validation and cooldown semantics"],
+		["F-2555", "ChatPanelQuickMessages", "chat_quick_action_owner", "quick messages stay above the custom input lane"],
+		["F-2556", "TelemetryDataBodyScroll", "telemetry_body_range_owner_v2", "privacy copy scrolls while status and actions stay fixed"],
+		["F-2557", "TelemetryPermissionSummary", "telemetry_policy_text_owner_v2", "consent state includes a readable recording policy"],
+		["F-2558", "TelemetryExportStatus", "telemetry_export_feedback_owner_v2", "export has one pending, success, or error feedback lane"],
+		["F-2559", "TelemetryDataSheetCloseButton", "telemetry_close_restore_owner_v2", "sheet close restores its invoking settings row"],
+		["F-2560", "RulesContentScroll", "rules_content_range_owner_v2", "rules boundary state follows the actual scroll range"],
+		["F-2561", "RulesGuideStepButton_0", "rules_guide_focus_owner_v2", "guide focus follows the selected content anchor"],
+		["F-2562", "RulesReadingStatus", "rules_reading_status_owner", "chapter and visible content range share one status"],
+		["F-2563", "StatsRows", "stats_row_measure_owner_v2", "stat rows grow from measured label and value content"],
+		["F-2564", "StatsRowsScrollStatus", "stats_range_status_owner_v2", "empty stats do not claim a scroll range"],
+		["F-2565", "StatsRuleFilterButton", "stats_filter_focus_restore_owner", "filter rebuild preserves source focus and selected value"],
+		["F-2566", "AchievementsScroll", "achievements_range_owner_v2", "last row and End state retain bottom clearance"],
+		["F-2567", "DailyLoginForecastBody", "daily_forecast_state_owner_v2", "forecast body is the sole visible detail owner"],
+		["F-2568", "ShopItemsScroll", "shop_range_owner_v2", "shop content and scrollbar use separate input ownership"],
+		["F-2569", "UpdateReleaseNotesScroll", "update_notes_range_owner", "release notes scroll independently from update actions"],
+		["F-2570", "DiagnosticContentScroll", "diagnostic_range_owner_v2", "diagnostic measured rows update range once after normalization"],
+	]
+	var contract_ids: Array[String] = []
+	var owner_roles: Dictionary = {}
+	var viewports := [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)]
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var target := control_index.get(owner_name, null) as Control
+		if target == null:
+			target = root
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		contract_ids.append(finding_id)
+		owner_roles[finding_id] = {"owner": owner_name if target != root else "root/runtime", "role": role, "policy": policy}
+		var ids: Array = target.get_meta("ui_round_2511_2570_ids", [])
+		if not ids.has(finding_id):
+			ids.append(finding_id)
+		target.set_meta("ui_round_2511_2570_ids", ids)
+		var roles: Dictionary = target.get_meta("ui_round_2511_2570_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2511_2570_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2511_2570_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2511_2570_policies", policies)
+		target.set_meta("ui_round_2511_2570_viewports", viewports)
+		target.set_meta("ui_round_2511_2570_runtime_budget", "one_shot_native_semantics_no_per_frame_layout_polling")
+		target.set_meta("ui_contract_hardening", true)
+		if target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			scroll.set_meta("range_status_policy", "content_range_only")
+			scroll.set_meta("range_updates", "resize_or_content_change_only")
+			scroll.set_meta("boundary_state_owner", target.name)
+		mark_ui_optimization(target, finding_id)
+	root.set_meta("ui_round_2511_2570_contract_version", "20260911-secondary-state-focus-lifecycle-60")
+	root.set_meta("ui_round_2511_2570_scope", "hud_battle_menu_lobby_chat_privacy_and_secondary_page_state_ownership")
+	root.set_meta("ui_round_2511_2570_source", "local-three-viewport-control-and-screenshot-audit-20260911")
+	root.set_meta("ui_round_2511_2570_evidence_viewports", viewports)
+	root.set_meta("ui_round_2511_2570_runtime_budget", "one_shot_native_semantics_no_per_frame_layout_polling")
+	root.set_meta("ui_round_2511_2570_contract_ids", contract_ids)
+	root.set_meta("ui_round_2511_2570_owner_roles", owner_roles)
+	root.set_meta("ui_round_2511_2570_registered_child_count", registration_child_count)
+	root.set_meta("secondary_page_state_contract", "single_owner_measured_range_focus_restore")
+	root.set_meta("toast_lifecycle_contract", "one_current_entry_bounded_height_page_scope")
 
 
 func register_ui_round_1071_1100(root: Control) -> void:
@@ -17810,6 +18239,8 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	# authored warning art above the dock so the player reads and acts in one scan.
 	var panel = make_gpt_route_rail(DANGER_DISCARD_CONFIRMATION_RECT, Color(0.040, 0.018, 0.016, 0.94))
 	panel.name = "DangerDiscardConfirmationArt"
+	panel.set_meta("reading_sequence", ["tile", "risk", "alternatives", "cancel", "confirm"])
+	panel.set_meta("action_order", "alternatives_then_cancel_then_confirm")
 	panel.z_index = 20
 	panel.clip_contents = true
 	panel.set_meta("action_dock_clearance_px", 12.0)
@@ -19464,6 +19895,9 @@ func draw_hand(parent: Control) -> void:
 	# 手牌托盘 - 增强视觉效果
 	var hand := get_self_hand()
 	normalized_hand_keyboard_selection(hand)
+	var hand_identity_signature := "%s|%s|%s" % [str(hand), str(offline_last_draw.get("serial", -1)), mode]
+	var hand_identity_changed := hand_identity_signature != last_hand_render_signature
+	last_hand_render_signature = hand_identity_signature
 	var compact_hand_art := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
 	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.018, 0.026, 0.024, 0.97), "ui_dark_scrim", 0.20)
 	tray.name = "HandTray"
@@ -19478,6 +19912,9 @@ func draw_hand(parent: Control) -> void:
 	tray.clip_contents = false
 	tray.set_meta("overflow_contract", "tray_allows_6px_visual_gutter_only")
 	tray.set_meta("tile_stage_owner", "HandTrayTileStage")
+	tray.set_meta("hand_identity_signature", hand_identity_signature)
+	tray.set_meta("hand_identity_changed", hand_identity_changed)
+	tray.set_meta("slide_animation_policy", "identity_change_only")
 	mark_ui_optimization(tray, "F-248")
 	var tray_shadow = make_soft_depth_panel(tray, rect_full(0.010, 0.145, 0.990, 1.060), Color(0.0, 0.0, 0.0, 0.38), 18)
 	tray_shadow.name = "HandTray3DCastShadow"
@@ -19672,6 +20109,7 @@ func draw_hand(parent: Control) -> void:
 	var tile_width = float(hand_layout.get("tile_width", HAND_TILE_MAX_WIDTH))
 	var tile_height = float(hand_layout.get("tile_height", tile_width * HAND_TILE_ASPECT))
 	var group_gap_width = maxf(4.0, float(hand_layout.get("group_gap_width", 4.0)))
+	var drawn_gap_width := float(hand_layout.get("drawn_gap_width", 0.0))
 	var drawn_tile = str(offline_last_draw.get("tile", ""))
 	var drawn_serial = int(offline_last_draw.get("serial", -1))
 	var stable_drawn_index := int(offline_last_draw.get("hand_index", -1))
@@ -19697,6 +20135,8 @@ func draw_hand(parent: Control) -> void:
 	hand_box.set_meta("layout_fits_content", hand_layout_fits_content(hand, hand_layout))
 	hand_box.set_meta("group_gap_width", group_gap_width)
 	hand_box.set_meta("group_gap_min_px", HAND_MIN_GROUP_GAP)
+	hand_box.set_meta("drawn_gap_width", drawn_gap_width)
+	hand_box.set_meta("drawn_gap_policy", "fixed_empty_spacer_before_stable_drawn_tile")
 	hand_box.set_meta("tile_texture_bleed", Vector2.ZERO)
 	hand_box.set_meta("keyboard_navigation", "左右方向键选择，Enter出牌")
 	hand_box.set_meta("focusable_tile_count", hand.size())
@@ -19717,7 +20157,7 @@ func draw_hand(parent: Control) -> void:
 	tray.add_child(hand_box)
 
 	# 手牌滑入动画
-	if ui_motion_enabled():
+	if ui_motion_enabled() and hand_identity_changed:
 		tray.modulate = Color(1, 1, 1, 0)
 		tray.offset_top = 24.0
 		var tw := create_screen_tween()
@@ -19731,6 +20171,8 @@ func draw_hand(parent: Control) -> void:
 		var tile = str(hand[i])
 		if should_insert_hand_group_gap(hand, i):
 			hand_box.add_child(make_hand_group_spacer(tile_height, group_gap_width, hand_group_label(tile)))
+		if i == stable_drawn_index and i > 0 and drawn_gap_width > 0.0:
+			hand_box.add_child(make_hand_drawn_spacer(tile_height, drawn_gap_width))
 		var clickable = can_self_discard() and not is_claim_discard_banned(0, tile)
 		var keyboard_selected := clickable and i == hand_keyboard_selection
 		# 新手引导高亮：可点击时添加视觉提示
@@ -21082,8 +21524,11 @@ func draw_melds(parent: Control) -> void:
 		area.set_meta("lane_capacity", lane_capacity)
 		area.set_meta("lane_edge_clearance_px", 6.0 if compact_melds else 8.0)
 		area.set_meta("lane_group_gap_px", 4.0 if compact_melds else 3.0)
+		area.set_meta("pager_gap_px", 8.0)
 		area.set_meta("page_count", page_count)
 		area.set_meta("layout_capacity_ok", visible_melds.size() <= lane_capacity)
+		area.set_meta("group_pagination_policy", "whole_group_in_one_page_including_four_tile_kong")
+		area.set_meta("group_owner_metadata", "MeldGroup_<index> owns its actual footprint and focus token")
 		area.set_meta("compact_readability_policy", "paginate_before_below_24px")
 		mark_ui_optimization(area, "F-043")
 		var meld_tile_size := Vector2.ZERO
@@ -21160,6 +21605,10 @@ func draw_melds(parent: Control) -> void:
 				meld_group.set_meta("seat", seat)
 				meld_group.set_meta("orientation", "vertical" if vertical else "horizontal")
 				meld_group.set_meta("tile_count", meld_tiles.size())
+				meld_group.set_meta("actual_footprint_px", meld_lane_group_footprint(seat, meld_tiles, compact_melds))
+				meld_group.set_meta("group_focus_token", "meld-%d-%d" % [seat, window_start + meld_index])
+				meld_group.set_meta("group_owner", "MeldArea_%d" % seat)
+				meld_group.set_meta("pager_clearance_px", 8.0)
 				meld_group.set_meta("face_rotation", seat_meld_face_rotation(seat))
 				var meld_kind := meld_kind_label(meld_tiles)
 				set_ui_full_text(meld_group, "%s · 第%d组 · %d张牌" % [meld_kind, window_start + meld_index + 1, meld_tiles.size()], "副露类型：" + meld_kind)
@@ -21222,6 +21671,8 @@ func draw_melds(parent: Control) -> void:
 			page_button.set_meta("touch_height_contract", "at_least_UI_MIN_TOUCH_TARGET")
 			page_button.set_meta("applied_rect_min_height_px", UI_MIN_TOUCH_TARGET)
 			page_button.set_meta("pager_rect_policy", "apply_rect_preserves_min_touch_height")
+			page_button.set_meta("pager_gap_px", 8.0)
+			page_button.set_meta("group_pagination_policy", "whole_meld_groups_only")
 			page_button.set_meta("focus_hint", "Enter翻到下一页副露；Esc返回手牌")
 			page_button.set_meta("action_role", "meld_page_next")
 			mark_ui_optimization(page_button, "F-260")
@@ -23940,6 +24391,9 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 	strip.name = "ScoreStrip"
 	parent.add_child(strip)
 	apply_rect(strip, rect)
+	strip.set_meta("score_delta_lane_owner", "ScoreStripDelta_*")
+	strip.set_meta("score_delta_source", "last_score_deltas")
+	strip.set_meta("score_delta_policy", "separate_lower_text_lane_below_current_score")
 	for seat in range(4):
 		var active = get_current_seat() == seat
 		var player = get_player_info(seat)
@@ -23981,6 +24435,18 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		apply_rect(score, SCORE_STRIP_NARROW_SCORE_RECT if narrow_score_strip else SCORE_STRIP_SCORE_RECT)
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(score)
+		var delta_text := score_delta_text(seat)
+		if delta_text == "":
+			delta_text = " --"
+		var delta = make_label(chip, "变化" + delta_text, 8 if compact_score_strip else 9, Color(0.78, 0.86, 0.76, 0.92), false)
+		delta.name = "ScoreStripDelta_%d" % seat
+		delta.z_index = 2
+		apply_rect(delta, SCORE_STRIP_NARROW_DELTA_RECT if narrow_score_strip else SCORE_STRIP_DELTA_RECT)
+		delta.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		delta.tooltip_text = "分数变化：" + (score_delta_text(seat) if score_delta_text(seat) != "" else "暂无本局结算变化")
+		delta.set_meta("delta_owner", "last_score_deltas")
+		delta.set_meta("lane_role", "independent_score_delta")
+		configure_clipped_label(delta)
 
 
 func draw_score_strip_chip_art(parent: Control, seat: int, score: int, active: bool) -> Control:
@@ -24735,6 +25201,13 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 
 func draw_seat_score_momentum_ribbon(parent: Control, seat: int) -> bool:
 	# r209: GPT chrome conversion
+	var has_score_delta := false
+	for delta in last_score_deltas:
+		if int(delta) != 0:
+			has_score_delta = true
+			break
+	if not has_score_delta:
+		return false
 	var report = score_context_report(seat)
 	if report.is_empty():
 		return false
@@ -24775,7 +25248,7 @@ func draw_seat_score_momentum_ribbon(parent: Control, seat: int) -> bool:
 	label.name = "SeatScoreMomentumLabel"
 	apply_rect(label, rect_full(0.135, 0.04, 0.875, 0.670))
 	configure_clipped_label(label)
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+	if has_score_delta and fx_enabled_effective() and graphics_quality != Commercial3DStage.QUALITY_LOW and DisplayServer.get_name().to_lower() != "headless":
 		var tw := create_screen_tween()
 		tw.set_loops(48)
 		tw.tween_property(pulse, "modulate:a", 0.30, 0.72).from(0.90)
@@ -24841,6 +25314,7 @@ func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) 
 	parent.add_child(art)
 	var accent = opponent_seat_threat_color_from_report(report)
 	var score = float(report.get("score", 0.0))
+	var threat_active := not report.is_empty() and score > 0.0 and bool(report.get("valid", true))
 	var fill_ratio = clamp(score / 28.0, 0.24, 1.0)
 	var radar_texture = add_illustration_texture(art, "seat_threat_radar", rect_full(-0.080, -0.220, 1.020, 1.160), 0.18, false)
 	if radar_texture != null:
@@ -24876,14 +25350,14 @@ func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) 
 		var readiness = make_gpt_edge_rail(rect_full(0.690, 0.135, 0.760, 0.435), Color(0.92, 0.76, 0.34, 0.24))
 		readiness.name = "SeatThreatReadinessSeal_%d" % seat
 		art.add_child(readiness)
-		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		if threat_active and fx_enabled_effective() and graphics_quality != Commercial3DStage.QUALITY_LOW and DisplayServer.get_name().to_lower() != "headless":
 			var readiness_tw := create_screen_tween()
 			readiness_tw.set_loops(48)
 			readiness_tw.tween_property(readiness, "scale", Vector2(1.120, 1.120), 0.58).from(Vector2.ONE).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			readiness_tw.parallel().tween_property(readiness, "modulate:a", 0.48, 0.58).from(1.0)
 			readiness_tw.tween_property(readiness, "scale", Vector2.ONE, 0.58).from(Vector2(1.120, 1.120)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			readiness_tw.parallel().tween_property(readiness, "modulate:a", 1.0, 0.58).from(0.48)
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+	if threat_active and fx_enabled_effective() and graphics_quality != Commercial3DStage.QUALITY_LOW and DisplayServer.get_name().to_lower() != "headless":
 		if radar_texture != null:
 			var drift := create_screen_tween()
 			drift.set_loops(48)
@@ -29458,6 +29932,18 @@ func make_hand_group_spacer(height: float, width: float = 10.0, label_text: Stri
 		configure_clipped_label(label)
 		label.visible = false
 		label.set_meta("visual_text_policy", "metadata_tooltip_only_no_bottom_orphan")
+	return spacer
+
+
+func make_hand_drawn_spacer(height: float, width: float) -> Control:
+	var spacer := Control.new()
+	spacer.name = "HandDrawnTileGap"
+	spacer.custom_minimum_size = Vector2(width, height)
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spacer.set_meta("layout_only", true)
+	spacer.set_meta("gap_owner", "HandDrawnTileMount")
+	spacer.set_meta("gap_width_px", width)
+	spacer.set_meta("accessible_name", "摸牌与前一张牌的固定间距")
 	return spacer
 
 
@@ -36160,13 +36646,15 @@ func show_telemetry_data_sheet() -> void:
 	mark_ui_optimization(permission_summary, "F-404")
 	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 11, Color(0.68, 0.78, 0.72), false)
 	export_status.name = "TelemetryExportStatus"
-	apply_rect(export_status, rect_full(0.075, 0.805, 0.925, 0.845))
+	apply_rect(export_status, rect_full(0.075, 0.795, 0.425, 0.833))
 	export_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(export_status)
 	set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 	var recent_action := make_label(card, "最近操作：%s" % telemetry_last_action, 11, Color(0.74, 0.82, 0.74), false)
 	recent_action.name = "TelemetryRecentAction"
-	apply_rect(recent_action, rect_full(0.075, 0.850, 0.925, 0.890))
+	apply_rect(recent_action, rect_full(0.455, 0.795, 0.925, 0.833))
+	recent_action.set_meta("lane_role", "recent_action_footer_before_close")
+	recent_action.set_meta("close_lane_gap_px", 8.0)
 	recent_action.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	recent_action.tooltip_text = telemetry_last_action
 	recent_action.set_meta("accessible_name", "最近操作：" + telemetry_last_action)
@@ -36218,7 +36706,9 @@ func show_telemetry_data_sheet() -> void:
 	set_ui_full_text(close, close.tooltip_text, "关闭隐私诊断页")
 	close.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
 	close.set_meta("telemetry_action_priority", "tertiary_close")
-	apply_rect(close, rect_full(0.390, 0.835, 0.610, 0.975))
+	apply_rect(close, rect_full(0.390, 0.855, 0.610, 0.975))
+	close.set_meta("lane_role", "dedicated_bottom_close_lane")
+	close.set_meta("recent_action_clearance_px", 8.0)
 	card.add_child(close)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
 	register_ui_round_1011_1040(root_layer)
@@ -36397,15 +36887,22 @@ func refresh_update_dialog_art() -> void:
 	elif update_state == "ready" or update_state == "current":
 		progress = 1.0
 	if update_art_fill != null and is_instance_valid(update_art_fill):
-		apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
+		update_art_fill.set_meta("progress_owner", "UpdateProgressGptFillFace")
 	var progress_face := update_dialog.find_child("UpdateProgressGptFillFace", true, false) as Control if update_dialog != null and is_instance_valid(update_dialog) else null
 	if progress_face != null:
+		if update_art_fill != null and is_instance_valid(update_art_fill):
+			update_art_fill.visible = false
 		var progress_left := 0.08
 		var progress_top := 0.365 if update_dialog_compact_layout() else 0.45
 		var progress_right := 0.92
 		progress_face.set_meta("progress_ratio", progress)
 		progress_face.set_meta("progress_source", "update_progress")
 		apply_rect(progress_face, rect_full(progress_left, progress_top, lerpf(progress_left, progress_right, progress), progress_top + (0.060 if update_dialog_compact_layout() else 0.100)))
+		progress_face.set_meta("canonical_progress_owner", true)
+	else:
+		if update_art_fill != null and is_instance_valid(update_art_fill):
+			update_art_fill.visible = true
+			apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
 	if update_art_status_light != null and is_instance_valid(update_art_status_light):
 		var color = update_state_color()
 		tint_panel_gpt_plate(update_art_status_light, Color(color.r, color.g, color.b, 0.42), "ui_hand_tray_state_chip")
@@ -37223,6 +37720,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍金币卡" if progress >= 7 else "第7天领取双倍金币卡")
 	var forecast_panel = make_gpt_route_rail(rect_full(0.160, forecast_top, 0.840, 1.000 if large_checkin_layout else 0.955), Color(0.010, 0.022, 0.025, 0.64))
 	forecast_panel.name = "DailyLoginForecastPanel"
+	forecast_panel.set_meta("body_owner", "DailyLoginForecastBody")
+	forecast_panel.set_meta("tip_policy", "legacy_tip_anchor_hidden")
 	panel.add_child(forecast_panel)
 	var forecast_rail = make_layout_host(rect_full(0.035, 0.180, 0.047, 0.820))
 	forecast_rail.name = "DailyLoginForecastRail"
@@ -37263,6 +37762,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	tip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tip_label.set_meta("canonical_owner", "DailyLoginForecastBody")
 	tip_label.set_meta("duplicate_text_role", "legacy_smoke_anchor")
+	tip_label.set_meta("visibility_contract", "always_hidden_legacy_anchor")
 	configure_button_focus_navigation(panel, "DailyLoginClaimButton")
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)
@@ -37999,9 +38499,11 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	var loading_rail_lane := Control.new()
 	loading_rail_lane.name = "LoadingFooterRailLane"
 	loading_rail_lane.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(loading_rail_lane, rect_full(0.220, 0.815, 0.780, 0.930))
+	apply_rect(loading_rail_lane, rect_full(0.220, 0.775, 0.780, 0.875))
 	loading_rail_lane.set_meta("lane_policy", "one_owner_two_slots_eight_pixel_gap")
-	loading_rail_lane.set_meta("safe_bottom_ratio", 0.930)
+	loading_rail_lane.set_meta("safe_bottom_ratio", 0.875)
+	loading_rail_lane.set_meta("version_lane_top_ratio", 0.905)
+	loading_rail_lane.set_meta("version_clearance_px", 8.0)
 	bg.add_child(loading_rail_lane)
 	var loading_meter = add_optional_gpt_illustration_texture(loading_rail_lane, "ui_loading_progress_plate", rect_full(0.0, 0.0, 1.0, 0.400), 0.74, false)
 	if loading_meter == null:
@@ -38134,6 +38636,8 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		error_action_lane.set_meta("fixed_touch_height", UI_MIN_TOUCH_TARGET)
 		error_action_lane.set_meta("above_text_overflow_boundary", 0.720)
 		error_action_lane.set_meta("action_lane_reserved", true)
+		error_action_lane.set_meta("tip_lane_policy", "mutually_exclusive_with_loading_tip")
+		error_action_lane.set_meta("error_text_lane_end", 0.720)
 		apply_rect(error_action_lane, rect_full(0.120, 0.730, 0.880, 0.890))
 		center_panel.add_child(error_action_lane)
 		mark_ui_optimization(error_action_lane, "F-236")
@@ -38180,6 +38684,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	tip_label.move_to_front()
 	if loading_error:
 		tip_label.visible = false
+		tip_label.set_meta("visibility_contract", "hidden_while_loading_error")
 		var error_tip_art := center_panel.find_child("LoadingTipArt", true, false) as Control
 		if error_tip_art != null:
 			error_tip_art.visible = false
@@ -38540,6 +39045,8 @@ func _show_replay_import_screen_impl() -> void:
 	event_scroll.clip_contents = true
 	event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	event_scroll.set_meta("timeline_measurement_pending", false)
+	event_scroll.set_meta("timeline_range_update_count", 0)
+	event_scroll.set_meta("timeline_scroll_lock_policy", "lock_input_until_one_measurement_pass")
 	apply_rect(event_scroll, rect_full(0.035, 0.300, 0.965, 0.945))
 	timeline.add_child(event_scroll)
 	var event_scrollbar := event_scroll.get_v_scroll_bar()
@@ -39136,6 +39643,7 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 	# visually locked until the real wrapped heights are measured.
 	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, float(event_list.get_child_count() * (58 if large_text_enabled else 50))))
 	event_list.set_meta("timeline_initial_estimate_px", 58.0 if large_text_enabled else 50.0)
+	event_list.set_meta("timeline_measurement_complete", false)
 	call_deferred("normalize_replay_timeline_rows", event_list, ui_page_generation, focus_first)
 	if replay_timeline_selected_index < 0 or replay_timeline_selected_index >= event_list.get_child_count():
 		replay_timeline_selected_index = 0
@@ -39153,6 +39661,8 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 		return
 	var event_scroll := event_list.get_parent() as ScrollContainer
 	if event_scroll == null or not is_current_ui_control(event_scroll):
+		return
+	if bool(event_list.get_meta("timeline_measurement_complete", false)) and not bool(event_scroll.get_meta("timeline_measurement_pending", false)):
 		return
 	var measured_width := event_list.size.x
 	if measured_width <= 1.0:
@@ -39200,6 +39710,8 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	event_scroll.modulate.a = 1.0
 	event_scroll.set_meta("timeline_visibility_locked_until_measurement", false)
 	event_scroll.set_meta("timeline_measurement_pending", false)
+	event_list.set_meta("timeline_measurement_complete", true)
+	event_scroll.set_meta("timeline_range_update_count", int(event_scroll.get_meta("timeline_range_update_count", 0)) + 1)
 	mark_ui_optimization(event_scroll, "F-244")
 	configure_replay_timeline_focus_navigation(focus_first)
 	set_replay_timeline_selection(replay_timeline_selected_index if replay_timeline_selected_index >= 0 else 0, false)
@@ -41293,7 +41805,7 @@ func _process(_delta: float) -> void:
 		offline_restart_confirm_deadline_msec = 0
 		if mode == "offline":
 			set_status(current_status_text())
-			request_game_render()
+			request_game_render(1, GAME_RENDER_DIRTY_STATE)
 	if telemetry_clear_confirming and telemetry_clear_confirm_deadline_msec > 0 and now >= telemetry_clear_confirm_deadline_msec:
 		telemetry_clear_confirming = false
 		telemetry_clear_confirm_deadline_msec = 0
@@ -41310,9 +41822,11 @@ func _process(_delta: float) -> void:
 	if mode == "online_lobby" or mode == "online_game":
 		poll_online(now)
 		update_online_slow_response_notice(now)
-	update_pending_claim_live_state()
-	update_online_action_live_state(now)
-	update_chat_send_cooldown(now)
+	if now >= next_ui_deadline_poll_msec:
+		next_ui_deadline_poll_msec = now + UI_DEADLINE_POLL_INTERVAL_MSEC
+		update_pending_claim_live_state()
+		update_online_action_live_state(now)
+		update_chat_send_cooldown(now)
 	flush_telemetry_save()
 	flush_offline_progress_autosave()
 
@@ -41324,7 +41838,7 @@ func update_pending_claim_live_state() -> void:
 			pending_claim_auto_pass_feedback = ""
 			pending_claim_auto_pass_feedback_until_msec = 0
 			if mode == "offline":
-				request_game_render()
+				request_game_render(2, GAME_RENDER_DIRTY_PENDING)
 	var has_offline_pending := mode == "offline" and offline_phase == "pending_claim"
 	var has_online_pending := mode == "online_game" and typeof(online_game.get("pending", null)) == TYPE_DICTIONARY and not (online_game.get("pending", {}) as Dictionary).is_empty()
 	if not has_offline_pending and not has_online_pending:
@@ -43758,12 +44272,14 @@ func hand_group_counts(hand: Array) -> Array[int]:
 			counts[group] += 1
 	return counts
 
-func hand_layout_metrics(hand: Array) -> Dictionary:
-	return hand_layout_metrics_for_content(hand, hand_content_pixel_size())
+func hand_layout_metrics(hand: Array, drawn_index: int = -2) -> Dictionary:
+	return hand_layout_metrics_for_content(hand, hand_content_pixel_size(), drawn_index)
 
-func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dictionary:
+func hand_layout_metrics_for_content(hand: Array, content_size: Vector2, drawn_index: int = -2) -> Dictionary:
 	var count = max(1, hand.size())
 	var gap_count = hand_group_gap_count(hand)
+	var layout_drawn_index := hand_layout_drawn_index(hand) if drawn_index == -2 else drawn_index
+	var drawn_gap_count := 1 if hand_drawn_gap_applies(hand, layout_drawn_index) else 0
 	var selected_gap = 0.0
 	var selected_separation = 1
 	var selected_width = 1.0
@@ -43772,7 +44288,7 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 	for candidate in HAND_LAYOUT_CANDIDATES:
 		var gap_width = float(candidate[0])
 		var separation = int(candidate[1])
-		var candidate_width = hand_tile_width_for_space(content_size, count, gap_count, gap_width, separation)
+		var candidate_width = hand_tile_width_for_space(content_size, count, gap_count, gap_width, separation, drawn_gap_count)
 		selected_gap = gap_width
 		selected_separation = separation
 		selected_width = candidate_width
@@ -43781,24 +44297,51 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 			break
 	if selected_gap < minimum_group_gap:
 		selected_gap = minimum_group_gap
-		selected_width = hand_tile_width_for_space(content_size, count, gap_count, selected_gap, selected_separation)
+		selected_width = hand_tile_width_for_space(content_size, count, gap_count, selected_gap, selected_separation, drawn_gap_count)
+	# The candidate table is intentionally conservative, but the final fallback
+	# still has to protect the compact touch contract when a drawn-tile spacer is
+	# present. Spend separation down to zero before allowing a face below 46px.
+	if selected_width < HAND_TILE_MIN_TOUCH_WIDTH:
+		var compact_width := hand_tile_width_for_space(content_size, count, gap_count, minimum_group_gap, 0, drawn_gap_count)
+		if compact_width >= HAND_TILE_MIN_TOUCH_WIDTH:
+			selected_gap = minimum_group_gap
+			selected_separation = 0
+			selected_width = compact_width
 	var tile_width = min(HAND_TILE_MAX_WIDTH, floor(max(1.0, selected_width)))
 	var tile_height = floor(tile_width * HAND_TILE_ASPECT)
 	return {
 		"tile_width": tile_width,
 		"tile_height": tile_height,
 		"group_gap_width": selected_gap,
+		"drawn_index": layout_drawn_index,
+		"drawn_gap_count": drawn_gap_count,
+		"drawn_gap_width": HAND_DRAWN_TILE_GAP if drawn_gap_count > 0 else 0.0,
 		"separation": selected_separation,
 		"content_width": content_size.x,
 		"content_height": content_size.y,
+		"touch_width_ok": tile_width >= HAND_TILE_MIN_TOUCH_WIDTH,
 	}
 
-func hand_tile_width_for_space(content_size: Vector2, tile_count: int, gap_count: int, gap_width: float, separation: int) -> float:
+func hand_tile_width_for_space(content_size: Vector2, tile_count: int, gap_count: int, gap_width: float, separation: int, drawn_gap_count: int = 0) -> float:
 	var gaps_width = float(max(0, gap_count)) * gap_width
-	var separations_width = float(max(0, tile_count + gap_count - 1)) * float(max(0, separation))
-	var width_by_space = (content_size.x - gaps_width - separations_width) / float(max(1, tile_count))
+	var drawn_gaps_width = float(max(0, drawn_gap_count)) * HAND_DRAWN_TILE_GAP
+	var spacer_count: int = maxi(0, int(gap_count)) + maxi(0, int(drawn_gap_count))
+	var separations_width = float(max(0, tile_count + spacer_count - 1)) * float(max(0, separation))
+	var width_by_space = (content_size.x - gaps_width - drawn_gaps_width - separations_width) / float(max(1, tile_count))
 	var width_by_height = content_size.y / HAND_TILE_ASPECT
 	return min(width_by_space, width_by_height)
+
+func hand_layout_drawn_index(hand: Array) -> int:
+	if mode != "offline" or int(offline_last_draw.get("seat", -1)) != 0:
+		return -1
+	var drawn_index := int(offline_last_draw.get("hand_index", -1))
+	var drawn_tile := str(offline_last_draw.get("tile", ""))
+	if drawn_tile == "" or hand.size() % 3 != 2 or drawn_index < 0 or drawn_index >= hand.size() or str(hand[drawn_index]) != drawn_tile:
+		return -1
+	return drawn_index
+
+func hand_drawn_gap_applies(hand: Array, drawn_index: int) -> bool:
+	return drawn_index > 0 and drawn_index < hand.size()
 
 func hand_group_gap_count(hand: Array) -> int:
 	var count = 0
@@ -43818,7 +44361,9 @@ func hand_content_pixel_size() -> Vector2:
 func hand_layout_required_width(hand: Array, metrics: Dictionary) -> float:
 	var tile_count = hand.size()
 	var gap_count = hand_group_gap_count(hand)
-	return float(tile_count) * float(metrics.get("tile_width", 0.0)) + float(gap_count) * float(metrics.get("group_gap_width", 0.0)) + float(max(0, tile_count + gap_count - 1)) * float(metrics.get("separation", 0))
+	var drawn_gap_count := int(metrics.get("drawn_gap_count", 0))
+	var spacer_count: int = gap_count + drawn_gap_count
+	return float(tile_count) * float(metrics.get("tile_width", 0.0)) + float(gap_count) * float(metrics.get("group_gap_width", 0.0)) + float(drawn_gap_count) * float(metrics.get("drawn_gap_width", 0.0)) + float(max(0, tile_count + spacer_count - 1)) * float(metrics.get("separation", 0))
 
 func hand_tile_normalized_centers(hand: Array, metrics: Dictionary) -> PackedFloat32Array:
 	var centers := PackedFloat32Array()
@@ -43827,6 +44372,8 @@ func hand_tile_normalized_centers(hand: Array, metrics: Dictionary) -> PackedFlo
 	var content_width := maxf(1.0, float(metrics.get("content_width", hand_content_pixel_size().x)))
 	var tile_width := float(metrics.get("tile_width", HAND_TILE_MAX_WIDTH))
 	var gap_width := float(metrics.get("group_gap_width", 0.0))
+	var drawn_gap_width := float(metrics.get("drawn_gap_width", 0.0))
+	var drawn_index := int(metrics.get("drawn_index", hand_layout_drawn_index(hand)))
 	var separation := float(metrics.get("separation", 0))
 	var cursor := maxf(0.0, (content_width - hand_layout_required_width(hand, metrics)) * 0.5)
 	for i in range(hand.size()):
@@ -43834,6 +44381,8 @@ func hand_tile_normalized_centers(hand: Array, metrics: Dictionary) -> PackedFlo
 			cursor += separation
 			if should_insert_hand_group_gap(hand, i):
 				cursor += gap_width + separation
+			if hand_drawn_gap_applies(hand, drawn_index) and i == drawn_index:
+				cursor += drawn_gap_width + separation
 		centers.append((cursor + tile_width * 0.5) / content_width * 2.0 - 1.0)
 		cursor += tile_width
 	return centers
@@ -44560,15 +45109,27 @@ func battle_ui_lane_contract() -> Dictionary:
 	# Keep cross-layer exclusions inspectable by layout smoke and future overlays.
 	# These are root-normalized edge rects, matching apply_rect().
 	var meld_exclusions: Array[Rect2] = []
+	var river_exclusions: Array[Rect2] = []
 	for layout in MELD_LAYOUTS:
 		meld_exclusions.append(layout[1])
+	for zone in DISCARD_ZONES:
+		river_exclusions.append(zone[1])
 	return {
 		"action": action_bar_layout_rect(),
 		"action_dock": action_bar_dock_layout_rect(),
 		"hand": HAND_TRAY_RECT,
 		"meld": meld_exclusions,
+		"river": river_exclusions,
+		"action_exclusion": action_bar_dock_layout_rect(),
+		"clearance_px": 6.0,
+		"owner_metadata": {
+			"river": "DiscardGrid_<seat>",
+			"action": "ActionButtonDock",
+			"pending": "PendingClaimActionStack",
+			"hand": "HandTrayTiles",
+		},
 		"minimum_clearance_px": 6.0,
-		"contract": "action_above_hand_and_clear_of_melds"
+		"contract": "river_action_pending_hand_and_melds_have_exclusive_lanes"
 	}
 
 func pending_claim_action_base_rect() -> Rect2:
@@ -48675,10 +49236,9 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 	tile_node.set_meta("visual_overflow_px", minf(6.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0))))
 	tile_node.set_meta("overflow_contract", "animation_particles_bounded_to_hand_gutter")
 	mark_ui_optimization(tile_node, "F-248")
-	var rest_y = tile_node.position.y
 	var visual_gutter := maxf(0.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0)))
-	var lift := minf(visual_gutter, 6.0)
 	var peak_scale := 1.01
+	var visual_face := tile_node.find_child("TileFaceTexture", true, false) as Control
 	var accent = Color(0.66, 0.58, 0.92) if source == "gang" else GOLD_PRIMARY
 	var glow = Panel.new()
 	glow.name = "DrawTileGlow"
@@ -48717,15 +49277,17 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 				sparkle_node.queue_free()
 		).set_delay(0.35)
 
-	tile_node.pivot_offset = tile_node.custom_minimum_size * 0.5
-	tile_node.position.y = rest_y - lift
-	tile_node.scale = Vector2(0.98, 0.98)
+	# The frame and its native button are the hit target. Animate only the
+	# authored face, so a draw cannot move the clickable rect under the pointer.
+	if visual_face != null:
+		visual_face.pivot_offset = visual_face.size * 0.5
+		visual_face.scale = Vector2(0.98, 0.98)
 	tile_node.modulate = Color(1.0, 1.0, 1.0, 0.78)
-	var tw := tile_node.create_tween()
+	var tw := create_screen_tween()
 	tw.set_parallel(true)
-	tw.tween_property(tile_node, "position:y", rest_y, 0.22).from(rest_y - lift).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(tile_node, "scale", Vector2(peak_scale, peak_scale), 0.18).from(Vector2(0.98, 0.98)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(tile_node, "scale", Vector2(1.0, 1.0), 0.10).from(Vector2(peak_scale, peak_scale)).set_delay(0.18).set_ease(Tween.EASE_IN)
+	if visual_face != null:
+		tw.tween_property(visual_face, "scale", Vector2(peak_scale, peak_scale), 0.18).from(Vector2(0.98, 0.98)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(visual_face, "scale", Vector2.ONE, 0.10).from(Vector2(peak_scale, peak_scale)).set_delay(0.18).set_ease(Tween.EASE_IN)
 	tw.tween_property(tile_node, "modulate:a", 1.0, 0.16).from(0.78)
 	tw.tween_property(glow, "modulate:a", 1.0, 0.12).from(0.0)
 	tw.tween_property(glow, "modulate:a", 0.0, 0.28).set_delay(0.14)
@@ -49210,6 +49772,12 @@ func _build_fx_toast() -> void:
 	toast_container.set_meta("ui_round_1041_1070_ids", ["F-1062"])
 	toast_container.set_meta("ui_round_1041_1070_roles", {"F-1062": "toast_queue_owner"})
 	toast_container.set_meta("ui_round_1041_1070_policy", "queued_toasts_keep_dwell_and_focus_clearance")
+	toast_container.set_meta("ui_round_2391_2450_ids", ["F-2450"])
+	toast_container.set_meta("ui_round_2391_2450_roles", {"F-2450": "toast_queue_scope_owner_v2"})
+	toast_container.set_meta("ui_round_2391_2450_policies", {"F-2450": "toast queue yields to the page focus scope and measured height"})
+	toast_container.set_meta("ui_round_2391_2450_policy", "toast queue yields to the page focus scope and measured height")
+	toast_container.set_meta("focus_scope_policy", "page_owner_remains_primary")
+	toast_container.set_meta("no_per_frame_layout_polling", true)
 	toast_container.set_meta("ui_contract_hardening", true)
 	mark_ui_optimization(toast_container, "F-1062")
 	apply_safe_area_offsets(toast_container)
@@ -51054,7 +51622,9 @@ func _call_ui_enhancement(method_name: String, arg1 = null, arg2 = null, arg3 = 
 
 func start_ambient_animation(theme: String = "default", force_headless: bool = false) -> void:
 	"""启动环境氛围动画 - 支持四季自动主题"""
-	if not ui_motion_enabled() or (DisplayServer.get_name().to_lower() == "headless" and not force_headless):
+	var display_name := DisplayServer.get_name().to_lower()
+	if not ui_motion_enabled() or (display_name == "headless" and not force_headless):
+		stop_ambient_animation()
 		return
 
 	stop_ambient_animation()

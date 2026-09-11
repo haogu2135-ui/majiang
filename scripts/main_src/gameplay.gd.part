@@ -131,11 +131,13 @@ func refresh_current_screen() -> void:
 	elif mode == "offline" or mode == "online_game":
 		request_game_render()
 
-func request_game_render() -> void:
+func request_game_render(priority: int = 0, dirty_flag: int = GAME_RENDER_DIRTY_STATE) -> void:
 	if offline_sim_quiet or runtime_shutdown_requested:
 		return
 	if mode != "offline" and mode != "online_game":
 		return
+	game_render_dirty_flags |= dirty_flag
+	game_render_priority = maxi(game_render_priority, priority)
 	if game_render_queued:
 		return
 	game_render_queued = true
@@ -144,14 +146,26 @@ func request_game_render() -> void:
 func flush_game_render() -> void:
 	if runtime_shutdown_requested:
 		game_render_queued = false
+		game_render_dirty_flags = 0
+		game_render_priority = 0
 		return
 	var elapsed = Time.get_ticks_msec() - last_game_render_msec
 	if last_game_render_msec > 0 and elapsed < UI_RENDER_MIN_INTERVAL_MSEC:
 		schedule_game_render_flush(float(UI_RENDER_MIN_INTERVAL_MSEC - elapsed) / 1000.0)
 		return
 	game_render_queued = false
+	var dirty_flags := game_render_dirty_flags
+	var render_priority := game_render_priority
+	game_render_dirty_flags = 0
+	game_render_priority = 0
 	if mode == "offline" or mode == "online_game":
 		render_game()
+	if render_priority >= 2 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
+		# Keep the priority contract inspectable on the next rebuilt root without
+		# forcing an additional render in the same frame.
+		if root_layer != null and is_instance_valid(root_layer):
+			root_layer.set_meta("last_render_priority", render_priority)
+			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
 	var timer := game_render_delay_timer
@@ -177,6 +191,8 @@ func _on_game_render_delay_timeout(timer: Timer) -> void:
 		timer.queue_free()
 	if runtime_shutdown_requested:
 		game_render_queued = false
+		game_render_dirty_flags = 0
+		game_render_priority = 0
 		return
 	flush_game_render()
 

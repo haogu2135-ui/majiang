@@ -3865,13 +3865,15 @@ func show_telemetry_data_sheet() -> void:
 	mark_ui_optimization(permission_summary, "F-404")
 	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 11, Color(0.68, 0.78, 0.72), false)
 	export_status.name = "TelemetryExportStatus"
-	apply_rect(export_status, rect_full(0.075, 0.805, 0.925, 0.845))
+	apply_rect(export_status, rect_full(0.075, 0.795, 0.425, 0.833))
 	export_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(export_status)
 	set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 	var recent_action := make_label(card, "最近操作：%s" % telemetry_last_action, 11, Color(0.74, 0.82, 0.74), false)
 	recent_action.name = "TelemetryRecentAction"
-	apply_rect(recent_action, rect_full(0.075, 0.850, 0.925, 0.890))
+	apply_rect(recent_action, rect_full(0.455, 0.795, 0.925, 0.833))
+	recent_action.set_meta("lane_role", "recent_action_footer_before_close")
+	recent_action.set_meta("close_lane_gap_px", 8.0)
 	recent_action.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	recent_action.tooltip_text = telemetry_last_action
 	recent_action.set_meta("accessible_name", "最近操作：" + telemetry_last_action)
@@ -3923,7 +3925,9 @@ func show_telemetry_data_sheet() -> void:
 	set_ui_full_text(close, close.tooltip_text, "关闭隐私诊断页")
 	close.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
 	close.set_meta("telemetry_action_priority", "tertiary_close")
-	apply_rect(close, rect_full(0.390, 0.835, 0.610, 0.975))
+	apply_rect(close, rect_full(0.390, 0.855, 0.610, 0.975))
+	close.set_meta("lane_role", "dedicated_bottom_close_lane")
+	close.set_meta("recent_action_clearance_px", 8.0)
 	card.add_child(close)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
 	register_ui_round_1011_1040(root_layer)
@@ -4102,15 +4106,22 @@ func refresh_update_dialog_art() -> void:
 	elif update_state == "ready" or update_state == "current":
 		progress = 1.0
 	if update_art_fill != null and is_instance_valid(update_art_fill):
-		apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
+		update_art_fill.set_meta("progress_owner", "UpdateProgressGptFillFace")
 	var progress_face := update_dialog.find_child("UpdateProgressGptFillFace", true, false) as Control if update_dialog != null and is_instance_valid(update_dialog) else null
 	if progress_face != null:
+		if update_art_fill != null and is_instance_valid(update_art_fill):
+			update_art_fill.visible = false
 		var progress_left := 0.08
 		var progress_top := 0.365 if update_dialog_compact_layout() else 0.45
 		var progress_right := 0.92
 		progress_face.set_meta("progress_ratio", progress)
 		progress_face.set_meta("progress_source", "update_progress")
 		apply_rect(progress_face, rect_full(progress_left, progress_top, lerpf(progress_left, progress_right, progress), progress_top + (0.060 if update_dialog_compact_layout() else 0.100)))
+		progress_face.set_meta("canonical_progress_owner", true)
+	else:
+		if update_art_fill != null and is_instance_valid(update_art_fill):
+			update_art_fill.visible = true
+			apply_rect(update_art_fill, rect_full(0.018, 0.260, 0.018 + 0.964 * progress, 0.740))
 	if update_art_status_light != null and is_instance_valid(update_art_status_light):
 		var color = update_state_color()
 		tint_panel_gpt_plate(update_art_status_light, Color(color.r, color.g, color.b, 0.42), "ui_hand_tray_state_chip")
@@ -4928,6 +4939,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍金币卡" if progress >= 7 else "第7天领取双倍金币卡")
 	var forecast_panel = make_gpt_route_rail(rect_full(0.160, forecast_top, 0.840, 1.000 if large_checkin_layout else 0.955), Color(0.010, 0.022, 0.025, 0.64))
 	forecast_panel.name = "DailyLoginForecastPanel"
+	forecast_panel.set_meta("body_owner", "DailyLoginForecastBody")
+	forecast_panel.set_meta("tip_policy", "legacy_tip_anchor_hidden")
 	panel.add_child(forecast_panel)
 	var forecast_rail = make_layout_host(rect_full(0.035, 0.180, 0.047, 0.820))
 	forecast_rail.name = "DailyLoginForecastRail"
@@ -4968,6 +4981,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	tip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tip_label.set_meta("canonical_owner", "DailyLoginForecastBody")
 	tip_label.set_meta("duplicate_text_role", "legacy_smoke_anchor")
+	tip_label.set_meta("visibility_contract", "always_hidden_legacy_anchor")
 	configure_button_focus_navigation(panel, "DailyLoginClaimButton")
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)
@@ -5704,9 +5718,11 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	var loading_rail_lane := Control.new()
 	loading_rail_lane.name = "LoadingFooterRailLane"
 	loading_rail_lane.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(loading_rail_lane, rect_full(0.220, 0.815, 0.780, 0.930))
+	apply_rect(loading_rail_lane, rect_full(0.220, 0.775, 0.780, 0.875))
 	loading_rail_lane.set_meta("lane_policy", "one_owner_two_slots_eight_pixel_gap")
-	loading_rail_lane.set_meta("safe_bottom_ratio", 0.930)
+	loading_rail_lane.set_meta("safe_bottom_ratio", 0.875)
+	loading_rail_lane.set_meta("version_lane_top_ratio", 0.905)
+	loading_rail_lane.set_meta("version_clearance_px", 8.0)
 	bg.add_child(loading_rail_lane)
 	var loading_meter = add_optional_gpt_illustration_texture(loading_rail_lane, "ui_loading_progress_plate", rect_full(0.0, 0.0, 1.0, 0.400), 0.74, false)
 	if loading_meter == null:
@@ -5839,6 +5855,8 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		error_action_lane.set_meta("fixed_touch_height", UI_MIN_TOUCH_TARGET)
 		error_action_lane.set_meta("above_text_overflow_boundary", 0.720)
 		error_action_lane.set_meta("action_lane_reserved", true)
+		error_action_lane.set_meta("tip_lane_policy", "mutually_exclusive_with_loading_tip")
+		error_action_lane.set_meta("error_text_lane_end", 0.720)
 		apply_rect(error_action_lane, rect_full(0.120, 0.730, 0.880, 0.890))
 		center_panel.add_child(error_action_lane)
 		mark_ui_optimization(error_action_lane, "F-236")
@@ -5885,6 +5903,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	tip_label.move_to_front()
 	if loading_error:
 		tip_label.visible = false
+		tip_label.set_meta("visibility_contract", "hidden_while_loading_error")
 		var error_tip_art := center_panel.find_child("LoadingTipArt", true, false) as Control
 		if error_tip_art != null:
 			error_tip_art.visible = false
@@ -6245,6 +6264,8 @@ func _show_replay_import_screen_impl() -> void:
 	event_scroll.clip_contents = true
 	event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	event_scroll.set_meta("timeline_measurement_pending", false)
+	event_scroll.set_meta("timeline_range_update_count", 0)
+	event_scroll.set_meta("timeline_scroll_lock_policy", "lock_input_until_one_measurement_pass")
 	apply_rect(event_scroll, rect_full(0.035, 0.300, 0.965, 0.945))
 	timeline.add_child(event_scroll)
 	var event_scrollbar := event_scroll.get_v_scroll_bar()
@@ -6841,6 +6862,7 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 	# visually locked until the real wrapped heights are measured.
 	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, float(event_list.get_child_count() * (58 if large_text_enabled else 50))))
 	event_list.set_meta("timeline_initial_estimate_px", 58.0 if large_text_enabled else 50.0)
+	event_list.set_meta("timeline_measurement_complete", false)
 	call_deferred("normalize_replay_timeline_rows", event_list, ui_page_generation, focus_first)
 	if replay_timeline_selected_index < 0 or replay_timeline_selected_index >= event_list.get_child_count():
 		replay_timeline_selected_index = 0
@@ -6858,6 +6880,8 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 		return
 	var event_scroll := event_list.get_parent() as ScrollContainer
 	if event_scroll == null or not is_current_ui_control(event_scroll):
+		return
+	if bool(event_list.get_meta("timeline_measurement_complete", false)) and not bool(event_scroll.get_meta("timeline_measurement_pending", false)):
 		return
 	var measured_width := event_list.size.x
 	if measured_width <= 1.0:
@@ -6905,6 +6929,8 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	event_scroll.modulate.a = 1.0
 	event_scroll.set_meta("timeline_visibility_locked_until_measurement", false)
 	event_scroll.set_meta("timeline_measurement_pending", false)
+	event_list.set_meta("timeline_measurement_complete", true)
+	event_scroll.set_meta("timeline_range_update_count", int(event_scroll.get_meta("timeline_range_update_count", 0)) + 1)
 	mark_ui_optimization(event_scroll, "F-244")
 	configure_replay_timeline_focus_navigation(focus_first)
 	set_replay_timeline_selection(replay_timeline_selected_index if replay_timeline_selected_index >= 0 else 0, false)

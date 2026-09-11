@@ -839,6 +839,7 @@ var stats_focus_restore_name := ""
 var stats_scroll_restore_value := -1.0
 var stats_scroll_restore_progress := -1.0
 var ui_page_generation := 0
+var next_ui_deadline_poll_msec := 0
 var online_feedback = ""
 var online_waiting_for_server = false
 var online_last_sent_action = ""
@@ -881,6 +882,8 @@ var voice_enabled = false
 var voice_sequence = 0
 var voice_peak = 0.0
 var game_render_queued = false
+var game_render_dirty_flags := 0
+var game_render_priority := 0
 var last_game_render_msec = 0
 var runtime_shutdown_requested = false
 var runtime_delay_timers: Array[Timer] = []
@@ -905,6 +908,8 @@ var transition_tween: Tween
 var transition_pending_callback: Callable
 var transition_active := false
 var screen_tweens: Array[Tween] = []
+var screen_tween_generations: Dictionary = {}
+var last_hand_render_signature := ""
 var _ui_cjk_font: Font = null
 var toast_container: Control
 var toast_tween: Tween
@@ -1040,7 +1045,7 @@ const SEAT_LAYOUTS := [
 	[2, Rect2(Vector2(0.395, 0.050), Vector2(0.605, 0.125)), "top"],
 	[3, Rect2(Vector2(0.020, 0.335), Vector2(0.115, 0.505)), "left"],
 	[1, Rect2(Vector2(0.885, 0.335), Vector2(0.980, 0.505)), "right"],
-	[0, Rect2(Vector2(0.020, 0.745), Vector2(0.180, 0.950)), "bottom"],
+	[0, Rect2(Vector2(0.020, 0.745), Vector2(0.174, 0.950)), "bottom"],
 ]
 const TABLE_ORNAMENT_EDGES := [
 	[Rect2(Vector2(0.055, 0.040), Vector2(0.945, 0.060)), Color(0.50, 0.42, 0.24, 0.36), Color(0.82, 0.76, 0.56, 0.12)],
@@ -1062,6 +1067,7 @@ const HAND_TILE_MAX_WIDTH := 68.0
 const HAND_TILE_MIN_TOUCH_WIDTH := 46.0
 const HAND_TILE_ASPECT := 1.36
 const HAND_MIN_GROUP_GAP := 8.0
+const HAND_DRAWN_TILE_GAP := 8.0
 const HAND_TRAY_RECT := Rect2(Vector2(0.185, 0.815), Vector2(0.985, 0.985))
 const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
 const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.190), Vector2(0.988, 0.218))
@@ -1085,8 +1091,8 @@ const ACTION_BUTTON_MIN_TOUCH_WIDTH := 50.0
 # the two-row response budget at 960x540.
 const PENDING_CLAIM_BUTTON_MIN_WIDTH := 52.0
 const ACTION_BUTTON_HEIGHT := 44.0
-const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.528, 0.688), Vector2(0.972, 0.792))
-const ACTION_BAR_RECT := Rect2(Vector2(0.542, 0.698), Vector2(0.960, 0.782))
+const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.615, 0.688), Vector2(0.972, 0.792))
+const ACTION_BAR_RECT := Rect2(Vector2(0.625, 0.698), Vector2(0.960, 0.782))
 const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.632, 0.588), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.972, 0.790))
 const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.615, 0.558), Vector2(0.972, 0.790))
@@ -1119,12 +1125,14 @@ const SCORE_STRIP_CHIP_RECTS := [
 	Rect2(Vector2(0.756, 0.0), Vector2(0.994, 1.0)),
 ]
 const SCORE_STRIP_ACCENT_RECT := Rect2(Vector2(0.0, 0.0), Vector2(0.035, 1.0))
-const SCORE_STRIP_NAME_RECT := Rect2(Vector2(0.065, 0.20), Vector2(0.405, 0.80))
-const SCORE_STRIP_SCORE_RECT := Rect2(Vector2(0.430, 0.08), Vector2(0.970, 0.92))
+const SCORE_STRIP_NAME_RECT := Rect2(Vector2(0.065, 0.12), Vector2(0.405, 0.48))
+const SCORE_STRIP_SCORE_RECT := Rect2(Vector2(0.430, 0.06), Vector2(0.970, 0.50))
+const SCORE_STRIP_DELTA_RECT := Rect2(Vector2(0.065, 0.56), Vector2(0.970, 0.94))
 # Narrow chips show the stable seat identity instead of a clipped player name.
 # The compact score lane still fits a signed value such as -2.6万 at 960px.
-const SCORE_STRIP_NARROW_NAME_RECT := Rect2(Vector2(0.110, 0.18), Vector2(0.350, 0.82))
-const SCORE_STRIP_NARROW_SCORE_RECT := Rect2(Vector2(0.380, 0.08), Vector2(0.985, 0.92))
+const SCORE_STRIP_NARROW_NAME_RECT := Rect2(Vector2(0.110, 0.11), Vector2(0.350, 0.45))
+const SCORE_STRIP_NARROW_SCORE_RECT := Rect2(Vector2(0.380, 0.05), Vector2(0.985, 0.48))
+const SCORE_STRIP_NARROW_DELTA_RECT := Rect2(Vector2(0.065, 0.56), Vector2(0.985, 0.94))
 const SEAT_STAT_RECTS := [
 	Rect2(Vector2(0.39, 0.38), Vector2(0.535, 0.505)),
 	Rect2(Vector2(0.550, 0.38), Vector2(0.695, 0.505)),
@@ -1289,6 +1297,15 @@ const FX_DEAL_CASCADE_TILE_COUNT := 8
 const FX_DEAL_CASCADE_DURATION_MSEC := 680
 const FX_TURN_SWITCH_SLIDE_MSEC := 280
 
+# Runtime contracts for short-lived UI work. These keep a burst of page or
+# battle feedback from accumulating unbounded tweens while preserving the
+# authored visual assets and completion callbacks.
+const SCREEN_TWEEN_ACTIVE_BUDGET := 96
+const UI_DEADLINE_POLL_INTERVAL_MSEC := 100
+const GAME_RENDER_DIRTY_STATE := 1
+const GAME_RENDER_DIRTY_PENDING := 2
+const GAME_RENDER_DIRTY_PRIORITY := 4
+
 # 界面过渡动画参数 / Interface Transition Parameters
 const TRANSITION_SLIDE_DURATION_MSEC := 350
 const TRANSITION_CARD_FLIP_DURATION_MSEC := 280
@@ -1309,6 +1326,11 @@ const AMBIENT_FIREWORK_COUNT := 6
 func create_screen_tween(preserve_timing: bool = false) -> Tween:
 	var tween := create_tween()
 	screen_tweens.append(tween)
+	screen_tween_generations[tween.get_instance_id()] = ui_page_generation
+	if screen_tweens.size() > SCREEN_TWEEN_ACTIVE_BUDGET:
+		# The newest state remains visible; excess decorative work resolves
+		# immediately instead of adding another long-lived animation.
+		tween.set_speed_scale(1000.0)
 	# Reduced motion keeps the feedback node and its completion callback, but
 	# resolves the visual transition immediately instead of hiding the event.
 	if reduce_motion_enabled and not preserve_timing:
@@ -1320,12 +1342,15 @@ func _forget_screen_tween(tween: Tween) -> void:
 	var index := screen_tweens.find(tween)
 	if index >= 0:
 		screen_tweens.remove_at(index)
+	if tween != null:
+		screen_tween_generations.erase(tween.get_instance_id())
 
 func clear_screen_tweens() -> void:
 	for tween in screen_tweens:
 		if tween != null and is_instance_valid(tween):
 			tween.kill()
 	screen_tweens.clear()
+	screen_tween_generations.clear()
 
 func ui_cjk_font() -> Font:
 	if _ui_cjk_font != null:
@@ -2438,6 +2463,23 @@ func add_button_focus_feedback(button: Button) -> void:
 		focus_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		focus_plate.show_behind_parent = true
 		focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.0)
+	else:
+		# The authored plate is optional in headless/exported or not-yet-imported
+		# builds. Keep focus visible through the native Button state instead of
+		# silently dropping keyboard feedback or adding a program-painted panel.
+		var focus_style := StyleBoxFlat.new()
+		focus_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+		focus_style.border_color = Color(1.0, 0.82, 0.34, 0.92)
+		focus_style.set_border_width_all(2)
+		focus_style.set_corner_radius_all(6)
+		button.add_theme_stylebox_override("focus", focus_style)
+		var focus_contract := Control.new()
+		focus_contract.name = "ButtonFocusPlate"
+		focus_contract.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		focus_contract.set_anchors_preset(Control.PRESET_FULL_RECT)
+		focus_contract.modulate = Color(1.0, 1.0, 1.0, 0.0)
+		focus_contract.set_meta("focus_visual_fallback", "native_button_focus_style")
+		button.add_child(focus_contract)
 	var button_id := button.get_instance_id()
 	button.focus_entered.connect(Callable(self, "set_button_focus_feedback_by_id").bind(button_id, true))
 	button.focus_exited.connect(Callable(self, "set_button_focus_feedback_by_id").bind(button_id, false))

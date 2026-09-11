@@ -229,7 +229,7 @@ func _process(_delta: float) -> void:
 		offline_restart_confirm_deadline_msec = 0
 		if mode == "offline":
 			set_status(current_status_text())
-			request_game_render()
+			request_game_render(1, GAME_RENDER_DIRTY_STATE)
 	if telemetry_clear_confirming and telemetry_clear_confirm_deadline_msec > 0 and now >= telemetry_clear_confirm_deadline_msec:
 		telemetry_clear_confirming = false
 		telemetry_clear_confirm_deadline_msec = 0
@@ -246,9 +246,11 @@ func _process(_delta: float) -> void:
 	if mode == "online_lobby" or mode == "online_game":
 		poll_online(now)
 		update_online_slow_response_notice(now)
-	update_pending_claim_live_state()
-	update_online_action_live_state(now)
-	update_chat_send_cooldown(now)
+	if now >= next_ui_deadline_poll_msec:
+		next_ui_deadline_poll_msec = now + UI_DEADLINE_POLL_INTERVAL_MSEC
+		update_pending_claim_live_state()
+		update_online_action_live_state(now)
+		update_chat_send_cooldown(now)
 	flush_telemetry_save()
 	flush_offline_progress_autosave()
 
@@ -260,7 +262,7 @@ func update_pending_claim_live_state() -> void:
 			pending_claim_auto_pass_feedback = ""
 			pending_claim_auto_pass_feedback_until_msec = 0
 			if mode == "offline":
-				request_game_render()
+				request_game_render(2, GAME_RENDER_DIRTY_PENDING)
 	var has_offline_pending := mode == "offline" and offline_phase == "pending_claim"
 	var has_online_pending := mode == "online_game" and typeof(online_game.get("pending", null)) == TYPE_DICTIONARY and not (online_game.get("pending", {}) as Dictionary).is_empty()
 	if not has_offline_pending and not has_online_pending:
@@ -2694,12 +2696,14 @@ func hand_group_counts(hand: Array) -> Array[int]:
 			counts[group] += 1
 	return counts
 
-func hand_layout_metrics(hand: Array) -> Dictionary:
-	return hand_layout_metrics_for_content(hand, hand_content_pixel_size())
+func hand_layout_metrics(hand: Array, drawn_index: int = -2) -> Dictionary:
+	return hand_layout_metrics_for_content(hand, hand_content_pixel_size(), drawn_index)
 
-func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dictionary:
+func hand_layout_metrics_for_content(hand: Array, content_size: Vector2, drawn_index: int = -2) -> Dictionary:
 	var count = max(1, hand.size())
 	var gap_count = hand_group_gap_count(hand)
+	var layout_drawn_index := hand_layout_drawn_index(hand) if drawn_index == -2 else drawn_index
+	var drawn_gap_count := 1 if hand_drawn_gap_applies(hand, layout_drawn_index) else 0
 	var selected_gap = 0.0
 	var selected_separation = 1
 	var selected_width = 1.0
@@ -2708,7 +2712,7 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 	for candidate in HAND_LAYOUT_CANDIDATES:
 		var gap_width = float(candidate[0])
 		var separation = int(candidate[1])
-		var candidate_width = hand_tile_width_for_space(content_size, count, gap_count, gap_width, separation)
+		var candidate_width = hand_tile_width_for_space(content_size, count, gap_count, gap_width, separation, drawn_gap_count)
 		selected_gap = gap_width
 		selected_separation = separation
 		selected_width = candidate_width
@@ -2717,24 +2721,51 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2) -> Dict
 			break
 	if selected_gap < minimum_group_gap:
 		selected_gap = minimum_group_gap
-		selected_width = hand_tile_width_for_space(content_size, count, gap_count, selected_gap, selected_separation)
+		selected_width = hand_tile_width_for_space(content_size, count, gap_count, selected_gap, selected_separation, drawn_gap_count)
+	# The candidate table is intentionally conservative, but the final fallback
+	# still has to protect the compact touch contract when a drawn-tile spacer is
+	# present. Spend separation down to zero before allowing a face below 46px.
+	if selected_width < HAND_TILE_MIN_TOUCH_WIDTH:
+		var compact_width := hand_tile_width_for_space(content_size, count, gap_count, minimum_group_gap, 0, drawn_gap_count)
+		if compact_width >= HAND_TILE_MIN_TOUCH_WIDTH:
+			selected_gap = minimum_group_gap
+			selected_separation = 0
+			selected_width = compact_width
 	var tile_width = min(HAND_TILE_MAX_WIDTH, floor(max(1.0, selected_width)))
 	var tile_height = floor(tile_width * HAND_TILE_ASPECT)
 	return {
 		"tile_width": tile_width,
 		"tile_height": tile_height,
 		"group_gap_width": selected_gap,
+		"drawn_index": layout_drawn_index,
+		"drawn_gap_count": drawn_gap_count,
+		"drawn_gap_width": HAND_DRAWN_TILE_GAP if drawn_gap_count > 0 else 0.0,
 		"separation": selected_separation,
 		"content_width": content_size.x,
 		"content_height": content_size.y,
+		"touch_width_ok": tile_width >= HAND_TILE_MIN_TOUCH_WIDTH,
 	}
 
-func hand_tile_width_for_space(content_size: Vector2, tile_count: int, gap_count: int, gap_width: float, separation: int) -> float:
+func hand_tile_width_for_space(content_size: Vector2, tile_count: int, gap_count: int, gap_width: float, separation: int, drawn_gap_count: int = 0) -> float:
 	var gaps_width = float(max(0, gap_count)) * gap_width
-	var separations_width = float(max(0, tile_count + gap_count - 1)) * float(max(0, separation))
-	var width_by_space = (content_size.x - gaps_width - separations_width) / float(max(1, tile_count))
+	var drawn_gaps_width = float(max(0, drawn_gap_count)) * HAND_DRAWN_TILE_GAP
+	var spacer_count: int = maxi(0, int(gap_count)) + maxi(0, int(drawn_gap_count))
+	var separations_width = float(max(0, tile_count + spacer_count - 1)) * float(max(0, separation))
+	var width_by_space = (content_size.x - gaps_width - drawn_gaps_width - separations_width) / float(max(1, tile_count))
 	var width_by_height = content_size.y / HAND_TILE_ASPECT
 	return min(width_by_space, width_by_height)
+
+func hand_layout_drawn_index(hand: Array) -> int:
+	if mode != "offline" or int(offline_last_draw.get("seat", -1)) != 0:
+		return -1
+	var drawn_index := int(offline_last_draw.get("hand_index", -1))
+	var drawn_tile := str(offline_last_draw.get("tile", ""))
+	if drawn_tile == "" or hand.size() % 3 != 2 or drawn_index < 0 or drawn_index >= hand.size() or str(hand[drawn_index]) != drawn_tile:
+		return -1
+	return drawn_index
+
+func hand_drawn_gap_applies(hand: Array, drawn_index: int) -> bool:
+	return drawn_index > 0 and drawn_index < hand.size()
 
 func hand_group_gap_count(hand: Array) -> int:
 	var count = 0
@@ -2754,7 +2785,9 @@ func hand_content_pixel_size() -> Vector2:
 func hand_layout_required_width(hand: Array, metrics: Dictionary) -> float:
 	var tile_count = hand.size()
 	var gap_count = hand_group_gap_count(hand)
-	return float(tile_count) * float(metrics.get("tile_width", 0.0)) + float(gap_count) * float(metrics.get("group_gap_width", 0.0)) + float(max(0, tile_count + gap_count - 1)) * float(metrics.get("separation", 0))
+	var drawn_gap_count := int(metrics.get("drawn_gap_count", 0))
+	var spacer_count: int = gap_count + drawn_gap_count
+	return float(tile_count) * float(metrics.get("tile_width", 0.0)) + float(gap_count) * float(metrics.get("group_gap_width", 0.0)) + float(drawn_gap_count) * float(metrics.get("drawn_gap_width", 0.0)) + float(max(0, tile_count + spacer_count - 1)) * float(metrics.get("separation", 0))
 
 func hand_tile_normalized_centers(hand: Array, metrics: Dictionary) -> PackedFloat32Array:
 	var centers := PackedFloat32Array()
@@ -2763,6 +2796,8 @@ func hand_tile_normalized_centers(hand: Array, metrics: Dictionary) -> PackedFlo
 	var content_width := maxf(1.0, float(metrics.get("content_width", hand_content_pixel_size().x)))
 	var tile_width := float(metrics.get("tile_width", HAND_TILE_MAX_WIDTH))
 	var gap_width := float(metrics.get("group_gap_width", 0.0))
+	var drawn_gap_width := float(metrics.get("drawn_gap_width", 0.0))
+	var drawn_index := int(metrics.get("drawn_index", hand_layout_drawn_index(hand)))
 	var separation := float(metrics.get("separation", 0))
 	var cursor := maxf(0.0, (content_width - hand_layout_required_width(hand, metrics)) * 0.5)
 	for i in range(hand.size()):
@@ -2770,6 +2805,8 @@ func hand_tile_normalized_centers(hand: Array, metrics: Dictionary) -> PackedFlo
 			cursor += separation
 			if should_insert_hand_group_gap(hand, i):
 				cursor += gap_width + separation
+			if hand_drawn_gap_applies(hand, drawn_index) and i == drawn_index:
+				cursor += drawn_gap_width + separation
 		centers.append((cursor + tile_width * 0.5) / content_width * 2.0 - 1.0)
 		cursor += tile_width
 	return centers
@@ -3496,15 +3533,27 @@ func battle_ui_lane_contract() -> Dictionary:
 	# Keep cross-layer exclusions inspectable by layout smoke and future overlays.
 	# These are root-normalized edge rects, matching apply_rect().
 	var meld_exclusions: Array[Rect2] = []
+	var river_exclusions: Array[Rect2] = []
 	for layout in MELD_LAYOUTS:
 		meld_exclusions.append(layout[1])
+	for zone in DISCARD_ZONES:
+		river_exclusions.append(zone[1])
 	return {
 		"action": action_bar_layout_rect(),
 		"action_dock": action_bar_dock_layout_rect(),
 		"hand": HAND_TRAY_RECT,
 		"meld": meld_exclusions,
+		"river": river_exclusions,
+		"action_exclusion": action_bar_dock_layout_rect(),
+		"clearance_px": 6.0,
+		"owner_metadata": {
+			"river": "DiscardGrid_<seat>",
+			"action": "ActionButtonDock",
+			"pending": "PendingClaimActionStack",
+			"hand": "HandTrayTiles",
+		},
 		"minimum_clearance_px": 6.0,
-		"contract": "action_above_hand_and_clear_of_melds"
+		"contract": "river_action_pending_hand_and_melds_have_exclusive_lanes"
 	}
 
 func pending_claim_action_base_rect() -> Rect2:
@@ -7611,10 +7660,9 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 	tile_node.set_meta("visual_overflow_px", minf(6.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0))))
 	tile_node.set_meta("overflow_contract", "animation_particles_bounded_to_hand_gutter")
 	mark_ui_optimization(tile_node, "F-248")
-	var rest_y = tile_node.position.y
 	var visual_gutter := maxf(0.0, float(tile_node.get_meta("visual_focus_gutter_px", 6.0)))
-	var lift := minf(visual_gutter, 6.0)
 	var peak_scale := 1.01
+	var visual_face := tile_node.find_child("TileFaceTexture", true, false) as Control
 	var accent = Color(0.66, 0.58, 0.92) if source == "gang" else GOLD_PRIMARY
 	var glow = Panel.new()
 	glow.name = "DrawTileGlow"
@@ -7653,15 +7701,17 @@ func play_hand_draw_tile_animation(tile_node: Control, source: String = "normal"
 				sparkle_node.queue_free()
 		).set_delay(0.35)
 
-	tile_node.pivot_offset = tile_node.custom_minimum_size * 0.5
-	tile_node.position.y = rest_y - lift
-	tile_node.scale = Vector2(0.98, 0.98)
+	# The frame and its native button are the hit target. Animate only the
+	# authored face, so a draw cannot move the clickable rect under the pointer.
+	if visual_face != null:
+		visual_face.pivot_offset = visual_face.size * 0.5
+		visual_face.scale = Vector2(0.98, 0.98)
 	tile_node.modulate = Color(1.0, 1.0, 1.0, 0.78)
-	var tw := tile_node.create_tween()
+	var tw := create_screen_tween()
 	tw.set_parallel(true)
-	tw.tween_property(tile_node, "position:y", rest_y, 0.22).from(rest_y - lift).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(tile_node, "scale", Vector2(peak_scale, peak_scale), 0.18).from(Vector2(0.98, 0.98)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(tile_node, "scale", Vector2(1.0, 1.0), 0.10).from(Vector2(peak_scale, peak_scale)).set_delay(0.18).set_ease(Tween.EASE_IN)
+	if visual_face != null:
+		tw.tween_property(visual_face, "scale", Vector2(peak_scale, peak_scale), 0.18).from(Vector2(0.98, 0.98)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(visual_face, "scale", Vector2.ONE, 0.10).from(Vector2(peak_scale, peak_scale)).set_delay(0.18).set_ease(Tween.EASE_IN)
 	tw.tween_property(tile_node, "modulate:a", 1.0, 0.16).from(0.78)
 	tw.tween_property(glow, "modulate:a", 1.0, 0.12).from(0.0)
 	tw.tween_property(glow, "modulate:a", 0.0, 0.28).set_delay(0.14)
@@ -8146,6 +8196,12 @@ func _build_fx_toast() -> void:
 	toast_container.set_meta("ui_round_1041_1070_ids", ["F-1062"])
 	toast_container.set_meta("ui_round_1041_1070_roles", {"F-1062": "toast_queue_owner"})
 	toast_container.set_meta("ui_round_1041_1070_policy", "queued_toasts_keep_dwell_and_focus_clearance")
+	toast_container.set_meta("ui_round_2391_2450_ids", ["F-2450"])
+	toast_container.set_meta("ui_round_2391_2450_roles", {"F-2450": "toast_queue_scope_owner_v2"})
+	toast_container.set_meta("ui_round_2391_2450_policies", {"F-2450": "toast queue yields to the page focus scope and measured height"})
+	toast_container.set_meta("ui_round_2391_2450_policy", "toast queue yields to the page focus scope and measured height")
+	toast_container.set_meta("focus_scope_policy", "page_owner_remains_primary")
+	toast_container.set_meta("no_per_frame_layout_polling", true)
 	toast_container.set_meta("ui_contract_hardening", true)
 	mark_ui_optimization(toast_container, "F-1062")
 	apply_safe_area_offsets(toast_container)
@@ -9990,7 +10046,9 @@ func _call_ui_enhancement(method_name: String, arg1 = null, arg2 = null, arg3 = 
 
 func start_ambient_animation(theme: String = "default", force_headless: bool = false) -> void:
 	"""启动环境氛围动画 - 支持四季自动主题"""
-	if not ui_motion_enabled() or (DisplayServer.get_name().to_lower() == "headless" and not force_headless):
+	var display_name := DisplayServer.get_name().to_lower()
+	if not ui_motion_enabled() or (display_name == "headless" and not force_headless):
+		stop_ambient_animation()
 		return
 
 	stop_ambient_animation()

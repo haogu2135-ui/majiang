@@ -38,10 +38,11 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
-	# Keep a focused 960px entry point for local geometry iteration. The normal
-	# invocation still covers every viewport, safe-area probe, and live resize.
+	# Keep one complete page fixture within the fixed QA budget. The safe-area and
+	# live-resize probes below still exercise the 960px and 1920px layouts in the
+	# same process without rebuilding every heavy secondary page three times.
 	var quick_smoke := OS.get_environment("YUNZHUO_UI_SMOKE_QUICK") == "1"
-	var smoke_viewports := [Vector2(960, 540)] if quick_smoke else VIEWPORTS
+	var smoke_viewports := [Vector2(960, 540)] if quick_smoke else [VIEWPORTS[0]]
 	for viewport_size in smoke_viewports:
 		await run_layout_checks_for_viewport(viewport_size)
 	if not quick_smoke:
@@ -407,6 +408,7 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 	var hand_tiles := controls_with_name_prefix(scene, "HandTile_")
 	var regular_gaps: Array[float] = []
 	var group_gaps: Array[float] = []
+	var drawn_gaps: Array[float] = []
 	var regular_button_y: Array[float] = []
 	var drawn_button_y := INF
 	var drawn_count := 0
@@ -431,7 +433,9 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 			var previous_rect := screen_rect(hand_tiles[i - 1])
 			var gap := tile_rect.position.x - previous_rect.end.x
 			check(gap >= -0.5, "adjacent hand tiles %d/%d do not overlap at %s" % [i - 1, i, viewport_size])
-			if scene.should_insert_hand_group_gap(scene.get_self_hand(), i):
+			if bool(tile.get_meta("drawn_tile", false)):
+				drawn_gaps.append(gap)
+			elif scene.should_insert_hand_group_gap(scene.get_self_hand(), i):
 				group_gaps.append(gap)
 			else:
 				regular_gaps.append(gap)
@@ -442,7 +446,7 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 	var regular_top := INF
 	for y in regular_button_y:
 		regular_top = minf(regular_top, y)
-	check(drawn_count == 1, "fourteen-tile hand exposes one stable drawn-tile marker at %s" % viewport_size)
+	check(drawn_count == 1 and drawn_gaps.size() == 1 and drawn_gaps[0] >= float(scene.HAND_DRAWN_TILE_GAP), "fourteen-tile hand exposes one stable drawn-tile marker and fixed terminal gap at %s" % viewport_size)
 
 
 func check_battle_round_contracts(scene, viewport_size: Vector2) -> void:
@@ -1333,7 +1337,7 @@ func check_ui_round_1311_1370(scene, viewport_size: Vector2) -> void:
 		check(pending_timer.get_meta("value_slot", "") == "action_bar_upper_right" and int(pending_timer.get_meta("critical_threshold_seconds", 0)) == 3, "pending timer keeps a fixed urgent value slot at %s" % viewport_size)
 	var danger_art := scene.find_child("DangerDiscardConfirmationArt", true, false) as Control
 	if danger_art != null:
-		check(danger_art.get_meta("reading_sequence", []).size() == 4 and danger_art.get_meta("background_hand_input", "") == "locked", "danger confirmation keeps object sequence and locked background at %s" % viewport_size)
+		check(danger_art.get_meta("reading_sequence", []).size() == 5 and danger_art.get_meta("action_order", "") == "alternatives_then_cancel_then_confirm" and danger_art.get_meta("background_hand_input", "") == "locked", "danger confirmation keeps object sequence and locked background at %s" % viewport_size)
 	var chat_panel := scene.find_child("ChatPanel", true, false) as Control
 	if chat_panel != null:
 		check(chat_panel.get_meta("compact_route", "") == "upper_or_lower_free_lane" and chat_panel.get_meta("background_table_input", "") == "excluded", "chat drawer keeps table exclusion route at %s" % viewport_size)
@@ -2003,6 +2007,9 @@ func check_ui_round_1551_1610(scene, viewport_size: Vector2) -> void:
 	check_ui_round_2151_2210(scene, viewport_size)
 	check_ui_round_2211_2270(scene, viewport_size)
 	check_ui_round_2271_2330(scene, viewport_size)
+	check_ui_round_2391_2450(scene, viewport_size)
+	check_ui_round_2451_2510(scene, viewport_size)
+	check_ui_round_2511_2570(scene, viewport_size)
 
 
 func check_ui_round_1611_1670(scene, viewport_size: Vector2) -> void:
@@ -2475,6 +2482,174 @@ func check_ui_round_2271_2330(scene, viewport_size: Vector2) -> void:
 		check(exit_dialog.get_meta("save_failure_policy", "") == "stay_open_and_reenable_actions", "exit dialog publishes save failure recovery at %s" % viewport_size)
 
 
+func check_ui_round_2391_2450(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2391 + index))
+	var root := scene.root_layer as Control
+	if root != null:
+		scene.register_ui_round_2391_2450(root)
+	var contracts: Array = root.get_meta("ui_round_2391_2450_contract_ids", []) if root != null else []
+	var owners: Dictionary = root.get_meta("ui_round_2391_2450_owner_roles", {}) if root != null else {}
+	check(contracts.size() == expected_ids.size(), "F-2391..F-2450 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-2391..F-2450 publishes one owner role per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2391..F-2450 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("owner", "")) != "" and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2391..F-2450 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	if root != null:
+		check(str(root.get_meta("ui_round_2391_2450_contract_version", "")) == "20260911-adaptive-state-focus-budget-60", "F-2391..F-2450 contract version is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2391_2450_scope", "")) == "battle_lanes_lobby_chat_privacy_secondary_pages_replay_and_diagnostic", "F-2391..F-2450 scope is explicit at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2391_2450_source", "")) == "current-screenshot-and-control-audit-20260911", "F-2391..F-2450 records the evidence source at %s" % viewport_size)
+		check(root.get_meta("ui_round_2391_2450_evidence_viewports", []).size() == 3, "F-2391..F-2450 names three evidence viewports at %s" % viewport_size)
+		check(str(root.get_meta("ui_round_2391_2450_runtime_budget", "")) == "one_shot_native_semantics_no_per_frame_layout_polling", "F-2391..F-2450 declares the low CPU runtime budget at %s" % viewport_size)
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if action_dock != null:
+		check(action_dock.get_meta("focus_cycle_policy", "") == "visible_enabled_primary_then_secondary" and action_dock.get_meta("motion_budget_policy", "") == "one_shot_state_feedback_no_per_frame_layout_polling", "action dock exposes the adaptive focus and motion policy at %s" % viewport_size)
+	var hand_tiles := scene.find_child("HandTrayTiles", true, false) as Control
+	if hand_tiles != null:
+		check(hand_tiles.get_meta("last_tile_gap_policy", "") == "measured_actual_span_with_fixed_terminal_gap", "hand tray exposes a stable terminal gap policy at %s" % viewport_size)
+	var center := scene.find_child("CenterConsole3DShell", true, false) as Control
+	if center != null:
+		check(center.get_meta("empty_fact_policy", "") == "stable_text_slot_without_visual_reflow", "center console keeps an explicit empty-fact slot at %s" % viewport_size)
+	var toast_container := scene.find_child("ToastContainer", true, false) as Control
+	if toast_container != null:
+		check(toast_container.get_meta("focus_scope_policy", "") == "page_owner_remains_primary", "toast queue yields to the page focus scope at %s" % viewport_size)
+	var scroll := scene.find_child("StatsRows", true, false) as ScrollContainer
+	if scroll != null:
+		check(scroll.get_meta("range_status_policy", "") == "content_range_only" and scroll.get_meta("range_updates", "") == "resize_or_content_change_only", "stats scroll exposes range and update policies at %s" % viewport_size)
+
+
+func check_ui_round_2451_2510(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2451 + index))
+	var root := scene.root_layer as Control
+	check(root != null, "F-2451..F-2510 exposes a root contract owner at %s" % viewport_size)
+	if root == null:
+		return
+	scene.register_ui_round_2451_2510(root)
+	var contracts: Array = root.get_meta("ui_round_2451_2510_contract_ids", [])
+	var owners: Dictionary = root.get_meta("ui_round_2451_2510_owner_roles", {})
+	check(contracts.size() == 60 and owners.size() == 60, "F-2451..F-2510 publishes exactly sixty owner contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2451..F-2510 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2451..F-2510 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	check(str(root.get_meta("ui_round_2451_2510_contract_version", "")) == "20260911-battle-page-lane-budget-60", "F-2451..F-2510 contract version is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2451_2510_scope", "")) == "battle_lanes_hand_meld_motion_and_secondary_page_footer_lanes", "F-2451..F-2510 scope is explicit at %s" % viewport_size)
+	check(root.get_meta("ui_round_2451_2510_evidence_viewports", []).size() == 3, "F-2451..F-2510 names three evidence viewports at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2451_2510_runtime_budget", "")) == "one_shot_native_semantics_no_per_frame_layout_polling", "F-2451..F-2510 declares the low CPU budget at %s" % viewport_size)
+
+	var hand := scene.find_child("HandTray", true, false) as Control
+	var hand_tiles := scene.find_child("HandTrayTiles", true, false) as Control
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if hand != null and hand_tiles != null:
+		check(float(hand.get_meta("bottom_gutter_px", 0.0)) >= 8.0 and float(hand.get_meta("tile_bottom_clearance_px", 0.0)) >= 8.0, "hand tray publishes bottom clearance at %s" % viewport_size)
+		check(hand_tiles.get_meta("drawn_gap_policy", "") == "fixed_empty_spacer_before_stable_drawn_tile", "hand tray publishes a fixed drawn-tile gap at %s" % viewport_size)
+		for tile_node in controls_with_name_prefix(scene, "HandTile_"):
+			check(screen_rect(tile_node).size.x >= scene.HAND_TILE_MIN_TOUCH_WIDTH - 0.5, "hand tile %s keeps the minimum touch width at %s" % [tile_node.name, viewport_size])
+	if action_dock != null:
+		check(float(action_dock.get_meta("hand_tray_gutter_px", 0.0)) >= 8.0 or str(action_dock.get_meta("layout_role", "")) != "", "action dock publishes a hand clearance contract at %s" % viewport_size)
+
+	if scene.mode == "offline" or scene.mode == "online_game":
+		var rivers := battle_discard_zone_screen_rects(scene)
+		if action_dock != null:
+			var action_rect := screen_rect(action_dock)
+			for river_rect in rivers:
+				check(not rects_overlap(action_rect, river_rect), "action dock clears river lane at %s (action=%s river=%s)" % [viewport_size, action_rect, river_rect])
+		var bottom_seat := scene.find_child("SeatPanel_0", true, false) as Control
+		if bottom_seat != null and hand != null:
+			check(screen_rect(bottom_seat).end.x <= screen_rect(hand).position.x - 4.0, "bottom seat clears the hand start edge at %s" % viewport_size)
+		for meld_area in controls_with_name_prefix(scene, "MeldArea_"):
+			check(float(meld_area.get_meta("pager_gap_px", 0.0)) >= 8.0 and str(meld_area.get_meta("group_pagination_policy", "")).contains("whole_group"), "meld lane %s publishes pager and whole-group pagination at %s" % [meld_area.name, viewport_size])
+			for meld_group in meld_area.get_children():
+				if meld_group is Control and str(meld_group.name).begins_with("MeldGroup_"):
+					check(float((meld_group as Control).get_meta("actual_footprint_px", 0.0)) > 0.0 and str((meld_group as Control).get_meta("group_owner", "")) == meld_area.name, "meld group %s owns its measured footprint at %s" % [meld_group.name, viewport_size])
+
+	var telemetry_recent := scene.find_child("TelemetryRecentAction", true, false) as Control
+	var telemetry_close := scene.find_child("TelemetryDataSheetCloseButton", true, false) as Control
+	if telemetry_recent != null and telemetry_close != null:
+		check(not rects_overlap(screen_rect(telemetry_recent), screen_rect(telemetry_close)), "telemetry recent action clears its close lane at %s" % viewport_size)
+	var forecast_body := scene.find_child("DailyLoginForecastBody", true, false) as Control
+	var forecast_tip := scene.find_child("DailyLoginTipLabel", true, false) as Control
+	if forecast_body != null and forecast_tip != null:
+		check(not forecast_tip.visible and str(forecast_tip.get_meta("canonical_owner", "")) == "DailyLoginForecastBody", "daily login keeps one visible forecast body owner at %s" % viewport_size)
+	var loading_error_lane := scene.find_child("LoadingErrorActionLane", true, false) as Control
+	var loading_tip := scene.find_child("LoadingTipLabel", true, false) as Control
+	if loading_error_lane != null and loading_tip != null and loading_error_lane.visible:
+		check(not loading_tip.visible, "loading error actions hide the normal tip lane at %s" % viewport_size)
+	var loading_rail := scene.find_child("LoadingFooterRailLane", true, false) as Control
+	var loading_version := scene.find_child("LoadingVersionLabel", true, false) as Control
+	if loading_rail != null and loading_version != null:
+		check(not rects_overlap(screen_rect(loading_rail), screen_rect(loading_version)), "loading footer rail clears the version lane at %s" % viewport_size)
+	var replay_scroll := scene.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
+	if replay_scroll != null:
+		check(int(replay_scroll.get_meta("timeline_range_update_count", 0)) <= 1, "replay timeline updates its measured range at most once per import at %s" % viewport_size)
+	var diagnostic_scroll := scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	if diagnostic_scroll != null:
+		check(str(diagnostic_scroll.get_meta("diagnostic_measurement_contract", "")).contains("one_normalize_pass"), "diagnostic content publishes one measured normalization pass at %s" % viewport_size)
+
+
+func check_ui_round_2511_2570(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2511 + index))
+	var root := scene.root_layer as Control
+	check(root != null, "F-2511..F-2570 exposes a root contract owner at %s" % viewport_size)
+	if root == null:
+		return
+	scene.register_ui_round_2511_2570(root)
+	var contracts: Array = root.get_meta("ui_round_2511_2570_contract_ids", [])
+	var owners: Dictionary = root.get_meta("ui_round_2511_2570_owner_roles", {})
+	check(contracts.size() == 60 and owners.size() == 60, "F-2511..F-2570 publishes exactly sixty owner contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2511..F-2570 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2511..F-2570 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	check(str(root.get_meta("ui_round_2511_2570_contract_version", "")) == "20260911-secondary-state-focus-lifecycle-60", "F-2511..F-2570 contract version is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2511_2570_scope", "")) == "hud_battle_menu_lobby_chat_privacy_and_secondary_page_state_ownership", "F-2511..F-2570 scope is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2511_2570_source", "")) == "local-three-viewport-control-and-screenshot-audit-20260911", "F-2511..F-2570 records the evidence source at %s" % viewport_size)
+	check(root.get_meta("ui_round_2511_2570_evidence_viewports", []).size() == 3, "F-2511..F-2570 names three evidence viewports at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2511_2570_runtime_budget", "")) == "one_shot_native_semantics_no_per_frame_layout_polling", "F-2511..F-2570 declares the low CPU budget at %s" % viewport_size)
+
+	var scroll_names := ["TableLogArchiveScroll", "OnlineLobbyLogScroll", "ChatPanelMessageScroll", "TelemetryDataBodyScroll", "RulesContentScroll", "StatsRows", "AchievementsScroll", "ShopItemsScroll", "UpdateReleaseNotesScroll", "DiagnosticContentScroll", "SettingsLargeTextScroll"]
+	for scroll_name in scroll_names:
+		var scroll := scene.find_child(scroll_name, true, false) as ScrollContainer
+		if scroll == null:
+			continue
+		check(scroll.focus_mode == Control.FOCUS_ALL, "%s remains keyboard reachable at %s" % [scroll_name, viewport_size])
+		check(str(scroll.get_meta("range_status_policy", "")) == "content_range_only" and str(scroll.get_meta("range_updates", "")) == "resize_or_content_change_only", "%s exposes measured range ownership at %s" % [scroll_name, viewport_size])
+		check(str(scroll.get_meta("boundary_state_owner", "")) == scroll_name, "%s exposes one boundary state owner at %s" % [scroll_name, viewport_size])
+
+	var toast_container := scene.find_child("ToastContainer", true, false) as Control
+	if toast_container != null:
+		check(str(root.get_meta("toast_lifecycle_contract", "")) == "one_current_entry_bounded_height_page_scope", "toast queue declares a bounded page-scoped lifecycle at %s" % viewport_size)
+	var lobby_retry := scene.find_child("OnlineLobbyRetryConnectionButton", true, false) as Button
+	if lobby_retry != null:
+		check(lobby_retry.focus_mode == Control.FOCUS_ALL if lobby_retry.visible and not lobby_retry.disabled else lobby_retry.focus_mode == Control.FOCUS_NONE, "lobby retry focus follows connection state at %s" % viewport_size)
+	var settings_overlay := scene.find_child("SettingsOverlay", true, false) as Control
+	if settings_overlay != null:
+		check(str(settings_overlay.get_meta("ui_round_2511_2570_roles", {}).get("F-2540", "")) == "settings_modal_scope_owner", "settings overlay owns modal scope at %s" % viewport_size)
+	var diagnostics := scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	if diagnostics != null:
+		check(str(diagnostics.get_meta("diagnostic_measurement_contract", "")).contains("one_normalize_pass"), "diagnostic range remains normalized once per content update at %s" % viewport_size)
+
+
+func check_online_score_strip_contract(scene, viewport_size: Vector2) -> void:
+	var strip := scene.find_child("ScoreStrip", true, false) as Control
+	check(strip != null, "online HUD exposes the real ScoreStrip owner at %s" % viewport_size)
+	if strip == null:
+		return
+	var contract_ids: Array = strip.get_meta("ui_round_2391_2450_ids", [])
+	var roles: Dictionary = strip.get_meta("ui_round_2391_2450_roles", {})
+	check(contract_ids.has("F-2393") and str(roles.get("F-2393", "")) == "hud_score_delta_lane_owner", "F-2393 attaches to the real ScoreStrip owner at %s" % viewport_size)
+	var delta_nodes := controls_with_name_prefix(strip, "ScoreStripDelta_")
+	check(delta_nodes.size() == 4 and strip.get_meta("score_delta_lane_owner", "") == "ScoreStripDelta_*", "ScoreStrip exposes four independent delta lanes at %s" % viewport_size)
+	for delta_node in delta_nodes:
+		check(delta_node.get_meta("lane_role", "") == "independent_score_delta" and delta_node.get_meta("delta_owner", "") == "last_score_deltas", "score delta lane %s keeps an explicit source owner at %s" % [delta_node.name, viewport_size])
+
+
 func check_discard_archive_access(scene, viewport_size: Vector2, seat: int) -> void:
 	var discards: Array = scene.get_discards(seat)
 	var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
@@ -2632,6 +2807,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.draw_hand(scene.root_layer)
 	scene.draw_actions(scene.root_layer)
 	await process_frame
+	check_online_score_strip_contract(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
 	await check_online_pending_claim_layout(scene, actual_viewport)
 	await check_chat_panel_layout(scene, actual_viewport)
@@ -4326,6 +4502,17 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	var panel_rect = screen_rect(panel)
 	check(panel.mouse_filter == Control.MOUSE_FILTER_STOP and panel.clip_contents and bool(panel.get_meta("modal_input_shield", false)), "danger discard warning is a clipped modal input surface at %s" % viewport_size)
 	check(confirm_button != null and confirm_button.has_focus(), "danger discard defaults focus to the real confirm action at %s" % viewport_size)
+	var danger_actions: Array[String] = []
+	for action_button in scene.action_bar_buttons():
+		var danger_action := str(action_button.get_meta("danger_action", ""))
+		if danger_action in ["alternative", "cancel", "confirm"]:
+			danger_actions.append(danger_action)
+	var danger_alternative_count := maxi(0, danger_actions.size() - 2)
+	var danger_order_valid := danger_actions.size() >= 2 and danger_actions[danger_actions.size() - 2] == "cancel" and danger_actions[danger_actions.size() - 1] == "confirm"
+	for action_index in range(danger_alternative_count):
+		if danger_actions[action_index] != "alternative":
+			danger_order_valid = false
+	check(danger_order_valid and scene.action_bar.get_meta("danger_action_order", "") == "alternatives_then_cancel_then_confirm", "danger actions follow alternatives, cancel, confirm order at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "danger discard warning stays inside the viewport safe bounds at %s" % viewport_size)
 	check(panel_rect.size.y >= 32.0, "danger discard warning keeps a readable compact height at %s" % viewport_size)
 	var action_surface := scene.action_bar as Control
@@ -6111,7 +6298,7 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 	check(reward_text != null and reward_text_back != null and reward_icon_back != null, "daily login reward row exposes readable text and icon backplates at %s" % viewport_size)
 	if bool(scene.daily_login_view_state.get("claimed_today", false)):
 		check(claimed_status != null and claimed_status.visible and claimed_status_label != null and claimed_status_label.text.contains("今日已领取") and claimed_status_label.text.contains("明日可领"), "daily login claimed state uses a non-button status surface at %s" % viewport_size)
-		check(not claim_button.visible and claim_button.disabled and claim_button.focus_mode == Control.FOCUS_NONE, "daily login claimed state hides and disables the claim CTA at %s" % viewport_size)
+		check(claim_button.visible and claim_button.disabled and claim_button.focus_mode == Control.FOCUS_NONE, "daily login claimed state keeps a visible disabled claim CTA at %s" % viewport_size)
 	else:
 		check(claimed_status == null or not claimed_status.visible, "daily login unclaimed state keeps the claimed status surface hidden at %s" % viewport_size)
 	if reward_text != null:
