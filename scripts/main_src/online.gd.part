@@ -650,6 +650,7 @@ func handle_online_log(data: Dictionary) -> void:
 		logs.remove_at(0)
 	online_room["logs"] = logs
 	online_log_total_count = previous_total + 1
+	online_lobby_render_revision += 1
 	set_online_feedback(message, false)
 	refresh_online_lobby_state()
 
@@ -741,6 +742,7 @@ func handle_online_message(line: String) -> void:
 				online_log_total_count = maxi(online_log_total_count, inferred_total)
 		if is_instance_valid(online_room_edit):
 			online_room_edit.text = selected_room
+		online_lobby_render_revision += 1
 		refresh_online_lobby_state()
 	elif kind == "gameState":
 		var next_game = normalize_online_game_state(data)
@@ -1242,6 +1244,8 @@ func send_online_action(payload: Dictionary, label: String = "") -> bool:
 	return false
 
 func set_online_feedback(text: String, waiting: bool = false) -> void:
+	if online_feedback == text and online_waiting_for_server == waiting:
+		return
 	online_feedback = text
 	online_waiting_for_server = waiting
 	if not waiting:

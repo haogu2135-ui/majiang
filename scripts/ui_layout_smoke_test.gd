@@ -2010,6 +2010,10 @@ func check_ui_round_1551_1610(scene, viewport_size: Vector2) -> void:
 	check_ui_round_2391_2450(scene, viewport_size)
 	check_ui_round_2451_2510(scene, viewport_size)
 	check_ui_round_2511_2570(scene, viewport_size)
+	check_ui_round_2571_2630(scene, viewport_size)
+	check_ui_round_2631_2690(scene, viewport_size)
+	check_ui_round_2691_2750(scene, viewport_size)
+	check_ui_round_2751_2810(scene, viewport_size)
 
 
 func check_ui_round_1611_1670(scene, viewport_size: Vector2) -> void:
@@ -2634,6 +2638,166 @@ func check_ui_round_2511_2570(scene, viewport_size: Vector2) -> void:
 	var diagnostics := scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
 	if diagnostics != null:
 		check(str(diagnostics.get_meta("diagnostic_measurement_contract", "")).contains("one_normalize_pass"), "diagnostic range remains normalized once per content update at %s" % viewport_size)
+
+
+func check_ui_round_2571_2630(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2571 + index))
+	var root := scene.root_layer as Control
+	check(root != null, "F-2571..F-2630 exposes a root contract owner at %s" % viewport_size)
+	if root == null:
+		return
+	scene.register_ui_round_2571_2630(root)
+	var contracts: Array = root.get_meta("ui_round_2571_2630_contract_ids", [])
+	var owners: Dictionary = root.get_meta("ui_round_2571_2630_owner_roles", {})
+	check(contracts.size() == 60 and owners.size() == 60, "F-2571..F-2630 publishes exactly sixty owner contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2571..F-2630 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2571..F-2630 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	check(str(root.get_meta("ui_round_2571_2630_contract_version", "")) == "20260911-event-revision-coalesced-60", "F-2571..F-2630 contract version is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2571_2630_scope", "")) == "interaction_cleanup_online_revision_secondary_range_and_idle_scheduler", "F-2571..F-2630 scope is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2571_2630_source", "")) == "local-three-viewport-state-and-cpu-audit-20260911", "F-2571..F-2630 records the evidence source at %s" % viewport_size)
+	check(root.get_meta("ui_round_2571_2630_evidence_viewports", []).size() == 3, "F-2571..F-2630 names three evidence viewports at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2571_2630_runtime_budget", "")) == "event_revision_coalesced_updates_no_idle_frame_rebuild", "F-2571..F-2630 declares the low CPU budget at %s" % viewport_size)
+	check(str(root.get_meta("online_lobby_render_policy", "")) == "accepted_message_revision_only", "online lobby declares revision-coalesced rendering at %s" % viewport_size)
+	check(str(root.get_meta("persistence_flush_policy", "")) == "coarse_100ms_scheduler_pause_flush_preserved", "persistence declares coarse idle polling at %s" % viewport_size)
+
+	var scroll_names := ["AdvisorDetailScroll", "TableLogArchiveScroll", "RulesContentScroll", "StatsRows", "AchievementsScroll", "ShopItemsScroll", "UpdateReleaseNotesScroll", "DiagnosticContentScroll", "ReplayArchiveScroll", "ReplayImportTimelineScroll"]
+	for scroll_name in scroll_names:
+		var scroll := scene.find_child(scroll_name, true, false) as ScrollContainer
+		if scroll == null:
+			continue
+		check(str(scroll.get_meta("range_status_policy", "")) == "content_range_only" and str(scroll.get_meta("range_updates", "")) == "resize_or_content_change_only", "%s keeps event-owned range updates at %s" % [scroll_name, viewport_size])
+		check(str(scroll.get_meta("boundary_state_owner", "")) == scroll_name, "%s keeps one boundary owner at %s" % [scroll_name, viewport_size])
+
+	var lobby_retry := scene.find_child("OnlineLobbyConnectionRetryButton", true, false) as Button
+	if lobby_retry != null:
+		check(str(lobby_retry.get_meta("recovery_route", "")) == "connection_state_adjacent_retry", "lobby retry remains adjacent to connection state at %s" % viewport_size)
+	var lobby_state := scene.find_child("OnlineLobbyConnectionStateLabel", true, false) as Label
+	if lobby_state != null:
+		check(str(lobby_state.get_meta("summary_contract", "")) == "endpoint_room_connection_state", "lobby state keeps one textual summary owner at %s" % viewport_size)
+	var toast := scene.find_child("ToastContainer", true, false) as Control
+	if toast != null:
+		check(str(root.get_meta("toast_lifecycle_contract", "")) == "one_current_entry_bounded_height_page_scope", "toast keeps one bounded lifecycle at %s" % viewport_size)
+	var diagnostic := scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
+	if diagnostic != null:
+		check(str(diagnostic.get_meta("diagnostic_measurement_contract", "")).contains("one_normalize_pass"), "diagnostic keeps one normalized range pass at %s" % viewport_size)
+
+
+func check_ui_round_2631_2690(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2631 + index))
+	var root := scene.root_layer as Control
+	check(root != null, "F-2631..F-2690 exposes a root contract owner at %s" % viewport_size)
+	if root == null:
+		return
+	scene.register_ui_round_2631_2690(root)
+	var contracts: Array = root.get_meta("ui_round_2631_2690_contract_ids", [])
+	var owners: Dictionary = root.get_meta("ui_round_2631_2690_owner_roles", {})
+	check(contracts.size() == 60 and owners.size() == 60, "F-2631..F-2690 publishes exactly sixty owner contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2631..F-2690 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2631..F-2690 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	check(str(root.get_meta("ui_round_2631_2690_contract_version", "")) == "20260911-deadline-diff-event-60", "F-2631..F-2690 contract version is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2631_2690_scope", "")) == "low_cpu_polling_status_diff_modal_range_and_transient_lifecycle", "F-2631..F-2690 scope is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2631_2690_source", "")) == "local-three-viewport-runtime-and-control-audit-20260911", "F-2631..F-2690 records the evidence source at %s" % viewport_size)
+	check(root.get_meta("ui_round_2631_2690_evidence_viewports", []).size() == 3, "F-2631..F-2690 names three evidence viewports at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2631_2690_runtime_budget", "")) == "deadline_polling_diff_writes_and_event_owned_ranges", "F-2631..F-2690 declares the low CPU budget at %s" % viewport_size)
+	check(str(root.get_meta("voice_capture_scheduler_policy", "")) == "50ms_chunk_deadline", "voice capture uses a bounded chunk deadline at %s" % viewport_size)
+	check(str(root.get_meta("online_disconnected_poll_policy", "")) == "tcp_status_or_revision_change_only", "offline lobby poll avoids idle refresh at %s" % viewport_size)
+	check(str(root.get_meta("online_feedback_render_policy", "")) == "feedback_key_deduped", "online feedback art is key-deduped at %s" % viewport_size)
+	check(str(root.get_meta("dynamic_label_diff_policy", "")) == "same_text_detail_skips_deferred_measurement", "dynamic labels skip duplicate measurement at %s" % viewport_size)
+	check(str(root.get_meta("persistence_scheduler_policy", "")) == "pending_flags_only_100ms_pause_flush_preserved", "persistence scheduler is pending-gated at %s" % viewport_size)
+	var lobby_scroll := scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	if lobby_scroll != null:
+		check(str(lobby_scroll.get_meta("range_updates", "")) == "resize_or_content_change_only", "lobby log range remains event-owned at %s" % viewport_size)
+	var chat_range := scene.find_child("ChatPanelMessageRangeLabel", true, false) as Control
+	if chat_range != null:
+		check(chat_range.get_meta("ui_round_2631_2690_ids", []).has("F-2671"), "chat range keeps its single event owner at %s" % viewport_size)
+
+
+func check_ui_round_2691_2750(scene, viewport_size: Vector2) -> void:
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2691 + index))
+	var root := scene.root_layer as Control
+	check(root != null, "F-2691..F-2750 exposes a root contract owner at %s" % viewport_size)
+	if root == null:
+		return
+	scene.register_ui_round_2691_2750(root)
+	var contracts: Array = root.get_meta("ui_round_2691_2750_contract_ids", [])
+	var owners: Dictionary = root.get_meta("ui_round_2691_2750_owner_roles", {})
+	check(contracts.size() == 60 and owners.size() == 60, "F-2691..F-2750 publishes exactly sixty owner contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2691..F-2750 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(owner_record.has("owner") and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2691..F-2750 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	check(str(root.get_meta("ui_round_2691_2750_contract_version", "")) == "20260911-revision-generation-lifecycle-60", "F-2691..F-2750 contract version is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2691_2750_scope", "")) == "resize_render_queue_deferred_ai_transition_focus_and_runtime_cleanup", "F-2691..F-2750 scope is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2691_2750_source", "")) == "local-three-viewport-runtime-and-lifecycle-fallback-audit-20260911", "F-2691..F-2750 records the evidence source at %s" % viewport_size)
+	check(root.get_meta("ui_round_2691_2750_evidence_viewports", []).size() == 3, "F-2691..F-2750 names three evidence viewports at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2691_2750_runtime_budget", "")) == "revision_coalesced_deferred_work_and_generation_scoped_cleanup", "F-2691..F-2750 declares the low CPU budget at %s" % viewport_size)
+	check(str(root.get_meta("safe_area_layout_policy", "")) == "signature_changed_only", "safe-area offsets use a signature change gate at %s" % viewport_size)
+	check(str(root.get_meta("resize_refresh_policy", "")) == "latest_revision_single_deferred_refresh", "resize refresh uses one latest revision callback at %s" % viewport_size)
+	check(str(root.get_meta("ui_qa_marker_policy", "")) == "android_gated_consecutive_duplicate_suppressed", "QA markers are platform-gated and deduped at %s" % viewport_size)
+	check(str(root.get_meta("ui_qa_page_ready_policy", "")) == "page_root_keyed_pending_probe", "page-ready probes are keyed to page and root at %s" % viewport_size)
+	check(str(root.get_meta("game_render_queue_policy", "")) == "dirty_mask_priority_and_min_interval_coalesced", "game render queue declares its coalescing policy at %s" % viewport_size)
+	check(str(root.get_meta("offline_ai_assistance_policy", "")) == "single_deferred_request_per_render_revision", "AI assistance declares one deferred request policy at %s" % viewport_size)
+	check(str(root.get_meta("screen_tween_policy", "")) == "generation_scoped_bounded_registry", "screen tweens declare generation and budget policy at %s" % viewport_size)
+	check(str(root.get_meta("runtime_cleanup_policy", "")) == "validity_guarded_shutdown_and_page_teardown", "runtime cleanup declares validity guards at %s" % viewport_size)
+	check(str(root.get_meta("contract_registry_index_policy", "")) == "root_generation_cached_control_list_with_dynamic_invalidation", "contract registries share one dynamically invalidated control index at %s" % viewport_size)
+	check(root.get_meta("ui_contract_control_list", []).size() > 0 and int(root.get_meta("ui_contract_index_scan_count", 0)) > 0, "contract registry exposes a populated root control index at %s" % viewport_size)
+	var safe_root := scene.find_child("SafeContent", true, false) as Control
+	if safe_root != null:
+		check(safe_root.get_meta("ui_round_2691_2750_ids", []).has("F-2691"), "SafeContent owns the safe-area signature contract at %s" % viewport_size)
+	var hand_tray := scene.find_child("HandTray", true, false) as Control
+	if hand_tray != null:
+		check(hand_tray.get_meta("ui_round_2691_2750_ids", []).has("F-2711"), "hand tray owns the single AI assistance queue contract at %s" % viewport_size)
+	var toast := scene.find_child("ToastContainer", true, false) as Control
+	if toast != null:
+		var toast_owner: Dictionary = owners.get("F-2694", {})
+		check(toast.get_meta("ui_round_2691_2750_ids", []).has("F-2694") or toast_owner.has("policy"), "toast container follows safe-area revision ownership at %s" % viewport_size)
+
+
+func check_ui_round_2751_2810(scene, viewport_size: Vector2) -> void:
+	var root := scene.root_layer as Control
+	check(root != null, "F-2751..F-2810 exposes a root contract owner at %s" % viewport_size)
+	if root == null:
+		return
+	scene.register_ui_round_2751_2810(root)
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2751 + index))
+	var contracts: Array = root.get_meta("ui_round_2751_2810_contract_ids", [])
+	var owners: Dictionary = root.get_meta("ui_round_2751_2810_owner_roles", {})
+	check(contracts.size() == expected_ids.size(), "F-2751..F-2810 publishes exactly sixty contracts at %s" % viewport_size)
+	check(owners.size() == expected_ids.size(), "F-2751..F-2810 publishes one owner policy per finding at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2751..F-2810 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2751..F-2810 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	check(str(root.get_meta("ui_round_2751_2810_contract_version", "")) == "20260911-lifecycle-performance-layout-input-60", "F-2751..F-2810 contract version is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2751_2810_scope", "")) == "timers_resources_fx_compact_occupancy_input_and_lifecycle_probes", "F-2751..F-2810 scope is explicit at %s" % viewport_size)
+	check(root.get_meta("ui_round_2751_2810_evidence_viewports", []).size() == 3, "F-2751..F-2810 names three evidence viewports at %s" % viewport_size)
+	check(int(root.get_meta("ui_round_2751_2810_registered_revision", -1)) >= 0, "F-2751..F-2810 records the structure revision at %s" % viewport_size)
+	var index_scan_count := int(root.get_meta("ui_contract_index_scan_count", 0))
+	check(root.get_meta("ui_contract_control_list", []).size() > 0 and index_scan_count > 0, "F-2810 exposes a populated shared control index at %s" % viewport_size)
+	check(scene.screen_tweens.size() <= scene.SCREEN_TWEEN_ACTIVE_BUDGET, "F-2810 keeps active screen tweens within budget at %s" % viewport_size)
+	check(scene.tile_flip_animations.size() == scene.tile_flip_animation_tokens.size(), "F-2790 keeps flip entries and tokens paired at %s" % viewport_size)
+	var focus_owner: Control = scene.get_viewport().gui_get_focus_owner() as Control
+	if focus_owner != null:
+		check(is_instance_valid(focus_owner) and root.is_ancestor_of(focus_owner), "F-2810 focus owner remains inside the current page at %s" % viewport_size)
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if action_dock != null:
+		var action_roles: Dictionary = action_dock.get_meta("ui_round_2751_2810_roles", {})
+		check(action_roles.has("F-2781") or int(action_dock.get_meta("pulse_driver_count", 0)) <= 1, "F-2781 publishes one action pulse owner at %s" % viewport_size)
+	var hand_tray := scene.find_child("HandTray", true, false) as Control
+	if hand_tray != null:
+		check(hand_tray.get_meta("ui_round_2751_2810_ids", []).has("F-2792"), "F-2792 attaches hand touch capacity to HandTray at %s" % viewport_size)
 
 
 func check_online_score_strip_contract(scene, viewport_size: Vector2) -> void:

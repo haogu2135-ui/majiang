@@ -241,7 +241,8 @@ func _process(_delta: float) -> void:
 		check_audio_health(now)
 	if update_state == "downloading":
 		update_download_progress(now)
-	if voice_enabled:
+	if voice_enabled and now >= next_voice_capture_msec:
+		next_voice_capture_msec = now + VOICE_CAPTURE_POLL_INTERVAL_MSEC
 		poll_voice_capture()
 	if mode == "online_lobby" or mode == "online_game":
 		poll_online(now)
@@ -251,8 +252,15 @@ func _process(_delta: float) -> void:
 		update_pending_claim_live_state()
 		update_online_action_live_state(now)
 		update_chat_send_cooldown(now)
-	flush_telemetry_save()
-	flush_offline_progress_autosave()
+	# Debounced persistence only needs a coarse scheduler. Keeping the two
+	# deadline checks out of the frame path avoids needless calls while idle;
+	# application-pause still flushes synchronously in _notification().
+	if now >= next_save_flush_poll_msec and (telemetry_save_pending or offline_progress_dirty):
+		next_save_flush_poll_msec = now + SAVE_FLUSH_POLL_INTERVAL_MSEC
+		if telemetry_save_pending:
+			flush_telemetry_save()
+		if offline_progress_dirty:
+			flush_offline_progress_autosave()
 
 
 func update_pending_claim_live_state() -> void:
@@ -278,31 +286,53 @@ func update_pending_claim_live_state() -> void:
 			human_claim("pass")
 			set_status(pending_claim_auto_pass_feedback)
 			return
-	var timer_label := root_layer.find_child("PendingClaimTimerText", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
-	if timer_label != null:
-		timer_label.text = pending_claim_timer_text()
+	refresh_pending_claim_live_controls()
+	var timer_label := pending_claim_timer_label
+	if timer_label != null and is_instance_valid(timer_label):
+		var timer_text := pending_claim_timer_text()
+		if timer_text != pending_claim_last_timer_text:
+			timer_label.text = timer_text
+			pending_claim_last_timer_text = timer_text
 		var auto_pass_text := pending_claim_auto_pass_text()
-		var warning_labels := root_layer.find_children("PendingClaimAutoPassWarning", "Label", true, false)
-		if warning_labels.is_empty():
-			var fallback_warning := root_layer.find_child("PendingClaimAutoPassWarning", true, false) as Label
-			if fallback_warning != null:
-				warning_labels.append(fallback_warning)
-		for warning_node in warning_labels:
-			var warning_label := warning_node as Label
-			if warning_label == null:
-				continue
-			warning_label.text = auto_pass_text
-			warning_label.visible = auto_pass_text != ""
-			warning_label.tooltip_text = auto_pass_text
-			warning_label.set_meta("accessible_name", auto_pass_text)
-			warning_label.set_meta("live_state_owner", "pending_claim_auto_pass_warning")
+		if auto_pass_text != pending_claim_last_warning_text:
+			for warning_label in pending_claim_warning_labels:
+				if warning_label == null or not is_instance_valid(warning_label):
+					continue
+				warning_label.text = auto_pass_text
+				warning_label.visible = auto_pass_text != ""
+				warning_label.tooltip_text = auto_pass_text
+				warning_label.set_meta("accessible_name", auto_pass_text)
+				warning_label.set_meta("live_state_owner", "pending_claim_auto_pass_warning")
+			pending_claim_last_warning_text = auto_pass_text
 	var remaining_ratio := pending_claim_remaining_ratio()
-	var timer_fill := root_layer.find_child("PendingClaimTimerFill", true, false) as Control
+	var timer_fill := pending_claim_timer_fill
 	if timer_fill != null:
 		apply_rect(timer_fill, rect_full(0.025, 0.260, 0.025 + 0.950 * remaining_ratio, 0.740))
-		var priority_label := root_layer.find_child("PendingClaimPriorityText", true, false) as Label
-		if priority_label != null:
-			priority_label.text = pending_claim_priority_text(pending_claim_state().get("options", []))
+		var priority_label := pending_claim_priority_label
+		if priority_label != null and is_instance_valid(priority_label):
+			var priority_text := pending_claim_priority_text(pending_claim_state().get("options", []))
+			if priority_text != pending_claim_last_priority_text:
+				priority_label.text = priority_text
+				pending_claim_last_priority_text = priority_text
+
+func refresh_pending_claim_live_controls() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var root_id := root_layer.get_instance_id()
+	if pending_claim_live_root_id == root_id and pending_claim_timer_label != null and is_instance_valid(pending_claim_timer_label):
+		return
+	pending_claim_live_root_id = root_id
+	pending_claim_timer_label = root_layer.find_child("PendingClaimTimerText", true, false) as Label
+	pending_claim_timer_fill = root_layer.find_child("PendingClaimTimerFill", true, false) as Control
+	pending_claim_priority_label = root_layer.find_child("PendingClaimPriorityText", true, false) as Label
+	pending_claim_warning_labels.clear()
+	for warning_node in root_layer.find_children("PendingClaimAutoPassWarning", "Label", true, false):
+		var warning_label := warning_node as Label
+		if warning_label != null:
+			pending_claim_warning_labels.append(warning_label)
+	pending_claim_last_timer_text = ""
+	pending_claim_last_warning_text = ""
+	pending_claim_last_priority_text = ""
 
 
 func update_online_action_live_state(now_msec: int) -> void:
@@ -338,6 +368,7 @@ func audio_health_check_due(now_msec: int) -> bool:
 	return true
 
 func schedule_resize_refresh() -> void:
+	resize_refresh_revision += 1
 	update_safe_area_layout()
 	if resize_refresh_pending:
 		return
@@ -346,6 +377,8 @@ func schedule_resize_refresh() -> void:
 
 func run_scheduled_resize_refresh() -> void:
 	resize_refresh_pending = false
+	if root_layer != null and is_instance_valid(root_layer):
+		root_layer.set_meta("resize_refresh_revision", resize_refresh_revision)
 	refresh_current_screen()
 
 func focused_control_instance_id() -> int:
@@ -486,7 +519,7 @@ func handle_ui_cancel() -> bool:
 	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 		hide_exit_confirm()
 		return true
-	if root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+	if diagnostic_dialog_open:
 		dismiss_diagnostic_dialog()
 		return true
 	if mode == "replay_import" and replay_delete_confirming:
@@ -554,17 +587,29 @@ func handle_ui_cancel() -> bool:
 
 func emit_ui_qa_marker(marker: String) -> void:
 	# Android smoke reads process markers from logcat; keep them invisible in the UI.
-	if OS.has_feature("android"):
-		print("UI_QA_MARKER|%s" % marker)
+	if not OS.has_feature("android") or marker == ui_qa_marker_last:
+		return
+	ui_qa_marker_last = marker
+	print("UI_QA_MARKER|%s" % marker)
+
+func ui_qa_markers_enabled() -> bool:
+	return OS.has_feature("android")
 
 
 func schedule_ui_qa_page_ready(page: String, required_nodes: Array) -> void:
 	if not OS.has_feature("android") or root_layer == null or not is_instance_valid(root_layer):
 		return
-	call_deferred("emit_ui_qa_page_ready", page, required_nodes.duplicate(), root_layer.get_instance_id())
+	var root_id := root_layer.get_instance_id()
+	var pending_key := "%s|%d" % [page, root_id]
+	if ui_qa_page_ready_pending.has(pending_key):
+		return
+	ui_qa_page_ready_pending[pending_key] = true
+	call_deferred("emit_ui_qa_page_ready", page, required_nodes.duplicate(), root_id, pending_key)
 
 
-func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int) -> void:
+func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int, pending_key: String = "") -> void:
+	if pending_key != "":
+		ui_qa_page_ready_pending.erase(pending_key)
 	# Wait through screen transitions and layout passes so Android evidence cannot
 	# mistake a mode assignment or partially-built control tree for a ready page.
 	for _i in range(120):
@@ -625,12 +670,14 @@ func _input(event: InputEvent) -> void:
 		pressed = event.pressed
 	if pressed:
 		wake_audio_from_interaction()
-	# 主菜单视差 - 鼠标/触摸移动驱动层次位移
-	if menu_parallax_enabled and event is InputEventMouseMotion:
+	# Background parallax is inert while a modal or text field owns input. This
+	# avoids doing decorative work for events that cannot affect the menu.
+	var parallax_input_allowed := mode == "menu" and not settings_panel_open and exit_confirm_panel == null and tutorial_panel == null and not telemetry_sheet_open and not game_keyboard_focus_is_text_input()
+	if menu_parallax_enabled and parallax_input_allowed and event is InputEventMouseMotion:
 		update_menu_parallax(get_global_mouse_position())
-	elif menu_parallax_enabled and event is InputEventScreenDrag:
+	elif menu_parallax_enabled and parallax_input_allowed and event is InputEventScreenDrag:
 		update_menu_parallax(event.position)
-	if event is InputEventScreenDrag:
+	if ui_qa_markers_enabled() and event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
 		emit_ui_qa_marker("touch_drag|%s|%.1f|%.1f" % [mode, drag.position.x, drag.position.y])
 
@@ -670,7 +717,7 @@ func game_keyboard_input_allowed() -> bool:
 	var modal_open := settings_panel_open or exit_confirm_panel != null or tutorial_panel != null or telemetry_sheet_open or advisor_detail_open or table_log_archive_open or chat_panel_open
 	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
 		modal_open = true
-	if root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+	if diagnostic_dialog_open:
 		modal_open = true
 	if modal_open or game_keyboard_focus_is_text_input():
 		return false
@@ -1417,7 +1464,8 @@ func poll_online(now_msec: int = -1) -> void:
 		if mode == "online_lobby" and not online_room.is_empty():
 			close_online_transport("连接已断开，请重新连接。")
 			return
-		refresh_online_lobby_state()
+		if mode == "online_lobby" and online_lobby_render_revision != online_last_lobby_render_revision:
+			refresh_online_lobby_state()
 		return
 	var available = tcp.get_available_bytes()
 	if available <= 0:
@@ -1446,7 +1494,8 @@ func poll_online(now_msec: int = -1) -> void:
 	if tcp_buffer.size() > ONLINE_MESSAGE_MAX_BYTES:
 		close_online_transport("服务器消息过大，已断开连接。", true, false)
 		return
-	refresh_online_lobby_state()
+	if mode == "online_lobby" and online_lobby_render_revision != online_last_lobby_render_revision:
+		refresh_online_lobby_state()
 
 
 func online_frame_line_is_safe(raw_line: PackedByteArray) -> bool:
@@ -1596,7 +1645,7 @@ func handle_voice_message(data: Dictionary) -> void:
 	var decoded := Marshalls.base64_to_raw(audio_base64)
 	if decoded.is_empty() or decoded.size() > ONLINE_VOICE_PACKET_MAX_BYTES or decoded.size() % 2 != 0:
 		return
-	var stream = make_voice_stream(audio_base64, sample_rate, channels)
+	var stream = make_voice_stream(audio_base64, sample_rate, channels, decoded)
 	if stream == null:
 		return
 	var player = AudioStreamPlayer.new()
@@ -1847,7 +1896,7 @@ func refresh_online_log_navigation() -> void:
 
 
 func update_chat_send_cooldown(now_msec: int = -1) -> void:
-	if root_layer == null or not is_instance_valid(root_layer):
+	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var cooldown_label := root_layer.find_child("ChatSendCooldownLabel", true, false) as Label
 	var send_button := root_layer.find_child("ChatSendButton", true, false) as Button
@@ -2371,12 +2420,20 @@ func clamp_safe_area_margins(margins: Vector4, viewport_size: Vector2) -> Vector
 		clamp(margins.w, 0.0, viewport_size.y * SAFE_CONTENT_MAX_BOTTOM_FRACTION)
 	)
 
-func update_safe_area_layout() -> void:
-	safe_area_margins = current_safe_area_margins()
+func update_safe_area_layout() -> bool:
+	var next_margins := current_safe_area_margins()
+	var next_signature := "%.2f|%.2f|%.2f|%.2f" % [next_margins.x, next_margins.y, next_margins.z, next_margins.w]
+	if next_signature == safe_area_layout_signature:
+		safe_area_margins = next_margins
+		return false
+	safe_area_margins = next_margins
+	safe_area_layout_signature = next_signature
+	safe_area_layout_revision += 1
 	if root_layer != null and is_instance_valid(root_layer):
 		apply_safe_area_offsets(root_layer)
 	if toast_container != null and is_instance_valid(toast_container):
 		apply_safe_area_offsets(toast_container)
+	return true
 
 func apply_safe_area_offsets(control: Control) -> void:
 	if control == null:
@@ -7728,6 +7785,8 @@ func flower_bloom_text(tile: String) -> String:
 
 
 func clear_fx_overlays() -> void:
+	clear_tile_fly_animations()
+	clear_tile_flip_animations()
 	if fx_burst_tween != null and is_instance_valid(fx_burst_tween):
 		fx_burst_tween.kill()
 	if fx_ripple_tween != null and is_instance_valid(fx_ripple_tween):
@@ -9162,6 +9221,11 @@ func toggle_chat_panel() -> void:
 func refresh_chat_panel() -> void:
 	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return
+	for shield_node in root_layer.find_children("ChatPanelInputShield", "Control", true, false):
+		var shield := shield_node as Control
+		if shield != null and is_instance_valid(shield):
+			root_layer.remove_child(shield)
+			shield.queue_free()
 	var old_panel := root_layer.find_child("ChatPanel", true, false) as Control
 	if old_panel != null and is_instance_valid(old_panel):
 		root_layer.remove_child(old_panel)
@@ -9176,10 +9240,12 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 	if panel != null and is_instance_valid(panel):
 		root_layer.remove_child(panel)
 		panel.queue_free()
-	var input_shield := root_layer.find_child("ChatPanelInputShield", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
-	if input_shield != null and is_instance_valid(input_shield):
-		root_layer.remove_child(input_shield)
-		input_shield.queue_free()
+	if root_layer != null and is_instance_valid(root_layer):
+		for shield_node in root_layer.find_children("ChatPanelInputShield", "Control", true, false):
+			var input_shield := shield_node as Control
+			if input_shield != null and is_instance_valid(input_shield):
+				root_layer.remove_child(input_shield)
+				input_shield.queue_free()
 	var ledger := root_layer.find_child("TableLogLedgerPanel", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
 	if ledger != null and bool(ledger.get_meta("hidden_for_chat", false)):
 		ledger.visible = true
@@ -9959,6 +10025,11 @@ func update_menu_parallax(mouse_pos: Vector2) -> void:
 	# 鼠标相对视口中心的归一化偏移 [-1, 1]
 	var nx: float = clamp((mouse_pos.x / viewport_size.x) * 2.0 - 1.0, -1.0, 1.0)
 	var ny: float = clamp((mouse_pos.y / viewport_size.y) * 2.0 - 1.0, -1.0, 1.0)
+	var normalized := Vector2(nx, ny)
+	if menu_parallax_last_viewport == viewport_size and normalized.distance_to(menu_parallax_last_normalized) < 0.01:
+		return
+	menu_parallax_last_viewport = viewport_size
+	menu_parallax_last_normalized = normalized
 	# 视差层：远景小幅度、中景中等、近景大幅度（营造纵深）
 	var layers := [
 		["MenuHeroGPTBackdropTexture", -1.4, -0.8],

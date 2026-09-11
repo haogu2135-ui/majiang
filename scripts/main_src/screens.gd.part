@@ -896,6 +896,12 @@ func refresh_online_lobby_action_states() -> void:
 	var connecting := connection_state == "连接中"
 	var has_room_context := not online_room.is_empty() and (connected or online_waiting_for_server)
 	var room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
+	var action_state_key := "%s|%s|%s|%s|%s|%s" % [connection_state, room_code, has_room_context, online_feedback, online_waiting_for_server, high_contrast_enabled]
+	var action_tree_ready := root_layer.find_child("ChatLobbyButton", true, false) != null and root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) != null
+	if action_tree_ready:
+		if str(root_layer.get_meta("online_lobby_action_state_key", "")) == action_state_key:
+			return
+		root_layer.set_meta("online_lobby_action_state_key", action_state_key)
 	var connect_button = root_layer.find_child("OnlineLobbyConnectButton", true, false) as Button
 	var create_button = root_layer.find_child("OnlineLobbyCreateButton", true, false) as Button
 	var join_button = root_layer.find_child("OnlineLobbyJoinButton", true, false) as Button
@@ -1554,6 +1560,7 @@ func online_lobby_room_snapshot_status_text() -> String:
 func refresh_online_lobby_state() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
+	online_last_lobby_render_revision = online_lobby_render_revision
 	var state := lobby_connection_state_text()
 	var connected := state == "已连接"
 	var state_tint := online_connection_state_tint(state)
@@ -1959,6 +1966,9 @@ func refresh_online_feedback_art() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var feedback_art = root_layer.find_child("OnlineFeedbackArt", true, false) as Control
+	var feedback_key := "%s|%s|%s" % [online_feedback, online_waiting_for_server, effective_viewport_size()]
+	if feedback_art != null and str(feedback_art.get_meta("feedback_render_key", "")) == feedback_key:
+		return
 	var feedback_parent: Control = feedback_art.get_parent() as Control if feedback_art != null else null
 	if feedback_parent == null:
 		var form_panel = root_layer.find_child("OnlineLobbyFormPanel", true, false) as Control
@@ -1970,7 +1980,9 @@ func refresh_online_feedback_art() -> void:
 	if online_feedback.strip_edges() == "" and not online_waiting_for_server:
 		return
 	if feedback_parent != null:
-		draw_online_feedback_art(feedback_parent)
+		var next_art := draw_online_feedback_art(feedback_parent)
+		if next_art != null:
+			next_art.set_meta("feedback_render_key", feedback_key)
 
 
 func _show_rules_screen_impl() -> void:
@@ -3930,6 +3942,9 @@ func show_telemetry_data_sheet() -> void:
 	close.set_meta("recent_action_clearance_px", 8.0)
 	card.add_child(close)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
+	root_layer.remove_meta("ui_contract_control_list")
+	root_layer.remove_meta("ui_contract_index_root_id")
+	root_layer.remove_meta("ui_contract_index_direct_child_count")
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)
 
@@ -3998,6 +4013,9 @@ func close_telemetry_data_sheet() -> void:
 func refresh_update_dialog() -> void:
 	if update_state == "idle":
 		refresh_top_hud_update_button()
+		if update_progress_tween != null and is_instance_valid(update_progress_tween):
+			update_progress_tween.kill()
+		update_progress_tween = null
 		var restore_id := update_dialog_focus_restore_id
 		update_dialog_focus_restore_id = 0
 		if update_dialog != null and is_instance_valid(update_dialog):
@@ -4023,18 +4041,25 @@ func refresh_update_dialog() -> void:
 			target_progress_value = 100.0
 		else:
 			target_progress_value = 0.0
-		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			AnimationEffects.animate_progress_bar(update_progress, target_progress_value, 0.3)
-		else:
-			update_progress.value = target_progress_value
-		update_progress.set_meta("progress_percent", int(round(target_progress_value)))
+		var target_progress_percent := int(round(target_progress_value))
+		var previous_target_percent := int(update_progress.get_meta("progress_target_percent", -1))
+		if previous_target_percent != target_progress_percent:
+			if update_progress_tween != null and is_instance_valid(update_progress_tween):
+				update_progress_tween.kill()
+			update_progress_tween = null
+			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				update_progress_tween = AnimationEffects.animate_progress_bar(update_progress, target_progress_value, 0.3)
+			else:
+				update_progress.value = target_progress_value
+			update_progress.set_meta("progress_target_percent", target_progress_percent)
+		update_progress.set_meta("progress_percent", target_progress_percent)
 		update_progress.set_meta("progress_bytes", "%s / %s" % [format_bytes(maxi(0, update_downloaded_bytes)), format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"])
 		update_progress.set_meta("accessible_name", "更新下载进度：%d%%" % int(round(target_progress_value)))
 	if update_progress_label != null and is_instance_valid(update_progress_label):
 		var progress_text := update_progress_text()
 		set_ui_full_text(update_progress_label, progress_text, "更新进度：" + progress_text)
 		update_progress_label.text = progress_text
-		update_progress_label.set_meta("progress_percent", int(round(update_progress.value)) if update_progress != null and is_instance_valid(update_progress) else 0)
+		update_progress_label.set_meta("progress_percent", int(update_progress.get_meta("progress_target_percent", 0)) if update_progress != null and is_instance_valid(update_progress) else 0)
 	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
 		var notes_text := update_release_notes.strip_edges()
 		update_release_notes_art.visible = true
@@ -5006,6 +5031,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		diagnostic_focus_restore_id = (previous_focus as Control).get_instance_id()
 	# 清除当前屏幕
 	clear_screen()
+	diagnostic_dialog_open = true
 
 	# 创建半透明背景
 	var bg = make_fullrect_overlay(Color(0, 0, 0, 0.72), "ui_dark_scrim")
@@ -5470,12 +5496,13 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 func dismiss_diagnostic_dialog() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
-	if root_layer.find_child("DiagnosticDialogPanel", true, false) == null:
+	if not diagnostic_dialog_open:
 		return
 	var restore_name := diagnostic_focus_restore_name
 	var restore_id := diagnostic_focus_restore_id
 	diagnostic_focus_restore_name = ""
 	diagnostic_focus_restore_id = 0
+	diagnostic_dialog_open = false
 	clear_screen()
 	refresh_current_screen()
 	var restored_control := node_from_instance_id(restore_id) as Control
@@ -6460,7 +6487,7 @@ func render_replay_archive_list() -> void:
 		if previous_focus_name != "":
 			previous_focus_name = "ReplayArchiveSearchInput"
 		configure_button_focus_navigation(archive_pane, "", false)
-		call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name)
+		call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name, ui_page_generation)
 		call_deferred("sync_replay_archive_range_status", archive_scroll)
 		return
 	for entry_variant in entries:
@@ -7345,18 +7372,23 @@ func cycle_rule_variant_setting() -> void:
 		current_index = RULE_VARIANT_ORDER.size() - 1
 	rule_variant = str(RULE_VARIANT_ORDER[(current_index + 1) % RULE_VARIANT_ORDER.size()])
 	save_settings()
-	refresh_rule_variant_controls()
 	show_toast("地方规则：%s · 下一局生效" % rule_variant_label(rule_variant))
 	settings_focus_restore_name = "SettingsRuleVariantButton"
-	refresh_current_screen()
+	# Settings owns a stable local selector. Commit its text/status in place so the
+	# click has immediate feedback and preserves scroll/focus; a full page render is
+	# only needed when the selector is changed outside the mounted settings overlay.
+	if settings_panel_open and root_layer != null and is_instance_valid(root_layer):
+		refresh_rule_variant_controls()
+	else:
+		refresh_current_screen()
 
 func refresh_rule_variant_controls() -> void:
-	var selector = find_child("SettingsRuleVariantButton", true, false) as Button
+	var selector = root_layer.find_child("SettingsRuleVariantButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if selector != null:
 		selector.text = rule_variant_short_label()
 		selector.tooltip_text = rule_variant_summary(rule_variant)
 		selector.set_meta("setting_state", rule_variant_short_label())
-	var status = find_child("SettingsRuleVariantStatus", true, false) as Label
+	var status = root_layer.find_child("SettingsRuleVariantStatus", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
 	if status != null:
 		var active_rule_profile := rule_profile(active_rule_variant())
 		var rule_difference := ("可吃 · 含花牌" if bool(active_rule_profile.get("allow_chi", true)) and bool(active_rule_profile.get("include_flowers", true)) else ("可吃 · 无花牌" if bool(active_rule_profile.get("allow_chi", true)) else "不可吃"))

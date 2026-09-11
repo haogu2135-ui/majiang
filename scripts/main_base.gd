@@ -489,6 +489,7 @@ const ITEM_TYPES := {
 
 var tile_textures: Dictionary = {}
 var tile_decal_textures: Dictionary = {}
+var missing_tile_texture_codes: Dictionary = {}
 var tile_assets_ready := false
 var tile_assets_validation_complete := false
 var tile_asset_errors: Array = []
@@ -506,6 +507,7 @@ var gpt_plate_atlas_cache_order: Array[String] = []
 var gpt_center_crop_cache: Dictionary = {}
 var gpt_center_crop_cache_order: Array[String] = []
 var loaded_texture_cache: Dictionary = {}
+var failed_texture_cache: Dictionary = {}
 var shader_materials: Dictionary = {}
 const SHADER_PATHS := {
 	"ink_wash_bg": "res://shaders/ink_wash_bg.gdshader",
@@ -518,6 +520,8 @@ const SHADER_PATHS := {
 }
 var audio_streams: Dictionary = {}
 var voice_streams: Dictionary = {}
+var remote_voice_stream_cache: Dictionary = {}
+var remote_voice_stream_cache_order: Array[String] = []
 var audio_layer: Node
 var bgm_player: AudioStreamPlayer
 var sfx_player: AudioStreamPlayer
@@ -535,6 +539,14 @@ var audio_touch_unlocked = false
 var next_audio_health_check_msec = 0
 var last_bgm_health_check = 0
 var resize_refresh_pending = false
+var resize_refresh_revision := 0
+var safe_area_layout_signature := ""
+var safe_area_layout_revision := 0
+var ui_qa_marker_last := ""
+var ui_qa_page_ready_pending: Dictionary = {}
+var diagnostic_dialog_open := false
+var menu_parallax_last_normalized := Vector2(9.0, 9.0)
+var menu_parallax_last_viewport := Vector2.ZERO
 var speech_queue: Array = []
 var speech_queue_active = false
 var speech_queue_generation = 0
@@ -705,6 +717,7 @@ var update_dialog: Control
 var update_status_label: Label
 var update_progress_label: Label
 var update_progress: ProgressBar
+var update_progress_tween: Tween
 var update_art_fill: Control
 var update_art_status_light: Control
 var update_release_notes_art: Control
@@ -745,6 +758,7 @@ var offline_last_draw: Dictionary = {}
 var offline_self_draw_ready: Dictionary = {}  # 当前回合可自摸的真实摸牌；空值只兼容旧局状态
 var offline_ai_active = false
 var offline_ai_run_queued = false
+var offline_ai_assistance_queued = false
 var offline_all_bot_mode := false
 var offline_sim_quiet := false
 var offline_match_briefing_shown := false
@@ -840,6 +854,7 @@ var stats_scroll_restore_value := -1.0
 var stats_scroll_restore_progress := -1.0
 var ui_page_generation := 0
 var next_ui_deadline_poll_msec := 0
+var next_save_flush_poll_msec := 0
 var online_feedback = ""
 var online_waiting_for_server = false
 var online_last_sent_action = ""
@@ -867,6 +882,8 @@ var online_messages_received := 0
 var online_messages_rejected := 0
 var online_last_snapshot_fingerprint := ""
 var online_last_room_snapshot_fingerprint := ""
+var online_lobby_render_revision := 0
+var online_last_lobby_render_revision := -1
 var online_players_by_seat: Dictionary = {}
 var online_player_index_token := 0
 var online_announced_discard_key = ""
@@ -885,9 +902,11 @@ var game_render_queued = false
 var game_render_dirty_flags := 0
 var game_render_priority := 0
 var last_game_render_msec = 0
+var game_render_request_revision := 0
 var runtime_shutdown_requested = false
 var runtime_delay_timers: Array[Timer] = []
 var next_online_poll_msec = 0
+var next_voice_capture_msec := 0
 var next_update_progress_msec = 0
 var safe_area_margins := Vector4(0.0, 0.0, 0.0, 0.0)
 var safe_area_test_margins_override := Vector4(-1.0, -1.0, -1.0, -1.0)
@@ -910,6 +929,18 @@ var transition_active := false
 var screen_tweens: Array[Tween] = []
 var screen_tween_generations: Dictionary = {}
 var last_hand_render_signature := ""
+var seat_threat_fingerprint := ""
+var seat_threat_root_generation := -1
+var ai_advisor_fingerprint := ""
+var ai_advisor_root_generation := -1
+var pending_claim_live_root_id := 0
+var pending_claim_timer_label: Label = null
+var pending_claim_warning_labels: Array[Label] = []
+var pending_claim_timer_fill: Control = null
+var pending_claim_priority_label: Label = null
+var pending_claim_last_timer_text := ""
+var pending_claim_last_warning_text := ""
+var pending_claim_last_priority_text := ""
 var _ui_cjk_font: Font = null
 var toast_container: Control
 var toast_tween: Tween
@@ -918,10 +949,15 @@ var toast_mode := ""
 var toast_queue: Array = []
 var toast_active_minimum_dwell_msec := 0
 var game_render_delay_timer: Timer = null
+var game_render_delay_mode := ""
+var game_render_delay_page_generation := -1
+var game_render_delay_request_revision := -1
 
 # 牌面动画系统变量 / Tile Animation System Variables
 var tile_flip_animations: Dictionary = {}  # 进行中的翻转动画
+var tile_flip_animation_tokens: Dictionary = {}
 var tile_fly_animations: Array = []         # 进行中的飞行动画
+var shared_empty_tile_stylebox: StyleBoxEmpty = null
 var offline_draw_serial := 0
 var fx_last_animated_draw_serial := -1
 
@@ -1143,6 +1179,8 @@ const SFX_VOLUME_BOOST_DB := 2.5
 const VOICE_VOLUME_DB := -2.0
 const UI_RENDER_MIN_INTERVAL_MSEC := 16
 const ONLINE_POLL_INTERVAL_MSEC := 33
+const VOICE_CAPTURE_POLL_INTERVAL_MSEC := 50
+const SAVE_FLUSH_POLL_INTERVAL_MSEC := 100
 const UPDATE_PROGRESS_INTERVAL_MSEC := 120
 const ANDROID_TTS_WARMUP_MSEC := 900
 const ANDROID_TTS_FALLBACK_MSEC := 4200
@@ -1338,6 +1376,32 @@ func create_screen_tween(preserve_timing: bool = false) -> Tween:
 	tween.finished.connect(Callable(self, "_forget_screen_tween").bind(tween))
 	return tween
 
+func create_screen_tween_for_owner(owner: Node, preserve_timing: bool = false) -> Tween:
+	var tween := create_screen_tween(preserve_timing)
+	if owner != null and is_instance_valid(owner):
+		tween.set_meta("screen_tween_owner_id", owner.get_instance_id())
+	return tween
+
+func empty_tile_stylebox() -> StyleBoxEmpty:
+	if shared_empty_tile_stylebox == null or not is_instance_valid(shared_empty_tile_stylebox):
+		shared_empty_tile_stylebox = StyleBoxEmpty.new()
+	return shared_empty_tile_stylebox
+
+func kill_screen_tweens_for_subtree(owner: Node) -> void:
+	if owner == null or not is_instance_valid(owner):
+		return
+	var owner_ids: Dictionary = {owner.get_instance_id(): true}
+	for candidate in owner.find_children("*", "Node", true, false):
+		if candidate != null and is_instance_valid(candidate):
+			owner_ids[candidate.get_instance_id()] = true
+	for candidate_tween in screen_tweens.duplicate():
+		var tween := candidate_tween as Tween
+		if tween == null or not is_instance_valid(tween):
+			continue
+		if owner_ids.has(int(tween.get_meta("screen_tween_owner_id", 0))):
+			tween.kill()
+			_forget_screen_tween(tween)
+
 func _forget_screen_tween(tween: Tween) -> void:
 	var index := screen_tweens.find(tween)
 	if index >= 0:
@@ -1427,12 +1491,18 @@ func load_illustration_texture(path: String) -> Texture2D:
 		return null
 	if loaded_texture_cache.has(path):
 		return loaded_texture_cache[path] as Texture2D
+	if failed_texture_cache.has(path):
+		return null
 	if not imported_texture_artifact_ready(path):
+		failed_texture_cache[path] = true
 		return null
 	var imported = ResourceLoader.load(path, "Texture2D")
 	var texture := imported as Texture2D if imported is Texture2D else null
 	if texture != null:
 		loaded_texture_cache[path] = texture
+		failed_texture_cache.erase(path)
+	else:
+		failed_texture_cache[path] = true
 	return texture
 
 func imported_texture_artifact_ready(path: String) -> bool:
@@ -1996,6 +2066,9 @@ func set_label_text_by_id(label_id: int, text: String) -> void:
 func set_dynamic_label_text(label: Label, text: String, detail: String = "") -> void:
 	if label == null or not is_instance_valid(label):
 		return
+	var resolved_detail := detail.strip_edges() if detail.strip_edges() != "" else text.strip_edges()
+	if label.text == text and str(label.get_meta("ui_full_text", "")) == resolved_detail:
+		return
 	label.text = text
 	# Dynamic body labels must keep their wrapped policy when their state changes.
 	# Reapplying the compact badge policy here used to turn a readable scrollable
@@ -2009,7 +2082,6 @@ func set_dynamic_label_text(label: Label, text: String, detail: String = "") -> 
 		call_deferred("refresh_wrapped_label_height", label, float(label.get_meta("wrapped_minimum_height", 0.0)), float(label.get_meta("wrapped_line_gap", 4.0)))
 	else:
 		configure_clipped_label(label)
-	var resolved_detail := detail.strip_edges() if detail.strip_edges() != "" else text.strip_edges()
 	label.tooltip_text = resolved_detail
 	label.set_meta("ui_full_text", resolved_detail)
 	label.set_meta("accessible_name", resolved_detail)
@@ -2018,11 +2090,14 @@ func set_ui_full_text(control: Control, detail: String, accessible_name: String 
 	if control == null or not is_instance_valid(control):
 		return
 	var resolved_detail := detail.strip_edges()
+	var resolved_name := accessible_name.strip_edges()
+	if resolved_detail == str(control.get_meta("ui_full_text", "")) and (resolved_name == "" or resolved_name == str(control.get_meta("accessible_name", ""))):
+		return
 	if resolved_detail != "":
 		control.tooltip_text = resolved_detail
 		control.set_meta("ui_full_text", resolved_detail)
-	if accessible_name.strip_edges() != "":
-		control.set_meta("accessible_name", accessible_name.strip_edges())
+	if resolved_name != "":
+		control.set_meta("accessible_name", resolved_name)
 	elif not control.has_meta("accessible_name") and resolved_detail != "":
 		control.set_meta("accessible_name", resolved_detail)
 
@@ -2432,7 +2507,11 @@ func play_button_press_sheen_by_id(button_id: int, sheen_id: int) -> void:
 	var sheen = node_from_instance_id(sheen_id) as Control
 	if button == null or sheen == null:
 		return
+	var previous_tween := button.get_meta("button_press_sheen_tween", null) as Tween
+	if previous_tween != null and is_instance_valid(previous_tween):
+		previous_tween.kill()
 	var tw := button.create_tween()
+	button.set_meta("button_press_sheen_tween", tw)
 	tw.tween_property(sheen, "modulate:a", 0.28, 0.06).from(0.0)
 	tw.tween_property(sheen, "modulate:a", 0.0, 0.16)
 
@@ -2642,9 +2721,15 @@ func play_touch_button_down_by_id(button_id: int) -> void:
 	center_touch_button_pivot_by_id(button_id)
 	if OS.has_feature("mobile") and fx_enabled:
 		Input.vibrate_handheld(18, 0.22)
+	var previous_tween := button.get_meta("touch_press_tween", null) as Tween
+	if previous_tween != null and is_instance_valid(previous_tween):
+		previous_tween.kill()
 	if not ui_motion_enabled():
+		button.scale = Vector2.ONE
+		button.modulate = Color.WHITE
 		return
 	var tw := button.create_tween()
+	button.set_meta("touch_press_tween", tw)
 	tw.set_parallel(true)
 	tw.tween_property(button, "scale", Vector2(0.96, 0.96), 0.08).from(Vector2(1.0, 1.0)).set_ease(Tween.EASE_OUT)
 	tw.tween_property(button, "modulate", Color(0.92, 0.92, 0.92, 1.0), 0.08).from(Color(1, 1, 1, 1))
@@ -2663,7 +2748,16 @@ func play_touch_button_up_by_id(button_id: int) -> void:
 	var button = node_from_instance_id(button_id) as Button
 	if button == null:
 		return
+	var previous_tween := button.get_meta("touch_press_tween", null) as Tween
+	if previous_tween != null and is_instance_valid(previous_tween):
+		previous_tween.kill()
+	button.set_meta("touch_press_tween", null)
+	if not ui_motion_enabled():
+		button.scale = Vector2.ONE
+		button.modulate = Color.WHITE
+		return
 	var tw := button.create_tween()
+	button.set_meta("touch_press_tween", tw)
 	tw.set_parallel(true)
 	tw.tween_property(button, "scale", Vector2(1.0, 1.0), 0.12).from(Vector2(0.96, 0.96)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	tw.tween_property(button, "modulate", Color(1, 1, 1, 1), 0.12).from(Color(0.92, 0.92, 0.92, 1.0))
@@ -4600,16 +4694,23 @@ func setup_tile_order() -> void:
 func load_assets() -> void:
 	# 优先加载关键资源
 	var ui_capture_mode := OS.get_environment("YUNZHUO_UI_CAPTURE") == "1"
+	# Visual resources are immutable for one process revision. Avoid clearing and
+	# re-reading every path when an audio wake or page rebuild calls this helper
+	# again; an explicit tile/asset reload can clear these maps first.
+	if bool(get_meta("assets_visuals_loaded", false)) and (ui_capture_mode or bool(get_meta("assets_audio_loaded", false))):
+		return
 	tile_back = load_illustration_texture("res://assets/tiles/tile_back.png")
 	felt_texture = tile_back
 	wood_texture = tile_back
-	illustration_textures.clear()
+	if not bool(get_meta("assets_visuals_loaded", false)):
+		illustration_textures.clear()
 	for key in ILLUSTRATION_ASSET_PATHS.keys():
 		var path = str(ILLUSTRATION_ASSET_PATHS[key])
 		var texture = load_illustration_texture(path)
 		if texture != null:
 			illustration_textures[key] = texture
-	optional_gpt_illustration_textures.clear()
+	if not bool(get_meta("assets_visuals_loaded", false)):
+		optional_gpt_illustration_textures.clear()
 	for key in GPT_ILLUSTRATION_ASSET_PATHS.keys():
 		var path = str(GPT_ILLUSTRATION_ASSET_PATHS[key])
 		if not FileAccess.file_exists(path):
@@ -4619,7 +4720,8 @@ func load_assets() -> void:
 			optional_gpt_illustration_textures[key] = texture
 
 	# 着色器材质加载
-	shader_materials.clear()
+	if not bool(get_meta("assets_visuals_loaded", false)):
+		shader_materials.clear()
 	for key in SHADER_PATHS.keys():
 		var shader = load(str(SHADER_PATHS[key]))
 		if shader != null:
@@ -4631,19 +4733,22 @@ func load_assets() -> void:
 	if ui_capture_mode:
 		audio_streams.clear()
 	else:
-		audio_streams = {
-			"bgm": load(BGM_STREAM_PATH),
-			"bird": load("res://assets/audio/bird.mp3"),
-			"discard": load("res://assets/audio/discard.mp3"),
-			"draw": load("res://assets/audio/draw.mp3"),
-			"gang": load("res://assets/audio/kong.mp3"),
-			"peng": load("res://assets/audio/pong.mp3"),
-			"win": load("res://assets/audio/win.mp3"),
-		}
+		if not bool(get_meta("assets_audio_loaded", false)):
+			audio_streams = {
+				"bgm": load(BGM_STREAM_PATH),
+				"bird": load("res://assets/audio/bird.mp3"),
+				"discard": load("res://assets/audio/discard.mp3"),
+				"draw": load("res://assets/audio/draw.mp3"),
+				"gang": load("res://assets/audio/kong.mp3"),
+				"peng": load("res://assets/audio/pong.mp3"),
+				"win": load("res://assets/audio/win.mp3"),
+			}
+			set_meta("assets_audio_loaded", true)
 		if audio_streams.get("bgm") == null:
 			print("BGM: 警告 - BGM文件加载失败！")
 		else:
 			print("BGM: BGM文件加载成功，类型:", audio_streams.get("bgm").get_class())
+	set_meta("assets_visuals_loaded", true)
 
 	# 麻将牌纹理延迟加载（在空闲时间加载）
 	call_deferred("_load_tile_textures")
@@ -4653,6 +4758,8 @@ func load_assets() -> void:
 		call_deferred("load_voice_assets")
 
 func _load_tile_textures() -> void:
+	if tile_assets_validation_complete:
+		return
 	tile_textures.clear()
 	tile_decal_textures.clear()
 	tile_asset_errors.clear()

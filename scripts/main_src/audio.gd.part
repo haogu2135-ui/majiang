@@ -58,6 +58,7 @@ func shutdown_runtime() -> void:
 		game_render_queued = false
 		offline_ai_active = false
 		offline_ai_run_queued = false
+		offline_ai_assistance_queued = false
 		var pending_timers := runtime_delay_timers.duplicate()
 		runtime_delay_timers.clear()
 		for timer in pending_timers:
@@ -143,6 +144,8 @@ func shutdown_runtime_audio() -> void:
 	voice_capture_effect = null
 	audio_streams.clear()
 	voice_streams.clear()
+	remote_voice_stream_cache.clear()
+	remote_voice_stream_cache_order.clear()
 	bgm_player = null
 	sfx_player = null
 	action_sfx_player = null
@@ -209,8 +212,15 @@ func switch_bgm_track() -> void:
 	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
 		bgm_player.stop()
 
-	# 加载新BGM
-	var new_stream = load(track["path"])
+	# Reuse a stream that was already loaded during an earlier track switch.
+	# Fast settings taps must not synchronously reload the same audio resource.
+	var track_path := str(track["path"])
+	var cache_key := "bgm:%s" % track_path
+	var new_stream = audio_streams.get(cache_key, null)
+	if new_stream == null:
+		new_stream = load(track_path)
+		if new_stream != null:
+			audio_streams[cache_key] = new_stream
 	if new_stream == null:
 		print("BGM: 警告 - 无法加载", track["path"])
 		set_status("BGM文件不存在: " + track["name"])
@@ -330,10 +340,11 @@ func configure_background_music_stream() -> void:
 func keep_background_music_alive(now_msec: int = -1) -> void:
 	if not music_enabled or not audio_runtime_enabled():
 		return
-	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
-		return
-	var now = now_msec if now_msec >= 0 else Time.get_ticks_msec()
+	var now := now_msec if now_msec >= 0 else Time.get_ticks_msec()
 	if now < next_bgm_retry_msec:
+		return
+	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
+		next_bgm_retry_msec = now + 1000
 		return
 	start_background_music()
 

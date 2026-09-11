@@ -108,7 +108,7 @@ func refresh_current_screen() -> void:
 	# anchors. Keep the topmost modal mounted during a live resize; the source page
 	# is rebuilt at the new size when the modal is explicitly dismissed.
 	if root_layer != null and is_instance_valid(root_layer):
-		if root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+		if diagnostic_dialog_open:
 			return
 		if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 			return
@@ -136,6 +136,7 @@ func request_game_render(priority: int = 0, dirty_flag: int = GAME_RENDER_DIRTY_
 		return
 	if mode != "offline" and mode != "online_game":
 		return
+	game_render_request_revision += 1
 	game_render_dirty_flags |= dirty_flag
 	game_render_priority = maxi(game_render_priority, priority)
 	if game_render_queued:
@@ -181,6 +182,10 @@ func schedule_game_render_flush(delay_seconds: float) -> void:
 	else:
 		timer.stop()
 	timer.wait_time = clampf(delay_seconds, 0.001, 1.0)
+	game_render_delay_mode = mode
+	game_render_delay_page_generation = ui_page_generation
+	game_render_delay_request_revision = game_render_request_revision
+	timer.set_meta("game_render_request_revision", game_render_request_revision)
 	timer.start()
 
 func _on_game_render_delay_timeout(timer: Timer) -> void:
@@ -193,7 +198,22 @@ func _on_game_render_delay_timeout(timer: Timer) -> void:
 		game_render_queued = false
 		game_render_dirty_flags = 0
 		game_render_priority = 0
+		game_render_delay_request_revision = -1
 		return
+	var scheduled_revision := int(timer.get_meta("game_render_request_revision", game_render_delay_request_revision)) if timer != null and is_instance_valid(timer) else game_render_delay_request_revision
+	if game_render_delay_mode != mode or game_render_delay_page_generation != ui_page_generation or game_render_request_revision < scheduled_revision:
+		# A delayed flush may outlive clear_screen() so its awaiter can resume, but
+		# it must never apply the previous page's dirty state to a new root.
+		game_render_queued = false
+		game_render_dirty_flags = 0
+		game_render_priority = 0
+		game_render_delay_mode = ""
+		game_render_delay_page_generation = -1
+		game_render_delay_request_revision = -1
+		return
+	game_render_delay_mode = ""
+	game_render_delay_page_generation = -1
+	game_render_delay_request_revision = -1
 	flush_game_render()
 
 func should_yield_before_ai_discard() -> bool:
@@ -251,6 +271,17 @@ func clear_screen() -> void:
 	update_secondary_button = null
 	menu_realtime_3d_stage = null
 	chat_input = null
+	menu_parallax_last_normalized = Vector2(9.0, 9.0)
+	menu_parallax_last_viewport = Vector2.ZERO
+	pending_claim_live_root_id = 0
+	pending_claim_timer_label = null
+	pending_claim_warning_labels.clear()
+	pending_claim_timer_fill = null
+	pending_claim_priority_label = null
+	pending_claim_last_timer_text = ""
+	pending_claim_last_warning_text = ""
+	pending_claim_last_priority_text = ""
+	diagnostic_dialog_open = false
 	safe_area_margins = current_safe_area_margins()
 	emit_ui_qa_marker("safe_area|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f" % [safe_area_margins.x, safe_area_margins.y, safe_area_margins.z, safe_area_margins.w, effective_viewport_size().x, effective_viewport_size().y])
 	screen_layer = Control.new()
@@ -555,7 +586,6 @@ func render_game() -> void:
 	draw_round_summary(root_layer)
 	if chat_panel_open:
 		show_chat_panel()
-	register_battle_ui_round_contracts(root_layer)
 
 	# 记录渲染性能
 	var render_elapsed = Time.get_ticks_msec() - render_start_time
@@ -563,10 +593,14 @@ func render_game() -> void:
 	perf_render_total_ms += render_elapsed
 
 	# AI辅助异步更新（延迟到下一帧）
-	if player_ai_assist_enabled() and mode == "offline" and can_self_discard():
+	if player_ai_assist_enabled() and mode == "offline" and can_self_discard() and not offline_ai_assistance_queued:
+		offline_ai_assistance_queued = true
 		call_deferred("update_ai_assistance_async")
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
+	# Register against the complete page-owned tree so late modal controls are
+	# included without a second recursive scan.
+	register_battle_ui_round_contracts(root_layer)
 	register_ui_round_681_710(root_layer)
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)
@@ -579,6 +613,7 @@ func render_game() -> void:
 
 func update_ai_assistance_async() -> void:
 	# 异步更新AI辅助信息，不阻塞UI渲染
+	offline_ai_assistance_queued = false
 	if mode != "offline" or not can_self_discard():
 		return
 
@@ -601,6 +636,41 @@ func update_ai_assistance_async() -> void:
 		var seat_threat_reports = render_seat_threat_reports(0, seat_threat_context)
 		# 更新座位威胁显示
 		update_seat_threats_display(seat_threat_reports)
+
+func copy_local_ui_contract_metadata(source: Control, target: Control) -> void:
+	if source == null or target == null or not is_instance_valid(source) or not is_instance_valid(target):
+		return
+	var source_nodes := source.find_children("*", "Control", true, false)
+	source_nodes.push_front(source)
+	var target_nodes := target.find_children("*", "Control", true, false)
+	target_nodes.push_front(target)
+	var target_by_name: Dictionary = {}
+	for candidate_node in target_nodes:
+		var candidate := candidate_node as Control
+		if candidate != null and not target_by_name.has(str(candidate.name)):
+			target_by_name[str(candidate.name)] = candidate
+	for source_node in source_nodes:
+		var source_control := source_node as Control
+		if source_control == null:
+			continue
+		# Prefer the relative subtree path so repeated names in a modal or seat
+		# branch cannot receive another branch's contract metadata. Name fallback is
+		# retained only for legacy builders that changed their child shape.
+		var relative_path := source.get_path_to(source_control)
+		var target_control := target.get_node_or_null(relative_path) as Control
+		if target_control == null:
+			target_control = target_by_name.get(str(source_control.name), null) as Control
+		if target_control == null:
+			continue
+		for meta_name_variant in source_control.get_meta_list():
+			var meta_name := str(meta_name_variant)
+			if meta_name == "ui_optimization_ids" or meta_name.begins_with("battle_ui_") or meta_name.begins_with("ui_round_"):
+				target_control.set_meta(meta_name, source_control.get_meta(meta_name))
+		for finding_id_variant in target_control.get_meta("ui_optimization_ids", []):
+			mark_ui_optimization(target_control, str(finding_id_variant))
+	target.set_meta("local_contract_source_instance_id", source.get_instance_id())
+	target.set_meta("local_contract_generation", ui_page_generation)
+	target.set_meta("local_contract_copy_strategy", "relative_subtree_path_then_legacy_name")
 
 func update_hand_ai_hints() -> void:
 	# 手牌牌面、风险徽标和推荐徽标都由 draw_hand 一次性构造；只替换
@@ -630,12 +700,15 @@ func update_hand_ai_hints() -> void:
 				hovered_source_index = source_index
 			break
 	var old_tray_index := old_tray.get_index()
+	kill_screen_tweens_for_subtree(old_tray)
 	root_layer.remove_child(old_tray)
 	old_tray.queue_free()
 	draw_hand(root_layer)
 	var new_tray = root_layer.get_node_or_null("HandTray")
 	if new_tray != null:
+		copy_local_ui_contract_metadata(old_tray, new_tray)
 		root_layer.move_child(new_tray, mini(old_tray_index, root_layer.get_child_count() - 1))
+	invalidate_ui_contract_control_cache(root_layer)
 	# AI suggestions can arrive while a player is reading the hand. Restore the
 	# stable selection/focus and pointer highlight after the replacement tree is
 	# mounted so the refresh cannot silently move the interaction target.
@@ -652,7 +725,21 @@ func update_hand_ai_hints() -> void:
 func refresh_ai_advisor_panel() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
+	var current_fingerprint := JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports})
+	var existing_panel := root_layer.get_node_or_null("AdvisorPanel")
+	if existing_panel != null and is_instance_valid(existing_panel) and ai_advisor_root_generation == current_root_generation and ai_advisor_fingerprint == current_fingerprint:
+		return
 	var old_panel = root_layer.get_node_or_null("AdvisorPanel")
+	for detail_name in ["AdvisorDetailPanel", "AdvisorDetailModalShield"]:
+		for detail_node in root_layer.find_children(detail_name, "Control", true, false):
+			var detail_control := detail_node as Control
+			if detail_control != null and is_instance_valid(detail_control):
+				kill_screen_tweens_for_subtree(detail_control)
+				var detail_parent := detail_control.get_parent()
+				if detail_parent != null:
+					detail_parent.remove_child(detail_control)
+				detail_control.queue_free()
 	var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
 	if old_panel != null and is_instance_valid(old_panel):
 		root_layer.remove_child(old_panel)
@@ -662,14 +749,24 @@ func refresh_ai_advisor_panel() -> void:
 	draw_advisor_panel(root_layer)
 	if advisor_detail_open:
 		draw_advisor_detail_panel(root_layer)
+		call_deferred("focus_named_control", "AdvisorDetailCloseButton")
 	var new_panel = root_layer.get_node_or_null("AdvisorPanel")
 	if new_panel != null and old_panel_index >= 0:
 		root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
+	ai_advisor_fingerprint = current_fingerprint
+	ai_advisor_root_generation = current_root_generation
+	invalidate_ui_contract_control_cache(root_layer)
 
 func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
-	current_seat_threat_reports = seat_threat_reports.duplicate(true)
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var next_fingerprint := JSON.stringify(seat_threat_reports)
+	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
+	if seat_threat_fingerprint == next_fingerprint and seat_threat_root_generation == current_root_generation:
+		return
+	current_seat_threat_reports = seat_threat_reports.duplicate(true)
+	seat_threat_fingerprint = next_fingerprint
+	seat_threat_root_generation = current_root_generation
 	# SeatPanel 的尺寸和朝向由 SEAT_LAYOUTS 决定，重绘这些局部面板比整局
 	# render_game 更安全，也不会重新触发 AI 辅助 deferred 回调。
 	for seat_layout in SEAT_LAYOUTS:
@@ -677,20 +774,27 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 		var old_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
 		var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
 		if old_panel != null and is_instance_valid(old_panel):
+			kill_screen_tweens_for_subtree(old_panel)
 			root_layer.remove_child(old_panel)
 			old_panel.queue_free()
 		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var old_shadow_index := old_shadow.get_index() if old_shadow != null and is_instance_valid(old_shadow) else -1
 		if old_shadow != null and is_instance_valid(old_shadow):
+			kill_screen_tweens_for_subtree(old_shadow)
 			root_layer.remove_child(old_shadow)
 			old_shadow.queue_free()
 		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
 		var new_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var new_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		if new_panel != null and old_panel != null and is_instance_valid(old_panel):
+			copy_local_ui_contract_metadata(old_panel, new_panel)
+		if new_shadow != null and old_shadow != null and is_instance_valid(old_shadow):
+			copy_local_ui_contract_metadata(old_shadow, new_shadow)
 		if new_shadow != null and old_shadow_index >= 0:
 			root_layer.move_child(new_shadow, mini(old_shadow_index, root_layer.get_child_count() - 1))
 		if new_panel != null and old_panel_index >= 0:
 			root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
+	invalidate_ui_contract_control_cache(root_layer)
 
 func table_log_tail(limit: int) -> Array[String]:
 	var result: Array[String] = []

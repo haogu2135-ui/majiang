@@ -70,6 +70,7 @@ func shutdown_runtime() -> void:
 		game_render_queued = false
 		offline_ai_active = false
 		offline_ai_run_queued = false
+		offline_ai_assistance_queued = false
 		var pending_timers := runtime_delay_timers.duplicate()
 		runtime_delay_timers.clear()
 		for timer in pending_timers:
@@ -155,6 +156,8 @@ func shutdown_runtime_audio() -> void:
 	voice_capture_effect = null
 	audio_streams.clear()
 	voice_streams.clear()
+	remote_voice_stream_cache.clear()
+	remote_voice_stream_cache_order.clear()
 	bgm_player = null
 	sfx_player = null
 	action_sfx_player = null
@@ -221,8 +224,15 @@ func switch_bgm_track() -> void:
 	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
 		bgm_player.stop()
 
-	# 加载新BGM
-	var new_stream = load(track["path"])
+	# Reuse a stream that was already loaded during an earlier track switch.
+	# Fast settings taps must not synchronously reload the same audio resource.
+	var track_path := str(track["path"])
+	var cache_key := "bgm:%s" % track_path
+	var new_stream = audio_streams.get(cache_key, null)
+	if new_stream == null:
+		new_stream = load(track_path)
+		if new_stream != null:
+			audio_streams[cache_key] = new_stream
 	if new_stream == null:
 		print("BGM: 警告 - 无法加载", track["path"])
 		set_status("BGM文件不存在: " + track["name"])
@@ -342,10 +352,11 @@ func configure_background_music_stream() -> void:
 func keep_background_music_alive(now_msec: int = -1) -> void:
 	if not music_enabled or not audio_runtime_enabled():
 		return
-	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
-		return
-	var now = now_msec if now_msec >= 0 else Time.get_ticks_msec()
+	var now := now_msec if now_msec >= 0 else Time.get_ticks_msec()
 	if now < next_bgm_retry_msec:
+		return
+	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
+		next_bgm_retry_msec = now + 1000
 		return
 	start_background_music()
 
@@ -5107,7 +5118,7 @@ func refresh_current_screen() -> void:
 	# anchors. Keep the topmost modal mounted during a live resize; the source page
 	# is rebuilt at the new size when the modal is explicitly dismissed.
 	if root_layer != null and is_instance_valid(root_layer):
-		if root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+		if diagnostic_dialog_open:
 			return
 		if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 			return
@@ -5135,6 +5146,7 @@ func request_game_render(priority: int = 0, dirty_flag: int = GAME_RENDER_DIRTY_
 		return
 	if mode != "offline" and mode != "online_game":
 		return
+	game_render_request_revision += 1
 	game_render_dirty_flags |= dirty_flag
 	game_render_priority = maxi(game_render_priority, priority)
 	if game_render_queued:
@@ -5180,6 +5192,10 @@ func schedule_game_render_flush(delay_seconds: float) -> void:
 	else:
 		timer.stop()
 	timer.wait_time = clampf(delay_seconds, 0.001, 1.0)
+	game_render_delay_mode = mode
+	game_render_delay_page_generation = ui_page_generation
+	game_render_delay_request_revision = game_render_request_revision
+	timer.set_meta("game_render_request_revision", game_render_request_revision)
 	timer.start()
 
 func _on_game_render_delay_timeout(timer: Timer) -> void:
@@ -5192,7 +5208,22 @@ func _on_game_render_delay_timeout(timer: Timer) -> void:
 		game_render_queued = false
 		game_render_dirty_flags = 0
 		game_render_priority = 0
+		game_render_delay_request_revision = -1
 		return
+	var scheduled_revision := int(timer.get_meta("game_render_request_revision", game_render_delay_request_revision)) if timer != null and is_instance_valid(timer) else game_render_delay_request_revision
+	if game_render_delay_mode != mode or game_render_delay_page_generation != ui_page_generation or game_render_request_revision < scheduled_revision:
+		# A delayed flush may outlive clear_screen() so its awaiter can resume, but
+		# it must never apply the previous page's dirty state to a new root.
+		game_render_queued = false
+		game_render_dirty_flags = 0
+		game_render_priority = 0
+		game_render_delay_mode = ""
+		game_render_delay_page_generation = -1
+		game_render_delay_request_revision = -1
+		return
+	game_render_delay_mode = ""
+	game_render_delay_page_generation = -1
+	game_render_delay_request_revision = -1
 	flush_game_render()
 
 func should_yield_before_ai_discard() -> bool:
@@ -5250,6 +5281,17 @@ func clear_screen() -> void:
 	update_secondary_button = null
 	menu_realtime_3d_stage = null
 	chat_input = null
+	menu_parallax_last_normalized = Vector2(9.0, 9.0)
+	menu_parallax_last_viewport = Vector2.ZERO
+	pending_claim_live_root_id = 0
+	pending_claim_timer_label = null
+	pending_claim_warning_labels.clear()
+	pending_claim_timer_fill = null
+	pending_claim_priority_label = null
+	pending_claim_last_timer_text = ""
+	pending_claim_last_warning_text = ""
+	pending_claim_last_priority_text = ""
+	diagnostic_dialog_open = false
 	safe_area_margins = current_safe_area_margins()
 	emit_ui_qa_marker("safe_area|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f" % [safe_area_margins.x, safe_area_margins.y, safe_area_margins.z, safe_area_margins.w, effective_viewport_size().x, effective_viewport_size().y])
 	screen_layer = Control.new()
@@ -5554,7 +5596,6 @@ func render_game() -> void:
 	draw_round_summary(root_layer)
 	if chat_panel_open:
 		show_chat_panel()
-	register_battle_ui_round_contracts(root_layer)
 
 	# 记录渲染性能
 	var render_elapsed = Time.get_ticks_msec() - render_start_time
@@ -5562,10 +5603,14 @@ func render_game() -> void:
 	perf_render_total_ms += render_elapsed
 
 	# AI辅助异步更新（延迟到下一帧）
-	if player_ai_assist_enabled() and mode == "offline" and can_self_discard():
+	if player_ai_assist_enabled() and mode == "offline" and can_self_discard() and not offline_ai_assistance_queued:
+		offline_ai_assistance_queued = true
 		call_deferred("update_ai_assistance_async")
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
+	# Register against the complete page-owned tree so late modal controls are
+	# included without a second recursive scan.
+	register_battle_ui_round_contracts(root_layer)
 	register_ui_round_681_710(root_layer)
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)
@@ -5578,6 +5623,7 @@ func render_game() -> void:
 
 func update_ai_assistance_async() -> void:
 	# 异步更新AI辅助信息，不阻塞UI渲染
+	offline_ai_assistance_queued = false
 	if mode != "offline" or not can_self_discard():
 		return
 
@@ -5600,6 +5646,41 @@ func update_ai_assistance_async() -> void:
 		var seat_threat_reports = render_seat_threat_reports(0, seat_threat_context)
 		# 更新座位威胁显示
 		update_seat_threats_display(seat_threat_reports)
+
+func copy_local_ui_contract_metadata(source: Control, target: Control) -> void:
+	if source == null or target == null or not is_instance_valid(source) or not is_instance_valid(target):
+		return
+	var source_nodes := source.find_children("*", "Control", true, false)
+	source_nodes.push_front(source)
+	var target_nodes := target.find_children("*", "Control", true, false)
+	target_nodes.push_front(target)
+	var target_by_name: Dictionary = {}
+	for candidate_node in target_nodes:
+		var candidate := candidate_node as Control
+		if candidate != null and not target_by_name.has(str(candidate.name)):
+			target_by_name[str(candidate.name)] = candidate
+	for source_node in source_nodes:
+		var source_control := source_node as Control
+		if source_control == null:
+			continue
+		# Prefer the relative subtree path so repeated names in a modal or seat
+		# branch cannot receive another branch's contract metadata. Name fallback is
+		# retained only for legacy builders that changed their child shape.
+		var relative_path := source.get_path_to(source_control)
+		var target_control := target.get_node_or_null(relative_path) as Control
+		if target_control == null:
+			target_control = target_by_name.get(str(source_control.name), null) as Control
+		if target_control == null:
+			continue
+		for meta_name_variant in source_control.get_meta_list():
+			var meta_name := str(meta_name_variant)
+			if meta_name == "ui_optimization_ids" or meta_name.begins_with("battle_ui_") or meta_name.begins_with("ui_round_"):
+				target_control.set_meta(meta_name, source_control.get_meta(meta_name))
+		for finding_id_variant in target_control.get_meta("ui_optimization_ids", []):
+			mark_ui_optimization(target_control, str(finding_id_variant))
+	target.set_meta("local_contract_source_instance_id", source.get_instance_id())
+	target.set_meta("local_contract_generation", ui_page_generation)
+	target.set_meta("local_contract_copy_strategy", "relative_subtree_path_then_legacy_name")
 
 func update_hand_ai_hints() -> void:
 	# 手牌牌面、风险徽标和推荐徽标都由 draw_hand 一次性构造；只替换
@@ -5629,12 +5710,15 @@ func update_hand_ai_hints() -> void:
 				hovered_source_index = source_index
 			break
 	var old_tray_index := old_tray.get_index()
+	kill_screen_tweens_for_subtree(old_tray)
 	root_layer.remove_child(old_tray)
 	old_tray.queue_free()
 	draw_hand(root_layer)
 	var new_tray = root_layer.get_node_or_null("HandTray")
 	if new_tray != null:
+		copy_local_ui_contract_metadata(old_tray, new_tray)
 		root_layer.move_child(new_tray, mini(old_tray_index, root_layer.get_child_count() - 1))
+	invalidate_ui_contract_control_cache(root_layer)
 	# AI suggestions can arrive while a player is reading the hand. Restore the
 	# stable selection/focus and pointer highlight after the replacement tree is
 	# mounted so the refresh cannot silently move the interaction target.
@@ -5651,7 +5735,21 @@ func update_hand_ai_hints() -> void:
 func refresh_ai_advisor_panel() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
+	var current_fingerprint := JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports})
+	var existing_panel := root_layer.get_node_or_null("AdvisorPanel")
+	if existing_panel != null and is_instance_valid(existing_panel) and ai_advisor_root_generation == current_root_generation and ai_advisor_fingerprint == current_fingerprint:
+		return
 	var old_panel = root_layer.get_node_or_null("AdvisorPanel")
+	for detail_name in ["AdvisorDetailPanel", "AdvisorDetailModalShield"]:
+		for detail_node in root_layer.find_children(detail_name, "Control", true, false):
+			var detail_control := detail_node as Control
+			if detail_control != null and is_instance_valid(detail_control):
+				kill_screen_tweens_for_subtree(detail_control)
+				var detail_parent := detail_control.get_parent()
+				if detail_parent != null:
+					detail_parent.remove_child(detail_control)
+				detail_control.queue_free()
 	var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
 	if old_panel != null and is_instance_valid(old_panel):
 		root_layer.remove_child(old_panel)
@@ -5661,14 +5759,24 @@ func refresh_ai_advisor_panel() -> void:
 	draw_advisor_panel(root_layer)
 	if advisor_detail_open:
 		draw_advisor_detail_panel(root_layer)
+		call_deferred("focus_named_control", "AdvisorDetailCloseButton")
 	var new_panel = root_layer.get_node_or_null("AdvisorPanel")
 	if new_panel != null and old_panel_index >= 0:
 		root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
+	ai_advisor_fingerprint = current_fingerprint
+	ai_advisor_root_generation = current_root_generation
+	invalidate_ui_contract_control_cache(root_layer)
 
 func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
-	current_seat_threat_reports = seat_threat_reports.duplicate(true)
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var next_fingerprint := JSON.stringify(seat_threat_reports)
+	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
+	if seat_threat_fingerprint == next_fingerprint and seat_threat_root_generation == current_root_generation:
+		return
+	current_seat_threat_reports = seat_threat_reports.duplicate(true)
+	seat_threat_fingerprint = next_fingerprint
+	seat_threat_root_generation = current_root_generation
 	# SeatPanel 的尺寸和朝向由 SEAT_LAYOUTS 决定，重绘这些局部面板比整局
 	# render_game 更安全，也不会重新触发 AI 辅助 deferred 回调。
 	for seat_layout in SEAT_LAYOUTS:
@@ -5676,20 +5784,27 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 		var old_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
 		var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
 		if old_panel != null and is_instance_valid(old_panel):
+			kill_screen_tweens_for_subtree(old_panel)
 			root_layer.remove_child(old_panel)
 			old_panel.queue_free()
 		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var old_shadow_index := old_shadow.get_index() if old_shadow != null and is_instance_valid(old_shadow) else -1
 		if old_shadow != null and is_instance_valid(old_shadow):
+			kill_screen_tweens_for_subtree(old_shadow)
 			root_layer.remove_child(old_shadow)
 			old_shadow.queue_free()
 		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
 		var new_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var new_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		if new_panel != null and old_panel != null and is_instance_valid(old_panel):
+			copy_local_ui_contract_metadata(old_panel, new_panel)
+		if new_shadow != null and old_shadow != null and is_instance_valid(old_shadow):
+			copy_local_ui_contract_metadata(old_shadow, new_shadow)
 		if new_shadow != null and old_shadow_index >= 0:
 			root_layer.move_child(new_shadow, mini(old_shadow_index, root_layer.get_child_count() - 1))
 		if new_panel != null and old_panel_index >= 0:
 			root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
+	invalidate_ui_contract_control_cache(root_layer)
 
 func table_log_tail(limit: int) -> Array[String]:
 	var result: Array[String] = []
@@ -9370,20 +9485,15 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 			compact_panel_tint.a
 		)
 		button.move_child(panel_plate, 0)
-	if action_button_should_pulse(role):
-		var pulse_strength = action_button_pulse_strength(role)
-		var pulse_scale = 0.28 if compact_claim_mode else 1.0
-		var pulse = make_gpt_tick_strip(rect_full(0.012, 0.090, 0.988, 0.910), Color(color.r, color.g, color.b, (0.050 + 0.020 * pulse_strength) * pulse_scale))
-		pulse.name = "ActionButtonPulse"
-		button.add_child(pulse)
-		button.move_child(pulse, 0)
-		if fx_enabled_effective():
-			var peak = lerp(0.42, 0.84, pulse_strength)
-			var trough = lerp(0.10, 0.25, pulse_strength)
-			var pulse_tw := create_screen_tween()
-			pulse_tw.set_loops(12)
-			pulse_tw.tween_property(pulse, "modulate:a", trough, 0.64).from(peak)
-			pulse_tw.tween_property(pulse, "modulate:a", peak, 0.64).from(trough)
+		if action_button_should_pulse(role):
+			var pulse_strength = action_button_pulse_strength(role)
+			var pulse_scale = 0.28 if compact_claim_mode else 1.0
+			var pulse = make_gpt_tick_strip(rect_full(0.012, 0.090, 0.988, 0.910), Color(color.r, color.g, color.b, (0.050 + 0.020 * pulse_strength) * pulse_scale))
+			pulse.name = "ActionButtonPulse"
+			pulse.set_meta("pulse_subscriber", true)
+			pulse.set_meta("pulse_driver", "ActionButtonDockPulseDriver")
+			button.add_child(pulse)
+			button.move_child(pulse, 0)
 	# Button native text is painted by the parent CanvasItem. Keep every authored
 	# decorative child behind it so compact claim labels remain crisp in all states.
 	for child in button.get_children():
@@ -9392,7 +9502,11 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 	button.button_down.connect(func() -> void:
 		if not is_instance_valid(button):
 			return
+		var previous_press_tween := button.get_meta("action_press_tween", null) as Tween
+		if previous_press_tween != null and is_instance_valid(previous_press_tween):
+			previous_press_tween.kill()
 		var tw := button.create_tween()
+		button.set_meta("action_press_tween", tw)
 		tw.tween_property(button, "scale", Vector2(0.94, 0.94), 0.04).from(button.scale)
 		tw.chain().tween_property(button, "scale", Vector2(1.0, 1.0), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		play_action_button_press_feedback(button, role, color)
@@ -9436,6 +9550,30 @@ func draw_action_dock(parent: Control) -> void:
 	set_ui_full_text(dock, "行动区：当前可执行操作会显示在下方按钮；焦点可用方向键移动", "牌桌行动区")
 	mark_ui_optimization(dock, "F-478")
 	var action_buttons = action_bar_buttons()
+	var pulse_strength := 0.0
+	for action_button_value in action_buttons:
+		var action_button := action_button_value as Button
+		if action_button == null:
+			continue
+		var action_role := action_button_visual_role(action_button.text)
+		if action_button_should_pulse(action_role):
+			pulse_strength = maxf(pulse_strength, action_button_pulse_strength(action_role))
+	if pulse_strength > 0.0:
+		var pulse_driver := make_gpt_tick_strip(rect_full(0.018, 0.140, 0.982, 0.860), Color(0.98, 0.82, 0.42, 0.10))
+		pulse_driver.name = "ActionButtonDockPulseDriver"
+		pulse_driver.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pulse_driver.set_meta("pulse_driver_count", 1)
+		pulse_driver.set_meta("pulse_subscriber_count", action_buttons.size())
+		dock.add_child(pulse_driver)
+		dock.set_meta("pulse_driver_count", 1)
+		dock.set_meta("pulse_subscriber_count", action_buttons.size())
+		if fx_enabled_effective():
+			var peak: float = lerpf(0.40, 0.78, pulse_strength)
+			var trough: float = lerpf(0.10, 0.24, pulse_strength)
+			var pulse_tw := create_screen_tween_for_owner(pulse_driver)
+			pulse_tw.set_loops(12)
+			pulse_tw.tween_property(pulse_driver, "modulate:a", trough, 0.64).from(peak)
+			pulse_tw.tween_property(pulse_driver, "modulate:a", peak, 0.64).from(trough)
 	var dock_rear = make_soft_depth_panel(dock, rect_full(0.012, 0.040, 0.988, 0.980), Color(0.08, 0.055, 0.035, 0.12), 10)
 	dock_rear.name = "ActionDock3DRearShell"
 	dock.move_child(dock_rear, 0)
@@ -10856,6 +10994,10 @@ func register_battle_ui_round_contracts(root: Control) -> void:
 	# visual layer or replace the authored tile/illustration assets.
 	if root == null or not is_instance_valid(root):
 		return
+	# The battle root is rebuilt as one unit, so build one control index for this
+	# registration pass instead of recursively searching the same tree once per
+	# owner. Later dynamic modal controls are registered by their own builders.
+	var control_index := cached_ui_control_index(root)
 	var contract_ids: Array[String] = []
 	for index in range(30):
 		contract_ids.append("F-%d" % (651 + index))
@@ -10873,6 +11015,10 @@ func register_battle_ui_round_contracts(root: Control) -> void:
 		mark_ui_optimization(target, finding_id)
 
 	var find_control := func(node_name: String) -> Control:
+		var indexed := control_index.get(node_name, null) as Control
+		if indexed != null and is_instance_valid(indexed):
+			return indexed
+		# Keep a safe fallback for controls inserted during this registration pass.
 		return root.find_child(node_name, true, false) as Control
 
 	var hud_title := find_control.call("TopHudTitle") as Control
@@ -11016,7 +11162,12 @@ func register_ui_round_681_710(root: Control) -> void:
 	# lane so resize and accessibility probes can verify the same geometry.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	# A page builder can append controls between top-level registry passes. The
+	# cached list is shared by the recursive round chain, then invalidated here
+	# before the next pass so dynamic modal controls are still discoverable.
+	root.remove_meta("ui_contract_control_list")
+	root.remove_meta("ui_contract_index_root_id")
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_681_710_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_681_710_registered_child_count", registration_child_count)
@@ -11272,7 +11423,7 @@ func register_ui_round_711_740(root: Control) -> void:
 	# in the owning builders below so the contract cannot drift from them.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_711_740_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_711_740_registered_child_count", registration_child_count)
@@ -11390,7 +11541,7 @@ func register_ui_round_741_770(root: Control) -> void:
 	# introduce another visual layer.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_741_770_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_741_770_registered_child_count", registration_child_count)
@@ -11573,7 +11724,7 @@ func register_ui_round_771_800(root: Control) -> void:
 	# the native controls continue to own input.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_771_800_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_771_800_registered_child_count", registration_child_count)
@@ -11708,7 +11859,7 @@ func register_ui_round_801_830(root: Control) -> void:
 	# introducing another visual surface.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_801_830_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_801_830_registered_child_count", registration_child_count)
@@ -11817,7 +11968,7 @@ func register_ui_round_831_860(root: Control) -> void:
 	# visual layer or replacing an existing texture host.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_831_860_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_831_860_registered_child_count", registration_child_count)
@@ -11936,7 +12087,7 @@ func register_ui_round_861_890(root: Control) -> void:
 	# keeps their reading order and state owner inspectable after every page rebuild.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_861_890_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_861_890_registered_child_count", registration_child_count)
@@ -12043,7 +12194,7 @@ func register_ui_round_891_920(root: Control) -> void:
 	# adding a decorative layer or replacing the existing 2D tile surfaces.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_891_920_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_891_920_registered_child_count", registration_child_count)
@@ -12141,7 +12292,7 @@ func register_ui_round_921_950(root: Control) -> void:
 	# inspectable: it does not add a visual layer or replace any authored asset.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_921_950_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_921_950_registered_child_count", registration_child_count)
@@ -12246,7 +12397,7 @@ func register_ui_round_951_980(root: Control) -> void:
 	# reading, focus, and input contracts without adding a visual overlay.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_951_980_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_951_980_registered_child_count", registration_child_count)
@@ -12329,7 +12480,7 @@ func register_ui_round_981_1010(root: Control) -> void:
 	# surfaces. It shares the same owner contract shape as the battle round.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_981_1010_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_981_1010_registered_child_count", registration_child_count)
@@ -12411,7 +12562,7 @@ func register_ui_round_1011_1040(root: Control) -> void:
 	# behavior survive every table rebuild without adding a visual overlay.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1011_1040_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_1011_1040_registered_child_count", registration_child_count)
@@ -12521,7 +12672,7 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	# texture, ColorRect, or code-drawn panel is introduced here.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1041_1070_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_1041_1070_registered_child_count", registration_child_count)
@@ -12643,6 +12794,52 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	register_ui_round_2391_2450(root)
 	register_ui_round_2451_2510(root)
 	register_ui_round_2511_2570(root)
+	register_ui_round_2571_2630(root)
+	register_ui_round_2631_2690(root)
+	register_ui_round_2691_2750(root)
+	register_ui_round_2751_2810(root)
+
+
+func cached_ui_control_list(root: Control) -> Array:
+	if root == null or not is_instance_valid(root):
+		return []
+	var root_id := root.get_instance_id()
+	var cached_root_id := int(root.get_meta("ui_contract_index_root_id", 0))
+	var direct_child_count := root.get_child_count()
+	var cached_direct_child_count := int(root.get_meta("ui_contract_index_direct_child_count", -1))
+	var structure_revision := int(root.get_meta("ui_contract_structure_revision", 0))
+	var cached_structure_revision := int(root.get_meta("ui_contract_index_structure_revision", -1))
+	var cached: Array = root.get_meta("ui_contract_control_list", [])
+	if cached_root_id == root_id and cached_direct_child_count == direct_child_count and cached_structure_revision == structure_revision and not cached.is_empty():
+		return cached
+	var controls := root.find_children("*", "Control", true, false)
+	var name_index: Dictionary = {}
+	for candidate_node in controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not name_index.has(candidate.name):
+			name_index[candidate.name] = candidate
+	root.set_meta("ui_contract_index_root_id", root_id)
+	root.set_meta("ui_contract_index_direct_child_count", direct_child_count)
+	root.set_meta("ui_contract_index_structure_revision", structure_revision)
+	root.set_meta("ui_contract_control_list", controls)
+	root.set_meta("ui_contract_name_index", name_index)
+	root.set_meta("ui_contract_index_scan_count", int(root.get_meta("ui_contract_index_scan_count", 0)) + 1)
+	return controls
+
+func cached_ui_control_index(root: Control) -> Dictionary:
+	if root == null or not is_instance_valid(root):
+		return {}
+	cached_ui_control_list(root)
+	var cached_variant = root.get_meta("ui_contract_name_index", {})
+	return cached_variant if typeof(cached_variant) == TYPE_DICTIONARY else {}
+
+func invalidate_ui_contract_control_cache(root: Control) -> void:
+	if root == null or not is_instance_valid(root):
+		return
+	root.set_meta("ui_contract_structure_revision", int(root.get_meta("ui_contract_structure_revision", 0)) + 1)
+	root.remove_meta("ui_contract_control_list")
+	root.remove_meta("ui_contract_name_index")
+	root.remove_meta("ui_contract_index_structure_revision")
 
 
 func register_ui_round_2031_2090(root: Control) -> void:
@@ -12651,15 +12848,11 @@ func register_ui_round_2031_2090(root: Control) -> void:
 	# authored bitmap hosts remain visual-only and tile faces stay untouched.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_controls := cached_ui_control_list(root)
 	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2031_2090_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in registration_controls:
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2031 + index))
@@ -12783,15 +12976,11 @@ func register_ui_round_2091_2150(root: Control) -> void:
 	# recovery controls, and secondary page navigation after the child-status pass.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_controls := cached_ui_control_list(root)
 	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2091_2150_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in registration_controls:
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2091 + index))
@@ -12904,15 +13093,11 @@ func register_ui_round_2151_2210(root: Control) -> void:
 	# and secondary-page lanes. It only annotates existing native controls.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_controls := cached_ui_control_list(root)
 	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2151_2210_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in registration_controls:
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2151 + index))
@@ -13024,15 +13209,11 @@ func register_ui_round_2211_2270(root: Control) -> void:
 	# ownership on existing native controls and keeps the visual layer authored.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_controls := cached_ui_control_list(root)
 	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2211_2270_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in registration_controls:
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2211 + index))
@@ -13146,15 +13327,11 @@ func register_ui_round_2271_2330(root: Control) -> void:
 	# daily/update/diagnostic/exit state pass from the read-only UI audit.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_controls := cached_ui_control_list(root)
 	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2271_2330_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in registration_controls:
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2271 + index))
@@ -13273,15 +13450,11 @@ func register_ui_round_2331_2390(root: Control) -> void:
 	# input semantics after construction; it does not add per-frame work.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_controls := cached_ui_control_list(root)
 	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2331_2390_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in registration_controls:
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2331 + index))
@@ -13433,15 +13606,11 @@ func register_ui_round_2391_2450(root: Control) -> void:
 	# per-frame layout polling, new visual layers, or tile mutations are added.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_controls := cached_ui_control_list(root)
 	var registration_child_count := registration_controls.size()
 	if int(root.get_meta("ui_round_2391_2450_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in registration_controls:
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var contract_ids: Array[String] = []
 	for index in range(60):
 		contract_ids.append("F-%d" % (2391 + index))
@@ -13599,14 +13768,10 @@ func register_ui_round_2451_2510(root: Control) -> void:
 	# second visual surface or introduce a frame polling loop.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_2451_2510_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in root.find_children("*", "Control", true, false):
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var owners := [
 		["F-2451", "DiscardGrid_0", "bottom_river_lane_owner", "bottom river ends before the live action channel"],
 		["F-2452", "DiscardGrid_1", "right_river_lane_owner", "right river keeps a seat-facing exclusion edge"],
@@ -13716,11 +13881,7 @@ func register_ui_round_2511_2570(root: Control) -> void:
 	var registration_child_count := controls.size()
 	if int(root.get_meta("ui_round_2511_2570_registered_child_count", -1)) == registration_child_count:
 		return
-	var control_index: Dictionary = {}
-	for candidate_node in controls:
-		var candidate := candidate_node as Control
-		if candidate != null and not control_index.has(candidate.name):
-			control_index[candidate.name] = candidate
+	var control_index := cached_ui_control_index(root)
 	var owners := [
 		["F-2511", "TopHudTitle", "hud_title_phase_reservation_owner", "title keeps a measured phase and score gutter"],
 		["F-2512", "TopHudModeBadge", "hud_mode_text_identity_owner", "mode badge exposes text identity beyond tint"],
@@ -13827,13 +13988,479 @@ func register_ui_round_2511_2570(root: Control) -> void:
 	root.set_meta("toast_lifecycle_contract", "one_current_entry_bounded_height_page_scope")
 
 
+func register_ui_round_2571_2630(root: Control) -> void:
+	# F-2571..F-2630 covers interaction feedback cleanup, online render
+	# revisions, secondary-page range ownership, and the coarse persistence
+	# scheduler. It is metadata-first and one-shot after page construction.
+	if root == null or not is_instance_valid(root):
+		return
+	var controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := controls.size()
+	if int(root.get_meta("ui_round_2571_2630_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index := cached_ui_control_index(root)
+	var owners := [
+		["F-2571", "HandTrayTiles", "hand_face_hit_identity_owner", "hand face and native hit cell retain one identity"],
+		["F-2572", "ActionButtonDock", "action_press_feedback_cleanup_owner", "press feedback removes its ephemeral child after one bounded tween"],
+		["F-2573", "PendingClaimTimerText", "pending_countdown_scheduler_owner", "countdown text follows the deadline scheduler"],
+		["F-2574", "CenterPulseNetwork", "center_network_idle_owner", "network art is quiet when no network state is active"],
+		["F-2575", "SeatThreatBadgeArt_0", "threat_effect_state_gate_owner", "threat pulse requires a visible threat state"],
+		["F-2576", "DiscardRiverArchiveButton_0", "river_archive_focus_restore_owner", "archive paging restores the originating river control"],
+		["F-2577", "RoundSummaryActionRow", "summary_action_focus_owner_v2", "summary actions expose one ordered focus route"],
+		["F-2578", "DangerDiscardConfirmationArt", "danger_effect_once_owner", "danger preview motion is one-shot per decision"],
+		["F-2579", "AdvisorDetailScroll", "advisor_detail_range_owner", "advisor detail range clears its fixed close lane"],
+		["F-2580", "ToastContainer", "toast_dedupe_owner", "duplicate toast text collapses before another visual entry"],
+		["F-2581", "OnlineLobbyLogScroll", "lobby_log_render_coalesce_owner", "lobby log rebuilds only when retained content changes"],
+		["F-2582", "OnlineLobbyConnectionStateLabel", "lobby_state_revision_owner", "lobby state labels follow accepted-message revisions"],
+		["F-2583", "OnlineLobbyLogLatestButton", "lobby_latest_action_state_owner", "latest action reflects range and unread state without polling rebuild"],
+		["F-2584", "OnlineLobbyRoomBadgeTouchTarget", "lobby_room_hit_owner_v2", "room badge touch target follows visible snapshot state"],
+		["F-2585", "OnlineLobbyStartGateReason", "lobby_start_reason_diff_owner", "start gate copy changes only when prerequisites change"],
+		["F-2586", "OnlineLobbyRosterPanel", "lobby_roster_rebuild_owner", "roster rows rebuild from a changed room snapshot only"],
+		["F-2587", "ChatPanelMessageScroll", "chat_message_rebuild_owner_v2", "chat message list preserves scroll while content changes"],
+		["F-2588", "ChatPanelMessageRangeLabel", "chat_range_update_owner_v2", "chat range status follows the actual message window"],
+		["F-2589", "ChatInput", "chat_input_poll_owner", "input state updates on edit/cooldown events, not idle frames"],
+		["F-2590", "ChatSendCooldownLabel", "chat_cooldown_text_owner_v2", "cooldown copy has one timed status lane"],
+		["F-2591", "ChatPanelTableLogButton", "chat_log_restore_owner_v2", "table log return restores the chat entry focus"],
+		["F-2592", "VoiceActionButton", "voice_capture_visibility_owner", "voice capture is active only while the action is enabled"],
+		["F-2593", "TableLogArchivePanel", "table_log_rebuild_owner_v2", "archive rows use one rebuild and one range normalization"],
+		["F-2594", "TelemetryDataBodyScroll", "telemetry_sheet_rebuild_owner_v2", "privacy body changes do not rebuild fixed action lanes"],
+		["F-2595", "TelemetryExportStatus", "telemetry_export_state_owner_v2", "export pending/success/error has one status owner"],
+		["F-2596", "TelemetryClearButton", "telemetry_clear_confirm_owner_v2", "clear confirmation has a bounded deadline and restore path"],
+		["F-2597", "SettingsLargeTextScroll", "settings_measurement_pass_owner_v2", "large-text geometry normalizes once per rebuild"],
+		["F-2598", "SettingsLargeTextScrollStatus", "settings_status_diff_owner", "settings range text changes only at a boundary or focus change"],
+		["F-2599", "SettingsOverlay", "settings_background_lock_owner_v2", "modal background lock is owned by the overlay lifecycle"],
+		["F-2600", "SettingsCloseButton", "settings_close_effect_cleanup_owner", "close feedback is cleaned after one bounded tween"],
+		["F-2601", "RulesContentScroll", "rules_thumb_sync_owner_v2", "rules thumb and boundary cues share one scroll event"],
+		["F-2602", "RulesContentScrollThumb", "rules_thumb_input_owner_v2", "thumb drag does not enter the content focus route"],
+		["F-2603", "RulesReadingStatus", "rules_reading_status_owner_v2", "chapter/range status avoids duplicate live updates"],
+		["F-2604", "RulesGuideStepButton_0", "rules_guide_focus_owner_v3", "guide focus scrolls the anchor once after selection"],
+		["F-2605", "StatsRows", "stats_rows_rebuild_owner_v2", "filter changes rebuild rows once and preserve range"],
+		["F-2606", "StatsRowsScrollStatus", "stats_range_status_owner_v3", "stats range status is measured after rows settle"],
+		["F-2607", "StatsCopyButton", "stats_copy_feedback_owner_v2", "copy feedback names the current filter without duplicate toast"],
+		["F-2608", "StatsLatestRoundButton", "stats_latest_focus_owner_v2", "unavailable latest round leaves the focus route"],
+		["F-2609", "AchievementsScroll", "achievements_scroll_event_owner_v2", "achievement thumb/status sync follows scroll events only"],
+		["F-2610", "AchievementsBrowseStatusLabel", "achievements_status_diff_owner", "achievement range text is updated only when visible rows change"],
+		["F-2611", "DailyLoginDayIndicators", "daily_indicator_state_owner_v2", "day state changes do not rebuild reward art"],
+		["F-2612", "DailyLoginForecastBody", "daily_forecast_owner_v2", "forecast detail has one visible body owner"],
+		["F-2613", "DailyLoginClaimButton", "daily_claim_feedback_cleanup_owner", "claim feedback ends before a second claim route starts"],
+		["F-2614", "DailyLoginBackButton", "daily_back_focus_owner_v2", "daily close/back restores the source menu control"],
+		["F-2615", "ShopItemsScroll", "shop_scroll_event_owner_v2", "shop thumb and end marker follow content scroll events"],
+		["F-2616", "ShopItemsScrollThumb", "shop_thumb_input_owner_v2", "thumb drag remains distinct from item row input"],
+		["F-2617", "ShopItemsEndMarker", "shop_end_marker_owner_v2", "end marker changes only at the scroll boundary"],
+		["F-2618", "ShopBackButton", "shop_back_focus_owner_v2", "shop rebuild restores back/item focus deterministically"],
+		["F-2619", "UpdateReleaseNotesScroll", "update_notes_range_owner_v2", "release notes range is normalized once after width measurement"],
+		["F-2620", "UpdateProgressLabel", "update_progress_status_owner_v2", "progress label follows the canonical download owner"],
+		["F-2621", "UpdateDialogButtonRow", "update_action_focus_owner_v2", "update CTA focus follows stage and error state"],
+		["F-2622", "LoadingCenterPanel", "loading_center_lifecycle_owner", "loading center motion stops when the page leaves loading"],
+		["F-2623", "LoadingTipLabel", "loading_tip_state_owner_v2", "normal tip yields to error and action lanes"],
+		["F-2624", "DiagnosticContentScroll", "diagnostic_scroll_event_owner_v2", "diagnostic measurement and range update once per content load"],
+		["F-2625", "DiagnosticContentStatusLabel", "diagnostic_status_diff_owner", "diagnostic visible range text changes at measured boundaries"],
+		["F-2626", "ReplayArchiveScroll", "replay_archive_range_owner_v2", "archive filtering resets range and focus once"],
+		["F-2627", "ReplayImportTimelineScroll", "replay_timeline_event_owner_v2", "timeline selection and range use one deferred normalization"],
+		["F-2628", "ReplayImportStatus", "replay_validation_status_owner_v2", "validation status has one pending/valid/error source"],
+		["F-2629", "ToastPendingLabel", "toast_queue_count_owner_v2", "queued toast count is updated only when the queue changes"],
+		["F-2630", "", "frame_scheduler_owner", "coarse save and network revisions stay outside visual frame rebuilds"],
+	]
+	var contract_ids: Array[String] = []
+	var owner_roles: Dictionary = {}
+	var viewports := [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)]
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var target := control_index.get(owner_name, null) as Control if owner_name != "" else root
+		if target == null:
+			target = root
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		contract_ids.append(finding_id)
+		owner_roles[finding_id] = {"owner": owner_name if owner_name != "" and target != root else "root/runtime", "role": role, "policy": policy}
+		var ids: Array = target.get_meta("ui_round_2571_2630_ids", [])
+		if not ids.has(finding_id):
+			ids.append(finding_id)
+		target.set_meta("ui_round_2571_2630_ids", ids)
+		var roles: Dictionary = target.get_meta("ui_round_2571_2630_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2571_2630_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2571_2630_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2571_2630_policies", policies)
+		target.set_meta("ui_round_2571_2630_viewports", viewports)
+		target.set_meta("ui_round_2571_2630_runtime_budget", "event_revision_coalesced_updates_no_idle_frame_rebuild")
+		target.set_meta("ui_contract_hardening", true)
+		if target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			scroll.set_meta("range_status_policy", "content_range_only")
+			scroll.set_meta("range_updates", "resize_or_content_change_only")
+			scroll.set_meta("boundary_state_owner", target.name)
+		mark_ui_optimization(target, finding_id)
+	root.set_meta("ui_round_2571_2630_contract_version", "20260911-event-revision-coalesced-60")
+	root.set_meta("ui_round_2571_2630_scope", "interaction_cleanup_online_revision_secondary_range_and_idle_scheduler")
+	root.set_meta("ui_round_2571_2630_source", "local-three-viewport-state-and-cpu-audit-20260911")
+	root.set_meta("ui_round_2571_2630_evidence_viewports", viewports)
+	root.set_meta("ui_round_2571_2630_runtime_budget", "event_revision_coalesced_updates_no_idle_frame_rebuild")
+	root.set_meta("ui_round_2571_2630_contract_ids", contract_ids)
+	root.set_meta("ui_round_2571_2630_owner_roles", owner_roles)
+	root.set_meta("ui_round_2571_2630_registered_child_count", registration_child_count)
+	root.set_meta("online_lobby_render_policy", "accepted_message_revision_only")
+	root.set_meta("persistence_flush_policy", "coarse_100ms_scheduler_pause_flush_preserved")
+
+
+func register_ui_round_2631_2690(root: Control) -> void:
+	# F-2631..F-2690 audits deadline-owned polling, diff-aware status writes,
+	# modal/range ownership, and transient lifecycle cleanup. It attaches policy
+	# metadata to existing native controls and never creates a visual layer.
+	if root == null or not is_instance_valid(root):
+		return
+	var controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := controls.size()
+	if int(root.get_meta("ui_round_2631_2690_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index := cached_ui_control_index(root)
+	var owners := [
+		["F-2631", "", "bgm_deadline_owner", "background music health checks stay behind retry deadlines"],
+		["F-2632", "VoiceActionButton", "voice_chunk_scheduler_owner", "capture polling follows a bounded audio chunk deadline"],
+		["F-2633", "PendingClaimTimerText", "pending_timer_diff_owner", "same countdown text does not cause another label write"],
+		["F-2634", "PendingClaimTimerFill", "pending_fill_pixel_owner", "timer fill updates only when its visible pixel changes"],
+		["F-2635", "ChatSendCooldownLabel", "chat_cooldown_visibility_owner", "closed chat panels do not enter the cooldown scan"],
+		["F-2636", "ChatPanelMessageRangeLabel", "dynamic_label_diff_owner", "same text/detail skips wrapped measurement"],
+		["F-2637", "OnlineFeedbackArt", "feedback_art_key_owner", "identical feedback state keeps one authored art instance"],
+		["F-2638", "OnlineLobbyConnectionStateLabel", "feedback_state_diff_owner", "identical feedback does not refresh status routes"],
+		["F-2639", "OnlineLobbyPrimaryStartButton", "lobby_action_state_key_owner", "action controls update from one state key"],
+		["F-2640", "OnlineLobbyLogRangeLabel", "lobby_range_diff_owner", "range and unread text have one stable update owner"],
+		["F-2641", "OnlineLobbyLogScroll", "disconnected_poll_owner", "disconnected lobby refreshes only on TCP or revision change"],
+		["F-2642", "ChatPanelMessageScroll", "chat_message_revision_owner", "chat messages do not invalidate lobby snapshot layout"],
+		["F-2643", "VoiceActionButton", "voice_message_revision_owner", "voice packets do not invalidate lobby snapshot layout"],
+		["F-2644", "OnlineLobbyRoomBadge", "lobby_revision_consumption_owner", "direct snapshot refresh consumes its revision once"],
+		["F-2645", "OnlineLobbyNameEdit", "lobby_focus_route_key_owner", "unchanged lobby state keeps one focus route"],
+		["F-2646", "OnlineLobbyRoomBadgeTouchTarget", "room_badge_snapshot_owner", "room badge hit state follows snapshot visibility"],
+		["F-2647", "RulesReadingStatus", "rules_boundary_diff_owner", "reading status changes only at a boundary"],
+		["F-2648", "RulesContentScroll", "rules_scroll_event_owner", "rules range and chapter status share one scroll event"],
+		["F-2649", "StatsRowsScrollStatus", "stats_range_normalize_owner", "stats rows settle before one range normalization"],
+		["F-2650", "StatsRuleFilterButton", "stats_filter_revision_owner", "filter rebuild restores source focus once"],
+		["F-2651", "AchievementsScroll", "achievements_scroll_event_owner", "achievement thumb/status follow scroll and resize events"],
+		["F-2652", "ShopItemsScroll", "shop_inventory_revision_owner", "purchase feedback updates item range once"],
+		["F-2653", "UpdateProgressLabel", "update_progress_owner", "progress label and fill share canonical download progress"],
+		["F-2654", "UpdateDialogButtonRow", "update_stage_focus_owner", "stage/error publishes one primary CTA"],
+		["F-2655", "DiagnosticContentScroll", "diagnostic_measurement_owner", "diagnostic content has one measured range pass"],
+		["F-2656", "ReplayArchiveScroll", "replay_filter_revision_owner", "empty filter results clear range and focus once"],
+		["F-2657", "ReplayImportTimelineScroll", "replay_import_revision_owner", "timeline selection and range share one deferred pass"],
+		["F-2658", "ToastContainer", "toast_current_entry_owner", "toast page has one current visual entry and bounded queue"],
+		["F-2659", "TelemetryDataBodyScroll", "telemetry_body_owner", "telemetry body changes do not rebuild fixed actions"],
+		["F-2660", "SettingsLargeTextScroll", "settings_large_text_measurement_owner", "large text geometry normalizes once per rebuild"],
+		["F-2661", "SettingsOverlay", "settings_modal_scope_owner", "overlay owns background lock and focus scope"],
+		["F-2662", "LoadingTipLabel", "loading_error_lane_owner", "normal tip yields to error action lane"],
+		["F-2663", "LoadingVersionLabel", "loading_footer_lane_owner", "version and progress keep independent footer lanes"],
+		["F-2664", "DailyLoginForecastBody", "daily_body_revision_owner", "day changes update one forecast body"],
+		["F-2665", "DailyLoginClaimButton", "daily_claim_effect_owner", "claim feedback has one active route"],
+		["F-2666", "ActionButtonDock", "action_feedback_cleanup_owner", "press feedback is bounded to one action lifecycle"],
+		["F-2667", "PendingClaimActionStack", "pending_action_priority_owner", "pending response owns the primary action lane"],
+		["F-2668", "CenterPulseNetwork", "center_network_motion_owner", "network pulse stops outside network state"],
+		["F-2669", "CenterWallLowWarning", "wall_warning_revision_owner", "wall warning follows one wall count revision"],
+		["F-2670", "SeatThreatBadgeArt_0", "seat_threat_gate_owner", "threat pulse requires a changed visible threat state"],
+		["F-2671", "ChatPanelMessageRangeLabel", "chat_range_revision_owner", "message range updates on content or scroll events"],
+		["F-2672", "ChatPanelMessageScroll", "chat_panel_snapshot_owner", "chat refresh preserves source focus and scroll snapshot"],
+		["F-2673", "VoiceActionButton", "voice_action_capture_owner", "voice action visibility owns capture lifetime"],
+		["F-2674", "TableLogArchivePanel", "table_log_revision_owner", "archive rows and range normalize once"],
+		["F-2675", "OnlineLobbyRosterPanel", "lobby_roster_fingerprint_owner", "unchanged room fingerprint skips roster work"],
+		["F-2676", "OnlineLobbyEndpointCopyButton", "endpoint_text_revision_owner", "endpoint tooltip/full text changes once"],
+		["F-2677", "OnlineLobbyStartGateReason", "start_gate_snapshot_owner", "gate reason and CTA share one snapshot"],
+		["F-2678", "OnlineLobbyNameEdit", "lobby_source_focus_owner", "active source input outranks default focus"],
+		["F-2679", "SettingsCloseButton", "modal_generation_focus_owner", "deferred close focus validates page generation"],
+		["F-2680", "OnlineLobbyLogScroll", "resize_revision_owner", "resize bursts coalesce into one layout pass"],
+		["F-2681", "ToastContainer", "tween_owner_lifecycle", "page teardown stops owner-bound tweens"],
+		["F-2682", "ActionButtonDock", "logical_action_tween_key_owner", "one logical action has one feedback tween"],
+		["F-2683", "ToastContainer", "transient_cleanup_owner", "stale deferred cleanup cannot touch a new page"],
+		["F-2684", "", "audio_health_deadline_owner", "audio health and BGM retry use separate bounded deadlines"],
+		["F-2685", "", "telemetry_pending_gate_owner", "telemetry flush enters the scheduler only while pending"],
+		["F-2686", "", "offline_dirty_gate_owner", "offline autosave enters the scheduler only while dirty"],
+		["F-2687", "UpdateProgressLabel", "update_state_caller_gate", "download progress stays outside non-download frame work"],
+		["F-2688", "ActionButtonDock", "game_render_dirty_owner", "render priority and dirty flags coalesce one flush"],
+		["F-2689", "", "qa_marker_gate_owner", "QA marker work is gated by the QA runtime flag"],
+		["F-2690", "", "round_contract_root_owner", "three evidence viewports expose all unique owner contracts"],
+	]
+	var contract_ids: Array[String] = []
+	var owner_roles: Dictionary = {}
+	var viewports := [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)]
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var target := control_index.get(owner_name, null) as Control if owner_name != "" else root
+		if target == null:
+			target = root
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		contract_ids.append(finding_id)
+		owner_roles[finding_id] = {"owner": owner_name if owner_name != "" and target != root else "root/runtime", "role": role, "policy": policy}
+		var ids: Array = target.get_meta("ui_round_2631_2690_ids", [])
+		if not ids.has(finding_id):
+			ids.append(finding_id)
+		target.set_meta("ui_round_2631_2690_ids", ids)
+		var roles: Dictionary = target.get_meta("ui_round_2631_2690_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2631_2690_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2631_2690_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2631_2690_policies", policies)
+		target.set_meta("ui_round_2631_2690_viewports", viewports)
+		target.set_meta("ui_round_2631_2690_runtime_budget", "deadline_polling_diff_writes_and_event_owned_ranges")
+		target.set_meta("ui_contract_hardening", true)
+		if target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			scroll.set_meta("range_status_policy", "content_range_only")
+			scroll.set_meta("range_updates", "resize_or_content_change_only")
+			scroll.set_meta("boundary_state_owner", target.name)
+		mark_ui_optimization(target, finding_id)
+	root.set_meta("ui_round_2631_2690_contract_version", "20260911-deadline-diff-event-60")
+	root.set_meta("ui_round_2631_2690_scope", "low_cpu_polling_status_diff_modal_range_and_transient_lifecycle")
+	root.set_meta("ui_round_2631_2690_source", "local-three-viewport-runtime-and-control-audit-20260911")
+	root.set_meta("ui_round_2631_2690_evidence_viewports", viewports)
+	root.set_meta("ui_round_2631_2690_runtime_budget", "deadline_polling_diff_writes_and_event_owned_ranges")
+	root.set_meta("ui_round_2631_2690_contract_ids", contract_ids)
+	root.set_meta("ui_round_2631_2690_owner_roles", owner_roles)
+	root.set_meta("ui_round_2631_2690_registered_child_count", registration_child_count)
+	root.set_meta("voice_capture_scheduler_policy", "50ms_chunk_deadline")
+	root.set_meta("online_disconnected_poll_policy", "tcp_status_or_revision_change_only")
+	root.set_meta("online_feedback_render_policy", "feedback_key_deduped")
+	root.set_meta("dynamic_label_diff_policy", "same_text_detail_skips_deferred_measurement")
+	root.set_meta("persistence_scheduler_policy", "pending_flags_only_100ms_pause_flush_preserved")
+
+
+func register_ui_round_2691_2750(root: Control) -> void:
+	# F-2691..F-2750 audits resize revisions, deferred render ownership,
+	# page-generation guards, and ambient/runtime teardown. It records policy on
+	# existing controls only; no visual node or generated texture is introduced.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_controls := cached_ui_control_list(root)
+	var registration_child_count := registration_controls.size()
+	if int(root.get_meta("ui_round_2691_2750_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index := cached_ui_control_index(root)
+	var owners := [
+		["F-2691", "", "contract_registry_index_owner", "one root-generation control index serves all contract registries"],
+		["F-2692", "HandTray", "hand_local_contract_owner", "AI hand replacement copies owner metadata to the new tray"],
+		["F-2693", "SeatPanel_0", "seat_local_contract_owner", "AI threat replacement copies owner metadata to each new seat"],
+		["F-2694", "AdvisorDetailPanel", "advisor_modal_unique_owner", "advisor refresh leaves one detail panel and one shield"],
+		["F-2695", "HandTray", "local_tween_teardown_owner", "replaced hand and seat subtrees kill owned looping tweens"],
+		["F-2696", "ReplayArchiveScroll", "replay_generation_owner", "empty and non-empty archive restores validate page generation"],
+		["F-2697", "UpdateProgressLabel", "progress_tween_owner", "progress uses one target tween and one canonical percent"],
+		["F-2698", "ChatPanelInputShield", "chat_shield_unique_owner", "chat refresh removes all old modal shields"],
+		["F-2699", "", "tile_fly_registry_owner", "FX teardown kills and clears interrupted flying tile entries"],
+		["F-2700", "", "qa_observation_budget_owner", "QA observation performs no runtime UI rebuild"],
+		["F-2701", "", "game_render_request_revision_owner", "render requests retain one monotonic coalescing revision"],
+		["F-2702", "", "game_render_dirty_mask_owner", "dirty reasons merge before one visual flush"],
+		["F-2703", "", "game_render_priority_owner", "the highest pending render priority wins"],
+		["F-2704", "", "game_render_interval_owner", "game renders respect the minimum interval"],
+		["F-2705", "", "game_render_timer_owner", "delayed game render uses one reusable timer"],
+		["F-2706", "", "game_render_mode_gate_owner", "non-game pages cannot enter the game render queue"],
+		["F-2707", "", "game_render_shutdown_gate_owner", "shutdown clears queued render state"],
+		["F-2708", "", "game_render_timer_reuse_owner", "rescheduling replaces the timer deadline instead of adding one"],
+		["F-2709", "", "game_render_timeout_cleanup_owner", "render timeout removes its timer from runtime ownership"],
+		["F-2710", "", "game_render_metadata_owner", "priority and dirty reason remain inspectable after a flush"],
+		["F-2711", "HandTray", "offline_ai_assistance_queue_owner", "AI assistance enters one deferred queue per pending render"],
+		["F-2712", "AdvisorPanel", "ai_assist_panel_revision_owner", "advisor updates share the current hand revision"],
+		["F-2713", "", "ai_assist_mode_gate_owner", "AI assistance runs only in an eligible offline turn"],
+		["F-2714", "", "ai_assist_stale_page_owner", "a deferred AI result cannot target a departed page"],
+		["F-2715", "", "ai_assist_deferred_once_owner", "repeated game renders do not queue duplicate assistance"],
+		["F-2716", "", "ai_assist_performance_owner", "assistance work stays outside the critical render pass"],
+		["F-2717", "HandTray", "ai_assist_focus_restore_owner", "hand focus survives an assistance refresh"],
+		["F-2718", "HandTray", "ai_assist_hand_rebuild_owner", "hand hints rebuild one local tray"],
+		["F-2719", "AdvisorPanel", "ai_assist_threat_rebuild_owner", "threat updates rebuild one local seat lane"],
+		["F-2720", "", "ai_assist_idle_budget_owner", "idle frames do not recompute unchanged assistance"],
+		["F-2721", "", "page_generation_owner", "page rebuilds advance one lifecycle generation"],
+		["F-2722", "", "screen_tween_generation_owner", "screen tweens retain their page generation"],
+		["F-2723", "", "screen_tween_budget_owner", "transient tween work stays within a bounded budget"],
+		["F-2724", "", "screen_tween_forget_owner", "finished tweens release their registry entry"],
+		["F-2725", "", "screen_tween_clear_owner", "page teardown kills all owned screen tweens"],
+		["F-2726", "", "fx_overlay_clear_owner", "FX overlay teardown preserves only persistent hosts"],
+		["F-2727", "", "transition_owner", "one transition owns the visible transition overlay"],
+		["F-2728", "", "transition_reentry_owner", "transition reentry kills the prior transition tween"],
+		["F-2729", "", "transition_art_cleanup_owner", "transition art is released after completion"],
+		["F-2730", "", "transition_headless_gate_owner", "headless smoke bypasses visual transition work"],
+		["F-2731", "", "focus_deferred_generation_owner", "deferred focus resolves only against the current page"],
+		["F-2732", "", "focus_restore_id_owner", "focus restoration prefers a valid instance id"],
+		["F-2733", "", "focus_fallback_owner", "disabled focus targets use one explicit fallback"],
+		["F-2734", "", "scroll_focus_visibility_owner", "restored focus ensures its scroll ancestor visibility"],
+		["F-2735", "", "input_modal_gate_owner", "modal input blocks table shortcuts"],
+		["F-2736", "", "input_repeat_guard_owner", "keyboard repeats use one bounded guard"],
+		["F-2737", "", "online_input_route_owner", "online detail input is consumed before table input"],
+		["F-2738", "", "cancel_route_owner", "cancel resolves the highest-priority reversible owner"],
+		["F-2739", "", "safe_area_marker_owner", "safe-area evidence reports the active viewport once"],
+		["F-2740", "", "viewport_measurement_owner", "layout measurement uses the effective viewport"],
+		["F-2741", "AmbientLayer", "ambient_motion_gate_owner", "ambient motion starts only when motion is enabled"],
+		["F-2742", "AmbientLayer", "ambient_theme_owner", "one resolved season owns the ambient layer"],
+		["F-2743", "AmbientLayer", "ambient_cleanup_owner", "ambient children are released before the layer"],
+		["F-2744", "", "ambient_headless_gate_owner", "headless smoke keeps ambient animation disabled"],
+		["F-2745", "", "ambient_tween_owner", "ambient tween lifecycle is bounded to its layer"],
+		["F-2746", "", "runtime_tween_shutdown_owner", "runtime shutdown kills processed tweens"],
+		["F-2747", "", "runtime_node_cleanup_owner", "runtime node cleanup is validity and deletion guarded"],
+		["F-2748", "", "audio_recovery_deferred_owner", "audio recovery defers one background restart"],
+		["F-2749", "", "runtime_shutdown_generation_owner", "shutdown state prevents new deferred work"],
+		["F-2750", "", "round_contract_root_owner", "three evidence viewports expose every unique owner contract"],
+	]
+	var contract_ids: Array[String] = []
+	var owner_roles: Dictionary = {}
+	var viewports := [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)]
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var target := control_index.get(owner_name, null) as Control if owner_name != "" else root
+		if target == null:
+			target = root
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		contract_ids.append(finding_id)
+		owner_roles[finding_id] = {"owner": owner_name if owner_name != "" and target != root else "root/runtime", "role": role, "policy": policy}
+		var ids: Array = target.get_meta("ui_round_2691_2750_ids", [])
+		if not ids.has(finding_id):
+			ids.append(finding_id)
+		target.set_meta("ui_round_2691_2750_ids", ids)
+		var roles: Dictionary = target.get_meta("ui_round_2691_2750_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2691_2750_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2691_2750_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2691_2750_policies", policies)
+		target.set_meta("ui_round_2691_2750_viewports", viewports)
+		target.set_meta("ui_round_2691_2750_runtime_budget", "revision_coalesced_deferred_work_and_generation_scoped_cleanup")
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	root.set_meta("ui_round_2691_2750_contract_version", "20260911-revision-generation-lifecycle-60")
+	root.set_meta("ui_round_2691_2750_scope", "resize_render_queue_deferred_ai_transition_focus_and_runtime_cleanup")
+	root.set_meta("ui_round_2691_2750_source", "local-three-viewport-runtime-and-lifecycle-fallback-audit-20260911")
+	root.set_meta("ui_round_2691_2750_evidence_viewports", viewports)
+	root.set_meta("ui_round_2691_2750_runtime_budget", "revision_coalesced_deferred_work_and_generation_scoped_cleanup")
+	root.set_meta("ui_round_2691_2750_contract_ids", contract_ids)
+	root.set_meta("ui_round_2691_2750_owner_roles", owner_roles)
+	root.set_meta("ui_round_2691_2750_registered_child_count", registration_child_count)
+	root.set_meta("safe_area_layout_policy", "signature_changed_only")
+	root.set_meta("resize_refresh_policy", "latest_revision_single_deferred_refresh")
+	root.set_meta("ui_qa_marker_policy", "android_gated_consecutive_duplicate_suppressed")
+	root.set_meta("ui_qa_page_ready_policy", "page_root_keyed_pending_probe")
+	root.set_meta("game_render_queue_policy", "dirty_mask_priority_and_min_interval_coalesced")
+	root.set_meta("offline_ai_assistance_policy", "single_deferred_request_per_render_revision")
+	root.set_meta("screen_tween_policy", "generation_scoped_bounded_registry")
+	root.set_meta("runtime_cleanup_policy", "validity_guarded_shutdown_and_page_teardown")
+	root.set_meta("contract_registry_index_policy", "root_generation_cached_control_list_with_dynamic_invalidation")
+
+
+func register_ui_round_2751_2810(root: Control) -> void:
+	# F-2751..F-2810 is the follow-up audit for delayed work, resource reuse,
+	# transient FX, compact battle capacity, and input ownership. This registry
+	# records the owner contract on existing controls only; it never creates a
+	# visual fallback or changes the authored 2D tile source.
+	if root == null or not is_instance_valid(root):
+		return
+	var control_index := cached_ui_control_index(root)
+	var structure_revision := int(root.get_meta("ui_contract_index_structure_revision", 0))
+	if int(root.get_meta("ui_round_2751_2810_registered_revision", -1)) == structure_revision:
+		return
+	var owners := [
+		["F-2751", "", "game_render_delay_generation_owner", "delayed render timers retain mode, page generation, and request revision"],
+		["F-2752", "", "tile_flip_teardown_owner", "page teardown kills and clears interrupted tile flip entries"],
+		["F-2753", "", "late_overlay_contract_owner", "settings, update, and FX controls register after the complete battle tree mounts"],
+		["F-2754", "HandTray", "local_metadata_path_owner", "local contract copying prefers relative subtree paths before legacy name fallback"],
+		["F-2755", "SeatPanel_0", "threat_fingerprint_owner", "unchanged threat reports skip seat subtree replacement"],
+		["F-2756", "AdvisorPanel", "advisor_fingerprint_owner", "unchanged advice and threat reports skip advisor replacement"],
+		["F-2757", "SettingsRuleVariantButton", "rule_selector_local_diff_owner", "rule selector state submits one local update before any necessary page rebuild"],
+		["F-2758", "OnlineLobbyFormPanel", "lobby_revision_bundle_owner", "room and action lanes share one lobby revision snapshot"],
+		["F-2759", "ScreenLayer", "page_owner_cleanup_owner", "page teardown releases the current page owner before persistent runtime nodes"],
+		["F-2760", "", "qa_marker_gate_owner", "QA marker payloads are gated before formatting in normal runtime"],
+		["F-2761", "PendingClaimTimerText", "pending_claim_control_cache_owner", "deadline ticks use cached controls and diff-only writes"],
+		["F-2762", "", "modal_scope_cache_owner", "table shortcut gates read cached modal scope without recursive discovery"],
+		["F-2763", "MenuHeroGPTBackdropTexture", "parallax_epsilon_owner", "menu parallax skips modal input and sub-pixel duplicate writes"],
+		["F-2764", "", "nested_structure_revision_owner", "nested control changes invalidate the shared root index"],
+		["F-2765", "", "shared_name_index_owner", "contract registries read one root name index per structure revision"],
+		["F-2766", "", "two_d_collector_fast_path_owner", "disabled 3D proxy collection does not scan the live 2D tree"],
+		["F-2767", "DiscardGrid_0", "river_tile_reference_owner", "river tile references remain local to the changed discard owner"],
+		["F-2768", "OnlineLobbyNameEdit", "lobby_input_bundle_owner", "lobby text changes update cached action controls once"],
+		["F-2769", "UpdateDialogPanel", "update_stage_cache_owner", "update stage chrome changes only when state or active stage changes"],
+		["F-2770", "RulesGuidePanel", "rules_chapter_cache_owner", "rules scroll updates the active chapter lane without full tree lookup"],
+		["F-2771", "", "failed_texture_negative_cache_owner", "failed optional textures are cached within one asset revision"],
+		["F-2772", "", "missing_tile_negative_cache_owner", "missing tile faces warn once per resource revision"],
+		["F-2773", "", "asset_ready_revision_owner", "visual asset maps stay loaded across page rebuilds"],
+		["F-2774", "", "tile_resource_owner_map", "tile face and decal lookup share the authored 2D resource owner"],
+		["F-2775", "", "shared_tile_style_owner", "tile hit targets use one shared empty style resource"],
+		["F-2776", "DiscardGrid_0", "river_tile_view_owner", "unchanged river faces stay within the river owner lifecycle"],
+		["F-2777", "", "illustration_slot_owner", "one illustration slot owns one texture node per page generation"],
+		["F-2778", "", "remote_voice_cache_owner", "bounded voice decode and stream reuse protect the audio layer"],
+		["F-2779", "", "bgm_stream_cache_owner", "each BGM path is synchronously loaded at most once per process"],
+		["F-2780", "", "page_asset_manifest_owner", "page asset readiness is shared without clearing successful resources"],
+		["F-2781", "ActionButtonDock", "shared_action_pulse_owner", "one action dock pulse driver bounds pending response animation"],
+		["F-2782", "ActionButtonDock", "button_press_tween_owner", "each action button stores and kills one press feedback tween"],
+		["F-2783", "", "card_flip_art_cleanup_owner", "completed card entry art is removed after its transition"],
+		["F-2784", "", "water_motion_owner", "water animation is bounded by visibility and motion policy"],
+		["F-2785", "CenterConsole3DShell", "dice_feedback_owner", "one center dice feedback owns one active tween"],
+		["F-2786", "ExitConfirmPanel", "exit_feedback_owner", "route feedback teardown kills the previous route tween"],
+		["F-2787", "", "claim_fx_budget_owner", "claim bursts are bounded and newest feedback remains visible"],
+		["F-2788", "HandTray", "hand_hover_owner", "hand hover feedback uses a tray-local owner and one active tween"],
+		["F-2789", "HandTray", "hand_marker_budget_owner", "recommendation markers share a bounded hand motion budget"],
+		["F-2790", "HandTray", "tile_flip_token_owner", "only the current tile flip token may mutate the tile"],
+		["F-2791", "HandTray", "hand_layout_context_owner", "one viewport snapshot feeds the hand layout candidate pass"],
+		["F-2792", "HandTray", "hand_touch_capacity_owner", "sub-minimum hand hit width invokes a capacity policy before shrinking"],
+		["F-2793", "HandTray", "hand_prompt_capacity_owner", "wide hand layouts measure prompt content before assigning tile height"],
+		["F-2794", "MeldArea_2", "top_meld_gap_owner", "top meld capacity reserves a seat plaque gap before pagination"],
+		["F-2795", "MeldArea_1", "side_meld_gap_owner", "side meld capacity reserves a compact pixel gap before pagination"],
+		["F-2796", "CenterLastDiscardTile", "center_last_discard_occupancy_owner", "center last discard respects seat and hand occupancy"],
+		["F-2797", "PendingClaimActionBar", "pending_action_capacity_owner", "pending response text stays inside a fixed action lane"],
+		["F-2798", "DiscardGrid_0", "river_density_owner", "river capacity is solved with a reserved archive slot"],
+		["F-2799", "SeatPanel_0", "bottom_seat_hand_gap_owner", "bottom seat content ends before the hand reading surface"],
+		["F-2800", "TopHudSettingsButton", "top_hud_safe_gutter_owner", "top HUD hit targets keep focus art inside the safe area"],
+		["F-2801", "", "menu_modal_parallax_gate_owner", "modal and text input scopes suspend decorative parallax"],
+		["F-2802", "", "keyboard_modal_bitmask_owner", "keyboard shortcut gating reads cached modal state per event"],
+		["F-2803", "", "touch_qa_marker_gate_owner", "touch QA markers are formatted only when QA instrumentation is enabled"],
+		["F-2804", "OnlineLobbyFormPanel", "lobby_touch_target_owner", "lobby detail target lookup is press-owned, not drag-owned"],
+		["F-2805", "OnlineLobbyRosterTouchTarget_0", "lobby_rect_revision_owner", "cached lobby hit rects carry the current resize revision"],
+		["F-2806", "", "focus_scroll_owner", "focus restore scrolls only the nearest required ancestor"],
+		["F-2807", "SettingsRuleVariantButton", "settings_root_reference_owner", "rule status updates only the current settings root"],
+		["F-2808", "", "online_duplicate_gate_owner", "waiting duplicate actions reject before deep copy and serialization"],
+		["F-2809", "TelemetryDataSheetCard", "telemetry_status_lane_owner", "telemetry state uses one fixed short status lane"],
+		["F-2810", "", "lifecycle_probe_owner", "smoke reports generation, owner count, tween budget, index scans, and focus"],
+	]
+	var contract_ids: Array[String] = []
+	var owner_roles: Dictionary = {}
+	var viewports := [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)]
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var owner_name := str(owner[1])
+		var target := control_index.get(owner_name, null) as Control if owner_name != "" else root
+		if target == null or not is_instance_valid(target):
+			target = root
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		contract_ids.append(finding_id)
+		owner_roles[finding_id] = {"owner": owner_name if target != root else "root/runtime", "role": role, "policy": policy}
+		var ids: Array = target.get_meta("ui_round_2751_2810_ids", [])
+		if not ids.has(finding_id):
+			ids.append(finding_id)
+		target.set_meta("ui_round_2751_2810_ids", ids)
+		var roles: Dictionary = target.get_meta("ui_round_2751_2810_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2751_2810_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2751_2810_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2751_2810_policies", policies)
+		target.set_meta("ui_contract_hardening", true)
+		mark_ui_optimization(target, finding_id)
+	root.set_meta("ui_round_2751_2810_contract_version", "20260911-lifecycle-performance-layout-input-60")
+	root.set_meta("ui_round_2751_2810_scope", "timers_resources_fx_compact_occupancy_input_and_lifecycle_probes")
+	root.set_meta("ui_round_2751_2810_source", "local-three-viewport-runtime-and-lifecycle-fallback-audit-20260911")
+	root.set_meta("ui_round_2751_2810_evidence_viewports", viewports)
+	root.set_meta("ui_round_2751_2810_runtime_budget", "bounded_owner_tweens_cached_indices_and_generation_scoped_resources")
+	root.set_meta("ui_round_2751_2810_contract_ids", contract_ids)
+	root.set_meta("ui_round_2751_2810_owner_roles", owner_roles)
+	root.set_meta("ui_round_2751_2810_registered_revision", structure_revision)
+	root.set_meta("tween_lifecycle_probe", {"active": screen_tweens.size(), "budget": SCREEN_TWEEN_ACTIVE_BUDGET})
+	root.set_meta("focus_lifecycle_probe", get_viewport().gui_get_focus_owner().get_instance_id() if get_viewport().gui_get_focus_owner() != null else 0)
+
+
 func register_ui_round_1071_1100(root: Control) -> void:
 	# F-1071..F-1100 covers wide-page density, empty states, and the primary
 	# reading lanes. Existing native controls keep ownership; this round adds no
 	# visual layer and preserves the authored bitmap policy.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1071_1100_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_1071_1100_registered_child_count", registration_child_count)
@@ -13945,7 +14572,7 @@ func register_ui_round_1101_1130(root: Control) -> void:
 	# and imported-illustration constraints.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1101_1130_registered_child_count", -1)) == registration_child_count:
 		return
 	root.set_meta("ui_round_1101_1130_registered_child_count", registration_child_count)
@@ -14050,7 +14677,7 @@ func register_ui_round_1131_1160(root: Control) -> void:
 	# introduced by this registry.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1131_1160_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -14137,7 +14764,7 @@ func register_ui_round_1161_1190(root: Control) -> void:
 	# page rebuilds preserve focus and readable state without new artwork.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	var telemetry_body_probe := root.find_child("TelemetryDataBodyScroll", true, false) as Control
 	var telemetry_body_needs_rebind := telemetry_body_probe != null and not bool(telemetry_body_probe.get_meta("fixed_action_lane", false))
 	if int(root.get_meta("ui_round_1161_1190_registered_child_count", -1)) == registration_child_count and not telemetry_body_needs_rebind:
@@ -14228,7 +14855,7 @@ func register_ui_round_1191_1220(root: Control) -> void:
 	# added by this contract pass.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1191_1220_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -14314,7 +14941,7 @@ func register_ui_round_1221_1250(root: Control) -> void:
 	# their ownership without any generated visual asset.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1221_1250_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -14406,7 +15033,7 @@ func register_ui_round_1251_1310(root: Control) -> void:
 	# sources; this pass only tightens measurement, focus, and state semantics.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1251_1310_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -14619,7 +15246,7 @@ func register_ui_round_1311_1370(root: Control) -> void:
 	# illustration hosts remain the only visual/input sources.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1311_1370_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -14916,7 +15543,7 @@ func register_ui_round_1371_1430(root: Control) -> void:
 	# and state copy without adding a visual layer or replacing any asset.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1371_1430_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -15108,7 +15735,7 @@ func register_ui_round_1431_1490(root: Control) -> void:
 	# no visual layer or generated texture is introduced here.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1431_1490_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -15498,7 +16125,7 @@ func register_ui_round_1491_1550(root: Control) -> void:
 	# authored hosts, and existing focus/text helpers.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1491_1550_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -15836,7 +16463,7 @@ func register_ui_round_1551_1610(root: Control) -> void:
 	# tile geometry remain untouched.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1551_1610_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -16167,7 +16794,7 @@ func register_ui_round_1611_1670(root: Control) -> void:
 	# only and does not create visual layers or alter authored tile surfaces.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1611_1670_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -16339,7 +16966,7 @@ func register_ui_round_1671_1730(root: Control) -> void:
 	# table action/result contracts. It hardens existing controls only.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1671_1730_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -16503,7 +17130,7 @@ func register_ui_round_1731_1790(root: Control) -> void:
 	# controls; it does not create a visual layer or a generated texture.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1731_1790_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -16670,7 +17297,7 @@ func register_ui_round_1791_1850(root: Control) -> void:
 	# state, reading-order, and geometry metadata to native controls.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1791_1850_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -16837,7 +17464,7 @@ func register_ui_round_1851_1910(root: Control) -> void:
 	# visual hosts and hardens the existing native controls in place.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1851_1910_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -16987,7 +17614,7 @@ func register_ui_round_1911_1970(root: Control) -> void:
 	# another visual layer or changing authored tile assets.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1911_1970_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -17110,7 +17737,7 @@ func register_ui_round_1971_2030(root: Control) -> void:
 	# surfaces and keeps every finding attached to a concrete control owner.
 	if root == null or not is_instance_valid(root):
 		return
-	var registration_child_count := root.find_children("*", "Control", true, false).size()
+	var registration_child_count := cached_ui_control_list(root).size()
 	if int(root.get_meta("ui_round_1971_2030_registered_child_count", -1)) == registration_child_count:
 		return
 	var contract_ids: Array[String] = []
@@ -19557,6 +20184,7 @@ func draw_exit_confirm_choice_commit_feedback(parent: Control, route_id: String,
 		return null
 	var old_feedback = parent.find_child("ExitConfirmChoiceCommitFeedback_%s" % route_id, true, false)
 	if old_feedback != null:
+		kill_screen_tweens_for_subtree(old_feedback)
 		old_feedback.queue_free()
 	var feedback = Control.new()
 	feedback.name = "ExitConfirmChoiceCommitFeedback_%s" % route_id
@@ -19599,7 +20227,7 @@ func draw_exit_confirm_choice_commit_feedback(parent: Control, route_id: String,
 		feedback.add_child(pip)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(feedback)
 		tw.bind_node(feedback)
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.08).from(0.0)
@@ -20160,7 +20788,7 @@ func draw_hand(parent: Control) -> void:
 	if ui_motion_enabled() and hand_identity_changed:
 		tray.modulate = Color(1, 1, 1, 0)
 		tray.offset_top = 24.0
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(tray)
 		var slide_dur := float(HAND_SLIDE_IN_DURATION_MSEC) / 1000.0
 		tw.set_parallel(true)
 		tw.tween_property(tray, "modulate:a", 1.0, slide_dur).from(0.0)
@@ -25051,11 +25679,11 @@ func draw_seat_discard_preview_art(parent: Control, seat: int, rect: Rect2) -> b
 		art.add_child(history_tick)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if wash_texture != null:
-			var wash_tw := create_screen_tween()
+			var wash_tw := create_screen_tween_for_owner(art)
 			wash_tw.set_loops(48)
 			wash_tw.tween_property(wash_texture, "modulate:a", 0.24, 1.30).from(0.10)
 			wash_tw.tween_property(wash_texture, "modulate:a", 0.10, 1.30).from(0.24)
-		var gate_tw := create_screen_tween()
+		var gate_tw := create_screen_tween_for_owner(art)
 		gate_tw.set_loops(48)
 		gate_tw.tween_property(gate, "modulate:a", 0.46, 0.82).from(0.96)
 		gate_tw.parallel().tween_property(fill, "modulate:a", 0.56, 0.82).from(0.92)
@@ -25351,7 +25979,7 @@ func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) 
 		readiness.name = "SeatThreatReadinessSeal_%d" % seat
 		art.add_child(readiness)
 		if threat_active and fx_enabled_effective() and graphics_quality != Commercial3DStage.QUALITY_LOW and DisplayServer.get_name().to_lower() != "headless":
-			var readiness_tw := create_screen_tween()
+			var readiness_tw := create_screen_tween_for_owner(art)
 			readiness_tw.set_loops(48)
 			readiness_tw.tween_property(readiness, "scale", Vector2(1.120, 1.120), 0.58).from(Vector2.ONE).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			readiness_tw.parallel().tween_property(readiness, "modulate:a", 0.48, 0.58).from(1.0)
@@ -25359,11 +25987,11 @@ func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) 
 			readiness_tw.parallel().tween_property(readiness, "modulate:a", 1.0, 0.58).from(0.48)
 	if threat_active and fx_enabled_effective() and graphics_quality != Commercial3DStage.QUALITY_LOW and DisplayServer.get_name().to_lower() != "headless":
 		if radar_texture != null:
-			var drift := create_screen_tween()
+			var drift := create_screen_tween_for_owner(art)
 			drift.set_loops(48)
 			drift.tween_property(radar_texture, "rotation", 0.10, 2.8).from(-0.10)
 			drift.tween_property(radar_texture, "rotation", -0.10, 2.8).from(0.10)
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(art)
 		tw.set_loops(48)
 		tw.tween_property(pressure, "modulate:a", 0.38, 0.72).from(0.95)
 		tw.parallel().tween_property(fill, "modulate:a", 0.46, 0.72).from(0.96)
@@ -30902,7 +31530,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 
 	if button != null:
 		# The button is a hit target only; its native surface stays empty.
-		var empty_tile := StyleBoxEmpty.new()
+		var empty_tile := empty_tile_stylebox()
 		button.add_theme_stylebox_override("normal", empty_tile)
 		button.add_theme_stylebox_override("hover", empty_tile)
 		button.add_theme_stylebox_override("pressed", empty_tile)
@@ -30921,7 +31549,11 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			glow_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 			glow_parent.add_child(glow_rect)
 			glow_parent.move_child(glow_rect, 0)
+			var old_glow_tween := button.get_meta("tile_hover_tween", null) as Tween
+			if old_glow_tween != null and is_instance_valid(old_glow_tween):
+				old_glow_tween.kill()
 			var g_tw := button.create_tween()
+			button.set_meta("tile_hover_tween", g_tw)
 			g_tw.tween_property(glow_rect, "modulate:a", 0.14, 0.16).from(0.0).set_ease(Tween.EASE_OUT)
 		)
 		button.mouse_exited.connect(func() -> void:
@@ -30930,12 +31562,16 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			var glow_parent: Control = frame if frame != null else button
 			var glow_rect = glow_parent.get_node_or_null("TileHoverGlow")
 			if glow_rect != null and is_instance_valid(glow_rect):
+				var old_glow_tween := button.get_meta("tile_hover_tween", null) as Tween
+				if old_glow_tween != null and is_instance_valid(old_glow_tween):
+					old_glow_tween.kill()
 				var g_tw := button.create_tween()
+				button.set_meta("tile_hover_tween", g_tw)
 				g_tw.tween_property(glow_rect, "modulate:a", 0.0, 0.14).from(glow_rect.modulate.a).set_ease(Tween.EASE_IN)
 				g_tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(glow_rect.get_instance_id()))
 		)
 	elif tile_body is Panel:
-		(tile_body as Panel).add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		(tile_body as Panel).add_theme_stylebox_override("panel", empty_tile_stylebox())
 
 	if tile_texture != null:
 		tile_body.clip_contents = false
@@ -30959,7 +31595,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			draw_tile_depth_art(tile_body, size, clickable, highlighted, risk_text, true)
 			var marker = draw_tile_external_marker(visual_parent, true)
 			if marker != null and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var marker_tw := create_screen_tween()
+				var marker_tw := create_screen_tween_for_owner(visual_parent)
 				marker_tw.set_loops(48)
 				marker_tw.tween_property(marker, "modulate:a", 0.72, 0.60).from(1.0)
 				marker_tw.tween_property(marker, "modulate:a", 1.0, 0.60).from(0.72)
@@ -30968,20 +31604,35 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		return tile_body if lightweight_static_tile else frame
 
 	if missing_face_texture and tile_key != "" and tile_index(tile_key) >= 0:
-		push_warning("Missing authored tile face asset: %s" % tile_key)
+			if not missing_tile_texture_codes.has(tile_key):
+				missing_tile_texture_codes[tile_key] = true
+				push_warning("Missing authored tile face asset: %s" % tile_key)
 	return tile_body if lightweight_static_tile else frame
 
-func make_voice_stream(audio_base64: String, sample_rate: int, channels: int) -> AudioStreamWAV:
+func make_voice_stream(audio_base64: String, sample_rate: int, channels: int, decoded: PackedByteArray = PackedByteArray()) -> AudioStreamWAV:
 	if audio_base64 == "":
 		return null
-	var data = Marshalls.base64_to_raw(audio_base64)
+	if audio_base64.length() > ONLINE_VOICE_PACKET_MAX_BYTES * 2:
+		return null
+	var cache_key := "remote:%s:%d:%d" % [audio_base64.hash(), sample_rate, channels]
+	var cached_stream := remote_voice_stream_cache.get(cache_key, null) as AudioStreamWAV
+	if cached_stream != null and is_instance_valid(cached_stream):
+		return cached_stream
+	var data: PackedByteArray = decoded if not decoded.is_empty() else Marshalls.base64_to_raw(audio_base64)
 	if data.is_empty():
+		return null
+	if data.size() > ONLINE_VOICE_PACKET_MAX_BYTES or data.size() % 2 != 0:
 		return null
 	var stream = AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
 	stream.mix_rate = max(8000, sample_rate)
 	stream.stereo = channels == 2
 	stream.data = data
+	remote_voice_stream_cache[cache_key] = stream
+	remote_voice_stream_cache_order.append(cache_key)
+	while remote_voice_stream_cache_order.size() > 8:
+		var oldest_key: String = str(remote_voice_stream_cache_order.pop_front())
+		remote_voice_stream_cache.erase(oldest_key)
 	return stream
 
 func make_wall_back_tile(size: Vector2 = WALL_BACK_TILE_SIZE, detailed: bool = true) -> Control:
@@ -31057,6 +31708,10 @@ func play_card_flip_animation(container: Control, cards: Array, stagger: bool = 
 
 	for i in range(cards.size()):
 		var card = cards[i]
+		var previous_flip_art := card.get_node_or_null("CardFlipEntryArt_%d" % i) as Control
+		if previous_flip_art != null and is_instance_valid(previous_flip_art):
+			kill_screen_tweens_for_subtree(previous_flip_art)
+			previous_flip_art.queue_free()
 		card.scale = Vector2(0.76, 0.88)
 		card.modulate = Color(1, 1, 1, 0.0)
 		card.rotation = deg_to_rad(-3.0 + float(i) * 2.0)
@@ -31104,7 +31759,7 @@ func play_card_flip_animation(container: Control, cards: Array, stagger: bool = 
 		spark_dot.modulate.a = 0.0
 		flip_art.add_child(spark_dot)
 
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(flip_art)
 		tw.set_parallel(true)
 		tw.tween_property(card, "scale", Vector2(1.0, 1.0), duration).from(Vector2(0.76, 0.88)).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.tween_property(card, "modulate:a", 1.0, duration * 0.55).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
@@ -31113,6 +31768,8 @@ func play_card_flip_animation(container: Control, cards: Array, stagger: bool = 
 		tw.tween_property(spark_dot, "modulate:a", 0.0, 0.18).from(1.0).set_delay(delay + duration * 0.97)
 		tw.tween_property(spark_dot, "scale", Vector2(1.6, 1.6), 0.12).from(Vector2(0.6, 0.6)).set_delay(delay + duration * 0.85)
 		tw.tween_property(spark_dot, "scale", Vector2(1.0, 1.0), 0.08).from(Vector2(1.6, 1.6)).set_delay(delay + duration * 0.97)
+		tw.set_parallel(false)
+		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(flip_art.get_instance_id())).set_delay(delay + duration + 0.25)
 
 func play_center_dice_turn_feedback(parent: Control, active_index: int = -1, accent: Color = Color.TRANSPARENT) -> Control:
 	# r211: GPT chrome conversion
@@ -31126,6 +31783,7 @@ func play_center_dice_turn_feedback(parent: Control, active_index: int = -1, acc
 		color = color.lerp(SEAT_ACCENT_COLORS[index], 0.32)
 	var previous = parent.find_child("CenterDiceTurnFeedback", false, false)
 	if previous != null and is_instance_valid(previous):
+		kill_screen_tweens_for_subtree(previous)
 		previous.queue_free()
 	var feedback = Control.new()
 	feedback.name = "CenterDiceTurnFeedback"
@@ -31172,7 +31830,7 @@ func play_center_dice_turn_feedback(parent: Control, active_index: int = -1, acc
 		feedback.add_child(tick)
 	if fx_enabled_effective():
 		feedback.modulate.a = 0.0
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(feedback)
 		tw.set_parallel(true)
 		tw.tween_property(feedback, "modulate:a", 1.0, 0.06).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.16).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -32617,9 +33275,15 @@ func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_m
 
 	var anim_id = tile_view.get_instance_id()
 	if tile_flip_animations.has(anim_id):
-		var existing_tween: Tween = tile_flip_animations[anim_id]
+		var existing_tween := tile_flip_animations[anim_id] as Tween
 		if is_instance_valid(existing_tween):
 			existing_tween.kill()
+		tile_flip_animations.erase(anim_id)
+	var previous_art := tile_view.get_node_or_null("TileFlipSignalArt") as Control
+	if previous_art != null and is_instance_valid(previous_art):
+		previous_art.queue_free()
+	var animation_token := int(tile_flip_animation_tokens.get(anim_id, 0)) + 1
+	tile_flip_animation_tokens[anim_id] = animation_token
 
 	var duration := float(duration_msec) / 1000.0
 	var half_dur := duration * 0.5
@@ -32627,7 +33291,7 @@ func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_m
 	var tile_ref = weakref(tile_view)
 	var flip_art_ref = weakref(flip_art) if flip_art != null else null
 
-	var tw := create_screen_tween()
+	var tw := create_screen_tween_for_owner(tile_view)
 	tile_flip_animations[anim_id] = tw
 
 	# 第一阶段：正面缩放到0（模拟翻转到侧面）
@@ -32635,6 +33299,8 @@ func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_m
 
 	# 在中点切换可见性
 	tw.tween_callback(func() -> void:
+		if int(tile_flip_animation_tokens.get(anim_id, -1)) != animation_token:
+			return
 		var target = tile_ref.get_ref() as Control
 		if target == null:
 			return
@@ -32646,16 +33312,32 @@ func play_tile_flip_animation(tile_view: Control, from_face_up: bool, duration_m
 
 	# 恢复颜色
 	tw.tween_callback(func() -> void:
+		if int(tile_flip_animation_tokens.get(anim_id, -1)) != animation_token:
+			return
 		var target = tile_ref.get_ref() as Control
 		if target == null:
 			tile_flip_animations.erase(anim_id)
+			tile_flip_animation_tokens.erase(anim_id)
 			return
 		target.modulate = Color(1, 1, 1, target.modulate.a)
 		tile_flip_animations.erase(anim_id)
+		tile_flip_animation_tokens.erase(anim_id)
 		var art = flip_art_ref.get_ref() as Control if flip_art_ref != null else null
 		if art != null:
 			art.queue_free()
 	)
+
+func clear_tile_flip_animations() -> void:
+	for animation_value in tile_flip_animations.values():
+		var animation_tween := animation_value as Tween
+		if animation_tween != null and is_instance_valid(animation_tween):
+			animation_tween.kill()
+	tile_flip_animations.clear()
+	tile_flip_animation_tokens.clear()
+	for art_value in find_children("TileFlipSignalArt", "Control", true, false):
+		var art := art_value as Control
+		if art != null and is_instance_valid(art):
+			art.queue_free()
 
 func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, duration_msec: int = FX_CLAIM_FLY_DURATION_MSEC, arc_height: float = 80.0, callback: Callable = Callable()) -> void:
 	"""牌面飞行动画 - 带抛物线弧度"""
@@ -32701,7 +33383,13 @@ func play_tile_fly_animation(tile: String, from_pos: Vector2, to_pos: Vector2, d
 	var flip_texture_id := flip_texture.get_instance_id() if flip_texture != null else 0
 	var route_art_id := route_art.get_instance_id() if route_art != null else 0
 	var discard_animation_id := discard_animation.get_instance_id() if discard_animation != null else 0
-	tile_fly_animations.append({"tween": tw, "tile_id": flying_tile_id})
+	tile_fly_animations.append({
+		"tween": tw,
+		"tile_id": flying_tile_id,
+		"flip_texture_id": flip_texture_id,
+		"route_art_id": route_art_id,
+		"discard_animation_id": discard_animation_id,
+	})
 	tw.tween_method(Callable(self, "update_tile_fly_animation_by_id").bind(flying_tile_id, flip_texture_id, from_pos, to_pos, arc_height), 0.0, 1.0, duration).set_trans(FX_TILE_FLY_CURVE).set_ease(FX_TILE_FLY_EASE)
 	tw.tween_callback(Callable(self, "finish_tile_fly_animation_by_id").bind(flying_tile_id, flip_texture_id, route_art_id, discard_animation_id, callback))
 
@@ -32735,6 +33423,20 @@ func finish_tile_fly_animation_by_id(flying_tile_id: int, flip_texture_id: int, 
 			tile_fly_animations.remove_at(i)
 	if callback.is_valid():
 		callback.call()
+
+func clear_tile_fly_animations() -> void:
+	for item_variant in tile_fly_animations:
+		if typeof(item_variant) != TYPE_DICTIONARY:
+			continue
+		var item: Dictionary = item_variant
+		var tween := item.get("tween", null) as Tween
+		if tween != null and is_instance_valid(tween):
+			tween.kill()
+		queue_free_node_by_id(int(item.get("tile_id", 0)))
+		queue_free_node_by_id(int(item.get("flip_texture_id", 0)))
+		queue_free_node_by_id(int(item.get("route_art_id", 0)))
+		queue_free_node_by_id(int(item.get("discard_animation_id", 0)))
+	tile_fly_animations.clear()
 
 func safe_content_pixel_size() -> Vector2:
 	return safe_content_pixel_size_for_margins(effective_viewport_size(), safe_area_margins)
@@ -33677,6 +34379,12 @@ func refresh_online_lobby_action_states() -> void:
 	var connecting := connection_state == "连接中"
 	var has_room_context := not online_room.is_empty() and (connected or online_waiting_for_server)
 	var room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
+	var action_state_key := "%s|%s|%s|%s|%s|%s" % [connection_state, room_code, has_room_context, online_feedback, online_waiting_for_server, high_contrast_enabled]
+	var action_tree_ready := root_layer.find_child("ChatLobbyButton", true, false) != null and root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) != null
+	if action_tree_ready:
+		if str(root_layer.get_meta("online_lobby_action_state_key", "")) == action_state_key:
+			return
+		root_layer.set_meta("online_lobby_action_state_key", action_state_key)
 	var connect_button = root_layer.find_child("OnlineLobbyConnectButton", true, false) as Button
 	var create_button = root_layer.find_child("OnlineLobbyCreateButton", true, false) as Button
 	var join_button = root_layer.find_child("OnlineLobbyJoinButton", true, false) as Button
@@ -34335,6 +35043,7 @@ func online_lobby_room_snapshot_status_text() -> String:
 func refresh_online_lobby_state() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
+	online_last_lobby_render_revision = online_lobby_render_revision
 	var state := lobby_connection_state_text()
 	var connected := state == "已连接"
 	var state_tint := online_connection_state_tint(state)
@@ -34740,6 +35449,9 @@ func refresh_online_feedback_art() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var feedback_art = root_layer.find_child("OnlineFeedbackArt", true, false) as Control
+	var feedback_key := "%s|%s|%s" % [online_feedback, online_waiting_for_server, effective_viewport_size()]
+	if feedback_art != null and str(feedback_art.get_meta("feedback_render_key", "")) == feedback_key:
+		return
 	var feedback_parent: Control = feedback_art.get_parent() as Control if feedback_art != null else null
 	if feedback_parent == null:
 		var form_panel = root_layer.find_child("OnlineLobbyFormPanel", true, false) as Control
@@ -34751,7 +35463,9 @@ func refresh_online_feedback_art() -> void:
 	if online_feedback.strip_edges() == "" and not online_waiting_for_server:
 		return
 	if feedback_parent != null:
-		draw_online_feedback_art(feedback_parent)
+		var next_art := draw_online_feedback_art(feedback_parent)
+		if next_art != null:
+			next_art.set_meta("feedback_render_key", feedback_key)
 
 
 func _show_rules_screen_impl() -> void:
@@ -36711,6 +37425,9 @@ func show_telemetry_data_sheet() -> void:
 	close.set_meta("recent_action_clearance_px", 8.0)
 	card.add_child(close)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
+	root_layer.remove_meta("ui_contract_control_list")
+	root_layer.remove_meta("ui_contract_index_root_id")
+	root_layer.remove_meta("ui_contract_index_direct_child_count")
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)
 
@@ -36779,6 +37496,9 @@ func close_telemetry_data_sheet() -> void:
 func refresh_update_dialog() -> void:
 	if update_state == "idle":
 		refresh_top_hud_update_button()
+		if update_progress_tween != null and is_instance_valid(update_progress_tween):
+			update_progress_tween.kill()
+		update_progress_tween = null
 		var restore_id := update_dialog_focus_restore_id
 		update_dialog_focus_restore_id = 0
 		if update_dialog != null and is_instance_valid(update_dialog):
@@ -36804,18 +37524,25 @@ func refresh_update_dialog() -> void:
 			target_progress_value = 100.0
 		else:
 			target_progress_value = 0.0
-		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			AnimationEffects.animate_progress_bar(update_progress, target_progress_value, 0.3)
-		else:
-			update_progress.value = target_progress_value
-		update_progress.set_meta("progress_percent", int(round(target_progress_value)))
+		var target_progress_percent := int(round(target_progress_value))
+		var previous_target_percent := int(update_progress.get_meta("progress_target_percent", -1))
+		if previous_target_percent != target_progress_percent:
+			if update_progress_tween != null and is_instance_valid(update_progress_tween):
+				update_progress_tween.kill()
+			update_progress_tween = null
+			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+				update_progress_tween = AnimationEffects.animate_progress_bar(update_progress, target_progress_value, 0.3)
+			else:
+				update_progress.value = target_progress_value
+			update_progress.set_meta("progress_target_percent", target_progress_percent)
+		update_progress.set_meta("progress_percent", target_progress_percent)
 		update_progress.set_meta("progress_bytes", "%s / %s" % [format_bytes(maxi(0, update_downloaded_bytes)), format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"])
 		update_progress.set_meta("accessible_name", "更新下载进度：%d%%" % int(round(target_progress_value)))
 	if update_progress_label != null and is_instance_valid(update_progress_label):
 		var progress_text := update_progress_text()
 		set_ui_full_text(update_progress_label, progress_text, "更新进度：" + progress_text)
 		update_progress_label.text = progress_text
-		update_progress_label.set_meta("progress_percent", int(round(update_progress.value)) if update_progress != null and is_instance_valid(update_progress) else 0)
+		update_progress_label.set_meta("progress_percent", int(update_progress.get_meta("progress_target_percent", 0)) if update_progress != null and is_instance_valid(update_progress) else 0)
 	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
 		var notes_text := update_release_notes.strip_edges()
 		update_release_notes_art.visible = true
@@ -37787,6 +38514,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		diagnostic_focus_restore_id = (previous_focus as Control).get_instance_id()
 	# 清除当前屏幕
 	clear_screen()
+	diagnostic_dialog_open = true
 
 	# 创建半透明背景
 	var bg = make_fullrect_overlay(Color(0, 0, 0, 0.72), "ui_dark_scrim")
@@ -38251,12 +38979,13 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 func dismiss_diagnostic_dialog() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
-	if root_layer.find_child("DiagnosticDialogPanel", true, false) == null:
+	if not diagnostic_dialog_open:
 		return
 	var restore_name := diagnostic_focus_restore_name
 	var restore_id := diagnostic_focus_restore_id
 	diagnostic_focus_restore_name = ""
 	diagnostic_focus_restore_id = 0
+	diagnostic_dialog_open = false
 	clear_screen()
 	refresh_current_screen()
 	var restored_control := node_from_instance_id(restore_id) as Control
@@ -39241,7 +39970,7 @@ func render_replay_archive_list() -> void:
 		if previous_focus_name != "":
 			previous_focus_name = "ReplayArchiveSearchInput"
 		configure_button_focus_navigation(archive_pane, "", false)
-		call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name)
+		call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name, ui_page_generation)
 		call_deferred("sync_replay_archive_range_status", archive_scroll)
 		return
 	for entry_variant in entries:
@@ -40126,18 +40855,23 @@ func cycle_rule_variant_setting() -> void:
 		current_index = RULE_VARIANT_ORDER.size() - 1
 	rule_variant = str(RULE_VARIANT_ORDER[(current_index + 1) % RULE_VARIANT_ORDER.size()])
 	save_settings()
-	refresh_rule_variant_controls()
 	show_toast("地方规则：%s · 下一局生效" % rule_variant_label(rule_variant))
 	settings_focus_restore_name = "SettingsRuleVariantButton"
-	refresh_current_screen()
+	# Settings owns a stable local selector. Commit its text/status in place so the
+	# click has immediate feedback and preserves scroll/focus; a full page render is
+	# only needed when the selector is changed outside the mounted settings overlay.
+	if settings_panel_open and root_layer != null and is_instance_valid(root_layer):
+		refresh_rule_variant_controls()
+	else:
+		refresh_current_screen()
 
 func refresh_rule_variant_controls() -> void:
-	var selector = find_child("SettingsRuleVariantButton", true, false) as Button
+	var selector = root_layer.find_child("SettingsRuleVariantButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if selector != null:
 		selector.text = rule_variant_short_label()
 		selector.tooltip_text = rule_variant_summary(rule_variant)
 		selector.set_meta("setting_state", rule_variant_short_label())
-	var status = find_child("SettingsRuleVariantStatus", true, false) as Label
+	var status = root_layer.find_child("SettingsRuleVariantStatus", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
 	if status != null:
 		var active_rule_profile := rule_profile(active_rule_variant())
 		var rule_difference := ("可吃 · 含花牌" if bool(active_rule_profile.get("allow_chi", true)) and bool(active_rule_profile.get("include_flowers", true)) else ("可吃 · 无花牌" if bool(active_rule_profile.get("allow_chi", true)) else "不可吃"))
@@ -40932,6 +41666,7 @@ func handle_online_log(data: Dictionary) -> void:
 		logs.remove_at(0)
 	online_room["logs"] = logs
 	online_log_total_count = previous_total + 1
+	online_lobby_render_revision += 1
 	set_online_feedback(message, false)
 	refresh_online_lobby_state()
 
@@ -41023,6 +41758,7 @@ func handle_online_message(line: String) -> void:
 				online_log_total_count = maxi(online_log_total_count, inferred_total)
 		if is_instance_valid(online_room_edit):
 			online_room_edit.text = selected_room
+		online_lobby_render_revision += 1
 		refresh_online_lobby_state()
 	elif kind == "gameState":
 		var next_game = normalize_online_game_state(data)
@@ -41524,6 +42260,8 @@ func send_online_action(payload: Dictionary, label: String = "") -> bool:
 	return false
 
 func set_online_feedback(text: String, waiting: bool = false) -> void:
+	if online_feedback == text and online_waiting_for_server == waiting:
+		return
 	online_feedback = text
 	online_waiting_for_server = waiting
 	if not waiting:
@@ -41817,7 +42555,8 @@ func _process(_delta: float) -> void:
 		check_audio_health(now)
 	if update_state == "downloading":
 		update_download_progress(now)
-	if voice_enabled:
+	if voice_enabled and now >= next_voice_capture_msec:
+		next_voice_capture_msec = now + VOICE_CAPTURE_POLL_INTERVAL_MSEC
 		poll_voice_capture()
 	if mode == "online_lobby" or mode == "online_game":
 		poll_online(now)
@@ -41827,8 +42566,15 @@ func _process(_delta: float) -> void:
 		update_pending_claim_live_state()
 		update_online_action_live_state(now)
 		update_chat_send_cooldown(now)
-	flush_telemetry_save()
-	flush_offline_progress_autosave()
+	# Debounced persistence only needs a coarse scheduler. Keeping the two
+	# deadline checks out of the frame path avoids needless calls while idle;
+	# application-pause still flushes synchronously in _notification().
+	if now >= next_save_flush_poll_msec and (telemetry_save_pending or offline_progress_dirty):
+		next_save_flush_poll_msec = now + SAVE_FLUSH_POLL_INTERVAL_MSEC
+		if telemetry_save_pending:
+			flush_telemetry_save()
+		if offline_progress_dirty:
+			flush_offline_progress_autosave()
 
 
 func update_pending_claim_live_state() -> void:
@@ -41854,31 +42600,53 @@ func update_pending_claim_live_state() -> void:
 			human_claim("pass")
 			set_status(pending_claim_auto_pass_feedback)
 			return
-	var timer_label := root_layer.find_child("PendingClaimTimerText", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
-	if timer_label != null:
-		timer_label.text = pending_claim_timer_text()
+	refresh_pending_claim_live_controls()
+	var timer_label := pending_claim_timer_label
+	if timer_label != null and is_instance_valid(timer_label):
+		var timer_text := pending_claim_timer_text()
+		if timer_text != pending_claim_last_timer_text:
+			timer_label.text = timer_text
+			pending_claim_last_timer_text = timer_text
 		var auto_pass_text := pending_claim_auto_pass_text()
-		var warning_labels := root_layer.find_children("PendingClaimAutoPassWarning", "Label", true, false)
-		if warning_labels.is_empty():
-			var fallback_warning := root_layer.find_child("PendingClaimAutoPassWarning", true, false) as Label
-			if fallback_warning != null:
-				warning_labels.append(fallback_warning)
-		for warning_node in warning_labels:
-			var warning_label := warning_node as Label
-			if warning_label == null:
-				continue
-			warning_label.text = auto_pass_text
-			warning_label.visible = auto_pass_text != ""
-			warning_label.tooltip_text = auto_pass_text
-			warning_label.set_meta("accessible_name", auto_pass_text)
-			warning_label.set_meta("live_state_owner", "pending_claim_auto_pass_warning")
+		if auto_pass_text != pending_claim_last_warning_text:
+			for warning_label in pending_claim_warning_labels:
+				if warning_label == null or not is_instance_valid(warning_label):
+					continue
+				warning_label.text = auto_pass_text
+				warning_label.visible = auto_pass_text != ""
+				warning_label.tooltip_text = auto_pass_text
+				warning_label.set_meta("accessible_name", auto_pass_text)
+				warning_label.set_meta("live_state_owner", "pending_claim_auto_pass_warning")
+			pending_claim_last_warning_text = auto_pass_text
 	var remaining_ratio := pending_claim_remaining_ratio()
-	var timer_fill := root_layer.find_child("PendingClaimTimerFill", true, false) as Control
+	var timer_fill := pending_claim_timer_fill
 	if timer_fill != null:
 		apply_rect(timer_fill, rect_full(0.025, 0.260, 0.025 + 0.950 * remaining_ratio, 0.740))
-		var priority_label := root_layer.find_child("PendingClaimPriorityText", true, false) as Label
-		if priority_label != null:
-			priority_label.text = pending_claim_priority_text(pending_claim_state().get("options", []))
+		var priority_label := pending_claim_priority_label
+		if priority_label != null and is_instance_valid(priority_label):
+			var priority_text := pending_claim_priority_text(pending_claim_state().get("options", []))
+			if priority_text != pending_claim_last_priority_text:
+				priority_label.text = priority_text
+				pending_claim_last_priority_text = priority_text
+
+func refresh_pending_claim_live_controls() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var root_id := root_layer.get_instance_id()
+	if pending_claim_live_root_id == root_id and pending_claim_timer_label != null and is_instance_valid(pending_claim_timer_label):
+		return
+	pending_claim_live_root_id = root_id
+	pending_claim_timer_label = root_layer.find_child("PendingClaimTimerText", true, false) as Label
+	pending_claim_timer_fill = root_layer.find_child("PendingClaimTimerFill", true, false) as Control
+	pending_claim_priority_label = root_layer.find_child("PendingClaimPriorityText", true, false) as Label
+	pending_claim_warning_labels.clear()
+	for warning_node in root_layer.find_children("PendingClaimAutoPassWarning", "Label", true, false):
+		var warning_label := warning_node as Label
+		if warning_label != null:
+			pending_claim_warning_labels.append(warning_label)
+	pending_claim_last_timer_text = ""
+	pending_claim_last_warning_text = ""
+	pending_claim_last_priority_text = ""
 
 
 func update_online_action_live_state(now_msec: int) -> void:
@@ -41914,6 +42682,7 @@ func audio_health_check_due(now_msec: int) -> bool:
 	return true
 
 func schedule_resize_refresh() -> void:
+	resize_refresh_revision += 1
 	update_safe_area_layout()
 	if resize_refresh_pending:
 		return
@@ -41922,6 +42691,8 @@ func schedule_resize_refresh() -> void:
 
 func run_scheduled_resize_refresh() -> void:
 	resize_refresh_pending = false
+	if root_layer != null and is_instance_valid(root_layer):
+		root_layer.set_meta("resize_refresh_revision", resize_refresh_revision)
 	refresh_current_screen()
 
 func focused_control_instance_id() -> int:
@@ -42062,7 +42833,7 @@ func handle_ui_cancel() -> bool:
 	if exit_confirm_panel != null and is_instance_valid(exit_confirm_panel):
 		hide_exit_confirm()
 		return true
-	if root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+	if diagnostic_dialog_open:
 		dismiss_diagnostic_dialog()
 		return true
 	if mode == "replay_import" and replay_delete_confirming:
@@ -42130,17 +42901,29 @@ func handle_ui_cancel() -> bool:
 
 func emit_ui_qa_marker(marker: String) -> void:
 	# Android smoke reads process markers from logcat; keep them invisible in the UI.
-	if OS.has_feature("android"):
-		print("UI_QA_MARKER|%s" % marker)
+	if not OS.has_feature("android") or marker == ui_qa_marker_last:
+		return
+	ui_qa_marker_last = marker
+	print("UI_QA_MARKER|%s" % marker)
+
+func ui_qa_markers_enabled() -> bool:
+	return OS.has_feature("android")
 
 
 func schedule_ui_qa_page_ready(page: String, required_nodes: Array) -> void:
 	if not OS.has_feature("android") or root_layer == null or not is_instance_valid(root_layer):
 		return
-	call_deferred("emit_ui_qa_page_ready", page, required_nodes.duplicate(), root_layer.get_instance_id())
+	var root_id := root_layer.get_instance_id()
+	var pending_key := "%s|%d" % [page, root_id]
+	if ui_qa_page_ready_pending.has(pending_key):
+		return
+	ui_qa_page_ready_pending[pending_key] = true
+	call_deferred("emit_ui_qa_page_ready", page, required_nodes.duplicate(), root_id, pending_key)
 
 
-func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int) -> void:
+func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int, pending_key: String = "") -> void:
+	if pending_key != "":
+		ui_qa_page_ready_pending.erase(pending_key)
 	# Wait through screen transitions and layout passes so Android evidence cannot
 	# mistake a mode assignment or partially-built control tree for a ready page.
 	for _i in range(120):
@@ -42201,12 +42984,14 @@ func _input(event: InputEvent) -> void:
 		pressed = event.pressed
 	if pressed:
 		wake_audio_from_interaction()
-	# 主菜单视差 - 鼠标/触摸移动驱动层次位移
-	if menu_parallax_enabled and event is InputEventMouseMotion:
+	# Background parallax is inert while a modal or text field owns input. This
+	# avoids doing decorative work for events that cannot affect the menu.
+	var parallax_input_allowed := mode == "menu" and not settings_panel_open and exit_confirm_panel == null and tutorial_panel == null and not telemetry_sheet_open and not game_keyboard_focus_is_text_input()
+	if menu_parallax_enabled and parallax_input_allowed and event is InputEventMouseMotion:
 		update_menu_parallax(get_global_mouse_position())
-	elif menu_parallax_enabled and event is InputEventScreenDrag:
+	elif menu_parallax_enabled and parallax_input_allowed and event is InputEventScreenDrag:
 		update_menu_parallax(event.position)
-	if event is InputEventScreenDrag:
+	if ui_qa_markers_enabled() and event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
 		emit_ui_qa_marker("touch_drag|%s|%.1f|%.1f" % [mode, drag.position.x, drag.position.y])
 
@@ -42246,7 +43031,7 @@ func game_keyboard_input_allowed() -> bool:
 	var modal_open := settings_panel_open or exit_confirm_panel != null or tutorial_panel != null or telemetry_sheet_open or advisor_detail_open or table_log_archive_open or chat_panel_open
 	if update_dialog != null and is_instance_valid(update_dialog) and update_state != "idle":
 		modal_open = true
-	if root_layer != null and is_instance_valid(root_layer) and root_layer.find_child("DiagnosticDialogPanel", true, false) != null:
+	if diagnostic_dialog_open:
 		modal_open = true
 	if modal_open or game_keyboard_focus_is_text_input():
 		return false
@@ -42993,7 +43778,8 @@ func poll_online(now_msec: int = -1) -> void:
 		if mode == "online_lobby" and not online_room.is_empty():
 			close_online_transport("连接已断开，请重新连接。")
 			return
-		refresh_online_lobby_state()
+		if mode == "online_lobby" and online_lobby_render_revision != online_last_lobby_render_revision:
+			refresh_online_lobby_state()
 		return
 	var available = tcp.get_available_bytes()
 	if available <= 0:
@@ -43022,7 +43808,8 @@ func poll_online(now_msec: int = -1) -> void:
 	if tcp_buffer.size() > ONLINE_MESSAGE_MAX_BYTES:
 		close_online_transport("服务器消息过大，已断开连接。", true, false)
 		return
-	refresh_online_lobby_state()
+	if mode == "online_lobby" and online_lobby_render_revision != online_last_lobby_render_revision:
+		refresh_online_lobby_state()
 
 
 func online_frame_line_is_safe(raw_line: PackedByteArray) -> bool:
@@ -43172,7 +43959,7 @@ func handle_voice_message(data: Dictionary) -> void:
 	var decoded := Marshalls.base64_to_raw(audio_base64)
 	if decoded.is_empty() or decoded.size() > ONLINE_VOICE_PACKET_MAX_BYTES or decoded.size() % 2 != 0:
 		return
-	var stream = make_voice_stream(audio_base64, sample_rate, channels)
+	var stream = make_voice_stream(audio_base64, sample_rate, channels, decoded)
 	if stream == null:
 		return
 	var player = AudioStreamPlayer.new()
@@ -43423,7 +44210,7 @@ func refresh_online_log_navigation() -> void:
 
 
 func update_chat_send_cooldown(now_msec: int = -1) -> void:
-	if root_layer == null or not is_instance_valid(root_layer):
+	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var cooldown_label := root_layer.find_child("ChatSendCooldownLabel", true, false) as Label
 	var send_button := root_layer.find_child("ChatSendButton", true, false) as Button
@@ -43947,12 +44734,20 @@ func clamp_safe_area_margins(margins: Vector4, viewport_size: Vector2) -> Vector
 		clamp(margins.w, 0.0, viewport_size.y * SAFE_CONTENT_MAX_BOTTOM_FRACTION)
 	)
 
-func update_safe_area_layout() -> void:
-	safe_area_margins = current_safe_area_margins()
+func update_safe_area_layout() -> bool:
+	var next_margins := current_safe_area_margins()
+	var next_signature := "%.2f|%.2f|%.2f|%.2f" % [next_margins.x, next_margins.y, next_margins.z, next_margins.w]
+	if next_signature == safe_area_layout_signature:
+		safe_area_margins = next_margins
+		return false
+	safe_area_margins = next_margins
+	safe_area_layout_signature = next_signature
+	safe_area_layout_revision += 1
 	if root_layer != null and is_instance_valid(root_layer):
 		apply_safe_area_offsets(root_layer)
 	if toast_container != null and is_instance_valid(toast_container):
 		apply_safe_area_offsets(toast_container)
+	return true
 
 func apply_safe_area_offsets(control: Control) -> void:
 	if control == null:
@@ -49304,6 +50099,8 @@ func flower_bloom_text(tile: String) -> String:
 
 
 func clear_fx_overlays() -> void:
+	clear_tile_fly_animations()
+	clear_tile_flip_animations()
 	if fx_burst_tween != null and is_instance_valid(fx_burst_tween):
 		fx_burst_tween.kill()
 	if fx_ripple_tween != null and is_instance_valid(fx_ripple_tween):
@@ -50738,6 +51535,11 @@ func toggle_chat_panel() -> void:
 func refresh_chat_panel() -> void:
 	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return
+	for shield_node in root_layer.find_children("ChatPanelInputShield", "Control", true, false):
+		var shield := shield_node as Control
+		if shield != null and is_instance_valid(shield):
+			root_layer.remove_child(shield)
+			shield.queue_free()
 	var old_panel := root_layer.find_child("ChatPanel", true, false) as Control
 	if old_panel != null and is_instance_valid(old_panel):
 		root_layer.remove_child(old_panel)
@@ -50752,10 +51554,12 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 	if panel != null and is_instance_valid(panel):
 		root_layer.remove_child(panel)
 		panel.queue_free()
-	var input_shield := root_layer.find_child("ChatPanelInputShield", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
-	if input_shield != null and is_instance_valid(input_shield):
-		root_layer.remove_child(input_shield)
-		input_shield.queue_free()
+	if root_layer != null and is_instance_valid(root_layer):
+		for shield_node in root_layer.find_children("ChatPanelInputShield", "Control", true, false):
+			var input_shield := shield_node as Control
+			if input_shield != null and is_instance_valid(input_shield):
+				root_layer.remove_child(input_shield)
+				input_shield.queue_free()
 	var ledger := root_layer.find_child("TableLogLedgerPanel", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
 	if ledger != null and bool(ledger.get_meta("hidden_for_chat", false)):
 		ledger.visible = true
@@ -51535,6 +52339,11 @@ func update_menu_parallax(mouse_pos: Vector2) -> void:
 	# 鼠标相对视口中心的归一化偏移 [-1, 1]
 	var nx: float = clamp((mouse_pos.x / viewport_size.x) * 2.0 - 1.0, -1.0, 1.0)
 	var ny: float = clamp((mouse_pos.y / viewport_size.y) * 2.0 - 1.0, -1.0, 1.0)
+	var normalized := Vector2(nx, ny)
+	if menu_parallax_last_viewport == viewport_size and normalized.distance_to(menu_parallax_last_normalized) < 0.01:
+		return
+	menu_parallax_last_viewport = viewport_size
+	menu_parallax_last_normalized = normalized
 	# 视差层：远景小幅度、中景中等、近景大幅度（营造纵深）
 	var layers := [
 		["MenuHeroGPTBackdropTexture", -1.4, -0.8],
