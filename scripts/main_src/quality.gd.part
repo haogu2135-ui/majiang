@@ -563,22 +563,33 @@ func telemetry_permission_summary_text() -> String:
 
 
 func toggle_telemetry_consent() -> void:
+	if telemetry_mutation_in_flight:
+		return
+	telemetry_mutation_revision += 1
+	var mutation_revision := telemetry_mutation_revision
+	telemetry_mutation_in_flight = true
+	if telemetry_sheet_open:
+		refresh_telemetry_data_sheet()
 	telemetry_consent_decided = true
 	telemetry_consent = not telemetry_consent
 	if telemetry_consent:
 		telemetry_last_action = "已同意记录匿名诊断数据"
 		save_settings()
 		telemetry_record_event("consent_granted")
-		show_toast("已同意记录匿名诊断数据")
 	else:
-		clear_telemetry_data(true)
+		telemetry_outbox.clear()
+		telemetry_export_status = "未导出"
 		telemetry_last_action = "已关闭记录并清空本地队列"
+		save_telemetry_state()
 		save_settings()
-		show_toast("已关闭诊断数据记录并清空本地队列")
+	if mutation_revision != telemetry_mutation_revision:
+		return
+	telemetry_mutation_in_flight = false
 	if telemetry_sheet_open:
 		refresh_telemetry_data_sheet()
 	else:
 		refresh_current_screen()
+	show_toast("已同意记录匿名诊断数据" if telemetry_consent else "已关闭诊断数据记录并清空本地队列")
 
 
 func clear_telemetry_data(confirmed: bool = true) -> void:

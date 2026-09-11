@@ -1,6 +1,7 @@
 func setup_audio() -> void:
 	print("AudioSetup: Starting audio system initialization")
 	ensure_master_audio_bus()
+	audio_backend_ready = true
 	ensure_audio_layer()
 
 	# v1.0.153: Android音频焦点请求
@@ -156,6 +157,10 @@ func shutdown_runtime_audio() -> void:
 func apply_audio_settings() -> void:
 	if bgm_player == null or not is_instance_valid(bgm_player):
 		return
+	if not music_enabled:
+		# Any in-flight async start belongs to an obsolete enabled state.
+		bgm_start_generation += 1
+		bgm_start_in_flight = false
 	ensure_master_audio_bus()
 	configure_background_music_stream()
 	bgm_player.volume_db = BGM_VOLUME_DB
@@ -169,17 +174,24 @@ func audio_runtime_enabled() -> bool:
 	return DisplayServer.get_name().to_lower() != "headless" and OS.get_environment("YUNZHUO_UI_CAPTURE") != "1"
 
 func wake_audio_from_interaction() -> void:
+	if audio_wake_pending:
+		return
+	audio_wake_pending = true
+	audio_wake_generation += 1
+	var generation := audio_wake_generation
 	if not audio_touch_unlocked:
 		# v1.0.150: 首次交互也改为异步，不阻塞UI
 		print("AudioWake: 首次用户交互，异步初始化音频系统")
 		audio_touch_unlocked = true
 		# 立即异步执行，不阻塞按钮响应
-		call_deferred("_wake_audio_first_time")
+		call_deferred("_wake_audio_first_time", generation)
 	else:
 		# 后续交互：异步
-		call_deferred("_wake_audio_deferred")
+		call_deferred("_wake_audio_deferred", generation)
 
-func _wake_audio_first_time() -> void:
+func _wake_audio_first_time(expected_generation: int = -1) -> void:
+	if expected_generation >= 0 and expected_generation != audio_wake_generation:
+		return
 	print("AudioWake: 开始异步初始化")
 	ensure_master_audio_bus()
 	print("AudioWake: 主音频总线已确保")
@@ -188,24 +200,34 @@ func _wake_audio_first_time() -> void:
 	if music_enabled:
 		print("AudioWake: 准备启动背景音乐")
 		start_background_music()
+	audio_wake_pending = false
 	print("AudioWake: 首次初始化完成")
 
-func _wake_audio_deferred() -> void:
+func _wake_audio_deferred(expected_generation: int = -1) -> void:
+	if expected_generation >= 0 and expected_generation != audio_wake_generation:
+		return
 	ensure_master_audio_bus()
-	warm_speech_backend()
+	if not audio_backend_ready:
+		warm_speech_backend()
+		audio_backend_ready = true
 	if music_enabled:
 		start_background_music()
+	audio_wake_pending = false
 
 func recover_audio_after_screen_change() -> void:
 	if not audio_runtime_enabled():
 		return
-	ensure_master_audio_bus()
-	warm_speech_backend()
+	if not audio_backend_ready:
+		ensure_master_audio_bus()
+		warm_speech_backend()
+		audio_backend_ready = true
 	if music_enabled:
 		call_deferred("start_background_music")
 
 func switch_bgm_track() -> void:
 	# v1.0.157: 切换到下一首BGM
+	bgm_start_generation += 1
+	bgm_start_in_flight = false
 	current_bgm_index = (current_bgm_index + 1) % BGM_TRACKS.size()
 	var track = BGM_TRACKS[current_bgm_index]
 	print("BGM: 切换到", track["name"], " - ", track["path"])
@@ -241,6 +263,19 @@ func switch_bgm_track() -> void:
 	refresh_settings_local_row("播放曲目")
 
 func start_background_music() -> void:
+	if bgm_start_in_flight:
+		return
+	bgm_start_generation += 1
+	var generation := bgm_start_generation
+	bgm_start_in_flight = true
+	await _start_background_music(generation)
+	if generation == bgm_start_generation:
+		bgm_start_in_flight = false
+
+func bgm_start_request_valid(expected_generation: int) -> bool:
+	return expected_generation == bgm_start_generation and music_enabled and audio_runtime_enabled() and bgm_player != null and is_instance_valid(bgm_player)
+
+func _start_background_music(expected_generation: int) -> void:
 	if not music_enabled or not audio_runtime_enabled():
 		print("BGM: 音乐已关闭或音频不可用")
 		return
@@ -281,6 +316,8 @@ func start_background_music() -> void:
 
 	# 等待一帧验证
 	await get_tree().process_frame
+	if not bgm_start_request_valid(expected_generation):
+		return
 
 	if bgm_player.playing:
 		print("BGM: ✓ 方法1成功")
@@ -291,6 +328,8 @@ func start_background_music() -> void:
 	print("BGM: 尝试方法2 - play(0.0)")
 	bgm_player.play(0.0)
 	await get_tree().process_frame
+	if not bgm_start_request_valid(expected_generation):
+		return
 
 	if bgm_player.playing:
 		print("BGM: ✓ 方法2成功")
@@ -306,6 +345,8 @@ func start_background_music() -> void:
 	configure_background_music_stream()
 	bgm_player.play()
 	await get_tree().process_frame
+	if not bgm_start_request_valid(expected_generation):
+		return
 
 	if bgm_player.playing:
 		print("BGM: ✓ 方法3成功")
@@ -355,6 +396,11 @@ func check_audio_health(now_msec: int) -> void:
 	# 音频系统健康检查，用于检测和恢复音频问题
 	if not audio_touch_unlocked:
 		return  # 用户还未激活音频，跳过检查
+	var bgm_healthy := not music_enabled or (bgm_player != null and is_instance_valid(bgm_player) and bgm_player.stream != null and bgm_player.playing)
+	var sfx_healthy := not sfx_enabled or (sfx_player != null and is_instance_valid(sfx_player))
+	if bgm_healthy and sfx_healthy and now_msec - last_audio_health_full_check_msec < 30000:
+		return
+	last_audio_health_full_check_msec = now_msec
 
 	# 检查背景音乐状态
 	if music_enabled and audio_runtime_enabled():
@@ -404,7 +450,14 @@ func play_sfx(name: String, volume_db: float = -3.0) -> void:
 		play_stream_on_audio_player(player, stream, boosted_sfx_volume_db(volume_db))
 
 func is_action_sfx(name: String) -> bool:
-	return ["peng", "gang", "win"].has(name)
+	return ACTION_SFX_NAMES.has(name)
+
+func cleanup_one_shot_sfx_player(player_id: int) -> void:
+	var node := instance_from_id(player_id) as AudioStreamPlayer
+	if node == null or not is_instance_valid(node) or bool(node.get_meta("sfx_cleanup_done", false)):
+		return
+	node.set_meta("sfx_cleanup_done", true)
+	node.queue_free()
 
 func play_stream_on_audio_player(player: AudioStreamPlayer, stream: AudioStream, volume_db: float) -> void:
 	if player == null or stream == null:
@@ -433,9 +486,7 @@ func make_one_shot_sfx_player(stream: AudioStream, volume_db: float) -> AudioStr
 	# （Godot 4 在调用捕获了已释放对象的 lambda 时会在绑定阶段直接报错）
 	var player_id := player.get_instance_id()
 	player.finished.connect(func() -> void:
-		var node := instance_from_id(player_id)
-		if node != null and is_instance_valid(node):
-			(node as Node).queue_free()
+		cleanup_one_shot_sfx_player(player_id)
 	)
 	var cleanup_timer := Timer.new()
 	cleanup_timer.name = "OneShotSfxCleanupTimer"
@@ -444,9 +495,7 @@ func make_one_shot_sfx_player(stream: AudioStream, volume_db: float) -> AudioStr
 	cleanup_timer.process_callback = Timer.TIMER_PROCESS_IDLE
 	player.add_child(cleanup_timer)
 	cleanup_timer.timeout.connect(func() -> void:
-		var node := instance_from_id(player_id)
-		if node != null and is_instance_valid(node):
-			(node as Node).queue_free()
+		cleanup_one_shot_sfx_player(player_id)
 	)
 	cleanup_timer.start()
 	return player

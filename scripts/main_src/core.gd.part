@@ -52,7 +52,9 @@ func rule_profile(variant: String = "") -> Dictionary:
 	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
 	if not rule_profile_cache.has(key):
 		rule_profile_cache[key] = (RULE_VARIANT_PROFILES.get(key, RULE_VARIANT_PROFILES[RULE_VARIANT_YANGZHOU]) as Dictionary).duplicate(true)
-	return (rule_profile_cache[key] as Dictionary).duplicate(true)
+	# Profiles are internal immutable snapshots. Callers only read fields, so do
+	# not deep-copy the nested rule description on every HUD/rules lookup.
+	return rule_profile_cache[key] as Dictionary
 
 func rule_variant_label(variant: String = "") -> String:
 	return str(rule_profile(variant).get("label", "扬州麻将"))
@@ -75,7 +77,7 @@ func rule_variant_activation_status_text() -> String:
 func rule_tile_codes(variant: String = "") -> Array[String]:
 	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
 	if rule_tile_codes_cache.has(key):
-		return rule_tile_codes_cache[key].duplicate()
+		return rule_tile_codes_cache[key] as Array[String]
 	var profile := rule_profile(key)
 	var codes: Array[String] = []
 	for index in range(TILE_CODES.size()):
@@ -88,7 +90,7 @@ func rule_tile_codes(variant: String = "") -> Array[String]:
 func rule_flower_codes(variant: String = "") -> Array[String]:
 	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
 	if rule_flower_codes_cache.has(key):
-		return rule_flower_codes_cache[key].duplicate()
+		return rule_flower_codes_cache[key] as Array[String]
 	var flowers: Array[String] = []
 	if bool(rule_profile(key).get("include_flowers", true)):
 		for code in FLOWER_CODES:
@@ -101,12 +103,27 @@ func rule_wall_size(variant: String = "") -> int:
 
 
 func display_wall_total() -> int:
+	var snapshot_mode: String = str(mode)
+	var snapshot_rule: String = active_rule_variant() if mode != "online_game" else str(online_game.get("ruleVariant", active_rule_variant()))
+	var snapshot_online_revision: int = online_game_revision if mode == "online_game" else -1
+	if wall_total_snapshot > 0 and wall_total_snapshot_mode == snapshot_mode and wall_total_snapshot_rule == snapshot_rule and wall_total_snapshot_online_revision == snapshot_online_revision:
+		return wall_total_snapshot
+	var resolved_total := 0
 	if mode == "online_game":
 		for key in ["wallTotal", "wallSize", "totalTiles", "deckSize"]:
 			var server_total := int(online_game.get(key, 0))
 			if server_total > 0:
-				return server_total
-	return maxi(1, rule_wall_size())
+				resolved_total = server_total
+				break
+	if resolved_total <= 0:
+		resolved_total = maxi(1, rule_wall_size())
+	wall_total_snapshot = resolved_total
+	wall_total_snapshot_mode = snapshot_mode
+	wall_total_snapshot_rule = snapshot_rule
+	wall_total_snapshot_online_revision = snapshot_online_revision
+	wall_low_threshold_snapshot = maxi(12, int(round(float(resolved_total) * 0.167)))
+	wall_critical_threshold_snapshot = maxi(6, int(round(float(resolved_total) * 0.125)))
+	return wall_total_snapshot
 
 
 func wall_progress(wall_count: int = -1) -> float:
@@ -115,11 +132,13 @@ func wall_progress(wall_count: int = -1) -> float:
 
 
 func wall_low_threshold() -> int:
-	return maxi(12, int(round(float(display_wall_total()) * 0.167)))
+	display_wall_total()
+	return wall_low_threshold_snapshot
 
 
 func wall_critical_threshold() -> int:
-	return maxi(6, int(round(float(display_wall_total()) * 0.125)))
+	display_wall_total()
+	return wall_critical_threshold_snapshot
 
 
 func wall_phase_threshold(yangzhou_reference: int) -> int:
@@ -224,6 +243,9 @@ func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 
 func _process(_delta: float) -> void:
 	var now = Time.get_ticks_msec()
+	if menu_parallax_update_pending:
+		menu_parallax_update_pending = false
+		update_menu_parallax(menu_parallax_pending_position)
 	if reset_progress_confirming and reset_progress_confirm_deadline_msec > 0 and now >= reset_progress_confirm_deadline_msec:
 		reset_progress_confirming = false
 		reset_progress_confirm_deadline_msec = 0
@@ -341,6 +363,8 @@ func refresh_pending_claim_live_controls() -> void:
 
 
 func update_online_action_live_state(now_msec: int) -> void:
+	if mode == "online_game" and online_game_disconnected():
+		refresh_online_recovery_live_controls(now_msec)
 	if not online_waiting_for_server or online_last_sent_msec <= 0:
 		return
 	if now_msec - online_last_sent_msec < ONLINE_ACTION_TIMEOUT_MSEC:
@@ -432,6 +456,14 @@ func focus_named_control(control_name: String) -> void:
 	control.grab_focus()
 	ensure_focus_control_visible(control)
 	mark_ui_optimization(control, "F-383")
+
+func restore_settings_focus_after_close(control_name: String, expected_token: int, expected_mode: String) -> void:
+	await get_tree().process_frame
+	if expected_token != settings_overlay_generation or expected_mode != mode or settings_panel_open:
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	focus_named_control(control_name)
 
 func ensure_focus_control_visible(control: Control) -> void:
 	if control == null or not is_instance_valid(control):
@@ -688,12 +720,14 @@ func _input(event: InputEvent) -> void:
 	# the cooldown expires, without waiting for the coarse UI deadline poll.
 	if chat_panel_open and (mode == "online_lobby" or mode == "online_game"):
 		update_chat_send_cooldown(Time.get_ticks_msec())
-	if mode == "online_lobby" and root_layer != null and is_instance_valid(root_layer):
+	var lobby_state_event := event is InputEventKey or event is InputEventMouseButton or event is InputEventScreenTouch or event is InputEventAction
+	if mode == "online_lobby" and lobby_state_event and root_layer != null and is_instance_valid(root_layer):
 		# Server fixtures and reconnect handlers can update the room dictionary
 		# between frames. Reconcile the native start/create/join gates before GUI
 		# dispatch so pointer and keyboard activation see the current permission.
 		refresh_online_lobby_action_states()
-	if handle_online_detail_touch(event):
+	var detail_pointer_event := event is InputEventScreenTouch or event is InputEventMouseButton
+	if detail_pointer_event and handle_online_detail_touch(event):
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel") and handle_ui_cancel():
@@ -713,12 +747,17 @@ func _input(event: InputEvent) -> void:
 	# avoids doing decorative work for events that cannot affect the menu.
 	var parallax_input_allowed := mode == "menu" and not settings_panel_open and exit_confirm_panel == null and tutorial_panel == null and not telemetry_sheet_open and not game_keyboard_focus_is_text_input()
 	if menu_parallax_enabled and parallax_input_allowed and event is InputEventMouseMotion:
-		update_menu_parallax(get_global_mouse_position())
+		queue_menu_parallax_update(get_global_mouse_position())
 	elif menu_parallax_enabled and parallax_input_allowed and event is InputEventScreenDrag:
-		update_menu_parallax(event.position)
+		queue_menu_parallax_update(event.position)
 	if ui_qa_markers_enabled() and event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
-		emit_ui_qa_marker("touch_drag|%s|%.1f|%.1f" % [mode, drag.position.x, drag.position.y])
+		var drag_now := Time.get_ticks_msec()
+		if touch_drag_marker_last_msec <= 0 or drag_now - touch_drag_marker_last_msec >= 250:
+			touch_drag_marker_last_msec = drag_now
+			emit_ui_qa_marker("touch_drag|%s|%.1f|%.1f" % [mode, drag.position.x, drag.position.y])
+	elif event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
+		touch_drag_marker_last_msec = 0
 
 
 func keyboard_event_key(event: InputEventKey) -> int:
@@ -1763,10 +1802,26 @@ func render_room_log() -> void:
 		previous_scroll = log_scroll.scroll_vertical
 		var previous_max := maxf(0.0, previous_bar.max_value - previous_bar.page)
 		follow_latest = previous_max <= 1.0 or float(previous_scroll) >= previous_max - 6.0
-	var logs = online_room.get("logs", [])
+	var logs: Array = online_room.get("logs", []) as Array
 	if typeof(logs) != TYPE_ARRAY:
 		logs = []
+	var log_fingerprint_parts: Array[String] = [str(logs.size())]
+	var fingerprint_start: int = maxi(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
+	for fingerprint_index in range(fingerprint_start, logs.size()):
+		log_fingerprint_parts.append(str(hash(online_log_entry_text(logs[fingerprint_index]))))
+	var log_fingerprint := "|".join(log_fingerprint_parts)
 	var log_count := online_lobby_log_count()
+	if log_fingerprint == online_log_render_fingerprint:
+		if not online_log_initialized:
+			online_log_initialized = true
+			online_log_seen_count = log_count
+		if follow_latest:
+			online_log_seen_count = log_count
+			online_log_at_latest = true
+		else:
+			online_log_at_latest = false
+		refresh_online_log_navigation()
+		return
 	if not online_log_initialized:
 		# The first snapshot is the baseline, not unread content. Later updates
 		# compare against this seen count while preserving a user's scroll position.
@@ -1778,32 +1833,61 @@ func render_room_log() -> void:
 		online_log_at_latest = true
 	else:
 		online_log_at_latest = false
-	var text = ""
-	if logs.is_empty():
-		text = "暂无房间日志"
-	var start_index = max(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
-	for i in range(start_index, logs.size()):
-		var log_item = logs[i]
-		var line = ""
-		if typeof(log_item) == TYPE_DICTIONARY:
-			line = str(log_item.get("text", "")).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
-		else:
-			line = str(log_item).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
-		if line != "":
-			text += "· " + line + "\n"
-	logs_label.text = text
+	var start_index: int = maxi(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
+	var can_append_one: bool = logs.size() == online_log_rendered_source_count + 1 and start_index == 0 and not logs_label.text.is_empty() and logs_label.text != "暂无房间日志"
+	var appended_line: String = online_log_entry_text(logs[logs.size() - 1]).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH) if not logs.is_empty() else ""
+	if can_append_one and appended_line != "":
+		logs_label.text += "· " + appended_line + "\n"
+	else:
+		var text: String = ""
+		if logs.is_empty():
+			text = "暂无房间日志"
+		for i in range(start_index, logs.size()):
+			var line: String = online_log_entry_text(logs[i]).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
+			if line != "":
+				text += "· " + line + "\n"
+		logs_label.text = text
+	online_log_render_fingerprint = log_fingerprint
+	online_log_rendered_source_count = logs.size()
 	refresh_online_log_navigation()
 	if follow_latest:
-		call_deferred("defer_online_log_scroll_to_end")
+		queue_online_log_scroll_request(true, 0)
 	else:
-		call_deferred("restore_online_log_scroll", previous_scroll)
+		queue_online_log_scroll_request(false, previous_scroll)
 
 func defer_online_log_scroll_to_end() -> void:
-	# Keep two layout passes for wrapped log text without awaiting from a
-	# deferred callback, so screen teardown cannot leave an await state behind.
-	call_deferred("scroll_online_log_to_end")
+	queue_online_log_scroll_request(true, 0)
 
-func scroll_online_log_to_end() -> void:
+func queue_online_log_scroll_request(follow_latest: bool, value: int) -> void:
+	online_log_scroll_request_revision += 1
+	online_log_scroll_request_follow_latest = follow_latest
+	online_log_scroll_request_value = value
+	if online_log_scroll_request_queued:
+		return
+	online_log_scroll_request_queued = true
+	call_deferred("flush_online_log_scroll_request", online_log_scroll_request_revision)
+
+func flush_online_log_scroll_request(expected_revision: int) -> void:
+	if expected_revision != online_log_scroll_request_revision:
+		call_deferred("flush_online_log_scroll_request", online_log_scroll_request_revision)
+		return
+	online_log_scroll_request_queued = false
+	if online_log_scroll_request_follow_latest:
+		# RichTextLabel reflow updates the ScrollContainer range one idle pass
+		# after the deferred request. Give the container that pass before reading
+		# max_value, otherwise a newly appended tail can stop at the old maximum.
+		call_deferred("scroll_online_log_to_end_after_layout", expected_revision)
+	else:
+		restore_online_log_scroll(online_log_scroll_request_value, expected_revision)
+
+func scroll_online_log_to_end_after_layout(expected_revision: int) -> void:
+	if expected_revision != online_log_scroll_request_revision:
+		return
+	call_deferred("scroll_online_log_to_end", expected_revision)
+
+func scroll_online_log_to_end(expected_revision: int = -1) -> void:
+	if expected_revision >= 0 and expected_revision != online_log_scroll_request_revision:
+		return
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
 	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
@@ -1817,7 +1901,9 @@ func scroll_online_log_to_end() -> void:
 	refresh_online_log_navigation()
 	emit_ui_qa_marker("scroll|online_lobby|%d|%d" % [log_scroll.scroll_vertical, int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))])
 
-func restore_online_log_scroll(value: int) -> void:
+func restore_online_log_scroll(value: int, expected_revision: int = -1) -> void:
+	if expected_revision >= 0 and expected_revision != online_log_scroll_request_revision:
+		return
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
 	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
@@ -1855,8 +1941,6 @@ func online_lobby_log_visible_range_text() -> String:
 	return "日志范围 · %d-%d/%d · %s" % [first, last, total, boundary]
 
 func online_lobby_log_unread_count() -> int:
-	if not online_log_initialized:
-		return 0
 	return maxi(0, online_lobby_log_count() - online_log_seen_count)
 
 func refresh_online_log_navigation() -> void:
@@ -3334,10 +3418,30 @@ func pending_claim_state() -> Dictionary:
 		"chi_choices": (chi_choices as Array).duplicate(true),
 		"rob_gang": bool(online_pending.get("rob_gang", false)),
 		"deadline_msec": int(online_pending.get("deadline_msec", 0)),
+		"snapshot_token": int(online_game.get("_snapshot_token", online_game_snapshot_token)),
 	}
 
 func has_pending_claim_window() -> bool:
 	return not pending_claim_state().is_empty()
+
+func invalidate_pending_claim_action_stack(revision: int = -1) -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var pending_root := root_layer.find_child("PendingClaimActionStack", true, false) as Control
+	if pending_root == null or not is_instance_valid(pending_root):
+		return
+	pending_root.visible = false
+	pending_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pending_root.focus_mode = Control.FOCUS_NONE
+	pending_root.set_meta("pending_action_invalidated", true)
+	pending_root.set_meta("invalidated_revision", revision)
+	for node in pending_root.find_children("*", "BaseButton", true, false):
+		var button := node as BaseButton
+		if button == null or not is_instance_valid(button):
+			continue
+		button.disabled = true
+		button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		button.focus_mode = Control.FOCUS_NONE
 
 func pending_claim_source_name(source_seat: int) -> String:
 	if source_seat < 0:
@@ -5572,10 +5676,24 @@ func build_opponent_runtime_state(opponent: int) -> Dictionary:
 func clear_ai_report_cache() -> void:
 	ai_report_cache.clear()
 	ai_report_cache_order.clear()
+	ai_report_cache_access.clear()
+	ai_report_lru_prev.clear()
+	ai_report_lru_next.clear()
+	ai_report_lru_head = ""
+	ai_report_lru_tail = ""
+	ai_report_key_cache.clear()
+	ai_report_cache_clock = 0
 	ai_report_cache_hits = 0
 	ai_report_cache_misses = 0
 	effective_tiles_cache.clear()
 	effective_tiles_cache_order.clear()
+	effective_tiles_cache_access.clear()
+	effective_tiles_lru_prev.clear()
+	effective_tiles_lru_next.clear()
+	effective_tiles_lru_head = ""
+	effective_tiles_lru_tail = ""
+	effective_tiles_cache_clock = 0
+	ai_rob_threat_cache.clear()
 	effective_tiles_cache_hits = 0
 	effective_tiles_cache_misses = 0
 	clear_threat_report_cache()
@@ -9322,6 +9440,13 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 	chat_panel_open = false
 	var panel := root_layer.find_child("ChatPanel", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
 	if panel != null and is_instance_valid(panel):
+		var cooldown_label := panel.find_child("ChatSendCooldownLabel", true, false) as Label
+		if cooldown_label != null:
+			# The drawer owns this transient presentation. Clear it before teardown so
+			# a queued redraw cannot leave the previous session's status visible.
+			cooldown_label.visible = false
+			cooldown_label.text = ""
+			cooldown_label.set_meta("chat_panel_closed", true)
 		root_layer.remove_child(panel)
 		panel.queue_free()
 	if root_layer != null and is_instance_valid(root_layer):
@@ -10146,6 +10271,10 @@ func update_menu_parallax(mouse_pos: Vector2) -> void:
 		node.offset_bottom = lerp(node.offset_bottom, dy, 0.18)
 	if menu_realtime_3d_stage != null and is_instance_valid(menu_realtime_3d_stage) and menu_realtime_3d_stage.has_method("set_pointer_normalized"):
 		menu_realtime_3d_stage.set_pointer_normalized(Vector2(nx, ny))
+
+func queue_menu_parallax_update(mouse_pos: Vector2) -> void:
+	menu_parallax_pending_position = mouse_pos
+	menu_parallax_update_pending = true
 
 
 func play_button_press_animation(button: Button, scale_amount: float = 0.92) -> void:

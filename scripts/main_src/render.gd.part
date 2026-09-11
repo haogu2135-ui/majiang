@@ -740,9 +740,19 @@ func draw_action_dock(parent: Control) -> void:
 		status_color = Color(0.90, 0.76, 0.46, 0.92)
 		status_priority = true
 	elif not pending_claim_mode and not danger_confirm_mode and not action_buttons.is_empty():
-		var first_button := action_buttons[0] as Button
-		status_text = "当前焦点 · %s" % first_button.text
-		status_tooltip = "方向键按空间位置移动焦点"
+		var focus_owner := get_viewport().gui_get_focus_owner()
+		var focused_button: Button = null
+		for action_button_value in action_buttons:
+			var action_button := action_button_value as Button
+			if action_button != null and is_instance_valid(action_button) and action_button == focus_owner:
+				focused_button = action_button
+				break
+		if focused_button != null:
+			status_text = "当前焦点 · %s" % focused_button.text
+			status_tooltip = "方向键按空间位置移动焦点"
+		else:
+			status_text = "请选择操作"
+			status_tooltip = "请选择一个行动按钮；方向键可移动焦点"
 	# All action-dock status variants own this one header slot. This keeps a
 	# focus hint and a network recovery message mutually exclusive.
 	if status_text != "":
@@ -938,6 +948,9 @@ func draw_actions(parent: Control) -> void:
 	if has_pending_claim_window():
 		var pending_root := VBoxContainer.new()
 		pending_root.name = "PendingClaimActionStack"
+		pending_root.set_meta("snapshot_token", int(pending_claim_state().get("snapshot_token", 0)))
+		pending_root.set_meta("pending_action_revision", online_game_revision if mode == "online_game" else -1)
+		pending_root.set_meta("pending_action_invalidated", false)
 		# Keep the response stack anchored at the top of its reserved lane. The
 		# remaining space becomes deliberate bottom breathing room instead of
 		# pushing the tail action against the dock edge on 960x540.
@@ -1430,7 +1443,7 @@ func draw_advisor_card_meter(parent: Control, heading: String, main_text: String
 	if decision_meter != null:
 		decision_meter.name = "AdvisorCardDecisionMeter_%s" % heading
 	if fx_enabled_effective():
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(parent)
 		tw.set_loops(8)
 		tw.tween_property(focus, "modulate:a", 0.42, 0.64).from(0.92).set_ease(Tween.EASE_OUT)
 		tw.tween_property(focus, "modulate:a", 0.92, 0.64).from(0.42).set_ease(Tween.EASE_IN)
@@ -1456,7 +1469,7 @@ func draw_advisor_card_signal_route(parent: Control, heading: String, main_text:
 	if gate != null:
 		gate.name = "AdvisorCardSignalGate_%s" % heading
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and fill != null:
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(parent)
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.44, 0.78).from(0.96)
 		if gate != null:
@@ -2107,7 +2120,7 @@ func draw_center(parent: Control) -> void:
 	var compact_center := effective_viewport_size().x <= 960.0 or effective_viewport_size().y < 720.0
 	center.set_meta("center_density_mode", "compact" if compact_center else "standard")
 	center.set_meta("center_density_policy", "compact_only_below_960_or_720_height")
-	var wall_label_text := wall_state_text(center_wall_count)
+	var wall_label_text := ("低墙" if center_wall_low else "牌墙") if compact_center else wall_state_text(center_wall_count)
 	var wall_label = make_label(center, wall_label_text, 9 if compact_center else (10 if not wall_is_critical(center_wall_count) else 9), Color(0.68, 0.66, 0.54, center_wall_alpha), false)
 	wall_label.name = "CenterWallStatusLabel"
 	wall_label.set_meta("layout_role", "center_wall_status")
@@ -2169,6 +2182,19 @@ func draw_center(parent: Control) -> void:
 		# The frame has a custom minimum for ordinary hand/river layouts. Clear it
 		# here because this preview uses an explicit centered pixel rect instead.
 		tile.custom_minimum_size = Vector2.ZERO
+		if not center_min_face_possible:
+			# Do not render a sub-minimum face into a clipped slot. The compact
+			# summary keeps the latest-discard fact readable and the full tile
+			# remains available through the tooltip and table river.
+			tile.visible = false
+			var compact_face_fallback := make_label(center, "牌面空间不足 · %s" % tile_label(last), 9, Color(0.92, 0.86, 0.66), true)
+			compact_face_fallback.name = "CenterLastDiscardCompactFallback"
+			apply_rect(compact_face_fallback, rect_full(0.365, 0.690, 0.635, 0.835))
+			compact_face_fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			compact_face_fallback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			set_ui_full_text(compact_face_fallback, compact_face_fallback.text, "最后弃牌：" + tile_label(last) + "；当前中心牌面空间不足，牌面请看牌河")
+			configure_clipped_label(compact_face_fallback)
+			center.set_meta("center_last_discard_fallback", "readable_summary_instead_of_subminimum_face")
 		# Compact labels consume real pixel height beyond their normalized anchor;
 		# reserve a measured reading gap before centering the face.
 		var label_gap_anchor := (float(last_label.get_theme_font_size("font_size")) + 5.0) / maxf(1.0, center_size_px.y) if compact_center else 0.0
@@ -2192,6 +2218,13 @@ func draw_center(parent: Control) -> void:
 		wind.add_theme_color_override("font_outline_color", Color(0.015, 0.028, 0.018, 0.90))
 		wind.add_theme_constant_override("outline_size", 1)
 		apply_rect(wind, CENTER_WIND_RECTS[i])
+		if i == 2:
+			# The bottom slot is shorter than the authored CJK glyph minimum on
+			# compact viewports. Keep the anchor contract, but spend the overflow
+			# above the slot's bottom edge instead of clipping outside the shell.
+			var wind_slot_height: float = center.size.y * CENTER_WIND_RECTS[i].size.y - center.size.y * CENTER_WIND_RECTS[i].position.y
+			var wind_min_height: float = wind.get_combined_minimum_size().y
+			wind.offset_top = -maxf(0.0, wind_min_height - wind_slot_height)
 		fit_label_font_size(wind, maxf(18.0, safe_content_pixel_size().x * CENTER_PANEL_RECT.size.x * CENTER_WIND_RECTS[i].size.x * 0.82), 17, 10)
 		wind.set_meta("fit_rect_contract", "center_wind_rect_before_data_lane")
 
@@ -2204,6 +2237,11 @@ func register_battle_ui_round_contracts(root: Control) -> void:
 	# visual layer or replace the authored tile/illustration assets.
 	if root == null or not is_instance_valid(root):
 		return
+	var structure_revision := int(root.get_meta("ui_contract_structure_revision", 0))
+	if int(root.get_meta("battle_ui_round_registered_generation", -1)) == ui_page_generation and int(root.get_meta("battle_ui_round_registered_structure_revision", -1)) == structure_revision:
+		return
+	root.set_meta("battle_ui_round_registered_generation", ui_page_generation)
+	root.set_meta("battle_ui_round_registered_structure_revision", structure_revision)
 	# The battle root is rebuilt as one unit, so build one control index for this
 	# registration pass instead of recursively searching the same tree once per
 	# owner. Later dynamic modal controls are registered by their own builders.
@@ -2400,8 +2438,10 @@ func register_ui_round_681_710(root: Control) -> void:
 		target.set_meta("ui_round_contract_role", role)
 		mark_ui_optimization(target, finding_id)
 
+	var control_index := cached_ui_control_index(root)
 	var find_control := func(node_name: String) -> Control:
-		return root.find_child(node_name, true, false) as Control
+		var indexed := control_index.get(node_name, null) as Control
+		return indexed if indexed != null and is_instance_valid(indexed) else root.find_child(node_name, true, false) as Control
 
 	# Settings: keep consequence text, section order, footer and focus recovery
 	# as separate lanes. This is especially important at 960x540 and large text.
@@ -3894,8 +3934,10 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	root.set_meta("ui_round_1041_1070_contract_version", "20260910-secondary-flow-30")
 	root.set_meta("ui_round_1041_1070_scope", "secondary_table_surfaces_page_flow_and_dialog_recovery")
 	root.set_meta("ui_round_1041_1070_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var control_index := cached_ui_control_index(root)
 	var find_control := func(node_name: String) -> Control:
-		return root.find_child(node_name, true, false) as Control
+		var indexed := control_index.get(node_name, null) as Control
+		return indexed if indexed != null and is_instance_valid(indexed) else root.find_child(node_name, true, false) as Control
 	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
 		var target := node if node != null and is_instance_valid(node) else root
 		var attached: Array = target.get_meta("ui_round_1041_1070_ids", [])
@@ -9261,7 +9303,7 @@ func draw_center_last_discard_response_window(parent: Control, accent: Color, ti
 	configure_clipped_label(response_label)
 	var tick = add_gpt_tick_strip(window, rect_full(0.270, 0.250, (0.270) + float(2) * (0.135) + (0.026), 0.760), Color(accent.r, accent.g, accent.b, 0.22), "CenterLastDiscardResponseWindowTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(window)
 		tw.set_loops(48)
 		tw.tween_property(fill, "modulate:a", 0.38, 0.56).from(0.86)
 		tw.parallel().tween_property(seal, "modulate:a", 0.64, 0.56).from(0.92)
@@ -9307,6 +9349,10 @@ func draw_center_last_tile_trace(parent: Control, tile: String) -> Control:
 	trace.add_child(claim_gate)
 	var tick = add_gpt_tick_strip(trace, rect_full(0.365, 0.180, (0.388) + float(2) * (0.095), 0.500), Color(accent.r, accent.g, accent.b, 0.24), "CenterLastTileTick_0")
 	var claim_tick = add_gpt_tick_strip(trace, rect_full(0.545, 0.615, (0.568) + float(1) * (0.085), 0.855), Color(accent.r, accent.g, accent.b, 0.22), "CenterLastTileClaimTick_0")
+	for dynamic_layer in [claim_route, claim_gate, claim_tick]:
+		dynamic_layer.visible = false
+		dynamic_layer.set_meta("dynamic_owner", "CenterLastDiscardResponseWindow")
+	trace.set_meta("dynamic_claim_layers", "delegated_to_response_window")
 	return trace
 
 
@@ -13509,11 +13555,12 @@ func meld_lane_group_footprint(seat: int, meld: Array, compact_melds: bool) -> f
 	var badge_gutter := 16.0 if tile_count >= 4 else 12.0
 	return float(tile_count) * tile_extent + padding + badge_gutter
 
-func meld_lane_capacity_for_list(seat: int, meld_list: Array, compact_melds: bool, meld_rect: Rect2, reserve_pager: bool = false) -> int:
+func meld_lane_capacity_for_list(seat: int, meld_list: Array, compact_melds: bool, meld_rect: Rect2, reserve_pager: bool = false, content_size: Vector2 = Vector2.ZERO) -> int:
 	if meld_list.is_empty():
 		return 0
 	var vertical := seat_meld_is_vertical(seat)
-	var lane_extent := safe_content_pixel_size().y * float(meld_rect.size.y - meld_rect.position.y) if vertical else safe_content_pixel_size().x * float(meld_rect.size.x - meld_rect.position.x)
+	var measured_content_size := content_size if content_size != Vector2.ZERO else safe_content_pixel_size()
+	var lane_extent := measured_content_size.y * float(meld_rect.size.y - meld_rect.position.y) if vertical else measured_content_size.x * float(meld_rect.size.x - meld_rect.position.x)
 	var pager_reserve := 56.0 if reserve_pager else 0.0
 	var edge_clearance := 6.0 if compact_melds else 8.0
 	var usable_extent := maxf(1.0, lane_extent - pager_reserve - edge_clearance)
@@ -13531,27 +13578,27 @@ func meld_lane_capacity_for_list(seat: int, meld_list: Array, compact_melds: boo
 		capacity += 1
 	return maxi(1, capacity)
 
-func meld_lane_pager_rect(seat: int, meld_rect: Rect2) -> Rect2:
+func meld_lane_pager_rect(seat: int, meld_rect: Rect2, content_size: Vector2 = Vector2.ZERO) -> Rect2:
 	var lane_left := meld_rect.position.x
 	var lane_top := meld_rect.position.y
 	var lane_right := meld_rect.size.x
 	var lane_bottom := meld_rect.size.y
-	var content_size := safe_content_pixel_size()
-	var min_width_ratio := UI_MIN_TOUCH_TARGET / maxf(1.0, content_size.x)
-	var min_height_ratio := UI_MIN_TOUCH_TARGET / maxf(1.0, content_size.y)
+	var measured_content_size := content_size if content_size != Vector2.ZERO else safe_content_pixel_size()
+	var min_width_ratio := UI_MIN_TOUCH_TARGET / maxf(1.0, measured_content_size.x)
+	var min_height_ratio := UI_MIN_TOUCH_TARGET / maxf(1.0, measured_content_size.y)
 	if seat_meld_is_vertical(seat):
 		var pager_height := maxf(0.095, min_height_ratio + 0.010)
 		return rect_full(lane_left, lane_bottom - pager_height, lane_right, lane_bottom - 0.005)
 	var pager_width := maxf(0.060, min_width_ratio)
 	return rect_full(lane_right - pager_width, lane_top, lane_right - 0.005, lane_bottom)
 
-func meld_lane_content_rect(seat: int, meld_rect: Rect2, has_pager: bool) -> Rect2:
+func meld_lane_content_rect(seat: int, meld_rect: Rect2, has_pager: bool, content_size: Vector2 = Vector2.ZERO) -> Rect2:
 	if not has_pager:
 		return meld_rect
-	var pager_rect := meld_lane_pager_rect(seat, meld_rect)
-	var content_size := safe_content_pixel_size()
-	var gap_x := 8.0 / maxf(1.0, content_size.x)
-	var gap_y := 8.0 / maxf(1.0, content_size.y)
+	var measured_content_size := content_size if content_size != Vector2.ZERO else safe_content_pixel_size()
+	var pager_rect := meld_lane_pager_rect(seat, meld_rect, measured_content_size)
+	var gap_x := 8.0 / maxf(1.0, measured_content_size.x)
+	var gap_y := 8.0 / maxf(1.0, measured_content_size.y)
 	if seat_meld_is_vertical(seat):
 		return rect_full(meld_rect.position.x, meld_rect.position.y, meld_rect.size.x, maxf(meld_rect.position.y, pager_rect.position.y - gap_y))
 	return rect_full(meld_rect.position.x, meld_rect.position.y, maxf(meld_rect.position.x, pager_rect.position.x - gap_x), meld_rect.size.y)
@@ -13572,16 +13619,18 @@ func draw_melds(parent: Control) -> void:
 	var proxy_order := 1000
 	var compact_melds := effective_viewport_size().y <= 560.0 or (mode == "offline" and has_pending_danger_discard())
 	var danger_compact_melds := mode == "offline" and has_pending_danger_discard()
+	var meld_content_size := safe_content_pixel_size()
+	var meld_layout_revision := safe_area_layout_revision
 	for layout in MELD_LAYOUTS:
 		var seat = int(layout[0])
 		var meld_list = get_melds(seat)
 		if meld_list.is_empty():
 			continue
 		var meld_rect: Rect2 = seat_meld_rect(seat)
-		var full_capacity := meld_lane_capacity_for_list(seat, meld_list, compact_melds, meld_rect)
+		var full_capacity := meld_lane_capacity_for_list(seat, meld_list, compact_melds, meld_rect, false, meld_content_size)
 		var lane_capacity := full_capacity
 		if meld_list.size() > full_capacity:
-			lane_capacity = meld_lane_capacity_for_list(seat, meld_list, compact_melds, meld_rect, true)
+			lane_capacity = meld_lane_capacity_for_list(seat, meld_list, compact_melds, meld_rect, true, meld_content_size)
 		var latest_start := maxi(0, meld_list.size() - lane_capacity)
 		var window_start := clampi(int(meld_window_start_by_seat.get(seat, 0)), 0, latest_start)
 		if window_start >= meld_list.size():
@@ -13590,7 +13639,7 @@ func draw_melds(parent: Control) -> void:
 		var visible_melds: Array = meld_list.slice(window_start, mini(meld_list.size(), window_start + lane_capacity))
 		var page_count := maxi(1, int(ceil(float(meld_list.size()) / float(maxi(1, lane_capacity)))))
 		var has_pager := page_count > 1
-		var content_rect := meld_lane_content_rect(seat, meld_rect, has_pager)
+		var content_rect := meld_lane_content_rect(seat, meld_rect, has_pager, meld_content_size)
 		# Soft seat lane; melds sit next to the player plaque.
 		var lane_art := draw_meld_lane_art(parent, seat, meld_rect, meld_list.size())
 		if lane_art != null and compact_melds:
@@ -13635,14 +13684,17 @@ func draw_melds(parent: Control) -> void:
 		area.set_meta("group_owner_metadata", "MeldGroup_<index> owns its actual footprint and focus token")
 		area.set_meta("compact_readability_policy", "paginate_before_below_24px")
 		area.set_meta("actual_footprint_policy", "group_tiles_badge_and_lane_gutter")
+		area.set_meta("safe_area_layout_revision", meld_layout_revision)
+		area.set_meta("safe_content_pixel_size", meld_content_size)
+		area.set_meta("coordinate_context", "root_layer_safe_content_normalized_rect_and_shared_pixel_budget")
 		mark_ui_optimization(area, "F-043")
 		var meld_tile_size := Vector2.ZERO
 		if vertical and compact_melds:
 			# Spend the side lane height across one vertical group per row. This keeps
 			# every chi/peng/gang in the seat-facing lane instead of creating a second
 			# column that can drift into the river.
-			var lane_height_px := safe_content_pixel_size().y * float(meld_rect.size.y - meld_rect.position.y) - (56.0 if has_pager else 0.0)
-			var lane_width_px := safe_content_pixel_size().x * float(meld_rect.size.x - meld_rect.position.x) - (56.0 if has_pager else 0.0)
+			var lane_height_px := meld_content_size.y * float(meld_rect.size.y - meld_rect.position.y) - (56.0 if has_pager else 0.0)
+			var lane_width_px := meld_content_size.x * float(meld_rect.size.x - meld_rect.position.x) - (56.0 if has_pager else 0.0)
 			var group_rows := maxi(1, visible_melds.size())
 			var row_gap_px := float(maxi(0, group_rows - 1)) * 3.0
 			var group_height_px := maxf(32.0, (lane_height_px - row_gap_px) / float(group_rows))
@@ -13678,8 +13730,8 @@ func draw_melds(parent: Control) -> void:
 					horizontal_group_count += 1
 			if horizontal_tile_count > 0:
 				var lane_width_fraction := float(meld_rect.size.x - meld_rect.position.x)
-				var lane_width_px := safe_content_pixel_size().x * lane_width_fraction - (56.0 if has_pager else 0.0)
-				var lane_height_px := safe_content_pixel_size().y * float(meld_rect.size.y - meld_rect.position.y)
+				var lane_width_px := meld_content_size.x * lane_width_fraction - (56.0 if has_pager else 0.0)
+				var lane_height_px := meld_content_size.y * float(meld_rect.size.y - meld_rect.position.y)
 				var group_padding_px := float(horizontal_group_count) * 6.0
 				var group_gap_px := float(maxi(0, horizontal_group_count - 1)) * 3.0
 				# make_meld_group_view reserves one compact separator per tile. Try
@@ -13813,7 +13865,7 @@ func draw_melds(parent: Control) -> void:
 			mark_ui_optimization(page_button, "F-247")
 			page_button.z_index = 14
 			parent.add_child(page_button)
-			apply_rect(page_button, meld_lane_pager_rect(seat, meld_rect))
+			apply_rect(page_button, meld_lane_pager_rect(seat, meld_rect, meld_content_size))
 
 func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: int, shadow_size: int = 0) -> Control:
 	# Depth accents are authored bitmap plates. Keep this helper free of Panel and

@@ -522,6 +522,7 @@ var audio_streams: Dictionary = {}
 var voice_streams: Dictionary = {}
 var remote_voice_stream_cache: Dictionary = {}
 var remote_voice_stream_cache_order: Array[String] = []
+const ACTION_SFX_NAMES := {"peng": true, "gang": true, "win": true}
 var audio_layer: Node
 var bgm_player: AudioStreamPlayer
 var sfx_player: AudioStreamPlayer
@@ -536,8 +537,14 @@ var tts_voice_id = ""
 var tts_utterance_id = 1
 var next_bgm_retry_msec = 0
 var audio_touch_unlocked = false
+var audio_wake_pending := false
+var audio_wake_generation := 0
+var audio_backend_ready := false
+var bgm_start_in_flight := false
+var bgm_start_generation := 0
 var next_audio_health_check_msec = 0
 var last_bgm_health_check = 0
+var last_audio_health_full_check_msec := 0
 var resize_refresh_pending = false
 var resize_refresh_revision := 0
 var safe_area_layout_signature := ""
@@ -568,6 +575,7 @@ var ai_assist_enabled = false  # 出牌辅助（推荐/危险提示），玩家�
 var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
 var settings_focus_restore_name := ""
+var settings_overlay_generation := 0
 var menu_focus_restore_name := ""
 var shop_scroll_restore_value := -1.0
 var shop_scroll_restore_progress := -1.0
@@ -577,6 +585,9 @@ var telemetry_sheet_focus_restore_id := 0
 var diagnostic_focus_restore_name := ""
 var diagnostic_focus_restore_id := 0
 var replay_archive_focus_restore_id := ""
+var menu_parallax_pending_position := Vector2.ZERO
+var menu_parallax_update_pending := false
+var touch_drag_marker_last_msec := 0
 var achievement_focused_index := -1
 var ui_optimization_ids: Array[String] = []
 var stats_selected_rule := ""
@@ -689,6 +700,8 @@ var telemetry_last_action := "尚未操作"
 var telemetry_sheet_open := false
 var telemetry_clear_confirming := false
 var telemetry_clear_confirm_deadline_msec := 0
+var telemetry_mutation_revision := 0
+var telemetry_mutation_in_flight := false
 var applied_result_transactions: Dictionary = {}
 var applied_result_transaction_order: Array[String] = []
 var offline_hand_seed := 0
@@ -826,12 +839,25 @@ var shanten_cache_hits = 0
 var shanten_cache_misses = 0
 var ai_report_cache: Dictionary = {}
 var ai_report_cache_order: Array[String] = []
+var ai_report_cache_access: Dictionary = {}
+var ai_report_cache_clock := 0
+var ai_report_lru_prev: Dictionary = {}
+var ai_report_lru_next: Dictionary = {}
+var ai_report_lru_head := ""
+var ai_report_lru_tail := ""
+var ai_report_key_cache: Dictionary = {}
 var ai_report_cache_hits = 0
 var ai_report_cache_misses = 0
 var threat_report_cache: Dictionary = {}
 var threat_report_cache_order: Array[String] = []
 var effective_tiles_cache: Dictionary = {}
 var effective_tiles_cache_order: Array[String] = []
+var effective_tiles_cache_access: Dictionary = {}
+var effective_tiles_cache_clock := 0
+var effective_tiles_lru_prev: Dictionary = {}
+var effective_tiles_lru_next: Dictionary = {}
+var effective_tiles_lru_head := ""
+var effective_tiles_lru_tail := ""
 var effective_tiles_cache_hits = 0
 var effective_tiles_cache_misses = 0
 var perf_render_count = 0
@@ -876,6 +902,7 @@ var online_action_sequence := 0
 var online_session_id := 0
 var online_room_revision := -1
 var online_game_revision := -1
+var online_game_snapshot_token := 0
 var online_resume_context: Dictionary = {}
 var online_resume_pending := false
 var online_resume_join_sent := false
@@ -896,6 +923,18 @@ var online_last_lobby_render_revision := -1
 var online_lobby_action_controls: Dictionary = {}
 var online_lobby_roster_controls: Array[Dictionary] = []
 var online_lobby_focus_signature := ""
+var online_log_render_fingerprint := ""
+var online_log_rendered_source_count := -1
+var online_log_scroll_request_revision := 0
+var online_log_scroll_request_queued := false
+var online_log_scroll_request_follow_latest := false
+var online_log_scroll_request_value := 0
+var wall_total_snapshot := 0
+var wall_total_snapshot_mode := ""
+var wall_total_snapshot_rule := ""
+var wall_total_snapshot_online_revision := -2
+var wall_low_threshold_snapshot := 0
+var wall_critical_threshold_snapshot := 0
 var online_players_by_seat: Dictionary = {}
 var online_player_index_token := 0
 var online_announced_discard_key = ""
@@ -1062,9 +1101,9 @@ const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635)
 const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.06), Vector2(0.57, 0.205)),
+	Rect2(Vector2(0.43, 0.075), Vector2(0.57, 0.195)),
 	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
-	Rect2(Vector2(0.43, 0.795), Vector2(0.57, 0.94)),
+	Rect2(Vector2(0.43, 0.805), Vector2(0.57, 0.925)),
 	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
 ]
 const CENTER_DICE_DOT_POINTS := [
@@ -1393,7 +1432,7 @@ func create_screen_tween(preserve_timing: bool = false) -> Tween:
 	while screen_tweens.size() >= SCREEN_TWEEN_ACTIVE_BUDGET:
 		var oldest := screen_tweens[0] as Tween
 		if oldest == null or not is_instance_valid(oldest):
-			_forget_screen_tween(oldest)
+			screen_tweens.remove_at(0)
 			continue
 		oldest.kill()
 		_forget_screen_tween(oldest)
@@ -1428,12 +1467,16 @@ func empty_tile_stylebox() -> StyleBoxEmpty:
 func kill_screen_tweens_for_subtree(owner: Node) -> void:
 	if owner == null or not is_instance_valid(owner):
 		return
-	var owner_ids: Dictionary = {owner.get_instance_id(): true}
-	for candidate in owner.find_children("*", "Node", true, false):
-		if candidate != null and is_instance_valid(candidate):
-			owner_ids[candidate.get_instance_id()] = true
 	var tween_ids: Array[int] = []
-	for owner_id in owner_ids:
+	# The reverse owner registry is bounded by active tweens. Walking its owners
+	# avoids a second full subtree traversal during hand/page teardown.
+	for owner_id_variant in screen_tween_owner_index.keys():
+		var owner_id := int(owner_id_variant)
+		var registered_owner := instance_from_id(owner_id) as Node
+		if registered_owner == null or not is_instance_valid(registered_owner):
+			continue
+		if registered_owner != owner and not owner.is_ancestor_of(registered_owner):
+			continue
 		for tween_id in screen_tween_owner_index.get(owner_id, []):
 			tween_ids.append(int(tween_id))
 	for tween_id in tween_ids:
@@ -2692,7 +2735,17 @@ func configure_ordered_focus_navigation(root: Control, controls: Array, default_
 	var seen_control_ids: Dictionary = {}
 	for candidate in controls:
 		var control := candidate as Control
-		if control == null or not is_instance_valid(control) or not control.is_inside_tree() or not control.is_visible_in_tree() or control.focus_mode == Control.FOCUS_NONE:
+		if control == null or not is_instance_valid(control):
+			continue
+		if not control.is_inside_tree() or not control.is_visible_in_tree() or control.focus_mode == Control.FOCUS_NONE:
+			# A control can leave the tree while its parent screen is retained. Clear
+			# its old explicit links so a later visible route cannot point at stale UI.
+			control.focus_previous = NodePath("")
+			control.focus_next = NodePath("")
+			control.focus_neighbor_left = NodePath("")
+			control.focus_neighbor_right = NodePath("")
+			control.focus_neighbor_top = NodePath("")
+			control.focus_neighbor_bottom = NodePath("")
 			continue
 		var control_id := control.get_instance_id()
 		if seen_control_ids.has(control_id):

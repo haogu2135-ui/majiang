@@ -354,6 +354,9 @@ func _show_menu_impl() -> void:
 	stop_ambient_animation()
 	recover_audio_after_screen_change()
 	clear_screen()
+	online_log_render_fingerprint = ""
+	online_log_rendered_source_count = -1
+	online_log_scroll_request_queued = false
 
 	# The primary GPT stage below is the menu's sole full-screen scene.
 	menu_hero_art = null
@@ -668,9 +671,9 @@ func activate_menu_entry(source_name: String, action: Callable) -> void:
 
 
 func open_daily_login_from_menu() -> void:
-	var login_state := daily_login_view_state.duplicate(true)
-	if login_state.is_empty():
-		login_state = check_and_update_login()
+	# Re-read the calendar boundary whenever the page opens. A retained view state
+	# can otherwise describe yesterday after an overnight resume.
+	var login_state := check_and_update_login()
 	login_state["show_reward"] = true
 	show_daily_login_panel(login_state)
 
@@ -892,13 +895,22 @@ func refresh_online_lobby_action_states() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var find_control := func(node_name: String) -> Control:
-		return find_ui_contract_control(root_layer, node_name)
+		return online_lobby_control(node_name)
 	var connection_state := lobby_connection_state_text()
 	var connected := connection_state == "已连接"
 	var connecting := connection_state == "连接中"
 	var has_room_context := not online_room.is_empty() and (connected or online_waiting_for_server)
 	var room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 	var start_gate := online_lobby_start_gate()
+	var action_view_model := {
+		"connection_state": connection_state,
+		"connected": connected,
+		"connecting": connecting,
+		"room_code": room_code,
+		"has_room_context": has_room_context,
+		"start_gate": start_gate.duplicate(true),
+	}
+	root_layer.set_meta("online_lobby_action_view_model", action_view_model)
 	var action_state_key := "%s|%s|%s|%s|%s|%s|%s|%s" % [connection_state, room_code, has_room_context, online_feedback, online_waiting_for_server, high_contrast_enabled, start_gate.get("enabled", false), start_gate.get("text", "")]
 	var action_tree_ready := find_control.call("ChatLobbyButton") != null and find_control.call("OnlineLobbyPrimaryStartButton") != null
 	if action_tree_ready:
@@ -957,7 +969,7 @@ func refresh_online_lobby_action_states() -> void:
 		start_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if not start_button.disabled else Color(0.82, 0.84, 0.80, 0.88)
 	var start_reason := find_control.call("OnlineLobbyStartGateReason") as Label
 	if start_reason != null:
-		var gate_reason := str(online_lobby_start_gate().get("reason", "等待服务器确认开局条件"))
+		var gate_reason := str(start_gate.get("reason", "等待服务器确认开局条件"))
 		var room_action_reason := "连接后可用" if not connected else ("输入房间号" if room_code == "" else "已就绪")
 		var visible_reason := "创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason]
 		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：" + visible_reason)
@@ -985,16 +997,29 @@ func refresh_online_lobby_action_states() -> void:
 		mark_ui_optimization(current_status, "F-394")
 	configure_online_lobby_focus_navigation(false)
 
+func online_lobby_control(node_name: String) -> Control:
+	if root_layer == null or not is_instance_valid(root_layer) or node_name.strip_edges() == "":
+		return null
+	var root_id := root_layer.get_instance_id()
+	if int(root_layer.get_meta("online_lobby_control_index_root_id", 0)) != root_id:
+		root_layer.set_meta("online_lobby_control_index_root_id", root_id)
+		root_layer.set_meta("online_lobby_control_index", {})
+	var index: Dictionary = root_layer.get_meta("online_lobby_control_index", {})
+	var cached := index.get(node_name, null) as Control
+	if cached != null and is_instance_valid(cached) and root_layer.is_ancestor_of(cached):
+		return cached
+	var found := find_ui_contract_control(root_layer, node_name)
+	if found != null:
+		index[node_name] = found
+		root_layer.set_meta("online_lobby_control_index", index)
+	return found
+
 
 func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
 	var find_control := func(node_name: String) -> Control:
-		return find_ui_contract_control(root_layer, node_name)
-	var focus_signature := "%s|%s|%s|%s|%s" % [lobby_connection_state_text(), bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH), online_feedback, online_waiting_for_server, ui_page_generation]
-	if not grab_default_focus and str(root_layer.get_meta("online_lobby_focus_signature", "")) == focus_signature:
-		return
-	root_layer.set_meta("online_lobby_focus_signature", focus_signature)
+		return online_lobby_control(node_name)
 	# Keep the operational route stable across connection-state refreshes. Disabled
 	# actions are filtered by the shared helper. Roster detail targets remain
 	# independently focusable, but do not lengthen the primary action route.
@@ -1011,6 +1036,18 @@ func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -
 		find_control.call("ChatLobbyButton"),
 		find_control.call("OnlineLobbyLogLatestButton"),
 	]
+	var focus_state_parts: Array[String] = []
+	for target in controls:
+		var control := target as Control
+		if control == null:
+			focus_state_parts.append("missing")
+			continue
+		var disabled := control is BaseButton and (control as BaseButton).disabled
+		focus_state_parts.append("%d:%d:%d:%d:%d" % [control.get_instance_id(), int(control.visible), int(control.is_visible_in_tree()), int(disabled), control.focus_mode])
+	var focus_signature := "%s|%s|%d|%s" % [lobby_connection_state_text(), online_waiting_for_server, ui_page_generation, "|".join(focus_state_parts)]
+	if not grab_default_focus and str(root_layer.get_meta("online_lobby_focus_signature", "")) == focus_signature:
+		return
+	root_layer.set_meta("online_lobby_focus_signature", focus_signature)
 	for target in online_detail_target_list():
 		if target != null and is_instance_valid(target):
 			target.set_meta("focus_group", "auxiliary_roster_detail")
@@ -1326,7 +1363,7 @@ func _show_online_lobby_impl() -> void:
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		form_panel.modulate = Color(1, 1, 1, 0)
 		form_panel.offset_left = -16.0
-		var ftw := create_screen_tween()
+		var ftw := create_screen_tween_for_owner(form_panel)
 		ftw.set_parallel(true)
 		ftw.tween_property(form_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT)
 		ftw.tween_property(form_panel, "offset_left", 0.0, 0.28).from(-16.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -1371,7 +1408,7 @@ func _show_online_lobby_impl() -> void:
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		log_panel.modulate = Color(1, 1, 1, 0)
 		log_panel.offset_left = 18.0
-		var tw_log := create_screen_tween()
+		var tw_log := create_screen_tween_for_owner(log_panel)
 		tw_log.set_parallel(true)
 		tw_log.tween_property(log_panel, "modulate:a", 1.0, 0.28).from(0.0).set_ease(Tween.EASE_OUT).set_delay(0.12)
 		tw_log.tween_property(log_panel, "offset_left", 0.0, 0.28).from(18.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD).set_delay(0.12)
@@ -1569,7 +1606,7 @@ func refresh_online_lobby_state() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var find_control := func(node_name: String) -> Control:
-		return find_ui_contract_control(root_layer, node_name)
+		return online_lobby_control(node_name)
 	var lobby_start_gate := online_lobby_start_gate()
 	var lobby_state_key := "%s|%s|%s|%s|%s|%s|%s|%s" % [lobby_connection_state_text(), online_feedback, online_waiting_for_server, bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH), high_contrast_enabled, online_connection_endpoint_text(), lobby_start_gate.get("enabled", false), lobby_start_gate.get("text", "")]
 	var previous_state_key := str(root_layer.get_meta("online_lobby_state_key", ""))
@@ -1593,6 +1630,9 @@ func refresh_online_lobby_state() -> void:
 	if state != "已连接" and online_waiting_for_server:
 		var connection_feedback := "正在连接服务器，请稍候" if state == "连接中" else ("连接异常，请重试" if state == "异常" else "请先连接服务器。")
 		set_online_feedback(connection_feedback, true)
+		# Feedback normalization can update the waiting gate. All action labels below
+		# must use the same post-normalization snapshot as the buttons.
+		lobby_start_gate = online_lobby_start_gate()
 	var state_label = find_control.call("OnlineLobbyConnectionStateLabel") as Label
 	if state_label != null:
 		state_label.text = state
@@ -1685,7 +1725,7 @@ func refresh_online_lobby_state() -> void:
 		ensure_button_gpt_face_plate(start_button, Color(0.74, 0.48, 0.16) if not start_button.disabled else Color(0.38, 0.34, 0.28))
 	var start_reason := find_control.call("OnlineLobbyStartGateReason") as Label
 	if start_reason != null:
-		var gate_reason := str(online_lobby_start_gate().get("reason", "等待服务器确认开局条件"))
+		var gate_reason := str(lobby_start_gate.get("reason", "等待服务器确认开局条件"))
 		var live_room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 		var live_connected := lobby_connection_state_text() == "已连接"
 		var room_action_reason := "连接后可用" if not live_connected else ("输入房间号" if live_room_code == "" else "已就绪")
@@ -1699,7 +1739,7 @@ func refresh_online_lobby_state() -> void:
 	if lobby_status != null:
 		var lobby_status_text := ""
 		if state == "已连接":
-			lobby_status_text = str(online_lobby_start_gate().get("reason", "可建房或入房"))
+			lobby_status_text = str(lobby_start_gate.get("reason", "可建房或入房"))
 		elif state == "连接中":
 			lobby_status_text = "正在连接服务器，请稍候"
 		elif state == "异常":
@@ -1715,7 +1755,7 @@ func refresh_online_room_content() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var find_control := func(node_name: String) -> Control:
-		return find_ui_contract_control(root_layer, node_name)
+		return online_lobby_control(node_name)
 	var room_art = find_control.call("OnlineLobbyRoomArt") as CanvasItem
 	var roster = find_control.call("OnlineLobbyRosterPanel") as CanvasItem
 	var log_list = find_control.call("OnlineLobbyLogListPanel") as CanvasItem
@@ -1796,7 +1836,7 @@ func refresh_online_room_content() -> void:
 	for slot in range(4):
 		var entry := online_lobby_player_for_slot(entries, slot)
 		var active := not entry.is_empty()
-		var slot_fingerprint := "%s|%s" % [JSON.stringify(entry), snapshot_state]
+		var slot_fingerprint := online_lobby_roster_entry_fingerprint(entry, snapshot_state)
 		if str(root_layer.get_meta("online_lobby_roster_slot_%d_fingerprint" % slot, "")) == slot_fingerprint:
 			continue
 		root_layer.set_meta("online_lobby_roster_slot_%d_fingerprint" % slot, slot_fingerprint)
@@ -1807,11 +1847,11 @@ func refresh_online_room_content() -> void:
 		if name_label != null:
 			name_label.text = online_lobby_slot_name(entry)
 			name_label.tooltip_text = name_label.text
-			fit_label_font_size(name_label, maxf(88.0, effective_viewport_size().x * 0.180), 12, 9)
+			fit_label_font_size(name_label, maxf(88.0, viewport_size.x * 0.180), 12, 9)
 			if slot_state_label != null:
 				var slot_state := online_lobby_slot_state(entry, slot)
 				set_dynamic_label_text(slot_state_label, slot_state, "第%d席状态：%s" % [slot + 1, slot_state])
-				fit_label_font_size(slot_state_label, maxf(96.0, effective_viewport_size().x * 0.210), 11, 9)
+				fit_label_font_size(slot_state_label, maxf(96.0, viewport_size.x * 0.210), 11, 9)
 			var slot_state_icon := find_control.call("OnlineLobbyRosterStateIcon_%d" % slot) as TextureRect
 			if slot_state_icon != null:
 				slot_state_icon.texture = lucide_icon_texture(online_lobby_slot_state_icon(entry, slot))
@@ -1850,13 +1890,25 @@ func refresh_online_room_content() -> void:
 		mark_ui_optimization(log_count_label, "F-241")
 	render_room_log()
 
+func online_lobby_roster_entry_fingerprint(entry: Dictionary, snapshot_state: String) -> String:
+	if entry.is_empty():
+		return "empty|" + snapshot_state
+	return "%s|%s|%s|%s|%s|%s" % [
+		snapshot_state,
+		str(entry.get("seat", entry.get("seatIndex", -1))),
+		str(entry.get("name", entry.get("playerName", ""))),
+		str(entry.get("ready", false)),
+		str(entry.get("connected", entry.get("online", true))),
+		str(entry.get("host", entry.get("isHost", false))),
+	]
+
 
 func online_detail_target_list() -> Array[Button]:
 	var targets: Array[Button] = []
 	if root_layer == null or not is_instance_valid(root_layer):
 		return targets
 	var find_control := func(node_name: String) -> Control:
-		return find_ui_contract_control(root_layer, node_name)
+		return online_lobby_control(node_name)
 	var room_target := find_control.call("OnlineLobbyRoomBadgeTouchTarget") as Button
 	if room_target != null:
 		targets.append(room_target)
@@ -2047,7 +2099,7 @@ func _show_rules_screen_impl() -> void:
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_right = -22.0
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(panel)
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_right", 0.0, 0.26).from(-22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -2199,16 +2251,25 @@ func _show_rules_screen_impl() -> void:
 	)
 	wire_rules_guide_navigation(rules_guide, content_scroll)
 	var rules_steps: Array[Control] = []
+	var rules_step_refs: Array[Dictionary] = []
 	for i in range(RULES_SECTION_COUNT):
 		var step_control := rules_guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
 		if step_control != null:
 			rules_steps.append(step_control)
+			rules_step_refs.append({
+			"root": step_control,
+			"plate": step_control.find_child("RulesGuideStepActivePlate_%d" % i, true, false) as CanvasItem,
+			"icon": step_control.find_child("RulesGuideStepIcon_%d" % i, true, false) as CanvasItem,
+			"label": step_control.find_child("RulesGuideStepLabel_%d" % i, true, false) as Label,
+			"state": step_control.find_child("RulesGuideStepState_%d" % i, true, false) as Label,
+		})
 	content_scroll.set_meta("rules_control_cache", {
 		"content": content,
 		"guide": rules_guide,
 		"hit_target": rules_scroll_hit_target,
 		"thumb": rules_scroll_thumb,
 		"steps": rules_steps,
+		"step_refs": rules_step_refs,
 		"status": rules_guide.get_parent().find_child("RulesReadingStatus", true, false) as Label,
 	})
 	content_scroll.set_meta("rules_layout_flush_queued", false)
@@ -2421,7 +2482,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 			current_section = total_sections
 	var cache: Dictionary = content_scroll.get_meta("rules_control_cache", {})
 	var status := cache.get("status", null) as Label
-	var steps: Array = cache.get("steps", [])
+	var step_refs: Array = cache.get("step_refs", [])
 	if status != null:
 		var current_section_name := rules_section_names[clampi(current_section - 1, 0, rules_section_names.size() - 1)]
 		status.text = "第%d/%d · %s" % [current_section, total_sections, current_section_name]
@@ -2441,18 +2502,19 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 			active_step = guide_index
 			break
 	for i in range(total_sections):
-		var step := steps[i] as Control if i < steps.size() else guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
+		var step_ref: Dictionary = step_refs[i] if i < step_refs.size() else {}
+		var step := step_ref.get("root", null) as Control
 		if step == null:
 			continue
 		var active := i == active_step
 		step.set_meta("active", active)
-		var plate = step.find_child("RulesGuideStepActivePlate_%d" % i, true, false) as CanvasItem
+		var plate := step_ref.get("plate", null) as CanvasItem
 		if plate != null:
 			plate.modulate = Color(1.0, 1.0, 1.0, 0.72 if active else 0.08)
-		var icon = step.find_child("RulesGuideStepIcon_%d" % i, true, false) as CanvasItem
+		var icon := step_ref.get("icon", null) as CanvasItem
 		if icon != null:
 			icon.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.48)
-		var label = step.find_child("RulesGuideStepLabel_%d" % i, true, false) as Label
+		var label := step_ref.get("label", null) as Label
 		if label != null:
 			var guide_name := str(label.get_meta("guide_name", label.text))
 			label.text = guide_name
@@ -2462,7 +2524,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 			mark_ui_optimization(label, "F-598")
 			mark_ui_optimization(label, "F-226")
 			label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.66) if active else Color(0.82, 0.88, 0.80))
-		var state_label := step.find_child("RulesGuideStepState_%d" % i, true, false) as Label
+		var state_label := step_ref.get("state", null) as Label
 		if state_label != null:
 			var state_text := "当前" if active else ("已读" if i < active_step else "待读")
 			state_label.text = state_text
@@ -2540,6 +2602,9 @@ func wire_rules_guide_navigation(guide: Control, content_scroll: ScrollContainer
 	for i in range(target_sections.size()):
 		var step := guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
 		if step == null:
+			continue
+		var existing_button := step.get_node_or_null("RulesGuideStepButton_%d" % i) as Button
+		if existing_button != null and is_instance_valid(existing_button):
 			continue
 		var section_index := int(target_sections[i])
 		var button := Button.new()
@@ -2769,7 +2834,7 @@ func _show_shop_screen_impl() -> void:
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.offset_left = 22.0
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(panel)
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_left", 0.0, 0.26).from(22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -3859,13 +3924,15 @@ func close_settings_panel() -> void:
 	settings_panel_open = false
 	telemetry_sheet_open = false
 	settings_focus_restore_name = ""
+	settings_overlay_generation += 1
+	var restore_token := settings_overlay_generation
 	emit_ui_qa_marker("settings|closed")
 	reset_progress_confirming = false
 	reset_progress_confirm_deadline_msec = 0
 	refresh_current_screen()
 	if mode == "menu" or mode == "offline" or mode == "online_game":
 		var restore_name := "MenuSettingsButton" if mode == "menu" else "TopHudSettingsButton"
-		call_deferred("focus_named_control", restore_name)
+		call_deferred("restore_settings_focus_after_close", restore_name, restore_token, mode)
 
 
 func show_telemetry_data_sheet() -> void:
@@ -3986,6 +4053,8 @@ func show_telemetry_data_sheet() -> void:
 	consent.name = "TelemetryConsentButton"
 	consent.tooltip_text = "允许或停止记录匿名诊断事件"
 	set_ui_full_text(consent, consent.tooltip_text, "隐私诊断记录开关")
+	consent.disabled = telemetry_mutation_in_flight
+	consent.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	consent.custom_minimum_size = Vector2(120, 44)
 	apply_rect(consent, rect_full(0.075, 0.620, 0.320, 0.765))
 	consent.set_meta("telemetry_action", "consent")
@@ -3995,6 +4064,8 @@ func show_telemetry_data_sheet() -> void:
 	export.name = "TelemetryExportButton"
 	export.tooltip_text = "复制本机匿名诊断数据"
 	set_ui_full_text(export, export.tooltip_text, "导出隐私诊断数据")
+	export.disabled = telemetry_mutation_in_flight
+	export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	export.custom_minimum_size = Vector2(100, 44)
 	apply_rect(export, rect_full(0.350, 0.620, 0.610, 0.765))
 	export.set_meta("telemetry_action", "export")
@@ -4006,6 +4077,8 @@ func show_telemetry_data_sheet() -> void:
 	clear.name = "TelemetryClearButton"
 	clear.tooltip_text = "清除本机匿名诊断数据"
 	set_ui_full_text(clear, clear.tooltip_text, "清除隐私诊断数据")
+	clear.disabled = telemetry_mutation_in_flight
+	clear.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	clear.custom_minimum_size = Vector2(100, 44)
 	apply_rect(clear, rect_full(0.640, 0.620, 0.925, 0.765))
 	clear.set_meta("telemetry_action", "clear")
@@ -4049,23 +4122,35 @@ func refresh_telemetry_data_sheet() -> void:
 		return
 	var status := sheet.find_child("TelemetryDataStatus", true, false) as Label
 	if status != null:
-		set_dynamic_label_text(status, telemetry_consent_status_text())
+		var status_text := "处理中 · 正在提交隐私记录设置" if telemetry_mutation_in_flight else telemetry_consent_status_text()
+		set_dynamic_label_text(status, status_text)
+		status.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var permission_summary := sheet.find_child("TelemetryPermissionSummary", true, false) as Label
 	if permission_summary != null:
-		set_dynamic_label_text(permission_summary, telemetry_permission_summary_text(), "当前隐私权限与本地队列状态")
+		var permission_text := "权限更新中 · 本地队列暂不变" if telemetry_mutation_in_flight else telemetry_permission_summary_text()
+		set_dynamic_label_text(permission_summary, permission_text, "当前隐私权限与本地队列状态")
+		permission_summary.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var consent := sheet.find_child("TelemetryConsentButton", true, false) as Button
 	if consent != null:
-		consent.text = "关闭记录" if telemetry_consent else "同意记录"
-		consent.tooltip_text = "停止记录并清除本地匿名事件" if telemetry_consent else "允许记录匿名诊断事件"
+		consent.disabled = telemetry_mutation_in_flight
+		consent.text = "处理中" if telemetry_mutation_in_flight else ("关闭记录" if telemetry_consent else "同意记录")
+		consent.tooltip_text = "正在提交隐私记录设置，请稍候" if telemetry_mutation_in_flight else ("停止记录并清除本地匿名事件" if telemetry_consent else "允许记录匿名诊断事件")
 		set_ui_full_text(consent, consent.tooltip_text, "隐私诊断记录：" + consent.text)
+		consent.set_meta("telemetry_state_revision", telemetry_mutation_revision)
+	var export := sheet.find_child("TelemetryExportButton", true, false) as Button
+	if export != null:
+		export.disabled = telemetry_mutation_in_flight
+		export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var clear := sheet.find_child("TelemetryClearButton", true, false) as Button
 	if clear != null:
+		clear.disabled = telemetry_mutation_in_flight
 		clear.text = "再次清除" if telemetry_clear_confirming else "清除"
 		clear.tooltip_text = "再次点击确认清除本机匿名诊断数据" if telemetry_clear_confirming else "首次点击只进入确认，第二次点击才清除本机匿名诊断数据"
 		set_ui_full_text(clear, clear.tooltip_text, "隐私诊断清除：" + clear.text)
 		clear.set_meta("confirm_state", "armed" if telemetry_clear_confirming else "idle")
 		clear.set_meta("first_click_is_non_destructive", true)
 		clear.set_meta("confirm_remaining_msec", maxi(0, telemetry_clear_confirm_deadline_msec - Time.get_ticks_msec()) if telemetry_clear_confirming else 0)
+		clear.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		mark_ui_optimization(clear, "F-406")
 	var clear_hint := sheet.find_child("TelemetryClearConfirmHint", true, false) as Label
 	if clear_hint != null:
@@ -4078,12 +4163,15 @@ func refresh_telemetry_data_sheet() -> void:
 	var export_status := sheet.find_child("TelemetryExportStatus", true, false) as Label
 	if export_status != null:
 		set_dynamic_label_text(export_status, "导出：%s" % telemetry_export_status)
+		export_status.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 		export_status.set_meta("modal_safe_route", "inside_sheet_footer")
 		mark_ui_optimization(export_status, "F-049")
 	var recent_action := sheet.find_child("TelemetryRecentAction", true, false) as Label
 	if recent_action != null:
-		set_dynamic_label_text(recent_action, "最近操作：%s" % telemetry_last_action, telemetry_last_action)
+		var recent_text := "最近操作：提交中" if telemetry_mutation_in_flight else "最近操作：%s" % telemetry_last_action
+		set_dynamic_label_text(recent_action, recent_text, telemetry_last_action)
+		recent_action.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 
 
 func close_telemetry_data_sheet() -> void:
@@ -4940,17 +5028,49 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 	# 确认按钮 - 一次性入账，领取后保留页面并明确显示已领取。
 	var claim_state := {"claimed": claimed_today}
+	var claim_in_flight := {"active": false}
 	var confirm_button_ref := {"button": null}
 	var confirm_btn: Button
 	confirm_btn = make_small_button("已领取" if claimed_today else "领取奖励", Color(0.78, 0.56, 0.28), func() -> void:
+		if bool(claim_in_flight.get("active", false)):
+			return
 		if bool(claim_state.get("claimed", false)):
 			show_toast("今日奖励已领取。", 1800)
 			return
+		claim_in_flight["active"] = true
+		var claim_button := confirm_button_ref.get("button") as Button
+		if claim_button != null and is_instance_valid(claim_button):
+			claim_button.disabled = true
+			claim_button.text = "领取中"
+			claim_button.tooltip_text = "签到请求处理中，请勿重复点击"
+			claim_button.set_meta("claim_state", "in_flight")
+			claim_button.set_meta("disabled_reason", "签到请求处理中")
+			set_ui_full_text(claim_button, claim_button.tooltip_text, "签到奖励操作：领取中")
 		var claim_result = claim_daily_login_reward()
 		if not bool(claim_result.get("claimed", false)):
+			if bool(claim_result.get("already_claimed", false)):
+				claim_state["claimed"] = true
+				daily_login_view_state["claimed_today"] = true
+				if claim_button != null and is_instance_valid(claim_button):
+					claim_button.text = "已领取"
+					claim_button.tooltip_text = "今日奖励已领取；明日可继续签到"
+					claim_button.set_meta("claim_state", "claimed")
+					claim_button.set_meta("disabled_reason", "今日奖励已领取")
+					set_ui_full_text(claim_button, claim_button.tooltip_text, "签到奖励操作：已领取")
+				show_toast("今日奖励已领取。", 1800)
+				return
+			claim_in_flight["active"] = false
+			if claim_button != null and is_instance_valid(claim_button):
+				claim_button.disabled = false
+				claim_button.text = "领取奖励"
+				claim_button.tooltip_text = "领取今日签到奖励；领取后奖励立即入账"
+				claim_button.set_meta("claim_state", "available")
+				claim_button.remove_meta("disabled_reason")
+				set_ui_full_text(claim_button, claim_button.tooltip_text, "签到奖励操作：可领取")
 			show_toast(str(claim_result.get("reason", "签到奖励领取失败")), 2200)
 			return
 		claim_state["claimed"] = true
+		daily_login_view_state["claimed_today"] = true
 		day_indicators_container.set_meta("claimed_today", true)
 		day_indicators_container.set_meta("daily_login_view_state", "claimed")
 		set_ui_full_text(day_indicators_container, "当前第%d天；今日已领取" % current_day_in_cycle, "七日签到进度：今日已领取，明日可继续签到")
@@ -7052,7 +7172,9 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	event_scroll.set_meta("timeline_range_update_count", int(event_scroll.get_meta("timeline_range_update_count", 0)) + 1)
 	mark_ui_optimization(event_scroll, "F-244")
 	configure_replay_timeline_focus_navigation(focus_first)
-	set_replay_timeline_selection(replay_timeline_selected_index if replay_timeline_selected_index >= 0 else 0, false)
+	# Re-align after the deferred row heights settle. The selected index remains
+	# authoritative, so long wrapped events cannot scroll the selection out of view.
+	set_replay_timeline_selection(replay_timeline_selected_index if replay_timeline_selected_index >= 0 else 0, true)
 
 
 func configure_replay_timeline_focus_navigation(focus_first: bool = false) -> void:
@@ -7197,6 +7319,8 @@ func import_replay_from_input() -> void:
 	if payload.is_empty():
 		replay_import_payload = {}
 		render_replay_timeline_events(replay_import_payload, false)
+		input.set_meta("replay_recovery_route", "保留错误码并返回输入框编辑")
+		input.grab_focus()
 		if status != null:
 			status.text = "回放码无效或校验失败"
 			status.modulate = Color(0.96, 0.48, 0.36)
@@ -7299,7 +7423,12 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 		toast_bg.set_meta("menu_safe_slot_name", menu_safe_slot_name)
 		toast_bg.set_meta("menu_safe_slot_contract", "clear_of_title_tutorial_and_primary_cards")
 	if root_layer != null and is_instance_valid(root_layer):
-		var modal_present := root_layer.find_child("DiagnosticDialogPanel", true, false) != null or root_layer.find_child("TelemetryDataSheetCard", true, false) != null or root_layer.find_child("ExitConfirmDialog", true, false) != null
+		var modal_owner := ""
+		for modal_name in ["TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "TutorialEntryOverlay", "UpdateDialogPanel", "SettingsOverlay"]:
+			if root_layer.find_child(modal_name, true, false) != null:
+				modal_owner = modal_name
+				break
+		var modal_present := modal_owner != ""
 		if modal_present:
 			# Modal cards own the middle of the screen. Keep transient feedback in
 			# the top-left safety band so it never masks a modal header or its
@@ -7309,6 +7438,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 			toast_top = 0.020
 			toast_bottom = 0.070
 			toast_bg.set_meta("modal_safe_route", "top_left_clear_of_header_close")
+			toast_bg.set_meta("modal_safe_owner", modal_owner)
 			if mode == "menu":
 				toast_bg.set_meta("menu_safe_slot_name", "modal_override_top_left")
 	toast_bg.anchor_top = toast_top
@@ -7700,6 +7830,7 @@ func toggle_music_setting() -> void:
 
 func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
+	settings_overlay_generation += 1
 	emit_ui_qa_marker("settings|%s" % ("open" if settings_panel_open else "closed"))
 	reset_progress_confirming = false
 	reset_progress_confirm_deadline_msec = 0

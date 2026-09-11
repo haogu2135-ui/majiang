@@ -718,12 +718,15 @@ func render_game() -> void:
 		call_deferred("update_ai_assistance_async")
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
-	# Register against the complete page-owned tree so late modal controls are
-	# included without a second recursive scan.
-	register_battle_ui_round_contracts(root_layer)
-	register_ui_round_681_710(root_layer)
-	register_ui_round_1011_1040(root_layer)
-	register_ui_round_1041_1070(root_layer)
+	# Contract registration belongs to the mounted root generation. Partial lane
+	# updates never enter this path, so they do not rescan the page tree.
+	var contract_generation_key := "%d|%d" % [ui_page_generation, int(root_layer.get_meta("ui_contract_structure_revision", 0))]
+	if str(root_layer.get_meta("battle_contract_registration_key", "")) != contract_generation_key:
+		register_battle_ui_round_contracts(root_layer)
+		register_ui_round_681_710(root_layer)
+		register_ui_round_1011_1040(root_layer)
+		register_ui_round_1041_1070(root_layer)
+		root_layer.set_meta("battle_contract_registration_key", contract_generation_key)
 	update_fx_turn_pulse()
 	if mode == "offline":
 		schedule_ui_qa_page_ready("offline", ["TopHudTitle", "TopHudSettingsButton", "HandTray", "ActionButtonDock"])
@@ -739,12 +742,16 @@ func update_ai_assistance_async() -> void:
 	var evaluation_revision := ai_state_revision
 	var evaluation_generation := ui_page_generation
 	var evaluation_hand_signature := hand_identity_fingerprint(get_self_hand())
+	var evaluation_visible_counts := visible_tile_counts()
+	var evaluation_table_signature := threat_report_table_state_cache_key(0, evaluation_visible_counts)
 
 	var start_time = Time.get_ticks_msec()
 
 	# 计算AI推荐
 	var next_human_advice := get_ai_discard_reports(0)
-	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline" or hand_identity_fingerprint(get_self_hand()) != evaluation_hand_signature:
+	var seat_threat_context := make_ai_evaluation_context(0, evaluation_visible_counts)
+	var next_seat_threat_reports := render_seat_threat_reports(0, seat_threat_context) if player_ai_assist_enabled() else {}
+	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline" or hand_identity_fingerprint(get_self_hand()) != evaluation_hand_signature or threat_report_table_state_cache_key(0, visible_tile_counts()) != evaluation_table_signature:
 		# The deferred evaluator no longer describes the mounted table. Do not
 		# partially commit hand and threat results; the next state render owns retry.
 		offline_ai_assistance_queued = false
@@ -752,22 +759,18 @@ func update_ai_assistance_async() -> void:
 	current_human_advice = next_human_advice
 	ai_advice_hand_signature = evaluation_hand_signature
 	ai_assistance_revision = evaluation_revision
+	ai_threat_assistance_revision = evaluation_revision
 
 	var elapsed = Time.get_ticks_msec() - start_time
 	perf_ai_decision_count += 1
 	perf_ai_decision_total_ms += elapsed
 
-	# 更新手牌显示的AI标注
+	# Commit both AI lanes from the same immutable table snapshot. This prevents a
+	# hand badge from becoming visible one frame before its seat threat reports.
+	if player_ai_assist_enabled():
+		update_seat_threats_display(next_seat_threat_reports)
 	if not current_human_advice.is_empty():
 		update_hand_ai_hints()
-
-	# 计算对手威胁（如果启用）
-	if player_ai_assist_enabled():
-		var seat_threat_context = make_ai_evaluation_context(0, visible_tile_counts())
-		var seat_threat_reports = render_seat_threat_reports(0, seat_threat_context)
-		# 更新座位威胁显示
-		update_seat_threats_display(seat_threat_reports)
-		ai_threat_assistance_revision = evaluation_revision
 
 func copy_local_ui_contract_metadata(source: Control, target: Control) -> void:
 	if source == null or target == null or not is_instance_valid(source) or not is_instance_valid(target):
@@ -1079,6 +1082,9 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 		if claim != "pass":
 			human_claim("pass")
 		return
+	# Invalidate the visible response stack before mutating the table. This closes
+	# the double-click window while the deferred full render is being scheduled.
+	invalidate_pending_claim_action_stack()
 	interactive_guide_active = false
 	interactive_guide_type = ""
 	interactive_guide_target_index = -1

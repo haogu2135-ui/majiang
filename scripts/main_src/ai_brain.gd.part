@@ -433,7 +433,10 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 		for key in banned_tiles.keys():
 			banned_lookup[str(key)] = true
 	var evaluated_tiles := {}
-	var simulated = after_hand.duplicate()
+	# Quiet/soak decisions consume only count-based risk fields. Avoid materializing
+	# and restoring a full array for every candidate in that path; foreground
+	# reports still receive the exact post-discard hand ordering below.
+	var simulated = after_hand.duplicate() if not offline_sim_quiet else []
 	var simulated_counts = after_counts.duplicate()
 	for i in range(after_hand.size()):
 		var candidate = str(after_hand[i])
@@ -445,14 +448,16 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 		var candidate_index = tile_index(candidate)
 		if candidate_index < 0 or candidate_index >= simulated_counts.size() or int(simulated_counts[candidate_index]) <= 0:
 			continue
-		simulated.remove_at(i)
+		if not offline_sim_quiet:
+			simulated.remove_at(i)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) - 1
 		# 副露压力检查只需要知道是否会被迫切危险张。静默全 Bot 采样中，
 		# 不要为每一个候选再展开完整的进张/待牌/路线报告；这会在一次响应
 		# 中重复数十次 34 张扫描。前台对局和玩家助手仍走完整评估。
 		var report = build_ai_fast_post_claim_discard_report(seat, candidate, open_melds, pressure_context, shared_context, simulated_counts) if offline_sim_quiet else build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, shared_context, simulated_counts, after_counts)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
-		simulated.insert(i, candidate)
+		if not offline_sim_quiet:
+			simulated.insert(i, candidate)
 		if best.is_empty() or float(report.get("score", -1000000.0)) > float(best.get("score", -1000000.0)):
 			best = report
 	return best
@@ -501,6 +506,10 @@ func choose_ai_rob_gang(gang_seat: int, tile: String) -> Dictionary:
 
 
 func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
+	var cache_state_key := "%d|%d|%s" % [ai_state_revision, gang_seat, tile]
+	var cached_report: Variant = ai_rob_threat_cache.get(cache_state_key, null)
+	if typeof(cached_report) == TYPE_DICTIONARY:
+		return (cached_report as Dictionary).duplicate(true)
 	var report := {
 		"can_rob": false,
 		"winner_seat": -1,
@@ -576,6 +585,9 @@ func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
 	# Compatibility key: this now means credible public risk, never exact hidden
 	# hand knowledge.  winner_seat/human_robber/ai_robber intentionally stay empty.
 	report["can_rob"] = max_risk >= threshold or aggregate_risk >= threshold + 6.0
+	ai_rob_threat_cache[cache_state_key] = report.duplicate(true)
+	if ai_rob_threat_cache.size() > 64:
+		ai_rob_threat_cache.erase(ai_rob_threat_cache.keys()[0])
 	return report
 
 # 荣和价值权衡：薄低番可过，厚高番/高压/守成必吃。
@@ -1456,7 +1468,9 @@ func get_ai_discard_reports(seat: int) -> Array:
 	var cache_key = ai_report_cache_key(seat) if use_report_cache else ""
 	if use_report_cache and ai_report_cache.has(cache_key):
 		ai_report_cache_hits += 1
-		touch_cache_key(ai_report_cache_order, cache_key)
+		ai_report_cache_clock += 1
+		ai_report_cache_access[cache_key] = ai_report_cache_clock
+		touch_ai_report_cache_key(cache_key)
 		return duplicate_report_array(ai_report_cache[cache_key])
 	if use_report_cache:
 		ai_report_cache_misses += 1
@@ -1762,6 +1776,7 @@ func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) 
 	return {
 		"seat": seat,
 		"visible_counts": visible_counts,
+		"visible_counts_key": counts_compact_key(visible_counts),
 		"known_counts": known_counts,
 		"opponents": opponents,
 		"threat_cache_state_key": threat_cache_state_key,
@@ -1822,20 +1837,65 @@ func opponent_discard_tile_count(opponent: int, tile: String, eval_context: Dict
 func ai_context_cache_key(tile: String, seat: int) -> String:
 	return "%d:%s" % [seat, tile]
 
+func touch_ai_report_cache_key(key: String) -> void:
+	if key == "":
+		return
+	var previous := str(ai_report_lru_prev.get(key, ""))
+	var next := str(ai_report_lru_next.get(key, ""))
+	if ai_report_lru_head == key:
+		return
+	if ai_report_lru_prev.has(key) or ai_report_lru_next.has(key) or ai_report_lru_tail == key:
+		if previous != "":
+			ai_report_lru_next[previous] = next
+		else:
+			ai_report_lru_head = next
+		if next != "":
+			ai_report_lru_prev[next] = previous
+		else:
+			ai_report_lru_tail = previous
+	ai_report_lru_prev[key] = ""
+	ai_report_lru_next[key] = ai_report_lru_head
+	if ai_report_lru_head != "":
+		ai_report_lru_prev[ai_report_lru_head] = key
+	else:
+		ai_report_lru_tail = key
+	ai_report_lru_head = key
+
+func evict_ai_report_cache_key(key: String) -> void:
+	if key == "":
+		return
+	var previous := str(ai_report_lru_prev.get(key, ""))
+	var next := str(ai_report_lru_next.get(key, ""))
+	if previous != "":
+		ai_report_lru_next[previous] = next
+	else:
+		ai_report_lru_head = next
+	if next != "":
+		ai_report_lru_prev[next] = previous
+	else:
+		ai_report_lru_tail = previous
+	ai_report_lru_prev.erase(key)
+	ai_report_lru_next.erase(key)
+	ai_report_cache.erase(key)
+	ai_report_cache_access.erase(key)
+
 func store_ai_report_cache(key: String, reports: Array) -> void:
 	if key == "":
 		return
-	if ai_report_cache.has(key):
-		touch_cache_key(ai_report_cache_order, key)
-	else:
-		ai_report_cache_order.append(key)
 	ai_report_cache[key] = duplicate_report_array(reports, true)
-	while ai_report_cache_order.size() > AI_REPORT_CACHE_LIMIT:
-		var oldest = ai_report_cache_order.pop_front()
-		ai_report_cache.erase(oldest)
+	ai_report_cache_clock += 1
+	ai_report_cache_access[key] = ai_report_cache_clock
+	touch_ai_report_cache_key(key)
+	while ai_report_cache.size() > AI_REPORT_CACHE_LIMIT:
+		evict_ai_report_cache_key(ai_report_lru_tail)
 
 func ai_report_cache_key(seat: int) -> String:
 	var visible_table_key := threat_report_table_state_cache_key(seat, visible_tile_counts())
+	var hand_key := tile_array_key(players[seat].get("hand", []))
+	var input_key := "%d|%d|%s|%s" % [ai_state_revision, seat, visible_table_key, hand_key]
+	var cached_key: String = str(ai_report_key_cache.get(input_key, ""))
+	if cached_key != "":
+		return cached_key
 	var parts: Array[String] = [
 		"rev=%d" % ai_state_revision,
 		"seat=%d" % seat,
@@ -1857,9 +1917,13 @@ func ai_report_cache_key(seat: int) -> String:
 		# include the table snapshot so those changes invalidate report reuse even
 		# when no gameplay revision was emitted.
 		"table=" + visible_table_key,
-		"hand=" + tile_array_key(players[seat].get("hand", [])),
+		"hand=" + hand_key,
 	]
-	return "|".join(parts)
+	var result := "|".join(parts)
+	ai_report_key_cache[input_key] = result
+	if ai_report_key_cache.size() > 32:
+		ai_report_key_cache.clear()
+	return result
 
 
 func ai_profile_map_cache_key() -> String:
@@ -1896,6 +1960,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var variety = 0
 	var effective_tiles: Array = []
 	var effective_remaining: Dictionary = {}
+	var effective_metrics_ready := false
 	# 静默模拟：远离听牌时跳过 34 张进张扫描（主耗时）
 	if (not offline_sim_quiet) or shanten <= 1:
 		var metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts, str(eval_context.get("visible_counts_key", "")))
@@ -1903,6 +1968,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		variety = int(metrics.get("variety", 0))
 		effective_tiles = metrics.get("tiles", [])
 		effective_remaining = metrics.get("remaining_by_tile", {})
+		effective_metrics_ready = true
 	var wait_value = 0.0
 	var wait_best_tile = ""
 	var wait_best_fan = 0
@@ -1960,7 +2026,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			needs_guard_ukeire = risk >= AI_DANGER_RISK_SOFT or feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
 		elif risk <= AI_DANGER_RISK_HIGH + 10.0:
 			needs_guard_ukeire = feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
-	if needs_guard_ukeire:
+	if needs_guard_ukeire and not effective_metrics_ready:
 		var guard_metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts, str(eval_context.get("visible_counts_key", "")))
 		ukeire = int(guard_metrics.get("count", 0))
 		variety = int(guard_metrics.get("variety", 0))
@@ -2910,9 +2976,9 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 	var cache_key = "%d:%d:%s:%s" % [current_shanten, open_melds, counts_compact_key(hand_counts), visible_key]
 	if effective_tiles_cache.has(cache_key):
 		effective_tiles_cache_hits += 1
-		# 移到最近使用
-		effective_tiles_cache_order.erase(cache_key)
-		effective_tiles_cache_order.append(cache_key)
+		effective_tiles_cache_clock += 1
+		effective_tiles_cache_access[cache_key] = effective_tiles_cache_clock
+		touch_effective_tiles_cache_key(cache_key)
 		return (effective_tiles_cache[cache_key] as Dictionary).duplicate(true)
 
 	effective_tiles_cache_misses += 1
@@ -2942,14 +3008,58 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 
 	var result = {"count": total, "variety": variety, "tiles": tiles, "remaining_by_tile": remaining_by_tile}
 
-	# 存入缓存
+	# Store with the same O(1) linked-list LRU used by the report cache. The
+	# bounded cache remains deterministic while hot hits no longer scan every key.
 	effective_tiles_cache[cache_key] = result.duplicate(true)
-	effective_tiles_cache_order.append(cache_key)
-	while effective_tiles_cache_order.size() > EFFECTIVE_TILES_CACHE_LIMIT:
-		var old_key = effective_tiles_cache_order.pop_front()
-		effective_tiles_cache.erase(old_key)
+	effective_tiles_cache_clock += 1
+	effective_tiles_cache_access[cache_key] = effective_tiles_cache_clock
+	touch_effective_tiles_cache_key(cache_key)
+	while effective_tiles_cache.size() > EFFECTIVE_TILES_CACHE_LIMIT:
+		evict_effective_tiles_cache_key(effective_tiles_lru_tail)
 
 	return result
+
+func touch_effective_tiles_cache_key(key: String) -> void:
+	if key == "":
+		return
+	var previous := str(effective_tiles_lru_prev.get(key, ""))
+	var next := str(effective_tiles_lru_next.get(key, ""))
+	if effective_tiles_lru_head == key:
+		return
+	if effective_tiles_lru_prev.has(key) or effective_tiles_lru_next.has(key) or effective_tiles_lru_tail == key:
+		if previous != "":
+			effective_tiles_lru_next[previous] = next
+		else:
+			effective_tiles_lru_head = next
+		if next != "":
+			effective_tiles_lru_prev[next] = previous
+		else:
+			effective_tiles_lru_tail = previous
+	effective_tiles_lru_prev[key] = ""
+	effective_tiles_lru_next[key] = effective_tiles_lru_head
+	if effective_tiles_lru_head != "":
+		effective_tiles_lru_prev[effective_tiles_lru_head] = key
+	else:
+		effective_tiles_lru_tail = key
+	effective_tiles_lru_head = key
+
+func evict_effective_tiles_cache_key(key: String) -> void:
+	if key == "":
+		return
+	var previous := str(effective_tiles_lru_prev.get(key, ""))
+	var next := str(effective_tiles_lru_next.get(key, ""))
+	if previous != "":
+		effective_tiles_lru_next[previous] = next
+	else:
+		effective_tiles_lru_head = next
+	if next != "":
+		effective_tiles_lru_prev[next] = previous
+	else:
+		effective_tiles_lru_tail = previous
+	effective_tiles_lru_prev.erase(key)
+	effective_tiles_lru_next.erase(key)
+	effective_tiles_cache.erase(key)
+	effective_tiles_cache_access.erase(key)
 
 func hand_plan_score(hand: Array) -> float:
 	return hand_plan_score_from_counts(tile_counts(hand), hand.size())
@@ -3878,11 +3988,19 @@ func choose_ai_concealed_gang(seat: int) -> String:
 	var best_tile = ""
 	var best_score = -1000000.0
 	var hand_counts = tile_counts(players[seat]["hand"])
+	var candidate_indices: Array[int] = []
 	for i in range(TILE_CODES.size()):
-		if int(hand_counts[i]) < 4:
-			continue
+		if int(hand_counts[i]) >= 4:
+			candidate_indices.append(i)
+	if candidate_indices.is_empty():
+		return ""
+	var visible_counts := visible_tile_counts()
+	var eval_context := make_ai_evaluation_context(seat, visible_counts)
+	eval_context["hand_counts"] = hand_counts
+	eval_context["pressure_context"] = ai_pressure_context(seat, eval_context)
+	for i in candidate_indices:
 		var tile = TILE_CODES[i]
-		var report = build_ai_self_gang_report(seat, tile, "concealed")
+		var report = build_ai_self_gang_report(seat, tile, "concealed", eval_context)
 		if not bool(report.get("allow", false)):
 			continue
 		var score = float(report.get("score", 0.0))
@@ -3904,13 +4022,18 @@ func choose_ai_added_gang(seat: int) -> String:
 		var meld_tile = str(meld[0])
 		if is_triplet_meld(meld, meld_tile):
 			added_candidates[meld_tile] = true
-	for i in range(TILE_CODES.size()):
-		if int(hand_counts[i]) <= 0:
+	if added_candidates.is_empty():
+		return ""
+	var visible_counts := visible_tile_counts()
+	var eval_context := make_ai_evaluation_context(seat, visible_counts)
+	eval_context["hand_counts"] = hand_counts
+	eval_context["pressure_context"] = ai_pressure_context(seat, eval_context)
+	for tile_variant in added_candidates.keys():
+		var tile := str(tile_variant)
+		var tile_index_value := tile_index(tile)
+		if tile_index_value < 0 or int(hand_counts[tile_index_value]) <= 0:
 			continue
-		var tile = TILE_CODES[i]
-		if not added_candidates.has(tile):
-			continue
-		var report = build_ai_self_gang_report(seat, tile, "added")
+		var report = build_ai_self_gang_report(seat, tile, "added", eval_context)
 		if not bool(report.get("allow", false)):
 			continue
 		var score = float(report.get("score", 0.0))
@@ -3919,7 +4042,7 @@ func choose_ai_added_gang(seat: int) -> String:
 			best_score = score
 	return best_tile
 
-func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Dictionary:
+func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_context: Dictionary = {}) -> Dictionary:
 	var report: Dictionary = {
 		"seat": seat,
 		"tile": tile,
@@ -3952,8 +4075,9 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String) -> Di
 		_:
 			return report
 	var open_melds = players[seat]["melds"].size()
-	var before_shanten = calculate_min_shanten(hand, open_melds)
-	var before_plan_label = str(hand_plan_report_for_seat(seat, hand).get("label", ""))
+	var before_counts: Array = eval_context.get("hand_counts", tile_counts(hand)) if not eval_context.is_empty() else tile_counts(hand)
+	var before_shanten = calculate_min_shanten_from_counts(before_counts, open_melds)
+	var before_plan_label = str(hand_plan_report_for_seat_from_counts(seat, before_counts, hand.size()).get("label", ""))
 	var after = hand.duplicate()
 	var after_open_melds = open_melds
 	match gang_kind:

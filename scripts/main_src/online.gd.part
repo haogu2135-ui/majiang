@@ -123,6 +123,32 @@ func online_recovery_detail_text() -> String:
 	var wait_text := "约%d秒后可重试" % remaining if remaining > 0 else "现在可以重试"
 	return "%s；牌局暂时只读；第%d次恢复，%s；使用重连恢复当前牌局，或返回大厅" % [online_recovery_reason_text(), attempt, wait_text]
 
+func refresh_online_recovery_live_controls(now_msec: int = -1) -> void:
+	if mode != "online_game" or root_layer == null or not is_instance_valid(root_layer):
+		return
+	var current_msec := Time.get_ticks_msec() if now_msec < 0 else now_msec
+	var reconnecting := online_recovery_connecting()
+	var remaining_msec := maxi(0, online_next_reconnect_msec - current_msec)
+	var cooldown := remaining_msec > 0
+	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
+	var recovery_state := root_layer.find_child("OnlineRecoveryStateLabel", true, false) as Label
+	if recovery_state != null:
+		recovery_state.text = online_recovery_phase_text()
+		set_ui_full_text(recovery_state, "%s；%s" % [online_recovery_phase_text(), online_recovery_detail_text()], "断线恢复阶段")
+		recovery_state.set_meta("recovery_phase", phase)
+		recovery_state.set_meta("recovery_remaining_msec", remaining_msec)
+		recovery_state.set_meta("recovery_state_revision", current_msec)
+	var reconnect_button := root_layer.find_child("OnlineReconnectGameButton", true, false) as Button
+	if reconnect_button != null:
+		reconnect_button.text = online_recovery_button_text()
+		reconnect_button.disabled = reconnecting or cooldown
+		reconnect_button.tooltip_text = online_recovery_detail_text()
+		set_ui_full_text(reconnect_button, reconnect_button.tooltip_text, "恢复当前牌局：" + reconnect_button.text)
+		reconnect_button.set_meta("recovery_phase", phase)
+		reconnect_button.set_meta("recovery_remaining_msec", remaining_msec)
+		reconnect_button.set_meta("recovery_retry_available", not reconnecting and not cooldown)
+		reconnect_button.set_meta("disabled_reason", "正在重新连接房间，请稍候" if reconnecting else ("还需%d秒后可重连" % int(ceil(float(remaining_msec) / 1000.0)) if cooldown else ""))
+
 func connect_online() -> void:
 	var host := online_host_input()
 	if host == "":
@@ -186,6 +212,7 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 	table_log_chat_restore_pending = false
 	table_log_chat_draft = ""
 	var preserve_game_board := preserve_game_for_reconnect and mode == "online_game" and not online_game.is_empty()
+	invalidate_pending_claim_action_stack(online_game_snapshot_token)
 	var should_show_lobby := return_to_lobby and mode == "online_game" and not preserve_game_board
 	var had_resume_pending := online_resume_pending
 	telemetry_record_event("online_disconnection", {"reason": "error" if message.contains("失败") or message.contains("出错") else "closed"})
@@ -748,6 +775,9 @@ func handle_online_message(line: String) -> void:
 		var next_game = normalize_online_game_state(data)
 		var snapshot_error := online_game_snapshot_validation_error(next_game)
 		if str(next_game.get("phase", "")) == "unknown":
+			online_game_snapshot_token += 1
+			next_game["_snapshot_token"] = online_game_snapshot_token
+			invalidate_pending_claim_action_stack(online_game_snapshot_token)
 			online_game = next_game
 			rebuild_online_player_index(next_game)
 			mode = "online_game"
@@ -761,6 +791,12 @@ func handle_online_message(line: String) -> void:
 		if game_fingerprint != "" and game_fingerprint == online_last_snapshot_fingerprint:
 			return
 		online_last_snapshot_fingerprint = game_fingerprint
+		online_game_snapshot_token += 1
+		next_game["_snapshot_token"] = online_game_snapshot_token
+		# A new game snapshot supersedes every visible response from the prior state.
+		# Invalidate it before assigning the snapshot so no deferred render can expose
+		# a clickable action for an older revision.
+		invalidate_pending_claim_action_stack(online_game_snapshot_token)
 		var game_revision := online_message_revision(data, kind)
 		if game_revision >= 0:
 			online_game_revision = game_revision
