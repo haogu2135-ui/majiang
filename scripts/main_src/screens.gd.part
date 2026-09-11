@@ -891,21 +891,24 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 func refresh_online_lobby_action_states() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root_layer, node_name)
 	var connection_state := lobby_connection_state_text()
 	var connected := connection_state == "已连接"
 	var connecting := connection_state == "连接中"
 	var has_room_context := not online_room.is_empty() and (connected or online_waiting_for_server)
 	var room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
-	var action_state_key := "%s|%s|%s|%s|%s|%s" % [connection_state, room_code, has_room_context, online_feedback, online_waiting_for_server, high_contrast_enabled]
-	var action_tree_ready := root_layer.find_child("ChatLobbyButton", true, false) != null and root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) != null
+	var start_gate := online_lobby_start_gate()
+	var action_state_key := "%s|%s|%s|%s|%s|%s|%s|%s" % [connection_state, room_code, has_room_context, online_feedback, online_waiting_for_server, high_contrast_enabled, start_gate.get("enabled", false), start_gate.get("text", "")]
+	var action_tree_ready := find_control.call("ChatLobbyButton") != null and find_control.call("OnlineLobbyPrimaryStartButton") != null
 	if action_tree_ready:
 		if str(root_layer.get_meta("online_lobby_action_state_key", "")) == action_state_key:
 			return
 		root_layer.set_meta("online_lobby_action_state_key", action_state_key)
-	var connect_button = root_layer.find_child("OnlineLobbyConnectButton", true, false) as Button
-	var create_button = root_layer.find_child("OnlineLobbyCreateButton", true, false) as Button
-	var join_button = root_layer.find_child("OnlineLobbyJoinButton", true, false) as Button
-	var chat_button = root_layer.find_child("ChatLobbyButton", true, false) as Button
+	var connect_button = find_control.call("OnlineLobbyConnectButton") as Button
+	var create_button = find_control.call("OnlineLobbyCreateButton") as Button
+	var join_button = find_control.call("OnlineLobbyJoinButton") as Button
+	var chat_button = find_control.call("ChatLobbyButton") as Button
 	if connect_button != null:
 		connect_button.disabled = connected or connecting
 		connect_button.tooltip_text = "已连接当前服务器" if connected else ("正在连接服务器" if connecting else "连接服务器")
@@ -940,9 +943,8 @@ func refresh_online_lobby_action_states() -> void:
 		chat_button.set_meta("disabled_reason", "进入房间后可聊天" if not has_room_context else "")
 		mark_ui_optimization(chat_button, "F-594")
 		chat_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if high_contrast_enabled else (Color(0.72, 0.76, 0.72, 0.78) if chat_button.disabled else Color.WHITE)
-	var start_button = root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+	var start_button = find_control.call("OnlineLobbyPrimaryStartButton") as Button
 	if start_button != null:
-		var start_gate := online_lobby_start_gate()
 		start_button.text = str(start_gate.get("text", "待连接"))
 		start_button.disabled = not bool(start_gate.get("enabled", false))
 		start_button.focus_mode = Control.FOCUS_ALL if start_button.visible else Control.FOCUS_NONE
@@ -953,14 +955,14 @@ func refresh_online_lobby_action_states() -> void:
 		start_button.set_meta("focus_fallback_name", "OnlineLobbyPrimaryStartButton" if bool(start_gate.get("enabled", false)) else "OnlineLobbyConnectButton")
 		mark_ui_optimization(start_button, "F-595")
 		start_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if not start_button.disabled else Color(0.82, 0.84, 0.80, 0.88)
-	var start_reason := root_layer.find_child("OnlineLobbyStartGateReason", true, false) as Label
+	var start_reason := find_control.call("OnlineLobbyStartGateReason") as Label
 	if start_reason != null:
 		var gate_reason := str(online_lobby_start_gate().get("reason", "等待服务器确认开局条件"))
 		var room_action_reason := "连接后可用" if not connected else ("输入房间号" if room_code == "" else "已就绪")
 		var visible_reason := "创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason]
 		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：" + visible_reason)
 		start_reason.set_meta("disabled_action_reason_visible", true)
-	var form_feedback := root_layer.find_child("OnlineLobbyFormFeedbackLabel", true, false) as Label
+	var form_feedback := find_control.call("OnlineLobbyFormFeedbackLabel") as Label
 	if form_feedback != null:
 		var feedback_text := online_feedback.strip_edges()
 		if feedback_text == "":
@@ -969,7 +971,7 @@ func refresh_online_lobby_action_states() -> void:
 		form_feedback.set_meta("feedback_state", "server" if online_feedback.strip_edges() != "" else ("disconnected" if not connected else ("room_required" if room_code == "" else "ready")))
 		form_feedback.set_meta("feedback_lane_clearance_px", 8.0)
 		mark_ui_optimization(form_feedback, "F-784")
-	var current_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
+	var current_status = find_control.call("OnlineLobbyStatusLabel") as Label
 	if current_status != null and online_feedback.strip_edges() == "":
 		var next_status := ""
 		if not connected:
@@ -987,21 +989,27 @@ func refresh_online_lobby_action_states() -> void:
 func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root_layer, node_name)
+	var focus_signature := "%s|%s|%s|%s|%s" % [lobby_connection_state_text(), bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH), online_feedback, online_waiting_for_server, ui_page_generation]
+	if not grab_default_focus and str(root_layer.get_meta("online_lobby_focus_signature", "")) == focus_signature:
+		return
+	root_layer.set_meta("online_lobby_focus_signature", focus_signature)
 	# Keep the operational route stable across connection-state refreshes. Disabled
 	# actions are filtered by the shared helper. Roster detail targets remain
 	# independently focusable, but do not lengthen the primary action route.
 	var controls: Array = [
-		root_layer.find_child("OnlineLobbyNameEdit", true, false),
-		root_layer.find_child("OnlineLobbyHostEdit", true, false),
-		root_layer.find_child("OnlineLobbyRoomEdit", true, false),
-		root_layer.find_child("OnlineLobbyConnectButton", true, false),
-		root_layer.find_child("OnlineLobbyConnectionRetryButton", true, false),
-		root_layer.find_child("OnlineLobbyCreateButton", true, false),
-		root_layer.find_child("OnlineLobbyJoinButton", true, false),
-		root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false),
-		root_layer.find_child("OnlineLobbySecondaryReturnButton", true, false),
-		root_layer.find_child("ChatLobbyButton", true, false),
-		root_layer.find_child("OnlineLobbyLogLatestButton", true, false),
+		find_control.call("OnlineLobbyNameEdit"),
+		find_control.call("OnlineLobbyHostEdit"),
+		find_control.call("OnlineLobbyRoomEdit"),
+		find_control.call("OnlineLobbyConnectButton"),
+		find_control.call("OnlineLobbyConnectionRetryButton"),
+		find_control.call("OnlineLobbyCreateButton"),
+		find_control.call("OnlineLobbyJoinButton"),
+		find_control.call("OnlineLobbyPrimaryStartButton"),
+		find_control.call("OnlineLobbySecondaryReturnButton"),
+		find_control.call("ChatLobbyButton"),
+		find_control.call("OnlineLobbyLogLatestButton"),
 	]
 	for target in online_detail_target_list():
 		if target != null and is_instance_valid(target):
@@ -1020,7 +1028,7 @@ func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -
 		default_focus_name = "OnlineLobbyHostEdit"
 	elif online_feedback.find("失败") >= 0 or online_feedback.find("请输入") >= 0:
 		default_focus_name = "OnlineLobbyConnectButton"
-	var default_control := root_layer.find_child(default_focus_name, true, false) as Control
+	var default_control := find_control.call(default_focus_name) as Control
 	if default_control != null:
 		default_control.set_meta("focus_fallback_name", "OnlineLobbyConnectButton")
 		mark_ui_optimization(default_control, "F-393")
@@ -1132,7 +1140,7 @@ func _show_online_lobby_impl() -> void:
 	if state_badge_icon != null:
 		state_badge_icon.name = "OnlineLobbyConnectionStateIcon"
 		state_badge.move_child(state_badge_icon, 0)
-	var retry_connection_button := make_small_button("重试连接" if connection_state == "异常" else "连接", Color(0.24, 0.48, 0.48), Callable(self, "connect_online"))
+	var retry_connection_button := make_small_button("重试连接" if connection_state != "连接中" else "连接中", Color(0.24, 0.48, 0.48), Callable(self, "connect_online"))
 	retry_connection_button.name = "OnlineLobbyConnectionRetryButton"
 	retry_connection_button.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
 	retry_connection_button.tooltip_text = "连接异常时在当前服务器位置重试"
@@ -1560,6 +1568,23 @@ func online_lobby_room_snapshot_status_text() -> String:
 func refresh_online_lobby_state() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root_layer, node_name)
+	var lobby_start_gate := online_lobby_start_gate()
+	var lobby_state_key := "%s|%s|%s|%s|%s|%s|%s|%s" % [lobby_connection_state_text(), online_feedback, online_waiting_for_server, bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH), high_contrast_enabled, online_connection_endpoint_text(), lobby_start_gate.get("enabled", false), lobby_start_gate.get("text", "")]
+	var previous_state_key := str(root_layer.get_meta("online_lobby_state_key", ""))
+	var previous_content_revision := int(root_layer.get_meta("online_lobby_content_revision", -1))
+	if previous_state_key == lobby_state_key:
+		if previous_content_revision != online_lobby_render_revision:
+			refresh_online_room_content()
+			root_layer.set_meta("online_lobby_content_revision", online_lobby_render_revision)
+		# Action gates can be changed by an in-memory room fixture or a server
+		# callback without changing the rendered page signature. Reapply them even
+		# when the rest of the lobby does not need a rebuild.
+		refresh_online_lobby_action_states()
+		return
+	root_layer.set_meta("online_lobby_state_key", lobby_state_key)
+	root_layer.set_meta("online_lobby_content_revision", online_lobby_render_revision)
 	online_last_lobby_render_revision = online_lobby_render_revision
 	var state := lobby_connection_state_text()
 	var connected := state == "已连接"
@@ -1568,7 +1593,7 @@ func refresh_online_lobby_state() -> void:
 	if state != "已连接" and online_waiting_for_server:
 		var connection_feedback := "正在连接服务器，请稍候" if state == "连接中" else ("连接异常，请重试" if state == "异常" else "请先连接服务器。")
 		set_online_feedback(connection_feedback, true)
-	var state_label = root_layer.find_child("OnlineLobbyConnectionStateLabel", true, false) as Label
+	var state_label = find_control.call("OnlineLobbyConnectionStateLabel") as Label
 	if state_label != null:
 		state_label.text = state
 		state_label.tooltip_text = "服务器连接状态：%s" % state
@@ -1576,11 +1601,11 @@ func refresh_online_lobby_state() -> void:
 		state_label.set_meta("summary_contract", "endpoint_room_connection_state")
 		mark_ui_optimization(state_label, "F-460")
 		mark_ui_optimization(state_label, "F-110")
-	var state_badge = root_layer.find_child("OnlineLobbyConnectionStateBadge", true, false) as CanvasItem
+	var state_badge = find_control.call("OnlineLobbyConnectionStateBadge") as CanvasItem
 	if state_badge != null:
 		tint_panel_gpt_plate(state_badge as Control, Color(state_tint.r, state_tint.g, state_tint.b, 0.92), "ui_dark_scrim")
 		state_badge.modulate = Color.WHITE
-	var retry_connection_button := root_layer.find_child("OnlineLobbyConnectionRetryButton", true, false) as Button
+	var retry_connection_button := find_control.call("OnlineLobbyConnectionRetryButton") as Button
 	if retry_connection_button != null:
 		var retry_available := state != "已连接"
 		retry_connection_button.visible = retry_available
@@ -1591,7 +1616,7 @@ func refresh_online_lobby_state() -> void:
 		retry_connection_button.set_meta("connection_state", state)
 		retry_connection_button.set_meta("recovery_route", "connection_state_adjacent_retry")
 		mark_ui_optimization(retry_connection_button, "F-739")
-	var endpoint_label = root_layer.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
+	var endpoint_label = find_control.call("OnlineLobbyServerEndpointLabel") as Label
 	if endpoint_label != null:
 		endpoint_label.text = online_connection_endpoint_text()
 		endpoint_label.tooltip_text = endpoint_label.text
@@ -1601,14 +1626,14 @@ func refresh_online_lobby_state() -> void:
 		mark_ui_optimization(endpoint_label, "F-547")
 		mark_ui_optimization(endpoint_label, "F-461")
 		mark_ui_optimization(endpoint_label, "F-110")
-	var endpoint_copy_button := root_layer.find_child("OnlineLobbyEndpointCopyButton", true, false) as Button
+	var endpoint_copy_button := find_control.call("OnlineLobbyEndpointCopyButton") as Button
 	if endpoint_copy_button != null:
 		var endpoint_value := online_connection_endpoint_text()
 		endpoint_copy_button.tooltip_text = "复制完整服务器地址：%s" % endpoint_value
 		endpoint_copy_button.set_meta("copy_value", endpoint_value)
 		set_ui_full_text(endpoint_copy_button, endpoint_copy_button.tooltip_text, "复制服务器地址")
 		mark_ui_optimization(endpoint_copy_button, "F-110")
-	var state_icon = root_layer.find_child("OnlineLobbyConnectionStateIcon", true, false) as TextureRect
+	var state_icon = find_control.call("OnlineLobbyConnectionStateIcon") as TextureRect
 	if state_icon != null:
 		state_icon.texture = lucide_icon_texture(online_connection_state_icon(state))
 		var icon_material := state_icon.material as ShaderMaterial
@@ -1618,12 +1643,12 @@ func refresh_online_lobby_state() -> void:
 			state_icon.modulate = state_tint
 	if state_label != null:
 		state_label.add_theme_color_override("font_color", state_tint.lightened(0.08))
-	var room_badge = root_layer.find_child("OnlineLobbyRoomBadge", true, false)
+	var room_badge = find_control.call("OnlineLobbyRoomBadge")
 	if room_badge != null:
 		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		room_badge.visible = show_room_snapshot
-		var room_touch_target = root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+		var room_touch_target = find_control.call("OnlineLobbyRoomBadgeTouchTarget") as Button
 		if room_touch_target != null:
 			room_touch_target.visible = show_room_snapshot
 			room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if show_room_snapshot else Control.MOUSE_FILTER_IGNORE
@@ -1632,11 +1657,11 @@ func refresh_online_lobby_state() -> void:
 			room_badge_label.tooltip_text = "房间号 " + (selected_room if show_room_snapshot and selected_room != "" else "连接后显示")
 			set_ui_full_text(room_badge_label, room_badge_label.tooltip_text, "当前房间号")
 			mark_ui_optimization(room_badge_label, "F-462")
-	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
-	var roster = root_layer.find_child("OnlineLobbyRosterPanel", true, false) as CanvasItem
-	var log_list = root_layer.find_child("OnlineLobbyLogListPanel", true, false) as CanvasItem
-	var empty_state_backplate = root_layer.find_child("OnlineLobbyEmptyStateReadabilityBackplate", true, false) as CanvasItem
-	var offline_state = root_layer.find_child("OnlineLobbyRoomOfflineState", true, false) as CanvasItem
+	var room_art = find_control.call("OnlineLobbyRoomArt") as CanvasItem
+	var roster = find_control.call("OnlineLobbyRosterPanel") as CanvasItem
+	var log_list = find_control.call("OnlineLobbyLogListPanel") as CanvasItem
+	var empty_state_backplate = find_control.call("OnlineLobbyEmptyStateReadabilityBackplate") as CanvasItem
+	var offline_state = find_control.call("OnlineLobbyRoomOfflineState") as CanvasItem
 	if room_art != null:
 		room_art.visible = show_room_snapshot
 	if roster != null:
@@ -1647,19 +1672,18 @@ func refresh_online_lobby_state() -> void:
 		empty_state_backplate.visible = not show_room_snapshot
 	if offline_state != null:
 		offline_state.visible = not show_room_snapshot
-	var start_button = root_layer.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
+	var start_button = find_control.call("OnlineLobbyPrimaryStartButton") as Button
 	if start_button != null:
-		var start_gate := online_lobby_start_gate()
-		start_button.text = str(start_gate.get("text", "待连接"))
-		start_button.disabled = not bool(start_gate.get("enabled", false))
+		start_button.text = str(lobby_start_gate.get("text", "待连接"))
+		start_button.disabled = not bool(lobby_start_gate.get("enabled", false))
 		start_button.focus_mode = Control.FOCUS_ALL if start_button.visible else Control.FOCUS_NONE
-		start_button.tooltip_text = str(start_gate.get("reason", "等待服务器确认开局条件"))
-		start_button.set_meta("accessible_name", "开始游戏：" + str(start_gate.get("reason", "等待服务器确认开局条件")))
-		set_ui_full_text(start_button, str(start_gate.get("reason", "等待服务器确认开局条件")), "开始游戏：" + str(start_gate.get("text", "待连接")))
+		start_button.tooltip_text = str(lobby_start_gate.get("reason", "等待服务器确认开局条件"))
+		start_button.set_meta("accessible_name", "开始游戏：" + str(lobby_start_gate.get("reason", "等待服务器确认开局条件")))
+		set_ui_full_text(start_button, str(lobby_start_gate.get("reason", "等待服务器确认开局条件")), "开始游戏：" + str(lobby_start_gate.get("text", "待连接")))
 		mark_ui_optimization(start_button, "F-463")
 		start_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if not start_button.disabled else Color(0.82, 0.84, 0.80, 0.88)
 		ensure_button_gpt_face_plate(start_button, Color(0.74, 0.48, 0.16) if not start_button.disabled else Color(0.38, 0.34, 0.28))
-	var start_reason := root_layer.find_child("OnlineLobbyStartGateReason", true, false) as Label
+	var start_reason := find_control.call("OnlineLobbyStartGateReason") as Label
 	if start_reason != null:
 		var gate_reason := str(online_lobby_start_gate().get("reason", "等待服务器确认开局条件"))
 		var live_room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
@@ -1668,10 +1692,10 @@ func refresh_online_lobby_state() -> void:
 		var visible_reason := "创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason]
 		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：" + visible_reason)
 		start_reason.set_meta("disabled_action_reason_visible", true)
-	var return_button = root_layer.find_child("OnlineLobbySecondaryReturnButton", true, false) as Button
+	var return_button = find_control.call("OnlineLobbySecondaryReturnButton") as Button
 	if return_button != null:
 		return_button.modulate = Color(0.82, 0.84, 0.82, 0.80) if connected else Color(1.0, 1.0, 1.0, 1.0)
-	var lobby_status = root_layer.find_child("OnlineLobbyStatusLabel", true, false) as Label
+	var lobby_status = find_control.call("OnlineLobbyStatusLabel") as Label
 	if lobby_status != null:
 		var lobby_status_text := ""
 		if state == "已连接":
@@ -1690,16 +1714,20 @@ func refresh_online_lobby_state() -> void:
 func refresh_online_room_content() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
-	var room_art = root_layer.find_child("OnlineLobbyRoomArt", true, false) as CanvasItem
-	var roster = root_layer.find_child("OnlineLobbyRosterPanel", true, false) as CanvasItem
-	var log_list = root_layer.find_child("OnlineLobbyLogListPanel", true, false) as CanvasItem
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root_layer, node_name)
+	var room_art = find_control.call("OnlineLobbyRoomArt") as CanvasItem
+	var roster = find_control.call("OnlineLobbyRosterPanel") as CanvasItem
+	var log_list = find_control.call("OnlineLobbyLogListPanel") as CanvasItem
+	var viewport_size := effective_viewport_size()
+	var compact_log_summary := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	var entries := online_lobby_player_entries()
 	var player_count := online_lobby_occupied_seat_count(entries)
 	var ready_count := 0
 	for entry_value in entries:
 		if typeof(entry_value) == TYPE_DICTIONARY and bool((entry_value as Dictionary).get("ready", false)):
 			ready_count += 1
-	var room_summary_headline := root_layer.find_child("OnlineLobbyRoomSummaryHeadline", true, false) as Label
+	var room_summary_headline := find_control.call("OnlineLobbyRoomSummaryHeadline") as Label
 	if room_summary_headline != null:
 		var headline := "等待连接"
 		if lobby_connection_state_text() == "已连接":
@@ -1711,16 +1739,16 @@ func refresh_online_room_content() -> void:
 				headline = "全员已准备 · 房主可开始"
 		set_dynamic_label_text(room_summary_headline, headline, "房间下一步：" + headline)
 		mark_ui_optimization(room_summary_headline, "F-465")
-	var summary_context := root_layer.find_child("OnlineLobbyRoomSummaryContext", true, false) as Label
+	var summary_context := find_control.call("OnlineLobbyRoomSummaryContext") as Label
 	if summary_context != null:
 		var full_context := "服务器 %s · 房间 %s" % [online_connection_endpoint_text(), bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH) if selected_room != "" else "未创建"]
 		var short_context := "%s · %s" % [online_endpoint_summary(online_connection_endpoint_text()), online_room_code_summary(selected_room)]
 		set_dynamic_label_text(summary_context, short_context, "当前房间摘要：" + full_context)
 		mark_ui_optimization(summary_context, "F-466")
-	var occupancy_label = root_layer.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
-	var ready_label = root_layer.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
-	var state_label = root_layer.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
-	var snapshot_status_label = root_layer.find_child("OnlineLobbyRoomSummarySnapshotStatus", true, false) as Label
+	var occupancy_label = find_control.call("OnlineLobbyRoomSummaryOccupancyLabel") as Label
+	var ready_label = find_control.call("OnlineLobbyRoomSummaryReadyLabel") as Label
+	var state_label = find_control.call("OnlineLobbyRoomSummaryStateLabel") as Label
+	var snapshot_status_label = find_control.call("OnlineLobbyRoomSummarySnapshotStatus") as Label
 	var snapshot_is_stale := online_lobby_room_snapshot_is_stale()
 	var snapshot_status_text := online_lobby_room_snapshot_status_text()
 	var snapshot_state := "stale_snapshot" if snapshot_is_stale else "current_snapshot"
@@ -1737,7 +1765,7 @@ func refresh_online_room_content() -> void:
 	if snapshot_status_label != null:
 		snapshot_status_label.visible = snapshot_is_stale
 		set_dynamic_label_text(snapshot_status_label, snapshot_status_text, "房间数据状态：" + snapshot_status_text)
-	var summary_headline = root_layer.find_child("OnlineLobbyRoomSummaryHeadline", true, false) as Label
+	var summary_headline = find_control.call("OnlineLobbyRoomSummaryHeadline") as Label
 	if summary_headline != null:
 		summary_headline.visible = not snapshot_is_stale
 	if occupancy_label != null:
@@ -1768,10 +1796,14 @@ func refresh_online_room_content() -> void:
 	for slot in range(4):
 		var entry := online_lobby_player_for_slot(entries, slot)
 		var active := not entry.is_empty()
-		var name_label = root_layer.find_child("OnlineLobbyRosterName_%d" % slot, true, false) as Label
-		var slot_state_label = root_layer.find_child("OnlineLobbyRosterState_%d" % slot, true, false) as Label
-		var roster_row = root_layer.find_child("OnlineLobbyRosterRow_%d" % slot, true, false) as CanvasItem
-		var seat_panel = root_layer.find_child("OnlineLobbyPlayerSeat_%d" % slot, true, false) as CanvasItem
+		var slot_fingerprint := "%s|%s" % [JSON.stringify(entry), snapshot_state]
+		if str(root_layer.get_meta("online_lobby_roster_slot_%d_fingerprint" % slot, "")) == slot_fingerprint:
+			continue
+		root_layer.set_meta("online_lobby_roster_slot_%d_fingerprint" % slot, slot_fingerprint)
+		var name_label = find_control.call("OnlineLobbyRosterName_%d" % slot) as Label
+		var slot_state_label = find_control.call("OnlineLobbyRosterState_%d" % slot) as Label
+		var roster_row = find_control.call("OnlineLobbyRosterRow_%d" % slot) as CanvasItem
+		var seat_panel = find_control.call("OnlineLobbyPlayerSeat_%d" % slot) as CanvasItem
 		if name_label != null:
 			name_label.text = online_lobby_slot_name(entry)
 			name_label.tooltip_text = name_label.text
@@ -1780,14 +1812,14 @@ func refresh_online_room_content() -> void:
 				var slot_state := online_lobby_slot_state(entry, slot)
 				set_dynamic_label_text(slot_state_label, slot_state, "第%d席状态：%s" % [slot + 1, slot_state])
 				fit_label_font_size(slot_state_label, maxf(96.0, effective_viewport_size().x * 0.210), 11, 9)
-			var slot_state_icon := root_layer.find_child("OnlineLobbyRosterStateIcon_%d" % slot, true, false) as TextureRect
+			var slot_state_icon := find_control.call("OnlineLobbyRosterStateIcon_%d" % slot) as TextureRect
 			if slot_state_icon != null:
 				slot_state_icon.texture = lucide_icon_texture(online_lobby_slot_state_icon(entry, slot))
 		if roster_row != null:
 			roster_row.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.76)
 			roster_row.set_meta("roster_slot_state", "occupied" if active else "empty")
 			roster_row.set_meta("roster_slot_label", "第%d席：%s" % [slot + 1, online_lobby_slot_name(entry)])
-			var roster_touch_target = root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+			var roster_touch_target = find_control.call("OnlineLobbyRosterTouchTarget_%d" % slot) as Button
 			if roster_touch_target != null:
 				roster_touch_target.disabled = not active
 				roster_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
@@ -1801,14 +1833,13 @@ func refresh_online_room_content() -> void:
 			seat_panel.modulate = Color(0.92, 1.0, 0.92, 1.0) if active else Color(0.72, 0.76, 0.74, 0.52)
 	var log_count := online_lobby_retained_log_count()
 	var log_total_count := online_lobby_log_count()
-	var log_count_label = root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
+	var log_count_label = find_control.call("OnlineLobbyLogCountLabel") as Label
 	if log_count_label != null:
 		var log_unread_count := online_lobby_log_unread_count()
-		var compact_log_summary := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
 		var visible_log_summary := "%d/%d · 未读%d" % [log_count, log_total_count, log_unread_count] if compact_log_summary else "存%d · 总%d · 未读%d" % [log_count, log_total_count, log_unread_count]
 		var full_log_summary := "房间日志缓存%d条；总计%d条；未读%d条" % [log_count, log_total_count, log_unread_count]
 		set_dynamic_label_text(log_count_label, visible_log_summary, full_log_summary)
-		fit_label_font_size(log_count_label, maxf(78.0, effective_viewport_size().x * (0.170 if compact_log_summary else 0.210)), 10, 8)
+		fit_label_font_size(log_count_label, maxf(78.0, viewport_size.x * (0.170 if compact_log_summary else 0.210)), 10, 8)
 		log_count_label.set_meta("log_view_state", "empty" if log_count == 0 else "has_entries")
 		log_count_label.set_meta("retained_count", log_count)
 		log_count_label.set_meta("total_count", log_total_count)
@@ -1824,11 +1855,13 @@ func online_detail_target_list() -> Array[Button]:
 	var targets: Array[Button] = []
 	if root_layer == null or not is_instance_valid(root_layer):
 		return targets
-	var room_target := root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root_layer, node_name)
+	var room_target := find_control.call("OnlineLobbyRoomBadgeTouchTarget") as Button
 	if room_target != null:
 		targets.append(room_target)
 	for slot in range(4):
-		var roster_target := root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+		var roster_target := find_control.call("OnlineLobbyRosterTouchTarget_%d" % slot) as Button
 		if roster_target != null:
 			targets.append(roster_target)
 	return targets
@@ -1857,16 +1890,18 @@ func sync_online_room_badge_touch_target(target: Button, badge: Control) -> void
 func sync_online_lobby_detail_targets() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
-	var room_badge := root_layer.find_child("OnlineLobbyRoomBadge", true, false) as Control
-	var room_target := root_layer.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root_layer, node_name)
+	var room_badge := find_control.call("OnlineLobbyRoomBadge") as Control
+	var room_target := find_control.call("OnlineLobbyRoomBadgeTouchTarget") as Button
 	if room_badge != null and room_target != null and room_badge.is_inside_tree():
 		apply_rect(room_target, normalized_rect_in_parent(room_badge.get_global_rect(), root_layer))
 		room_target.set_meta("detail_rect_synced", true)
 		room_target.set_meta("detail_rect_generation", ui_page_generation)
 		mark_ui_optimization(room_target, "F-072")
 	for slot in range(4):
-		var row := root_layer.find_child("OnlineLobbyRosterRow_%d" % slot, true, false) as Control
-		var target := root_layer.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
+		var row := find_control.call("OnlineLobbyRosterRow_%d" % slot) as Control
+		var target := find_control.call("OnlineLobbyRosterTouchTarget_%d" % slot) as Button
 		if row == null or target == null or not row.is_inside_tree():
 			continue
 		apply_rect(target, normalized_rect_in_parent(row.get_global_rect(), root_layer))
@@ -1965,13 +2000,15 @@ func show_online_roster_detail(slot: int) -> void:
 func refresh_online_feedback_art() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
-	var feedback_art = root_layer.find_child("OnlineFeedbackArt", true, false) as Control
+	var find_control := func(node_name: String) -> Control:
+		return find_ui_contract_control(root_layer, node_name)
+	var feedback_art = find_control.call("OnlineFeedbackArt") as Control
 	var feedback_key := "%s|%s|%s" % [online_feedback, online_waiting_for_server, effective_viewport_size()]
 	if feedback_art != null and str(feedback_art.get_meta("feedback_render_key", "")) == feedback_key:
 		return
 	var feedback_parent: Control = feedback_art.get_parent() as Control if feedback_art != null else null
 	if feedback_parent == null:
-		var form_panel = root_layer.find_child("OnlineLobbyFormPanel", true, false) as Control
+		var form_panel = find_control.call("OnlineLobbyFormPanel") as Control
 		if form_panel != null:
 			feedback_parent = form_panel.get_parent() as Control
 	if feedback_art != null and feedback_parent != null:
@@ -2155,16 +2192,27 @@ func _show_rules_screen_impl() -> void:
 			sync_rules_guide_state(content_scroll, rules_guide)
 		)
 	content_scroll.resized.connect(func() -> void:
-		normalize_rules_section_heights(content_scroll)
-		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
-		sync_rules_guide_state(content_scroll, rules_guide)
+		queue_rules_layout_sync(content_scroll, rules_scroll_thumb, rules_guide)
 	)
 	content.resized.connect(func() -> void:
-		normalize_rules_section_heights(content_scroll)
-		sync_rules_scroll_thumb(content_scroll, rules_scroll_thumb)
-		sync_rules_guide_state(content_scroll, rules_guide)
+		queue_rules_layout_sync(content_scroll, rules_scroll_thumb, rules_guide)
 	)
 	wire_rules_guide_navigation(rules_guide, content_scroll)
+	var rules_steps: Array[Control] = []
+	for i in range(RULES_SECTION_COUNT):
+		var step_control := rules_guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
+		if step_control != null:
+			rules_steps.append(step_control)
+	content_scroll.set_meta("rules_control_cache", {
+		"content": content,
+		"guide": rules_guide,
+		"hit_target": rules_scroll_hit_target,
+		"thumb": rules_scroll_thumb,
+		"steps": rules_steps,
+		"status": rules_guide.get_parent().find_child("RulesReadingStatus", true, false) as Label,
+	})
+	content_scroll.set_meta("rules_layout_flush_queued", false)
+	content.set_meta("rules_anchor_revision", int(content.get_meta("rules_anchor_revision", 0)) + 1)
 
 	# 本地规则合同：文案必须与计分和结算实现同步，不将其表述为外部认证的地方规则。
 	var current_profile := rule_profile()
@@ -2265,7 +2313,14 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var visible_ratio = 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
 	var thumb_height = track_height * visible_ratio
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
-	emit_ui_qa_marker("scroll|rules|%d|%d" % [int(round(scrollbar.value)), int(round(scroll_range))])
+	var marker_position := int(round(scrollbar.value))
+	var marker_range := int(round(scroll_range))
+	var previous_marker_position := int(thumb.get_meta("rules_last_marker_position", -1000000))
+	var previous_marker_range := int(thumb.get_meta("rules_last_marker_range", -1000000))
+	if marker_range != previous_marker_range or abs(marker_position - previous_marker_position) >= 2 or marker_position <= 0 or marker_position >= marker_range:
+		emit_ui_qa_marker("scroll|rules|%d|%d" % [marker_position, marker_range])
+		thumb.set_meta("rules_last_marker_position", marker_position)
+		thumb.set_meta("rules_last_marker_range", marker_range)
 	var thumb_top = track_top + (track_height - thumb_height) * progress
 	var thumb_left = float(thumb.get_meta("track_left", 0.220))
 	var thumb_right = float(thumb.get_meta("track_right", 0.780))
@@ -2273,7 +2328,8 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	thumb.set_meta("scroll_progress", progress)
 	thumb.set_meta("scroll_position_text", "规则阅读进度 %.0f%%" % (progress * 100.0))
 	thumb.set_meta("drag_affordance", "可拖动握柄；点击轨道按比例跳转")
-	var hit_target := root_layer.find_child("RulesContentScrollHitTarget", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	var cache: Dictionary = content_scroll.get_meta("rules_control_cache", {})
+	var hit_target := cache.get("hit_target", null) as Control
 	if hit_target != null:
 		hit_target.tooltip_text = "规则阅读进度 %.0f%% · 拖动或使用方向键定位" % (progress * 100.0)
 		hit_target.set_meta("ui_full_text", hit_target.tooltip_text)
@@ -2282,19 +2338,43 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 func normalize_rules_layout_and_sync(content_scroll: ScrollContainer, thumb: Control, guide: Control) -> void:
 	if content_scroll == null or not is_current_ui_control(content_scroll) or not is_current_ui_control(thumb) or not is_current_ui_control(guide):
 		return
+	queue_rules_layout_sync(content_scroll, thumb, guide)
+
+
+func queue_rules_layout_sync(content_scroll: ScrollContainer, thumb: Control, guide: Control) -> void:
+	if content_scroll == null or not is_current_ui_control(content_scroll):
+		return
+	if bool(content_scroll.get_meta("rules_layout_flush_queued", false)):
+		return
+	content_scroll.set_meta("rules_layout_flush_queued", true)
+	content_scroll.set_meta("rules_layout_generation", ui_page_generation)
+	call_deferred("flush_rules_layout_sync", content_scroll, thumb, guide, ui_page_generation)
+
+
+func flush_rules_layout_sync(content_scroll: ScrollContainer, thumb: Control, guide: Control, generation: int) -> void:
+	if content_scroll == null or not is_current_ui_control(content_scroll):
+		return
+	content_scroll.set_meta("rules_layout_flush_queued", false)
+	if generation != ui_page_generation or int(content_scroll.get_meta("rules_layout_generation", generation)) != generation:
+		return
+	await get_tree().process_frame
+	if generation != ui_page_generation or not is_current_ui_control(content_scroll):
+		return
 	normalize_rules_section_heights(content_scroll)
-	# Container measurements settle on the following idle pass. Keep both the
-	# guide and custom thumb behind that same range calculation.
-	call_deferred("sync_rules_scroll_thumb", content_scroll, thumb)
-	call_deferred("sync_rules_guide_state", content_scroll, guide)
+	sync_rules_scroll_thumb(content_scroll, thumb)
+	sync_rules_guide_state(content_scroll, guide)
 
 
 func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 	if content_scroll == null or not is_current_ui_control(content_scroll):
 		return
-	var content = content_scroll.find_child("RulesContentList", true, false) as Control
+	var cache: Dictionary = content_scroll.get_meta("rules_control_cache", {})
+	var content := cache.get("content", null) as Control
+	if content == null:
+		content = content_scroll.find_child("RulesContentList", true, false) as Control
 	if content == null:
 		return
+	content.set_meta("rules_anchor_revision", int(content.get_meta("rules_anchor_revision", 0)) + 1)
 	# Keep every chapter content-sized. A full viewport minimum makes short
 	# sections look empty and turns a chapter jump into a long blank scroll.
 	for child in content.get_children():
@@ -2339,7 +2419,9 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 		# rather than leaving the guide one section behind.
 		if scroll_range > 0.0 and scrollbar.value >= scroll_range - 1.0:
 			current_section = total_sections
-	var status = guide.get_parent().find_child("RulesReadingStatus", true, false) as Label
+	var cache: Dictionary = content_scroll.get_meta("rules_control_cache", {})
+	var status := cache.get("status", null) as Label
+	var steps: Array = cache.get("steps", [])
 	if status != null:
 		var current_section_name := rules_section_names[clampi(current_section - 1, 0, rules_section_names.size() - 1)]
 		status.text = "第%d/%d · %s" % [current_section, total_sections, current_section_name]
@@ -2359,7 +2441,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 			active_step = guide_index
 			break
 	for i in range(total_sections):
-		var step = guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
+		var step := steps[i] as Control if i < steps.size() else guide.find_child("RulesGuideStep_%d" % i, true, false) as Control
 		if step == null:
 			continue
 		var active := i == active_step
@@ -2400,9 +2482,17 @@ func rules_section_anchors(content_scroll: ScrollContainer) -> Array[Dictionary]
 	var anchors: Array[Dictionary] = []
 	if content_scroll == null:
 		return anchors
-	var content = content_scroll.find_child("RulesContentList", true, false) as Control
+	var cache: Dictionary = content_scroll.get_meta("rules_control_cache", {})
+	var content := cache.get("content", null) as Control
+	if content == null:
+		content = content_scroll.find_child("RulesContentList", true, false) as Control
 	if content == null:
 		return anchors
+	var anchor_revision := int(content.get_meta("rules_anchor_revision", 0))
+	var cached_revision := int(content.get_meta("rules_anchor_cache_revision", -1))
+	var cached_anchors: Array = content.get_meta("rules_anchor_cache", [])
+	if cached_revision == anchor_revision and not cached_anchors.is_empty():
+		return cached_anchors
 	for child in content.get_children():
 		var section := child as Control
 		if section == null or not section.has_meta("rules_section_index"):
@@ -2411,6 +2501,8 @@ func rules_section_anchors(content_scroll: ScrollContainer) -> Array[Dictionary]
 		if section_index < 0:
 			continue
 		anchors.append({"index": section_index, "top": section.position.y, "height": section.size.y})
+	content.set_meta("rules_anchor_cache_revision", anchor_revision)
+	content.set_meta("rules_anchor_cache", anchors)
 	return anchors
 
 
@@ -2467,7 +2559,7 @@ func wire_rules_guide_navigation(guide: Control, content_scroll: ScrollContainer
 		mark_ui_optimization(button, "F-081")
 		button.set_meta("focus_target_generation", ui_page_generation)
 		configure_touch_button(button)
-		var empty_style := StyleBoxEmpty.new()
+		var empty_style := empty_tile_stylebox()
 		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 			button.add_theme_stylebox_override(state, empty_style)
 		apply_centered_rect(button, Vector2(0.5, 0.5), Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET))
@@ -7167,9 +7259,10 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 		refresh_toast_queue_indicator()
 		return
 	# 创建toast节点
-	var toast_bg = Panel.new()
+	var toast_bg := Control.new()
 	toast_bg.name = "Toast"
 	toast_bg.set_meta("toast_text", safe_text)
+	toast_bg.set_meta("visual_host_policy", "authored_bitmap_face_only")
 	toast_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var toast_left := 0.18
 	var toast_right := 0.82
@@ -7229,10 +7322,8 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	var toast_height := clampf(estimate_wrapped_text_height(safe_text, toast_width - 56.0, 16, 3.0) + 16.0, float(UI_MIN_TOUCH_TARGET), 132.0)
 	var anchor_height := effective_viewport_size().y * (toast_bottom - toast_top)
 	toast_bg.offset_bottom = maxf(0.0, toast_height - anchor_height)
-	# Host style transparent; GPT toast banner is the visual face.
-	var toast_host := StyleBoxEmpty.new()
-	toast_host.set_content_margin_all(8)
-	toast_bg.add_theme_stylebox_override("panel", toast_host)
+	# The Control is only a geometry/lifecycle host. The imported authored face is
+	# the visual surface, so a missing asset never falls back to a program Panel.
 	var toast_face = add_optional_gpt_illustration_texture(toast_bg, "toast_gpt_banner", rect_full(0.0, 0.0, 1.0, 1.0), 0.92, false)
 	if toast_face == null:
 		toast_face = add_optional_gpt_illustration_texture(toast_bg, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.88, false)
@@ -7298,9 +7389,11 @@ func refresh_toast_queue_indicator() -> void:
 	for queued in toast_queue:
 		if typeof(queued) == TYPE_DICTIONARY:
 			pending_count += maxi(1, int((queued as Dictionary).get("count", 1)))
-	pending_label.text = "还有%d条" % pending_count if pending_count > 0 else ""
+	var pending_copy := "还有99+条" if pending_count > 99 else "还有%d条" % pending_count
+	pending_label.text = pending_copy if pending_count > 0 else ""
 	pending_label.tooltip_text = "还有%d条通知待显示" % pending_count if pending_count > 0 else ""
 	pending_label.set_meta("pending_count", pending_count)
+	pending_label.set_meta("bounded_visual_copy", pending_copy if pending_count > 0 else "")
 
 func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
 	var is_current := toast_current != null and is_instance_valid(toast_current) and toast_current.get_instance_id() == toast_id
@@ -7340,19 +7433,138 @@ func clear_toast_on_mode_change() -> void:
 	if toast_mode != "" and toast_mode != mode:
 		dismiss_active_toast()
 
+func refresh_settings_local_row(setting_key: String) -> bool:
+	if not settings_panel_open or root_layer == null or not is_instance_valid(root_layer):
+		return false
+	var settings_panel := root_layer.find_child("SettingsPanel", true, false) as Control
+	if settings_panel == null or not is_current_ui_control(settings_panel):
+		return false
+	var button := root_layer.find_child("SettingRowButton_%s" % setting_key, true, false) as Button
+	var status_label := root_layer.find_child("SettingRowStatus_%s" % setting_key, true, false) as Label
+	if button == null or status_label == null:
+		return false
+
+	var full_status := ""
+	var button_text := str(button.text)
+	var button_tooltip := ""
+	var is_toggle := false
+	var toggle_enabled := false
+	match setting_key:
+		"背景音乐":
+			is_toggle = true
+			toggle_enabled = music_enabled
+			full_status = "当前: %s" % ("开启" if music_enabled else "关闭")
+			button_tooltip = "背景音乐：当前%s，点击切换" % ("开启" if music_enabled else "关闭")
+		"音效反馈":
+			is_toggle = true
+			toggle_enabled = sfx_enabled
+			full_status = "当前: %s" % ("开启" if sfx_enabled else "关闭")
+			button_tooltip = "音效反馈：当前%s，点击切换" % ("开启" if sfx_enabled else "关闭")
+		"语音报牌":
+			is_toggle = true
+			toggle_enabled = tts_enabled
+			full_status = "当前: %s" % ("开启" if tts_enabled else "关闭")
+			button_tooltip = "语音报牌：当前%s，点击切换" % ("开启" if tts_enabled else "关闭")
+		"AI 节奏":
+			button_text = "快速" if fast_mode_enabled else "标准"
+			full_status = "当前: %s" % button_text
+			button_tooltip = "AI 节奏：当前%s，点击切换" % button_text
+		"AI 难度":
+			button_text = ai_difficulty_label()
+			full_status = "对手强度: %s" % button_text
+			button_tooltip = "AI 难度：当前%s，点击切换" % button_text
+		"桌面特效":
+			is_toggle = true
+			toggle_enabled = fx_enabled
+			full_status = "当前: %s" % ("开启" if fx_enabled else "关闭")
+			button_tooltip = "桌面特效：当前%s，点击切换" % ("开启" if fx_enabled else "关闭")
+		"阅读辅助":
+			button_text = accessibility_profile_label()
+			full_status = "当前: %s" % button_text
+			button_tooltip = "阅读辅助：当前%s，点击切换" % button_text
+		"出牌辅助":
+			is_toggle = true
+			toggle_enabled = ai_assist_enabled
+			full_status = "危险提示: %s" % ("开启" if ai_assist_enabled else "关闭")
+			button_tooltip = "出牌辅助：当前%s，点击切换" % ("开启" if ai_assist_enabled else "关闭")
+		"播放曲目":
+			var track_name := str(BGM_TRACKS[current_bgm_index].get("name", "默认曲目"))
+			full_status = track_name
+			button_text = "切歌"
+			button_tooltip = "播放曲目：当前%s，点击切换" % track_name
+		"画面质量":
+			button_text = graphics_quality_label(true)
+			full_status = "牌面保持 2D · 仅影响背景和动效"
+			button_tooltip = "画面质量：当前%s，仅影响背景、动效和资源质量；牌面保持 2D" % button_text
+		"本地进度":
+			button_text = "确认清空" if reset_progress_confirming else "重置"
+			full_status = "再次点击确认清空本地进度" if reset_progress_confirming else "清空统计与离线记录"
+			button_tooltip = "确认清空统计与离线记录（5秒内有效）" if reset_progress_confirming else "进入二次确认，将清空统计与离线记录"
+		_:
+			return false
+
+	if is_toggle:
+		button_text = "已开" if toggle_enabled else "已关"
+		button.set_meta("setting_state", "on" if toggle_enabled else "off")
+		var old_switch_art := button.find_child("SettingSwitchArt", true, false) as Control
+		if old_switch_art != null:
+			button.remove_child(old_switch_art)
+			old_switch_art.queue_free()
+		draw_setting_switch_art(button, toggle_enabled)
+	else:
+		button.set_meta("setting_state", str(graphics_quality) if setting_key == "画面质量" else button_text)
+	button.text = button_text
+	button.tooltip_text = button_tooltip
+	button.set_meta("accessible_name", "%s：%s" % [setting_key, button_text])
+	button.set_meta("ui_full_text", button_tooltip)
+	set_ui_full_text(button, "%s：%s" % [setting_key, full_status], "%s设置" % setting_key)
+	if setting_key == "本地进度":
+		button.set_meta("confirmation_state", "armed" if reset_progress_confirming else "idle")
+		var old_reset_art := button.find_child("ResetProgressButtonArt", true, false) as Control
+		if old_reset_art != null:
+			button.remove_child(old_reset_art)
+			old_reset_art.queue_free()
+			draw_reset_progress_button_art(button)
+
+	var compact_settings := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 960.0
+	var visible_status := full_status
+	if compact_settings or large_text_enabled or setting_key == "画面质量" or setting_key == "本地进度":
+		visible_status = compact_setting_status(setting_key, full_status)
+	if compact_settings and setting_key == "本地进度":
+		visible_status = "确认清空\n统计 + 离线记录" if reset_progress_confirming else "清空统计\n/ 离线记录"
+	status_label.text = visible_status
+	set_ui_full_text(status_label, full_status, "%s完整状态" % setting_key)
+	status_label.set_meta("local_update_revision", int(settings_panel.get_meta("settings_local_update_revision", 0)) + 1)
+	settings_panel.set_meta("settings_local_update_revision", int(settings_panel.get_meta("settings_local_update_revision", 0)) + 1)
+	button.set_meta("local_update_revision", settings_panel.get_meta("settings_local_update_revision", 0))
+
+	var overview_summary := settings_panel.find_child("SettingsOverviewSummary", true, false) as Label
+	if overview_summary != null:
+		var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
+		var enabled_play := int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
+		overview_summary.text = "声音 %d/3    体验 %d/3" % [enabled_audio, enabled_play]
+		set_ui_full_text(overview_summary, overview_summary.text, "设置总览：声音与体验启用数量")
+	var overview_fill := settings_panel.find_child("SettingsOverviewFill", true, false) as Control
+	if overview_fill != null:
+		var enabled_total := int(music_enabled) + int(sfx_enabled) + int(tts_enabled) + int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
+		overview_fill.anchor_right = 0.030 + 0.920 * clampf(float(enabled_total) / 6.0, 0.0, 1.0)
+	return true
+
 func toggle_ai_assist_setting() -> void:
 	ai_assist_enabled = not ai_assist_enabled
 	save_settings()
 	show_toast("出牌辅助已%s" % ("开启" if ai_assist_enabled else "关闭"))
-	settings_focus_restore_name = "SettingRowButton_出牌辅助"
-	refresh_current_screen()
+	if not refresh_settings_local_row("出牌辅助"):
+		settings_focus_restore_name = "SettingRowButton_出牌辅助"
+		refresh_current_screen()
 
 func toggle_fast_mode_setting() -> void:
 	fast_mode_enabled = not fast_mode_enabled
 	save_settings()
 	show_toast("快节奏模式已%s" % ("开启" if fast_mode_enabled else "关闭"))
-	settings_focus_restore_name = "SettingRowButton_AI 节奏"
-	refresh_current_screen()
+	if not refresh_settings_local_row("AI 节奏"):
+		settings_focus_restore_name = "SettingRowButton_AI 节奏"
+		refresh_current_screen()
 
 func ai_difficulty_label(short: bool = false) -> String:
 	var idx = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
@@ -7363,8 +7575,9 @@ func cycle_ai_difficulty_setting() -> void:
 	ai_difficulty = (clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD) + 1) % 3
 	save_settings()
 	show_toast("AI难度: %s" % ai_difficulty_label())
-	settings_focus_restore_name = "SettingRowButton_AI 难度"
-	refresh_current_screen()
+	if not refresh_settings_local_row("AI 难度"):
+		settings_focus_restore_name = "SettingRowButton_AI 难度"
+		refresh_current_screen()
 
 func cycle_rule_variant_setting() -> void:
 	var current_index := RULE_VARIANT_ORDER.find(normalized_rule_variant(rule_variant))
@@ -7403,8 +7616,9 @@ func toggle_fx_setting() -> void:
 	if not fx_enabled:
 		clear_fx_overlays()
 	show_toast("桌面动效已%s" % ("开启" if fx_enabled else "关闭"))
-	settings_focus_restore_name = "SettingRowButton_桌面特效"
-	refresh_current_screen()
+	if not refresh_settings_local_row("桌面特效"):
+		settings_focus_restore_name = "SettingRowButton_桌面特效"
+		refresh_current_screen()
 
 func cycle_accessibility_profile_setting() -> void:
 	var current := accessibility_profile_label()
@@ -7468,19 +7682,21 @@ func cycle_graphics_quality_setting() -> void:
 		graphics_quality = Commercial3DStage.QUALITY_AUTO
 	save_settings()
 	show_toast("画面质量已切换为%s" % graphics_quality_label())
-	settings_focus_restore_name = "SettingRowButton_画面质量"
-	refresh_current_screen()
+	if not refresh_settings_local_row("画面质量"):
+		settings_focus_restore_name = "SettingRowButton_画面质量"
+		refresh_current_screen()
 
 func toggle_music_setting() -> void:
 	music_enabled = not music_enabled
 	apply_audio_settings()
 	save_settings()
 	show_toast("背景音乐已%s" % ("开启" if music_enabled else "关闭"))
-	settings_focus_restore_name = "SettingRowButton_背景音乐"
-	# Rebuild after the native press event finishes. Rebuilding the modal from
-	# inside button_down/pressed can let the original pointer event reach the new
-	# overlay and close the settings sheet as an outside click.
-	call_deferred("refresh_current_screen")
+	if not refresh_settings_local_row("背景音乐"):
+		settings_focus_restore_name = "SettingRowButton_背景音乐"
+		# Rebuild after the native press event finishes. Rebuilding the modal from
+		# inside button_down/pressed can let the original pointer event reach the new
+		# overlay and close the settings sheet as an outside click.
+		call_deferred("refresh_current_screen")
 
 func toggle_settings_panel() -> void:
 	settings_panel_open = not settings_panel_open
@@ -7495,15 +7711,17 @@ func toggle_sfx_setting() -> void:
 	sfx_enabled = not sfx_enabled
 	save_settings()
 	show_toast("操作音效已%s" % ("开启" if sfx_enabled else "关闭"))
-	settings_focus_restore_name = "SettingRowButton_音效反馈"
-	refresh_current_screen()
+	if not refresh_settings_local_row("音效反馈"):
+		settings_focus_restore_name = "SettingRowButton_音效反馈"
+		refresh_current_screen()
 
 func toggle_tts_setting() -> void:
 	tts_enabled = not tts_enabled
 	save_settings()
 	show_toast("语音播报已%s" % ("开启" if tts_enabled else "关闭"))
-	settings_focus_restore_name = "SettingRowButton_语音报牌"
-	refresh_current_screen()
+	if not refresh_settings_local_row("语音报牌"):
+		settings_focus_restore_name = "SettingRowButton_语音报牌"
+		refresh_current_screen()
 
 func toggle_voice_chat() -> void:
 	if mode != "online_game" and mode != "online_lobby":

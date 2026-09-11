@@ -152,6 +152,7 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 	var eval_context = make_ai_evaluation_context(seat, visible_counts)
 	var pressure_context = ai_pressure_context(seat, eval_context)
 	eval_context["pressure_context"] = pressure_context
+	eval_context["visible_counts_key"] = counts_compact_key(visible_counts_snapshot)
 	var before_shanten = calculate_min_shanten_from_counts(hand_counts, open_melds)
 	var before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size())
 	var before_plan_report: Dictionary = before_plan_eval.get("report", {})
@@ -1599,7 +1600,13 @@ func sort_ai_discard_reports(reports: Array) -> void:
 			var danger_b = float(b.get("risk", 0.0)) + float(b.get("feed_risk", 0.0)) * 0.45
 			if not is_equal_approx(danger_a, danger_b):
 				return danger_a < danger_b
-			return tile_sort_index(str(a.get("tile", ""))) < tile_sort_index(str(b.get("tile", "")))
+			var tile_index_a := int(a.get("tile_index", -1))
+			if tile_index_a < 0:
+				tile_index_a = tile_index(str(a.get("tile", "")))
+			var tile_index_b := int(b.get("tile_index", -1))
+			if tile_index_b < 0:
+				tile_index_b = tile_index(str(b.get("tile", "")))
+			return tile_index_a < tile_index_b
 		return score_a > score_b
 	)
 
@@ -1828,7 +1835,9 @@ func store_ai_report_cache(key: String, reports: Array) -> void:
 		ai_report_cache.erase(oldest)
 
 func ai_report_cache_key(seat: int) -> String:
+	var visible_table_key := threat_report_table_state_cache_key(seat, visible_tile_counts())
 	var parts: Array[String] = [
+		"rev=%d" % ai_state_revision,
 		"seat=%d" % seat,
 		"mode=" + mode,
 		# 静默全 Bot 模拟只保留快评 Top-K；不能与玩家对局的完整候选共用缓存。
@@ -1842,16 +1851,14 @@ func ai_report_cache_key(seat: int) -> String:
 		"handno=%d" % offline_hand_number,
 		"wall=%d" % get_wall_count(),
 		"diff=%d" % clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD),
-		"package=" + package_liability_ai_cache_key(),
-		"claim_ban=" + claim_discard_ban_cache_key(seat),
+		"package_rev=%d" % ai_package_liability_revision,
+		"claim_ban_rev=%d" % ai_claim_ban_revision,
+		# Smoke fixtures and live rules can mutate visible discards/melds directly;
+		# include the table snapshot so those changes invalidate report reuse even
+		# when no gameplay revision was emitted.
+		"table=" + visible_table_key,
+		"hand=" + tile_array_key(players[seat].get("hand", [])),
 	]
-	for player_seat in range(players.size()):
-		var player: Dictionary = players[player_seat]
-		parts.append("p%d_score=%d" % [player_seat, int(player.get("score", 0))])
-		parts.append("p%d_flowers=%d" % [player_seat, int(player.get("flowers", 0))])
-		parts.append("p%d_hand=%s" % [player_seat, tile_array_key(player.get("hand", [])) if player_seat == seat else "%d" % numeric_count(player.get("hand", []), 0)])
-		parts.append("p%d_disc=%s" % [player_seat, tile_array_key(player.get("discards", []))])
-		parts.append("p%d_meld=%s" % [player_seat, meld_array_key(player.get("melds", []))])
 	return "|".join(parts)
 
 
@@ -1863,25 +1870,11 @@ func ai_profile_map_cache_key() -> String:
 
 
 func claim_discard_ban_cache_key(seat: int) -> String:
-	var tiles = claim_discard_ban_tiles_for_seat(seat)
-	if tiles.is_empty():
-		return "-"
-	return ",".join(tiles)
+	return "%d:%d" % [ai_claim_ban_revision, seat]
 
 
 func package_liability_ai_cache_key() -> String:
-	var parts: Array[String] = []
-	var claim_keys: Array = offline_claim_counts.keys()
-	claim_keys.sort_custom(func(a, b): return str(a) < str(b))
-	for key in claim_keys:
-		var count = int(offline_claim_counts.get(key, 0))
-		if count > 0:
-			parts.append("%s=%d" % [str(key), count])
-	var liability_keys: Array = offline_package_liability.keys()
-	liability_keys.sort_custom(func(a, b): return int(a) < int(b))
-	for key in liability_keys:
-		parts.append("L%s=%d" % [str(key), int(offline_package_liability.get(key, -1))])
-	return ",".join(parts)
+	return str(ai_package_liability_revision)
 
 
 func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = [], hand_index: int = -1) -> Dictionary:
@@ -1905,7 +1898,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var effective_remaining: Dictionary = {}
 	# 静默模拟：远离听牌时跳过 34 张进张扫描（主耗时）
 	if (not offline_sim_quiet) or shanten <= 1:
-		var metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts)
+		var metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts, str(eval_context.get("visible_counts_key", "")))
 		ukeire = int(metrics.get("count", 0))
 		variety = int(metrics.get("variety", 0))
 		effective_tiles = metrics.get("tiles", [])
@@ -1968,7 +1961,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		elif risk <= AI_DANGER_RISK_HIGH + 10.0:
 			needs_guard_ukeire = feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
 	if needs_guard_ukeire:
-		var guard_metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts)
+		var guard_metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts, str(eval_context.get("visible_counts_key", "")))
 		ukeire = int(guard_metrics.get("count", 0))
 		variety = int(guard_metrics.get("variety", 0))
 		effective_tiles = guard_metrics.get("tiles", [])
@@ -2010,6 +2003,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	score -= package_pen
 	return {
 		"tile": tile,
+		"tile_index": tile_index(tile),
 		"hand_index": hand_index,
 		"score": score,
 		"shanten": shanten,
@@ -2169,10 +2163,10 @@ func wait_quality_text_from_values(total_remaining: int, self_discarded_waits: A
 		parts.append("回头待%s%s" % ["、".join(labels), suffix])
 	return " ".join(parts)
 
-func recommended_discard_report() -> Dictionary:
+func recommended_discard_report(report_snapshot: Array = []) -> Dictionary:
 	if not player_ai_assist_enabled():
 		return {}
-	var reports = human_discard_reports()
+	var reports = human_discard_reports(report_snapshot)
 	if reports.is_empty() or typeof(reports[0]) != TYPE_DICTIONARY:
 		return {}
 	return duplicate_ai_report(reports[0], true)
@@ -2905,14 +2899,15 @@ func effective_tile_count(hand: Array, open_melds: int, seat: int) -> int:
 func effective_tile_variety(hand: Array, open_melds: int, seat: int) -> int:
 	return int(effective_tile_metrics(hand, open_melds, seat).get("variety", 0))
 
-func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shanten: int = 99, visible_counts_snapshot: Array = [], hand_counts_snapshot: Array = []) -> Dictionary:
+func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shanten: int = 99, visible_counts_snapshot: Array = [], hand_counts_snapshot: Array = [], visible_counts_key_override: String = "") -> Dictionary:
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
 	var current_shanten = known_shanten if known_shanten != 99 else calculate_min_shanten_from_counts(hand_counts, open_melds)
 
 	# 有效张种类取决于手牌，但有效张数还取决于已见牌。
 	# 将可见张快照纳入缓存键，避免牌河/副露变化后复用旧的 ukeire。
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
-	var cache_key = "%d:%d:%s:%s" % [current_shanten, open_melds, counts_compact_key(hand_counts), counts_compact_key(visible_counts)]
+	var visible_key := visible_counts_key_override if visible_counts_key_override != "" else counts_compact_key(visible_counts)
+	var cache_key = "%d:%d:%s:%s" % [current_shanten, open_melds, counts_compact_key(hand_counts), visible_key]
 	if effective_tiles_cache.has(cache_key):
 		effective_tiles_cache_hits += 1
 		# 移到最近使用

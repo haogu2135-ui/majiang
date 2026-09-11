@@ -66,11 +66,13 @@ func human_draw_delay() -> float:
 func wait_for_runtime_delay(delay_seconds: float) -> void:
 	if delay_seconds <= 0.0 or runtime_shutdown_requested:
 		return
+	var timer_generation := ui_page_generation
 	var timer := Timer.new()
 	timer.name = "RuntimeDelayTimer"
 	timer.one_shot = true
 	timer.wait_time = maxf(0.001, delay_seconds)
 	timer.process_callback = Timer.TIMER_PROCESS_IDLE
+	timer.set_meta("runtime_delay_generation", timer_generation)
 	add_child(timer)
 	runtime_delay_timers.append(timer)
 	timer.start()
@@ -78,6 +80,8 @@ func wait_for_runtime_delay(delay_seconds: float) -> void:
 	runtime_delay_timers.erase(timer)
 	if is_instance_valid(timer) and not timer.is_queued_for_deletion():
 		timer.queue_free()
+	if timer_generation != ui_page_generation:
+		return
 
 
 func pace_after_human_discard_response() -> void:
@@ -137,6 +141,8 @@ func request_game_render(priority: int = 0, dirty_flag: int = GAME_RENDER_DIRTY_
 	if mode != "offline" and mode != "online_game":
 		return
 	game_render_request_revision += 1
+	if (dirty_flag & GAME_RENDER_DIRTY_STATE) != 0:
+		ai_state_revision += 1
 	game_render_dirty_flags |= dirty_flag
 	game_render_priority = maxi(game_render_priority, priority)
 	if game_render_queued:
@@ -160,13 +166,50 @@ func flush_game_render() -> void:
 	game_render_dirty_flags = 0
 	game_render_priority = 0
 	if mode == "offline" or mode == "online_game":
-		render_game()
+		# Deadline polling owns the pending timer/fill controls. Updating that
+		# narrow lane does not justify replacing the table, seats, melds, river or
+		# hand tree; a state request still takes the full render path below.
+		if (dirty_flags & GAME_RENDER_DIRTY_STATE) == 0 and (dirty_flags & GAME_RENDER_DIRTY_HUD) != 0 and root_layer != null and is_instance_valid(root_layer):
+			refresh_battle_hud_lane()
+			if (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
+				refresh_pending_claim_live_controls()
+				update_pending_claim_live_state()
+			root_layer.set_meta("last_render_lane", "hud_only")
+			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
+		elif (dirty_flags & GAME_RENDER_DIRTY_STATE) == 0 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0 and root_layer != null and is_instance_valid(root_layer):
+			refresh_pending_claim_live_controls()
+			update_pending_claim_live_state()
+			root_layer.set_meta("last_render_lane", "pending_only")
+			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
+		else:
+			render_game()
 	if render_priority >= 2 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
 		# Keep the priority contract inspectable on the next rebuilt root without
 		# forcing an additional render in the same frame.
 		if root_layer != null and is_instance_valid(root_layer):
 			root_layer.set_meta("last_render_priority", render_priority)
 			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
+
+func refresh_battle_hud_lane() -> void:
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var status := root_layer.find_child("TopHudStatus", true, false) as Label
+	if status != null:
+		set_dynamic_label_text(status, top_hud_short_status_text(effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0), top_hud_status_tooltip_text())
+	var wall := root_layer.find_child("TopHudWallText", true, false) as Label
+	var wall_state := root_layer.find_child("TopHudWallState", true, false) as Label
+	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [get_wall_count(), display_wall_total(), wall_state_text(), tile_label(get_last_discard()) if get_last_discard() != "" else "无"]
+	if wall != null:
+		set_dynamic_label_text(wall, "余牌 %d/%d" % [get_wall_count(), display_wall_total()], wall_detail)
+		wall.set_meta("wall_count", get_wall_count())
+		wall.set_meta("wall_total", display_wall_total())
+	if wall_state != null:
+		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text().replace("牌墙", ""), tile_label(get_last_discard()) if get_last_discard() != "" else "无"], wall_detail)
+	var center_count := root_layer.find_child("CenterWallCount", true, false) as Label
+	if center_count != null:
+		center_count.text = "%d" % get_wall_count()
+		center_count.tooltip_text = "牌墙剩余 %d/%d 张" % [get_wall_count(), display_wall_total()]
+	root_layer.set_meta("hud_lane_refresh_count", int(root_layer.get_meta("hud_lane_refresh_count", 0)) + 1)
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
 	var timer := game_render_delay_timer
@@ -219,6 +262,65 @@ func _on_game_render_delay_timeout(timer: Timer) -> void:
 func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
+func retain_battle_hand_tray_for_render() -> void:
+	if retained_battle_hand_tray != null and is_instance_valid(retained_battle_hand_tray):
+		retained_battle_hand_tray.queue_free()
+	retained_battle_hand_tray = null
+	retained_battle_hand_signature = ""
+	retained_battle_hand_state_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var tray := root_layer.get_node_or_null("HandTray") as Control
+	if tray == null or not is_instance_valid(tray) or tray.is_queued_for_deletion():
+		return
+	var current_signature := "%s|%s" % [hand_identity_fingerprint(get_self_hand()), mode]
+	var tray_signature := str(tray.get_meta("hand_identity_signature", ""))
+	if tray_signature == "" or tray_signature != current_signature:
+		return
+	root_layer.remove_child(tray)
+	retained_battle_hand_tray = tray
+	retained_battle_hand_signature = tray_signature
+	retained_battle_hand_state_signature = str(tray.get_meta("hand_visual_state_signature", ""))
+	tray.set_meta("retained_for_battle_render", true)
+
+func battle_center_identity_signature() -> String:
+	return "%s|%d|%d|%s|%s|%s|%s|%s" % [
+		get_last_discard(),
+		get_last_discard_seat(),
+		get_wall_count(),
+		str(get_current_seat()),
+		"overlay" if (chat_panel_open or advisor_detail_open or has_pending_claim_window()) else "plain",
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+	]
+
+func retain_battle_center_for_render() -> void:
+	if retained_battle_center != null and is_instance_valid(retained_battle_center):
+		retained_battle_center.queue_free()
+	retained_battle_center = null
+	retained_battle_center_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var center := root_layer.find_child("CenterConsole3DShell", true, false) as Control
+	if center == null or not is_instance_valid(center) or center.is_queued_for_deletion():
+		return
+	var current_signature := battle_center_identity_signature()
+	var center_signature := str(center.get_meta("center_identity_signature", ""))
+	if center_signature == "" or center_signature != current_signature:
+		return
+	var center_parent := center.get_parent()
+	if center_parent == null:
+		return
+	center_parent.remove_child(center)
+	retained_battle_center = center
+	retained_battle_center_signature = center_signature
+	center.set_meta("retained_for_battle_render", true)
+
 func clear_screen() -> void:
 	ui_page_generation += 1
 	loading_screen_active = false
@@ -235,6 +337,8 @@ func clear_screen() -> void:
 	clear_screen_tweens()
 	clear_fx_overlays()
 	clear_toast_on_mode_change()
+	if mode != "offline" and mode != "online_game":
+		release_retained_battle_views()
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
 			continue
@@ -302,6 +406,18 @@ func clear_screen() -> void:
 	root_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	apply_safe_area_offsets(root_layer)
 	screen_layer.add_child(root_layer)
+
+func release_retained_battle_views() -> void:
+	for retained in [retained_battle_hand_tray, retained_battle_center]:
+		if retained != null and is_instance_valid(retained):
+			if retained.get_parent() != null:
+				retained.get_parent().remove_child(retained)
+			retained.queue_free()
+	retained_battle_hand_tray = null
+	retained_battle_hand_signature = ""
+	retained_battle_hand_state_signature = ""
+	retained_battle_center = null
+	retained_battle_center_signature = ""
 
 func start_offline(instant: bool = false) -> void:
 	if not ensure_tile_assets_ready():
@@ -534,10 +650,14 @@ func render_game() -> void:
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
 	last_game_render_msec = Time.get_ticks_msec()
+	retain_battle_hand_tray_for_render()
+	retain_battle_center_for_render()
 	clear_screen()
-	# 延迟AI辅助计算，优先渲染关键UI
-	current_human_advice = []
-	current_seat_threat_reports = {}
+	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
+	# the next evaluation commits, avoiding an empty advice frame during HUD-only
+	# renders. The snapshot helper still rejects it after a hand replacement.
+	ai_render_report_snapshot.clear()
+	ai_render_report_snapshot_ready = false
 	draw_game_top_hud(root_layer)
 
 	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.004), 42)  # r426
@@ -616,11 +736,22 @@ func update_ai_assistance_async() -> void:
 	offline_ai_assistance_queued = false
 	if mode != "offline" or not can_self_discard():
 		return
+	var evaluation_revision := ai_state_revision
+	var evaluation_generation := ui_page_generation
+	var evaluation_hand_signature := hand_identity_fingerprint(get_self_hand())
 
 	var start_time = Time.get_ticks_msec()
 
 	# 计算AI推荐
-	current_human_advice = get_ai_discard_reports(0)
+	var next_human_advice := get_ai_discard_reports(0)
+	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline" or hand_identity_fingerprint(get_self_hand()) != evaluation_hand_signature:
+		# The deferred evaluator no longer describes the mounted table. Do not
+		# partially commit hand and threat results; the next state render owns retry.
+		offline_ai_assistance_queued = false
+		return
+	current_human_advice = next_human_advice
+	ai_advice_hand_signature = evaluation_hand_signature
+	ai_assistance_revision = evaluation_revision
 
 	var elapsed = Time.get_ticks_msec() - start_time
 	perf_ai_decision_count += 1
@@ -636,6 +767,7 @@ func update_ai_assistance_async() -> void:
 		var seat_threat_reports = render_seat_threat_reports(0, seat_threat_context)
 		# 更新座位威胁显示
 		update_seat_threats_display(seat_threat_reports)
+		ai_threat_assistance_revision = evaluation_revision
 
 func copy_local_ui_contract_metadata(source: Control, target: Control) -> void:
 	if source == null or target == null or not is_instance_valid(source) or not is_instance_valid(target):
@@ -702,12 +834,14 @@ func update_hand_ai_hints() -> void:
 	var old_tray_index := old_tray.get_index()
 	kill_screen_tweens_for_subtree(old_tray)
 	root_layer.remove_child(old_tray)
-	old_tray.queue_free()
 	draw_hand(root_layer)
 	var new_tray = root_layer.get_node_or_null("HandTray")
 	if new_tray != null:
+		# The source remains valid until this copy completes. Do not read contracts
+		# from a node that has already entered the delete queue.
 		copy_local_ui_contract_metadata(old_tray, new_tray)
 		root_layer.move_child(new_tray, mini(old_tray_index, root_layer.get_child_count() - 1))
+	old_tray.queue_free()
 	invalidate_ui_contract_control_cache(root_layer)
 	# AI suggestions can arrive while a player is reading the hand. Restore the
 	# stable selection/focus and pointer highlight after the replacement tree is
@@ -728,7 +862,12 @@ func refresh_ai_advisor_panel() -> void:
 	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
 	var current_fingerprint := JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports})
 	var existing_panel := root_layer.get_node_or_null("AdvisorPanel")
-	if existing_panel != null and is_instance_valid(existing_panel) and ai_advisor_root_generation == current_root_generation and ai_advisor_fingerprint == current_fingerprint:
+	if existing_panel != null and is_instance_valid(existing_panel) and ai_advisor_root_generation == current_root_generation:
+		if ai_advisor_fingerprint == current_fingerprint:
+			return
+		refresh_advisor_panel_cards(existing_panel)
+		ai_advisor_fingerprint = current_fingerprint
+		root_layer.set_meta("advisor_card_update_mode", "in_place")
 		return
 	var old_panel = root_layer.get_node_or_null("AdvisorPanel")
 	for detail_name in ["AdvisorDetailPanel", "AdvisorDetailModalShield"]:
@@ -760,24 +899,42 @@ func refresh_ai_advisor_panel() -> void:
 func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
-	var next_fingerprint := JSON.stringify(seat_threat_reports)
+	var next_revisions: Dictionary = {}
+	var revision_parts: Array[String] = []
+	for seat_layout in SEAT_LAYOUTS:
+		var seat := int(seat_layout[0])
+		var report = seat_threat_reports.get(seat, {})
+		var revision := int(report.get("seat_revision", seat_threat_report_revision(report))) if typeof(report) == TYPE_DICTIONARY else 0
+		next_revisions[seat] = revision
+		revision_parts.append("%d:%d" % [seat, revision])
+	var next_fingerprint := "|".join(revision_parts)
 	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
 	if seat_threat_fingerprint == next_fingerprint and seat_threat_root_generation == current_root_generation:
 		return
+	var previous_reports := current_seat_threat_reports.duplicate(true)
 	current_seat_threat_reports = seat_threat_reports.duplicate(true)
 	seat_threat_fingerprint = next_fingerprint
 	seat_threat_root_generation = current_root_generation
+	seat_threat_revisions = next_revisions
 	# SeatPanel 的尺寸和朝向由 SEAT_LAYOUTS 决定，重绘这些局部面板比整局
 	# render_game 更安全，也不会重新触发 AI 辅助 deferred 回调。
+	var changed_seats: Array[int] = []
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
 		var old_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
+		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
+		var old_report = previous_reports.get(seat, {})
+		var next_report = current_seat_threat_reports.get(seat, {})
+		var old_revision := int(old_report.get("seat_revision", seat_threat_report_revision(old_report))) if typeof(old_report) == TYPE_DICTIONARY else 0
+		var next_revision := int(next_report.get("seat_revision", seat_threat_report_revision(next_report))) if typeof(next_report) == TYPE_DICTIONARY else 0
+		if old_panel != null and is_instance_valid(old_panel) and old_shadow != null and is_instance_valid(old_shadow) and old_revision == next_revision:
+			continue
+		changed_seats.append(seat)
 		var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
 		if old_panel != null and is_instance_valid(old_panel):
 			kill_screen_tweens_for_subtree(old_panel)
 			root_layer.remove_child(old_panel)
 			old_panel.queue_free()
-		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var old_shadow_index := old_shadow.get_index() if old_shadow != null and is_instance_valid(old_shadow) else -1
 		if old_shadow != null and is_instance_valid(old_shadow):
 			kill_screen_tweens_for_subtree(old_shadow)
@@ -794,6 +951,8 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 			root_layer.move_child(new_shadow, mini(old_shadow_index, root_layer.get_child_count() - 1))
 		if new_panel != null and old_panel_index >= 0:
 			root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
+	root_layer.set_meta("seat_threat_changed_seats", changed_seats)
+	root_layer.set_meta("seat_threat_rebuild_count", changed_seats.size())
 	invalidate_ui_contract_control_cache(root_layer)
 
 func table_log_tail(limit: int) -> Array[String]:
@@ -3128,9 +3287,11 @@ func clear_passed_win_tiles(seat: int) -> void:
 func clear_claim_discard_bans(seat: int = -1) -> void:
 	if seat < 0:
 		offline_claim_discard_bans.clear()
+		ai_claim_ban_revision += 1
 		return
 	if seat < players.size():
 		offline_claim_discard_bans.erase(seat)
+		ai_claim_ban_revision += 1
 
 
 func set_claim_discard_bans(seat: int, tiles) -> void:
@@ -3153,11 +3314,13 @@ func set_claim_discard_bans(seat: int, tiles) -> void:
 			banned[code] = true
 	if banned.is_empty():
 		offline_claim_discard_bans.erase(seat)
+		ai_claim_ban_revision += 1
 		return
 	offline_claim_discard_bans[seat] = banned
 	# 若禁打后手牌已无任何可切张，立即解除，避免副露后锁死整桌。
 	if not seat_has_unbanned_hand_tile(seat):
 		offline_claim_discard_bans.erase(seat)
+	ai_claim_ban_revision += 1
 
 
 func claim_discard_ban_tiles(claim: String, tile: String, meld: Array = []) -> Array:
@@ -3416,17 +3579,19 @@ func clear_pending_danger_discard() -> void:
 	pending_danger_discard_tile = ""
 	pending_danger_discard_report.clear()
 
-func human_discard_reports() -> Array:
+func human_discard_reports(report_snapshot: Array = []) -> Array:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard():
 		return []
+	if not report_snapshot.is_empty():
+		return report_snapshot
 	return current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
 
-func discard_action_alternative_reports(excluded_tiles = [], limit: int = 2) -> Array:
+func discard_action_alternative_reports(excluded_tiles = [], limit: int = 2, report_snapshot: Array = []) -> Array:
 	var result: Array = []
 	if not player_ai_assist_enabled():
 		return result
 	var excluded = discard_excluded_tile_set(excluded_tiles)
-	for report in human_discard_reports():
+	for report in human_discard_reports(report_snapshot):
 		if typeof(report) != TYPE_DICTIONARY:
 			continue
 		var tile = str(report.get("tile", ""))
@@ -3708,8 +3873,24 @@ func render_seat_threat_reports(viewer: int, eval_context: Dictionary = {}) -> D
 			continue
 		var report = opponent_seat_threat_report(viewer, seat, eval_context)
 		if not report.is_empty():
+			report["seat_revision"] = seat_threat_report_revision(report)
 			reports[seat] = report
 	return reports
+
+func seat_threat_report_revision(report: Dictionary) -> int:
+	if report.is_empty():
+		return 0
+	var safe_tiles: Array = report.get("safe_tiles", [])
+	return hash("%s|%s|%s|%s|%d|%.3f|%.3f|%s" % [
+		str(report.get("opponent", -1)),
+		str(report.get("level", "")),
+		str(report.get("plan_type", "")),
+		str(report.get("plan_label", "")),
+		int(report.get("plan_suit", -1)),
+		float(report.get("score", 0.0)),
+		float(report.get("readiness_score", 0.0)),
+		"/".join(safe_tiles.map(func(tile): return str(tile))),
+	])
 
 func best_chi_choice(hand: Array, tile: String) -> Dictionary:
 	return best_chi_choice_from_counts(tile_counts(hand), normalize_tile_code(tile))

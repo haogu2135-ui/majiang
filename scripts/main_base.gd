@@ -775,6 +775,15 @@ var last_score_deltas: Array[int] = []
 var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
 var current_human_advice: Array = []
 var current_seat_threat_reports: Dictionary = {}
+var ai_render_report_snapshot: Array = []
+var ai_render_report_snapshot_ready := false
+var ai_advice_hand_signature := ""
+var ai_assistance_revision := -1
+var ai_threat_assistance_revision := -1
+var ai_state_revision := 0
+var ai_claim_ban_revision := 0
+var ai_package_liability_revision := 0
+var ai_rob_threat_cache: Dictionary = {}
 var advisor_detail_open := false
 var table_log_archive_open := false
 var table_log_chat_restore_pending := false
@@ -884,6 +893,9 @@ var online_last_snapshot_fingerprint := ""
 var online_last_room_snapshot_fingerprint := ""
 var online_lobby_render_revision := 0
 var online_last_lobby_render_revision := -1
+var online_lobby_action_controls: Dictionary = {}
+var online_lobby_roster_controls: Array[Dictionary] = []
+var online_lobby_focus_signature := ""
 var online_players_by_seat: Dictionary = {}
 var online_player_index_token := 0
 var online_announced_discard_key = ""
@@ -928,9 +940,21 @@ var transition_pending_callback: Callable
 var transition_active := false
 var screen_tweens: Array[Tween] = []
 var screen_tween_generations: Dictionary = {}
+var screen_tweens_by_id: Dictionary = {}
+var screen_tween_owner_index: Dictionary = {}
+var screen_tween_indices: Dictionary = {}
+var focus_registry_cache: Dictionary = {}
+var focus_registry_generation := -1
 var last_hand_render_signature := ""
+var last_hand_render_state_signature := ""
+var retained_battle_hand_tray: Control = null
+var retained_battle_hand_signature := ""
+var retained_battle_hand_state_signature := ""
+var retained_battle_center: Control = null
+var retained_battle_center_signature := ""
 var seat_threat_fingerprint := ""
 var seat_threat_root_generation := -1
+var seat_threat_revisions: Dictionary = {}
 var ai_advisor_fingerprint := ""
 var ai_advisor_root_generation := -1
 var pending_claim_live_root_id := 0
@@ -1024,7 +1048,7 @@ const MELD_LAYOUTS := [
 	# Keep the vertical lanes beside the seat plaques. Their lower edge leaves a
 	# separate bottom action channel while pagination preserves full meld access.
 	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.865, 0.510))],
-	[2, Rect2(Vector2(0.680, 0.105), Vector2(0.965, 0.195))],
+	[2, Rect2(Vector2(0.680, 0.140), Vector2(0.965, 0.195))],
 	[3, Rect2(Vector2(0.135, 0.240), Vector2(0.205, 0.510))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
@@ -1038,9 +1062,9 @@ const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635)
 const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.05), Vector2(0.57, 0.22)),
+	Rect2(Vector2(0.43, 0.06), Vector2(0.57, 0.205)),
 	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
-	Rect2(Vector2(0.43, 0.74), Vector2(0.57, 1.00)),
+	Rect2(Vector2(0.43, 0.795), Vector2(0.57, 0.94)),
 	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
 ]
 const CENTER_DICE_DOT_POINTS := [
@@ -1343,6 +1367,7 @@ const UI_DEADLINE_POLL_INTERVAL_MSEC := 100
 const GAME_RENDER_DIRTY_STATE := 1
 const GAME_RENDER_DIRTY_PENDING := 2
 const GAME_RENDER_DIRTY_PRIORITY := 4
+const GAME_RENDER_DIRTY_HUD := 8
 
 # 界面过渡动画参数 / Interface Transition Parameters
 const TRANSITION_SLIDE_DURATION_MSEC := 350
@@ -1362,13 +1387,22 @@ const AMBIENT_FIREWORK_COUNT := 6
 
 # ===== Shared UI helpers =====
 func create_screen_tween(preserve_timing: bool = false) -> Tween:
+	# Keep the registry bounded before creating the next animation. Decorative
+	# work is allowed to evict the oldest active tween; the caller still receives
+	# a normal Tween so completion paths remain valid.
+	while screen_tweens.size() >= SCREEN_TWEEN_ACTIVE_BUDGET:
+		var oldest := screen_tweens[0] as Tween
+		if oldest == null or not is_instance_valid(oldest):
+			_forget_screen_tween(oldest)
+			continue
+		oldest.kill()
+		_forget_screen_tween(oldest)
 	var tween := create_tween()
+	var tween_id := tween.get_instance_id()
 	screen_tweens.append(tween)
-	screen_tween_generations[tween.get_instance_id()] = ui_page_generation
-	if screen_tweens.size() > SCREEN_TWEEN_ACTIVE_BUDGET:
-		# The newest state remains visible; excess decorative work resolves
-		# immediately instead of adding another long-lived animation.
-		tween.set_speed_scale(1000.0)
+	screen_tweens_by_id[tween_id] = tween
+	screen_tween_indices[tween_id] = screen_tweens.size() - 1
+	screen_tween_generations[tween_id] = ui_page_generation
 	# Reduced motion keeps the feedback node and its completion callback, but
 	# resolves the visual transition immediately instead of hiding the event.
 	if reduce_motion_enabled and not preserve_timing:
@@ -1379,7 +1413,11 @@ func create_screen_tween(preserve_timing: bool = false) -> Tween:
 func create_screen_tween_for_owner(owner: Node, preserve_timing: bool = false) -> Tween:
 	var tween := create_screen_tween(preserve_timing)
 	if owner != null and is_instance_valid(owner):
-		tween.set_meta("screen_tween_owner_id", owner.get_instance_id())
+		var owner_id := owner.get_instance_id()
+		tween.set_meta("screen_tween_owner_id", owner_id)
+		var owned_ids: Array = screen_tween_owner_index.get(owner_id, [])
+		owned_ids.append(tween.get_instance_id())
+		screen_tween_owner_index[owner_id] = owned_ids
 	return tween
 
 func empty_tile_stylebox() -> StyleBoxEmpty:
@@ -1394,26 +1432,51 @@ func kill_screen_tweens_for_subtree(owner: Node) -> void:
 	for candidate in owner.find_children("*", "Node", true, false):
 		if candidate != null and is_instance_valid(candidate):
 			owner_ids[candidate.get_instance_id()] = true
-	for candidate_tween in screen_tweens.duplicate():
-		var tween := candidate_tween as Tween
+	var tween_ids: Array[int] = []
+	for owner_id in owner_ids:
+		for tween_id in screen_tween_owner_index.get(owner_id, []):
+			tween_ids.append(int(tween_id))
+	for tween_id in tween_ids:
+		var tween := screen_tweens_by_id.get(tween_id, null) as Tween
 		if tween == null or not is_instance_valid(tween):
+			screen_tweens_by_id.erase(tween_id)
 			continue
-		if owner_ids.has(int(tween.get_meta("screen_tween_owner_id", 0))):
-			tween.kill()
-			_forget_screen_tween(tween)
+		tween.kill()
+		_forget_screen_tween(tween)
 
 func _forget_screen_tween(tween: Tween) -> void:
-	var index := screen_tweens.find(tween)
-	if index >= 0:
-		screen_tweens.remove_at(index)
-	if tween != null:
-		screen_tween_generations.erase(tween.get_instance_id())
+	if tween == null:
+		return
+	var tween_id := tween.get_instance_id()
+	var index := int(screen_tween_indices.get(tween_id, -1))
+	if index >= 0 and index < screen_tweens.size():
+		var last_index := screen_tweens.size() - 1
+		var last_tween := screen_tweens[last_index] as Tween
+		if index != last_index:
+			screen_tweens[index] = last_tween
+			if last_tween != null:
+				screen_tween_indices[last_tween.get_instance_id()] = index
+		screen_tweens.pop_back()
+	screen_tween_indices.erase(tween_id)
+	screen_tweens_by_id.erase(tween_id)
+	screen_tween_generations.erase(tween_id)
+	var owner_id := int(tween.get_meta("screen_tween_owner_id", 0))
+	if owner_id != 0:
+		var owned_ids: Array = screen_tween_owner_index.get(owner_id, [])
+		owned_ids.erase(tween_id)
+		if owned_ids.is_empty():
+			screen_tween_owner_index.erase(owner_id)
+		else:
+			screen_tween_owner_index[owner_id] = owned_ids
 
 func clear_screen_tweens() -> void:
 	for tween in screen_tweens:
 		if tween != null and is_instance_valid(tween):
 			tween.kill()
 	screen_tweens.clear()
+	screen_tweens_by_id.clear()
+	screen_tween_indices.clear()
+	screen_tween_owner_index.clear()
 	screen_tween_generations.clear()
 
 func ui_cjk_font() -> Font:
@@ -2261,25 +2324,24 @@ func add_line_edit_clear_proxy(parent: Control, edit: LineEdit, proxy_name: Stri
 func find_ui_contract_control(root: Control, node_name: String) -> Control:
 	if root == null or not is_instance_valid(root) or node_name.strip_edges() == "":
 		return null
-	var cache: Dictionary = root.get_meta("ui_contract_control_index", {})
-	if not bool(root.get_meta("ui_contract_control_index_built", false)):
-		for candidate_node in root.find_children("*", "Control", true, false):
-			var candidate := candidate_node as Control
-			if candidate != null and not cache.has(candidate.name):
-				cache[candidate.name] = candidate.get_instance_id()
-		root.set_meta("ui_contract_control_index", cache)
-		root.set_meta("ui_contract_control_index_built", true)
-	var cached_id := int(cache.get(node_name, 0))
-	if cached_id > 0:
-		var cached_node := instance_from_id(cached_id)
-		if cached_node != null and is_instance_valid(cached_node):
-			var cached := cached_node as Control
-			if cached != null and (cached == root or root.is_ancestor_of(cached)):
-				return cached
+	# Reuse the revision-aware object index built by the render contract pass.
+	# Older callers used an instance-id map that never noticed nested page
+	# replacement, so a stale entry could force another recursive search on every
+	# refresh. Keep a small legacy fallback for controls created before that pass.
+	var indexed_index: Dictionary = call("cached_ui_control_index", root) if has_method("cached_ui_control_index") else {}
+	var indexed_variant = indexed_index.get(node_name, null)
+	# A page refresh can queue an indexed control before the deferred delete runs.
+	# Validate the object before casting it, otherwise a stale ObjectDB entry raises
+	# a script error instead of falling back to the live tree search.
+	if indexed_variant != null and is_instance_valid(indexed_variant):
+		var indexed := indexed_variant as Control
+		if indexed != null and (indexed == root or root.is_ancestor_of(indexed)):
+			return indexed
 	var found := root.find_child(node_name, true, false) as Control
 	if found != null:
-		cache[node_name] = found.get_instance_id()
-		root.set_meta("ui_contract_control_index", cache)
+		var name_index: Dictionary = root.get_meta("ui_contract_name_index", {})
+		name_index[node_name] = found
+		root.set_meta("ui_contract_name_index", name_index)
 	return found
 
 func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = "") -> void:
@@ -2507,7 +2569,9 @@ func play_button_press_sheen_by_id(button_id: int, sheen_id: int) -> void:
 	var sheen = node_from_instance_id(sheen_id) as Control
 	if button == null or sheen == null:
 		return
-	var previous_tween := button.get_meta("button_press_sheen_tween", null) as Tween
+	var previous_tween: Tween = null
+	if button.has_meta("button_press_sheen_tween"):
+		previous_tween = button.get_meta("button_press_sheen_tween") as Tween
 	if previous_tween != null and is_instance_valid(previous_tween):
 		previous_tween.kill()
 	var tw := button.create_tween()
@@ -2623,6 +2687,7 @@ func focus_control_neighbor(control: Control, focusable: Array[Control], directi
 func configure_ordered_focus_navigation(root: Control, controls: Array, default_focus_name: String = "", grab_default_focus: bool = true) -> void:
 	if root == null or not is_instance_valid(root):
 		return
+	root.set_meta("focus_registry_revision", int(root.get_meta("focus_registry_revision", 0)) + 1)
 	var focusable: Array[Control] = []
 	var seen_control_ids: Dictionary = {}
 	for candidate in controls:
@@ -2721,7 +2786,9 @@ func play_touch_button_down_by_id(button_id: int) -> void:
 	center_touch_button_pivot_by_id(button_id)
 	if OS.has_feature("mobile") and fx_enabled:
 		Input.vibrate_handheld(18, 0.22)
-	var previous_tween := button.get_meta("touch_press_tween", null) as Tween
+	var previous_tween: Tween = null
+	if button.has_meta("touch_press_tween"):
+		previous_tween = button.get_meta("touch_press_tween") as Tween
 	if previous_tween != null and is_instance_valid(previous_tween):
 		previous_tween.kill()
 	if not ui_motion_enabled():
@@ -2748,7 +2815,9 @@ func play_touch_button_up_by_id(button_id: int) -> void:
 	var button = node_from_instance_id(button_id) as Button
 	if button == null:
 		return
-	var previous_tween := button.get_meta("touch_press_tween", null) as Tween
+	var previous_tween: Tween = null
+	if button.has_meta("touch_press_tween"):
+		previous_tween = button.get_meta("touch_press_tween") as Tween
 	if previous_tween != null and is_instance_valid(previous_tween):
 		previous_tween.kill()
 	button.set_meta("touch_press_tween", null)
@@ -4416,8 +4485,10 @@ func restore_offline_progress_state(state: Dictionary) -> bool:
 		offline_pending_claim.erase("remaining_msec")
 	offline_claim_counts = state.get("offline_claim_counts", {}).duplicate(true) if typeof(state.get("offline_claim_counts", {})) == TYPE_DICTIONARY else {}
 	offline_package_liability = state.get("offline_package_liability", {}).duplicate(true) if typeof(state.get("offline_package_liability", {})) == TYPE_DICTIONARY else {}
+	ai_package_liability_revision += 1
 	offline_passed_win_tiles = state.get("offline_passed_win_tiles", {}).duplicate(true) if typeof(state.get("offline_passed_win_tiles", {})) == TYPE_DICTIONARY else {}
 	offline_claim_discard_bans = state.get("offline_claim_discard_bans", {}).duplicate(true) if typeof(state.get("offline_claim_discard_bans", {})) == TYPE_DICTIONARY else {}
+	ai_claim_ban_revision += 1
 	offline_concealed_gang_tiles = state.get("offline_concealed_gang_tiles", {}).duplicate(true) if typeof(state.get("offline_concealed_gang_tiles", {})) == TYPE_DICTIONARY else {}
 	wall = []
 	for raw_tile in state.get("wall", []):

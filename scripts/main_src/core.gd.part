@@ -11,6 +11,11 @@ func _ready() -> void:
 	if not ui_capture_mode:
 		verify_audio_assets()
 	load_settings()
+	# UI capture runs in a low-resource virtual display. Keep it deterministic
+	# even when the user's persisted settings enable visual effects; otherwise
+	# interaction smoke can observe a page while its transition is still active.
+	if ui_capture_mode:
+		fx_enabled = false
 	load_telemetry_state()
 	telemetry_record_event("app_started", {"platform": OS.get_name(), "app_version": APP_VERSION})
 	load_game_stats()
@@ -410,12 +415,12 @@ func restore_control_focus_by_id(control_id: int) -> void:
 func focus_named_control(control_name: String) -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
-	var control = root_layer.find_child(control_name, true, false) as Control
+	var control := find_ui_contract_control(root_layer, control_name)
 	if control == null or not control.is_visible_in_tree():
 		control = first_visible_focusable_control(root_layer)
 	if control is BaseButton and (control as BaseButton).disabled:
 		var fallback_name := str(control.get_meta("focus_fallback_name", ""))
-		var fallback := root_layer.find_child(fallback_name, true, false) as Control if fallback_name != "" else null
+		var fallback := find_ui_contract_control(root_layer, fallback_name) if fallback_name != "" else null
 		if fallback != null and fallback.is_visible_in_tree() and fallback.focus_mode != Control.FOCUS_NONE and not (fallback is BaseButton and (fallback as BaseButton).disabled):
 			control = fallback
 		else:
@@ -435,9 +440,14 @@ func ensure_focus_control_visible(control: Control) -> void:
 	while ancestor != null:
 		if ancestor is ScrollContainer:
 			var scroll := ancestor as ScrollContainer
-			scroll.ensure_control_visible(control)
-			scroll.set_meta("ui_focus_child_name", str(control.name))
-			scroll.set_meta("ui_focus_auto_scrolled", true)
+			var control_rect := control.get_global_rect()
+			var viewport_rect := scroll.get_global_rect()
+			if not viewport_rect.encloses(control_rect):
+				scroll.ensure_control_visible(control)
+				scroll.set_meta("ui_focus_child_name", str(control.name))
+				scroll.set_meta("ui_focus_auto_scrolled", true)
+				scroll.set_meta("ui_focus_scroll_policy", "nearest_required_ancestor_only")
+				break
 		ancestor = ancestor.get_parent()
 
 func remember_chat_panel_focus() -> void:
@@ -463,15 +473,22 @@ func restore_chat_panel_focus() -> void:
 	var restore_id := chat_focus_restore_id
 	var restore_name := chat_focus_restore_name
 	var restore_hand_index := chat_focus_restore_hand_index
+	var restore_generation := ui_page_generation
+	var restore_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
 	chat_focus_restore_id = 0
 	chat_focus_restore_name = ""
 	chat_focus_restore_hand_index = -1
 	await get_tree().process_frame
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	if restore_generation != ui_page_generation or restore_root_id != root_layer.get_instance_id():
+		var current_fallback := action_bar_default_focus_name()
+		if current_fallback != "":
+			focus_named_control(current_fallback)
+		return
 	var target := node_from_instance_id(restore_id) as Control
 	if target == null and restore_name != "":
-		target = root_layer.find_child(restore_name, true, false) as Control
+		target = find_ui_contract_control(root_layer, restore_name)
 	if target != null and target.is_visible_in_tree() and target.focus_mode != Control.FOCUS_NONE:
 		if not (target is BaseButton and (target as BaseButton).disabled):
 			target.grab_focus()
@@ -482,7 +499,7 @@ func restore_chat_panel_focus() -> void:
 			hand_keyboard_selection = restore_hand_index
 			hand_button.grab_focus()
 			return
-	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button
+	var chat_button := find_ui_contract_control(root_layer, "ChatActionButton") as Button
 	if chat_button != null and chat_button.is_visible_in_tree() and not chat_button.disabled:
 		chat_button.grab_focus()
 		return
@@ -498,6 +515,15 @@ func collect_visible_focusable_controls(root: Control) -> Array[Control]:
 	var controls: Array[Control] = []
 	if root == null or not is_instance_valid(root):
 		return controls
+	var revision := int(root.get_meta("focus_registry_revision", 0))
+	var cache_key := "%d:%d:%d" % [root.get_instance_id(), ui_page_generation, revision]
+	var cached: Array = focus_registry_cache.get(cache_key, [])
+	if not cached.is_empty():
+		for candidate in cached:
+			var cached_control := candidate as Control
+			if cached_control != null and is_instance_valid(cached_control) and cached_control.is_visible_in_tree() and cached_control.focus_mode != Control.FOCUS_NONE and not (cached_control is BaseButton and (cached_control as BaseButton).disabled):
+				controls.append(cached_control)
+		return controls
 	for node in root.find_children("*", "Control", true, false):
 		var control := node as Control
 		if control == null or not control.is_visible_in_tree() or control.focus_mode == Control.FOCUS_NONE:
@@ -505,6 +531,9 @@ func collect_visible_focusable_controls(root: Control) -> Array[Control]:
 		if control is BaseButton and (control as BaseButton).disabled:
 			continue
 		controls.append(control)
+	focus_registry_cache[cache_key] = controls.duplicate()
+	if focus_registry_cache.size() > 24:
+		focus_registry_cache.erase(focus_registry_cache.keys()[0])
 	return controls
 
 func focus_danger_discard_confirm() -> void:
@@ -654,6 +683,16 @@ func emit_ui_qa_page_ready(page: String, required_nodes: Array, root_id: int, pe
 
 
 func _input(event: InputEvent) -> void:
+	# Reconcile the send action immediately before dispatching pointer or keyboard
+	# input. This keeps a drawer opened during chat cooldown responsive as soon as
+	# the cooldown expires, without waiting for the coarse UI deadline poll.
+	if chat_panel_open and (mode == "online_lobby" or mode == "online_game"):
+		update_chat_send_cooldown(Time.get_ticks_msec())
+	if mode == "online_lobby" and root_layer != null and is_instance_valid(root_layer):
+		# Server fixtures and reconnect handlers can update the room dictionary
+		# between frames. Reconcile the native start/create/join gates before GUI
+		# dispatch so pointer and keyboard activation see the current permission.
+		refresh_online_lobby_action_states()
 	if handle_online_detail_touch(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -1101,6 +1140,9 @@ func test_audio_setting() -> void:
 	sfx_enabled = true
 	tts_enabled = true
 	save_settings()
+	refresh_settings_local_row("背景音乐")
+	refresh_settings_local_row("音效反馈")
+	refresh_settings_local_row("语音报牌")
 
 	# 强制同步初始化
 	ensure_master_audio_bus()
@@ -1981,6 +2023,8 @@ func deal_offline_hand() -> void:
 	clear_pending_danger_discard()
 	offline_claim_counts.clear()
 	offline_package_liability.clear()
+	ai_claim_ban_revision += 1
+	ai_package_liability_revision += 1
 	offline_passed_win_tiles.clear()
 	offline_claim_discard_bans.clear()
 	offline_concealed_gang_tiles.clear()
@@ -2091,7 +2135,8 @@ func request_reset_progress_from_settings() -> void:
 		reset_progress_confirm_deadline_msec = Time.get_ticks_msec() + 5000
 		set_status("确认清空：将删除统计与离线记录（5秒内再次点击）")
 		show_toast("确认清空统计与离线记录：5秒内再次点击")
-		refresh_current_screen()
+		if not refresh_settings_local_row("本地进度"):
+			refresh_current_screen()
 		return
 	reset_offline_progress()
 	close_settings_panel()
@@ -2753,6 +2798,43 @@ func hand_group_counts(hand: Array) -> Array[int]:
 			counts[group] += 1
 	return counts
 
+func hand_identity_fingerprint(hand: Array) -> String:
+	# Keep the hot render key proportional to tile count. The previous str(hand)
+	# key allocated a full array representation on every HUD refresh and ignored
+	# the stable instance serials already maintained for online hands.
+	var serials: Array = []
+	if players.size() > 0 and typeof(players[0]) == TYPE_DICTIONARY:
+		serials = players[0].get("hand_instance_serials", [])
+	var accumulator: int = 17
+	for index in range(hand.size()):
+		var tile_text := str(hand[index])
+		for char_index in range(tile_text.length()):
+			accumulator = int((accumulator * 33 + tile_text.unicode_at(char_index) + index + 1) % 2147483629)
+		var serial := int(serials[index]) if index < serials.size() else -1
+		accumulator = int((accumulator * 131 + serial + 3) % 2147483629)
+	return "%d:%d:%d" % [accumulator, hand.size(), int(offline_last_draw.get("serial", -1))]
+
+func hand_visual_state_signature(hand: Array) -> String:
+	# State changes that alter a tile callback or visible badge invalidate the
+	# retained tray; unrelated HUD changes can keep the native hand controls.
+	return "%s|%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%s" % [
+		hand_tray_visible_text(),
+		hand_tray_state_text(),
+		hand_shortcut_hint_text(),
+		str(offline_claim_discard_bans),
+		int(can_self_discard()),
+		int(mode == "online_game" and online_game_disconnected()),
+		int(player_ai_assist_enabled()),
+		int(show_hand_hint),
+		int(tutorial_step),
+		interactive_guide_target_index,
+		hand_keyboard_selection,
+		pending_danger_discard_index,
+		int(has_pending_claim_window()),
+		int(has_pending_danger_discard()),
+		str(pending_danger_discard_tile),
+	]
+
 func hand_layout_metrics(hand: Array, drawn_index: int = -2) -> Dictionary:
 	return hand_layout_metrics_for_content(hand, hand_content_pixel_size(), drawn_index)
 
@@ -2764,7 +2846,8 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2, drawn_i
 	var selected_gap = 0.0
 	var selected_separation = 1
 	var selected_width = 1.0
-	var compact_view := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
+	var viewport_snapshot := effective_viewport_size()
+	var compact_view := viewport_snapshot.y <= 560.0 or viewport_snapshot.x <= 1100.0
 	var minimum_group_gap := HAND_MIN_GROUP_GAP if compact_view else 4.0
 	for candidate in HAND_LAYOUT_CANDIDATES:
 		var gap_width = float(candidate[0])
@@ -4974,6 +5057,7 @@ func record_claim_source(claimer: int, from_seat: int, claim: String) -> void:
 	var key = claim_source_key(claimer, from_seat)
 	var count = int(offline_claim_counts.get(key, 0)) + 1
 	offline_claim_counts[key] = count
+	ai_package_liability_revision += 1
 	if count >= 3 and not offline_package_liability.has(claimer):
 		offline_package_liability[claimer] = from_seat
 		add_log("%s对%s三搭成包。" % [players[from_seat]["name"], players[claimer]["name"]])
@@ -5757,13 +5841,13 @@ func safe_discard_button_color(report: Dictionary) -> Color:
 	var risk = str(report.get("risk_label", "低"))
 	return tile_risk_color(risk)
 
-func safest_discard_report(excluded_tiles = []) -> Dictionary:
+func safest_discard_report(excluded_tiles = [], report_snapshot: Array = []) -> Dictionary:
 	if not player_ai_assist_enabled():
 		return {}
 	var excluded = discard_excluded_tile_set(excluded_tiles)
 	var best: Dictionary = {}
 	var best_score = -1000000.0
-	for report in human_discard_reports():
+	for report in human_discard_reports(report_snapshot):
 		if typeof(report) != TYPE_DICTIONARY:
 			continue
 		var tile = str(report.get("tile", ""))

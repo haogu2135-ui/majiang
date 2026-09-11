@@ -128,6 +128,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"ActionDockMidBandWash",
 	"AdvisorPanelContextMeter",
 	"AdvisorPanelContextStrip",
+	"AdvisorPanelContext",
 	"AdvisorPanelDecisionBridgeMeter",
 	"AdvisorPanelDecisionBridgeStrip",
 	"AdvisorPanelPriorityMeter",
@@ -3189,6 +3190,9 @@ func run() -> void:
 	check(pending_claim_gpt_dock == null or pending_claim_gpt_dock.modulate.a <= 0.42, "pending claim GPT dock texture stays below the compact alpha cap")
 	check(pending_claim_parent.find_child("ActionDockPlateTexture", true, false) == null and pending_claim_parent.find_child("ActionDockRibbonTexture", true, false) == null and pending_claim_parent.find_child("ActionGPTDockTexture", true, false) == null, "pending claim action dock avoids legacy plate ribbon and generic dock texture layers")
 	check(pending_claim_parent.find_child("ActionButtonDock", true, false) != null and pending_claim_parent.find_child("ActionIntentDock", true, false) == null, "pending claim actions render one compact dock without an overlapping intent rail")
+	check(pending_claim_parent.find_child("ActionButtonDockPulseDriver", true, false) != null, "action dock always exposes one pulse driver owner")
+	var action_pulse_art = pending_claim_parent.find_child("ActionButtonDockPulseArt", true, false)
+	check(action_pulse_art == null or action_pulse_art.get_parent().name == "ActionButtonDockPulseDriver", "action dock pulse art stays owned by the single pulse driver")
 	check(pending_claim_parent.find_child("ActionDockLeftTail", true, false) == null and pending_claim_parent.find_child("ActionDockRightTail", true, false) == null and count_nodes_with_name_prefix(pending_claim_parent, "ActionDockRhythmDot_") == 0, "pending claim action dock drops code-drawn scroll tails and rhythm dots")
 	check(pending_claim_parent.find_child("ActionDockButtonTrack", true, false) == null and pending_claim_parent.find_child("ActionDockButtonTrackFill", true, false) == null and pending_claim_parent.find_child("ActionDockSafeLeft", true, false) == null and pending_claim_parent.find_child("ActionDockSafeRight", true, false) == null, "pending claim action dock drops code-drawn button track and safe edge rails")
 	check(count_nodes_with_name_prefix(pending_claim_parent, "ActionDockButtonSlot_") == 0 and pending_claim_parent.find_child("ActionDockFocusLabel", true, false) == null, "pending claim action dock drops per-button slots and duplicate focus label")

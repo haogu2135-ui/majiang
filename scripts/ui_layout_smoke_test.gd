@@ -585,7 +585,7 @@ func check_ui_round_741_770(scene, viewport_size: Vector2) -> void:
 		check(chat_input.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET, "chat input keeps a finger-sized lane at %s" % viewport_size)
 	var hud := scene.find_child("TopHud3DShell", true, false) as Control
 	if hud != null:
-		check(bool(hud.get_meta("reading_order", "").contains("phase")) and hud.clip_contents, "battle HUD declares phase ordering and clips to its shell at %s" % viewport_size)
+		check(bool(hud.get_meta("reading_order", "").contains("phase")) and not hud.clip_contents and str(hud.get_meta("visual_clip_policy", "")) == "content_labels_clip_focus_and_shadow_hosts_unclipped", "battle HUD keeps phase ordering while visual gutter hosts stay unclipped at %s" % viewport_size)
 
 
 func check_ui_round_771_800(scene, viewport_size: Vector2) -> void:
@@ -2800,6 +2800,65 @@ func check_ui_round_2751_2810(scene, viewport_size: Vector2) -> void:
 		check(hand_tray.get_meta("ui_round_2751_2810_ids", []).has("F-2792"), "F-2792 attaches hand touch capacity to HandTray at %s" % viewport_size)
 
 
+func check_ui_round_2811_2870(scene, viewport_size: Vector2) -> void:
+	var root := scene.root_layer as Control
+	check(root != null, "F-2811..F-2870 exposes a root contract owner at %s" % viewport_size)
+	if root == null:
+		return
+	scene.register_ui_round_2811_2870(root)
+	var expected_ids: Array[String] = []
+	for index in range(60):
+		expected_ids.append("F-%d" % (2811 + index))
+	var contracts: Array = root.get_meta("ui_round_2811_2870_contract_ids", [])
+	var owners: Dictionary = root.get_meta("ui_round_2811_2870_owner_roles", {})
+	check(contracts.size() == 60 and owners.size() == 60, "F-2811..F-2870 publishes exactly sixty owner contracts at %s" % viewport_size)
+	for finding_id in expected_ids:
+		var owner_record: Dictionary = owners.get(finding_id, {})
+		check(contracts.has(finding_id), "F-2811..F-2870 exposes contract %s at %s" % [finding_id, viewport_size])
+		check(str(owner_record.get("owner", "")) != "" and str(owner_record.get("role", "")) != "" and str(owner_record.get("policy", "")) != "", "F-2811..F-2870 exposes owner policy %s at %s" % [finding_id, viewport_size])
+	check(str(root.get_meta("ui_round_2811_2870_contract_version", "")) == "20260911-hand-river-meld-surface-state-60", "F-2811..F-2870 contract version is explicit at %s" % viewport_size)
+	check(str(root.get_meta("ui_round_2811_2870_scope", "")) == "hand_river_meld_seat_center_hud_chat_toast_and_secondary_pages", "F-2811..F-2870 scope is explicit at %s" % viewport_size)
+	check(root.get_meta("ui_round_2811_2870_evidence_viewports", []).size() == 3, "F-2811..F-2870 names three evidence viewports at %s" % viewport_size)
+	check(int(root.get_meta("ui_round_2811_2870_registered_revision", -1)) >= 0, "F-2811..F-2870 records the structure revision at %s" % viewport_size)
+	var hand_tray := scene.find_child("HandTray", true, false) as Control
+	if hand_tray != null:
+		check(str(hand_tray.get_meta("hand_visual_owner_policy", "")) == "identity_reuse_state_diff_only", "F-2811 keeps HandTray reuse as the visual owner policy at %s" % viewport_size)
+		check(str(hand_tray.get_meta("hand_layout_metrics_policy", "")) == "one_cached_metrics_solve_per_draw", "F-2812 keeps one cached hand metrics solve at %s" % viewport_size)
+		check(hand_tray.get_meta("ui_round_2811_2870_ids", []).has("F-2819"), "F-2819 binds teardown snapshot ownership to HandTray at %s" % viewport_size)
+	var hand_hint := scene.find_child("HandTrayTutorialHintText", true, false) as Label
+	if hand_hint != null:
+		check(hand_hint.clip_text and int(hand_hint.get_meta("visual_max_lines", 0)) <= 2 and hand_hint.tooltip_text != "", "F-2813 keeps tutorial copy bounded with full detail at %s" % viewport_size)
+	var river_grid := scene.find_child("DiscardGrid_0", true, false) as Control
+	if river_grid != null:
+		var geometry_context: Dictionary = river_grid.get_meta("river_geometry_context", {})
+		check(geometry_context.has("tile_size") and geometry_context.has("table_size"), "F-2821 publishes one river geometry context at %s" % viewport_size)
+		check(river_grid.get_meta("archive_reserved_cells", 0) is int and int(river_grid.get_meta("archive_reserved_cells", 0)) >= 0, "F-2826 publishes actual archive reserved geometry at %s" % viewport_size)
+		var river_overlay := scene.find_child("DiscardRiverOwnerOverlay_0", true, false) as Control
+		if river_overlay != null:
+			check(bool(river_overlay.get_meta("table_2d_foreground", false)) and not bool(river_overlay.get_meta("table_3d_foreground", false)), "F-2823 keeps the river in the 2D foreground collector at %s" % viewport_size)
+	var archive_label := scene.find_child("DiscardRiverArchiveLabel_0", true, false) as Label
+	if archive_label != null:
+		check(archive_label.tooltip_text != "" and archive_label.get_meta("visual_hit_contract", "") == "label_inside_archive_hit_rect", "F-2824 keeps archive text inside its stable hit host at %s" % viewport_size)
+	var meld_area := scene.find_child("MeldArea_1", true, false) as Control
+	if meld_area != null:
+		check(str(meld_area.get_meta("actual_footprint_policy", "")) == "group_tiles_badge_and_lane_gutter", "F-2827/F-2831 publish meld footprint and badge gutter ownership at %s" % viewport_size)
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	if action_dock != null:
+		check(not action_dock.clip_contents and str(action_dock.get_meta("focus_clip_policy", "")) == "visual_host_unclipped_native_hit_rect_stable", "F-2843 keeps action focus art visible without changing hit targets at %s" % viewport_size)
+	var chat := scene.find_child("ChatPanel", true, false) as Control
+	if chat != null:
+		check(str(chat.get_meta("chat_surface_policy", "")) == "one_authored_reading_surface_plus_edge_rails", "F-2846 keeps one authored chat reading surface at %s" % viewport_size)
+	var toast := scene.find_child("Toast", true, false) as Control
+	if toast != null:
+		check(str(toast.get_meta("visual_host_policy", "")) == "authored_bitmap_face_only", "F-2849 keeps toast visuals on an authored face host at %s" % viewport_size)
+	var room_copy := scene.find_child("TopHudRoomCodeCopyButton", true, false) as Control
+	if room_copy != null:
+		check(room_copy.get_meta("hit_rect_min_px", Vector2.ZERO).x >= scene.UI_MIN_TOUCH_TARGET, "F-2862 keeps the room copy hit rectangle at 44px or wider at %s" % viewport_size)
+	var loading_status := scene.find_child("LoadingProgressStatusLabel", true, false) as Control
+	if loading_status != null:
+		check(str(loading_status.get_meta("loading_reading_surface_policy", "")) == "title_progress_tip_version_safe_surface", "F-2869 keeps loading copy in one safe reading surface at %s" % viewport_size)
+
+
 func check_online_score_strip_contract(scene, viewport_size: Vector2) -> void:
 	var strip := scene.find_child("ScoreStrip", true, false) as Control
 	check(strip != null, "online HUD exposes the real ScoreStrip owner at %s" % viewport_size)
@@ -2957,6 +3016,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	check_ui_round_921_950(scene, actual_viewport)
 	check_ui_round_951_980(scene, actual_viewport)
 	check_ui_round_981_1010(scene, actual_viewport)
+	check_ui_round_2811_2870(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
 	await check_table_log_archive_layout(scene, actual_viewport)
 	seed_online_pending_claim_layout_state(scene)
@@ -2979,10 +3039,25 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	seed_offline_battle_layout_state(scene)
 	scene.render_game()
 	await process_frame
+	var center_before_ai := scene.find_child("CenterConsole3DShell", true, false) as Control
+	var center_tile_before_ai := scene.find_child("CenterLastDiscardTile", true, false) as Control
 	scene.ai_assist_enabled = true
 	scene.render_game()
 	await process_frame
+	var center_after_ai := scene.find_child("CenterConsole3DShell", true, false) as Control
+	var center_tile_after_ai := scene.find_child("CenterLastDiscardTile", true, false) as Control
+	check(center_before_ai != null and center_after_ai != null and center_before_ai.get_instance_id() == center_after_ai.get_instance_id(), "same-viewport advisor refresh keeps the center console instance at %s" % actual_viewport)
+	if center_tile_before_ai != null and center_tile_after_ai != null:
+		check(center_tile_before_ai.get_instance_id() == center_tile_after_ai.get_instance_id(), "same-viewport advisor refresh keeps the latest discard instance at %s" % actual_viewport)
 	check_advisor_interaction_layout(scene, actual_viewport)
+	var advisor_before_probe := scene.find_child("AdvisorPanel", true, false) as Control
+	if advisor_before_probe != null and not scene.current_human_advice.is_empty() and typeof(scene.current_human_advice[0]) == TYPE_DICTIONARY:
+		var advice_probe: Array = scene.current_human_advice.duplicate(true)
+		(advice_probe[0] as Dictionary)["smoke_probe_revision"] = 1
+		scene.current_human_advice = advice_probe
+		scene.refresh_ai_advisor_panel()
+		var advisor_after_probe := scene.find_child("AdvisorPanel", true, false) as Control
+		check(advisor_after_probe != null and advisor_after_probe.get_instance_id() == advisor_before_probe.get_instance_id() and str(scene.root_layer.get_meta("advisor_card_update_mode", "")) == "in_place", "advisor report changes update card text in place at %s" % actual_viewport)
 	await check_advisor_detail_layout(scene, actual_viewport)
 	scene.ai_assist_enabled = false
 	scene.render_game()
@@ -3027,6 +3102,40 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 		var refreshed_rule_status = scene.find_child("SettingsRuleVariantStatus", true, false) as Label
 		var refreshed_rule_text: String = str(refreshed_rule_status.text) if refreshed_rule_status != null else "<missing>"
 		check(refreshed_rule_text.begins_with("当前局：扬州 · 下一局：南京") and (refreshed_rule_text.contains("可吃") or refreshed_rule_text.contains("不可吃")), "settings local-rule state refreshes after cycling the queued profile at %s (got %s)" % [actual_viewport, refreshed_rule_text])
+	var settings_panel_for_local_probe := scene.find_child("SettingsPanel", true, false) as Control
+	var local_probe_panel_id := settings_panel_for_local_probe.get_instance_id() if settings_panel_for_local_probe != null else 0
+	var saved_ai_assist: bool = scene.ai_assist_enabled
+	var saved_fast_mode: bool = scene.fast_mode_enabled
+	var saved_fx: bool = scene.fx_enabled
+	var saved_ai_difficulty: int = scene.ai_difficulty
+	var ai_assist_button := scene.find_child("SettingRowButton_出牌辅助", true, false) as Button
+	var ai_assist_status := scene.find_child("SettingRowStatus_出牌辅助", true, false) as Label
+	if settings_panel_for_local_probe != null and ai_assist_button != null and ai_assist_status != null:
+		ai_assist_button.grab_focus()
+		var ai_assist_button_id := ai_assist_button.get_instance_id()
+		scene.toggle_ai_assist_setting()
+		var local_panel_after_ai := scene.find_child("SettingsPanel", true, false) as Control
+		var local_ai_button_after := scene.find_child("SettingRowButton_出牌辅助", true, false) as Button
+		check(local_panel_after_ai != null and local_panel_after_ai.get_instance_id() == local_probe_panel_id and local_ai_button_after != null and local_ai_button_after.get_instance_id() == ai_assist_button_id, "settings AI assist updates the existing row without rebuilding the modal at %s" % actual_viewport)
+		check(scene.get_viewport().gui_get_focus_owner() == ai_assist_button and ai_assist_status.text != "", "settings AI assist keeps focus and visible row status after local update at %s" % actual_viewport)
+		check(int(settings_panel_for_local_probe.get_meta("settings_local_update_revision", 0)) > 0 and int(ai_assist_button.get_meta("local_update_revision", 0)) > 0, "settings local update records one row revision without a page rebuild at %s" % actual_viewport)
+		var fast_button := scene.find_child("SettingRowButton_AI 节奏", true, false) as Button
+		var difficulty_button := scene.find_child("SettingRowButton_AI 难度", true, false) as Button
+		var fx_button := scene.find_child("SettingRowButton_桌面特效", true, false) as Button
+		if fast_button != null and difficulty_button != null and fx_button != null:
+			fast_button.grab_focus()
+			scene.toggle_fast_mode_setting()
+			difficulty_button.grab_focus()
+			scene.cycle_ai_difficulty_setting()
+			fx_button.grab_focus()
+			scene.toggle_fx_setting()
+			check(scene.find_child("SettingsPanel", true, false).get_instance_id() == local_probe_panel_id and scene.find_child("SettingRowButton_AI 节奏", true, false).get_instance_id() == fast_button.get_instance_id() and scene.find_child("SettingRowButton_AI 难度", true, false).get_instance_id() == difficulty_button.get_instance_id() and scene.find_child("SettingRowButton_桌面特效", true, false).get_instance_id() == fx_button.get_instance_id(), "settings rapid AI/FX changes keep all local row instances stable at %s" % actual_viewport)
+			check(scene.get_viewport().gui_get_focus_owner() == fx_button and str(fx_button.get_meta("setting_state", "")) == ("on" if scene.fx_enabled else "off"), "settings rapid AI/FX changes keep the latest focus and switch state at %s" % actual_viewport)
+	scene.ai_assist_enabled = saved_ai_assist
+	scene.fast_mode_enabled = saved_fast_mode
+	scene.fx_enabled = saved_fx
+	scene.ai_difficulty = saved_ai_difficulty
+	scene.save_settings()
 	# The selector callback intentionally persists. Restore the pre-smoke profile
 	# so layout QA cannot alter later gameplay tests or the developer's settings.
 	scene.rule_variant = original_rule_variant
@@ -3370,7 +3479,7 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 	var score_strip = scene.find_child("ScoreStrip", true, false) as Control
 	var connection_surface = scene.find_child("TopHudOnlineConnectionStatus", true, false) as Control
 	var connection_label = scene.find_child("TopHudOnlineConnectionLabel", true, false) as Label
-	check(hud != null and hud.clip_contents, "top HUD clips decorative artwork at %s" % viewport_size)
+	check(hud != null and not hud.clip_contents and str(hud.get_meta("visual_clip_policy", "")) == "content_labels_clip_focus_and_shadow_hosts_unclipped", "top HUD leaves its decorative focus and shadow gutter visible at %s" % viewport_size)
 	check(title != null and status != null and title_back != null and status_back != null and wall_back != null and wall_text != null and wall_meter != null, "top HUD exposes readable title status and wall groups at %s" % viewport_size)
 	check(scene.rule_wall_size("guangdong") == 136 and scene.rule_wall_size("sichuan") == 108 and scene.rule_wall_size("yangzhou") == 144, "rule profiles expose their actual wall totals at %s" % viewport_size)
 	var saved_active_variant := str(scene.offline_active_rule_variant)
@@ -4048,7 +4157,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 			and summary_rect.position.y >= viewport_size.y * 0.10 \
 			and summary_rect.end.y <= viewport_size.y * 0.22
 		check(horizontal_gap <= reference_width + 1.0 or compact_top_channel, "pending claim summary stays near the dock or uses the dedicated compact top channel at %s" % viewport_size)
-		check(dock.clip_contents, "pending claim action dock clips decorative artwork at %s" % viewport_size)
+		check(not dock.clip_contents and str(dock.get_meta("focus_clip_policy", "")) == "visual_host_unclipped_native_hit_rect_stable", "pending claim action dock leaves focus artwork visible without changing native hit rects at %s" % viewport_size)
 		check(dock_rect.end.y <= hand_rect.position.y - 10.0, "pending claim action dock keeps a clear channel above hand tray at %s" % viewport_size)
 		if pending_last_button_bottom >= 0.0:
 			var dock_bottom_padding = dock_rect.end.y - pending_last_button_bottom

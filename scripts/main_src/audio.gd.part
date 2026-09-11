@@ -72,6 +72,8 @@ func shutdown_runtime() -> void:
 
 
 func shutdown_runtime_visuals() -> void:
+	if has_method("release_retained_battle_views"):
+		release_retained_battle_views()
 	stop_ambient_animation()
 	clear_fx_overlays()
 	shutdown_runtime_tweens()
@@ -236,6 +238,7 @@ func switch_bgm_track() -> void:
 			bgm_player.play()
 			print("BGM: 开始播放", track["name"])
 			set_status("正在播放: " + track["name"])
+	refresh_settings_local_row("播放曲目")
 
 func start_background_music() -> void:
 	if not music_enabled or not audio_runtime_enabled():
