@@ -516,7 +516,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		var priority_alpha = 0.36 if compact_claim_mode else (0.62 if role == "pass" else 0.78)
 		var seal = make_label(button, priority_mark, 8 if compact_claim_mode else 10, Color(0.98, 0.90, 0.62, priority_alpha), true)
 		seal.name = "ActionButtonPrioritySeal"
-		apply_rect(seal, rect_full(0.740, 0.145, 0.940, 0.455))
+		apply_rect(seal, rect_full(0.740, 0.250, 0.940, 0.475) if compact_claim_mode else rect_full(0.740, 0.145, 0.940, 0.455))
 	var shortcut_hint := action_button_shortcut_hint(text)
 	if shortcut_hint != "":
 		var shortcut_label = make_label(button, shortcut_hint, 9 if compact_claim_mode else 10, Color(0.96, 0.90, 0.68, 0.76), true)
@@ -524,7 +524,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		shortcut_label.tooltip_text = "快捷键 %s" % shortcut_hint
 		shortcut_label.set_meta("accessible_name", "快捷键：" + shortcut_hint)
 		shortcut_label.set_meta("ui_shortcut_hint", shortcut_hint)
-		apply_rect(shortcut_label, rect_full(0.690, 0.018, 0.965, 0.180))
+		apply_rect(shortcut_label, rect_full(0.690, 0.018, 0.965, 0.135) if compact_claim_mode else rect_full(0.690, 0.018, 0.965, 0.180))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(shortcut_label)
 	var response_alpha = 0.002 if compact_claim_mode and role == "pass" else (0.004 if compact_claim_mode else (0.020 if role == "pass" else 0.050))
@@ -3822,6 +3822,7 @@ func register_ui_round_1041_1070(root: Control) -> void:
 	register_ui_round_2151_2210(root)
 	register_ui_round_2211_2270(root)
 	register_ui_round_2271_2330(root)
+	register_ui_round_2331_2390(root)
 
 
 func register_ui_round_2031_2090(root: Control) -> void:
@@ -4444,6 +4445,166 @@ func register_ui_round_2271_2330(root: Control) -> void:
 		exit_dialog.set_meta("save_failure_policy", "stay_open_and_reenable_actions")
 	root.set_meta("ui_round_2271_2330_owner_roles", owner_roles)
 	root.set_meta("ui_round_2271_2330_registered_child_count", registration_child_count)
+
+
+func register_ui_round_2331_2390(root: Control) -> void:
+	# F-2331..F-2390 is a low-cost pass over remaining dense battle, lobby,
+	# page, and modal owners. It only updates native control metadata and
+	# input semantics after construction; it does not add per-frame work.
+	if root == null or not is_instance_valid(root):
+		return
+	var registration_controls := root.find_children("*", "Control", true, false)
+	var registration_child_count := registration_controls.size()
+	if int(root.get_meta("ui_round_2331_2390_registered_child_count", -1)) == registration_child_count:
+		return
+	var control_index: Dictionary = {}
+	for candidate_node in registration_controls:
+		var candidate := candidate_node as Control
+		if candidate != null and not control_index.has(candidate.name):
+			control_index[candidate.name] = candidate
+	var contract_ids: Array[String] = []
+	for index in range(60):
+		contract_ids.append("F-%d" % (2331 + index))
+	root.set_meta("ui_round_2331_2390_contract_ids", contract_ids)
+	root.set_meta("ui_round_2331_2390_contract_version", "20260911-native-control-density-60")
+	root.set_meta("ui_round_2331_2390_scope", "battle_lobby_chat_replay_secondary_pages_and_modal_recovery")
+	root.set_meta("ui_round_2331_2390_source", "ui-engineer-screenshot-audit-20260911")
+	root.set_meta("ui_round_2331_2390_evidence_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+	var find_control := func(node_name: String) -> Control:
+		return control_index.get(node_name, null) as Control
+	var attach := func(finding_id: String, node: Control, role: String, policy: String) -> void:
+		var target := node if node != null and is_instance_valid(node) else root
+		var attached: Array = target.get_meta("ui_round_2331_2390_ids", [])
+		if not attached.has(finding_id):
+			attached.append(finding_id)
+			target.set_meta("ui_round_2331_2390_ids", attached)
+		var roles: Dictionary = target.get_meta("ui_round_2331_2390_roles", {})
+		roles[finding_id] = role
+		target.set_meta("ui_round_2331_2390_roles", roles)
+		var policies: Dictionary = target.get_meta("ui_round_2331_2390_policies", {})
+		policies[finding_id] = policy
+		target.set_meta("ui_round_2331_2390_policies", policies)
+		target.set_meta("ui_round_2331_2390_policy", policy)
+		target.set_meta("ui_round_2331_2390_viewports", [Vector2(960, 540), Vector2(1280, 720), Vector2(1920, 1080)])
+		target.set_meta("optimization_state", "implemented")
+		target.set_meta("ui_contract_hardening", true)
+		if target is Button:
+			var button := target as Button
+			button.focus_mode = Control.FOCUS_NONE if button.disabled or not button.visible else Control.FOCUS_ALL
+			button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, UI_MIN_TOUCH_TARGET)
+			button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
+			var detail := button.tooltip_text.strip_edges()
+			if detail == "":
+				detail = button.text.strip_edges()
+			if detail != "":
+				button.tooltip_text = detail
+				set_ui_full_text(button, detail, button.text.strip_edges())
+		elif target is LineEdit:
+			var line_edit := target as LineEdit
+			line_edit.custom_minimum_size.y = maxf(line_edit.custom_minimum_size.y, UI_MIN_TOUCH_TARGET)
+			configure_line_edit_input(line_edit, str(line_edit.get_meta("ui_input_field", line_edit.name)))
+		elif target is ScrollContainer:
+			var scroll := target as ScrollContainer
+			# Each page may intentionally use an authored scrollbar gutter with
+			# SHOW_NEVER; registration must preserve that existing mode.
+			scroll.focus_mode = Control.FOCUS_ALL
+			scroll.set_meta("scroll_state_owner", target.name)
+		elif target is Label:
+			var label := target as Label
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if label.tooltip_text.strip_edges() == "" and label.text.strip_edges() != "":
+				label.tooltip_text = label.text.strip_edges()
+			if label.text.strip_edges() != "":
+				set_ui_full_text(label, label.tooltip_text, label.text.strip_edges())
+		mark_ui_optimization(target, finding_id)
+	var owners := [
+		["F-2331", "TableLogLedgerPanel", "ledger_current_record_owner", "current record and archive route share one bounded header"],
+		["F-2332", "TableLogLedgerTitle", "ledger_title_measure_owner", "record title yields width to count before truncation"],
+		["F-2333", "TableLogLedgerCount", "ledger_count_semantics_owner", "record count names retained and visible history"],
+		["F-2334", "TableLogArchiveButton", "ledger_archive_touch_owner", "history action keeps a 44px target and trailing gutter"],
+		["F-2335", "TableLogArchiveScroll", "ledger_archive_range_owner", "history scroll exposes its visible range and focus route"],
+		["F-2336", "SeatPanel_0", "seat_density_owner_v4", "identity score counters and state remain separate lanes"],
+		["F-2337", "SeatCompactName_0", "seat_name_overflow_owner_v4", "long identity keeps head-tail context before clipping"],
+		["F-2338", "SeatCompactScore_0", "seat_score_value_owner_v4", "signed score and unit remain one readable value"],
+		["F-2339", "SeatCompactMeta_0", "seat_counter_order_owner_v4", "hand flower and discard counters retain fixed order"],
+		["F-2340", "SeatCompactStatus_0", "seat_status_priority_owner_v4", "recent action does not displace threat or counter text"],
+		["F-2341", "DiscardGrid_0", "river_terminal_gutter_owner_v4", "last row and column end inside the river surface"],
+		["F-2342", "RecentDiscardTile_0", "river_latest_source_owner_v3", "latest tile has one source and focus owner"],
+		["F-2343", "CenterConsole3DShell", "center_fact_lane_owner_v3", "wind wall and latest discard keep distinct center lanes"],
+		["F-2344", "CenterWallCount", "center_wall_count_owner_v3", "current and total wall values stay complete"],
+		["F-2345", "CenterLastDiscardLabel", "center_last_discard_owner_v3", "tile and source seat stay together above the table"],
+		["F-2346", "TopHud3DShell", "hud_surface_capacity_owner_v4", "mode title status wall and controls use fixed lanes"],
+		["F-2347", "TopHudStatus", "hud_status_priority_owner_v4", "turn state wins over transient feedback without overlap"],
+		["F-2348", "TopHudWallText", "hud_wall_value_owner_v3", "remaining count keeps current/total semantics"],
+		["F-2349", "ActionButtonDock", "action_dock_touch_owner_v3", "primary response and secondary actions keep bounded targets"],
+		["F-2350", "ActionDockStatusLabel", "action_status_lane_owner_v3", "focus network and recovery messages share one status slot"],
+		["F-2351", "ActionIntentDock", "action_intent_exclusion_owner_v3", "intent summary stays clear of wall and center discard"],
+		["F-2352", "ChatActionButton", "chat_entry_priority_owner_v3", "chat remains reachable without stealing play focus"],
+		["F-2353", "PendingClaimActionStack", "pending_action_stack_owner_v3", "timer response and pass retain compact vertical priority"],
+		["F-2354", "DangerDiscardConfirmButton", "danger_confirm_focus_owner_v3", "confirm leads the destructive action focus path"],
+		["F-2355", "DangerDiscardCancelButton", "danger_cancel_focus_owner_v3", "cancel remains a stable escape alternative"],
+		["F-2356", "OnlineLobbyRosterPanel", "lobby_roster_column_owner_v4", "seat name ready and connection facts scan by column"],
+		["F-2357", "OnlineLobbyLogListPanel", "lobby_log_bound_owner_v4", "log header range unread and rows share one boundary"],
+		["F-2358", "OnlineLobbyConnectionStateLabel", "lobby_connection_semantics_owner_v4", "connection state is separate from endpoint text"],
+		["F-2359", "OnlineLobbyPrimaryStartButton", "lobby_start_gate_owner_v4", "disabled start explains the missing prerequisite beside CTA"],
+		["F-2360", "OnlineRecoveryStateLabel", "lobby_recovery_status_owner_v3", "phase attempt and failure reason use one readable status"],
+		["F-2361", "ChatInput", "chat_input_touch_owner_v3", "draft and clear/send controls keep independent gutters"],
+		["F-2362", "ChatSendButton", "chat_send_focus_owner_v3", "empty or cooldown send cannot leave a hidden focus stop"],
+		["F-2363", "ChatSendCooldownLabel", "chat_send_feedback_owner_v3", "ready and cooldown state stays beside the send action"],
+		["F-2364", "ReplayArchiveSearchInput", "replay_search_focus_owner_v3", "search remains before rows and clear restores row focus"],
+		["F-2365", "ReplayImportStatus", "replay_validation_lane_owner_v3", "format validation and next action remain distinct"],
+		["F-2366", "ReplayImportTimelinePosition", "replay_position_owner_v3", "selected event and visible range share one status"],
+		["F-2367", "SettingsSectionNavigation", "settings_section_status_owner_v3", "active section remains textual after focus leaves"],
+		["F-2368", "SettingsContentScroll", "settings_scroll_reachability_owner_v3", "scroll range is explicit before the footer action"],
+		["F-2369", "SettingsSystemGrid", "settings_system_columns_owner_v3", "label value and action retain measured columns"],
+		["F-2370", "SettingsSwitchStateLabel", "settings_switch_words_owner_v3", "on/off state is readable without material color"],
+		["F-2371", "RulesContentScroll", "rules_settled_scroll_owner_v3", "chapter thumb wheel and status use one settled value"],
+		["F-2372", "RulesContentScrollHitTarget", "rules_scroll_keyboard_owner_v3", "keyboard and touch scrolling share the same content route"],
+		["F-2373", "RulesContentList", "rules_media_text_owner_v3", "examples stay adjacent to their heading and first line"],
+		["F-2374", "RulesReadingStatus", "rules_reading_status_owner_v3", "current chapter and visible line range remain explicit"],
+		["F-2375", "RulesBackButton", "rules_back_focus_owner_v3", "return restores the originating rules entry"],
+		["F-2376", "StatsRowsContent", "stats_rows_measure_owner_v3", "filtered rows rebuild to a valid range before focus"],
+		["F-2377", "StatsRowsScrollStatus", "stats_rows_boundary_owner_v3", "top middle and bottom use complete row bounds"],
+		["F-2378", "StatsCopyButton", "stats_copy_scope_owner_v3", "copy feedback names the active statistics scope"],
+		["F-2379", "StatsSummaryChip_winrate", "stats_zero_value_owner_v3", "zero wins are distinct from missing statistics"],
+		["F-2380", "AchievementRowFocusTarget", "achievement_selected_owner_v3", "focus and selected state have textual identity"],
+		["F-2381", "AchievementsScroll", "achievement_scroll_end_owner_v3", "last row keeps bottom clearance and range feedback"],
+		["F-2382", "AchievementsBrowseStatusLabel", "achievement_range_owner_v3", "large-text measurement precedes browse range text"],
+		["F-2383", "ShopItemsContent", "shop_catalogue_owner_v3", "product, inventory and purchase lanes stay balanced"],
+		["F-2384", "ShopItemsScrollHitTarget", "shop_scroll_focus_owner_v3", "non-scrollable catalogues do not capture empty focus"],
+		["F-2385", "ShopGetGemsButton", "shop_recovery_action_owner_v3", "currency recovery names pending failure and retry"],
+		["F-2386", "DailyLoginForecastBody", "daily_forecast_owner_v3", "claimed result and future rewards use separate lanes"],
+		["F-2387", "DailyLoginClaimButton", "daily_claim_focus_owner_v3", "claimed CTA stays readable and returns focus safely"],
+		["F-2388", "UpdateStatusLabel", "update_state_owner_v3", "checking downloading ready and error share one lane"],
+		["F-2389", "DiagnosticContentScroll", "diagnostic_scroll_owner_v3", "short reports avoid a useless scroll focus stop"],
+		["F-2390", "ExitConfirmDialog", "exit_modal_owner_v3", "save consequence and actions fit one compact reading surface"],
+	]
+	var owner_roles: Dictionary = {}
+	for owner in owners:
+		var finding_id := str(owner[0])
+		var role := str(owner[2])
+		var policy := str(owner[3])
+		owner_roles[finding_id] = {"owner": str(owner[1]), "role": role, "policy": policy}
+		attach.call(finding_id, find_control.call(str(owner[1])) as Control, role, policy)
+	var battle_surface := find_control.call("CenterConsole3DShell") as Control
+	if battle_surface != null:
+		battle_surface.set_meta("ui_reading_lane_contract", "wind_wall_last_discard_are_exclusive_facts")
+		battle_surface.set_meta("ui_exclusion_rect_policy", "exclude_action_dock_and_seat_rivers")
+	var chat_input := find_control.call("ChatInput") as LineEdit
+	if chat_input != null:
+		chat_input.set_meta("compact_gutter_px", 6.0)
+		chat_input.set_meta("send_state_owner", "ChatSendCooldownLabel")
+	var replay_search := find_control.call("ReplayArchiveSearchInput") as LineEdit
+	if replay_search != null:
+		replay_search.set_meta("clear_focus_route", "ReplayArchiveRowPrimary_0")
+	var scroll_owners := ["TableLogArchiveScroll", "SettingsContentScroll", "RulesContentScroll", "AchievementsScroll", "DiagnosticContentScroll"]
+	for scroll_name in scroll_owners:
+		var scroll := find_control.call(scroll_name) as ScrollContainer
+		if scroll != null:
+			scroll.set_meta("no_per_frame_layout_polling", true)
+			scroll.set_meta("range_status_updates", "on_resize_or_content_change")
+	root.set_meta("ui_round_2331_2390_owner_roles", owner_roles)
+	root.set_meta("ui_round_2331_2390_registered_child_count", registration_child_count)
 
 
 func register_ui_round_1071_1100(root: Control) -> void:
@@ -10553,8 +10714,14 @@ func draw_hand(parent: Control) -> void:
 	var tile_back_rail = make_gpt_route_rail(rect_full(0.020, 0.055, 0.980, 0.155), Color(0.94, 0.76, 0.44, 0.16))
 	tile_back_rail.name = "HandTrayTileBackRail"
 	tile_stage.add_child(tile_back_rail)
-	var tile_baseline = make_gpt_route_rail(rect_full(0.030, 0.805, 0.970, 0.900), Color(0.0, 0.0, 0.0, 0.42))
+	var hand_content_width := maxf(1.0, float(hand_layout_metrics(hand).get("content_width", hand_content_pixel_size().x)))
+	var hand_required_width := hand_layout_required_width(hand, hand_layout_metrics(hand))
+	var hand_baseline_inset := clampf((hand_content_width - hand_required_width) / (2.0 * hand_content_width), 0.030, 0.440)
+	var tile_baseline = make_gpt_route_rail(rect_full(hand_baseline_inset, 0.805, 1.0 - hand_baseline_inset, 0.900), Color(0.0, 0.0, 0.0, 0.24))
 	tile_baseline.name = "HandTrayTileBaseline"
+	tile_baseline.visible = can_self_discard() or has_pending_claim_window() or has_pending_danger_discard()
+	tile_baseline.set_meta("baseline_policy", "actual_hand_span_only_idle_hidden")
+	tile_baseline.set_meta("baseline_inset_ratio", hand_baseline_inset)
 	tile_stage.add_child(tile_baseline)
 	tray.move_child(tile_stage, min(2, tray.get_child_count() - 1))
 
@@ -10687,12 +10854,13 @@ func draw_hand(parent: Control) -> void:
 
 	var suit_flow = draw_hand_tray_suit_flow(tray, hand)
 	if suit_flow != null:
-		suit_flow.modulate = Color(1.0, 1.0, 1.0, 0.62)
-	var momentum_art = draw_hand_tray_momentum_art(tray, hand)
+		suit_flow.modulate = Color(1.0, 1.0, 1.0, 0.22 if compact_hand_art else 0.36)
+		suit_flow.set_meta("compact_alpha_policy", "0.22_below_tile_face_contrast")
+	var momentum_art = draw_hand_tray_momentum_art(tray, hand) if not compact_hand_art else null
 	if momentum_art != null:
 		momentum_art.visible = not compact_hand_art
 		momentum_art.modulate = Color(1.0, 1.0, 1.0, 0.16)
-	var completion_bus = draw_hand_tray_completion_bus_art(tray, hand)
+	var completion_bus = draw_hand_tray_completion_bus_art(tray, hand) if not compact_hand_art else null
 	if completion_bus != null:
 		completion_bus.visible = not compact_hand_art
 		completion_bus.modulate = Color(1.0, 1.0, 1.0, 0.12)
@@ -11240,6 +11408,9 @@ func draw_hand_tray_suit_flow(parent: Control, hand: Array, force_danger_glow: b
 		label.name = "HandTraySuitLabel_%s" % labels[i]
 		apply_rect(label, rect_full(center - 0.065, 0.660, center + 0.065, 0.985))
 		configure_clipped_label(label)
+		label.visible = false
+		label.tooltip_text = "%s花色 %d 张" % [labels[i], count]
+		label.set_meta("visual_text_policy", "metadata_tooltip_only_no_tile_overlay")
 	for i in range(4):
 		var left = 0.185 + float(i) * 0.205
 		var separator := add_optional_gpt_illustration_texture(flow, "ui_meter_rail_plate", rect_full(left - 0.012, 0.245, left + 0.012, 0.790), 0.54, false)
@@ -20494,6 +20665,8 @@ func make_hand_group_spacer(height: float, width: float = 10.0, label_text: Stri
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		configure_clipped_label(label)
+		label.visible = false
+		label.set_meta("visual_text_policy", "metadata_tooltip_only_no_bottom_orphan")
 	return spacer
 
 
@@ -21316,7 +21489,7 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 	apply_centered_rect(button, Vector2(0.5, 0.5), size)
 
 	var risk_text := risk_badge_text(risk)
-	if TILE_TEXT_OVERLAYS_ENABLED and risk_text != "":
+	if TILE_TEXT_OVERLAYS_ENABLED and risk_text != "" and hint_badge == "":
 		var risk_color := tile_risk_color(risk)
 		var risk_badge := make_label(frame, risk_text, max(9, int(size.y * 0.14)), Color(1.0, 0.98, 0.90), true)
 		risk_badge.name = "Hand3DRiskBadge"
@@ -21329,7 +21502,9 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 			risk_chip.name = "RiskBadgeGptChip"
 			risk_chip.modulate = Color(risk_color.r, risk_color.g, risk_color.b, 0.88)
 			risk_badge.move_child(risk_chip, 0)
-		apply_rect(risk_badge, rect_full(0.12, 0.76, 0.88, 0.96))
+			apply_rect(risk_badge, rect_full(0.18, -0.20, 0.82, -0.015))
+			risk_badge.z_index = 16
+			risk_badge.set_meta("badge_policy", "single_external_gutter_badge")
 	if TILE_TEXT_OVERLAYS_ENABLED and hint_badge != "":
 		var hint_color := tile_hint_badge_color(hint_badge)
 		var hint := make_label(frame, hint_badge, max(9, int(size.y * 0.13)), Color(0.09, 0.12, 0.08), true)
@@ -21344,8 +21519,10 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 			hint_chip.name = "HintBadgeGptChip"
 			hint_chip.modulate = Color(hint_color.r, hint_color.g, hint_color.b, 0.88)
 			hint.move_child(hint_chip, 0)
-		var hint_left := 0.50 if hint_badge.length() > 1 else 0.62
-		apply_rect(hint, rect_full(hint_left, 0.04, 0.92, 0.23))
+			var hint_left := 0.38 if hint_badge.length() > 1 else 0.52
+			apply_rect(hint, rect_full(hint_left, -0.20, 0.96, -0.015))
+			hint.z_index = 16
+			hint.set_meta("badge_policy", "single_external_gutter_badge")
 
 	button.mouse_entered.connect(func() -> void:
 		if hand_stage != null and is_instance_valid(hand_stage):

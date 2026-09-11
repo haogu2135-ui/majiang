@@ -5585,7 +5585,7 @@ func show_exit_confirm() -> void:
 		exit_confirm_decision_locked = true
 		var live_status := dialog.find_child("ExitConfirmSaveStatus", true, false) as Label
 		if live_status != null:
-			set_dynamic_label_text(live_status, "保存中…", "退出前正在保存当前牌局")
+			set_dynamic_label_text(live_status, "保存中...", "退出前正在保存当前牌局")
 			live_status.set_meta("save_state", "saving")
 		if continue_btn != null and is_instance_valid(continue_btn):
 			continue_btn.disabled = true
