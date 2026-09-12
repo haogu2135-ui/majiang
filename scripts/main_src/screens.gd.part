@@ -371,6 +371,8 @@ func _show_menu_impl() -> void:
 	menu_parallax_enabled = false
 
 	var content_size = safe_content_pixel_size()
+	var tutorial_available := tutorial_is_available()
+	var tutorial_detail_text := tutorial_entry_detail_text()
 
 	# 首屏按「标题 / 主操作 / 快捷入口 / 状态栏」分层，生成图负责框体和线条。
 	var header = Control.new()
@@ -424,9 +426,9 @@ func _show_menu_impl() -> void:
 	tutorial_button.name = "MenuTutorialButton"
 	# While a tutorial is active, the banner below owns the single continue CTA.
 	# Keep this header entry for completed/new states where the banner is absent.
-	tutorial_button.visible = not tutorial_is_available()
+	tutorial_button.visible = not tutorial_available
 	tutorial_button.custom_minimum_size = Vector2(112, 44)
-	tutorial_button.tooltip_text = "查看教学进度：" + tutorial_entry_detail_text()
+	tutorial_button.tooltip_text = "查看教学进度：" + tutorial_detail_text
 	set_ui_full_text(tutorial_button, tutorial_button.tooltip_text, "打开新手教学")
 	mark_ui_optimization(tutorial_button, "F-452")
 	root_layer.add_child(tutorial_button)
@@ -434,7 +436,7 @@ func _show_menu_impl() -> void:
 	ensure_button_gpt_face_plate(tutorial_button, Color(0.34, 0.58, 0.48, 0.42))
 	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.92, 0.96, 0.82, 0.90))
 
-	if tutorial_is_available():
+	if tutorial_available:
 		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.014, 0.034, 0.034, 0.88), "ui_jade_reading_plate")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
 		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
@@ -449,13 +451,13 @@ func _show_menu_impl() -> void:
 		tutorial_title.name = "MenuTutorialEntryTitle"
 		apply_rect(tutorial_title, rect_full(0.105, 0.095, 0.390, 0.360))
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var tutorial_detail = make_label(tutorial_banner, tutorial_entry_detail_text(), 11, Color(0.78, 0.88, 0.78), false)
+		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 11, Color(0.78, 0.88, 0.78), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
 		apply_rect(tutorial_detail, rect_full(0.105, 0.390, 0.560, 0.670))
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(tutorial_detail)
-		set_ui_full_text(tutorial_detail, tutorial_entry_detail_text(), "新手教学进度详情")
-		if tutorial_entry_detail_text().length() > 16 or large_text_enabled:
+		set_ui_full_text(tutorial_detail, tutorial_detail_text, "新手教学进度详情")
+		if tutorial_detail_text.length() > 16 or large_text_enabled:
 			configure_wrapped_label(tutorial_detail, maxf(160.0, content_size.x * 0.245), 0.0, 2.0)
 			tutorial_detail.max_lines_visible = 2
 			tutorial_detail.set_meta("max_visible_lines", 2)
@@ -575,11 +577,11 @@ func _show_menu_impl() -> void:
 	# 赛季段位与积分
 	var rank_name = get_rank_name()
 	var rank_full_text := "%s  积分 %d" % [rank_name, int(season_data.get("points", 0))]
-	var rank_display_text := "%s · %d分" % [rank_name, int(season_data.get("points", 0))] if effective_viewport_size().x <= 1280.0 else rank_full_text
+	var rank_display_text := "%s · %d分" % [rank_name, int(season_data.get("points", 0))] if content_size.x <= 1280.0 else rank_full_text
 	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.405, 0.185, 0.570, 0.830), Color(0.46, 0.66, 0.54), Color(0.88, 0.96, 0.82))
 	rank_chip.tooltip_text = "完整段位状态：" + rank_full_text
 	rank_chip.set_meta("full_status_text", rank_full_text)
-	var rank_label := rank_chip.find_child("MenuRankBadge", true, false) as Label
+	var rank_label := rank_chip.get_meta("label_control", null) as Label
 	if rank_label != null:
 		rank_label.tooltip_text = rank_chip.tooltip_text
 		rank_label.set_meta("ui_full_text", rank_full_text)
@@ -598,14 +600,14 @@ func _show_menu_impl() -> void:
 	var stats_display_text := "对局%d · 胜率%d%%" % [int(game_stats.get("games_played", 0)), int(float(game_stats.get("win_rate", 0.0)) * 100.0)]
 	if int(game_stats.get("games_played", 0)) <= 0:
 		stats_display_text = "暂无对局"
-	elif effective_viewport_size().x <= 960.0:
+	elif content_size.x <= 960.0:
 		stats_display_text = "对局%d · 胜率%d%%" % [int(game_stats.get("games_played", 0)), int(float(game_stats.get("win_rate", 0.0)) * 100.0)]
 	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_display_text, rect_full(0.585, 0.185, 0.745, 0.830), Color(0.42, 0.72, 0.66), Color(0.88, 0.96, 0.84))
 	stats_chip.tooltip_text = "统计详情：" + stats_text
 	stats_chip.set_meta("full_status_text", stats_text)
-	var stats_label := stats_chip.find_child("MenuStatsBadge", true, false) as Label
+	var stats_label := stats_chip.get_meta("label_control", null) as Label
 	if stats_label != null:
-		fit_label_font_size(stats_label, maxf(90.0, effective_viewport_size().x * 0.145), 13, 13)
+		fit_label_font_size(stats_label, maxf(90.0, content_size.x * 0.145), 13, 13)
 		stats_label.tooltip_text = stats_chip.tooltip_text
 		set_ui_full_text(stats_label, stats_text, "菜单统计摘要")
 	mark_ui_optimization(stats_chip, "F-458")
@@ -2088,6 +2090,8 @@ func _show_rules_screen_impl() -> void:
 	mode = "rules"
 	emit_ui_qa_marker("page|rules")
 	clear_screen()
+	rules_section_controls.clear()
+	rules_focus_controls_cache.clear()
 
 	var codex_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.14), 24)  # r416
 	codex_shadow.name = "RulesCodex3DCastShadow"
@@ -2351,17 +2355,15 @@ func _show_rules_screen_impl() -> void:
 	# before exposing the custom grip so its first frame cannot point at stale data.
 	call_deferred("normalize_rules_layout_and_sync", content_scroll, rules_scroll_thumb, rules_guide)
 	var rules_focus_controls: Array[Control] = [back, content_scroll]
-	for i in range(RULES_SECTION_COUNT):
-		var rules_step_button := rules_guide.find_child("RulesGuideStepButton_%d" % i, true, false) as Control
-		if rules_step_button != null:
-			rules_focus_controls.append(rules_step_button)
+	rules_focus_controls.append_array(rules_focus_controls_cache)
 	configure_ordered_focus_navigation(panel, rules_focus_controls, "RulesBackButton")
 
 	# 规则段落逐一滑入
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		var sections: Array[Node] = []
-		for child in content.get_children():
-			sections.append(child)
+		for section_control in rules_section_controls:
+			if section_control != null and is_instance_valid(section_control):
+				sections.append(section_control)
 		AnimationEffects.list_items_stagger_in(sections, 0.28, 0.08)
 
 	# 阅读规则不会代替交互式教学完成；教程 checkpoint 只由实际操作推进。
@@ -2618,6 +2620,8 @@ func wire_rules_guide_navigation(guide: Control, content_scroll: ScrollContainer
 			continue
 		var existing_button := step.get_node_or_null("RulesGuideStepButton_%d" % i) as Button
 		if existing_button != null and is_instance_valid(existing_button):
+			if not rules_focus_controls_cache.has(existing_button):
+				rules_focus_controls_cache.append(existing_button)
 			continue
 		var section_index := int(target_sections[i])
 		var button := Button.new()
@@ -2642,6 +2646,7 @@ func wire_rules_guide_navigation(guide: Control, content_scroll: ScrollContainer
 			button.add_theme_stylebox_override(state, empty_style)
 		apply_centered_rect(button, Vector2(0.5, 0.5), Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET))
 		step.add_child(button)
+		rules_focus_controls_cache.append(button)
 		button.pressed.connect(func() -> void:
 			scroll_rules_to_section(content_scroll, section_index)
 		)
@@ -6861,7 +6866,11 @@ func replay_archive_row_for_entry(entry: Dictionary) -> Control:
 	var pooled: Control = null
 	if pooled_value != null and is_instance_valid(pooled_value):
 		pooled = pooled_value as Control
-	if pooled != null and not pooled.is_queued_for_deletion() and str(pooled.get_meta("archive_row_signature", "")) == signature:
+	# A row can remain parented to a previous archive page until that page's
+	# queued teardown runs. Never move a live node across lists; only detached
+	# rows are eligible for pooling.
+	var pooled_parent := pooled.get_parent() if pooled != null else null
+	if pooled != null and pooled_parent == null and not pooled.is_queued_for_deletion() and str(pooled.get_meta("archive_row_signature", "")) == signature:
 		pooled.visible = true
 		pooled.mouse_filter = Control.MOUSE_FILTER_PASS
 		pooled.set_meta("archive_id", archive_id)
@@ -6896,6 +6905,10 @@ func render_replay_archive_list() -> void:
 	var count := root_layer.find_child("ReplayArchiveCount", true, false) as Label
 	if list == null:
 		return
+	var render_token := "%d|%d|%s|%s|%d" % [root_layer.get_instance_id(), replay_archive_generation, replay_search_query, replay_delete_target_id, 1 if replay_delete_confirming else 0]
+	if render_token == replay_archive_render_token:
+		return
+	replay_archive_render_token = render_token
 	var archive_scroll := root_layer.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
 	var previous_scroll_value := float(archive_scroll.scroll_vertical) if archive_scroll != null else -1.0
 	var previous_focus_name := ""
@@ -7049,11 +7062,14 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 		return
 	var total := int(list.get_meta("archive_result_count", 0))
 	if total <= 0:
-		count.text = "0 条 · 暂无归档"
-		set_ui_full_text(count, "当前没有符合筛选条件的本地归档", "本地归档数量与可见范围")
-		count.set_meta("archive_visible_first", 0)
-		count.set_meta("archive_visible_last", 0)
-		count.set_meta("archive_result_count", 0)
+		var empty_status_token := "empty|%d" % total
+		if str(count.get_meta("archive_range_status_token", "")) != empty_status_token:
+			count.text = "0 条 · 暂无归档"
+			set_ui_full_text(count, "当前没有符合筛选条件的本地归档", "本地归档数量与可见范围")
+			count.set_meta("archive_visible_first", 0)
+			count.set_meta("archive_visible_last", 0)
+			count.set_meta("archive_result_count", 0)
+			count.set_meta("archive_range_status_token", empty_status_token)
 		return
 	var index_signature := "%d|%d|%d" % [list.get_child_count(), int(list.size.x), int(list.size.y)]
 	var stored_signature := str(list.get_meta("archive_height_index_signature", ""))
@@ -7074,6 +7090,9 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 		last_index = first_index
 	var first := first_index + 1
 	var last := clampi(last_index + 1, first, total)
+	var range_status_token := "%d|%d|%d|%d|%d" % [total, first, last, int(round(viewport_top)), int(round(viewport_height))]
+	if str(count.get_meta("archive_range_status_token", "")) == range_status_token:
+		return
 	count.text = "显示 %d-%d/%d 条" % [first, last, total]
 	count.tooltip_text = "当前显示第%d至%d条，共%d条；筛选结果随搜索框更新" % [first, last, total]
 	set_ui_full_text(count, count.tooltip_text, "本地归档数量与可见范围")
@@ -7081,6 +7100,7 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 	count.set_meta("archive_visible_last", last)
 	count.set_meta("archive_result_count", total)
 	count.set_meta("archive_range_contract", "visible_first_last_over_filtered_total")
+	count.set_meta("archive_range_status_token", range_status_token)
 	mark_ui_optimization(count, "F-727")
 
 
@@ -7351,7 +7371,16 @@ func replay_timeline_visible_events(payload: Dictionary) -> Array[Dictionary]:
 		replay_timeline_visible_cache.clear()
 		return replay_timeline_visible_cache
 	var events: Array = events_value as Array
-	var cache_key := "%s|%d|%d" % [str(payload.get("digest", "")), events.size(), hash(events)]
+	var payload_digest := str(payload.get("digest", "")).strip_edges()
+	var cache_key := ""
+	if payload_digest != "" and bool(payload.get("valid", false)):
+		# A verified replay digest already identifies the immutable event chain;
+		# avoid hashing every event on each timeline render.
+		cache_key = "digest|%s|%d" % [payload_digest, events.size()]
+	else:
+		# Keep content validation for unverified fixtures and malformed payloads
+		# that do not provide a stable digest.
+		cache_key = "content|%d|%d" % [events.size(), hash(events)]
 	if cache_key == replay_timeline_visible_cache_key:
 		return replay_timeline_visible_cache
 	var visible_events: Array[Dictionary] = []

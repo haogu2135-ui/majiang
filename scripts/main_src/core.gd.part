@@ -2085,11 +2085,29 @@ func online_lobby_log_unread_count() -> int:
 func refresh_online_log_navigation() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
-	var latest_button = root_layer.find_child("OnlineLobbyLogLatestButton", true, false) as Button
-	var unread_label = root_layer.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label
 	var unread := online_lobby_log_unread_count()
 	var retained_count := online_lobby_retained_log_count()
 	var total_count := online_lobby_log_count()
+	var range_text := online_lobby_log_visible_range_text()
+	var root_id := root_layer.get_instance_id()
+	if root_id != online_log_navigation_root_id or online_log_navigation_controls.is_empty():
+		online_log_navigation_root_id = root_id
+		online_log_navigation_controls = {
+			"latest_button": root_layer.find_child("OnlineLobbyLogLatestButton", true, false) as Button,
+			"unread_label": root_layer.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label,
+			"count_label": root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label,
+			"count_badge": root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control,
+			"range_label": root_layer.find_child("OnlineLobbyLogRangeLabel", true, false) as Label,
+			"log_scroll": root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer,
+			"log_list": root_layer.find_child("OnlineLobbyLogListPanel", true, false) as Control,
+		}
+		online_log_navigation_token = ""
+	var navigation_token := "%d|%d|%d|%d|%s" % [retained_count, total_count, unread, 1 if online_log_at_latest else 0, range_text]
+	if navigation_token == online_log_navigation_token:
+		return
+	online_log_navigation_token = navigation_token
+	var latest_button := online_log_navigation_controls.get("latest_button", null) as Button
+	var unread_label := online_log_navigation_controls.get("unread_label", null) as Label
 	if latest_button != null:
 		# Keep the visible CTA stable; the unread count has its own lane and a
 		# growing number must never squeeze the button label on compact screens.
@@ -2109,7 +2127,7 @@ func refresh_online_log_navigation() -> void:
 		set_ui_full_text(unread_label, unread_label.text, "房间日志状态：" + unread_label.text)
 		unread_label.set_meta("unread_count", unread)
 		mark_ui_optimization(unread_label, "F-240")
-	var count_label := root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
+	var count_label := online_log_navigation_controls.get("count_label", null) as Label
 	if count_label != null:
 		count_label.text = "存%d · 总%d · 未读%d" % [retained_count, total_count, unread]
 		set_ui_full_text(count_label, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
@@ -2119,7 +2137,7 @@ func refresh_online_log_navigation() -> void:
 		count_label.set_meta("unread_count", unread)
 		count_label.set_meta("log_semantics", "visible_retained_total_unread_summary")
 		mark_ui_optimization(count_label, "F-241")
-		var count_badge := root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control
+		var count_badge := online_log_navigation_controls.get("count_badge", null) as Control
 		if count_badge != null:
 			count_badge.set_meta("log_count", retained_count)
 			count_badge.set_meta("retained_count", retained_count)
@@ -2128,8 +2146,7 @@ func refresh_online_log_navigation() -> void:
 			set_ui_full_text(count_badge, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
 			count_badge.set_meta("log_semantics", "visible_retained_total_unread_summary")
 			mark_ui_optimization(count_badge, "F-241")
-	var range_text := online_lobby_log_visible_range_text()
-	var range_label := root_layer.find_child("OnlineLobbyLogRangeLabel", true, false) as Label
+	var range_label := online_log_navigation_controls.get("range_label", null) as Label
 	if range_label != null:
 		set_dynamic_label_text(range_label, range_text, "房间日志可见范围；" + range_text)
 		range_label.set_meta("log_range_text", range_text)
@@ -2141,7 +2158,7 @@ func refresh_online_log_navigation() -> void:
 		mark_ui_optimization(range_label, "F-902")
 		mark_ui_optimization(range_label, "F-904")
 		mark_ui_optimization(range_label, "F-907")
-	var log_scroll := root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var log_scroll := online_log_navigation_controls.get("log_scroll", null) as ScrollContainer
 	if log_scroll != null:
 		log_scroll.set_meta("range_text_snapshot", range_text if range_label != null else "")
 		log_scroll.set_meta("range_boundary", "latest" if online_log_at_latest else "historical")
@@ -2150,11 +2167,11 @@ func refresh_online_log_navigation() -> void:
 	if unread_label != null:
 		unread_label.set_meta("range_unread_owner", "OnlineLobbyLogRangeLabel")
 		mark_ui_optimization(unread_label, "F-906")
-	var range_count_badge := root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control
+	var range_count_badge := online_log_navigation_controls.get("count_badge", null) as Control
 	if range_count_badge != null:
 		range_count_badge.set_meta("range_total_owner", "OnlineLobbyLogRangeLabel")
 		mark_ui_optimization(range_count_badge, "F-905")
-	var log_list := root_layer.find_child("OnlineLobbyLogListPanel", true, false) as Control
+	var log_list := online_log_navigation_controls.get("log_list", null) as Control
 	if log_list != null:
 		log_list.set_meta("visible_range_owner", "OnlineLobbyLogRangeLabel")
 		mark_ui_optimization(log_list, "F-910")
@@ -2715,8 +2732,16 @@ func clamp_safe_area_margins(margins: Vector4, viewport_size: Vector2) -> Vector
 	)
 
 func update_safe_area_layout() -> bool:
-	var next_margins := current_safe_area_margins()
-	var next_signature := "%.2f|%.2f|%.2f|%.2f" % [next_margins.x, next_margins.y, next_margins.z, next_margins.w]
+	var measured_margins := current_safe_area_margins()
+	# Control offsets are pixel coordinates. Quantizing once keeps subpixel
+	# viewport changes from invalidating the layout or reapplying anchors.
+	var next_margins := Vector4(
+		round(measured_margins.x),
+		round(measured_margins.y),
+		round(measured_margins.z),
+		round(measured_margins.w)
+	)
+	var next_signature := "%d|%d|%d|%d" % [int(next_margins.x), int(next_margins.y), int(next_margins.z), int(next_margins.w)]
 	if next_signature == safe_area_layout_signature:
 		safe_area_margins = next_margins
 		return false
@@ -2732,7 +2757,9 @@ func update_safe_area_layout() -> bool:
 func apply_safe_area_offsets(control: Control) -> void:
 	if control == null:
 		return
-	control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	if not bool(control.get_meta("safe_area_anchors_initialized", false)):
+		control.set_anchors_preset(Control.PRESET_FULL_RECT)
+		control.set_meta("safe_area_anchors_initialized", true)
 	control.offset_left = safe_area_margins.x
 	control.offset_top = safe_area_margins.y
 	control.offset_right = -safe_area_margins.z
@@ -6968,6 +6995,8 @@ func duplicate_threat_report(report) -> Dictionary:
 func clear_threat_report_cache() -> void:
 	threat_report_cache.clear()
 	threat_report_cache_order.clear()
+	seat_threat_display_cache.clear()
+	seat_threat_display_cache_order.clear()
 
 
 func seat_threat_report_from_map(seat: int, seat_threat_reports: Dictionary) -> Dictionary:
@@ -6980,6 +7009,30 @@ func seat_threat_report_from_map(seat: int, seat_threat_reports: Dictionary) -> 
 	if mode == "offline" and seat != 0:
 		return opponent_seat_threat_report(0, seat)
 	return {}
+
+
+func seat_threat_display_model(seat: int, report: Dictionary) -> Dictionary:
+	if report.is_empty():
+		return {}
+	var revision := int(report.get("seat_revision", seat_threat_report_revision(report)))
+	var cache_key := "%d|%d" % [seat, revision]
+	var cached: Variant = seat_threat_display_cache.get(cache_key, null)
+	if cached != null:
+		return cached
+	var model := {
+		"badge_text": opponent_seat_threat_badge_text_from_report(report),
+		"line": opponent_seat_threat_line_from_report(report),
+		"color": opponent_seat_threat_color_from_report(report),
+		"score": float(report.get("score", 0.0)),
+		"safe_count": min(3, (report.get("safe_tiles", []) as Array).size()) if typeof(report.get("safe_tiles", [])) == TYPE_ARRAY else 0,
+		"active": bool(report.get("valid", true)) and float(report.get("score", 0.0)) > 0.0,
+	}
+	seat_threat_display_cache[cache_key] = model
+	seat_threat_display_cache_order.append(cache_key)
+	while seat_threat_display_cache_order.size() > 32:
+		var oldest_key: String = str(seat_threat_display_cache_order.pop_front())
+		seat_threat_display_cache.erase(oldest_key)
+	return model
 
 
 func readiness_threat_level(score: float) -> String:
@@ -8949,6 +9002,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	section.set_meta("rules_section_index", section_index)
+	rules_section_controls.append(section)
 	set_ui_full_text(section, title_text + "：" + "；".join(PackedStringArray(lines)), "规则章节：" + title_text)
 	mark_ui_optimization(section, "F-471")
 	parent.add_child(section)

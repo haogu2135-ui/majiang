@@ -5388,23 +5388,23 @@ func flush_game_render() -> void:
 	game_render_dirty_flags = 0
 	game_render_priority = 0
 	if mode == "offline" or mode == "online_game":
-		# Deadline polling owns the pending timer/fill controls. Updating that
-		# narrow lane does not justify replacing the table, seats, melds, river or
-		# hand tree; a state request still takes the full render path below.
-		if (dirty_flags & GAME_RENDER_DIRTY_STATE) == 0 and (dirty_flags & GAME_RENDER_DIRTY_HUD) != 0 and root_layer != null and is_instance_valid(root_layer):
-			refresh_battle_hud_lane()
-			if (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
+		# Consume all live lanes in one deferred commit. Requests from the same
+		# frame arrive as a bitmask, so status, wall, and pending controls never
+		# schedule separate refreshes for one state snapshot.
+		var live_root_ready := root_layer != null and is_instance_valid(root_layer)
+		var state_dirty := (dirty_flags & GAME_RENDER_DIRTY_STATE) != 0
+		var hud_dirty := (dirty_flags & GAME_RENDER_DIRTY_HUD) != 0
+		var pending_dirty := (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0
+		if not state_dirty and live_root_ready and (hud_dirty or pending_dirty):
+			if hud_dirty:
+				refresh_battle_hud_lane()
+			if pending_dirty:
 				refresh_pending_claim_live_controls()
 				update_pending_claim_live_state()
-			root_layer.set_meta("last_render_lane", "hud_only")
-			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
-		elif (dirty_flags & GAME_RENDER_DIRTY_STATE) == 0 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0 and root_layer != null and is_instance_valid(root_layer):
-			refresh_pending_claim_live_controls()
-			update_pending_claim_live_state()
-			root_layer.set_meta("last_render_lane", "pending_only")
+			root_layer.set_meta("last_render_lane", "hud_and_pending" if hud_dirty and pending_dirty else ("hud_only" if hud_dirty else "pending_only"))
 			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
 		else:
-			render_game((dirty_flags & GAME_RENDER_DIRTY_STATE) != 0)
+			render_game(state_dirty)
 	if render_priority >= 2 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
 		# Keep the priority contract inspectable on the next rebuilt root without
 		# forcing an additional render in the same frame.
@@ -5428,11 +5428,20 @@ func refresh_battle_hud_lane() -> void:
 	root_layer.set_meta("battle_hud_view_token", hud_token)
 	hud_view_token = hud_token
 	hud_lane_refresh_count += 1
-	var status := root_layer.find_child("TopHudStatus", true, false) as Label
+	var root_id := root_layer.get_instance_id()
+	if battle_hud_control_root_id != root_id:
+		battle_hud_control_root_id = root_id
+		battle_hud_control_index = {
+			"status": root_layer.find_child("TopHudStatus", true, false) as Label,
+			"wall": root_layer.find_child("TopHudWallText", true, false) as Label,
+			"wall_state": root_layer.find_child("TopHudWallState", true, false) as Label,
+			"center_count": root_layer.find_child("CenterWallCount", true, false) as Label,
+		}
+	var status := battle_hud_control_index.get("status", null) as Label
 	if status != null:
 		set_dynamic_label_text(status, top_hud_short_status_text(compact_hud), top_hud_status_tooltip_text())
-	var wall := root_layer.find_child("TopHudWallText", true, false) as Label
-	var wall_state := root_layer.find_child("TopHudWallState", true, false) as Label
+	var wall := battle_hud_control_index.get("wall", null) as Label
+	var wall_state := battle_hud_control_index.get("wall_state", null) as Label
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, last_discard_text]
 	if wall != null:
 		set_dynamic_label_text(wall, "余牌 %d/%d" % [wall_count, wall_total], wall_detail)
@@ -5440,7 +5449,7 @@ func refresh_battle_hud_lane() -> void:
 		wall.set_meta("wall_total", wall_total)
 	if wall_state != null:
 		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), last_discard_text], wall_detail)
-	var center_count := root_layer.find_child("CenterWallCount", true, false) as Label
+	var center_count := battle_hud_control_index.get("center_count", null) as Label
 	if center_count != null:
 		var center_wall_token := "%d/%d" % [wall_count, wall_total]
 		if str(center_count.get_meta("wall_view_token", "")) != center_wall_token:
@@ -5499,6 +5508,8 @@ func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
 func retain_battle_hand_tray_for_render() -> void:
+	hand_render_snapshot_valid = false
+	hand_render_snapshot_signature = ""
 	if retained_battle_hand_tray != null and is_instance_valid(retained_battle_hand_tray):
 		retained_battle_hand_tray.queue_free()
 	retained_battle_hand_tray = null
@@ -5512,6 +5523,8 @@ func retain_battle_hand_tray_for_render() -> void:
 	if tray == null or not is_instance_valid(tray) or tray.is_queued_for_deletion():
 		return
 	var current_signature := "%s|%s" % [hand_identity_fingerprint(get_self_hand()), mode]
+	hand_render_snapshot_signature = current_signature
+	hand_render_snapshot_valid = true
 	var tray_signature := str(tray.get_meta("hand_identity_signature", ""))
 	if tray_signature == "" or tray_signature != current_signature:
 		return
@@ -5600,9 +5613,19 @@ func clear_screen() -> void:
 		table_log_chat_draft = ""
 	if mode != "online_lobby" and (mode != "online_game" or online_game_disconnected()):
 		chat_panel_open = false
+	if mode != "online_lobby":
+		online_log_navigation_root_id = 0
+		online_log_navigation_controls.clear()
+		online_log_navigation_token = ""
 	if mode != "offline" and mode != "online_game":
 		advisor_detail_open = false
 		table_log_archive_open = false
+	if mode != "replay_import":
+		replay_archive_render_token = ""
+		replay_archive_row_pool.clear()
+	if mode != "rules":
+		rules_section_controls.clear()
+		rules_focus_controls_cache.clear()
 	clear_screen_tweens()
 	clear_fx_overlays()
 	clear_toast_on_mode_change()
@@ -5686,7 +5709,7 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func release_retained_battle_views() -> void:
-	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere]:
+	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere, discard_river_foreground_layer]:
 		if retained != null and is_instance_valid(retained):
 			if retained.get_parent() != null:
 				retained.get_parent().remove_child(retained)
@@ -5698,6 +5721,7 @@ func release_retained_battle_views() -> void:
 	retained_battle_center_signature = ""
 	retained_battle_atmosphere = null
 	retained_battle_atmosphere_signature = ""
+	discard_river_foreground_layer = null
 	for retained_button in retained_battle_discard_archive_buttons.values():
 		var archive_button := retained_button as Button
 		if archive_button != null and is_instance_valid(archive_button):
@@ -5720,6 +5744,26 @@ func retain_battle_discard_archive_buttons_for_render() -> void:
 		if button_parent != null:
 			button_parent.remove_child(archive_button)
 		retained_battle_discard_archive_buttons[seat] = archive_button
+
+
+func retain_battle_discard_foreground_for_render() -> void:
+	if discard_river_foreground_layer != null and is_instance_valid(discard_river_foreground_layer):
+		if discard_river_foreground_layer.get_parent() != null:
+			discard_river_foreground_layer.get_parent().remove_child(discard_river_foreground_layer)
+	else:
+		discard_river_foreground_layer = null
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var foreground := root_layer.find_child("DiscardRiverForegroundLayer", true, false) as Control
+	if foreground == null or not is_instance_valid(foreground) or foreground.is_queued_for_deletion():
+		return
+	var foreground_parent := foreground.get_parent()
+	if foreground_parent == null:
+		return
+	foreground_parent.remove_child(foreground)
+	discard_river_foreground_layer = foreground
 
 func start_offline(instant: bool = false) -> void:
 	if not ensure_tile_assets_ready():
@@ -5952,11 +5996,14 @@ func render_game(state_changed: bool = false) -> void:
 	# r215: GPT chrome conversion
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
+	hand_render_snapshot_valid = false
+	hand_render_snapshot_signature = ""
 	last_game_render_msec = Time.get_ticks_msec()
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
 	retain_battle_atmosphere_for_render()
 	retain_battle_discard_archive_buttons_for_render()
+	retain_battle_discard_foreground_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -5996,8 +6043,9 @@ func render_game(state_changed: bool = false) -> void:
 	draw_center(table)
 	draw_discards(table)
 
+	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat()}
 	for seat_layout in SEAT_LAYOUTS:
-		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
@@ -6048,7 +6096,6 @@ func update_ai_assistance_async() -> void:
 	var evaluation_generation := ui_page_generation
 	var evaluation_hand_signature := hand_identity_fingerprint(get_self_hand())
 	var evaluation_visible_counts := visible_tile_counts()
-	var evaluation_table_signature := threat_report_table_state_cache_key(0, evaluation_visible_counts)
 
 	var start_time = Time.get_ticks_msec()
 
@@ -6150,16 +6197,6 @@ func update_hand_ai_hints() -> void:
 	var preserved_selection := hand_keyboard_selection
 	var focused_source_index := -1
 	var hovered_source_index := -1
-	var old_tile_buttons: Dictionary = {}
-	for old_button_value in old_tray.find_children("*", "Button", true, false):
-		var old_button := old_button_value as Button
-		if old_button == null or old_button.disabled:
-			continue
-		var tile_owner := old_button.get_parent() as Control
-		while tile_owner != null and not tile_owner.name.begins_with("HandTile_"):
-			tile_owner = tile_owner.get_parent() as Control
-		if tile_owner != null:
-			old_tile_buttons[int(tile_owner.get_meta("hand_source_index", -1))] = old_button
 	for old_tile_value in old_tray.find_children("HandTile_*", "Control", true, false):
 		var old_tile := old_tile_value as Control
 		if old_tile == null:
@@ -6167,12 +6204,16 @@ func update_hand_ai_hints() -> void:
 		var source_index := int(old_tile.get_meta("hand_source_index", -1))
 		if source_index < 0:
 			continue
-		var old_button := old_tile_buttons.get(source_index, null) as Button
-		if old_button != null:
-			if old_button.has_focus():
-				focused_source_index = source_index
-			if old_button.is_hovered():
-				hovered_source_index = source_index
+		# make_tile_view mounts the native hit button as the tile frame's first
+		# child. Read that stable owner directly instead of recursively scanning
+		# every button in the tray and then walking each button back to its tile.
+		var old_button := old_tile.get_child(0) as Button if old_tile.get_child_count() > 0 else null
+		if old_button == null or old_button.disabled:
+			continue
+		if old_button.has_focus():
+			focused_source_index = source_index
+		if old_button.is_hovered():
+			hovered_source_index = source_index
 	var old_tray_index := old_tray.get_index()
 	kill_screen_tweens_for_subtree(old_tray)
 	root_layer.remove_child(old_tray)
@@ -8730,6 +8771,19 @@ func is_claim_discard_banned(seat: int, tile: String) -> bool:
 	return typeof(banned) == TYPE_DICTIONARY and bool((banned as Dictionary).get(tile, false))
 
 
+func claim_discard_ban_snapshot_for_seat(seat: int) -> Dictionary:
+	var token := "%d|%d|%d" % [ai_claim_ban_revision, seat, offline_claim_discard_bans.size()]
+	if token == hand_ban_snapshot_token:
+		return hand_ban_snapshot
+	hand_ban_snapshot_token = token
+	hand_ban_snapshot = {}
+	var banned: Variant = offline_claim_discard_bans.get(seat, {})
+	if typeof(banned) == TYPE_DICTIONARY:
+		for key in (banned as Dictionary).keys():
+			hand_ban_snapshot[normalize_tile_code(str(key))] = true
+	return hand_ban_snapshot
+
+
 func claim_discard_ban_tiles_for_seat(seat: int) -> Array:
 	var result: Array = []
 	if seat < 0:
@@ -10052,7 +10106,7 @@ func draw_action_button_pass_route(button: Button, color: Color) -> Control:
 	# 保留为空壳；过按钮装饰碎块已并入 action_button_panel 插画底板。
 	return null
 
-func draw_action_dock(parent: Control) -> void:
+func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
 	# r214: bulk GPT chrome sweep
 	var count = action_bar_button_count()
 	if count <= 0:
@@ -10179,7 +10233,7 @@ func draw_action_dock(parent: Control) -> void:
 		status_tooltip = "牌局动作已锁定；语音和聊天仍可用"
 		status_color = Color(0.76, 0.86, 0.82, 0.86)
 		status_priority = true
-	elif mode == "online_game" and online_game_disconnected():
+	elif disconnected:
 		status_text = online_recovery_status_text() + " · 牌桌只读"
 		status_tooltip = online_recovery_detail_text()
 		status_color = Color(0.92, 0.76, 0.46, 0.92)
@@ -10234,10 +10288,11 @@ func draw_action_intent_decision_pulse(parent: Control, count: int, color: Color
 
 func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback := false) -> Control:
 	# r214: bulk GPT chrome sweep
-	var intent = make_gpt_plate_rect(action_intent_rect_for_count(count), Color(0.020, 0.036, 0.038, 0.88), "ui_jade_reading_plate")
+	var intent_rect := action_intent_rect_for_count(count)
+	var intent = make_gpt_plate_rect(intent_rect, Color(0.020, 0.036, 0.038, 0.88), "ui_jade_reading_plate")
 	intent.name = "ActionIntentDock"
 	parent.add_child(intent)
-	intent.set_meta("layout_rect", action_intent_rect_for_count(count))
+	intent.set_meta("layout_rect", intent_rect)
 	intent.set_meta("layout_role", "action_intent")
 	var action_texture = add_illustration_texture(intent, "action_dock_ribbon", rect_full(0.010, 0.040, 0.990, 0.960), 0.13, false)
 	if action_texture != null:
@@ -10299,14 +10354,15 @@ func ai_discard_reports_for_render() -> Array:
 
 func draw_actions(parent: Control) -> void:
 	action_dock_status_label = null
+	var disconnected := mode == "online_game" and online_game_disconnected()
 	var pending_claim_response_bar: Control = null
 	var pending_claim_tail_bar: HBoxContainer = null
 	var pending_claim_response_tail_lane: HBoxContainer = null
 	var pending_claim_network_lane: HBoxContainer = null
 	var pending_claim_voice_lane: HBoxContainer = null
-	if mode == "online_game" and not online_game_disconnected():
+	if mode == "online_game" and not disconnected:
 		draw_chat_action_button(parent)
-	if online_game_disconnected():
+	if disconnected:
 		var recovery_model := online_recovery_view_model()
 		var reconnecting := bool(recovery_model.get("reconnecting", false))
 		var recovery_phase := str(recovery_model.get("phase", "retry_ready"))
@@ -10366,7 +10422,7 @@ func draw_actions(parent: Control) -> void:
 		mark_ui_optimization(lobby_button, "F-898")
 		lobby_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
 		action_bar.add_child(lobby_button)
-		draw_action_dock(parent)
+		draw_action_dock(parent, disconnected)
 		finalize_action_bar_layout()
 		action_bar.set_meta("layout_role", "online_recovery_actions")
 		action_bar.set_meta("recovery_state_owner", "OnlineRecoveryStateLabel")
@@ -10395,7 +10451,7 @@ func draw_actions(parent: Control) -> void:
 		parent.add_child(action_bar)
 		action_bar.add_child(unknown_retry)
 		action_bar.add_child(unknown_lobby)
-		draw_action_dock(parent)
+		draw_action_dock(parent, disconnected)
 		finalize_action_bar_layout()
 		call_deferred("focus_online_recovery_if_current", root_layer.get_instance_id(), ui_page_generation, "OnlineUnknownPhaseRetryButton")
 		return
@@ -10519,7 +10575,7 @@ func draw_actions(parent: Control) -> void:
 			summary_menu_button.z_index = 2
 			action_bar.add_child(summary_menu_button)
 			prepare_ended_action_overflow(parent)
-			draw_action_dock(parent)
+			draw_action_dock(parent, disconnected)
 			finalize_action_bar_layout()
 			return
 		if offline_phase == "pending_claim":
@@ -10555,7 +10611,7 @@ func draw_actions(parent: Control) -> void:
 				offline_pass_button.set_meta("pending_tail", true)
 				pending_claim_response_tail_lane.add_child(offline_pass_button)
 			draw_pending_claim_illustration(parent)
-			draw_action_dock(parent)
+			draw_action_dock(parent, disconnected)
 			finalize_action_bar_layout()
 			return
 		if player_ai_assist_enabled() and has_pending_danger_discard():
@@ -10609,7 +10665,7 @@ func draw_actions(parent: Control) -> void:
 			action_bar.set_meta("danger_shortcut_state", {"confirm": "Enter", "cancel": "Esc"})
 			action_bar.set_meta("danger_action_order", "alternatives_then_cancel_then_confirm")
 			action_bar.set_meta("danger_reading_sequence", ["tile", "risk", "alternatives", "cancel", "confirm"])
-			draw_action_dock(parent)
+			draw_action_dock(parent, disconnected)
 			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
 			finalize_action_bar_layout()
 			return
@@ -10766,7 +10822,7 @@ func draw_actions(parent: Control) -> void:
 		else:
 			action_bar.add_child(retry_sync_button)
 	prepare_ended_action_overflow(parent)
-	draw_action_dock(parent)
+	draw_action_dock(parent, disconnected)
 	finalize_action_bar_layout()
 
 func open_pending_network_menu(anchor: Control = null) -> void:
@@ -20699,7 +20755,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		discard_archive_button_focus_visual_by_id(archive_button.get_instance_id(), archive_button.has_focus())
 	return overlay
 
-func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int) -> Control:
+func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, latest_seat: int = -1) -> Control:
 	# r453: river bed = warm GPT plate only (no green wash mats under porcelain faces).
 	var art = Control.new()
 	art.name = "DiscardRiverArt_%d" % seat
@@ -20715,7 +20771,8 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 	if soft != null:
 		soft.name = "DiscardRiverWarmWash_%d" % seat
 		soft.modulate = Color(1.12, 1.02, 0.88, soft.modulate.a)
-	var is_last_source = seat == get_last_discard_seat() and discard_count > 0
+	var current_latest_seat := latest_seat if latest_seat >= 0 else get_last_discard_seat()
+	var is_last_source = seat == current_latest_seat and discard_count > 0
 	if is_last_source:
 		var last_edge = make_gpt_plate_rect(rect_full(0.020, 0.040, 0.980, 0.085), Color(0.96, 0.80, 0.38, 0.18), "ui_soft_flash")
 		last_edge.name = "DiscardRiverLastSourceEdge_%d" % seat
@@ -20885,7 +20942,7 @@ func discard_river_tile_semantics(seat: int, source_index: int, tile_code: Strin
 	if typeof(cached) == TYPE_DICTIONARY:
 		return cached
 	var source_name := pending_claim_source_name(seat)
-	var tile_name := tile_label(tile_code)
+	var tile_name := str(tile_semantic_record(tile_code).get("label", tile_code))
 	var page_suffix := "；当前最后一张" if highlighted else ("；历史页" if page_state == "history" else "")
 	var model := {
 		"tooltip": "%s牌河 · 第%d张 · %s" % [source_name, source_index + 1, tile_name],
@@ -20905,8 +20962,10 @@ func discard_history_summary(seat: int, discards: Array) -> String:
 		return str(cached)
 	var summary := join_tile_labels(discards)
 	discard_river_history_summary_cache[revision_key] = summary
+	discard_river_history_summary_cache_order.append(revision_key)
 	if discard_river_history_summary_cache.size() > 16:
-		discard_river_history_summary_cache.erase(discard_river_history_summary_cache.keys()[0])
+		var oldest_key: String = str(discard_river_history_summary_cache_order.pop_front())
+		discard_river_history_summary_cache.erase(oldest_key)
 	return summary
 
 
@@ -20916,15 +20975,24 @@ func draw_discards(parent: Control) -> void:
 	var river_viewport_size := effective_viewport_size()
 	var river_compact_readable := river_viewport_size.y <= 560.0
 	var latest_discard_seat := get_last_discard_seat()
+	var disconnected := mode == "online_game" and online_game_disconnected()
 	var total_discards := 0
 	var active_seats: Array[int] = []
-	var foreground_layer := Control.new()
-	foreground_layer.name = "DiscardRiverForegroundLayer"
-	foreground_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	foreground_layer.z_index = 18
-	foreground_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	foreground_layer.set_meta("foreground_owner", "all_discard_river_overlays")
+	var foreground_layer := discard_river_foreground_layer
+	discard_river_foreground_layer = null
+	if foreground_layer == null or not is_instance_valid(foreground_layer) or foreground_layer.is_queued_for_deletion():
+		foreground_layer = Control.new()
+		foreground_layer.name = "DiscardRiverForegroundLayer"
+		foreground_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		foreground_layer.z_index = 18
+		foreground_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+		foreground_layer.set_meta("foreground_owner", "all_discard_river_overlays")
+	else:
+		for old_overlay in foreground_layer.get_children():
+			foreground_layer.remove_child(old_overlay)
+			old_overlay.queue_free()
 	parent.add_child(foreground_layer)
+	var size_basis: Vector2 = table_render_size if table_render_size.x > 8.0 and table_render_size.y > 8.0 else table_size
 	for zone in DISCARD_ZONES:
 		var seat = int(zone[0])
 		var zone_rect: Rect2 = zone[1]
@@ -20934,7 +21002,7 @@ func draw_discards(parent: Control) -> void:
 		grid.columns = int(zone[2])
 		grid.z_index = 8  # r449 above seat/meld chrome so river faces stay readable
 		apply_rect(grid, zone_rect)
-		if mode == "online_game" and online_game_disconnected():
+		if disconnected:
 			grid.set_meta("interaction_state", "read_only")
 			grid.set_meta("disabled_reason", "牌局已断线，牌河仅供查看")
 			grid.tooltip_text = "只读牌河：等待重连后才能继续牌局"
@@ -20946,7 +21014,6 @@ func draw_discards(parent: Control) -> void:
 			total_discards += discards.size()
 			active_seats.append(seat)
 		# Prefer live table control size so river cells match the painted surface.
-		var size_basis: Vector2 = table_render_size if table_render_size.x > 8.0 and table_render_size.y > 8.0 else table_size
 		var visible_rows = discard_zone_visible_rows_for_table_size(zone_rect, grid.columns, size_basis)
 		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, grid.columns, visible_rows, size_basis)
 		var raw_visible_capacity: int = int(grid.columns * visible_rows)
@@ -20977,7 +21044,7 @@ func draw_discards(parent: Control) -> void:
 		grid.set_meta("latest_discard_page_state", latest_page_state)
 		grid.set_meta("latest_discard_source_seat", latest_discard_seat)
 		grid.set_meta("river_overlay_contract", "final_grid_reserved_cell_and_latest_gutter")
-		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count)
+		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count, latest_discard_seat)
 		if river_art != null:
 			parent.move_child(river_art, max(0, grid.get_index()))
 		for i in range(visible_count):
@@ -21582,7 +21649,7 @@ func draw_hand(parent: Control) -> void:
 	# 手牌托盘 - 增强视觉效果
 	var hand := get_self_hand()
 	normalized_hand_keyboard_selection(hand)
-	var hand_identity_signature := "%s|%s" % [hand_identity_fingerprint(hand), mode]
+	var hand_identity_signature := hand_render_snapshot_signature if hand_render_snapshot_valid else "%s|%s" % [hand_identity_fingerprint(hand), mode]
 	var hand_state_signature := hand_visual_state_signature(hand)
 	var hand_identity_changed := hand_identity_signature != last_hand_render_signature
 	last_hand_render_signature = hand_identity_signature
@@ -21814,8 +21881,11 @@ func draw_hand(parent: Control) -> void:
 	var pending_index: int = pending_danger_discard_index if pending_tile != "" else -1
 	if pending_index < 0 or pending_index >= hand.size() or str(hand[pending_index]) != pending_tile:
 		pending_index = -1
-	if interactive_guide_active and interactive_guide_type == "discard":
-		if interactive_guide_target_index < 0 or interactive_guide_target_index >= hand.size() or not hand_keyboard_tile_selectable(interactive_guide_target_index, hand):
+	var guide_target_valid := interactive_guide_target_index >= 0 and interactive_guide_target_index < hand.size() and hand_keyboard_tile_selectable(interactive_guide_target_index, hand)
+	if interactive_guide_active and interactive_guide_type == "discard" and not guide_target_valid:
+		var guide_invalid_token := "%d|%s|%d|%d" % [tutorial_step, hand_identity_signature, interactive_guide_target_index, hand.size()]
+		if guide_invalid_token != interactive_guide_target_invalid_token:
+			interactive_guide_target_invalid_token = guide_invalid_token
 			interactive_guide_target_index = suggested_index if suggested_index >= 0 else hand_tile_index_for_advice(hand, str(hand[0])) if not hand.is_empty() else -1
 	var tile_width = float(hand_layout.get("tile_width", HAND_TILE_MAX_WIDTH))
 	var tile_height = float(hand_layout.get("tile_height", tile_width * HAND_TILE_ASPECT))
@@ -21877,14 +21947,17 @@ func draw_hand(parent: Control) -> void:
 		tw.tween_property(tray, "modulate:a", 1.0, slide_dur).from(0.0)
 		tw.tween_property(tray, "offset_top", 0.0, slide_dur).from(24.0)
 
+	var banned_tiles := claim_discard_ban_snapshot_for_seat(0)
 	for i in range(hand.size()):
 		var index = i
 		var tile = str(hand[i])
+		var tile_semantic := tile_semantic_record(tile)
+		var tile_display_label := str(tile_semantic.get("label", tile))
 		if should_insert_hand_group_gap(hand, i):
 			hand_box.add_child(make_hand_group_spacer(tile_height, group_gap_width, hand_group_label(tile)))
 		if i == stable_drawn_index and i > 0 and drawn_gap_width > 0.0:
 			hand_box.add_child(make_hand_drawn_spacer(tile_height, drawn_gap_width))
-		var clickable = can_self_discard() and not is_claim_discard_banned(0, tile)
+		var clickable = can_self_discard() and not banned_tiles.has(tile)
 		var keyboard_selected := clickable and i == hand_keyboard_selection
 		# 新手引导高亮：可点击时添加视觉提示
 		var should_highlight = clickable and (i == suggested_index or i == pending_index)
@@ -21955,9 +22028,9 @@ func draw_hand(parent: Control) -> void:
 		if not state_tokens.is_empty():
 			tile_node.tooltip_text += " · 状态：" + "、".join(state_tokens)
 		if disconnected_hand_state:
-			tile_node.tooltip_text = "只读手牌：%s；等待重连后才能提交" % tile_label(tile)
+			tile_node.tooltip_text = "只读手牌：%s；等待重连后才能提交" % tile_display_label
 			tile_node.set_meta("disabled_reason", "牌局已断线，手牌只读")
-		tile_node.set_meta("accessible_name", "手牌第%d张：%s" % [i + 1, tile_label(tile)])
+		tile_node.set_meta("accessible_name", "手牌第%d张：%s" % [i + 1, tile_display_label])
 		mark_ui_optimization(tile_node, "F-258")
 		mark_ui_optimization(tile_node, "F-485")
 		if keyboard_selected and hint_badge != "选":
@@ -23618,6 +23691,7 @@ func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: 
 	chip.add_child(edge)
 	var label = make_label(chip, text, 13, text_color, true)
 	label.name = label_name
+	chip.set_meta("label_control", label)
 	# The version chip keeps a wider text lane inside its fixed footprint so the
 	# current short build label remains fully visible at 960px.
 	var label_left := 0.045 if chip_id == "version" else 0.088
@@ -26404,12 +26478,20 @@ func draw_online_local_seat_marker(parent: Control, seat: int, side: String) -> 
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}) -> void:
+func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}) -> void:
 	# r212: GPT chrome conversion
 	var seat_viewport_size := effective_viewport_size()
 	var seat_compact_height := seat_viewport_size.y <= 560.0
 	var active = get_current_seat() == seat
-	var recent_discard_source = seat == get_last_discard_seat() and get_last_discard() != ""
+	var latest_discard_seat := -1
+	var latest_discard_tile := ""
+	if discard_snapshot.is_empty():
+		latest_discard_seat = get_last_discard_seat()
+		latest_discard_tile = get_last_discard()
+	else:
+		latest_discard_seat = int(discard_snapshot.get("seat", -1))
+		latest_discard_tile = str(discard_snapshot.get("tile", ""))
+	var recent_discard_source = seat == latest_discard_seat and latest_discard_tile != ""
 	var p = get_player_info(seat)
 	# 座位面板 - 增强的视觉区分
 	var seat_shadow_rect = rect_full(rect.position.x + 0.006, rect.position.y + 0.012, rect.size.x + 0.010, rect.size.y + 0.018)
@@ -26518,7 +26600,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			var top_dealer = make_badge(panel, rect_full(0.575, 0.075, 0.670, 0.355), "庄", 9, Color(0.58, 0.12, 0.08, 0.88), Color(1.0, 0.79, 0.34, 0.56), Color(0.98, 0.92, 0.74))
 			top_dealer.name = "SeatCompactDealer_%d" % seat
 			top_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
+		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side, latest_discard_seat)
 		return
 
 	if side == "left" or side == "right":
@@ -26578,7 +26660,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			var side_turn = make_badge(panel, side_turn_rect, "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
 			side_turn.name = "SeatCompactTurn_%d" % seat
 			side_turn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var side_status_text = "打%s" % tile_label(get_last_discard()) if recent_discard_source else ""
+		var side_status_text = "打%s" % tile_label(latest_discard_tile) if recent_discard_source else ""
 		if side_status_text != "":
 			var side_threat = seat_threat_report_from_map(seat, seat_threat_reports)
 			var side_has_threat := opponent_seat_threat_badge_text_from_report(side_threat) != ""
@@ -26590,7 +26672,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			fit_label_font_size(side_status, maxf(68.0, seat_viewport_size.x * (0.105 if compact_side else 0.130)), 11, 8)
 			set_ui_full_text(side_status, side_status_text, "座位%d最近弃牌状态" % (seat + 1))
 			style_seat_readable_label(side_status, false)
-		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
+		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side, latest_discard_seat)
 		return
 
 	# 头像
@@ -26628,7 +26710,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	simple_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_seat_readable_label(simple_stats, false)
 	fit_label_font_size(simple_stats, maxf(110.0, seat_viewport_size.x * 0.390), 11, 9)
-	var simple_status_text = "刚打 %s" % tile_label(get_last_discard()) if recent_discard_source else (package_preview(seat) if active else "")
+	var simple_status_text = "刚打 %s" % tile_label(latest_discard_tile) if recent_discard_source else (package_preview(seat) if active else "")
 	if active and simple_status_text == "":
 		simple_status_text = seat_status_summary_fallback(seat)
 	if simple_status_text != "":
@@ -26650,16 +26732,17 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var simple_dealer = make_badge(panel, rect_full(0.555, 0.075, 0.635, 0.255), "庄", 9, Color(0.58, 0.12, 0.08, 0.86), Color(1.0, 0.79, 0.34, 0.56), Color(0.96, 0.90, 0.72))
 		simple_dealer.name = "SeatCompactDealer_%d" % seat
 		simple_dealer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
+	draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side, latest_discard_seat)
 	return
 
 	var threat_report = seat_threat_report_from_map(seat, seat_threat_reports)
-	var threat_badge_text = opponent_seat_threat_badge_text_from_report(threat_report)
+	var threat_display_model := seat_threat_display_model(seat, threat_report)
+	var threat_badge_text := str(threat_display_model.get("badge_text", ""))
 	var display_name = str(p.get("name", "玩家"))
 	if mode == "offline" and seat != 0:
 		display_name += " · " + ai_profile_short_label(seat)
 	var package_text = package_preview(seat)
-	var threat_line = opponent_seat_threat_line_from_report(threat_report)
+	var threat_line := str(threat_display_model.get("line", ""))
 	var summary_text = package_text if package_text != "" else threat_line
 	var name = make_label(panel, display_name, 15, Color(0.94, 0.86, 0.68), true)
 	var name_right = 0.55 if threat_badge_text != "" else 0.75 if active else 0.96
@@ -26672,8 +26755,8 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var turn_badge = make_badge(panel, rect_full(0.77, 0.075, 0.96, 0.255), "行牌", 11, Color(0.72, 0.60, 0.24, 0.92), Color(1.0, 0.86, 0.44, 0.42), Color(0.13, 0.12, 0.08))
 		turn_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if threat_badge_text != "":
-		draw_seat_threat_badge_art(panel, seat, threat_report)
-		var threat_badge = make_badge(panel, rect_full(0.57, 0.075, 0.75, 0.255), threat_badge_text, 12, opponent_seat_threat_color_from_report(threat_report), Color(1.0, 0.91, 0.48, 0.56), Color(0.10, 0.11, 0.10))
+		draw_seat_threat_badge_art(panel, seat, threat_report, latest_discard_seat)
+		var threat_badge = make_badge(panel, rect_full(0.57, 0.075, 0.75, 0.255), threat_badge_text, 12, threat_display_model.get("color", Color(0.32, 0.56, 0.48, 0.90)), Color(1.0, 0.91, 0.48, 0.56), Color(0.10, 0.11, 0.10))
 		threat_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# 统计信息 - 增强的视觉效果
@@ -26714,12 +26797,13 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
 
 
-func draw_compact_seat_threat_badge(parent: Control, seat: int, seat_threat_reports: Dictionary, side: String) -> void:
+func draw_compact_seat_threat_badge(parent: Control, seat: int, seat_threat_reports: Dictionary, side: String, latest_discard_seat: int = -1) -> void:
 	var report = seat_threat_report_from_map(seat, seat_threat_reports)
-	var badge_text = opponent_seat_threat_badge_text_from_report(report)
+	var display_model := seat_threat_display_model(seat, report)
+	var badge_text := str(display_model.get("badge_text", ""))
 	if badge_text == "":
 		return
-	var art = draw_seat_threat_badge_art(parent, seat, report)
+	var art = draw_seat_threat_badge_art(parent, seat, report, latest_discard_seat)
 	var badge_rect := rect_full(0.560, 0.340, 0.945, 0.535)
 	if side == "top":
 		badge_rect = rect_full(0.560, 0.385, 0.945, 0.555)
@@ -26729,7 +26813,7 @@ func draw_compact_seat_threat_badge(parent: Control, seat: int, seat_threat_repo
 		apply_rect(art, rect_full(0.520, 0.545, 0.945, 0.680))
 	else:
 		apply_rect(art, rect_full(0.560, 0.340, 0.945, 0.535))
-	var badge = make_badge(parent, badge_rect, badge_text, 8 if side == "left" or side == "right" else 9, opponent_seat_threat_color_from_report(report), Color(1.0, 0.91, 0.48, 0.46), Color(0.10, 0.11, 0.10))
+	var badge = make_badge(parent, badge_rect, badge_text, 8 if side == "left" or side == "right" else 9, display_model.get("color", Color(0.32, 0.56, 0.48, 0.90)), Color(1.0, 0.91, 0.48, 0.46), Color(0.10, 0.11, 0.10))
 	badge.name = "SeatThreatBadge_%d" % seat
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -26988,7 +27072,8 @@ func draw_seat_flower_tiles(parent: Control, seat: int) -> bool:
 	strip.add_theme_constant_override("separation", 2)
 	apply_rect(strip, rect_full(0.155, 0.105, 0.835, 0.790))
 	art.add_child(strip)
-	var compact_seat_lane := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
+	var flower_viewport_size := effective_viewport_size()
+	var compact_seat_lane := flower_viewport_size.y <= 560.0 or flower_viewport_size.x <= 1100.0
 	var visible_limit := 3 if compact_seat_lane else 4
 	var visible_count = min(visible_limit, flowers.size())
 	strip.set_meta("visible_limit", visible_limit)
@@ -27123,17 +27208,18 @@ func draw_seat_stat_pill(parent: Control, rect: Rect2, label_text: String, value
 	mark_ui_optimization(pill, "F-246")
 
 
-func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) -> Control:
+func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary, latest_discard_seat: int = -1) -> Control:
 	# r214: bulk GPT chrome sweep
 	var art = Control.new()
 	art.name = "SeatThreatBadgeArt_%d" % seat
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.535, 0.075, 0.955, 0.365))
 	parent.add_child(art)
-	var accent = opponent_seat_threat_color_from_report(report)
-	var score = float(report.get("score", 0.0))
-	var threat_active := not report.is_empty() and score > 0.0 and bool(report.get("valid", true))
-	var latest_seat := get_last_discard_seat()
+	var display_model := seat_threat_display_model(seat, report)
+	var accent: Color = display_model.get("color", Color(0.32, 0.56, 0.48, 0.90))
+	var score := float(display_model.get("score", 0.0))
+	var threat_active := bool(display_model.get("active", false))
+	var latest_seat := latest_discard_seat if latest_discard_seat >= 0 else get_last_discard_seat()
 	var threat_motion_owner: int = latest_seat if latest_seat >= 0 else current_seat
 	var threat_motion_allowed := seat == threat_motion_owner and ui_motion_enabled() and graphics_quality != Commercial3DStage.QUALITY_LOW
 	art.set_meta("threat_motion_owner_seat", threat_motion_owner)
@@ -27162,7 +27248,7 @@ func draw_seat_threat_badge_art(parent: Control, seat: int, report: Dictionary) 
 	pressure.name = "SeatThreatPressureNode_%d" % seat
 	art.add_child(pressure)
 	var safe_tiles: Array = report.get("safe_tiles", [])
-	var safe_count = min(3, safe_tiles.size())
+	var safe_count := int(display_model.get("safe_count", 0))
 	for i in range(3):
 		var alpha = 0.24 if i < safe_count else 0.10
 		var left = 0.245 + float(i) * 0.105
@@ -32672,6 +32758,8 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 
 func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Callable, highlighted: bool = false, risk: String = "", hint_badge: String = "") -> Control:
 	var lightweight_static_tile = should_use_lightweight_static_tile(clickable, size) and not highlighted
+	var tile_semantic := tile_semantic_record(tile)
+	var tile_display_label := str(tile_semantic.get("label", tile))
 	var frame: Control = null
 	var tile_body: Control
 	var button: Button = null
@@ -32721,8 +32809,8 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			tile_body.offset_top -= 4.0
 			tile_body.offset_bottom -= 4.0
 	if button != null:
-		var tile_detail := "打出" + tile_label(tile) if clickable else tile_label(tile)
-		set_ui_full_text(button, tile_detail, "牌面：" + tile_label(tile))
+		var tile_detail := "打出" + tile_display_label if clickable else tile_display_label
+		set_ui_full_text(button, tile_detail, "牌面：" + tile_display_label)
 		button.set_meta("tile_code", normalize_tile_code(tile))
 		button.set_meta("tile_click_role", "play_tile" if clickable else "tile_preview")
 	if button != null and callback.is_valid():
@@ -35087,6 +35175,8 @@ func _show_menu_impl() -> void:
 	menu_parallax_enabled = false
 
 	var content_size = safe_content_pixel_size()
+	var tutorial_available := tutorial_is_available()
+	var tutorial_detail_text := tutorial_entry_detail_text()
 
 	# 首屏按「标题 / 主操作 / 快捷入口 / 状态栏」分层，生成图负责框体和线条。
 	var header = Control.new()
@@ -35140,9 +35230,9 @@ func _show_menu_impl() -> void:
 	tutorial_button.name = "MenuTutorialButton"
 	# While a tutorial is active, the banner below owns the single continue CTA.
 	# Keep this header entry for completed/new states where the banner is absent.
-	tutorial_button.visible = not tutorial_is_available()
+	tutorial_button.visible = not tutorial_available
 	tutorial_button.custom_minimum_size = Vector2(112, 44)
-	tutorial_button.tooltip_text = "查看教学进度：" + tutorial_entry_detail_text()
+	tutorial_button.tooltip_text = "查看教学进度：" + tutorial_detail_text
 	set_ui_full_text(tutorial_button, tutorial_button.tooltip_text, "打开新手教学")
 	mark_ui_optimization(tutorial_button, "F-452")
 	root_layer.add_child(tutorial_button)
@@ -35150,7 +35240,7 @@ func _show_menu_impl() -> void:
 	ensure_button_gpt_face_plate(tutorial_button, Color(0.34, 0.58, 0.48, 0.42))
 	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.92, 0.96, 0.82, 0.90))
 
-	if tutorial_is_available():
+	if tutorial_available:
 		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.014, 0.034, 0.034, 0.88), "ui_jade_reading_plate")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
 		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
@@ -35165,13 +35255,13 @@ func _show_menu_impl() -> void:
 		tutorial_title.name = "MenuTutorialEntryTitle"
 		apply_rect(tutorial_title, rect_full(0.105, 0.095, 0.390, 0.360))
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var tutorial_detail = make_label(tutorial_banner, tutorial_entry_detail_text(), 11, Color(0.78, 0.88, 0.78), false)
+		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 11, Color(0.78, 0.88, 0.78), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
 		apply_rect(tutorial_detail, rect_full(0.105, 0.390, 0.560, 0.670))
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(tutorial_detail)
-		set_ui_full_text(tutorial_detail, tutorial_entry_detail_text(), "新手教学进度详情")
-		if tutorial_entry_detail_text().length() > 16 or large_text_enabled:
+		set_ui_full_text(tutorial_detail, tutorial_detail_text, "新手教学进度详情")
+		if tutorial_detail_text.length() > 16 or large_text_enabled:
 			configure_wrapped_label(tutorial_detail, maxf(160.0, content_size.x * 0.245), 0.0, 2.0)
 			tutorial_detail.max_lines_visible = 2
 			tutorial_detail.set_meta("max_visible_lines", 2)
@@ -35291,11 +35381,11 @@ func _show_menu_impl() -> void:
 	# 赛季段位与积分
 	var rank_name = get_rank_name()
 	var rank_full_text := "%s  积分 %d" % [rank_name, int(season_data.get("points", 0))]
-	var rank_display_text := "%s · %d分" % [rank_name, int(season_data.get("points", 0))] if effective_viewport_size().x <= 1280.0 else rank_full_text
+	var rank_display_text := "%s · %d分" % [rank_name, int(season_data.get("points", 0))] if content_size.x <= 1280.0 else rank_full_text
 	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.405, 0.185, 0.570, 0.830), Color(0.46, 0.66, 0.54), Color(0.88, 0.96, 0.82))
 	rank_chip.tooltip_text = "完整段位状态：" + rank_full_text
 	rank_chip.set_meta("full_status_text", rank_full_text)
-	var rank_label := rank_chip.find_child("MenuRankBadge", true, false) as Label
+	var rank_label := rank_chip.get_meta("label_control", null) as Label
 	if rank_label != null:
 		rank_label.tooltip_text = rank_chip.tooltip_text
 		rank_label.set_meta("ui_full_text", rank_full_text)
@@ -35314,14 +35404,14 @@ func _show_menu_impl() -> void:
 	var stats_display_text := "对局%d · 胜率%d%%" % [int(game_stats.get("games_played", 0)), int(float(game_stats.get("win_rate", 0.0)) * 100.0)]
 	if int(game_stats.get("games_played", 0)) <= 0:
 		stats_display_text = "暂无对局"
-	elif effective_viewport_size().x <= 960.0:
+	elif content_size.x <= 960.0:
 		stats_display_text = "对局%d · 胜率%d%%" % [int(game_stats.get("games_played", 0)), int(float(game_stats.get("win_rate", 0.0)) * 100.0)]
 	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_display_text, rect_full(0.585, 0.185, 0.745, 0.830), Color(0.42, 0.72, 0.66), Color(0.88, 0.96, 0.84))
 	stats_chip.tooltip_text = "统计详情：" + stats_text
 	stats_chip.set_meta("full_status_text", stats_text)
-	var stats_label := stats_chip.find_child("MenuStatsBadge", true, false) as Label
+	var stats_label := stats_chip.get_meta("label_control", null) as Label
 	if stats_label != null:
-		fit_label_font_size(stats_label, maxf(90.0, effective_viewport_size().x * 0.145), 13, 13)
+		fit_label_font_size(stats_label, maxf(90.0, content_size.x * 0.145), 13, 13)
 		stats_label.tooltip_text = stats_chip.tooltip_text
 		set_ui_full_text(stats_label, stats_text, "菜单统计摘要")
 	mark_ui_optimization(stats_chip, "F-458")
@@ -36804,6 +36894,8 @@ func _show_rules_screen_impl() -> void:
 	mode = "rules"
 	emit_ui_qa_marker("page|rules")
 	clear_screen()
+	rules_section_controls.clear()
+	rules_focus_controls_cache.clear()
 
 	var codex_shadow = make_soft_depth_panel(root_layer, rect_full(0.026, 0.034, 0.986, 0.994), Color(0.0, 0.0, 0.0, 0.14), 24)  # r416
 	codex_shadow.name = "RulesCodex3DCastShadow"
@@ -37067,17 +37159,15 @@ func _show_rules_screen_impl() -> void:
 	# before exposing the custom grip so its first frame cannot point at stale data.
 	call_deferred("normalize_rules_layout_and_sync", content_scroll, rules_scroll_thumb, rules_guide)
 	var rules_focus_controls: Array[Control] = [back, content_scroll]
-	for i in range(RULES_SECTION_COUNT):
-		var rules_step_button := rules_guide.find_child("RulesGuideStepButton_%d" % i, true, false) as Control
-		if rules_step_button != null:
-			rules_focus_controls.append(rules_step_button)
+	rules_focus_controls.append_array(rules_focus_controls_cache)
 	configure_ordered_focus_navigation(panel, rules_focus_controls, "RulesBackButton")
 
 	# 规则段落逐一滑入
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		var sections: Array[Node] = []
-		for child in content.get_children():
-			sections.append(child)
+		for section_control in rules_section_controls:
+			if section_control != null and is_instance_valid(section_control):
+				sections.append(section_control)
 		AnimationEffects.list_items_stagger_in(sections, 0.28, 0.08)
 
 	# 阅读规则不会代替交互式教学完成；教程 checkpoint 只由实际操作推进。
@@ -37334,6 +37424,8 @@ func wire_rules_guide_navigation(guide: Control, content_scroll: ScrollContainer
 			continue
 		var existing_button := step.get_node_or_null("RulesGuideStepButton_%d" % i) as Button
 		if existing_button != null and is_instance_valid(existing_button):
+			if not rules_focus_controls_cache.has(existing_button):
+				rules_focus_controls_cache.append(existing_button)
 			continue
 		var section_index := int(target_sections[i])
 		var button := Button.new()
@@ -37358,6 +37450,7 @@ func wire_rules_guide_navigation(guide: Control, content_scroll: ScrollContainer
 			button.add_theme_stylebox_override(state, empty_style)
 		apply_centered_rect(button, Vector2(0.5, 0.5), Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET))
 		step.add_child(button)
+		rules_focus_controls_cache.append(button)
 		button.pressed.connect(func() -> void:
 			scroll_rules_to_section(content_scroll, section_index)
 		)
@@ -41577,7 +41670,11 @@ func replay_archive_row_for_entry(entry: Dictionary) -> Control:
 	var pooled: Control = null
 	if pooled_value != null and is_instance_valid(pooled_value):
 		pooled = pooled_value as Control
-	if pooled != null and not pooled.is_queued_for_deletion() and str(pooled.get_meta("archive_row_signature", "")) == signature:
+	# A row can remain parented to a previous archive page until that page's
+	# queued teardown runs. Never move a live node across lists; only detached
+	# rows are eligible for pooling.
+	var pooled_parent := pooled.get_parent() if pooled != null else null
+	if pooled != null and pooled_parent == null and not pooled.is_queued_for_deletion() and str(pooled.get_meta("archive_row_signature", "")) == signature:
 		pooled.visible = true
 		pooled.mouse_filter = Control.MOUSE_FILTER_PASS
 		pooled.set_meta("archive_id", archive_id)
@@ -41612,6 +41709,10 @@ func render_replay_archive_list() -> void:
 	var count := root_layer.find_child("ReplayArchiveCount", true, false) as Label
 	if list == null:
 		return
+	var render_token := "%d|%d|%s|%s|%d" % [root_layer.get_instance_id(), replay_archive_generation, replay_search_query, replay_delete_target_id, 1 if replay_delete_confirming else 0]
+	if render_token == replay_archive_render_token:
+		return
+	replay_archive_render_token = render_token
 	var archive_scroll := root_layer.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
 	var previous_scroll_value := float(archive_scroll.scroll_vertical) if archive_scroll != null else -1.0
 	var previous_focus_name := ""
@@ -41765,11 +41866,14 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 		return
 	var total := int(list.get_meta("archive_result_count", 0))
 	if total <= 0:
-		count.text = "0 条 · 暂无归档"
-		set_ui_full_text(count, "当前没有符合筛选条件的本地归档", "本地归档数量与可见范围")
-		count.set_meta("archive_visible_first", 0)
-		count.set_meta("archive_visible_last", 0)
-		count.set_meta("archive_result_count", 0)
+		var empty_status_token := "empty|%d" % total
+		if str(count.get_meta("archive_range_status_token", "")) != empty_status_token:
+			count.text = "0 条 · 暂无归档"
+			set_ui_full_text(count, "当前没有符合筛选条件的本地归档", "本地归档数量与可见范围")
+			count.set_meta("archive_visible_first", 0)
+			count.set_meta("archive_visible_last", 0)
+			count.set_meta("archive_result_count", 0)
+			count.set_meta("archive_range_status_token", empty_status_token)
 		return
 	var index_signature := "%d|%d|%d" % [list.get_child_count(), int(list.size.x), int(list.size.y)]
 	var stored_signature := str(list.get_meta("archive_height_index_signature", ""))
@@ -41790,6 +41894,9 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 		last_index = first_index
 	var first := first_index + 1
 	var last := clampi(last_index + 1, first, total)
+	var range_status_token := "%d|%d|%d|%d|%d" % [total, first, last, int(round(viewport_top)), int(round(viewport_height))]
+	if str(count.get_meta("archive_range_status_token", "")) == range_status_token:
+		return
 	count.text = "显示 %d-%d/%d 条" % [first, last, total]
 	count.tooltip_text = "当前显示第%d至%d条，共%d条；筛选结果随搜索框更新" % [first, last, total]
 	set_ui_full_text(count, count.tooltip_text, "本地归档数量与可见范围")
@@ -41797,6 +41904,7 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 	count.set_meta("archive_visible_last", last)
 	count.set_meta("archive_result_count", total)
 	count.set_meta("archive_range_contract", "visible_first_last_over_filtered_total")
+	count.set_meta("archive_range_status_token", range_status_token)
 	mark_ui_optimization(count, "F-727")
 
 
@@ -42067,7 +42175,16 @@ func replay_timeline_visible_events(payload: Dictionary) -> Array[Dictionary]:
 		replay_timeline_visible_cache.clear()
 		return replay_timeline_visible_cache
 	var events: Array = events_value as Array
-	var cache_key := "%s|%d|%d" % [str(payload.get("digest", "")), events.size(), hash(events)]
+	var payload_digest := str(payload.get("digest", "")).strip_edges()
+	var cache_key := ""
+	if payload_digest != "" and bool(payload.get("valid", false)):
+		# A verified replay digest already identifies the immutable event chain;
+		# avoid hashing every event on each timeline render.
+		cache_key = "digest|%s|%d" % [payload_digest, events.size()]
+	else:
+		# Keep content validation for unverified fixtures and malformed payloads
+		# that do not provide a stable digest.
+		cache_key = "content|%d|%d" % [events.size(), hash(events)]
 	if cache_key == replay_timeline_visible_cache_key:
 		return replay_timeline_visible_cache
 	var visible_events: Array[Dictionary] = []
@@ -43172,7 +43289,7 @@ func online_game_disconnected() -> bool:
 func online_recovery_connecting() -> bool:
 	if not online_game_disconnected():
 		return false
-	return online_feedback.find("正在重新连接") >= 0 or online_feedback.find("正在连接") >= 0
+	return online_recovery_reason_code == "connecting"
 
 func online_recovery_status_text() -> String:
 	# Keep one short state sentence in the HUD while the action lane carries the
@@ -43216,7 +43333,8 @@ func online_recovery_view_model(now_msec: int = -1) -> Dictionary:
 	var attempt := maxi(online_reconnect_attempts, 1)
 	var cooldown := remaining_msec > 0
 	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
-	var compact := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+	var viewport_size := effective_viewport_size()
+	var compact := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	var phase_text := "正在连接 · 第%d次" % attempt if reconnecting else ("等待重试 · %d秒后可重连" % remaining_seconds if cooldown else "可立即重连")
 	var button_text := "连接中 · 第%d次" % attempt if reconnecting else ("%d秒后可重连" % remaining_seconds if cooldown else "立即重连 · 第%d次" % attempt)
 	var status_text := ("断线·连接中" if compact else "断线 · 连接中 · 第%d次" % attempt) if reconnecting else (("断线·%d秒后重连" % remaining_seconds if compact else "断线 · %d秒后可重连" % remaining_seconds) if cooldown else ("断线·重连" if compact else "断线 · 可立即重连"))
@@ -46688,11 +46806,29 @@ func online_lobby_log_unread_count() -> int:
 func refresh_online_log_navigation() -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
-	var latest_button = root_layer.find_child("OnlineLobbyLogLatestButton", true, false) as Button
-	var unread_label = root_layer.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label
 	var unread := online_lobby_log_unread_count()
 	var retained_count := online_lobby_retained_log_count()
 	var total_count := online_lobby_log_count()
+	var range_text := online_lobby_log_visible_range_text()
+	var root_id := root_layer.get_instance_id()
+	if root_id != online_log_navigation_root_id or online_log_navigation_controls.is_empty():
+		online_log_navigation_root_id = root_id
+		online_log_navigation_controls = {
+			"latest_button": root_layer.find_child("OnlineLobbyLogLatestButton", true, false) as Button,
+			"unread_label": root_layer.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label,
+			"count_label": root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label,
+			"count_badge": root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control,
+			"range_label": root_layer.find_child("OnlineLobbyLogRangeLabel", true, false) as Label,
+			"log_scroll": root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer,
+			"log_list": root_layer.find_child("OnlineLobbyLogListPanel", true, false) as Control,
+		}
+		online_log_navigation_token = ""
+	var navigation_token := "%d|%d|%d|%d|%s" % [retained_count, total_count, unread, 1 if online_log_at_latest else 0, range_text]
+	if navigation_token == online_log_navigation_token:
+		return
+	online_log_navigation_token = navigation_token
+	var latest_button := online_log_navigation_controls.get("latest_button", null) as Button
+	var unread_label := online_log_navigation_controls.get("unread_label", null) as Label
 	if latest_button != null:
 		# Keep the visible CTA stable; the unread count has its own lane and a
 		# growing number must never squeeze the button label on compact screens.
@@ -46712,7 +46848,7 @@ func refresh_online_log_navigation() -> void:
 		set_ui_full_text(unread_label, unread_label.text, "房间日志状态：" + unread_label.text)
 		unread_label.set_meta("unread_count", unread)
 		mark_ui_optimization(unread_label, "F-240")
-	var count_label := root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label
+	var count_label := online_log_navigation_controls.get("count_label", null) as Label
 	if count_label != null:
 		count_label.text = "存%d · 总%d · 未读%d" % [retained_count, total_count, unread]
 		set_ui_full_text(count_label, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
@@ -46722,7 +46858,7 @@ func refresh_online_log_navigation() -> void:
 		count_label.set_meta("unread_count", unread)
 		count_label.set_meta("log_semantics", "visible_retained_total_unread_summary")
 		mark_ui_optimization(count_label, "F-241")
-		var count_badge := root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control
+		var count_badge := online_log_navigation_controls.get("count_badge", null) as Control
 		if count_badge != null:
 			count_badge.set_meta("log_count", retained_count)
 			count_badge.set_meta("retained_count", retained_count)
@@ -46731,8 +46867,7 @@ func refresh_online_log_navigation() -> void:
 			set_ui_full_text(count_badge, "房间日志缓存%d条；总计%d条；未读%d条" % [retained_count, total_count, unread], "房间日志总数")
 			count_badge.set_meta("log_semantics", "visible_retained_total_unread_summary")
 			mark_ui_optimization(count_badge, "F-241")
-	var range_text := online_lobby_log_visible_range_text()
-	var range_label := root_layer.find_child("OnlineLobbyLogRangeLabel", true, false) as Label
+	var range_label := online_log_navigation_controls.get("range_label", null) as Label
 	if range_label != null:
 		set_dynamic_label_text(range_label, range_text, "房间日志可见范围；" + range_text)
 		range_label.set_meta("log_range_text", range_text)
@@ -46744,7 +46879,7 @@ func refresh_online_log_navigation() -> void:
 		mark_ui_optimization(range_label, "F-902")
 		mark_ui_optimization(range_label, "F-904")
 		mark_ui_optimization(range_label, "F-907")
-	var log_scroll := root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var log_scroll := online_log_navigation_controls.get("log_scroll", null) as ScrollContainer
 	if log_scroll != null:
 		log_scroll.set_meta("range_text_snapshot", range_text if range_label != null else "")
 		log_scroll.set_meta("range_boundary", "latest" if online_log_at_latest else "historical")
@@ -46753,11 +46888,11 @@ func refresh_online_log_navigation() -> void:
 	if unread_label != null:
 		unread_label.set_meta("range_unread_owner", "OnlineLobbyLogRangeLabel")
 		mark_ui_optimization(unread_label, "F-906")
-	var range_count_badge := root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control
+	var range_count_badge := online_log_navigation_controls.get("count_badge", null) as Control
 	if range_count_badge != null:
 		range_count_badge.set_meta("range_total_owner", "OnlineLobbyLogRangeLabel")
 		mark_ui_optimization(range_count_badge, "F-905")
-	var log_list := root_layer.find_child("OnlineLobbyLogListPanel", true, false) as Control
+	var log_list := online_log_navigation_controls.get("log_list", null) as Control
 	if log_list != null:
 		log_list.set_meta("visible_range_owner", "OnlineLobbyLogRangeLabel")
 		mark_ui_optimization(log_list, "F-910")
@@ -47318,8 +47453,16 @@ func clamp_safe_area_margins(margins: Vector4, viewport_size: Vector2) -> Vector
 	)
 
 func update_safe_area_layout() -> bool:
-	var next_margins := current_safe_area_margins()
-	var next_signature := "%.2f|%.2f|%.2f|%.2f" % [next_margins.x, next_margins.y, next_margins.z, next_margins.w]
+	var measured_margins := current_safe_area_margins()
+	# Control offsets are pixel coordinates. Quantizing once keeps subpixel
+	# viewport changes from invalidating the layout or reapplying anchors.
+	var next_margins := Vector4(
+		round(measured_margins.x),
+		round(measured_margins.y),
+		round(measured_margins.z),
+		round(measured_margins.w)
+	)
+	var next_signature := "%d|%d|%d|%d" % [int(next_margins.x), int(next_margins.y), int(next_margins.z), int(next_margins.w)]
 	if next_signature == safe_area_layout_signature:
 		safe_area_margins = next_margins
 		return false
@@ -47335,7 +47478,9 @@ func update_safe_area_layout() -> bool:
 func apply_safe_area_offsets(control: Control) -> void:
 	if control == null:
 		return
-	control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	if not bool(control.get_meta("safe_area_anchors_initialized", false)):
+		control.set_anchors_preset(Control.PRESET_FULL_RECT)
+		control.set_meta("safe_area_anchors_initialized", true)
 	control.offset_left = safe_area_margins.x
 	control.offset_top = safe_area_margins.y
 	control.offset_right = -safe_area_margins.z
@@ -51571,6 +51716,8 @@ func duplicate_threat_report(report) -> Dictionary:
 func clear_threat_report_cache() -> void:
 	threat_report_cache.clear()
 	threat_report_cache_order.clear()
+	seat_threat_display_cache.clear()
+	seat_threat_display_cache_order.clear()
 
 
 func seat_threat_report_from_map(seat: int, seat_threat_reports: Dictionary) -> Dictionary:
@@ -51583,6 +51730,30 @@ func seat_threat_report_from_map(seat: int, seat_threat_reports: Dictionary) -> 
 	if mode == "offline" and seat != 0:
 		return opponent_seat_threat_report(0, seat)
 	return {}
+
+
+func seat_threat_display_model(seat: int, report: Dictionary) -> Dictionary:
+	if report.is_empty():
+		return {}
+	var revision := int(report.get("seat_revision", seat_threat_report_revision(report)))
+	var cache_key := "%d|%d" % [seat, revision]
+	var cached: Variant = seat_threat_display_cache.get(cache_key, null)
+	if cached != null:
+		return cached
+	var model := {
+		"badge_text": opponent_seat_threat_badge_text_from_report(report),
+		"line": opponent_seat_threat_line_from_report(report),
+		"color": opponent_seat_threat_color_from_report(report),
+		"score": float(report.get("score", 0.0)),
+		"safe_count": min(3, (report.get("safe_tiles", []) as Array).size()) if typeof(report.get("safe_tiles", [])) == TYPE_ARRAY else 0,
+		"active": bool(report.get("valid", true)) and float(report.get("score", 0.0)) > 0.0,
+	}
+	seat_threat_display_cache[cache_key] = model
+	seat_threat_display_cache_order.append(cache_key)
+	while seat_threat_display_cache_order.size() > 32:
+		var oldest_key: String = str(seat_threat_display_cache_order.pop_front())
+		seat_threat_display_cache.erase(oldest_key)
+	return model
 
 
 func readiness_threat_level(score: float) -> String:
@@ -53552,6 +53723,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	section.set_meta("rules_section_index", section_index)
+	rules_section_controls.append(section)
 	set_ui_full_text(section, title_text + "：" + "；".join(PackedStringArray(lines)), "规则章节：" + title_text)
 	mark_ui_optimization(section, "F-471")
 	parent.add_child(section)

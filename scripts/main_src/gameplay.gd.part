@@ -171,23 +171,23 @@ func flush_game_render() -> void:
 	game_render_dirty_flags = 0
 	game_render_priority = 0
 	if mode == "offline" or mode == "online_game":
-		# Deadline polling owns the pending timer/fill controls. Updating that
-		# narrow lane does not justify replacing the table, seats, melds, river or
-		# hand tree; a state request still takes the full render path below.
-		if (dirty_flags & GAME_RENDER_DIRTY_STATE) == 0 and (dirty_flags & GAME_RENDER_DIRTY_HUD) != 0 and root_layer != null and is_instance_valid(root_layer):
-			refresh_battle_hud_lane()
-			if (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
+		# Consume all live lanes in one deferred commit. Requests from the same
+		# frame arrive as a bitmask, so status, wall, and pending controls never
+		# schedule separate refreshes for one state snapshot.
+		var live_root_ready := root_layer != null and is_instance_valid(root_layer)
+		var state_dirty := (dirty_flags & GAME_RENDER_DIRTY_STATE) != 0
+		var hud_dirty := (dirty_flags & GAME_RENDER_DIRTY_HUD) != 0
+		var pending_dirty := (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0
+		if not state_dirty and live_root_ready and (hud_dirty or pending_dirty):
+			if hud_dirty:
+				refresh_battle_hud_lane()
+			if pending_dirty:
 				refresh_pending_claim_live_controls()
 				update_pending_claim_live_state()
-			root_layer.set_meta("last_render_lane", "hud_only")
-			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
-		elif (dirty_flags & GAME_RENDER_DIRTY_STATE) == 0 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0 and root_layer != null and is_instance_valid(root_layer):
-			refresh_pending_claim_live_controls()
-			update_pending_claim_live_state()
-			root_layer.set_meta("last_render_lane", "pending_only")
+			root_layer.set_meta("last_render_lane", "hud_and_pending" if hud_dirty and pending_dirty else ("hud_only" if hud_dirty else "pending_only"))
 			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
 		else:
-			render_game((dirty_flags & GAME_RENDER_DIRTY_STATE) != 0)
+			render_game(state_dirty)
 	if render_priority >= 2 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
 		# Keep the priority contract inspectable on the next rebuilt root without
 		# forcing an additional render in the same frame.
@@ -211,11 +211,20 @@ func refresh_battle_hud_lane() -> void:
 	root_layer.set_meta("battle_hud_view_token", hud_token)
 	hud_view_token = hud_token
 	hud_lane_refresh_count += 1
-	var status := root_layer.find_child("TopHudStatus", true, false) as Label
+	var root_id := root_layer.get_instance_id()
+	if battle_hud_control_root_id != root_id:
+		battle_hud_control_root_id = root_id
+		battle_hud_control_index = {
+			"status": root_layer.find_child("TopHudStatus", true, false) as Label,
+			"wall": root_layer.find_child("TopHudWallText", true, false) as Label,
+			"wall_state": root_layer.find_child("TopHudWallState", true, false) as Label,
+			"center_count": root_layer.find_child("CenterWallCount", true, false) as Label,
+		}
+	var status := battle_hud_control_index.get("status", null) as Label
 	if status != null:
 		set_dynamic_label_text(status, top_hud_short_status_text(compact_hud), top_hud_status_tooltip_text())
-	var wall := root_layer.find_child("TopHudWallText", true, false) as Label
-	var wall_state := root_layer.find_child("TopHudWallState", true, false) as Label
+	var wall := battle_hud_control_index.get("wall", null) as Label
+	var wall_state := battle_hud_control_index.get("wall_state", null) as Label
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, last_discard_text]
 	if wall != null:
 		set_dynamic_label_text(wall, "余牌 %d/%d" % [wall_count, wall_total], wall_detail)
@@ -223,7 +232,7 @@ func refresh_battle_hud_lane() -> void:
 		wall.set_meta("wall_total", wall_total)
 	if wall_state != null:
 		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), last_discard_text], wall_detail)
-	var center_count := root_layer.find_child("CenterWallCount", true, false) as Label
+	var center_count := battle_hud_control_index.get("center_count", null) as Label
 	if center_count != null:
 		var center_wall_token := "%d/%d" % [wall_count, wall_total]
 		if str(center_count.get_meta("wall_view_token", "")) != center_wall_token:
@@ -282,6 +291,8 @@ func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
 func retain_battle_hand_tray_for_render() -> void:
+	hand_render_snapshot_valid = false
+	hand_render_snapshot_signature = ""
 	if retained_battle_hand_tray != null and is_instance_valid(retained_battle_hand_tray):
 		retained_battle_hand_tray.queue_free()
 	retained_battle_hand_tray = null
@@ -295,6 +306,8 @@ func retain_battle_hand_tray_for_render() -> void:
 	if tray == null or not is_instance_valid(tray) or tray.is_queued_for_deletion():
 		return
 	var current_signature := "%s|%s" % [hand_identity_fingerprint(get_self_hand()), mode]
+	hand_render_snapshot_signature = current_signature
+	hand_render_snapshot_valid = true
 	var tray_signature := str(tray.get_meta("hand_identity_signature", ""))
 	if tray_signature == "" or tray_signature != current_signature:
 		return
@@ -383,9 +396,19 @@ func clear_screen() -> void:
 		table_log_chat_draft = ""
 	if mode != "online_lobby" and (mode != "online_game" or online_game_disconnected()):
 		chat_panel_open = false
+	if mode != "online_lobby":
+		online_log_navigation_root_id = 0
+		online_log_navigation_controls.clear()
+		online_log_navigation_token = ""
 	if mode != "offline" and mode != "online_game":
 		advisor_detail_open = false
 		table_log_archive_open = false
+	if mode != "replay_import":
+		replay_archive_render_token = ""
+		replay_archive_row_pool.clear()
+	if mode != "rules":
+		rules_section_controls.clear()
+		rules_focus_controls_cache.clear()
 	clear_screen_tweens()
 	clear_fx_overlays()
 	clear_toast_on_mode_change()
@@ -469,7 +492,7 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func release_retained_battle_views() -> void:
-	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere]:
+	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere, discard_river_foreground_layer]:
 		if retained != null and is_instance_valid(retained):
 			if retained.get_parent() != null:
 				retained.get_parent().remove_child(retained)
@@ -481,6 +504,7 @@ func release_retained_battle_views() -> void:
 	retained_battle_center_signature = ""
 	retained_battle_atmosphere = null
 	retained_battle_atmosphere_signature = ""
+	discard_river_foreground_layer = null
 	for retained_button in retained_battle_discard_archive_buttons.values():
 		var archive_button := retained_button as Button
 		if archive_button != null and is_instance_valid(archive_button):
@@ -503,6 +527,26 @@ func retain_battle_discard_archive_buttons_for_render() -> void:
 		if button_parent != null:
 			button_parent.remove_child(archive_button)
 		retained_battle_discard_archive_buttons[seat] = archive_button
+
+
+func retain_battle_discard_foreground_for_render() -> void:
+	if discard_river_foreground_layer != null and is_instance_valid(discard_river_foreground_layer):
+		if discard_river_foreground_layer.get_parent() != null:
+			discard_river_foreground_layer.get_parent().remove_child(discard_river_foreground_layer)
+	else:
+		discard_river_foreground_layer = null
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var foreground := root_layer.find_child("DiscardRiverForegroundLayer", true, false) as Control
+	if foreground == null or not is_instance_valid(foreground) or foreground.is_queued_for_deletion():
+		return
+	var foreground_parent := foreground.get_parent()
+	if foreground_parent == null:
+		return
+	foreground_parent.remove_child(foreground)
+	discard_river_foreground_layer = foreground
 
 func start_offline(instant: bool = false) -> void:
 	if not ensure_tile_assets_ready():
@@ -735,11 +779,14 @@ func render_game(state_changed: bool = false) -> void:
 	# r215: GPT chrome conversion
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
+	hand_render_snapshot_valid = false
+	hand_render_snapshot_signature = ""
 	last_game_render_msec = Time.get_ticks_msec()
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
 	retain_battle_atmosphere_for_render()
 	retain_battle_discard_archive_buttons_for_render()
+	retain_battle_discard_foreground_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -779,8 +826,9 @@ func render_game(state_changed: bool = false) -> void:
 	draw_center(table)
 	draw_discards(table)
 
+	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat()}
 	for seat_layout in SEAT_LAYOUTS:
-		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
@@ -831,7 +879,6 @@ func update_ai_assistance_async() -> void:
 	var evaluation_generation := ui_page_generation
 	var evaluation_hand_signature := hand_identity_fingerprint(get_self_hand())
 	var evaluation_visible_counts := visible_tile_counts()
-	var evaluation_table_signature := threat_report_table_state_cache_key(0, evaluation_visible_counts)
 
 	var start_time = Time.get_ticks_msec()
 
@@ -933,16 +980,6 @@ func update_hand_ai_hints() -> void:
 	var preserved_selection := hand_keyboard_selection
 	var focused_source_index := -1
 	var hovered_source_index := -1
-	var old_tile_buttons: Dictionary = {}
-	for old_button_value in old_tray.find_children("*", "Button", true, false):
-		var old_button := old_button_value as Button
-		if old_button == null or old_button.disabled:
-			continue
-		var tile_owner := old_button.get_parent() as Control
-		while tile_owner != null and not tile_owner.name.begins_with("HandTile_"):
-			tile_owner = tile_owner.get_parent() as Control
-		if tile_owner != null:
-			old_tile_buttons[int(tile_owner.get_meta("hand_source_index", -1))] = old_button
 	for old_tile_value in old_tray.find_children("HandTile_*", "Control", true, false):
 		var old_tile := old_tile_value as Control
 		if old_tile == null:
@@ -950,12 +987,16 @@ func update_hand_ai_hints() -> void:
 		var source_index := int(old_tile.get_meta("hand_source_index", -1))
 		if source_index < 0:
 			continue
-		var old_button := old_tile_buttons.get(source_index, null) as Button
-		if old_button != null:
-			if old_button.has_focus():
-				focused_source_index = source_index
-			if old_button.is_hovered():
-				hovered_source_index = source_index
+		# make_tile_view mounts the native hit button as the tile frame's first
+		# child. Read that stable owner directly instead of recursively scanning
+		# every button in the tray and then walking each button back to its tile.
+		var old_button := old_tile.get_child(0) as Button if old_tile.get_child_count() > 0 else null
+		if old_button == null or old_button.disabled:
+			continue
+		if old_button.has_focus():
+			focused_source_index = source_index
+		if old_button.is_hovered():
+			hovered_source_index = source_index
 	var old_tray_index := old_tray.get_index()
 	kill_screen_tweens_for_subtree(old_tray)
 	root_layer.remove_child(old_tray)
@@ -3511,6 +3552,19 @@ func is_claim_discard_banned(seat: int, tile: String) -> bool:
 		return false
 	var banned = offline_claim_discard_bans.get(seat, {})
 	return typeof(banned) == TYPE_DICTIONARY and bool((banned as Dictionary).get(tile, false))
+
+
+func claim_discard_ban_snapshot_for_seat(seat: int) -> Dictionary:
+	var token := "%d|%d|%d" % [ai_claim_ban_revision, seat, offline_claim_discard_bans.size()]
+	if token == hand_ban_snapshot_token:
+		return hand_ban_snapshot
+	hand_ban_snapshot_token = token
+	hand_ban_snapshot = {}
+	var banned: Variant = offline_claim_discard_bans.get(seat, {})
+	if typeof(banned) == TYPE_DICTIONARY:
+		for key in (banned as Dictionary).keys():
+			hand_ban_snapshot[normalize_tile_code(str(key))] = true
+	return hand_ban_snapshot
 
 
 func claim_discard_ban_tiles_for_seat(seat: int) -> Array:

@@ -635,6 +635,7 @@ var show_hand_hint = true  # 是否显示手牌操作提示
 var interactive_guide_active = false  # 交互式引导是否激活
 var interactive_guide_type = ""  # 当前引导类型：discard/claim/self_win
 var interactive_guide_target_index := -1  # 教学目标绑定到具体手牌实例
+var interactive_guide_target_invalid_token := ""
 var game_stats = {
 	"games_played": 0,
 	"games_won": 0,
@@ -698,6 +699,7 @@ var replay_search_cache_generation := -1
 var replay_search_cache_query := ""
 var replay_search_cache_results: Array = []
 var replay_archive_row_pool: Dictionary = {}
+var replay_archive_render_token := ""
 var replay_archive_view_revision := 0
 var replay_archive_view_flush_queued := false
 var replay_archive_view_scroll_value := -1.0
@@ -989,6 +991,9 @@ var online_log_scroll_request_queued := false
 var online_log_scroll_request_follow_latest := false
 var online_log_scroll_request_value := 0
 var online_log_follow_latest_pending_frames := 0
+var online_log_navigation_root_id := 0
+var online_log_navigation_controls: Dictionary = {}
+var online_log_navigation_token := ""
 var wall_total_snapshot := 0
 var wall_total_snapshot_mode := ""
 var wall_total_snapshot_rule := ""
@@ -1049,11 +1054,15 @@ var screen_tween_owner_index: Dictionary = {}
 var screen_tween_indices: Dictionary = {}
 var focus_registry_cache: Dictionary = {}
 var focus_registry_generation := -1
+var battle_hud_control_index: Dictionary = {}
+var battle_hud_control_root_id := 0
 var last_hand_render_signature := ""
 var last_hand_render_state_signature := ""
 var retained_battle_hand_tray: Control = null
 var retained_battle_hand_signature := ""
 var retained_battle_hand_state_signature := ""
+var hand_render_snapshot_signature := ""
+var hand_render_snapshot_valid := false
 var retained_battle_center: Control = null
 var retained_battle_center_signature := ""
 var retained_battle_atmosphere: Control = null
@@ -1061,6 +1070,8 @@ var retained_battle_atmosphere_signature := ""
 var seat_threat_fingerprint := ""
 var seat_threat_root_generation := -1
 var seat_threat_revisions: Dictionary = {}
+var seat_threat_display_cache: Dictionary = {}
+var seat_threat_display_cache_order: Array[String] = []
 var ai_advisor_fingerprint := ""
 var ai_advisor_root_generation := -1
 var pending_claim_live_root_id := 0
@@ -1078,8 +1089,23 @@ var center_last_discard_view_cache: Dictionary = {}
 var discard_river_foreground_layer: Control = null
 var retained_battle_discard_archive_buttons: Dictionary = {}
 var discard_river_history_summary_cache: Dictionary = {}
+var discard_river_history_summary_cache_order: Array[String] = []
 var discard_river_semantics_cache: Dictionary = {}
 var seat_river_summary_cache: Dictionary = {}
+var tile_semantic_cache: Dictionary = {}
+var tile_semantic_cache_order: Array[String] = []
+var hand_ban_snapshot_token := ""
+var hand_ban_snapshot: Dictionary = {}
+var rules_section_controls: Array[Control] = []
+var rules_focus_controls_cache: Array[Control] = []
+var wrapped_text_layout_cache: Dictionary = {}
+var wrapped_text_layout_cache_order: Array[String] = []
+var fitted_label_font_cache: Dictionary = {}
+var fitted_label_font_cache_order: Array[String] = []
+var player_info_cache: Dictionary = {}
+var player_info_cache_token := ""
+var package_preview_cache: Dictionary = {}
+var package_preview_cache_token := ""
 var action_dock_status_label: Label = null
 var hand_tile_button_registry: Dictionary = {}
 var hand_tile_button_registry_root_id := 0
@@ -2320,11 +2346,33 @@ func estimate_wrapped_text_height(text: String, available_width: float, font_siz
 	var width := maxf(1.0, available_width)
 	var glyph_width := maxf(8.0, float(font_size) * 0.98)
 	var chars_per_line := maxi(1, int(floor(width / glyph_width)))
+	var layout := wrapped_text_layout(text, width, font_size, line_gap, chars_per_line)
+	return float(layout.get("height", 0.0))
+
+
+func wrapped_text_layout(text: String, available_width: float, font_size: int, line_gap: float = 4.0, chars_per_line: int = -1) -> Dictionary:
+	var width := maxf(1.0, available_width)
+	var resolved_chars_per_line := chars_per_line
+	if resolved_chars_per_line <= 0:
+		var glyph_width := maxf(8.0, float(font_size) * 0.98)
+		resolved_chars_per_line = maxi(1, int(floor(width / glyph_width)))
+	var cache_key := "%d|%d|%d|%d|%d" % [text.hash(), text.length(), int(round(width)), font_size, int(round(line_gap * 100.0))]
+	var cached: Variant = wrapped_text_layout_cache.get(cache_key, null)
+	if cached != null:
+		return cached
 	var line_count := 0
 	for paragraph in text.replace("\r", "").split("\n", true):
-		line_count += maxi(1, int(ceil(float(str(paragraph).length()) / float(chars_per_line))))
+		line_count += maxi(1, int(ceil(float(str(paragraph).length()) / float(resolved_chars_per_line))))
 	var line_height := maxf(18.0, float(font_size) * 1.42)
-	return float(line_count) * line_height + float(maxi(0, line_count - 1)) * line_gap + 4.0
+	var result := {
+		"line_count": line_count,
+		"height": float(line_count) * line_height + float(maxi(0, line_count - 1)) * line_gap + 4.0,
+	}
+	wrapped_text_layout_cache[cache_key] = result
+	wrapped_text_layout_cache_order.append(cache_key)
+	while wrapped_text_layout_cache_order.size() > 128:
+		wrapped_text_layout_cache.erase(wrapped_text_layout_cache_order.pop_front())
+	return result
 
 func configure_wrapped_label(label: Label, available_width: float = 0.0, minimum_height: float = 0.0, line_gap: float = 4.0) -> void:
 	if label == null or not is_instance_valid(label):
@@ -2359,13 +2407,13 @@ func refresh_wrapped_label_height(label: Label, minimum_height: float = 0.0, lin
 	if width <= 1.0:
 		return
 	var font_size := label.get_theme_font_size("font_size")
-	label.custom_minimum_size.y = maxf(minimum_height, estimate_wrapped_text_height(label.text, width, font_size, line_gap))
 	var glyph_width := maxf(8.0, float(font_size) * 0.98)
 	var chars_per_line := maxi(1, int(floor(width / glyph_width)))
-	var wrapped_lines := 0
-	for paragraph in label.text.replace("\r", "").split("\n", true):
-		wrapped_lines += maxi(1, int(ceil(float(str(paragraph).length()) / float(chars_per_line))))
-	label.set_meta("wrapped_line_count", wrapped_lines)
+	var layout := wrapped_text_layout(label.text, width, font_size, line_gap, chars_per_line)
+	var next_height := maxf(minimum_height, float(layout.get("height", 0.0)))
+	if not is_equal_approx(label.custom_minimum_size.y, next_height):
+		label.custom_minimum_size.y = next_height
+	label.set_meta("wrapped_line_count", int(layout.get("line_count", 0)))
 
 func make_body_label(parent: Control, text: String, font_size: int, color: Color, bold: bool, available_width: float = 0.0, minimum_height: float = 0.0, line_gap: float = 4.0) -> Label:
 	# Long-form copy has an explicit, measurable layout contract. Callers can pass
@@ -2381,12 +2429,25 @@ func fit_label_font_size(label: Label, available_width: float, preferred_size: i
 	var resolved := maxi(minimum_size, preferred_size)
 	var width := maxf(1.0, available_width)
 	var font := label.get_theme_font("font")
-	var measured_width := font.get_string_size(label.text.strip_edges(), HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved).x if font != null else float(label.text.strip_edges().length()) * float(resolved) * 0.98
+	var text := label.text.strip_edges()
+	var cache_key := "%d|%d|%d|%d|%d" % [text.hash(), text.length(), int(round(width)), preferred_size, minimum_size]
+	if fitted_label_font_cache.has(cache_key):
+		var cached_size := int(fitted_label_font_cache[cache_key])
+		if int(label.get_meta("fitted_font_size", -1)) != cached_size:
+			label.add_theme_font_size_override("font_size", cached_size)
+			label.set_meta("fitted_font_size", cached_size)
+		return cached_size
+	var measured_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved).x if font != null else float(text.length()) * float(resolved) * 0.98
 	while measured_width + 8.0 > width and resolved > minimum_size:
 		resolved -= 1
-		measured_width = font.get_string_size(label.text.strip_edges(), HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved).x if font != null else float(label.text.strip_edges().length()) * float(resolved) * 0.98
-	label.add_theme_font_size_override("font_size", resolved)
-	label.set_meta("fitted_font_size", resolved)
+		measured_width = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved).x if font != null else float(text.length()) * float(resolved) * 0.98
+	fitted_label_font_cache[cache_key] = resolved
+	fitted_label_font_cache_order.append(cache_key)
+	while fitted_label_font_cache_order.size() > 128:
+		fitted_label_font_cache.erase(fitted_label_font_cache_order.pop_front())
+	if int(label.get_meta("fitted_font_size", -1)) != resolved:
+		label.add_theme_font_size_override("font_size", resolved)
+		label.set_meta("fitted_font_size", resolved)
 	return resolved
 
 func configure_line_edit_input(edit: LineEdit, field_label: String = "", max_length: int = -1, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> void:
@@ -2822,9 +2883,50 @@ func focus_control_neighbor(control: Control, focusable: Array[Control], directi
 	return best if best != null else control
 
 
+func focus_navigation_signature(root: Control, controls: Array, default_focus_name: String) -> String:
+	var parts: Array[String] = []
+	for candidate in controls:
+		var control := candidate as Control
+		if control == null or not is_instance_valid(control):
+			parts.append("missing")
+			continue
+		var rect: Rect2 = control.get_global_rect()
+		var disabled := control is BaseButton and (control as BaseButton).disabled
+		parts.append("%d:%d:%d:%d:%d:%d:%d:%d:%d" % [
+			control.get_instance_id(),
+			int(control.visible),
+			int(control.is_visible_in_tree()),
+			int(control.focus_mode),
+			int(disabled),
+			int(round(rect.position.x)),
+			int(round(rect.position.y)),
+			int(round(rect.size.x)),
+			int(round(rect.size.y)),
+		])
+	return "%d|%d|%s|%s" % [root.get_instance_id(), ui_page_generation, default_focus_name, "|".join(parts)]
+
+
 func configure_ordered_focus_navigation(root: Control, controls: Array, default_focus_name: String = "", grab_default_focus: bool = true) -> void:
 	if root == null or not is_instance_valid(root):
 		return
+	var focus_signature := focus_navigation_signature(root, controls, default_focus_name)
+	if str(root.get_meta("ordered_focus_navigation_signature", "")) == focus_signature:
+		if not grab_default_focus:
+			return
+		var requested_cached: Control = null
+		if default_focus_name != "":
+			requested_cached = root.find_child(default_focus_name, true, false) as Control
+		var cached_focusable: Array = root.get_meta("ordered_focusable_controls", [])
+		if requested_cached == null or not requested_cached.is_visible_in_tree() or requested_cached.focus_mode == Control.FOCUS_NONE or (requested_cached is BaseButton and (requested_cached as BaseButton).disabled):
+			for candidate in cached_focusable:
+				var cached_control := candidate as Control
+				if cached_control != null and is_instance_valid(cached_control) and cached_control.is_visible_in_tree() and cached_control.focus_mode != Control.FOCUS_NONE and not (cached_control is BaseButton and (cached_control as BaseButton).disabled):
+					requested_cached = cached_control
+					break
+		if requested_cached != null and requested_cached.is_inside_tree():
+			requested_cached.grab_focus()
+		return
+	root.set_meta("ordered_focus_navigation_signature", focus_signature)
 	root.set_meta("focus_registry_revision", int(root.get_meta("focus_registry_revision", 0)) + 1)
 	var focusable: Array[Control] = []
 	var seen_control_ids: Dictionary = {}
@@ -2851,7 +2953,9 @@ func configure_ordered_focus_navigation(root: Control, controls: Array, default_
 		control.focus_mode = Control.FOCUS_ALL
 		focusable.append(control)
 	if focusable.is_empty():
+		root.set_meta("ordered_focusable_controls", [])
 		return
+	root.set_meta("ordered_focusable_controls", focusable.duplicate())
 	for index in range(focusable.size()):
 		var control := focusable[index]
 		var previous := focusable[(index - 1 + focusable.size()) % focusable.size()]
@@ -2884,43 +2988,29 @@ func configure_ordered_focus_navigation(root: Control, controls: Array, default_
 func configure_button_focus_navigation(root: Control, default_focus_name: String = "", grab_default_focus: bool = true) -> void:
 	if root == null or not is_instance_valid(root):
 		return
-	var focusable: Array[Button] = []
-	var seen_button_ids: Dictionary = {}
-	for node in root.find_children("*", "Button", true, false):
-		var button := node as Button
-		if button == null or not button.visible or button.disabled:
-			continue
-		var button_id := button.get_instance_id()
-		if seen_button_ids.has(button_id):
-			continue
-		seen_button_ids[button_id] = true
-		button.focus_mode = Control.FOCUS_ALL
-		focusable.append(button)
-	if focusable.is_empty():
-		return
-	for index in range(focusable.size()):
-		var button := focusable[index]
-		var previous := focusable[(index - 1 + focusable.size()) % focusable.size()]
-		var next := focusable[(index + 1) % focusable.size()]
-		var left := focus_button_neighbor(button, focusable, Vector2.LEFT)
-		var right := focus_button_neighbor(button, focusable, Vector2.RIGHT)
-		var top := focus_button_neighbor(button, focusable, Vector2.UP)
-		var bottom := focus_button_neighbor(button, focusable, Vector2.DOWN)
-		button.focus_previous = previous.get_path()
-		button.focus_next = next.get_path()
-		button.focus_neighbor_left = (left if left != button else previous).get_path()
-		button.focus_neighbor_right = (right if right != button else next).get_path()
-		button.focus_neighbor_top = (top if top != button else previous).get_path()
-		button.focus_neighbor_bottom = (bottom if bottom != button else next).get_path()
-	if not grab_default_focus:
-		return
-	var requested: Control = null
-	if default_focus_name != "":
-		requested = root.find_child(default_focus_name, true, false) as Control
-	if requested == null or not requested.visible or requested.focus_mode == Control.FOCUS_NONE or (requested is Button and (requested as Button).disabled):
-		requested = focusable[0]
-	if requested.is_inside_tree():
-		requested.grab_focus()
+	var structure_revision := int(root.get_meta("ui_contract_structure_revision", 0))
+	var cached_revision := int(root.get_meta("button_focus_controls_revision", -1))
+	var button_controls: Array = root.get_meta("button_focus_controls", [])
+	if cached_revision != structure_revision or not root.has_meta("button_focus_controls"):
+		button_controls = []
+		var seen_button_ids: Dictionary = {}
+		for node in root.find_children("*", "Button", true, false):
+			var button := node as Button
+			if button == null:
+				continue
+			var button_id := button.get_instance_id()
+			if seen_button_ids.has(button_id):
+				continue
+			seen_button_ids[button_id] = true
+			button_controls.append(button)
+		root.set_meta("button_focus_controls", button_controls)
+		root.set_meta("button_focus_controls_revision", structure_revision)
+	var controls: Array = []
+	for candidate in button_controls:
+		var button := candidate as Button
+		if button != null and is_instance_valid(button) and root.is_ancestor_of(button):
+			controls.append(button)
+	configure_ordered_focus_navigation(root, controls, default_focus_name, grab_default_focus)
 
 func center_touch_button_pivot_by_id(button_id: int) -> void:
 	var button = node_from_instance_id(button_id) as Button
@@ -3225,6 +3315,8 @@ func apply_centered_rect(control: Control, center: Vector2, size: Vector2) -> vo
 	control.offset_bottom = size.y * 0.5
 
 func set_status(text: String) -> void:
+	if text == last_status_text:
+		return
 	last_status_text = text
 	status_last_updated_msec = Time.get_ticks_msec()
 	if status_label != null and is_instance_valid(status_label):
@@ -4895,6 +4987,8 @@ func setup_tile_order() -> void:
 	tile_face_sub_cache.clear()
 	tile_corner_cache.clear()
 	tile_accent_cache.clear()
+	tile_semantic_cache.clear()
+	tile_semantic_cache_order.clear()
 	var orphan_lookup: Dictionary = {}
 	for orphan_code in THIRTEEN_ORPHANS_CODES:
 		orphan_lookup[str(orphan_code)] = true
@@ -5441,8 +5535,7 @@ func tile_presence_set(tiles: Array) -> Dictionary:
 	return result
 
 func has_tile_list(hand: Array, tiles: Array) -> bool:
-	var copy = hand.duplicate()
-	return remove_tile_list(copy, tiles)
+	return has_tile_list_counts(tile_counts(hand), tiles)
 
 func consume_tile_count(counts: Array, tile: String, amount: int) -> bool:
 	var index = tile_index(tile)
@@ -5474,17 +5567,18 @@ func consume_tile_list_counts(counts: Array, tiles: Array) -> bool:
 		counts[first_index] = int(counts[first_index]) - 1
 		counts[second_index] = int(counts[second_index]) - 1
 		return true
-	var required: Dictionary = {}
+	var required := make_empty_tile_counts()
 	for tile in tiles:
 		var index = tile_index(str(tile))
 		if index < 0 or index >= counts.size():
 			return false
-		required[index] = int(required.get(index, 0)) + 1
-	for index in required.keys():
-		if int(counts[int(index)]) < int(required[index]):
+		required[index] = int(required[index]) + 1
+	for index in range(required.size()):
+		if int(required[index]) > int(counts[index]):
 			return false
-	for index in required.keys():
-		counts[int(index)] = int(counts[int(index)]) - int(required[index])
+	for index in range(required.size()):
+		if int(required[index]) > 0:
+			counts[index] = int(counts[index]) - int(required[index])
 	return true
 
 func restore_tile_list_counts(counts: Array, tiles: Array) -> void:
@@ -5671,26 +5765,37 @@ func rebuild_online_player_index(game: Dictionary) -> void:
 			online_players_by_seat[seat] = player
 
 func get_player_info(seat: int) -> Dictionary:
+	var cache_token := "%s|%d|%d|%d" % [mode, ai_state_revision, online_game_revision, players.size()]
+	if cache_token != player_info_cache_token:
+		player_info_cache_token = cache_token
+		player_info_cache.clear()
+	if player_info_cache.has(seat):
+		return player_info_cache[seat]
+	var result: Dictionary = {}
 	if mode == "offline":
 		var player: Dictionary = players[seat] if seat >= 0 and seat < players.size() else {}
 		var hand_value = player.get("hand", [])
 		var hand_count = hand_value.size() if hand_value is Array else int(player.get("hand_count", 0))
-		return {
+		result = {
 			"name": str(player.get("name", "玩家")),
 			"hand_count": hand_count,
 			"flowers": int(player.get("flowers", 0)),
 			"flower_tiles": player.get("flower_tiles", []),
 			"score": int(player.get("score", 0)),
 		}
-	var online_player := online_player_for_seat(seat)
-	if not online_player.is_empty():
-		return {
+	else:
+		var online_player := online_player_for_seat(seat)
+		if not online_player.is_empty():
+			result = {
 			"name": str(online_player.get("name", "玩家")),
 			"hand_count": int(online_player.get("handCount", 0)),
 			"flowers": int(online_player.get("flowerCount", 0)),
 			"score": int(online_player.get("score", 0)),
 		}
-	return {"name": "空位", "hand_count": 0, "flowers": 0, "score": 0}
+		else:
+			result = {"name": "空位", "hand_count": 0, "flowers": 0, "score": 0}
+	player_info_cache[seat] = result
+	return result
 
 func get_current_seat() -> int:
 	return current_seat if mode == "offline" else int(online_game.get("currentSeat", 0))
@@ -5724,33 +5829,27 @@ func tail_window_start(total: int, limit: int) -> int:
 
 func join_tail_lines(items: Array, limit: int) -> String:
 	var start := tail_window_start(items.size(), limit)
-	var output := ""
+	var lines: Array[String] = []
 	for i in range(start, items.size()):
-		if output != "":
-			output += "\n"
-		output += str(items[i])
-	return output
+		lines.append(str(items[i]))
+	return "\n".join(lines)
 
 func join_tile_labels(tiles: Array, start_index: int = 0, max_count: int = -1) -> String:
 	var start: int = min(max(0, start_index), tiles.size())
 	var end: int = tiles.size()
 	if max_count >= 0:
 		end = min(end, start + max_count)
-	var output := ""
+	var labels: Array[String] = []
 	for i in range(start, end):
-		if output != "":
-			output += " "
-		output += tile_label(str(tiles[i]))
-	return output
+		labels.append(tile_label(str(tiles[i])))
+	return " ".join(labels)
 
 func join_limited_strings(values: Array, separator: String, max_count: int) -> String:
 	var end: int = min(values.size(), max(0, max_count))
-	var output := ""
+	var selected: Array[String] = []
 	for i in range(end):
-		if output != "":
-			output += separator
-		output += str(values[i])
-	return output
+		selected.append(str(values[i]))
+	return separator.join(selected)
 
 func flower_preview(seat: int) -> String:
 	if mode != "offline" or seat < 0 or seat >= players.size():
@@ -5770,9 +5869,18 @@ func package_payer_from_state(winner: int) -> int:
 func package_preview(seat: int) -> String:
 	if mode != "offline":
 		return ""
+	var package_token := "%d|%d|%d" % [ai_package_liability_revision, players.size(), offline_package_liability.size()]
+	if package_token != package_preview_cache_token:
+		package_preview_cache_token = package_token
+		package_preview_cache.clear()
+	if package_preview_cache.has(seat):
+		return str(package_preview_cache[seat])
 	var payer = package_payer_from_state(seat)
+	var preview := ""
 	if payer >= 0:
-		return "%s包" % players[payer]["name"]
+		preview = "%s包" % players[payer]["name"]
+		package_preview_cache[seat] = preview
+		return preview
 	var targets: Array[String] = []
 	for key in offline_package_liability.keys():
 		if int(offline_package_liability[key]) == seat:
@@ -5780,8 +5888,9 @@ func package_preview(seat: int) -> String:
 			if package_payer_from_state(winner) == seat:
 				targets.append(str(players[winner]["name"]))
 	if not targets.is_empty():
-		return "包%s" % "、".join(targets)
-	return ""
+		preview = "包%s" % "、".join(targets)
+	package_preview_cache[seat] = preview
+	return preview
 
 func active_package_lines() -> Array[String]:
 	var lines: Array[String] = []
@@ -5915,6 +6024,37 @@ func tile_accent(tile: String) -> Color:
 	if tile.ends_with("B"):
 		return Color(0.14, 0.28, 0.62)
 	return Color(0.14, 0.16, 0.16)
+
+
+func tile_semantic_record(tile: String) -> Dictionary:
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var code := normalize_tile_code(tile)
+	if code == "":
+		code = tile
+	var cached: Variant = tile_semantic_cache.get(code, null)
+	if cached != null:
+		return cached
+	var label := str(tile_label_cache.get(code, ""))
+	if label == "" and not tile_label_cache.has(code):
+		label = tile_label(code)
+	var corner := str(tile_corner_cache.get(code, ""))
+	if corner == "" and not tile_corner_cache.has(code):
+		corner = tile_corner(code)
+	var accent: Color = tile_accent_cache[code] if tile_accent_cache.has(code) else tile_accent(code)
+	var speech_label := str(tile_speech_label_cache[code]) if tile_speech_label_cache.has(code) else tile_speech_label(code)
+	var record := {
+		"code": code,
+		"label": label,
+		"corner": corner,
+		"speech_label": speech_label,
+		"accent": accent,
+	}
+	tile_semantic_cache[code] = record
+	tile_semantic_cache_order.append(code)
+	while tile_semantic_cache_order.size() > 128:
+		tile_semantic_cache.erase(tile_semantic_cache_order.pop_front())
+	return record
 
 func claim_label(claim: String) -> String:
 	match claim:

@@ -82,7 +82,7 @@ func online_game_disconnected() -> bool:
 func online_recovery_connecting() -> bool:
 	if not online_game_disconnected():
 		return false
-	return online_feedback.find("正在重新连接") >= 0 or online_feedback.find("正在连接") >= 0
+	return online_recovery_reason_code == "connecting"
 
 func online_recovery_status_text() -> String:
 	# Keep one short state sentence in the HUD while the action lane carries the
@@ -126,7 +126,8 @@ func online_recovery_view_model(now_msec: int = -1) -> Dictionary:
 	var attempt := maxi(online_reconnect_attempts, 1)
 	var cooldown := remaining_msec > 0
 	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
-	var compact := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+	var viewport_size := effective_viewport_size()
+	var compact := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	var phase_text := "正在连接 · 第%d次" % attempt if reconnecting else ("等待重试 · %d秒后可重连" % remaining_seconds if cooldown else "可立即重连")
 	var button_text := "连接中 · 第%d次" % attempt if reconnecting else ("%d秒后可重连" % remaining_seconds if cooldown else "立即重连 · 第%d次" % attempt)
 	var status_text := ("断线·连接中" if compact else "断线 · 连接中 · 第%d次" % attempt) if reconnecting else (("断线·%d秒后重连" % remaining_seconds if compact else "断线 · %d秒后可重连" % remaining_seconds) if cooldown else ("断线·重连" if compact else "断线 · 可立即重连"))
