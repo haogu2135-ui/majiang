@@ -117,7 +117,10 @@ func round_replay_digest(events: Array = []) -> String:
 	return str(last.get("digest", "")) if typeof(last) == TYPE_DICTIONARY else ""
 
 func ensure_round_replay_view_cache() -> void:
-	var cache_key := "%s|%d|%d" % [active_round_id, round_event_sequence, round_event_history.size()]
+	# The history can be edited by restore/import/test callers without going
+	# through record_round_event(), so sequence and size alone are not enough to
+	# decide whether the derived replay view is still current.
+	var cache_key := "%s|%d|%d|%d" % [active_round_id, round_event_sequence, round_event_history.size(), hash(round_event_history)]
 	if replay_view_cache_round_id == cache_key and replay_view_cache_sequence == round_event_sequence and not replay_view_cache.is_empty():
 		return
 	var events := round_event_history.duplicate(true)
@@ -443,8 +446,22 @@ func request_delete_replay_archive(archive_id: String) -> void:
 
 func set_replay_search_query(query: String) -> void:
 	replay_search_query = query.strip_edges().left(64)
+	replay_search_pending_query = replay_search_query
+	replay_search_request_revision += 1
 	replay_delete_target_id = ""
 	replay_delete_confirming = false
+	if replay_search_flush_queued:
+		return
+	replay_search_flush_queued = true
+	call_deferred("flush_replay_search_query", replay_search_request_revision)
+
+
+func flush_replay_search_query(expected_revision: int) -> void:
+	if expected_revision != replay_search_request_revision:
+		call_deferred("flush_replay_search_query", replay_search_request_revision)
+		return
+	replay_search_flush_queued = false
+	replay_search_query = replay_search_pending_query
 	refresh_replay_archive_view()
 
 
@@ -581,6 +598,7 @@ func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool
 	telemetry_outbox.append(event)
 	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
 		telemetry_outbox.pop_front()
+	telemetry_queue_sync_revision += 1
 	schedule_telemetry_save()
 	return true
 
@@ -602,10 +620,10 @@ func toggle_telemetry_consent() -> void:
 	if telemetry_mutation_in_flight:
 		return
 	telemetry_mutation_revision += 1
+	telemetry_consent_sync_revision += 1
+	telemetry_recent_action_sync_revision += 1
 	var mutation_revision := telemetry_mutation_revision
 	telemetry_mutation_in_flight = true
-	if telemetry_sheet_open:
-		refresh_telemetry_data_sheet()
 	telemetry_consent_decided = true
 	telemetry_consent = not telemetry_consent
 	if telemetry_consent:
@@ -614,7 +632,9 @@ func toggle_telemetry_consent() -> void:
 		telemetry_record_event("consent_granted")
 	else:
 		telemetry_outbox.clear()
+		telemetry_queue_sync_revision += 1
 		telemetry_export_status = "未导出"
+		telemetry_export_sync_revision += 1
 		telemetry_last_action = "已关闭记录并清空本地队列"
 		save_telemetry_state()
 		save_settings()
@@ -633,6 +653,7 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 		telemetry_clear_confirming = false
 		telemetry_clear_confirm_deadline_msec = 0
 		telemetry_last_action = "清除确认已超时，未删除任何数据"
+		telemetry_recent_action_sync_revision += 1
 		refresh_telemetry_data_sheet()
 		show_toast("清除确认已超时，数据未删除")
 		return
@@ -640,6 +661,7 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 		telemetry_clear_confirming = true
 		telemetry_clear_confirm_deadline_msec = Time.get_ticks_msec() + 5000
 		telemetry_last_action = "等待确认清除本地匿名数据"
+		telemetry_recent_action_sync_revision += 1
 		var clear_button := root_layer.find_child("TelemetryClearButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 		if clear_button != null:
 			clear_button.set_meta("confirm_state", "armed")
@@ -653,12 +675,15 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 		return
 	telemetry_clear_confirming = false
 	telemetry_clear_confirm_deadline_msec = 0
+	telemetry_recent_action_sync_revision += 1
 	var clear_button := root_layer.find_child("TelemetryClearButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if clear_button != null:
 		clear_button.set_meta("confirm_state", "executed")
 		clear_button.set_meta("first_click_is_non_destructive", true)
 	telemetry_outbox.clear()
+	telemetry_queue_sync_revision += 1
 	telemetry_export_status = "未导出"
+	telemetry_export_sync_revision += 1
 	telemetry_last_action = "已清除本地匿名数据"
 	save_telemetry_state()
 	if telemetry_sheet_open:
@@ -670,7 +695,9 @@ func export_telemetry_data() -> bool:
 	var export_payload := {"schema": TELEMETRY_SCHEMA_VERSION, "events": telemetry_outbox.duplicate(true)}
 	DisplayServer.clipboard_set(JSON.stringify(export_payload))
 	telemetry_export_status = "已复制 · %d 条" % telemetry_outbox.size()
+	telemetry_export_sync_revision += 1
 	telemetry_last_action = "已导出并复制 %d 条匿名事件" % telemetry_outbox.size()
+	telemetry_recent_action_sync_revision += 1
 	if telemetry_sheet_open:
 		refresh_telemetry_data_sheet()
 		# The sheet footer is the modal's single success channel; a global toast
@@ -691,27 +718,36 @@ func flush_telemetry_outbox() -> bool:
 	return false
 
 
-func is_valid_replay_base64_shape(value: String) -> bool:
-	if value.is_empty() or value.length() % 4 == 1:
-		return false
-	var padding_start := value.length()
-	for index in range(value.length()):
-		var codepoint := value.unicode_at(index)
+func parse_replay_base64_shape(value: String) -> Dictionary:
+	var code := value.strip_edges()
+	if code.is_empty():
+		return {"valid": false, "error_position": -1, "reason": "等待粘贴回放码"}
+	if code.length() % 4 == 1:
+		return {"valid": false, "error_position": code.length(), "reason": "格式不正确 · 第%d个字符后长度无法组成 Base64" % code.length()}
+	var padding_start := code.length()
+	for index in range(code.length()):
+		var codepoint := code.unicode_at(index)
 		var is_alphabet := (codepoint >= 65 and codepoint <= 90) or (codepoint >= 97 and codepoint <= 122) or (codepoint >= 48 and codepoint <= 57) or codepoint == 43 or codepoint == 47
 		if codepoint == 61:
-			if padding_start == value.length():
+			if padding_start == code.length():
 				padding_start = index
-		elif padding_start != value.length() or not is_alphabet:
-			return false
-	var padding_count := value.length() - padding_start
+		elif padding_start != code.length() or not is_alphabet:
+			return {"valid": false, "error_position": index + 1, "reason": "格式不正确 · 第%d个字符不是 Base64 字符" % (index + 1)}
+	var padding_count := code.length() - padding_start
 	if padding_count > 2:
-		return false
-	return padding_count == 0 or value.length() % 4 == 0
+		return {"valid": false, "error_position": padding_start + 1, "reason": "格式不正确 · 结尾最多允许两个补位字符"}
+	if padding_count > 0 and code.length() % 4 != 0:
+		return {"valid": false, "error_position": padding_start + 1, "reason": "格式不正确 · 补位字符必须位于完整 Base64 分组末尾"}
+	return {"valid": true, "error_position": -1, "reason": "格式可用 · 点击导入进行完整校验"}
+
+
+func is_valid_replay_base64_shape(value: String) -> bool:
+	return bool(parse_replay_base64_shape(value).get("valid", false))
 
 
 func import_round_replay_share_code(code: String) -> Dictionary:
 	var clean := code.strip_edges()
-	if not is_valid_replay_base64_shape(clean):
+	if not bool(parse_replay_base64_shape(clean).get("valid", false)):
 		return {}
 	var decoded := Marshalls.base64_to_raw(clean)
 	if decoded.is_empty() or decoded.size() > REPLAY_SHARE_MAX_BYTES:

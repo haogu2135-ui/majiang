@@ -1285,9 +1285,9 @@ func offline_hand_ai_briefing_text() -> String:
 	return " · ".join(parts)
 
 func ai_profile(seat: int) -> Dictionary:
-	# Profile definitions are immutable runtime constants. Read-only callers can
-	# share them; callers that edit a profile must request an explicit duplicate.
-	return ai_profile_source(seat)
+	# Keep the canonical profile private to the AI evaluator. Public callers may
+	# annotate or tune the returned profile without changing future decisions.
+	return ai_profile_source(seat).duplicate(true)
 
 func is_ai_controlled_seat(seat: int) -> bool:
 	if seat < 0 or seat >= players.size():

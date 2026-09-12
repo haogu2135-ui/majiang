@@ -260,6 +260,8 @@ func _process(_delta: float) -> void:
 	if telemetry_clear_confirming and telemetry_clear_confirm_deadline_msec > 0 and now >= telemetry_clear_confirm_deadline_msec:
 		telemetry_clear_confirming = false
 		telemetry_clear_confirm_deadline_msec = 0
+		telemetry_last_action = "清除确认已超时，未删除任何数据"
+		telemetry_recent_action_sync_revision += 1
 		if telemetry_sheet_open:
 			refresh_telemetry_data_sheet()
 	keep_background_music_alive(now)
@@ -274,6 +276,11 @@ func _process(_delta: float) -> void:
 	if mode == "online_lobby" or mode == "online_game":
 		poll_online(now)
 		update_online_slow_response_notice(now)
+	if mode == "online_lobby" and online_log_follow_latest_pending_frames > 0:
+		var pending_log_scroll := root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer if root_layer != null and is_instance_valid(root_layer) else null
+		if pending_log_scroll != null:
+			online_log_follow_latest_pending_frames -= 1
+			scroll_online_log_to_end()
 	if now >= next_ui_deadline_poll_msec:
 		next_ui_deadline_poll_msec = now + UI_DEADLINE_POLL_INTERVAL_MSEC
 		update_pending_claim_live_state()
@@ -471,15 +478,18 @@ func schedule_online_recovery_focus() -> void:
 	online_recovery_focus_pending = true
 	call_deferred("focus_online_recovery_if_current", root_id)
 
-func focus_online_recovery_if_current(expected_root_id: int) -> void:
+func focus_online_recovery_if_current(expected_root_id: int, expected_generation: int = -1, expected_control_name: String = "OnlineReconnectGameButton") -> void:
 	if expected_root_id != online_recovery_focus_root_id:
-		return
+		if expected_control_name == "OnlineReconnectGameButton":
+			return
 	online_recovery_focus_pending = false
 	if root_layer == null or not is_instance_valid(root_layer) or root_layer.get_instance_id() != expected_root_id:
 		return
-	if mode != "online_game" or not online_game_disconnected():
+	if expected_generation >= 0 and ui_page_generation != expected_generation:
 		return
-	focus_named_control("OnlineReconnectGameButton")
+	if mode != "online_game" or (not online_game_disconnected() and str(online_game.get("phase", "")) != "unknown"):
+		return
+	focus_named_control(expected_control_name)
 
 func restore_settings_focus_after_close(control_name: String, expected_token: int, expected_mode: String) -> void:
 	await get_tree().process_frame
@@ -977,14 +987,26 @@ func focus_hand_keyboard_control() -> void:
 func hand_tile_button_for_source_index(source_index: int) -> Button:
 	if root_layer == null or not is_instance_valid(root_layer) or source_index < 0:
 		return null
-	for node in root_layer.find_children("HandTile_*", "Control", true, false):
-		var tile_node := node as Control
-		if tile_node == null or int(tile_node.get_meta("hand_source_index", -1)) != source_index:
-			continue
-		for button_node in tile_node.find_children("*", "Button", true, false):
-			var button := button_node as Button
-			if button != null and not button.disabled:
-				return button
+	var root_id := root_layer.get_instance_id()
+	if hand_tile_button_registry_root_id != root_id:
+		hand_tile_button_registry.clear()
+		hand_tile_button_registry_root_id = root_id
+		for node in root_layer.find_children("HandTile_*", "Control", true, false):
+			var tile_node := node as Control
+			if tile_node == null:
+				continue
+			var tile_index := int(tile_node.get_meta("hand_source_index", -1))
+			if tile_index < 0:
+				continue
+			for button_node in tile_node.find_children("*", "Button", true, false):
+				var candidate := button_node as Button
+				if candidate != null and not candidate.disabled:
+					hand_tile_button_registry[tile_index] = candidate
+					break
+	var button := hand_tile_button_registry.get(source_index, null) as Button
+	if button != null and is_instance_valid(button) and not button.disabled:
+		return button
+	hand_tile_button_registry.erase(source_index)
 	return null
 
 
@@ -1713,11 +1735,9 @@ func poll_voice_capture() -> void:
 		return
 	while voice_capture_effect.get_frames_available() >= VOICE_CHUNK_FRAMES:
 		var frames = voice_capture_effect.get_buffer(VOICE_CHUNK_FRAMES)
-		if not voice_frames_have_signal(frames):
-			continue
 		var payload = build_voice_payload(frames)
 		if payload.is_empty():
-			return
+			continue
 		send_online(payload)
 
 
@@ -1733,15 +1753,20 @@ func encode_voice_frames(frames: PackedVector2Array) -> Dictionary:
 	if frames.is_empty():
 		return {}
 	var bytes = PackedByteArray()
+	bytes.resize(frames.size() * 2)
 	var peak = 0.0
-	for frame in frames:
+	for index in range(frames.size()):
+		var frame := frames[index]
 		var mono = clamp((frame.x + frame.y) * 0.5, -1.0, 1.0)
 		peak = max(peak, abs(mono))
 		var sample = int(round(mono * 32767.0))
 		if sample < 0:
 			sample += 65536
-		bytes.append(sample & 0xff)
-		bytes.append((sample >> 8) & 0xff)
+		var byte_index := index * 2
+		bytes[byte_index] = sample & 0xff
+		bytes[byte_index + 1] = (sample >> 8) & 0xff
+	if peak < ONLINE_VOICE_SILENCE_THRESHOLD:
+		return {"silent": true, "peak": peak, "bytes": bytes.size()}
 	return {
 		"audio": Marshalls.raw_to_base64(bytes),
 		"peak": peak,
@@ -1753,10 +1778,20 @@ func clear_remote_voice_players() -> void:
 		if player == null or not is_instance_valid(player):
 			continue
 		player.stop()
+		player.stream = null
+		remote_voice_player_meta.erase(player.get_instance_id())
+
+
+func destroy_remote_voice_players() -> void:
+	for player in remote_voice_players:
+		if player == null or not is_instance_valid(player):
+			continue
+		player.stop()
 		if player.get_parent() != null:
 			player.get_parent().remove_child(player)
 		player.queue_free()
 	remote_voice_players.clear()
+	remote_voice_player_meta.clear()
 
 
 func _on_remote_voice_player_finished(_player: AudioStreamPlayer) -> void:
@@ -1765,18 +1800,25 @@ func _on_remote_voice_player_finished(_player: AudioStreamPlayer) -> void:
 	pass
 
 
-func remote_voice_player_for_stream(stream: AudioStream) -> AudioStreamPlayer:
+func remote_voice_player_for_stream(stream: AudioStream, speaker_seat: int = -1, sequence: int = -1) -> AudioStreamPlayer:
 	var reusable: AudioStreamPlayer = null
+	var oldest_started := 9223372036854775807
 	for index in range(remote_voice_players.size() - 1, -1, -1):
 		var candidate := remote_voice_players[index]
 		if candidate == null or not is_instance_valid(candidate):
 			remote_voice_players.remove_at(index)
+			remote_voice_player_meta.erase(candidate.get_instance_id() if candidate != null else -1)
 			continue
 		if reusable == null and not candidate.playing:
 			reusable = candidate
 	if reusable == null and remote_voice_players.size() >= ONLINE_REMOTE_VOICE_PLAYER_LIMIT:
-		reusable = remote_voice_players[0]
-		reusable.stop()
+		for candidate in remote_voice_players:
+			var started := int(remote_voice_player_meta.get(candidate.get_instance_id(), {}).get("started_msec", 0))
+			if started < oldest_started:
+				oldest_started = started
+				reusable = candidate
+		if reusable != null:
+			reusable.stop()
 	if reusable == null:
 		reusable = AudioStreamPlayer.new()
 		reusable.name = "RemoteVoicePlayer_%d" % remote_voice_players.size()
@@ -1786,6 +1828,11 @@ func remote_voice_player_for_stream(stream: AudioStream) -> AudioStreamPlayer:
 		reusable.finished.connect(Callable(self, "_on_remote_voice_player_finished").bind(reusable))
 		remote_voice_players.append(reusable)
 	reusable.stream = stream
+	remote_voice_player_meta[reusable.get_instance_id()] = {
+		"speaker": speaker_seat,
+		"sequence": sequence,
+		"started_msec": Time.get_ticks_msec(),
+	}
 	return reusable
 
 
@@ -1794,25 +1841,30 @@ func handle_voice_message(data: Dictionary) -> void:
 	if speaker_seat >= 0 and speaker_seat == int(online_game.get("youSeat", -2)):
 		return
 	var sequence := int(first_present(data, ["sequence", "seq"], -1))
-	if sequence >= 0:
-		var sequence_key := "%d:%d" % [speaker_seat, sequence]
-		if online_seen_voice_sequences.has(sequence_key):
-			return
-		online_seen_voice_sequences[sequence_key] = true
-		while online_seen_voice_sequences.size() > ONLINE_SEEN_EVENT_LIMIT:
-			online_seen_voice_sequences.erase(online_seen_voice_sequences.keys()[0])
 	var audio_base64 := str(data.get("audio", "")).strip_edges()
 	var sample_rate := int(data.get("sampleRate", AudioServer.get_mix_rate()))
 	var channels := int(data.get("channels", 1))
 	if audio_base64 == "" or sample_rate < ONLINE_VOICE_MIN_SAMPLE_RATE or sample_rate > ONLINE_VOICE_MAX_SAMPLE_RATE or not [1, 2].has(channels):
+		online_voice_rejection_count += 1
+		return
+	var sequence_key := "%d:%d" % [speaker_seat, sequence] if sequence >= 0 else ""
+	if sequence_key != "" and online_seen_voice_sequences.has(sequence_key):
 		return
 	var decoded := Marshalls.base64_to_raw(audio_base64)
 	if decoded.is_empty() or decoded.size() > ONLINE_VOICE_PACKET_MAX_BYTES or decoded.size() % 2 != 0:
+		online_voice_rejection_count += 1
 		return
 	var stream = make_voice_stream(audio_base64, sample_rate, channels, decoded)
 	if stream == null:
+		online_voice_rejection_count += 1
 		return
-	var player := remote_voice_player_for_stream(stream)
+	var player := remote_voice_player_for_stream(stream, speaker_seat, sequence)
+	if sequence_key != "":
+		online_seen_voice_sequences[sequence_key] = true
+		online_seen_voice_sequence_order.append(sequence_key)
+		while online_seen_voice_sequence_order.size() > ONLINE_SEEN_EVENT_LIMIT:
+			var oldest_key: String = str(online_seen_voice_sequence_order.pop_front())
+			online_seen_voice_sequences.erase(oldest_key)
 	player.play()
 
 
@@ -1883,11 +1935,21 @@ func render_room_log() -> void:
 	var logs: Array = online_room.get("logs", []) as Array
 	if typeof(logs) != TYPE_ARRAY:
 		logs = []
-	var log_fingerprint_parts: Array[String] = [str(logs.size())]
-	var fingerprint_start: int = maxi(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
-	for fingerprint_index in range(fingerprint_start, logs.size()):
-		log_fingerprint_parts.append(str(hash(online_log_entry_text(logs[fingerprint_index]))))
-	var log_fingerprint := "|".join(log_fingerprint_parts)
+	var log_fingerprint := online_log_cached_fingerprint
+	var rendered_lines: Array[String] = online_log_cached_lines
+	if online_log_fingerprint_revision != online_log_revision or rendered_lines.size() != logs.size():
+		rendered_lines = []
+		var log_fingerprint_parts: Array[String] = [str(logs.size())]
+		var fingerprint_start: int = maxi(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
+		for fingerprint_index in range(fingerprint_start, logs.size()):
+			var normalized_line := online_log_entry_text(logs[fingerprint_index]).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
+			if normalized_line != "":
+				rendered_lines.append(normalized_line)
+			log_fingerprint_parts.append(str(hash(normalized_line)))
+		log_fingerprint = "|".join(log_fingerprint_parts)
+		online_log_cached_lines = rendered_lines
+		online_log_cached_fingerprint = log_fingerprint
+		online_log_fingerprint_revision = online_log_revision
 	var log_count := online_lobby_log_count()
 	if log_fingerprint == online_log_render_fingerprint:
 		if not online_log_initialized:
@@ -1909,22 +1971,17 @@ func render_room_log() -> void:
 	if follow_latest:
 		online_log_seen_count = log_count
 		online_log_at_latest = true
+		online_log_follow_latest_pending_frames = 4
 	else:
 		online_log_at_latest = false
+		online_log_follow_latest_pending_frames = 0
 	var start_index: int = maxi(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
 	var can_append_one: bool = logs.size() == online_log_rendered_source_count + 1 and start_index == 0 and not logs_label.text.is_empty() and logs_label.text != "暂无房间日志"
-	var appended_line: String = online_log_entry_text(logs[logs.size() - 1]).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH) if not logs.is_empty() else ""
+	var appended_line: String = str(rendered_lines.back()) if not rendered_lines.is_empty() else ""
 	if can_append_one and appended_line != "":
 		logs_label.text += "· " + appended_line + "\n"
 	else:
-		var text: String = ""
-		if logs.is_empty():
-			text = "暂无房间日志"
-		for i in range(start_index, logs.size()):
-			var line: String = online_log_entry_text(logs[i]).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
-			if line != "":
-				text += "· " + line + "\n"
-		logs_label.text = text
+		logs_label.text = "暂无房间日志" if rendered_lines.is_empty() else "· " + "\n· ".join(rendered_lines) + "\n"
 	online_log_render_fingerprint = log_fingerprint
 	online_log_rendered_source_count = logs.size()
 	refresh_online_log_navigation()
@@ -1951,10 +2008,14 @@ func flush_online_log_scroll_request(expected_revision: int) -> void:
 		return
 	online_log_scroll_request_queued = false
 	if online_log_scroll_request_follow_latest:
-		# RichTextLabel reflow updates the ScrollContainer range one idle pass
-		# after the deferred request. Give the container that pass before reading
-		# max_value, otherwise a newly appended tail can stop at the old maximum.
-		call_deferred("scroll_online_log_to_end_after_layout", expected_revision)
+		# RichTextLabel reflow and ScrollContainer range propagation can land on
+		# several consecutive idle frames. Track the current bottom during a short
+		# settling window so an append cannot leave the user at the previous range.
+		for _frame in range(2):
+			await get_tree().process_frame
+			if expected_revision != online_log_scroll_request_revision:
+				return
+			scroll_online_log_to_end(expected_revision)
 	else:
 		restore_online_log_scroll(online_log_scroll_request_value, expected_revision)
 
@@ -8109,6 +8170,10 @@ func clear_fx_overlays() -> void:
 	if transition_overlay != null and is_instance_valid(transition_overlay):
 		transition_overlay.visible = false
 	transition_active = false
+	if ui_enhancements != null and is_instance_valid(ui_enhancements) and root_layer != null and is_instance_valid(root_layer):
+		var settlement_panel := root_layer.find_child("RoundSummaryPanel", true, false) as Control
+		if settlement_panel != null and is_instance_valid(settlement_panel):
+			ui_enhancements.clear_effects_for_owner(settlement_panel)
 	if fx_layer != null and is_instance_valid(fx_layer):
 		for child in fx_layer.get_children():
 			if child == transition_overlay or child == toast_container or child == fx_turn_pulse or child == fx_burst_root or child == fx_ripple_root:
@@ -9365,6 +9430,13 @@ var chat_send_input: LineEdit = null
 var chat_send_quick_buttons: Array[Button] = []
 var chat_send_cooldown_token := ""
 var chat_send_validity_token := ""
+var chat_message_panel_root_id := 0
+var chat_message_panel: Control = null
+var chat_message_scroll: ScrollContainer = null
+var chat_message_label: Label = null
+var chat_message_range_label: Label = null
+var chat_message_refresh_revision := 0
+var chat_message_refresh_queued := false
 
 
 func chat_panel_rect() -> Rect2:
@@ -9536,24 +9608,81 @@ func toggle_chat_panel() -> void:
 func refresh_chat_panel() -> void:
 	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return
-	for shield_node in root_layer.find_children("ChatPanelInputShield", "Control", true, false):
-		var shield := shield_node as Control
-		if shield != null and is_instance_valid(shield):
-			root_layer.remove_child(shield)
-			shield.queue_free()
-	var old_panel := root_layer.find_child("ChatPanel", true, false) as Control
-	if old_panel != null and is_instance_valid(old_panel):
-		root_layer.remove_child(old_panel)
-		old_panel.queue_free()
-	chat_input = null
-	chat_send_controls_root_id = 0
-	chat_send_cooldown_label = null
-	chat_send_button = null
-	chat_send_input = null
-	chat_send_quick_buttons.clear()
-	chat_send_cooldown_token = ""
-	chat_send_validity_token = ""
-	show_chat_panel()
+	if not bind_chat_message_lane():
+		return
+	chat_message_refresh_revision += 1
+	if chat_message_refresh_queued:
+		return
+	chat_message_refresh_queued = true
+	call_deferred("flush_chat_panel_message_refresh", chat_message_refresh_revision)
+
+
+func bind_chat_message_lane() -> bool:
+	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
+		return false
+	var root_id := root_layer.get_instance_id()
+	if chat_message_panel_root_id == root_id and chat_message_panel != null and is_instance_valid(chat_message_panel) and root_layer.is_ancestor_of(chat_message_panel) and chat_message_scroll != null and is_instance_valid(chat_message_scroll) and chat_message_label != null and is_instance_valid(chat_message_label) and chat_message_range_label != null and is_instance_valid(chat_message_range_label):
+		return true
+	var panel := root_layer.find_child("ChatPanel", true, false) as Control
+	if panel == null or not is_instance_valid(panel):
+		return false
+	chat_message_panel_root_id = root_id
+	chat_message_panel = panel
+	chat_message_scroll = panel.find_child("ChatPanelMessageScroll", true, false) as ScrollContainer
+	chat_message_label = panel.find_child("ChatPanelMessageText", true, false) as Label
+	chat_message_range_label = panel.find_child("ChatPanelMessageRangeLabel", true, false) as Label
+	return chat_message_scroll != null and chat_message_label != null and chat_message_range_label != null
+
+
+func flush_chat_panel_message_refresh(expected_revision: int) -> void:
+	if expected_revision != chat_message_refresh_revision:
+		call_deferred("flush_chat_panel_message_refresh", chat_message_refresh_revision)
+		return
+	chat_message_refresh_queued = false
+	if not bind_chat_message_lane():
+		return
+	var scroll := chat_message_scroll
+	var message_label := chat_message_label
+	var range_label := chat_message_range_label
+	if scroll == null or message_label == null or range_label == null:
+		return
+	var scrollbar := scroll.get_v_scroll_bar()
+	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page) if scrollbar != null else 0.0
+	var follow_latest := max_scroll <= 0.5 or float(scroll.scroll_vertical) >= max_scroll - 1.0
+	var chat_text := "\n".join(chat_messages)
+	if chat_text.strip_edges() == "":
+		chat_text = "等待房间消息"
+	var chat_display_lines: Array[String] = []
+	for message_index in range(chat_messages.size()):
+		chat_display_lines.append("• %02d  %s" % [message_index + 1, str(chat_messages[message_index])])
+	var display_text: String = "\n".join(chat_display_lines) if not chat_display_lines.is_empty() else "· 等待房间消息"
+	message_label.text = display_text
+	message_label.tooltip_text = chat_text
+	var wrap_width := float(scroll.get_meta("message_wrap_width_px", 0.0))
+	if wrap_width <= 1.0:
+		wrap_width = maxf(140.0, safe_content_pixel_size().x * maxf(0.001, chat_panel_rect().size.x - chat_panel_rect().position.x) * 0.86)
+	var chat_height := estimate_wrapped_text_height(display_text, wrap_width, accessibility_font_size(10 if bool(chat_message_panel.get_meta("compact_chat", false)) else 12), 3.0)
+	message_label.custom_minimum_size = Vector2(0.0, maxf(44.0, chat_height))
+	configure_wrapped_label(message_label, wrap_width, message_label.custom_minimum_size.y, 3.0)
+	message_label.set_meta("chat_message_revision", expected_revision)
+	message_label.set_meta("chat_message_count", chat_messages.size())
+	range_label.set_meta("chat_message_revision", expected_revision)
+	if follow_latest:
+		call_deferred("scroll_chat_panel_to_end_for_revision", expected_revision, scroll.get_instance_id())
+	else:
+		refresh_chat_message_range_status()
+
+
+func scroll_chat_panel_to_end_for_revision(expected_revision: int, scroll_id: int) -> void:
+	if expected_revision != chat_message_refresh_revision or not chat_panel_open:
+		return
+	var scroll := node_from_instance_id(scroll_id) as ScrollContainer
+	if scroll == null or not is_instance_valid(scroll) or not bind_chat_message_lane() or scroll != chat_message_scroll:
+		return
+	var scrollbar := scroll.get_v_scroll_bar()
+	if scrollbar != null:
+		scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
+	refresh_chat_message_range_status()
 
 
 func close_chat_panel(restore_focus: bool = true) -> void:
@@ -9587,6 +9716,12 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 	chat_send_quick_buttons.clear()
 	chat_send_cooldown_token = ""
 	chat_send_validity_token = ""
+	chat_message_panel_root_id = 0
+	chat_message_panel = null
+	chat_message_scroll = null
+	chat_message_label = null
+	chat_message_range_label = null
+	chat_message_refresh_queued = false
 	if restore_focus:
 		call_deferred("restore_chat_panel_focus")
 	else:
@@ -9609,9 +9744,11 @@ func scroll_chat_panel_to_end() -> void:
 func refresh_chat_message_range_status() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
-	var scroll := root_layer.find_child("ChatPanelMessageScroll", true, false) as ScrollContainer
-	var status := root_layer.find_child("ChatPanelMessageRangeLabel", true, false) as Label
-	var message_label := root_layer.find_child("ChatPanelMessageText", true, false) as Label
+	if not bind_chat_message_lane():
+		return
+	var scroll := chat_message_scroll
+	var status := chat_message_range_label
+	var message_label := chat_message_label
 	if scroll == null or status == null:
 		return
 	var total := chat_messages.size()
@@ -9706,25 +9843,55 @@ func update_action_dock_focus_label(button_id: int) -> void:
 	var button := node_from_instance_id(button_id) as Button
 	if button == null or not is_instance_valid(button):
 		return
-	var status_slot := root_layer.find_child("ActionDockStatusLabel", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
+	var status_slot := action_dock_status_label if action_dock_status_label != null and is_instance_valid(action_dock_status_label) else null
+	if status_slot == null and root_layer != null and is_instance_valid(root_layer):
+		status_slot = root_layer.find_child("ActionDockStatusLabel", true, false) as Label
+		action_dock_status_label = status_slot
 	if status_slot == null:
 		return
 	if bool(status_slot.get_meta("ui_action_status_priority", false)):
 		return
-	status_slot.text = "当前焦点 · %s" % button.text
-	status_slot.tooltip_text = "%s · %s" % [button.tooltip_text if button.tooltip_text != "" else button.text, action_button_shortcut_hint(button.text)]
-	set_ui_full_text(status_slot, status_slot.text, status_slot.tooltip_text)
+	var next_text := "当前焦点 · %s" % button.text
+	var next_tooltip := "%s · %s" % [button.tooltip_text if button.tooltip_text != "" else button.text, action_button_shortcut_hint(button.text)]
+	var focus_token := "%d|%s|%s" % [button.get_instance_id(), next_text, next_tooltip]
+	if str(status_slot.get_meta("action_focus_text_token", "")) == focus_token:
+		return
+	status_slot.set_meta("action_focus_text_token", focus_token)
+	status_slot.text = next_text
+	status_slot.tooltip_text = next_tooltip
+	set_ui_full_text(status_slot, next_text, next_tooltip)
 
 
 func toggle_table_log_archive() -> void:
 	if mode != "offline" and mode != "online_game":
 		return
 	table_log_archive_open = not table_log_archive_open
+	table_log_focus_generation += 1
+	var focus_generation := table_log_focus_generation
+	var focus_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
+	var expected_open := table_log_archive_open
 	request_game_render()
 	if table_log_archive_open:
-		call_deferred("focus_named_control", "TableLogArchiveCloseButton")
+		call_deferred("focus_table_log_archive_if_current", focus_generation, focus_root_id, expected_open, "TableLogArchiveCloseButton")
 	else:
-		call_deferred("focus_named_control", "TableLogArchiveButton")
+		call_deferred("focus_table_log_archive_if_current", focus_generation, focus_root_id, expected_open, "TableLogArchiveButton")
+
+
+func focus_table_log_archive_if_current(expected_generation: int, expected_root_id: int, expected_open: bool, control_name: String, settle_frames: int = 2) -> void:
+	# request_game_render() is deferred and may be throttled by the render cadence.
+	# Use a deferred frame chain instead of an await coroutine so a page teardown
+	# cannot resume a method whose scene instance has already been released.
+	if settle_frames > 0:
+		call_deferred("focus_table_log_archive_if_current", expected_generation, expected_root_id, expected_open, control_name, settle_frames - 1)
+		return
+	if expected_generation != table_log_focus_generation or table_log_archive_open != expected_open:
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var target := find_ui_contract_control(root_layer, control_name)
+	if target == null or not target.is_visible_in_tree():
+		return
+	focus_named_control(control_name)
 
 func open_table_log_from_chat() -> void:
 	if mode != "online_game":
@@ -9734,20 +9901,26 @@ func open_table_log_from_chat() -> void:
 		table_log_chat_restore_pending = true
 	close_chat_panel(false)
 	table_log_archive_open = true
+	table_log_focus_generation += 1
+	var focus_generation := table_log_focus_generation
+	var focus_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
 	request_game_render()
-	call_deferred("focus_named_control", "TableLogArchiveCloseButton")
+	call_deferred("focus_table_log_archive_if_current", focus_generation, focus_root_id, true, "TableLogArchiveCloseButton")
 
 
 func close_table_log_archive() -> void:
 	if not table_log_archive_open:
 		return
 	table_log_archive_open = false
+	table_log_focus_generation += 1
+	var focus_generation := table_log_focus_generation
+	var focus_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
 	var restore_chat := table_log_chat_restore_pending and mode == "online_game" and not online_game_disconnected()
 	if restore_chat:
 		chat_panel_open = true
 	request_game_render()
 	if not restore_chat:
-		call_deferred("focus_named_control", "TableLogArchiveButton")
+		call_deferred("focus_table_log_archive_if_current", focus_generation, focus_root_id, false, "TableLogArchiveButton")
 
 
 func scroll_table_log_archive_to_end() -> void:
@@ -9759,11 +9932,37 @@ func scroll_table_log_archive_to_end() -> void:
 	var scrollbar := archive_scroll.get_v_scroll_bar()
 	archive_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
 
+func animate_chat_send_panel_feedback(feedback: Control) -> void:
+	if feedback == null or not is_instance_valid(feedback):
+		return
+	var fill := feedback.find_child("ChatSendPanelFill", true, false) as Control
+	var gate := feedback.find_child("ChatSendPanelGate", true, false) as Control
+	if not fx_enabled_effective() or fill == null or gate == null:
+		feedback.modulate.a = 0.92
+		return
+	feedback.modulate.a = 0.0
+	var tw := create_screen_tween_for_owner(feedback)
+	tw.set_parallel(true)
+	tw.tween_property(feedback, "modulate:a", 1.0, 0.08).from(0.0)
+	tw.tween_property(fill, "anchor_right", 1.0, 0.20).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(gate, "scale", Vector2(1.10, 1.10), 0.14).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT)
+	tw.set_parallel(false)
+	tw.tween_property(feedback, "modulate:a", 0.0, 0.24).from(1.0).set_delay(0.16)
+
+
 func play_chat_send_panel_feedback(message: String = "") -> Control:
 	# r215: GPT chrome conversion
 	var panel = find_child("ChatPanel", true, false) as Control
 	if panel == null or not is_instance_valid(panel):
 		return null
+	var reusable := panel.get_node_or_null("ChatSendPanelFeedback") as Control
+	if reusable != null and is_instance_valid(reusable) and not reusable.is_queued_for_deletion():
+		kill_screen_tweens_for_subtree(reusable)
+		var reusable_glyph := reusable.find_child("ChatSendPanelReceiptGlyph", true, false) as Label
+		if reusable_glyph != null:
+			reusable_glyph.text = str(message).substr(0, 1) if str(message).strip_edges() != "" else "发"
+		animate_chat_send_panel_feedback(reusable)
+		return reusable
 	var feedback = Control.new()
 	feedback.name = "ChatSendPanelFeedback"
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -9793,18 +9992,8 @@ func play_chat_send_panel_feedback(message: String = "") -> Control:
 		var tick = make_gpt_tick_strip(rect_full(0.320 + float(i) * 0.130, 0.770, 0.342 + float(i) * 0.130, 0.910), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040))
 		tick.name = "ChatSendPanelTick_%d" % i
 		feedback.add_child(tick)
-	if fx_enabled_effective():
-		feedback.modulate.a = 0.0
-		var tw := create_screen_tween()
-		tw.set_parallel(true)
-		tw.tween_property(feedback, "modulate:a", 1.0, 0.08).from(0.0)
-		tw.tween_property(fill, "anchor_right", 1.0, 0.20).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-		tw.tween_property(gate, "scale", Vector2(1.10, 1.10), 0.14).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT)
-		tw.set_parallel(false)
-		tw.tween_property(feedback, "modulate:a", 0.0, 0.24).from(1.0).set_delay(0.16)
-		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
-	else:
-		feedback.modulate.a = 0.92
+	feedback.set_meta("feedback_reuse_policy", "single_panel_owner_reset_animation")
+	animate_chat_send_panel_feedback(feedback)
 	return feedback
 
 

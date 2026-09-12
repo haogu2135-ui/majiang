@@ -204,25 +204,31 @@ func refresh_battle_hud_lane() -> void:
 	var wall_total := display_wall_total()
 	var wall_state_text_value := wall_state_text(wall_count)
 	var last_discard := get_last_discard()
+	var last_discard_text := tile_label(last_discard) if last_discard != "" else "无"
+	var hud_token := "%d|%d|%s|%s|%d|%d" % [1 if compact_hud else 0, wall_count, wall_state_text_value, last_discard, wall_total, get_last_discard_seat()]
+	if str(root_layer.get_meta("battle_hud_view_token", "")) == hud_token:
+		return
+	root_layer.set_meta("battle_hud_view_token", hud_token)
+	hud_view_token = hud_token
+	hud_lane_refresh_count += 1
 	var status := root_layer.find_child("TopHudStatus", true, false) as Label
 	if status != null:
 		set_dynamic_label_text(status, top_hud_short_status_text(compact_hud), top_hud_status_tooltip_text())
 	var wall := root_layer.find_child("TopHudWallText", true, false) as Label
 	var wall_state := root_layer.find_child("TopHudWallState", true, false) as Label
-	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, tile_label(last_discard) if last_discard != "" else "无"]
+	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, last_discard_text]
 	if wall != null:
 		set_dynamic_label_text(wall, "余牌 %d/%d" % [wall_count, wall_total], wall_detail)
 		wall.set_meta("wall_count", wall_count)
 		wall.set_meta("wall_total", wall_total)
 	if wall_state != null:
-		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), tile_label(last_discard) if last_discard != "" else "无"], wall_detail)
+		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), last_discard_text], wall_detail)
 	var center_count := root_layer.find_child("CenterWallCount", true, false) as Label
 	if center_count != null:
 		var center_wall_token := "%d/%d" % [wall_count, wall_total]
 		if str(center_count.get_meta("wall_view_token", "")) != center_wall_token:
 			set_dynamic_label_text(center_count, "%d" % wall_count, "牌墙剩余 %d/%d 张" % [wall_count, wall_total])
 			center_count.set_meta("wall_view_token", center_wall_token)
-	root_layer.set_meta("hud_lane_refresh_count", int(root_layer.get_meta("hud_lane_refresh_count", 0)) + 1)
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
 	var timer := game_render_delay_timer
@@ -419,8 +425,17 @@ func clear_screen() -> void:
 	update_release_notes_label = null
 	update_primary_button = null
 	update_secondary_button = null
+	update_release_notes_layout_sync_revision += 1
+	update_release_notes_layout_sync_queued = false
 	menu_realtime_3d_stage = null
 	chat_input = null
+	chat_message_refresh_revision += 1
+	chat_message_refresh_queued = false
+	chat_message_panel_root_id = 0
+	chat_message_panel = null
+	chat_message_scroll = null
+	chat_message_label = null
+	chat_message_range_label = null
 	menu_parallax_last_normalized = Vector2(9.0, 9.0)
 	menu_parallax_last_viewport = Vector2.ZERO
 	pending_claim_live_root_id = 0
@@ -466,6 +481,28 @@ func release_retained_battle_views() -> void:
 	retained_battle_center_signature = ""
 	retained_battle_atmosphere = null
 	retained_battle_atmosphere_signature = ""
+	for retained_button in retained_battle_discard_archive_buttons.values():
+		var archive_button := retained_button as Button
+		if archive_button != null and is_instance_valid(archive_button):
+			if archive_button.get_parent() != null:
+				archive_button.get_parent().remove_child(archive_button)
+			archive_button.queue_free()
+	retained_battle_discard_archive_buttons.clear()
+
+
+func retain_battle_discard_archive_buttons_for_render() -> void:
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for seat in range(4):
+		var archive_button := root_layer.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
+		if archive_button == null or not is_instance_valid(archive_button) or archive_button.is_queued_for_deletion():
+			continue
+		var button_parent := archive_button.get_parent()
+		if button_parent != null:
+			button_parent.remove_child(archive_button)
+		retained_battle_discard_archive_buttons[seat] = archive_button
 
 func start_offline(instant: bool = false) -> void:
 	if not ensure_tile_assets_ready():
@@ -702,6 +739,7 @@ func render_game(state_changed: bool = false) -> void:
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
 	retain_battle_atmosphere_for_render()
+	retain_battle_discard_archive_buttons_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -801,9 +839,11 @@ func update_ai_assistance_async() -> void:
 	var next_human_advice := get_ai_discard_reports(0)
 	var seat_threat_context := make_ai_evaluation_context(0, evaluation_visible_counts)
 	var next_seat_threat_reports := render_seat_threat_reports(0, seat_threat_context) if player_ai_assist_enabled() else {}
-	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline" or hand_identity_fingerprint(get_self_hand()) != evaluation_hand_signature or threat_report_table_state_cache_key(0, visible_tile_counts()) != evaluation_table_signature:
+	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline":
 		# The deferred evaluator no longer describes the mounted table. Do not
-		# partially commit hand and threat results; the next state render owns retry.
+		# partially commit hand and threat results. State renders increment the
+		# monotonic revision at the mutation boundary, so no second public-table
+		# scan is needed here.
 		offline_ai_assistance_queued = false
 		return
 	current_human_advice = next_human_advice
@@ -857,6 +897,31 @@ func copy_local_ui_contract_metadata(source: Control, target: Control) -> void:
 	target.set_meta("local_contract_generation", ui_page_generation)
 	target.set_meta("local_contract_copy_strategy", "relative_subtree_path_then_legacy_name")
 
+
+func copy_hand_ui_contract_metadata(source: Control, target: Control) -> void:
+	if source == null or target == null or not is_instance_valid(source) or not is_instance_valid(target):
+		return
+	# Hand hints only need the tile owners. Build the index once per tray and
+	# copy contracts by source index, avoiding a second full target-tree scan.
+	var target_by_index: Dictionary = {}
+	for target_node in target.find_children("HandTile_*", "Control", true, false):
+		var target_tile := target_node as Control
+		if target_tile != null:
+			target_by_index[int(target_tile.get_meta("hand_source_index", -1))] = target_tile
+	for source_node in source.find_children("HandTile_*", "Control", true, false):
+		var source_tile := source_node as Control
+		if source_tile == null:
+			continue
+		var source_index := int(source_tile.get_meta("hand_source_index", -1))
+		var target_tile := target_by_index.get(source_index, null) as Control
+		if target_tile == null:
+			continue
+		for meta_name_variant in source_tile.get_meta_list():
+			var meta_name := str(meta_name_variant)
+			if meta_name == "ui_optimization_ids" or meta_name.begins_with("battle_ui_") or meta_name.begins_with("ui_round_"):
+				target_tile.set_meta(meta_name, source_tile.get_meta(meta_name))
+	target.set_meta("local_contract_copy_strategy", "hand_source_index_registry")
+
 func update_hand_ai_hints() -> void:
 	# 手牌牌面、风险徽标和推荐徽标都由 draw_hand 一次性构造；只替换
 	# HandTray 子树，避免再次进入 render_game 并重新排队异步计算。
@@ -868,6 +933,16 @@ func update_hand_ai_hints() -> void:
 	var preserved_selection := hand_keyboard_selection
 	var focused_source_index := -1
 	var hovered_source_index := -1
+	var old_tile_buttons: Dictionary = {}
+	for old_button_value in old_tray.find_children("*", "Button", true, false):
+		var old_button := old_button_value as Button
+		if old_button == null or old_button.disabled:
+			continue
+		var tile_owner := old_button.get_parent() as Control
+		while tile_owner != null and not tile_owner.name.begins_with("HandTile_"):
+			tile_owner = tile_owner.get_parent() as Control
+		if tile_owner != null:
+			old_tile_buttons[int(tile_owner.get_meta("hand_source_index", -1))] = old_button
 	for old_tile_value in old_tray.find_children("HandTile_*", "Control", true, false):
 		var old_tile := old_tile_value as Control
 		if old_tile == null:
@@ -875,15 +950,12 @@ func update_hand_ai_hints() -> void:
 		var source_index := int(old_tile.get_meta("hand_source_index", -1))
 		if source_index < 0:
 			continue
-		for old_button_value in old_tile.find_children("*", "Button", true, false):
-			var old_button := old_button_value as Button
-			if old_button == null or old_button.disabled:
-				continue
+		var old_button := old_tile_buttons.get(source_index, null) as Button
+		if old_button != null:
 			if old_button.has_focus():
 				focused_source_index = source_index
 			if old_button.is_hovered():
 				hovered_source_index = source_index
-			break
 	var old_tray_index := old_tray.get_index()
 	kill_screen_tweens_for_subtree(old_tray)
 	root_layer.remove_child(old_tray)
@@ -892,10 +964,12 @@ func update_hand_ai_hints() -> void:
 	if new_tray != null:
 		# The source remains valid until this copy completes. Do not read contracts
 		# from a node that has already entered the delete queue.
-		copy_local_ui_contract_metadata(old_tray, new_tray)
+		copy_hand_ui_contract_metadata(old_tray, new_tray)
 		root_layer.move_child(new_tray, mini(old_tray_index, root_layer.get_child_count() - 1))
 	old_tray.queue_free()
 	invalidate_ui_contract_control_cache(root_layer)
+	hand_tile_button_registry.clear()
+	hand_tile_button_registry_root_id = 0
 	# AI suggestions can arrive while a player is reading the hand. Restore the
 	# stable selection/focus and pointer highlight after the replacement tree is
 	# mounted so the refresh cannot silently move the interaction target.
@@ -964,8 +1038,18 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
 	if seat_threat_fingerprint == next_fingerprint and seat_threat_root_generation == current_root_generation:
 		return
-	var previous_reports := current_seat_threat_reports.duplicate(true)
-	current_seat_threat_reports = seat_threat_reports.duplicate(true)
+	var previous_reports := current_seat_threat_reports
+	var merged_reports: Dictionary = current_seat_threat_reports.duplicate(false)
+	for seat_key in seat_threat_reports.keys():
+		var old_report = previous_reports.get(seat_key, {})
+		var next_report = seat_threat_reports.get(seat_key, {})
+		var old_revision := int(old_report.get("seat_revision", seat_threat_report_revision(old_report))) if typeof(old_report) == TYPE_DICTIONARY else 0
+		var next_revision := int(next_report.get("seat_revision", seat_threat_report_revision(next_report))) if typeof(next_report) == TYPE_DICTIONARY else 0
+		if old_revision != next_revision or not merged_reports.has(seat_key):
+			# Report dictionaries are immutable render snapshots. Replace only the
+			# seat whose revision changed and retain the other three by reference.
+			merged_reports[seat_key] = next_report
+	current_seat_threat_reports = merged_reports
 	seat_threat_fingerprint = next_fingerprint
 	seat_threat_root_generation = current_root_generation
 	seat_threat_revisions = next_revisions

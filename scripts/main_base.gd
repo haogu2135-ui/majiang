@@ -484,6 +484,7 @@ const ONLINE_HEARTBEAT_INTERVAL_MSEC := 10000
 const ONLINE_RECONNECT_BASE_DELAY_MSEC := 800
 const ONLINE_RECONNECT_MAX_DELAY_MSEC := 12000
 const ONLINE_VOICE_SILENCE_THRESHOLD := 0.018
+const ONLINE_LOG_OVERLAP_WINDOW := 16
 const ITEM_TYPES := {
 	"swap_card": {"name": "换牌卡", "desc": "重新摸一张牌", "icon": "🔄", "cost_gems": 5},
 	"peek_card": {"name": "偷看卡", "desc": "查看对手一张手牌", "icon": "👁", "cost_gems": 8},
@@ -583,6 +584,7 @@ var graphics_quality = Commercial3DStage.QUALITY_AUTO
 var ai_assist_enabled = false  # 出牌辅助（推荐/危险提示），玩家可在设置中开启
 var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
+var settings_local_row_controls: Dictionary = {}
 var settings_focus_restore_name := ""
 var settings_overlay_generation := 0
 var menu_focus_restore_name := ""
@@ -593,6 +595,10 @@ var telemetry_sheet_focus_restore_name := ""
 var telemetry_sheet_focus_restore_id := 0
 var diagnostic_focus_restore_name := ""
 var diagnostic_focus_restore_id := 0
+var diagnostic_layout_retry_timer: Timer = null
+var diagnostic_layout_retry_generation := -1
+var diagnostic_layout_retry_scroll_id := 0
+var diagnostic_layout_retry_list_id := 0
 var replay_archive_focus_restore_id := ""
 var menu_parallax_pending_position := Vector2.ZERO
 var menu_parallax_update_pending := false
@@ -691,6 +697,15 @@ var replay_archive_generation := 0
 var replay_search_cache_generation := -1
 var replay_search_cache_query := ""
 var replay_search_cache_results: Array = []
+var replay_archive_row_pool: Dictionary = {}
+var replay_archive_view_revision := 0
+var replay_archive_view_flush_queued := false
+var replay_archive_view_scroll_value := -1.0
+var replay_archive_view_focus_name := ""
+var replay_archive_view_generation := -1
+var replay_search_pending_query := ""
+var replay_search_request_revision := 0
+var replay_search_flush_queued := false
 var replay_delete_target_id := ""
 var replay_delete_confirming := false
 var round_event_history: Array = []  # 当前牌局结构化事件，用于战报复盘
@@ -698,6 +713,9 @@ var replay_import_payload: Dictionary = {}
 var replay_import_code_draft := ""
 var replay_import_input: LineEdit
 var replay_timeline_selected_index := -1
+var replay_timeline_visible_cache_key := ""
+var replay_timeline_visible_cache: Array[Dictionary] = []
+var replay_timeline_height_index_signature := ""
 var round_event_sequence := 0
 var active_round_id := ""
 var replay_view_cache_round_id := ""
@@ -717,6 +735,10 @@ var telemetry_clear_confirming := false
 var telemetry_clear_confirm_deadline_msec := 0
 var telemetry_mutation_revision := 0
 var telemetry_mutation_in_flight := false
+var telemetry_consent_sync_revision := 0
+var telemetry_queue_sync_revision := 0
+var telemetry_export_sync_revision := 0
+var telemetry_recent_action_sync_revision := 0
 var applied_result_transactions: Dictionary = {}
 var applied_result_transaction_order: Array[String] = []
 var offline_hand_seed := 0
@@ -768,6 +790,8 @@ var update_remote_size = 0
 var update_file_path = UPDATE_FILE_PATH
 var update_downloaded_bytes = 0
 var update_total_bytes = 0
+var update_release_notes_layout_sync_revision := 0
+var update_release_notes_layout_sync_queued := false
 var players: Array = []
 var wall: Array[String] = []
 var current_seat = 0
@@ -940,6 +964,7 @@ var online_recovery_button: Button = null
 var online_recovery_live_token := ""
 var online_recovery_focus_root_id := 0
 var online_recovery_focus_pending := false
+var online_recovery_reason_code := "connection_lost"
 var online_last_malformed_notice_msec := 0
 var online_messages_received := 0
 var online_messages_rejected := 0
@@ -947,16 +972,23 @@ var online_last_snapshot_fingerprint := ""
 var online_last_room_snapshot_fingerprint := ""
 var online_rule_code_set_cache: Dictionary = {}
 var online_lobby_render_revision := 0
+var online_lobby_refresh_queued := false
 var online_last_lobby_render_revision := -1
 var online_lobby_action_controls: Dictionary = {}
 var online_lobby_roster_controls: Array[Dictionary] = []
 var online_lobby_focus_signature := ""
+var online_lobby_refresh_domain_tokens: Dictionary = {}
 var online_log_render_fingerprint := ""
 var online_log_rendered_source_count := -1
+var online_log_revision := 0
+var online_log_fingerprint_revision := -1
+var online_log_cached_fingerprint := ""
+var online_log_cached_lines: Array[String] = []
 var online_log_scroll_request_revision := 0
 var online_log_scroll_request_queued := false
 var online_log_scroll_request_follow_latest := false
 var online_log_scroll_request_value := 0
+var online_log_follow_latest_pending_frames := 0
 var wall_total_snapshot := 0
 var wall_total_snapshot_mode := ""
 var wall_total_snapshot_rule := ""
@@ -974,6 +1006,11 @@ var meld_window_start_by_seat: Dictionary = {}
 var sent_hello = false
 var voice_capture_effect: AudioEffectCapture
 var voice_mic_player: AudioStreamPlayer
+var remote_voice_player_meta: Dictionary = {}
+var online_seen_voice_sequence_order: Array[String] = []
+var speech_queue_head := 0
+var online_rule_model_cache: Dictionary = {}
+var online_voice_rejection_count := 0
 var voice_enabled = false
 var voice_sequence = 0
 var voice_peak = 0.0
@@ -1034,12 +1071,30 @@ var pending_claim_priority_label: Label = null
 var pending_claim_last_timer_text := ""
 var pending_claim_last_warning_text := ""
 var pending_claim_last_priority_text := ""
+var hud_view_token := ""
+var hud_lane_refresh_count := 0
+var center_wall_view_cache: Dictionary = {}
+var center_last_discard_view_cache: Dictionary = {}
+var discard_river_foreground_layer: Control = null
+var retained_battle_discard_archive_buttons: Dictionary = {}
+var discard_river_history_summary_cache: Dictionary = {}
+var discard_river_semantics_cache: Dictionary = {}
+var seat_river_summary_cache: Dictionary = {}
+var action_dock_status_label: Label = null
+var hand_tile_button_registry: Dictionary = {}
+var hand_tile_button_registry_root_id := 0
+var table_log_focus_generation := 0
+var online_lobby_control_cache_root_id := 0
+var rules_layout_revision := 0
+var rules_layout_flush_generation := -1
 var _ui_cjk_font: Font = null
 var toast_container: Control
 var toast_tween: Tween
 var toast_current: Control
 var toast_mode := ""
 var toast_queue: Array = []
+var toast_queue_pending_count := 0
+var toast_queue_pending_bytes := 0
 var toast_active_minimum_dwell_msec := 0
 var game_render_delay_timer: Timer = null
 var game_render_delay_mode := ""
@@ -1122,7 +1177,9 @@ const MELD_LAYOUTS := [
 	# Keep the vertical lanes beside the seat plaques. Their lower edge leaves a
 	# separate bottom action channel while pagination preserves full meld access.
 	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.865, 0.510))],
-	[2, Rect2(Vector2(0.680, 0.140), Vector2(0.965, 0.195))],
+	# Top seat melds stay centered below the top plaque and above the center
+	# console, preserving a continuous seat-facing ownership lane.
+	[2, Rect2(Vector2(0.395, 0.145), Vector2(0.605, 0.245))],
 	[3, Rect2(Vector2(0.135, 0.240), Vector2(0.205, 0.510))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
@@ -1412,6 +1469,9 @@ const TOAST_SLIDE_DURATION_MSEC := 220
 const TOAST_MIN_DURATION_MSEC := 700
 const TOAST_MAX_DURATION_MSEC := 12000
 const TOAST_MAX_TEXT_LENGTH := 160
+const TOAST_QUEUE_MAX_ENTRIES := 24
+const TOAST_QUEUE_MAX_BYTES := 4096
+const TOAST_QUEUE_MAX_REPEAT_COUNT := 999
 const FX_TILE_FLIP_DURATION_MSEC := 180
 const FX_SCORE_CHANGE_DURATION_MSEC := 320
 const FX_CLAIM_FLY_DURATION_MSEC := 280
@@ -2930,11 +2990,21 @@ func connect_immediate_button_action(button: Button, callback: Callable) -> void
 func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 	if button == null or not is_instance_valid(button):
 		return
-	var old_plate = button.get_node_or_null("GptButtonFacePlate")
+	var primary_plate_key := "ui_dark_scrim" if color.a <= 0.45 else "ui_button_face_plate"
+	var old_plate := button.get_node_or_null("GptButtonFacePlate") as TextureRect
+	if old_plate != null and is_instance_valid(old_plate) and str(button.get_meta("gpt_face_plate_key", "")) == primary_plate_key:
+		var existing_fill := soften_button_color(color)
+		var existing_tint_a := clampf(existing_fill.a if existing_fill.a > 0.001 else 0.88, 0.35, 1.0)
+		old_plate.modulate = Color(
+			clampf(0.40 + existing_fill.r * 0.75, 0.18, 1.25),
+			clampf(0.40 + existing_fill.g * 0.75, 0.18, 1.25),
+			clampf(0.40 + existing_fill.b * 0.75, 0.18, 1.25),
+			existing_tint_a
+		)
+		return
 	if old_plate != null and is_instance_valid(old_plate):
 		button.remove_child(old_plate)
 		old_plate.queue_free()
-	var primary_plate_key := "ui_dark_scrim" if color.a <= 0.45 else "ui_button_face_plate"
 	var plate_keys := [
 		primary_plate_key,
 		"action_button_panel",
@@ -2983,6 +3053,7 @@ func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 	tex.show_behind_parent = true
 	button.add_child(tex)
 	button.move_child(tex, 0)
+	button.set_meta("gpt_face_plate_key", primary_plate_key)
 
 
 func apply_button_style(button: Button, color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> void:
@@ -4468,7 +4539,8 @@ func grant_round_coins(won: bool, score: int) -> int:
 
 func offline_progress_state_payload() -> Dictionary:
 	var snapshot_key := str(offline_progress_state_revision)
-	if offline_progress_snapshot_key == snapshot_key and not offline_progress_snapshot.is_empty():
+	var live_pending_claim := typeof(offline_pending_claim) == TYPE_DICTIONARY and offline_pending_claim.has("deadline_msec")
+	if not live_pending_claim and offline_progress_snapshot_key == snapshot_key and not offline_progress_snapshot.is_empty():
 		return offline_progress_snapshot.duplicate(true)
 	var snapshot_players: Array = []
 	for i in range(mini(players.size(), 4)):

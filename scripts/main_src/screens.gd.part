@@ -1623,6 +1623,7 @@ func refresh_online_lobby_state() -> void:
 		if previous_content_revision != online_lobby_render_revision:
 			refresh_online_room_content()
 			root_layer.set_meta("online_lobby_content_revision", online_lobby_render_revision)
+		online_last_lobby_render_revision = online_lobby_render_revision
 		# Action gates can be changed by an in-memory room fixture or a server
 		# callback without changing the rendered page signature. Reapply them even
 		# when the rest of the lobby does not need a rebuild.
@@ -4140,67 +4141,81 @@ func refresh_telemetry_data_sheet() -> void:
 	var sheet := root_layer.find_child("TelemetryDataSheet", true, false) as Control
 	if sheet == null:
 		return
-	var telemetry_sync_token := "%d|%d|%d|%d|%d|%s|%s" % [
-		telemetry_mutation_revision,
-		1 if telemetry_mutation_in_flight else 0,
-		1 if telemetry_consent else 0,
-		telemetry_outbox.size(),
-		maxi(0, int(ceil(float(telemetry_clear_confirm_deadline_msec - Time.get_ticks_msec()) / 100.0))) if telemetry_clear_confirming else 0,
-		telemetry_export_status,
-		telemetry_last_action,
-	]
-	if str(sheet.get_meta("telemetry_sync_token", "")) == telemetry_sync_token:
-		return
-	sheet.set_meta("telemetry_sync_token", telemetry_sync_token)
+	var now_msec := Time.get_ticks_msec()
+	var mutation_token := "%d|%d" % [telemetry_mutation_revision, 1 if telemetry_mutation_in_flight else 0]
+	var consent_token := "%d|%d|%d" % [telemetry_consent_sync_revision, 1 if telemetry_consent else 0, 1 if telemetry_consent_decided else 0]
+	var queue_token := "%d|%d" % [telemetry_queue_sync_revision, telemetry_outbox.size()]
+	var export_token := "%d|%s" % [telemetry_export_sync_revision, telemetry_export_status]
+	var recent_token := "%d|%s|%d" % [telemetry_recent_action_sync_revision, telemetry_last_action, 1 if telemetry_mutation_in_flight else 0]
+	var remaining_seconds := maxi(0, int(ceil(float(telemetry_clear_confirm_deadline_msec - now_msec) / 1000.0))) if telemetry_clear_confirming else 0
+	var clear_token := "%d|%d|%d|%d" % [telemetry_mutation_revision, 1 if telemetry_mutation_in_flight else 0, 1 if telemetry_clear_confirming else 0, remaining_seconds]
+	var consent_changed := str(sheet.get_meta("telemetry_consent_sync_token", "")) != consent_token
+	var queue_changed := str(sheet.get_meta("telemetry_queue_sync_token", "")) != queue_token
+	var mutation_changed := str(sheet.get_meta("telemetry_mutation_sync_token", "")) != mutation_token
+	var export_changed := str(sheet.get_meta("telemetry_export_sync_token", "")) != export_token
+	var recent_changed := str(sheet.get_meta("telemetry_recent_action_sync_token", "")) != recent_token
+	var clear_changed := str(sheet.get_meta("telemetry_clear_sync_token", "")) != clear_token
+	if consent_changed:
+		sheet.set_meta("telemetry_consent_sync_token", consent_token)
+	if queue_changed:
+		sheet.set_meta("telemetry_queue_sync_token", queue_token)
+	if mutation_changed:
+		sheet.set_meta("telemetry_mutation_sync_token", mutation_token)
+	if export_changed:
+		sheet.set_meta("telemetry_export_sync_token", export_token)
+	if recent_changed:
+		sheet.set_meta("telemetry_recent_action_sync_token", recent_token)
+	if clear_changed:
+		sheet.set_meta("telemetry_clear_sync_token", clear_token)
 	var status := sheet.find_child("TelemetryDataStatus", true, false) as Label
-	if status != null:
+	if status != null and (consent_changed or queue_changed):
 		var status_text := "处理中 · 正在提交隐私记录设置" if telemetry_mutation_in_flight else telemetry_consent_status_text()
 		set_dynamic_label_text(status, status_text)
 		status.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var permission_summary := sheet.find_child("TelemetryPermissionSummary", true, false) as Label
-	if permission_summary != null:
-		var permission_text := "权限更新中 · 本地队列暂不变" if telemetry_mutation_in_flight else telemetry_permission_summary_text()
+	if permission_summary != null and (consent_changed or queue_changed):
+		var permission_text := telemetry_permission_summary_text()
 		set_dynamic_label_text(permission_summary, permission_text, "当前隐私权限与本地队列状态")
 		permission_summary.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var consent := sheet.find_child("TelemetryConsentButton", true, false) as Button
-	if consent != null:
+	if consent != null and consent_changed:
 		consent.disabled = telemetry_mutation_in_flight
 		consent.text = "处理中" if telemetry_mutation_in_flight else ("关闭记录" if telemetry_consent else "同意记录")
 		consent.tooltip_text = "正在提交隐私记录设置，请稍候" if telemetry_mutation_in_flight else ("停止记录并清除本地匿名事件" if telemetry_consent else "允许记录匿名诊断事件")
 		set_ui_full_text(consent, consent.tooltip_text, "隐私诊断记录：" + consent.text)
 		consent.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var export := sheet.find_child("TelemetryExportButton", true, false) as Button
-	if export != null:
+	if export != null and mutation_changed:
 		export.disabled = telemetry_mutation_in_flight
 		export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var clear := sheet.find_child("TelemetryClearButton", true, false) as Button
-	if clear != null:
+	if clear != null and (mutation_changed or clear_changed):
 		clear.disabled = telemetry_mutation_in_flight
 		clear.text = "再次清除" if telemetry_clear_confirming else "清除"
 		clear.tooltip_text = "再次点击确认清除本机匿名诊断数据" if telemetry_clear_confirming else "首次点击只进入确认，第二次点击才清除本机匿名诊断数据"
 		set_ui_full_text(clear, clear.tooltip_text, "隐私诊断清除：" + clear.text)
 		clear.set_meta("confirm_state", "armed" if telemetry_clear_confirming else "idle")
 		clear.set_meta("first_click_is_non_destructive", true)
-		clear.set_meta("confirm_remaining_msec", maxi(0, telemetry_clear_confirm_deadline_msec - Time.get_ticks_msec()) if telemetry_clear_confirming else 0)
+		clear.set_meta("confirm_remaining_seconds", remaining_seconds)
 		clear.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		mark_ui_optimization(clear, "F-406")
 	var clear_hint := sheet.find_child("TelemetryClearConfirmHint", true, false) as Label
-	if clear_hint != null:
+	if clear_hint != null and clear_changed:
 		clear_hint.visible = true
 		var clear_scope := "范围：本机匿名诊断数据"
-		var clear_hint_text := clear_scope + " · 再次点击确认清除 · 5秒内有效" if telemetry_clear_confirming else clear_scope + " · 首次点击仅确认"
+		var clear_hint_text := clear_scope + " · 再次点击确认清除 · %d秒内有效" % remaining_seconds if telemetry_clear_confirming else clear_scope + " · 首次点击仅确认"
 		set_dynamic_label_text(clear_hint, clear_hint_text, clear_hint_text)
 		clear_hint.set_meta("telemetry_clear_scope", "本机匿名诊断数据")
 		clear_hint.set_meta("confirm_window_seconds", 5)
 	var export_status := sheet.find_child("TelemetryExportStatus", true, false) as Label
-	if export_status != null:
+	if export_status != null and export_changed:
 		set_dynamic_label_text(export_status, "导出：%s" % telemetry_export_status)
 		export_status.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 		export_status.set_meta("modal_safe_route", "inside_sheet_footer")
 		mark_ui_optimization(export_status, "F-049")
 	var recent_action := sheet.find_child("TelemetryRecentAction", true, false) as Label
-	if recent_action != null:
+	if recent_action != null and recent_changed:
 		var recent_text := "最近操作：提交中" if telemetry_mutation_in_flight else "最近操作：%s" % telemetry_last_action
 		set_dynamic_label_text(recent_action, recent_text, telemetry_last_action)
 		recent_action.set_meta("telemetry_state_revision", telemetry_mutation_revision)
@@ -4225,6 +4240,8 @@ func close_telemetry_data_sheet() -> void:
 func refresh_update_dialog() -> void:
 	if update_state == "idle":
 		refresh_top_hud_update_button()
+		update_release_notes_layout_sync_revision += 1
+		update_release_notes_layout_sync_queued = false
 		if update_progress_tween != null and is_instance_valid(update_progress_tween):
 			update_progress_tween.kill()
 		update_progress_tween = null
@@ -4235,27 +4252,40 @@ func refresh_update_dialog() -> void:
 		update_dialog = null
 		call_deferred("restore_control_focus_by_id", restore_id)
 		return
-	if update_status_label == null or not is_instance_valid(update_status_label):
+	if update_dialog == null or not is_instance_valid(update_dialog) or update_status_label == null or not is_instance_valid(update_status_label):
 		return
-	set_dynamic_label_text(update_status_label, update_message, update_message)
-	update_status_label.set_meta("update_state", update_state)
-	update_status_label.set_meta("accessible_name", "更新状态：" + update_message)
-	update_status_label.set_meta("primary_status_text", update_message)
-	update_status_label.set_meta("status_hierarchy", "primary_fixed_line")
-	mark_ui_optimization(update_status_label, "F-062")
-	if update_dialog_compact_layout():
-		configure_wrapped_label(update_status_label, maxf(260.0, effective_viewport_size().x * 0.500), 0.0, 4.0)
+	var viewport := effective_viewport_size()
+	var compact_layout := update_dialog_compact_layout()
+	var layout_token := "%d|%d|%s|%d|%d|%d" % [int(round(viewport.x)), int(round(viewport.y)), ui_layout_density(), safe_area_layout_revision, resize_refresh_revision, int(large_text_enabled)]
+	var previous_layout_token := str(update_dialog.get_meta("update_layout_token", ""))
+	var layout_changed := previous_layout_token != layout_token
+	update_dialog.set_meta("update_layout_token", layout_token)
+	var state_token := "%s|%s|%s" % [update_state, update_message, update_remote_version]
+	var previous_state_token := str(update_dialog.get_meta("update_state_token", ""))
+	var state_changed := previous_state_token != state_token
+	update_dialog.set_meta("update_state_token", state_token)
+	if state_changed:
+		set_dynamic_label_text(update_status_label, update_message, update_message)
+		update_status_label.set_meta("update_state", update_state)
+		update_status_label.set_meta("accessible_name", "更新状态：" + update_message)
+		update_status_label.set_meta("primary_status_text", update_message)
+		update_status_label.set_meta("status_hierarchy", "primary_fixed_line")
+		mark_ui_optimization(update_status_label, "F-062")
+	if compact_layout and (state_changed or layout_changed):
+		configure_wrapped_label(update_status_label, maxf(260.0, viewport.x * 0.500), 0.0, 4.0)
+
+	var target_progress_value := 0.0
+	if update_total_bytes > 0:
+		target_progress_value = clamp(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes), 0.0, 100.0)
+	elif update_state == "ready" or update_state == "current":
+		target_progress_value = 100.0
+	var target_progress_percent := int(round(target_progress_value))
+	var progress_token := "%s|%d|%d" % [update_state, target_progress_percent, update_total_bytes]
+	var previous_progress_token := str(update_dialog.get_meta("update_progress_token", ""))
+	var progress_changed := previous_progress_token != progress_token
+	update_dialog.set_meta("update_progress_token", progress_token)
 	if update_progress != null and is_instance_valid(update_progress):
-		var target_progress_value := 0.0
-		if update_total_bytes > 0:
-			target_progress_value = clamp(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes), 0.0, 100.0)
-		elif update_state == "ready":
-			target_progress_value = 100.0
-		else:
-			target_progress_value = 0.0
-		var target_progress_percent := int(round(target_progress_value))
-		var previous_target_percent := int(update_progress.get_meta("progress_target_percent", -1))
-		if previous_target_percent != target_progress_percent:
+		if progress_changed:
 			if update_progress_tween != null and is_instance_valid(update_progress_tween):
 				update_progress_tween.kill()
 			update_progress_tween = null
@@ -4264,31 +4294,44 @@ func refresh_update_dialog() -> void:
 			else:
 				update_progress.value = target_progress_value
 			update_progress.set_meta("progress_target_percent", target_progress_percent)
-		update_progress.set_meta("progress_percent", target_progress_percent)
-		update_progress.set_meta("progress_bytes", "%s / %s" % [format_bytes(maxi(0, update_downloaded_bytes)), format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"])
-		update_progress.set_meta("accessible_name", "更新下载进度：%d%%" % int(round(target_progress_value)))
-	if update_progress_label != null and is_instance_valid(update_progress_label):
+			update_progress.set_meta("progress_percent", target_progress_percent)
+			update_progress.set_meta("progress_bytes", "%s / %s" % [format_bytes(maxi(0, update_downloaded_bytes)), format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"])
+			update_progress.set_meta("accessible_name", "更新下载进度：%d%%" % int(round(target_progress_value)))
+	if progress_changed and update_progress_label != null and is_instance_valid(update_progress_label):
 		var progress_text := update_progress_text()
 		set_ui_full_text(update_progress_label, progress_text, "更新进度：" + progress_text)
 		update_progress_label.text = progress_text
-		update_progress_label.set_meta("progress_percent", int(update_progress.get_meta("progress_target_percent", 0)) if update_progress != null and is_instance_valid(update_progress) else 0)
+		update_progress_label.set_meta("progress_percent", target_progress_percent)
 	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
 		var notes_text := update_release_notes.strip_edges()
-		update_release_notes_art.visible = true
-		if update_release_notes_label != null and is_instance_valid(update_release_notes_label):
-			var display_notes := notes_text if notes_text != "" else "暂无发布说明"
-			update_release_notes_label.text = display_notes
-			set_ui_full_text(update_release_notes_label, display_notes, "更新说明")
-			update_release_notes_label.set_meta("notes_empty", notes_text == "")
-			configure_wrapped_label(update_release_notes_label, maxf(220.0, effective_viewport_size().x * 0.420), 0.0, 4.0)
-		var notes_scroll := update_release_notes_art.find_child("UpdateReleaseNotesScroll", true, false) as ScrollContainer
-		var notes_thumb := update_release_notes_art.find_child("UpdateReleaseNotesScrollThumb", true, false) as Control
-		if notes_scroll != null and notes_text == "":
-			notes_scroll.scroll_vertical = 0
-		if notes_scroll != null and notes_thumb != null:
-			call_deferred("sync_update_release_notes_scroll_thumb", notes_scroll, notes_thumb)
-	refresh_update_dialog_art()
-	if update_primary_button != null and is_instance_valid(update_primary_button):
+		var notes_content_token := "%d|%d" % [notes_text.length(), hash(notes_text)]
+		var previous_notes_content_token := str(update_dialog.get_meta("update_notes_content_token", ""))
+		var notes_content_changed := previous_notes_content_token != notes_content_token
+		var previous_notes_layout_token := str(update_dialog.get_meta("update_notes_layout_token", ""))
+		var notes_layout_changed := previous_notes_layout_token != layout_token
+		update_dialog.set_meta("update_notes_content_token", notes_content_token)
+		update_dialog.set_meta("update_notes_layout_token", layout_token)
+		if notes_content_changed or notes_layout_changed:
+			update_release_notes_art.visible = true
+			var notes_scroll := update_release_notes_art.find_child("UpdateReleaseNotesScroll", true, false) as ScrollContainer
+			var notes_thumb := update_release_notes_art.find_child("UpdateReleaseNotesScrollThumb", true, false) as Control
+			if update_release_notes_label != null and is_instance_valid(update_release_notes_label):
+				var display_notes := notes_text if notes_text != "" else "暂无发布说明"
+				if notes_content_changed:
+					update_release_notes_label.text = display_notes
+					set_ui_full_text(update_release_notes_label, display_notes, "更新说明")
+					update_release_notes_label.set_meta("notes_empty", notes_text == "")
+				if notes_scroll != null:
+					queue_update_release_notes_layout_sync(notes_scroll, update_release_notes_label, notes_thumb, float(notes_scroll.scroll_vertical), layout_token)
+			elif notes_scroll != null and notes_text == "":
+				notes_scroll.scroll_vertical = 0
+			if notes_scroll != null and notes_text == "" and not notes_content_changed:
+				notes_scroll.scroll_vertical = 0
+		if update_release_notes_label != null and is_instance_valid(update_release_notes_label) and (notes_content_changed or notes_layout_changed):
+			configure_wrapped_label(update_release_notes_label, maxf(220.0, viewport.x * 0.420), 0.0, 4.0)
+	if progress_changed or state_changed or layout_changed:
+		refresh_update_dialog_art()
+	if state_changed and update_primary_button != null and is_instance_valid(update_primary_button):
 		var primary_blocked := update_state == "checking" or update_state == "downloading" or update_state == "current" or update_state == "installing"
 		update_primary_button.visible = update_state != "current"
 		update_primary_button.disabled = primary_blocked
@@ -4325,9 +4368,10 @@ func refresh_update_dialog() -> void:
 		else:
 			update_primary_button.remove_meta("recommended_action")
 			update_primary_button.remove_meta("action_hierarchy")
-	refresh_top_hud_update_button()
-	if update_secondary_button != null and is_instance_valid(update_secondary_button):
-		update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else ("安装中" if update_state == "installing" else "关闭")
+	if state_changed:
+		refresh_top_hud_update_button()
+		if state_changed and update_secondary_button != null and is_instance_valid(update_secondary_button):
+			update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else ("安装中" if update_state == "installing" else "关闭")
 		update_secondary_button.disabled = update_state == "installing"
 		update_secondary_button.tooltip_text = "安装正在进行，完成后可继续" if update_state == "installing" else "取消下载" if update_state == "checking" or update_state == "downloading" else "关闭更新"
 		set_ui_full_text(update_secondary_button, update_secondary_button.tooltip_text, "更新辅助操作：" + update_secondary_button.text)
@@ -4335,6 +4379,53 @@ func refresh_update_dialog() -> void:
 			update_secondary_button.set_meta("disabled_reason", update_secondary_button.tooltip_text)
 		else:
 			update_secondary_button.remove_meta("disabled_reason")
+
+
+func queue_update_release_notes_layout_sync(notes_scroll: ScrollContainer, notes_label: Label, notes_thumb: Control, previous_scroll: float, layout_token: String) -> void:
+	if notes_scroll == null or notes_label == null or not is_instance_valid(notes_scroll) or not is_instance_valid(notes_label):
+		return
+	update_release_notes_layout_sync_revision += 1
+	if update_dialog != null and is_instance_valid(update_dialog):
+		update_dialog.set_meta("update_notes_pending_scroll_id", notes_scroll.get_instance_id())
+		update_dialog.set_meta("update_notes_pending_label_id", notes_label.get_instance_id())
+		update_dialog.set_meta("update_notes_pending_thumb_id", notes_thumb.get_instance_id() if notes_thumb != null and is_instance_valid(notes_thumb) else 0)
+		update_dialog.set_meta("update_notes_pending_scroll_value", previous_scroll)
+		update_dialog.set_meta("update_notes_pending_layout_token", layout_token)
+	if update_release_notes_layout_sync_queued:
+		return
+	update_release_notes_layout_sync_queued = true
+	call_deferred("flush_update_release_notes_layout_sync", update_release_notes_layout_sync_revision)
+
+
+func flush_update_release_notes_layout_sync(expected_revision: int) -> void:
+	if expected_revision != update_release_notes_layout_sync_revision:
+		call_deferred("flush_update_release_notes_layout_sync", update_release_notes_layout_sync_revision)
+		return
+	update_release_notes_layout_sync_queued = false
+	if update_dialog == null or not is_instance_valid(update_dialog):
+		return
+	var scroll := node_from_instance_id(int(update_dialog.get_meta("update_notes_pending_scroll_id", 0))) as ScrollContainer
+	var label := node_from_instance_id(int(update_dialog.get_meta("update_notes_pending_label_id", 0))) as Label
+	if scroll == null or label == null or not is_instance_valid(scroll) or not is_instance_valid(label):
+		return
+	sync_update_release_notes_content_width(scroll, label)
+	call_deferred("finish_update_release_notes_layout_sync", expected_revision)
+
+
+func finish_update_release_notes_layout_sync(expected_revision: int) -> void:
+	if expected_revision != update_release_notes_layout_sync_revision or update_dialog == null or not is_instance_valid(update_dialog):
+		return
+	var scroll := node_from_instance_id(int(update_dialog.get_meta("update_notes_pending_scroll_id", 0))) as ScrollContainer
+	var thumb := node_from_instance_id(int(update_dialog.get_meta("update_notes_pending_thumb_id", 0))) as Control
+	if scroll == null or not is_instance_valid(scroll):
+		return
+	var scrollbar := scroll.get_v_scroll_bar()
+	var previous_scroll := float(update_dialog.get_meta("update_notes_pending_scroll_value", 0.0))
+	if scrollbar != null:
+		scroll.scroll_vertical = int(round(clampf(previous_scroll, 0.0, maxf(0.0, scrollbar.max_value - scrollbar.page))))
+	if thumb != null and is_instance_valid(thumb):
+		sync_update_release_notes_scroll_thumb(scroll, thumb)
+
 
 func refresh_update_dialog_art() -> void:
 	var progress = 0.0
@@ -4548,6 +4639,11 @@ func show_chat_panel() -> void:
 	chat_label.custom_minimum_size = Vector2(0.0, maxf(44.0, chat_height))
 	configure_wrapped_label(chat_label, chat_width, chat_label.custom_minimum_size.y, 3.0)
 	chat_label.tooltip_text = chat_text
+	chat_message_panel_root_id = root_layer.get_instance_id()
+	chat_message_panel = chat_panel
+	chat_message_scroll = chat_scroll
+	chat_message_label = chat_label
+	chat_message_range_label = message_range_label
 	var chat_scrollbar := chat_scroll.get_v_scroll_bar()
 	if chat_scrollbar != null:
 		chat_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -4632,6 +4728,18 @@ func show_chat_panel() -> void:
 	draw_line_edit_input_art(chat_input, "聊天")
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
+	)
+	# Some desktop, virtual-keyboard, and synthetic QA events reach the native
+	# LineEdit without emitting text_submitted. Keep Enter on the same production
+	# send path so every input modality has identical validation and feedback.
+	chat_input.gui_input.connect(func(event: InputEvent) -> void:
+		if not event is InputEventKey:
+			return
+		var key_event := event as InputEventKey
+		if not key_event.pressed or key_event.echo or (key_event.keycode != KEY_ENTER and key_event.keycode != KEY_KP_ENTER):
+			return
+		send_chat_input()
+		chat_input.accept_event()
 	)
 	chat_input.text_changed.connect(func(value: String) -> void:
 		var char_count := value.length()
@@ -5267,6 +5375,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 func show_diagnostic_dialog(lines: Array) -> void:
 	# r215: GPT chrome conversion
+	stop_diagnostic_layout_retry_timer()
 	diagnostic_focus_restore_name = ""
 	diagnostic_focus_restore_id = 0
 	var previous_focus := get_viewport().gui_get_focus_owner()
@@ -5406,6 +5515,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 10 if large_text_enabled else 1)
 	content_scroll.add_child(vbox)
+	content_scroll.set_meta("diagnostic_content_list", vbox)
 
 	# 添加每一行文本
 	for line_index in range(lines.size()):
@@ -5573,6 +5683,7 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	var measured_width := diagnostic_content_viewport_width(content_scroll, content_list)
 	var width_changed := previous_width < 0.0 or absf(previous_width - measured_width) > 1.0
 	refresh_diagnostic_line_measurements(content_scroll, content_list)
+	rebuild_diagnostic_height_index(content_list, measured_width)
 	# The authored .215-.700 rect is the viewport contract. Only the child list
 	# is measured here; changing the viewport to the list height breaks the fixed
 	# status and close lanes and can move the scroll range outside the modal.
@@ -5649,28 +5760,89 @@ func refresh_diagnostic_line_measurements(content_scroll: ScrollContainer, conte
 		label.set_meta("diagnostic_measurement_source", "scroll_viewport_content_width")
 
 
+func rebuild_diagnostic_height_index(content_list: Control, measured_width: float = -1.0) -> void:
+	if content_list == null or not is_instance_valid(content_list):
+		return
+	var labels: Array[Label] = []
+	for child in content_list.get_children():
+		var label := child as Label
+		if label != null and is_instance_valid(label):
+			labels.append(label)
+	var starts: Array[float] = []
+	var ends: Array[float] = []
+	var cursor := 0.0
+	var separation := float(content_list.get_theme_constant("separation"))
+	for index in range(labels.size()):
+		var label := labels[index]
+		var row_height := maxf(12.0, maxf(label.custom_minimum_size.y, label.size.y))
+		starts.append(cursor)
+		ends.append(cursor + row_height)
+		cursor += row_height
+		if index < labels.size() - 1:
+			cursor += separation
+	var width_token := measured_width if measured_width > 0.0 else float(content_list.size.x)
+	var height_parts: Array[String] = []
+	for index in range(labels.size()):
+		height_parts.append("%.1f" % maxf(12.0, maxf(labels[index].custom_minimum_size.y, labels[index].size.y)))
+	content_list.set_meta("diagnostic_height_index_starts", starts)
+	content_list.set_meta("diagnostic_height_index_ends", ends)
+	content_list.set_meta("diagnostic_height_index_signature", "%d|%d|%.1f|%s" % [labels.size(), int(large_text_enabled), width_token, "|".join(height_parts)])
+	content_list.set_meta("diagnostic_height_index_total_height", cursor)
+
+
+func stop_diagnostic_layout_retry_timer() -> void:
+	if diagnostic_layout_retry_timer != null and is_instance_valid(diagnostic_layout_retry_timer):
+		diagnostic_layout_retry_timer.stop()
+	diagnostic_layout_retry_generation = -1
+	diagnostic_layout_retry_scroll_id = 0
+	diagnostic_layout_retry_list_id = 0
+
+
 func queue_diagnostic_layout_retry(content_scroll: ScrollContainer, content_list: Control) -> void:
 	if content_scroll == null or not is_instance_valid(content_scroll) or content_list == null or not is_instance_valid(content_list):
 		return
-	if bool(content_scroll.get_meta("diagnostic_layout_retry_pending", false)):
+	if not diagnostic_dialog_open or int(content_scroll.get_meta("diagnostic_measurement_generation", ui_page_generation)) != ui_page_generation:
 		return
 	var retry_count := int(content_scroll.get_meta("diagnostic_layout_passes", 0))
 	if retry_count >= 4:
 		return
 	content_scroll.set_meta("diagnostic_layout_passes", retry_count + 1)
 	content_scroll.set_meta("diagnostic_layout_retry_pending", true)
-	var content_scroll_id := content_scroll.get_instance_id()
-	var content_list_id := content_list.get_instance_id()
-	get_tree().create_timer(0.01).timeout.connect(func() -> void:
-		var retry_scroll := instance_from_id(content_scroll_id) as ScrollContainer
-		var retry_list := instance_from_id(content_list_id) as Control
-		if retry_scroll != null and is_instance_valid(retry_scroll) and retry_list != null and is_instance_valid(retry_list):
-			retry_diagnostic_layout(retry_scroll, retry_list)
-	, CONNECT_ONE_SHOT)
+	diagnostic_layout_retry_generation = ui_page_generation
+	diagnostic_layout_retry_scroll_id = content_scroll.get_instance_id()
+	diagnostic_layout_retry_list_id = content_list.get_instance_id()
+	if diagnostic_layout_retry_timer == null or not is_instance_valid(diagnostic_layout_retry_timer):
+		diagnostic_layout_retry_timer = Timer.new()
+		diagnostic_layout_retry_timer.name = "DiagnosticLayoutRetryTimer"
+		diagnostic_layout_retry_timer.one_shot = true
+		diagnostic_layout_retry_timer.process_callback = Timer.TIMER_PROCESS_IDLE
+		diagnostic_layout_retry_timer.timeout.connect(Callable(self, "on_diagnostic_layout_retry_timeout"))
+		attach_audio_node(diagnostic_layout_retry_timer)
+	diagnostic_layout_retry_timer.stop()
+	diagnostic_layout_retry_timer.wait_time = 0.01
+	diagnostic_layout_retry_timer.start()
 
 
-func retry_diagnostic_layout(content_scroll: ScrollContainer, content_list: Control) -> void:
-	if content_scroll == null or not is_instance_valid(content_scroll):
+func on_diagnostic_layout_retry_timeout() -> void:
+	var expected_generation := diagnostic_layout_retry_generation
+	var content_scroll_id := diagnostic_layout_retry_scroll_id
+	var content_list_id := diagnostic_layout_retry_list_id
+	diagnostic_layout_retry_generation = -1
+	diagnostic_layout_retry_scroll_id = 0
+	diagnostic_layout_retry_list_id = 0
+	var retry_scroll := instance_from_id(content_scroll_id) as ScrollContainer
+	var retry_list := instance_from_id(content_list_id) as Control
+	if expected_generation != ui_page_generation or not diagnostic_dialog_open:
+		return
+	if retry_scroll == null or not is_instance_valid(retry_scroll) or retry_list == null or not is_instance_valid(retry_list):
+		return
+	retry_diagnostic_layout(retry_scroll, retry_list, expected_generation)
+
+
+func retry_diagnostic_layout(content_scroll: ScrollContainer, content_list: Control, expected_generation: int = -1) -> void:
+	if content_scroll == null or not is_instance_valid(content_scroll) or not diagnostic_dialog_open:
+		return
+	if expected_generation >= 0 and expected_generation != ui_page_generation:
 		return
 	content_scroll.set_meta("diagnostic_layout_retry_pending", false)
 	normalize_diagnostic_scroll_viewport(content_scroll, content_list)
@@ -5688,48 +5860,50 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 		status_label.set_meta("diagnostic_status_pending", true)
 		return
 	var scrollbar := content_scroll.get_v_scroll_bar()
-	var content_list := content_scroll.find_child("DiagnosticContentList", true, false) as Control
+	var content_list := content_scroll.get_meta("diagnostic_content_list", null) as Control
+	if content_list == null or not is_instance_valid(content_list):
+		content_list = content_scroll.find_child("DiagnosticContentList", true, false) as Control
 	if scrollbar == null or content_list == null:
 		return
 	var total := maxi(0, total_count)
 	var sync_token := "%s|%s|%s|%d|%s|%s" % [scrollbar.value, scrollbar.page, scrollbar.max_value, total, content_scroll.size, content_list.size]
 	if str(status_label.get_meta("diagnostic_scroll_sync_token", "")) == sync_token:
 		return
-	status_label.set_meta("diagnostic_scroll_sync_token", sync_token)
 	if total == 0:
+		var empty_token := "empty|%d" % total
+		if str(status_label.get_meta("diagnostic_scroll_sync_token", "")) == empty_token:
+			return
+		status_label.set_meta("diagnostic_scroll_sync_token", empty_token)
 		set_dynamic_label_text(status_label, "诊断内容 0-0 / 0 · 无内容", "当前诊断报告没有内容")
+		return
+	status_label.set_meta("diagnostic_scroll_sync_token", sync_token)
+	var row_starts: Array = content_list.get_meta("diagnostic_height_index_starts", [])
+	var row_ends: Array = content_list.get_meta("diagnostic_height_index_ends", [])
+	if row_starts.size() != total or row_ends.size() != total:
+		rebuild_diagnostic_height_index(content_list)
+		row_starts = content_list.get_meta("diagnostic_height_index_starts", [])
+		row_ends = content_list.get_meta("diagnostic_height_index_ends", [])
+	if row_starts.size() != total or row_ends.size() != total:
 		return
 	var viewport_top := scrollbar.value
 	var viewport_height := maxf(scrollbar.page, content_scroll.size.y)
 	var viewport_bottom := viewport_top + viewport_height
 	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page)
 	var at_bottom := scrollbar.value >= max_scroll - 0.5
-	var first_visible := -1
-	var last_visible := -1
-	var line_index := 0
-	for child in content_list.get_children():
-		if not child is Label:
-			continue
-		line_index += 1
-		var line := child as Label
-		var line_top := line.position.y
-		var line_bottom := line_top + line.size.y
-		# Count only complete rows. A partially clipped last row is not a reliable
-		# reading range and made large-text mode report content the user could not
-		# actually read.
-		if line_top >= viewport_top + 1.0 and line_bottom <= viewport_bottom - 1.0:
-			if first_visible < 0:
-				first_visible = line_index
-			last_visible = line_index
+	# The measured prefix index contains complete row bounds, so scrolling uses
+	# two logarithmic lookups instead of reading every Label geometry.
+	var first_index := archive_lower_bound(row_starts, viewport_top - 0.5)
+	var last_index := archive_upper_bound(row_ends, viewport_bottom - 1.0) - 1
 	# Native scrollbars can leave the last row exactly on the clip edge. Once the
 	# user is at the actual end, the end state is authoritative even if that edge
 	# loses a fractional pixel during layout; the row remains the scroll target.
 	if at_bottom:
-		last_visible = total
-	if first_visible < 0:
-		var fallback_line_height := 38.0 if large_text_enabled else 30.0
-		first_visible = clampi(int(floor(viewport_top / fallback_line_height)) + 1, 1, total)
-		last_visible = mini(total, first_visible + maxi(1, int(ceil(viewport_height / fallback_line_height))) - 1)
+		last_index = total - 1
+	if first_index >= total or first_index > last_index:
+		first_index = clampi(archive_upper_bound(row_starts, viewport_top) - 1, 0, total - 1)
+		last_index = first_index
+	var first_visible := first_index + 1
+	var last_visible := last_index + 1
 	first_visible = clampi(first_visible, 1, total)
 	last_visible = clampi(maxi(first_visible, last_visible), first_visible, total)
 	var remaining := maxi(0, total - last_visible)
@@ -5752,6 +5926,7 @@ func dismiss_diagnostic_dialog() -> void:
 		return
 	var restore_name := diagnostic_focus_restore_name
 	var restore_id := diagnostic_focus_restore_id
+	stop_diagnostic_layout_retry_timer()
 	diagnostic_focus_restore_name = ""
 	diagnostic_focus_restore_id = 0
 	diagnostic_dialog_open = false
@@ -6617,16 +6792,17 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 	var status := root_layer.find_child("ReplayImportStatus", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
 	var import_button := root_layer.find_child("ReplayImportButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	var validation := ""
-	var valid_shape := not code.is_empty() and code.length() <= max_chars and is_valid_replay_base64_shape(code)
+	var shape_result := parse_replay_base64_shape(code)
+	var valid_shape := not code.is_empty() and code.length() <= max_chars and bool(shape_result.get("valid", false))
 	if code.is_empty():
 		validation = "等待粘贴回放码"
 	elif code.length() > max_chars:
 		validation = "回放码过长 · 请删除多余字符"
-	elif not is_valid_replay_base64_shape(code):
-		validation = replay_import_shape_error_text(code)
+	elif not valid_shape:
+		validation = str(shape_result.get("reason", "格式不正确"))
 	else:
 		validation = "格式可用 · 点击导入进行完整校验"
-	var error_position := replay_import_error_position(code) if not valid_shape and code != "" else -1
+	var error_position := int(shape_result.get("error_position", -1)) if not valid_shape and code != "" else -1
 	input.set_meta("replay_error_position", error_position)
 	input.set_meta("replay_validation_state", "valid_shape" if valid_shape else ("empty" if code == "" else "invalid_shape"))
 	if error_position > 0:
@@ -6651,35 +6827,10 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 
 
 func replay_import_shape_error_text(value: String) -> String:
-	var code := value.strip_edges()
-	if code.length() % 4 == 1:
-		return "格式不正确 · 第%d个字符后长度无法组成 Base64" % code.length()
-	var padding_start := code.length()
-	for index in range(code.length()):
-		var codepoint := code.unicode_at(index)
-		var is_alphabet := (codepoint >= 65 and codepoint <= 90) or (codepoint >= 97 and codepoint <= 122) or (codepoint >= 48 and codepoint <= 57) or codepoint == 43 or codepoint == 47
-		if codepoint == 61:
-			if padding_start == code.length():
-				padding_start = index
-		elif padding_start != code.length() or not is_alphabet:
-			return "格式不正确 · 第%d个字符不是 Base64 字符" % (index + 1)
-	var padding_count := code.length() - padding_start
-	if padding_count > 2:
-		return "格式不正确 · 结尾最多允许两个补位字符"
-	if padding_count > 0 and code.length() % 4 != 0:
-		return "格式不正确 · 补位字符必须位于末尾"
-	return "格式不正确 · 仅支持 Base64 字符"
+	return str(parse_replay_base64_shape(value).get("reason", "格式不正确"))
 
 func replay_import_error_position(value: String) -> int:
-	var code := value.strip_edges()
-	for index in range(code.length()):
-		var codepoint := code.unicode_at(index)
-		var is_alphabet := (codepoint >= 65 and codepoint <= 90) or (codepoint >= 97 and codepoint <= 122) or (codepoint >= 48 and codepoint <= 57) or codepoint == 43 or codepoint == 47 or codepoint == 61
-		if not is_alphabet:
-			return index + 1
-	if code.length() % 4 == 1:
-		return code.length()
-	return -1
+	return int(parse_replay_base64_shape(value).get("error_position", -1))
 
 
 func refresh_replay_archive_view() -> void:
@@ -6690,6 +6841,52 @@ func refresh_replay_archive_view() -> void:
 	if search != null and search.text != replay_search_query:
 		search.text = replay_search_query
 	render_replay_archive_list()
+
+
+func replay_archive_row_signature(entry: Dictionary) -> String:
+	return "%s|%s|%s|%s|%d|%d" % [
+		str(entry.get("archive_id", "")),
+		replay_archive_date_text(entry),
+		replay_archive_result_label(entry),
+		str(entry.get("replay_digest", "")),
+		1 if bool(entry.get("favorite", false)) else 0,
+		1 if replay_delete_confirming and replay_delete_target_id == str(entry.get("archive_id", "")) else 0,
+	]
+
+
+func replay_archive_row_for_entry(entry: Dictionary) -> Control:
+	var archive_id := str(entry.get("archive_id", ""))
+	var signature := replay_archive_row_signature(entry)
+	var pooled_value: Variant = replay_archive_row_pool.get(archive_id, null)
+	var pooled: Control = null
+	if pooled_value != null and is_instance_valid(pooled_value):
+		pooled = pooled_value as Control
+	if pooled != null and not pooled.is_queued_for_deletion() and str(pooled.get_meta("archive_row_signature", "")) == signature:
+		pooled.visible = true
+		pooled.mouse_filter = Control.MOUSE_FILTER_PASS
+		pooled.set_meta("archive_id", archive_id)
+		return pooled
+	if pooled != null and is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
+		pooled.queue_free()
+	replay_archive_row_pool.erase(archive_id)
+	var row := make_replay_archive_row(entry)
+	row.set_meta("archive_row_signature", signature)
+	replay_archive_row_pool[archive_id] = row
+	return row
+
+
+func configure_replay_archive_focus_if_changed(archive_pane: Control, entries: Array) -> void:
+	if archive_pane == null or not is_instance_valid(archive_pane):
+		return
+	var ids: Array[String] = []
+	for entry_value in entries:
+		if typeof(entry_value) == TYPE_DICTIONARY:
+			ids.append(str((entry_value as Dictionary).get("archive_id", "")))
+	var token := "%d|%s" % [replay_archive_generation, "|".join(ids)]
+	if str(archive_pane.get_meta("archive_focus_graph_token", "")) == token:
+		return
+	archive_pane.set_meta("archive_focus_graph_token", token)
+	configure_button_focus_navigation(archive_pane, "", false)
 
 
 func render_replay_archive_list() -> void:
@@ -6707,9 +6904,19 @@ func render_replay_archive_list() -> void:
 	if focus_owner != null and archive_pane != null and archive_pane.is_ancestor_of(focus_owner):
 		previous_focus_name = str(focus_owner.name)
 	for child in list.get_children():
-		list.remove_child(child)
-		child.queue_free()
+		var row := child as Control
+		if row != null and str(row.name).begins_with("ReplayArchiveRow_"):
+			var row_id := str(row.get_meta("archive_id", ""))
+			if row_id != "":
+				replay_archive_row_pool[row_id] = row
+			list.remove_child(row)
+			row.visible = false
+			row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		else:
+			list.remove_child(child)
+			child.queue_free()
 	var entries := replay_archive_entries(replay_search_query)
+	list.set_meta("archive_result_count", entries.size())
 	var search_input := root_layer.find_child("ReplayArchiveSearchInput", true, false) as LineEdit
 	if search_input != null:
 		search_input.set_meta("replay_search_state", "filtered" if replay_search_query.strip_edges() != "" else "all")
@@ -6738,16 +6945,99 @@ func render_replay_archive_list() -> void:
 			list.add_child(clear_search)
 		if previous_focus_name != "":
 			previous_focus_name = "ReplayArchiveSearchInput"
-		configure_button_focus_navigation(archive_pane, "", false)
-		call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name, ui_page_generation)
-		call_deferred("sync_replay_archive_range_status", archive_scroll)
-		return
+			configure_replay_archive_focus_if_changed(archive_pane, entries)
+			queue_replay_archive_view_flush(previous_scroll_value, previous_focus_name, ui_page_generation)
+			return
 	for entry_variant in entries:
 		if typeof(entry_variant) == TYPE_DICTIONARY:
-			list.add_child(make_replay_archive_row(entry_variant as Dictionary))
-	configure_button_focus_navigation(archive_pane, "", false)
-	call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name, ui_page_generation)
-	call_deferred("sync_replay_archive_range_status", archive_scroll)
+			list.add_child(replay_archive_row_for_entry(entry_variant as Dictionary))
+	configure_replay_archive_focus_if_changed(archive_pane, entries)
+	queue_replay_archive_view_flush(previous_scroll_value, previous_focus_name, ui_page_generation)
+
+
+func queue_replay_archive_view_flush(scroll_value: float, focus_name: String, expected_generation: int) -> void:
+	replay_archive_view_revision += 1
+	replay_archive_view_scroll_value = scroll_value
+	replay_archive_view_focus_name = focus_name
+	replay_archive_view_generation = expected_generation
+	if replay_archive_view_flush_queued:
+		return
+	replay_archive_view_flush_queued = true
+	call_deferred("flush_replay_archive_view", replay_archive_view_revision)
+
+
+func flush_replay_archive_view(expected_revision: int) -> void:
+	if expected_revision != replay_archive_view_revision:
+		call_deferred("flush_replay_archive_view", replay_archive_view_revision)
+		return
+	replay_archive_view_flush_queued = false
+	await get_tree().process_frame
+	if root_layer == null or not is_instance_valid(root_layer) or mode != "replay_import" or ui_page_generation != replay_archive_view_generation:
+		return
+	var archive_scroll := root_layer.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
+	if archive_scroll != null and replay_archive_view_scroll_value >= 0.0:
+		var scrollbar := archive_scroll.get_v_scroll_bar()
+		if scrollbar != null:
+			var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
+			archive_scroll.scroll_vertical = int(round(clampf(replay_archive_view_scroll_value, 0.0, scroll_range)))
+	if replay_archive_view_focus_name != "":
+		var focus_target := root_layer.find_child(replay_archive_view_focus_name, true, false) as Control
+		var focus_button := focus_target as Button if focus_target != null else null
+		var focus_is_enabled := focus_button == null or not focus_button.disabled
+		if focus_target != null and focus_target.is_visible_in_tree() and focus_is_enabled and focus_target.focus_mode != Control.FOCUS_NONE:
+			focus_target.grab_focus()
+		else:
+			focus_named_control("ReplayArchiveSearchInput")
+	if archive_scroll != null:
+		sync_replay_archive_range_status(archive_scroll)
+
+
+func rebuild_replay_archive_height_index(list: VBoxContainer) -> void:
+	if list == null or not is_instance_valid(list):
+		return
+	var starts: Array[float] = []
+	var ends: Array[float] = []
+	var cursor := 0.0
+	var row_count := 0
+	for child in list.get_children():
+		var row := child as Control
+		if row == null or not str(row.name).begins_with("ReplayArchiveRow_"):
+			continue
+		var row_height := maxf(44.0, row.custom_minimum_size.y if row.custom_minimum_size.y > 1.0 else row.size.y)
+		starts.append(cursor)
+		ends.append(cursor + row_height)
+		cursor += row_height
+		row_count += 1
+		if row_count < list.get_child_count():
+			cursor += 5.0
+	list.set_meta("archive_row_starts", starts)
+	list.set_meta("archive_row_ends", ends)
+	list.set_meta("archive_height_index_signature", "%d|%d|%d|%.1f" % [row_count, int(list.size.x), int(list.size.y), cursor])
+	list.set_meta("archive_height_index_total_height", cursor)
+
+
+func archive_lower_bound(values: Array, target: float) -> int:
+	var low := 0
+	var high := values.size()
+	while low < high:
+		var mid := (low + high) / 2
+		if float(values[mid]) < target:
+			low = mid + 1
+		else:
+			high = mid
+	return low
+
+
+func archive_upper_bound(values: Array, target: float) -> int:
+	var low := 0
+	var high := values.size()
+	while low < high:
+		var mid := (low + high) / 2
+		if float(values[mid]) <= target:
+			low = mid + 1
+		else:
+			high = mid
+	return low
 
 
 func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
@@ -6757,11 +7047,7 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 	var list := root_layer.find_child("ReplayArchiveList", true, false) as VBoxContainer
 	if count == null or list == null:
 		return
-	var rows: Array[Control] = []
-	for child in list.get_children():
-		if child is Control and str(child.name).begins_with("ReplayArchiveRow_"):
-			rows.append(child as Control)
-	var total := rows.size()
+	var total := int(list.get_meta("archive_result_count", 0))
 	if total <= 0:
 		count.text = "0 条 · 暂无归档"
 		set_ui_full_text(count, "当前没有符合筛选条件的本地归档", "本地归档数量与可见范围")
@@ -6769,16 +7055,25 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 		count.set_meta("archive_visible_last", 0)
 		count.set_meta("archive_result_count", 0)
 		return
-	var viewport_rect := archive_scroll.get_global_rect()
-	var first := total
-	var last := 1
-	for index in range(rows.size()):
-		if rows[index].get_global_rect().intersects(viewport_rect, true):
-			first = mini(first, index + 1)
-			last = maxi(last, index + 1)
-	if first > last:
-		first = 1
-		last = mini(total, 1)
+	var index_signature := "%d|%d|%d" % [list.get_child_count(), int(list.size.x), int(list.size.y)]
+	var stored_signature := str(list.get_meta("archive_height_index_signature", ""))
+	if stored_signature == "" or not stored_signature.begins_with(index_signature + "|"):
+		rebuild_replay_archive_height_index(list)
+	var starts: Array = list.get_meta("archive_row_starts", [])
+	var ends: Array = list.get_meta("archive_row_ends", [])
+	if starts.size() != total or ends.size() != total:
+		return
+	var scrollbar := archive_scroll.get_v_scroll_bar()
+	var viewport_height := maxf(archive_scroll.size.y, scrollbar.page if scrollbar != null else archive_scroll.size.y)
+	var viewport_top := float(archive_scroll.scroll_vertical)
+	var viewport_bottom := viewport_top + viewport_height
+	var first_index := archive_lower_bound(starts, viewport_top + 1.0)
+	var last_index := archive_upper_bound(ends, viewport_bottom - 1.0) - 1
+	if first_index >= total or first_index > last_index:
+		first_index = clampi(archive_upper_bound(starts, viewport_top) - 1, 0, total - 1)
+		last_index = first_index
+	var first := first_index + 1
+	var last := clampi(last_index + 1, first, total)
 	count.text = "显示 %d-%d/%d 条" % [first, last, total]
 	count.tooltip_text = "当前显示第%d至%d条，共%d条；筛选结果随搜索框更新" % [first, last, total]
 	set_ui_full_text(count, count.tooltip_text, "本地归档数量与可见范围")
@@ -7050,14 +7345,33 @@ func replay_timeline_event_allowed(event: Dictionary) -> bool:
 
 
 func replay_timeline_visible_events(payload: Dictionary) -> Array[Dictionary]:
-	var visible_events: Array[Dictionary] = []
 	var events_value = payload.get("events", [])
 	if typeof(events_value) != TYPE_ARRAY:
-		return visible_events
+		replay_timeline_visible_cache_key = "invalid"
+		replay_timeline_visible_cache.clear()
+		return replay_timeline_visible_cache
+	var events: Array = events_value as Array
+	var cache_key := "%s|%d|%d" % [str(payload.get("digest", "")), events.size(), hash(events)]
+	if cache_key == replay_timeline_visible_cache_key:
+		return replay_timeline_visible_cache
+	var visible_events: Array[Dictionary] = []
 	for raw_event in (events_value as Array):
 		if typeof(raw_event) == TYPE_DICTIONARY and replay_timeline_event_allowed(raw_event as Dictionary):
 			visible_events.append(raw_event as Dictionary)
+	replay_timeline_visible_cache_key = cache_key
+	replay_timeline_visible_cache = visible_events
 	return visible_events
+
+
+func replay_timeline_event_display_model(event: Dictionary, index: int) -> Dictionary:
+	var short_text := replay_event_line_text(event)
+	var full_text := "第%d条事件：%s · 点击选择，方向键逐条移动" % [index + 1, short_text]
+	return {
+		"short_text": short_text,
+		"full_text": full_text,
+		"accessible_text": "回放第%d条：%s" % [index + 1, short_text],
+		"sequence": int(event.get("sequence", index + 1)),
+	}
 
 
 func render_replay_timeline_events(payload: Dictionary, focus_first: bool = false) -> void:
@@ -7107,9 +7421,10 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		event_scroll.set_meta("timeline_visibility_locked_until_measurement", true)
 	for index in range(visible_events.size()):
 		var event: Dictionary = visible_events[index]
-		var event_text := replay_event_line_text(event)
+		var display_model := replay_timeline_event_display_model(event, index)
+		var short_text := str(display_model.get("short_text", "事件"))
 		var selected_index := index
-		var event_button := make_small_button(event_text, Color(0.28, 0.48, 0.42), Callable(self, "select_replay_timeline_event").bind(selected_index))
+		var event_button := make_small_button(short_text, Color(0.28, 0.48, 0.42), Callable(self, "select_replay_timeline_event").bind(selected_index))
 		event_button.name = "ReplayImportEventRow_%03d" % index
 		event_button.custom_minimum_size = Vector2(0.0, 44.0)
 		event_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -7118,13 +7433,14 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		event_button.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		event_button.clip_text = false
 		event_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		event_button.tooltip_text = "第%d条事件：%s · 点击选择，方向键逐条移动" % [index + 1, event_text]
+		event_button.tooltip_text = str(display_model.get("full_text", short_text))
 		event_button.set_meta("timeline_event_index", index)
-		event_button.set_meta("timeline_sequence", int(event.get("sequence", index + 1)))
-		event_button.set_meta("accessible_name", "回放第%d条：%s" % [index + 1, event_text])
-		event_button.set_meta("ui_full_text", event_text)
+		event_button.set_meta("timeline_sequence", int(display_model.get("sequence", index + 1)))
+		event_button.set_meta("accessible_name", str(display_model.get("accessible_text", short_text)))
+		event_button.set_meta("ui_full_text", short_text)
 		event_button.set_meta("timeline_text_slot", "measured_wrapped_row")
-		event_button.set_meta("timeline_full_event_text", event_text)
+		event_button.set_meta("timeline_full_event_text", str(display_model.get("full_text", short_text)))
+		event_button.set_meta("timeline_base_text", short_text)
 		event_button.set_meta("timeline_min_touch_height", 44.0)
 		event_button.set_meta("timeline_measurement_pending", true)
 		event_button.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -7173,6 +7489,10 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	var row_count := 0
 	var reserved_marker_text := "▶ "
 	var reserved_marker_width := 0.0
+	var height_signature_parts: Array[String] = ["%d|%d" % [int(round(measured_width)), int(large_text_enabled)]]
+	var row_starts: Array[float] = []
+	var row_ends: Array[float] = []
+	var total_rows := event_list.get_child_count()
 	for child in event_list.get_children():
 		var row := child as Button
 		if row == null or not is_instance_valid(row):
@@ -7180,29 +7500,40 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 		row_count += 1
 		var font_size := row.get_theme_font_size("font_size")
 		var base_event_text := str(row.get_meta("timeline_base_text", row.text)).trim_prefix("▶ ").trim_prefix("  ")
+		var measurement_signature := "%d|%d|%.1f|%s" % [row_count - 1, int(large_text_enabled), measured_width, base_event_text]
 		var marker_font := row.get_theme_font("font")
 		if marker_font != null:
 			reserved_marker_width = maxf(reserved_marker_width, marker_font.get_string_size(reserved_marker_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x)
-		var measurement_text := reserved_marker_text + base_event_text
-		var row_height := estimate_wrapped_text_height(measurement_text, measured_width, font_size, 4.0) + 12.0
-		row.custom_minimum_size = Vector2(0.0, maxf(44.0, row_height))
+		var row_height := float(row.get_meta("timeline_measured_height", 0.0))
+		if str(row.get_meta("timeline_measurement_signature", "")) != measurement_signature:
+			var measurement_text := reserved_marker_text + base_event_text
+			row_height = estimate_wrapped_text_height(measurement_text, measured_width, font_size, 4.0) + 12.0
+			row.custom_minimum_size = Vector2(0.0, maxf(44.0, row_height))
+			row.set_meta("timeline_measurement_signature", measurement_signature)
+			row.set_meta("timeline_measurement_pending", false)
+		else:
+			row_height = maxf(44.0, row_height)
 		row.mouse_filter = Control.MOUSE_FILTER_STOP
 		row.focus_mode = Control.FOCUS_ALL
-		row.set_meta("timeline_measurement_pending", false)
 		row.set_meta("timeline_reserved_marker_text", reserved_marker_text)
 		row.set_meta("timeline_reserved_marker_width", reserved_marker_width)
 		row.set_meta("timeline_measured_width", measured_width)
-		row.set_meta("timeline_measured_height", row.custom_minimum_size.y)
-		total_height += row.custom_minimum_size.y
-	var separation := 3.0
-	if row_count > 1:
-		total_height += float(row_count - 1) * separation
+		row.set_meta("timeline_measured_height", row_height)
+		row_starts.append(total_height)
+		row_ends.append(total_height + row_height)
+		total_height += row_height
+		if row_count < total_rows:
+			total_height += 3.0
+		height_signature_parts.append("%.1f" % row_height)
 	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, total_height))
 	event_list.set_meta("timeline_measured_width", measured_width)
 	event_list.set_meta("timeline_reserved_marker_text", reserved_marker_text)
 	event_list.set_meta("timeline_reserved_marker_width", reserved_marker_width)
 	event_list.set_meta("timeline_marker_gutter_contract", "fixed_marker_reserved_before_selection")
 	event_list.set_meta("timeline_measurement_source", "timeline_scroll_viewport_width")
+	event_list.set_meta("timeline_row_starts", row_starts)
+	event_list.set_meta("timeline_row_ends", row_ends)
+	event_list.set_meta("timeline_height_index_signature", "|".join(height_signature_parts))
 	event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	event_scroll.focus_mode = Control.FOCUS_ALL
 	event_scroll.modulate.a = 1.0
@@ -7231,6 +7562,16 @@ func configure_replay_timeline_focus_navigation(focus_first: bool = false) -> vo
 			rows.append(row)
 	if rows.is_empty():
 		return
+	var row_names: Array[String] = []
+	for row in rows:
+		row_names.append(str(row.name))
+	var focus_token := "%d|%d|%s" % [rows.size(), ui_page_generation, "|".join(row_names)]
+	if str(event_list.get_meta("timeline_focus_graph_token", "")) == focus_token:
+		if focus_first:
+			call_deferred("focus_named_control", rows[0].name)
+		return
+	event_list.set_meta("timeline_focus_graph_token", focus_token)
+	event_list.set_meta("timeline_focus_graph_revision", int(event_list.get_meta("timeline_focus_graph_revision", 0)) + 1)
 	configure_ordered_focus_navigation(event_list, rows, "", false)
 	for index in range(rows.size()):
 		var previous: Control = input if index == 0 and input != null else rows[index - 1]
@@ -7250,21 +7591,36 @@ func set_replay_timeline_selection(index: int, ensure_visible: bool = false) -> 
 	var event_list := root_layer.find_child("ReplayImportEventList", true, false) as VBoxContainer
 	if event_list == null:
 		return
-	replay_timeline_selected_index = clampi(index, 0, maxi(0, event_list.get_child_count() - 1))
-	for child_index in range(event_list.get_child_count()):
+	var previous_index := int(event_list.get_meta("timeline_selected_applied_index", -1))
+	var child_count := event_list.get_child_count()
+	if child_count <= 0:
+		replay_timeline_selected_index = -1
+		event_list.set_meta("timeline_selected_applied_index", -1)
+		return
+	replay_timeline_selected_index = clampi(index, 0, child_count - 1)
+	if previous_index == replay_timeline_selected_index and previous_index >= 0:
+		if ensure_visible:
+			var unchanged_scroll := root_layer.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
+			if unchanged_scroll != null:
+				unchanged_scroll.ensure_control_visible(event_list.get_child(replay_timeline_selected_index) as Control)
+			return
+	for child_index in [previous_index, replay_timeline_selected_index]:
+		if child_index < 0 or child_index >= event_list.get_child_count():
+			continue
 		var row := event_list.get_child(child_index) as Button
 		if row == null:
 			continue
-		var selected := child_index == replay_timeline_selected_index
+		var selected: bool = child_index == replay_timeline_selected_index
 		row.set_meta("timeline_selected", selected)
 		row.set_meta("timeline_focus_state", "selected" if selected else "available")
 		row.set_meta("timeline_recovery_hint", "按方向键移动，Enter确认" if selected else "按Enter查看此事件")
 		mark_ui_optimization(row, "F-615")
-		var base_event_text := str(row.get_meta("timeline_base_text", row.text))
+		var base_event_text := str(row.get_meta("timeline_base_text", row.text)).trim_prefix("▶ ").trim_prefix("  ")
 		row.set_meta("timeline_base_text", base_event_text)
 		row.text = ("▶ " if selected else "  ") + base_event_text
 		row.set_meta("timeline_selection_marker", "当前事件" if selected else "")
 		row.modulate = Color(1.08, 1.02, 0.78, 1.0) if selected else Color.WHITE
+	event_list.set_meta("timeline_selected_applied_index", replay_timeline_selected_index)
 	if ensure_visible and replay_timeline_selected_index >= 0 and replay_timeline_selected_index < event_list.get_child_count():
 		var event_scroll := root_layer.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
 		if event_scroll != null:
@@ -7296,6 +7652,10 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 	var total := event_list.get_child_count() if event_list != null else 0
 	var source_total := int(event_list.get_meta("timeline_source_event_count", total)) if event_list != null else total
 	if total <= 0:
+		var empty_token := "empty|%d|%d" % [source_total, total]
+		if str(status.get_meta("timeline_status_token", "")) == empty_token:
+			return
+		status.set_meta("timeline_status_token", empty_token)
 		status.text = "待导入 · 0 / 0 条已验证事件"
 		status.tooltip_text = "暂无可显示的已验证回放事件；导入后将显示格式校验结果、事件数和可滚动范围；原始事件数 %d" % source_total
 		set_ui_full_text(status, status.tooltip_text, "回放时间线状态")
@@ -7310,19 +7670,21 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 		mark_ui_optimization(status, "F-118")
 		mark_ui_optimization(event_scroll, "F-118")
 		return
-	var viewport_rect := event_scroll.get_global_rect()
-	var first_event := total
-	var last_event := 1
-	if event_list != null:
-		for child_index in range(event_list.get_child_count()):
-			var row := event_list.get_child(child_index) as Control
-			if row == null or not row.get_global_rect().intersects(viewport_rect, true):
-				continue
-			first_event = mini(first_event, child_index + 1)
-			last_event = maxi(last_event, child_index + 1)
-	if first_event > last_event:
-		first_event = 1
-		last_event = 1
+	var scrollbar := event_scroll.get_v_scroll_bar()
+	var viewport_height := maxf(event_scroll.size.y, scrollbar.page if scrollbar != null else event_scroll.size.y)
+	var viewport_top := float(event_scroll.scroll_vertical)
+	var viewport_bottom := viewport_top + viewport_height
+	var row_starts: Array = event_list.get_meta("timeline_row_starts", []) if event_list != null else []
+	var row_ends: Array = event_list.get_meta("timeline_row_ends", []) if event_list != null else []
+	if row_starts.size() != total or row_ends.size() != total:
+		return
+	var first_index := archive_lower_bound(row_starts, viewport_top + 1.0)
+	var last_index := archive_upper_bound(row_ends, viewport_bottom - 1.0) - 1
+	if first_index >= total or first_index > last_index:
+		first_index = clampi(archive_upper_bound(row_starts, viewport_top) - 1, 0, total - 1)
+		last_index = first_index
+	var first_event := first_index + 1
+	var last_event := clampi(last_index + 1, first_event, total)
 	first_event = clampi(first_event, 1, total)
 	last_event = clampi(maxi(first_event, last_event), first_event, total)
 	# Manual scrolling changes the visible window, not the user's selected event.
@@ -7331,6 +7693,10 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 		replay_timeline_selected_index = first_event - 1
 	var selected_event := clampi(replay_timeline_selected_index + 1, 1, total)
 	var filtered_note := "；已过滤 %d 条不支持事件" % maxi(0, source_total - total) if source_total > total else ""
+	var status_token := "%d|%d|%d|%d|%d" % [selected_event, first_event, last_event, total, source_total]
+	if str(status.get_meta("timeline_status_token", "")) == status_token:
+		return
+	status.set_meta("timeline_status_token", status_token)
 	status.text = "当前 %d · 显示 %d-%d / %d 条已验证事件%s" % [selected_event, first_event, last_event, total, filtered_note]
 	status.tooltip_text = "当前第%d条；可见第%d至%d条，共%d条已验证事件%s" % [selected_event, first_event, last_event, total, filtered_note]
 	set_ui_full_text(status, status.tooltip_text, "回放时间线状态")
@@ -7397,11 +7763,72 @@ func toast_needs_minimum_dwell(text: String) -> bool:
 	return normalized.contains("失败") or normalized.contains("错误") or normalized.contains("不足") or normalized.contains("无法") or normalized.contains("清除") or normalized.contains("清空") or normalized.contains("删除")
 
 
+func toast_queue_entry_priority(text: String) -> int:
+	if toast_needs_minimum_dwell(text):
+		return 2
+	if toast_is_reward_text(text):
+		return 1
+	return 0
+
+
+func toast_queue_entry_bytes(entry: Dictionary) -> int:
+	var stored_bytes := int(entry.get("bytes", 0))
+	if stored_bytes > 0:
+		return stored_bytes
+	return str(entry.get("text", "")).to_utf8_buffer().size()
+
+
+func evict_toast_queue_entry(index: int) -> void:
+	if index < 0 or index >= toast_queue.size():
+		return
+	var removed := toast_queue[index] as Dictionary
+	toast_queue.remove_at(index)
+	if removed != null:
+		toast_queue_pending_count = maxi(0, toast_queue_pending_count - maxi(1, int(removed.get("count", 1))))
+		toast_queue_pending_bytes = maxi(0, toast_queue_pending_bytes - toast_queue_entry_bytes(removed))
+
+
+func enqueue_toast_message(text: String, duration_msec: int) -> bool:
+	var entry_bytes := str(text).to_utf8_buffer().size()
+	if entry_bytes <= 0 or entry_bytes > TOAST_QUEUE_MAX_BYTES:
+		return false
+	for queued in toast_queue:
+		if typeof(queued) == TYPE_DICTIONARY and str((queued as Dictionary).get("text", "")) == text:
+			var queued_entry := queued as Dictionary
+			queued_entry["count"] = mini(TOAST_QUEUE_MAX_REPEAT_COUNT, int(queued_entry.get("count", 1)) + 1)
+			queued_entry["duration_msec"] = maxi(int(queued_entry.get("duration_msec", duration_msec)), duration_msec)
+			toast_queue_pending_count = mini(TOAST_QUEUE_MAX_ENTRIES * TOAST_QUEUE_MAX_REPEAT_COUNT, toast_queue_pending_count + 1)
+			return true
+	var new_priority := toast_queue_entry_priority(text)
+	while toast_queue.size() >= TOAST_QUEUE_MAX_ENTRIES or toast_queue_pending_bytes + entry_bytes > TOAST_QUEUE_MAX_BYTES:
+		var evict_index := -1
+		for index in range(toast_queue.size()):
+			var candidate := toast_queue[index] as Dictionary
+			if candidate != null and toast_queue_entry_priority(str(candidate.get("text", ""))) < new_priority:
+				evict_index = index
+				break
+		if evict_index < 0 and new_priority == 0:
+			for index in range(toast_queue.size()):
+				var candidate := toast_queue[index] as Dictionary
+				if candidate != null and toast_queue_entry_priority(str(candidate.get("text", ""))) == 0:
+					evict_index = index
+					break
+		if evict_index < 0 and new_priority > 0 and not toast_queue.is_empty():
+			evict_index = 0
+		if evict_index < 0:
+			return false
+		evict_toast_queue_entry(evict_index)
+	toast_queue.append({"text": text, "duration_msec": duration_msec, "count": 1, "bytes": entry_bytes})
+	toast_queue_pending_count += 1
+	toast_queue_pending_bytes += entry_bytes
+	return true
+
+
 func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) -> void:
 	"""显示临时Toast提示"""
 	if fx_layer == null or not is_instance_valid(fx_layer):
 		return
-	var safe_text := text.strip_edges()
+	var safe_text := text.strip_edges().left(TOAST_MAX_TEXT_LENGTH)
 	if safe_text == "":
 		return
 	duration_msec = clampi(duration_msec, 1, TOAST_MAX_DURATION_MSEC)
@@ -7413,13 +7840,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	if minimum_dwell > 0:
 		duration_msec = maxi(duration_msec, minimum_dwell)
 	if toast_current != null and is_instance_valid(toast_current):
-		for queued in toast_queue:
-			if typeof(queued) == TYPE_DICTIONARY and str((queued as Dictionary).get("text", "")) == safe_text:
-				(queued as Dictionary)["count"] = int((queued as Dictionary).get("count", 1)) + 1
-				(queued as Dictionary)["duration_msec"] = maxi(int((queued as Dictionary).get("duration_msec", duration_msec)), duration_msec)
-				refresh_toast_queue_indicator()
-				return
-		toast_queue.append({"text": safe_text, "duration_msec": duration_msec, "count": 1})
+		enqueue_toast_message(safe_text, duration_msec)
 		refresh_toast_queue_indicator()
 		return
 	# 创建toast节点
@@ -7555,10 +7976,7 @@ func refresh_toast_queue_indicator() -> void:
 	var pending_label := toast_current.find_child("ToastPendingLabel", true, false) as Label
 	if pending_label == null:
 		return
-	var pending_count := 0
-	for queued in toast_queue:
-		if typeof(queued) == TYPE_DICTIONARY:
-			pending_count += maxi(1, int((queued as Dictionary).get("count", 1)))
+	var pending_count := toast_queue_pending_count
 	var pending_copy := "还有99+条" if pending_count > 99 else "还有%d条" % pending_count
 	pending_label.text = pending_copy if pending_count > 0 else ""
 	pending_label.tooltip_text = "还有%d条通知待显示" % pending_count if pending_count > 0 else ""
@@ -7580,11 +7998,14 @@ func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
 	if not toast_queue.is_empty():
 		var next_toast = toast_queue.pop_front()
 		if typeof(next_toast) == TYPE_DICTIONARY:
-			var next_text := str((next_toast as Dictionary).get("text", ""))
-			var repeat_count := int((next_toast as Dictionary).get("count", 1))
+			var next_entry := next_toast as Dictionary
+			toast_queue_pending_count = maxi(0, toast_queue_pending_count - maxi(1, int(next_entry.get("count", 1))))
+			toast_queue_pending_bytes = maxi(0, toast_queue_pending_bytes - toast_queue_entry_bytes(next_entry))
+			var next_text := str(next_entry.get("text", ""))
+			var repeat_count := int(next_entry.get("count", 1))
 			if repeat_count > 1:
 				next_text += "（×%d）" % repeat_count
-			show_toast(next_text, int((next_toast as Dictionary).get("duration_msec", TOAST_DEFAULT_DURATION_MSEC)))
+			show_toast(next_text, int(next_entry.get("duration_msec", TOAST_DEFAULT_DURATION_MSEC)))
 
 func dismiss_active_toast() -> void:
 	if toast_tween != null and is_instance_valid(toast_tween):
@@ -7597,6 +8018,8 @@ func dismiss_active_toast() -> void:
 		toast_container.visible = false
 	toast_mode = ""
 	toast_queue.clear()
+	toast_queue_pending_count = 0
+	toast_queue_pending_bytes = 0
 	toast_active_minimum_dwell_msec = 0
 
 func clear_toast_on_mode_change() -> void:
@@ -7606,12 +8029,27 @@ func clear_toast_on_mode_change() -> void:
 func refresh_settings_local_row(setting_key: String) -> bool:
 	if not settings_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return false
-	var settings_panel := root_layer.find_child("SettingsPanel", true, false) as Control
-	if settings_panel == null or not is_current_ui_control(settings_panel):
-		return false
-	var button := root_layer.find_child("SettingRowButton_%s" % setting_key, true, false) as Button
-	var status_label := root_layer.find_child("SettingRowStatus_%s" % setting_key, true, false) as Label
-	if button == null or status_label == null:
+	var cached_row: Dictionary = settings_local_row_controls.get(setting_key, {}) if typeof(settings_local_row_controls.get(setting_key, {})) == TYPE_DICTIONARY else {}
+	var settings_panel := cached_row.get("panel", null) as Control
+	var button := cached_row.get("button", null) as Button
+	var status_label := cached_row.get("status", null) as Label
+	var overview_summary := cached_row.get("overview_summary", null) as Label
+	var overview_fill := cached_row.get("overview_fill", null) as Control
+	if not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label) or not is_current_ui_control(overview_summary) or not is_current_ui_control(overview_fill):
+		settings_panel = root_layer.find_child("SettingsPanel", true, false) as Control
+		button = root_layer.find_child("SettingRowButton_%s" % setting_key, true, false) as Button
+		status_label = root_layer.find_child("SettingRowStatus_%s" % setting_key, true, false) as Label
+		if settings_panel != null and button != null and status_label != null:
+			overview_summary = settings_panel.find_child("SettingsOverviewSummary", true, false) as Label
+			overview_fill = settings_panel.find_child("SettingsOverviewFill", true, false) as Control
+			settings_local_row_controls[setting_key] = {
+				"panel": settings_panel,
+				"button": button,
+				"status": status_label,
+				"overview_summary": overview_summary,
+				"overview_fill": overview_fill,
+			}
+	if settings_panel == null or button == null or status_label == null or not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label):
 		return false
 
 	var full_status := ""
@@ -7724,13 +8162,11 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	settings_panel.set_meta("settings_local_update_revision", int(settings_panel.get_meta("settings_local_update_revision", 0)) + 1)
 	button.set_meta("local_update_revision", settings_panel.get_meta("settings_local_update_revision", 0))
 
-	var overview_summary := settings_panel.find_child("SettingsOverviewSummary", true, false) as Label
 	if overview_summary != null:
 		var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
 		var enabled_play := int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
 		overview_summary.text = "声音 %d/3    体验 %d/3" % [enabled_audio, enabled_play]
 		set_ui_full_text(overview_summary, overview_summary.text, "设置总览：声音与体验启用数量")
-	var overview_fill := settings_panel.find_child("SettingsOverviewFill", true, false) as Control
 	if overview_fill != null:
 		var enabled_total := int(music_enabled) + int(sfx_enabled) + int(tts_enabled) + int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
 		overview_fill.anchor_right = 0.030 + 0.920 * clampf(float(enabled_total) / 6.0, 0.0, 1.0)

@@ -19,7 +19,7 @@ func announce_online_game_audio(next_game: Dictionary) -> void:
 
 func build_voice_payload(frames: PackedVector2Array) -> Dictionary:
 	var encoded = encode_voice_frames(frames)
-	if encoded.is_empty():
+	if encoded.is_empty() or bool(encoded.get("silent", false)):
 		return {}
 	var payload = {
 		"type": "voiceMessage",
@@ -88,7 +88,8 @@ func online_recovery_status_text() -> String:
 	# Keep one short state sentence in the HUD while the action lane carries the
 	# full reason and route. The phase word is intentionally visible so a disabled
 	# retry cannot be mistaken for an active connection attempt.
-	var compact := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+	var viewport_size := effective_viewport_size()
+	var compact := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	if online_recovery_connecting():
 		return "断线·连接中" if compact else "断线 · 连接中 · 第%d次" % maxi(online_reconnect_attempts, 1)
 	var remaining := maxi(0, int(ceil(float(online_next_reconnect_msec - Time.get_ticks_msec()) / 1000.0)))
@@ -105,10 +106,45 @@ func online_recovery_phase_text() -> String:
 	return "可立即重连"
 
 func online_recovery_reason_text() -> String:
-	var feedback := online_feedback.strip_edges()
-	if feedback == "" or feedback.find("正在重新连接") >= 0 or feedback.find("正在连接") >= 0:
-		return "连接已断开"
-	return feedback
+	match online_recovery_reason_code:
+		"connecting":
+			return "连接已断开"
+		"connection_lost":
+			return "连接已断开"
+		"connection_error":
+			return "连接出错"
+		"server_rejected":
+			return online_feedback.strip_edges()
+	return online_feedback.strip_edges() if online_feedback.strip_edges() != "" else "连接已断开"
+
+
+func online_recovery_view_model(now_msec: int = -1) -> Dictionary:
+	var current_msec := Time.get_ticks_msec() if now_msec < 0 else now_msec
+	var reconnecting := online_recovery_connecting()
+	var remaining_msec := maxi(0, online_next_reconnect_msec - current_msec)
+	var remaining_seconds := maxi(0, int(ceil(float(remaining_msec) / 1000.0)))
+	var attempt := maxi(online_reconnect_attempts, 1)
+	var cooldown := remaining_msec > 0
+	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
+	var compact := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+	var phase_text := "正在连接 · 第%d次" % attempt if reconnecting else ("等待重试 · %d秒后可重连" % remaining_seconds if cooldown else "可立即重连")
+	var button_text := "连接中 · 第%d次" % attempt if reconnecting else ("%d秒后可重连" % remaining_seconds if cooldown else "立即重连 · 第%d次" % attempt)
+	var status_text := ("断线·连接中" if compact else "断线 · 连接中 · 第%d次" % attempt) if reconnecting else (("断线·%d秒后重连" % remaining_seconds if compact else "断线 · %d秒后可重连" % remaining_seconds) if cooldown else ("断线·重连" if compact else "断线 · 可立即重连"))
+	var reason := online_recovery_reason_text()
+	var detail := "%s；牌局暂时只读；第%d次恢复，%s；使用重连恢复当前牌局，或返回大厅" % [reason, attempt, ("约%d秒后可重试" % remaining_seconds if cooldown else "现在可以重试")]
+	return {
+		"phase": phase,
+		"reconnecting": reconnecting,
+		"cooldown": cooldown,
+		"remaining_msec": remaining_msec,
+		"remaining_seconds": remaining_seconds,
+		"attempt": attempt,
+		"phase_text": phase_text,
+		"button_text": button_text,
+		"status_text": status_text,
+		"reason": reason,
+		"detail": detail,
+	}
 
 func online_recovery_button_text() -> String:
 	var attempt := maxi(online_reconnect_attempts, 1)
@@ -127,21 +163,22 @@ func refresh_online_recovery_live_controls(now_msec: int = -1) -> void:
 	if mode != "online_game" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var current_msec := Time.get_ticks_msec() if now_msec < 0 else now_msec
-	var reconnecting := online_recovery_connecting()
-	var remaining_msec := maxi(0, online_next_reconnect_msec - current_msec)
-	var cooldown := remaining_msec > 0
-	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
+	var recovery_model := online_recovery_view_model(current_msec)
+	var reconnecting := bool(recovery_model.get("reconnecting", false))
+	var remaining_msec := int(recovery_model.get("remaining_msec", 0))
+	var cooldown := bool(recovery_model.get("cooldown", false))
+	var phase := str(recovery_model.get("phase", "retry_ready"))
 	var root_id := root_layer.get_instance_id()
 	if root_id != online_recovery_controls_root_id or online_recovery_state_label == null or not is_instance_valid(online_recovery_state_label) or online_recovery_button == null or not is_instance_valid(online_recovery_button):
 		online_recovery_controls_root_id = root_id
 		online_recovery_state_label = root_layer.find_child("OnlineRecoveryStateLabel", true, false) as Label
 		online_recovery_button = root_layer.find_child("OnlineReconnectGameButton", true, false) as Button
 		online_recovery_live_token = ""
-	var remaining_seconds := maxi(0, int(ceil(float(remaining_msec) / 1000.0)))
-	var state_text := online_recovery_phase_text()
-	var button_text := online_recovery_button_text()
-	var detail_text := online_recovery_detail_text()
-	var view_token := "%s|%d|%d|%s|%s" % [phase, remaining_seconds, maxi(online_reconnect_attempts, 1), online_recovery_reason_text(), button_text]
+	var remaining_seconds := int(recovery_model.get("remaining_seconds", 0))
+	var state_text := str(recovery_model.get("phase_text", ""))
+	var button_text := str(recovery_model.get("button_text", ""))
+	var detail_text := str(recovery_model.get("detail", ""))
+	var view_token := "%s|%d|%d|%s|%s" % [phase, remaining_seconds, int(recovery_model.get("attempt", 1)), str(recovery_model.get("reason", "")), button_text]
 	if view_token == online_recovery_live_token:
 		return
 	online_recovery_live_token = view_token
@@ -244,10 +281,13 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 		online_log_total_count = 0
 		online_log_initialized = false
 		online_log_at_latest = false
+		online_log_follow_latest_pending_frames = 0
+		reset_online_log_render_cache()
 		online_last_snapshot_fingerprint = ""
 		online_last_room_snapshot_fingerprint = ""
 		online_seen_message_ids.clear()
 		online_seen_voice_sequences.clear()
+		online_seen_voice_sequence_order.clear()
 	else:
 		clear_online_room_snapshot()
 	if should_show_lobby:
@@ -286,6 +326,8 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_log_total_count = 0
 	online_log_initialized = false
 	online_log_at_latest = false
+	online_log_follow_latest_pending_frames = 0
+	reset_online_log_render_cache()
 	selected_room = resume_room
 	if is_instance_valid(online_room_edit):
 		online_room_edit.text = selected_room
@@ -295,6 +337,7 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_game_revision = -1
 	online_seen_message_ids.clear()
 	online_seen_voice_sequences.clear()
+	online_seen_voice_sequence_order.clear()
 	online_last_chat_sent_msec = 0
 	online_next_reconnect_msec = 0
 	online_last_snapshot_fingerprint = ""
@@ -467,32 +510,32 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 
 
 func online_rule_code_set(variant: String) -> Dictionary:
-	var cache_key := variant if variant != "" else "__default__"
-	var cached = online_rule_code_set_cache.get(cache_key, null)
-	if typeof(cached) == TYPE_DICTIONARY and not (cached as Dictionary).is_empty():
-		return cached
-	var code_set: Dictionary = {}
-	var tile_codes: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
-	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
-	for code in tile_codes:
-		code_set[normalize_tile_code(str(code))] = true
-	for code in flower_codes:
-		code_set[normalize_tile_code(str(code))] = true
-	online_rule_code_set_cache[cache_key] = code_set
-	return code_set
+	return online_rule_model(variant).get("allowed", {}) as Dictionary
 
 
 func online_rule_flower_set(variant: String) -> Dictionary:
-	var cache_key := "flowers:" + (variant if variant != "" else "__default__")
-	var cached = online_rule_code_set_cache.get(cache_key, null)
-	if typeof(cached) == TYPE_DICTIONARY and not (cached as Dictionary).is_empty():
+	return online_rule_model(variant).get("flowers", {}) as Dictionary
+
+
+func online_rule_model(variant: String) -> Dictionary:
+	var cache_key := variant if variant != "" else "__default__"
+	var cached: Variant = online_rule_model_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY:
 		return cached
-	var flower_set: Dictionary = {}
+	var allowed: Dictionary = {}
+	var flowers: Dictionary = {}
+	var tile_codes: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
 	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	for code in tile_codes:
+		allowed[normalize_tile_code(str(code))] = true
 	for code in flower_codes:
-		flower_set[normalize_tile_code(str(code))] = true
-	online_rule_code_set_cache[cache_key] = flower_set
-	return flower_set
+		var normalized := normalize_tile_code(str(code))
+		allowed[normalized] = true
+		flowers[normalized] = true
+	var model := {"allowed": allowed, "flowers": flowers}
+	online_rule_model_cache[cache_key] = model
+	online_rule_code_set_cache[cache_key] = allowed
+	return model
 
 
 func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool:
@@ -527,17 +570,32 @@ func online_log_entry_text(value) -> String:
 	return raw.strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
 
 
+func reset_online_log_render_cache() -> void:
+	online_log_revision += 1
+	online_log_fingerprint_revision = -1
+	online_log_cached_fingerprint = ""
+	online_log_cached_lines.clear()
+	online_log_render_fingerprint = ""
+	online_log_rendered_source_count = -1
+
+
 func online_log_snapshot_increment(previous_logs: Array, next_logs: Array) -> int:
 	if next_logs.is_empty():
 		return 0
 	if previous_logs.is_empty():
 		return next_logs.size()
-	var max_overlap := mini(previous_logs.size(), next_logs.size())
+	var previous_text: Array[String] = []
+	var next_text: Array[String] = []
+	for value in previous_logs.slice(maxi(0, previous_logs.size() - ONLINE_LOG_OVERLAP_WINDOW)):
+		previous_text.append(online_log_entry_text(value))
+	for value in next_logs.slice(maxi(0, next_logs.size() - ONLINE_LOG_OVERLAP_WINDOW)):
+		next_text.append(online_log_entry_text(value))
+	var max_overlap := mini(previous_text.size(), next_text.size())
 	for overlap in range(max_overlap, 0, -1):
 		var matches := true
 		for offset in range(overlap):
-			var previous_index := previous_logs.size() - overlap + offset
-			if online_log_entry_text(previous_logs[previous_index]) != online_log_entry_text(next_logs[offset]):
+			var previous_index := previous_text.size() - overlap + offset
+			if previous_text[previous_index] != next_text[offset]:
 				matches = false
 				break
 		if matches:
@@ -744,8 +802,29 @@ func handle_online_log(data: Dictionary) -> void:
 		logs.remove_at(0)
 	online_room["logs"] = logs
 	online_log_total_count = previous_total + 1
+	online_log_revision += 1
 	online_lobby_render_revision += 1
 	set_online_feedback(message, false)
+	# A log can arrive through a test transport or a polling path that has no
+	# subsequent readable bytes. Commit the page refresh immediately so the
+	# bottom-follow request is created before the next idle frame.
+	if mode == "online_lobby":
+		refresh_online_lobby_state()
+
+
+func schedule_online_lobby_content_refresh() -> void:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return
+	if online_lobby_refresh_queued:
+		return
+	online_lobby_refresh_queued = true
+	call_deferred("flush_online_lobby_content_refresh")
+
+
+func flush_online_lobby_content_refresh() -> void:
+	online_lobby_refresh_queued = false
+	if mode == "online_lobby" and online_last_lobby_render_revision != online_lobby_render_revision:
+		refresh_online_lobby_state()
 
 
 func handle_online_chat(data: Dictionary) -> void:
@@ -834,6 +913,7 @@ func handle_online_message(line: String) -> void:
 				if bounded_log != "":
 					bounded_logs.append(bounded_log)
 			online_room["logs"] = bounded_logs
+			online_log_revision += 1
 			var explicit_total = first_present(next_room, ["logCount", "logTotal", "logsTotal", "totalLogs"], null)
 			if explicit_total != null:
 				online_log_total_count = maxi(online_log_total_count, int(explicit_total))
@@ -1374,6 +1454,15 @@ func set_online_feedback(text: String, waiting: bool = false) -> void:
 		return
 	online_feedback = text
 	online_waiting_for_server = waiting
+	var clean_feedback := text.strip_edges()
+	if clean_feedback.find("正在重新连接") >= 0 or clean_feedback.find("正在连接") >= 0:
+		online_recovery_reason_code = "connecting"
+	elif clean_feedback.find("出错") >= 0 or clean_feedback.find("失败") >= 0:
+		online_recovery_reason_code = "connection_error"
+	elif clean_feedback.find("拒绝") >= 0:
+		online_recovery_reason_code = "server_rejected"
+	else:
+		online_recovery_reason_code = "connection_lost"
 	if not waiting:
 		online_last_sent_msec = 0
 		online_slow_notice_shown = false

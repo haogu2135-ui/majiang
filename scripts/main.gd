@@ -132,11 +132,12 @@ func queue_free_runtime_node(node: Node) -> void:
 
 
 func shutdown_runtime_audio() -> void:
-	clear_remote_voice_players()
+	destroy_remote_voice_players()
 	shutdown_android_tts()
 	stop_current_speech()
 	speech_queue_generation += 1
 	speech_queue.clear()
+	speech_queue_head = 0
 	if speech_delay_timer != null and is_instance_valid(speech_delay_timer):
 		speech_delay_timer.stop()
 		speech_delay_timer.timeout.emit()
@@ -807,10 +808,10 @@ func speak_text_delayed(text: String, delay_seconds: float = 0.0, interrupt: boo
 	if not tts_enabled:
 		return
 	if interrupt:
-		speech_queue.clear()
+		clear_speech_queue()
 		speech_queue_generation += 1
 		stop_current_speech()
-	speech_queue.append({
+	enqueue_speech_item({
 		"text": text,
 		"delay": max(0.0, delay_seconds),
 		"interrupt": interrupt,
@@ -831,10 +832,10 @@ func speak_voice_clips_delayed(clips: Array, delay_seconds: float = 0.0, interru
 			return false
 		normalized.append(key)
 	if interrupt:
-		speech_queue.clear()
+		clear_speech_queue()
 		speech_queue_generation += 1
 		stop_current_speech()
-	speech_queue.append({
+	enqueue_speech_item({
 		"clips": normalized,
 		"delay": max(0.0, delay_seconds),
 		"interrupt": interrupt,
@@ -861,14 +862,57 @@ func wait_for_speech_delay(delay_seconds: float) -> void:
 	await speech_delay_timer.timeout
 
 
+func clear_speech_queue() -> void:
+	speech_queue.clear()
+	speech_queue_head = 0
+
+
+func enqueue_speech_item(item: Dictionary) -> void:
+	if speech_queue_head >= speech_queue.size():
+		clear_speech_queue()
+	speech_queue.append(item)
+
+
+func advance_speech_queue() -> Dictionary:
+	if speech_queue_head >= speech_queue.size():
+		return {}
+	var item: Dictionary = speech_queue[speech_queue_head]
+	speech_queue_head += 1
+	compact_speech_queue()
+	return item
+
+
+func requeue_speech_item(item: Dictionary) -> void:
+	if item.is_empty():
+		return
+	if speech_queue_head > 0:
+		speech_queue_head -= 1
+		speech_queue[speech_queue_head] = item
+	else:
+		# Retries are rare and the queue is still at its head; preserve FIFO order
+		# without making normal consumption pay the Array front-shift cost.
+		speech_queue.insert(0, item)
+
+
+func compact_speech_queue(force: bool = false) -> void:
+	if speech_queue_head <= 0:
+		return
+	if speech_queue_head >= speech_queue.size():
+		clear_speech_queue()
+		return
+	if force or (speech_queue_head >= 16 and speech_queue_head * 2 >= speech_queue.size()):
+		speech_queue = speech_queue.slice(speech_queue_head)
+		speech_queue_head = 0
+
+
 func drain_speech_queue() -> void:
 	if speech_queue_active:
 		return
 	speech_queue_active = true
-	while not speech_queue.is_empty():
-		var next_item: Dictionary = speech_queue[0]
+	while speech_queue_head < speech_queue.size():
+		var next_item: Dictionary = speech_queue[speech_queue_head]
 		if next_item.has("clips"):
-			var clip_item: Dictionary = speech_queue.pop_front()
+			var clip_item := advance_speech_queue()
 			var clip_generation = int(clip_item.get("generation", speech_queue_generation))
 			var clip_delay = float(clip_item.get("delay", 0.0))
 			if clip_delay > 0.0:
@@ -885,13 +929,13 @@ func drain_speech_queue() -> void:
 				await wait_for_speech_delay(SPEECH_CLIP_TAIL_SECONDS)
 			continue
 		if not speech_backend_ready():
-			var queued_msec = int(speech_queue[0].get("queued_msec", Time.get_ticks_msec()))
+			var queued_msec = int(speech_queue[speech_queue_head].get("queued_msec", Time.get_ticks_msec()))
 			if Time.get_ticks_msec() - queued_msec < SPEECH_MAX_READY_WAIT_MSEC and can_speak_text():
 				await wait_for_speech_delay(SPEECH_READY_RETRY_SECONDS)
 				continue
-			speech_queue.pop_front()
+			advance_speech_queue()
 			continue
-		var item: Dictionary = speech_queue.pop_front()
+		var item := advance_speech_queue()
 		var generation = int(item.get("generation", speech_queue_generation))
 		var delay = float(item.get("delay", 0.0))
 		if delay > 0.0:
@@ -905,9 +949,10 @@ func drain_speech_queue() -> void:
 			var attempts = int(item.get("attempts", 0))
 			if attempts < 2 and can_speak_text():
 				item["attempts"] = attempts + 1
-				speech_queue.push_front(item)
+				requeue_speech_item(item)
 				await wait_for_speech_delay(SPEECH_READY_RETRY_SECONDS)
 	speech_queue_active = false
+	compact_speech_queue(true)
 
 func play_voice_clip(key: String) -> bool:
 	if key == "" or not tts_enabled or not audio_runtime_enabled():
@@ -2231,9 +2276,9 @@ func offline_hand_ai_briefing_text() -> String:
 	return " · ".join(parts)
 
 func ai_profile(seat: int) -> Dictionary:
-	# Profile definitions are immutable runtime constants. Read-only callers can
-	# share them; callers that edit a profile must request an explicit duplicate.
-	return ai_profile_source(seat)
+	# Keep the canonical profile private to the AI evaluator. Public callers may
+	# annotate or tune the returned profile without changing future decisions.
+	return ai_profile_source(seat).duplicate(true)
 
 func is_ai_controlled_seat(seat: int) -> bool:
 	if seat < 0 or seat >= players.size():
@@ -5376,25 +5421,31 @@ func refresh_battle_hud_lane() -> void:
 	var wall_total := display_wall_total()
 	var wall_state_text_value := wall_state_text(wall_count)
 	var last_discard := get_last_discard()
+	var last_discard_text := tile_label(last_discard) if last_discard != "" else "无"
+	var hud_token := "%d|%d|%s|%s|%d|%d" % [1 if compact_hud else 0, wall_count, wall_state_text_value, last_discard, wall_total, get_last_discard_seat()]
+	if str(root_layer.get_meta("battle_hud_view_token", "")) == hud_token:
+		return
+	root_layer.set_meta("battle_hud_view_token", hud_token)
+	hud_view_token = hud_token
+	hud_lane_refresh_count += 1
 	var status := root_layer.find_child("TopHudStatus", true, false) as Label
 	if status != null:
 		set_dynamic_label_text(status, top_hud_short_status_text(compact_hud), top_hud_status_tooltip_text())
 	var wall := root_layer.find_child("TopHudWallText", true, false) as Label
 	var wall_state := root_layer.find_child("TopHudWallState", true, false) as Label
-	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, tile_label(last_discard) if last_discard != "" else "无"]
+	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, last_discard_text]
 	if wall != null:
 		set_dynamic_label_text(wall, "余牌 %d/%d" % [wall_count, wall_total], wall_detail)
 		wall.set_meta("wall_count", wall_count)
 		wall.set_meta("wall_total", wall_total)
 	if wall_state != null:
-		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), tile_label(last_discard) if last_discard != "" else "无"], wall_detail)
+		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), last_discard_text], wall_detail)
 	var center_count := root_layer.find_child("CenterWallCount", true, false) as Label
 	if center_count != null:
 		var center_wall_token := "%d/%d" % [wall_count, wall_total]
 		if str(center_count.get_meta("wall_view_token", "")) != center_wall_token:
 			set_dynamic_label_text(center_count, "%d" % wall_count, "牌墙剩余 %d/%d 张" % [wall_count, wall_total])
 			center_count.set_meta("wall_view_token", center_wall_token)
-	root_layer.set_meta("hud_lane_refresh_count", int(root_layer.get_meta("hud_lane_refresh_count", 0)) + 1)
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
 	var timer := game_render_delay_timer
@@ -5591,8 +5642,17 @@ func clear_screen() -> void:
 	update_release_notes_label = null
 	update_primary_button = null
 	update_secondary_button = null
+	update_release_notes_layout_sync_revision += 1
+	update_release_notes_layout_sync_queued = false
 	menu_realtime_3d_stage = null
 	chat_input = null
+	chat_message_refresh_revision += 1
+	chat_message_refresh_queued = false
+	chat_message_panel_root_id = 0
+	chat_message_panel = null
+	chat_message_scroll = null
+	chat_message_label = null
+	chat_message_range_label = null
 	menu_parallax_last_normalized = Vector2(9.0, 9.0)
 	menu_parallax_last_viewport = Vector2.ZERO
 	pending_claim_live_root_id = 0
@@ -5638,6 +5698,28 @@ func release_retained_battle_views() -> void:
 	retained_battle_center_signature = ""
 	retained_battle_atmosphere = null
 	retained_battle_atmosphere_signature = ""
+	for retained_button in retained_battle_discard_archive_buttons.values():
+		var archive_button := retained_button as Button
+		if archive_button != null and is_instance_valid(archive_button):
+			if archive_button.get_parent() != null:
+				archive_button.get_parent().remove_child(archive_button)
+			archive_button.queue_free()
+	retained_battle_discard_archive_buttons.clear()
+
+
+func retain_battle_discard_archive_buttons_for_render() -> void:
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for seat in range(4):
+		var archive_button := root_layer.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
+		if archive_button == null or not is_instance_valid(archive_button) or archive_button.is_queued_for_deletion():
+			continue
+		var button_parent := archive_button.get_parent()
+		if button_parent != null:
+			button_parent.remove_child(archive_button)
+		retained_battle_discard_archive_buttons[seat] = archive_button
 
 func start_offline(instant: bool = false) -> void:
 	if not ensure_tile_assets_ready():
@@ -5874,6 +5956,7 @@ func render_game(state_changed: bool = false) -> void:
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
 	retain_battle_atmosphere_for_render()
+	retain_battle_discard_archive_buttons_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -5973,9 +6056,11 @@ func update_ai_assistance_async() -> void:
 	var next_human_advice := get_ai_discard_reports(0)
 	var seat_threat_context := make_ai_evaluation_context(0, evaluation_visible_counts)
 	var next_seat_threat_reports := render_seat_threat_reports(0, seat_threat_context) if player_ai_assist_enabled() else {}
-	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline" or hand_identity_fingerprint(get_self_hand()) != evaluation_hand_signature or threat_report_table_state_cache_key(0, visible_tile_counts()) != evaluation_table_signature:
+	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline":
 		# The deferred evaluator no longer describes the mounted table. Do not
-		# partially commit hand and threat results; the next state render owns retry.
+		# partially commit hand and threat results. State renders increment the
+		# monotonic revision at the mutation boundary, so no second public-table
+		# scan is needed here.
 		offline_ai_assistance_queued = false
 		return
 	current_human_advice = next_human_advice
@@ -6029,6 +6114,31 @@ func copy_local_ui_contract_metadata(source: Control, target: Control) -> void:
 	target.set_meta("local_contract_generation", ui_page_generation)
 	target.set_meta("local_contract_copy_strategy", "relative_subtree_path_then_legacy_name")
 
+
+func copy_hand_ui_contract_metadata(source: Control, target: Control) -> void:
+	if source == null or target == null or not is_instance_valid(source) or not is_instance_valid(target):
+		return
+	# Hand hints only need the tile owners. Build the index once per tray and
+	# copy contracts by source index, avoiding a second full target-tree scan.
+	var target_by_index: Dictionary = {}
+	for target_node in target.find_children("HandTile_*", "Control", true, false):
+		var target_tile := target_node as Control
+		if target_tile != null:
+			target_by_index[int(target_tile.get_meta("hand_source_index", -1))] = target_tile
+	for source_node in source.find_children("HandTile_*", "Control", true, false):
+		var source_tile := source_node as Control
+		if source_tile == null:
+			continue
+		var source_index := int(source_tile.get_meta("hand_source_index", -1))
+		var target_tile := target_by_index.get(source_index, null) as Control
+		if target_tile == null:
+			continue
+		for meta_name_variant in source_tile.get_meta_list():
+			var meta_name := str(meta_name_variant)
+			if meta_name == "ui_optimization_ids" or meta_name.begins_with("battle_ui_") or meta_name.begins_with("ui_round_"):
+				target_tile.set_meta(meta_name, source_tile.get_meta(meta_name))
+	target.set_meta("local_contract_copy_strategy", "hand_source_index_registry")
+
 func update_hand_ai_hints() -> void:
 	# 手牌牌面、风险徽标和推荐徽标都由 draw_hand 一次性构造；只替换
 	# HandTray 子树，避免再次进入 render_game 并重新排队异步计算。
@@ -6040,6 +6150,16 @@ func update_hand_ai_hints() -> void:
 	var preserved_selection := hand_keyboard_selection
 	var focused_source_index := -1
 	var hovered_source_index := -1
+	var old_tile_buttons: Dictionary = {}
+	for old_button_value in old_tray.find_children("*", "Button", true, false):
+		var old_button := old_button_value as Button
+		if old_button == null or old_button.disabled:
+			continue
+		var tile_owner := old_button.get_parent() as Control
+		while tile_owner != null and not tile_owner.name.begins_with("HandTile_"):
+			tile_owner = tile_owner.get_parent() as Control
+		if tile_owner != null:
+			old_tile_buttons[int(tile_owner.get_meta("hand_source_index", -1))] = old_button
 	for old_tile_value in old_tray.find_children("HandTile_*", "Control", true, false):
 		var old_tile := old_tile_value as Control
 		if old_tile == null:
@@ -6047,15 +6167,12 @@ func update_hand_ai_hints() -> void:
 		var source_index := int(old_tile.get_meta("hand_source_index", -1))
 		if source_index < 0:
 			continue
-		for old_button_value in old_tile.find_children("*", "Button", true, false):
-			var old_button := old_button_value as Button
-			if old_button == null or old_button.disabled:
-				continue
+		var old_button := old_tile_buttons.get(source_index, null) as Button
+		if old_button != null:
 			if old_button.has_focus():
 				focused_source_index = source_index
 			if old_button.is_hovered():
 				hovered_source_index = source_index
-			break
 	var old_tray_index := old_tray.get_index()
 	kill_screen_tweens_for_subtree(old_tray)
 	root_layer.remove_child(old_tray)
@@ -6064,10 +6181,12 @@ func update_hand_ai_hints() -> void:
 	if new_tray != null:
 		# The source remains valid until this copy completes. Do not read contracts
 		# from a node that has already entered the delete queue.
-		copy_local_ui_contract_metadata(old_tray, new_tray)
+		copy_hand_ui_contract_metadata(old_tray, new_tray)
 		root_layer.move_child(new_tray, mini(old_tray_index, root_layer.get_child_count() - 1))
 	old_tray.queue_free()
 	invalidate_ui_contract_control_cache(root_layer)
+	hand_tile_button_registry.clear()
+	hand_tile_button_registry_root_id = 0
 	# AI suggestions can arrive while a player is reading the hand. Restore the
 	# stable selection/focus and pointer highlight after the replacement tree is
 	# mounted so the refresh cannot silently move the interaction target.
@@ -6136,8 +6255,18 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
 	if seat_threat_fingerprint == next_fingerprint and seat_threat_root_generation == current_root_generation:
 		return
-	var previous_reports := current_seat_threat_reports.duplicate(true)
-	current_seat_threat_reports = seat_threat_reports.duplicate(true)
+	var previous_reports := current_seat_threat_reports
+	var merged_reports: Dictionary = current_seat_threat_reports.duplicate(false)
+	for seat_key in seat_threat_reports.keys():
+		var old_report = previous_reports.get(seat_key, {})
+		var next_report = seat_threat_reports.get(seat_key, {})
+		var old_revision := int(old_report.get("seat_revision", seat_threat_report_revision(old_report))) if typeof(old_report) == TYPE_DICTIONARY else 0
+		var next_revision := int(next_report.get("seat_revision", seat_threat_report_revision(next_report))) if typeof(next_report) == TYPE_DICTIONARY else 0
+		if old_revision != next_revision or not merged_reports.has(seat_key):
+			# Report dictionaries are immutable render snapshots. Replace only the
+			# seat whose revision changed and retain the other three by reference.
+			merged_reports[seat_key] = next_report
+	current_seat_threat_reports = merged_reports
 	seat_threat_fingerprint = next_fingerprint
 	seat_threat_root_generation = current_root_generation
 	seat_threat_revisions = next_revisions
@@ -10079,6 +10208,7 @@ func draw_action_dock(parent: Control) -> void:
 	if status_text != "":
 		var status_slot := make_label(dock, status_text, 10, status_color, true)
 		status_slot.name = "ActionDockStatusLabel"
+		action_dock_status_label = status_slot
 		status_slot.set_meta("ui_action_status_slot", true)
 		status_slot.set_meta("ui_action_status_priority", status_priority)
 		status_slot.set_meta("action_dock_state", "priority" if status_priority else ("focus" if not action_buttons.is_empty() else "idle"))
@@ -10168,6 +10298,7 @@ func ai_discard_reports_for_render() -> Array:
 	return ai_render_report_snapshot
 
 func draw_actions(parent: Control) -> void:
+	action_dock_status_label = null
 	var pending_claim_response_bar: Control = null
 	var pending_claim_tail_bar: HBoxContainer = null
 	var pending_claim_response_tail_lane: HBoxContainer = null
@@ -10176,34 +10307,36 @@ func draw_actions(parent: Control) -> void:
 	if mode == "online_game" and not online_game_disconnected():
 		draw_chat_action_button(parent)
 	if online_game_disconnected():
-		var reconnecting := online_recovery_connecting()
-		var recovery_state := make_label(parent, online_recovery_phase_text(), 11, Color(0.98, 0.82, 0.52), true)
+		var recovery_model := online_recovery_view_model()
+		var reconnecting := bool(recovery_model.get("reconnecting", false))
+		var recovery_phase := str(recovery_model.get("phase", "retry_ready"))
+		var recovery_state := make_label(parent, str(recovery_model.get("phase_text", "")), 11, Color(0.98, 0.82, 0.52), true)
 		recovery_state.name = "OnlineRecoveryStateLabel"
 		apply_rect(recovery_state, rect_full(0.535, 0.630, 0.970, 0.680))
 		recovery_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		recovery_state.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		set_ui_full_text(recovery_state, "%s；%s" % [online_recovery_phase_text(), online_recovery_detail_text()], "断线恢复阶段")
-		recovery_state.set_meta("recovery_phase", "connecting" if reconnecting else ("cooldown" if online_next_reconnect_msec > Time.get_ticks_msec() else "retry_ready"))
-		recovery_state.set_meta("recovery_attempt", maxi(online_reconnect_attempts, 1))
-		recovery_state.set_meta("recovery_reason", online_recovery_reason_text())
+		set_ui_full_text(recovery_state, "%s；%s" % [str(recovery_model.get("phase_text", "")), str(recovery_model.get("detail", ""))], "断线恢复阶段")
+		recovery_state.set_meta("recovery_phase", recovery_phase)
+		recovery_state.set_meta("recovery_attempt", int(recovery_model.get("attempt", 1)))
+		recovery_state.set_meta("recovery_reason", str(recovery_model.get("reason", "")))
 		recovery_state.set_meta("state_owner", "online_recovery_phase_and_reason")
 		mark_ui_optimization(recovery_state, "F-891")
 		mark_ui_optimization(recovery_state, "F-892")
 		mark_ui_optimization(recovery_state, "F-897")
-		var reconnect_button := make_action_button(online_recovery_button_text(), Color(0.36, 0.62, 0.72), Callable(self, "reconnect_online_game"))
+		var reconnect_button := make_action_button(str(recovery_model.get("button_text", "立即重连")), Color(0.36, 0.62, 0.72), Callable(self, "reconnect_online_game"))
 		reconnect_button.name = "OnlineReconnectGameButton"
 		reconnect_button.disabled = reconnecting
-		reconnect_button.tooltip_text = online_recovery_detail_text()
+		reconnect_button.tooltip_text = str(recovery_model.get("detail", ""))
 		reconnect_button.set_meta("focus_fallback_name", "OnlineDisconnectedLobbyButton")
 		reconnect_button.set_meta("disabled_reason", "正在重新连接房间，请稍候" if reconnecting else "")
 		set_ui_full_text(reconnect_button, reconnect_button.tooltip_text, "恢复当前牌局：" + reconnect_button.tooltip_text)
 		reconnect_button.set_meta("action_priority", "primary")
-		reconnect_button.set_meta("recovery_status", online_recovery_button_text())
-		reconnect_button.set_meta("recovery_phase", "connecting" if reconnecting else ("cooldown" if online_next_reconnect_msec > Time.get_ticks_msec() else "retry_ready"))
-		reconnect_button.set_meta("recovery_attempt", maxi(online_reconnect_attempts, 1))
+		reconnect_button.set_meta("recovery_status", str(recovery_model.get("button_text", "")))
+		reconnect_button.set_meta("recovery_phase", recovery_phase)
+		reconnect_button.set_meta("recovery_attempt", int(recovery_model.get("attempt", 1)))
 		reconnect_button.set_meta("recovery_retry_available", not reconnecting)
-		reconnect_button.set_meta("recovery_phase_text", online_recovery_phase_text())
-		reconnect_button.set_meta("recovery_reason", online_recovery_reason_text())
+		reconnect_button.set_meta("recovery_phase_text", str(recovery_model.get("phase_text", "")))
+		reconnect_button.set_meta("recovery_reason", str(recovery_model.get("reason", "")))
 		reconnect_button.set_meta("recovery_focus_route", "primary_reconnect_then_preserved_lobby")
 		mark_ui_optimization(reconnect_button, "F-067")
 		mark_ui_optimization(reconnect_button, "F-107")
@@ -10264,7 +10397,7 @@ func draw_actions(parent: Control) -> void:
 		action_bar.add_child(unknown_lobby)
 		draw_action_dock(parent)
 		finalize_action_bar_layout()
-		call_deferred("focus_named_control", "OnlineUnknownPhaseRetryButton")
+		call_deferred("focus_online_recovery_if_current", root_layer.get_instance_id(), ui_page_generation, "OnlineUnknownPhaseRetryButton")
 		return
 	if has_pending_claim_window():
 		var pending_root := VBoxContainer.new()
@@ -11403,10 +11536,48 @@ func draw_bgm_switch_button_art(button: Control) -> Control:
 	return art
 
 
+func center_wall_view_model(wall_count: int, wall_total: int, compact: bool) -> Dictionary:
+	var cache_key := "%d|%d|%d" % [wall_count, wall_total, 1 if compact else 0]
+	var cached: Variant = center_wall_view_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY:
+		return cached
+	var state_text := wall_state_text(wall_count)
+	var model := {
+		"low": wall_is_low(wall_count),
+		"critical": wall_is_critical(wall_count),
+		"state_text": state_text,
+		"label_text": ("低墙" if wall_is_low(wall_count) else "牌墙") if compact else state_text,
+		"tooltip": "牌墙剩余 %d/%d 张 · %s" % [wall_count, wall_total, state_text],
+	}
+	center_wall_view_cache[cache_key] = model
+	if center_wall_view_cache.size() > 8:
+		center_wall_view_cache.erase(center_wall_view_cache.keys()[0])
+	return model
+
+
+func center_last_discard_view_model(tile: String, seat: int) -> Dictionary:
+	var cache_key := "%s|%d" % [tile, seat]
+	var cached: Variant = center_last_discard_view_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY:
+		return cached
+	var tile_name := tile_label(tile)
+	var source_name := pending_claim_source_name(seat)
+	var model := {
+		"tile": tile,
+		"seat": seat,
+		"tile_label": tile_name,
+		"source_name": source_name,
+		"label_text": "上张 · %s家 · %s" % [source_name, tile_name],
+		"accessible_text": "当前最后一张牌：%s · 来源：%s" % [tile_name, source_name],
+	}
+	center_last_discard_view_cache[cache_key] = model
+	if center_last_discard_view_cache.size() > 8:
+		center_last_discard_view_cache.erase(center_last_discard_view_cache.keys()[0])
+	return model
+
+
 func draw_center(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
-	var center_shadow = make_soft_depth_panel(parent, rect_full(CENTER_PANEL_RECT.position.x + 0.008, CENTER_PANEL_RECT.position.y + 0.014, CENTER_PANEL_RECT.size.x + 0.010, CENTER_PANEL_RECT.size.y + 0.018), Color(0.0, 0.0, 0.0, 0.38), 22)
-	center_shadow.name = "CenterConsole3DCastShadow"
 	var center_identity := battle_center_identity_signature()
 	if retained_battle_center != null and is_instance_valid(retained_battle_center) and not retained_battle_center.is_queued_for_deletion() and retained_battle_center_signature == center_identity:
 		parent.add_child(retained_battle_center)
@@ -11415,6 +11586,8 @@ func draw_center(parent: Control) -> void:
 		retained_battle_center = null
 		retained_battle_center_signature = ""
 		return
+	var center_shadow = make_soft_depth_panel(parent, rect_full(CENTER_PANEL_RECT.position.x + 0.008, CENTER_PANEL_RECT.position.y + 0.014, CENTER_PANEL_RECT.size.x + 0.010, CENTER_PANEL_RECT.size.y + 0.018), Color(0.0, 0.0, 0.0, 0.38), 22)
+	center_shadow.name = "CenterConsole3DCastShadow"
 	var center_overlay_active := chat_panel_open or advisor_detail_open or has_pending_claim_window()
 	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color(0.10, 0.08, 0.05, 0.52 if center_overlay_active else 0.64), "ui_jade_reading_plate")
 	center.name = "CenterConsole3DShell"
@@ -11436,18 +11609,21 @@ func draw_center(parent: Control) -> void:
 		center.move_child(center_compass, 0)
 
 	# 完整阶段提示只由顶部 HUD承载；中心保留牌墙、上张、风位和骰子等桌面事实。
-	var center_wall_count = get_wall_count()
-	var center_wall_low = wall_is_low(center_wall_count)
-	var center_wall_alpha = 0.72 if center_wall_low else 0.38
-	var compact_center := effective_viewport_size().x <= 960.0 or effective_viewport_size().y < 720.0
+	var center_wall_count := get_wall_count()
+	var center_wall_total := display_wall_total()
+	var center_viewport_size := effective_viewport_size()
+	var compact_center := center_viewport_size.x <= 960.0 or center_viewport_size.y < 720.0
+	var center_wall_model := center_wall_view_model(center_wall_count, center_wall_total, compact_center)
+	var center_wall_low := bool(center_wall_model.get("low", false))
+	var center_wall_alpha := 0.72 if center_wall_low else 0.38
 	center.set_meta("center_density_mode", "compact" if compact_center else "standard")
 	center.set_meta("center_density_policy", "compact_only_below_960_or_720_height")
-	var wall_label_text := ("低墙" if center_wall_low else "牌墙") if compact_center else wall_state_text(center_wall_count)
-	var wall_label = make_label(center, wall_label_text, 9 if compact_center else (10 if not wall_is_critical(center_wall_count) else 9), Color(0.68, 0.66, 0.54, center_wall_alpha), false)
+	var wall_label_text := str(center_wall_model.get("label_text", "牌墙"))
+	var wall_label = make_label(center, wall_label_text, 9 if compact_center else (10 if not bool(center_wall_model.get("critical", false)) else 9), Color(0.68, 0.66, 0.54, center_wall_alpha), false)
 	wall_label.name = "CenterWallStatusLabel"
 	wall_label.set_meta("layout_role", "center_wall_status")
 	wall_label.set_meta("content_slot", "wall_label")
-	wall_label.tooltip_text = "牌墙剩余 %d/%d 张 · %s" % [center_wall_count, display_wall_total(), wall_state_text(center_wall_count)]
+	wall_label.tooltip_text = str(center_wall_model.get("tooltip", ""))
 	apply_rect(wall_label, rect_full(0.34, 0.220, 0.66, 0.320) if compact_center else CENTER_WALL_LABEL_RECT)
 	var wall_text = make_label(center, "%d" % center_wall_count, 12 if compact_center else (19 if center_wall_low else 16), Color(0.86, 0.72, 0.46, 0.78 if center_wall_low else 0.36), true)
 	wall_text.name = "CenterWallCount"
@@ -11458,19 +11634,20 @@ func draw_center(parent: Control) -> void:
 	# 上张牌
 	var last = get_last_discard()
 	if last != "":
-		var last_label_text := "上张 · %s家 · %s" % [pending_claim_source_name(get_last_discard_seat()), tile_label(last)]
+		var last_discard_model := center_last_discard_view_model(last, get_last_discard_seat())
+		var last_label_text := str(last_discard_model.get("label_text", ""))
 		var last_label = make_label(center, last_label_text, 10 if compact_center else 12, Color(0.88, 0.82, 0.62), true)
 		last_label.name = "CenterLastDiscardLabel"
 		last_label.set_meta("layout_role", "center_last_discard_label")
-		last_label.set_meta("source_seat", get_last_discard_seat())
+		last_label.set_meta("source_seat", int(last_discard_model.get("seat", -1)))
 		last_label.set_meta("tile_code", last)
 		last_label.set_meta("stable_two_line_summary", true)
-		set_ui_full_text(last_label, last_label_text, "当前最后弃牌：" + last_label_text)
+		set_ui_full_text(last_label, last_label_text, str(last_discard_model.get("accessible_text", last_label_text)))
 		fit_label_font_size(last_label, maxf(72.0, safe_content_pixel_size().x * 0.105), 12, 9)
 		mark_ui_optimization(last_label, "F-041")
 		apply_rect(last_label, rect_full(0.34, 0.510, 0.66, 0.610) if compact_center else CENTER_LAST_LABEL_RECT)
 		draw_center_last_tile_trace(center, last)
-		play_center_last_discard_feedback(center, last, get_last_discard_seat())
+		play_center_last_discard_feedback(center, last, int(last_discard_model.get("seat", -1)))
 		# Reuse the river's measured face budget so the center preview follows the
 		# same aspect, min/max cap, and viewport density at every resolution.
 		# The center shell is nested inside the authored table surface. Size the
@@ -11499,7 +11676,7 @@ func draw_center(parent: Control) -> void:
 		tile.name = "CenterLastDiscardTile"
 		tile.set_meta("latest_visual_owner", "CenterLastDiscardTile")
 		tile.set_meta("discard_tile_code", last)
-		tile.tooltip_text = "当前最后一张牌：%s · 来源：%s" % [tile_label(last), pending_claim_source_name(get_last_discard_seat())]
+		tile.tooltip_text = str(last_discard_model.get("accessible_text", ""))
 		mark_ui_optimization(tile, "F-482")
 		center.add_child(tile)
 		# The frame has a custom minimum for ordinary hand/river layouts. Clear it
@@ -11510,12 +11687,12 @@ func draw_center(parent: Control) -> void:
 			# summary keeps the latest-discard fact readable and the full tile
 			# remains available through the tooltip and table river.
 			tile.visible = false
-			var compact_face_fallback := make_label(center, "牌面空间不足 · %s" % tile_label(last), 9, Color(0.92, 0.86, 0.66), true)
+			var compact_face_fallback := make_label(center, "牌面空间不足 · %s" % str(last_discard_model.get("tile_label", "")), 9, Color(0.92, 0.86, 0.66), true)
 			compact_face_fallback.name = "CenterLastDiscardCompactFallback"
 			apply_rect(compact_face_fallback, rect_full(0.365, 0.690, 0.635, 0.835))
 			compact_face_fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			compact_face_fallback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			set_ui_full_text(compact_face_fallback, compact_face_fallback.text, "最后弃牌：" + tile_label(last) + "；当前中心牌面空间不足，牌面请看牌河")
+			set_ui_full_text(compact_face_fallback, compact_face_fallback.text, "最后弃牌：" + str(last_discard_model.get("tile_label", "")) + "；当前中心牌面空间不足，牌面请看牌河")
 			configure_clipped_label(compact_face_fallback)
 			center.set_meta("center_last_discard_fallback", "readable_summary_instead_of_subminimum_face")
 		# Compact labels consume real pixel height beyond their normalized anchor;
@@ -20376,7 +20553,48 @@ func cycle_discard_archive_window(seat: int, visible_capacity: int) -> void:
 		discard_window_start_by_seat[seat] = maxi(0, current_start - visible_capacity)
 	request_game_render()
 
-func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int = 0, rows: int = 0, reserved_start: int = -1, reserved_columns: int = 0, reserved_rows: int = 0) -> Control:
+
+func cycle_discard_archive_window_from_button(button_id: int) -> void:
+	var archive_button := node_from_instance_id(button_id) as Button
+	if archive_button == null or not is_instance_valid(archive_button):
+		return
+	var seat := int(archive_button.get_meta("discard_archive_seat", -1))
+	var visible_capacity := maxi(1, int(archive_button.get_meta("visible_capacity", 1)))
+	if seat >= 0:
+		cycle_discard_archive_window(seat, visible_capacity)
+
+
+func discard_archive_button_focus_visual_by_id(button_id: int, focused: bool) -> void:
+	var archive_button := node_from_instance_id(button_id) as Button
+	if archive_button == null or not is_instance_valid(archive_button):
+		return
+	var seat := int(archive_button.get_meta("discard_archive_seat", -1))
+	var archive_art := archive_button.find_child("DiscardRiverArchiveArt_%d" % seat, true, false) as Control
+	if archive_art != null:
+		archive_art.modulate = Color(1.18, 1.10, 0.78, 1.0) if focused else Color(1.0, 1.0, 1.0, 0.82)
+	var archive_label := archive_button.find_child("DiscardRiverArchiveLabel_%d" % seat, true, false) as Label
+	if archive_label != null:
+		archive_label.add_theme_color_override("font_color", Color(1.0, 1.0, 0.86, 1.0) if focused else Color(1.0, 0.94, 0.66, 1.0))
+
+
+func clear_discard_archive_button_visuals(archive_button: Button) -> void:
+	if archive_button == null or not is_instance_valid(archive_button):
+		return
+	for child in archive_button.get_children():
+		var child_name := str(child.name)
+		if child_name.begins_with("DiscardRiverArchiveArt_") or child_name.begins_with("DiscardRiverArchiveLabel_") or child_name == "Icon_book-open":
+			archive_button.remove_child(child)
+			child.queue_free()
+
+
+func release_unused_discard_archive_buttons() -> void:
+	for retained_button in retained_battle_discard_archive_buttons.values():
+		var archive_button := retained_button as Button
+		if archive_button != null and is_instance_valid(archive_button):
+			archive_button.queue_free()
+	retained_battle_discard_archive_buttons.clear()
+
+func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int = 0, rows: int = 0, reserved_start: int = -1, reserved_columns: int = 0, reserved_rows: int = 0, compact_readable: bool = false, latest_seat: int = -1) -> Control:
 	if discard_count <= 0:
 		return null
 	var overlay = Control.new()
@@ -20387,7 +20605,8 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	apply_rect(overlay, zone_rect)
 	parent.add_child(overlay)
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
-	var is_last = seat == get_last_discard_seat() and discard_count > 0
+	var current_latest_seat := latest_seat if latest_seat >= 0 else get_last_discard_seat()
+	var is_last = seat == current_latest_seat and discard_count > 0
 	var fill_alpha = 0.48 if is_last else 0.34
 	var border_alpha = 0.28 if is_last else 0.12
 	var window_end := visible_start + visible_count
@@ -20395,7 +20614,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	# archive control is still needed for navigation, but the tail window is no
 	# longer an implicit loss of history when its button is not focused.
 	var latest_start := tail_window_start(discard_count, visible_capacity)
-	var latest_off_page := seat == get_last_discard_seat() and visible_start < latest_start
+	var latest_off_page := seat == current_latest_seat and visible_start < latest_start
 	var owner_copy := "%s %d-%d/%d" % [discard_river_owner_text(seat), visible_start + 1, window_end, discard_count]
 	var owner_display_copy := "%s · 最新在末页" % owner_copy if latest_off_page else owner_copy
 	var owner = make_badge(overlay, discard_river_owner_badge_rect(seat), owner_display_copy, 10, Color(0.010, 0.024, 0.026, fill_alpha), Color(accent.r, accent.g, accent.b, border_alpha), Color(0.92, 0.88, 0.70, 0.92))
@@ -20409,13 +20628,21 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	owner.set_meta("latest_discard_page_state", "history" if latest_off_page else "latest")
 	owner.set_meta("latest_page_hint", "最新弃牌在末页" if latest_off_page else "当前页包含最新弃牌")
 	owner.set_meta("latest_page_action", "回到最新")
-	owner.set_meta("compact_readable", effective_viewport_size().y <= 560.0)
+	owner.set_meta("compact_readable", compact_readable)
 	mark_ui_optimization(owner, "F-038")
 	mark_ui_optimization(owner, "F-039")
 	if latest_off_page:
 		set_ui_full_text(owner, owner_display_copy, "%s；点击下方入口回到最新页" % owner_copy)
 	if discard_count > visible_capacity:
-		var archive_button = make_small_button(discard_archive_button_text(discard_count, visible_start, visible_capacity), Color(accent.r, accent.g, accent.b, 0.44), Callable(self, "cycle_discard_archive_window").bind(seat, visible_capacity))
+		var archive_button := retained_battle_discard_archive_buttons.get(seat, null) as Button
+		var reused_archive_button := archive_button != null and is_instance_valid(archive_button) and not archive_button.is_queued_for_deletion()
+		if not reused_archive_button:
+			archive_button = make_small_button("", Color(accent.r, accent.g, accent.b, 0.44), Callable())
+			archive_button.pressed.connect(Callable(self, "cycle_discard_archive_window_from_button").bind(archive_button.get_instance_id()))
+		else:
+			retained_battle_discard_archive_buttons.erase(seat)
+		clear_discard_archive_button_visuals(archive_button)
+		archive_button.text = discard_archive_button_text(discard_count, visible_start, visible_capacity)
 		archive_button.name = "DiscardRiverArchiveButton_%d" % seat
 		archive_button.z_index = 12
 		archive_button.custom_minimum_size = Vector2(44, 44)
@@ -20426,7 +20653,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		archive_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		var page_text := "第%d-%d张 / 共%d张" % [visible_start + 1, mini(discard_count, visible_start + visible_capacity), discard_count]
 		var latest_page_hint := " · 最后一张在最新页" if latest_off_page else ""
-		archive_button.tooltip_text = "点击切换牌河窗口：%s%s\n完整牌河：%s" % [page_text, latest_page_hint, join_tile_labels(get_discards(seat))]
+		archive_button.tooltip_text = "点击切换牌河窗口：%s%s\n完整牌河：%s" % [page_text, latest_page_hint, discard_history_summary(seat, get_discards(seat))]
 		set_ui_full_text(archive_button, archive_button.tooltip_text, "牌河窗口：" + page_text)
 		archive_button.set_meta("visible_summary", ("历史\n回到最新" if latest_off_page else "更早\n%d-%d" % [visible_start + 1, mini(discard_count, visible_start + visible_capacity)]))
 		archive_button.set_meta("window_label", page_text)
@@ -20437,6 +20664,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		mark_ui_optimization(archive_button, "F-420")
 		mark_ui_optimization(archive_button, "F-040")
 		archive_button.set_meta("hidden_count", visible_start)
+		archive_button.set_meta("discard_archive_seat", seat)
 		archive_button.set_meta("window_start", visible_start)
 		archive_button.set_meta("visible_capacity", visible_capacity)
 		overlay.add_child(archive_button)
@@ -20463,14 +20691,12 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		# window range, so it must never start beneath the book icon.
 		apply_rect(archive_label, rect_full(0.34, 0.08, 0.96, 0.94))
 		archive_label.set_meta("visual_hit_contract", "label_inside_archive_hit_rect")
-		archive_button.focus_entered.connect(func() -> void:
-			archive_art.modulate = Color(1.18, 1.10, 0.78, 1.0)
-			archive_label.add_theme_color_override("font_color", Color(1.0, 1.0, 0.86, 1.0))
-		)
-		archive_button.focus_exited.connect(func() -> void:
-			archive_art.modulate = Color(1.0, 1.0, 1.0, 0.82)
-			archive_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.66, 1.0))
-		)
+		if not bool(archive_button.get_meta("archive_focus_visual_bound", false)):
+			var archive_button_id := archive_button.get_instance_id()
+			archive_button.focus_entered.connect(Callable(self, "discard_archive_button_focus_visual_by_id").bind(archive_button_id, true))
+			archive_button.focus_exited.connect(Callable(self, "discard_archive_button_focus_visual_by_id").bind(archive_button_id, false))
+			archive_button.set_meta("archive_focus_visual_bound", true)
+		discard_archive_button_focus_visual_by_id(archive_button.get_instance_id(), archive_button.has_focus())
 	return overlay
 
 func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int) -> Control:
@@ -20653,13 +20879,52 @@ func make_discard_3d_entry(tile: String, seat: int, zone_rect: Rect2, columns: i
 	}
 
 
+func discard_river_tile_semantics(seat: int, source_index: int, tile_code: String, highlighted: bool, page_state: String) -> Dictionary:
+	var cache_key := "%d|%d|%s|%d|%s" % [seat, source_index, tile_code, 1 if highlighted else 0, page_state]
+	var cached: Variant = discard_river_semantics_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY:
+		return cached
+	var source_name := pending_claim_source_name(seat)
+	var tile_name := tile_label(tile_code)
+	var page_suffix := "；当前最后一张" if highlighted else ("；历史页" if page_state == "history" else "")
+	var model := {
+		"tooltip": "%s牌河 · 第%d张 · %s" % [source_name, source_index + 1, tile_name],
+		"full_text": "%s牌河第%d张：%s%s" % [source_name, source_index + 1, tile_name, page_suffix],
+		"accessible_name": "%s牌河第%d张：%s" % [source_name, source_index + 1, tile_name],
+	}
+	discard_river_semantics_cache[cache_key] = model
+	if discard_river_semantics_cache.size() > 256:
+		discard_river_semantics_cache.erase(discard_river_semantics_cache.keys()[0])
+	return model
+
+
+func discard_history_summary(seat: int, discards: Array) -> String:
+	var revision_key := "%d|%d|%s|%d|%d" % [seat, discards.size(), str(discards.back()) if not discards.is_empty() else "", ai_state_revision, online_game_revision]
+	var cached: Variant = discard_river_history_summary_cache.get(revision_key, null)
+	if cached != null:
+		return str(cached)
+	var summary := join_tile_labels(discards)
+	discard_river_history_summary_cache[revision_key] = summary
+	if discard_river_history_summary_cache.size() > 16:
+		discard_river_history_summary_cache.erase(discard_river_history_summary_cache.keys()[0])
+	return summary
+
+
 func draw_discards(parent: Control) -> void:
 	var table_size: Vector2 = game_table_pixel_size()
 	var table_render_size: Vector2 = parent.size if parent.size.x > 1.0 and parent.size.y > 1.0 else table_size
+	var river_viewport_size := effective_viewport_size()
+	var river_compact_readable := river_viewport_size.y <= 560.0
+	var latest_discard_seat := get_last_discard_seat()
 	var total_discards := 0
 	var active_seats: Array[int] = []
-	var table_tile_entries: Array[Dictionary] = []
-	var foreground_overlays: Array[Control] = []
+	var foreground_layer := Control.new()
+	foreground_layer.name = "DiscardRiverForegroundLayer"
+	foreground_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	foreground_layer.z_index = 18
+	foreground_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	foreground_layer.set_meta("foreground_owner", "all_discard_river_overlays")
+	parent.add_child(foreground_layer)
 	for zone in DISCARD_ZONES:
 		var seat = int(zone[0])
 		var zone_rect: Rect2 = zone[1]
@@ -20710,15 +20975,16 @@ func draw_discards(parent: Control) -> void:
 		grid.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": grid.columns, "rows": int(visible_rows), "archive_reserved_start": archive_reserved_start})
 		grid.set_meta("latest_discard_gutter_px", 6.0)
 		grid.set_meta("latest_discard_page_state", latest_page_state)
-		grid.set_meta("latest_discard_source_seat", get_last_discard_seat())
+		grid.set_meta("latest_discard_source_seat", latest_discard_seat)
 		grid.set_meta("river_overlay_contract", "final_grid_reserved_cell_and_latest_gutter")
 		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count)
 		if river_art != null:
 			parent.move_child(river_art, max(0, grid.get_index()))
 		for i in range(visible_count):
 			var source_index = visible_start + i
-			var highlighted = seat == get_last_discard_seat() and source_index == discards.size() - 1
+			var highlighted = seat == latest_discard_seat and source_index == discards.size() - 1
 			var tile_code := str(discards[source_index])
+			var tile_semantics := discard_river_tile_semantics(seat, source_index, tile_code, highlighted, latest_page_state)
 			# The single river focus marker owns the latest-discard frame; keep the
 			# authored face clean instead of stacking a second per-tile frame.
 			var tile_node = make_tile_view(tile_code, tile_size, false, Callable(), false)
@@ -20728,8 +20994,8 @@ func draw_discards(parent: Control) -> void:
 			tile_node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			tile_node.custom_minimum_size = tile_size
 			# r449: river porcelain must never keep a wall-back fallback texture.
-			var face_tex := tile_node.find_child("TileFaceTexture", true, false) as TextureRect
-			var norm_code := normalize_tile_code(tile_code)
+			var face_tex := tile_node.get_meta("tile_face_texture", null) as TextureRect
+			var norm_code := str(tile_node.get_meta("normalized_tile_code", tile_code))
 			if face_tex != null and tile_back != null and (face_tex.texture == null or face_tex.texture == tile_back):
 				var forced = tile_textures.get(norm_code, null)
 				if forced == null or forced == tile_back:
@@ -20745,15 +21011,15 @@ func draw_discards(parent: Control) -> void:
 			tile_node.modulate = Color(1.0, 1.0, 1.0, tile_node.modulate.a)
 			tile_node.set_meta("discard_source_index", source_index)
 			tile_node.set_meta("discard_tile_code", tile_code)
-			tile_node.tooltip_text = "%s牌河 · 第%d张 · %s" % [pending_claim_source_name(seat), source_index + 1, tile_label(tile_code)]
+			tile_node.tooltip_text = str(tile_semantics.get("tooltip", ""))
 			tile_node.set_meta("latest_discard_gutter_px", 6.0)
 			tile_node.set_meta("river_final_grid_columns", grid.columns)
 			tile_node.set_meta("river_final_grid_rows", int(visible_rows))
 			tile_node.set_meta("river_cell_contract", "owner_overlay_uses_same_final_grid")
 			tile_node.set_meta("visual_owner", "river_face")
 			tile_node.set_meta("discard_page_state", latest_page_state)
-			set_ui_full_text(tile_node, tile_node.tooltip_text, "%s牌河第%d张：%s%s" % [pending_claim_source_name(seat), source_index + 1, tile_label(tile_code), "；当前最后一张" if highlighted else ("；历史页" if latest_page_state == "history" else "")])
-			tile_node.set_meta("accessible_name", "%s牌河第%d张：%s" % [pending_claim_source_name(seat), source_index + 1, tile_label(tile_code)])
+			set_ui_full_text(tile_node, tile_node.tooltip_text, str(tile_semantics.get("full_text", tile_node.tooltip_text)))
+			tile_node.set_meta("accessible_name", str(tile_semantics.get("accessible_name", tile_node.tooltip_text)))
 			if highlighted:
 				tile_node.tooltip_text += " · 刚打出 · 当前最后一张牌"
 				tile_node.set_meta("latest_discard_visual_owner", "LastDiscardFocusMarker")
@@ -20762,20 +21028,19 @@ func draw_discards(parent: Control) -> void:
 				tile_node.name = "RecentDiscardTile_%d" % seat
 				tile_node.z_index = 9
 				mark_ui_optimization(tile_node, "F-259")
-		var owner_overlay := draw_discard_river_owner_overlay(parent, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), archive_reserved_start, int(archive_geometry.get("columns", 0)), int(archive_geometry.get("rows", 0)))
+		var owner_overlay := draw_discard_river_owner_overlay(foreground_layer, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), archive_reserved_start, int(archive_geometry.get("columns", 0)), int(archive_geometry.get("rows", 0)), river_compact_readable, latest_discard_seat)
 		if owner_overlay != null:
 			owner_overlay.set_meta("archive_reserved_start", archive_reserved_start)
 			owner_overlay.set_meta("final_grid_contract", "columns_rows_reserved_start_from_same_grid")
 			owner_overlay.set_meta("latest_discard_gutter_px", 6.0)
 			owner_overlay.set_meta("latest_discard_page_state", latest_page_state)
-			owner_overlay.set_meta("latest_discard_source_seat", get_last_discard_seat())
+			owner_overlay.set_meta("latest_discard_source_seat", latest_discard_seat)
 			owner_overlay.set_meta("table_2d_foreground", true)
 			owner_overlay.set_meta("legacy_table_3d_foreground", false)
 			owner_overlay.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": grid.columns, "rows": int(visible_rows), "archive_reserved_start": archive_reserved_start})
 			owner_overlay.set_meta("archive_reserved_columns", int(archive_geometry.get("columns", 0)) if archive_reserved_start >= 0 else 0)
 			owner_overlay.set_meta("archive_reserved_rows", int(archive_geometry.get("rows", 0)) if archive_reserved_start >= 0 else 0)
-			foreground_overlays.append(owner_overlay)
-		if seat == get_last_discard_seat() and visible_start + visible_count == discards.size() and visible_count > 0:
+		if seat == latest_discard_seat and visible_start + visible_count == discards.size() and visible_count > 0:
 			var focus_marker := draw_last_discard_focus_marker(parent, seat, size_basis)
 			if focus_marker != null:
 				focus_marker.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": grid.columns, "rows": int(visible_rows)})
@@ -20787,10 +21052,9 @@ func draw_discards(parent: Control) -> void:
 					# tile remains the single visual owner for the latest discard.
 					focus_tile.visible = false
 					focus_tile.modulate.a = 0.0
-	# Pure 2D river tiles: keep ownership overlays above discards without realtime 3D stage.
-	for overlay in foreground_overlays:
-		if overlay != null and is_instance_valid(overlay) and overlay.get_parent() == parent:
-			parent.move_child(overlay, parent.get_child_count() - 1)
+		release_unused_discard_archive_buttons()
+		# The dedicated foreground layer owns all river overlays, so root child order is
+	# stable across HUD-only redraws and no per-seat move_child pass is required.
 	# The four rivers already carry ownership and last-discard focus; a cross-table
 	# summary strip made the battle page read as over-instrumented.
 
@@ -23077,8 +23341,8 @@ func draw_melds(parent: Control) -> void:
 		elif not vertical:
 			# Wide lanes should spend their actual pixel budget before falling
 			# back to the old fixed 20x28 face for four groups.
-			var wide_lane_width_px := safe_content_pixel_size().x * float(meld_rect.size.x - meld_rect.position.x) - (56.0 if has_pager else 0.0)
-			var wide_lane_height_px := safe_content_pixel_size().y * float(meld_rect.size.y - meld_rect.position.y)
+			var wide_lane_width_px := meld_content_size.x * float(meld_rect.size.x - meld_rect.position.x) - (56.0 if has_pager else 0.0)
+			var wide_lane_height_px := meld_content_size.y * float(meld_rect.size.y - meld_rect.position.y)
 			var wide_tile_count := 0
 			var wide_group_count := 0
 			for wide_meld in visible_melds:
@@ -23098,14 +23362,17 @@ func draw_melds(parent: Control) -> void:
 			var meld = visible_melds[meld_index]
 			if typeof(meld) == TYPE_ARRAY:
 				var meld_tiles := meld as Array
+				var meld_kind := meld_kind_label(meld_tiles)
 				# Chi/peng/gang share one lane orientation per seat — no kind-specific layout.
 				var meld_group := make_meld_group_view(meld_tiles, seat, false, proxy_order, meld_tile_size)
-				meld_group.name = "MeldGroup_%d_%s" % [window_start + meld_index, meld_kind_label(meld_tiles)]
+				meld_group.name = "MeldGroup_%d_%s" % [window_start + meld_index, meld_kind]
 				meld_group.set_meta("seat", seat)
 				meld_group.set_meta("orientation", "vertical" if vertical else "horizontal")
 				meld_group.set_meta("tile_count", meld_tiles.size())
-				var group_footprint := meld_lane_group_footprint(seat, meld_tiles, compact_melds)
-				if meld_tile_size != Vector2.ZERO:
+				var group_footprint := 0.0
+				if meld_tile_size == Vector2.ZERO:
+					group_footprint = meld_lane_group_footprint(seat, meld_tiles, compact_melds)
+				else:
 					var group_gap := 2.0 if compact_melds else 3.0
 					var badge_gutter := 16.0 if meld_tiles.size() >= 4 else 12.0
 					var face_extent := meld_tile_size.y if vertical else meld_tile_size.x
@@ -23116,12 +23383,14 @@ func draw_melds(parent: Control) -> void:
 				meld_group.set_meta("group_owner", "MeldArea_%d" % seat)
 				meld_group.set_meta("pager_clearance_px", 8.0)
 				meld_group.set_meta("face_rotation", seat_meld_face_rotation(seat))
-				var meld_kind := meld_kind_label(meld_tiles)
 				set_ui_full_text(meld_group, "%s · 第%d组 · %d张牌" % [meld_kind, window_start + meld_index + 1, meld_tiles.size()], "副露类型：" + meld_kind)
-				var meld_kind_badge_back := add_optional_gpt_illustration_texture(meld_group, "ui_hand_tray_state_chip", rect_full(0.570, 0.030, 0.955, 0.320), 0.58, false)
-				if meld_kind_badge_back != null:
-					meld_kind_badge_back.name = "MeldKindBadgeBack_%d_%s" % [window_start + meld_index, meld_kind]
-					meld_kind_badge_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				# One authored badge rail per lane is enough to establish the type cue;
+				# repeating the same texture behind every group only adds CanvasItems.
+				if meld_index == 0:
+					var meld_kind_badge_back := add_optional_gpt_illustration_texture(meld_group, "ui_hand_tray_state_chip", rect_full(0.570, 0.030, 0.955, 0.320), 0.58, false)
+					if meld_kind_badge_back != null:
+						meld_kind_badge_back.name = "MeldKindBadgeBack_%d_%s" % [window_start + meld_index, meld_kind]
+						meld_kind_badge_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				var meld_kind_badge := make_label(meld_group, meld_kind, 11, Color(1.0, 0.94, 0.68, 1.0), true)
 				meld_kind_badge.name = "MeldKindBadge_%d_%s" % [window_start + meld_index, meld_kind]
 				# Keep the type token inside the group after the face rotation. A
@@ -23163,12 +23432,20 @@ func draw_melds(parent: Control) -> void:
 				proxy_order += meld_tiles.size() + 1
 		if page_count > 1:
 			var page_index := int(window_start / maxi(1, lane_capacity)) + 1
-			var page_copy := "第%d/%d页\n组%d-%d" % [page_index, page_count, window_start + 1, window_start + visible_melds.size()]
+			var page_state := {
+				"index": page_index,
+				"count": page_count,
+				"start": window_start + 1,
+				"end": window_start + visible_melds.size(),
+				"copy": "第%d/%d页\n组%d-%d" % [page_index, page_count, window_start + 1, window_start + visible_melds.size()],
+				"range": "第%d/%d页 · 组%d-%d" % [page_index, page_count, window_start + 1, window_start + visible_melds.size()],
+			}
+			var page_copy := str(page_state.get("copy", ""))
 			var page_button := make_action_button(page_copy, Color(0.54, 0.58, 0.42), Callable(self, "cycle_meld_window").bind(seat, lane_capacity))
 			page_button.name = "MeldLaneArchiveButton_%d" % seat
 			page_button.custom_minimum_size = Vector2(50, UI_MIN_TOUCH_TARGET)
 			page_button.add_theme_font_size_override("font_size", 9)
-			page_button.tooltip_text = "副露第%d/%d页 · 显示第%d-%d组 · 点击查看下一页" % [int(window_start / maxi(1, lane_capacity)) + 1, page_count, window_start + 1, window_start + visible_melds.size()]
+			page_button.tooltip_text = "副露第%d/%d页 · 显示第%d-%d组 · 点击查看下一页" % [int(page_state.get("index", 1)), int(page_state.get("count", 1)), int(page_state.get("start", 1)), int(page_state.get("end", 1))]
 			set_ui_full_text(page_button, page_button.tooltip_text, "座位%d副露翻页" % seat)
 			mark_ui_optimization(page_button, "F-481")
 			page_button.set_meta("seat", seat)
@@ -23184,7 +23461,7 @@ func draw_melds(parent: Control) -> void:
 			page_button.set_meta("focus_hint", "Enter翻到下一页副露；Esc返回手牌")
 			page_button.set_meta("action_role", "meld_page_next")
 			page_button.set_meta("navigation_only", true)
-			page_button.set_meta("page_range_text", "第%d/%d页 · 组%d-%d" % [page_index, page_count, window_start + 1, window_start + visible_melds.size()])
+			page_button.set_meta("page_range_text", str(page_state.get("range", "")))
 			mark_ui_optimization(page_button, "F-260")
 			mark_ui_optimization(page_button, "F-247")
 			page_button.z_index = 14
@@ -24820,6 +25097,7 @@ func draw_round_summary(parent: Control) -> void:
 	panel.set_meta("fixed_action_lane", "action_bar_above_modal")
 	panel.set_meta("action_lane_external", true)
 	panel.set_meta("action_lane_clearance_px", 12.0)
+	panel.set_meta("settlement_fx_generation", fx_generation)
 	mark_ui_optimization(panel, "F-245")
 	panel.clip_contents = true
 	parent.add_child(panel)
@@ -26060,7 +26338,7 @@ func seat_full_identity_text(seat: int, info: Dictionary) -> String:
 		wind,
 		int(info.get("hand_count", 0)),
 		int(info.get("flowers", 0)),
-		get_discards(seat).size(),
+		int(seat_river_summary(seat).get("count", 0)),
 		seat_score_text(info),
 	]
 	var last_tile := get_last_discard_for_seat(seat)
@@ -26069,15 +26347,26 @@ func seat_full_identity_text(seat: int, info: Dictionary) -> String:
 	return detail
 
 func seat_recent_river_text(seat: int, max_count: int = 4) -> String:
-	var discards = get_discards(seat)
-	var river := join_tile_labels(discards, tail_window_start(discards.size(), max_count), max_count)
-	if river == "":
-		return ""
-	return "弃 " + river
+	return str(seat_river_summary(seat, max_count).get("recent_text", ""))
 
 func seat_recent_river_count_text(seat: int) -> String:
-	var discard_count = get_discards(seat).size()
+	var discard_count := int(seat_river_summary(seat).get("count", 0))
 	return "弃%d" % discard_count if discard_count > 0 else ""
+
+
+func seat_river_summary(seat: int, max_count: int = 4) -> Dictionary:
+	var discards := get_discards(seat)
+	var last_tile := str(discards.back()) if not discards.is_empty() else ""
+	var cache_key := "%d|%d|%s|%d|%d|%d" % [seat, discards.size(), last_tile, max_count, ai_state_revision, online_game_revision]
+	var cached: Variant = seat_river_summary_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY:
+		return cached
+	var river := join_tile_labels(discards, tail_window_start(discards.size(), max_count), max_count)
+	var summary := {"count": discards.size(), "recent_text": ("弃 " + river) if river != "" else "", "last_tile": last_tile}
+	seat_river_summary_cache[cache_key] = summary
+	if seat_river_summary_cache.size() > 32:
+		seat_river_summary_cache.erase(seat_river_summary_cache.keys()[0])
+	return summary
 
 
 func style_seat_readable_label(label: Label, primary: bool = true) -> void:
@@ -26117,6 +26406,8 @@ func draw_online_local_seat_marker(parent: Control, seat: int, side: String) -> 
 
 func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}) -> void:
 	# r212: GPT chrome conversion
+	var seat_viewport_size := effective_viewport_size()
+	var seat_compact_height := seat_viewport_size.y <= 560.0
 	var active = get_current_seat() == seat
 	var recent_discard_source = seat == get_last_discard_seat() and get_last_discard() != ""
 	var p = get_player_info(seat)
@@ -26165,10 +26456,18 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var side_fill_light = make_soft_depth_panel(panel, rect_full(0.020, 0.040, 0.980, 0.920), Color(1.0, 0.97, 0.76, 0.16 if active else 0.12), 999)
 		side_fill_light.name = "SeatPanel3DSideFillLight_%d" % seat
 
-	# r449: skip mint jade wash slab (was covering brocade + nearby tiles with green).
-	var seat_jade_wash = make_layout_host(rect_full(0.030, 0.080, 0.970, 0.860))
-	seat_jade_wash.name = "SeatPanel3DJadeWash_%d" % seat
-	panel.add_child(seat_jade_wash)
+	# Keep the authored jade ink strip as a restrained lower-surface wash. It is
+	# an existing bitmap asset, so the seat retains the established visual hook
+	# without introducing a program-painted slab over the brocade.
+	var seat_jade_wash: Control = add_illustration_texture(panel, "ui_jade_ink_strip", rect_full(0.030, 0.080, 0.970, 0.860), 0.035, false)
+	if seat_jade_wash == null:
+		# Keep the named layout anchor when an optional imported texture is not
+		# available in a stripped export; the fallback remains non-painting.
+		seat_jade_wash = make_layout_host(rect_full(0.030, 0.080, 0.970, 0.860))
+		panel.add_child(seat_jade_wash)
+	if seat_jade_wash != null:
+		seat_jade_wash.name = "SeatPanel3DJadeWash_%d" % seat
+		seat_jade_wash.set_meta("legacy_visual_hook", true)
 	var seat_accent: Color = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
 	var accent_rail = make_gpt_route_rail(rect_full(0.070, 0.900, 0.930, 0.975), Color(seat_accent.r, seat_accent.g, seat_accent.b, 0.68 if active else 0.48))
 	accent_rail.name = "SeatPanelAccentRail_%d" % seat
@@ -26194,7 +26493,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(top_name, rect_full(0.220, 0.070, 0.510 if seat == dealer_seat else 0.610, 0.385))
 		top_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(top_name, true)
-		fit_label_font_size(top_name, maxf(86.0, effective_viewport_size().x * 0.190), 12, 9)
+		fit_label_font_size(top_name, maxf(86.0, seat_viewport_size.x * 0.190), 12, 9)
 		top_name.set_meta("name_only_truncation", true)
 		set_ui_full_text(top_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
 		var top_score = make_label(panel, seat_score_text(p), 11, Color(1.0, 0.94, 0.72), true)
@@ -26202,19 +26501,19 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(top_score, rect_full(0.680 if seat == dealer_seat else 0.700, 0.070, 0.935, 0.385))
 		top_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(top_score, true)
-		fit_label_font_size(top_score, maxf(58.0, effective_viewport_size().x * 0.240), 11, 9)
+		fit_label_font_size(top_score, maxf(58.0, seat_viewport_size.x * 0.240), 11, 9)
 		var top_stats = make_label(panel, seat_hand_flower_text(p), 11, Color(0.96, 0.94, 0.84), false)
 		top_stats.name = "SeatCompactMeta_%d" % seat
 		apply_rect(top_stats, rect_full(0.220, 0.590, 0.555, 0.915))
 		top_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(top_stats, false)
-		fit_label_font_size(top_stats, maxf(72.0, effective_viewport_size().x * 0.245), 11, 9)
+		fit_label_font_size(top_stats, maxf(72.0, seat_viewport_size.x * 0.245), 11, 9)
 		var top_recent = make_label(panel, seat_recent_river_text(seat, 3), 10, Color(0.94, 0.92, 0.80), false)
 		top_recent.name = "SeatCompactRiver_%d" % seat
 		apply_rect(top_recent, rect_full(0.575, 0.590, 0.935, 0.915))
 		top_recent.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(top_recent, false)
-		fit_label_font_size(top_recent, maxf(76.0, effective_viewport_size().x * 0.300), 10, 8)
+		fit_label_font_size(top_recent, maxf(76.0, seat_viewport_size.x * 0.300), 10, 8)
 		if seat == dealer_seat:
 			var top_dealer = make_badge(panel, rect_full(0.575, 0.075, 0.670, 0.355), "庄", 9, Color(0.58, 0.12, 0.08, 0.88), Color(1.0, 0.79, 0.34, 0.56), Color(0.98, 0.92, 0.74))
 			top_dealer.name = "SeatCompactDealer_%d" % seat
@@ -26225,7 +26524,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	if side == "left" or side == "right":
 		var side_avatar = make_avatar_view(seat, active)
 		panel.add_child(side_avatar)
-		var compact_side := effective_viewport_size().y <= 560.0
+		var compact_side := seat_compact_height
 		var side_content_left := 0.225 if compact_side else 0.285
 		var side_text_back_left := 0.195 if compact_side else 0.255
 		apply_rect(side_avatar, rect_full(0.035, 0.245, 0.180 if compact_side else 0.240, 0.755))
@@ -26238,7 +26537,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(side_name, rect_full(side_content_left, 0.075, side_name_right, 0.285 if compact_side else 0.300))
 		side_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_name, true)
-		fit_label_font_size(side_name, maxf(54.0, effective_viewport_size().x * (0.070 if compact_side else 0.090)), 13, 9)
+		fit_label_font_size(side_name, maxf(54.0, seat_viewport_size.x * (0.070 if compact_side else 0.090)), 13, 9)
 		side_name.set_meta("name_only_truncation", true)
 		side_name.set_meta("name_summary_policy", "head_tail_identity_preserved")
 		set_ui_full_text(side_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
@@ -26252,10 +26551,11 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(side_score, rect_full(side_score_left, 0.295 if compact_side else 0.090, 0.940, 0.435 if compact_side else 0.300))
 		side_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_seat_readable_label(side_score, true)
-		fit_label_font_size(side_score, maxf(62.0, effective_viewport_size().x * 0.220), 12, 9)
+		fit_label_font_size(side_score, maxf(62.0, seat_viewport_size.x * 0.220), 12, 9)
 		var side_stats = make_label(panel, "", 11, Color(0.96, 0.94, 0.84), false)
 		side_stats.name = "SeatCompactMeta_%d" % seat
-		var side_discard_count = get_discards(seat).size()
+		var side_river_summary := seat_river_summary(seat, 3)
+		var side_discard_count := int(side_river_summary.get("count", 0))
 		var side_meta_text: String
 		if compact_side:
 			# Keep all three scan-critical counters in one short, non-truncating lane.
@@ -26272,7 +26572,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(side_stats, rect_full(side_content_left, 0.445 if compact_side else 0.340, 0.940, 0.570 if compact_side else 0.515))
 		side_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(side_stats, false)
-		fit_label_font_size(side_stats, maxf(82.0, effective_viewport_size().x * 0.300), 11, 8)
+		fit_label_font_size(side_stats, maxf(82.0, seat_viewport_size.x * 0.300), 11, 8)
 		if active:
 			var side_turn_rect := rect_full(side_content_left, 0.545, 0.470, 0.680) if compact_side else rect_full(0.785, 0.555, 0.940, 0.730)
 			var side_turn = make_badge(panel, side_turn_rect, "行", 8, Color(0.72, 0.56, 0.24, 0.92), Color(1.0, 0.82, 0.38, 0.34), Color(0.16, 0.12, 0.06))
@@ -26287,7 +26587,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			var side_status_right := 0.500 if side_has_threat else 0.940
 			apply_rect(side_status, rect_full(side_content_left, 0.690 if compact_side else 0.565, side_status_right, 0.800 if compact_side else 0.720))
 			side_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-			fit_label_font_size(side_status, maxf(68.0, effective_viewport_size().x * (0.105 if compact_side else 0.130)), 11, 8)
+			fit_label_font_size(side_status, maxf(68.0, seat_viewport_size.x * (0.105 if compact_side else 0.130)), 11, 8)
 			set_ui_full_text(side_status, side_status_text, "座位%d最近弃牌状态" % (seat + 1))
 			style_seat_readable_label(side_status, false)
 		draw_compact_seat_threat_badge(panel, seat, seat_threat_reports, side)
@@ -26308,7 +26608,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	apply_rect(simple_name, rect_full(content_left, 0.075, 0.535 if seat == dealer_seat else 0.610, 0.255))
 	simple_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_seat_readable_label(simple_name, true)
-	fit_label_font_size(simple_name, maxf(96.0, effective_viewport_size().x * 0.205), 15 if side == "bottom" else 12, 9)
+	fit_label_font_size(simple_name, maxf(96.0, seat_viewport_size.x * 0.205), 15 if side == "bottom" else 12, 9)
 	simple_name.set_meta("name_only_truncation", true)
 	simple_name.set_meta("name_summary_policy", "head_tail_identity_preserved")
 	set_ui_full_text(simple_name, seat_full_identity_text(seat, p), "座位%d：%s" % [seat + 1, str(p.get("name", "玩家"))])
@@ -26317,7 +26617,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	apply_rect(simple_score, rect_full(0.650, 0.075, 0.955, 0.255))
 	simple_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_seat_readable_label(simple_score, true)
-	fit_label_font_size(simple_score, maxf(76.0, effective_viewport_size().x * 0.250), 11, 9)
+	fit_label_font_size(simple_score, maxf(76.0, seat_viewport_size.x * 0.250), 11, 9)
 	if active:
 		var simple_turn = make_badge(panel, rect_full(0.800, 0.265, 0.955, 0.420), "行牌", 8, Color(0.60, 0.45, 0.20, 0.78), Color(0.90, 0.68, 0.34, 0.22), Color(0.18, 0.13, 0.08))
 		simple_turn.name = "SeatCompactTurn_%d" % seat
@@ -26327,7 +26627,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	apply_rect(simple_stats, rect_full(content_left, 0.300, 0.790, 0.430))
 	simple_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_seat_readable_label(simple_stats, false)
-	fit_label_font_size(simple_stats, maxf(110.0, effective_viewport_size().x * 0.390), 11, 9)
+	fit_label_font_size(simple_stats, maxf(110.0, seat_viewport_size.x * 0.390), 11, 9)
 	var simple_status_text = "刚打 %s" % tile_label(get_last_discard()) if recent_discard_source else (package_preview(seat) if active else "")
 	if active and simple_status_text == "":
 		simple_status_text = seat_status_summary_fallback(seat)
@@ -26337,7 +26637,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(simple_status, rect_full(content_left, 0.465, 0.955, 0.585))
 		simple_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(simple_status, false)
-		fit_label_font_size(simple_status, maxf(120.0, effective_viewport_size().x * 0.550), 9, 8)
+		fit_label_font_size(simple_status, maxf(120.0, seat_viewport_size.x * 0.550), 9, 8)
 	var simple_discard_text = seat_recent_river_text(seat, 4)
 	if active or simple_discard_text != "":
 		var simple_river = make_label(panel, simple_discard_text, 9, Color(0.94, 0.92, 0.80), false)
@@ -26345,7 +26645,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(simple_river, rect_full(content_left, 0.645, 0.955, 0.845))
 		simple_river.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		style_seat_readable_label(simple_river, false)
-		fit_label_font_size(simple_river, maxf(120.0, effective_viewport_size().x * 0.550), 9, 8)
+		fit_label_font_size(simple_river, maxf(120.0, seat_viewport_size.x * 0.550), 9, 8)
 	if seat == dealer_seat:
 		var simple_dealer = make_badge(panel, rect_full(0.555, 0.075, 0.635, 0.255), "庄", 9, Color(0.58, 0.12, 0.08, 0.86), Color(1.0, 0.79, 0.34, 0.56), Color(0.96, 0.90, 0.72))
 		simple_dealer.name = "SeatCompactDealer_%d" % seat
@@ -32435,6 +32735,10 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 
 	var risk_text = risk_badge_text(risk)
 	var tile_key := normalize_tile_code(tile) if tile != "" else tile
+	var tile_owner: Control = tile_body if lightweight_static_tile else frame
+	if tile_owner != null:
+		tile_owner.set_meta("normalized_tile_code", tile_key)
+		tile_owner.set_meta("tile_face_texture_ready", false)
 	var tile_texture = tile_textures.get(tile_key, null)
 	if tile_texture == null and tile_key != "" and not missing_tile_texture_codes.has(tile_key):
 		# On-demand load for valid codes; never cache tile_back as a face.
@@ -32511,6 +32815,9 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		texture.offset_right = bleed.x
 		texture.offset_bottom = bleed.y
 		tile_body.add_child(texture)
+		if tile_owner != null:
+			tile_owner.set_meta("tile_face_texture", texture)
+			tile_owner.set_meta("tile_face_texture_ready", true)
 		var visual_parent: Control = frame if frame != null else tile_body
 		if frame != null and (risk_text != "" or hint_badge != ""):
 			draw_tile_status_route_art(visual_parent, risk, hint_badge)
@@ -36032,6 +36339,7 @@ func refresh_online_lobby_state() -> void:
 		if previous_content_revision != online_lobby_render_revision:
 			refresh_online_room_content()
 			root_layer.set_meta("online_lobby_content_revision", online_lobby_render_revision)
+		online_last_lobby_render_revision = online_lobby_render_revision
 		# Action gates can be changed by an in-memory room fixture or a server
 		# callback without changing the rendered page signature. Reapply them even
 		# when the rest of the lobby does not need a rebuild.
@@ -38549,67 +38857,81 @@ func refresh_telemetry_data_sheet() -> void:
 	var sheet := root_layer.find_child("TelemetryDataSheet", true, false) as Control
 	if sheet == null:
 		return
-	var telemetry_sync_token := "%d|%d|%d|%d|%d|%s|%s" % [
-		telemetry_mutation_revision,
-		1 if telemetry_mutation_in_flight else 0,
-		1 if telemetry_consent else 0,
-		telemetry_outbox.size(),
-		maxi(0, int(ceil(float(telemetry_clear_confirm_deadline_msec - Time.get_ticks_msec()) / 100.0))) if telemetry_clear_confirming else 0,
-		telemetry_export_status,
-		telemetry_last_action,
-	]
-	if str(sheet.get_meta("telemetry_sync_token", "")) == telemetry_sync_token:
-		return
-	sheet.set_meta("telemetry_sync_token", telemetry_sync_token)
+	var now_msec := Time.get_ticks_msec()
+	var mutation_token := "%d|%d" % [telemetry_mutation_revision, 1 if telemetry_mutation_in_flight else 0]
+	var consent_token := "%d|%d|%d" % [telemetry_consent_sync_revision, 1 if telemetry_consent else 0, 1 if telemetry_consent_decided else 0]
+	var queue_token := "%d|%d" % [telemetry_queue_sync_revision, telemetry_outbox.size()]
+	var export_token := "%d|%s" % [telemetry_export_sync_revision, telemetry_export_status]
+	var recent_token := "%d|%s|%d" % [telemetry_recent_action_sync_revision, telemetry_last_action, 1 if telemetry_mutation_in_flight else 0]
+	var remaining_seconds := maxi(0, int(ceil(float(telemetry_clear_confirm_deadline_msec - now_msec) / 1000.0))) if telemetry_clear_confirming else 0
+	var clear_token := "%d|%d|%d|%d" % [telemetry_mutation_revision, 1 if telemetry_mutation_in_flight else 0, 1 if telemetry_clear_confirming else 0, remaining_seconds]
+	var consent_changed := str(sheet.get_meta("telemetry_consent_sync_token", "")) != consent_token
+	var queue_changed := str(sheet.get_meta("telemetry_queue_sync_token", "")) != queue_token
+	var mutation_changed := str(sheet.get_meta("telemetry_mutation_sync_token", "")) != mutation_token
+	var export_changed := str(sheet.get_meta("telemetry_export_sync_token", "")) != export_token
+	var recent_changed := str(sheet.get_meta("telemetry_recent_action_sync_token", "")) != recent_token
+	var clear_changed := str(sheet.get_meta("telemetry_clear_sync_token", "")) != clear_token
+	if consent_changed:
+		sheet.set_meta("telemetry_consent_sync_token", consent_token)
+	if queue_changed:
+		sheet.set_meta("telemetry_queue_sync_token", queue_token)
+	if mutation_changed:
+		sheet.set_meta("telemetry_mutation_sync_token", mutation_token)
+	if export_changed:
+		sheet.set_meta("telemetry_export_sync_token", export_token)
+	if recent_changed:
+		sheet.set_meta("telemetry_recent_action_sync_token", recent_token)
+	if clear_changed:
+		sheet.set_meta("telemetry_clear_sync_token", clear_token)
 	var status := sheet.find_child("TelemetryDataStatus", true, false) as Label
-	if status != null:
+	if status != null and (consent_changed or queue_changed):
 		var status_text := "处理中 · 正在提交隐私记录设置" if telemetry_mutation_in_flight else telemetry_consent_status_text()
 		set_dynamic_label_text(status, status_text)
 		status.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var permission_summary := sheet.find_child("TelemetryPermissionSummary", true, false) as Label
-	if permission_summary != null:
-		var permission_text := "权限更新中 · 本地队列暂不变" if telemetry_mutation_in_flight else telemetry_permission_summary_text()
+	if permission_summary != null and (consent_changed or queue_changed):
+		var permission_text := telemetry_permission_summary_text()
 		set_dynamic_label_text(permission_summary, permission_text, "当前隐私权限与本地队列状态")
 		permission_summary.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var consent := sheet.find_child("TelemetryConsentButton", true, false) as Button
-	if consent != null:
+	if consent != null and consent_changed:
 		consent.disabled = telemetry_mutation_in_flight
 		consent.text = "处理中" if telemetry_mutation_in_flight else ("关闭记录" if telemetry_consent else "同意记录")
 		consent.tooltip_text = "正在提交隐私记录设置，请稍候" if telemetry_mutation_in_flight else ("停止记录并清除本地匿名事件" if telemetry_consent else "允许记录匿名诊断事件")
 		set_ui_full_text(consent, consent.tooltip_text, "隐私诊断记录：" + consent.text)
 		consent.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var export := sheet.find_child("TelemetryExportButton", true, false) as Button
-	if export != null:
+	if export != null and mutation_changed:
 		export.disabled = telemetry_mutation_in_flight
 		export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	var clear := sheet.find_child("TelemetryClearButton", true, false) as Button
-	if clear != null:
+	if clear != null and (mutation_changed or clear_changed):
 		clear.disabled = telemetry_mutation_in_flight
 		clear.text = "再次清除" if telemetry_clear_confirming else "清除"
 		clear.tooltip_text = "再次点击确认清除本机匿名诊断数据" if telemetry_clear_confirming else "首次点击只进入确认，第二次点击才清除本机匿名诊断数据"
 		set_ui_full_text(clear, clear.tooltip_text, "隐私诊断清除：" + clear.text)
 		clear.set_meta("confirm_state", "armed" if telemetry_clear_confirming else "idle")
 		clear.set_meta("first_click_is_non_destructive", true)
-		clear.set_meta("confirm_remaining_msec", maxi(0, telemetry_clear_confirm_deadline_msec - Time.get_ticks_msec()) if telemetry_clear_confirming else 0)
+		clear.set_meta("confirm_remaining_seconds", remaining_seconds)
 		clear.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		mark_ui_optimization(clear, "F-406")
 	var clear_hint := sheet.find_child("TelemetryClearConfirmHint", true, false) as Label
-	if clear_hint != null:
+	if clear_hint != null and clear_changed:
 		clear_hint.visible = true
 		var clear_scope := "范围：本机匿名诊断数据"
-		var clear_hint_text := clear_scope + " · 再次点击确认清除 · 5秒内有效" if telemetry_clear_confirming else clear_scope + " · 首次点击仅确认"
+		var clear_hint_text := clear_scope + " · 再次点击确认清除 · %d秒内有效" % remaining_seconds if telemetry_clear_confirming else clear_scope + " · 首次点击仅确认"
 		set_dynamic_label_text(clear_hint, clear_hint_text, clear_hint_text)
 		clear_hint.set_meta("telemetry_clear_scope", "本机匿名诊断数据")
 		clear_hint.set_meta("confirm_window_seconds", 5)
 	var export_status := sheet.find_child("TelemetryExportStatus", true, false) as Label
-	if export_status != null:
+	if export_status != null and export_changed:
 		set_dynamic_label_text(export_status, "导出：%s" % telemetry_export_status)
 		export_status.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 		export_status.set_meta("modal_safe_route", "inside_sheet_footer")
 		mark_ui_optimization(export_status, "F-049")
 	var recent_action := sheet.find_child("TelemetryRecentAction", true, false) as Label
-	if recent_action != null:
+	if recent_action != null and recent_changed:
 		var recent_text := "最近操作：提交中" if telemetry_mutation_in_flight else "最近操作：%s" % telemetry_last_action
 		set_dynamic_label_text(recent_action, recent_text, telemetry_last_action)
 		recent_action.set_meta("telemetry_state_revision", telemetry_mutation_revision)
@@ -38634,6 +38956,8 @@ func close_telemetry_data_sheet() -> void:
 func refresh_update_dialog() -> void:
 	if update_state == "idle":
 		refresh_top_hud_update_button()
+		update_release_notes_layout_sync_revision += 1
+		update_release_notes_layout_sync_queued = false
 		if update_progress_tween != null and is_instance_valid(update_progress_tween):
 			update_progress_tween.kill()
 		update_progress_tween = null
@@ -38644,27 +38968,40 @@ func refresh_update_dialog() -> void:
 		update_dialog = null
 		call_deferred("restore_control_focus_by_id", restore_id)
 		return
-	if update_status_label == null or not is_instance_valid(update_status_label):
+	if update_dialog == null or not is_instance_valid(update_dialog) or update_status_label == null or not is_instance_valid(update_status_label):
 		return
-	set_dynamic_label_text(update_status_label, update_message, update_message)
-	update_status_label.set_meta("update_state", update_state)
-	update_status_label.set_meta("accessible_name", "更新状态：" + update_message)
-	update_status_label.set_meta("primary_status_text", update_message)
-	update_status_label.set_meta("status_hierarchy", "primary_fixed_line")
-	mark_ui_optimization(update_status_label, "F-062")
-	if update_dialog_compact_layout():
-		configure_wrapped_label(update_status_label, maxf(260.0, effective_viewport_size().x * 0.500), 0.0, 4.0)
+	var viewport := effective_viewport_size()
+	var compact_layout := update_dialog_compact_layout()
+	var layout_token := "%d|%d|%s|%d|%d|%d" % [int(round(viewport.x)), int(round(viewport.y)), ui_layout_density(), safe_area_layout_revision, resize_refresh_revision, int(large_text_enabled)]
+	var previous_layout_token := str(update_dialog.get_meta("update_layout_token", ""))
+	var layout_changed := previous_layout_token != layout_token
+	update_dialog.set_meta("update_layout_token", layout_token)
+	var state_token := "%s|%s|%s" % [update_state, update_message, update_remote_version]
+	var previous_state_token := str(update_dialog.get_meta("update_state_token", ""))
+	var state_changed := previous_state_token != state_token
+	update_dialog.set_meta("update_state_token", state_token)
+	if state_changed:
+		set_dynamic_label_text(update_status_label, update_message, update_message)
+		update_status_label.set_meta("update_state", update_state)
+		update_status_label.set_meta("accessible_name", "更新状态：" + update_message)
+		update_status_label.set_meta("primary_status_text", update_message)
+		update_status_label.set_meta("status_hierarchy", "primary_fixed_line")
+		mark_ui_optimization(update_status_label, "F-062")
+	if compact_layout and (state_changed or layout_changed):
+		configure_wrapped_label(update_status_label, maxf(260.0, viewport.x * 0.500), 0.0, 4.0)
+
+	var target_progress_value := 0.0
+	if update_total_bytes > 0:
+		target_progress_value = clamp(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes), 0.0, 100.0)
+	elif update_state == "ready" or update_state == "current":
+		target_progress_value = 100.0
+	var target_progress_percent := int(round(target_progress_value))
+	var progress_token := "%s|%d|%d" % [update_state, target_progress_percent, update_total_bytes]
+	var previous_progress_token := str(update_dialog.get_meta("update_progress_token", ""))
+	var progress_changed := previous_progress_token != progress_token
+	update_dialog.set_meta("update_progress_token", progress_token)
 	if update_progress != null and is_instance_valid(update_progress):
-		var target_progress_value := 0.0
-		if update_total_bytes > 0:
-			target_progress_value = clamp(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes), 0.0, 100.0)
-		elif update_state == "ready":
-			target_progress_value = 100.0
-		else:
-			target_progress_value = 0.0
-		var target_progress_percent := int(round(target_progress_value))
-		var previous_target_percent := int(update_progress.get_meta("progress_target_percent", -1))
-		if previous_target_percent != target_progress_percent:
+		if progress_changed:
 			if update_progress_tween != null and is_instance_valid(update_progress_tween):
 				update_progress_tween.kill()
 			update_progress_tween = null
@@ -38673,31 +39010,44 @@ func refresh_update_dialog() -> void:
 			else:
 				update_progress.value = target_progress_value
 			update_progress.set_meta("progress_target_percent", target_progress_percent)
-		update_progress.set_meta("progress_percent", target_progress_percent)
-		update_progress.set_meta("progress_bytes", "%s / %s" % [format_bytes(maxi(0, update_downloaded_bytes)), format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"])
-		update_progress.set_meta("accessible_name", "更新下载进度：%d%%" % int(round(target_progress_value)))
-	if update_progress_label != null and is_instance_valid(update_progress_label):
+			update_progress.set_meta("progress_percent", target_progress_percent)
+			update_progress.set_meta("progress_bytes", "%s / %s" % [format_bytes(maxi(0, update_downloaded_bytes)), format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"])
+			update_progress.set_meta("accessible_name", "更新下载进度：%d%%" % int(round(target_progress_value)))
+	if progress_changed and update_progress_label != null and is_instance_valid(update_progress_label):
 		var progress_text := update_progress_text()
 		set_ui_full_text(update_progress_label, progress_text, "更新进度：" + progress_text)
 		update_progress_label.text = progress_text
-		update_progress_label.set_meta("progress_percent", int(update_progress.get_meta("progress_target_percent", 0)) if update_progress != null and is_instance_valid(update_progress) else 0)
+		update_progress_label.set_meta("progress_percent", target_progress_percent)
 	if update_release_notes_art != null and is_instance_valid(update_release_notes_art):
 		var notes_text := update_release_notes.strip_edges()
-		update_release_notes_art.visible = true
-		if update_release_notes_label != null and is_instance_valid(update_release_notes_label):
-			var display_notes := notes_text if notes_text != "" else "暂无发布说明"
-			update_release_notes_label.text = display_notes
-			set_ui_full_text(update_release_notes_label, display_notes, "更新说明")
-			update_release_notes_label.set_meta("notes_empty", notes_text == "")
-			configure_wrapped_label(update_release_notes_label, maxf(220.0, effective_viewport_size().x * 0.420), 0.0, 4.0)
-		var notes_scroll := update_release_notes_art.find_child("UpdateReleaseNotesScroll", true, false) as ScrollContainer
-		var notes_thumb := update_release_notes_art.find_child("UpdateReleaseNotesScrollThumb", true, false) as Control
-		if notes_scroll != null and notes_text == "":
-			notes_scroll.scroll_vertical = 0
-		if notes_scroll != null and notes_thumb != null:
-			call_deferred("sync_update_release_notes_scroll_thumb", notes_scroll, notes_thumb)
-	refresh_update_dialog_art()
-	if update_primary_button != null and is_instance_valid(update_primary_button):
+		var notes_content_token := "%d|%d" % [notes_text.length(), hash(notes_text)]
+		var previous_notes_content_token := str(update_dialog.get_meta("update_notes_content_token", ""))
+		var notes_content_changed := previous_notes_content_token != notes_content_token
+		var previous_notes_layout_token := str(update_dialog.get_meta("update_notes_layout_token", ""))
+		var notes_layout_changed := previous_notes_layout_token != layout_token
+		update_dialog.set_meta("update_notes_content_token", notes_content_token)
+		update_dialog.set_meta("update_notes_layout_token", layout_token)
+		if notes_content_changed or notes_layout_changed:
+			update_release_notes_art.visible = true
+			var notes_scroll := update_release_notes_art.find_child("UpdateReleaseNotesScroll", true, false) as ScrollContainer
+			var notes_thumb := update_release_notes_art.find_child("UpdateReleaseNotesScrollThumb", true, false) as Control
+			if update_release_notes_label != null and is_instance_valid(update_release_notes_label):
+				var display_notes := notes_text if notes_text != "" else "暂无发布说明"
+				if notes_content_changed:
+					update_release_notes_label.text = display_notes
+					set_ui_full_text(update_release_notes_label, display_notes, "更新说明")
+					update_release_notes_label.set_meta("notes_empty", notes_text == "")
+				if notes_scroll != null:
+					queue_update_release_notes_layout_sync(notes_scroll, update_release_notes_label, notes_thumb, float(notes_scroll.scroll_vertical), layout_token)
+			elif notes_scroll != null and notes_text == "":
+				notes_scroll.scroll_vertical = 0
+			if notes_scroll != null and notes_text == "" and not notes_content_changed:
+				notes_scroll.scroll_vertical = 0
+		if update_release_notes_label != null and is_instance_valid(update_release_notes_label) and (notes_content_changed or notes_layout_changed):
+			configure_wrapped_label(update_release_notes_label, maxf(220.0, viewport.x * 0.420), 0.0, 4.0)
+	if progress_changed or state_changed or layout_changed:
+		refresh_update_dialog_art()
+	if state_changed and update_primary_button != null and is_instance_valid(update_primary_button):
 		var primary_blocked := update_state == "checking" or update_state == "downloading" or update_state == "current" or update_state == "installing"
 		update_primary_button.visible = update_state != "current"
 		update_primary_button.disabled = primary_blocked
@@ -38734,9 +39084,10 @@ func refresh_update_dialog() -> void:
 		else:
 			update_primary_button.remove_meta("recommended_action")
 			update_primary_button.remove_meta("action_hierarchy")
-	refresh_top_hud_update_button()
-	if update_secondary_button != null and is_instance_valid(update_secondary_button):
-		update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else ("安装中" if update_state == "installing" else "关闭")
+	if state_changed:
+		refresh_top_hud_update_button()
+		if state_changed and update_secondary_button != null and is_instance_valid(update_secondary_button):
+			update_secondary_button.text = "取消" if update_state == "checking" or update_state == "downloading" else ("安装中" if update_state == "installing" else "关闭")
 		update_secondary_button.disabled = update_state == "installing"
 		update_secondary_button.tooltip_text = "安装正在进行，完成后可继续" if update_state == "installing" else "取消下载" if update_state == "checking" or update_state == "downloading" else "关闭更新"
 		set_ui_full_text(update_secondary_button, update_secondary_button.tooltip_text, "更新辅助操作：" + update_secondary_button.text)
@@ -38744,6 +39095,53 @@ func refresh_update_dialog() -> void:
 			update_secondary_button.set_meta("disabled_reason", update_secondary_button.tooltip_text)
 		else:
 			update_secondary_button.remove_meta("disabled_reason")
+
+
+func queue_update_release_notes_layout_sync(notes_scroll: ScrollContainer, notes_label: Label, notes_thumb: Control, previous_scroll: float, layout_token: String) -> void:
+	if notes_scroll == null or notes_label == null or not is_instance_valid(notes_scroll) or not is_instance_valid(notes_label):
+		return
+	update_release_notes_layout_sync_revision += 1
+	if update_dialog != null and is_instance_valid(update_dialog):
+		update_dialog.set_meta("update_notes_pending_scroll_id", notes_scroll.get_instance_id())
+		update_dialog.set_meta("update_notes_pending_label_id", notes_label.get_instance_id())
+		update_dialog.set_meta("update_notes_pending_thumb_id", notes_thumb.get_instance_id() if notes_thumb != null and is_instance_valid(notes_thumb) else 0)
+		update_dialog.set_meta("update_notes_pending_scroll_value", previous_scroll)
+		update_dialog.set_meta("update_notes_pending_layout_token", layout_token)
+	if update_release_notes_layout_sync_queued:
+		return
+	update_release_notes_layout_sync_queued = true
+	call_deferred("flush_update_release_notes_layout_sync", update_release_notes_layout_sync_revision)
+
+
+func flush_update_release_notes_layout_sync(expected_revision: int) -> void:
+	if expected_revision != update_release_notes_layout_sync_revision:
+		call_deferred("flush_update_release_notes_layout_sync", update_release_notes_layout_sync_revision)
+		return
+	update_release_notes_layout_sync_queued = false
+	if update_dialog == null or not is_instance_valid(update_dialog):
+		return
+	var scroll := node_from_instance_id(int(update_dialog.get_meta("update_notes_pending_scroll_id", 0))) as ScrollContainer
+	var label := node_from_instance_id(int(update_dialog.get_meta("update_notes_pending_label_id", 0))) as Label
+	if scroll == null or label == null or not is_instance_valid(scroll) or not is_instance_valid(label):
+		return
+	sync_update_release_notes_content_width(scroll, label)
+	call_deferred("finish_update_release_notes_layout_sync", expected_revision)
+
+
+func finish_update_release_notes_layout_sync(expected_revision: int) -> void:
+	if expected_revision != update_release_notes_layout_sync_revision or update_dialog == null or not is_instance_valid(update_dialog):
+		return
+	var scroll := node_from_instance_id(int(update_dialog.get_meta("update_notes_pending_scroll_id", 0))) as ScrollContainer
+	var thumb := node_from_instance_id(int(update_dialog.get_meta("update_notes_pending_thumb_id", 0))) as Control
+	if scroll == null or not is_instance_valid(scroll):
+		return
+	var scrollbar := scroll.get_v_scroll_bar()
+	var previous_scroll := float(update_dialog.get_meta("update_notes_pending_scroll_value", 0.0))
+	if scrollbar != null:
+		scroll.scroll_vertical = int(round(clampf(previous_scroll, 0.0, maxf(0.0, scrollbar.max_value - scrollbar.page))))
+	if thumb != null and is_instance_valid(thumb):
+		sync_update_release_notes_scroll_thumb(scroll, thumb)
+
 
 func refresh_update_dialog_art() -> void:
 	var progress = 0.0
@@ -38957,6 +39355,11 @@ func show_chat_panel() -> void:
 	chat_label.custom_minimum_size = Vector2(0.0, maxf(44.0, chat_height))
 	configure_wrapped_label(chat_label, chat_width, chat_label.custom_minimum_size.y, 3.0)
 	chat_label.tooltip_text = chat_text
+	chat_message_panel_root_id = root_layer.get_instance_id()
+	chat_message_panel = chat_panel
+	chat_message_scroll = chat_scroll
+	chat_message_label = chat_label
+	chat_message_range_label = message_range_label
 	var chat_scrollbar := chat_scroll.get_v_scroll_bar()
 	if chat_scrollbar != null:
 		chat_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -39041,6 +39444,18 @@ func show_chat_panel() -> void:
 	draw_line_edit_input_art(chat_input, "聊天")
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
+	)
+	# Some desktop, virtual-keyboard, and synthetic QA events reach the native
+	# LineEdit without emitting text_submitted. Keep Enter on the same production
+	# send path so every input modality has identical validation and feedback.
+	chat_input.gui_input.connect(func(event: InputEvent) -> void:
+		if not event is InputEventKey:
+			return
+		var key_event := event as InputEventKey
+		if not key_event.pressed or key_event.echo or (key_event.keycode != KEY_ENTER and key_event.keycode != KEY_KP_ENTER):
+			return
+		send_chat_input()
+		chat_input.accept_event()
 	)
 	chat_input.text_changed.connect(func(value: String) -> void:
 		var char_count := value.length()
@@ -39676,6 +40091,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 func show_diagnostic_dialog(lines: Array) -> void:
 	# r215: GPT chrome conversion
+	stop_diagnostic_layout_retry_timer()
 	diagnostic_focus_restore_name = ""
 	diagnostic_focus_restore_id = 0
 	var previous_focus := get_viewport().gui_get_focus_owner()
@@ -39815,6 +40231,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 10 if large_text_enabled else 1)
 	content_scroll.add_child(vbox)
+	content_scroll.set_meta("diagnostic_content_list", vbox)
 
 	# 添加每一行文本
 	for line_index in range(lines.size()):
@@ -39982,6 +40399,7 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	var measured_width := diagnostic_content_viewport_width(content_scroll, content_list)
 	var width_changed := previous_width < 0.0 or absf(previous_width - measured_width) > 1.0
 	refresh_diagnostic_line_measurements(content_scroll, content_list)
+	rebuild_diagnostic_height_index(content_list, measured_width)
 	# The authored .215-.700 rect is the viewport contract. Only the child list
 	# is measured here; changing the viewport to the list height breaks the fixed
 	# status and close lanes and can move the scroll range outside the modal.
@@ -40058,28 +40476,89 @@ func refresh_diagnostic_line_measurements(content_scroll: ScrollContainer, conte
 		label.set_meta("diagnostic_measurement_source", "scroll_viewport_content_width")
 
 
+func rebuild_diagnostic_height_index(content_list: Control, measured_width: float = -1.0) -> void:
+	if content_list == null or not is_instance_valid(content_list):
+		return
+	var labels: Array[Label] = []
+	for child in content_list.get_children():
+		var label := child as Label
+		if label != null and is_instance_valid(label):
+			labels.append(label)
+	var starts: Array[float] = []
+	var ends: Array[float] = []
+	var cursor := 0.0
+	var separation := float(content_list.get_theme_constant("separation"))
+	for index in range(labels.size()):
+		var label := labels[index]
+		var row_height := maxf(12.0, maxf(label.custom_minimum_size.y, label.size.y))
+		starts.append(cursor)
+		ends.append(cursor + row_height)
+		cursor += row_height
+		if index < labels.size() - 1:
+			cursor += separation
+	var width_token := measured_width if measured_width > 0.0 else float(content_list.size.x)
+	var height_parts: Array[String] = []
+	for index in range(labels.size()):
+		height_parts.append("%.1f" % maxf(12.0, maxf(labels[index].custom_minimum_size.y, labels[index].size.y)))
+	content_list.set_meta("diagnostic_height_index_starts", starts)
+	content_list.set_meta("diagnostic_height_index_ends", ends)
+	content_list.set_meta("diagnostic_height_index_signature", "%d|%d|%.1f|%s" % [labels.size(), int(large_text_enabled), width_token, "|".join(height_parts)])
+	content_list.set_meta("diagnostic_height_index_total_height", cursor)
+
+
+func stop_diagnostic_layout_retry_timer() -> void:
+	if diagnostic_layout_retry_timer != null and is_instance_valid(diagnostic_layout_retry_timer):
+		diagnostic_layout_retry_timer.stop()
+	diagnostic_layout_retry_generation = -1
+	diagnostic_layout_retry_scroll_id = 0
+	diagnostic_layout_retry_list_id = 0
+
+
 func queue_diagnostic_layout_retry(content_scroll: ScrollContainer, content_list: Control) -> void:
 	if content_scroll == null or not is_instance_valid(content_scroll) or content_list == null or not is_instance_valid(content_list):
 		return
-	if bool(content_scroll.get_meta("diagnostic_layout_retry_pending", false)):
+	if not diagnostic_dialog_open or int(content_scroll.get_meta("diagnostic_measurement_generation", ui_page_generation)) != ui_page_generation:
 		return
 	var retry_count := int(content_scroll.get_meta("diagnostic_layout_passes", 0))
 	if retry_count >= 4:
 		return
 	content_scroll.set_meta("diagnostic_layout_passes", retry_count + 1)
 	content_scroll.set_meta("diagnostic_layout_retry_pending", true)
-	var content_scroll_id := content_scroll.get_instance_id()
-	var content_list_id := content_list.get_instance_id()
-	get_tree().create_timer(0.01).timeout.connect(func() -> void:
-		var retry_scroll := instance_from_id(content_scroll_id) as ScrollContainer
-		var retry_list := instance_from_id(content_list_id) as Control
-		if retry_scroll != null and is_instance_valid(retry_scroll) and retry_list != null and is_instance_valid(retry_list):
-			retry_diagnostic_layout(retry_scroll, retry_list)
-	, CONNECT_ONE_SHOT)
+	diagnostic_layout_retry_generation = ui_page_generation
+	diagnostic_layout_retry_scroll_id = content_scroll.get_instance_id()
+	diagnostic_layout_retry_list_id = content_list.get_instance_id()
+	if diagnostic_layout_retry_timer == null or not is_instance_valid(diagnostic_layout_retry_timer):
+		diagnostic_layout_retry_timer = Timer.new()
+		diagnostic_layout_retry_timer.name = "DiagnosticLayoutRetryTimer"
+		diagnostic_layout_retry_timer.one_shot = true
+		diagnostic_layout_retry_timer.process_callback = Timer.TIMER_PROCESS_IDLE
+		diagnostic_layout_retry_timer.timeout.connect(Callable(self, "on_diagnostic_layout_retry_timeout"))
+		attach_audio_node(diagnostic_layout_retry_timer)
+	diagnostic_layout_retry_timer.stop()
+	diagnostic_layout_retry_timer.wait_time = 0.01
+	diagnostic_layout_retry_timer.start()
 
 
-func retry_diagnostic_layout(content_scroll: ScrollContainer, content_list: Control) -> void:
-	if content_scroll == null or not is_instance_valid(content_scroll):
+func on_diagnostic_layout_retry_timeout() -> void:
+	var expected_generation := diagnostic_layout_retry_generation
+	var content_scroll_id := diagnostic_layout_retry_scroll_id
+	var content_list_id := diagnostic_layout_retry_list_id
+	diagnostic_layout_retry_generation = -1
+	diagnostic_layout_retry_scroll_id = 0
+	diagnostic_layout_retry_list_id = 0
+	var retry_scroll := instance_from_id(content_scroll_id) as ScrollContainer
+	var retry_list := instance_from_id(content_list_id) as Control
+	if expected_generation != ui_page_generation or not diagnostic_dialog_open:
+		return
+	if retry_scroll == null or not is_instance_valid(retry_scroll) or retry_list == null or not is_instance_valid(retry_list):
+		return
+	retry_diagnostic_layout(retry_scroll, retry_list, expected_generation)
+
+
+func retry_diagnostic_layout(content_scroll: ScrollContainer, content_list: Control, expected_generation: int = -1) -> void:
+	if content_scroll == null or not is_instance_valid(content_scroll) or not diagnostic_dialog_open:
+		return
+	if expected_generation >= 0 and expected_generation != ui_page_generation:
 		return
 	content_scroll.set_meta("diagnostic_layout_retry_pending", false)
 	normalize_diagnostic_scroll_viewport(content_scroll, content_list)
@@ -40097,48 +40576,50 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 		status_label.set_meta("diagnostic_status_pending", true)
 		return
 	var scrollbar := content_scroll.get_v_scroll_bar()
-	var content_list := content_scroll.find_child("DiagnosticContentList", true, false) as Control
+	var content_list := content_scroll.get_meta("diagnostic_content_list", null) as Control
+	if content_list == null or not is_instance_valid(content_list):
+		content_list = content_scroll.find_child("DiagnosticContentList", true, false) as Control
 	if scrollbar == null or content_list == null:
 		return
 	var total := maxi(0, total_count)
 	var sync_token := "%s|%s|%s|%d|%s|%s" % [scrollbar.value, scrollbar.page, scrollbar.max_value, total, content_scroll.size, content_list.size]
 	if str(status_label.get_meta("diagnostic_scroll_sync_token", "")) == sync_token:
 		return
-	status_label.set_meta("diagnostic_scroll_sync_token", sync_token)
 	if total == 0:
+		var empty_token := "empty|%d" % total
+		if str(status_label.get_meta("diagnostic_scroll_sync_token", "")) == empty_token:
+			return
+		status_label.set_meta("diagnostic_scroll_sync_token", empty_token)
 		set_dynamic_label_text(status_label, "诊断内容 0-0 / 0 · 无内容", "当前诊断报告没有内容")
+		return
+	status_label.set_meta("diagnostic_scroll_sync_token", sync_token)
+	var row_starts: Array = content_list.get_meta("diagnostic_height_index_starts", [])
+	var row_ends: Array = content_list.get_meta("diagnostic_height_index_ends", [])
+	if row_starts.size() != total or row_ends.size() != total:
+		rebuild_diagnostic_height_index(content_list)
+		row_starts = content_list.get_meta("diagnostic_height_index_starts", [])
+		row_ends = content_list.get_meta("diagnostic_height_index_ends", [])
+	if row_starts.size() != total or row_ends.size() != total:
 		return
 	var viewport_top := scrollbar.value
 	var viewport_height := maxf(scrollbar.page, content_scroll.size.y)
 	var viewport_bottom := viewport_top + viewport_height
 	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page)
 	var at_bottom := scrollbar.value >= max_scroll - 0.5
-	var first_visible := -1
-	var last_visible := -1
-	var line_index := 0
-	for child in content_list.get_children():
-		if not child is Label:
-			continue
-		line_index += 1
-		var line := child as Label
-		var line_top := line.position.y
-		var line_bottom := line_top + line.size.y
-		# Count only complete rows. A partially clipped last row is not a reliable
-		# reading range and made large-text mode report content the user could not
-		# actually read.
-		if line_top >= viewport_top + 1.0 and line_bottom <= viewport_bottom - 1.0:
-			if first_visible < 0:
-				first_visible = line_index
-			last_visible = line_index
+	# The measured prefix index contains complete row bounds, so scrolling uses
+	# two logarithmic lookups instead of reading every Label geometry.
+	var first_index := archive_lower_bound(row_starts, viewport_top - 0.5)
+	var last_index := archive_upper_bound(row_ends, viewport_bottom - 1.0) - 1
 	# Native scrollbars can leave the last row exactly on the clip edge. Once the
 	# user is at the actual end, the end state is authoritative even if that edge
 	# loses a fractional pixel during layout; the row remains the scroll target.
 	if at_bottom:
-		last_visible = total
-	if first_visible < 0:
-		var fallback_line_height := 38.0 if large_text_enabled else 30.0
-		first_visible = clampi(int(floor(viewport_top / fallback_line_height)) + 1, 1, total)
-		last_visible = mini(total, first_visible + maxi(1, int(ceil(viewport_height / fallback_line_height))) - 1)
+		last_index = total - 1
+	if first_index >= total or first_index > last_index:
+		first_index = clampi(archive_upper_bound(row_starts, viewport_top) - 1, 0, total - 1)
+		last_index = first_index
+	var first_visible := first_index + 1
+	var last_visible := last_index + 1
 	first_visible = clampi(first_visible, 1, total)
 	last_visible = clampi(maxi(first_visible, last_visible), first_visible, total)
 	var remaining := maxi(0, total - last_visible)
@@ -40161,6 +40642,7 @@ func dismiss_diagnostic_dialog() -> void:
 		return
 	var restore_name := diagnostic_focus_restore_name
 	var restore_id := diagnostic_focus_restore_id
+	stop_diagnostic_layout_retry_timer()
 	diagnostic_focus_restore_name = ""
 	diagnostic_focus_restore_id = 0
 	diagnostic_dialog_open = false
@@ -41026,16 +41508,17 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 	var status := root_layer.find_child("ReplayImportStatus", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
 	var import_button := root_layer.find_child("ReplayImportButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	var validation := ""
-	var valid_shape := not code.is_empty() and code.length() <= max_chars and is_valid_replay_base64_shape(code)
+	var shape_result := parse_replay_base64_shape(code)
+	var valid_shape := not code.is_empty() and code.length() <= max_chars and bool(shape_result.get("valid", false))
 	if code.is_empty():
 		validation = "等待粘贴回放码"
 	elif code.length() > max_chars:
 		validation = "回放码过长 · 请删除多余字符"
-	elif not is_valid_replay_base64_shape(code):
-		validation = replay_import_shape_error_text(code)
+	elif not valid_shape:
+		validation = str(shape_result.get("reason", "格式不正确"))
 	else:
 		validation = "格式可用 · 点击导入进行完整校验"
-	var error_position := replay_import_error_position(code) if not valid_shape and code != "" else -1
+	var error_position := int(shape_result.get("error_position", -1)) if not valid_shape and code != "" else -1
 	input.set_meta("replay_error_position", error_position)
 	input.set_meta("replay_validation_state", "valid_shape" if valid_shape else ("empty" if code == "" else "invalid_shape"))
 	if error_position > 0:
@@ -41060,35 +41543,10 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 
 
 func replay_import_shape_error_text(value: String) -> String:
-	var code := value.strip_edges()
-	if code.length() % 4 == 1:
-		return "格式不正确 · 第%d个字符后长度无法组成 Base64" % code.length()
-	var padding_start := code.length()
-	for index in range(code.length()):
-		var codepoint := code.unicode_at(index)
-		var is_alphabet := (codepoint >= 65 and codepoint <= 90) or (codepoint >= 97 and codepoint <= 122) or (codepoint >= 48 and codepoint <= 57) or codepoint == 43 or codepoint == 47
-		if codepoint == 61:
-			if padding_start == code.length():
-				padding_start = index
-		elif padding_start != code.length() or not is_alphabet:
-			return "格式不正确 · 第%d个字符不是 Base64 字符" % (index + 1)
-	var padding_count := code.length() - padding_start
-	if padding_count > 2:
-		return "格式不正确 · 结尾最多允许两个补位字符"
-	if padding_count > 0 and code.length() % 4 != 0:
-		return "格式不正确 · 补位字符必须位于末尾"
-	return "格式不正确 · 仅支持 Base64 字符"
+	return str(parse_replay_base64_shape(value).get("reason", "格式不正确"))
 
 func replay_import_error_position(value: String) -> int:
-	var code := value.strip_edges()
-	for index in range(code.length()):
-		var codepoint := code.unicode_at(index)
-		var is_alphabet := (codepoint >= 65 and codepoint <= 90) or (codepoint >= 97 and codepoint <= 122) or (codepoint >= 48 and codepoint <= 57) or codepoint == 43 or codepoint == 47 or codepoint == 61
-		if not is_alphabet:
-			return index + 1
-	if code.length() % 4 == 1:
-		return code.length()
-	return -1
+	return int(parse_replay_base64_shape(value).get("error_position", -1))
 
 
 func refresh_replay_archive_view() -> void:
@@ -41099,6 +41557,52 @@ func refresh_replay_archive_view() -> void:
 	if search != null and search.text != replay_search_query:
 		search.text = replay_search_query
 	render_replay_archive_list()
+
+
+func replay_archive_row_signature(entry: Dictionary) -> String:
+	return "%s|%s|%s|%s|%d|%d" % [
+		str(entry.get("archive_id", "")),
+		replay_archive_date_text(entry),
+		replay_archive_result_label(entry),
+		str(entry.get("replay_digest", "")),
+		1 if bool(entry.get("favorite", false)) else 0,
+		1 if replay_delete_confirming and replay_delete_target_id == str(entry.get("archive_id", "")) else 0,
+	]
+
+
+func replay_archive_row_for_entry(entry: Dictionary) -> Control:
+	var archive_id := str(entry.get("archive_id", ""))
+	var signature := replay_archive_row_signature(entry)
+	var pooled_value: Variant = replay_archive_row_pool.get(archive_id, null)
+	var pooled: Control = null
+	if pooled_value != null and is_instance_valid(pooled_value):
+		pooled = pooled_value as Control
+	if pooled != null and not pooled.is_queued_for_deletion() and str(pooled.get_meta("archive_row_signature", "")) == signature:
+		pooled.visible = true
+		pooled.mouse_filter = Control.MOUSE_FILTER_PASS
+		pooled.set_meta("archive_id", archive_id)
+		return pooled
+	if pooled != null and is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
+		pooled.queue_free()
+	replay_archive_row_pool.erase(archive_id)
+	var row := make_replay_archive_row(entry)
+	row.set_meta("archive_row_signature", signature)
+	replay_archive_row_pool[archive_id] = row
+	return row
+
+
+func configure_replay_archive_focus_if_changed(archive_pane: Control, entries: Array) -> void:
+	if archive_pane == null or not is_instance_valid(archive_pane):
+		return
+	var ids: Array[String] = []
+	for entry_value in entries:
+		if typeof(entry_value) == TYPE_DICTIONARY:
+			ids.append(str((entry_value as Dictionary).get("archive_id", "")))
+	var token := "%d|%s" % [replay_archive_generation, "|".join(ids)]
+	if str(archive_pane.get_meta("archive_focus_graph_token", "")) == token:
+		return
+	archive_pane.set_meta("archive_focus_graph_token", token)
+	configure_button_focus_navigation(archive_pane, "", false)
 
 
 func render_replay_archive_list() -> void:
@@ -41116,9 +41620,19 @@ func render_replay_archive_list() -> void:
 	if focus_owner != null and archive_pane != null and archive_pane.is_ancestor_of(focus_owner):
 		previous_focus_name = str(focus_owner.name)
 	for child in list.get_children():
-		list.remove_child(child)
-		child.queue_free()
+		var row := child as Control
+		if row != null and str(row.name).begins_with("ReplayArchiveRow_"):
+			var row_id := str(row.get_meta("archive_id", ""))
+			if row_id != "":
+				replay_archive_row_pool[row_id] = row
+			list.remove_child(row)
+			row.visible = false
+			row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		else:
+			list.remove_child(child)
+			child.queue_free()
 	var entries := replay_archive_entries(replay_search_query)
+	list.set_meta("archive_result_count", entries.size())
 	var search_input := root_layer.find_child("ReplayArchiveSearchInput", true, false) as LineEdit
 	if search_input != null:
 		search_input.set_meta("replay_search_state", "filtered" if replay_search_query.strip_edges() != "" else "all")
@@ -41147,16 +41661,99 @@ func render_replay_archive_list() -> void:
 			list.add_child(clear_search)
 		if previous_focus_name != "":
 			previous_focus_name = "ReplayArchiveSearchInput"
-		configure_button_focus_navigation(archive_pane, "", false)
-		call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name, ui_page_generation)
-		call_deferred("sync_replay_archive_range_status", archive_scroll)
-		return
+			configure_replay_archive_focus_if_changed(archive_pane, entries)
+			queue_replay_archive_view_flush(previous_scroll_value, previous_focus_name, ui_page_generation)
+			return
 	for entry_variant in entries:
 		if typeof(entry_variant) == TYPE_DICTIONARY:
-			list.add_child(make_replay_archive_row(entry_variant as Dictionary))
-	configure_button_focus_navigation(archive_pane, "", false)
-	call_deferred("restore_replay_archive_view_state", previous_scroll_value, previous_focus_name, ui_page_generation)
-	call_deferred("sync_replay_archive_range_status", archive_scroll)
+			list.add_child(replay_archive_row_for_entry(entry_variant as Dictionary))
+	configure_replay_archive_focus_if_changed(archive_pane, entries)
+	queue_replay_archive_view_flush(previous_scroll_value, previous_focus_name, ui_page_generation)
+
+
+func queue_replay_archive_view_flush(scroll_value: float, focus_name: String, expected_generation: int) -> void:
+	replay_archive_view_revision += 1
+	replay_archive_view_scroll_value = scroll_value
+	replay_archive_view_focus_name = focus_name
+	replay_archive_view_generation = expected_generation
+	if replay_archive_view_flush_queued:
+		return
+	replay_archive_view_flush_queued = true
+	call_deferred("flush_replay_archive_view", replay_archive_view_revision)
+
+
+func flush_replay_archive_view(expected_revision: int) -> void:
+	if expected_revision != replay_archive_view_revision:
+		call_deferred("flush_replay_archive_view", replay_archive_view_revision)
+		return
+	replay_archive_view_flush_queued = false
+	await get_tree().process_frame
+	if root_layer == null or not is_instance_valid(root_layer) or mode != "replay_import" or ui_page_generation != replay_archive_view_generation:
+		return
+	var archive_scroll := root_layer.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
+	if archive_scroll != null and replay_archive_view_scroll_value >= 0.0:
+		var scrollbar := archive_scroll.get_v_scroll_bar()
+		if scrollbar != null:
+			var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
+			archive_scroll.scroll_vertical = int(round(clampf(replay_archive_view_scroll_value, 0.0, scroll_range)))
+	if replay_archive_view_focus_name != "":
+		var focus_target := root_layer.find_child(replay_archive_view_focus_name, true, false) as Control
+		var focus_button := focus_target as Button if focus_target != null else null
+		var focus_is_enabled := focus_button == null or not focus_button.disabled
+		if focus_target != null and focus_target.is_visible_in_tree() and focus_is_enabled and focus_target.focus_mode != Control.FOCUS_NONE:
+			focus_target.grab_focus()
+		else:
+			focus_named_control("ReplayArchiveSearchInput")
+	if archive_scroll != null:
+		sync_replay_archive_range_status(archive_scroll)
+
+
+func rebuild_replay_archive_height_index(list: VBoxContainer) -> void:
+	if list == null or not is_instance_valid(list):
+		return
+	var starts: Array[float] = []
+	var ends: Array[float] = []
+	var cursor := 0.0
+	var row_count := 0
+	for child in list.get_children():
+		var row := child as Control
+		if row == null or not str(row.name).begins_with("ReplayArchiveRow_"):
+			continue
+		var row_height := maxf(44.0, row.custom_minimum_size.y if row.custom_minimum_size.y > 1.0 else row.size.y)
+		starts.append(cursor)
+		ends.append(cursor + row_height)
+		cursor += row_height
+		row_count += 1
+		if row_count < list.get_child_count():
+			cursor += 5.0
+	list.set_meta("archive_row_starts", starts)
+	list.set_meta("archive_row_ends", ends)
+	list.set_meta("archive_height_index_signature", "%d|%d|%d|%.1f" % [row_count, int(list.size.x), int(list.size.y), cursor])
+	list.set_meta("archive_height_index_total_height", cursor)
+
+
+func archive_lower_bound(values: Array, target: float) -> int:
+	var low := 0
+	var high := values.size()
+	while low < high:
+		var mid := (low + high) / 2
+		if float(values[mid]) < target:
+			low = mid + 1
+		else:
+			high = mid
+	return low
+
+
+func archive_upper_bound(values: Array, target: float) -> int:
+	var low := 0
+	var high := values.size()
+	while low < high:
+		var mid := (low + high) / 2
+		if float(values[mid]) <= target:
+			low = mid + 1
+		else:
+			high = mid
+	return low
 
 
 func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
@@ -41166,11 +41763,7 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 	var list := root_layer.find_child("ReplayArchiveList", true, false) as VBoxContainer
 	if count == null or list == null:
 		return
-	var rows: Array[Control] = []
-	for child in list.get_children():
-		if child is Control and str(child.name).begins_with("ReplayArchiveRow_"):
-			rows.append(child as Control)
-	var total := rows.size()
+	var total := int(list.get_meta("archive_result_count", 0))
 	if total <= 0:
 		count.text = "0 条 · 暂无归档"
 		set_ui_full_text(count, "当前没有符合筛选条件的本地归档", "本地归档数量与可见范围")
@@ -41178,16 +41771,25 @@ func sync_replay_archive_range_status(archive_scroll: ScrollContainer) -> void:
 		count.set_meta("archive_visible_last", 0)
 		count.set_meta("archive_result_count", 0)
 		return
-	var viewport_rect := archive_scroll.get_global_rect()
-	var first := total
-	var last := 1
-	for index in range(rows.size()):
-		if rows[index].get_global_rect().intersects(viewport_rect, true):
-			first = mini(first, index + 1)
-			last = maxi(last, index + 1)
-	if first > last:
-		first = 1
-		last = mini(total, 1)
+	var index_signature := "%d|%d|%d" % [list.get_child_count(), int(list.size.x), int(list.size.y)]
+	var stored_signature := str(list.get_meta("archive_height_index_signature", ""))
+	if stored_signature == "" or not stored_signature.begins_with(index_signature + "|"):
+		rebuild_replay_archive_height_index(list)
+	var starts: Array = list.get_meta("archive_row_starts", [])
+	var ends: Array = list.get_meta("archive_row_ends", [])
+	if starts.size() != total or ends.size() != total:
+		return
+	var scrollbar := archive_scroll.get_v_scroll_bar()
+	var viewport_height := maxf(archive_scroll.size.y, scrollbar.page if scrollbar != null else archive_scroll.size.y)
+	var viewport_top := float(archive_scroll.scroll_vertical)
+	var viewport_bottom := viewport_top + viewport_height
+	var first_index := archive_lower_bound(starts, viewport_top + 1.0)
+	var last_index := archive_upper_bound(ends, viewport_bottom - 1.0) - 1
+	if first_index >= total or first_index > last_index:
+		first_index = clampi(archive_upper_bound(starts, viewport_top) - 1, 0, total - 1)
+		last_index = first_index
+	var first := first_index + 1
+	var last := clampi(last_index + 1, first, total)
 	count.text = "显示 %d-%d/%d 条" % [first, last, total]
 	count.tooltip_text = "当前显示第%d至%d条，共%d条；筛选结果随搜索框更新" % [first, last, total]
 	set_ui_full_text(count, count.tooltip_text, "本地归档数量与可见范围")
@@ -41459,14 +42061,33 @@ func replay_timeline_event_allowed(event: Dictionary) -> bool:
 
 
 func replay_timeline_visible_events(payload: Dictionary) -> Array[Dictionary]:
-	var visible_events: Array[Dictionary] = []
 	var events_value = payload.get("events", [])
 	if typeof(events_value) != TYPE_ARRAY:
-		return visible_events
+		replay_timeline_visible_cache_key = "invalid"
+		replay_timeline_visible_cache.clear()
+		return replay_timeline_visible_cache
+	var events: Array = events_value as Array
+	var cache_key := "%s|%d|%d" % [str(payload.get("digest", "")), events.size(), hash(events)]
+	if cache_key == replay_timeline_visible_cache_key:
+		return replay_timeline_visible_cache
+	var visible_events: Array[Dictionary] = []
 	for raw_event in (events_value as Array):
 		if typeof(raw_event) == TYPE_DICTIONARY and replay_timeline_event_allowed(raw_event as Dictionary):
 			visible_events.append(raw_event as Dictionary)
+	replay_timeline_visible_cache_key = cache_key
+	replay_timeline_visible_cache = visible_events
 	return visible_events
+
+
+func replay_timeline_event_display_model(event: Dictionary, index: int) -> Dictionary:
+	var short_text := replay_event_line_text(event)
+	var full_text := "第%d条事件：%s · 点击选择，方向键逐条移动" % [index + 1, short_text]
+	return {
+		"short_text": short_text,
+		"full_text": full_text,
+		"accessible_text": "回放第%d条：%s" % [index + 1, short_text],
+		"sequence": int(event.get("sequence", index + 1)),
+	}
 
 
 func render_replay_timeline_events(payload: Dictionary, focus_first: bool = false) -> void:
@@ -41516,9 +42137,10 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		event_scroll.set_meta("timeline_visibility_locked_until_measurement", true)
 	for index in range(visible_events.size()):
 		var event: Dictionary = visible_events[index]
-		var event_text := replay_event_line_text(event)
+		var display_model := replay_timeline_event_display_model(event, index)
+		var short_text := str(display_model.get("short_text", "事件"))
 		var selected_index := index
-		var event_button := make_small_button(event_text, Color(0.28, 0.48, 0.42), Callable(self, "select_replay_timeline_event").bind(selected_index))
+		var event_button := make_small_button(short_text, Color(0.28, 0.48, 0.42), Callable(self, "select_replay_timeline_event").bind(selected_index))
 		event_button.name = "ReplayImportEventRow_%03d" % index
 		event_button.custom_minimum_size = Vector2(0.0, 44.0)
 		event_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -41527,13 +42149,14 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		event_button.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		event_button.clip_text = false
 		event_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		event_button.tooltip_text = "第%d条事件：%s · 点击选择，方向键逐条移动" % [index + 1, event_text]
+		event_button.tooltip_text = str(display_model.get("full_text", short_text))
 		event_button.set_meta("timeline_event_index", index)
-		event_button.set_meta("timeline_sequence", int(event.get("sequence", index + 1)))
-		event_button.set_meta("accessible_name", "回放第%d条：%s" % [index + 1, event_text])
-		event_button.set_meta("ui_full_text", event_text)
+		event_button.set_meta("timeline_sequence", int(display_model.get("sequence", index + 1)))
+		event_button.set_meta("accessible_name", str(display_model.get("accessible_text", short_text)))
+		event_button.set_meta("ui_full_text", short_text)
 		event_button.set_meta("timeline_text_slot", "measured_wrapped_row")
-		event_button.set_meta("timeline_full_event_text", event_text)
+		event_button.set_meta("timeline_full_event_text", str(display_model.get("full_text", short_text)))
+		event_button.set_meta("timeline_base_text", short_text)
 		event_button.set_meta("timeline_min_touch_height", 44.0)
 		event_button.set_meta("timeline_measurement_pending", true)
 		event_button.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -41582,6 +42205,10 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	var row_count := 0
 	var reserved_marker_text := "▶ "
 	var reserved_marker_width := 0.0
+	var height_signature_parts: Array[String] = ["%d|%d" % [int(round(measured_width)), int(large_text_enabled)]]
+	var row_starts: Array[float] = []
+	var row_ends: Array[float] = []
+	var total_rows := event_list.get_child_count()
 	for child in event_list.get_children():
 		var row := child as Button
 		if row == null or not is_instance_valid(row):
@@ -41589,29 +42216,40 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 		row_count += 1
 		var font_size := row.get_theme_font_size("font_size")
 		var base_event_text := str(row.get_meta("timeline_base_text", row.text)).trim_prefix("▶ ").trim_prefix("  ")
+		var measurement_signature := "%d|%d|%.1f|%s" % [row_count - 1, int(large_text_enabled), measured_width, base_event_text]
 		var marker_font := row.get_theme_font("font")
 		if marker_font != null:
 			reserved_marker_width = maxf(reserved_marker_width, marker_font.get_string_size(reserved_marker_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x)
-		var measurement_text := reserved_marker_text + base_event_text
-		var row_height := estimate_wrapped_text_height(measurement_text, measured_width, font_size, 4.0) + 12.0
-		row.custom_minimum_size = Vector2(0.0, maxf(44.0, row_height))
+		var row_height := float(row.get_meta("timeline_measured_height", 0.0))
+		if str(row.get_meta("timeline_measurement_signature", "")) != measurement_signature:
+			var measurement_text := reserved_marker_text + base_event_text
+			row_height = estimate_wrapped_text_height(measurement_text, measured_width, font_size, 4.0) + 12.0
+			row.custom_minimum_size = Vector2(0.0, maxf(44.0, row_height))
+			row.set_meta("timeline_measurement_signature", measurement_signature)
+			row.set_meta("timeline_measurement_pending", false)
+		else:
+			row_height = maxf(44.0, row_height)
 		row.mouse_filter = Control.MOUSE_FILTER_STOP
 		row.focus_mode = Control.FOCUS_ALL
-		row.set_meta("timeline_measurement_pending", false)
 		row.set_meta("timeline_reserved_marker_text", reserved_marker_text)
 		row.set_meta("timeline_reserved_marker_width", reserved_marker_width)
 		row.set_meta("timeline_measured_width", measured_width)
-		row.set_meta("timeline_measured_height", row.custom_minimum_size.y)
-		total_height += row.custom_minimum_size.y
-	var separation := 3.0
-	if row_count > 1:
-		total_height += float(row_count - 1) * separation
+		row.set_meta("timeline_measured_height", row_height)
+		row_starts.append(total_height)
+		row_ends.append(total_height + row_height)
+		total_height += row_height
+		if row_count < total_rows:
+			total_height += 3.0
+		height_signature_parts.append("%.1f" % row_height)
 	event_list.custom_minimum_size = Vector2(0.0, maxf(44.0, total_height))
 	event_list.set_meta("timeline_measured_width", measured_width)
 	event_list.set_meta("timeline_reserved_marker_text", reserved_marker_text)
 	event_list.set_meta("timeline_reserved_marker_width", reserved_marker_width)
 	event_list.set_meta("timeline_marker_gutter_contract", "fixed_marker_reserved_before_selection")
 	event_list.set_meta("timeline_measurement_source", "timeline_scroll_viewport_width")
+	event_list.set_meta("timeline_row_starts", row_starts)
+	event_list.set_meta("timeline_row_ends", row_ends)
+	event_list.set_meta("timeline_height_index_signature", "|".join(height_signature_parts))
 	event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	event_scroll.focus_mode = Control.FOCUS_ALL
 	event_scroll.modulate.a = 1.0
@@ -41640,6 +42278,16 @@ func configure_replay_timeline_focus_navigation(focus_first: bool = false) -> vo
 			rows.append(row)
 	if rows.is_empty():
 		return
+	var row_names: Array[String] = []
+	for row in rows:
+		row_names.append(str(row.name))
+	var focus_token := "%d|%d|%s" % [rows.size(), ui_page_generation, "|".join(row_names)]
+	if str(event_list.get_meta("timeline_focus_graph_token", "")) == focus_token:
+		if focus_first:
+			call_deferred("focus_named_control", rows[0].name)
+		return
+	event_list.set_meta("timeline_focus_graph_token", focus_token)
+	event_list.set_meta("timeline_focus_graph_revision", int(event_list.get_meta("timeline_focus_graph_revision", 0)) + 1)
 	configure_ordered_focus_navigation(event_list, rows, "", false)
 	for index in range(rows.size()):
 		var previous: Control = input if index == 0 and input != null else rows[index - 1]
@@ -41659,21 +42307,36 @@ func set_replay_timeline_selection(index: int, ensure_visible: bool = false) -> 
 	var event_list := root_layer.find_child("ReplayImportEventList", true, false) as VBoxContainer
 	if event_list == null:
 		return
-	replay_timeline_selected_index = clampi(index, 0, maxi(0, event_list.get_child_count() - 1))
-	for child_index in range(event_list.get_child_count()):
+	var previous_index := int(event_list.get_meta("timeline_selected_applied_index", -1))
+	var child_count := event_list.get_child_count()
+	if child_count <= 0:
+		replay_timeline_selected_index = -1
+		event_list.set_meta("timeline_selected_applied_index", -1)
+		return
+	replay_timeline_selected_index = clampi(index, 0, child_count - 1)
+	if previous_index == replay_timeline_selected_index and previous_index >= 0:
+		if ensure_visible:
+			var unchanged_scroll := root_layer.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
+			if unchanged_scroll != null:
+				unchanged_scroll.ensure_control_visible(event_list.get_child(replay_timeline_selected_index) as Control)
+			return
+	for child_index in [previous_index, replay_timeline_selected_index]:
+		if child_index < 0 or child_index >= event_list.get_child_count():
+			continue
 		var row := event_list.get_child(child_index) as Button
 		if row == null:
 			continue
-		var selected := child_index == replay_timeline_selected_index
+		var selected: bool = child_index == replay_timeline_selected_index
 		row.set_meta("timeline_selected", selected)
 		row.set_meta("timeline_focus_state", "selected" if selected else "available")
 		row.set_meta("timeline_recovery_hint", "按方向键移动，Enter确认" if selected else "按Enter查看此事件")
 		mark_ui_optimization(row, "F-615")
-		var base_event_text := str(row.get_meta("timeline_base_text", row.text))
+		var base_event_text := str(row.get_meta("timeline_base_text", row.text)).trim_prefix("▶ ").trim_prefix("  ")
 		row.set_meta("timeline_base_text", base_event_text)
 		row.text = ("▶ " if selected else "  ") + base_event_text
 		row.set_meta("timeline_selection_marker", "当前事件" if selected else "")
 		row.modulate = Color(1.08, 1.02, 0.78, 1.0) if selected else Color.WHITE
+	event_list.set_meta("timeline_selected_applied_index", replay_timeline_selected_index)
 	if ensure_visible and replay_timeline_selected_index >= 0 and replay_timeline_selected_index < event_list.get_child_count():
 		var event_scroll := root_layer.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
 		if event_scroll != null:
@@ -41705,6 +42368,10 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 	var total := event_list.get_child_count() if event_list != null else 0
 	var source_total := int(event_list.get_meta("timeline_source_event_count", total)) if event_list != null else total
 	if total <= 0:
+		var empty_token := "empty|%d|%d" % [source_total, total]
+		if str(status.get_meta("timeline_status_token", "")) == empty_token:
+			return
+		status.set_meta("timeline_status_token", empty_token)
 		status.text = "待导入 · 0 / 0 条已验证事件"
 		status.tooltip_text = "暂无可显示的已验证回放事件；导入后将显示格式校验结果、事件数和可滚动范围；原始事件数 %d" % source_total
 		set_ui_full_text(status, status.tooltip_text, "回放时间线状态")
@@ -41719,19 +42386,21 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 		mark_ui_optimization(status, "F-118")
 		mark_ui_optimization(event_scroll, "F-118")
 		return
-	var viewport_rect := event_scroll.get_global_rect()
-	var first_event := total
-	var last_event := 1
-	if event_list != null:
-		for child_index in range(event_list.get_child_count()):
-			var row := event_list.get_child(child_index) as Control
-			if row == null or not row.get_global_rect().intersects(viewport_rect, true):
-				continue
-			first_event = mini(first_event, child_index + 1)
-			last_event = maxi(last_event, child_index + 1)
-	if first_event > last_event:
-		first_event = 1
-		last_event = 1
+	var scrollbar := event_scroll.get_v_scroll_bar()
+	var viewport_height := maxf(event_scroll.size.y, scrollbar.page if scrollbar != null else event_scroll.size.y)
+	var viewport_top := float(event_scroll.scroll_vertical)
+	var viewport_bottom := viewport_top + viewport_height
+	var row_starts: Array = event_list.get_meta("timeline_row_starts", []) if event_list != null else []
+	var row_ends: Array = event_list.get_meta("timeline_row_ends", []) if event_list != null else []
+	if row_starts.size() != total or row_ends.size() != total:
+		return
+	var first_index := archive_lower_bound(row_starts, viewport_top + 1.0)
+	var last_index := archive_upper_bound(row_ends, viewport_bottom - 1.0) - 1
+	if first_index >= total or first_index > last_index:
+		first_index = clampi(archive_upper_bound(row_starts, viewport_top) - 1, 0, total - 1)
+		last_index = first_index
+	var first_event := first_index + 1
+	var last_event := clampi(last_index + 1, first_event, total)
 	first_event = clampi(first_event, 1, total)
 	last_event = clampi(maxi(first_event, last_event), first_event, total)
 	# Manual scrolling changes the visible window, not the user's selected event.
@@ -41740,6 +42409,10 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 		replay_timeline_selected_index = first_event - 1
 	var selected_event := clampi(replay_timeline_selected_index + 1, 1, total)
 	var filtered_note := "；已过滤 %d 条不支持事件" % maxi(0, source_total - total) if source_total > total else ""
+	var status_token := "%d|%d|%d|%d|%d" % [selected_event, first_event, last_event, total, source_total]
+	if str(status.get_meta("timeline_status_token", "")) == status_token:
+		return
+	status.set_meta("timeline_status_token", status_token)
 	status.text = "当前 %d · 显示 %d-%d / %d 条已验证事件%s" % [selected_event, first_event, last_event, total, filtered_note]
 	status.tooltip_text = "当前第%d条；可见第%d至%d条，共%d条已验证事件%s" % [selected_event, first_event, last_event, total, filtered_note]
 	set_ui_full_text(status, status.tooltip_text, "回放时间线状态")
@@ -41806,11 +42479,72 @@ func toast_needs_minimum_dwell(text: String) -> bool:
 	return normalized.contains("失败") or normalized.contains("错误") or normalized.contains("不足") or normalized.contains("无法") or normalized.contains("清除") or normalized.contains("清空") or normalized.contains("删除")
 
 
+func toast_queue_entry_priority(text: String) -> int:
+	if toast_needs_minimum_dwell(text):
+		return 2
+	if toast_is_reward_text(text):
+		return 1
+	return 0
+
+
+func toast_queue_entry_bytes(entry: Dictionary) -> int:
+	var stored_bytes := int(entry.get("bytes", 0))
+	if stored_bytes > 0:
+		return stored_bytes
+	return str(entry.get("text", "")).to_utf8_buffer().size()
+
+
+func evict_toast_queue_entry(index: int) -> void:
+	if index < 0 or index >= toast_queue.size():
+		return
+	var removed := toast_queue[index] as Dictionary
+	toast_queue.remove_at(index)
+	if removed != null:
+		toast_queue_pending_count = maxi(0, toast_queue_pending_count - maxi(1, int(removed.get("count", 1))))
+		toast_queue_pending_bytes = maxi(0, toast_queue_pending_bytes - toast_queue_entry_bytes(removed))
+
+
+func enqueue_toast_message(text: String, duration_msec: int) -> bool:
+	var entry_bytes := str(text).to_utf8_buffer().size()
+	if entry_bytes <= 0 or entry_bytes > TOAST_QUEUE_MAX_BYTES:
+		return false
+	for queued in toast_queue:
+		if typeof(queued) == TYPE_DICTIONARY and str((queued as Dictionary).get("text", "")) == text:
+			var queued_entry := queued as Dictionary
+			queued_entry["count"] = mini(TOAST_QUEUE_MAX_REPEAT_COUNT, int(queued_entry.get("count", 1)) + 1)
+			queued_entry["duration_msec"] = maxi(int(queued_entry.get("duration_msec", duration_msec)), duration_msec)
+			toast_queue_pending_count = mini(TOAST_QUEUE_MAX_ENTRIES * TOAST_QUEUE_MAX_REPEAT_COUNT, toast_queue_pending_count + 1)
+			return true
+	var new_priority := toast_queue_entry_priority(text)
+	while toast_queue.size() >= TOAST_QUEUE_MAX_ENTRIES or toast_queue_pending_bytes + entry_bytes > TOAST_QUEUE_MAX_BYTES:
+		var evict_index := -1
+		for index in range(toast_queue.size()):
+			var candidate := toast_queue[index] as Dictionary
+			if candidate != null and toast_queue_entry_priority(str(candidate.get("text", ""))) < new_priority:
+				evict_index = index
+				break
+		if evict_index < 0 and new_priority == 0:
+			for index in range(toast_queue.size()):
+				var candidate := toast_queue[index] as Dictionary
+				if candidate != null and toast_queue_entry_priority(str(candidate.get("text", ""))) == 0:
+					evict_index = index
+					break
+		if evict_index < 0 and new_priority > 0 and not toast_queue.is_empty():
+			evict_index = 0
+		if evict_index < 0:
+			return false
+		evict_toast_queue_entry(evict_index)
+	toast_queue.append({"text": text, "duration_msec": duration_msec, "count": 1, "bytes": entry_bytes})
+	toast_queue_pending_count += 1
+	toast_queue_pending_bytes += entry_bytes
+	return true
+
+
 func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) -> void:
 	"""显示临时Toast提示"""
 	if fx_layer == null or not is_instance_valid(fx_layer):
 		return
-	var safe_text := text.strip_edges()
+	var safe_text := text.strip_edges().left(TOAST_MAX_TEXT_LENGTH)
 	if safe_text == "":
 		return
 	duration_msec = clampi(duration_msec, 1, TOAST_MAX_DURATION_MSEC)
@@ -41822,13 +42556,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	if minimum_dwell > 0:
 		duration_msec = maxi(duration_msec, minimum_dwell)
 	if toast_current != null and is_instance_valid(toast_current):
-		for queued in toast_queue:
-			if typeof(queued) == TYPE_DICTIONARY and str((queued as Dictionary).get("text", "")) == safe_text:
-				(queued as Dictionary)["count"] = int((queued as Dictionary).get("count", 1)) + 1
-				(queued as Dictionary)["duration_msec"] = maxi(int((queued as Dictionary).get("duration_msec", duration_msec)), duration_msec)
-				refresh_toast_queue_indicator()
-				return
-		toast_queue.append({"text": safe_text, "duration_msec": duration_msec, "count": 1})
+		enqueue_toast_message(safe_text, duration_msec)
 		refresh_toast_queue_indicator()
 		return
 	# 创建toast节点
@@ -41964,10 +42692,7 @@ func refresh_toast_queue_indicator() -> void:
 	var pending_label := toast_current.find_child("ToastPendingLabel", true, false) as Label
 	if pending_label == null:
 		return
-	var pending_count := 0
-	for queued in toast_queue:
-		if typeof(queued) == TYPE_DICTIONARY:
-			pending_count += maxi(1, int((queued as Dictionary).get("count", 1)))
+	var pending_count := toast_queue_pending_count
 	var pending_copy := "还有99+条" if pending_count > 99 else "还有%d条" % pending_count
 	pending_label.text = pending_copy if pending_count > 0 else ""
 	pending_label.tooltip_text = "还有%d条通知待显示" % pending_count if pending_count > 0 else ""
@@ -41989,11 +42714,14 @@ func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
 	if not toast_queue.is_empty():
 		var next_toast = toast_queue.pop_front()
 		if typeof(next_toast) == TYPE_DICTIONARY:
-			var next_text := str((next_toast as Dictionary).get("text", ""))
-			var repeat_count := int((next_toast as Dictionary).get("count", 1))
+			var next_entry := next_toast as Dictionary
+			toast_queue_pending_count = maxi(0, toast_queue_pending_count - maxi(1, int(next_entry.get("count", 1))))
+			toast_queue_pending_bytes = maxi(0, toast_queue_pending_bytes - toast_queue_entry_bytes(next_entry))
+			var next_text := str(next_entry.get("text", ""))
+			var repeat_count := int(next_entry.get("count", 1))
 			if repeat_count > 1:
 				next_text += "（×%d）" % repeat_count
-			show_toast(next_text, int((next_toast as Dictionary).get("duration_msec", TOAST_DEFAULT_DURATION_MSEC)))
+			show_toast(next_text, int(next_entry.get("duration_msec", TOAST_DEFAULT_DURATION_MSEC)))
 
 func dismiss_active_toast() -> void:
 	if toast_tween != null and is_instance_valid(toast_tween):
@@ -42006,6 +42734,8 @@ func dismiss_active_toast() -> void:
 		toast_container.visible = false
 	toast_mode = ""
 	toast_queue.clear()
+	toast_queue_pending_count = 0
+	toast_queue_pending_bytes = 0
 	toast_active_minimum_dwell_msec = 0
 
 func clear_toast_on_mode_change() -> void:
@@ -42015,12 +42745,27 @@ func clear_toast_on_mode_change() -> void:
 func refresh_settings_local_row(setting_key: String) -> bool:
 	if not settings_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return false
-	var settings_panel := root_layer.find_child("SettingsPanel", true, false) as Control
-	if settings_panel == null or not is_current_ui_control(settings_panel):
-		return false
-	var button := root_layer.find_child("SettingRowButton_%s" % setting_key, true, false) as Button
-	var status_label := root_layer.find_child("SettingRowStatus_%s" % setting_key, true, false) as Label
-	if button == null or status_label == null:
+	var cached_row: Dictionary = settings_local_row_controls.get(setting_key, {}) if typeof(settings_local_row_controls.get(setting_key, {})) == TYPE_DICTIONARY else {}
+	var settings_panel := cached_row.get("panel", null) as Control
+	var button := cached_row.get("button", null) as Button
+	var status_label := cached_row.get("status", null) as Label
+	var overview_summary := cached_row.get("overview_summary", null) as Label
+	var overview_fill := cached_row.get("overview_fill", null) as Control
+	if not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label) or not is_current_ui_control(overview_summary) or not is_current_ui_control(overview_fill):
+		settings_panel = root_layer.find_child("SettingsPanel", true, false) as Control
+		button = root_layer.find_child("SettingRowButton_%s" % setting_key, true, false) as Button
+		status_label = root_layer.find_child("SettingRowStatus_%s" % setting_key, true, false) as Label
+		if settings_panel != null and button != null and status_label != null:
+			overview_summary = settings_panel.find_child("SettingsOverviewSummary", true, false) as Label
+			overview_fill = settings_panel.find_child("SettingsOverviewFill", true, false) as Control
+			settings_local_row_controls[setting_key] = {
+				"panel": settings_panel,
+				"button": button,
+				"status": status_label,
+				"overview_summary": overview_summary,
+				"overview_fill": overview_fill,
+			}
+	if settings_panel == null or button == null or status_label == null or not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label):
 		return false
 
 	var full_status := ""
@@ -42133,13 +42878,11 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	settings_panel.set_meta("settings_local_update_revision", int(settings_panel.get_meta("settings_local_update_revision", 0)) + 1)
 	button.set_meta("local_update_revision", settings_panel.get_meta("settings_local_update_revision", 0))
 
-	var overview_summary := settings_panel.find_child("SettingsOverviewSummary", true, false) as Label
 	if overview_summary != null:
 		var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
 		var enabled_play := int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
 		overview_summary.text = "声音 %d/3    体验 %d/3" % [enabled_audio, enabled_play]
 		set_ui_full_text(overview_summary, overview_summary.text, "设置总览：声音与体验启用数量")
-	var overview_fill := settings_panel.find_child("SettingsOverviewFill", true, false) as Control
 	if overview_fill != null:
 		var enabled_total := int(music_enabled) + int(sfx_enabled) + int(tts_enabled) + int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
 		overview_fill.anchor_right = 0.030 + 0.920 * clampf(float(enabled_total) / 6.0, 0.0, 1.0)
@@ -42366,7 +43109,7 @@ func announce_online_game_audio(next_game: Dictionary) -> void:
 
 func build_voice_payload(frames: PackedVector2Array) -> Dictionary:
 	var encoded = encode_voice_frames(frames)
-	if encoded.is_empty():
+	if encoded.is_empty() or bool(encoded.get("silent", false)):
 		return {}
 	var payload = {
 		"type": "voiceMessage",
@@ -42435,7 +43178,8 @@ func online_recovery_status_text() -> String:
 	# Keep one short state sentence in the HUD while the action lane carries the
 	# full reason and route. The phase word is intentionally visible so a disabled
 	# retry cannot be mistaken for an active connection attempt.
-	var compact := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+	var viewport_size := effective_viewport_size()
+	var compact := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	if online_recovery_connecting():
 		return "断线·连接中" if compact else "断线 · 连接中 · 第%d次" % maxi(online_reconnect_attempts, 1)
 	var remaining := maxi(0, int(ceil(float(online_next_reconnect_msec - Time.get_ticks_msec()) / 1000.0)))
@@ -42452,10 +43196,45 @@ func online_recovery_phase_text() -> String:
 	return "可立即重连"
 
 func online_recovery_reason_text() -> String:
-	var feedback := online_feedback.strip_edges()
-	if feedback == "" or feedback.find("正在重新连接") >= 0 or feedback.find("正在连接") >= 0:
-		return "连接已断开"
-	return feedback
+	match online_recovery_reason_code:
+		"connecting":
+			return "连接已断开"
+		"connection_lost":
+			return "连接已断开"
+		"connection_error":
+			return "连接出错"
+		"server_rejected":
+			return online_feedback.strip_edges()
+	return online_feedback.strip_edges() if online_feedback.strip_edges() != "" else "连接已断开"
+
+
+func online_recovery_view_model(now_msec: int = -1) -> Dictionary:
+	var current_msec := Time.get_ticks_msec() if now_msec < 0 else now_msec
+	var reconnecting := online_recovery_connecting()
+	var remaining_msec := maxi(0, online_next_reconnect_msec - current_msec)
+	var remaining_seconds := maxi(0, int(ceil(float(remaining_msec) / 1000.0)))
+	var attempt := maxi(online_reconnect_attempts, 1)
+	var cooldown := remaining_msec > 0
+	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
+	var compact := effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0
+	var phase_text := "正在连接 · 第%d次" % attempt if reconnecting else ("等待重试 · %d秒后可重连" % remaining_seconds if cooldown else "可立即重连")
+	var button_text := "连接中 · 第%d次" % attempt if reconnecting else ("%d秒后可重连" % remaining_seconds if cooldown else "立即重连 · 第%d次" % attempt)
+	var status_text := ("断线·连接中" if compact else "断线 · 连接中 · 第%d次" % attempt) if reconnecting else (("断线·%d秒后重连" % remaining_seconds if compact else "断线 · %d秒后可重连" % remaining_seconds) if cooldown else ("断线·重连" if compact else "断线 · 可立即重连"))
+	var reason := online_recovery_reason_text()
+	var detail := "%s；牌局暂时只读；第%d次恢复，%s；使用重连恢复当前牌局，或返回大厅" % [reason, attempt, ("约%d秒后可重试" % remaining_seconds if cooldown else "现在可以重试")]
+	return {
+		"phase": phase,
+		"reconnecting": reconnecting,
+		"cooldown": cooldown,
+		"remaining_msec": remaining_msec,
+		"remaining_seconds": remaining_seconds,
+		"attempt": attempt,
+		"phase_text": phase_text,
+		"button_text": button_text,
+		"status_text": status_text,
+		"reason": reason,
+		"detail": detail,
+	}
 
 func online_recovery_button_text() -> String:
 	var attempt := maxi(online_reconnect_attempts, 1)
@@ -42474,21 +43253,22 @@ func refresh_online_recovery_live_controls(now_msec: int = -1) -> void:
 	if mode != "online_game" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var current_msec := Time.get_ticks_msec() if now_msec < 0 else now_msec
-	var reconnecting := online_recovery_connecting()
-	var remaining_msec := maxi(0, online_next_reconnect_msec - current_msec)
-	var cooldown := remaining_msec > 0
-	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
+	var recovery_model := online_recovery_view_model(current_msec)
+	var reconnecting := bool(recovery_model.get("reconnecting", false))
+	var remaining_msec := int(recovery_model.get("remaining_msec", 0))
+	var cooldown := bool(recovery_model.get("cooldown", false))
+	var phase := str(recovery_model.get("phase", "retry_ready"))
 	var root_id := root_layer.get_instance_id()
 	if root_id != online_recovery_controls_root_id or online_recovery_state_label == null or not is_instance_valid(online_recovery_state_label) or online_recovery_button == null or not is_instance_valid(online_recovery_button):
 		online_recovery_controls_root_id = root_id
 		online_recovery_state_label = root_layer.find_child("OnlineRecoveryStateLabel", true, false) as Label
 		online_recovery_button = root_layer.find_child("OnlineReconnectGameButton", true, false) as Button
 		online_recovery_live_token = ""
-	var remaining_seconds := maxi(0, int(ceil(float(remaining_msec) / 1000.0)))
-	var state_text := online_recovery_phase_text()
-	var button_text := online_recovery_button_text()
-	var detail_text := online_recovery_detail_text()
-	var view_token := "%s|%d|%d|%s|%s" % [phase, remaining_seconds, maxi(online_reconnect_attempts, 1), online_recovery_reason_text(), button_text]
+	var remaining_seconds := int(recovery_model.get("remaining_seconds", 0))
+	var state_text := str(recovery_model.get("phase_text", ""))
+	var button_text := str(recovery_model.get("button_text", ""))
+	var detail_text := str(recovery_model.get("detail", ""))
+	var view_token := "%s|%d|%d|%s|%s" % [phase, remaining_seconds, int(recovery_model.get("attempt", 1)), str(recovery_model.get("reason", "")), button_text]
 	if view_token == online_recovery_live_token:
 		return
 	online_recovery_live_token = view_token
@@ -42591,10 +43371,13 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 		online_log_total_count = 0
 		online_log_initialized = false
 		online_log_at_latest = false
+		online_log_follow_latest_pending_frames = 0
+		reset_online_log_render_cache()
 		online_last_snapshot_fingerprint = ""
 		online_last_room_snapshot_fingerprint = ""
 		online_seen_message_ids.clear()
 		online_seen_voice_sequences.clear()
+		online_seen_voice_sequence_order.clear()
 	else:
 		clear_online_room_snapshot()
 	if should_show_lobby:
@@ -42633,6 +43416,8 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_log_total_count = 0
 	online_log_initialized = false
 	online_log_at_latest = false
+	online_log_follow_latest_pending_frames = 0
+	reset_online_log_render_cache()
 	selected_room = resume_room
 	if is_instance_valid(online_room_edit):
 		online_room_edit.text = selected_room
@@ -42642,6 +43427,7 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_game_revision = -1
 	online_seen_message_ids.clear()
 	online_seen_voice_sequences.clear()
+	online_seen_voice_sequence_order.clear()
 	online_last_chat_sent_msec = 0
 	online_next_reconnect_msec = 0
 	online_last_snapshot_fingerprint = ""
@@ -42814,32 +43600,32 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 
 
 func online_rule_code_set(variant: String) -> Dictionary:
-	var cache_key := variant if variant != "" else "__default__"
-	var cached = online_rule_code_set_cache.get(cache_key, null)
-	if typeof(cached) == TYPE_DICTIONARY and not (cached as Dictionary).is_empty():
-		return cached
-	var code_set: Dictionary = {}
-	var tile_codes: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
-	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
-	for code in tile_codes:
-		code_set[normalize_tile_code(str(code))] = true
-	for code in flower_codes:
-		code_set[normalize_tile_code(str(code))] = true
-	online_rule_code_set_cache[cache_key] = code_set
-	return code_set
+	return online_rule_model(variant).get("allowed", {}) as Dictionary
 
 
 func online_rule_flower_set(variant: String) -> Dictionary:
-	var cache_key := "flowers:" + (variant if variant != "" else "__default__")
-	var cached = online_rule_code_set_cache.get(cache_key, null)
-	if typeof(cached) == TYPE_DICTIONARY and not (cached as Dictionary).is_empty():
+	return online_rule_model(variant).get("flowers", {}) as Dictionary
+
+
+func online_rule_model(variant: String) -> Dictionary:
+	var cache_key := variant if variant != "" else "__default__"
+	var cached: Variant = online_rule_model_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY:
 		return cached
-	var flower_set: Dictionary = {}
+	var allowed: Dictionary = {}
+	var flowers: Dictionary = {}
+	var tile_codes: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
 	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	for code in tile_codes:
+		allowed[normalize_tile_code(str(code))] = true
 	for code in flower_codes:
-		flower_set[normalize_tile_code(str(code))] = true
-	online_rule_code_set_cache[cache_key] = flower_set
-	return flower_set
+		var normalized := normalize_tile_code(str(code))
+		allowed[normalized] = true
+		flowers[normalized] = true
+	var model := {"allowed": allowed, "flowers": flowers}
+	online_rule_model_cache[cache_key] = model
+	online_rule_code_set_cache[cache_key] = allowed
+	return model
 
 
 func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool:
@@ -42874,17 +43660,32 @@ func online_log_entry_text(value) -> String:
 	return raw.strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
 
 
+func reset_online_log_render_cache() -> void:
+	online_log_revision += 1
+	online_log_fingerprint_revision = -1
+	online_log_cached_fingerprint = ""
+	online_log_cached_lines.clear()
+	online_log_render_fingerprint = ""
+	online_log_rendered_source_count = -1
+
+
 func online_log_snapshot_increment(previous_logs: Array, next_logs: Array) -> int:
 	if next_logs.is_empty():
 		return 0
 	if previous_logs.is_empty():
 		return next_logs.size()
-	var max_overlap := mini(previous_logs.size(), next_logs.size())
+	var previous_text: Array[String] = []
+	var next_text: Array[String] = []
+	for value in previous_logs.slice(maxi(0, previous_logs.size() - ONLINE_LOG_OVERLAP_WINDOW)):
+		previous_text.append(online_log_entry_text(value))
+	for value in next_logs.slice(maxi(0, next_logs.size() - ONLINE_LOG_OVERLAP_WINDOW)):
+		next_text.append(online_log_entry_text(value))
+	var max_overlap := mini(previous_text.size(), next_text.size())
 	for overlap in range(max_overlap, 0, -1):
 		var matches := true
 		for offset in range(overlap):
-			var previous_index := previous_logs.size() - overlap + offset
-			if online_log_entry_text(previous_logs[previous_index]) != online_log_entry_text(next_logs[offset]):
+			var previous_index := previous_text.size() - overlap + offset
+			if previous_text[previous_index] != next_text[offset]:
 				matches = false
 				break
 		if matches:
@@ -43091,8 +43892,29 @@ func handle_online_log(data: Dictionary) -> void:
 		logs.remove_at(0)
 	online_room["logs"] = logs
 	online_log_total_count = previous_total + 1
+	online_log_revision += 1
 	online_lobby_render_revision += 1
 	set_online_feedback(message, false)
+	# A log can arrive through a test transport or a polling path that has no
+	# subsequent readable bytes. Commit the page refresh immediately so the
+	# bottom-follow request is created before the next idle frame.
+	if mode == "online_lobby":
+		refresh_online_lobby_state()
+
+
+func schedule_online_lobby_content_refresh() -> void:
+	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
+		return
+	if online_lobby_refresh_queued:
+		return
+	online_lobby_refresh_queued = true
+	call_deferred("flush_online_lobby_content_refresh")
+
+
+func flush_online_lobby_content_refresh() -> void:
+	online_lobby_refresh_queued = false
+	if mode == "online_lobby" and online_last_lobby_render_revision != online_lobby_render_revision:
+		refresh_online_lobby_state()
 
 
 func handle_online_chat(data: Dictionary) -> void:
@@ -43181,6 +44003,7 @@ func handle_online_message(line: String) -> void:
 				if bounded_log != "":
 					bounded_logs.append(bounded_log)
 			online_room["logs"] = bounded_logs
+			online_log_revision += 1
 			var explicit_total = first_present(next_room, ["logCount", "logTotal", "logsTotal", "totalLogs"], null)
 			if explicit_total != null:
 				online_log_total_count = maxi(online_log_total_count, int(explicit_total))
@@ -43721,6 +44544,15 @@ func set_online_feedback(text: String, waiting: bool = false) -> void:
 		return
 	online_feedback = text
 	online_waiting_for_server = waiting
+	var clean_feedback := text.strip_edges()
+	if clean_feedback.find("正在重新连接") >= 0 or clean_feedback.find("正在连接") >= 0:
+		online_recovery_reason_code = "connecting"
+	elif clean_feedback.find("出错") >= 0 or clean_feedback.find("失败") >= 0:
+		online_recovery_reason_code = "connection_error"
+	elif clean_feedback.find("拒绝") >= 0:
+		online_recovery_reason_code = "server_rejected"
+	else:
+		online_recovery_reason_code = "connection_lost"
 	if not waiting:
 		online_last_sent_msec = 0
 		online_slow_notice_shown = false
@@ -44031,6 +44863,8 @@ func _process(_delta: float) -> void:
 	if telemetry_clear_confirming and telemetry_clear_confirm_deadline_msec > 0 and now >= telemetry_clear_confirm_deadline_msec:
 		telemetry_clear_confirming = false
 		telemetry_clear_confirm_deadline_msec = 0
+		telemetry_last_action = "清除确认已超时，未删除任何数据"
+		telemetry_recent_action_sync_revision += 1
 		if telemetry_sheet_open:
 			refresh_telemetry_data_sheet()
 	keep_background_music_alive(now)
@@ -44045,6 +44879,11 @@ func _process(_delta: float) -> void:
 	if mode == "online_lobby" or mode == "online_game":
 		poll_online(now)
 		update_online_slow_response_notice(now)
+	if mode == "online_lobby" and online_log_follow_latest_pending_frames > 0:
+		var pending_log_scroll := root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer if root_layer != null and is_instance_valid(root_layer) else null
+		if pending_log_scroll != null:
+			online_log_follow_latest_pending_frames -= 1
+			scroll_online_log_to_end()
 	if now >= next_ui_deadline_poll_msec:
 		next_ui_deadline_poll_msec = now + UI_DEADLINE_POLL_INTERVAL_MSEC
 		update_pending_claim_live_state()
@@ -44242,15 +45081,18 @@ func schedule_online_recovery_focus() -> void:
 	online_recovery_focus_pending = true
 	call_deferred("focus_online_recovery_if_current", root_id)
 
-func focus_online_recovery_if_current(expected_root_id: int) -> void:
+func focus_online_recovery_if_current(expected_root_id: int, expected_generation: int = -1, expected_control_name: String = "OnlineReconnectGameButton") -> void:
 	if expected_root_id != online_recovery_focus_root_id:
-		return
+		if expected_control_name == "OnlineReconnectGameButton":
+			return
 	online_recovery_focus_pending = false
 	if root_layer == null or not is_instance_valid(root_layer) or root_layer.get_instance_id() != expected_root_id:
 		return
-	if mode != "online_game" or not online_game_disconnected():
+	if expected_generation >= 0 and ui_page_generation != expected_generation:
 		return
-	focus_named_control("OnlineReconnectGameButton")
+	if mode != "online_game" or (not online_game_disconnected() and str(online_game.get("phase", "")) != "unknown"):
+		return
+	focus_named_control(expected_control_name)
 
 func restore_settings_focus_after_close(control_name: String, expected_token: int, expected_mode: String) -> void:
 	await get_tree().process_frame
@@ -44748,14 +45590,26 @@ func focus_hand_keyboard_control() -> void:
 func hand_tile_button_for_source_index(source_index: int) -> Button:
 	if root_layer == null or not is_instance_valid(root_layer) or source_index < 0:
 		return null
-	for node in root_layer.find_children("HandTile_*", "Control", true, false):
-		var tile_node := node as Control
-		if tile_node == null or int(tile_node.get_meta("hand_source_index", -1)) != source_index:
-			continue
-		for button_node in tile_node.find_children("*", "Button", true, false):
-			var button := button_node as Button
-			if button != null and not button.disabled:
-				return button
+	var root_id := root_layer.get_instance_id()
+	if hand_tile_button_registry_root_id != root_id:
+		hand_tile_button_registry.clear()
+		hand_tile_button_registry_root_id = root_id
+		for node in root_layer.find_children("HandTile_*", "Control", true, false):
+			var tile_node := node as Control
+			if tile_node == null:
+				continue
+			var tile_index := int(tile_node.get_meta("hand_source_index", -1))
+			if tile_index < 0:
+				continue
+			for button_node in tile_node.find_children("*", "Button", true, false):
+				var candidate := button_node as Button
+				if candidate != null and not candidate.disabled:
+					hand_tile_button_registry[tile_index] = candidate
+					break
+	var button := hand_tile_button_registry.get(source_index, null) as Button
+	if button != null and is_instance_valid(button) and not button.disabled:
+		return button
+	hand_tile_button_registry.erase(source_index)
 	return null
 
 
@@ -45484,11 +46338,9 @@ func poll_voice_capture() -> void:
 		return
 	while voice_capture_effect.get_frames_available() >= VOICE_CHUNK_FRAMES:
 		var frames = voice_capture_effect.get_buffer(VOICE_CHUNK_FRAMES)
-		if not voice_frames_have_signal(frames):
-			continue
 		var payload = build_voice_payload(frames)
 		if payload.is_empty():
-			return
+			continue
 		send_online(payload)
 
 
@@ -45504,15 +46356,20 @@ func encode_voice_frames(frames: PackedVector2Array) -> Dictionary:
 	if frames.is_empty():
 		return {}
 	var bytes = PackedByteArray()
+	bytes.resize(frames.size() * 2)
 	var peak = 0.0
-	for frame in frames:
+	for index in range(frames.size()):
+		var frame := frames[index]
 		var mono = clamp((frame.x + frame.y) * 0.5, -1.0, 1.0)
 		peak = max(peak, abs(mono))
 		var sample = int(round(mono * 32767.0))
 		if sample < 0:
 			sample += 65536
-		bytes.append(sample & 0xff)
-		bytes.append((sample >> 8) & 0xff)
+		var byte_index := index * 2
+		bytes[byte_index] = sample & 0xff
+		bytes[byte_index + 1] = (sample >> 8) & 0xff
+	if peak < ONLINE_VOICE_SILENCE_THRESHOLD:
+		return {"silent": true, "peak": peak, "bytes": bytes.size()}
 	return {
 		"audio": Marshalls.raw_to_base64(bytes),
 		"peak": peak,
@@ -45524,10 +46381,20 @@ func clear_remote_voice_players() -> void:
 		if player == null or not is_instance_valid(player):
 			continue
 		player.stop()
+		player.stream = null
+		remote_voice_player_meta.erase(player.get_instance_id())
+
+
+func destroy_remote_voice_players() -> void:
+	for player in remote_voice_players:
+		if player == null or not is_instance_valid(player):
+			continue
+		player.stop()
 		if player.get_parent() != null:
 			player.get_parent().remove_child(player)
 		player.queue_free()
 	remote_voice_players.clear()
+	remote_voice_player_meta.clear()
 
 
 func _on_remote_voice_player_finished(_player: AudioStreamPlayer) -> void:
@@ -45536,18 +46403,25 @@ func _on_remote_voice_player_finished(_player: AudioStreamPlayer) -> void:
 	pass
 
 
-func remote_voice_player_for_stream(stream: AudioStream) -> AudioStreamPlayer:
+func remote_voice_player_for_stream(stream: AudioStream, speaker_seat: int = -1, sequence: int = -1) -> AudioStreamPlayer:
 	var reusable: AudioStreamPlayer = null
+	var oldest_started := 9223372036854775807
 	for index in range(remote_voice_players.size() - 1, -1, -1):
 		var candidate := remote_voice_players[index]
 		if candidate == null or not is_instance_valid(candidate):
 			remote_voice_players.remove_at(index)
+			remote_voice_player_meta.erase(candidate.get_instance_id() if candidate != null else -1)
 			continue
 		if reusable == null and not candidate.playing:
 			reusable = candidate
 	if reusable == null and remote_voice_players.size() >= ONLINE_REMOTE_VOICE_PLAYER_LIMIT:
-		reusable = remote_voice_players[0]
-		reusable.stop()
+		for candidate in remote_voice_players:
+			var started := int(remote_voice_player_meta.get(candidate.get_instance_id(), {}).get("started_msec", 0))
+			if started < oldest_started:
+				oldest_started = started
+				reusable = candidate
+		if reusable != null:
+			reusable.stop()
 	if reusable == null:
 		reusable = AudioStreamPlayer.new()
 		reusable.name = "RemoteVoicePlayer_%d" % remote_voice_players.size()
@@ -45557,6 +46431,11 @@ func remote_voice_player_for_stream(stream: AudioStream) -> AudioStreamPlayer:
 		reusable.finished.connect(Callable(self, "_on_remote_voice_player_finished").bind(reusable))
 		remote_voice_players.append(reusable)
 	reusable.stream = stream
+	remote_voice_player_meta[reusable.get_instance_id()] = {
+		"speaker": speaker_seat,
+		"sequence": sequence,
+		"started_msec": Time.get_ticks_msec(),
+	}
 	return reusable
 
 
@@ -45565,25 +46444,30 @@ func handle_voice_message(data: Dictionary) -> void:
 	if speaker_seat >= 0 and speaker_seat == int(online_game.get("youSeat", -2)):
 		return
 	var sequence := int(first_present(data, ["sequence", "seq"], -1))
-	if sequence >= 0:
-		var sequence_key := "%d:%d" % [speaker_seat, sequence]
-		if online_seen_voice_sequences.has(sequence_key):
-			return
-		online_seen_voice_sequences[sequence_key] = true
-		while online_seen_voice_sequences.size() > ONLINE_SEEN_EVENT_LIMIT:
-			online_seen_voice_sequences.erase(online_seen_voice_sequences.keys()[0])
 	var audio_base64 := str(data.get("audio", "")).strip_edges()
 	var sample_rate := int(data.get("sampleRate", AudioServer.get_mix_rate()))
 	var channels := int(data.get("channels", 1))
 	if audio_base64 == "" or sample_rate < ONLINE_VOICE_MIN_SAMPLE_RATE or sample_rate > ONLINE_VOICE_MAX_SAMPLE_RATE or not [1, 2].has(channels):
+		online_voice_rejection_count += 1
+		return
+	var sequence_key := "%d:%d" % [speaker_seat, sequence] if sequence >= 0 else ""
+	if sequence_key != "" and online_seen_voice_sequences.has(sequence_key):
 		return
 	var decoded := Marshalls.base64_to_raw(audio_base64)
 	if decoded.is_empty() or decoded.size() > ONLINE_VOICE_PACKET_MAX_BYTES or decoded.size() % 2 != 0:
+		online_voice_rejection_count += 1
 		return
 	var stream = make_voice_stream(audio_base64, sample_rate, channels, decoded)
 	if stream == null:
+		online_voice_rejection_count += 1
 		return
-	var player := remote_voice_player_for_stream(stream)
+	var player := remote_voice_player_for_stream(stream, speaker_seat, sequence)
+	if sequence_key != "":
+		online_seen_voice_sequences[sequence_key] = true
+		online_seen_voice_sequence_order.append(sequence_key)
+		while online_seen_voice_sequence_order.size() > ONLINE_SEEN_EVENT_LIMIT:
+			var oldest_key: String = str(online_seen_voice_sequence_order.pop_front())
+			online_seen_voice_sequences.erase(oldest_key)
 	player.play()
 
 
@@ -45654,11 +46538,21 @@ func render_room_log() -> void:
 	var logs: Array = online_room.get("logs", []) as Array
 	if typeof(logs) != TYPE_ARRAY:
 		logs = []
-	var log_fingerprint_parts: Array[String] = [str(logs.size())]
-	var fingerprint_start: int = maxi(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
-	for fingerprint_index in range(fingerprint_start, logs.size()):
-		log_fingerprint_parts.append(str(hash(online_log_entry_text(logs[fingerprint_index]))))
-	var log_fingerprint := "|".join(log_fingerprint_parts)
+	var log_fingerprint := online_log_cached_fingerprint
+	var rendered_lines: Array[String] = online_log_cached_lines
+	if online_log_fingerprint_revision != online_log_revision or rendered_lines.size() != logs.size():
+		rendered_lines = []
+		var log_fingerprint_parts: Array[String] = [str(logs.size())]
+		var fingerprint_start: int = maxi(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
+		for fingerprint_index in range(fingerprint_start, logs.size()):
+			var normalized_line := online_log_entry_text(logs[fingerprint_index]).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
+			if normalized_line != "":
+				rendered_lines.append(normalized_line)
+			log_fingerprint_parts.append(str(hash(normalized_line)))
+		log_fingerprint = "|".join(log_fingerprint_parts)
+		online_log_cached_lines = rendered_lines
+		online_log_cached_fingerprint = log_fingerprint
+		online_log_fingerprint_revision = online_log_revision
 	var log_count := online_lobby_log_count()
 	if log_fingerprint == online_log_render_fingerprint:
 		if not online_log_initialized:
@@ -45680,22 +46574,17 @@ func render_room_log() -> void:
 	if follow_latest:
 		online_log_seen_count = log_count
 		online_log_at_latest = true
+		online_log_follow_latest_pending_frames = 4
 	else:
 		online_log_at_latest = false
+		online_log_follow_latest_pending_frames = 0
 	var start_index: int = maxi(0, logs.size() - ONLINE_LOG_HISTORY_LIMIT)
 	var can_append_one: bool = logs.size() == online_log_rendered_source_count + 1 and start_index == 0 and not logs_label.text.is_empty() and logs_label.text != "暂无房间日志"
-	var appended_line: String = online_log_entry_text(logs[logs.size() - 1]).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH) if not logs.is_empty() else ""
+	var appended_line: String = str(rendered_lines.back()) if not rendered_lines.is_empty() else ""
 	if can_append_one and appended_line != "":
 		logs_label.text += "· " + appended_line + "\n"
 	else:
-		var text: String = ""
-		if logs.is_empty():
-			text = "暂无房间日志"
-		for i in range(start_index, logs.size()):
-			var line: String = online_log_entry_text(logs[i]).strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
-			if line != "":
-				text += "· " + line + "\n"
-		logs_label.text = text
+		logs_label.text = "暂无房间日志" if rendered_lines.is_empty() else "· " + "\n· ".join(rendered_lines) + "\n"
 	online_log_render_fingerprint = log_fingerprint
 	online_log_rendered_source_count = logs.size()
 	refresh_online_log_navigation()
@@ -45722,10 +46611,14 @@ func flush_online_log_scroll_request(expected_revision: int) -> void:
 		return
 	online_log_scroll_request_queued = false
 	if online_log_scroll_request_follow_latest:
-		# RichTextLabel reflow updates the ScrollContainer range one idle pass
-		# after the deferred request. Give the container that pass before reading
-		# max_value, otherwise a newly appended tail can stop at the old maximum.
-		call_deferred("scroll_online_log_to_end_after_layout", expected_revision)
+		# RichTextLabel reflow and ScrollContainer range propagation can land on
+		# several consecutive idle frames. Track the current bottom during a short
+		# settling window so an append cannot leave the user at the previous range.
+		for _frame in range(2):
+			await get_tree().process_frame
+			if expected_revision != online_log_scroll_request_revision:
+				return
+			scroll_online_log_to_end(expected_revision)
 	else:
 		restore_online_log_scroll(online_log_scroll_request_value, expected_revision)
 
@@ -51880,6 +52773,10 @@ func clear_fx_overlays() -> void:
 	if transition_overlay != null and is_instance_valid(transition_overlay):
 		transition_overlay.visible = false
 	transition_active = false
+	if ui_enhancements != null and is_instance_valid(ui_enhancements) and root_layer != null and is_instance_valid(root_layer):
+		var settlement_panel := root_layer.find_child("RoundSummaryPanel", true, false) as Control
+		if settlement_panel != null and is_instance_valid(settlement_panel):
+			ui_enhancements.clear_effects_for_owner(settlement_panel)
 	if fx_layer != null and is_instance_valid(fx_layer):
 		for child in fx_layer.get_children():
 			if child == transition_overlay or child == toast_container or child == fx_turn_pulse or child == fx_burst_root or child == fx_ripple_root:
@@ -53136,6 +54033,13 @@ var chat_send_input: LineEdit = null
 var chat_send_quick_buttons: Array[Button] = []
 var chat_send_cooldown_token := ""
 var chat_send_validity_token := ""
+var chat_message_panel_root_id := 0
+var chat_message_panel: Control = null
+var chat_message_scroll: ScrollContainer = null
+var chat_message_label: Label = null
+var chat_message_range_label: Label = null
+var chat_message_refresh_revision := 0
+var chat_message_refresh_queued := false
 
 
 func chat_panel_rect() -> Rect2:
@@ -53307,24 +54211,81 @@ func toggle_chat_panel() -> void:
 func refresh_chat_panel() -> void:
 	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return
-	for shield_node in root_layer.find_children("ChatPanelInputShield", "Control", true, false):
-		var shield := shield_node as Control
-		if shield != null and is_instance_valid(shield):
-			root_layer.remove_child(shield)
-			shield.queue_free()
-	var old_panel := root_layer.find_child("ChatPanel", true, false) as Control
-	if old_panel != null and is_instance_valid(old_panel):
-		root_layer.remove_child(old_panel)
-		old_panel.queue_free()
-	chat_input = null
-	chat_send_controls_root_id = 0
-	chat_send_cooldown_label = null
-	chat_send_button = null
-	chat_send_input = null
-	chat_send_quick_buttons.clear()
-	chat_send_cooldown_token = ""
-	chat_send_validity_token = ""
-	show_chat_panel()
+	if not bind_chat_message_lane():
+		return
+	chat_message_refresh_revision += 1
+	if chat_message_refresh_queued:
+		return
+	chat_message_refresh_queued = true
+	call_deferred("flush_chat_panel_message_refresh", chat_message_refresh_revision)
+
+
+func bind_chat_message_lane() -> bool:
+	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
+		return false
+	var root_id := root_layer.get_instance_id()
+	if chat_message_panel_root_id == root_id and chat_message_panel != null and is_instance_valid(chat_message_panel) and root_layer.is_ancestor_of(chat_message_panel) and chat_message_scroll != null and is_instance_valid(chat_message_scroll) and chat_message_label != null and is_instance_valid(chat_message_label) and chat_message_range_label != null and is_instance_valid(chat_message_range_label):
+		return true
+	var panel := root_layer.find_child("ChatPanel", true, false) as Control
+	if panel == null or not is_instance_valid(panel):
+		return false
+	chat_message_panel_root_id = root_id
+	chat_message_panel = panel
+	chat_message_scroll = panel.find_child("ChatPanelMessageScroll", true, false) as ScrollContainer
+	chat_message_label = panel.find_child("ChatPanelMessageText", true, false) as Label
+	chat_message_range_label = panel.find_child("ChatPanelMessageRangeLabel", true, false) as Label
+	return chat_message_scroll != null and chat_message_label != null and chat_message_range_label != null
+
+
+func flush_chat_panel_message_refresh(expected_revision: int) -> void:
+	if expected_revision != chat_message_refresh_revision:
+		call_deferred("flush_chat_panel_message_refresh", chat_message_refresh_revision)
+		return
+	chat_message_refresh_queued = false
+	if not bind_chat_message_lane():
+		return
+	var scroll := chat_message_scroll
+	var message_label := chat_message_label
+	var range_label := chat_message_range_label
+	if scroll == null or message_label == null or range_label == null:
+		return
+	var scrollbar := scroll.get_v_scroll_bar()
+	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page) if scrollbar != null else 0.0
+	var follow_latest := max_scroll <= 0.5 or float(scroll.scroll_vertical) >= max_scroll - 1.0
+	var chat_text := "\n".join(chat_messages)
+	if chat_text.strip_edges() == "":
+		chat_text = "等待房间消息"
+	var chat_display_lines: Array[String] = []
+	for message_index in range(chat_messages.size()):
+		chat_display_lines.append("• %02d  %s" % [message_index + 1, str(chat_messages[message_index])])
+	var display_text: String = "\n".join(chat_display_lines) if not chat_display_lines.is_empty() else "· 等待房间消息"
+	message_label.text = display_text
+	message_label.tooltip_text = chat_text
+	var wrap_width := float(scroll.get_meta("message_wrap_width_px", 0.0))
+	if wrap_width <= 1.0:
+		wrap_width = maxf(140.0, safe_content_pixel_size().x * maxf(0.001, chat_panel_rect().size.x - chat_panel_rect().position.x) * 0.86)
+	var chat_height := estimate_wrapped_text_height(display_text, wrap_width, accessibility_font_size(10 if bool(chat_message_panel.get_meta("compact_chat", false)) else 12), 3.0)
+	message_label.custom_minimum_size = Vector2(0.0, maxf(44.0, chat_height))
+	configure_wrapped_label(message_label, wrap_width, message_label.custom_minimum_size.y, 3.0)
+	message_label.set_meta("chat_message_revision", expected_revision)
+	message_label.set_meta("chat_message_count", chat_messages.size())
+	range_label.set_meta("chat_message_revision", expected_revision)
+	if follow_latest:
+		call_deferred("scroll_chat_panel_to_end_for_revision", expected_revision, scroll.get_instance_id())
+	else:
+		refresh_chat_message_range_status()
+
+
+func scroll_chat_panel_to_end_for_revision(expected_revision: int, scroll_id: int) -> void:
+	if expected_revision != chat_message_refresh_revision or not chat_panel_open:
+		return
+	var scroll := node_from_instance_id(scroll_id) as ScrollContainer
+	if scroll == null or not is_instance_valid(scroll) or not bind_chat_message_lane() or scroll != chat_message_scroll:
+		return
+	var scrollbar := scroll.get_v_scroll_bar()
+	if scrollbar != null:
+		scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
+	refresh_chat_message_range_status()
 
 
 func close_chat_panel(restore_focus: bool = true) -> void:
@@ -53358,6 +54319,12 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 	chat_send_quick_buttons.clear()
 	chat_send_cooldown_token = ""
 	chat_send_validity_token = ""
+	chat_message_panel_root_id = 0
+	chat_message_panel = null
+	chat_message_scroll = null
+	chat_message_label = null
+	chat_message_range_label = null
+	chat_message_refresh_queued = false
 	if restore_focus:
 		call_deferred("restore_chat_panel_focus")
 	else:
@@ -53380,9 +54347,11 @@ func scroll_chat_panel_to_end() -> void:
 func refresh_chat_message_range_status() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
-	var scroll := root_layer.find_child("ChatPanelMessageScroll", true, false) as ScrollContainer
-	var status := root_layer.find_child("ChatPanelMessageRangeLabel", true, false) as Label
-	var message_label := root_layer.find_child("ChatPanelMessageText", true, false) as Label
+	if not bind_chat_message_lane():
+		return
+	var scroll := chat_message_scroll
+	var status := chat_message_range_label
+	var message_label := chat_message_label
 	if scroll == null or status == null:
 		return
 	var total := chat_messages.size()
@@ -53477,25 +54446,55 @@ func update_action_dock_focus_label(button_id: int) -> void:
 	var button := node_from_instance_id(button_id) as Button
 	if button == null or not is_instance_valid(button):
 		return
-	var status_slot := root_layer.find_child("ActionDockStatusLabel", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
+	var status_slot := action_dock_status_label if action_dock_status_label != null and is_instance_valid(action_dock_status_label) else null
+	if status_slot == null and root_layer != null and is_instance_valid(root_layer):
+		status_slot = root_layer.find_child("ActionDockStatusLabel", true, false) as Label
+		action_dock_status_label = status_slot
 	if status_slot == null:
 		return
 	if bool(status_slot.get_meta("ui_action_status_priority", false)):
 		return
-	status_slot.text = "当前焦点 · %s" % button.text
-	status_slot.tooltip_text = "%s · %s" % [button.tooltip_text if button.tooltip_text != "" else button.text, action_button_shortcut_hint(button.text)]
-	set_ui_full_text(status_slot, status_slot.text, status_slot.tooltip_text)
+	var next_text := "当前焦点 · %s" % button.text
+	var next_tooltip := "%s · %s" % [button.tooltip_text if button.tooltip_text != "" else button.text, action_button_shortcut_hint(button.text)]
+	var focus_token := "%d|%s|%s" % [button.get_instance_id(), next_text, next_tooltip]
+	if str(status_slot.get_meta("action_focus_text_token", "")) == focus_token:
+		return
+	status_slot.set_meta("action_focus_text_token", focus_token)
+	status_slot.text = next_text
+	status_slot.tooltip_text = next_tooltip
+	set_ui_full_text(status_slot, next_text, next_tooltip)
 
 
 func toggle_table_log_archive() -> void:
 	if mode != "offline" and mode != "online_game":
 		return
 	table_log_archive_open = not table_log_archive_open
+	table_log_focus_generation += 1
+	var focus_generation := table_log_focus_generation
+	var focus_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
+	var expected_open := table_log_archive_open
 	request_game_render()
 	if table_log_archive_open:
-		call_deferred("focus_named_control", "TableLogArchiveCloseButton")
+		call_deferred("focus_table_log_archive_if_current", focus_generation, focus_root_id, expected_open, "TableLogArchiveCloseButton")
 	else:
-		call_deferred("focus_named_control", "TableLogArchiveButton")
+		call_deferred("focus_table_log_archive_if_current", focus_generation, focus_root_id, expected_open, "TableLogArchiveButton")
+
+
+func focus_table_log_archive_if_current(expected_generation: int, expected_root_id: int, expected_open: bool, control_name: String, settle_frames: int = 2) -> void:
+	# request_game_render() is deferred and may be throttled by the render cadence.
+	# Use a deferred frame chain instead of an await coroutine so a page teardown
+	# cannot resume a method whose scene instance has already been released.
+	if settle_frames > 0:
+		call_deferred("focus_table_log_archive_if_current", expected_generation, expected_root_id, expected_open, control_name, settle_frames - 1)
+		return
+	if expected_generation != table_log_focus_generation or table_log_archive_open != expected_open:
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var target := find_ui_contract_control(root_layer, control_name)
+	if target == null or not target.is_visible_in_tree():
+		return
+	focus_named_control(control_name)
 
 func open_table_log_from_chat() -> void:
 	if mode != "online_game":
@@ -53505,20 +54504,26 @@ func open_table_log_from_chat() -> void:
 		table_log_chat_restore_pending = true
 	close_chat_panel(false)
 	table_log_archive_open = true
+	table_log_focus_generation += 1
+	var focus_generation := table_log_focus_generation
+	var focus_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
 	request_game_render()
-	call_deferred("focus_named_control", "TableLogArchiveCloseButton")
+	call_deferred("focus_table_log_archive_if_current", focus_generation, focus_root_id, true, "TableLogArchiveCloseButton")
 
 
 func close_table_log_archive() -> void:
 	if not table_log_archive_open:
 		return
 	table_log_archive_open = false
+	table_log_focus_generation += 1
+	var focus_generation := table_log_focus_generation
+	var focus_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
 	var restore_chat := table_log_chat_restore_pending and mode == "online_game" and not online_game_disconnected()
 	if restore_chat:
 		chat_panel_open = true
 	request_game_render()
 	if not restore_chat:
-		call_deferred("focus_named_control", "TableLogArchiveButton")
+		call_deferred("focus_table_log_archive_if_current", focus_generation, focus_root_id, false, "TableLogArchiveButton")
 
 
 func scroll_table_log_archive_to_end() -> void:
@@ -53530,11 +54535,37 @@ func scroll_table_log_archive_to_end() -> void:
 	var scrollbar := archive_scroll.get_v_scroll_bar()
 	archive_scroll.scroll_vertical = int(round(maxf(0.0, scrollbar.max_value - scrollbar.page)))
 
+func animate_chat_send_panel_feedback(feedback: Control) -> void:
+	if feedback == null or not is_instance_valid(feedback):
+		return
+	var fill := feedback.find_child("ChatSendPanelFill", true, false) as Control
+	var gate := feedback.find_child("ChatSendPanelGate", true, false) as Control
+	if not fx_enabled_effective() or fill == null or gate == null:
+		feedback.modulate.a = 0.92
+		return
+	feedback.modulate.a = 0.0
+	var tw := create_screen_tween_for_owner(feedback)
+	tw.set_parallel(true)
+	tw.tween_property(feedback, "modulate:a", 1.0, 0.08).from(0.0)
+	tw.tween_property(fill, "anchor_right", 1.0, 0.20).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(gate, "scale", Vector2(1.10, 1.10), 0.14).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT)
+	tw.set_parallel(false)
+	tw.tween_property(feedback, "modulate:a", 0.0, 0.24).from(1.0).set_delay(0.16)
+
+
 func play_chat_send_panel_feedback(message: String = "") -> Control:
 	# r215: GPT chrome conversion
 	var panel = find_child("ChatPanel", true, false) as Control
 	if panel == null or not is_instance_valid(panel):
 		return null
+	var reusable := panel.get_node_or_null("ChatSendPanelFeedback") as Control
+	if reusable != null and is_instance_valid(reusable) and not reusable.is_queued_for_deletion():
+		kill_screen_tweens_for_subtree(reusable)
+		var reusable_glyph := reusable.find_child("ChatSendPanelReceiptGlyph", true, false) as Label
+		if reusable_glyph != null:
+			reusable_glyph.text = str(message).substr(0, 1) if str(message).strip_edges() != "" else "发"
+		animate_chat_send_panel_feedback(reusable)
+		return reusable
 	var feedback = Control.new()
 	feedback.name = "ChatSendPanelFeedback"
 	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -53564,18 +54595,8 @@ func play_chat_send_panel_feedback(message: String = "") -> Control:
 		var tick = make_gpt_tick_strip(rect_full(0.320 + float(i) * 0.130, 0.770, 0.342 + float(i) * 0.130, 0.910), Color(accent.r, accent.g, accent.b, 0.24 - float(i) * 0.040))
 		tick.name = "ChatSendPanelTick_%d" % i
 		feedback.add_child(tick)
-	if fx_enabled_effective():
-		feedback.modulate.a = 0.0
-		var tw := create_screen_tween()
-		tw.set_parallel(true)
-		tw.tween_property(feedback, "modulate:a", 1.0, 0.08).from(0.0)
-		tw.tween_property(fill, "anchor_right", 1.0, 0.20).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-		tw.tween_property(gate, "scale", Vector2(1.10, 1.10), 0.14).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT)
-		tw.set_parallel(false)
-		tw.tween_property(feedback, "modulate:a", 0.0, 0.24).from(1.0).set_delay(0.16)
-		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
-	else:
-		feedback.modulate.a = 0.92
+	feedback.set_meta("feedback_reuse_policy", "single_panel_owner_reset_animation")
+	animate_chat_send_panel_feedback(feedback)
 	return feedback
 
 
@@ -54882,7 +55903,10 @@ func round_replay_digest(events: Array = []) -> String:
 	return str(last.get("digest", "")) if typeof(last) == TYPE_DICTIONARY else ""
 
 func ensure_round_replay_view_cache() -> void:
-	var cache_key := "%s|%d|%d" % [active_round_id, round_event_sequence, round_event_history.size()]
+	# The history can be edited by restore/import/test callers without going
+	# through record_round_event(), so sequence and size alone are not enough to
+	# decide whether the derived replay view is still current.
+	var cache_key := "%s|%d|%d|%d" % [active_round_id, round_event_sequence, round_event_history.size(), hash(round_event_history)]
 	if replay_view_cache_round_id == cache_key and replay_view_cache_sequence == round_event_sequence and not replay_view_cache.is_empty():
 		return
 	var events := round_event_history.duplicate(true)
@@ -55208,8 +56232,22 @@ func request_delete_replay_archive(archive_id: String) -> void:
 
 func set_replay_search_query(query: String) -> void:
 	replay_search_query = query.strip_edges().left(64)
+	replay_search_pending_query = replay_search_query
+	replay_search_request_revision += 1
 	replay_delete_target_id = ""
 	replay_delete_confirming = false
+	if replay_search_flush_queued:
+		return
+	replay_search_flush_queued = true
+	call_deferred("flush_replay_search_query", replay_search_request_revision)
+
+
+func flush_replay_search_query(expected_revision: int) -> void:
+	if expected_revision != replay_search_request_revision:
+		call_deferred("flush_replay_search_query", replay_search_request_revision)
+		return
+	replay_search_flush_queued = false
+	replay_search_query = replay_search_pending_query
 	refresh_replay_archive_view()
 
 
@@ -55346,6 +56384,7 @@ func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool
 	telemetry_outbox.append(event)
 	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
 		telemetry_outbox.pop_front()
+	telemetry_queue_sync_revision += 1
 	schedule_telemetry_save()
 	return true
 
@@ -55367,10 +56406,10 @@ func toggle_telemetry_consent() -> void:
 	if telemetry_mutation_in_flight:
 		return
 	telemetry_mutation_revision += 1
+	telemetry_consent_sync_revision += 1
+	telemetry_recent_action_sync_revision += 1
 	var mutation_revision := telemetry_mutation_revision
 	telemetry_mutation_in_flight = true
-	if telemetry_sheet_open:
-		refresh_telemetry_data_sheet()
 	telemetry_consent_decided = true
 	telemetry_consent = not telemetry_consent
 	if telemetry_consent:
@@ -55379,7 +56418,9 @@ func toggle_telemetry_consent() -> void:
 		telemetry_record_event("consent_granted")
 	else:
 		telemetry_outbox.clear()
+		telemetry_queue_sync_revision += 1
 		telemetry_export_status = "未导出"
+		telemetry_export_sync_revision += 1
 		telemetry_last_action = "已关闭记录并清空本地队列"
 		save_telemetry_state()
 		save_settings()
@@ -55398,6 +56439,7 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 		telemetry_clear_confirming = false
 		telemetry_clear_confirm_deadline_msec = 0
 		telemetry_last_action = "清除确认已超时，未删除任何数据"
+		telemetry_recent_action_sync_revision += 1
 		refresh_telemetry_data_sheet()
 		show_toast("清除确认已超时，数据未删除")
 		return
@@ -55405,6 +56447,7 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 		telemetry_clear_confirming = true
 		telemetry_clear_confirm_deadline_msec = Time.get_ticks_msec() + 5000
 		telemetry_last_action = "等待确认清除本地匿名数据"
+		telemetry_recent_action_sync_revision += 1
 		var clear_button := root_layer.find_child("TelemetryClearButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 		if clear_button != null:
 			clear_button.set_meta("confirm_state", "armed")
@@ -55418,12 +56461,15 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 		return
 	telemetry_clear_confirming = false
 	telemetry_clear_confirm_deadline_msec = 0
+	telemetry_recent_action_sync_revision += 1
 	var clear_button := root_layer.find_child("TelemetryClearButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if clear_button != null:
 		clear_button.set_meta("confirm_state", "executed")
 		clear_button.set_meta("first_click_is_non_destructive", true)
 	telemetry_outbox.clear()
+	telemetry_queue_sync_revision += 1
 	telemetry_export_status = "未导出"
+	telemetry_export_sync_revision += 1
 	telemetry_last_action = "已清除本地匿名数据"
 	save_telemetry_state()
 	if telemetry_sheet_open:
@@ -55435,7 +56481,9 @@ func export_telemetry_data() -> bool:
 	var export_payload := {"schema": TELEMETRY_SCHEMA_VERSION, "events": telemetry_outbox.duplicate(true)}
 	DisplayServer.clipboard_set(JSON.stringify(export_payload))
 	telemetry_export_status = "已复制 · %d 条" % telemetry_outbox.size()
+	telemetry_export_sync_revision += 1
 	telemetry_last_action = "已导出并复制 %d 条匿名事件" % telemetry_outbox.size()
+	telemetry_recent_action_sync_revision += 1
 	if telemetry_sheet_open:
 		refresh_telemetry_data_sheet()
 		# The sheet footer is the modal's single success channel; a global toast
@@ -55456,27 +56504,36 @@ func flush_telemetry_outbox() -> bool:
 	return false
 
 
-func is_valid_replay_base64_shape(value: String) -> bool:
-	if value.is_empty() or value.length() % 4 == 1:
-		return false
-	var padding_start := value.length()
-	for index in range(value.length()):
-		var codepoint := value.unicode_at(index)
+func parse_replay_base64_shape(value: String) -> Dictionary:
+	var code := value.strip_edges()
+	if code.is_empty():
+		return {"valid": false, "error_position": -1, "reason": "等待粘贴回放码"}
+	if code.length() % 4 == 1:
+		return {"valid": false, "error_position": code.length(), "reason": "格式不正确 · 第%d个字符后长度无法组成 Base64" % code.length()}
+	var padding_start := code.length()
+	for index in range(code.length()):
+		var codepoint := code.unicode_at(index)
 		var is_alphabet := (codepoint >= 65 and codepoint <= 90) or (codepoint >= 97 and codepoint <= 122) or (codepoint >= 48 and codepoint <= 57) or codepoint == 43 or codepoint == 47
 		if codepoint == 61:
-			if padding_start == value.length():
+			if padding_start == code.length():
 				padding_start = index
-		elif padding_start != value.length() or not is_alphabet:
-			return false
-	var padding_count := value.length() - padding_start
+		elif padding_start != code.length() or not is_alphabet:
+			return {"valid": false, "error_position": index + 1, "reason": "格式不正确 · 第%d个字符不是 Base64 字符" % (index + 1)}
+	var padding_count := code.length() - padding_start
 	if padding_count > 2:
-		return false
-	return padding_count == 0 or value.length() % 4 == 0
+		return {"valid": false, "error_position": padding_start + 1, "reason": "格式不正确 · 结尾最多允许两个补位字符"}
+	if padding_count > 0 and code.length() % 4 != 0:
+		return {"valid": false, "error_position": padding_start + 1, "reason": "格式不正确 · 补位字符必须位于完整 Base64 分组末尾"}
+	return {"valid": true, "error_position": -1, "reason": "格式可用 · 点击导入进行完整校验"}
+
+
+func is_valid_replay_base64_shape(value: String) -> bool:
+	return bool(parse_replay_base64_shape(value).get("valid", false))
 
 
 func import_round_replay_share_code(code: String) -> Dictionary:
 	var clean := code.strip_edges()
-	if not is_valid_replay_base64_shape(clean):
+	if not bool(parse_replay_base64_shape(clean).get("valid", false)):
 		return {}
 	var decoded := Marshalls.base64_to_raw(clean)
 	if decoded.is_empty() or decoded.size() > REPLAY_SHARE_MAX_BYTES:

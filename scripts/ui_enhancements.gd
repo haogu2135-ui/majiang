@@ -23,6 +23,9 @@ class_name UIEnhancements
 # 存储当前的粒子动画，用于管理和清理
 var active_particles: Array[Tween] = []
 var particle_nodes: Array[Control] = []
+var _active_particle_indices: Dictionary = {}
+var _active_particle_owner_ids: Dictionary = {}
+var _particle_node_indices: Dictionary = {}
 
 # GPT spark host — never StyleBoxFlat program paint for VFX chrome.
 var _spark_tex_cache: Texture2D
@@ -68,6 +71,92 @@ func _make_gpt_spark(spark_size: float, color: Color) -> Control:
 func _exit_tree() -> void:
 	clear_all_effects()
 
+
+func _register_active_particle(tween: Tween, owner: Node = null) -> void:
+	if tween == null or not is_instance_valid(tween):
+		return
+	var tween_id := tween.get_instance_id()
+	if _active_particle_indices.has(tween_id):
+		return
+	_active_particle_indices[tween_id] = active_particles.size()
+	active_particles.append(tween)
+	if owner != null and is_instance_valid(owner):
+		_active_particle_owner_ids[tween_id] = owner.get_instance_id()
+
+
+func _unregister_active_particle_by_id(tween_id: int) -> void:
+	var index := int(_active_particle_indices.get(tween_id, -1))
+	if index < 0 or index >= active_particles.size():
+		_active_particle_indices.erase(tween_id)
+		return
+	var last_index := active_particles.size() - 1
+	var last_tween := active_particles[last_index]
+	active_particles[index] = last_tween
+	active_particles.pop_back()
+	_active_particle_indices.erase(tween_id)
+	_active_particle_owner_ids.erase(tween_id)
+	if index != last_index and last_tween != null and is_instance_valid(last_tween):
+		_active_particle_indices[last_tween.get_instance_id()] = index
+
+
+func _register_particle_node(node: Control) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	var node_id := node.get_instance_id()
+	if _particle_node_indices.has(node_id):
+		return
+	_particle_node_indices[node_id] = particle_nodes.size()
+	particle_nodes.append(node)
+
+
+func _unregister_particle_node(node: Control) -> void:
+	if node == null:
+		return
+	_unregister_particle_node_by_id(node.get_instance_id())
+
+
+func _unregister_particle_node_by_id(node_id: int) -> void:
+	var index := int(_particle_node_indices.get(node_id, -1))
+	if index < 0 or index >= particle_nodes.size():
+		_particle_node_indices.erase(node_id)
+		return
+	var last_index := particle_nodes.size() - 1
+	var last_node := particle_nodes[last_index]
+	particle_nodes[index] = last_node
+	particle_nodes.pop_back()
+	_particle_node_indices.erase(node_id)
+	if index != last_index and last_node != null and is_instance_valid(last_node):
+		_particle_node_indices[last_node.get_instance_id()] = index
+
+
+func _finish_particle_effect(tween_id: int, node_id: int) -> void:
+	_unregister_active_particle_by_id(tween_id)
+	var node := instance_from_id(node_id) as Control
+	if node != null and is_instance_valid(node):
+		_unregister_particle_node(node)
+		node.queue_free()
+
+
+func clear_effects_for_owner(owner: Node) -> void:
+	if owner == null or not is_instance_valid(owner):
+		return
+	var tween_snapshot := active_particles.duplicate()
+	for tween in tween_snapshot:
+		var tw := tween as Tween
+		if tw == null or not is_instance_valid(tw):
+			continue
+		var owner_node := instance_from_id(int(_active_particle_owner_ids.get(tw.get_instance_id(), 0))) as Node
+		if owner_node == owner or (owner_node != null and owner.is_ancestor_of(owner_node)):
+			tw.kill()
+			_unregister_active_particle_by_id(tw.get_instance_id())
+	var node_snapshot := particle_nodes.duplicate()
+	for node in node_snapshot:
+		if node == null or not is_instance_valid(node):
+			continue
+		if owner == node or owner.is_ancestor_of(node):
+			_unregister_particle_node(node)
+			node.queue_free()
+
 # 粒子颜色调色板 - 国风主题
 const PARTICLE_PALETTES := {
 	"gold": [
@@ -109,7 +198,7 @@ func create_enhanced_particle_burst(parent: Control, center: Vector2, color_them
 		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		particle.position = center
 		parent.add_child(particle)
-		particle_nodes.append(particle)
+		_register_particle_node(particle)
 
 		# 粒子核心 — GPT spark
 		var core_size = randf_range(4.0, 10.0)
@@ -141,12 +230,9 @@ func create_enhanced_particle_burst(parent: Control, center: Vector2, color_them
 
 		# 动画结束后清理。Tween 回调只保存实例 ID，避免场景切换后捕获已释放节点。
 		var particle_id := particle.get_instance_id()
-		tw.chain().tween_callback(func():
-			var particle_node := instance_from_id(particle_id) as Control
-			if particle_node != null:
-				particle_node.queue_free()
-		)
-		active_particles.append(tw)
+		var tween_id := tw.get_instance_id()
+		tw.chain().tween_callback(Callable(self, "_finish_particle_effect").bind(tween_id, particle_id))
+		_register_active_particle(tw, parent)
 
 # ============================================================
 # 动态星光效果 / Dynamic Starlight Effect
@@ -172,13 +258,13 @@ func create_enhanced_starlight(parent: Control, rect: Rect2, star_count: int = 1
 		var radius = randf_range(0.0, min(rect.size.x, rect.size.y) * 0.45)
 		star.position = center + Vector2(cos(angle), sin(angle)) * radius - Vector2(star_size * 0.5, star_size * 0.5)
 		star_container.add_child(star)
-		particle_nodes.append(star)
+		_register_particle_node(star)
 		var tw = star.create_tween()
 		tw.set_loops(48)
 		var duration = randf_range(0.8, 1.8)
 		tw.tween_property(star, "modulate:a", 0.15, duration).set_trans(Tween.TRANS_SINE)
 		tw.tween_property(star, "modulate:a", col.a, duration).set_trans(Tween.TRANS_SINE)
-		active_particles.append(tw)
+		_register_active_particle(tw, parent)
 	return star_container
 
 func apply_hand_tile_hover_effect(tile_control: Control, is_hovered: bool) -> void:
@@ -188,14 +274,14 @@ func apply_hand_tile_hover_effect(tile_control: Control, is_hovered: bool) -> vo
 		tw.set_parallel(true)
 		tw.tween_property(tile_control, "scale", Vector2(1.08, 1.08), 0.15).set_ease(Tween.EASE_OUT)
 		tw.tween_property(tile_control, "modulate", Color(1.1, 1.1, 1.1, 1.0), 0.15)
-		active_particles.append(tw)
+		_register_active_particle(tw, tile_control)
 	else:
 		# 恢复原始状态
 		var tw = tile_control.create_tween()
 		tw.set_parallel(true)
 		tw.tween_property(tile_control, "scale", Vector2.ONE, 0.15).set_ease(Tween.EASE_OUT)
 		tw.tween_property(tile_control, "modulate", Color.WHITE, 0.15)
-		active_particles.append(tw)
+		_register_active_particle(tw, tile_control)
 
 # 为选中的手牌添加弹跳动画
 func apply_hand_tile_select_bounce(tile_control: Control) -> void:
@@ -206,7 +292,7 @@ func apply_hand_tile_select_bounce(tile_control: Control) -> void:
 	tw.set_ease(Tween.EASE_OUT)
 	tw.tween_property(tile_control, "position:y", tile_control.position.y - 10.0, 0.2)
 	tw.tween_property(tile_control, "position:y", tile_control.position.y, 0.15)
-	active_particles.append(tw)
+	_register_active_particle(tw, tile_control)
 
 # ============================================================
 # 国风装饰动态效果 / Guofeng Decoration Dynamic Effects
@@ -240,7 +326,7 @@ func create_floating_cloud(parent: Control, rect: Rect2, speed: float = 20.0) ->
 	tw.set_loops(48)
 	var duration = rect.size.x / max(1.0, speed)
 	tw.tween_property(cloud, "position:x", rect.position.x + rect.size.x, duration).from(rect.position.x - rect.size.x)
-	active_particles.append(tw)
+	_register_active_particle(tw, parent)
 	return cloud
 
 # 竹子微风：仅用 GPT 纹理条，不再 StyleBox 程序绿
@@ -276,7 +362,7 @@ func create_bamboo_sway(parent: Control, rect: Rect2, segments: int = 5) -> Cont
 	tw.set_ease(Tween.EASE_IN_OUT)
 	tw.tween_property(bamboo, "rotation", 0.05, 2.0).from(-0.05)
 	tw.tween_property(bamboo, "rotation", -0.05, 2.0).from(0.05)
-	active_particles.append(tw)
+	_register_active_particle(tw, parent)
 	return bamboo
 
 # 梅花飘落 — petals 纹理
@@ -287,7 +373,7 @@ func create_falling_plum_blossoms(parent: Control, rect: Rect2, count: int = 8) 
 		blossom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		blossom.position = Vector2(randf_range(rect.position.x, rect.position.x + rect.size.x), rect.position.y - randf_range(0, 50))
 		parent.add_child(blossom)
-		particle_nodes.append(blossom)
+		_register_particle_node(blossom)
 
 		var petal_color = Color(0.96, 0.70, 0.74, randf_range(0.7, 0.9))
 		var petal_size = randf_range(8.0, 14.0)
@@ -314,17 +400,20 @@ func create_falling_plum_blossoms(parent: Control, rect: Rect2, count: int = 8) 
 			blossom_node.position = Vector2(randf_range(rect.position.x, rect.position.x + rect.size.x), rect.position.y - 20.0)
 			blossom_node.rotation = 0.0
 		)
-		active_particles.append(tw)
+		_register_active_particle(tw, parent)
 
 func clear_all_effects() -> void:
 	for tw in active_particles:
 		if tw != null and is_instance_valid(tw):
 			tw.kill()
 	active_particles.clear()
+	_active_particle_indices.clear()
+	_active_particle_owner_ids.clear()
 	for node in particle_nodes:
 		if node != null and is_instance_valid(node):
 			node.queue_free()
 	particle_nodes.clear()
+	_particle_node_indices.clear()
 
 func get_active_effect_count() -> int:
 	return active_particles.size()
@@ -340,7 +429,7 @@ func create_floating_spirit(parent: Control, rect: Rect2, count: int = 6) -> voi
 			randf_range(rect.position.y, rect.position.y + rect.size.y)
 		)
 		parent.add_child(spirit)
-		particle_nodes.append(spirit)
+		_register_particle_node(spirit)
 
 		var glow = _make_gpt_spark(spirit_size * 2.2, Color.from_hsv(hue, 0.3, 1.0, 0.18))
 		glow.position = Vector2(-spirit_size * 0.6, -spirit_size * 0.6)
@@ -352,7 +441,7 @@ func create_floating_spirit(parent: Control, rect: Rect2, count: int = 6) -> voi
 		var dur = randf_range(3.0, 6.0)
 		tw.tween_property(spirit, "position", spirit.position + drift, dur).set_trans(Tween.TRANS_SINE)
 		tw.tween_property(spirit, "position", spirit.position, dur).set_trans(Tween.TRANS_SINE)
-		active_particles.append(tw)
+		_register_active_particle(tw, parent)
 
 func create_ripple_ring(parent: Control, center: Vector2, color: Color = Color(1.0, 0.9, 0.5, 0.8), ring_count: int = 3) -> void:
 	for i in range(ring_count):
@@ -361,7 +450,7 @@ func create_ripple_ring(parent: Control, center: Vector2, color: Color = Color(1
 		ring.name = "RippleRing_%d" % i
 		ring.position = center - Vector2(base * 0.5, base * 0.5)
 		parent.add_child(ring)
-		particle_nodes.append(ring)
+		_register_particle_node(ring)
 		var tw = ring.create_tween()
 		tw.set_parallel(true)
 		var target = base * 3.5
@@ -369,8 +458,10 @@ func create_ripple_ring(parent: Control, center: Vector2, color: Color = Color(1
 		tw.tween_property(ring, "custom_minimum_size", Vector2(target, target), 0.7 + float(i) * 0.12)
 		tw.tween_property(ring, "position", center - Vector2(target * 0.5, target * 0.5), 0.7 + float(i) * 0.12)
 		tw.tween_property(ring, "modulate:a", 0.0, 0.7 + float(i) * 0.12)
-		tw.chain().tween_callback(ring.queue_free)
-		active_particles.append(tw)
+		var tween_id := tw.get_instance_id()
+		var ring_id := ring.get_instance_id()
+		tw.chain().tween_callback(Callable(self, "_finish_particle_effect").bind(tween_id, ring_id))
+		_register_active_particle(tw, parent)
 
 func create_gold_dust(parent: Control, rect: Rect2, count: int = 8) -> void:
 	for i in range(count):
@@ -382,7 +473,7 @@ func create_gold_dust(parent: Control, rect: Rect2, count: int = 8) -> void:
 			randf_range(rect.position.y, rect.position.y + rect.size.y)
 		)
 		parent.add_child(dust)
-		particle_nodes.append(dust)
+		_register_particle_node(dust)
 
 		var tw = dust.create_tween()
 		tw.set_loops(48)
@@ -399,8 +490,8 @@ func create_gold_dust(parent: Control, rect: Rect2, count: int = 8) -> void:
 		flicker_tw.set_trans(Tween.TRANS_SINE)
 		flicker_tw.tween_property(dust, "modulate:a", 0.1, randf_range(1.0, 2.5))
 		flicker_tw.tween_property(dust, "modulate:a", 1.0, randf_range(1.0, 2.5))
-		active_particles.append(tw)
-		active_particles.append(flicker_tw)
+		_register_active_particle(tw, parent)
+		_register_active_particle(flicker_tw, parent)
 
 func animate_panel_breath(panel: Control, drift: Vector2 = Vector2(0.0, -4.0), duration: float = 2.8, min_alpha: float = 0.92) -> void:
 	if panel == null:
@@ -414,7 +505,7 @@ func animate_panel_breath(panel: Control, drift: Vector2 = Vector2(0.0, -4.0), d
 	tw.parallel().tween_property(panel, "modulate:a", min_alpha, duration).from(1.0)
 	tw.tween_property(panel, "position", base_pos, duration)
 	tw.parallel().tween_property(panel, "modulate:a", 1.0, duration).from(min_alpha)
-	active_particles.append(tw)
+	_register_active_particle(tw, panel)
 
 func create_orbiting_motes(parent: Control, rect: Rect2, theme: String = "gold", count: int = 6) -> Control:
 	var orbit = Control.new()
@@ -423,7 +514,7 @@ func create_orbiting_motes(parent: Control, rect: Rect2, theme: String = "gold",
 	orbit.position = rect.position
 	orbit.size = rect.size
 	parent.add_child(orbit)
-	particle_nodes.append(orbit)
+	_register_particle_node(orbit)
 
 	var palette = PARTICLE_PALETTES.get(theme, PARTICLE_PALETTES["gold"])
 	var center = rect.size * 0.5
@@ -457,14 +548,14 @@ func create_orbiting_motes(parent: Control, rect: Rect2, theme: String = "gold",
 			var p = center + Vector2(cos(a) * radius_x, sin(a) * radius_y)
 			mote_node.position = p - Vector2(mote_size * 0.5, mote_size * 0.5)
 		, 0.0, 1.0, randf_range(7.5, 12.0))
-		active_particles.append(orbit_tw)
+		_register_active_particle(orbit_tw, parent)
 
 		var flicker_tw = mote.create_tween()
 		flicker_tw.set_loops(48)
 		flicker_tw.set_trans(Tween.TRANS_SINE)
 		flicker_tw.tween_property(mote, "modulate:a", 0.24, randf_range(1.2, 2.4)).from(0.82)
 		flicker_tw.tween_property(mote, "modulate:a", 0.82, randf_range(1.2, 2.4)).from(0.24)
-		active_particles.append(flicker_tw)
+		_register_active_particle(flicker_tw, parent)
 
 	return orbit
 
@@ -481,7 +572,7 @@ func create_ribbon_sweep(parent: Control, rect: Rect2, color: Color, duration: f
 	sweep.offset_right = 0.0
 	sweep.offset_bottom = 0.0
 	parent.add_child(sweep)
-	particle_nodes.append(sweep)
+	_register_particle_node(sweep)
 
 	# GPT soft flash streak — no program ColorRect
 	var streak: Control
@@ -509,5 +600,5 @@ func create_ribbon_sweep(parent: Control, rect: Rect2, color: Color, duration: f
 	tw.set_loops(48)
 	tw.tween_property(sweep, "modulate:a", 0.15, duration * 0.5).from(0.85)
 	tw.tween_property(sweep, "modulate:a", 0.85, duration * 0.5)
-	active_particles.append(tw)
+	_register_active_particle(tw, parent)
 	return sweep
