@@ -132,6 +132,7 @@ func queue_free_runtime_node(node: Node) -> void:
 
 
 func shutdown_runtime_audio() -> void:
+	clear_remote_voice_players()
 	shutdown_android_tts()
 	stop_current_speech()
 	speech_queue_generation += 1
@@ -159,6 +160,7 @@ func shutdown_runtime_audio() -> void:
 	voice_capture_effect = null
 	audio_streams.clear()
 	voice_streams.clear()
+	voice_assets_loaded = false
 	remote_voice_stream_cache.clear()
 	remote_voice_stream_cache_order.clear()
 	bgm_player = null
@@ -2071,6 +2073,8 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 	if mode != "offline" or not rule_uses_package_liability() or seat < 0 or seat >= players.size() or tile == "":
 		return out
 	var details: Array = feed_report.get("details", [])
+	if details.is_empty():
+		return out
 	for item in details:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
@@ -2227,7 +2231,9 @@ func offline_hand_ai_briefing_text() -> String:
 	return " · ".join(parts)
 
 func ai_profile(seat: int) -> Dictionary:
-	return ai_profile_source(seat).duplicate(true)
+	# Profile definitions are immutable runtime constants. Read-only callers can
+	# share them; callers that edit a profile must request an explicit duplicate.
+	return ai_profile_source(seat)
 
 func is_ai_controlled_seat(seat: int) -> bool:
 	if seat < 0 or seat >= players.size():
@@ -3757,6 +3763,12 @@ func midgame_danger_adjustment(seat: int, shanten: int, ukeire: int, safety: Str
 	return (safety_value - danger_penalty) * scale * ai_risk_factor(seat)
 
 func ai_hand_shape_metrics_from_counts(counts: Array) -> Dictionary:
+	var cache_key := counts_compact_key(counts)
+	var cached = ai_shape_metrics_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY:
+		ai_shape_metrics_cache_order.erase(cache_key)
+		ai_shape_metrics_cache_order.append(cache_key)
+		return cached as Dictionary
 	var value = 0.0
 	var sequences = 0
 	var ryanmen = 0
@@ -3806,7 +3818,7 @@ func ai_hand_shape_metrics_from_counts(counts: Array) -> Dictionary:
 			if int(counts[start + rank]) > 0 and int(counts[start + rank + 2]) > 0:
 				kanchan += 1
 	var quality_score = float(sequences) * 30.0 + float(ryanmen) * 24.0 + float(kanchan) * 13.0 + float(penchan) * 9.0 + float(pairs) * 14.0 + float(triplets) * 20.0 - float(isolated) * 8.0
-	return {
+	var result := {
 		"value": value,
 		"quality_report": {
 			"score": quality_score,
@@ -3819,53 +3831,18 @@ func ai_hand_shape_metrics_from_counts(counts: Array) -> Dictionary:
 			"isolated": isolated,
 		},
 	}
+	ai_shape_metrics_cache[cache_key] = result
+	ai_shape_metrics_cache_order.append(cache_key)
+	while ai_shape_metrics_cache_order.size() > 64:
+		var oldest: String = ai_shape_metrics_cache_order.pop_front()
+		ai_shape_metrics_cache.erase(oldest)
+	return result
 
 func hand_shape_quality_report(hand: Array) -> Dictionary:
 	return hand_shape_quality_report_from_counts(tile_counts(hand))
 
 func hand_shape_quality_report_from_counts(counts: Array) -> Dictionary:
-	var sequences = 0
-	var ryanmen = 0
-	var kanchan = 0
-	var penchan = 0
-	var pairs = 0
-	var triplets = 0
-	var isolated = 0
-	for i in range(TILE_CODES.size()):
-		var amount = int(counts[i])
-		if amount <= 0:
-			continue
-		if amount >= 2:
-			pairs += 1
-		if amount >= 3:
-			triplets += 1
-		if is_isolated_shape_tile(counts, i):
-			isolated += amount
-	for start in NUMBER_SUIT_STARTS:
-		for rank in range(0, 7):
-			if int(counts[start + rank]) > 0 and int(counts[start + rank + 1]) > 0 and int(counts[start + rank + 2]) > 0:
-				sequences += 1
-		for rank in range(0, 8):
-			if int(counts[start + rank]) <= 0 or int(counts[start + rank + 1]) <= 0:
-				continue
-			if rank == 0 or rank == 7:
-				penchan += 1
-			else:
-				ryanmen += 1
-		for rank in range(0, 7):
-			if int(counts[start + rank]) > 0 and int(counts[start + rank + 2]) > 0:
-				kanchan += 1
-	var score = float(sequences) * 30.0 + float(ryanmen) * 24.0 + float(kanchan) * 13.0 + float(penchan) * 9.0 + float(pairs) * 14.0 + float(triplets) * 20.0 - float(isolated) * 8.0
-	return {
-		"score": score,
-		"sequences": sequences,
-		"ryanmen": ryanmen,
-		"kanchan": kanchan,
-		"penchan": penchan,
-		"pairs": pairs,
-		"triplets": triplets,
-		"isolated": isolated,
-	}
+	return ai_hand_shape_metrics_from_counts(counts).get("quality_report", {}) as Dictionary
 
 func hand_shape_quality_text(report: Dictionary) -> String:
 	var parts: Array[String] = []
@@ -3886,7 +3863,19 @@ func hand_shape_quality_text(report: Dictionary) -> String:
 	return "形" + join_limited_strings(parts, " ", 3)
 
 func calculate_min_shanten(hand: Array, open_melds: int = 0) -> int:
-	return calculate_min_shanten_from_counts(tile_counts(hand), open_melds)
+	var cache_key := "%d:%s" % [open_melds, tile_array_key(hand)]
+	var cached = shanten_hand_counts_cache.get(cache_key, null)
+	var hand_counts: Array
+	if typeof(cached) == TYPE_ARRAY:
+		hand_counts = cached
+	else:
+		hand_counts = tile_counts(hand)
+		shanten_hand_counts_cache[cache_key] = hand_counts
+		shanten_hand_counts_cache_order.append(cache_key)
+		while shanten_hand_counts_cache_order.size() > 64:
+			var oldest: String = str(shanten_hand_counts_cache_order.pop_front())
+			shanten_hand_counts_cache.erase(oldest)
+	return calculate_min_shanten_from_counts(hand_counts, open_melds)
 
 func calculate_min_shanten_from_counts(counts: Array, open_melds: int = 0) -> int:
 	var cache_key = shanten_cache_key(counts, open_melds)
@@ -3923,7 +3912,9 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 		effective_tiles_cache_clock += 1
 		effective_tiles_cache_access[cache_key] = effective_tiles_cache_clock
 		touch_effective_tiles_cache_key(cache_key)
-		return (effective_tiles_cache[cache_key] as Dictionary).duplicate(true)
+		# The cache owns immutable result dictionaries. Callers only read these
+		# metrics, so avoid a deep duplicate on every AI candidate hit.
+		return effective_tiles_cache[cache_key] as Dictionary
 
 	effective_tiles_cache_misses += 1
 	var next_tile_count = hand.size() + 1
@@ -5192,6 +5183,10 @@ func init_ui_enhancements() -> void:
 
 func _finish_startup() -> void:
 	if not ensure_tile_assets_ready():
+		# Tile faces are warmed in bounded idle batches. Keep startup pending until
+		# validation completes instead of forcing the remaining loads into one frame.
+		if not tile_assets_validation_complete:
+			call_deferred("_finish_startup")
 		return
 	if OS.get_cmdline_user_args().has("--offline-preview"):
 		start_offline(true)
@@ -5324,6 +5319,7 @@ func request_game_render(priority: int = 0, dirty_flag: int = GAME_RENDER_DIRTY_
 	game_render_request_revision += 1
 	if (dirty_flag & GAME_RENDER_DIRTY_STATE) != 0:
 		ai_state_revision += 1
+		mark_offline_progress_dirty()
 	game_render_dirty_flags |= dirty_flag
 	game_render_priority = maxi(game_render_priority, priority)
 	if game_render_queued:
@@ -5363,7 +5359,7 @@ func flush_game_render() -> void:
 			root_layer.set_meta("last_render_lane", "pending_only")
 			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
 		else:
-			render_game()
+			render_game((dirty_flags & GAME_RENDER_DIRTY_STATE) != 0)
 	if render_priority >= 2 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
 		# Keep the priority contract inspectable on the next rebuilt root without
 		# forcing an additional render in the same frame.
@@ -5374,22 +5370,30 @@ func flush_game_render() -> void:
 func refresh_battle_hud_lane() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var viewport_size := effective_viewport_size()
+	var compact_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
+	var wall_count := get_wall_count()
+	var wall_total := display_wall_total()
+	var wall_state_text_value := wall_state_text(wall_count)
+	var last_discard := get_last_discard()
 	var status := root_layer.find_child("TopHudStatus", true, false) as Label
 	if status != null:
-		set_dynamic_label_text(status, top_hud_short_status_text(effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0), top_hud_status_tooltip_text())
+		set_dynamic_label_text(status, top_hud_short_status_text(compact_hud), top_hud_status_tooltip_text())
 	var wall := root_layer.find_child("TopHudWallText", true, false) as Label
 	var wall_state := root_layer.find_child("TopHudWallState", true, false) as Label
-	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [get_wall_count(), display_wall_total(), wall_state_text(), tile_label(get_last_discard()) if get_last_discard() != "" else "无"]
+	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, tile_label(last_discard) if last_discard != "" else "无"]
 	if wall != null:
-		set_dynamic_label_text(wall, "余牌 %d/%d" % [get_wall_count(), display_wall_total()], wall_detail)
-		wall.set_meta("wall_count", get_wall_count())
-		wall.set_meta("wall_total", display_wall_total())
+		set_dynamic_label_text(wall, "余牌 %d/%d" % [wall_count, wall_total], wall_detail)
+		wall.set_meta("wall_count", wall_count)
+		wall.set_meta("wall_total", wall_total)
 	if wall_state != null:
-		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text().replace("牌墙", ""), tile_label(get_last_discard()) if get_last_discard() != "" else "无"], wall_detail)
+		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), tile_label(last_discard) if last_discard != "" else "无"], wall_detail)
 	var center_count := root_layer.find_child("CenterWallCount", true, false) as Label
 	if center_count != null:
-		center_count.text = "%d" % get_wall_count()
-		center_count.tooltip_text = "牌墙剩余 %d/%d 张" % [get_wall_count(), display_wall_total()]
+		var center_wall_token := "%d/%d" % [wall_count, wall_total]
+		if str(center_count.get_meta("wall_view_token", "")) != center_wall_token:
+			set_dynamic_label_text(center_count, "%d" % wall_count, "牌墙剩余 %d/%d 张" % [wall_count, wall_total])
+			center_count.set_meta("wall_view_token", center_wall_token)
 	root_layer.set_meta("hud_lane_refresh_count", int(root_layer.get_meta("hud_lane_refresh_count", 0)) + 1)
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
@@ -5502,6 +5506,39 @@ func retain_battle_center_for_render() -> void:
 	retained_battle_center_signature = center_signature
 	center.set_meta("retained_for_battle_render", true)
 
+func battle_atmosphere_identity_signature() -> String:
+	return "%s|%s|%s|%s|%d|%d" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		"fx" if fx_enabled_effective() else "quiet",
+		graphics_quality,
+		1 if ui_motion_enabled() else 0,
+	]
+
+func retain_battle_atmosphere_for_render() -> void:
+	if retained_battle_atmosphere != null and is_instance_valid(retained_battle_atmosphere):
+		retained_battle_atmosphere.queue_free()
+	retained_battle_atmosphere = null
+	retained_battle_atmosphere_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var atmosphere := root_layer.find_child("TableAtmosphereFrame", true, false) as Control
+	if atmosphere == null or not is_instance_valid(atmosphere) or atmosphere.is_queued_for_deletion():
+		return
+	var atmosphere_signature := str(atmosphere.get_meta("atmosphere_identity_signature", ""))
+	if atmosphere_signature == "" or atmosphere_signature != battle_atmosphere_identity_signature():
+		return
+	var atmosphere_parent := atmosphere.get_parent()
+	if atmosphere_parent == null:
+		return
+	atmosphere_parent.remove_child(atmosphere)
+	retained_battle_atmosphere = atmosphere
+	retained_battle_atmosphere_signature = atmosphere_signature
+	atmosphere.set_meta("retained_for_battle_render", true)
+
 func clear_screen() -> void:
 	ui_page_generation += 1
 	loading_screen_active = false
@@ -5589,7 +5626,7 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func release_retained_battle_views() -> void:
-	for retained in [retained_battle_hand_tray, retained_battle_center]:
+	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere]:
 		if retained != null and is_instance_valid(retained):
 			if retained.get_parent() != null:
 				retained.get_parent().remove_child(retained)
@@ -5599,6 +5636,8 @@ func release_retained_battle_views() -> void:
 	retained_battle_hand_state_signature = ""
 	retained_battle_center = null
 	retained_battle_center_signature = ""
+	retained_battle_atmosphere = null
+	retained_battle_atmosphere_signature = ""
 
 func start_offline(instant: bool = false) -> void:
 	if not ensure_tile_assets_ready():
@@ -5822,17 +5861,19 @@ func sort_player_hand(seat: int) -> void:
 	if int(offline_last_draw.get("seat", -1)) == seat and drawn_serial >= 0:
 		offline_last_draw["hand_index"] = serials.find(drawn_serial)
 
-func render_game() -> void:
+func render_game(state_changed: bool = false) -> void:
 	if offline_sim_quiet:
 		game_render_queued = false
 		return
-	mark_offline_progress_dirty()
+	if state_changed:
+		mark_offline_progress_dirty()
 	# r215: GPT chrome conversion
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
 	last_game_render_msec = Time.get_ticks_msec()
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
+	retain_battle_atmosphere_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -6231,7 +6272,7 @@ func human_discard(index: int) -> void:
 		set_tutorial_checkpoint(TUTORIAL_STEP_RESPONSE, "已完成首次出牌")
 	elif tutorial_step == TUTORIAL_STEP_WIN:
 		complete_tutorial("已完成摸切与响应练习")
-	render_game()
+	render_game(true)
 	get_tree().process_frame.connect(Callable(self, "resolve_human_discard_after_frame").bind(tile), CONNECT_ONE_SHOT)
 
 func resolve_human_discard_after_frame(tile: String) -> void:
@@ -6319,7 +6360,7 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 			complete_tutorial("已完成响应并胡牌")
 		else:
 			set_tutorial_checkpoint(TUTORIAL_STEP_WIN, "已完成响应选择")
-	render_game()
+	render_game(true)
 
 func human_self_win() -> void:
 	if mode != "offline" or not can_self_discard() or not can_win_for_seat(0):
@@ -6372,7 +6413,7 @@ func human_concealed_gang(tile: String) -> void:
 	hand_keyboard_selection = -1
 	play_human_action_choice_confirmation_fx("concealed_gang", tile)
 	perform_concealed_gang(0, tile)
-	render_game()
+	render_game(true)
 
 func human_added_gang(tile: String) -> void:
 	if mode != "offline" or not can_self_discard():
@@ -6383,7 +6424,7 @@ func human_added_gang(tile: String) -> void:
 	hand_keyboard_selection = -1
 	play_human_action_choice_confirmation_fx("added_gang", tile)
 	perform_added_gang(0, tile)
-	render_game()
+	render_game(true)
 
 func enable_offline_all_bot_mode(enabled: bool = true, quiet: bool = true) -> void:
 	offline_all_bot_mode = enabled
@@ -7723,7 +7764,7 @@ func run_ai_until_human() -> void:
 						add_log("你摸到%s，可以自摸。" % tile_label(drawn))
 					else:
 						add_log("轮到你出牌。")
-					render_game()
+					render_game(true)
 	offline_ai_active = false
 
 func discard_tile_by_index(seat: int, index: int) -> String:
@@ -7822,7 +7863,7 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 				interactive_guide_active = true
 				interactive_guide_type = "claim"
 				set_tutorial_checkpoint(TUTORIAL_STEP_CLAIM, "已进入响应窗口")
-			render_game()
+			render_game(true)
 			return
 	resolve_ai_or_advance(from_seat, tile, ai_claim)
 	if tutorial_step == TUTORIAL_STEP_RESPONSE and offline_phase != "pending_claim":
@@ -8080,7 +8121,7 @@ func resolve_after_rob_gang_pass(gang_seat: int, tile: String, prepared_ai_claim
 		finish_offline_round(int(ai_claim.get("seat", -1)), tile, false, gang_seat, "rob_gang")
 	else:
 		complete_added_gang(gang_seat, tile)
-	render_game()
+	render_game(true)
 
 func finish_wall_draw() -> void:
 	if mode != "offline" or offline_phase == "ended":
@@ -8165,7 +8206,7 @@ func finish_wall_draw() -> void:
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
 	play_wall_draw_resolution_fx(dealer_seat)
 	save_offline_progress()
-	render_game()
+	render_game(true)
 
 
 func is_seat_tenpai_for_wall_draw(seat: int) -> bool:
@@ -8441,7 +8482,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		archive_latest_round_history_entry()
 		telemetry_record_event("round_completed", {"rule_variant": active_rule_variant(), "result_kind": "win", "points_bucket": int(floor(float(points) / 100.0)) * 100, "fan_bucket": int(score_data.get("fan", 0))})
 	save_offline_progress()
-	render_game()
+	render_game(true)
 
 func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size():
@@ -10203,7 +10244,7 @@ func draw_actions(parent: Control) -> void:
 		if recovery_dock != null:
 			action_bar.z_index = max(20, recovery_dock.z_index + 1)
 		configure_ordered_focus_navigation(action_bar, [reconnect_button, lobby_button], "OnlineReconnectGameButton")
-		call_deferred("focus_named_control", "OnlineReconnectGameButton")
+		schedule_online_recovery_focus()
 		return
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
 		var unknown_retry := make_action_button("重试", Color(0.86, 0.48, 0.30), Callable(self, "reconnect_online_game"))
@@ -10310,7 +10351,8 @@ func draw_actions(parent: Control) -> void:
 
 	if mode == "offline":
 		if offline_phase == "ended":
-			var replay_code_available := round_replay_digest() != "" and validate_round_replay(round_event_history) and round_replay_share_code() != ""
+			var replay_view := round_replay_view_state()
+			var replay_code_available := str(replay_view.get("digest", "")) != "" and bool(replay_view.get("valid", false)) and str(replay_view.get("share_code", "")) != ""
 			# The compact action lane cannot fit the full five-character CTA beside
 			# the other settlement actions. Keep a specific three-character label on
 			# narrow screens; the tooltip retains the complete copy instruction.
@@ -11410,6 +11452,7 @@ func draw_center(parent: Control) -> void:
 	var wall_text = make_label(center, "%d" % center_wall_count, 12 if compact_center else (19 if center_wall_low else 16), Color(0.86, 0.72, 0.46, 0.78 if center_wall_low else 0.36), true)
 	wall_text.name = "CenterWallCount"
 	wall_text.set_meta("layout_role", "center_wall_count")
+	wall_text.set_meta("wall_view_token", "%d/%d" % [center_wall_count, display_wall_total()])
 	apply_rect(wall_text, rect_full(0.33, 0.350, 0.67, 0.490) if compact_center else CENTER_WALL_COUNT_RECT)
 
 	# 上张牌
@@ -21298,7 +21341,8 @@ func draw_hand(parent: Control) -> void:
 	retained_battle_hand_signature = ""
 	retained_battle_hand_state_signature = ""
 	last_hand_render_state_signature = hand_state_signature
-	var compact_hand_art := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
+	var hand_viewport_size := effective_viewport_size()
+	var compact_hand_art := hand_viewport_size.y <= 560.0 or hand_viewport_size.x <= 1100.0
 	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.018, 0.026, 0.024, 0.97), "ui_dark_scrim", 0.20)
 	tray.name = "HandTray"
 	tray.set_meta("bottom_gutter_px", 8.0)
@@ -27537,6 +27581,10 @@ func sync_settings_large_text_scroll_status(settings_scroll: ScrollContainer, st
 	var content := settings_scroll.find_child("SettingsLargeTextContent", true, false) as Control
 	if scrollbar == null or content == null:
 		return
+	var sync_token := "%s|%s|%s|%s|%s" % [scrollbar.value, scrollbar.page, scrollbar.max_value, settings_scroll.size, content.size]
+	if str(status_label.get_meta("settings_scroll_sync_token", "")) == sync_token:
+		return
+	status_label.set_meta("settings_scroll_sync_token", sync_token)
 	if settings_scroll.size.y <= 1.0 or content.size.y <= 1.0:
 		status_label.visible = true
 		set_dynamic_label_text(status_label, "设置区 · 正在测量阅读范围...", "当前设置区正在测量阅读范围")
@@ -28667,10 +28715,23 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	# Keep the named atmosphere anchors for layout/smoke probes, but let the
 	# single battle backdrop own the table surface instead of repainting a second
 	# full-size texture stack beneath the board.
+	var atmosphere_identity := battle_atmosphere_identity_signature()
+	if retained_battle_atmosphere != null and is_instance_valid(retained_battle_atmosphere) and not retained_battle_atmosphere.is_queued_for_deletion() and retained_battle_atmosphere_signature == atmosphere_identity:
+		var reused_atmosphere := retained_battle_atmosphere
+		retained_battle_atmosphere = null
+		retained_battle_atmosphere_signature = ""
+		parent.add_child(reused_atmosphere)
+		reused_atmosphere.set_meta("retained_for_battle_render", false)
+		reused_atmosphere.set_meta("atmosphere_identity_signature", atmosphere_identity)
+		reused_atmosphere.set_meta("ui_page_generation", ui_page_generation)
+		start_table_atmosphere_animation(reused_atmosphere)
+		return reused_atmosphere
 	var frame = Control.new()
 	frame.name = "TableAtmosphereFrame"
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.set_meta("atmosphere_identity_signature", atmosphere_identity)
+	frame.set_meta("ui_page_generation", ui_page_generation)
 	parent.add_child(frame)
 	var inset_shadow = make_layout_host(rect_full(0.052, 0.080, 0.948, 0.920))
 	inset_shadow.name = "Table3DInsetShadow"
@@ -28687,12 +28748,24 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	var center_spotlight = make_layout_host(rect_full(0.300, 0.275, 0.700, 0.690))
 	center_spotlight.name = "Table3DCenterSpotlight"
 	frame.add_child(center_spotlight)
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var glow_tw := create_screen_tween()
-		glow_tw.set_loops(24)
-		glow_tw.tween_property(center_spotlight, "modulate:a", 0.55, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		glow_tw.tween_property(center_spotlight, "modulate:a", 0.82, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	start_table_atmosphere_animation(frame)
 	return frame
+
+
+func start_table_atmosphere_animation(frame: Control) -> void:
+	if frame == null or not is_instance_valid(frame) or not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+		return
+	var center_spotlight := frame.find_child("Table3DCenterSpotlight", true, false) as Control
+	if center_spotlight == null or not is_instance_valid(center_spotlight):
+		return
+	# render_game() clears page tweens after retaining this subtree. Restart the
+	# owner-bound loop whenever the subtree is mounted into the new page.
+	kill_screen_tweens_for_subtree(frame)
+	center_spotlight.modulate.a = 0.82
+	var glow_tw := create_screen_tween_for_owner(frame)
+	glow_tw.set_loops(24)
+	glow_tw.tween_property(center_spotlight, "modulate:a", 0.55, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	glow_tw.tween_property(center_spotlight, "modulate:a", 0.82, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func draw_table_center_starlight(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
@@ -32363,13 +32436,15 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 	var risk_text = risk_badge_text(risk)
 	var tile_key := normalize_tile_code(tile) if tile != "" else tile
 	var tile_texture = tile_textures.get(tile_key, null)
-	if tile_texture == null and tile_key != "":
+	if tile_texture == null and tile_key != "" and not missing_tile_texture_codes.has(tile_key):
 		# On-demand load for valid codes; never cache tile_back as a face.
 		var face_path := tile_path(tile_key)
 		var resolved := load_tile_texture(face_path) if face_path != "" else null
 		if resolved != null and resolved != tile_back:
 			tile_texture = resolved
 			tile_textures[tile_key] = resolved
+		else:
+			missing_tile_texture_codes[tile_key] = true
 	var missing_face_texture := tile_texture == null
 
 	if button != null:
@@ -33657,12 +33732,15 @@ func play_fx_turn_switch_slide(seat: int) -> void:
 			route.get_instance_id(),
 			gate.get_instance_id(),
 			ready_art.get_instance_id() if ready_art != null else 0,
-			fx_layer.get_instance_id()
+			fx_layer.get_instance_id(),
+			fx_generation
 		))
 	target.pivot_offset = target.size * 0.5
 
 
-func cleanup_turn_switch_fx_by_id(compass_halo_id: int, route_id: int, gate_id: int, ready_art_id: int, fx_layer_id: int) -> void:
+func cleanup_turn_switch_fx_by_id(compass_halo_id: int, route_id: int, gate_id: int, ready_art_id: int, fx_layer_id: int, expected_fx_generation: int = -1) -> void:
+	if expected_fx_generation >= 0 and expected_fx_generation != fx_generation:
+		return
 	queue_free_node_by_id(compass_halo_id)
 	queue_free_node_by_id(route_id)
 	queue_free_node_by_id(gate_id)
@@ -34605,6 +34683,10 @@ func sync_achievements_scroll_thumb(content_scroll: ScrollContainer, thumb: Cont
 	var page := maxf(0.0, scrollbar.page)
 	var max_value := maxf(page, scrollbar.max_value)
 	var scroll_range := maxf(0.0, scrollbar.max_value - page)
+	var thumb_sync_token := "%s|%s|%s|%s" % [scrollbar.value, page, max_value, thumb.get_parent().size]
+	if str(thumb.get_meta("achievements_scroll_sync_token", "")) == thumb_sync_token:
+		return
+	thumb.set_meta("achievements_scroll_sync_token", thumb_sync_token)
 	var track_top := 0.055
 	var track_height := 0.845
 	var visible_ratio := 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
@@ -34633,6 +34715,10 @@ func sync_achievements_scroll_status(content_scroll: ScrollContainer, status_lab
 	if scrollbar == null or content_list == null:
 		return
 	var total := maxi(0, total_count)
+	var status_sync_token := "%s|%s|%s|%d|%s|%s|%d" % [scrollbar.value, scrollbar.page, scrollbar.max_value, total, content_scroll.size, content_list.size, achievement_focused_index]
+	if str(status_label.get_meta("achievements_scroll_status_token", "")) == status_sync_token:
+		return
+	status_label.set_meta("achievements_scroll_status_token", status_sync_token)
 	if total == 0:
 		status_label.text = "暂无成就记录"
 		set_ui_full_text(status_label, "暂无可浏览的成就记录", "成就浏览位置")
@@ -36700,6 +36786,10 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var page = maxf(0.0, scrollbar.page)
 	var max_value = maxf(page, scrollbar.max_value)
 	var scroll_range = maxf(0.0, scrollbar.max_value - page)
+	var sync_token := "%s|%s|%s|%s" % [scrollbar.value, page, scrollbar.max_value, thumb.get_parent().size]
+	if str(thumb.get_meta("rules_scroll_sync_token", "")) == sync_token:
+		return
+	thumb.set_meta("rules_scroll_sync_token", sync_token)
 	var track_top = 0.050
 	var track_height = 0.900
 	var visible_ratio = 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
@@ -37743,6 +37833,10 @@ func sync_shop_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> 
 	if total_items <= 0:
 		var content := content_scroll.find_child("ShopItemsContent", true, false) as Control
 		total_items = content.get_child_count() if content != null else 0
+	var sync_token := "%s|%s|%s|%d|%s" % [scrollbar.value, page, scrollbar.max_value, total_items, content_scroll.size]
+	if str(thumb.get_meta("shop_scroll_sync_token", "")) == sync_token:
+		return
+	thumb.set_meta("shop_scroll_sync_token", sync_token)
 	var visible_items := total_items if total_items <= 0 else clampi(int(ceil(float(total_items) * visible_ratio)), 1, total_items)
 	var first_item := 1 if total_items <= 0 else clampi(int(floor(progress * float(maxi(0, total_items - visible_items)))) + 1, 1, total_items)
 	var last_item := total_items if total_items <= 0 else mini(total_items, first_item + visible_items - 1)
@@ -37938,6 +38032,10 @@ func sync_stats_scroll_status(content_scroll: ScrollContainer, status_label: Lab
 	for child in content.get_children():
 		if child is Control and (child as Control).visible:
 			total += 1
+	var sync_token := "%s|%s|%s|%d|%s|%s" % [scrollbar.value, scrollbar.page, scrollbar.max_value, total, content_scroll.size, content.size]
+	if str(status_label.get_meta("stats_scroll_sync_token", "")) == sync_token:
+		return
+	status_label.set_meta("stats_scroll_sync_token", sync_token)
 	if total <= 0:
 		set_ui_full_text(status_label, "暂无统计行", "统计滚动位置：暂无统计数据")
 		status_label.text = "暂无统计行"
@@ -38451,6 +38549,18 @@ func refresh_telemetry_data_sheet() -> void:
 	var sheet := root_layer.find_child("TelemetryDataSheet", true, false) as Control
 	if sheet == null:
 		return
+	var telemetry_sync_token := "%d|%d|%d|%d|%d|%s|%s" % [
+		telemetry_mutation_revision,
+		1 if telemetry_mutation_in_flight else 0,
+		1 if telemetry_consent else 0,
+		telemetry_outbox.size(),
+		maxi(0, int(ceil(float(telemetry_clear_confirm_deadline_msec - Time.get_ticks_msec()) / 100.0))) if telemetry_clear_confirming else 0,
+		telemetry_export_status,
+		telemetry_last_action,
+	]
+	if str(sheet.get_meta("telemetry_sync_token", "")) == telemetry_sync_token:
+		return
+	sheet.set_meta("telemetry_sync_token", telemetry_sync_token)
 	var status := sheet.find_child("TelemetryDataStatus", true, false) as Label
 	if status != null:
 		var status_text := "处理中 · 正在提交隐私记录设置" if telemetry_mutation_in_flight else telemetry_consent_status_text()
@@ -39979,6 +40089,10 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	if content_scroll == null or status_label == null or not is_current_ui_control(content_scroll) or not is_current_ui_control(status_label):
 		return
 	if bool(content_scroll.get_meta("diagnostic_measurement_pending", false)):
+		var pending_token := "pending|%s|%s" % [content_scroll.size, status_label.size]
+		if str(status_label.get_meta("diagnostic_scroll_sync_token", "")) == pending_token:
+			return
+		status_label.set_meta("diagnostic_scroll_sync_token", pending_token)
 		set_dynamic_label_text(status_label, "诊断内容 · 正在测量可见范围", "诊断报告布局尚未完成测量；可见行范围将在下一布局帧显示")
 		status_label.set_meta("diagnostic_status_pending", true)
 		return
@@ -39987,6 +40101,10 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	if scrollbar == null or content_list == null:
 		return
 	var total := maxi(0, total_count)
+	var sync_token := "%s|%s|%s|%d|%s|%s" % [scrollbar.value, scrollbar.page, scrollbar.max_value, total, content_scroll.size, content_list.size]
+	if str(status_label.get_meta("diagnostic_scroll_sync_token", "")) == sync_token:
+		return
+	status_label.set_meta("diagnostic_scroll_sync_token", sync_token)
 	if total == 0:
 		set_dynamic_label_text(status_label, "诊断内容 0-0 / 0 · 无内容", "当前诊断报告没有内容")
 		return
@@ -41963,6 +42081,22 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 			button_tooltip = "确认清空统计与离线记录（5秒内有效）" if reset_progress_confirming else "进入二次确认，将清空统计与离线记录"
 		_:
 			return false
+	var settings_state_token := "%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%d" % [
+			setting_key,
+			button_text,
+			full_status,
+			1 if music_enabled else 0,
+			1 if sfx_enabled else 0,
+			1 if tts_enabled else 0,
+			1 if fast_mode_enabled else 0,
+			1 if fx_enabled else 0,
+			1 if ai_assist_enabled else 0,
+			graphics_quality,
+			1 if reset_progress_confirming else 0,
+		]
+	if str(button.get_meta("settings_state_token", "")) == settings_state_token:
+		return true
+	button.set_meta("settings_state_token", settings_state_token)
 
 	if is_toggle:
 		button_text = "已开" if toggle_enabled else "已关"
@@ -42344,23 +42478,36 @@ func refresh_online_recovery_live_controls(now_msec: int = -1) -> void:
 	var remaining_msec := maxi(0, online_next_reconnect_msec - current_msec)
 	var cooldown := remaining_msec > 0
 	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
-	var recovery_state := root_layer.find_child("OnlineRecoveryStateLabel", true, false) as Label
-	if recovery_state != null:
-		recovery_state.text = online_recovery_phase_text()
-		set_ui_full_text(recovery_state, "%s；%s" % [online_recovery_phase_text(), online_recovery_detail_text()], "断线恢复阶段")
-		recovery_state.set_meta("recovery_phase", phase)
-		recovery_state.set_meta("recovery_remaining_msec", remaining_msec)
-		recovery_state.set_meta("recovery_state_revision", current_msec)
-	var reconnect_button := root_layer.find_child("OnlineReconnectGameButton", true, false) as Button
-	if reconnect_button != null:
-		reconnect_button.text = online_recovery_button_text()
-		reconnect_button.disabled = reconnecting or cooldown
-		reconnect_button.tooltip_text = online_recovery_detail_text()
-		set_ui_full_text(reconnect_button, reconnect_button.tooltip_text, "恢复当前牌局：" + reconnect_button.text)
-		reconnect_button.set_meta("recovery_phase", phase)
-		reconnect_button.set_meta("recovery_remaining_msec", remaining_msec)
-		reconnect_button.set_meta("recovery_retry_available", not reconnecting and not cooldown)
-		reconnect_button.set_meta("disabled_reason", "正在重新连接房间，请稍候" if reconnecting else ("还需%d秒后可重连" % int(ceil(float(remaining_msec) / 1000.0)) if cooldown else ""))
+	var root_id := root_layer.get_instance_id()
+	if root_id != online_recovery_controls_root_id or online_recovery_state_label == null or not is_instance_valid(online_recovery_state_label) or online_recovery_button == null or not is_instance_valid(online_recovery_button):
+		online_recovery_controls_root_id = root_id
+		online_recovery_state_label = root_layer.find_child("OnlineRecoveryStateLabel", true, false) as Label
+		online_recovery_button = root_layer.find_child("OnlineReconnectGameButton", true, false) as Button
+		online_recovery_live_token = ""
+	var remaining_seconds := maxi(0, int(ceil(float(remaining_msec) / 1000.0)))
+	var state_text := online_recovery_phase_text()
+	var button_text := online_recovery_button_text()
+	var detail_text := online_recovery_detail_text()
+	var view_token := "%s|%d|%d|%s|%s" % [phase, remaining_seconds, maxi(online_reconnect_attempts, 1), online_recovery_reason_text(), button_text]
+	if view_token == online_recovery_live_token:
+		return
+	online_recovery_live_token = view_token
+	if online_recovery_state_label != null:
+		online_recovery_state_label.text = state_text
+		set_ui_full_text(online_recovery_state_label, "%s；%s" % [state_text, detail_text], "断线恢复阶段")
+		online_recovery_state_label.set_meta("recovery_phase", phase)
+		online_recovery_state_label.set_meta("recovery_remaining_msec", remaining_msec)
+		online_recovery_state_label.set_meta("recovery_remaining_seconds", remaining_seconds)
+	if online_recovery_button != null:
+		online_recovery_button.text = button_text
+		online_recovery_button.disabled = reconnecting or cooldown
+		online_recovery_button.tooltip_text = detail_text
+		set_ui_full_text(online_recovery_button, online_recovery_button.tooltip_text, "恢复当前牌局：" + online_recovery_button.text)
+		online_recovery_button.set_meta("recovery_phase", phase)
+		online_recovery_button.set_meta("recovery_remaining_msec", remaining_msec)
+		online_recovery_button.set_meta("recovery_remaining_seconds", remaining_seconds)
+		online_recovery_button.set_meta("recovery_retry_available", not reconnecting and not cooldown)
+		online_recovery_button.set_meta("disabled_reason", "正在重新连接房间，请稍候" if reconnecting else ("还需%d秒后可重连" % remaining_seconds if cooldown else ""))
 
 func connect_online() -> void:
 	var host := online_host_input()
@@ -42422,6 +42569,7 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 	# A real transport loss owns the chat lifecycle; a transient status copy
 	# must not make clear_screen infer that the drawer should disappear.
 	chat_panel_open = false
+	clear_remote_voice_players()
 	table_log_chat_restore_pending = false
 	table_log_chat_draft = ""
 	var preserve_game_board := preserve_game_for_reconnect and mode == "online_game" and not online_game.is_empty()
@@ -42597,7 +42745,8 @@ func remember_online_message_identity(identity: String) -> bool:
 		return false
 	online_seen_message_ids[identity] = true
 	while online_seen_message_ids.size() > ONLINE_SEEN_EVENT_LIMIT:
-		online_seen_message_ids.erase(online_seen_message_ids.keys()[0])
+		var oldest_key = online_seen_message_ids.keys()[0]
+		online_seen_message_ids.erase(oldest_key)
 	return true
 
 func accept_online_message(data: Dictionary, kind: String) -> bool:
@@ -42664,6 +42813,62 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 	return JSON.stringify(stable)
 
 
+func online_rule_code_set(variant: String) -> Dictionary:
+	var cache_key := variant if variant != "" else "__default__"
+	var cached = online_rule_code_set_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY and not (cached as Dictionary).is_empty():
+		return cached
+	var code_set: Dictionary = {}
+	var tile_codes: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
+	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	for code in tile_codes:
+		code_set[normalize_tile_code(str(code))] = true
+	for code in flower_codes:
+		code_set[normalize_tile_code(str(code))] = true
+	online_rule_code_set_cache[cache_key] = code_set
+	return code_set
+
+
+func online_rule_flower_set(variant: String) -> Dictionary:
+	var cache_key := "flowers:" + (variant if variant != "" else "__default__")
+	var cached = online_rule_code_set_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY and not (cached as Dictionary).is_empty():
+		return cached
+	var flower_set: Dictionary = {}
+	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	for code in flower_codes:
+		flower_set[normalize_tile_code(str(code))] = true
+	online_rule_code_set_cache[cache_key] = flower_set
+	return flower_set
+
+
+func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool:
+	var revision := online_message_revision(data, kind)
+	if revision < 0:
+		return false
+	if kind == "roomState":
+		if revision != online_room_revision:
+			return false
+		var room_value = data.get("room", data)
+		if typeof(room_value) != TYPE_DICTIONARY:
+			return true
+		var incoming_code := bounded_online_input(str(first_present(room_value, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var current_code := bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		return incoming_code == "" or current_code == "" or incoming_code == current_code
+	if kind == "gameState":
+		if revision != online_game_revision:
+			return false
+		var game_value = data.get("game", data)
+		var incoming_room := ""
+		if typeof(game_value) == TYPE_DICTIONARY:
+			incoming_room = str(first_present(game_value as Dictionary, ["roomCode", "room_code", "code"], "")).strip_edges()
+		if incoming_room == "":
+			incoming_room = str(first_present(data, ["roomCode", "room_code"], "")).strip_edges()
+		var current_room := str(online_game.get("roomCode", "")).strip_edges()
+		return incoming_room == "" or current_room == "" or incoming_room == current_room
+	return false
+
+
 func online_log_entry_text(value) -> String:
 	var raw := str(first_present(value, ["text", "message", "content"], "")) if typeof(value) == TYPE_DICTIONARY else str(value)
 	return raw.strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
@@ -42694,12 +42899,8 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 	if str(game.get("phase", "")) == "unknown":
 		return "服务器返回了不受支持的牌局状态。"
 	var variant := str(game.get("ruleVariant", ""))
-	var allowed_tiles: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
-	var allowed_flowers: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
-	var allowed_codes: Array = allowed_tiles.duplicate()
-	for flower in allowed_flowers:
-		if not allowed_codes.has(flower):
-			allowed_codes.append(flower)
+	var allowed_codes := online_rule_code_set(variant)
+	var allowed_flowers := online_rule_flower_set(variant)
 	var you_seat := int(game.get("youSeat", -1))
 	if you_seat < -1 or you_seat >= 4:
 		return "玩家座位越界。"
@@ -42892,7 +43093,6 @@ func handle_online_log(data: Dictionary) -> void:
 	online_log_total_count = previous_total + 1
 	online_lobby_render_revision += 1
 	set_online_feedback(message, false)
-	refresh_online_lobby_state()
 
 
 func handle_online_chat(data: Dictionary) -> void:
@@ -42913,7 +43113,11 @@ func handle_online_chat(data: Dictionary) -> void:
 		set_status("新消息 · %s" % message)
 
 func handle_online_message(line: String) -> void:
-	var data = JSON.parse_string(line)
+	var trimmed_line := line.strip_edges()
+	if trimmed_line == "" or not trimmed_line.begins_with("{"):
+		register_online_message_rejection()
+		return
+	var data = JSON.parse_string(trimmed_line)
 	if typeof(data) != TYPE_DICTIONARY:
 		register_online_message_rejection("服务器消息解析失败")
 		return
@@ -42921,6 +43125,11 @@ func handle_online_message(line: String) -> void:
 	var kind = normalize_online_message_kind(data)
 	if not accept_online_message(data, kind):
 		register_online_message_rejection()
+		return
+	# Server revisions are authoritative for room/game snapshots. Once a revision
+	# has been committed, discard retransmissions before normalization, validation,
+	# fingerprint construction, or any UI work.
+	if (kind == "roomState" or kind == "gameState") and online_revision_snapshot_is_current(data, kind):
 		return
 	if kind == "welcome":
 		var server_name = str(data.get("name", "")).strip_edges()
@@ -43064,19 +43273,27 @@ func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary
 
 func normalize_online_chi_choices(value, claimed_tile: String = "") -> Array:
 	var choices: Array = []
+	var seen: Dictionary = {}
 	if typeof(value) != TYPE_ARRAY:
 		return choices
 	for item in value:
 		var choice = normalize_online_chi_choice(item, claimed_tile)
-		if not choice.is_empty():
-			choices.append(choice)
+		if choice.is_empty():
+			continue
+		var choice_key := "%s|%s" % [tile_array_key(choice.get("meld", [])), tile_array_key(choice.get("needed", []))]
+		if seen.has(choice_key):
+			continue
+		seen[choice_key] = true
+		choices.append(choice)
 	return choices
 
 func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	var source = message.get("game", message)
 	if typeof(source) != TYPE_DICTIONARY:
 		source = {}
-	var game: Dictionary = (source as Dictionary).duplicate(true)
+	# JSON input is owned by this handler. A shallow shell avoids duplicating
+	# large raw arrays that are immediately replaced by normalized projections.
+	var game: Dictionary = (source as Dictionary).duplicate(false)
 	game["roomCode"] = bounded_online_input(str(first_present(game, ["roomCode", "room_code", "code"], selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
 	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
 	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
@@ -43153,7 +43370,7 @@ func normalize_online_message_kind(data: Dictionary) -> String:
 func normalize_online_pending(value, game: Dictionary) -> Dictionary:
 	var pending: Dictionary = {}
 	if typeof(value) == TYPE_DICTIONARY:
-		pending = (value as Dictionary).duplicate(true)
+		pending = (value as Dictionary).duplicate(false)
 	var options = normalize_claim_options(first_present(pending, ["options", "claims", "actions"], game.get("claimOptions", [])))
 	pending["options"] = options
 	pending["tile"] = normalize_last_discard_tile(first_present(pending, ["tile", "discard", "lastDiscard"], game.get("lastDiscard", "")))
@@ -43189,18 +43406,25 @@ func normalize_online_players(value) -> Array:
 	for item in value:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
-		var player: Dictionary = (item as Dictionary).duplicate(true)
-		var hand_value = first_present(player, ["hand", "tiles"], [])
+		var source: Dictionary = item as Dictionary
+		var player: Dictionary = {}
+		# Keep only fields consumed by game validation/rendering. Primitive
+		# compatibility fields remain available without copying arbitrary payloads.
+		for key in ["ready", "connected", "avatar", "bot"]:
+			if source.has(key):
+				player[key] = source.get(key)
+		var hand_value = first_present(source, ["hand", "tiles"], [])
 		var normalized_hand = normalize_tile_array(hand_value)
-		player["seat"] = int(first_present(player, ["seat", "index", "position"], result.size()))
-		player["name"] = bounded_online_input(str(first_present(player, ["name", "nickname", "userName"], "玩家")), ONLINE_NAME_MAX_LENGTH)
+		player["hand"] = normalized_hand
+		player["seat"] = int(first_present(source, ["seat", "index", "position"], result.size()))
+		player["name"] = bounded_online_input(str(first_present(source, ["name", "nickname", "userName"], "玩家")), ONLINE_NAME_MAX_LENGTH)
 		if player["name"] == "":
 			player["name"] = "玩家"
-		player["handCount"] = numeric_count(first_present(player, ["handCount", "hand_count", "tileCount"], normalized_hand), normalized_hand.size())
-		player["flowerCount"] = numeric_count(first_present(player, ["flowerCount", "flowers", "flower_count"], 0), 0)
-		player["score"] = int(first_present(player, ["score", "points"], 0))
-		player["discards"] = normalize_tile_array(first_present(player, ["discards", "discarded", "river"], []))
-		player["melds"] = normalize_online_melds(first_present(player, ["melds", "openMelds", "sets"], []))
+		player["handCount"] = numeric_count(first_present(source, ["handCount", "hand_count", "tileCount"], normalized_hand), normalized_hand.size())
+		player["flowerCount"] = numeric_count(first_present(source, ["flowerCount", "flowers", "flower_count"], 0), 0)
+		player["score"] = int(first_present(source, ["score", "points"], 0))
+		player["discards"] = normalize_tile_array(first_present(source, ["discards", "discarded", "river"], []))
+		player["melds"] = normalize_online_melds(first_present(source, ["melds", "openMelds", "sets"], []))
 		result.append(player)
 	return result
 
@@ -43417,11 +43641,11 @@ func online_server_message_text(data: Dictionary, fallback: String) -> String:
 	var text = str(value).strip_edges()
 	return text if text != "" else fallback
 
-func send_online(payload: Dictionary) -> bool:
+func send_online(payload: Dictionary, payload_is_owned: bool = false) -> bool:
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
 		set_online_feedback("请先连接服务器。", false)
 		return false
-	var outbound := payload.duplicate(true)
+	var outbound: Dictionary = payload if payload_is_owned else payload.duplicate(true)
 	var outbound_type := str(outbound.get("type", "")).strip_edges()
 	if outbound_type != "" and outbound_type != "hello":
 		var validation_error := online_action_validation_error(outbound)
@@ -43475,10 +43699,10 @@ func send_online_action(payload: Dictionary, label: String = "") -> bool:
 	if repeated_request:
 		set_online_feedback("正在等待上一次%s的服务器确认。" % action_label, true)
 		return false
-	var outbound := payload.duplicate(true)
+	var outbound: Dictionary = normalized_payload
 	online_action_sequence += 1
 	outbound["requestId"] = "%d-%d" % [online_session_id, online_action_sequence]
-	if send_online(outbound):
+	if send_online(outbound, true):
 		play_outgoing_online_action_audio(outbound)
 		online_last_sent_action = action_label
 		online_last_sent_type = action_type
@@ -43829,12 +44053,14 @@ func _process(_delta: float) -> void:
 	# Debounced persistence only needs a coarse scheduler. Keeping the two
 	# deadline checks out of the frame path avoids needless calls while idle;
 	# application-pause still flushes synchronously in _notification().
-	if now >= next_save_flush_poll_msec and (telemetry_save_pending or offline_progress_dirty):
+	if now >= next_save_flush_poll_msec and (telemetry_save_pending or offline_progress_dirty or round_history_save_pending):
 		next_save_flush_poll_msec = now + SAVE_FLUSH_POLL_INTERVAL_MSEC
 		if telemetry_save_pending:
 			flush_telemetry_save()
 		if offline_progress_dirty:
 			flush_offline_progress_autosave()
+		if round_history_save_pending and now >= round_history_save_due_msec:
+			save_round_history()
 
 
 func update_pending_claim_live_state() -> void:
@@ -43934,6 +44160,8 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		flush_telemetry_save(true)
 		flush_offline_progress_autosave(true)
+		if round_history_save_pending:
+			save_round_history()
 	elif what == NOTIFICATION_WM_SIZE_CHANGED or what == NOTIFICATION_WM_DPI_CHANGE:
 		schedule_resize_refresh()
 
@@ -44003,6 +44231,26 @@ func focus_named_control(control_name: String) -> void:
 	control.grab_focus()
 	ensure_focus_control_visible(control)
 	mark_ui_optimization(control, "F-383")
+
+func schedule_online_recovery_focus() -> void:
+	if root_layer == null or not is_instance_valid(root_layer) or mode != "online_game" or not online_game_disconnected():
+		return
+	var root_id := root_layer.get_instance_id()
+	if online_recovery_focus_pending and online_recovery_focus_root_id == root_id:
+		return
+	online_recovery_focus_root_id = root_id
+	online_recovery_focus_pending = true
+	call_deferred("focus_online_recovery_if_current", root_id)
+
+func focus_online_recovery_if_current(expected_root_id: int) -> void:
+	if expected_root_id != online_recovery_focus_root_id:
+		return
+	online_recovery_focus_pending = false
+	if root_layer == null or not is_instance_valid(root_layer) or root_layer.get_instance_id() != expected_root_id:
+		return
+	if mode != "online_game" or not online_game_disconnected():
+		return
+	focus_named_control("OnlineReconnectGameButton")
 
 func restore_settings_focus_after_close(control_name: String, expected_token: int, expected_mode: String) -> void:
 	await get_tree().process_frame
@@ -45106,10 +45354,11 @@ func poll_online(now_msec: int = -1) -> void:
 	tcp_buffer.append_array(read_result[1] as PackedByteArray)
 	online_last_receive_msec = Time.get_ticks_msec()
 	var frames_processed := 0
-	while tcp_buffer.find(10) >= 0 and frames_processed < ONLINE_MAX_FRAMES_PER_POLL:
-		var split_at := tcp_buffer.find(10)
-		var raw_line := tcp_buffer.slice(0, split_at)
-		tcp_buffer = tcp_buffer.slice(split_at + 1)
+	var consumed_bytes := 0
+	var split_at := tcp_buffer.find(10)
+	while split_at >= 0 and frames_processed < ONLINE_MAX_FRAMES_PER_POLL:
+		var raw_line := tcp_buffer.slice(consumed_bytes, split_at)
+		consumed_bytes = split_at + 1
 		frames_processed += 1
 		if not online_frame_line_is_safe(raw_line):
 			close_online_transport("服务器消息过大，已断开连接。", true, false)
@@ -45119,6 +45368,13 @@ func poll_online(now_msec: int = -1) -> void:
 		var line := raw_line.get_string_from_utf8().strip_edges()
 		if line.length() > 0:
 			handle_online_message(line)
+		# A message handler can close the transport and clear tcp_buffer. Do not
+		# copy the stale local buffer back after that lifecycle transition.
+		if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+			return
+		split_at = tcp_buffer.find(10, consumed_bytes)
+	if consumed_bytes > 0:
+		tcp_buffer = tcp_buffer.slice(consumed_bytes)
 	if tcp_buffer.size() > ONLINE_MESSAGE_MAX_BYTES:
 		close_online_transport("服务器消息过大，已断开连接。", true, false)
 		return
@@ -45228,10 +45484,20 @@ func poll_voice_capture() -> void:
 		return
 	while voice_capture_effect.get_frames_available() >= VOICE_CHUNK_FRAMES:
 		var frames = voice_capture_effect.get_buffer(VOICE_CHUNK_FRAMES)
+		if not voice_frames_have_signal(frames):
+			continue
 		var payload = build_voice_payload(frames)
 		if payload.is_empty():
 			return
 		send_online(payload)
+
+
+func voice_frames_have_signal(frames: PackedVector2Array) -> bool:
+	for frame in frames:
+		var mono: float = absf((frame.x + frame.y) * 0.5)
+		if mono >= ONLINE_VOICE_SILENCE_THRESHOLD:
+			return true
+	return false
 
 
 func encode_voice_frames(frames: PackedVector2Array) -> Dictionary:
@@ -45252,6 +45518,47 @@ func encode_voice_frames(frames: PackedVector2Array) -> Dictionary:
 		"peak": peak,
 		"bytes": bytes.size(),
 	}
+
+func clear_remote_voice_players() -> void:
+	for player in remote_voice_players:
+		if player == null or not is_instance_valid(player):
+			continue
+		player.stop()
+		if player.get_parent() != null:
+			player.get_parent().remove_child(player)
+		player.queue_free()
+	remote_voice_players.clear()
+
+
+func _on_remote_voice_player_finished(_player: AudioStreamPlayer) -> void:
+	# Keep finished players in the bounded pool for the next packet. The transport
+	# and page lifecycle own actual destruction through clear_remote_voice_players().
+	pass
+
+
+func remote_voice_player_for_stream(stream: AudioStream) -> AudioStreamPlayer:
+	var reusable: AudioStreamPlayer = null
+	for index in range(remote_voice_players.size() - 1, -1, -1):
+		var candidate := remote_voice_players[index]
+		if candidate == null or not is_instance_valid(candidate):
+			remote_voice_players.remove_at(index)
+			continue
+		if reusable == null and not candidate.playing:
+			reusable = candidate
+	if reusable == null and remote_voice_players.size() >= ONLINE_REMOTE_VOICE_PLAYER_LIMIT:
+		reusable = remote_voice_players[0]
+		reusable.stop()
+	if reusable == null:
+		reusable = AudioStreamPlayer.new()
+		reusable.name = "RemoteVoicePlayer_%d" % remote_voice_players.size()
+		reusable.bus = "Master"
+		reusable.process_mode = Node.PROCESS_MODE_ALWAYS
+		attach_audio_node(reusable)
+		reusable.finished.connect(Callable(self, "_on_remote_voice_player_finished").bind(reusable))
+		remote_voice_players.append(reusable)
+	reusable.stream = stream
+	return reusable
+
 
 func handle_voice_message(data: Dictionary) -> void:
 	var speaker_seat = int(data.get("seat", data.get("fromSeat", -1)))
@@ -45276,12 +45583,7 @@ func handle_voice_message(data: Dictionary) -> void:
 	var stream = make_voice_stream(audio_base64, sample_rate, channels, decoded)
 	if stream == null:
 		return
-	var player = AudioStreamPlayer.new()
-	player.stream = stream
-	player.bus = "Master"
-	player.process_mode = Node.PROCESS_MODE_ALWAYS
-	attach_audio_node(player)
-	player.finished.connect(Callable(self, "queue_free_node_by_id").bind(player.get_instance_id()))
+	var player := remote_voice_player_for_stream(stream)
 	player.play()
 
 
@@ -45568,23 +45870,45 @@ func refresh_online_log_navigation() -> void:
 		mark_ui_optimization(log_list, "F-910")
 
 
-func update_chat_send_cooldown(now_msec: int = -1) -> void:
+func bind_chat_send_controls() -> bool:
 	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
-		return
-	var cooldown_label := root_layer.find_child("ChatSendCooldownLabel", true, false) as Label
-	var send_button := root_layer.find_child("ChatSendButton", true, false) as Button
-	var quick_buttons: Array[Button] = []
-	var quick_row := root_layer.find_child("ChatPanelQuickMessages", true, false) as Control
+		return false
+	if chat_send_controls_root_id == root_layer.get_instance_id() and chat_send_cooldown_label != null and is_instance_valid(chat_send_cooldown_label) and chat_send_button != null and is_instance_valid(chat_send_button) and chat_send_input != null and is_instance_valid(chat_send_input):
+		return true
+	var panel := root_layer.find_child("ChatPanel", true, false) as Control
+	if panel == null or not is_instance_valid(panel):
+		return false
+	chat_send_controls_root_id = root_layer.get_instance_id()
+	chat_send_cooldown_label = panel.find_child("ChatSendCooldownLabel", true, false) as Label
+	chat_send_button = panel.find_child("ChatSendButton", true, false) as Button
+	chat_send_input = panel.find_child("ChatInput", true, false) as LineEdit
+	chat_send_quick_buttons.clear()
+	var quick_row := panel.find_child("ChatPanelQuickMessages", true, false) as Control
 	if quick_row != null:
 		for child in quick_row.get_children():
 			var quick_button := child as Button
 			if quick_button != null:
-				quick_buttons.append(quick_button)
-	if cooldown_label == null and send_button == null and quick_buttons.is_empty():
+				chat_send_quick_buttons.append(quick_button)
+	chat_send_cooldown_token = ""
+	chat_send_validity_token = ""
+	return chat_send_cooldown_label != null or chat_send_button != null or not chat_send_quick_buttons.is_empty()
+
+
+func update_chat_send_cooldown(now_msec: int = -1) -> void:
+	if not bind_chat_send_controls():
 		return
+	var cooldown_label := chat_send_cooldown_label
+	var send_button := chat_send_button
+	var quick_buttons := chat_send_quick_buttons
 	var current_msec := Time.get_ticks_msec() if now_msec < 0 else now_msec
 	var remaining_msec := maxi(0, ONLINE_CHAT_COOLDOWN_MSEC - (current_msec - online_last_chat_sent_msec)) if online_last_chat_sent_msec > 0 else 0
 	var cooling := remaining_msec > 0
+	var remaining_deciseconds := maxi(0, int(ceil(float(remaining_msec) / 100.0)))
+	var empty := chat_send_input == null or chat_send_input.text.strip_edges() == ""
+	var cooldown_token := "%d|%d|%d" % [1 if cooling else 0, remaining_deciseconds, 1 if empty else 0]
+	if cooldown_token == chat_send_cooldown_token:
+		return
+	chat_send_cooldown_token = cooldown_token
 	if cooldown_label != null:
 		cooldown_label.visible = true
 		cooldown_label.text = "发送冷却 %.1fs" % (float(remaining_msec) / 1000.0) if cooling else "发送 · 可用"
@@ -45622,14 +45946,18 @@ func update_chat_send_cooldown(now_msec: int = -1) -> void:
 	refresh_chat_send_button_state()
 
 func refresh_chat_send_button_state() -> void:
-	if root_layer == null or not is_instance_valid(root_layer):
+	if not bind_chat_send_controls():
 		return
-	var button := root_layer.find_child("ChatSendButton", true, false) as Button
-	var input := root_layer.find_child("ChatInput", true, false) as LineEdit
+	var button := chat_send_button
+	var input := chat_send_input
 	if button == null or input == null:
 		return
 	var empty := input.text.strip_edges() == ""
 	var cooling := bool(button.get_meta("chat_cooldown_owned", false))
+	var validity_token := "%d|%d|%d" % [chat_send_controls_root_id, 1 if cooling else 0, 1 if empty else 0]
+	if validity_token == chat_send_validity_token:
+		return
+	chat_send_validity_token = validity_token
 	if not cooling:
 		button.disabled = empty
 		var state_detail := "请输入消息后发送 · Enter" if empty else "发送当前消息 · Enter"
@@ -45714,7 +46042,7 @@ func deal_offline_hand() -> void:
 			if not offline_match_briefing_shown:
 				show_toast(briefing, 2600)
 				offline_match_briefing_shown = true
-	render_game()
+	render_game(true)
 	play_fx_deal_start(dealer_seat)
 	play_fx_deal_cascade(dealer_seat)
 	save_offline_progress(false)
@@ -48815,7 +49143,7 @@ func begin_rob_gang_resolution(gang_seat: int, tile: String) -> bool:
 		offline_phase = "pending_claim"
 		add_log("你可抢杠胡%s。" % tile_label(tile))
 		play_rob_gang_warning_fx(gang_seat, 0, tile)
-		render_game()
+		render_game(true)
 		return true
 	if not ai_claim.is_empty():
 		play_rob_gang_warning_fx(gang_seat, int(ai_claim.get("seat", -1)), tile)
@@ -51534,6 +51862,7 @@ func flower_bloom_text(tile: String) -> String:
 
 
 func clear_fx_overlays() -> void:
+	fx_generation += 1
 	clear_tile_fly_animations()
 	clear_tile_flip_animations()
 	if fx_burst_tween != null and is_instance_valid(fx_burst_tween):
@@ -51555,6 +51884,7 @@ func clear_fx_overlays() -> void:
 		for child in fx_layer.get_children():
 			if child == transition_overlay or child == toast_container or child == fx_turn_pulse or child == fx_burst_root or child == fx_ripple_root:
 				continue
+			kill_screen_tweens_for_subtree(child)
 			if child is Control:
 				child.visible = false
 			child.queue_free()
@@ -52799,6 +53129,13 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 var chat_messages: Array = []
 var chat_input: LineEdit = null
 var chat_panel_open := false
+var chat_send_controls_root_id := 0
+var chat_send_cooldown_label: Label = null
+var chat_send_button: Button = null
+var chat_send_input: LineEdit = null
+var chat_send_quick_buttons: Array[Button] = []
+var chat_send_cooldown_token := ""
+var chat_send_validity_token := ""
 
 
 func chat_panel_rect() -> Rect2:
@@ -52980,6 +53317,13 @@ func refresh_chat_panel() -> void:
 		root_layer.remove_child(old_panel)
 		old_panel.queue_free()
 	chat_input = null
+	chat_send_controls_root_id = 0
+	chat_send_cooldown_label = null
+	chat_send_button = null
+	chat_send_input = null
+	chat_send_quick_buttons.clear()
+	chat_send_cooldown_token = ""
+	chat_send_validity_token = ""
 	show_chat_panel()
 
 
@@ -53007,6 +53351,13 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 		ledger.visible = true
 		ledger.remove_meta("hidden_for_chat")
 	chat_input = null
+	chat_send_controls_root_id = 0
+	chat_send_cooldown_label = null
+	chat_send_button = null
+	chat_send_input = null
+	chat_send_quick_buttons.clear()
+	chat_send_cooldown_token = ""
+	chat_send_validity_token = ""
 	if restore_focus:
 		call_deferred("restore_chat_panel_focus")
 	else:
@@ -54436,18 +54787,29 @@ func record_round_event(event_type: String, payload: Dictionary = {}) -> void:
 	round_event_history.append(event)
 	while round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
 		round_event_history.pop_front()
+	invalidate_round_replay_view_cache()
 	mark_offline_progress_dirty()
+
+func invalidate_round_replay_view_cache() -> void:
+	replay_view_cache_round_id = ""
+	replay_view_cache_sequence = -1
+	replay_view_cache.clear()
 
 func round_replay_snapshot() -> Array:
 	return round_event_history.duplicate(true)
 
 func replay_event_digest(event: Dictionary) -> String:
-	var canonical := event.duplicate(true)
-	canonical.erase("digest")
+	# The event snapshot is already deep-copied at commit time. Filter the
+	# derived digest without copying the full payload a second time; the
+	# canonicalizer owns the single recursive copy needed for hashing.
+	var digest_input: Dictionary = {}
+	for key in event.keys():
+		if str(key) != "digest":
+			digest_input[key] = event[key]
 	var context := HashingContext.new()
 	if context.start(HashingContext.HASH_SHA256) != OK:
 		return ""
-	context.update(JSON.stringify(canonicalize_replay_value(canonical)).to_utf8_buffer())
+	context.update(JSON.stringify(canonicalize_replay_value(digest_input)).to_utf8_buffer())
 	return context.finish().hex_encode()
 
 func canonicalize_replay_value(value):
@@ -54510,11 +54872,46 @@ func digest_is_missing_or_invalid(event: Dictionary) -> bool:
 	return digest == "" or digest != replay_event_digest(event)
 
 func round_replay_digest(events: Array = []) -> String:
+	if events.is_empty():
+		ensure_round_replay_view_cache()
+		return str(replay_view_cache.get("digest", ""))
 	var source := events if not events.is_empty() else round_event_history
 	if source.is_empty():
 		return ""
 	var last = source.back()
 	return str(last.get("digest", "")) if typeof(last) == TYPE_DICTIONARY else ""
+
+func ensure_round_replay_view_cache() -> void:
+	var cache_key := "%s|%d|%d" % [active_round_id, round_event_sequence, round_event_history.size()]
+	if replay_view_cache_round_id == cache_key and replay_view_cache_sequence == round_event_sequence and not replay_view_cache.is_empty():
+		return
+	var events := round_event_history.duplicate(true)
+	var digest := ""
+	if not events.is_empty():
+		digest = round_replay_digest(events)
+	var valid := validate_round_replay(events)
+	var payload := {
+		"schema": REPLAY_SCHEMA_VERSION,
+		"app_version": APP_VERSION,
+		"round_id": active_round_id,
+		"seed": offline_hand_seed,
+		"rule_variant": active_rule_variant(),
+		"events": events,
+		"digest": digest,
+		"valid": valid,
+		"event_counts": replay_event_counts(events),
+	}
+	var share_code := ""
+	var bytes := JSON.stringify(payload).to_utf8_buffer()
+	if valid and not bytes.is_empty() and bytes.size() <= REPLAY_SHARE_MAX_BYTES:
+		share_code = Marshalls.raw_to_base64(bytes)
+	replay_view_cache_round_id = cache_key
+	replay_view_cache_sequence = round_event_sequence
+	replay_view_cache = {"digest": digest, "valid": valid, "share_code": share_code, "payload": payload}
+
+func round_replay_view_state() -> Dictionary:
+	ensure_round_replay_view_cache()
+	return replay_view_cache
 
 func replay_event_counts(events: Array = []) -> Dictionary:
 	var counts: Dictionary = {}
@@ -54528,35 +54925,25 @@ func replay_event_counts(events: Array = []) -> Dictionary:
 	return counts
 
 func export_round_replay_payload() -> Dictionary:
-	var events := round_replay_snapshot()
-	return {
-		"schema": REPLAY_SCHEMA_VERSION,
-		"app_version": APP_VERSION,
-		"round_id": active_round_id,
-		"seed": offline_hand_seed,
-		"rule_variant": active_rule_variant(),
-		"events": events,
-		"digest": round_replay_digest(events),
-		"valid": validate_round_replay(events),
-		"event_counts": replay_event_counts(events),
-	}
+	ensure_round_replay_view_cache()
+	return (replay_view_cache.get("payload", {}) as Dictionary).duplicate(true)
 
 func round_replay_share_code() -> String:
-	var bytes := JSON.stringify(export_round_replay_payload()).to_utf8_buffer()
-	if bytes.size() <= 0 or bytes.size() > REPLAY_SHARE_MAX_BYTES:
-		return ""
-	return Marshalls.raw_to_base64(bytes)
+	ensure_round_replay_view_cache()
+	return str(replay_view_cache.get("share_code", ""))
 
 func round_replay_status_text() -> String:
-	var digest := round_replay_digest()
+	var view := round_replay_view_state()
+	var digest := str(view.get("digest", ""))
 	if digest == "":
 		return "本局暂无回放记录"
-	if not validate_round_replay(round_event_history):
+	if not bool(view.get("valid", false)):
 		return "回放校验失败 · 请勿分享"
 	return "回放校验通过 · %s" % digest.left(10).to_upper()
 
 func copy_round_replay_share_code() -> bool:
-	if round_replay_digest() == "" or not validate_round_replay(round_event_history):
+	var view := round_replay_view_state()
+	if str(view.get("digest", "")) == "" or not bool(view.get("valid", false)):
 		show_toast("本局回放校验失败 · 暂不可分享")
 		return false
 	var code := round_replay_share_code()

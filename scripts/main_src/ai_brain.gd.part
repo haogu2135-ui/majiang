@@ -1127,6 +1127,8 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 	if mode != "offline" or not rule_uses_package_liability() or seat < 0 or seat >= players.size() or tile == "":
 		return out
 	var details: Array = feed_report.get("details", [])
+	if details.is_empty():
+		return out
 	for item in details:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
@@ -1283,7 +1285,9 @@ func offline_hand_ai_briefing_text() -> String:
 	return " · ".join(parts)
 
 func ai_profile(seat: int) -> Dictionary:
-	return ai_profile_source(seat).duplicate(true)
+	# Profile definitions are immutable runtime constants. Read-only callers can
+	# share them; callers that edit a profile must request an explicit duplicate.
+	return ai_profile_source(seat)
 
 func is_ai_controlled_seat(seat: int) -> bool:
 	if seat < 0 or seat >= players.size():
@@ -2813,6 +2817,12 @@ func midgame_danger_adjustment(seat: int, shanten: int, ukeire: int, safety: Str
 	return (safety_value - danger_penalty) * scale * ai_risk_factor(seat)
 
 func ai_hand_shape_metrics_from_counts(counts: Array) -> Dictionary:
+	var cache_key := counts_compact_key(counts)
+	var cached = ai_shape_metrics_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY:
+		ai_shape_metrics_cache_order.erase(cache_key)
+		ai_shape_metrics_cache_order.append(cache_key)
+		return cached as Dictionary
 	var value = 0.0
 	var sequences = 0
 	var ryanmen = 0
@@ -2862,7 +2872,7 @@ func ai_hand_shape_metrics_from_counts(counts: Array) -> Dictionary:
 			if int(counts[start + rank]) > 0 and int(counts[start + rank + 2]) > 0:
 				kanchan += 1
 	var quality_score = float(sequences) * 30.0 + float(ryanmen) * 24.0 + float(kanchan) * 13.0 + float(penchan) * 9.0 + float(pairs) * 14.0 + float(triplets) * 20.0 - float(isolated) * 8.0
-	return {
+	var result := {
 		"value": value,
 		"quality_report": {
 			"score": quality_score,
@@ -2875,53 +2885,18 @@ func ai_hand_shape_metrics_from_counts(counts: Array) -> Dictionary:
 			"isolated": isolated,
 		},
 	}
+	ai_shape_metrics_cache[cache_key] = result
+	ai_shape_metrics_cache_order.append(cache_key)
+	while ai_shape_metrics_cache_order.size() > 64:
+		var oldest: String = ai_shape_metrics_cache_order.pop_front()
+		ai_shape_metrics_cache.erase(oldest)
+	return result
 
 func hand_shape_quality_report(hand: Array) -> Dictionary:
 	return hand_shape_quality_report_from_counts(tile_counts(hand))
 
 func hand_shape_quality_report_from_counts(counts: Array) -> Dictionary:
-	var sequences = 0
-	var ryanmen = 0
-	var kanchan = 0
-	var penchan = 0
-	var pairs = 0
-	var triplets = 0
-	var isolated = 0
-	for i in range(TILE_CODES.size()):
-		var amount = int(counts[i])
-		if amount <= 0:
-			continue
-		if amount >= 2:
-			pairs += 1
-		if amount >= 3:
-			triplets += 1
-		if is_isolated_shape_tile(counts, i):
-			isolated += amount
-	for start in NUMBER_SUIT_STARTS:
-		for rank in range(0, 7):
-			if int(counts[start + rank]) > 0 and int(counts[start + rank + 1]) > 0 and int(counts[start + rank + 2]) > 0:
-				sequences += 1
-		for rank in range(0, 8):
-			if int(counts[start + rank]) <= 0 or int(counts[start + rank + 1]) <= 0:
-				continue
-			if rank == 0 or rank == 7:
-				penchan += 1
-			else:
-				ryanmen += 1
-		for rank in range(0, 7):
-			if int(counts[start + rank]) > 0 and int(counts[start + rank + 2]) > 0:
-				kanchan += 1
-	var score = float(sequences) * 30.0 + float(ryanmen) * 24.0 + float(kanchan) * 13.0 + float(penchan) * 9.0 + float(pairs) * 14.0 + float(triplets) * 20.0 - float(isolated) * 8.0
-	return {
-		"score": score,
-		"sequences": sequences,
-		"ryanmen": ryanmen,
-		"kanchan": kanchan,
-		"penchan": penchan,
-		"pairs": pairs,
-		"triplets": triplets,
-		"isolated": isolated,
-	}
+	return ai_hand_shape_metrics_from_counts(counts).get("quality_report", {}) as Dictionary
 
 func hand_shape_quality_text(report: Dictionary) -> String:
 	var parts: Array[String] = []
@@ -2942,7 +2917,19 @@ func hand_shape_quality_text(report: Dictionary) -> String:
 	return "形" + join_limited_strings(parts, " ", 3)
 
 func calculate_min_shanten(hand: Array, open_melds: int = 0) -> int:
-	return calculate_min_shanten_from_counts(tile_counts(hand), open_melds)
+	var cache_key := "%d:%s" % [open_melds, tile_array_key(hand)]
+	var cached = shanten_hand_counts_cache.get(cache_key, null)
+	var hand_counts: Array
+	if typeof(cached) == TYPE_ARRAY:
+		hand_counts = cached
+	else:
+		hand_counts = tile_counts(hand)
+		shanten_hand_counts_cache[cache_key] = hand_counts
+		shanten_hand_counts_cache_order.append(cache_key)
+		while shanten_hand_counts_cache_order.size() > 64:
+			var oldest: String = str(shanten_hand_counts_cache_order.pop_front())
+			shanten_hand_counts_cache.erase(oldest)
+	return calculate_min_shanten_from_counts(hand_counts, open_melds)
 
 func calculate_min_shanten_from_counts(counts: Array, open_melds: int = 0) -> int:
 	var cache_key = shanten_cache_key(counts, open_melds)
@@ -2979,7 +2966,9 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 		effective_tiles_cache_clock += 1
 		effective_tiles_cache_access[cache_key] = effective_tiles_cache_clock
 		touch_effective_tiles_cache_key(cache_key)
-		return (effective_tiles_cache[cache_key] as Dictionary).duplicate(true)
+		# The cache owns immutable result dictionaries. Callers only read these
+		# metrics, so avoid a deep duplicate on every AI candidate hit.
+		return effective_tiles_cache[cache_key] as Dictionary
 
 	effective_tiles_cache_misses += 1
 	var next_tile_count = hand.size() + 1

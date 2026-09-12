@@ -131,23 +131,36 @@ func refresh_online_recovery_live_controls(now_msec: int = -1) -> void:
 	var remaining_msec := maxi(0, online_next_reconnect_msec - current_msec)
 	var cooldown := remaining_msec > 0
 	var phase := "connecting" if reconnecting else ("cooldown" if cooldown else "retry_ready")
-	var recovery_state := root_layer.find_child("OnlineRecoveryStateLabel", true, false) as Label
-	if recovery_state != null:
-		recovery_state.text = online_recovery_phase_text()
-		set_ui_full_text(recovery_state, "%s；%s" % [online_recovery_phase_text(), online_recovery_detail_text()], "断线恢复阶段")
-		recovery_state.set_meta("recovery_phase", phase)
-		recovery_state.set_meta("recovery_remaining_msec", remaining_msec)
-		recovery_state.set_meta("recovery_state_revision", current_msec)
-	var reconnect_button := root_layer.find_child("OnlineReconnectGameButton", true, false) as Button
-	if reconnect_button != null:
-		reconnect_button.text = online_recovery_button_text()
-		reconnect_button.disabled = reconnecting or cooldown
-		reconnect_button.tooltip_text = online_recovery_detail_text()
-		set_ui_full_text(reconnect_button, reconnect_button.tooltip_text, "恢复当前牌局：" + reconnect_button.text)
-		reconnect_button.set_meta("recovery_phase", phase)
-		reconnect_button.set_meta("recovery_remaining_msec", remaining_msec)
-		reconnect_button.set_meta("recovery_retry_available", not reconnecting and not cooldown)
-		reconnect_button.set_meta("disabled_reason", "正在重新连接房间，请稍候" if reconnecting else ("还需%d秒后可重连" % int(ceil(float(remaining_msec) / 1000.0)) if cooldown else ""))
+	var root_id := root_layer.get_instance_id()
+	if root_id != online_recovery_controls_root_id or online_recovery_state_label == null or not is_instance_valid(online_recovery_state_label) or online_recovery_button == null or not is_instance_valid(online_recovery_button):
+		online_recovery_controls_root_id = root_id
+		online_recovery_state_label = root_layer.find_child("OnlineRecoveryStateLabel", true, false) as Label
+		online_recovery_button = root_layer.find_child("OnlineReconnectGameButton", true, false) as Button
+		online_recovery_live_token = ""
+	var remaining_seconds := maxi(0, int(ceil(float(remaining_msec) / 1000.0)))
+	var state_text := online_recovery_phase_text()
+	var button_text := online_recovery_button_text()
+	var detail_text := online_recovery_detail_text()
+	var view_token := "%s|%d|%d|%s|%s" % [phase, remaining_seconds, maxi(online_reconnect_attempts, 1), online_recovery_reason_text(), button_text]
+	if view_token == online_recovery_live_token:
+		return
+	online_recovery_live_token = view_token
+	if online_recovery_state_label != null:
+		online_recovery_state_label.text = state_text
+		set_ui_full_text(online_recovery_state_label, "%s；%s" % [state_text, detail_text], "断线恢复阶段")
+		online_recovery_state_label.set_meta("recovery_phase", phase)
+		online_recovery_state_label.set_meta("recovery_remaining_msec", remaining_msec)
+		online_recovery_state_label.set_meta("recovery_remaining_seconds", remaining_seconds)
+	if online_recovery_button != null:
+		online_recovery_button.text = button_text
+		online_recovery_button.disabled = reconnecting or cooldown
+		online_recovery_button.tooltip_text = detail_text
+		set_ui_full_text(online_recovery_button, online_recovery_button.tooltip_text, "恢复当前牌局：" + online_recovery_button.text)
+		online_recovery_button.set_meta("recovery_phase", phase)
+		online_recovery_button.set_meta("recovery_remaining_msec", remaining_msec)
+		online_recovery_button.set_meta("recovery_remaining_seconds", remaining_seconds)
+		online_recovery_button.set_meta("recovery_retry_available", not reconnecting and not cooldown)
+		online_recovery_button.set_meta("disabled_reason", "正在重新连接房间，请稍候" if reconnecting else ("还需%d秒后可重连" % remaining_seconds if cooldown else ""))
 
 func connect_online() -> void:
 	var host := online_host_input()
@@ -209,6 +222,7 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 	# A real transport loss owns the chat lifecycle; a transient status copy
 	# must not make clear_screen infer that the drawer should disappear.
 	chat_panel_open = false
+	clear_remote_voice_players()
 	table_log_chat_restore_pending = false
 	table_log_chat_draft = ""
 	var preserve_game_board := preserve_game_for_reconnect and mode == "online_game" and not online_game.is_empty()
@@ -384,7 +398,8 @@ func remember_online_message_identity(identity: String) -> bool:
 		return false
 	online_seen_message_ids[identity] = true
 	while online_seen_message_ids.size() > ONLINE_SEEN_EVENT_LIMIT:
-		online_seen_message_ids.erase(online_seen_message_ids.keys()[0])
+		var oldest_key = online_seen_message_ids.keys()[0]
+		online_seen_message_ids.erase(oldest_key)
 	return true
 
 func accept_online_message(data: Dictionary, kind: String) -> bool:
@@ -451,6 +466,62 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 	return JSON.stringify(stable)
 
 
+func online_rule_code_set(variant: String) -> Dictionary:
+	var cache_key := variant if variant != "" else "__default__"
+	var cached = online_rule_code_set_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY and not (cached as Dictionary).is_empty():
+		return cached
+	var code_set: Dictionary = {}
+	var tile_codes: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
+	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	for code in tile_codes:
+		code_set[normalize_tile_code(str(code))] = true
+	for code in flower_codes:
+		code_set[normalize_tile_code(str(code))] = true
+	online_rule_code_set_cache[cache_key] = code_set
+	return code_set
+
+
+func online_rule_flower_set(variant: String) -> Dictionary:
+	var cache_key := "flowers:" + (variant if variant != "" else "__default__")
+	var cached = online_rule_code_set_cache.get(cache_key, null)
+	if typeof(cached) == TYPE_DICTIONARY and not (cached as Dictionary).is_empty():
+		return cached
+	var flower_set: Dictionary = {}
+	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	for code in flower_codes:
+		flower_set[normalize_tile_code(str(code))] = true
+	online_rule_code_set_cache[cache_key] = flower_set
+	return flower_set
+
+
+func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool:
+	var revision := online_message_revision(data, kind)
+	if revision < 0:
+		return false
+	if kind == "roomState":
+		if revision != online_room_revision:
+			return false
+		var room_value = data.get("room", data)
+		if typeof(room_value) != TYPE_DICTIONARY:
+			return true
+		var incoming_code := bounded_online_input(str(first_present(room_value, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var current_code := bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		return incoming_code == "" or current_code == "" or incoming_code == current_code
+	if kind == "gameState":
+		if revision != online_game_revision:
+			return false
+		var game_value = data.get("game", data)
+		var incoming_room := ""
+		if typeof(game_value) == TYPE_DICTIONARY:
+			incoming_room = str(first_present(game_value as Dictionary, ["roomCode", "room_code", "code"], "")).strip_edges()
+		if incoming_room == "":
+			incoming_room = str(first_present(data, ["roomCode", "room_code"], "")).strip_edges()
+		var current_room := str(online_game.get("roomCode", "")).strip_edges()
+		return incoming_room == "" or current_room == "" or incoming_room == current_room
+	return false
+
+
 func online_log_entry_text(value) -> String:
 	var raw := str(first_present(value, ["text", "message", "content"], "")) if typeof(value) == TYPE_DICTIONARY else str(value)
 	return raw.strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
@@ -481,12 +552,8 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 	if str(game.get("phase", "")) == "unknown":
 		return "服务器返回了不受支持的牌局状态。"
 	var variant := str(game.get("ruleVariant", ""))
-	var allowed_tiles: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
-	var allowed_flowers: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
-	var allowed_codes: Array = allowed_tiles.duplicate()
-	for flower in allowed_flowers:
-		if not allowed_codes.has(flower):
-			allowed_codes.append(flower)
+	var allowed_codes := online_rule_code_set(variant)
+	var allowed_flowers := online_rule_flower_set(variant)
 	var you_seat := int(game.get("youSeat", -1))
 	if you_seat < -1 or you_seat >= 4:
 		return "玩家座位越界。"
@@ -679,7 +746,6 @@ func handle_online_log(data: Dictionary) -> void:
 	online_log_total_count = previous_total + 1
 	online_lobby_render_revision += 1
 	set_online_feedback(message, false)
-	refresh_online_lobby_state()
 
 
 func handle_online_chat(data: Dictionary) -> void:
@@ -700,7 +766,11 @@ func handle_online_chat(data: Dictionary) -> void:
 		set_status("新消息 · %s" % message)
 
 func handle_online_message(line: String) -> void:
-	var data = JSON.parse_string(line)
+	var trimmed_line := line.strip_edges()
+	if trimmed_line == "" or not trimmed_line.begins_with("{"):
+		register_online_message_rejection()
+		return
+	var data = JSON.parse_string(trimmed_line)
 	if typeof(data) != TYPE_DICTIONARY:
 		register_online_message_rejection("服务器消息解析失败")
 		return
@@ -708,6 +778,11 @@ func handle_online_message(line: String) -> void:
 	var kind = normalize_online_message_kind(data)
 	if not accept_online_message(data, kind):
 		register_online_message_rejection()
+		return
+	# Server revisions are authoritative for room/game snapshots. Once a revision
+	# has been committed, discard retransmissions before normalization, validation,
+	# fingerprint construction, or any UI work.
+	if (kind == "roomState" or kind == "gameState") and online_revision_snapshot_is_current(data, kind):
 		return
 	if kind == "welcome":
 		var server_name = str(data.get("name", "")).strip_edges()
@@ -851,19 +926,27 @@ func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary
 
 func normalize_online_chi_choices(value, claimed_tile: String = "") -> Array:
 	var choices: Array = []
+	var seen: Dictionary = {}
 	if typeof(value) != TYPE_ARRAY:
 		return choices
 	for item in value:
 		var choice = normalize_online_chi_choice(item, claimed_tile)
-		if not choice.is_empty():
-			choices.append(choice)
+		if choice.is_empty():
+			continue
+		var choice_key := "%s|%s" % [tile_array_key(choice.get("meld", [])), tile_array_key(choice.get("needed", []))]
+		if seen.has(choice_key):
+			continue
+		seen[choice_key] = true
+		choices.append(choice)
 	return choices
 
 func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	var source = message.get("game", message)
 	if typeof(source) != TYPE_DICTIONARY:
 		source = {}
-	var game: Dictionary = (source as Dictionary).duplicate(true)
+	# JSON input is owned by this handler. A shallow shell avoids duplicating
+	# large raw arrays that are immediately replaced by normalized projections.
+	var game: Dictionary = (source as Dictionary).duplicate(false)
 	game["roomCode"] = bounded_online_input(str(first_present(game, ["roomCode", "room_code", "code"], selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
 	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
 	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
@@ -940,7 +1023,7 @@ func normalize_online_message_kind(data: Dictionary) -> String:
 func normalize_online_pending(value, game: Dictionary) -> Dictionary:
 	var pending: Dictionary = {}
 	if typeof(value) == TYPE_DICTIONARY:
-		pending = (value as Dictionary).duplicate(true)
+		pending = (value as Dictionary).duplicate(false)
 	var options = normalize_claim_options(first_present(pending, ["options", "claims", "actions"], game.get("claimOptions", [])))
 	pending["options"] = options
 	pending["tile"] = normalize_last_discard_tile(first_present(pending, ["tile", "discard", "lastDiscard"], game.get("lastDiscard", "")))
@@ -976,18 +1059,25 @@ func normalize_online_players(value) -> Array:
 	for item in value:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
-		var player: Dictionary = (item as Dictionary).duplicate(true)
-		var hand_value = first_present(player, ["hand", "tiles"], [])
+		var source: Dictionary = item as Dictionary
+		var player: Dictionary = {}
+		# Keep only fields consumed by game validation/rendering. Primitive
+		# compatibility fields remain available without copying arbitrary payloads.
+		for key in ["ready", "connected", "avatar", "bot"]:
+			if source.has(key):
+				player[key] = source.get(key)
+		var hand_value = first_present(source, ["hand", "tiles"], [])
 		var normalized_hand = normalize_tile_array(hand_value)
-		player["seat"] = int(first_present(player, ["seat", "index", "position"], result.size()))
-		player["name"] = bounded_online_input(str(first_present(player, ["name", "nickname", "userName"], "玩家")), ONLINE_NAME_MAX_LENGTH)
+		player["hand"] = normalized_hand
+		player["seat"] = int(first_present(source, ["seat", "index", "position"], result.size()))
+		player["name"] = bounded_online_input(str(first_present(source, ["name", "nickname", "userName"], "玩家")), ONLINE_NAME_MAX_LENGTH)
 		if player["name"] == "":
 			player["name"] = "玩家"
-		player["handCount"] = numeric_count(first_present(player, ["handCount", "hand_count", "tileCount"], normalized_hand), normalized_hand.size())
-		player["flowerCount"] = numeric_count(first_present(player, ["flowerCount", "flowers", "flower_count"], 0), 0)
-		player["score"] = int(first_present(player, ["score", "points"], 0))
-		player["discards"] = normalize_tile_array(first_present(player, ["discards", "discarded", "river"], []))
-		player["melds"] = normalize_online_melds(first_present(player, ["melds", "openMelds", "sets"], []))
+		player["handCount"] = numeric_count(first_present(source, ["handCount", "hand_count", "tileCount"], normalized_hand), normalized_hand.size())
+		player["flowerCount"] = numeric_count(first_present(source, ["flowerCount", "flowers", "flower_count"], 0), 0)
+		player["score"] = int(first_present(source, ["score", "points"], 0))
+		player["discards"] = normalize_tile_array(first_present(source, ["discards", "discarded", "river"], []))
+		player["melds"] = normalize_online_melds(first_present(source, ["melds", "openMelds", "sets"], []))
 		result.append(player)
 	return result
 
@@ -1204,11 +1294,11 @@ func online_server_message_text(data: Dictionary, fallback: String) -> String:
 	var text = str(value).strip_edges()
 	return text if text != "" else fallback
 
-func send_online(payload: Dictionary) -> bool:
+func send_online(payload: Dictionary, payload_is_owned: bool = false) -> bool:
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
 		set_online_feedback("请先连接服务器。", false)
 		return false
-	var outbound := payload.duplicate(true)
+	var outbound: Dictionary = payload if payload_is_owned else payload.duplicate(true)
 	var outbound_type := str(outbound.get("type", "")).strip_edges()
 	if outbound_type != "" and outbound_type != "hello":
 		var validation_error := online_action_validation_error(outbound)
@@ -1262,10 +1352,10 @@ func send_online_action(payload: Dictionary, label: String = "") -> bool:
 	if repeated_request:
 		set_online_feedback("正在等待上一次%s的服务器确认。" % action_label, true)
 		return false
-	var outbound := payload.duplicate(true)
+	var outbound: Dictionary = normalized_payload
 	online_action_sequence += 1
 	outbound["requestId"] = "%d-%d" % [online_session_id, online_action_sequence]
-	if send_online(outbound):
+	if send_online(outbound, true):
 		play_outgoing_online_action_audio(outbound)
 		online_last_sent_action = action_label
 		online_last_sent_type = action_type

@@ -22,18 +22,29 @@ func record_round_event(event_type: String, payload: Dictionary = {}) -> void:
 	round_event_history.append(event)
 	while round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
 		round_event_history.pop_front()
+	invalidate_round_replay_view_cache()
 	mark_offline_progress_dirty()
+
+func invalidate_round_replay_view_cache() -> void:
+	replay_view_cache_round_id = ""
+	replay_view_cache_sequence = -1
+	replay_view_cache.clear()
 
 func round_replay_snapshot() -> Array:
 	return round_event_history.duplicate(true)
 
 func replay_event_digest(event: Dictionary) -> String:
-	var canonical := event.duplicate(true)
-	canonical.erase("digest")
+	# The event snapshot is already deep-copied at commit time. Filter the
+	# derived digest without copying the full payload a second time; the
+	# canonicalizer owns the single recursive copy needed for hashing.
+	var digest_input: Dictionary = {}
+	for key in event.keys():
+		if str(key) != "digest":
+			digest_input[key] = event[key]
 	var context := HashingContext.new()
 	if context.start(HashingContext.HASH_SHA256) != OK:
 		return ""
-	context.update(JSON.stringify(canonicalize_replay_value(canonical)).to_utf8_buffer())
+	context.update(JSON.stringify(canonicalize_replay_value(digest_input)).to_utf8_buffer())
 	return context.finish().hex_encode()
 
 func canonicalize_replay_value(value):
@@ -96,11 +107,46 @@ func digest_is_missing_or_invalid(event: Dictionary) -> bool:
 	return digest == "" or digest != replay_event_digest(event)
 
 func round_replay_digest(events: Array = []) -> String:
+	if events.is_empty():
+		ensure_round_replay_view_cache()
+		return str(replay_view_cache.get("digest", ""))
 	var source := events if not events.is_empty() else round_event_history
 	if source.is_empty():
 		return ""
 	var last = source.back()
 	return str(last.get("digest", "")) if typeof(last) == TYPE_DICTIONARY else ""
+
+func ensure_round_replay_view_cache() -> void:
+	var cache_key := "%s|%d|%d" % [active_round_id, round_event_sequence, round_event_history.size()]
+	if replay_view_cache_round_id == cache_key and replay_view_cache_sequence == round_event_sequence and not replay_view_cache.is_empty():
+		return
+	var events := round_event_history.duplicate(true)
+	var digest := ""
+	if not events.is_empty():
+		digest = round_replay_digest(events)
+	var valid := validate_round_replay(events)
+	var payload := {
+		"schema": REPLAY_SCHEMA_VERSION,
+		"app_version": APP_VERSION,
+		"round_id": active_round_id,
+		"seed": offline_hand_seed,
+		"rule_variant": active_rule_variant(),
+		"events": events,
+		"digest": digest,
+		"valid": valid,
+		"event_counts": replay_event_counts(events),
+	}
+	var share_code := ""
+	var bytes := JSON.stringify(payload).to_utf8_buffer()
+	if valid and not bytes.is_empty() and bytes.size() <= REPLAY_SHARE_MAX_BYTES:
+		share_code = Marshalls.raw_to_base64(bytes)
+	replay_view_cache_round_id = cache_key
+	replay_view_cache_sequence = round_event_sequence
+	replay_view_cache = {"digest": digest, "valid": valid, "share_code": share_code, "payload": payload}
+
+func round_replay_view_state() -> Dictionary:
+	ensure_round_replay_view_cache()
+	return replay_view_cache
 
 func replay_event_counts(events: Array = []) -> Dictionary:
 	var counts: Dictionary = {}
@@ -114,35 +160,25 @@ func replay_event_counts(events: Array = []) -> Dictionary:
 	return counts
 
 func export_round_replay_payload() -> Dictionary:
-	var events := round_replay_snapshot()
-	return {
-		"schema": REPLAY_SCHEMA_VERSION,
-		"app_version": APP_VERSION,
-		"round_id": active_round_id,
-		"seed": offline_hand_seed,
-		"rule_variant": active_rule_variant(),
-		"events": events,
-		"digest": round_replay_digest(events),
-		"valid": validate_round_replay(events),
-		"event_counts": replay_event_counts(events),
-	}
+	ensure_round_replay_view_cache()
+	return (replay_view_cache.get("payload", {}) as Dictionary).duplicate(true)
 
 func round_replay_share_code() -> String:
-	var bytes := JSON.stringify(export_round_replay_payload()).to_utf8_buffer()
-	if bytes.size() <= 0 or bytes.size() > REPLAY_SHARE_MAX_BYTES:
-		return ""
-	return Marshalls.raw_to_base64(bytes)
+	ensure_round_replay_view_cache()
+	return str(replay_view_cache.get("share_code", ""))
 
 func round_replay_status_text() -> String:
-	var digest := round_replay_digest()
+	var view := round_replay_view_state()
+	var digest := str(view.get("digest", ""))
 	if digest == "":
 		return "本局暂无回放记录"
-	if not validate_round_replay(round_event_history):
+	if not bool(view.get("valid", false)):
 		return "回放校验失败 · 请勿分享"
 	return "回放校验通过 · %s" % digest.left(10).to_upper()
 
 func copy_round_replay_share_code() -> bool:
-	if round_replay_digest() == "" or not validate_round_replay(round_event_history):
+	var view := round_replay_view_state()
+	if str(view.get("digest", "")) == "" or not bool(view.get("valid", false)):
 		show_toast("本局回放校验失败 · 暂不可分享")
 		return false
 	var code := round_replay_share_code()

@@ -274,6 +274,10 @@ func sync_achievements_scroll_thumb(content_scroll: ScrollContainer, thumb: Cont
 	var page := maxf(0.0, scrollbar.page)
 	var max_value := maxf(page, scrollbar.max_value)
 	var scroll_range := maxf(0.0, scrollbar.max_value - page)
+	var thumb_sync_token := "%s|%s|%s|%s" % [scrollbar.value, page, max_value, thumb.get_parent().size]
+	if str(thumb.get_meta("achievements_scroll_sync_token", "")) == thumb_sync_token:
+		return
+	thumb.set_meta("achievements_scroll_sync_token", thumb_sync_token)
 	var track_top := 0.055
 	var track_height := 0.845
 	var visible_ratio := 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
@@ -302,6 +306,10 @@ func sync_achievements_scroll_status(content_scroll: ScrollContainer, status_lab
 	if scrollbar == null or content_list == null:
 		return
 	var total := maxi(0, total_count)
+	var status_sync_token := "%s|%s|%s|%d|%s|%s|%d" % [scrollbar.value, scrollbar.page, scrollbar.max_value, total, content_scroll.size, content_list.size, achievement_focused_index]
+	if str(status_label.get_meta("achievements_scroll_status_token", "")) == status_sync_token:
+		return
+	status_label.set_meta("achievements_scroll_status_token", status_sync_token)
 	if total == 0:
 		status_label.text = "暂无成就记录"
 		set_ui_full_text(status_label, "暂无可浏览的成就记录", "成就浏览位置")
@@ -2369,6 +2377,10 @@ func sync_rules_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) ->
 	var page = maxf(0.0, scrollbar.page)
 	var max_value = maxf(page, scrollbar.max_value)
 	var scroll_range = maxf(0.0, scrollbar.max_value - page)
+	var sync_token := "%s|%s|%s|%s" % [scrollbar.value, page, scrollbar.max_value, thumb.get_parent().size]
+	if str(thumb.get_meta("rules_scroll_sync_token", "")) == sync_token:
+		return
+	thumb.set_meta("rules_scroll_sync_token", sync_token)
 	var track_top = 0.050
 	var track_height = 0.900
 	var visible_ratio = 1.0 if max_value <= 0.0 else clampf(page / max_value, 0.14, 1.0)
@@ -3412,6 +3424,10 @@ func sync_shop_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> 
 	if total_items <= 0:
 		var content := content_scroll.find_child("ShopItemsContent", true, false) as Control
 		total_items = content.get_child_count() if content != null else 0
+	var sync_token := "%s|%s|%s|%d|%s" % [scrollbar.value, page, scrollbar.max_value, total_items, content_scroll.size]
+	if str(thumb.get_meta("shop_scroll_sync_token", "")) == sync_token:
+		return
+	thumb.set_meta("shop_scroll_sync_token", sync_token)
 	var visible_items := total_items if total_items <= 0 else clampi(int(ceil(float(total_items) * visible_ratio)), 1, total_items)
 	var first_item := 1 if total_items <= 0 else clampi(int(floor(progress * float(maxi(0, total_items - visible_items)))) + 1, 1, total_items)
 	var last_item := total_items if total_items <= 0 else mini(total_items, first_item + visible_items - 1)
@@ -3607,6 +3623,10 @@ func sync_stats_scroll_status(content_scroll: ScrollContainer, status_label: Lab
 	for child in content.get_children():
 		if child is Control and (child as Control).visible:
 			total += 1
+	var sync_token := "%s|%s|%s|%d|%s|%s" % [scrollbar.value, scrollbar.page, scrollbar.max_value, total, content_scroll.size, content.size]
+	if str(status_label.get_meta("stats_scroll_sync_token", "")) == sync_token:
+		return
+	status_label.set_meta("stats_scroll_sync_token", sync_token)
 	if total <= 0:
 		set_ui_full_text(status_label, "暂无统计行", "统计滚动位置：暂无统计数据")
 		status_label.text = "暂无统计行"
@@ -4120,6 +4140,18 @@ func refresh_telemetry_data_sheet() -> void:
 	var sheet := root_layer.find_child("TelemetryDataSheet", true, false) as Control
 	if sheet == null:
 		return
+	var telemetry_sync_token := "%d|%d|%d|%d|%d|%s|%s" % [
+		telemetry_mutation_revision,
+		1 if telemetry_mutation_in_flight else 0,
+		1 if telemetry_consent else 0,
+		telemetry_outbox.size(),
+		maxi(0, int(ceil(float(telemetry_clear_confirm_deadline_msec - Time.get_ticks_msec()) / 100.0))) if telemetry_clear_confirming else 0,
+		telemetry_export_status,
+		telemetry_last_action,
+	]
+	if str(sheet.get_meta("telemetry_sync_token", "")) == telemetry_sync_token:
+		return
+	sheet.set_meta("telemetry_sync_token", telemetry_sync_token)
 	var status := sheet.find_child("TelemetryDataStatus", true, false) as Label
 	if status != null:
 		var status_text := "处理中 · 正在提交隐私记录设置" if telemetry_mutation_in_flight else telemetry_consent_status_text()
@@ -5648,6 +5680,10 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	if content_scroll == null or status_label == null or not is_current_ui_control(content_scroll) or not is_current_ui_control(status_label):
 		return
 	if bool(content_scroll.get_meta("diagnostic_measurement_pending", false)):
+		var pending_token := "pending|%s|%s" % [content_scroll.size, status_label.size]
+		if str(status_label.get_meta("diagnostic_scroll_sync_token", "")) == pending_token:
+			return
+		status_label.set_meta("diagnostic_scroll_sync_token", pending_token)
 		set_dynamic_label_text(status_label, "诊断内容 · 正在测量可见范围", "诊断报告布局尚未完成测量；可见行范围将在下一布局帧显示")
 		status_label.set_meta("diagnostic_status_pending", true)
 		return
@@ -5656,6 +5692,10 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	if scrollbar == null or content_list == null:
 		return
 	var total := maxi(0, total_count)
+	var sync_token := "%s|%s|%s|%d|%s|%s" % [scrollbar.value, scrollbar.page, scrollbar.max_value, total, content_scroll.size, content_list.size]
+	if str(status_label.get_meta("diagnostic_scroll_sync_token", "")) == sync_token:
+		return
+	status_label.set_meta("diagnostic_scroll_sync_token", sync_token)
 	if total == 0:
 		set_dynamic_label_text(status_label, "诊断内容 0-0 / 0 · 无内容", "当前诊断报告没有内容")
 		return
@@ -7632,6 +7672,22 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 			button_tooltip = "确认清空统计与离线记录（5秒内有效）" if reset_progress_confirming else "进入二次确认，将清空统计与离线记录"
 		_:
 			return false
+	var settings_state_token := "%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%d" % [
+			setting_key,
+			button_text,
+			full_status,
+			1 if music_enabled else 0,
+			1 if sfx_enabled else 0,
+			1 if tts_enabled else 0,
+			1 if fast_mode_enabled else 0,
+			1 if fx_enabled else 0,
+			1 if ai_assist_enabled else 0,
+			graphics_quality,
+			1 if reset_progress_confirming else 0,
+		]
+	if str(button.get_meta("settings_state_token", "")) == settings_state_token:
+		return true
+	button.set_meta("settings_state_token", settings_state_token)
 
 	if is_toggle:
 		button_text = "已开" if toggle_enabled else "已关"

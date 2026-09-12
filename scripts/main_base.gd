@@ -19,6 +19,7 @@ const ONLINE_CHAT_COOLDOWN_MSEC := 650
 const ONLINE_VOICE_PACKET_MAX_BYTES := 16384
 const ONLINE_VOICE_MIN_SAMPLE_RATE := 8000
 const ONLINE_VOICE_MAX_SAMPLE_RATE := 48000
+const ONLINE_REMOTE_VOICE_PLAYER_LIMIT := 4
 const ONLINE_SEEN_EVENT_LIMIT := 128
 const ONLINE_PROTOCOL_VERSION := 1
 const CHAT_MESSAGE_MAX_LENGTH := 64
@@ -476,6 +477,9 @@ const RESULT_TRANSACTION_HISTORY_LIMIT := 64
 const STATS_SCHEMA_VERSION := 3
 const REPLAY_SCHEMA_VERSION := 2
 const REPLAY_SHARE_MAX_BYTES := 96 * 1024
+const HISTORY_SAVE_DEBOUNCE_MSEC := 250
+const ECONOMY_PATH := "user://economy.cfg"
+const TILE_ASSET_BATCH_SIZE := 8
 const ONLINE_HEARTBEAT_INTERVAL_MSEC := 10000
 const ONLINE_RECONNECT_BASE_DELAY_MSEC := 800
 const ONLINE_RECONNECT_MAX_DELAY_MSEC := 12000
@@ -490,8 +494,12 @@ const ITEM_TYPES := {
 var tile_textures: Dictionary = {}
 var tile_decal_textures: Dictionary = {}
 var missing_tile_texture_codes: Dictionary = {}
+var shanten_hand_counts_cache: Dictionary = {}
+var shanten_hand_counts_cache_order: Array[String] = []
 var tile_assets_ready := false
 var tile_assets_validation_complete := false
+var tile_assets_load_in_progress := false
+var tile_asset_load_cursor := 0
 var tile_asset_errors: Array = []
 var icon_textures: Dictionary = {}
 var animation_specs: Dictionary = {}
@@ -520,6 +528,7 @@ const SHADER_PATHS := {
 }
 var audio_streams: Dictionary = {}
 var voice_streams: Dictionary = {}
+var voice_assets_loaded := false
 var remote_voice_stream_cache: Dictionary = {}
 var remote_voice_stream_cache_order: Array[String] = []
 const ACTION_SFX_NAMES := {"peng": true, "gang": true, "win": true}
@@ -673,6 +682,9 @@ var task_progress = {}  # 任务进度
 var task_claimed = {}  # 当日任务奖励是否已领取
 var last_task_reset_date = ""  # 上次任务重置日期
 var round_history: Array = []  # 最近对局战报，最多保留 ROUND_HISTORY_LIMIT 条
+var round_history_id_index: Dictionary = {}
+var round_history_save_pending := false
+var round_history_save_due_msec := 0
 var replay_archive: Array = []  # 可检索、可收藏的本地回放归档
 var replay_search_query := ""
 var replay_archive_generation := 0
@@ -688,6 +700,9 @@ var replay_import_input: LineEdit
 var replay_timeline_selected_index := -1
 var round_event_sequence := 0
 var active_round_id := ""
+var replay_view_cache_round_id := ""
+var replay_view_cache_sequence := -1
+var replay_view_cache: Dictionary = {}
 var telemetry_consent := false
 var telemetry_consent_decided := false
 var telemetry_outbox: Array = []
@@ -710,6 +725,11 @@ var offline_progress_loaded_state := false
 var offline_progress_dirty := false
 var offline_progress_last_save_msec := 0
 var offline_progress_last_save_ok := false
+var offline_progress_state_revision := 0
+var offline_progress_snapshot_key := ""
+var offline_progress_snapshot: Dictionary = {}
+var offline_progress_snapshot_validation_key := ""
+var offline_progress_snapshot_validation_error := ""
 # 道具系统
 var inventory = {}  # 道具库存 {"swap_card": 2, "peek_card": 1, ...}
 # 虚拟货币
@@ -908,16 +928,24 @@ var online_resume_pending := false
 var online_resume_join_sent := false
 var online_seen_message_ids: Dictionary = {}
 var online_seen_voice_sequences: Dictionary = {}
+var remote_voice_players: Array[AudioStreamPlayer] = []
 var online_last_chat_sent_msec := 0
 var online_last_receive_msec := 0
 var online_last_heartbeat_msec := 0
 var online_reconnect_attempts := 0
 var online_next_reconnect_msec := 0
+var online_recovery_controls_root_id := 0
+var online_recovery_state_label: Label = null
+var online_recovery_button: Button = null
+var online_recovery_live_token := ""
+var online_recovery_focus_root_id := 0
+var online_recovery_focus_pending := false
 var online_last_malformed_notice_msec := 0
 var online_messages_received := 0
 var online_messages_rejected := 0
 var online_last_snapshot_fingerprint := ""
 var online_last_room_snapshot_fingerprint := ""
+var online_rule_code_set_cache: Dictionary = {}
 var online_lobby_render_revision := 0
 var online_last_lobby_render_revision := -1
 var online_lobby_action_controls: Dictionary = {}
@@ -991,6 +1019,8 @@ var retained_battle_hand_signature := ""
 var retained_battle_hand_state_signature := ""
 var retained_battle_center: Control = null
 var retained_battle_center_signature := ""
+var retained_battle_atmosphere: Control = null
+var retained_battle_atmosphere_signature := ""
 var seat_threat_fingerprint := ""
 var seat_threat_root_generation := -1
 var seat_threat_revisions: Dictionary = {}
@@ -1015,6 +1045,11 @@ var game_render_delay_timer: Timer = null
 var game_render_delay_mode := ""
 var game_render_delay_page_generation := -1
 var game_render_delay_request_revision := -1
+var fx_generation := 0
+var ai_shape_metrics_cache: Dictionary = {}
+var ai_shape_metrics_cache_order: Array[String] = []
+var economy_load_attempted := false
+var economy_file_loaded := false
 
 # 牌面动画系统变量 / Tile Animation System Variables
 var tile_flip_animations: Dictionary = {}  # 进行中的翻转动画
@@ -3825,6 +3860,9 @@ func game_stats_insight() -> Dictionary:
 func load_round_history() -> void:
 	var config = ConfigFile.new()
 	round_history = []
+	round_history_id_index.clear()
+	round_history_save_pending = false
+	round_history_save_due_msec = 0
 	if config.load(HISTORY_PATH) != OK:
 		return
 	var stored = config.get_value("history", "entries", [])
@@ -3832,11 +3870,23 @@ func load_round_history() -> void:
 		return
 	for entry in (stored as Array):
 		if typeof(entry) == TYPE_DICTIONARY:
-			round_history.append((entry as Dictionary).duplicate(true))
+			var normalized := (entry as Dictionary).duplicate(true)
+			var round_id := str(normalized.get("round_id", normalized.get("roundId", ""))).strip_edges()
+			if round_id != "" and round_history_id_index.has(round_id):
+				continue
+			round_history.append(normalized)
+			if round_id != "":
+				round_history_id_index[round_id] = int(normalized.get("saved_at", 0))
 	while round_history.size() > ROUND_HISTORY_LIMIT:
-		round_history.pop_front()
+		var removed = round_history.pop_front()
+		if typeof(removed) == TYPE_DICTIONARY:
+			var removed_id := str((removed as Dictionary).get("round_id", (removed as Dictionary).get("roundId", ""))).strip_edges()
+			if removed_id != "":
+				round_history_id_index.erase(removed_id)
 
 func save_round_history() -> void:
+	round_history_save_pending = false
+	round_history_save_due_msec = 0
 	var config = ConfigFile.new()
 	config.set_value("history", "entries", round_history.slice(maxi(0, round_history.size() - ROUND_HISTORY_LIMIT)))
 	config.save(HISTORY_PATH)
@@ -3847,15 +3897,21 @@ func record_round_history(entry: Dictionary) -> void:
 	var normalized := entry.duplicate(true)
 	var round_id := str(normalized.get("round_id", normalized.get("roundId", ""))).strip_edges()
 	if round_id != "":
-		for existing in round_history:
-			if typeof(existing) == TYPE_DICTIONARY and str(existing.get("round_id", existing.get("roundId", ""))) == round_id:
-				return
+		if round_history_id_index.has(round_id):
+			return
 		normalized["round_id"] = round_id
 	normalized["saved_at"] = int(Time.get_unix_time_from_system())
 	round_history.append(normalized)
+	if round_id != "":
+		round_history_id_index[round_id] = int(normalized.get("saved_at", 0))
 	while round_history.size() > ROUND_HISTORY_LIMIT:
-		round_history.pop_front()
-	save_round_history()
+		var removed = round_history.pop_front()
+		if typeof(removed) == TYPE_DICTIONARY:
+			var removed_id := str((removed as Dictionary).get("round_id", (removed as Dictionary).get("roundId", ""))).strip_edges()
+			if removed_id != "":
+				round_history_id_index.erase(removed_id)
+	round_history_save_pending = true
+	round_history_save_due_msec = Time.get_ticks_msec() + HISTORY_SAVE_DEBOUNCE_MSEC
 
 func latest_round_history(limit: int = 5) -> Array:
 	var count := clampi(limit, 0, ROUND_HISTORY_LIMIT)
@@ -4265,15 +4321,7 @@ func task_progress_text(task_id: String) -> String:
 # ============================================================
 
 func load_inventory() -> void:
-	var config = ConfigFile.new()
-	var load_error := config.load(INVENTORY_PATH)
-	if load_error == OK:
-		var inv = config.get_value("inventory", "items", {})
-		inventory = sanitize_inventory(inv)
-	else:
-		inventory = {}
-	if load_error == OK:
-		save_inventory()
+	load_economy_state()
 
 func sanitize_inventory(value) -> Dictionary:
 	var result: Dictionary = {}
@@ -4286,10 +4334,7 @@ func sanitize_inventory(value) -> Dictionary:
 	return result
 
 func save_inventory() -> void:
-	inventory = sanitize_inventory(inventory)
-	var config = ConfigFile.new()
-	config.set_value("inventory", "items", inventory)
-	config.save(INVENTORY_PATH)
+	save_economy_state()
 
 func add_item(item_id: String, count: int = 1) -> bool:
 	if not ITEM_TYPES.has(item_id) or count <= 0:
@@ -4311,24 +4356,52 @@ func item_display_name(item_id: String) -> String:
 # ============================================================
 
 func load_currency() -> void:
-	var config = ConfigFile.new()
-	if config.load(CURRENCY_PATH) == OK:
-		currency = {
-			"coins": maxi(0, int(config.get_value("currency", "coins", 0))),
-			"gems": maxi(0, int(config.get_value("currency", "gems", 0))),
-		}
-		save_currency()
-	else:
-		currency = {"coins": 500, "gems": 10}  # 初始货币
-		save_currency()
+	load_economy_state()
 
 func save_currency() -> void:
+	save_economy_state()
+
+func load_economy_state() -> void:
+	if economy_load_attempted:
+		return
+	economy_load_attempted = true
+	var shared_config := ConfigFile.new()
+	if shared_config.load(ECONOMY_PATH) == OK:
+		inventory = sanitize_inventory(shared_config.get_value("inventory", "items", {}))
+		currency = {
+			"coins": maxi(0, int(shared_config.get_value("currency", "coins", 0))),
+			"gems": maxi(0, int(shared_config.get_value("currency", "gems", 0))),
+		}
+		economy_file_loaded = true
+		return
+	# Migrate the two legacy files in one read pass, then consolidate future
+	# writes into the shared economy file.
+	var inventory_config := ConfigFile.new()
+	if inventory_config.load(INVENTORY_PATH) == OK:
+		inventory = sanitize_inventory(inventory_config.get_value("inventory", "items", {}))
+	else:
+		inventory = {}
+	var currency_config := ConfigFile.new()
+	if currency_config.load(CURRENCY_PATH) == OK:
+		currency = {
+			"coins": maxi(0, int(currency_config.get_value("currency", "coins", 0))),
+			"gems": maxi(0, int(currency_config.get_value("currency", "gems", 0))),
+		}
+	else:
+		currency = {"coins": 500, "gems": 10}  # 初始货币
+	save_economy_state()
+
+func save_economy_state() -> void:
+	economy_load_attempted = true
+	inventory = sanitize_inventory(inventory)
 	currency["coins"] = maxi(0, int(currency.get("coins", 0)))
 	currency["gems"] = maxi(0, int(currency.get("gems", 0)))
-	var config = ConfigFile.new()
+	var config := ConfigFile.new()
+	config.set_value("economy", "schema_version", 1)
+	config.set_value("inventory", "items", inventory)
 	config.set_value("currency", "coins", currency.get("coins", 0))
 	config.set_value("currency", "gems", currency.get("gems", 0))
-	config.save(CURRENCY_PATH)
+	economy_file_loaded = config.save(ECONOMY_PATH) == OK
 
 func can_afford_gems(amount: int) -> bool:
 	return amount > 0 and int(currency.get("gems", 0)) >= amount
@@ -4345,11 +4418,10 @@ func record_game_result(won: bool, score: int, hands_played: int, result_key: St
 	if transaction_key != "":
 		if applied_result_transactions.has(transaction_key):
 			return
-		for history_entry in round_history:
-			if typeof(history_entry) == TYPE_DICTIONARY and str(history_entry.get("round_id", "")) == transaction_key:
-				applied_result_transactions[transaction_key] = int(history_entry.get("saved_at", Time.get_unix_time_from_system()))
-				touch_cache_key(applied_result_transaction_order, transaction_key)
-				return
+		if round_history_id_index.has(transaction_key):
+			applied_result_transactions[transaction_key] = int(round_history_id_index.get(transaction_key, Time.get_unix_time_from_system()))
+			touch_cache_key(applied_result_transaction_order, transaction_key)
+			return
 		applied_result_transactions[transaction_key] = int(Time.get_unix_time_from_system())
 		touch_cache_key(applied_result_transaction_order, transaction_key)
 		while applied_result_transaction_order.size() > RESULT_TRANSACTION_HISTORY_LIMIT:
@@ -4387,13 +4459,17 @@ func grant_round_coins(won: bool, score: int) -> int:
 	if doubled:
 		reward *= 2
 		inventory["double_coins"] = int(inventory.get("double_coins", 0)) - 1
-		save_inventory()
 	currency["coins"] = maxi(0, int(currency.get("coins", 0)) + reward)
-	save_currency()
+	# Inventory consumption and currency reward are one economy transaction;
+	# persist both sections together so a completed hand performs one write.
+	save_economy_state()
 	call("show_toast", "本局奖励：+%d金币%s" % [reward, "（双倍卡已消耗）" if doubled else ""], 2200)
 	return reward
 
 func offline_progress_state_payload() -> Dictionary:
+	var snapshot_key := str(offline_progress_state_revision)
+	if offline_progress_snapshot_key == snapshot_key and not offline_progress_snapshot.is_empty():
+		return offline_progress_snapshot.duplicate(true)
 	var snapshot_players: Array = []
 	for i in range(mini(players.size(), 4)):
 		var source: Dictionary = players[i] if typeof(players[i]) == TYPE_DICTIONARY else {}
@@ -4411,8 +4487,9 @@ func offline_progress_state_payload() -> Dictionary:
 	if pending.has("deadline_msec"):
 		pending["remaining_msec"] = maxi(0, int(pending.get("deadline_msec", 0)) - Time.get_ticks_msec())
 		pending.erase("deadline_msec")
-	return {
+	var snapshot := {
 		"schema_version": OFFLINE_PROGRESS_SCHEMA_VERSION,
+		"state_revision": offline_progress_state_revision,
 		"saved_at": int(Time.get_unix_time_from_system()),
 		"dealer_seat": dealer_seat,
 		"hand_number": offline_hand_number,
@@ -4446,9 +4523,25 @@ func offline_progress_state_payload() -> Dictionary:
 		"round_event_sequence": round_event_sequence,
 		"ai_profile_seat_map": ai_profile_seat_map.duplicate(),
 	}
+	offline_progress_snapshot_key = snapshot_key
+	offline_progress_snapshot = snapshot
+	offline_progress_snapshot_validation_key = ""
+	offline_progress_snapshot_validation_error = ""
+	return snapshot.duplicate(true)
 
 
 func offline_progress_state_validation_error(state: Dictionary) -> String:
+	var validation_key := str(state.get("state_revision", ""))
+	if validation_key != "" and offline_progress_snapshot_validation_key == validation_key:
+		return offline_progress_snapshot_validation_error
+	var validation_error := _offline_progress_state_validation_error_uncached(state)
+	if validation_key != "":
+		offline_progress_snapshot_validation_key = validation_key
+		offline_progress_snapshot_validation_error = validation_error
+	return validation_error
+
+
+func _offline_progress_state_validation_error_uncached(state: Dictionary) -> String:
 	if int(state.get("schema_version", 0)) != OFFLINE_PROGRESS_SCHEMA_VERSION:
 		return "本地进度版本不兼容。"
 	var loaded_dealer := int(state.get("dealer_seat", -1))
@@ -4520,6 +4613,11 @@ func restore_offline_progress_state(state: Dictionary) -> bool:
 	if validation_error != "":
 		set_status("本地进度无法恢复：%s" % validation_error)
 		return false
+	offline_progress_state_revision = maxi(offline_progress_state_revision + 1, int(state.get("state_revision", 0)))
+	offline_progress_snapshot_key = ""
+	offline_progress_snapshot.clear()
+	offline_progress_snapshot_validation_key = ""
+	offline_progress_snapshot_validation_error = ""
 	mode = "offline"
 	dealer_seat = int(state.get("dealer_seat", 0))
 	offline_hand_number = int(state.get("hand_number", 1))
@@ -4666,6 +4764,10 @@ func save_offline_progress(announce: bool = true) -> void:
 func mark_offline_progress_dirty() -> void:
 	if not offline_sim_quiet and mode == "offline":
 		offline_progress_dirty = true
+		offline_progress_state_revision += 1
+		offline_progress_snapshot_key = ""
+		offline_progress_snapshot_validation_key = ""
+	offline_progress_snapshot_validation_error = ""
 
 
 func flush_offline_progress_autosave(force: bool = false) -> void:
@@ -4694,6 +4796,11 @@ func reset_offline_progress() -> void:
 	offline_progress_loaded_state = false
 	offline_progress_dirty = false
 	offline_progress_last_save_msec = 0
+	offline_progress_state_revision += 1
+	offline_progress_snapshot_key = ""
+	offline_progress_snapshot.clear()
+	offline_progress_snapshot_validation_key = ""
+	offline_progress_snapshot_validation_error = ""
 	set_status("进度已重置")
 
 # ===== Shared startup assets and tile metadata =====
@@ -4822,6 +4929,8 @@ func load_assets() -> void:
 	# re-reading every path when an audio wake or page rebuild calls this helper
 	# again; an explicit tile/asset reload can clear these maps first.
 	if bool(get_meta("assets_visuals_loaded", false)) and (ui_capture_mode or bool(get_meta("assets_audio_loaded", false))):
+		if not ui_capture_mode and not voice_assets_loaded:
+			call_deferred("load_voice_assets")
 		return
 	tile_back = load_illustration_texture("res://assets/tiles/tile_back.png")
 	felt_texture = tile_back
@@ -4882,25 +4991,31 @@ func load_assets() -> void:
 		call_deferred("load_voice_assets")
 
 func _load_tile_textures() -> void:
-	if tile_assets_validation_complete:
+	if tile_assets_validation_complete or tile_assets_load_in_progress and tile_asset_load_cursor >= TILE_CODES.size() + FLOWER_CODES.size():
 		return
-	tile_textures.clear()
-	tile_decal_textures.clear()
-	tile_asset_errors.clear()
-	for code in TILE_CODES:
-		var code_key := str(code)
+	if not tile_assets_load_in_progress:
+		tile_assets_load_in_progress = true
+		tile_asset_load_cursor = 0
+		tile_textures.clear()
+		tile_decal_textures.clear()
+		missing_tile_texture_codes.clear()
+		tile_asset_errors.clear()
+	var total := TILE_CODES.size() + FLOWER_CODES.size()
+	var batch_end := mini(total, tile_asset_load_cursor + TILE_ASSET_BATCH_SIZE)
+	while tile_asset_load_cursor < batch_end:
+		var code_key := str(TILE_CODES[tile_asset_load_cursor]) if tile_asset_load_cursor < TILE_CODES.size() else str(FLOWER_CODES[tile_asset_load_cursor - TILE_CODES.size()])
 		var face_path := tile_path(code_key)
 		var face_texture := load_tile_texture(face_path)
 		tile_textures[code_key] = face_texture
 		tile_decal_textures[code_key] = face_texture
+		if face_texture == null:
+			missing_tile_texture_codes[code_key] = true
 		_register_tile_asset_error(code_key, face_path, face_texture)
-	for code in FLOWER_CODES:
-		var code_key := str(code)
-		var face_path := tile_path(code_key)
-		var face_texture := load_tile_texture(face_path)
-		tile_textures[code_key] = face_texture
-		tile_decal_textures[code_key] = face_texture
-		_register_tile_asset_error(code_key, face_path, face_texture)
+		tile_asset_load_cursor += 1
+	if tile_asset_load_cursor < total:
+		call_deferred("_load_tile_textures")
+		return
+	tile_assets_load_in_progress = false
 	tile_assets_validation_complete = true
 	tile_assets_ready = tile_asset_errors.is_empty()
 	if tile_assets_ready:
@@ -4930,7 +5045,10 @@ func _register_tile_asset_error(code: String, path: String, texture: Texture2D) 
 
 func ensure_tile_assets_ready(show_diagnostic: bool = true) -> bool:
 	if not tile_assets_validation_complete:
-		_load_tile_textures()
+		if not tile_assets_load_in_progress:
+			_load_tile_textures()
+		if not tile_assets_validation_complete:
+			return false
 	if tile_assets_ready:
 		return true
 	if show_diagnostic:
@@ -4990,14 +5108,19 @@ func verify_audio_assets() -> void:
 	print("麻将牌纹理加载完成")
 
 func load_voice_assets() -> void:
+	if voice_assets_loaded:
+		return
 	voice_streams.clear()
 	for code in TILE_CODES + FLOWER_CODES:
 		load_voice_stream(voice_clip_key_for_tile(str(code)))
 	for key in ["action_chi", "action_peng", "action_gang", "action_hidden_gang", "action_added_gang", "action_hu", "action_zimo"]:
 		load_voice_stream(key)
+	voice_assets_loaded = true
 
 func load_voice_stream(key: String) -> void:
 	if key == "":
+		return
+	if voice_streams.has(key):
 		return
 	var path = "res://assets/audio/voice/%s.mp3" % key
 	if not ResourceLoader.exists(path):

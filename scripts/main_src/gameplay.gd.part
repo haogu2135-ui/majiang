@@ -11,6 +11,10 @@ func init_ui_enhancements() -> void:
 
 func _finish_startup() -> void:
 	if not ensure_tile_assets_ready():
+		# Tile faces are warmed in bounded idle batches. Keep startup pending until
+		# validation completes instead of forcing the remaining loads into one frame.
+		if not tile_assets_validation_complete:
+			call_deferred("_finish_startup")
 		return
 	if OS.get_cmdline_user_args().has("--offline-preview"):
 		start_offline(true)
@@ -143,6 +147,7 @@ func request_game_render(priority: int = 0, dirty_flag: int = GAME_RENDER_DIRTY_
 	game_render_request_revision += 1
 	if (dirty_flag & GAME_RENDER_DIRTY_STATE) != 0:
 		ai_state_revision += 1
+		mark_offline_progress_dirty()
 	game_render_dirty_flags |= dirty_flag
 	game_render_priority = maxi(game_render_priority, priority)
 	if game_render_queued:
@@ -182,7 +187,7 @@ func flush_game_render() -> void:
 			root_layer.set_meta("last_render_lane", "pending_only")
 			root_layer.set_meta("last_render_dirty_flags", dirty_flags)
 		else:
-			render_game()
+			render_game((dirty_flags & GAME_RENDER_DIRTY_STATE) != 0)
 	if render_priority >= 2 and (dirty_flags & GAME_RENDER_DIRTY_PENDING) != 0:
 		# Keep the priority contract inspectable on the next rebuilt root without
 		# forcing an additional render in the same frame.
@@ -193,22 +198,30 @@ func flush_game_render() -> void:
 func refresh_battle_hud_lane() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var viewport_size := effective_viewport_size()
+	var compact_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
+	var wall_count := get_wall_count()
+	var wall_total := display_wall_total()
+	var wall_state_text_value := wall_state_text(wall_count)
+	var last_discard := get_last_discard()
 	var status := root_layer.find_child("TopHudStatus", true, false) as Label
 	if status != null:
-		set_dynamic_label_text(status, top_hud_short_status_text(effective_viewport_size().x <= 960.0 or effective_viewport_size().y <= 560.0), top_hud_status_tooltip_text())
+		set_dynamic_label_text(status, top_hud_short_status_text(compact_hud), top_hud_status_tooltip_text())
 	var wall := root_layer.find_child("TopHudWallText", true, false) as Label
 	var wall_state := root_layer.find_child("TopHudWallState", true, false) as Label
-	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [get_wall_count(), display_wall_total(), wall_state_text(), tile_label(get_last_discard()) if get_last_discard() != "" else "无"]
+	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, tile_label(last_discard) if last_discard != "" else "无"]
 	if wall != null:
-		set_dynamic_label_text(wall, "余牌 %d/%d" % [get_wall_count(), display_wall_total()], wall_detail)
-		wall.set_meta("wall_count", get_wall_count())
-		wall.set_meta("wall_total", display_wall_total())
+		set_dynamic_label_text(wall, "余牌 %d/%d" % [wall_count, wall_total], wall_detail)
+		wall.set_meta("wall_count", wall_count)
+		wall.set_meta("wall_total", wall_total)
 	if wall_state != null:
-		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text().replace("牌墙", ""), tile_label(get_last_discard()) if get_last_discard() != "" else "无"], wall_detail)
+		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), tile_label(last_discard) if last_discard != "" else "无"], wall_detail)
 	var center_count := root_layer.find_child("CenterWallCount", true, false) as Label
 	if center_count != null:
-		center_count.text = "%d" % get_wall_count()
-		center_count.tooltip_text = "牌墙剩余 %d/%d 张" % [get_wall_count(), display_wall_total()]
+		var center_wall_token := "%d/%d" % [wall_count, wall_total]
+		if str(center_count.get_meta("wall_view_token", "")) != center_wall_token:
+			set_dynamic_label_text(center_count, "%d" % wall_count, "牌墙剩余 %d/%d 张" % [wall_count, wall_total])
+			center_count.set_meta("wall_view_token", center_wall_token)
 	root_layer.set_meta("hud_lane_refresh_count", int(root_layer.get_meta("hud_lane_refresh_count", 0)) + 1)
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
@@ -321,6 +334,39 @@ func retain_battle_center_for_render() -> void:
 	retained_battle_center_signature = center_signature
 	center.set_meta("retained_for_battle_render", true)
 
+func battle_atmosphere_identity_signature() -> String:
+	return "%s|%s|%s|%s|%d|%d" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		"fx" if fx_enabled_effective() else "quiet",
+		graphics_quality,
+		1 if ui_motion_enabled() else 0,
+	]
+
+func retain_battle_atmosphere_for_render() -> void:
+	if retained_battle_atmosphere != null and is_instance_valid(retained_battle_atmosphere):
+		retained_battle_atmosphere.queue_free()
+	retained_battle_atmosphere = null
+	retained_battle_atmosphere_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var atmosphere := root_layer.find_child("TableAtmosphereFrame", true, false) as Control
+	if atmosphere == null or not is_instance_valid(atmosphere) or atmosphere.is_queued_for_deletion():
+		return
+	var atmosphere_signature := str(atmosphere.get_meta("atmosphere_identity_signature", ""))
+	if atmosphere_signature == "" or atmosphere_signature != battle_atmosphere_identity_signature():
+		return
+	var atmosphere_parent := atmosphere.get_parent()
+	if atmosphere_parent == null:
+		return
+	atmosphere_parent.remove_child(atmosphere)
+	retained_battle_atmosphere = atmosphere
+	retained_battle_atmosphere_signature = atmosphere_signature
+	atmosphere.set_meta("retained_for_battle_render", true)
+
 func clear_screen() -> void:
 	ui_page_generation += 1
 	loading_screen_active = false
@@ -408,7 +454,7 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func release_retained_battle_views() -> void:
-	for retained in [retained_battle_hand_tray, retained_battle_center]:
+	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere]:
 		if retained != null and is_instance_valid(retained):
 			if retained.get_parent() != null:
 				retained.get_parent().remove_child(retained)
@@ -418,6 +464,8 @@ func release_retained_battle_views() -> void:
 	retained_battle_hand_state_signature = ""
 	retained_battle_center = null
 	retained_battle_center_signature = ""
+	retained_battle_atmosphere = null
+	retained_battle_atmosphere_signature = ""
 
 func start_offline(instant: bool = false) -> void:
 	if not ensure_tile_assets_ready():
@@ -641,17 +689,19 @@ func sort_player_hand(seat: int) -> void:
 	if int(offline_last_draw.get("seat", -1)) == seat and drawn_serial >= 0:
 		offline_last_draw["hand_index"] = serials.find(drawn_serial)
 
-func render_game() -> void:
+func render_game(state_changed: bool = false) -> void:
 	if offline_sim_quiet:
 		game_render_queued = false
 		return
-	mark_offline_progress_dirty()
+	if state_changed:
+		mark_offline_progress_dirty()
 	# r215: GPT chrome conversion
 	var render_start_time = Time.get_ticks_msec()
 	game_render_queued = false
 	last_game_render_msec = Time.get_ticks_msec()
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
+	retain_battle_atmosphere_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -1050,7 +1100,7 @@ func human_discard(index: int) -> void:
 		set_tutorial_checkpoint(TUTORIAL_STEP_RESPONSE, "已完成首次出牌")
 	elif tutorial_step == TUTORIAL_STEP_WIN:
 		complete_tutorial("已完成摸切与响应练习")
-	render_game()
+	render_game(true)
 	get_tree().process_frame.connect(Callable(self, "resolve_human_discard_after_frame").bind(tile), CONNECT_ONE_SHOT)
 
 func resolve_human_discard_after_frame(tile: String) -> void:
@@ -1138,7 +1188,7 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 			complete_tutorial("已完成响应并胡牌")
 		else:
 			set_tutorial_checkpoint(TUTORIAL_STEP_WIN, "已完成响应选择")
-	render_game()
+	render_game(true)
 
 func human_self_win() -> void:
 	if mode != "offline" or not can_self_discard() or not can_win_for_seat(0):
@@ -1191,7 +1241,7 @@ func human_concealed_gang(tile: String) -> void:
 	hand_keyboard_selection = -1
 	play_human_action_choice_confirmation_fx("concealed_gang", tile)
 	perform_concealed_gang(0, tile)
-	render_game()
+	render_game(true)
 
 func human_added_gang(tile: String) -> void:
 	if mode != "offline" or not can_self_discard():
@@ -1202,7 +1252,7 @@ func human_added_gang(tile: String) -> void:
 	hand_keyboard_selection = -1
 	play_human_action_choice_confirmation_fx("added_gang", tile)
 	perform_added_gang(0, tile)
-	render_game()
+	render_game(true)
 
 func enable_offline_all_bot_mode(enabled: bool = true, quiet: bool = true) -> void:
 	offline_all_bot_mode = enabled
@@ -2542,7 +2592,7 @@ func run_ai_until_human() -> void:
 						add_log("你摸到%s，可以自摸。" % tile_label(drawn))
 					else:
 						add_log("轮到你出牌。")
-					render_game()
+					render_game(true)
 	offline_ai_active = false
 
 func discard_tile_by_index(seat: int, index: int) -> String:
@@ -2641,7 +2691,7 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 				interactive_guide_active = true
 				interactive_guide_type = "claim"
 				set_tutorial_checkpoint(TUTORIAL_STEP_CLAIM, "已进入响应窗口")
-			render_game()
+			render_game(true)
 			return
 	resolve_ai_or_advance(from_seat, tile, ai_claim)
 	if tutorial_step == TUTORIAL_STEP_RESPONSE and offline_phase != "pending_claim":
@@ -2899,7 +2949,7 @@ func resolve_after_rob_gang_pass(gang_seat: int, tile: String, prepared_ai_claim
 		finish_offline_round(int(ai_claim.get("seat", -1)), tile, false, gang_seat, "rob_gang")
 	else:
 		complete_added_gang(gang_seat, tile)
-	render_game()
+	render_game(true)
 
 func finish_wall_draw() -> void:
 	if mode != "offline" or offline_phase == "ended":
@@ -2984,7 +3034,7 @@ func finish_wall_draw() -> void:
 	play_fx_win_burst_enhanced("荒庄", INK_WASH, "normal")
 	play_wall_draw_resolution_fx(dealer_seat)
 	save_offline_progress()
-	render_game()
+	render_game(true)
 
 
 func is_seat_tenpai_for_wall_draw(seat: int) -> bool:
@@ -3260,7 +3310,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 		archive_latest_round_history_entry()
 		telemetry_record_event("round_completed", {"rule_variant": active_rule_variant(), "result_kind": "win", "points_bucket": int(floor(float(points) / 100.0)) * 100, "fan_bucket": int(score_data.get("fan", 0))})
 	save_offline_progress()
-	render_game()
+	render_game(true)
 
 func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size():

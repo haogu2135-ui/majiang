@@ -120,6 +120,7 @@ func queue_free_runtime_node(node: Node) -> void:
 
 
 func shutdown_runtime_audio() -> void:
+	clear_remote_voice_players()
 	shutdown_android_tts()
 	stop_current_speech()
 	speech_queue_generation += 1
@@ -147,6 +148,7 @@ func shutdown_runtime_audio() -> void:
 	voice_capture_effect = null
 	audio_streams.clear()
 	voice_streams.clear()
+	voice_assets_loaded = false
 	remote_voice_stream_cache.clear()
 	remote_voice_stream_cache_order.clear()
 	bgm_player = null

@@ -923,7 +923,7 @@ func draw_actions(parent: Control) -> void:
 		if recovery_dock != null:
 			action_bar.z_index = max(20, recovery_dock.z_index + 1)
 		configure_ordered_focus_navigation(action_bar, [reconnect_button, lobby_button], "OnlineReconnectGameButton")
-		call_deferred("focus_named_control", "OnlineReconnectGameButton")
+		schedule_online_recovery_focus()
 		return
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
 		var unknown_retry := make_action_button("重试", Color(0.86, 0.48, 0.30), Callable(self, "reconnect_online_game"))
@@ -1030,7 +1030,8 @@ func draw_actions(parent: Control) -> void:
 
 	if mode == "offline":
 		if offline_phase == "ended":
-			var replay_code_available := round_replay_digest() != "" and validate_round_replay(round_event_history) and round_replay_share_code() != ""
+			var replay_view := round_replay_view_state()
+			var replay_code_available := str(replay_view.get("digest", "")) != "" and bool(replay_view.get("valid", false)) and str(replay_view.get("share_code", "")) != ""
 			# The compact action lane cannot fit the full five-character CTA beside
 			# the other settlement actions. Keep a specific three-character label on
 			# narrow screens; the tooltip retains the complete copy instruction.
@@ -2130,6 +2131,7 @@ func draw_center(parent: Control) -> void:
 	var wall_text = make_label(center, "%d" % center_wall_count, 12 if compact_center else (19 if center_wall_low else 16), Color(0.86, 0.72, 0.46, 0.78 if center_wall_low else 0.36), true)
 	wall_text.name = "CenterWallCount"
 	wall_text.set_meta("layout_role", "center_wall_count")
+	wall_text.set_meta("wall_view_token", "%d/%d" % [center_wall_count, display_wall_total()])
 	apply_rect(wall_text, rect_full(0.33, 0.350, 0.67, 0.490) if compact_center else CENTER_WALL_COUNT_RECT)
 
 	# 上张牌
@@ -12018,7 +12020,8 @@ func draw_hand(parent: Control) -> void:
 	retained_battle_hand_signature = ""
 	retained_battle_hand_state_signature = ""
 	last_hand_render_state_signature = hand_state_signature
-	var compact_hand_art := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
+	var hand_viewport_size := effective_viewport_size()
+	var compact_hand_art := hand_viewport_size.y <= 560.0 or hand_viewport_size.x <= 1100.0
 	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.018, 0.026, 0.024, 0.97), "ui_dark_scrim", 0.20)
 	tray.name = "HandTray"
 	tray.set_meta("bottom_gutter_px", 8.0)
@@ -18257,6 +18260,10 @@ func sync_settings_large_text_scroll_status(settings_scroll: ScrollContainer, st
 	var content := settings_scroll.find_child("SettingsLargeTextContent", true, false) as Control
 	if scrollbar == null or content == null:
 		return
+	var sync_token := "%s|%s|%s|%s|%s" % [scrollbar.value, scrollbar.page, scrollbar.max_value, settings_scroll.size, content.size]
+	if str(status_label.get_meta("settings_scroll_sync_token", "")) == sync_token:
+		return
+	status_label.set_meta("settings_scroll_sync_token", sync_token)
 	if settings_scroll.size.y <= 1.0 or content.size.y <= 1.0:
 		status_label.visible = true
 		set_dynamic_label_text(status_label, "设置区 · 正在测量阅读范围...", "当前设置区正在测量阅读范围")
@@ -19387,10 +19394,23 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	# Keep the named atmosphere anchors for layout/smoke probes, but let the
 	# single battle backdrop own the table surface instead of repainting a second
 	# full-size texture stack beneath the board.
+	var atmosphere_identity := battle_atmosphere_identity_signature()
+	if retained_battle_atmosphere != null and is_instance_valid(retained_battle_atmosphere) and not retained_battle_atmosphere.is_queued_for_deletion() and retained_battle_atmosphere_signature == atmosphere_identity:
+		var reused_atmosphere := retained_battle_atmosphere
+		retained_battle_atmosphere = null
+		retained_battle_atmosphere_signature = ""
+		parent.add_child(reused_atmosphere)
+		reused_atmosphere.set_meta("retained_for_battle_render", false)
+		reused_atmosphere.set_meta("atmosphere_identity_signature", atmosphere_identity)
+		reused_atmosphere.set_meta("ui_page_generation", ui_page_generation)
+		start_table_atmosphere_animation(reused_atmosphere)
+		return reused_atmosphere
 	var frame = Control.new()
 	frame.name = "TableAtmosphereFrame"
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.set_meta("atmosphere_identity_signature", atmosphere_identity)
+	frame.set_meta("ui_page_generation", ui_page_generation)
 	parent.add_child(frame)
 	var inset_shadow = make_layout_host(rect_full(0.052, 0.080, 0.948, 0.920))
 	inset_shadow.name = "Table3DInsetShadow"
@@ -19407,12 +19427,24 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	var center_spotlight = make_layout_host(rect_full(0.300, 0.275, 0.700, 0.690))
 	center_spotlight.name = "Table3DCenterSpotlight"
 	frame.add_child(center_spotlight)
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var glow_tw := create_screen_tween()
-		glow_tw.set_loops(24)
-		glow_tw.tween_property(center_spotlight, "modulate:a", 0.55, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		glow_tw.tween_property(center_spotlight, "modulate:a", 0.82, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	start_table_atmosphere_animation(frame)
 	return frame
+
+
+func start_table_atmosphere_animation(frame: Control) -> void:
+	if frame == null or not is_instance_valid(frame) or not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+		return
+	var center_spotlight := frame.find_child("Table3DCenterSpotlight", true, false) as Control
+	if center_spotlight == null or not is_instance_valid(center_spotlight):
+		return
+	# render_game() clears page tweens after retaining this subtree. Restart the
+	# owner-bound loop whenever the subtree is mounted into the new page.
+	kill_screen_tweens_for_subtree(frame)
+	center_spotlight.modulate.a = 0.82
+	var glow_tw := create_screen_tween_for_owner(frame)
+	glow_tw.set_loops(24)
+	glow_tw.tween_property(center_spotlight, "modulate:a", 0.55, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	glow_tw.tween_property(center_spotlight, "modulate:a", 0.82, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func draw_table_center_starlight(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
@@ -23083,13 +23115,15 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 	var risk_text = risk_badge_text(risk)
 	var tile_key := normalize_tile_code(tile) if tile != "" else tile
 	var tile_texture = tile_textures.get(tile_key, null)
-	if tile_texture == null and tile_key != "":
+	if tile_texture == null and tile_key != "" and not missing_tile_texture_codes.has(tile_key):
 		# On-demand load for valid codes; never cache tile_back as a face.
 		var face_path := tile_path(tile_key)
 		var resolved := load_tile_texture(face_path) if face_path != "" else null
 		if resolved != null and resolved != tile_back:
 			tile_texture = resolved
 			tile_textures[tile_key] = resolved
+		else:
+			missing_tile_texture_codes[tile_key] = true
 	var missing_face_texture := tile_texture == null
 
 	if button != null:
@@ -24377,12 +24411,15 @@ func play_fx_turn_switch_slide(seat: int) -> void:
 			route.get_instance_id(),
 			gate.get_instance_id(),
 			ready_art.get_instance_id() if ready_art != null else 0,
-			fx_layer.get_instance_id()
+			fx_layer.get_instance_id(),
+			fx_generation
 		))
 	target.pivot_offset = target.size * 0.5
 
 
-func cleanup_turn_switch_fx_by_id(compass_halo_id: int, route_id: int, gate_id: int, ready_art_id: int, fx_layer_id: int) -> void:
+func cleanup_turn_switch_fx_by_id(compass_halo_id: int, route_id: int, gate_id: int, ready_art_id: int, fx_layer_id: int, expected_fx_generation: int = -1) -> void:
+	if expected_fx_generation >= 0 and expected_fx_generation != fx_generation:
+		return
 	queue_free_node_by_id(compass_halo_id)
 	queue_free_node_by_id(route_id)
 	queue_free_node_by_id(gate_id)

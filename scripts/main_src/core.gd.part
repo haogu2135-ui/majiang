@@ -282,12 +282,14 @@ func _process(_delta: float) -> void:
 	# Debounced persistence only needs a coarse scheduler. Keeping the two
 	# deadline checks out of the frame path avoids needless calls while idle;
 	# application-pause still flushes synchronously in _notification().
-	if now >= next_save_flush_poll_msec and (telemetry_save_pending or offline_progress_dirty):
+	if now >= next_save_flush_poll_msec and (telemetry_save_pending or offline_progress_dirty or round_history_save_pending):
 		next_save_flush_poll_msec = now + SAVE_FLUSH_POLL_INTERVAL_MSEC
 		if telemetry_save_pending:
 			flush_telemetry_save()
 		if offline_progress_dirty:
 			flush_offline_progress_autosave()
+		if round_history_save_pending and now >= round_history_save_due_msec:
+			save_round_history()
 
 
 func update_pending_claim_live_state() -> void:
@@ -387,6 +389,8 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		flush_telemetry_save(true)
 		flush_offline_progress_autosave(true)
+		if round_history_save_pending:
+			save_round_history()
 	elif what == NOTIFICATION_WM_SIZE_CHANGED or what == NOTIFICATION_WM_DPI_CHANGE:
 		schedule_resize_refresh()
 
@@ -456,6 +460,26 @@ func focus_named_control(control_name: String) -> void:
 	control.grab_focus()
 	ensure_focus_control_visible(control)
 	mark_ui_optimization(control, "F-383")
+
+func schedule_online_recovery_focus() -> void:
+	if root_layer == null or not is_instance_valid(root_layer) or mode != "online_game" or not online_game_disconnected():
+		return
+	var root_id := root_layer.get_instance_id()
+	if online_recovery_focus_pending and online_recovery_focus_root_id == root_id:
+		return
+	online_recovery_focus_root_id = root_id
+	online_recovery_focus_pending = true
+	call_deferred("focus_online_recovery_if_current", root_id)
+
+func focus_online_recovery_if_current(expected_root_id: int) -> void:
+	if expected_root_id != online_recovery_focus_root_id:
+		return
+	online_recovery_focus_pending = false
+	if root_layer == null or not is_instance_valid(root_layer) or root_layer.get_instance_id() != expected_root_id:
+		return
+	if mode != "online_game" or not online_game_disconnected():
+		return
+	focus_named_control("OnlineReconnectGameButton")
 
 func restore_settings_focus_after_close(control_name: String, expected_token: int, expected_mode: String) -> void:
 	await get_tree().process_frame
@@ -1559,10 +1583,11 @@ func poll_online(now_msec: int = -1) -> void:
 	tcp_buffer.append_array(read_result[1] as PackedByteArray)
 	online_last_receive_msec = Time.get_ticks_msec()
 	var frames_processed := 0
-	while tcp_buffer.find(10) >= 0 and frames_processed < ONLINE_MAX_FRAMES_PER_POLL:
-		var split_at := tcp_buffer.find(10)
-		var raw_line := tcp_buffer.slice(0, split_at)
-		tcp_buffer = tcp_buffer.slice(split_at + 1)
+	var consumed_bytes := 0
+	var split_at := tcp_buffer.find(10)
+	while split_at >= 0 and frames_processed < ONLINE_MAX_FRAMES_PER_POLL:
+		var raw_line := tcp_buffer.slice(consumed_bytes, split_at)
+		consumed_bytes = split_at + 1
 		frames_processed += 1
 		if not online_frame_line_is_safe(raw_line):
 			close_online_transport("服务器消息过大，已断开连接。", true, false)
@@ -1572,6 +1597,13 @@ func poll_online(now_msec: int = -1) -> void:
 		var line := raw_line.get_string_from_utf8().strip_edges()
 		if line.length() > 0:
 			handle_online_message(line)
+		# A message handler can close the transport and clear tcp_buffer. Do not
+		# copy the stale local buffer back after that lifecycle transition.
+		if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+			return
+		split_at = tcp_buffer.find(10, consumed_bytes)
+	if consumed_bytes > 0:
+		tcp_buffer = tcp_buffer.slice(consumed_bytes)
 	if tcp_buffer.size() > ONLINE_MESSAGE_MAX_BYTES:
 		close_online_transport("服务器消息过大，已断开连接。", true, false)
 		return
@@ -1681,10 +1713,20 @@ func poll_voice_capture() -> void:
 		return
 	while voice_capture_effect.get_frames_available() >= VOICE_CHUNK_FRAMES:
 		var frames = voice_capture_effect.get_buffer(VOICE_CHUNK_FRAMES)
+		if not voice_frames_have_signal(frames):
+			continue
 		var payload = build_voice_payload(frames)
 		if payload.is_empty():
 			return
 		send_online(payload)
+
+
+func voice_frames_have_signal(frames: PackedVector2Array) -> bool:
+	for frame in frames:
+		var mono: float = absf((frame.x + frame.y) * 0.5)
+		if mono >= ONLINE_VOICE_SILENCE_THRESHOLD:
+			return true
+	return false
 
 
 func encode_voice_frames(frames: PackedVector2Array) -> Dictionary:
@@ -1705,6 +1747,47 @@ func encode_voice_frames(frames: PackedVector2Array) -> Dictionary:
 		"peak": peak,
 		"bytes": bytes.size(),
 	}
+
+func clear_remote_voice_players() -> void:
+	for player in remote_voice_players:
+		if player == null or not is_instance_valid(player):
+			continue
+		player.stop()
+		if player.get_parent() != null:
+			player.get_parent().remove_child(player)
+		player.queue_free()
+	remote_voice_players.clear()
+
+
+func _on_remote_voice_player_finished(_player: AudioStreamPlayer) -> void:
+	# Keep finished players in the bounded pool for the next packet. The transport
+	# and page lifecycle own actual destruction through clear_remote_voice_players().
+	pass
+
+
+func remote_voice_player_for_stream(stream: AudioStream) -> AudioStreamPlayer:
+	var reusable: AudioStreamPlayer = null
+	for index in range(remote_voice_players.size() - 1, -1, -1):
+		var candidate := remote_voice_players[index]
+		if candidate == null or not is_instance_valid(candidate):
+			remote_voice_players.remove_at(index)
+			continue
+		if reusable == null and not candidate.playing:
+			reusable = candidate
+	if reusable == null and remote_voice_players.size() >= ONLINE_REMOTE_VOICE_PLAYER_LIMIT:
+		reusable = remote_voice_players[0]
+		reusable.stop()
+	if reusable == null:
+		reusable = AudioStreamPlayer.new()
+		reusable.name = "RemoteVoicePlayer_%d" % remote_voice_players.size()
+		reusable.bus = "Master"
+		reusable.process_mode = Node.PROCESS_MODE_ALWAYS
+		attach_audio_node(reusable)
+		reusable.finished.connect(Callable(self, "_on_remote_voice_player_finished").bind(reusable))
+		remote_voice_players.append(reusable)
+	reusable.stream = stream
+	return reusable
+
 
 func handle_voice_message(data: Dictionary) -> void:
 	var speaker_seat = int(data.get("seat", data.get("fromSeat", -1)))
@@ -1729,12 +1812,7 @@ func handle_voice_message(data: Dictionary) -> void:
 	var stream = make_voice_stream(audio_base64, sample_rate, channels, decoded)
 	if stream == null:
 		return
-	var player = AudioStreamPlayer.new()
-	player.stream = stream
-	player.bus = "Master"
-	player.process_mode = Node.PROCESS_MODE_ALWAYS
-	attach_audio_node(player)
-	player.finished.connect(Callable(self, "queue_free_node_by_id").bind(player.get_instance_id()))
+	var player := remote_voice_player_for_stream(stream)
 	player.play()
 
 
@@ -2021,23 +2099,45 @@ func refresh_online_log_navigation() -> void:
 		mark_ui_optimization(log_list, "F-910")
 
 
-func update_chat_send_cooldown(now_msec: int = -1) -> void:
+func bind_chat_send_controls() -> bool:
 	if not chat_panel_open or root_layer == null or not is_instance_valid(root_layer):
-		return
-	var cooldown_label := root_layer.find_child("ChatSendCooldownLabel", true, false) as Label
-	var send_button := root_layer.find_child("ChatSendButton", true, false) as Button
-	var quick_buttons: Array[Button] = []
-	var quick_row := root_layer.find_child("ChatPanelQuickMessages", true, false) as Control
+		return false
+	if chat_send_controls_root_id == root_layer.get_instance_id() and chat_send_cooldown_label != null and is_instance_valid(chat_send_cooldown_label) and chat_send_button != null and is_instance_valid(chat_send_button) and chat_send_input != null and is_instance_valid(chat_send_input):
+		return true
+	var panel := root_layer.find_child("ChatPanel", true, false) as Control
+	if panel == null or not is_instance_valid(panel):
+		return false
+	chat_send_controls_root_id = root_layer.get_instance_id()
+	chat_send_cooldown_label = panel.find_child("ChatSendCooldownLabel", true, false) as Label
+	chat_send_button = panel.find_child("ChatSendButton", true, false) as Button
+	chat_send_input = panel.find_child("ChatInput", true, false) as LineEdit
+	chat_send_quick_buttons.clear()
+	var quick_row := panel.find_child("ChatPanelQuickMessages", true, false) as Control
 	if quick_row != null:
 		for child in quick_row.get_children():
 			var quick_button := child as Button
 			if quick_button != null:
-				quick_buttons.append(quick_button)
-	if cooldown_label == null and send_button == null and quick_buttons.is_empty():
+				chat_send_quick_buttons.append(quick_button)
+	chat_send_cooldown_token = ""
+	chat_send_validity_token = ""
+	return chat_send_cooldown_label != null or chat_send_button != null or not chat_send_quick_buttons.is_empty()
+
+
+func update_chat_send_cooldown(now_msec: int = -1) -> void:
+	if not bind_chat_send_controls():
 		return
+	var cooldown_label := chat_send_cooldown_label
+	var send_button := chat_send_button
+	var quick_buttons := chat_send_quick_buttons
 	var current_msec := Time.get_ticks_msec() if now_msec < 0 else now_msec
 	var remaining_msec := maxi(0, ONLINE_CHAT_COOLDOWN_MSEC - (current_msec - online_last_chat_sent_msec)) if online_last_chat_sent_msec > 0 else 0
 	var cooling := remaining_msec > 0
+	var remaining_deciseconds := maxi(0, int(ceil(float(remaining_msec) / 100.0)))
+	var empty := chat_send_input == null or chat_send_input.text.strip_edges() == ""
+	var cooldown_token := "%d|%d|%d" % [1 if cooling else 0, remaining_deciseconds, 1 if empty else 0]
+	if cooldown_token == chat_send_cooldown_token:
+		return
+	chat_send_cooldown_token = cooldown_token
 	if cooldown_label != null:
 		cooldown_label.visible = true
 		cooldown_label.text = "发送冷却 %.1fs" % (float(remaining_msec) / 1000.0) if cooling else "发送 · 可用"
@@ -2075,14 +2175,18 @@ func update_chat_send_cooldown(now_msec: int = -1) -> void:
 	refresh_chat_send_button_state()
 
 func refresh_chat_send_button_state() -> void:
-	if root_layer == null or not is_instance_valid(root_layer):
+	if not bind_chat_send_controls():
 		return
-	var button := root_layer.find_child("ChatSendButton", true, false) as Button
-	var input := root_layer.find_child("ChatInput", true, false) as LineEdit
+	var button := chat_send_button
+	var input := chat_send_input
 	if button == null or input == null:
 		return
 	var empty := input.text.strip_edges() == ""
 	var cooling := bool(button.get_meta("chat_cooldown_owned", false))
+	var validity_token := "%d|%d|%d" % [chat_send_controls_root_id, 1 if cooling else 0, 1 if empty else 0]
+	if validity_token == chat_send_validity_token:
+		return
+	chat_send_validity_token = validity_token
 	if not cooling:
 		button.disabled = empty
 		var state_detail := "请输入消息后发送 · Enter" if empty else "发送当前消息 · Enter"
@@ -2167,7 +2271,7 @@ func deal_offline_hand() -> void:
 			if not offline_match_briefing_shown:
 				show_toast(briefing, 2600)
 				offline_match_briefing_shown = true
-	render_game()
+	render_game(true)
 	play_fx_deal_start(dealer_seat)
 	play_fx_deal_cascade(dealer_seat)
 	save_offline_progress(false)
@@ -5268,7 +5372,7 @@ func begin_rob_gang_resolution(gang_seat: int, tile: String) -> bool:
 		offline_phase = "pending_claim"
 		add_log("你可抢杠胡%s。" % tile_label(tile))
 		play_rob_gang_warning_fx(gang_seat, 0, tile)
-		render_game()
+		render_game(true)
 		return true
 	if not ai_claim.is_empty():
 		play_rob_gang_warning_fx(gang_seat, int(ai_claim.get("seat", -1)), tile)
@@ -7987,6 +8091,7 @@ func flower_bloom_text(tile: String) -> String:
 
 
 func clear_fx_overlays() -> void:
+	fx_generation += 1
 	clear_tile_fly_animations()
 	clear_tile_flip_animations()
 	if fx_burst_tween != null and is_instance_valid(fx_burst_tween):
@@ -8008,6 +8113,7 @@ func clear_fx_overlays() -> void:
 		for child in fx_layer.get_children():
 			if child == transition_overlay or child == toast_container or child == fx_turn_pulse or child == fx_burst_root or child == fx_ripple_root:
 				continue
+			kill_screen_tweens_for_subtree(child)
 			if child is Control:
 				child.visible = false
 			child.queue_free()
@@ -9252,6 +9358,13 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 var chat_messages: Array = []
 var chat_input: LineEdit = null
 var chat_panel_open := false
+var chat_send_controls_root_id := 0
+var chat_send_cooldown_label: Label = null
+var chat_send_button: Button = null
+var chat_send_input: LineEdit = null
+var chat_send_quick_buttons: Array[Button] = []
+var chat_send_cooldown_token := ""
+var chat_send_validity_token := ""
 
 
 func chat_panel_rect() -> Rect2:
@@ -9433,6 +9546,13 @@ func refresh_chat_panel() -> void:
 		root_layer.remove_child(old_panel)
 		old_panel.queue_free()
 	chat_input = null
+	chat_send_controls_root_id = 0
+	chat_send_cooldown_label = null
+	chat_send_button = null
+	chat_send_input = null
+	chat_send_quick_buttons.clear()
+	chat_send_cooldown_token = ""
+	chat_send_validity_token = ""
 	show_chat_panel()
 
 
@@ -9460,6 +9580,13 @@ func close_chat_panel(restore_focus: bool = true) -> void:
 		ledger.visible = true
 		ledger.remove_meta("hidden_for_chat")
 	chat_input = null
+	chat_send_controls_root_id = 0
+	chat_send_cooldown_label = null
+	chat_send_button = null
+	chat_send_input = null
+	chat_send_quick_buttons.clear()
+	chat_send_cooldown_token = ""
+	chat_send_validity_token = ""
 	if restore_focus:
 		call_deferred("restore_chat_panel_focus")
 	else:
