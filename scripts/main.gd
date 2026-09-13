@@ -1661,7 +1661,23 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["accept"] = false
 		report["reason"] = "无效"
 		return report
-	if is_discard_furiten(seat, tile):
+	var tenpai_hand: Array = players[seat]["hand"]
+	var hand_counts: Array = tile_counts(tenpai_hand)
+	var can_win := can_win_for_seat_from_counts(seat, hand_counts, tile)
+	var furiten := false
+	if can_win:
+		furiten = is_discard_furiten_from_counts(seat, hand_counts)
+	else:
+		# Keep the completed self-draw hand fallback from is_discard_furiten():
+		# a 14-tile hand is checked against its pre-draw 13-tile wait shape.
+		var drawn_index := tile_index_normalized(normalize_tile_code(tile))
+		if drawn_index >= 0 and drawn_index < hand_counts.size() and int(hand_counts[drawn_index]) > 0:
+			var pre_draw_counts: Array = hand_counts.duplicate()
+			pre_draw_counts[drawn_index] = int(pre_draw_counts[drawn_index]) - 1
+			var open_melds_for_furiten: int = players[seat].get("melds", []).size()
+			if is_complete_hand_from_counts(hand_counts, tenpai_hand.size(), open_melds_for_furiten):
+				furiten = is_discard_furiten_from_counts(seat, pre_draw_counts, tenpai_hand.size() - 1)
+	if furiten:
 		report["accept"] = false
 		report["reason"] = "舍张振听"
 		report["score"] = 0.0
@@ -1671,7 +1687,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["reason"] = "过水"
 		report["score"] = 0.0
 		return report
-	if not can_win_for_seat(seat, tile):
+	if not can_win:
 		report["accept"] = false
 		report["reason"] = "未成和"
 		return report
@@ -1680,10 +1696,12 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["score"] = 1120.0
 		return report
 	var open_melds = players[seat]["melds"].size()
-	var tenpai_hand: Array = players[seat]["hand"]
 	var win_hand = tenpai_hand.duplicate()
 	win_hand.append(tile)
-	var score_data = calculate_win_score_from_tiles(seat, win_hand, false, win_context)
+	var winning_counts: Array = hand_counts.duplicate()
+	var winning_index := tile_index_normalized(normalize_tile_code(tile))
+	winning_counts[winning_index] = int(winning_counts[winning_index]) + 1
+	var score_data = calculate_win_score_from_tiles(seat, win_hand, false, win_context, false, winning_counts, tenpai_hand.size() + 1)
 	var fan = int(score_data.get("fan", 0))
 	var points = int(score_data.get("points", 0))
 	report["fan"] = fan
@@ -1693,7 +1711,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	if fan >= 4 or points >= score_points_for_fan(4):
 		report["reason"] = "高价值"
 		return report
-	var wait_metrics = effective_tile_metrics(tenpai_hand, open_melds, seat, 0)
+	var wait_metrics = effective_tile_metrics(tenpai_hand, open_melds, seat, 0, [], hand_counts)
 	var wait_tiles: Array = wait_metrics.get("tiles", [])
 	var remaining_by_tile: Dictionary = wait_metrics.get("remaining_by_tile", {})
 	report["wait_variety"] = wait_tiles.size()
@@ -1708,7 +1726,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	var alt_weighted = 0.0
 	var alt_best_points = 0
 	var alt_best_fan = 0
-	var probe_hand = tenpai_hand.duplicate()
+	var probe_counts: Array = hand_counts.duplicate()
 	for item in wait_tiles:
 		var wait_tile = str(item)
 		if wait_tile == tile:
@@ -1716,9 +1734,12 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		var rem = int(remaining_by_tile.get(wait_tile, 0))
 		if rem <= 0:
 			continue
-		probe_hand.append(wait_tile)
-		var alt_score = calculate_win_score_from_tiles(seat, probe_hand, false, "", true)
-		probe_hand.pop_back()
+		var wait_index := tile_index_normalized(wait_tile)
+		if wait_index < 0 or wait_index >= probe_counts.size():
+			continue
+		probe_counts[wait_index] = int(probe_counts[wait_index]) + 1
+		var alt_score = calculate_win_score_from_tiles(seat, [], false, "", true, probe_counts, tenpai_hand.size() + 1)
+		probe_counts[wait_index] = int(probe_counts[wait_index]) - 1
 		var alt_points = int(alt_score.get("points", 0))
 		var alt_fan = int(alt_score.get("fan", 0))
 		alt_remaining += rem
@@ -2609,8 +2630,11 @@ func get_ai_discard_reports(seat: int) -> Array:
 			var idx = int(item.get("tile_index", -1))
 			simulated_counts[idx] = int(simulated_counts[idx]) - 1
 			var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
+			item["fast_shanten"] = shanten
 			# 快评：只靠向听 + 危险，避免 34 张进张扫描
-			var risk = deal_in_risk_score(cand, seat, eval_context)
+			var fast_risk_vector: Dictionary = tile_risk_vector(cand, seat, [], eval_context)
+			var risk = float(fast_risk_vector.get("score", 0.0))
+			item["fast_risk_vector"] = fast_risk_vector
 			danger_risk_peak = max(danger_risk_peak, risk)
 			var cheap = -float(shanten) * 760.0 - risk * defense_guess * risk_factor
 			var human_pressure = 0.0
@@ -2680,7 +2704,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 			continue
 		simulated.remove_at(i)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) - 1
-		var report = build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, eval_context, simulated_counts, hand_counts, i, candidate_index)
+		var fast_risk_vector: Dictionary = item.get("fast_risk_vector", {})
+		var report = build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, eval_context, simulated_counts, hand_counts, i, candidate_index, int(item.get("fast_shanten", -99)), fast_risk_vector)
 		reports.append(report)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		simulated.insert(i, candidate)
@@ -2881,6 +2906,11 @@ func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) 
 		"visible_counts": visible_counts,
 		"visible_counts_key": counts_compact_key(visible_counts),
 		"known_counts": known_counts,
+		# These values are invariant across discard candidates in one evaluation pass.
+		"discard_report_exposed_melds": exposed_meld_count_for_seat(seat),
+		"discard_report_attack_multiplier": ai_total_attack_multiplier(seat),
+		"discard_report_route_focus": ai_route_focus(seat),
+		"discard_report_risk_factor": ai_risk_factor(seat),
 		"opponents": opponents,
 		"threat_cache_state_key": threat_cache_state_key,
 		"discard_pressures": {},
@@ -3059,7 +3089,7 @@ func package_liability_ai_cache_key() -> String:
 	return str(ai_package_liability_revision)
 
 
-func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = [], hand_index: int = -1, tile_index_override: int = -1) -> Dictionary:
+func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = [], hand_index: int = -1, tile_index_override: int = -1, shanten_snapshot: int = -99, risk_vector_snapshot: Dictionary = {}) -> Dictionary:
 	var simulated_counts = simulated_counts_snapshot if not simulated_counts_snapshot.is_empty() else tile_counts(simulated)
 	var original_counts = original_counts_snapshot
 	if original_counts.is_empty():
@@ -3069,11 +3099,20 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			original_counts[discarded_index] = int(original_counts[discarded_index]) + 1
 	var simulated_tile_count = simulated.size()
 	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
-	var exposed_melds = exposed_meld_count_for_seat(seat)
-	var attack = ai_total_attack_multiplier(seat)
-	var route_focus = ai_route_focus(seat)
-	var risk_factor = ai_risk_factor(seat)
+	var shanten = shanten_snapshot if shanten_snapshot > -99 else calculate_min_shanten_from_counts(simulated_counts, open_melds)
+	var context_matches_seat := not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat
+	var exposed_melds = int(eval_context.get("discard_report_exposed_melds", -1)) if context_matches_seat else -1
+	if exposed_melds < 0:
+		exposed_melds = exposed_meld_count_for_seat(seat)
+	var attack = float(eval_context.get("discard_report_attack_multiplier", -1.0)) if context_matches_seat else -1.0
+	if attack < 0.0:
+		attack = ai_total_attack_multiplier(seat)
+	var route_focus = float(eval_context.get("discard_report_route_focus", -1.0)) if context_matches_seat else -1.0
+	if route_focus < 0.0:
+		route_focus = ai_route_focus(seat)
+	var risk_factor = float(eval_context.get("discard_report_risk_factor", -1.0)) if context_matches_seat else -1.0
+	if risk_factor < 0.0:
+		risk_factor = ai_risk_factor(seat)
 	var ukeire = 0
 	var variety = 0
 	var effective_tiles: Array = []
@@ -3126,7 +3165,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var plan_suit = int(plan_report.get("suit", -1))
 	var plan_bonus = float(plan_report.get("score_bonus", 0.0))
 	var pressure = discard_pressure_score(tile, seat, visible_counts, eval_context)
-	var risk_vector = tile_risk_vector(tile, seat, visible_counts, eval_context)
+	var risk_vector: Dictionary = risk_vector_snapshot if not risk_vector_snapshot.is_empty() else tile_risk_vector(tile, seat, visible_counts, eval_context)
 	var risk_summary = deal_in_risk_summary(tile, seat, visible_counts, risk_vector)
 	var risk = float(risk_summary.get("score", 0.0))
 	var risk_label_text = risk_label(risk)
@@ -5952,6 +5991,404 @@ func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_t
 	]
 	return "|".join(signature_parts)
 
+func battle_top_hud_identity_signature() -> String:
+	var viewport_size := effective_viewport_size()
+	var compact_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
+	var wall_count := get_wall_count()
+	var wall_total := display_wall_total()
+	var room_code := str(online_game.get("roomCode", selected_room))
+	var update_percent := 0
+	if update_total_bytes > 0:
+		update_percent = clampi(int(round(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes))), 0, 100)
+	var hud_score_parts: Array[String] = []
+	if mode == "online_game":
+		for seat in range(4):
+			var score_info := get_player_info(seat)
+			hud_score_parts.append(str(score_info.get("name", "玩家")))
+			hud_score_parts.append(str(int(score_info.get("score", 0))))
+	var hud_score_signature := "|".join(hud_score_parts)
+	var signature_parts: Array[String] = [
+		mode,
+		active_rule_variant(),
+		rule_variant_short_label(),
+		str(viewport_size),
+		str(safe_area_margins),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		ui_layout_density(),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(reduce_motion_enabled),
+		str(fx_enabled_effective()),
+		str(graphics_quality),
+		str(compact_hud),
+		str(dealer_seat),
+		str(offline_hand_number),
+		str(offline_dealer_repeat),
+		str(get_current_seat()),
+		str(wall_count),
+		str(wall_total),
+		wall_state_text(wall_count),
+		get_last_discard(),
+		str(get_last_discard_seat()),
+		top_hud_short_status_text(compact_hud),
+		top_hud_status_tooltip_text(),
+		last_status_text,
+		online_snapshot_fingerprint("gameState", online_game),
+		hud_score_signature,
+		str(online_room_revision),
+		str(online_game_revision),
+		selected_room,
+		room_code,
+		online_connection_status_text(),
+		online_connection_status_detail(),
+		str(tcp_status),
+		str(online_resume_pending),
+		str(update_state),
+		str(update_percent),
+		str(update_total_bytes),
+		str(update_downloaded_bytes),
+		update_message,
+	]
+	return "|".join(signature_parts)
+
+func retain_battle_top_hud_for_render() -> void:
+	if retained_battle_top_hud != null and is_instance_valid(retained_battle_top_hud):
+		retained_battle_top_hud.queue_free()
+	retained_battle_top_hud = null
+	retained_battle_top_hud_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var hud := root_layer.get_node_or_null("TopHud3DShell") as Control
+	if hud == null or not is_instance_valid(hud) or hud.is_queued_for_deletion():
+		return
+	var hud_signature := str(hud.get_meta("top_hud_render_signature", ""))
+	if hud_signature == "" or hud_signature != battle_top_hud_identity_signature():
+		return
+	var hud_parent := hud.get_parent()
+	if hud_parent == null:
+		return
+	hud_parent.remove_child(hud)
+	retained_battle_top_hud = hud
+	retained_battle_top_hud_signature = hud_signature
+	hud.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_top_hud() -> void:
+	if retained_battle_top_hud != null and is_instance_valid(retained_battle_top_hud):
+		if retained_battle_top_hud.get_parent() != null:
+			retained_battle_top_hud.get_parent().remove_child(retained_battle_top_hud)
+		retained_battle_top_hud.queue_free()
+	retained_battle_top_hud = null
+	retained_battle_top_hud_signature = ""
+
+func action_chrome_button_signature() -> String:
+	var button_parts: Array[String] = []
+	var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+	for button in action_bar_buttons():
+		if button == null or not is_instance_valid(button):
+			continue
+		button_parts.append(str(button.name))
+		button_parts.append(button.text)
+		button_parts.append(action_button_visual_role(button.text))
+		button_parts.append(str(button.visible))
+		button_parts.append(str(button.disabled))
+		button_parts.append(str(button.get_meta("non_game_action", false)))
+		button_parts.append(str(button.get_meta("pending_lane", "")))
+		button_parts.append(str(button.get_meta("action_priority", "")))
+		if button == focus_owner:
+			button_parts.append("focused")
+	return "|".join(button_parts)
+
+func battle_action_chrome_identity_signature() -> String:
+	var viewport_size := effective_viewport_size()
+	var count := action_bar_button_count()
+	var disconnected := mode == "online_game" and online_game_disconnected()
+	var pending_claim_mode := has_pending_claim_window()
+	var danger_confirm_mode := mode == "offline" and has_pending_danger_discard()
+	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
+	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
+	var focus_token := ""
+	var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+	if focus_owner != null and is_instance_valid(focus_owner):
+		focus_token = "%s|%s" % [str(focus_owner.name), str(focus_owner.get("text"))]
+	var auto_pass_active := pending_claim_auto_pass_feedback != "" and pending_claim_auto_pass_feedback_until_msec > Time.get_ticks_msec()
+	var signature_parts: Array[String] = [
+		mode,
+		str(viewport_size),
+		str(safe_area_margins),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		ui_layout_density(),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(fx_enabled_effective()),
+		str(ui_motion_enabled()),
+		str(count),
+		action_chrome_button_signature(),
+		str(disconnected),
+		str(pending_claim_mode),
+		str(danger_confirm_mode),
+		str(ended_action_mode),
+		str(has_intent),
+		str(action_dock_rect_for_count(count)),
+		str(action_intent_rect_for_count(count)) if has_intent else "",
+		action_intent_text(count) if has_intent else "",
+		str(action_intent_color()) if has_intent else "",
+		action_intent_icon_name() if has_intent else "",
+		action_intent_fallback_icon_text() if has_intent else "",
+		online_recovery_detail_text() if disconnected else "",
+		str(online_waiting_for_server),
+		str(online_retry_available),
+		focus_token,
+		pending_claim_auto_pass_feedback,
+		str(auto_pass_active),
+	]
+	return "|".join(signature_parts)
+
+func retain_battle_action_chrome_for_render() -> void:
+	release_retained_battle_action_chrome()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var dock := root_layer.find_child("ActionButtonDock", true, false) as Control
+	var shadow := root_layer.find_child("ActionDock3DCastShadow", true, false) as Control
+	var current_signature := battle_action_chrome_identity_signature()
+	if dock != null and shadow != null and is_instance_valid(dock) and is_instance_valid(shadow) and not dock.is_queued_for_deletion() and not shadow.is_queued_for_deletion():
+		var dock_signature := str(dock.get_meta("action_chrome_render_signature", ""))
+		if dock_signature != "" and dock_signature == current_signature:
+			var dock_parent := dock.get_parent()
+			var shadow_parent := shadow.get_parent()
+			if dock_parent != null and shadow_parent != null:
+				dock_parent.remove_child(dock)
+				shadow_parent.remove_child(shadow)
+				retained_battle_action_dock = dock
+				retained_battle_action_dock_shadow = shadow
+				retained_battle_action_dock_signature = dock_signature
+				dock.set_meta("retained_for_battle_render", true)
+				shadow.set_meta("retained_for_battle_render", true)
+		var intent := root_layer.find_child("ActionIntentDock", true, false) as Control
+		if intent != null and is_instance_valid(intent) and not intent.is_queued_for_deletion():
+			var intent_parent := intent.get_parent()
+			var intent_signature := str(intent.get_meta("action_chrome_render_signature", ""))
+			if intent_parent != null and intent_signature == current_signature:
+				intent_parent.remove_child(intent)
+				retained_battle_action_intent = intent
+				retained_battle_action_intent_signature = intent_signature
+				intent.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_action_chrome() -> void:
+	for retained in [retained_battle_action_dock, retained_battle_action_dock_shadow, retained_battle_action_intent]:
+		if retained != null and is_instance_valid(retained):
+			if retained.get_parent() != null:
+				retained.get_parent().remove_child(retained)
+			retained.queue_free()
+	retained_battle_action_dock = null
+	retained_battle_action_dock_shadow = null
+	retained_battle_action_dock_signature = ""
+	retained_battle_action_intent = null
+	retained_battle_action_intent_signature = ""
+
+func battle_action_bar_can_retain() -> bool:
+	if mode != "offline":
+		return false
+	if offline_phase == "pending_claim" or offline_phase == "ended":
+		return false
+	if has_pending_danger_discard() or offline_restart_confirming:
+		return false
+	return action_bar != null and is_instance_valid(action_bar) and action_bar.get_parent() == root_layer
+
+func battle_action_bar_state_signature() -> String:
+	var hand := get_self_hand()
+	return "%s|%s|%s|%s|%s|%d|%s|%s|%d|%d|%d|%d" % [
+		mode,
+		offline_phase,
+		active_rule_variant(),
+		hand_identity_fingerprint(hand),
+		str(offline_claim_discard_bans),
+		1 if player_ai_assist_enabled() else 0,
+		str(ai_advice_hand_signature),
+		str(hash(current_human_advice)),
+		get_current_seat(),
+		dealer_seat,
+		offline_hand_number,
+		1 if offline_dealer_repeat else 0,
+	]
+
+func battle_action_bar_identity_signature() -> String:
+	return battle_action_bar_state_signature() + "|" + battle_action_chrome_identity_signature()
+
+func retain_battle_action_bar_for_render() -> void:
+	release_retained_battle_action_bar()
+	if not battle_action_bar_can_retain():
+		return
+	var bar_signature := str(action_bar.get_meta("action_bar_render_signature", ""))
+	var state_signature := battle_action_bar_state_signature()
+	if bar_signature == "" or bar_signature != battle_action_bar_identity_signature() or str(action_bar.get_meta("action_bar_state_signature", "")) != state_signature:
+		return
+	var bar_parent := action_bar.get_parent()
+	if bar_parent == null:
+		return
+	bar_parent.remove_child(action_bar)
+	retained_battle_action_bar = action_bar
+	retained_battle_action_bar_signature = bar_signature
+	retained_battle_action_bar_state_signature = state_signature
+	action_bar.set_meta("retained_for_battle_render", true)
+
+func reuse_retained_battle_action_bar_for_render(parent: Control) -> bool:
+	var retained_bar := retained_battle_action_bar
+	var retained_signature := retained_battle_action_bar_signature
+	var retained_state_signature := retained_battle_action_bar_state_signature
+	retained_battle_action_bar = null
+	retained_battle_action_bar_signature = ""
+	retained_battle_action_bar_state_signature = ""
+	if retained_bar == null or not is_instance_valid(retained_bar) or retained_bar.is_queued_for_deletion():
+		return false
+	if retained_state_signature != battle_action_bar_state_signature():
+		retained_bar.queue_free()
+		return false
+	parent.add_child(retained_bar)
+	action_bar = retained_bar
+	action_bar.set_meta("retained_for_battle_render", false)
+	action_bar.set_meta("ui_page_generation", ui_page_generation)
+	action_bar.set_meta("action_bar_render_signature", retained_signature)
+	action_bar.set_meta("action_bar_state_signature", retained_state_signature)
+	return true
+
+func release_retained_battle_action_bar() -> void:
+	if retained_battle_action_bar != null and is_instance_valid(retained_battle_action_bar):
+		if retained_battle_action_bar.get_parent() != null:
+			retained_battle_action_bar.get_parent().remove_child(retained_battle_action_bar)
+		retained_battle_action_bar.queue_free()
+	retained_battle_action_bar = null
+	retained_battle_action_bar_signature = ""
+	retained_battle_action_bar_state_signature = ""
+
+
+func battle_round_summary_identity_signature() -> String:
+	if mode != "offline" or offline_phase != "ended":
+		return ""
+	var parts: Array[String] = [
+		mode,
+		offline_phase,
+		round_result_kind,
+		active_rule_variant(),
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		str(action_bar_dock_layout_rect()),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(reduce_motion_enabled),
+		str(fx_enabled_effective()),
+		str(graphics_quality),
+		str(offline_hand_number),
+		str(dealer_seat),
+		str(offline_last_winner),
+		str(offline_dealer_repeat),
+		str(hash(round_summary)),
+		str(hash(last_win_score)),
+		str(hash(last_score_deltas)),
+		str(hash(last_match_summary)),
+		str(hash(offline_package_liability)),
+	]
+	for seat in range(mini(4, players.size())):
+		var player: Dictionary = players[seat]
+		parts.append("%d:%s:%d:%d" % [
+			seat,
+			str(player.get("name", "")),
+			int(player.get("score", 0)),
+			int(player.get("flowers", 0)),
+		])
+	return "|".join(parts)
+
+
+func retain_battle_round_summary_for_render() -> void:
+	release_retained_battle_round_summary()
+	if mode != "offline" or offline_phase != "ended":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var panel := root_layer.get_node_or_null("RoundSummaryPanel") as Control
+	var shield := root_layer.get_node_or_null("RoundSummaryModalInputShield") as Control
+	if panel == null or shield == null or not is_instance_valid(panel) or not is_instance_valid(shield):
+		return
+	if panel.is_queued_for_deletion() or shield.is_queued_for_deletion():
+		return
+	var summary_signature := battle_round_summary_identity_signature()
+	if summary_signature == "" or str(panel.get_meta("round_summary_render_signature", "")) != summary_signature or str(shield.get_meta("round_summary_render_signature", "")) != summary_signature:
+		return
+	var panel_parent := panel.get_parent()
+	var shield_parent := shield.get_parent()
+	if panel_parent == null or shield_parent == null:
+		return
+	panel_parent.remove_child(panel)
+	shield_parent.remove_child(shield)
+	retained_battle_round_summary_panel = panel
+	retained_battle_round_summary_shield = shield
+	retained_battle_round_summary_signature = summary_signature
+	panel.set_meta("retained_for_battle_render", true)
+	shield.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_round_summary() -> void:
+	for retained in [retained_battle_round_summary_panel, retained_battle_round_summary_shield]:
+		if retained != null and is_instance_valid(retained):
+			if retained is Control and retained.name == "RoundSummaryPanel":
+				clear_round_summary_runtime_effects(retained as Control)
+			if retained.get_parent() != null:
+				retained.get_parent().remove_child(retained)
+			retained.queue_free()
+	retained_battle_round_summary_panel = null
+	retained_battle_round_summary_shield = null
+	retained_battle_round_summary_signature = ""
+
+func battle_living_illustration_identity_signature() -> String:
+	return "%s|%s|%s|%d|%d|%s|%s|%s" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		get_last_discard(),
+		str(get_last_discard_seat()),
+		str(fx_enabled_effective()),
+	]
+
+func retain_battle_living_illustration_for_render() -> void:
+	if retained_battle_living_illustration != null and is_instance_valid(retained_battle_living_illustration):
+		retained_battle_living_illustration.queue_free()
+	retained_battle_living_illustration = null
+	retained_battle_living_illustration_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var layer := root_layer.find_child("TableLivingIllustration", true, false) as Control
+	if layer == null or not is_instance_valid(layer) or layer.is_queued_for_deletion():
+		return
+	var layer_signature := str(layer.get_meta("living_illustration_identity_signature", ""))
+	if layer_signature == "" or layer_signature != battle_living_illustration_identity_signature():
+		return
+	var layer_parent := layer.get_parent()
+	if layer_parent == null:
+		return
+	layer_parent.remove_child(layer)
+	retained_battle_living_illustration = layer
+	retained_battle_living_illustration_signature = layer_signature
+	layer.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_living_illustration() -> void:
+	if retained_battle_living_illustration != null and is_instance_valid(retained_battle_living_illustration):
+		if retained_battle_living_illustration.get_parent() != null:
+			retained_battle_living_illustration.get_parent().remove_child(retained_battle_living_illustration)
+		retained_battle_living_illustration.queue_free()
+	retained_battle_living_illustration = null
+	retained_battle_living_illustration_signature = ""
+
 func retain_battle_seats_for_render() -> void:
 	if not retained_battle_seats.is_empty():
 		release_retained_battle_seats()
@@ -6044,6 +6481,98 @@ func release_retained_battle_meld_lanes() -> void:
 
 func release_unused_battle_meld_lanes() -> void:
 	release_retained_battle_meld_lanes()
+
+func retain_battle_wall_strips_for_render() -> void:
+	if not retained_battle_wall_strips.is_empty():
+		release_retained_battle_wall_strips()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for i in range(WALL_LAYOUTS.size()):
+		var layout = WALL_LAYOUTS[i]
+		var expected_name := "WallBackStrip_%s_%d_%d" % ["h" if bool(layout[3]) else "v", int(layout[2]), i]
+		var strip := root_layer.find_child(expected_name, true, false) as WallBackStrip
+		if strip == null or not is_instance_valid(strip) or strip.is_queued_for_deletion():
+			continue
+		var strip_parent := strip.get_parent()
+		if strip_parent == null:
+			continue
+		strip_parent.remove_child(strip)
+		retained_battle_wall_strips[i] = strip
+
+func release_retained_battle_wall_strip(index: int) -> void:
+	var retained_variant = retained_battle_wall_strips.get(index, null)
+	var strip := retained_variant as WallBackStrip
+	if strip != null and is_instance_valid(strip):
+		if strip.get_parent() != null:
+			strip.get_parent().remove_child(strip)
+		strip.queue_free()
+	retained_battle_wall_strips.erase(index)
+
+func release_retained_battle_wall_strips() -> void:
+	var retained_indices := retained_battle_wall_strips.keys()
+	for index_variant in retained_indices:
+		release_retained_battle_wall_strip(int(index_variant))
+
+func release_unused_battle_wall_strips() -> void:
+	release_retained_battle_wall_strips()
+
+func retain_battle_table_log_for_render() -> void:
+	if retained_battle_table_log != null and is_instance_valid(retained_battle_table_log):
+		retained_battle_table_log.queue_free()
+	retained_battle_table_log = null
+	retained_battle_table_log_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var ledger := root_layer.get_node_or_null("TableLogLedgerPanel") as Control
+	if ledger == null or not is_instance_valid(ledger) or ledger.is_queued_for_deletion():
+		return
+	var ledger_parent := ledger.get_parent()
+	if ledger_parent == null:
+		return
+	ledger_parent.remove_child(ledger)
+	retained_battle_table_log = ledger
+	retained_battle_table_log_signature = str(ledger.get_meta("table_log_render_signature", ""))
+	ledger.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_table_log() -> void:
+	if retained_battle_table_log != null and is_instance_valid(retained_battle_table_log):
+		if retained_battle_table_log.get_parent() != null:
+			retained_battle_table_log.get_parent().remove_child(retained_battle_table_log)
+		retained_battle_table_log.queue_free()
+	retained_battle_table_log = null
+	retained_battle_table_log_signature = ""
+
+func retain_battle_last_discard_marker_for_render() -> void:
+	if retained_battle_last_discard_marker != null and is_instance_valid(retained_battle_last_discard_marker):
+		retained_battle_last_discard_marker.queue_free()
+	retained_battle_last_discard_marker = null
+	retained_battle_last_discard_marker_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var marker := root_layer.find_child("LastDiscardFocusMarker", true, false) as Control
+	if marker == null or not is_instance_valid(marker) or marker.is_queued_for_deletion():
+		return
+	var marker_parent := marker.get_parent()
+	if marker_parent == null:
+		return
+	marker_parent.remove_child(marker)
+	retained_battle_last_discard_marker = marker
+	retained_battle_last_discard_marker_signature = str(marker.get_meta("last_discard_focus_marker_signature", ""))
+	marker.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_last_discard_marker() -> void:
+	if retained_battle_last_discard_marker != null and is_instance_valid(retained_battle_last_discard_marker):
+		if retained_battle_last_discard_marker.get_parent() != null:
+			retained_battle_last_discard_marker.get_parent().remove_child(retained_battle_last_discard_marker)
+		retained_battle_last_discard_marker.queue_free()
+	retained_battle_last_discard_marker = null
+	retained_battle_last_discard_marker_signature = ""
 
 func retain_battle_hand_tray_for_render() -> void:
 	hand_render_snapshot_valid = false
@@ -6250,8 +6779,23 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func release_retained_battle_views() -> void:
+	release_retained_battle_top_hud()
+	release_retained_battle_action_chrome()
+	release_retained_battle_action_bar()
+	release_retained_battle_living_illustration()
+	release_retained_battle_table_chrome()
+	release_retained_battle_table_surface()
+	release_retained_battle_chat_action_button()
+	release_retained_battle_round_summary()
+	release_retained_battle_wall_feedback()
+	release_retained_battle_advisor_panel()
 	release_retained_battle_seats()
 	release_retained_battle_meld_lanes()
+	release_retained_battle_wall_strips()
+	release_retained_battle_table_log()
+	release_retained_battle_last_discard_marker()
+	release_retained_battle_discard_river_art()
+	release_retained_battle_discard_owner_overlays()
 	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere, discard_river_foreground_layer]:
 		if retained != null and is_instance_valid(retained):
 			if retained.get_parent() != null:
@@ -6279,6 +6823,352 @@ func release_retained_battle_views() -> void:
 				archive_button.get_parent().remove_child(archive_button)
 			archive_button.queue_free()
 	retained_battle_discard_archive_buttons.clear()
+
+
+func battle_table_surface_identity_signature(current_seat: int = -1) -> String:
+	var seat := get_current_seat() if current_seat < 0 else current_seat
+	return "%s|%s|%s|%d|%d|%s|%s|%d" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		str(table_outer_rect_for_viewport()),
+		str(TABLE_INNER_RECT),
+		seat,
+	]
+
+
+func retain_battle_table_surface_for_render() -> void:
+	release_retained_battle_table_surface()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var outer := root_layer.get_node_or_null("OfflineTable3DOuterShell") as Control
+	if outer == null or not is_instance_valid(outer) or outer.is_queued_for_deletion():
+		return
+	var table := outer.get_node_or_null("OfflineTable3DInnerSurface") as Control
+	var perspective_depth := table.get_node_or_null("BattleTablePerspectiveDepth") as BattleTableDepth if table != null else null
+	if table == null or perspective_depth == null or not is_instance_valid(table) or not is_instance_valid(perspective_depth):
+		return
+	var surface_signature := battle_table_surface_identity_signature(get_current_seat())
+	if str(outer.get_meta("table_surface_render_signature", "")) != surface_signature:
+		return
+	# Every data-bearing child has its own retention slot. Refuse the bundle if a
+	# child remains here, so mounting the shell again can never duplicate a lane.
+	for child in table.get_children():
+		if child != perspective_depth:
+			return
+	var outer_parent := outer.get_parent()
+	if outer_parent == null:
+		return
+	outer_parent.remove_child(outer)
+	retained_battle_table_surface = outer
+	retained_battle_table_surface_signature = surface_signature
+	outer.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_table_surface() -> void:
+	if retained_battle_table_surface != null and is_instance_valid(retained_battle_table_surface):
+		if retained_battle_table_surface.get_parent() != null:
+			retained_battle_table_surface.get_parent().remove_child(retained_battle_table_surface)
+		retained_battle_table_surface.queue_free()
+	retained_battle_table_surface = null
+	retained_battle_table_surface_signature = ""
+
+
+func draw_battle_table_surface(parent: Control, current_seat: int) -> Control:
+	var surface_signature := battle_table_surface_identity_signature(current_seat)
+	var outer := retained_battle_table_surface
+	var retained_surface_signature := retained_battle_table_surface_signature
+	retained_battle_table_surface = null
+	retained_battle_table_surface_signature = ""
+	if outer != null and is_instance_valid(outer) and not outer.is_queued_for_deletion() and retained_surface_signature == surface_signature and str(outer.get_meta("table_surface_render_signature", "")) == surface_signature:
+		var retained_table := outer.get_node_or_null("OfflineTable3DInnerSurface") as Control
+		var retained_depth := retained_table.get_node_or_null("BattleTablePerspectiveDepth") as BattleTableDepth if retained_table != null else null
+		if retained_table != null and retained_depth != null and is_instance_valid(retained_table) and is_instance_valid(retained_depth):
+			parent.add_child(outer)
+			retained_depth.configure(current_seat, SEAT_ACCENT_COLORS[clampi(current_seat, 0, SEAT_ACCENT_COLORS.size() - 1)])
+			outer.set_meta("retained_for_battle_render", false)
+			outer.set_meta("table_surface_render_signature", surface_signature)
+			return retained_table
+	if outer != null and is_instance_valid(outer):
+		outer.queue_free()
+	outer = make_layout_host(table_outer_rect_for_viewport())
+	outer.name = "OfflineTable3DOuterShell"
+	outer.set_meta("table_surface_render_signature", surface_signature)
+	parent.add_child(outer)
+	var table := make_layout_host(TABLE_INNER_RECT)
+	table.name = "OfflineTable3DInnerSurface"
+	outer.add_child(table)
+	var perspective_depth := BattleTableDepth.new()
+	perspective_depth.name = "BattleTablePerspectiveDepth"
+	perspective_depth.set_anchors_preset(Control.PRESET_FULL_RECT)
+	perspective_depth.configure(current_seat, SEAT_ACCENT_COLORS[clampi(current_seat, 0, SEAT_ACCENT_COLORS.size() - 1)])
+	table.add_child(perspective_depth)
+	return table
+
+
+func battle_chat_action_button_identity_signature() -> String:
+	return "%s|%s|%s|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		ui_layout_density(),
+		1 if large_text_enabled else 0,
+		1 if high_contrast_enabled else 0,
+		1 if fx_enabled_effective() else 0,
+		1 if ui_motion_enabled() else 0,
+		1 if chat_panel_open else 0,
+		1 if has_pending_claim_window() else 0,
+		graphics_quality,
+	]
+
+
+func retain_battle_chat_action_button_for_render() -> void:
+	if retained_battle_chat_action_button != null and is_instance_valid(retained_battle_chat_action_button):
+		retained_battle_chat_action_button.queue_free()
+	retained_battle_chat_action_button = null
+	retained_battle_chat_action_button_signature = ""
+	if mode != "online_game" or online_game_disconnected():
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button
+	if chat_button == null or not is_instance_valid(chat_button) or chat_button.is_queued_for_deletion():
+		return
+	var current_signature := battle_chat_action_button_identity_signature()
+	if str(chat_button.get_meta("chat_action_button_render_signature", "")) != current_signature:
+		return
+	var chat_parent := chat_button.get_parent()
+	if chat_parent == null:
+		return
+	chat_parent.remove_child(chat_button)
+	retained_battle_chat_action_button = chat_button
+	retained_battle_chat_action_button_signature = current_signature
+	chat_button.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_chat_action_button() -> void:
+	if retained_battle_chat_action_button != null and is_instance_valid(retained_battle_chat_action_button):
+		if retained_battle_chat_action_button.get_parent() != null:
+			retained_battle_chat_action_button.get_parent().remove_child(retained_battle_chat_action_button)
+		retained_battle_chat_action_button.queue_free()
+	retained_battle_chat_action_button = null
+	retained_battle_chat_action_button_signature = ""
+
+
+func battle_table_chrome_identity_signature() -> String:
+	return "%s|%s|%s|%d|%d|%s" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		str(table_outer_rect_for_viewport()),
+	]
+
+
+func retain_battle_table_chrome_for_render() -> void:
+	release_retained_battle_table_chrome()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var chrome_signature := battle_table_chrome_identity_signature()
+	var chrome_names: Array[String] = [
+		"OfflineTable3DFloorShadow",
+		"OfflineTable3DFrontApron",
+		"OfflineTable3DCastShadow",
+	]
+	var retained: Dictionary = {}
+	for node_name in chrome_names:
+		var chrome := root_layer.get_node_or_null(node_name) as Control
+		if chrome == null or not is_instance_valid(chrome) or chrome.is_queued_for_deletion():
+			return
+		if str(chrome.get_meta("table_chrome_render_signature", "")) != chrome_signature:
+			return
+		var chrome_parent := chrome.get_parent()
+		if chrome_parent == null:
+			return
+		retained[node_name] = chrome
+	if retained.size() != chrome_names.size():
+		return
+	for node_name in chrome_names:
+		var chrome := retained[node_name] as Control
+		chrome.get_parent().remove_child(chrome)
+	retained_battle_table_chrome = retained
+	retained_battle_table_chrome_signature = chrome_signature
+	for chrome_variant in retained.values():
+		var chrome := chrome_variant as Control
+		if chrome != null and is_instance_valid(chrome):
+			chrome.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_table_chrome() -> void:
+	for retained_variant in retained_battle_table_chrome.values():
+		var chrome := retained_variant as Control
+		if chrome != null and is_instance_valid(chrome):
+			if chrome.get_parent() != null:
+				chrome.get_parent().remove_child(chrome)
+			chrome.queue_free()
+	retained_battle_table_chrome.clear()
+	retained_battle_table_chrome_signature = ""
+
+
+func battle_wall_feedback_identity_signature(wall_count: int, progress: float, recent_feedback: bool) -> String:
+	return "%s|%d|%s|%d|%d|%s|%s|%s|%s|%s" % [
+		mode,
+		wall_count,
+		str(progress),
+		1 if recent_feedback else 0,
+		safe_area_layout_revision,
+		str(effective_viewport_size()),
+		str(wall_is_low(wall_count)),
+		str(fx_enabled_effective()),
+		str(ui_motion_enabled()),
+		str(offline_last_draw.get("source", "")),
+	]
+
+
+func retain_battle_wall_feedback_for_render() -> void:
+	release_retained_battle_wall_feedback()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var wall_count := get_wall_count()
+	var wall_signature := battle_wall_feedback_identity_signature(wall_count, wall_progress(wall_count), mode == "offline" and bool(offline_last_draw.get("announce", false)))
+	var feedback := root_layer.find_child("WallDrawFeedbackArt", true, false) as Control
+	if feedback != null and is_instance_valid(feedback) and not feedback.is_queued_for_deletion() and str(feedback.get_meta("wall_feedback_render_signature", "")) == wall_signature:
+		if feedback.get_parent() != null:
+			feedback.get_parent().remove_child(feedback)
+			retained_battle_wall_feedback_art = feedback
+			retained_battle_wall_feedback_art_signature = wall_signature
+	var badge := root_layer.find_child("WallRemainingBadge", true, false) as Control
+	if badge != null and is_instance_valid(badge) and not badge.is_queued_for_deletion() and str(badge.get_meta("wall_remaining_badge_render_signature", "")) == wall_signature:
+		if badge.get_parent() != null:
+			badge.get_parent().remove_child(badge)
+			retained_battle_wall_remaining_badge = badge
+			retained_battle_wall_remaining_badge_signature = wall_signature
+
+
+func release_retained_battle_wall_feedback() -> void:
+	for retained in [retained_battle_wall_feedback_art, retained_battle_wall_remaining_badge]:
+		if retained != null and is_instance_valid(retained):
+			if retained.get_parent() != null:
+				retained.get_parent().remove_child(retained)
+			retained.queue_free()
+	retained_battle_wall_feedback_art = null
+	retained_battle_wall_feedback_art_signature = ""
+	retained_battle_wall_remaining_badge = null
+	retained_battle_wall_remaining_badge_signature = ""
+
+
+func battle_advisor_identity_signature() -> String:
+	var player_state_parts: Array[String] = []
+	for seat in range(mini(4, players.size())):
+		var player: Dictionary = players[seat]
+		player_state_parts.append(str(player.get("name", "")))
+		player_state_parts.append(str(player.get("score", 0)))
+		player_state_parts.append(str(player.get("melds", []).size()))
+	return "%s|%s|%s|%d|%d|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s|%s" % [
+		mode,
+		offline_phase,
+		str(advisor_panel_layout_rect()),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(fx_enabled_effective()),
+		str(ui_motion_enabled()),
+		current_seat,
+		get_wall_count(),
+		get_last_discard(),
+		str(hand_identity_fingerprint(get_self_hand())),
+		"|".join(player_state_parts) + "|" + JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports}),
+	]
+
+
+func retain_battle_advisor_panel_for_render() -> void:
+	release_retained_battle_advisor_panel()
+	if mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or has_pending_danger_discard() or not player_ai_assist_enabled():
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var panel := root_layer.get_node_or_null("AdvisorPanel") as Control
+	if panel == null or not is_instance_valid(panel) or panel.is_queued_for_deletion():
+		return
+	var panel_signature := str(panel.get_meta("advisor_render_signature", ""))
+	if panel_signature == "" or panel_signature != battle_advisor_identity_signature():
+		return
+	var panel_parent := panel.get_parent()
+	if panel_parent == null:
+		return
+	panel_parent.remove_child(panel)
+	retained_battle_advisor_panel = panel
+	retained_battle_advisor_panel_signature = panel_signature
+	panel.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_advisor_panel() -> void:
+	if retained_battle_advisor_panel != null and is_instance_valid(retained_battle_advisor_panel):
+		if retained_battle_advisor_panel.get_parent() != null:
+			retained_battle_advisor_panel.get_parent().remove_child(retained_battle_advisor_panel)
+		retained_battle_advisor_panel.queue_free()
+	retained_battle_advisor_panel = null
+	retained_battle_advisor_panel_signature = ""
+
+
+func retain_battle_discard_river_art_for_render() -> void:
+	if not retained_battle_discard_river_art.is_empty():
+		release_retained_battle_discard_river_art()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for seat in range(4):
+		var art := root_layer.find_child("DiscardRiverArt_%d" % seat, true, false) as Control
+		if art == null or not is_instance_valid(art) or art.is_queued_for_deletion():
+			continue
+		var art_parent := art.get_parent()
+		if art_parent == null:
+			continue
+		art_parent.remove_child(art)
+		retained_battle_discard_river_art[seat] = art
+
+
+func release_retained_battle_discard_river_art() -> void:
+	for retained_variant in retained_battle_discard_river_art.values():
+		var art := retained_variant as Control
+		if art != null and is_instance_valid(art):
+			if art.get_parent() != null:
+				art.get_parent().remove_child(art)
+			art.queue_free()
+	retained_battle_discard_river_art.clear()
+
+
+func release_unused_discard_river_art() -> void:
+	release_retained_battle_discard_river_art()
+
+
+func release_retained_battle_discard_owner_overlays() -> void:
+	for retained_variant in retained_battle_discard_owner_overlays.values():
+		var overlay := retained_variant as Control
+		if overlay != null and is_instance_valid(overlay):
+			if overlay.get_parent() != null:
+				overlay.get_parent().remove_child(overlay)
+			overlay.queue_free()
+	retained_battle_discard_owner_overlays.clear()
+
+
+func release_unused_discard_river_owner_overlays() -> void:
+	release_retained_battle_discard_owner_overlays()
 
 
 func retain_battle_discard_archive_buttons_for_render() -> void:
@@ -6338,6 +7228,16 @@ func retain_battle_discard_foreground_for_render() -> void:
 	var foreground_parent := foreground.get_parent()
 	if foreground_parent == null:
 		return
+	for child in foreground.get_children():
+		var overlay := child as Control
+		if overlay == null or not is_instance_valid(overlay) or overlay.is_queued_for_deletion():
+			continue
+		var child_name := str(overlay.name)
+		if not child_name.begins_with("DiscardRiverOwnerOverlay_"):
+			continue
+		var seat := int(child_name.trim_prefix("DiscardRiverOwnerOverlay_"))
+		foreground.remove_child(overlay)
+		retained_battle_discard_owner_overlays[seat] = overlay
 	foreground_parent.remove_child(foreground)
 	discard_river_foreground_layer = foreground
 
@@ -6588,11 +7488,25 @@ func render_game(state_changed: bool = false) -> void:
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
 	retain_battle_atmosphere_for_render()
+	retain_battle_top_hud_for_render()
+	retain_battle_action_chrome_for_render()
+	retain_battle_action_bar_for_render()
+	retain_battle_living_illustration_for_render()
 	retain_battle_seats_for_render()
 	retain_battle_meld_lanes_for_render()
+	retain_battle_wall_strips_for_render()
+	retain_battle_table_log_for_render()
+	retain_battle_last_discard_marker_for_render()
+	retain_battle_table_chrome_for_render()
+	retain_battle_wall_feedback_for_render()
+	retain_battle_advisor_panel_for_render()
+	retain_battle_discard_river_art_for_render()
 	retain_battle_discard_archive_buttons_for_render()
 	retain_battle_discard_grids_for_render()
 	retain_battle_discard_foreground_for_render()
+	retain_battle_table_surface_for_render()
+	retain_battle_chat_action_button_for_render()
+	retain_battle_round_summary_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -6601,32 +7515,13 @@ func render_game(state_changed: bool = false) -> void:
 	ai_render_report_snapshot_ready = false
 	draw_game_top_hud(root_layer)
 
-	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.004), 42)  # r426
-	table_floor_shadow.name = "OfflineTable3DFloorShadow"
-	# r406: apron sits under hand tray only — do not darken bottom river (zone y~0.638-0.824).
-	var table_apron = make_gpt_route_rail(rect_full(0.145, 0.805, 0.855, 0.865), Color(0.12, 0.09, 0.05, 0.05))
-	table_apron.name = "OfflineTable3DFrontApron"
-	root_layer.add_child(table_apron)
-	var apron_highlight = make_soft_depth_panel(table_apron, rect_full(0.035, 0.040, 0.965, 0.170), Color(0.98, 0.78, 0.40, 0.06), 999)  # r406
-	apron_highlight.name = "OfflineTable3DApronHighlight"
-	var table_shadow = make_soft_depth_panel(root_layer, rect_full(0.112, 0.142, 0.888, 0.812), Color(0.0, 0.0, 0.0, 0.005), 38)  # r426
-	table_shadow.name = "OfflineTable3DCastShadow"
+	draw_battle_table_chrome(root_layer)
 	# The battle background already supplies the authored table surface. Keep the
 	# table nodes as geometry hosts so board children retain their coordinates,
 	# but do not repaint a second full-size high-frequency plate over the room.
-	var outer = make_layout_host(table_outer_rect_for_viewport())
-	outer.name = "OfflineTable3DOuterShell"
-	root_layer.add_child(outer)
-	var table = make_layout_host(TABLE_INNER_RECT)
-	table.name = "OfflineTable3DInnerSurface"
-	outer.add_child(table)
 	# Room guofeng lives on screen_layer; table surface stays translucent so felt reads against the room plate.
 	var render_current_seat := get_current_seat()
-	var perspective_depth = BattleTableDepth.new()
-	perspective_depth.name = "BattleTablePerspectiveDepth"
-	perspective_depth.set_anchors_preset(Control.PRESET_FULL_RECT)
-	perspective_depth.configure(render_current_seat, SEAT_ACCENT_COLORS[clamp(render_current_seat, 0, SEAT_ACCENT_COLORS.size() - 1)])
-	table.add_child(perspective_depth)
+	var table := draw_battle_table_surface(root_layer, render_current_seat)
 	draw_table_atmosphere_frame(table)
 	draw_walls(table)
 	draw_table_living_illustration(table)
@@ -10732,13 +11627,55 @@ func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
 	# r214: bulk GPT chrome sweep
 	var count = action_bar_button_count()
 	if count <= 0:
+		release_retained_battle_action_chrome()
 		return
 	var pending_claim_mode = has_pending_claim_window()
 	var danger_confirm_mode = mode == "offline" and has_pending_danger_discard()
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
-	if not pending_claim_mode and not danger_confirm_mode and not ended_action_mode:
-		draw_action_intent_dock(parent, count, false, disconnected)
+	var action_chrome_signature := battle_action_chrome_identity_signature()
+	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
+	var retained_intent := retained_battle_action_intent
+	retained_battle_action_intent = null
+	if has_intent:
+		if retained_intent != null and is_instance_valid(retained_intent) and not retained_intent.is_queued_for_deletion() and retained_battle_action_intent_signature == action_chrome_signature:
+			parent.add_child(retained_intent)
+			retained_intent.set_meta("retained_for_battle_render", false)
+			retained_intent.set_meta("ui_page_generation", ui_page_generation)
+			retained_intent.set_meta("action_chrome_render_signature", action_chrome_signature)
+		else:
+			if retained_intent != null and is_instance_valid(retained_intent):
+				retained_intent.queue_free()
+			draw_action_intent_dock(parent, count, false, disconnected)
+			var new_intent := parent.find_child("ActionIntentDock", true, false) as Control
+			if new_intent != null:
+				new_intent.set_meta("action_chrome_render_signature", action_chrome_signature)
+	else:
+		if retained_intent != null and is_instance_valid(retained_intent):
+			retained_intent.queue_free()
+	retained_battle_action_intent_signature = ""
 	# r451c: translucent lacquer shell + GPT dock plate on top (no jade program slabs).
+	var retained_dock := retained_battle_action_dock
+	var retained_shadow := retained_battle_action_dock_shadow
+	retained_battle_action_dock = null
+	retained_battle_action_dock_shadow = null
+	var can_reuse_dock := retained_dock != null and retained_shadow != null and is_instance_valid(retained_dock) and is_instance_valid(retained_shadow) and not retained_dock.is_queued_for_deletion() and not retained_shadow.is_queued_for_deletion() and retained_battle_action_dock_signature == action_chrome_signature
+	if can_reuse_dock:
+		parent.add_child(retained_shadow)
+		parent.add_child(retained_dock)
+		retained_shadow.set_meta("retained_for_battle_render", false)
+		retained_dock.set_meta("retained_for_battle_render", false)
+		retained_dock.set_meta("ui_page_generation", ui_page_generation)
+		retained_dock.set_meta("action_chrome_render_signature", action_chrome_signature)
+		action_dock_status_label = retained_dock.find_child("ActionDockStatusLabel", true, false) as Label
+		start_action_dock_pulse_animation(retained_dock)
+		parent.move_child(retained_shadow, max(0, action_bar.get_index()))
+		parent.move_child(retained_dock, max(0, action_bar.get_index()))
+		retained_battle_action_dock_signature = ""
+		return
+	for stale_dock in [retained_dock, retained_shadow]:
+		if stale_dock != null and is_instance_valid(stale_dock):
+			stale_dock.queue_free()
+	retained_battle_action_dock_signature = ""
 	var dock_rect := action_dock_rect_for_count(count)
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
 	var dock_shadow = make_soft_depth_panel(parent, dock_shadow_rect, Color(0.0, 0.0, 0.0, 0.18 if pending_claim_mode else 0.22), 12)
@@ -10787,13 +11724,7 @@ func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
 		pulse_art.name = "ActionButtonDockPulseArt"
 		pulse_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pulse_driver.add_child(pulse_art)
-		if fx_enabled_effective():
-			var peak: float = lerpf(0.40, 0.78, pulse_strength)
-			var trough: float = lerpf(0.10, 0.24, pulse_strength)
-			var pulse_tw := create_screen_tween_for_owner(pulse_driver)
-			pulse_tw.set_loops(12)
-			pulse_tw.tween_property(pulse_art, "modulate:a", trough, 0.64).from(peak)
-			pulse_tw.tween_property(pulse_art, "modulate:a", peak, 0.64).from(trough)
+	start_action_dock_pulse_animation(dock)
 	var dock_rear = make_soft_depth_panel(dock, rect_full(0.012, 0.040, 0.988, 0.980), Color(0.08, 0.055, 0.035, 0.12), 10)
 	dock_rear.name = "ActionDock3DRearShell"
 	dock.move_child(dock_rear, 0)
@@ -10898,6 +11829,30 @@ func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
 		configure_clipped_label(status_slot)
 	parent.move_child(dock_shadow, max(0, action_bar.get_index()))
 	parent.move_child(dock, max(0, action_bar.get_index()))
+	dock.set_meta("action_chrome_render_signature", action_chrome_signature)
+
+
+func start_action_dock_pulse_animation(dock: Control) -> void:
+	if dock == null or not is_instance_valid(dock):
+		return
+	kill_screen_tweens_for_subtree(dock)
+	var pulse_driver := dock.get_node_or_null("ActionButtonDockPulseDriver") as Control
+	var pulse_art := dock.get_node_or_null("ActionButtonDockPulseDriver/ActionButtonDockPulseArt") as Control
+	if pulse_driver == null or pulse_art == null or not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+		return
+	var pulse_strength := 0.0
+	for action_button_value in action_bar_buttons():
+		var action_button := action_button_value as Button
+		if action_button != null:
+			pulse_strength = maxf(pulse_strength, action_button_pulse_strength(action_button_visual_role(action_button.text)))
+	if pulse_strength <= 0.0:
+		return
+	var peak: float = lerpf(0.40, 0.78, pulse_strength)
+	var trough: float = lerpf(0.10, 0.24, pulse_strength)
+	var pulse_tw := create_screen_tween_for_owner(pulse_driver)
+	pulse_tw.set_loops(12)
+	pulse_tw.tween_property(pulse_art, "modulate:a", trough, 0.64).from(peak)
+	pulse_tw.tween_property(pulse_art, "modulate:a", peak, 0.64).from(trough)
 
 
 func draw_action_intent_command_bridge(parent: Control, count: int, color: Color) -> Control:
@@ -10986,6 +11941,10 @@ func draw_actions(parent: Control) -> void:
 	var pending_claim_voice_lane: HBoxContainer = null
 	if mode == "online_game" and not disconnected:
 		draw_chat_action_button(parent)
+	if mode == "offline" and reuse_retained_battle_action_bar_for_render(parent):
+		draw_action_dock(parent, disconnected)
+		finalize_action_bar_layout()
+		return
 	if disconnected:
 		var recovery_model := online_recovery_view_model()
 		var reconnecting := bool(recovery_model.get("reconnecting", false))
@@ -11450,6 +12409,10 @@ func draw_actions(parent: Control) -> void:
 	prepare_ended_action_overflow(parent)
 	draw_action_dock(parent, disconnected)
 	finalize_action_bar_layout()
+	if mode == "offline" and battle_action_bar_can_retain():
+		var action_bar_state_signature := battle_action_bar_state_signature()
+		action_bar.set_meta("action_bar_state_signature", action_bar_state_signature)
+		action_bar.set_meta("action_bar_render_signature", battle_action_bar_identity_signature())
 
 func open_pending_network_menu(anchor: Control = null) -> void:
 	var menu := PopupMenu.new()
@@ -11530,6 +12493,18 @@ func prepare_ended_action_overflow(parent: Control) -> void:
 	action_bar.add_child(overflow)
 
 func draw_chat_action_button(parent: Control) -> void:
+	var chat_signature := battle_chat_action_button_identity_signature()
+	var retained_button := retained_battle_chat_action_button
+	var retained_signature := retained_battle_chat_action_button_signature
+	retained_battle_chat_action_button = null
+	retained_battle_chat_action_button_signature = ""
+	if retained_button != null and is_instance_valid(retained_button) and not retained_button.is_queued_for_deletion() and retained_signature == chat_signature:
+		parent.add_child(retained_button)
+		retained_button.set_meta("retained_for_battle_render", false)
+		retained_button.set_meta("chat_action_button_render_signature", chat_signature)
+		return
+	if retained_button != null and is_instance_valid(retained_button):
+		retained_button.queue_free()
 	var chat_button := make_action_button("聊天", Color(0.30, 0.58, 0.54), func() -> void:
 		toggle_chat_panel()
 	)
@@ -11543,6 +12518,7 @@ func draw_chat_action_button(parent: Control) -> void:
 	if chat_panel_open:
 		chat_button.modulate = Color(0.78, 0.92, 0.82, 0.92)
 	apply_rect(chat_button, CHAT_ACTION_BUTTON_RECT)
+	chat_button.set_meta("chat_action_button_render_signature", chat_signature)
 	parent.add_child(chat_button)
 
 func draw_advisor_card_meter(parent: Control, heading: String, main_text: String, sub_text: String, accent: Color) -> Control:
@@ -11781,12 +12757,27 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# danger decision surfaces and keeps keyboard focus within the active action.
 	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or has_pending_danger_discard() or not player_ai_assist_enabled()):
 		return
+	var advisor_signature := battle_advisor_identity_signature()
+	var retained_panel := retained_battle_advisor_panel
+	var retained_panel_signature := retained_battle_advisor_panel_signature
+	retained_battle_advisor_panel = null
+	retained_battle_advisor_panel_signature = ""
+	if retained_panel != null and is_instance_valid(retained_panel) and not retained_panel.is_queued_for_deletion() and retained_panel_signature == advisor_signature:
+		parent.add_child(retained_panel)
+		retained_panel.set_meta("retained_for_battle_render", false)
+		retained_panel.set_meta("advisor_render_signature", advisor_signature)
+		ai_advisor_fingerprint = JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports})
+		ai_advisor_root_generation = ui_page_generation
+		return
+	if retained_panel != null and is_instance_valid(retained_panel):
+		retained_panel.queue_free()
 	# The advisor owns an authored side channel selected against the live table
 	# geometry. It must not cover the center wind, wall count, last discard, or a
 	# seat-facing river/meld lane just because the viewport is compact.
 	var advisor_rect := advisor_panel_layout_rect()
 	var panel = make_gpt_plate_rect(advisor_rect, Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
 	panel.set_name("AdvisorPanel")
+	panel.set_meta("advisor_render_signature", advisor_signature)
 	panel.set_meta("layout_rect", advisor_rect)
 	panel.set_meta("layout_role", "advisor_safe_side_channel")
 	panel.set_meta("center_occlusion_policy", "never")
@@ -11838,6 +12829,8 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 		var payload: Dictionary = card_payloads[index]
 		var card_rect := advisor_card_rect_a if index == 0 else advisor_card_rect_b if index == 1 else advisor_card_rect_c
 		draw_advisor_info_card(panel, card_rect, str(payload.get("heading", "")), str(payload.get("main", "")), str(payload.get("sub", "")), payload.get("accent", Color.WHITE))
+	ai_advisor_fingerprint = JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports})
+	ai_advisor_root_generation = ui_page_generation
 
 
 func draw_advisor_detail_panel(parent: Control) -> void:
@@ -21122,6 +22115,7 @@ func draw_discard_river_archive_art(parent: Control, seat: int, accent: Color, d
 	# r211: GPT chrome conversion
 	var archive = Control.new()
 	archive.name = "DiscardRiverArchiveArt_%d" % seat
+	archive.set_meta("discard_archive_seat", seat)
 	archive.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(archive, rect_full(0.350, 0.745, 0.965, 0.995))
 	parent.add_child(archive)
@@ -21155,16 +22149,46 @@ func draw_discard_river_archive_art(parent: Control, seat: int, accent: Color, d
 	window_gate.name = "DiscardRiverArchiveWindowGate_%d" % seat
 	archive.add_child(window_gate)
 	var tick = add_gpt_tick_strip(archive, rect_full(0.250, 0.175, (0.250) + float(2) * (0.145) + (0.020), 0.650), Color(accent.r, accent.g, accent.b, 0.18), "DiscardRiverArchiveTick_%d_0" % [seat])
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_screen_tween()
-		tw.set_loops(10)
-		tw.tween_property(fill, "modulate:a", 0.34, 0.72).from(0.86)
-		tw.parallel().tween_property(window_fill, "modulate:a", 0.30, 0.72).from(0.80)
-		tw.parallel().tween_property(seal, "modulate:a", 0.56, 0.72).from(0.88)
-		tw.tween_property(fill, "modulate:a", 0.86, 0.72).from(0.34)
-		tw.parallel().tween_property(window_fill, "modulate:a", 0.80, 0.72).from(0.30)
-		tw.parallel().tween_property(seal, "modulate:a", 0.88, 0.72).from(0.56)
+	archive.set_meta("discard_archive_art_render_signature", discard_archive_art_render_signature(seat, accent, discard_count, visible_start, visible_count))
+	animate_discard_river_archive_art(archive)
 	return archive
+
+
+func discard_archive_art_render_signature(seat: int, accent: Color, discard_count: int, visible_start: int, visible_count: int) -> String:
+	return "%s|%d|%s|%d|%d|%d|%d|%d" % [
+		mode,
+		seat,
+		str(accent),
+		discard_count,
+		visible_start,
+		visible_count,
+		1 if fx_enabled_effective() else 0,
+		1 if ui_motion_enabled() else 0,
+	]
+
+
+func animate_discard_river_archive_art(archive: Control) -> void:
+	if archive == null or not is_instance_valid(archive):
+		return
+	kill_screen_tweens_for_subtree(archive)
+	var fill := archive.find_child("DiscardRiverArchiveFill_%d" % int(archive.get_meta("discard_archive_seat", -1)), true, false) as Control
+	var window_fill := archive.find_child("DiscardRiverArchiveWindowFill_%d" % int(archive.get_meta("discard_archive_seat", -1)), true, false) as Control
+	var seal := archive.find_child("DiscardRiverArchiveSeal_%d" % int(archive.get_meta("discard_archive_seat", -1)), true, false) as Control
+	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
+		var tw := create_screen_tween_for_owner(archive)
+		tw.set_loops(10)
+		if fill != null:
+			tw.tween_property(fill, "modulate:a", 0.34, 0.72).from(0.86)
+		if window_fill != null:
+			tw.parallel().tween_property(window_fill, "modulate:a", 0.30, 0.72).from(0.80)
+		if seal != null:
+			tw.parallel().tween_property(seal, "modulate:a", 0.56, 0.72).from(0.88)
+		if fill != null:
+			tw.tween_property(fill, "modulate:a", 0.86, 0.72).from(0.34)
+		if window_fill != null:
+			tw.parallel().tween_property(window_fill, "modulate:a", 0.80, 0.72).from(0.30)
+		if seal != null:
+			tw.parallel().tween_property(seal, "modulate:a", 0.88, 0.72).from(0.56)
 
 
 func discard_river_owner_text(seat: int) -> String:
@@ -21183,6 +22207,32 @@ func discard_river_owner_badge_rect(seat: int) -> Rect2:
 		3:
 			return rect_full(0.080, 0.035, 0.920, 0.225)
 	return rect_full(0.720, 0.805, 0.975, 0.965)
+
+
+func discard_river_owner_overlay_render_signature(seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int, rows: int, reserved_start: int, reserved_columns: int, reserved_rows: int, compact_readable: bool, latest_seat: int) -> String:
+	var parts: Array[String] = [
+		mode,
+		str(seat),
+		str(zone_rect),
+		str(discard_count),
+		str(visible_start),
+		str(visible_count),
+		str(visible_capacity),
+		str(columns),
+		str(rows),
+		str(reserved_start),
+		str(reserved_columns),
+		str(reserved_rows),
+		str(compact_readable),
+		str(latest_seat),
+		str(effective_viewport_size()),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(reduce_motion_enabled),
+	]
+	return "|".join(parts)
 
 func discard_archive_button_rect(seat: int, zone_rect: Rect2 = Rect2(), columns: int = 0, rows: int = 0, reserved_start: int = -1, reserved_columns: int = 0, reserved_rows: int = 0) -> Rect2:
 	if columns > 0 and rows > 0 and reserved_start >= 0 and zone_rect.size.x > zone_rect.position.x and zone_rect.size.y > zone_rect.position.y:
@@ -21293,13 +22343,6 @@ func release_unused_discard_archive_buttons() -> void:
 func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int = 0, rows: int = 0, reserved_start: int = -1, reserved_columns: int = 0, reserved_rows: int = 0, compact_readable: bool = false, latest_seat: int = -1, discards_snapshot: Array = []) -> Control:
 	if discard_count <= 0:
 		return null
-	var overlay = Control.new()
-	overlay.name = "DiscardRiverOwnerOverlay_%d" % seat
-	# Ownership chrome is visual-only. Archive navigation is the explicit child
-	# target, so the transparent parent must never win tile hit testing.
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(overlay, zone_rect)
-	parent.add_child(overlay)
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
 	var current_latest_seat := latest_seat if latest_seat >= 0 else get_last_discard_seat()
 	var is_last = seat == current_latest_seat and discard_count > 0
@@ -21313,8 +22356,36 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	var latest_off_page := seat == current_latest_seat and visible_start < latest_start
 	var owner_copy := "%s %d-%d/%d" % [discard_river_owner_text(seat), visible_start + 1, window_end, discard_count]
 	var owner_display_copy := "%s · 最新在末页" % owner_copy if latest_off_page else owner_copy
-	var owner = make_badge(overlay, discard_river_owner_badge_rect(seat), owner_display_copy, 10, Color(0.010, 0.024, 0.026, fill_alpha), Color(accent.r, accent.g, accent.b, border_alpha), Color(0.92, 0.88, 0.70, 0.92))
-	owner.name = "DiscardRiverOwnerBadge_%d" % seat
+	var overlay_signature := discard_river_owner_overlay_render_signature(seat, zone_rect, discard_count, visible_start, visible_count, visible_capacity, columns, rows, reserved_start, reserved_columns, reserved_rows, compact_readable, current_latest_seat)
+	var retained_overlay := retained_battle_discard_owner_overlays.get(seat, null) as Control
+	retained_battle_discard_owner_overlays.erase(seat)
+	var overlay: Control = null
+	var owner: Control = null
+	var reuse_overlay := retained_overlay != null and is_instance_valid(retained_overlay) and not retained_overlay.is_queued_for_deletion() and str(retained_overlay.get_meta("discard_river_owner_overlay_render_signature", "")) == overlay_signature
+	if reuse_overlay:
+		overlay = retained_overlay
+		parent.add_child(overlay)
+		owner = overlay.find_child("DiscardRiverOwnerBadge_%d" % seat, true, false) as Control
+		if owner == null:
+			reuse_overlay = false
+			if overlay.get_parent() != null:
+				overlay.get_parent().remove_child(overlay)
+	if not reuse_overlay:
+		if retained_overlay != null and is_instance_valid(retained_overlay):
+			retained_overlay.queue_free()
+		overlay = Control.new()
+		overlay.name = "DiscardRiverOwnerOverlay_%d" % seat
+		# Ownership chrome is visual-only. Archive navigation is the explicit child
+		# target, so the transparent parent must never win tile hit testing.
+		overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		apply_rect(overlay, zone_rect)
+		parent.add_child(overlay)
+		owner = make_badge(overlay, discard_river_owner_badge_rect(seat), owner_display_copy, 10, Color(0.010, 0.024, 0.026, fill_alpha), Color(accent.r, accent.g, accent.b, border_alpha), Color(0.92, 0.88, 0.70, 0.92))
+		owner.name = "DiscardRiverOwnerBadge_%d" % seat
+	overlay.set_meta("discard_river_owner_overlay_render_signature", overlay_signature)
+	overlay.set_meta("retained_for_battle_render", false)
+	overlay.set_meta("ui_page_generation", ui_page_generation)
+	apply_rect(overlay, zone_rect)
 	owner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	owner.tooltip_text = "%s · 当前 %d-%d / %d" % [discard_river_owner_text(seat), visible_start + 1, visible_start + visible_count, discard_count]
 	owner.set_meta("window_start", visible_start)
@@ -21338,7 +22409,6 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			archive_button.pressed.connect(Callable(self, "cycle_discard_archive_window_from_button").bind(archive_button.get_instance_id()))
 		else:
 			retained_battle_discard_archive_buttons.erase(seat)
-		clear_discard_archive_button_visuals(archive_button)
 		archive_button.text = discard_archive_button_text(discard_count, visible_start, visible_capacity)
 		archive_button.name = "DiscardRiverArchiveButton_%d" % seat
 		archive_button.z_index = 12
@@ -21368,13 +22438,22 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		apply_rect(archive_button, discard_archive_button_rect(seat, zone_rect, columns, rows, reserved_start, reserved_columns, reserved_rows))
 		archive_button.set_meta("hit_rect_local_to_zone", true)
 		archive_button.set_meta("reserved_start", reserved_start)
-		var archive_art := draw_discard_river_archive_art(archive_button, seat, accent, discard_count, visible_start, visible_count)
-		archive_art.modulate.a = 0.82
-		archive_button.move_child(archive_art, 0)
-		add_lucide_icon(archive_button, "book-open", rect_full(0.08, 0.07, 0.30, 0.34), Color(1.0, 0.92, 0.62, 0.92))
+		var archive_art_signature := discard_archive_art_render_signature(seat, accent, discard_count, visible_start, visible_count)
+		var archive_art := archive_button.find_child("DiscardRiverArchiveArt_%d" % seat, true, false) as Control
+		var archive_label := archive_button.find_child("DiscardRiverArchiveLabel_%d" % seat, true, false) as Label
+		var rebuild_archive_visuals := not reused_archive_button or archive_art == null or archive_label == null or str(archive_button.get_meta("discard_archive_art_render_signature", "")) != archive_art_signature
+		if rebuild_archive_visuals:
+			clear_discard_archive_button_visuals(archive_button)
+			archive_art = draw_discard_river_archive_art(archive_button, seat, accent, discard_count, visible_start, visible_count)
+			add_lucide_icon(archive_button, "book-open", rect_full(0.08, 0.07, 0.30, 0.34), Color(1.0, 0.92, 0.62, 0.92))
+			archive_label = make_label(archive_button, str(archive_button.get_meta("visible_summary", "历史")), 10, Color(1.0, 0.94, 0.66, 1.0), true)
+		else:
+			animate_discard_river_archive_art(archive_art)
+		archive_button.set_meta("discard_archive_art_render_signature", archive_art_signature)
+		if archive_art != null:
+			archive_art.modulate.a = 0.82
 		# The full range remains available to focus and tooltip semantics, while the
 		# painted label stays to two short lines at compact resolutions.
-		var archive_label = make_label(archive_button, str(archive_button.get_meta("visible_summary", "历史")), 10, Color(1.0, 0.94, 0.66, 1.0), true)
 		archive_label.name = "DiscardRiverArchiveLabel_%d" % seat
 		archive_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		archive_label.tooltip_text = archive_button.tooltip_text
@@ -21396,13 +22475,45 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		discard_archive_button_focus_visual_by_id(archive_button.get_instance_id(), archive_button.has_focus())
 	return overlay
 
+func discard_river_art_render_signature(seat: int, zone_rect: Rect2, discard_count: int, latest_seat: int) -> String:
+	var parts: Array[String] = [
+		mode,
+		str(seat),
+		str(zone_rect),
+		str(discard_count),
+		str(latest_seat),
+		str(effective_viewport_size()),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		str(fx_enabled_effective()),
+		str(ui_motion_enabled()),
+	]
+	return "|".join(parts)
+
+
 func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, latest_seat: int = -1) -> Control:
 	# r453: river bed = warm GPT plate only (no green wash mats under porcelain faces).
+	var current_latest_seat := latest_seat if latest_seat >= 0 else get_last_discard_seat()
+	var art_signature := discard_river_art_render_signature(seat, zone_rect, discard_count, current_latest_seat)
+	var retained_art := retained_battle_discard_river_art.get(seat, null) as Control
+	retained_battle_discard_river_art.erase(seat)
+	var reuse_art := retained_art != null and is_instance_valid(retained_art) and not retained_art.is_queued_for_deletion() and str(retained_art.get_meta("discard_river_art_render_signature", "")) == art_signature
+	if reuse_art:
+		parent.add_child(retained_art)
+		apply_rect(retained_art, zone_rect)
+		retained_art.set_meta("retained_for_battle_render", false)
+		retained_art.set_meta("ui_page_generation", ui_page_generation)
+		return retained_art
+	if retained_art != null and is_instance_valid(retained_art):
+		retained_art.queue_free()
 	var art = Control.new()
 	art.name = "DiscardRiverArt_%d" % seat
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.z_index = 1
 	apply_rect(art, zone_rect)
+	art.set_meta("discard_river_art_render_signature", art_signature)
+	art.set_meta("retained_for_battle_render", false)
+	art.set_meta("ui_page_generation", ui_page_generation)
 	parent.add_child(art)
 	# r187: slightly stronger warm GPT river bed so porcelain seats read against felt.
 	var wash_a := 0.070 if discard_count > 0 else 0.032
@@ -21412,7 +22523,6 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 	if soft != null:
 		soft.name = "DiscardRiverWarmWash_%d" % seat
 		soft.modulate = Color(1.12, 1.02, 0.88, soft.modulate.a)
-	var current_latest_seat := latest_seat if latest_seat >= 0 else get_last_discard_seat()
 	var is_last_source = seat == current_latest_seat and discard_count > 0
 	if is_last_source:
 		var last_edge = make_gpt_plate_rect(rect_full(0.020, 0.040, 0.980, 0.085), Color(0.96, 0.80, 0.38, 0.18), "ui_soft_flash")
@@ -21799,8 +22909,11 @@ func draw_discards(parent: Control) -> void:
 					# tile remains the single visual owner for the latest discard.
 					focus_tile.visible = false
 					focus_tile.modulate.a = 0.0
-			release_unused_discard_archive_buttons()
+	release_unused_discard_archive_buttons()
 	release_unused_discard_grids()
+	release_unused_discard_river_art()
+	release_unused_discard_river_owner_overlays()
+	release_retained_battle_last_discard_marker()
 	# The dedicated foreground layer owns all river overlays, so root child order is
 	# stable across HUD-only redraws and no per-seat move_child pass is required.
 	# The four rivers already carry ownership and last-discard focus; a cross-table
@@ -22096,6 +23209,21 @@ func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2
 
 
 func draw_game_top_hud(parent: Control) -> void:
+	var hud_signature := battle_top_hud_identity_signature()
+	var retained_hud := retained_battle_top_hud
+	retained_battle_top_hud = null
+	if retained_hud != null and is_instance_valid(retained_hud) and not retained_hud.is_queued_for_deletion() and retained_battle_top_hud_signature == hud_signature:
+		parent.add_child(retained_hud)
+		retained_hud.set_meta("retained_for_battle_render", false)
+		retained_hud.set_meta("ui_page_generation", ui_page_generation)
+		retained_hud.set_meta("top_hud_render_signature", hud_signature)
+		status_label = retained_hud.find_child("TopHudStatus", true, false) as Label
+		start_top_hud_hand_progress_animations(retained_hud.get_node_or_null("TopHudHandProgress") as Control)
+		retained_battle_top_hud_signature = ""
+		return
+	if retained_hud != null and is_instance_valid(retained_hud):
+		retained_hud.queue_free()
+	retained_battle_top_hud_signature = ""
 	# Keep the generated texture as a restrained header surface; status text and
 	# controls remain the primary visual signal at 960x540.
 	var hud = make_gpt_plate_rect(TOP_HUD_RECT, Color(0.028, 0.036, 0.032, 0.26), "ui_dark_scrim")
@@ -22328,6 +23456,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	update.set_meta("focus_order", 3)
 	mark_ui_optimization(update, "F-254")
 	refresh_top_hud_update_button(update)
+	hud.set_meta("top_hud_render_signature", hud_signature)
 
 
 func draw_hand(parent: Control) -> void:
@@ -23391,12 +24520,75 @@ func draw_item_toast_inventory_route(toast_bg: Control, item_id: String, accent:
 	return route
 
 
+func last_discard_focus_marker_render_signature(seat: int, table_size: Vector2, latest_tile: String, discard_count: int, marker_rect: Rect2) -> String:
+	return "%s|%d|%s|%d|%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%d" % [
+		mode,
+		seat,
+		latest_tile,
+		discard_count,
+		str(table_size),
+		str(marker_rect),
+		str(effective_viewport_size()),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		1 if has_pending_claim_window() else 0,
+		1 if fx_enabled_effective() else 0,
+		1 if ui_motion_enabled() else 0,
+		1 if large_text_enabled else 0,
+		1 if high_contrast_enabled else 0,
+		1 if reduce_motion_enabled else 0,
+	]
+
+func animate_last_discard_focus_marker(marker: Control) -> void:
+	if marker == null or not is_instance_valid(marker):
+		return
+	kill_screen_tweens_for_subtree(marker)
+	var aura_texture := marker.find_child("LastDiscardAuraTexture", true, false) as Control
+	var route_fill := marker.find_child("LastDiscardFocusRouteFill", true, false) as Control
+	var animated := fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless"
+	if not animated:
+		marker.modulate = Color(1, 1, 1, 1)
+		marker.scale = Vector2.ONE
+		return
+	marker.modulate = Color(1, 1, 1, 0)
+	marker.scale = Vector2(0.92, 0.92)
+	if aura_texture != null:
+		var aura_texture_tw := create_screen_tween_for_owner(marker)
+		aura_texture_tw.set_loops(6)
+		aura_texture_tw.tween_property(aura_texture, "modulate:a", 0.06, 0.42).from(0.18)
+		aura_texture_tw.parallel().tween_property(aura_texture, "scale", Vector2(1.06, 1.06), 0.42).from(Vector2(0.96, 0.96))
+		aura_texture_tw.tween_property(aura_texture, "modulate:a", 0.18, 0.42).from(0.06)
+		aura_texture_tw.parallel().tween_property(aura_texture, "scale", Vector2(0.96, 0.96), 0.42).from(Vector2(1.06, 1.06))
+	var tw := create_screen_tween_for_owner(marker)
+	tw.set_parallel(true)
+	tw.tween_property(marker, "modulate:a", 1.0, 0.16).from(0.0)
+	tw.tween_property(marker, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.92, 0.92)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if route_fill != null:
+		tw.tween_property(route_fill, "modulate:a", 0.42, 0.36).from(0.88)
+
 func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vector2 = Vector2.ZERO, latest_tile: String = "", discard_count: int = -1) -> Control:
 	# r210: GPT chrome conversion
 	var marker_rect = last_discard_focus_marker_rect_for_seat(seat, table_size)
 	if marker_rect.size == Vector2.ZERO:
 		return null
 	var tile := latest_tile if latest_tile != "" else get_last_discard()
+	var resolved_discard_count := discard_count if discard_count >= 0 else get_discards(seat).size()
+	var marker_signature := last_discard_focus_marker_render_signature(seat, table_size, tile, resolved_discard_count, marker_rect)
+	var retained_marker := retained_battle_last_discard_marker
+	retained_battle_last_discard_marker = null
+	if retained_marker != null and is_instance_valid(retained_marker) and not retained_marker.is_queued_for_deletion() and retained_battle_last_discard_marker_signature == marker_signature:
+		parent.add_child(retained_marker)
+		retained_marker.set_meta("retained_for_battle_render", false)
+		retained_marker.set_meta("ui_page_generation", ui_page_generation)
+		retained_marker.set_meta("last_discard_focus_marker_signature", marker_signature)
+		retained_marker.set_meta("discard_tile_code", tile)
+		retained_marker.set_meta("latest_discard_source_index", resolved_discard_count - 1)
+		retained_battle_last_discard_marker_signature = ""
+		animate_last_discard_focus_marker(retained_marker)
+		return retained_marker
+	if retained_marker != null and is_instance_valid(retained_marker):
+		retained_marker.queue_free()
+	retained_battle_last_discard_marker_signature = ""
 	var tile_display_label := tile_label(tile)
 	var marker = Control.new()
 	marker.name = "LastDiscardFocusMarker"
@@ -23415,18 +24607,11 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	marker.z_index = 50
 	marker.set_meta("z_index_policy", "latest_discard_owner_above_river_faces")
 	marker.set_meta("latest_discard_page_state", "latest")
-	var resolved_discard_count := discard_count if discard_count >= 0 else get_discards(seat).size()
 	marker.set_meta("latest_discard_source_index", resolved_discard_count - 1)
+	marker.set_meta("last_discard_focus_marker_signature", marker_signature)
 	var aura_texture = add_illustration_texture(marker, "last_discard_aura", rect_full(-0.170, -0.220, 1.170, 1.170), 0.18, false)
 	if aura_texture != null:
 		aura_texture.name = "LastDiscardAuraTexture"
-		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-			var aura_texture_tw := create_screen_tween()
-			aura_texture_tw.set_loops(6)
-			aura_texture_tw.tween_property(aura_texture, "modulate:a", 0.06, 0.42).from(0.18)
-			aura_texture_tw.parallel().tween_property(aura_texture, "scale", Vector2(1.06, 1.06), 0.42).from(Vector2(0.96, 0.96))
-			aura_texture_tw.tween_property(aura_texture, "modulate:a", 0.18, 0.42).from(0.06)
-			aura_texture_tw.parallel().tween_property(aura_texture, "scale", Vector2(0.96, 0.96), 0.42).from(Vector2(1.06, 1.06))
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
 	# Keep a stable authored edge around the latest tile. Animation and response
 	# routes can quiet down during a claim window, but the target itself remains
@@ -23496,14 +24681,7 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	if badge_icon != null:
 		badge_icon.name = "LastDiscardFocusBadgeIcon"
 		badge_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if fx_enabled_effective():
-		marker.modulate = Color(1, 1, 1, 0)
-		marker.scale = Vector2(0.92, 0.92)
-		var tw := create_screen_tween()
-		tw.set_parallel(true)
-		tw.tween_property(marker, "modulate:a", 1.0, 0.16).from(0.0)
-		tw.tween_property(marker, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.92, 0.92)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tw.tween_property(route_fill, "modulate:a", 0.42, 0.36).from(0.88)
+	animate_last_discard_focus_marker(marker)
 	return marker
 
 
@@ -25889,6 +27067,34 @@ func draw_round_summary(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
 	if mode != "offline" or offline_phase != "ended":
 		return
+	var summary_signature := battle_round_summary_identity_signature()
+	var retained_panel := retained_battle_round_summary_panel
+	var retained_shield := retained_battle_round_summary_shield
+	retained_battle_round_summary_panel = null
+	retained_battle_round_summary_shield = null
+	retained_battle_round_summary_signature = ""
+	var can_reuse_retained := retained_panel != null and retained_shield != null and is_instance_valid(retained_panel) and is_instance_valid(retained_shield) and not retained_panel.is_queued_for_deletion() and not retained_shield.is_queued_for_deletion() and str(retained_panel.get_meta("round_summary_render_signature", "")) == summary_signature and str(retained_shield.get_meta("round_summary_render_signature", "")) == summary_signature
+	if can_reuse_retained:
+		normalize_retained_battle_round_summary_visuals(retained_panel)
+		parent.add_child(retained_shield)
+		parent.add_child(retained_panel)
+		retained_shield.set_meta("retained_for_battle_render", false)
+		retained_panel.set_meta("retained_for_battle_render", false)
+		retained_panel.set_meta("ui_page_generation", ui_page_generation)
+		retained_panel.set_meta("settlement_fx_generation", fx_generation)
+		retained_panel.set_meta("round_summary_render_signature", summary_signature)
+		var reused_body_scroll := retained_panel.get_node_or_null("RoundSummaryBodyScroll") as ScrollContainer
+		var reused_body := reused_body_scroll.get_node_or_null("RoundSummaryBody") as Label if reused_body_scroll != null else null
+		var reused_body_status := retained_panel.get_node_or_null("RoundSummaryBodyStatus") as Label
+		if reused_body_scroll != null and reused_body != null and reused_body_status != null:
+			call_deferred("sync_round_summary_body_status_by_id", reused_body_scroll.get_instance_id(), reused_body.get_instance_id(), reused_body_status.get_instance_id())
+		restore_round_summary_action_lane(parent)
+		return
+	for stale_summary in [retained_panel, retained_shield]:
+		if stale_summary != null and is_instance_valid(stale_summary):
+			if stale_summary is Control and stale_summary.name == "RoundSummaryPanel":
+				clear_round_summary_runtime_effects(stale_summary as Control)
+			stale_summary.queue_free()
 	lock_round_summary_background_controls(parent)
 	var content_size = safe_content_pixel_size()
 	var panel_width_px = clampf(content_size.x * 0.500, 480.0, 720.0)
@@ -25905,6 +27111,7 @@ func draw_round_summary(parent: Control) -> void:
 	modal_input_shield.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal_input_shield.z_index = 29
 	modal_input_shield.set_meta("layout_role", "settlement_modal_input_shield")
+	modal_input_shield.set_meta("round_summary_render_signature", summary_signature)
 	parent.add_child(modal_input_shield)
 	var panel = make_gpt_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.006, 0.012, 0.010, 1.0), "ui_dark_scrim")
 	panel.name = "RoundSummaryPanel"
@@ -25916,6 +27123,9 @@ func draw_round_summary(parent: Control) -> void:
 	panel.set_meta("action_lane_external", true)
 	panel.set_meta("action_lane_clearance_px", 12.0)
 	panel.set_meta("settlement_fx_generation", fx_generation)
+	panel.set_meta("round_summary_render_signature", summary_signature)
+	panel.set_meta("round_summary_animation_enabled", fx_enabled_effective())
+	panel.set_meta("round_summary_motion_enabled", ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless")
 	mark_ui_optimization(panel, "F-245")
 	panel.clip_contents = true
 	parent.add_child(panel)
@@ -25945,7 +27155,7 @@ func draw_round_summary(parent: Control) -> void:
 	if fx_enabled_effective():
 		panel.modulate = Color(1, 1, 1, 0)
 		panel.scale = Vector2(0.88, 0.88)
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(panel)
 		tw.set_parallel(true)
 		tw.tween_property(panel, "modulate:a", 1.0, 0.22).from(0.0)
 		tw.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.22).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -26015,21 +27225,132 @@ func draw_round_summary(parent: Control) -> void:
 		next.set_meta("settlement_layer", "next_dealer_status")
 		mark_ui_optimization(next, "F-245")
 		next.tooltip_text = "下一局由%s坐庄" % players[next_dealer]["name"]
-	# The summary shield is intentionally full-screen. Keep the real action bar
-	# above the newly-built modal in the tree as well as by z-index, so touch hit
-	# testing cannot stop at the shield before reaching settlement CTAs.
-	if action_bar != null and is_instance_valid(action_bar):
-		action_bar.set_meta("settlement_layer", "fixed_next_action")
-		mark_ui_optimization(action_bar, "F-245")
-		if action_bar.get_parent() == parent:
-			parent.move_child(action_bar, parent.get_child_count() - 1)
-		else:
-			action_bar.move_to_front()
-		call_deferred("focus_named_control", action_bar_default_focus_name())
+	restore_round_summary_action_lane(parent)
 	# MessageQueue marshaling in Godot 4.6 cannot reliably pass typed Object
 	# arguments through call_deferred. Pass instance ids and resolve them in the
 	# deferred frame instead.
 	call_deferred("sync_round_summary_body_status_by_id", body_scroll.get_instance_id(), body.get_instance_id(), body_status.get_instance_id())
+
+
+func restore_round_summary_action_lane(parent: Control) -> void:
+	# Keep the external action lane above the full-screen settlement shield.
+	if action_bar == null or not is_instance_valid(action_bar):
+		return
+	action_bar.set_meta("settlement_layer", "fixed_next_action")
+	mark_ui_optimization(action_bar, "F-245")
+	if action_bar.get_parent() == parent:
+		parent.move_child(action_bar, parent.get_child_count() - 1)
+	else:
+		action_bar.move_to_front()
+	call_deferred("focus_named_control", action_bar_default_focus_name())
+
+
+func clear_round_summary_runtime_effects(panel: Control) -> void:
+	if panel == null or not is_instance_valid(panel):
+		return
+	# The panel is detached before clear_screen() removes the rest of the page.
+	# Explicitly clear both registries so detached settlement effects cannot keep
+	# ticking or resume from an interrupted visual state when reused.
+	kill_screen_tweens_for_subtree(panel)
+	if ui_enhancements != null and is_instance_valid(ui_enhancements):
+		ui_enhancements.clear_effects_for_owner(panel)
+	for node_value in panel.find_children("*", "Control", true, false):
+		var node := node_value as Control
+		if node == null or not is_instance_valid(node):
+			continue
+		var node_name := str(node.name)
+		if node_name == "EnhancedStarlight" or node_name.begins_with("EnhancedParticle_"):
+			node.queue_free()
+
+
+func normalize_retained_battle_round_summary_visuals(panel: Control) -> void:
+	if panel == null or not is_instance_valid(panel):
+		return
+	clear_round_summary_runtime_effects(panel)
+	panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	panel.scale = Vector2.ONE
+	var animation_enabled := bool(panel.get_meta("round_summary_animation_enabled", false))
+	if animation_enabled:
+		var orbit := panel.find_child("RoundSummaryScoreOrbit", true, false) as Control
+		if orbit != null:
+			orbit.modulate.a = 1.0
+		var laurel := panel.find_child("RoundSummaryLaurelTexture", true, false) as Control
+		if laurel != null:
+			laurel.modulate.a = 0.16
+			laurel.offset_left = 0.0
+			laurel.offset_right = 0.0
+		var victory_badge := panel.find_child("RoundSummaryVictoryBadgeTexture", true, false) as Control
+		if victory_badge != null:
+			victory_badge.modulate.a = 0.34
+			victory_badge.rotation = -0.025
+		var wave := panel.find_child("RoundSummarySettlementWave", true, false) as Control
+		if wave != null:
+			wave.modulate.a = 0.10
+			wave.position.y = float(wave.get_meta("round_summary_wave_base_y", wave.position.y)) + 2.0
+		var flow_bus := panel.find_child("RoundSummaryScoreFlowBus", true, false) as Control
+		if flow_bus != null:
+			flow_bus.modulate.a = 1.0
+		var flow_fill := panel.find_child("RoundSummaryScoreFlowSpineFill", true, false) as Control
+		if flow_fill != null:
+			flow_fill.anchor_right = 0.980
+		var flow_gate := panel.find_child("RoundSummaryScoreFlowWinnerGate", true, false) as Control
+		if flow_gate != null:
+			flow_gate.scale = Vector2(1.10, 1.10)
+		var commit_art := panel.find_child("RoundSummarySettlementCommitArt", true, false) as Control
+		if commit_art != null:
+			commit_art.modulate.a = 1.0
+		var commit_fill := panel.find_child("RoundSummarySettlementCommitFill", true, false) as Control
+		if commit_fill != null:
+			commit_fill.anchor_right = 0.980
+		var commit_gate := panel.find_child("RoundSummarySettlementCommitGate", true, false) as Control
+		if commit_gate != null:
+			commit_gate.scale = Vector2(1.10, 1.10)
+		var commit_archive := panel.find_child("RoundSummarySettlementArchiveNode", true, false) as Control
+		if commit_archive != null:
+			commit_archive.modulate.a = 1.0
+		var complete_art := panel.find_child("RoundSummaryMatchCompleteArt", true, false) as Control
+		if complete_art != null:
+			var complete_fill := complete_art.find_child("RoundSummaryMatchCompleteFill", true, false) as Control
+			if complete_fill != null:
+				complete_fill.modulate.a = 0.94
+			var archive_gate := complete_art.find_child("RoundSummaryMatchArchiveGate", true, false) as Control
+			if archive_gate != null:
+				archive_gate.modulate.a = 0.92
+			var complete_laurel := complete_art.find_child("RoundSummaryMatchCompleteLaurel", true, false) as Control
+			if complete_laurel != null:
+				complete_laurel.modulate.a = 0.14
+				complete_laurel.offset_top = 0.0
+	var preview := panel.find_child("AnimationPreview_victory_sparkle", true, false) as Control
+	if preview != null:
+		preview.modulate.a = 1.0
+		preview.rotation = 0.0
+		preview.scale = Vector2.ONE
+	var detail_score := panel.find_child("WinDetailScoreLabel", true, false) as Label
+	if detail_score != null and not last_win_score.is_empty():
+		set_dynamic_label_text(detail_score, "%d番  %d分" % [int(last_win_score.get("fan", 0)), int(last_win_score.get("points", 0))])
+	var showcase := panel.find_child("WinDetailShowcase", true, false) as Control
+	if animation_enabled and showcase != null:
+		showcase.modulate.a = 1.0
+		showcase.scale = Vector2.ONE
+	for node_value in panel.find_children("*", "Control", true, false):
+		var node := node_value as Control
+		if node == null or not is_instance_valid(node):
+			continue
+		var node_name := str(node.name)
+		if node_name.begins_with("WinDetailYakuBadge_") and animation_enabled:
+			node.modulate.a = 1.0
+			node.scale = Vector2.ONE
+		if node_name == "RoundSummaryDeltaBar" and animation_enabled:
+			node.modulate.a = 1.0
+		if node_name == "RoundSummaryRankRow_" or node_name.begins_with("RoundSummaryRankRow_"):
+			if animation_enabled:
+				node.modulate.a = 1.0
+				node.offset_left = 0.0
+				node.offset_right = 0.0
+			var seat := int(node.get_meta("round_summary_seat", -1))
+			var delta_label := node.find_child("RoundSummaryDeltaLabel", true, false) as Label
+			if seat >= 0 and delta_label != null:
+				set_dynamic_label_text(delta_label, round_summary_delta_text(round_summary_score_delta(seat)))
 
 
 func sync_round_summary_body_status(body_scroll: ScrollContainer, body: Label, status: Label) -> void:
@@ -26119,6 +27440,7 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 	var settlement_wave = add_illustration_texture(art, "summary_settlement_wave", rect_full(0.025, 0.610, 0.975, 0.965), 0.07, false)
 	if settlement_wave != null:
 		settlement_wave.name = "RoundSummarySettlementWave"
+		settlement_wave.set_meta("round_summary_wave_base_y", settlement_wave.position.y)
 		art.move_child(settlement_wave, 0)
 	var laurel = add_illustration_texture(art, "summary_laurel", rect_full(0.040, 0.015, 0.960, 0.250), 0.10, false)
 	if laurel != null:
@@ -26217,11 +27539,11 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 	else:
 		draw_round_summary_match_complete_art(art, ranked)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(art)
 		tw.tween_property(orbit, "modulate:a", 0.52, 0.72).from(1.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(orbit, "modulate:a", 1.0, 0.72).from(0.52).set_ease(Tween.EASE_IN)
 		if laurel != null:
-			var laurel_tw := create_screen_tween()
+			var laurel_tw := create_screen_tween_for_owner(art)
 			laurel_tw.set_loops(48)
 			laurel_tw.tween_property(laurel, "modulate:a", 0.10, 2.2).from(0.16)
 			laurel_tw.parallel().tween_property(laurel, "offset_left", -8.0, 2.2).from(0.0)
@@ -26230,14 +27552,14 @@ func draw_round_summary_ambience(parent: Control) -> Control:
 			laurel_tw.parallel().tween_property(laurel, "offset_left", 0.0, 2.2).from(-8.0)
 			laurel_tw.parallel().tween_property(laurel, "offset_right", 0.0, 2.2).from(8.0)
 		if victory_texture != null:
-			var badge_tw := create_screen_tween()
+			var badge_tw := create_screen_tween_for_owner(art)
 			badge_tw.set_loops(48)
 			badge_tw.tween_property(victory_texture, "modulate:a", 0.18, 1.5).from(0.30)
 			badge_tw.parallel().tween_property(victory_texture, "rotation", 0.035, 1.5).from(-0.025)
 			badge_tw.tween_property(victory_texture, "modulate:a", 0.34, 1.5).from(0.18)
 			badge_tw.parallel().tween_property(victory_texture, "rotation", -0.025, 1.5).from(0.035)
 		if settlement_wave != null:
-			var wave_tw := create_screen_tween()
+			var wave_tw := create_screen_tween_for_owner(art)
 			wave_tw.set_loops(48)
 			wave_tw.tween_property(settlement_wave, "modulate:a", 0.22, 2.0).from(0.10)
 			wave_tw.parallel().tween_property(settlement_wave, "position:y", settlement_wave.position.y - 3.0, 2.0).from(settlement_wave.position.y + 2.0)
@@ -26326,7 +27648,7 @@ func draw_round_summary_score_flow_bus(parent: Control, ranked: Array) -> Contro
 	var tick_2 = add_gpt_tick_strip(bus, rect_full(0.640, 0.770, (0.660) + float(2) * (0.056), 0.898), Color(0.86, 0.70, 0.36, 0.22), "RoundSummaryScoreFlowTick_0")
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		bus.modulate.a = 0.0
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(bus)
 		tw.set_parallel(true)
 		tw.tween_property(bus, "modulate:a", 1.0, 0.16).from(0.0).set_delay(0.16)
 		tw.tween_property(flow_fill, "anchor_right", 0.980, 0.28).from(0.060).set_delay(0.20).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -26415,14 +27737,14 @@ func draw_round_summary_match_complete_art(parent: Control, ranked: Array) -> Co
 	seal.name = "RoundSummaryFinalSeal"
 	art.add_child(seal)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(art)
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.42, 0.82).from(0.94)
 		tw.parallel().tween_property(archive_gate, "modulate:a", 0.50, 0.82).from(0.92)
 		tw.tween_property(fill, "modulate:a", 0.94, 0.82).from(0.42)
 		tw.parallel().tween_property(archive_gate, "modulate:a", 0.92, 0.82).from(0.50)
 		if laurel != null:
-			var laurel_tw := create_screen_tween()
+			var laurel_tw := create_screen_tween_for_owner(art)
 			laurel_tw.set_loops(12)
 			laurel_tw.tween_property(laurel, "modulate:a", 0.08, 1.6).from(0.14)
 			laurel_tw.parallel().tween_property(laurel, "offset_top", -6.0, 1.6).from(0.0)
@@ -26474,6 +27796,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	var accent = round_summary_delta_color(delta, rank)
 	var row = make_gpt_plate_rect(row_rect, Color(0.006, 0.012, 0.010, 0.98), "ui_dark_scrim")
 	row.name = "RoundSummaryRankRow_%d" % seat
+	row.set_meta("round_summary_seat", seat)
 	parent.add_child(row)
 	var rank_texture = add_illustration_texture(row, "rank_row_ribbon", rect_full(0.010, 0.040, 0.990, 0.960), 0.11, false)
 	if rank_texture != null:
@@ -26501,6 +27824,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(score)
 	var delta_label = make_label(row, round_summary_delta_text(delta), 14, accent.lightened(0.36), true)
+	delta_label.name = "RoundSummaryDeltaLabel"
 	delta_label.tooltip_text = "本局分数变化：%s" % round_summary_delta_text(delta)
 	apply_rect(delta_label, rect_full(0.700, 0.12, 0.835, 0.88))
 	delta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -26510,12 +27834,12 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 		var delay_for_roll = 0.28 + float(rank - 1) * 0.072
 		delta_label.text = "0"
 		var delta_label_id := delta_label.get_instance_id()
-		var roll_tw := create_screen_tween()
+		var roll_tw := create_screen_tween_for_owner(row)
 		roll_tw.tween_callback(func() -> void:
 			var roll_label := instance_from_id(delta_label_id) as Label
 			if roll_label == null:
 				return
-			AnimationEffects.animate_number(roll_label, delta, 0.4)
+			set_dynamic_label_text(roll_label, round_summary_delta_text(delta))
 		).set_delay(delay_for_roll)
 	var flowers = make_label(row, "花%d" % int(players[seat].get("flowers", 0)), 13, Color(0.86, 0.90, 0.84), false)
 	flowers.tooltip_text = "花牌 %d 张" % int(players[seat].get("flowers", 0))
@@ -26527,7 +27851,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 		row.modulate = Color(1, 1, 1, 0)
 		row.offset_left = -10.0
 		row.offset_right = -10.0
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(row)
 		tw.set_parallel(true)
 		var delay = 0.14 + float(rank - 1) * 0.072
 		tw.tween_property(row, "modulate:a", 1.0, 0.22).from(0.0).set_delay(delay).set_ease(Tween.EASE_OUT)
@@ -26537,7 +27861,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 		var delta_bar = row.get_node_or_null("RoundSummaryDeltaBar")
 		if delta_bar != null and is_instance_valid(delta_bar):
 			delta_bar.modulate.a = 0.0
-			var d_tw := create_screen_tween()
+			var d_tw := create_screen_tween_for_owner(row)
 			d_tw.tween_property(delta_bar, "modulate:a", 1.0, 0.18).from(0.0).set_delay(delay + 0.12).set_ease(Tween.EASE_OUT)
 
 
@@ -26582,7 +27906,7 @@ func draw_round_summary_settlement_commit_art(parent: Control, winner: int, acce
 		art.add_child(pip)
 	if fx_enabled_effective():
 		art.modulate.a = 0.0
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(art)
 		tw.set_parallel(true)
 		tw.tween_property(art, "modulate:a", 1.0, 0.08).from(0.0)
 		tw.tween_property(fill, "anchor_right", 0.980, 0.20).from(0.080).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -29904,6 +31228,47 @@ func draw_table_atmosphere_frame(parent: Control) -> Control:
 	return frame
 
 
+func draw_battle_table_chrome(parent: Control) -> void:
+	var chrome_signature := battle_table_chrome_identity_signature()
+	var chrome_names: Array[String] = [
+		"OfflineTable3DFloorShadow",
+		"OfflineTable3DFrontApron",
+		"OfflineTable3DCastShadow",
+	]
+	var can_reuse := retained_battle_table_chrome_signature == chrome_signature and retained_battle_table_chrome.size() == chrome_names.size()
+	if can_reuse:
+		for node_name in chrome_names:
+			var retained_chrome := retained_battle_table_chrome.get(node_name, null) as Control
+			if retained_chrome == null or not is_instance_valid(retained_chrome) or retained_chrome.is_queued_for_deletion():
+				can_reuse = false
+				break
+	if can_reuse:
+		for node_name in chrome_names:
+			var retained_chrome := retained_battle_table_chrome[node_name] as Control
+			parent.add_child(retained_chrome)
+			retained_chrome.set_meta("retained_for_battle_render", false)
+			retained_chrome.set_meta("table_chrome_render_signature", chrome_signature)
+			retained_battle_table_chrome.erase(node_name)
+		retained_battle_table_chrome_signature = ""
+		return
+	if not retained_battle_table_chrome.is_empty():
+		release_retained_battle_table_chrome()
+	# r426: fixed table depth hosts are retained independently from dynamic board data.
+	var table_floor_shadow := make_soft_depth_panel(parent, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.004), 42)
+	table_floor_shadow.name = "OfflineTable3DFloorShadow"
+	table_floor_shadow.set_meta("table_chrome_render_signature", chrome_signature)
+	# r406: apron sits under hand tray only; do not darken the bottom river.
+	var table_apron := make_gpt_route_rail(rect_full(0.145, 0.805, 0.855, 0.865), Color(0.12, 0.09, 0.05, 0.05))
+	table_apron.name = "OfflineTable3DFrontApron"
+	table_apron.set_meta("table_chrome_render_signature", chrome_signature)
+	parent.add_child(table_apron)
+	var apron_highlight := make_soft_depth_panel(table_apron, rect_full(0.035, 0.040, 0.965, 0.170), Color(0.98, 0.78, 0.40, 0.06), 999)
+	apron_highlight.name = "OfflineTable3DApronHighlight"
+	var table_shadow := make_soft_depth_panel(parent, rect_full(0.112, 0.142, 0.888, 0.812), Color(0.0, 0.0, 0.0, 0.005), 38)
+	table_shadow.name = "OfflineTable3DCastShadow"
+	table_shadow.set_meta("table_chrome_render_signature", chrome_signature)
+
+
 func start_table_atmosphere_animation(frame: Control) -> void:
 	if frame == null or not is_instance_valid(frame) or not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
 		return
@@ -30007,17 +31372,67 @@ func draw_table_last_discard_ripple(parent: Control) -> void:
 
 
 func draw_table_living_illustration(parent: Control) -> Control:
+	var living_signature := battle_living_illustration_identity_signature()
+	if retained_battle_living_illustration != null and is_instance_valid(retained_battle_living_illustration) and not retained_battle_living_illustration.is_queued_for_deletion() and retained_battle_living_illustration_signature == living_signature:
+		var reused_layer := retained_battle_living_illustration
+		retained_battle_living_illustration = null
+		retained_battle_living_illustration_signature = ""
+		parent.add_child(reused_layer)
+		reused_layer.set_meta("retained_for_battle_render", false)
+		reused_layer.set_meta("living_illustration_identity_signature", living_signature)
+		reused_layer.set_meta("ui_page_generation", ui_page_generation)
+		return reused_layer
+	if retained_battle_living_illustration != null and is_instance_valid(retained_battle_living_illustration):
+		retained_battle_living_illustration.queue_free()
+	retained_battle_living_illustration = null
+	retained_battle_living_illustration_signature = ""
 	var layer = Control.new()
 	layer.name = "TableLivingIllustration"
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.set_meta("living_illustration_identity_signature", living_signature)
+	layer.set_meta("ui_page_generation", ui_page_generation)
 	parent.add_child(layer)
 	layer.modulate = Color(1.0, 1.0, 1.0, 0.030)
 	draw_table_last_discard_ripple(layer)
 	return layer
 
+func table_log_render_signature() -> String:
+	var viewport_size := effective_viewport_size()
+	var compact_log := viewport_size.y <= 560.0
+	var hide_compact_ledger_for_pending := viewport_size.x <= 960.0 and has_pending_claim_window() and not table_log_archive_open
+	return "%s|%s|%s|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d" % [
+		mode,
+		str(viewport_size),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		ui_layout_density(),
+		1 if compact_log else 0,
+		1 if hide_compact_ledger_for_pending else 0,
+		1 if table_log_archive_open else 0,
+		1 if has_pending_claim_window() else 0,
+		table_logs.size(),
+		hash(table_logs),
+		1 if large_text_enabled else 0,
+	]
+
 func draw_table_log(parent: Control) -> void:
 	# r213: GPT chrome conversion
+	var log_signature := table_log_render_signature()
+	var retained_ledger := retained_battle_table_log
+	retained_battle_table_log = null
+	var can_reuse_retained := retained_ledger != null and is_instance_valid(retained_ledger) and not retained_ledger.is_queued_for_deletion() and retained_battle_table_log_signature == log_signature
+	if can_reuse_retained:
+		parent.add_child(retained_ledger)
+		retained_ledger.set_meta("retained_for_battle_render", false)
+		retained_ledger.set_meta("ui_page_generation", ui_page_generation)
+		retained_ledger.set_meta("table_log_render_signature", log_signature)
+		retained_battle_table_log_signature = ""
+		return
+	if retained_ledger != null and is_instance_valid(retained_ledger):
+		retained_ledger.queue_free()
+	retained_battle_table_log_signature = ""
 	var compact_log := effective_viewport_size().y <= 560.0
 	# At 960x540 the response context owns the only readable left-top reserve.
 	# Hide the secondary ledger for this short decision window; its complete
@@ -30037,6 +31452,7 @@ func draw_table_log(parent: Control) -> void:
 	ledger_panel.visible = not hide_compact_ledger_for_pending
 	ledger_panel.set_meta("compact_header_policy", "title_then_count_then_history_with_measured_gutters")
 	ledger_panel.set_meta("latest_event_policy", "latest_record_is_visible_before_archive_route")
+	ledger_panel.set_meta("table_log_render_signature", log_signature)
 	parent.add_child(ledger_panel)
 	var ledger_texture = add_illustration_texture(ledger_panel, "table_log_scroll", rect_full(0.010, 0.018, 0.990, 0.982), 0.075, false)
 	if ledger_texture != null:
@@ -30833,26 +32249,39 @@ func draw_top_hud_hand_progress(parent: Control) -> Control:
 		var repeat_ring = add_optional_gpt_illustration_texture(progress, "dealer_repeat_ring", rect_full(0.780, -0.240, 0.950, 0.360), 0.34, true)  # r221
 		if repeat_ring != null:
 			repeat_ring.name = "HandProgressDealerRepeatRing"
-			if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-				var repeat_tw := create_screen_tween()
-				repeat_tw.set_loops(48)
-				repeat_tw.tween_property(repeat_ring, "rotation", TAU, 2.4).from(0.0)
-				repeat_tw.parallel().tween_property(repeat_ring, "modulate:a", 0.42, 1.2).from(0.18)
-				repeat_tw.parallel().tween_property(repeat_ring, "modulate:a", 0.18, 1.2).from(0.42).set_delay(1.2)
 		var repeat_badge = make_badge(progress, rect_full(0.805, -0.160, 0.930, 0.300), "连庄", 8, Color(0.50, 0.12, 0.08, 0.94), Color(0.96, 0.62, 0.34, 0.32), Color(0.98, 0.90, 0.72))
 		repeat_badge.name = "HandProgressRepeatBadge"
 		repeat_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	draw_hand_progress_wall_sync(progress, accent)
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_screen_tween()
-		tw.set_loops(12)
-		tw.tween_property(rail_panel, "modulate:a", 0.58, 0.72).from(0.94)
-		tw.tween_property(rail_panel, "modulate:a", 0.94, 0.72).from(0.58)
-		var route_tw := create_screen_tween()
-		route_tw.set_loops(12)
-		route_tw.tween_property(route_fill, "modulate:a", 0.38, 0.76).from(0.88)
-		route_tw.tween_property(route_fill, "modulate:a", 0.88, 0.76).from(0.38)
+	start_top_hud_hand_progress_animations(progress)
 	return progress
+
+
+func start_top_hud_hand_progress_animations(progress: Control) -> void:
+	if progress == null or not is_instance_valid(progress):
+		return
+	kill_screen_tweens_for_subtree(progress)
+	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+		return
+	var repeat_ring := progress.get_node_or_null("HandProgressDealerRepeatRing") as Control
+	if repeat_ring != null:
+		var repeat_tw := create_screen_tween_for_owner(progress)
+		repeat_tw.set_loops(48)
+		repeat_tw.tween_property(repeat_ring, "rotation", TAU, 2.4).from(0.0)
+		repeat_tw.parallel().tween_property(repeat_ring, "modulate:a", 0.42, 1.2).from(0.18)
+		repeat_tw.parallel().tween_property(repeat_ring, "modulate:a", 0.18, 1.2).from(0.42).set_delay(1.2)
+	var rail_panel := progress.get_node_or_null("HandProgressRail") as Control
+	var route_fill := progress.get_node_or_null("HandProgressRouteFill") as Control
+	if rail_panel != null:
+		var rail_tween := create_screen_tween_for_owner(progress)
+		rail_tween.set_loops(12)
+		rail_tween.tween_property(rail_panel, "modulate:a", 0.58, 0.72).from(0.94)
+		rail_tween.tween_property(rail_panel, "modulate:a", 0.94, 0.72).from(0.58)
+	if route_fill != null:
+		var route_tween := create_screen_tween_for_owner(progress)
+		route_tween.set_loops(12)
+		route_tween.tween_property(route_fill, "modulate:a", 0.38, 0.76).from(0.88)
+		route_tween.tween_property(route_fill, "modulate:a", 0.88, 0.76).from(0.38)
 
 
 func draw_top_hud_status_art(parent: Control) -> Control:
@@ -31648,11 +33077,23 @@ func wall_remaining_badge_state_text(wall_count: int, recent_feedback: bool) -> 
 
 func draw_wall_remaining_badge(parent: Control, wall_count: int, progress: float, recent_feedback: bool) -> Control:
 	# r214: bulk GPT chrome sweep
+	var wall_signature := battle_wall_feedback_identity_signature(wall_count, progress, recent_feedback)
+	var retained_badge := retained_battle_wall_remaining_badge
+	retained_battle_wall_remaining_badge = null
+	retained_battle_wall_remaining_badge_signature = ""
+	if retained_badge != null and is_instance_valid(retained_badge) and not retained_badge.is_queued_for_deletion() and str(retained_badge.get_meta("wall_remaining_badge_render_signature", "")) == wall_signature:
+		parent.add_child(retained_badge)
+		retained_badge.set_meta("retained_for_battle_render", false)
+		retained_badge.set_meta("wall_remaining_badge_render_signature", wall_signature)
+		return retained_badge
+	if retained_badge != null and is_instance_valid(retained_badge):
+		retained_badge.queue_free()
 	var color = wall_meter_color(progress)
 	var low_wall := wall_is_low(wall_count)
 	var has_live_feedback_kit := optional_gpt_illustration_texture("wall_live_feedback_kit") != null
 	var badge = make_gpt_gate(rect_full(0.758, 0.016, 0.962, 0.083), Color(0.010, 0.020, 0.020, 0.72))
 	badge.name = "WallRemainingBadge"
+	badge.set_meta("wall_remaining_badge_render_signature", wall_signature)
 	parent.add_child(badge)
 	var badge_frame = add_optional_gpt_atlas_texture(badge, "wall_live_feedback_kit", wall_live_feedback_badge_region(progress), rect_full(0.012, -0.160, 0.190, 1.030), 0.24 if low_wall else 0.18, true)
 	if badge_frame != null:
@@ -31698,13 +33139,28 @@ func draw_wall_remaining_badge(parent: Control, wall_count: int, progress: float
 
 func draw_wall_count_feedback_art(parent: Control, wall_count: int, progress: float, recent_feedback: bool) -> Control:
 	# r214: bulk GPT chrome sweep
+	var wall_signature := battle_wall_feedback_identity_signature(wall_count, progress, recent_feedback)
+	var retained_feedback := retained_battle_wall_feedback_art
+	retained_battle_wall_feedback_art = null
+	retained_battle_wall_feedback_art_signature = ""
 	if not recent_feedback and not wall_is_low(wall_count):
+		if retained_feedback != null and is_instance_valid(retained_feedback):
+			retained_feedback.queue_free()
 		return null
+	if retained_feedback != null and is_instance_valid(retained_feedback) and not retained_feedback.is_queued_for_deletion() and str(retained_feedback.get_meta("wall_feedback_render_signature", "")) == wall_signature:
+		parent.add_child(retained_feedback)
+		retained_feedback.set_meta("retained_for_battle_render", false)
+		retained_feedback.set_meta("wall_feedback_render_signature", wall_signature)
+		animate_wall_count_feedback_art(retained_feedback)
+		return retained_feedback
+	if retained_feedback != null and is_instance_valid(retained_feedback):
+		retained_feedback.queue_free()
 	var color = wall_meter_color(progress)
 	var low_wall := wall_is_low(wall_count)
 	var has_live_feedback_kit := optional_gpt_illustration_texture("wall_live_feedback_kit") != null
 	var art = Control.new()
 	art.name = "WallDrawFeedbackArt"
+	art.set_meta("wall_feedback_render_signature", wall_signature)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(art)
@@ -31730,14 +33186,26 @@ func draw_wall_count_feedback_art(parent: Control, wall_count: int, progress: fl
 		var warning = make_gpt_edge_rail(rect_full(0.982, 0.025, 0.996, 0.078), Color(0.78, 0.20, 0.10, 0.22))
 		warning.name = "WallDrawLowWarningPulse"
 		art.add_child(warning)
-	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_screen_tween()
-		tw.set_loops(4)
-		tw.tween_property(sheen, "modulate:a", 0.42, 0.22).from(0.92)
-		tw.parallel().tween_property(edge, "modulate:a", 0.56, 0.22).from(0.94)
-		tw.tween_property(sheen, "modulate:a", 0.92, 0.22).from(0.42)
-		tw.parallel().tween_property(edge, "modulate:a", 0.94, 0.22).from(0.56)
+	animate_wall_count_feedback_art(art)
 	return art
+
+
+func animate_wall_count_feedback_art(art: Control) -> void:
+	if art == null or not is_instance_valid(art):
+		return
+	kill_screen_tweens_for_subtree(art)
+	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
+		return
+	var sheen := art.find_child("WallDrawFeedbackSheen", true, false) as Control
+	var edge := art.find_child("WallDrawFeedbackEdge", true, false) as Control
+	if sheen == null or edge == null:
+		return
+	var tw := create_screen_tween_for_owner(art)
+	tw.set_loops(4)
+	tw.tween_property(sheen, "modulate:a", 0.42, 0.22).from(0.92)
+	tw.parallel().tween_property(edge, "modulate:a", 0.56, 0.22).from(0.94)
+	tw.tween_property(sheen, "modulate:a", 0.92, 0.22).from(0.42)
+	tw.parallel().tween_property(edge, "modulate:a", 0.94, 0.22).from(0.56)
 
 
 func draw_walls(parent: Control) -> void:
@@ -31751,14 +33219,28 @@ func draw_walls(parent: Control) -> void:
 	for i in range(WALL_LAYOUTS.size()):
 		var item = WALL_LAYOUTS[i]
 		var capacity = int(item[2])
-		var strip = make_wall_back_strip(int(active_counts[i]), bool(item[3]), capacity, progress, low_wall, recent_feedback)
+		var retained_strip := retained_battle_wall_strips.get(i, null) as WallBackStrip
+		var strip: WallBackStrip
+		var can_reuse_strip := retained_strip != null and is_instance_valid(retained_strip) and not retained_strip.is_queued_for_deletion()
+		if can_reuse_strip:
+			strip = retained_strip
+			retained_battle_wall_strips.erase(i)
+			strip.configure(int(active_counts[i]), bool(item[3]), WALL_BACK_TILE_SIZE, Color(0.20, 0.34, 0.27, 0.72), Color(0.82, 0.66, 0.36, 0.24), capacity, progress, low_wall, recent_feedback)
+		else:
+			if retained_strip != null and is_instance_valid(retained_strip):
+				retained_strip.queue_free()
+			retained_battle_wall_strips.erase(i)
+			strip = make_wall_back_strip(int(active_counts[i]), bool(item[3]), capacity, progress, low_wall, recent_feedback) as WallBackStrip
 		# Keep names unique among siblings so smoke/layout probes can find all four sides.
 		strip.name = "WallBackStrip_%s_%d_%d" % ["h" if bool(item[3]) else "v", capacity, i]
+		strip.set_meta("wall_layout_index", i)
+		strip.set_meta("wall_strip_retention_policy", "configure_in_place_when_retained")
 		strip.anchor_left = item[0].x
 		strip.anchor_top = item[0].y
 		strip.anchor_right = item[1].x
 		strip.anchor_bottom = item[1].y
 		parent.add_child(strip)
+	release_unused_battle_wall_strips()
 	draw_wall_count_feedback_art(parent, wall_count, progress, recent_feedback)
 	draw_wall_remaining_badge(parent, wall_count, progress, recent_feedback)
 
@@ -31925,7 +33407,7 @@ func draw_win_detail_limit_art(parent: Control, limit_name: String, fan: int, po
 		spark.name = "WinDetailLimitSpark_%d" % i
 		art.add_child(spark)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(art)
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.46, 0.68).from(1.0)
 		tw.tween_property(fill, "modulate:a", 1.0, 0.68).from(0.46)
@@ -31979,13 +33461,13 @@ func draw_win_detail_resolution_bridge(parent: Control, fan: int, points: int, r
 		bridge.add_child(pip)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		if seal_texture != null:
-			var seal_tw := create_screen_tween()
+			var seal_tw := create_screen_tween_for_owner(bridge)
 			seal_tw.set_loops(12)
 			seal_tw.tween_property(seal_texture, "modulate:a", 0.26, 0.70).from(0.10)
 			seal_tw.parallel().tween_property(seal_texture, "rotation", 0.05, 0.70).from(-0.05)
 			seal_tw.tween_property(seal_texture, "modulate:a", 0.10, 0.70).from(0.26)
 			seal_tw.parallel().tween_property(seal_texture, "rotation", -0.05, 0.70).from(0.05)
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(bridge)
 		tw.set_loops(12)
 		tw.tween_property(fill, "modulate:a", 0.42, 0.70).from(0.96)
 		tw.parallel().tween_property(gate, "modulate:a", 0.52, 0.70).from(0.96)
@@ -32048,7 +33530,7 @@ func draw_win_detail_score_constellation(parent: Control, reasons: Array, fan: i
 	pulse.name = "WinDetailScorePulse"
 	constellation.add_child(pulse)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(constellation)
 		tw.set_loops(12)
 		tw.tween_property(pulse, "scale", Vector2(1.12, 1.12), 0.72).from(Vector2(0.86, 0.86)).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(pulse, "modulate:a", 0.0, 0.72).from(0.76)
@@ -32106,7 +33588,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and points > 0:
 		score_label.text = "0番  0分"
-		var score_tw := create_screen_tween()
+		var score_tw := create_screen_tween_for_owner(detail_panel)
 		var steps := 16
 		var step_dur := 0.4 / float(steps)
 		for step_i in range(steps):
@@ -32173,7 +33655,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 				badge.modulate = Color(1, 1, 1, 0)
 				badge.scale = Vector2(0.6, 0.6)
 				var delay = 0.16 + float(i) * 0.06
-				var tw := create_screen_tween()
+				var tw := create_screen_tween_for_owner(detail_panel)
 				tw.set_parallel(true)
 				tw.tween_property(badge, "modulate:a", 1.0, 0.18).from(0.0).set_delay(delay)
 				tw.tween_property(badge, "scale", Vector2(1.0, 1.0), 0.18).from(Vector2(0.6, 0.6)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK).set_delay(delay)
@@ -32236,7 +33718,7 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 	if fx_enabled_effective():
 		showcase.modulate = Color(1, 1, 1, 0)
 		showcase.scale = Vector2(0.92, 0.92)
-		var tw := create_screen_tween()
+		var tw := create_screen_tween_for_owner(showcase)
 		tw.set_parallel(true)
 		tw.tween_property(showcase, "modulate:a", 1.0, 0.24).from(0.0).set_delay(0.08)
 		tw.tween_property(showcase, "scale", Vector2(1.0, 1.0), 0.24).from(Vector2(0.92, 0.92)).set_delay(0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

@@ -1130,8 +1130,40 @@ var retained_battle_center: Control = null
 var retained_battle_center_signature := ""
 var retained_battle_atmosphere: Control = null
 var retained_battle_atmosphere_signature := ""
+var retained_battle_table_chrome: Dictionary = {}
+var retained_battle_table_chrome_signature := ""
+var retained_battle_table_surface: Control = null
+var retained_battle_table_surface_signature := ""
+var retained_battle_chat_action_button: Button = null
+var retained_battle_chat_action_button_signature := ""
+var retained_battle_round_summary_shield: Control = null
+var retained_battle_round_summary_panel: Control = null
+var retained_battle_round_summary_signature := ""
+var retained_battle_wall_feedback_art: Control = null
+var retained_battle_wall_feedback_art_signature := ""
+var retained_battle_wall_remaining_badge: Control = null
+var retained_battle_wall_remaining_badge_signature := ""
+var retained_battle_advisor_panel: Control = null
+var retained_battle_advisor_panel_signature := ""
+var retained_battle_top_hud: Control = null
+var retained_battle_top_hud_signature := ""
+var retained_battle_action_dock: Control = null
+var retained_battle_action_dock_shadow: Control = null
+var retained_battle_action_dock_signature := ""
+var retained_battle_action_intent: Control = null
+var retained_battle_action_intent_signature := ""
+var retained_battle_action_bar: Container = null
+var retained_battle_action_bar_signature := ""
+var retained_battle_action_bar_state_signature := ""
+var retained_battle_living_illustration: Control = null
+var retained_battle_living_illustration_signature := ""
 var retained_battle_seats: Dictionary = {}
 var retained_battle_meld_lanes: Dictionary = {}
+var retained_battle_wall_strips: Dictionary = {}
+var retained_battle_table_log: Control = null
+var retained_battle_table_log_signature := ""
+var retained_battle_last_discard_marker: Control = null
+var retained_battle_last_discard_marker_signature := ""
 var seat_threat_fingerprint := ""
 var seat_threat_root_generation := -1
 var seat_threat_revisions: Dictionary = {}
@@ -1157,6 +1189,8 @@ var center_wall_view_lru: Dictionary = {}
 var center_last_discard_view_cache: Dictionary = {}
 var center_last_discard_view_lru: Dictionary = {}
 var discard_river_foreground_layer: Control = null
+var retained_battle_discard_river_art: Dictionary = {}
+var retained_battle_discard_owner_overlays: Dictionary = {}
 var retained_battle_discard_archive_buttons: Dictionary = {}
 var retained_battle_discard_grids: Dictionary = {}
 var discard_river_history_summary_cache: Dictionary = {}
@@ -3962,7 +3996,9 @@ func animate_animation_preview(preview: Control, animation_name: String) -> void
 	if not ui_motion_enabled() or DisplayServer.get_name().to_lower() == "headless":
 		return
 	var duration = clamp(animation_duration_seconds(animation_name), 0.6, 2.4)
-	var tw := preview.create_tween()
+	# Keep preview animation under the same owner registry as the rest of the
+	# screen feedback so retained panels can stop it before being remounted.
+	var tw := create_screen_tween_for_owner(preview)
 	match animation_name:
 		"coin_spin":
 			tw.tween_property(preview, "rotation", TAU * 0.35, duration * 0.7).from(0.0).set_trans(Tween.TRANS_LINEAR)

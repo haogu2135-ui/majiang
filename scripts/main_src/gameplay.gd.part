@@ -349,6 +349,404 @@ func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_t
 	]
 	return "|".join(signature_parts)
 
+func battle_top_hud_identity_signature() -> String:
+	var viewport_size := effective_viewport_size()
+	var compact_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
+	var wall_count := get_wall_count()
+	var wall_total := display_wall_total()
+	var room_code := str(online_game.get("roomCode", selected_room))
+	var update_percent := 0
+	if update_total_bytes > 0:
+		update_percent = clampi(int(round(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes))), 0, 100)
+	var hud_score_parts: Array[String] = []
+	if mode == "online_game":
+		for seat in range(4):
+			var score_info := get_player_info(seat)
+			hud_score_parts.append(str(score_info.get("name", "玩家")))
+			hud_score_parts.append(str(int(score_info.get("score", 0))))
+	var hud_score_signature := "|".join(hud_score_parts)
+	var signature_parts: Array[String] = [
+		mode,
+		active_rule_variant(),
+		rule_variant_short_label(),
+		str(viewport_size),
+		str(safe_area_margins),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		ui_layout_density(),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(reduce_motion_enabled),
+		str(fx_enabled_effective()),
+		str(graphics_quality),
+		str(compact_hud),
+		str(dealer_seat),
+		str(offline_hand_number),
+		str(offline_dealer_repeat),
+		str(get_current_seat()),
+		str(wall_count),
+		str(wall_total),
+		wall_state_text(wall_count),
+		get_last_discard(),
+		str(get_last_discard_seat()),
+		top_hud_short_status_text(compact_hud),
+		top_hud_status_tooltip_text(),
+		last_status_text,
+		online_snapshot_fingerprint("gameState", online_game),
+		hud_score_signature,
+		str(online_room_revision),
+		str(online_game_revision),
+		selected_room,
+		room_code,
+		online_connection_status_text(),
+		online_connection_status_detail(),
+		str(tcp_status),
+		str(online_resume_pending),
+		str(update_state),
+		str(update_percent),
+		str(update_total_bytes),
+		str(update_downloaded_bytes),
+		update_message,
+	]
+	return "|".join(signature_parts)
+
+func retain_battle_top_hud_for_render() -> void:
+	if retained_battle_top_hud != null and is_instance_valid(retained_battle_top_hud):
+		retained_battle_top_hud.queue_free()
+	retained_battle_top_hud = null
+	retained_battle_top_hud_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var hud := root_layer.get_node_or_null("TopHud3DShell") as Control
+	if hud == null or not is_instance_valid(hud) or hud.is_queued_for_deletion():
+		return
+	var hud_signature := str(hud.get_meta("top_hud_render_signature", ""))
+	if hud_signature == "" or hud_signature != battle_top_hud_identity_signature():
+		return
+	var hud_parent := hud.get_parent()
+	if hud_parent == null:
+		return
+	hud_parent.remove_child(hud)
+	retained_battle_top_hud = hud
+	retained_battle_top_hud_signature = hud_signature
+	hud.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_top_hud() -> void:
+	if retained_battle_top_hud != null and is_instance_valid(retained_battle_top_hud):
+		if retained_battle_top_hud.get_parent() != null:
+			retained_battle_top_hud.get_parent().remove_child(retained_battle_top_hud)
+		retained_battle_top_hud.queue_free()
+	retained_battle_top_hud = null
+	retained_battle_top_hud_signature = ""
+
+func action_chrome_button_signature() -> String:
+	var button_parts: Array[String] = []
+	var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+	for button in action_bar_buttons():
+		if button == null or not is_instance_valid(button):
+			continue
+		button_parts.append(str(button.name))
+		button_parts.append(button.text)
+		button_parts.append(action_button_visual_role(button.text))
+		button_parts.append(str(button.visible))
+		button_parts.append(str(button.disabled))
+		button_parts.append(str(button.get_meta("non_game_action", false)))
+		button_parts.append(str(button.get_meta("pending_lane", "")))
+		button_parts.append(str(button.get_meta("action_priority", "")))
+		if button == focus_owner:
+			button_parts.append("focused")
+	return "|".join(button_parts)
+
+func battle_action_chrome_identity_signature() -> String:
+	var viewport_size := effective_viewport_size()
+	var count := action_bar_button_count()
+	var disconnected := mode == "online_game" and online_game_disconnected()
+	var pending_claim_mode := has_pending_claim_window()
+	var danger_confirm_mode := mode == "offline" and has_pending_danger_discard()
+	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
+	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
+	var focus_token := ""
+	var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+	if focus_owner != null and is_instance_valid(focus_owner):
+		focus_token = "%s|%s" % [str(focus_owner.name), str(focus_owner.get("text"))]
+	var auto_pass_active := pending_claim_auto_pass_feedback != "" and pending_claim_auto_pass_feedback_until_msec > Time.get_ticks_msec()
+	var signature_parts: Array[String] = [
+		mode,
+		str(viewport_size),
+		str(safe_area_margins),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		ui_layout_density(),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(fx_enabled_effective()),
+		str(ui_motion_enabled()),
+		str(count),
+		action_chrome_button_signature(),
+		str(disconnected),
+		str(pending_claim_mode),
+		str(danger_confirm_mode),
+		str(ended_action_mode),
+		str(has_intent),
+		str(action_dock_rect_for_count(count)),
+		str(action_intent_rect_for_count(count)) if has_intent else "",
+		action_intent_text(count) if has_intent else "",
+		str(action_intent_color()) if has_intent else "",
+		action_intent_icon_name() if has_intent else "",
+		action_intent_fallback_icon_text() if has_intent else "",
+		online_recovery_detail_text() if disconnected else "",
+		str(online_waiting_for_server),
+		str(online_retry_available),
+		focus_token,
+		pending_claim_auto_pass_feedback,
+		str(auto_pass_active),
+	]
+	return "|".join(signature_parts)
+
+func retain_battle_action_chrome_for_render() -> void:
+	release_retained_battle_action_chrome()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var dock := root_layer.find_child("ActionButtonDock", true, false) as Control
+	var shadow := root_layer.find_child("ActionDock3DCastShadow", true, false) as Control
+	var current_signature := battle_action_chrome_identity_signature()
+	if dock != null and shadow != null and is_instance_valid(dock) and is_instance_valid(shadow) and not dock.is_queued_for_deletion() and not shadow.is_queued_for_deletion():
+		var dock_signature := str(dock.get_meta("action_chrome_render_signature", ""))
+		if dock_signature != "" and dock_signature == current_signature:
+			var dock_parent := dock.get_parent()
+			var shadow_parent := shadow.get_parent()
+			if dock_parent != null and shadow_parent != null:
+				dock_parent.remove_child(dock)
+				shadow_parent.remove_child(shadow)
+				retained_battle_action_dock = dock
+				retained_battle_action_dock_shadow = shadow
+				retained_battle_action_dock_signature = dock_signature
+				dock.set_meta("retained_for_battle_render", true)
+				shadow.set_meta("retained_for_battle_render", true)
+		var intent := root_layer.find_child("ActionIntentDock", true, false) as Control
+		if intent != null and is_instance_valid(intent) and not intent.is_queued_for_deletion():
+			var intent_parent := intent.get_parent()
+			var intent_signature := str(intent.get_meta("action_chrome_render_signature", ""))
+			if intent_parent != null and intent_signature == current_signature:
+				intent_parent.remove_child(intent)
+				retained_battle_action_intent = intent
+				retained_battle_action_intent_signature = intent_signature
+				intent.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_action_chrome() -> void:
+	for retained in [retained_battle_action_dock, retained_battle_action_dock_shadow, retained_battle_action_intent]:
+		if retained != null and is_instance_valid(retained):
+			if retained.get_parent() != null:
+				retained.get_parent().remove_child(retained)
+			retained.queue_free()
+	retained_battle_action_dock = null
+	retained_battle_action_dock_shadow = null
+	retained_battle_action_dock_signature = ""
+	retained_battle_action_intent = null
+	retained_battle_action_intent_signature = ""
+
+func battle_action_bar_can_retain() -> bool:
+	if mode != "offline":
+		return false
+	if offline_phase == "pending_claim" or offline_phase == "ended":
+		return false
+	if has_pending_danger_discard() or offline_restart_confirming:
+		return false
+	return action_bar != null and is_instance_valid(action_bar) and action_bar.get_parent() == root_layer
+
+func battle_action_bar_state_signature() -> String:
+	var hand := get_self_hand()
+	return "%s|%s|%s|%s|%s|%d|%s|%s|%d|%d|%d|%d" % [
+		mode,
+		offline_phase,
+		active_rule_variant(),
+		hand_identity_fingerprint(hand),
+		str(offline_claim_discard_bans),
+		1 if player_ai_assist_enabled() else 0,
+		str(ai_advice_hand_signature),
+		str(hash(current_human_advice)),
+		get_current_seat(),
+		dealer_seat,
+		offline_hand_number,
+		1 if offline_dealer_repeat else 0,
+	]
+
+func battle_action_bar_identity_signature() -> String:
+	return battle_action_bar_state_signature() + "|" + battle_action_chrome_identity_signature()
+
+func retain_battle_action_bar_for_render() -> void:
+	release_retained_battle_action_bar()
+	if not battle_action_bar_can_retain():
+		return
+	var bar_signature := str(action_bar.get_meta("action_bar_render_signature", ""))
+	var state_signature := battle_action_bar_state_signature()
+	if bar_signature == "" or bar_signature != battle_action_bar_identity_signature() or str(action_bar.get_meta("action_bar_state_signature", "")) != state_signature:
+		return
+	var bar_parent := action_bar.get_parent()
+	if bar_parent == null:
+		return
+	bar_parent.remove_child(action_bar)
+	retained_battle_action_bar = action_bar
+	retained_battle_action_bar_signature = bar_signature
+	retained_battle_action_bar_state_signature = state_signature
+	action_bar.set_meta("retained_for_battle_render", true)
+
+func reuse_retained_battle_action_bar_for_render(parent: Control) -> bool:
+	var retained_bar := retained_battle_action_bar
+	var retained_signature := retained_battle_action_bar_signature
+	var retained_state_signature := retained_battle_action_bar_state_signature
+	retained_battle_action_bar = null
+	retained_battle_action_bar_signature = ""
+	retained_battle_action_bar_state_signature = ""
+	if retained_bar == null or not is_instance_valid(retained_bar) or retained_bar.is_queued_for_deletion():
+		return false
+	if retained_state_signature != battle_action_bar_state_signature():
+		retained_bar.queue_free()
+		return false
+	parent.add_child(retained_bar)
+	action_bar = retained_bar
+	action_bar.set_meta("retained_for_battle_render", false)
+	action_bar.set_meta("ui_page_generation", ui_page_generation)
+	action_bar.set_meta("action_bar_render_signature", retained_signature)
+	action_bar.set_meta("action_bar_state_signature", retained_state_signature)
+	return true
+
+func release_retained_battle_action_bar() -> void:
+	if retained_battle_action_bar != null and is_instance_valid(retained_battle_action_bar):
+		if retained_battle_action_bar.get_parent() != null:
+			retained_battle_action_bar.get_parent().remove_child(retained_battle_action_bar)
+		retained_battle_action_bar.queue_free()
+	retained_battle_action_bar = null
+	retained_battle_action_bar_signature = ""
+	retained_battle_action_bar_state_signature = ""
+
+
+func battle_round_summary_identity_signature() -> String:
+	if mode != "offline" or offline_phase != "ended":
+		return ""
+	var parts: Array[String] = [
+		mode,
+		offline_phase,
+		round_result_kind,
+		active_rule_variant(),
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		str(action_bar_dock_layout_rect()),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(reduce_motion_enabled),
+		str(fx_enabled_effective()),
+		str(graphics_quality),
+		str(offline_hand_number),
+		str(dealer_seat),
+		str(offline_last_winner),
+		str(offline_dealer_repeat),
+		str(hash(round_summary)),
+		str(hash(last_win_score)),
+		str(hash(last_score_deltas)),
+		str(hash(last_match_summary)),
+		str(hash(offline_package_liability)),
+	]
+	for seat in range(mini(4, players.size())):
+		var player: Dictionary = players[seat]
+		parts.append("%d:%s:%d:%d" % [
+			seat,
+			str(player.get("name", "")),
+			int(player.get("score", 0)),
+			int(player.get("flowers", 0)),
+		])
+	return "|".join(parts)
+
+
+func retain_battle_round_summary_for_render() -> void:
+	release_retained_battle_round_summary()
+	if mode != "offline" or offline_phase != "ended":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var panel := root_layer.get_node_or_null("RoundSummaryPanel") as Control
+	var shield := root_layer.get_node_or_null("RoundSummaryModalInputShield") as Control
+	if panel == null or shield == null or not is_instance_valid(panel) or not is_instance_valid(shield):
+		return
+	if panel.is_queued_for_deletion() or shield.is_queued_for_deletion():
+		return
+	var summary_signature := battle_round_summary_identity_signature()
+	if summary_signature == "" or str(panel.get_meta("round_summary_render_signature", "")) != summary_signature or str(shield.get_meta("round_summary_render_signature", "")) != summary_signature:
+		return
+	var panel_parent := panel.get_parent()
+	var shield_parent := shield.get_parent()
+	if panel_parent == null or shield_parent == null:
+		return
+	panel_parent.remove_child(panel)
+	shield_parent.remove_child(shield)
+	retained_battle_round_summary_panel = panel
+	retained_battle_round_summary_shield = shield
+	retained_battle_round_summary_signature = summary_signature
+	panel.set_meta("retained_for_battle_render", true)
+	shield.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_round_summary() -> void:
+	for retained in [retained_battle_round_summary_panel, retained_battle_round_summary_shield]:
+		if retained != null and is_instance_valid(retained):
+			if retained is Control and retained.name == "RoundSummaryPanel":
+				clear_round_summary_runtime_effects(retained as Control)
+			if retained.get_parent() != null:
+				retained.get_parent().remove_child(retained)
+			retained.queue_free()
+	retained_battle_round_summary_panel = null
+	retained_battle_round_summary_shield = null
+	retained_battle_round_summary_signature = ""
+
+func battle_living_illustration_identity_signature() -> String:
+	return "%s|%s|%s|%d|%d|%s|%s|%s" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		get_last_discard(),
+		str(get_last_discard_seat()),
+		str(fx_enabled_effective()),
+	]
+
+func retain_battle_living_illustration_for_render() -> void:
+	if retained_battle_living_illustration != null and is_instance_valid(retained_battle_living_illustration):
+		retained_battle_living_illustration.queue_free()
+	retained_battle_living_illustration = null
+	retained_battle_living_illustration_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var layer := root_layer.find_child("TableLivingIllustration", true, false) as Control
+	if layer == null or not is_instance_valid(layer) or layer.is_queued_for_deletion():
+		return
+	var layer_signature := str(layer.get_meta("living_illustration_identity_signature", ""))
+	if layer_signature == "" or layer_signature != battle_living_illustration_identity_signature():
+		return
+	var layer_parent := layer.get_parent()
+	if layer_parent == null:
+		return
+	layer_parent.remove_child(layer)
+	retained_battle_living_illustration = layer
+	retained_battle_living_illustration_signature = layer_signature
+	layer.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_living_illustration() -> void:
+	if retained_battle_living_illustration != null and is_instance_valid(retained_battle_living_illustration):
+		if retained_battle_living_illustration.get_parent() != null:
+			retained_battle_living_illustration.get_parent().remove_child(retained_battle_living_illustration)
+		retained_battle_living_illustration.queue_free()
+	retained_battle_living_illustration = null
+	retained_battle_living_illustration_signature = ""
+
 func retain_battle_seats_for_render() -> void:
 	if not retained_battle_seats.is_empty():
 		release_retained_battle_seats()
@@ -441,6 +839,98 @@ func release_retained_battle_meld_lanes() -> void:
 
 func release_unused_battle_meld_lanes() -> void:
 	release_retained_battle_meld_lanes()
+
+func retain_battle_wall_strips_for_render() -> void:
+	if not retained_battle_wall_strips.is_empty():
+		release_retained_battle_wall_strips()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for i in range(WALL_LAYOUTS.size()):
+		var layout = WALL_LAYOUTS[i]
+		var expected_name := "WallBackStrip_%s_%d_%d" % ["h" if bool(layout[3]) else "v", int(layout[2]), i]
+		var strip := root_layer.find_child(expected_name, true, false) as WallBackStrip
+		if strip == null or not is_instance_valid(strip) or strip.is_queued_for_deletion():
+			continue
+		var strip_parent := strip.get_parent()
+		if strip_parent == null:
+			continue
+		strip_parent.remove_child(strip)
+		retained_battle_wall_strips[i] = strip
+
+func release_retained_battle_wall_strip(index: int) -> void:
+	var retained_variant = retained_battle_wall_strips.get(index, null)
+	var strip := retained_variant as WallBackStrip
+	if strip != null and is_instance_valid(strip):
+		if strip.get_parent() != null:
+			strip.get_parent().remove_child(strip)
+		strip.queue_free()
+	retained_battle_wall_strips.erase(index)
+
+func release_retained_battle_wall_strips() -> void:
+	var retained_indices := retained_battle_wall_strips.keys()
+	for index_variant in retained_indices:
+		release_retained_battle_wall_strip(int(index_variant))
+
+func release_unused_battle_wall_strips() -> void:
+	release_retained_battle_wall_strips()
+
+func retain_battle_table_log_for_render() -> void:
+	if retained_battle_table_log != null and is_instance_valid(retained_battle_table_log):
+		retained_battle_table_log.queue_free()
+	retained_battle_table_log = null
+	retained_battle_table_log_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var ledger := root_layer.get_node_or_null("TableLogLedgerPanel") as Control
+	if ledger == null or not is_instance_valid(ledger) or ledger.is_queued_for_deletion():
+		return
+	var ledger_parent := ledger.get_parent()
+	if ledger_parent == null:
+		return
+	ledger_parent.remove_child(ledger)
+	retained_battle_table_log = ledger
+	retained_battle_table_log_signature = str(ledger.get_meta("table_log_render_signature", ""))
+	ledger.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_table_log() -> void:
+	if retained_battle_table_log != null and is_instance_valid(retained_battle_table_log):
+		if retained_battle_table_log.get_parent() != null:
+			retained_battle_table_log.get_parent().remove_child(retained_battle_table_log)
+		retained_battle_table_log.queue_free()
+	retained_battle_table_log = null
+	retained_battle_table_log_signature = ""
+
+func retain_battle_last_discard_marker_for_render() -> void:
+	if retained_battle_last_discard_marker != null and is_instance_valid(retained_battle_last_discard_marker):
+		retained_battle_last_discard_marker.queue_free()
+	retained_battle_last_discard_marker = null
+	retained_battle_last_discard_marker_signature = ""
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var marker := root_layer.find_child("LastDiscardFocusMarker", true, false) as Control
+	if marker == null or not is_instance_valid(marker) or marker.is_queued_for_deletion():
+		return
+	var marker_parent := marker.get_parent()
+	if marker_parent == null:
+		return
+	marker_parent.remove_child(marker)
+	retained_battle_last_discard_marker = marker
+	retained_battle_last_discard_marker_signature = str(marker.get_meta("last_discard_focus_marker_signature", ""))
+	marker.set_meta("retained_for_battle_render", true)
+
+func release_retained_battle_last_discard_marker() -> void:
+	if retained_battle_last_discard_marker != null and is_instance_valid(retained_battle_last_discard_marker):
+		if retained_battle_last_discard_marker.get_parent() != null:
+			retained_battle_last_discard_marker.get_parent().remove_child(retained_battle_last_discard_marker)
+		retained_battle_last_discard_marker.queue_free()
+	retained_battle_last_discard_marker = null
+	retained_battle_last_discard_marker_signature = ""
 
 func retain_battle_hand_tray_for_render() -> void:
 	hand_render_snapshot_valid = false
@@ -647,8 +1137,23 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func release_retained_battle_views() -> void:
+	release_retained_battle_top_hud()
+	release_retained_battle_action_chrome()
+	release_retained_battle_action_bar()
+	release_retained_battle_living_illustration()
+	release_retained_battle_table_chrome()
+	release_retained_battle_table_surface()
+	release_retained_battle_chat_action_button()
+	release_retained_battle_round_summary()
+	release_retained_battle_wall_feedback()
+	release_retained_battle_advisor_panel()
 	release_retained_battle_seats()
 	release_retained_battle_meld_lanes()
+	release_retained_battle_wall_strips()
+	release_retained_battle_table_log()
+	release_retained_battle_last_discard_marker()
+	release_retained_battle_discard_river_art()
+	release_retained_battle_discard_owner_overlays()
 	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere, discard_river_foreground_layer]:
 		if retained != null and is_instance_valid(retained):
 			if retained.get_parent() != null:
@@ -676,6 +1181,352 @@ func release_retained_battle_views() -> void:
 				archive_button.get_parent().remove_child(archive_button)
 			archive_button.queue_free()
 	retained_battle_discard_archive_buttons.clear()
+
+
+func battle_table_surface_identity_signature(current_seat: int = -1) -> String:
+	var seat := get_current_seat() if current_seat < 0 else current_seat
+	return "%s|%s|%s|%d|%d|%s|%s|%d" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		str(table_outer_rect_for_viewport()),
+		str(TABLE_INNER_RECT),
+		seat,
+	]
+
+
+func retain_battle_table_surface_for_render() -> void:
+	release_retained_battle_table_surface()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var outer := root_layer.get_node_or_null("OfflineTable3DOuterShell") as Control
+	if outer == null or not is_instance_valid(outer) or outer.is_queued_for_deletion():
+		return
+	var table := outer.get_node_or_null("OfflineTable3DInnerSurface") as Control
+	var perspective_depth := table.get_node_or_null("BattleTablePerspectiveDepth") as BattleTableDepth if table != null else null
+	if table == null or perspective_depth == null or not is_instance_valid(table) or not is_instance_valid(perspective_depth):
+		return
+	var surface_signature := battle_table_surface_identity_signature(get_current_seat())
+	if str(outer.get_meta("table_surface_render_signature", "")) != surface_signature:
+		return
+	# Every data-bearing child has its own retention slot. Refuse the bundle if a
+	# child remains here, so mounting the shell again can never duplicate a lane.
+	for child in table.get_children():
+		if child != perspective_depth:
+			return
+	var outer_parent := outer.get_parent()
+	if outer_parent == null:
+		return
+	outer_parent.remove_child(outer)
+	retained_battle_table_surface = outer
+	retained_battle_table_surface_signature = surface_signature
+	outer.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_table_surface() -> void:
+	if retained_battle_table_surface != null and is_instance_valid(retained_battle_table_surface):
+		if retained_battle_table_surface.get_parent() != null:
+			retained_battle_table_surface.get_parent().remove_child(retained_battle_table_surface)
+		retained_battle_table_surface.queue_free()
+	retained_battle_table_surface = null
+	retained_battle_table_surface_signature = ""
+
+
+func draw_battle_table_surface(parent: Control, current_seat: int) -> Control:
+	var surface_signature := battle_table_surface_identity_signature(current_seat)
+	var outer := retained_battle_table_surface
+	var retained_surface_signature := retained_battle_table_surface_signature
+	retained_battle_table_surface = null
+	retained_battle_table_surface_signature = ""
+	if outer != null and is_instance_valid(outer) and not outer.is_queued_for_deletion() and retained_surface_signature == surface_signature and str(outer.get_meta("table_surface_render_signature", "")) == surface_signature:
+		var retained_table := outer.get_node_or_null("OfflineTable3DInnerSurface") as Control
+		var retained_depth := retained_table.get_node_or_null("BattleTablePerspectiveDepth") as BattleTableDepth if retained_table != null else null
+		if retained_table != null and retained_depth != null and is_instance_valid(retained_table) and is_instance_valid(retained_depth):
+			parent.add_child(outer)
+			retained_depth.configure(current_seat, SEAT_ACCENT_COLORS[clampi(current_seat, 0, SEAT_ACCENT_COLORS.size() - 1)])
+			outer.set_meta("retained_for_battle_render", false)
+			outer.set_meta("table_surface_render_signature", surface_signature)
+			return retained_table
+	if outer != null and is_instance_valid(outer):
+		outer.queue_free()
+	outer = make_layout_host(table_outer_rect_for_viewport())
+	outer.name = "OfflineTable3DOuterShell"
+	outer.set_meta("table_surface_render_signature", surface_signature)
+	parent.add_child(outer)
+	var table := make_layout_host(TABLE_INNER_RECT)
+	table.name = "OfflineTable3DInnerSurface"
+	outer.add_child(table)
+	var perspective_depth := BattleTableDepth.new()
+	perspective_depth.name = "BattleTablePerspectiveDepth"
+	perspective_depth.set_anchors_preset(Control.PRESET_FULL_RECT)
+	perspective_depth.configure(current_seat, SEAT_ACCENT_COLORS[clampi(current_seat, 0, SEAT_ACCENT_COLORS.size() - 1)])
+	table.add_child(perspective_depth)
+	return table
+
+
+func battle_chat_action_button_identity_signature() -> String:
+	return "%s|%s|%s|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		ui_layout_density(),
+		1 if large_text_enabled else 0,
+		1 if high_contrast_enabled else 0,
+		1 if fx_enabled_effective() else 0,
+		1 if ui_motion_enabled() else 0,
+		1 if chat_panel_open else 0,
+		1 if has_pending_claim_window() else 0,
+		graphics_quality,
+	]
+
+
+func retain_battle_chat_action_button_for_render() -> void:
+	if retained_battle_chat_action_button != null and is_instance_valid(retained_battle_chat_action_button):
+		retained_battle_chat_action_button.queue_free()
+	retained_battle_chat_action_button = null
+	retained_battle_chat_action_button_signature = ""
+	if mode != "online_game" or online_game_disconnected():
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var chat_button := root_layer.find_child("ChatActionButton", true, false) as Button
+	if chat_button == null or not is_instance_valid(chat_button) or chat_button.is_queued_for_deletion():
+		return
+	var current_signature := battle_chat_action_button_identity_signature()
+	if str(chat_button.get_meta("chat_action_button_render_signature", "")) != current_signature:
+		return
+	var chat_parent := chat_button.get_parent()
+	if chat_parent == null:
+		return
+	chat_parent.remove_child(chat_button)
+	retained_battle_chat_action_button = chat_button
+	retained_battle_chat_action_button_signature = current_signature
+	chat_button.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_chat_action_button() -> void:
+	if retained_battle_chat_action_button != null and is_instance_valid(retained_battle_chat_action_button):
+		if retained_battle_chat_action_button.get_parent() != null:
+			retained_battle_chat_action_button.get_parent().remove_child(retained_battle_chat_action_button)
+		retained_battle_chat_action_button.queue_free()
+	retained_battle_chat_action_button = null
+	retained_battle_chat_action_button_signature = ""
+
+
+func battle_table_chrome_identity_signature() -> String:
+	return "%s|%s|%s|%d|%d|%s" % [
+		mode,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		str(table_outer_rect_for_viewport()),
+	]
+
+
+func retain_battle_table_chrome_for_render() -> void:
+	release_retained_battle_table_chrome()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var chrome_signature := battle_table_chrome_identity_signature()
+	var chrome_names: Array[String] = [
+		"OfflineTable3DFloorShadow",
+		"OfflineTable3DFrontApron",
+		"OfflineTable3DCastShadow",
+	]
+	var retained: Dictionary = {}
+	for node_name in chrome_names:
+		var chrome := root_layer.get_node_or_null(node_name) as Control
+		if chrome == null or not is_instance_valid(chrome) or chrome.is_queued_for_deletion():
+			return
+		if str(chrome.get_meta("table_chrome_render_signature", "")) != chrome_signature:
+			return
+		var chrome_parent := chrome.get_parent()
+		if chrome_parent == null:
+			return
+		retained[node_name] = chrome
+	if retained.size() != chrome_names.size():
+		return
+	for node_name in chrome_names:
+		var chrome := retained[node_name] as Control
+		chrome.get_parent().remove_child(chrome)
+	retained_battle_table_chrome = retained
+	retained_battle_table_chrome_signature = chrome_signature
+	for chrome_variant in retained.values():
+		var chrome := chrome_variant as Control
+		if chrome != null and is_instance_valid(chrome):
+			chrome.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_table_chrome() -> void:
+	for retained_variant in retained_battle_table_chrome.values():
+		var chrome := retained_variant as Control
+		if chrome != null and is_instance_valid(chrome):
+			if chrome.get_parent() != null:
+				chrome.get_parent().remove_child(chrome)
+			chrome.queue_free()
+	retained_battle_table_chrome.clear()
+	retained_battle_table_chrome_signature = ""
+
+
+func battle_wall_feedback_identity_signature(wall_count: int, progress: float, recent_feedback: bool) -> String:
+	return "%s|%d|%s|%d|%d|%s|%s|%s|%s|%s" % [
+		mode,
+		wall_count,
+		str(progress),
+		1 if recent_feedback else 0,
+		safe_area_layout_revision,
+		str(effective_viewport_size()),
+		str(wall_is_low(wall_count)),
+		str(fx_enabled_effective()),
+		str(ui_motion_enabled()),
+		str(offline_last_draw.get("source", "")),
+	]
+
+
+func retain_battle_wall_feedback_for_render() -> void:
+	release_retained_battle_wall_feedback()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var wall_count := get_wall_count()
+	var wall_signature := battle_wall_feedback_identity_signature(wall_count, wall_progress(wall_count), mode == "offline" and bool(offline_last_draw.get("announce", false)))
+	var feedback := root_layer.find_child("WallDrawFeedbackArt", true, false) as Control
+	if feedback != null and is_instance_valid(feedback) and not feedback.is_queued_for_deletion() and str(feedback.get_meta("wall_feedback_render_signature", "")) == wall_signature:
+		if feedback.get_parent() != null:
+			feedback.get_parent().remove_child(feedback)
+			retained_battle_wall_feedback_art = feedback
+			retained_battle_wall_feedback_art_signature = wall_signature
+	var badge := root_layer.find_child("WallRemainingBadge", true, false) as Control
+	if badge != null and is_instance_valid(badge) and not badge.is_queued_for_deletion() and str(badge.get_meta("wall_remaining_badge_render_signature", "")) == wall_signature:
+		if badge.get_parent() != null:
+			badge.get_parent().remove_child(badge)
+			retained_battle_wall_remaining_badge = badge
+			retained_battle_wall_remaining_badge_signature = wall_signature
+
+
+func release_retained_battle_wall_feedback() -> void:
+	for retained in [retained_battle_wall_feedback_art, retained_battle_wall_remaining_badge]:
+		if retained != null and is_instance_valid(retained):
+			if retained.get_parent() != null:
+				retained.get_parent().remove_child(retained)
+			retained.queue_free()
+	retained_battle_wall_feedback_art = null
+	retained_battle_wall_feedback_art_signature = ""
+	retained_battle_wall_remaining_badge = null
+	retained_battle_wall_remaining_badge_signature = ""
+
+
+func battle_advisor_identity_signature() -> String:
+	var player_state_parts: Array[String] = []
+	for seat in range(mini(4, players.size())):
+		var player: Dictionary = players[seat]
+		player_state_parts.append(str(player.get("name", "")))
+		player_state_parts.append(str(player.get("score", 0)))
+		player_state_parts.append(str(player.get("melds", []).size()))
+	return "%s|%s|%s|%d|%d|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s|%s" % [
+		mode,
+		offline_phase,
+		str(advisor_panel_layout_rect()),
+		safe_area_layout_revision,
+		resize_refresh_revision,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		str(large_text_enabled),
+		str(high_contrast_enabled),
+		str(fx_enabled_effective()),
+		str(ui_motion_enabled()),
+		current_seat,
+		get_wall_count(),
+		get_last_discard(),
+		str(hand_identity_fingerprint(get_self_hand())),
+		"|".join(player_state_parts) + "|" + JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports}),
+	]
+
+
+func retain_battle_advisor_panel_for_render() -> void:
+	release_retained_battle_advisor_panel()
+	if mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or has_pending_danger_discard() or not player_ai_assist_enabled():
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	var panel := root_layer.get_node_or_null("AdvisorPanel") as Control
+	if panel == null or not is_instance_valid(panel) or panel.is_queued_for_deletion():
+		return
+	var panel_signature := str(panel.get_meta("advisor_render_signature", ""))
+	if panel_signature == "" or panel_signature != battle_advisor_identity_signature():
+		return
+	var panel_parent := panel.get_parent()
+	if panel_parent == null:
+		return
+	panel_parent.remove_child(panel)
+	retained_battle_advisor_panel = panel
+	retained_battle_advisor_panel_signature = panel_signature
+	panel.set_meta("retained_for_battle_render", true)
+
+
+func release_retained_battle_advisor_panel() -> void:
+	if retained_battle_advisor_panel != null and is_instance_valid(retained_battle_advisor_panel):
+		if retained_battle_advisor_panel.get_parent() != null:
+			retained_battle_advisor_panel.get_parent().remove_child(retained_battle_advisor_panel)
+		retained_battle_advisor_panel.queue_free()
+	retained_battle_advisor_panel = null
+	retained_battle_advisor_panel_signature = ""
+
+
+func retain_battle_discard_river_art_for_render() -> void:
+	if not retained_battle_discard_river_art.is_empty():
+		release_retained_battle_discard_river_art()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for seat in range(4):
+		var art := root_layer.find_child("DiscardRiverArt_%d" % seat, true, false) as Control
+		if art == null or not is_instance_valid(art) or art.is_queued_for_deletion():
+			continue
+		var art_parent := art.get_parent()
+		if art_parent == null:
+			continue
+		art_parent.remove_child(art)
+		retained_battle_discard_river_art[seat] = art
+
+
+func release_retained_battle_discard_river_art() -> void:
+	for retained_variant in retained_battle_discard_river_art.values():
+		var art := retained_variant as Control
+		if art != null and is_instance_valid(art):
+			if art.get_parent() != null:
+				art.get_parent().remove_child(art)
+			art.queue_free()
+	retained_battle_discard_river_art.clear()
+
+
+func release_unused_discard_river_art() -> void:
+	release_retained_battle_discard_river_art()
+
+
+func release_retained_battle_discard_owner_overlays() -> void:
+	for retained_variant in retained_battle_discard_owner_overlays.values():
+		var overlay := retained_variant as Control
+		if overlay != null and is_instance_valid(overlay):
+			if overlay.get_parent() != null:
+				overlay.get_parent().remove_child(overlay)
+			overlay.queue_free()
+	retained_battle_discard_owner_overlays.clear()
+
+
+func release_unused_discard_river_owner_overlays() -> void:
+	release_retained_battle_discard_owner_overlays()
 
 
 func retain_battle_discard_archive_buttons_for_render() -> void:
@@ -735,6 +1586,16 @@ func retain_battle_discard_foreground_for_render() -> void:
 	var foreground_parent := foreground.get_parent()
 	if foreground_parent == null:
 		return
+	for child in foreground.get_children():
+		var overlay := child as Control
+		if overlay == null or not is_instance_valid(overlay) or overlay.is_queued_for_deletion():
+			continue
+		var child_name := str(overlay.name)
+		if not child_name.begins_with("DiscardRiverOwnerOverlay_"):
+			continue
+		var seat := int(child_name.trim_prefix("DiscardRiverOwnerOverlay_"))
+		foreground.remove_child(overlay)
+		retained_battle_discard_owner_overlays[seat] = overlay
 	foreground_parent.remove_child(foreground)
 	discard_river_foreground_layer = foreground
 
@@ -985,11 +1846,25 @@ func render_game(state_changed: bool = false) -> void:
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
 	retain_battle_atmosphere_for_render()
+	retain_battle_top_hud_for_render()
+	retain_battle_action_chrome_for_render()
+	retain_battle_action_bar_for_render()
+	retain_battle_living_illustration_for_render()
 	retain_battle_seats_for_render()
 	retain_battle_meld_lanes_for_render()
+	retain_battle_wall_strips_for_render()
+	retain_battle_table_log_for_render()
+	retain_battle_last_discard_marker_for_render()
+	retain_battle_table_chrome_for_render()
+	retain_battle_wall_feedback_for_render()
+	retain_battle_advisor_panel_for_render()
+	retain_battle_discard_river_art_for_render()
 	retain_battle_discard_archive_buttons_for_render()
 	retain_battle_discard_grids_for_render()
 	retain_battle_discard_foreground_for_render()
+	retain_battle_table_surface_for_render()
+	retain_battle_chat_action_button_for_render()
+	retain_battle_round_summary_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -998,32 +1873,13 @@ func render_game(state_changed: bool = false) -> void:
 	ai_render_report_snapshot_ready = false
 	draw_game_top_hud(root_layer)
 
-	var table_floor_shadow = make_soft_depth_panel(root_layer, rect_full(0.105, 0.165, 0.895, 0.835), Color(0.0, 0.0, 0.0, 0.004), 42)  # r426
-	table_floor_shadow.name = "OfflineTable3DFloorShadow"
-	# r406: apron sits under hand tray only — do not darken bottom river (zone y~0.638-0.824).
-	var table_apron = make_gpt_route_rail(rect_full(0.145, 0.805, 0.855, 0.865), Color(0.12, 0.09, 0.05, 0.05))
-	table_apron.name = "OfflineTable3DFrontApron"
-	root_layer.add_child(table_apron)
-	var apron_highlight = make_soft_depth_panel(table_apron, rect_full(0.035, 0.040, 0.965, 0.170), Color(0.98, 0.78, 0.40, 0.06), 999)  # r406
-	apron_highlight.name = "OfflineTable3DApronHighlight"
-	var table_shadow = make_soft_depth_panel(root_layer, rect_full(0.112, 0.142, 0.888, 0.812), Color(0.0, 0.0, 0.0, 0.005), 38)  # r426
-	table_shadow.name = "OfflineTable3DCastShadow"
+	draw_battle_table_chrome(root_layer)
 	# The battle background already supplies the authored table surface. Keep the
 	# table nodes as geometry hosts so board children retain their coordinates,
 	# but do not repaint a second full-size high-frequency plate over the room.
-	var outer = make_layout_host(table_outer_rect_for_viewport())
-	outer.name = "OfflineTable3DOuterShell"
-	root_layer.add_child(outer)
-	var table = make_layout_host(TABLE_INNER_RECT)
-	table.name = "OfflineTable3DInnerSurface"
-	outer.add_child(table)
 	# Room guofeng lives on screen_layer; table surface stays translucent so felt reads against the room plate.
 	var render_current_seat := get_current_seat()
-	var perspective_depth = BattleTableDepth.new()
-	perspective_depth.name = "BattleTablePerspectiveDepth"
-	perspective_depth.set_anchors_preset(Control.PRESET_FULL_RECT)
-	perspective_depth.configure(render_current_seat, SEAT_ACCENT_COLORS[clamp(render_current_seat, 0, SEAT_ACCENT_COLORS.size() - 1)])
-	table.add_child(perspective_depth)
+	var table := draw_battle_table_surface(root_layer, render_current_seat)
 	draw_table_atmosphere_frame(table)
 	draw_walls(table)
 	draw_table_living_illustration(table)

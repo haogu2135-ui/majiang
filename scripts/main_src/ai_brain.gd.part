@@ -668,7 +668,23 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["accept"] = false
 		report["reason"] = "无效"
 		return report
-	if is_discard_furiten(seat, tile):
+	var tenpai_hand: Array = players[seat]["hand"]
+	var hand_counts: Array = tile_counts(tenpai_hand)
+	var can_win := can_win_for_seat_from_counts(seat, hand_counts, tile)
+	var furiten := false
+	if can_win:
+		furiten = is_discard_furiten_from_counts(seat, hand_counts)
+	else:
+		# Keep the completed self-draw hand fallback from is_discard_furiten():
+		# a 14-tile hand is checked against its pre-draw 13-tile wait shape.
+		var drawn_index := tile_index_normalized(normalize_tile_code(tile))
+		if drawn_index >= 0 and drawn_index < hand_counts.size() and int(hand_counts[drawn_index]) > 0:
+			var pre_draw_counts: Array = hand_counts.duplicate()
+			pre_draw_counts[drawn_index] = int(pre_draw_counts[drawn_index]) - 1
+			var open_melds_for_furiten: int = players[seat].get("melds", []).size()
+			if is_complete_hand_from_counts(hand_counts, tenpai_hand.size(), open_melds_for_furiten):
+				furiten = is_discard_furiten_from_counts(seat, pre_draw_counts, tenpai_hand.size() - 1)
+	if furiten:
 		report["accept"] = false
 		report["reason"] = "舍张振听"
 		report["score"] = 0.0
@@ -678,7 +694,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["reason"] = "过水"
 		report["score"] = 0.0
 		return report
-	if not can_win_for_seat(seat, tile):
+	if not can_win:
 		report["accept"] = false
 		report["reason"] = "未成和"
 		return report
@@ -687,10 +703,12 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		report["score"] = 1120.0
 		return report
 	var open_melds = players[seat]["melds"].size()
-	var tenpai_hand: Array = players[seat]["hand"]
 	var win_hand = tenpai_hand.duplicate()
 	win_hand.append(tile)
-	var score_data = calculate_win_score_from_tiles(seat, win_hand, false, win_context)
+	var winning_counts: Array = hand_counts.duplicate()
+	var winning_index := tile_index_normalized(normalize_tile_code(tile))
+	winning_counts[winning_index] = int(winning_counts[winning_index]) + 1
+	var score_data = calculate_win_score_from_tiles(seat, win_hand, false, win_context, false, winning_counts, tenpai_hand.size() + 1)
 	var fan = int(score_data.get("fan", 0))
 	var points = int(score_data.get("points", 0))
 	report["fan"] = fan
@@ -700,7 +718,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	if fan >= 4 or points >= score_points_for_fan(4):
 		report["reason"] = "高价值"
 		return report
-	var wait_metrics = effective_tile_metrics(tenpai_hand, open_melds, seat, 0)
+	var wait_metrics = effective_tile_metrics(tenpai_hand, open_melds, seat, 0, [], hand_counts)
 	var wait_tiles: Array = wait_metrics.get("tiles", [])
 	var remaining_by_tile: Dictionary = wait_metrics.get("remaining_by_tile", {})
 	report["wait_variety"] = wait_tiles.size()
@@ -715,7 +733,7 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	var alt_weighted = 0.0
 	var alt_best_points = 0
 	var alt_best_fan = 0
-	var probe_hand = tenpai_hand.duplicate()
+	var probe_counts: Array = hand_counts.duplicate()
 	for item in wait_tiles:
 		var wait_tile = str(item)
 		if wait_tile == tile:
@@ -723,9 +741,12 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 		var rem = int(remaining_by_tile.get(wait_tile, 0))
 		if rem <= 0:
 			continue
-		probe_hand.append(wait_tile)
-		var alt_score = calculate_win_score_from_tiles(seat, probe_hand, false, "", true)
-		probe_hand.pop_back()
+		var wait_index := tile_index_normalized(wait_tile)
+		if wait_index < 0 or wait_index >= probe_counts.size():
+			continue
+		probe_counts[wait_index] = int(probe_counts[wait_index]) + 1
+		var alt_score = calculate_win_score_from_tiles(seat, [], false, "", true, probe_counts, tenpai_hand.size() + 1)
+		probe_counts[wait_index] = int(probe_counts[wait_index]) - 1
 		var alt_points = int(alt_score.get("points", 0))
 		var alt_fan = int(alt_score.get("fan", 0))
 		alt_remaining += rem
@@ -1616,8 +1637,11 @@ func get_ai_discard_reports(seat: int) -> Array:
 			var idx = int(item.get("tile_index", -1))
 			simulated_counts[idx] = int(simulated_counts[idx]) - 1
 			var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
+			item["fast_shanten"] = shanten
 			# 快评：只靠向听 + 危险，避免 34 张进张扫描
-			var risk = deal_in_risk_score(cand, seat, eval_context)
+			var fast_risk_vector: Dictionary = tile_risk_vector(cand, seat, [], eval_context)
+			var risk = float(fast_risk_vector.get("score", 0.0))
+			item["fast_risk_vector"] = fast_risk_vector
 			danger_risk_peak = max(danger_risk_peak, risk)
 			var cheap = -float(shanten) * 760.0 - risk * defense_guess * risk_factor
 			var human_pressure = 0.0
@@ -1687,7 +1711,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 			continue
 		simulated.remove_at(i)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) - 1
-		var report = build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, eval_context, simulated_counts, hand_counts, i, candidate_index)
+		var fast_risk_vector: Dictionary = item.get("fast_risk_vector", {})
+		var report = build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, eval_context, simulated_counts, hand_counts, i, candidate_index, int(item.get("fast_shanten", -99)), fast_risk_vector)
 		reports.append(report)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		simulated.insert(i, candidate)
@@ -1888,6 +1913,11 @@ func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) 
 		"visible_counts": visible_counts,
 		"visible_counts_key": counts_compact_key(visible_counts),
 		"known_counts": known_counts,
+		# These values are invariant across discard candidates in one evaluation pass.
+		"discard_report_exposed_melds": exposed_meld_count_for_seat(seat),
+		"discard_report_attack_multiplier": ai_total_attack_multiplier(seat),
+		"discard_report_route_focus": ai_route_focus(seat),
+		"discard_report_risk_factor": ai_risk_factor(seat),
 		"opponents": opponents,
 		"threat_cache_state_key": threat_cache_state_key,
 		"discard_pressures": {},
@@ -2066,7 +2096,7 @@ func package_liability_ai_cache_key() -> String:
 	return str(ai_package_liability_revision)
 
 
-func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = [], hand_index: int = -1, tile_index_override: int = -1) -> Dictionary:
+func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = [], hand_index: int = -1, tile_index_override: int = -1, shanten_snapshot: int = -99, risk_vector_snapshot: Dictionary = {}) -> Dictionary:
 	var simulated_counts = simulated_counts_snapshot if not simulated_counts_snapshot.is_empty() else tile_counts(simulated)
 	var original_counts = original_counts_snapshot
 	if original_counts.is_empty():
@@ -2076,11 +2106,20 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			original_counts[discarded_index] = int(original_counts[discarded_index]) + 1
 	var simulated_tile_count = simulated.size()
 	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
-	var exposed_melds = exposed_meld_count_for_seat(seat)
-	var attack = ai_total_attack_multiplier(seat)
-	var route_focus = ai_route_focus(seat)
-	var risk_factor = ai_risk_factor(seat)
+	var shanten = shanten_snapshot if shanten_snapshot > -99 else calculate_min_shanten_from_counts(simulated_counts, open_melds)
+	var context_matches_seat := not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat
+	var exposed_melds = int(eval_context.get("discard_report_exposed_melds", -1)) if context_matches_seat else -1
+	if exposed_melds < 0:
+		exposed_melds = exposed_meld_count_for_seat(seat)
+	var attack = float(eval_context.get("discard_report_attack_multiplier", -1.0)) if context_matches_seat else -1.0
+	if attack < 0.0:
+		attack = ai_total_attack_multiplier(seat)
+	var route_focus = float(eval_context.get("discard_report_route_focus", -1.0)) if context_matches_seat else -1.0
+	if route_focus < 0.0:
+		route_focus = ai_route_focus(seat)
+	var risk_factor = float(eval_context.get("discard_report_risk_factor", -1.0)) if context_matches_seat else -1.0
+	if risk_factor < 0.0:
+		risk_factor = ai_risk_factor(seat)
 	var ukeire = 0
 	var variety = 0
 	var effective_tiles: Array = []
@@ -2133,7 +2172,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var plan_suit = int(plan_report.get("suit", -1))
 	var plan_bonus = float(plan_report.get("score_bonus", 0.0))
 	var pressure = discard_pressure_score(tile, seat, visible_counts, eval_context)
-	var risk_vector = tile_risk_vector(tile, seat, visible_counts, eval_context)
+	var risk_vector: Dictionary = risk_vector_snapshot if not risk_vector_snapshot.is_empty() else tile_risk_vector(tile, seat, visible_counts, eval_context)
 	var risk_summary = deal_in_risk_summary(tile, seat, visible_counts, risk_vector)
 	var risk = float(risk_summary.get("score", 0.0))
 	var risk_label_text = risk_label(risk)

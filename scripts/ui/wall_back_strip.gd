@@ -37,23 +37,31 @@ var soft_flash_texture_cache: Texture2D
 var warning_texture_cache: Texture2D
 
 func configure(count: int, is_horizontal: bool, requested_tile_size: Vector2, fill_color: Color, border_color: Color, requested_capacity: int = -1, ratio: float = 1.0, is_low_wall: bool = false, has_recent_feedback: bool = false) -> void:
-	tile_count = max(0, count)
-	capacity_count = max(tile_count, requested_capacity if requested_capacity >= 0 else tile_count)
+	var next_tile_count: int = maxi(0, count)
+	var requested_capacity_value: int = requested_capacity if requested_capacity >= 0 else next_tile_count
+	var next_capacity_count: int = maxi(next_tile_count, requested_capacity_value)
+	var next_ratio: float = clampf(ratio, 0.0, 1.0)
+	var visual_state_changed: bool = tile_count != next_tile_count or capacity_count != next_capacity_count or horizontal != is_horizontal or tile_size != requested_tile_size or not is_equal_approx(remaining_ratio, next_ratio) or low_wall != is_low_wall or recent_feedback != has_recent_feedback
+	tile_count = next_tile_count
+	capacity_count = next_capacity_count
 	horizontal = is_horizontal
 	tile_size = requested_tile_size
-	remaining_ratio = clamp(ratio, 0.0, 1.0)
+	remaining_ratio = next_ratio
 	low_wall = is_low_wall
 	recent_feedback = has_recent_feedback
 	name = "WallBackStrip_%s_%d" % ["h" if horizontal else "v", capacity_count]
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style_was_created := false
 	if tile_style == null:
 		tile_style = StyleBoxFlat.new()
+		style_was_created = true
 	# Keep StyleBox for smoke/property probes only — never paint program slabs.
 	tile_style.bg_color = Color(fill_color.r, fill_color.g, fill_color.b, 0.0)
 	tile_style.border_color = Color(border_color.r, border_color.g, border_color.b, 0.0)
 	tile_style.set_border_width_all(0)
 	tile_style.set_corner_radius_all(7)
-	queue_redraw()
+	if visual_state_changed or style_was_created:
+		queue_redraw()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
