@@ -293,6 +293,7 @@ func should_yield_before_ai_discard() -> bool:
 func retain_battle_hand_tray_for_render() -> void:
 	hand_render_snapshot_valid = false
 	hand_render_snapshot_signature = ""
+	hand_render_snapshot_state_signature = ""
 	if retained_battle_hand_tray != null and is_instance_valid(retained_battle_hand_tray):
 		retained_battle_hand_tray.queue_free()
 	retained_battle_hand_tray = null
@@ -305,8 +306,10 @@ func retain_battle_hand_tray_for_render() -> void:
 	var tray := root_layer.get_node_or_null("HandTray") as Control
 	if tray == null or not is_instance_valid(tray) or tray.is_queued_for_deletion():
 		return
-	var current_signature := "%s|%s" % [hand_identity_fingerprint(get_self_hand()), mode]
+	var hand_snapshot := get_self_hand()
+	var current_signature := "%s|%s" % [hand_identity_fingerprint(hand_snapshot), mode]
 	hand_render_snapshot_signature = current_signature
+	hand_render_snapshot_state_signature = hand_visual_state_signature(hand_snapshot)
 	hand_render_snapshot_valid = true
 	var tray_signature := str(tray.get_meta("hand_identity_signature", ""))
 	if tray_signature == "" or tray_signature != current_signature:
@@ -781,6 +784,7 @@ func render_game(state_changed: bool = false) -> void:
 	game_render_queued = false
 	hand_render_snapshot_valid = false
 	hand_render_snapshot_signature = ""
+	hand_render_snapshot_state_signature = ""
 	last_game_render_msec = Time.get_ticks_msec()
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
@@ -815,10 +819,11 @@ func render_game(state_changed: bool = false) -> void:
 	table.name = "OfflineTable3DInnerSurface"
 	outer.add_child(table)
 	# Room guofeng lives on screen_layer; table surface stays translucent so felt reads against the room plate.
+	var render_current_seat := get_current_seat()
 	var perspective_depth = BattleTableDepth.new()
 	perspective_depth.name = "BattleTablePerspectiveDepth"
 	perspective_depth.set_anchors_preset(Control.PRESET_FULL_RECT)
-	perspective_depth.configure(get_current_seat(), SEAT_ACCENT_COLORS[clamp(get_current_seat(), 0, SEAT_ACCENT_COLORS.size() - 1)])
+	perspective_depth.configure(render_current_seat, SEAT_ACCENT_COLORS[clamp(render_current_seat, 0, SEAT_ACCENT_COLORS.size() - 1)])
 	table.add_child(perspective_depth)
 	draw_table_atmosphere_frame(table)
 	draw_walls(table)
@@ -826,7 +831,7 @@ func render_game(state_changed: bool = false) -> void:
 	draw_center(table)
 	draw_discards(table)
 
-	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat()}
+	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat(), "current_seat": render_current_seat}
 	for seat_layout in SEAT_LAYOUTS:
 		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
@@ -878,7 +883,7 @@ func update_ai_assistance_async() -> void:
 	var evaluation_revision := ai_state_revision
 	var evaluation_generation := ui_page_generation
 	var evaluation_hand_signature := hand_identity_fingerprint(get_self_hand())
-	var evaluation_visible_counts := visible_tile_counts()
+	var evaluation_visible_counts := visible_tile_counts_shared()
 
 	var start_time = Time.get_ticks_msec()
 
@@ -1588,7 +1593,7 @@ func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
 	# where the drawn tile is already the only valid preserve-tenpai action.
 	if seat < 0 or seat >= players.size() or tile == "":
 		return
-	var visible_counts = visible_tile_counts()
+	var visible_counts = visible_tile_counts_shared()
 	var eval_context = make_ai_evaluation_context(seat, visible_counts)
 	var risk = deal_in_risk_score(tile, seat, eval_context)
 	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context)
@@ -3095,6 +3100,7 @@ func finish_wall_draw() -> void:
 		for i in range(mini(4, (settled_deltas as Array).size())):
 			next_deltas[i] = int((settled_deltas as Array)[i])
 	last_score_deltas = next_deltas
+	refresh_score_delta_cache()
 	if not offline_sim_quiet:
 		record_game_result(false, int(next_deltas[0]), 1, active_round_id, {
 			"result_kind": "wall_draw",
@@ -3320,6 +3326,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	last_score_deltas = []
 	for seat in range(players.size()):
 		last_score_deltas.append(int(players[seat].get("score", 0)) - int(before_scores[seat]))
+	refresh_score_delta_cache()
 
 	# 记录游戏统计（全 bot 静默模拟跳过，避免污染本地成就/进度）
 	var player_score_delta = int(last_score_deltas[0]) if not last_score_deltas.is_empty() else 0

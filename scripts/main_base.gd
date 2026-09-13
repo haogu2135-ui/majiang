@@ -717,6 +717,7 @@ var replay_import_input: LineEdit
 var replay_timeline_selected_index := -1
 var replay_timeline_visible_cache_key := ""
 var replay_timeline_visible_cache: Array[Dictionary] = []
+var replay_timeline_render_key := ""
 var replay_timeline_height_index_signature := ""
 var round_event_sequence := 0
 var active_round_id := ""
@@ -831,6 +832,8 @@ var ai_sim_trace_enabled := false  # 仅基准诊断：记录紧凑弃牌链路�
 var round_summary = ""
 var round_result_kind := "playing"  # playing / win / wall_draw
 var last_score_deltas: Array[int] = []
+var last_score_deltas_revision := 0
+var last_score_deltas_have_change := false
 var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
 var current_human_advice: Array = []
 var current_seat_threat_reports: Dictionary = {}
@@ -843,6 +846,19 @@ var ai_state_revision := 0
 var ai_claim_ban_revision := 0
 var ai_package_liability_revision := 0
 var ai_rob_threat_cache: Dictionary = {}
+var score_rank_cache_key := ""
+var score_rank_cache: Array = []
+var score_context_cache_key := ""
+var score_context_cache: Dictionary = {}
+var visible_tile_counts_cache_key := ""
+var visible_tile_counts_cache: Array = []
+var exposed_meld_count_cache: Dictionary = {}
+var opponent_runtime_state_cache_key := ""
+var opponent_runtime_state_cache: Dictionary = {}
+var threat_table_state_input_cache_key := ""
+var threat_table_state_cached_value := ""
+var human_readiness_cache_key := ""
+var human_readiness_cache_value := 0.0
 var advisor_detail_open := false
 var table_log_archive_open := false
 var table_log_chat_restore_pending := false
@@ -880,7 +896,10 @@ var button_style_set_cache_order: Array[String] = []
 var input_style_set_cache: Dictionary = {}
 var input_style_set_cache_order: Array[String] = []
 var shanten_cache: Dictionary = {}
-var shanten_cache_order: Array[String] = []
+var shanten_lru_prev: Dictionary = {}
+var shanten_lru_next: Dictionary = {}
+var shanten_lru_head := ""
+var shanten_lru_tail := ""
 var shanten_cache_hits = 0
 var shanten_cache_misses = 0
 var ai_report_cache: Dictionary = {}
@@ -894,8 +913,12 @@ var ai_report_lru_tail := ""
 var ai_report_key_cache: Dictionary = {}
 var ai_report_cache_hits = 0
 var ai_report_cache_misses = 0
+var ai_profile_value_cache: Dictionary = {}
 var threat_report_cache: Dictionary = {}
-var threat_report_cache_order: Array[String] = []
+var threat_report_lru_prev: Dictionary = {}
+var threat_report_lru_next: Dictionary = {}
+var threat_report_lru_head := ""
+var threat_report_lru_tail := ""
 var effective_tiles_cache: Dictionary = {}
 var effective_tiles_cache_order: Array[String] = []
 var effective_tiles_cache_access: Dictionary = {}
@@ -1031,6 +1054,14 @@ var next_voice_capture_msec := 0
 var next_update_progress_msec = 0
 var safe_area_margins := Vector4(0.0, 0.0, 0.0, 0.0)
 var safe_area_test_margins_override := Vector4(-1.0, -1.0, -1.0, -1.0)
+var effective_viewport_cached_size := Vector2.ZERO
+var effective_viewport_cached_frame := -1
+var safe_content_cached_viewport := Vector2.ZERO
+var safe_content_cached_margins := Vector4(-1.0, -1.0, -1.0, -1.0)
+var safe_content_cached_size := Vector2.ZERO
+var game_table_cached_viewport := Vector2.ZERO
+var game_table_cached_margins := Vector4(-1.0, -1.0, -1.0, -1.0)
+var game_table_cached_size := Vector2.ZERO
 var fx_layer: Control
 var fx_turn_pulse: Control
 var fx_turn_glow: Panel
@@ -1062,6 +1093,7 @@ var retained_battle_hand_tray: Control = null
 var retained_battle_hand_signature := ""
 var retained_battle_hand_state_signature := ""
 var hand_render_snapshot_signature := ""
+var hand_render_snapshot_state_signature := ""
 var hand_render_snapshot_valid := false
 var retained_battle_center: Control = null
 var retained_battle_center_signature := ""
@@ -1082,6 +1114,8 @@ var pending_claim_priority_label: Label = null
 var pending_claim_last_timer_text := ""
 var pending_claim_last_warning_text := ""
 var pending_claim_last_priority_text := ""
+var pending_claim_display_cache_key := ""
+var pending_claim_display_cache: Dictionary = {}
 var hud_view_token := ""
 var hud_lane_refresh_count := 0
 var center_wall_view_cache: Dictionary = {}
@@ -1128,7 +1162,10 @@ var game_render_delay_page_generation := -1
 var game_render_delay_request_revision := -1
 var fx_generation := 0
 var ai_shape_metrics_cache: Dictionary = {}
-var ai_shape_metrics_cache_order: Array[String] = []
+var ai_shape_metrics_lru_prev: Dictionary = {}
+var ai_shape_metrics_lru_next: Dictionary = {}
+var ai_shape_metrics_lru_head := ""
+var ai_shape_metrics_lru_tail := ""
 var economy_load_attempted := false
 var economy_file_loaded := false
 
@@ -1377,6 +1414,7 @@ const SHANTEN_CACHE_LIMIT := 4096
 const AI_REPORT_CACHE_LIMIT := 256
 const THREAT_REPORT_CACHE_LIMIT := 192
 const EFFECTIVE_TILES_CACHE_LIMIT := 512
+const AI_SHAPE_METRICS_CACHE_LIMIT := 64
 const STYLE_CACHE_LIMIT := 256
 const BUTTON_STYLE_SET_CACHE_LIMIT := 96
 const INPUT_STYLE_SET_CACHE_LIMIT := 32
@@ -1546,6 +1584,14 @@ const AMBIENT_RAINDROP_COUNT := 28
 const AMBIENT_FIREWORK_COUNT := 6
 
 # ===== Shared UI helpers =====
+func refresh_score_delta_cache() -> void:
+	last_score_deltas_revision += 1
+	last_score_deltas_have_change = false
+	for delta in last_score_deltas:
+		if int(delta) != 0:
+			last_score_deltas_have_change = true
+			break
+
 func create_screen_tween(preserve_timing: bool = false) -> Tween:
 	# Keep the registry bounded before creating the next animation. Decorative
 	# work is allowed to evict the oldest active tween; the caller still receives
@@ -4816,6 +4862,7 @@ func restore_offline_progress_state(state: Dictionary) -> bool:
 	last_score_deltas = []
 	for delta in state.get("last_score_deltas", []):
 		last_score_deltas.append(int(delta))
+	refresh_score_delta_cache()
 	last_win_score = state.get("last_win_score", {}).duplicate(true) if typeof(state.get("last_win_score", {})) == TYPE_DICTIONARY else {}
 	offline_last_winner = int(state.get("offline_last_winner", -1))
 	offline_dealer_repeat = bool(state.get("offline_dealer_repeat", false))
@@ -5535,7 +5582,32 @@ func tile_presence_set(tiles: Array) -> Dictionary:
 	return result
 
 func has_tile_list(hand: Array, tiles: Array) -> bool:
-	return has_tile_list_counts(tile_counts(hand), tiles)
+	if tiles.is_empty():
+		return true
+	# Claims contain at most a few tiles. Count only requested indexes so a
+	# validation check does not allocate a full hand-count snapshot first.
+	var required_indices: Array[int] = []
+	var required_amounts: Array[int] = []
+	for tile in tiles:
+		var index := tile_index(str(tile))
+		if index < 0:
+			return false
+		var required_slot := required_indices.find(index)
+		if required_slot < 0:
+			required_indices.append(index)
+			required_amounts.append(1)
+		else:
+			required_amounts[required_slot] = int(required_amounts[required_slot]) + 1
+	for required_slot in range(required_indices.size()):
+		var available := 0
+		for hand_tile in hand:
+			if tile_index(str(hand_tile)) == int(required_indices[required_slot]):
+				available += 1
+				if available >= int(required_amounts[required_slot]):
+					break
+		if available < int(required_amounts[required_slot]):
+			return false
+	return true
 
 func consume_tile_count(counts: Array, tile: String, amount: int) -> bool:
 	var index = tile_index(tile)
@@ -5567,18 +5639,25 @@ func consume_tile_list_counts(counts: Array, tiles: Array) -> bool:
 		counts[first_index] = int(counts[first_index]) - 1
 		counts[second_index] = int(counts[second_index]) - 1
 		return true
-	var required := make_empty_tile_counts()
+	var required_indices: Array[int] = []
+	var required_amounts: Array[int] = []
 	for tile in tiles:
-		var index = tile_index(str(tile))
+		var index := tile_index(str(tile))
 		if index < 0 or index >= counts.size():
 			return false
-		required[index] = int(required[index]) + 1
-	for index in range(required.size()):
-		if int(required[index]) > int(counts[index]):
+		var required_slot := required_indices.find(index)
+		if required_slot < 0:
+			required_indices.append(index)
+			required_amounts.append(1)
+		else:
+			required_amounts[required_slot] = int(required_amounts[required_slot]) + 1
+	for required_slot in range(required_indices.size()):
+		var required_index := int(required_indices[required_slot])
+		if int(required_amounts[required_slot]) > int(counts[required_index]):
 			return false
-	for index in range(required.size()):
-		if int(required[index]) > 0:
-			counts[index] = int(counts[index]) - int(required[index])
+	for required_slot in range(required_indices.size()):
+		var required_index := int(required_indices[required_slot])
+		counts[required_index] = int(counts[required_index]) - int(required_amounts[required_slot])
 	return true
 
 func restore_tile_list_counts(counts: Array, tiles: Array) -> void:
@@ -5602,14 +5681,21 @@ func has_tile_list_counts(counts: Array, tiles: Array) -> bool:
 		if first_index == second_index:
 			return int(counts[first_index]) >= 2
 		return int(counts[first_index]) > 0 and int(counts[second_index]) > 0
-	var required: Dictionary = {}
+	var required_indices: Array[int] = []
+	var required_amounts: Array[int] = []
 	for tile in tiles:
-		var index = tile_index(str(tile))
+		var index := tile_index(str(tile))
 		if index < 0 or index >= counts.size():
 			return false
-		required[index] = int(required.get(index, 0)) + 1
-	for index in required.keys():
-		if int(counts[int(index)]) < int(required[index]):
+		var required_slot := required_indices.find(index)
+		if required_slot < 0:
+			required_indices.append(index)
+			required_amounts.append(1)
+		else:
+			required_amounts[required_slot] = int(required_amounts[required_slot]) + 1
+	for required_slot in range(required_indices.size()):
+		var required_index := int(required_indices[required_slot])
+		if int(counts[required_index]) < int(required_amounts[required_slot]):
 			return false
 	return true
 
@@ -5873,24 +5959,30 @@ func package_preview(seat: int) -> String:
 	if package_token != package_preview_cache_token:
 		package_preview_cache_token = package_token
 		package_preview_cache.clear()
+		# Seat rendering asks for all four summaries. Build payer and covered-winner
+		# directions once instead of scanning the liability map once per seat.
+		var targets_by_payer: Dictionary = {}
+		for key in offline_package_liability.keys():
+			var winner := int(key)
+			var payer := package_payer_from_state(winner)
+			if payer < 0:
+				continue
+			package_preview_cache[winner] = "%s包" % players[payer]["name"]
+			var targets: Array[String] = []
+			for target in targets_by_payer.get(payer, []):
+				targets.append(str(target))
+			targets.append(str(players[winner]["name"]))
+			targets_by_payer[payer] = targets
+		for payer_key in targets_by_payer.keys():
+			var payer_seat := int(payer_key)
+			# Preserve the old direct-payer precedence when a seat is both covered
+			# and responsible for another winner.
+			if not package_preview_cache.has(payer_seat):
+				package_preview_cache[payer_seat] = "包%s" % "、".join(targets_by_payer[payer_seat])
 	if package_preview_cache.has(seat):
 		return str(package_preview_cache[seat])
-	var payer = package_payer_from_state(seat)
-	var preview := ""
-	if payer >= 0:
-		preview = "%s包" % players[payer]["name"]
-		package_preview_cache[seat] = preview
-		return preview
-	var targets: Array[String] = []
-	for key in offline_package_liability.keys():
-		if int(offline_package_liability[key]) == seat:
-			var winner = int(key)
-			if package_payer_from_state(winner) == seat:
-				targets.append(str(players[winner]["name"]))
-	if not targets.is_empty():
-		preview = "包%s" % "、".join(targets)
-	package_preview_cache[seat] = preview
-	return preview
+	package_preview_cache[seat] = ""
+	return ""
 
 func active_package_lines() -> Array[String]:
 	var lines: Array[String] = []

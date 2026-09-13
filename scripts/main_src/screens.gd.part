@@ -7410,12 +7410,21 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 	if event_list == null:
 		return
 	var event_scroll := root_layer.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
-	for child in event_list.get_children():
-		event_list.remove_child(child)
-		child.queue_free()
 	var events_value = payload.get("events", [])
 	var events: Array = events_value as Array if typeof(events_value) == TYPE_ARRAY else []
 	var visible_events := replay_timeline_visible_events(payload)
+	# replay_timeline_visible_events() already computed the immutable payload key;
+	# reuse it instead of hashing an unverified event list a second time.
+	var payload_key := replay_timeline_visible_cache_key
+	var render_key := "%d|%d|%d|%s" % [root_layer.get_instance_id(), ui_page_generation, accessibility_font_size(11), payload_key]
+	if render_key == replay_timeline_render_key and event_list.get_child_count() == visible_events.size():
+		if focus_first and not visible_events.is_empty():
+			configure_replay_timeline_focus_navigation(true)
+		return
+	replay_timeline_render_key = render_key
+	for child in event_list.get_children():
+		event_list.remove_child(child)
+		child.queue_free()
 	event_list.set_meta("timeline_source_event_count", events.size())
 	event_list.set_meta("timeline_filtered_event_count", visible_events.size())
 	event_list.set_meta("ui_page_generation", ui_page_generation)

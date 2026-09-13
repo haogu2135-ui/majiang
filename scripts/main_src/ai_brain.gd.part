@@ -1,6 +1,6 @@
 func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 	var best: Dictionary = {}
-	var visible_counts_snapshot = visible_tile_counts()
+	var visible_counts_snapshot = visible_tile_counts_shared()
 	for offset in range(1, 4):
 		var seat = (from_seat + offset) % 4
 		if not is_ai_controlled_seat(seat):
@@ -148,7 +148,7 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 	var exposed_melds = exposed_meld_count_for_seat(seat)
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
 	var route_focus = ai_route_focus(seat)
-	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
+	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts_shared()
 	var eval_context = make_ai_evaluation_context(seat, visible_counts)
 	var pressure_context = ai_pressure_context(seat, eval_context)
 	eval_context["pressure_context"] = pressure_context
@@ -218,10 +218,20 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		return report
 	var hand: Array = players[seat]["hand"]
 	var has_claim_context = is_ai_claim_context_for_seat(claim_context, seat)
-	var open_melds = int(claim_context.get("open_melds", 0)) if has_claim_context else players[seat]["melds"].size()
-	var exposed_melds = int(claim_context.get("exposed_melds", exposed_meld_count_for_seat(seat))) if has_claim_context else exposed_meld_count_for_seat(seat)
+	var open_melds: int
+	var exposed_melds: int
+	var before_shanten: int
+	if has_claim_context:
+		open_melds = int(claim_context.get("open_melds", 0))
+		var context_exposed_melds := int(claim_context.get("exposed_melds", -1))
+		exposed_melds = context_exposed_melds if context_exposed_melds >= 0 else exposed_meld_count_for_seat(seat)
+		before_shanten = int(claim_context.get("before_shanten", 8))
+	else:
+		open_melds = players[seat]["melds"].size()
+		exposed_melds = exposed_meld_count_for_seat(seat)
 	var hand_counts = claim_context.get("hand_counts", []) if has_claim_context else tile_counts(hand)
-	var before_shanten = int(claim_context.get("before_shanten", 8)) if has_claim_context else calculate_min_shanten_from_counts(hand_counts, open_melds)
+	if not has_claim_context:
+		before_shanten = calculate_min_shanten_from_counts(hand_counts, open_melds)
 	var standalone_before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size()) if not has_claim_context else {}
 	var before_plan_report = claim_context.get("before_plan_report", {}) if has_claim_context else standalone_before_plan_eval.get("report", {})
 	if typeof(before_plan_report) != TYPE_DICTIONARY:
@@ -263,7 +273,10 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	# The route report includes both existing and newly exposed melds. Reuse its
 	# score for the claim delta so the numeric comparison matches the displayed
 	# route label and the later post-meld discard evaluator.
-	var after_score = evaluate_ai_hand_from_counts(after_counts) + float(after_plan_report.get("score", hand_plan_score_from_counts(after_counts, after.size()))) * 0.35 * route_focus + bonus
+	var after_plan_score := float(after_plan_report.get("score", 0.0))
+	if not after_plan_report.has("score"):
+		after_plan_score = hand_plan_score_from_counts(after_counts, after.size())
+	var after_score = evaluate_ai_hand_from_counts(after_counts) + after_plan_score * 0.35 * route_focus + bonus
 	var shape_gain = after_score - before_score
 	var allow = false
 	var reason = "牌型收益不足"
@@ -385,7 +398,7 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 		if typeof(shared_pressure_context) == TYPE_DICTIONARY:
 			pressure_context = shared_pressure_context
 	if eval_context.is_empty():
-		var visible_counts_snapshot = visible_tile_counts()
+		var visible_counts_snapshot = visible_tile_counts_shared()
 		eval_context = make_ai_evaluation_context(seat, visible_counts_snapshot)
 	if pressure_context.is_empty():
 		pressure_context = ai_context_pressure_context(seat, eval_context)
@@ -421,7 +434,7 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 
 func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds: int, eval_context: Dictionary = {}, after_counts_snapshot: Array = [], banned_tiles = []) -> Dictionary:
 	var best: Dictionary = {}
-	var visible_counts_snapshot = visible_tile_counts() if eval_context.is_empty() else ai_context_visible_counts(eval_context)
+	var visible_counts_snapshot = visible_tile_counts_shared() if eval_context.is_empty() else ai_context_visible_counts(eval_context)
 	var shared_context = make_ai_evaluation_context(seat, visible_counts_snapshot) if eval_context.is_empty() else eval_context
 	var pressure_context = ai_context_pressure_context(seat, shared_context)
 	var after_counts = after_counts_snapshot if not after_counts_snapshot.is_empty() else tile_counts(after_hand)
@@ -528,7 +541,7 @@ func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
 	# The declarer must not inspect concealed opponent hands.  Estimate chankan
 	# danger only from public rivers, melds, wall depth and inferred readiness;
 	# actual winners are still resolved by the gameplay layer after declaration.
-	var visible_counts = visible_tile_counts()
+	var visible_counts = visible_tile_counts_shared()
 	var eval_context = make_ai_evaluation_context(gang_seat, visible_counts)
 	var visible = max(3, visible_tile_count_from_counts(tile, visible_counts))
 	var details: Array = []
@@ -649,7 +662,9 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "") -
 	if wait_tiles.size() <= 1:
 		report["reason"] = "单听必胡"
 		return report
-	var current_remaining = int(remaining_by_tile.get(tile, remaining_tile_count(tile, tenpai_hand)))
+	var current_remaining := int(remaining_by_tile.get(tile, 0))
+	if not remaining_by_tile.has(tile):
+		current_remaining = remaining_tile_count(tile, tenpai_hand)
 	var alt_remaining = 0
 	var alt_weighted = 0.0
 	var alt_best_points = 0
@@ -795,7 +810,9 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	if wait_tiles.size() <= 1:
 		report["reason"] = "单听必摸"
 		return report
-	var current_remaining = int(remaining_by_tile.get(drawn_tile, remaining_tile_count(drawn_tile, tenpai_hand)))
+	var current_remaining := int(remaining_by_tile.get(drawn_tile, 0))
+	if not remaining_by_tile.has(drawn_tile):
+		current_remaining = remaining_tile_count(drawn_tile, tenpai_hand)
 	var alt_remaining = 0
 	var alt_weighted = 0.0
 	var alt_best_points = 0
@@ -867,7 +884,7 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 		if should_force_accept_for_wall_draw_ba(seat, points, wall):
 			report["reason"] = "查听落袋"
 			return report
-		var continue_eval_context = make_ai_evaluation_context(seat, visible_tile_counts())
+		var continue_eval_context = make_ai_evaluation_context(seat, visible_tile_counts_shared())
 		var continue_risk = deal_in_risk_score(drawn_tile, seat, continue_eval_context)
 		var continue_feed_report = discard_feed_risk_report(drawn_tile, seat, [], continue_eval_context)
 		var continue_feed = float(continue_feed_report.get("score", 0.0)) if typeof(continue_feed_report) == TYPE_DICTIONARY else 0.0
@@ -905,6 +922,12 @@ func ai_tsumo_continue_discard(seat: int, drawn_tile: String, decision: Dictiona
 func score_context_report(seat: int) -> Dictionary:
 	if mode != "offline" or seat < 0 or seat >= players.size() or players.is_empty():
 		return {}
+	var cache_key := score_state_cache_key()
+	if cache_key != score_context_cache_key:
+		score_context_cache_key = cache_key
+		score_context_cache.clear()
+	if score_context_cache.has(seat):
+		return (score_context_cache[seat] as Dictionary).duplicate(false)
 	var ranked = ranked_seats_by_score()
 	var rank = ranked.find(seat) + 1
 	if rank <= 0:
@@ -922,13 +945,15 @@ func score_context_report(seat: int) -> Dictionary:
 		strategy = "守成"
 	elif late > 0.0 and rank >= 3 and lead_gap <= -1800:
 		strategy = "追分"
-	return {
+	var report := {
 		"rank": rank,
 		"score": score,
 		"leader_gap": lead_gap,
 		"late": late,
 		"strategy": strategy,
 	}
+	score_context_cache[seat] = report
+	return report.duplicate(false)
 
 func score_strategy_text(seat: int) -> String:
 	var report = score_context_report(seat)
@@ -1036,6 +1061,9 @@ func human_readiness_for_defense() -> float:
 		return 0.0
 	var melds_arr = players[0].get("melds", [])
 	var disc_arr = players[0].get("discards", [])
+	var cache_key := "%d|%d|%d|%d|%d" % [ai_state_revision, hash(melds_arr), hash(disc_arr), get_wall_count(), players.size()]
+	if cache_key == human_readiness_cache_key:
+		return human_readiness_cache_value
 	var melds = int(melds_arr.size()) if typeof(melds_arr) == TYPE_ARRAY else 0
 	var discards = int(disc_arr.size()) if typeof(disc_arr) == TYPE_ARRAY else 0
 	var wall = get_wall_count()
@@ -1046,6 +1074,8 @@ func human_readiness_for_defense() -> float:
 		score += 3.5
 	if melds >= 3 or discards >= 14:
 		score += 4.0
+	human_readiness_cache_key = cache_key
+	human_readiness_cache_value = score
 	return score
 
 func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}) -> float:
@@ -1064,7 +1094,8 @@ func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_re
 		if int(item.get("opponent", -1)) != 0:
 			continue
 		human_feed = max(human_feed, float(item.get("score", 0.0)))
-	var visible = visible_tile_count(tile)
+	var visible_counts = ai_context_visible_counts(eval_context)
+	var visible = visible_tile_count_from_counts(tile, visible_counts)
 	var human_threat = opponent_pattern_threat_score(0, tile, visible, eval_context)
 	var readiness = human_readiness_for_defense()
 	if human_feed < 8.0 and human_threat < 6.0 and risk < AI_DANGER_RISK_SOFT and readiness < 8.0:
@@ -1129,6 +1160,8 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 	var details: Array = feed_report.get("details", [])
 	if details.is_empty():
 		return out
+	var wall_count := get_wall_count()
+	var difficulty := clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	for item in details:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
@@ -1148,9 +1181,9 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 		var plan_pressure = opponent_plan_pressure(opponent, eval_context)
 		var meld_count = int(players[opponent].get("melds", []).size())
 		var penalty = 52.0 + feed_score * 1.55 + readiness * 1.8 + plan_pressure * 0.75 + float(meld_count) * 7.0
-		if get_wall_count() <= 28:
+		if wall_count <= 28:
 			penalty += 14.0
-		if get_wall_count() <= 16:
+		if wall_count <= 16:
 			penalty += 18.0
 		# 听牌时仍可为优质进攻承担责任；离听越远，越没有理由送出第三搭。
 		if shanten <= 0:
@@ -1159,7 +1192,7 @@ func package_feed_discipline_report(seat: int, tile: String, feed_report: Dictio
 			penalty *= 0.64
 		elif shanten >= 3:
 			penalty *= 1.12
-		match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
+		match difficulty:
 			AI_DIFFICULTY_HARD:
 				penalty *= 1.48
 			AI_DIFFICULTY_EASY:
@@ -1318,19 +1351,30 @@ func reshuffle_ai_profiles_for_hand() -> void:
 	for i in range(4):
 		ai_profile_seat_map[i] = int(full[i])
 
-func ai_profile_source(seat: int) -> Dictionary:
-	var idx = seat
+func ai_profile_index_for_seat(seat: int) -> int:
+	var idx := seat
 	if seat >= 0 and seat < ai_profile_seat_map.size():
 		idx = int(ai_profile_seat_map[seat])
+	return idx if idx >= 0 and idx < AI_PROFILES.size() else 0
+
+func ai_profile_source(seat: int) -> Dictionary:
+	var idx := ai_profile_index_for_seat(seat)
 	if idx >= 0 and idx < AI_PROFILES.size():
 		return AI_PROFILES[idx] as Dictionary
 	return AI_PROFILES[0] as Dictionary
 
 func ai_profile_value(seat: int, key: String, fallback: float = 1.0) -> float:
 	# 简单档压缩人设差异（更好抓漏洞）；困难档放大攻/守/大牌个性反差。
-	var raw = float(ai_profile_source(seat).get(key, fallback))
+	var diff := clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	var profile_index := ai_profile_index_for_seat(seat)
+	var cache_key := "%d|%d|%s|%s" % [diff, profile_index, key, str(fallback)]
+	if ai_profile_value_cache.has(cache_key):
+		return float(ai_profile_value_cache[cache_key])
+	var raw = float((AI_PROFILES[profile_index] as Dictionary).get(key, fallback))
 	var contrasted = 1.0 + (raw - 1.0) * ai_profile_contrast()
-	return contrasted * ai_difficulty_scale(key)
+	var result: float = contrasted * ai_difficulty_scale(key)
+	ai_profile_value_cache[cache_key] = result
+	return result
 
 func ai_profile_contrast() -> float:
 	match clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD):
@@ -1479,7 +1523,7 @@ func get_ai_discard_reports(seat: int) -> Array:
 	if use_report_cache:
 		ai_report_cache_misses += 1
 	var open_melds = players[seat]["melds"].size()
-	var visible_counts_snapshot = visible_tile_counts()
+	var visible_counts_snapshot = visible_tile_counts_shared()
 	var eval_context = make_ai_evaluation_context(seat, visible_counts_snapshot)
 	var pressure_context = ai_pressure_context(seat, eval_context)
 	eval_context["pressure_context"] = pressure_context
@@ -1505,8 +1549,8 @@ func get_ai_discard_reports(seat: int) -> Array:
 		var defense_guess = ai_defense_weight(seat, 2, pressure_context)
 		var risk_factor = ai_risk_factor(seat)
 		var diff = decision_difficulty
-		var fast_human_guard = seat > 0 and mode == "offline" and (diff == AI_DIFFICULTY_HARD or human_readiness_for_defense() >= 8.0)
-		var fast_human_readiness = human_readiness_for_defense() if fast_human_guard else 0.0
+		var fast_human_readiness := human_readiness_for_defense() if seat > 0 and mode == "offline" else 0.0
+		var fast_human_guard = seat > 0 and mode == "offline" and (diff == AI_DIFFICULTY_HARD or fast_human_readiness >= 8.0)
 		var safest_candidate: Dictionary = {}
 		var safest_rank = INF
 		var human_pressure_peak = 0.0
@@ -1758,7 +1802,7 @@ func hard_safety_value(label: String) -> float:
 	return 0.0
 
 func known_tile_counts_for_seat(seat: int, visible_counts_snapshot: Array = []) -> Array:
-	var known_counts = (visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()).duplicate()
+	var known_counts = (visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts_shared()).duplicate()
 	if known_counts.is_empty():
 		known_counts = make_empty_tile_counts()
 	if seat >= 0 and seat < players.size():
@@ -1766,13 +1810,19 @@ func known_tile_counts_for_seat(seat: int, visible_counts_snapshot: Array = []) 
 	return known_counts
 
 func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) -> Dictionary:
-	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
+	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts_shared()
 	var known_counts = known_tile_counts_for_seat(seat, visible_counts)
 	var opponents: Dictionary = {}
+	var runtime_cache_key := "%s|wall=%d" % [visible_tile_counts_state_cache_key(), get_wall_count()]
+	if runtime_cache_key != opponent_runtime_state_cache_key:
+		opponent_runtime_state_cache_key = runtime_cache_key
+		opponent_runtime_state_cache.clear()
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		opponents[other] = build_opponent_runtime_state(other)
+		if not opponent_runtime_state_cache.has(other):
+			opponent_runtime_state_cache[other] = build_opponent_runtime_state(other)
+		opponents[other] = opponent_runtime_state_cache[other]
 	# Threat reports are requested once per opponent in a single evaluation pass.
 	# Capture their immutable table signature here so those requests neither rebuild
 	# the same long key nor drift to live state halfway through the pass.
@@ -1797,7 +1847,7 @@ func ai_context_visible_counts(eval_context: Dictionary, fallback: Array = []) -
 		var counts = eval_context.get("visible_counts", [])
 		if typeof(counts) == TYPE_ARRAY and not counts.is_empty():
 			return counts
-	return fallback if not fallback.is_empty() else visible_tile_counts()
+	return fallback if not fallback.is_empty() else visible_tile_counts_shared()
 
 func ai_context_known_counts(eval_context: Dictionary, seat: int, fallback: Array = []) -> Array:
 	if not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat:
@@ -1894,7 +1944,7 @@ func store_ai_report_cache(key: String, reports: Array) -> void:
 		evict_ai_report_cache_key(ai_report_lru_tail)
 
 func ai_report_cache_key(seat: int) -> String:
-	var visible_table_key := threat_report_table_state_cache_key(seat, visible_tile_counts())
+	var visible_table_key := threat_report_table_state_cache_key(seat, visible_tile_counts_shared())
 	var hand_key := tile_array_key(players[seat].get("hand", []))
 	var input_key := "%d|%d|%s|%s" % [ai_state_revision, seat, visible_table_key, hand_key]
 	var cached_key: String = str(ai_report_key_cache.get(input_key, ""))
@@ -2820,8 +2870,7 @@ func ai_hand_shape_metrics_from_counts(counts: Array) -> Dictionary:
 	var cache_key := counts_compact_key(counts)
 	var cached = ai_shape_metrics_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
-		ai_shape_metrics_cache_order.erase(cache_key)
-		ai_shape_metrics_cache_order.append(cache_key)
+		touch_ai_shape_metrics_cache_key(cache_key)
 		return cached as Dictionary
 	var value = 0.0
 	var sequences = 0
@@ -2886,11 +2935,51 @@ func ai_hand_shape_metrics_from_counts(counts: Array) -> Dictionary:
 		},
 	}
 	ai_shape_metrics_cache[cache_key] = result
-	ai_shape_metrics_cache_order.append(cache_key)
-	while ai_shape_metrics_cache_order.size() > 64:
-		var oldest: String = ai_shape_metrics_cache_order.pop_front()
-		ai_shape_metrics_cache.erase(oldest)
+	touch_ai_shape_metrics_cache_key(cache_key)
+	while ai_shape_metrics_cache.size() > AI_SHAPE_METRICS_CACHE_LIMIT:
+		evict_ai_shape_metrics_cache_key(ai_shape_metrics_lru_tail)
 	return result
+
+func touch_ai_shape_metrics_cache_key(key: String) -> void:
+	if key == "":
+		return
+	var previous := str(ai_shape_metrics_lru_prev.get(key, ""))
+	var next := str(ai_shape_metrics_lru_next.get(key, ""))
+	if ai_shape_metrics_lru_head == key:
+		return
+	if ai_shape_metrics_lru_prev.has(key) or ai_shape_metrics_lru_next.has(key) or ai_shape_metrics_lru_tail == key:
+		if previous != "":
+			ai_shape_metrics_lru_next[previous] = next
+		else:
+			ai_shape_metrics_lru_head = next
+		if next != "":
+			ai_shape_metrics_lru_prev[next] = previous
+		else:
+			ai_shape_metrics_lru_tail = previous
+	ai_shape_metrics_lru_prev[key] = ""
+	ai_shape_metrics_lru_next[key] = ai_shape_metrics_lru_head
+	if ai_shape_metrics_lru_head != "":
+		ai_shape_metrics_lru_prev[ai_shape_metrics_lru_head] = key
+	else:
+		ai_shape_metrics_lru_tail = key
+	ai_shape_metrics_lru_head = key
+
+func evict_ai_shape_metrics_cache_key(key: String) -> void:
+	if key == "":
+		return
+	var previous := str(ai_shape_metrics_lru_prev.get(key, ""))
+	var next := str(ai_shape_metrics_lru_next.get(key, ""))
+	if previous != "":
+		ai_shape_metrics_lru_next[previous] = next
+	else:
+		ai_shape_metrics_lru_head = next
+	if next != "":
+		ai_shape_metrics_lru_prev[next] = previous
+	else:
+		ai_shape_metrics_lru_tail = previous
+	ai_shape_metrics_lru_prev.erase(key)
+	ai_shape_metrics_lru_next.erase(key)
+	ai_shape_metrics_cache.erase(key)
 
 func hand_shape_quality_report(hand: Array) -> Dictionary:
 	return hand_shape_quality_report_from_counts(tile_counts(hand))
@@ -2935,7 +3024,7 @@ func calculate_min_shanten_from_counts(counts: Array, open_melds: int = 0) -> in
 	var cache_key = shanten_cache_key(counts, open_melds)
 	if shanten_cache.has(cache_key):
 		shanten_cache_hits += 1
-		touch_cache_key(shanten_cache_order, cache_key)
+		touch_shanten_cache_key(cache_key)
 		return int(shanten_cache[cache_key])
 	shanten_cache_misses += 1
 	var memo: Dictionary = {}
@@ -2958,7 +3047,7 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 
 	# 有效张种类取决于手牌，但有效张数还取决于已见牌。
 	# 将可见张快照纳入缓存键，避免牌河/副露变化后复用旧的 ukeire。
-	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts()
+	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts_shared()
 	var visible_key := visible_counts_key_override if visible_counts_key_override != "" else counts_compact_key(visible_counts)
 	var cache_key = "%d:%d:%s:%s" % [current_shanten, open_melds, counts_compact_key(hand_counts), visible_key]
 	if effective_tiles_cache.has(cache_key):
@@ -3200,15 +3289,26 @@ func hand_plan_report_for_seat_from_features(seat: int, counts: Array, tile_coun
 	var open_melds = 0
 	if seat >= 0 and seat < players.size():
 		open_melds = players[seat]["melds"].size()
+	var plan_features: Dictionary = features
+	if open_melds > 0:
+		plan_features = features.duplicate(true)
 		for meld in players[seat]["melds"]:
 			for item in meld:
 				var index = tile_index(str(item))
 				if index >= 0 and index < plan_counts.size():
+					var previous_amount := int(plan_counts[index])
 					plan_counts[index] = int(plan_counts[index]) + 1
 					total += 1
+					hand_plan_features_add_tile(plan_features, index, previous_amount)
+		var best_suit := 0
+		var suit_counts: Array = plan_features.get("suit_counts", [0, 0, 0])
+		for suit in range(1, 3):
+			if int(suit_counts[suit]) > int(suit_counts[best_suit]):
+				best_suit = suit
+		plan_features["best_suit"] = best_suit
 	var report: Dictionary
 	if open_melds > 0:
-		report = hand_plan_report_from_counts(plan_counts, total)
+		report = hand_plan_report_from_features(plan_counts, total, plan_features)
 	else:
 		report = hand_plan_report_from_features(plan_counts, total, features)
 	if open_melds > 0 and (str(report.get("label", "")) == "十三幺" or str(report.get("label", "")) == "七对"):
@@ -3216,13 +3316,49 @@ func hand_plan_report_for_seat_from_features(seat: int, counts: Array, tile_coun
 		report["score_bonus"] = 0.0
 	return report
 
+func hand_plan_features_add_tile(features: Dictionary, index: int, previous_amount: int) -> void:
+	if index < 0 or index >= TILE_CODES.size():
+		return
+	var amount := previous_amount + 1
+	features["total"] = int(features.get("total", 0)) + 1
+	var suit_counts: Array = features.get("suit_counts", [0, 0, 0])
+	var suit_rank_masks: Array = features.get("suit_rank_masks", [0, 0, 0])
+	if index < 27:
+		var suit_index := int(index / 9)
+		suit_counts[suit_index] = int(suit_counts[suit_index]) + 1
+		if previous_amount == 0:
+			suit_rank_masks[suit_index] = int(suit_rank_masks[suit_index]) | (1 << (index % 9))
+	else:
+		features["honor_count"] = int(features.get("honor_count", 0)) + 1
+	if previous_amount == 0:
+		features["unique_count"] = int(features.get("unique_count", 0)) + 1
+	features["seven_pair_slots"] = int(features.get("seven_pair_slots", 0)) + (min(2, int(amount / 2)) - min(2, int(previous_amount / 2)))
+	features["single_tile_count"] = int(features.get("single_tile_count", 0)) + (1 if amount % 2 == 1 else 0) - (1 if previous_amount % 2 == 1 else 0)
+	if previous_amount == 1:
+		features["pair_count"] = int(features.get("pair_count", 0)) + 1
+	elif previous_amount == 2:
+		features["triplet_count"] = int(features.get("triplet_count", 0)) + 1
+	if is_simple_number_tile(TILE_CODES[index]):
+		features["simple_tiles"] = int(features.get("simple_tiles", 0)) + 1
+	else:
+		features["terminal_honor_tiles"] = int(features.get("terminal_honor_tiles", 0)) + 1
+	if is_thirteen_orphans_tile(TILE_CODES[index]):
+		if previous_amount == 0:
+			features["orphan_unique"] = int(features.get("orphan_unique", 0)) + 1
+		features["orphan_tiles"] = int(features.get("orphan_tiles", 0)) + 1
+		if amount >= 2:
+			features["orphan_pair"] = true
+
 func hand_plan_eval_for_seat_from_counts(seat: int, counts: Array, tile_count: int) -> Dictionary:
 	var features = hand_plan_features_from_counts(counts, tile_count)
 	var report = hand_plan_report_for_seat_from_features(seat, counts, tile_count, features)
+	var score := float(report.get("score", 0.0))
+	if not report.has("score"):
+		score = hand_plan_score_from_features(counts, features)
 	return {
 		# Keep the scalar and the human-readable report sourced from one
 		# seat-aware calculation. This matters once the seat has exposed melds.
-		"score": float(report.get("score", hand_plan_score_from_features(counts, features))),
+		"score": score,
 		"report": report,
 	}
 
@@ -3347,16 +3483,19 @@ func ai_pressure_context(seat: int, eval_context: Dictionary = {}) -> Dictionary
 		if other == seat:
 			continue
 		var plan = opponent_plan_pressure(other, eval_context)
-		var readiness = opponent_readiness_score_from_plan(other, plan)
-		var value = float(players[other]["melds"].size()) * 1.55 + float(players[other]["discards"].size()) * 0.12
+		var opponent_state = ai_context_opponent_state(eval_context, other)
+		var readiness = float(opponent_state.get("readiness", 0.0)) if not opponent_state.is_empty() else opponent_readiness_score_from_plan(other, plan)
+		var meld_count = int(opponent_state.get("melds", players[other]["melds"].size())) if not opponent_state.is_empty() else players[other]["melds"].size()
+		var discard_count = int(opponent_state.get("discards", players[other]["discards"].size())) if not opponent_state.is_empty() else players[other]["discards"].size()
+		var value = float(meld_count) * 1.55 + float(discard_count) * 0.12
 		value += plan * 0.18
 		value += readiness * 0.42
-		if players[other]["discards"].size() >= 12:
+		if discard_count >= 12:
 			value += 1.0
 		pressure = max(pressure, value)
 		readiness_pressure = max(readiness_pressure, readiness)
 		# 多家可听/高压时，单点 max 会低估桌面危险。
-		if readiness >= 8.8 or players[other]["melds"].size() >= 3 or players[other]["discards"].size() >= 14:
+		if readiness >= 8.8 or meld_count >= 3 or discard_count >= 14:
 			hot_opponents += 1
 			hot_readiness_sum += readiness
 	var threat = opponent_threat_report(seat, eval_context)
@@ -3376,11 +3515,15 @@ func opponent_pressure_score(seat: int, eval_context: Dictionary = {}) -> float:
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		var value = float(players[other]["melds"].size()) * 1.55 + float(players[other]["discards"].size()) * 0.12
 		var plan = opponent_plan_pressure(other, eval_context)
+		var opponent_state = ai_context_opponent_state(eval_context, other)
+		var readiness = float(opponent_state.get("readiness", 0.0)) if not opponent_state.is_empty() else opponent_readiness_score_from_plan(other, plan)
+		var meld_count = int(opponent_state.get("melds", players[other]["melds"].size())) if not opponent_state.is_empty() else players[other]["melds"].size()
+		var discard_count = int(opponent_state.get("discards", players[other]["discards"].size())) if not opponent_state.is_empty() else players[other]["discards"].size()
+		var value = float(meld_count) * 1.55 + float(discard_count) * 0.12
 		value += plan * 0.18
-		value += opponent_readiness_score_from_plan(other, plan) * 0.42
-		if players[other]["discards"].size() >= 12:
+		value += readiness * 0.42
+		if discard_count >= 12:
 			value += 1.0
 		pressure = max(pressure, value)
 	return pressure
@@ -3631,7 +3774,9 @@ func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, ev
 			return 0.0
 		var meld_tiles = opponent_meld_tile_count_for_suit(opponent, suit, eval_context)
 		var suit_discards = opponent_discard_count_for_suit(opponent, suit, eval_context)
-		var off_suit_discards = max(0, players[opponent]["discards"].size() - suit_discards)
+		var opponent_state = ai_context_opponent_state(eval_context, opponent)
+		var discard_count = int(opponent_state.get("discards", players[opponent]["discards"].size())) if not opponent_state.is_empty() else players[opponent]["discards"].size()
+		var off_suit_discards = max(0, discard_count - suit_discards)
 		threat += float(meld_count) * 3.2 + float(meld_tiles) * 0.65
 		if meld_count >= 2:
 			threat += 6.0
@@ -3650,7 +3795,9 @@ func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, ev
 		var honor_melds = opponent_honor_meld_count(opponent, eval_context)
 		if honor_melds <= 0:
 			return 0.0
-		threat += float(honor_melds) * 4.4 + float(players[opponent]["melds"].size()) * 0.9
+		var opponent_state = ai_context_opponent_state(eval_context, opponent)
+		var meld_count = int(opponent_state.get("melds", players[opponent]["melds"].size())) if not opponent_state.is_empty() else players[opponent]["melds"].size()
+		threat += float(honor_melds) * 4.4 + float(meld_count) * 0.9
 		if visible == 0:
 			threat += 3.6
 		elif visible >= 2:
@@ -3697,7 +3844,7 @@ func opponent_seat_threat_report(viewer: int, opponent: int, eval_context: Dicti
 		return {}
 	var cache_key = threat_report_cache_key(viewer, opponent, eval_context)
 	if cache_key != "" and threat_report_cache.has(cache_key):
-		touch_cache_key(threat_report_cache_order, cache_key)
+		touch_threat_report_cache_key(cache_key)
 		return duplicate_threat_report(threat_report_cache[cache_key])
 	var best_score = 0.0
 	var best_label = ""
@@ -3983,7 +4130,7 @@ func choose_ai_concealed_gang(seat: int) -> String:
 			candidate_indices.append(i)
 	if candidate_indices.is_empty():
 		return ""
-	var visible_counts := visible_tile_counts()
+	var visible_counts := visible_tile_counts_shared()
 	var eval_context := make_ai_evaluation_context(seat, visible_counts)
 	eval_context["hand_counts"] = hand_counts
 	eval_context["pressure_context"] = ai_pressure_context(seat, eval_context)
@@ -4013,7 +4160,7 @@ func choose_ai_added_gang(seat: int) -> String:
 			added_candidates[meld_tile] = true
 	if added_candidates.is_empty():
 		return ""
-	var visible_counts := visible_tile_counts()
+	var visible_counts := visible_tile_counts_shared()
 	var eval_context := make_ai_evaluation_context(seat, visible_counts)
 	eval_context["hand_counts"] = hand_counts
 	eval_context["pressure_context"] = ai_pressure_context(seat, eval_context)
@@ -4064,7 +4211,12 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_
 		_:
 			return report
 	var open_melds = players[seat]["melds"].size()
-	var before_counts: Array = eval_context.get("hand_counts", tile_counts(hand)) if not eval_context.is_empty() else tile_counts(hand)
+	var before_counts: Array
+	var context_hand_counts = eval_context.get("hand_counts", []) if not eval_context.is_empty() else []
+	if typeof(context_hand_counts) == TYPE_ARRAY and not (context_hand_counts as Array).is_empty():
+		before_counts = context_hand_counts as Array
+	else:
+		before_counts = tile_counts(hand)
 	var before_shanten = calculate_min_shanten_from_counts(before_counts, open_melds)
 	var before_plan_label = str(hand_plan_report_for_seat_from_counts(seat, before_counts, hand.size()).get("label", ""))
 	var after = hand.duplicate()
@@ -4079,9 +4231,14 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_
 				return report
 		_:
 			return report
-	var after_shanten = calculate_min_shanten(after, after_open_melds)
-	var pressure = opponent_pressure_score(seat)
-	var defense = ai_defense_weight(seat, before_shanten)
+	var after_counts := before_counts.duplicate()
+	var removed_count := 4 if gang_kind == "concealed" else 1
+	if not consume_tile_count(after_counts, tile, removed_count):
+		return report
+	var after_shanten = calculate_min_shanten_from_counts(after_counts, after_open_melds)
+	var pressure_context: Dictionary = eval_context.get("pressure_context", {}) if not eval_context.is_empty() else {}
+	var pressure = opponent_pressure_score(seat, eval_context)
+	var defense = ai_defense_weight(seat, before_shanten, pressure_context)
 	# 补杠只看公开信息推断抢杠风险，不能读取任何对手暗手。
 	var rob_threat = added_gang_rob_threat_report(seat, tile) if gang_kind == "added" else {}
 	var rob_risk_score = float(rob_threat.get("risk_score", 0.0))
