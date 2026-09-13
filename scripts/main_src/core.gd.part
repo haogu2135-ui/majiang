@@ -36,17 +36,28 @@ func _ready() -> void:
 	call_deferred("_finish_startup")
 
 func normalized_rule_variant(value: String = "") -> String:
+	# Most callers already hold a canonical profile id. Skip allocation and case
+	# folding for that hot path; only compatibility/import values need cleanup.
+	if RULE_VARIANT_PROFILES.has(value):
+		return value
 	var candidate := value.strip_edges().to_lower()
 	return candidate if RULE_VARIANT_PROFILES.has(candidate) else RULE_VARIANT_YANGZHOU
 
 func active_rule_variant() -> String:
+	var server_variant := str(online_game.get("ruleVariant", "")) if mode == "online_game" else ""
+	var cache_key := "%s|%s|%s|%s|%d|%d" % [mode, offline_active_rule_variant, rule_variant, server_variant, online_room_revision, online_game_revision]
+	if cache_key == active_rule_variant_cache_key and active_rule_variant_cache_value != "":
+		return active_rule_variant_cache_value
+	var resolved := RULE_VARIANT_YANGZHOU
 	if mode == "offline" and offline_active_rule_variant != "":
-		return normalized_rule_variant(offline_active_rule_variant)
-	if mode == "online_game":
-		var server_variant := str(online_game.get("ruleVariant", "")).strip_edges().to_lower()
-		if RULE_VARIANT_PROFILES.has(server_variant):
-			return server_variant
-	return normalized_rule_variant(rule_variant)
+		resolved = normalized_rule_variant(offline_active_rule_variant)
+	elif mode == "online_game" and RULE_VARIANT_PROFILES.has(server_variant):
+		resolved = server_variant
+	else:
+		resolved = normalized_rule_variant(rule_variant)
+	active_rule_variant_cache_key = cache_key
+	active_rule_variant_cache_value = resolved
+	return resolved
 
 func rule_profile(variant: String = "") -> Dictionary:
 	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
@@ -99,7 +110,12 @@ func rule_flower_codes(variant: String = "") -> Array[String]:
 	return flowers
 
 func rule_wall_size(variant: String = "") -> int:
-	return rule_tile_codes(variant).size() * 4 + rule_flower_codes(variant).size()
+	var key := normalized_rule_variant(variant if variant != "" else active_rule_variant())
+	if rule_wall_size_cache.has(key):
+		return int(rule_wall_size_cache[key])
+	var wall_size := rule_tile_codes(key).size() * 4 + rule_flower_codes(key).size()
+	rule_wall_size_cache[key] = wall_size
+	return wall_size
 
 
 func display_wall_total() -> int:
@@ -585,8 +601,10 @@ func collect_visible_focusable_controls(root: Control) -> Array[Control]:
 		return controls
 	var revision := int(root.get_meta("focus_registry_revision", 0))
 	var cache_key := "%d:%d:%d" % [root.get_instance_id(), ui_page_generation, revision]
+	var has_cached := focus_registry_cache.has(cache_key)
 	var cached: Array = focus_registry_cache.get(cache_key, [])
-	if not cached.is_empty():
+	if has_cached:
+		touch_cache_key(focus_registry_lru, cache_key)
 		for candidate in cached:
 			var cached_control := candidate as Control
 			if cached_control != null and is_instance_valid(cached_control) and cached_control.is_visible_in_tree() and cached_control.focus_mode != Control.FOCUS_NONE and not (cached_control is BaseButton and (cached_control as BaseButton).disabled):
@@ -599,9 +617,12 @@ func collect_visible_focusable_controls(root: Control) -> Array[Control]:
 		if control is BaseButton and (control as BaseButton).disabled:
 			continue
 		controls.append(control)
+	if focus_registry_cache.is_empty():
+		clear_cache_lru(focus_registry_lru)
 	focus_registry_cache[cache_key] = controls.duplicate()
-	if focus_registry_cache.size() > 24:
-		focus_registry_cache.erase(focus_registry_cache.keys()[0])
+	touch_cache_key(focus_registry_lru, cache_key)
+	while focus_registry_cache.size() > 24:
+		evict_cache_key(focus_registry_lru, focus_registry_cache)
 	return controls
 
 func focus_danger_discard_confirm() -> void:
@@ -1861,12 +1882,7 @@ func handle_voice_message(data: Dictionary) -> void:
 		online_voice_rejection_count += 1
 		return
 	var player := remote_voice_player_for_stream(stream, speaker_seat, sequence)
-	if sequence_key != "":
-		online_seen_voice_sequences[sequence_key] = true
-		online_seen_voice_sequence_order.append(sequence_key)
-		while online_seen_voice_sequence_order.size() > ONLINE_SEEN_EVENT_LIMIT:
-			var oldest_key: String = str(online_seen_voice_sequence_order.pop_front())
-			online_seen_voice_sequences.erase(oldest_key)
+	remember_online_voice_sequence(sequence_key)
 	player.play()
 
 
@@ -1883,6 +1899,7 @@ func normalize_tile_array(value) -> Array:
 	var result: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return result
+	var metadata_ready: bool = tile_metadata_ready
 	for item in value:
 		var raw_tile := ""
 		if typeof(item) == TYPE_DICTIONARY:
@@ -1890,7 +1907,8 @@ func normalize_tile_array(value) -> Array:
 		else:
 			raw_tile = str(item)
 		var tile := normalize_tile_code(raw_tile)
-		if tile != "" and (TILE_CODES.has(tile) or FLOWER_CODES.has(tile)):
+		var known := tile_order.has(tile) or tile_flower_cache.has(tile) if metadata_ready else TILE_CODES.has(tile) or FLOWER_CODES.has(tile)
+		if tile != "" and known:
 			result.append(tile)
 	return result
 
@@ -1899,6 +1917,7 @@ func normalize_claim_options(value) -> Array:
 	var options: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return options
+	var seen: Dictionary = {}
 	for item in value:
 		var name = ""
 		if typeof(item) == TYPE_DICTIONARY:
@@ -1916,7 +1935,8 @@ func normalize_claim_options(value) -> Array:
 				name = "hu"
 			"过", "pass":
 				name = "pass"
-		if name != "" and not options.has(name):
+		if name != "" and not seen.has(name):
+			seen[name] = true
 			options.append(name)
 	return options
 
@@ -1926,7 +1946,7 @@ func render_room_log() -> void:
 		return
 	var log_scroll: ScrollContainer = null
 	if root_layer != null and is_instance_valid(root_layer):
-		log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+		log_scroll = find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer
 	var previous_scroll := 0
 	var follow_latest := online_log_at_latest
 	if log_scroll != null:
@@ -2031,7 +2051,7 @@ func scroll_online_log_to_end(expected_revision: int = -1) -> void:
 		return
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
-	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var log_scroll = find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer
 	if log_scroll == null:
 		return
 	var scrollbar := log_scroll.get_v_scroll_bar()
@@ -2047,7 +2067,7 @@ func restore_online_log_scroll(value: int, expected_revision: int = -1) -> void:
 		return
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
-	var log_scroll = root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+	var log_scroll = find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer
 	if log_scroll != null:
 		log_scroll.scroll_vertical = value
 		online_log_initialized = true
@@ -2067,7 +2087,7 @@ func online_lobby_log_visible_range_text() -> String:
 	var total := online_lobby_retained_log_count()
 	if total <= 0:
 		return "日志范围 · 暂无记录"
-	var scroll := root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer if root_layer != null and is_instance_valid(root_layer) else null
+	var scroll := find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer if root_layer != null and is_instance_valid(root_layer) else null
 	if scroll == null:
 		return "日志范围 · 1-%d/%d" % [mini(total, 1), total]
 	var scrollbar := scroll.get_v_scroll_bar()
@@ -2095,13 +2115,13 @@ func refresh_online_log_navigation() -> void:
 	if root_id != online_log_navigation_root_id or online_log_navigation_controls.is_empty():
 		online_log_navigation_root_id = root_id
 		online_log_navigation_controls = {
-			"latest_button": root_layer.find_child("OnlineLobbyLogLatestButton", true, false) as Button,
-			"unread_label": root_layer.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label,
-			"count_label": root_layer.find_child("OnlineLobbyLogCountLabel", true, false) as Label,
-			"count_badge": root_layer.find_child("OnlineLobbyLogCountBadge", true, false) as Control,
-			"range_label": root_layer.find_child("OnlineLobbyLogRangeLabel", true, false) as Label,
-			"log_scroll": root_layer.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer,
-			"log_list": root_layer.find_child("OnlineLobbyLogListPanel", true, false) as Control,
+			"latest_button": find_ui_contract_control(root_layer, "OnlineLobbyLogLatestButton") as Button,
+			"unread_label": find_ui_contract_control(root_layer, "OnlineLobbyLogUnreadLabel") as Label,
+			"count_label": find_ui_contract_control(root_layer, "OnlineLobbyLogCountLabel") as Label,
+			"count_badge": find_ui_contract_control(root_layer, "OnlineLobbyLogCountBadge") as Control,
+			"range_label": find_ui_contract_control(root_layer, "OnlineLobbyLogRangeLabel") as Label,
+			"log_scroll": find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer,
+			"log_list": find_ui_contract_control(root_layer, "OnlineLobbyLogListPanel") as Control,
 		}
 		online_log_navigation_token = ""
 	var navigation_token := "%d|%d|%d|%d|%s" % [retained_count, total_count, unread, 1 if online_log_at_latest else 0, range_text]
@@ -2184,15 +2204,15 @@ func bind_chat_send_controls() -> bool:
 		return false
 	if chat_send_controls_root_id == root_layer.get_instance_id() and chat_send_cooldown_label != null and is_instance_valid(chat_send_cooldown_label) and chat_send_button != null and is_instance_valid(chat_send_button) and chat_send_input != null and is_instance_valid(chat_send_input):
 		return true
-	var panel := root_layer.find_child("ChatPanel", true, false) as Control
+	var panel := find_ui_contract_control(root_layer, "ChatPanel") as Control
 	if panel == null or not is_instance_valid(panel):
 		return false
 	chat_send_controls_root_id = root_layer.get_instance_id()
-	chat_send_cooldown_label = panel.find_child("ChatSendCooldownLabel", true, false) as Label
-	chat_send_button = panel.find_child("ChatSendButton", true, false) as Button
-	chat_send_input = panel.find_child("ChatInput", true, false) as LineEdit
+	chat_send_cooldown_label = find_ui_contract_control(panel, "ChatSendCooldownLabel") as Label
+	chat_send_button = find_ui_contract_control(panel, "ChatSendButton") as Button
+	chat_send_input = find_ui_contract_control(panel, "ChatInput") as LineEdit
 	chat_send_quick_buttons.clear()
-	var quick_row := panel.find_child("ChatPanelQuickMessages", true, false) as Control
+	var quick_row := find_ui_contract_control(panel, "ChatPanelQuickMessages") as Control
 	if quick_row != null:
 		for child in quick_row.get_children():
 			var quick_button := child as Button
@@ -5526,12 +5546,15 @@ func can_added_gang(seat: int, tile: String) -> bool:
 	if count_tile(players[seat]["hand"], tile) <= 0:
 		return false
 	for meld in players[seat]["melds"]:
-		if is_triplet_meld(meld, tile):
+		if _is_triplet_meld_normalized(meld, tile):
 			return true
 	return false
 
 func is_triplet_meld(meld: Array, tile: String) -> bool:
 	tile = normalize_tile_code(tile)
+	return _is_triplet_meld_normalized(meld, tile)
+
+func _is_triplet_meld_normalized(meld: Array, tile: String) -> bool:
 	if meld.size() != 3:
 		return false
 	for item in meld:
@@ -5550,14 +5573,17 @@ func score_state_cache_key() -> String:
 	return "|".join(parts)
 
 func ranked_seats_by_score() -> Array:
+	return ranked_seats_by_score_shared().duplicate(false)
+
+func ranked_seats_by_score_shared() -> Array:
 	var cache_key := score_state_cache_key()
 	if cache_key == score_rank_cache_key and not score_rank_cache.is_empty():
-		return score_rank_cache.duplicate(false)
+		return score_rank_cache
 	var seats: Array = [0, 1, 2, 3]
 	seats.sort_custom(func(a, b): return int(players[int(a)].get("score", 0)) > int(players[int(b)].get("score", 0)))
 	score_rank_cache_key = cache_key
 	score_rank_cache = seats.duplicate(false)
-	return seats
+	return score_rank_cache
 
 
 func calculate_win_score(seat: int, win_tile: String, self_draw: bool, win_context: String = "") -> Dictionary:
@@ -5567,20 +5593,37 @@ func calculate_win_score(seat: int, win_tile: String, self_draw: bool, win_conte
 		test_hand.append(win_tile)
 	return calculate_win_score_from_tiles(seat, test_hand, self_draw, win_context)
 
-func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool, win_context: String = "", assume_complete: bool = false) -> Dictionary:
+func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool, win_context: String = "", assume_complete: bool = false, hand_counts_snapshot: Array = [], canonical_tile_count_override: int = -1) -> Dictionary:
 	if seat < 0 or seat >= players.size():
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
-	var canonical_hand: Array = []
-	for item in test_hand:
-		var canonical_tile := normalize_tile_code(str(item))
-		if canonical_tile != "":
-			canonical_hand.append(canonical_tile)
-	test_hand = canonical_hand
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var hand_counts: Array
+	var canonical_tile_count := 0
+	var use_counts_snapshot := hand_counts_snapshot.size() == TILE_CODES.size()
+	if use_counts_snapshot:
+		hand_counts = hand_counts_snapshot
+		if canonical_tile_count_override >= 0:
+			canonical_tile_count = canonical_tile_count_override
+		else:
+			for amount in hand_counts:
+				canonical_tile_count += int(amount)
+	else:
+		hand_counts = make_empty_tile_counts()
+		for item in test_hand:
+			var canonical_tile := normalize_tile_code(str(item))
+			if canonical_tile != "":
+				canonical_tile_count += 1
+				var tile_index_value := int(tile_order.get(canonical_tile, -1))
+				if tile_index_value >= 0:
+					hand_counts[tile_index_value] = int(hand_counts[tile_index_value]) + 1
+	var melds: Array = players[seat].get("melds", [])
 	# Keep the public scoring boundary authoritative. Normal game flow has already
 	# validated a win, but callers such as UI previews or imported match state must
 	# never turn an incomplete hand into a paid result.
-	if not assume_complete and (not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, test_hand) or not is_complete_hand(test_hand, players[seat]["melds"].size())):
+	if not assume_complete and (not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, hand_counts, canonical_tile_count) or not is_complete_hand_from_counts(hand_counts.duplicate(), canonical_tile_count, melds.size())):
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
+	var scoring_counts := scoring_tile_counts_from_counts(seat, hand_counts)
 	var fan = 1
 	var reasons: Array[String] = ["平胡"]
 	if self_draw:
@@ -5607,43 +5650,45 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	if is_menzen_hand(seat):
 		fan += 1
 		reasons.append("门清")
-	if players[seat]["melds"].size() == 0 and is_seven_pairs(test_hand):
+	if melds.size() == 0 and is_seven_pairs_from_counts(hand_counts, canonical_tile_count):
 		fan += 3
 		reasons.append("七对")
-	if players[seat]["melds"].size() == 0 and is_thirteen_orphans(test_hand):
+	if melds.size() == 0 and is_thirteen_orphans_from_counts(hand_counts, canonical_tile_count):
 		fan += 7
 		reasons.append("十三幺")
-	if is_all_honor_hand(seat, test_hand):
+	if is_all_honor_from_counts(scoring_counts):
 		fan += 5
 		reasons.append("字一色")
-	elif is_pure_one_suit_hand(seat, test_hand):
+	elif is_pure_one_suit_from_counts(scoring_counts):
 		fan += 3
 		reasons.append("清一色")
-	elif is_mixed_one_suit_hand(seat, test_hand):
+	elif is_mixed_one_suit_from_counts(scoring_counts):
 		fan += 2
 		reasons.append("混一色")
-	if is_big_three_dragons_hand(seat, test_hand):
+	var dragon_stats := honor_group_stats_from_counts(scoring_counts, DRAGON_CODES)
+	if int(dragon_stats.get("triplets", 0)) == DRAGON_CODES.size():
 		fan += 6
 		reasons.append("大三元")
-	elif is_small_three_dragons_hand(seat, test_hand):
+	elif int(dragon_stats.get("triplets", 0)) == DRAGON_CODES.size() - 1 and int(dragon_stats.get("pairs", 0)) >= 1:
 		fan += 4
 		reasons.append("小三元")
-	if is_big_four_winds_hand(seat, test_hand):
+	var wind_stats := honor_group_stats_from_counts(scoring_counts, WIND_CODES)
+	if int(wind_stats.get("triplets", 0)) == WIND_CODES.size():
 		fan += 7
 		reasons.append("大四喜")
-	elif is_small_four_winds_hand(seat, test_hand):
+	elif int(wind_stats.get("triplets", 0)) == WIND_CODES.size() - 1 and int(wind_stats.get("pairs", 0)) >= 1:
 		fan += 5
 		reasons.append("小四喜")
-	if is_all_simples_hand(seat, test_hand):
+	if is_all_simples_from_counts(scoring_counts):
 		fan += 1
 		reasons.append("断幺九")
-	if is_full_straight_hand(seat, test_hand):
+	if full_straight_suit_from_counts(seat, hand_counts) >= 0:
 		fan += 2
 		reasons.append("一条龙")
-	if is_all_triplet_hand(seat, test_hand):
+	if is_all_triplet_from_counts(seat, hand_counts, canonical_tile_count):
 		fan += 2
 		reasons.append("碰碰胡")
-	if players[seat]["melds"].size() >= 4:
+	if melds.size() >= 4:
 		fan += 2
 		reasons.append("大吊车")
 	var gang_count = count_gang_melds(seat)
@@ -5714,9 +5759,10 @@ func is_thirteen_orphans_from_counts(counts: Array, tile_count: int) -> bool:
 func is_thirteen_orphans_tile(tile: String) -> bool:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	if tile_thirteen_orphans_cache.has(tile):
-		return bool(tile_thirteen_orphans_cache[tile])
-	return THIRTEEN_ORPHANS_CODES.has(tile)
+	var normalized := normalize_tile_code(tile)
+	if tile_thirteen_orphans_cache.has(normalized):
+		return bool(tile_thirteen_orphans_cache[normalized])
+	return THIRTEEN_ORPHANS_CODES.has(normalized)
 
 func is_standard_complete(tiles: Array, needed_melds: int) -> bool:
 	return is_standard_complete_from_counts(tile_counts(tiles), needed_melds)
@@ -5736,13 +5782,11 @@ func can_form_sets(counts: Array, melds_needed: int) -> bool:
 	var memo: Dictionary = {}
 	return can_form_sets_with_memo(counts, melds_needed, memo)
 
-func can_form_sets_with_memo(counts: Array, melds_needed: int, memo: Dictionary) -> bool:
-	var first = -1
-	for i in range(TILE_CODES.size()):
-		if int(counts[i]) > 0:
-			first = i
-			break
-	if first == -1:
+func can_form_sets_with_memo(counts: Array, melds_needed: int, memo: Dictionary, first_index: int = 0) -> bool:
+	var first := clampi(first_index, 0, TILE_CODES.size())
+	while first < TILE_CODES.size() and int(counts[first]) <= 0:
+		first += 1
+	if first >= TILE_CODES.size():
 		return melds_needed == 0
 	if melds_needed <= 0:
 		return false
@@ -5751,7 +5795,7 @@ func can_form_sets_with_memo(counts: Array, melds_needed: int, memo: Dictionary)
 		return bool(memo[memo_key])
 	if int(counts[first]) >= 3:
 		counts[first] = int(counts[first]) - 3
-		if can_form_sets_with_memo(counts, melds_needed - 1, memo):
+		if can_form_sets_with_memo(counts, melds_needed - 1, memo, first):
 			counts[first] = int(counts[first]) + 3
 			memo[memo_key] = true
 			return true
@@ -5760,7 +5804,7 @@ func can_form_sets_with_memo(counts: Array, melds_needed: int, memo: Dictionary)
 		counts[first] = int(counts[first]) - 1
 		counts[first + 1] = int(counts[first + 1]) - 1
 		counts[first + 2] = int(counts[first + 2]) - 1
-		if can_form_sets_with_memo(counts, melds_needed - 1, memo):
+		if can_form_sets_with_memo(counts, melds_needed - 1, memo, first):
 			counts[first] = int(counts[first]) + 1
 			counts[first + 1] = int(counts[first + 1]) + 1
 			counts[first + 2] = int(counts[first + 2]) + 1
@@ -5927,6 +5971,12 @@ func build_opponent_runtime_state(opponent: int) -> Dictionary:
 
 
 func clear_ai_report_cache() -> void:
+	shanten_hand_counts_cache.clear()
+	shanten_hand_counts_cache_order.clear()
+	shanten_hand_counts_lru_prev.clear()
+	shanten_hand_counts_lru_next.clear()
+	shanten_hand_counts_lru_head = ""
+	shanten_hand_counts_lru_tail = ""
 	ai_report_cache.clear()
 	ai_report_cache_order.clear()
 	ai_report_cache_access.clear()
@@ -5947,11 +5997,22 @@ func clear_ai_report_cache() -> void:
 	effective_tiles_lru_tail = ""
 	effective_tiles_cache_clock = 0
 	ai_rob_threat_cache.clear()
+	ai_rob_threat_lru_prev.clear()
+	ai_rob_threat_lru_next.clear()
+	ai_rob_threat_lru_head = ""
+	ai_rob_threat_lru_tail = ""
 	ai_shape_metrics_cache.clear()
 	ai_shape_metrics_lru_prev.clear()
 	ai_shape_metrics_lru_next.clear()
 	ai_shape_metrics_lru_head = ""
 	ai_shape_metrics_lru_tail = ""
+	hand_plan_features_cache.clear()
+	hand_plan_features_lru_prev.clear()
+	hand_plan_features_lru_next.clear()
+	hand_plan_features_lru_head = ""
+	hand_plan_features_lru_tail = ""
+	hand_plan_features_cache_hits = 0
+	hand_plan_features_cache_misses = 0
 	effective_tiles_cache_hits = 0
 	effective_tiles_cache_misses = 0
 	clear_threat_report_cache()
@@ -5965,7 +6026,8 @@ func tile_array_key(tiles: Array) -> String:
 	var counts: Dictionary = {}
 	var indices: Array[int] = []
 	for item in tiles:
-		var index = tile_index(str(item))
+		var normalized := normalize_tile_code(str(item))
+		var index = tile_index_normalized(normalized)
 		if index < 0:
 			continue
 		if not counts.has(index):
@@ -5990,7 +6052,8 @@ func small_tile_array_key(tiles: Array) -> String:
 	var fourth = -1
 	var valid = 0
 	for item in tiles:
-		var index = tile_index(str(item))
+		var normalized := normalize_tile_code(str(item))
+		var index = tile_index_normalized(normalized)
 		if index < 0:
 			continue
 		match valid:
@@ -6443,33 +6506,10 @@ func evaluate_ai_hand(hand: Array) -> float:
 	return evaluate_ai_hand_from_counts(tile_counts(hand))
 
 func evaluate_ai_hand_from_counts(counts: Array) -> float:
-	var score = 0.0
-	for i in range(TILE_CODES.size()):
-		var amount = int(counts[i])
-		if amount == 0:
-			continue
-		score += tile_base_value(i) * amount
-		if amount >= 2:
-			score += 22.0
-		if amount >= 3:
-			score += 42.0
-		if amount == 4:
-			score += 10.0
-		if i < 27:
-			if has_neighbor(counts, i, -1):
-				score += 9.0
-			if has_neighbor(counts, i, 1):
-				score += 9.0
-			if has_neighbor(counts, i, -2):
-				score += 5.0
-			if has_neighbor(counts, i, 2):
-				score += 5.0
-	for start in NUMBER_SUIT_STARTS:
-		for rank in range(0, 7):
-			var index = start + rank
-			if int(counts[index]) > 0 and int(counts[index + 1]) > 0 and int(counts[index + 2]) > 0:
-				score += 28.0
-	return score
+	# The shape metrics cache already computes this exact base score and the
+	# sequence contribution. Reuse it so claim and discard paths do not rescan
+	# the same 34-count hand.
+	return float(ai_hand_shape_metrics_from_counts(counts).get("value", 0.0))
 
 
 func is_isolated_shape_tile(counts: Array, index: int) -> bool:
@@ -6489,8 +6529,9 @@ func shanten_cache_key(counts: Array, open_melds: int) -> String:
 	return "%d:%s" % [open_melds, counts_compact_key(counts)]
 
 func counts_compact_key(counts: Array) -> String:
-	var bytes := PackedByteArray()
-	bytes.resize(counts.size())
+	# Shanten recursion asks for this key at every memo state. Reuse the temporary
+	# byte buffer; get_string_from_ascii() returns an independent String key.
+	counts_compact_key_scratch.resize(counts.size())
 	for i in range(counts.size()):
 		var amount = int(counts[i])
 		if amount < 0 or amount > 9:
@@ -6498,8 +6539,8 @@ func counts_compact_key(counts: Array) -> String:
 			for count in counts:
 				fallback.append(str(int(count)))
 			return "".join(fallback)
-		bytes[i] = 48 + amount
-	return bytes.get_string_from_ascii()
+		counts_compact_key_scratch[i] = 48 + amount
+	return counts_compact_key_scratch.get_string_from_ascii()
 
 func store_shanten_cache(key: String, value: int) -> void:
 	if key == "":
@@ -6559,51 +6600,59 @@ func clear_shanten_cache() -> void:
 	shanten_cache_hits = 0
 	shanten_cache_misses = 0
 
-func standard_shanten_search(counts: Array, melds: int, taatsu: int, has_pair: bool, memo: Dictionary) -> int:
-	var first = -1
-	for i in range(TILE_CODES.size()):
-		if int(counts[i]) > 0:
-			first = i
-			break
-	if first == -1:
+func standard_shanten_search(counts: Array, melds: int, taatsu: int, has_pair: bool, memo: Dictionary, first_index: int = 0) -> int:
+	var first := clampi(first_index, 0, TILE_CODES.size())
+	while first < TILE_CODES.size() and int(counts[first]) <= 0:
+		first += 1
+	if first >= TILE_CODES.size():
 		var capped_taatsu = min(taatsu, max(0, 4 - melds))
 		return 8 - melds * 2 - capped_taatsu - (1 if has_pair else 0)
+	if melds >= 4:
+		# Remaining tiles cannot improve a four-meld hand. They are irrelevant to
+		# shanten, except that an unused pair can still complete the hand.
+		var terminal_has_pair := has_pair
+		if not terminal_has_pair:
+			for index in range(first, TILE_CODES.size()):
+				if int(counts[index]) >= 2:
+					terminal_has_pair = true
+					break
+		return 8 - melds * 2 - (1 if terminal_has_pair else 0)
 	var key = shanten_memo_key(counts, melds, taatsu, has_pair)
 	if memo.has(key):
 		return int(memo[key])
 	var best = 8
 	counts[first] = int(counts[first]) - 1
-	best = min(best, standard_shanten_search(counts, melds, taatsu, has_pair, memo))
+	best = min(best, standard_shanten_search(counts, melds, taatsu, has_pair, memo, first))
 	counts[first] = int(counts[first]) + 1
 	if int(counts[first]) >= 3:
 		counts[first] = int(counts[first]) - 3
-		best = min(best, standard_shanten_search(counts, melds + 1, taatsu, has_pair, memo))
+		best = min(best, standard_shanten_search(counts, melds + 1, taatsu, has_pair, memo, first))
 		counts[first] = int(counts[first]) + 3
 	if can_sequence_from(counts, first):
 		counts[first] = int(counts[first]) - 1
 		counts[first + 1] = int(counts[first + 1]) - 1
 		counts[first + 2] = int(counts[first + 2]) - 1
-		best = min(best, standard_shanten_search(counts, melds + 1, taatsu, has_pair, memo))
+		best = min(best, standard_shanten_search(counts, melds + 1, taatsu, has_pair, memo, first))
 		counts[first] = int(counts[first]) + 1
 		counts[first + 1] = int(counts[first + 1]) + 1
 		counts[first + 2] = int(counts[first + 2]) + 1
 	if int(counts[first]) >= 2:
 		counts[first] = int(counts[first]) - 2
 		if not has_pair:
-			best = min(best, standard_shanten_search(counts, melds, taatsu, true, memo))
-		best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo))
+			best = min(best, standard_shanten_search(counts, melds, taatsu, true, memo, first))
+		best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first))
 		counts[first] = int(counts[first]) + 2
 	if first < 27:
 		if same_suit_index(first, first + 1) and int(counts[first + 1]) > 0:
 			counts[first] = int(counts[first]) - 1
 			counts[first + 1] = int(counts[first + 1]) - 1
-			best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo))
+			best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first))
 			counts[first] = int(counts[first]) + 1
 			counts[first + 1] = int(counts[first + 1]) + 1
 		if same_suit_index(first, first + 2) and int(counts[first + 2]) > 0:
 			counts[first] = int(counts[first]) - 1
 			counts[first + 2] = int(counts[first + 2]) - 1
-			best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo))
+			best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first))
 			counts[first] = int(counts[first]) + 1
 			counts[first + 2] = int(counts[first + 2]) + 1
 	memo[key] = best
@@ -6954,7 +7003,7 @@ func chi_feed_risk_score(tile: String, seat: int, opponent: int, visible_overrid
 	if opponent_meld_count_for_suit(opponent, suit, eval_context) > 0:
 		score += 4.5
 	var opponent_state = ai_context_opponent_state(eval_context, opponent)
-	var discard_count = int(opponent_state.get("discards", players[opponent]["discards"].size())) if not opponent_state.is_empty() else players[opponent]["discards"].size()
+	var discard_count = ai_opponent_state_count(opponent_state, opponent, "discards")
 	if discard_count >= 10:
 		score += 2.5
 	return max(0.0, score)
@@ -6970,8 +7019,8 @@ func meld_feed_risk_score(tile: String, seat: int, opponent: int, visible_overri
 	var unseen = max(0, 4 - visible)
 	var score = float(unseen) * 3.0
 	var opponent_state = ai_context_opponent_state(eval_context, opponent)
-	var meld_count = int(opponent_state.get("melds", players[opponent]["melds"].size())) if not opponent_state.is_empty() else players[opponent]["melds"].size()
-	var discard_count = int(opponent_state.get("discards", players[opponent]["discards"].size())) if not opponent_state.is_empty() else players[opponent]["discards"].size()
+	var meld_count = ai_opponent_state_count(opponent_state, opponent, "melds")
+	var discard_count = ai_opponent_state_count(opponent_state, opponent, "discards")
 	score += float(meld_count) * 2.2
 	if visible == 0:
 		score += 4.0
@@ -7016,8 +7065,8 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 	# instead of repeatedly traversing every live discard and meld collection.
 	var visible = visible_override if visible_override >= 0 else visible_tile_count_from_counts(tile, visible_counts_snapshot)
 	var opponent_state = ai_context_opponent_state(eval_context, opponent)
-	var meld_count = int(opponent_state.get("melds", players[opponent]["melds"].size())) if not opponent_state.is_empty() else players[opponent]["melds"].size()
-	var discard_count = int(opponent_state.get("discards", players[opponent]["discards"].size())) if not opponent_state.is_empty() else players[opponent]["discards"].size()
+	var meld_count = ai_opponent_state_count(opponent_state, opponent, "melds")
+	var discard_count = ai_opponent_state_count(opponent_state, opponent, "discards")
 	var pressure = 2.0 + float(meld_count) * 3.2
 	var readiness = opponent_readiness_score(opponent, eval_context)
 	if visible == 0:
@@ -7171,6 +7220,7 @@ func clear_threat_report_cache() -> void:
 	threat_report_lru_head = ""
 	threat_report_lru_tail = ""
 	seat_threat_display_cache.clear()
+	clear_cache_lru(seat_threat_display_cache_lru)
 	seat_threat_display_cache_order.clear()
 
 
@@ -7193,6 +7243,7 @@ func seat_threat_display_model(seat: int, report: Dictionary) -> Dictionary:
 	var cache_key := "%d|%d" % [seat, revision]
 	var cached: Variant = seat_threat_display_cache.get(cache_key, null)
 	if cached != null:
+		touch_cache_key(seat_threat_display_cache_lru, cache_key)
 		return cached
 	var model := {
 		"badge_text": opponent_seat_threat_badge_text_from_report(report),
@@ -7202,11 +7253,17 @@ func seat_threat_display_model(seat: int, report: Dictionary) -> Dictionary:
 		"safe_count": min(3, (report.get("safe_tiles", []) as Array).size()) if typeof(report.get("safe_tiles", [])) == TYPE_ARRAY else 0,
 		"active": bool(report.get("valid", true)) and float(report.get("score", 0.0)) > 0.0,
 	}
+	if seat_threat_display_cache.is_empty():
+		clear_cache_lru(seat_threat_display_cache_lru)
 	seat_threat_display_cache[cache_key] = model
 	seat_threat_display_cache_order.append(cache_key)
-	while seat_threat_display_cache_order.size() > 32:
-		var oldest_key: String = str(seat_threat_display_cache_order.pop_front())
-		seat_threat_display_cache.erase(oldest_key)
+	touch_cache_key(seat_threat_display_cache_lru, cache_key)
+	while seat_threat_display_cache.size() > 32:
+		var evicted_key := str(seat_threat_display_cache_lru.get("tail", ""))
+		evict_cache_key(seat_threat_display_cache_lru, seat_threat_display_cache)
+		var legacy_index := seat_threat_display_cache_order.find(evicted_key)
+		if legacy_index >= 0:
+			seat_threat_display_cache_order.remove_at(legacy_index)
 	return model
 
 
@@ -7310,7 +7367,8 @@ func tile_suit_index(tile: String) -> int:
 	var normalized := normalize_tile_code(tile)
 	if tile_suit_cache.has(normalized):
 		return int(tile_suit_cache[normalized])
-	var index = tile_index(normalized)
+	# normalized is already canonical; avoid a second normalization in tile_index.
+	var index := int(tile_order.get(normalized, -1))
 	var result := -1 if index < 0 or index >= 27 else int(index / 9)
 	if normalized != "" and tile_suit_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
 		tile_suit_cache[normalized] = result
@@ -7330,16 +7388,37 @@ func should_ai_chi(seat: int, tile: String, choice: Dictionary) -> bool:
 func first_concealed_gang_tile(seat: int) -> String:
 	if seat < 0 or seat >= players.size():
 		return ""
-	for tile in TILE_CODES:
-		if count_tile(players[seat]["hand"], tile) >= 4:
-			return tile
+	var counts := tile_counts(players[seat]["hand"])
+	for index in range(TILE_CODES.size()):
+		if int(counts[index]) >= 4:
+			return str(TILE_CODES[index])
 	return ""
 
 func first_added_gang_tile(seat: int) -> String:
 	if seat < 0 or seat >= players.size():
 		return ""
+	var hand_counts := tile_counts(players[seat].get("hand", []))
+	var triplet_tiles: Dictionary = {}
+	for meld_value in players[seat].get("melds", []):
+		if typeof(meld_value) != TYPE_ARRAY:
+			continue
+		var meld: Array = meld_value
+		if meld.size() != 3:
+			continue
+		var normalized := normalize_tile_code(str(meld[0]))
+		if normalized == "":
+			continue
+		var is_triplet := true
+		for meld_index in range(1, meld.size()):
+			if normalize_tile_code(str(meld[meld_index])) != normalized:
+				is_triplet = false
+				break
+		if is_triplet:
+			triplet_tiles[normalized] = true
 	for tile in TILE_CODES:
-		if can_added_gang(seat, tile):
+		var normalized_tile := str(tile)
+		var index := tile_index_normalized(normalized_tile)
+		if index >= 0 and int(hand_counts[index]) > 0 and triplet_tiles.has(normalized_tile):
 			return tile
 	return ""
 
@@ -7458,7 +7537,7 @@ func is_honor_tile(tile: String) -> bool:
 	var normalized := normalize_tile_code(tile)
 	if tile_honor_cache.has(normalized):
 		return bool(tile_honor_cache[normalized])
-	var index = tile_index(normalized)
+	var index := int(tile_order.get(normalized, -1))
 	var result: bool = index >= 27
 	if tile_honor_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
 		tile_honor_cache[normalized] = result
@@ -7470,7 +7549,7 @@ func is_terminal_or_honor(tile: String) -> bool:
 	var normalized := normalize_tile_code(tile)
 	if tile_terminal_or_honor_cache.has(normalized):
 		return bool(tile_terminal_or_honor_cache[normalized])
-	var index = tile_index(normalized)
+	var index := int(tile_order.get(normalized, -1))
 	var result: bool = false
 	if index >= 27:
 		result = true
@@ -7487,7 +7566,7 @@ func is_simple_number_tile(tile: String) -> bool:
 	var normalized := normalize_tile_code(tile)
 	if tile_simple_number_cache.has(normalized):
 		return bool(tile_simple_number_cache[normalized])
-	var index = tile_index(normalized)
+	var index := int(tile_order.get(normalized, -1))
 	var result: bool = false
 	if index >= 0 and index < 27:
 		var rank = index % 9
@@ -7526,8 +7605,11 @@ func visible_tile_counts_shared() -> Array:
 	return visible_tile_counts_cache
 
 func add_visible_tile_counts(counts: Array, tiles: Array) -> void:
+	if not tile_metadata_ready:
+		setup_tile_order()
 	for tile in tiles:
-		var index = tile_index(str(tile))
+		var normalized := normalize_tile_code(str(tile))
+		var index := int(tile_order.get(normalized, -1))
 		if index >= 0 and index < counts.size():
 			counts[index] = int(counts[index]) + 1
 
@@ -7541,7 +7623,9 @@ func visible_tile_count(tile: String) -> int:
 func visible_tile_count_from_counts(tile: String, visible_counts_snapshot: Array = []) -> int:
 	if visible_counts_snapshot.is_empty():
 		return visible_tile_count(tile)
-	var index = tile_index(tile)
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var index := int(tile_order.get(normalize_tile_code(tile), -1))
 	if index < 0 or index >= visible_counts_snapshot.size():
 		return 0
 	return int(visible_counts_snapshot[index])
@@ -7583,6 +7667,63 @@ func is_all_simples_hand(seat: int, tiles: Array) -> bool:
 	for tile in all_scoring_tiles(seat, tiles):
 		var code = str(tile)
 		if not is_simple_number_tile(code):
+			return false
+		has_tile = true
+	return has_tile
+
+func scoring_tile_counts_from_counts(seat: int, concealed_counts: Array) -> Array:
+	var counts: Array = concealed_counts.duplicate()
+	if seat < 0 or seat >= players.size():
+		return counts
+	for meld in players[seat].get("melds", []):
+		if typeof(meld) != TYPE_ARRAY:
+			continue
+		for item in meld:
+			var index := tile_index(str(item))
+			if index >= 0 and index < counts.size():
+				counts[index] = int(counts[index]) + 1
+	return counts
+
+func is_pure_one_suit_from_counts(counts: Array) -> bool:
+	var suit := -1
+	var has_number := false
+	for index in range(counts.size()):
+		if int(counts[index]) <= 0:
+			continue
+		if index >= 27:
+			return false
+		has_number = true
+		var current_suit := int(index / 9)
+		if suit < 0:
+			suit = current_suit
+		elif suit != current_suit:
+			return false
+	return has_number
+
+func is_mixed_one_suit_from_counts(counts: Array) -> bool:
+	var suit := -1
+	var has_number := false
+	var has_honor := false
+	for index in range(counts.size()):
+		if int(counts[index]) <= 0:
+			continue
+		if index >= 27:
+			has_honor = true
+			continue
+		has_number = true
+		var current_suit := int(index / 9)
+		if suit < 0:
+			suit = current_suit
+		elif suit != current_suit:
+			return false
+	return has_number and has_honor
+
+func is_all_simples_from_counts(counts: Array) -> bool:
+	var has_tile := false
+	for index in range(counts.size()):
+		if int(counts[index]) <= 0:
+			continue
+		if index >= 27 or index % 9 == 0 or index % 9 == 8:
 			return false
 		has_tile = true
 	return has_tile
@@ -7698,7 +7839,7 @@ func honor_group_stats_from_counts(counts: Array, codes: Array) -> Dictionary:
 	var singles = 0
 	var tile_total = 0
 	for code in codes:
-		var index = tile_index(str(code))
+		var index := int(tile_order.get(normalize_tile_code(str(code)), -1))
 		if index < 0 or index >= counts.size():
 			continue
 		var amount = int(counts[index])
@@ -7722,20 +7863,37 @@ func is_all_honor_hand(seat: int, tiles: Array) -> bool:
 			return false
 	return true
 
+func is_all_honor_from_counts(counts: Array) -> bool:
+	for index in range(mini(27, counts.size())):
+		if int(counts[index]) > 0:
+			return false
+	return true
+
 func is_full_straight_hand(seat: int, tiles: Array) -> bool:
 	return full_straight_suit(seat, tiles) >= 0
 
 func full_straight_suit(seat: int, tiles: Array) -> int:
+	return full_straight_suit_from_counts(seat, tile_counts(tiles))
+
+func full_straight_suit_from_counts(seat: int, concealed_counts_source: Array) -> int:
 	if seat < 0 or seat >= players.size():
 		return -1
 	var open_melds: Array = players[seat]["melds"]
+	var open_meld_groups: Array = [[false, false, false], [false, false, false], [false, false, false]]
+	for meld in open_melds:
+		if meld.size() != 3:
+			continue
+		var meld_first_index := tile_index(str(meld[0]))
+		if meld_first_index < 0 or meld_first_index >= 27:
+			continue
+		var meld_suit := int(meld_first_index / 9)
+		var group := full_straight_open_meld_group(meld, meld_suit)
+		if group >= 0:
+			var suit_groups: Array = open_meld_groups[meld_suit]
+			suit_groups[group] = true
 	for suit in range(3):
-		var fulfilled_by_open = [false, false, false]
-		for meld in open_melds:
-			var group = full_straight_open_meld_group(meld, suit)
-			if group >= 0:
-				fulfilled_by_open[group] = true
-		var concealed_counts = tile_counts(tiles)
+		var fulfilled_by_open: Array = open_meld_groups[suit]
+		var concealed_counts = concealed_counts_source.duplicate()
 		var concealed_sequences = 0
 		var valid = true
 		# 一条龙必须能在真实面子分解中取出 123、456、789，不能仅凭
@@ -7776,6 +7934,11 @@ func full_straight_open_meld_group(meld: Array, suit: int) -> int:
 	return -1
 
 func is_all_triplet_hand(seat: int, tiles: Array) -> bool:
+	return is_all_triplet_from_counts(seat, tile_counts(tiles), tiles.size())
+
+func is_all_triplet_from_counts(seat: int, counts: Array, tile_count: int) -> bool:
+	if seat < 0 or seat >= players.size():
+		return false
 	for meld in players[seat]["melds"]:
 		if meld.size() < 3:
 			return false
@@ -7783,12 +7946,14 @@ func is_all_triplet_hand(seat: int, tiles: Array) -> bool:
 		for tile in meld:
 			if str(tile) != first:
 				return false
-	return can_form_triplets_with_pair(tiles)
+	return can_form_triplets_with_pair_from_counts(counts, tile_count)
 
 func can_form_triplets_with_pair(tiles: Array) -> bool:
-	if tiles.size() % 3 != 2:
+	return can_form_triplets_with_pair_from_counts(tile_counts(tiles), tiles.size())
+
+func can_form_triplets_with_pair_from_counts(counts: Array, tile_count: int) -> bool:
+	if tile_count % 3 != 2:
 		return false
-	var counts = tile_counts(tiles)
 	var pair_found = false
 	for count in counts:
 		var amount = int(count)

@@ -33,6 +33,10 @@ const ONLINE_MESSAGE_MAX_BYTES := 256 * 1024
 const ONLINE_MAX_FRAMES_PER_POLL := 8
 const ONLINE_MALFORMED_NOTICE_INTERVAL_MSEC := 1500
 const ONLINE_PLAYER_INDEX_TOKEN_KEY := "_online_player_index_token"
+const ONLINE_MESSAGE_TEXT_KEYS := ["message", "text", "detail", "reason", "error"]
+const ONLINE_LOG_TEXT_KEYS := ["text", "message", "content"]
+const ONLINE_ACTION_TYPE_KEYS := {"createRoom": true, "joinRoom": true, "startGame": true, "discard": true, "claim": true, "chat": true, "voiceState": true, "voiceMessage": true}
+const ONLINE_CLAIM_ACTION_KEYS := {"chi": true, "peng": true, "gang": true, "hu": true, "pass": true}
 const TILE_CODE_NORMALIZATION_CACHE_LIMIT := 128
 const TELEMETRY_SAVE_DEBOUNCE_MSEC := 750
 const APP_VERSION := "1.0.180-godot"
@@ -497,6 +501,10 @@ var tile_decal_textures: Dictionary = {}
 var missing_tile_texture_codes: Dictionary = {}
 var shanten_hand_counts_cache: Dictionary = {}
 var shanten_hand_counts_cache_order: Array[String] = []
+var shanten_hand_counts_lru_prev: Dictionary = {}
+var shanten_hand_counts_lru_next: Dictionary = {}
+var shanten_hand_counts_lru_head := ""
+var shanten_hand_counts_lru_tail := ""
 var tile_assets_ready := false
 var tile_assets_validation_complete := false
 var tile_assets_load_in_progress := false
@@ -512,9 +520,11 @@ var wood_texture: Texture2D
 var illustration_textures: Dictionary = {}
 var optional_gpt_illustration_textures: Dictionary = {}
 var gpt_plate_atlas_cache: Dictionary = {}
-var gpt_plate_atlas_cache_order: Array[String] = []
+var gpt_plate_atlas_lru: Dictionary = {}
+var gpt_plate_atlas_cache_order: Array[String] = []  # legacy diagnostics
 var gpt_center_crop_cache: Dictionary = {}
-var gpt_center_crop_cache_order: Array[String] = []
+var gpt_center_crop_lru: Dictionary = {}
+var gpt_center_crop_cache_order: Array[String] = []  # legacy diagnostics
 var loaded_texture_cache: Dictionary = {}
 var failed_texture_cache: Dictionary = {}
 var shader_materials: Dictionary = {}
@@ -531,7 +541,8 @@ var audio_streams: Dictionary = {}
 var voice_streams: Dictionary = {}
 var voice_assets_loaded := false
 var remote_voice_stream_cache: Dictionary = {}
-var remote_voice_stream_cache_order: Array[String] = []
+var remote_voice_stream_lru: Dictionary = {}
+var remote_voice_stream_cache_order: Array[String] = []  # legacy diagnostics
 const ACTION_SFX_NAMES := {"peng": true, "gang": true, "win": true}
 var audio_layer: Node
 var bgm_player: AudioStreamPlayer
@@ -693,6 +704,7 @@ var round_history_id_index: Dictionary = {}
 var round_history_save_pending := false
 var round_history_save_due_msec := 0
 var replay_archive: Array = []  # 可检索、可收藏的本地回放归档
+var replay_archive_id_index: Dictionary = {}
 var replay_search_query := ""
 var replay_archive_generation := 0
 var replay_search_cache_generation := -1
@@ -743,7 +755,8 @@ var telemetry_queue_sync_revision := 0
 var telemetry_export_sync_revision := 0
 var telemetry_recent_action_sync_revision := 0
 var applied_result_transactions: Dictionary = {}
-var applied_result_transaction_order: Array[String] = []
+var applied_result_transaction_lru: Dictionary = {}
+var applied_result_transaction_order: Array[String] = []  # legacy diagnostics
 var offline_hand_seed := 0
 var last_match_summary: Dictionary = {}
 var offline_progress_loaded_state := false
@@ -846,6 +859,10 @@ var ai_state_revision := 0
 var ai_claim_ban_revision := 0
 var ai_package_liability_revision := 0
 var ai_rob_threat_cache: Dictionary = {}
+var ai_rob_threat_lru_prev: Dictionary = {}
+var ai_rob_threat_lru_next: Dictionary = {}
+var ai_rob_threat_lru_head := ""
+var ai_rob_threat_lru_tail := ""
 var score_rank_cache_key := ""
 var score_rank_cache: Array = []
 var score_context_cache_key := ""
@@ -883,18 +900,26 @@ var tile_face_main_cache: Dictionary = {}
 var tile_face_sub_cache: Dictionary = {}
 var tile_corner_cache: Dictionary = {}
 var tile_accent_cache: Dictionary = {}
+var counts_compact_key_scratch := PackedByteArray()
 var tile_code_normalization_cache: Dictionary = {}
+var tile_code_normalization_lru: Dictionary = {}
 var tile_code_normalization_cache_order: Array[String] = []
 var rule_profile_cache: Dictionary = {}
 var rule_tile_codes_cache: Dictionary = {}
 var rule_flower_codes_cache: Dictionary = {}
 var rule_tile_membership_cache: Dictionary = {}
+var rule_wall_size_cache: Dictionary = {}
+var active_rule_variant_cache_key := ""
+var active_rule_variant_cache_value := ""
 var style_cache: Dictionary = {}
-var style_cache_order: Array[String] = []
+var style_cache_lru: Dictionary = {}
+var style_cache_order: Array[String] = []  # legacy diagnostics
 var button_style_set_cache: Dictionary = {}
-var button_style_set_cache_order: Array[String] = []
+var button_style_set_lru: Dictionary = {}
+var button_style_set_cache_order: Array[String] = []  # legacy diagnostics
 var input_style_set_cache: Dictionary = {}
-var input_style_set_cache_order: Array[String] = []
+var input_style_set_lru: Dictionary = {}
+var input_style_set_cache_order: Array[String] = []  # legacy diagnostics
 var shanten_cache: Dictionary = {}
 var shanten_lru_prev: Dictionary = {}
 var shanten_lru_next: Dictionary = {}
@@ -972,10 +997,14 @@ var online_session_id := 0
 var online_room_revision := -1
 var online_game_revision := -1
 var online_game_snapshot_token := 0
+var online_hand_identity_index: Dictionary = {}
+var online_hand_identity_index_token := -1
 var online_resume_context: Dictionary = {}
 var online_resume_pending := false
 var online_resume_join_sent := false
 var online_seen_message_ids: Dictionary = {}
+var online_seen_message_id_order: Array[String] = []
+var online_seen_message_id_order_head := 0
 var online_seen_voice_sequences: Dictionary = {}
 var remote_voice_players: Array[AudioStreamPlayer] = []
 var online_last_chat_sent_msec := 0
@@ -1036,6 +1065,7 @@ var voice_capture_effect: AudioEffectCapture
 var voice_mic_player: AudioStreamPlayer
 var remote_voice_player_meta: Dictionary = {}
 var online_seen_voice_sequence_order: Array[String] = []
+var online_seen_voice_sequence_order_head := 0
 var speech_queue_head := 0
 var online_rule_model_cache: Dictionary = {}
 var online_voice_rejection_count := 0
@@ -1084,6 +1114,7 @@ var screen_tweens_by_id: Dictionary = {}
 var screen_tween_owner_index: Dictionary = {}
 var screen_tween_indices: Dictionary = {}
 var focus_registry_cache: Dictionary = {}
+var focus_registry_lru: Dictionary = {}
 var focus_registry_generation := -1
 var battle_hud_control_index: Dictionary = {}
 var battle_hud_control_root_id := 0
@@ -1099,10 +1130,13 @@ var retained_battle_center: Control = null
 var retained_battle_center_signature := ""
 var retained_battle_atmosphere: Control = null
 var retained_battle_atmosphere_signature := ""
+var retained_battle_seats: Dictionary = {}
+var retained_battle_meld_lanes: Dictionary = {}
 var seat_threat_fingerprint := ""
 var seat_threat_root_generation := -1
 var seat_threat_revisions: Dictionary = {}
 var seat_threat_display_cache: Dictionary = {}
+var seat_threat_display_cache_lru: Dictionary = {}
 var seat_threat_display_cache_order: Array[String] = []
 var ai_advisor_fingerprint := ""
 var ai_advisor_root_generation := -1
@@ -1119,22 +1153,33 @@ var pending_claim_display_cache: Dictionary = {}
 var hud_view_token := ""
 var hud_lane_refresh_count := 0
 var center_wall_view_cache: Dictionary = {}
+var center_wall_view_lru: Dictionary = {}
 var center_last_discard_view_cache: Dictionary = {}
+var center_last_discard_view_lru: Dictionary = {}
 var discard_river_foreground_layer: Control = null
 var retained_battle_discard_archive_buttons: Dictionary = {}
+var retained_battle_discard_grids: Dictionary = {}
 var discard_river_history_summary_cache: Dictionary = {}
+var discard_river_history_summary_lru: Dictionary = {}
 var discard_river_history_summary_cache_order: Array[String] = []
 var discard_river_semantics_cache: Dictionary = {}
+var discard_river_semantics_lru: Dictionary = {}
 var seat_river_summary_cache: Dictionary = {}
+var seat_river_summary_lru: Dictionary = {}
 var tile_semantic_cache: Dictionary = {}
+var tile_semantic_lru: Dictionary = {}
 var tile_semantic_cache_order: Array[String] = []
 var hand_ban_snapshot_token := ""
 var hand_ban_snapshot: Dictionary = {}
+var offline_furiten_cache_key := ""
+var offline_furiten_cache_value := false
 var rules_section_controls: Array[Control] = []
 var rules_focus_controls_cache: Array[Control] = []
 var wrapped_text_layout_cache: Dictionary = {}
+var wrapped_text_layout_lru: Dictionary = {}
 var wrapped_text_layout_cache_order: Array[String] = []
 var fitted_label_font_cache: Dictionary = {}
+var fitted_label_font_lru: Dictionary = {}
 var fitted_label_font_cache_order: Array[String] = []
 var player_info_cache: Dictionary = {}
 var player_info_cache_token := ""
@@ -1151,8 +1196,10 @@ var _ui_cjk_font: Font = null
 var toast_container: Control
 var toast_tween: Tween
 var toast_current: Control
+var toast_pending_label: Label = null
 var toast_mode := ""
 var toast_queue: Array = []
+var toast_queue_text_index: Dictionary = {}
 var toast_queue_pending_count := 0
 var toast_queue_pending_bytes := 0
 var toast_active_minimum_dwell_msec := 0
@@ -1166,6 +1213,13 @@ var ai_shape_metrics_lru_prev: Dictionary = {}
 var ai_shape_metrics_lru_next: Dictionary = {}
 var ai_shape_metrics_lru_head := ""
 var ai_shape_metrics_lru_tail := ""
+var hand_plan_features_cache: Dictionary = {}
+var hand_plan_features_lru_prev: Dictionary = {}
+var hand_plan_features_lru_next: Dictionary = {}
+var hand_plan_features_lru_head := ""
+var hand_plan_features_lru_tail := ""
+var hand_plan_features_cache_hits := 0
+var hand_plan_features_cache_misses := 0
 var economy_load_attempted := false
 var economy_file_loaded := false
 
@@ -1415,6 +1469,7 @@ const AI_REPORT_CACHE_LIMIT := 256
 const THREAT_REPORT_CACHE_LIMIT := 192
 const EFFECTIVE_TILES_CACHE_LIMIT := 512
 const AI_SHAPE_METRICS_CACHE_LIMIT := 64
+const HAND_PLAN_FEATURES_CACHE_LIMIT := 128
 const STYLE_CACHE_LIMIT := 256
 const BUTTON_STYLE_SET_CACHE_LIMIT := 96
 const INPUT_STYLE_SET_CACHE_LIMIT := 32
@@ -1880,17 +1935,16 @@ func _gpt_plate_texture_for_rect(texture: Texture2D, plate_key: String, rect: Re
 		return texture
 	var cache_key: String = "%s|%s|%.3f" % [str(texture.get_instance_id()), plate_key, crop_fraction]
 	if gpt_plate_atlas_cache.has(cache_key):
-		touch_cache_key(gpt_plate_atlas_cache_order, cache_key)
+		touch_cache_key(gpt_plate_atlas_lru, cache_key)
 		return gpt_plate_atlas_cache[cache_key] as Texture2D
 	var crop_size := source_size * crop_fraction
 	var atlas := AtlasTexture.new()
 	atlas.atlas = texture
 	atlas.region = Rect2((source_size - crop_size) * 0.5, crop_size)
-	while gpt_plate_atlas_cache_order.size() >= GPT_PLATE_ATLAS_CACHE_LIMIT:
-		var oldest_key: String = str(gpt_plate_atlas_cache_order.pop_front())
-		gpt_plate_atlas_cache.erase(oldest_key)
-	touch_cache_key(gpt_plate_atlas_cache_order, cache_key)
 	gpt_plate_atlas_cache[cache_key] = atlas
+	touch_cache_key(gpt_plate_atlas_lru, cache_key)
+	while gpt_plate_atlas_cache.size() > GPT_PLATE_ATLAS_CACHE_LIMIT:
+		evict_cache_key(gpt_plate_atlas_lru, gpt_plate_atlas_cache)
 	return atlas
 
 
@@ -1939,17 +1993,16 @@ func gpt_center_crop_texture(source: Texture2D, plate_key: String, crop_fraction
 		return source
 	var cache_key := "%s|%s|%.3f" % [str(source.get_instance_id()), plate_key, fraction]
 	if gpt_center_crop_cache.has(cache_key):
-		touch_cache_key(gpt_center_crop_cache_order, cache_key)
+		touch_cache_key(gpt_center_crop_lru, cache_key)
 		return gpt_center_crop_cache[cache_key] as Texture2D
 	var crop_size := source_size * fraction
 	var atlas := AtlasTexture.new()
 	atlas.atlas = source
 	atlas.region = Rect2((source_size - crop_size) * 0.5, crop_size)
-	while gpt_center_crop_cache_order.size() >= GPT_CENTER_CROP_CACHE_LIMIT:
-		var oldest_key: String = str(gpt_center_crop_cache_order.pop_front())
-		gpt_center_crop_cache.erase(oldest_key)
-	touch_cache_key(gpt_center_crop_cache_order, cache_key)
 	gpt_center_crop_cache[cache_key] = atlas
+	touch_cache_key(gpt_center_crop_lru, cache_key)
+	while gpt_center_crop_cache.size() > GPT_CENTER_CROP_CACHE_LIMIT:
+		evict_cache_key(gpt_center_crop_lru, gpt_center_crop_cache)
 	return atlas
 
 
@@ -2255,13 +2308,70 @@ func make_gpt_spark(size: Vector2, color: Color, plate_key: String = "ui_soft_fl
 func configure_passive_container(container: Control) -> void:
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-func touch_cache_key(order: Array, key: String) -> void:
-	# Every bounded cache uses the same MRU policy so hot UI/AI entries are not
-	# evicted merely because an older screen was rebuilt.
+func touch_cache_key(lru, key: String) -> void:
+	# Every bounded cache uses the same MRU policy without scanning its key list.
 	if key == "":
 		return
-	order.erase(key)
-	order.append(key)
+	if typeof(lru) == TYPE_ARRAY:
+		# Keep the original helper contract for diagnostics and extensions.
+		(lru as Array).erase(key)
+		(lru as Array).append(key)
+		return
+	if typeof(lru) != TYPE_DICTIONARY:
+		return
+	var previous_map: Dictionary = lru.get("prev", {})
+	var next_map: Dictionary = lru.get("next", {})
+	var head := str(lru.get("head", ""))
+	var tail := str(lru.get("tail", ""))
+	if head == key:
+		return
+	if previous_map.has(key) or next_map.has(key) or tail == key:
+		var previous := str(previous_map.get(key, ""))
+		var next := str(next_map.get(key, ""))
+		if previous != "":
+			next_map[previous] = next
+		else:
+			head = next
+		if next != "":
+			previous_map[next] = previous
+		else:
+			tail = previous
+	previous_map[key] = ""
+	next_map[key] = head
+	if head != "":
+		previous_map[head] = key
+	else:
+		tail = key
+	head = key
+	lru["prev"] = previous_map
+	lru["next"] = next_map
+	lru["head"] = head
+	lru["tail"] = tail
+
+func evict_cache_key(lru: Dictionary, cache: Dictionary) -> void:
+	var key := str(lru.get("tail", ""))
+	if key == "":
+		return
+	var previous_map: Dictionary = lru.get("prev", {})
+	var next_map: Dictionary = lru.get("next", {})
+	var previous := str(previous_map.get(key, ""))
+	var next := str(next_map.get(key, ""))
+	if previous != "":
+		next_map[previous] = next
+	else:
+		lru["head"] = next
+	if next != "":
+		previous_map[next] = previous
+	else:
+		lru["tail"] = previous
+	previous_map.erase(key)
+	next_map.erase(key)
+	lru["prev"] = previous_map
+	lru["next"] = next_map
+	cache.erase(key)
+
+func clear_cache_lru(lru: Dictionary) -> void:
+	lru.clear()
 
 func make_label(parent: Control, text: String, font_size: int, color: Color, bold: bool) -> Label:
 	var label = Label.new()
@@ -2405,6 +2515,7 @@ func wrapped_text_layout(text: String, available_width: float, font_size: int, l
 	var cache_key := "%d|%d|%d|%d|%d" % [text.hash(), text.length(), int(round(width)), font_size, int(round(line_gap * 100.0))]
 	var cached: Variant = wrapped_text_layout_cache.get(cache_key, null)
 	if cached != null:
+		touch_cache_key(wrapped_text_layout_lru, cache_key)
 		return cached
 	var line_count := 0
 	for paragraph in text.replace("\r", "").split("\n", true):
@@ -2414,10 +2525,12 @@ func wrapped_text_layout(text: String, available_width: float, font_size: int, l
 		"line_count": line_count,
 		"height": float(line_count) * line_height + float(maxi(0, line_count - 1)) * line_gap + 4.0,
 	}
+	if wrapped_text_layout_cache.is_empty():
+		clear_cache_lru(wrapped_text_layout_lru)
 	wrapped_text_layout_cache[cache_key] = result
-	wrapped_text_layout_cache_order.append(cache_key)
-	while wrapped_text_layout_cache_order.size() > 128:
-		wrapped_text_layout_cache.erase(wrapped_text_layout_cache_order.pop_front())
+	touch_cache_key(wrapped_text_layout_lru, cache_key)
+	while wrapped_text_layout_cache.size() > 128:
+		evict_cache_key(wrapped_text_layout_lru, wrapped_text_layout_cache)
 	return result
 
 func configure_wrapped_label(label: Label, available_width: float = 0.0, minimum_height: float = 0.0, line_gap: float = 4.0) -> void:
@@ -2479,6 +2592,7 @@ func fit_label_font_size(label: Label, available_width: float, preferred_size: i
 	var cache_key := "%d|%d|%d|%d|%d" % [text.hash(), text.length(), int(round(width)), preferred_size, minimum_size]
 	if fitted_label_font_cache.has(cache_key):
 		var cached_size := int(fitted_label_font_cache[cache_key])
+		touch_cache_key(fitted_label_font_lru, cache_key)
 		if int(label.get_meta("fitted_font_size", -1)) != cached_size:
 			label.add_theme_font_size_override("font_size", cached_size)
 			label.set_meta("fitted_font_size", cached_size)
@@ -2487,10 +2601,12 @@ func fit_label_font_size(label: Label, available_width: float, preferred_size: i
 	while measured_width + 8.0 > width and resolved > minimum_size:
 		resolved -= 1
 		measured_width = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved).x if font != null else float(text.length()) * float(resolved) * 0.98
+	if fitted_label_font_cache.is_empty():
+		clear_cache_lru(fitted_label_font_lru)
 	fitted_label_font_cache[cache_key] = resolved
-	fitted_label_font_cache_order.append(cache_key)
-	while fitted_label_font_cache_order.size() > 128:
-		fitted_label_font_cache.erase(fitted_label_font_cache_order.pop_front())
+	touch_cache_key(fitted_label_font_lru, cache_key)
+	while fitted_label_font_cache.size() > 128:
+		evict_cache_key(fitted_label_font_lru, fitted_label_font_cache)
 	if int(label.get_meta("fitted_font_size", -1)) != resolved:
 		label.add_theme_font_size_override("font_size", resolved)
 		label.set_meta("fitted_font_size", resolved)
@@ -2570,16 +2686,22 @@ func find_ui_contract_control(root: Control, node_name: String) -> Control:
 	if root == null or not is_instance_valid(root) or node_name.strip_edges() == "":
 		return null
 	# Reuse the revision-aware object index built by the render contract pass.
-	# Older callers used an instance-id map that never noticed nested page
-	# replacement, so a stale entry could force another recursive search on every
-	# refresh. Keep a small legacy fallback for controls created before that pass.
-	var indexed_index: Dictionary = call("cached_ui_control_index", root) if has_method("cached_ui_control_index") else {}
-	var indexed_variant = indexed_index.get(node_name, null)
+	# Read its metadata directly here because the base part is parsed before the
+	# render part; callers before the contract pass still use the tree fallback.
+	var indexed_root_id := int(root.get_meta("ui_contract_index_root_id", 0))
+	var indexed_direct_child_count := int(root.get_meta("ui_contract_index_direct_child_count", -1))
+	var indexed_structure_revision := int(root.get_meta("ui_contract_index_structure_revision", -1))
+	var current_structure_revision := int(root.get_meta("ui_contract_structure_revision", 0))
+	var index_is_current := root.has_meta("ui_contract_control_list") and indexed_root_id == root.get_instance_id() \
+		and indexed_direct_child_count == root.get_child_count() and indexed_structure_revision == current_structure_revision
+	var indexed_variant = root.get_meta("ui_contract_name_index", {}) if index_is_current else {}
+	var indexed_index: Dictionary = indexed_variant as Dictionary if typeof(indexed_variant) == TYPE_DICTIONARY else {}
+	var indexed_control_variant = indexed_index.get(node_name, null)
 	# A page refresh can queue an indexed control before the deferred delete runs.
 	# Validate the object before casting it, otherwise a stale ObjectDB entry raises
 	# a script error instead of falling back to the live tree search.
-	if indexed_variant != null and is_instance_valid(indexed_variant):
-		var indexed := indexed_variant as Control
+	if indexed_control_variant != null and is_instance_valid(indexed_control_variant):
+		var indexed := indexed_control_variant as Control
 		if indexed != null and (indexed == root or root.is_ancestor_of(indexed)):
 			return indexed
 	var found := root.find_child(node_name, true, false) as Control
@@ -2961,7 +3083,7 @@ func configure_ordered_focus_navigation(root: Control, controls: Array, default_
 			return
 		var requested_cached: Control = null
 		if default_focus_name != "":
-			requested_cached = root.find_child(default_focus_name, true, false) as Control
+			requested_cached = find_ui_contract_control(root, default_focus_name)
 		var cached_focusable: Array = root.get_meta("ordered_focusable_controls", [])
 		if requested_cached == null or not requested_cached.is_visible_in_tree() or requested_cached.focus_mode == Control.FOCUS_NONE or (requested_cached is BaseButton and (requested_cached as BaseButton).disabled):
 			for candidate in cached_focusable:
@@ -3024,7 +3146,7 @@ func configure_ordered_focus_navigation(root: Control, controls: Array, default_
 		return
 	var requested: Control = null
 	if default_focus_name != "":
-		requested = root.find_child(default_focus_name, true, false) as Control
+		requested = find_ui_contract_control(root, default_focus_name)
 	if requested == null or not requested.is_visible_in_tree() or requested.focus_mode == Control.FOCUS_NONE or (requested is BaseButton and (requested as BaseButton).disabled):
 		requested = focusable[0]
 	if requested.is_inside_tree():
@@ -3053,8 +3175,10 @@ func configure_button_focus_navigation(root: Control, default_focus_name: String
 		root.set_meta("button_focus_controls_revision", structure_revision)
 	var controls: Array = []
 	for candidate in button_controls:
+		if not is_instance_valid(candidate):
+			continue
 		var button := candidate as Button
-		if button != null and is_instance_valid(button) and root.is_ancestor_of(button):
+		if button != null and root.is_ancestor_of(button):
 			controls.append(button)
 	configure_ordered_focus_navigation(root, controls, default_focus_name, grab_default_focus)
 
@@ -3222,9 +3346,11 @@ func icon_name_for_button_text(text: String) -> String:
 
 func button_style_set(color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> Dictionary:
 	# Cache still returns StyleBoxFlat hosts, but alpha=0 — GPT button face paints the chrome.
+	if button_style_set_cache.is_empty():
+		clear_cache_lru(button_style_set_lru)
 	var key = button_style_set_cache_key(color, radius, border_width, shadow_size)
 	if button_style_set_cache.has(key):
-		touch_cache_key(button_style_set_cache_order, key)
+		touch_cache_key(button_style_set_lru, key)
 		return button_style_set_cache[key]
 	var fill = soften_button_color(color)
 	var cached_set = {
@@ -3238,9 +3364,11 @@ func button_style_set(color: Color, radius: int, border_width: int = 2, shadow_s
 func input_style_set() -> Dictionary:
 	# r180: transparent StyleBoxFlat hosts (no extra content margins that inflate LineEdit min size).
 	# GPT ui_online_form_field paints the field face.
+	if input_style_set_cache.is_empty():
+		clear_cache_lru(input_style_set_lru)
 	var key = "default"
 	if input_style_set_cache.has(key):
-		touch_cache_key(input_style_set_cache_order, key)
+		touch_cache_key(input_style_set_lru, key)
 		return input_style_set_cache[key]
 	var normal = style(Color(0.120, 0.134, 0.112, 0.0), 10, Color(0.62, 0.54, 0.34, 0.0), 0, 0)
 	var focus = style(Color(0.145, 0.160, 0.130, 0.0), 10, Color(0.82, 0.68, 0.34, 0.0), 0, 0)
@@ -3259,34 +3387,28 @@ func button_style_set_cache_key(color: Color, radius: int, border_width: int = 2
 func store_button_style_set_cache(key: String, cached_set: Dictionary) -> void:
 	if key == "" or cached_set.is_empty():
 		return
-	if button_style_set_cache.has(key):
-		touch_cache_key(button_style_set_cache_order, key)
-	else:
-		button_style_set_cache_order.append(key)
 	button_style_set_cache[key] = cached_set
-	while button_style_set_cache_order.size() > BUTTON_STYLE_SET_CACHE_LIMIT:
-		var oldest = button_style_set_cache_order.pop_front()
-		button_style_set_cache.erase(oldest)
+	touch_cache_key(button_style_set_lru, key)
+	while button_style_set_cache.size() > BUTTON_STYLE_SET_CACHE_LIMIT:
+		evict_cache_key(button_style_set_lru, button_style_set_cache)
 
 func store_input_style_set_cache(key: String, cached_set: Dictionary) -> void:
 	if key == "" or cached_set.is_empty():
 		return
-	if input_style_set_cache.has(key):
-		touch_cache_key(input_style_set_cache_order, key)
-	else:
-		input_style_set_cache_order.append(key)
 	input_style_set_cache[key] = cached_set
-	while input_style_set_cache_order.size() > INPUT_STYLE_SET_CACHE_LIMIT:
-		var oldest = input_style_set_cache_order.pop_front()
-		input_style_set_cache.erase(oldest)
+	touch_cache_key(input_style_set_lru, key)
+	while input_style_set_cache.size() > INPUT_STYLE_SET_CACHE_LIMIT:
+		evict_cache_key(input_style_set_lru, input_style_set_cache)
 
 func style(color: Color, radius: int, border: Color, border_width: int, shadow_size: int = 8) -> StyleBoxFlat:
 	# Host-only StyleBox: always transparent. GPT plates paint the chrome.
+	if style_cache.is_empty():
+		clear_cache_lru(style_cache_lru)
 	var safe_color = Color(color.r, color.g, color.b, 0.0)
 	var safe_border = Color(border.r, border.g, border.b, 0.0)
 	var key = style_cache_key(safe_color, radius, safe_border, 0, 0)
 	if style_cache.has(key):
-		touch_cache_key(style_cache_order, key)
+		touch_cache_key(style_cache_lru, key)
 		return style_cache[key]
 	var box = StyleBoxFlat.new()
 	box.bg_color = safe_color
@@ -3328,14 +3450,10 @@ func style_cache_key(color: Color, radius: int, border: Color, border_width: int
 func store_style_cache(key: String, box: StyleBoxFlat) -> void:
 	if key == "" or box == null:
 		return
-	if style_cache.has(key):
-		touch_cache_key(style_cache_order, key)
-	else:
-		style_cache_order.append(key)
 	style_cache[key] = box
-	while style_cache_order.size() > STYLE_CACHE_LIMIT:
-		var oldest = style_cache_order.pop_front()
-		style_cache.erase(oldest)
+	touch_cache_key(style_cache_lru, key)
+	while style_cache.size() > STYLE_CACHE_LIMIT:
+		evict_cache_key(style_cache_lru, style_cache)
 
 func rect_full(left: float, top: float, right: float, bottom: float) -> Rect2:
 	return Rect2(Vector2(left, top), Vector2(right, bottom))
@@ -4086,12 +4204,21 @@ func load_round_history() -> void:
 			round_history.append(normalized)
 			if round_id != "":
 				round_history_id_index[round_id] = int(normalized.get("saved_at", 0))
-	while round_history.size() > ROUND_HISTORY_LIMIT:
-		var removed = round_history.pop_front()
+	trim_round_history_to_limit()
+
+func trim_round_history_to_limit() -> void:
+	if round_history.size() <= ROUND_HISTORY_LIMIT:
+		return
+	var trim_count := round_history.size() - ROUND_HISTORY_LIMIT
+	for index in range(trim_count):
+		var removed = round_history[index]
 		if typeof(removed) == TYPE_DICTIONARY:
 			var removed_id := str((removed as Dictionary).get("round_id", (removed as Dictionary).get("roundId", ""))).strip_edges()
 			if removed_id != "":
 				round_history_id_index.erase(removed_id)
+	# Drop the whole expired prefix once; remove_at(0) would shift the retained
+	# history for every overflowed entry.
+	round_history = round_history.slice(trim_count)
 
 func save_round_history() -> void:
 	round_history_save_pending = false
@@ -4113,12 +4240,7 @@ func record_round_history(entry: Dictionary) -> void:
 	round_history.append(normalized)
 	if round_id != "":
 		round_history_id_index[round_id] = int(normalized.get("saved_at", 0))
-	while round_history.size() > ROUND_HISTORY_LIMIT:
-		var removed = round_history.pop_front()
-		if typeof(removed) == TYPE_DICTIONARY:
-			var removed_id := str((removed as Dictionary).get("round_id", (removed as Dictionary).get("roundId", ""))).strip_edges()
-			if removed_id != "":
-				round_history_id_index.erase(removed_id)
+	trim_round_history_to_limit()
 	round_history_save_pending = true
 	round_history_save_due_msec = Time.get_ticks_msec() + HISTORY_SAVE_DEBOUNCE_MSEC
 
@@ -4629,13 +4751,12 @@ func record_game_result(won: bool, score: int, hands_played: int, result_key: St
 			return
 		if round_history_id_index.has(transaction_key):
 			applied_result_transactions[transaction_key] = int(round_history_id_index.get(transaction_key, Time.get_unix_time_from_system()))
-			touch_cache_key(applied_result_transaction_order, transaction_key)
+			touch_cache_key(applied_result_transaction_lru, transaction_key)
 			return
 		applied_result_transactions[transaction_key] = int(Time.get_unix_time_from_system())
-		touch_cache_key(applied_result_transaction_order, transaction_key)
-		while applied_result_transaction_order.size() > RESULT_TRANSACTION_HISTORY_LIMIT:
-			var oldest_key: String = applied_result_transaction_order.pop_front()
-			applied_result_transactions.erase(oldest_key)
+		touch_cache_key(applied_result_transaction_lru, transaction_key)
+		while applied_result_transactions.size() > RESULT_TRANSACTION_HISTORY_LIMIT:
+			evict_cache_key(applied_result_transaction_lru, applied_result_transactions)
 	game_stats["games_played"] = int(game_stats.get("games_played", 0)) + 1
 	game_stats["total_hands"] = int(game_stats.get("total_hands", 0)) + maxi(0, hands_played)
 	game_stats["total_score"] = int(game_stats.get("total_score", 0)) + score
@@ -5035,6 +5156,7 @@ func setup_tile_order() -> void:
 	tile_corner_cache.clear()
 	tile_accent_cache.clear()
 	tile_semantic_cache.clear()
+	clear_cache_lru(tile_semantic_lru)
 	tile_semantic_cache_order.clear()
 	var orphan_lookup: Dictionary = {}
 	for orphan_code in THIRTEEN_ORPHANS_CODES:
@@ -5393,23 +5515,42 @@ func attach_audio_node(node: Node) -> void:
 		node.get_parent().remove_child(node)
 	layer.add_child(node)
 
+func is_canonical_tile_code(code: String) -> bool:
+	if code.length() == 1:
+		match code:
+			"E", "S", "N", "R", "Z", "F", "P":
+				return true
+	if code.length() == 2:
+		var first := code.substr(0, 1)
+		var second := code.substr(1, 1)
+		if first >= "1" and first <= "9" and (second == "W" or second == "T" or second == "B"):
+			return true
+		if first == "H" and second >= "1" and second <= "8":
+			return true
+	return false
+
 func normalize_tile_code(code: String) -> String:
-	var cache_key := str(code).strip_edges().to_upper()
+	# The game stores canonical codes. Avoid strip/uppercase and a dictionary
+	# lookup on the hot path; aliases still take the cached normalization path.
+	if is_canonical_tile_code(code):
+		return code
+	var cache_key := code.strip_edges().to_upper()
 	if tile_code_normalization_cache.has(cache_key):
 		return str(tile_code_normalization_cache[cache_key])
 	var normalized := _normalize_tile_code_uncached(cache_key)
+	if tile_code_normalization_cache.is_empty():
+		clear_cache_lru(tile_code_normalization_lru)
 	tile_code_normalization_cache[cache_key] = normalized
-	tile_code_normalization_cache_order.append(cache_key)
-	while tile_code_normalization_cache_order.size() > TILE_CODE_NORMALIZATION_CACHE_LIMIT:
-		var oldest: String = str(tile_code_normalization_cache_order.pop_front())
-		tile_code_normalization_cache.erase(oldest)
+	touch_cache_key(tile_code_normalization_lru, cache_key)
+	while tile_code_normalization_cache.size() > TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(tile_code_normalization_lru, tile_code_normalization_cache)
 	return normalized
 
 
 func _normalize_tile_code_uncached(code: String) -> String:
 	# Map legacy aliases so river/meld never fall through to tile_back.
 	# Canonical suits: W=万 T=条 B=筒; honors E/S/N/R/Z/F/P.
-	var c := str(code).strip_edges().to_upper()
+	var c := code
 	if c.is_empty():
 		return c
 	if FLOWER_CODES.has(c):
@@ -5518,18 +5659,25 @@ func tile_index(tile: String) -> int:
 		setup_tile_order()
 	return int(tile_order.get(normalize_tile_code(tile), -1))
 
+func tile_index_normalized(tile: String) -> int:
+	if not tile_metadata_ready:
+		setup_tile_order()
+	return int(tile_order.get(tile, -1))
+
 func tile_sort_index(tile: String) -> int:
 	if not tile_metadata_ready:
 		setup_tile_order()
 	tile = normalize_tile_code(tile)
 	if tile_sort_order.has(tile):
 		return int(tile_sort_order[tile])
+	# tile_sort_order already contains all canonical faces, so do not normalize a
+	# second time through tile_index for unknown/legacy values.
+	var index := int(tile_order.get(tile, -1))
+	if index >= 0:
+		return index
 	var flower_index = FLOWER_CODES.find(tile)
 	if flower_index >= 0:
 		return TILE_CODES.size() + flower_index
-	var index = tile_index(tile)
-	if index >= 0:
-		return index
 	return TILE_CODES.size() + FLOWER_CODES.size() + 1
 
 func is_flower_tile(tile: String) -> bool:
@@ -5557,9 +5705,14 @@ func is_number_tile(tile: String) -> bool:
 
 
 func tile_counts(tiles: Array) -> Array:
-	var counts = make_empty_tile_counts()
+	var counts: Array = make_empty_tile_counts()
+	if not tile_metadata_ready:
+		setup_tile_order()
 	for tile in tiles:
-		var index = tile_index(str(tile))
+		# tile_index() normalizes too; use the canonical lookup directly after one
+		# normalization per element.
+		var normalized := normalize_tile_code(str(tile))
+		var index := int(tile_order.get(normalized, -1))
 		if index >= 0:
 			counts[index] = int(counts[index]) + 1
 	return counts
@@ -5568,7 +5721,9 @@ func make_empty_tile_counts() -> Array:
 	return EMPTY_TILE_COUNTS_TEMPLATE.duplicate(false)
 
 func tile_count_from_counts(tile: String, counts: Array) -> int:
-	var index = tile_index(tile)
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var index := int(tile_order.get(normalize_tile_code(tile), -1))
 	if index < 0 or index >= counts.size():
 		return 0
 	return int(counts[index])
@@ -5586,31 +5741,33 @@ func has_tile_list(hand: Array, tiles: Array) -> bool:
 		return true
 	# Claims contain at most a few tiles. Count only requested indexes so a
 	# validation check does not allocate a full hand-count snapshot first.
-	var required_indices: Array[int] = []
-	var required_amounts: Array[int] = []
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var required_amounts: Dictionary = {}
 	for tile in tiles:
-		var index := tile_index(str(tile))
-		if index < 0:
+		var normalized := normalize_tile_code(str(tile))
+		var index := int(tile_order.get(normalized, -1))
+		if index < 0 or index >= TILE_CODES.size():
 			return false
-		var required_slot := required_indices.find(index)
-		if required_slot < 0:
-			required_indices.append(index)
-			required_amounts.append(1)
-		else:
-			required_amounts[required_slot] = int(required_amounts[required_slot]) + 1
-	for required_slot in range(required_indices.size()):
+		required_amounts[index] = int(required_amounts.get(index, 0)) + 1
+	for required_index_variant in required_amounts:
+		var required_index := int(required_index_variant)
 		var available := 0
 		for hand_tile in hand:
-			if tile_index(str(hand_tile)) == int(required_indices[required_slot]):
+			var raw_hand_tile := str(hand_tile)
+			var hand_index := int(tile_order.get(raw_hand_tile, -1)) if is_canonical_tile_code(raw_hand_tile) else int(tile_order.get(normalize_tile_code(raw_hand_tile), -1))
+			if hand_index == required_index:
 				available += 1
-				if available >= int(required_amounts[required_slot]):
+				if available >= int(required_amounts[required_index]):
 					break
-		if available < int(required_amounts[required_slot]):
+		if available < int(required_amounts[required_index]):
 			return false
 	return true
 
 func consume_tile_count(counts: Array, tile: String, amount: int) -> bool:
-	var index = tile_index(tile)
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var index := int(tile_order.get(normalize_tile_code(tile), -1))
 	if index < 0 or index >= counts.size() or amount <= 0:
 		return false
 	if int(counts[index]) < amount:
@@ -5625,8 +5782,10 @@ func consume_tile_list_counts(counts: Array, tiles: Array) -> bool:
 	if tile_size == 1:
 		return consume_tile_count(counts, str(tiles[0]), 1)
 	if tile_size == 2:
-		var first_index = tile_index(str(tiles[0]))
-		var second_index = tile_index(str(tiles[1]))
+		if not tile_metadata_ready:
+			setup_tile_order()
+		var first_index := int(tile_order.get(normalize_tile_code(str(tiles[0])), -1))
+		var second_index := int(tile_order.get(normalize_tile_code(str(tiles[1])), -1))
 		if first_index < 0 or second_index < 0 or first_index >= counts.size() or second_index >= counts.size():
 			return false
 		if first_index == second_index:
@@ -5639,30 +5798,28 @@ func consume_tile_list_counts(counts: Array, tiles: Array) -> bool:
 		counts[first_index] = int(counts[first_index]) - 1
 		counts[second_index] = int(counts[second_index]) - 1
 		return true
-	var required_indices: Array[int] = []
-	var required_amounts: Array[int] = []
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var required_amounts: Dictionary = {}
 	for tile in tiles:
-		var index := tile_index(str(tile))
+		var index := int(tile_order.get(normalize_tile_code(str(tile)), -1))
 		if index < 0 or index >= counts.size():
 			return false
-		var required_slot := required_indices.find(index)
-		if required_slot < 0:
-			required_indices.append(index)
-			required_amounts.append(1)
-		else:
-			required_amounts[required_slot] = int(required_amounts[required_slot]) + 1
-	for required_slot in range(required_indices.size()):
-		var required_index := int(required_indices[required_slot])
-		if int(required_amounts[required_slot]) > int(counts[required_index]):
+		required_amounts[index] = int(required_amounts.get(index, 0)) + 1
+	for required_index_variant in required_amounts:
+		var required_index := int(required_index_variant)
+		if int(required_amounts[required_index]) > int(counts[required_index]):
 			return false
-	for required_slot in range(required_indices.size()):
-		var required_index := int(required_indices[required_slot])
-		counts[required_index] = int(counts[required_index]) - int(required_amounts[required_slot])
+	for required_index_variant in required_amounts:
+		var required_index := int(required_index_variant)
+		counts[required_index] = int(counts[required_index]) - int(required_amounts[required_index])
 	return true
 
 func restore_tile_list_counts(counts: Array, tiles: Array) -> void:
+	if not tile_metadata_ready:
+		setup_tile_order()
 	for tile in tiles:
-		var index = tile_index(str(tile))
+		var index := int(tile_order.get(normalize_tile_code(str(tile)), -1))
 		if index >= 0 and index < counts.size():
 			counts[index] = int(counts[index]) + 1
 
@@ -5671,31 +5828,31 @@ func has_tile_list_counts(counts: Array, tiles: Array) -> bool:
 	if tile_size == 0:
 		return true
 	if tile_size == 1:
-		var single_index = tile_index(str(tiles[0]))
+		if not tile_metadata_ready:
+			setup_tile_order()
+		var single_index := int(tile_order.get(normalize_tile_code(str(tiles[0])), -1))
 		return single_index >= 0 and single_index < counts.size() and int(counts[single_index]) > 0
 	if tile_size == 2:
-		var first_index = tile_index(str(tiles[0]))
-		var second_index = tile_index(str(tiles[1]))
+		if not tile_metadata_ready:
+			setup_tile_order()
+		var first_index := int(tile_order.get(normalize_tile_code(str(tiles[0])), -1))
+		var second_index := int(tile_order.get(normalize_tile_code(str(tiles[1])), -1))
 		if first_index < 0 or second_index < 0 or first_index >= counts.size() or second_index >= counts.size():
 			return false
 		if first_index == second_index:
 			return int(counts[first_index]) >= 2
 		return int(counts[first_index]) > 0 and int(counts[second_index]) > 0
-	var required_indices: Array[int] = []
-	var required_amounts: Array[int] = []
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var required_amounts: Dictionary = {}
 	for tile in tiles:
-		var index := tile_index(str(tile))
+		var index := int(tile_order.get(normalize_tile_code(str(tile)), -1))
 		if index < 0 or index >= counts.size():
 			return false
-		var required_slot := required_indices.find(index)
-		if required_slot < 0:
-			required_indices.append(index)
-			required_amounts.append(1)
-		else:
-			required_amounts[required_slot] = int(required_amounts[required_slot]) + 1
-	for required_slot in range(required_indices.size()):
-		var required_index := int(required_indices[required_slot])
-		if int(counts[required_index]) < int(required_amounts[required_slot]):
+		required_amounts[index] = int(required_amounts.get(index, 0)) + 1
+	for required_index_variant in required_amounts:
+		var required_index := int(required_index_variant)
+		if int(counts[required_index]) < int(required_amounts[required_index]):
 			return false
 	return true
 
@@ -5738,6 +5895,17 @@ func remove_tiles(hand: Array, tile: String, amount: int) -> bool:
 
 func find_tile_in_hand(hand: Array, tile: String) -> int:
 	var normalized := normalize_tile_code(tile)
+	# Canonical hands are the common case. A direct pass avoids normalizing every
+	# item; the fallback preserves compatibility with imported legacy aliases.
+	var saw_noncanonical := false
+	for i in range(hand.size()):
+		var raw := str(hand[i])
+		if raw == normalized and not saw_noncanonical:
+			return i
+		if not is_canonical_tile_code(raw):
+			saw_noncanonical = true
+	if not saw_noncanonical:
+		return -1
 	for i in range(hand.size()):
 		if normalize_tile_code(str(hand[i])) == normalized:
 			return i
@@ -5746,6 +5914,17 @@ func find_tile_in_hand(hand: Array, tile: String) -> int:
 func count_tile(hand: Array, tile: String) -> int:
 	var normalized := normalize_tile_code(tile)
 	var count = 0
+	var needs_normalization := false
+	for item in hand:
+		var raw := str(item)
+		if raw == normalized:
+			count += 1
+		elif not is_canonical_tile_code(raw):
+			needs_normalization = true
+	if not needs_normalization:
+		return count
+	# Imported/replayed hands may still contain legacy aliases.
+	count = 0
 	for item in hand:
 		if normalize_tile_code(str(item)) == normalized:
 			count += 1
@@ -5758,8 +5937,8 @@ func add_log(text: String) -> void:
 	if clean == "":
 		return
 	table_logs.append(clean.left(ONLINE_LOG_ENTRY_MAX_LENGTH))
-	while table_logs.size() > 10:
-		table_logs.pop_front()
+	if table_logs.size() > 10:
+		table_logs = table_logs.slice(table_logs.size() - 10)
 
 func log_performance_stats() -> void:
 	# 输出性能统计信息
@@ -5996,6 +6175,7 @@ func active_package_lines() -> Array[String]:
 func tile_label(tile: String) -> String:
 	if not tile_metadata_ready:
 		setup_tile_order()
+	tile = normalize_tile_code(tile)
 	if tile_label_cache.has(tile):
 		return str(tile_label_cache[tile])
 	if is_flower_tile(tile):
@@ -6042,6 +6222,7 @@ func tile_label(tile: String) -> String:
 func tile_speech_label(tile: String) -> String:
 	if not tile_metadata_ready:
 		setup_tile_order()
+	tile = normalize_tile_code(tile)
 	if tile_speech_label_cache.has(tile):
 		return str(tile_speech_label_cache[tile])
 	if is_flower_tile(tile):
@@ -6094,6 +6275,7 @@ func chinese_rank(text: String) -> String:
 func tile_corner(tile: String) -> String:
 	if not tile_metadata_ready:
 		setup_tile_order()
+	tile = normalize_tile_code(tile)
 	if tile_corner_cache.has(tile):
 		return str(tile_corner_cache[tile])
 	if is_flower_tile(tile):
@@ -6105,6 +6287,7 @@ func tile_corner(tile: String) -> String:
 func tile_accent(tile: String) -> Color:
 	if not tile_metadata_ready:
 		setup_tile_order()
+	tile = normalize_tile_code(tile)
 	if tile_accent_cache.has(tile):
 		return tile_accent_cache[tile]
 	if is_flower_tile(tile):
@@ -6126,6 +6309,7 @@ func tile_semantic_record(tile: String) -> Dictionary:
 		code = tile
 	var cached: Variant = tile_semantic_cache.get(code, null)
 	if cached != null:
+		touch_cache_key(tile_semantic_lru, code)
 		return cached
 	var label := str(tile_label_cache.get(code, ""))
 	if label == "" and not tile_label_cache.has(code):
@@ -6142,10 +6326,12 @@ func tile_semantic_record(tile: String) -> Dictionary:
 		"speech_label": speech_label,
 		"accent": accent,
 	}
+	if tile_semantic_cache.is_empty():
+		clear_cache_lru(tile_semantic_lru)
 	tile_semantic_cache[code] = record
-	tile_semantic_cache_order.append(code)
-	while tile_semantic_cache_order.size() > 128:
-		tile_semantic_cache.erase(tile_semantic_cache_order.pop_front())
+	touch_cache_key(tile_semantic_lru, code)
+	while tile_semantic_cache.size() > 128:
+		evict_cache_key(tile_semantic_lru, tile_semantic_cache)
 	return record
 
 func claim_label(claim: String) -> String:

@@ -99,6 +99,7 @@ func shutdown_runtime_visuals() -> void:
 	transition_active = false
 	toast_container = null
 	toast_current = null
+	toast_pending_label = null
 	queue_free_runtime_node(ui_enhancements)
 	ui_enhancements = null
 
@@ -152,6 +153,7 @@ func shutdown_runtime_audio() -> void:
 	voice_assets_loaded = false
 	remote_voice_stream_cache.clear()
 	remote_voice_stream_cache_order.clear()
+	clear_cache_lru(remote_voice_stream_lru)
 	bgm_player = null
 	sfx_player = null
 	action_sfx_player = null

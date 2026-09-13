@@ -20,8 +20,8 @@ func record_round_event(event_type: String, payload: Dictionary = {}) -> void:
 	event["prev_digest"] = str(round_event_history.back().get("digest", "")) if not round_event_history.is_empty() else ""
 	event["digest"] = replay_event_digest(event)
 	round_event_history.append(event)
-	while round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
-		round_event_history.pop_front()
+	if round_event_history.size() > ROUND_EVENT_HISTORY_LIMIT:
+		round_event_history = round_event_history.slice(round_event_history.size() - ROUND_EVENT_HISTORY_LIMIT)
 	invalidate_round_replay_view_cache()
 	mark_offline_progress_dirty()
 
@@ -248,8 +248,34 @@ func normalize_replay_archive_entry(entry: Dictionary) -> Dictionary:
 	return normalized
 
 
+func rebuild_replay_archive_id_index() -> void:
+	replay_archive_id_index.clear()
+	for index in range(replay_archive.size()):
+		var raw_entry = replay_archive[index]
+		if typeof(raw_entry) != TYPE_DICTIONARY:
+			continue
+		var archive_id := str((raw_entry as Dictionary).get("archive_id", ""))
+		if archive_id != "" and not replay_archive_id_index.has(archive_id):
+			replay_archive_id_index[archive_id] = index
+
+
+func replay_archive_index_for_id(archive_id: String) -> int:
+	if archive_id == "":
+		return -1
+	var index := int(replay_archive_id_index.get(archive_id, -1))
+	if index >= 0 and index < replay_archive.size():
+		var raw_entry = replay_archive[index]
+		if typeof(raw_entry) == TYPE_DICTIONARY and str((raw_entry as Dictionary).get("archive_id", "")) == archive_id:
+			return index
+	# External fixtures may replace the public archive array directly. Repair the
+	# private index once, then keep normal reads on the O(1) indexed path.
+	rebuild_replay_archive_id_index()
+	return int(replay_archive_id_index.get(archive_id, -1))
+
+
 func load_replay_archive() -> void:
 	replay_archive = []
+	replay_archive_id_index.clear()
 	replay_archive_generation += 1
 	replay_search_cache_generation = -1
 	replay_search_cache_results.clear()
@@ -265,15 +291,14 @@ func load_replay_archive() -> void:
 		var normalized := normalize_replay_archive_entry(raw_entry as Dictionary)
 		if normalized.is_empty():
 			continue
-		var duplicate := false
-		for existing in replay_archive:
-			if typeof(existing) == TYPE_DICTIONARY and str((existing as Dictionary).get("archive_id", "")) == str(normalized.get("archive_id", "")):
-				duplicate = true
-				break
-		if not duplicate:
-			replay_archive.append(normalized)
-	while replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
-		replay_archive.pop_front()
+		var archive_id := str(normalized.get("archive_id", ""))
+		if archive_id == "" or replay_archive_id_index.has(archive_id):
+			continue
+		replay_archive_id_index[archive_id] = replay_archive.size()
+		replay_archive.append(normalized)
+	if replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
+		replay_archive = replay_archive.slice(replay_archive.size() - REPLAY_ARCHIVE_LIMIT)
+	rebuild_replay_archive_id_index()
 
 
 func save_replay_archive() -> void:
@@ -290,10 +315,14 @@ func upsert_replay_archive_entry(entry: Dictionary, persist: bool = true) -> boo
 	if normalized.is_empty():
 		return false
 	var archive_id := str(normalized.get("archive_id", ""))
-	for index in range(replay_archive.size()):
+	var index := replay_archive_index_for_id(archive_id)
+	if index >= 0:
 		var existing = replay_archive[index]
 		if typeof(existing) != TYPE_DICTIONARY or str((existing as Dictionary).get("archive_id", "")) != archive_id:
-			continue
+			rebuild_replay_archive_id_index()
+			index = replay_archive_index_for_id(archive_id)
+		if index < 0:
+			return false
 		normalized["favorite"] = bool((existing as Dictionary).get("favorite", normalized.get("favorite", false)))
 		if (existing as Dictionary) == normalized:
 			return false
@@ -304,10 +333,12 @@ func upsert_replay_archive_entry(entry: Dictionary, persist: bool = true) -> boo
 			save_replay_archive()
 		return true
 	replay_archive.append(normalized)
+	replay_archive_id_index[archive_id] = replay_archive.size() - 1
 	replay_archive_generation += 1
 	replay_search_cache_generation = -1
-	while replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
-		replay_archive.pop_front()
+	if replay_archive.size() > REPLAY_ARCHIVE_LIMIT:
+		replay_archive = replay_archive.slice(replay_archive.size() - REPLAY_ARCHIVE_LIMIT)
+		rebuild_replay_archive_id_index()
 	if persist:
 		save_replay_archive()
 	return true
@@ -348,10 +379,12 @@ func replay_archive_entries(query: String = "") -> Array:
 			str(entry.get("replay_digest", "")),
 		]).to_lower()
 		if needle == "" or searchable.contains(needle):
-			filtered.append(entry.duplicate(true))
+			# Archive entries are immutable until generation changes. Keep references in
+			# the private cache and copy only at the public return boundary.
+			filtered.append(entry)
 	replay_search_cache_query = needle
 	replay_search_cache_generation = replay_archive_generation
-	replay_search_cache_results = filtered.duplicate(true)
+	replay_search_cache_results = filtered
 	return filtered
 
 
@@ -378,8 +411,10 @@ func replay_archive_display_date_text(entry: Dictionary) -> String:
 
 
 func replay_archive_entry(archive_id: String) -> Dictionary:
-	for raw_entry in replay_archive:
-		if typeof(raw_entry) == TYPE_DICTIONARY and str((raw_entry as Dictionary).get("archive_id", "")) == archive_id:
+	var index := replay_archive_index_for_id(archive_id)
+	if index >= 0:
+		var raw_entry = replay_archive[index]
+		if typeof(raw_entry) == TYPE_DICTIONARY:
 			return (raw_entry as Dictionary).duplicate(true)
 	return {}
 
@@ -398,19 +433,22 @@ func replay_archive_share_code(archive_id: String) -> String:
 
 
 func toggle_replay_archive_favorite(archive_id: String) -> void:
-	for index in range(replay_archive.size()):
-		if typeof(replay_archive[index]) == TYPE_DICTIONARY and str((replay_archive[index] as Dictionary).get("archive_id", "")) == archive_id:
-			var entry: Dictionary = replay_archive[index]
-			entry["favorite"] = not bool(entry.get("favorite", false))
-			replay_archive[index] = entry
-			replay_archive_generation += 1
-			replay_search_cache_generation = -1
-			save_replay_archive()
-			replay_delete_target_id = ""
-			replay_delete_confirming = false
-			refresh_replay_archive_view()
-			show_toast("已%s收藏" % ("加入" if bool(entry["favorite"]) else "取消"))
-			return
+	var index := replay_archive_index_for_id(archive_id)
+	if index < 0:
+		return
+	var raw_entry = replay_archive[index]
+	if typeof(raw_entry) != TYPE_DICTIONARY:
+		return
+	var entry: Dictionary = raw_entry
+	entry["favorite"] = not bool(entry.get("favorite", false))
+	replay_archive[index] = entry
+	replay_archive_generation += 1
+	replay_search_cache_generation = -1
+	save_replay_archive()
+	replay_delete_target_id = ""
+	replay_delete_confirming = false
+	refresh_replay_archive_view()
+	show_toast("已%s收藏" % ("加入" if bool(entry["favorite"]) else "取消"))
 
 
 func copy_replay_archive_share_code(archive_id: String) -> bool:
@@ -426,17 +464,18 @@ func copy_replay_archive_share_code(archive_id: String) -> bool:
 
 func request_delete_replay_archive(archive_id: String) -> void:
 	if replay_delete_confirming and replay_delete_target_id == archive_id:
-		for index in range(replay_archive.size()):
-			if typeof(replay_archive[index]) == TYPE_DICTIONARY and str((replay_archive[index] as Dictionary).get("archive_id", "")) == archive_id:
-				replay_archive.remove_at(index)
-				replay_archive_generation += 1
-				replay_search_cache_generation = -1
-				save_replay_archive()
-				replay_delete_target_id = ""
-				replay_delete_confirming = false
-				refresh_replay_archive_view()
-				show_toast("回放已从本机删除")
-				return
+		var index := replay_archive_index_for_id(archive_id)
+		if index >= 0:
+			replay_archive.remove_at(index)
+			rebuild_replay_archive_id_index()
+			replay_archive_generation += 1
+			replay_search_cache_generation = -1
+			save_replay_archive()
+			replay_delete_target_id = ""
+			replay_delete_confirming = false
+			refresh_replay_archive_view()
+			show_toast("回放已从本机删除")
+			return
 	replay_delete_target_id = archive_id
 	replay_delete_confirming = true
 	refresh_replay_archive_view()
@@ -552,8 +591,8 @@ func load_telemetry_state() -> void:
 				"payload": telemetry_sanitize_fields(event_name, event.get("payload", {})),
 			})
 			telemetry_event_sequence = maxi(telemetry_event_sequence, int(event.get("event_id", 0)))
-	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
-		telemetry_outbox.pop_front()
+	if telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
+		telemetry_outbox = telemetry_outbox.slice(telemetry_outbox.size() - TELEMETRY_OUTBOX_LIMIT)
 	if not telemetry_consent:
 		telemetry_outbox.clear()
 
@@ -596,8 +635,8 @@ func telemetry_record_event(event_name: String, fields: Dictionary = {}) -> bool
 		return false
 	telemetry_event_sequence += 1
 	telemetry_outbox.append(event)
-	while telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
-		telemetry_outbox.pop_front()
+	if telemetry_outbox.size() > TELEMETRY_OUTBOX_LIMIT:
+		telemetry_outbox = telemetry_outbox.slice(telemetry_outbox.size() - TELEMETRY_OUTBOX_LIMIT)
 	telemetry_queue_sync_revision += 1
 	schedule_telemetry_save()
 	return true
@@ -692,7 +731,8 @@ func clear_telemetry_data(confirmed: bool = true) -> void:
 
 
 func export_telemetry_data() -> bool:
-	var export_payload := {"schema": TELEMETRY_SCHEMA_VERSION, "events": telemetry_outbox.duplicate(true)}
+	# JSON serialization is read-only; avoid cloning the bounded outbox before it.
+	var export_payload := {"schema": TELEMETRY_SCHEMA_VERSION, "events": telemetry_outbox}
 	DisplayServer.clipboard_set(JSON.stringify(export_payload))
 	telemetry_export_status = "已复制 · %d 条" % telemetry_outbox.size()
 	telemetry_export_sync_revision += 1

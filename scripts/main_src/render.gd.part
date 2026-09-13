@@ -2096,6 +2096,7 @@ func center_wall_view_model(wall_count: int, wall_total: int, compact: bool) -> 
 	var cache_key := "%d|%d|%d" % [wall_count, wall_total, 1 if compact else 0]
 	var cached: Variant = center_wall_view_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
+		touch_cache_key(center_wall_view_lru, cache_key)
 		return cached
 	var low := wall_is_low(wall_count)
 	var critical := wall_is_critical(wall_count)
@@ -2107,9 +2108,12 @@ func center_wall_view_model(wall_count: int, wall_total: int, compact: bool) -> 
 		"label_text": ("低墙" if low else "牌墙") if compact else state_text,
 		"tooltip": "牌墙剩余 %d/%d 张 · %s" % [wall_count, wall_total, state_text],
 	}
+	if center_wall_view_cache.is_empty():
+		clear_cache_lru(center_wall_view_lru)
 	center_wall_view_cache[cache_key] = model
-	if center_wall_view_cache.size() > 8:
-		center_wall_view_cache.erase(center_wall_view_cache.keys()[0])
+	touch_cache_key(center_wall_view_lru, cache_key)
+	while center_wall_view_cache.size() > 8:
+		evict_cache_key(center_wall_view_lru, center_wall_view_cache)
 	return model
 
 
@@ -2117,6 +2121,7 @@ func center_last_discard_view_model(tile: String, seat: int) -> Dictionary:
 	var cache_key := "%s|%d" % [tile, seat]
 	var cached: Variant = center_last_discard_view_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
+		touch_cache_key(center_last_discard_view_lru, cache_key)
 		return cached
 	var tile_name := tile_label(tile)
 	var source_name := pending_claim_source_name(seat)
@@ -2128,9 +2133,12 @@ func center_last_discard_view_model(tile: String, seat: int) -> Dictionary:
 		"label_text": "上张 · %s家 · %s" % [source_name, tile_name],
 		"accessible_text": "当前最后一张牌：%s · 来源：%s" % [tile_name, source_name],
 	}
+	if center_last_discard_view_cache.is_empty():
+		clear_cache_lru(center_last_discard_view_lru)
 	center_last_discard_view_cache[cache_key] = model
-	if center_last_discard_view_cache.size() > 8:
-		center_last_discard_view_cache.erase(center_last_discard_view_cache.keys()[0])
+	touch_cache_key(center_last_discard_view_lru, cache_key)
+	while center_last_discard_view_cache.size() > 8:
+		evict_cache_key(center_last_discard_view_lru, center_last_discard_view_cache)
 	return model
 
 
@@ -4123,8 +4131,9 @@ func cached_ui_control_list(root: Control) -> Array:
 	var cached_direct_child_count := int(root.get_meta("ui_contract_index_direct_child_count", -1))
 	var structure_revision := int(root.get_meta("ui_contract_structure_revision", 0))
 	var cached_structure_revision := int(root.get_meta("ui_contract_index_structure_revision", -1))
-	var cached: Array = root.get_meta("ui_contract_control_list", [])
-	if cached_root_id == root_id and cached_direct_child_count == direct_child_count and cached_structure_revision == structure_revision and not cached.is_empty():
+	var cached_variant = root.get_meta("ui_contract_control_list", [])
+	var cached: Array = cached_variant as Array if typeof(cached_variant) == TYPE_ARRAY else []
+	if root.has_meta("ui_contract_control_list") and cached_root_id == root_id and cached_direct_child_count == direct_child_count and cached_structure_revision == structure_revision:
 		return cached
 	var controls := root.find_children("*", "Control", true, false)
 	var name_index: Dictionary = {}
@@ -11446,6 +11455,7 @@ func discard_river_tile_semantics(seat: int, source_index: int, tile_code: Strin
 	var cache_key := "%d|%d|%s|%d|%s" % [seat, source_index, tile_code, 1 if highlighted else 0, page_state]
 	var cached: Variant = discard_river_semantics_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
+		touch_cache_key(discard_river_semantics_lru, cache_key)
 		return cached
 	var source_name := pending_claim_source_name(seat)
 	var tile_name := str(tile_semantic_record(tile_code).get("label", tile_code))
@@ -11455,9 +11465,12 @@ func discard_river_tile_semantics(seat: int, source_index: int, tile_code: Strin
 		"full_text": "%s牌河第%d张：%s%s" % [source_name, source_index + 1, tile_name, page_suffix],
 		"accessible_name": "%s牌河第%d张：%s" % [source_name, source_index + 1, tile_name],
 	}
+	if discard_river_semantics_cache.is_empty():
+		clear_cache_lru(discard_river_semantics_lru)
 	discard_river_semantics_cache[cache_key] = model
-	if discard_river_semantics_cache.size() > 256:
-		discard_river_semantics_cache.erase(discard_river_semantics_cache.keys()[0])
+	touch_cache_key(discard_river_semantics_lru, cache_key)
+	while discard_river_semantics_cache.size() > 256:
+		evict_cache_key(discard_river_semantics_lru, discard_river_semantics_cache)
 	return model
 
 
@@ -11465,14 +11478,35 @@ func discard_history_summary(seat: int, discards: Array) -> String:
 	var revision_key := "%d|%d|%s|%d|%d" % [seat, discards.size(), str(discards.back()) if not discards.is_empty() else "", ai_state_revision, online_game_revision]
 	var cached: Variant = discard_river_history_summary_cache.get(revision_key, null)
 	if cached != null:
+		touch_cache_key(discard_river_history_summary_lru, revision_key)
 		return str(cached)
 	var summary := join_tile_labels(discards)
+	if discard_river_history_summary_cache.is_empty():
+		clear_cache_lru(discard_river_history_summary_lru)
 	discard_river_history_summary_cache[revision_key] = summary
-	discard_river_history_summary_cache_order.append(revision_key)
-	if discard_river_history_summary_cache.size() > 16:
-		var oldest_key: String = str(discard_river_history_summary_cache_order.pop_front())
-		discard_river_history_summary_cache.erase(oldest_key)
+	touch_cache_key(discard_river_history_summary_lru, revision_key)
+	while discard_river_history_summary_cache.size() > 16:
+		evict_cache_key(discard_river_history_summary_lru, discard_river_history_summary_cache)
 	return summary
+
+
+func discard_grid_render_signature(seat: int, discards: Array, visible_start: int, visible_count: int, visible_capacity: int, tile_size: Vector2, visible_rows: int, columns: int, latest_discard_seat: int, disconnected: bool, latest_page_state: String, size_basis: Vector2) -> String:
+	return "%s|%d|%d|%d|%d|%d|%s|%s|%d|%d|%d|%s|%s|%s" % [
+		mode,
+		seat,
+		hash(discards),
+		discards.size(),
+		visible_start,
+		visible_count,
+		str(tile_size),
+		str(size_basis),
+		visible_rows,
+		columns,
+		latest_discard_seat,
+		1 if disconnected else 0,
+		latest_page_state,
+		visible_capacity,
+	]
 
 
 func draw_discards(parent: Control) -> void:
@@ -11502,28 +11536,16 @@ func draw_discards(parent: Control) -> void:
 	for zone in DISCARD_ZONES:
 		var seat = int(zone[0])
 		var zone_rect: Rect2 = zone[1]
-		var grid = GridContainer.new()
-		grid.name = "DiscardGrid_%d" % seat
-		configure_passive_container(grid)
-		grid.columns = int(zone[2])
-		grid.z_index = 8  # r449 above seat/meld chrome so river faces stay readable
-		apply_rect(grid, zone_rect)
-		if disconnected:
-			grid.set_meta("interaction_state", "read_only")
-			grid.set_meta("disabled_reason", "牌局已断线，牌河仅供查看")
-			grid.tooltip_text = "只读牌河：等待重连后才能继续牌局"
-		grid.add_theme_constant_override("h_separation", DISCARD_GRID_SEPARATION)
-		grid.add_theme_constant_override("v_separation", DISCARD_GRID_SEPARATION)
-		parent.add_child(grid)
-		var discards = get_discards(seat)
+		var columns := int(zone[2])
+		var discards: Array = get_discards(seat)
 		if not discards.is_empty():
 			total_discards += discards.size()
 			active_seats.append(seat)
 		# Prefer live table control size so river cells match the painted surface.
-		var visible_rows = discard_zone_visible_rows_for_table_size(zone_rect, grid.columns, size_basis)
-		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, grid.columns, visible_rows, size_basis)
-		var raw_visible_capacity: int = int(grid.columns * visible_rows)
-		var archive_geometry := discard_archive_reserved_geometry(zone_rect, grid.columns, visible_rows, size_basis)
+		var visible_rows := discard_zone_visible_rows_for_table_size(zone_rect, columns, size_basis)
+		var tile_size := discard_zone_tile_size_for_table_size(zone_rect, columns, visible_rows, size_basis)
+		var raw_visible_capacity: int = int(columns * visible_rows)
+		var archive_geometry := discard_archive_reserved_geometry(zone_rect, columns, visible_rows, size_basis)
 		var visible_capacity := raw_visible_capacity
 		if discards.size() > raw_visible_capacity:
 			# Reserve only the cells needed by the final archive hit target. The old
@@ -11534,73 +11556,99 @@ func draw_discards(parent: Control) -> void:
 		var visible_start := clampi(int(discard_window_start_by_seat.get(seat, latest_start)), 0, latest_start)
 		var visible_count = mini(visible_capacity, discards.size() - visible_start)
 		var latest_page_state := "latest" if visible_start >= latest_start else "history"
+		var grid_signature := discard_grid_render_signature(seat, discards, visible_start, visible_count, visible_capacity, tile_size, int(visible_rows), columns, latest_discard_seat, disconnected, latest_page_state, size_basis)
+		var retained_grid := retained_battle_discard_grids.get(seat, null) as GridContainer
+		var reuse_grid := retained_grid != null and is_instance_valid(retained_grid) and not retained_grid.is_queued_for_deletion() and str(retained_grid.get_meta("discard_grid_render_signature", "")) == grid_signature
+		var grid: GridContainer
+		if reuse_grid:
+			grid = retained_grid
+			retained_battle_discard_grids.erase(seat)
+		else:
+			if retained_grid != null and is_instance_valid(retained_grid):
+				retained_grid.queue_free()
+			retained_battle_discard_grids.erase(seat)
+			grid = GridContainer.new()
+			grid.name = "DiscardGrid_%d" % seat
+			configure_passive_container(grid)
+			grid.columns = columns
+			grid.z_index = 8  # r449 above seat/meld chrome so river faces stay readable
+			apply_rect(grid, zone_rect)
+			if disconnected:
+				grid.set_meta("interaction_state", "read_only")
+				grid.set_meta("disabled_reason", "牌局已断线，牌河仅供查看")
+				grid.tooltip_text = "只读牌河：等待重连后才能继续牌局"
+			grid.add_theme_constant_override("h_separation", DISCARD_GRID_SEPARATION)
+			grid.add_theme_constant_override("v_separation", DISCARD_GRID_SEPARATION)
+		parent.add_child(grid)
 		grid.set_meta("visible_capacity", visible_capacity)
 		grid.set_meta("raw_visible_capacity", raw_visible_capacity)
 		grid.set_meta("window_start", visible_start)
 		grid.set_meta("discard_count", discards.size())
 		var archive_reserved_start := int(archive_geometry.get("start", visible_capacity)) if discards.size() > raw_visible_capacity else -1
 		grid.set_meta("archive_reserved_start", archive_reserved_start)
-		grid.set_meta("final_grid_columns", grid.columns)
+		grid.set_meta("final_grid_columns", columns)
 		grid.set_meta("final_grid_rows", int(visible_rows))
 		grid.set_meta("archive_reserved_cells", int(archive_geometry.get("cells", 0)) if archive_reserved_start >= 0 else 0)
 		grid.set_meta("archive_reserved_columns", int(archive_geometry.get("columns", 0)) if archive_reserved_start >= 0 else 0)
 		grid.set_meta("archive_reserved_rows", int(archive_geometry.get("rows", 0)) if archive_reserved_start >= 0 else 0)
-		grid.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": grid.columns, "rows": int(visible_rows), "archive_reserved_start": archive_reserved_start})
+		grid.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": columns, "rows": int(visible_rows), "archive_reserved_start": archive_reserved_start})
 		grid.set_meta("latest_discard_gutter_px", 6.0)
 		grid.set_meta("latest_discard_page_state", latest_page_state)
 		grid.set_meta("latest_discard_source_seat", latest_discard_seat)
 		grid.set_meta("river_overlay_contract", "final_grid_reserved_cell_and_latest_gutter")
+		grid.set_meta("discard_grid_render_signature", grid_signature)
 		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count, latest_discard_seat)
 		if river_art != null:
 			parent.move_child(river_art, max(0, grid.get_index()))
-		for i in range(visible_count):
-			var source_index = visible_start + i
-			var highlighted = seat == latest_discard_seat and source_index == discards.size() - 1
-			var tile_code := str(discards[source_index])
-			var tile_semantics := discard_river_tile_semantics(seat, source_index, tile_code, highlighted, latest_page_state)
-			# The single river focus marker owns the latest-discard frame; keep the
-			# authored face clean instead of stacking a second per-tile frame.
-			var tile_node = make_tile_view(tile_code, tile_size, false, Callable(), false)
-			# Keep each river face at the measured authored size. The grid may add
-			# empty gutter, but must not stretch one face differently from its peers.
-			tile_node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-			tile_node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			tile_node.custom_minimum_size = tile_size
-			# r449: river porcelain must never keep a wall-back fallback texture.
-			var face_tex := tile_node.get_meta("tile_face_texture", null) as TextureRect
-			var norm_code := str(tile_node.get_meta("normalized_tile_code", tile_code))
-			if face_tex != null and tile_back != null and (face_tex.texture == null or face_tex.texture == tile_back):
-				var forced = tile_textures.get(norm_code, null)
-				if forced == null or forced == tile_back:
-					forced = load_tile_texture(tile_path(norm_code))
-				if forced != null and forced != tile_back:
-					face_tex.texture = forced
-					tile_textures[norm_code] = forced
-					face_tex.modulate = Color(1.0, 1.0, 1.0, 1.0)
-			# Tile artwork keeps its authored RGB on every seat. River emphasis comes
-			# from the existing GPT mats and focus marker, never runtime tinting.
-			if face_tex != null:
-				face_tex.modulate = Color(1.0, 1.0, 1.0, face_tex.modulate.a)
-			tile_node.modulate = Color(1.0, 1.0, 1.0, tile_node.modulate.a)
-			tile_node.set_meta("discard_source_index", source_index)
-			tile_node.set_meta("discard_tile_code", tile_code)
-			tile_node.tooltip_text = str(tile_semantics.get("tooltip", ""))
-			tile_node.set_meta("latest_discard_gutter_px", 6.0)
-			tile_node.set_meta("river_final_grid_columns", grid.columns)
-			tile_node.set_meta("river_final_grid_rows", int(visible_rows))
-			tile_node.set_meta("river_cell_contract", "owner_overlay_uses_same_final_grid")
-			tile_node.set_meta("visual_owner", "river_face")
-			tile_node.set_meta("discard_page_state", latest_page_state)
-			set_ui_full_text(tile_node, tile_node.tooltip_text, str(tile_semantics.get("full_text", tile_node.tooltip_text)))
-			tile_node.set_meta("accessible_name", str(tile_semantics.get("accessible_name", tile_node.tooltip_text)))
-			if highlighted:
-				tile_node.tooltip_text += " · 刚打出 · 当前最后一张牌"
-				tile_node.set_meta("latest_discard_visual_owner", "LastDiscardFocusMarker")
-			grid.add_child(tile_node)
-			if highlighted:
-				tile_node.name = "RecentDiscardTile_%d" % seat
-				tile_node.z_index = 9
-				mark_ui_optimization(tile_node, "F-259")
+		if not reuse_grid:
+			for i in range(visible_count):
+				var source_index = visible_start + i
+				var highlighted = seat == latest_discard_seat and source_index == discards.size() - 1
+				var tile_code := str(discards[source_index])
+				var tile_semantics := discard_river_tile_semantics(seat, source_index, tile_code, highlighted, latest_page_state)
+				# The single river focus marker owns the latest-discard frame; keep the
+				# authored face clean instead of stacking a second per-tile frame.
+				var tile_node = make_tile_view(tile_code, tile_size, false, Callable(), false)
+				# Keep each river face at the measured authored size. The grid may add
+				# empty gutter, but must not stretch one face differently from its peers.
+				tile_node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+				tile_node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+				tile_node.custom_minimum_size = tile_size
+				# r449: river porcelain must never keep a wall-back fallback texture.
+				var face_tex := tile_node.get_meta("tile_face_texture", null) as TextureRect
+				var norm_code := str(tile_node.get_meta("normalized_tile_code", tile_code))
+				if face_tex != null and tile_back != null and (face_tex.texture == null or face_tex.texture == tile_back):
+					var forced = tile_textures.get(norm_code, null)
+					if forced == null or forced == tile_back:
+						forced = load_tile_texture(tile_path(norm_code))
+					if forced != null and forced != tile_back:
+						face_tex.texture = forced
+						tile_textures[norm_code] = forced
+						face_tex.modulate = Color(1.0, 1.0, 1.0, 1.0)
+				# Tile artwork keeps its authored RGB on every seat. River emphasis comes
+				# from the existing GPT mats and focus marker, never runtime tinting.
+				if face_tex != null:
+					face_tex.modulate = Color(1.0, 1.0, 1.0, face_tex.modulate.a)
+				tile_node.modulate = Color(1.0, 1.0, 1.0, tile_node.modulate.a)
+				tile_node.set_meta("discard_source_index", source_index)
+				tile_node.set_meta("discard_tile_code", tile_code)
+				tile_node.tooltip_text = str(tile_semantics.get("tooltip", ""))
+				tile_node.set_meta("latest_discard_gutter_px", 6.0)
+				tile_node.set_meta("river_final_grid_columns", columns)
+				tile_node.set_meta("river_final_grid_rows", int(visible_rows))
+				tile_node.set_meta("river_cell_contract", "owner_overlay_uses_same_final_grid")
+				tile_node.set_meta("visual_owner", "river_face")
+				tile_node.set_meta("discard_page_state", latest_page_state)
+				set_ui_full_text(tile_node, tile_node.tooltip_text, str(tile_semantics.get("full_text", tile_node.tooltip_text)))
+				tile_node.set_meta("accessible_name", str(tile_semantics.get("accessible_name", tile_node.tooltip_text)))
+				if highlighted:
+					tile_node.tooltip_text += " · 刚打出 · 当前最后一张牌"
+					tile_node.set_meta("latest_discard_visual_owner", "LastDiscardFocusMarker")
+				grid.add_child(tile_node)
+				if highlighted:
+					tile_node.name = "RecentDiscardTile_%d" % seat
+					tile_node.z_index = 9
+					mark_ui_optimization(tile_node, "F-259")
 		var owner_overlay := draw_discard_river_owner_overlay(foreground_layer, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), archive_reserved_start, int(archive_geometry.get("columns", 0)), int(archive_geometry.get("rows", 0)), river_compact_readable, latest_discard_seat, discards)
 		if owner_overlay != null:
 			owner_overlay.set_meta("archive_reserved_start", archive_reserved_start)
@@ -11610,13 +11658,13 @@ func draw_discards(parent: Control) -> void:
 			owner_overlay.set_meta("latest_discard_source_seat", latest_discard_seat)
 			owner_overlay.set_meta("table_2d_foreground", true)
 			owner_overlay.set_meta("legacy_table_3d_foreground", false)
-			owner_overlay.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": grid.columns, "rows": int(visible_rows), "archive_reserved_start": archive_reserved_start})
+			owner_overlay.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": columns, "rows": int(visible_rows), "archive_reserved_start": archive_reserved_start})
 			owner_overlay.set_meta("archive_reserved_columns", int(archive_geometry.get("columns", 0)) if archive_reserved_start >= 0 else 0)
 			owner_overlay.set_meta("archive_reserved_rows", int(archive_geometry.get("rows", 0)) if archive_reserved_start >= 0 else 0)
 		if seat == latest_discard_seat and visible_start + visible_count == discards.size() and visible_count > 0:
 			var focus_marker := draw_last_discard_focus_marker(parent, seat, size_basis, str(discards.back()), discards.size())
 			if focus_marker != null:
-				focus_marker.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": grid.columns, "rows": int(visible_rows)})
+				focus_marker.set_meta("river_geometry_context", {"table_size": size_basis, "tile_size": tile_size, "columns": columns, "rows": int(visible_rows)})
 				focus_marker.set_meta("latest_discard_page_state", latest_page_state)
 				focus_marker.set_meta("latest_discard_source_index", discards.size() - 1)
 				var focus_tile := focus_marker.find_child("LastDiscardFocusActualTile", true, false) as CanvasItem
@@ -11625,8 +11673,9 @@ func draw_discards(parent: Control) -> void:
 					# tile remains the single visual owner for the latest discard.
 					focus_tile.visible = false
 					focus_tile.modulate.a = 0.0
-		release_unused_discard_archive_buttons()
-		# The dedicated foreground layer owns all river overlays, so root child order is
+			release_unused_discard_archive_buttons()
+	release_unused_discard_grids()
+	# The dedicated foreground layer owns all river overlays, so root child order is
 	# stable across HUD-only redraws and no per-seat move_child pass is required.
 	# The four rivers already carry ownership and last-discard focus; a cross-table
 	# summary strip made the battle page read as over-instrumented.
@@ -12371,7 +12420,8 @@ func draw_hand(parent: Control) -> void:
 		interactive_guide_active = true
 		interactive_guide_type = "discard"
 
-	var suit_flow = draw_hand_tray_suit_flow(tray, hand)
+	var hand_group_counts_snapshot: Array[int] = hand_group_counts(hand)
+	var suit_flow = draw_hand_tray_suit_flow(tray, hand, false, hand_group_counts_snapshot)
 	if suit_flow != null:
 		suit_flow.modulate = Color(1.0, 1.0, 1.0, 0.22 if compact_hand_art else 0.36)
 		suit_flow.set_meta("compact_alpha_policy", "0.22_below_tile_face_contrast")
@@ -12379,7 +12429,7 @@ func draw_hand(parent: Control) -> void:
 	if momentum_art != null:
 		momentum_art.visible = not compact_hand_art
 		momentum_art.modulate = Color(1.0, 1.0, 1.0, 0.16)
-	var completion_bus = draw_hand_tray_completion_bus_art(tray, hand) if not compact_hand_art else null
+	var completion_bus = draw_hand_tray_completion_bus_art(tray, hand, hand_group_counts_snapshot) if not compact_hand_art else null
 	if completion_bus != null:
 		completion_bus.visible = not compact_hand_art
 		completion_bus.modulate = Color(1.0, 1.0, 1.0, 0.12)
@@ -12703,7 +12753,7 @@ func draw_hand_tray_action_path(parent: Control, hand: Array) -> Control:
 	delivery_fill.modulate = Color(1, 1, 1, 0.78)
 	return path
 
-func draw_hand_tray_completion_bus_art(parent: Control, hand: Array) -> Control:
+func draw_hand_tray_completion_bus_art(parent: Control, hand: Array, group_counts: Array[int] = []) -> Control:
 	# r209: GPT chrome conversion
 	var bus = Control.new()
 	bus.name = "HandTrayCompletionBusArt"
@@ -12718,7 +12768,7 @@ func draw_hand_tray_completion_bus_art(parent: Control, hand: Array) -> Control:
 	parent.add_child(bus)
 	var accent = hand_tray_state_fill()
 	var active = can_self_discard()
-	var counts := hand_group_counts(hand)
+	var counts: Array[int] = group_counts if group_counts.size() == 5 else hand_group_counts(hand)
 	var occupied_groups := 0
 	for count in counts:
 		if int(count) > 0:
@@ -12880,7 +12930,7 @@ func draw_hand_tray_state_art(parent: Control) -> Control:
 	return art
 
 
-func draw_hand_tray_suit_flow(parent: Control, hand: Array, force_danger_glow: bool = false) -> Control:
+func draw_hand_tray_suit_flow(parent: Control, hand: Array, force_danger_glow: bool = false, group_counts: Array[int] = []) -> Control:
 	# r213: GPT chrome conversion
 	var flow = Control.new()
 	flow.name = "HandTraySuitFlow"
@@ -12893,7 +12943,7 @@ func draw_hand_tray_suit_flow(parent: Control, hand: Array, force_danger_glow: b
 	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(flow, rect_full(0.020, 0.855, 0.235, 0.960))
 	parent.add_child(flow)
-	var counts := hand_group_counts(hand)
+	var counts: Array[int] = group_counts if group_counts.size() == 5 else hand_group_counts(hand)
 	var max_count = 1
 	for value in counts:
 		max_count = max(max_count, int(value))
@@ -13780,6 +13830,34 @@ func meld_lane_content_rect(seat: int, meld_rect: Rect2, has_pager: bool, conten
 		return rect_full(meld_rect.position.x, meld_rect.position.y, meld_rect.size.x, maxf(meld_rect.position.y, pager_rect.position.y - gap_y))
 	return rect_full(meld_rect.position.x, meld_rect.position.y, maxf(meld_rect.position.x, pager_rect.position.x - gap_x), meld_rect.size.y)
 
+func meld_lane_render_signature(seat: int, meld_list: Array, meld_rect: Rect2, content_rect: Rect2, full_capacity: int, lane_capacity: int, window_start: int, page_count: int, has_pager: bool, compact_melds: bool, danger_compact_melds: bool, content_size: Vector2) -> String:
+	var signature_parts: Array[String] = [
+		mode,
+		str(seat),
+		str(meld_list),
+		str(meld_list.size()),
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		str(safe_area_layout_revision),
+		str(resize_refresh_revision),
+		str(ui_layout_density()),
+		str(meld_rect),
+		str(content_rect),
+		str(content_size),
+		str(full_capacity),
+		str(lane_capacity),
+		str(window_start),
+		str(page_count),
+		str(int(has_pager)),
+		str(int(compact_melds)),
+		str(int(danger_compact_melds)),
+		str(int(fx_enabled_effective())),
+		str(int(ui_motion_enabled())),
+		str(graphics_quality),
+		str(int(large_text_enabled)),
+	]
+	return "|".join(signature_parts)
+
 func cycle_meld_window(seat: int, page_capacity: int) -> void:
 	var meld_list := get_melds(seat)
 	if page_capacity <= 0 or meld_list.size() <= page_capacity:
@@ -13817,6 +13895,25 @@ func draw_melds(parent: Control) -> void:
 		var page_count := maxi(1, int(ceil(float(meld_list.size()) / float(maxi(1, lane_capacity)))))
 		var has_pager := page_count > 1
 		var content_rect := meld_lane_content_rect(seat, meld_rect, has_pager, meld_content_size)
+		var meld_render_signature := meld_lane_render_signature(seat, meld_list, meld_rect, content_rect, full_capacity, lane_capacity, window_start, page_count, has_pager, compact_melds, danger_compact_melds, meld_content_size)
+		var retained_entry = retained_battle_meld_lanes.get(seat, {})
+		if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty() and str((retained_entry as Dictionary).get("signature", "")) == meld_render_signature:
+			var retained_lane_art := (retained_entry as Dictionary).get("lane_art", null) as Control
+			var retained_area := (retained_entry as Dictionary).get("area", null) as Control
+			var retained_pager := (retained_entry as Dictionary).get("pager", null) as Control
+			var pager_matches := (has_pager and retained_pager != null) or (not has_pager and retained_pager == null)
+			if retained_lane_art != null and retained_area != null and is_instance_valid(retained_lane_art) and is_instance_valid(retained_area) and pager_matches and not retained_lane_art.is_queued_for_deletion() and not retained_area.is_queued_for_deletion() and (retained_pager == null or (is_instance_valid(retained_pager) and not retained_pager.is_queued_for_deletion())):
+				for retained_node in [retained_lane_art, retained_area, retained_pager]:
+					if retained_node == null:
+						continue
+					parent.add_child(retained_node)
+					retained_node.set_meta("retained_for_battle_render", false)
+					retained_node.set_meta("ui_page_generation", ui_page_generation)
+					retained_node.set_meta("meld_lane_render_signature", meld_render_signature)
+				retained_battle_meld_lanes.erase(seat)
+				continue
+		if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty():
+			release_retained_battle_meld_lane(seat)
 		# Soft seat lane; melds sit next to the player plaque.
 		var lane_art := draw_meld_lane_art(parent, seat, meld_rect, meld_list.size())
 		if lane_art != null and compact_melds:
@@ -13825,6 +13922,8 @@ func draw_melds(parent: Control) -> void:
 			lane_art.visible = true
 			lane_art.modulate.a = 0.24
 			lane_art.set_meta("compact_boundary_policy", "authored_edge_kept_at_reduced_alpha")
+		if lane_art != null:
+			lane_art.set_meta("meld_lane_render_signature", meld_render_signature)
 		var vertical: bool = seat_meld_is_vertical(seat)
 		var area: Container
 		if vertical:
@@ -13864,6 +13963,7 @@ func draw_melds(parent: Control) -> void:
 		area.set_meta("safe_area_layout_revision", meld_layout_revision)
 		area.set_meta("safe_content_pixel_size", meld_content_size)
 		area.set_meta("coordinate_context", "root_layer_safe_content_normalized_rect_and_shared_pixel_budget")
+		area.set_meta("meld_lane_render_signature", meld_render_signature)
 		mark_ui_optimization(area, "F-043")
 		var meld_tile_size := Vector2.ZERO
 		if vertical and compact_melds:
@@ -14051,11 +14151,13 @@ func draw_melds(parent: Control) -> void:
 			page_button.set_meta("action_role", "meld_page_next")
 			page_button.set_meta("navigation_only", true)
 			page_button.set_meta("page_range_text", str(page_state.get("range", "")))
+			page_button.set_meta("meld_lane_render_signature", meld_render_signature)
 			mark_ui_optimization(page_button, "F-260")
 			mark_ui_optimization(page_button, "F-247")
 			page_button.z_index = 14
 			parent.add_child(page_button)
 			apply_rect(page_button, meld_lane_pager_rect(seat, meld_rect, meld_content_size))
+	release_unused_battle_meld_lanes()
 
 func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: int, shadow_size: int = 0) -> Control:
 	# Depth accents are authored bitmap plates. Keep this helper free of Panel and
@@ -16950,12 +17052,16 @@ func seat_river_summary(seat: int, max_count: int = 4) -> Dictionary:
 	var cache_key := "%d|%d|%s|%d|%d|%d" % [seat, discards.size(), last_tile, max_count, ai_state_revision, online_game_revision]
 	var cached: Variant = seat_river_summary_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
+		touch_cache_key(seat_river_summary_lru, cache_key)
 		return cached
 	var river := join_tile_labels(discards, tail_window_start(discards.size(), max_count), max_count)
 	var summary := {"count": discards.size(), "recent_text": ("弃 " + river) if river != "" else "", "last_tile": last_tile}
+	if seat_river_summary_cache.is_empty():
+		clear_cache_lru(seat_river_summary_lru)
 	seat_river_summary_cache[cache_key] = summary
-	if seat_river_summary_cache.size() > 32:
-		seat_river_summary_cache.erase(seat_river_summary_cache.keys()[0])
+	touch_cache_key(seat_river_summary_lru, cache_key)
+	while seat_river_summary_cache.size() > 32:
+		evict_cache_key(seat_river_summary_lru, seat_river_summary_cache)
 	return summary
 
 
@@ -16996,6 +17102,24 @@ func draw_online_local_seat_marker(parent: Control, seat: int, side: String) -> 
 
 func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}) -> void:
 	# r212: GPT chrome conversion
+	var seat_identity_signature := battle_seat_identity_signature(seat, rect, side, seat_threat_reports, discard_snapshot)
+	var retained_entry = retained_battle_seats.get(seat, {})
+	if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty() and str((retained_entry as Dictionary).get("signature", "")) == seat_identity_signature:
+		var retained_shadow := (retained_entry as Dictionary).get("shadow", null) as Control
+		var retained_panel := (retained_entry as Dictionary).get("panel", null) as Control
+		if retained_shadow != null and retained_panel != null and is_instance_valid(retained_shadow) and is_instance_valid(retained_panel) and not retained_shadow.is_queued_for_deletion() and not retained_panel.is_queued_for_deletion():
+			parent.add_child(retained_shadow)
+			parent.add_child(retained_panel)
+			retained_shadow.set_meta("retained_for_battle_render", false)
+			retained_panel.set_meta("retained_for_battle_render", false)
+			retained_shadow.set_meta("ui_page_generation", ui_page_generation)
+			retained_panel.set_meta("ui_page_generation", ui_page_generation)
+			retained_battle_seats.erase(seat)
+			return
+	if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty():
+		# A resize or state mutation can change the signature between retention and
+		# the rebuilt root. Do not leave the detached old subtree behind.
+		release_retained_battle_seat(seat)
 	var seat_viewport_size := effective_viewport_size()
 	var seat_compact_height := seat_viewport_size.y <= 560.0
 	var snapshot_current_seat := int(discard_snapshot.get("current_seat", -1)) if not discard_snapshot.is_empty() else -1
@@ -17014,10 +17138,12 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	var seat_shadow_rect = rect_full(rect.position.x + 0.006, rect.position.y + 0.012, rect.size.x + 0.010, rect.size.y + 0.018)
 	var seat_shadow = make_soft_depth_panel(parent, seat_shadow_rect, Color(0.0, 0.0, 0.0, 0.22 if active else 0.14), 14)
 	seat_shadow.name = "SeatPanel3DCastShadow_%d" % seat
+	seat_shadow.set_meta("seat_identity_signature", seat_identity_signature)
 	# Lift midtones so inactive side seats still read as lacquer plaques, not black voids.
 	# r449: warm lacquer seat shell — no mint/jade green program fills under brocade.
 	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.018, 0.026, 0.024, 0.88), "ui_dark_scrim", 0.20)
 	panel.name = "SeatPanel_%d" % seat
+	panel.set_meta("seat_identity_signature", seat_identity_signature)
 	parent.add_child(panel)
 	panel.clip_contents = true
 	# Commercial lacquer shell: rear plate, jade inset, bottom contact, light-catching rims.
@@ -23452,6 +23578,7 @@ func make_voice_stream(audio_base64: String, sample_rate: int, channels: int, de
 	var cache_key := "remote:%s:%d:%d" % [audio_base64.hash(), sample_rate, channels]
 	var cached_stream := remote_voice_stream_cache.get(cache_key, null) as AudioStreamWAV
 	if cached_stream != null and is_instance_valid(cached_stream):
+		touch_cache_key(remote_voice_stream_lru, cache_key)
 		return cached_stream
 	var data: PackedByteArray = decoded if not decoded.is_empty() else Marshalls.base64_to_raw(audio_base64)
 	if data.is_empty():
@@ -23464,10 +23591,9 @@ func make_voice_stream(audio_base64: String, sample_rate: int, channels: int, de
 	stream.stereo = channels == 2
 	stream.data = data
 	remote_voice_stream_cache[cache_key] = stream
-	remote_voice_stream_cache_order.append(cache_key)
-	while remote_voice_stream_cache_order.size() > 8:
-		var oldest_key: String = str(remote_voice_stream_cache_order.pop_front())
-		remote_voice_stream_cache.erase(oldest_key)
+	touch_cache_key(remote_voice_stream_lru, cache_key)
+	while remote_voice_stream_cache.size() > 8:
+		evict_cache_key(remote_voice_stream_lru, remote_voice_stream_cache)
 	return stream
 
 func make_wall_back_tile(size: Vector2 = WALL_BACK_TILE_SIZE, detailed: bool = true) -> Control:

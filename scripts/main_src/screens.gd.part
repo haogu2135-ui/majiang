@@ -7822,6 +7822,7 @@ func evict_toast_queue_entry(index: int) -> void:
 	var removed := toast_queue[index] as Dictionary
 	toast_queue.remove_at(index)
 	if removed != null:
+		toast_queue_text_index.erase(str(removed.get("text", "")))
 		toast_queue_pending_count = maxi(0, toast_queue_pending_count - maxi(1, int(removed.get("count", 1))))
 		toast_queue_pending_bytes = maxi(0, toast_queue_pending_bytes - toast_queue_entry_bytes(removed))
 
@@ -7830,13 +7831,15 @@ func enqueue_toast_message(text: String, duration_msec: int) -> bool:
 	var entry_bytes := str(text).to_utf8_buffer().size()
 	if entry_bytes <= 0 or entry_bytes > TOAST_QUEUE_MAX_BYTES:
 		return false
-	for queued in toast_queue:
-		if typeof(queued) == TYPE_DICTIONARY and str((queued as Dictionary).get("text", "")) == text:
-			var queued_entry := queued as Dictionary
-			queued_entry["count"] = mini(TOAST_QUEUE_MAX_REPEAT_COUNT, int(queued_entry.get("count", 1)) + 1)
-			queued_entry["duration_msec"] = maxi(int(queued_entry.get("duration_msec", duration_msec)), duration_msec)
+	var queued_variant = toast_queue_text_index.get(text, null)
+	if typeof(queued_variant) == TYPE_DICTIONARY:
+		var queued_entry := queued_variant as Dictionary
+		var repeat_count := int(queued_entry.get("count", 1))
+		if repeat_count < TOAST_QUEUE_MAX_REPEAT_COUNT:
+			queued_entry["count"] = repeat_count + 1
 			toast_queue_pending_count = mini(TOAST_QUEUE_MAX_ENTRIES * TOAST_QUEUE_MAX_REPEAT_COUNT, toast_queue_pending_count + 1)
-			return true
+		queued_entry["duration_msec"] = maxi(int(queued_entry.get("duration_msec", duration_msec)), duration_msec)
+		return true
 	var new_priority := toast_queue_entry_priority(text)
 	while toast_queue.size() >= TOAST_QUEUE_MAX_ENTRIES or toast_queue_pending_bytes + entry_bytes > TOAST_QUEUE_MAX_BYTES:
 		var evict_index := -1
@@ -7856,7 +7859,9 @@ func enqueue_toast_message(text: String, duration_msec: int) -> bool:
 		if evict_index < 0:
 			return false
 		evict_toast_queue_entry(evict_index)
-	toast_queue.append({"text": text, "duration_msec": duration_msec, "count": 1, "bytes": entry_bytes})
+	var new_entry := {"text": text, "duration_msec": duration_msec, "count": 1, "bytes": entry_bytes}
+	toast_queue.append(new_entry)
+	toast_queue_text_index[text] = new_entry
 	toast_queue_pending_count += 1
 	toast_queue_pending_bytes += entry_bytes
 	return true
@@ -7977,6 +7982,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	pending_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pending_label.set_meta("toast_queue_indicator", true)
 	mark_ui_optimization(pending_label, "F-526")
+	toast_pending_label = pending_label
 	toast_bg.offset_top = -28.0
 	toast_container.add_child(toast_bg)
 	toast_container.visible = true
@@ -8011,7 +8017,10 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 func refresh_toast_queue_indicator() -> void:
 	if toast_current == null or not is_instance_valid(toast_current):
 		return
-	var pending_label := toast_current.find_child("ToastPendingLabel", true, false) as Label
+	var pending_label := toast_pending_label if toast_pending_label != null and is_instance_valid(toast_pending_label) else null
+	if pending_label == null:
+		pending_label = toast_current.find_child("ToastPendingLabel", true, false) as Label
+		toast_pending_label = pending_label
 	if pending_label == null:
 		return
 	var pending_count := toast_queue_pending_count
@@ -8030,6 +8039,7 @@ func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
 	if container != null:
 		container.visible = false
 	toast_current = null
+	toast_pending_label = null
 	toast_tween = null
 	toast_mode = ""
 	toast_active_minimum_dwell_msec = 0
@@ -8037,6 +8047,7 @@ func cleanup_toast_by_id(toast_id: int, container_id: int) -> void:
 		var next_toast = toast_queue.pop_front()
 		if typeof(next_toast) == TYPE_DICTIONARY:
 			var next_entry := next_toast as Dictionary
+			toast_queue_text_index.erase(str(next_entry.get("text", "")))
 			toast_queue_pending_count = maxi(0, toast_queue_pending_count - maxi(1, int(next_entry.get("count", 1))))
 			toast_queue_pending_bytes = maxi(0, toast_queue_pending_bytes - toast_queue_entry_bytes(next_entry))
 			var next_text := str(next_entry.get("text", ""))
@@ -8052,10 +8063,12 @@ func dismiss_active_toast() -> void:
 	if toast_current != null and is_instance_valid(toast_current):
 		toast_current.queue_free()
 	toast_current = null
+	toast_pending_label = null
 	if toast_container != null and is_instance_valid(toast_container):
 		toast_container.visible = false
 	toast_mode = ""
 	toast_queue.clear()
+	toast_queue_text_index.clear()
 	toast_queue_pending_count = 0
 	toast_queue_pending_bytes = 0
 	toast_active_minimum_dwell_msec = 0

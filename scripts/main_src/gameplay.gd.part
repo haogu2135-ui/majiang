@@ -290,6 +290,158 @@ func _on_game_render_delay_timeout(timer: Timer) -> void:
 func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
+func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}) -> String:
+	if seat < 0 or seat >= players.size():
+		return ""
+	var snapshot_current_seat := int(discard_snapshot.get("current_seat", -1)) if not discard_snapshot.is_empty() else -1
+	var current_seat_snapshot := snapshot_current_seat if snapshot_current_seat >= 0 else get_current_seat()
+	var snapshot_discard_seat := int(discard_snapshot.get("seat", -1)) if not discard_snapshot.is_empty() else -1
+	var latest_discard_seat := snapshot_discard_seat if snapshot_discard_seat >= 0 else get_last_discard_seat()
+	var snapshot_discard_tile := str(discard_snapshot.get("tile", "")) if not discard_snapshot.is_empty() else ""
+	var latest_discard_tile := snapshot_discard_tile if snapshot_discard_tile != "" else get_last_discard()
+	var player_info := get_player_info(seat)
+	var discards: Array = get_discards(seat)
+	var melds: Array = get_melds(seat)
+	var flower_tiles: Array = []
+	if mode == "offline":
+		var flowers_value = players[seat].get("flower_tiles", [])
+		if typeof(flowers_value) == TYPE_ARRAY:
+			flower_tiles = flowers_value as Array
+	var threat_report := seat_threat_report_from_map(seat, seat_threat_reports)
+	var threat_revision := int(threat_report.get("seat_revision", 0))
+	if not threat_report.has("seat_revision"):
+		threat_revision = seat_threat_report_revision(threat_report)
+	var score_state := score_state_cache_key() if mode == "offline" else "%d|%d" % [online_game_revision, int(online_game.get("youSeat", -1))]
+	var profile_state := ai_profile_map_cache_key() if mode == "offline" else ""
+	var signature_parts: Array[String] = [
+		str(seat),
+		str(rect),
+		side,
+		str(effective_viewport_size()),
+		str(safe_area_margins),
+		mode,
+		str(current_seat_snapshot),
+		str(latest_discard_seat),
+		latest_discard_tile,
+		str(player_info.get("name", "玩家")),
+		str(int(player_info.get("score", 0))),
+		str(int(player_info.get("hand_count", 0))),
+		str(int(player_info.get("flowers", 0))),
+		str(discards.size()),
+		str(discards.back()) if not discards.is_empty() else "",
+		str(hash(discards)),
+		meld_array_key(melds),
+		str(hash(flower_tiles)),
+		str(flower_tiles.size()),
+		str(dealer_seat == seat),
+		str(threat_revision),
+		str(last_score_deltas_revision),
+		str(last_score_deltas_have_change),
+		score_state,
+		profile_state,
+		str(ai_package_liability_revision),
+		package_preview(seat),
+		str(fx_enabled_effective()),
+		str(ui_motion_enabled()),
+		str(graphics_quality),
+		str(int(player_ai_assist_enabled())),
+		seat_recent_river_text(seat, 3),
+	]
+	return "|".join(signature_parts)
+
+func retain_battle_seats_for_render() -> void:
+	if not retained_battle_seats.is_empty():
+		release_retained_battle_seats()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for seat_layout in SEAT_LAYOUTS:
+		var seat := int(seat_layout[0])
+		var panel := root_layer.get_node_or_null("SeatPanel_%d" % seat) as Control
+		var shadow := root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat) as Control
+		if panel == null or shadow == null or not is_instance_valid(panel) or not is_instance_valid(shadow):
+			continue
+		if panel.is_queued_for_deletion() or shadow.is_queued_for_deletion():
+			continue
+		var identity := battle_seat_identity_signature(seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		if identity == "" or str(panel.get_meta("seat_identity_signature", "")) != identity or str(shadow.get_meta("seat_identity_signature", "")) != identity:
+			continue
+		root_layer.remove_child(panel)
+		root_layer.remove_child(shadow)
+		retained_battle_seats[seat] = {"panel": panel, "shadow": shadow, "signature": identity}
+
+func release_retained_battle_seat(seat: int) -> void:
+	var entry_variant = retained_battle_seats.get(seat, null)
+	if typeof(entry_variant) == TYPE_DICTIONARY:
+		var entry: Dictionary = entry_variant
+		for node_key in ["panel", "shadow"]:
+			var control := entry.get(node_key, null) as Control
+			if control == null or not is_instance_valid(control):
+				continue
+			if control.get_parent() != null:
+				control.get_parent().remove_child(control)
+			control.queue_free()
+	retained_battle_seats.erase(seat)
+
+func release_retained_battle_seats() -> void:
+	var retained_seats := retained_battle_seats.keys()
+	for seat_variant in retained_seats:
+		release_retained_battle_seat(int(seat_variant))
+
+func retain_battle_meld_lanes_for_render() -> void:
+	if not retained_battle_meld_lanes.is_empty():
+		release_retained_battle_meld_lanes()
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for seat in range(4):
+		var area := root_layer.get_node_or_null("MeldArea_%d" % seat) as Control
+		var lane_art := root_layer.get_node_or_null("MeldLaneArt_%d" % seat) as Control
+		if area == null or lane_art == null or not is_instance_valid(area) or not is_instance_valid(lane_art):
+			continue
+		if area.is_queued_for_deletion() or lane_art.is_queued_for_deletion():
+			continue
+		var pager := root_layer.get_node_or_null("MeldLaneArchiveButton_%d" % seat) as Control
+		if pager != null and (not is_instance_valid(pager) or pager.is_queued_for_deletion()):
+			pager = null
+		var area_parent := area.get_parent()
+		var lane_parent := lane_art.get_parent()
+		if area_parent == null or lane_parent == null:
+			continue
+		area_parent.remove_child(area)
+		lane_parent.remove_child(lane_art)
+		if pager != null and pager.get_parent() != null:
+			pager.get_parent().remove_child(pager)
+		retained_battle_meld_lanes[seat] = {
+			"area": area,
+			"lane_art": lane_art,
+			"pager": pager,
+			"signature": str(area.get_meta("meld_lane_render_signature", "")),
+		}
+
+func release_retained_battle_meld_lane(seat: int) -> void:
+	var entry_variant = retained_battle_meld_lanes.get(seat, null)
+	if typeof(entry_variant) == TYPE_DICTIONARY:
+		var entry: Dictionary = entry_variant
+		for node_key in ["area", "lane_art", "pager"]:
+			var control := entry.get(node_key, null) as Control
+			if control == null or not is_instance_valid(control):
+				continue
+			if control.get_parent() != null:
+				control.get_parent().remove_child(control)
+			control.queue_free()
+	retained_battle_meld_lanes.erase(seat)
+
+func release_retained_battle_meld_lanes() -> void:
+	var retained_seats := retained_battle_meld_lanes.keys()
+	for seat_variant in retained_seats:
+		release_retained_battle_meld_lane(int(seat_variant))
+
+func release_unused_battle_meld_lanes() -> void:
+	release_retained_battle_meld_lanes()
+
 func retain_battle_hand_tray_for_render() -> void:
 	hand_render_snapshot_valid = false
 	hand_render_snapshot_signature = ""
@@ -495,6 +647,8 @@ func clear_screen() -> void:
 	screen_layer.add_child(root_layer)
 
 func release_retained_battle_views() -> void:
+	release_retained_battle_seats()
+	release_retained_battle_meld_lanes()
 	for retained in [retained_battle_hand_tray, retained_battle_center, retained_battle_atmosphere, discard_river_foreground_layer]:
 		if retained != null and is_instance_valid(retained):
 			if retained.get_parent() != null:
@@ -508,6 +662,13 @@ func release_retained_battle_views() -> void:
 	retained_battle_atmosphere = null
 	retained_battle_atmosphere_signature = ""
 	discard_river_foreground_layer = null
+	for retained_grid_variant in retained_battle_discard_grids.values():
+		var retained_grid := retained_grid_variant as Control
+		if retained_grid != null and is_instance_valid(retained_grid):
+			if retained_grid.get_parent() != null:
+				retained_grid.get_parent().remove_child(retained_grid)
+			retained_grid.queue_free()
+	retained_battle_discard_grids.clear()
 	for retained_button in retained_battle_discard_archive_buttons.values():
 		var archive_button := retained_button as Button
 		if archive_button != null and is_instance_valid(archive_button):
@@ -530,6 +691,32 @@ func retain_battle_discard_archive_buttons_for_render() -> void:
 		if button_parent != null:
 			button_parent.remove_child(archive_button)
 		retained_battle_discard_archive_buttons[seat] = archive_button
+
+
+func retain_battle_discard_grids_for_render() -> void:
+	if mode != "offline" and mode != "online_game":
+		return
+	if root_layer == null or not is_instance_valid(root_layer):
+		return
+	for seat in range(4):
+		var grid := root_layer.find_child("DiscardGrid_%d" % seat, true, false) as Control
+		if grid == null or not is_instance_valid(grid) or grid.is_queued_for_deletion():
+			continue
+		var grid_parent := grid.get_parent()
+		if grid_parent == null:
+			continue
+		grid_parent.remove_child(grid)
+		retained_battle_discard_grids[seat] = grid
+
+
+func release_unused_discard_grids() -> void:
+	for retained_grid_variant in retained_battle_discard_grids.values():
+		var retained_grid := retained_grid_variant as Control
+		if retained_grid != null and is_instance_valid(retained_grid):
+			if retained_grid.get_parent() != null:
+				retained_grid.get_parent().remove_child(retained_grid)
+			retained_grid.queue_free()
+	retained_battle_discard_grids.clear()
 
 
 func retain_battle_discard_foreground_for_render() -> void:
@@ -739,7 +926,17 @@ func draw_turn_tile_or_finish(seat: int, announce: bool = true, source: String =
 	return drawn
 
 func sort_hand(hand: Array) -> void:
-	hand.sort_custom(func(a, b): return tile_sort_index(str(a)) < tile_sort_index(str(b)))
+	var entries: Array = []
+	for index in range(hand.size()):
+		entries.append({"tile": hand[index], "order": tile_sort_index(str(hand[index])), "source_index": index})
+	entries.sort_custom(func(a, b):
+		var order_a := int(a.get("order", 999))
+		var order_b := int(b.get("order", 999))
+		return order_a < order_b if order_a != order_b else int(a.get("source_index", 0)) < int(b.get("source_index", 0))
+	)
+	hand.clear()
+	for entry in entries:
+		hand.append(entry.get("tile", ""))
 
 func sort_player_hand(seat: int) -> void:
 	if seat < 0 or seat >= players.size():
@@ -752,12 +949,11 @@ func sort_player_hand(seat: int) -> void:
 			serials.append(-1)
 	var entries: Array = []
 	for i in range(hand.size()):
-		entries.append({"tile": str(hand[i]), "serial": int(serials[i])})
+		var tile := str(hand[i])
+		entries.append({"tile": tile, "serial": int(serials[i]), "order": tile_sort_index(tile)})
 	entries.sort_custom(func(a, b):
-		var tile_a := str(a.get("tile", ""))
-		var tile_b := str(b.get("tile", ""))
-		var order_a := tile_sort_index(tile_a)
-		var order_b := tile_sort_index(tile_b)
+		var order_a := int(a.get("order", 999))
+		var order_b := int(b.get("order", 999))
 		if order_a == order_b:
 			return int(a.get("serial", -1)) < int(b.get("serial", -1))
 		return order_a < order_b
@@ -789,7 +985,10 @@ func render_game(state_changed: bool = false) -> void:
 	retain_battle_hand_tray_for_render()
 	retain_battle_center_for_render()
 	retain_battle_atmosphere_for_render()
+	retain_battle_seats_for_render()
+	retain_battle_meld_lanes_for_render()
 	retain_battle_discard_archive_buttons_for_render()
+	retain_battle_discard_grids_for_render()
 	retain_battle_discard_foreground_for_render()
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
@@ -2758,6 +2957,7 @@ func is_valid_offline_discard_turn(seat: int) -> bool:
 		and not offline_turn_needs_draw
 
 func is_valid_offline_discard(seat: int, tile: String) -> bool:
+	tile = normalize_tile_code(tile)
 	if not is_valid_offline_discard_turn(seat) or tile == "":
 		return false
 	if is_claim_discard_banned(seat, tile):
@@ -2908,6 +3108,9 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> bool:
 	tile = normalize_tile_code(tile)
 	claim = claim.strip_edges().to_lower()
+	return _is_valid_offline_claim_normalized(seat, from_seat, tile, claim, chi_choice)
+
+func _is_valid_offline_claim_normalized(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> bool:
 	if mode != "offline" or seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or tile == "":
 		return false
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
@@ -2930,13 +3133,25 @@ func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: Stri
 	var discards: Array = players[from_seat]["discards"]
 	if discards.is_empty() or str(discards.back()) != tile:
 		return false
-	var hand_counts = tile_counts(players[seat]["hand"])
-	var options = get_claim_options(seat, from_seat, tile, hand_counts)
+	var hand_counts := tile_counts(players[seat]["hand"])
+	var options: Array = []
+	if can_ron_for_seat_from_counts(seat, hand_counts, tile):
+		options.append("hu")
+	var held_count := tile_count_from_counts(tile, hand_counts)
+	if held_count >= 3:
+		options.append("gang")
+	if held_count >= 2:
+		options.append("peng")
+	var chi_choices: Array = []
+	if rule_allows_chi() and seat == (from_seat + 1) % 4:
+		chi_choices = get_chi_choices_from_counts(hand_counts, tile)
+		if not chi_choices.is_empty():
+			options.append("chi")
 	if not options.has(claim):
 		return false
 	if claim != "chi" or chi_choice.is_empty():
 		return true
-	for option in get_chi_choices_from_counts(hand_counts, tile):
+	for option in chi_choices:
 		if typeof(option) != TYPE_DICTIONARY:
 			continue
 		if same_tile_list(option.get("meld", []), chi_choice.get("meld", [])) and same_tile_list(option.get("needed", []), chi_choice.get("needed", [])):
@@ -2946,7 +3161,7 @@ func is_valid_offline_claim(seat: int, from_seat: int, tile: String, claim: Stri
 func apply_offline_claim(seat: int, from_seat: int, tile: String, claim: String, chi_choice: Dictionary = {}) -> void:
 	tile = normalize_tile_code(tile)
 	claim = claim.strip_edges().to_lower()
-	if not is_valid_offline_claim(seat, from_seat, tile, claim, chi_choice):
+	if not _is_valid_offline_claim_normalized(seat, from_seat, tile, claim, chi_choice):
 		return
 	if claim == "hu":
 		finish_offline_round(seat, tile, false, from_seat)
@@ -3039,15 +3254,21 @@ func is_valid_offline_self_gang_turn(seat: int) -> bool:
 
 func is_valid_offline_concealed_gang(seat: int, tile: String) -> bool:
 	tile = normalize_tile_code(tile)
+	return _is_valid_offline_concealed_gang_normalized(seat, tile)
+
+func _is_valid_offline_concealed_gang_normalized(seat: int, tile: String) -> bool:
 	return is_valid_offline_self_gang_turn(seat) and tile != "" and count_tile(players[seat].get("hand", []), tile) >= 4
 
 func is_valid_offline_added_gang(seat: int, tile: String) -> bool:
 	tile = normalize_tile_code(tile)
+	return _is_valid_offline_added_gang_normalized(seat, tile)
+
+func _is_valid_offline_added_gang_normalized(seat: int, tile: String) -> bool:
 	return is_valid_offline_self_gang_turn(seat) and can_added_gang(seat, tile)
 
 func perform_concealed_gang(seat: int, tile: String) -> bool:
 	tile = normalize_tile_code(tile)
-	if not is_valid_offline_concealed_gang(seat, tile):
+	if not _is_valid_offline_concealed_gang_normalized(seat, tile):
 		return false
 	var hand: Array = players[seat]["hand"]
 	if not remove_tiles(hand, tile, 4):
@@ -3067,7 +3288,7 @@ func perform_concealed_gang(seat: int, tile: String) -> bool:
 
 func perform_added_gang(seat: int, tile: String) -> bool:
 	tile = normalize_tile_code(tile)
-	if not is_valid_offline_added_gang(seat, tile):
+	if not _is_valid_offline_added_gang_normalized(seat, tile):
 		return false
 	if begin_rob_gang_resolution(seat, tile):
 		return true
@@ -3523,21 +3744,21 @@ func claim_discard_ban_tiles(claim: String, tile: String, meld: Array = []) -> A
 		bans.append(tile)
 	if claim != "chi":
 		return bans
-	var claimed_index = tile_index(tile)
+	var claimed_index := tile_index_normalized(tile)
 	if claimed_index < 0 or claimed_index >= 27:
 		return bans
 	var claimed_rank = claimed_index % 9
 	var suit_start = claimed_index - claimed_rank
 	var meld_tiles: Array = []
 	for item in meld:
-		var code = str(item)
+		var code := normalize_tile_code(str(item))
 		if code != "" and TILE_CODES.has(code):
 			meld_tiles.append(code)
 	if meld_tiles.size() != 3:
 		return bans
 	var ranks: Array = []
 	for code in meld_tiles:
-		var index = tile_index(code)
+		var index := tile_index_normalized(code)
 		if index < 0 or index >= 27 or (index - (index % 9)) != suit_start:
 			return bans
 		ranks.append(index % 9)
@@ -3665,7 +3886,7 @@ func is_discard_furiten(seat: int, tile: String) -> bool:
 	# A completed self-draw hand holds fourteen tiles, so adding the drawn tile
 	# again is not a structural win. For UI/AI state inspection, reconstruct the
 	# pre-draw thirteen-tile base by removing that tile and retain its furiten flag.
-	var index = tile_index(tile)
+	var index := tile_index_normalized(normalize_tile_code(tile))
 	if index < 0 or index >= hand_counts.size() or int(hand_counts[index]) <= 0:
 		return false
 	var pre_draw_counts = hand_counts.duplicate()
@@ -3682,21 +3903,28 @@ func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_cou
 	if seat < 0 or seat >= players.size() or hand_counts.size() != TILE_CODES.size():
 		return false
 	var discards: Array = players[seat].get("discards", [])
+	var cache_key := "%d|%d|%s|%s" % [ai_state_revision, seat, counts_compact_key(hand_counts), tile_array_key(discards)]
+	if cache_key == offline_furiten_cache_key:
+		return offline_furiten_cache_value
 	var seen := {}
 	var hand_tile_count = hand_tile_count_override if hand_tile_count_override >= 0 else players[seat].get("hand", []).size()
 	var open_melds = players[seat].get("melds", []).size()
 	for item in discards:
-		var discarded_tile = str(item)
+		var discarded_tile := normalize_tile_code(str(item))
 		if seen.has(discarded_tile):
 			continue
 		seen[discarded_tile] = true
-		var index = tile_index(discarded_tile)
+		var index := tile_index_normalized(discarded_tile)
 		if index < 0 or index >= hand_counts.size():
 			continue
 		var candidate_counts = hand_counts.duplicate()
 		candidate_counts[index] = int(candidate_counts[index]) + 1
 		if is_complete_hand_from_counts(candidate_counts, hand_tile_count + 1, open_melds):
+			offline_furiten_cache_key = cache_key
+			offline_furiten_cache_value = true
 			return true
+	offline_furiten_cache_key = cache_key
+	offline_furiten_cache_value = false
 	return false
 
 
@@ -3726,7 +3954,7 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 	var counts = hand_counts
 	var tile_count = players[seat]["hand"].size()
 	if extra_tile != "":
-		var index = tile_index(extra_tile)
+		var index := tile_index_normalized(extra_tile)
 		if index < 0 or index >= counts.size():
 			return false
 		counts = hand_counts.duplicate()
@@ -3736,6 +3964,8 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 		return false
 	if not is_complete_hand_from_counts(counts, tile_count, players[seat]["melds"].size()):
 		return false
+	if rule_min_fan() <= 1:
+		return true
 	return rule_minimum_met_for_tiles(seat, tiles_from_counts(counts), false)
 
 func discard_report_for_tile(tile: String, hand_index: int = -1) -> Dictionary:
@@ -4097,7 +4327,6 @@ func best_chi_choice(hand: Array, tile: String) -> Dictionary:
 	return best_chi_choice_from_counts(tile_counts(hand), normalize_tile_code(tile))
 
 func best_chi_choice_from_counts(hand_counts: Array, tile: String) -> Dictionary:
-	tile = normalize_tile_code(tile)
 	var choices = get_chi_choices_from_counts(hand_counts, tile)
 	var best: Dictionary = {}
 	var best_score = -100000.0
@@ -4114,12 +4343,12 @@ func best_chi_choice_from_counts(hand_counts: Array, tile: String) -> Dictionary
 	return best
 
 func get_chi_choices(hand: Array, tile: String) -> Array:
-	return get_chi_choices_from_counts(tile_counts(hand), normalize_tile_code(tile))
+	return get_chi_choices_from_counts(tile_counts(hand), tile)
 
 func get_chi_choices_from_counts(hand_counts: Array, tile: String) -> Array:
 	var choices: Array = []
 	tile = normalize_tile_code(tile)
-	var index = tile_index(tile)
+	var index = tile_index_normalized(tile)
 	if index < 0 or index >= 27 or hand_counts.is_empty():
 		return choices
 	var rank = index % 9

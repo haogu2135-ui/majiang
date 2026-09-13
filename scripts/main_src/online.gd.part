@@ -287,8 +287,13 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 		online_last_snapshot_fingerprint = ""
 		online_last_room_snapshot_fingerprint = ""
 		online_seen_message_ids.clear()
+		online_seen_message_id_order.clear()
+		online_seen_message_id_order_head = 0
 		online_seen_voice_sequences.clear()
 		online_seen_voice_sequence_order.clear()
+		online_seen_voice_sequence_order_head = 0
+		online_hand_identity_index.clear()
+		online_hand_identity_index_token = -1
 	else:
 		clear_online_room_snapshot()
 	if should_show_lobby:
@@ -337,8 +342,13 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_room_revision = -1
 	online_game_revision = -1
 	online_seen_message_ids.clear()
+	online_seen_message_id_order.clear()
+	online_seen_message_id_order_head = 0
 	online_seen_voice_sequences.clear()
 	online_seen_voice_sequence_order.clear()
+	online_seen_voice_sequence_order_head = 0
+	online_hand_identity_index.clear()
+	online_hand_identity_index_token = -1
 	online_last_chat_sent_msec = 0
 	online_next_reconnect_msec = 0
 	online_last_snapshot_fingerprint = ""
@@ -405,13 +415,21 @@ func online_message_protocol_version(data: Dictionary) -> int:
 
 func online_message_revision(data: Dictionary, kind: String) -> int:
 	var source = data
+	var has_nested_source := false
 	if kind == "roomState" and typeof(data.get("room", null)) == TYPE_DICTIONARY:
 		source = data.get("room", data)
+		has_nested_source = true
 	elif kind == "gameState" and typeof(data.get("game", null)) == TYPE_DICTIONARY:
 		source = data.get("game", data)
+		has_nested_source = true
 	if typeof(source) != TYPE_DICTIONARY:
 		source = data
-	var value = first_present(source, ["revision", "stateVersion", "state_version", "sequence", "seq"], first_present(data, ["revision", "stateVersion", "state_version", "sequence", "seq"], -1))
+	var revision_keys := ["revision", "stateVersion", "state_version", "sequence", "seq"]
+	var value = first_present(source, revision_keys, null)
+	if value == null and has_nested_source:
+		value = first_present(data, revision_keys, -1)
+	elif value == null:
+		value = -1
 	return online_integer_value(value)
 
 func online_message_identity(data: Dictionary) -> String:
@@ -438,13 +456,45 @@ func register_online_message_rejection(feedback: String = "") -> void:
 func remember_online_message_identity(identity: String) -> bool:
 	if identity == "":
 		return true
+	if online_seen_message_ids.is_empty() and not online_seen_message_id_order.is_empty():
+		online_seen_message_id_order.clear()
+		online_seen_message_id_order_head = 0
 	if online_seen_message_ids.has(identity):
 		return false
 	online_seen_message_ids[identity] = true
+	online_seen_message_id_order.append(identity)
 	while online_seen_message_ids.size() > ONLINE_SEEN_EVENT_LIMIT:
-		var oldest_key = online_seen_message_ids.keys()[0]
+		if online_seen_message_id_order_head >= online_seen_message_id_order.size():
+			online_seen_message_id_order.clear()
+			online_seen_message_id_order_head = 0
+			break
+		var oldest_key := online_seen_message_id_order[online_seen_message_id_order_head]
+		online_seen_message_id_order_head += 1
 		online_seen_message_ids.erase(oldest_key)
+	if online_seen_message_id_order_head > 64 and online_seen_message_id_order_head * 2 >= online_seen_message_id_order.size():
+		online_seen_message_id_order = online_seen_message_id_order.slice(online_seen_message_id_order_head)
+		online_seen_message_id_order_head = 0
 	return true
+
+func remember_online_voice_sequence(identity: String) -> void:
+	if identity == "":
+		return
+	if online_seen_voice_sequences.is_empty() and not online_seen_voice_sequence_order.is_empty():
+		online_seen_voice_sequence_order.clear()
+		online_seen_voice_sequence_order_head = 0
+	online_seen_voice_sequences[identity] = true
+	online_seen_voice_sequence_order.append(identity)
+	while online_seen_voice_sequences.size() > ONLINE_SEEN_EVENT_LIMIT:
+		if online_seen_voice_sequence_order_head >= online_seen_voice_sequence_order.size():
+			online_seen_voice_sequence_order.clear()
+			online_seen_voice_sequence_order_head = 0
+			break
+		var oldest_key := online_seen_voice_sequence_order[online_seen_voice_sequence_order_head]
+		online_seen_voice_sequence_order_head += 1
+		online_seen_voice_sequences.erase(oldest_key)
+	if online_seen_voice_sequence_order_head > 64 and online_seen_voice_sequence_order_head * 2 >= online_seen_voice_sequence_order.size():
+		online_seen_voice_sequence_order = online_seen_voice_sequence_order.slice(online_seen_voice_sequence_order_head)
+		online_seen_voice_sequence_order_head = 0
 
 func accept_online_message(data: Dictionary, kind: String) -> bool:
 	if not online_message_session_matches(data):
@@ -483,8 +533,16 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 				bool(first_present(item, ["ready"], false)),
 			])
 		stable.append(players_snapshot)
-		var logs_snapshot: Array = snapshot.get("logs", []) if typeof(snapshot.get("logs", [])) == TYPE_ARRAY else []
-		stable.append(logs_snapshot.slice(maxi(0, logs_snapshot.size() - ONLINE_LOG_HISTORY_LIMIT)))
+		var logs_value = snapshot.get("logs", [])
+		if typeof(logs_value) == TYPE_ARRAY:
+			var logs_snapshot: Array = logs_value
+			var log_start := maxi(0, logs_snapshot.size() - ONLINE_LOG_HISTORY_LIMIT)
+			var retained_logs: Array = []
+			for log_index in range(log_start, logs_snapshot.size()):
+				retained_logs.append(logs_snapshot[log_index])
+			stable.append(retained_logs)
+		else:
+			stable.append([])
 	else:
 		stable.append(str(snapshot.get("roomCode", "")))
 		stable.append(int(snapshot.get("revision", snapshot.get("stateVersion", -1))))
@@ -567,7 +625,7 @@ func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool
 
 
 func online_log_entry_text(value) -> String:
-	var raw := str(first_present(value, ["text", "message", "content"], "")) if typeof(value) == TYPE_DICTIONARY else str(value)
+	var raw := str(first_present(value, ONLINE_LOG_TEXT_KEYS, "")) if typeof(value) == TYPE_DICTIONARY else str(value)
 	return raw.strip_edges().left(ONLINE_LOG_ENTRY_MAX_LENGTH)
 
 
@@ -678,7 +736,7 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 			return "同种牌数量超过四张。"
 	var last_tile := str(game.get("lastDiscard", ""))
 	var last_seat := int(game.get("lastDiscardSeat", -1))
-	if last_tile != "" and (not allowed_codes.has(normalize_tile_code(last_tile)) or last_seat < 0 or last_seat >= 4):
+	if last_tile != "" and (not allowed_codes.has(last_tile) or last_seat < 0 or last_seat >= 4):
 		return "最近弃牌数据异常。"
 	if str(game.get("phase", "")) == "pendingClaim":
 		var pending_value = game.get("pending", null)
@@ -704,7 +762,7 @@ func online_action_validation_error(payload: Dictionary) -> String:
 	var action_type := str(payload.get("type", "")).strip_edges()
 	if action_type == "":
 		return "缺少操作类型。"
-	if not ["createRoom", "joinRoom", "startGame", "discard", "claim", "chat", "voiceState", "voiceMessage"].has(action_type):
+	if not ONLINE_ACTION_TYPE_KEYS.has(action_type):
 		return "不支持的联机操作。"
 	if mode == "online_game" and online_game_disconnected() and action_type != "joinRoom":
 		return "牌桌已断线，请先重连。"
@@ -733,7 +791,7 @@ func online_action_validation_error(payload: Dictionary) -> String:
 				return "这张牌的手牌位置已变化，请重新选择。"
 	if action_type == "claim":
 		var claim := str(payload.get("claim", "")).strip_edges().to_lower()
-		if not ["chi", "peng", "gang", "hu", "pass"].has(claim):
+		if not ONLINE_CLAIM_ACTION_KEYS.has(claim):
 			return "无效的响应动作。"
 		if mode != "online_game":
 			return "请先进入联机牌局。"
@@ -799,8 +857,9 @@ func handle_online_log(data: Dictionary) -> void:
 	var logs: Array = online_room.get("logs", [])
 	var previous_total := maxi(online_log_total_count, logs.size())
 	logs.append(message)
-	while logs.size() > ONLINE_LOG_HISTORY_LIMIT:
-		logs.remove_at(0)
+	if logs.size() > ONLINE_LOG_HISTORY_LIMIT:
+		# Trim a burst in one operation instead of shifting the front repeatedly.
+		logs = logs.slice(logs.size() - ONLINE_LOG_HISTORY_LIMIT)
 	online_room["logs"] = logs
 	online_log_total_count = previous_total + 1
 	online_log_revision += 1
@@ -880,7 +939,7 @@ func handle_online_message(line: String) -> void:
 		handle_online_log(data)
 	elif kind == "roomState":
 		var room_value = data.get("room", data)
-		var next_room: Dictionary = (room_value as Dictionary).duplicate(true) if typeof(room_value) == TYPE_DICTIONARY else {}
+		var next_room: Dictionary = (room_value as Dictionary).duplicate(false) if typeof(room_value) == TYPE_DICTIONARY else {}
 		var room_fingerprint := online_snapshot_fingerprint("roomState", next_room)
 		if room_fingerprint != "" and room_fingerprint == online_last_room_snapshot_fingerprint:
 			return
@@ -892,7 +951,7 @@ func handle_online_message(line: String) -> void:
 		var previous_room_code := bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var next_room_code := bounded_online_input(str(first_present(next_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var previous_logs_value = online_room.get("logs", [])
-		var previous_logs: Array = (previous_logs_value as Array).duplicate(true) if typeof(previous_logs_value) == TYPE_ARRAY else []
+		var previous_logs: Array = previous_logs_value as Array if typeof(previous_logs_value) == TYPE_ARRAY else []
 		var previous_log_total := online_log_total_count
 		if previous_room_code != "" and next_room_code != "" and previous_room_code != next_room_code:
 			online_log_seen_count = 0
@@ -1200,10 +1259,25 @@ func online_hand_identity_at(index: int, tile: String = "") -> String:
 			occurrence += 1
 	return "client-%d-%s-%d" % [online_session_id, normalized_tile, occurrence]
 
+func ensure_online_hand_identity_index() -> void:
+	if online_hand_identity_index_token == online_game_snapshot_token:
+		return
+	online_hand_identity_index.clear()
+	var identities: Array = online_game.get("handIdentities", [])
+	for index in range(identities.size()):
+		var identity := str(identities[index]).strip_edges()
+		if identity != "" and not online_hand_identity_index.has(identity):
+			online_hand_identity_index[identity] = index
+	online_hand_identity_index_token = online_game_snapshot_token
+
 func online_hand_index_for_identity(identity: String, tile: String) -> int:
 	var hand: Array = online_game.get("hand", [])
 	var identities: Array = online_game.get("handIdentities", [])
 	var normalized_tile := normalize_tile_code(tile)
+	ensure_online_hand_identity_index()
+	var indexed := int(online_hand_identity_index.get(identity, -1))
+	if indexed >= 0 and indexed < hand.size() and normalize_tile_code(str(hand[indexed])) == normalized_tile:
+		return indexed
 	for i in range(mini(hand.size(), identities.size())):
 		if str(identities[i]).strip_edges() == identity and normalize_tile_code(str(hand[i])) == normalized_tile:
 			return i
@@ -1371,7 +1445,7 @@ func online_waiting_response_is_slow() -> bool:
 	return online_waiting_for_server and online_last_sent_msec > 0 and Time.get_ticks_msec() - online_last_sent_msec >= ONLINE_SLOW_NOTICE_MSEC
 
 func online_server_message_text(data: Dictionary, fallback: String) -> String:
-	var value = first_present(data, ["message", "text", "detail", "reason", "error"], fallback)
+	var value = first_present(data, ONLINE_MESSAGE_TEXT_KEYS, fallback)
 	var text = str(value).strip_edges()
 	return text if text != "" else fallback
 
@@ -1395,9 +1469,12 @@ func send_online(payload: Dictionary, payload_is_owned: bool = false) -> bool:
 		outbound["roomRevision"] = online_room_revision
 	if online_game_revision >= 0:
 		outbound["gameRevision"] = online_game_revision
-	for context_key in ["gameId", "roundId"]:
-		if online_game.has(context_key):
-			outbound[context_key] = online_game.get(context_key)
+	# These are the only two optional context fields; avoid a temporary array per
+	# outbound action.
+	if online_game.has("gameId"):
+		outbound["gameId"] = online_game.get("gameId")
+	if online_game.has("roundId"):
+		outbound["roundId"] = online_game.get("roundId")
 	var text = JSON.stringify(outbound) + "\n"
 	var write_error := tcp.put_data(text.to_utf8_buffer())
 	if write_error != OK:
@@ -1405,8 +1482,8 @@ func send_online(payload: Dictionary, payload_is_owned: bool = false) -> bool:
 		return false
 	return true
 
-func send_online_action(payload: Dictionary, label: String = "") -> bool:
-	var normalized_payload := payload.duplicate(true)
+func send_online_action(payload: Dictionary, label: String = "", payload_is_owned: bool = false) -> bool:
+	var normalized_payload: Dictionary = payload if payload_is_owned else payload.duplicate(true)
 	var normalized_type := str(normalized_payload.get("type", "")).strip_edges()
 	if normalized_type == "discard":
 		normalized_payload["tile"] = normalize_tile_code(str(normalized_payload.get("tile", "")))
@@ -1489,11 +1566,12 @@ func retry_online_last_action() -> void:
 	if not online_retry_available or online_last_sent_payload.is_empty():
 		set_online_feedback("没有可重试的操作。", false)
 		return
-	var payload := online_last_sent_payload.duplicate(true)
+	# The saved payload is controller-owned and this method adds a fresh request id.
+	var payload := online_last_sent_payload
 	var label: String = online_last_sent_action
 	online_waiting_for_server = false
 	online_retry_available = false
-	send_online_action(payload, label)
+	send_online_action(payload, label, true)
 
 
 func cancel_online_pending_action() -> void:
