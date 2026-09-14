@@ -203,7 +203,10 @@ func draw_achievements_completion_convergence_art(parent: Control) -> Control:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.430, 0.118, 0.935, 0.300))
 	parent.add_child(art)
-	var compact_completion_lane := effective_viewport_size().x <= 1280.0 or effective_viewport_size().y <= 560.0
+	var completion_viewport_size := effective_viewport_size()
+	art.set_meta("viewport_snapshot", completion_viewport_size)
+	art.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var compact_completion_lane := completion_viewport_size.x <= 1280.0 or completion_viewport_size.y <= 560.0
 	var label = make_label(art, "收集进度 %d%%" % int(round(ratio * 100.0)), 13, Color(0.88, 0.84, 0.64, 0.86), true)
 	label.name = "AchievementsCompletionLabel"
 	label.tooltip_text = label.text
@@ -602,17 +605,17 @@ func draw_action_button_pass_route(button: Button, color: Color) -> Control:
 	# 保留为空壳；过按钮装饰碎块已并入 action_button_panel 插画底板。
 	return null
 
-func draw_action_dock(parent: Control, disconnected: bool = false) -> Array[Button]:
+func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1) -> Array[Button]:
 	# r214: bulk GPT chrome sweep
 	var action_buttons: Array[Button] = action_bar_buttons()
 	var count = action_bar_button_count(action_buttons)
 	if count <= 0:
 		release_retained_battle_action_chrome()
 		return action_buttons
-	var pending_claim_mode = has_pending_claim_window()
-	var danger_confirm_mode = mode == "offline" and has_pending_danger_discard()
+	var pending_claim_mode := bool(pending_claim_snapshot) if pending_claim_snapshot >= 0 else has_pending_claim_window()
+	var danger_confirm_mode := mode == "offline" and (bool(pending_danger_snapshot) if pending_danger_snapshot >= 0 else has_pending_danger_discard())
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
-	var action_chrome_signature := battle_action_chrome_identity_signature(action_buttons)
+	var action_chrome_signature := battle_action_chrome_identity_signature(action_buttons, int(pending_claim_mode), int(danger_confirm_mode))
 	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
 	var retained_intent := retained_battle_action_intent
 	retained_battle_action_intent = null
@@ -671,6 +674,9 @@ func draw_action_dock(parent: Control, disconnected: bool = false) -> Array[Butt
 	dock.set_meta("hit_rect_stable", true)
 	dock.set_meta("layout_rect", dock_rect)
 	dock.set_meta("layout_role", "action_buttons")
+	dock.set_meta("pending_claim_window_snapshot", pending_claim_mode)
+	dock.set_meta("pending_danger_discard_snapshot", danger_confirm_mode)
+	dock.set_meta("action_state_snapshot_policy", "one_action_state_snapshot_per_dock")
 	set_ui_full_text(dock, "行动区：当前可执行操作会显示在下方按钮；焦点可用方向键移动", "牌桌行动区")
 	mark_ui_optimization(dock, "F-478")
 	var action_available_width := maxf(1.0, safe_content_pixel_size().x * maxf(0.001, action_bar_layout_rect().size.x - action_bar_layout_rect().position.x))
@@ -1019,7 +1025,9 @@ func draw_actions(parent: Control) -> void:
 		finalize_action_bar_layout(unknown_phase_action_buttons)
 		call_deferred("focus_online_recovery_if_current", root_layer.get_instance_id(), ui_page_generation, "OnlineUnknownPhaseRetryButton")
 		return
-	if has_pending_claim_window():
+	var pending_claim_window_snapshot := has_pending_claim_window()
+	var pending_danger_discard_snapshot := mode == "offline" and has_pending_danger_discard()
+	if pending_claim_window_snapshot:
 		var pending_root := VBoxContainer.new()
 		pending_root.name = "PendingClaimActionStack"
 		pending_root.set_meta("snapshot_token", int(pending_claim_display_model().get("snapshot_token", 0)))
@@ -1078,7 +1086,7 @@ func draw_actions(parent: Control) -> void:
 	action_bar.set_meta("minimum_clearance_px", lane_contract.get("minimum_clearance_px", 6.0))
 	mark_ui_optimization(action_bar, "F-031")
 	mark_ui_optimization(action_bar, "F-033")
-	if has_pending_claim_window():
+	if pending_claim_window_snapshot:
 		action_bar.set_meta("response_lane", "primary_and_secondary")
 		action_bar.set_meta("response_summary", pending_claim_focus_text())
 		action_bar.set_meta("response_timer_slot", "root_above_action_dock")
@@ -1087,6 +1095,8 @@ func draw_actions(parent: Control) -> void:
 		mark_ui_optimization(action_bar, "F-035")
 		mark_ui_optimization(action_bar, "F-100")
 		mark_ui_optimization(action_bar, "F-101")
+	action_bar.set_meta("pending_claim_window_snapshot", pending_claim_window_snapshot)
+	action_bar.set_meta("pending_danger_discard_snapshot", pending_danger_discard_snapshot)
 	var summary_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	action_bar.z_index = 31 if summary_action_mode else 18
 	if summary_action_mode:
@@ -1139,7 +1149,7 @@ func draw_actions(parent: Control) -> void:
 			summary_menu_button.z_index = 2
 			action_bar.add_child(summary_menu_button)
 			prepare_ended_action_overflow(parent)
-			var ended_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+			var ended_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
 			finalize_action_bar_layout(ended_action_buttons)
 			return
 		if offline_phase == "pending_claim":
@@ -1175,10 +1185,10 @@ func draw_actions(parent: Control) -> void:
 				offline_pass_button.set_meta("pending_tail", true)
 				pending_claim_response_tail_lane.add_child(offline_pass_button)
 			draw_pending_claim_illustration(parent)
-			var pending_claim_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+			var pending_claim_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
 			finalize_action_bar_layout(pending_claim_action_buttons)
 			return
-		if player_ai_assist_enabled() and has_pending_danger_discard():
+		if player_ai_assist_enabled() and pending_danger_discard_snapshot:
 			var selected_danger_tile = pending_danger_discard_tile
 			var selected_danger_label := tile_label(selected_danger_tile)
 			var danger_alternatives = safe_discard_alternative_reports(selected_danger_tile, 2)
@@ -1231,7 +1241,7 @@ func draw_actions(parent: Control) -> void:
 			action_bar.set_meta("danger_shortcut_state", {"confirm": "Enter", "cancel": "Esc"})
 			action_bar.set_meta("danger_action_order", "alternatives_then_cancel_then_confirm")
 			action_bar.set_meta("danger_reading_sequence", ["tile", "risk", "alternatives", "cancel", "confirm"])
-			var danger_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+			var danger_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
 			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
 			finalize_action_bar_layout(danger_action_buttons)
 			return
@@ -1249,7 +1259,7 @@ func draw_actions(parent: Control) -> void:
 			action_bar.add_child(make_action_button("补杠", Color(0.66, 0.58, 0.92), func() -> void:
 				human_added_gang(added_gang_tile)
 			))
-		if player_ai_assist_enabled() and can_self_discard() and not has_pending_danger_discard():
+		if player_ai_assist_enabled() and can_self_discard() and not pending_danger_discard_snapshot:
 			var report_snapshot := ai_discard_reports_for_render()
 			var recommended_report = recommended_discard_report(report_snapshot)
 			var recommended_tile = str(recommended_report.get("tile", ""))
@@ -1361,7 +1371,7 @@ func draw_actions(parent: Control) -> void:
 			)
 			voice.name = "VoiceActionButton"
 			draw_voice_button_art(voice, voice_enabled, voice_peak)
-			if has_pending_claim_window():
+			if pending_claim_window_snapshot:
 				voice.set_meta("pending_tail", true)
 				voice.set_meta("pending_lane", "voice")
 				pending_claim_voice_lane.add_child(voice)
@@ -1388,7 +1398,7 @@ func draw_actions(parent: Control) -> void:
 		else:
 			action_bar.add_child(retry_sync_button)
 	prepare_ended_action_overflow(parent)
-	var action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+	var action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
 	finalize_action_bar_layout(action_buttons)
 	if mode == "offline" and battle_action_bar_can_retain():
 		var action_bar_state_signature := battle_action_bar_state_signature()
@@ -2280,6 +2290,9 @@ func draw_center(parent: Control) -> void:
 	var center_wall_count := get_wall_count()
 	var center_wall_total := display_wall_total()
 	var center_viewport_size := effective_viewport_size()
+	var center_content_size := safe_content_pixel_size()
+	center.set_meta("center_draw_content_size_snapshot", center_content_size)
+	center.set_meta("center_draw_content_size_snapshot_policy", "one_content_size_snapshot_per_center_draw")
 	var compact_center := center_viewport_size.x <= 960.0 or center_viewport_size.y < 720.0
 	var center_wall_model := center_wall_view_model(center_wall_count, center_wall_total, compact_center)
 	var center_wall_low := bool(center_wall_model.get("low", false))
@@ -2312,7 +2325,7 @@ func draw_center(parent: Control) -> void:
 		last_label.set_meta("tile_code", last)
 		last_label.set_meta("stable_two_line_summary", true)
 		set_ui_full_text(last_label, last_label_text, str(last_discard_model.get("accessible_text", last_label_text)))
-		fit_label_font_size(last_label, maxf(72.0, safe_content_pixel_size().x * 0.105), 12, 9)
+		fit_label_font_size(last_label, maxf(72.0, center_content_size.x * 0.105), 12, 9)
 		mark_ui_optimization(last_label, "F-041")
 		apply_rect(last_label, rect_full(0.34, 0.510, 0.66, 0.610) if compact_center else CENTER_LAST_LABEL_RECT)
 		draw_center_last_tile_trace(center, last)
@@ -2380,6 +2393,8 @@ func draw_center(parent: Control) -> void:
 		mark_ui_optimization(tile, "F-159")
 
 	# 风位标签
+	center.set_meta("wind_label_content_size_snapshot", center_content_size)
+	center.set_meta("wind_label_content_size_snapshot_policy", "one_content_size_snapshot_per_wind_label_pass")
 	var center_current_seat := get_current_seat()
 	for i in range(4):
 		var wind_color = Color(0.86, 0.72, 0.42, 0.82) if i == center_current_seat else Color(0.72, 0.67, 0.49, 0.80)
@@ -2395,7 +2410,7 @@ func draw_center(parent: Control) -> void:
 			var wind_slot_height: float = center.size.y * CENTER_WIND_RECTS[i].size.y - center.size.y * CENTER_WIND_RECTS[i].position.y
 			var wind_min_height: float = wind.get_combined_minimum_size().y
 			wind.offset_top = -maxf(0.0, wind_min_height - wind_slot_height)
-		fit_label_font_size(wind, maxf(18.0, safe_content_pixel_size().x * CENTER_PANEL_RECT.size.x * CENTER_WIND_RECTS[i].size.x * 0.82), 17, 10)
+		fit_label_font_size(wind, maxf(18.0, center_content_size.x * CENTER_PANEL_RECT.size.x * CENTER_WIND_RECTS[i].size.x * 0.82), 17, 10)
 		wind.set_meta("fit_rect_contract", "center_wind_rect_before_data_lane")
 
 	draw_center_dice_plate(center, center_current_seat)
@@ -9843,7 +9858,10 @@ func draw_center_wind_compass(parent: Control) -> Control:
 	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(compass, rect_full(0.08, 0.08, 0.92, 0.92))
 	parent.add_child(compass)
-	var simple_current = get_current_seat()
+	var center_current_seat := get_current_seat()
+	compass.set_meta("current_seat_snapshot", center_current_seat)
+	compass.set_meta("current_seat_snapshot_policy", "one_current_seat_snapshot_per_draw")
+	var simple_current := center_current_seat
 	var simple_seal_texture = add_illustration_texture(compass, "center_wind_seal", rect_full(0.15, 0.15, 0.85, 0.85), 0.055, true)
 	if simple_seal_texture != null:
 		simple_seal_texture.name = "CenterWindSimpleSealTexture"
@@ -9869,7 +9887,7 @@ func draw_center_wind_compass(parent: Control) -> Control:
 	if center_wind_gpt_texture != null:
 		center_wind_gpt_texture.name = "CenterWindGPTCompassTexture"
 		compass.move_child(center_wind_gpt_texture, min(1, compass.get_child_count() - 1))
-	var current = get_current_seat()
+	var current := center_current_seat
 	var pointer_texture = add_optional_gpt_illustration_texture(compass, "center_wind_pointer", rect_full(0.360, 0.050, 0.640, 0.950), 0.38, true)  # r221
 	if pointer_texture != null:
 		pointer_texture.name = "CenterWindPointerTexture"
@@ -12471,10 +12489,16 @@ func draw_hand(parent: Control) -> void:
 	retained_battle_hand_signature = ""
 	retained_battle_hand_state_signature = ""
 	last_hand_render_state_signature = hand_state_signature
+	var hand_can_self_discard := can_self_discard()
+	var hand_ai_assist_enabled := player_ai_assist_enabled()
+	var hand_has_pending_claim_window := has_pending_claim_window()
+	var hand_has_pending_danger_discard := hand_ai_assist_enabled and has_pending_danger_discard()
 	var hand_viewport_size := effective_viewport_size()
 	var compact_hand_art := hand_viewport_size.y <= 560.0 or hand_viewport_size.x <= 1100.0
 	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.018, 0.026, 0.024, 0.97), "ui_dark_scrim", 0.20)
 	tray.name = "HandTray"
+	tray.set_meta("viewport_snapshot", hand_viewport_size)
+	tray.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	tray.set_meta("bottom_gutter_px", 8.0)
 	tray.set_meta("tile_bottom_clearance_px", 8.0)
 	parent.add_child(tray)
@@ -12523,7 +12547,7 @@ func draw_hand(parent: Control) -> void:
 	var hand_baseline_inset := clampf((hand_content_width - hand_required_width) / (2.0 * hand_content_width), 0.030, 0.440)
 	var tile_baseline = make_gpt_route_rail(rect_full(hand_baseline_inset, 0.805, 1.0 - hand_baseline_inset, 0.900), Color(0.0, 0.0, 0.0, 0.24))
 	tile_baseline.name = "HandTrayTileBaseline"
-	tile_baseline.visible = can_self_discard() or has_pending_claim_window() or has_pending_danger_discard()
+	tile_baseline.visible = hand_can_self_discard or hand_has_pending_claim_window or hand_has_pending_danger_discard
 	tile_baseline.set_meta("baseline_policy", "actual_hand_span_only_idle_hidden")
 	tile_baseline.set_meta("baseline_inset_ratio", hand_baseline_inset)
 	tile_stage.add_child(tile_baseline)
@@ -12533,11 +12557,14 @@ func draw_hand(parent: Control) -> void:
 	# shortcut row was too short at 960x540 and competed with the first tile row.
 	var shortcut_hint_text := hand_shortcut_hint_text()
 	var disconnected_hand_state := mode == "online_game" and online_game_disconnected()
-	var tutorial_hint_visible := show_hand_hint and can_self_discard() and (tutorial_step == TUTORIAL_STEP_NEW or tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_WIN)
+	var tutorial_hint_visible := show_hand_hint and hand_can_self_discard and (tutorial_step == TUTORIAL_STEP_NEW or tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_WIN)
 	var tray_detail_text := hand_tray_text()
-	var tray_text = make_label(tray, hand_tray_visible_text(), 14, Color(0.92, 0.82, 0.56), true)
+	var hand_state_text := hand_tray_state_text()
+	var tray_text = make_label(tray, hand_tray_visible_text(tray_detail_text), 14, Color(0.92, 0.82, 0.56), true)
 	tray_text.name = "HandTrayStatusText"
 	tray_text.clip_text = true
+	tray.set_meta("hand_tray_text_snapshot_policy", "one_status_text_snapshot_per_draw")
+	tray.set_meta("hand_tray_detail_text_snapshot", tray_detail_text)
 	if disconnected_hand_state:
 		tray.set_meta("interaction_state", "read_only")
 		tray.set_meta("disabled_reason", "牌局已断线，手牌只读；请先重连")
@@ -12568,7 +12595,7 @@ func draw_hand(parent: Control) -> void:
 	mark_ui_optimization(tray_text, "F-098")
 	if disconnected_hand_state:
 		mark_ui_optimization(tray_text, "F-056")
-	if has_pending_claim_window() or has_pending_danger_discard() or tutorial_hint_visible:
+	if hand_has_pending_claim_window or hand_has_pending_danger_discard or tutorial_hint_visible:
 		tray_text.visible = false
 	if shortcut_hint_text != "":
 		var shortcut_label = make_label(tray, shortcut_hint_text, commercial_ui_font_size(11, 1), Color(0.68, 0.76, 0.70, 0.88), false)
@@ -12587,18 +12614,26 @@ func draw_hand(parent: Control) -> void:
 	var state_chip = add_optional_gpt_illustration_texture(tray, "ui_hand_tray_state_chip", rect_full(0.783, 0.028, 0.982, 0.157), 0.55, false)
 	if state_chip != null:
 		state_chip.name = "HandTrayStateChip"
-	var hand_state_text := hand_tray_state_text()
-	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_state_text, 12, hand_tray_state_fill(), hand_tray_state_border(), Color(0.92, 0.92, 0.84))
+	var hand_state_fill_snapshot := hand_tray_state_fill(hand_state_text)
+	var hand_state_border_snapshot := hand_tray_state_border(hand_state_text, hand_state_fill_snapshot)
+	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_state_text, 12, hand_state_fill_snapshot, hand_state_border_snapshot, Color(0.92, 0.92, 0.84))
 	state_badge.name = "HandTrayStateBadge"
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	state_badge.tooltip_text = "手牌状态：%s · %s" % [hand_state_text, hand_tray_text()]
-	set_ui_full_text(state_badge, hand_tray_text(), "手牌状态：" + hand_state_text)
+	state_badge.tooltip_text = "手牌状态：%s · %s" % [hand_state_text, tray_detail_text]
+	set_ui_full_text(state_badge, tray_detail_text, "手牌状态：" + hand_state_text)
 	state_badge.set_meta("ui_short_text", hand_state_text)
-	state_badge.set_meta("state_detail", hand_tray_text())
+	state_badge.set_meta("state_detail", tray_detail_text)
+	state_badge.set_meta("state_text_snapshot", hand_state_text)
+	state_badge.set_meta("state_fill_snapshot", hand_state_fill_snapshot)
+	state_badge.set_meta("state_border_snapshot", hand_state_border_snapshot)
 	state_badge.set_meta("status_priority", "prompt_over_idle_state")
+	tray.set_meta("hand_tray_state_snapshot_policy", "one_state_text_and_color_snapshot_per_draw")
+	tray.set_meta("hand_tray_state_text_snapshot", hand_state_text)
+	tray.set_meta("hand_tray_state_fill_snapshot", hand_state_fill_snapshot)
+	tray.set_meta("hand_tray_state_border_snapshot", hand_state_border_snapshot)
 	mark_ui_optimization(state_badge, "F-256")
 	mark_ui_optimization(state_badge, "F-417")
-	if has_pending_claim_window() or tutorial_hint_visible:
+	if hand_has_pending_claim_window or tutorial_hint_visible:
 		state_badge.visible = false
 
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
@@ -12628,7 +12663,7 @@ func draw_hand(parent: Control) -> void:
 		hint_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		hint_label.set_meta("visual_line_budget", 2)
 		hint_label.set_meta("visual_max_lines", 2)
-		configure_wrapped_label(hint_label, maxf(180.0, effective_viewport_size().x * 0.360), 0.0, 2.0)
+		configure_wrapped_label(hint_label, maxf(180.0, hand_viewport_size.x * 0.360), 0.0, 2.0)
 		mark_ui_optimization(hint_panel, "F-416")
 		mark_ui_optimization(hint_label, "F-416")
 		mark_ui_optimization(hint_panel, "F-097")
@@ -12659,22 +12694,22 @@ func draw_hand(parent: Control) -> void:
 		interactive_guide_type = "discard"
 
 	var hand_group_counts_snapshot: Array[int] = hand_group_counts(hand)
-	var suit_flow = draw_hand_tray_suit_flow(tray, hand, false, hand_group_counts_snapshot)
+	var suit_flow = draw_hand_tray_suit_flow(tray, hand, false, hand_group_counts_snapshot, int(hand_has_pending_danger_discard))
 	if suit_flow != null:
 		suit_flow.modulate = Color(1.0, 1.0, 1.0, 0.22 if compact_hand_art else 0.36)
 		suit_flow.set_meta("compact_alpha_policy", "0.22_below_tile_face_contrast")
-	var momentum_art = draw_hand_tray_momentum_art(tray, hand) if not compact_hand_art else null
+	var momentum_art = draw_hand_tray_momentum_art(tray, hand, false, hand_state_text, int(hand_can_self_discard), int(hand_has_pending_danger_discard)) if not compact_hand_art else null
 	if momentum_art != null:
 		momentum_art.visible = not compact_hand_art
 		momentum_art.modulate = Color(1.0, 1.0, 1.0, 0.16)
-	var completion_bus = draw_hand_tray_completion_bus_art(tray, hand, hand_group_counts_snapshot) if not compact_hand_art else null
+	var completion_bus = draw_hand_tray_completion_bus_art(tray, hand, hand_group_counts_snapshot, hand_state_text, int(hand_can_self_discard)) if not compact_hand_art else null
 	if completion_bus != null:
 		completion_bus.visible = not compact_hand_art
 		completion_bus.modulate = Color(1.0, 1.0, 1.0, 0.12)
-	var assist_enabled = player_ai_assist_enabled()
+	var assist_enabled := hand_ai_assist_enabled
 	var suggested_tile = suggest_human_discard() if assist_enabled else ""
 	var hand_reports = discard_report_map_for_hand() if assist_enabled else {}
-	var pending_tile = pending_danger_discard_tile if assist_enabled and has_pending_danger_discard() else ""
+	var pending_tile = pending_danger_discard_tile if assist_enabled and hand_has_pending_danger_discard else ""
 	var suggested_index := discard_report_index_for_tile(hand_reports, suggested_tile) if suggested_tile != "" else -1
 	if suggested_index < 0 or suggested_index >= hand.size() or str(hand[suggested_index]) != suggested_tile:
 		suggested_index = -1
@@ -12711,9 +12746,14 @@ func draw_hand(parent: Control) -> void:
 	hand_box.set_meta("hover_gutter_px", 6.0)
 	hand_box.set_meta("overflow_contract", "native_hit_rect_bounded_visual_gutter_6px")
 	hand_box.set_meta("clip_owner", "HandTrayTileStage_metadata_boundary")
-	hand_box.set_meta("layout_required_width", hand_layout_required_width(hand, hand_layout))
+	hand_box.set_meta("hand_interaction_snapshot_policy", "one_action_state_snapshot_per_draw")
+	hand_box.set_meta("hand_can_self_discard_snapshot", hand_can_self_discard)
+	hand_box.set_meta("hand_pending_claim_window_snapshot", hand_has_pending_claim_window)
+	hand_box.set_meta("hand_pending_danger_discard_snapshot", hand_has_pending_danger_discard)
+	hand_box.set_meta("layout_required_width", hand_required_width)
+	hand_box.set_meta("layout_required_width_policy", "one_required_width_snapshot_per_draw")
 	hand_box.set_meta("layout_content_width", float(hand_layout.get("content_width", 0.0)))
-	hand_box.set_meta("layout_fits_content", hand_layout_fits_content(hand, hand_layout))
+	hand_box.set_meta("layout_fits_content", hand_layout_fits_content(hand, hand_layout, hand_required_width))
 	hand_box.set_meta("group_gap_width", group_gap_width)
 	hand_box.set_meta("group_gap_min_px", HAND_MIN_GROUP_GAP)
 	hand_box.set_meta("drawn_gap_width", drawn_gap_width)
@@ -12721,7 +12761,7 @@ func draw_hand(parent: Control) -> void:
 	hand_box.set_meta("tile_texture_bleed", Vector2.ZERO)
 	hand_box.set_meta("keyboard_navigation", "左右方向键选择，Enter出牌")
 	hand_box.set_meta("focusable_tile_count", hand.size())
-	hand_box.set_meta("interaction_state", "interactive" if can_self_discard() else "read_only")
+	hand_box.set_meta("interaction_state", "interactive" if hand_can_self_discard else "read_only")
 	hand_box.set_meta("focus_restore_route", "hand_source_index")
 	hand_box.set_meta("bottom_gutter_px", 8.0)
 	hand_box.set_meta("tile_sampling_policy", "assets_tiles_2d_native_bounds")
@@ -12757,7 +12797,7 @@ func draw_hand(parent: Control) -> void:
 			hand_box.add_child(make_hand_group_spacer(tile_height, group_gap_width, hand_group_label(tile)))
 		if i == stable_drawn_index and i > 0 and drawn_gap_width > 0.0:
 			hand_box.add_child(make_hand_drawn_spacer(tile_height, drawn_gap_width))
-		var clickable = can_self_discard() and not banned_tiles.has(tile)
+		var clickable := hand_can_self_discard and not banned_tiles.has(tile)
 		var keyboard_selected := clickable and i == hand_keyboard_selection
 		# 新手引导高亮：可点击时添加视觉提示
 		var should_highlight = clickable and (i == suggested_index or i == pending_index)
@@ -12906,15 +12946,16 @@ func draw_hand_progress_wall_sync(parent: Control, accent: Color) -> Control:
 	return sync
 
 
-func draw_hand_tray_action_path(parent: Control, hand: Array) -> Control:
+func draw_hand_tray_action_path(parent: Control, hand: Array, state_snapshot: String = "", active_snapshot: int = -1) -> Control:
 	var path = Control.new()
 	path.name = "HandTrayActionPath"
 	path.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(path, rect_full(0.752, 0.835, 0.985, 0.965))
 	parent.add_child(path)
-	var active = can_self_discard()
+	var active := bool(active_snapshot) if active_snapshot >= 0 else can_self_discard()
 	var responding = mode == "offline" and offline_phase == "pending_claim"
-	var accent = hand_tray_state_fill()
+	var accent = hand_tray_state_fill(state_snapshot)
+	path.set_meta("hand_active_snapshot", active)
 	var base_alpha := 0.34 if active else 0.18
 	if responding:
 		base_alpha = 0.30
@@ -12991,7 +13032,7 @@ func draw_hand_tray_action_path(parent: Control, hand: Array) -> Control:
 	delivery_fill.modulate = Color(1, 1, 1, 0.78)
 	return path
 
-func draw_hand_tray_completion_bus_art(parent: Control, hand: Array, group_counts: Array[int] = []) -> Control:
+func draw_hand_tray_completion_bus_art(parent: Control, hand: Array, group_counts: Array[int] = [], state_snapshot: String = "", active_snapshot: int = -1) -> Control:
 	# r209: GPT chrome conversion
 	var bus = Control.new()
 	bus.name = "HandTrayCompletionBusArt"
@@ -13004,8 +13045,9 @@ func draw_hand_tray_completion_bus_art(parent: Control, hand: Array, group_count
 	bus.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(bus, rect_full(0.275, 0.175, 0.725, 0.330))
 	parent.add_child(bus)
-	var accent = hand_tray_state_fill()
-	var active = can_self_discard()
+	var accent = hand_tray_state_fill(state_snapshot)
+	var active := bool(active_snapshot) if active_snapshot >= 0 else can_self_discard()
+	bus.set_meta("hand_active_snapshot", active)
 	var counts: Array[int] = group_counts if group_counts.size() == 5 else hand_group_counts(hand)
 	var occupied_groups := 0
 	for count in counts:
@@ -13060,7 +13102,7 @@ func draw_hand_tray_completion_bus_art(parent: Control, hand: Array, group_count
 	return bus
 
 
-func draw_hand_tray_momentum_art(parent: Control, hand: Array, force_danger_warning: bool = false) -> Control:
+func draw_hand_tray_momentum_art(parent: Control, hand: Array, force_danger_warning: bool = false, state_snapshot: String = "", active_snapshot: int = -1, danger_snapshot: int = -1) -> Control:
 	# r207: GPT chrome conversion
 	var art = Control.new()
 	art.name = "HandTrayMomentumArt"
@@ -13077,8 +13119,11 @@ func draw_hand_tray_momentum_art(parent: Control, hand: Array, force_danger_warn
 	if hand_texture != null:
 		hand_texture.name = "HandTrayFlowTexture"
 		hand_texture.modulate = Color(1, 1, 1, 0.09)
-	var accent = hand_tray_state_fill()
-	var active = can_self_discard()
+	var accent = hand_tray_state_fill(state_snapshot)
+	var active := bool(active_snapshot) if active_snapshot >= 0 else can_self_discard()
+	var danger_pending := bool(danger_snapshot) if danger_snapshot >= 0 else has_pending_danger_discard()
+	art.set_meta("hand_active_snapshot", active)
+	art.set_meta("hand_danger_snapshot", danger_pending)
 	var count = max(1, hand.size())
 	var visible_pips = min(6, max(3, int(ceil(float(count) / 3.0))))
 	for i in range(visible_pips):
@@ -13131,16 +13176,16 @@ func draw_hand_tray_momentum_art(parent: Control, hand: Array, force_danger_warn
 		draw_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		apply_rect(draw_label, rect_full(0.0, 0.08, 1.0, 0.92))
 		configure_clipped_label(draw_label)
-	if force_danger_warning or has_pending_danger_discard():
+	if force_danger_warning or danger_pending:
 		focus.modulate = Color(1, 1, 1, 0.78)
 		readiness_fill.modulate = Color(1, 1, 1, 0.82)
 	return art
 
 
-func draw_hand_tray_state_art(parent: Control) -> Control:
+func draw_hand_tray_state_art(parent: Control, state_snapshot: String = "") -> Control:
 	# r214: bulk GPT chrome sweep
-	var state = hand_tray_state_text()
-	var accent = hand_tray_state_fill()
+	var state := state_snapshot if state_snapshot != "" else hand_tray_state_text()
+	var accent = hand_tray_state_fill(state)
 	var art = Control.new()
 	art.name = "HandTrayStateArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -13168,7 +13213,7 @@ func draw_hand_tray_state_art(parent: Control) -> Control:
 	return art
 
 
-func draw_hand_tray_suit_flow(parent: Control, hand: Array, force_danger_glow: bool = false, group_counts: Array[int] = []) -> Control:
+func draw_hand_tray_suit_flow(parent: Control, hand: Array, force_danger_glow: bool = false, group_counts: Array[int] = [], danger_snapshot: int = -1) -> Control:
 	# r213: GPT chrome conversion
 	var flow = Control.new()
 	flow.name = "HandTraySuitFlow"
@@ -13181,6 +13226,8 @@ func draw_hand_tray_suit_flow(parent: Control, hand: Array, force_danger_glow: b
 	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(flow, rect_full(0.020, 0.855, 0.235, 0.960))
 	parent.add_child(flow)
+	var danger_pending := bool(danger_snapshot) if danger_snapshot >= 0 else has_pending_danger_discard()
+	flow.set_meta("hand_danger_snapshot", danger_pending)
 	var counts: Array[int] = group_counts if group_counts.size() == 5 else hand_group_counts(hand)
 	var max_count = 1
 	for value in counts:
@@ -13236,7 +13283,7 @@ func draw_hand_tray_suit_flow(parent: Control, hand: Array, force_danger_glow: b
 		if separator != null:
 			separator.name = "HandTraySuitSeparator_%d" % i
 			separator.set_meta("separator_width_ratio", 0.024)
-	if force_danger_glow or has_pending_danger_discard():
+	if force_danger_glow or danger_pending:
 		var danger = make_gpt_plate_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.92, 0.34, 0.24, 0.08), "ui_jade_reading_plate")
 		danger.name = "HandTraySuitDangerGlow"
 		flow.add_child(danger)
@@ -14159,8 +14206,9 @@ func cycle_meld_window(seat: int, page_capacity: int) -> void:
 
 func draw_melds(parent: Control) -> void:
 	var proxy_order := 1000
-	var compact_melds := effective_viewport_size().y <= 560.0 or (mode == "offline" and has_pending_danger_discard())
-	var danger_compact_melds := mode == "offline" and has_pending_danger_discard()
+	var danger_compact_snapshot := mode == "offline" and has_pending_danger_discard()
+	var compact_melds := effective_viewport_size().y <= 560.0 or danger_compact_snapshot
+	var danger_compact_melds := danger_compact_snapshot
 	var meld_content_size := safe_content_pixel_size()
 	var meld_layout_revision := safe_area_layout_revision
 	for layout in MELD_LAYOUTS:
@@ -14246,6 +14294,8 @@ func draw_melds(parent: Control) -> void:
 		area.set_meta("group_pagination_policy", "whole_group_in_one_page_including_four_tile_kong")
 		area.set_meta("group_owner_metadata", "MeldGroup_<index> owns its actual footprint and focus token")
 		area.set_meta("compact_readability_policy", "paginate_before_below_24px")
+		area.set_meta("danger_compact_snapshot", danger_compact_melds)
+		area.set_meta("compact_melds_snapshot", compact_melds)
 		area.set_meta("actual_footprint_policy", "group_tiles_badge_and_lane_gutter")
 		area.set_meta("safe_area_layout_revision", meld_layout_revision)
 		area.set_meta("safe_content_pixel_size", meld_content_size)
@@ -15175,8 +15225,9 @@ func draw_online_feedback_art(parent: Control) -> Control:
 	if online_feedback.strip_edges() == "" and not online_waiting_for_server:
 		return null
 	var accent = online_feedback_accent()
-	var feedback_left := 0.525 if effective_viewport_size().x >= 1600.0 else 0.505
-	var feedback_right := 0.885 if effective_viewport_size().x >= 1600.0 else 0.965
+	var feedback_viewport := effective_viewport_size()
+	var feedback_left := 0.525 if feedback_viewport.x >= 1600.0 else 0.505
+	var feedback_right := 0.885 if feedback_viewport.x >= 1600.0 else 0.965
 	var recovery_feedback := online_feedback_requires_recovery()
 	# Keep the footer after the native log scroll while retaining a small lower
 	# breathing room inside the room-state panel.
@@ -15184,6 +15235,8 @@ func draw_online_feedback_art(parent: Control) -> Control:
 	art.name = "OnlineFeedbackArt"
 	parent.add_child(art)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_meta("viewport_snapshot", feedback_viewport)
+	art.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	art.set_meta("footer_owner", "OnlineLobbyLogPanel")
 	art.set_meta("feedback_identity", "连接反馈")
 	art.set_meta("log_footer_contract", "latest_feedback_after_log_rows_before_action_route")
@@ -15365,6 +15418,9 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 	var roster = make_gpt_center_crop_plate_rect(rect_full(0.050, 0.295, 0.950, 0.620), Color(0.008, 0.016, 0.016, 0.50), "ui_dark_scrim")
 	roster.name = "OnlineLobbyRosterPanel"
 	roster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var roster_viewport := effective_viewport_size()
+	roster.set_meta("viewport_snapshot", roster_viewport)
+	roster.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	roster.set_meta("column_contract", "seat|name|ready|status")
 	roster.set_meta("column_rects", {
 		"seat": rect_full(0.020, 0.145, 0.092, 0.855),
@@ -15409,7 +15465,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		name.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		name.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(name)
-		fit_label_font_size(name, maxf(88.0, effective_viewport_size().x * 0.180), 12, 9)
+		fit_label_font_size(name, maxf(88.0, roster_viewport.x * 0.180), 12, 9)
 		name.set_meta("name_priority", "preserve_leading_identity")
 		name.set_meta("full_name_route", "OnlineLobbyRosterTouchTarget_%d" % i)
 		set_ui_full_text(name, online_lobby_slot_name(entry), "第%d席完整昵称" % (i + 1))
@@ -15426,7 +15482,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		state.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.82))
 		state.add_theme_constant_override("outline_size", 1)
 		configure_clipped_label(state)
-		fit_label_font_size(state, maxf(96.0, effective_viewport_size().x * 0.210), 11, 9)
+		fit_label_font_size(state, maxf(96.0, roster_viewport.x * 0.210), 11, 9)
 		state.set_meta("state_priority", "always_visible_short_label")
 		state.set_meta("column_owner", "status")
 		state.set_meta("column_rect", rect_full(0.610, 0.080, 0.940, 0.920))
@@ -15678,6 +15734,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	if tile == "":
 		return
 	var content_size = safe_content_pixel_size()
+	var viewport_size := effective_viewport_size()
 	var context_rect = pending_claim_context_layout_rect(content_size)
 	var has_status_strip := optional_gpt_illustration_texture("pending_claim_status_strip") != null
 	var panel = make_gpt_route_rail(context_rect, Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
@@ -15685,8 +15742,10 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.z_index = 20
 	panel.clip_contents = true
 	parent.add_child(panel)
-	var compact_context_layout := effective_viewport_size().x <= 1280.0
-	var narrow_context_layout := effective_viewport_size().x <= 960.0
+	panel.set_meta("viewport_snapshot", viewport_size)
+	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var compact_context_layout := viewport_size.x <= 1280.0
+	var narrow_context_layout := viewport_size.x <= 960.0
 	var status_strip = add_optional_gpt_illustration_texture(panel, "pending_claim_status_strip", rect_full(0.0, 0.0, 1.0, 1.0), 0.62, false)
 	if status_strip != null:
 		status_strip.name = "PendingClaimStatusStripTexture"
@@ -17155,11 +17214,14 @@ func draw_rules_completion_convergence_art(parent: Control) -> Control:
 	return art
 
 
-func draw_rules_guide_art(parent: Control) -> Control:
+func draw_rules_guide_art(parent: Control, viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	# r214: bulk GPT chrome sweep
-	var guide_right := 0.700 if effective_viewport_size().x >= 1600.0 else 0.820
+	var guide_viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var guide_right := 0.700 if guide_viewport_size.x >= 1600.0 else 0.820
 	var art = make_gpt_route_rail(rect_full(0.05, 0.086, guide_right, 0.146), Color(0.030, 0.050, 0.046, 0.84))
 	art.name = "RulesGuideArt"
+	art.set_meta("viewport_snapshot", guide_viewport_size)
+	art.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	art.set_meta("wide_layout_policy", "compact_guide_keep_body_primary")
 	parent.add_child(art)
 	# 国风底板插画替代原 rail/fill/gate/tick/connector/lead_glow 代码自绘装饰
@@ -17307,19 +17369,25 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 	strip.set_meta("score_delta_lane_owner", "ScoreStripDelta_*")
 	strip.set_meta("score_delta_source", "last_score_deltas")
 	strip.set_meta("score_delta_policy", "separate_lower_text_lane_below_current_score")
+	var viewport_size := effective_viewport_size()
+	strip.set_meta("viewport_snapshot", viewport_size)
+	strip.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var score_strip_current_seat := get_current_seat()
+	strip.set_meta("current_seat_snapshot", score_strip_current_seat)
+	strip.set_meta("current_seat_snapshot_policy", "one_current_seat_snapshot_per_draw")
 	for seat in range(4):
-		var active = get_current_seat() == seat
+		var active = score_strip_current_seat == seat
 		var player = get_player_info(seat)
 		var chip_fill = Color(0.008, 0.016, 0.018, 0.82) if active else Color(0.006, 0.014, 0.016, 0.66)
 		var chip_border = Color(0.56, 0.46, 0.22, 0.44) if active else Color(0.28, 0.32, 0.30, 0.16)
 		var chip = make_gpt_gate(SCORE_STRIP_CHIP_RECTS[seat], chip_fill)
 		chip.name = "ScoreStripChip_%d" % seat
+		chip.set_meta("active_snapshot", active)
 		strip.add_child(chip)
 		var accent_bar = make_gpt_meter_fill(SCORE_STRIP_ACCENT_RECT, SEAT_ACCENT_COLORS[seat])
 		accent_bar.name = "ScoreStripAccent_%d" % seat
 		chip.add_child(accent_bar)
 		draw_score_strip_chip_art(chip, seat, int(player.get("score", 0)), active)
-		var viewport_size := effective_viewport_size()
 		var narrow_score_strip := viewport_size.x <= 1280.0 or viewport_size.y <= 560.0
 		var compact_score_strip := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 		var full_name_text := ""
@@ -17349,6 +17417,7 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(score)
 		var delta_text := score_delta_text(seat)
+		var delta_detail_text := "暂无本局结算变化" if delta_text == "" else delta_text
 		if delta_text == "":
 			delta_text = " --"
 		var delta = make_label(chip, "变化" + delta_text, 8 if compact_score_strip else 9, Color(0.78, 0.86, 0.76, 0.92), false)
@@ -17356,9 +17425,11 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		delta.z_index = 2
 		apply_rect(delta, SCORE_STRIP_NARROW_DELTA_RECT if narrow_score_strip else SCORE_STRIP_DELTA_RECT)
 		delta.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		delta.tooltip_text = "分数变化：" + (score_delta_text(seat) if score_delta_text(seat) != "" else "暂无本局结算变化")
+		delta.tooltip_text = "分数变化：" + delta_detail_text
 		delta.set_meta("delta_owner", "last_score_deltas")
 		delta.set_meta("lane_role", "independent_score_delta")
+		delta.set_meta("score_delta_text_snapshot", delta_detail_text)
+		delta.set_meta("score_delta_text_snapshot_policy", "one_score_delta_snapshot_per_chip")
 		configure_clipped_label(delta)
 
 
@@ -18633,6 +18704,8 @@ func draw_settings_overlay(parent: Control) -> void:
 	overlay.name = "SettingsOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.set_meta("viewport_snapshot", settings_viewport)
+	overlay.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	overlay.set_meta("modal_backdrop_contract", "one_fullscreen_scrim_plus_opaque_reading_surface")
 	overlay.set_meta("input_restore_contract", "close_rebuilds_source_and_restores_named_focus")
 	parent.add_child(overlay)
@@ -18793,7 +18866,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rule_variant_status.tooltip_text = rule_variant_full_status_text
 	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(rule_variant_status)
-	fit_label_font_size(rule_variant_status, maxf(120.0, effective_viewport_size().x * 0.22), 11, 9)
+	fit_label_font_size(rule_variant_status, maxf(120.0, settings_viewport.x * 0.22), 11, 9)
 
 	# Large text needs a real scroll viewport: the three authored sections cannot
 	# all fit in the compact panel while preserving readable setting rows.
@@ -19693,10 +19766,13 @@ func draw_stat_row_art(parent: Control, label_text: String, value_text: String) 
 	return art
 
 
-func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: String, value_text: String, rect: Rect2, accent: Color) -> Control:
+func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: String, value_text: String, rect: Rect2, accent: Color, viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	# r205: GPT-only summary chips (no program panel chrome)
+	var chip_viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var chip = make_gpt_plate_rect(rect, Color(0.026, 0.044, 0.042, 0.86), "ui_menu_card_face")
 	chip.name = "StatsSummaryChip_%s" % chip_id
+	chip.set_meta("viewport_snapshot", chip_viewport_size)
+	chip.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_chip")
 	var display_value := value_text
 	var unit_text := "状态"
 	for suffix in ["%", "番/局", "分/局", "局", "番", "分"]:
@@ -19722,13 +19798,13 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	configure_clipped_label(value_label)
 	value_label.set_meta("summary_role", "value")
 	value_label.set_meta("summary_full_value", value_text)
-	fit_label_font_size(value_label, maxf(54.0, rect.size.x * effective_viewport_size().x * 0.56), 20, 12)
+	fit_label_font_size(value_label, maxf(54.0, rect.size.x * chip_viewport_size.x * 0.56), 20, 12)
 	var unit_label := make_label(chip, unit_text, 11, Color(0.84, 0.94, 0.86), true)
 	unit_label.name = "StatsSummaryUnit_%s" % chip_id
 	apply_rect(unit_label, rect_full(0.660, 0.150, 0.925, 0.470))
 	unit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	unit_label.set_meta("summary_role", "unit")
-	fit_label_font_size(unit_label, maxf(34.0, rect.size.x * effective_viewport_size().x * 0.26), 11, 8)
+	fit_label_font_size(unit_label, maxf(34.0, rect.size.x * chip_viewport_size.x * 0.26), 11, 8)
 	set_ui_full_text(unit_label, unit_text, "统计单位：" + unit_text)
 	var caption_label = make_label(chip, caption_text, 11, Color(0.84, 0.94, 0.86), false)
 	caption_label.name = "StatsSummaryCaption_%s" % chip_id
@@ -19736,7 +19812,7 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(caption_label)
 	caption_label.set_meta("summary_role", "caption")
-	fit_label_font_size(caption_label, maxf(64.0, rect.size.x * effective_viewport_size().x * 0.72), 11, 8)
+	fit_label_font_size(caption_label, maxf(64.0, rect.size.x * chip_viewport_size.x * 0.72), 11, 8)
 	var rail = make_gpt_edge_rail(rect_full(0.045, 0.180, 0.066, 0.820), Color(accent.r, accent.g, accent.b, 0.42))
 	rail.name = "StatsSummaryRail_%s" % chip_id
 	chip.add_child(rail)
@@ -19744,7 +19820,8 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	return chip
 
 
-func draw_stats_dashboard_art(parent: Control) -> Control:
+func draw_stats_dashboard_art(parent: Control, viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
+	var dashboard_viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var source: Dictionary = game_stats
 	if parent != null and parent.has_meta("stats_source"):
 		var meta_source = parent.get_meta("stats_source", {})
@@ -19753,6 +19830,8 @@ func draw_stats_dashboard_art(parent: Control) -> Control:
 	# r205: compact GPT-led dashboard; dead post-return chrome removed
 	var dash = make_gpt_plate_rect(rect_full(0.08, 0.120, 0.92, 0.300), Color(0.014, 0.034, 0.040, 0.88), "stats_gpt_dashboard")
 	dash.name = "StatsDashboardArt"
+	dash.set_meta("viewport_snapshot", dashboard_viewport_size)
+	dash.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	parent.add_child(dash)
 	var dashboard_depth = make_gpt_plate_rect(rect_full(0.010, 0.705, 0.990, 0.985), Color(0.0, 0.0, 0.0, 0.34), "ui_dark_scrim")
 	dashboard_depth.name = "StatsDashboard3DDepthEdge"
@@ -19820,9 +19899,9 @@ func draw_stats_dashboard_art(parent: Control) -> Control:
 	configure_clipped_label(narrative_meta)
 	# The dashboard owns trend and per-round context; the rows below own exact
 	# totals and peaks, so the first viewport does not print the same metrics twice.
-	make_stats_summary_chip(dash, "winrate", "走势", trend_text, rect_full(0.235, 0.145, 0.405, 0.800), Color(0.78, 0.62, 0.36))
-	make_stats_summary_chip(dash, "games", "场均番", "%d番/局" % average_fan_value, rect_full(0.425, 0.145, 0.595, 0.800), Color(0.58, 0.70, 0.62))
-	make_stats_summary_chip(dash, "best", "场均净分", "%s分/局" % compact_score_text(average_score_value), rect_full(0.615, 0.145, 0.895, 0.800), Color(0.82, 0.66, 0.32))
+	make_stats_summary_chip(dash, "winrate", "走势", trend_text, rect_full(0.235, 0.145, 0.405, 0.800), Color(0.78, 0.62, 0.36), dashboard_viewport_size)
+	make_stats_summary_chip(dash, "games", "场均番", "%d番/局" % average_fan_value, rect_full(0.425, 0.145, 0.595, 0.800), Color(0.58, 0.70, 0.62), dashboard_viewport_size)
+	make_stats_summary_chip(dash, "best", "场均净分", "%s分/局" % compact_score_text(average_score_value), rect_full(0.615, 0.145, 0.895, 0.800), Color(0.82, 0.66, 0.32), dashboard_viewport_size)
 	var stats_hint_text := "摘要等待首局 · 下方明细会显示完整数值" if games_count <= 0 else "摘要显示走势与场均 · 下方明细显示总量与峰值"
 	var stats_hint = make_label(dash, stats_hint_text, 13, Color(0.76, 0.88, 0.78), false)
 	stats_hint.name = "StatsSummaryHint"
@@ -20380,8 +20459,8 @@ func draw_table_living_illustration(parent: Control) -> Control:
 	draw_table_last_discard_ripple(layer)
 	return layer
 
-func table_log_render_signature() -> String:
-	var viewport_size := effective_viewport_size()
+func table_log_render_signature(viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var compact_log := viewport_size.y <= 560.0
 	var hide_compact_ledger_for_pending := viewport_size.x <= 960.0 and has_pending_claim_window() and not table_log_archive_open
 	return "%s|%s|%s|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d" % [
@@ -20402,7 +20481,8 @@ func table_log_render_signature() -> String:
 
 func draw_table_log(parent: Control) -> void:
 	# r213: GPT chrome conversion
-	var log_signature := table_log_render_signature()
+	var table_log_viewport_size := effective_viewport_size()
+	var log_signature := table_log_render_signature(table_log_viewport_size)
 	var retained_ledger := retained_battle_table_log
 	retained_battle_table_log = null
 	var can_reuse_retained := retained_ledger != null and is_instance_valid(retained_ledger) and not retained_ledger.is_queued_for_deletion() and retained_battle_table_log_signature == log_signature
@@ -20416,11 +20496,11 @@ func draw_table_log(parent: Control) -> void:
 	if retained_ledger != null and is_instance_valid(retained_ledger):
 		retained_ledger.queue_free()
 	retained_battle_table_log_signature = ""
-	var compact_log := effective_viewport_size().y <= 560.0
+	var compact_log := table_log_viewport_size.y <= 560.0
 	# At 960x540 the response context owns the only readable left-top reserve.
 	# Hide the secondary ledger for this short decision window; its complete
 	# history remains available through the chat/history routes after the action.
-	var hide_compact_ledger_for_pending: bool = effective_viewport_size().x <= 960.0 \
+	var hide_compact_ledger_for_pending: bool = table_log_viewport_size.x <= 960.0 \
 		and has_pending_claim_window() and not table_log_archive_open
 	# The compact ledger sits below the side seat card, so it can grow rightward
 	# without touching the side river. This gives the latest event a real reading
@@ -20433,6 +20513,8 @@ func draw_table_log(parent: Control) -> void:
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
 	ledger_panel.visible = not hide_compact_ledger_for_pending
+	ledger_panel.set_meta("table_log_viewport_snapshot", table_log_viewport_size)
+	ledger_panel.set_meta("table_log_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	ledger_panel.set_meta("compact_header_policy", "title_then_count_then_history_with_measured_gutters")
 	ledger_panel.set_meta("latest_event_policy", "latest_record_is_visible_before_archive_route")
 	ledger_panel.set_meta("table_log_render_signature", log_signature)
@@ -20449,14 +20531,14 @@ func draw_table_log(parent: Control) -> void:
 	ledger_title.name = "TableLogLedgerTitle"
 	apply_rect(ledger_title, rect_full(0.085, 0.030, 0.430 if compact_log else 0.500, 0.230))
 	ledger_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	fit_label_font_size(ledger_title, maxf(86.0, effective_viewport_size().x * (0.145 if compact_log else 0.220)), 10 if compact_log else 12, 8)
+	fit_label_font_size(ledger_title, maxf(86.0, table_log_viewport_size.x * (0.145 if compact_log else 0.220)), 10 if compact_log else 12, 8)
 	set_ui_full_text(ledger_title, "牌桌记录", "当前牌桌最近事件")
 	mark_ui_optimization(ledger_title, "F-517")
 	var ledger_count = make_label(ledger_panel, "%d条" % table_logs.size(), 8 if compact_log else 10, Color(0.72, 0.66, 0.48), false)
 	ledger_count.name = "TableLogLedgerCount"
 	apply_rect(ledger_count, rect_full(0.455 if compact_log else 0.520, 0.040, 0.650, 0.220))
 	ledger_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	fit_label_font_size(ledger_count, maxf(52.0, effective_viewport_size().x * 0.105), 8 if compact_log else 10, 8)
+	fit_label_font_size(ledger_count, maxf(52.0, table_log_viewport_size.x * 0.105), 8 if compact_log else 10, 8)
 	set_ui_full_text(ledger_count, "%d 条牌桌记录" % table_logs.size(), "牌桌记录数量")
 	mark_ui_optimization(ledger_count, "F-518")
 	var archive_button := make_small_button("历史", Color(0.48, 0.42, 0.28), Callable(self, "toggle_table_log_archive"))
@@ -20500,7 +20582,7 @@ func draw_table_log(parent: Control) -> void:
 		row_body.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		configure_clipped_label(row_body)
-		fit_label_font_size(row_body, maxf(112.0, effective_viewport_size().x * 0.225), 11 if compact_log else 10, 8)
+		fit_label_font_size(row_body, maxf(112.0, table_log_viewport_size.x * 0.225), 11 if compact_log else 10, 8)
 		row_body.set_meta("measured_body_lane", true)
 		row_body.tooltip_text = row_body.text
 		set_ui_full_text(row_body, row_body.text, "牌桌最近事件")
@@ -20511,9 +20593,12 @@ func draw_table_log(parent: Control) -> void:
 func draw_table_log_archive_panel(parent: Control) -> void:
 	if not table_log_archive_open or (mode != "offline" and mode != "online_game"):
 		return
-	var archive_bottom := 0.420 if effective_viewport_size().y <= 560.0 and has_pending_claim_window() else 0.545
+	var archive_viewport_size := effective_viewport_size()
+	var archive_bottom := 0.420 if archive_viewport_size.y <= 560.0 and has_pending_claim_window() else 0.545
 	var panel = make_gpt_plate_rect(rect_full(0.230, 0.120, 0.870, archive_bottom), Color(0.014, 0.034, 0.040, 0.96), "ui_jade_reading_plate")
 	panel.name = "TableLogArchivePanel"
+	panel.set_meta("table_log_viewport_snapshot", archive_viewport_size)
+	panel.set_meta("table_log_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	panel.z_index = 43
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.clip_contents = true
@@ -20530,7 +20615,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title, "牌桌记录·历史", "完整牌桌历史记录")
 	mark_ui_optimization(title, "F-522")
-	fit_label_font_size(title, maxf(150.0, effective_viewport_size().x * 0.300), 16, 12)
+	fit_label_font_size(title, maxf(150.0, archive_viewport_size.x * 0.300), 16, 12)
 	var visible_log_count := mini(table_logs.size(), ONLINE_LOG_HISTORY_LIMIT)
 	var count_text := "%d条" % table_logs.size()
 	if table_logs.size() > ONLINE_LOG_HISTORY_LIMIT:
@@ -20542,7 +20627,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	count.tooltip_text = "显示最近%d/%d条牌桌记录" % [visible_log_count, table_logs.size()] if table_logs.size() > ONLINE_LOG_HISTORY_LIMIT else "共%d条牌桌记录" % table_logs.size()
 	set_ui_full_text(count, count.tooltip_text, "牌桌历史记录数量")
 	mark_ui_optimization(count, "F-523")
-	fit_label_font_size(count, maxf(94.0, effective_viewport_size().x * 0.180), 11, 9)
+	fit_label_font_size(count, maxf(94.0, archive_viewport_size.x * 0.180), 11, 9)
 	var close_button := make_icon_button("x", Color(0.92, 0.82, 0.58), 16, Callable(self, "close_table_log_archive"))
 	close_button.name = "TableLogArchiveCloseButton"
 	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
@@ -20577,7 +20662,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 			var full_text := table_log_display_text(str(table_logs[log_i]))
 			var row := make_label(list, "%02d  %s" % [log_i + 1, full_text], 13, Color(0.84, 0.88, 0.80), false)
 			row.name = "TableLogArchiveRow_%d" % log_i
-			var row_width := maxf(260.0, effective_viewport_size().x * 0.820)
+			var row_width := maxf(260.0, archive_viewport_size.x * 0.820)
 			var row_height := estimate_wrapped_text_height(row.text, row_width, accessibility_font_size(13), 5.0)
 			row.custom_minimum_size = Vector2(0, row_height)
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -20595,9 +20680,10 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 			var history_text := str((entry as Dictionary).get("summary", "已完成一局"))
 			var history_row := make_label(list, "对局 %02d  ·  %s" % [int((entry as Dictionary).get("hand_number", 0)), history_text], 11, Color(0.80, 0.86, 0.76), false)
 			history_row.name = "RoundHistoryArchiveRow_%d" % history_index
-			history_row.custom_minimum_size = Vector2(0, estimate_wrapped_text_height(history_row.text, maxf(240.0, effective_viewport_size().x * 0.640), accessibility_font_size(11), 5.0))
+			var history_row_width := maxf(240.0, archive_viewport_size.x * 0.640)
+			history_row.custom_minimum_size = Vector2(0, estimate_wrapped_text_height(history_row.text, history_row_width, accessibility_font_size(11), 5.0))
 			history_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			configure_wrapped_label(history_row, maxf(240.0, effective_viewport_size().x * 0.640), history_row.custom_minimum_size.y, 5.0)
+			configure_wrapped_label(history_row, history_row_width, history_row.custom_minimum_size.y, 5.0)
 			history_row.tooltip_text = history_text
 	call_deferred("scroll_table_log_archive_to_end")
 
@@ -22533,6 +22619,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var reasons: Array = score_data.get("reasons", [])
 	var win_tile = str(score_data.get("win_tile", ""))
 	var self_draw = bool(score_data.get("self_draw", false))
+	var win_detail_viewport := effective_viewport_size()
 
 	# Keep the detail strip above the settlement copy and rank table. The previous
 	# tall strip let its yaku flow extend into the body and ranking rows at 960px.
@@ -22541,6 +22628,8 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var detail_rect = rect_full(0.04, 0.145, 0.96, 0.375)
 	var detail_panel = make_gpt_plate_rect(detail_rect, Color(0.006, 0.012, 0.010, 0.98), "ui_dark_scrim")
 	detail_panel.name = "WinDetailPanel"
+	detail_panel.set_meta("viewport_snapshot", win_detail_viewport)
+	detail_panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	parent.add_child(detail_panel)
 	var detail_texture = add_illustration_texture(detail_panel, "win_detail_scroll", rect_full(0.010, 0.030, 0.990, 0.970), 0.13, false)
 	if detail_texture != null:
@@ -22557,7 +22646,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var winner_text = "%s %s" % [players[winner]["name"], "自摸" if self_draw else "胡"]
 	if win_tile != "":
 		winner_text += " %s" % tile_label(win_tile)
-	var compact_detail := effective_viewport_size().y <= 560.0
+	var compact_detail := win_detail_viewport.y <= 560.0
 	var winner_label = make_label(detail_panel, winner_text, 18, Color(0.94, 0.88, 0.58), true)
 	winner_label.name = "WinDetailWinnerLabel"
 	apply_rect(winner_label, rect_full(0.04, 0.05, 0.60, 0.25))
@@ -22580,7 +22669,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 			var cur_pts = int(round(points * frac))
 			score_tw.tween_callback(Callable(self, "set_label_text_by_id").bind(score_label.get_instance_id(), "%d番  %d分" % [cur_fan, cur_pts])).set_delay(step_dur)
 		score_tw.tween_callback(Callable(self, "set_label_text_by_id").bind(score_label.get_instance_id(), "%d番  %d分" % [fan, points]))
-	draw_win_detail_showcase(detail_panel, win_tile, self_draw, fan, points)
+	draw_win_detail_showcase(detail_panel, win_tile, self_draw, fan, points, win_detail_viewport)
 	# Keep the legacy authored subtrees available for structural compatibility,
 	# but suppress their duplicated micro-readouts. The primary score line,
 	# winning tile, and full yaku badges carry the commercial reading hierarchy.
@@ -22593,7 +22682,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	if reasons.size() > 0:
 		var yaku_track = draw_win_detail_yaku_track(detail_panel, reasons)
 		yaku_track.visible = false
-		var compact_yaku := effective_viewport_size().y <= 560.0
+		var compact_yaku := win_detail_viewport.y <= 560.0
 		var yaku_scroll := ScrollContainer.new()
 		yaku_scroll.name = "WinDetailYakuScroll"
 		configure_scroll_container(yaku_scroll, "上下滚动查看全部番种")
@@ -22653,12 +22742,15 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 		limit_art.visible = false
 
 
-func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool, fan: int, points: int) -> Control:
+func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool, fan: int, points: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	# r214: bulk GPT chrome sweep
 	var showcase = Control.new()
 	showcase.name = "WinDetailShowcase"
 	showcase.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var compact_showcase := effective_viewport_size().y <= 560.0
+	var showcase_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	showcase.set_meta("viewport_snapshot", showcase_viewport)
+	showcase.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var compact_showcase := showcase_viewport.y <= 560.0
 	apply_rect(showcase, rect_full(0.70, 0.18, 0.98, 0.96) if compact_showcase else rect_full(0.72, 0.27, 0.96, 0.68))
 	parent.add_child(showcase)
 	make_cloud_decoration(showcase, rect_full(-0.08, 0.06, 0.56, 0.82), "gold", false)
@@ -22741,8 +22833,9 @@ func draw_win_detail_yaku_track(parent: Control, reasons: Array) -> Control:
 	return track
 
 
-func make_achievement_row(key: String, index: int) -> Control:
+func make_achievement_row(key: String, index: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	# r214: bulk GPT chrome sweep
+	var row_viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var unlocked = bool(achievements.get(key, false))
 	var accent = Color(0.82, 0.64, 0.28, 1.0) if unlocked else Color(0.46, 0.56, 0.54, 1.0)
 	var row = Panel.new()
@@ -22750,11 +22843,13 @@ func make_achievement_row(key: String, index: int) -> Control:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(row, achievement_display_name(key) + "：" + achievement_goal_text(key), "成就条目：" + achievement_display_name(key))
 	mark_ui_optimization(row, "F-476")
-	var achievement_row_height: float = achievement_row_height_contract()
+	var achievement_row_height: float = achievement_row_height_contract(row_viewport_size)
 	row.custom_minimum_size = Vector2(0, achievement_row_height)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.set_meta("row_height_contract", "adaptive_long_goal_and_large_text")
 	row.set_meta("row_height_px", achievement_row_height)
+	row.set_meta("viewport_snapshot", row_viewport_size)
+	row.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_row")
 	# r180: transparent host + GPT shop/settings plate for achievement row face.
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
@@ -22784,7 +22879,7 @@ func make_achievement_row(key: String, index: int) -> Control:
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(name_label, achievement_display_name(key), "成就名称：" + achievement_display_name(key))
 	name_label.set_meta("achievement_field", "name")
-	fit_label_font_size(name_label, maxf(120.0, effective_viewport_size().x * 0.500), 16, 11)
+	fit_label_font_size(name_label, maxf(120.0, row_viewport_size.x * 0.500), 16, 11)
 	name_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
 	name_label.add_theme_constant_override("outline_size", 3)
 	configure_clipped_label(name_label)
@@ -22797,7 +22892,7 @@ func make_achievement_row(key: String, index: int) -> Control:
 	goal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(goal_label, achievement_goal_text(key), "成就目标：" + achievement_goal_text(key))
 	goal_label.set_meta("achievement_field", "goal")
-	fit_label_font_size(goal_label, maxf(120.0, effective_viewport_size().x * 0.500), 13, 10)
+	fit_label_font_size(goal_label, maxf(120.0, row_viewport_size.x * 0.500), 13, 10)
 	configure_clipped_label(goal_label)
 	var progress_back = make_gpt_gate(rect_full(0.135, 0.660, 0.475, 0.910), Color(accent.r, accent.g, accent.b, 0.24 if unlocked else 0.18))
 	progress_back.name = "AchievementRowProgressTextBackplate_%s" % key
@@ -22806,7 +22901,7 @@ func make_achievement_row(key: String, index: int) -> Control:
 	progress_text.name = "AchievementRowProgressText_%s" % key
 	apply_rect(progress_text, rect_full(0.146, 0.660, 0.460, 0.910))
 	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	fit_label_font_size(progress_text, maxf(72.0, effective_viewport_size().x * 0.285), 13, 10)
+	fit_label_font_size(progress_text, maxf(72.0, row_viewport_size.x * 0.285), 13, 10)
 	progress_text.clip_text = true
 	progress_text.clip_contents = false
 	progress_text.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -23344,10 +23439,13 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 		group.add_child(seal)
 	return group
 
-func configure_menu_button_motion(button: Control, delay: float = 0.0, hover_scale: float = 1.035, hover_rotation: float = 0.0) -> void:
+func configure_menu_button_motion(button: Control, delay: float = 0.0, hover_scale: float = 1.035, hover_rotation: float = 0.0, viewport_snapshot: Vector2 = Vector2.ZERO) -> void:
 	if button == null or not is_instance_valid(button) or button.has_meta("menu_motion_configured"):
 		return
 	button.set_meta("menu_motion_configured", true)
+	if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0:
+		button.set_meta("motion_viewport_snapshot", viewport_snapshot)
+		button.set_meta("motion_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	var button_ref = weakref(button)
 	button.resized.connect(func() -> void:
 		var motion_button = button_ref.get_ref() as Control
@@ -23359,7 +23457,11 @@ func configure_menu_button_motion(button: Control, delay: float = 0.0, hover_sca
 	if not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
 		return
 	var intro_alpha := clampf(float(button.get_meta("menu_motion_intro_alpha", 1.0)), 0.0, 1.0)
-	var compact_motion := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 1100.0
+	var motion_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	if not button.has_meta("motion_viewport_snapshot"):
+		button.set_meta("motion_viewport_snapshot", motion_viewport)
+		button.set_meta("motion_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var compact_motion := motion_viewport.y <= 560.0 or motion_viewport.x <= 1100.0
 	var resolved_hover_scale := 1.0 if compact_motion else hover_scale
 	var resolved_hover_rotation := 0.0 if compact_motion else hover_rotation
 	button.modulate.a = 0.0
@@ -23391,6 +23493,9 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# r214: bulk GPT chrome sweep
 	var button = Button.new()
 	button.text = ""
+	var menu_card_viewport := effective_viewport_size()
+	button.set_meta("viewport_snapshot", menu_card_viewport)
+	button.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	# The card is the native interactive surface, so keep its complete action
 	# label available even though the visible title/subtitle are separate labels.
 	button.tooltip_text = text.replace("\n", " · ")
@@ -23417,7 +23522,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# Keep the subtitle lane immediately to the left of the icon on compact cards;
 	# the previous 0.68 edge clipped the LAN suffix at 960px.
 	var card_text_right := 0.730 if icon_name != "" else 0.935
-	var subtitle_font_size := 14 if effective_viewport_size().x < 1100.0 and icon_name != "" else commercial_ui_font_size(15, 2)
+	var subtitle_font_size := 14 if menu_card_viewport.x < 1100.0 and icon_name != "" else commercial_ui_font_size(15, 2)
 	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.016, 0.030, 0.028, 0.76), "ui_dark_scrim", 0.18)
 	text_back.name = "MenuCardTextBackplate"
 	button.add_child(text_back)
@@ -23432,7 +23537,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	configure_clipped_label(title)
 	title.tooltip_text = title_text
 	title.set_meta("long_text_policy", "measured_title_slot_with_full_tooltip")
-	fit_label_font_size(title, maxf(96.0, effective_viewport_size().x * 0.210), commercial_ui_font_size(24, 4), 14)
+	fit_label_font_size(title, maxf(96.0, menu_card_viewport.x * 0.210), commercial_ui_font_size(24, 4), 14)
 	mark_ui_optimization(title, "F-446")
 	mark_ui_optimization(title, "F-225")
 	if subtitle_text != "":
@@ -23447,14 +23552,14 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		style_background_readable_label(subtitle, 2)
 		if subtitle_text.length() > 12 or large_text_enabled:
-			configure_wrapped_label(subtitle, maxf(110.0, effective_viewport_size().x * 0.185), 0.0, 2.0)
+			configure_wrapped_label(subtitle, maxf(110.0, menu_card_viewport.x * 0.185), 0.0, 2.0)
 			subtitle.max_lines_visible = 2
 			subtitle.set_meta("max_visible_lines", 2)
 		else:
 			configure_clipped_label(subtitle)
 		mark_ui_optimization(subtitle, "F-447")
 		mark_ui_optimization(subtitle, "F-225")
-	configure_menu_button_motion(button, 0.08, 1.035, deg_to_rad(0.45))
+	configure_menu_button_motion(button, 0.08, 1.035, deg_to_rad(0.45), menu_card_viewport)
 	var menu_button_ref = weakref(button)
 	button.button_down.connect(func() -> void:
 		var pressed_button = menu_button_ref.get_ref() as Button
@@ -23695,6 +23800,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var large_text_settings := large_text_enabled
 	var row = Panel.new()
 	row.name = "SettingRow_%s" % title
+	row.set_meta("viewport_snapshot", setting_viewport)
+	row.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	configure_passive_container(row)
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	var consequence_row := title == "画面质量" or title == "本地进度"
@@ -23733,7 +23840,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title_label, title, "设置项标题：" + title)
 	title_label.set_meta("section_title_font_contract", "accessibility_scaled_and_measured")
-	fit_label_font_size(title_label, maxf(82.0, effective_viewport_size().x * (text_right - 0.075)), 14, 10)
+	fit_label_font_size(title_label, maxf(82.0, setting_viewport.x * (text_right - 0.075)), 14, 10)
 	configure_clipped_label(title_label)
 	# Preserve the full explanation in the tooltip/accessibility metadata while
 	# showing a scan-friendly status whenever large text would make the detail
@@ -23774,7 +23881,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		if consequence_row and compact_settings:
 			status_label.add_theme_font_size_override("font_size", accessibility_font_size(13))
 			if title != "本地进度":
-				fit_label_font_size(status_label, maxf(64.0, effective_viewport_size().x * maxf(0.18, text_right - 0.070)), accessibility_font_size(13), 9)
+					fit_label_font_size(status_label, maxf(64.0, setting_viewport.x * maxf(0.18, text_right - 0.070)), accessibility_font_size(13), 9)
 			status_label.set_meta("status_visual_fit", true)
 			if title == "本地进度":
 				status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

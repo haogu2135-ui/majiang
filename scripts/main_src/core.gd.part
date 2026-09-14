@@ -3268,8 +3268,14 @@ func hand_tile_normalized_centers(hand: Array, metrics: Dictionary) -> PackedFlo
 		cursor += tile_width
 	return centers
 
-func hand_layout_fits_content(hand: Array, metrics: Dictionary) -> bool:
-	return hand_layout_required_width(hand, metrics) <= float(metrics.get("content_width", hand_content_pixel_size().x)) + 0.5
+func hand_layout_fits_content(hand: Array, metrics: Dictionary, required_width_snapshot: float = -1.0) -> bool:
+	var required_width := required_width_snapshot
+	if required_width < 0.0:
+		required_width = hand_layout_required_width(hand, metrics)
+	var content_width := float(metrics.get("content_width", 0.0))
+	if not metrics.has("content_width"):
+		content_width = hand_content_pixel_size().x
+	return required_width <= content_width + 0.5
 
 func hand_tile_hint_badge(tile: String, suggested_tile: String, pending_tile: String, drawn: bool = false) -> String:
 	if pending_tile != "" and tile == pending_tile:
@@ -3369,8 +3375,8 @@ func compact_battle_view() -> bool:
 	return viewport.x <= 960.0 or viewport.y <= 560.0
 
 
-func hand_tray_visible_text() -> String:
-	var detail := hand_tray_text()
+func hand_tray_visible_text(detail_snapshot: String = "") -> String:
+	var detail := detail_snapshot if detail_snapshot != "" else hand_tray_text()
 	if not compact_battle_view():
 		return detail
 	if detail == "点击手牌出牌":
@@ -3549,8 +3555,9 @@ func hand_tray_state_text() -> String:
 		return "出牌" if can_self_discard() else "等待"
 	return "准备"
 
-func hand_tray_state_fill() -> Color:
-	match hand_tray_state_text():
+func hand_tray_state_fill(state_snapshot: String = "") -> Color:
+	var state := state_snapshot if state_snapshot != "" else hand_tray_state_text()
+	match state:
 		"出牌":
 			return Color(0.56, 0.40, 0.20, 0.72)  # r420
 		"响应":
@@ -3565,8 +3572,10 @@ func hand_tray_state_fill() -> Color:
 			return Color(0.48, 0.38, 0.28, 0.72)
 	return Color(0.34, 0.30, 0.24, 0.68)
 
-func hand_tray_state_border() -> Color:
-	var fill = hand_tray_state_fill()
+func hand_tray_state_border(state_snapshot: String = "", fill_snapshot: Color = Color.TRANSPARENT) -> Color:
+	var fill := fill_snapshot
+	if fill.a <= 0.0:
+		fill = hand_tray_state_fill(state_snapshot)
 	return Color(fill.r + 0.18, fill.g + 0.16, fill.b + 0.12, 0.42)
 
 
@@ -4168,8 +4177,7 @@ func battle_table_anchor_root_rect(table_rect: Rect2) -> Rect2:
 		table_top + table_rect.size.y * table_height
 	)
 
-func advisor_panel_candidate_is_clear(candidate: Rect2) -> bool:
-	var geometry := Rect2(candidate.position, candidate.size - candidate.position)
+func advisor_panel_occupancy_snapshot() -> Array[Rect2]:
 	var occupied: Array[Rect2] = []
 	for layout in SEAT_LAYOUTS:
 		var seat_rect: Rect2 = layout[1]
@@ -4191,6 +4199,11 @@ func advisor_panel_candidate_is_clear(candidate: Rect2) -> bool:
 	var action_rect := action_bar_dock_layout_rect()
 	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
 	occupied.append(Rect2(CHAT_ACTION_BUTTON_RECT.position, CHAT_ACTION_BUTTON_RECT.size - CHAT_ACTION_BUTTON_RECT.position))
+	return occupied
+
+func advisor_panel_candidate_is_clear(candidate: Rect2, occupancy_snapshot = null) -> bool:
+	var geometry := Rect2(candidate.position, candidate.size - candidate.position)
+	var occupied: Array = occupancy_snapshot if typeof(occupancy_snapshot) == TYPE_ARRAY else advisor_panel_occupancy_snapshot()
 	for occupied_rect in occupied:
 		if geometry.intersects(occupied_rect.grow(0.004), true):
 			return false
@@ -4205,8 +4218,9 @@ func advisor_panel_layout_rect() -> Rect2:
 		rect_full(0.015, 0.535, 0.350, 0.705),
 		rect_full(0.650, 0.535, 0.985, 0.705),
 	]
+	var occupancy_snapshot := advisor_panel_occupancy_snapshot()
 	for candidate in candidates:
-		if advisor_panel_candidate_is_clear(candidate):
+		if advisor_panel_candidate_is_clear(candidate, occupancy_snapshot):
 			return candidate
 	# A dynamic table state can occupy every preferred side channel. Keep a real
 	# bounded fallback instead of returning a zero rect whose children spill at
@@ -4227,10 +4241,12 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var table_top = table_outer.position.y + TABLE_INNER_RECT.position.y * outer_height
 	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
 	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
-	var context_height_px := 64.0 if effective_viewport_size().y <= 560.0 else (72.0 if effective_viewport_size().y < 900.0 else 84.0)
+	var occupancy_snapshot := pending_claim_context_occupancy_snapshot(table_left, table_top, table_width, table_height, resolved_size)
+	var context_viewport_size := effective_viewport_size()
+	var context_height_px := 64.0 if context_viewport_size.y <= 560.0 else (72.0 if context_viewport_size.y < 900.0 else 84.0)
 	# The compact channel sits under the top HUD at the left edge of the table.
 	# It clears the top river/meld and stays above the left river and side meld.
-	var narrow_context := effective_viewport_size().x <= 960.0
+	var narrow_context := context_viewport_size.x <= 960.0
 	if narrow_context:
 		# Use the independent left-top slot so the panel can keep readable source
 		# and tile labels without covering the right-seat meld lane.
@@ -4246,7 +4262,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var header_top := 0.108
 	var header_right := 0.280
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
-	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height):
+	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
 		return header_candidate
 	var left_river = seat_discard_rect(3)
 	var right_river = seat_discard_rect(1)
@@ -4308,12 +4324,13 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 				candidate_center + panel_width * 0.5,
 				candidate_bottom
 			)
-			if pending_claim_context_candidate_is_clear(candidate, table_left, table_top, table_width, table_height):
+			if pending_claim_context_candidate_is_clear(candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
 				return candidate
 	return base_candidate
 
-func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: float, table_top: float, table_width: float, table_height: float) -> bool:
+func pending_claim_context_occupancy_snapshot(table_left: float, table_top: float, table_width: float, table_height: float, content_size: Vector2 = Vector2.ZERO) -> Array[Rect2]:
 	var occupied: Array[Rect2] = []
+	var wall_content_size := content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
 	for zone in DISCARD_ZONES:
 		var zone_rect: Rect2 = zone[1]
 		var zone_left := table_left + zone_rect.position.x * table_width
@@ -4334,7 +4351,7 @@ func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: floa
 		var wall_right := table_left + wall_rect.size.x * table_width
 		var wall_bottom := table_top + wall_rect.size.y * table_height
 		# Pending response copy must stay visibly separated from tile backs.
-		var wall_gutter := maxf(8.0 / maxf(1.0, safe_content_pixel_size().x), 8.0 / maxf(1.0, safe_content_pixel_size().y))
+		var wall_gutter := maxf(8.0 / maxf(1.0, wall_content_size.x), 8.0 / maxf(1.0, wall_content_size.y))
 		occupied.append(Rect2(Vector2(wall_left, wall_top), Vector2(wall_right - wall_left, wall_bottom - wall_top)).grow(wall_gutter))
 	# The entire center console is a reading surface: its plate, compass, wall
 	# count, winds, dice, and last-discard trace must remain visible together.
@@ -4344,6 +4361,10 @@ func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: floa
 	var center_right := table_left + center_rect.size.x * table_width
 	var center_bottom := table_top + center_rect.size.y * table_height
 	occupied.append(Rect2(Vector2(center_left, center_top), Vector2(center_right - center_left, center_bottom - center_top)))
+	return occupied
+
+func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: float, table_top: float, table_width: float, table_height: float, occupancy_snapshot = null) -> bool:
+	var occupied: Array = occupancy_snapshot if typeof(occupancy_snapshot) == TYPE_ARRAY else pending_claim_context_occupancy_snapshot(table_left, table_top, table_width, table_height)
 	var candidate_geometry := Rect2(candidate.position, candidate.size - candidate.position)
 	for occupied_rect in occupied:
 		if candidate_geometry.intersects(occupied_rect.grow(0.004), true):
@@ -6925,14 +6946,29 @@ func main_threat_opponent(seat: int, eval_context: Dictionary = {}) -> int:
 	return result
 
 func is_tile_safe_against_all(tile: String, seat: int, eval_context: Dictionary = {}) -> bool:
+	var cache_key := ""
+	var cache: Dictionary = {}
+	if not eval_context.is_empty():
+		cache_key = ai_context_cache_key(tile, seat)
+		var cached = eval_context.get("all_safe_tiles", {})
+		if typeof(cached) == TYPE_DICTIONARY:
+			cache = cached
+			if cache.has(cache_key):
+				return bool(cache.get(cache_key, false))
+		eval_context["all_safe_tiles"] = cache
 	var opponents = 0
+	var result = true
 	for other in range(players.size()):
 		if other == seat:
 			continue
 		opponents += 1
 		if opponent_discard_tile_count(other, tile, eval_context) <= 0:
-			return false
-	return opponents > 0
+			result = false
+			break
+	result = result and opponents > 0
+	if not eval_context.is_empty():
+		cache[cache_key] = result
+	return result
 
 func is_suji_safe_tile(tile: String, seat: int, eval_context: Dictionary = {}) -> bool:
 	if not is_number_tile(tile) or seat < 0 or seat >= players.size():
@@ -6955,15 +6991,29 @@ func is_suji_safe_tile(tile: String, seat: int, eval_context: Dictionary = {}) -
 func is_suji_safe_against_opponent(tile: String, opponent: int, eval_context: Dictionary = {}) -> bool:
 	if not is_number_tile(tile) or opponent < 0 or opponent >= players.size():
 		return false
+	var cache_key := "%d:%s" % [opponent, tile]
+	var cache: Dictionary = {}
+	if not eval_context.is_empty():
+		var cached = eval_context.get("suji_safe_tiles", {})
+		if typeof(cached) == TYPE_DICTIONARY:
+			cache = cached
+			if cache.has(cache_key):
+				return bool(cache.get(cache_key, false))
+		eval_context["suji_safe_tiles"] = cache
 	var index = tile_index(tile)
 	if index < 0 or index >= 27:
 		return false
 	var rank = index % 9
+	var result = false
 	if rank <= 2:
-		return opponent_discard_tile_count(opponent, TILE_CODES[index + 3], eval_context) > 0
-	if rank >= 6:
-		return opponent_discard_tile_count(opponent, TILE_CODES[index - 3], eval_context) > 0
-	return opponent_discard_tile_count(opponent, TILE_CODES[index - 3], eval_context) > 0 and opponent_discard_tile_count(opponent, TILE_CODES[index + 3], eval_context) > 0
+		result = opponent_discard_tile_count(opponent, TILE_CODES[index + 3], eval_context) > 0
+	elif rank >= 6:
+		result = opponent_discard_tile_count(opponent, TILE_CODES[index - 3], eval_context) > 0
+	else:
+		result = opponent_discard_tile_count(opponent, TILE_CODES[index - 3], eval_context) > 0 and opponent_discard_tile_count(opponent, TILE_CODES[index + 3], eval_context) > 0
+	if not eval_context.is_empty():
+		cache[cache_key] = result
+	return result
 
 func suji_anchor_tiles(tile: String) -> Array[String]:
 	var result: Array[String] = []
@@ -7032,10 +7082,11 @@ func kabe_wall_tiles(tile: String) -> Array[String]:
 	return result
 
 
-func chi_feed_risk_score(tile: String, seat: int, opponent: int, visible_override: int = -1, eval_context: Dictionary = {}) -> float:
+func chi_feed_risk_score(tile: String, seat: int, opponent: int, visible_override: int = -1, eval_context: Dictionary = {}, opponent_discard_count_override: int = -1) -> float:
 	if not can_feed_chi(tile) or opponent < 0 or opponent >= players.size():
 		return 0.0
-	if opponent_discard_tile_count(opponent, tile, eval_context) > 0:
+	var opponent_discard_count := opponent_discard_count_override if opponent_discard_count_override >= 0 else opponent_discard_tile_count(opponent, tile, eval_context)
+	if opponent_discard_count > 0:
 		return 0.0
 	var index = tile_index(tile)
 	var rank = index % 9
@@ -7062,10 +7113,11 @@ func chi_feed_risk_score(tile: String, seat: int, opponent: int, visible_overrid
 		score += 2.5
 	return max(0.0, score)
 
-func meld_feed_risk_score(tile: String, seat: int, opponent: int, visible_override: int = -1, eval_context: Dictionary = {}) -> float:
+func meld_feed_risk_score(tile: String, seat: int, opponent: int, visible_override: int = -1, eval_context: Dictionary = {}, opponent_discard_count_override: int = -1) -> float:
 	if tile == "" or opponent < 0 or opponent >= players.size() or opponent == seat:
 		return 0.0
-	if opponent_discard_tile_count(opponent, tile, eval_context) > 0:
+	var opponent_discard_count := opponent_discard_count_override if opponent_discard_count_override >= 0 else opponent_discard_tile_count(opponent, tile, eval_context)
+	if opponent_discard_count > 0:
 		return 0.0
 	var visible = visible_override if visible_override >= 0 else visible_tile_count(tile)
 	if visible >= 3:
@@ -7384,8 +7436,8 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		else:
 			# The target-opponent branch above fully determines both values; avoid
 			# building the all-opponent safety/risk reports before entering it.
-			safety = tile_safety_label(tile, seat, [], eval_context)
-			risk = float(tile_risk_vector(tile, seat, [], eval_context).get("score", 0.0))
+			safety = tile_safety_label(tile, seat, visible_counts, eval_context)
+			risk = float(tile_risk_vector(tile, seat, visible_counts, eval_context).get("score", 0.0))
 		var score = -risk
 		if safety == "安":
 			score += 120.0
@@ -9434,10 +9486,13 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	section_plate.name = "RuleSectionPlate_%d" % section_index if section_index >= 0 else "RuleSectionPlate"
 	section.add_child(section_plate)
 	var line_count := int(lines.size())
-	var wide_typography := effective_viewport_size().x >= 1600.0
+	var section_viewport := effective_viewport_size()
+	section.set_meta("viewport_snapshot", section_viewport)
+	section.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var wide_typography := section_viewport.x >= 1600.0
 	var line_gap := 6.0 if wide_typography else 5.0
 	var line_font_size := accessibility_font_size(commercial_ui_font_size(15, 2))
-	var text_width := maxf(180.0, effective_viewport_size().x * (0.640 if section_index >= 0 else 0.880))
+	var text_width := maxf(180.0, section_viewport.x * (0.640 if section_index >= 0 else 0.880))
 	var measured_line_heights: Array[float] = []
 	var required_text_height := 26.0 if wide_typography else 24.0
 	for line in lines:
@@ -9939,17 +9994,13 @@ func chat_panel_rect() -> Rect2:
 		rect_full(0.115, 0.430, left_route_right, 0.720),
 		rect_full(0.645, 0.400, 0.985, 0.680),
 	]
-	# Candidate scoring runs once per authored lane. Capture meld visibility once
-	# so every score reuses the same table-state snapshot.
-	var visible_meld_seats: Dictionary = {}
-	for layout in MELD_LAYOUTS:
-		var meld_seat := int(layout[0])
-		if not visible_meld_seats.has(meld_seat) and not get_melds(meld_seat).is_empty():
-			visible_meld_seats[meld_seat] = true
+	# Candidate scoring runs once per authored lane. Capture all shared geometry
+	# once so every score reuses the same table-state snapshot.
+	var occupancy_snapshot := chat_panel_occupancy_snapshot()
 	var best := candidates[2]
 	var best_score := INF
 	for candidate in candidates:
-		var score := chat_panel_candidate_overlap_score(candidate, visible_meld_seats)
+		var score := chat_panel_candidate_overlap_score(candidate, occupancy_snapshot)
 		if score < best_score:
 			best_score = score
 			best = candidate
@@ -9960,19 +10011,16 @@ func chat_panel_rect() -> Rect2:
 		return rect_full(0.115, 0.430, left_route_right, 0.720)
 	return best
 
-func chat_panel_candidate_overlap_score(candidate: Rect2, visible_meld_seats_snapshot = null) -> float:
-	var candidate_geometry := Rect2(candidate.position, candidate.size - candidate.position)
-	var occupied: Array[Rect2] = []
+func chat_panel_occupancy_snapshot(visible_meld_seats_snapshot = null) -> Dictionary:
 	var visible_meld_seats: Dictionary = {}
 	if typeof(visible_meld_seats_snapshot) == TYPE_DICTIONARY:
 		visible_meld_seats = visible_meld_seats_snapshot
 	else:
-		# Preserve the direct-call API for callers that do not own a parent-level
-		# snapshot, while ensuring the local check only reads each seat once.
 		for layout in MELD_LAYOUTS:
 			var meld_seat := int(layout[0])
 			if not visible_meld_seats.has(meld_seat) and not get_melds(meld_seat).is_empty():
 				visible_meld_seats[meld_seat] = true
+	var occupied: Array[Rect2] = []
 	for layout in SEAT_LAYOUTS:
 		var seat_rect: Rect2 = layout[1]
 		# Seat panels are mounted on root_layer. Do not apply the table transform
@@ -9992,13 +10040,38 @@ func chat_panel_candidate_overlap_score(candidate: Rect2, visible_meld_seats_sna
 	occupied.append(chat_panel_table_geometry(CENTER_PANEL_RECT).grow(0.004))
 	occupied.append(chat_panel_root_geometry(TOP_HUD_RECT).grow(0.004))
 	occupied.append(chat_panel_root_geometry(CHAT_ACTION_BUTTON_RECT).grow(0.004))
-	var intent_rect := action_intent_rect_for_count(action_bar_button_count())
+	var action_button_count_snapshot := action_bar_button_count()
+	var intent_rect := action_intent_rect_for_count(action_button_count_snapshot)
 	occupied.append(chat_panel_root_geometry(intent_rect).grow(0.004))
 	var action_rect := action_bar_dock_layout_rect()
 	occupied.append(chat_panel_root_geometry(action_rect).grow(0.004))
 	occupied.append(chat_panel_root_geometry(HAND_TRAY_RECT).grow(0.006))
 	var ledger_rect := rect_full(0.018, 0.128, 0.340, 0.235)
 	var ledger_geometry := chat_panel_root_geometry(ledger_rect)
+	return {
+		"occupied": occupied,
+		"ledger_geometry": ledger_geometry,
+		"visible_meld_seats": visible_meld_seats,
+		"action_bar_button_count": action_button_count_snapshot,
+	}
+
+func chat_panel_candidate_overlap_score(candidate: Rect2, occupancy_snapshot_or_melds = null) -> float:
+	var candidate_geometry := Rect2(candidate.position, candidate.size - candidate.position)
+	var occupancy_snapshot: Dictionary = {}
+	var visible_meld_seats: Dictionary = {}
+	if typeof(occupancy_snapshot_or_melds) == TYPE_DICTIONARY and (occupancy_snapshot_or_melds as Dictionary).has("occupied"):
+		occupancy_snapshot = occupancy_snapshot_or_melds
+	else:
+		# Preserve the direct-call API for callers that do not own a parent-level
+		# snapshot, while allowing older callers to pass only visible meld seats.
+		if typeof(occupancy_snapshot_or_melds) == TYPE_DICTIONARY:
+			visible_meld_seats = occupancy_snapshot_or_melds
+		occupancy_snapshot = chat_panel_occupancy_snapshot(visible_meld_seats if not visible_meld_seats.is_empty() else occupancy_snapshot_or_melds)
+	# Ledger exclusion is candidate-specific, so keep the shared base geometry
+	# immutable while adding it for lanes that leave the ledger visible.
+	var occupied: Array = (occupancy_snapshot.get("occupied", []) as Array).duplicate()
+	visible_meld_seats = occupancy_snapshot.get("visible_meld_seats", {})
+	var ledger_geometry: Rect2 = occupancy_snapshot.get("ledger_geometry", Rect2())
 	# The upper-left route hides the ledger before mounting the drawer, so the
 	# ledger is only a hard exclusion for candidates that leave it visible.
 	if candidate.position.x >= 0.35 or candidate.position.y >= 0.45:

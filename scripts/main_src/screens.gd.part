@@ -1,5 +1,6 @@
-func achievement_row_height_contract() -> float:
-	var wide := effective_viewport_size().x >= 1600.0
+func achievement_row_height_contract(viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var wide := viewport_size.x >= 1600.0
 	if large_text_enabled:
 		return 132.0 if wide else 124.0
 	return 116.0 if wide else 80.0
@@ -9,12 +10,13 @@ func _show_achievements_screen_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "achievements"
 	clear_screen()
+	var achievement_viewport_size := effective_viewport_size()
 	var content_size = safe_content_pixel_size()
 	var panel_height = max(1.0, content_size.y * 0.96)
 	var achievement_scroll_top := 0.330
 	var achievement_scroll_max_bottom := 0.885
-	var wide_achievement_gallery := effective_viewport_size().x >= 1600.0
-	var achievement_row_height := achievement_row_height_contract()
+	var wide_achievement_gallery := achievement_viewport_size.x >= 1600.0
+	var achievement_row_height := achievement_row_height_contract(achievement_viewport_size)
 	var achievement_row_gap := 12.0 if wide_achievement_gallery else 8.0
 	var max_scroll_height = panel_height * (achievement_scroll_max_bottom - achievement_scroll_top)
 	var visible_row_count = int(clamp(floor((max_scroll_height + achievement_row_gap) / (achievement_row_height + achievement_row_gap)), 3.0, float(max(3, achievements.size()))))
@@ -41,6 +43,8 @@ func _show_achievements_screen_impl() -> void:
 
 	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.08), "ui_jade_reading_plate")
 	panel.name = "AchievementGalleryFrontPanel"
+	panel.set_meta("viewport_snapshot", achievement_viewport_size)
+	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	root_layer.add_child(panel)
 	draw_secondary_screen_texture(panel, "achievement_medal_glow", "AchievementsGlowTexture", 0.035)
 	var achievement_gpt_key := "achievement_gpt_gallery"
@@ -178,7 +182,7 @@ func _show_achievements_screen_impl() -> void:
 	var rows: Array[Node] = []
 	var index = 0
 	for key in achievements.keys():
-		var row = make_achievement_row(str(key), index)
+		var row = make_achievement_row(str(key), index, achievement_viewport_size)
 		grid.add_child(row)
 		rows.append(row)
 		index += 1
@@ -1089,6 +1093,7 @@ func _show_online_lobby_impl() -> void:
 	emit_ui_qa_marker("page|online_lobby")
 	recover_audio_after_screen_change()
 	clear_screen()
+	var online_lobby_viewport_size := effective_viewport_size()
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and (not online_waiting_for_server or was_online_lobby):
 		if was_online_lobby:
 			online_waiting_for_server = false
@@ -1101,6 +1106,8 @@ func _show_online_lobby_impl() -> void:
 	# header edge instead of running behind inputs and calls to action.
 	var panel = make_gpt_center_crop_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.030, 0.040, 0.036, 0.38), "ui_dark_scrim", 0.18)
 	panel.name = "OnlineLobbyLowFrequencyPagePlate"
+	panel.set_meta("viewport_snapshot", online_lobby_viewport_size)
+	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	root_layer.add_child(panel)
 	var lobby_shadow = make_soft_depth_panel(panel, rect_full(0.008, 0.025, 0.992, 1.020), Color(0.0, 0.0, 0.0, 0.10), 22)  # r415
 	lobby_shadow.name = "OnlineLobby3DCastShadow"
@@ -1203,7 +1210,7 @@ func _show_online_lobby_impl() -> void:
 	mark_ui_optimization(retry_connection_button, "F-739")
 
 	# 表单面板 - 连接与房间设置
-	var wide_lobby_layout := effective_viewport_size().x >= 1600.0
+	var wide_lobby_layout := online_lobby_viewport_size.x >= 1600.0
 	var lobby_form_left := 0.115 if wide_lobby_layout else 0.035
 	var lobby_form_right := 0.475 if wide_lobby_layout else 0.475
 	var lobby_log_left := 0.525 if wide_lobby_layout else 0.505
@@ -1443,7 +1450,7 @@ func _show_online_lobby_impl() -> void:
 	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
-	var compact_room_badge := effective_viewport_size().x <= 960.0
+	var compact_room_badge := online_lobby_viewport_size.x <= 960.0
 	var room_badge_rect := rect_full(0.665, 0.030, 0.985, 0.100) if compact_room_badge else rect_full(0.670, 0.030, 0.945, 0.100)
 	var room_gate_texture = add_optional_gpt_illustration_texture(log_panel, "lobby_room_gate_token", rect_full(0.595, -0.006, 0.990, 0.148), 0.32, false)  # r182 denser gate token
 	if room_gate_texture != null:
@@ -1486,7 +1493,7 @@ func _show_online_lobby_impl() -> void:
 	configure_clipped_label(room_offline_state)
 	set_ui_full_text(room_offline_state, room_offline_state.text, "联机大厅内容：连接后显示房间、席位和日志")
 	mark_ui_optimization(room_offline_state, "F-546")
-	var compact_lobby_log := effective_viewport_size().y <= 560.0
+	var compact_lobby_log := online_lobby_viewport_size.y <= 560.0
 	var log_scroll := ScrollContainer.new()
 	log_scroll.name = "OnlineLobbyLogScroll"
 	configure_scroll_container(log_scroll, "上下滚动查看房间日志；新日志到达时自动跟随底部")
@@ -1540,7 +1547,7 @@ func _show_online_lobby_impl() -> void:
 	draw_online_lobby_connection_route(panel)
 	draw_online_lobby_feedback_sync_art(panel)
 	ensure_update_dialog()
-	refresh_online_lobby_state()
+	refresh_online_lobby_state(online_lobby_viewport_size)
 	configure_online_lobby_focus_navigation(true)
 	register_ui_round_771_800(root_layer)
 	register_ui_round_801_830(root_layer)
@@ -1612,9 +1619,10 @@ func online_lobby_room_snapshot_status_text() -> String:
 	return "同步中 · 以下数据为上次房间快照" if not online_room.is_empty() else "等待服务器确认 · 暂无当前快照"
 
 
-func refresh_online_lobby_state() -> void:
+func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
+	var lobby_viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var find_control := func(node_name: String) -> Control:
 		return online_lobby_control(node_name)
 	var lobby_start_gate := online_lobby_start_gate()
@@ -1623,7 +1631,7 @@ func refresh_online_lobby_state() -> void:
 	var previous_content_revision := int(root_layer.get_meta("online_lobby_content_revision", -1))
 	if previous_state_key == lobby_state_key:
 		if previous_content_revision != online_lobby_render_revision:
-			refresh_online_room_content()
+			refresh_online_room_content(lobby_viewport_size)
 			root_layer.set_meta("online_lobby_content_revision", online_lobby_render_revision)
 		online_last_lobby_render_revision = online_lobby_render_revision
 		# Action gates can be changed by an in-memory room fixture or a server
@@ -1673,7 +1681,7 @@ func refresh_online_lobby_state() -> void:
 		endpoint_label.tooltip_text = endpoint_label.text
 		set_ui_full_text(endpoint_label, online_connection_endpoint_text(), "服务器地址")
 		endpoint_label.set_meta("summary_contract", "endpoint_room_connection_and_copy_route")
-		fit_label_font_size(endpoint_label, maxf(110.0, effective_viewport_size().x * 0.170), commercial_ui_font_size(12, 2), 9)
+		fit_label_font_size(endpoint_label, maxf(110.0, lobby_viewport_size.x * 0.170), commercial_ui_font_size(12, 2), 9)
 		mark_ui_optimization(endpoint_label, "F-547")
 		mark_ui_optimization(endpoint_label, "F-461")
 		mark_ui_optimization(endpoint_label, "F-110")
@@ -1759,10 +1767,10 @@ func refresh_online_lobby_state() -> void:
 			lobby_status_text = "下一步 · 先连接，再建房或入房"
 		set_dynamic_label_text(lobby_status, lobby_status_text, "联机大厅当前状态：" + lobby_status_text)
 		mark_ui_optimization(lobby_status, "F-464")
-	refresh_online_room_content()
+	refresh_online_room_content(lobby_viewport_size)
 	refresh_online_lobby_action_states()
 
-func refresh_online_room_content() -> void:
+func refresh_online_room_content(viewport_snapshot: Vector2 = Vector2.ZERO) -> void:
 	if mode != "online_lobby" or root_layer == null or not is_instance_valid(root_layer):
 		return
 	var find_control := func(node_name: String) -> Control:
@@ -1770,7 +1778,7 @@ func refresh_online_room_content() -> void:
 	var room_art = find_control.call("OnlineLobbyRoomArt") as CanvasItem
 	var roster = find_control.call("OnlineLobbyRosterPanel") as CanvasItem
 	var log_list = find_control.call("OnlineLobbyLogListPanel") as CanvasItem
-	var viewport_size := effective_viewport_size()
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var compact_log_summary := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	var entries := online_lobby_player_entries()
 	var player_count := online_lobby_occupied_seat_count(entries)
@@ -2090,6 +2098,7 @@ func _show_rules_screen_impl() -> void:
 	mode = "rules"
 	emit_ui_qa_marker("page|rules")
 	clear_screen()
+	var rules_viewport_size := effective_viewport_size()
 	rules_section_controls.clear()
 	rules_focus_controls_cache.clear()
 
@@ -2099,6 +2108,8 @@ func _show_rules_screen_impl() -> void:
 	# 主面板：纹理与交互/文字处于同级，避免父纹理调色压低阅读内容。
 	var panel = make_layout_host(rect_full(0.02, 0.02, 0.98, 0.98))
 	panel.name = "RulesCodexFrontPanel"
+	panel.set_meta("viewport_snapshot", rules_viewport_size)
+	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	root_layer.add_child(panel)
 	# The front plate is the single authored surface for the page; keep the
 	# content area free of a second full-page illustration.
@@ -2122,7 +2133,7 @@ func _show_rules_screen_impl() -> void:
 	apply_rect(title, rect_full(0.04, 0.024, 0.46, 0.082))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
-	var rules_guide = draw_rules_guide_art(panel)
+	var rules_guide = draw_rules_guide_art(panel, rules_viewport_size)
 	mark_ui_optimization(rules_guide, "F-534")
 
 	# 返回按钮
@@ -2161,7 +2172,7 @@ func _show_rules_screen_impl() -> void:
 	var content_scroll = ScrollContainer.new()
 	content_scroll.name = "RulesContentScroll"
 	configure_scroll_container(content_scroll, "上下滚动查看完整规则说明")
-	var compact_rules_scroll := effective_viewport_size().y <= 560.0
+	var compact_rules_scroll := rules_viewport_size.y <= 560.0
 	var rules_content_bottom := 0.875 if compact_rules_scroll else 0.982
 	content_scroll.anchor_left = 0.058
 	content_scroll.anchor_top = 0.168
@@ -2186,7 +2197,7 @@ func _show_rules_screen_impl() -> void:
 	panel.add_child(rules_scroll_gutter)
 	# Solve the fraction from a pixel target so the grip remains discoverable on
 	# 960/1280/1920 captures and still has a stable touch target on Android.
-	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * effective_viewport_size().x)
+	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * rules_viewport_size.x)
 	var rules_thumb_visual_width_px := 24.0
 	var thumb_span_frac := minf(rules_thumb_visual_width_px / gutter_span_px, 0.90)
 	var thumb_left := 0.5 - thumb_span_frac * 0.5
@@ -2293,7 +2304,7 @@ func _show_rules_screen_impl() -> void:
 	var chi_text := "允许吃牌（仅限下家弃牌）" if rule_allows_chi() else "不允许吃牌，仅可碰、杠、胡"
 	var flower_text := "含8张花牌，补花后计番" if bool(current_profile.get("include_flowers", true)) else "不含花牌"
 	var wall_rule_text := "牌墙：%d张 · %s · %s" % [rule_wall_size(), flower_text, chi_text]
-	if effective_viewport_size().x <= 960.0:
+	if rules_viewport_size.x <= 960.0:
 		# Keep the long CJK clause visible even on Godot builds where arbitrary
 		# label wrapping does not break text inside a VBoxContainer.
 		wall_rule_text = "牌墙：%d张 · %s\n%s" % [rule_wall_size(), flower_text, chi_text]
@@ -2819,6 +2830,8 @@ func _show_shop_screen_impl() -> void:
 			shop_scroll_restore_value = float(old_shop_scroll.scroll_vertical)
 	mode = "shop"
 	clear_screen()
+	var shop_viewport_size := effective_viewport_size()
+	var shop_content_size := safe_content_pixel_size()
 
 	# 背景装饰 - 祥云与灯笼
 	make_cloud_decoration(root_layer, rect_full(0.02, 0.75, 0.25, 0.95), "mist", false)
@@ -2840,6 +2853,10 @@ func _show_shop_screen_impl() -> void:
 		0.16
 	)
 	panel.name = "ShopCabinetFrontPanel"
+	panel.set_meta("viewport_snapshot", shop_viewport_size)
+	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	panel.set_meta("content_size_snapshot", shop_content_size)
+	panel.set_meta("content_size_snapshot_policy", "one_content_size_snapshot_per_draw")
 	root_layer.add_child(panel)
 	var shop_gpt_key := "shop_gpt_vault"
 	var gpt_shop_texture = add_optional_gpt_illustration_texture(panel, shop_gpt_key, rect_full(0.010, 0.020, 0.990, 0.980), 0.025, false)
@@ -2986,7 +3003,7 @@ func _show_shop_screen_impl() -> void:
 	set_ui_full_text(shop_scroll_position, shop_scroll_position.tooltip_text, "商品列表滚动位置")
 	mark_ui_optimization(shop_scroll_position, "F-551")
 
-	var shop_wide_layout := effective_viewport_size().x >= 1600.0
+	var shop_wide_layout := shop_viewport_size.x >= 1600.0
 	var content: Control
 	if shop_wide_layout:
 		var grid := GridContainer.new()
@@ -3004,14 +3021,14 @@ func _show_shop_screen_impl() -> void:
 
 	# 让道具行按可用陈列区高度自适应，填满原本空洞的橱窗，同时保证不越过底部说明栏。
 	var shop_item_count := maxi(1, ITEM_TYPES.size())
-	var shop_content_pixels := safe_content_pixel_size()
+	var shop_content_pixels := shop_content_size
 	var shop_scroll_pixels := shop_content_pixels.y * 0.96 * (0.750 - 0.12)
 	var shop_columns := 2 if shop_wide_layout else 1
 	var shop_visual_rows := maxi(1, ceili(float(shop_item_count) / float(shop_columns)))
 	var shop_row_gap := 12.0 if shop_wide_layout else 10.0
 	var shop_row_max_height := 320.0 if shop_wide_layout else 120.0
 	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_visual_rows - 1)) / float(shop_visual_rows)), 68.0, shop_row_max_height)
-	var shop_text_width := maxf(180.0, effective_viewport_size().x * (0.190 if shop_wide_layout else 0.380))
+	var shop_text_width := maxf(180.0, shop_viewport_size.x * (0.190 if shop_wide_layout else 0.380))
 	for item_id in ITEM_TYPES.keys():
 		var item_info = ITEM_TYPES[item_id]
 		var description := str(item_info.get("desc", ""))
@@ -3107,7 +3124,7 @@ func _show_shop_screen_impl() -> void:
 		name_label.add_theme_constant_override("shadow_offset_y", 1)
 		name_label.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.90))
 		name_label.add_theme_constant_override("outline_size", 4)
-		var name_width_px := maxf(120.0, safe_content_pixel_size().x * (0.445 if shop_wide_layout else 0.300))
+		var name_width_px := maxf(120.0, shop_content_size.x * (0.445 if shop_wide_layout else 0.300))
 		fit_label_font_size(name_label, name_width_px, commercial_ui_font_size(20, 3), 12)
 		configure_clipped_label(name_label)
 		name_label.set_meta("shop_name_width_px", name_width_px)
@@ -3224,7 +3241,7 @@ func _show_shop_screen_impl() -> void:
 		# The CTA occupies only the inner text lane of a narrow purchase target.
 		# Estimate that lane from the final target width, then re-measure after the
 		# GridContainer/VBoxContainer has resolved its row geometry.
-		fit_label_font_size(command_label, maxf(64.0, effective_viewport_size().x * (0.040 if shop_wide_layout else 0.100)), commercial_ui_font_size(13, 2), 10)
+		fit_label_font_size(command_label, maxf(64.0, shop_viewport_size.x * (0.040 if shop_wide_layout else 0.100)), commercial_ui_font_size(13, 2), 10)
 		command_label.set_meta("cta_width_contract", "single_line_measured_text_lane")
 		configure_clipped_label(command_label)
 		set_ui_full_text(command_label, command_label.text, "购买操作：" + name_label.text)
@@ -3263,7 +3280,7 @@ func _show_shop_screen_impl() -> void:
 
 	var shop_bottom_spacer := Control.new()
 	shop_bottom_spacer.name = "ShopItemsBottomSpacer"
-	shop_bottom_spacer.custom_minimum_size = Vector2(0.0, maxf(32.0, effective_viewport_size().y * 0.090))
+	shop_bottom_spacer.custom_minimum_size = Vector2(0.0, maxf(32.0, shop_viewport_size.y * 0.090))
 	shop_bottom_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shop_bottom_spacer.set_meta("shop_footer_reserved_px", shop_bottom_spacer.custom_minimum_size.y)
 	shop_bottom_spacer.set_meta("shop_footer_gap_px", 8.0)
@@ -3327,7 +3344,7 @@ func _show_shop_screen_impl() -> void:
 	apply_rect(footer_body, rect_full(0.035, 0.515, 0.630, 0.850))
 	footer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_body)
-	fit_label_font_size(footer_body, maxf(180.0, effective_viewport_size().x * 0.540), commercial_ui_font_size(13, 2), 10)
+	fit_label_font_size(footer_body, maxf(180.0, shop_viewport_size.x * 0.540), commercial_ui_font_size(13, 2), 10)
 	footer_body.set_meta("compact_fit_policy", "measure_copy_before_inventory_badges")
 	var inventory_text := "库存 %d件" % total_inventory
 	var footer_inventory = make_badge(shop_footer, rect_full(0.650, 0.175, 0.790, 0.775), inventory_text, commercial_ui_font_size(13, 2), Color(0.060, 0.120, 0.110, 0.80), Color(0.42, 0.62, 0.50, 0.28), Color(0.90, 0.96, 0.84))
@@ -3703,13 +3720,15 @@ func _show_stats_screen_impl() -> void:
 	# r215: GPT chrome conversion
 	mode = "stats"
 	clear_screen()
-	var content_size = safe_content_pixel_size()
+	var stats_viewport_size := effective_viewport_size()
+	var stats_content_size := safe_content_pixel_size()
+	var content_size = stats_content_size
 	var panel_height = max(1.0, content_size.y * 0.96)
 	var stats_row_count := 6
 	var stats_content_top := 0.340
 	var stats_content_max_bottom := 0.920
 	var stats_available_height = panel_height * (stats_content_max_bottom - stats_content_top)
-	var wide_stats_layout := effective_viewport_size().x >= 1600.0
+	var wide_stats_layout := stats_viewport_size.x >= 1600.0
 	var stats_row_gap = 14.0 if wide_stats_layout else clamp(panel_height * 0.010, 5.0, 10.0)
 	var stats_row_height_cap := 104.0 if wide_stats_layout else 52.0
 	var stats_row_height = clamp(floor((stats_available_height - stats_row_gap * float(stats_row_count - 1)) / float(stats_row_count)), 42.0, stats_row_height_cap)
@@ -3731,6 +3750,10 @@ func _show_stats_screen_impl() -> void:
 
 	var panel = make_gpt_plate_rect(rect_full(0.02, 0.02, 0.98, 0.98), Color(0.22, 0.16, 0.11, 0.58), "ui_jade_reading_plate")
 	panel.name = "StatsConsoleFrontPanel"
+	panel.set_meta("viewport_snapshot", stats_viewport_size)
+	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	panel.set_meta("content_size_snapshot", stats_content_size)
+	panel.set_meta("content_size_snapshot_policy", "one_content_size_snapshot_per_draw")
 	root_layer.add_child(panel)
 	draw_secondary_screen_texture(panel, "stats_chart", "StatsChartTexture", 0.035)
 	var stats_gpt_key := "stats_gpt_dashboard"
@@ -3829,7 +3852,7 @@ func _show_stats_screen_impl() -> void:
 	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
 	var stats_source := stats_source_for_filter(stats_selected_rule)
 	panel.set_meta("stats_source", stats_source.duplicate(true))
-	draw_stats_dashboard_art(panel)
+	draw_stats_dashboard_art(panel, stats_viewport_size)
 	draw_stats_data_scan_art(panel)
 	draw_stats_insight_convergence_art(panel)
 	var stats_games_played := maxi(0, int(stats_source.get("games", stats_source.get("games_played", 0))))
@@ -3866,7 +3889,7 @@ func _show_stats_screen_impl() -> void:
 	stats_scroll_status.tooltip_text = "统计行滚动位置"
 	stats_scroll_status.set_meta("ui_scroll_role", "stats_rows_status")
 	stats_scroll_status.add_theme_font_size_override("font_size", accessibility_font_size(11))
-	fit_label_font_size(stats_scroll_status, maxf(180.0, safe_content_pixel_size().x * 0.80), accessibility_font_size(11), 9)
+	fit_label_font_size(stats_scroll_status, maxf(180.0, stats_content_size.x * 0.80), accessibility_font_size(11), 9)
 	var content := VBoxContainer.new()
 	content.name = "StatsRowsContent"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4865,8 +4888,11 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	clear_screen()
 
 	# 主面板
+	var daily_login_viewport_size := effective_viewport_size()
 	var panel = make_gpt_plate_rect(rect_full(0.16, 0.085, 0.84, 0.915), Color(0.18, 0.13, 0.09, 0.97), "ui_jade_reading_plate")
 	panel.name = "DailyLoginPanel"
+	panel.set_meta("viewport_snapshot", daily_login_viewport_size)
+	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	root_layer.add_child(panel)
 	var daily_shadow = make_soft_depth_panel(panel, rect_full(0.010, 0.030, 0.990, 1.025), Color(0.0, 0.0, 0.0, 0.34), 24)
 	daily_shadow.name = "DailyLogin3DCastShadow"
@@ -5027,14 +5053,14 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		day_label.name = "DailyLoginDayLabel_%d" % day_num
 		apply_rect(day_label, rect_full(0.070, 0.070, 0.930, 0.350))
 		set_ui_full_text(day_label, day_state_text, "签到第%d天" % day_num)
-		fit_label_font_size(day_label, maxf(28.0, effective_viewport_size().x * 0.045), 10, 8)
+		fit_label_font_size(day_label, maxf(28.0, daily_login_viewport_size.x * 0.045), 10, 8)
 		configure_clipped_label(day_label)
 		var day_state_label := make_label(indicator, "已领取" if is_claimed else ("今日可领" if is_current else "待签到"), 8, text_color, true)
 		day_state_label.name = "DailyLoginDayStateLabel_%d" % day_num
 		apply_rect(day_state_label, rect_full(0.070, 0.355, 0.930, 0.610))
 		day_state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		set_ui_full_text(day_state_label, day_state_label.text, day_state_text)
-		fit_label_font_size(day_state_label, maxf(30.0, effective_viewport_size().x * 0.050), 9, 7)
+		fit_label_font_size(day_state_label, maxf(30.0, daily_login_viewport_size.x * 0.050), 9, 7)
 		configure_clipped_label(day_state_label)
 
 		var reward_icon = "双倍" if is_milestone else "+100"
@@ -5043,7 +5069,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		icon_label.name = "DailyLoginRewardLabel_%d" % day_num
 		apply_rect(icon_label, rect_full(0.070, 0.625, 0.930, 0.920))
 		set_ui_full_text(icon_label, day_state_text, "第%d天奖励" % day_num)
-		fit_label_font_size(icon_label, maxf(30.0, effective_viewport_size().x * 0.050), 12, 8)
+		fit_label_font_size(icon_label, maxf(30.0, daily_login_viewport_size.x * 0.050), 12, 8)
 		configure_clipped_label(icon_label)
 
 		# 已签到的天数添加对勾
@@ -5105,7 +5131,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		reward_text += "金币 +100"
 		reward_icon_name = "coin"
 
-	var large_checkin_layout := large_text_enabled or effective_viewport_size().y <= 560.0
+	var large_checkin_layout := large_text_enabled or daily_login_viewport_size.y <= 560.0
 	var reward_top := 0.415 if large_checkin_layout else 0.430
 	var reward_bottom := 0.555 if large_checkin_layout else 0.542
 	var progress_top := 0.575 if large_checkin_layout else 0.560
@@ -5989,10 +6015,13 @@ func show_exit_confirm() -> void:
 	overlay.add_child(mask)
 
 	# 对话框面板 — r415: thin lacquer shell under GPT confirm plate.
-	var compact_exit := effective_viewport_size().y <= 600.0 or effective_viewport_size().x <= 1000.0
+	var exit_viewport := effective_viewport_size()
+	var compact_exit := exit_viewport.y <= 600.0 or exit_viewport.x <= 1000.0
 	var dialog_rect := rect_full(0.16, 0.22, 0.84, 0.78) if compact_exit else rect_full(0.28, 0.35, 0.72, 0.65)
 	var dialog = make_gpt_plate_rect(dialog_rect, Color(0.18, 0.13, 0.08, 0.20), "ui_button_face_plate")
 	dialog.name = "ExitConfirmDialog"
+	dialog.set_meta("viewport_snapshot", exit_viewport)
+	dialog.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	dialog.set_meta("compact_layout", compact_exit)
 	dialog.set_meta("reading_order", ["ExitConfirmTitle", "ExitConfirmMessage", "ExitConfirmSaveStatus", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"])
 	dialog.set_meta("save_guard_policy", "save_must_succeed_before_menu_transition")
@@ -6157,12 +6186,15 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 			"progress_ratio": -1.0,
 		}
 	clear_screen()
+	var loading_viewport_size := effective_viewport_size()
 	loading_screen_active = true
 	var loading_error := loading_state_is_error()
 
 	# 背景面板 - 使用位图国风背景，避免叠加程序绘制装饰
 	var bg = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.018, 0.024, 1.0), "ui_jade_reading_plate")
 	bg.name = "LoadingPanel"
+	bg.set_meta("viewport_snapshot", loading_viewport_size)
+	bg.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	root_layer.add_child(bg)
 	var loading_gpt_key := "loading_scene_gpt_backdrop"
 	var gpt_loading_texture = add_optional_gpt_illustration_texture(bg, loading_gpt_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.78, true)
@@ -6249,7 +6281,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	apply_rect(title, rect_full(0.10, 0.150, 0.90, 0.365))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.clip_text = true
-	fit_label_font_size(title, maxf(260.0, effective_viewport_size().x * 0.360), 52, 38)
+	fit_label_font_size(title, maxf(260.0, loading_viewport_size.x * 0.360), 52, 38)
 	set_ui_full_text(title, "云桌麻将", "加载页标题：云桌麻将")
 	mark_ui_optimization(title, "F-493")
 	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.95))
@@ -6287,7 +6319,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	apply_rect(loading_text, rect_full(0.0, 0.0, 1.0, 1.0))
 	loading_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	loading_text.tooltip_text = loading_status_text
-	configure_wrapped_label(loading_text, maxf(260.0, effective_viewport_size().x * 0.300), 0.0, 3.0)
+	configure_wrapped_label(loading_text, maxf(260.0, loading_viewport_size.x * 0.300), 0.0, 3.0)
 	set_ui_full_text(loading_text, loading_status_text, "加载状态：" + loading_status_text)
 	mark_ui_optimization(loading_text, "F-430")
 	loading_text.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
@@ -6302,7 +6334,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		set_ui_full_text(error_hint, "加载失败：%s；可重试或返回主菜单，返回不会删除本地进度" % loading_status_text, "加载错误恢复提示")
 		error_hint.set_meta("text_slot_role", "loading_error_summary")
 		error_hint.set_meta("full_error_text", loading_status_text)
-		configure_wrapped_label(error_hint, maxf(220.0, effective_viewport_size().x * 0.62), 0.0, 2.0)
+		configure_wrapped_label(error_hint, maxf(220.0, loading_viewport_size.x * 0.62), 0.0, 2.0)
 		error_hint.max_lines_visible = 2
 		error_hint.set_meta("max_visible_lines", 2)
 		mark_ui_optimization(error_hint, "F-495")
@@ -6354,7 +6386,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	apply_rect(tip_label, rect_full(0.10, 0.785, 0.90, 0.900))
 	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tip_label.tooltip_text = tip_text
-	configure_wrapped_label(tip_label, maxf(260.0, effective_viewport_size().x * 0.340), 0.0, 3.0)
+	configure_wrapped_label(tip_label, maxf(260.0, loading_viewport_size.x * 0.340), 0.0, 3.0)
 	tip_label.set_meta("accessible_name", "加载提示：" + tip_text)
 	mark_ui_optimization(tip_label, "F-431")
 	tip_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.85))
@@ -7148,16 +7180,23 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	plate.name = "ReplayArchiveRowPlate"
 	row.add_child(plate)
 	var result_label := replay_archive_result_label(entry)
-	var archive_context := "归档：" + replay_archive_display_date_text(entry)
-	var primary := make_label(row, replay_archive_display_date_text(entry), 11, Color(0.92, 0.88, 0.74), true)
+	var archive_date_text := replay_archive_date_text(entry)
+	var archive_display_date_text := archive_date_text
+	if archive_date_text.length() >= 16 and archive_date_text[4] == "-":
+		archive_display_date_text = archive_date_text.substr(5, 11)
+	row.set_meta("archive_date_text_snapshot", archive_date_text)
+	row.set_meta("archive_display_date_text_snapshot", archive_display_date_text)
+	row.set_meta("archive_date_text_snapshot_policy", "one_date_parse_per_row")
+	var archive_context := "归档：" + archive_display_date_text
+	var primary := make_label(row, archive_display_date_text, 11, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
 	apply_rect(primary, rect_full(0.035, 0.040, 0.520, 0.260))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
 	fit_label_font_size(primary, maxf(96.0, effective_viewport_size().x * 0.430), 11, 9)
 	primary.set_meta("measured_column_policy", "date_and_result_columns_keep_trailing_gutter")
-	primary.tooltip_text = replay_archive_date_text(entry)
-	set_ui_full_text(primary, replay_archive_date_text(entry), "回放日期")
+	primary.tooltip_text = archive_date_text
+	set_ui_full_text(primary, archive_date_text, "回放日期")
 	var result := make_label(row, result_label, 11, Color(0.72, 0.90, 0.68), true)
 	result.name = "ReplayArchiveRowResult"
 	apply_rect(result, rect_full(0.520, 0.040, 0.965, 0.260))
@@ -7952,9 +7991,12 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC) 
 	toast_bg.offset_right = 0
 	# Give long errors a bounded multi-line lane. The anchor position remains
 	# stable, while the height grows enough to expose the first complete message.
-	var toast_width := maxf(240.0, effective_viewport_size().x * (toast_right - toast_left))
+	var toast_viewport := effective_viewport_size()
+	toast_bg.set_meta("viewport_snapshot", toast_viewport)
+	toast_bg.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var toast_width := maxf(240.0, toast_viewport.x * (toast_right - toast_left))
 	var toast_height := clampf(estimate_wrapped_text_height(safe_text, toast_width - 56.0, 16, 3.0) + 16.0, float(UI_MIN_TOUCH_TARGET), 132.0)
-	var anchor_height := effective_viewport_size().y * (toast_bottom - toast_top)
+	var anchor_height := toast_viewport.y * (toast_bottom - toast_top)
 	toast_bg.offset_bottom = maxf(0.0, toast_height - anchor_height)
 	# The Control is only a geometry/lifecycle host. The imported authored face is
 	# the visual surface, so a missing asset never falls back to a program Panel.
@@ -8201,7 +8243,10 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 			old_reset_art.queue_free()
 			draw_reset_progress_button_art(button)
 
-	var compact_settings := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 960.0
+	var local_update_viewport := effective_viewport_size()
+	settings_panel.set_meta("local_update_viewport_snapshot", local_update_viewport)
+	settings_panel.set_meta("local_update_viewport_snapshot_policy", "one_viewport_snapshot_per_update")
+	var compact_settings := local_update_viewport.y <= 560.0 or local_update_viewport.x <= 960.0
 	var visible_status := full_status
 	if compact_settings or large_text_enabled or setting_key == "画面质量" or setting_key == "本地进度":
 		visible_status = compact_setting_status(setting_key, full_status)

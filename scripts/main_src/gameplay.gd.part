@@ -460,13 +460,13 @@ func action_chrome_button_signature(button_snapshot = null) -> String:
 			button_parts.append("focused")
 	return "|".join(button_parts)
 
-func battle_action_chrome_identity_signature(button_snapshot = null) -> String:
+func battle_action_chrome_identity_signature(button_snapshot = null, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1) -> String:
 	var viewport_size := effective_viewport_size()
 	var buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
 	var count := action_bar_button_count(buttons)
 	var disconnected := mode == "online_game" and online_game_disconnected()
-	var pending_claim_mode := has_pending_claim_window()
-	var danger_confirm_mode := mode == "offline" and has_pending_danger_discard()
+	var pending_claim_mode := bool(pending_claim_snapshot) if pending_claim_snapshot >= 0 else has_pending_claim_window()
+	var danger_confirm_mode := mode == "offline" and (bool(pending_danger_snapshot) if pending_danger_snapshot >= 0 else has_pending_danger_discard())
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
 	var focus_token := ""
@@ -2656,7 +2656,7 @@ func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
 		return
 	var visible_counts = visible_tile_counts_shared()
 	var eval_context = make_ai_evaluation_context(seat, visible_counts)
-	var risk = deal_in_risk_score(tile, seat, eval_context)
+	var risk = deal_in_risk_score(tile, seat, eval_context, visible_counts)
 	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context)
 	var feed = float(feed_report.get("score", 0.0))
 	if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
