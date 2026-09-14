@@ -2673,19 +2673,19 @@ func _ai_sim_note_discard_risk(seat: int, tile: String) -> void:
 		return
 	var visible_counts = visible_tile_counts_shared()
 	var eval_context = make_ai_evaluation_context(seat, visible_counts)
-	var risk = deal_in_risk_score(tile, seat, eval_context, visible_counts)
-	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context)
+	var tile_idx = tile_index(tile)
+	var risk = deal_in_risk_score(tile, seat, eval_context, visible_counts, tile_idx)
+	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context, tile_idx)
 	var feed = float(feed_report.get("score", 0.0))
 	if risk >= AI_DANGER_RISK_SOFT or feed >= AI_DANGER_FEED_SOFT:
 		ai_sim_stats["dangerous_discards"] = int(ai_sim_stats.get("dangerous_discards", 0)) + 1
 	if risk >= AI_DANGER_RISK_HIGH:
 		ai_sim_stats["high_danger_discards"] = int(ai_sim_stats.get("high_danger_discards", 0)) + 1
 	var hand_counts = tile_counts(players[seat].get("hand", []))
-	var tile_idx = tile_index(tile)
 	if tile_idx >= 0 and tile_idx < hand_counts.size() and int(hand_counts[tile_idx]) > 0:
 		hand_counts[tile_idx] = int(hand_counts[tile_idx]) - 1
 	var shanten = calculate_min_shanten_from_counts(hand_counts, int(players[seat].get("melds", []).size()))
-	_ai_sim_note_human_target_pressure(human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context))
+	_ai_sim_note_human_target_pressure(human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context, tile_idx))
 
 func _ai_sim_note_human_target_pressure(pressure: float) -> void:
 	# R68: 对玩家危险弃牌遥测必须难度无关；实际 seat0 和牌数在全 Bot
@@ -4549,15 +4549,11 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 func can_win_for_seat(seat: int, extra_tile: String = "") -> bool:
 	if seat < 0 or seat >= players.size():
 		return false
-	var tiles: Array = players[seat]["hand"].duplicate()
-	extra_tile = normalize_tile_code(extra_tile)
-	if extra_tile != "":
-		tiles.append(extra_tile)
-	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory(seat, tiles):
-		return false
-	if not is_complete_hand(tiles, players[seat]["melds"].size()):
-		return false
-	return rule_minimum_met_for_tiles(seat, tiles, extra_tile == "")
+	# The count-based boundary already owns inventory, completion, and minimum-fan
+	# validation. Build the hand vector once and keep the public self-draw flag.
+	var hand_counts: Array = tile_counts(players[seat]["hand"])
+	var normalized_extra_tile := normalize_tile_code(extra_tile)
+	return _can_win_for_seat_from_counts_normalized(seat, hand_counts, normalized_extra_tile, normalized_extra_tile == "")
 
 
 func record_passed_win_tile(seat: int, tile: String) -> void:
@@ -4790,6 +4786,9 @@ func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_cou
 	var seen := {}
 	var hand_tile_count = hand_tile_count_override if hand_tile_count_override >= 0 else players[seat].get("hand", []).size()
 	var open_melds = players[seat].get("melds", []).size()
+	# Each discarded tile is probed against the same hand vector. Reuse one
+	# temporary count array and restore its candidate slot after every probe.
+	var candidate_counts := hand_counts.duplicate()
 	for item in discards:
 		var discarded_tile := normalize_tile_code(str(item))
 		if seen.has(discarded_tile):
@@ -4798,9 +4797,10 @@ func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_cou
 		var index := tile_index_normalized(discarded_tile)
 		if index < 0 or index >= hand_counts.size():
 			continue
-		var candidate_counts = hand_counts.duplicate()
 		candidate_counts[index] = int(candidate_counts[index]) + 1
-		if is_complete_hand_from_counts(candidate_counts, hand_tile_count + 1, open_melds):
+		var completes_hand := is_complete_hand_from_counts(candidate_counts, hand_tile_count + 1, open_melds)
+		candidate_counts[index] = int(candidate_counts[index]) - 1
+		if completes_hand:
 			offline_furiten_cache_key = cache_key
 			offline_furiten_cache_value = true
 			return true
@@ -4814,7 +4814,7 @@ func can_ron_for_seat(seat: int, tile: String) -> bool:
 	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
 	var hand_counts = tile_counts(players[seat].get("hand", []))
-	if not can_win_for_seat_from_counts(seat, hand_counts, tile):
+	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile):
 		return false
 	return not is_discard_furiten_from_counts(seat, hand_counts)
 
@@ -4823,13 +4823,16 @@ func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -
 	tile = normalize_tile_code(tile)
 	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
-	if not can_win_for_seat_from_counts(seat, hand_counts, tile):
+	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile):
 		return false
 	return not is_discard_furiten_from_counts(seat, hand_counts)
 
 
 func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "", self_draw: bool = false) -> bool:
-	extra_tile = normalize_tile_code(extra_tile)
+	return _can_win_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(extra_tile), self_draw)
+
+
+func _can_win_for_seat_from_counts_normalized(seat: int, hand_counts: Array, extra_tile: String, self_draw: bool = false) -> bool:
 	if seat < 0 or seat >= players.size() or hand_counts.is_empty():
 		return false
 	var counts = hand_counts
@@ -4841,13 +4844,14 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 		counts = hand_counts.duplicate()
 		counts[index] = int(counts[index]) + 1
 		tile_count += 1
-	if not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, counts, tile_count):
+	var validated_counts := validated_scoring_tile_counts_from_counts(seat, counts, tile_count)
+	if validated_counts.is_empty():
 		return false
 	if not is_complete_hand_from_counts(counts, tile_count, players[seat]["melds"].size()):
 		return false
 	if rule_min_fan() <= 1:
 		return true
-	return rule_minimum_met_for_tiles(seat, tiles_from_counts(counts), self_draw)
+	return rule_minimum_met_for_counts(seat, counts, tile_count, self_draw, "", validated_counts)
 
 func discard_report_for_tile(tile: String, hand_index: int = -1) -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard() or tile == "":
@@ -5088,7 +5092,7 @@ func discard_reason_label(tile: String, original_hand: Array, report: Dictionary
 	var safety = str(report.get("safety_label", ""))
 	if safety != "":
 		return "防守" + discard_safety_short_text(report)
-	if is_plan_offcut(tile, report, original_hand, original_counts_snapshot):
+	if is_plan_offcut(tile, report, original_hand, original_counts_snapshot, tile_index_snapshot):
 		return "保路线"
 	if is_discard_isolated(tile, original_hand, original_counts_snapshot, tile_index_snapshot):
 		return "切孤张"
@@ -5137,20 +5141,23 @@ func discard_danger_source_report(tile: String, seat: int) -> Dictionary:
 		return source
 	return {}
 
-func discard_danger_reason(tile: String, seat: int, opponent: int, eval_context: Dictionary = {}) -> String:
+func discard_danger_reason(tile: String, seat: int, opponent: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> String:
 	var parts: Array[String] = []
 	var visible_counts = ai_context_visible_counts(eval_context)
-	var visible = visible_tile_count_from_counts(tile, visible_counts)
-	if is_number_tile(tile):
-		var suit = tile_suit_index(tile)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var visible = visible_tile_count_from_counts(tile, visible_counts, index)
+	var is_number_value := index >= 0 and index < 27
+	if is_number_value:
+		var suit := int(index / 9)
 		var suit_melds = opponent_meld_count_for_suit(opponent, suit, eval_context)
 		if suit_melds >= 2:
 			parts.append("%s染手" % suit_label(suit_code(suit)))
 		elif suit_melds == 1:
 			parts.append("%s副露" % suit_label(suit_code(suit)))
-		if is_middle_number_tile(tile):
+		var rank := index % 9
+		if rank >= 2 and rank <= 6:
 			parts.append("中张")
-	elif is_honor_tile(tile):
+	elif index >= 27:
 		if opponent_honor_meld_count(opponent, eval_context) > 0:
 			parts.append("字牌副露")
 		else:
@@ -5159,7 +5166,7 @@ func discard_danger_reason(tile: String, seat: int, opponent: int, eval_context:
 		parts.append("生张")
 	elif visible == 1:
 		parts.append("少见")
-	if opponent == (seat + 1) % 4 and can_feed_chi(tile):
+	if opponent == (seat + 1) % 4 and is_number_value:
 		parts.append("下家可吃")
 	if players[opponent]["melds"].size() >= 3:
 		parts.append("三副露")

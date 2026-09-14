@@ -3383,7 +3383,7 @@ func run() -> void:
 	var feed_explicit_242: Dictionary = scene.discard_feed_risk_report("4M", 0, feed_visible_242, feed_context_242, feed_index_242)
 	check(is_equal_approx(float(feed_explicit_242.get("score", 0.0)), float(feed_fallback_242.get("score", 0.0))) and feed_explicit_242.get("details", []) == feed_fallback_242.get("details", []), "explicit feed-risk index preserves the report")
 	var feed_invalid_242: Dictionary = scene.discard_feed_risk_report("ZZ", 0, feed_visible_242, feed_context_242, -1)
-	check(is_equal_approx(float(feed_invalid_242.get("score", 0.0)), float(scene.discard_feed_risk_report("ZZ", 0, feed_visible_242, feed_context_242))), "invalid feed-risk tiles keep the legacy fallback")
+	check(is_equal_approx(float(feed_invalid_242.get("score", 0.0)), float(scene.discard_feed_risk_report("ZZ", 0, feed_visible_242, feed_context_242).get("score", 0.0))), "invalid feed-risk tiles keep the legacy fallback")
 
 	print("--- FA) risk-vector tile-index snapshot reuse ---")
 	var risk_visible_243: Array = scene.make_empty_tile_counts()
@@ -3397,7 +3397,961 @@ func run() -> void:
 	var deal_risk_fallback_243: float = scene.deal_in_risk_score("4W", 0, risk_context_243, risk_visible_243)
 	check(is_equal_approx(deal_risk_explicit_243, deal_risk_fallback_243), "deal-in risk forwards the explicit candidate index")
 	var risk_invalid_243: Dictionary = scene.tile_risk_vector("ZZ", 0, risk_visible_243, risk_context_243, -1)
-	check(is_equal_approx(float(risk_invalid_243.get("score", 0.0)), float(scene.tile_risk_vector("ZZ", 0, risk_visible_243, risk_context_243))), "invalid risk-vector tiles keep the legacy fallback")
+	check(is_equal_approx(float(risk_invalid_243.get("score", 0.0)), float(scene.tile_risk_vector("ZZ", 0, risk_visible_243, risk_context_243).get("score", 0.0))), "invalid risk-vector tiles keep the legacy fallback")
+
+	print("--- FB) honor-route statistics reuse ---")
+	var dragon_counts_244: Array = scene.tile_counts(["Z", "Z", "Z", "F", "F", "F", "P", "P", "1W", "2W"])
+	var dragon_stats_244: Dictionary = scene.honor_group_stats_from_counts(dragon_counts_244, scene.DRAGON_CODES)
+	var dragon_score_244: float = scene.honor_route_score_from_counts(dragon_counts_244, scene.DRAGON_CODES)
+	check(is_equal_approx(dragon_score_244, scene.honor_route_score_from_stats(dragon_stats_244, scene.DRAGON_CODES.size())), "honor route score preserves the shared statistics result")
+	var dragon_report_244: Dictionary = scene.honor_group_plan_report_from_counts(dragon_counts_244, scene.DRAGON_CODES, "Big dragons", "Small dragons")
+	check(str(dragon_report_244.get("label", "")) == "Small dragons" and int(dragon_report_244.get("progress", 0)) == 5, "dragon route report preserves label and progress")
+	check(is_equal_approx(float(dragon_report_244.get("score", 0.0)), dragon_score_244), "dragon route report preserves its score")
+	var wind_counts_244: Array = scene.tile_counts(["E", "E", "E", "S", "S", "S", "N", "N", "N", "R", "R"])
+	var wind_stats_244: Dictionary = scene.honor_group_stats_from_counts(wind_counts_244, scene.WIND_CODES)
+	var wind_report_244: Dictionary = scene.honor_group_plan_report_from_counts(wind_counts_244, scene.WIND_CODES, "Big winds", "Small winds")
+	check(is_equal_approx(scene.honor_route_score_from_counts(wind_counts_244, scene.WIND_CODES), scene.honor_route_score_from_stats(wind_stats_244, scene.WIND_CODES.size())), "wind route score preserves the shared statistics result")
+	check(str(wind_report_244.get("label", "")) == "Small winds" and int(wind_report_244.get("progress", 0)) == 7, "wind route report preserves label and progress")
+	var low_counts_244: Array = scene.tile_counts(["Z", "F", "P"])
+	check(scene.honor_group_plan_report_from_counts(low_counts_244, scene.DRAGON_CODES, "Big dragons", "Small dragons").is_empty(), "insufficient honor progress keeps the empty report")
+
+	print("--- FC) human-target pressure tile-index reuse ---")
+	scene.players[0]["melds"] = [["4W", "4W", "4W"]]
+	scene.players[0]["discards"] = ["1W", "7W"]
+	var target_visible_245: Array = scene.make_empty_tile_counts()
+	var target_index_245: int = scene.tile_index("4W")
+	target_visible_245[target_index_245] = 2
+	var target_context_245: Dictionary = scene.make_ai_evaluation_context(1, target_visible_245)
+	var target_feed_245: Dictionary = {"details": [{"opponent": 0, "score": 14.0}]}
+	var target_fallback_245: float = scene.human_target_discard_pressure(1, "4W", 24.0, target_feed_245, 2, target_context_245)
+	var target_explicit_245: float = scene.human_target_discard_pressure(1, "4M", 24.0, target_feed_245, 2, target_context_245, target_index_245)
+	check(is_equal_approx(target_explicit_245, target_fallback_245), "human-target pressure preserves normalized aliases")
+	var target_penalty_fallback_245: float = scene.human_target_discard_penalty(1, "4W", 24.0, target_feed_245, 2, target_context_245)
+	var target_penalty_explicit_245: float = scene.human_target_discard_penalty(1, "4M", 24.0, target_feed_245, 2, target_context_245, target_index_245)
+	check(is_equal_approx(target_penalty_explicit_245, target_penalty_fallback_245), "human-target penalty forwards the candidate index")
+	var target_fast_pressure_245: Dictionary = scene.ai_context_pressure_context(1, target_context_245)
+	var target_fast_report_245: Dictionary = scene.build_ai_fast_post_claim_discard_report(1, "4M", 0, target_fast_pressure_245, target_context_245, scene.make_empty_tile_counts(), target_visible_245, target_index_245)
+	check(int(target_fast_report_245.get("tile_index", -2)) == target_index_245, "post-claim fast reports retain the candidate index")
+	var target_invalid_fallback_245: float = scene.human_target_discard_pressure(1, "ZZ", 0.0, {}, 2, target_context_245)
+	var target_invalid_explicit_245: float = scene.human_target_discard_pressure(1, "ZZ", 0.0, {}, 2, target_context_245, -1)
+	check(is_equal_approx(target_invalid_explicit_245, target_invalid_fallback_245), "invalid candidate keeps the legacy pressure fallback")
+
+	print("--- FD) claim pressure feed snapshot reuse ---")
+	scene.players[0]["melds"] = [["4W", "4W", "4W"]]
+	scene.players[0]["discards"] = ["1W", "7W"]
+	var claim_target_visible_246: Array = scene.make_empty_tile_counts()
+	var claim_target_index_246: int = scene.tile_index("4W")
+	claim_target_visible_246[claim_target_index_246] = 2
+	var claim_target_context_246: Dictionary = scene.make_ai_evaluation_context(1, claim_target_visible_246)
+	var claim_target_feed_246: Dictionary = {"details": [
+		{"opponent": 0, "score": 14.0},
+		{"opponent": 2, "score": 31.0},
+	]}
+	var claim_pressure_fallback_246: float = scene.human_target_discard_pressure(1, "4W", 24.0, claim_target_feed_246, 2, claim_target_context_246)
+	var claim_pressure_snapshot_246: float = scene.human_target_discard_pressure(1, "4M", 24.0, claim_target_feed_246, 2, claim_target_context_246, claim_target_index_246, 14.0)
+	check(is_equal_approx(claim_pressure_snapshot_246, claim_pressure_fallback_246), "feed-score snapshot preserves human-target pressure")
+	var claim_pressure_report_246: Dictionary = {
+		"discard": "4M",
+		"tile_index": claim_target_index_246,
+		"risk": 24.0,
+		"safety": "筋",
+		"feed_report": claim_target_feed_246,
+	}
+	var claim_difficulty_246: int = int(claim_target_context_246.get("discard_report_difficulty", -1))
+	var claim_expected_feed_246: float = max(14.0, scene.human_target_discard_penalty_from_pressure(claim_pressure_fallback_246, claim_difficulty_246) * 0.55)
+	var claim_discipline_246: Dictionary = scene.human_claim_discipline_report(1, "chi", 0, 2, 2, 0.0, claim_pressure_report_246, 0, claim_target_context_246)
+	check(is_equal_approx(float(claim_discipline_246.get("feed_human", -1.0)), claim_expected_feed_246), "claim discipline keeps the single pressure result")
+	check(str(claim_discipline_246.get("reason", "")) != "", "claim discipline still publishes a decision reason")
+
+	print("--- FE) quiet discard risk-vector index forwarding ---")
+	var fast_source_247 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	check(fast_source_247.contains("tile_risk_vector(cand, seat, visible_counts_snapshot, eval_context, idx)"), "quiet discard evaluation forwards its captured candidate index")
+	scene.offline_all_bot_mode = true
+	scene.offline_sim_quiet = true
+	scene.players[1]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "E"]
+	var fast_context_output_247: Dictionary = {}
+	var fast_reports_247: Array = scene.get_ai_discard_reports(1, [], fast_context_output_247)
+	check(fast_reports_247.size() > 0, "quiet discard evaluation still produces candidate reports")
+	if not fast_reports_247.is_empty():
+		var fast_report_247: Dictionary = fast_reports_247[0]
+		var fast_tile_247 := str(fast_report_247.get("tile", ""))
+		var fast_index_247 := int(fast_report_247.get("tile_index", -1))
+		var fast_visible_247: Array = scene.ai_context_visible_counts(fast_context_output_247)
+		var fast_risk_247: Dictionary = scene.tile_risk_vector(fast_tile_247, 1, fast_visible_247, fast_context_output_247, fast_index_247)
+		check(fast_index_247 >= 0 and is_equal_approx(float(fast_report_247.get("risk", -1.0)), float(fast_risk_247.get("score", -2.0))), "quiet report risk remains aligned with the forwarded index")
+
+	print("--- FF) tsumo continuation risk index forwarding ---")
+	var tsumo_source_248 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	check(tsumo_source_248.contains("deal_in_risk_score(drawn_tile, seat, continue_eval_context, continue_visible_counts, drawn_index)"), "tsumo continuation forwards the captured index to deal-in risk")
+	check(tsumo_source_248.contains("discard_feed_risk_report(drawn_tile, seat, continue_visible_counts, continue_eval_context, drawn_index)"), "tsumo continuation forwards the captured index to feed risk")
+	scene.offline_sim_quiet = true
+	scene.offline_all_bot_mode = false
+	scene.ai_difficulty = scene.AI_DIFFICULTY_HARD
+	scene.current_seat = 3
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 3, "tile": "2W", "source": "normal", "wall_empty": false, "serial": 248}
+	scene.offline_self_draw_ready = {"seat": 3, "tile": "2W", "serial": 248}
+	scene.players[3]["hand"] = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W", "2T", "3T", "4T", "2W"]
+	var tsumo_decision_248: Dictionary = scene.ai_tsumo_decision_report(3, "2W")
+	check(bool(tsumo_decision_248.get("win_valid", false)) and tsumo_decision_248.has("reason"), "tsumo continuation keeps a valid decision report")
+	var tsumo_visible_248: Array = scene.visible_tile_counts_shared()
+	var tsumo_context_248: Dictionary = scene.make_ai_evaluation_context(3, tsumo_visible_248)
+	var tsumo_index_248: int = scene.tile_index_normalized("2W")
+	var tsumo_risk_248: float = scene.deal_in_risk_score("2W", 3, tsumo_context_248, tsumo_visible_248, tsumo_index_248)
+	var tsumo_feed_248: Dictionary = scene.discard_feed_risk_report("2W", 3, tsumo_visible_248, tsumo_context_248, tsumo_index_248)
+	check(tsumo_index_248 >= 0 and tsumo_risk_248 >= 0.0 and typeof(tsumo_feed_248) == TYPE_DICTIONARY, "explicit continuation index keeps bounded risk outputs")
+
+	print("--- FG) threat-card risk-vector index forwarding ---")
+	var threat_card_source_249 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	check(threat_card_source_249.contains("tile_risk_vector(tile, seat, visible_counts, eval_context, tile_index_snapshot)"), "general threat cards forward the captured candidate index")
+	scene.offline_sim_quiet = true
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "E"]
+	scene.players[1]["discards"] = ["1W", "7W"]
+	var threat_card_visible_249: Array = scene.make_empty_tile_counts()
+	threat_card_visible_249[scene.tile_index("4W")] = 2
+	var threat_card_context_249: Dictionary = scene.make_ai_evaluation_context(0, threat_card_visible_249)
+	var threat_card_labels_249: Array = scene.threat_safe_tile_labels(0, "suit", 0, 3, threat_card_context_249)
+	check(threat_card_labels_249.size() > 0 and threat_card_labels_249.size() <= 3, "general threat cards still return a bounded safe-tile list")
+	var threat_card_repeat_249: Array = scene.threat_safe_tile_labels(0, "suit", 0, 3, threat_card_context_249)
+	check(threat_card_repeat_249 == threat_card_labels_249, "general threat-card ranking remains deterministic after index forwarding")
+
+	print("--- FH) claim feed-report fallback index forwarding ---")
+	var claim_fallback_source_250 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	check(claim_fallback_source_250.contains("discard_feed_risk_report(forced_tile, seat, claim_visible_counts, eval_context, forced_tile_index)"), "claim discipline forwards the forced tile index on feed-report fallback")
+	scene.offline_all_bot_mode = true
+	scene.offline_sim_quiet = true
+	scene.players[0]["melds"] = [["4W", "4W", "4W"]]
+	scene.players[0]["discards"] = ["1W", "7W"]
+	var claim_fallback_visible_250: Array = scene.make_empty_tile_counts()
+	var claim_fallback_index_250: int = scene.tile_index("4W")
+	claim_fallback_visible_250[claim_fallback_index_250] = 2
+	var claim_fallback_context_250: Dictionary = scene.make_ai_evaluation_context(1, claim_fallback_visible_250)
+	var claim_fallback_pressure_250: Dictionary = {"discard": "4W", "tile_index": claim_fallback_index_250, "risk": 24.0, "safety": "筋", "feed_report": {}}
+	var claim_explicit_feed_250: Dictionary = scene.discard_feed_risk_report("4W", 1, claim_fallback_visible_250, claim_fallback_context_250, claim_fallback_index_250)
+	var claim_snapshot_pressure_250: Dictionary = claim_fallback_pressure_250.duplicate(true)
+	claim_snapshot_pressure_250["feed_report"] = claim_explicit_feed_250
+	var claim_fallback_report_250: Dictionary = scene.human_claim_discipline_report(1, "chi", 0, 2, 2, 0.0, claim_fallback_pressure_250, 0, claim_fallback_context_250)
+	var claim_snapshot_report_250: Dictionary = scene.human_claim_discipline_report(1, "chi", 0, 2, 2, 0.0, claim_snapshot_pressure_250, 0, claim_fallback_context_250)
+	check(is_equal_approx(float(claim_fallback_report_250.get("feed_human", -1.0)), float(claim_snapshot_report_250.get("feed_human", -2.0))), "claim feed fallback preserves the feed-human score")
+	check(bool(claim_fallback_report_250.get("decline", false)) == bool(claim_snapshot_report_250.get("decline", true)) and str(claim_fallback_report_250.get("reason", "")) == str(claim_snapshot_report_250.get("reason", "")), "claim feed fallback preserves the decision")
+
+	print("--- FI) danger-source reason index forwarding ---")
+	var danger_reason_source_251 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var danger_reason_gameplay_251 := FileAccess.get_file_as_string("res://scripts/main_src/gameplay.gd.part")
+	check(danger_reason_source_251.contains("discard_danger_reason(tile, seat, best_opponent, eval_context, index)"), "risk vectors forward their captured index to danger-source reasons")
+	check(danger_reason_gameplay_251.contains("visible_tile_count_from_counts(tile, visible_counts, index)"), "danger-source reasons reuse the supplied tile index for visibility")
+	scene.players[1]["melds"] = [["4W", "4W", "4W"]]
+	scene.players[1]["discards"] = []
+	var danger_visible_251: Array = scene.make_empty_tile_counts()
+	var danger_index_251: int = scene.tile_index("4W")
+	danger_visible_251[danger_index_251] = 1
+	var danger_context_251: Dictionary = scene.make_ai_evaluation_context(0, danger_visible_251)
+	var danger_fallback_251: String = scene.discard_danger_reason("4W", 0, 1, danger_context_251)
+	var danger_explicit_251: String = scene.discard_danger_reason("4M", 0, 1, danger_context_251, danger_index_251)
+	check(danger_explicit_251 == danger_fallback_251 and danger_explicit_251 != "", "danger-source reason preserves normalized aliases with the explicit index")
+
+	print("--- FJ) quiet discard safety tie index reuse ---")
+	var fast_sort_source_252 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	check(fast_sort_source_252.contains('var safest_index := int(safest_candidate.get("tile_index", -1))'), "quiet safety tie-break reads the saved candidate index")
+	check(not fast_sort_source_252.contains("tile_sort_index(cand)"), "quiet safety tie-break avoids reparsing the candidate tile")
+	var canonical_sort_order_252 := true
+	for code in scene.TILE_CODES:
+		var canonical_code := str(code)
+		if scene.tile_sort_index(canonical_code) != scene.tile_index_normalized(canonical_code):
+			canonical_sort_order_252 = false
+			break
+	check(canonical_sort_order_252, "canonical candidate indexes preserve tile sort order")
+	check(scene.tile_sort_index("4M") == scene.tile_index_normalized("4W"), "normalized aliases preserve the candidate sort index")
+	scene.offline_all_bot_mode = true
+	scene.offline_sim_quiet = true
+	scene.players[1]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "E"]
+	var fast_sort_context_output_252: Dictionary = {}
+	var fast_sort_reports_252: Array = scene.get_ai_discard_reports(1, [], fast_sort_context_output_252)
+	check(fast_sort_reports_252.size() > 0, "quiet discard fast evaluation still returns reports")
+	var fast_sort_indexes_valid_252 := true
+	for report_value in fast_sort_reports_252:
+		if typeof(report_value) != TYPE_DICTIONARY:
+			fast_sort_indexes_valid_252 = false
+			break
+		var report_252: Dictionary = report_value
+		var report_tile_252 := str(report_252.get("tile", ""))
+		var report_index_252 := int(report_252.get("tile_index", -1))
+		if report_index_252 < 0 or report_index_252 >= scene.TILE_CODES.size() or report_index_252 != scene.tile_index(report_tile_252):
+			fast_sort_indexes_valid_252 = false
+			break
+	check(fast_sort_indexes_valid_252, "quiet reports retain canonical indexes for safety ranking")
+
+	print("--- FK) scoring-meld first-tile index reuse ---")
+	var scoring_meld_source_253 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	check(scoring_meld_source_253.contains("var first_index := -1"), "scoring-meld validation captures the first index in its single pass")
+	check(not scoring_meld_source_253.contains('var first_index = tile_index(str(meld[0]))'), "scoring-meld validation avoids the duplicate first-tile lookup")
+	check(scene.is_valid_scoring_meld(["4W", "4W", "4W"]), "triplet validation preserves valid scoring melds")
+	check(scene.is_valid_scoring_meld(["4M", "5M", "6M"]), "sequence validation preserves normalized aliases")
+	check(not scene.is_valid_scoring_meld(["4W", "5W", "6T"]), "mixed-suit sequences remain invalid")
+	check(not scene.is_valid_scoring_meld(["ZZ", "ZZ", "ZZ"]), "invalid scoring meld tiles remain rejected")
+
+	print("--- FL) exposed full-straight first-tile index reuse ---")
+	var straight_source_254 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	check(straight_source_254.contains("full_straight_open_meld_group(meld, meld_suit, meld_first_index)"), "full-straight detection forwards the existing first-tile index")
+	check(straight_source_254.contains("first_index_snapshot: int = -2"), "exposed-meld grouping keeps a direct-call fallback")
+	var straight_meld_254: Array = ["1W", "2W", "3W"]
+	var straight_first_index_254: int = scene.tile_index("1W")
+	var straight_fallback_254: int = scene.full_straight_open_meld_group(straight_meld_254, 0)
+	var straight_explicit_254: int = scene.full_straight_open_meld_group(["1M", "2M", "3M"], 0, straight_first_index_254)
+	check(straight_fallback_254 == 0 and straight_explicit_254 == straight_fallback_254, "exposed sequence grouping preserves normalized aliases")
+	check(scene.full_straight_open_meld_group(["4W", "4W", "4W"], 0, scene.tile_index("4W")) == -1, "triplet melds remain outside sequence groups")
+	check(scene.full_straight_open_meld_group(["1W", "2W", "3T"], 0, straight_first_index_254) == -1, "mixed-suit exposed melds remain rejected")
+
+	print("--- FM) discard route tile classification reuse ---")
+	var route_source_255 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var reason_source_255 := FileAccess.get_file_as_string("res://scripts/main_src/gameplay.gd.part")
+	check(route_source_255.contains("tile_index_snapshot: int = -2"), "route offcut classification accepts an index snapshot")
+	check(reason_source_255.contains("is_plan_offcut(tile, report, original_hand, original_counts_snapshot, tile_index_snapshot)"), "discard reasons forward the candidate index to route classification")
+	var route_index_255: int = scene.tile_index("4W")
+	var route_report_255: Dictionary = {"plan_label": "清一色", "plan_suit": 1, "tile_index": route_index_255}
+	var indexed_route_reason_255: String = scene.discard_reason_label("ZZ", [], route_report_255)
+	check(indexed_route_reason_255 == "保路线", "report tile indexes classify canonical route offcuts")
+	var route_fallback_report_255: Dictionary = {"plan_label": "清一色", "plan_suit": 1}
+	var fallback_route_reason_255: String = scene.discard_reason_label("4W", [], route_fallback_report_255)
+	var explicit_route_reason_255: String = scene.discard_reason_label("4M", [], route_fallback_report_255, [], route_index_255)
+	check(explicit_route_reason_255 == fallback_route_reason_255, "explicit route indexes preserve normalized aliases")
+	var simple_report_255: Dictionary = {"plan_label": "断幺九", "tile_index": scene.tile_index("4W")}
+	check(not scene.is_plan_offcut("ZZ", simple_report_255) and not scene.is_plan_offcut("4W", simple_report_255), "route classification keeps non-offcut simple-number behavior")
+
+	print("--- FN) furiten probe count-vector reuse ---")
+	var furiten_source_256 := FileAccess.get_file_as_string("res://scripts/main_src/gameplay.gd.part")
+	check(furiten_source_256.contains("var candidate_counts := hand_counts.duplicate()"), "furiten probes allocate one reusable count vector")
+	check(furiten_source_256.contains("candidate_counts[index] = int(candidate_counts[index]) - 1"), "furiten probes restore the candidate slot")
+	check(not furiten_source_256.contains("var candidate_counts = hand_counts.duplicate()"), "furiten probes avoid per-discard vector copies")
+	var furiten_counts_256: Array = scene.tile_counts(["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T"])
+	var furiten_counts_before_256: Array = furiten_counts_256.duplicate()
+	scene.players[0]["hand"] = scene.tiles_from_counts(furiten_counts_256)
+	scene.players[0]["discards"] = ["1W", "4W", "1W"]
+	var furiten_result_256: bool = scene.is_discard_furiten_from_counts(0, furiten_counts_256, scene.players[0]["hand"].size())
+	check(furiten_result_256 == scene.is_discard_furiten_from_counts(0, furiten_counts_256, scene.players[0]["hand"].size()), "furiten cache preserves repeated probe results")
+	check(furiten_counts_256 == furiten_counts_before_256, "furiten probes keep the caller count vector unchanged")
+
+	print("--- FO) scoring inventory meld normalization reuse ---")
+	var scoring_inventory_source_257 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var scoring_inventory_start_257 := scoring_inventory_source_257.find("func has_valid_scoring_tile_inventory_from_counts")
+	var scoring_inventory_end_257 := scoring_inventory_source_257.find("func is_valid_scoring_meld", scoring_inventory_start_257)
+	var scoring_inventory_function_257 := scoring_inventory_source_257.substr(scoring_inventory_start_257, scoring_inventory_end_257 - scoring_inventory_start_257)
+	check(scoring_inventory_source_257.contains("var normalized_code := normalize_tile_code(str(item))"), "scoring inventory normalizes each meld tile once")
+	check(scoring_inventory_source_257.contains("var index := int(tile_order.get(normalized_code, -1))"), "scoring inventory resolves the normalized index directly")
+	check(not scoring_inventory_function_257.contains("is_tile_enabled_for_rule("), "scoring inventory avoids the duplicate rule normalization")
+	var scoring_inventory_counts_257: Array = scene.tile_counts(["1W", "2W"])
+	scene.players[0]["melds"] = [["4M", "5M", "6M"]]
+	check(scene.has_valid_scoring_tile_inventory_from_counts(0, scoring_inventory_counts_257, 2), "legacy suit aliases remain accepted for enabled meld tiles")
+	var scoring_inventory_repeat_257: bool = scene.has_valid_scoring_tile_inventory_from_counts(0, scoring_inventory_counts_257, 2)
+	check(scoring_inventory_repeat_257, "normalized inventory validation remains stable across repeated calls")
+	scene.players[0]["melds"] = [["H1", "H1", "H1"]]
+	check(not scene.has_valid_scoring_tile_inventory_from_counts(0, scoring_inventory_counts_257, 2), "flower meld tiles remain outside the scoring inventory")
+	scene.players[0]["melds"] = [["4W", "5W", "6W"]]
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_SICHUAN
+	check(scene.has_valid_scoring_tile_inventory_from_counts(0, scoring_inventory_counts_257, 2), "enabled suited melds remain valid under a restricted rule")
+	scene.players[0]["melds"] = [["E", "E", "E"]]
+	check(not scene.has_valid_scoring_tile_inventory_from_counts(0, scoring_inventory_counts_257, 2), "rule-disabled honor melds remain rejected")
+
+	print("--- FP) combined scoring validation count snapshot ---")
+	var scoring_validation_source_258 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var scoring_validation_start_258 := scoring_validation_source_258.find("func calculate_win_score_from_tiles")
+	var scoring_validation_end_258 := scoring_validation_source_258.find("func is_last_draw_context", scoring_validation_start_258)
+	var scoring_validation_score_source_258 := scoring_validation_source_258.substr(scoring_validation_start_258, scoring_validation_end_258 - scoring_validation_start_258)
+	check(scoring_validation_source_258.contains("func validated_scoring_tile_counts_from_counts"), "scoring validation exposes a combined count snapshot helper")
+	check(scoring_validation_score_source_258.contains("scoring_counts = validated_scoring_tile_counts_from_counts(seat, hand_counts, canonical_tile_count)"), "normal scoring uses the combined validation pass")
+	check(not scoring_validation_score_source_258.contains("has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts"), "normal scoring avoids separate meld and inventory scans")
+	var scoring_validation_concealed_258: Array = ["1W", "2W", "3W", "7W", "8W", "9W", "1T", "2T", "3T", "E", "E"]
+	var scoring_validation_counts_258: Array = scene.tile_counts(scoring_validation_concealed_258)
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_YANGZHOU
+	scene.players[0]["hand"] = scoring_validation_concealed_258.duplicate()
+	scene.players[0]["melds"] = [["4M", "5M", "6M"]]
+	var scoring_validation_combined_258: Array = scene.validated_scoring_tile_counts_from_counts(0, scoring_validation_counts_258, scoring_validation_concealed_258.size())
+	var scoring_validation_legacy_258: Array = scene.scoring_tile_counts_from_counts(0, scoring_validation_counts_258)
+	check(scoring_validation_combined_258 == scoring_validation_legacy_258, "combined scoring counts preserve normalized meld aliases")
+	var scoring_validation_score_258: Dictionary = scene.calculate_win_score_from_tiles(0, scoring_validation_concealed_258, false)
+	check(int(scoring_validation_score_258.get("points", 0)) > 0 and int(scoring_validation_score_258.get("fan", 0)) > 0, "valid open hand still receives a paid score")
+	scene.players[0]["melds"] = [["4W", "5W", "7W"]]
+	check(scene.validated_scoring_tile_counts_from_counts(0, scoring_validation_counts_258, scoring_validation_concealed_258.size()).is_empty(), "malformed sequence melds remain rejected by the combined pass")
+	check(int(scene.calculate_win_score_from_tiles(0, scoring_validation_concealed_258, false).get("points", 0)) == 0, "malformed melds cannot produce a paid score")
+	scene.players[0]["melds"] = [["4W", "4W", "4W", "4W"]]
+	var scoring_validation_over_limit_258: Array = scoring_validation_counts_258.duplicate()
+	scoring_validation_over_limit_258[scene.tile_index("4W")] = 1
+	scoring_validation_over_limit_258[scene.tile_index("1W")] = 0
+	check(scene.validated_scoring_tile_counts_from_counts(0, scoring_validation_over_limit_258, scoring_validation_concealed_258.size()).is_empty(), "combined inventory still enforces the four-copy limit")
+
+	print("--- FQ) fallback opponent threat tile-index reuse ---")
+	var fallback_threat_source_259 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var fallback_threat_start_259 := fallback_threat_source_259.find("func opponent_tile_threat_score")
+	var fallback_threat_end_259 := fallback_threat_source_259.find("func opponent_pattern_threat_score", fallback_threat_start_259)
+	var fallback_threat_function_259 := fallback_threat_source_259.substr(fallback_threat_start_259, fallback_threat_end_259 - fallback_threat_start_259)
+	check(fallback_threat_function_259.contains("var tile_index_snapshot := tile_index(tile)"), "fallback threat scoring captures the tile index once")
+	check(fallback_threat_function_259.contains("visible_tile_count_from_counts(tile, known_counts, tile_index_snapshot)"), "fallback threat scoring forwards the captured index")
+	check(fallback_threat_function_259.contains("if not risk_vector.is_empty():"), "precomputed risk vectors keep their early return")
+	scene.players[1]["melds"] = [["4W", "5W", "6W"]]
+	scene.players[1]["discards"] = ["9B"]
+	var fallback_threat_visible_259: Array = scene.make_empty_tile_counts()
+	var fallback_threat_canonical_context_259: Dictionary = scene.make_ai_evaluation_context(0, fallback_threat_visible_259)
+	var fallback_threat_alias_context_259: Dictionary = scene.make_ai_evaluation_context(0, fallback_threat_visible_259)
+	var fallback_threat_canonical_259: float = scene.opponent_tile_threat_score("4W", 0, fallback_threat_visible_259, {}, fallback_threat_canonical_context_259)
+	var fallback_threat_alias_259: float = scene.opponent_tile_threat_score("4M", 0, fallback_threat_visible_259, {}, fallback_threat_alias_context_259)
+	check(is_equal_approx(fallback_threat_alias_259, fallback_threat_canonical_259), "normalized aliases preserve fallback threat scoring")
+	check(is_equal_approx(scene.opponent_tile_threat_score("ZZ", 0, fallback_threat_visible_259, {}, {}), 0.0), "invalid fallback threat tiles retain the zero result")
+	check(is_equal_approx(scene.opponent_tile_threat_score("4W", 0, fallback_threat_visible_259, {"threat": 17.5}, {}), 17.5), "precomputed risk vectors retain the threat fast path")
+
+	print("--- FR) shared scoring suit-profile scan ---")
+	var scoring_profile_source_260 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var scoring_profile_start_260 := scoring_profile_source_260.find("func calculate_win_score_from_tiles")
+	var scoring_profile_end_260 := scoring_profile_source_260.find("func is_last_draw_context", scoring_profile_start_260)
+	var scoring_profile_score_source_260 := scoring_profile_source_260.substr(scoring_profile_start_260, scoring_profile_end_260 - scoring_profile_start_260)
+	check(scoring_profile_source_260.contains("func scoring_tile_profile_from_counts"), "scoring patterns expose a shared count profile")
+	check(scoring_profile_score_source_260.contains("var scoring_profile := scoring_tile_profile_from_counts(scoring_counts)"), "win scoring builds one shared suit profile")
+	check(not scoring_profile_score_source_260.contains("is_all_honor_from_counts(scoring_counts)"), "win scoring avoids the separate honor scan")
+	check(not scoring_profile_score_source_260.contains("is_pure_one_suit_from_counts(scoring_counts)"), "win scoring avoids the separate pure-suit scan")
+	check(not scoring_profile_score_source_260.contains("is_mixed_one_suit_from_counts(scoring_counts)"), "win scoring avoids the separate mixed-suit scan")
+	check(not scoring_profile_score_source_260.contains("is_all_simples_from_counts(scoring_counts)"), "win scoring avoids the separate simples scan")
+	var scoring_profile_cases_260: Array = [
+		["honors", ["E", "S", "N", "R"]],
+		["pure", ["1W", "2W", "3W", "4W"]],
+		["mixed", ["2W", "3W", "4W", "E"]],
+		["simples", ["2T", "3T", "4T", "5T"]],
+		["terminal", ["1B", "2B", "3B"]],
+		["multi-suit", ["2W", "3W", "4T", "E"]],
+		["empty", []],
+	]
+	for scoring_profile_case_260 in scoring_profile_cases_260:
+		var scoring_profile_counts_260: Array = scene.tile_counts(scoring_profile_case_260[1])
+		var scoring_profile_expected_260: Dictionary = {
+			"all_honor": scene.is_all_honor_from_counts(scoring_profile_counts_260),
+			"pure_one_suit": scene.is_pure_one_suit_from_counts(scoring_profile_counts_260),
+			"mixed_one_suit": scene.is_mixed_one_suit_from_counts(scoring_profile_counts_260),
+			"all_simples": scene.is_all_simples_from_counts(scoring_profile_counts_260),
+		}
+		check(scene.scoring_tile_profile_from_counts(scoring_profile_counts_260) == scoring_profile_expected_260, "%s profile preserves the four legacy flags" % str(scoring_profile_case_260[0]))
+	var scoring_profile_invalid_counts_260: Array = scene.make_empty_tile_counts()
+	scoring_profile_invalid_counts_260.append(1)
+	var scoring_profile_invalid_expected_260: Dictionary = {
+		"all_honor": scene.is_all_honor_from_counts(scoring_profile_invalid_counts_260),
+		"pure_one_suit": scene.is_pure_one_suit_from_counts(scoring_profile_invalid_counts_260),
+		"mixed_one_suit": scene.is_mixed_one_suit_from_counts(scoring_profile_invalid_counts_260),
+		"all_simples": scene.is_all_simples_from_counts(scoring_profile_invalid_counts_260),
+	}
+	check(scene.scoring_tile_profile_from_counts(scoring_profile_invalid_counts_260) == scoring_profile_invalid_expected_260, "out-of-range profile values keep legacy flags")
+
+	print("--- FS) effective-tile index snapshot reuse ---")
+	var effective_metrics_source_261 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var effective_metrics_start_261 := effective_metrics_source_261.find("func effective_tile_metrics")
+	var effective_metrics_end_261 := effective_metrics_source_261.find("func touch_effective_tiles_cache_key", effective_metrics_start_261)
+	var effective_metrics_function_261 := effective_metrics_source_261.substr(effective_metrics_start_261, effective_metrics_end_261 - effective_metrics_start_261)
+	var wait_metrics_start_261 := effective_metrics_source_261.find("func wait_value_metrics")
+	var wait_metrics_end_261 := effective_metrics_source_261.find("func wait_quality_penalty", wait_metrics_start_261)
+	var wait_metrics_function_261 := effective_metrics_source_261.substr(wait_metrics_start_261, wait_metrics_end_261 - wait_metrics_start_261)
+	check(effective_metrics_function_261.contains("var tile_indices_by_tile: Dictionary = {}"), "effective metrics capture tile indexes during the scan")
+	check(effective_metrics_function_261.contains("\"tile_indices\": tile_indices_by_tile"), "effective metrics publish the index snapshot")
+	check(wait_metrics_function_261.contains("effective_tile_indices_snapshot: Dictionary = {}"), "wait valuation accepts an optional index snapshot")
+	check(wait_metrics_function_261.contains("effective_tile_indices_snapshot.get(tile, -1)"), "wait valuation reuses captured indexes")
+	check(wait_metrics_function_261.contains("tile_index_value = tile_index_normalized(tile)"), "wait valuation keeps the direct-call fallback")
+	var tenpai_hand_261: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "4T"]
+	scene.players[0]["hand"] = tenpai_hand_261.duplicate()
+	scene.players[0]["melds"] = []
+	scene.players[0]["discards"] = []
+	var visible_counts_261: Array = scene.make_empty_tile_counts()
+	var hand_counts_261: Array = scene.tile_counts(tenpai_hand_261)
+	var effective_metrics_261: Dictionary = scene.effective_tile_metrics(tenpai_hand_261, 0, 0, 0, visible_counts_261, hand_counts_261)
+	var effective_tiles_261: Array = effective_metrics_261.get("tiles", [])
+	var remaining_261: Dictionary = effective_metrics_261.get("remaining_by_tile", {})
+	var indexes_261: Dictionary = effective_metrics_261.get("tile_indices", {})
+	check(effective_tiles_261.has("4T"), "tenpai metrics retain the expected winning tile")
+	check(int(indexes_261.get("4T", -1)) == scene.tile_index("4T"), "captured index matches the canonical tile order")
+	var snapshot_wait_261: Dictionary = scene.wait_value_metrics(0, tenpai_hand_261, 0, 0, effective_tiles_261, remaining_261, true, {}, 1.0, 1.0, hand_counts_261, 0, indexes_261)
+	var fallback_wait_261: Dictionary = scene.wait_value_metrics(0, tenpai_hand_261, 0, 0, effective_tiles_261, remaining_261, true, {}, 1.0, 1.0, hand_counts_261, 0)
+	check(is_equal_approx(float(snapshot_wait_261.get("score", 0.0)), float(fallback_wait_261.get("score", 0.0))), "index snapshot preserves wait score")
+	check(str(snapshot_wait_261.get("best_tile", "")) == str(fallback_wait_261.get("best_tile", "")), "index snapshot preserves best wait")
+
+	print("--- FT) alternate-wait index snapshot reuse ---")
+	var alternate_wait_source_262 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var alternate_ron_start_262 := alternate_wait_source_262.find("func ai_ron_decision_report")
+	var alternate_ron_end_262 := alternate_wait_source_262.find("func ai_tsumo_decision_report", alternate_ron_start_262)
+	var alternate_ron_source_262 := alternate_wait_source_262.substr(alternate_ron_start_262, alternate_ron_end_262 - alternate_ron_start_262)
+	var alternate_tsumo_start_262 := alternate_wait_source_262.find("func ai_tsumo_decision_report")
+	var alternate_tsumo_end_262 := alternate_wait_source_262.find("func ai_tsumo_continue_discard", alternate_tsumo_start_262)
+	var alternate_tsumo_source_262 := alternate_wait_source_262.substr(alternate_tsumo_start_262, alternate_tsumo_end_262 - alternate_tsumo_start_262)
+	check(alternate_ron_source_262.contains("var wait_tile_indices: Dictionary = wait_metrics.get(\"tile_indices\", {})"), "ron captures effective-tile indexes")
+	check(alternate_ron_source_262.contains("int(wait_tile_indices.get(wait_tile, -1))"), "ron alternate waits reuse captured indexes")
+	check(alternate_tsumo_source_262.contains("var wait_tile_indices: Dictionary = wait_metrics.get(\"tile_indices\", {})"), "tsumo captures effective-tile indexes")
+	check(alternate_tsumo_source_262.contains("int(wait_tile_indices.get(wait_tile, -1))"), "tsumo alternate waits reuse captured indexes")
+	check(alternate_ron_source_262.contains("wait_index = tile_index_normalized(wait_tile)"), "ron keeps the direct-call fallback")
+	check(alternate_tsumo_source_262.contains("wait_index = tile_index_normalized(wait_tile)"), "tsumo keeps the direct-call fallback")
+	var alternate_tenpai_262: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7B", "8B", "9B", "1T", "1T", "2T", "3T"]
+	var alternate_counts_262: Array = scene.tile_counts(alternate_tenpai_262)
+	var alternate_metrics_262: Dictionary = scene.effective_tile_metrics(alternate_tenpai_262, 0, 1, 0, scene.make_empty_tile_counts(), alternate_counts_262)
+	var alternate_waits_262: Array = alternate_metrics_262.get("tiles", [])
+	var alternate_indexes_262: Dictionary = alternate_metrics_262.get("tile_indices", {})
+	check(alternate_waits_262.has("1T") and alternate_waits_262.has("4T"), "fixture exposes multiple alternate waits")
+	check(int(alternate_indexes_262.get("1T", -1)) == scene.tile_index("1T") and int(alternate_indexes_262.get("4T", -1)) == scene.tile_index("4T"), "alternate waits carry canonical indexes")
+	scene.offline_phase = "resolving"
+	scene.dealer_seat = 0
+	scene.offline_passed_win_tiles.clear()
+	scene.players[1]["hand"] = alternate_tenpai_262.duplicate()
+	scene.players[1]["discards"] = []
+	scene.players[1]["melds"] = []
+	scene.players[1]["flowers"] = 0
+	var alternate_ron_report_262: Dictionary = scene.ai_ron_decision_report(1, "4T")
+	check(int(alternate_ron_report_262.get("wait_variety", 0)) >= 2 and int(alternate_ron_report_262.get("points", 0)) > 0, "ron alternate-wait report remains valid")
+	var alternate_tsumo_hand_262: Array = alternate_tenpai_262.duplicate()
+	alternate_tsumo_hand_262.append("1T")
+	scene.current_seat = 3
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 3, "tile": "1T", "source": "normal", "wall_empty": false, "serial": 262}
+	scene.offline_self_draw_ready = {"seat": 3, "tile": "1T", "serial": 262}
+	scene.players[3]["hand"] = alternate_tsumo_hand_262
+	scene.players[3]["discards"] = []
+	var alternate_tsumo_report_262: Dictionary = scene.ai_tsumo_decision_report(3, "1T")
+	check(bool(alternate_tsumo_report_262.get("win_valid", false)) and int(alternate_tsumo_report_262.get("wait_variety", 0)) >= 2, "tsumo alternate-wait report remains valid")
+
+	print("--- FU) wait scoring meld-vector reuse ---")
+	var wait_score_core_source_263 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var wait_score_core_start_263 := wait_score_core_source_263.find("func calculate_win_score_from_tiles")
+	var wait_score_core_end_263 := wait_score_core_source_263.find("func is_last_draw_context", wait_score_core_start_263)
+	var wait_score_core_function_263 := wait_score_core_source_263.substr(wait_score_core_start_263, wait_score_core_end_263 - wait_score_core_start_263)
+	var wait_score_ai_source_263 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var wait_score_ai_start_263 := wait_score_ai_source_263.find("func wait_value_metrics")
+	var wait_score_ai_end_263 := wait_score_ai_source_263.find("func wait_quality_penalty", wait_score_ai_start_263)
+	var wait_score_ai_function_263 := wait_score_ai_source_263.substr(wait_score_ai_start_263, wait_score_ai_end_263 - wait_score_ai_start_263)
+	check(wait_score_core_function_263.contains("scoring_counts_snapshot: Array = []"), "scoring accepts an optional meld-inclusive vector")
+	check(wait_score_core_function_263.contains("scoring_counts = scoring_counts_snapshot if scoring_counts_snapshot.size() == TILE_CODES.size() else scoring_tile_counts_from_counts(seat, hand_counts)"), "scoring keeps the vector fallback")
+	check(wait_score_ai_function_263.contains("var winning_scoring_counts: Array = []"), "wait valuation prepares one scoring vector")
+	check(wait_score_ai_function_263.contains("winning_scoring_counts[tile_index_value] = int(winning_scoring_counts[tile_index_value]) + 1"), "wait valuation mutates only the candidate scoring slot")
+	check(wait_score_ai_function_263.contains("next_tile_count, winning_scoring_counts)"), "wait valuation forwards the scoring snapshot")
+	var wait_score_hand_263: Array = ["4W", "5W", "6W", "7B", "8B", "9B", "1T", "1T", "2T", "3T"]
+	scene.players[1]["hand"] = wait_score_hand_263.duplicate()
+	scene.players[1]["melds"] = [["1W", "2W", "3W"]]
+	var wait_score_counts_263: Array = scene.tile_counts(wait_score_hand_263)
+	var wait_score_visible_263: Array = scene.make_empty_tile_counts()
+	var wait_score_metrics_263: Dictionary = scene.effective_tile_metrics(wait_score_hand_263, 1, 1, 0, wait_score_visible_263, wait_score_counts_263)
+	var wait_score_waits_263: Array = wait_score_metrics_263.get("tiles", [])
+	var wait_score_remaining_263: Dictionary = wait_score_metrics_263.get("remaining_by_tile", {})
+	var wait_score_indexes_263: Dictionary = wait_score_metrics_263.get("tile_indices", {})
+	check(wait_score_waits_263.has("1T") and wait_score_waits_263.has("4T"), "open tenpai exposes multiple waits")
+	check(int(wait_score_indexes_263.get("1T", -1)) == scene.tile_index("1T") and int(wait_score_indexes_263.get("4T", -1)) == scene.tile_index("4T"), "open waits retain canonical indexes")
+	var wait_score_winning_counts_263: Array = wait_score_counts_263.duplicate()
+	var wait_score_winning_index_263: int = scene.tile_index("4T")
+	wait_score_winning_counts_263[wait_score_winning_index_263] = int(wait_score_winning_counts_263[wait_score_winning_index_263]) + 1
+	var wait_score_scoring_counts_263: Array = scene.scoring_tile_counts_from_counts(1, wait_score_counts_263)
+	wait_score_scoring_counts_263[wait_score_winning_index_263] = int(wait_score_scoring_counts_263[wait_score_winning_index_263]) + 1
+	var wait_score_legacy_263: Dictionary = scene.calculate_win_score_from_tiles(1, [], false, "", true, wait_score_winning_counts_263, 11)
+	var wait_score_snapshot_263: Dictionary = scene.calculate_win_score_from_tiles(1, [], false, "", true, wait_score_winning_counts_263, 11, wait_score_scoring_counts_263)
+	check(wait_score_legacy_263 == wait_score_snapshot_263, "scoring vector snapshot preserves the open-hand score")
+	var wait_score_array_263: Dictionary = scene.wait_value_metrics(1, wait_score_hand_263, 1, 0, wait_score_waits_263, wait_score_remaining_263, true)
+	var wait_score_fast_263: Dictionary = scene.wait_value_metrics(1, wait_score_hand_263, 1, 0, wait_score_waits_263, wait_score_remaining_263, true, {}, -1.0, -1.0, wait_score_counts_263, -1, wait_score_indexes_263)
+	check(wait_score_array_263 == wait_score_fast_263, "wait valuation snapshot preserves open-hand wait values")
+
+	print("--- FV) wait score map reuse in ron/tsumo reports ---")
+	var wait_map_source_264 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var wait_map_start_264 := wait_map_source_264.find("func wait_value_metrics")
+	var wait_map_end_264 := wait_map_source_264.find("func wait_quality_penalty", wait_map_start_264)
+	var wait_map_function_264 := wait_map_source_264.substr(wait_map_start_264, wait_map_end_264 - wait_map_start_264)
+	var wait_map_ron_start_264 := wait_map_source_264.find("func ai_ron_decision_report")
+	var wait_map_ron_end_264 := wait_map_source_264.find("func ai_tsumo_decision_report", wait_map_ron_start_264)
+	var wait_map_ron_function_264 := wait_map_source_264.substr(wait_map_ron_start_264, wait_map_ron_end_264 - wait_map_ron_start_264)
+	var wait_map_tsumo_start_264 := wait_map_source_264.find("func ai_tsumo_decision_report")
+	var wait_map_tsumo_end_264 := wait_map_source_264.find("func ai_tsumo_continue_discard", wait_map_tsumo_start_264)
+	var wait_map_tsumo_function_264 := wait_map_source_264.substr(wait_map_tsumo_start_264, wait_map_tsumo_end_264 - wait_map_tsumo_start_264)
+	check(wait_map_function_264.contains("var points_by_tile: Dictionary = {}"), "wait valuation prepares per-tile points")
+	check(wait_map_function_264.contains("var fan_by_tile: Dictionary = {}"), "wait valuation prepares per-tile fan")
+	check(wait_map_function_264.contains("points_by_tile[tile] = points") and wait_map_function_264.contains("fan_by_tile[tile] = fan"), "wait valuation publishes valid wait scores")
+	check(wait_map_ron_function_264.contains("wait_value_metrics(seat, tenpai_hand, open_melds") and wait_map_ron_function_264.contains("if wait_points_by_tile.has(wait_tile):"), "ron consumes the wait score map")
+	check(wait_map_tsumo_function_264.contains("wait_value_metrics(seat, tenpai_hand, open_melds") and wait_map_tsumo_function_264.contains("if wait_points_by_tile.has(wait_tile):"), "tsumo consumes the wait score map")
+	check(wait_map_ron_function_264.contains("calculate_win_score_from_tiles(seat, [], false, \"\", true, probe_counts") and wait_map_tsumo_function_264.contains("calculate_win_score_from_tiles(seat, [], false, \"\", true, probe_counts"), "both reports retain the missing-map fallback")
+	scene.players = [make_player("P0"), make_player("P1"), make_player("P2"), make_player("P3")]
+	scene.mode = "offline"
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_YANGZHOU
+	var wait_map_hand_264: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7B", "8B", "9B", "1T", "1T", "2T", "3T"]
+	var wait_map_counts_264: Array = scene.tile_counts(wait_map_hand_264)
+	var wait_map_metrics_264: Dictionary = scene.effective_tile_metrics(wait_map_hand_264, 0, 1, 0, scene.make_empty_tile_counts(), wait_map_counts_264)
+	var wait_map_waits_264: Array = wait_map_metrics_264.get("tiles", [])
+	var wait_map_remaining_264: Dictionary = wait_map_metrics_264.get("remaining_by_tile", {})
+	var wait_map_indexes_264: Dictionary = wait_map_metrics_264.get("tile_indices", {})
+	var wait_map_scores_264: Dictionary = scene.wait_value_metrics(1, wait_map_hand_264, 0, 0, wait_map_waits_264, wait_map_remaining_264, true, {}, 1.0, 1.0, wait_map_counts_264, 0, wait_map_indexes_264)
+	var wait_map_points_264: Dictionary = wait_map_scores_264.get("points_by_tile", {})
+	var wait_map_fan_264: Dictionary = wait_map_scores_264.get("fan_by_tile", {})
+	check(wait_map_waits_264.has("1T") and wait_map_waits_264.has("4T"), "score-map fixture exposes multiple waits")
+	check(wait_map_points_264.has("1T") and wait_map_points_264.has("4T") and wait_map_fan_264.has("1T") and wait_map_fan_264.has("4T"), "score map contains both wait scores")
+	scene.offline_phase = "resolving"
+	scene.dealer_seat = 0
+	scene.offline_passed_win_tiles.clear()
+	scene.players[1]["hand"] = wait_map_hand_264.duplicate()
+	scene.players[1]["discards"] = []
+	scene.players[1]["melds"] = []
+	var wait_map_ron_report_264: Dictionary = scene.ai_ron_decision_report(1, "4T")
+	check(int(wait_map_ron_report_264.get("alt_best_points", -1)) == int(wait_map_points_264.get("1T", -2)), "ron report matches the cached alternate score")
+	var wait_map_tsumo_hand_264: Array = wait_map_hand_264.duplicate()
+	wait_map_tsumo_hand_264.append("1T")
+	scene.current_seat = 3
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 3, "tile": "1T", "source": "normal", "wall_empty": false, "serial": 264}
+	scene.offline_self_draw_ready = {"seat": 3, "tile": "1T", "serial": 264}
+	scene.players[3]["hand"] = wait_map_tsumo_hand_264
+	scene.players[3]["discards"] = []
+	scene.players[3]["melds"] = []
+	var wait_map_expected_tsumo_264 := int(round(float(wait_map_points_264.get("4T", 0)) * 0.45 + float(scene.score_points_for_fan(clampi(int(wait_map_fan_264.get("4T", 0)) + 1, 1, scene.SCORE_LIMIT_FAN))) * 0.55))
+	var wait_map_tsumo_report_264: Dictionary = scene.ai_tsumo_decision_report(3, "1T")
+	check(int(wait_map_tsumo_report_264.get("alt_best_points", -1)) == wait_map_expected_tsumo_264, "tsumo report matches the cached alternate score")
+
+	print("--- FW) full-straight work-vector reuse ---")
+	var full_straight_source_265 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var full_straight_start_265 := full_straight_source_265.find("func full_straight_suit_from_counts")
+	var full_straight_end_265 := full_straight_source_265.find("func full_straight_open_meld_group", full_straight_start_265)
+	var full_straight_function_265 := full_straight_source_265.substr(full_straight_start_265, full_straight_end_265 - full_straight_start_265)
+	check(full_straight_function_265.contains("var concealed_counts: Array = concealed_counts_source.duplicate()"), "full-straight scoring prepares one work vector")
+	check(full_straight_function_265.contains("consumed_indices.append(index") and full_straight_function_265.contains("for consumed_index in consumed_indices:"), "full-straight scoring restores temporary mutations")
+	check(full_straight_function_265.count("concealed_counts_source.duplicate()") == 1, "full-straight scoring avoids per-suit copies")
+	var full_straight_hand_265: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players = [make_player("P0"), make_player("P1"), make_player("P2"), make_player("P3")]
+	var full_straight_counts_265: Array = scene.tile_counts(full_straight_hand_265)
+	var full_straight_key_265: String = scene.counts_compact_key(full_straight_counts_265)
+	check(scene.full_straight_suit_from_counts(0, full_straight_counts_265) == 0, "concealed full straight remains recognized")
+	check(scene.counts_compact_key(full_straight_counts_265) == full_straight_key_265, "full-straight scan leaves caller counts unchanged")
+	var full_straight_false_265: Array = ["1W", "1W", "1W", "2W", "2W", "2W", "3W", "4W", "5W", "6W", "7W", "7W", "8W", "9W"]
+	check(scene.full_straight_suit_from_counts(0, scene.tile_counts(full_straight_false_265)) == -1, "non-decomposable hand remains rejected")
+	scene.players[0]["melds"] = [["1W", "2W", "3W"]]
+	var full_straight_open_265: Array = ["4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	check(scene.full_straight_suit_from_counts(0, scene.tile_counts(full_straight_open_265)) == 0, "exposed full straight remains recognized")
+
+	print("--- FX) count-based minimum-fan gate ---")
+	var minimum_fan_core_source_266 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var minimum_fan_gameplay_source_266 := FileAccess.get_file_as_string("res://scripts/main_src/gameplay.gd.part")
+	check(minimum_fan_core_source_266.contains("func rule_minimum_met_for_counts"), "core exposes the count-based minimum-fan gate")
+	var minimum_fan_start_266 := minimum_fan_gameplay_source_266.find("func can_win_for_seat_from_counts")
+	var minimum_fan_end_266 := minimum_fan_gameplay_source_266.find("func discard_report_for_tile", minimum_fan_start_266)
+	var minimum_fan_function_266 := minimum_fan_gameplay_source_266.substr(minimum_fan_start_266, minimum_fan_end_266 - minimum_fan_start_266)
+	check(minimum_fan_function_266.contains("rule_minimum_met_for_counts(seat, counts, tile_count, self_draw, \"\", validated_counts)"), "count-based win validation uses the prepared count vector")
+	check(not minimum_fan_function_266.contains("tiles_from_counts(counts)"), "count-based win validation avoids count-to-tile expansion")
+	var minimum_fan_hand_266: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7T", "8T", "9T", "E", "E", "E", "S", "S"]
+	scene.players[1]["hand"] = minimum_fan_hand_266.duplicate()
+	scene.players[1]["melds"] = []
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_GUANGDONG
+	scene.offline_phase = "resolving"
+	var minimum_fan_counts_266: Array = scene.tile_counts(minimum_fan_hand_266)
+	var minimum_fan_array_266: bool = scene.rule_minimum_met_for_tiles(1, scene.tiles_from_counts(minimum_fan_counts_266), false)
+	var minimum_fan_count_266: bool = scene.rule_minimum_met_for_counts(1, minimum_fan_counts_266, minimum_fan_hand_266.size(), false)
+	check(minimum_fan_count_266 == minimum_fan_array_266 and not minimum_fan_count_266, "count gate preserves a Guangdong hand below the minimum fan")
+	var qualifying_hand_266: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "E", "S", "S"]
+	var qualifying_counts_266: Array = scene.tile_counts(qualifying_hand_266)
+	var qualifying_array_266: bool = scene.rule_minimum_met_for_tiles(1, scene.tiles_from_counts(qualifying_counts_266), false)
+	var qualifying_count_266: bool = scene.rule_minimum_met_for_counts(1, qualifying_counts_266, qualifying_hand_266.size(), false)
+	check(qualifying_count_266 == qualifying_array_266 and qualifying_count_266, "count gate preserves a qualifying Guangdong full-straight hand")
+	var bottom_wait_base_266: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7T", "8T", "9T", "E", "E", "E", "S"]
+	var bottom_winning_hand_266: Array = bottom_wait_base_266.duplicate()
+	bottom_winning_hand_266.append("S")
+	var bottom_winning_counts_266: Array = scene.tile_counts(bottom_winning_hand_266)
+	scene.offline_phase = "pending_claim"
+	scene.last_discard = "S"
+	scene.last_discard_seat = 0
+	scene.offline_last_draw = {"wall_empty": true, "seat": 0}
+	var bottom_array_266: bool = scene.rule_minimum_met_for_tiles(1, scene.tiles_from_counts(bottom_winning_counts_266), false)
+	var bottom_count_266: bool = scene.rule_minimum_met_for_counts(1, bottom_winning_counts_266, bottom_winning_hand_266.size(), false)
+	check(bottom_count_266 == bottom_array_266 and bottom_count_266, "count gate preserves the river-bottom bonus context")
+
+	print("--- FY) effective-tile shared shanten memo ---")
+	var shanten_source_267 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var shanten_start_267 := shanten_source_267.find("func calculate_min_shanten_from_counts")
+	var shanten_end_267 := shanten_source_267.find("func effective_tile_count", shanten_start_267)
+	var shanten_function_267 := shanten_source_267.substr(shanten_start_267, shanten_end_267 - shanten_start_267)
+	check(shanten_function_267.contains("func calculate_min_shanten_from_counts_with_memo"), "shanten exposes a shared-memo entry point")
+	var effective_start_267 := shanten_source_267.find("func effective_tile_metrics")
+	var effective_end_267 := shanten_source_267.find("func touch_effective_tiles_cache_key", effective_start_267)
+	var effective_function_267 := shanten_source_267.substr(effective_start_267, effective_end_267 - effective_start_267)
+	check(effective_function_267.contains("var effective_tile_search_memo: Dictionary = {}"), "effective-tile scan allocates one batch memo")
+	check(effective_function_267.contains("calculate_min_shanten_from_counts_with_memo(hand_counts, open_melds, \"\", effective_tile_search_memo)"), "candidate probes reuse the batch memo")
+	var shared_hand_267: Array = ["1W", "2W", "4W", "5W", "7W", "8W", "2T", "3T", "5T", "6T", "8T", "9T", "E", "S"]
+	var shared_counts_267: Array = scene.tile_counts(shared_hand_267)
+	var shared_key_267: String = scene.counts_compact_key(shared_counts_267)
+	var shared_normal_267: int = scene.calculate_min_shanten_from_counts(shared_counts_267.duplicate(), 0)
+	scene.clear_shanten_cache()
+	var shared_memo_267: Dictionary = {}
+	var shared_result_267: int = scene.calculate_min_shanten_from_counts_with_memo(shared_counts_267.duplicate(), 0, "", shared_memo_267)
+	check(shared_result_267 == shared_normal_267 and not shared_memo_267.is_empty(), "shared and standalone shanten results remain equal")
+	scene.clear_ai_report_cache()
+	var shared_metrics_267: Dictionary = scene.effective_tile_metrics(shared_hand_267, 0, 1, 99, scene.make_empty_tile_counts(), shared_counts_267)
+	check(int(shared_metrics_267.get("count", 0)) >= 0 and scene.counts_compact_key(shared_counts_267) == shared_key_267, "effective-tile scan preserves results and caller counts")
+	var shared_repeat_267: Dictionary = scene.effective_tile_metrics(shared_hand_267, 0, 1, 99, scene.make_empty_tile_counts(), shared_counts_267)
+	check(shared_repeat_267 == shared_metrics_267, "effective-tile cache preserves the shared-memo result")
+	scene.players[1]["melds"] = [["1W", "1W", "1W"]]
+	var shared_open_hand_267: Array = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "2T", "3T", "4T", "E", "S"]
+	var shared_open_counts_267: Array = scene.tile_counts(shared_open_hand_267)
+	var shared_open_normal_267: int = scene.calculate_min_shanten_from_counts(shared_open_counts_267.duplicate(), 1)
+	scene.clear_shanten_cache()
+	var shared_open_memo_267: Dictionary = {}
+	var shared_open_result_267: int = scene.calculate_min_shanten_from_counts_with_memo(shared_open_counts_267.duplicate(), 1, "", shared_open_memo_267)
+	check(shared_open_result_267 == shared_open_normal_267 and not shared_open_memo_267.is_empty(), "open-hand shanten also preserves shared-memo equivalence")
+
+	print("--- FZ) discard visible-count key reuse ---")
+	var visible_key_source_268 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var context_start_268 := visible_key_source_268.find("func make_ai_evaluation_context")
+	var context_end_268 := visible_key_source_268.find("func ai_context_visible_counts", context_start_268)
+	var context_function_268 := visible_key_source_268.substr(context_start_268, context_end_268 - context_start_268)
+	check(context_function_268.contains("visible_counts_key_override: String = \"\""), "evaluation context accepts a visible-count key snapshot")
+	check(context_function_268.contains("visible_counts_key_override if visible_counts_key_override != \"\" else counts_compact_key(visible_counts)"), "evaluation context keeps the compact-key fallback")
+	var report_key_start_268 := visible_key_source_268.find("func ai_report_cache_key")
+	var report_key_end_268 := visible_key_source_268.find("func ai_profile_map_cache_key", report_key_start_268)
+	var report_key_function_268 := visible_key_source_268.substr(report_key_start_268, report_key_end_268 - report_key_start_268)
+	check(report_key_function_268.contains("visible_counts_key_override: String = \"\""), "discard report cache key accepts the shared count key")
+	check(report_key_function_268.contains("threat_report_table_state_cache_key(seat, visible_counts, visible_counts_key_override, wall_count)"), "discard report key forwards the shared count key")
+	var reports_start_268 := visible_key_source_268.find("func get_ai_discard_reports")
+	var reports_end_268 := visible_key_source_268.find("func sort_ai_discard_reports", reports_start_268)
+	var reports_function_268 := visible_key_source_268.substr(reports_start_268, reports_end_268 - reports_start_268)
+	check(reports_function_268.contains("var visible_counts_key_snapshot := counts_compact_key(visible_counts_snapshot)"), "discard evaluation builds one visible-count key snapshot")
+	check(reports_function_268.contains("ai_report_cache_key(seat, visible_counts_snapshot, -1, visible_counts_key_snapshot)"), "discard cache lookup receives the shared count key")
+	check(reports_function_268.contains("make_ai_evaluation_context(seat, visible_counts_snapshot, visible_counts_key_snapshot)"), "discard evaluation forwards the key into its context")
+	var visible_counts_268: Array = scene.make_empty_tile_counts()
+	visible_counts_268[scene.tile_index("3W")] = 2
+	visible_counts_268[scene.tile_index("E")] = 1
+	var visible_key_268: String = scene.counts_compact_key(visible_counts_268)
+	var baseline_context_268: Dictionary = scene.make_ai_evaluation_context(1, visible_counts_268)
+	var snapshot_context_268: Dictionary = scene.make_ai_evaluation_context(1, visible_counts_268, visible_key_268)
+	check(snapshot_context_268 == baseline_context_268, "key snapshot preserves the complete evaluation context")
+	check(str(snapshot_context_268.get("visible_counts_key", "")) == visible_key_268, "context publishes the forwarded visible-count key")
+	var baseline_report_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
+	var snapshot_report_key_268: String = scene.ai_report_cache_key(1, visible_counts_268, -1, visible_key_268)
+	check(snapshot_report_key_268 == baseline_report_key_268, "forwarded key preserves the discard report cache partition")
+
+	print("--- FZA) wait scoring exposed-meld index reuse ---")
+	var scoring_source_269 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var scoring_start_269 := scoring_source_269.find("func scoring_tile_counts_from_counts")
+	var scoring_end_269 := scoring_source_269.find("func is_pure_one_suit_from_counts", scoring_start_269)
+	var scoring_function_269 := scoring_source_269.substr(scoring_start_269, scoring_end_269 - scoring_start_269)
+	check(scoring_function_269.contains("meld_tile_indices_snapshot: Array = []"), "scoring count helper accepts a meld-index snapshot")
+	check(scoring_function_269.contains("if not meld_tile_indices_snapshot.is_empty()"), "scoring count helper has the snapshot fast path")
+	check(scoring_function_269.contains("for raw_index in meld_tile_indices_snapshot"), "scoring count helper consumes normalized indexes directly")
+	var wait_source_269 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var wait_start_269 := wait_source_269.find("func wait_value_metrics")
+	var wait_end_269 := wait_source_269.find("func wait_quality_penalty", wait_start_269)
+	var wait_function_269 := wait_source_269.substr(wait_start_269, wait_end_269 - wait_start_269)
+	check(wait_function_269.contains("meld_tile_indices_snapshot: Array = []"), "wait valuation accepts a meld-index snapshot")
+	check(wait_function_269.contains("scoring_tile_counts_from_counts(seat, hand_counts_snapshot, meld_tile_indices_snapshot)"), "wait valuation forwards the snapshot to scoring counts")
+	var report_start_269 := wait_source_269.find("func build_ai_discard_report")
+	var report_end_269 := wait_source_269.find("func wait_value_metrics", report_start_269)
+	var report_function_269 := wait_source_269.substr(report_start_269, report_end_269 - report_start_269)
+	check(report_function_269.contains("effective_tile_indices, meld_tile_indices_snapshot)"), "discard reports forward their shared meld indexes")
+	var hand_269: Array = ["4W", "5W", "6W", "7B", "8B", "9B", "1T", "1T", "2T", "3T"]
+	scene.players[1]["hand"] = hand_269.duplicate()
+	scene.players[1]["melds"] = [["1W", "2W", "3W"]]
+	var hand_counts_269: Array = scene.tile_counts(hand_269)
+	var meld_indices_269: Array = scene.hand_plan_meld_tile_indices_for_seat(1)
+	check(meld_indices_269 == [scene.tile_index("1W"), scene.tile_index("2W"), scene.tile_index("3W")], "context snapshot contains every exposed tile index")
+	var legacy_counts_269: Array = scene.scoring_tile_counts_from_counts(1, hand_counts_269)
+	var snapshot_counts_269: Array = scene.scoring_tile_counts_from_counts(1, hand_counts_269, meld_indices_269)
+	check(snapshot_counts_269 == legacy_counts_269, "snapshot scoring counts equal the legacy meld scan")
+	var visible_counts_269: Array = scene.make_empty_tile_counts()
+	var metrics_269: Dictionary = scene.effective_tile_metrics(hand_269, 1, 1, 0, visible_counts_269, hand_counts_269)
+	var waits_269: Array = metrics_269.get("tiles", [])
+	var remaining_269: Dictionary = metrics_269.get("remaining_by_tile", {})
+	var wait_indices_269: Dictionary = metrics_269.get("tile_indices", {})
+	var legacy_wait_269: Dictionary = scene.wait_value_metrics(1, hand_269, 1, 0, waits_269, remaining_269, true, {}, -1.0, -1.0, hand_counts_269, 1, wait_indices_269)
+	var snapshot_wait_269: Dictionary = scene.wait_value_metrics(1, hand_269, 1, 0, waits_269, remaining_269, true, {}, -1.0, -1.0, hand_counts_269, 1, wait_indices_269, meld_indices_269)
+	check(legacy_wait_269 == snapshot_wait_269, "snapshot wait valuation preserves all open-hand metrics")
+	check(scene.counts_compact_key(hand_counts_269) == scene.counts_compact_key(scene.tile_counts(hand_269)), "wait probes leave concealed counts unchanged")
+	scene.players[1]["melds"] = []
+	var closed_wait_269: Dictionary = scene.wait_value_metrics(1, hand_269, 0, 0, waits_269, remaining_269, true, {}, -1.0, -1.0, hand_counts_269, 0, wait_indices_269)
+	check(not closed_wait_269.is_empty(), "legacy wait valuation remains available without exposed melds")
+
+	print("--- FZB) closed special-hand profile scan ---")
+	var special_source_270 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var score_start_270 := special_source_270.find("func calculate_win_score_from_tiles")
+	var score_end_270 := special_source_270.find("func is_last_draw_context", score_start_270)
+	var score_function_270 := special_source_270.substr(score_start_270, score_end_270 - score_start_270)
+	check(score_function_270.contains("scoring_special_hand_profile_from_counts(hand_counts, canonical_tile_count)"), "scoring uses the shared special-hand profile")
+	check(score_function_270.contains("special_hand_profile.get(\"seven_pairs\""), "scoring consumes the shared seven-pairs flag")
+	check(score_function_270.contains("special_hand_profile.get(\"thirteen_orphans\""), "scoring consumes the shared thirteen-orphans flag")
+	var profile_start_270 := special_source_270.find("func scoring_special_hand_profile_from_counts")
+	var profile_end_270 := special_source_270.find("func is_thirteen_orphans_tile", profile_start_270)
+	var profile_function_270 := special_source_270.substr(profile_start_270, profile_end_270 - profile_start_270)
+	check(profile_function_270.contains("for index in range(TILE_CODES.size())"), "special-hand profile scans the count vector once")
+	check(profile_function_270.contains("result[\"seven_pairs\"]"), "special-hand profile publishes seven-pairs classification")
+	check(profile_function_270.contains("result[\"thirteen_orphans\"]"), "special-hand profile publishes thirteen-orphans classification")
+	var standard_hand_270: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "E", "S", "S"]
+	var standard_counts_270: Array = scene.tile_counts(standard_hand_270)
+	var standard_profile_270: Dictionary = scene.scoring_special_hand_profile_from_counts(standard_counts_270, standard_hand_270.size())
+	check(not bool(standard_profile_270.get("seven_pairs", false)) and not bool(standard_profile_270.get("thirteen_orphans", false)), "standard hand keeps both special flags false")
+	check(bool(scene.is_complete_hand_from_counts(standard_counts_270, standard_hand_270.size(), 0)), "standard hand remains complete")
+	var seven_pairs_hand_270: Array = ["1W", "1W", "2W", "2W", "3W", "3W", "4T", "4T", "5T", "5T", "6B", "6B", "E", "E"]
+	var seven_pairs_counts_270: Array = scene.tile_counts(seven_pairs_hand_270)
+	var seven_pairs_profile_270: Dictionary = scene.scoring_special_hand_profile_from_counts(seven_pairs_counts_270, seven_pairs_hand_270.size())
+	check(bool(seven_pairs_profile_270.get("seven_pairs", false)) and not bool(seven_pairs_profile_270.get("thirteen_orphans", false)), "seven-pairs hand keeps only the seven-pairs flag")
+	check(scene.is_seven_pairs_from_counts(seven_pairs_counts_270, seven_pairs_hand_270.size()), "seven-pairs public predicate agrees with the shared profile")
+	var thirteen_hand_270: Array = ["1W", "9W", "1T", "9T", "1B", "9B", "E", "S", "N", "R", "Z", "F", "P", "E"]
+	var thirteen_counts_270: Array = scene.tile_counts(thirteen_hand_270)
+	var thirteen_profile_270: Dictionary = scene.scoring_special_hand_profile_from_counts(thirteen_counts_270, thirteen_hand_270.size())
+	check(not bool(thirteen_profile_270.get("seven_pairs", false)) and bool(thirteen_profile_270.get("thirteen_orphans", false)), "thirteen-orphans hand keeps only the thirteen-orphans flag")
+	check(scene.is_thirteen_orphans_from_counts(thirteen_counts_270, thirteen_hand_270.size()), "thirteen-orphans public predicate agrees with the shared profile")
+	var short_counts_270: Array = scene.tile_counts(seven_pairs_hand_270.slice(0, 13))
+	var short_profile_270: Dictionary = scene.scoring_special_hand_profile_from_counts(short_counts_270, 13)
+	check(not bool(short_profile_270.get("seven_pairs", false)) and not bool(short_profile_270.get("thirteen_orphans", false)), "non-fourteen-tile inputs keep both special flags false")
+
+	print("--- FZC) scoring meld-state cache reuse ---")
+	var meld_state_source_271 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var exposed_start_271 := meld_state_source_271.find("func exposed_meld_count_for_seat")
+	var exposed_end_271 := meld_state_source_271.find("func is_menzen_hand", exposed_start_271)
+	var exposed_function_271 := meld_state_source_271.substr(exposed_start_271, exposed_end_271 - exposed_start_271)
+	check(exposed_function_271.count("for item in melds") == 1, "meld state uses one exposed-meld scan")
+	check(exposed_function_271.contains("var gang_count = 0"), "meld state captures gang count during the scan")
+	check(exposed_function_271.contains("\"gang_count\": gang_count"), "meld cache publishes the paired gang count")
+	var score_start_271 := meld_state_source_271.find("func calculate_win_score_from_tiles")
+	var score_end_271 := meld_state_source_271.find("func is_last_draw_context", score_start_271)
+	var score_function_271 := meld_state_source_271.substr(score_start_271, score_end_271 - score_start_271)
+	check(score_function_271.contains("var scoring_meld_state := scoring_meld_state_for_seat(seat)"), "scoring captures one meld state")
+	check(not score_function_271.contains("is_menzen_hand(seat)"), "scoring avoids a second menzen lookup")
+	check(not score_function_271.contains("count_gang_melds(seat)"), "scoring avoids a second gang scan")
+	var gang_start_271 := meld_state_source_271.find("func count_gang_melds")
+	var gang_end_271 := meld_state_source_271.find("func add_clickable_tile_press_art", gang_start_271)
+	var gang_function_271 := meld_state_source_271.substr(gang_start_271, gang_end_271 - gang_start_271)
+	check(gang_function_271.contains("scoring_meld_state_for_seat(seat)"), "public gang helper keeps the cached fallback")
+	var closed_hand_271: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7T", "8T", "9T", "E", "E", "E", "S", "S"]
+	scene.players[1]["hand"] = closed_hand_271.duplicate()
+	scene.players[1]["melds"] = []
+	scene.exposed_meld_count_cache.clear()
+	var closed_state_271: Dictionary = scene.scoring_meld_state_for_seat(1)
+	var closed_score_271: Dictionary = scene.calculate_win_score_from_tiles(1, closed_hand_271, false)
+	check(int(closed_state_271.get("value", -1)) == 0 and int(closed_state_271.get("gang_count", -1)) == 0, "closed meld state keeps menzen and gang values")
+	check(scene.is_menzen_hand(1) and scene.count_gang_melds(1) == 0, "public closed helpers preserve their results")
+	check(closed_score_271.get("reasons", []).has("门清"), "closed scoring keeps the menzen fan")
+	var open_hand_271: Array = ["4W", "5W", "6W", "7B", "8B", "9B", "1T", "2T", "3T", "E", "E"]
+	scene.players[1]["hand"] = open_hand_271.duplicate()
+	scene.players[1]["melds"] = [["1W", "2W", "3W"]]
+	scene.exposed_meld_count_cache.clear()
+	var open_state_271: Dictionary = scene.scoring_meld_state_for_seat(1)
+	var open_score_271: Dictionary = scene.calculate_win_score_from_tiles(1, open_hand_271, false)
+	check(int(open_state_271.get("value", -1)) == 1 and int(open_state_271.get("gang_count", -1)) == 0, "open sequence state keeps exposed and gang values")
+	check(not scene.is_menzen_hand(1) and scene.count_gang_melds(1) == 0, "public open helpers preserve their results")
+	check(int(open_score_271.get("points", 0)) > 0 and not open_score_271.get("reasons", []).has("门清"), "open scoring keeps paid result without menzen fan")
+	scene.players[1]["melds"] = [["1W", "1W", "1W", "1W"]]
+	scene.exposed_meld_count_cache.clear()
+	var gang_state_271: Dictionary = scene.scoring_meld_state_for_seat(1)
+	var gang_score_271: Dictionary = scene.calculate_win_score_from_tiles(1, open_hand_271, false)
+	check(int(gang_state_271.get("value", -1)) == 1 and int(gang_state_271.get("gang_count", -1)) == 1, "gang state keeps one exposed meld and one gang")
+	check(not scene.is_menzen_hand(1) and scene.count_gang_melds(1) == 1, "public gang helper keeps the cached count")
+	check(gang_score_271.get("reasons", []).has("杠") and int(gang_score_271.get("points", 0)) > int(open_score_271.get("points", 0)), "gang scoring keeps its extra fan")
+	var cached_state_271: Dictionary = scene.scoring_meld_state_for_seat(1)
+	check(cached_state_271 == gang_state_271, "repeated scoring state reuses the same cache entry")
+
+	print("--- FZD) full-straight exposed-group cache reuse ---")
+	var full_straight_source_272 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var helper_start_272 := full_straight_source_272.find("func full_straight_open_meld_groups_for_seat")
+	var helper_end_272 := full_straight_source_272.find("func full_straight_suit_from_counts", helper_start_272)
+	var helper_function_272 := full_straight_source_272.substr(helper_start_272, helper_end_272 - helper_start_272)
+	check(helper_function_272.contains("exposed_meld_count_for_seat(seat)"), "full-straight grouping uses the meld fingerprint")
+	check(helper_function_272.contains("full_straight_open_meld_groups"), "full-straight grouping publishes a cache entry")
+	check(helper_function_272.contains("if typeof(cached_groups) == TYPE_ARRAY"), "full-straight grouping has a cache fast path")
+	var straight_start_272 := full_straight_source_272.find("func full_straight_suit_from_counts")
+	var straight_end_272 := full_straight_source_272.find("func full_straight_open_meld_group", straight_start_272)
+	var straight_function_272 := full_straight_source_272.substr(straight_start_272, straight_end_272 - straight_start_272)
+	check(straight_function_272.contains("full_straight_open_meld_groups_for_seat(seat)"), "full-straight scoring consumes the cached grouping")
+	check(not straight_function_272.contains("for meld in open_melds"), "full-straight scoring avoids rebuilding exposed groups")
+	var full_straight_hand_272: Array = ["7W", "8W", "9W", "E", "E", "E", "S", "S"]
+	scene.players[1]["hand"] = full_straight_hand_272.duplicate()
+	scene.players[1]["melds"] = [["1W", "2W", "3W"], ["4W", "5W", "6W"]]
+	scene.exposed_meld_count_cache.clear()
+	var groups_272: Array = scene.full_straight_open_meld_groups_for_seat(1)
+	check(groups_272[0] == [true, true, false], "exposed groups retain the 123/456 layout")
+	check(scene.exposed_meld_count_cache.get(1, {}).has("full_straight_open_meld_groups"), "exposed cache stores the derived grouping")
+	var first_result_272: int = scene.full_straight_suit_from_counts(1, scene.tile_counts(full_straight_hand_272))
+	var second_result_272: int = scene.full_straight_suit_from_counts(1, scene.tile_counts(full_straight_hand_272))
+	check(first_result_272 == 0 and second_result_272 == first_result_272, "repeated full-straight probes preserve the result")
+	check(scene.full_straight_open_meld_groups_for_seat(1) == groups_272, "repeated probes reuse the same exposed grouping")
+	scene.players[1]["melds"] = [["1W", "2W", "3W"]]
+	var changed_groups_272: Array = scene.full_straight_open_meld_groups_for_seat(1)
+	check(changed_groups_272[0] == [true, false, false], "meld mutation invalidates the derived grouping")
+	var closed_hand_272: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "E", "S", "S"]
+	scene.players[1]["hand"] = closed_hand_272.duplicate()
+	scene.players[1]["melds"] = []
+	var closed_groups_272: Array = scene.full_straight_open_meld_groups_for_seat(1)
+	check(closed_groups_272[0] == [false, false, false], "closed hands keep an empty exposed grouping")
+	check(scene.full_straight_suit_from_counts(1, scene.tile_counts(closed_hand_272)) == 0, "closed full straight remains recognized")
+
+	print("--- FZE) public win count-boundary reuse ---")
+	var win_boundary_source_273 := FileAccess.get_file_as_string("res://scripts/main_src/gameplay.gd.part")
+	var win_boundary_start_273 := win_boundary_source_273.find("func can_win_for_seat(seat: int")
+	var win_boundary_end_273 := win_boundary_source_273.find("func record_passed_win_tile", win_boundary_start_273)
+	var win_boundary_function_273 := win_boundary_source_273.substr(win_boundary_start_273, win_boundary_end_273 - win_boundary_start_273)
+	check(win_boundary_function_273.contains("var hand_counts: Array = tile_counts(players[seat][\"hand\"]"), "public win validation builds one count vector")
+	check(win_boundary_function_273.contains("_can_win_for_seat_from_counts_normalized(seat, hand_counts, normalized_extra_tile, normalized_extra_tile == \"\")"), "public win validation delegates completion and scoring")
+	check(not win_boundary_function_273.contains("has_valid_scoring_melds(seat)"), "public win validation avoids a separate meld scan")
+	check(not win_boundary_function_273.contains("has_valid_scoring_tile_inventory(seat, tiles)"), "public win validation avoids rebuilding a tile array")
+	check(not win_boundary_function_273.contains("rule_minimum_met_for_tiles(seat, tiles"), "public win validation avoids the array minimum-fan path")
+	var win_boundary_self_draw_273: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players[0]["hand"] = win_boundary_self_draw_273.duplicate()
+	scene.players[0]["melds"] = []
+	var win_boundary_self_draw_counts_273: Array = scene.tile_counts(win_boundary_self_draw_273)
+	check(scene.can_win_for_seat(0) == scene.can_win_for_seat_from_counts(0, win_boundary_self_draw_counts_273, "", true), "self-draw behavior matches the count boundary")
+	var win_boundary_ron_base_273: Array = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players[0]["hand"] = win_boundary_ron_base_273.duplicate()
+	var win_boundary_ron_counts_273: Array = scene.tile_counts(win_boundary_ron_base_273)
+	check(scene.can_win_for_seat(0, "1M") == scene.can_win_for_seat_from_counts(0, win_boundary_ron_counts_273, "1M", false) and scene.can_win_for_seat(0, "1M"), "normalized ron tile keeps the count-boundary result")
+	var win_boundary_open_hand_273: Array = ["4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players[0]["hand"] = win_boundary_open_hand_273.duplicate()
+	scene.players[0]["melds"] = [["1W", "2W", "3W"]]
+	var win_boundary_open_counts_273: Array = scene.tile_counts(win_boundary_open_hand_273)
+	check(scene.can_win_for_seat(0) == scene.can_win_for_seat_from_counts(0, win_boundary_open_counts_273, "", true), "open-hand completion keeps the same result")
+	var win_boundary_malformed_273: Array = win_boundary_self_draw_273.duplicate()
+	win_boundary_malformed_273[0] = "ZZ"
+	scene.players[0]["hand"] = win_boundary_malformed_273
+	scene.players[0]["melds"] = []
+	check(not scene.can_win_for_seat(0), "invalid stored tile remains rejected by the count boundary")
+
+	print("--- FZF) count-win combined validation reuse ---")
+	var count_win_source_274 := FileAccess.get_file_as_string("res://scripts/main_src/gameplay.gd.part")
+	var count_win_start_274 := count_win_source_274.find("func can_win_for_seat_from_counts")
+	var count_win_end_274 := count_win_source_274.find("func discard_report_for_tile", count_win_start_274)
+	var count_win_function_274 := count_win_source_274.substr(count_win_start_274, count_win_end_274 - count_win_start_274)
+	check(count_win_function_274.contains("validated_scoring_tile_counts_from_counts(seat, counts, tile_count)"), "count win validation uses the combined inventory pass")
+	check(not count_win_function_274.contains("has_valid_scoring_melds(seat)"), "count win validation avoids a separate meld scan")
+	check(not count_win_function_274.contains("has_valid_scoring_tile_inventory_from_counts(seat, counts, tile_count)"), "count win validation avoids a second inventory scan")
+	var count_win_valid_274: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players[0]["hand"] = count_win_valid_274.duplicate()
+	scene.players[0]["melds"] = []
+	var count_win_valid_counts_274: Array = scene.tile_counts(count_win_valid_274)
+	var count_win_valid_combined_274: Array = scene.validated_scoring_tile_counts_from_counts(0, count_win_valid_counts_274, count_win_valid_274.size())
+	check(not count_win_valid_combined_274.is_empty() and scene.has_valid_scoring_melds(0) and scene.has_valid_scoring_tile_inventory_from_counts(0, count_win_valid_counts_274, count_win_valid_274.size()), "valid closed hand keeps the combined validation result")
+	check(scene.can_win_for_seat_from_counts(0, count_win_valid_counts_274, "", true), "valid closed hand still passes the count win boundary")
+	var count_win_open_274: Array = ["4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players[0]["hand"] = count_win_open_274.duplicate()
+	scene.players[0]["melds"] = [["1W", "2W", "3W"]]
+	var count_win_open_counts_274: Array = scene.tile_counts(count_win_open_274)
+	check(scene.can_win_for_seat_from_counts(0, count_win_open_counts_274, "", true), "valid open hand still passes the count win boundary")
+	scene.players[0]["melds"] = [["4W", "5W", "7W"]]
+	check(scene.validated_scoring_tile_counts_from_counts(0, count_win_open_counts_274, count_win_open_274.size()).is_empty() and not scene.can_win_for_seat_from_counts(0, count_win_open_counts_274, "", true), "malformed meld remains rejected by one combined pass")
+	scene.players[0]["melds"] = [["1W", "1W", "1W", "1W"]]
+	var count_win_over_limit_274: Array = ["1W", "1W", "2T", "3T", "4T", "5T", "6T", "7T", "7B", "8B", "9B"]
+	scene.players[0]["hand"] = count_win_over_limit_274.duplicate()
+	var count_win_over_limit_counts_274: Array = scene.tile_counts(count_win_over_limit_274)
+	check(scene.validated_scoring_tile_counts_from_counts(0, count_win_over_limit_counts_274, count_win_over_limit_274.size()).is_empty() and not scene.can_win_for_seat_from_counts(0, count_win_over_limit_counts_274, "", false), "combined inventory still enforces the four-copy limit")
+
+	print("--- FZG) minimum-fan validated snapshot reuse ---")
+	var minimum_snapshot_source_275 := FileAccess.get_file_as_string("res://scripts/main_src/core.gd.part")
+	var minimum_snapshot_start_275 := minimum_snapshot_source_275.find("func rule_minimum_met_for_counts")
+	var minimum_snapshot_end_275 := minimum_snapshot_source_275.find("func _play_reward_claim_animation", minimum_snapshot_start_275)
+	var minimum_snapshot_function_275 := minimum_snapshot_source_275.substr(minimum_snapshot_start_275, minimum_snapshot_end_275 - minimum_snapshot_start_275)
+	check(minimum_snapshot_function_275.contains("validated_scoring_counts_snapshot: Array = []"), "minimum-fan gate accepts an optional validated snapshot")
+	check(minimum_snapshot_function_275.contains("var use_validated_snapshot := validated_scoring_counts_snapshot.size() == TILE_CODES.size()"), "minimum-fan gate selects the snapshot fast path explicitly")
+	check(minimum_snapshot_function_275.contains("calculate_win_score_from_tiles(seat, [], self_draw, win_context, use_validated_snapshot"), "minimum-fan gate keeps the direct-call fallback")
+	check(minimum_snapshot_source_275.contains("preserve_context_bonuses: bool = false") and minimum_snapshot_function_275.contains("validated_scoring_counts_snapshot, use_validated_snapshot"), "minimum-fan snapshot preserves context bonuses explicitly")
+	var minimum_snapshot_gameplay_275 := FileAccess.get_file_as_string("res://scripts/main_src/gameplay.gd.part")
+	var minimum_snapshot_win_start_275 := minimum_snapshot_gameplay_275.find("func can_win_for_seat_from_counts")
+	var minimum_snapshot_win_end_275 := minimum_snapshot_gameplay_275.find("func discard_report_for_tile", minimum_snapshot_win_start_275)
+	var minimum_snapshot_win_function_275 := minimum_snapshot_gameplay_275.substr(minimum_snapshot_win_start_275, minimum_snapshot_win_end_275 - minimum_snapshot_win_start_275)
+	check(minimum_snapshot_win_function_275.contains("rule_minimum_met_for_counts(seat, counts, tile_count, self_draw, \"\", validated_counts)"), "count win validation forwards its validated scoring counts")
+	var minimum_snapshot_hand_275: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players[0]["hand"] = minimum_snapshot_hand_275.duplicate()
+	scene.players[0]["melds"] = []
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_GUANGDONG
+	var minimum_snapshot_counts_275: Array = scene.tile_counts(minimum_snapshot_hand_275)
+	var minimum_snapshot_validated_275: Array = scene.validated_scoring_tile_counts_from_counts(0, minimum_snapshot_counts_275, minimum_snapshot_hand_275.size())
+	var minimum_snapshot_direct_gate_275: bool = scene.rule_minimum_met_for_counts(0, minimum_snapshot_counts_275, minimum_snapshot_hand_275.size(), false)
+	var minimum_snapshot_fast_gate_275: bool = scene.rule_minimum_met_for_counts(0, minimum_snapshot_counts_275, minimum_snapshot_hand_275.size(), false, "", minimum_snapshot_validated_275)
+	check(minimum_snapshot_direct_gate_275 == minimum_snapshot_fast_gate_275, "validated snapshot preserves the minimum-fan result")
+	var minimum_snapshot_direct_score_275: Dictionary = scene.calculate_win_score_from_tiles(0, minimum_snapshot_hand_275, false)
+	var minimum_snapshot_fast_score_275: Dictionary = scene.calculate_win_score_from_tiles(0, [], false, "", true, minimum_snapshot_counts_275, minimum_snapshot_hand_275.size(), minimum_snapshot_validated_275, true)
+	check(minimum_snapshot_direct_score_275 == minimum_snapshot_fast_score_275, "validated snapshot preserves score details")
+	check(scene.can_win_for_seat_from_counts(0, minimum_snapshot_counts_275, "", true), "count win boundary remains valid after snapshot forwarding")
+	var minimum_snapshot_open_hand_275: Array = ["4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players[0]["hand"] = minimum_snapshot_open_hand_275.duplicate()
+	scene.players[0]["melds"] = [["1W", "2W", "3W"]]
+	var minimum_snapshot_open_counts_275: Array = scene.tile_counts(minimum_snapshot_open_hand_275)
+	var minimum_snapshot_open_validated_275: Array = scene.validated_scoring_tile_counts_from_counts(0, minimum_snapshot_open_counts_275, minimum_snapshot_open_hand_275.size())
+	check(scene.rule_minimum_met_for_counts(0, minimum_snapshot_open_counts_275, minimum_snapshot_open_hand_275.size(), false) == scene.rule_minimum_met_for_counts(0, minimum_snapshot_open_counts_275, minimum_snapshot_open_hand_275.size(), false, "", minimum_snapshot_open_validated_275) and scene.can_win_for_seat_from_counts(0, minimum_snapshot_open_counts_275, "", true), "open-hand minimum-fan behavior remains equivalent")
+	scene.players[0]["melds"] = [["4W", "5W", "7W"]]
+	check(scene.validated_scoring_tile_counts_from_counts(0, minimum_snapshot_open_counts_275, minimum_snapshot_open_hand_275.size()).is_empty() and not scene.can_win_for_seat_from_counts(0, minimum_snapshot_open_counts_275, "", true), "malformed melds are rejected before the snapshot path")
+
+	print("--- FZH) ron normalized tile reuse ---")
+	var normalized_win_source_276 := FileAccess.get_file_as_string("res://scripts/main_src/gameplay.gd.part")
+	var normalized_win_start_276 := normalized_win_source_276.find("func can_win_for_seat(seat: int")
+	var normalized_win_end_276 := normalized_win_source_276.find("func record_passed_win_tile", normalized_win_start_276)
+	var normalized_win_function_276 := normalized_win_source_276.substr(normalized_win_start_276, normalized_win_end_276 - normalized_win_start_276)
+	var normalized_ron_start_276 := normalized_win_source_276.find("func can_ron_for_seat(seat: int")
+	var normalized_ron_end_276 := normalized_win_source_276.find("func can_win_for_seat_from_counts", normalized_ron_start_276)
+	var normalized_ron_function_276 := normalized_win_source_276.substr(normalized_ron_start_276, normalized_ron_end_276 - normalized_ron_start_276)
+	var normalized_ron_counts_start_276 := normalized_win_source_276.find("func can_ron_for_seat_from_counts")
+	var normalized_ron_counts_end_276 := normalized_win_source_276.find("func can_win_for_seat_from_counts", normalized_ron_counts_start_276)
+	var normalized_ron_counts_function_276 := normalized_win_source_276.substr(normalized_ron_counts_start_276, normalized_ron_counts_end_276 - normalized_ron_counts_start_276)
+	var normalized_count_start_276 := normalized_win_source_276.find("func can_win_for_seat_from_counts")
+	var normalized_count_end_276 := normalized_win_source_276.find("func _can_win_for_seat_from_counts_normalized", normalized_count_start_276)
+	var normalized_count_function_276 := normalized_win_source_276.substr(normalized_count_start_276, normalized_count_end_276 - normalized_count_start_276)
+	check(normalized_win_function_276.contains("var normalized_extra_tile := normalize_tile_code(extra_tile)"), "public win boundary normalizes the extra tile once")
+	check(normalized_win_function_276.contains("_can_win_for_seat_from_counts_normalized(seat, hand_counts, normalized_extra_tile"), "public win boundary forwards its normalized tile directly")
+	check(normalized_ron_function_276.contains("tile = normalize_tile_code(tile)"), "ron boundary normalizes the winning tile once")
+	check(normalized_ron_function_276.contains("_can_win_for_seat_from_counts_normalized(seat, hand_counts, tile)"), "ron boundary forwards its normalized tile directly")
+	check(not normalized_ron_function_276.contains("\tif not can_win_for_seat_from_counts("), "ron boundary avoids re-entering the normalizing wrapper")
+	check(normalized_ron_counts_function_276.contains("_can_win_for_seat_from_counts_normalized(seat, hand_counts, tile)"), "count ron boundary forwards its normalized tile directly")
+	check(not normalized_ron_counts_function_276.contains("\tif not can_win_for_seat_from_counts("), "count ron boundary avoids duplicate normalization")
+	check(normalized_count_function_276.contains("normalize_tile_code(extra_tile)"), "direct count callers retain the normalization fallback")
+	var normalized_ron_hand_276: Array = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+	scene.players[0]["hand"] = normalized_ron_hand_276.duplicate()
+	scene.players[0]["melds"] = []
+	scene.players[0]["discards"] = []
+	scene.offline_passed_win_tiles.clear()
+	var normalized_ron_counts_276: Array = scene.tile_counts(normalized_ron_hand_276)
+	var normalized_canonical_ron_276: bool = scene.can_ron_for_seat(0, "1W")
+	var normalized_alias_ron_276: bool = scene.can_ron_for_seat(0, "1M")
+	var normalized_count_alias_ron_276: bool = scene.can_ron_for_seat_from_counts(0, normalized_ron_counts_276, "1M")
+	check(normalized_canonical_ron_276 and normalized_alias_ron_276 and normalized_count_alias_ron_276, "canonical and legacy ron tiles keep the same valid result")
+	check(scene.can_win_for_seat(0, "1M") and scene.can_win_for_seat_from_counts(0, normalized_ron_counts_276, "1M"), "public and count win boundaries preserve normalized aliases")
+	check(not scene.can_ron_for_seat(0, "ZZ") and not scene.can_ron_for_seat_from_counts(0, normalized_ron_counts_276, "ZZ"), "invalid ron tiles remain rejected")
+
+	print("--- FZI) AI ron normalized tile reuse ---")
+	var ai_ron_normalized_source_277 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var ai_ron_normalized_start_277 := ai_ron_normalized_source_277.find("func ai_ron_decision_report")
+	var ai_ron_normalized_end_277 := ai_ron_normalized_source_277.find("func ai_tsumo_decision_report", ai_ron_normalized_start_277)
+	var ai_ron_normalized_function_277 := ai_ron_normalized_source_277.substr(ai_ron_normalized_start_277, ai_ron_normalized_end_277 - ai_ron_normalized_start_277)
+	check(ai_ron_normalized_function_277.contains("var normalized_tile := normalize_tile_code(tile)"), "ron report captures one normalized winning tile")
+	check(ai_ron_normalized_function_277.contains("_can_win_for_seat_from_counts_normalized(seat, hand_counts, normalized_tile)"), "ron validation consumes the normalized winning tile")
+	check(ai_ron_normalized_function_277.contains("tile_index_normalized(normalized_tile)"), "ron scoring consumes the normalized winning tile index")
+	check(not ai_ron_normalized_function_277.contains("tile_index_normalized(normalize_tile_code(tile))"), "ron report avoids a second normalization")
+	check(ai_ron_normalized_function_277.contains("remaining_by_tile.get(normalized_tile, 0)"), "ron wait comparison uses the normalized winning tile")
+	var ai_ron_waiting_hand_277: Array = ["1W", "1W", "1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W"]
+	scene.players[1]["hand"] = ai_ron_waiting_hand_277.duplicate()
+	scene.players[1]["discards"] = []
+	scene.players[1]["melds"] = []
+	scene.offline_passed_win_tiles.clear()
+	var ai_ron_canonical_report_277: Dictionary = scene.ai_ron_decision_report(1, "5W")
+	var ai_ron_alias_report_277: Dictionary = scene.ai_ron_decision_report(1, "5M")
+	check(bool(ai_ron_canonical_report_277.get("accept", false)) == bool(ai_ron_alias_report_277.get("accept", false)), "legacy ron aliases preserve the accept decision")
+	check(str(ai_ron_canonical_report_277.get("reason", "")) == str(ai_ron_alias_report_277.get("reason", "")) and int(ai_ron_canonical_report_277.get("fan", -1)) == int(ai_ron_alias_report_277.get("fan", -2)), "legacy ron aliases preserve decision details")
+	check(int(ai_ron_canonical_report_277.get("points", -1)) == int(ai_ron_alias_report_277.get("points", -2)) and int(ai_ron_canonical_report_277.get("wait_variety", -1)) == int(ai_ron_alias_report_277.get("wait_variety", -2)), "legacy ron aliases preserve score and wait metrics")
+	var ai_ron_invalid_report_277: Dictionary = scene.ai_ron_decision_report(1, "ZZ")
+	check(not bool(ai_ron_invalid_report_277.get("accept", true)) and str(ai_ron_invalid_report_277.get("reason", "")) == "未成和", "invalid ron tiles retain the rejection result")
+
+	print("--- FZJ) AI tsumo normalized tile reuse ---")
+	var ai_tsumo_normalized_source_278 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
+	var ai_tsumo_normalized_start_278 := ai_tsumo_normalized_source_278.find("func ai_tsumo_decision_report")
+	var ai_tsumo_normalized_end_278 := ai_tsumo_normalized_source_278.find("func ai_tsumo_continue_discard", ai_tsumo_normalized_start_278)
+	var ai_tsumo_normalized_function_278 := ai_tsumo_normalized_source_278.substr(ai_tsumo_normalized_start_278, ai_tsumo_normalized_end_278 - ai_tsumo_normalized_start_278)
+	check(ai_tsumo_normalized_function_278.contains("var normalized_drawn_tile := normalize_tile_code(drawn_tile)"), "tsumo report captures one normalized drawn tile")
+	check(ai_tsumo_normalized_function_278.contains("current_self_draw_tile(seat) != normalized_drawn_tile"), "tsumo validation consumes the normalized drawn tile")
+	check(ai_tsumo_normalized_function_278.contains("tile_index_normalized(normalized_drawn_tile)"), "tsumo hand removal consumes the normalized tile index")
+	check(not ai_tsumo_normalized_function_278.contains("tile_index_normalized(normalize_tile_code(drawn_tile))"), "tsumo report avoids a second normalization")
+	check(ai_tsumo_normalized_function_278.contains("remaining_by_tile.get(normalized_drawn_tile, 0)"), "tsumo wait comparison uses the normalized drawn tile")
+	check(ai_tsumo_normalized_function_278.contains("deal_in_risk_score(normalized_drawn_tile") and ai_tsumo_normalized_function_278.contains("discard_feed_risk_report(normalized_drawn_tile"), "tsumo continuation risk uses the normalized drawn tile")
+	var ai_tsumo_tenpai_hand_278: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7B", "8B", "9B", "1T", "1T", "2T", "3T"]
+	var ai_tsumo_hand_278: Array = ai_tsumo_tenpai_hand_278.duplicate()
+	ai_tsumo_hand_278.append("1T")
+	scene.current_seat = 3
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.players[3]["hand"] = ai_tsumo_hand_278
+	scene.players[3]["discards"] = []
+	scene.players[3]["melds"] = []
+	scene.offline_last_draw = {"seat": 3, "tile": "1T", "source": "normal", "wall_empty": false, "serial": 278}
+	scene.offline_self_draw_ready = {"seat": 3, "tile": "1T", "serial": 278}
+	var ai_tsumo_canonical_report_278: Dictionary = scene.ai_tsumo_decision_report(3, "1T")
+	var ai_tsumo_alias_report_278: Dictionary = scene.ai_tsumo_decision_report(3, "1S")
+	check(bool(ai_tsumo_canonical_report_278.get("win_valid", false)) and bool(ai_tsumo_alias_report_278.get("win_valid", false)), "canonical and legacy tsumo tiles remain valid")
+	check(bool(ai_tsumo_canonical_report_278.get("accept", false)) == bool(ai_tsumo_alias_report_278.get("accept", false)) and str(ai_tsumo_canonical_report_278.get("reason", "")) == str(ai_tsumo_alias_report_278.get("reason", "")), "legacy tsumo aliases preserve the decision")
+	check(int(ai_tsumo_canonical_report_278.get("fan", -1)) == int(ai_tsumo_alias_report_278.get("fan", -2)) and int(ai_tsumo_canonical_report_278.get("points", -1)) == int(ai_tsumo_alias_report_278.get("points", -2)), "legacy tsumo aliases preserve score details")
+	var ai_tsumo_invalid_report_278: Dictionary = scene.ai_tsumo_decision_report(3, "ZZ")
+	check(not bool(ai_tsumo_invalid_report_278.get("accept", true)) and str(ai_tsumo_invalid_report_278.get("reason", "")) == "无效", "invalid tsumo tiles retain the invalid result")
 
 	scene.queue_free()
 	if failed:

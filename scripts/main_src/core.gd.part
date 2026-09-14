@@ -216,6 +216,19 @@ func rule_minimum_met_for_tiles(seat: int, tiles: Array, self_draw: bool, win_co
 	return int(score_data.get("fan", 0)) >= rule_min_fan()
 
 
+func rule_minimum_met_for_counts(seat: int, hand_counts: Array, canonical_tile_count: int, self_draw: bool, win_context: String = "", validated_scoring_counts_snapshot: Array = []) -> bool:
+	if rule_min_fan() <= 1:
+		return true
+	if hand_counts.size() != TILE_CODES.size() or canonical_tile_count < 0:
+		return false
+	# A supplied scoring snapshot is authoritative only for callers that already
+	# completed validation and decomposition. Direct callers keep the old normal
+	# validation path, including imported-state protection and context bonuses.
+	var use_validated_snapshot := validated_scoring_counts_snapshot.size() == TILE_CODES.size()
+	var score_data := calculate_win_score_from_tiles(seat, [], self_draw, win_context, use_validated_snapshot, hand_counts, canonical_tile_count, validated_scoring_counts_snapshot, use_validated_snapshot)
+	return int(score_data.get("fan", 0)) >= rule_min_fan()
+
+
 func _play_reward_claim_animation(panel: Control, reward_text: String) -> void:
 	"""播放奖励领取动画 - 闪光和粒子效果"""
 	# 闪光效果
@@ -5506,15 +5519,30 @@ func exposed_meld_count_for_seat(seat: int) -> int:
 	if typeof(cached) == TYPE_DICTIONARY and str((cached as Dictionary).get("key", "")) == cache_key:
 		return int((cached as Dictionary).get("value", 0))
 	var exposed_count = 0
+	var gang_count = 0
 	for item in melds:
+		if typeof(item) == TYPE_ARRAY and (item as Array).size() == 4:
+			# The scoring boundary needs the total gang count as well as the
+			# exposed count. Capture both while the meld snapshot is already hot.
+			gang_count += 1
 		if typeof(item) != TYPE_ARRAY or not is_concealed_gang_meld(seat, item as Array):
 			exposed_count += 1
-	exposed_meld_count_cache[seat] = {"key": cache_key, "value": exposed_count}
+	exposed_meld_count_cache[seat] = {"key": cache_key, "value": exposed_count, "gang_count": gang_count}
 	return exposed_count
 
 
 func is_menzen_hand(seat: int) -> bool:
 	return seat >= 0 and seat < players.size() and exposed_meld_count_for_seat(seat) == 0
+
+
+func scoring_meld_state_for_seat(seat: int) -> Dictionary:
+	if seat < 0 or seat >= players.size():
+		return {}
+	# The exposed-meld cache owns the current meld fingerprint and the paired
+	# gang count, so scoring can consume both values without another meld scan.
+	exposed_meld_count_for_seat(seat)
+	var cached: Variant = exposed_meld_count_cache.get(seat, null)
+	return cached as Dictionary if typeof(cached) == TYPE_DICTIONARY else {}
 
 
 func is_valid_offline_added_gang_completion(seat: int, tile: String) -> bool:
@@ -5637,7 +5665,7 @@ func calculate_win_score(seat: int, win_tile: String, self_draw: bool, win_conte
 		test_hand.append(win_tile)
 	return calculate_win_score_from_tiles(seat, test_hand, self_draw, win_context)
 
-func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool, win_context: String = "", assume_complete: bool = false, hand_counts_snapshot: Array = [], canonical_tile_count_override: int = -1) -> Dictionary:
+func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool, win_context: String = "", assume_complete: bool = false, hand_counts_snapshot: Array = [], canonical_tile_count_override: int = -1, scoring_counts_snapshot: Array = [], preserve_context_bonuses: bool = false) -> Dictionary:
 	if seat < 0 or seat >= players.size():
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
 	if not tile_metadata_ready:
@@ -5666,10 +5694,18 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	# validated a win, but callers such as UI previews or imported match state must
 	# never turn an incomplete hand into a paid result.
 	# is_complete_hand_from_counts() restores every temporary pair/set mutation;
-	# avoid copying the count vector for this validation-only probe.
-	if not assume_complete and (not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, hand_counts, canonical_tile_count) or not is_complete_hand_from_counts(hand_counts, canonical_tile_count, melds.size())):
-		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
-	var scoring_counts := scoring_tile_counts_from_counts(seat, hand_counts)
+	# the combined validator owns its separate scoring-count copy.
+	var scoring_counts: Array
+	if not assume_complete:
+		# This single pass validates meld shape/rule inventory and returns the
+		# combined counts needed by the scoring patterns below.
+		scoring_counts = validated_scoring_tile_counts_from_counts(seat, hand_counts, canonical_tile_count)
+		if scoring_counts.is_empty() or not is_complete_hand_from_counts(hand_counts, canonical_tile_count, melds.size()):
+			return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
+	else:
+		# A wait-value batch can prepare the meld-inclusive vector once and only
+		# mutate the candidate wait slot between score probes.
+		scoring_counts = scoring_counts_snapshot if scoring_counts_snapshot.size() == TILE_CODES.size() else scoring_tile_counts_from_counts(seat, hand_counts)
 	var fan = 1
 	var reasons: Array[String] = ["平胡"]
 	if self_draw:
@@ -5681,7 +5717,7 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	if self_draw and bool(offline_last_draw.get("wall_empty", false)) and int(offline_last_draw.get("seat", -1)) == seat:
 		fan += 1
 		reasons.append("海底捞月")
-	if not assume_complete and not self_draw and win_context == "" and is_last_discard_context():
+	if (not assume_complete or preserve_context_bonuses) and not self_draw and win_context == "" and is_last_discard_context():
 		fan += 1
 		reasons.append("河底捞鱼")
 	if win_context == "rob_gang":
@@ -5693,22 +5729,25 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	if int(players[seat]["flowers"]) > 0:
 		fan += int(players[seat]["flowers"])
 		reasons.append("花牌")
-	if is_menzen_hand(seat):
+	var scoring_meld_state := scoring_meld_state_for_seat(seat)
+	if int(scoring_meld_state.get("value", 0)) == 0:
 		fan += 1
 		reasons.append("门清")
-	if melds.size() == 0 and is_seven_pairs_from_counts(hand_counts, canonical_tile_count):
+	var special_hand_profile := scoring_special_hand_profile_from_counts(hand_counts, canonical_tile_count) if melds.size() == 0 else {}
+	if bool(special_hand_profile.get("seven_pairs", false)):
 		fan += 3
 		reasons.append("七对")
-	if melds.size() == 0 and is_thirteen_orphans_from_counts(hand_counts, canonical_tile_count):
+	if bool(special_hand_profile.get("thirteen_orphans", false)):
 		fan += 7
 		reasons.append("十三幺")
-	if is_all_honor_from_counts(scoring_counts):
+	var scoring_profile := scoring_tile_profile_from_counts(scoring_counts)
+	if bool(scoring_profile.get("all_honor", false)):
 		fan += 5
 		reasons.append("字一色")
-	elif is_pure_one_suit_from_counts(scoring_counts):
+	elif bool(scoring_profile.get("pure_one_suit", false)):
 		fan += 3
 		reasons.append("清一色")
-	elif is_mixed_one_suit_from_counts(scoring_counts):
+	elif bool(scoring_profile.get("mixed_one_suit", false)):
 		fan += 2
 		reasons.append("混一色")
 	var dragon_stats := honor_group_stats_from_counts(scoring_counts, DRAGON_CODES)
@@ -5725,7 +5764,7 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	elif int(wind_stats.get("triplets", 0)) == WIND_CODES.size() - 1 and int(wind_stats.get("pairs", 0)) >= 1:
 		fan += 5
 		reasons.append("小四喜")
-	if is_all_simples_from_counts(scoring_counts):
+	if bool(scoring_profile.get("all_simples", false)):
 		fan += 1
 		reasons.append("断幺九")
 	if full_straight_suit_from_counts(seat, hand_counts) >= 0:
@@ -5737,7 +5776,7 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	if melds.size() >= 4:
 		fan += 2
 		reasons.append("大吊车")
-	var gang_count = count_gang_melds(seat)
+	var gang_count := int(scoring_meld_state.get("gang_count", 0))
 	if gang_count > 0:
 		fan += gang_count
 		reasons.append("杠")
@@ -5801,6 +5840,45 @@ func is_thirteen_orphans_from_counts(counts: Array, tile_count: int) -> bool:
 				return false
 			has_pair = true
 	return unique == THIRTEEN_ORPHANS_CODES.size() and has_pair
+
+func scoring_special_hand_profile_from_counts(counts: Array, tile_count: int) -> Dictionary:
+	# The scoring boundary asks for both closed special-hand flags. Derive them
+	# during one 34-slot pass; the individual public predicates remain available
+	# for callers that need only one classification.
+	var result := {"seven_pairs": false, "thirteen_orphans": false}
+	if tile_count != 14 or counts.size() < TILE_CODES.size():
+		return result
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var seven_pairs_valid := true
+	var pair_slots := 0
+	var orphans_valid := true
+	var orphan_unique := 0
+	var orphan_pair := false
+	for index in range(TILE_CODES.size()):
+		var amount := int(counts[index])
+		if amount <= 0:
+			continue
+		if seven_pairs_valid:
+			if amount == 2:
+				pair_slots += 1
+			elif amount == 4:
+				pair_slots += 2
+			else:
+				seven_pairs_valid = false
+		if orphans_valid:
+			if not bool(tile_thirteen_orphans_cache.get(TILE_CODES[index], false)):
+				orphans_valid = false
+			else:
+				orphan_unique += 1
+				if amount >= 2:
+					if orphan_pair or amount > 2:
+						orphans_valid = false
+					else:
+						orphan_pair = true
+	result["seven_pairs"] = seven_pairs_valid and pair_slots == 7
+	result["thirteen_orphans"] = orphans_valid and orphan_unique == THIRTEEN_ORPHANS_CODES.size() and orphan_pair
+	return result
 
 func is_thirteen_orphans_tile(tile: String) -> bool:
 	if not tile_metadata_ready:
@@ -6520,27 +6598,46 @@ func ai_advice_summary(seat: int, limit: int = 3) -> String:
 	return "\n".join(lines)
 
 
-func is_plan_offcut(tile: String, report: Dictionary, original_hand: Array = [], original_counts_snapshot: Array = []) -> bool:
+func is_plan_offcut(tile: String, report: Dictionary, original_hand: Array = [], original_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> bool:
 	var label = str(report.get("plan_label", "标准"))
 	if label == "标准" or tile == "":
 		return false
+	var index := tile_index_snapshot
+	if index == -2:
+		index = int(report.get("tile_index", -2))
+	var has_index := index >= 0 and index < TILE_CODES.size()
+	var is_number_index := has_index and index < 27
+	var is_honor_index := has_index and index >= 27
+	var is_terminal_or_honor_index := is_honor_index or (is_number_index and (index % 9 == 0 or index % 9 == 8))
 	if label == "七对":
 		if not original_counts_snapshot.is_empty():
 			return tile_count_from_counts(tile, original_counts_snapshot) == 1
 		return not original_hand.is_empty() and count_tile(original_hand, tile) == 1
 	if label == "字一色":
-		return not is_honor_tile(tile)
+		return not (is_honor_index if has_index else is_honor_tile(tile))
 	if label == "清一色":
+		if has_index:
+			return is_number_index and int(index / 9) != int(report.get("plan_suit", -1))
 		return is_number_tile(tile) and tile_suit_index(tile) != int(report.get("plan_suit", -1))
 	if label == "混一色":
+		if has_index:
+			return is_number_index and int(index / 9) != int(report.get("plan_suit", -1))
 		return is_number_tile(tile) and tile_suit_index(tile) != int(report.get("plan_suit", -1))
 	if label == "碰碰胡":
+		if has_index:
+			return is_number_index and not is_terminal_or_honor_index
 		return is_number_tile(tile) and not is_terminal_or_honor(tile)
 	if label == "十三幺":
+		if has_index:
+			return not THIRTEEN_ORPHANS_CODES.has(TILE_CODES[index])
 		return not is_thirteen_orphans_tile(tile)
 	if label == "一条龙":
+		if has_index:
+			return not is_number_index or int(index / 9) != int(report.get("plan_suit", -1))
 		return not is_number_tile(tile) or tile_suit_index(tile) != int(report.get("plan_suit", -1))
 	if label == "断幺九":
+		if has_index:
+			return not is_number_index or index % 9 == 0 or index % 9 == 8
 		return not is_simple_number_tile(tile)
 	if label == "大三元" or label == "小三元":
 		return not DRAGON_CODES.has(tile)
@@ -6879,30 +6976,32 @@ func seven_pairs_plan_report_from_counts(counts: Array) -> Dictionary:
 		"suit": -1,
 	}
 
-func honor_route_score_from_counts(counts: Array, codes: Array) -> float:
-	var stats = honor_group_stats_from_counts(counts, codes)
+func honor_route_score_from_stats(stats: Dictionary, code_count: int) -> float:
 	var triplets = int(stats.get("triplets", 0))
 	var pairs = int(stats.get("pairs", 0))
 	var singles = int(stats.get("singles", 0))
 	var tiles = int(stats.get("tiles", 0))
-	if codes.size() == 3:
+	if code_count == 3:
 		if triplets >= 2 and pairs + singles >= 1:
 			return float(tiles) * 3.5 + float(triplets) * 28.0 + float(pairs) * 12.0 + 70.0
 		if triplets + pairs >= 2 and tiles >= 5:
 			return float(tiles) * 3.0 + float(triplets) * 22.0 + float(pairs) * 10.0 + 34.0
 		return 0.0
-	if codes.size() == 4:
+	if code_count == 4:
 		if triplets >= 3 and pairs + singles >= 1:
 			return float(tiles) * 3.5 + float(triplets) * 28.0 + float(pairs) * 12.0 + 90.0
 		if triplets + pairs >= 3 and tiles >= 7:
 			return float(tiles) * 3.0 + float(triplets) * 22.0 + float(pairs) * 10.0 + 48.0
 	return 0.0
 
+func honor_route_score_from_counts(counts: Array, codes: Array) -> float:
+	return honor_route_score_from_stats(honor_group_stats_from_counts(counts, codes), codes.size())
+
 func honor_group_plan_report_from_counts(counts: Array, codes: Array, big_label: String, small_label: String) -> Dictionary:
-	var score = honor_route_score_from_counts(counts, codes)
+	var stats = honor_group_stats_from_counts(counts, codes)
+	var score = honor_route_score_from_stats(stats, codes.size())
 	if score <= 0.0:
 		return {}
-	var stats = honor_group_stats_from_counts(counts, codes)
 	var triplets = int(stats.get("triplets", 0))
 	var pairs = int(stats.get("pairs", 0))
 	var singles = int(stats.get("singles", 0))
@@ -7482,7 +7581,7 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 			# The target-opponent branch above fully determines both values; avoid
 			# building the all-opponent safety/risk reports before entering it.
 			safety = tile_safety_label(tile, seat, visible_counts, eval_context)
-			risk = float(tile_risk_vector(tile, seat, visible_counts, eval_context).get("score", 0.0))
+			risk = float(tile_risk_vector(tile, seat, visible_counts, eval_context, tile_index_snapshot).get("score", 0.0))
 		var score = -risk
 		var is_number_candidate := tile_index_snapshot >= 0 and tile_index_snapshot < 27
 		var candidate_suit := int(tile_index_snapshot / 9) if is_number_candidate else -1
@@ -7570,7 +7669,7 @@ func first_added_gang_tile(seat: int) -> String:
 	for meld_value in players[seat].get("melds", []):
 		if typeof(meld_value) != TYPE_ARRAY:
 			continue
-		var meld: Array = meld_value
+		var meld: Array = meld_value as Array
 		if meld.size() != 3:
 			continue
 		var normalized := normalize_tile_code(str(meld[0]))
@@ -7838,9 +7937,17 @@ func is_all_simples_hand(seat: int, tiles: Array) -> bool:
 		has_tile = true
 	return has_tile
 
-func scoring_tile_counts_from_counts(seat: int, concealed_counts: Array) -> Array:
+func scoring_tile_counts_from_counts(seat: int, concealed_counts: Array, meld_tile_indices_snapshot: Array = []) -> Array:
 	var counts: Array = concealed_counts.duplicate()
 	if seat < 0 or seat >= players.size():
+		return counts
+	if not meld_tile_indices_snapshot.is_empty():
+		# Evaluation batches already normalized the immutable exposed melds once.
+		# Reuse those indexes instead of resolving every meld tile again.
+		for raw_index in meld_tile_indices_snapshot:
+			var index := int(raw_index)
+			if index >= 0 and index < counts.size():
+				counts[index] = int(counts[index]) + 1
 		return counts
 	for meld in players[seat].get("melds", []):
 		if typeof(meld) != TYPE_ARRAY:
@@ -7866,6 +7973,37 @@ func is_pure_one_suit_from_counts(counts: Array) -> bool:
 		elif suit != current_suit:
 			return false
 	return has_number
+
+func scoring_tile_profile_from_counts(counts: Array) -> Dictionary:
+	var has_number := false
+	var has_honor := false
+	var has_multiple_suits := false
+	var suit := -1
+	var all_honor := true
+	var all_simples := true
+	for index in range(counts.size()):
+		if int(counts[index]) <= 0:
+			continue
+		if index >= 27:
+			has_honor = true
+			all_simples = false
+			continue
+		has_number = true
+		all_honor = false
+		var current_suit := int(index / 9)
+		if suit < 0:
+			suit = current_suit
+		elif suit != current_suit:
+			has_multiple_suits = true
+		var rank := index % 9
+		if rank == 0 or rank == 8:
+			all_simples = false
+	return {
+		"all_honor": all_honor,
+		"pure_one_suit": has_number and not has_honor and not has_multiple_suits,
+		"mixed_one_suit": has_number and has_honor and not has_multiple_suits,
+		"all_simples": has_number and all_simples,
+	}
 
 func is_mixed_one_suit_from_counts(counts: Array) -> bool:
 	var suit := -1
@@ -7926,6 +8064,8 @@ func has_valid_scoring_tile_inventory(seat: int, tiles: Array) -> bool:
 func has_valid_scoring_tile_inventory_from_counts(seat: int, hand_counts: Array, expected_tile_count: int = -1) -> bool:
 	if seat < 0 or seat >= players.size() or hand_counts.size() != TILE_CODES.size():
 		return false
+	if not tile_metadata_ready:
+		setup_tile_order()
 	var combined = hand_counts.duplicate()
 	var allowed_codes := rule_tile_codes()
 	var concealed_total = 0
@@ -7946,10 +8086,10 @@ func has_valid_scoring_tile_inventory_from_counts(seat: int, hand_counts: Array,
 		if typeof(meld) != TYPE_ARRAY:
 			return false
 		for item in meld:
-			var code = str(item)
-			if not is_tile_enabled_for_rule(code):
+			var normalized_code := normalize_tile_code(str(item))
+			if not allowed_codes.has(normalized_code):
 				return false
-			var index = tile_index(code)
+			var index := int(tile_order.get(normalized_code, -1))
 			if index < 0 or index >= combined.size():
 				return false
 			combined[index] = int(combined[index]) + 1
@@ -7958,12 +8098,67 @@ func has_valid_scoring_tile_inventory_from_counts(seat: int, hand_counts: Array,
 	return true
 
 
+func validated_scoring_tile_counts_from_counts(seat: int, hand_counts: Array, expected_tile_count: int = -1) -> Array:
+	if seat < 0 or seat >= players.size() or hand_counts.size() != TILE_CODES.size():
+		return []
+	if not tile_metadata_ready:
+		setup_tile_order()
+	var combined = hand_counts.duplicate()
+	var allowed_codes := rule_tile_codes()
+	var concealed_total := 0
+	for index in range(combined.size()):
+		var amount := int(combined[index])
+		if amount < 0 or amount > 4:
+			return []
+		if amount > 0 and not allowed_codes.has(TILE_CODES[index]):
+			return []
+		combined[index] = amount
+		concealed_total += amount
+	if expected_tile_count >= 0 and concealed_total != expected_tile_count:
+		return []
+	var melds = players[seat].get("melds", [])
+	if typeof(melds) != TYPE_ARRAY or (melds as Array).size() > 4:
+		return []
+	for meld_value in melds:
+		if typeof(meld_value) != TYPE_ARRAY:
+			return []
+		var meld: Array = meld_value as Array
+		if meld.size() != 3 and meld.size() != 4:
+			return []
+		var first_index := -1
+		var all_same := true
+		var indexes: Array[int] = []
+		for item in meld:
+			var normalized_code := normalize_tile_code(str(item))
+			if not allowed_codes.has(normalized_code):
+				return []
+			var index := int(tile_order.get(normalized_code, -1))
+			if index < 0 or index >= combined.size():
+				return []
+			combined[index] = int(combined[index]) + 1
+			if int(combined[index]) > 4:
+				return []
+			indexes.append(index)
+			if first_index < 0:
+				first_index = index
+			elif index != first_index:
+				all_same = false
+		if all_same:
+			continue
+		if meld.size() != 3:
+			return []
+		indexes.sort()
+		if indexes[0] >= 27 or indexes[2] >= 27:
+			return []
+		if int(indexes[0] / 9) != int(indexes[2] / 9) or indexes[1] != indexes[0] + 1 or indexes[2] != indexes[1] + 1:
+			return []
+	return combined
+
+
 func is_valid_scoring_meld(meld: Array) -> bool:
 	if meld.size() != 3 and meld.size() != 4:
 		return false
-	var first_index = tile_index(str(meld[0]))
-	if first_index < 0:
-		return false
+	var first_index := -1
 	var all_same = true
 	var indexes: Array[int] = []
 	for tile in meld:
@@ -7971,7 +8166,9 @@ func is_valid_scoring_meld(meld: Array) -> bool:
 		if index < 0:
 			return false
 		indexes.append(index)
-		if index != first_index:
+		if first_index < 0:
+			first_index = index
+		elif index != first_index:
 			all_same = false
 	if all_same:
 		return true
@@ -8042,25 +8239,47 @@ func is_full_straight_hand(seat: int, tiles: Array) -> bool:
 func full_straight_suit(seat: int, tiles: Array) -> int:
 	return full_straight_suit_from_counts(seat, tile_counts(tiles))
 
-func full_straight_suit_from_counts(seat: int, concealed_counts_source: Array) -> int:
+func full_straight_open_meld_groups_for_seat(seat: int) -> Array:
+	var empty_groups: Array = [[false, false, false], [false, false, false], [false, false, false]]
 	if seat < 0 or seat >= players.size():
-		return -1
+		return empty_groups
+	# Exposed meld layout is invariant across the scoring probes for one seat.
+	# Reuse the existing meld fingerprint so direct river/meld mutations still
+	# invalidate this derived grouping without introducing a second cache key.
+	exposed_meld_count_for_seat(seat)
+	var cached: Variant = exposed_meld_count_cache.get(seat, null)
+	if typeof(cached) == TYPE_DICTIONARY:
+		var cached_groups = (cached as Dictionary).get("full_straight_open_meld_groups", null)
+		if typeof(cached_groups) == TYPE_ARRAY:
+			return cached_groups as Array
+	var groups: Array = empty_groups
 	var open_melds: Array = players[seat]["melds"]
-	var open_meld_groups: Array = [[false, false, false], [false, false, false], [false, false, false]]
-	for meld in open_melds:
-		if meld.size() != 3:
+	for meld_value in open_melds:
+		if typeof(meld_value) != TYPE_ARRAY or (meld_value as Array).size() != 3:
 			continue
+		var meld: Array = meld_value as Array
 		var meld_first_index := tile_index(str(meld[0]))
 		if meld_first_index < 0 or meld_first_index >= 27:
 			continue
 		var meld_suit := int(meld_first_index / 9)
-		var group := full_straight_open_meld_group(meld, meld_suit)
+		var group := full_straight_open_meld_group(meld, meld_suit, meld_first_index)
 		if group >= 0:
-			var suit_groups: Array = open_meld_groups[meld_suit]
+			var suit_groups: Array = groups[meld_suit]
 			suit_groups[group] = true
+	if typeof(cached) == TYPE_DICTIONARY:
+		(cached as Dictionary)["full_straight_open_meld_groups"] = groups
+	return groups
+
+func full_straight_suit_from_counts(seat: int, concealed_counts_source: Array) -> int:
+	if seat < 0 or seat >= players.size():
+		return -1
+	var open_melds: Array = players[seat]["melds"]
+	var open_meld_groups: Array = full_straight_open_meld_groups_for_seat(seat)
+	var concealed_counts: Array = concealed_counts_source.duplicate()
+	var consumed_indices: Array[int] = []
 	for suit in range(3):
 		var fulfilled_by_open: Array = open_meld_groups[suit]
-		var concealed_counts = concealed_counts_source.duplicate()
+		consumed_indices.clear()
 		var concealed_sequences = 0
 		var valid = true
 		# 一条龙必须能在真实面子分解中取出 123、456、789，不能仅凭
@@ -8075,22 +8294,26 @@ func full_straight_suit_from_counts(seat: int, concealed_counts_source: Array) -
 					valid = false
 					break
 				concealed_counts[index] = int(concealed_counts[index]) - 1
+				consumed_indices.append(index)
 			if not valid:
 				break
 			concealed_sequences += 1
-		if not valid:
-			continue
-		var remaining_melds = 4 - open_melds.size() - concealed_sequences
-		if remaining_melds >= 0 and is_standard_complete_from_counts(concealed_counts, remaining_melds):
+		var found := false
+		if valid:
+			var remaining_melds = 4 - open_melds.size() - concealed_sequences
+			found = remaining_melds >= 0 and is_standard_complete_from_counts(concealed_counts, remaining_melds)
+		for consumed_index in consumed_indices:
+			concealed_counts[consumed_index] = int(concealed_counts[consumed_index]) + 1
+		if found:
 			return suit
 	return -1
 
-func full_straight_open_meld_group(meld: Array, suit: int) -> int:
+func full_straight_open_meld_group(meld: Array, suit: int, first_index_snapshot: int = -2) -> int:
 	if meld.size() != 3 or suit < 0 or suit >= 3:
 		return -1
 	var rank_counts = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-	for tile in meld:
-		var index = tile_index(str(tile))
+	for tile_position in range(meld.size()):
+		var index := first_index_snapshot if tile_position == 0 and first_index_snapshot != -2 else tile_index(str(meld[tile_position]))
 		if index < 0 or index >= 27 or int(index / 9) != suit:
 			return -1
 		rank_counts[index % 9] = int(rank_counts[index % 9]) + 1
@@ -8142,11 +8365,7 @@ func all_scoring_tiles(seat: int, tiles: Array) -> Array:
 	return result
 
 func count_gang_melds(seat: int) -> int:
-	var amount = 0
-	for meld in players[seat]["melds"]:
-		if meld.size() == 4:
-			amount += 1
-	return amount
+	return int(scoring_meld_state_for_seat(seat).get("gang_count", 0))
 
 
 func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bool, marker_parent: Control = null) -> void:
