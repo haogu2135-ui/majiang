@@ -1,10 +1,10 @@
-func action_button_width_for_available(count: int, available_width: float, separation: int = -1) -> float:
+func action_button_width_for_available(count: int, available_width: float, separation: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
 	if count <= 0:
-		return action_button_max_width_for_viewport()
-	var gap = action_button_separation_for_count(count) if separation < 0 else separation
+		return action_button_max_width_for_viewport(viewport_snapshot)
+	var gap = action_button_separation_for_count(count, viewport_snapshot) if separation < 0 else separation
 	var layout_slack = 2.0
 	var available = available_width - float(max(0, count - 1) * gap) - layout_slack
-	var width: float = minf(action_button_max_width_for_viewport(), floorf(maxf(1.0, available / float(count))))
+	var width: float = minf(action_button_max_width_for_viewport(viewport_snapshot), floorf(maxf(1.0, available / float(count))))
 	if has_pending_claim_window():
 		# Keep authored touch targets intact; the FlowContainer supplies the second
 		# row when a compact viewport cannot fit the full response set.
@@ -12,16 +12,16 @@ func action_button_width_for_available(count: int, available_width: float, separ
 		return maxf(pending_min_width, width)
 	return width
 
-func action_button_max_width_for_viewport() -> float:
-	var viewport_size := effective_viewport_size()
+func action_button_max_width_for_viewport(viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	if viewport_size.y <= 560.0 or viewport_size.x < 1100.0:
 		return ACTION_BUTTON_COMPACT_MAX_WIDTH
 	if viewport_size.x < 1600.0:
 		return ACTION_BUTTON_MEDIUM_MAX_WIDTH
 	return ACTION_BUTTON_MAX_WIDTH
 
-func action_button_width_for_count(count: int, separation: int = -1) -> float:
-	return action_button_width_for_available(count, action_bar_pixel_width(), separation)
+func action_button_width_for_count(count: int, separation: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
+	return action_button_width_for_available(count, action_bar_pixel_width(), separation, viewport_snapshot)
 
 func action_buttons_fit_available(count: int, available_width: float) -> bool:
 	var separation = action_button_separation_for_count(count)
@@ -82,15 +82,16 @@ func discard_zone_tile_size_for_table_size(zone_rect: Rect2, columns: int, rows:
 		height = min(available_height, width * max_aspect)
 	return Vector2(max(1.0, floor(width)), max(1.0, floor(height)))
 
-func discard_zone_visible_rows(zone_rect: Rect2, columns: int) -> int:
-	return discard_zone_visible_rows_for_table_size(zone_rect, columns, game_table_pixel_size())
+func discard_zone_visible_rows(zone_rect: Rect2, columns: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> int:
+	return discard_zone_visible_rows_for_table_size(zone_rect, columns, game_table_pixel_size(), viewport_snapshot)
 
-func discard_zone_visible_rows_for_table_size(zone_rect: Rect2, columns: int, table_size: Vector2) -> int:
+func discard_zone_visible_rows_for_table_size(zone_rect: Rect2, columns: int, table_size: Vector2, viewport_snapshot: Vector2 = Vector2.ZERO) -> int:
 	var zone_size = discard_zone_pixel_size_for_table_size(zone_rect, table_size)
 	var max_rows = int(floor((zone_size.y + float(DISCARD_GRID_SEPARATION)) / (DISCARD_TILE_MIN_SIZE.y + float(DISCARD_GRID_SEPARATION))))
 	# r500: bottom/top (8-col) prefer 2 rows. On compact screens, side rivers
 	# trade one visible row for a larger face so the tile glyph remains readable.
-	var compact_side_river := columns <= 3 and effective_viewport_size().y <= 560.0
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var compact_side_river := columns <= 3 and resolved_viewport.y <= 560.0
 	var row_cap := 2 if columns >= 8 else (3 if compact_side_river else 4)
 	return clamp(max_rows, 1, row_cap)
 
@@ -605,7 +606,7 @@ func draw_action_button_pass_route(button: Button, color: Color) -> Control:
 	# 保留为空壳；过按钮装饰碎块已并入 action_button_panel 插画底板。
 	return null
 
-func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1) -> Array[Button]:
+func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Array[Button]:
 	# r214: bulk GPT chrome sweep
 	var action_buttons: Array[Button] = action_bar_buttons()
 	var count = action_bar_button_count(action_buttons)
@@ -615,7 +616,9 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	var pending_claim_mode := bool(pending_claim_snapshot) if pending_claim_snapshot >= 0 else has_pending_claim_window()
 	var danger_confirm_mode := mode == "offline" and (bool(pending_danger_snapshot) if pending_danger_snapshot >= 0 else has_pending_danger_discard())
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
-	var action_chrome_signature := battle_action_chrome_identity_signature(action_buttons, int(pending_claim_mode), int(danger_confirm_mode))
+	var layout_viewport_snapshot := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var layout_content_size_snapshot := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	var action_chrome_signature := battle_action_chrome_identity_signature(action_buttons, int(pending_claim_mode), int(danger_confirm_mode), layout_viewport_snapshot, layout_content_size_snapshot)
 	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
 	var retained_intent := retained_battle_action_intent
 	retained_battle_action_intent = null
@@ -659,7 +662,7 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 		if stale_dock != null and is_instance_valid(stale_dock):
 			stale_dock.queue_free()
 	retained_battle_action_dock_signature = ""
-	var dock_rect := action_dock_rect_for_count(count)
+	var dock_rect := action_dock_rect_for_count(count, layout_viewport_snapshot, layout_content_size_snapshot)
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
 	var dock_shadow = make_soft_depth_panel(parent, dock_shadow_rect, Color(0.0, 0.0, 0.0, 0.18 if pending_claim_mode else 0.22), 12)
 	dock_shadow.name = "ActionDock3DCastShadow"
@@ -676,12 +679,16 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	dock.set_meta("layout_role", "action_buttons")
 	dock.set_meta("pending_claim_window_snapshot", pending_claim_mode)
 	dock.set_meta("pending_danger_discard_snapshot", danger_confirm_mode)
+	dock.set_meta("action_layout_viewport_snapshot", layout_viewport_snapshot)
+	dock.set_meta("action_layout_content_size_snapshot", layout_content_size_snapshot)
+	dock.set_meta("action_layout_snapshot_policy", "one_viewport_and_content_snapshot_per_layout")
 	dock.set_meta("action_state_snapshot_policy", "one_action_state_snapshot_per_dock")
 	set_ui_full_text(dock, "行动区：当前可执行操作会显示在下方按钮；焦点可用方向键移动", "牌桌行动区")
 	mark_ui_optimization(dock, "F-478")
-	var action_available_width := maxf(1.0, safe_content_pixel_size().x * maxf(0.001, action_bar_layout_rect().size.x - action_bar_layout_rect().position.x))
-	var action_separation := action_button_separation_for_count(action_buttons.size())
-	var action_button_width := action_button_width_for_available(action_buttons.size(), action_available_width, action_separation)
+	var action_layout_rect := action_bar_layout_rect(layout_viewport_snapshot, layout_content_size_snapshot)
+	var action_available_width := maxf(1.0, layout_content_size_snapshot.x * maxf(0.001, action_layout_rect.size.x - action_layout_rect.position.x))
+	var action_separation := action_button_separation_for_count(action_buttons.size(), layout_viewport_snapshot)
+	var action_button_width := action_button_width_for_available(action_buttons.size(), action_available_width, action_separation, layout_viewport_snapshot)
 	dock.set_meta("button_solver_available_width_px", action_available_width)
 	dock.set_meta("button_solver_width_px", action_button_width)
 	dock.set_meta("button_solver_policy", "shared_width_solver_for_normal_danger_and_ended")
@@ -920,6 +927,7 @@ func ai_discard_reports_for_render() -> Array:
 func draw_actions(parent: Control) -> void:
 	action_dock_status_label = null
 	var action_viewport_size := effective_viewport_size()
+	var action_content_size := safe_content_pixel_size()
 	var disconnected := mode == "online_game" and online_game_disconnected()
 	var pending_claim_response_bar: Control = null
 	var pending_claim_tail_bar: HBoxContainer = null
@@ -929,8 +937,8 @@ func draw_actions(parent: Control) -> void:
 	if mode == "online_game" and not disconnected:
 		draw_chat_action_button(parent)
 	if mode == "offline" and reuse_retained_battle_action_bar_for_render(parent):
-		var retained_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout(retained_action_buttons)
+		var retained_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, -1, -1, action_viewport_size, action_content_size)
+		finalize_action_bar_layout(retained_action_buttons, action_viewport_size, action_content_size)
 		return
 	if disconnected:
 		var recovery_model := online_recovery_view_model()
@@ -992,8 +1000,8 @@ func draw_actions(parent: Control) -> void:
 		mark_ui_optimization(lobby_button, "F-898")
 		lobby_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
 		action_bar.add_child(lobby_button)
-		var recovery_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout(recovery_action_buttons)
+		var recovery_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, -1, -1, action_viewport_size, action_content_size)
+		finalize_action_bar_layout(recovery_action_buttons, action_viewport_size, action_content_size)
 		action_bar.set_meta("layout_role", "online_recovery_actions")
 		action_bar.set_meta("recovery_state_owner", "OnlineRecoveryStateLabel")
 		action_bar.set_meta("recovery_focus_order", "reconnect_then_lobby")
@@ -1021,8 +1029,8 @@ func draw_actions(parent: Control) -> void:
 		parent.add_child(action_bar)
 		action_bar.add_child(unknown_retry)
 		action_bar.add_child(unknown_lobby)
-		var unknown_phase_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout(unknown_phase_action_buttons)
+		var unknown_phase_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, -1, -1, action_viewport_size, action_content_size)
+		finalize_action_bar_layout(unknown_phase_action_buttons, action_viewport_size, action_content_size)
 		call_deferred("focus_online_recovery_if_current", root_layer.get_instance_id(), ui_page_generation, "OnlineUnknownPhaseRetryButton")
 		return
 	var pending_claim_window_snapshot := has_pending_claim_window()
@@ -1149,8 +1157,8 @@ func draw_actions(parent: Control) -> void:
 			summary_menu_button.z_index = 2
 			action_bar.add_child(summary_menu_button)
 			prepare_ended_action_overflow(parent)
-			var ended_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
-			finalize_action_bar_layout(ended_action_buttons)
+			var ended_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot), action_viewport_size, action_content_size)
+			finalize_action_bar_layout(ended_action_buttons, action_viewport_size, action_content_size)
 			return
 		if offline_phase == "pending_claim":
 			# 新手引导：吃碰杠提示
@@ -1185,8 +1193,8 @@ func draw_actions(parent: Control) -> void:
 				offline_pass_button.set_meta("pending_tail", true)
 				pending_claim_response_tail_lane.add_child(offline_pass_button)
 			draw_pending_claim_illustration(parent)
-			var pending_claim_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
-			finalize_action_bar_layout(pending_claim_action_buttons)
+			var pending_claim_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot), action_viewport_size, action_content_size)
+			finalize_action_bar_layout(pending_claim_action_buttons, action_viewport_size, action_content_size)
 			return
 		if player_ai_assist_enabled() and pending_danger_discard_snapshot:
 			var selected_danger_tile = pending_danger_discard_tile
@@ -1241,25 +1249,27 @@ func draw_actions(parent: Control) -> void:
 			action_bar.set_meta("danger_shortcut_state", {"confirm": "Enter", "cancel": "Esc"})
 			action_bar.set_meta("danger_action_order", "alternatives_then_cancel_then_confirm")
 			action_bar.set_meta("danger_reading_sequence", ["tile", "risk", "alternatives", "cancel", "confirm"])
-			var danger_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
+			var danger_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot), action_viewport_size, action_content_size)
 			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
-			finalize_action_bar_layout(danger_action_buttons)
+			finalize_action_bar_layout(danger_action_buttons, action_viewport_size, action_content_size)
 			return
-		if can_self_discard() and can_win_for_seat(0):
+		var action_can_self_discard := can_self_discard()
+		var action_ai_assist_enabled := player_ai_assist_enabled()
+		if action_can_self_discard and can_win_for_seat(0):
 			action_bar.add_child(make_action_button("自摸", Color(0.94, 0.42, 0.32), func() -> void:
 				human_self_win()
 			))
 		var gang_tile = first_concealed_gang_tile(0)
-		if can_self_discard() and gang_tile != "":
+		if action_can_self_discard and gang_tile != "":
 			action_bar.add_child(make_action_button("暗杠", Color(0.62, 0.54, 0.88), func() -> void:
 				human_concealed_gang(gang_tile)
 			))
 		var added_gang_tile = first_added_gang_tile(0)
-		if can_self_discard() and added_gang_tile != "":
+		if action_can_self_discard and added_gang_tile != "":
 			action_bar.add_child(make_action_button("补杠", Color(0.66, 0.58, 0.92), func() -> void:
 				human_added_gang(added_gang_tile)
 			))
-		if player_ai_assist_enabled() and can_self_discard() and not pending_danger_discard_snapshot:
+		if action_ai_assist_enabled and action_can_self_discard and not pending_danger_discard_snapshot:
 			var report_snapshot := ai_discard_reports_for_render()
 			var recommended_report = recommended_discard_report(report_snapshot)
 			var recommended_tile = str(recommended_report.get("tile", ""))
@@ -1324,7 +1334,7 @@ func draw_actions(parent: Control) -> void:
 			restart_button.set_meta("restart_action", "request")
 			set_ui_full_text(restart_button, restart_button.tooltip_text, "请求重开当前牌局")
 			action_bar.add_child(restart_button)
-		if player_ai_assist_enabled():
+		if action_ai_assist_enabled:
 			action_bar.add_child(make_action_button("提示", Color(0.25, 0.58, 0.48), func() -> void:
 				set_status(human_hint_text())
 			))
@@ -1398,8 +1408,8 @@ func draw_actions(parent: Control) -> void:
 		else:
 			action_bar.add_child(retry_sync_button)
 	prepare_ended_action_overflow(parent)
-	var action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
-	finalize_action_bar_layout(action_buttons)
+	var action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot), action_viewport_size, action_content_size)
+	finalize_action_bar_layout(action_buttons, action_viewport_size, action_content_size)
 	if mode == "offline" and battle_action_bar_can_retain():
 		var action_bar_state_signature := battle_action_bar_state_signature()
 		action_bar.set_meta("action_bar_state_signature", action_bar_state_signature)
@@ -1750,7 +1760,10 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# danger decision surfaces and keeps keyboard focus within the active action.
 	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or has_pending_danger_discard() or not player_ai_assist_enabled()):
 		return
-	var advisor_signature := battle_advisor_identity_signature()
+	var advisor_viewport_snapshot := effective_viewport_size()
+	var advisor_content_size_snapshot := safe_content_pixel_size_for_margins(advisor_viewport_snapshot, safe_area_margins)
+	var advisor_layout_snapshot := advisor_panel_layout_rect(advisor_viewport_snapshot, advisor_content_size_snapshot)
+	var advisor_signature := battle_advisor_identity_signature(advisor_viewport_snapshot, advisor_content_size_snapshot, advisor_layout_snapshot)
 	var retained_panel := retained_battle_advisor_panel
 	var retained_panel_signature := retained_battle_advisor_panel_signature
 	retained_battle_advisor_panel = null
@@ -1767,11 +1780,14 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# The advisor owns an authored side channel selected against the live table
 	# geometry. It must not cover the center wind, wall count, last discard, or a
 	# seat-facing river/meld lane just because the viewport is compact.
-	var advisor_rect := advisor_panel_layout_rect()
+	var advisor_rect := advisor_layout_snapshot
 	var panel = make_gpt_plate_rect(advisor_rect, Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
 	panel.set_name("AdvisorPanel")
 	panel.set_meta("advisor_render_signature", advisor_signature)
 	panel.set_meta("layout_rect", advisor_rect)
+	panel.set_meta("viewport_snapshot", advisor_viewport_snapshot)
+	panel.set_meta("content_size_snapshot", advisor_content_size_snapshot)
+	panel.set_meta("layout_snapshot_policy", "one_viewport_content_and_layout_snapshot_per_draw")
 	panel.set_meta("layout_role", "advisor_safe_side_channel")
 	panel.set_meta("center_occlusion_policy", "never")
 	panel.set_meta("center_facts_preserved", "wind,wall_count,last_discard,round")
@@ -2256,11 +2272,16 @@ func center_last_discard_view_model(tile: String, seat: int) -> Dictionary:
 
 func draw_center(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
-	var center_identity := battle_center_identity_signature()
+	var center_viewport_snapshot := effective_viewport_size()
+	var center_identity := battle_center_identity_signature(center_viewport_snapshot)
+	parent.set_meta("center_viewport_snapshot", center_viewport_snapshot)
+	parent.set_meta("center_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	if retained_battle_center != null and is_instance_valid(retained_battle_center) and not retained_battle_center.is_queued_for_deletion() and retained_battle_center_signature == center_identity:
 		parent.add_child(retained_battle_center)
 		retained_battle_center.set_meta("retained_for_battle_render", false)
 		retained_battle_center.set_meta("ui_page_generation", ui_page_generation)
+		retained_battle_center.set_meta("center_viewport_snapshot", center_viewport_snapshot)
+		retained_battle_center.set_meta("center_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 		retained_battle_center = null
 		retained_battle_center_signature = ""
 		return
@@ -2289,8 +2310,10 @@ func draw_center(parent: Control) -> void:
 	# 完整阶段提示只由顶部 HUD承载；中心保留牌墙、上张、风位和骰子等桌面事实。
 	var center_wall_count := get_wall_count()
 	var center_wall_total := display_wall_total()
-	var center_viewport_size := effective_viewport_size()
+	var center_viewport_size := center_viewport_snapshot
 	var center_content_size := safe_content_pixel_size()
+	center.set_meta("center_viewport_snapshot", center_viewport_snapshot)
+	center.set_meta("center_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	center.set_meta("center_draw_content_size_snapshot", center_content_size)
 	center.set_meta("center_draw_content_size_snapshot_policy", "one_content_size_snapshot_per_center_draw")
 	var compact_center := center_viewport_size.x <= 960.0 or center_viewport_size.y < 720.0
@@ -2459,15 +2482,18 @@ func register_battle_ui_round_contracts(root: Control) -> void:
 	var hud_wall := find_control.call("TopHudWallText") as Control
 	var center_shell := find_control.call("CenterConsole3DShell") as Control
 	var center_last := find_control.call("CenterLastDiscardTile") as Control
+	var battle_content_size_snapshot := safe_content_pixel_size()
+	root.set_meta("battle_ui_content_size_snapshot", battle_content_size_snapshot)
+	root.set_meta("battle_ui_content_size_snapshot_policy", "one_content_size_snapshot_per_registration")
 	attach.call("F-651", hud_title, "hud_title_measured_lane")
 	attach.call("F-652", hud_status, "hud_phase_status_lane")
 	attach.call("F-653", hud_wall, "hud_wall_count_and_last_discard_lane")
 	attach.call("F-654", center_shell, "center_overlay_alpha_budget")
 	attach.call("F-655", center_last, "center_latest_discard_single_visual_owner")
 	if hud_title is Label:
-		fit_label_font_size(hud_title as Label, maxf(96.0, safe_content_pixel_size().x * 0.205), hud_title.get_theme_font_size("font_size"), 12)
+		fit_label_font_size(hud_title as Label, maxf(96.0, battle_content_size_snapshot.x * 0.205), hud_title.get_theme_font_size("font_size"), 12)
 	if hud_status is Label:
-		fit_label_font_size(hud_status as Label, maxf(96.0, safe_content_pixel_size().x * 0.285), hud_status.get_theme_font_size("font_size"), 12)
+		fit_label_font_size(hud_status as Label, maxf(96.0, battle_content_size_snapshot.x * 0.285), hud_status.get_theme_font_size("font_size"), 12)
 	if hud_wall is Label:
 		hud_wall.set_meta("wall_detail_owner", "TopHudWallState")
 		hud_wall.set_meta("wall_count_format", "current_over_total")
@@ -11210,7 +11236,8 @@ func discard_river_owner_badge_rect(seat: int) -> Rect2:
 	return rect_full(0.720, 0.805, 0.975, 0.965)
 
 
-func discard_river_owner_overlay_render_signature(seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int, rows: int, reserved_start: int, reserved_columns: int, reserved_rows: int, compact_readable: bool, latest_seat: int) -> String:
+func discard_river_owner_overlay_render_signature(seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int, rows: int, reserved_start: int, reserved_columns: int, reserved_rows: int, compact_readable: bool, latest_seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var parts: Array[String] = [
 		mode,
 		str(seat),
@@ -11226,7 +11253,7 @@ func discard_river_owner_overlay_render_signature(seat: int, zone_rect: Rect2, d
 		str(reserved_rows),
 		str(compact_readable),
 		str(latest_seat),
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_layout_revision),
 		str(resize_refresh_revision),
 		str(large_text_enabled),
@@ -11341,7 +11368,7 @@ func release_unused_discard_archive_buttons() -> void:
 			archive_button.queue_free()
 	retained_battle_discard_archive_buttons.clear()
 
-func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int = 0, rows: int = 0, reserved_start: int = -1, reserved_columns: int = 0, reserved_rows: int = 0, compact_readable: bool = false, latest_seat: int = -1, discards_snapshot: Array = []) -> Control:
+func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int = 0, rows: int = 0, reserved_start: int = -1, reserved_columns: int = 0, reserved_rows: int = 0, compact_readable: bool = false, latest_seat: int = -1, discards_snapshot: Array = [], viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	if discard_count <= 0:
 		return null
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
@@ -11357,7 +11384,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	var latest_off_page := seat == current_latest_seat and visible_start < latest_start
 	var owner_copy := "%s %d-%d/%d" % [discard_river_owner_text(seat), visible_start + 1, window_end, discard_count]
 	var owner_display_copy := "%s · 最新在末页" % owner_copy if latest_off_page else owner_copy
-	var overlay_signature := discard_river_owner_overlay_render_signature(seat, zone_rect, discard_count, visible_start, visible_count, visible_capacity, columns, rows, reserved_start, reserved_columns, reserved_rows, compact_readable, current_latest_seat)
+	var overlay_signature := discard_river_owner_overlay_render_signature(seat, zone_rect, discard_count, visible_start, visible_count, visible_capacity, columns, rows, reserved_start, reserved_columns, reserved_rows, compact_readable, current_latest_seat, viewport_snapshot)
 	var retained_overlay := retained_battle_discard_owner_overlays.get(seat, null) as Control
 	retained_battle_discard_owner_overlays.erase(seat)
 	var overlay: Control = null
@@ -11476,14 +11503,15 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		discard_archive_button_focus_visual_by_id(archive_button.get_instance_id(), archive_button.has_focus())
 	return overlay
 
-func discard_river_art_render_signature(seat: int, zone_rect: Rect2, discard_count: int, latest_seat: int) -> String:
+func discard_river_art_render_signature(seat: int, zone_rect: Rect2, discard_count: int, latest_seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var parts: Array[String] = [
 		mode,
 		str(seat),
 		str(zone_rect),
 		str(discard_count),
 		str(latest_seat),
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_layout_revision),
 		str(resize_refresh_revision),
 		str(fx_enabled_effective()),
@@ -11492,10 +11520,10 @@ func discard_river_art_render_signature(seat: int, zone_rect: Rect2, discard_cou
 	return "|".join(parts)
 
 
-func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, latest_seat: int = -1) -> Control:
+func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, latest_seat: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	# r453: river bed = warm GPT plate only (no green wash mats under porcelain faces).
 	var current_latest_seat := latest_seat if latest_seat >= 0 else get_last_discard_seat()
-	var art_signature := discard_river_art_render_signature(seat, zone_rect, discard_count, current_latest_seat)
+	var art_signature := discard_river_art_render_signature(seat, zone_rect, discard_count, current_latest_seat, viewport_snapshot)
 	var retained_art := retained_battle_discard_river_art.get(seat, null) as Control
 	retained_battle_discard_river_art.erase(seat)
 	var reuse_art := retained_art != null and is_instance_valid(retained_art) and not retained_art.is_queued_for_deletion() and str(retained_art.get_meta("discard_river_art_render_signature", "")) == art_signature
@@ -11751,6 +11779,8 @@ func draw_discards(parent: Control) -> void:
 	var table_render_size: Vector2 = parent.size if parent.size.x > 1.0 and parent.size.y > 1.0 else table_size
 	var river_viewport_size := effective_viewport_size()
 	var river_compact_readable := river_viewport_size.y <= 560.0
+	parent.set_meta("discard_river_viewport_snapshot", river_viewport_size)
+	parent.set_meta("discard_river_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	var latest_discard_seat := get_last_discard_seat()
 	var disconnected := mode == "online_game" and online_game_disconnected()
 	var total_discards := 0
@@ -11779,7 +11809,7 @@ func draw_discards(parent: Control) -> void:
 			total_discards += discards.size()
 			active_seats.append(seat)
 		# Prefer live table control size so river cells match the painted surface.
-		var visible_rows := discard_zone_visible_rows_for_table_size(zone_rect, columns, size_basis)
+		var visible_rows := discard_zone_visible_rows_for_table_size(zone_rect, columns, size_basis, river_viewport_size)
 		var tile_size := discard_zone_tile_size_for_table_size(zone_rect, columns, visible_rows, size_basis)
 		var raw_visible_capacity: int = int(columns * visible_rows)
 		var archive_geometry := discard_archive_reserved_geometry(zone_rect, columns, visible_rows, size_basis)
@@ -11834,7 +11864,7 @@ func draw_discards(parent: Control) -> void:
 		grid.set_meta("latest_discard_source_seat", latest_discard_seat)
 		grid.set_meta("river_overlay_contract", "final_grid_reserved_cell_and_latest_gutter")
 		grid.set_meta("discard_grid_render_signature", grid_signature)
-		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count, latest_discard_seat)
+		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count, latest_discard_seat, river_viewport_size)
 		if river_art != null:
 			parent.move_child(river_art, max(0, grid.get_index()))
 		if not reuse_grid:
@@ -11886,7 +11916,7 @@ func draw_discards(parent: Control) -> void:
 					tile_node.name = "RecentDiscardTile_%d" % seat
 					tile_node.z_index = 9
 					mark_ui_optimization(tile_node, "F-259")
-		var owner_overlay := draw_discard_river_owner_overlay(foreground_layer, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), archive_reserved_start, int(archive_geometry.get("columns", 0)), int(archive_geometry.get("rows", 0)), river_compact_readable, latest_discard_seat, discards)
+		var owner_overlay := draw_discard_river_owner_overlay(foreground_layer, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), archive_reserved_start, int(archive_geometry.get("columns", 0)), int(archive_geometry.get("rows", 0)), river_compact_readable, latest_discard_seat, discards, river_viewport_size)
 		if owner_overlay != null:
 			owner_overlay.set_meta("archive_reserved_start", archive_reserved_start)
 			owner_overlay.set_meta("final_grid_contract", "columns_rows_reserved_start_from_same_grid")
@@ -12210,7 +12240,8 @@ func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2
 
 
 func draw_game_top_hud(parent: Control) -> void:
-	var hud_signature := battle_top_hud_identity_signature()
+	var hud_viewport_snapshot := effective_viewport_size()
+	var hud_signature := battle_top_hud_identity_signature(hud_viewport_snapshot)
 	var retained_hud := retained_battle_top_hud
 	retained_battle_top_hud = null
 	if retained_hud != null and is_instance_valid(retained_hud) and not retained_hud.is_queued_for_deletion() and retained_battle_top_hud_signature == hud_signature:
@@ -12273,7 +12304,6 @@ func draw_game_top_hud(parent: Control) -> void:
 
 	# 标题
 	var dealer_wind: String = str(CENTER_WIND_LABELS[clampi(dealer_seat, 0, CENTER_WIND_LABELS.size() - 1)]) if mode == "offline" else ""
-	var hud_viewport_snapshot := effective_viewport_size()
 	hud.set_meta("viewport_snapshot", hud_viewport_snapshot)
 	hud.set_meta("viewport_snapshot_policy", "one_snapshot_per_hud_build")
 	var compact_top_hud := hud_viewport_snapshot.x <= 960.0 or hud_viewport_snapshot.y <= 560.0
@@ -14164,13 +14194,14 @@ func meld_lane_content_rect(seat: int, meld_rect: Rect2, has_pager: bool, conten
 		return rect_full(meld_rect.position.x, meld_rect.position.y, meld_rect.size.x, maxf(meld_rect.position.y, pager_rect.position.y - gap_y))
 	return rect_full(meld_rect.position.x, meld_rect.position.y, maxf(meld_rect.position.x, pager_rect.position.x - gap_x), meld_rect.size.y)
 
-func meld_lane_render_signature(seat: int, meld_list: Array, meld_rect: Rect2, content_rect: Rect2, full_capacity: int, lane_capacity: int, window_start: int, page_count: int, has_pager: bool, compact_melds: bool, danger_compact_melds: bool, content_size: Vector2) -> String:
+func meld_lane_render_signature(seat: int, meld_list: Array, meld_rect: Rect2, content_rect: Rect2, full_capacity: int, lane_capacity: int, window_start: int, page_count: int, has_pager: bool, compact_melds: bool, danger_compact_melds: bool, content_size: Vector2, viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var signature_parts: Array[String] = [
 		mode,
 		str(seat),
 		str(meld_list),
 		str(meld_list.size()),
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_margins),
 		str(safe_area_layout_revision),
 		str(resize_refresh_revision),
@@ -14207,10 +14238,13 @@ func cycle_meld_window(seat: int, page_capacity: int) -> void:
 func draw_melds(parent: Control) -> void:
 	var proxy_order := 1000
 	var danger_compact_snapshot := mode == "offline" and has_pending_danger_discard()
-	var compact_melds := effective_viewport_size().y <= 560.0 or danger_compact_snapshot
+	var meld_viewport_snapshot := effective_viewport_size()
+	var compact_melds := meld_viewport_snapshot.y <= 560.0 or danger_compact_snapshot
 	var danger_compact_melds := danger_compact_snapshot
 	var meld_content_size := safe_content_pixel_size()
 	var meld_layout_revision := safe_area_layout_revision
+	parent.set_meta("meld_viewport_snapshot", meld_viewport_snapshot)
+	parent.set_meta("meld_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	for layout in MELD_LAYOUTS:
 		var seat = int(layout[0])
 		var meld_list = get_melds(seat)
@@ -14230,7 +14264,7 @@ func draw_melds(parent: Control) -> void:
 		var page_count := maxi(1, int(ceil(float(meld_list.size()) / float(maxi(1, lane_capacity)))))
 		var has_pager := page_count > 1
 		var content_rect := meld_lane_content_rect(seat, meld_rect, has_pager, meld_content_size)
-		var meld_render_signature := meld_lane_render_signature(seat, meld_list, meld_rect, content_rect, full_capacity, lane_capacity, window_start, page_count, has_pager, compact_melds, danger_compact_melds, meld_content_size)
+		var meld_render_signature := meld_lane_render_signature(seat, meld_list, meld_rect, content_rect, full_capacity, lane_capacity, window_start, page_count, has_pager, compact_melds, danger_compact_melds, meld_content_size, meld_viewport_snapshot)
 		var retained_entry = retained_battle_meld_lanes.get(seat, {})
 		if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty() and str((retained_entry as Dictionary).get("signature", "")) == meld_render_signature:
 			var retained_lane_art := (retained_entry as Dictionary).get("lane_art", null) as Control
@@ -15733,9 +15767,9 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var tile = str(pending.get("tile", ""))
 	if tile == "":
 		return
-	var content_size = safe_content_pixel_size()
 	var viewport_size := effective_viewport_size()
-	var context_rect = pending_claim_context_layout_rect(content_size)
+	var content_size = safe_content_pixel_size()
+	var context_rect = pending_claim_context_layout_rect(content_size, viewport_size)
 	var has_status_strip := optional_gpt_illustration_texture("pending_claim_status_strip") != null
 	var panel = make_gpt_route_rail(context_rect, Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
 	panel.name = "PendingClaimIllustration"
@@ -16109,7 +16143,12 @@ func draw_round_summary(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
 	if mode != "offline" or offline_phase != "ended":
 		return
-	var summary_signature := battle_round_summary_identity_signature()
+	var summary_viewport_snapshot := effective_viewport_size()
+	var summary_content_size_snapshot := safe_content_pixel_size_for_margins(summary_viewport_snapshot, safe_area_margins)
+	var summary_signature := battle_round_summary_identity_signature(summary_viewport_snapshot, summary_content_size_snapshot)
+	parent.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+	parent.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+	parent.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 	var retained_panel := retained_battle_round_summary_panel
 	var retained_shield := retained_battle_round_summary_shield
 	retained_battle_round_summary_panel = null
@@ -16125,6 +16164,12 @@ func draw_round_summary(parent: Control) -> void:
 		retained_panel.set_meta("ui_page_generation", ui_page_generation)
 		retained_panel.set_meta("settlement_fx_generation", fx_generation)
 		retained_panel.set_meta("round_summary_render_signature", summary_signature)
+		retained_panel.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+		retained_panel.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+		retained_panel.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
+		retained_shield.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+		retained_shield.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+		retained_shield.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 		var reused_body_scroll := retained_panel.get_node_or_null("RoundSummaryBodyScroll") as ScrollContainer
 		var reused_body := reused_body_scroll.get_node_or_null("RoundSummaryBody") as Label if reused_body_scroll != null else null
 		var reused_body_status := retained_panel.get_node_or_null("RoundSummaryBodyStatus") as Label
@@ -16138,12 +16183,12 @@ func draw_round_summary(parent: Control) -> void:
 				clear_round_summary_runtime_effects(stale_summary as Control)
 			stale_summary.queue_free()
 	lock_round_summary_background_controls(parent)
-	var content_size = safe_content_pixel_size()
+	var content_size := summary_content_size_snapshot
 	var panel_width_px = clampf(content_size.x * 0.500, 480.0, 720.0)
-	var compact_summary := effective_viewport_size().y <= 560.0
+	var compact_summary := summary_viewport_snapshot.y <= 560.0
 	var panel_height_px = clampf(content_size.y * 0.500, 320.0 if compact_summary else 270.0, 420.0)
 	var panel_gap_px := 12.0
-	var panel_bottom = action_bar_dock_layout_rect().position.y - panel_gap_px / maxf(1.0, content_size.y)
+	var panel_bottom = action_bar_dock_layout_rect(summary_viewport_snapshot, summary_content_size_snapshot).position.y - panel_gap_px / maxf(1.0, content_size.y)
 	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
 	var panel_left = 0.5 - panel_width_px / maxf(2.0, content_size.x * 2.0)
 	var panel_right = 0.5 + panel_width_px / maxf(2.0, content_size.x * 2.0)
@@ -16154,6 +16199,9 @@ func draw_round_summary(parent: Control) -> void:
 	modal_input_shield.z_index = 29
 	modal_input_shield.set_meta("layout_role", "settlement_modal_input_shield")
 	modal_input_shield.set_meta("round_summary_render_signature", summary_signature)
+	modal_input_shield.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+	modal_input_shield.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+	modal_input_shield.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 	parent.add_child(modal_input_shield)
 	var panel = make_gpt_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.006, 0.012, 0.010, 1.0), "ui_dark_scrim")
 	panel.name = "RoundSummaryPanel"
@@ -16166,6 +16214,9 @@ func draw_round_summary(parent: Control) -> void:
 	panel.set_meta("action_lane_clearance_px", 12.0)
 	panel.set_meta("settlement_fx_generation", fx_generation)
 	panel.set_meta("round_summary_render_signature", summary_signature)
+	panel.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+	panel.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+	panel.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 	panel.set_meta("round_summary_animation_enabled", fx_enabled_effective())
 	panel.set_meta("round_summary_motion_enabled", ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless")
 	mark_ui_optimization(panel, "F-245")
@@ -16209,7 +16260,7 @@ func draw_round_summary(parent: Control) -> void:
 
 	# 胡牌详情展示（如果有）
 	if not last_win_score.is_empty() and int(last_win_score.get("fan", 0)) > 0:
-		draw_win_detail_section(panel, last_win_score)
+		draw_win_detail_section(panel, last_win_score, summary_viewport_snapshot)
 
 	var lines: Array[String] = [round_summary]
 	var package_lines = active_package_lines()
@@ -17604,9 +17655,12 @@ func draw_online_local_seat_marker(parent: Control, seat: int, side: String) -> 
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}) -> void:
+func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}, viewport_snapshot: Vector2 = Vector2.ZERO) -> void:
 	# r212: GPT chrome conversion
-	var seat_identity_signature := battle_seat_identity_signature(seat, rect, side, seat_threat_reports, discard_snapshot)
+	var seat_viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	parent.set_meta("seat_viewport_snapshot", seat_viewport_size)
+	parent.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
+	var seat_identity_signature := battle_seat_identity_signature(seat, rect, side, seat_threat_reports, discard_snapshot, seat_viewport_size)
 	var retained_entry = retained_battle_seats.get(seat, {})
 	if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty() and str((retained_entry as Dictionary).get("signature", "")) == seat_identity_signature:
 		var retained_shadow := (retained_entry as Dictionary).get("shadow", null) as Control
@@ -17618,13 +17672,16 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			retained_panel.set_meta("retained_for_battle_render", false)
 			retained_shadow.set_meta("ui_page_generation", ui_page_generation)
 			retained_panel.set_meta("ui_page_generation", ui_page_generation)
+			retained_shadow.set_meta("seat_viewport_snapshot", seat_viewport_size)
+			retained_panel.set_meta("seat_viewport_snapshot", seat_viewport_size)
+			retained_shadow.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
+			retained_panel.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 			retained_battle_seats.erase(seat)
 			return
 	if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty():
 		# A resize or state mutation can change the signature between retention and
 		# the rebuilt root. Do not leave the detached old subtree behind.
 		release_retained_battle_seat(seat)
-	var seat_viewport_size := effective_viewport_size()
 	var seat_compact_height := seat_viewport_size.y <= 560.0
 	var snapshot_current_seat := int(discard_snapshot.get("current_seat", -1)) if not discard_snapshot.is_empty() else -1
 	var active = (snapshot_current_seat if snapshot_current_seat >= 0 else get_current_seat()) == seat
@@ -17643,11 +17700,15 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	var seat_shadow = make_soft_depth_panel(parent, seat_shadow_rect, Color(0.0, 0.0, 0.0, 0.22 if active else 0.14), 14)
 	seat_shadow.name = "SeatPanel3DCastShadow_%d" % seat
 	seat_shadow.set_meta("seat_identity_signature", seat_identity_signature)
+	seat_shadow.set_meta("seat_viewport_snapshot", seat_viewport_size)
+	seat_shadow.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	# Lift midtones so inactive side seats still read as lacquer plaques, not black voids.
 	# r449: warm lacquer seat shell — no mint/jade green program fills under brocade.
 	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.018, 0.026, 0.024, 0.88), "ui_dark_scrim", 0.20)
 	panel.name = "SeatPanel_%d" % seat
 	panel.set_meta("seat_identity_signature", seat_identity_signature)
+	panel.set_meta("seat_viewport_snapshot", seat_viewport_size)
+	panel.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	parent.add_child(panel)
 	panel.clip_contents = true
 	# Commercial lacquer shell: rear plate, jade inset, bottom contact, light-catching rims.
@@ -22607,7 +22668,7 @@ func draw_win_detail_score_constellation(parent: Control, reasons: Array, fan: i
 	return constellation
 
 
-func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
+func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_snapshot: Vector2 = Vector2.ZERO) -> void:
 	# r214: bulk GPT chrome sweep
 	"""绘制胡牌详情区域 - 增强版：番种徽章化展示"""
 	var winner = int(score_data.get("winner", -1))
@@ -22619,7 +22680,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var reasons: Array = score_data.get("reasons", [])
 	var win_tile = str(score_data.get("win_tile", ""))
 	var self_draw = bool(score_data.get("self_draw", false))
-	var win_detail_viewport := effective_viewport_size()
+	var win_detail_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 
 	# Keep the detail strip above the settlement copy and rank table. The previous
 	# tall strip let its yaku flow extend into the body and ranking rows at 960px.

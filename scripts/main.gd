@@ -1278,7 +1278,17 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		claim_aggression = float(claim_context.get("claim_report_claim_aggression", 1.0))
 	else:
 		claim_aggression = ai_claim_aggression(seat)
-	var bonus = ai_claim_meld_bonus(seat, claim, tile, chi_choice, claim_aggression)
+	var claim_tile_index_snapshot := tile_index(tile)
+	var claim_tile_index_arg := claim_tile_index_snapshot if claim_tile_index_snapshot >= 0 else -2
+	var claim_is_terminal_or_honor := false
+	if claim_tile_index_snapshot >= 27:
+		claim_is_terminal_or_honor = true
+	elif claim_tile_index_snapshot >= 0 and claim_tile_index_snapshot < 27:
+		var claim_tile_rank := claim_tile_index_snapshot % 9
+		claim_is_terminal_or_honor = claim_tile_rank == 0 or claim_tile_rank == 8
+	else:
+		claim_is_terminal_or_honor = is_terminal_or_honor(tile)
+	var bonus = ai_claim_meld_bonus(seat, claim, tile, chi_choice, claim_aggression, claim_tile_index_arg)
 	var threshold = ai_claim_shape_threshold(seat, claim, exposed_melds, claim_aggression)
 	match claim:
 		"gang":
@@ -1298,16 +1308,24 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	var after_shanten = calculate_min_shanten_from_counts(after_counts, after_open_melds)
 	var before_score = float(claim_context.get("before_score", 0.0)) if has_claim_context else evaluate_ai_hand_from_counts(hand_counts) + float(standalone_before_plan_eval.get("score", 0.0)) * 0.35 * route_focus
 	var extra_meld_tiles: Array = []
+	var extra_meld_tile_indices_snapshot: Array[int] = []
 	match claim:
 		"gang":
 			extra_meld_tiles = [tile, tile, tile, tile]
+			for _i in range(4):
+				extra_meld_tile_indices_snapshot.append(claim_tile_index_snapshot)
 		"peng":
 			extra_meld_tiles = [tile, tile, tile]
+			for _i in range(3):
+				extra_meld_tile_indices_snapshot.append(claim_tile_index_snapshot)
 		"chi":
 			extra_meld_tiles = [tile]
+			extra_meld_tile_indices_snapshot.append(claim_tile_index_snapshot)
 			for needed in chi_choice.get("needed", []):
-				extra_meld_tiles.append(str(needed))
-	var after_plan_report = plan_report_with_extra_melds(seat, after_counts, after.size(), extra_meld_tiles, meld_tile_indices_snapshot)
+				var needed_tile := str(needed)
+				extra_meld_tiles.append(needed_tile)
+				extra_meld_tile_indices_snapshot.append(tile_index(needed_tile))
+	var after_plan_report = plan_report_with_extra_melds(seat, after_counts, after.size(), extra_meld_tiles, meld_tile_indices_snapshot, extra_meld_tile_indices_snapshot)
 	# The route report includes both existing and newly exposed melds. Reuse its
 	# score for the claim delta so the numeric comparison matches the displayed
 	# route label and the later post-meld discard evaluator.
@@ -1336,7 +1354,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		reason = "保路线"
 		declined_by_plan = true
 	var post_claim_bans = claim_discard_ban_tiles(claim, tile, extra_meld_tiles)
-	var pressure_report = ai_open_claim_pressure_report(seat, claim, tile, before_shanten, after_shanten, after, after_open_melds, claim_context, after_counts, post_claim_bans)
+	var pressure_report = ai_open_claim_pressure_report(seat, claim, tile, before_shanten, after_shanten, after, after_open_melds, claim_context, after_counts, post_claim_bans, claim_tile_index_arg)
 	var declined_by_pressure = allow and bool(pressure_report.get("decline", false))
 	if declined_by_pressure:
 		allow = false
@@ -1347,7 +1365,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		var opening_need = threshold + 8.0 + float(before_shanten - 2) * 3.5
 		if claim == "chi":
 			opening_need += 6.0
-		elif claim == "peng" and not is_terminal_or_honor(tile):
+		elif claim == "peng" and not claim_is_terminal_or_honor:
 			opening_need += 3.0
 		if after_shanten >= before_shanten and shape_gain < opening_need:
 			allow = false
@@ -1408,13 +1426,22 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	report["after_plan_suit"] = int(after_plan_report.get("suit", -1))
 	return report
 
-func ai_claim_meld_bonus(seat: int, claim: String, tile: String, chi_choice: Dictionary = {}, claim_aggression_snapshot: float = -1.0) -> float:
+func ai_claim_meld_bonus(seat: int, claim: String, tile: String, chi_choice: Dictionary = {}, claim_aggression_snapshot: float = -1.0, tile_index_snapshot: int = -2) -> float:
 	var claim_aggression = claim_aggression_snapshot if claim_aggression_snapshot >= 0.0 else ai_claim_aggression(seat)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var terminal_or_honor := false
+	if index >= 27:
+		terminal_or_honor = true
+	elif index >= 0 and index < 27:
+		var rank := index % 9
+		terminal_or_honor = rank == 0 or rank == 8
+	else:
+		terminal_or_honor = is_terminal_or_honor(tile)
 	match claim:
 		"gang":
-			return (64.0 if is_terminal_or_honor(tile) else 48.0) * claim_aggression
+			return (64.0 if terminal_or_honor else 48.0) * claim_aggression
 		"peng":
-			return (50.0 if is_terminal_or_honor(tile) else 34.0) * claim_aggression
+			return (50.0 if terminal_or_honor else 34.0) * claim_aggression
 		"chi":
 			return (28.0 + float(chi_choice.get("score", 0.0)) * 0.08) * claim_aggression
 	return 0.0
@@ -1438,7 +1465,7 @@ func ai_claim_shape_threshold(seat: int, claim: String, exposed_melds: int, clai
 		return scaled
 	return threshold - max(0.0, claim_aggression - 1.0) * 6.0
 
-func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, before_shanten: int, after_shanten: int, after_hand: Array, after_open_melds: int, claim_context: Dictionary = {}, after_counts_snapshot: Array = [], banned_tiles = []) -> Dictionary:
+func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, before_shanten: int, after_shanten: int, after_hand: Array, after_open_melds: int, claim_context: Dictionary = {}, after_counts_snapshot: Array = [], banned_tiles = [], tile_index_snapshot: int = -2) -> Dictionary:
 	var eval_context: Dictionary = {}
 	var pressure_context: Dictionary = {}
 	if is_ai_claim_context_for_seat(claim_context, seat):
@@ -1468,9 +1495,17 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 	var decline = false
 	var pressure_limit = 4.6 * ai_pressure_tolerance(seat)
 	var risk_limit = 27.0 * ai_pressure_tolerance(seat)
+	var terminal_or_honor := false
+	if tile_index_snapshot >= 27:
+		terminal_or_honor = true
+	elif tile_index_snapshot >= 0 and tile_index_snapshot < 27:
+		var tile_rank := tile_index_snapshot % 9
+		terminal_or_honor = tile_rank == 0 or tile_rank == 8
+	else:
+		terminal_or_honor = is_terminal_or_honor(tile)
 	if after_shanten >= before_shanten and before_shanten >= 2 and defense >= 1.45:
 		if claim == "gang":
-			decline = after_shanten > 1 and pressure >= pressure_limit and not is_terminal_or_honor(tile)
+			decline = after_shanten > 1 and pressure >= pressure_limit and not terminal_or_honor
 		elif forced_safety != "安":
 			decline = forced_risk >= risk_limit or pressure >= pressure_limit
 	return {
@@ -1519,7 +1554,7 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 		# 副露压力检查只需要知道是否会被迫切危险张。静默全 Bot 采样中，
 		# 不要为每一个候选再展开完整的进张/待牌/路线报告；这会在一次响应
 		# 中重复数十次 34 张扫描。前台对局和玩家助手仍走完整评估。
-		var report = build_ai_fast_post_claim_discard_report(seat, candidate, open_melds, pressure_context, shared_context, simulated_counts, visible_counts_snapshot) if offline_sim_quiet else build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, shared_context, simulated_counts, after_counts, i, candidate_index)
+		var report = build_ai_fast_post_claim_discard_report(seat, candidate, open_melds, pressure_context, shared_context, simulated_counts, visible_counts_snapshot, candidate_index) if offline_sim_quiet else build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, shared_context, simulated_counts, after_counts, i, candidate_index)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		if not offline_sim_quiet:
 			simulated.insert(i, candidate)
@@ -1528,15 +1563,15 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 	return best
 
 
-func build_ai_fast_post_claim_discard_report(seat: int, tile: String, open_melds: int, pressure_context: Dictionary, eval_context: Dictionary, simulated_counts: Array, visible_counts_snapshot: Array = []) -> Dictionary:
+func build_ai_fast_post_claim_discard_report(seat: int, tile: String, open_melds: int, pressure_context: Dictionary, eval_context: Dictionary, simulated_counts: Array, visible_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> Dictionary:
 	# This stays deliberately smaller than the player-facing scorer, but keeps the
 	# practical risks that can make an otherwise safe forced discard unacceptable.
 	# The shared evaluation context bounds the added feed/package lookups per tile.
 	var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
-	var risk = deal_in_risk_score(tile, seat, eval_context, visible_counts_snapshot)
-	var safety = tile_safety_label(tile, seat, visible_counts_snapshot, eval_context)
+	var risk = deal_in_risk_score(tile, seat, eval_context, visible_counts_snapshot, tile_index_snapshot)
+	var safety = tile_safety_label(tile, seat, visible_counts_snapshot, eval_context, tile_index_snapshot)
 	var defense = ai_defense_weight(seat, shanten, pressure_context, eval_context)
-	var feed_report = discard_feed_risk_report(tile, seat, visible_counts_snapshot, eval_context)
+	var feed_report = discard_feed_risk_report(tile, seat, visible_counts_snapshot, eval_context, tile_index_snapshot)
 	var feed_risk = float(feed_report.get("score", 0.0))
 	var human_pen = human_target_discard_penalty(seat, tile, risk, feed_report, shanten, eval_context)
 	var package_report = package_feed_discipline_report(seat, tile, feed_report, shanten, eval_context)
@@ -1603,18 +1638,19 @@ func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
 	var visible_counts = visible_tile_counts_shared()
 	var eval_context = make_ai_evaluation_context(gang_seat, visible_counts)
 	var visible = max(3, visible_tile_count_from_counts(tile, visible_counts))
+	var tile_index_snapshot := tile_index(tile)
 	var details: Array = []
 	for offset in range(1, 4):
 		var seat = (gang_seat + offset) % 4
-		# A tile already in this opponent's river is a public furiten clue and
-		# cannot be a credible chankan target for that seat.
-		if opponent_discard_tile_count(seat, tile, eval_context) > 0:
+		# The single-opponent risk component owns the public-river early exit;
+		# avoid querying the same discard count again before entering it.
+		var components = single_opponent_deal_in_risk_components(tile, gang_seat, seat, visible, visible_counts, eval_context, tile_index_snapshot)
+		var public_risk = float(components.get("risk", 0.0))
+		if public_risk <= 0.01:
 			continue
-		var components = single_opponent_deal_in_risk_components(tile, gang_seat, seat, visible, visible_counts, eval_context)
 		var readiness = opponent_readiness_score(seat, eval_context)
 		var meld_count = players[seat]["melds"].size()
 		var discard_count = players[seat]["discards"].size()
-		var public_risk = float(components.get("risk", 0.0))
 		# Chankan requires a completed wait.  Early closed hands have little
 		# public evidence, while late/open hands retain the full public risk.
 		if readiness < 7.0 and meld_count < 3 and discard_count < 12:
@@ -2993,13 +3029,24 @@ func known_tile_counts_for_seat(seat: int, visible_counts_snapshot: Array = []) 
 	return known_counts
 
 func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) -> Dictionary:
-	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts_shared()
+	var visible_counts: Array
+	var visible_state_cache_key := ""
+	if visible_counts_snapshot.is_empty():
+		visible_counts = visible_tile_counts_shared()
+		# visible_tile_counts_shared() has already validated and published this
+		# state key; avoid hashing every player's rivers and melds a second time.
+		visible_state_cache_key = visible_tile_counts_cache_key
+	else:
+		visible_counts = visible_counts_snapshot
+		# External snapshots may not belong to the live cache, so preserve the
+		# legacy live-state key for their runtime cache partition.
+		visible_state_cache_key = visible_tile_counts_state_cache_key()
 	var visible_counts_key := counts_compact_key(visible_counts)
 	var known_counts = known_tile_counts_for_seat(seat, visible_counts)
 	var discard_wall_count := get_wall_count()
 	var meld_tile_indices: Array[int] = hand_plan_meld_tile_indices_for_seat(seat)
 	var opponents: Dictionary = {}
-	var runtime_cache_key := "%s|wall=%d" % [visible_tile_counts_state_cache_key(), discard_wall_count]
+	var runtime_cache_key := "%s|wall=%d" % [visible_state_cache_key, discard_wall_count]
 	if runtime_cache_key != opponent_runtime_state_cache_key:
 		opponent_runtime_state_cache_key = runtime_cache_key
 		opponent_runtime_state_cache.clear()
@@ -3017,6 +3064,7 @@ func make_ai_evaluation_context(seat: int, visible_counts_snapshot: Array = []) 
 		"seat": seat,
 		"visible_counts": visible_counts,
 		"visible_counts_key": visible_counts_key,
+		"visible_state_cache_key": visible_state_cache_key,
 		"known_counts": known_counts,
 		# These values are invariant across discard candidates in one evaluation pass.
 		"discard_report_exposed_melds": exposed_meld_count_for_seat(seat),
@@ -3218,13 +3266,13 @@ func package_liability_ai_cache_key() -> String:
 
 
 func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = [], hand_index: int = -1, tile_index_override: int = -1, shanten_snapshot: int = -99, risk_vector_snapshot: Dictionary = {}) -> Dictionary:
+	var candidate_tile_index_snapshot := tile_index_override if tile_index_override >= 0 else tile_index(tile)
 	var simulated_counts = simulated_counts_snapshot if not simulated_counts_snapshot.is_empty() else tile_counts(simulated)
 	var original_counts = original_counts_snapshot
 	if original_counts.is_empty():
 		original_counts = simulated_counts.duplicate()
-		var discarded_index := tile_index_override if tile_index_override >= 0 else tile_index(tile)
-		if discarded_index >= 0 and discarded_index < original_counts.size():
-			original_counts[discarded_index] = int(original_counts[discarded_index]) + 1
+		if candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < original_counts.size():
+			original_counts[candidate_tile_index_snapshot] = int(original_counts[candidate_tile_index_snapshot]) + 1
 	var simulated_tile_count = simulated.size()
 	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
 	var shanten = shanten_snapshot if shanten_snapshot > -99 else calculate_min_shanten_from_counts(simulated_counts, open_melds)
@@ -3306,15 +3354,15 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var plan_label = str(plan_report.get("label", "标准"))
 	var plan_suit = int(plan_report.get("suit", -1))
 	var plan_bonus = float(plan_report.get("score_bonus", 0.0))
-	var pressure = discard_pressure_score(tile, seat, visible_counts, eval_context)
-	var risk_vector: Dictionary = risk_vector_snapshot if not risk_vector_snapshot.is_empty() else tile_risk_vector(tile, seat, visible_counts, eval_context)
+	var pressure = discard_pressure_score(tile, seat, visible_counts, eval_context, candidate_tile_index_snapshot)
+	var risk_vector: Dictionary = risk_vector_snapshot if not risk_vector_snapshot.is_empty() else tile_risk_vector(tile, seat, visible_counts, eval_context, candidate_tile_index_snapshot)
 	var risk_summary = deal_in_risk_summary(tile, seat, visible_counts, risk_vector)
 	var risk = float(risk_summary.get("score", 0.0))
 	var risk_label_text = risk_label(risk)
-	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context)
+	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context, candidate_tile_index_snapshot)
 	var feed_risk = float(feed_report.get("score", 0.0))
 	var threat = opponent_tile_threat_score(tile, seat, visible_counts, risk_vector, eval_context)
-	var safety = tile_safety_label(tile, seat, visible_counts, eval_context)
+	var safety = tile_safety_label(tile, seat, visible_counts, eval_context, candidate_tile_index_snapshot)
 	var danger_source: Dictionary = risk_summary.get("danger_source", {})
 	var defense = ai_defense_weight(seat, shanten, pressure_context, eval_context)
 	var diff_idx = int(eval_context.get("discard_report_difficulty", -1)) if context_matches_seat else -1
@@ -3338,8 +3386,9 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var tenpai_bonus = 220.0 if shanten <= 0 else 0.0
 	var fold_push = tenpai_fold_adjustment(seat, shanten, ukeire, wait_best_points, wait_total_remaining, safety, risk, feed_risk, pressure_context, eval_context)
 	var midgame_push = midgame_danger_adjustment(seat, shanten, ukeire, safety, risk, feed_risk, pressure_context, eval_context)
-	var opening_push = opening_efficiency_adjustment(seat, tile, shanten, original_counts, exposed_melds, eval_context)
-	var post_meld_push = post_meld_route_adjustment(seat, tile, exposed_melds, original_counts, plan_label, plan_suit, shanten, eval_context)
+	var candidate_tile_index_arg := candidate_tile_index_snapshot if candidate_tile_index_snapshot >= 0 else -2
+	var opening_push = opening_efficiency_adjustment(seat, tile, shanten, original_counts, exposed_melds, eval_context, candidate_tile_index_arg)
+	var post_meld_push = post_meld_route_adjustment(seat, tile, exposed_melds, original_counts, plan_label, plan_suit, shanten, eval_context, candidate_tile_index_arg)
 	var open_wait_push = open_tenpai_quality_adjustment(seat, exposed_melds, shanten, wait_total_remaining, int(effective_tiles.size()) if typeof(effective_tiles) == TYPE_ARRAY else 0, wait_average_points, wait_best_points, eval_context)
 	var wall_draw_push = wall_draw_tenpai_preservation_adjustment(seat, shanten, ukeire, eval_context)
 	var score = -float(shanten) * 760.0
@@ -3370,7 +3419,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	score -= package_pen
 	return {
 		"tile": tile,
-		"tile_index": tile_index_override if tile_index_override >= 0 else tile_index(tile),
+		"tile_index": candidate_tile_index_snapshot,
 		"hand_index": hand_index,
 		"score": score,
 		"shanten": shanten,
@@ -3430,7 +3479,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			"shape_label": shape_label,
 			"shanten": shanten,
 			"wait_value": wait_value,
-		}, original_counts),
+		}, original_counts, candidate_tile_index_snapshot),
 	}
 
 func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, effective_tiles: Array, remaining_by_tile: Dictionary, effective_tiles_are_winning: bool = false, self_discarded_lookup_snapshot: Dictionary = {}, attack_multiplier_snapshot: float = -1.0, wait_focus_snapshot: float = -1.0, hand_counts_snapshot: Array = [], exposed_meld_count_snapshot: int = -1) -> Dictionary:
@@ -4027,7 +4076,7 @@ func open_tenpai_quality_adjustment(seat: int, open_melds: int, shanten: int, wa
 	score += clamp(float(wait_best_points) / 200.0, 0.0, 24.0) * 0.20 * scale
 	return score
 
-func post_meld_route_adjustment(seat: int, tile: String, open_melds: int, original_counts: Array, plan_label: String, plan_suit: int, shanten: int, eval_context: Dictionary = {}) -> float:
+func post_meld_route_adjustment(seat: int, tile: String, open_melds: int, original_counts: Array, plan_label: String, plan_suit: int, shanten: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> float:
 	if open_melds <= 0 or tile == "" or seat < 0:
 		return 0.0
 	var context_matches_seat := not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat
@@ -4042,7 +4091,7 @@ func post_meld_route_adjustment(seat: int, tile: String, open_melds: int, origin
 		scale *= 1.12
 	elif difficulty == AI_DIFFICULTY_EASY:
 		scale *= 0.78
-	var index = tile_index(tile)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	if index < 0 or index >= original_counts.size():
 		return 0.0
 	var amount = int(original_counts[index])
@@ -4050,7 +4099,7 @@ func post_meld_route_adjustment(seat: int, tile: String, open_melds: int, origin
 	var tile_suit = -1
 	if index < 27:
 		tile_suit = int(index / 9)
-	var is_honor = is_honor_tile(tile)
+	var is_honor := index >= 27 if index >= 0 else is_honor_tile(tile)
 	# 清一色：副露后坚决切外花色与字牌
 	if plan_label == "清一色" and plan_suit >= 0:
 		if is_honor or (tile_suit >= 0 and tile_suit != plan_suit):
@@ -4078,7 +4127,7 @@ func post_meld_route_adjustment(seat: int, tile: String, open_melds: int, origin
 			score += 10.0
 	return score * scale
 
-func opening_efficiency_adjustment(seat: int, tile: String, shanten: int, original_counts: Array, open_melds: int, eval_context: Dictionary = {}) -> float:
+func opening_efficiency_adjustment(seat: int, tile: String, shanten: int, original_counts: Array, open_melds: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> float:
 	if seat < 0 or tile == "" or shanten <= 1:
 		return 0.0
 	var context_matches_seat := not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat
@@ -4097,15 +4146,24 @@ func opening_efficiency_adjustment(seat: int, tile: String, shanten: int, origin
 	var scale = (0.55 + phase * 0.70 + depth * 0.45) * route_focus
 	if open_melds > 0:
 		scale *= 0.55
-	var index = tile_index(tile)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	if index < 0 or index >= original_counts.size():
 		return 0.0
 	var amount = int(original_counts[index])
 	var isolated = is_isolated_shape_tile(original_counts, index)
 	var score = 0.0
-	if is_honor_tile(tile) and isolated:
+	var is_honor := index >= 27 if index >= 0 else is_honor_tile(tile)
+	var is_terminal_or_honor_value := false
+	if index >= 27:
+		is_terminal_or_honor_value = true
+	elif index >= 0 and index < 27:
+		var tile_rank := index % 9
+		is_terminal_or_honor_value = tile_rank == 0 or tile_rank == 8
+	else:
+		is_terminal_or_honor_value = is_terminal_or_honor(tile)
+	if is_honor and isolated:
 		score += 42.0
-	elif is_terminal_or_honor(tile) and isolated:
+	elif is_terminal_or_honor_value and isolated:
 		score += 28.0
 	elif isolated and amount == 1:
 		score += 16.0
@@ -4115,7 +4173,7 @@ func opening_efficiency_adjustment(seat: int, tile: String, shanten: int, origin
 	elif amount >= 3 and shanten >= 3:
 		score -= 26.0
 	# 中张连张序盘不优先切
-	if index < 27 and not isolated and not is_terminal_or_honor(tile):
+	if index < 27 and not isolated and not is_terminal_or_honor_value:
 		score -= 10.0
 	var difficulty := int(eval_context.get("discard_report_difficulty", -1)) if context_matches_seat else -1
 	if difficulty < AI_DIFFICULTY_EASY or difficulty > AI_DIFFICULTY_HARD:
@@ -4224,16 +4282,22 @@ func ai_hand_shape_metrics_from_counts(counts: Array, shape_features: Dictionary
 			triplets += 1
 		if amount == 4:
 			value += 10.0
-		if i < 27:
+		var is_number_tile := i < 27
+		var has_shape_neighbor := false
+		if is_number_tile:
 			if has_neighbor(counts, i, -1):
 				value += 9.0
+				has_shape_neighbor = true
 			if has_neighbor(counts, i, 1):
 				value += 9.0
+				has_shape_neighbor = true
 			if has_neighbor(counts, i, -2):
 				value += 5.0
+				has_shape_neighbor = true
 			if has_neighbor(counts, i, 2):
 				value += 5.0
-		if is_isolated_shape_tile(counts, i):
+				has_shape_neighbor = true
+		if amount == 1 and (not is_number_tile or not has_shape_neighbor):
 			isolated += amount
 	for start in NUMBER_SUIT_STARTS:
 		for rank in range(0, 7):
@@ -4539,6 +4603,8 @@ func hand_plan_score_from_counts(counts: Array, tile_count: int) -> float:
 	return hand_plan_score_from_features(counts, hand_plan_features_from_counts(counts, tile_count))
 
 func hand_plan_features_from_counts(counts: Array, tile_count: int, include_shape_metrics: bool = false) -> Dictionary:
+	if not tile_metadata_ready:
+		setup_tile_order()
 	var cache_key := "%d:%s|shape=%d" % [tile_count, counts_compact_key(counts), 1 if include_shape_metrics else 0]
 	var cached: Variant = hand_plan_features_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
@@ -4573,6 +4639,8 @@ func hand_plan_features_from_counts(counts: Array, tile_count: int, include_shap
 		var amount = int(counts[i])
 		if amount <= 0:
 			continue
+		var is_number_tile := i < 27
+		var rank := i % 9 if is_number_tile else -1
 		if include_shape_metrics:
 			shape_value += tile_base_value(i) * amount
 			if amount >= 2:
@@ -4583,22 +4651,27 @@ func hand_plan_features_from_counts(counts: Array, tile_count: int, include_shap
 				shape_triplets += 1
 			if amount == 4:
 				shape_value += 10.0
-			if i < 27:
+			var has_shape_neighbor := false
+			if is_number_tile:
 				if has_neighbor(counts, i, -1):
 					shape_value += 9.0
+					has_shape_neighbor = true
 				if has_neighbor(counts, i, 1):
 					shape_value += 9.0
+					has_shape_neighbor = true
 				if has_neighbor(counts, i, -2):
 					shape_value += 5.0
+					has_shape_neighbor = true
 				if has_neighbor(counts, i, 2):
 					shape_value += 5.0
-			if is_isolated_shape_tile(counts, i):
+					has_shape_neighbor = true
+			if amount == 1 and (not is_number_tile or not has_shape_neighbor):
 				shape_isolated += amount
 		unique_count += 1
 		seven_pair_slots += min(2, int(amount / 2))
 		if amount % 2 == 1:
 			single_tile_count += 1
-		if is_simple_number_tile(TILE_CODES[i]):
+		if is_number_tile and rank >= 1 and rank <= 7:
 			simple_tiles += amount
 		else:
 			terminal_honor_tiles += amount
@@ -4608,7 +4681,7 @@ func hand_plan_features_from_counts(counts: Array, tile_count: int, include_shap
 			suit_rank_masks[suit_index] = int(suit_rank_masks[suit_index]) | (1 << (i % 9))
 		else:
 			honor_count += amount
-		if is_thirteen_orphans_tile(TILE_CODES[i]):
+		if (is_number_tile and (rank == 0 or rank == 8)) or not is_number_tile:
 			orphan_unique += 1
 			orphan_tiles += amount
 			if amount >= 2:
@@ -4776,7 +4849,7 @@ func hand_plan_meld_tile_indices_for_seat(seat: int) -> Array[int]:
 	return result
 
 
-func plan_report_with_extra_melds(seat: int, hand_counts: Array, hand_size: int, extra_meld_tiles: Array = [], existing_meld_tile_indices_snapshot: Array = []) -> Dictionary:
+func plan_report_with_extra_melds(seat: int, hand_counts: Array, hand_size: int, extra_meld_tiles: Array = [], existing_meld_tile_indices_snapshot: Array = [], extra_meld_tile_indices_snapshot: Array = []) -> Dictionary:
 	# 评估「当前副露 + 即将副露 + 剩余手牌」的路线标签，用于副露后重估。
 	var plan_counts = hand_counts.duplicate() if not hand_counts.is_empty() else tile_counts([])
 	var total = hand_size
@@ -4789,8 +4862,9 @@ func plan_report_with_extra_melds(seat: int, hand_counts: Array, hand_size: int,
 			if index >= 0 and index < plan_counts.size():
 				plan_counts[index] = int(plan_counts[index]) + 1
 				total += 1
-	for item in extra_meld_tiles:
-		var index = tile_index(str(item))
+	var use_extra_meld_indices := extra_meld_tile_indices_snapshot.size() == extra_meld_tiles.size()
+	for i in range(extra_meld_tiles.size()):
+		var index := int(extra_meld_tile_indices_snapshot[i]) if use_extra_meld_indices else tile_index(str(extra_meld_tiles[i]))
 		if index >= 0 and index < plan_counts.size():
 			plan_counts[index] = int(plan_counts[index]) + 1
 			total += 1
@@ -4847,10 +4921,12 @@ func hand_plan_features_add_tile(features: Dictionary, index: int, previous_amou
 	if index < 0 or index >= TILE_CODES.size():
 		return
 	var amount := previous_amount + 1
+	var is_number_tile := index < 27
+	var rank := index % 9 if is_number_tile else -1
 	features["total"] = int(features.get("total", 0)) + 1
 	var suit_counts: Array = features.get("suit_counts", [0, 0, 0])
 	var suit_rank_masks: Array = features.get("suit_rank_masks", [0, 0, 0])
-	if index < 27:
+	if is_number_tile:
 		var suit_index := int(index / 9)
 		suit_counts[suit_index] = int(suit_counts[suit_index]) + 1
 		if previous_amount == 0:
@@ -4865,11 +4941,11 @@ func hand_plan_features_add_tile(features: Dictionary, index: int, previous_amou
 		features["pair_count"] = int(features.get("pair_count", 0)) + 1
 	elif previous_amount == 2:
 		features["triplet_count"] = int(features.get("triplet_count", 0)) + 1
-	if is_simple_number_tile(TILE_CODES[index]):
+	if is_number_tile and rank >= 1 and rank <= 7:
 		features["simple_tiles"] = int(features.get("simple_tiles", 0)) + 1
 	else:
 		features["terminal_honor_tiles"] = int(features.get("terminal_honor_tiles", 0)) + 1
-	if is_thirteen_orphans_tile(TILE_CODES[index]):
+	if (is_number_tile and (rank == 0 or rank == 8)) or not is_number_tile:
 		if previous_amount == 0:
 			features["orphan_unique"] = int(features.get("orphan_unique", 0)) + 1
 		features["orphan_tiles"] = int(features.get("orphan_tiles", 0)) + 1
@@ -5104,7 +5180,7 @@ func opponent_readiness_pressure_score(seat: int, eval_context: Dictionary = {})
 		pressure = max(pressure, opponent_readiness_score(other, eval_context))
 	return pressure
 
-func tile_safety_label(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> String:
+func tile_safety_label(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> String:
 	if tile == "" or seat < 0 or seat >= players.size():
 		return ""
 	var cache_key = ""
@@ -5119,11 +5195,11 @@ func tile_safety_label(tile: String, seat: int, visible_counts_snapshot: Array =
 		label = "安"
 	elif is_main_threat_genbutsu(tile, seat, eval_context):
 		label = "现"
-	elif visible_tile_count_from_counts(tile, known_counts) >= 3:
+	elif visible_tile_count_from_counts(tile, known_counts, tile_index_snapshot) >= 3:
 		label = "熟"
-	elif is_suji_safe_tile(tile, seat, eval_context):
+	elif is_suji_safe_tile(tile, seat, eval_context, tile_index_snapshot):
 		label = "筋"
-	elif is_kabe_safe_tile(tile, seat, known_counts, eval_context):
+	elif is_kabe_safe_tile(tile, seat, known_counts, eval_context, tile_index_snapshot):
 		label = "壁"
 	if not eval_context.is_empty():
 		var cache = eval_context.get("safety_labels", {})
@@ -5131,7 +5207,7 @@ func tile_safety_label(tile: String, seat: int, visible_counts_snapshot: Array =
 			cache[cache_key] = label
 	return label
 
-func discard_pressure_score(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> float:
+func discard_pressure_score(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> float:
 	var cache_key = ""
 	if not eval_context.is_empty():
 		cache_key = ai_context_cache_key(tile, seat)
@@ -5140,9 +5216,23 @@ func discard_pressure_score(tile: String, seat: int, visible_counts_snapshot: Ar
 			return float(cache.get(cache_key, 0.0))
 	var score = 0.0
 	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, known_counts)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var lookup_tile := str(TILE_CODES[index]) if index >= 0 and index < TILE_CODES.size() else tile
+	var visible := 0
+	if known_counts.is_empty():
+		visible = visible_tile_count(tile)
+	elif index >= 0 and index < known_counts.size():
+		visible = int(known_counts[index])
 	score += float(visible) * 3.4
-	if is_terminal_or_honor(tile):
+	var is_terminal_or_honor_value := false
+	if index >= 27:
+		is_terminal_or_honor_value = true
+	elif index >= 0 and index < 27:
+		var tile_rank := index % 9
+		is_terminal_or_honor_value = tile_rank == 0 or tile_rank == 8
+	else:
+		is_terminal_or_honor_value = is_terminal_or_honor(tile)
+	if is_terminal_or_honor_value:
 		score += 3.0
 	var next_seat = (seat + 1) % 4
 	for other in range(players.size()):
@@ -5150,12 +5240,12 @@ func discard_pressure_score(tile: String, seat: int, visible_counts_snapshot: Ar
 			continue
 		# The next seat gets an extra chi/pressure weight, but its discard
 		# presence is resolved by this single per-opponent lookup.
-		var opponent_discard_count := opponent_discard_tile_count(other, tile, eval_context)
+		var opponent_discard_count := opponent_discard_tile_count(other, lookup_tile, eval_context)
 		if opponent_discard_count > 0:
 			score += 3.5
 			if other == next_seat:
 				score += 5.0
-		if same_suit_pressure(other, tile, eval_context):
+		if same_suit_pressure(other, tile, eval_context, index):
 			score += 1.2
 	if not eval_context.is_empty():
 		var cache = eval_context.get("discard_pressures", {})
@@ -5163,7 +5253,7 @@ func discard_pressure_score(tile: String, seat: int, visible_counts_snapshot: Ar
 			cache[cache_key] = score
 	return score
 
-func discard_feed_risk_report(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> Dictionary:
+func discard_feed_risk_report(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> Dictionary:
 	var cache_key = ""
 	if not eval_context.is_empty():
 		cache_key = ai_context_cache_key(tile, seat)
@@ -5175,13 +5265,15 @@ func discard_feed_risk_report(tile: String, seat: int, visible_counts_snapshot: 
 		return report
 	var details: Array = []
 	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, known_counts)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var lookup_tile := str(TILE_CODES[index]) if index >= 0 and index < TILE_CODES.size() else tile
+	var visible = visible_tile_count_from_counts(tile, known_counts, index)
 	var next_seat = (seat + 1) % 4
 	var next_seat_chi_score := 0.0
 	var next_seat_discard_count := -1
 	if next_seat != seat:
-		next_seat_discard_count = opponent_discard_tile_count(next_seat, tile, eval_context)
-		var chi_score = chi_feed_risk_score(tile, seat, next_seat, visible, eval_context, next_seat_discard_count)
+		next_seat_discard_count = opponent_discard_tile_count(next_seat, lookup_tile, eval_context)
+		var chi_score = chi_feed_risk_score(tile, seat, next_seat, visible, eval_context, next_seat_discard_count, index)
 		if chi_score > 0.0:
 			next_seat_chi_score = chi_score
 			details.append({
@@ -5194,8 +5286,8 @@ func discard_feed_risk_report(tile: String, seat: int, visible_counts_snapshot: 
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		var opponent_discard_count := next_seat_discard_count if other == next_seat else opponent_discard_tile_count(other, tile, eval_context)
-		var meld_score = meld_feed_risk_score(tile, seat, other, visible, eval_context, opponent_discard_count)
+		var opponent_discard_count := next_seat_discard_count if other == next_seat else opponent_discard_tile_count(other, lookup_tile, eval_context)
+		var meld_score = meld_feed_risk_score(tile, seat, other, visible, eval_context, opponent_discard_count, index)
 		if meld_score > 0.0:
 			details.append({
 				"opponent": other,
@@ -5256,8 +5348,8 @@ func discard_feed_risk_text(feed_report) -> String:
 	var best: Dictionary = details[0]
 	return "喂%s%s" % [str(best.get("name", "")), str(best.get("label", ""))]
 
-func deal_in_risk_score(tile: String, seat: int, eval_context: Dictionary = {}, visible_counts_snapshot: Array = []) -> float:
-	return float(tile_risk_vector(tile, seat, visible_counts_snapshot, eval_context).get("score", 0.0))
+func deal_in_risk_score(tile: String, seat: int, eval_context: Dictionary = {}, visible_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> float:
+	return float(tile_risk_vector(tile, seat, visible_counts_snapshot, eval_context, tile_index_snapshot).get("score", 0.0))
 
 func deal_in_risk_summary(tile: String, seat: int, visible_counts_snapshot: Array = [], risk_vector: Dictionary = {}, eval_context: Dictionary = {}) -> Dictionary:
 	var summary: Dictionary = {"score": 0.0, "danger_source": {}}
@@ -5276,7 +5368,7 @@ func deal_in_risk_summary(tile: String, seat: int, visible_counts_snapshot: Arra
 		summary["danger_source"] = computed_source
 	return summary
 
-func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> Dictionary:
+func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> Dictionary:
 	var cache_key = ""
 	if not eval_context.is_empty():
 		cache_key = ai_context_cache_key(tile, seat)
@@ -5287,7 +5379,10 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 	if tile == "" or seat < 0 or seat >= players.size():
 		return vector
 	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
-	var visible = visible_tile_count_from_counts(tile, known_counts)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var visible = visible_tile_count_from_counts(tile, known_counts, index)
+	# Every opponent component evaluates the same candidate tile. Resolve its
+	# canonical index once so the risk loop does not repeat normalization work.
 	vector["visible"] = visible
 	var risk = 0.0
 	var threat = 0.0
@@ -5297,7 +5392,7 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		write_single_opponent_deal_in_risk_components(opponent_vector, tile, seat, other, visible, known_counts, eval_context)
+		write_single_opponent_deal_in_risk_components(opponent_vector, tile, seat, other, visible, known_counts, eval_context, index)
 		var opponent_risk = float(opponent_vector.get("risk", 0.0))
 		risk += opponent_risk
 		threat += float(opponent_vector.get("pattern_threat", 0.0))
@@ -5327,19 +5422,17 @@ func opponent_tile_threat_score(tile: String, seat: int, visible_counts_snapshot
 	var total = 0.0
 	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
 	var visible = visible_tile_count_from_counts(tile, known_counts)
+	var tile_index_snapshot := tile_index(tile)
 	for other in range(players.size()):
 		if other == seat:
 			continue
 		if opponent_discard_tile_count(other, tile, eval_context) > 0:
 			continue
-		total += opponent_pattern_threat_score(other, tile, visible, eval_context)
+		total += opponent_pattern_threat_score(other, tile, visible, eval_context, tile_index_snapshot)
 	return total
 
-func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, eval_context: Dictionary = {}) -> float:
+func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> float:
 	if opponent < 0 or opponent >= players.size():
-		return 0.0
-	var index = tile_index(tile)
-	if index < 0:
 		return 0.0
 	var cache_key := "%d:%s:%d" % [opponent, tile, visible]
 	var cache: Dictionary = {}
@@ -5350,9 +5443,12 @@ func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, ev
 			if cache.has(cache_key):
 				return float(cache.get(cache_key, 0.0))
 		eval_context["pattern_threats"] = cache
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	if index < 0:
+		return 0.0
 	var threat = 0.0
 	if index < 27:
-		var suit = tile_suit_index(tile)
+		var suit := int(index / 9)
 		var meld_count = opponent_meld_count_for_suit(opponent, suit, eval_context)
 		if meld_count > 0:
 			var meld_tiles = opponent_meld_tile_count_for_suit(opponent, suit, eval_context)
@@ -5370,9 +5466,10 @@ func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, ev
 			elif suit_discards <= 2:
 				threat += 2.0
 			threat += min(5.0, float(off_suit_discards) * 0.45)
-			if is_middle_number_tile(tile):
+			var tile_rank := index % 9
+			if tile_rank >= 2 and tile_rank <= 6:
 				threat += 2.4
-			elif is_terminal_or_honor(tile):
+			elif tile_rank == 0 or tile_rank == 8:
 				threat += 0.6
 	else:
 		var honor_melds = opponent_honor_meld_count(opponent, eval_context)
@@ -5725,14 +5822,18 @@ func choose_ai_concealed_gang(seat: int) -> String:
 	var visible_counts := visible_tile_counts_shared()
 	var eval_context := make_ai_evaluation_context(seat, visible_counts)
 	eval_context["hand_counts"] = hand_counts
+	var before_plan_report := hand_plan_report_for_seat_from_counts(seat, hand_counts, players[seat]["hand"].size())
+	eval_context["self_gang_before_plan_label"] = str(before_plan_report.get("label", ""))
 	eval_context["self_gang_attack_multiplier"] = ai_total_attack_multiplier(seat)
 	eval_context["self_gang_gang_aggression"] = ai_gang_aggression(seat)
 	eval_context["self_gang_wait_focus"] = ai_wait_value_focus(seat)
 	eval_context["self_gang_difficulty"] = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	eval_context["self_gang_open_melds"] = players[seat]["melds"].size()
+	eval_context["self_gang_before_shanten"] = calculate_min_shanten_from_counts(hand_counts, int(eval_context["self_gang_open_melds"]))
 	eval_context["pressure_context"] = ai_pressure_context(seat, eval_context)
 	for i in candidate_indices:
 		var tile = TILE_CODES[i]
-		var report = build_ai_self_gang_report(seat, tile, "concealed", eval_context)
+		var report = build_ai_self_gang_report(seat, tile, "concealed", eval_context, i)
 		if not bool(report.get("allow", false)):
 			continue
 		var score = float(report.get("score", 0.0))
@@ -5753,23 +5854,34 @@ func choose_ai_added_gang(seat: int) -> String:
 			continue
 		var meld_tile = str(meld[0])
 		if is_triplet_meld(meld, meld_tile):
-			added_candidates[meld_tile] = true
+			var meld_tile_index := tile_index(meld_tile)
+			added_candidates[meld_tile] = meld_tile_index
 	if added_candidates.is_empty():
 		return ""
 	var visible_counts := visible_tile_counts_shared()
 	var eval_context := make_ai_evaluation_context(seat, visible_counts)
 	eval_context["hand_counts"] = hand_counts
+	var before_plan_report := hand_plan_report_for_seat_from_counts(seat, hand_counts, players[seat]["hand"].size())
+	eval_context["self_gang_before_plan_label"] = str(before_plan_report.get("label", ""))
+	var added_candidate_snapshot: Dictionary = {}
+	for candidate_variant in added_candidates.keys():
+		var candidate_index := int(added_candidates.get(candidate_variant, -1))
+		if candidate_index >= 0 and candidate_index < TILE_CODES.size():
+			added_candidate_snapshot[str(TILE_CODES[candidate_index])] = true
+	eval_context["self_gang_added_candidates"] = added_candidate_snapshot
 	eval_context["self_gang_attack_multiplier"] = ai_total_attack_multiplier(seat)
 	eval_context["self_gang_gang_aggression"] = ai_gang_aggression(seat)
 	eval_context["self_gang_wait_focus"] = ai_wait_value_focus(seat)
 	eval_context["self_gang_difficulty"] = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+	eval_context["self_gang_open_melds"] = players[seat]["melds"].size()
+	eval_context["self_gang_before_shanten"] = calculate_min_shanten_from_counts(hand_counts, int(eval_context["self_gang_open_melds"]))
 	eval_context["pressure_context"] = ai_pressure_context(seat, eval_context)
 	for tile_variant in added_candidates.keys():
 		var tile := str(tile_variant)
-		var tile_index_value := tile_index(tile)
+		var tile_index_value := int(added_candidates.get(tile_variant, -1))
 		if tile_index_value < 0 or int(hand_counts[tile_index_value]) <= 0:
 			continue
-		var report = build_ai_self_gang_report(seat, tile, "added", eval_context)
+		var report = build_ai_self_gang_report(seat, tile, "added", eval_context, tile_index_value)
 		if not bool(report.get("allow", false)):
 			continue
 		var score = float(report.get("score", 0.0))
@@ -5778,7 +5890,7 @@ func choose_ai_added_gang(seat: int) -> String:
 			best_score = score
 	return best_tile
 
-func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_context: Dictionary = {}) -> Dictionary:
+func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> Dictionary:
 	var report: Dictionary = {
 		"seat": seat,
 		"tile": tile,
@@ -5798,27 +5910,44 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_
 	}
 	if seat < 0 or seat >= players.size() or tile == "":
 		return report
+	# The report is scored more than once. Keep the canonical classification
+	# inputs with it so each scoring pass avoids re-normalizing the tile string.
+	var resolved_tile_index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	report["tile_index"] = resolved_tile_index
 	var hand: Array = players[seat]["hand"]
+	var context_hand_counts = eval_context.get("hand_counts", []) if not eval_context.is_empty() else []
+	var has_context_hand_counts := typeof(context_hand_counts) == TYPE_ARRAY and not (context_hand_counts as Array).is_empty()
 	# Reject non-gang tiles before any shanten/route work. The selectors call
 	# this on every draw, while legal gang candidates are exceptionally rare.
 	match gang_kind:
 		"concealed":
-			if count_tile(hand, tile) < 4:
+			var concealed_count := int(context_hand_counts[resolved_tile_index]) if has_context_hand_counts and resolved_tile_index >= 0 and resolved_tile_index < context_hand_counts.size() else count_tile(hand, tile)
+			if concealed_count < 4:
 				return report
 		"added":
-			if not can_added_gang(seat, tile):
+			var added_candidates_context = eval_context.get("self_gang_added_candidates", null) if not eval_context.is_empty() else null
+			if typeof(added_candidates_context) == TYPE_DICTIONARY:
+				var added_candidate_key := str(TILE_CODES[resolved_tile_index]) if resolved_tile_index >= 0 and resolved_tile_index < TILE_CODES.size() else normalize_tile_code(tile)
+				if added_candidate_key == "" or not (added_candidates_context as Dictionary).has(added_candidate_key):
+					return report
+			elif not can_added_gang(seat, tile):
 				return report
 		_:
 			return report
-	var open_melds = players[seat]["melds"].size()
+	var open_melds := int(eval_context.get("self_gang_open_melds", -1)) if not eval_context.is_empty() else -1
+	if open_melds < 0:
+		open_melds = players[seat]["melds"].size()
 	var before_counts: Array
-	var context_hand_counts = eval_context.get("hand_counts", []) if not eval_context.is_empty() else []
-	if typeof(context_hand_counts) == TYPE_ARRAY and not (context_hand_counts as Array).is_empty():
+	if has_context_hand_counts:
 		before_counts = context_hand_counts as Array
 	else:
 		before_counts = tile_counts(hand)
-	var before_shanten = calculate_min_shanten_from_counts(before_counts, open_melds)
-	var before_plan_label = str(hand_plan_report_for_seat_from_counts(seat, before_counts, hand.size()).get("label", ""))
+	var before_shanten: int
+	if not eval_context.is_empty() and eval_context.has("self_gang_before_shanten"):
+		before_shanten = int(eval_context.get("self_gang_before_shanten", 8))
+	else:
+		before_shanten = calculate_min_shanten_from_counts(before_counts, open_melds)
+	var before_plan_label := str(eval_context.get("self_gang_before_plan_label", "")) if not eval_context.is_empty() and eval_context.has("self_gang_before_plan_label") else str(hand_plan_report_for_seat_from_counts(seat, before_counts, hand.size()).get("label", ""))
 	var after = hand.duplicate()
 	var after_open_melds = open_melds
 	match gang_kind:
@@ -5836,6 +5965,10 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_
 	if not consume_tile_count(after_counts, tile, removed_count):
 		return report
 	var after_shanten = calculate_min_shanten_from_counts(after_counts, after_open_melds)
+	var is_honor_tile_snapshot := resolved_tile_index >= 27
+	var is_terminal_or_honor_snapshot := is_honor_tile_snapshot or (resolved_tile_index >= 0 and resolved_tile_index < 27 and (resolved_tile_index % 9 == 0 or resolved_tile_index % 9 == 8))
+	report["is_honor_tile"] = is_honor_tile_snapshot
+	report["is_terminal_or_honor"] = is_terminal_or_honor_snapshot
 	var pressure_context: Dictionary = eval_context.get("pressure_context", {}) if not eval_context.is_empty() else {}
 	var pressure = opponent_pressure_score(seat, eval_context)
 	var defense = ai_defense_weight(seat, before_shanten, pressure_context, eval_context)
@@ -5926,7 +6059,7 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_
 		report["reason"] = "牌值杠"
 	else:
 		report["reason"] = "杠牌收益不足"
-	if bool(report.get("allow", false)) and pressure >= 6.8 and after_shanten >= 2 and not is_terminal_or_honor(tile):
+	if bool(report.get("allow", false)) and pressure >= 6.8 and after_shanten >= 2 and not bool(report.get("is_terminal_or_honor", false)):
 		report["allow"] = false
 		report["reason"] = "高压防守"
 	var wall_draw_discipline = wall_draw_self_gang_discipline_report(seat, gang_kind, before_shanten, after_shanten, gang_wall_count)
@@ -5947,6 +6080,9 @@ func ai_self_gang_action_score(report: Dictionary) -> float:
 		return -1000000.0
 	var gang_kind = str(report.get("gang_kind", ""))
 	var tile = str(report.get("tile", ""))
+	var tile_index_snapshot := int(report.get("tile_index", -2))
+	if tile_index_snapshot == -2:
+		tile_index_snapshot = tile_index(tile)
 	var before_shanten = int(report.get("before_shanten", 8))
 	var after_shanten = int(report.get("after_shanten", before_shanten))
 	var shanten_gain = max(0, before_shanten - after_shanten)
@@ -5956,9 +6092,19 @@ func ai_self_gang_action_score(report: Dictionary) -> float:
 		score += 38.0
 	elif after_shanten == 1:
 		score += 22.0
-	if is_honor_tile(tile):
+	var is_honor_tile_snapshot: bool
+	if report.has("is_honor_tile"):
+		is_honor_tile_snapshot = bool(report.get("is_honor_tile", false))
+	else:
+		is_honor_tile_snapshot = tile_index_snapshot >= 27
+	var is_terminal_or_honor_snapshot: bool
+	if report.has("is_terminal_or_honor"):
+		is_terminal_or_honor_snapshot = bool(report.get("is_terminal_or_honor", false))
+	else:
+		is_terminal_or_honor_snapshot = is_honor_tile_snapshot or (tile_index_snapshot >= 0 and tile_index_snapshot < 27 and (tile_index_snapshot % 9 == 0 or tile_index_snapshot % 9 == 8))
+	if is_honor_tile_snapshot:
 		score += 18.0
-	elif is_terminal_or_honor(tile):
+	elif is_terminal_or_honor_snapshot:
 		score += 10.0
 	var seat = int(report.get("seat", -1))
 	var attack = float(report.get("ai_attack_multiplier", -1.0))
@@ -6306,9 +6452,10 @@ func _on_game_render_delay_timeout(timer: Timer) -> void:
 func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
-func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}) -> String:
+func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}, viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
 	if seat < 0 or seat >= players.size():
 		return ""
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var snapshot_current_seat := int(discard_snapshot.get("current_seat", -1)) if not discard_snapshot.is_empty() else -1
 	var current_seat_snapshot := snapshot_current_seat if snapshot_current_seat >= 0 else get_current_seat()
 	var snapshot_discard_seat := int(discard_snapshot.get("seat", -1)) if not discard_snapshot.is_empty() else -1
@@ -6333,7 +6480,7 @@ func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_t
 		str(seat),
 		str(rect),
 		side,
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_margins),
 		mode,
 		str(current_seat_snapshot),
@@ -6365,8 +6512,8 @@ func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_t
 	]
 	return "|".join(signature_parts)
 
-func battle_top_hud_identity_signature() -> String:
-	var viewport_size := effective_viewport_size()
+func battle_top_hud_identity_signature(viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var compact_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	var wall_count := get_wall_count()
 	var wall_total := display_wall_total()
@@ -6476,8 +6623,9 @@ func action_chrome_button_signature(button_snapshot = null) -> String:
 			button_parts.append("focused")
 	return "|".join(button_parts)
 
-func battle_action_chrome_identity_signature(button_snapshot = null, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1) -> String:
-	var viewport_size := effective_viewport_size()
+func battle_action_chrome_identity_signature(button_snapshot = null, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
 	var buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
 	var count := action_bar_button_count(buttons)
 	var disconnected := mode == "online_game" and online_game_disconnected()
@@ -6508,8 +6656,8 @@ func battle_action_chrome_identity_signature(button_snapshot = null, pending_cla
 		str(danger_confirm_mode),
 		str(ended_action_mode),
 		str(has_intent),
-		str(action_dock_rect_for_count(count)),
-		str(action_intent_rect_for_count(count)) if has_intent else "",
+		str(action_dock_rect_for_count(count, viewport_size, content_size)),
+		str(action_intent_rect_for_count(count, viewport_size, content_size)) if has_intent else "",
 		action_intent_text(count) if has_intent else "",
 		str(action_intent_color()) if has_intent else "",
 		action_intent_icon_name() if has_intent else "",
@@ -6643,19 +6791,22 @@ func release_retained_battle_action_bar() -> void:
 	retained_battle_action_bar_state_signature = ""
 
 
-func battle_round_summary_identity_signature() -> String:
+func battle_round_summary_identity_signature(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> String:
 	if mode != "offline" or offline_phase != "ended":
 		return ""
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size_for_margins(resolved_viewport, safe_area_margins)
 	var parts: Array[String] = [
 		mode,
 		offline_phase,
 		round_result_kind,
 		active_rule_variant(),
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_margins),
 		str(safe_area_layout_revision),
 		str(resize_refresh_revision),
-		str(action_bar_dock_layout_rect()),
+		str(ui_layout_density(resolved_viewport)),
+		str(action_bar_dock_layout_rect(resolved_viewport, resolved_content_size)),
 		str(large_text_enabled),
 		str(high_contrast_enabled),
 		str(reduce_motion_enabled),
@@ -6772,6 +6923,7 @@ func retain_battle_seats_for_render() -> void:
 		return
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var seat_retention_viewport_snapshot := effective_viewport_size()
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
 		var panel := root_layer.get_node_or_null("SeatPanel_%d" % seat) as Control
@@ -6780,7 +6932,7 @@ func retain_battle_seats_for_render() -> void:
 			continue
 		if panel.is_queued_for_deletion() or shadow.is_queued_for_deletion():
 			continue
-		var identity := battle_seat_identity_signature(seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		var identity := battle_seat_identity_signature(seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, {}, seat_retention_viewport_snapshot)
 		if identity == "" or str(panel.get_meta("seat_identity_signature", "")) != identity or str(shadow.get_meta("seat_identity_signature", "")) != identity:
 			continue
 		root_layer.remove_child(panel)
@@ -6980,7 +7132,8 @@ func retain_battle_hand_tray_for_render() -> void:
 	retained_battle_hand_state_signature = str(tray.get_meta("hand_visual_state_signature", ""))
 	tray.set_meta("retained_for_battle_render", true)
 
-func battle_center_identity_signature() -> String:
+func battle_center_identity_signature(viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	return "%s|%d|%d|%s|%s|%s|%s|%s" % [
 		get_last_discard(),
 		get_last_discard_seat(),
@@ -6988,7 +7141,7 @@ func battle_center_identity_signature() -> String:
 		str(get_current_seat()),
 		"overlay" if (chat_panel_open or advisor_detail_open or has_pending_claim_window()) else "plain",
 		mode,
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_margins),
 	]
 
@@ -7444,7 +7597,10 @@ func release_retained_battle_wall_feedback() -> void:
 	retained_battle_wall_remaining_badge_signature = ""
 
 
-func battle_advisor_identity_signature() -> String:
+func battle_advisor_identity_signature(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO, layout_rect_snapshot: Rect2 = Rect2()) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size_for_margins(resolved_viewport, safe_area_margins)
+	var resolved_layout_rect := layout_rect_snapshot if layout_rect_snapshot.size.x > 0.001 and layout_rect_snapshot.size.y > 0.001 else advisor_panel_layout_rect(resolved_viewport, resolved_content_size)
 	var player_state_parts: Array[String] = []
 	for seat in range(mini(4, players.size())):
 		var player: Dictionary = players[seat]
@@ -7454,10 +7610,10 @@ func battle_advisor_identity_signature() -> String:
 	return "%s|%s|%s|%d|%d|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s|%s" % [
 		mode,
 		offline_phase,
-		str(advisor_panel_layout_rect()),
+			str(resolved_layout_rect),
 		safe_area_layout_revision,
 		resize_refresh_revision,
-		str(effective_viewport_size()),
+			str(resolved_viewport),
 		str(safe_area_margins),
 		str(large_text_enabled),
 		str(high_contrast_enabled),
@@ -7905,8 +8061,11 @@ func render_game(state_changed: bool = false) -> void:
 	draw_discards(table)
 
 	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat(), "current_seat": render_current_seat}
+	var battle_seat_viewport_snapshot := effective_viewport_size()
+	root_layer.set_meta("seat_viewport_snapshot", battle_seat_viewport_snapshot)
+	root_layer.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_battle_draw")
 	for seat_layout in SEAT_LAYOUTS:
-		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot)
+		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot, battle_seat_viewport_snapshot)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
@@ -7953,6 +8112,7 @@ func update_ai_assistance_async() -> void:
 	offline_ai_assistance_queued = false
 	if mode != "offline" or not can_self_discard():
 		return
+	var ai_assist_enabled_snapshot := player_ai_assist_enabled()
 	var evaluation_revision := ai_state_revision
 	var evaluation_generation := ui_page_generation
 	var evaluation_hand_signature := hand_identity_fingerprint(get_self_hand())
@@ -7967,7 +8127,7 @@ func update_ai_assistance_async() -> void:
 	var seat_threat_context: Dictionary = shared_evaluation_context
 	if seat_threat_context.is_empty():
 		seat_threat_context = make_ai_evaluation_context(0, evaluation_visible_counts)
-	var next_seat_threat_reports := render_seat_threat_reports(0, seat_threat_context) if player_ai_assist_enabled() else {}
+	var next_seat_threat_reports := render_seat_threat_reports(0, seat_threat_context) if ai_assist_enabled_snapshot else {}
 	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline":
 		# The deferred evaluator no longer describes the mounted table. Do not
 		# partially commit hand and threat results. State renders increment the
@@ -7986,7 +8146,7 @@ func update_ai_assistance_async() -> void:
 
 	# Commit both AI lanes from the same immutable table snapshot. This prevents a
 	# hand badge from becoming visible one frame before its seat threat reports.
-	if player_ai_assist_enabled():
+	if ai_assist_enabled_snapshot:
 		update_seat_threats_display(next_seat_threat_reports)
 	if not current_human_advice.is_empty():
 		update_hand_ai_hints()
@@ -8178,6 +8338,9 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	seat_threat_revisions = next_revisions
 	# SeatPanel 的尺寸和朝向由 SEAT_LAYOUTS 决定，重绘这些局部面板比整局
 	# render_game 更安全，也不会重新触发 AI 辅助 deferred 回调。
+	var seat_refresh_viewport_snapshot := effective_viewport_size()
+	root_layer.set_meta("seat_viewport_snapshot", seat_refresh_viewport_snapshot)
+	root_layer.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_refresh")
 	var changed_seats: Array[int] = []
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
@@ -8200,7 +8363,7 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 			kill_screen_tweens_for_subtree(old_shadow)
 			root_layer.remove_child(old_shadow)
 			old_shadow.queue_free()
-		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, {}, seat_refresh_viewport_snapshot)
 		var new_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var new_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
 		if new_panel != null and old_panel != null and is_instance_valid(old_panel):
@@ -11083,13 +11246,13 @@ func forced_discard_risk_text(report: Dictionary) -> String:
 		return discard_safety_text({"safety_label": safety, "risk_label": risk_label(float(report.get("forced_discard_risk", 0.0)))})
 	return "风险%s" % risk_label(float(report.get("forced_discard_risk", 0.0)))
 
-func discard_reason_label(tile: String, original_hand: Array, report: Dictionary, original_counts_snapshot: Array = []) -> String:
+func discard_reason_label(tile: String, original_hand: Array, report: Dictionary, original_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> String:
 	var safety = str(report.get("safety_label", ""))
 	if safety != "":
 		return "防守" + discard_safety_short_text(report)
 	if is_plan_offcut(tile, report, original_hand, original_counts_snapshot):
 		return "保路线"
-	if is_discard_isolated(tile, original_hand, original_counts_snapshot):
+	if is_discard_isolated(tile, original_hand, original_counts_snapshot, tile_index_snapshot):
 		return "切孤张"
 	if int(report.get("shanten", 8)) <= 0 and float(report.get("wait_value", 0.0)) > 0.0:
 		return "成听牌"
@@ -11402,13 +11565,13 @@ func human_action_choice_target_position(action: String) -> Vector2:
 			return rect_center_screen_position(seat_meld_rect(0))
 	return rect_center_screen_position(CENTER_PANEL_RECT)
 
-func action_button_width_for_available(count: int, available_width: float, separation: int = -1) -> float:
+func action_button_width_for_available(count: int, available_width: float, separation: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
 	if count <= 0:
-		return action_button_max_width_for_viewport()
-	var gap = action_button_separation_for_count(count) if separation < 0 else separation
+		return action_button_max_width_for_viewport(viewport_snapshot)
+	var gap = action_button_separation_for_count(count, viewport_snapshot) if separation < 0 else separation
 	var layout_slack = 2.0
 	var available = available_width - float(max(0, count - 1) * gap) - layout_slack
-	var width: float = minf(action_button_max_width_for_viewport(), floorf(maxf(1.0, available / float(count))))
+	var width: float = minf(action_button_max_width_for_viewport(viewport_snapshot), floorf(maxf(1.0, available / float(count))))
 	if has_pending_claim_window():
 		# Keep authored touch targets intact; the FlowContainer supplies the second
 		# row when a compact viewport cannot fit the full response set.
@@ -11416,16 +11579,16 @@ func action_button_width_for_available(count: int, available_width: float, separ
 		return maxf(pending_min_width, width)
 	return width
 
-func action_button_max_width_for_viewport() -> float:
-	var viewport_size := effective_viewport_size()
+func action_button_max_width_for_viewport(viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	if viewport_size.y <= 560.0 or viewport_size.x < 1100.0:
 		return ACTION_BUTTON_COMPACT_MAX_WIDTH
 	if viewport_size.x < 1600.0:
 		return ACTION_BUTTON_MEDIUM_MAX_WIDTH
 	return ACTION_BUTTON_MAX_WIDTH
 
-func action_button_width_for_count(count: int, separation: int = -1) -> float:
-	return action_button_width_for_available(count, action_bar_pixel_width(), separation)
+func action_button_width_for_count(count: int, separation: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
+	return action_button_width_for_available(count, action_bar_pixel_width(), separation, viewport_snapshot)
 
 func action_buttons_fit_available(count: int, available_width: float) -> bool:
 	var separation = action_button_separation_for_count(count)
@@ -11486,15 +11649,16 @@ func discard_zone_tile_size_for_table_size(zone_rect: Rect2, columns: int, rows:
 		height = min(available_height, width * max_aspect)
 	return Vector2(max(1.0, floor(width)), max(1.0, floor(height)))
 
-func discard_zone_visible_rows(zone_rect: Rect2, columns: int) -> int:
-	return discard_zone_visible_rows_for_table_size(zone_rect, columns, game_table_pixel_size())
+func discard_zone_visible_rows(zone_rect: Rect2, columns: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> int:
+	return discard_zone_visible_rows_for_table_size(zone_rect, columns, game_table_pixel_size(), viewport_snapshot)
 
-func discard_zone_visible_rows_for_table_size(zone_rect: Rect2, columns: int, table_size: Vector2) -> int:
+func discard_zone_visible_rows_for_table_size(zone_rect: Rect2, columns: int, table_size: Vector2, viewport_snapshot: Vector2 = Vector2.ZERO) -> int:
 	var zone_size = discard_zone_pixel_size_for_table_size(zone_rect, table_size)
 	var max_rows = int(floor((zone_size.y + float(DISCARD_GRID_SEPARATION)) / (DISCARD_TILE_MIN_SIZE.y + float(DISCARD_GRID_SEPARATION))))
 	# r500: bottom/top (8-col) prefer 2 rows. On compact screens, side rivers
 	# trade one visible row for a larger face so the tile glyph remains readable.
-	var compact_side_river := columns <= 3 and effective_viewport_size().y <= 560.0
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var compact_side_river := columns <= 3 and resolved_viewport.y <= 560.0
 	var row_cap := 2 if columns >= 8 else (3 if compact_side_river else 4)
 	return clamp(max_rows, 1, row_cap)
 
@@ -12009,7 +12173,7 @@ func draw_action_button_pass_route(button: Button, color: Color) -> Control:
 	# 保留为空壳；过按钮装饰碎块已并入 action_button_panel 插画底板。
 	return null
 
-func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1) -> Array[Button]:
+func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Array[Button]:
 	# r214: bulk GPT chrome sweep
 	var action_buttons: Array[Button] = action_bar_buttons()
 	var count = action_bar_button_count(action_buttons)
@@ -12019,7 +12183,9 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	var pending_claim_mode := bool(pending_claim_snapshot) if pending_claim_snapshot >= 0 else has_pending_claim_window()
 	var danger_confirm_mode := mode == "offline" and (bool(pending_danger_snapshot) if pending_danger_snapshot >= 0 else has_pending_danger_discard())
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
-	var action_chrome_signature := battle_action_chrome_identity_signature(action_buttons, int(pending_claim_mode), int(danger_confirm_mode))
+	var layout_viewport_snapshot := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var layout_content_size_snapshot := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	var action_chrome_signature := battle_action_chrome_identity_signature(action_buttons, int(pending_claim_mode), int(danger_confirm_mode), layout_viewport_snapshot, layout_content_size_snapshot)
 	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
 	var retained_intent := retained_battle_action_intent
 	retained_battle_action_intent = null
@@ -12063,7 +12229,7 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 		if stale_dock != null and is_instance_valid(stale_dock):
 			stale_dock.queue_free()
 	retained_battle_action_dock_signature = ""
-	var dock_rect := action_dock_rect_for_count(count)
+	var dock_rect := action_dock_rect_for_count(count, layout_viewport_snapshot, layout_content_size_snapshot)
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
 	var dock_shadow = make_soft_depth_panel(parent, dock_shadow_rect, Color(0.0, 0.0, 0.0, 0.18 if pending_claim_mode else 0.22), 12)
 	dock_shadow.name = "ActionDock3DCastShadow"
@@ -12080,12 +12246,16 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	dock.set_meta("layout_role", "action_buttons")
 	dock.set_meta("pending_claim_window_snapshot", pending_claim_mode)
 	dock.set_meta("pending_danger_discard_snapshot", danger_confirm_mode)
+	dock.set_meta("action_layout_viewport_snapshot", layout_viewport_snapshot)
+	dock.set_meta("action_layout_content_size_snapshot", layout_content_size_snapshot)
+	dock.set_meta("action_layout_snapshot_policy", "one_viewport_and_content_snapshot_per_layout")
 	dock.set_meta("action_state_snapshot_policy", "one_action_state_snapshot_per_dock")
 	set_ui_full_text(dock, "行动区：当前可执行操作会显示在下方按钮；焦点可用方向键移动", "牌桌行动区")
 	mark_ui_optimization(dock, "F-478")
-	var action_available_width := maxf(1.0, safe_content_pixel_size().x * maxf(0.001, action_bar_layout_rect().size.x - action_bar_layout_rect().position.x))
-	var action_separation := action_button_separation_for_count(action_buttons.size())
-	var action_button_width := action_button_width_for_available(action_buttons.size(), action_available_width, action_separation)
+	var action_layout_rect := action_bar_layout_rect(layout_viewport_snapshot, layout_content_size_snapshot)
+	var action_available_width := maxf(1.0, layout_content_size_snapshot.x * maxf(0.001, action_layout_rect.size.x - action_layout_rect.position.x))
+	var action_separation := action_button_separation_for_count(action_buttons.size(), layout_viewport_snapshot)
+	var action_button_width := action_button_width_for_available(action_buttons.size(), action_available_width, action_separation, layout_viewport_snapshot)
 	dock.set_meta("button_solver_available_width_px", action_available_width)
 	dock.set_meta("button_solver_width_px", action_button_width)
 	dock.set_meta("button_solver_policy", "shared_width_solver_for_normal_danger_and_ended")
@@ -12324,6 +12494,7 @@ func ai_discard_reports_for_render() -> Array:
 func draw_actions(parent: Control) -> void:
 	action_dock_status_label = null
 	var action_viewport_size := effective_viewport_size()
+	var action_content_size := safe_content_pixel_size()
 	var disconnected := mode == "online_game" and online_game_disconnected()
 	var pending_claim_response_bar: Control = null
 	var pending_claim_tail_bar: HBoxContainer = null
@@ -12333,8 +12504,8 @@ func draw_actions(parent: Control) -> void:
 	if mode == "online_game" and not disconnected:
 		draw_chat_action_button(parent)
 	if mode == "offline" and reuse_retained_battle_action_bar_for_render(parent):
-		var retained_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout(retained_action_buttons)
+		var retained_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, -1, -1, action_viewport_size, action_content_size)
+		finalize_action_bar_layout(retained_action_buttons, action_viewport_size, action_content_size)
 		return
 	if disconnected:
 		var recovery_model := online_recovery_view_model()
@@ -12396,8 +12567,8 @@ func draw_actions(parent: Control) -> void:
 		mark_ui_optimization(lobby_button, "F-898")
 		lobby_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
 		action_bar.add_child(lobby_button)
-		var recovery_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout(recovery_action_buttons)
+		var recovery_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, -1, -1, action_viewport_size, action_content_size)
+		finalize_action_bar_layout(recovery_action_buttons, action_viewport_size, action_content_size)
 		action_bar.set_meta("layout_role", "online_recovery_actions")
 		action_bar.set_meta("recovery_state_owner", "OnlineRecoveryStateLabel")
 		action_bar.set_meta("recovery_focus_order", "reconnect_then_lobby")
@@ -12425,8 +12596,8 @@ func draw_actions(parent: Control) -> void:
 		parent.add_child(action_bar)
 		action_bar.add_child(unknown_retry)
 		action_bar.add_child(unknown_lobby)
-		var unknown_phase_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout(unknown_phase_action_buttons)
+		var unknown_phase_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, -1, -1, action_viewport_size, action_content_size)
+		finalize_action_bar_layout(unknown_phase_action_buttons, action_viewport_size, action_content_size)
 		call_deferred("focus_online_recovery_if_current", root_layer.get_instance_id(), ui_page_generation, "OnlineUnknownPhaseRetryButton")
 		return
 	var pending_claim_window_snapshot := has_pending_claim_window()
@@ -12553,8 +12724,8 @@ func draw_actions(parent: Control) -> void:
 			summary_menu_button.z_index = 2
 			action_bar.add_child(summary_menu_button)
 			prepare_ended_action_overflow(parent)
-			var ended_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
-			finalize_action_bar_layout(ended_action_buttons)
+			var ended_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot), action_viewport_size, action_content_size)
+			finalize_action_bar_layout(ended_action_buttons, action_viewport_size, action_content_size)
 			return
 		if offline_phase == "pending_claim":
 			# 新手引导：吃碰杠提示
@@ -12589,8 +12760,8 @@ func draw_actions(parent: Control) -> void:
 				offline_pass_button.set_meta("pending_tail", true)
 				pending_claim_response_tail_lane.add_child(offline_pass_button)
 			draw_pending_claim_illustration(parent)
-			var pending_claim_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
-			finalize_action_bar_layout(pending_claim_action_buttons)
+			var pending_claim_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot), action_viewport_size, action_content_size)
+			finalize_action_bar_layout(pending_claim_action_buttons, action_viewport_size, action_content_size)
 			return
 		if player_ai_assist_enabled() and pending_danger_discard_snapshot:
 			var selected_danger_tile = pending_danger_discard_tile
@@ -12645,25 +12816,27 @@ func draw_actions(parent: Control) -> void:
 			action_bar.set_meta("danger_shortcut_state", {"confirm": "Enter", "cancel": "Esc"})
 			action_bar.set_meta("danger_action_order", "alternatives_then_cancel_then_confirm")
 			action_bar.set_meta("danger_reading_sequence", ["tile", "risk", "alternatives", "cancel", "confirm"])
-			var danger_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
+			var danger_action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot), action_viewport_size, action_content_size)
 			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
-			finalize_action_bar_layout(danger_action_buttons)
+			finalize_action_bar_layout(danger_action_buttons, action_viewport_size, action_content_size)
 			return
-		if can_self_discard() and can_win_for_seat(0):
+		var action_can_self_discard := can_self_discard()
+		var action_ai_assist_enabled := player_ai_assist_enabled()
+		if action_can_self_discard and can_win_for_seat(0):
 			action_bar.add_child(make_action_button("自摸", Color(0.94, 0.42, 0.32), func() -> void:
 				human_self_win()
 			))
 		var gang_tile = first_concealed_gang_tile(0)
-		if can_self_discard() and gang_tile != "":
+		if action_can_self_discard and gang_tile != "":
 			action_bar.add_child(make_action_button("暗杠", Color(0.62, 0.54, 0.88), func() -> void:
 				human_concealed_gang(gang_tile)
 			))
 		var added_gang_tile = first_added_gang_tile(0)
-		if can_self_discard() and added_gang_tile != "":
+		if action_can_self_discard and added_gang_tile != "":
 			action_bar.add_child(make_action_button("补杠", Color(0.66, 0.58, 0.92), func() -> void:
 				human_added_gang(added_gang_tile)
 			))
-		if player_ai_assist_enabled() and can_self_discard() and not pending_danger_discard_snapshot:
+		if action_ai_assist_enabled and action_can_self_discard and not pending_danger_discard_snapshot:
 			var report_snapshot := ai_discard_reports_for_render()
 			var recommended_report = recommended_discard_report(report_snapshot)
 			var recommended_tile = str(recommended_report.get("tile", ""))
@@ -12728,7 +12901,7 @@ func draw_actions(parent: Control) -> void:
 			restart_button.set_meta("restart_action", "request")
 			set_ui_full_text(restart_button, restart_button.tooltip_text, "请求重开当前牌局")
 			action_bar.add_child(restart_button)
-		if player_ai_assist_enabled():
+		if action_ai_assist_enabled:
 			action_bar.add_child(make_action_button("提示", Color(0.25, 0.58, 0.48), func() -> void:
 				set_status(human_hint_text())
 			))
@@ -12802,8 +12975,8 @@ func draw_actions(parent: Control) -> void:
 		else:
 			action_bar.add_child(retry_sync_button)
 	prepare_ended_action_overflow(parent)
-	var action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot))
-	finalize_action_bar_layout(action_buttons)
+	var action_buttons: Array[Button] = draw_action_dock(parent, disconnected, int(pending_claim_window_snapshot), int(pending_danger_discard_snapshot), action_viewport_size, action_content_size)
+	finalize_action_bar_layout(action_buttons, action_viewport_size, action_content_size)
 	if mode == "offline" and battle_action_bar_can_retain():
 		var action_bar_state_signature := battle_action_bar_state_signature()
 		action_bar.set_meta("action_bar_state_signature", action_bar_state_signature)
@@ -13154,7 +13327,10 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# danger decision surfaces and keeps keyboard focus within the active action.
 	if not force_visible and (mode != "offline" or offline_phase == "ended" or offline_phase == "pending_claim" or has_pending_danger_discard() or not player_ai_assist_enabled()):
 		return
-	var advisor_signature := battle_advisor_identity_signature()
+	var advisor_viewport_snapshot := effective_viewport_size()
+	var advisor_content_size_snapshot := safe_content_pixel_size_for_margins(advisor_viewport_snapshot, safe_area_margins)
+	var advisor_layout_snapshot := advisor_panel_layout_rect(advisor_viewport_snapshot, advisor_content_size_snapshot)
+	var advisor_signature := battle_advisor_identity_signature(advisor_viewport_snapshot, advisor_content_size_snapshot, advisor_layout_snapshot)
 	var retained_panel := retained_battle_advisor_panel
 	var retained_panel_signature := retained_battle_advisor_panel_signature
 	retained_battle_advisor_panel = null
@@ -13171,11 +13347,14 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	# The advisor owns an authored side channel selected against the live table
 	# geometry. It must not cover the center wind, wall count, last discard, or a
 	# seat-facing river/meld lane just because the viewport is compact.
-	var advisor_rect := advisor_panel_layout_rect()
+	var advisor_rect := advisor_layout_snapshot
 	var panel = make_gpt_plate_rect(advisor_rect, Color(0.014, 0.034, 0.040, 0.90), "ui_button_face_plate")
 	panel.set_name("AdvisorPanel")
 	panel.set_meta("advisor_render_signature", advisor_signature)
 	panel.set_meta("layout_rect", advisor_rect)
+	panel.set_meta("viewport_snapshot", advisor_viewport_snapshot)
+	panel.set_meta("content_size_snapshot", advisor_content_size_snapshot)
+	panel.set_meta("layout_snapshot_policy", "one_viewport_content_and_layout_snapshot_per_draw")
 	panel.set_meta("layout_role", "advisor_safe_side_channel")
 	panel.set_meta("center_occlusion_policy", "never")
 	panel.set_meta("center_facts_preserved", "wind,wall_count,last_discard,round")
@@ -13660,11 +13839,16 @@ func center_last_discard_view_model(tile: String, seat: int) -> Dictionary:
 
 func draw_center(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
-	var center_identity := battle_center_identity_signature()
+	var center_viewport_snapshot := effective_viewport_size()
+	var center_identity := battle_center_identity_signature(center_viewport_snapshot)
+	parent.set_meta("center_viewport_snapshot", center_viewport_snapshot)
+	parent.set_meta("center_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	if retained_battle_center != null and is_instance_valid(retained_battle_center) and not retained_battle_center.is_queued_for_deletion() and retained_battle_center_signature == center_identity:
 		parent.add_child(retained_battle_center)
 		retained_battle_center.set_meta("retained_for_battle_render", false)
 		retained_battle_center.set_meta("ui_page_generation", ui_page_generation)
+		retained_battle_center.set_meta("center_viewport_snapshot", center_viewport_snapshot)
+		retained_battle_center.set_meta("center_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 		retained_battle_center = null
 		retained_battle_center_signature = ""
 		return
@@ -13693,8 +13877,10 @@ func draw_center(parent: Control) -> void:
 	# 完整阶段提示只由顶部 HUD承载；中心保留牌墙、上张、风位和骰子等桌面事实。
 	var center_wall_count := get_wall_count()
 	var center_wall_total := display_wall_total()
-	var center_viewport_size := effective_viewport_size()
+	var center_viewport_size := center_viewport_snapshot
 	var center_content_size := safe_content_pixel_size()
+	center.set_meta("center_viewport_snapshot", center_viewport_snapshot)
+	center.set_meta("center_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	center.set_meta("center_draw_content_size_snapshot", center_content_size)
 	center.set_meta("center_draw_content_size_snapshot_policy", "one_content_size_snapshot_per_center_draw")
 	var compact_center := center_viewport_size.x <= 960.0 or center_viewport_size.y < 720.0
@@ -13863,15 +14049,18 @@ func register_battle_ui_round_contracts(root: Control) -> void:
 	var hud_wall := find_control.call("TopHudWallText") as Control
 	var center_shell := find_control.call("CenterConsole3DShell") as Control
 	var center_last := find_control.call("CenterLastDiscardTile") as Control
+	var battle_content_size_snapshot := safe_content_pixel_size()
+	root.set_meta("battle_ui_content_size_snapshot", battle_content_size_snapshot)
+	root.set_meta("battle_ui_content_size_snapshot_policy", "one_content_size_snapshot_per_registration")
 	attach.call("F-651", hud_title, "hud_title_measured_lane")
 	attach.call("F-652", hud_status, "hud_phase_status_lane")
 	attach.call("F-653", hud_wall, "hud_wall_count_and_last_discard_lane")
 	attach.call("F-654", center_shell, "center_overlay_alpha_budget")
 	attach.call("F-655", center_last, "center_latest_discard_single_visual_owner")
 	if hud_title is Label:
-		fit_label_font_size(hud_title as Label, maxf(96.0, safe_content_pixel_size().x * 0.205), hud_title.get_theme_font_size("font_size"), 12)
+		fit_label_font_size(hud_title as Label, maxf(96.0, battle_content_size_snapshot.x * 0.205), hud_title.get_theme_font_size("font_size"), 12)
 	if hud_status is Label:
-		fit_label_font_size(hud_status as Label, maxf(96.0, safe_content_pixel_size().x * 0.285), hud_status.get_theme_font_size("font_size"), 12)
+		fit_label_font_size(hud_status as Label, maxf(96.0, battle_content_size_snapshot.x * 0.285), hud_status.get_theme_font_size("font_size"), 12)
 	if hud_wall is Label:
 		hud_wall.set_meta("wall_detail_owner", "TopHudWallState")
 		hud_wall.set_meta("wall_count_format", "current_over_total")
@@ -22614,7 +22803,8 @@ func discard_river_owner_badge_rect(seat: int) -> Rect2:
 	return rect_full(0.720, 0.805, 0.975, 0.965)
 
 
-func discard_river_owner_overlay_render_signature(seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int, rows: int, reserved_start: int, reserved_columns: int, reserved_rows: int, compact_readable: bool, latest_seat: int) -> String:
+func discard_river_owner_overlay_render_signature(seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int, rows: int, reserved_start: int, reserved_columns: int, reserved_rows: int, compact_readable: bool, latest_seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var parts: Array[String] = [
 		mode,
 		str(seat),
@@ -22630,7 +22820,7 @@ func discard_river_owner_overlay_render_signature(seat: int, zone_rect: Rect2, d
 		str(reserved_rows),
 		str(compact_readable),
 		str(latest_seat),
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_layout_revision),
 		str(resize_refresh_revision),
 		str(large_text_enabled),
@@ -22745,7 +22935,7 @@ func release_unused_discard_archive_buttons() -> void:
 			archive_button.queue_free()
 	retained_battle_discard_archive_buttons.clear()
 
-func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int = 0, rows: int = 0, reserved_start: int = -1, reserved_columns: int = 0, reserved_rows: int = 0, compact_readable: bool = false, latest_seat: int = -1, discards_snapshot: Array = []) -> Control:
+func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, visible_capacity: int, columns: int = 0, rows: int = 0, reserved_start: int = -1, reserved_columns: int = 0, reserved_rows: int = 0, compact_readable: bool = false, latest_seat: int = -1, discards_snapshot: Array = [], viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	if discard_count <= 0:
 		return null
 	var accent = SEAT_ACCENT_COLORS[seat] if seat >= 0 and seat < SEAT_ACCENT_COLORS.size() else GOLD_PRIMARY
@@ -22761,7 +22951,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	var latest_off_page := seat == current_latest_seat and visible_start < latest_start
 	var owner_copy := "%s %d-%d/%d" % [discard_river_owner_text(seat), visible_start + 1, window_end, discard_count]
 	var owner_display_copy := "%s · 最新在末页" % owner_copy if latest_off_page else owner_copy
-	var overlay_signature := discard_river_owner_overlay_render_signature(seat, zone_rect, discard_count, visible_start, visible_count, visible_capacity, columns, rows, reserved_start, reserved_columns, reserved_rows, compact_readable, current_latest_seat)
+	var overlay_signature := discard_river_owner_overlay_render_signature(seat, zone_rect, discard_count, visible_start, visible_count, visible_capacity, columns, rows, reserved_start, reserved_columns, reserved_rows, compact_readable, current_latest_seat, viewport_snapshot)
 	var retained_overlay := retained_battle_discard_owner_overlays.get(seat, null) as Control
 	retained_battle_discard_owner_overlays.erase(seat)
 	var overlay: Control = null
@@ -22880,14 +23070,15 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		discard_archive_button_focus_visual_by_id(archive_button.get_instance_id(), archive_button.has_focus())
 	return overlay
 
-func discard_river_art_render_signature(seat: int, zone_rect: Rect2, discard_count: int, latest_seat: int) -> String:
+func discard_river_art_render_signature(seat: int, zone_rect: Rect2, discard_count: int, latest_seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var parts: Array[String] = [
 		mode,
 		str(seat),
 		str(zone_rect),
 		str(discard_count),
 		str(latest_seat),
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_layout_revision),
 		str(resize_refresh_revision),
 		str(fx_enabled_effective()),
@@ -22896,10 +23087,10 @@ func discard_river_art_render_signature(seat: int, zone_rect: Rect2, discard_cou
 	return "|".join(parts)
 
 
-func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, latest_seat: int = -1) -> Control:
+func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discard_count: int, visible_start: int, visible_count: int, latest_seat: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	# r453: river bed = warm GPT plate only (no green wash mats under porcelain faces).
 	var current_latest_seat := latest_seat if latest_seat >= 0 else get_last_discard_seat()
-	var art_signature := discard_river_art_render_signature(seat, zone_rect, discard_count, current_latest_seat)
+	var art_signature := discard_river_art_render_signature(seat, zone_rect, discard_count, current_latest_seat, viewport_snapshot)
 	var retained_art := retained_battle_discard_river_art.get(seat, null) as Control
 	retained_battle_discard_river_art.erase(seat)
 	var reuse_art := retained_art != null and is_instance_valid(retained_art) and not retained_art.is_queued_for_deletion() and str(retained_art.get_meta("discard_river_art_render_signature", "")) == art_signature
@@ -23155,6 +23346,8 @@ func draw_discards(parent: Control) -> void:
 	var table_render_size: Vector2 = parent.size if parent.size.x > 1.0 and parent.size.y > 1.0 else table_size
 	var river_viewport_size := effective_viewport_size()
 	var river_compact_readable := river_viewport_size.y <= 560.0
+	parent.set_meta("discard_river_viewport_snapshot", river_viewport_size)
+	parent.set_meta("discard_river_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	var latest_discard_seat := get_last_discard_seat()
 	var disconnected := mode == "online_game" and online_game_disconnected()
 	var total_discards := 0
@@ -23183,7 +23376,7 @@ func draw_discards(parent: Control) -> void:
 			total_discards += discards.size()
 			active_seats.append(seat)
 		# Prefer live table control size so river cells match the painted surface.
-		var visible_rows := discard_zone_visible_rows_for_table_size(zone_rect, columns, size_basis)
+		var visible_rows := discard_zone_visible_rows_for_table_size(zone_rect, columns, size_basis, river_viewport_size)
 		var tile_size := discard_zone_tile_size_for_table_size(zone_rect, columns, visible_rows, size_basis)
 		var raw_visible_capacity: int = int(columns * visible_rows)
 		var archive_geometry := discard_archive_reserved_geometry(zone_rect, columns, visible_rows, size_basis)
@@ -23238,7 +23431,7 @@ func draw_discards(parent: Control) -> void:
 		grid.set_meta("latest_discard_source_seat", latest_discard_seat)
 		grid.set_meta("river_overlay_contract", "final_grid_reserved_cell_and_latest_gutter")
 		grid.set_meta("discard_grid_render_signature", grid_signature)
-		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count, latest_discard_seat)
+		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count, latest_discard_seat, river_viewport_size)
 		if river_art != null:
 			parent.move_child(river_art, max(0, grid.get_index()))
 		if not reuse_grid:
@@ -23290,7 +23483,7 @@ func draw_discards(parent: Control) -> void:
 					tile_node.name = "RecentDiscardTile_%d" % seat
 					tile_node.z_index = 9
 					mark_ui_optimization(tile_node, "F-259")
-		var owner_overlay := draw_discard_river_owner_overlay(foreground_layer, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), archive_reserved_start, int(archive_geometry.get("columns", 0)), int(archive_geometry.get("rows", 0)), river_compact_readable, latest_discard_seat, discards)
+		var owner_overlay := draw_discard_river_owner_overlay(foreground_layer, seat, zone_rect, discards.size(), visible_start, visible_count, visible_capacity, grid.columns, int(visible_rows), archive_reserved_start, int(archive_geometry.get("columns", 0)), int(archive_geometry.get("rows", 0)), river_compact_readable, latest_discard_seat, discards, river_viewport_size)
 		if owner_overlay != null:
 			owner_overlay.set_meta("archive_reserved_start", archive_reserved_start)
 			owner_overlay.set_meta("final_grid_contract", "columns_rows_reserved_start_from_same_grid")
@@ -23614,7 +23807,8 @@ func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2
 
 
 func draw_game_top_hud(parent: Control) -> void:
-	var hud_signature := battle_top_hud_identity_signature()
+	var hud_viewport_snapshot := effective_viewport_size()
+	var hud_signature := battle_top_hud_identity_signature(hud_viewport_snapshot)
 	var retained_hud := retained_battle_top_hud
 	retained_battle_top_hud = null
 	if retained_hud != null and is_instance_valid(retained_hud) and not retained_hud.is_queued_for_deletion() and retained_battle_top_hud_signature == hud_signature:
@@ -23677,7 +23871,6 @@ func draw_game_top_hud(parent: Control) -> void:
 
 	# 标题
 	var dealer_wind: String = str(CENTER_WIND_LABELS[clampi(dealer_seat, 0, CENTER_WIND_LABELS.size() - 1)]) if mode == "offline" else ""
-	var hud_viewport_snapshot := effective_viewport_size()
 	hud.set_meta("viewport_snapshot", hud_viewport_snapshot)
 	hud.set_meta("viewport_snapshot_policy", "one_snapshot_per_hud_build")
 	var compact_top_hud := hud_viewport_snapshot.x <= 960.0 or hud_viewport_snapshot.y <= 560.0
@@ -25568,13 +25761,14 @@ func meld_lane_content_rect(seat: int, meld_rect: Rect2, has_pager: bool, conten
 		return rect_full(meld_rect.position.x, meld_rect.position.y, meld_rect.size.x, maxf(meld_rect.position.y, pager_rect.position.y - gap_y))
 	return rect_full(meld_rect.position.x, meld_rect.position.y, maxf(meld_rect.position.x, pager_rect.position.x - gap_x), meld_rect.size.y)
 
-func meld_lane_render_signature(seat: int, meld_list: Array, meld_rect: Rect2, content_rect: Rect2, full_capacity: int, lane_capacity: int, window_start: int, page_count: int, has_pager: bool, compact_melds: bool, danger_compact_melds: bool, content_size: Vector2) -> String:
+func meld_lane_render_signature(seat: int, meld_list: Array, meld_rect: Rect2, content_rect: Rect2, full_capacity: int, lane_capacity: int, window_start: int, page_count: int, has_pager: bool, compact_melds: bool, danger_compact_melds: bool, content_size: Vector2, viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var signature_parts: Array[String] = [
 		mode,
 		str(seat),
 		str(meld_list),
 		str(meld_list.size()),
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_margins),
 		str(safe_area_layout_revision),
 		str(resize_refresh_revision),
@@ -25611,10 +25805,13 @@ func cycle_meld_window(seat: int, page_capacity: int) -> void:
 func draw_melds(parent: Control) -> void:
 	var proxy_order := 1000
 	var danger_compact_snapshot := mode == "offline" and has_pending_danger_discard()
-	var compact_melds := effective_viewport_size().y <= 560.0 or danger_compact_snapshot
+	var meld_viewport_snapshot := effective_viewport_size()
+	var compact_melds := meld_viewport_snapshot.y <= 560.0 or danger_compact_snapshot
 	var danger_compact_melds := danger_compact_snapshot
 	var meld_content_size := safe_content_pixel_size()
 	var meld_layout_revision := safe_area_layout_revision
+	parent.set_meta("meld_viewport_snapshot", meld_viewport_snapshot)
+	parent.set_meta("meld_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	for layout in MELD_LAYOUTS:
 		var seat = int(layout[0])
 		var meld_list = get_melds(seat)
@@ -25634,7 +25831,7 @@ func draw_melds(parent: Control) -> void:
 		var page_count := maxi(1, int(ceil(float(meld_list.size()) / float(maxi(1, lane_capacity)))))
 		var has_pager := page_count > 1
 		var content_rect := meld_lane_content_rect(seat, meld_rect, has_pager, meld_content_size)
-		var meld_render_signature := meld_lane_render_signature(seat, meld_list, meld_rect, content_rect, full_capacity, lane_capacity, window_start, page_count, has_pager, compact_melds, danger_compact_melds, meld_content_size)
+		var meld_render_signature := meld_lane_render_signature(seat, meld_list, meld_rect, content_rect, full_capacity, lane_capacity, window_start, page_count, has_pager, compact_melds, danger_compact_melds, meld_content_size, meld_viewport_snapshot)
 		var retained_entry = retained_battle_meld_lanes.get(seat, {})
 		if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty() and str((retained_entry as Dictionary).get("signature", "")) == meld_render_signature:
 			var retained_lane_art := (retained_entry as Dictionary).get("lane_art", null) as Control
@@ -27137,9 +27334,9 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var tile = str(pending.get("tile", ""))
 	if tile == "":
 		return
-	var content_size = safe_content_pixel_size()
 	var viewport_size := effective_viewport_size()
-	var context_rect = pending_claim_context_layout_rect(content_size)
+	var content_size = safe_content_pixel_size()
+	var context_rect = pending_claim_context_layout_rect(content_size, viewport_size)
 	var has_status_strip := optional_gpt_illustration_texture("pending_claim_status_strip") != null
 	var panel = make_gpt_route_rail(context_rect, Color(0.026, 0.040, 0.036, 0.42 if has_status_strip else 0.70))
 	panel.name = "PendingClaimIllustration"
@@ -27513,7 +27710,12 @@ func draw_round_summary(parent: Control) -> void:
 	# r214: bulk GPT chrome sweep
 	if mode != "offline" or offline_phase != "ended":
 		return
-	var summary_signature := battle_round_summary_identity_signature()
+	var summary_viewport_snapshot := effective_viewport_size()
+	var summary_content_size_snapshot := safe_content_pixel_size_for_margins(summary_viewport_snapshot, safe_area_margins)
+	var summary_signature := battle_round_summary_identity_signature(summary_viewport_snapshot, summary_content_size_snapshot)
+	parent.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+	parent.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+	parent.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 	var retained_panel := retained_battle_round_summary_panel
 	var retained_shield := retained_battle_round_summary_shield
 	retained_battle_round_summary_panel = null
@@ -27529,6 +27731,12 @@ func draw_round_summary(parent: Control) -> void:
 		retained_panel.set_meta("ui_page_generation", ui_page_generation)
 		retained_panel.set_meta("settlement_fx_generation", fx_generation)
 		retained_panel.set_meta("round_summary_render_signature", summary_signature)
+		retained_panel.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+		retained_panel.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+		retained_panel.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
+		retained_shield.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+		retained_shield.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+		retained_shield.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 		var reused_body_scroll := retained_panel.get_node_or_null("RoundSummaryBodyScroll") as ScrollContainer
 		var reused_body := reused_body_scroll.get_node_or_null("RoundSummaryBody") as Label if reused_body_scroll != null else null
 		var reused_body_status := retained_panel.get_node_or_null("RoundSummaryBodyStatus") as Label
@@ -27542,12 +27750,12 @@ func draw_round_summary(parent: Control) -> void:
 				clear_round_summary_runtime_effects(stale_summary as Control)
 			stale_summary.queue_free()
 	lock_round_summary_background_controls(parent)
-	var content_size = safe_content_pixel_size()
+	var content_size := summary_content_size_snapshot
 	var panel_width_px = clampf(content_size.x * 0.500, 480.0, 720.0)
-	var compact_summary := effective_viewport_size().y <= 560.0
+	var compact_summary := summary_viewport_snapshot.y <= 560.0
 	var panel_height_px = clampf(content_size.y * 0.500, 320.0 if compact_summary else 270.0, 420.0)
 	var panel_gap_px := 12.0
-	var panel_bottom = action_bar_dock_layout_rect().position.y - panel_gap_px / maxf(1.0, content_size.y)
+	var panel_bottom = action_bar_dock_layout_rect(summary_viewport_snapshot, summary_content_size_snapshot).position.y - panel_gap_px / maxf(1.0, content_size.y)
 	var panel_top = panel_bottom - panel_height_px / maxf(1.0, content_size.y)
 	var panel_left = 0.5 - panel_width_px / maxf(2.0, content_size.x * 2.0)
 	var panel_right = 0.5 + panel_width_px / maxf(2.0, content_size.x * 2.0)
@@ -27558,6 +27766,9 @@ func draw_round_summary(parent: Control) -> void:
 	modal_input_shield.z_index = 29
 	modal_input_shield.set_meta("layout_role", "settlement_modal_input_shield")
 	modal_input_shield.set_meta("round_summary_render_signature", summary_signature)
+	modal_input_shield.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+	modal_input_shield.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+	modal_input_shield.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 	parent.add_child(modal_input_shield)
 	var panel = make_gpt_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.006, 0.012, 0.010, 1.0), "ui_dark_scrim")
 	panel.name = "RoundSummaryPanel"
@@ -27570,6 +27781,9 @@ func draw_round_summary(parent: Control) -> void:
 	panel.set_meta("action_lane_clearance_px", 12.0)
 	panel.set_meta("settlement_fx_generation", fx_generation)
 	panel.set_meta("round_summary_render_signature", summary_signature)
+	panel.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
+	panel.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
+	panel.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 	panel.set_meta("round_summary_animation_enabled", fx_enabled_effective())
 	panel.set_meta("round_summary_motion_enabled", ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless")
 	mark_ui_optimization(panel, "F-245")
@@ -27613,7 +27827,7 @@ func draw_round_summary(parent: Control) -> void:
 
 	# 胡牌详情展示（如果有）
 	if not last_win_score.is_empty() and int(last_win_score.get("fan", 0)) > 0:
-		draw_win_detail_section(panel, last_win_score)
+		draw_win_detail_section(panel, last_win_score, summary_viewport_snapshot)
 
 	var lines: Array[String] = [round_summary]
 	var package_lines = active_package_lines()
@@ -29008,9 +29222,12 @@ func draw_online_local_seat_marker(parent: Control, seat: int, side: String) -> 
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}) -> void:
+func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}, viewport_snapshot: Vector2 = Vector2.ZERO) -> void:
 	# r212: GPT chrome conversion
-	var seat_identity_signature := battle_seat_identity_signature(seat, rect, side, seat_threat_reports, discard_snapshot)
+	var seat_viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	parent.set_meta("seat_viewport_snapshot", seat_viewport_size)
+	parent.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
+	var seat_identity_signature := battle_seat_identity_signature(seat, rect, side, seat_threat_reports, discard_snapshot, seat_viewport_size)
 	var retained_entry = retained_battle_seats.get(seat, {})
 	if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty() and str((retained_entry as Dictionary).get("signature", "")) == seat_identity_signature:
 		var retained_shadow := (retained_entry as Dictionary).get("shadow", null) as Control
@@ -29022,13 +29239,16 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 			retained_panel.set_meta("retained_for_battle_render", false)
 			retained_shadow.set_meta("ui_page_generation", ui_page_generation)
 			retained_panel.set_meta("ui_page_generation", ui_page_generation)
+			retained_shadow.set_meta("seat_viewport_snapshot", seat_viewport_size)
+			retained_panel.set_meta("seat_viewport_snapshot", seat_viewport_size)
+			retained_shadow.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
+			retained_panel.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 			retained_battle_seats.erase(seat)
 			return
 	if typeof(retained_entry) == TYPE_DICTIONARY and not (retained_entry as Dictionary).is_empty():
 		# A resize or state mutation can change the signature between retention and
 		# the rebuilt root. Do not leave the detached old subtree behind.
 		release_retained_battle_seat(seat)
-	var seat_viewport_size := effective_viewport_size()
 	var seat_compact_height := seat_viewport_size.y <= 560.0
 	var snapshot_current_seat := int(discard_snapshot.get("current_seat", -1)) if not discard_snapshot.is_empty() else -1
 	var active = (snapshot_current_seat if snapshot_current_seat >= 0 else get_current_seat()) == seat
@@ -29047,11 +29267,15 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	var seat_shadow = make_soft_depth_panel(parent, seat_shadow_rect, Color(0.0, 0.0, 0.0, 0.22 if active else 0.14), 14)
 	seat_shadow.name = "SeatPanel3DCastShadow_%d" % seat
 	seat_shadow.set_meta("seat_identity_signature", seat_identity_signature)
+	seat_shadow.set_meta("seat_viewport_snapshot", seat_viewport_size)
+	seat_shadow.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	# Lift midtones so inactive side seats still read as lacquer plaques, not black voids.
 	# r449: warm lacquer seat shell — no mint/jade green program fills under brocade.
 	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.018, 0.026, 0.024, 0.88), "ui_dark_scrim", 0.20)
 	panel.name = "SeatPanel_%d" % seat
 	panel.set_meta("seat_identity_signature", seat_identity_signature)
+	panel.set_meta("seat_viewport_snapshot", seat_viewport_size)
+	panel.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	parent.add_child(panel)
 	panel.clip_contents = true
 	# Commercial lacquer shell: rear plate, jade inset, bottom contact, light-catching rims.
@@ -34011,7 +34235,7 @@ func draw_win_detail_score_constellation(parent: Control, reasons: Array, fan: i
 	return constellation
 
 
-func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
+func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_snapshot: Vector2 = Vector2.ZERO) -> void:
 	# r214: bulk GPT chrome sweep
 	"""绘制胡牌详情区域 - 增强版：番种徽章化展示"""
 	var winner = int(score_data.get("winner", -1))
@@ -34023,7 +34247,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary) -> void:
 	var reasons: Array = score_data.get("reasons", [])
 	var win_tile = str(score_data.get("win_tile", ""))
 	var self_draw = bool(score_data.get("self_draw", false))
-	var win_detail_viewport := effective_viewport_size()
+	var win_detail_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 
 	# Keep the detail strip above the settlement copy and rank table. The previous
 	# tall strip let its yaku flow extend into the body and ranking rows at 960px.
@@ -44435,10 +44659,11 @@ func refresh_replay_archive_view() -> void:
 	render_replay_archive_list()
 
 
-func replay_archive_row_signature(entry: Dictionary) -> String:
+func replay_archive_row_signature(entry: Dictionary, archive_date_text_snapshot: String = "") -> String:
+	var archive_date_text := archive_date_text_snapshot if archive_date_text_snapshot != "" else replay_archive_date_text(entry)
 	return "%s|%s|%s|%s|%d|%d" % [
 		str(entry.get("archive_id", "")),
-		replay_archive_date_text(entry),
+		archive_date_text,
 		replay_archive_result_label(entry),
 		str(entry.get("replay_digest", "")),
 		1 if bool(entry.get("favorite", false)) else 0,
@@ -44448,7 +44673,8 @@ func replay_archive_row_signature(entry: Dictionary) -> String:
 
 func replay_archive_row_for_entry(entry: Dictionary) -> Control:
 	var archive_id := str(entry.get("archive_id", ""))
-	var signature := replay_archive_row_signature(entry)
+	var archive_date_text_snapshot := replay_archive_date_text(entry)
+	var signature := replay_archive_row_signature(entry, archive_date_text_snapshot)
 	var pooled_value: Variant = replay_archive_row_pool.get(archive_id, null)
 	var pooled: Control = null
 	if pooled_value != null and is_instance_valid(pooled_value):
@@ -44465,7 +44691,7 @@ func replay_archive_row_for_entry(entry: Dictionary) -> Control:
 	if pooled != null and is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
 		pooled.queue_free()
 	replay_archive_row_pool.erase(archive_id)
-	var row := make_replay_archive_row(entry)
+	var row := make_replay_archive_row(entry, archive_date_text_snapshot)
 	row.set_meta("archive_row_signature", signature)
 	replay_archive_row_pool[archive_id] = row
 	return row
@@ -44713,9 +44939,10 @@ func restore_replay_archive_view_state(scroll_value: float, focus_name: String, 
 			focus_named_control("ReplayArchiveSearchInput")
 
 
-func make_replay_archive_row(entry: Dictionary) -> Control:
+func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: String = "") -> Control:
 	var archive_id := str(entry.get("archive_id", ""))
 	var delete_confirming := replay_delete_confirming and replay_delete_target_id == archive_id
+	var archive_viewport_size := effective_viewport_size()
 	var row := Control.new()
 	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
@@ -44729,26 +44956,29 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	row.set_meta("archive_favorite_state", "favorite" if bool(entry.get("favorite", false)) else "normal")
 	row.set_meta("archive_primary_action", "open_verified_replay")
 	row.set_meta("delete_confirmation_lane", "dedicated_secondary_lane" if delete_confirming else "none")
+	row.set_meta("archive_viewport_snapshot", archive_viewport_size)
+	row.set_meta("archive_viewport_snapshot_policy", "one_viewport_snapshot_per_row")
 	mark_ui_optimization(row, "F-613")
 	mark_ui_optimization(row, "F-242")
 	var plate := make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.026, 0.024, 0.44), "ui_button_face_plate")
 	plate.name = "ReplayArchiveRowPlate"
 	row.add_child(plate)
 	var result_label := replay_archive_result_label(entry)
-	var archive_date_text := replay_archive_date_text(entry)
+	var archive_date_text := archive_date_text_snapshot if archive_date_text_snapshot != "" else replay_archive_date_text(entry)
 	var archive_display_date_text := archive_date_text
 	if archive_date_text.length() >= 16 and archive_date_text[4] == "-":
 		archive_display_date_text = archive_date_text.substr(5, 11)
 	row.set_meta("archive_date_text_snapshot", archive_date_text)
 	row.set_meta("archive_display_date_text_snapshot", archive_display_date_text)
 	row.set_meta("archive_date_text_snapshot_policy", "one_date_parse_per_row")
+	row.set_meta("archive_date_build_policy", "shared_precomputed_date" if archive_date_text_snapshot != "" else "one_date_parse_in_row")
 	var archive_context := "归档：" + archive_display_date_text
 	var primary := make_label(row, archive_display_date_text, 11, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
 	apply_rect(primary, rect_full(0.035, 0.040, 0.520, 0.260))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
-	fit_label_font_size(primary, maxf(96.0, effective_viewport_size().x * 0.430), 11, 9)
+	fit_label_font_size(primary, maxf(96.0, archive_viewport_size.x * 0.430), 11, 9)
 	primary.set_meta("measured_column_policy", "date_and_result_columns_keep_trailing_gutter")
 	primary.tooltip_text = archive_date_text
 	set_ui_full_text(primary, archive_date_text, "回放日期")
@@ -44757,7 +44987,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(result, rect_full(0.520, 0.040, 0.965, 0.260))
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(result)
-	fit_label_font_size(result, maxf(120.0, effective_viewport_size().x * 0.380), 11, 9)
+	fit_label_font_size(result, maxf(120.0, archive_viewport_size.x * 0.380), 11, 9)
 	result.tooltip_text = result_label
 	set_ui_full_text(result, result_label, "回放结果")
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
@@ -44768,7 +44998,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	set_ui_full_text(secondary, str(entry.get("rule_variant", "")) + " · " + str(entry.get("replay_digest", "")).to_upper(), "回放规则与摘要")
 	var action_top := 0.455 if delete_confirming else 0.435
 	var action_bottom := 0.970
-	var compact_archive_actions := ui_is_compact()
+	var compact_archive_actions := archive_viewport_size.x <= 1100.0 or archive_viewport_size.y <= 560.0
 	# The archive scrollbar reserves a 44px touch lane. Compact rows therefore
 	# use four 44px targets in the remaining content lane instead of letting the
 	# fourth target drift underneath that scrollbar.
@@ -50289,8 +50519,8 @@ func game_table_pixel_size() -> Vector2:
 	game_table_cached_size = table_size
 	return table_size
 
-func table_outer_rect_for_viewport() -> Rect2:
-	var viewport := effective_viewport_size()
+func table_outer_rect_for_viewport(viewport_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
+	var viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	if viewport.x < 1600.0:
 		return TABLE_OUTER_RECT
 	# Scale the authored table by aspect ratio on wide desktop viewports while
@@ -50319,10 +50549,10 @@ func effective_viewport_size() -> Vector2:
 	return viewport_size
 
 
-func ui_layout_density() -> String:
+func ui_layout_density(viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
 	# Keep responsive decisions discrete so text, touch targets, and authored
 	# plates change together instead of drifting at arbitrary window widths.
-	var viewport := effective_viewport_size()
+	var viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	if viewport.x <= 1100.0 or viewport.y <= 560.0:
 		return "compact"
 	if viewport.x >= 1600.0:
@@ -50968,9 +51198,10 @@ func hand_tray_text() -> String:
 		var wall_count := get_wall_count()
 		if wall_is_critical(wall_count):
 			return "牌墙将尽 · 余%d · 谨慎出牌" % wall_count
-		if wall_is_low(wall_count) and not player_ai_assist_enabled():
+		var hand_ai_assist_enabled := player_ai_assist_enabled()
+		if wall_is_low(wall_count) and not hand_ai_assist_enabled:
 			return "牌墙偏少 · 余%d · 点击手牌出牌" % wall_count
-		if player_ai_assist_enabled():
+		if hand_ai_assist_enabled:
 			var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
 			if not reports.is_empty():
 				var best: Dictionary = reports[0]
@@ -51501,8 +51732,8 @@ func pending_claim_response_summary(action_key: String, visible_label: String) -
 	return "%s · 快捷键%s" % [action_name, pending_claim_shortcut_text([action_key])]
 
 
-func action_intent_rect_for_count(count: int) -> Rect2:
-	var dock_rect = action_dock_rect_for_count(count)
+func action_intent_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
+	var dock_rect = action_dock_rect_for_count(count, viewport_snapshot, content_size_snapshot)
 	var left = max(0.580, dock_rect.position.x)
 	if has_pending_claim_window():
 		# The pending dock owns the lower decision lane. Keep its summary above the
@@ -51636,26 +51867,28 @@ func action_button_shortcut_hint(text: String) -> String:
 	return ""
 
 
-func action_dock_rect_for_count(count: int) -> Rect2:
-	var content_width = max(1.0, safe_content_pixel_size().x)
-	var bar_rect = action_bar_layout_rect()
-	var dock_rect = action_bar_dock_layout_rect()
+func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	if has_pending_claim_window():
+		return pending_claim_action_dock_rect_for_count(count, resolved_viewport, resolved_content_size)
+	var content_width := maxf(1.0, resolved_content_size.x)
+	var bar_rect = action_bar_layout_rect(resolved_viewport, resolved_content_size)
+	var dock_rect = action_bar_dock_layout_rect(resolved_viewport, resolved_content_size)
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	if mode == "offline" and has_pending_danger_discard():
 		return dock_rect
-	if has_pending_claim_window():
-		return pending_claim_action_dock_rect_for_count(count)
-	var separation = action_button_separation_for_count(count)
-	var width = action_button_width_for_count(count, separation)
+	var separation = action_button_separation_for_count(count, resolved_viewport)
+	var width = action_button_width_for_count(count, separation, resolved_viewport)
 	var dock_pixels = ended_action_bar_required_width(count) + 24.0 if ended_action_mode else float(count) * width + float(max(0, count - 1) * separation) + 24.0
 	var left = max(dock_rect.position.x, bar_rect.size.x - dock_pixels / content_width)
 	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
 
-func action_bar_layout_rect() -> Rect2:
+func action_bar_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_RECT
 	if has_pending_claim_window():
-		return pending_claim_action_bar_rect_for_count(action_bar_button_count())
+		return pending_claim_action_bar_rect_for_count(action_bar_button_count(), viewport_snapshot, content_size_snapshot)
 	return ACTION_BAR_RECT
 
 func battle_ui_lane_contract() -> Dictionary:
@@ -51694,11 +51927,11 @@ func pending_claim_action_base_rect() -> Rect2:
 func pending_claim_action_dock_base_rect() -> Rect2:
 	return rect_full(0.605, 0.535, 0.995, 0.805)
 
-func pending_claim_action_row_count(count: int) -> int:
+func pending_claim_action_row_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> int:
 	if count <= 0:
 		return 1
 	var response_count = pending_claim_response_count(count)
-	var columns = pending_claim_action_columns(count)
+	var columns = pending_claim_action_columns(count, viewport_snapshot, content_size_snapshot)
 	var response_rows = maxi(1, int(ceil(float(response_count) / float(columns))))
 	# Pass/cancel/voice share one deliberate secondary lane below the response grid.
 	return response_rows + pending_claim_action_tail_count()
@@ -51717,61 +51950,67 @@ func pending_claim_response_count(count: int) -> int:
 	var tail_buttons := pending_claim_tail_button_count()
 	return maxi(1, count - tail_buttons) if count > tail_buttons else 1
 
-func pending_claim_action_columns(count: int) -> int:
+func pending_claim_action_columns(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> int:
 	if count <= 0:
 		return 1
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
 	# Keep pass (and online voice) in a deliberate secondary lane. The response
 	# choices therefore retain a stable scan order instead of letting the last
 	# button drift between rows with Flow capacity.
 	var response_count := pending_claim_response_count(count)
-	if effective_viewport_size().y <= 560.0:
+	if resolved_viewport.y <= 560.0:
 		var compact_rect := pending_claim_action_base_rect()
-		var compact_width := safe_content_pixel_size().x * maxf(0.001, compact_rect.size.x - compact_rect.position.x)
-		var compact_separation := action_button_separation_for_count(count)
+		var compact_width := resolved_content_size.x * maxf(0.001, compact_rect.size.x - compact_rect.position.x)
+		var compact_separation := action_button_separation_for_count(count, resolved_viewport)
 		# The grid may use several columns only when the real compact width can
 		# carry every button's minimum touch target. Never force a column count that
 		# makes GridContainer shrink or clip a response label.
 		var compact_capacity := maxi(1, int(floor((compact_width + float(compact_separation)) / maxf(1.0, float(PENDING_CLAIM_BUTTON_MIN_WIDTH) + float(compact_separation)))))
 		return mini(response_count, compact_capacity)
 	var bar_rect = pending_claim_action_base_rect()
-	var available_width = safe_content_pixel_size().x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
-	var separation = action_button_separation_for_count(count)
-	var width = action_button_width_for_available(count, available_width, separation)
+	var available_width = resolved_content_size.x * maxf(0.001, bar_rect.size.x - bar_rect.position.x)
+	var separation = action_button_separation_for_count(count, resolved_viewport)
+	var width = action_button_width_for_available(count, available_width, separation, resolved_viewport)
 	var capacity = maxi(1, int(floor((available_width + float(separation)) / maxf(1.0, width + float(separation)))))
 	return mini(response_count, maxi(1, capacity))
 
-func pending_claim_response_button_width(count: int, separation: int) -> float:
-	var columns := maxi(1, pending_claim_action_columns(count))
+func pending_claim_response_button_width(count: int, separation: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
+	var columns := maxi(1, pending_claim_action_columns(count, viewport_snapshot, content_size_snapshot))
 	var base_rect := pending_claim_action_base_rect()
-	var available_width := safe_content_pixel_size().x * maxf(0.001, base_rect.size.x - base_rect.position.x)
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	var available_width := resolved_content_size.x * maxf(0.001, base_rect.size.x - base_rect.position.x)
 	var width := floorf((available_width - float(maxi(0, columns - 1) * separation)) / float(columns))
-	width = minf(action_button_max_width_for_viewport(), width)
+	width = minf(action_button_max_width_for_viewport(viewport_snapshot), width)
 	return maxf(float(PENDING_CLAIM_BUTTON_MIN_WIDTH), width)
 
-func pending_claim_action_content_height(count: int) -> float:
-	var rows = pending_claim_action_row_count(count)
+func pending_claim_action_content_height(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
+	var rows = pending_claim_action_row_count(count, viewport_snapshot, content_size_snapshot)
 	var button_height = maxf(44.0, ACTION_BUTTON_HEIGHT)
-	var separation = action_button_separation_for_count(count)
+	var separation = action_button_separation_for_count(count, viewport_snapshot)
 	return float(rows) * button_height + float(maxi(0, rows - 1) * separation)
 
-func pending_claim_action_dock_rect_for_count(count: int) -> Rect2:
+func pending_claim_action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
 	var base_rect = pending_claim_action_dock_base_rect()
-	var content_height = maxf(1.0, safe_content_pixel_size().y)
-	var compact_headroom := 8.0 if effective_viewport_size().y <= 560.0 else 0.0
-	var dock_height = (8.0 + pending_claim_action_content_height(count) + 14.0 + compact_headroom) / content_height
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	var content_height := maxf(1.0, resolved_content_size.y)
+	var compact_headroom := 8.0 if resolved_viewport.y <= 560.0 else 0.0
+	var dock_height = (8.0 + pending_claim_action_content_height(count, resolved_viewport, resolved_content_size) + 14.0 + compact_headroom) / content_height
 	# Keep the dock bottom in its established hand-safe lane, but let taller
 	# response stacks grow upward instead of forcing their containers below it.
-	var compact_min_top: float = 0.46 if effective_viewport_size().y <= 560.0 else 0.30
+	var compact_min_top: float = 0.46 if resolved_viewport.y <= 560.0 else 0.30
 	# On 960x540 the side river ends immediately above this lane. The small
 	# lower reserve prevents the first response row from touching its last tile.
 	var dock_bottom := minf(base_rect.size.y, HAND_TRAY_RECT.position.y - 14.0 / content_height)
 	var top = maxf(compact_min_top, dock_bottom - dock_height)
 	return Rect2(Vector2(base_rect.position.x, top), Vector2(base_rect.size.x, dock_bottom))
 
-func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
-	var dock_rect = pending_claim_action_dock_rect_for_count(count)
+func pending_claim_action_bar_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
+	var dock_rect = pending_claim_action_dock_rect_for_count(count, viewport_snapshot, content_size_snapshot)
 	var base_rect = pending_claim_action_base_rect()
-	var content_height := maxf(1.0, safe_content_pixel_size().y)
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	var content_height := maxf(1.0, resolved_content_size.y)
 	var top_inset := 8.0 / content_height
 	var bottom_inset := 14.0 / content_height
 	return Rect2(
@@ -51779,8 +52018,8 @@ func pending_claim_action_bar_rect_for_count(count: int) -> Rect2:
 		Vector2(dock_rect.size.x, dock_rect.size.y - bottom_inset)
 	)
 
-func battle_table_anchor_root_rect(table_rect: Rect2) -> Rect2:
-	var table_outer := table_outer_rect_for_viewport()
+func battle_table_anchor_root_rect(table_rect: Rect2, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
+	var table_outer := table_outer_rect_for_viewport(viewport_snapshot)
 	var outer_width := maxf(0.001, table_outer.size.x - table_outer.position.x)
 	var outer_height := maxf(0.001, table_outer.size.y - table_outer.position.y)
 	var table_left := table_outer.position.x + TABLE_INNER_RECT.position.x * outer_width
@@ -51794,7 +52033,9 @@ func battle_table_anchor_root_rect(table_rect: Rect2) -> Rect2:
 		table_top + table_rect.size.y * table_height
 	)
 
-func advisor_panel_occupancy_snapshot() -> Array[Rect2]:
+func advisor_panel_occupancy_snapshot(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Array[Rect2]:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size_for_margins(resolved_viewport, safe_area_margins)
 	var occupied: Array[Rect2] = []
 	for layout in SEAT_LAYOUTS:
 		var seat_rect: Rect2 = layout[1]
@@ -51803,17 +52044,17 @@ func advisor_panel_occupancy_snapshot() -> Array[Rect2]:
 		var meld_rect: Rect2 = layout[1]
 		occupied.append(Rect2(meld_rect.position, meld_rect.size - meld_rect.position))
 	for layout in WALL_LAYOUTS:
-		var wall_rect := battle_table_anchor_root_rect(Rect2(layout[0], layout[1]))
+		var wall_rect := battle_table_anchor_root_rect(Rect2(layout[0], layout[1]), resolved_viewport)
 		# Reserve a physical gutter around the authored wall lane.
 		occupied.append(Rect2(wall_rect.position, wall_rect.size - wall_rect.position).grow(0.008))
 	for zone in DISCARD_ZONES:
-		var river_rect := battle_table_anchor_root_rect(zone[1])
+		var river_rect := battle_table_anchor_root_rect(zone[1], resolved_viewport)
 		occupied.append(Rect2(river_rect.position, river_rect.size - river_rect.position))
-	var center_rect := battle_table_anchor_root_rect(CENTER_PANEL_RECT)
+	var center_rect := battle_table_anchor_root_rect(CENTER_PANEL_RECT, resolved_viewport)
 	occupied.append(Rect2(center_rect.position, center_rect.size - center_rect.position))
 	occupied.append(Rect2(TOP_HUD_RECT.position, TOP_HUD_RECT.size - TOP_HUD_RECT.position))
 	occupied.append(Rect2(HAND_TRAY_RECT.position, HAND_TRAY_RECT.size - HAND_TRAY_RECT.position))
-	var action_rect := action_bar_dock_layout_rect()
+	var action_rect := action_bar_dock_layout_rect(resolved_viewport, resolved_content_size)
 	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
 	occupied.append(Rect2(CHAT_ACTION_BUTTON_RECT.position, CHAT_ACTION_BUTTON_RECT.size - CHAT_ACTION_BUTTON_RECT.position))
 	return occupied
@@ -51826,16 +52067,18 @@ func advisor_panel_candidate_is_clear(candidate: Rect2, occupancy_snapshot = nul
 			return false
 	return true
 
-func advisor_panel_layout_rect() -> Rect2:
+func advisor_panel_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
 	# Advisor is a scan surface, not a modal. Prefer a side channel outside the
 	# center console, rivers, seat plaques, and hand tray.
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size_for_margins(resolved_viewport, safe_area_margins)
 	var candidates: Array[Rect2] = [
 		rect_full(0.015, 0.115, 0.350, 0.305),
 		rect_full(0.650, 0.115, 0.985, 0.305),
 		rect_full(0.015, 0.535, 0.350, 0.705),
 		rect_full(0.650, 0.535, 0.985, 0.705),
 	]
-	var occupancy_snapshot := advisor_panel_occupancy_snapshot()
+	var occupancy_snapshot := advisor_panel_occupancy_snapshot(resolved_viewport, resolved_content_size)
 	for candidate in candidates:
 		if advisor_panel_candidate_is_clear(candidate, occupancy_snapshot):
 			return candidate
@@ -51844,14 +52087,15 @@ func advisor_panel_layout_rect() -> Rect2:
 	# the viewport edge and become unreadable.
 	return rect_full(0.015, 0.525, 0.350, 0.805)
 
-func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> Rect2:
+func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
 	# Keep the response context in one predictable upper-left decision lane. The
 	# table ledger is suppressed while a response is pending, leaving this slot
 	# available at every supported viewport without covering the center console.
 	var resolved_size = content_size if content_size.x > 1.0 and content_size.y > 1.0 else safe_content_pixel_size()
 	var safe_width = maxf(1.0, resolved_size.x)
 	var safe_height = maxf(1.0, resolved_size.y)
-	var table_outer := table_outer_rect_for_viewport()
+	var context_viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var table_outer := table_outer_rect_for_viewport(context_viewport_size)
 	var outer_width = maxf(0.001, table_outer.size.x - table_outer.position.x)
 	var outer_height = maxf(0.001, table_outer.size.y - table_outer.position.y)
 	var table_left = table_outer.position.x + TABLE_INNER_RECT.position.x * outer_width
@@ -51859,7 +52103,6 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var table_width = outer_width * maxf(0.001, TABLE_INNER_RECT.size.x - TABLE_INNER_RECT.position.x)
 	var table_height = outer_height * maxf(0.001, TABLE_INNER_RECT.size.y - TABLE_INNER_RECT.position.y)
 	var occupancy_snapshot := pending_claim_context_occupancy_snapshot(table_left, table_top, table_width, table_height, resolved_size)
-	var context_viewport_size := effective_viewport_size()
 	var context_height_px := 64.0 if context_viewport_size.y <= 560.0 else (72.0 if context_viewport_size.y < 900.0 else 84.0)
 	# The compact channel sits under the top HUD at the left edge of the table.
 	# It clears the top river/meld and stays above the left river and side meld.
@@ -51890,7 +52133,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO) -> 
 	var lane_width = maxf(0.12, lane_right - lane_left)
 	var panel_width_px = clampf(safe_width * 0.270, 240.0, 320.0)
 	var panel_width = minf(panel_width_px / safe_width, lane_width)
-	var dock_rect = action_dock_rect_for_count(action_bar_button_count())
+	var dock_rect = action_dock_rect_for_count(action_bar_button_count(), context_viewport_size, resolved_size)
 	var dock_left = dock_rect.position.x
 	var centered_panel_x = (lane_left + lane_right) * 0.5
 	var dock_aligned_panel_x = dock_left - panel_width * 0.5
@@ -51988,14 +52231,14 @@ func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: floa
 			return false
 	return true
 
-func action_bar_dock_layout_rect() -> Rect2:
+func action_bar_dock_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_DOCK_RECT
 	if has_pending_claim_window():
-		return pending_claim_action_dock_rect_for_count(action_bar_button_count())
+		return pending_claim_action_dock_rect_for_count(action_bar_button_count(), viewport_snapshot, content_size_snapshot)
 	return ACTION_BAR_DOCK_RECT
 
-func finalize_action_bar_layout(button_snapshot = null) -> void:
+func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> void:
 	if action_bar == null:
 		return
 	var buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
@@ -52003,26 +52246,31 @@ func finalize_action_bar_layout(button_snapshot = null) -> void:
 	if count <= 0:
 		configure_chat_action_focus_navigation()
 		return
-	var separation = action_button_separation_for_count(count)
+	var layout_viewport_snapshot := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var layout_content_size_snapshot := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	action_bar.set_meta("action_layout_viewport_snapshot", layout_viewport_snapshot)
+	action_bar.set_meta("action_layout_content_size_snapshot", layout_content_size_snapshot)
+	action_bar.set_meta("action_layout_snapshot_policy", "one_viewport_and_content_snapshot_per_layout")
+	var separation = action_button_separation_for_count(count, layout_viewport_snapshot)
 	var compact_claim_mode := has_pending_claim_window()
 	if action_bar is GridContainer:
-		(action_bar as GridContainer).columns = pending_claim_action_columns(count)
+		(action_bar as GridContainer).columns = pending_claim_action_columns(count, layout_viewport_snapshot, layout_content_size_snapshot)
 		action_bar.add_theme_constant_override("h_separation", separation)
 		action_bar.add_theme_constant_override("v_separation", separation)
-		action_bar.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
+		action_bar.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count, layout_viewport_snapshot, layout_content_size_snapshot))
 	elif compact_claim_mode:
 		var response_grid := action_bar.get_node_or_null("PendingClaimResponseGrid") as GridContainer
 		if response_grid != null:
-			response_grid.columns = pending_claim_action_columns(count)
+			response_grid.columns = pending_claim_action_columns(count, layout_viewport_snapshot, layout_content_size_snapshot)
 			response_grid.add_theme_constant_override("h_separation", separation)
 			response_grid.add_theme_constant_override("v_separation", separation)
 		var stack := action_bar as VBoxContainer
 		if stack != null:
 			stack.add_theme_constant_override("separation", separation)
-			stack.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count))
+			stack.custom_minimum_size = Vector2(0.0, pending_claim_action_content_height(count, layout_viewport_snapshot, layout_content_size_snapshot))
 	else:
 		action_bar.add_theme_constant_override("separation", separation)
-	apply_rect(action_bar, action_bar_layout_rect())
+	apply_rect(action_bar, action_bar_layout_rect(layout_viewport_snapshot, layout_content_size_snapshot))
 	if compact_claim_mode:
 		var pending_tail_lane := action_bar.get_node_or_null("PendingClaimSecondaryLane") as Control
 		if pending_tail_lane != null:
@@ -52030,15 +52278,15 @@ func finalize_action_bar_layout(button_snapshot = null) -> void:
 			# to add their own minimum-width slack to the visible lane.
 			pending_tail_lane.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			pending_tail_lane.custom_minimum_size.x = action_bar_pixel_width()
-	if compact_claim_mode and effective_viewport_size().y <= 560.0:
+	if compact_claim_mode and layout_viewport_snapshot.y <= 560.0:
 		# Keep the response stack aligned with the shell. The shell already reserves
 		# its hand-tray gutter, so an extra negative offset would create a false
 		# bottom gap and make the last row look detached from the action surface.
 		action_bar.offset_top = 0.0
 		action_bar.offset_bottom = 0.0
-	var width = action_button_width_for_count(count, separation)
+	var width = action_button_width_for_count(count, separation, layout_viewport_snapshot)
 	var font_size = action_button_font_size(width)
-	var response_width: float = pending_claim_response_button_width(count, separation) if compact_claim_mode else float(width)
+	var response_width: float = pending_claim_response_button_width(count, separation, layout_viewport_snapshot, layout_content_size_snapshot) if compact_claim_mode else float(width)
 	var height = max(44.0, ACTION_BUTTON_HEIGHT) if compact_claim_mode else (ACTION_BUTTON_HEIGHT if width >= ACTION_BUTTON_MIN_TOUCH_WIDTH else 48.0)
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	var ended_widths: Array[float] = []
@@ -52362,13 +52610,14 @@ func online_connection_status_text() -> String:
 func online_connection_status_detail() -> String:
 	return "在线连接状态：%s · %s" % [online_connection_status_text(), online_connection_endpoint_text()]
 
-func action_button_separation_for_count(count: int) -> int:
+func action_button_separation_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> int:
 	if mode == "offline" and has_pending_danger_discard():
 		return 3
 	if has_pending_claim_window():
 		# Keep a small, stable gap; FlowContainer wraps claim choices when the row
 		# cannot fit full-size touch targets.
-		return 1 if effective_viewport_size().y <= 560.0 else 3
+		var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+		return 1 if viewport_size.y <= 560.0 else 3
 	if count <= 5:
 		return 4
 	if count <= 8:
@@ -54146,9 +54395,9 @@ func is_plan_offcut(tile: String, report: Dictionary, original_hand: Array = [],
 		return not WIND_CODES.has(tile)
 	return false
 
-func is_discard_isolated(tile: String, original_hand: Array, original_counts_snapshot: Array = []) -> bool:
+func is_discard_isolated(tile: String, original_hand: Array, original_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> bool:
 	var counts = original_counts_snapshot if not original_counts_snapshot.is_empty() else tile_counts(original_hand)
-	var index = tile_index(tile)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	if index < 0:
 		return false
 	return is_isolated_shape_tile(counts, index)
@@ -54587,26 +54836,29 @@ func is_tile_safe_against_all(tile: String, seat: int, eval_context: Dictionary 
 		cache[cache_key] = result
 	return result
 
-func is_suji_safe_tile(tile: String, seat: int, eval_context: Dictionary = {}) -> bool:
-	if not is_number_tile(tile) or seat < 0 or seat >= players.size():
+func is_suji_safe_tile(tile: String, seat: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> bool:
+	if seat < 0 or seat >= players.size():
+		return false
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	if index < 0 or index >= 27:
 		return false
 	# "筋" is presented as a global safety cue and receives a defense bonus.
 	# Once a table has a clear main threat, a suji from an unrelated player must
 	# not make a tile look safe against that threat.
 	var main_threat = main_threat_opponent(seat, eval_context)
 	if main_threat >= 0:
-		return is_suji_safe_against_opponent(tile, main_threat, eval_context)
+		return is_suji_safe_against_opponent(tile, main_threat, eval_context, index)
 	for other in range(players.size()):
 		if other == seat:
 			continue
 		if players[other]["melds"].size() <= 0 and players[other]["discards"].size() < 6:
 			continue
-		if is_suji_safe_against_opponent(tile, other, eval_context):
+		if is_suji_safe_against_opponent(tile, other, eval_context, index):
 			return true
 	return false
 
-func is_suji_safe_against_opponent(tile: String, opponent: int, eval_context: Dictionary = {}) -> bool:
-	if not is_number_tile(tile) or opponent < 0 or opponent >= players.size():
+func is_suji_safe_against_opponent(tile: String, opponent: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> bool:
+	if opponent < 0 or opponent >= players.size():
 		return false
 	var cache_key := "%d:%s" % [opponent, tile]
 	var cache: Dictionary = {}
@@ -54617,7 +54869,7 @@ func is_suji_safe_against_opponent(tile: String, opponent: int, eval_context: Di
 			if cache.has(cache_key):
 				return bool(cache.get(cache_key, false))
 		eval_context["suji_safe_tiles"] = cache
-	var index = tile_index(tile)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	if index < 0 or index >= 27:
 		return false
 	var rank = index % 9
@@ -54656,27 +54908,33 @@ func suji_anchor_tiles(tile: String) -> Array[String]:
 			result.append("9" + suit)
 	return result
 
-func is_kabe_safe_tile(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> bool:
-	if not is_number_tile(tile) or seat < 0 or seat >= players.size():
+func is_kabe_safe_tile(tile: String, seat: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> bool:
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	if index < 0 or index >= 27 or seat < 0 or seat >= players.size():
 		return false
-	if visible_tile_count_from_counts(tile, visible_counts_snapshot) >= 3:
+	var visible := 0
+	if not visible_counts_snapshot.is_empty() and index < visible_counts_snapshot.size():
+		visible = int(visible_counts_snapshot[index])
+	else:
+		visible = visible_tile_count(tile)
+	if visible >= 3:
 		return false
 	for other in range(players.size()):
 		if other == seat:
 			continue
 		if players[other]["melds"].size() <= 0 and players[other]["discards"].size() < 6:
 			continue
-		if is_kabe_safe_against_opponent(tile, other, visible_counts_snapshot, eval_context):
+		if is_kabe_safe_against_opponent(tile, other, visible_counts_snapshot, eval_context, index):
 			return true
 	return false
 
-func is_kabe_safe_against_opponent(tile: String, opponent: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> bool:
-	if not is_number_tile(tile) or opponent < 0 or opponent >= players.size():
+func is_kabe_safe_against_opponent(tile: String, opponent: int, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> bool:
+	if opponent < 0 or opponent >= players.size():
 		return false
 	# An explicit snapshot may include tiles known only to the acting seat. Keep it
 	# authoritative; the evaluation context's public counts are only the fallback.
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else ai_context_visible_counts(eval_context)
-	var index = tile_index(tile)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	if index < 0 or index >= 27 or index >= visible_counts.size():
 		return false
 	var rank = index % 9
@@ -54699,13 +54957,15 @@ func kabe_wall_tiles(tile: String) -> Array[String]:
 	return result
 
 
-func chi_feed_risk_score(tile: String, seat: int, opponent: int, visible_override: int = -1, eval_context: Dictionary = {}, opponent_discard_count_override: int = -1) -> float:
-	if not can_feed_chi(tile) or opponent < 0 or opponent >= players.size():
+func chi_feed_risk_score(tile: String, seat: int, opponent: int, visible_override: int = -1, eval_context: Dictionary = {}, opponent_discard_count_override: int = -1, tile_index_snapshot: int = -2) -> float:
+	if opponent < 0 or opponent >= players.size():
+		return 0.0
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	if index < 0 or index >= 27:
 		return 0.0
 	var opponent_discard_count := opponent_discard_count_override if opponent_discard_count_override >= 0 else opponent_discard_tile_count(opponent, tile, eval_context)
 	if opponent_discard_count > 0:
 		return 0.0
-	var index = tile_index(tile)
 	var rank = index % 9
 	var score = 7.0
 	if rank >= 2 and rank <= 6:
@@ -54719,7 +54979,7 @@ func chi_feed_risk_score(tile: String, seat: int, opponent: int, visible_overrid
 		score += 1.5
 	elif visible >= 3:
 		score -= 6.0
-	var suit = tile_suit_index(tile)
+	var suit := int(index / 9)
 	var suit_pressure = opponent_suit_plan_threat(opponent, suit, eval_context)
 	score += suit_pressure * 0.42
 	if opponent_meld_count_for_suit(opponent, suit, eval_context) > 0:
@@ -54730,7 +54990,7 @@ func chi_feed_risk_score(tile: String, seat: int, opponent: int, visible_overrid
 		score += 2.5
 	return max(0.0, score)
 
-func meld_feed_risk_score(tile: String, seat: int, opponent: int, visible_override: int = -1, eval_context: Dictionary = {}, opponent_discard_count_override: int = -1) -> float:
+func meld_feed_risk_score(tile: String, seat: int, opponent: int, visible_override: int = -1, eval_context: Dictionary = {}, opponent_discard_count_override: int = -1, tile_index_snapshot: int = -2) -> float:
 	if tile == "" or opponent < 0 or opponent >= players.size() or opponent == seat:
 		return 0.0
 	var opponent_discard_count := opponent_discard_count_override if opponent_discard_count_override >= 0 else opponent_discard_tile_count(opponent, tile, eval_context)
@@ -54749,15 +55009,21 @@ func meld_feed_risk_score(tile: String, seat: int, opponent: int, visible_overri
 		score += 4.0
 	elif visible == 1:
 		score += 1.8
-	if is_number_tile(tile):
-		var suit = tile_suit_index(tile)
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var is_number_tile_value := index >= 0 and index < 27
+	if index < 0:
+		# Preserve the legacy suffix-only classification for malformed direct callers.
+		is_number_tile_value = is_number_tile(tile)
+	if is_number_tile_value:
+		var suit := int(index / 9) if index >= 0 else -1
 		var suit_pressure = opponent_suit_plan_threat(opponent, suit, eval_context)
 		score += suit_pressure * 0.34
 		if opponent_meld_count_for_suit(opponent, suit, eval_context) > 0:
 			score += 3.0
-		if is_middle_number_tile(tile):
+		var rank := index % 9 if index >= 0 else -1
+		if rank >= 2 and rank <= 6:
 			score += 2.5
-	elif is_honor_tile(tile):
+	elif index >= 27:
 		var honor_pressure = opponent_honor_plan_threat(opponent, eval_context)
 		score += honor_pressure * 0.42
 		if opponent_honor_meld_count(opponent, eval_context) > 0:
@@ -54769,27 +55035,35 @@ func meld_feed_risk_score(tile: String, seat: int, opponent: int, visible_overri
 	return max(0.0, score)
 
 
-func single_opponent_deal_in_risk(tile: String, seat: int, opponent: int, visible_override: int = -1, visible_counts_snapshot: Array = []) -> float:
-	return float(single_opponent_deal_in_risk_components(tile, seat, opponent, visible_override, visible_counts_snapshot).get("risk", 0.0))
+func single_opponent_deal_in_risk(tile: String, seat: int, opponent: int, visible_override: int = -1, visible_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> float:
+	return float(single_opponent_deal_in_risk_components(tile, seat, opponent, visible_override, visible_counts_snapshot, {}, tile_index_snapshot).get("risk", 0.0))
 
-func single_opponent_deal_in_risk_components(tile: String, seat: int, opponent: int, visible_override: int = -1, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> Dictionary:
+func single_opponent_deal_in_risk_components(tile: String, seat: int, opponent: int, visible_override: int = -1, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> Dictionary:
 	var result: Dictionary = {"risk": 0.0, "pattern_threat": 0.0}
-	write_single_opponent_deal_in_risk_components(result, tile, seat, opponent, visible_override, visible_counts_snapshot, eval_context)
+	write_single_opponent_deal_in_risk_components(result, tile, seat, opponent, visible_override, visible_counts_snapshot, eval_context, tile_index_snapshot)
 	return result
 
-func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: String, seat: int, opponent: int, visible_override: int = -1, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}) -> void:
+func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: String, seat: int, opponent: int, visible_override: int = -1, visible_counts_snapshot: Array = [], eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> void:
 	result["risk"] = 0.0
 	result["pattern_threat"] = 0.0
 	if tile == "" or seat < 0 or seat >= players.size() or opponent < 0 or opponent >= players.size() or opponent == seat:
 		return
-	if opponent_discard_tile_count(opponent, tile, eval_context) > 0:
+	var tile_index_value := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var lookup_tile := str(TILE_CODES[tile_index_value]) if tile_index_value >= 0 and tile_index_value < TILE_CODES.size() else tile
+	if opponent_discard_tile_count(opponent, lookup_tile, eval_context) > 0:
 		return
 	# Report batches already capture visibility once. Reuse that immutable state
 	# instead of repeatedly traversing every live discard and meld collection.
-	var visible = visible_override if visible_override >= 0 else visible_tile_count_from_counts(tile, visible_counts_snapshot)
+	var visible = visible_override if visible_override >= 0 else visible_tile_count_from_counts(tile, visible_counts_snapshot, tile_index_value)
 	var opponent_state = ai_context_opponent_state(eval_context, opponent)
 	var meld_count = ai_opponent_state_count(opponent_state, opponent, "melds")
 	var discard_count = ai_opponent_state_count(opponent_state, opponent, "discards")
+	var is_number_tile_value := tile_index_value >= 0 and tile_index_value < 27
+	var tile_rank := tile_index_value % 9 if is_number_tile_value else -1
+	var is_middle_number_value := is_number_tile_value and tile_rank >= 2 and tile_rank <= 6
+	var is_terminal_or_honor_value := tile_index_value >= 27 or (is_number_tile_value and (tile_rank == 0 or tile_rank == 8))
+	var is_honor_value := tile_index_value >= 27
+	var can_feed_chi_value := is_number_tile_value
 	var pressure = 2.0 + float(meld_count) * 3.2
 	var readiness = opponent_readiness_score(opponent, eval_context)
 	if visible == 0:
@@ -54798,25 +55072,25 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 		pressure += 2.2
 	elif visible >= 3:
 		pressure -= 4.0
-	if is_middle_number_tile(tile):
+	if is_middle_number_value:
 		pressure += 3.0
-	elif is_terminal_or_honor(tile):
+	elif is_terminal_or_honor_value:
 		pressure -= 1.4
-	if is_honor_tile(tile) and visible == 0:
+	if is_honor_value and visible == 0:
 		pressure += 2.0
-	if opponent == (seat + 1) % 4 and can_feed_chi(tile):
+	if opponent == (seat + 1) % 4 and can_feed_chi_value:
 		pressure += 1.8
 	if discard_count >= 12 or meld_count >= 3:
 		pressure += 2.8
 	if readiness >= 7.0:
-		pressure += readiness * (0.32 if is_terminal_or_honor(tile) else 0.52)
-		if is_middle_number_tile(tile):
+		pressure += readiness * (0.32 if is_terminal_or_honor_value else 0.52)
+		if is_middle_number_value:
 			pressure += readiness * 0.18
-	if is_suji_safe_against_opponent(tile, opponent, eval_context):
+	if is_suji_safe_against_opponent(tile, opponent, eval_context, tile_index_value):
 		pressure -= 8.6
-	elif is_kabe_safe_against_opponent(tile, opponent, visible_counts_snapshot, eval_context):
+	elif is_kabe_safe_against_opponent(tile, opponent, visible_counts_snapshot, eval_context, tile_index_value):
 		pressure -= 5.4
-	var pattern_threat = opponent_pattern_threat_score(opponent, tile, visible, eval_context)
+	var pattern_threat = opponent_pattern_threat_score(opponent, tile, visible, eval_context, tile_index_value)
 	pressure += pattern_threat
 	result["risk"] = max(0.0, pressure)
 	result["pattern_threat"] = pattern_threat
@@ -55032,6 +55306,7 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		if seen.has(tile):
 			continue
 		seen[tile] = true
+		var tile_index_snapshot := tile_index(tile)
 		var safety := ""
 		var risk := 0.0
 		if target_opponent >= 0:
@@ -55041,21 +55316,26 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 				safety = "安"
 			elif opponent_discard_tile_count(target_opponent, tile, eval_context) > 0:
 				safety = "现"
-			elif visible_tile_count_from_counts(tile, known_counts) >= 3:
+			elif visible_tile_count_from_counts(tile, known_counts, tile_index_snapshot) >= 3:
 				safety = "熟"
-			elif is_suji_safe_against_opponent(tile, target_opponent, eval_context):
+			elif is_suji_safe_against_opponent(tile, target_opponent, eval_context, tile_index_snapshot):
 				safety = "筋"
-			elif is_kabe_safe_against_opponent(tile, target_opponent, known_counts, eval_context):
+			elif is_kabe_safe_against_opponent(tile, target_opponent, known_counts, eval_context, tile_index_snapshot):
 				safety = "壁"
 			else:
 				safety = ""
-			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, known_counts, eval_context).get("risk", 0.0))
+			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, known_counts, eval_context, tile_index_snapshot).get("risk", 0.0))
 		else:
 			# The target-opponent branch above fully determines both values; avoid
 			# building the all-opponent safety/risk reports before entering it.
 			safety = tile_safety_label(tile, seat, visible_counts, eval_context)
 			risk = float(tile_risk_vector(tile, seat, visible_counts, eval_context).get("score", 0.0))
 		var score = -risk
+		var is_number_candidate := tile_index_snapshot >= 0 and tile_index_snapshot < 27
+		var candidate_suit := int(tile_index_snapshot / 9) if is_number_candidate else -1
+		var is_honor_candidate := tile_index_snapshot >= 27
+		var candidate_rank := tile_index_snapshot % 9 if is_number_candidate else -1
+		var is_terminal_or_honor_candidate := is_honor_candidate or (is_number_candidate and (candidate_rank == 0 or candidate_rank == 8))
 		if safety == "安":
 			score += 120.0
 		elif safety == "现":
@@ -55066,13 +55346,16 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 			score += 42.0
 		elif safety == "壁":
 			score += 34.0
-		if plan_type == "suit" and tile_suit_index(tile) != plan_suit:
+		if plan_type == "suit" and candidate_suit != plan_suit:
 			score += 16.0
-		if plan_type == "honor" and not is_honor_tile(tile):
+		if plan_type == "honor" and not is_honor_candidate:
 			score += 12.0
-		if is_terminal_or_honor(tile):
+		if is_terminal_or_honor_candidate:
 			score += 4.0
-		var tile_sort = tile_sort_index(tile)
+		# Canonical tile indexes use the same order as tile_sort_order. Reuse the
+		# candidate index for normal tiles; flowers and invalid values retain the
+		# broader sort helper fallback.
+		var tile_sort := tile_index_snapshot if tile_index_snapshot >= 0 else tile_sort_index(tile)
 		var insert_at = best_tiles.size()
 		for i in range(best_tiles.size()):
 			var current_score = float(best_scores[i])
@@ -55147,11 +55430,10 @@ func first_added_gang_tile(seat: int) -> String:
 				break
 		if is_triplet:
 			triplet_tiles[normalized] = true
-	for tile in TILE_CODES:
-		var normalized_tile := str(tile)
-		var index := tile_index_normalized(normalized_tile)
-		if index >= 0 and int(hand_counts[index]) > 0 and triplet_tiles.has(normalized_tile):
-			return tile
+	for index in range(TILE_CODES.size()):
+		var normalized_tile := str(TILE_CODES[index])
+		if int(hand_counts[index]) > 0 and triplet_tiles.has(normalized_tile):
+			return normalized_tile
 	return ""
 
 
@@ -55246,8 +55528,8 @@ func is_middle_number_tile(tile: String) -> bool:
 	var rank = index % 9
 	return rank >= 2 and rank <= 6
 
-func same_suit_pressure(seat: int, tile: String, eval_context: Dictionary = {}) -> bool:
-	var index = tile_index(tile)
+func same_suit_pressure(seat: int, tile: String, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> bool:
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	if index < 0 or index >= 27:
 		return false
 	var suit = index / 9
@@ -55352,12 +55634,12 @@ func visible_tile_count(tile: String) -> int:
 	var counts := visible_tile_counts_shared()
 	return int(counts[index]) if index < counts.size() else 0
 
-func visible_tile_count_from_counts(tile: String, visible_counts_snapshot: Array = []) -> int:
+func visible_tile_count_from_counts(tile: String, visible_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> int:
 	if visible_counts_snapshot.is_empty():
 		return visible_tile_count(tile)
 	if not tile_metadata_ready:
 		setup_tile_order()
-	var index := int(tile_order.get(normalize_tile_code(tile), -1))
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else int(tile_order.get(normalize_tile_code(tile), -1))
 	if index < 0 or index >= visible_counts_snapshot.size():
 		return 0
 	return int(visible_counts_snapshot[index])

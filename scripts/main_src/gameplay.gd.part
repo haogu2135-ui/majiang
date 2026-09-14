@@ -290,9 +290,10 @@ func _on_game_render_delay_timeout(timer: Timer) -> void:
 func should_yield_before_ai_discard() -> bool:
 	return game_render_queued
 
-func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}) -> String:
+func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_threat_reports: Dictionary = {}, discard_snapshot: Dictionary = {}, viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
 	if seat < 0 or seat >= players.size():
 		return ""
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var snapshot_current_seat := int(discard_snapshot.get("current_seat", -1)) if not discard_snapshot.is_empty() else -1
 	var current_seat_snapshot := snapshot_current_seat if snapshot_current_seat >= 0 else get_current_seat()
 	var snapshot_discard_seat := int(discard_snapshot.get("seat", -1)) if not discard_snapshot.is_empty() else -1
@@ -317,7 +318,7 @@ func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_t
 		str(seat),
 		str(rect),
 		side,
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_margins),
 		mode,
 		str(current_seat_snapshot),
@@ -349,8 +350,8 @@ func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_t
 	]
 	return "|".join(signature_parts)
 
-func battle_top_hud_identity_signature() -> String:
-	var viewport_size := effective_viewport_size()
+func battle_top_hud_identity_signature(viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var compact_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	var wall_count := get_wall_count()
 	var wall_total := display_wall_total()
@@ -460,8 +461,9 @@ func action_chrome_button_signature(button_snapshot = null) -> String:
 			button_parts.append("focused")
 	return "|".join(button_parts)
 
-func battle_action_chrome_identity_signature(button_snapshot = null, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1) -> String:
-	var viewport_size := effective_viewport_size()
+func battle_action_chrome_identity_signature(button_snapshot = null, pending_claim_snapshot: int = -1, pending_danger_snapshot: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
 	var buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
 	var count := action_bar_button_count(buttons)
 	var disconnected := mode == "online_game" and online_game_disconnected()
@@ -492,8 +494,8 @@ func battle_action_chrome_identity_signature(button_snapshot = null, pending_cla
 		str(danger_confirm_mode),
 		str(ended_action_mode),
 		str(has_intent),
-		str(action_dock_rect_for_count(count)),
-		str(action_intent_rect_for_count(count)) if has_intent else "",
+		str(action_dock_rect_for_count(count, viewport_size, content_size)),
+		str(action_intent_rect_for_count(count, viewport_size, content_size)) if has_intent else "",
 		action_intent_text(count) if has_intent else "",
 		str(action_intent_color()) if has_intent else "",
 		action_intent_icon_name() if has_intent else "",
@@ -627,19 +629,22 @@ func release_retained_battle_action_bar() -> void:
 	retained_battle_action_bar_state_signature = ""
 
 
-func battle_round_summary_identity_signature() -> String:
+func battle_round_summary_identity_signature(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> String:
 	if mode != "offline" or offline_phase != "ended":
 		return ""
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size_for_margins(resolved_viewport, safe_area_margins)
 	var parts: Array[String] = [
 		mode,
 		offline_phase,
 		round_result_kind,
 		active_rule_variant(),
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_margins),
 		str(safe_area_layout_revision),
 		str(resize_refresh_revision),
-		str(action_bar_dock_layout_rect()),
+		str(ui_layout_density(resolved_viewport)),
+		str(action_bar_dock_layout_rect(resolved_viewport, resolved_content_size)),
 		str(large_text_enabled),
 		str(high_contrast_enabled),
 		str(reduce_motion_enabled),
@@ -756,6 +761,7 @@ func retain_battle_seats_for_render() -> void:
 		return
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
+	var seat_retention_viewport_snapshot := effective_viewport_size()
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
 		var panel := root_layer.get_node_or_null("SeatPanel_%d" % seat) as Control
@@ -764,7 +770,7 @@ func retain_battle_seats_for_render() -> void:
 			continue
 		if panel.is_queued_for_deletion() or shadow.is_queued_for_deletion():
 			continue
-		var identity := battle_seat_identity_signature(seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		var identity := battle_seat_identity_signature(seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, {}, seat_retention_viewport_snapshot)
 		if identity == "" or str(panel.get_meta("seat_identity_signature", "")) != identity or str(shadow.get_meta("seat_identity_signature", "")) != identity:
 			continue
 		root_layer.remove_child(panel)
@@ -964,7 +970,8 @@ func retain_battle_hand_tray_for_render() -> void:
 	retained_battle_hand_state_signature = str(tray.get_meta("hand_visual_state_signature", ""))
 	tray.set_meta("retained_for_battle_render", true)
 
-func battle_center_identity_signature() -> String:
+func battle_center_identity_signature(viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	return "%s|%d|%d|%s|%s|%s|%s|%s" % [
 		get_last_discard(),
 		get_last_discard_seat(),
@@ -972,7 +979,7 @@ func battle_center_identity_signature() -> String:
 		str(get_current_seat()),
 		"overlay" if (chat_panel_open or advisor_detail_open or has_pending_claim_window()) else "plain",
 		mode,
-		str(effective_viewport_size()),
+		str(resolved_viewport),
 		str(safe_area_margins),
 	]
 
@@ -1428,7 +1435,10 @@ func release_retained_battle_wall_feedback() -> void:
 	retained_battle_wall_remaining_badge_signature = ""
 
 
-func battle_advisor_identity_signature() -> String:
+func battle_advisor_identity_signature(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO, layout_rect_snapshot: Rect2 = Rect2()) -> String:
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size_for_margins(resolved_viewport, safe_area_margins)
+	var resolved_layout_rect := layout_rect_snapshot if layout_rect_snapshot.size.x > 0.001 and layout_rect_snapshot.size.y > 0.001 else advisor_panel_layout_rect(resolved_viewport, resolved_content_size)
 	var player_state_parts: Array[String] = []
 	for seat in range(mini(4, players.size())):
 		var player: Dictionary = players[seat]
@@ -1438,10 +1448,10 @@ func battle_advisor_identity_signature() -> String:
 	return "%s|%s|%s|%d|%d|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s|%s" % [
 		mode,
 		offline_phase,
-		str(advisor_panel_layout_rect()),
+			str(resolved_layout_rect),
 		safe_area_layout_revision,
 		resize_refresh_revision,
-		str(effective_viewport_size()),
+			str(resolved_viewport),
 		str(safe_area_margins),
 		str(large_text_enabled),
 		str(high_contrast_enabled),
@@ -1889,8 +1899,11 @@ func render_game(state_changed: bool = false) -> void:
 	draw_discards(table)
 
 	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat(), "current_seat": render_current_seat}
+	var battle_seat_viewport_snapshot := effective_viewport_size()
+	root_layer.set_meta("seat_viewport_snapshot", battle_seat_viewport_snapshot)
+	root_layer.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_battle_draw")
 	for seat_layout in SEAT_LAYOUTS:
-		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot)
+		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot, battle_seat_viewport_snapshot)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
 	draw_melds(root_layer)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
@@ -1937,6 +1950,7 @@ func update_ai_assistance_async() -> void:
 	offline_ai_assistance_queued = false
 	if mode != "offline" or not can_self_discard():
 		return
+	var ai_assist_enabled_snapshot := player_ai_assist_enabled()
 	var evaluation_revision := ai_state_revision
 	var evaluation_generation := ui_page_generation
 	var evaluation_hand_signature := hand_identity_fingerprint(get_self_hand())
@@ -1951,7 +1965,7 @@ func update_ai_assistance_async() -> void:
 	var seat_threat_context: Dictionary = shared_evaluation_context
 	if seat_threat_context.is_empty():
 		seat_threat_context = make_ai_evaluation_context(0, evaluation_visible_counts)
-	var next_seat_threat_reports := render_seat_threat_reports(0, seat_threat_context) if player_ai_assist_enabled() else {}
+	var next_seat_threat_reports := render_seat_threat_reports(0, seat_threat_context) if ai_assist_enabled_snapshot else {}
 	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline":
 		# The deferred evaluator no longer describes the mounted table. Do not
 		# partially commit hand and threat results. State renders increment the
@@ -1970,7 +1984,7 @@ func update_ai_assistance_async() -> void:
 
 	# Commit both AI lanes from the same immutable table snapshot. This prevents a
 	# hand badge from becoming visible one frame before its seat threat reports.
-	if player_ai_assist_enabled():
+	if ai_assist_enabled_snapshot:
 		update_seat_threats_display(next_seat_threat_reports)
 	if not current_human_advice.is_empty():
 		update_hand_ai_hints()
@@ -2162,6 +2176,9 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	seat_threat_revisions = next_revisions
 	# SeatPanel 的尺寸和朝向由 SEAT_LAYOUTS 决定，重绘这些局部面板比整局
 	# render_game 更安全，也不会重新触发 AI 辅助 deferred 回调。
+	var seat_refresh_viewport_snapshot := effective_viewport_size()
+	root_layer.set_meta("seat_viewport_snapshot", seat_refresh_viewport_snapshot)
+	root_layer.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_refresh")
 	var changed_seats: Array[int] = []
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
@@ -2184,7 +2201,7 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 			kill_screen_tweens_for_subtree(old_shadow)
 			root_layer.remove_child(old_shadow)
 			old_shadow.queue_free()
-		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports)
+		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, {}, seat_refresh_viewport_snapshot)
 		var new_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var new_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
 		if new_panel != null and old_panel != null and is_instance_valid(old_panel):
@@ -5067,13 +5084,13 @@ func forced_discard_risk_text(report: Dictionary) -> String:
 		return discard_safety_text({"safety_label": safety, "risk_label": risk_label(float(report.get("forced_discard_risk", 0.0)))})
 	return "风险%s" % risk_label(float(report.get("forced_discard_risk", 0.0)))
 
-func discard_reason_label(tile: String, original_hand: Array, report: Dictionary, original_counts_snapshot: Array = []) -> String:
+func discard_reason_label(tile: String, original_hand: Array, report: Dictionary, original_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> String:
 	var safety = str(report.get("safety_label", ""))
 	if safety != "":
 		return "防守" + discard_safety_short_text(report)
 	if is_plan_offcut(tile, report, original_hand, original_counts_snapshot):
 		return "保路线"
-	if is_discard_isolated(tile, original_hand, original_counts_snapshot):
+	if is_discard_isolated(tile, original_hand, original_counts_snapshot, tile_index_snapshot):
 		return "切孤张"
 	if int(report.get("shanten", 8)) <= 0 and float(report.get("wait_value", 0.0)) > 0.0:
 		return "成听牌"

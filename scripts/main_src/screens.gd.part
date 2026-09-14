@@ -6880,10 +6880,11 @@ func refresh_replay_archive_view() -> void:
 	render_replay_archive_list()
 
 
-func replay_archive_row_signature(entry: Dictionary) -> String:
+func replay_archive_row_signature(entry: Dictionary, archive_date_text_snapshot: String = "") -> String:
+	var archive_date_text := archive_date_text_snapshot if archive_date_text_snapshot != "" else replay_archive_date_text(entry)
 	return "%s|%s|%s|%s|%d|%d" % [
 		str(entry.get("archive_id", "")),
-		replay_archive_date_text(entry),
+		archive_date_text,
 		replay_archive_result_label(entry),
 		str(entry.get("replay_digest", "")),
 		1 if bool(entry.get("favorite", false)) else 0,
@@ -6893,7 +6894,8 @@ func replay_archive_row_signature(entry: Dictionary) -> String:
 
 func replay_archive_row_for_entry(entry: Dictionary) -> Control:
 	var archive_id := str(entry.get("archive_id", ""))
-	var signature := replay_archive_row_signature(entry)
+	var archive_date_text_snapshot := replay_archive_date_text(entry)
+	var signature := replay_archive_row_signature(entry, archive_date_text_snapshot)
 	var pooled_value: Variant = replay_archive_row_pool.get(archive_id, null)
 	var pooled: Control = null
 	if pooled_value != null and is_instance_valid(pooled_value):
@@ -6910,7 +6912,7 @@ func replay_archive_row_for_entry(entry: Dictionary) -> Control:
 	if pooled != null and is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
 		pooled.queue_free()
 	replay_archive_row_pool.erase(archive_id)
-	var row := make_replay_archive_row(entry)
+	var row := make_replay_archive_row(entry, archive_date_text_snapshot)
 	row.set_meta("archive_row_signature", signature)
 	replay_archive_row_pool[archive_id] = row
 	return row
@@ -7158,9 +7160,10 @@ func restore_replay_archive_view_state(scroll_value: float, focus_name: String, 
 			focus_named_control("ReplayArchiveSearchInput")
 
 
-func make_replay_archive_row(entry: Dictionary) -> Control:
+func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: String = "") -> Control:
 	var archive_id := str(entry.get("archive_id", ""))
 	var delete_confirming := replay_delete_confirming and replay_delete_target_id == archive_id
+	var archive_viewport_size := effective_viewport_size()
 	var row := Control.new()
 	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
@@ -7174,26 +7177,29 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	row.set_meta("archive_favorite_state", "favorite" if bool(entry.get("favorite", false)) else "normal")
 	row.set_meta("archive_primary_action", "open_verified_replay")
 	row.set_meta("delete_confirmation_lane", "dedicated_secondary_lane" if delete_confirming else "none")
+	row.set_meta("archive_viewport_snapshot", archive_viewport_size)
+	row.set_meta("archive_viewport_snapshot_policy", "one_viewport_snapshot_per_row")
 	mark_ui_optimization(row, "F-613")
 	mark_ui_optimization(row, "F-242")
 	var plate := make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.026, 0.024, 0.44), "ui_button_face_plate")
 	plate.name = "ReplayArchiveRowPlate"
 	row.add_child(plate)
 	var result_label := replay_archive_result_label(entry)
-	var archive_date_text := replay_archive_date_text(entry)
+	var archive_date_text := archive_date_text_snapshot if archive_date_text_snapshot != "" else replay_archive_date_text(entry)
 	var archive_display_date_text := archive_date_text
 	if archive_date_text.length() >= 16 and archive_date_text[4] == "-":
 		archive_display_date_text = archive_date_text.substr(5, 11)
 	row.set_meta("archive_date_text_snapshot", archive_date_text)
 	row.set_meta("archive_display_date_text_snapshot", archive_display_date_text)
 	row.set_meta("archive_date_text_snapshot_policy", "one_date_parse_per_row")
+	row.set_meta("archive_date_build_policy", "shared_precomputed_date" if archive_date_text_snapshot != "" else "one_date_parse_in_row")
 	var archive_context := "归档：" + archive_display_date_text
 	var primary := make_label(row, archive_display_date_text, 11, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
 	apply_rect(primary, rect_full(0.035, 0.040, 0.520, 0.260))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
-	fit_label_font_size(primary, maxf(96.0, effective_viewport_size().x * 0.430), 11, 9)
+	fit_label_font_size(primary, maxf(96.0, archive_viewport_size.x * 0.430), 11, 9)
 	primary.set_meta("measured_column_policy", "date_and_result_columns_keep_trailing_gutter")
 	primary.tooltip_text = archive_date_text
 	set_ui_full_text(primary, archive_date_text, "回放日期")
@@ -7202,7 +7208,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	apply_rect(result, rect_full(0.520, 0.040, 0.965, 0.260))
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(result)
-	fit_label_font_size(result, maxf(120.0, effective_viewport_size().x * 0.380), 11, 9)
+	fit_label_font_size(result, maxf(120.0, archive_viewport_size.x * 0.380), 11, 9)
 	result.tooltip_text = result_label
 	set_ui_full_text(result, result_label, "回放结果")
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 10, Color(0.70, 0.80, 0.72), false)
@@ -7213,7 +7219,7 @@ func make_replay_archive_row(entry: Dictionary) -> Control:
 	set_ui_full_text(secondary, str(entry.get("rule_variant", "")) + " · " + str(entry.get("replay_digest", "")).to_upper(), "回放规则与摘要")
 	var action_top := 0.455 if delete_confirming else 0.435
 	var action_bottom := 0.970
-	var compact_archive_actions := ui_is_compact()
+	var compact_archive_actions := archive_viewport_size.x <= 1100.0 or archive_viewport_size.y <= 560.0
 	# The archive scrollbar reserves a 44px touch lane. Compact rows therefore
 	# use four 44px targets in the remaining content lane instead of letting the
 	# fourth target drift underneath that scrollbar.

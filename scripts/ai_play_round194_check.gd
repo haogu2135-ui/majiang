@@ -32,7 +32,7 @@ func run() -> void:
 	scene.show_exit_confirm()
 	var dialog := page_root.get_node_or_null("ExitConfirmOverlay/ExitConfirmDialog") as Control
 	var message := dialog.get_node_or_null("ExitConfirmMessage") as Label if dialog != null else null
-	var continue_button := dialog.get_node_or_null("HBoxContainer/ExitConfirmContinueButton") as Button if dialog != null else null
+	var continue_button := dialog.find_child("ExitConfirmContinueButton", true, false) as Button if dialog != null else null
 	check(dialog != null and dialog.get_meta("viewport_snapshot", Vector2.ZERO) == expected_viewport, "退出确认对话框发布本次绘制的 viewport 快照")
 	check(dialog != null and str(dialog.get_meta("viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_draw", "退出确认对话框声明每次绘制只读取一次 viewport")
 	check(message != null and continue_button != null and message.text != "", "退出确认消息和继续按钮仍完整构建")

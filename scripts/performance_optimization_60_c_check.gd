@@ -2400,7 +2400,7 @@ func run() -> void:
 	scene.show_exit_confirm()
 	var exit_confirm_dialog_194 := exit_confirm_snapshot_root_194.get_node_or_null("ExitConfirmOverlay/ExitConfirmDialog") as Control
 	var exit_confirm_message_194 := exit_confirm_dialog_194.get_node_or_null("ExitConfirmMessage") as Label if exit_confirm_dialog_194 != null else null
-	var exit_continue_button_194 := exit_confirm_dialog_194.get_node_or_null("HBoxContainer/ExitConfirmContinueButton") as Button if exit_confirm_dialog_194 != null else null
+	var exit_continue_button_194 := exit_confirm_dialog_194.find_child("ExitConfirmContinueButton", true, false) as Button if exit_confirm_dialog_194 != null else null
 	check(exit_confirm_dialog_194 != null and exit_confirm_dialog_194.get_meta("viewport_snapshot", Vector2.ZERO) == expected_exit_confirm_viewport_194, "退出确认对话框发布本次绘制的 viewport 快照")
 	check(exit_confirm_dialog_194 != null and str(exit_confirm_dialog_194.get_meta("viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_draw", "退出确认对话框声明每次绘制只读取一次 viewport")
 	check(exit_confirm_message_194 != null and exit_continue_button_194 != null and exit_confirm_message_194.text != "", "退出确认消息和继续按钮仍完整构建")
@@ -2409,6 +2409,995 @@ func run() -> void:
 	exit_confirm_snapshot_root_194.queue_free()
 	scene.clear_screen()
 	scene.root_layer = null
+
+	print("--- DF) replay-archive viewport snapshot reuse ---")
+	var archive_viewport_snapshot_root_195 := Control.new()
+	archive_viewport_snapshot_root_195.name = "ReplayArchiveViewportSnapshotRoot"
+	archive_viewport_snapshot_root_195.size = Vector2(1280.0, 720.0)
+	root.add_child(archive_viewport_snapshot_root_195)
+	scene.root_layer = archive_viewport_snapshot_root_195
+	scene.mode = "replay_import"
+	var expected_archive_viewport_195: Vector2 = scene.effective_viewport_size()
+	var archive_entry_195 := {"archive_id": "snapshot195", "timestamp": 1789000000, "result_kind": "win", "replay_digest": "abc12345", "rule_variant": "standard", "favorite": false}
+	var archive_row_195: Control = scene.make_replay_archive_row(archive_entry_195)
+	archive_viewport_snapshot_root_195.add_child(archive_row_195)
+	var archive_primary_195 := archive_row_195.get_node_or_null("ReplayArchiveRowPrimary") as Label
+	var archive_result_195 := archive_row_195.get_node_or_null("ReplayArchiveRowResult") as Label
+	var archive_open_195 := archive_row_195.find_child("ReplayArchiveOpenButton_snapshot", true, false) as Button
+	check(archive_row_195.get_meta("archive_viewport_snapshot", Vector2.ZERO) == expected_archive_viewport_195, "回放归档行发布本次绘制的 viewport 快照")
+	check(str(archive_row_195.get_meta("archive_viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_row", "回放归档行声明每行只读取一次 viewport")
+	check(archive_primary_195 != null and archive_result_195 != null and archive_open_195 != null and archive_primary_195.text != "" and archive_result_195.text != "", "归档日期、结果和操作仍完整构建")
+	scene.large_text_enabled = true
+	check(archive_row_195.get_meta("archive_viewport_snapshot", Vector2.ZERO) == expected_archive_viewport_195, "后续阅读状态不会改写已完成的归档 viewport 快照")
+	archive_viewport_snapshot_root_195.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DG) AI evaluation visible-count state-key reuse ---")
+	scene.mode = "offline"
+	var visible_counts_196: Array = scene.visible_tile_counts_shared()
+	var live_visible_state_key_196: String = scene.visible_tile_counts_cache_key
+	var eval_context_196: Dictionary = scene.make_ai_evaluation_context(0)
+	check(eval_context_196.get("visible_counts") == visible_counts_196, "AI 上下文仍复用共享的可见牌快照")
+	check(str(eval_context_196.get("visible_state_cache_key", "")) == live_visible_state_key_196, "无参 AI 上下文复用已发布的可见牌状态键")
+	check(str(eval_context_196.get("visible_state_cache_key", "")) == scene.visible_tile_counts_cache_key, "复用后的状态键仍与可见牌缓存保持一致")
+	var explicit_eval_context_196: Dictionary = scene.make_ai_evaluation_context(0, visible_counts_196.duplicate(false))
+	check(str(explicit_eval_context_196.get("visible_state_cache_key", "")) == live_visible_state_key_196, "显式可见牌快照保留实时状态键回退")
+	check(explicit_eval_context_196.get("visible_counts") != null and explicit_eval_context_196.get("known_counts") != null, "显式快照上下文仍完整构建已知牌数据")
+
+	print("--- DH) replay-archive parsed-date snapshot reuse ---")
+	var archive_date_build_snapshot_root_197 := Control.new()
+	archive_date_build_snapshot_root_197.name = "ReplayArchiveDateBuildSnapshotRoot"
+	archive_date_build_snapshot_root_197.size = Vector2(1280.0, 720.0)
+	root.add_child(archive_date_build_snapshot_root_197)
+	scene.root_layer = archive_date_build_snapshot_root_197
+	scene.mode = "replay_import"
+	var archive_entry_197 := {"archive_id": "snapshot197", "timestamp": 1789000000, "result_kind": "win", "replay_digest": "abc12345", "rule_variant": "standard", "favorite": false}
+	var expected_archive_date_197: String = scene.replay_archive_date_text(archive_entry_197)
+	var archive_row_197: Control = scene.replay_archive_row_for_entry(archive_entry_197)
+	archive_date_build_snapshot_root_197.add_child(archive_row_197)
+	var archive_primary_197 := archive_row_197.get_node_or_null("ReplayArchiveRowPrimary") as Label
+	check(archive_row_197.get_meta("archive_date_text_snapshot", "") == expected_archive_date_197, "归档行仍发布完整日期快照")
+	check(str(archive_row_197.get_meta("archive_date_build_policy", "")) == "shared_precomputed_date", "归档行构建复用行签名已解析的日期")
+	check(archive_primary_197 != null and archive_primary_197.tooltip_text == expected_archive_date_197 and archive_primary_197.text != "", "共享日期快照仍保持显示和 tooltip 文本")
+	archive_entry_197["timestamp"] = 1790000000
+	check(archive_row_197.get_meta("archive_date_text_snapshot", "") == expected_archive_date_197 and archive_primary_197 != null and archive_primary_197.tooltip_text == expected_archive_date_197, "后续归档数据变化不会改写已完成的日期快照")
+	archive_date_build_snapshot_root_197.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DI) pending-claim layout viewport/content snapshot reuse ---")
+	var pending_layout_snapshot_root_198 := Control.new()
+	pending_layout_snapshot_root_198.name = "PendingClaimLayoutSnapshotRoot"
+	pending_layout_snapshot_root_198.size = Vector2(1280.0, 720.0)
+	root.add_child(pending_layout_snapshot_root_198)
+	scene.root_layer = pending_layout_snapshot_root_198
+	scene.mode = "offline"
+	scene.offline_phase = "pending_claim"
+	scene.offline_pending_claim = {
+		"from_seat": 1,
+		"tile": "3W",
+		"options": ["chi", "peng", "gang", "hu"],
+		"deadline_msec": Time.get_ticks_msec() + 12000,
+	}
+	scene.pending_claim_display_cache_key = ""
+	var pending_layout_count_198 := 20
+	var pending_live_viewport_198: Vector2 = scene.effective_viewport_size()
+	var pending_live_content_198: Vector2 = scene.safe_content_pixel_size()
+	var pending_live_columns_198: int = scene.pending_claim_action_columns(pending_layout_count_198)
+	var pending_live_dock_198: Rect2 = scene.pending_claim_action_dock_rect_for_count(pending_layout_count_198)
+	var pending_compact_viewport_198 := Vector2(960.0, 540.0)
+	var pending_compact_content_198 := Vector2(960.0, 540.0)
+	var pending_compact_columns_198: int = scene.pending_claim_action_columns(pending_layout_count_198, pending_compact_viewport_198, pending_compact_content_198)
+	var pending_compact_rows_198: int = scene.pending_claim_action_row_count(pending_layout_count_198, pending_compact_viewport_198, pending_compact_content_198)
+	var pending_compact_dock_198: Rect2 = scene.pending_claim_action_dock_rect_for_count(pending_layout_count_198, pending_compact_viewport_198, pending_compact_content_198)
+	var pending_compact_bar_198: Rect2 = scene.pending_claim_action_bar_rect_for_count(pending_layout_count_198, pending_compact_viewport_198, pending_compact_content_198)
+	var pending_compact_response_width_198: float = scene.pending_claim_response_button_width(pending_layout_count_198, scene.action_button_separation_for_count(pending_layout_count_198, pending_compact_viewport_198), pending_compact_viewport_198, pending_compact_content_198)
+	var pending_smaller_content_columns_198: int = scene.pending_claim_action_columns(pending_layout_count_198, pending_compact_viewport_198, Vector2(720.0, 400.0))
+	check(pending_live_viewport_198.y > 560.0 and pending_compact_viewport_198.y <= 560.0, "pending action layout covers standard and compact viewport snapshots")
+	check(pending_compact_columns_198 < pending_live_columns_198, "pending action columns consume the supplied viewport snapshot")
+	check(pending_smaller_content_columns_198 < pending_compact_columns_198, "pending action columns consume the supplied content-size snapshot")
+	check(pending_compact_rows_198 > 0 and pending_compact_dock_198 != pending_live_dock_198 and pending_compact_bar_198 != scene.pending_claim_action_bar_rect_for_count(pending_layout_count_198), "pending action dock/bar geometry consume the supplied snapshots")
+	check(pending_compact_response_width_198 >= scene.PENDING_CLAIM_BUTTON_MIN_WIDTH, "pending response width keeps its minimum touch target under supplied snapshots")
+	check(scene.pending_claim_action_columns(pending_layout_count_198, pending_live_viewport_198, pending_live_content_198) == pending_live_columns_198, "pending action layout keeps the live fallback equivalent")
+	pending_layout_snapshot_root_198.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DJ) battle contract content-size snapshot reuse ---")
+	var battle_contract_snapshot_root_199 := Control.new()
+	battle_contract_snapshot_root_199.name = "BattleContractContentSnapshotRoot"
+	battle_contract_snapshot_root_199.size = Vector2(1280.0, 720.0)
+	var battle_contract_hud_title_199 := Label.new()
+	battle_contract_hud_title_199.name = "TopHudTitle"
+	battle_contract_hud_title_199.text = "四川麻将"
+	battle_contract_snapshot_root_199.add_child(battle_contract_hud_title_199)
+	var battle_contract_hud_status_199 := Label.new()
+	battle_contract_hud_status_199.name = "TopHudStatus"
+	battle_contract_hud_status_199.text = "等待响应"
+	battle_contract_snapshot_root_199.add_child(battle_contract_hud_status_199)
+	root.add_child(battle_contract_snapshot_root_199)
+	var expected_battle_contract_content_199: Vector2 = scene.safe_content_pixel_size()
+	scene.register_battle_ui_round_contracts(battle_contract_snapshot_root_199)
+	check(battle_contract_snapshot_root_199.get_meta("battle_ui_content_size_snapshot", Vector2.ZERO) == expected_battle_contract_content_199, "battle contract registration publishes one content-size snapshot")
+	check(str(battle_contract_snapshot_root_199.get_meta("battle_ui_content_size_snapshot_policy", "")) == "one_content_size_snapshot_per_registration", "battle contract registration declares one content-size read per batch")
+	check(battle_contract_hud_title_199.text != "" and battle_contract_hud_status_199.text != "", "battle HUD title and status remain registered and fitted")
+	scene.large_text_enabled = true
+	check(battle_contract_snapshot_root_199.get_meta("battle_ui_content_size_snapshot", Vector2.ZERO) == expected_battle_contract_content_199, "later accessibility state does not rewrite the completed registration snapshot")
+	battle_contract_snapshot_root_199.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DK) discard river row viewport snapshot reuse ---")
+	var discard_viewport_snapshot_root_200 := Control.new()
+	discard_viewport_snapshot_root_200.name = "DiscardRiverViewportSnapshotRoot"
+	discard_viewport_snapshot_root_200.size = Vector2(1280.0, 720.0)
+	root.add_child(discard_viewport_snapshot_root_200)
+	scene.root_layer = discard_viewport_snapshot_root_200
+	scene.mode = "offline"
+	var discard_river_discards_200: Array = []
+	for _i in range(60):
+		discard_river_discards_200.append("1W")
+	while scene.players.size() < 4:
+		scene.players.append({"discards": []})
+	scene.players[0]["discards"] = discard_river_discards_200
+	scene.last_discard = "1W"
+	scene.last_discard_seat = 0
+	scene.draw_discards(discard_viewport_snapshot_root_200)
+	var expected_discard_viewport_200: Vector2 = scene.effective_viewport_size()
+	check(discard_viewport_snapshot_root_200.get_meta("discard_river_viewport_snapshot", Vector2.ZERO) == expected_discard_viewport_200, "discard river publishes the draw viewport snapshot")
+	check(str(discard_viewport_snapshot_root_200.get_meta("discard_river_viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_draw", "discard river declares one viewport read per draw")
+	var discard_side_zone_200: Rect2 = scene.DISCARD_ZONES[2][1]
+	var discard_probe_table_200 := Vector2(1280.0, 1600.0)
+	var discard_wide_viewport_200 := Vector2(1280.0, 720.0)
+	var discard_compact_viewport_200 := Vector2(960.0, 540.0)
+	var discard_wide_rows_200: int = scene.discard_zone_visible_rows_for_table_size(discard_side_zone_200, 3, discard_probe_table_200, discard_wide_viewport_200)
+	var discard_compact_rows_200: int = scene.discard_zone_visible_rows_for_table_size(discard_side_zone_200, 3, discard_probe_table_200, discard_compact_viewport_200)
+	check(discard_wide_rows_200 == 4 and discard_compact_rows_200 == 3, "explicit viewport snapshots drive side-river row caps")
+	var discard_live_viewport_200: Vector2 = scene.effective_viewport_size()
+	var discard_live_rows_200: int = scene.discard_zone_visible_rows(discard_side_zone_200, 3)
+	var discard_explicit_live_rows_200: int = scene.discard_zone_visible_rows(discard_side_zone_200, 3, discard_live_viewport_200)
+	check(discard_explicit_live_rows_200 == discard_live_rows_200, "viewport-aware row sizing preserves the live fallback result")
+	var saved_discard_viewport_200: Vector2 = discard_viewport_snapshot_root_200.get_meta("discard_river_viewport_snapshot", Vector2.ZERO)
+	scene.large_text_enabled = true
+	check(discard_viewport_snapshot_root_200.get_meta("discard_river_viewport_snapshot", Vector2.ZERO) == saved_discard_viewport_200, "later state changes do not rewrite the completed river viewport snapshot")
+	discard_viewport_snapshot_root_200.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DL) discard river chrome signature viewport snapshot reuse ---")
+	var discard_chrome_snapshot_root_201 := Control.new()
+	discard_chrome_snapshot_root_201.name = "DiscardRiverChromeViewportSnapshotRoot"
+	discard_chrome_snapshot_root_201.size = Vector2(1280.0, 720.0)
+	root.add_child(discard_chrome_snapshot_root_201)
+	scene.root_layer = discard_chrome_snapshot_root_201
+	scene.mode = "offline"
+	while scene.players.size() < 4:
+		scene.players.append({"discards": []})
+	var discard_chrome_discards_201: Array = []
+	for _i in range(20):
+		discard_chrome_discards_201.append("1W")
+	scene.players[0]["discards"] = discard_chrome_discards_201
+	scene.last_discard = "1W"
+	scene.last_discard_seat = 0
+	scene.draw_discards(discard_chrome_snapshot_root_201)
+	var expected_chrome_viewport_201: Vector2 = scene.effective_viewport_size()
+	check(discard_chrome_snapshot_root_201.get_meta("discard_river_viewport_snapshot", Vector2.ZERO) == expected_chrome_viewport_201, "discard river chrome consumes the draw viewport snapshot")
+	var discard_chrome_zone_201: Rect2 = scene.DISCARD_ZONES[0][1]
+	var discard_chrome_live_viewport_201: Vector2 = scene.effective_viewport_size()
+	var discard_chrome_compact_viewport_201 := Vector2(960.0, 540.0)
+	var fallback_art_signature_201: String = scene.discard_river_art_render_signature(0, discard_chrome_zone_201, 20, 0)
+	var explicit_art_signature_201: String = scene.discard_river_art_render_signature(0, discard_chrome_zone_201, 20, 0, discard_chrome_live_viewport_201)
+	var compact_art_signature_201: String = scene.discard_river_art_render_signature(0, discard_chrome_zone_201, 20, 0, discard_chrome_compact_viewport_201)
+	check(explicit_art_signature_201 == fallback_art_signature_201, "river art signature preserves the live fallback result")
+	check(compact_art_signature_201 != fallback_art_signature_201, "river art signature consumes an explicit viewport snapshot")
+	var fallback_owner_signature_201: String = scene.discard_river_owner_overlay_render_signature(0, discard_chrome_zone_201, 20, 0, 16, 16, 8, 2, -1, 0, 0, false, 0)
+	var explicit_owner_signature_201: String = scene.discard_river_owner_overlay_render_signature(0, discard_chrome_zone_201, 20, 0, 16, 16, 8, 2, -1, 0, 0, false, 0, discard_chrome_live_viewport_201)
+	var compact_owner_signature_201: String = scene.discard_river_owner_overlay_render_signature(0, discard_chrome_zone_201, 20, 0, 16, 16, 8, 2, -1, 0, 0, false, 0, discard_chrome_compact_viewport_201)
+	check(explicit_owner_signature_201 == fallback_owner_signature_201, "owner overlay signature preserves the live fallback result")
+	check(compact_owner_signature_201 != fallback_owner_signature_201, "owner overlay signature consumes an explicit viewport snapshot")
+	var saved_chrome_viewport_201: Vector2 = discard_chrome_snapshot_root_201.get_meta("discard_river_viewport_snapshot", Vector2.ZERO)
+	scene.large_text_enabled = true
+	check(discard_chrome_snapshot_root_201.get_meta("discard_river_viewport_snapshot", Vector2.ZERO) == saved_chrome_viewport_201, "later state changes do not rewrite the completed chrome viewport snapshot")
+	discard_chrome_snapshot_root_201.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DM) meld lane signature viewport snapshot reuse ---")
+	var meld_viewport_snapshot_root_202 := Control.new()
+	meld_viewport_snapshot_root_202.name = "MeldViewportSnapshotRoot"
+	meld_viewport_snapshot_root_202.size = Vector2(1280.0, 720.0)
+	root.add_child(meld_viewport_snapshot_root_202)
+	scene.root_layer = meld_viewport_snapshot_root_202
+	scene.mode = "offline"
+	while scene.players.size() < 4:
+		scene.players.append({"discards": [], "melds": []})
+	scene.players[0]["melds"] = [["1W", "1W", "1W"], ["2W", "3W", "4W"]]
+	scene.draw_melds(meld_viewport_snapshot_root_202)
+	var expected_meld_viewport_202: Vector2 = scene.effective_viewport_size()
+	check(meld_viewport_snapshot_root_202.get_meta("meld_viewport_snapshot", Vector2.ZERO) == expected_meld_viewport_202, "meld draw publishes the viewport snapshot")
+	check(str(meld_viewport_snapshot_root_202.get_meta("meld_viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_draw", "meld draw declares one viewport read per draw")
+	var meld_rect_202: Rect2 = scene.seat_meld_rect(0)
+	var meld_content_202: Vector2 = scene.safe_content_pixel_size()
+	var meld_live_viewport_202: Vector2 = scene.effective_viewport_size()
+	var meld_compact_viewport_202 := Vector2(960.0, 540.0)
+	var meld_list_202: Array = scene.players[0]["melds"]
+	var fallback_meld_signature_202: String = scene.meld_lane_render_signature(0, meld_list_202, meld_rect_202, meld_rect_202, 2, 2, 0, 1, false, false, false, meld_content_202)
+	var explicit_meld_signature_202: String = scene.meld_lane_render_signature(0, meld_list_202, meld_rect_202, meld_rect_202, 2, 2, 0, 1, false, false, false, meld_content_202, meld_live_viewport_202)
+	var compact_meld_signature_202: String = scene.meld_lane_render_signature(0, meld_list_202, meld_rect_202, meld_rect_202, 2, 2, 0, 1, false, false, false, meld_content_202, meld_compact_viewport_202)
+	check(explicit_meld_signature_202 == fallback_meld_signature_202, "meld lane signature preserves the live fallback result")
+	check(compact_meld_signature_202 != fallback_meld_signature_202, "meld lane signature consumes an explicit viewport snapshot")
+	var saved_meld_viewport_202: Vector2 = meld_viewport_snapshot_root_202.get_meta("meld_viewport_snapshot", Vector2.ZERO)
+	scene.large_text_enabled = true
+	check(meld_viewport_snapshot_root_202.get_meta("meld_viewport_snapshot", Vector2.ZERO) == saved_meld_viewport_202, "later state changes do not rewrite the completed meld viewport snapshot")
+	meld_viewport_snapshot_root_202.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DN) top HUD identity viewport snapshot reuse ---")
+	var top_hud_viewport_snapshot_root_203 := Control.new()
+	top_hud_viewport_snapshot_root_203.name = "TopHudViewportSnapshotRoot"
+	top_hud_viewport_snapshot_root_203.size = Vector2(1280.0, 720.0)
+	root.add_child(top_hud_viewport_snapshot_root_203)
+	scene.root_layer = top_hud_viewport_snapshot_root_203
+	scene.mode = "offline"
+	while scene.players.size() < 4:
+		scene.players.append({"name": "玩家", "score": 8000, "hand": [], "discards": [], "melds": [], "flowers": 0})
+	var top_hud_live_viewport_203: Vector2 = scene.effective_viewport_size()
+	var top_hud_compact_viewport_203 := Vector2(960.0, 540.0)
+	var fallback_top_hud_signature_203: String = scene.battle_top_hud_identity_signature()
+	var explicit_top_hud_signature_203: String = scene.battle_top_hud_identity_signature(top_hud_live_viewport_203)
+	var compact_top_hud_signature_203: String = scene.battle_top_hud_identity_signature(top_hud_compact_viewport_203)
+	check(explicit_top_hud_signature_203 == fallback_top_hud_signature_203, "top HUD signature preserves the live fallback result")
+	check(compact_top_hud_signature_203 != fallback_top_hud_signature_203, "top HUD signature consumes an explicit viewport snapshot")
+	scene.draw_game_top_hud(top_hud_viewport_snapshot_root_203)
+	var top_hud_203 := top_hud_viewport_snapshot_root_203.get_node_or_null("TopHud3DShell") as Control
+	check(top_hud_203 != null and top_hud_203.get_meta("viewport_snapshot", Vector2.ZERO) == top_hud_live_viewport_203, "top HUD publishes the viewport snapshot used by its signature")
+	check(top_hud_203 != null and str(top_hud_203.get_meta("viewport_snapshot_policy", "")) == "one_snapshot_per_hud_build", "top HUD keeps one viewport snapshot per build")
+	var saved_top_hud_viewport_203: Vector2 = top_hud_203.get_meta("viewport_snapshot", Vector2.ZERO) if top_hud_203 != null else Vector2.ZERO
+	scene.large_text_enabled = true
+	check(top_hud_203 != null and top_hud_203.get_meta("viewport_snapshot", Vector2.ZERO) == saved_top_hud_viewport_203, "later state changes do not rewrite the completed HUD viewport snapshot")
+	top_hud_viewport_snapshot_root_203.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DO) round summary viewport/content snapshot reuse ---")
+	var summary_viewport_snapshot_root_204 := Control.new()
+	summary_viewport_snapshot_root_204.name = "RoundSummaryViewportSnapshotRoot"
+	summary_viewport_snapshot_root_204.size = Vector2(1280.0, 720.0)
+	root.add_child(summary_viewport_snapshot_root_204)
+	scene.root_layer = summary_viewport_snapshot_root_204
+	scene.mode = "offline"
+	scene.offline_phase = "ended"
+	scene.round_result_kind = "win"
+	scene.round_summary = "P0胡五万，2番 1000分。庄家连庄。"
+	scene.last_win_score = {"winner": 0, "fan": 2, "points": 1000, "reasons": ["平和"], "win_tile": "5W", "self_draw": false, "limit_name": ""}
+	scene.offline_last_winner = 0
+	scene.offline_dealer_repeat = true
+	while scene.players.size() < 4:
+		scene.players.append({"name": "玩家", "score": 8000, "hand": [], "discards": [], "melds": [], "flowers": 0})
+	var summary_live_viewport_204: Vector2 = scene.effective_viewport_size()
+	var summary_live_content_204: Vector2 = scene.safe_content_pixel_size()
+	var fallback_summary_signature_204: String = scene.battle_round_summary_identity_signature()
+	var explicit_summary_signature_204: String = scene.battle_round_summary_identity_signature(summary_live_viewport_204, summary_live_content_204)
+	var summary_compact_viewport_204 := Vector2(960.0, 540.0)
+	var summary_compact_content_204 := Vector2(880.0, 500.0)
+	var compact_summary_signature_204: String = scene.battle_round_summary_identity_signature(summary_compact_viewport_204, summary_compact_content_204)
+	check(explicit_summary_signature_204 == fallback_summary_signature_204, "summary signature preserves the live fallback result")
+	check(compact_summary_signature_204 != fallback_summary_signature_204, "summary signature consumes an explicit compact viewport snapshot")
+	check(scene.ui_layout_density(summary_compact_viewport_204) == "compact", "summary signature density accepts the explicit viewport snapshot")
+	check(scene.action_bar_dock_layout_rect(summary_live_viewport_204, summary_live_content_204) == scene.action_bar_dock_layout_rect(), "summary action-dock geometry preserves the live fallback result")
+	scene.draw_round_summary(summary_viewport_snapshot_root_204)
+	var summary_panel_204 := summary_viewport_snapshot_root_204.get_node_or_null("RoundSummaryPanel") as Control
+	var summary_shield_204 := summary_viewport_snapshot_root_204.get_node_or_null("RoundSummaryModalInputShield") as Control
+	check(summary_viewport_snapshot_root_204.get_meta("round_summary_viewport_snapshot", Vector2.ZERO) == summary_live_viewport_204, "summary draw publishes one viewport snapshot")
+	check(summary_viewport_snapshot_root_204.get_meta("round_summary_content_size_snapshot", Vector2.ZERO) == summary_live_content_204, "summary draw publishes one content-size snapshot")
+	check(str(summary_viewport_snapshot_root_204.get_meta("round_summary_snapshot_policy", "")) == "one_viewport_and_content_snapshot_per_draw", "summary draw declares its paired snapshot policy")
+	check(summary_panel_204 != null and summary_panel_204.get_meta("round_summary_viewport_snapshot", Vector2.ZERO) == summary_live_viewport_204 and summary_panel_204.get_meta("round_summary_content_size_snapshot", Vector2.ZERO) == summary_live_content_204, "summary panel retains the draw snapshots")
+	check(summary_shield_204 != null and summary_shield_204.get_meta("round_summary_viewport_snapshot", Vector2.ZERO) == summary_live_viewport_204 and summary_shield_204.get_meta("round_summary_content_size_snapshot", Vector2.ZERO) == summary_live_content_204, "summary input shield retains the draw snapshots")
+	var saved_summary_viewport_204: Vector2 = summary_viewport_snapshot_root_204.get_meta("round_summary_viewport_snapshot", Vector2.ZERO)
+	var saved_summary_content_204: Vector2 = summary_viewport_snapshot_root_204.get_meta("round_summary_content_size_snapshot", Vector2.ZERO)
+	scene.large_text_enabled = true
+	check(summary_viewport_snapshot_root_204.get_meta("round_summary_viewport_snapshot", Vector2.ZERO) == saved_summary_viewport_204 and summary_viewport_snapshot_root_204.get_meta("round_summary_content_size_snapshot", Vector2.ZERO) == saved_summary_content_204, "later state changes do not rewrite the completed summary snapshots")
+	summary_viewport_snapshot_root_204.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DP) center identity viewport snapshot reuse ---")
+	var center_viewport_snapshot_root_205 := Control.new()
+	center_viewport_snapshot_root_205.name = "CenterViewportSnapshotRoot"
+	center_viewport_snapshot_root_205.size = Vector2(1280.0, 720.0)
+	root.add_child(center_viewport_snapshot_root_205)
+	scene.root_layer = center_viewport_snapshot_root_205
+	scene.mode = "offline"
+	scene.offline_phase = "resolving"
+	scene.offline_sim_quiet = true
+	scene.last_discard = ""
+	scene.last_discard_seat = -1
+	while scene.players.size() < 4:
+		scene.players.append({"name": "玩家", "score": 8000, "hand": [], "discards": [], "melds": [], "flowers": 0})
+	var center_live_viewport_205: Vector2 = scene.effective_viewport_size()
+	var fallback_center_signature_205: String = scene.battle_center_identity_signature()
+	var explicit_center_signature_205: String = scene.battle_center_identity_signature(center_live_viewport_205)
+	var compact_center_viewport_205 := Vector2(960.0, 540.0)
+	var compact_center_signature_205: String = scene.battle_center_identity_signature(compact_center_viewport_205)
+	check(explicit_center_signature_205 == fallback_center_signature_205, "center signature preserves the live fallback result")
+	check(compact_center_signature_205 != fallback_center_signature_205, "center signature consumes an explicit compact viewport snapshot")
+	scene.draw_center(center_viewport_snapshot_root_205)
+	var center_205 := center_viewport_snapshot_root_205.get_node_or_null("CenterConsole3DShell") as Control
+	check(center_viewport_snapshot_root_205.get_meta("center_viewport_snapshot", Vector2.ZERO) == center_live_viewport_205, "center draw publishes one viewport snapshot")
+	check(str(center_viewport_snapshot_root_205.get_meta("center_viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_draw", "center draw declares one viewport read per draw")
+	check(center_205 != null and center_205.get_meta("center_viewport_snapshot", Vector2.ZERO) == center_live_viewport_205, "center shell retains the draw viewport snapshot")
+	check(center_205 != null and str(center_205.get_meta("center_viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_draw", "center shell declares the viewport snapshot policy")
+	var saved_center_viewport_205: Vector2 = center_viewport_snapshot_root_205.get_meta("center_viewport_snapshot", Vector2.ZERO)
+	scene.large_text_enabled = true
+	check(center_viewport_snapshot_root_205.get_meta("center_viewport_snapshot", Vector2.ZERO) == saved_center_viewport_205, "later state changes do not rewrite the completed center snapshot")
+	center_viewport_snapshot_root_205.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DQ) seat render viewport snapshot reuse ---")
+	var seat_viewport_snapshot_root_206 := Control.new()
+	seat_viewport_snapshot_root_206.name = "SeatViewportSnapshotRoot"
+	seat_viewport_snapshot_root_206.size = Vector2(1280.0, 720.0)
+	root.add_child(seat_viewport_snapshot_root_206)
+	scene.root_layer = seat_viewport_snapshot_root_206
+	scene.mode = "offline"
+	scene.offline_phase = "resolving"
+	scene.offline_sim_quiet = true
+	while scene.players.size() < 4:
+		scene.players.append({"name": "玩家", "score": 8000, "hand": [], "discards": [], "melds": [], "flowers": 0})
+	var seat_rect_206: Rect2 = scene.SEAT_LAYOUTS[0][1]
+	var seat_side_206 := str(scene.SEAT_LAYOUTS[0][2])
+	var seat_live_viewport_206: Vector2 = scene.effective_viewport_size()
+	var fallback_seat_signature_206: String = scene.battle_seat_identity_signature(0, seat_rect_206, seat_side_206)
+	var explicit_seat_signature_206: String = scene.battle_seat_identity_signature(0, seat_rect_206, seat_side_206, {}, {}, seat_live_viewport_206)
+	var compact_seat_viewport_206 := Vector2(960.0, 540.0)
+	var compact_seat_signature_206: String = scene.battle_seat_identity_signature(0, seat_rect_206, seat_side_206, {}, {}, compact_seat_viewport_206)
+	check(explicit_seat_signature_206 == fallback_seat_signature_206, "seat signature preserves the live fallback result")
+	check(compact_seat_signature_206 != fallback_seat_signature_206, "seat signature consumes an explicit compact viewport snapshot")
+	scene.draw_seat(seat_viewport_snapshot_root_206, 0, seat_rect_206, seat_side_206, {}, {}, seat_live_viewport_206)
+	var seat_panel_206 := seat_viewport_snapshot_root_206.get_node_or_null("SeatPanel_0") as Control
+	var seat_shadow_206 := seat_viewport_snapshot_root_206.get_node_or_null("SeatPanel3DCastShadow_0") as Control
+	check(seat_viewport_snapshot_root_206.get_meta("seat_viewport_snapshot", Vector2.ZERO) == seat_live_viewport_206, "seat draw publishes one viewport snapshot")
+	check(str(seat_viewport_snapshot_root_206.get_meta("seat_viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_seat_draw", "seat draw declares one viewport read per seat")
+	check(seat_panel_206 != null and seat_panel_206.get_meta("seat_viewport_snapshot", Vector2.ZERO) == seat_live_viewport_206, "seat panel retains the draw viewport snapshot")
+	check(seat_shadow_206 != null and seat_shadow_206.get_meta("seat_viewport_snapshot", Vector2.ZERO) == seat_live_viewport_206, "seat shadow retains the draw viewport snapshot")
+	var saved_seat_viewport_206: Vector2 = seat_viewport_snapshot_root_206.get_meta("seat_viewport_snapshot", Vector2.ZERO)
+	scene.large_text_enabled = true
+	check(seat_viewport_snapshot_root_206.get_meta("seat_viewport_snapshot", Vector2.ZERO) == saved_seat_viewport_206, "later state changes do not rewrite the completed seat snapshot")
+	seat_viewport_snapshot_root_206.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DR) win-detail parent viewport snapshot reuse ---")
+	var win_detail_parent_snapshot_root_207 := Control.new()
+	win_detail_parent_snapshot_root_207.name = "WinDetailParentViewportSnapshotRoot"
+	win_detail_parent_snapshot_root_207.size = Vector2(1280.0, 720.0)
+	root.add_child(win_detail_parent_snapshot_root_207)
+	scene.root_layer = win_detail_parent_snapshot_root_207
+	scene.setup_tile_order()
+	scene.players = [
+		{"name": "P0", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P1", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P2", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P3", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+	]
+	scene.mode = "offline"
+	var win_detail_live_viewport_207: Vector2 = scene.effective_viewport_size()
+	var win_detail_score_data_207 := {"winner": 0, "fan": 2, "points": 100, "reasons": ["立直"], "win_tile": "5W", "self_draw": false}
+	scene.draw_win_detail_section(win_detail_parent_snapshot_root_207, win_detail_score_data_207, win_detail_live_viewport_207)
+	var win_detail_panel_207 := win_detail_parent_snapshot_root_207.get_node_or_null("WinDetailPanel") as Control
+	var win_detail_showcase_207 := win_detail_panel_207.get_node_or_null("WinDetailShowcase") as Control if win_detail_panel_207 != null else null
+	check(win_detail_panel_207 != null and win_detail_panel_207.get_meta("viewport_snapshot", Vector2.ZERO) == win_detail_live_viewport_207, "win detail consumes the supplied parent viewport snapshot")
+	check(win_detail_showcase_207 != null and win_detail_showcase_207.get_meta("viewport_snapshot", Vector2.ZERO) == win_detail_live_viewport_207, "win-detail showcase receives the same parent snapshot")
+	win_detail_parent_snapshot_root_207.queue_free()
+	scene.clear_screen()
+
+	print("--- DS) pending-claim nested viewport snapshot reuse ---")
+	scene.setup_tile_order()
+	scene.mode = "offline"
+	scene.offline_phase = "pending_claim"
+	scene.current_seat = 0
+	scene.players = [
+		{"name": "P0", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P1", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P2", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P3", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+	]
+	scene.offline_pending_claim = {"from_seat": 1, "tile": "5W", "options": ["peng"], "chi_choices": [], "snapshot_token": 208}
+	var pending_nested_live_viewport_208: Vector2 = scene.effective_viewport_size()
+	var pending_nested_live_content_208: Vector2 = scene.safe_content_pixel_size()
+	var pending_nested_fallback_rect_208: Rect2 = scene.pending_claim_context_layout_rect(pending_nested_live_content_208)
+	var pending_nested_explicit_rect_208: Rect2 = scene.pending_claim_context_layout_rect(pending_nested_live_content_208, pending_nested_live_viewport_208)
+	var pending_nested_compact_rect_208: Rect2 = scene.pending_claim_context_layout_rect(Vector2(880.0, 500.0), Vector2(960.0, 540.0))
+	check(pending_nested_explicit_rect_208 == pending_nested_fallback_rect_208, "nested pending layout preserves the live fallback geometry")
+	check(pending_nested_compact_rect_208 != pending_nested_fallback_rect_208, "nested pending layout consumes the explicit compact viewport snapshot")
+	var pending_nested_root_208 := Control.new()
+	pending_nested_root_208.name = "PendingClaimNestedViewportSnapshotRoot"
+	pending_nested_root_208.size = Vector2(1280.0, 720.0)
+	root.add_child(pending_nested_root_208)
+	scene.root_layer = pending_nested_root_208
+	scene.draw_pending_claim_illustration(pending_nested_root_208)
+	var pending_nested_panel_208 := pending_nested_root_208.get_node_or_null("PendingClaimIllustration") as Control
+	check(pending_nested_panel_208 != null and pending_nested_panel_208.get_meta("viewport_snapshot", Vector2.ZERO) == pending_nested_live_viewport_208, "pending illustration publishes the draw viewport snapshot")
+	check(pending_nested_panel_208 != null and str(pending_nested_panel_208.get_meta("viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_draw", "pending illustration retains its one-read policy")
+	scene.current_seat = 2
+	check(pending_nested_panel_208 != null and pending_nested_panel_208.get_meta("viewport_snapshot", Vector2.ZERO) == pending_nested_live_viewport_208, "later state changes do not rewrite the pending viewport snapshot")
+	pending_nested_root_208.queue_free()
+	scene.clear_screen()
+	scene.root_layer = null
+
+	print("--- DT) single-opponent risk tile classification snapshot reuse ---")
+	var risk_visibility_210: Array = scene.make_empty_tile_counts()
+	var middle_risk_210: Dictionary = scene.single_opponent_deal_in_risk_components("5W", 0, 1, 0, risk_visibility_210)
+	var terminal_risk_210: Dictionary = scene.single_opponent_deal_in_risk_components("1W", 0, 1, 1, risk_visibility_210)
+	var honor_risk_210: Dictionary = scene.single_opponent_deal_in_risk_components("E", 0, 1, 0, risk_visibility_210)
+	var invalid_risk_210: Dictionary = scene.single_opponent_deal_in_risk_components("ZZ", 0, 1, 0, risk_visibility_210)
+	check(float(middle_risk_210.get("risk", 0.0)) > float(terminal_risk_210.get("risk", 0.0)), "middle-number risk keeps its sequence-feed weighting")
+	check(float(honor_risk_210.get("risk", 0.0)) > float(terminal_risk_210.get("risk", 0.0)), "honor risk keeps its zero-visible weighting")
+	check(float(invalid_risk_210.get("pattern_threat", 0.0)) == 0.0, "invalid tiles keep the legacy zero pattern threat")
+	check(float(invalid_risk_210.get("risk", 0.0)) >= 0.0, "invalid tiles keep a bounded non-negative risk result")
+
+	print("--- DU) opponent pattern-threat tile index snapshot reuse ---")
+	scene.offline_pending_claim = {}
+	scene.players[1]["melds"] = [["1W", "2W", "3W"]]
+	scene.players[1]["discards"] = ["9B"]
+	var pattern_visibility_211: Array = scene.make_empty_tile_counts()
+	var pattern_index_211: int = scene.tile_index("5W")
+	var pattern_visible_211: int = scene.visible_tile_count_from_counts("5W", pattern_visibility_211)
+	var explicit_pattern_211: float = scene.opponent_pattern_threat_score(1, "5W", pattern_visible_211, {}, pattern_index_211)
+	var fallback_pattern_211: float = scene.opponent_pattern_threat_score(1, "5W", pattern_visible_211)
+	check(is_equal_approx(explicit_pattern_211, fallback_pattern_211), "pattern threat preserves its direct fallback with an explicit tile index")
+	var aggregate_pattern_context_211: Dictionary = scene.make_ai_evaluation_context(0, pattern_visibility_211)
+	var aggregate_pattern_211: float = scene.opponent_tile_threat_score("5W", 0, pattern_visibility_211, {}, aggregate_pattern_context_211)
+	check(is_equal_approx(aggregate_pattern_211, explicit_pattern_211), "aggregate opponent threat reuses the single tile index across opponents")
+
+	print("--- DV) added-gang canonical slot scan ---")
+	scene.setup_tile_order()
+	scene.players = [
+		{"name": "P0", "hand": ["9W", "2W"], "discards": [], "melds": [["9W", "9W", "9W"], ["2W", "2W", "2W"]], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P1", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P2", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "P3", "hand": [], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+	]
+	check(scene.first_added_gang_tile(0) == "2W", "added-gang scan keeps canonical tile order")
+	scene.players[0]["hand"] = ["5W"]
+	scene.players[0]["melds"] = [["5M", "5M", "5M"]]
+	check(scene.first_added_gang_tile(0) == "5W", "added-gang scan keeps normalized meld aliases")
+	scene.players[0]["hand"] = ["4W"]
+	scene.players[0]["melds"] = [["4W", "4W", "5W"]]
+	check(scene.first_added_gang_tile(0) == "", "added-gang scan ignores non-triplet melds")
+	scene.players[0]["hand"] = []
+	scene.players[0]["melds"] = [["6W", "6W", "6W"]]
+	check(scene.first_added_gang_tile(0) == "", "added-gang scan ignores triplets absent from the hand")
+	check(scene.first_added_gang_tile(-1) == "" and scene.first_added_gang_tile(4) == "", "added-gang scan keeps invalid-seat behavior")
+
+	print("--- DW) hand-plan canonical tile classification ---")
+	var feature_counts_213: Array = scene.make_empty_tile_counts()
+	var feature_total_213 := 0
+	var expected_simple_213 := 0
+	var expected_terminal_213 := 0
+	var expected_orphan_unique_213 := 0
+	var expected_orphan_tiles_213 := 0
+	var expected_orphan_pair_213 := false
+	for feature_index_213 in range(scene.TILE_CODES.size()):
+		var feature_amount_213 := (feature_index_213 % 4) + 1
+		feature_counts_213[feature_index_213] = feature_amount_213
+		feature_total_213 += feature_amount_213
+		var feature_tile_213: String = str(scene.TILE_CODES[feature_index_213])
+		if scene.is_simple_number_tile(feature_tile_213):
+			expected_simple_213 += feature_amount_213
+		else:
+			expected_terminal_213 += feature_amount_213
+		if scene.is_thirteen_orphans_tile(feature_tile_213):
+			expected_orphan_unique_213 += 1
+			expected_orphan_tiles_213 += feature_amount_213
+			if feature_amount_213 >= 2:
+				expected_orphan_pair_213 = true
+	var feature_report_213: Dictionary = scene.hand_plan_features_from_counts(feature_counts_213, feature_total_213, false)
+	check(int(feature_report_213.get("simple_tiles", -1)) == expected_simple_213, "hand-plan simple-number totals keep canonical classification")
+	check(int(feature_report_213.get("terminal_honor_tiles", -1)) == expected_terminal_213, "hand-plan terminal/honor totals keep canonical classification")
+	check(int(feature_report_213.get("orphan_unique", -1)) == expected_orphan_unique_213, "hand-plan orphan unique totals keep canonical classification")
+	check(int(feature_report_213.get("orphan_tiles", -1)) == expected_orphan_tiles_213, "hand-plan orphan tile totals keep canonical classification")
+	check(bool(feature_report_213.get("orphan_pair", false)) == expected_orphan_pair_213, "hand-plan orphan pair flag keeps canonical classification")
+
+	print("--- DX) shape neighbor snapshot reuse ---")
+	var shape_counts_214: Array = scene.make_empty_tile_counts()
+	shape_counts_214[0] = 1
+	shape_counts_214[4] = 1
+	shape_counts_214[9] = 2
+	shape_counts_214[18] = 1
+	shape_counts_214[27] = 1
+	shape_counts_214[31] = 2
+	var expected_shape_isolated_214 := 0
+	for shape_index_214 in range(scene.TILE_CODES.size()):
+		if scene.is_isolated_shape_tile(shape_counts_214, shape_index_214):
+			expected_shape_isolated_214 += int(shape_counts_214[shape_index_214])
+	var shape_metrics_214: Dictionary = scene.ai_hand_shape_metrics_from_counts(shape_counts_214)
+	var shape_quality_214: Dictionary = shape_metrics_214.get("quality_report", {})
+	check(int(shape_quality_214.get("isolated", -1)) == expected_shape_isolated_214, "shape metrics reuse neighbor checks without changing isolated count")
+	var shape_feature_total_214 := 0
+	for shape_amount_214 in shape_counts_214:
+		shape_feature_total_214 += int(shape_amount_214)
+	var shape_features_214: Dictionary = scene.hand_plan_features_from_counts(shape_counts_214, shape_feature_total_214, true)
+	check(int(shape_features_214.get("shape_isolated", -1)) == expected_shape_isolated_214, "fused plan shape metrics reuse neighbor checks without changing isolated count")
+
+	print("--- DY) hand-tray AI-assist status snapshot reuse ---")
+	scene.mode = "offline"
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.current_seat = 0
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "2T", "3T", "5B", "E"]
+	scene.wall.clear()
+	for _i in range(20):
+		scene.wall.append("1B")
+	scene.ai_assist_enabled = false
+	scene.current_human_advice = []
+	var disabled_tray_text_215: String = scene.hand_tray_text()
+	check(disabled_tray_text_215 == "牌墙偏少 · 余20 · 点击手牌出牌", "disabled AI assistance preserves the low-wall tray status")
+	scene.ai_assist_enabled = true
+	scene.current_human_advice = [{"tile": "1W", "ukeire": 8, "score": 42.0, "safety_label": "安"}]
+	var enabled_tray_text_215: String = scene.hand_tray_text()
+	check(enabled_tray_text_215 != disabled_tray_text_215 and enabled_tray_text_215 != "", "enabled AI assistance preserves the recommendation tray status")
+	scene.wall.clear()
+	for _i in range(6):
+		scene.wall.append("1B")
+	check(scene.hand_tray_text() == "牌墙将尽 · 余6 · 谨慎出牌", "critical wall preserves the hand-tray early return")
+
+	print("--- DZ) deferred AI-assistance enable-state snapshot reuse ---")
+	scene.wall.clear()
+	for _i in range(60):
+		scene.wall.append("1B")
+	scene.offline_sim_quiet = true
+	scene.ai_assist_enabled = true
+	scene.current_human_advice = []
+	scene.current_seat_threat_reports = {}
+	scene.update_ai_assistance_async()
+	check(not scene.current_human_advice.is_empty(), "enabled assistance still commits deferred discard advice")
+	scene.ai_assist_enabled = false
+	scene.current_human_advice = []
+	scene.current_seat_threat_reports = {"sentinel": true}
+	scene.update_ai_assistance_async()
+	check(not scene.current_human_advice.is_empty(), "disabled assistance preserves deferred report calculation")
+	check(bool(scene.current_seat_threat_reports.get("sentinel", false)), "disabled assistance preserves the existing threat display")
+
+	print("--- EA) normal action self-discard and AI-state snapshot reuse ---")
+	scene.offline_sim_quiet = true
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.current_seat = 0
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "2T", "3T", "5B", "E"]
+	scene.ai_assist_enabled = true
+	scene.current_human_advice = [{"tile": "1W", "ukeire": 8, "score": 42.0, "safety_label": "安"}]
+	scene.ai_advice_hand_signature = scene.hand_identity_fingerprint(scene.get_self_hand())
+	var action_snapshot_enabled_root := Control.new()
+	action_snapshot_enabled_root.size = Vector2(1280.0, 720.0)
+	root.add_child(action_snapshot_enabled_root)
+	scene.root_layer = action_snapshot_enabled_root
+	scene.draw_actions(action_snapshot_enabled_root)
+	check(action_snapshot_enabled_root.find_child("RecommendedDiscardButton", true, false) != null, "enabled assistance keeps the recommended action")
+	scene.ai_assist_enabled = false
+	scene.current_human_advice = []
+	scene.ai_render_report_snapshot_ready = false
+	var action_snapshot_disabled_root := Control.new()
+	action_snapshot_disabled_root.size = Vector2(1280.0, 720.0)
+	root.add_child(action_snapshot_disabled_root)
+	scene.root_layer = action_snapshot_disabled_root
+	scene.draw_actions(action_snapshot_disabled_root)
+	check(action_snapshot_disabled_root.find_child("RecommendedDiscardButton", true, false) == null, "disabled assistance removes the recommended action")
+	check(action_snapshot_disabled_root.find_child("OfflineRestartButton", true, false) != null, "disabled assistance preserves the normal restart action")
+	action_snapshot_enabled_root.queue_free()
+	action_snapshot_disabled_root.queue_free()
+
+	print("--- EB) incremental hand-plan canonical tile classification ---")
+	var incremental_counts_218: Array = scene.make_empty_tile_counts()
+	var incremental_total_218 := 0
+	for incremental_index_218 in range(scene.TILE_CODES.size()):
+		var incremental_amount_218 := (incremental_index_218 % 4) + 1
+		incremental_counts_218[incremental_index_218] = incremental_amount_218
+		incremental_total_218 += incremental_amount_218
+	var complete_features_218: Dictionary = scene.hand_plan_features_from_counts(incremental_counts_218, incremental_total_218, false)
+	var added_features_218: Dictionary = {}
+	for incremental_index_218 in range(scene.TILE_CODES.size()):
+		var incremental_amount_218 := int(incremental_counts_218[incremental_index_218])
+		for incremental_previous_218 in range(incremental_amount_218):
+			scene.hand_plan_features_add_tile(added_features_218, incremental_index_218, incremental_previous_218)
+	check(int(added_features_218.get("simple_tiles", -1)) == int(complete_features_218.get("simple_tiles", -2)), "incremental hand-plan simple-number totals preserve canonical classification")
+	check(int(added_features_218.get("terminal_honor_tiles", -1)) == int(complete_features_218.get("terminal_honor_tiles", -2)), "incremental hand-plan terminal/honor totals preserve canonical classification")
+	check(int(added_features_218.get("orphan_unique", -1)) == int(complete_features_218.get("orphan_unique", -2)), "incremental hand-plan orphan unique totals preserve canonical classification")
+	check(int(added_features_218.get("orphan_tiles", -1)) == int(complete_features_218.get("orphan_tiles", -2)), "incremental hand-plan orphan tile totals preserve canonical classification")
+	check(bool(added_features_218.get("orphan_pair", false)) == bool(complete_features_218.get("orphan_pair", true)), "incremental hand-plan orphan pair state preserves canonical classification")
+
+	print("--- EC) feed-risk tile-index snapshot reuse ---")
+	scene.players[1]["melds"] = [["5W", "5W", "5W"]]
+	var feed_visible_219: Array = scene.make_empty_tile_counts()
+	var feed_index_219: int = scene.tile_index("5W")
+	var chi_fallback_219: float = scene.chi_feed_risk_score("5W", 0, 1, 0)
+	var chi_explicit_219: float = scene.chi_feed_risk_score("5W", 0, 1, 0, {}, -1, feed_index_219)
+	check(is_equal_approx(chi_fallback_219, chi_explicit_219), "chi feed risk preserves the direct fallback result")
+	var meld_fallback_219: float = scene.meld_feed_risk_score("5W", 0, 1, 0)
+	var meld_explicit_219: float = scene.meld_feed_risk_score("5W", 0, 1, 0, {}, -1, feed_index_219)
+	check(is_equal_approx(meld_fallback_219, meld_explicit_219), "meld feed risk preserves the direct fallback result")
+	var feed_report_219: Dictionary = scene.discard_feed_risk_report("5W", 0, feed_visible_219)
+	check(feed_report_219.has("score") and feed_report_219.has("details"), "aggregate feed-risk reporting keeps its result structure")
+
+	print("--- ED) suji safety tile-index snapshot reuse ---")
+	scene.players[1]["discards"] = ["1W", "7W"]
+	var suji_index_220: int = scene.tile_index("4W")
+	var suji_fallback_220: bool = scene.is_suji_safe_against_opponent("4W", 1)
+	var suji_explicit_220: bool = scene.is_suji_safe_against_opponent("4W", 1, {}, suji_index_220)
+	check(suji_fallback_220 == suji_explicit_220, "suji safety preserves its direct fallback result")
+	check(scene.is_suji_safe_tile("4M", 0) == suji_fallback_220, "table-level suji safety preserves normalized aliases")
+
+	print("--- EE) kabe safety tile-index snapshot reuse ---")
+	scene.players[1]["discards"] = ["E", "S", "W", "N", "P", "F"]
+	var kabe_visible_221: Array = scene.make_empty_tile_counts()
+	var kabe_index_221: int = scene.tile_index("4W")
+	kabe_visible_221[scene.tile_index("3W")] = 3
+	var kabe_fallback_221: bool = scene.is_kabe_safe_against_opponent("4W", 1, kabe_visible_221)
+	var kabe_explicit_221: bool = scene.is_kabe_safe_against_opponent("4W", 1, kabe_visible_221, {}, kabe_index_221)
+	check(kabe_fallback_221 == kabe_explicit_221, "kabe safety preserves its direct fallback result")
+	check(scene.is_kabe_safe_tile("4M", 0, kabe_visible_221, {}, kabe_index_221) == kabe_fallback_221, "table-level kabe safety preserves normalized aliases")
+	kabe_visible_221[kabe_index_221] = 3
+	check(not scene.is_kabe_safe_tile("4W", 0, kabe_visible_221, {}, kabe_index_221), "visible candidate tiles retain the kabe rejection")
+	check(not scene.is_kabe_safe_against_opponent("ZZ", 1, kabe_visible_221), "invalid kabe tiles retain the legacy rejection")
+
+	print("--- EF) discard-pressure tile-index snapshot reuse ---")
+	scene.players[1]["discards"] = ["1W", "2W", "3W", "E"]
+	var pressure_index_222: int = scene.tile_index("4W")
+	var pressure_fallback_222: bool = scene.same_suit_pressure(1, "4W")
+	var pressure_explicit_222: bool = scene.same_suit_pressure(1, "4W", {}, pressure_index_222)
+	check(pressure_fallback_222 == pressure_explicit_222, "same-suit pressure preserves its direct fallback result")
+	check(scene.same_suit_pressure(1, "4M", {}, pressure_index_222) == pressure_fallback_222, "same-suit pressure preserves normalized aliases")
+	check(not scene.same_suit_pressure(1, "ZZ"), "same-suit pressure keeps invalid-tile behavior")
+	var pressure_visible_222: Array = scene.make_empty_tile_counts()
+	var pressure_score_222: float = scene.discard_pressure_score("4W", 0, pressure_visible_222)
+	check(pressure_score_222 >= 1.2, "discard pressure retains the same-suit contribution")
+
+	print("--- EG) discard-report tile-index snapshot reuse ---")
+	var report_counts_223: Array = scene.tile_counts(["E", "2W", "3W", "4W"])
+	var report_index_223: int = scene.tile_index("E")
+	var report_opening_context_223: Dictionary = {
+		"seat": 1,
+		"discard_report_wall_count": 60,
+		"discard_report_route_focus": 1.0,
+		"discard_report_difficulty": 1,
+	}
+	var report_opening_fallback_223: float = scene.opening_efficiency_adjustment(1, "E", 4, report_counts_223, 0, report_opening_context_223)
+	var report_opening_explicit_223: float = scene.opening_efficiency_adjustment(1, "E", 4, report_counts_223, 0, report_opening_context_223, report_index_223)
+	check(is_equal_approx(report_opening_fallback_223, report_opening_explicit_223), "opening efficiency preserves its explicit tile-index result")
+	var report_post_context_223: Dictionary = {
+		"seat": 1,
+		"discard_report_route_focus": 1.0,
+		"discard_report_difficulty": 1,
+	}
+	var report_post_fallback_223: float = scene.post_meld_route_adjustment(1, "E", 1, report_counts_223, "标准", -1, 2, report_post_context_223)
+	var report_post_explicit_223: float = scene.post_meld_route_adjustment(1, "E", 1, report_counts_223, "标准", -1, 2, report_post_context_223, report_index_223)
+	check(is_equal_approx(report_post_fallback_223, report_post_explicit_223), "post-meld route preserves its explicit tile-index result")
+	check(is_equal_approx(scene.opening_efficiency_adjustment(1, "ZZ", 4, report_counts_223, 0, report_opening_context_223), 0.0), "opening efficiency keeps invalid-tile behavior")
+	check(is_equal_approx(scene.post_meld_route_adjustment(1, "ZZ", 1, report_counts_223, "标准", -1, 2, report_post_context_223), 0.0), "post-meld route keeps invalid-tile behavior")
+
+	print("--- EH) claim tile-index snapshot reuse ---")
+	var claim_index_224: int = scene.tile_index("E")
+	var claim_bonus_fallback_224: float = scene.ai_claim_meld_bonus(1, "peng", "E", {}, 1.0)
+	var claim_bonus_explicit_224: float = scene.ai_claim_meld_bonus(1, "peng", "E", {}, 1.0, claim_index_224)
+	check(is_equal_approx(claim_bonus_fallback_224, claim_bonus_explicit_224), "claim meld bonus preserves its explicit tile-index result")
+	var claim_pressure_fallback_224: Dictionary = scene.ai_open_claim_pressure_report(1, "gang", "E", 3, 3, [], 1, {}, [], [])
+	var claim_pressure_explicit_224: Dictionary = scene.ai_open_claim_pressure_report(1, "gang", "E", 3, 3, [], 1, {}, [], [], claim_index_224)
+	check(bool(claim_pressure_fallback_224.get("decline", false)) == bool(claim_pressure_explicit_224.get("decline", false)), "claim pressure preserves its explicit tile-index decision")
+	check(is_equal_approx(float(claim_pressure_fallback_224.get("risk", 0.0)), float(claim_pressure_explicit_224.get("risk", 0.0))), "claim pressure preserves its explicit tile-index risk")
+	check(is_equal_approx(scene.ai_claim_meld_bonus(1, "peng", "ZZ", {}, 1.0), 34.0), "claim meld bonus keeps invalid-tile fallback behavior")
+
+	print("--- EI) opponent risk tile-index snapshot reuse ---")
+	scene.players[1]["discards"] = ["1W", "7W"]
+	var risk_visible_225: Array = scene.make_empty_tile_counts()
+	var risk_index_225: int = scene.tile_index("4W")
+	var risk_fallback_context_225: Dictionary = scene.make_ai_evaluation_context(0, risk_visible_225)
+	var risk_explicit_context_225: Dictionary = scene.make_ai_evaluation_context(0, risk_visible_225)
+	var risk_fallback_225: Dictionary = scene.single_opponent_deal_in_risk_components("4W", 0, 1, 0, risk_visible_225, risk_fallback_context_225)
+	var risk_explicit_225: Dictionary = scene.single_opponent_deal_in_risk_components("4W", 0, 1, 0, risk_visible_225, risk_explicit_context_225, risk_index_225)
+	check(is_equal_approx(float(risk_fallback_225.get("risk", 0.0)), float(risk_explicit_225.get("risk", 0.0))), "single-opponent risk preserves its explicit tile-index result")
+	check(is_equal_approx(float(risk_fallback_225.get("pattern_threat", 0.0)), float(risk_explicit_225.get("pattern_threat", 0.0))), "single-opponent threat preserves its explicit tile-index result")
+	var risk_vector_225: Dictionary = scene.tile_risk_vector("4W", 0, risk_visible_225, risk_fallback_context_225)
+	check(risk_vector_225.has("score") and risk_vector_225.has("threat") and risk_vector_225.has("visible"), "aggregate risk vector keeps its result structure")
+	var invalid_risk_fallback_225: Dictionary = scene.single_opponent_deal_in_risk_components("ZZ", 0, 1, 0, risk_visible_225)
+	var invalid_risk_explicit_225: Dictionary = scene.single_opponent_deal_in_risk_components("ZZ", 0, 1, 0, risk_visible_225, {}, -1)
+	check(is_equal_approx(float(invalid_risk_fallback_225.get("risk", 0.0)), float(invalid_risk_explicit_225.get("risk", 0.0))), "invalid risk tiles keep the legacy fallback")
+
+	print("--- EJ) added-gang public risk river lookup reuse ---")
+	scene.players[1]["melds"] = [["5W", "5W", "5W"], ["6W", "6W", "6W"], ["7W", "7W", "7W"]]
+	scene.players[1]["discards"] = ["1W", "2W", "3W", "8W", "9W", "E", "S", "W", "N", "P", "F", "C", "4W"]
+	var chankan_discarded_226: Dictionary = scene.added_gang_rob_threat_report(0, "4W")
+	var chankan_discarded_details_226: Array = chankan_discarded_226.get("risk_details", [])
+	var chankan_discarded_seen_226 := false
+	for chankan_detail_226 in chankan_discarded_details_226:
+		if int(chankan_detail_226.get("seat", -1)) == 1:
+			chankan_discarded_seen_226 = true
+			break
+	check(not chankan_discarded_seen_226, "publicly discarded gang tiles remain excluded from chankan risk")
+	check(chankan_discarded_226.has("risk_score") and chankan_discarded_226.has("risk_details"), "added-gang risk keeps its report structure")
+	scene.ai_state_revision += 1
+	scene.players[1]["discards"] = []
+	var chankan_live_226: Dictionary = scene.added_gang_rob_threat_report(0, "4W")
+	check(chankan_live_226.has("risk_score") and chankan_live_226.has("max_risk"), "live public risk keeps aggregate fields after river changes")
+
+	print("--- EK) threat-safe candidate tile-index snapshot reuse ---")
+	scene.players[0]["hand"] = ["1W", "4W", "E", "5T"]
+	scene.players[1]["discards"] = ["1W", "7W", "E"]
+	var safe_visible_227: Array = scene.make_empty_tile_counts()
+	safe_visible_227[scene.tile_index("4W")] = 2
+	var safe_index_227: int = scene.tile_index("4W")
+	var safe_visible_fallback_227: int = scene.visible_tile_count_from_counts("4W", safe_visible_227)
+	var safe_visible_explicit_227: int = scene.visible_tile_count_from_counts("4W", safe_visible_227, safe_index_227)
+	check(safe_visible_fallback_227 == safe_visible_explicit_227, "visible-count lookup preserves the explicit tile-index result")
+	var safe_context_227: Dictionary = scene.make_ai_evaluation_context(0, safe_visible_227)
+	var safe_tiles_227: Array = scene.threat_safe_tile_labels(0, "suit", 0, 3, safe_context_227, 1)
+	check(safe_tiles_227.size() <= 3, "targeted threat-safe candidates keep the requested bound")
+	var invalid_safe_fallback_227: int = scene.visible_tile_count_from_counts("ZZ", safe_visible_227)
+	var invalid_safe_explicit_227: int = scene.visible_tile_count_from_counts("ZZ", safe_visible_227, -1)
+	check(invalid_safe_fallback_227 == invalid_safe_explicit_227, "invalid visible-count tiles keep the legacy fallback")
+
+	print("--- EL) discard-report candidate tile-index reuse ---")
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "S", "W", "N"]
+	var discard_visible_228: Array = scene.make_empty_tile_counts()
+	var discard_index_228: int = scene.tile_index("4W")
+	var discard_simulated_228: Array = scene.players[0]["hand"].duplicate()
+	discard_simulated_228.erase("4W")
+	var discard_simulated_counts_228: Array = scene.tile_counts(discard_simulated_228)
+	var discard_context_228: Dictionary = scene.make_ai_evaluation_context(0, discard_visible_228)
+	var discard_report_228: Dictionary = scene.build_ai_discard_report(0, "4W", discard_simulated_228, 0, discard_visible_228, {}, discard_context_228, discard_simulated_counts_228, [], 3, discard_index_228, 3, {})
+	check(int(discard_report_228.get("tile_index", -1)) == discard_index_228, "discard reports preserve the explicit candidate tile index")
+	check(str(discard_report_228.get("tile", "")) == "4W", "discard reports preserve the candidate tile")
+	var invalid_discard_report_228: Dictionary = scene.build_ai_discard_report(0, "ZZ", ["1W", "2W", "3W"], 0, discard_visible_228, {}, {}, scene.tile_counts(["1W", "2W", "3W"]), [], -1, -1, 3, {})
+	check(int(invalid_discard_report_228.get("tile_index", -2)) == -1, "invalid discard candidates keep the legacy index fallback")
+
+	print("--- EM) claim route extra-meld index reuse ---")
+	var claim_route_counts_229: Array = scene.tile_counts(["1W", "2W", "3W", "4T", "5T", "6T", "7B", "8B", "9B", "E", "S"])
+	var claim_route_tiles_229: Array = ["9B", "9B", "9B"]
+	var claim_route_indexes_229: Array[int] = []
+	for claim_route_tile_229 in claim_route_tiles_229:
+		claim_route_indexes_229.append(scene.tile_index(str(claim_route_tile_229)))
+	var claim_route_fallback_229: Dictionary = scene.plan_report_with_extra_melds(1, claim_route_counts_229, 11, claim_route_tiles_229)
+	var claim_route_explicit_229: Dictionary = scene.plan_report_with_extra_melds(1, claim_route_counts_229, 11, claim_route_tiles_229, [], claim_route_indexes_229)
+	check(str(claim_route_fallback_229.get("label", "")) == str(claim_route_explicit_229.get("label", "")), "claim route labels preserve explicit extra-meld indexes")
+	check(is_equal_approx(float(claim_route_fallback_229.get("score", 0.0)), float(claim_route_explicit_229.get("score", 0.0))), "claim route scores preserve explicit extra-meld indexes")
+	check(is_equal_approx(float(claim_route_fallback_229.get("score_bonus", 0.0)), float(claim_route_explicit_229.get("score_bonus", 0.0))), "claim route bonuses preserve explicit extra-meld indexes")
+	var invalid_claim_route_fallback_229: Dictionary = scene.plan_report_with_extra_melds(1, claim_route_counts_229, 11, ["ZZ"])
+	var invalid_claim_route_explicit_229: Dictionary = scene.plan_report_with_extra_melds(1, claim_route_counts_229, 11, ["ZZ"], [], [-1])
+	check(str(invalid_claim_route_fallback_229.get("label", "")) == str(invalid_claim_route_explicit_229.get("label", "")), "invalid extra-meld tiles keep the legacy route fallback")
+
+	print("--- EN) discard reason tile-index reuse ---")
+	var reason_counts_230: Array = scene.tile_counts(["1W", "2W", "3W", "4T", "5T", "6T", "E"])
+	var reason_index_230: int = scene.tile_index("4W")
+	var reason_isolated_fallback_230: bool = scene.is_discard_isolated("4W", [], reason_counts_230)
+	var reason_isolated_explicit_230: bool = scene.is_discard_isolated("4W", [], reason_counts_230, reason_index_230)
+	check(reason_isolated_fallback_230 == reason_isolated_explicit_230, "isolated-discard detection preserves the explicit tile index")
+	var reason_input_230: Dictionary = {"safety_label": "", "plan_label": "标准", "shanten": 3, "shape_label": "", "wait_value": 0.0}
+	var reason_fallback_230: String = scene.discard_reason_label("4W", [], reason_input_230, reason_counts_230)
+	var reason_explicit_230: String = scene.discard_reason_label("4W", [], reason_input_230, reason_counts_230, reason_index_230)
+	check(reason_fallback_230 == reason_explicit_230, "discard reason text preserves the explicit tile index")
+
+	print("--- EO) threat-safe candidate classification reuse ---")
+	scene.players[0]["hand"] = ["4W", "8W", "E", "5T"]
+	scene.players[1]["discards"] = ["1W", "7W", "E"]
+	var classification_visible_231: Array = scene.make_empty_tile_counts()
+	var classification_context_231: Dictionary = scene.make_ai_evaluation_context(0, classification_visible_231)
+	var classification_suit_231: Array = scene.threat_safe_tile_labels(0, "suit", 0, 4, classification_context_231, 1)
+	var classification_honor_231: Array = scene.threat_safe_tile_labels(0, "honor", -1, 4, classification_context_231, 1)
+	check(classification_suit_231.size() <= 4, "suit threat candidates keep the requested bound")
+	check(classification_honor_231.size() <= 4, "honor threat candidates keep the requested bound")
+	check(classification_suit_231.has(scene.tile_label("4W")), "number candidates retain their suit classification")
+	check(classification_honor_231.has(scene.tile_label("E")), "honor candidates retain their honor classification")
+
+	print("--- EP) threat-safe candidate sort-index reuse ---")
+	for sort_index_232 in range(scene.TILE_CODES.size()):
+		var sort_tile_232 := str(scene.TILE_CODES[sort_index_232])
+		check(scene.tile_index(sort_tile_232) == scene.tile_sort_index(sort_tile_232), "canonical tile sort key matches its captured index")
+	var sort_alias_index_232: int = scene.tile_index("4M")
+	check(sort_alias_index_232 >= 0 and sort_alias_index_232 == scene.tile_sort_index("4M"), "normalized aliases keep the direct sort key")
+	var sort_flower_232: int = scene.tile_sort_index("H1")
+	check(scene.tile_index("H1") < 0 and sort_flower_232 == scene.TILE_CODES.size(), "flower candidates keep the sort fallback")
+	var sort_invalid_232: int = scene.tile_sort_index("ZZ")
+	check(scene.tile_index("ZZ") < 0 and sort_invalid_232 > sort_flower_232, "invalid candidates keep the terminal sort fallback")
+	scene.players[0]["hand"] = ["1W", "4M", "E", "H1", "ZZ"]
+	var sort_context_232: Dictionary = scene.make_ai_evaluation_context(0, scene.make_empty_tile_counts())
+	var sort_labels_first_232: Array = scene.threat_safe_tile_labels(0, "honor", -1, 5, sort_context_232, 1)
+	var sort_labels_second_232: Array = scene.threat_safe_tile_labels(0, "honor", -1, 5, sort_context_232, 1)
+	check(sort_labels_first_232.size() <= 5, "threat candidates retain the requested bound")
+	check(sort_labels_first_232 == sort_labels_second_232, "threat candidate ordering remains deterministic")
+	check(sort_labels_first_232.has(scene.tile_label("4M")) and sort_labels_first_232.has(scene.tile_label("H1")), "canonical aliases and flowers remain visible candidates")
+
+	print("--- EQ) self-gang tile classification snapshot reuse ---")
+	scene.players[0]["hand"] = ["E", "E", "E", "E", "1W", "2W", "3W", "4T", "5T", "6T", "7B", "8B", "9B"]
+	var gang_visible_233: Array = scene.make_empty_tile_counts()
+	var gang_context_233: Dictionary = scene.make_ai_evaluation_context(0, gang_visible_233)
+	var gang_report_233: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", gang_context_233)
+	check(int(gang_report_233.get("tile_index", -2)) == scene.tile_index("E"), "self-gang reports publish the canonical tile index")
+	check(bool(gang_report_233.get("is_honor_tile", false)), "self-gang reports retain honor classification")
+	check(bool(gang_report_233.get("is_terminal_or_honor", false)), "self-gang reports retain terminal/honor classification")
+	var gang_fallback_report_233: Dictionary = gang_report_233.duplicate(true)
+	gang_fallback_report_233.erase("tile_index")
+	gang_fallback_report_233.erase("is_honor_tile")
+	gang_fallback_report_233.erase("is_terminal_or_honor")
+	check(is_equal_approx(scene.ai_self_gang_action_score(gang_report_233), scene.ai_self_gang_action_score(gang_fallback_report_233)), "honor self-gang score preserves the legacy fallback")
+	var gang_invalid_report_233: Dictionary = {"tile": "ZZ", "gang_kind": "concealed"}
+	var gang_invalid_snapshot_233: Dictionary = gang_invalid_report_233.duplicate(true)
+	gang_invalid_snapshot_233["tile_index"] = -1
+	gang_invalid_snapshot_233["is_honor_tile"] = false
+	gang_invalid_snapshot_233["is_terminal_or_honor"] = false
+	check(is_equal_approx(scene.ai_self_gang_action_score(gang_invalid_report_233), scene.ai_self_gang_action_score(gang_invalid_snapshot_233)), "invalid self-gang tiles retain the fallback score")
+
+	print("--- ER) self-gang selector tile-index reuse ---")
+	scene.players[0]["hand"] = ["E", "E", "E", "E", "1W", "2W", "3W", "4T", "5T", "6T", "7B", "8B", "9B"]
+	var selector_visible_234: Array = scene.make_empty_tile_counts()
+	var selector_context_234: Dictionary = scene.make_ai_evaluation_context(0, selector_visible_234)
+	var selector_index_234: int = scene.tile_index("E")
+	var selector_fallback_234: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", selector_context_234)
+	var selector_snapshot_234: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", selector_context_234, selector_index_234)
+	check(int(selector_snapshot_234.get("tile_index", -2)) == selector_index_234, "explicit self-gang index is retained in the report")
+	check(bool(selector_snapshot_234.get("allow", false)) == bool(selector_fallback_234.get("allow", false)) and str(selector_snapshot_234.get("reason", "")) == str(selector_fallback_234.get("reason", "")), "explicit selector index preserves the decision")
+	check(is_equal_approx(float(selector_snapshot_234.get("score", 0.0)), float(selector_fallback_234.get("score", 0.0))), "explicit selector index preserves the score")
+	var selector_invalid_fallback_234: Dictionary = scene.build_ai_self_gang_report(0, "ZZ", "concealed", selector_context_234)
+	var selector_invalid_snapshot_234: Dictionary = scene.build_ai_self_gang_report(0, "ZZ", "concealed", selector_context_234, -1)
+	check(int(selector_invalid_snapshot_234.get("tile_index", -2)) == -1 and bool(selector_invalid_snapshot_234.get("allow", false)) == bool(selector_invalid_fallback_234.get("allow", false)), "invalid explicit index keeps the legacy rejection")
+
+	print("--- ES) self-gang hand-count snapshot reuse ---")
+	scene.players[0]["hand"] = ["E", "E", "E", "E", "1W", "2W", "3W", "4T", "5T", "6T", "7B", "8B", "9B"]
+	var hand_count_visible_235: Array = scene.make_empty_tile_counts()
+	var hand_count_context_235: Dictionary = scene.make_ai_evaluation_context(0, hand_count_visible_235)
+	hand_count_context_235["hand_counts"] = scene.tile_counts(scene.players[0]["hand"])
+	var hand_count_fallback_235: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed")
+	var hand_count_snapshot_235: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", hand_count_context_235)
+	check(bool(hand_count_snapshot_235.get("allow", false)) == bool(hand_count_fallback_235.get("allow", false)) and str(hand_count_snapshot_235.get("reason", "")) == str(hand_count_fallback_235.get("reason", "")), "hand-count snapshot preserves the concealed-gang decision")
+	check(is_equal_approx(float(hand_count_snapshot_235.get("score", 0.0)), float(hand_count_fallback_235.get("score", 0.0))), "hand-count snapshot preserves the concealed-gang score")
+	var hand_count_invalid_context_235: Dictionary = hand_count_context_235.duplicate(true)
+	hand_count_invalid_context_235["hand_counts"] = scene.make_empty_tile_counts()
+	var hand_count_invalid_235: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", hand_count_invalid_context_235)
+	check(not bool(hand_count_invalid_235.get("allow", false)) and str(hand_count_invalid_235.get("reason", "")) == "非法杠", "stale hand-count snapshot keeps the guarded rejection")
+	var hand_count_live_context_235: Dictionary = hand_count_context_235.duplicate(true)
+	hand_count_live_context_235.erase("hand_counts")
+	var hand_count_live_235: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", hand_count_live_context_235)
+	check(bool(hand_count_live_235.get("allow", false)) == bool(hand_count_fallback_235.get("allow", false)), "missing hand-count snapshot keeps the live fallback")
+
+	print("--- ET) self-gang open-meld snapshot reuse ---")
+	scene.players[0]["hand"] = ["E", "E", "E", "E", "1W", "2W", "3W", "4T", "5T", "6T", "7B", "8B", "9B"]
+	scene.players[0]["melds"] = [["1T", "1T", "1T"], ["2T", "2T", "2T"]]
+	var open_meld_visible_236: Array = scene.make_empty_tile_counts()
+	var open_meld_context_236: Dictionary = scene.make_ai_evaluation_context(0, open_meld_visible_236)
+	open_meld_context_236["hand_counts"] = scene.tile_counts(scene.players[0]["hand"])
+	open_meld_context_236["self_gang_open_melds"] = scene.players[0]["melds"].size()
+	var open_meld_fallback_236: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed")
+	var open_meld_snapshot_236: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", open_meld_context_236)
+	check(int(open_meld_context_236.get("self_gang_open_melds", -1)) == 2, "self-gang context publishes the open-meld snapshot")
+	check(int(open_meld_snapshot_236.get("before_shanten", 99)) == int(open_meld_fallback_236.get("before_shanten", -1)) and int(open_meld_snapshot_236.get("after_shanten", 99)) == int(open_meld_fallback_236.get("after_shanten", -1)), "open-meld snapshot preserves self-gang shanten")
+	check(bool(open_meld_snapshot_236.get("allow", false)) == bool(open_meld_fallback_236.get("allow", false)), "open-meld snapshot preserves the decision")
+	check(is_equal_approx(float(open_meld_snapshot_236.get("score", 0.0)), float(open_meld_fallback_236.get("score", 0.0))), "open-meld snapshot preserves the score")
+	var open_meld_live_context_236: Dictionary = open_meld_context_236.duplicate(true)
+	open_meld_live_context_236.erase("self_gang_open_melds")
+	var open_meld_live_236: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", open_meld_live_context_236)
+	check(bool(open_meld_live_236.get("allow", false)) == bool(open_meld_fallback_236.get("allow", false)), "missing open-meld snapshot keeps the live fallback")
+
+	print("--- EU) self-gang added-candidate snapshot reuse ---")
+	scene.players[0]["hand"] = ["4M", "1W", "2W", "3W", "5W", "6W", "7W", "8W", "9W", "E", "S", "W", "N"]
+	scene.players[0]["melds"] = [["4M", "4M", "4M"]]
+	var added_candidate_visible_237: Array = scene.make_empty_tile_counts()
+	var added_candidate_context_237: Dictionary = scene.make_ai_evaluation_context(0, added_candidate_visible_237)
+	added_candidate_context_237["hand_counts"] = scene.tile_counts(scene.players[0]["hand"])
+	added_candidate_context_237["self_gang_open_melds"] = scene.players[0]["melds"].size()
+	added_candidate_context_237["self_gang_added_candidates"] = {"4W": true}
+	var added_candidate_fallback_237: Dictionary = scene.build_ai_self_gang_report(0, "4M", "added")
+	var added_candidate_snapshot_237: Dictionary = scene.build_ai_self_gang_report(0, "4M", "added", added_candidate_context_237, scene.tile_index("4M"))
+	check(bool(added_candidate_snapshot_237.get("allow", false)) == bool(added_candidate_fallback_237.get("allow", false)) and str(added_candidate_snapshot_237.get("reason", "")) == str(added_candidate_fallback_237.get("reason", "")), "added-candidate snapshot preserves the decision")
+	check(is_equal_approx(float(added_candidate_snapshot_237.get("score", 0.0)), float(added_candidate_fallback_237.get("score", 0.0))), "added-candidate snapshot preserves the score")
+	var added_candidate_live_context_237: Dictionary = added_candidate_context_237.duplicate(true)
+	added_candidate_live_context_237.erase("self_gang_added_candidates")
+	var added_candidate_live_237: Dictionary = scene.build_ai_self_gang_report(0, "4M", "added", added_candidate_live_context_237, scene.tile_index("4M"))
+	check(bool(added_candidate_live_237.get("allow", false)) == bool(added_candidate_fallback_237.get("allow", false)), "missing added-candidate snapshot keeps the live fallback")
+	var added_candidate_stale_context_237: Dictionary = added_candidate_context_237.duplicate(true)
+	added_candidate_stale_context_237["self_gang_added_candidates"] = {}
+	var added_candidate_stale_237: Dictionary = scene.build_ai_self_gang_report(0, "4M", "added", added_candidate_stale_context_237, scene.tile_index("4M"))
+	check(not bool(added_candidate_stale_237.get("allow", false)) and str(added_candidate_stale_237.get("reason", "")) == "非法杠", "empty added-candidate snapshot remains authoritative")
+	var added_candidate_invalid_237: Dictionary = scene.build_ai_self_gang_report(0, "ZZ", "added", added_candidate_context_237, -1)
+	check(not bool(added_candidate_invalid_237.get("allow", false)) and str(added_candidate_invalid_237.get("reason", "")) == "非法杠", "invalid added-gang candidates keep the guarded rejection")
+
+	print("--- EV) self-gang before-plan label snapshot reuse ---")
+	scene.players[0]["hand"] = ["E", "E", "E", "E", "1W", "2W", "3W", "4T", "5T", "6T", "7B", "8B", "9B"]
+	scene.players[0]["melds"] = []
+	var before_plan_visible_238: Array = scene.make_empty_tile_counts()
+	var before_plan_context_238: Dictionary = scene.make_ai_evaluation_context(0, before_plan_visible_238)
+	before_plan_context_238["hand_counts"] = scene.tile_counts(scene.players[0]["hand"])
+	var before_plan_label_238: String = str(scene.hand_plan_report_for_seat_from_counts(0, before_plan_context_238["hand_counts"], scene.players[0]["hand"].size()).get("label", ""))
+	before_plan_context_238["self_gang_before_plan_label"] = before_plan_label_238
+	var before_plan_fallback_238: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed")
+	var before_plan_snapshot_238: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", before_plan_context_238, scene.tile_index("E"))
+	check(before_plan_label_238 != "", "self-gang context captures the current before-plan label")
+	check(str(before_plan_snapshot_238.get("before_plan_label", "")) == before_plan_label_238 and str(before_plan_snapshot_238.get("before_plan_label", "")) == str(before_plan_fallback_238.get("before_plan_label", "")), "before-plan snapshot preserves the route label")
+	check(bool(before_plan_snapshot_238.get("allow", false)) == bool(before_plan_fallback_238.get("allow", false)) and str(before_plan_snapshot_238.get("reason", "")) == str(before_plan_fallback_238.get("reason", "")), "before-plan snapshot preserves the decision")
+	var before_plan_live_context_238: Dictionary = before_plan_context_238.duplicate(true)
+	before_plan_live_context_238.erase("self_gang_before_plan_label")
+	var before_plan_live_238: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", before_plan_live_context_238, scene.tile_index("E"))
+	check(str(before_plan_live_238.get("before_plan_label", "")) == str(before_plan_fallback_238.get("before_plan_label", "")), "missing before-plan snapshot keeps the live fallback")
+	var before_plan_changed_context_238: Dictionary = before_plan_context_238.duplicate(true)
+	before_plan_changed_context_238["self_gang_before_plan_label"] = "七对"
+	var before_plan_changed_238: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", before_plan_changed_context_238, scene.tile_index("E"))
+	check(str(before_plan_changed_238.get("before_plan_label", "")) == "七对", "explicit before-plan snapshot remains authoritative")
+
+	print("--- EW) self-gang before-shanten snapshot reuse ---")
+	scene.players[0]["hand"] = ["E", "E", "E", "E", "1W", "2W", "3W", "4T", "5T", "6T", "7B", "8B", "9B"]
+	scene.players[0]["melds"] = []
+	var before_shanten_visible_239: Array = scene.make_empty_tile_counts()
+	var before_shanten_counts_239: Array = scene.tile_counts(scene.players[0]["hand"])
+	var before_shanten_expected_239: int = scene.calculate_min_shanten_from_counts(before_shanten_counts_239, 0)
+	var before_shanten_context_239: Dictionary = scene.make_ai_evaluation_context(0, before_shanten_visible_239)
+	before_shanten_context_239["hand_counts"] = before_shanten_counts_239
+	before_shanten_context_239["self_gang_open_melds"] = 0
+	before_shanten_context_239["self_gang_before_shanten"] = before_shanten_expected_239
+	var before_shanten_fallback_239: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed")
+	var before_shanten_snapshot_239: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", before_shanten_context_239, scene.tile_index("E"))
+	check(int(before_shanten_snapshot_239.get("before_shanten", 99)) == before_shanten_expected_239 and int(before_shanten_snapshot_239.get("before_shanten", 99)) == int(before_shanten_fallback_239.get("before_shanten", -1)), "before-shanten snapshot preserves the baseline")
+	check(int(before_shanten_snapshot_239.get("after_shanten", 99)) == int(before_shanten_fallback_239.get("after_shanten", -1)) and bool(before_shanten_snapshot_239.get("allow", false)) == bool(before_shanten_fallback_239.get("allow", false)), "before-shanten snapshot preserves the decision")
+	var before_shanten_live_context_239: Dictionary = before_shanten_context_239.duplicate(true)
+	before_shanten_live_context_239.erase("self_gang_before_shanten")
+	var before_shanten_live_239: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", before_shanten_live_context_239, scene.tile_index("E"))
+	check(int(before_shanten_live_239.get("before_shanten", 99)) == int(before_shanten_fallback_239.get("before_shanten", -1)), "missing before-shanten snapshot keeps the live fallback")
+	var before_shanten_changed_context_239: Dictionary = before_shanten_context_239.duplicate(true)
+	before_shanten_changed_context_239["self_gang_before_shanten"] = before_shanten_expected_239 + 1
+	var before_shanten_changed_239: Dictionary = scene.build_ai_self_gang_report(0, "E", "concealed", before_shanten_changed_context_239, scene.tile_index("E"))
+	check(int(before_shanten_changed_239.get("before_shanten", 99)) == before_shanten_expected_239 + 1, "explicit before-shanten snapshot remains authoritative")
+
+	print("--- EX) discard safety tile-index snapshot reuse ---")
+	scene.players[0]["hand"] = ["4W", "1W", "2W", "3W", "5W", "6W", "7W", "8W", "9W", "E", "S", "W", "N"]
+	scene.players[1]["discards"] = ["1W", "7W"]
+	var safety_visible_240: Array = scene.make_empty_tile_counts()
+	safety_visible_240[scene.tile_index("4W")] = 2
+	var safety_context_240: Dictionary = scene.make_ai_evaluation_context(0, safety_visible_240)
+	var safety_index_240: int = scene.tile_index("4W")
+	var safety_fallback_240: String = scene.tile_safety_label("4W", 0, safety_visible_240, safety_context_240)
+	var safety_snapshot_240: String = scene.tile_safety_label("4M", 0, safety_visible_240, safety_context_240, safety_index_240)
+	check(safety_snapshot_240 == safety_fallback_240, "explicit safety-label index preserves normalized aliases")
+	check(scene.is_suji_safe_tile("4M", 0, safety_context_240, safety_index_240) == scene.is_suji_safe_tile("4W", 0, safety_context_240), "suji safety consumes the explicit tile index")
+	check(scene.is_kabe_safe_tile("4M", 0, safety_visible_240, safety_context_240, safety_index_240) == scene.is_kabe_safe_tile("4W", 0, safety_visible_240, safety_context_240), "kabe safety retains the explicit tile index")
+	var safety_invalid_240: String = scene.tile_safety_label("ZZ", 0, safety_visible_240, safety_context_240, -1)
+	check(safety_invalid_240 == scene.tile_safety_label("ZZ", 0, safety_visible_240, safety_context_240), "invalid safety tiles keep the legacy fallback")
+
+	print("--- EY) discard-pressure tile-index snapshot reuse ---")
+	scene.players[0]["hand"] = ["4W", "1W", "2W", "3W", "5W", "6W", "7W", "8W", "9W", "E", "S", "W", "N"]
+	scene.players[1]["discards"] = ["4W", "5W"]
+	var pressure_visible_241: Array = scene.make_empty_tile_counts()
+	pressure_visible_241[scene.tile_index("4W")] = 2
+	var pressure_context_241: Dictionary = scene.make_ai_evaluation_context(0, pressure_visible_241)
+	var pressure_index_241: int = scene.tile_index("4W")
+	var pressure_fallback_241: float = scene.discard_pressure_score("4W", 0, pressure_visible_241, pressure_context_241)
+	var pressure_explicit_241: float = scene.discard_pressure_score("4M", 0, pressure_visible_241, pressure_context_241, pressure_index_241)
+	check(is_equal_approx(pressure_explicit_241, pressure_fallback_241), "explicit discard-pressure index preserves normalized aliases")
+	var pressure_invalid_241: float = scene.discard_pressure_score("ZZ", 0, pressure_visible_241, pressure_context_241, -1)
+	check(is_equal_approx(pressure_invalid_241, scene.discard_pressure_score("ZZ", 0, pressure_visible_241, pressure_context_241)), "invalid discard-pressure tiles keep the legacy fallback")
+
+	print("--- EZ) feed-risk tile-index snapshot reuse ---")
+	scene.players[1]["melds"] = [["4W", "4W", "4W"]]
+	var feed_visible_242: Array = scene.make_empty_tile_counts()
+	var feed_context_242: Dictionary = scene.make_ai_evaluation_context(0, feed_visible_242)
+	var feed_index_242: int = scene.tile_index("4W")
+	var feed_fallback_242: Dictionary = scene.discard_feed_risk_report("4W", 0, feed_visible_242, feed_context_242)
+	var feed_explicit_242: Dictionary = scene.discard_feed_risk_report("4M", 0, feed_visible_242, feed_context_242, feed_index_242)
+	check(is_equal_approx(float(feed_explicit_242.get("score", 0.0)), float(feed_fallback_242.get("score", 0.0))) and feed_explicit_242.get("details", []) == feed_fallback_242.get("details", []), "explicit feed-risk index preserves the report")
+	var feed_invalid_242: Dictionary = scene.discard_feed_risk_report("ZZ", 0, feed_visible_242, feed_context_242, -1)
+	check(is_equal_approx(float(feed_invalid_242.get("score", 0.0)), float(scene.discard_feed_risk_report("ZZ", 0, feed_visible_242, feed_context_242))), "invalid feed-risk tiles keep the legacy fallback")
+
+	print("--- FA) risk-vector tile-index snapshot reuse ---")
+	var risk_visible_243: Array = scene.make_empty_tile_counts()
+	risk_visible_243[scene.tile_index("4W")] = 2
+	var risk_context_243: Dictionary = scene.make_ai_evaluation_context(0, risk_visible_243)
+	var risk_index_243: int = scene.tile_index("4W")
+	var risk_fallback_243: Dictionary = scene.tile_risk_vector("4W", 0, risk_visible_243, risk_context_243)
+	var risk_explicit_243: Dictionary = scene.tile_risk_vector("4M", 0, risk_visible_243, risk_context_243, risk_index_243)
+	check(is_equal_approx(float(risk_explicit_243.get("score", 0.0)), float(risk_fallback_243.get("score", 0.0))) and is_equal_approx(float(risk_explicit_243.get("threat", 0.0)), float(risk_fallback_243.get("threat", 0.0))), "explicit risk-vector index preserves score and threat")
+	var deal_risk_explicit_243: float = scene.deal_in_risk_score("4M", 0, risk_context_243, risk_visible_243, risk_index_243)
+	var deal_risk_fallback_243: float = scene.deal_in_risk_score("4W", 0, risk_context_243, risk_visible_243)
+	check(is_equal_approx(deal_risk_explicit_243, deal_risk_fallback_243), "deal-in risk forwards the explicit candidate index")
+	var risk_invalid_243: Dictionary = scene.tile_risk_vector("ZZ", 0, risk_visible_243, risk_context_243, -1)
+	check(is_equal_approx(float(risk_invalid_243.get("score", 0.0)), float(scene.tile_risk_vector("ZZ", 0, risk_visible_243, risk_context_243))), "invalid risk-vector tiles keep the legacy fallback")
 
 	scene.queue_free()
 	if failed:
