@@ -2986,16 +2986,19 @@ func advisor_shape_text(report: Dictionary) -> String:
 		parts.append(score_text)
 	return " · ".join(parts)
 
-func advisor_defense_text(seat: int, best: Dictionary = {}) -> String:
+func advisor_defense_text(seat: int, best: Dictionary = {}, report_snapshot: Array = []) -> String:
+	var threat_report: Dictionary = opponent_threat_report(seat)
+	return advisor_defense_text_from_summary(best, report_snapshot, opponent_threat_summary_from_report(threat_report), threat_report)
+
+func advisor_defense_text_from_summary(best: Dictionary = {}, report_snapshot: Array = [], threat_summary: String = "", threat_report_snapshot = null) -> String:
 	var parts: Array[String] = []
 	if not best.is_empty():
 		parts.append(discard_safety_text(best))
-		var safest_hint = safest_discard_hint_text(best, safest_discard_report())
+		var safest_hint = safest_discard_hint_text(best, safest_discard_report([], report_snapshot), threat_report_snapshot)
 		if safest_hint != "":
 			parts.append(safest_hint)
-	var threat = opponent_threat_summary(seat)
-	if threat != "":
-		parts.append(threat)
+	if threat_summary != "":
+		parts.append(threat_summary)
 	if get_last_discard() != "":
 		parts.append("上张 " + tile_label(get_last_discard()))
 	return " · ".join(parts) if not parts.is_empty() else "无明显压力"
@@ -3348,7 +3351,7 @@ func hand_tray_text() -> String:
 			var reports = current_human_advice if not current_human_advice.is_empty() else get_ai_discard_reports(0)
 			if not reports.is_empty():
 				var best: Dictionary = reports[0]
-				var safest = safest_discard_report()
+				var safest = safest_discard_report([], reports)
 				return compact_hand_tray_summary(best, safest)
 		return "点击手牌出牌"
 	if mode == "offline" and offline_phase == "ended":
@@ -3498,7 +3501,7 @@ func advisor_detail_text() -> String:
 		lines.append("推荐理由：%s" % advisor_recommendation_reason_text(best))
 		lines.append("牌形收益：%s" % advisor_value_text(best))
 		lines.append("备选路线：%s" % advisor_options_text(reports, 5))
-		lines.append("防守提醒：%s" % advisor_defense_text(0, best))
+		lines.append("防守提醒：%s" % advisor_defense_text(0, best, reports))
 		return "\n".join(lines)
 	lines.append("当前阶段：%s" % advisor_turn_line())
 	lines.append("局面状态：%s" % current_status_text())
@@ -4354,10 +4357,11 @@ func action_bar_dock_layout_rect() -> Rect2:
 		return pending_claim_action_dock_rect_for_count(action_bar_button_count())
 	return ACTION_BAR_DOCK_RECT
 
-func finalize_action_bar_layout() -> void:
+func finalize_action_bar_layout(button_snapshot = null) -> void:
 	if action_bar == null:
 		return
-	var count = action_bar_button_count()
+	var buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
+	var count = action_bar_button_count(buttons)
 	if count <= 0:
 		configure_chat_action_focus_navigation()
 		return
@@ -4402,7 +4406,6 @@ func finalize_action_bar_layout() -> void:
 	var ended_widths: Array[float] = []
 	if ended_action_mode:
 		ended_widths = ended_action_button_widths(count)
-	var buttons := action_bar_buttons()
 	var full_width := maxf(float(width), action_bar_pixel_width())
 	var pending_tail_buttons: Array[Button] = []
 	for button in buttons:
@@ -4649,9 +4652,10 @@ func ended_action_bar_required_width(count: int) -> float:
 		action_bar.set_meta("layout_width_within_bounds", required <= action_bar_pixel_width() + 0.5)
 	return required
 
-func action_bar_button_count() -> int:
+func action_bar_button_count(button_snapshot = null) -> int:
 	var count := 0
-	for button in action_bar_buttons():
+	var buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
+	for button in buttons:
 		if button != null and not bool(button.get_meta("non_game_action", false)):
 			count += 1
 	return count
@@ -5621,7 +5625,9 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	# Keep the public scoring boundary authoritative. Normal game flow has already
 	# validated a win, but callers such as UI previews or imported match state must
 	# never turn an incomplete hand into a paid result.
-	if not assume_complete and (not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, hand_counts, canonical_tile_count) or not is_complete_hand_from_counts(hand_counts.duplicate(), canonical_tile_count, melds.size())):
+	# is_complete_hand_from_counts() restores every temporary pair/set mutation;
+	# avoid copying the count vector for this validation-only probe.
+	if not assume_complete and (not has_valid_scoring_melds(seat) or not has_valid_scoring_tile_inventory_from_counts(seat, hand_counts, canonical_tile_count) or not is_complete_hand_from_counts(hand_counts, canonical_tile_count, melds.size())):
 		return {"fan": 0, "limit_fan": 0, "limit_name": "", "points": 0, "reasons": []}
 	var scoring_counts := scoring_tile_counts_from_counts(seat, hand_counts)
 	var fan = 1
@@ -5892,7 +5898,7 @@ func duplicate_claim_report(report: Dictionary) -> Dictionary:
 	return copy
 
 
-func build_opponent_runtime_state(opponent: int) -> Dictionary:
+func build_opponent_runtime_state(opponent: int, wall_count_snapshot: int = -1) -> Dictionary:
 	var state: Dictionary = {
 		"discard_counts": {},
 		"suit_discards": [0, 0, 0],
@@ -5966,7 +5972,7 @@ func build_opponent_runtime_state(opponent: int) -> Dictionary:
 	for suit in range(3):
 		plan_pressure = max(plan_pressure, float(suit_plan_threats[suit]))
 	state["plan_pressure"] = plan_pressure
-	state["readiness"] = opponent_readiness_score_from_plan(opponent, plan_pressure)
+	state["readiness"] = opponent_readiness_score_from_plan(opponent, plan_pressure, wall_count_snapshot)
 	return state
 
 
@@ -6324,22 +6330,26 @@ func safest_discard_action_score(report: Dictionary) -> float:
 			base = 610.0 if str(report.get("risk_label", "")) == "低" else 0.0
 	return base - float(report.get("risk", 0.0)) * 7.0 + float(report.get("score", 0.0)) * 0.025 + float(report.get("ukeire", 0)) * 0.4
 
-func should_offer_safest_discard_button(recommended_report: Dictionary, safest_report: Dictionary) -> bool:
+func should_offer_safest_discard_button(recommended_report: Dictionary, safest_report: Dictionary, threat_report_snapshot = null) -> bool:
 	if safest_report.is_empty() or str(safest_report.get("tile", "")) == "":
 		return false
 	if is_high_risk_discard_report(recommended_report):
 		return true
 	if str(recommended_report.get("stance", "")) == "防守" or str(safest_report.get("stance", "")) == "防守":
 		return true
-	var threat = opponent_threat_report(0)
+	var threat: Dictionary = {}
+	if threat_report_snapshot == null:
+		threat = opponent_threat_report(0)
+	elif typeof(threat_report_snapshot) == TYPE_DICTIONARY:
+		threat = threat_report_snapshot
 	var level = str(threat.get("level", ""))
 	return level == "高" or level == "危"
 
 func safest_discard_button_text(report: Dictionary) -> String:
 	return "最安%s" % tile_label(str(report.get("tile", "")))
 
-func safest_discard_hint_text(recommended_report: Dictionary, safest_report: Dictionary) -> String:
-	if not should_offer_safest_discard_button(recommended_report, safest_report):
+func safest_discard_hint_text(recommended_report: Dictionary, safest_report: Dictionary, threat_report_snapshot = null) -> String:
+	if not should_offer_safest_discard_button(recommended_report, safest_report, threat_report_snapshot):
 		return ""
 	var tile = str(safest_report.get("tile", ""))
 	if tile == "":
@@ -6436,8 +6446,10 @@ func ai_advice_summary(seat: int, limit: int = 3) -> String:
 	var score_text = score_strategy_text(seat)
 	if score_text != "":
 		lines.append(score_text)
+	var threat_report: Dictionary = {}
 	if seat == 0:
-		var safest_hint = safest_discard_hint_text(best, safest_discard_report())
+		threat_report = opponent_threat_report(seat)
+		var safest_hint = safest_discard_hint_text(best, safest_discard_report([], reports), threat_report)
 		if safest_hint != "":
 			lines.append(safest_hint)
 	var options: Array[String] = []
@@ -6459,8 +6471,10 @@ func ai_advice_summary(seat: int, limit: int = 3) -> String:
 	var quality_hint = wait_quality_text(best)
 	if quality_hint != "":
 		lines.append(quality_hint)
-	lines.append("备选 " + "  ".join(options))
-	var threat = opponent_threat_summary(seat)
+		lines.append("备选 " + "  ".join(options))
+	if seat != 0:
+		threat_report = opponent_threat_report(seat)
+	var threat = opponent_threat_summary_from_report(threat_report)
 	if threat != "":
 		lines.append("防守 " + threat)
 	return "\n".join(lines)
@@ -6525,8 +6539,9 @@ func is_isolated_shape_tile(counts: Array, index: int) -> bool:
 	return true
 
 
-func shanten_cache_key(counts: Array, open_melds: int) -> String:
-	return "%d:%s" % [open_melds, counts_compact_key(counts)]
+func shanten_cache_key(counts: Array, open_melds: int, counts_key_override: String = "") -> String:
+	var compact_key := counts_key_override if counts_key_override != "" else counts_compact_key(counts)
+	return "%d:%s" % [open_melds, compact_key]
 
 func counts_compact_key(counts: Array) -> String:
 	# Shanten recursion asks for this key at every memo state. Reuse the temporary
@@ -6599,6 +6614,7 @@ func clear_shanten_cache() -> void:
 	shanten_lru_tail = ""
 	shanten_cache_hits = 0
 	shanten_cache_misses = 0
+	shanten_standard_lower_bound_hits = 0
 
 func standard_shanten_search(counts: Array, melds: int, taatsu: int, has_pair: bool, memo: Dictionary, first_index: int = 0) -> int:
 	var first := clampi(first_index, 0, TILE_CODES.size())
@@ -6622,39 +6638,77 @@ func standard_shanten_search(counts: Array, melds: int, taatsu: int, has_pair: b
 		return int(memo[key])
 	var best = 8
 	counts[first] = int(counts[first]) - 1
-	best = min(best, standard_shanten_search(counts, melds, taatsu, has_pair, memo, first))
+	var branch_result := standard_shanten_search(counts, melds, taatsu, has_pair, memo, first)
 	counts[first] = int(counts[first]) + 1
+	# Standard shanten cannot improve beyond -1. Winning branches therefore
+	# terminate the search after restoring the temporary count mutation.
+	if branch_result == -1:
+		shanten_standard_lower_bound_hits += 1
+		memo[key] = -1
+		return -1
+	best = min(best, branch_result)
 	if int(counts[first]) >= 3:
 		counts[first] = int(counts[first]) - 3
-		best = min(best, standard_shanten_search(counts, melds + 1, taatsu, has_pair, memo, first))
+		branch_result = standard_shanten_search(counts, melds + 1, taatsu, has_pair, memo, first)
 		counts[first] = int(counts[first]) + 3
+		if branch_result == -1:
+			shanten_standard_lower_bound_hits += 1
+			memo[key] = -1
+			return -1
+		best = min(best, branch_result)
 	if can_sequence_from(counts, first):
 		counts[first] = int(counts[first]) - 1
 		counts[first + 1] = int(counts[first + 1]) - 1
 		counts[first + 2] = int(counts[first + 2]) - 1
-		best = min(best, standard_shanten_search(counts, melds + 1, taatsu, has_pair, memo, first))
+		branch_result = standard_shanten_search(counts, melds + 1, taatsu, has_pair, memo, first)
 		counts[first] = int(counts[first]) + 1
 		counts[first + 1] = int(counts[first + 1]) + 1
 		counts[first + 2] = int(counts[first + 2]) + 1
+		if branch_result == -1:
+			shanten_standard_lower_bound_hits += 1
+			memo[key] = -1
+			return -1
+		best = min(best, branch_result)
 	if int(counts[first]) >= 2:
 		counts[first] = int(counts[first]) - 2
 		if not has_pair:
-			best = min(best, standard_shanten_search(counts, melds, taatsu, true, memo, first))
-		best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first))
+			branch_result = standard_shanten_search(counts, melds, taatsu, true, memo, first)
+			if branch_result == -1:
+				shanten_standard_lower_bound_hits += 1
+				counts[first] = int(counts[first]) + 2
+				memo[key] = -1
+				return -1
+			best = min(best, branch_result)
+		branch_result = standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first)
 		counts[first] = int(counts[first]) + 2
+		if branch_result == -1:
+			shanten_standard_lower_bound_hits += 1
+			memo[key] = -1
+			return -1
+		best = min(best, branch_result)
 	if first < 27:
 		if same_suit_index(first, first + 1) and int(counts[first + 1]) > 0:
 			counts[first] = int(counts[first]) - 1
 			counts[first + 1] = int(counts[first + 1]) - 1
-			best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first))
+			branch_result = standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first)
 			counts[first] = int(counts[first]) + 1
 			counts[first + 1] = int(counts[first + 1]) + 1
+			if branch_result == -1:
+				shanten_standard_lower_bound_hits += 1
+				memo[key] = -1
+				return -1
+			best = min(best, branch_result)
 		if same_suit_index(first, first + 2) and int(counts[first + 2]) > 0:
 			counts[first] = int(counts[first]) - 1
 			counts[first + 2] = int(counts[first + 2]) - 1
-			best = min(best, standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first))
+			branch_result = standard_shanten_search(counts, melds, taatsu + 1, has_pair, memo, first)
 			counts[first] = int(counts[first]) + 1
 			counts[first + 2] = int(counts[first + 2]) + 1
+			if branch_result == -1:
+				shanten_standard_lower_bound_hits += 1
+				memo[key] = -1
+				return -1
+			best = min(best, branch_result)
 	memo[key] = best
 	return best
 
@@ -7099,17 +7153,19 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 	result["pattern_threat"] = pattern_threat
 
 
-func threat_report_table_state_cache_key(viewer: int, visible_counts_snapshot: Array = []) -> String:
+func threat_report_table_state_cache_key(viewer: int, visible_counts_snapshot: Array = [], visible_counts_key_override: String = "", wall_count_snapshot: int = -1) -> String:
 	if mode != "offline" or viewer < 0 or viewer >= players.size():
 		return ""
+	var wall_count := wall_count_snapshot if wall_count_snapshot >= 0 else get_wall_count()
+	var visible_counts_key := visible_counts_key_override if visible_counts_key_override != "" else counts_compact_key(visible_counts_snapshot)
 	var input_parts: Array[String] = [
 		mode,
 		str(ai_state_revision),
 		str(viewer),
 		offline_phase,
 		str(current_seat),
-		str(get_wall_count()),
-		counts_compact_key(visible_counts_snapshot),
+		str(wall_count),
+		visible_counts_key,
 	]
 	for seat in range(players.size()):
 		var player: Dictionary = players[seat]
@@ -7123,12 +7179,12 @@ func threat_report_table_state_cache_key(viewer: int, visible_counts_snapshot: A
 	var parts: Array[String] = [
 		"phase=" + offline_phase,
 		"cur=%d" % current_seat,
-		"wall=%d" % get_wall_count(),
+		"wall=%d" % wall_count,
 	]
 	# Context callers may supply a visibility snapshot that intentionally differs
 	# from the live table. Include it only for that snapshot-specific signature.
-	if not visible_counts_snapshot.is_empty():
-		parts.append("visible=" + counts_compact_key(visible_counts_snapshot))
+	if visible_counts_key != "":
+		parts.append("visible=" + visible_counts_key)
 	for seat in range(players.size()):
 		var player: Dictionary = players[seat]
 		parts.append("p%d_hand=%s" % [seat, tile_array_key(player.get("hand", [])) if seat == viewer else "%d" % numeric_count(player.get("hand", []), 0)])
@@ -7215,6 +7271,8 @@ func duplicate_threat_report(report) -> Dictionary:
 
 func clear_threat_report_cache() -> void:
 	threat_report_cache.clear()
+	threat_report_cache_hits = 0
+	threat_report_cache_misses = 0
 	threat_report_lru_prev.clear()
 	threat_report_lru_next.clear()
 	threat_report_lru_head = ""
@@ -7295,7 +7353,7 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		return []
 	var target_opponent = opponent if opponent >= 0 and opponent < players.size() and opponent != seat else -1
 	var visible_counts = ai_context_visible_counts(eval_context)
-	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts)
+	var known_counts: Array = ai_context_known_counts(eval_context, seat, visible_counts) if target_opponent >= 0 else []
 	var seen: Dictionary = {}
 	var best_tiles: Array[String] = []
 	var best_scores: Array = []
@@ -7305,8 +7363,8 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		if seen.has(tile):
 			continue
 		seen[tile] = true
-		var safety = tile_safety_label(tile, seat, [], eval_context)
-		var risk = float(tile_risk_vector(tile, seat, [], eval_context).get("score", 0.0))
+		var safety := ""
+		var risk := 0.0
 		if target_opponent >= 0:
 			# 座位威胁卡只回答“对这一家是否安全”。全桌安牌仍保留最高级别，
 			# 其余现物、筋、壁均改按当前展示对手判断。
@@ -7323,6 +7381,11 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 			else:
 				safety = ""
 			risk = float(single_opponent_deal_in_risk_components(tile, seat, target_opponent, -1, known_counts, eval_context).get("risk", 0.0))
+		else:
+			# The target-opponent branch above fully determines both values; avoid
+			# building the all-opponent safety/risk reports before entering it.
+			safety = tile_safety_label(tile, seat, [], eval_context)
+			risk = float(tile_risk_vector(tile, seat, [], eval_context).get("score", 0.0))
 		var score = -risk
 		if safety == "安":
 			score += 120.0
@@ -9876,10 +9939,17 @@ func chat_panel_rect() -> Rect2:
 		rect_full(0.115, 0.430, left_route_right, 0.720),
 		rect_full(0.645, 0.400, 0.985, 0.680),
 	]
+	# Candidate scoring runs once per authored lane. Capture meld visibility once
+	# so every score reuses the same table-state snapshot.
+	var visible_meld_seats: Dictionary = {}
+	for layout in MELD_LAYOUTS:
+		var meld_seat := int(layout[0])
+		if not visible_meld_seats.has(meld_seat) and not get_melds(meld_seat).is_empty():
+			visible_meld_seats[meld_seat] = true
 	var best := candidates[2]
 	var best_score := INF
 	for candidate in candidates:
-		var score := chat_panel_candidate_overlap_score(candidate)
+		var score := chat_panel_candidate_overlap_score(candidate, visible_meld_seats)
 		if score < best_score:
 			best_score = score
 			best = candidate
@@ -9890,9 +9960,19 @@ func chat_panel_rect() -> Rect2:
 		return rect_full(0.115, 0.430, left_route_right, 0.720)
 	return best
 
-func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
+func chat_panel_candidate_overlap_score(candidate: Rect2, visible_meld_seats_snapshot = null) -> float:
 	var candidate_geometry := Rect2(candidate.position, candidate.size - candidate.position)
 	var occupied: Array[Rect2] = []
+	var visible_meld_seats: Dictionary = {}
+	if typeof(visible_meld_seats_snapshot) == TYPE_DICTIONARY:
+		visible_meld_seats = visible_meld_seats_snapshot
+	else:
+		# Preserve the direct-call API for callers that do not own a parent-level
+		# snapshot, while ensuring the local check only reads each seat once.
+		for layout in MELD_LAYOUTS:
+			var meld_seat := int(layout[0])
+			if not visible_meld_seats.has(meld_seat) and not get_melds(meld_seat).is_empty():
+				visible_meld_seats[meld_seat] = true
 	for layout in SEAT_LAYOUTS:
 		var seat_rect: Rect2 = layout[1]
 		# Seat panels are mounted on root_layer. Do not apply the table transform
@@ -9900,7 +9980,7 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 		occupied.append(chat_panel_root_geometry(seat_rect).grow(0.004))
 	for layout in MELD_LAYOUTS:
 		var meld_seat := int(layout[0])
-		if get_melds(meld_seat).is_empty():
+		if not visible_meld_seats.has(meld_seat):
 			continue
 		var meld_rect: Rect2 = layout[1]
 		# Melds share the seat/root coordinate space; rivers and the center console
@@ -9926,10 +10006,8 @@ func chat_panel_candidate_overlap_score(candidate: Rect2) -> float:
 	# Once any meld is visible, keep the modal out of the upper-left reading lane.
 	# That lane hides the ledger and is only safe for a clean table state; the
 	# bounded left candidate below it preserves the same compact control height.
-	if candidate.position.x < 0.30 and candidate.position.y < 0.40:
-		for layout in MELD_LAYOUTS:
-			if not get_melds(int(layout[0])).is_empty():
-				return INF
+	if candidate.position.x < 0.30 and candidate.position.y < 0.40 and not visible_meld_seats.is_empty():
+		return INF
 	# A drawer that barely overlaps a seat or hand is still unusable. Treat every
 	# occupied table lane as a hard exclusion instead of ranking the smallest
 	# collision as the "best" route.

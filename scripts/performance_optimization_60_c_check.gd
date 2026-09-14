@@ -778,6 +778,12 @@ func run() -> void:
 	scene.players[1]["discards"] = [ron_tile]
 	var completed_ron_report: Dictionary = scene.ai_ron_decision_report(1, ron_tile)
 	check(str(completed_ron_report.get("reason", "")) == "舍张振听", "completed self-draw hand keeps the ron furiten fallback")
+	scene.players[1]["hand"] = ron_hand.duplicate()
+	scene.players[1]["discards"] = []
+	var ron_counts_key_before: String = scene.counts_compact_key(ron_counts)
+	var ron_default_report: Dictionary = scene.ai_ron_decision_report(1, ron_tile)
+	var ron_snapshot_report: Dictionary = scene.ai_ron_decision_report(1, ron_tile, "", ron_counts)
+	check(ron_default_report == ron_snapshot_report and scene.counts_compact_key(ron_counts) == ron_counts_key_before, "claim chooser snapshot preserves ron report and source counts")
 
 	print("--- W) discard report snapshot reuse ---")
 	scene.offline_phase = "await_discard"
@@ -797,9 +803,480 @@ func run() -> void:
 	scene.clear_shanten_cache()
 	var report_with_snapshot: Dictionary = scene.build_ai_discard_report(1, report_tile, report_simulated, 0, scene.visible_tile_counts(), {}, report_context, report_counts, report_original_counts, -1, scene.tile_index_normalized(report_tile), report_shanten, report_risk_vector)
 	check(report_context.has("discard_report_exposed_melds") and report_context.has("discard_report_attack_multiplier") and report_context.has("discard_report_route_focus") and report_context.has("discard_report_risk_factor"), "evaluation context carries discard-invariant seat snapshots")
+	check(report_context.has("discard_report_defense_adjustment") and report_context.has("discard_report_wall_progress"), "evaluation context carries invariant defense inputs")
 	check(report_without_snapshot_misses > 0 and scene.shanten_cache_misses == 0, "known candidate shanten avoids a second search")
 	check(int(report_without_snapshot.get("shanten", 99)) == report_shanten and int(report_with_snapshot.get("shanten", 99)) == report_shanten and is_equal_approx(float(report_without_snapshot.get("score", -1.0)), float(report_with_snapshot.get("score", -2.0))), "snapshot report keeps the original score")
 	check(is_equal_approx(float(report_without_snapshot.get("risk", -1.0)), float(report_with_snapshot.get("risk", -2.0))) and report_without_snapshot.get("danger_source", {}) == report_with_snapshot.get("danger_source", {}), "snapshot report keeps the original danger source")
+
+	print("--- X) tsumo decision count snapshot equivalence ---")
+	scene.current_seat = 3
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 3, "tile": "2W", "source": "normal", "wall_empty": false, "serial": 101}
+	scene.offline_self_draw_ready = {"seat": 3, "tile": "2W", "serial": 101}
+	scene.players[3]["hand"] = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W", "2T", "3T", "4T", "2W"]
+	var tsumo_hand: Array = scene.players[3]["hand"]
+	var tsumo_counts: Array = scene.tile_counts(tsumo_hand)
+	var tsumo_array_score: Dictionary = scene.calculate_win_score_from_tiles(3, tsumo_hand, true)
+	var tsumo_snapshot_score: Dictionary = scene.calculate_win_score_from_tiles(3, [], true, "", false, tsumo_counts, tsumo_hand.size())
+	check(int(tsumo_array_score.get("fan", -1)) == int(tsumo_snapshot_score.get("fan", -2)) and int(tsumo_array_score.get("points", -1)) == int(tsumo_snapshot_score.get("points", -2)) and tsumo_array_score.get("reasons", []) == tsumo_snapshot_score.get("reasons", []), "tsumo count snapshot preserves the array score")
+	var tsumo_drawn_index: int = scene.tile_index_normalized("2W")
+	var tsumo_tenpai_counts: Array = tsumo_counts.duplicate()
+	tsumo_tenpai_counts[tsumo_drawn_index] = int(tsumo_tenpai_counts[tsumo_drawn_index]) - 1
+	var tsumo_array_metrics: Dictionary = scene.effective_tile_metrics(tsumo_hand.slice(0, tsumo_hand.size() - 1), 0, 3, 0)
+	var tsumo_snapshot_metrics: Dictionary = scene.effective_tile_metrics(tsumo_hand.slice(0, tsumo_hand.size() - 1), 0, 3, 0, [], tsumo_tenpai_counts)
+	check(tsumo_array_metrics.get("tiles", []) == tsumo_snapshot_metrics.get("tiles", []) and tsumo_array_metrics.get("remaining_by_tile", {}) == tsumo_snapshot_metrics.get("remaining_by_tile", {}), "tsumo count snapshot preserves alternate waits")
+	var tsumo_decision: Dictionary = scene.ai_tsumo_decision_report(3, "2W")
+	check(int(tsumo_decision.get("fan", -1)) == int(tsumo_array_score.get("fan", -2)) and int(tsumo_decision.get("points", -1)) == int(tsumo_array_score.get("points", -2)) and int(tsumo_decision.get("wait_variety", -1)) == int(tsumo_snapshot_metrics.get("variety", -2)), "optimized tsumo report preserves its decision fields")
+
+	print("--- Y) self-gang effective-count snapshot reuse ---")
+	var gang_hand: Array = ["5W", "5W", "5W", "5W", "1W", "2W", "3W", "7W", "8W", "9W", "2T", "3T", "4T", "E"]
+	var gang_counts: Array = scene.tile_counts(gang_hand)
+	var gang_before_shanten: int = scene.calculate_min_shanten_from_counts(gang_counts, 0)
+	var gang_after_hand: Array = gang_hand.duplicate()
+	for _i in range(4):
+		gang_after_hand.erase("5W")
+	var gang_after_counts: Array = gang_counts.duplicate()
+	gang_after_counts[scene.tile_index_normalized("5W")] = int(gang_after_counts[scene.tile_index_normalized("5W")]) - 4
+	var gang_after_shanten: int = scene.calculate_min_shanten_from_counts(gang_after_counts, 1)
+	var gang_before_array: int = scene.effective_tile_count(gang_hand, 0, 1)
+	var gang_before_snapshot: int = scene.effective_tile_count(gang_hand, 0, 1, gang_before_shanten, [], gang_counts)
+	var gang_after_array: int = scene.effective_tile_count(gang_after_hand, 1, 1)
+	var gang_after_snapshot: int = scene.effective_tile_count(gang_after_hand, 1, 1, gang_after_shanten, [], gang_after_counts)
+	check(gang_before_array == gang_before_snapshot and gang_after_array == gang_after_snapshot, "self-gang count snapshots preserve before/after effective counts")
+	check(gang_before_shanten == 0 and gang_after_shanten == 0, "self-gang fixture keeps the comparable tenpai branch")
+
+	print("--- Z) completion ordering preserves alternate hand families ---")
+	var standard_complete: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "E", "E"]
+	var seven_pairs: Array = ["1W", "1W", "2W", "2W", "3W", "3W", "4W", "4W", "5T", "5T", "6T", "6T", "E", "E"]
+	var thirteen_orphans: Array = ["1W", "9W", "1T", "9T", "1B", "9B", "E", "S", "N", "R", "Z", "F", "P", "1W"]
+	var incomplete: Array = standard_complete.slice(0, standard_complete.size() - 1)
+	for completion_case in [standard_complete, seven_pairs, thirteen_orphans, incomplete]:
+		var completion_counts: Array = scene.tile_counts(completion_case)
+		var completion_key: String = scene.counts_compact_key(completion_counts)
+		var expected_complete: bool = completion_case != incomplete
+		check(scene.is_complete_hand_from_counts(completion_counts, completion_case.size(), 0) == expected_complete and scene.counts_compact_key(completion_counts) == completion_key, "completion ordering preserves hand family and source counts")
+
+	print("--- AA) claim strategy snapshot reuse ---")
+	scene.players[1]["melds"] = []
+	scene.players[1]["hand"] = ["1W", "1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "E", "E", "R"]
+	scene.offline_sim_quiet = true
+	var claim_context: Dictionary = scene.make_ai_claim_context(1, scene.visible_tile_counts_shared(), [], 0)
+	check(claim_context.has("claim_report_attack_multiplier") and claim_context.has("claim_report_claim_aggression") and claim_context.has("claim_report_risk_factor") and claim_context.has("claim_report_route_focus"), "claim context carries static strategy snapshots")
+	var claim_report: Dictionary = scene.build_ai_claim_report(1, "peng", "1W", {}, claim_context)
+	var uncached_claim_report: Dictionary = claim_report.duplicate(true)
+	for key in ["ai_attack_multiplier", "ai_claim_aggression", "ai_risk_factor", "ai_route_focus"]:
+		uncached_claim_report.erase(key)
+	check(is_equal_approx(scene.ai_claim_action_score(claim_report, 1), scene.ai_claim_action_score(uncached_claim_report, 1)), "claim action score keeps its fallback result")
+	check(is_equal_approx(scene.ai_claim_route_bonus(claim_report), scene.ai_claim_route_bonus(uncached_claim_report)), "claim route bonus keeps its fallback result")
+
+	print("--- AB) self-gang strategy snapshot reuse ---")
+	scene.players[1]["hand"] = ["5W", "5W", "5W", "5W", "1W", "2W", "3W", "7W", "8W", "9W", "2T", "3T", "4T", "E"]
+	var gang_snapshot_counts: Array = scene.tile_counts(scene.players[1]["hand"])
+	var gang_context: Dictionary = scene.make_ai_evaluation_context(1, scene.visible_tile_counts_shared())
+	gang_context["hand_counts"] = gang_snapshot_counts
+	gang_context["self_gang_attack_multiplier"] = scene.ai_total_attack_multiplier(1)
+	gang_context["self_gang_gang_aggression"] = scene.ai_gang_aggression(1)
+	gang_context["self_gang_wait_focus"] = scene.ai_wait_value_focus(1)
+	gang_context["self_gang_difficulty"] = scene.AI_DIFFICULTY_NORMAL
+	check(gang_context.has("self_gang_attack_multiplier") and gang_context.has("self_gang_gang_aggression") and gang_context.has("self_gang_wait_focus") and gang_context.has("self_gang_difficulty"), "self-gang context carries static strategy snapshots")
+	var gang_report: Dictionary = scene.build_ai_self_gang_report(1, "5W", "concealed", gang_context)
+	var uncached_gang_report: Dictionary = gang_report.duplicate(true)
+	for key in ["ai_attack_multiplier", "ai_gang_aggression", "ai_wait_focus", "ai_difficulty"]:
+		uncached_gang_report.erase(key)
+	check(is_equal_approx(scene.ai_self_gang_action_score(gang_report), scene.ai_self_gang_action_score(uncached_gang_report)), "self-gang action score keeps its fallback result")
+
+	print("--- AC) discard fixed-input snapshot reuse ---")
+	scene.players[1]["melds"] = [["1W", "1W", "1W"]]
+	scene.players[1]["hand"] = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "2T", "3T", "4T", "E", "S"]
+	var discard_context: Dictionary = scene.make_ai_evaluation_context(1, scene.visible_tile_counts_shared())
+	check(discard_context.has("discard_report_difficulty") and discard_context.has("discard_report_wall_count") and discard_context.has("discard_report_wait_focus") and discard_context.has("discard_report_profile_label") and discard_context.has("discard_report_profile_short"), "discard context carries fixed difficulty, wall, wait, and profile inputs")
+	var discard_fallback_context: Dictionary = discard_context.duplicate(true)
+	for key in ["discard_report_difficulty", "discard_report_wall_count", "discard_report_wait_focus", "discard_report_profile_label", "discard_report_profile_short"]:
+		discard_fallback_context.erase(key)
+	var discard_pressure: Dictionary = scene.ai_pressure_context(1, discard_context)
+	var discard_simulated: Array = scene.players[1]["hand"].duplicate()
+	discard_simulated.erase("E")
+	var discard_counts: Array = scene.tile_counts(discard_simulated)
+	var discard_original: Array = scene.tile_counts(scene.players[1]["hand"])
+	var discard_snapshot_report: Dictionary = scene.build_ai_discard_report(1, "E", discard_simulated, 1, scene.visible_tile_counts_shared(), discard_pressure, discard_context, discard_counts, discard_original, -1, scene.tile_index_normalized("E"))
+	var discard_fallback_report: Dictionary = scene.build_ai_discard_report(1, "E", discard_simulated, 1, scene.visible_tile_counts_shared(), discard_pressure, discard_fallback_context, discard_counts, discard_original, -1, scene.tile_index_normalized("E"))
+	check(is_equal_approx(float(discard_snapshot_report.get("score", -1.0)), float(discard_fallback_report.get("score", -2.0))) and str(discard_snapshot_report.get("ai_profile", "")) == str(discard_fallback_report.get("ai_profile", "?")), "discard fixed-input snapshots preserve the legacy report result")
+
+	print("--- AD) BGM watchdog deadline throttling ---")
+	scene.music_enabled = true
+	scene.bgm_start_in_flight = false
+	scene.next_bgm_retry_msec = 0
+	scene.keep_background_music_alive(1000)
+	check(scene.next_bgm_retry_msec == 2000, "unavailable runtime audio schedules the next BGM retry")
+	scene.keep_background_music_alive(1500)
+	check(scene.next_bgm_retry_msec == 2000, "BGM watchdog skips runtime checks before its retry deadline")
+	scene.keep_background_music_alive(2000)
+	check(scene.next_bgm_retry_msec == 3000, "BGM watchdog advances the retry deadline after another unavailable check")
+	scene.next_bgm_retry_msec = 0
+	scene.bgm_start_in_flight = true
+	scene.keep_background_music_alive(3000)
+	check(scene.next_bgm_retry_msec == 0, "BGM watchdog skips runtime checks while async startup is in flight")
+
+	print("--- AE) discard player-pressure and wait snapshots ---")
+	scene.players[0]["melds"] = [["E", "E", "E"]]
+	scene.players[0]["discards"] = ["1W", "9W", "E"]
+	scene.bgm_start_in_flight = false
+	scene.music_enabled = false
+	var pressure_context_116: Dictionary = scene.make_ai_evaluation_context(1, scene.visible_tile_counts_shared())
+	check(pressure_context_116.has("discard_report_human_readiness") and int(pressure_context_116.get("discard_report_exposed_melds", -1)) == scene.exposed_meld_count_for_seat(1), "discard context carries human readiness and exposed-meld snapshots")
+	var pressure_fallback_context_116: Dictionary = pressure_context_116.duplicate(true)
+	pressure_fallback_context_116.erase("discard_report_human_readiness")
+	var player_pressure_snapshot: float = scene.human_target_discard_pressure(1, "5W", 24.0, {}, 2, pressure_context_116)
+	var player_pressure_fallback: float = scene.human_target_discard_pressure(1, "5W", 24.0, {}, 2, pressure_fallback_context_116)
+	check(is_equal_approx(player_pressure_snapshot, player_pressure_fallback), "human readiness snapshot preserves target pressure")
+	var open_wait_hand: Array = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W"]
+	scene.players[1]["melds"] = [["1W", "1W", "1W"]]
+	var open_wait_metrics: Dictionary = scene.effective_tile_metrics(open_wait_hand, 1, 1, 0)
+	var open_wait_counts: Array = scene.tile_counts(open_wait_hand)
+	var open_wait_array: Dictionary = scene.wait_value_metrics(1, open_wait_hand, 1, 0, open_wait_metrics.get("tiles", []), open_wait_metrics.get("remaining_by_tile", {}), true)
+	var open_wait_snapshot: Dictionary = scene.wait_value_metrics(1, open_wait_hand, 1, 0, open_wait_metrics.get("tiles", []), open_wait_metrics.get("remaining_by_tile", {}), true, {}, -1.0, -1.0, open_wait_counts, 1)
+	check(open_wait_array == open_wait_snapshot, "exposed-meld wait snapshot preserves wait valuation")
+
+	print("--- AF) discard report inner-loop snapshots ---")
+	scene.players[1]["hand"] = open_wait_hand.duplicate()
+	var report_context_117: Dictionary = scene.make_ai_evaluation_context(1, scene.visible_tile_counts_shared())
+	var report_counts_117: Array = scene.tile_counts(open_wait_hand)
+	var report_wait_metrics_117: Dictionary = scene.effective_tile_metrics(open_wait_hand, 1, 1, 0, [], report_counts_117)
+	var report_with_context_117: Dictionary = scene.build_ai_discard_report(1, "1W", open_wait_hand, 1, scene.visible_tile_counts_shared(), {}, report_context_117, report_counts_117, report_counts_117, -1, scene.tile_index_normalized("1W"), 0)
+	var expected_wait_117: Dictionary = scene.wait_value_metrics(1, open_wait_hand, 1, 0, report_with_context_117.get("effective_tiles", report_wait_metrics_117.get("tiles", [])), report_with_context_117.get("effective_remaining", report_wait_metrics_117.get("remaining_by_tile", {})), true, {}, float(report_context_117.get("discard_report_attack_multiplier", -1.0)), float(report_context_117.get("discard_report_wait_focus", -1.0)), report_counts_117, 1)
+	check(is_equal_approx(float(report_with_context_117.get("wait_value", -1.0)), float(expected_wait_117.get("score", -2.0))), "discard reports pass the captured wait focus into wait valuation")
+	var report_fallback_context_117: Dictionary = report_context_117.duplicate(true)
+	for key in ["discard_report_wait_focus"]:
+		report_fallback_context_117.erase(key)
+	var report_without_wait_snapshot_117: Dictionary = scene.build_ai_discard_report(1, "1W", open_wait_hand, 1, scene.visible_tile_counts_shared(), {}, report_fallback_context_117, report_counts_117, report_counts_117, -1, scene.tile_index_normalized("1W"), 0)
+	check(is_equal_approx(float(report_with_context_117.get("wait_value", -1.0)), float(report_without_wait_snapshot_117.get("wait_value", -2.0))), "wait-focus snapshot preserves the standalone fallback result")
+	var readiness_117: float = scene.human_readiness_for_defense()
+	var expected_readiness_117 := float(scene.players[0]["melds"].size()) * 3.4 + float(scene.players[0]["discards"].size()) * 0.22
+	var readiness_wall_117: int = scene.get_wall_count()
+	if readiness_wall_117 <= scene.wall_phase_threshold(30):
+		expected_readiness_117 += 2.5
+	if readiness_wall_117 <= scene.wall_phase_threshold(18):
+		expected_readiness_117 += 3.5
+	if scene.players[0]["melds"].size() >= 3 or scene.players[0]["discards"].size() >= 14:
+		expected_readiness_117 += 4.0
+	check(is_equal_approx(readiness_117, expected_readiness_117) and is_equal_approx(readiness_117, scene.human_readiness_for_defense()), "human readiness remains stable after the single wall read")
+
+	print("--- AG) feed penalty difficulty snapshot ---")
+	scene.ai_difficulty = scene.AI_DIFFICULTY_HARD
+	var feed_weight_fallback_118: float = scene.discard_feed_penalty_weight(1.20, 0)
+	var feed_weight_snapshot_118: float = scene.discard_feed_penalty_weight(1.20, 0, scene.AI_DIFFICULTY_HARD)
+	var feed_weight_easy_118: float = scene.discard_feed_penalty_weight(1.20, 0, scene.AI_DIFFICULTY_EASY)
+	check(is_equal_approx(feed_weight_fallback_118, feed_weight_snapshot_118), "feed penalty difficulty snapshot preserves the live fallback")
+	check(not is_equal_approx(feed_weight_snapshot_118, feed_weight_easy_118), "feed penalty helper honors an explicit difficulty snapshot")
+
+	print("--- AH) targeted threat-card ranking ---")
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "5W", "7W", "9W", "E", "S"]
+	scene.players[1]["discards"] = ["1W", "4W", "7W"]
+	var threat_context_119: Dictionary = scene.make_ai_evaluation_context(0, scene.visible_tile_counts_shared())
+	var targeted_labels_119: Array = scene.threat_safe_tile_labels(0, "suit", 0, 3, threat_context_119, 1)
+	var general_labels_119: Array = scene.threat_safe_tile_labels(0, "suit", 0, 3, threat_context_119)
+	var targeted_repeat_119: Array = scene.threat_safe_tile_labels(0, "suit", 0, 3, threat_context_119, 1)
+	check(targeted_labels_119.size() <= 3 and general_labels_119.size() <= 3, "targeted and general threat cards keep their bounded result size")
+	check(targeted_labels_119 == targeted_repeat_119, "targeted threat-card ranking remains deterministic")
+
+	print("--- AI) threat/readiness wall snapshots ---")
+	var threat_key_120: String = scene.threat_report_table_state_cache_key(0, scene.visible_tile_counts_shared())
+	var threat_key_repeat_120: String = scene.threat_report_table_state_cache_key(0, scene.visible_tile_counts_shared())
+	var readiness_120: float = scene.opponent_readiness_score_from_plan(1, 12.0)
+	check(threat_key_120 != "" and threat_key_120 == threat_key_repeat_120, "threat cache key remains stable across repeated wall snapshots")
+	check(readiness_120 >= 0.0, "plan-based opponent readiness remains valid with the wall snapshot")
+
+	print("--- AJ) visible-count key reuse ---")
+	var visible_counts_121: Array = scene.visible_tile_counts_shared()
+	var visible_key_121: String = scene.counts_compact_key(visible_counts_121)
+	var threat_key_default_121: String = scene.threat_report_table_state_cache_key(0, visible_counts_121)
+	var threat_key_override_121: String = scene.threat_report_table_state_cache_key(0, visible_counts_121, visible_key_121)
+	var context_121: Dictionary = scene.make_ai_evaluation_context(0, visible_counts_121)
+	check(threat_key_default_121 == threat_key_override_121, "visible-count key override preserves the threat cache key")
+	check(str(context_121.get("visible_counts_key", "")) == visible_key_121 and str(context_121.get("threat_cache_state_key", "")) == threat_key_override_121, "evaluation context reuses one visible-count key")
+
+	print("--- AK) claim context key reuse ---")
+	var claim_context_122: Dictionary = scene.make_ai_claim_context(1)
+	var claim_eval_context_122: Dictionary = claim_context_122.get("eval_context", {})
+	var claim_visible_122: Array = claim_eval_context_122.get("visible_counts", [])
+	var claim_visible_key_122: String = scene.counts_compact_key(claim_visible_122)
+	check(claim_visible_key_122 != "" and str(claim_eval_context_122.get("visible_counts_key", "")) == claim_visible_key_122, "snapshot-free claim context keeps the live visible-count key")
+	var explicit_visible_122: Array = scene.visible_tile_counts_shared()
+	var explicit_claim_context_122: Dictionary = scene.make_ai_claim_context(1, explicit_visible_122)
+	var explicit_claim_eval_122: Dictionary = explicit_claim_context_122.get("eval_context", {})
+	check(str(explicit_claim_eval_122.get("visible_counts_key", "")) == scene.counts_compact_key(explicit_visible_122), "snapshot claim context keeps the supplied visible-count key")
+
+	print("--- AL) tsumo difficulty snapshot reuse ---")
+	scene.current_seat = 3
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 3, "tile": "2W", "source": "normal", "wall_empty": false, "serial": 123}
+	scene.offline_self_draw_ready = {"seat": 3, "tile": "2W", "serial": 123}
+	scene.players[3]["hand"] = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W", "2T", "3T", "4T", "2W"]
+	scene.ai_difficulty = scene.AI_DIFFICULTY_EASY
+	var tsumo_easy_123: Dictionary = scene.ai_tsumo_decision_report(3, "2W")
+	scene.ai_difficulty = -100
+	var tsumo_clamped_easy_123: Dictionary = scene.ai_tsumo_decision_report(3, "2W")
+	check(tsumo_easy_123 == tsumo_clamped_easy_123, "tsumo difficulty reuse preserves the normalized easy decision")
+	scene.ai_difficulty = scene.AI_DIFFICULTY_HARD
+	var tsumo_hard_123: Dictionary = scene.ai_tsumo_decision_report(3, "2W")
+	scene.ai_difficulty = 100
+	var tsumo_clamped_hard_123: Dictionary = scene.ai_tsumo_decision_report(3, "2W")
+	check(tsumo_hard_123 == tsumo_clamped_hard_123, "tsumo difficulty reuse preserves the normalized hard decision")
+
+	print("--- AM) effective-tile hand key reuse ---")
+	var compact_hand_124: Array = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "E", "S"]
+	var compact_counts_124: Array = scene.tile_counts(compact_hand_124)
+	var compact_key_124: String = scene.counts_compact_key(compact_counts_124)
+	scene.clear_ai_report_cache()
+	var unknown_metrics_124: Dictionary = scene.effective_tile_metrics(compact_hand_124, 0, 1)
+	var known_shanten_124: int = scene.calculate_min_shanten_from_counts(compact_counts_124)
+	var snapshot_metrics_124: Dictionary = scene.effective_tile_metrics(compact_hand_124, 0, 1, known_shanten_124, [], compact_counts_124)
+	check(unknown_metrics_124.get("tiles", []) == snapshot_metrics_124.get("tiles", []) and unknown_metrics_124.get("remaining_by_tile", {}) == snapshot_metrics_124.get("remaining_by_tile", {}), "effective-tile metrics preserve results across the reused hand key")
+	check(scene.calculate_min_shanten_from_counts(compact_counts_124, 0, compact_key_124) == known_shanten_124 and scene.counts_compact_key(compact_counts_124) == compact_key_124, "explicit hand key preserves shanten and source counts")
+
+	print("--- AN) discard cache visible-count snapshot reuse ---")
+	scene.players[1]["hand"] = compact_hand_124.duplicate()
+	scene.offline_sim_quiet = false
+	var visible_snapshot_125: Array = scene.visible_tile_counts_shared()
+	var discard_key_default_125: String = scene.ai_report_cache_key(1)
+	var discard_key_snapshot_125: String = scene.ai_report_cache_key(1, visible_snapshot_125)
+	check(discard_key_default_125 != "" and discard_key_default_125 == discard_key_snapshot_125, "discard cache key preserves the supplied visible-count snapshot")
+	scene.clear_ai_report_cache()
+	var discard_reports_125: Array = scene.get_ai_discard_reports(1)
+	var discard_repeat_125: Array = scene.get_ai_discard_reports(1)
+	check(not discard_reports_125.is_empty() and discard_reports_125 == discard_repeat_125 and scene.ai_report_cache_hits >= 1, "discard cache-miss and cache-hit paths preserve reports")
+
+	print("--- AO) claim wall snapshot reuse ---")
+	var claim_context_126: Dictionary = scene.make_ai_claim_context(1, scene.visible_tile_counts_shared())
+	var claim_eval_126: Dictionary = claim_context_126.get("eval_context", {})
+	var claim_wall_126: int = scene.get_wall_count()
+	check(int(claim_eval_126.get("discard_report_wall_count", -1)) == claim_wall_126, "claim context carries the wall count used by claim reports")
+	var claim_wall_default_126: Dictionary = scene.wall_draw_claim_discipline_report(1, "chi", 3, 3, 0.0, 0)
+	var claim_wall_snapshot_126: Dictionary = scene.wall_draw_claim_discipline_report(1, "chi", 3, 3, 0.0, 0, claim_wall_126)
+	check(claim_wall_default_126 == claim_wall_snapshot_126, "claim wall snapshot preserves discipline output")
+
+	print("--- AP) ron difficulty snapshot reuse ---")
+	scene.offline_phase = "resolving"
+	scene.players[1]["hand"] = ["1W", "1W", "1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W"]
+	scene.ai_difficulty = scene.AI_DIFFICULTY_EASY
+	var ron_easy_127: Dictionary = scene.ai_ron_decision_report(1, "5W")
+	scene.ai_difficulty = -100
+	var ron_clamped_easy_127: Dictionary = scene.ai_ron_decision_report(1, "5W")
+	check(ron_easy_127 == ron_clamped_easy_127, "ron difficulty reuse preserves the normalized easy decision")
+	scene.ai_difficulty = scene.AI_DIFFICULTY_HARD
+	var ron_hard_127: Dictionary = scene.ai_ron_decision_report(1, "5W")
+	scene.ai_difficulty = 100
+	var ron_clamped_hard_127: Dictionary = scene.ai_ron_decision_report(1, "5W")
+	check(ron_hard_127 == ron_clamped_hard_127, "ron difficulty reuse preserves the normalized hard decision")
+
+	print("--- AQ) AI assistance visible-count snapshot reuse ---")
+	scene.players[1]["hand"] = compact_hand_124.duplicate()
+	scene.offline_sim_quiet = false
+	var assistance_visible_128: Array = scene.visible_tile_counts_shared()
+	scene.clear_ai_report_cache()
+	var assistance_default_128: Array = scene.get_ai_discard_reports(1)
+	scene.clear_ai_report_cache()
+	var assistance_snapshot_128: Array = scene.get_ai_discard_reports(1, assistance_visible_128)
+	check(not assistance_default_128.is_empty() and assistance_default_128 == assistance_snapshot_128, "AI assistance preserves reports with the shared visible-count snapshot")
+	scene.offline_sim_quiet = true
+	check(not scene.get_ai_discard_reports(1).is_empty(), "quiet discard evaluation remains lazy without a snapshot")
+
+	print("--- AR) threat/readiness wall snapshot reuse ---")
+	scene.players[1]["discards"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T"]
+	scene.players[1]["melds"] = [["E", "E", "E"], ["5W", "5W", "5W"]]
+	scene.wall.clear()
+	for _i in range(55):
+		scene.wall.append("1B")
+	var wall_snapshot_129: int = scene.get_wall_count()
+	var readiness_context_129: Dictionary = scene.make_ai_evaluation_context(0, scene.visible_tile_counts_shared())
+	var readiness_state_129: Dictionary = readiness_context_129.get("opponents", {}).get(1, {})
+	var readiness_plan_129: float = float(readiness_state_129.get("plan_pressure", -1.0))
+	var readiness_expected_129: float = scene.opponent_readiness_score_from_plan(1, readiness_plan_129, wall_snapshot_129)
+	check(int(readiness_context_129.get("discard_report_wall_count", -1)) == wall_snapshot_129, "readiness context carries one wall snapshot")
+	check(is_equal_approx(float(readiness_state_129.get("readiness", -1.0)), readiness_expected_129), "runtime readiness matches the explicit wall snapshot")
+	scene.wall.clear()
+	var readiness_report_129: Dictionary = scene.opponent_readiness_report(0, 1, readiness_context_129)
+	check(is_equal_approx(float(readiness_report_129.get("score", -1.0)), readiness_expected_129) and not readiness_report_129.get("reasons", []).has("末盘"), "contextual readiness keeps score and reasons on the captured wall")
+	var live_readiness_129: Dictionary = scene.opponent_readiness_report(0, 1)
+	check(live_readiness_129.get("reasons", []).has("末盘") and is_equal_approx(float(live_readiness_129.get("score", -1.0)), scene.opponent_readiness_score_from_plan(1, readiness_plan_129, 0)), "context-free readiness retains its live-wall fallback")
+
+	print("--- AS) report/threat cache key wall snapshot reuse ---")
+	scene.wall.clear()
+	for _i in range(60):
+		scene.wall.append("1B")
+	var wall_snapshot_130: int = scene.get_wall_count()
+	var visible_snapshot_130: Array = scene.visible_tile_counts_shared()
+	var threat_key_default_130: String = scene.threat_report_table_state_cache_key(0, visible_snapshot_130)
+	var threat_key_snapshot_130: String = scene.threat_report_table_state_cache_key(0, visible_snapshot_130, "", wall_snapshot_130)
+	check(threat_key_default_130 != "" and threat_key_default_130 == threat_key_snapshot_130, "threat table key preserves its default result with a wall snapshot")
+	var key_context_130: Dictionary = scene.make_ai_evaluation_context(0, visible_snapshot_130)
+	check(int(key_context_130.get("discard_report_wall_count", -1)) == wall_snapshot_130 and str(key_context_130.get("threat_cache_state_key", "")) == threat_key_snapshot_130, "evaluation context reuses the captured wall for its threat key")
+	var report_key_default_130: String = scene.ai_report_cache_key(1, visible_snapshot_130)
+	var report_key_snapshot_130: String = scene.ai_report_cache_key(1, visible_snapshot_130, wall_snapshot_130)
+	check(report_key_default_130 != "" and report_key_default_130 == report_key_snapshot_130, "discard report key preserves its default result with a wall snapshot")
+
+	print("--- AT) discard/threat evaluation context reuse ---")
+	scene.offline_sim_quiet = false
+	scene.offline_phase = "await_discard"
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "2T", "3T", "5B", "E"]
+	scene.players[1]["discards"] = ["1W", "4W", "7W", "2T"]
+	scene.players[2]["discards"] = ["2W", "5W", "8W"]
+	scene.players[3]["melds"] = [["E", "E", "E"]]
+	scene.wall.clear()
+	for _i in range(60):
+		scene.wall.append("1B")
+	scene.clear_ai_report_cache()
+	var visible_snapshot_131: Array = scene.visible_tile_counts_shared()
+	var shared_context_131: Dictionary = {}
+	var shared_reports_131: Array = scene.get_ai_discard_reports(0, visible_snapshot_131, shared_context_131)
+	check(not shared_reports_131.is_empty() and shared_context_131.has("pressure_context"), "discard evaluation exports its completed shared context")
+	check(shared_context_131.has("threat_cache_state_key") and shared_context_131.has("opponents"), "shared context retains the threat snapshot inputs")
+	var shared_threats_131: Dictionary = scene.render_seat_threat_reports(0, shared_context_131)
+	scene.clear_ai_report_cache()
+	var baseline_reports_131: Array = scene.get_ai_discard_reports(0, visible_snapshot_131)
+	var baseline_context_131: Dictionary = scene.make_ai_evaluation_context(0, visible_snapshot_131)
+	var baseline_threats_131: Dictionary = scene.render_seat_threat_reports(0, baseline_context_131)
+	check(shared_reports_131 == baseline_reports_131, "shared discard context preserves the baseline ranking")
+	check(shared_threats_131 == baseline_threats_131, "shared discard context preserves the baseline threat reports")
+	var cache_hit_context_131: Dictionary = {}
+	var cached_reports_131: Array = scene.get_ai_discard_reports(0, visible_snapshot_131, cache_hit_context_131)
+	check(cached_reports_131 == baseline_reports_131 and cache_hit_context_131.is_empty(), "report-cache hits retain lazy threat-context creation")
+
+	print("--- AU) helper text discard-report snapshot reuse ---")
+	scene.ai_assist_enabled = true
+	scene.current_human_advice = []
+	scene.offline_sim_quiet = false
+	scene.offline_phase = "await_discard"
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "2T", "3T", "5B", "E"]
+	scene.wall.clear()
+	for _i in range(60):
+		scene.wall.append("1B")
+	scene.clear_ai_report_cache()
+	var hint_text_132: String = scene.human_hint_text()
+	check(hint_text_132 != "" and scene.ai_report_cache_misses == 1 and scene.ai_report_cache_hits == 0, "human hint reuses its report array for safest-discard text")
+	scene.current_human_advice = []
+	scene.clear_ai_report_cache()
+	var tray_text_132: String = scene.hand_tray_text()
+	check(tray_text_132 != "" and scene.ai_report_cache_misses == 1 and scene.ai_report_cache_hits == 0, "hand tray reuses its report array for safety text")
+	scene.current_human_advice = []
+	scene.clear_ai_report_cache()
+	var advice_text_132: String = scene.ai_advice_summary(0)
+	check(advice_text_132 != "" and scene.ai_report_cache_misses == 1 and scene.ai_report_cache_hits == 0, "advice summary reuses its report array for safest-discard text")
+	scene.current_human_advice = []
+	scene.clear_ai_report_cache()
+	var defense_reports_132: Array = scene.get_ai_discard_reports(0)
+	var defense_best_132: Dictionary = defense_reports_132[0] if not defense_reports_132.is_empty() else {}
+	var defense_text_132: String = scene.advisor_defense_text(0, defense_best_132, defense_reports_132)
+	check(defense_text_132 != "" and scene.ai_report_cache_hits == 0, "detailed defense text reuses its supplied report array")
+
+	print("--- AV) advisor threat summary reuse ---")
+	scene.current_seat = 1
+	scene.last_discard = "3B"
+	scene.players[1]["melds"] = [["5W", "5W", "5W"]]
+	scene.offline_phase = "pending_claim"
+	scene.offline_pending_claim = {"tile": "5W", "options": ["pass"], "chi_choices": []}
+	scene.clear_ai_report_cache()
+	var pending_defense_baseline_133: String = scene.advisor_defense_text(0)
+	scene.clear_ai_report_cache()
+	var pending_cards_133: Array = scene.advisor_panel_card_payloads()
+	var pending_card_133: Dictionary = pending_cards_133[2] if pending_cards_133.size() > 2 else {}
+	check(str(pending_card_133.get("main", "")) == pending_defense_baseline_133 and str(pending_card_133.get("sub", "")) != "", "pending-claim advisor card preserves both defense texts")
+	check(scene.threat_report_cache_misses > 0 and scene.threat_report_cache_hits == 0, "pending-claim advisor card reuses one threat summary")
+	scene.offline_phase = "resolving"
+	scene.offline_pending_claim = {}
+	scene.clear_ai_report_cache()
+	var waiting_defense_baseline_133: String = scene.advisor_defense_text(0)
+	scene.clear_ai_report_cache()
+	var waiting_cards_133: Array = scene.advisor_panel_card_payloads()
+	var waiting_card_133: Dictionary = waiting_cards_133[2] if waiting_cards_133.size() > 2 else {}
+	check(str(waiting_card_133.get("main", "")) == waiting_defense_baseline_133, "waiting advisor card preserves its defense text")
+	check(scene.threat_report_cache_misses > 0 and scene.threat_report_cache_hits == 0, "waiting advisor card reuses one threat summary")
+
+	print("--- AW) advisor helper threat snapshot reuse ---")
+	scene.offline_phase = "await_discard"
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.players[0]["hand"] = ["1W", "2W"]
+	scene.players[1]["melds"] = [["5W", "5W", "5W"], ["6W", "6W", "6W"]]
+	var recommended_134: Dictionary = {"tile": "1W", "risk": 12.0, "risk_label": "中", "safety_label": "", "stance": "均衡"}
+	var safest_134: Dictionary = {"tile": "2W", "risk": 1.0, "risk_label": "低", "safety_label": "安", "stance": "均衡", "score": 0.0, "ukeire": 0}
+	var report_snapshot_134: Array = [recommended_134, safest_134]
+	scene.clear_ai_report_cache()
+	var threat_snapshot_134: Dictionary = scene.opponent_threat_report(0)
+	scene.clear_ai_report_cache()
+	var fallback_hint_134: String = scene.safest_discard_hint_text(recommended_134, safest_134)
+	scene.clear_ai_report_cache()
+	var snapshot_hint_134: String = scene.safest_discard_hint_text(recommended_134, safest_134, threat_snapshot_134)
+	check(not threat_snapshot_134.is_empty() and fallback_hint_134 == snapshot_hint_134, "safest-discard helper preserves its fallback text")
+	check(scene.threat_report_cache_hits == 0 and scene.threat_report_cache_misses == 0, "safest-discard helper reuses an explicit threat report")
+	scene.current_human_advice = report_snapshot_134
+	scene.clear_ai_report_cache()
+	var hint_text_134: String = scene.human_hint_text()
+	check(hint_text_134 != "" and scene.threat_report_cache_misses > 0 and scene.threat_report_cache_hits == 0, "human hint reuses one threat report")
+	scene.clear_ai_report_cache()
+	var advice_text_134: String = scene.ai_advice_summary(0)
+	check(advice_text_134 != "" and scene.threat_report_cache_misses > 0 and scene.threat_report_cache_hits == 0, "advice summary reuses one threat report")
+	scene.clear_ai_report_cache()
+	var defense_text_134: String = scene.advisor_defense_text(0, recommended_134, report_snapshot_134)
+	check(defense_text_134 != "" and scene.threat_report_cache_misses > 0 and scene.threat_report_cache_hits == 0, "advisor defense text does not re-read its threat report")
+
+	print("--- AY) action dock button snapshot reuse ---")
+	var action_root_136 := Control.new()
+	action_root_136.size = Vector2(1280.0, 720.0)
+	root.add_child(action_root_136)
+	scene.root_layer = action_root_136
+	var action_bar_136 := HBoxContainer.new()
+	action_bar_136.name = "ActionSnapshotTestBar"
+	action_bar_136.size = Vector2(520.0, 64.0)
+	action_bar_136.position = Vector2(700.0, 620.0)
+	action_root_136.add_child(action_bar_136)
+	var nested_lane_136 := VBoxContainer.new()
+	nested_lane_136.name = "NestedActionLane"
+	action_bar_136.add_child(nested_lane_136)
+	var game_button_136 := Button.new()
+	game_button_136.name = "SnapshotGameButton"
+	game_button_136.text = "出牌"
+	nested_lane_136.add_child(game_button_136)
+	var support_button_136 := Button.new()
+	support_button_136.name = "SnapshotSupportButton"
+	support_button_136.text = "语音"
+	support_button_136.set_meta("non_game_action", true)
+	action_bar_136.add_child(support_button_136)
+	scene.action_bar = action_bar_136
+	var button_snapshot_136: Array[Button] = scene.action_bar_buttons()
+	var action_signature_136: String = scene.battle_action_chrome_identity_signature(button_snapshot_136)
+	check(button_snapshot_136.size() == 2 and scene.action_bar_button_count(button_snapshot_136) == 1, "action snapshot captures nested game and support buttons")
+	nested_lane_136.remove_child(game_button_136)
+	check(scene.action_bar_button_count(button_snapshot_136) == 1 and scene.action_bar_button_count() == 0 and scene.battle_action_chrome_identity_signature(button_snapshot_136) == action_signature_136, "action snapshot stays stable while the live fallback sees tree mutation")
+	nested_lane_136.add_child(game_button_136)
+	var drawn_buttons_136: Array[Button] = scene.draw_action_dock(action_root_136)
+	check(drawn_buttons_136.size() == 2 and action_root_136.find_child("ActionButtonDock", true, false) != null, "draw action dock returns its button snapshot")
+	scene.finalize_action_bar_layout(drawn_buttons_136)
+	check(scene.action_bar_button_count(drawn_buttons_136) == 1, "final action layout consumes the draw snapshot")
+	scene.retain_battle_action_chrome_for_render()
+	var retained_buttons_136: Array[Button] = scene.draw_action_dock(action_root_136)
+	check(retained_buttons_136.size() == 2 and scene.retained_battle_action_dock == null, "retained action-dock redraw returns the same button snapshot")
+	scene.finalize_action_bar_layout(retained_buttons_136)
+	action_root_136.queue_free()
+	scene.root_layer = null
+
+	print("--- AX) chat candidate meld snapshot reuse ---")
+	var meld_lane_candidate_135 := Rect2(Vector2(0.135, 0.240), Vector2(0.205, 0.510))
+	var empty_meld_snapshot_135: Dictionary = {}
+	var empty_meld_score_135: float = scene.chat_panel_candidate_overlap_score(meld_lane_candidate_135, empty_meld_snapshot_135)
+	scene.players[3]["melds"] = [["5W", "5W", "5W"]]
+	var reused_empty_meld_score_135: float = scene.chat_panel_candidate_overlap_score(meld_lane_candidate_135, empty_meld_snapshot_135)
+	var live_meld_score_135: float = scene.chat_panel_candidate_overlap_score(meld_lane_candidate_135)
+	check(is_equal_approx(empty_meld_score_135, reused_empty_meld_score_135), "chat scoring reuses an explicit empty meld snapshot")
+	check(live_meld_score_135 == INF and live_meld_score_135 != reused_empty_meld_score_135, "chat scoring keeps the live meld exclusion fallback")
+	var chat_rect_135: Rect2 = scene.chat_panel_rect()
+	check(chat_rect_135.size.x > 0.0 and chat_rect_135.size.y > 0.0, "chat panel keeps a bounded lane after meld snapshot selection")
 
 	scene.queue_free()
 	if failed:

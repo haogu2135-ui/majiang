@@ -602,16 +602,17 @@ func draw_action_button_pass_route(button: Button, color: Color) -> Control:
 	# 保留为空壳；过按钮装饰碎块已并入 action_button_panel 插画底板。
 	return null
 
-func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
+func draw_action_dock(parent: Control, disconnected: bool = false) -> Array[Button]:
 	# r214: bulk GPT chrome sweep
-	var count = action_bar_button_count()
+	var action_buttons: Array[Button] = action_bar_buttons()
+	var count = action_bar_button_count(action_buttons)
 	if count <= 0:
 		release_retained_battle_action_chrome()
-		return
+		return action_buttons
 	var pending_claim_mode = has_pending_claim_window()
 	var danger_confirm_mode = mode == "offline" and has_pending_danger_discard()
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
-	var action_chrome_signature := battle_action_chrome_identity_signature()
+	var action_chrome_signature := battle_action_chrome_identity_signature(action_buttons)
 	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
 	var retained_intent := retained_battle_action_intent
 	retained_battle_action_intent = null
@@ -646,11 +647,11 @@ func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
 		retained_dock.set_meta("ui_page_generation", ui_page_generation)
 		retained_dock.set_meta("action_chrome_render_signature", action_chrome_signature)
 		action_dock_status_label = retained_dock.find_child("ActionDockStatusLabel", true, false) as Label
-		start_action_dock_pulse_animation(retained_dock)
+		start_action_dock_pulse_animation(retained_dock, action_buttons)
 		parent.move_child(retained_shadow, max(0, action_bar.get_index()))
 		parent.move_child(retained_dock, max(0, action_bar.get_index()))
 		retained_battle_action_dock_signature = ""
-		return
+		return action_buttons
 	for stale_dock in [retained_dock, retained_shadow]:
 		if stale_dock != null and is_instance_valid(stale_dock):
 			stale_dock.queue_free()
@@ -672,7 +673,6 @@ func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
 	dock.set_meta("layout_role", "action_buttons")
 	set_ui_full_text(dock, "行动区：当前可执行操作会显示在下方按钮；焦点可用方向键移动", "牌桌行动区")
 	mark_ui_optimization(dock, "F-478")
-	var action_buttons = action_bar_buttons()
 	var action_available_width := maxf(1.0, safe_content_pixel_size().x * maxf(0.001, action_bar_layout_rect().size.x - action_bar_layout_rect().position.x))
 	var action_separation := action_button_separation_for_count(action_buttons.size())
 	var action_button_width := action_button_width_for_available(action_buttons.size(), action_available_width, action_separation)
@@ -703,7 +703,7 @@ func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
 		pulse_art.name = "ActionButtonDockPulseArt"
 		pulse_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pulse_driver.add_child(pulse_art)
-	start_action_dock_pulse_animation(dock)
+	start_action_dock_pulse_animation(dock, action_buttons)
 	var dock_rear = make_soft_depth_panel(dock, rect_full(0.012, 0.040, 0.988, 0.980), Color(0.08, 0.055, 0.035, 0.12), 10)
 	dock_rear.name = "ActionDock3DRearShell"
 	dock.move_child(dock_rear, 0)
@@ -809,9 +809,10 @@ func draw_action_dock(parent: Control, disconnected: bool = false) -> void:
 	parent.move_child(dock_shadow, max(0, action_bar.get_index()))
 	parent.move_child(dock, max(0, action_bar.get_index()))
 	dock.set_meta("action_chrome_render_signature", action_chrome_signature)
+	return action_buttons
 
 
-func start_action_dock_pulse_animation(dock: Control) -> void:
+func start_action_dock_pulse_animation(dock: Control, button_snapshot = null) -> void:
 	if dock == null or not is_instance_valid(dock):
 		return
 	kill_screen_tweens_for_subtree(dock)
@@ -820,7 +821,8 @@ func start_action_dock_pulse_animation(dock: Control) -> void:
 	if pulse_driver == null or pulse_art == null or not fx_enabled_effective() or DisplayServer.get_name().to_lower() == "headless":
 		return
 	var pulse_strength := 0.0
-	for action_button_value in action_bar_buttons():
+	var action_buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
+	for action_button_value in action_buttons:
 		var action_button := action_button_value as Button
 		if action_button != null:
 			pulse_strength = maxf(pulse_strength, action_button_pulse_strength(action_button_visual_role(action_button.text)))
@@ -921,8 +923,8 @@ func draw_actions(parent: Control) -> void:
 	if mode == "online_game" and not disconnected:
 		draw_chat_action_button(parent)
 	if mode == "offline" and reuse_retained_battle_action_bar_for_render(parent):
-		draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout()
+		var retained_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+		finalize_action_bar_layout(retained_action_buttons)
 		return
 	if disconnected:
 		var recovery_model := online_recovery_view_model()
@@ -984,8 +986,8 @@ func draw_actions(parent: Control) -> void:
 		mark_ui_optimization(lobby_button, "F-898")
 		lobby_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
 		action_bar.add_child(lobby_button)
-		draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout()
+		var recovery_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+		finalize_action_bar_layout(recovery_action_buttons)
 		action_bar.set_meta("layout_role", "online_recovery_actions")
 		action_bar.set_meta("recovery_state_owner", "OnlineRecoveryStateLabel")
 		action_bar.set_meta("recovery_focus_order", "reconnect_then_lobby")
@@ -1013,8 +1015,8 @@ func draw_actions(parent: Control) -> void:
 		parent.add_child(action_bar)
 		action_bar.add_child(unknown_retry)
 		action_bar.add_child(unknown_lobby)
-		draw_action_dock(parent, disconnected)
-		finalize_action_bar_layout()
+		var unknown_phase_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+		finalize_action_bar_layout(unknown_phase_action_buttons)
 		call_deferred("focus_online_recovery_if_current", root_layer.get_instance_id(), ui_page_generation, "OnlineUnknownPhaseRetryButton")
 		return
 	if has_pending_claim_window():
@@ -1137,8 +1139,8 @@ func draw_actions(parent: Control) -> void:
 			summary_menu_button.z_index = 2
 			action_bar.add_child(summary_menu_button)
 			prepare_ended_action_overflow(parent)
-			draw_action_dock(parent, disconnected)
-			finalize_action_bar_layout()
+			var ended_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+			finalize_action_bar_layout(ended_action_buttons)
 			return
 		if offline_phase == "pending_claim":
 			# 新手引导：吃碰杠提示
@@ -1173,8 +1175,8 @@ func draw_actions(parent: Control) -> void:
 				offline_pass_button.set_meta("pending_tail", true)
 				pending_claim_response_tail_lane.add_child(offline_pass_button)
 			draw_pending_claim_illustration(parent)
-			draw_action_dock(parent, disconnected)
-			finalize_action_bar_layout()
+			var pending_claim_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+			finalize_action_bar_layout(pending_claim_action_buttons)
 			return
 		if player_ai_assist_enabled() and has_pending_danger_discard():
 			var selected_danger_tile = pending_danger_discard_tile
@@ -1229,9 +1231,9 @@ func draw_actions(parent: Control) -> void:
 			action_bar.set_meta("danger_shortcut_state", {"confirm": "Enter", "cancel": "Esc"})
 			action_bar.set_meta("danger_action_order", "alternatives_then_cancel_then_confirm")
 			action_bar.set_meta("danger_reading_sequence", ["tile", "risk", "alternatives", "cancel", "confirm"])
-			draw_action_dock(parent, disconnected)
+			var danger_action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
 			draw_danger_discard_confirmation_art(parent, selected_danger_tile, pending_danger_discard_report, danger_alternatives)
-			finalize_action_bar_layout()
+			finalize_action_bar_layout(danger_action_buttons)
 			return
 		if can_self_discard() and can_win_for_seat(0):
 			action_bar.add_child(make_action_button("自摸", Color(0.94, 0.42, 0.32), func() -> void:
@@ -1386,8 +1388,8 @@ func draw_actions(parent: Control) -> void:
 		else:
 			action_bar.add_child(retry_sync_button)
 	prepare_ended_action_overflow(parent)
-	draw_action_dock(parent, disconnected)
-	finalize_action_bar_layout()
+	var action_buttons: Array[Button] = draw_action_dock(parent, disconnected)
+	finalize_action_bar_layout(action_buttons)
 	if mode == "offline" and battle_action_bar_can_retain():
 		var action_bar_state_signature := battle_action_bar_state_signature()
 		action_bar.set_meta("action_bar_state_signature", action_bar_state_signature)
@@ -1649,7 +1651,8 @@ func advisor_panel_card_payloads() -> Array:
 	if offline_phase == "pending_claim":
 		payloads.append({"heading": "响应", "main": tile_label(str(offline_pending_claim.get("tile", ""))), "sub": claim_options_text(offline_pending_claim), "accent": Color(0.86, 0.78, 0.56)})
 		payloads.append({"heading": "牌局", "main": advisor_turn_line(), "sub": current_status_text(), "accent": Color(0.62, 0.78, 0.82)})
-		payloads.append({"heading": "防守", "main": advisor_defense_text(0), "sub": opponent_threat_summary(0), "accent": Color(0.84, 0.62, 0.54)})
+		var threat_summary := opponent_threat_summary(0)
+		payloads.append({"heading": "防守", "main": advisor_defense_text_from_summary({}, [], threat_summary), "sub": threat_summary, "accent": Color(0.84, 0.62, 0.54)})
 		return payloads
 	if can_self_discard():
 		var reports := ai_discard_reports_for_render()
@@ -1669,7 +1672,8 @@ func advisor_panel_card_payloads() -> Array:
 		return payloads
 	payloads.append({"heading": "局", "main": advisor_turn_line(), "sub": current_status_text(), "accent": Color(0.86, 0.78, 0.56)})
 	payloads.append({"heading": "势", "main": score_strategy_text(0), "sub": "余牌%d" % get_wall_count(), "accent": Color(0.62, 0.78, 0.82)})
-	payloads.append({"heading": "守", "main": advisor_defense_text(0), "sub": opponent_threat_summary(0), "accent": Color(0.84, 0.62, 0.54)})
+	var threat_summary := opponent_threat_summary(0)
+	payloads.append({"heading": "守", "main": advisor_defense_text_from_summary({}, [], threat_summary), "sub": threat_summary, "accent": Color(0.84, 0.62, 0.54)})
 	return payloads
 
 func refresh_advisor_panel_cards(panel: Control) -> void:

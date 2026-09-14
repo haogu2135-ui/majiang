@@ -387,10 +387,19 @@ func configure_background_music_stream() -> void:
 		bgm_wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
 
 func keep_background_music_alive(now_msec: int = -1) -> void:
-	if not music_enabled or not audio_runtime_enabled():
+	if not music_enabled:
 		return
 	var now := now_msec if now_msec >= 0 else Time.get_ticks_msec()
 	if now < next_bgm_retry_msec:
+		return
+	# The watchdog is called from _process(). Avoid querying DisplayServer on
+	# every frame while an async start is already active or runtime audio is
+	# temporarily unavailable; unavailable runtime audio gets the same retry
+	# interval used by the healthy-player path.
+	if bgm_start_in_flight:
+		return
+	if not audio_runtime_enabled():
+		next_bgm_retry_msec = now + 1000
 		return
 	if bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
 		next_bgm_retry_msec = now + 1000

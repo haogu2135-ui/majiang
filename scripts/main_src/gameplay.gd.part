@@ -441,10 +441,11 @@ func release_retained_battle_top_hud() -> void:
 	retained_battle_top_hud = null
 	retained_battle_top_hud_signature = ""
 
-func action_chrome_button_signature() -> String:
+func action_chrome_button_signature(button_snapshot = null) -> String:
 	var button_parts: Array[String] = []
 	var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
-	for button in action_bar_buttons():
+	var buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
+	for button in buttons:
 		if button == null or not is_instance_valid(button):
 			continue
 		button_parts.append(str(button.name))
@@ -459,9 +460,10 @@ func action_chrome_button_signature() -> String:
 			button_parts.append("focused")
 	return "|".join(button_parts)
 
-func battle_action_chrome_identity_signature() -> String:
+func battle_action_chrome_identity_signature(button_snapshot = null) -> String:
 	var viewport_size := effective_viewport_size()
-	var count := action_bar_button_count()
+	var buttons: Array[Button] = action_bar_buttons() if button_snapshot == null else button_snapshot
+	var count := action_bar_button_count(buttons)
 	var disconnected := mode == "online_game" and online_game_disconnected()
 	var pending_claim_mode := has_pending_claim_window()
 	var danger_confirm_mode := mode == "offline" and has_pending_danger_discard()
@@ -484,7 +486,7 @@ func battle_action_chrome_identity_signature() -> String:
 		str(fx_enabled_effective()),
 		str(ui_motion_enabled()),
 		str(count),
-		action_chrome_button_signature(),
+		action_chrome_button_signature(buttons),
 		str(disconnected),
 		str(pending_claim_mode),
 		str(danger_confirm_mode),
@@ -1942,9 +1944,13 @@ func update_ai_assistance_async() -> void:
 
 	var start_time = Time.get_ticks_msec()
 
-	# 计算AI推荐
-	var next_human_advice := get_ai_discard_reports(0)
-	var seat_threat_context := make_ai_evaluation_context(0, evaluation_visible_counts)
+	# 计算AI推荐，并把报告评估已经构建的上下文交给同一轮的威胁 lane。
+	# 缓存命中时输出为空，威胁 lane 保持原有的惰性上下文创建。
+	var shared_evaluation_context: Dictionary = {}
+	var next_human_advice := get_ai_discard_reports(0, evaluation_visible_counts, shared_evaluation_context)
+	var seat_threat_context: Dictionary = shared_evaluation_context
+	if seat_threat_context.is_empty():
+		seat_threat_context = make_ai_evaluation_context(0, evaluation_visible_counts)
 	var next_seat_threat_reports := render_seat_threat_reports(0, seat_threat_context) if player_ai_assist_enabled() else {}
 	if evaluation_revision != ai_state_revision or evaluation_generation != ui_page_generation or mode != "offline":
 		# The deferred evaluator no longer describes the mounted table. Do not
@@ -2853,14 +2859,15 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 		# 当前自摸资格的牌，确保它和普通摸牌一样经过 AI 的价值决策。
 		if not offline_turn_needs_draw:
 			var existing_drawn_tile = current_self_draw_tile(seat)
-			if existing_drawn_tile != "" and can_win_for_seat(seat):
+			if existing_drawn_tile != "":
 				var existing_tsumo_decision = ai_tsumo_decision_report(seat, existing_drawn_tile)
-				if bool(existing_tsumo_decision.get("accept", true)):
-					finish_offline_round(seat, existing_drawn_tile, true, -1)
-					_ai_sim_note_terminal_result(seat)
-					break
-				ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
-				tsumo_continue_discard = ai_tsumo_continue_discard(seat, existing_drawn_tile, existing_tsumo_decision)
+				if bool(existing_tsumo_decision.get("win_valid", false)):
+					if bool(existing_tsumo_decision.get("accept", true)):
+						finish_offline_round(seat, existing_drawn_tile, true, -1)
+						_ai_sim_note_terminal_result(seat)
+						break
+					ai_sim_stats["tsumo_passes"] = int(ai_sim_stats.get("tsumo_passes", 0)) + 1
+					tsumo_continue_discard = ai_tsumo_continue_discard(seat, existing_drawn_tile, existing_tsumo_decision)
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -2873,8 +2880,8 @@ func simulate_offline_bot_hand_sync(max_steps: int = 700) -> Dictionary:
 				break
 			sort_player_hand(seat)
 			offline_turn_needs_draw = false
-			if can_win_for_seat(seat):
-				var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
+			var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
+			if bool(tsumo_decision.get("win_valid", false)):
 				if bool(tsumo_decision.get("accept", true)):
 					finish_offline_round(seat, drawn, true, -1)
 					_ai_sim_note_terminal_result(seat)
@@ -3694,12 +3701,13 @@ func run_ai_until_human() -> void:
 		# 直接在 draw_after_gang 中结算，从而跳过留听策略。
 		if not offline_turn_needs_draw:
 			var existing_drawn_tile = current_self_draw_tile(seat)
-			if existing_drawn_tile != "" and can_win_for_seat(seat):
+			if existing_drawn_tile != "":
 				var existing_tsumo_decision = ai_tsumo_decision_report(seat, existing_drawn_tile)
-				if bool(existing_tsumo_decision.get("accept", true)):
-					finish_offline_round(seat, existing_drawn_tile, true, -1)
-					break
-				tsumo_continue_discard = ai_tsumo_continue_discard(seat, existing_drawn_tile, existing_tsumo_decision)
+				if bool(existing_tsumo_decision.get("win_valid", false)):
+					if bool(existing_tsumo_decision.get("accept", true)):
+						finish_offline_round(seat, existing_drawn_tile, true, -1)
+						break
+					tsumo_continue_discard = ai_tsumo_continue_discard(seat, existing_drawn_tile, existing_tsumo_decision)
 		if offline_turn_needs_draw:
 			if wall.is_empty():
 				finish_wall_draw()
@@ -3713,8 +3721,8 @@ func run_ai_until_human() -> void:
 			play_ai_draw_tile_animation(seat, drawn)
 			sort_player_hand(seat)
 			offline_turn_needs_draw = false
-			if can_win_for_seat(seat):
-				var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
+			var tsumo_decision = ai_tsumo_decision_report(seat, drawn)
+			if bool(tsumo_decision.get("win_valid", false)):
 				if bool(tsumo_decision.get("accept", true)):
 					finish_offline_round(seat, drawn, true, -1)
 					break
@@ -4803,7 +4811,7 @@ func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -
 	return not is_discard_furiten_from_counts(seat, hand_counts)
 
 
-func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "") -> bool:
+func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "", self_draw: bool = false) -> bool:
 	extra_tile = normalize_tile_code(extra_tile)
 	if seat < 0 or seat >= players.size() or hand_counts.is_empty():
 		return false
@@ -4822,7 +4830,7 @@ func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: Str
 		return false
 	if rule_min_fan() <= 1:
 		return true
-	return rule_minimum_met_for_tiles(seat, tiles_from_counts(counts), false)
+	return rule_minimum_met_for_tiles(seat, tiles_from_counts(counts), self_draw)
 
 func discard_report_for_tile(tile: String, hand_index: int = -1) -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard() or tile == "":
@@ -4936,13 +4944,14 @@ func human_hint_text(limit: int = 2) -> String:
 	var score_text = score_strategy_text(0)
 	if score_text != "":
 		parts.append(score_text)
-	var safest_hint = safest_discard_hint_text(best, safest_discard_report())
+	var threat_report: Dictionary = opponent_threat_report(0)
+	var safest_hint = safest_discard_hint_text(best, safest_discard_report([], reports), threat_report)
 	if safest_hint != "":
 		parts.append(safest_hint)
 	var alternatives = discard_alternative_text(reports, limit)
 	if alternatives != "":
 		parts.append("备选%s" % alternatives)
-	var threat = opponent_threat_summary(0)
+	var threat = opponent_threat_summary_from_report(threat_report)
 	if threat != "":
 		parts.append("防守%s" % threat)
 	return " · ".join(parts)
