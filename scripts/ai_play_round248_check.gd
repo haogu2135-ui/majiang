@@ -47,8 +47,8 @@ func run() -> void:
 	scene.players[3]["hand"] = ["2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "9W", "9W", "2T", "3T", "4T", "2W"]
 
 	var source_248 := FileAccess.get_file_as_string("res://scripts/main_src/ai_brain.gd.part")
-	check(source_248.contains("deal_in_risk_score(drawn_tile, seat, continue_eval_context, continue_visible_counts, drawn_index)"), "tsumo continuation forwards the drawn index to deal-in risk")
-	check(source_248.contains("discard_feed_risk_report(drawn_tile, seat, continue_visible_counts, continue_eval_context, drawn_index)"), "tsumo continuation forwards the drawn index to feed risk")
+	check(source_248.contains("deal_in_risk_score(normalized_drawn_tile, seat, continue_eval_context, continue_visible_counts, drawn_index)"), "tsumo continuation forwards the normalized drawn index to deal-in risk")
+	check(source_248.contains("discard_feed_risk_report(normalized_drawn_tile, seat, continue_visible_counts, continue_eval_context, drawn_index)"), "tsumo continuation forwards the normalized drawn index to feed risk")
 	var decision_248: Dictionary = scene.ai_tsumo_decision_report(3, "2W")
 	check(bool(decision_248.get("win_valid", false)) and decision_248.has("reason"), "tsumo continuation keeps a valid decision report")
 

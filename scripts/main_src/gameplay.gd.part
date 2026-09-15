@@ -3972,17 +3972,29 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 	var options: Array = []
 	if seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or tile == "" or offline_phase == "ended":
 		return options
+	var normalized_tile := normalize_tile_code(tile)
+	var tile_index_snapshot := tile_index_normalized(normalized_tile)
 	var hand: Array = players[seat]["hand"]
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
+	return _get_claim_options_normalized(seat, from_seat, normalized_tile, hand_counts, tile_index_snapshot)
+
+
+func _get_claim_options_normalized(seat: int, from_seat: int, normalized_tile: String, hand_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> Array:
+	var options: Array = []
+	if seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or normalized_tile == "" or offline_phase == "ended":
+		return options
+	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(players[seat]["hand"])
+	if tile_index_snapshot == -2:
+		tile_index_snapshot = tile_index_normalized(normalized_tile)
 	# 荣和边界统一处理舍张振听与过水，避免 UI/AI 展示不可提交的胡。
-	if can_ron_for_seat_from_counts(seat, hand_counts, tile):
+	if _can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalized_tile):
 		options.append("hu")
-	var held_count = tile_count_from_counts(tile, hand_counts)
+	var held_count = tile_count_from_counts(normalized_tile, hand_counts, tile_index_snapshot)
 	if held_count >= 3:
 		options.append("gang")
 	if held_count >= 2:
 		options.append("peng")
-	if rule_allows_chi() and seat == (from_seat + 1) % 4 and not get_chi_choices_from_counts(hand_counts, tile).is_empty():
+	if rule_allows_chi() and seat == (from_seat + 1) % 4 and not get_chi_choices_from_counts(hand_counts, normalized_tile, tile_index_snapshot).is_empty():
 		options.append("chi")
 	return options
 
@@ -4014,18 +4026,19 @@ func _is_valid_offline_claim_normalized(seat: int, from_seat: int, tile: String,
 	var discards: Array = players[from_seat]["discards"]
 	if discards.is_empty() or str(discards.back()) != tile:
 		return false
+	var tile_index_snapshot := tile_index_normalized(tile)
 	var hand_counts := tile_counts(players[seat]["hand"])
 	var options: Array = []
-	if can_ron_for_seat_from_counts(seat, hand_counts, tile):
+	if _can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile):
 		options.append("hu")
-	var held_count := tile_count_from_counts(tile, hand_counts)
+	var held_count := tile_count_from_counts(tile, hand_counts, tile_index_snapshot)
 	if held_count >= 3:
 		options.append("gang")
 	if held_count >= 2:
 		options.append("peng")
 	var chi_choices: Array = []
 	if rule_allows_chi() and seat == (from_seat + 1) % 4:
-		chi_choices = get_chi_choices_from_counts(hand_counts, tile)
+		chi_choices = get_chi_choices_from_counts(hand_counts, tile, tile_index_snapshot)
 		if not chi_choices.is_empty():
 			options.append("chi")
 	if not options.has(claim):
@@ -4811,16 +4824,15 @@ func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_cou
 
 func can_ron_for_seat(seat: int, tile: String) -> bool:
 	tile = normalize_tile_code(tile)
-	if tile == "" or is_passed_win_tile(seat, tile):
-		return false
 	var hand_counts = tile_counts(players[seat].get("hand", []))
-	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile):
-		return false
-	return not is_discard_furiten_from_counts(seat, hand_counts)
+	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile)
 
 
 func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -> bool:
-	tile = normalize_tile_code(tile)
+	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(tile))
+
+
+func _can_ron_for_seat_from_counts_normalized(seat: int, hand_counts: Array, tile: String) -> bool:
 	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
 	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile):
@@ -5031,7 +5043,8 @@ func human_claim_hint_text() -> String:
 	]
 
 func human_claim_candidate_reports() -> Array:
-	var tile = str(offline_pending_claim.get("tile", ""))
+	var tile := normalize_tile_code(str(offline_pending_claim.get("tile", "")))
+	var tile_index_snapshot := tile_index_normalized(tile)
 	var candidates: Array = []
 	var claim_context: Dictionary = {}
 	for claim in offline_pending_claim.get("options", []):
@@ -5043,7 +5056,9 @@ func human_claim_candidate_reports() -> Array:
 			if chi_choices.is_empty():
 				if claim_context.is_empty():
 					claim_context = make_ai_claim_context(0)
-				var choice = best_chi_choice_from_counts(claim_context.get("hand_counts", []), tile)
+					claim_context["claim_tile"] = tile
+					claim_context["claim_tile_index"] = tile_index_snapshot
+				var choice = best_chi_choice_from_counts(claim_context.get("hand_counts", []), tile, tile_index_snapshot)
 				if not choice.is_empty():
 					var report = build_ai_claim_report(0, "chi", tile, choice, claim_context)
 					report["label"] = chi_choice_label(choice)
@@ -5055,6 +5070,8 @@ func human_claim_candidate_reports() -> Array:
 						continue
 					if claim_context.is_empty():
 						claim_context = make_ai_claim_context(0)
+						claim_context["claim_tile"] = tile
+						claim_context["claim_tile_index"] = tile_index_snapshot
 					var report = build_ai_claim_report(0, "chi", tile, choice, claim_context)
 					report["label"] = chi_choice_label(choice)
 					report["chi_choice"] = choice
@@ -5062,6 +5079,8 @@ func human_claim_candidate_reports() -> Array:
 		else:
 			if claim_context.is_empty():
 				claim_context = make_ai_claim_context(0)
+				claim_context["claim_tile"] = tile
+				claim_context["claim_tile_index"] = tile_index_snapshot
 			var report = build_ai_claim_report(0, claim_name, tile, {}, claim_context)
 			report["label"] = claim_label(claim_name)
 			candidates.append(report)
@@ -5213,10 +5232,16 @@ func seat_threat_report_revision(report: Dictionary) -> int:
 	])
 
 func best_chi_choice(hand: Array, tile: String) -> Dictionary:
-	return best_chi_choice_from_counts(tile_counts(hand), normalize_tile_code(tile))
+	var normalized_tile := normalize_tile_code(tile)
+	return best_chi_choice_from_counts(tile_counts(hand), normalized_tile, tile_index_normalized(normalized_tile))
 
-func best_chi_choice_from_counts(hand_counts: Array, tile: String) -> Dictionary:
-	var choices = get_chi_choices_from_counts(hand_counts, tile)
+func best_chi_choice_from_counts(hand_counts: Array, tile: String, tile_index_snapshot: int = -2) -> Dictionary:
+	var normalized_tile := tile
+	var index := tile_index_snapshot
+	if index == -2:
+		normalized_tile = normalize_tile_code(tile)
+		index = tile_index_normalized(normalized_tile)
+	var choices = get_chi_choices_from_counts(hand_counts, normalized_tile, index)
 	var best: Dictionary = {}
 	var best_score = -100000.0
 	for choice in choices:
@@ -5234,10 +5259,13 @@ func best_chi_choice_from_counts(hand_counts: Array, tile: String) -> Dictionary
 func get_chi_choices(hand: Array, tile: String) -> Array:
 	return get_chi_choices_from_counts(tile_counts(hand), tile)
 
-func get_chi_choices_from_counts(hand_counts: Array, tile: String) -> Array:
+func get_chi_choices_from_counts(hand_counts: Array, tile: String, tile_index_snapshot: int = -2) -> Array:
 	var choices: Array = []
-	tile = normalize_tile_code(tile)
-	var index = tile_index_normalized(tile)
+	var normalized_tile := tile
+	var index := tile_index_snapshot
+	if index == -2:
+		normalized_tile = normalize_tile_code(tile)
+		index = tile_index_normalized(normalized_tile)
 	if index < 0 or index >= 27 or hand_counts.is_empty():
 		return choices
 	var rank = index % 9

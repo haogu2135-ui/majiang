@@ -67,7 +67,7 @@ func run() -> void:
 	check(bool(canonical_report_278.get("accept", false)) == bool(alias_report_278.get("accept", false)) and str(canonical_report_278.get("reason", "")) == str(alias_report_278.get("reason", "")), "legacy tsumo aliases preserve the decision")
 	check(int(canonical_report_278.get("fan", -1)) == int(alias_report_278.get("fan", -2)) and int(canonical_report_278.get("points", -1)) == int(alias_report_278.get("points", -2)), "legacy tsumo aliases preserve score details")
 	var invalid_report_278: Dictionary = scene.ai_tsumo_decision_report(3, "ZZ")
-	check(not bool(invalid_report_278.get("accept", true)) and str(invalid_report_278.get("reason", "")) == "无效", "invalid tsumo tiles retain the invalid result")
+	check(not bool(invalid_report_278.get("accept", true)) and str(invalid_report_278.get("reason", "")) == "非当前摸牌", "invalid tsumo tiles retain the legacy rejection result")
 
 	scene.queue_free()
 	if failed:

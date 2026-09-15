@@ -1,7 +1,7 @@
 class_name Commercial3DStage
 extends SubViewportContainer
 
-const FELT_TEXTURE_PATH := "res://assets/table/table_felt_warm_gpt.png"  # r428: GPT warm bright felt (lifted from gpt-image-2)
+const FELT_TEXTURE_PATH := "res://assets/table/table_felt_3d_gpt.png"  # GPT jade felt keeps the table family coherent with the battle frame.
 const LACQUER_TEXTURE_PATH := "res://assets/table/table_lacquer_3d_gpt.png"
 const FELT_NORMAL_PATH := "res://assets/table/table_felt_3d_normal.png"
 const FELT_ROUGHNESS_PATH := "res://assets/table/table_felt_3d_roughness.png"

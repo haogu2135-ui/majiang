@@ -1002,6 +1002,10 @@ func speak_action_call(action: String, tile: String) -> void:
 
 func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 	var best: Dictionary = {}
+	var normalized_tile := normalize_tile_code(tile)
+	if normalized_tile == "":
+		return best
+	var tile_index_snapshot := tile_index_normalized(normalized_tile)
 	var visible_counts_snapshot = visible_tile_counts_shared()
 	for offset in range(1, 4):
 		var seat = (from_seat + offset) % 4
@@ -1009,13 +1013,13 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 			continue
 		apply_ai_decision_difficulty_for_seat(seat)
 		var hand_counts = tile_counts(players[seat]["hand"])
-		var options = get_claim_options(seat, from_seat, tile, hand_counts)
+		var options = _get_claim_options_normalized(seat, from_seat, normalized_tile, hand_counts, tile_index_snapshot)
 		if options.is_empty():
 			continue
 		if options.has("hu"):
 			# get_claim_options() has just validated this exact hand/tile pair. Keep
 			# that result for the report instead of repeating structural/furiten scans.
-			var hu_decision = ai_ron_decision_report(seat, tile, "", hand_counts, true)
+			var hu_decision = ai_ron_decision_report(seat, normalized_tile, "", hand_counts, true)
 			if bool(hu_decision.get("accept", true)):
 				return {
 					"seat": seat,
@@ -1024,11 +1028,13 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 					"claim_report": hu_decision,
 				}
 			# AI 主动留听也应进入同张过水；否则下一家重复同张可立刻绕过决策。
-			record_passed_win_tile(seat, tile)
+			record_passed_win_tile(seat, normalized_tile)
 			continue
 		var claim_context = make_ai_claim_context(seat, visible_counts_snapshot, hand_counts, from_seat)
+		claim_context["claim_tile"] = normalized_tile
+		claim_context["claim_tile_index"] = tile_index_snapshot
 		if options.has("gang"):
-			var gang_report = build_ai_claim_report(seat, "gang", tile, {}, claim_context)
+			var gang_report = build_ai_claim_report(seat, "gang", normalized_tile, {}, claim_context)
 			if not bool(gang_report.get("allow", false)):
 				pass
 			else:
@@ -1037,7 +1043,7 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 				if ai_claim_candidate_precedes(gang_candidate, best, from_seat):
 					best = gang_candidate
 		if options.has("peng"):
-			var peng_report = build_ai_claim_report(seat, "peng", tile, {}, claim_context)
+			var peng_report = build_ai_claim_report(seat, "peng", normalized_tile, {}, claim_context)
 			if not bool(peng_report.get("allow", false)):
 				pass
 			else:
@@ -1046,7 +1052,7 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 				if ai_claim_candidate_precedes(peng_candidate, best, from_seat):
 					best = peng_candidate
 		if options.has("chi"):
-			var chi_claim = best_ai_chi_claim(seat, tile, offset, claim_context)
+			var chi_claim = best_ai_chi_claim(seat, normalized_tile, offset, claim_context)
 			if not chi_claim.is_empty() and ai_claim_candidate_precedes(chi_claim, best, from_seat):
 				best = chi_claim
 	return best
@@ -1079,7 +1085,11 @@ func best_ai_chi_claim(seat: int, tile: String, offset: int = 1, claim_context: 
 	var best_score = -1000000.0
 	if seat < 0 or seat >= players.size() or tile == "":
 		return best
-	var choices = get_chi_choices_from_counts(claim_context.get("hand_counts", []), tile) if is_ai_claim_context_for_seat(claim_context, seat) else get_chi_choices(players[seat]["hand"], tile)
+	var has_context := is_ai_claim_context_for_seat(claim_context, seat)
+	var claim_tile_index_snapshot := -2
+	if has_context and str(claim_context.get("claim_tile", "")) == tile:
+		claim_tile_index_snapshot = int(claim_context.get("claim_tile_index", -2))
+	var choices = get_chi_choices_from_counts(claim_context.get("hand_counts", []), tile, claim_tile_index_snapshot) if has_context else get_chi_choices(players[seat]["hand"], tile)
 	for choice in choices:
 		var chi_choice: Dictionary = choice
 		var report = build_ai_claim_report(seat, "chi", tile, chi_choice, claim_context)
@@ -1169,8 +1179,11 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 	var meld_tile_indices: Array = eval_context.get("meld_tile_indices", [])
 	var pressure_context = ai_pressure_context(seat, eval_context)
 	eval_context["pressure_context"] = pressure_context
-	var before_shanten = calculate_min_shanten_from_counts(hand_counts, open_melds)
-	var before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size(), meld_tile_indices)
+	var hand_counts_key := counts_compact_key(hand_counts)
+	var before_shanten = calculate_min_shanten_from_counts(hand_counts, open_melds, hand_counts_key)
+	var before_features: Dictionary = hand_plan_features_from_counts(hand_counts, hand.size(), true, hand_counts_key)
+	var before_shape_metrics: Dictionary = ai_hand_shape_metrics_from_counts(hand_counts, before_features)
+	var before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size(), meld_tile_indices, before_features)
 	var before_plan_report: Dictionary = before_plan_eval.get("report", {})
 	return {
 		"seat": seat,
@@ -1191,7 +1204,7 @@ func make_ai_claim_context(seat: int, visible_counts_snapshot: Array = [], hand_
 		# Use the same seat-aware plan score as discard reports. The report merges
 		# exposed melds; the numeric score must do the same or claim comparisons
 		# and post-meld discards disagree about the active route.
-		"before_score": evaluate_ai_hand_from_counts(hand_counts) + float(before_plan_eval.get("score", 0.0)) * 0.35 * route_focus,
+		"before_score": float(before_shape_metrics.get("value", 0.0)) + float(before_plan_eval.get("score", 0.0)) * 0.35 * route_focus,
 		"visible_counts": visible_counts,
 		"eval_context": eval_context,
 		"pressure_context": pressure_context,
@@ -1258,9 +1271,16 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		open_melds = players[seat]["melds"].size()
 		exposed_melds = exposed_meld_count_for_seat(seat)
 	var hand_counts = claim_context.get("hand_counts", []) if has_claim_context else tile_counts(hand)
+	var standalone_counts_key := ""
 	if not has_claim_context:
-		before_shanten = calculate_min_shanten_from_counts(hand_counts, open_melds)
-	var standalone_before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size()) if not has_claim_context else {}
+		standalone_counts_key = counts_compact_key(hand_counts)
+		before_shanten = calculate_min_shanten_from_counts(hand_counts, open_melds, standalone_counts_key)
+	var standalone_before_plan_eval: Dictionary = {}
+	var standalone_before_shape_metrics: Dictionary = {}
+	if not has_claim_context:
+		var standalone_features: Dictionary = hand_plan_features_from_counts(hand_counts, hand.size(), true, standalone_counts_key)
+		standalone_before_shape_metrics = ai_hand_shape_metrics_from_counts(hand_counts, standalone_features)
+		standalone_before_plan_eval = hand_plan_eval_for_seat_from_counts(seat, hand_counts, hand.size(), [], standalone_features)
 	var before_plan_report = claim_context.get("before_plan_report", {}) if has_claim_context else standalone_before_plan_eval.get("report", {})
 	if typeof(before_plan_report) != TYPE_DICTIONARY:
 		before_plan_report = {}
@@ -1278,7 +1298,11 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		claim_aggression = float(claim_context.get("claim_report_claim_aggression", 1.0))
 	else:
 		claim_aggression = ai_claim_aggression(seat)
-	var claim_tile_index_snapshot := tile_index(tile)
+	var claim_tile_index_snapshot := -2
+	if has_claim_context and str(claim_context.get("claim_tile", "")) == tile:
+		claim_tile_index_snapshot = int(claim_context.get("claim_tile_index", -2))
+	if claim_tile_index_snapshot == -2:
+		claim_tile_index_snapshot = tile_index(tile)
 	var claim_tile_index_arg := claim_tile_index_snapshot if claim_tile_index_snapshot >= 0 else -2
 	var claim_is_terminal_or_honor := false
 	if claim_tile_index_snapshot >= 27:
@@ -1305,8 +1329,11 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 		_:
 			return report
 	var after_open_melds = open_melds + 1
-	var after_shanten = calculate_min_shanten_from_counts(after_counts, after_open_melds)
-	var before_score = float(claim_context.get("before_score", 0.0)) if has_claim_context else evaluate_ai_hand_from_counts(hand_counts) + float(standalone_before_plan_eval.get("score", 0.0)) * 0.35 * route_focus
+	var after_counts_key := counts_compact_key(after_counts)
+	var after_shanten = calculate_min_shanten_from_counts(after_counts, after_open_melds, after_counts_key)
+	var after_features: Dictionary = hand_plan_features_from_counts(after_counts, after.size(), true, after_counts_key)
+	var after_shape_metrics: Dictionary = ai_hand_shape_metrics_from_counts(after_counts, after_features)
+	var before_score = float(claim_context.get("before_score", 0.0)) if has_claim_context else float(standalone_before_shape_metrics.get("value", 0.0)) + float(standalone_before_plan_eval.get("score", 0.0)) * 0.35 * route_focus
 	var extra_meld_tiles: Array = []
 	var extra_meld_tile_indices_snapshot: Array[int] = []
 	match claim:
@@ -1325,14 +1352,14 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 				var needed_tile := str(needed)
 				extra_meld_tiles.append(needed_tile)
 				extra_meld_tile_indices_snapshot.append(tile_index(needed_tile))
-	var after_plan_report = plan_report_with_extra_melds(seat, after_counts, after.size(), extra_meld_tiles, meld_tile_indices_snapshot, extra_meld_tile_indices_snapshot)
+	var after_plan_report = plan_report_with_extra_melds(seat, after_counts, after.size(), extra_meld_tiles, meld_tile_indices_snapshot, extra_meld_tile_indices_snapshot, after_features)
 	# The route report includes both existing and newly exposed melds. Reuse its
 	# score for the claim delta so the numeric comparison matches the displayed
 	# route label and the later post-meld discard evaluator.
 	var after_plan_score := float(after_plan_report.get("score", 0.0))
 	if not after_plan_report.has("score"):
 		after_plan_score = hand_plan_score_from_counts(after_counts, after.size())
-	var after_score = evaluate_ai_hand_from_counts(after_counts) + after_plan_score * 0.35 * route_focus + bonus
+	var after_score = float(after_shape_metrics.get("value", 0.0)) + after_plan_score * 0.35 * route_focus + bonus
 	var shape_gain = after_score - before_score
 	var allow = false
 	var reason = "牌型收益不足"
@@ -1533,6 +1560,9 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 			banned_lookup[normalize_tile_code(str(key))] = true
 	var evaluated_tiles: Array[bool] = []
 	evaluated_tiles.resize(TILE_CODES.size())
+	# All post-claim candidates share the same open-meld state. Reuse the
+	# recursive shanten sub-states across this bounded candidate batch.
+	var post_claim_shanten_memo: Dictionary = {}
 	# Quiet/soak decisions consume only count-based risk fields. Avoid materializing
 	# and restoring a full array for every candidate in that path; foreground
 	# reports still receive the exact post-discard hand ordering below.
@@ -1554,7 +1584,7 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 		# 副露压力检查只需要知道是否会被迫切危险张。静默全 Bot 采样中，
 		# 不要为每一个候选再展开完整的进张/待牌/路线报告；这会在一次响应
 		# 中重复数十次 34 张扫描。前台对局和玩家助手仍走完整评估。
-		var report = build_ai_fast_post_claim_discard_report(seat, candidate, open_melds, pressure_context, shared_context, simulated_counts, visible_counts_snapshot, candidate_index) if offline_sim_quiet else build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, shared_context, simulated_counts, after_counts, i, candidate_index)
+		var report = build_ai_fast_post_claim_discard_report(seat, candidate, open_melds, pressure_context, shared_context, simulated_counts, visible_counts_snapshot, candidate_index, post_claim_shanten_memo) if offline_sim_quiet else build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, shared_context, simulated_counts, after_counts, i, candidate_index, -99, {}, post_claim_shanten_memo)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		if not offline_sim_quiet:
 			simulated.insert(i, candidate)
@@ -1563,11 +1593,11 @@ func best_ai_post_claim_discard_report(seat: int, after_hand: Array, open_melds:
 	return best
 
 
-func build_ai_fast_post_claim_discard_report(seat: int, tile: String, open_melds: int, pressure_context: Dictionary, eval_context: Dictionary, simulated_counts: Array, visible_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> Dictionary:
+func build_ai_fast_post_claim_discard_report(seat: int, tile: String, open_melds: int, pressure_context: Dictionary, eval_context: Dictionary, simulated_counts: Array, visible_counts_snapshot: Array = [], tile_index_snapshot: int = -2, shanten_search_memo: Dictionary = {}) -> Dictionary:
 	# This stays deliberately smaller than the player-facing scorer, but keeps the
 	# practical risks that can make an otherwise safe forced discard unacceptable.
 	# The shared evaluation context bounds the added feed/package lookups per tile.
-	var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
+	var shanten = calculate_min_shanten_from_counts_with_memo(simulated_counts, open_melds, "", shanten_search_memo)
 	var risk = deal_in_risk_score(tile, seat, eval_context, visible_counts_snapshot, tile_index_snapshot)
 	var safety = tile_safety_label(tile, seat, visible_counts_snapshot, eval_context, tile_index_snapshot)
 	var defense = ai_defense_weight(seat, shanten, pressure_context, eval_context)
@@ -1613,7 +1643,9 @@ func choose_ai_rob_gang(gang_seat: int, tile: String) -> Dictionary:
 
 
 func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
-	var cache_state_key := "%d|%d|%s" % [ai_state_revision, gang_seat, tile]
+	var normalized_tile := normalize_tile_code(tile)
+	var tile_index_snapshot := tile_index_normalized(normalized_tile)
+	var cache_state_key := "%d|%d|%s" % [ai_state_revision, gang_seat, normalized_tile]
 	var cached_report: Variant = ai_rob_threat_cache.get(cache_state_key, null)
 	if typeof(cached_report) == TYPE_DICTIONARY:
 		touch_ai_rob_threat_cache_key(cache_state_key)
@@ -1631,21 +1663,20 @@ func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
 		"risk_threshold": 0.0,
 		"risk_details": [],
 	}
-	if gang_seat < 0 or gang_seat >= players.size() or tile == "":
+	if gang_seat < 0 or gang_seat >= players.size() or normalized_tile == "":
 		return report
 	# The declarer must not inspect concealed opponent hands.  Estimate chankan
 	# danger only from public rivers, melds, wall depth and inferred readiness;
 	# actual winners are still resolved by the gameplay layer after declaration.
 	var visible_counts = visible_tile_counts_shared()
 	var eval_context = make_ai_evaluation_context(gang_seat, visible_counts)
-	var visible = max(3, visible_tile_count_from_counts(tile, visible_counts))
-	var tile_index_snapshot := tile_index(tile)
+	var visible = max(3, visible_tile_count_from_counts(normalized_tile, visible_counts, tile_index_snapshot))
 	var details: Array = []
 	for offset in range(1, 4):
 		var seat = (gang_seat + offset) % 4
 		# The single-opponent risk component owns the public-river early exit;
 		# avoid querying the same discard count again before entering it.
-		var components = single_opponent_deal_in_risk_components(tile, gang_seat, seat, visible, visible_counts, eval_context, tile_index_snapshot)
+		var components = single_opponent_deal_in_risk_components(normalized_tile, gang_seat, seat, visible, visible_counts, eval_context, tile_index_snapshot)
 		var public_risk = float(components.get("risk", 0.0))
 		if public_risk <= 0.01:
 			continue
@@ -2106,8 +2137,8 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 			return report
 		var continue_visible_counts = visible_tile_counts_shared()
 		var continue_eval_context = make_ai_evaluation_context(seat, continue_visible_counts)
-			var continue_risk = deal_in_risk_score(normalized_drawn_tile, seat, continue_eval_context, continue_visible_counts, drawn_index)
-			var continue_feed_report = discard_feed_risk_report(normalized_drawn_tile, seat, continue_visible_counts, continue_eval_context, drawn_index)
+		var continue_risk = deal_in_risk_score(normalized_drawn_tile, seat, continue_eval_context, continue_visible_counts, drawn_index)
+		var continue_feed_report = discard_feed_risk_report(normalized_drawn_tile, seat, continue_visible_counts, continue_eval_context, drawn_index)
 		var continue_feed = float(continue_feed_report.get("score", 0.0)) if typeof(continue_feed_report) == TYPE_DICTIONARY else 0.0
 		var risk_limit = AI_DANGER_RISK_SOFT + (2.0 if diff == AI_DIFFICULTY_HARD else 6.0)
 		var feed_limit = AI_DANGER_FEED_SOFT + (2.0 if diff == AI_DIFFICULTY_HARD else 6.0)
@@ -2795,6 +2826,7 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 	var hand_counts = tile_counts(hand)
 	var evaluated_tiles: Array[bool] = []
 	evaluated_tiles.resize(TILE_CODES.size())
+	var discard_shanten_memo: Dictionary = {}
 	var simulated = hand.duplicate()
 	var simulated_counts = hand_counts.duplicate()
 	var candidates: Array = []  # {tile, index, cheap_score}
@@ -2827,7 +2859,7 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			var cand = str(item.get("tile", ""))
 			var idx = int(item.get("tile_index", -1))
 			simulated_counts[idx] = int(simulated_counts[idx]) - 1
-			var shanten = calculate_min_shanten_from_counts(simulated_counts, open_melds)
+			var shanten = calculate_min_shanten_from_counts_with_memo(simulated_counts, open_melds, "", discard_shanten_memo)
 			item["fast_shanten"] = shanten
 			# 快评：只靠向听 + 危险，避免 34 张进张扫描
 			var fast_risk_vector: Dictionary = tile_risk_vector(cand, seat, visible_counts_snapshot, eval_context, idx)
@@ -2906,7 +2938,7 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 		simulated.remove_at(i)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) - 1
 		var fast_risk_vector: Dictionary = item.get("fast_risk_vector", {})
-		var report = build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, eval_context, simulated_counts, hand_counts, i, candidate_index, int(item.get("fast_shanten", -99)), fast_risk_vector)
+		var report = build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, eval_context, simulated_counts, hand_counts, i, candidate_index, int(item.get("fast_shanten", -99)), fast_risk_vector, discard_shanten_memo)
 		reports.append(report)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		simulated.insert(i, candidate)
@@ -3321,7 +3353,7 @@ func package_liability_ai_cache_key() -> String:
 	return str(ai_package_liability_revision)
 
 
-func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = [], hand_index: int = -1, tile_index_override: int = -1, shanten_snapshot: int = -99, risk_vector_snapshot: Dictionary = {}) -> Dictionary:
+func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_melds: int, visible_counts_snapshot: Array = [], pressure_context: Dictionary = {}, eval_context: Dictionary = {}, simulated_counts_snapshot: Array = [], original_counts_snapshot: Array = [], hand_index: int = -1, tile_index_override: int = -1, shanten_snapshot: int = -99, risk_vector_snapshot: Dictionary = {}, shanten_search_memo: Dictionary = {}) -> Dictionary:
 	var candidate_tile_index_snapshot := tile_index_override if tile_index_override >= 0 else tile_index(tile)
 	var simulated_counts = simulated_counts_snapshot if not simulated_counts_snapshot.is_empty() else tile_counts(simulated)
 	var original_counts = original_counts_snapshot
@@ -3330,8 +3362,11 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		if candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < original_counts.size():
 			original_counts[candidate_tile_index_snapshot] = int(original_counts[candidate_tile_index_snapshot]) + 1
 	var simulated_tile_count = simulated.size()
+	# This candidate count vector feeds several memo keys below. Build its compact
+	# key once and pass it through the shanten, effective-tile, and route helpers.
+	var simulated_counts_key := counts_compact_key(simulated_counts)
 	var visible_counts = ai_context_visible_counts(eval_context, visible_counts_snapshot)
-	var shanten = shanten_snapshot if shanten_snapshot > -99 else calculate_min_shanten_from_counts(simulated_counts, open_melds)
+	var shanten = shanten_snapshot if shanten_snapshot > -99 else calculate_min_shanten_from_counts_with_memo(simulated_counts, open_melds, simulated_counts_key, shanten_search_memo)
 	var context_matches_seat := not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat
 	var meld_tile_indices_snapshot: Array = []
 	if context_matches_seat:
@@ -3363,7 +3398,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var effective_metrics_ready := false
 	# 静默模拟：远离听牌时跳过 34 张进张扫描（主耗时）
 	if (not offline_sim_quiet) or shanten <= 1:
-		var metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts, str(eval_context.get("visible_counts_key", "")))
+		var metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts, str(eval_context.get("visible_counts_key", "")), simulated_counts_key)
 		ukeire = int(metrics.get("count", 0))
 		variety = int(metrics.get("variety", 0))
 		effective_tiles = metrics.get("tiles", [])
@@ -3394,7 +3429,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	# The discard report needs both shape and route features for this same
 	# candidate count vector. Build the optional shape fields during the route
 	# scan so the two 34-slot passes do not run independently.
-	var candidate_features = hand_plan_features_from_counts(simulated_counts, simulated_tile_count, true)
+	var candidate_features = hand_plan_features_from_counts(simulated_counts, simulated_tile_count, true, simulated_counts_key)
 	var shape_metrics = ai_hand_shape_metrics_from_counts(simulated_counts, candidate_features)
 	var shape = float(shape_metrics.get("value", 0.0))
 	var shape_report: Dictionary = shape_metrics.get("quality_report", {})
@@ -3414,7 +3449,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var plan_bonus = float(plan_report.get("score_bonus", 0.0))
 	var pressure = discard_pressure_score(tile, seat, visible_counts, eval_context, candidate_tile_index_snapshot)
 	var risk_vector: Dictionary = risk_vector_snapshot if not risk_vector_snapshot.is_empty() else tile_risk_vector(tile, seat, visible_counts, eval_context, candidate_tile_index_snapshot)
-	var risk_summary = deal_in_risk_summary(tile, seat, visible_counts, risk_vector)
+	var risk_summary = deal_in_risk_summary(tile, seat, visible_counts, risk_vector, eval_context, candidate_tile_index_snapshot)
 	var risk = float(risk_summary.get("score", 0.0))
 	var risk_label_text = risk_label(risk)
 	var feed_report = discard_feed_risk_report(tile, seat, visible_counts, eval_context, candidate_tile_index_snapshot)
@@ -3434,7 +3469,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		elif risk <= AI_DANGER_RISK_HIGH + 10.0:
 			needs_guard_ukeire = feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
 	if needs_guard_ukeire and not effective_metrics_ready:
-		var guard_metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts, str(eval_context.get("visible_counts_key", "")))
+		var guard_metrics = effective_tile_metrics(simulated, open_melds, seat, shanten, visible_counts, simulated_counts, str(eval_context.get("visible_counts_key", "")), simulated_counts_key)
 		ukeire = int(guard_metrics.get("count", 0))
 		variety = int(guard_metrics.get("variety", 0))
 		effective_tiles = guard_metrics.get("tiles", [])
@@ -4564,9 +4599,9 @@ func effective_tile_count(hand: Array, open_melds: int, seat: int, known_shanten
 func effective_tile_variety(hand: Array, open_melds: int, seat: int) -> int:
 	return int(effective_tile_metrics(hand, open_melds, seat).get("variety", 0))
 
-func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shanten: int = 99, visible_counts_snapshot: Array = [], hand_counts_snapshot: Array = [], visible_counts_key_override: String = "") -> Dictionary:
+func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shanten: int = 99, visible_counts_snapshot: Array = [], hand_counts_snapshot: Array = [], visible_counts_key_override: String = "", hand_counts_key_override: String = "") -> Dictionary:
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
-	var hand_counts_key := counts_compact_key(hand_counts)
+	var hand_counts_key := hand_counts_key_override if hand_counts_key_override != "" else counts_compact_key(hand_counts)
 	var current_shanten = known_shanten if known_shanten != 99 else calculate_min_shanten_from_counts(hand_counts, open_melds, hand_counts_key)
 
 	# 有效张种类取决于手牌，但有效张数还取决于已见牌。
@@ -4685,10 +4720,11 @@ func hand_plan_score(hand: Array) -> float:
 func hand_plan_score_from_counts(counts: Array, tile_count: int) -> float:
 	return hand_plan_score_from_features(counts, hand_plan_features_from_counts(counts, tile_count))
 
-func hand_plan_features_from_counts(counts: Array, tile_count: int, include_shape_metrics: bool = false) -> Dictionary:
+func hand_plan_features_from_counts(counts: Array, tile_count: int, include_shape_metrics: bool = false, counts_key_override: String = "") -> Dictionary:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	var cache_key := "%d:%s|shape=%d" % [tile_count, counts_compact_key(counts), 1 if include_shape_metrics else 0]
+	var counts_key := counts_key_override if counts_key_override != "" else counts_compact_key(counts)
+	var cache_key := "%d:%s|shape=%d" % [tile_count, counts_key, 1 if include_shape_metrics else 0]
 	var cached: Variant = hand_plan_features_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
 		hand_plan_features_cache_hits += 1
@@ -4932,10 +4968,11 @@ func hand_plan_meld_tile_indices_for_seat(seat: int) -> Array[int]:
 	return result
 
 
-func plan_report_with_extra_melds(seat: int, hand_counts: Array, hand_size: int, extra_meld_tiles: Array = [], existing_meld_tile_indices_snapshot: Array = [], extra_meld_tile_indices_snapshot: Array = []) -> Dictionary:
+func plan_report_with_extra_melds(seat: int, hand_counts: Array, hand_size: int, extra_meld_tiles: Array = [], existing_meld_tile_indices_snapshot: Array = [], extra_meld_tile_indices_snapshot: Array = [], base_features_snapshot: Dictionary = {}) -> Dictionary:
 	# 评估「当前副露 + 即将副露 + 剩余手牌」的路线标签，用于副露后重估。
 	var plan_counts = hand_counts.duplicate() if not hand_counts.is_empty() else tile_counts([])
 	var total = hand_size
+	var plan_features: Dictionary = base_features_snapshot.duplicate(true) if not base_features_snapshot.is_empty() else {}
 	if seat >= 0 and seat < players.size():
 		var meld_tile_indices: Array = existing_meld_tile_indices_snapshot
 		if meld_tile_indices.is_empty():
@@ -4943,15 +4980,28 @@ func plan_report_with_extra_melds(seat: int, hand_counts: Array, hand_size: int,
 		for raw_index in meld_tile_indices:
 			var index := int(raw_index)
 			if index >= 0 and index < plan_counts.size():
+				var previous_amount := int(plan_counts[index])
 				plan_counts[index] = int(plan_counts[index]) + 1
 				total += 1
+				if not plan_features.is_empty():
+					hand_plan_features_add_tile(plan_features, index, previous_amount)
 	var use_extra_meld_indices := extra_meld_tile_indices_snapshot.size() == extra_meld_tiles.size()
 	for i in range(extra_meld_tiles.size()):
 		var index := int(extra_meld_tile_indices_snapshot[i]) if use_extra_meld_indices else tile_index(str(extra_meld_tiles[i]))
 		if index >= 0 and index < plan_counts.size():
+			var previous_amount := int(plan_counts[index])
 			plan_counts[index] = int(plan_counts[index]) + 1
 			total += 1
-	var report = hand_plan_report_from_counts(plan_counts, total)
+			if not plan_features.is_empty():
+				hand_plan_features_add_tile(plan_features, index, previous_amount)
+	if not plan_features.is_empty():
+		var best_suit := 0
+		var suit_counts: Array = plan_features.get("suit_counts", [0, 0, 0])
+		for suit in range(1, 3):
+			if int(suit_counts[suit]) > int(suit_counts[best_suit]):
+				best_suit = suit
+		plan_features["best_suit"] = best_suit
+	var report = hand_plan_report_from_features(plan_counts, total, plan_features) if not plan_features.is_empty() else hand_plan_report_from_counts(plan_counts, total)
 	# 已副露不可能走七对/十三幺
 	if (seat >= 0 and seat < players.size() and players[seat]["melds"].size() > 0) or not extra_meld_tiles.is_empty():
 		if str(report.get("label", "")) == "十三幺" or str(report.get("label", "")) == "七对":
@@ -5434,7 +5484,7 @@ func discard_feed_risk_text(feed_report) -> String:
 func deal_in_risk_score(tile: String, seat: int, eval_context: Dictionary = {}, visible_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> float:
 	return float(tile_risk_vector(tile, seat, visible_counts_snapshot, eval_context, tile_index_snapshot).get("score", 0.0))
 
-func deal_in_risk_summary(tile: String, seat: int, visible_counts_snapshot: Array = [], risk_vector: Dictionary = {}, eval_context: Dictionary = {}) -> Dictionary:
+func deal_in_risk_summary(tile: String, seat: int, visible_counts_snapshot: Array = [], risk_vector: Dictionary = {}, eval_context: Dictionary = {}, tile_index_snapshot: int = -2) -> Dictionary:
 	var summary: Dictionary = {"score": 0.0, "danger_source": {}}
 	if tile == "" or seat < 0 or seat >= players.size():
 		return summary
@@ -5444,7 +5494,7 @@ func deal_in_risk_summary(tile: String, seat: int, visible_counts_snapshot: Arra
 		if typeof(vector_source) == TYPE_DICTIONARY:
 			summary["danger_source"] = vector_source
 		return summary
-	var vector = tile_risk_vector(tile, seat, visible_counts_snapshot, eval_context)
+	var vector = tile_risk_vector(tile, seat, visible_counts_snapshot, eval_context, tile_index_snapshot)
 	summary["score"] = float(vector.get("score", 0.0))
 	var computed_source = vector.get("danger_source", {})
 	if typeof(computed_source) == TYPE_DICTIONARY:
@@ -10217,17 +10267,29 @@ func get_claim_options(seat: int, from_seat: int, tile: String, hand_counts_snap
 	var options: Array = []
 	if seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or tile == "" or offline_phase == "ended":
 		return options
+	var normalized_tile := normalize_tile_code(tile)
+	var tile_index_snapshot := tile_index_normalized(normalized_tile)
 	var hand: Array = players[seat]["hand"]
 	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(hand)
+	return _get_claim_options_normalized(seat, from_seat, normalized_tile, hand_counts, tile_index_snapshot)
+
+
+func _get_claim_options_normalized(seat: int, from_seat: int, normalized_tile: String, hand_counts_snapshot: Array = [], tile_index_snapshot: int = -2) -> Array:
+	var options: Array = []
+	if seat < 0 or seat >= players.size() or from_seat < 0 or from_seat >= players.size() or seat == from_seat or normalized_tile == "" or offline_phase == "ended":
+		return options
+	var hand_counts = hand_counts_snapshot if not hand_counts_snapshot.is_empty() else tile_counts(players[seat]["hand"])
+	if tile_index_snapshot == -2:
+		tile_index_snapshot = tile_index_normalized(normalized_tile)
 	# 荣和边界统一处理舍张振听与过水，避免 UI/AI 展示不可提交的胡。
-	if can_ron_for_seat_from_counts(seat, hand_counts, tile):
+	if _can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalized_tile):
 		options.append("hu")
-	var held_count = tile_count_from_counts(tile, hand_counts)
+	var held_count = tile_count_from_counts(normalized_tile, hand_counts, tile_index_snapshot)
 	if held_count >= 3:
 		options.append("gang")
 	if held_count >= 2:
 		options.append("peng")
-	if rule_allows_chi() and seat == (from_seat + 1) % 4 and not get_chi_choices_from_counts(hand_counts, tile).is_empty():
+	if rule_allows_chi() and seat == (from_seat + 1) % 4 and not get_chi_choices_from_counts(hand_counts, normalized_tile, tile_index_snapshot).is_empty():
 		options.append("chi")
 	return options
 
@@ -10259,18 +10321,19 @@ func _is_valid_offline_claim_normalized(seat: int, from_seat: int, tile: String,
 	var discards: Array = players[from_seat]["discards"]
 	if discards.is_empty() or str(discards.back()) != tile:
 		return false
+	var tile_index_snapshot := tile_index_normalized(tile)
 	var hand_counts := tile_counts(players[seat]["hand"])
 	var options: Array = []
-	if can_ron_for_seat_from_counts(seat, hand_counts, tile):
+	if _can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile):
 		options.append("hu")
-	var held_count := tile_count_from_counts(tile, hand_counts)
+	var held_count := tile_count_from_counts(tile, hand_counts, tile_index_snapshot)
 	if held_count >= 3:
 		options.append("gang")
 	if held_count >= 2:
 		options.append("peng")
 	var chi_choices: Array = []
 	if rule_allows_chi() and seat == (from_seat + 1) % 4:
-		chi_choices = get_chi_choices_from_counts(hand_counts, tile)
+		chi_choices = get_chi_choices_from_counts(hand_counts, tile, tile_index_snapshot)
 		if not chi_choices.is_empty():
 			options.append("chi")
 	if not options.has(claim):
@@ -11056,16 +11119,15 @@ func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_cou
 
 func can_ron_for_seat(seat: int, tile: String) -> bool:
 	tile = normalize_tile_code(tile)
-	if tile == "" or is_passed_win_tile(seat, tile):
-		return false
 	var hand_counts = tile_counts(players[seat].get("hand", []))
-	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile):
-		return false
-	return not is_discard_furiten_from_counts(seat, hand_counts)
+	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile)
 
 
 func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -> bool:
-	tile = normalize_tile_code(tile)
+	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(tile))
+
+
+func _can_ron_for_seat_from_counts_normalized(seat: int, hand_counts: Array, tile: String) -> bool:
 	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
 	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile):
@@ -11276,7 +11338,8 @@ func human_claim_hint_text() -> String:
 	]
 
 func human_claim_candidate_reports() -> Array:
-	var tile = str(offline_pending_claim.get("tile", ""))
+	var tile := normalize_tile_code(str(offline_pending_claim.get("tile", "")))
+	var tile_index_snapshot := tile_index_normalized(tile)
 	var candidates: Array = []
 	var claim_context: Dictionary = {}
 	for claim in offline_pending_claim.get("options", []):
@@ -11288,7 +11351,9 @@ func human_claim_candidate_reports() -> Array:
 			if chi_choices.is_empty():
 				if claim_context.is_empty():
 					claim_context = make_ai_claim_context(0)
-				var choice = best_chi_choice_from_counts(claim_context.get("hand_counts", []), tile)
+					claim_context["claim_tile"] = tile
+					claim_context["claim_tile_index"] = tile_index_snapshot
+				var choice = best_chi_choice_from_counts(claim_context.get("hand_counts", []), tile, tile_index_snapshot)
 				if not choice.is_empty():
 					var report = build_ai_claim_report(0, "chi", tile, choice, claim_context)
 					report["label"] = chi_choice_label(choice)
@@ -11300,6 +11365,8 @@ func human_claim_candidate_reports() -> Array:
 						continue
 					if claim_context.is_empty():
 						claim_context = make_ai_claim_context(0)
+						claim_context["claim_tile"] = tile
+						claim_context["claim_tile_index"] = tile_index_snapshot
 					var report = build_ai_claim_report(0, "chi", tile, choice, claim_context)
 					report["label"] = chi_choice_label(choice)
 					report["chi_choice"] = choice
@@ -11307,6 +11374,8 @@ func human_claim_candidate_reports() -> Array:
 		else:
 			if claim_context.is_empty():
 				claim_context = make_ai_claim_context(0)
+				claim_context["claim_tile"] = tile
+				claim_context["claim_tile_index"] = tile_index_snapshot
 			var report = build_ai_claim_report(0, claim_name, tile, {}, claim_context)
 			report["label"] = claim_label(claim_name)
 			candidates.append(report)
@@ -11458,10 +11527,16 @@ func seat_threat_report_revision(report: Dictionary) -> int:
 	])
 
 func best_chi_choice(hand: Array, tile: String) -> Dictionary:
-	return best_chi_choice_from_counts(tile_counts(hand), normalize_tile_code(tile))
+	var normalized_tile := normalize_tile_code(tile)
+	return best_chi_choice_from_counts(tile_counts(hand), normalized_tile, tile_index_normalized(normalized_tile))
 
-func best_chi_choice_from_counts(hand_counts: Array, tile: String) -> Dictionary:
-	var choices = get_chi_choices_from_counts(hand_counts, tile)
+func best_chi_choice_from_counts(hand_counts: Array, tile: String, tile_index_snapshot: int = -2) -> Dictionary:
+	var normalized_tile := tile
+	var index := tile_index_snapshot
+	if index == -2:
+		normalized_tile = normalize_tile_code(tile)
+		index = tile_index_normalized(normalized_tile)
+	var choices = get_chi_choices_from_counts(hand_counts, normalized_tile, index)
 	var best: Dictionary = {}
 	var best_score = -100000.0
 	for choice in choices:
@@ -11479,10 +11554,13 @@ func best_chi_choice_from_counts(hand_counts: Array, tile: String) -> Dictionary
 func get_chi_choices(hand: Array, tile: String) -> Array:
 	return get_chi_choices_from_counts(tile_counts(hand), tile)
 
-func get_chi_choices_from_counts(hand_counts: Array, tile: String) -> Array:
+func get_chi_choices_from_counts(hand_counts: Array, tile: String, tile_index_snapshot: int = -2) -> Array:
 	var choices: Array = []
-	tile = normalize_tile_code(tile)
-	var index = tile_index_normalized(tile)
+	var normalized_tile := tile
+	var index := tile_index_snapshot
+	if index == -2:
+		normalized_tile = normalize_tile_code(tile)
+		index = tile_index_normalized(normalized_tile)
 	if index < 0 or index >= 27 or hand_counts.is_empty():
 		return choices
 	var rank = index % 9
@@ -11751,6 +11829,18 @@ func discard_zone_visible_rows_for_table_size(zone_rect: Rect2, columns: int, ta
 	var compact_side_river := columns <= 3 and resolved_viewport.y <= 560.0
 	var row_cap := 2 if columns >= 8 else (3 if compact_side_river else 4)
 	return clamp(max_rows, 1, row_cap)
+
+
+func add_optional_gpt_center_crop_texture(parent: Control, name: String, rect: Rect2, alpha: float = 1.0, crop_fraction: float = 0.14) -> TextureRect:
+	# Reuse an authored GPT bitmap as a quiet material crop; this never paints a new image.
+	if parent == null or not is_instance_valid(parent) or optional_gpt_illustration_texture(name) == null:
+		return null
+	var plate := make_gpt_center_crop_plate_rect(rect, Color(1.0, 1.0, 1.0, alpha), name, crop_fraction) as TextureRect
+	if plate == null:
+		return null
+	plate.name = "OptionalGPTCenterCrop_%s" % name
+	parent.add_child(plate)
+	return plate
 
 func achievement_medal_gpt_key(key: String, unlocked: bool) -> String:
 	if not unlocked:
@@ -12323,7 +12413,7 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
 	var dock_shadow = make_soft_depth_panel(parent, dock_shadow_rect, Color(0.0, 0.0, 0.0, 0.18 if pending_claim_mode else 0.22), 12)
 	dock_shadow.name = "ActionDock3DCastShadow"
-	var dock = make_gpt_center_crop_plate_rect(dock_rect, Color(0.018, 0.026, 0.024, 0.78), "ui_dark_scrim", 0.20)
+	var dock = make_gpt_center_crop_plate_rect(dock_rect, Color(0.42, 0.58, 0.42, 0.76), "ui_soft_flash", 0.26)
 	dock.name = "ActionButtonDock"
 	parent.add_child(dock)
 	# Action buttons have a small press/focus lift. Keep the dock as a visual host
@@ -12394,25 +12484,26 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 		var pending_dock_texture = add_optional_gpt_illustration_texture(dock, "pending_claim_action_dock", rect_full(0.002, 0.010, 0.998, 0.990), 0.24, false)
 		if pending_dock_texture != null:
 			pending_dock_texture.name = "PendingClaimActionGPTDockTexture"
-			pending_dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.16)
+			pending_dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.11)
 			dock.move_child(pending_dock_texture, dock.get_child_count() - 1)
 	else:
-		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock", rect_full(0.000, 0.010, 1.000, 0.990), 0.26, false)
+		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock_bright", rect_full(0.000, 0.010, 1.000, 0.990), 0.32, false)
 		if dock_texture != null:
 			dock_texture.name = "ActionGPTDockTexture"
-			dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.46)
+			dock_texture.modulate = Color(1.08, 1.04, 0.92, 0.28)
 			dock.move_child(dock_texture, dock.get_child_count() - 1)
 		# r452b: GPT title plate + soft flash mid-band (no program jade).
 		# r184: light mid-band only — keep action_gpt_dock micro-detail readable.
-		var mid_plate = make_gpt_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.98, 0.93, 0.80, 0.07), "ui_title_backplate")  # r189 reveal denser dock
+		var mid_plate = make_gpt_center_crop_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.62, 0.70, 0.50, 0.10), "ui_soft_flash", 0.20)  # r189 bright jade dock mid-band
 		mid_plate.name = "ActionDockMidBandPlate"
 		dock.add_child(mid_plate)
-		var mid_wash = make_gpt_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(1.0, 0.95, 0.80, 0.035), "ui_soft_flash")  # r189 lighter wash
+		var mid_wash = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(0.74, 0.78, 0.60, 0.045), "ui_river_soft_wash", 0.18)  # r189 lighter wash
 		mid_wash.name = "ActionDockMidBandWash"
 		dock.add_child(mid_wash)
-		var track_texture = add_optional_gpt_illustration_texture(dock, "action_dock_track_panel", rect_full(0.010, 0.120, 0.990, 0.900), 0.22, false)  # r221 denser track
+		var track_texture = make_gpt_center_crop_plate_rect(rect_full(0.010, 0.120, 0.990, 0.900), Color(0.36, 0.52, 0.38, 0.12), "ui_soft_flash", 0.18)  # r221 bright track
 		if track_texture != null:
 			track_texture.name = "ActionDockTrackPanelTexture"
+			dock.add_child(track_texture)
 			dock.move_child(track_texture, dock.get_child_count() - 1)
 	if pending_claim_auto_pass_feedback != "" and pending_claim_auto_pass_feedback_until_msec > Time.get_ticks_msec():
 		var auto_pass_label := make_label(dock, pending_claim_auto_pass_feedback, 10, Color(1.0, 0.84, 0.52), true)
@@ -24182,7 +24273,7 @@ func draw_hand(parent: Control) -> void:
 	var hand_has_pending_danger_discard := hand_ai_assist_enabled and has_pending_danger_discard()
 	var hand_viewport_size := effective_viewport_size()
 	var compact_hand_art := hand_viewport_size.y <= 560.0 or hand_viewport_size.x <= 1100.0
-	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.018, 0.026, 0.024, 0.97), "ui_dark_scrim", 0.20)
+	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.58, 0.64, 0.50, 0.78), "ui_river_soft_wash", 0.24)
 	tray.name = "HandTray"
 	tray.set_meta("viewport_snapshot", hand_viewport_size)
 	tray.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
@@ -24209,12 +24300,12 @@ func draw_hand(parent: Control) -> void:
 	tray_lip.name = "HandTray3DFrontLip"
 	var tray_side_bevel = make_soft_depth_panel(tray, rect_full(0.010, 0.140, 0.035, 0.900), Color(1.0, 0.94, 0.66, 0.20), 999)
 	tray_side_bevel.name = "HandTray3DSideBevel"
-	var hand_gpt_key := "hand_gpt_tray"
-	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 0.28, false)
+	var hand_gpt_key := "hand_gpt_tray_bright"
+	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 0.34, false)
 	if gpt_hand_texture != null:
 		gpt_hand_texture.name = "HandGPTTrayTexture"
-		# Keep the authored tray material as a quiet edge texture beneath the tiles.
-		gpt_hand_texture.modulate = Color(1.20, 1.12, 1.02, 0.18)
+		# Keep the authored bright tray material visible as a jade/gold frame beneath the tiles.
+		gpt_hand_texture.modulate = Color(1.12, 1.08, 0.96, 0.28)
 		tray.move_child(gpt_hand_texture, min(1, tray.get_child_count() - 1))
 	var tile_stage = make_gpt_plate_rect(rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.22), "ui_button_face_plate")
 	tile_stage.name = "HandTrayTileStage"
@@ -24298,9 +24389,9 @@ func draw_hand(parent: Control) -> void:
 		mark_ui_optimization(shortcut_label, "F-097")
 
 	# 状态徽章
-	var state_chip = add_optional_gpt_illustration_texture(tray, "ui_hand_tray_state_chip", rect_full(0.783, 0.028, 0.982, 0.157), 0.55, false)
-	if state_chip != null:
-		state_chip.name = "HandTrayStateChip"
+	var state_chip = make_gpt_center_crop_plate_rect(rect_full(0.783, 0.028, 0.982, 0.157), Color(0.24, 0.30, 0.26, 0.20), "ui_dark_scrim", 0.14)
+	state_chip.name = "HandTrayStateChip"
+	tray.add_child(state_chip)
 	var hand_state_fill_snapshot := hand_tray_state_fill(hand_state_text)
 	var hand_state_border_snapshot := hand_tray_state_border(hand_state_text, hand_state_fill_snapshot)
 	var state_badge = make_badge(tray, HAND_TRAY_STATE_BADGE_RECT, hand_state_text, 12, hand_state_fill_snapshot, hand_state_border_snapshot, Color(0.92, 0.92, 0.84))
@@ -24878,7 +24969,7 @@ func draw_hand_tray_state_art(parent: Control, state_snapshot: String = "") -> C
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.760, 0.030, 0.985, 0.150))
 	parent.add_child(art)
-	var chip = add_optional_gpt_illustration_texture(art, "ui_hand_tray_state_chip", rect_full(0.0, 0.0, 1.0, 1.0), 0.72, false)
+	var chip := add_optional_gpt_center_crop_texture(art, "ui_hand_tray_state_chip", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, 0.14)
 	if chip != null:
 		chip.name = "HandTrayStateGptChip"
 		chip.modulate = Color(
@@ -26104,7 +26195,7 @@ func draw_melds(parent: Control) -> void:
 				# One authored badge rail per lane is enough to establish the type cue;
 				# repeating the same texture behind every group only adds CanvasItems.
 				if meld_index == 0:
-					var meld_kind_badge_back := add_optional_gpt_illustration_texture(meld_group, "ui_hand_tray_state_chip", rect_full(0.570, 0.030, 0.955, 0.320), 0.58, false)
+					var meld_kind_badge_back := add_optional_gpt_center_crop_texture(meld_group, "ui_hand_tray_state_chip", rect_full(0.570, 0.030, 0.955, 0.320), 0.22, 0.14)
 					if meld_kind_badge_back != null:
 						meld_kind_badge_back.name = "MeldKindBadgeBack_%d_%s" % [window_start + meld_index, meld_kind]
 						meld_kind_badge_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -26202,7 +26293,7 @@ func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: i
 
 func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String = "") -> Control:
 	# r213: GPT chrome conversion
-	var has_menu_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
+	var has_menu_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null or optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
 	var art = Control.new()
 	art.name = "MenuCardEntryArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -26217,10 +26308,9 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 	art.move_child(cast_shadow, 0)
 	var depth_edge = make_soft_depth_panel(art, rect_full(0.050, 0.825, 0.950, 0.985), Color(0.22, 0.14, 0.06, card_depth_alpha), 14)
 	depth_edge.name = "MenuCardDepthEdge"
-	# Menu cards share the same quiet reading material as rules/settings. The
-	# authored dark-scrim center crop keeps the scene recognizable while removing
-	# the repeated high-frequency jade plate behind every line of copy.
-	var card_face = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.045, 0.970, 0.955), Color(0.012, 0.024, 0.022, 0.82), "ui_dark_scrim", 0.22)
+	# Use the authored jade/cinnabar GPT button plate as the card surface. The
+	# center crop keeps its material language without repeating a full ornament.
+	var card_face = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.045, 0.970, 0.955), Color(0.70, 0.86, 0.62, 0.82), "menu_lobby_ui_overlay", 0.14)
 	card_face.name = "MenuCardGptFace"
 	art.add_child(card_face)
 	var surface = make_layout_host(rect_full(0.030, 0.045, 0.970, 0.955))
@@ -26261,14 +26351,15 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 
 
 func draw_menu_primary_3d_stage(parent: Control) -> Control:
-	var has_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
-	var stage_overlay = add_optional_gpt_illustration_texture(parent, "menu_primary_3d_stage_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.28, false)
+	var stage_overlay_key := "menu_primary_3d_stage_overlay_warm" if optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null else "menu_primary_3d_stage_overlay"
+	var has_stage_overlay := optional_gpt_illustration_texture(stage_overlay_key) != null
+	var stage_overlay = add_optional_gpt_illustration_texture(parent, stage_overlay_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.055, false)
 	if stage_overlay != null:
 		stage_overlay.name = "MenuPrimary3DStageGPTOverlay"
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			stage_overlay.modulate.a = 0.0
 			var overlay_tw := create_screen_tween()
-			overlay_tw.tween_property(stage_overlay, "modulate:a", 0.28, 0.36).from(0.0).set_delay(0.02).set_ease(Tween.EASE_OUT)
+			overlay_tw.tween_property(stage_overlay, "modulate:a", 0.055, 0.36).from(0.0).set_delay(0.02).set_ease(Tween.EASE_OUT)
 	var stage = Control.new()
 	stage.name = "MenuPrimary3DStage"
 	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -26313,14 +26404,14 @@ func draw_menu_card_selection_bus(parent: Control, cards: Array) -> Control:
 
 func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: String, text: String, rect: Rect2, accent: Color, text_color: Color) -> Control:
 	# r214: bulk GPT chrome sweep
-	var chip = make_gpt_center_crop_plate_rect(rect, Color(0.014, 0.024, 0.024, 0.86), "ui_dark_scrim", 0.18)
+	var chip = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.50, 0.34, 0.78), "menu_lobby_ui_overlay", 0.12)
 	chip.name = "MenuFooterStatusChip_%s" % chip_id
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.focus_mode = Control.FOCUS_NONE
 	chip.set_meta("ui_role", "passive_status")
 	chip.tooltip_text = "状态信息：" + text
 	parent.add_child(chip)
-	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.010, 0.018, 0.018, 0.24), "ui_dark_scrim", 0.18)
+	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.42, 0.64, 0.44, 0.34), "menu_lobby_ui_overlay", 0.10)
 	inner.name = "MenuFooterStatusInner_%s" % chip_id
 	chip.add_child(inner)
 	var rail = make_gpt_route_rail(rect_full(0.045, 0.790, 0.955, 0.855), Color(0.010, 0.024, 0.028, 0.36))
@@ -26506,22 +26597,22 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 	apply_rect(art, rect_full(0.0, 0.0, 1.0, 1.0))
 	parent.add_child(art)
 
-	var lobby_scene = add_optional_gpt_illustration_texture(art, "menu_lobby_gpt_scene", rect_full(0.0, 0.0, 1.0, 1.0), 0.96, false)
+	var lobby_scene = add_optional_gpt_illustration_texture(art, "menu_lobby_gpt_scene", rect_full(0.0, 0.0, 1.0, 1.0), 0.23, false)
 	if lobby_scene != null:
 		lobby_scene.name = "MenuHeroGPTBackdropTexture"
 		art.move_child(lobby_scene, 0)
 	else:
-		var fallback_scene = add_optional_gpt_illustration_texture(art, "menu_hero_gpt_backdrop", rect_full(-0.060, -0.190, 1.060, 1.060), 0.92, false)
+		var fallback_scene = add_optional_gpt_illustration_texture(art, "menu_hero_gpt_backdrop", rect_full(-0.060, -0.190, 1.060, 1.060), 0.20, false)
 		if fallback_scene != null:
 			fallback_scene.name = "MenuHeroGPTBackdropTexture"
 			art.move_child(fallback_scene, 0)
-	var ambient_tint = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.024, 0.022, 0.02))
+	var ambient_tint = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.010, 0.026, 0.024, 0.52), "ui_dark_scrim", 0.13)
 	ambient_tint.name = "MenuHeroCommercialReadabilityTint"
 	art.add_child(ambient_tint)
-	var lower_tint = make_gpt_route_rail(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.010, 0.010, 0.12))
+	var lower_tint = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.012, 0.012, 0.34), "ui_dark_scrim", 0.13)
 	lower_tint.name = "MenuHeroControlReadabilityTint"
 	art.add_child(lower_tint)
-	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.18, false)  # r497 single restrained menu overlay
+	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.045, false)  # r497 single restrained menu overlay
 	if ui_overlay != null:
 		ui_overlay.name = "MenuLobbyGeneratedUIOverlay"
 	return art
@@ -26597,7 +26688,7 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		["daily_login", "签到", "calendar-check", Color(0.62, 0.48, 0.28), Callable(self, "open_daily_login_from_menu")],
 		["replay", "回放", "book-open", Color(0.36, 0.60, 0.62), Callable(self, "show_replay_import_screen")],
 	]
-	var surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.010, 0.020, 0.022, 0.72), "ui_dark_scrim", 0.18)
+	var surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.34, 0.58, 0.40, 0.72), "menu_lobby_ui_overlay", 0.12)
 	surface.name = "MenuQuickActionSurface"
 	rail.add_child(surface)
 	rail.move_child(surface, 0)
@@ -29361,7 +29452,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_shadow.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	# Lift midtones so inactive side seats still read as lacquer plaques, not black voids.
 	# r449: warm lacquer seat shell — no mint/jade green program fills under brocade.
-	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.018, 0.026, 0.024, 0.88), "ui_dark_scrim", 0.20)
+	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.46, 0.32, 0.78), "ui_soft_flash", 0.24)
 	panel.name = "SeatPanel_%d" % seat
 	panel.set_meta("seat_identity_signature", seat_identity_signature)
 	panel.set_meta("seat_viewport_snapshot", seat_viewport_size)
@@ -29380,11 +29471,11 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_side_bevel.name = "SeatPanel3DSideBevel_%d" % seat
 	var seat_right_bevel = make_soft_depth_panel(panel, rect_full(0.940, 0.120, 0.985, 0.880), Color(0.22, 0.16, 0.10, 0.14 if active else 0.10), 999)
 	seat_right_bevel.name = "SeatPanel3DRightBevel_%d" % seat
-	var seat_info_plate = add_optional_gpt_illustration_texture(panel, "ui_seat_info_plate", rect_full(-0.010, -0.015, 1.010, 1.015), 0.22 if active else 0.16, false)
-	if seat_info_plate != null:
-		seat_info_plate.name = "SeatInfoPlate_%d" % seat
-		panel.move_child(seat_info_plate, 0)
-	var seat_texture = add_optional_gpt_illustration_texture(panel, "seat_gpt_brocade", rect_full(-0.015, -0.020, 1.015, 1.020), 0.34 if active else 0.24, false)
+	var seat_info_plate = make_gpt_center_crop_plate_rect(rect_full(-0.010, -0.015, 1.010, 1.015), Color(0.32, 0.48, 0.30, 0.18 if active else 0.13), "ui_soft_flash", 0.20)
+	seat_info_plate.name = "SeatInfoPlate_%d" % seat
+	panel.add_child(seat_info_plate)
+	panel.move_child(seat_info_plate, 0)
+	var seat_texture = add_optional_gpt_illustration_texture(panel, "seat_gpt_brocade_bright", rect_full(-0.015, -0.020, 1.015, 1.020), 0.38 if active else 0.30, false)
 	if seat_texture != null:
 		seat_texture.name = "SeatGPTBrocadeTexture_%d" % seat
 		# Commercial lacquer midtones; extra lift on side seats which sit in darker table periphery.
@@ -30449,7 +30540,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.018, 0.028, 0.026, panel_alpha), "ui_dark_scrim", 0.20)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.66, 0.82, 0.58, panel_alpha), "menu_lobby_ui_overlay", 0.14)
 	panel.name = "SettingsPanel"
 	# The settings surface contains native controls several levels below this
 	# authored plate. PASS keeps the modal backdrop active while allowing mouse
@@ -30513,11 +30604,12 @@ func draw_settings_overlay(parent: Control) -> void:
 		var corner_cap = make_gpt_plate_rect(rect_full(corner_x, corner_y, corner_x + 0.026, corner_y + 0.034), Color(0.58, 0.40, 0.16, 0.34), "ui_jade_reading_plate")
 		corner_cap.name = "SettingsConsole3DCornerCap_%d" % corner_index
 		panel.add_child(corner_cap)
-	var settings_gpt_key := "settings_gpt_panel_v2"
-	var gpt_settings_texture = add_optional_gpt_illustration_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.025, false)
+	var settings_gpt_key := "settings_gpt_panel_warm"
+	var gpt_settings_texture := add_optional_gpt_center_crop_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.045, 0.30)
 	if gpt_settings_texture != null:
 		gpt_settings_texture.name = "SettingsGPTPanelTexture"
 		gpt_settings_texture.modulate = Color(1.20, 1.22, 1.08, gpt_settings_texture.modulate.a)
+		panel.move_child(gpt_settings_texture, 0)
 	# Keep the panel's dedicated clean header as the only title surface. A second
 	# high-frequency rail competes with the title and rule selector at compact sizes.
 	# 设置面板滑入动画
@@ -30905,8 +30997,8 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	var enabled_play = int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
 	# The optional generated plate is only a quiet material wash; native nodes and
 	# labels carry the real settings state so baked pseudo-controls stay subdued.
-	var overview_panel_key := "settings_overview_panel"
-	var overview_panel = add_optional_gpt_illustration_texture(art, overview_panel_key, rect_full(-0.02, 0.0, 1.02, 1.0), 0.026, false)
+	var overview_panel_key := "menu_lobby_ui_overlay"
+	var overview_panel := add_optional_gpt_center_crop_texture(art, overview_panel_key, rect_full(-0.02, 0.0, 1.02, 1.0), 0.080, 0.28)
 	if overview_panel != null:
 		overview_panel.name = "SettingsOverviewPanelTexture"
 		art.move_child(overview_panel, 0)
@@ -30987,8 +31079,8 @@ func draw_settings_section_signal(parent: Control, title_text: String) -> Contro
 	var accent = settings_section_color(title_text)
 	# Keep generated signal chrome below the native section icon so any baked
 	# circles/slots cannot read as real controls.
-	var signal_panel_key := "settings_section_signal_panel"
-	var signal_panel = add_optional_gpt_illustration_texture(art, signal_panel_key, rect_full(-0.02, 0.0, 1.02, 1.0), 0.025, false)
+	var signal_panel_key := "menu_lobby_ui_overlay"
+	var signal_panel := add_optional_gpt_center_crop_texture(art, signal_panel_key, rect_full(-0.02, 0.0, 1.02, 1.0), 0.075, 0.28)
 	if signal_panel != null:
 		signal_panel.name = "SettingsSectionSignalPanelTexture_%s" % title_text
 		art.move_child(signal_panel, 0)
@@ -32237,11 +32329,11 @@ func draw_table_log(parent: Control) -> void:
 	ledger_panel.set_meta("latest_event_policy", "latest_record_is_visible_before_archive_route")
 	ledger_panel.set_meta("table_log_render_signature", log_signature)
 	parent.add_child(ledger_panel)
-	var ledger_texture = add_illustration_texture(ledger_panel, "table_log_scroll", rect_full(0.010, 0.018, 0.990, 0.982), 0.075, false)
+	var ledger_texture := add_optional_gpt_center_crop_texture(ledger_panel, "seat_gpt_brocade", rect_full(0.010, 0.018, 0.990, 0.982), 0.050, 0.30)
 	if ledger_texture != null:
 		ledger_texture.name = "TableLogLedgerTexture"
 		ledger_panel.move_child(ledger_texture, 0)
-		ledger_texture.modulate = Color(1, 1, 1, 0.07)
+		ledger_texture.modulate = Color(1, 1, 1, 0.32)
 	var ledger_spine = make_gpt_edge_rail(rect_full(0.035, 0.075, 0.050, 0.915), Color(0.78, 0.56, 0.24, 0.34))
 	ledger_spine.name = "TableLogLedgerSpine"
 	ledger_panel.add_child(ledger_spine)
@@ -34726,7 +34818,7 @@ func make_avatar_view(seat: int, active: bool) -> Control:
 	# r180: GPT seat plate is the avatar shell (no program StyleBox/band paint).
 	var empty_panel := StyleBoxEmpty.new()
 	avatar.add_theme_stylebox_override("panel", empty_panel)
-	var seat_plate = add_optional_gpt_illustration_texture(avatar, "ui_seat_info_plate", rect_full(-0.02, -0.02, 1.02, 1.02), 0.88 if active else 0.72, false)
+	var seat_plate := add_optional_gpt_center_crop_texture(avatar, "seat_gpt_brocade_bright", rect_full(-0.02, -0.02, 1.02, 1.02), 0.38 if active else 0.30, 0.26)
 	if seat_plate != null:
 		seat_plate.name = "SeatAvatarGptPlate_%d" % seat
 		seat_plate.modulate = Color(
@@ -34765,7 +34857,7 @@ func make_avatar_view(seat: int, active: bool) -> Control:
 		var empty_active := StyleBoxEmpty.new()
 		empty_active.set_content_margin_all(3)
 		active_badge.add_theme_stylebox_override("normal", empty_active)
-		var active_chip = add_optional_gpt_illustration_texture(active_badge, "ui_hand_tray_state_chip", rect_full(-0.10, -0.12, 1.10, 1.12), 0.80, false)
+		var active_chip := add_optional_gpt_center_crop_texture(active_badge, "ui_hand_tray_state_chip", rect_full(-0.10, -0.12, 1.10, 1.12), 0.24, 0.14)
 		if active_chip != null:
 			active_chip.name = "SeatActiveGptChip_%d" % seat
 			active_chip.modulate = Color(0.92, 0.78, 0.36, 0.88)
@@ -35241,7 +35333,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# the previous 0.68 edge clipped the LAN suffix at 960px.
 	var card_text_right := 0.730 if icon_name != "" else 0.935
 	var subtitle_font_size := 14 if menu_card_viewport.x < 1100.0 and icon_name != "" else commercial_ui_font_size(15, 2)
-	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.016, 0.030, 0.028, 0.76), "ui_dark_scrim", 0.18)
+	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.20, 0.38, 0.26, 0.58), "menu_lobby_ui_overlay", 0.12)
 	text_back.name = "MenuCardTextBackplate"
 	button.add_child(text_back)
 	text_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -35648,7 +35740,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_center_crop_plate_rect(rect, Color(0.016, 0.028, 0.026, 0.52), "ui_dark_scrim", 0.18)
+	var section = make_gpt_center_crop_plate_rect(rect, Color(0.52, 0.72, 0.46, 0.74), "menu_lobby_ui_overlay", 0.13)
 	section.name = "SettingsSection_%s" % title_text
 	section.mouse_filter = Control.MOUSE_FILTER_PASS
 	parent.add_child(section)
@@ -35658,12 +35750,10 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_top_rim = make_gpt_ribbon(rect_full(0.035, 0.018, 0.965, 0.048), Color(1.0, 0.88, 0.56, 0.055))
 	section_top_rim.name = "SettingsSection3DTopRim_%s" % title_text
 	section.add_child(section_top_rim)
-	var section_plate = add_optional_gpt_illustration_texture(section, "ui_settings_section_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.020, false)
-	if section_plate == null:
-		section_plate = add_optional_gpt_illustration_texture(section, "ui_confirm_sheet_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.018, false)
-	if section_plate != null:
-		section_plate.name = "SettingsSectionGptPlate_%s" % title_text
-		section.move_child(section_plate, 0)
+	var section_plate = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.68, 0.82, 0.56, 0.14), "menu_lobby_ui_overlay", 0.11)
+	section_plate.name = "SettingsSectionGptPlate_%s" % title_text
+	section.add_child(section_plate)
+	section.move_child(section_plate, 0)
 	var brocade_texture = add_illustration_texture(section, "settings_section_brocade", rect_full(-0.012, -0.020, 1.012, 1.020), 0.006, false)
 	if brocade_texture != null:
 		brocade_texture.name = "SettingsSectionBrocadeTexture_%s" % title_text
@@ -38417,7 +38507,7 @@ func _show_menu_impl() -> void:
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(footer, rect_full(0.055, 0.828, 0.945, 0.948))
 	root_layer.add_child(footer)
-	var footer_back = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.050, 1.000, 0.950), Color(0.018, 0.034, 0.032, 0.94), "ui_dark_scrim", 0.18)
+	var footer_back = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.050, 1.000, 0.950), Color(0.28, 0.50, 0.34, 0.82), "menu_lobby_ui_overlay", 0.10)
 	footer_back.name = "MenuFooterBackplate"
 	footer.add_child(footer_back)
 	footer_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -47944,7 +48034,10 @@ func _ready() -> void:
 	setup_tile_order()
 	init_ui_enhancements()
 	show_loading_screen()
-	load_assets()
+	# Let Godot finish its filesystem/import scan before resolving GPT bitmap
+	# resources. This prevents a first-frame fallback when the project was just
+	# reloaded or launched from a fresh editor cache.
+	call_deferred("load_assets")
 	if not ui_capture_mode:
 		verify_audio_assets()
 	load_settings()
@@ -55517,7 +55610,7 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		else:
 			# The target-opponent branch above fully determines both values; avoid
 			# building the all-opponent safety/risk reports before entering it.
-			safety = tile_safety_label(tile, seat, visible_counts, eval_context)
+			safety = tile_safety_label(tile, seat, visible_counts, eval_context, tile_index_snapshot)
 			risk = float(tile_risk_vector(tile, seat, visible_counts, eval_context, tile_index_snapshot).get("score", 0.0))
 		var score = -risk
 		var is_number_candidate := tile_index_snapshot >= 0 and tile_index_snapshot < 27

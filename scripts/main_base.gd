@@ -126,13 +126,14 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"table_gpt_backdrop": "res://assets/illustrations/table_gpt_backdrop_v4.png",
 	"table_gpt_backdrop_warm": "res://assets/illustrations/table_gpt_backdrop_warm_v391.png",
 	"offline_table_3d_overlay": "res://assets/illustrations/offline_table_3d_overlay.png",
-	"hand_gpt_tray": "res://assets/illustrations/hand_gpt_tray_bright_r432.png",
+	"hand_gpt_tray": "res://assets/illustrations/hand_gpt_tray_v4.png",
+	"hand_gpt_tray_bright": "res://assets/illustrations/hand_gpt_tray_bright_r432.png",
 	"hand_completion_gpt_bus": "res://assets/illustrations/hand_completion_gpt_bus.png",
-	"action_gpt_dock": "res://assets/illustrations/action_gpt_dock_banner_r436.png",
+	"action_gpt_dock": "res://assets/illustrations/action_gpt_dock_v6.png",
 	"action_gpt_dock_banner_r433": "res://assets/illustrations/action_gpt_dock_banner_r433.png",
 	"action_gpt_dock_bright": "res://assets/illustrations/action_gpt_dock_bright_r431.png",
 	"action_gpt_dock_warm": "res://assets/illustrations/action_gpt_dock_warm_v391.png",
-	"pending_claim_action_dock": "res://assets/illustrations/action_gpt_dock_banner_r436.png",
+	"pending_claim_action_dock": "res://assets/illustrations/action_gpt_dock_v6.png",
 	"pending_claim_status_strip": "res://assets/illustrations/pending_claim_status_strip.png",
 	"wall_live_feedback_kit": "res://assets/illustrations/wall_live_feedback_kit.png",
 	"action_button_panel": "res://assets/illustrations/action_button_panel.png",
@@ -147,7 +148,8 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"advisor_gpt_panel": "res://assets/illustrations/advisor_gpt_panel.png",
 	"top_hud_gpt_banner": "res://assets/illustrations/top_hud_gpt_banner_r434.png",
 	"top_hud_gpt_banner_warm": "res://assets/illustrations/top_hud_gpt_banner_warm_v392.png",
-	"seat_gpt_brocade": "res://assets/illustrations/seat_gpt_brocade_v5.png",
+	"seat_gpt_brocade": "res://assets/illustrations/seat_gpt_brocade_v4.png",
+	"seat_gpt_brocade_bright": "res://assets/illustrations/seat_gpt_brocade_v5.png",
 	"seat_gpt_plaque_warm": "res://assets/illustrations/seat_gpt_plaque_warm_r429.png",
 	"exit_gpt_confirm": "res://assets/illustrations/exit_gpt_confirm.png",
 	"exit_gpt_confirm_warm": "res://assets/illustrations/exit_gpt_confirm_warm_v392.png",
@@ -1800,11 +1802,17 @@ func add_background(parent: Control) -> void:
 	base.name = "UtilityPageLowFrequencyBackdrop"
 
 func add_menu_background(parent: Control) -> void:
-	# The menu owns one full-screen scene in draw_menu_primary_3d_stage(). Keep
-	# only a single GPT scrim underneath it so fallback/loading frames stay clean.
-	var scrim = make_fullrect_overlay(Color(0.012, 0.020, 0.018, 0.38), "ui_dark_scrim")
-	scrim.name = "MenuBackgroundReadabilityScrim"
-	parent.add_child(scrim)
+	# Share the GPT jade table cloth with battle so the app has one calm visual
+	# stage. Keep the menu's dragon frame as a barely-there perimeter accent.
+	var backdrop_key := "table_gpt_backdrop" if optional_gpt_illustration_texture("table_gpt_backdrop") != null else "menu_lobby_ui_overlay"
+	var backdrop = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.86, 0.98, 0.82, 0.94), backdrop_key, 0.16)
+	backdrop.name = "MenuBackgroundGuofengBackdrop"
+	parent.add_child(backdrop)
+	var frame_key := "menu_lobby_ui_overlay" if optional_gpt_illustration_texture("menu_lobby_ui_overlay") != null else backdrop_key
+	var frame = add_optional_gpt_illustration_texture(parent, frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.014, false)
+	if frame != null:
+		frame.name = "MenuBackgroundGuofengFrame"
+		frame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 
 func add_rules_background(parent: Control) -> void:
 	# The codex panel owns the reading frame; the page-level layer remains a quiet
@@ -1816,24 +1824,17 @@ func add_rules_background(parent: Control) -> void:
 	codex.name = "RulesBackgroundLowFrequencyBackdrop"
 
 func add_battle_background(parent: Control) -> void:
-	# Normal battle renders own one authored room plate. Keep the dark plate only as a
-	# fallback under a missing/transparent asset, so two full-screen textures do not
-	# compete beneath the HUD.
-	var battle_scene = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.11, false)
-	if battle_scene != null:
-		battle_scene.name = "OfflineBattleGuofengBackdrop"
-	else:
-		var base = make_fullrect_overlay(Color(0.030, 0.042, 0.036, 1.0), "ui_dark_scrim")
-		base.name = "OfflineBattleGuofengBase"
-		parent.add_child(base)
-		# Fallback to menu hero scenery if table plate missing.
-		var garden_scene = add_optional_gpt_illustration_texture(parent, "menu_hero_gpt_backdrop", rect_full(0.0, 0.0, 1.0, 1.0), 0.12, false)
-		if garden_scene != null:
-			garden_scene.name = "OfflineBattleGuofengBackdrop"
-		else:
-			var fallback_wash = add_illustration_texture(parent, "table_wash", rect_full(-0.04, -0.06, 1.04, 1.06), 0.22, false)
-			if fallback_wash != null:
-				fallback_wash.name = "OfflineBattleInkWashBackdrop"
+	# Use the GPT jade table frame: its center is a quiet felt surface, while
+	# the warm variant is a high-frequency gold ornament close-up that fights
+	# the tile grid when stretched across the whole battle page.
+	var battle_key := "table_gpt_backdrop" if optional_gpt_illustration_texture("table_gpt_backdrop") != null else "table_gpt_backdrop_warm"
+	var battle_scene = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.82, 0.96, 0.76, 0.90), battle_key, 0.16)
+	battle_scene.name = "OfflineBattleGuofengBackdrop"
+	parent.add_child(battle_scene)
+	var frame = add_optional_gpt_illustration_texture(parent, battle_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.010, false)
+	if frame != null:
+		frame.name = "OfflineBattleGuofengFrame"
+		frame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 
 func add_texture(parent: Control, texture: Texture2D, rect: Rect2, alpha: float) -> TextureRect:
 	var tex = TextureRect.new()
@@ -1861,14 +1862,32 @@ func load_illustration_texture(path: String) -> Texture2D:
 	if not imported_texture_artifact_ready(path):
 		failed_texture_cache[path] = true
 		return null
-	var imported = ResourceLoader.load(path, "Texture2D")
-	var texture := imported as Texture2D if imported is Texture2D else null
+	var adapter_name := str(RenderingServer.get_video_adapter_name()).to_lower()
+	var low_resource_vulkan := adapter_name.find("llvmpipe") >= 0 or adapter_name.find("swiftshader") >= 0 or adapter_name.find("softpipe") >= 0
+	var texture := load_source_png_texture(path) if low_resource_vulkan else null
+	if texture == null:
+		var imported = ResourceLoader.load(path, "Texture2D")
+		texture = imported as Texture2D if imported is Texture2D else null
+	# Some low-resource Vulkan/llvmpipe environments cannot sample the ETC2
+	# import even though the authored PNG and its import record are present.
+	# Keep the GPT bitmap as the source of truth and decode that same PNG rather
+	# than dropping the visual layer to a procedural or blank fallback.
+	if texture == null:
+		texture = load_source_png_texture(path)
 	if texture != null:
 		loaded_texture_cache[path] = texture
 		failed_texture_cache.erase(path)
 	else:
 		failed_texture_cache[path] = true
 	return texture
+
+func load_source_png_texture(path: String) -> Texture2D:
+	if not FileAccess.file_exists(path):
+		return null
+	var source_image := Image.load_from_file(ProjectSettings.globalize_path(path))
+	if source_image == null or source_image.is_empty():
+		return null
+	return ImageTexture.create_from_image(source_image)
 
 func imported_texture_artifact_ready(path: String) -> bool:
 	if not ResourceLoader.exists(path):
@@ -1933,6 +1952,39 @@ func add_optional_gpt_atlas_texture(parent: Control, name: String, region: Rect2
 	apply_rect(tex, rect)
 	parent.add_child(tex)
 	return tex
+
+
+func _gpt_quiet_chrome_source(texture: Texture2D, plate_key: String) -> Texture2D:
+	# Small controls should borrow a center crop from one authored GPT plate. This
+	# preserves bitmap provenance while preventing a full decorative frame from
+	# repeating across every button, rail, and status chip.
+	if texture == null:
+		return null
+	var quiet_keys := [
+		"ui_dark_scrim",
+		"ui_jade_reading_plate",
+		"ui_seat_info_plate",
+		"ui_button_face_plate",
+		"ui_confirm_sheet_plate",
+		"ui_menu_card_face",
+		"ui_shop_row_plate",
+		"ui_settings_section_plate",
+		"ui_online_form_field",
+		"ui_meld_pad",
+		"ui_route_rail_plate",
+		"ui_meter_rail_plate",
+		"ui_meter_fill_plate",
+		"ui_progress_signal_strip",
+		"ui_action_role_rail",
+		"ui_ornament_tick_strip",
+		"ui_hand_tray_state_chip",
+	]
+	if not quiet_keys.has(plate_key):
+		return texture
+	var quiet_source := optional_gpt_illustration_texture("ui_dark_scrim")
+	if quiet_source == null:
+		return texture
+	return gpt_center_crop_texture(quiet_source, "ui_dark_scrim_quiet", 0.14)
 
 
 func make_layout_host(rect: Rect2) -> Control:
@@ -2001,10 +2053,12 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> C
 		host.set_meta("visual_asset_contract", "authored_gpt_plate_or_layout_host")
 		apply_rect(host, rect)
 		return host
+	var resolved_texture := _gpt_quiet_chrome_source(texture, plate_key)
+	var resolved_plate_key := "ui_dark_scrim_quiet" if resolved_texture != texture else plate_key
 	var tex = TextureRect.new()
 	tex.set_meta("shadowless_visual_host", true)
 	tex.set_meta("visual_asset_contract", "authored_gpt_plate_texture")
-	tex.texture = _gpt_plate_texture_for_rect(texture, plate_key, rect)
+	tex.texture = _gpt_plate_texture_for_rect(resolved_texture, resolved_plate_key, rect)
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_SCALE
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2072,6 +2126,10 @@ func make_fullrect_overlay(color: Color, plate_key: String = "ui_dark_scrim") ->
 		texture = optional_gpt_illustration_texture("ui_title_backplate")
 	if texture == null:
 		texture = optional_gpt_illustration_texture("ui_jade_reading_plate")
+	# Full-frame generated borders are not useful as modal scrims. Use a quiet
+	# center crop whenever the overlay is based on the shared dark plate.
+	if plate_key == "ui_dark_scrim" and texture != null:
+		texture = gpt_center_crop_texture(texture, "ui_dark_scrim_quiet_overlay", 0.13)
 	var node: Control
 	if texture != null:
 		var tex = TextureRect.new()
@@ -2235,9 +2293,11 @@ func make_panel(parent: Control, rect: Rect2, color: Color, radius: int, border:
 	if texture == null:
 		texture = optional_gpt_illustration_texture("ui_jade_reading_plate")
 	if texture != null:
+		var resolved_texture := _gpt_quiet_chrome_source(texture, plate_key)
+		var resolved_plate_key := "ui_dark_scrim_quiet" if resolved_texture != texture else plate_key
 		var tex = TextureRect.new()
 		tex.name = "GptPanelPlate"
-		tex.texture = _gpt_plate_texture_for_rect(texture, plate_key, rect)
+		tex.texture = _gpt_plate_texture_for_rect(resolved_texture, resolved_plate_key, rect)
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_SCALE
 		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2282,6 +2342,7 @@ func tint_panel_gpt_plate(panel: Control, color: Color, plate_key: String = "") 
 			texture = optional_gpt_illustration_texture("ui_title_backplate")
 		if texture == null:
 			return
+		texture = _gpt_quiet_chrome_source(texture, key)
 		tex = TextureRect.new()
 		tex.name = "GptPanelPlate"
 		tex.texture = texture
@@ -3009,6 +3070,9 @@ func add_button_focus_feedback(button: Button) -> void:
 		focus_plate.name = "ButtonFocusPlate"
 		focus_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		focus_plate.show_behind_parent = true
+		var focus_source := optional_gpt_illustration_texture("ui_dark_scrim")
+		if focus_source != null:
+			focus_plate.texture = gpt_center_crop_texture(focus_source, "ui_dark_scrim_focus_quiet", 0.14)
 		focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.0)
 	else:
 		# The authored plate is optional in headless/exported or not-yet-imported
@@ -3316,19 +3380,16 @@ func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 			break
 	if texture == null:
 		return
+	# All ordinary buttons use the quiet center of an authored GPT plate. The
+	# button's semantic icon and label provide identity; the image supplies only
+	# restrained material and contrast.
+	# Colored controls use the authored jade/cinnabar button plate; only truly
+	# muted utility controls fall back to the dark scrim.
+	var quiet_button_key := "menu_lobby_ui_overlay" if color.a >= 0.30 else "ui_dark_scrim"
+	var quiet_button_source := optional_gpt_illustration_texture(quiet_button_key)
 	var face_texture: Texture2D = texture
-	if primary_plate_key == "ui_dark_scrim":
-		# Both authored plates are framed bitmaps. Use a quiet center crop on
-		# compact controls so their decorative frames do not compete with labels.
-		var quiet_texture: Texture2D = optional_gpt_illustration_texture("ui_settings_section_plate")
-		if quiet_texture != null:
-			face_texture = quiet_texture
-		var source_size := face_texture.get_size()
-		var crop_size := source_size * 0.18
-		var center_crop := AtlasTexture.new()
-		center_crop.atlas = face_texture
-		center_crop.region = Rect2((source_size - crop_size) * 0.5, crop_size)
-		face_texture = center_crop
+	if quiet_button_source != null:
+		face_texture = gpt_center_crop_texture(quiet_button_source, quiet_button_key + "_button_quiet", 0.18)
 	var tex = TextureRect.new()
 	tex.name = "GptButtonFacePlate"
 	tex.texture = face_texture
@@ -5759,10 +5820,12 @@ func tile_counts(tiles: Array) -> Array:
 func make_empty_tile_counts() -> Array:
 	return EMPTY_TILE_COUNTS_TEMPLATE.duplicate(false)
 
-func tile_count_from_counts(tile: String, counts: Array) -> int:
+func tile_count_from_counts(tile: String, counts: Array, tile_index_snapshot: int = -2) -> int:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	var index := int(tile_order.get(normalize_tile_code(tile), -1))
+	var index := tile_index_snapshot
+	if index == -2:
+		index = int(tile_order.get(normalize_tile_code(tile), -1))
 	if index < 0 or index >= counts.size():
 		return 0
 	return int(counts[index])

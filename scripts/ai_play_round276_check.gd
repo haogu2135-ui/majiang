@@ -55,9 +55,9 @@ func run() -> void:
 	check(public_function_276.contains("var normalized_extra_tile := normalize_tile_code(extra_tile)"), "public win boundary normalizes the extra tile once")
 	check(public_function_276.contains("_can_win_for_seat_from_counts_normalized(seat, hand_counts, normalized_extra_tile"), "public win boundary forwards its normalized tile directly")
 	check(ron_function_276.contains("tile = normalize_tile_code(tile)"), "ron boundary normalizes the winning tile once")
-	check(ron_function_276.contains("_can_win_for_seat_from_counts_normalized(seat, hand_counts, tile)"), "ron boundary forwards its normalized tile directly")
+	check(ron_function_276.contains("_can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile)"), "ron boundary forwards its normalized tile directly")
 	check(not ron_function_276.contains("\tif not can_win_for_seat_from_counts("), "ron boundary avoids re-entering the normalizing wrapper")
-	check(ron_counts_function_276.contains("_can_win_for_seat_from_counts_normalized(seat, hand_counts, tile)"), "count ron boundary forwards its normalized tile directly")
+	check(ron_counts_function_276.contains("_can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(tile))"), "count ron boundary normalizes its tile once")
 	check(not ron_counts_function_276.contains("\tif not can_win_for_seat_from_counts("), "count ron boundary avoids duplicate normalization")
 	check(count_function_276.contains("normalize_tile_code(extra_tile)"), "direct count callers retain the normalization fallback")
 

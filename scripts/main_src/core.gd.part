@@ -7,7 +7,10 @@ func _ready() -> void:
 	setup_tile_order()
 	init_ui_enhancements()
 	show_loading_screen()
-	load_assets()
+	# Let Godot finish its filesystem/import scan before resolving GPT bitmap
+	# resources. This prevents a first-frame fallback when the project was just
+	# reloaded or launched from a fresh editor cache.
+	call_deferred("load_assets")
 	if not ui_capture_mode:
 		verify_audio_assets()
 	load_settings()
@@ -7580,7 +7583,7 @@ func threat_safe_tile_labels(seat: int, plan_type: String, plan_suit: int, limit
 		else:
 			# The target-opponent branch above fully determines both values; avoid
 			# building the all-opponent safety/risk reports before entering it.
-			safety = tile_safety_label(tile, seat, visible_counts, eval_context)
+			safety = tile_safety_label(tile, seat, visible_counts, eval_context, tile_index_snapshot)
 			risk = float(tile_risk_vector(tile, seat, visible_counts, eval_context, tile_index_snapshot).get("score", 0.0))
 		var score = -risk
 		var is_number_candidate := tile_index_snapshot >= 0 and tile_index_snapshot < 27
