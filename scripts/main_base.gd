@@ -171,6 +171,7 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"top_hud_gpt_banner_v5": "res://assets/illustrations/top_hud_gpt_banner_v5.png",
 	"seat_gpt_brocade": "res://assets/illustrations/seat_gpt_brocade_v4.png",
 	"seat_gpt_brocade_bright": "res://assets/illustrations/seat_gpt_brocade_v8.png",
+	"seat_gpt_brocade_light": "res://assets/illustrations/seat_gpt_brocade_v7.png",
 	"seat_gpt_plaque_warm": "res://assets/illustrations/seat_gpt_plaque_warm_r429.png",
 	"exit_gpt_confirm": "res://assets/illustrations/exit_gpt_confirm.png",
 	"exit_gpt_confirm_warm": "res://assets/illustrations/exit_gpt_confirm_warm_v392.png",
@@ -1947,6 +1948,9 @@ func add_battle_background(parent: Control) -> void:
 	if bright != null:
 		bright.name = "OfflineBattleBrightGPTTable"
 		bright.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		# Lift the authored daylight scene slightly so the wood and jade frame
+		# remain readable instead of collapsing into a dark brown edge.
+		bright.self_modulate = Color(1.12, 1.08, 0.98, 1.0)
 		return
 	var battle_key := "gpt_jade_felt" if optional_gpt_illustration_texture("gpt_jade_felt") != null else "table_gpt_backdrop"
 	var battle_scene = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.62, 0.82, 0.62, 0.84), battle_key, 0.82)
@@ -3053,11 +3057,12 @@ func make_top_hud_button(text: String, color: Color, callback: Callable) -> Butt
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.add_theme_font_size_override("font_size", 1)
 	apply_button_style(button, color, 10, 1, 1)
+	ensure_button_gpt_face_plate(button, Color(0.96, 0.90, 0.72, 0.92), "action_gpt_dock_banner_bright")
 	draw_top_hud_button_art(button, text, color)
 	button.button_down.connect(Callable(self, "play_top_hud_button_press_feedback_by_id").bind(button.get_instance_id(), text, color))
 	var icon_name = icon_name_for_button_text(text)
 	if icon_name != "":
-		add_lucide_icon(button, icon_name, rect_full(0.245, 0.220, 0.755, 0.780), Color(0.92, 0.94, 0.88, 0.88))
+		add_lucide_icon(button, icon_name, rect_full(0.245, 0.220, 0.755, 0.780), Color(0.12, 0.28, 0.20, 0.94))
 	return button
 
 func draw_top_hud_button_art(button: Button, text: String, color: Color) -> Control:
@@ -3067,9 +3072,9 @@ func draw_top_hud_button_art(button: Button, text: String, color: Color) -> Cont
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(art)
 	# r180: GPT accents with smoke-stable names/geometry (IconBack/Rail/Seal).
-	var icon_back = add_optional_gpt_illustration_texture(art, "ui_button_face_plate", rect_full(0.180, 0.170, 0.820, 0.830), 0.42, false)
+	var icon_back = add_optional_gpt_illustration_texture(art, "action_gpt_dock_banner_bright", rect_full(0.180, 0.170, 0.820, 0.830), 0.16, false)
 	if icon_back == null:
-		icon_back = make_gpt_plate_rect(rect_full(0.180, 0.170, 0.820, 0.830), Color(0.18, 0.13, 0.08, 0.20), "ui_button_face_plate")
+		icon_back = make_gpt_plate_rect(rect_full(0.180, 0.170, 0.820, 0.830), Color(0.18, 0.13, 0.08, 0.20), "action_gpt_dock_banner_bright")
 		art.add_child(icon_back)
 	icon_back.name = "TopHudButtonIconBack_%s" % text
 	var rail = add_optional_gpt_illustration_texture(art, "ui_meter_rail_plate", rect_full(0.285, 0.815, 0.715, 0.845), 0.36, false)
@@ -3518,10 +3523,10 @@ func ensure_button_gpt_face_plate(button: Button, color: Color, plate_key_overri
 	if quiet_button_source != null:
 		face_texture = gpt_center_crop_texture(quiet_button_source, quiet_button_key + "_button_quiet", 0.18)
 	elif requested_plate_key != "":
-		# Keep the full horizontal GPT banner so its authored ornament remains
-		# visible on compact bright controls.
-		if primary_plate_key != "action_gpt_dock_banner_bright":
-			var override_crop := 0.30 if primary_plate_key == "menu_primary_3d_stage_overlay_bright" else 0.56
+			# Bright controls use the quiet paper center of the authored banner.
+			# This keeps the gold/jade edge language without stretching dark corners
+			# into small square buttons.
+			var override_crop := 0.34 if primary_plate_key == "action_gpt_dock_banner_bright" else (0.30 if primary_plate_key == "menu_primary_3d_stage_overlay_bright" else 0.56)
 			face_texture = gpt_center_crop_texture(texture, primary_plate_key + "_button_light_crop", override_crop)
 	var tex = TextureRect.new()
 	tex.name = "GptButtonFacePlate"

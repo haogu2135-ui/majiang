@@ -12289,8 +12289,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	retained_battle_top_hud_signature = ""
 	# Keep the generated texture as a restrained header surface; status text and
 	# controls remain the primary visual signal at 960x540.
-	var top_hud_surface_key := "top_hud_gpt_banner_v5" if optional_gpt_illustration_texture("top_hud_gpt_banner_v5") != null else "ui_dark_scrim"
-	var top_hud_surface_color := Color(0.88, 0.96, 0.74, 0.90) if top_hud_surface_key == "top_hud_gpt_banner_v5" else Color(0.028, 0.036, 0.032, 0.26)
+	var top_hud_surface_key := "action_gpt_dock_banner_bright" if optional_gpt_illustration_texture("action_gpt_dock_banner_bright") != null else "top_hud_gpt_banner_v5"
+	var top_hud_surface_color := Color(0.99, 0.96, 0.84, 0.94) if top_hud_surface_key == "action_gpt_dock_banner_bright" else Color(0.88, 0.96, 0.74, 0.90)
 	var hud = make_gpt_plate_rect(TOP_HUD_RECT, top_hud_surface_color, top_hud_surface_key)
 	hud.name = "TopHud3DShell"
 	parent.add_child(hud)
@@ -12421,7 +12421,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	if mode == "online_game":
 		var connection_status := online_connection_status_text()
 		var connection_color := Color(0.40, 0.78, 0.60) if connection_status == "已连接" else Color(0.92, 0.70, 0.34) if connection_status == "断线" or connection_status == "连接异常" else Color(0.52, 0.72, 0.78)
-		var connection_surface := make_gpt_plate_rect(rect_full(0.106, 0.580, 0.268, 0.940), Color(0.018, 0.036, 0.034, 0.62), "ui_dark_scrim")
+		var connection_surface := make_gpt_center_crop_plate_rect(rect_full(0.106, 0.580, 0.268, 0.940), Color(0.98, 0.94, 0.80, 0.82), "action_gpt_dock_banner_bright", 0.30)
 		connection_surface.name = "TopHudOnlineConnectionStatus"
 		connection_surface.set_meta("ui_state_source", "tcp_status")
 		connection_surface.set_meta("accessible_name", online_connection_status_detail())
@@ -12451,17 +12451,17 @@ func draw_game_top_hud(parent: Control) -> void:
 	var hud_wall_state := wall_state_text(hud_wall_count)
 	var hud_last_discard := get_last_discard()
 	var hud_last_discard_text := tile_label(hud_last_discard) if hud_last_discard != "" else "无"
-	var wall_back = make_gpt_plate_rect(rect_full(wall_rect.position.x - 0.006, wall_rect.position.y - 0.010, wall_rect.size.x + 0.006, wall_rect.size.y + 0.010), Color(0.72, 0.56, 0.28, 0.10), "ui_dark_scrim")
+	var wall_back = make_gpt_center_crop_plate_rect(rect_full(wall_rect.position.x - 0.006, wall_rect.position.y - 0.010, wall_rect.size.x + 0.006, wall_rect.size.y + 0.010), Color(0.98, 0.94, 0.80, 0.74), "action_gpt_dock_banner_bright", 0.30)
 	wall_back.name = "TopHudWallBack"
 	hud.add_child(wall_back)
 	draw_top_hud_wall_meter(hud, wall_rect, hud_wall_count, hud_wall_total, hud_last_discard)
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [hud_wall_count, hud_wall_total, hud_wall_state, hud_last_discard_text]
-	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 11, Color(0.98, 0.93, 0.78, 1.0), true)
+	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 11, Color(0.08, 0.20, 0.14, 1.0), true)
 	wall.name = "TopHudWallText"
 	var empty_wall := StyleBoxEmpty.new()
 	empty_wall.set_content_margin_all(4)
 	wall.add_theme_stylebox_override("normal", empty_wall)
-	var wall_chip = add_optional_gpt_illustration_texture(wall, "ui_dark_scrim", rect_full(-0.04, -0.08, 1.04, 1.08), 0.22, false)
+	var wall_chip = add_optional_gpt_illustration_texture(wall, "action_gpt_dock_banner_bright", rect_full(-0.04, -0.08, 1.04, 1.08), 0.14, false)
 	if wall_chip != null:
 		wall_chip.name = "WallCountGptPlate"
 		wall.move_child(wall_chip, 0)
@@ -14707,14 +14707,14 @@ func draw_menu_card_selection_bus(parent: Control, cards: Array) -> Control:
 
 func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: String, text: String, rect: Rect2, accent: Color, text_color: Color) -> Control:
 	# r214: bulk GPT chrome sweep
-	var chip = make_gpt_center_crop_plate_rect(rect, Color(0.98, 0.98, 0.90, 0.94), "ui_button_face_plate", 0.42)
+	var chip = make_gpt_center_crop_plate_rect(rect, Color(0.99, 0.96, 0.84, 0.90), "action_gpt_dock_banner_bright", 0.30)
 	chip.name = "MenuFooterStatusChip_%s" % chip_id
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.focus_mode = Control.FOCUS_NONE
 	chip.set_meta("ui_role", "passive_status")
 	chip.tooltip_text = "状态信息：" + text
 	parent.add_child(chip)
-	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.96, 0.98, 0.90, 0.50), "ui_button_face_plate", 0.34)
+	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.98, 0.96, 0.86, 0.28), "action_gpt_dock_banner_bright", 0.24)
 	inner.name = "MenuFooterStatusInner_%s" % chip_id
 	chip.add_child(inner)
 	var rail = make_gpt_route_rail(rect_full(0.045, 0.790, 0.955, 0.855), Color(0.010, 0.024, 0.028, 0.36))
@@ -15046,7 +15046,7 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		mark_ui_optimization(button, "F-619")
 		mark_ui_optimization(button, "F-454")
 		# Keep quick navigation calm enough for the hero artwork and readable at 960px.
-		ensure_button_gpt_face_plate(button, Color(quick_color.r, quick_color.g, quick_color.b, 0.88), "ui_button_face_plate")
+		ensure_button_gpt_face_plate(button, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		button.add_theme_color_override("font_color", Color(0.0, 0.0, 0.0, 0.0))
 		button.add_theme_color_override("font_hover_color", Color(0.0, 0.0, 0.0, 0.0))
 		button.add_theme_color_override("font_pressed_color", Color(0.0, 0.0, 0.0, 0.0))
@@ -15061,9 +15061,9 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		# surface without painting a new shape in code.
 		var quick_text_plate := make_gpt_center_crop_plate_rect(
 			rect_full(left + button_width * 0.220, 0.105, left + button_width * 0.955, 0.895),
-			Color(0.98, 0.98, 0.90, 0.78),
-			"ui_button_face_plate",
-			0.18
+			Color(0.98, 0.96, 0.86, 0.72),
+			"action_gpt_dock_banner_bright",
+			0.22
 		)
 		quick_text_plate.name = "MenuQuick%sLabelBackplate" % quick_suffix
 		quick_text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -17710,12 +17710,13 @@ func seat_river_summary(seat: int, max_count: int = 4) -> Dictionary:
 
 
 func style_seat_readable_label(label: Label, primary: bool = true) -> void:
-	# Dark lacquer outline so gold/cream seat text stays legible over bright brocade.
-	var fill := Color(1.0, 0.98, 0.90, 1.0) if primary else Color(0.96, 0.94, 0.84, 0.96)
+	# Seat plaques now use a pale GPT paper center, so ink text carries the
+	# hierarchy and a soft paper outline keeps it readable over jade ornament.
+	var fill := Color(0.08, 0.20, 0.14, 1.0) if primary else Color(0.18, 0.28, 0.22, 0.96)
 	label.add_theme_color_override("font_color", fill)
-	label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
-	label.add_theme_constant_override("outline_size", 4)
-	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.78))
+	label.add_theme_color_override("font_outline_color", Color(1.0, 0.94, 0.76, 0.88))
+	label.add_theme_constant_override("outline_size", 2)
+	label.add_theme_color_override("font_shadow_color", Color(0.02, 0.08, 0.05, 0.30))
 	label.add_theme_constant_override("shadow_offset_x", 1)
 	label.add_theme_constant_override("shadow_offset_y", 1)
 	configure_clipped_label(label)
@@ -17793,7 +17794,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_shadow.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	# Lift midtones so inactive side seats still read as lacquer plaques, not black voids.
 	# r449: warm lacquer seat shell — no mint/jade green program fills under brocade.
-	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.56, 0.36, 0.82), "gpt_jade_felt", 0.72)
+	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.98, 0.94, 0.80, 0.88), "action_gpt_dock_banner_bright", 0.30)
 	panel.name = "SeatPanel_%d" % seat
 	panel.set_meta("seat_identity_signature", seat_identity_signature)
 	panel.set_meta("seat_viewport_snapshot", seat_viewport_size)
@@ -17812,11 +17813,11 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_side_bevel.name = "SeatPanel3DSideBevel_%d" % seat
 	var seat_right_bevel = make_soft_depth_panel(panel, rect_full(0.940, 0.120, 0.985, 0.880), Color(0.22, 0.16, 0.10, 0.14 if active else 0.10), 999)
 	seat_right_bevel.name = "SeatPanel3DRightBevel_%d" % seat
-	var seat_info_plate = make_gpt_center_crop_plate_rect(rect_full(-0.010, -0.015, 1.010, 1.015), Color(0.42, 0.68, 0.46, 0.16 if active else 0.10), "gpt_jade_felt", 0.72)
+	var seat_info_plate = make_gpt_center_crop_plate_rect(rect_full(-0.010, -0.015, 1.010, 1.015), Color(0.98, 0.94, 0.80, 0.24 if active else 0.16), "action_gpt_dock_banner_bright", 0.28)
 	seat_info_plate.name = "SeatInfoPlate_%d" % seat
 	panel.add_child(seat_info_plate)
 	panel.move_child(seat_info_plate, 0)
-	var seat_texture = add_optional_gpt_illustration_texture(panel, "seat_gpt_brocade_bright", rect_full(-0.015, -0.020, 1.015, 1.020), 0.38 if active else 0.30, false)
+	var seat_texture = add_optional_gpt_illustration_texture(panel, "seat_gpt_brocade_light", rect_full(-0.015, -0.020, 1.015, 1.020), 0.68 if active else 0.56, false)
 	if seat_texture != null:
 		seat_texture.name = "SeatGPTBrocadeTexture_%d" % seat
 		seat_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
@@ -17865,7 +17866,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var top_avatar = make_avatar_view(seat, active)
 		panel.add_child(top_avatar)
 		apply_rect(top_avatar, rect_full(0.035, 0.175, 0.185, 0.825))
-		var top_text_back = make_gpt_center_crop_plate_rect(rect_full(0.205, 0.050, 0.955, 0.990), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
+		var top_text_back = make_gpt_center_crop_plate_rect(rect_full(0.205, 0.050, 0.955, 0.990), Color(0.99, 0.96, 0.84, 0.72), "action_gpt_dock_banner_bright", 0.24)
 		top_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(top_text_back)
 		var top_name = make_label(panel, seat_compact_display_name(seat, p, 3), 12, Color(1.0, 0.98, 0.90), true)
@@ -17908,7 +17909,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		var side_content_left := 0.225 if compact_side else 0.285
 		var side_text_back_left := 0.195 if compact_side else 0.255
 		apply_rect(side_avatar, rect_full(0.035, 0.245, 0.180 if compact_side else 0.240, 0.755))
-		var side_text_back = make_gpt_center_crop_plate_rect(rect_full(side_text_back_left, 0.060, 0.960, 0.860), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
+		var side_text_back = make_gpt_center_crop_plate_rect(rect_full(side_text_back_left, 0.060, 0.960, 0.860), Color(0.99, 0.96, 0.84, 0.70), "action_gpt_dock_banner_bright", 0.24)
 		side_text_back.name = "SeatCompactTextBack_%d" % seat
 		panel.add_child(side_text_back)
 		var side_name_right := 0.590 if seat == dealer_seat else 0.620
@@ -17980,7 +17981,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	apply_rect(avatar, avatar_rect)
 
 	var content_left := 0.295 if side == "bottom" else 0.305
-	var text_back = make_gpt_center_crop_plate_rect(rect_full(content_left - 0.018, 0.052, 0.965, 0.875), Color(0.012, 0.020, 0.018, 0.78), "ui_dark_scrim", 0.18)
+	var text_back = make_gpt_center_crop_plate_rect(rect_full(content_left - 0.018, 0.052, 0.965, 0.875), Color(0.99, 0.96, 0.84, 0.72), "action_gpt_dock_banner_bright", 0.24)
 	text_back.name = "SeatCompactTextBack_%d" % seat
 	panel.add_child(text_back)
 	var simple_name = make_label(panel, seat_compact_display_name(seat, p, 2), 15 if side == "bottom" else 12, Color(1.0, 0.98, 0.90), true)
@@ -18882,7 +18883,10 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.28, 0.48, 0.34, panel_alpha), "gpt_jade_felt", 0.72)
+	# The settings console is a bright paper reading surface. Use the authored
+	# horizontal GPT banner as the quiet base so this modal shares the menu's
+	# daylight palette without introducing a program-painted fill.
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.98, 0.92, 0.72, panel_alpha), "menu_primary_3d_stage_overlay_bright", 0.78)
 	panel.name = "SettingsPanel"
 	# The settings surface contains native controls several levels below this
 	# authored plate. PASS keeps the modal backdrop active while allowing mouse
@@ -18931,26 +18935,26 @@ func draw_settings_overlay(parent: Control) -> void:
 	)
 	overlay.set_meta("outside_click_contract", "canvas_inverse_panel_local_safe_area")
 	mark_ui_optimization(overlay, "F-249")
-	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.0, 0.0, 0.0, 0.34))
+	var left_depth_rail = make_gpt_route_rail(rect_full(0.006, 0.055, 0.020, 0.940), Color(0.08, 0.16, 0.12, 0.22))
 	left_depth_rail.name = "SettingsConsole3DLeftRail"
 	panel.add_child(left_depth_rail)
-	var right_light_rail = make_gpt_gate(rect_full(0.980, 0.055, 0.994, 0.940), Color(0.72, 0.54, 0.26, 0.10))
+	var right_light_rail = make_gpt_gate(rect_full(0.980, 0.055, 0.994, 0.940), Color(0.74, 0.52, 0.20, 0.18))
 	right_light_rail.name = "SettingsConsole3DRightRail"
 	panel.add_child(right_light_rail)
-	var inner_floor = make_gpt_route_rail(rect_full(0.025, 0.955, 0.975, 0.985), Color(0.0, 0.0, 0.0, 0.36))
+	var inner_floor = make_gpt_route_rail(rect_full(0.025, 0.955, 0.975, 0.985), Color(0.12, 0.20, 0.14, 0.24))
 	inner_floor.name = "SettingsConsole3DInnerFloor"
 	panel.add_child(inner_floor)
 	for corner_index in range(4):
 		var corner_x := 0.018 if corner_index % 2 == 0 else 0.956
 		var corner_y := 0.024 if corner_index < 2 else 0.932
-		var corner_cap = make_gpt_plate_rect(rect_full(corner_x, corner_y, corner_x + 0.026, corner_y + 0.034), Color(0.58, 0.40, 0.16, 0.34), "ui_jade_reading_plate")
+		var corner_cap = make_gpt_plate_rect(rect_full(corner_x, corner_y, corner_x + 0.026, corner_y + 0.034), Color(0.68, 0.44, 0.16, 0.28), "ui_jade_reading_plate")
 		corner_cap.name = "SettingsConsole3DCornerCap_%d" % corner_index
 		panel.add_child(corner_cap)
-	var settings_gpt_key := "settings_gpt_panel_v2"
-	var gpt_settings_texture := add_optional_gpt_center_crop_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.025, 0.30)
+	var settings_gpt_key := "settings_overview_panel"
+	var gpt_settings_texture := add_optional_gpt_center_crop_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.11, 0.28)
 	if gpt_settings_texture != null:
 		gpt_settings_texture.name = "SettingsGPTPanelTexture"
-		gpt_settings_texture.modulate = Color(1.20, 1.22, 1.08, gpt_settings_texture.modulate.a)
+		gpt_settings_texture.modulate = Color(1.08, 1.04, 0.92, gpt_settings_texture.modulate.a)
 		panel.move_child(gpt_settings_texture, 0)
 	# Keep the panel's dedicated clean header as the only title surface. A second
 	# high-frequency rail competes with the title and rule selector at compact sizes.
@@ -18963,32 +18967,36 @@ func draw_settings_overlay(parent: Control) -> void:
 		stw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
 		stw.tween_property(panel, "offset_right", 0.0, 0.2).from(20.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
-	var title = make_label(panel, "设置", 24, Color(1.0, 0.92, 0.58), true)
+	var title = make_label(panel, "设置", 24, Color(0.10, 0.22, 0.16), true)
 	title.name = "SettingsTitleLabel"
 	apply_rect(title, SETTINGS_TITLE_RECT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.92))
-	title.add_theme_constant_override("outline_size", 4)
+	title.add_theme_color_override("font_color", Color(0.08, 0.20, 0.14, 1.0))
+	title.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.92))
+	title.add_theme_constant_override("outline_size", 2)
 	configure_clipped_label(title)
-	add_lucide_icon(panel, "settings", rect_full(0.035, 0.050, 0.068, 0.125), Color(0.96, 0.84, 0.46, 0.86))
+	add_lucide_icon(panel, "settings", rect_full(0.035, 0.050, 0.068, 0.125), Color(0.22, 0.46, 0.32, 0.94))
 	draw_settings_overview_art(panel)
 
-	var close = make_small_button("关闭", Color(0.30, 0.34, 0.36), func() -> void:
+	var close = make_small_button("关闭", Color(0.98, 0.92, 0.72), func() -> void:
 		close_settings_panel()
 	)
-	ensure_button_gpt_face_plate(close, Color(0.30, 0.34, 0.36, 0.40))
+	ensure_button_gpt_face_plate(close, Color(0.98, 0.92, 0.72, 0.94), "action_gpt_dock_banner_bright")
 	close.custom_minimum_size = Vector2(88, UI_MIN_TOUCH_TARGET)
 	close.name = "SettingsCloseButton"
 	close.tooltip_text = "关闭设置（Esc）"
 	close.set_meta("accessible_name", "关闭设置")
 	close.focus_mode = Control.FOCUS_ALL
 	draw_settings_close_button_art(close)
+	close.add_theme_color_override("font_color", Color(0.10, 0.20, 0.14, 1.0))
+	close.add_theme_color_override("font_hover_color", Color(0.48, 0.16, 0.06, 1.0))
+	close.add_theme_color_override("font_pressed_color", Color(0.66, 0.20, 0.08, 1.0))
 	panel.add_child(close)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		AnimationEffects.flash(close, 0.5, 1.0, 0.8)
 	apply_rect(close, SETTINGS_CLOSE_RECT)
 	close.grab_focus()
-	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.84, 0.90, 0.78), true)
+	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.16, 0.27, 0.20), true)
 	rule_setting_label.name = "SettingsRuleVariantLabel"
 	apply_rect(rule_setting_label, rect_full(0.550, 0.040, 0.675, 0.115))
 	rule_setting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -19007,7 +19015,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	var rule_activation_visible := rule_activation_full.replace("当前局：", "当前：").replace(" · 下一局：", " · 下局：")
 	var rule_variant_status_text := "%s · %s" % [rule_activation_visible, rule_difference_short]
 	var rule_variant_full_status_text := "%s · %s" % [rule_activation_full, rule_difference]
-	var rule_variant_status = make_label(panel, rule_variant_status_text, 11, Color(0.82, 0.86, 0.70, 0.94), true)
+	var rule_variant_status = make_label(panel, rule_variant_status_text, 11, Color(0.30, 0.34, 0.25, 0.94), true)
 	rule_variant_status.name = "SettingsRuleVariantStatus"
 	apply_rect(rule_variant_status, rect_full(0.550, 0.130 if compact_settings else 0.125, 0.815, 0.170 if compact_settings else 0.165))
 	rule_variant_status.set_meta("overview_art_gap_policy", "minimum_6px_compact")
@@ -19043,8 +19051,9 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.add_child(settings_content)
 		settings_content_parent = settings_content
 		settings_large_text_scroll = settings_scroll
-		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 10, Color(0.78, 0.88, 0.80), true)
+		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 10, Color(0.24, 0.34, 0.27), true)
 		settings_large_text_status.name = "SettingsLargeTextScrollStatus"
+		settings_large_text_status.add_theme_color_override("font_color", Color(0.22, 0.30, 0.24, 1.0))
 		apply_rect(settings_large_text_status, rect_full(0.040, 0.902, 0.790, 0.942))
 		# Keep a stable status slot visible during the first measurement pass. The
 		# copy is replaced with the measured section range as soon as geometry lands.
@@ -19157,9 +19166,10 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel.add_child(settings_section_navigation)
 	for settings_section_name in ["声音", "体验", "系统"]:
 		var section_name := str(settings_section_name)
-		var section_nav_button := make_small_button(("当前 · " + section_name) if section_name == active_settings_section else section_name, Color(0.28, 0.48, 0.42), func() -> void:
+		var section_nav_button := make_small_button(("当前 · " + section_name) if section_name == active_settings_section else section_name, Color(0.98, 0.92, 0.72), func() -> void:
 			focus_settings_section(settings_content_parent, settings_large_text_scroll, section_name)
 		)
+		ensure_button_gpt_face_plate(section_nav_button, Color(0.98, 0.92, 0.72, 0.88), "action_gpt_dock_banner_bright")
 		section_nav_button.name = "SettingsSectionNavButton_%s" % section_name
 		section_nav_button.custom_minimum_size = Vector2(82, UI_MIN_TOUCH_TARGET)
 		section_nav_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -19180,7 +19190,7 @@ func draw_settings_overlay(parent: Control) -> void:
 			active_marker.set_meta("marker_contract", "one_visible_active_section")
 			section_nav_button.add_child(active_marker)
 	if not large_text_enabled:
-		var settings_default_scroll_hint := make_label(panel, "系统设置 · 已到页面底部", 10, Color(0.74, 0.84, 0.76), true)
+		var settings_default_scroll_hint := make_label(panel, "系统设置 · 已到页面底部", 10, Color(0.30, 0.38, 0.30), true)
 		settings_default_scroll_hint.name = "SettingsDefaultScrollStatus"
 		apply_rect(settings_default_scroll_hint, rect_full(0.040, 0.900, 0.520, 0.945))
 		settings_default_scroll_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -23149,7 +23159,7 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 
 func make_audio_test_button(callback: Callable) -> Button:
 	var button = make_small_button("试音", Color(0.28, 0.42, 0.56), callback)
-	ensure_button_gpt_face_plate(button, Color(0.28, 0.42, 0.56, 0.38))
+	ensure_button_gpt_face_plate(button, Color(0.98, 0.92, 0.72, 0.92), "action_gpt_dock_banner_bright")
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	draw_audio_test_button_art(button)
@@ -23236,7 +23246,7 @@ func make_bamboo_decoration(parent: Control, rect: Rect2, segments: int = 3) -> 
 func make_bgm_switch_button(callback: Callable) -> Button:
 	# v1.0.157: 切换BGM按钮
 	var button = make_small_button("切歌", Color(0.38, 0.40, 0.56), callback)
-	ensure_button_gpt_face_plate(button, Color(0.38, 0.40, 0.56, 0.38))
+	ensure_button_gpt_face_plate(button, Color(0.98, 0.92, 0.72, 0.92), "action_gpt_dock_banner_bright")
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
@@ -23682,7 +23692,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# the previous 0.68 edge clipped the LAN suffix at 960px.
 	var card_text_right := 0.730 if icon_name != "" else 0.935
 	var subtitle_font_size := 14 if menu_card_viewport.x < 1100.0 and icon_name != "" else commercial_ui_font_size(15, 2)
-	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.98, 0.98, 0.90, 0.86), "ui_button_face_plate", 0.46)
+	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.99, 0.96, 0.84, 0.84), "action_gpt_dock_banner_bright", 0.24)
 	text_back.name = "MenuCardTextBackplate"
 	button.add_child(text_back)
 	text_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -23869,7 +23879,7 @@ func make_reset_progress_button(callback: Callable) -> Button:
 	var armed = reset_progress_confirming
 	var button = make_small_button(label, color, callback)
 	button.tooltip_text = "确认清空统计与离线记录（5秒内有效）" if armed else "进入二次确认，将清空统计与离线记录"
-	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.40))
+	ensure_button_gpt_face_plate(button, Color(0.98, 0.86, 0.70, 0.94), "action_gpt_dock_banner_bright")
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
@@ -23907,7 +23917,7 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 	var color = Color(0.22, 0.52, 0.42) if enabled else Color(0.44, 0.32, 0.28)
 	var button = make_small_button("已开" if enabled else "已关", color, callback)
 	button.tooltip_text = "%s：当前%s，点击切换" % [label, "开启" if enabled else "关闭"]
-	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.38))
+	ensure_button_gpt_face_plate(button, Color(0.98, 0.92, 0.72, 0.92), "action_gpt_dock_banner_bright")
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
@@ -23926,7 +23936,7 @@ func make_setting_selector_button(value_text: String, setting_label: String, cal
 	var color = Color(0.34, 0.46, 0.58)
 	var button = make_small_button(value_text, color, callback)
 	button.tooltip_text = "%s：当前%s，点击切换选项" % [setting_label, value_text]
-	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, 0.38))
+	ensure_button_gpt_face_plate(button, Color(0.98, 0.92, 0.72, 0.92), "action_gpt_dock_banner_bright")
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
@@ -23947,7 +23957,7 @@ func make_graphics_quality_button(callback: Callable) -> Button:
 	var button = make_small_button(graphics_quality_label(true), quality_colors[color_index], callback)
 	button.tooltip_text = "画面质量：当前%s，仅影响背景、动效和资源质量；牌面保持 2D" % graphics_quality_label(true)
 	var quality_color: Color = quality_colors[color_index]
-	ensure_button_gpt_face_plate(button, Color(quality_color.r, quality_color.g, quality_color.b, 0.38))
+	ensure_button_gpt_face_plate(button, Color(0.98, 0.92, 0.72, 0.92), "action_gpt_dock_banner_bright")
 	button.custom_minimum_size = Vector2(112, 46)
 	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.clip_text = true
@@ -23983,7 +23993,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var empty_row := StyleBoxEmpty.new()
 	row.add_theme_stylebox_override("panel", empty_row)
 	parent.add_child(row)
-	var row_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.012, 0.022, 0.020, 0.05), "ui_dark_scrim", 0.18)
+	var row_plate = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.98, 0.92, 0.74, 0.46), "action_gpt_dock_banner_bright", 0.24)
 	row_plate.name = "SettingRowGptPlate_%s" % title
 	row.add_child(row_plate)
 	row.move_child(row_plate, 0)
@@ -23995,11 +24005,14 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	var button_left := 0.495 if compact_settings else 0.595
 	var text_panel_top := 0.060 if compact_settings and title == "本地进度" else 0.110
 	var text_panel_bottom := 0.980 if compact_settings and title == "本地进度" else 0.890
-	var text_panel = make_gpt_plate_rect(rect_full(0.028, text_panel_top, text_right, text_panel_bottom), Color(0.012, 0.016, 0.012, 0.42), "ui_dark_scrim")
+	var text_panel = make_gpt_center_crop_plate_rect(rect_full(0.028, text_panel_top, text_right, text_panel_bottom), Color(0.92, 0.86, 0.66, 0.52), "action_gpt_dock_banner_bright", 0.22)
 	text_panel.name = "SettingRowTextReadabilityPanel_%s" % title
 	row.add_child(text_panel)
-	var title_label = make_label(row, title, 14, Color(1.0, 0.97, 0.88, 1.0), true)
+	var title_label = make_label(row, title, 14, Color(0.10, 0.24, 0.17, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
+	title_label.add_theme_color_override("font_color", Color(0.08, 0.20, 0.14, 1.0))
+	title_label.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.76))
+	title_label.add_theme_constant_override("outline_size", 1)
 	apply_rect(title_label, rect_full(0.052, 0.130, text_right - 0.020, 0.455))
 	if compact_settings and title == "本地进度":
 		apply_rect(title_label, rect_full(0.052, 0.080, text_right - 0.020, 0.365))
@@ -24017,8 +24030,9 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		consequence_status = "牌面保持2D"
 	var compact_reset_status := "确认清空\n统计 + 离线记录" if reset_progress_confirming else "清空统计\n/ 离线记录"
 	var visible_status := compact_reset_status if compact_settings and title == "本地进度" else (status if show_full_status else (consequence_status if compact_settings or large_text_settings or title == "画面质量" or title == "本地进度" else status))
-	var status_label = make_label(row, visible_status, 13, Color(0.94, 0.97, 0.91, 1.0), false)
+	var status_label = make_label(row, visible_status, 13, Color(0.28, 0.34, 0.27, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
+	status_label.add_theme_color_override("font_color", Color(0.22, 0.30, 0.24, 1.0))
 	set_ui_full_text(status_label, status, title + "完整状态")
 	if title == "本地进度" or title == "隐私诊断":
 		row.set_meta("maintenance_row", true)
@@ -24031,7 +24045,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		apply_rect(status_label, rect_full(0.052, 0.400, text_right - 0.015, 0.960))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.56))
+	status_label.add_theme_color_override("font_shadow_color", Color(1.0, 0.94, 0.78, 0.52))
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	if show_full_status:
@@ -24096,17 +24110,17 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_center_crop_plate_rect(rect, Color(0.42, 0.66, 0.46, 0.74), "gpt_jade_felt", 0.72)
+	var section = make_gpt_center_crop_plate_rect(rect, Color(0.96, 0.90, 0.72, 0.72), "action_gpt_dock_banner_bright", 0.26)
 	section.name = "SettingsSection_%s" % title_text
 	section.mouse_filter = Control.MOUSE_FILTER_PASS
 	parent.add_child(section)
-	var section_depth = make_gpt_route_rail(rect_full(0.015, 0.910, 0.985, 0.985), Color(0.0, 0.0, 0.0, 0.10))
+	var section_depth = make_gpt_route_rail(rect_full(0.015, 0.910, 0.985, 0.985), Color(0.12, 0.22, 0.16, 0.20))
 	section_depth.name = "SettingsSection3DDepthEdge_%s" % title_text
 	section.add_child(section_depth)
-	var section_top_rim = make_gpt_ribbon(rect_full(0.035, 0.018, 0.965, 0.048), Color(1.0, 0.88, 0.56, 0.055))
+	var section_top_rim = make_gpt_ribbon(rect_full(0.035, 0.018, 0.965, 0.048), Color(0.76, 0.48, 0.16, 0.16))
 	section_top_rim.name = "SettingsSection3DTopRim_%s" % title_text
 	section.add_child(section_top_rim)
-	var section_plate = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.62, 0.84, 0.62, 0.10), "gpt_jade_felt", 0.72)
+	var section_plate = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.98, 0.92, 0.74, 0.18), "action_gpt_dock_banner_bright", 0.22)
 	section_plate.name = "SettingsSectionGptPlate_%s" % title_text
 	section.add_child(section_plate)
 	section.move_child(section_plate, 0)
@@ -24114,7 +24128,10 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	if brocade_texture != null:
 		brocade_texture.name = "SettingsSectionBrocadeTexture_%s" % title_text
 	draw_settings_section_signal(section, title_text)
-	var section_title = make_label(section, title_text, 14, Color(0.90, 0.84, 0.60), true)
+	var section_title = make_label(section, title_text, 14, Color(0.12, 0.25, 0.18), true)
+	section_title.add_theme_color_override("font_color", Color(0.08, 0.20, 0.14, 1.0))
+	section_title.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.70))
+	section_title.add_theme_constant_override("outline_size", 1)
 	apply_rect(section_title, SETTINGS_SECTION_TITLE_RECT)
 	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	section_title.set_meta("section_title_font_contract", "accessibility_scaled_and_measured")

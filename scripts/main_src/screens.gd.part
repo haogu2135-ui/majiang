@@ -437,7 +437,7 @@ func _show_menu_impl() -> void:
 	mark_ui_optimization(tutorial_button, "F-452")
 	root_layer.add_child(tutorial_button)
 	apply_rect(tutorial_button, rect_full(0.445, 0.075, 0.625, 0.175))
-	ensure_button_gpt_face_plate(tutorial_button, Color(0.18, 0.58, 0.46, 0.88), "action_gpt_dock_banner_bright")
+	ensure_button_gpt_face_plate(tutorial_button, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.18, 0.25, 0.20, 0.92))
 
 	if tutorial_available:
@@ -471,7 +471,7 @@ func _show_menu_impl() -> void:
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(112, 44)
 		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
-		ensure_button_gpt_face_plate(tutorial_action, Color(0.20, 0.62, 0.48, 0.88), "action_gpt_dock_banner_bright")
+		ensure_button_gpt_face_plate(tutorial_action, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		apply_rect(tutorial_action, rect_full(0.620, 0.205, 0.810, 0.800))
 		tutorial_banner.add_child(tutorial_action)
 		var tutorial_skip = make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
@@ -479,7 +479,7 @@ func _show_menu_impl() -> void:
 		tutorial_skip.custom_minimum_size = Vector2(76, 44)
 		tutorial_skip.set_meta("accessible_name", "跳过新手教学")
 		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
-		ensure_button_gpt_face_plate(tutorial_skip, Color(0.78, 0.22, 0.14, 0.88), "action_gpt_dock_banner_bright")
+		ensure_button_gpt_face_plate(tutorial_skip, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		apply_rect(tutorial_skip, rect_full(0.835, 0.190, 0.985, 0.810))
 		tutorial_banner.add_child(tutorial_skip)
 
@@ -631,7 +631,7 @@ func _show_menu_impl() -> void:
 		menu_focus_restore_name = "MenuSettingsButton"
 		toggle_settings_panel()
 	)
-	ensure_button_gpt_face_plate(settings, Color(0.26, 0.44, 0.58, 0.68), "menu_primary_3d_stage_overlay_bright")
+	ensure_button_gpt_face_plate(settings, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 	settings.custom_minimum_size = Vector2(88, 48)
 	settings.name = "MenuSettingsButton"
 	settings.add_theme_font_size_override("font_size", 15)
