@@ -80,6 +80,8 @@ func shutdown_runtime() -> void:
 				timer.timeout.emit()
 				if is_instance_valid(timer) and not timer.is_queued_for_deletion():
 					timer.queue_free()
+			if has_method("release_runtime_delay_timer_pool"):
+				release_runtime_delay_timer_pool()
 	shutdown_runtime_visuals()
 	shutdown_runtime_audio()
 
@@ -159,6 +161,11 @@ func shutdown_runtime_audio() -> void:
 	for player in players:
 		player.stop()
 		player.stream = null
+	for pooled_player in one_shot_sfx_pool:
+		if pooled_player != null and is_instance_valid(pooled_player) and not pooled_player.is_queued_for_deletion():
+			pooled_player.stop()
+			pooled_player.queue_free()
+	one_shot_sfx_pool.clear()
 	voice_capture_effect = null
 	audio_streams.clear()
 	voice_streams.clear()
@@ -483,7 +490,16 @@ func cleanup_one_shot_sfx_player(player_id: int) -> void:
 	if node == null or not is_instance_valid(node) or bool(node.get_meta("sfx_cleanup_done", false)):
 		return
 	node.set_meta("sfx_cleanup_done", true)
-	node.queue_free()
+	node.stop()
+	node.stream = null
+	var cleanup_timer := node.get_node_or_null("OneShotSfxCleanupTimer") as Timer
+	if cleanup_timer != null:
+		cleanup_timer.stop()
+	if runtime_shutdown_requested or one_shot_sfx_pool.size() >= ONE_SHOT_SFX_POOL_LIMIT:
+		node.queue_free()
+		return
+	node.set_meta("sfx_pooled", true)
+	one_shot_sfx_pool.append(node)
 
 func play_stream_on_audio_player(player: AudioStreamPlayer, stream: AudioStream, volume_db: float) -> void:
 	if player == null or stream == null:
@@ -501,7 +517,21 @@ func boosted_sfx_volume_db(volume_db: float) -> float:
 	return clamp(volume_db + SFX_VOLUME_BOOST_DB, -10.0, 1.5)
 
 func make_one_shot_sfx_player(stream: AudioStream, volume_db: float) -> AudioStreamPlayer:
+	while not one_shot_sfx_pool.is_empty():
+		var pooled: AudioStreamPlayer = one_shot_sfx_pool.pop_back()
+		if pooled != null and is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
+			one_shot_sfx_pool_hits += 1
+			pooled.set_meta("sfx_cleanup_done", false)
+			pooled.set_meta("sfx_pooled", false)
+			pooled.stream = stream
+			pooled.volume_db = volume_db
+			var pooled_timer := pooled.get_node_or_null("OneShotSfxCleanupTimer") as Timer
+			if pooled_timer != null:
+				pooled_timer.stop()
+				pooled_timer.start()
+			return pooled
 	var player = AudioStreamPlayer.new()
+	one_shot_sfx_pool_misses += 1
 	player.name = "OneShotSfx"
 	player.stream = stream
 	player.volume_db = volume_db
@@ -6366,21 +6396,55 @@ func wait_for_runtime_delay(delay_seconds: float) -> void:
 	if delay_seconds <= 0.0 or runtime_shutdown_requested:
 		return
 	var timer_generation := ui_page_generation
-	var timer := Timer.new()
+	var timer := acquire_runtime_delay_timer()
 	timer.name = "RuntimeDelayTimer"
 	timer.one_shot = true
 	timer.wait_time = maxf(0.001, delay_seconds)
 	timer.process_callback = Timer.TIMER_PROCESS_IDLE
 	timer.set_meta("runtime_delay_generation", timer_generation)
-	add_child(timer)
 	runtime_delay_timers.append(timer)
 	timer.start()
 	await timer.timeout
 	runtime_delay_timers.erase(timer)
-	if is_instance_valid(timer) and not timer.is_queued_for_deletion():
-		timer.queue_free()
+	release_runtime_delay_timer(timer)
 	if timer_generation != ui_page_generation:
 		return
+
+
+func acquire_runtime_delay_timer() -> Timer:
+	while not runtime_delay_timer_pool.is_empty():
+		var pooled: Timer = runtime_delay_timer_pool.pop_back()
+		if pooled != null and is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
+			runtime_delay_timer_pool_hits += 1
+			pooled.set_meta("runtime_delay_pool", false)
+			return pooled
+	var timer := Timer.new()
+	timer.process_callback = Timer.TIMER_PROCESS_IDLE
+	timer.one_shot = true
+	timer.set_meta("runtime_delay_pool", false)
+	add_child(timer)
+	runtime_delay_timer_pool_misses += 1
+	return timer
+
+
+func release_runtime_delay_timer(timer: Timer) -> void:
+	if timer == null or not is_instance_valid(timer) or timer.is_queued_for_deletion():
+		return
+	timer.stop()
+	timer.set_meta("runtime_delay_generation", -1)
+	if runtime_shutdown_requested or runtime_delay_timer_pool.size() >= RUNTIME_DELAY_TIMER_POOL_LIMIT:
+		timer.queue_free()
+		return
+	timer.set_meta("runtime_delay_pool", true)
+	runtime_delay_timer_pool.append(timer)
+
+
+func release_runtime_delay_timer_pool() -> void:
+	for timer in runtime_delay_timer_pool:
+		if timer != null and is_instance_valid(timer) and not timer.is_queued_for_deletion():
+			timer.stop()
+			timer.queue_free()
+	runtime_delay_timer_pool.clear()
 
 
 func pace_after_human_discard_response() -> void:
@@ -7366,7 +7430,7 @@ func clear_screen() -> void:
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
 			continue
-		if child is Timer and runtime_delay_timers.has(child):
+		if child is Timer and (runtime_delay_timers.has(child) or bool(child.get_meta("runtime_delay_pool", false))):
 			# Runtime AI/render delays outlive a page rebuild; their awaiters own
 			# cleanup after the timer resumes.
 			continue
@@ -8187,20 +8251,39 @@ func render_game(state_changed: bool = false) -> void:
 	# Room guofeng lives on screen_layer; table surface stays translucent so felt reads against the room plate.
 	var render_current_seat := get_current_seat()
 	var table := draw_battle_table_surface(root_layer, render_current_seat)
+	var battle_render_viewport := effective_viewport_size()
+	var battle_discards_snapshot: Array = []
+	var battle_melds_snapshot: Array = []
+	for battle_seat in range(4):
+		battle_discards_snapshot.append(get_discards(battle_seat))
+		battle_melds_snapshot.append(get_melds(battle_seat))
+	var battle_render_context := {
+		"viewport": battle_render_viewport,
+		"table_size": table.size,
+		"table_render_size": table.size,
+		"content_size": safe_content_pixel_size(),
+		"last_discard": get_last_discard(),
+		"last_discard_seat": get_last_discard_seat(),
+		"disconnected": mode == "online_game" and online_game_disconnected(),
+		"danger_compact": mode == "offline" and has_pending_danger_discard(),
+		"discards": battle_discards_snapshot,
+		"melds": battle_melds_snapshot,
+	}
+	table.set_meta("battle_render_context", battle_render_context)
 	draw_table_atmosphere_frame(table)
 	draw_walls(table)
 	draw_table_living_illustration(table)
 	draw_center(table)
-	draw_discards(table)
+	draw_discards(table, battle_render_context)
 
 	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat(), "current_seat": render_current_seat}
-	var battle_seat_viewport_snapshot := effective_viewport_size()
+	var battle_seat_viewport_snapshot := battle_render_viewport
 	root_layer.set_meta("seat_viewport_snapshot", battle_seat_viewport_snapshot)
 	root_layer.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_battle_draw")
 	for seat_layout in SEAT_LAYOUTS:
 		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot, battle_seat_viewport_snapshot)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
-	draw_melds(root_layer)
+	draw_melds(root_layer, battle_render_context)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
 	if table_log_archive_open:
 		draw_table_log_archive_panel(root_layer)
@@ -12290,7 +12373,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		role_rail.modulate = Color(color.r, color.g, color.b, rail_alpha)
 	# Compact claims use the authored action plate as their distinct dark face.
 	var panel_alpha = 0.28 if compact_claim_mode and role == "pass" else (0.66 if compact_claim_mode and is_focus_action else (0.56 if compact_claim_mode else (0.42 if role == "pass" else 0.70)))
-	var panel_key := "ui_button_face_plate" if compact_claim_mode and is_focus_action else ("ui_dark_scrim" if compact_claim_mode else "ui_button_face_plate")
+	var panel_key := "ui_button_face_plate" if compact_claim_mode and is_focus_action else ("ui_dark_scrim" if compact_claim_mode else "action_gpt_dock_banner_bright")
 	var panel_plate = add_optional_gpt_illustration_texture(button, panel_key, rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate == null:
 		panel_plate = add_optional_gpt_illustration_texture(button, "ui_dark_scrim", rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
@@ -12413,7 +12496,9 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
 	var dock_shadow = make_soft_depth_panel(parent, dock_shadow_rect, Color(0.0, 0.0, 0.0, 0.18 if pending_claim_mode else 0.22), 12)
 	dock_shadow.name = "ActionDock3DCastShadow"
-	var dock = make_gpt_center_crop_plate_rect(dock_rect, Color(0.42, 0.58, 0.42, 0.76), "ui_soft_flash", 0.26)
+	var bright_dock_key := "action_gpt_dock_banner_bright" if optional_gpt_illustration_texture("action_gpt_dock_banner_bright") != null else "gpt_jade_felt"
+	var bright_dock_color := Color(0.92, 0.80, 0.56, 0.92) if bright_dock_key == "action_gpt_dock_banner_bright" else Color(0.48, 0.72, 0.48, 0.86)
+	var dock = make_gpt_center_crop_plate_rect(dock_rect, bright_dock_color, bright_dock_key, 0.78)
 	dock.name = "ActionButtonDock"
 	parent.add_child(dock)
 	# Action buttons have a small press/focus lift. Keep the dock as a visual host
@@ -12487,24 +12572,25 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 			pending_dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.11)
 			dock.move_child(pending_dock_texture, dock.get_child_count() - 1)
 	else:
-		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock_bright", rect_full(0.000, 0.010, 1.000, 0.990), 0.32, false)
-		if dock_texture != null:
-			dock_texture.name = "ActionGPTDockTexture"
-			dock_texture.modulate = Color(1.08, 1.04, 0.92, 0.28)
-			dock.move_child(dock_texture, dock.get_child_count() - 1)
-		# r452b: GPT title plate + soft flash mid-band (no program jade).
-		# r184: light mid-band only — keep action_gpt_dock micro-detail readable.
-		var mid_plate = make_gpt_center_crop_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.62, 0.70, 0.50, 0.10), "ui_soft_flash", 0.20)  # r189 bright jade dock mid-band
-		mid_plate.name = "ActionDockMidBandPlate"
-		dock.add_child(mid_plate)
-		var mid_wash = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(0.74, 0.78, 0.60, 0.045), "ui_river_soft_wash", 0.18)  # r189 lighter wash
-		mid_wash.name = "ActionDockMidBandWash"
-		dock.add_child(mid_wash)
-		var track_texture = make_gpt_center_crop_plate_rect(rect_full(0.010, 0.120, 0.990, 0.900), Color(0.36, 0.52, 0.38, 0.12), "ui_soft_flash", 0.18)  # r221 bright track
-		if track_texture != null:
-			track_texture.name = "ActionDockTrackPanelTexture"
-			dock.add_child(track_texture)
-			dock.move_child(track_texture, dock.get_child_count() - 1)
+		if bright_dock_key != "action_gpt_dock_banner_bright":
+			var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock_bright", rect_full(0.000, 0.010, 1.000, 0.990), 0.32, false)
+			if dock_texture != null:
+				dock_texture.name = "ActionGPTDockTexture"
+				dock_texture.modulate = Color(1.08, 1.04, 0.92, 0.28)
+				dock.move_child(dock_texture, dock.get_child_count() - 1)
+			# Fallback-only jade layers preserve the old visual when the bright GPT
+			# banner is unavailable; the bright path keeps its generated paper clear.
+			var mid_plate = make_gpt_center_crop_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.62, 0.82, 0.58, 0.10), "gpt_jade_felt", 0.72)
+			mid_plate.name = "ActionDockMidBandPlate"
+			dock.add_child(mid_plate)
+			var mid_wash = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(0.76, 0.90, 0.70, 0.035), "gpt_jade_felt", 0.72)
+			mid_wash.name = "ActionDockMidBandWash"
+			dock.add_child(mid_wash)
+			var track_texture = make_gpt_center_crop_plate_rect(rect_full(0.010, 0.120, 0.990, 0.900), Color(0.40, 0.66, 0.46, 0.10), "gpt_jade_felt", 0.72)
+			if track_texture != null:
+				track_texture.name = "ActionDockTrackPanelTexture"
+				dock.add_child(track_texture)
+				dock.move_child(track_texture, dock.get_child_count() - 1)
 	if pending_claim_auto_pass_feedback != "" and pending_claim_auto_pass_feedback_until_msec > Time.get_ticks_msec():
 		var auto_pass_label := make_label(dock, pending_claim_auto_pass_feedback, 10, Color(1.0, 0.84, 0.52), true)
 		auto_pass_label.name = "PendingClaimAutoPassFeedback"
@@ -23522,17 +23608,28 @@ func discard_grid_render_signature(seat: int, discards: Array, visible_start: in
 	]
 
 
-func draw_discards(parent: Control) -> void:
-	var table_size: Vector2 = game_table_pixel_size()
-	var table_render_size: Vector2 = parent.size if parent.size.x > 1.0 and parent.size.y > 1.0 else table_size
-	var river_viewport_size := effective_viewport_size()
+func draw_discards(parent: Control, render_context: Dictionary = {}) -> void:
+	var table_size: Vector2 = render_context.get("table_size", Vector2.ZERO)
+	if table_size.x <= 1.0 or table_size.y <= 1.0:
+		table_size = game_table_pixel_size()
+	var table_render_size: Vector2 = render_context.get("table_render_size", Vector2.ZERO)
+	if table_render_size.x <= 1.0 or table_render_size.y <= 1.0:
+		table_render_size = parent.size if parent.size.x > 1.0 and parent.size.y > 1.0 else table_size
+	var river_viewport_size: Vector2 = render_context.get("viewport", Vector2.ZERO)
+	if river_viewport_size.x <= 1.0 or river_viewport_size.y <= 1.0:
+		river_viewport_size = effective_viewport_size()
 	var river_compact_readable := river_viewport_size.y <= 560.0
 	parent.set_meta("discard_river_viewport_snapshot", river_viewport_size)
 	parent.set_meta("discard_river_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
-	var latest_discard_seat := get_last_discard_seat()
-	var disconnected := mode == "online_game" and online_game_disconnected()
+	var latest_discard_seat := int(render_context.get("last_discard_seat", -1))
+	if not render_context.has("last_discard_seat"):
+		latest_discard_seat = get_last_discard_seat()
+	var disconnected := bool(render_context.get("disconnected", false))
+	if not render_context.has("disconnected"):
+		disconnected = mode == "online_game" and online_game_disconnected()
 	var total_discards := 0
 	var active_seats: Array[int] = []
+	var discard_snapshot: Array = render_context.get("discards", [])
 	var foreground_layer := discard_river_foreground_layer
 	discard_river_foreground_layer = null
 	if foreground_layer == null or not is_instance_valid(foreground_layer) or foreground_layer.is_queued_for_deletion():
@@ -23552,7 +23649,11 @@ func draw_discards(parent: Control) -> void:
 		var seat = int(zone[0])
 		var zone_rect: Rect2 = zone[1]
 		var columns := int(zone[2])
-		var discards: Array = get_discards(seat)
+		var discards: Array = []
+		if seat >= 0 and seat < discard_snapshot.size() and typeof(discard_snapshot[seat]) == TYPE_ARRAY:
+			discards = discard_snapshot[seat] as Array
+		else:
+			discards = get_discards(seat)
 		if not discards.is_empty():
 			total_discards += discards.size()
 			active_seats.append(seat)
@@ -24006,7 +24107,9 @@ func draw_game_top_hud(parent: Control) -> void:
 	retained_battle_top_hud_signature = ""
 	# Keep the generated texture as a restrained header surface; status text and
 	# controls remain the primary visual signal at 960x540.
-	var hud = make_gpt_plate_rect(TOP_HUD_RECT, Color(0.028, 0.036, 0.032, 0.26), "ui_dark_scrim")
+	var top_hud_surface_key := "top_hud_gpt_banner_v5" if optional_gpt_illustration_texture("top_hud_gpt_banner_v5") != null else "ui_dark_scrim"
+	var top_hud_surface_color := Color(0.88, 0.96, 0.74, 0.90) if top_hud_surface_key == "top_hud_gpt_banner_v5" else Color(0.028, 0.036, 0.032, 0.26)
+	var hud = make_gpt_plate_rect(TOP_HUD_RECT, top_hud_surface_color, top_hud_surface_key)
 	hud.name = "TopHud3DShell"
 	parent.add_child(hud)
 	# Content owns its own clipped labels; the shell must leave the authored
@@ -24015,22 +24118,22 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.set_meta("visual_clip_policy", "content_labels_clip_focus_and_shadow_hosts_unclipped")
 	hud.set_meta("compact_lane_policy", "mode_title_status_wall_then_actions")
 	hud.set_meta("minimum_lane_clearance_px", 8.0)
-	var hud_shadow = make_soft_depth_panel(hud, rect_full(0.010, 0.220, 0.990, 1.080), Color(0.0, 0.0, 0.0, 0.36), 12)
+	var hud_shadow = make_soft_depth_panel(hud, rect_full(0.010, 0.220, 0.990, 1.080), Color(0.0, 0.0, 0.0, 0.18), 12)
 	hud_shadow.name = "TopHud3DCastShadow"
 	hud.move_child(hud_shadow, 0)
-	var hud_depth = make_soft_depth_panel(hud, rect_full(0.018, 0.620, 0.982, 0.980), Color(0.14, 0.084, 0.036, 0.24), 10)
+	var hud_depth = make_soft_depth_panel(hud, rect_full(0.018, 0.620, 0.982, 0.980), Color(0.54, 0.20, 0.08, 0.16), 10)
 	hud_depth.name = "TopHud3DDepthEdge"
 	var hud_top_rim = make_soft_depth_panel(hud, rect_full(0.030, 0.015, 0.970, 0.095), Color(1.0, 0.92, 0.58, 0.12), 999)
 	hud_top_rim.name = "TopHud3DTopRim"
 	var hud_jade_rail = make_soft_depth_panel(hud, rect_full(0.040, 0.860, 0.960, 0.930), Color(0.42, 0.30, 0.14, 0.08), 999)
 	hud_jade_rail.name = "TopHud3DJadeRail"
-	var top_hud_gpt_key := "top_hud_gpt_banner"
-	var gpt_top_hud_texture = add_optional_gpt_atlas_texture(hud, top_hud_gpt_key, Rect2(0.0, 0.0, 1254.0, 260.0), rect_full(0.000, 0.000, 1.000, 0.230), 0.06, false)
+	var top_hud_gpt_key := "top_hud_gpt_banner_v5"
+	var gpt_top_hud_texture = add_optional_gpt_illustration_texture(hud, top_hud_gpt_key, rect_full(0.000, 0.000, 1.000, 0.230), 0.08, false)
 	if gpt_top_hud_texture != null:
 		gpt_top_hud_texture.name = "TopHudGPTBannerTexture"
 		# Keep the authored header material present without competing with the
 		# long AI profile/status line at compact resolutions.
-		gpt_top_hud_texture.modulate = Color(1.02, 1.00, 0.96, 0.018)
+		gpt_top_hud_texture.modulate = Color(1.04, 1.02, 0.94, 0.085)
 		hud.move_child(gpt_top_hud_texture, min(1, hud.get_child_count() - 1))
 
 	# 模式徽章
@@ -24044,7 +24147,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		else:
 			mode_text = "联机 · 规则同步中"
 			mode_tooltip = "等待服务器下发当前牌局规则"
-	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 11, Color(0.100, 0.082, 0.058, 0.78), Color(0.52, 0.42, 0.22, 0.22), Color(0.94, 0.88, 0.72))
+	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 11, Color(0.98, 0.88, 0.58, 0.92), Color(0.76, 0.20, 0.10, 0.72), Color(0.26, 0.09, 0.045))
 	mode_badge.name = "TopHudModeBadge"
 	mode_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mode_badge.tooltip_text = mode_tooltip
@@ -24074,10 +24177,10 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.set_meta("header_lane_policy", "score_wall_actions_have_explicit_gutters")
 	hud.set_meta("header_lane_rects", [TOP_HUD_SCORE_STRIP_RECT, wall_rect, TOP_HUD_SETTINGS_BUTTON_RECT, TOP_HUD_BACK_BUTTON_RECT, TOP_HUD_UPDATE_BUTTON_RECT])
 	# r202: GPT title/status chips instead of make_panel lacquer hosts
-	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.90, 0.72, 0.34, 0.18), "ui_dark_scrim")
+	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.98, 0.92, 0.70, 0.54), "action_gpt_dock_banner_bright")
 	title_back.name = "TopHudTitleBack"
 	hud.add_child(title_back)
-	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.58, 0.74, 0.64, 0.16), "ui_dark_scrim")
+	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.92, 0.96, 0.78, 0.48), "action_gpt_dock_banner_bright")
 	status_back.name = "TopHudStatusBack"
 	hud.add_child(status_back)
 	var online_title_size := 16
@@ -24085,12 +24188,13 @@ func draw_game_top_hud(parent: Control) -> void:
 		# Room codes are server data and must remain intact; reduce only the title
 		# glyph size for unusually long codes inside the dedicated header lane.
 		online_title_size = 15 if room_code.length() > 14 else 16
-	var title = make_label(hud, title_text, 15 if mode == "offline" else online_title_size, Color(0.96, 0.80, 0.48), true)
+	var title = make_label(hud, title_text, 15 if mode == "offline" else online_title_size, Color(0.06, 0.14, 0.09), true)
 	title.name = "TopHudTitle"
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
 	fit_label_font_size(title, maxf(96.0, hud_viewport_snapshot.x * title_rect.size.x * 0.96), 15 if mode == "offline" else online_title_size, 10)
+	style_background_readable_label(title, 2)
 	title.set_meta("fit_before_clip", true)
 	title.set_meta("compact_lane", "mode_and_round_before_status")
 	set_ui_full_text(title, title_text, "牌桌标题：" + title_text)
@@ -24117,11 +24221,12 @@ func draw_game_top_hud(parent: Control) -> void:
 
 	# 状态
 	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
-	var status = make_label(hud, top_hud_short_status_text(compact_top_hud), 15 if mode == "offline" else (15 if compact_disconnect_status else 16), Color(0.92, 0.94, 0.86), true)
+	var status = make_label(hud, top_hud_short_status_text(compact_top_hud), 15 if mode == "offline" else (15 if compact_disconnect_status else 16), Color(0.06, 0.15, 0.10), true)
 	status.name = "TopHudStatus"
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
 	fit_label_font_size(status, maxf(120.0, hud_viewport_snapshot.x * status_rect.size.x * 0.96), 15 if mode == "offline" else (15 if compact_disconnect_status else 16), 10)
+	style_background_readable_label(status, 2)
 	status.set_meta("fit_before_clip", true)
 	status.set_meta("compact_lane", "phase_and_connection_before_wall")
 	set_ui_full_text(status, top_hud_status_tooltip_text(), "牌桌状态")
@@ -24169,7 +24274,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.add_child(wall_back)
 	draw_top_hud_wall_meter(hud, wall_rect, hud_wall_count, hud_wall_total, hud_last_discard)
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [hud_wall_count, hud_wall_total, hud_wall_state, hud_last_discard_text]
-	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 11, Color(0.90, 0.88, 0.74), true)
+	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 11, Color(0.98, 0.93, 0.78, 1.0), true)
 	wall.name = "TopHudWallText"
 	var empty_wall := StyleBoxEmpty.new()
 	empty_wall.set_content_margin_all(4)
@@ -24181,6 +24286,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
 	configure_clipped_label(wall)
 	fit_label_font_size(wall, maxf(82.0, hud_viewport_snapshot.x * wall_rect.size.x * 0.94), 11, 9)
+	style_background_readable_label(wall, 2)
 	set_ui_full_text(wall, wall_detail, "牌墙剩余：%d/%d" % [hud_wall_count, hud_wall_total])
 	wall.set_meta("wall_count", hud_wall_count)
 	wall.set_meta("wall_total", hud_wall_total)
@@ -24189,7 +24295,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	wall.set_meta("header_lane_owner", "TopHudWallText")
 	wall.set_meta("score_action_clearance_px", 8.0)
 	mark_ui_optimization(wall, "F-255")
-	var wall_state = make_label(hud, "状态 · %s · 上张%s" % [hud_wall_state.replace("牌墙", ""), hud_last_discard_text], 9, Color(0.78, 0.82, 0.72), false)
+	var wall_state = make_label(hud, "状态 · %s · 上张%s" % [hud_wall_state.replace("牌墙", ""), hud_last_discard_text], 9, Color(0.14, 0.24, 0.17), false)
 	wall_state.name = "TopHudWallState"
 	apply_rect(wall_state, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.500, wall_rect.size.x - 0.010, wall_rect.position.y + 0.840))
 	wall_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -24273,7 +24379,9 @@ func draw_hand(parent: Control) -> void:
 	var hand_has_pending_danger_discard := hand_ai_assist_enabled and has_pending_danger_discard()
 	var hand_viewport_size := effective_viewport_size()
 	var compact_hand_art := hand_viewport_size.y <= 560.0 or hand_viewport_size.x <= 1100.0
-	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.58, 0.64, 0.50, 0.78), "ui_river_soft_wash", 0.24)
+	# The bright GPT banner supplies a paper reading surface while the jade
+	# ornaments remain visible around the hand and keep the table identity.
+	var tray = make_gpt_plate_rect(HAND_TRAY_RECT, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 	tray.name = "HandTray"
 	tray.set_meta("viewport_snapshot", hand_viewport_size)
 	tray.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
@@ -24293,7 +24401,7 @@ func draw_hand(parent: Control) -> void:
 	tray.set_meta("hand_visual_state_signature", hand_state_signature)
 	tray.set_meta("slide_animation_policy", "identity_change_only")
 	mark_ui_optimization(tray, "F-248")
-	var tray_shadow = make_soft_depth_panel(tray, rect_full(0.010, 0.145, 0.990, 1.060), Color(0.0, 0.0, 0.0, 0.38), 18)
+	var tray_shadow = make_soft_depth_panel(tray, rect_full(0.010, 0.145, 0.990, 1.060), Color(0.0, 0.0, 0.0, 0.18), 18)
 	tray_shadow.name = "HandTray3DCastShadow"
 	tray.move_child(tray_shadow, 0)
 	var tray_lip = make_soft_depth_panel(tray, rect_full(0.025, 0.025, 0.975, 0.185), Color(1.0, 0.94, 0.64, 0.28), 999)
@@ -24301,13 +24409,13 @@ func draw_hand(parent: Control) -> void:
 	var tray_side_bevel = make_soft_depth_panel(tray, rect_full(0.010, 0.140, 0.035, 0.900), Color(1.0, 0.94, 0.66, 0.20), 999)
 	tray_side_bevel.name = "HandTray3DSideBevel"
 	var hand_gpt_key := "hand_gpt_tray_bright"
-	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 0.34, false)
+	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 0.12, false)
 	if gpt_hand_texture != null:
 		gpt_hand_texture.name = "HandGPTTrayTexture"
 		# Keep the authored bright tray material visible as a jade/gold frame beneath the tiles.
-		gpt_hand_texture.modulate = Color(1.12, 1.08, 0.96, 0.28)
+		gpt_hand_texture.modulate = Color(1.04, 1.02, 0.92, 0.08)
 		tray.move_child(gpt_hand_texture, min(1, tray.get_child_count() - 1))
-	var tile_stage = make_gpt_plate_rect(rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.22), "ui_button_face_plate")
+	var tile_stage = make_gpt_plate_rect(rect_full(0.010, 0.170, 0.990, 0.955), Color(0.98, 0.94, 0.80, 0.28), "action_gpt_dock_banner_bright")
 	tile_stage.name = "HandTrayTileStage"
 	tile_stage.clip_contents = true
 	tile_stage.set_meta("visual_focus_gutter_px", 6.0)
@@ -24338,7 +24446,7 @@ func draw_hand(parent: Control) -> void:
 	var tutorial_hint_visible := show_hand_hint and hand_can_self_discard and (tutorial_step == TUTORIAL_STEP_NEW or tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_WIN)
 	var tray_detail_text := hand_tray_text()
 	var hand_state_text := hand_tray_state_text()
-	var tray_text = make_label(tray, hand_tray_visible_text(tray_detail_text), 14, Color(0.92, 0.82, 0.56), true)
+	var tray_text = make_label(tray, hand_tray_visible_text(tray_detail_text), 14, Color(0.27, 0.10, 0.055), true)
 	tray_text.name = "HandTrayStatusText"
 	tray_text.clip_text = true
 	tray.set_meta("hand_tray_text_snapshot_policy", "one_status_text_snapshot_per_draw")
@@ -24364,6 +24472,8 @@ func draw_hand(parent: Control) -> void:
 	var tray_text_rect := rect_full(0.030, 0.018, 0.745, 0.082) if disconnected_hand_state else (rect_full(0.030, 0.018, 0.760, 0.082) if shortcut_hint_text != "" else HAND_TRAY_TEXT_RECT)
 	apply_rect(tray_text, tray_text_rect)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	style_background_readable_label(tray_text, 2)
+	tray_text.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.92))
 	configure_clipped_label(tray_text)
 	set_ui_full_text(tray_text, tray_detail_text, "手牌托盘状态：" + tray_detail_text)
 	tray_text.set_meta("prompt_lane_contract", "above_tiles_and_action_dock")
@@ -24376,7 +24486,7 @@ func draw_hand(parent: Control) -> void:
 	if hand_has_pending_claim_window or hand_has_pending_danger_discard or tutorial_hint_visible:
 		tray_text.visible = false
 	if shortcut_hint_text != "":
-		var shortcut_label = make_label(tray, shortcut_hint_text, commercial_ui_font_size(11, 1), Color(0.68, 0.76, 0.70, 0.88), false)
+		var shortcut_label = make_label(tray, shortcut_hint_text, commercial_ui_font_size(11, 1), Color(0.18, 0.35, 0.28, 0.92), false)
 		shortcut_label.name = "HandTrayShortcutHint"
 		apply_rect(shortcut_label, rect_full(0.034, 0.090, 0.758, 0.166))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -25983,19 +26093,30 @@ func cycle_meld_window(seat: int, page_capacity: int) -> void:
 		meld_window_start_by_seat[seat] = mini(latest_start, current_start + page_capacity)
 	request_game_render()
 
-func draw_melds(parent: Control) -> void:
+func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 	var proxy_order := 1000
-	var danger_compact_snapshot := mode == "offline" and has_pending_danger_discard()
-	var meld_viewport_snapshot := effective_viewport_size()
+	var danger_compact_snapshot := bool(render_context.get("danger_compact", false))
+	if not render_context.has("danger_compact"):
+		danger_compact_snapshot = mode == "offline" and has_pending_danger_discard()
+	var meld_viewport_snapshot: Vector2 = render_context.get("viewport", Vector2.ZERO)
+	if meld_viewport_snapshot.x <= 1.0 or meld_viewport_snapshot.y <= 1.0:
+		meld_viewport_snapshot = effective_viewport_size()
 	var compact_melds := meld_viewport_snapshot.y <= 560.0 or danger_compact_snapshot
 	var danger_compact_melds := danger_compact_snapshot
-	var meld_content_size := safe_content_pixel_size()
+	var meld_content_size: Vector2 = render_context.get("content_size", Vector2.ZERO)
+	if meld_content_size.x <= 1.0 or meld_content_size.y <= 1.0:
+		meld_content_size = safe_content_pixel_size()
 	var meld_layout_revision := safe_area_layout_revision
 	parent.set_meta("meld_viewport_snapshot", meld_viewport_snapshot)
 	parent.set_meta("meld_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var meld_snapshot: Array = render_context.get("melds", [])
 	for layout in MELD_LAYOUTS:
 		var seat = int(layout[0])
-		var meld_list = get_melds(seat)
+		var meld_list: Array = []
+		if seat >= 0 and seat < meld_snapshot.size() and typeof(meld_snapshot[seat]) == TYPE_ARRAY:
+			meld_list = meld_snapshot[seat] as Array
+		else:
+			meld_list = get_melds(seat)
 		if meld_list.is_empty():
 			continue
 		var meld_rect: Rect2 = seat_meld_rect(seat)
@@ -26293,24 +26414,24 @@ func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: i
 
 func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String = "") -> Control:
 	# r213: GPT chrome conversion
-	var has_menu_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null or optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
+	var has_menu_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_bright") != null or optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null or optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
 	var art = Control.new()
 	art.name = "MenuCardEntryArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.modulate = Color(1, 1, 1, 0.96)
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(art)
-	var card_shadow_alpha := 0.10 if has_menu_stage_overlay else 0.18
-	var card_depth_alpha := 0.22 if has_menu_stage_overlay else 0.32
-	var card_sheen_alpha := 0.16 if has_menu_stage_overlay else 0.22
+	var card_shadow_alpha := 0.08 if has_menu_stage_overlay else 0.14
+	var card_depth_alpha := 0.16 if has_menu_stage_overlay else 0.24
+	var card_sheen_alpha := 0.22 if has_menu_stage_overlay else 0.26
 	var cast_shadow = make_soft_depth_panel(art, rect_full(0.020, 0.100, 0.990, 1.035), Color(0.0, 0.0, 0.0, card_shadow_alpha), 18)
 	cast_shadow.name = "MenuCardCastShadow"
 	art.move_child(cast_shadow, 0)
-	var depth_edge = make_soft_depth_panel(art, rect_full(0.050, 0.825, 0.950, 0.985), Color(0.22, 0.14, 0.06, card_depth_alpha), 14)
+	var depth_edge = make_soft_depth_panel(art, rect_full(0.050, 0.825, 0.950, 0.985), Color(0.54, 0.16, 0.08, card_depth_alpha), 14)
 	depth_edge.name = "MenuCardDepthEdge"
-	# Use the authored jade/cinnabar GPT button plate as the card surface. The
-	# center crop keeps its material language without repeating a full ornament.
-	var card_face = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.045, 0.970, 0.955), Color(0.70, 0.86, 0.62, 0.82), "menu_lobby_ui_overlay", 0.14)
+	# The bright GPT banner has a quiet paper center and visible jade/gold
+	# ornament at its edges, which gives the card a clear Chinese reading frame.
+	var card_face = make_gpt_plate_rect(rect_full(0.030, 0.045, 0.970, 0.955), Color(0.98, 0.96, 0.86, 0.92), "action_gpt_dock_banner_bright")
 	card_face.name = "MenuCardGptFace"
 	art.add_child(card_face)
 	var surface = make_layout_host(rect_full(0.030, 0.045, 0.970, 0.955))
@@ -26321,21 +26442,21 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 	var inner = make_layout_host(rect_full(0.060, 0.090, 0.940, 0.910))
 	inner.name = "MenuCardInner"
 	art.add_child(inner)
-	var accent = make_gpt_route_rail(rect_full(0.075, 0.740, 0.925, 0.870), Color(color.r, color.g, color.b, 0.10))
+	var accent = make_gpt_meter_fill(rect_full(0.075, 0.740, 0.925, 0.870), Color(color.r, color.g, color.b, 0.72))
 	accent.name = "MenuCardAccent"
 	art.add_child(accent)
 	var icon_echo_left = 0.695 if icon_name != "" else 0.765
 	var echo = make_layout_host(rect_full(icon_echo_left, 0.135, icon_echo_left + 0.220, 0.455))
 	echo.name = "MenuCardIconEcho"
 	art.add_child(echo)
-	var focus = make_gpt_gate(rect_full(0.805, 0.720, 0.910, 0.925), Color(color.r, color.g, color.b, 0.13))
+	var focus = make_gpt_gate(rect_full(0.805, 0.720, 0.910, 0.925), Color(color.r, color.g, color.b, 0.32))
 	focus.name = "MenuCardEntryFocus"
 	art.add_child(focus)
-	var arrow_icon = add_lucide_icon(focus, "chevron-right", rect_full(0.250, 0.250, 0.750, 0.750), Color(0.96, 0.90, 0.66, 0.86))
+	var arrow_icon = add_lucide_icon(focus, "chevron-right", rect_full(0.250, 0.250, 0.750, 0.750), color.darkened(0.28))
 	if arrow_icon != null:
 		arrow_icon.name = "MenuCardEntryArrow"
 	else:
-		var arrow = make_label(focus, ">", 11, Color(0.96, 0.90, 0.66, 0.86), true)
+		var arrow = make_label(focus, ">", 11, Color(0.72, 0.20, 0.10, 0.92), true)
 		arrow.name = "MenuCardEntryArrow"
 		apply_rect(arrow, rect_full(0.0, 0.0, 1.0, 1.0))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -26351,7 +26472,7 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 
 
 func draw_menu_primary_3d_stage(parent: Control) -> Control:
-	var stage_overlay_key := "menu_primary_3d_stage_overlay_warm" if optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null else "menu_primary_3d_stage_overlay"
+	var stage_overlay_key := "menu_primary_3d_stage_overlay_bright" if optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_bright") != null else ("menu_primary_3d_stage_overlay_warm" if optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null else "menu_primary_3d_stage_overlay")
 	var has_stage_overlay := optional_gpt_illustration_texture(stage_overlay_key) != null
 	var stage_overlay = add_optional_gpt_illustration_texture(parent, stage_overlay_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.055, false)
 	if stage_overlay != null:
@@ -26404,14 +26525,14 @@ func draw_menu_card_selection_bus(parent: Control, cards: Array) -> Control:
 
 func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: String, text: String, rect: Rect2, accent: Color, text_color: Color) -> Control:
 	# r214: bulk GPT chrome sweep
-	var chip = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.50, 0.34, 0.78), "menu_lobby_ui_overlay", 0.12)
+	var chip = make_gpt_plate_rect(rect, Color(0.98, 0.94, 0.80, 0.94), "action_gpt_dock_banner_bright")
 	chip.name = "MenuFooterStatusChip_%s" % chip_id
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.focus_mode = Control.FOCUS_NONE
 	chip.set_meta("ui_role", "passive_status")
 	chip.tooltip_text = "状态信息：" + text
 	parent.add_child(chip)
-	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.42, 0.64, 0.44, 0.34), "menu_lobby_ui_overlay", 0.10)
+	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.98, 0.93, 0.80, 0.42), "action_gpt_dock_banner_bright", 0.38)
 	inner.name = "MenuFooterStatusInner_%s" % chip_id
 	chip.add_child(inner)
 	var rail = make_gpt_route_rail(rect_full(0.045, 0.790, 0.955, 0.855), Color(0.010, 0.024, 0.028, 0.36))
@@ -26434,6 +26555,10 @@ func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: 
 	var label_left := 0.045 if chip_id == "version" else 0.088
 	apply_rect(label, rect_full(label_left, 0.080, 0.970, 0.900))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	style_background_readable_label(label, 1)
+	label.add_theme_color_override("font_color", Color(0.055, 0.12, 0.085, 1.0))
+	label.add_theme_color_override("font_outline_color", Color(1.00, 0.92, 0.72, 0.94))
+	label.add_theme_constant_override("outline_size", 2)
 	configure_clipped_label(label)
 	return chip
 
@@ -26682,13 +26807,13 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	apply_rect(rail, rect_full(0.180, 0.704, 0.820, 0.804))
 	parent.add_child(rail)
 	var items := [
-		["rules", "规则", "help-circle", Color(0.30, 0.58, 0.50), Callable(self, "show_rules_screen")],
-		["stats", "战绩", "trophy", Color(0.56, 0.46, 0.72), Callable(self, "show_stats_screen")],
-		["achievements", "成就", "medal", Color(0.70, 0.54, 0.28), Callable(self, "show_achievements_screen")],
-		["daily_login", "签到", "calendar-check", Color(0.62, 0.48, 0.28), Callable(self, "open_daily_login_from_menu")],
-		["replay", "回放", "book-open", Color(0.36, 0.60, 0.62), Callable(self, "show_replay_import_screen")],
+		["rules", "规则", "help-circle", Color(0.18, 0.48, 0.38), Callable(self, "show_rules_screen")],
+		["stats", "战绩", "trophy", Color(0.72, 0.26, 0.18), Callable(self, "show_stats_screen")],
+		["achievements", "成就", "medal", Color(0.78, 0.48, 0.16), Callable(self, "show_achievements_screen")],
+		["daily_login", "签到", "calendar-check", Color(0.22, 0.42, 0.62), Callable(self, "open_daily_login_from_menu")],
+		["replay", "回放", "book-open", Color(0.18, 0.48, 0.56), Callable(self, "show_replay_import_screen")],
 	]
-	var surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.34, 0.58, 0.40, 0.72), "menu_lobby_ui_overlay", 0.12)
+	var surface = make_gpt_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.98, 0.94, 0.80, 0.82), "action_gpt_dock_banner_bright")
 	surface.name = "MenuQuickActionSurface"
 	rail.add_child(surface)
 	rail.move_child(surface, 0)
@@ -26716,6 +26841,9 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		var quick_action: Callable = item[4]
 		var button = make_small_button(str(item[1]), item[3], Callable(self, "activate_menu_entry").bind(quick_source_name, quick_action))
 		button.name = "MenuQuick%sButton" % quick_suffix
+		# Keep the native label for accessibility and layout contracts. The visible
+		# label is added to the rail below so it stays above the GPT face; native
+		# text is made transparent after the face is installed to avoid a duplicate.
 		button.custom_minimum_size = Vector2(96, 44)
 		set_ui_full_text(button, "%s：打开%s页面" % [str(item[1]), str(item[1])], "快捷入口：" + str(item[1]))
 		button.set_meta("quick_action_id", quick_id)
@@ -26736,12 +26864,43 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		mark_ui_optimization(button, "F-619")
 		mark_ui_optimization(button, "F-454")
 		# Keep quick navigation calm enough for the hero artwork and readable at 960px.
-		ensure_button_gpt_face_plate(button, Color(quick_color.r, quick_color.g, quick_color.b, 0.38))
+		ensure_button_gpt_face_plate(button, Color(quick_color.r, quick_color.g, quick_color.b, 0.88), "action_gpt_dock_banner_bright")
+		button.add_theme_color_override("font_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_hover_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_pressed_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_focus_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_hover_pressed_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_disabled_color", Color(0.0, 0.0, 0.0, 0.0))
 		button.button_down.connect(Callable(self, "play_menu_quick_button_press_feedback").bind(button, quick_id, quick_color))
 		rail.add_child(button)
 		var left = start_x + float(i) * (button_width + gap)
 		apply_rect(button, rect_full(left, 0.060, left + button_width, 0.940))
-		add_lucide_icon(button, str(item[2]), rect_full(0.100, 0.255, 0.225, 0.575), Color(0.94, 0.92, 0.76, 0.88))
+		# A narrow authored GPT paper plate gives every label a stable reading
+		# surface without painting a new shape in code.
+		var quick_text_plate := make_gpt_center_crop_plate_rect(
+			rect_full(left + button_width * 0.220, 0.105, left + button_width * 0.955, 0.895),
+			Color(0.98, 0.93, 0.80, 0.72),
+			"action_gpt_dock_banner_bright",
+			0.18
+		)
+		quick_text_plate.name = "MenuQuick%sLabelBackplate" % quick_suffix
+		quick_text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		quick_text_plate.z_index = 10
+		rail.add_child(quick_text_plate)
+		var quick_label := make_label(rail, str(item[1]), 14, Color(0.055, 0.12, 0.085, 1.0), true)
+		quick_label.name = "MenuQuick%sLabel" % quick_suffix
+		apply_rect(quick_label, rect_full(left + button_width * 0.235, 0.125, left + button_width * 0.950, 0.875))
+		quick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		quick_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		quick_label.z_index = 11
+		quick_label.add_theme_color_override("font_color", Color(0.055, 0.12, 0.085, 1.0))
+		quick_label.add_theme_color_override("font_outline_color", Color(1.00, 0.92, 0.72, 0.96))
+		quick_label.add_theme_constant_override("outline_size", 2)
+		quick_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.05, 0.035, 0.78))
+		quick_label.add_theme_constant_override("shadow_offset_x", 1)
+		quick_label.add_theme_constant_override("shadow_offset_y", 1)
+		configure_clipped_label(quick_label)
+		add_lucide_icon(button, str(item[2]), rect_full(0.100, 0.255, 0.225, 0.575), quick_color.darkened(0.30))
 		configure_menu_button_motion(button, 0.12 + float(i) * 0.045, 1.060, 0.0)
 	return rail
 
@@ -29452,7 +29611,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_shadow.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	# Lift midtones so inactive side seats still read as lacquer plaques, not black voids.
 	# r449: warm lacquer seat shell — no mint/jade green program fills under brocade.
-	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.46, 0.32, 0.78), "ui_soft_flash", 0.24)
+	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.56, 0.36, 0.82), "gpt_jade_felt", 0.72)
 	panel.name = "SeatPanel_%d" % seat
 	panel.set_meta("seat_identity_signature", seat_identity_signature)
 	panel.set_meta("seat_viewport_snapshot", seat_viewport_size)
@@ -29471,13 +29630,14 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_side_bevel.name = "SeatPanel3DSideBevel_%d" % seat
 	var seat_right_bevel = make_soft_depth_panel(panel, rect_full(0.940, 0.120, 0.985, 0.880), Color(0.22, 0.16, 0.10, 0.14 if active else 0.10), 999)
 	seat_right_bevel.name = "SeatPanel3DRightBevel_%d" % seat
-	var seat_info_plate = make_gpt_center_crop_plate_rect(rect_full(-0.010, -0.015, 1.010, 1.015), Color(0.32, 0.48, 0.30, 0.18 if active else 0.13), "ui_soft_flash", 0.20)
+	var seat_info_plate = make_gpt_center_crop_plate_rect(rect_full(-0.010, -0.015, 1.010, 1.015), Color(0.42, 0.68, 0.46, 0.16 if active else 0.10), "gpt_jade_felt", 0.72)
 	seat_info_plate.name = "SeatInfoPlate_%d" % seat
 	panel.add_child(seat_info_plate)
 	panel.move_child(seat_info_plate, 0)
 	var seat_texture = add_optional_gpt_illustration_texture(panel, "seat_gpt_brocade_bright", rect_full(-0.015, -0.020, 1.015, 1.020), 0.38 if active else 0.30, false)
 	if seat_texture != null:
 		seat_texture.name = "SeatGPTBrocadeTexture_%d" % seat
+		seat_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		# Commercial lacquer midtones; extra lift on side seats which sit in darker table periphery.
 		# Keep brocade present but dim enough for name/score text to remain readable.
 		# r450: warm lacquer boost — do not amplify green channel (v9 jade seats).
@@ -30540,7 +30700,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.66, 0.82, 0.58, panel_alpha), "menu_lobby_ui_overlay", 0.14)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.28, 0.48, 0.34, panel_alpha), "gpt_jade_felt", 0.72)
 	panel.name = "SettingsPanel"
 	# The settings surface contains native controls several levels below this
 	# authored plate. PASS keeps the modal backdrop active while allowing mouse
@@ -30604,8 +30764,8 @@ func draw_settings_overlay(parent: Control) -> void:
 		var corner_cap = make_gpt_plate_rect(rect_full(corner_x, corner_y, corner_x + 0.026, corner_y + 0.034), Color(0.58, 0.40, 0.16, 0.34), "ui_jade_reading_plate")
 		corner_cap.name = "SettingsConsole3DCornerCap_%d" % corner_index
 		panel.add_child(corner_cap)
-	var settings_gpt_key := "settings_gpt_panel_warm"
-	var gpt_settings_texture := add_optional_gpt_center_crop_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.045, 0.30)
+	var settings_gpt_key := "settings_gpt_panel_v2"
+	var gpt_settings_texture := add_optional_gpt_center_crop_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.025, 0.30)
 	if gpt_settings_texture != null:
 		gpt_settings_texture.name = "SettingsGPTPanelTexture"
 		gpt_settings_texture.modulate = Color(1.20, 1.22, 1.08, gpt_settings_texture.modulate.a)
@@ -30988,7 +31148,9 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "SettingsOverviewArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.285, 0.195, 0.715, 0.252))
+	# Keep the progress summary in its own right-side header lane so the section
+	# navigation remains a clean, full-width keyboard target.
+	apply_rect(art, rect_full(0.535, 0.175, 0.925, 0.235))
 	parent.add_child(art)
 	var overview_texture = add_illustration_texture(art, "settings_overview_scroll", rect_full(-0.020, -0.160, 1.020, 1.160), 0.026, false)
 	if overview_texture != null:
@@ -31001,6 +31163,7 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	var overview_panel := add_optional_gpt_center_crop_texture(art, overview_panel_key, rect_full(-0.02, 0.0, 1.02, 1.0), 0.080, 0.28)
 	if overview_panel != null:
 		overview_panel.name = "SettingsOverviewPanelTexture"
+		overview_panel.modulate.a = 0.03
 		art.move_child(overview_panel, 0)
 	var rail = make_gpt_route_rail(rect_full(0.330, 0.735, 0.905, 0.855), Color(0.006, 0.016, 0.018, 0.42))
 	rail.name = "SettingsOverviewRail"
@@ -31083,6 +31246,7 @@ func draw_settings_section_signal(parent: Control, title_text: String) -> Contro
 	var signal_panel := add_optional_gpt_center_crop_texture(art, signal_panel_key, rect_full(-0.02, 0.0, 1.02, 1.0), 0.075, 0.28)
 	if signal_panel != null:
 		signal_panel.name = "SettingsSectionSignalPanelTexture_%s" % title_text
+		signal_panel.modulate.a = 0.02
 		art.move_child(signal_panel, 0)
 	var icon = make_gpt_edge_rail(rect_full(0.000, 0.155, 0.115, 0.845), Color(accent.r, accent.g, accent.b, 0.22))
 	icon.name = "SettingsSectionSignalIcon_%s" % title_text
@@ -31422,7 +31586,7 @@ func draw_shop_transaction_map_art(parent: Control) -> Control:
 	parent.add_child(art)
 	var gems = int(currency.get("gems", 0))
 	var min_cost = 999999
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		min_cost = min(min_cost, int(ITEM_TYPES[item_id].get("cost_gems", 10)))
 	var affordable = gems >= min_cost
 	var accent = Color(0.62, 0.52, 0.84) if affordable else Color(0.78, 0.44, 0.36)
@@ -34772,12 +34936,15 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	button.set_meta("action_role", role)
 	button.set_meta("action_shortcut", action_button_shortcut_hint(text))
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
-	button.add_theme_color_override("font_color", Color(1.00, 0.98, 0.88))
-	button.add_theme_color_override("font_hover_color", Color(1.00, 1.00, 0.96))
-	button.add_theme_color_override("font_pressed_color", Color(1.00, 0.92, 0.68))
-	button.add_theme_color_override("font_disabled_color", Color(0.82, 0.82, 0.74))
-	button.add_theme_color_override("font_outline_color", Color(0.035, 0.020, 0.008, 0.96))
 	var compact_claim_mode := has_pending_claim_window()
+	var action_text_color := Color(1.00, 0.98, 0.88) if compact_claim_mode else Color(0.25, 0.075, 0.035)
+	var action_hover_color := Color(1.00, 1.00, 0.96) if compact_claim_mode else Color(0.62, 0.16, 0.07)
+	var action_pressed_color := Color(1.00, 0.92, 0.68) if compact_claim_mode else Color(0.78, 0.22, 0.08)
+	button.add_theme_color_override("font_color", action_text_color)
+	button.add_theme_color_override("font_hover_color", action_hover_color)
+	button.add_theme_color_override("font_pressed_color", action_pressed_color)
+	button.add_theme_color_override("font_disabled_color", Color(0.30, 0.32, 0.26, 0.72) if not compact_claim_mode else Color(0.82, 0.82, 0.74))
+	button.add_theme_color_override("font_outline_color", Color(1.00, 0.92, 0.70, 0.96) if not compact_claim_mode else Color(0.035, 0.020, 0.008, 0.96))
 	button.add_theme_constant_override("outline_size", 3 if compact_claim_mode else 2)
 	var is_focus_action = ["win", "gang", "safe", "advice", "next"].has(role) or text.begins_with("荐")
 	var fill_alpha := 0.240 if compact_claim_mode and role == "pass" else (0.680 if compact_claim_mode and is_focus_action else (0.420 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
@@ -34794,7 +34961,7 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	button.add_theme_stylebox_override("normal", empty_normal)
 	button.add_theme_stylebox_override("hover", empty_hover)
 	button.add_theme_stylebox_override("pressed", empty_pressed)
-	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, fill_alpha))
+	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, fill_alpha), "action_gpt_dock_banner_bright" if not compact_claim_mode else "")
 	draw_action_button_art(button, text, color)
 	return button
 
@@ -35322,7 +35489,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	draw_menu_card_entry_art(button, color, icon_name)
 	if icon_name != "":
 		# Keep the primary icon above the generated face and card ornament.
-		add_lucide_icon(button, icon_name, rect_full(0.735, 0.165, 0.865, 0.395), Color(0.92, 0.82, 0.58, 0.78))
+		add_lucide_icon(button, icon_name, rect_full(0.735, 0.165, 0.865, 0.395), Color(0.18, 0.25, 0.20, 0.92))
 	if force_depth_art:
 		_add_card_breathing_shadow(button, color)
 		_add_card_shimmer(button, color)
@@ -35333,17 +35500,21 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# the previous 0.68 edge clipped the LAN suffix at 960px.
 	var card_text_right := 0.730 if icon_name != "" else 0.935
 	var subtitle_font_size := 14 if menu_card_viewport.x < 1100.0 and icon_name != "" else commercial_ui_font_size(15, 2)
-	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.20, 0.38, 0.26, 0.58), "menu_lobby_ui_overlay", 0.12)
+	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.98, 0.88, 0.66, 0.34), "menu_primary_3d_stage_overlay_bright", 0.22)
 	text_back.name = "MenuCardTextBackplate"
 	button.add_child(text_back)
 	text_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var title = make_label(button, title_text, commercial_ui_font_size(24, 4), Color(1.00, 0.91, 0.60), true)
+	var title = make_label(button, title_text, commercial_ui_font_size(24, 4), Color(0.10, 0.15, 0.12), true)
 	title.name = "MenuCardTitleLabel"
 	apply_rect(title, rect_full(0.10, 0.13, 0.68 if icon_name != "" else 0.92, 0.48))
 	title.set_meta("layout_role", "menu_card_title_slot")
 	title.set_meta("slot_rect", "title:0.10..0.48")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	style_background_readable_label(title, 2)
+	title.add_theme_color_override("font_color", Color(0.075, 0.13, 0.095, 1.0))
+	title.add_theme_color_override("font_outline_color", Color(1.00, 0.91, 0.70, 0.94))
+	title.add_theme_constant_override("outline_size", 2)
 	configure_clipped_label(title)
 	title.tooltip_text = title_text
 	title.set_meta("long_text_policy", "measured_title_slot_with_full_tooltip")
@@ -35351,7 +35522,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	mark_ui_optimization(title, "F-446")
 	mark_ui_optimization(title, "F-225")
 	if subtitle_text != "":
-		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(15, 2), Color(0.94, 0.92, 0.80), false)
+		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(15, 2), Color(0.24, 0.29, 0.23), false)
 		subtitle.name = "MenuCardSubtitleLabel"
 		apply_rect(subtitle, rect_full(0.10, 0.50, card_text_right - 0.005 if icon_name != "" else 0.92, 0.78))
 		subtitle.set_meta("layout_role", "menu_card_subtitle_slot")
@@ -35361,6 +35532,9 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		style_background_readable_label(subtitle, 2)
+		subtitle.add_theme_color_override("font_color", Color(0.13, 0.19, 0.14, 1.0))
+		subtitle.add_theme_color_override("font_outline_color", Color(1.00, 0.92, 0.74, 0.86))
+		subtitle.add_theme_constant_override("outline_size", 1)
 		if subtitle_text.length() > 12 or large_text_enabled:
 			configure_wrapped_label(subtitle, maxf(110.0, menu_card_viewport.x * 0.185), 0.0, 2.0)
 			subtitle.max_lines_visible = 2
@@ -35740,7 +35914,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_center_crop_plate_rect(rect, Color(0.52, 0.72, 0.46, 0.74), "menu_lobby_ui_overlay", 0.13)
+	var section = make_gpt_center_crop_plate_rect(rect, Color(0.42, 0.66, 0.46, 0.74), "gpt_jade_felt", 0.72)
 	section.name = "SettingsSection_%s" % title_text
 	section.mouse_filter = Control.MOUSE_FILTER_PASS
 	parent.add_child(section)
@@ -35750,7 +35924,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_top_rim = make_gpt_ribbon(rect_full(0.035, 0.018, 0.965, 0.048), Color(1.0, 0.88, 0.56, 0.055))
 	section_top_rim.name = "SettingsSection3DTopRim_%s" % title_text
 	section.add_child(section_top_rim)
-	var section_plate = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.68, 0.82, 0.56, 0.14), "menu_lobby_ui_overlay", 0.11)
+	var section_plate = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.62, 0.84, 0.62, 0.10), "gpt_jade_felt", 0.72)
 	section_plate.name = "SettingsSectionGptPlate_%s" % title_text
 	section.add_child(section_plate)
 	section.move_child(section_plate, 0)
@@ -37921,7 +38095,13 @@ func safe_content_pixel_size_for_margins(viewport_size: Vector2, margins: Vector
 	return Vector2(max(1.0, viewport_size.x - margins.x - margins.z), max(1.0, viewport_size.y - margins.y - margins.w))
 
 func tile_face_font_size(size: Vector2) -> int:
-	return max(10, int(size.y * 0.42))
+	var cache_key := "%s|%s" % [size.x, size.y]
+	if tile_face_font_size_cache.has(cache_key):
+		return int(tile_face_font_size_cache[cache_key])
+	var result: int = maxi(10, int(size.y * 0.42))
+	if tile_face_font_size_cache.size() < 32:
+		tile_face_font_size_cache[cache_key] = result
+	return result
 
 func tile_face_main(tile: String) -> String:
 	if not tile_metadata_ready:
@@ -38352,7 +38532,7 @@ func _show_menu_impl() -> void:
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 游戏标题 - 更大更突出，使用国风金色
-	var title = make_label(header, "云桌麻将", commercial_ui_font_size(42, 6), Color(1.00, 0.90, 0.58), true)
+	var title = make_label(header, "云桌麻将", commercial_ui_font_size(42, 6), Color(0.30, 0.08, 0.045), true)
 	title.name = "MenuTitleLabel"
 	apply_rect(title, rect_full(0.010, 0.025, 0.880, 0.660))
 	title.set_meta("header_reserved_right", 0.445)
@@ -38361,12 +38541,12 @@ func _show_menu_impl() -> void:
 	title.set_meta("title_layout_contract", "measured_header_with_rule_detail")
 	mark_ui_optimization(title, "F-069")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
-	title.add_theme_constant_override("shadow_offset_x", 2)
-	title.add_theme_constant_override("shadow_offset_y", 3)
-	title.add_theme_constant_override("outline_size", 4)
-	title.add_theme_color_override("font_outline_color", Color(0.08, 0.045, 0.018, 0.96))
-	var title_rule = make_label(header, "一桌风雅，四方入席 · %s" % rule_variant_label(), commercial_ui_font_size(14, 2), Color(0.92, 0.86, 0.68, 0.88), false)
+	title.add_theme_color_override("font_shadow_color", Color(1.0, 0.88, 0.58, 0.62))
+	title.add_theme_constant_override("shadow_offset_x", 1)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.add_theme_constant_override("outline_size", 3)
+	title.add_theme_color_override("font_outline_color", Color(1.0, 0.94, 0.78, 0.96))
+	var title_rule = make_label(header, "一桌风雅，四方入席 · %s" % rule_variant_label(), commercial_ui_font_size(14, 2), Color(0.16, 0.32, 0.26, 0.94), false)
 	title_rule.name = "MenuTitleRule"
 	apply_rect(title_rule, rect_full(0.018, 0.650, 0.860, 0.950))
 	title_rule.set_meta("header_reserved_right", 0.445)
@@ -38396,11 +38576,11 @@ func _show_menu_impl() -> void:
 	mark_ui_optimization(tutorial_button, "F-452")
 	root_layer.add_child(tutorial_button)
 	apply_rect(tutorial_button, rect_full(0.445, 0.075, 0.625, 0.175))
-	ensure_button_gpt_face_plate(tutorial_button, Color(0.34, 0.58, 0.48, 0.42))
-	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.92, 0.96, 0.82, 0.90))
+	ensure_button_gpt_face_plate(tutorial_button, Color(0.18, 0.58, 0.46, 0.88), "action_gpt_dock_banner_bright")
+	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.18, 0.25, 0.20, 0.92))
 
 	if tutorial_available:
-		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.014, 0.034, 0.034, 0.88), "ui_jade_reading_plate")
+		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.98, 0.88, 0.66, 0.70), "menu_primary_3d_stage_overlay_bright")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
 		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
 		tutorial_banner.set_meta("status_owner", "MenuTutorialEntryStatus")
@@ -38410,11 +38590,11 @@ func _show_menu_impl() -> void:
 		tutorial_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root_layer.add_child(tutorial_banner)
 		draw_menu_tutorial_hint_art(tutorial_banner)
-		var tutorial_title = make_label(tutorial_banner, "新手教学", 14, Color(0.96, 0.90, 0.66), true)
+		var tutorial_title = make_label(tutorial_banner, "新手教学", 14, Color(0.10, 0.15, 0.12), true)
 		tutorial_title.name = "MenuTutorialEntryTitle"
 		apply_rect(tutorial_title, rect_full(0.105, 0.095, 0.390, 0.360))
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 11, Color(0.78, 0.88, 0.78), false)
+		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 11, Color(0.24, 0.29, 0.23), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
 		apply_rect(tutorial_detail, rect_full(0.105, 0.390, 0.560, 0.670))
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -38430,6 +38610,7 @@ func _show_menu_impl() -> void:
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(112, 44)
 		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
+		ensure_button_gpt_face_plate(tutorial_action, Color(0.20, 0.62, 0.48, 0.88), "action_gpt_dock_banner_bright")
 		apply_rect(tutorial_action, rect_full(0.620, 0.205, 0.810, 0.800))
 		tutorial_banner.add_child(tutorial_action)
 		var tutorial_skip = make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
@@ -38437,6 +38618,7 @@ func _show_menu_impl() -> void:
 		tutorial_skip.custom_minimum_size = Vector2(76, 44)
 		tutorial_skip.set_meta("accessible_name", "跳过新手教学")
 		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
+		ensure_button_gpt_face_plate(tutorial_skip, Color(0.78, 0.22, 0.14, 0.88), "action_gpt_dock_banner_bright")
 		apply_rect(tutorial_skip, rect_full(0.835, 0.190, 0.985, 0.810))
 		tutorial_banner.add_child(tutorial_skip)
 
@@ -38467,7 +38649,7 @@ func _show_menu_impl() -> void:
 
 	# 三个主功能卡片 - 更大更醒目，使用国风配色
 	var cards: Array = []
-	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.78, 0.56, 0.28), func() -> void:
+	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.84, 0.24, 0.16), func() -> void:
 		menu_focus_restore_name = "MenuPrimaryOfflineCard"
 		start_offline()
 	, "play")
@@ -38476,7 +38658,7 @@ func _show_menu_impl() -> void:
 	row.add_child(card1)
 	cards.append(card1)
 
-	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", AZURE, func() -> void:
+	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", Color(0.18, 0.52, 0.50), func() -> void:
 		menu_focus_restore_name = "MenuPrimaryOnlineCard"
 		show_online_lobby()
 	, "users")
@@ -38485,7 +38667,7 @@ func _show_menu_impl() -> void:
 	row.add_child(card2)
 	cards.append(card2)
 
-	var card3 = make_menu_card("商店\n道具和货币", VERMILION, func() -> void:
+	var card3 = make_menu_card("商店\n道具和货币", Color(0.92, 0.56, 0.16), func() -> void:
 		menu_focus_restore_name = "MenuPrimaryShopCard"
 		show_shop_screen()
 	, "gift")
@@ -38507,7 +38689,7 @@ func _show_menu_impl() -> void:
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(footer, rect_full(0.055, 0.828, 0.945, 0.948))
 	root_layer.add_child(footer)
-	var footer_back = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.050, 1.000, 0.950), Color(0.28, 0.50, 0.34, 0.82), "menu_lobby_ui_overlay", 0.10)
+	var footer_back = make_gpt_plate_rect(rect_full(0.000, 0.050, 1.000, 0.950), Color(0.98, 0.94, 0.80, 0.86), "action_gpt_dock_banner_bright")
 	footer_back.name = "MenuFooterBackplate"
 	footer.add_child(footer_back)
 	footer_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -38521,14 +38703,14 @@ func _show_menu_impl() -> void:
 		footer_tw.tween_property(footer, "modulate:a", 1.0, 0.28).from(0.0).set_delay(0.18).set_ease(Tween.EASE_OUT)
 		footer_tw.tween_property(footer, "offset_top", 0.0, 0.28).from(12.0).set_delay(0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
-	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(0.030, 0.185, 0.190, 0.830), Color(0.58, 0.54, 0.42), Color(0.92, 0.88, 0.70))
+	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(0.030, 0.185, 0.190, 0.830), Color(0.58, 0.54, 0.42), Color(0.10, 0.15, 0.12))
 	set_ui_full_text(_version_chip, "当前版本：" + app_version(), "应用版本")
 	mark_ui_optimization(_version_chip, "F-455")
 
 	# 货币显示 - 使用国风配色
 	var coins_text = "铜钱 %d" % int(currency.get("coins", 0))
 	var gems_text = "玉符 %d" % int(currency.get("gems", 0))
-	var currency_chip = make_menu_footer_status_chip(footer, "currency", "MenuCurrencyBadge", "%s   %s" % [coins_text, gems_text], rect_full(0.205, 0.185, 0.390, 0.830), Color(0.82, 0.62, 0.28), Color(1.00, 0.88, 0.56))
+	var currency_chip = make_menu_footer_status_chip(footer, "currency", "MenuCurrencyBadge", "%s   %s" % [coins_text, gems_text], rect_full(0.205, 0.185, 0.390, 0.830), Color(0.82, 0.62, 0.28), Color(0.10, 0.15, 0.12))
 	set_ui_full_text(currency_chip, "铜钱：%d；玉符：%d" % [int(currency.get("coins", 0)), int(currency.get("gems", 0))], "当前货币")
 	currency_chip.set_meta("currency_coins", int(currency.get("coins", 0)))
 	currency_chip.set_meta("currency_gems", int(currency.get("gems", 0)))
@@ -38541,7 +38723,7 @@ func _show_menu_impl() -> void:
 	var rank_name = get_rank_name()
 	var rank_full_text := "%s  积分 %d" % [rank_name, int(season_data.get("points", 0))]
 	var rank_display_text := "%s · %d分" % [rank_name, int(season_data.get("points", 0))] if content_size.x <= 1280.0 else rank_full_text
-	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.405, 0.185, 0.570, 0.830), Color(0.46, 0.66, 0.54), Color(0.88, 0.96, 0.82))
+	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.405, 0.185, 0.570, 0.830), Color(0.46, 0.66, 0.54), Color(0.10, 0.15, 0.12))
 	rank_chip.tooltip_text = "完整段位状态：" + rank_full_text
 	rank_chip.set_meta("full_status_text", rank_full_text)
 	var rank_label := rank_chip.get_meta("label_control", null) as Label
@@ -38565,7 +38747,7 @@ func _show_menu_impl() -> void:
 		stats_display_text = "暂无对局"
 	elif content_size.x <= 960.0:
 		stats_display_text = "对局%d · 胜率%d%%" % [int(game_stats.get("games_played", 0)), int(float(game_stats.get("win_rate", 0.0)) * 100.0)]
-	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_display_text, rect_full(0.585, 0.185, 0.745, 0.830), Color(0.42, 0.72, 0.66), Color(0.88, 0.96, 0.84))
+	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_display_text, rect_full(0.585, 0.185, 0.745, 0.830), Color(0.42, 0.72, 0.66), Color(0.10, 0.15, 0.12))
 	stats_chip.tooltip_text = "统计详情：" + stats_text
 	stats_chip.set_meta("full_status_text", stats_text)
 	var stats_label := stats_chip.get_meta("label_control", null) as Label
@@ -38588,7 +38770,7 @@ func _show_menu_impl() -> void:
 		menu_focus_restore_name = "MenuSettingsButton"
 		toggle_settings_panel()
 	)
-	ensure_button_gpt_face_plate(settings, Color(0.26, 0.44, 0.58, 0.40))
+	ensure_button_gpt_face_plate(settings, Color(0.26, 0.44, 0.58, 0.68), "menu_primary_3d_stage_overlay_bright")
 	settings.custom_minimum_size = Vector2(88, 48)
 	settings.name = "MenuSettingsButton"
 	settings.add_theme_font_size_override("font_size", 15)
@@ -38598,7 +38780,7 @@ func _show_menu_impl() -> void:
 	apply_rect(settings, rect_full(0.800, 0.155, 0.965, 0.875))
 
 	draw_menu_settings_button_art(settings)
-	add_lucide_icon(settings, "settings", rect_full(0.080, 0.240, 0.250, 0.760), Color(0.92, 0.94, 0.88, 0.92))
+	add_lucide_icon(settings, "settings", rect_full(0.080, 0.240, 0.250, 0.760), Color(0.18, 0.25, 0.20, 0.92))
 
 	# 首次游戏提示 - 高亮常驻规则入口
 	if tutorial_step == 0:
@@ -40447,7 +40629,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
 	var total_sections := maxi(1, RULES_SECTION_COUNT)
 	var current_section := clampi(int(floor(progress * float(total_sections))) + 1, 1, total_sections)
-	var rules_section_names: Array[String] = ["和牌与响应", "结算与支付", "计番项目", "牌型介绍", "特殊牌型", "游戏操作"]
+	var rules_section_names: Array = RULES_SECTION_NAMES
 	var anchors = rules_section_anchors(content_scroll)
 	if forced_section_index >= 0:
 		# An explicit chapter jump can clamp to the scroll range when the chosen
@@ -40469,7 +40651,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 	var status := cache.get("status", null) as Label
 	var step_refs: Array = cache.get("step_refs", [])
 	if status != null:
-		var current_section_name := rules_section_names[clampi(current_section - 1, 0, rules_section_names.size() - 1)]
+		var current_section_name: String = str(rules_section_names[clampi(current_section - 1, 0, rules_section_names.size() - 1)])
 		status.text = "第%d/%d · %s" % [current_section, total_sections, current_section_name]
 		set_ui_full_text(status, "当前：%s；第%d段，共%d段规则" % [current_section_name, current_section, total_sections], "规则阅读位置")
 		status.set_meta("active_section", current_section)
@@ -40480,7 +40662,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 		status.set_meta("next_reading_action", "回到开头" if progress >= 0.999 else ("向下滚动" if progress <= 0.001 else "继续阅读"))
 		mark_ui_optimization(status, "F-081")
 		mark_ui_optimization(status, "F-124")
-	var guide_target_sections := [0, 1, 2, 3, 4, 5]
+	var guide_target_sections: Array = RULES_GUIDE_TARGET_SECTIONS
 	var active_step := 0
 	for guide_index in range(guide_target_sections.size()):
 		if int(guide_target_sections[guide_index]) == current_section - 1:
@@ -40988,7 +41170,7 @@ func _show_shop_screen_impl() -> void:
 	var shop_row_max_height := 320.0 if shop_wide_layout else 120.0
 	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_visual_rows - 1)) / float(shop_visual_rows)), 68.0, shop_row_max_height)
 	var shop_text_width := maxf(180.0, shop_viewport_size.x * (0.190 if shop_wide_layout else 0.380))
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
 		var description := str(item_info.get("desc", ""))
 		var description_height := estimate_wrapped_text_height(description, shop_text_width, accessibility_font_size(commercial_ui_font_size(14, 2)), 4.0)
@@ -40998,28 +41180,13 @@ func _show_shop_screen_impl() -> void:
 			shop_row_height = maxf(shop_row_height, description_height + 48.0)
 	shop_row_height = minf(shop_row_height, shop_row_max_height)
 
-	# 道具图标映射
-	var item_icon_map := {
-		"swap_card": "refresh-cw",
-		"peek_card": "info",
-		"lucky_charm": "leaf",
-		"double_coins": "coin",
-	}
-	# 道具颜色映射
-	var item_color_map := {
-		"swap_card": Color(0.22, 0.48, 0.72),
-		"peek_card": Color(0.62, 0.38, 0.72),
-		"lucky_charm": Color(0.78, 0.56, 0.28),
-		"double_coins": Color(0.72, 0.52, 0.22),
-	}
-
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
 		var count = get_item_count(item_id)
 		var cost = int(item_info.get("cost_gems", 10))
 		var description := str(item_info.get("desc", ""))
-		var item_color = item_color_map.get(item_id, Color(0.42, 0.48, 0.44))
-		var icon_name = item_icon_map.get(item_id, "gift")
+		var item_color = SHOP_ITEM_COLOR_MAP.get(item_id, Color(0.42, 0.48, 0.44))
+		var icon_name = SHOP_ITEM_ICON_MAP.get(item_id, "gift")
 
 		# 道具行面板
 		var row = Panel.new()
@@ -41043,7 +41210,7 @@ func _show_shop_screen_impl() -> void:
 		content.add_child(row)
 		# 道具行交错入场 / Staggered item entrance
 		if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
-			var item_index = int(ITEM_TYPES.keys().find(item_id))
+			var item_index = shop_item_index(item_id)
 			row.modulate = Color(1, 1, 1, 0)
 			row.offset_left = 14.0
 			var r_tw := create_screen_tween()
@@ -41273,7 +41440,7 @@ func _show_shop_screen_impl() -> void:
 	var total_inventory := 0
 	var affordable_items := 0
 	var min_cost := 9999
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
 		var cost = int(item_info.get("cost_gems", 10))
 		total_inventory += get_item_count(item_id)
@@ -41350,7 +41517,7 @@ func _show_shop_screen_impl() -> void:
 	call_deferred("fit_shop_buy_command_labels")
 	var shop_focus_controls: Array[Control] = [back, scroll, shop_scroll_hit_target]
 	var shop_buy_controls: Array[Control] = []
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var shop_buy_button := content.find_child("ShopItemBuyButton_%s" % item_id, true, false) as Control
 		if shop_buy_button != null:
 			shop_buy_controls.append(shop_buy_button)
@@ -41515,7 +41682,7 @@ func fit_shop_buy_command_labels() -> void:
 	await get_tree().process_frame
 	if root_layer == null or not is_instance_valid(root_layer) or mode != "shop":
 		return
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var command_label := root_layer.find_child("ShopBuyButtonCommand_%s" % item_id, true, false) as Label
 		if command_label == null or not is_instance_valid(command_label):
 			continue
@@ -46957,14 +47124,14 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 		return ""
 	var stable: Array = [kind]
 	if kind == "roomState":
-		stable.append(str(first_present(snapshot, ["code", "roomCode", "room_code"], "")))
+		stable.append(str(first_present(snapshot, ONLINE_ROOM_CODE_KEYS, "")))
 		var players_snapshot: Array = []
 		for item in snapshot.get("players", []):
 			if typeof(item) != TYPE_DICTIONARY:
 				continue
 			players_snapshot.append([
-				int(first_present(item, ["seat", "index", "position"], players_snapshot.size())),
-				str(first_present(item, ["name", "nickname", "userName"], "")),
+				int(first_present(item, ONLINE_SEAT_KEYS, players_snapshot.size())),
+				str(first_present(item, ONLINE_NAME_KEYS, "")),
 				bool(first_present(item, ["ready"], false)),
 			])
 		stable.append(players_snapshot)
@@ -47042,8 +47209,8 @@ func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool
 		var room_value = data.get("room", data)
 		if typeof(room_value) != TYPE_DICTIONARY:
 			return true
-		var incoming_code := bounded_online_input(str(first_present(room_value, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
-		var current_code := bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var incoming_code := bounded_online_input(str(first_present(room_value, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var current_code := bounded_online_input(str(first_present(online_room, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		return incoming_code == "" or current_code == "" or incoming_code == current_code
 	if kind == "gameState":
 		if revision != online_game_revision:
@@ -47051,7 +47218,7 @@ func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool
 		var game_value = data.get("game", data)
 		var incoming_room := ""
 		if typeof(game_value) == TYPE_DICTIONARY:
-			incoming_room = str(first_present(game_value as Dictionary, ["roomCode", "room_code", "code"], "")).strip_edges()
+			incoming_room = str(first_present(game_value as Dictionary, ONLINE_ROOM_CODE_KEYS, "")).strip_edges()
 		if incoming_room == "":
 			incoming_room = str(first_present(data, ["roomCode", "room_code"], "")).strip_edges()
 		var current_room := str(online_game.get("roomCode", "")).strip_edges()
@@ -47383,8 +47550,8 @@ func handle_online_message(line: String) -> void:
 		if room_revision >= 0:
 			online_room_revision = room_revision
 		clear_online_feedback()
-		var previous_room_code := bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
-		var next_room_code := bounded_online_input(str(first_present(next_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var previous_room_code := bounded_online_input(str(first_present(online_room, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var next_room_code := bounded_online_input(str(first_present(next_room, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var previous_logs_value = online_room.get("logs", [])
 		var previous_logs: Array = previous_logs_value as Array if typeof(previous_logs_value) == TYPE_ARRAY else []
 		var previous_log_total := online_log_total_count
@@ -47395,7 +47562,7 @@ func handle_online_message(line: String) -> void:
 			online_log_at_latest = false
 			previous_log_total = 0
 		online_room = next_room
-		selected_room = bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		selected_room = bounded_online_input(str(first_present(online_room, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var resumed_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		if online_resume_pending and selected_room != "" and (resumed_room == "" or selected_room == resumed_room):
 			online_resume_pending = false
@@ -47463,15 +47630,34 @@ func handle_online_message(line: String) -> void:
 		if message != "":
 			set_online_feedback(message, false)
 
+func cache_online_normalized_value(cache: Dictionary, lru: Dictionary, key: String, value: String) -> void:
+	if key == "":
+		return
+	if cache.is_empty():
+		clear_cache_lru(lru)
+	cache[key] = value
+	touch_cache_key(lru, key)
+	while cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(lru, cache)
+
+
 func normalize_last_discard_seat(value, fallback: int) -> int:
 	if typeof(value) == TYPE_DICTIONARY:
 		return int(first_present(value, ["seat", "fromSeat", "discardSeat"], fallback))
 	return fallback
 
 func normalize_last_discard_tile(value) -> String:
+	var raw_value = first_present(value, ONLINE_TILE_VALUE_KEYS, "") if typeof(value) == TYPE_DICTIONARY else value
+	var cache_key := str(raw_value).strip_edges().to_upper()
+	if cache_key != "" and online_last_discard_tile_cache.has(cache_key):
+		return str(online_last_discard_tile_cache[cache_key])
+	var result := ""
 	if typeof(value) == TYPE_DICTIONARY:
-		return normalize_tile_code(str(first_present(value, ["tile", "code", "id"], "")))
-	return normalize_tile_code(str(value))
+		result = normalize_tile_code(str(raw_value))
+	else:
+		result = normalize_tile_code(str(value))
+	cache_online_normalized_value(online_last_discard_tile_cache, online_last_discard_tile_cache_lru, cache_key, result)
+	return result
 
 func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary:
 	claimed_tile = normalize_tile_code(claimed_tile)
@@ -47501,9 +47687,15 @@ func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary
 
 func normalize_online_chi_choices(value, claimed_tile: String = "") -> Array:
 	var choices: Array = []
-	var seen: Dictionary = {}
 	if typeof(value) != TYPE_ARRAY:
 		return choices
+	claimed_tile = normalize_tile_code(claimed_tile)
+	var cache_key := "%s|%s" % [str(value), claimed_tile]
+	var cached: Variant = normalized_online_chi_choices_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_online_chi_choices_cache_lru, cache_key)
+		return (cached as Array).duplicate(true)
+	var seen: Dictionary = {}
 	for item in value:
 		var choice = normalize_online_chi_choice(item, claimed_tile)
 		if choice.is_empty():
@@ -47513,6 +47705,12 @@ func normalize_online_chi_choices(value, claimed_tile: String = "") -> Array:
 			continue
 		seen[choice_key] = true
 		choices.append(choice)
+	if normalized_online_chi_choices_cache.is_empty():
+		clear_cache_lru(normalized_online_chi_choices_cache_lru)
+	normalized_online_chi_choices_cache[cache_key] = choices.duplicate(true)
+	touch_cache_key(normalized_online_chi_choices_cache_lru, cache_key)
+	while normalized_online_chi_choices_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(normalized_online_chi_choices_cache_lru, normalized_online_chi_choices_cache)
 	return choices
 
 func normalize_online_game_state(message: Dictionary) -> Dictionary:
@@ -47522,7 +47720,7 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	# JSON input is owned by this handler. A shallow shell avoids duplicating
 	# large raw arrays that are immediately replaced by normalized projections.
 	var game: Dictionary = (source as Dictionary).duplicate(false)
-	game["roomCode"] = bounded_online_input(str(first_present(game, ["roomCode", "room_code", "code"], selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
+	game["roomCode"] = bounded_online_input(str(first_present(game, ONLINE_ROOM_CODE_KEYS, selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
 	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
 	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
 	game["wallCount"] = int(first_present(game, ["wallCount", "wallRemaining", "remainingTiles"], game.get("wallCount", 0)))
@@ -47531,7 +47729,7 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	game["ruleVariantInvalid"] = server_variant != "" and not RULE_VARIANT_PROFILES.has(server_variant)
 	var server_wall_total := int(first_present(game, ["wallTotal", "wallSize", "totalTiles", "deckSize"], game.get("wallTotal", 0)))
 	game["wallTotal"] = maxi(0, server_wall_total)
-	game["phase"] = normalize_online_phase(str(first_present(game, ["phase", "state", "status"], "")))
+	game["phase"] = normalize_online_phase(str(first_present(game, ONLINE_PHASE_KEYS, "")))
 	var raw_hand_value = first_present(game, ["hand", "tiles", "yourHand", "selfHand"], [])
 	game["hand"] = normalize_tile_array(raw_hand_value)
 	game["handIdentities"] = normalize_online_hand_identities(game, raw_hand_value, game["hand"])
@@ -47555,45 +47753,63 @@ func normalize_online_melds(value) -> Array:
 	var melds: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return melds
+	var cache_key := str(value)
+	var cached: Variant = normalized_online_melds_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_online_melds_cache_lru, cache_key)
+		return (cached as Array).duplicate(true)
 	for meld in value:
 		if typeof(meld) == TYPE_ARRAY:
 			melds.append(normalize_tile_array(meld))
 		elif typeof(meld) == TYPE_DICTIONARY:
 			melds.append(normalize_tile_array(first_present(meld, ["tiles", "meld", "cards"], [])))
+	if normalized_online_melds_cache.is_empty():
+		clear_cache_lru(normalized_online_melds_cache_lru)
+	normalized_online_melds_cache[cache_key] = melds.duplicate(true)
+	touch_cache_key(normalized_online_melds_cache_lru, cache_key)
+	while normalized_online_melds_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(normalized_online_melds_cache_lru, normalized_online_melds_cache)
 	return melds
 
 func normalize_online_message_kind(data: Dictionary) -> String:
-	var raw = str(first_present(data, ["type", "event", "kind", "messageType"], "")).strip_edges()
+	var raw = str(first_present(data, ONLINE_MESSAGE_KIND_KEYS, "")).strip_edges()
 	var compact = raw.to_lower().replace("_", "").replace("-", "")
 	if compact == "message" and data.has("event"):
 		raw = str(data.get("event", ""))
 		compact = raw.to_lower().replace("_", "").replace("-", "")
+	if compact != "" and online_message_kind_cache.has(compact):
+		return str(online_message_kind_cache[compact])
+	var resolved := ""
 	match compact:
 		"welcome", "hello":
-			return "welcome"
+			resolved = "welcome"
 		"chat", "chatmessage", "roomchat":
-			return "chat"
+			resolved = "chat"
 		"info", "notice", "status", "servermessage", "message":
-			return "info"
+			resolved = "info"
 		"error", "err", "reject", "rejected", "actionrejected", "invalidaction", "denied":
-			return "error"
+			resolved = "error"
 		"ack", "ok", "success", "accepted", "actionack", "actionaccepted":
-			return "ack"
+			resolved = "ack"
 		"roomstate", "roomupdate", "lobbystate", "lobbyupdate", "room":
-			return "roomState"
+			resolved = "roomState"
 		"gamestate", "gameupdate", "gamesnapshot", "state", "snapshot", "game":
-			return "gameState"
+			resolved = "gameState"
 		"voicemessage", "voice", "voicepacket":
-			return "voiceMessage"
+			resolved = "voiceMessage"
 		"log", "roomlog", "eventlog":
-			return "log"
-	if (data.has("sender") or data.has("fromSeat") or data.has("player")) and (data.has("message") or data.has("text")):
-		return "chat"
-	if data.has("game") or data.has("hand") or data.has("yourHand") or data.has("selfHand"):
-		return "gameState"
-	if data.has("room") or (data.has("players") and data.has("roomCode")):
-		return "roomState"
-	return raw
+			resolved = "log"
+	if resolved == "":
+		if (data.has("sender") or data.has("fromSeat") or data.has("player")) and (data.has("message") or data.has("text")):
+			resolved = "chat"
+		elif data.has("game") or data.has("hand") or data.has("yourHand") or data.has("selfHand"):
+			resolved = "gameState"
+		elif data.has("room") or (data.has("players") and data.has("roomCode")):
+			resolved = "roomState"
+		else:
+			resolved = raw
+	cache_online_normalized_value(online_message_kind_cache, online_message_kind_cache_lru, compact, resolved)
+	return resolved
 
 func normalize_online_pending(value, game: Dictionary) -> Dictionary:
 	var pending: Dictionary = {}
@@ -47617,20 +47833,29 @@ func normalize_online_pending(value, game: Dictionary) -> Dictionary:
 func normalize_online_phase(value: String) -> String:
 	var phase = value.strip_edges()
 	var compact = phase.to_lower().replace("_", "").replace("-", "")
+	if compact != "" and online_phase_cache.has(compact):
+		return str(online_phase_cache[compact])
+	var result := "unknown"
 	if compact == "awaitdiscard" or compact == "discard" or compact == "turn":
-		return "awaitDiscard"
-	if compact == "pendingclaim" or compact == "claim" or compact == "response":
-		return "pendingClaim"
-	if compact == "ended" or compact == "finished" or compact == "gameover":
-		return "ended"
-	if compact == "ready" or compact == "waiting":
-		return compact
-	return "unknown"
+		result = "awaitDiscard"
+	elif compact == "pendingclaim" or compact == "claim" or compact == "response":
+		result = "pendingClaim"
+	elif compact == "ended" or compact == "finished" or compact == "gameover":
+		result = "ended"
+	elif compact == "ready" or compact == "waiting":
+		result = compact
+	cache_online_normalized_value(online_phase_cache, online_phase_cache_lru, compact, result)
+	return result
 
 func normalize_online_players(value) -> Array:
 	var result: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return result
+	var cache_key := str(value)
+	var cached: Variant = normalized_online_players_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_online_players_cache_lru, cache_key)
+		return (cached as Array).duplicate(true)
 	for item in value:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
@@ -47654,6 +47879,12 @@ func normalize_online_players(value) -> Array:
 		player["discards"] = normalize_tile_array(first_present(source, ["discards", "discarded", "river"], []))
 		player["melds"] = normalize_online_melds(first_present(source, ["melds", "openMelds", "sets"], []))
 		result.append(player)
+	if normalized_online_players_cache.is_empty():
+		clear_cache_lru(normalized_online_players_cache_lru)
+	normalized_online_players_cache[cache_key] = result.duplicate(true)
+	touch_cache_key(normalized_online_players_cache_lru, cache_key)
+	while normalized_online_players_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(normalized_online_players_cache_lru, normalized_online_players_cache)
 	return result
 
 func normalize_online_hand_identities(game: Dictionary, raw_hand, normalized_hand: Array) -> Array:
@@ -48204,11 +48435,14 @@ func wall_is_critical(wall_count: int = -1) -> bool:
 
 
 func wall_state_text(wall_count: int = -1) -> String:
-	if wall_is_critical(wall_count):
-		return "牌墙将尽"
-	if wall_is_low(wall_count):
-		return "牌墙偏少"
-	return "牌墙充足"
+	var remaining := get_wall_count() if wall_count < 0 else wall_count
+	var total := display_wall_total()
+	var cache_key := "%s|%d|%d|%d" % [mode, remaining, total, online_game_revision]
+	if wall_state_text_cache.has(cache_key):
+		return str(wall_state_text_cache[cache_key])
+	var result := "牌墙将尽" if remaining <= wall_critical_threshold() else ("牌墙偏少" if remaining <= wall_low_threshold() else "牌墙充足")
+	wall_state_text_cache[cache_key] = result
+	return result
 
 func rule_allows_chi(variant: String = "") -> bool:
 	return bool(rule_profile(variant).get("allow_chi", true))
@@ -49942,17 +50176,29 @@ func normalize_tile_array(value) -> Array:
 	var result: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return result
+	var cache_key := str(value)
+	var cached: Variant = normalized_tile_array_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_tile_array_cache_lru, cache_key)
+		return (cached as Array).duplicate(false)
 	var metadata_ready: bool = tile_metadata_ready
 	for item in value:
 		var raw_tile := ""
 		if typeof(item) == TYPE_DICTIONARY:
-			raw_tile = str(first_present(item, ["tile", "code", "id"], ""))
+			raw_tile = str(first_present(item, ONLINE_TILE_VALUE_KEYS, ""))
 		else:
 			raw_tile = str(item)
 		var tile := normalize_tile_code(raw_tile)
 		var known := tile_order.has(tile) or tile_flower_cache.has(tile) if metadata_ready else TILE_CODES.has(tile) or FLOWER_CODES.has(tile)
 		if tile != "" and known:
 			result.append(tile)
+	if not result.is_empty() or value.is_empty():
+		if normalized_tile_array_cache.is_empty():
+			clear_cache_lru(normalized_tile_array_cache_lru)
+		normalized_tile_array_cache[cache_key] = result.duplicate(false)
+		touch_cache_key(normalized_tile_array_cache_lru, cache_key)
+		while normalized_tile_array_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+			evict_cache_key(normalized_tile_array_cache_lru, normalized_tile_array_cache)
 	return result
 
 
@@ -49960,6 +50206,11 @@ func normalize_claim_options(value) -> Array:
 	var options: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return options
+	var cache_key := str(value)
+	var cached: Variant = normalized_claim_options_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_claim_options_cache_lru, cache_key)
+		return (cached as Array).duplicate(false)
 	var seen: Dictionary = {}
 	for item in value:
 		var name = ""
@@ -49981,6 +50232,12 @@ func normalize_claim_options(value) -> Array:
 		if name != "" and not seen.has(name):
 			seen[name] = true
 			options.append(name)
+	if normalized_claim_options_cache.is_empty():
+		clear_cache_lru(normalized_claim_options_cache_lru)
+	normalized_claim_options_cache[cache_key] = options.duplicate(false)
+	touch_cache_key(normalized_claim_options_cache_lru, cache_key)
+	while normalized_claim_options_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(normalized_claim_options_cache_lru, normalized_claim_options_cache)
 	return options
 
 
@@ -50124,15 +50381,34 @@ func online_lobby_log_count() -> int:
 
 func online_lobby_retained_log_count() -> int:
 	var logs = online_room.get("logs", [])
-	return (logs as Array).size() if typeof(logs) == TYPE_ARRAY else 0
+	var size := (logs as Array).size() if typeof(logs) == TYPE_ARRAY else 0
+	if online_log_retained_count_cache_revision == online_log_revision and online_log_retained_count_cache_size == size:
+		return online_log_retained_count_cache_value
+	online_log_retained_count_cache_revision = online_log_revision
+	online_log_retained_count_cache_size = size
+	online_log_retained_count_cache_value = size
+	return size
 
 func online_lobby_log_visible_range_text() -> String:
 	var total := online_lobby_retained_log_count()
+	var range_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
+	var range_scroll := 0
+	if range_root_id != 0:
+		var range_scroll_control := find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer
+		if range_scroll_control != null:
+			range_scroll = range_scroll_control.scroll_vertical
+	var range_key := "%d|%d|%d|%d|%d" % [range_root_id, total, range_scroll, online_log_revision, int(round(effective_viewport_size().y))]
+	if range_key == online_log_range_cache_key:
+		return online_log_range_cache_value
 	if total <= 0:
-		return "日志范围 · 暂无记录"
+		online_log_range_cache_key = range_key
+		online_log_range_cache_value = "日志范围 · 暂无记录"
+		return online_log_range_cache_value
 	var scroll := find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer if root_layer != null and is_instance_valid(root_layer) else null
 	if scroll == null:
-		return "日志范围 · 1-%d/%d" % [mini(total, 1), total]
+		online_log_range_cache_key = range_key
+		online_log_range_cache_value = "日志范围 · 1-%d/%d" % [mini(total, 1), total]
+		return online_log_range_cache_value
 	var scrollbar := scroll.get_v_scroll_bar()
 	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page) if scrollbar != null else 0.0
 	var progress := 0.0 if max_scroll <= 0.5 else clampf(float(scroll.scroll_vertical) / max_scroll, 0.0, 1.0)
@@ -50142,7 +50418,9 @@ func online_lobby_log_visible_range_text() -> String:
 	var first := 1 if max_scroll <= 0.5 else clampi(int(round(progress * float(maxi(0, total - visible_count)))) + 1, 1, maxi(1, total))
 	var last := mini(total, first + visible_count - 1)
 	var boundary := "已到最新" if online_log_at_latest else "可回到最新"
-	return "日志范围 · %d-%d/%d · %s" % [first, last, total, boundary]
+	online_log_range_cache_key = range_key
+	online_log_range_cache_value = "日志范围 · %d-%d/%d · %s" % [first, last, total, boundary]
+	return online_log_range_cache_value
 
 func online_lobby_log_unread_count() -> int:
 	return maxi(0, online_lobby_log_count() - online_log_seen_count)
@@ -50880,32 +51158,40 @@ func center_phase_key() -> String:
 	return "ready"
 
 func center_phase_label(phase_key: String) -> String:
+	if center_phase_label_cache.has(phase_key):
+		return str(center_phase_label_cache[phase_key])
+	var result := "准备"
 	match phase_key:
 		"discard":
-			return "我方出牌"
+			result = "我方出牌"
 		"claim":
-			return "响应窗口"
+			result = "响应窗口"
 		"ended":
-			return "结算"
+			result = "结算"
 		"wait":
-			return "对手行牌"
+			result = "对手行牌"
 		"unknown":
-			return "同步异常"
-	return "准备"
+			result = "同步异常"
+	center_phase_label_cache[phase_key] = result
+	return result
 
 func center_phase_color(phase_key: String) -> Color:
+	if center_phase_color_cache.has(phase_key):
+		return center_phase_color_cache[phase_key]
+	var result := Color(0.62, 0.64, 0.58, 1.0)
 	match phase_key:
 		"discard":
-			return Color(0.38, 0.72, 0.58, 1.0)
+			result = Color(0.38, 0.72, 0.58, 1.0)
 		"claim":
-			return Color(0.88, 0.58, 0.28, 1.0)
+			result = Color(0.88, 0.58, 0.28, 1.0)
 		"ended":
-			return Color(0.88, 0.72, 0.34, 1.0)
+			result = Color(0.88, 0.72, 0.34, 1.0)
 		"wait":
-			return Color(0.42, 0.58, 0.72, 1.0)
+			result = Color(0.42, 0.58, 0.72, 1.0)
 		"unknown":
-			return Color(0.86, 0.42, 0.30, 1.0)
-	return Color(0.62, 0.64, 0.58, 1.0)
+			result = Color(0.86, 0.42, 0.30, 1.0)
+	center_phase_color_cache[phase_key] = result
+	return result
 
 
 func wall_meter_color(progress: float) -> Color:
@@ -51065,33 +51351,33 @@ func advisor_panel_text() -> String:
 
 
 func fan_badge_color(reason: String) -> Color:
+	if fan_badge_color_cache.has(reason):
+		return fan_badge_color_cache[reason]
+	var result := Color(0.40, 0.46, 0.50)
 	# 高番型 - 金色
 	if reason == "十三幺" or reason == "大四喜" or reason == "字一色":
-		return Color(0.92, 0.76, 0.28)
+		result = Color(0.92, 0.76, 0.28)
 	# 中等番型 - 紫色
-	if reason == "大三元" or reason == "小四喜" or reason == "清一色" or reason == "七对":
-		return Color(0.58, 0.42, 0.82)
+	elif reason == "大三元" or reason == "小四喜" or reason == "清一色" or reason == "七对":
+		result = Color(0.58, 0.42, 0.82)
 	# 低番型 - 青色
-	if reason == "小三元" or reason == "混一色" or reason == "碰碰胡" or reason == "一条龙":
-		return Color(0.32, 0.56, 0.72)
+	elif reason == "小三元" or reason == "混一色" or reason == "碰碰胡" or reason == "一条龙":
+		result = Color(0.32, 0.56, 0.72)
 	# 基础番型 - 绿色
-	if reason == "平胡" or reason == "自摸" or reason == "门清" or reason == "断幺九" or reason == "庄家" or reason == "花牌":
-		return Color(0.28, 0.58, 0.42)
+	elif reason == "平胡" or reason == "自摸" or reason == "门清" or reason == "断幺九" or reason == "庄家" or reason == "花牌":
+		result = Color(0.28, 0.58, 0.42)
 	# 特殊操作 - 橙色
-	if reason == "杠" or reason == "杠上开花" or reason == "海底捞月" or reason == "河底捞鱼" or reason == "抢杠胡" or reason == "大吊车":
-		return Color(0.82, 0.56, 0.28)
+	elif reason == "杠" or reason == "杠上开花" or reason == "海底捞月" or reason == "河底捞鱼" or reason == "抢杠胡" or reason == "大吊车":
+		result = Color(0.82, 0.56, 0.28)
 	# 封顶 - 红色
-	if reason == "封顶":
-		return Color(0.88, 0.28, 0.22)
-	# 默认
-	return Color(0.40, 0.46, 0.50)
+	elif reason == "封顶":
+		result = Color(0.88, 0.28, 0.22)
+	fan_badge_color_cache[reason] = result
+	return result
 
 
 func round_summary_delta_bar_fraction(delta: int) -> float:
-	var max_delta = 1
-	for value in last_score_deltas:
-		max_delta = max(max_delta, abs(int(value)))
-	return clamp(float(abs(delta)) / float(max_delta), 0.0, 1.0)
+	return clamp(float(abs(delta)) / float(last_score_delta_max_abs), 0.0, 1.0)
 
 func round_summary_score_delta(seat: int) -> int:
 	if seat < 0 or seat >= last_score_deltas.size():
@@ -51353,30 +51639,46 @@ func should_insert_hand_group_gap(hand: Array, index: int) -> bool:
 	return hand_group_index(str(hand[index - 1])) != hand_group_index(str(hand[index]))
 
 func hand_group_index(tile: String) -> int:
-	var index = tile_index(tile)
+	var cache_key := normalize_tile_code(tile)
+	if cache_key == "":
+		cache_key = tile
+	if hand_group_index_cache.has(cache_key):
+		return int(hand_group_index_cache[cache_key])
+	var index = tile_index(cache_key)
+	var result := 5
 	if index >= 0 and index < 27:
-		return int(index / 9)
-	if index >= 27:
-		return 3
-	if is_flower_tile(tile):
-		return 4
-	return 5
+		result = int(index / 9)
+	elif index >= 27:
+		result = 3
+	elif is_flower_tile(cache_key):
+		result = 4
+	if hand_group_index_cache.size() < 64:
+		hand_group_index_cache[cache_key] = result
+	return result
 
 
 func hand_group_label(tile: String) -> String:
-	var group_index = hand_group_index(tile)
+	var cache_key := normalize_tile_code(tile)
+	if cache_key == "":
+		cache_key = tile
+	if hand_group_label_cache.has(cache_key):
+		return str(hand_group_label_cache[cache_key])
+	var group_index = hand_group_index(cache_key)
+	var result := ""
 	match group_index:
 		0:
-			return "万"
+			result = "万"
 		1:
-			return "条"
+			result = "条"
 		2:
-			return "筒"
+			result = "筒"
 		3:
-			return "字"
+			result = "字"
 		4:
-			return "花"
-	return ""
+			result = "花"
+	if hand_group_label_cache.size() < 64:
+		hand_group_label_cache[cache_key] = result
+	return result
 
 
 func hand_tray_text() -> String:
@@ -51675,9 +51977,15 @@ func play_voice_button_press_feedback(button: Button, active: bool, peak: float 
 
 
 func pending_claim_source_badge_text(source_seat: int) -> String:
+	var cache_key := str(source_seat)
+	if pending_claim_source_badge_cache.has(cache_key):
+		return str(pending_claim_source_badge_cache[cache_key])
+	var result := "对手"
 	if source_seat >= 0 and source_seat < CENTER_WIND_LABELS.size():
-		return CENTER_WIND_LABELS[source_seat] + "家"
-	return "对手"
+		result = CENTER_WIND_LABELS[source_seat] + "家"
+	if pending_claim_source_badge_cache.size() < 8:
+		pending_claim_source_badge_cache[cache_key] = result
+	return result
 
 func pending_claim_state() -> Dictionary:
 	if mode == "offline":
@@ -51888,17 +52196,26 @@ func pending_claim_auto_pass_text() -> String:
 
 
 func pending_claim_priority_text(options: Array) -> String:
+	var cache_key := str(options)
+	if pending_claim_priority_cache.has(cache_key):
+		return str(pending_claim_priority_cache[cache_key])
 	var labels: Array[String] = []
 	var label_by_claim := {"hu": "胡", "gang": "杠", "peng": "碰", "chi": "吃"}
 	for claim in ["hu", "gang", "peng", "chi"]:
 		if options.has(claim):
 			labels.append(str(label_by_claim[claim]))
 	if not options.is_empty():
-		labels.append("过")
-	return "动作优先级 · " + " > ".join(labels) if not labels.is_empty() else "动作优先级 · 过"
+			labels.append("过")
+	var result := "动作优先级 · " + " > ".join(labels) if not labels.is_empty() else "动作优先级 · 过"
+	if pending_claim_priority_cache.size() < 32:
+		pending_claim_priority_cache[cache_key] = result
+	return result
 
 
 func pending_claim_shortcut_text(options: Array) -> String:
+	var cache_key := str(options)
+	if pending_claim_shortcut_cache.has(cache_key):
+		return str(pending_claim_shortcut_cache[cache_key])
 	var shortcuts: Array[String] = []
 	var shortcut_by_claim := {
 		"chi": "C吃",
@@ -51911,7 +52228,10 @@ func pending_claim_shortcut_text(options: Array) -> String:
 			shortcuts.append(str(shortcut_by_claim[claim]))
 	if not options.is_empty():
 		shortcuts.append("X过")
-	return " · ".join(shortcuts)
+	var result := " · ".join(shortcuts)
+	if pending_claim_shortcut_cache.size() < 32:
+		pending_claim_shortcut_cache[cache_key] = result
+	return result
 
 
 func pending_claim_response_summary(action_key: String, visible_label: String) -> String:
@@ -51943,105 +52263,150 @@ func action_intent_rect_for_count(count: int, viewport_snapshot: Vector2 = Vecto
 	# .330-.635 panel at 960x540.
 	return Rect2(Vector2(left, 0.642), Vector2(0.975, 0.682))
 
+func action_intent_state_cache_token() -> String:
+	var disconnected := mode == "online_game" and online_game_disconnected()
+	var pending := has_pending_claim_window()
+	var danger := mode == "offline" and has_pending_danger_discard()
+	var self_discard := can_self_discard()
+	return "%s|%s|%s|%s|%d|%d|%d|%d|%d|%d" % [
+		mode,
+		offline_phase,
+		str(online_game.get("phase", "")),
+		str(tcp_status),
+		1 if disconnected else 0,
+		1 if pending else 0,
+		1 if danger else 0,
+		1 if self_discard else 0,
+		online_game_revision,
+		ai_state_revision,
+	]
+
 func action_intent_text(count: int) -> String:
+	var cache_key := action_intent_state_cache_token() + "|" + str(count)
+	if cache_key == action_intent_text_cache_key:
+		return action_intent_text_cache_value
+	var result := "可用操作 · %d项" % count
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
-		return "状态异常 · 牌局只读 · 重试或回大厅"
-	if mode == "online_game" and online_game_disconnected():
-		return online_recovery_status_text()
-	if has_pending_claim_window():
-		return "响应 · 选择动作或过"
-	if mode == "offline" and offline_phase == "ended":
-		return "结算 · 继续下一局"
-	if mode == "offline" and has_pending_danger_discard():
-		return "风险 · 确认或改打"
-	if mode == "offline" and can_self_discard():
-		return "出牌 · 点击手牌"
-	if mode == "online_game":
-		return "在线操作 · 等待或提交响应" if count <= 1 else "在线操作 · 处理当前响应"
-	return "可用操作 · %d项" % count
+		result = "状态异常 · 牌局只读 · 重试或回大厅"
+	elif mode == "online_game" and online_game_disconnected():
+		result = online_recovery_status_text()
+	elif has_pending_claim_window():
+		result = "响应 · 选择动作或过"
+	elif mode == "offline" and offline_phase == "ended":
+		result = "结算 · 继续下一局"
+	elif mode == "offline" and has_pending_danger_discard():
+		result = "风险 · 确认或改打"
+	elif mode == "offline" and can_self_discard():
+		result = "出牌 · 点击手牌"
+	elif mode == "online_game":
+		result = "在线操作 · 等待或提交响应" if count <= 1 else "在线操作 · 处理当前响应"
+	action_intent_text_cache_key = cache_key
+	action_intent_text_cache_value = result
+	return result
 
 func action_intent_color() -> Color:
+	var cache_key := action_intent_state_cache_token()
+	if cache_key == action_intent_color_cache_key:
+		return action_intent_color_cache_value
+	var result := Color(0.66, 0.58, 0.38)
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
-		return Color(0.86, 0.48, 0.30)
-	if mode == "online_game" and online_game_disconnected():
-		return Color(0.72, 0.48, 0.30)
-	if has_pending_claim_window():
-		return Color(0.86, 0.62, 0.32)
-	if mode == "offline" and has_pending_danger_discard():
-		return Color(0.92, 0.46, 0.34)
-	if mode == "offline" and can_self_discard():
-		return Color(0.86, 0.66, 0.32)
-	if mode == "online_game":
-		return Color(0.34, 0.58, 0.78)
-	return Color(0.66, 0.58, 0.38)
+		result = Color(0.86, 0.48, 0.30)
+	elif mode == "online_game" and online_game_disconnected():
+		result = Color(0.72, 0.48, 0.30)
+	elif has_pending_claim_window():
+		result = Color(0.86, 0.62, 0.32)
+	elif mode == "offline" and has_pending_danger_discard():
+		result = Color(0.92, 0.46, 0.34)
+	elif mode == "offline" and can_self_discard():
+		result = Color(0.86, 0.66, 0.32)
+	elif mode == "online_game":
+		result = Color(0.34, 0.58, 0.78)
+	action_intent_color_cache_key = cache_key
+	action_intent_color_cache_value = result
+	return result
 
 func action_intent_icon_name() -> String:
+	var cache_key := action_intent_state_cache_token()
+	if cache_key == action_intent_icon_cache_key:
+		return action_intent_icon_cache_value
+	var result := "info"
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
-		return "alert-triangle"
-	if mode == "online_game" and online_game_disconnected():
-		return "refresh-cw"
-	if mode == "offline" and has_pending_danger_discard():
-		return "alert-triangle"
-	if mode == "offline" and can_self_discard():
-		return "zap"
-	if has_pending_claim_window():
-		return "sparkles"
-	if mode == "online_game":
-		return "users"
-	return "info"
+		result = "alert-triangle"
+	elif mode == "online_game" and online_game_disconnected():
+		result = "refresh-cw"
+	elif mode == "offline" and has_pending_danger_discard():
+		result = "alert-triangle"
+	elif mode == "offline" and can_self_discard():
+		result = "zap"
+	elif has_pending_claim_window():
+		result = "sparkles"
+	elif mode == "online_game":
+		result = "users"
+	action_intent_icon_cache_key = cache_key
+	action_intent_icon_cache_value = result
+	return result
 
 func action_intent_fallback_icon_text() -> String:
+	var cache_key := action_intent_state_cache_token()
+	if cache_key == action_intent_fallback_cache_key:
+		return action_intent_fallback_cache_value
+	var result := "i"
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
-		return "!"
-	if mode == "online_game" and online_game_disconnected():
-		return "↻"
-	if mode == "offline" and has_pending_danger_discard():
-		return "!"
-	if mode == "offline" and can_self_discard():
-		return "行"
-	if has_pending_claim_window():
-		return "应"
-	return "i"
+		result = "!"
+	elif mode == "online_game" and online_game_disconnected():
+		result = "↻"
+	elif mode == "offline" and has_pending_danger_discard():
+		result = "!"
+	elif mode == "offline" and can_self_discard():
+		result = "行"
+	elif has_pending_claim_window():
+		result = "应"
+	action_intent_fallback_cache_key = cache_key
+	action_intent_fallback_cache_value = result
+	return result
 
 
 func action_button_tooltip(text: String) -> String:
 	# Keep the visual CTA short while exposing the consequence on hover/focus.
 	var clean := text.strip_edges()
+	if action_button_tooltip_cache.has(clean):
+		return str(action_button_tooltip_cache[clean])
+	var result := clean
 	if clean == "过" or clean == "建议过" or clean == "荐过":
-		return "放弃本次吃、碰、杠或胡响应，继续轮转 · 快捷键 X / Space"
-	if clean.begins_with("吃"):
-		return "选择这组顺子吃牌，接着进入你的出牌阶段 · 快捷键 C"
-	if clean.begins_with("碰"):
-		return "选择碰牌，公开这组刻子并继续出牌 · 快捷键 P"
-	if clean.begins_with("杠"):
-		return "选择杠牌，公开或补齐这组牌并补摸一张 · 快捷键 G"
-	if clean.contains("自摸"):
-		return "确认自摸胡牌并进入结算 · 快捷键 H"
-	if clean.begins_with("确认打"):
-		return "确认打出这张高风险牌 · Enter确认"
-	if clean.begins_with("改打"):
-		return "改打这张牌，降低当前放铳风险"
-	if clean.begins_with("荐打") or clean.begins_with("稳打"):
-		return "使用 AI 的%s出牌建议" % ("稳妥" if clean.begins_with("稳打") else "推荐")
-	if clean == "提示":
-		return "查看当前牌局的出牌与响应建议"
-	if clean == "重开":
-		return "放弃当前牌局并重新开局"
-	if clean == "下一局":
-		return "继续当前对局，进入下一局"
-	if clean == "新赛":
-		return "结束当前对局并开始新的比赛"
-	if clean == "菜单":
-		return "返回主菜单"
-	if clean == "回放码":
-		return "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
-	if clean == "复制回放码":
-		return "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
-	if clean == "取消":
-		return "取消当前确认，不打出这张牌 · 快捷键 Esc"
-	if clean == "语音" or clean == "闭麦":
-		return "切换语音麦克风状态"
-	return clean
+		result = "放弃本次吃、碰、杠或胡响应，继续轮转 · 快捷键 X / Space"
+	elif clean.begins_with("吃"):
+		result = "选择这组顺子吃牌，接着进入你的出牌阶段 · 快捷键 C"
+	elif clean.begins_with("碰"):
+		result = "选择碰牌，公开这组刻子并继续出牌 · 快捷键 P"
+	elif clean.begins_with("杠"):
+		result = "选择杠牌，公开或补齐这组牌并补摸一张 · 快捷键 G"
+	elif clean.contains("自摸"):
+		result = "确认自摸胡牌并进入结算 · 快捷键 H"
+	elif clean.begins_with("确认打"):
+		result = "确认打出这张高风险牌 · Enter确认"
+	elif clean.begins_with("改打"):
+		result = "改打这张牌，降低当前放铳风险"
+	elif clean.begins_with("荐打") or clean.begins_with("稳打"):
+		result = "使用 AI 的%s出牌建议" % ("稳妥" if clean.begins_with("稳打") else "推荐")
+	elif clean == "提示":
+		result = "查看当前牌局的出牌与响应建议"
+	elif clean == "重开":
+		result = "放弃当前牌局并重新开局"
+	elif clean == "下一局":
+		result = "继续当前对局，进入下一局"
+	elif clean == "新赛":
+		result = "结束当前对局并开始新的比赛"
+	elif clean == "菜单":
+		result = "返回主菜单"
+	elif clean == "回放码" or clean == "复制回放码":
+		result = "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
+	elif clean == "取消":
+		result = "取消当前确认，不打出这张牌 · 快捷键 Esc"
+	elif clean == "语音" or clean == "闭麦":
+		result = "切换语音麦克风状态"
+	if clean != "" and action_button_tooltip_cache.size() < 64:
+		action_button_tooltip_cache[clean] = result
+	return result
 
 
 func action_button_shortcut_hint(text: String) -> String:
@@ -52789,18 +53154,27 @@ func action_bar_default_focus_name() -> String:
 
 
 func online_connection_status_text() -> String:
-	if mode != "online_game":
-		return ""
-	if online_game_disconnected():
-		return "断线"
-	match tcp_status:
-		StreamPeerTCP.STATUS_CONNECTED:
-			return "已连接"
-		StreamPeerTCP.STATUS_CONNECTING:
-			return "连接中"
-		StreamPeerTCP.STATUS_ERROR:
-			return "连接异常"
-	return "待同步" if not online_game.is_empty() else "未连接"
+	var disconnected := mode == "online_game" and online_game_disconnected()
+	var cache_key := "%s|%d|%d|%d" % [mode, tcp_status, 1 if disconnected else 0, online_game_revision]
+	if cache_key == online_connection_status_cache_key:
+		return online_connection_status_cache_value
+	var result := ""
+	if mode == "online_game":
+		if disconnected:
+			result = "断线"
+		else:
+			match tcp_status:
+				StreamPeerTCP.STATUS_CONNECTED:
+					result = "已连接"
+				StreamPeerTCP.STATUS_CONNECTING:
+					result = "连接中"
+				StreamPeerTCP.STATUS_ERROR:
+					result = "连接异常"
+				_:
+					result = "待同步" if not online_game.is_empty() else "未连接"
+	online_connection_status_cache_key = cache_key
+	online_connection_status_cache_value = result
+	return result
 
 
 func online_connection_status_detail() -> String:
@@ -53212,32 +53586,42 @@ func play_update_dialog_button_feedback(button: Button, role: String, color: Col
 
 
 func update_stage_index() -> int:
+	if update_state == update_stage_index_cache_key:
+		return update_stage_index_cache_value
+	var result := 3
 	match update_state:
 		"checking":
-			return 0
+			result = 0
 		"downloading":
-			return 1
+			result = 1
 		"ready", "current":
-			return 2
+			result = 2
 		"error":
-			return 1
-	return 3
+			result = 1
+	update_stage_index_cache_key = update_state
+	update_stage_index_cache_value = result
+	return result
 
 func update_dialog_compact_layout() -> bool:
 	var viewport := effective_viewport_size()
 	return viewport.y <= 560.0 or viewport.x <= 960.0
 
 func update_state_color() -> Color:
+	if update_state == update_state_color_cache_key:
+		return update_state_color_cache_value
+	var result := Color(0.60, 0.66, 0.58, 1.0)
 	match update_state:
 		"downloading":
-			return Color(0.34, 0.72, 0.54, 1.0)
+			result = Color(0.34, 0.72, 0.54, 1.0)
 		"ready":
-			return Color(0.86, 0.70, 0.30, 1.0)
+			result = Color(0.86, 0.70, 0.30, 1.0)
 		"error":
-			return Color(0.86, 0.34, 0.26, 1.0)
+			result = Color(0.86, 0.34, 0.26, 1.0)
 		"current":
-			return Color(0.42, 0.62, 0.76, 1.0)
-	return Color(0.60, 0.66, 0.58, 1.0)
+			result = Color(0.42, 0.62, 0.76, 1.0)
+	update_state_color_cache_key = update_state
+	update_state_color_cache_value = result
+	return result
 
 func refresh_top_hud_update_button(button: Button = null) -> void:
 	if button == null and root_layer != null and is_instance_valid(root_layer):
@@ -53283,6 +53667,25 @@ func refresh_top_hud_update_button(button: Button = null) -> void:
 	button.modulate = Color(1.0, 1.0, 1.0, 0.70 if blocked else 1.0)
 
 func update_progress_text() -> String:
+	var viewport := effective_viewport_size()
+	var cache_key := "%s|%d|%d|%s|%s|%s|%d|%d" % [
+		update_state,
+		update_downloaded_bytes,
+		update_total_bytes,
+		update_download_url,
+		update_remote_version,
+		update_message,
+		int(round(viewport.x)),
+		int(round(viewport.y)),
+	]
+	if cache_key == update_progress_text_cache_key:
+		return update_progress_text_cache_value
+	var result := _update_progress_text_uncached()
+	update_progress_text_cache_key = cache_key
+	update_progress_text_cache_value = result
+	return result
+
+func _update_progress_text_uncached() -> String:
 	var downloaded := format_bytes(maxi(0, update_downloaded_bytes))
 	var total := format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"
 	var percent := 0
@@ -53438,12 +53841,20 @@ func parse_update_manifest(data: Dictionary) -> Dictionary:
 	}
 
 func manifest_notes_to_text(value) -> String:
+	var cache_key := str(value)
+	if manifest_notes_cache.has(cache_key):
+		return str(manifest_notes_cache[cache_key])
+	var result := ""
 	if typeof(value) == TYPE_ARRAY:
 		var lines: Array[String] = []
 		for item in value:
 			lines.append(str(item))
-		return "\n".join(lines)
-	return str(value)
+		result = "\n".join(lines)
+	else:
+		result = str(value)
+	if manifest_notes_cache.size() < 32:
+		manifest_notes_cache[cache_key] = result
+	return result
 
 func is_newer_version(remote: String, current: String) -> bool:
 	var remote_numbers = version_numbers(remote)
@@ -53459,6 +53870,8 @@ func is_newer_version(remote: String, current: String) -> bool:
 	return false
 
 func version_numbers(version: String) -> Array:
+	if version_numbers_cache.has(version):
+		return (version_numbers_cache[version] as Array).duplicate(false)
 	var numbers: Array = []
 	var current = ""
 	for i in range(version.length()):
@@ -53472,9 +53885,13 @@ func version_numbers(version: String) -> Array:
 		numbers.append(int(current))
 	if numbers.is_empty():
 		numbers.append(0)
+	if version_numbers_cache.size() < 32:
+		version_numbers_cache[version] = numbers.duplicate(false)
 	return numbers
 
 func safe_filename_part(text: String) -> String:
+	if safe_filename_part_cache.has(text):
+		return str(safe_filename_part_cache[text])
 	var result = ""
 	for i in range(text.length()):
 		var ch = text.substr(i, 1)
@@ -53482,7 +53899,10 @@ func safe_filename_part(text: String) -> String:
 			result += ch
 		else:
 			result += "_"
-	return result if result != "" else app_version()
+	result = result if result != "" else app_version()
+	if safe_filename_part_cache.size() < 32:
+		safe_filename_part_cache[text] = result
+	return result
 
 
 func is_ai_claim_context_for_seat(claim_context: Dictionary, seat: int) -> bool:
@@ -54177,6 +54597,10 @@ func tile_array_key(tiles: Array) -> String:
 		return ""
 	if tiles.size() <= 4:
 		return small_tile_array_key(tiles)
+	var cache_key := str(tiles)
+	if tile_array_key_cache.has(cache_key):
+		touch_cache_key(tile_array_key_cache_lru, cache_key)
+		return str(tile_array_key_cache[cache_key])
 	var counts: Dictionary = {}
 	var indices: Array[int] = []
 	for item in tiles:
@@ -54190,6 +54614,7 @@ func tile_array_key(tiles: Array) -> String:
 		else:
 			counts[index] = int(counts[index]) + 1
 	if indices.is_empty():
+		store_tile_array_key_cache(cache_key, "")
 		return ""
 	indices.sort()
 	var parts: Array[String] = []
@@ -54197,7 +54622,20 @@ func tile_array_key(tiles: Array) -> String:
 		var amount = int(counts[i])
 		if amount > 0:
 			parts.append("%s%d" % [TILE_CODES[i], amount])
-	return ",".join(parts)
+	var result := ",".join(parts)
+	store_tile_array_key_cache(cache_key, result)
+	return result
+
+
+func store_tile_array_key_cache(cache_key: String, value: String) -> void:
+	if cache_key == "":
+		return
+	if tile_array_key_cache.is_empty():
+		clear_cache_lru(tile_array_key_cache_lru)
+	tile_array_key_cache[cache_key] = value
+	touch_cache_key(tile_array_key_cache_lru, cache_key)
+	while tile_array_key_cache.size() > TILE_SEMANTIC_CACHE_LIMIT:
+		evict_cache_key(tile_array_key_cache_lru, tile_array_key_cache)
 
 func small_tile_array_key(tiles: Array) -> String:
 	var first = -1
@@ -55051,18 +55489,20 @@ func honor_group_plan_report_from_counts(counts: Array, codes: Array, big_label:
 
 
 func shanten_label(shanten: int) -> String:
-	if shanten < 0:
-		return "已胡"
-	if shanten == 0:
-		return "听牌"
-	return "%d向听" % shanten
+	var cache_key := str(shanten)
+	if shanten_label_cache.has(cache_key):
+		return str(shanten_label_cache[cache_key])
+	var result := "已胡" if shanten < 0 else ("听牌" if shanten == 0 else "%d向听" % shanten)
+	shanten_label_cache[cache_key] = result
+	return result
 
 func risk_label(risk: float) -> String:
-	if risk < 18.0:
-		return "低"
-	if risk < 31.0:
-		return "中"
-	return "高"
+	var cache_key := str(int(round(risk * 10.0)))
+	if risk_label_cache.has(cache_key):
+		return str(risk_label_cache[cache_key])
+	var result := "低" if risk < 18.0 else ("中" if risk < 31.0 else "高")
+	risk_label_cache[cache_key] = result
+	return result
 
 
 func is_main_threat_genbutsu(tile: String, seat: int, eval_context: Dictionary = {}) -> bool:
@@ -55739,6 +56179,9 @@ func same_tile_list(left: Array, right: Array) -> bool:
 	return true
 
 func claim_options_text(pending: Dictionary) -> String:
+	var cache_key := str(pending.get("options", [])) + "|" + str(pending.get("chi_choices", []))
+	if claim_options_text_cache.has(cache_key):
+		return str(claim_options_text_cache[cache_key])
 	var names: Array[String] = []
 	for claim in pending.get("options", []):
 		var claim_name = str(claim)
@@ -55752,24 +56195,45 @@ func claim_options_text(pending: Dictionary) -> String:
 						names.append(chi_choice_label(choice))
 		else:
 			names.append(claim_label(claim_name))
-	return " / ".join(names)
+	var result := " / ".join(names)
+	if claim_options_text_cache.size() < 32:
+		claim_options_text_cache[cache_key] = result
+	return result
 
 func chi_choice_label(choice: Dictionary) -> String:
-	return "吃" + compact_tile_run_label(choice.get("meld", []))
+	var cache_key := str(choice.get("meld", []))
+	if compact_chi_choice_label_cache.has(cache_key):
+		return str(compact_chi_choice_label_cache[cache_key])
+	var result := "吃" + compact_tile_run_label(choice.get("meld", []))
+	if compact_chi_choice_label_cache.size() < 32:
+		compact_chi_choice_label_cache[cache_key] = result
+	return result
 
 func compact_chi_choice_button_label(choice: Dictionary) -> String:
+	var cache_key := str(choice.get("meld", []))
+	if compact_chi_choice_label_cache.has(cache_key + "|compact"):
+		return str(compact_chi_choice_label_cache[cache_key + "|compact"])
 	var tiles: Array = choice.get("meld", [])
+	var result := ""
 	if tiles.size() == 3:
 		var first = str(tiles[0])
 		var last = str(tiles[tiles.size() - 1])
 		if is_number_tile(first) and is_number_tile(last) and first.right(1) == last.right(1):
-			return "吃%s-%s" % [first.left(first.length() - 1), last.left(last.length() - 1)]
-	return chi_choice_label(choice)
+			result = "吃%s-%s" % [first.left(first.length() - 1), last.left(last.length() - 1)]
+	if result == "":
+		result = chi_choice_label(choice)
+	if compact_chi_choice_label_cache.size() < 64:
+		compact_chi_choice_label_cache[cache_key + "|compact"] = result
+	return result
 
 func compact_tile_run_label(tiles: Array) -> String:
 	if tiles.is_empty():
 		return ""
+	var cache_key := str(tiles)
+	if compact_tile_run_label_cache.has(cache_key):
+		return str(compact_tile_run_label_cache[cache_key])
 	var first = str(tiles[0])
+	var result := ""
 	if is_number_tile(first):
 		var suit = first.right(1)
 		var ranks = ""
@@ -55781,11 +56245,15 @@ func compact_tile_run_label(tiles: Array) -> String:
 				break
 			ranks += code.left(code.length() - 1)
 		if same_suit:
-			return ranks + suit_label(suit)
+			result = ranks + suit_label(suit)
 	var labels: Array[String] = []
-	for tile in tiles:
-		labels.append(tile_label(str(tile)))
-	return "".join(labels)
+	if result == "":
+		for tile in tiles:
+			labels.append(tile_label(str(tile)))
+		result = "".join(labels)
+	if compact_tile_run_label_cache.size() < 64:
+		compact_tile_run_label_cache[cache_key] = result
+	return result
 
 
 func tile_base_value(index: int) -> float:
@@ -56750,16 +57218,21 @@ func configure_action_button_size(button: Button, width: float, height: float, f
 
 
 func seat_wind_label(seat: int) -> String:
+	var cache_key := str(seat)
+	if seat_wind_label_cache.has(cache_key):
+		return str(seat_wind_label_cache[cache_key])
+	var result := "位"
 	match seat:
 		0:
-			return "东"
+			result = "东"
 		1:
-			return "南"
+			result = "南"
 		2:
-			return "西"
+			result = "西"
 		3:
-			return "北"
-	return "位"
+			result = "北"
+	seat_wind_label_cache[cache_key] = result
+	return result
 
 func seat_short_name(seat: int) -> String:
 	if seat >= 0 and seat < SEAT_NAMES.size():
@@ -57541,7 +58014,7 @@ func toast_item_effect_strength(item_id: String) -> float:
 	return 0.58
 
 func toast_item_key_for_text(text: String) -> String:
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		if text.find(item_display_name(str(item_id))) >= 0:
 			return str(item_id)
 	return ""

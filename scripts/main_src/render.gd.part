@@ -555,7 +555,7 @@ func draw_action_button_art(button: Button, text: String, color: Color) -> Contr
 		role_rail.modulate = Color(color.r, color.g, color.b, rail_alpha)
 	# Compact claims use the authored action plate as their distinct dark face.
 	var panel_alpha = 0.28 if compact_claim_mode and role == "pass" else (0.66 if compact_claim_mode and is_focus_action else (0.56 if compact_claim_mode else (0.42 if role == "pass" else 0.70)))
-	var panel_key := "ui_button_face_plate" if compact_claim_mode and is_focus_action else ("ui_dark_scrim" if compact_claim_mode else "ui_button_face_plate")
+	var panel_key := "ui_button_face_plate" if compact_claim_mode and is_focus_action else ("ui_dark_scrim" if compact_claim_mode else "action_gpt_dock_banner_bright")
 	var panel_plate = add_optional_gpt_illustration_texture(button, panel_key, rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
 	if panel_plate == null:
 		panel_plate = add_optional_gpt_illustration_texture(button, "ui_dark_scrim", rect_full(-0.040, -0.040, 1.040, 1.040), panel_alpha, false)
@@ -678,7 +678,9 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	var dock_shadow_rect := Rect2(dock_rect.position + Vector2(0.005, 0.012), dock_rect.size + Vector2(0.006, 0.010))
 	var dock_shadow = make_soft_depth_panel(parent, dock_shadow_rect, Color(0.0, 0.0, 0.0, 0.18 if pending_claim_mode else 0.22), 12)
 	dock_shadow.name = "ActionDock3DCastShadow"
-	var dock = make_gpt_center_crop_plate_rect(dock_rect, Color(0.42, 0.58, 0.42, 0.76), "ui_soft_flash", 0.26)
+	var bright_dock_key := "action_gpt_dock_banner_bright" if optional_gpt_illustration_texture("action_gpt_dock_banner_bright") != null else "gpt_jade_felt"
+	var bright_dock_color := Color(0.92, 0.80, 0.56, 0.92) if bright_dock_key == "action_gpt_dock_banner_bright" else Color(0.48, 0.72, 0.48, 0.86)
+	var dock = make_gpt_center_crop_plate_rect(dock_rect, bright_dock_color, bright_dock_key, 0.78)
 	dock.name = "ActionButtonDock"
 	parent.add_child(dock)
 	# Action buttons have a small press/focus lift. Keep the dock as a visual host
@@ -752,24 +754,25 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 			pending_dock_texture.modulate = Color(1.0, 1.0, 1.0, 0.11)
 			dock.move_child(pending_dock_texture, dock.get_child_count() - 1)
 	else:
-		var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock_bright", rect_full(0.000, 0.010, 1.000, 0.990), 0.32, false)
-		if dock_texture != null:
-			dock_texture.name = "ActionGPTDockTexture"
-			dock_texture.modulate = Color(1.08, 1.04, 0.92, 0.28)
-			dock.move_child(dock_texture, dock.get_child_count() - 1)
-		# r452b: GPT title plate + soft flash mid-band (no program jade).
-		# r184: light mid-band only — keep action_gpt_dock micro-detail readable.
-		var mid_plate = make_gpt_center_crop_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.62, 0.70, 0.50, 0.10), "ui_soft_flash", 0.20)  # r189 bright jade dock mid-band
-		mid_plate.name = "ActionDockMidBandPlate"
-		dock.add_child(mid_plate)
-		var mid_wash = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(0.74, 0.78, 0.60, 0.045), "ui_river_soft_wash", 0.18)  # r189 lighter wash
-		mid_wash.name = "ActionDockMidBandWash"
-		dock.add_child(mid_wash)
-		var track_texture = make_gpt_center_crop_plate_rect(rect_full(0.010, 0.120, 0.990, 0.900), Color(0.36, 0.52, 0.38, 0.12), "ui_soft_flash", 0.18)  # r221 bright track
-		if track_texture != null:
-			track_texture.name = "ActionDockTrackPanelTexture"
-			dock.add_child(track_texture)
-			dock.move_child(track_texture, dock.get_child_count() - 1)
+		if bright_dock_key != "action_gpt_dock_banner_bright":
+			var dock_texture = add_optional_gpt_illustration_texture(dock, "action_gpt_dock_bright", rect_full(0.000, 0.010, 1.000, 0.990), 0.32, false)
+			if dock_texture != null:
+				dock_texture.name = "ActionGPTDockTexture"
+				dock_texture.modulate = Color(1.08, 1.04, 0.92, 0.28)
+				dock.move_child(dock_texture, dock.get_child_count() - 1)
+			# Fallback-only jade layers preserve the old visual when the bright GPT
+			# banner is unavailable; the bright path keeps its generated paper clear.
+			var mid_plate = make_gpt_center_crop_plate_rect(rect_full(0.018, 0.150, 0.982, 0.850), Color(0.62, 0.82, 0.58, 0.10), "gpt_jade_felt", 0.72)
+			mid_plate.name = "ActionDockMidBandPlate"
+			dock.add_child(mid_plate)
+			var mid_wash = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.180, 0.970, 0.820), Color(0.76, 0.90, 0.70, 0.035), "gpt_jade_felt", 0.72)
+			mid_wash.name = "ActionDockMidBandWash"
+			dock.add_child(mid_wash)
+			var track_texture = make_gpt_center_crop_plate_rect(rect_full(0.010, 0.120, 0.990, 0.900), Color(0.40, 0.66, 0.46, 0.10), "gpt_jade_felt", 0.72)
+			if track_texture != null:
+				track_texture.name = "ActionDockTrackPanelTexture"
+				dock.add_child(track_texture)
+				dock.move_child(track_texture, dock.get_child_count() - 1)
 	if pending_claim_auto_pass_feedback != "" and pending_claim_auto_pass_feedback_until_msec > Time.get_ticks_msec():
 		var auto_pass_label := make_label(dock, pending_claim_auto_pass_feedback, 10, Color(1.0, 0.84, 0.52), true)
 		auto_pass_label.name = "PendingClaimAutoPassFeedback"
@@ -11787,17 +11790,28 @@ func discard_grid_render_signature(seat: int, discards: Array, visible_start: in
 	]
 
 
-func draw_discards(parent: Control) -> void:
-	var table_size: Vector2 = game_table_pixel_size()
-	var table_render_size: Vector2 = parent.size if parent.size.x > 1.0 and parent.size.y > 1.0 else table_size
-	var river_viewport_size := effective_viewport_size()
+func draw_discards(parent: Control, render_context: Dictionary = {}) -> void:
+	var table_size: Vector2 = render_context.get("table_size", Vector2.ZERO)
+	if table_size.x <= 1.0 or table_size.y <= 1.0:
+		table_size = game_table_pixel_size()
+	var table_render_size: Vector2 = render_context.get("table_render_size", Vector2.ZERO)
+	if table_render_size.x <= 1.0 or table_render_size.y <= 1.0:
+		table_render_size = parent.size if parent.size.x > 1.0 and parent.size.y > 1.0 else table_size
+	var river_viewport_size: Vector2 = render_context.get("viewport", Vector2.ZERO)
+	if river_viewport_size.x <= 1.0 or river_viewport_size.y <= 1.0:
+		river_viewport_size = effective_viewport_size()
 	var river_compact_readable := river_viewport_size.y <= 560.0
 	parent.set_meta("discard_river_viewport_snapshot", river_viewport_size)
 	parent.set_meta("discard_river_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
-	var latest_discard_seat := get_last_discard_seat()
-	var disconnected := mode == "online_game" and online_game_disconnected()
+	var latest_discard_seat := int(render_context.get("last_discard_seat", -1))
+	if not render_context.has("last_discard_seat"):
+		latest_discard_seat = get_last_discard_seat()
+	var disconnected := bool(render_context.get("disconnected", false))
+	if not render_context.has("disconnected"):
+		disconnected = mode == "online_game" and online_game_disconnected()
 	var total_discards := 0
 	var active_seats: Array[int] = []
+	var discard_snapshot: Array = render_context.get("discards", [])
 	var foreground_layer := discard_river_foreground_layer
 	discard_river_foreground_layer = null
 	if foreground_layer == null or not is_instance_valid(foreground_layer) or foreground_layer.is_queued_for_deletion():
@@ -11817,7 +11831,11 @@ func draw_discards(parent: Control) -> void:
 		var seat = int(zone[0])
 		var zone_rect: Rect2 = zone[1]
 		var columns := int(zone[2])
-		var discards: Array = get_discards(seat)
+		var discards: Array = []
+		if seat >= 0 and seat < discard_snapshot.size() and typeof(discard_snapshot[seat]) == TYPE_ARRAY:
+			discards = discard_snapshot[seat] as Array
+		else:
+			discards = get_discards(seat)
 		if not discards.is_empty():
 			total_discards += discards.size()
 			active_seats.append(seat)
@@ -12271,7 +12289,9 @@ func draw_game_top_hud(parent: Control) -> void:
 	retained_battle_top_hud_signature = ""
 	# Keep the generated texture as a restrained header surface; status text and
 	# controls remain the primary visual signal at 960x540.
-	var hud = make_gpt_plate_rect(TOP_HUD_RECT, Color(0.028, 0.036, 0.032, 0.26), "ui_dark_scrim")
+	var top_hud_surface_key := "top_hud_gpt_banner_v5" if optional_gpt_illustration_texture("top_hud_gpt_banner_v5") != null else "ui_dark_scrim"
+	var top_hud_surface_color := Color(0.88, 0.96, 0.74, 0.90) if top_hud_surface_key == "top_hud_gpt_banner_v5" else Color(0.028, 0.036, 0.032, 0.26)
+	var hud = make_gpt_plate_rect(TOP_HUD_RECT, top_hud_surface_color, top_hud_surface_key)
 	hud.name = "TopHud3DShell"
 	parent.add_child(hud)
 	# Content owns its own clipped labels; the shell must leave the authored
@@ -12280,22 +12300,22 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.set_meta("visual_clip_policy", "content_labels_clip_focus_and_shadow_hosts_unclipped")
 	hud.set_meta("compact_lane_policy", "mode_title_status_wall_then_actions")
 	hud.set_meta("minimum_lane_clearance_px", 8.0)
-	var hud_shadow = make_soft_depth_panel(hud, rect_full(0.010, 0.220, 0.990, 1.080), Color(0.0, 0.0, 0.0, 0.36), 12)
+	var hud_shadow = make_soft_depth_panel(hud, rect_full(0.010, 0.220, 0.990, 1.080), Color(0.0, 0.0, 0.0, 0.18), 12)
 	hud_shadow.name = "TopHud3DCastShadow"
 	hud.move_child(hud_shadow, 0)
-	var hud_depth = make_soft_depth_panel(hud, rect_full(0.018, 0.620, 0.982, 0.980), Color(0.14, 0.084, 0.036, 0.24), 10)
+	var hud_depth = make_soft_depth_panel(hud, rect_full(0.018, 0.620, 0.982, 0.980), Color(0.54, 0.20, 0.08, 0.16), 10)
 	hud_depth.name = "TopHud3DDepthEdge"
 	var hud_top_rim = make_soft_depth_panel(hud, rect_full(0.030, 0.015, 0.970, 0.095), Color(1.0, 0.92, 0.58, 0.12), 999)
 	hud_top_rim.name = "TopHud3DTopRim"
 	var hud_jade_rail = make_soft_depth_panel(hud, rect_full(0.040, 0.860, 0.960, 0.930), Color(0.42, 0.30, 0.14, 0.08), 999)
 	hud_jade_rail.name = "TopHud3DJadeRail"
-	var top_hud_gpt_key := "top_hud_gpt_banner"
-	var gpt_top_hud_texture = add_optional_gpt_atlas_texture(hud, top_hud_gpt_key, Rect2(0.0, 0.0, 1254.0, 260.0), rect_full(0.000, 0.000, 1.000, 0.230), 0.06, false)
+	var top_hud_gpt_key := "top_hud_gpt_banner_v5"
+	var gpt_top_hud_texture = add_optional_gpt_illustration_texture(hud, top_hud_gpt_key, rect_full(0.000, 0.000, 1.000, 0.230), 0.08, false)
 	if gpt_top_hud_texture != null:
 		gpt_top_hud_texture.name = "TopHudGPTBannerTexture"
 		# Keep the authored header material present without competing with the
 		# long AI profile/status line at compact resolutions.
-		gpt_top_hud_texture.modulate = Color(1.02, 1.00, 0.96, 0.018)
+		gpt_top_hud_texture.modulate = Color(1.04, 1.02, 0.94, 0.085)
 		hud.move_child(gpt_top_hud_texture, min(1, hud.get_child_count() - 1))
 
 	# 模式徽章
@@ -12309,7 +12329,7 @@ func draw_game_top_hud(parent: Control) -> void:
 		else:
 			mode_text = "联机 · 规则同步中"
 			mode_tooltip = "等待服务器下发当前牌局规则"
-	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 11, Color(0.100, 0.082, 0.058, 0.78), Color(0.52, 0.42, 0.22, 0.22), Color(0.94, 0.88, 0.72))
+	var mode_badge = make_badge(hud, TOP_HUD_MODE_BADGE_RECT, mode_text, 11, Color(0.98, 0.88, 0.58, 0.92), Color(0.76, 0.20, 0.10, 0.72), Color(0.26, 0.09, 0.045))
 	mode_badge.name = "TopHudModeBadge"
 	mode_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mode_badge.tooltip_text = mode_tooltip
@@ -12339,10 +12359,10 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.set_meta("header_lane_policy", "score_wall_actions_have_explicit_gutters")
 	hud.set_meta("header_lane_rects", [TOP_HUD_SCORE_STRIP_RECT, wall_rect, TOP_HUD_SETTINGS_BUTTON_RECT, TOP_HUD_BACK_BUTTON_RECT, TOP_HUD_UPDATE_BUTTON_RECT])
 	# r202: GPT title/status chips instead of make_panel lacquer hosts
-	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.90, 0.72, 0.34, 0.18), "ui_dark_scrim")
+	var title_back = make_gpt_plate_rect(rect_full(title_rect.position.x - 0.008, 0.020, title_rect.size.x + 0.006, 0.685), Color(0.98, 0.92, 0.70, 0.54), "action_gpt_dock_banner_bright")
 	title_back.name = "TopHudTitleBack"
 	hud.add_child(title_back)
-	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.58, 0.74, 0.64, 0.16), "ui_dark_scrim")
+	var status_back = make_gpt_plate_rect(rect_full(status_rect.position.x - 0.008, 0.020, status_rect.size.x + 0.006, 0.685), Color(0.92, 0.96, 0.78, 0.48), "action_gpt_dock_banner_bright")
 	status_back.name = "TopHudStatusBack"
 	hud.add_child(status_back)
 	var online_title_size := 16
@@ -12350,12 +12370,13 @@ func draw_game_top_hud(parent: Control) -> void:
 		# Room codes are server data and must remain intact; reduce only the title
 		# glyph size for unusually long codes inside the dedicated header lane.
 		online_title_size = 15 if room_code.length() > 14 else 16
-	var title = make_label(hud, title_text, 15 if mode == "offline" else online_title_size, Color(0.96, 0.80, 0.48), true)
+	var title = make_label(hud, title_text, 15 if mode == "offline" else online_title_size, Color(0.06, 0.14, 0.09), true)
 	title.name = "TopHudTitle"
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
 	fit_label_font_size(title, maxf(96.0, hud_viewport_snapshot.x * title_rect.size.x * 0.96), 15 if mode == "offline" else online_title_size, 10)
+	style_background_readable_label(title, 2)
 	title.set_meta("fit_before_clip", true)
 	title.set_meta("compact_lane", "mode_and_round_before_status")
 	set_ui_full_text(title, title_text, "牌桌标题：" + title_text)
@@ -12382,11 +12403,12 @@ func draw_game_top_hud(parent: Control) -> void:
 
 	# 状态
 	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
-	var status = make_label(hud, top_hud_short_status_text(compact_top_hud), 15 if mode == "offline" else (15 if compact_disconnect_status else 16), Color(0.92, 0.94, 0.86), true)
+	var status = make_label(hud, top_hud_short_status_text(compact_top_hud), 15 if mode == "offline" else (15 if compact_disconnect_status else 16), Color(0.06, 0.15, 0.10), true)
 	status.name = "TopHudStatus"
 	apply_rect(status, status_rect)
 	configure_clipped_label(status)
 	fit_label_font_size(status, maxf(120.0, hud_viewport_snapshot.x * status_rect.size.x * 0.96), 15 if mode == "offline" else (15 if compact_disconnect_status else 16), 10)
+	style_background_readable_label(status, 2)
 	status.set_meta("fit_before_clip", true)
 	status.set_meta("compact_lane", "phase_and_connection_before_wall")
 	set_ui_full_text(status, top_hud_status_tooltip_text(), "牌桌状态")
@@ -12434,7 +12456,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.add_child(wall_back)
 	draw_top_hud_wall_meter(hud, wall_rect, hud_wall_count, hud_wall_total, hud_last_discard)
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [hud_wall_count, hud_wall_total, hud_wall_state, hud_last_discard_text]
-	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 11, Color(0.90, 0.88, 0.74), true)
+	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 11, Color(0.98, 0.93, 0.78, 1.0), true)
 	wall.name = "TopHudWallText"
 	var empty_wall := StyleBoxEmpty.new()
 	empty_wall.set_content_margin_all(4)
@@ -12446,6 +12468,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
 	configure_clipped_label(wall)
 	fit_label_font_size(wall, maxf(82.0, hud_viewport_snapshot.x * wall_rect.size.x * 0.94), 11, 9)
+	style_background_readable_label(wall, 2)
 	set_ui_full_text(wall, wall_detail, "牌墙剩余：%d/%d" % [hud_wall_count, hud_wall_total])
 	wall.set_meta("wall_count", hud_wall_count)
 	wall.set_meta("wall_total", hud_wall_total)
@@ -12454,7 +12477,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	wall.set_meta("header_lane_owner", "TopHudWallText")
 	wall.set_meta("score_action_clearance_px", 8.0)
 	mark_ui_optimization(wall, "F-255")
-	var wall_state = make_label(hud, "状态 · %s · 上张%s" % [hud_wall_state.replace("牌墙", ""), hud_last_discard_text], 9, Color(0.78, 0.82, 0.72), false)
+	var wall_state = make_label(hud, "状态 · %s · 上张%s" % [hud_wall_state.replace("牌墙", ""), hud_last_discard_text], 9, Color(0.14, 0.24, 0.17), false)
 	wall_state.name = "TopHudWallState"
 	apply_rect(wall_state, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.500, wall_rect.size.x - 0.010, wall_rect.position.y + 0.840))
 	wall_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -12538,7 +12561,9 @@ func draw_hand(parent: Control) -> void:
 	var hand_has_pending_danger_discard := hand_ai_assist_enabled and has_pending_danger_discard()
 	var hand_viewport_size := effective_viewport_size()
 	var compact_hand_art := hand_viewport_size.y <= 560.0 or hand_viewport_size.x <= 1100.0
-	var tray = make_gpt_center_crop_plate_rect(HAND_TRAY_RECT, Color(0.58, 0.64, 0.50, 0.78), "ui_river_soft_wash", 0.24)
+	# The bright GPT banner supplies a paper reading surface while the jade
+	# ornaments remain visible around the hand and keep the table identity.
+	var tray = make_gpt_plate_rect(HAND_TRAY_RECT, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 	tray.name = "HandTray"
 	tray.set_meta("viewport_snapshot", hand_viewport_size)
 	tray.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
@@ -12558,7 +12583,7 @@ func draw_hand(parent: Control) -> void:
 	tray.set_meta("hand_visual_state_signature", hand_state_signature)
 	tray.set_meta("slide_animation_policy", "identity_change_only")
 	mark_ui_optimization(tray, "F-248")
-	var tray_shadow = make_soft_depth_panel(tray, rect_full(0.010, 0.145, 0.990, 1.060), Color(0.0, 0.0, 0.0, 0.38), 18)
+	var tray_shadow = make_soft_depth_panel(tray, rect_full(0.010, 0.145, 0.990, 1.060), Color(0.0, 0.0, 0.0, 0.18), 18)
 	tray_shadow.name = "HandTray3DCastShadow"
 	tray.move_child(tray_shadow, 0)
 	var tray_lip = make_soft_depth_panel(tray, rect_full(0.025, 0.025, 0.975, 0.185), Color(1.0, 0.94, 0.64, 0.28), 999)
@@ -12566,13 +12591,13 @@ func draw_hand(parent: Control) -> void:
 	var tray_side_bevel = make_soft_depth_panel(tray, rect_full(0.010, 0.140, 0.035, 0.900), Color(1.0, 0.94, 0.66, 0.20), 999)
 	tray_side_bevel.name = "HandTray3DSideBevel"
 	var hand_gpt_key := "hand_gpt_tray_bright"
-	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 0.34, false)
+	var gpt_hand_texture = add_optional_gpt_illustration_texture(tray, hand_gpt_key, rect_full(0.000, 0.000, 1.000, 0.990), 0.12, false)
 	if gpt_hand_texture != null:
 		gpt_hand_texture.name = "HandGPTTrayTexture"
 		# Keep the authored bright tray material visible as a jade/gold frame beneath the tiles.
-		gpt_hand_texture.modulate = Color(1.12, 1.08, 0.96, 0.28)
+		gpt_hand_texture.modulate = Color(1.04, 1.02, 0.92, 0.08)
 		tray.move_child(gpt_hand_texture, min(1, tray.get_child_count() - 1))
-	var tile_stage = make_gpt_plate_rect(rect_full(0.010, 0.170, 0.990, 0.955), Color(0.08, 0.06, 0.04, 0.22), "ui_button_face_plate")
+	var tile_stage = make_gpt_plate_rect(rect_full(0.010, 0.170, 0.990, 0.955), Color(0.98, 0.94, 0.80, 0.28), "action_gpt_dock_banner_bright")
 	tile_stage.name = "HandTrayTileStage"
 	tile_stage.clip_contents = true
 	tile_stage.set_meta("visual_focus_gutter_px", 6.0)
@@ -12603,7 +12628,7 @@ func draw_hand(parent: Control) -> void:
 	var tutorial_hint_visible := show_hand_hint and hand_can_self_discard and (tutorial_step == TUTORIAL_STEP_NEW or tutorial_step == TUTORIAL_STEP_DISCARD or tutorial_step == TUTORIAL_STEP_WIN)
 	var tray_detail_text := hand_tray_text()
 	var hand_state_text := hand_tray_state_text()
-	var tray_text = make_label(tray, hand_tray_visible_text(tray_detail_text), 14, Color(0.92, 0.82, 0.56), true)
+	var tray_text = make_label(tray, hand_tray_visible_text(tray_detail_text), 14, Color(0.27, 0.10, 0.055), true)
 	tray_text.name = "HandTrayStatusText"
 	tray_text.clip_text = true
 	tray.set_meta("hand_tray_text_snapshot_policy", "one_status_text_snapshot_per_draw")
@@ -12629,6 +12654,8 @@ func draw_hand(parent: Control) -> void:
 	var tray_text_rect := rect_full(0.030, 0.018, 0.745, 0.082) if disconnected_hand_state else (rect_full(0.030, 0.018, 0.760, 0.082) if shortcut_hint_text != "" else HAND_TRAY_TEXT_RECT)
 	apply_rect(tray_text, tray_text_rect)
 	tray_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	style_background_readable_label(tray_text, 2)
+	tray_text.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.92))
 	configure_clipped_label(tray_text)
 	set_ui_full_text(tray_text, tray_detail_text, "手牌托盘状态：" + tray_detail_text)
 	tray_text.set_meta("prompt_lane_contract", "above_tiles_and_action_dock")
@@ -12641,7 +12668,7 @@ func draw_hand(parent: Control) -> void:
 	if hand_has_pending_claim_window or hand_has_pending_danger_discard or tutorial_hint_visible:
 		tray_text.visible = false
 	if shortcut_hint_text != "":
-		var shortcut_label = make_label(tray, shortcut_hint_text, commercial_ui_font_size(11, 1), Color(0.68, 0.76, 0.70, 0.88), false)
+		var shortcut_label = make_label(tray, shortcut_hint_text, commercial_ui_font_size(11, 1), Color(0.18, 0.35, 0.28, 0.92), false)
 		shortcut_label.name = "HandTrayShortcutHint"
 		apply_rect(shortcut_label, rect_full(0.034, 0.090, 0.758, 0.166))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -14248,19 +14275,30 @@ func cycle_meld_window(seat: int, page_capacity: int) -> void:
 		meld_window_start_by_seat[seat] = mini(latest_start, current_start + page_capacity)
 	request_game_render()
 
-func draw_melds(parent: Control) -> void:
+func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 	var proxy_order := 1000
-	var danger_compact_snapshot := mode == "offline" and has_pending_danger_discard()
-	var meld_viewport_snapshot := effective_viewport_size()
+	var danger_compact_snapshot := bool(render_context.get("danger_compact", false))
+	if not render_context.has("danger_compact"):
+		danger_compact_snapshot = mode == "offline" and has_pending_danger_discard()
+	var meld_viewport_snapshot: Vector2 = render_context.get("viewport", Vector2.ZERO)
+	if meld_viewport_snapshot.x <= 1.0 or meld_viewport_snapshot.y <= 1.0:
+		meld_viewport_snapshot = effective_viewport_size()
 	var compact_melds := meld_viewport_snapshot.y <= 560.0 or danger_compact_snapshot
 	var danger_compact_melds := danger_compact_snapshot
-	var meld_content_size := safe_content_pixel_size()
+	var meld_content_size: Vector2 = render_context.get("content_size", Vector2.ZERO)
+	if meld_content_size.x <= 1.0 or meld_content_size.y <= 1.0:
+		meld_content_size = safe_content_pixel_size()
 	var meld_layout_revision := safe_area_layout_revision
 	parent.set_meta("meld_viewport_snapshot", meld_viewport_snapshot)
 	parent.set_meta("meld_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
+	var meld_snapshot: Array = render_context.get("melds", [])
 	for layout in MELD_LAYOUTS:
 		var seat = int(layout[0])
-		var meld_list = get_melds(seat)
+		var meld_list: Array = []
+		if seat >= 0 and seat < meld_snapshot.size() and typeof(meld_snapshot[seat]) == TYPE_ARRAY:
+			meld_list = meld_snapshot[seat] as Array
+		else:
+			meld_list = get_melds(seat)
 		if meld_list.is_empty():
 			continue
 		var meld_rect: Rect2 = seat_meld_rect(seat)
@@ -14558,24 +14596,24 @@ func make_soft_depth_panel(parent: Control, rect: Rect2, color: Color, radius: i
 
 func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String = "") -> Control:
 	# r213: GPT chrome conversion
-	var has_menu_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null or optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
+	var has_menu_stage_overlay := optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_bright") != null or optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null or optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") != null
 	var art = Control.new()
 	art.name = "MenuCardEntryArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.modulate = Color(1, 1, 1, 0.96)
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	button.add_child(art)
-	var card_shadow_alpha := 0.10 if has_menu_stage_overlay else 0.18
-	var card_depth_alpha := 0.22 if has_menu_stage_overlay else 0.32
-	var card_sheen_alpha := 0.16 if has_menu_stage_overlay else 0.22
+	var card_shadow_alpha := 0.08 if has_menu_stage_overlay else 0.14
+	var card_depth_alpha := 0.16 if has_menu_stage_overlay else 0.24
+	var card_sheen_alpha := 0.22 if has_menu_stage_overlay else 0.26
 	var cast_shadow = make_soft_depth_panel(art, rect_full(0.020, 0.100, 0.990, 1.035), Color(0.0, 0.0, 0.0, card_shadow_alpha), 18)
 	cast_shadow.name = "MenuCardCastShadow"
 	art.move_child(cast_shadow, 0)
-	var depth_edge = make_soft_depth_panel(art, rect_full(0.050, 0.825, 0.950, 0.985), Color(0.22, 0.14, 0.06, card_depth_alpha), 14)
+	var depth_edge = make_soft_depth_panel(art, rect_full(0.050, 0.825, 0.950, 0.985), Color(0.54, 0.16, 0.08, card_depth_alpha), 14)
 	depth_edge.name = "MenuCardDepthEdge"
-	# Use the authored jade/cinnabar GPT button plate as the card surface. The
-	# center crop keeps its material language without repeating a full ornament.
-	var card_face = make_gpt_center_crop_plate_rect(rect_full(0.030, 0.045, 0.970, 0.955), Color(0.70, 0.86, 0.62, 0.82), "menu_lobby_ui_overlay", 0.14)
+	# The bright GPT banner has a quiet paper center and visible jade/gold
+	# ornament at its edges, which gives the card a clear Chinese reading frame.
+	var card_face = make_gpt_plate_rect(rect_full(0.030, 0.045, 0.970, 0.955), Color(0.98, 0.96, 0.86, 0.92), "action_gpt_dock_banner_bright")
 	card_face.name = "MenuCardGptFace"
 	art.add_child(card_face)
 	var surface = make_layout_host(rect_full(0.030, 0.045, 0.970, 0.955))
@@ -14586,21 +14624,21 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 	var inner = make_layout_host(rect_full(0.060, 0.090, 0.940, 0.910))
 	inner.name = "MenuCardInner"
 	art.add_child(inner)
-	var accent = make_gpt_route_rail(rect_full(0.075, 0.740, 0.925, 0.870), Color(color.r, color.g, color.b, 0.10))
+	var accent = make_gpt_meter_fill(rect_full(0.075, 0.740, 0.925, 0.870), Color(color.r, color.g, color.b, 0.72))
 	accent.name = "MenuCardAccent"
 	art.add_child(accent)
 	var icon_echo_left = 0.695 if icon_name != "" else 0.765
 	var echo = make_layout_host(rect_full(icon_echo_left, 0.135, icon_echo_left + 0.220, 0.455))
 	echo.name = "MenuCardIconEcho"
 	art.add_child(echo)
-	var focus = make_gpt_gate(rect_full(0.805, 0.720, 0.910, 0.925), Color(color.r, color.g, color.b, 0.13))
+	var focus = make_gpt_gate(rect_full(0.805, 0.720, 0.910, 0.925), Color(color.r, color.g, color.b, 0.32))
 	focus.name = "MenuCardEntryFocus"
 	art.add_child(focus)
-	var arrow_icon = add_lucide_icon(focus, "chevron-right", rect_full(0.250, 0.250, 0.750, 0.750), Color(0.96, 0.90, 0.66, 0.86))
+	var arrow_icon = add_lucide_icon(focus, "chevron-right", rect_full(0.250, 0.250, 0.750, 0.750), color.darkened(0.28))
 	if arrow_icon != null:
 		arrow_icon.name = "MenuCardEntryArrow"
 	else:
-		var arrow = make_label(focus, ">", 11, Color(0.96, 0.90, 0.66, 0.86), true)
+		var arrow = make_label(focus, ">", 11, Color(0.72, 0.20, 0.10, 0.92), true)
 		arrow.name = "MenuCardEntryArrow"
 		apply_rect(arrow, rect_full(0.0, 0.0, 1.0, 1.0))
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
@@ -14616,7 +14654,7 @@ func draw_menu_card_entry_art(button: Control, color: Color, icon_name: String =
 
 
 func draw_menu_primary_3d_stage(parent: Control) -> Control:
-	var stage_overlay_key := "menu_primary_3d_stage_overlay_warm" if optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null else "menu_primary_3d_stage_overlay"
+	var stage_overlay_key := "menu_primary_3d_stage_overlay_bright" if optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_bright") != null else ("menu_primary_3d_stage_overlay_warm" if optional_gpt_illustration_texture("menu_primary_3d_stage_overlay_warm") != null else "menu_primary_3d_stage_overlay")
 	var has_stage_overlay := optional_gpt_illustration_texture(stage_overlay_key) != null
 	var stage_overlay = add_optional_gpt_illustration_texture(parent, stage_overlay_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.055, false)
 	if stage_overlay != null:
@@ -14669,14 +14707,14 @@ func draw_menu_card_selection_bus(parent: Control, cards: Array) -> Control:
 
 func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: String, text: String, rect: Rect2, accent: Color, text_color: Color) -> Control:
 	# r214: bulk GPT chrome sweep
-	var chip = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.50, 0.34, 0.78), "menu_lobby_ui_overlay", 0.12)
+	var chip = make_gpt_center_crop_plate_rect(rect, Color(0.98, 0.98, 0.90, 0.94), "ui_button_face_plate", 0.42)
 	chip.name = "MenuFooterStatusChip_%s" % chip_id
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.focus_mode = Control.FOCUS_NONE
 	chip.set_meta("ui_role", "passive_status")
 	chip.tooltip_text = "状态信息：" + text
 	parent.add_child(chip)
-	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.42, 0.64, 0.44, 0.34), "menu_lobby_ui_overlay", 0.10)
+	var inner = make_gpt_center_crop_plate_rect(rect_full(0.022, 0.130, 0.978, 0.870), Color(0.96, 0.98, 0.90, 0.50), "ui_button_face_plate", 0.34)
 	inner.name = "MenuFooterStatusInner_%s" % chip_id
 	chip.add_child(inner)
 	var rail = make_gpt_route_rail(rect_full(0.045, 0.790, 0.955, 0.855), Color(0.010, 0.024, 0.028, 0.36))
@@ -14699,6 +14737,10 @@ func make_menu_footer_status_chip(parent: Control, chip_id: String, label_name: 
 	var label_left := 0.045 if chip_id == "version" else 0.088
 	apply_rect(label, rect_full(label_left, 0.080, 0.970, 0.900))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	style_background_readable_label(label, 1)
+	label.add_theme_color_override("font_color", Color(0.055, 0.12, 0.085, 1.0))
+	label.add_theme_color_override("font_outline_color", Color(1.00, 0.92, 0.72, 0.94))
+	label.add_theme_constant_override("outline_size", 2)
 	configure_clipped_label(label)
 	return chip
 
@@ -14947,13 +14989,13 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	apply_rect(rail, rect_full(0.180, 0.704, 0.820, 0.804))
 	parent.add_child(rail)
 	var items := [
-		["rules", "规则", "help-circle", Color(0.30, 0.58, 0.50), Callable(self, "show_rules_screen")],
-		["stats", "战绩", "trophy", Color(0.56, 0.46, 0.72), Callable(self, "show_stats_screen")],
-		["achievements", "成就", "medal", Color(0.70, 0.54, 0.28), Callable(self, "show_achievements_screen")],
-		["daily_login", "签到", "calendar-check", Color(0.62, 0.48, 0.28), Callable(self, "open_daily_login_from_menu")],
-		["replay", "回放", "book-open", Color(0.36, 0.60, 0.62), Callable(self, "show_replay_import_screen")],
+		["rules", "规则", "help-circle", Color(0.18, 0.48, 0.38), Callable(self, "show_rules_screen")],
+		["stats", "战绩", "trophy", Color(0.72, 0.26, 0.18), Callable(self, "show_stats_screen")],
+		["achievements", "成就", "medal", Color(0.78, 0.48, 0.16), Callable(self, "show_achievements_screen")],
+		["daily_login", "签到", "calendar-check", Color(0.22, 0.42, 0.62), Callable(self, "open_daily_login_from_menu")],
+		["replay", "回放", "book-open", Color(0.18, 0.48, 0.56), Callable(self, "show_replay_import_screen")],
 	]
-	var surface = make_gpt_center_crop_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.34, 0.58, 0.40, 0.72), "menu_lobby_ui_overlay", 0.12)
+	var surface = make_gpt_plate_rect(rect_full(0.015, 0.050, 0.985, 0.750), Color(0.98, 0.94, 0.80, 0.82), "action_gpt_dock_banner_bright")
 	surface.name = "MenuQuickActionSurface"
 	rail.add_child(surface)
 	rail.move_child(surface, 0)
@@ -14981,6 +15023,9 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		var quick_action: Callable = item[4]
 		var button = make_small_button(str(item[1]), item[3], Callable(self, "activate_menu_entry").bind(quick_source_name, quick_action))
 		button.name = "MenuQuick%sButton" % quick_suffix
+		# Keep the native label for accessibility and layout contracts. The visible
+		# label is added to the rail below so it stays above the GPT face; native
+		# text is made transparent after the face is installed to avoid a duplicate.
 		button.custom_minimum_size = Vector2(96, 44)
 		set_ui_full_text(button, "%s：打开%s页面" % [str(item[1]), str(item[1])], "快捷入口：" + str(item[1]))
 		button.set_meta("quick_action_id", quick_id)
@@ -15001,12 +15046,43 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		mark_ui_optimization(button, "F-619")
 		mark_ui_optimization(button, "F-454")
 		# Keep quick navigation calm enough for the hero artwork and readable at 960px.
-		ensure_button_gpt_face_plate(button, Color(quick_color.r, quick_color.g, quick_color.b, 0.38))
+		ensure_button_gpt_face_plate(button, Color(quick_color.r, quick_color.g, quick_color.b, 0.88), "ui_button_face_plate")
+		button.add_theme_color_override("font_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_hover_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_pressed_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_focus_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_hover_pressed_color", Color(0.0, 0.0, 0.0, 0.0))
+		button.add_theme_color_override("font_disabled_color", Color(0.0, 0.0, 0.0, 0.0))
 		button.button_down.connect(Callable(self, "play_menu_quick_button_press_feedback").bind(button, quick_id, quick_color))
 		rail.add_child(button)
 		var left = start_x + float(i) * (button_width + gap)
 		apply_rect(button, rect_full(left, 0.060, left + button_width, 0.940))
-		add_lucide_icon(button, str(item[2]), rect_full(0.100, 0.255, 0.225, 0.575), Color(0.94, 0.92, 0.76, 0.88))
+		# A narrow authored GPT paper plate gives every label a stable reading
+		# surface without painting a new shape in code.
+		var quick_text_plate := make_gpt_center_crop_plate_rect(
+			rect_full(left + button_width * 0.220, 0.105, left + button_width * 0.955, 0.895),
+			Color(0.98, 0.98, 0.90, 0.78),
+			"ui_button_face_plate",
+			0.18
+		)
+		quick_text_plate.name = "MenuQuick%sLabelBackplate" % quick_suffix
+		quick_text_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		quick_text_plate.z_index = 10
+		rail.add_child(quick_text_plate)
+		var quick_label := make_label(rail, str(item[1]), 14, Color(0.055, 0.12, 0.085, 1.0), true)
+		quick_label.name = "MenuQuick%sLabel" % quick_suffix
+		apply_rect(quick_label, rect_full(left + button_width * 0.235, 0.125, left + button_width * 0.950, 0.875))
+		quick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		quick_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		quick_label.z_index = 11
+		quick_label.add_theme_color_override("font_color", Color(0.055, 0.12, 0.085, 1.0))
+		quick_label.add_theme_color_override("font_outline_color", Color(1.00, 0.92, 0.72, 0.96))
+		quick_label.add_theme_constant_override("outline_size", 2)
+		quick_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.05, 0.035, 0.78))
+		quick_label.add_theme_constant_override("shadow_offset_x", 1)
+		quick_label.add_theme_constant_override("shadow_offset_y", 1)
+		configure_clipped_label(quick_label)
+		add_lucide_icon(button, str(item[2]), rect_full(0.100, 0.255, 0.225, 0.575), quick_color.darkened(0.30))
 		configure_menu_button_motion(button, 0.12 + float(i) * 0.045, 1.060, 0.0)
 	return rail
 
@@ -17717,7 +17793,7 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_shadow.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	# Lift midtones so inactive side seats still read as lacquer plaques, not black voids.
 	# r449: warm lacquer seat shell — no mint/jade green program fills under brocade.
-	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.46, 0.32, 0.78), "ui_soft_flash", 0.24)
+	var panel = make_gpt_center_crop_plate_rect(rect, Color(0.28, 0.56, 0.36, 0.82), "gpt_jade_felt", 0.72)
 	panel.name = "SeatPanel_%d" % seat
 	panel.set_meta("seat_identity_signature", seat_identity_signature)
 	panel.set_meta("seat_viewport_snapshot", seat_viewport_size)
@@ -17736,13 +17812,14 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	seat_side_bevel.name = "SeatPanel3DSideBevel_%d" % seat
 	var seat_right_bevel = make_soft_depth_panel(panel, rect_full(0.940, 0.120, 0.985, 0.880), Color(0.22, 0.16, 0.10, 0.14 if active else 0.10), 999)
 	seat_right_bevel.name = "SeatPanel3DRightBevel_%d" % seat
-	var seat_info_plate = make_gpt_center_crop_plate_rect(rect_full(-0.010, -0.015, 1.010, 1.015), Color(0.32, 0.48, 0.30, 0.18 if active else 0.13), "ui_soft_flash", 0.20)
+	var seat_info_plate = make_gpt_center_crop_plate_rect(rect_full(-0.010, -0.015, 1.010, 1.015), Color(0.42, 0.68, 0.46, 0.16 if active else 0.10), "gpt_jade_felt", 0.72)
 	seat_info_plate.name = "SeatInfoPlate_%d" % seat
 	panel.add_child(seat_info_plate)
 	panel.move_child(seat_info_plate, 0)
 	var seat_texture = add_optional_gpt_illustration_texture(panel, "seat_gpt_brocade_bright", rect_full(-0.015, -0.020, 1.015, 1.020), 0.38 if active else 0.30, false)
 	if seat_texture != null:
 		seat_texture.name = "SeatGPTBrocadeTexture_%d" % seat
+		seat_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		# Commercial lacquer midtones; extra lift on side seats which sit in darker table periphery.
 		# Keep brocade present but dim enough for name/score text to remain readable.
 		# r450: warm lacquer boost — do not amplify green channel (v9 jade seats).
@@ -18805,7 +18882,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel_shadow.name = "SettingsConsole3DCastShadow"
 
 	# 设置面板 - 更精致的样式
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.66, 0.82, 0.58, panel_alpha), "menu_lobby_ui_overlay", 0.14)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.28, 0.48, 0.34, panel_alpha), "gpt_jade_felt", 0.72)
 	panel.name = "SettingsPanel"
 	# The settings surface contains native controls several levels below this
 	# authored plate. PASS keeps the modal backdrop active while allowing mouse
@@ -18869,8 +18946,8 @@ func draw_settings_overlay(parent: Control) -> void:
 		var corner_cap = make_gpt_plate_rect(rect_full(corner_x, corner_y, corner_x + 0.026, corner_y + 0.034), Color(0.58, 0.40, 0.16, 0.34), "ui_jade_reading_plate")
 		corner_cap.name = "SettingsConsole3DCornerCap_%d" % corner_index
 		panel.add_child(corner_cap)
-	var settings_gpt_key := "settings_gpt_panel_warm"
-	var gpt_settings_texture := add_optional_gpt_center_crop_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.045, 0.30)
+	var settings_gpt_key := "settings_gpt_panel_v2"
+	var gpt_settings_texture := add_optional_gpt_center_crop_texture(panel, settings_gpt_key, rect_full(0.018, 0.018, 0.982, 0.982), 0.025, 0.30)
 	if gpt_settings_texture != null:
 		gpt_settings_texture.name = "SettingsGPTPanelTexture"
 		gpt_settings_texture.modulate = Color(1.20, 1.22, 1.08, gpt_settings_texture.modulate.a)
@@ -19253,7 +19330,9 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "SettingsOverviewArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.285, 0.195, 0.715, 0.252))
+	# Keep the progress summary in its own right-side header lane so the section
+	# navigation remains a clean, full-width keyboard target.
+	apply_rect(art, rect_full(0.535, 0.175, 0.925, 0.235))
 	parent.add_child(art)
 	var overview_texture = add_illustration_texture(art, "settings_overview_scroll", rect_full(-0.020, -0.160, 1.020, 1.160), 0.026, false)
 	if overview_texture != null:
@@ -19266,6 +19345,7 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	var overview_panel := add_optional_gpt_center_crop_texture(art, overview_panel_key, rect_full(-0.02, 0.0, 1.02, 1.0), 0.080, 0.28)
 	if overview_panel != null:
 		overview_panel.name = "SettingsOverviewPanelTexture"
+		overview_panel.modulate.a = 0.03
 		art.move_child(overview_panel, 0)
 	var rail = make_gpt_route_rail(rect_full(0.330, 0.735, 0.905, 0.855), Color(0.006, 0.016, 0.018, 0.42))
 	rail.name = "SettingsOverviewRail"
@@ -19348,6 +19428,7 @@ func draw_settings_section_signal(parent: Control, title_text: String) -> Contro
 	var signal_panel := add_optional_gpt_center_crop_texture(art, signal_panel_key, rect_full(-0.02, 0.0, 1.02, 1.0), 0.075, 0.28)
 	if signal_panel != null:
 		signal_panel.name = "SettingsSectionSignalPanelTexture_%s" % title_text
+		signal_panel.modulate.a = 0.02
 		art.move_child(signal_panel, 0)
 	var icon = make_gpt_edge_rail(rect_full(0.000, 0.155, 0.115, 0.845), Color(accent.r, accent.g, accent.b, 0.22))
 	icon.name = "SettingsSectionSignalIcon_%s" % title_text
@@ -19687,7 +19768,7 @@ func draw_shop_transaction_map_art(parent: Control) -> Control:
 	parent.add_child(art)
 	var gems = int(currency.get("gems", 0))
 	var min_cost = 999999
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		min_cost = min(min_cost, int(ITEM_TYPES[item_id].get("cost_gems", 10)))
 	var affordable = gems >= min_cost
 	var accent = Color(0.62, 0.52, 0.84) if affordable else Color(0.78, 0.44, 0.36)
@@ -23037,12 +23118,15 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	button.set_meta("action_role", role)
 	button.set_meta("action_shortcut", action_button_shortcut_hint(text))
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
-	button.add_theme_color_override("font_color", Color(1.00, 0.98, 0.88))
-	button.add_theme_color_override("font_hover_color", Color(1.00, 1.00, 0.96))
-	button.add_theme_color_override("font_pressed_color", Color(1.00, 0.92, 0.68))
-	button.add_theme_color_override("font_disabled_color", Color(0.82, 0.82, 0.74))
-	button.add_theme_color_override("font_outline_color", Color(0.035, 0.020, 0.008, 0.96))
 	var compact_claim_mode := has_pending_claim_window()
+	var action_text_color := Color(1.00, 0.98, 0.88) if compact_claim_mode else Color(0.25, 0.075, 0.035)
+	var action_hover_color := Color(1.00, 1.00, 0.96) if compact_claim_mode else Color(0.62, 0.16, 0.07)
+	var action_pressed_color := Color(1.00, 0.92, 0.68) if compact_claim_mode else Color(0.78, 0.22, 0.08)
+	button.add_theme_color_override("font_color", action_text_color)
+	button.add_theme_color_override("font_hover_color", action_hover_color)
+	button.add_theme_color_override("font_pressed_color", action_pressed_color)
+	button.add_theme_color_override("font_disabled_color", Color(0.30, 0.32, 0.26, 0.72) if not compact_claim_mode else Color(0.82, 0.82, 0.74))
+	button.add_theme_color_override("font_outline_color", Color(1.00, 0.92, 0.70, 0.96) if not compact_claim_mode else Color(0.035, 0.020, 0.008, 0.96))
 	button.add_theme_constant_override("outline_size", 3 if compact_claim_mode else 2)
 	var is_focus_action = ["win", "gang", "safe", "advice", "next"].has(role) or text.begins_with("荐")
 	var fill_alpha := 0.240 if compact_claim_mode and role == "pass" else (0.680 if compact_claim_mode and is_focus_action else (0.420 if compact_claim_mode else (0.32 if role == "pass" else (0.68 if is_focus_action else 0.50))))
@@ -23059,7 +23143,7 @@ func make_action_button(text: String, color: Color, callback: Callable) -> Butto
 	button.add_theme_stylebox_override("normal", empty_normal)
 	button.add_theme_stylebox_override("hover", empty_hover)
 	button.add_theme_stylebox_override("pressed", empty_pressed)
-	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, fill_alpha))
+	ensure_button_gpt_face_plate(button, Color(color.r, color.g, color.b, fill_alpha), "action_gpt_dock_banner_bright" if not compact_claim_mode else "")
 	draw_action_button_art(button, text, color)
 	return button
 
@@ -23587,7 +23671,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	draw_menu_card_entry_art(button, color, icon_name)
 	if icon_name != "":
 		# Keep the primary icon above the generated face and card ornament.
-		add_lucide_icon(button, icon_name, rect_full(0.735, 0.165, 0.865, 0.395), Color(0.92, 0.82, 0.58, 0.78))
+		add_lucide_icon(button, icon_name, rect_full(0.735, 0.165, 0.865, 0.395), Color(0.18, 0.25, 0.20, 0.92))
 	if force_depth_art:
 		_add_card_breathing_shadow(button, color)
 		_add_card_shimmer(button, color)
@@ -23598,17 +23682,21 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	# the previous 0.68 edge clipped the LAN suffix at 960px.
 	var card_text_right := 0.730 if icon_name != "" else 0.935
 	var subtitle_font_size := 14 if menu_card_viewport.x < 1100.0 and icon_name != "" else commercial_ui_font_size(15, 2)
-	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.20, 0.38, 0.26, 0.58), "menu_lobby_ui_overlay", 0.12)
+	var text_back = make_gpt_center_crop_plate_rect(rect_full(0.075, 0.105, card_text_right, 0.805), Color(0.98, 0.98, 0.90, 0.86), "ui_button_face_plate", 0.46)
 	text_back.name = "MenuCardTextBackplate"
 	button.add_child(text_back)
 	text_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var title = make_label(button, title_text, commercial_ui_font_size(24, 4), Color(1.00, 0.91, 0.60), true)
+	var title = make_label(button, title_text, commercial_ui_font_size(24, 4), Color(0.10, 0.15, 0.12), true)
 	title.name = "MenuCardTitleLabel"
 	apply_rect(title, rect_full(0.10, 0.13, 0.68 if icon_name != "" else 0.92, 0.48))
 	title.set_meta("layout_role", "menu_card_title_slot")
 	title.set_meta("slot_rect", "title:0.10..0.48")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	style_background_readable_label(title, 2)
+	title.add_theme_color_override("font_color", Color(0.075, 0.13, 0.095, 1.0))
+	title.add_theme_color_override("font_outline_color", Color(1.00, 0.91, 0.70, 0.94))
+	title.add_theme_constant_override("outline_size", 2)
 	configure_clipped_label(title)
 	title.tooltip_text = title_text
 	title.set_meta("long_text_policy", "measured_title_slot_with_full_tooltip")
@@ -23616,7 +23704,7 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	mark_ui_optimization(title, "F-446")
 	mark_ui_optimization(title, "F-225")
 	if subtitle_text != "":
-		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(15, 2), Color(0.94, 0.92, 0.80), false)
+		var subtitle = make_label(button, subtitle_text, commercial_ui_font_size(15, 2), Color(0.24, 0.29, 0.23), false)
 		subtitle.name = "MenuCardSubtitleLabel"
 		apply_rect(subtitle, rect_full(0.10, 0.50, card_text_right - 0.005 if icon_name != "" else 0.92, 0.78))
 		subtitle.set_meta("layout_role", "menu_card_subtitle_slot")
@@ -23626,6 +23714,9 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		style_background_readable_label(subtitle, 2)
+		subtitle.add_theme_color_override("font_color", Color(0.13, 0.19, 0.14, 1.0))
+		subtitle.add_theme_color_override("font_outline_color", Color(1.00, 0.92, 0.74, 0.86))
+		subtitle.add_theme_constant_override("outline_size", 1)
 		if subtitle_text.length() > 12 or large_text_enabled:
 			configure_wrapped_label(subtitle, maxf(110.0, menu_card_viewport.x * 0.185), 0.0, 2.0)
 			subtitle.max_lines_visible = 2
@@ -24005,7 +24096,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_shadow_rect := Rect2(rect.position + Vector2(0.003, 0.007), rect.size + Vector2(0.003, 0.006))
 	var section_shadow = make_soft_depth_panel(parent, section_shadow_rect, Color(0.0, 0.0, 0.0, 0.30), 15)
 	section_shadow.name = "SettingsSection3DCastShadow_%s" % title_text
-	var section = make_gpt_center_crop_plate_rect(rect, Color(0.52, 0.72, 0.46, 0.74), "menu_lobby_ui_overlay", 0.13)
+	var section = make_gpt_center_crop_plate_rect(rect, Color(0.42, 0.66, 0.46, 0.74), "gpt_jade_felt", 0.72)
 	section.name = "SettingsSection_%s" % title_text
 	section.mouse_filter = Control.MOUSE_FILTER_PASS
 	parent.add_child(section)
@@ -24015,7 +24106,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	var section_top_rim = make_gpt_ribbon(rect_full(0.035, 0.018, 0.965, 0.048), Color(1.0, 0.88, 0.56, 0.055))
 	section_top_rim.name = "SettingsSection3DTopRim_%s" % title_text
 	section.add_child(section_top_rim)
-	var section_plate = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.68, 0.82, 0.56, 0.14), "menu_lobby_ui_overlay", 0.11)
+	var section_plate = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.000, 1.000, 1.000), Color(0.62, 0.84, 0.62, 0.10), "gpt_jade_felt", 0.72)
 	section_plate.name = "SettingsSectionGptPlate_%s" % title_text
 	section.add_child(section_plate)
 	section.move_child(section_plate, 0)
@@ -26186,7 +26277,13 @@ func safe_content_pixel_size_for_margins(viewport_size: Vector2, margins: Vector
 	return Vector2(max(1.0, viewport_size.x - margins.x - margins.z), max(1.0, viewport_size.y - margins.y - margins.w))
 
 func tile_face_font_size(size: Vector2) -> int:
-	return max(10, int(size.y * 0.42))
+	var cache_key := "%s|%s" % [size.x, size.y]
+	if tile_face_font_size_cache.has(cache_key):
+		return int(tile_face_font_size_cache[cache_key])
+	var result: int = maxi(10, int(size.y * 0.42))
+	if tile_face_font_size_cache.size() < 32:
+		tile_face_font_size_cache[cache_key] = result
+	return result
 
 func tile_face_main(tile: String) -> String:
 	if not tile_metadata_ready:

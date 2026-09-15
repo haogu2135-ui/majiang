@@ -9,10 +9,14 @@ func run() -> void:
 	var scene = load("res://Main.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
-	scene.start_offline(true)
-	seed_preview_discards(scene)
-	seed_preview_pending_claim(scene)
-	scene.render_game()
+	var preview_page := OS.get_environment("YUNZHUO_PREVIEW_PAGE")
+	if preview_page == "menu":
+		scene.show_menu(true)
+	else:
+		scene.start_offline(true)
+		seed_preview_discards(scene)
+		seed_preview_pending_claim(scene)
+		scene.render_game()
 	scene.clear_fx_overlays()
 	await process_frame
 	await process_frame

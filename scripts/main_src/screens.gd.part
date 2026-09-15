@@ -393,7 +393,7 @@ func _show_menu_impl() -> void:
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	# 游戏标题 - 更大更突出，使用国风金色
-	var title = make_label(header, "云桌麻将", commercial_ui_font_size(42, 6), Color(1.00, 0.90, 0.58), true)
+	var title = make_label(header, "云桌麻将", commercial_ui_font_size(42, 6), Color(0.30, 0.08, 0.045), true)
 	title.name = "MenuTitleLabel"
 	apply_rect(title, rect_full(0.010, 0.025, 0.880, 0.660))
 	title.set_meta("header_reserved_right", 0.445)
@@ -402,12 +402,12 @@ func _show_menu_impl() -> void:
 	title.set_meta("title_layout_contract", "measured_header_with_rule_detail")
 	mark_ui_optimization(title, "F-069")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
-	title.add_theme_constant_override("shadow_offset_x", 2)
-	title.add_theme_constant_override("shadow_offset_y", 3)
-	title.add_theme_constant_override("outline_size", 4)
-	title.add_theme_color_override("font_outline_color", Color(0.08, 0.045, 0.018, 0.96))
-	var title_rule = make_label(header, "一桌风雅，四方入席 · %s" % rule_variant_label(), commercial_ui_font_size(14, 2), Color(0.92, 0.86, 0.68, 0.88), false)
+	title.add_theme_color_override("font_shadow_color", Color(1.0, 0.88, 0.58, 0.62))
+	title.add_theme_constant_override("shadow_offset_x", 1)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.add_theme_constant_override("outline_size", 3)
+	title.add_theme_color_override("font_outline_color", Color(1.0, 0.94, 0.78, 0.96))
+	var title_rule = make_label(header, "一桌风雅，四方入席 · %s" % rule_variant_label(), commercial_ui_font_size(14, 2), Color(0.16, 0.32, 0.26, 0.94), false)
 	title_rule.name = "MenuTitleRule"
 	apply_rect(title_rule, rect_full(0.018, 0.650, 0.860, 0.950))
 	title_rule.set_meta("header_reserved_right", 0.445)
@@ -437,11 +437,11 @@ func _show_menu_impl() -> void:
 	mark_ui_optimization(tutorial_button, "F-452")
 	root_layer.add_child(tutorial_button)
 	apply_rect(tutorial_button, rect_full(0.445, 0.075, 0.625, 0.175))
-	ensure_button_gpt_face_plate(tutorial_button, Color(0.34, 0.58, 0.48, 0.42))
-	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.92, 0.96, 0.82, 0.90))
+	ensure_button_gpt_face_plate(tutorial_button, Color(0.18, 0.58, 0.46, 0.88), "action_gpt_dock_banner_bright")
+	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.18, 0.25, 0.20, 0.92))
 
 	if tutorial_available:
-		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.014, 0.034, 0.034, 0.88), "ui_jade_reading_plate")
+		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.98, 0.88, 0.66, 0.70), "menu_primary_3d_stage_overlay_bright")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
 		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
 		tutorial_banner.set_meta("status_owner", "MenuTutorialEntryStatus")
@@ -451,11 +451,11 @@ func _show_menu_impl() -> void:
 		tutorial_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root_layer.add_child(tutorial_banner)
 		draw_menu_tutorial_hint_art(tutorial_banner)
-		var tutorial_title = make_label(tutorial_banner, "新手教学", 14, Color(0.96, 0.90, 0.66), true)
+		var tutorial_title = make_label(tutorial_banner, "新手教学", 14, Color(0.10, 0.15, 0.12), true)
 		tutorial_title.name = "MenuTutorialEntryTitle"
 		apply_rect(tutorial_title, rect_full(0.105, 0.095, 0.390, 0.360))
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 11, Color(0.78, 0.88, 0.78), false)
+		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 11, Color(0.24, 0.29, 0.23), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
 		apply_rect(tutorial_detail, rect_full(0.105, 0.390, 0.560, 0.670))
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -471,6 +471,7 @@ func _show_menu_impl() -> void:
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(112, 44)
 		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
+		ensure_button_gpt_face_plate(tutorial_action, Color(0.20, 0.62, 0.48, 0.88), "action_gpt_dock_banner_bright")
 		apply_rect(tutorial_action, rect_full(0.620, 0.205, 0.810, 0.800))
 		tutorial_banner.add_child(tutorial_action)
 		var tutorial_skip = make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
@@ -478,6 +479,7 @@ func _show_menu_impl() -> void:
 		tutorial_skip.custom_minimum_size = Vector2(76, 44)
 		tutorial_skip.set_meta("accessible_name", "跳过新手教学")
 		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
+		ensure_button_gpt_face_plate(tutorial_skip, Color(0.78, 0.22, 0.14, 0.88), "action_gpt_dock_banner_bright")
 		apply_rect(tutorial_skip, rect_full(0.835, 0.190, 0.985, 0.810))
 		tutorial_banner.add_child(tutorial_skip)
 
@@ -508,7 +510,7 @@ func _show_menu_impl() -> void:
 
 	# 三个主功能卡片 - 更大更醒目，使用国风配色
 	var cards: Array = []
-	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.78, 0.56, 0.28), func() -> void:
+	var card1 = make_menu_card("单机人机\nAI 自动打牌", Color(0.84, 0.24, 0.16), func() -> void:
 		menu_focus_restore_name = "MenuPrimaryOfflineCard"
 		start_offline()
 	, "play")
@@ -517,7 +519,7 @@ func _show_menu_impl() -> void:
 	row.add_child(card1)
 	cards.append(card1)
 
-	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", AZURE, func() -> void:
+	var card2 = make_menu_card("联机房间\n连接本机 / 局域网", Color(0.18, 0.52, 0.50), func() -> void:
 		menu_focus_restore_name = "MenuPrimaryOnlineCard"
 		show_online_lobby()
 	, "users")
@@ -526,7 +528,7 @@ func _show_menu_impl() -> void:
 	row.add_child(card2)
 	cards.append(card2)
 
-	var card3 = make_menu_card("商店\n道具和货币", VERMILION, func() -> void:
+	var card3 = make_menu_card("商店\n道具和货币", Color(0.92, 0.56, 0.16), func() -> void:
 		menu_focus_restore_name = "MenuPrimaryShopCard"
 		show_shop_screen()
 	, "gift")
@@ -548,7 +550,7 @@ func _show_menu_impl() -> void:
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(footer, rect_full(0.055, 0.828, 0.945, 0.948))
 	root_layer.add_child(footer)
-	var footer_back = make_gpt_center_crop_plate_rect(rect_full(0.000, 0.050, 1.000, 0.950), Color(0.28, 0.50, 0.34, 0.82), "menu_lobby_ui_overlay", 0.10)
+	var footer_back = make_gpt_plate_rect(rect_full(0.000, 0.050, 1.000, 0.950), Color(0.98, 0.94, 0.80, 0.86), "action_gpt_dock_banner_bright")
 	footer_back.name = "MenuFooterBackplate"
 	footer.add_child(footer_back)
 	footer_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -562,14 +564,14 @@ func _show_menu_impl() -> void:
 		footer_tw.tween_property(footer, "modulate:a", 1.0, 0.28).from(0.0).set_delay(0.18).set_ease(Tween.EASE_OUT)
 		footer_tw.tween_property(footer, "offset_top", 0.0, 0.28).from(12.0).set_delay(0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
-	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(0.030, 0.185, 0.190, 0.830), Color(0.58, 0.54, 0.42), Color(0.92, 0.88, 0.70))
+	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(0.030, 0.185, 0.190, 0.830), Color(0.58, 0.54, 0.42), Color(0.10, 0.15, 0.12))
 	set_ui_full_text(_version_chip, "当前版本：" + app_version(), "应用版本")
 	mark_ui_optimization(_version_chip, "F-455")
 
 	# 货币显示 - 使用国风配色
 	var coins_text = "铜钱 %d" % int(currency.get("coins", 0))
 	var gems_text = "玉符 %d" % int(currency.get("gems", 0))
-	var currency_chip = make_menu_footer_status_chip(footer, "currency", "MenuCurrencyBadge", "%s   %s" % [coins_text, gems_text], rect_full(0.205, 0.185, 0.390, 0.830), Color(0.82, 0.62, 0.28), Color(1.00, 0.88, 0.56))
+	var currency_chip = make_menu_footer_status_chip(footer, "currency", "MenuCurrencyBadge", "%s   %s" % [coins_text, gems_text], rect_full(0.205, 0.185, 0.390, 0.830), Color(0.82, 0.62, 0.28), Color(0.10, 0.15, 0.12))
 	set_ui_full_text(currency_chip, "铜钱：%d；玉符：%d" % [int(currency.get("coins", 0)), int(currency.get("gems", 0))], "当前货币")
 	currency_chip.set_meta("currency_coins", int(currency.get("coins", 0)))
 	currency_chip.set_meta("currency_gems", int(currency.get("gems", 0)))
@@ -582,7 +584,7 @@ func _show_menu_impl() -> void:
 	var rank_name = get_rank_name()
 	var rank_full_text := "%s  积分 %d" % [rank_name, int(season_data.get("points", 0))]
 	var rank_display_text := "%s · %d分" % [rank_name, int(season_data.get("points", 0))] if content_size.x <= 1280.0 else rank_full_text
-	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.405, 0.185, 0.570, 0.830), Color(0.46, 0.66, 0.54), Color(0.88, 0.96, 0.82))
+	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.405, 0.185, 0.570, 0.830), Color(0.46, 0.66, 0.54), Color(0.10, 0.15, 0.12))
 	rank_chip.tooltip_text = "完整段位状态：" + rank_full_text
 	rank_chip.set_meta("full_status_text", rank_full_text)
 	var rank_label := rank_chip.get_meta("label_control", null) as Label
@@ -606,7 +608,7 @@ func _show_menu_impl() -> void:
 		stats_display_text = "暂无对局"
 	elif content_size.x <= 960.0:
 		stats_display_text = "对局%d · 胜率%d%%" % [int(game_stats.get("games_played", 0)), int(float(game_stats.get("win_rate", 0.0)) * 100.0)]
-	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_display_text, rect_full(0.585, 0.185, 0.745, 0.830), Color(0.42, 0.72, 0.66), Color(0.88, 0.96, 0.84))
+	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_display_text, rect_full(0.585, 0.185, 0.745, 0.830), Color(0.42, 0.72, 0.66), Color(0.10, 0.15, 0.12))
 	stats_chip.tooltip_text = "统计详情：" + stats_text
 	stats_chip.set_meta("full_status_text", stats_text)
 	var stats_label := stats_chip.get_meta("label_control", null) as Label
@@ -629,7 +631,7 @@ func _show_menu_impl() -> void:
 		menu_focus_restore_name = "MenuSettingsButton"
 		toggle_settings_panel()
 	)
-	ensure_button_gpt_face_plate(settings, Color(0.26, 0.44, 0.58, 0.40))
+	ensure_button_gpt_face_plate(settings, Color(0.26, 0.44, 0.58, 0.68), "menu_primary_3d_stage_overlay_bright")
 	settings.custom_minimum_size = Vector2(88, 48)
 	settings.name = "MenuSettingsButton"
 	settings.add_theme_font_size_override("font_size", 15)
@@ -639,7 +641,7 @@ func _show_menu_impl() -> void:
 	apply_rect(settings, rect_full(0.800, 0.155, 0.965, 0.875))
 
 	draw_menu_settings_button_art(settings)
-	add_lucide_icon(settings, "settings", rect_full(0.080, 0.240, 0.250, 0.760), Color(0.92, 0.94, 0.88, 0.92))
+	add_lucide_icon(settings, "settings", rect_full(0.080, 0.240, 0.250, 0.760), Color(0.18, 0.25, 0.20, 0.92))
 
 	# 首次游戏提示 - 高亮常驻规则入口
 	if tutorial_step == 0:
@@ -2488,7 +2490,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 	var progress = 0.0 if scroll_range <= 0.0 else clampf(scrollbar.value / scroll_range, 0.0, 1.0)
 	var total_sections := maxi(1, RULES_SECTION_COUNT)
 	var current_section := clampi(int(floor(progress * float(total_sections))) + 1, 1, total_sections)
-	var rules_section_names: Array[String] = ["和牌与响应", "结算与支付", "计番项目", "牌型介绍", "特殊牌型", "游戏操作"]
+	var rules_section_names: Array = RULES_SECTION_NAMES
 	var anchors = rules_section_anchors(content_scroll)
 	if forced_section_index >= 0:
 		# An explicit chapter jump can clamp to the scroll range when the chosen
@@ -2510,7 +2512,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 	var status := cache.get("status", null) as Label
 	var step_refs: Array = cache.get("step_refs", [])
 	if status != null:
-		var current_section_name := rules_section_names[clampi(current_section - 1, 0, rules_section_names.size() - 1)]
+		var current_section_name: String = str(rules_section_names[clampi(current_section - 1, 0, rules_section_names.size() - 1)])
 		status.text = "第%d/%d · %s" % [current_section, total_sections, current_section_name]
 		set_ui_full_text(status, "当前：%s；第%d段，共%d段规则" % [current_section_name, current_section, total_sections], "规则阅读位置")
 		status.set_meta("active_section", current_section)
@@ -2521,7 +2523,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 		status.set_meta("next_reading_action", "回到开头" if progress >= 0.999 else ("向下滚动" if progress <= 0.001 else "继续阅读"))
 		mark_ui_optimization(status, "F-081")
 		mark_ui_optimization(status, "F-124")
-	var guide_target_sections := [0, 1, 2, 3, 4, 5]
+	var guide_target_sections: Array = RULES_GUIDE_TARGET_SECTIONS
 	var active_step := 0
 	for guide_index in range(guide_target_sections.size()):
 		if int(guide_target_sections[guide_index]) == current_section - 1:
@@ -3029,7 +3031,7 @@ func _show_shop_screen_impl() -> void:
 	var shop_row_max_height := 320.0 if shop_wide_layout else 120.0
 	var shop_row_height := clampf(floorf((shop_scroll_pixels - shop_row_gap * float(shop_visual_rows - 1)) / float(shop_visual_rows)), 68.0, shop_row_max_height)
 	var shop_text_width := maxf(180.0, shop_viewport_size.x * (0.190 if shop_wide_layout else 0.380))
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
 		var description := str(item_info.get("desc", ""))
 		var description_height := estimate_wrapped_text_height(description, shop_text_width, accessibility_font_size(commercial_ui_font_size(14, 2)), 4.0)
@@ -3039,28 +3041,13 @@ func _show_shop_screen_impl() -> void:
 			shop_row_height = maxf(shop_row_height, description_height + 48.0)
 	shop_row_height = minf(shop_row_height, shop_row_max_height)
 
-	# 道具图标映射
-	var item_icon_map := {
-		"swap_card": "refresh-cw",
-		"peek_card": "info",
-		"lucky_charm": "leaf",
-		"double_coins": "coin",
-	}
-	# 道具颜色映射
-	var item_color_map := {
-		"swap_card": Color(0.22, 0.48, 0.72),
-		"peek_card": Color(0.62, 0.38, 0.72),
-		"lucky_charm": Color(0.78, 0.56, 0.28),
-		"double_coins": Color(0.72, 0.52, 0.22),
-	}
-
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
 		var count = get_item_count(item_id)
 		var cost = int(item_info.get("cost_gems", 10))
 		var description := str(item_info.get("desc", ""))
-		var item_color = item_color_map.get(item_id, Color(0.42, 0.48, 0.44))
-		var icon_name = item_icon_map.get(item_id, "gift")
+		var item_color = SHOP_ITEM_COLOR_MAP.get(item_id, Color(0.42, 0.48, 0.44))
+		var icon_name = SHOP_ITEM_ICON_MAP.get(item_id, "gift")
 
 		# 道具行面板
 		var row = Panel.new()
@@ -3084,7 +3071,7 @@ func _show_shop_screen_impl() -> void:
 		content.add_child(row)
 		# 道具行交错入场 / Staggered item entrance
 		if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
-			var item_index = int(ITEM_TYPES.keys().find(item_id))
+			var item_index = shop_item_index(item_id)
 			row.modulate = Color(1, 1, 1, 0)
 			row.offset_left = 14.0
 			var r_tw := create_screen_tween()
@@ -3314,7 +3301,7 @@ func _show_shop_screen_impl() -> void:
 	var total_inventory := 0
 	var affordable_items := 0
 	var min_cost := 9999
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
 		var cost = int(item_info.get("cost_gems", 10))
 		total_inventory += get_item_count(item_id)
@@ -3391,7 +3378,7 @@ func _show_shop_screen_impl() -> void:
 	call_deferred("fit_shop_buy_command_labels")
 	var shop_focus_controls: Array[Control] = [back, scroll, shop_scroll_hit_target]
 	var shop_buy_controls: Array[Control] = []
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var shop_buy_button := content.find_child("ShopItemBuyButton_%s" % item_id, true, false) as Control
 		if shop_buy_button != null:
 			shop_buy_controls.append(shop_buy_button)
@@ -3556,7 +3543,7 @@ func fit_shop_buy_command_labels() -> void:
 	await get_tree().process_frame
 	if root_layer == null or not is_instance_valid(root_layer) or mode != "shop":
 		return
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var command_label := root_layer.find_child("ShopBuyButtonCommand_%s" % item_id, true, false) as Label
 		if command_label == null or not is_instance_valid(command_label):
 			continue

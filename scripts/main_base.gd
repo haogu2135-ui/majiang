@@ -35,9 +35,23 @@ const ONLINE_MALFORMED_NOTICE_INTERVAL_MSEC := 1500
 const ONLINE_PLAYER_INDEX_TOKEN_KEY := "_online_player_index_token"
 const ONLINE_MESSAGE_TEXT_KEYS := ["message", "text", "detail", "reason", "error"]
 const ONLINE_LOG_TEXT_KEYS := ["text", "message", "content"]
+const ONLINE_TILE_VALUE_KEYS := ["tile", "code", "id"]
+const ONLINE_ROOM_CODE_KEYS := ["roomCode", "room_code", "code"]
+const ONLINE_SEAT_KEYS := ["seat", "index", "position"]
+const ONLINE_NAME_KEYS := ["name", "nickname", "userName"]
+const ONLINE_HAND_KEYS := ["hand", "tiles"]
+const ONLINE_DISCARD_KEYS := ["discards", "discarded", "river"]
+const ONLINE_MELD_KEYS := ["melds", "openMelds", "sets"]
+const ONLINE_CLAIM_KEYS := ["options", "claims", "actions"]
+const ONLINE_PHASE_KEYS := ["phase", "state", "status"]
+const ONLINE_MESSAGE_KIND_KEYS := ["type", "event", "kind", "messageType"]
 const ONLINE_ACTION_TYPE_KEYS := {"createRoom": true, "joinRoom": true, "startGame": true, "discard": true, "claim": true, "chat": true, "voiceState": true, "voiceMessage": true}
 const ONLINE_CLAIM_ACTION_KEYS := {"chi": true, "peng": true, "gang": true, "hu": true, "pass": true}
 const TILE_CODE_NORMALIZATION_CACHE_LIMIT := 128
+const TILE_SEMANTIC_CACHE_LIMIT := 128
+const ONLINE_NORMALIZATION_CACHE_LIMIT := 96
+const RUNTIME_DELAY_TIMER_POOL_LIMIT := 8
+const ONE_SHOT_SFX_POOL_LIMIT := 8
 const TELEMETRY_SAVE_DEBOUNCE_MSEC := 750
 const APP_VERSION := "1.0.180-godot"
 const UPDATE_APPROVED_TARGET_VERSION := APP_VERSION
@@ -102,6 +116,7 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"menu_lobby_ui_overlay": "res://assets/illustrations/menu_lobby_ui_overlay.png",
 	"menu_primary_3d_stage_overlay": "res://assets/illustrations/menu_primary_3d_stage_overlay.png",
 	"menu_primary_3d_stage_overlay_warm": "res://assets/illustrations/menu_primary_3d_stage_overlay_warm_v390.png",
+	"menu_primary_3d_stage_overlay_bright": "res://assets/illustrations/menu_primary_3d_stage_overlay_bright_gpt_r185.png",
 	"loading_scene_gpt_backdrop": "res://assets/illustrations/loading_scene_gpt_backdrop.png",
 	"daily_login_gpt_calendar": "res://assets/illustrations/daily_login_gpt_calendar.png",
 	"daily_login_gpt_calendar_warm": "res://assets/illustrations/daily_login_gpt_calendar_warm_v392.png",
@@ -124,6 +139,8 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"settings_gpt_panel_v2": "res://assets/illustrations/settings_gpt_panel_v2_sub2api_gpt2_20260814.png",
 	"settings_gpt_panel_warm": "res://assets/illustrations/settings_gpt_panel_warm_v391.png",
 	"table_gpt_backdrop": "res://assets/illustrations/table_gpt_backdrop_v4.png",
+	"table_gpt_backdrop_bright": "res://assets/illustrations/table_gpt_backdrop_bright_gpt_r185.png",
+	"gpt_jade_felt": "res://assets/table/table_felt_3d_gpt.png",
 	"table_gpt_backdrop_warm": "res://assets/illustrations/table_gpt_backdrop_warm_v391.png",
 	"offline_table_3d_overlay": "res://assets/illustrations/offline_table_3d_overlay.png",
 	"hand_gpt_tray": "res://assets/illustrations/hand_gpt_tray_v4.png",
@@ -131,7 +148,10 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"hand_completion_gpt_bus": "res://assets/illustrations/hand_completion_gpt_bus.png",
 	"action_gpt_dock": "res://assets/illustrations/action_gpt_dock_v6.png",
 	"action_gpt_dock_banner_r433": "res://assets/illustrations/action_gpt_dock_banner_r433.png",
-	"action_gpt_dock_bright": "res://assets/illustrations/action_gpt_dock_bright_r431.png",
+	"action_gpt_dock_banner_r436": "res://assets/illustrations/action_gpt_dock_banner_r436.png",
+	"action_gpt_dock_banner_bright": "res://assets/illustrations/action_gpt_dock_banner_bright_gpt_r185.png",
+	"action_gpt_dock_bright": "res://assets/illustrations/action_gpt_dock_v7.png",
+	"action_gpt_dock_bright_legacy": "res://assets/illustrations/action_gpt_dock_bright_r431.png",
 	"action_gpt_dock_warm": "res://assets/illustrations/action_gpt_dock_warm_v391.png",
 	"pending_claim_action_dock": "res://assets/illustrations/action_gpt_dock_v6.png",
 	"pending_claim_status_strip": "res://assets/illustrations/pending_claim_status_strip.png",
@@ -148,8 +168,9 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"advisor_gpt_panel": "res://assets/illustrations/advisor_gpt_panel.png",
 	"top_hud_gpt_banner": "res://assets/illustrations/top_hud_gpt_banner_r434.png",
 	"top_hud_gpt_banner_warm": "res://assets/illustrations/top_hud_gpt_banner_warm_v392.png",
+	"top_hud_gpt_banner_v5": "res://assets/illustrations/top_hud_gpt_banner_v5.png",
 	"seat_gpt_brocade": "res://assets/illustrations/seat_gpt_brocade_v4.png",
-	"seat_gpt_brocade_bright": "res://assets/illustrations/seat_gpt_brocade_v5.png",
+	"seat_gpt_brocade_bright": "res://assets/illustrations/seat_gpt_brocade_v8.png",
 	"seat_gpt_plaque_warm": "res://assets/illustrations/seat_gpt_plaque_warm_r429.png",
 	"exit_gpt_confirm": "res://assets/illustrations/exit_gpt_confirm.png",
 	"exit_gpt_confirm_warm": "res://assets/illustrations/exit_gpt_confirm_warm_v392.png",
@@ -453,6 +474,15 @@ const HUMAN_DRAW_DELAY_SECONDS := 0.006
 const SCORE_LIMIT_FAN := 8
 const WALL_DRAW_NOTEN_BA := 1000  # 荒庄未听罚符：每家未听支付总额，由听牌者均分
 const RULES_SECTION_COUNT := 6
+const RULES_SECTION_NAMES := ["和牌与响应", "结算与支付", "计番项目", "牌型介绍", "特殊牌型", "游戏操作"]
+const RULES_GUIDE_TARGET_SECTIONS := [0, 1, 2, 3, 4, 5]
+const SHOP_ITEM_ICON_MAP := {"swap_card": "refresh-cw", "peek_card": "info", "lucky_charm": "leaf", "double_coins": "coin"}
+const SHOP_ITEM_COLOR_MAP := {
+	"swap_card": Color(0.22, 0.48, 0.72),
+	"peek_card": Color(0.62, 0.38, 0.72),
+	"lucky_charm": Color(0.78, 0.56, 0.28),
+	"double_coins": Color(0.72, 0.52, 0.22),
+}
 const SCORE_TABLE := {
 	1: 200,
 	2: 400,
@@ -550,6 +580,9 @@ var audio_layer: Node
 var bgm_player: AudioStreamPlayer
 var sfx_player: AudioStreamPlayer
 var action_sfx_player: AudioStreamPlayer
+var one_shot_sfx_pool: Array[AudioStreamPlayer] = []
+var one_shot_sfx_pool_hits := 0
+var one_shot_sfx_pool_misses := 0
 var android_tts
 var android_tts_requested = false
 var android_tts_requested_msec = 0
@@ -849,6 +882,7 @@ var round_result_kind := "playing"  # playing / win / wall_draw
 var last_score_deltas: Array[int] = []
 var last_score_deltas_revision := 0
 var last_score_deltas_have_change := false
+var last_score_delta_max_abs := 1
 var last_win_score: Dictionary = {}  # 保存上次胡牌得分详情
 var current_human_advice: Array = []
 var current_seat_threat_reports: Dictionary = {}
@@ -902,6 +936,41 @@ var tile_face_main_cache: Dictionary = {}
 var tile_face_sub_cache: Dictionary = {}
 var tile_corner_cache: Dictionary = {}
 var tile_accent_cache: Dictionary = {}
+var tile_index_cache: Dictionary = {}
+var tile_index_normalized_cache: Dictionary = {}
+var tile_path_cache: Dictionary = {}
+var tile_sort_index_cache: Dictionary = {}
+var suit_code_cache: Dictionary = {}
+var suit_label_cache: Dictionary = {}
+var tile_face_font_size_cache: Dictionary = {}
+var chinese_rank_cache: Dictionary = {}
+var hand_group_index_cache: Dictionary = {}
+var hand_group_label_cache: Dictionary = {}
+var pending_claim_source_badge_cache: Dictionary = {}
+var pending_claim_priority_cache: Dictionary = {}
+var pending_claim_shortcut_cache: Dictionary = {}
+var claim_options_text_cache: Dictionary = {}
+var compact_tile_run_label_cache: Dictionary = {}
+var compact_chi_choice_label_cache: Dictionary = {}
+var claim_label_cache: Dictionary = {}
+var claim_color_cache: Dictionary = {}
+var fan_badge_color_cache: Dictionary = {}
+var shanten_label_cache: Dictionary = {}
+var risk_label_cache: Dictionary = {}
+var seat_wind_label_cache: Dictionary = {}
+var wall_state_text_cache: Dictionary = {}
+var center_phase_label_cache: Dictionary = {}
+var center_phase_color_cache: Dictionary = {}
+var normalized_tile_array_cache: Dictionary = {}
+var normalized_tile_array_cache_lru: Dictionary = {}
+var normalized_claim_options_cache: Dictionary = {}
+var normalized_claim_options_cache_lru: Dictionary = {}
+var normalized_online_chi_choices_cache: Dictionary = {}
+var normalized_online_chi_choices_cache_lru: Dictionary = {}
+var normalized_online_melds_cache: Dictionary = {}
+var normalized_online_melds_cache_lru: Dictionary = {}
+var normalized_online_players_cache: Dictionary = {}
+var normalized_online_players_cache_lru: Dictionary = {}
 var counts_compact_key_scratch := PackedByteArray()
 var tile_code_normalization_cache: Dictionary = {}
 var tile_code_normalization_lru: Dictionary = {}
@@ -1043,6 +1112,31 @@ var online_log_revision := 0
 var online_log_fingerprint_revision := -1
 var online_log_cached_fingerprint := ""
 var online_log_cached_lines: Array[String] = []
+var online_log_retained_count_cache_revision := -1
+var online_log_retained_count_cache_size := -1
+var online_log_retained_count_cache_value := 0
+var online_log_range_cache_key := ""
+var online_log_range_cache_value := ""
+var action_intent_text_cache_key := ""
+var action_intent_text_cache_value := ""
+var action_intent_icon_cache_key := ""
+var action_intent_icon_cache_value := ""
+var action_intent_fallback_cache_key := ""
+var action_intent_fallback_cache_value := ""
+var action_intent_color_cache_key := ""
+var action_intent_color_cache_value := Color(0.66, 0.58, 0.38)
+var action_button_tooltip_cache: Dictionary = {}
+var online_connection_status_cache_key := ""
+var online_connection_status_cache_value := ""
+var update_stage_index_cache_key := ""
+var update_stage_index_cache_value := 3
+var update_state_color_cache_key := ""
+var update_state_color_cache_value := Color(0.60, 0.66, 0.58, 1.0)
+var update_progress_text_cache_key := ""
+var update_progress_text_cache_value := ""
+var manifest_notes_cache: Dictionary = {}
+var version_numbers_cache: Dictionary = {}
+var safe_filename_part_cache: Dictionary = {}
 var online_log_scroll_request_revision := 0
 var online_log_scroll_request_queued := false
 var online_log_scroll_request_follow_latest := false
@@ -1073,6 +1167,12 @@ var online_seen_voice_sequence_order: Array[String] = []
 var online_seen_voice_sequence_order_head := 0
 var speech_queue_head := 0
 var online_rule_model_cache: Dictionary = {}
+var online_message_kind_cache: Dictionary = {}
+var online_message_kind_cache_lru: Dictionary = {}
+var online_phase_cache: Dictionary = {}
+var online_phase_cache_lru: Dictionary = {}
+var online_last_discard_tile_cache: Dictionary = {}
+var online_last_discard_tile_cache_lru: Dictionary = {}
 var online_voice_rejection_count := 0
 var voice_enabled = false
 var voice_sequence = 0
@@ -1084,6 +1184,9 @@ var last_game_render_msec = 0
 var game_render_request_revision := 0
 var runtime_shutdown_requested = false
 var runtime_delay_timers: Array[Timer] = []
+var runtime_delay_timer_pool: Array[Timer] = []
+var runtime_delay_timer_pool_hits := 0
+var runtime_delay_timer_pool_misses := 0
 var next_online_poll_msec = 0
 var next_voice_capture_msec := 0
 var next_update_progress_msec = 0
@@ -1208,6 +1311,8 @@ var seat_river_summary_lru: Dictionary = {}
 var tile_semantic_cache: Dictionary = {}
 var tile_semantic_lru: Dictionary = {}
 var tile_semantic_cache_order: Array[String] = []
+var tile_array_key_cache: Dictionary = {}
+var tile_array_key_cache_lru: Dictionary = {}
 var hand_ban_snapshot_token := ""
 var hand_ban_snapshot: Dictionary = {}
 var offline_furiten_cache_key := ""
@@ -1224,6 +1329,8 @@ var player_info_cache: Dictionary = {}
 var player_info_cache_token := ""
 var package_preview_cache: Dictionary = {}
 var package_preview_cache_token := ""
+var shop_item_ids_cache: Array[String] = []
+var shop_item_index_cache: Dictionary = {}
 var action_dock_status_label: Label = null
 var hand_tile_button_registry: Dictionary = {}
 var hand_tile_button_registry_root_id := 0
@@ -1514,22 +1621,22 @@ const BUTTON_STYLE_SET_CACHE_LIMIT := 96
 const INPUT_STYLE_SET_CACHE_LIMIT := 32
 const UI_GOLD := Color(0.74, 0.56, 0.26, 0.26)
 const UI_GOLD_SOFT := Color(0.68, 0.50, 0.24, 0.15)
-const UI_DARK := Color(0.070, 0.060, 0.046, 0.970)
-const UI_DARK_SOFT := Color(0.102, 0.086, 0.064, 0.900)
+const UI_DARK := Color(0.028, 0.074, 0.054, 0.970)
+const UI_DARK_SOFT := Color(0.058, 0.150, 0.104, 0.900)
 const UI_FELT := Color(0.090, 0.165, 0.122, 0.955)
 const UI_FELT_LINE := Color(0.72, 0.61, 0.36, 0.12)
 const UI_TEXT_MAIN := Color(0.96, 0.92, 0.80, 1.0)
 const UI_TEXT_SUB := Color(0.90, 0.88, 0.76, 0.98)
 const UI_TEXT_MUTED := Color(0.78, 0.76, 0.64, 0.94)
-const UI_PANEL_FILL := Color(0.108, 0.092, 0.066, 0.925)
+const UI_PANEL_FILL := Color(0.100, 0.205, 0.150, 0.925)
 const UI_PANEL_BORDER := Color(0.64, 0.48, 0.24, 0.24)
-const UI_PANEL_SHADOW := Color(0.020, 0.014, 0.008, 0.20)
-const TOP_HUD_FILL := Color(0.118, 0.094, 0.064, 0.920)
+const UI_PANEL_SHADOW := Color(0.010, 0.032, 0.022, 0.20)
+const TOP_HUD_FILL := Color(0.080, 0.180, 0.128, 0.920)
 const TOP_HUD_BORDER := Color(0.70, 0.52, 0.28, 0.28)
-const SCORE_STRIP_FILL := Color(0.095, 0.112, 0.082, 0.860)
+const SCORE_STRIP_FILL := Color(0.082, 0.170, 0.118, 0.860)
 const SCORE_STRIP_BORDER := Color(0.60, 0.48, 0.26, 0.20)
 const SCORE_STRIP_NAME_FILL := Color(0.92, 0.84, 0.62, 0.90)
-const SETTINGS_PANEL_FILL := Color(0.086, 0.106, 0.094, 0.940)
+const SETTINGS_PANEL_FILL := Color(0.082, 0.190, 0.132, 0.940)
 const SETTINGS_PANEL_BORDER := Color(0.68, 0.56, 0.34, 0.32)
 const SETTINGS_PANEL_RECT := Rect2(Vector2(0.145, 0.055), Vector2(0.855, 0.955))
 const SETTINGS_TITLE_RECT := Rect2(Vector2(0.06, 0.045), Vector2(0.34, 0.155))
@@ -1541,7 +1648,7 @@ const SETTINGS_SECTION_TITLE_RECT := Rect2(Vector2(0.035, 0.018), Vector2(0.300,
 const SETTINGS_SECTION_GRID_RECT := Rect2(Vector2(0.035, 0.120), Vector2(0.965, 0.985))
 const SETTINGS_ROW_STATUS_RECT := Rect2(Vector2(0.045, 0.145), Vector2(0.510, 0.855))
 const SETTINGS_ROW_BUTTON_RECT := Rect2(Vector2(0.595, 0.020), Vector2(0.975, 0.980))
-const UI_BACKGROUND_TINT := Color(0.112, 0.086, 0.052, 0.800)
+const UI_BACKGROUND_TINT := Color(0.082, 0.180, 0.120, 0.800)
 
 # ============================================================
 # 国风雅韵主题色彩系统 / Guofeng Theme Color System
@@ -1681,10 +1788,12 @@ const AMBIENT_FIREWORK_COUNT := 6
 func refresh_score_delta_cache() -> void:
 	last_score_deltas_revision += 1
 	last_score_deltas_have_change = false
+	last_score_delta_max_abs = 1
 	for delta in last_score_deltas:
-		if int(delta) != 0:
+		var value := int(delta)
+		last_score_delta_max_abs = maxi(last_score_delta_max_abs, abs(value))
+		if value != 0:
 			last_score_deltas_have_change = true
-			break
 
 func create_screen_tween(preserve_timing: bool = false) -> Tween:
 	# Keep the registry bounded before creating the next animation. Decorative
@@ -1802,16 +1911,24 @@ func add_background(parent: Control) -> void:
 	base.name = "UtilityPageLowFrequencyBackdrop"
 
 func add_menu_background(parent: Control) -> void:
-	# Share the GPT jade table cloth with battle so the app has one calm visual
-	# stage. Keep the menu's dragon frame as a barely-there perimeter accent.
-	var backdrop_key := "table_gpt_backdrop" if optional_gpt_illustration_texture("table_gpt_backdrop") != null else "menu_lobby_ui_overlay"
-	var backdrop = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.86, 0.98, 0.82, 0.94), backdrop_key, 0.16)
+	# The bright GPT stage already contains the Chinese frame, lanterns and paper
+	# center. Keep it as the sole full-screen menu scene so the reading area stays
+	# light instead of being buried under a second dark felt layer.
+	var bright_key := "menu_primary_3d_stage_overlay_bright"
+	var bright = add_optional_gpt_illustration_texture(parent, bright_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.98, false)
+	if bright != null:
+		bright.name = "MenuBackgroundBrightGPTStage"
+		bright.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		return
+	var backdrop_key := "gpt_jade_felt" if optional_gpt_illustration_texture("gpt_jade_felt") != null else "table_gpt_backdrop"
+	var backdrop = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.66, 0.86, 0.66, 0.86), backdrop_key, 0.82)
 	backdrop.name = "MenuBackgroundGuofengBackdrop"
+	backdrop.modulate.a = 0.72
 	parent.add_child(backdrop)
 	var frame_key := "menu_lobby_ui_overlay" if optional_gpt_illustration_texture("menu_lobby_ui_overlay") != null else backdrop_key
-	var frame = add_optional_gpt_illustration_texture(parent, frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.014, false)
+	var frame = add_optional_gpt_illustration_texture(parent, frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.05, false)
 	if frame != null:
-		frame.name = "MenuBackgroundGuofengFrame"
+		frame.name = "MenuBackgroundReadabilityScrim"
 		frame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 
 func add_rules_background(parent: Control) -> void:
@@ -1824,14 +1941,20 @@ func add_rules_background(parent: Control) -> void:
 	codex.name = "RulesBackgroundLowFrequencyBackdrop"
 
 func add_battle_background(parent: Control) -> void:
-	# Use the GPT jade table frame: its center is a quiet felt surface, while
-	# the warm variant is a high-frequency gold ornament close-up that fights
-	# the tile grid when stretched across the whole battle page.
-	var battle_key := "table_gpt_backdrop" if optional_gpt_illustration_texture("table_gpt_backdrop") != null else "table_gpt_backdrop_warm"
-	var battle_scene = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.82, 0.96, 0.76, 0.90), battle_key, 0.16)
+	# Use the GPT-rendered table as the room and tabletop together. Its built-in
+	# wood, jade and daylight keep the battle screen lively without a dark wash.
+	var bright = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop_bright", rect_full(0.0, 0.0, 1.0, 1.0), 0.94, false)
+	if bright != null:
+		bright.name = "OfflineBattleBrightGPTTable"
+		bright.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		return
+	var battle_key := "gpt_jade_felt" if optional_gpt_illustration_texture("gpt_jade_felt") != null else "table_gpt_backdrop"
+	var battle_scene = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.62, 0.82, 0.62, 0.84), battle_key, 0.82)
 	battle_scene.name = "OfflineBattleGuofengBackdrop"
+	battle_scene.modulate.a = 0.22
 	parent.add_child(battle_scene)
-	var frame = add_optional_gpt_illustration_texture(parent, battle_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.010, false)
+	var frame_key := "table_gpt_backdrop" if optional_gpt_illustration_texture("table_gpt_backdrop") != null else battle_key
+	var frame = add_optional_gpt_illustration_texture(parent, frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.05, false)
 	if frame != null:
 		frame.name = "OfflineBattleGuofengFrame"
 		frame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
@@ -1891,7 +2014,10 @@ func load_source_png_texture(path: String) -> Texture2D:
 
 func imported_texture_artifact_ready(path: String) -> bool:
 	if not ResourceLoader.exists(path):
-		return false
+		# Newly added GPT PNGs may not have a generated .import sidecar yet. The
+		# source bitmap is still a valid project asset, and llvmpipe already uses
+		# load_source_png_texture below for this exact case.
+		return FileAccess.file_exists(ProjectSettings.globalize_path(path))
 	var import_path := path + ".import"
 	if not FileAccess.file_exists(import_path):
 		# Exported PCK resources are remapped internally and do not expose .import.
@@ -3348,10 +3474,11 @@ func connect_immediate_button_action(button: Button, callback: Callable) -> void
 	# allowing release-based input paths to reach the production callback.
 	button.pressed.connect(callback)
 
-func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
+func ensure_button_gpt_face_plate(button: Button, color: Color, plate_key_override: String = "") -> void:
 	if button == null or not is_instance_valid(button):
 		return
-	var primary_plate_key := "ui_dark_scrim" if color.a <= 0.45 else "ui_button_face_plate"
+	var requested_plate_key := plate_key_override.strip_edges()
+	var primary_plate_key := requested_plate_key if requested_plate_key != "" and optional_gpt_illustration_texture(requested_plate_key) != null else ("ui_dark_scrim" if color.a <= 0.45 else "ui_button_face_plate")
 	var old_plate := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if old_plate != null and is_instance_valid(old_plate) and str(button.get_meta("gpt_face_plate_key", "")) == primary_plate_key:
 		var existing_fill := soften_button_color(color)
@@ -3385,11 +3512,17 @@ func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 	# restrained material and contrast.
 	# Colored controls use the authored jade/cinnabar button plate; only truly
 	# muted utility controls fall back to the dark scrim.
-	var quiet_button_key := "menu_lobby_ui_overlay" if color.a >= 0.30 else "ui_dark_scrim"
+	var quiet_button_key := "" if requested_plate_key != "" else ("gpt_jade_felt" if color.a >= 0.30 else "ui_dark_scrim")
 	var quiet_button_source := optional_gpt_illustration_texture(quiet_button_key)
 	var face_texture: Texture2D = texture
 	if quiet_button_source != null:
 		face_texture = gpt_center_crop_texture(quiet_button_source, quiet_button_key + "_button_quiet", 0.18)
+	elif requested_plate_key != "":
+		# Keep the full horizontal GPT banner so its authored ornament remains
+		# visible on compact bright controls.
+		if primary_plate_key != "action_gpt_dock_banner_bright":
+			var override_crop := 0.30 if primary_plate_key == "menu_primary_3d_stage_overlay_bright" else 0.56
+			face_texture = gpt_center_crop_texture(texture, primary_plate_key + "_button_light_crop", override_crop)
 	var tex = TextureRect.new()
 	tex.name = "GptButtonFacePlate"
 	tex.texture = face_texture
@@ -3412,6 +3545,14 @@ func ensure_button_gpt_face_plate(button: Button, color: Color) -> void:
 	button.add_child(tex)
 	button.move_child(tex, 0)
 	button.set_meta("gpt_face_plate_key", primary_plate_key)
+	if requested_plate_key != "":
+		# Explicit light plates are used on the new bright menu surfaces. Ink text
+		# preserves contrast while hover/press states retain the same visual role.
+		button.add_theme_color_override("font_color", Color(0.10, 0.15, 0.12, 1.0))
+		button.add_theme_color_override("font_hover_color", Color(0.34, 0.12, 0.06, 1.0))
+		button.add_theme_color_override("font_pressed_color", Color(0.60, 0.18, 0.08, 1.0))
+		button.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.88))
+		button.add_theme_constant_override("outline_size", 2)
 
 
 func apply_button_style(button: Button, color: Color, radius: int, border_width: int = 2, shadow_size: int = 8) -> void:
@@ -4758,7 +4899,7 @@ func sanitize_inventory(value) -> Dictionary:
 	var result: Dictionary = {}
 	if typeof(value) != TYPE_DICTIONARY:
 		return result
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		var count := clampi(int((value as Dictionary).get(item_id, 0)), 0, 999999)
 		if count > 0:
 			result[item_id] = count
@@ -5698,6 +5839,15 @@ func _normalize_tile_code_uncached(code: String) -> String:
 
 func tile_path(code: String) -> String:
 	code = normalize_tile_code(code)
+	if tile_path_cache.has(code):
+		return str(tile_path_cache[code])
+	var result := _tile_path_uncached(code)
+	if code != "" and tile_path_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_path_cache[code] = result
+	return result
+
+
+func _tile_path_uncached(code: String) -> String:
 	if is_flower_tile(code):
 		return preferred_tile_path("res://assets/tiles/tile_flower_%s.png" % code.to_lower())
 	if code.length() >= 2 and code.ends_with("W"):
@@ -5735,50 +5885,77 @@ func tile_decal_path(code: String) -> String:
 	return tile_path(code)
 
 func suit_code(suit: int) -> String:
+	var cache_key := str(suit)
+	if suit_code_cache.has(cache_key):
+		return str(suit_code_cache[cache_key])
+	var result := ""
 	match suit:
 		0:
-			return "W"
+			result = "W"
 		1:
-			return "T"
+			result = "T"
 		2:
-			return "B"
-	return ""
+			result = "B"
+	suit_code_cache[cache_key] = result
+	return result
 
 func suit_label(suit: String) -> String:
+	if suit_label_cache.has(suit):
+		return str(suit_label_cache[suit])
+	var result := suit
 	match suit:
 		"W":
-			return "万"
+			result = "万"
 		"T":
-			return "条"
+			result = "条"
 		"B":
-			return "筒"
-	return suit
+			result = "筒"
+	suit_label_cache[suit] = result
+	return result
 
 func tile_index(tile: String) -> int:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	return int(tile_order.get(normalize_tile_code(tile), -1))
+	var normalized := normalize_tile_code(tile)
+	if tile_index_cache.has(normalized):
+		return int(tile_index_cache[normalized])
+	var result := int(tile_order.get(normalized, -1))
+	if normalized != "" and tile_index_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_index_cache[normalized] = result
+	return result
 
 func tile_index_normalized(tile: String) -> int:
 	if not tile_metadata_ready:
 		setup_tile_order()
-	return int(tile_order.get(tile, -1))
+	if tile_index_normalized_cache.has(tile):
+		return int(tile_index_normalized_cache[tile])
+	var result := int(tile_order.get(tile, -1))
+	if tile != "" and tile_index_normalized_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_index_normalized_cache[tile] = result
+	return result
 
 func tile_sort_index(tile: String) -> int:
 	if not tile_metadata_ready:
 		setup_tile_order()
 	tile = normalize_tile_code(tile)
+	if tile_sort_index_cache.has(tile):
+		return int(tile_sort_index_cache[tile])
+	var result := TILE_CODES.size() + FLOWER_CODES.size() + 1
 	if tile_sort_order.has(tile):
-		return int(tile_sort_order[tile])
-	# tile_sort_order already contains all canonical faces, so do not normalize a
-	# second time through tile_index for unknown/legacy values.
-	var index := int(tile_order.get(tile, -1))
-	if index >= 0:
-		return index
-	var flower_index = FLOWER_CODES.find(tile)
-	if flower_index >= 0:
-		return TILE_CODES.size() + flower_index
-	return TILE_CODES.size() + FLOWER_CODES.size() + 1
+		result = int(tile_sort_order[tile])
+	else:
+		# tile_sort_order already contains all canonical faces, so do not normalize a
+		# second time through tile_index for unknown/legacy values.
+		var index := int(tile_order.get(tile, -1))
+		if index >= 0:
+			result = index
+		else:
+			var flower_index = FLOWER_CODES.find(tile)
+			if flower_index >= 0:
+				result = TILE_CODES.size() + flower_index
+	if tile != "" and tile_sort_index_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_sort_index_cache[tile] = result
+	return result
 
 func is_flower_tile(tile: String) -> bool:
 	if not tile_metadata_ready:
@@ -6274,52 +6451,71 @@ func active_package_lines() -> Array[String]:
 			lines.append("包三搭：%s包赔%s" % [players[payer]["name"], players[winner]["name"]])
 	return lines
 
+
+func shop_item_ids_shared() -> Array[String]:
+	if not shop_item_ids_cache.is_empty():
+		return shop_item_ids_cache
+	for item_id in ITEM_TYPES.keys():
+		var key := str(item_id)
+		shop_item_ids_cache.append(key)
+		shop_item_index_cache[key] = shop_item_ids_cache.size() - 1
+	return shop_item_ids_cache
+
+
+func shop_item_index(item_id: String) -> int:
+	shop_item_ids_shared()
+	return int(shop_item_index_cache.get(item_id, -1))
+
 func tile_label(tile: String) -> String:
 	if not tile_metadata_ready:
 		setup_tile_order()
 	tile = normalize_tile_code(tile)
 	if tile_label_cache.has(tile):
 		return str(tile_label_cache[tile])
+	var result := tile
 	if is_flower_tile(tile):
 		match tile:
 			"H1":
-				return "春"
+				result = "春"
 			"H2":
-				return "夏"
+				result = "夏"
 			"H3":
-				return "秋"
+				result = "秋"
 			"H4":
-				return "冬"
+				result = "冬"
 			"H5":
-				return "梅"
+				result = "梅"
 			"H6":
-				return "兰"
+				result = "兰"
 			"H7":
-				return "竹"
+				result = "竹"
 			"H8":
-				return "菊"
-	if tile.ends_with("W"):
-		return tile.left(tile.length() - 1) + "万"
-	if tile.ends_with("T"):
-		return tile.left(tile.length() - 1) + "条"
-	if tile.ends_with("B"):
-		return tile.left(tile.length() - 1) + "筒"
-	match tile:
-		"E":
-			return "东"
-		"S":
-			return "南"
-		"N":
-			return "西"
-		"R":
-			return "北"
-		"Z":
-			return "中"
-		"F":
-			return "发"
-		"P":
-			return "白"
-	return tile
+				result = "菊"
+	elif tile.ends_with("W"):
+		result = tile.left(tile.length() - 1) + "万"
+	elif tile.ends_with("T"):
+		result = tile.left(tile.length() - 1) + "条"
+	elif tile.ends_with("B"):
+		result = tile.left(tile.length() - 1) + "筒"
+	else:
+		match tile:
+			"E":
+				result = "东"
+			"S":
+				result = "南"
+			"N":
+				result = "西"
+			"R":
+				result = "北"
+			"Z":
+				result = "中"
+			"F":
+				result = "发"
+			"P":
+				result = "白"
+	if tile != "" and tile_label_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_label_cache[tile] = result
+	return result
 
 func tile_speech_label(tile: String) -> String:
 	if not tile_metadata_ready:
@@ -6327,52 +6523,63 @@ func tile_speech_label(tile: String) -> String:
 	tile = normalize_tile_code(tile)
 	if tile_speech_label_cache.has(tile):
 		return str(tile_speech_label_cache[tile])
+	var result := ""
 	if is_flower_tile(tile):
-		return tile_label(tile)
-	if tile.ends_with("W"):
-		return chinese_rank(tile.left(tile.length() - 1)) + "万"
-	if tile.ends_with("T"):
-		return chinese_rank(tile.left(tile.length() - 1)) + "条"
-	if tile.ends_with("B"):
-		return chinese_rank(tile.left(tile.length() - 1)) + "筒"
-	match tile:
-		"E":
-			return "东风"
-		"S":
-			return "南风"
-		"N":
-			return "西风"
-		"R":
-			return "北风"
-		"Z":
-			return "红中"
-		"F":
-			return "发财"
-		"P":
-			return "白板"
-	return tile_label(tile)
+		result = tile_label(tile)
+	elif tile.ends_with("W"):
+		result = chinese_rank(tile.left(tile.length() - 1)) + "万"
+	elif tile.ends_with("T"):
+		result = chinese_rank(tile.left(tile.length() - 1)) + "条"
+	elif tile.ends_with("B"):
+		result = chinese_rank(tile.left(tile.length() - 1)) + "筒"
+	else:
+		match tile:
+			"E":
+				result = "东风"
+			"S":
+				result = "南风"
+			"N":
+				result = "西风"
+			"R":
+				result = "北风"
+			"Z":
+				result = "红中"
+			"F":
+				result = "发财"
+			"P":
+				result = "白板"
+			_:
+				result = tile_label(tile)
+	if tile != "" and tile_speech_label_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_speech_label_cache[tile] = result
+	return result
 
 func chinese_rank(text: String) -> String:
+	if chinese_rank_cache.has(text):
+		return str(chinese_rank_cache[text])
+	var result := text
 	match text:
 		"1":
-			return "一"
+			result = "一"
 		"2":
-			return "二"
+			result = "二"
 		"3":
-			return "三"
+			result = "三"
 		"4":
-			return "四"
+			result = "四"
 		"5":
-			return "五"
+			result = "五"
 		"6":
-			return "六"
+			result = "六"
 		"7":
-			return "七"
+			result = "七"
 		"8":
-			return "八"
+			result = "八"
 		"9":
-			return "九"
-	return text
+			result = "九"
+	if chinese_rank_cache.size() < 16:
+		chinese_rank_cache[text] = result
+	return result
 
 func tile_corner(tile: String) -> String:
 	if not tile_metadata_ready:
@@ -6380,11 +6587,16 @@ func tile_corner(tile: String) -> String:
 	tile = normalize_tile_code(tile)
 	if tile_corner_cache.has(tile):
 		return str(tile_corner_cache[tile])
+	var result := ""
 	if is_flower_tile(tile):
-		return "花"
-	if tile.ends_with("W") or tile.ends_with("T") or tile.ends_with("B"):
-		return tile.left(tile.length() - 1)
-	return tile_label(tile)
+		result = "花"
+	elif tile.ends_with("W") or tile.ends_with("T") or tile.ends_with("B"):
+		result = tile.left(tile.length() - 1)
+	else:
+		result = tile_label(tile)
+	if tile != "" and tile_corner_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_corner_cache[tile] = result
+	return result
 
 func tile_accent(tile: String) -> Color:
 	if not tile_metadata_ready:
@@ -6392,15 +6604,18 @@ func tile_accent(tile: String) -> Color:
 	tile = normalize_tile_code(tile)
 	if tile_accent_cache.has(tile):
 		return tile_accent_cache[tile]
+	var result := Color(0.14, 0.16, 0.16)
 	if is_flower_tile(tile):
-		return Color(0.60, 0.34, 0.12)
-	if tile.ends_with("W") or tile == "Z":
-		return Color(0.66, 0.16, 0.16)
-	if tile.ends_with("T") or tile == "F":
-		return Color(0.10, 0.42, 0.28)
-	if tile.ends_with("B"):
-		return Color(0.14, 0.28, 0.62)
-	return Color(0.14, 0.16, 0.16)
+		result = Color(0.60, 0.34, 0.12)
+	elif tile.ends_with("W") or tile == "Z":
+		result = Color(0.66, 0.16, 0.16)
+	elif tile.ends_with("T") or tile == "F":
+		result = Color(0.10, 0.42, 0.28)
+	elif tile.ends_with("B"):
+		result = Color(0.14, 0.28, 0.62)
+	if tile != "" and tile_accent_cache.size() < TILE_CODE_NORMALIZATION_CACHE_LIMIT:
+		tile_accent_cache[tile] = result
+	return result
 
 
 func tile_semantic_record(tile: String) -> Dictionary:
@@ -6432,33 +6647,41 @@ func tile_semantic_record(tile: String) -> Dictionary:
 		clear_cache_lru(tile_semantic_lru)
 	tile_semantic_cache[code] = record
 	touch_cache_key(tile_semantic_lru, code)
-	while tile_semantic_cache.size() > 128:
+	while tile_semantic_cache.size() > TILE_SEMANTIC_CACHE_LIMIT:
 		evict_cache_key(tile_semantic_lru, tile_semantic_cache)
 	return record
 
 func claim_label(claim: String) -> String:
+	if claim_label_cache.has(claim):
+		return str(claim_label_cache[claim])
+	var result := claim
 	match claim:
 		"chi":
-			return "吃"
+			result = "吃"
 		"peng":
-			return "碰"
+			result = "碰"
 		"gang":
-			return "杠"
+			result = "杠"
 		"hu":
-			return "胡"
-	return claim
+			result = "胡"
+	claim_label_cache[claim] = result
+	return result
 
 func claim_color(claim: String) -> Color:
+	if claim_color_cache.has(claim):
+		return claim_color_cache[claim]
+	var result := Color(0.36, 0.30, 0.22)
 	match claim:
 		"hu":
-			return Color(0.66, 0.20, 0.14)
+			result = Color(0.66, 0.20, 0.14)
 		"gang":
-			return Color(0.64, 0.42, 0.18)
+			result = Color(0.64, 0.42, 0.18)
 		"peng":
-			return Color(0.72, 0.48, 0.22)
+			result = Color(0.72, 0.48, 0.22)
 		"chi":
-			return Color(0.36, 0.46, 0.32)
-	return Color(0.36, 0.30, 0.22)
+			result = Color(0.36, 0.46, 0.32)
+	claim_color_cache[claim] = result
+	return result
 
 # ===== Shared wall view helpers =====
 func make_wall_back_strip(count: int, horizontal: bool, capacity: int = -1, wall_ratio: float = 1.0, low_wall: bool = false, recent_feedback: bool = false) -> Control:

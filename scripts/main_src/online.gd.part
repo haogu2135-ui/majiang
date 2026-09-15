@@ -522,14 +522,14 @@ func online_snapshot_fingerprint(kind: String, snapshot: Dictionary) -> String:
 		return ""
 	var stable: Array = [kind]
 	if kind == "roomState":
-		stable.append(str(first_present(snapshot, ["code", "roomCode", "room_code"], "")))
+		stable.append(str(first_present(snapshot, ONLINE_ROOM_CODE_KEYS, "")))
 		var players_snapshot: Array = []
 		for item in snapshot.get("players", []):
 			if typeof(item) != TYPE_DICTIONARY:
 				continue
 			players_snapshot.append([
-				int(first_present(item, ["seat", "index", "position"], players_snapshot.size())),
-				str(first_present(item, ["name", "nickname", "userName"], "")),
+				int(first_present(item, ONLINE_SEAT_KEYS, players_snapshot.size())),
+				str(first_present(item, ONLINE_NAME_KEYS, "")),
 				bool(first_present(item, ["ready"], false)),
 			])
 		stable.append(players_snapshot)
@@ -607,8 +607,8 @@ func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool
 		var room_value = data.get("room", data)
 		if typeof(room_value) != TYPE_DICTIONARY:
 			return true
-		var incoming_code := bounded_online_input(str(first_present(room_value, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
-		var current_code := bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var incoming_code := bounded_online_input(str(first_present(room_value, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var current_code := bounded_online_input(str(first_present(online_room, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		return incoming_code == "" or current_code == "" or incoming_code == current_code
 	if kind == "gameState":
 		if revision != online_game_revision:
@@ -616,7 +616,7 @@ func online_revision_snapshot_is_current(data: Dictionary, kind: String) -> bool
 		var game_value = data.get("game", data)
 		var incoming_room := ""
 		if typeof(game_value) == TYPE_DICTIONARY:
-			incoming_room = str(first_present(game_value as Dictionary, ["roomCode", "room_code", "code"], "")).strip_edges()
+			incoming_room = str(first_present(game_value as Dictionary, ONLINE_ROOM_CODE_KEYS, "")).strip_edges()
 		if incoming_room == "":
 			incoming_room = str(first_present(data, ["roomCode", "room_code"], "")).strip_edges()
 		var current_room := str(online_game.get("roomCode", "")).strip_edges()
@@ -948,8 +948,8 @@ func handle_online_message(line: String) -> void:
 		if room_revision >= 0:
 			online_room_revision = room_revision
 		clear_online_feedback()
-		var previous_room_code := bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
-		var next_room_code := bounded_online_input(str(first_present(next_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var previous_room_code := bounded_online_input(str(first_present(online_room, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var next_room_code := bounded_online_input(str(first_present(next_room, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var previous_logs_value = online_room.get("logs", [])
 		var previous_logs: Array = previous_logs_value as Array if typeof(previous_logs_value) == TYPE_ARRAY else []
 		var previous_log_total := online_log_total_count
@@ -960,7 +960,7 @@ func handle_online_message(line: String) -> void:
 			online_log_at_latest = false
 			previous_log_total = 0
 		online_room = next_room
-		selected_room = bounded_online_input(str(first_present(online_room, ["code", "roomCode", "room_code"], "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		selected_room = bounded_online_input(str(first_present(online_room, ONLINE_ROOM_CODE_KEYS, "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		var resumed_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
 		if online_resume_pending and selected_room != "" and (resumed_room == "" or selected_room == resumed_room):
 			online_resume_pending = false
@@ -1028,15 +1028,34 @@ func handle_online_message(line: String) -> void:
 		if message != "":
 			set_online_feedback(message, false)
 
+func cache_online_normalized_value(cache: Dictionary, lru: Dictionary, key: String, value: String) -> void:
+	if key == "":
+		return
+	if cache.is_empty():
+		clear_cache_lru(lru)
+	cache[key] = value
+	touch_cache_key(lru, key)
+	while cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(lru, cache)
+
+
 func normalize_last_discard_seat(value, fallback: int) -> int:
 	if typeof(value) == TYPE_DICTIONARY:
 		return int(first_present(value, ["seat", "fromSeat", "discardSeat"], fallback))
 	return fallback
 
 func normalize_last_discard_tile(value) -> String:
+	var raw_value = first_present(value, ONLINE_TILE_VALUE_KEYS, "") if typeof(value) == TYPE_DICTIONARY else value
+	var cache_key := str(raw_value).strip_edges().to_upper()
+	if cache_key != "" and online_last_discard_tile_cache.has(cache_key):
+		return str(online_last_discard_tile_cache[cache_key])
+	var result := ""
 	if typeof(value) == TYPE_DICTIONARY:
-		return normalize_tile_code(str(first_present(value, ["tile", "code", "id"], "")))
-	return normalize_tile_code(str(value))
+		result = normalize_tile_code(str(raw_value))
+	else:
+		result = normalize_tile_code(str(value))
+	cache_online_normalized_value(online_last_discard_tile_cache, online_last_discard_tile_cache_lru, cache_key, result)
+	return result
 
 func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary:
 	claimed_tile = normalize_tile_code(claimed_tile)
@@ -1066,9 +1085,15 @@ func normalize_online_chi_choice(value, claimed_tile: String = "") -> Dictionary
 
 func normalize_online_chi_choices(value, claimed_tile: String = "") -> Array:
 	var choices: Array = []
-	var seen: Dictionary = {}
 	if typeof(value) != TYPE_ARRAY:
 		return choices
+	claimed_tile = normalize_tile_code(claimed_tile)
+	var cache_key := "%s|%s" % [str(value), claimed_tile]
+	var cached: Variant = normalized_online_chi_choices_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_online_chi_choices_cache_lru, cache_key)
+		return (cached as Array).duplicate(true)
+	var seen: Dictionary = {}
 	for item in value:
 		var choice = normalize_online_chi_choice(item, claimed_tile)
 		if choice.is_empty():
@@ -1078,6 +1103,12 @@ func normalize_online_chi_choices(value, claimed_tile: String = "") -> Array:
 			continue
 		seen[choice_key] = true
 		choices.append(choice)
+	if normalized_online_chi_choices_cache.is_empty():
+		clear_cache_lru(normalized_online_chi_choices_cache_lru)
+	normalized_online_chi_choices_cache[cache_key] = choices.duplicate(true)
+	touch_cache_key(normalized_online_chi_choices_cache_lru, cache_key)
+	while normalized_online_chi_choices_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(normalized_online_chi_choices_cache_lru, normalized_online_chi_choices_cache)
 	return choices
 
 func normalize_online_game_state(message: Dictionary) -> Dictionary:
@@ -1087,7 +1118,7 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	# JSON input is owned by this handler. A shallow shell avoids duplicating
 	# large raw arrays that are immediately replaced by normalized projections.
 	var game: Dictionary = (source as Dictionary).duplicate(false)
-	game["roomCode"] = bounded_online_input(str(first_present(game, ["roomCode", "room_code", "code"], selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
+	game["roomCode"] = bounded_online_input(str(first_present(game, ONLINE_ROOM_CODE_KEYS, selected_room)), ONLINE_ROOM_CODE_MAX_LENGTH)
 	game["youSeat"] = int(first_present(game, ["youSeat", "seat", "playerSeat", "selfSeat"], message.get("seat", game.get("youSeat", -1))))
 	game["currentSeat"] = int(first_present(game, ["currentSeat", "turnSeat", "activeSeat", "current"], 0))
 	game["wallCount"] = int(first_present(game, ["wallCount", "wallRemaining", "remainingTiles"], game.get("wallCount", 0)))
@@ -1096,7 +1127,7 @@ func normalize_online_game_state(message: Dictionary) -> Dictionary:
 	game["ruleVariantInvalid"] = server_variant != "" and not RULE_VARIANT_PROFILES.has(server_variant)
 	var server_wall_total := int(first_present(game, ["wallTotal", "wallSize", "totalTiles", "deckSize"], game.get("wallTotal", 0)))
 	game["wallTotal"] = maxi(0, server_wall_total)
-	game["phase"] = normalize_online_phase(str(first_present(game, ["phase", "state", "status"], "")))
+	game["phase"] = normalize_online_phase(str(first_present(game, ONLINE_PHASE_KEYS, "")))
 	var raw_hand_value = first_present(game, ["hand", "tiles", "yourHand", "selfHand"], [])
 	game["hand"] = normalize_tile_array(raw_hand_value)
 	game["handIdentities"] = normalize_online_hand_identities(game, raw_hand_value, game["hand"])
@@ -1120,45 +1151,63 @@ func normalize_online_melds(value) -> Array:
 	var melds: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return melds
+	var cache_key := str(value)
+	var cached: Variant = normalized_online_melds_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_online_melds_cache_lru, cache_key)
+		return (cached as Array).duplicate(true)
 	for meld in value:
 		if typeof(meld) == TYPE_ARRAY:
 			melds.append(normalize_tile_array(meld))
 		elif typeof(meld) == TYPE_DICTIONARY:
 			melds.append(normalize_tile_array(first_present(meld, ["tiles", "meld", "cards"], [])))
+	if normalized_online_melds_cache.is_empty():
+		clear_cache_lru(normalized_online_melds_cache_lru)
+	normalized_online_melds_cache[cache_key] = melds.duplicate(true)
+	touch_cache_key(normalized_online_melds_cache_lru, cache_key)
+	while normalized_online_melds_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(normalized_online_melds_cache_lru, normalized_online_melds_cache)
 	return melds
 
 func normalize_online_message_kind(data: Dictionary) -> String:
-	var raw = str(first_present(data, ["type", "event", "kind", "messageType"], "")).strip_edges()
+	var raw = str(first_present(data, ONLINE_MESSAGE_KIND_KEYS, "")).strip_edges()
 	var compact = raw.to_lower().replace("_", "").replace("-", "")
 	if compact == "message" and data.has("event"):
 		raw = str(data.get("event", ""))
 		compact = raw.to_lower().replace("_", "").replace("-", "")
+	if compact != "" and online_message_kind_cache.has(compact):
+		return str(online_message_kind_cache[compact])
+	var resolved := ""
 	match compact:
 		"welcome", "hello":
-			return "welcome"
+			resolved = "welcome"
 		"chat", "chatmessage", "roomchat":
-			return "chat"
+			resolved = "chat"
 		"info", "notice", "status", "servermessage", "message":
-			return "info"
+			resolved = "info"
 		"error", "err", "reject", "rejected", "actionrejected", "invalidaction", "denied":
-			return "error"
+			resolved = "error"
 		"ack", "ok", "success", "accepted", "actionack", "actionaccepted":
-			return "ack"
+			resolved = "ack"
 		"roomstate", "roomupdate", "lobbystate", "lobbyupdate", "room":
-			return "roomState"
+			resolved = "roomState"
 		"gamestate", "gameupdate", "gamesnapshot", "state", "snapshot", "game":
-			return "gameState"
+			resolved = "gameState"
 		"voicemessage", "voice", "voicepacket":
-			return "voiceMessage"
+			resolved = "voiceMessage"
 		"log", "roomlog", "eventlog":
-			return "log"
-	if (data.has("sender") or data.has("fromSeat") or data.has("player")) and (data.has("message") or data.has("text")):
-		return "chat"
-	if data.has("game") or data.has("hand") or data.has("yourHand") or data.has("selfHand"):
-		return "gameState"
-	if data.has("room") or (data.has("players") and data.has("roomCode")):
-		return "roomState"
-	return raw
+			resolved = "log"
+	if resolved == "":
+		if (data.has("sender") or data.has("fromSeat") or data.has("player")) and (data.has("message") or data.has("text")):
+			resolved = "chat"
+		elif data.has("game") or data.has("hand") or data.has("yourHand") or data.has("selfHand"):
+			resolved = "gameState"
+		elif data.has("room") or (data.has("players") and data.has("roomCode")):
+			resolved = "roomState"
+		else:
+			resolved = raw
+	cache_online_normalized_value(online_message_kind_cache, online_message_kind_cache_lru, compact, resolved)
+	return resolved
 
 func normalize_online_pending(value, game: Dictionary) -> Dictionary:
 	var pending: Dictionary = {}
@@ -1182,20 +1231,29 @@ func normalize_online_pending(value, game: Dictionary) -> Dictionary:
 func normalize_online_phase(value: String) -> String:
 	var phase = value.strip_edges()
 	var compact = phase.to_lower().replace("_", "").replace("-", "")
+	if compact != "" and online_phase_cache.has(compact):
+		return str(online_phase_cache[compact])
+	var result := "unknown"
 	if compact == "awaitdiscard" or compact == "discard" or compact == "turn":
-		return "awaitDiscard"
-	if compact == "pendingclaim" or compact == "claim" or compact == "response":
-		return "pendingClaim"
-	if compact == "ended" or compact == "finished" or compact == "gameover":
-		return "ended"
-	if compact == "ready" or compact == "waiting":
-		return compact
-	return "unknown"
+		result = "awaitDiscard"
+	elif compact == "pendingclaim" or compact == "claim" or compact == "response":
+		result = "pendingClaim"
+	elif compact == "ended" or compact == "finished" or compact == "gameover":
+		result = "ended"
+	elif compact == "ready" or compact == "waiting":
+		result = compact
+	cache_online_normalized_value(online_phase_cache, online_phase_cache_lru, compact, result)
+	return result
 
 func normalize_online_players(value) -> Array:
 	var result: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return result
+	var cache_key := str(value)
+	var cached: Variant = normalized_online_players_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_online_players_cache_lru, cache_key)
+		return (cached as Array).duplicate(true)
 	for item in value:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
@@ -1219,6 +1277,12 @@ func normalize_online_players(value) -> Array:
 		player["discards"] = normalize_tile_array(first_present(source, ["discards", "discarded", "river"], []))
 		player["melds"] = normalize_online_melds(first_present(source, ["melds", "openMelds", "sets"], []))
 		result.append(player)
+	if normalized_online_players_cache.is_empty():
+		clear_cache_lru(normalized_online_players_cache_lru)
+	normalized_online_players_cache[cache_key] = result.duplicate(true)
+	touch_cache_key(normalized_online_players_cache_lru, cache_key)
+	while normalized_online_players_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(normalized_online_players_cache_lru, normalized_online_players_cache)
 	return result
 
 func normalize_online_hand_identities(game: Dictionary, raw_hand, normalized_hand: Array) -> Array:

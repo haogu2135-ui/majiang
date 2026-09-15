@@ -71,21 +71,55 @@ func wait_for_runtime_delay(delay_seconds: float) -> void:
 	if delay_seconds <= 0.0 or runtime_shutdown_requested:
 		return
 	var timer_generation := ui_page_generation
-	var timer := Timer.new()
+	var timer := acquire_runtime_delay_timer()
 	timer.name = "RuntimeDelayTimer"
 	timer.one_shot = true
 	timer.wait_time = maxf(0.001, delay_seconds)
 	timer.process_callback = Timer.TIMER_PROCESS_IDLE
 	timer.set_meta("runtime_delay_generation", timer_generation)
-	add_child(timer)
 	runtime_delay_timers.append(timer)
 	timer.start()
 	await timer.timeout
 	runtime_delay_timers.erase(timer)
-	if is_instance_valid(timer) and not timer.is_queued_for_deletion():
-		timer.queue_free()
+	release_runtime_delay_timer(timer)
 	if timer_generation != ui_page_generation:
 		return
+
+
+func acquire_runtime_delay_timer() -> Timer:
+	while not runtime_delay_timer_pool.is_empty():
+		var pooled: Timer = runtime_delay_timer_pool.pop_back()
+		if pooled != null and is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
+			runtime_delay_timer_pool_hits += 1
+			pooled.set_meta("runtime_delay_pool", false)
+			return pooled
+	var timer := Timer.new()
+	timer.process_callback = Timer.TIMER_PROCESS_IDLE
+	timer.one_shot = true
+	timer.set_meta("runtime_delay_pool", false)
+	add_child(timer)
+	runtime_delay_timer_pool_misses += 1
+	return timer
+
+
+func release_runtime_delay_timer(timer: Timer) -> void:
+	if timer == null or not is_instance_valid(timer) or timer.is_queued_for_deletion():
+		return
+	timer.stop()
+	timer.set_meta("runtime_delay_generation", -1)
+	if runtime_shutdown_requested or runtime_delay_timer_pool.size() >= RUNTIME_DELAY_TIMER_POOL_LIMIT:
+		timer.queue_free()
+		return
+	timer.set_meta("runtime_delay_pool", true)
+	runtime_delay_timer_pool.append(timer)
+
+
+func release_runtime_delay_timer_pool() -> void:
+	for timer in runtime_delay_timer_pool:
+		if timer != null and is_instance_valid(timer) and not timer.is_queued_for_deletion():
+			timer.stop()
+			timer.queue_free()
+	runtime_delay_timer_pool.clear()
 
 
 func pace_after_human_discard_response() -> void:
@@ -1071,7 +1105,7 @@ func clear_screen() -> void:
 	for child in get_children():
 		if child == audio_layer or child.name == "PersistentAudio":
 			continue
-		if child is Timer and runtime_delay_timers.has(child):
+		if child is Timer and (runtime_delay_timers.has(child) or bool(child.get_meta("runtime_delay_pool", false))):
 			# Runtime AI/render delays outlive a page rebuild; their awaiters own
 			# cleanup after the timer resumes.
 			continue
@@ -1892,20 +1926,39 @@ func render_game(state_changed: bool = false) -> void:
 	# Room guofeng lives on screen_layer; table surface stays translucent so felt reads against the room plate.
 	var render_current_seat := get_current_seat()
 	var table := draw_battle_table_surface(root_layer, render_current_seat)
+	var battle_render_viewport := effective_viewport_size()
+	var battle_discards_snapshot: Array = []
+	var battle_melds_snapshot: Array = []
+	for battle_seat in range(4):
+		battle_discards_snapshot.append(get_discards(battle_seat))
+		battle_melds_snapshot.append(get_melds(battle_seat))
+	var battle_render_context := {
+		"viewport": battle_render_viewport,
+		"table_size": table.size,
+		"table_render_size": table.size,
+		"content_size": safe_content_pixel_size(),
+		"last_discard": get_last_discard(),
+		"last_discard_seat": get_last_discard_seat(),
+		"disconnected": mode == "online_game" and online_game_disconnected(),
+		"danger_compact": mode == "offline" and has_pending_danger_discard(),
+		"discards": battle_discards_snapshot,
+		"melds": battle_melds_snapshot,
+	}
+	table.set_meta("battle_render_context", battle_render_context)
 	draw_table_atmosphere_frame(table)
 	draw_walls(table)
 	draw_table_living_illustration(table)
 	draw_center(table)
-	draw_discards(table)
+	draw_discards(table, battle_render_context)
 
 	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat(), "current_seat": render_current_seat}
-	var battle_seat_viewport_snapshot := effective_viewport_size()
+	var battle_seat_viewport_snapshot := battle_render_viewport
 	root_layer.set_meta("seat_viewport_snapshot", battle_seat_viewport_snapshot)
 	root_layer.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_battle_draw")
 	for seat_layout in SEAT_LAYOUTS:
 		draw_seat(root_layer, int(seat_layout[0]), seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, battle_discard_snapshot, battle_seat_viewport_snapshot)
 	# Melds share root_layer anchors with seats so they sit next to each player plaque.
-	draw_melds(root_layer)
+	draw_melds(root_layer, battle_render_context)
 	draw_table_log(root_layer)  # r425: parchment ledger must render in battle, not only offline smoke
 	if table_log_archive_open:
 		draw_table_log_archive_panel(root_layer)

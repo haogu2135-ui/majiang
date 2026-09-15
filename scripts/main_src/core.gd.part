@@ -177,11 +177,14 @@ func wall_is_critical(wall_count: int = -1) -> bool:
 
 
 func wall_state_text(wall_count: int = -1) -> String:
-	if wall_is_critical(wall_count):
-		return "牌墙将尽"
-	if wall_is_low(wall_count):
-		return "牌墙偏少"
-	return "牌墙充足"
+	var remaining := get_wall_count() if wall_count < 0 else wall_count
+	var total := display_wall_total()
+	var cache_key := "%s|%d|%d|%d" % [mode, remaining, total, online_game_revision]
+	if wall_state_text_cache.has(cache_key):
+		return str(wall_state_text_cache[cache_key])
+	var result := "牌墙将尽" if remaining <= wall_critical_threshold() else ("牌墙偏少" if remaining <= wall_low_threshold() else "牌墙充足")
+	wall_state_text_cache[cache_key] = result
+	return result
 
 func rule_allows_chi(variant: String = "") -> bool:
 	return bool(rule_profile(variant).get("allow_chi", true))
@@ -1915,17 +1918,29 @@ func normalize_tile_array(value) -> Array:
 	var result: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return result
+	var cache_key := str(value)
+	var cached: Variant = normalized_tile_array_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_tile_array_cache_lru, cache_key)
+		return (cached as Array).duplicate(false)
 	var metadata_ready: bool = tile_metadata_ready
 	for item in value:
 		var raw_tile := ""
 		if typeof(item) == TYPE_DICTIONARY:
-			raw_tile = str(first_present(item, ["tile", "code", "id"], ""))
+			raw_tile = str(first_present(item, ONLINE_TILE_VALUE_KEYS, ""))
 		else:
 			raw_tile = str(item)
 		var tile := normalize_tile_code(raw_tile)
 		var known := tile_order.has(tile) or tile_flower_cache.has(tile) if metadata_ready else TILE_CODES.has(tile) or FLOWER_CODES.has(tile)
 		if tile != "" and known:
 			result.append(tile)
+	if not result.is_empty() or value.is_empty():
+		if normalized_tile_array_cache.is_empty():
+			clear_cache_lru(normalized_tile_array_cache_lru)
+		normalized_tile_array_cache[cache_key] = result.duplicate(false)
+		touch_cache_key(normalized_tile_array_cache_lru, cache_key)
+		while normalized_tile_array_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+			evict_cache_key(normalized_tile_array_cache_lru, normalized_tile_array_cache)
 	return result
 
 
@@ -1933,6 +1948,11 @@ func normalize_claim_options(value) -> Array:
 	var options: Array = []
 	if typeof(value) != TYPE_ARRAY:
 		return options
+	var cache_key := str(value)
+	var cached: Variant = normalized_claim_options_cache.get(cache_key, null)
+	if cached != null:
+		touch_cache_key(normalized_claim_options_cache_lru, cache_key)
+		return (cached as Array).duplicate(false)
 	var seen: Dictionary = {}
 	for item in value:
 		var name = ""
@@ -1954,6 +1974,12 @@ func normalize_claim_options(value) -> Array:
 		if name != "" and not seen.has(name):
 			seen[name] = true
 			options.append(name)
+	if normalized_claim_options_cache.is_empty():
+		clear_cache_lru(normalized_claim_options_cache_lru)
+	normalized_claim_options_cache[cache_key] = options.duplicate(false)
+	touch_cache_key(normalized_claim_options_cache_lru, cache_key)
+	while normalized_claim_options_cache.size() > ONLINE_NORMALIZATION_CACHE_LIMIT:
+		evict_cache_key(normalized_claim_options_cache_lru, normalized_claim_options_cache)
 	return options
 
 
@@ -2097,15 +2123,34 @@ func online_lobby_log_count() -> int:
 
 func online_lobby_retained_log_count() -> int:
 	var logs = online_room.get("logs", [])
-	return (logs as Array).size() if typeof(logs) == TYPE_ARRAY else 0
+	var size := (logs as Array).size() if typeof(logs) == TYPE_ARRAY else 0
+	if online_log_retained_count_cache_revision == online_log_revision and online_log_retained_count_cache_size == size:
+		return online_log_retained_count_cache_value
+	online_log_retained_count_cache_revision = online_log_revision
+	online_log_retained_count_cache_size = size
+	online_log_retained_count_cache_value = size
+	return size
 
 func online_lobby_log_visible_range_text() -> String:
 	var total := online_lobby_retained_log_count()
+	var range_root_id := root_layer.get_instance_id() if root_layer != null and is_instance_valid(root_layer) else 0
+	var range_scroll := 0
+	if range_root_id != 0:
+		var range_scroll_control := find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer
+		if range_scroll_control != null:
+			range_scroll = range_scroll_control.scroll_vertical
+	var range_key := "%d|%d|%d|%d|%d" % [range_root_id, total, range_scroll, online_log_revision, int(round(effective_viewport_size().y))]
+	if range_key == online_log_range_cache_key:
+		return online_log_range_cache_value
 	if total <= 0:
-		return "日志范围 · 暂无记录"
+		online_log_range_cache_key = range_key
+		online_log_range_cache_value = "日志范围 · 暂无记录"
+		return online_log_range_cache_value
 	var scroll := find_ui_contract_control(root_layer, "OnlineLobbyLogScroll") as ScrollContainer if root_layer != null and is_instance_valid(root_layer) else null
 	if scroll == null:
-		return "日志范围 · 1-%d/%d" % [mini(total, 1), total]
+		online_log_range_cache_key = range_key
+		online_log_range_cache_value = "日志范围 · 1-%d/%d" % [mini(total, 1), total]
+		return online_log_range_cache_value
 	var scrollbar := scroll.get_v_scroll_bar()
 	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page) if scrollbar != null else 0.0
 	var progress := 0.0 if max_scroll <= 0.5 else clampf(float(scroll.scroll_vertical) / max_scroll, 0.0, 1.0)
@@ -2115,7 +2160,9 @@ func online_lobby_log_visible_range_text() -> String:
 	var first := 1 if max_scroll <= 0.5 else clampi(int(round(progress * float(maxi(0, total - visible_count)))) + 1, 1, maxi(1, total))
 	var last := mini(total, first + visible_count - 1)
 	var boundary := "已到最新" if online_log_at_latest else "可回到最新"
-	return "日志范围 · %d-%d/%d · %s" % [first, last, total, boundary]
+	online_log_range_cache_key = range_key
+	online_log_range_cache_value = "日志范围 · %d-%d/%d · %s" % [first, last, total, boundary]
+	return online_log_range_cache_value
 
 func online_lobby_log_unread_count() -> int:
 	return maxi(0, online_lobby_log_count() - online_log_seen_count)
@@ -2853,32 +2900,40 @@ func center_phase_key() -> String:
 	return "ready"
 
 func center_phase_label(phase_key: String) -> String:
+	if center_phase_label_cache.has(phase_key):
+		return str(center_phase_label_cache[phase_key])
+	var result := "准备"
 	match phase_key:
 		"discard":
-			return "我方出牌"
+			result = "我方出牌"
 		"claim":
-			return "响应窗口"
+			result = "响应窗口"
 		"ended":
-			return "结算"
+			result = "结算"
 		"wait":
-			return "对手行牌"
+			result = "对手行牌"
 		"unknown":
-			return "同步异常"
-	return "准备"
+			result = "同步异常"
+	center_phase_label_cache[phase_key] = result
+	return result
 
 func center_phase_color(phase_key: String) -> Color:
+	if center_phase_color_cache.has(phase_key):
+		return center_phase_color_cache[phase_key]
+	var result := Color(0.62, 0.64, 0.58, 1.0)
 	match phase_key:
 		"discard":
-			return Color(0.38, 0.72, 0.58, 1.0)
+			result = Color(0.38, 0.72, 0.58, 1.0)
 		"claim":
-			return Color(0.88, 0.58, 0.28, 1.0)
+			result = Color(0.88, 0.58, 0.28, 1.0)
 		"ended":
-			return Color(0.88, 0.72, 0.34, 1.0)
+			result = Color(0.88, 0.72, 0.34, 1.0)
 		"wait":
-			return Color(0.42, 0.58, 0.72, 1.0)
+			result = Color(0.42, 0.58, 0.72, 1.0)
 		"unknown":
-			return Color(0.86, 0.42, 0.30, 1.0)
-	return Color(0.62, 0.64, 0.58, 1.0)
+			result = Color(0.86, 0.42, 0.30, 1.0)
+	center_phase_color_cache[phase_key] = result
+	return result
 
 
 func wall_meter_color(progress: float) -> Color:
@@ -3038,33 +3093,33 @@ func advisor_panel_text() -> String:
 
 
 func fan_badge_color(reason: String) -> Color:
+	if fan_badge_color_cache.has(reason):
+		return fan_badge_color_cache[reason]
+	var result := Color(0.40, 0.46, 0.50)
 	# 高番型 - 金色
 	if reason == "十三幺" or reason == "大四喜" or reason == "字一色":
-		return Color(0.92, 0.76, 0.28)
+		result = Color(0.92, 0.76, 0.28)
 	# 中等番型 - 紫色
-	if reason == "大三元" or reason == "小四喜" or reason == "清一色" or reason == "七对":
-		return Color(0.58, 0.42, 0.82)
+	elif reason == "大三元" or reason == "小四喜" or reason == "清一色" or reason == "七对":
+		result = Color(0.58, 0.42, 0.82)
 	# 低番型 - 青色
-	if reason == "小三元" or reason == "混一色" or reason == "碰碰胡" or reason == "一条龙":
-		return Color(0.32, 0.56, 0.72)
+	elif reason == "小三元" or reason == "混一色" or reason == "碰碰胡" or reason == "一条龙":
+		result = Color(0.32, 0.56, 0.72)
 	# 基础番型 - 绿色
-	if reason == "平胡" or reason == "自摸" or reason == "门清" or reason == "断幺九" or reason == "庄家" or reason == "花牌":
-		return Color(0.28, 0.58, 0.42)
+	elif reason == "平胡" or reason == "自摸" or reason == "门清" or reason == "断幺九" or reason == "庄家" or reason == "花牌":
+		result = Color(0.28, 0.58, 0.42)
 	# 特殊操作 - 橙色
-	if reason == "杠" or reason == "杠上开花" or reason == "海底捞月" or reason == "河底捞鱼" or reason == "抢杠胡" or reason == "大吊车":
-		return Color(0.82, 0.56, 0.28)
+	elif reason == "杠" or reason == "杠上开花" or reason == "海底捞月" or reason == "河底捞鱼" or reason == "抢杠胡" or reason == "大吊车":
+		result = Color(0.82, 0.56, 0.28)
 	# 封顶 - 红色
-	if reason == "封顶":
-		return Color(0.88, 0.28, 0.22)
-	# 默认
-	return Color(0.40, 0.46, 0.50)
+	elif reason == "封顶":
+		result = Color(0.88, 0.28, 0.22)
+	fan_badge_color_cache[reason] = result
+	return result
 
 
 func round_summary_delta_bar_fraction(delta: int) -> float:
-	var max_delta = 1
-	for value in last_score_deltas:
-		max_delta = max(max_delta, abs(int(value)))
-	return clamp(float(abs(delta)) / float(max_delta), 0.0, 1.0)
+	return clamp(float(abs(delta)) / float(last_score_delta_max_abs), 0.0, 1.0)
 
 func round_summary_score_delta(seat: int) -> int:
 	if seat < 0 or seat >= last_score_deltas.size():
@@ -3326,30 +3381,46 @@ func should_insert_hand_group_gap(hand: Array, index: int) -> bool:
 	return hand_group_index(str(hand[index - 1])) != hand_group_index(str(hand[index]))
 
 func hand_group_index(tile: String) -> int:
-	var index = tile_index(tile)
+	var cache_key := normalize_tile_code(tile)
+	if cache_key == "":
+		cache_key = tile
+	if hand_group_index_cache.has(cache_key):
+		return int(hand_group_index_cache[cache_key])
+	var index = tile_index(cache_key)
+	var result := 5
 	if index >= 0 and index < 27:
-		return int(index / 9)
-	if index >= 27:
-		return 3
-	if is_flower_tile(tile):
-		return 4
-	return 5
+		result = int(index / 9)
+	elif index >= 27:
+		result = 3
+	elif is_flower_tile(cache_key):
+		result = 4
+	if hand_group_index_cache.size() < 64:
+		hand_group_index_cache[cache_key] = result
+	return result
 
 
 func hand_group_label(tile: String) -> String:
-	var group_index = hand_group_index(tile)
+	var cache_key := normalize_tile_code(tile)
+	if cache_key == "":
+		cache_key = tile
+	if hand_group_label_cache.has(cache_key):
+		return str(hand_group_label_cache[cache_key])
+	var group_index = hand_group_index(cache_key)
+	var result := ""
 	match group_index:
 		0:
-			return "万"
+			result = "万"
 		1:
-			return "条"
+			result = "条"
 		2:
-			return "筒"
+			result = "筒"
 		3:
-			return "字"
+			result = "字"
 		4:
-			return "花"
-	return ""
+			result = "花"
+	if hand_group_label_cache.size() < 64:
+		hand_group_label_cache[cache_key] = result
+	return result
 
 
 func hand_tray_text() -> String:
@@ -3648,9 +3719,15 @@ func play_voice_button_press_feedback(button: Button, active: bool, peak: float 
 
 
 func pending_claim_source_badge_text(source_seat: int) -> String:
+	var cache_key := str(source_seat)
+	if pending_claim_source_badge_cache.has(cache_key):
+		return str(pending_claim_source_badge_cache[cache_key])
+	var result := "对手"
 	if source_seat >= 0 and source_seat < CENTER_WIND_LABELS.size():
-		return CENTER_WIND_LABELS[source_seat] + "家"
-	return "对手"
+		result = CENTER_WIND_LABELS[source_seat] + "家"
+	if pending_claim_source_badge_cache.size() < 8:
+		pending_claim_source_badge_cache[cache_key] = result
+	return result
 
 func pending_claim_state() -> Dictionary:
 	if mode == "offline":
@@ -3861,17 +3938,26 @@ func pending_claim_auto_pass_text() -> String:
 
 
 func pending_claim_priority_text(options: Array) -> String:
+	var cache_key := str(options)
+	if pending_claim_priority_cache.has(cache_key):
+		return str(pending_claim_priority_cache[cache_key])
 	var labels: Array[String] = []
 	var label_by_claim := {"hu": "胡", "gang": "杠", "peng": "碰", "chi": "吃"}
 	for claim in ["hu", "gang", "peng", "chi"]:
 		if options.has(claim):
 			labels.append(str(label_by_claim[claim]))
 	if not options.is_empty():
-		labels.append("过")
-	return "动作优先级 · " + " > ".join(labels) if not labels.is_empty() else "动作优先级 · 过"
+			labels.append("过")
+	var result := "动作优先级 · " + " > ".join(labels) if not labels.is_empty() else "动作优先级 · 过"
+	if pending_claim_priority_cache.size() < 32:
+		pending_claim_priority_cache[cache_key] = result
+	return result
 
 
 func pending_claim_shortcut_text(options: Array) -> String:
+	var cache_key := str(options)
+	if pending_claim_shortcut_cache.has(cache_key):
+		return str(pending_claim_shortcut_cache[cache_key])
 	var shortcuts: Array[String] = []
 	var shortcut_by_claim := {
 		"chi": "C吃",
@@ -3884,7 +3970,10 @@ func pending_claim_shortcut_text(options: Array) -> String:
 			shortcuts.append(str(shortcut_by_claim[claim]))
 	if not options.is_empty():
 		shortcuts.append("X过")
-	return " · ".join(shortcuts)
+	var result := " · ".join(shortcuts)
+	if pending_claim_shortcut_cache.size() < 32:
+		pending_claim_shortcut_cache[cache_key] = result
+	return result
 
 
 func pending_claim_response_summary(action_key: String, visible_label: String) -> String:
@@ -3916,105 +4005,150 @@ func action_intent_rect_for_count(count: int, viewport_snapshot: Vector2 = Vecto
 	# .330-.635 panel at 960x540.
 	return Rect2(Vector2(left, 0.642), Vector2(0.975, 0.682))
 
+func action_intent_state_cache_token() -> String:
+	var disconnected := mode == "online_game" and online_game_disconnected()
+	var pending := has_pending_claim_window()
+	var danger := mode == "offline" and has_pending_danger_discard()
+	var self_discard := can_self_discard()
+	return "%s|%s|%s|%s|%d|%d|%d|%d|%d|%d" % [
+		mode,
+		offline_phase,
+		str(online_game.get("phase", "")),
+		str(tcp_status),
+		1 if disconnected else 0,
+		1 if pending else 0,
+		1 if danger else 0,
+		1 if self_discard else 0,
+		online_game_revision,
+		ai_state_revision,
+	]
+
 func action_intent_text(count: int) -> String:
+	var cache_key := action_intent_state_cache_token() + "|" + str(count)
+	if cache_key == action_intent_text_cache_key:
+		return action_intent_text_cache_value
+	var result := "可用操作 · %d项" % count
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
-		return "状态异常 · 牌局只读 · 重试或回大厅"
-	if mode == "online_game" and online_game_disconnected():
-		return online_recovery_status_text()
-	if has_pending_claim_window():
-		return "响应 · 选择动作或过"
-	if mode == "offline" and offline_phase == "ended":
-		return "结算 · 继续下一局"
-	if mode == "offline" and has_pending_danger_discard():
-		return "风险 · 确认或改打"
-	if mode == "offline" and can_self_discard():
-		return "出牌 · 点击手牌"
-	if mode == "online_game":
-		return "在线操作 · 等待或提交响应" if count <= 1 else "在线操作 · 处理当前响应"
-	return "可用操作 · %d项" % count
+		result = "状态异常 · 牌局只读 · 重试或回大厅"
+	elif mode == "online_game" and online_game_disconnected():
+		result = online_recovery_status_text()
+	elif has_pending_claim_window():
+		result = "响应 · 选择动作或过"
+	elif mode == "offline" and offline_phase == "ended":
+		result = "结算 · 继续下一局"
+	elif mode == "offline" and has_pending_danger_discard():
+		result = "风险 · 确认或改打"
+	elif mode == "offline" and can_self_discard():
+		result = "出牌 · 点击手牌"
+	elif mode == "online_game":
+		result = "在线操作 · 等待或提交响应" if count <= 1 else "在线操作 · 处理当前响应"
+	action_intent_text_cache_key = cache_key
+	action_intent_text_cache_value = result
+	return result
 
 func action_intent_color() -> Color:
+	var cache_key := action_intent_state_cache_token()
+	if cache_key == action_intent_color_cache_key:
+		return action_intent_color_cache_value
+	var result := Color(0.66, 0.58, 0.38)
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
-		return Color(0.86, 0.48, 0.30)
-	if mode == "online_game" and online_game_disconnected():
-		return Color(0.72, 0.48, 0.30)
-	if has_pending_claim_window():
-		return Color(0.86, 0.62, 0.32)
-	if mode == "offline" and has_pending_danger_discard():
-		return Color(0.92, 0.46, 0.34)
-	if mode == "offline" and can_self_discard():
-		return Color(0.86, 0.66, 0.32)
-	if mode == "online_game":
-		return Color(0.34, 0.58, 0.78)
-	return Color(0.66, 0.58, 0.38)
+		result = Color(0.86, 0.48, 0.30)
+	elif mode == "online_game" and online_game_disconnected():
+		result = Color(0.72, 0.48, 0.30)
+	elif has_pending_claim_window():
+		result = Color(0.86, 0.62, 0.32)
+	elif mode == "offline" and has_pending_danger_discard():
+		result = Color(0.92, 0.46, 0.34)
+	elif mode == "offline" and can_self_discard():
+		result = Color(0.86, 0.66, 0.32)
+	elif mode == "online_game":
+		result = Color(0.34, 0.58, 0.78)
+	action_intent_color_cache_key = cache_key
+	action_intent_color_cache_value = result
+	return result
 
 func action_intent_icon_name() -> String:
+	var cache_key := action_intent_state_cache_token()
+	if cache_key == action_intent_icon_cache_key:
+		return action_intent_icon_cache_value
+	var result := "info"
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
-		return "alert-triangle"
-	if mode == "online_game" and online_game_disconnected():
-		return "refresh-cw"
-	if mode == "offline" and has_pending_danger_discard():
-		return "alert-triangle"
-	if mode == "offline" and can_self_discard():
-		return "zap"
-	if has_pending_claim_window():
-		return "sparkles"
-	if mode == "online_game":
-		return "users"
-	return "info"
+		result = "alert-triangle"
+	elif mode == "online_game" and online_game_disconnected():
+		result = "refresh-cw"
+	elif mode == "offline" and has_pending_danger_discard():
+		result = "alert-triangle"
+	elif mode == "offline" and can_self_discard():
+		result = "zap"
+	elif has_pending_claim_window():
+		result = "sparkles"
+	elif mode == "online_game":
+		result = "users"
+	action_intent_icon_cache_key = cache_key
+	action_intent_icon_cache_value = result
+	return result
 
 func action_intent_fallback_icon_text() -> String:
+	var cache_key := action_intent_state_cache_token()
+	if cache_key == action_intent_fallback_cache_key:
+		return action_intent_fallback_cache_value
+	var result := "i"
 	if mode == "online_game" and str(online_game.get("phase", "")) == "unknown":
-		return "!"
-	if mode == "online_game" and online_game_disconnected():
-		return "↻"
-	if mode == "offline" and has_pending_danger_discard():
-		return "!"
-	if mode == "offline" and can_self_discard():
-		return "行"
-	if has_pending_claim_window():
-		return "应"
-	return "i"
+		result = "!"
+	elif mode == "online_game" and online_game_disconnected():
+		result = "↻"
+	elif mode == "offline" and has_pending_danger_discard():
+		result = "!"
+	elif mode == "offline" and can_self_discard():
+		result = "行"
+	elif has_pending_claim_window():
+		result = "应"
+	action_intent_fallback_cache_key = cache_key
+	action_intent_fallback_cache_value = result
+	return result
 
 
 func action_button_tooltip(text: String) -> String:
 	# Keep the visual CTA short while exposing the consequence on hover/focus.
 	var clean := text.strip_edges()
+	if action_button_tooltip_cache.has(clean):
+		return str(action_button_tooltip_cache[clean])
+	var result := clean
 	if clean == "过" or clean == "建议过" or clean == "荐过":
-		return "放弃本次吃、碰、杠或胡响应，继续轮转 · 快捷键 X / Space"
-	if clean.begins_with("吃"):
-		return "选择这组顺子吃牌，接着进入你的出牌阶段 · 快捷键 C"
-	if clean.begins_with("碰"):
-		return "选择碰牌，公开这组刻子并继续出牌 · 快捷键 P"
-	if clean.begins_with("杠"):
-		return "选择杠牌，公开或补齐这组牌并补摸一张 · 快捷键 G"
-	if clean.contains("自摸"):
-		return "确认自摸胡牌并进入结算 · 快捷键 H"
-	if clean.begins_with("确认打"):
-		return "确认打出这张高风险牌 · Enter确认"
-	if clean.begins_with("改打"):
-		return "改打这张牌，降低当前放铳风险"
-	if clean.begins_with("荐打") or clean.begins_with("稳打"):
-		return "使用 AI 的%s出牌建议" % ("稳妥" if clean.begins_with("稳打") else "推荐")
-	if clean == "提示":
-		return "查看当前牌局的出牌与响应建议"
-	if clean == "重开":
-		return "放弃当前牌局并重新开局"
-	if clean == "下一局":
-		return "继续当前对局，进入下一局"
-	if clean == "新赛":
-		return "结束当前对局并开始新的比赛"
-	if clean == "菜单":
-		return "返回主菜单"
-	if clean == "回放码":
-		return "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
-	if clean == "复制回放码":
-		return "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
-	if clean == "取消":
-		return "取消当前确认，不打出这张牌 · 快捷键 Esc"
-	if clean == "语音" or clean == "闭麦":
-		return "切换语音麦克风状态"
-	return clean
+		result = "放弃本次吃、碰、杠或胡响应，继续轮转 · 快捷键 X / Space"
+	elif clean.begins_with("吃"):
+		result = "选择这组顺子吃牌，接着进入你的出牌阶段 · 快捷键 C"
+	elif clean.begins_with("碰"):
+		result = "选择碰牌，公开这组刻子并继续出牌 · 快捷键 P"
+	elif clean.begins_with("杠"):
+		result = "选择杠牌，公开或补齐这组牌并补摸一张 · 快捷键 G"
+	elif clean.contains("自摸"):
+		result = "确认自摸胡牌并进入结算 · 快捷键 H"
+	elif clean.begins_with("确认打"):
+		result = "确认打出这张高风险牌 · Enter确认"
+	elif clean.begins_with("改打"):
+		result = "改打这张牌，降低当前放铳风险"
+	elif clean.begins_with("荐打") or clean.begins_with("稳打"):
+		result = "使用 AI 的%s出牌建议" % ("稳妥" if clean.begins_with("稳打") else "推荐")
+	elif clean == "提示":
+		result = "查看当前牌局的出牌与响应建议"
+	elif clean == "重开":
+		result = "放弃当前牌局并重新开局"
+	elif clean == "下一局":
+		result = "继续当前对局，进入下一局"
+	elif clean == "新赛":
+		result = "结束当前对局并开始新的比赛"
+	elif clean == "菜单":
+		result = "返回主菜单"
+	elif clean == "回放码" or clean == "复制回放码":
+		result = "复制本局回放码，便于分享或复盘 · 需要本局有有效回放记录"
+	elif clean == "取消":
+		result = "取消当前确认，不打出这张牌 · 快捷键 Esc"
+	elif clean == "语音" or clean == "闭麦":
+		result = "切换语音麦克风状态"
+	if clean != "" and action_button_tooltip_cache.size() < 64:
+		action_button_tooltip_cache[clean] = result
+	return result
 
 
 func action_button_shortcut_hint(text: String) -> String:
@@ -4762,18 +4896,27 @@ func action_bar_default_focus_name() -> String:
 
 
 func online_connection_status_text() -> String:
-	if mode != "online_game":
-		return ""
-	if online_game_disconnected():
-		return "断线"
-	match tcp_status:
-		StreamPeerTCP.STATUS_CONNECTED:
-			return "已连接"
-		StreamPeerTCP.STATUS_CONNECTING:
-			return "连接中"
-		StreamPeerTCP.STATUS_ERROR:
-			return "连接异常"
-	return "待同步" if not online_game.is_empty() else "未连接"
+	var disconnected := mode == "online_game" and online_game_disconnected()
+	var cache_key := "%s|%d|%d|%d" % [mode, tcp_status, 1 if disconnected else 0, online_game_revision]
+	if cache_key == online_connection_status_cache_key:
+		return online_connection_status_cache_value
+	var result := ""
+	if mode == "online_game":
+		if disconnected:
+			result = "断线"
+		else:
+			match tcp_status:
+				StreamPeerTCP.STATUS_CONNECTED:
+					result = "已连接"
+				StreamPeerTCP.STATUS_CONNECTING:
+					result = "连接中"
+				StreamPeerTCP.STATUS_ERROR:
+					result = "连接异常"
+				_:
+					result = "待同步" if not online_game.is_empty() else "未连接"
+	online_connection_status_cache_key = cache_key
+	online_connection_status_cache_value = result
+	return result
 
 
 func online_connection_status_detail() -> String:
@@ -5185,32 +5328,42 @@ func play_update_dialog_button_feedback(button: Button, role: String, color: Col
 
 
 func update_stage_index() -> int:
+	if update_state == update_stage_index_cache_key:
+		return update_stage_index_cache_value
+	var result := 3
 	match update_state:
 		"checking":
-			return 0
+			result = 0
 		"downloading":
-			return 1
+			result = 1
 		"ready", "current":
-			return 2
+			result = 2
 		"error":
-			return 1
-	return 3
+			result = 1
+	update_stage_index_cache_key = update_state
+	update_stage_index_cache_value = result
+	return result
 
 func update_dialog_compact_layout() -> bool:
 	var viewport := effective_viewport_size()
 	return viewport.y <= 560.0 or viewport.x <= 960.0
 
 func update_state_color() -> Color:
+	if update_state == update_state_color_cache_key:
+		return update_state_color_cache_value
+	var result := Color(0.60, 0.66, 0.58, 1.0)
 	match update_state:
 		"downloading":
-			return Color(0.34, 0.72, 0.54, 1.0)
+			result = Color(0.34, 0.72, 0.54, 1.0)
 		"ready":
-			return Color(0.86, 0.70, 0.30, 1.0)
+			result = Color(0.86, 0.70, 0.30, 1.0)
 		"error":
-			return Color(0.86, 0.34, 0.26, 1.0)
+			result = Color(0.86, 0.34, 0.26, 1.0)
 		"current":
-			return Color(0.42, 0.62, 0.76, 1.0)
-	return Color(0.60, 0.66, 0.58, 1.0)
+			result = Color(0.42, 0.62, 0.76, 1.0)
+	update_state_color_cache_key = update_state
+	update_state_color_cache_value = result
+	return result
 
 func refresh_top_hud_update_button(button: Button = null) -> void:
 	if button == null and root_layer != null and is_instance_valid(root_layer):
@@ -5256,6 +5409,25 @@ func refresh_top_hud_update_button(button: Button = null) -> void:
 	button.modulate = Color(1.0, 1.0, 1.0, 0.70 if blocked else 1.0)
 
 func update_progress_text() -> String:
+	var viewport := effective_viewport_size()
+	var cache_key := "%s|%d|%d|%s|%s|%s|%d|%d" % [
+		update_state,
+		update_downloaded_bytes,
+		update_total_bytes,
+		update_download_url,
+		update_remote_version,
+		update_message,
+		int(round(viewport.x)),
+		int(round(viewport.y)),
+	]
+	if cache_key == update_progress_text_cache_key:
+		return update_progress_text_cache_value
+	var result := _update_progress_text_uncached()
+	update_progress_text_cache_key = cache_key
+	update_progress_text_cache_value = result
+	return result
+
+func _update_progress_text_uncached() -> String:
 	var downloaded := format_bytes(maxi(0, update_downloaded_bytes))
 	var total := format_bytes(maxi(0, update_total_bytes)) if update_total_bytes > 0 else "未知"
 	var percent := 0
@@ -5411,12 +5583,20 @@ func parse_update_manifest(data: Dictionary) -> Dictionary:
 	}
 
 func manifest_notes_to_text(value) -> String:
+	var cache_key := str(value)
+	if manifest_notes_cache.has(cache_key):
+		return str(manifest_notes_cache[cache_key])
+	var result := ""
 	if typeof(value) == TYPE_ARRAY:
 		var lines: Array[String] = []
 		for item in value:
 			lines.append(str(item))
-		return "\n".join(lines)
-	return str(value)
+		result = "\n".join(lines)
+	else:
+		result = str(value)
+	if manifest_notes_cache.size() < 32:
+		manifest_notes_cache[cache_key] = result
+	return result
 
 func is_newer_version(remote: String, current: String) -> bool:
 	var remote_numbers = version_numbers(remote)
@@ -5432,6 +5612,8 @@ func is_newer_version(remote: String, current: String) -> bool:
 	return false
 
 func version_numbers(version: String) -> Array:
+	if version_numbers_cache.has(version):
+		return (version_numbers_cache[version] as Array).duplicate(false)
 	var numbers: Array = []
 	var current = ""
 	for i in range(version.length()):
@@ -5445,9 +5627,13 @@ func version_numbers(version: String) -> Array:
 		numbers.append(int(current))
 	if numbers.is_empty():
 		numbers.append(0)
+	if version_numbers_cache.size() < 32:
+		version_numbers_cache[version] = numbers.duplicate(false)
 	return numbers
 
 func safe_filename_part(text: String) -> String:
+	if safe_filename_part_cache.has(text):
+		return str(safe_filename_part_cache[text])
 	var result = ""
 	for i in range(text.length()):
 		var ch = text.substr(i, 1)
@@ -5455,7 +5641,10 @@ func safe_filename_part(text: String) -> String:
 			result += ch
 		else:
 			result += "_"
-	return result if result != "" else app_version()
+	result = result if result != "" else app_version()
+	if safe_filename_part_cache.size() < 32:
+		safe_filename_part_cache[text] = result
+	return result
 
 
 func is_ai_claim_context_for_seat(claim_context: Dictionary, seat: int) -> bool:
@@ -6150,6 +6339,10 @@ func tile_array_key(tiles: Array) -> String:
 		return ""
 	if tiles.size() <= 4:
 		return small_tile_array_key(tiles)
+	var cache_key := str(tiles)
+	if tile_array_key_cache.has(cache_key):
+		touch_cache_key(tile_array_key_cache_lru, cache_key)
+		return str(tile_array_key_cache[cache_key])
 	var counts: Dictionary = {}
 	var indices: Array[int] = []
 	for item in tiles:
@@ -6163,6 +6356,7 @@ func tile_array_key(tiles: Array) -> String:
 		else:
 			counts[index] = int(counts[index]) + 1
 	if indices.is_empty():
+		store_tile_array_key_cache(cache_key, "")
 		return ""
 	indices.sort()
 	var parts: Array[String] = []
@@ -6170,7 +6364,20 @@ func tile_array_key(tiles: Array) -> String:
 		var amount = int(counts[i])
 		if amount > 0:
 			parts.append("%s%d" % [TILE_CODES[i], amount])
-	return ",".join(parts)
+	var result := ",".join(parts)
+	store_tile_array_key_cache(cache_key, result)
+	return result
+
+
+func store_tile_array_key_cache(cache_key: String, value: String) -> void:
+	if cache_key == "":
+		return
+	if tile_array_key_cache.is_empty():
+		clear_cache_lru(tile_array_key_cache_lru)
+	tile_array_key_cache[cache_key] = value
+	touch_cache_key(tile_array_key_cache_lru, cache_key)
+	while tile_array_key_cache.size() > TILE_SEMANTIC_CACHE_LIMIT:
+		evict_cache_key(tile_array_key_cache_lru, tile_array_key_cache)
 
 func small_tile_array_key(tiles: Array) -> String:
 	var first = -1
@@ -7024,18 +7231,20 @@ func honor_group_plan_report_from_counts(counts: Array, codes: Array, big_label:
 
 
 func shanten_label(shanten: int) -> String:
-	if shanten < 0:
-		return "已胡"
-	if shanten == 0:
-		return "听牌"
-	return "%d向听" % shanten
+	var cache_key := str(shanten)
+	if shanten_label_cache.has(cache_key):
+		return str(shanten_label_cache[cache_key])
+	var result := "已胡" if shanten < 0 else ("听牌" if shanten == 0 else "%d向听" % shanten)
+	shanten_label_cache[cache_key] = result
+	return result
 
 func risk_label(risk: float) -> String:
-	if risk < 18.0:
-		return "低"
-	if risk < 31.0:
-		return "中"
-	return "高"
+	var cache_key := str(int(round(risk * 10.0)))
+	if risk_label_cache.has(cache_key):
+		return str(risk_label_cache[cache_key])
+	var result := "低" if risk < 18.0 else ("中" if risk < 31.0 else "高")
+	risk_label_cache[cache_key] = result
+	return result
 
 
 func is_main_threat_genbutsu(tile: String, seat: int, eval_context: Dictionary = {}) -> bool:
@@ -7712,6 +7921,9 @@ func same_tile_list(left: Array, right: Array) -> bool:
 	return true
 
 func claim_options_text(pending: Dictionary) -> String:
+	var cache_key := str(pending.get("options", [])) + "|" + str(pending.get("chi_choices", []))
+	if claim_options_text_cache.has(cache_key):
+		return str(claim_options_text_cache[cache_key])
 	var names: Array[String] = []
 	for claim in pending.get("options", []):
 		var claim_name = str(claim)
@@ -7725,24 +7937,45 @@ func claim_options_text(pending: Dictionary) -> String:
 						names.append(chi_choice_label(choice))
 		else:
 			names.append(claim_label(claim_name))
-	return " / ".join(names)
+	var result := " / ".join(names)
+	if claim_options_text_cache.size() < 32:
+		claim_options_text_cache[cache_key] = result
+	return result
 
 func chi_choice_label(choice: Dictionary) -> String:
-	return "吃" + compact_tile_run_label(choice.get("meld", []))
+	var cache_key := str(choice.get("meld", []))
+	if compact_chi_choice_label_cache.has(cache_key):
+		return str(compact_chi_choice_label_cache[cache_key])
+	var result := "吃" + compact_tile_run_label(choice.get("meld", []))
+	if compact_chi_choice_label_cache.size() < 32:
+		compact_chi_choice_label_cache[cache_key] = result
+	return result
 
 func compact_chi_choice_button_label(choice: Dictionary) -> String:
+	var cache_key := str(choice.get("meld", []))
+	if compact_chi_choice_label_cache.has(cache_key + "|compact"):
+		return str(compact_chi_choice_label_cache[cache_key + "|compact"])
 	var tiles: Array = choice.get("meld", [])
+	var result := ""
 	if tiles.size() == 3:
 		var first = str(tiles[0])
 		var last = str(tiles[tiles.size() - 1])
 		if is_number_tile(first) and is_number_tile(last) and first.right(1) == last.right(1):
-			return "吃%s-%s" % [first.left(first.length() - 1), last.left(last.length() - 1)]
-	return chi_choice_label(choice)
+			result = "吃%s-%s" % [first.left(first.length() - 1), last.left(last.length() - 1)]
+	if result == "":
+		result = chi_choice_label(choice)
+	if compact_chi_choice_label_cache.size() < 64:
+		compact_chi_choice_label_cache[cache_key + "|compact"] = result
+	return result
 
 func compact_tile_run_label(tiles: Array) -> String:
 	if tiles.is_empty():
 		return ""
+	var cache_key := str(tiles)
+	if compact_tile_run_label_cache.has(cache_key):
+		return str(compact_tile_run_label_cache[cache_key])
 	var first = str(tiles[0])
+	var result := ""
 	if is_number_tile(first):
 		var suit = first.right(1)
 		var ranks = ""
@@ -7754,11 +7987,15 @@ func compact_tile_run_label(tiles: Array) -> String:
 				break
 			ranks += code.left(code.length() - 1)
 		if same_suit:
-			return ranks + suit_label(suit)
+			result = ranks + suit_label(suit)
 	var labels: Array[String] = []
-	for tile in tiles:
-		labels.append(tile_label(str(tile)))
-	return "".join(labels)
+	if result == "":
+		for tile in tiles:
+			labels.append(tile_label(str(tile)))
+		result = "".join(labels)
+	if compact_tile_run_label_cache.size() < 64:
+		compact_tile_run_label_cache[cache_key] = result
+	return result
 
 
 func tile_base_value(index: int) -> float:
@@ -8723,16 +8960,21 @@ func configure_action_button_size(button: Button, width: float, height: float, f
 
 
 func seat_wind_label(seat: int) -> String:
+	var cache_key := str(seat)
+	if seat_wind_label_cache.has(cache_key):
+		return str(seat_wind_label_cache[cache_key])
+	var result := "位"
 	match seat:
 		0:
-			return "东"
+			result = "东"
 		1:
-			return "南"
+			result = "南"
 		2:
-			return "西"
+			result = "西"
 		3:
-			return "北"
-	return "位"
+			result = "北"
+	seat_wind_label_cache[cache_key] = result
+	return result
 
 func seat_short_name(seat: int) -> String:
 	if seat >= 0 and seat < SEAT_NAMES.size():
@@ -9514,7 +9756,7 @@ func toast_item_effect_strength(item_id: String) -> float:
 	return 0.58
 
 func toast_item_key_for_text(text: String) -> String:
-	for item_id in ITEM_TYPES.keys():
+	for item_id in shop_item_ids_shared():
 		if text.find(item_display_name(str(item_id))) >= 0:
 			return str(item_id)
 	return ""

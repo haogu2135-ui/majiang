@@ -68,6 +68,8 @@ func shutdown_runtime() -> void:
 				timer.timeout.emit()
 				if is_instance_valid(timer) and not timer.is_queued_for_deletion():
 					timer.queue_free()
+			if has_method("release_runtime_delay_timer_pool"):
+				release_runtime_delay_timer_pool()
 	shutdown_runtime_visuals()
 	shutdown_runtime_audio()
 
@@ -147,6 +149,11 @@ func shutdown_runtime_audio() -> void:
 	for player in players:
 		player.stop()
 		player.stream = null
+	for pooled_player in one_shot_sfx_pool:
+		if pooled_player != null and is_instance_valid(pooled_player) and not pooled_player.is_queued_for_deletion():
+			pooled_player.stop()
+			pooled_player.queue_free()
+	one_shot_sfx_pool.clear()
 	voice_capture_effect = null
 	audio_streams.clear()
 	voice_streams.clear()
@@ -471,7 +478,16 @@ func cleanup_one_shot_sfx_player(player_id: int) -> void:
 	if node == null or not is_instance_valid(node) or bool(node.get_meta("sfx_cleanup_done", false)):
 		return
 	node.set_meta("sfx_cleanup_done", true)
-	node.queue_free()
+	node.stop()
+	node.stream = null
+	var cleanup_timer := node.get_node_or_null("OneShotSfxCleanupTimer") as Timer
+	if cleanup_timer != null:
+		cleanup_timer.stop()
+	if runtime_shutdown_requested or one_shot_sfx_pool.size() >= ONE_SHOT_SFX_POOL_LIMIT:
+		node.queue_free()
+		return
+	node.set_meta("sfx_pooled", true)
+	one_shot_sfx_pool.append(node)
 
 func play_stream_on_audio_player(player: AudioStreamPlayer, stream: AudioStream, volume_db: float) -> void:
 	if player == null or stream == null:
@@ -489,7 +505,21 @@ func boosted_sfx_volume_db(volume_db: float) -> float:
 	return clamp(volume_db + SFX_VOLUME_BOOST_DB, -10.0, 1.5)
 
 func make_one_shot_sfx_player(stream: AudioStream, volume_db: float) -> AudioStreamPlayer:
+	while not one_shot_sfx_pool.is_empty():
+		var pooled: AudioStreamPlayer = one_shot_sfx_pool.pop_back()
+		if pooled != null and is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
+			one_shot_sfx_pool_hits += 1
+			pooled.set_meta("sfx_cleanup_done", false)
+			pooled.set_meta("sfx_pooled", false)
+			pooled.stream = stream
+			pooled.volume_db = volume_db
+			var pooled_timer := pooled.get_node_or_null("OneShotSfxCleanupTimer") as Timer
+			if pooled_timer != null:
+				pooled_timer.stop()
+				pooled_timer.start()
+			return pooled
 	var player = AudioStreamPlayer.new()
+	one_shot_sfx_pool_misses += 1
 	player.name = "OneShotSfx"
 	player.stream = stream
 	player.volume_db = volume_db
