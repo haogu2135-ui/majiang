@@ -30704,7 +30704,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	# The settings console is a bright paper reading surface. Use the authored
 	# horizontal GPT banner as the quiet base so this modal shares the menu's
 	# daylight palette without introducing a program-painted fill.
-	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.98, 0.92, 0.72, panel_alpha), "action_gpt_dock_banner_bright", 0.34)
+	var panel = make_gpt_center_crop_plate_rect(panel_rect, Color(0.98, 0.92, 0.72, panel_alpha), "menu_primary_3d_stage_overlay_bright", 0.78)
 	panel.name = "SettingsPanel"
 	# The settings surface contains native controls several levels below this
 	# authored plate. PASS keeps the modal backdrop active while allowing mouse
