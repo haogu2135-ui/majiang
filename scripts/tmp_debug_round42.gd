@@ -43,6 +43,8 @@ func run() -> void:
 	print("high_score=", scene.calculate_win_score_from_tiles(3, scene.players[3]["hand"] + ["1W"], false))
 	print("low_dragon=", scene.full_straight_suit_from_counts(3, low_counts))
 	print("high_dragon=", scene.full_straight_suit_from_counts(3, high_counts))
+	var snapshot_high = scene.calculate_win_score_from_tiles(3, [], false, "", true, high_counts, 14, high_counts)
+	print("snapshot_high=", snapshot_high)
 	var counts = scene.tile_counts(scene.players[3]["hand"])
 	var metrics = scene.effective_tile_metrics(scene.players[3]["hand"], 0, 3, 0, scene.visible_tile_counts_shared(), counts)
 	print("metrics=", metrics)
