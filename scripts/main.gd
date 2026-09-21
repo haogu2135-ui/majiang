@@ -1675,7 +1675,7 @@ func choose_ai_rob_gang(gang_seat: int, tile: String) -> Dictionary:
 func added_gang_rob_threat_report(gang_seat: int, tile: String) -> Dictionary:
 	var normalized_tile := normalize_tile_code(tile)
 	var tile_index_snapshot := tile_index_normalized(normalized_tile)
-	var cache_state_key := "%d|%d|%s" % [ai_state_revision, gang_seat, normalized_tile]
+	var cache_state_key := "%d|%d|%s|%s" % [ai_state_revision, gang_seat, normalized_tile, visible_tile_counts_state_cache_key()]
 	var cached_report: Variant = ai_rob_threat_cache.get(cache_state_key, null)
 	if typeof(cached_report) == TYPE_DICTIONARY:
 		touch_ai_rob_threat_cache_key(cache_state_key)
