@@ -50,6 +50,8 @@ func run() -> void:
 	print("metrics=", metrics)
 	var wait_values = scene.wait_value_metrics(3, scene.players[3]["hand"], 0, 0, metrics.get("tiles", []), metrics.get("remaining_by_tile", {}), true, {}, -1.0, -1.0, counts, -1, metrics.get("tile_indices", {}))
 	print("wait_values=", wait_values)
+	var single_values = scene.wait_value_metrics(3, scene.players[3]["hand"], 0, 0, ["1W"], {"1W": 4}, true, {}, -1.0, -1.0, counts, -1, {"1W": 0})
+	print("single_values=", single_values)
 	print("pressure=", scene.ai_pressure_context(3))
 	print("profile=", scene.ai_profile_source(3))
 	print("wait_focus=", scene.ai_wait_value_focus(3))
