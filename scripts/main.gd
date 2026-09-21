@@ -3633,7 +3633,7 @@ func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, e
 	if use_counts_snapshot:
 		# The meld-inclusive scoring vector is invariant across all wait probes in
 		# this batch; only the candidate wait slot changes per score.
-		winning_scoring_counts = winning_hand_counts if players[seat].get("melds", []).is_empty() else scoring_tile_counts_from_counts(seat, hand_counts_snapshot, meld_tile_indices_snapshot)
+		winning_scoring_counts = winning_hand_counts.duplicate() if players[seat].get("melds", []).is_empty() else scoring_tile_counts_from_counts(seat, hand_counts_snapshot, meld_tile_indices_snapshot)
 	var winning_hand = hand.duplicate() if not use_counts_snapshot else []
 	var next_tile_count := hand.size() + 1
 	for item in effective_tiles:
