@@ -37,6 +37,12 @@ func run() -> void:
 	scene.players[0]["discards"] = ["2W"]
 	var decision = scene.ai_ron_decision_report(3, "2W")
 	print("decision=", decision)
+	var low_counts = scene.tile_counts(scene.players[3]["hand"] + ["2W"])
+	var high_counts = scene.tile_counts(scene.players[3]["hand"] + ["1W"])
+	print("low_score=", scene.calculate_win_score_from_tiles(3, scene.players[3]["hand"] + ["2W"], false))
+	print("high_score=", scene.calculate_win_score_from_tiles(3, scene.players[3]["hand"] + ["1W"], false))
+	print("low_dragon=", scene.full_straight_suit_from_counts(3, low_counts))
+	print("high_dragon=", scene.full_straight_suit_from_counts(3, high_counts))
 	var counts = scene.tile_counts(scene.players[3]["hand"])
 	var metrics = scene.effective_tile_metrics(scene.players[3]["hand"], 0, 3, 0, scene.visible_tile_counts_shared(), counts)
 	print("metrics=", metrics)
