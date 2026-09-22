@@ -386,10 +386,10 @@ func build_screen(scene: Node, screen_name: String) -> void:
 	match screen_name:
 		"01_menu":
 			scene.show_menu(true)
-		"02_menu_settings":
-			scene.show_menu(true)
-			scene.settings_panel_open = true
-			scene.refresh_current_screen()
+	"02_menu_settings":
+		scene.show_menu(true)
+		scene.settings_panel_open = true
+		scene.refresh_current_screen()
 		"03_offline_battle":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
