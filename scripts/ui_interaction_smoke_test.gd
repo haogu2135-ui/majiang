@@ -2411,8 +2411,9 @@ func run() -> void:
 		check(not scene.settings_panel_open and menu_settings_interaction_restored != null and menu_settings_interaction_restored.has_focus(), "closing touch-opened settings restores the source focus")
 
 	if OS.get_environment("YUNZHUO_UI_INTERACTION_LEAK_PROFILING") != "1":
-		await run_extended_ui_contracts(scene)
 		await run_new_ui_optimization_contracts(scene)
+	else:
+		await run_extended_ui_contracts(scene)
 
 	# Stop any AI coroutine started by the real discard path before freeing the
 	# scene. Its active delay must finish while the owner is still alive.
