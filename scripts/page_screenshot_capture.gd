@@ -213,6 +213,8 @@ func selected_screen_names() -> Array:
 func capture_screen(scene: Node, screen_name: String, output_dir_res: String) -> void:
 	apply_static_capture_mode(scene)
 	reset_update_fixture_state(scene, screen_name)
+	if screen_name != "02_menu_settings" and screen_name != "19_reset_progress" and not screen_name.begins_with("31_") and not screen_name.begins_with("32_") and not screen_name.begins_with("33_") and not screen_name.begins_with("34_"):
+		scene.settings_panel_open = false
 	build_screen(scene, screen_name)
 	apply_static_capture_mode(scene)
 	if not validate_update_fixture(scene, screen_name):
@@ -386,10 +388,10 @@ func build_screen(scene: Node, screen_name: String) -> void:
 	match screen_name:
 		"01_menu":
 			scene.show_menu(true)
-	"02_menu_settings":
-		scene.show_menu(true)
-		scene.settings_panel_open = true
-		scene.refresh_current_screen()
+		"02_menu_settings":
+			scene.show_menu(true)
+			scene.settings_panel_open = true
+			scene.refresh_current_screen()
 		"03_offline_battle":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
