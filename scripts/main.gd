@@ -16207,7 +16207,7 @@ func register_ui_round_2031_2090(root: Control) -> void:
 		["F-2055", "RoundSummaryRankHeader", "summary_rank_compact_columns_owner", "compact score columns keep fixed labels and numeric gutters"],
 		["F-2056", "MenuPrimaryCardRow", "menu_wide_card_capacity_owner", "wide menu expands the primary action group without empty drift"],
 		["F-2057", "MenuFooterStatusChip_currency", "menu_footer_wide_value_owner", "wide footer values remain readable before secondary labels"],
-		["F-2058", "MenuHeroCommercialReadabilityTint", "menu_surface_layer_budget_owner", "menu keeps one primary reading layer above the authored background"],
+		["F-2058", "MenuBackgroundReadabilityScrim", "menu_surface_layer_budget_owner", "menu keeps one primary reading layer above the authored background"],
 		["F-2059", "MenuTutorialButton", "menu_tutorial_entry_owner", "tutorial entry has a stable authored boundary beside the title"],
 		["F-2060", "MenuQuickActionState", "menu_quick_state_marker_owner", "quick navigation state has a non-color active marker"],
 		["F-2061", "SettingsSectionNavigation", "settings_progress_slot_owner", "section count lives in a fixed header status slot"],
@@ -26732,14 +26732,13 @@ func draw_menu_hero_illustration(parent: Control) -> Control:
 			fallback_scene.name = "MenuHeroGPTBackdropTexture"
 			art.move_child(fallback_scene, 0)
 	var ambient_tint = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.010, 0.026, 0.024, 0.52), "ui_dark_scrim", 0.13)
-	ambient_tint.name = "MenuHeroCommercialReadabilityTint"
+	ambient_tint.name = "MenuBackgroundReadabilityScrim"
 	art.add_child(ambient_tint)
 	var lower_tint = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.455, 1.0, 1.0), Color(0.004, 0.012, 0.012, 0.34), "ui_dark_scrim", 0.13)
 	lower_tint.name = "MenuHeroControlReadabilityTint"
 	art.add_child(lower_tint)
-	var ui_overlay = add_optional_gpt_illustration_texture(art, "menu_lobby_ui_overlay", rect_full(0.0, 0.0, 1.0, 1.0), 0.045, false)  # r497 single restrained menu overlay
-	if ui_overlay != null:
-		ui_overlay.name = "MenuLobbyGeneratedUIOverlay"
+	# The hero illustration and stage overlay are the only full-screen authored
+	# menu layers; a third generated overlay previously doubled the foreground.
 	return art
 
 func draw_menu_hero_wind_path(parent: Control) -> Control:
