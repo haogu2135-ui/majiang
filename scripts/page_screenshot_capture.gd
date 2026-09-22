@@ -85,12 +85,19 @@ func run() -> void:
 		return
 
 	var selected_screens := selected_screen_names()
-	var scene = load("res://Main.tscn").instantiate()
-	apply_static_capture_mode(scene)
-	root.add_child(scene)
-	apply_static_capture_mode(scene)
-	await settle()
+	var scene: Node = null
 	for screen_name in selected_screens:
+		if scene != null and is_instance_valid(scene):
+			if scene.has_method("shutdown_runtime"):
+				scene.shutdown_runtime()
+			root.remove_child(scene)
+			scene.queue_free()
+			await process_frame
+		scene = load("res://Main.tscn").instantiate()
+		apply_static_capture_mode(scene)
+		root.add_child(scene)
+		apply_static_capture_mode(scene)
+		await settle()
 		await capture_screen(scene, screen_name, output_dir_res)
 	if scene.has_method("clear_fx_overlays"):
 		scene.clear_fx_overlays()
