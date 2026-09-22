@@ -5274,7 +5274,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	var panel_rect := Rect2()
 	if panel != null:
 		panel_rect = screen_rect(panel)
-		var expected_panel_alpha := 0.96 if scene.high_contrast_enabled else 0.82
+		var expected_panel_alpha := 1.0
 		check(absf(float(panel.get_meta("reading_surface_alpha", 0.0)) - expected_panel_alpha) <= 0.01, "settings panel uses an opaque reading surface at %s" % viewport_size)
 		var contrast_frame := overlay_control.find_child("SettingsHighContrastFrame", true, false) as Control
 		if scene.high_contrast_enabled:
