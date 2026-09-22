@@ -3,16 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b3g35xp4r1a2s"
-path.etc2="res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495203464e8eeee.etc2.ctex"
+path="res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495203464e8eeee.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/menu_lobby_gpt_scene.png"
-dest_files=["res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495203464e8eeee.etc2.ctex"]
+dest_files=["res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495203464e8eeee.ctex"]
 
 [params]
 

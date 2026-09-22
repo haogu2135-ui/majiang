@@ -3,16 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d3i5xfgsbeevr"
-path.etc2="res://.godot/imported/online_feedback_gpt_strip_v2.png-4a0fb2cc896a379efb4866394737830e.etc2.ctex"
+path="res://.godot/imported/online_feedback_gpt_strip_v2.png-4a0fb2cc896a379efb4866394737830e.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/online_feedback_gpt_strip_v2.png"
-dest_files=["res://.godot/imported/online_feedback_gpt_strip_v2.png-4a0fb2cc896a379efb4866394737830e.etc2.ctex"]
+dest_files=["res://.godot/imported/online_feedback_gpt_strip_v2.png-4a0fb2cc896a379efb4866394737830e.ctex"]
 
 [params]
 

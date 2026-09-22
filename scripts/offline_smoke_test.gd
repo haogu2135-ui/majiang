@@ -1696,7 +1696,8 @@ func run() -> void:
 	var limit_fill = limit_win_detail_parent.find_child("WinDetailLimitFill", true, false) as Control
 	check(limit_fill != null and limit_fill.anchor_right > 0.90, "win detail limit route fill reaches the high-value gate")
 	dispose_node(limit_win_detail_parent)
-	scene.last_score_deltas = [3600, -1200, 0, -2400]
+	var delta_fixture: Array[int] = [3600, -1200, 0, -2400]
+	scene.last_score_deltas = delta_fixture
 	scene.refresh_score_delta_cache()
 	check(is_equal_approx(scene.round_summary_delta_bar_fraction(3600), 1.0) and is_equal_approx(scene.round_summary_delta_bar_fraction(-1200), 1.0 / 3.0), "round summary delta bars scale by the largest score change")
 	var rank_row_parent = Control.new()

@@ -3,16 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://roa3qq38dqq1"
-path.etc2="res://.godot/imported/lobby_room_gate_token.png-9a08f144b533ad5ef64858cf0791e105.etc2.ctex"
+path="res://.godot/imported/lobby_room_gate_token.png-9a08f144b533ad5ef64858cf0791e105.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/lobby_room_gate_token.png"
-dest_files=["res://.godot/imported/lobby_room_gate_token.png-9a08f144b533ad5ef64858cf0791e105.etc2.ctex"]
+dest_files=["res://.godot/imported/lobby_room_gate_token.png-9a08f144b533ad5ef64858cf0791e105.ctex"]
 
 [params]
 

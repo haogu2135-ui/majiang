@@ -3,16 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://btvtmos62bhoe"
-path.etc2="res://.godot/imported/hand_gpt_tray_bright_r432.png-d8d64949c67fba1890d7cede16b7328a.etc2.ctex"
+path="res://.godot/imported/hand_gpt_tray_bright_r432.png-d8d64949c67fba1890d7cede16b7328a.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/hand_gpt_tray_bright_r432.png"
-dest_files=["res://.godot/imported/hand_gpt_tray_bright_r432.png-d8d64949c67fba1890d7cede16b7328a.etc2.ctex"]
+dest_files=["res://.godot/imported/hand_gpt_tray_bright_r432.png-d8d64949c67fba1890d7cede16b7328a.ctex"]
 
 [params]
 

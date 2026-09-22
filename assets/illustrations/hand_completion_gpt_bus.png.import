@@ -3,16 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://4dcbhqll84n0"
-path.etc2="res://.godot/imported/hand_completion_gpt_bus.png-0b548f53270d164c64a7bee3e7ab798f.etc2.ctex"
+path="res://.godot/imported/hand_completion_gpt_bus.png-0b548f53270d164c64a7bee3e7ab798f.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/hand_completion_gpt_bus.png"
-dest_files=["res://.godot/imported/hand_completion_gpt_bus.png-0b548f53270d164c64a7bee3e7ab798f.etc2.ctex"]
+dest_files=["res://.godot/imported/hand_completion_gpt_bus.png-0b548f53270d164c64a7bee3e7ab798f.ctex"]
 
 [params]
 

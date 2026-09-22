@@ -1989,18 +1989,8 @@ func load_illustration_texture(path: String) -> Texture2D:
 	if not imported_texture_artifact_ready(path):
 		failed_texture_cache[path] = true
 		return null
-	var adapter_name := str(RenderingServer.get_video_adapter_name()).to_lower()
-	var low_resource_vulkan := adapter_name.find("llvmpipe") >= 0 or adapter_name.find("swiftshader") >= 0 or adapter_name.find("softpipe") >= 0
-	var texture := load_source_png_texture(path) if low_resource_vulkan else null
-	if texture == null:
-		var imported = ResourceLoader.load(path, "Texture2D")
-		texture = imported as Texture2D if imported is Texture2D else null
-	# Some low-resource Vulkan/llvmpipe environments cannot sample the ETC2
-	# import even though the authored PNG and its import record are present.
-	# Keep the GPT bitmap as the source of truth and decode that same PNG rather
-	# than dropping the visual layer to a procedural or blank fallback.
-	if texture == null:
-		texture = load_source_png_texture(path)
+	var imported = ResourceLoader.load(path, "Texture2D")
+	var texture := imported as Texture2D if imported is Texture2D else null
 	if texture != null:
 		loaded_texture_cache[path] = texture
 		failed_texture_cache.erase(path)
@@ -2008,19 +1998,8 @@ func load_illustration_texture(path: String) -> Texture2D:
 		failed_texture_cache[path] = true
 	return texture
 
-func load_source_png_texture(path: String) -> Texture2D:
-	if not FileAccess.file_exists(path):
-		return null
-	var source_image := Image.load_from_file(ProjectSettings.globalize_path(path))
-	if source_image == null or source_image.is_empty():
-		return null
-	return ImageTexture.create_from_image(source_image)
-
 func imported_texture_artifact_ready(path: String) -> bool:
 	if not ResourceLoader.exists(path):
-		# Newly added GPT PNGs may not have a generated .import sidecar yet. The
-		# source bitmap is still a valid project asset, and llvmpipe already uses
-		# load_source_png_texture below for this exact case.
 		return FileAccess.file_exists(ProjectSettings.globalize_path(path))
 	var import_path := path + ".import"
 	if not FileAccess.file_exists(import_path):

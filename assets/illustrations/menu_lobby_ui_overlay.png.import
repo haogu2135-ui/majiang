@@ -3,16 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dv4g45kjr01gh"
-path.etc2="res://.godot/imported/menu_lobby_ui_overlay.png-305864987e65e67f9c42956f108c2931.etc2.ctex"
+path="res://.godot/imported/menu_lobby_ui_overlay.png-305864987e65e67f9c42956f108c2931.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/menu_lobby_ui_overlay.png"
-dest_files=["res://.godot/imported/menu_lobby_ui_overlay.png-305864987e65e67f9c42956f108c2931.etc2.ctex"]
+dest_files=["res://.godot/imported/menu_lobby_ui_overlay.png-305864987e65e67f9c42956f108c2931.ctex"]
 
 [params]
 
