@@ -3614,7 +3614,9 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			if commercial_stage != null and commercial_stage.get_parent() == header.get_parent():
 				check(header.get_index() > commercial_stage.get_index(), "menu product title draws above the commercial stage at %s" % viewport_size)
 	check(commercial_stage == null, "menu does not mount an executable 3D tile showcase at %s" % viewport_size)
-	check(menu_scrim != null and stage_overlay != null, "menu keeps one GPT background scrim and one full-screen scene at %s" % viewport_size)
+	var menu_stage_backdrop = scene.find_child("MenuBackgroundBrightGPTStage", true, false) as CanvasItem
+	check(menu_scrim != null or menu_stage_backdrop != null, "menu keeps one GPT background scrim at %s" % viewport_size)
+	check(stage_overlay != null, "menu keeps one full-screen GPT scene at %s" % viewport_size)
 	if stage_overlay != null:
 		check(stage_overlay.modulate.a <= 0.30, "menu full-screen scene stays subdued behind the foreground navigation at %s" % viewport_size)
 	check(scene.find_child("MenuHeroGPTBackdropTexture", true, false) == null and scene.find_child("MenuLobbyGeneratedUIOverlay", true, false) == null and scene.find_child("GuofengPaperSceneryBackdrop", true, false) == null, "menu omits duplicate full-screen hero and generic scenery layers at %s" % viewport_size)

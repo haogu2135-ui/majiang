@@ -7489,7 +7489,7 @@ func clear_screen() -> void:
 	screen_layer.name = "ScreenLayer"
 	screen_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(screen_layer)
-	if mode == "offline":
+	if mode == "offline" or mode == "online_game":
 		add_battle_background(screen_layer)
 	elif mode == "menu":
 		add_menu_background(screen_layer)
@@ -30832,7 +30832,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	var rule_activation_visible := rule_activation_full.replace("当前局：", "当前：").replace(" · 下一局：", " · 下局：")
 	var rule_variant_status_text := "%s · %s" % [rule_activation_visible, rule_difference_short]
 	var rule_variant_full_status_text := "%s · %s" % [rule_activation_full, rule_difference]
-	var rule_variant_status = make_label(panel, rule_variant_status_text, 11, Color(0.30, 0.34, 0.25, 0.94), true)
+	var rule_variant_status = make_label(panel, rule_variant_status_text, 11, Color(0.13, 0.17, 0.12, 0.98), true)
 	rule_variant_status.name = "SettingsRuleVariantStatus"
 	apply_rect(rule_variant_status, rect_full(0.550, 0.130 if compact_settings else 0.125, 0.815, 0.170 if compact_settings else 0.165))
 	rule_variant_status.set_meta("overview_art_gap_policy", "minimum_6px_compact")

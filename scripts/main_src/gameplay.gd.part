@@ -1164,7 +1164,7 @@ func clear_screen() -> void:
 	screen_layer.name = "ScreenLayer"
 	screen_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(screen_layer)
-	if mode == "offline":
+	if mode == "offline" or mode == "online_game":
 		add_battle_background(screen_layer)
 	elif mode == "menu":
 		add_menu_background(screen_layer)
