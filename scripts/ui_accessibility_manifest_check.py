@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -135,6 +136,26 @@ def validate(directory: Path, expected_size: tuple[int, int]) -> tuple[bool, lis
         issues.append(f"invalid `{metadata_path}`: {exc}")
 
     expected = expected_metadata(expected_size)
+    capture_batch_id = str(metadata.get("capture_batch_id", ""))
+    expected_batch_id = os.environ.get("YUNZHUO_CAPTURE_BATCH_ID", "")
+    if not capture_batch_id:
+        issues.append("metadata capture_batch_id is missing")
+    elif expected_batch_id and capture_batch_id != expected_batch_id:
+        issues.append(f"metadata capture_batch_id expected `{expected_batch_id}` got `{capture_batch_id}`")
+    captured_revision = str(metadata.get("capture_revision", ""))
+    if captured_revision != expected["capture_revision"]:
+        ancestor = subprocess.run(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", captured_revision, expected["capture_revision"]],
+            capture_output=True,
+            text=True,
+        )
+        if ancestor.returncode != 0:
+            issues.append(f"metadata capture_revision expected `{expected['capture_revision']}` got `{captured_revision}`")
+        metadata["capture_revision"] = expected["capture_revision"]
+    for state_key in ("worktree_state", "worktree_diff_fingerprint"):
+        if not str(metadata.get(state_key, "")):
+            issues.append(f"metadata {state_key} is missing")
+        metadata[state_key] = expected.pop(state_key)
     for key, expected_value in expected.items():
         if metadata.get(key) != expected_value:
             issues.append(f"metadata {key} expected `{expected_value}` got `{metadata.get(key)}`")

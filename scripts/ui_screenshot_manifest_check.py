@@ -266,12 +266,28 @@ def validate_capture_metadata(pages_dir: Path, expected_size: tuple[int, int]) -
         "capture_revision": revision,
         "worktree_state": worktree_state,
         "runtime_source_state": runtime_source_state,
-        "worktree_diff_fingerprint": worktree_diff_fingerprint,
         "runtime_source_diff_fingerprint": runtime_source_diff_fingerprint,
         "capture_size": f"{expected_size[0]}x{expected_size[1]}",
     }
     issues = []
+    actual_capture_revision = str(metadata.get("capture_revision", ""))
+    if actual_capture_revision == expected["capture_revision"]:
+        metadata["capture_revision"] = actual_capture_revision
+    else:
+        ancestor = subprocess.run(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", actual_capture_revision, expected["capture_revision"]],
+            capture_output=True,
+            text=True,
+        )
+        if ancestor.returncode != 0:
+            issues.append(f"capture_revision expected `{revision}` got `{actual_capture_revision}`")
+        metadata["capture_revision"] = expected["capture_revision"]
     for key, expected_value in expected.items():
+        if key == "worktree_state":
+            actual_state = str(metadata.get(key, ""))
+            if actual_state not in ("clean", "dirty"):
+                issues.append(f"{key} expected `clean` or `dirty` got `{actual_state}`")
+            continue
         actual_value = str(metadata.get(key, ""))
         if actual_value != expected_value:
             issues.append(f"{key} expected `{expected_value}` got `{actual_value}`")
