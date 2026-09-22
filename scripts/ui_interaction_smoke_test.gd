@@ -2423,6 +2423,18 @@ func run() -> void:
 	# Let shutdown-emitted runtime timers resume their callers before freeing the
 	# scene. Godot 4.6 reports a leaked function state otherwise.
 	await settle(0.30)
+	for cache_name in [
+		"illustration_textures",
+		"optional_gpt_illustration_textures",
+		"loaded_texture_cache",
+		"icon_textures",
+		"tile_textures",
+		"tile_decal_textures",
+		"shader_materials",
+	]:
+		var resource_cache = scene.get(cache_name)
+		if resource_cache != null and resource_cache is Dictionary:
+			(resource_cache as Dictionary).clear()
 	restore_smoke_state(scene, initial_smoke_snapshot)
 	scene.free()
 	await process_frame

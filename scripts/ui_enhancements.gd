@@ -414,6 +414,8 @@ func clear_all_effects() -> void:
 			node.queue_free()
 	particle_nodes.clear()
 	_particle_node_indices.clear()
+	_spark_tex_cache = null
+	_spark_tex_ready = false
 
 func get_active_effect_count() -> int:
 	return active_particles.size()
