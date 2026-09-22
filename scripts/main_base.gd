@@ -1944,7 +1944,7 @@ func add_rules_background(parent: Control) -> void:
 func add_battle_background(parent: Control) -> void:
 	# Use the GPT-rendered table as the room and tabletop together. Its built-in
 	# wood, jade and daylight keep the battle screen lively without a dark wash.
-	var bright = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop_bright", rect_full(0.0, 0.0, 1.0, 1.0), 0.94, false)
+	var bright = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop_bright", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if bright != null:
 		bright.name = "OfflineBattleBrightGPTTable"
 		bright.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
