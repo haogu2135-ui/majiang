@@ -3603,7 +3603,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 	check(header != null and product_title != null and rule_summary != null, "menu exposes named foreground title and current-rule summary at %s" % viewport_size)
 	if header != null and product_title != null:
 		check(product_title.text == "云桌麻将" and product_title.get_theme_font_size("font_size") >= 28, "menu product title keeps its full name and commercial display size at %s" % viewport_size)
-		check(relative_luma(product_title.get_theme_color("font_color")) >= 0.80, "menu product title keeps bright foreground contrast at %s" % viewport_size)
+			check(readable_paper_ink(product_title.get_theme_color("font_color")), "menu product title keeps readable foreground contrast at %s" % viewport_size)
 	if rule_summary != null:
 		check(rule_summary.text.contains(scene.rule_variant_label()) and rule_summary.clip_text, "menu title summary exposes the active local rule without truncation at %s" % viewport_size)
 		if stage_overlay != null and stage_overlay.get_parent() == header.get_parent():
@@ -3654,7 +3654,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			check(back_rect.grow(1.0).encloses(title_rect) and back_rect.grow(1.0).encloses(subtitle_rect), "menu card labels stay inside text backplate at %s" % viewport_size)
 			check(title.clip_text and subtitle.clip_text and title.get_theme_font_size("font_size") >= 21 and subtitle.get_theme_font_size("font_size") >= 14, "menu card text clips safely and keeps readable size at %s" % viewport_size)
 			check(not str(subtitle.text).contains("...") and not str(subtitle.text).contains("…") and label_text_width(subtitle, str(subtitle.text)) <= subtitle_rect.size.x + 1.0, "menu card subtitle fits without rendered truncation at %s" % viewport_size)
-			check(relative_luma(title.get_theme_color("font_color")) >= 0.86 and relative_luma(subtitle.get_theme_color("font_color")) >= 0.86, "menu card title and subtitle keep readable contrast at %s" % viewport_size)
+				check(readable_paper_ink(title.get_theme_color("font_color")) and readable_paper_ink(subtitle.get_theme_color("font_color")), "menu card title and subtitle keep readable contrast at %s" % viewport_size)
 			check(not rects_overlap(title_rect, subtitle_rect), "menu card title and subtitle do not overlap at %s" % viewport_size)
 		if quick_rail != null:
 				check(screen_rect(card).end.y <= screen_rect(quick_rail).position.y - 8.0, "menu card keeps an 8px clearance before the quick action rail at %s" % viewport_size)
@@ -3959,7 +3959,7 @@ func check_menu_footer_layout(scene, viewport_size: Vector2) -> void:
 		check(chip_rect.grow(1.0).encloses(label_rect), "menu footer chip %s contains its label at %s" % [chip_id, viewport_size])
 		check(chip_rect.size.y >= 32.0 and chip_rect.size.x >= 100.0, "menu footer chip %s keeps a readable footprint at %s" % [chip_id, viewport_size])
 		check(label.clip_text and label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS, "menu footer label %s clips safely at %s" % [chip_id, viewport_size])
-		check(label.get_theme_font_size("font_size") >= 13 and relative_luma(label.get_theme_color("font_color")) >= 0.82, "menu footer label %s remains readable at %s" % [chip_id, viewport_size])
+			check(label.get_theme_font_size("font_size") >= 13 and readable_paper_ink(label.get_theme_color("font_color")), "menu footer label %s remains readable at %s" % [chip_id, viewport_size])
 		if chip_id == "version":
 			var expected_version_text := "版本 v%s" % scene.app_version_short()
 			check(label.text == expected_version_text, "menu footer version uses compact display text at %s" % viewport_size)
