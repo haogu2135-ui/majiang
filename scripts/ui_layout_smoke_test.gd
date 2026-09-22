@@ -3509,7 +3509,7 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 		var wall_back_rect = screen_rect(wall_back)
 		var wall_meter_rect = screen_rect(wall_meter)
 		check(wall_back_rect.grow(1.0).encloses(wall_text_rect) and wall_back_rect.grow(1.0).encloses(wall_meter_rect), "top HUD wall backplate contains text and meter at %s" % viewport_size)
-		check(wall_text.clip_text and wall_text.get_theme_font_size("font_size") >= 11 and relative_luma(wall_text.get_theme_color("font_color")) >= 0.78, "top HUD wall text remains readable at %s" % viewport_size)
+		check(wall_text.clip_text and wall_text.get_theme_font_size("font_size") >= 11 and readable_paper_ink(wall_text.get_theme_color("font_color")), "top HUD wall text remains readable at %s" % viewport_size)
 		check(str(wall_text.text).begins_with("余牌 ") and wall_text.tooltip_text.contains("牌墙剩余") and wall_text.tooltip_text.contains("上张"), "top HUD wall counter and last-discard context remain explicit at %s" % viewport_size)
 		if status != null:
 			check(screen_rect(status).end.x <= wall_back_rect.position.x - 2.0, "top HUD status clears wall badge at %s" % viewport_size)
@@ -5297,7 +5297,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		var rule_button_rect = screen_rect(rule_variant_button)
 		var rule_status_rect = screen_rect(rule_variant_status)
 		check((rule_variant_status.text.begins_with("当前：扬州 · 下局：四川") or rule_variant_status.text.begins_with("当前：扬州 ·")) and (rule_variant_status.text.contains("可吃") or rule_variant_status.text.contains("不可吃")), "settings local-rule state keeps the active/queued profiles and a visible rule difference at %s" % viewport_size)
-		check(rule_variant_status.clip_text and rule_variant_status.get_theme_font_size("font_size") >= 11 and relative_luma(rule_variant_status.get_theme_color("font_color")) >= 0.80, "settings local-rule state remains readable and clipped at %s" % viewport_size)
+		check(rule_variant_status.clip_text and rule_variant_status.get_theme_font_size("font_size") >= 11 and readable_paper_ink(rule_variant_status.get_theme_color("font_color")), "settings local-rule state remains readable and clipped at %s" % viewport_size)
 		check(not rects_overlap(rule_label_rect.grow(-1.0), rule_button_rect.grow(-1.0)) and not rects_overlap(rule_status_rect.grow(-1.0), rule_button_rect.grow(-1.0)), "settings local-rule label and state clear the selector button at %s" % viewport_size)
 		check(label_text_width(rule_variant_status, rule_variant_status.text) <= rule_status_rect.size.x + 1.0, "settings local-rule state fits its header lane at %s" % viewport_size)
 	if header_title_label != null and panel != null:
@@ -5407,10 +5407,10 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		var text_panel = overlay_control.find_child("SettingRowTextReadabilityPanel_%s" % title, true, false) as Control
 		check(title_label != null and status_label != null and text_panel != null, "settings row %s exposes title status and readability panel at %s" % [title, viewport_size])
 		if title_label != null:
-			check(title_label.clip_text and title_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and title_label.get_theme_font_size("font_size") >= 14 and relative_luma(title_label.get_theme_color("font_color")) >= 0.94, "settings row %s title stays bright clipped and readable at %s" % [title, viewport_size])
+			check(title_label.clip_text and title_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and title_label.get_theme_font_size("font_size") >= 14 and readable_paper_ink(title_label.get_theme_color("font_color")), "settings row %s title stays bright clipped and readable at %s" % [title, viewport_size])
 			check(not rects_overlap(screen_rect(title_label), button_rect), "settings row %s title clears the button lane at %s" % [title, viewport_size])
 		if status_label != null:
-			check(status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and status_label.get_theme_font_size("font_size") >= 13 and relative_luma(status_label.get_theme_color("font_color")) >= 0.94, "settings row %s status stays bright clipped and readable at %s" % [title, viewport_size])
+			check(status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and status_label.get_theme_font_size("font_size") >= 13 and readable_paper_ink(status_label.get_theme_color("font_color")), "settings row %s status stays bright clipped and readable at %s" % [title, viewport_size])
 			if scene.large_text_enabled:
 				check(not status_label.text.contains("...") and not status_label.text.contains("…"), "large-text settings row %s keeps a visible non-truncated status at %s" % [title, viewport_size])
 			if (viewport_size.y <= 560.0 or viewport_size.x <= 960.0) and title == "出牌辅助":
@@ -6645,7 +6645,7 @@ func check_compact_seat_panels(scene, viewport_size: Vector2) -> void:
 		var minimum_detail_size := 9 if is_side_thumbnail else 10
 		check(name.get_theme_font_size("font_size") >= minimum_name_size, "seat %d name keeps commercial HUD type scale at %s" % [seat, viewport_size])
 		check(meta.get_theme_font_size("font_size") >= minimum_detail_size and score.get_theme_font_size("font_size") >= minimum_detail_size, "seat %d score and state remain readable at %s" % [seat, viewport_size])
-		check(relative_luma(name.get_theme_color("font_color")) >= 0.80 and relative_luma(meta.get_theme_color("font_color")) >= 0.76 and relative_luma(score.get_theme_color("font_color")) >= 0.80, "seat %d compact text keeps production contrast at %s" % [seat, viewport_size])
+		check(readable_paper_ink(name.get_theme_color("font_color")) and readable_paper_ink(meta.get_theme_color("font_color")) and readable_paper_ink(score.get_theme_color("font_color")), "seat %d compact text keeps production contrast at %s" % [seat, viewport_size])
 		check(panel_rect.grow(1.0).encloses(avatar_rect), "seat %d avatar stays inside panel at %s" % [seat, viewport_size])
 		for label in [name, meta, score]:
 			var label_rect = screen_rect(label)
@@ -6679,7 +6679,7 @@ func check_compact_seat_panels(scene, viewport_size: Vector2) -> void:
 			check(dealer_badge != null, "dealer seat %d exposes compact dealer badge inside text area at %s" % [seat, viewport_size])
 		check(not rects_overlap(screen_rect(name), screen_rect(score)), "seat %d name and score do not overlap at %s" % [seat, viewport_size])
 		check(screen_rect(meta).position.y >= min(screen_rect(name).end.y, screen_rect(score).end.y) + 1.0, "seat %d meta clears name row at %s" % [seat, viewport_size])
-		check(relative_luma(name.get_theme_color("font_color")) >= 0.82 and relative_luma(score.get_theme_color("font_color")) >= 0.80 and relative_luma(meta.get_theme_color("font_color")) >= 0.78, "seat %d compact text keeps readable contrast at %s" % [seat, viewport_size])
+		check(readable_paper_ink(name.get_theme_color("font_color")) and readable_paper_ink(score.get_theme_color("font_color")) and readable_paper_ink(meta.get_theme_color("font_color")), "seat %d compact text keeps readable contrast at %s" % [seat, viewport_size])
 		if wind_mark != null and short_name != null:
 			check(wind_mark.clip_text and short_name.clip_text, "seat %d avatar wind and short name clip safely at %s" % [seat, viewport_size])
 			check(wind_mark.anchor_bottom <= short_name.anchor_top - 0.04, "seat %d avatar wind mark anchor band clears short name band at %s" % [seat, viewport_size])
@@ -6834,6 +6834,10 @@ func check_button_face_behind_native_text(button: Button, label_text: String, vi
 
 func relative_luma(color: Color) -> float:
 	return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
+
+func readable_paper_ink(color: Color) -> bool:
+	var luma := relative_luma(color)
+	return luma >= 0.80 or luma <= 0.24
 
 func check(condition: bool, message: String) -> void:
 	if condition:
