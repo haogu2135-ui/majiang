@@ -18864,7 +18864,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	# Settings is a modal reading surface. Keep the authored panel texture visible,
 	# but make the ordinary profile opaque enough that menu copy cannot show through.
 	var scrim_alpha := 0.86 if settings_is_high_contrast else 0.82
-	var panel_alpha := 0.98 if settings_is_high_contrast else 0.94
+	var panel_alpha := 1.0
 	var scrim = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, scrim_alpha), "ui_dark_scrim")
 	scrim.name = "SettingsOverlayScrim"
 	# Keep the profile contract discoverable to QA; the authored scrim color above
@@ -18893,7 +18893,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	# The visual alpha is intentionally stronger than the legacy profile baseline;
 	# retain the baseline metadata for compatibility with layout probes.
-	panel.set_meta("reading_surface_alpha", 0.96 if settings_is_high_contrast else 0.82)
+	panel.set_meta("reading_surface_alpha", 1.0)
 	panel.set_meta("high_contrast_surface", settings_is_high_contrast)
 	panel.set_meta("opaque_reading_surface", true)
 	panel.set_meta("reading_surface_contract", "settings_copy_and_controls_do_not_show_menu_through")
