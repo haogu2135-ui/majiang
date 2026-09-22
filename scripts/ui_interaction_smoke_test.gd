@@ -2422,10 +2422,10 @@ func run() -> void:
 		scene.shutdown_runtime()
 	# Let shutdown-emitted runtime timers resume their callers before freeing the
 	# scene. Godot 4.6 reports a leaked function state otherwise.
-	await settle(0.10)
+	await settle(0.30)
 	restore_smoke_state(scene, initial_smoke_snapshot)
-	scene.queue_free()
-	await settle(0.05)
+	scene.free()
+	await process_frame
 	if failed:
 		print("=== RESULT: FAIL ===")
 		quit(1)
