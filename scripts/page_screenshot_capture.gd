@@ -255,6 +255,7 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 	if screen_name == "13_round_summary" or screen_name == "16_win_detail":
 		stabilize_capture_round_summary(scene)
 
+	await RenderingServer.frame_post_draw
 	var viewport_texture = root.get_texture()
 	if viewport_texture == null:
 		printerr("failed to save %s: viewport texture is unavailable" % screen_name)
