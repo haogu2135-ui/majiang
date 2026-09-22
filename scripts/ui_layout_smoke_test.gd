@@ -3603,7 +3603,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 	check(header != null and product_title != null and rule_summary != null, "menu exposes named foreground title and current-rule summary at %s" % viewport_size)
 	if header != null and product_title != null:
 		check(product_title.text == "云桌麻将" and product_title.get_theme_font_size("font_size") >= 28, "menu product title keeps its full name and commercial display size at %s" % viewport_size)
-			check(readable_paper_ink(product_title.get_theme_color("font_color")), "menu product title keeps readable foreground contrast at %s" % viewport_size)
+		check(readable_paper_ink(product_title.get_theme_color("font_color")), "menu product title keeps readable foreground contrast at %s" % viewport_size)
 	if rule_summary != null:
 		check(rule_summary.text.contains(scene.rule_variant_label()) and rule_summary.clip_text, "menu title summary exposes the active local rule without truncation at %s" % viewport_size)
 		if stage_overlay != null and stage_overlay.get_parent() == header.get_parent():
@@ -3657,7 +3657,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 				check(readable_paper_ink(title.get_theme_color("font_color")) and readable_paper_ink(subtitle.get_theme_color("font_color")), "menu card title and subtitle keep readable contrast at %s" % viewport_size)
 			check(not rects_overlap(title_rect, subtitle_rect), "menu card title and subtitle do not overlap at %s" % viewport_size)
 		if quick_rail != null:
-				check(screen_rect(card).end.y <= screen_rect(quick_rail).position.y - 8.0, "menu card keeps an 8px clearance before the quick action rail at %s" % viewport_size)
+			check(screen_rect(card).end.y <= screen_rect(quick_rail).position.y - 8.0, "menu card keeps an 8px clearance before the quick action rail at %s" % viewport_size)
 		if footer != null:
 			check(screen_rect(card).end.y <= screen_rect(footer).position.y - 8.0, "menu card clears the footer status bar at %s" % viewport_size)
 
