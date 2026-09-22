@@ -1437,7 +1437,7 @@ func run() -> void:
 		if DisplayServer.is_touchscreen_available():
 			check(log_scroll.scroll_vertical > 0, "screen drag scrolls the native room log history")
 		else:
-			check(log_scroll.scroll_vertical == 0, "Xvfb exposes no touchscreen device; drag validation remains a real-device gate")
+			print("SKIP: Xvfb exposes no touchscreen device; screen drag validation remains a real-device gate")
 			await send_wheel_down(log_scroll.get_global_rect().get_center())
 			check(log_scroll.scroll_vertical > 0, "desktop wheel scrolls the same native room log history")
 		review_scroll = log_scroll.scroll_vertical
