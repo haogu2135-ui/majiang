@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dois8pv3emjk4"
-path.etc2="res://.godot/imported/rank_ribbon_silver.png-080262c0ce84dded51c24c1e9629e368.etc2.ctex"
+path="res://.godot/imported/rank_ribbon_silver.png-080262c0ce84dded51c24c1e9629e368.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/rank_ribbon_silver.png"
-dest_files=["res://.godot/imported/rank_ribbon_silver.png-080262c0ce84dded51c24c1e9629e368.etc2.ctex"]
+dest_files=["res://.godot/imported/rank_ribbon_silver.png-080262c0ce84dded51c24c1e9629e368.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

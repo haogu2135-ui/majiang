@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://y4ghpauwwm1"
-path.etc2="res://.godot/imported/center_wind_pointer.png-5d36d31cd004b0895e007684c1a04340.etc2.ctex"
+path="res://.godot/imported/center_wind_pointer.png-5d36d31cd004b0895e007684c1a04340.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/center_wind_pointer.png"
-dest_files=["res://.godot/imported/center_wind_pointer.png-5d36d31cd004b0895e007684c1a04340.etc2.ctex"]
+dest_files=["res://.godot/imported/center_wind_pointer.png-5d36d31cd004b0895e007684c1a04340.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

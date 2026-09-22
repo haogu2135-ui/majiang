@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bwgihwlahq4bj"
-path.etc2="res://.godot/imported/online_lobby_panel_frame_warm_v392.png-6313e7feb43cc5c765e1d6c3068e4ef1.etc2.ctex"
+path="res://.godot/imported/online_lobby_panel_frame_warm_v392.png-6313e7feb43cc5c765e1d6c3068e4ef1.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/online_lobby_panel_frame_warm_v392.png"
-dest_files=["res://.godot/imported/online_lobby_panel_frame_warm_v392.png-6313e7feb43cc5c765e1d6c3068e4ef1.etc2.ctex"]
+dest_files=["res://.godot/imported/online_lobby_panel_frame_warm_v392.png-6313e7feb43cc5c765e1d6c3068e4ef1.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

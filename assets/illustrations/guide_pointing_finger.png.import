@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dko264pmf1yvu"
-path.etc2="res://.godot/imported/guide_pointing_finger.png-fadf4473b34f259306cb8a7e54aed3ca.etc2.ctex"
+path="res://.godot/imported/guide_pointing_finger.png-fadf4473b34f259306cb8a7e54aed3ca.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/guide_pointing_finger.png"
-dest_files=["res://.godot/imported/guide_pointing_finger.png-fadf4473b34f259306cb8a7e54aed3ca.etc2.ctex"]
+dest_files=["res://.godot/imported/guide_pointing_finger.png-fadf4473b34f259306cb8a7e54aed3ca.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

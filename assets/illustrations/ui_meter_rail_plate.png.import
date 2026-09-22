@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b3f8db477acee"
-path.etc2="res://.godot/imported/ui_meter_rail_plate.png-8a3e5a2a5bdabfe47f6b0ac1ebfbeeaf.etc2.ctex"
+path="res://.godot/imported/ui_meter_rail_plate.png-8a3e5a2a5bdabfe47f6b0ac1ebfbeeaf.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/ui_meter_rail_plate.png"
-dest_files=["res://.godot/imported/ui_meter_rail_plate.png-8a3e5a2a5bdabfe47f6b0ac1ebfbeeaf.etc2.ctex"]
+dest_files=["res://.godot/imported/ui_meter_rail_plate.png-8a3e5a2a5bdabfe47f6b0ac1ebfbeeaf.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

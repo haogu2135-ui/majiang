@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bcxbhon6hsba6"
-path.etc2="res://.godot/imported/ui_ornament_tick_strip.png-d2a8baa59dde78d3920a431db44b5730.etc2.ctex"
+path="res://.godot/imported/ui_ornament_tick_strip.png-d2a8baa59dde78d3920a431db44b5730.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/ui_ornament_tick_strip.png"
-dest_files=["res://.godot/imported/ui_ornament_tick_strip.png-d2a8baa59dde78d3920a431db44b5730.etc2.ctex"]
+dest_files=["res://.godot/imported/ui_ornament_tick_strip.png-d2a8baa59dde78d3920a431db44b5730.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

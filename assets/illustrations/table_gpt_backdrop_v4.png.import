@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cf48vohaqqp8v"
-path.etc2="res://.godot/imported/table_gpt_backdrop_v4.png-5c178e0781eea6c22a0156a9b5d8e22e.etc2.ctex"
+path="res://.godot/imported/table_gpt_backdrop_v4.png-5c178e0781eea6c22a0156a9b5d8e22e.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/table_gpt_backdrop_v4.png"
-dest_files=["res://.godot/imported/table_gpt_backdrop_v4.png-5c178e0781eea6c22a0156a9b5d8e22e.etc2.ctex"]
+dest_files=["res://.godot/imported/table_gpt_backdrop_v4.png-5c178e0781eea6c22a0156a9b5d8e22e.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

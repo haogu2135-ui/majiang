@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://3rk1p0omp45y"
-path.etc2="res://.godot/imported/win_cover_draw_game.png-e6d68b90669404b1db161ea5a5d0f50c.etc2.ctex"
+path="res://.godot/imported/win_cover_draw_game.png-e6d68b90669404b1db161ea5a5d0f50c.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/win_cover_draw_game.png"
-dest_files=["res://.godot/imported/win_cover_draw_game.png-e6d68b90669404b1db161ea5a5d0f50c.etc2.ctex"]
+dest_files=["res://.godot/imported/win_cover_draw_game.png-e6d68b90669404b1db161ea5a5d0f50c.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

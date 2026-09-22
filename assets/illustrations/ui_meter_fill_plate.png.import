@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://fnghdd3l3jdc"
-path.etc2="res://.godot/imported/ui_meter_fill_plate.png-e394df23982de5464e4f78f95a3ef1cd.etc2.ctex"
+path="res://.godot/imported/ui_meter_fill_plate.png-e394df23982de5464e4f78f95a3ef1cd.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/ui_meter_fill_plate.png"
-dest_files=["res://.godot/imported/ui_meter_fill_plate.png-e394df23982de5464e4f78f95a3ef1cd.etc2.ctex"]
+dest_files=["res://.godot/imported/ui_meter_fill_plate.png-e394df23982de5464e4f78f95a3ef1cd.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

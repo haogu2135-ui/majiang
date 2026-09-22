@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ca784704473c1"
-path.etc2="res://.godot/imported/ui_action_role_rail.png-fbf568757539175b33a726a1ac82fc05.etc2.ctex"
+path="res://.godot/imported/ui_action_role_rail.png-fbf568757539175b33a726a1ac82fc05.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/ui_action_role_rail.png"
-dest_files=["res://.godot/imported/ui_action_role_rail.png-fbf568757539175b33a726a1ac82fc05.etc2.ctex"]
+dest_files=["res://.godot/imported/ui_action_role_rail.png-fbf568757539175b33a726a1ac82fc05.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

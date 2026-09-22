@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d34o0qf7r777j"
-path.etc2="res://.godot/imported/win_celebration_gpt_burst.png-5fc52e7f18e4e623d46db2895ef9c17c.etc2.ctex"
+path="res://.godot/imported/win_celebration_gpt_burst.png-5fc52e7f18e4e623d46db2895ef9c17c.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/win_celebration_gpt_burst.png"
-dest_files=["res://.godot/imported/win_celebration_gpt_burst.png-5fc52e7f18e4e623d46db2895ef9c17c.etc2.ctex"]
+dest_files=["res://.godot/imported/win_celebration_gpt_burst.png-5fc52e7f18e4e623d46db2895ef9c17c.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

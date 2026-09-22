@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c5eu8ynlapis1"
-path.etc2="res://.godot/imported/diagnostic_gpt_panel.png-7b7974676de84e6b7d1188829af257d7.etc2.ctex"
+path="res://.godot/imported/diagnostic_gpt_panel.png-7b7974676de84e6b7d1188829af257d7.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/diagnostic_gpt_panel.png"
-dest_files=["res://.godot/imported/diagnostic_gpt_panel.png-7b7974676de84e6b7d1188829af257d7.etc2.ctex"]
+dest_files=["res://.godot/imported/diagnostic_gpt_panel.png-7b7974676de84e6b7d1188829af257d7.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -16,7 +16,7 @@ dest_files=["res://.godot/imported/menu_hero_gpt_backdrop.png-542b78f1120fc09c42
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

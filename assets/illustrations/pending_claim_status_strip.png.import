@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c8f1m047ugmot"
-path.etc2="res://.godot/imported/pending_claim_status_strip.png-5aaa88e458ca38e8da9d28d2e063823e.etc2.ctex"
+path="res://.godot/imported/pending_claim_status_strip.png-5aaa88e458ca38e8da9d28d2e063823e.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/pending_claim_status_strip.png"
-dest_files=["res://.godot/imported/pending_claim_status_strip.png-5aaa88e458ca38e8da9d28d2e063823e.etc2.ctex"]
+dest_files=["res://.godot/imported/pending_claim_status_strip.png-5aaa88e458ca38e8da9d28d2e063823e.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

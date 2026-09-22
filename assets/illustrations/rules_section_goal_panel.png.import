@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://r017oawscjkl"
-path.etc2="res://.godot/imported/rules_section_goal_panel.png-0ff730b3031307ea42eef360b0620e88.etc2.ctex"
+path="res://.godot/imported/rules_section_goal_panel.png-0ff730b3031307ea42eef360b0620e88.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/rules_section_goal_panel.png"
-dest_files=["res://.godot/imported/rules_section_goal_panel.png-0ff730b3031307ea42eef360b0620e88.etc2.ctex"]
+dest_files=["res://.godot/imported/rules_section_goal_panel.png-0ff730b3031307ea42eef360b0620e88.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

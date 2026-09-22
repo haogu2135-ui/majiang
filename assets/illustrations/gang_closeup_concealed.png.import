@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://shrinjur8vmn"
-path.etc2="res://.godot/imported/gang_closeup_concealed.png-cd7b72ade6574da1d5f26e5b81e39bae.etc2.ctex"
+path="res://.godot/imported/gang_closeup_concealed.png-cd7b72ade6574da1d5f26e5b81e39bae.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/gang_closeup_concealed.png"
-dest_files=["res://.godot/imported/gang_closeup_concealed.png-cd7b72ade6574da1d5f26e5b81e39bae.etc2.ctex"]
+dest_files=["res://.godot/imported/gang_closeup_concealed.png-cd7b72ade6574da1d5f26e5b81e39bae.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

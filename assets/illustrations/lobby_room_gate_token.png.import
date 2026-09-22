@@ -16,7 +16,7 @@ dest_files=["res://.godot/imported/lobby_room_gate_token.png-9a08f144b533ad5ef64
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

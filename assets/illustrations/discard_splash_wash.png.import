@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dp5ueubka1edu"
-path.etc2="res://.godot/imported/discard_splash_wash.png-63a550653025873e0b440704e8235c96.etc2.ctex"
+path="res://.godot/imported/discard_splash_wash.png-63a550653025873e0b440704e8235c96.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/discard_splash_wash.png"
-dest_files=["res://.godot/imported/discard_splash_wash.png-63a550653025873e0b440704e8235c96.etc2.ctex"]
+dest_files=["res://.godot/imported/discard_splash_wash.png-63a550653025873e0b440704e8235c96.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

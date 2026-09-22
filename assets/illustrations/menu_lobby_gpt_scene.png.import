@@ -16,7 +16,7 @@ dest_files=["res://.godot/imported/menu_lobby_gpt_scene.png-3c615f0c62f99f7c4495
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cbbx1n0bmd581"
-path.etc2="res://.godot/imported/petals_spring.png-dbcbe22e3935b4f57feef098bdbbc786.etc2.ctex"
+path="res://.godot/imported/petals_spring.png-dbcbe22e3935b4f57feef098bdbbc786.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/petals_spring.png"
-dest_files=["res://.godot/imported/petals_spring.png-dbcbe22e3935b4f57feef098bdbbc786.etc2.ctex"]
+dest_files=["res://.godot/imported/petals_spring.png-dbcbe22e3935b4f57feef098bdbbc786.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

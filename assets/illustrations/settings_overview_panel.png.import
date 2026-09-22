@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b37w5nn2nscn4"
-path.etc2="res://.godot/imported/settings_overview_panel.png-8e2ff334c143a38753458b18106191ad.etc2.ctex"
+path="res://.godot/imported/settings_overview_panel.png-8e2ff334c143a38753458b18106191ad.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/settings_overview_panel.png"
-dest_files=["res://.godot/imported/settings_overview_panel.png-8e2ff334c143a38753458b18106191ad.etc2.ctex"]
+dest_files=["res://.godot/imported/settings_overview_panel.png-8e2ff334c143a38753458b18106191ad.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

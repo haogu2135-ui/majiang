@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cq54irtxkko1t"
-path.etc2="res://.godot/imported/ui_online_form_field.png-c6dd9f60575ede909c79682db790022e.etc2.ctex"
+path="res://.godot/imported/ui_online_form_field.png-c6dd9f60575ede909c79682db790022e.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/ui_online_form_field.png"
-dest_files=["res://.godot/imported/ui_online_form_field.png-c6dd9f60575ede909c79682db790022e.etc2.ctex"]
+dest_files=["res://.godot/imported/ui_online_form_field.png-c6dd9f60575ede909c79682db790022e.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

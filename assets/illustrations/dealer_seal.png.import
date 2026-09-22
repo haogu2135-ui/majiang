@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://clqjrdli1b8o6"
-path.etc2="res://.godot/imported/dealer_seal.png-d03922ff1a083fce38dc58591fc1034e.etc2.ctex"
+path="res://.godot/imported/dealer_seal.png-d03922ff1a083fce38dc58591fc1034e.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/dealer_seal.png"
-dest_files=["res://.godot/imported/dealer_seal.png-d03922ff1a083fce38dc58591fc1034e.etc2.ctex"]
+dest_files=["res://.godot/imported/dealer_seal.png-d03922ff1a083fce38dc58591fc1034e.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

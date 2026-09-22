@@ -16,7 +16,7 @@ dest_files=["res://.godot/imported/hand_tutorial_gpt_hint.png-7515e1a9d332bb72b5
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

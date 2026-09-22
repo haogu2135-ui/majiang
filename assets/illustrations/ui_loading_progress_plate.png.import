@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://chp6avl3jnp08"
-path.etc2="res://.godot/imported/ui_loading_progress_plate.png-10a16a009a5391ad09c4e65e263bfa74.etc2.ctex"
+path="res://.godot/imported/ui_loading_progress_plate.png-10a16a009a5391ad09c4e65e263bfa74.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/ui_loading_progress_plate.png"
-dest_files=["res://.godot/imported/ui_loading_progress_plate.png-10a16a009a5391ad09c4e65e263bfa74.etc2.ctex"]
+dest_files=["res://.godot/imported/ui_loading_progress_plate.png-10a16a009a5391ad09c4e65e263bfa74.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

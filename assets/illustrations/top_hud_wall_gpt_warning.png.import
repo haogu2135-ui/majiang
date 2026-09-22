@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bwoctqhcdsmwm"
-path.etc2="res://.godot/imported/top_hud_wall_gpt_warning.png-3e72626531f598bab387f0057b7fe92d.etc2.ctex"
+path="res://.godot/imported/top_hud_wall_gpt_warning.png-3e72626531f598bab387f0057b7fe92d.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/top_hud_wall_gpt_warning.png"
-dest_files=["res://.godot/imported/top_hud_wall_gpt_warning.png-3e72626531f598bab387f0057b7fe92d.etc2.ctex"]
+dest_files=["res://.godot/imported/top_hud_wall_gpt_warning.png-3e72626531f598bab387f0057b7fe92d.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

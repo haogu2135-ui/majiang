@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://buwx8tyjqymcy"
-path.etc2="res://.godot/imported/settings_gpt_panel_v2_sub2api_gpt2_20260814.png-45da14b4d7bd6161d9d5cba8cc4a72ed.etc2.ctex"
+path="res://.godot/imported/settings_gpt_panel_v2_sub2api_gpt2_20260814.png-45da14b4d7bd6161d9d5cba8cc4a72ed.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/settings_gpt_panel_v2_sub2api_gpt2_20260814.png"
-dest_files=["res://.godot/imported/settings_gpt_panel_v2_sub2api_gpt2_20260814.png-45da14b4d7bd6161d9d5cba8cc4a72ed.etc2.ctex"]
+dest_files=["res://.godot/imported/settings_gpt_panel_v2_sub2api_gpt2_20260814.png-45da14b4d7bd6161d9d5cba8cc4a72ed.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

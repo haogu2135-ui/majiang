@@ -3,20 +3,19 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://db0wbmb743pu7"
-path.etc2="res://.godot/imported/ui_button_face_plate.png-111f90b21b77b0e6146a9872685a9149.etc2.ctex"
+path="res://.godot/imported/ui_button_face_plate.png-111f90b21b77b0e6146a9872685a9149.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/illustrations/ui_button_face_plate.png"
-dest_files=["res://.godot/imported/ui_button_face_plate.png-111f90b21b77b0e6146a9872685a9149.etc2.ctex"]
+dest_files=["res://.godot/imported/ui_button_face_plate.png-111f90b21b77b0e6146a9872685a9149.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
