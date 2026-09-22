@@ -6361,7 +6361,18 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 
 func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	check_secondary_back_button_art(scene, "shop", viewport_size)
-	check_focus_route(scene, ["ShopBackButton", "ShopItemsScroll", "ShopItemsScrollHitTarget", "ShopItemBuyButton_swap_card", "ShopItemBuyButton_peek_card", "ShopItemBuyButton_lucky_charm", "ShopItemBuyButton_double_coins"], "ShopBackButton", "shop", viewport_size)
+	var shop_focus_order := [
+		"ShopBackButton", "ShopItemsScroll", "ShopItemsScrollHitTarget",
+		"ShopItemBuyButton_swap_card", "ShopItemBuyButton_peek_card",
+		"ShopItemBuyButton_lucky_charm", "ShopItemBuyButton_double_coins",
+	]
+	if viewport_size.x >= 1600.0:
+		shop_focus_order = [
+			"ShopBackButton", "ShopItemsScroll", "ShopItemsScrollHitTarget",
+			"ShopItemBuyButton_swap_card", "ShopItemBuyButton_lucky_charm",
+			"ShopItemBuyButton_peek_card", "ShopItemBuyButton_double_coins",
+		]
+	check_focus_route(scene, shop_focus_order, "ShopBackButton", "shop", viewport_size)
 	var cabinet_front = scene.find_child("ShopCabinetFrontPanel", true, false) as Control
 	var cabinet_rear = scene.find_child("ShopCabinet3DRearShell", true, false) as Control
 	var cabinet_shadow = scene.find_child("ShopCabinet3DCastShadow", true, false) as Control
