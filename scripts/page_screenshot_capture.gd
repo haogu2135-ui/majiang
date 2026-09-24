@@ -931,6 +931,7 @@ func seed_preview_capacity_battle(scene: Node) -> void:
 		scene.players[seat]["melds"] = meld_sets.duplicate(true)
 		scene.players[seat]["flowers"] = flower_tiles.size()
 		scene.players[seat]["flower_tiles"] = flower_tiles.duplicate()
+	scene.wall.resize(88)
 	scene.last_discard = "R"
 	scene.last_discard_seat = 3
 	scene.table_logs.clear()
