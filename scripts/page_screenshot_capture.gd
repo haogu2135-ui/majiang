@@ -959,6 +959,12 @@ func seed_preview_midgame_battle(scene: Node) -> void:
 		[],
 		["H2"],
 	]
+	var preview_hands := [
+		["1W", "2W", "3W", "5W", "7W", "8W", "9W", "2T", "5T", "8T", "3B", "6B", "F", "F"],
+		["6T", "6T", "6T", "7T", "7T", "7T", "W", "W", "Z", "Z"],
+		["4W", "4W", "4W", "6W", "6W", "6W", "3T", "3T", "3T", "4T", "4T", "4T", "1T"],
+		["9T", "9T", "9T", "8T", "8T", "8T", "W", "W", "Z", "Z"],
+	]
 	var preview_scores := [26000, 25500, 25000, 23500]
 	for seat in range(4):
 		var player: Dictionary = scene.players[seat]
@@ -966,10 +972,9 @@ func seed_preview_midgame_battle(scene: Node) -> void:
 		player["melds"] = preview_melds[seat].duplicate(true)
 		player["flower_tiles"] = preview_flower_tiles[seat].duplicate()
 		player["flowers"] = preview_flower_tiles[seat].size()
+		player["hand"] = preview_hands[seat].duplicate()
+		player["hand_count"] = preview_hands[seat].size()
 		player["score"] = preview_scores[seat]
-		if seat != 0:
-			player["hand_count"] = 13 - preview_melds[seat].size() * 3
-	scene.players[0]["hand"] = ["1W", "2W", "3W", "5W", "7W", "8W", "9W", "2T", "5T", "8T", "3B", "6B", "F", "F"]
 	scene.wall.resize(64)
 	scene.offline_phase = "await_discard"
 	scene.offline_pending_claim.clear()
