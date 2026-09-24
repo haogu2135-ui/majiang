@@ -45,7 +45,7 @@ func run() -> void:
 	var function_281 := source_281.substr(start_281, end_281 - start_281)
 	check(function_281.contains("var normalized_tile := normalize_tile_code(tile)"), "added-gang risk normalizes the tile once")
 	check(function_281.contains("var tile_index_snapshot := tile_index_normalized(normalized_tile)"), "added-gang risk resolves the tile index once")
-	check(function_281.contains("%d|%d|%s\" % [ai_state_revision, gang_seat, normalized_tile]"), "added-gang cache keys use the normalized tile")
+	check(function_281.contains("normalized_tile, visible_tile_counts_state_cache_key()"), "added-gang cache keys include public visible-tile state")
 	check(function_281.contains("visible_tile_count_from_counts(normalized_tile, visible_counts, tile_index_snapshot)"), "visible risk count consumes the captured index")
 	check(function_281.contains("single_opponent_deal_in_risk_components(normalized_tile, gang_seat, seat, visible, visible_counts, eval_context, tile_index_snapshot)"), "opponent risk branches consume the normalized snapshot")
 	check(not function_281.contains("visible_tile_count_from_counts(tile, visible_counts)"), "added-gang risk avoids the legacy tile lookup")
@@ -58,6 +58,21 @@ func run() -> void:
 	var alias_281: Dictionary = scene.added_gang_rob_threat_report(0, "4M")
 	check(canonical_281 == alias_281, "legacy tile aliases preserve the public risk report")
 	check(cache_size_281 == 1 and scene.ai_rob_threat_cache.size() == cache_size_281, "canonical and legacy tiles share one threat cache entry")
+	var live_risk_seat_seen_281 := false
+	for detail_281 in canonical_281.get("risk_details", []):
+		if int(detail_281.get("seat", -1)) == 1:
+			live_risk_seat_seen_281 = true
+			break
+	check(live_risk_seat_seen_281, "publicly live gang tile contributes an opponent risk candidate")
+	scene.players[1]["discards"].append("4W")
+	var discarded_281: Dictionary = scene.added_gang_rob_threat_report(0, "4W")
+	check(scene.ai_rob_threat_cache.size() > cache_size_281, "public tile changes create a fresh threat-cache entry without a revision bump")
+	var discarded_risk_seat_seen_281 := false
+	for detail_281 in discarded_281.get("risk_details", []):
+		if int(detail_281.get("seat", -1)) == 1:
+			discarded_risk_seat_seen_281 = true
+			break
+	check(not discarded_risk_seat_seen_281, "publicly discarded gang tile is removed from cached threat candidates")
 	var invalid_281: Dictionary = scene.added_gang_rob_threat_report(0, "ZZ")
 	var invalid_again_281: Dictionary = scene.added_gang_rob_threat_report(0, "ZZ")
 	check(invalid_281.has("risk_score") and invalid_281.has("risk_details") and float(invalid_281.get("risk_score", -1.0)) >= 0.0 and invalid_281 == invalid_again_281, "invalid gang tiles retain a stable non-negative report")
