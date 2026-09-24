@@ -60,12 +60,14 @@ REQUIRED_BATTLE_SCREEN_CONTRACT = {
         "meld_group_counts": [0, 1, 0, 1],
         "discard_counts": [7, 6, 7, 5],
         "flower_counts": [0, 1, 0, 1],
+        "wall_count": 64,
     },
     "35_offline_battle_capacity": {
         "seed": "seed_preview_capacity_battle",
         "meld_group_counts": [4, 4, 4, 4],
         "discard_counts": [35, 35, 35, 35],
         "flower_counts": [8, 8, 8, 8],
+        "wall_count": 88,
     },
 }
 REQUIRED_INTERACTIVE_STATE_CONTRACTS = {

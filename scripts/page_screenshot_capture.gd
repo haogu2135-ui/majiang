@@ -213,12 +213,14 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 				"meld_group_counts": [0, 1, 0, 1],
 				"discard_counts": [7, 6, 7, 5],
 				"flower_counts": [0, 1, 0, 1],
+				"wall_count": 64,
 			},
 			"35_offline_battle_capacity": {
 				"seed": "seed_preview_capacity_battle",
 				"meld_group_counts": [4, 4, 4, 4],
 				"discard_counts": [35, 35, 35, 35],
 				"flower_counts": [8, 8, 8, 8],
+				"wall_count": 88,
 			},
 		},
 		"interactive_state_contract": {
@@ -502,6 +504,10 @@ func validate_preview_meld_fixture(scene: Node, screen_name: String) -> bool:
 	elif screen_name == "35_offline_battle_capacity":
 		expected_discard_counts = [35, 35, 35, 35]
 		expected_flower_counts = [8, 8, 8, 8]
+	var expected_wall_count := 64 if screen_name == "03_offline_battle" else 88 if screen_name == "35_offline_battle_capacity" else -1
+	if expected_wall_count >= 0 and scene.wall.size() != expected_wall_count:
+		printerr("battle fixture wall count mismatch for %s: got=%d expected=%d" % [screen_name, scene.wall.size(), expected_wall_count])
+		return false
 	if fixture.get("horizontal_seats", []) != [0, 2] or fixture.get("vertical_seats", []) != [1, 3]:
 		printerr("meld fixture seat contract mismatch: %s" % fixture)
 		return false
@@ -975,7 +981,9 @@ func seed_preview_midgame_battle(scene: Node) -> void:
 		player["hand"] = preview_hands[seat].duplicate()
 		player["hand_count"] = preview_hands[seat].size()
 		player["score"] = preview_scores[seat]
-	scene.wall.resize(64)
+	scene.wall = preview_battle_wall_remaining(scene)
+	if scene.wall.size() != 64:
+		printerr("midgame fixture tile ledger mismatch: expected 64 wall tiles, got %d" % scene.wall.size())
 	scene.offline_phase = "await_discard"
 	scene.offline_pending_claim.clear()
 	scene.current_seat = 0
@@ -995,6 +1003,26 @@ func seed_preview_midgame_battle(scene: Node) -> void:
 		"compact_horizontal_tile_width_min": 18,
 		"orientation_rule": "top/bottom horizontal; left/right vertical; faces point to table center",
 	})
+
+
+func preview_battle_wall_remaining(scene: Node) -> Array[String]:
+	var remaining_wall: Array[String] = scene.make_wall()
+	for player in scene.players:
+		for tiles in [player.get("hand", []), player.get("discards", []), player.get("flower_tiles", [])]:
+			for tile in tiles:
+				var tile_index := remaining_wall.find(str(tile))
+				if tile_index < 0:
+					printerr("midgame fixture exceeds the physical tile ledger for tile %s" % str(tile))
+					return []
+				remaining_wall.remove_at(tile_index)
+		for meld in player.get("melds", []):
+			for tile in meld:
+				var tile_index := remaining_wall.find(str(tile))
+				if tile_index < 0:
+					printerr("midgame fixture exceeds the physical tile ledger for meld tile %s" % str(tile))
+					return []
+				remaining_wall.remove_at(tile_index)
+	return remaining_wall
 
 
 func seed_preview_pending_claim(scene: Node) -> void:
