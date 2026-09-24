@@ -1675,7 +1675,6 @@ func _start_offline_impl() -> void:
 		offline_hand_number = 1
 		offline_last_winner = -1
 		offline_dealer_repeat = false
-		offline_match_briefing_shown = false
 		table_logs.clear()
 		players.clear()
 		for i in range(4):

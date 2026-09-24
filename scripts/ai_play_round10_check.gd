@@ -104,22 +104,13 @@ func run() -> void:
 	var score2 = scene.ai_claim_action_score(rep2, 1)
 	check(score2 < score - 19.0, "action score 扣 human_claim_penalty")
 
-	# --- C) briefing toast once per match ---
-	print("--- C) match briefing once ---")
-	scene.offline_match_briefing_shown = false
-	scene.offline_sim_quiet = true  # avoid real toast/render side effects in headless
-	# unit: flag semantics
+	# --- C) briefing text remains in the game log ---
+	print("--- C) briefing text and log ---")
 	var brief = scene.offline_hand_ai_briefing_text()
 	check(brief.find("AI难度") >= 0, "简报文本可用")
-	# simulate deal path flag
-	scene.offline_sim_quiet = false
-	scene.offline_match_briefing_shown = false
-	# call internal logic equivalent
-	if brief != "" and not scene.offline_match_briefing_shown:
-		scene.offline_match_briefing_shown = true
-	check(scene.offline_match_briefing_shown, "首局后标记已展示")
-	var second_would_toast = brief != "" and not scene.offline_match_briefing_shown
-	check(not second_would_toast, "次局不再 toast")
+	if brief != "":
+		scene.add_log(brief)
+	check(scene.table_logs.has(brief), "AI简报写入牌桌记录")
 
 	# --- D) sim stats deal_ins_to_human field + bot smoke ---
 	print("--- D) deal-in-to-human stats + smoke ---")

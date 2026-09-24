@@ -8002,7 +8002,6 @@ func _start_offline_impl() -> void:
 		offline_hand_number = 1
 		offline_last_winner = -1
 		offline_dealer_repeat = false
-		offline_match_briefing_shown = false
 		table_logs.clear()
 		players.clear()
 		for i in range(4):
@@ -50707,10 +50706,6 @@ func deal_offline_hand() -> void:
 		var briefing = offline_hand_ai_briefing_text()
 		if briefing != "":
 			add_log(briefing)
-			# R10: 整场比赛只 toast 一次人设简报，避免每局弹窗刷屏；日志仍每局写。
-			if not offline_match_briefing_shown:
-				show_toast(briefing, 2600)
-				offline_match_briefing_shown = true
 	render_game(true)
 	play_fx_deal_start(dealer_seat)
 	play_fx_deal_cascade(dealer_seat)

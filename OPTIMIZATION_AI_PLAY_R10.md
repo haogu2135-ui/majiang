@@ -9,7 +9,7 @@
 1. **吃碰玩家弃牌更克制**：困难拒脏吃/无收益碰；副露后必喂 seat0 则拒  
 2. **副露评分扣分**：`human_claim_penalty` 进入 `ai_claim_action_score`  
 3. **点炮玩家可度量**：sim / benchmark 增加 `deal_ins_to_human`  
-4. **开局简报不刷屏**：整场比赛 toast 一次，日志仍每局写  
+4. **开局简报不遮挡牌桌**：AI 难度与画像写入对局日志，不弹居中 toast
 
 ## 实现
 
@@ -20,7 +20,7 @@
 | `build_ai_claim_report` | `declined_by_human` + `human_claim_penalty` |
 | `ai_claim_action_score` | `score -= human_claim_penalty` |
 | `deal_ins_to_human` / `human_claim_declines` | 全 bot 采样指标 |
-| `offline_match_briefing_shown` | 首局 toast 一次 |
+| `offline_hand_ai_briefing_text()` | 生成 AI 难度与画像简报；每局写入对局日志 |
 
 ## 运行
 

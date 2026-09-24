@@ -870,7 +870,6 @@ var offline_ai_run_queued = false
 var offline_ai_assistance_queued = false
 var offline_all_bot_mode := false
 var offline_sim_quiet := false
-var offline_match_briefing_shown := false
 var offline_skip_ai_profile_reshuffle := false
 var rule_variant := RULE_VARIANT_YANGZHOU
 var offline_active_rule_variant := ""
