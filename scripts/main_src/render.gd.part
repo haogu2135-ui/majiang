@@ -18853,6 +18853,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		maint_section_rect = rect_full(0.040, 0.854, 0.960, 0.995)
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
+	overlay.z_index = UI_MODAL_Z_INDEX
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.set_meta("viewport_snapshot", settings_viewport)

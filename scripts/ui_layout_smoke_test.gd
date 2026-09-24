@@ -5255,6 +5255,10 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		return
 	var overlay_control := overlay as Control
 	check(overlay_control.mouse_filter == Control.MOUSE_FILTER_STOP, "settings overlay blocks clicks behind the modal at %s" % viewport_size)
+	check(overlay_control.z_index >= scene.UI_MODAL_Z_INDEX, "settings overlay renders on the modal layer above menu navigation at %s" % viewport_size)
+	var menu_quick_label := scene.find_child("MenuQuickRulesLabel", true, false) as Control
+	if menu_quick_label != null:
+		check(overlay_control.z_index > menu_quick_label.z_index, "settings modal covers raised menu shortcut labels at %s" % viewport_size)
 	var overlay_rect = screen_rect(overlay_control)
 	var root_rect = screen_rect(scene.root_layer)
 	check(overlay_rect.position.distance_to(root_rect.position) <= 0.5 and overlay_rect.size.distance_to(root_rect.size) <= 1.0, "settings overlay covers the safe content viewport at %s" % viewport_size)
