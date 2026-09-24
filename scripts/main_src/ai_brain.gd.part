@@ -1194,7 +1194,7 @@ func score_context_report_cached(seat: int) -> Dictionary:
 	var strategy = "均衡"
 	if late > 0.0 and rank == 1 and lead_gap >= 1200:
 		strategy = "守成"
-	elif late > 0.0 and rank >= 3 and lead_gap <= -1800:
+	elif late > 0.0 and rank >= 2 and lead_gap <= -1800:
 		strategy = "追分"
 	var report := {
 		"rank": rank,
@@ -1229,7 +1229,7 @@ func score_defense_adjustment(seat: int) -> float:
 	var adj = 0.0
 	if rank == 1 and gap > 0:
 		adj = min(0.30, 0.08 + float(gap) / 18000.0) * late
-	elif rank >= 3 and gap < 0:
+	elif (rank == 2 and gap <= -1800) or (rank >= 3 and gap < 0):
 		adj = -min(0.18, 0.04 + float(abs(gap)) / 26000.0) * late
 	adj += human_relative_defense_bias(seat, late)
 	return adj
@@ -1246,7 +1246,7 @@ func score_attack_multiplier(seat: int) -> float:
 	var mult = 1.0
 	if rank == 1 and gap > 0:
 		mult = clamp(1.0 - (0.06 + float(gap) / 60000.0) * late, 0.84, 1.0)
-	elif rank >= 3 and gap < 0:
+	elif (rank == 2 and gap <= -1800) or (rank >= 3 and gap < 0):
 		mult = clamp(1.0 + (0.08 + float(abs(gap)) / 52000.0) * late, 1.0, 1.34)
 	# 人机分差标定：AI 相对玩家的攻守微调（困难更明显）
 	mult *= human_relative_attack_bias(seat, late)
