@@ -32447,7 +32447,7 @@ func draw_table_living_illustration(parent: Control) -> Control:
 func table_log_render_signature(viewport_snapshot: Vector2 = Vector2.ZERO) -> String:
 	var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var compact_log := viewport_size.y <= 560.0
-	var hide_compact_ledger_for_pending := viewport_size.x <= 960.0 and has_pending_claim_window() and not table_log_archive_open
+	var hide_ledger_for_pending := has_pending_claim_window() and not table_log_archive_open
 	return "%s|%s|%s|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d" % [
 		mode,
 		str(viewport_size),
@@ -32456,7 +32456,7 @@ func table_log_render_signature(viewport_snapshot: Vector2 = Vector2.ZERO) -> St
 		resize_refresh_revision,
 		ui_layout_density(),
 		1 if compact_log else 0,
-		1 if hide_compact_ledger_for_pending else 0,
+		1 if hide_ledger_for_pending else 0,
 		1 if table_log_archive_open else 0,
 		1 if has_pending_claim_window() else 0,
 		table_logs.size(),
@@ -32482,11 +32482,10 @@ func draw_table_log(parent: Control) -> void:
 		retained_ledger.queue_free()
 	retained_battle_table_log_signature = ""
 	var compact_log := table_log_viewport_size.y <= 560.0
-	# At 960x540 the response context owns the only readable left-top reserve.
-	# Hide the secondary ledger for this short decision window; its complete
-	# history remains available through the chat/history routes after the action.
-	var hide_compact_ledger_for_pending: bool = table_log_viewport_size.x <= 960.0 \
-		and has_pending_claim_window() and not table_log_archive_open
+	# The pending response context occupies the ledger's upper-left reading lane.
+	# Hide the secondary ledger during the decision window; the archive remains
+	# available through the existing history routes after the action.
+	var hide_ledger_for_pending: bool = has_pending_claim_window() and not table_log_archive_open
 	# The compact ledger sits below the side seat card, so it can grow rightward
 	# without touching the side river. This gives the latest event a real reading
 	# lane instead of relying on a tooltip for every long sentence.
@@ -32497,7 +32496,7 @@ func draw_table_log(parent: Control) -> void:
 	var ledger_rect := rect_full(0.018, 0.128, ledger_right, ledger_bottom)
 	var ledger_panel = make_gpt_gate(ledger_rect, Color(0.094, 0.074, 0.048, 0.88))
 	ledger_panel.name = "TableLogLedgerPanel"
-	ledger_panel.visible = not hide_compact_ledger_for_pending
+	ledger_panel.visible = not hide_ledger_for_pending
 	ledger_panel.set_meta("table_log_viewport_snapshot", table_log_viewport_size)
 	ledger_panel.set_meta("table_log_viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	ledger_panel.set_meta("compact_header_policy", "title_then_count_then_history_with_measured_gutters")

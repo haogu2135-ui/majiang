@@ -50,6 +50,9 @@ const BATTLE_DIAGNOSTIC_OWNER_NAMES := [
 	"TopHud3DShell",
 	"TopHudTitle",
 	"TopHudStatus",
+	"TableLogLedgerPanel",
+	"TableLogLedgerTitle",
+	"TableLogArchiveButton",
 	"CenterDicePlate",
 	"CenterDiceSimpleSeal",
 	"CenterDiceSimpleGlyph",
@@ -57,11 +60,21 @@ const BATTLE_DIAGNOSTIC_OWNER_NAMES := [
 	"CenterWallCount",
 	"CenterLastDiscardLabel",
 	"CenterLastDiscardTile",
+	"CenterLastDiscardCompactFallback",
 	"CenterLastTileTrace",
 	"CenterLastDiscardFeedback",
+	"CenterWindLabel_东",
+	"CenterWindLabel_南",
 	"CenterWindLabel_西",
+	"CenterWindLabel_北",
 	"PendingClaimIllustration",
+	"PendingClaimActionStack",
 	"PendingClaimResponseGrid",
+	"PendingClaimPrimaryButton",
+	"PendingClaimSecondaryLane",
+	"PendingClaimResponseTailLane",
+	"PendingClaimNetworkLane",
+	"PendingClaimVoiceLane",
 	"ActionButtonDock",
 ]
 var battle_node_diagnostic_reports: Array[String] = []
@@ -342,6 +355,7 @@ func battle_node_diagnostic_report(scene: Node, screen_name: String) -> String:
 	else:
 		lines.append("root_layer=<missing>")
 	var all_controls := scene.find_children("*", "Control", true, false)
+	var observed_controls: Array[Control] = []
 	for owner_name in BATTLE_DIAGNOSTIC_OWNER_NAMES:
 		var matches: Array[Control] = []
 		for candidate in all_controls:
@@ -349,6 +363,7 @@ func battle_node_diagnostic_report(scene: Node, screen_name: String) -> String:
 				matches.append(candidate as Control)
 		lines.append("owner=%s instances=%d" % [owner_name, matches.size()])
 		for control in matches:
+			observed_controls.append(control)
 			var global_rect := control.get_global_rect()
 			var root_relative_rect := global_rect
 			if root_layer != null and is_instance_valid(root_layer):
@@ -369,6 +384,20 @@ func battle_node_diagnostic_report(scene: Node, screen_name: String) -> String:
 				control.z_as_relative,
 				z_chain,
 			])
+	lines.append("visible_non_ancestor_overlaps:")
+	for first_index in range(observed_controls.size()):
+		var first_control := observed_controls[first_index]
+		if not first_control.is_visible_in_tree():
+			continue
+		for second_index in range(first_index + 1, observed_controls.size()):
+			var second_control := observed_controls[second_index]
+			if not second_control.is_visible_in_tree() or first_control.is_ancestor_of(second_control) or second_control.is_ancestor_of(first_control):
+				continue
+			var overlap_rect := first_control.get_global_rect().intersection(second_control.get_global_rect())
+			if overlap_rect.size.x <= 0.0 or overlap_rect.size.y <= 0.0:
+				continue
+			var overlap_area := overlap_rect.size.x * overlap_rect.size.y
+			lines.append("  %s <> %s overlap=%s area=%.1f" % [first_control.name, second_control.name, format_rect(overlap_rect), overlap_area])
 	return "\n".join(lines)
 
 func write_battle_node_diagnostics(output_dir_res: String) -> bool:

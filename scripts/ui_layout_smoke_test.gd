@@ -4261,11 +4261,12 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	check(action_dock != null and summary != null, "online pending mounts context and action dock together at %s" % viewport_size)
 	if action_dock != null and summary != null:
 		check(screen_rect(summary).end.y <= screen_rect(action_dock).position.y - 5.0, "online pending context clears the action dock at %s" % viewport_size)
+	var pending_ledger := scene.find_child("TableLogLedgerPanel", true, false) as Control
+	if summary != null and pending_ledger != null:
+		check(not pending_ledger.visible or not rects_overlap(screen_rect(summary), screen_rect(pending_ledger)), "online pending context does not cover the table ledger at %s" % viewport_size)
 	if summary != null and viewport_size.x <= 960.0:
 		var context_rect := screen_rect(summary)
 		check(context_rect.size.x >= viewport_size.x * 0.24 and context_rect.size.y <= viewport_size.y * 0.11, "960px pending context widens while staying above the right river at %s" % viewport_size)
-		var compact_ledger := scene.find_child("TableLogLedgerPanel", true, false) as Control
-		check(compact_ledger == null or not compact_ledger.visible or not rects_overlap(context_rect, screen_rect(compact_ledger)), "960px pending context owns its top lane without covering the table ledger at %s" % viewport_size)
 		for context_label in [source_text, tile_name, urgency_text, focus_text]:
 			if context_label == null:
 				continue
