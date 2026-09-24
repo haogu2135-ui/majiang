@@ -1096,12 +1096,12 @@ func _show_online_lobby_impl() -> void:
 	recover_audio_after_screen_change()
 	clear_screen()
 	var online_lobby_viewport_size := effective_viewport_size()
-	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and (not online_waiting_for_server or was_online_lobby):
 		if was_online_lobby:
 			online_waiting_for_server = false
 			online_retry_available = false
 		clear_online_room_snapshot(not was_online_lobby)
+	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 
 	# 主面板 - 统一的全屏面板
 	# The disconnected lobby is an operational form, so its full-page substrate
