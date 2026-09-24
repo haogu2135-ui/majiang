@@ -5155,6 +5155,14 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		var lane_capacity := int(meld_area.get_meta("lane_capacity", 0))
 		check(visible_group_count == group_count and declared_group_count >= visible_group_count and lane_capacity >= visible_group_count and visible_group_count <= 4, "battle meld area %d exposes its visible group capacity at %s" % [meld_seat, viewport_size])
 		check(page_count == maxi(1, ceili(float(declared_group_count) / float(maxi(1, lane_capacity)))), "battle meld area %d declares accurate pagination metadata at %s" % [meld_seat, viewport_size])
+		var meld_pager := scene.find_child("MeldLaneArchiveButton_%d" % meld_seat, true, false) as Control
+		if meld_pager != null:
+			var pager_rect := screen_rect(meld_pager)
+			for child in meld_area.get_children():
+				var meld_group := child as Control
+				if meld_group == null or not str(meld_group.name).begins_with("MeldGroup_"):
+					continue
+				check(not rects_overlap(pager_rect, screen_rect(meld_group)), "battle meld pager %d clears group %s at %s" % [meld_seat, meld_group.name, viewport_size])
 	var table_log = scene.find_child("TableLogLedgerPanel", true, false) as Control
 	check(table_log != null, "battle renders named table log ledger at %s" % viewport_size)
 	if table_log != null:

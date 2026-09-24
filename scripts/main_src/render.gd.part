@@ -14192,7 +14192,7 @@ func meld_lane_capacity_for_list(seat: int, meld_list: Array, compact_melds: boo
 	var vertical := seat_meld_is_vertical(seat)
 	var measured_content_size := content_size if content_size != Vector2.ZERO else safe_content_pixel_size()
 	var lane_extent := measured_content_size.y * float(meld_rect.size.y - meld_rect.position.y) if vertical else measured_content_size.x * float(meld_rect.size.x - meld_rect.position.x)
-	var pager_reserve := 56.0 if reserve_pager else 0.0
+	var pager_reserve := meld_lane_pager_reserved_extent_px(seat, meld_rect, measured_content_size) if reserve_pager else 0.0
 	var edge_clearance := 6.0 if compact_melds else 8.0
 	var usable_extent := maxf(1.0, lane_extent - pager_reserve - edge_clearance)
 	var used_extent := 0.0
@@ -14222,6 +14222,14 @@ func meld_lane_pager_rect(seat: int, meld_rect: Rect2, content_size: Vector2 = V
 		return rect_full(lane_left, lane_bottom - pager_height, lane_right, lane_bottom - 0.005)
 	var pager_width := maxf(0.060, min_width_ratio)
 	return rect_full(lane_right - pager_width, lane_top, lane_right - 0.005, lane_bottom)
+
+func meld_lane_pager_reserved_extent_px(seat: int, meld_rect: Rect2, content_size: Vector2 = Vector2.ZERO) -> float:
+	var measured_content_size := content_size if content_size != Vector2.ZERO else safe_content_pixel_size()
+	var pager_rect := meld_lane_pager_rect(seat, meld_rect, measured_content_size)
+	var normalized_extent := pager_rect.size.y - pager_rect.position.y if seat_meld_is_vertical(seat) else pager_rect.size.x - pager_rect.position.x
+	var axis_extent := normalized_extent * (measured_content_size.y if seat_meld_is_vertical(seat) else measured_content_size.x)
+	var minimum_extent := UI_MIN_TOUCH_TARGET if seat_meld_is_vertical(seat) else 50.0
+	return maxf(axis_extent, minimum_extent) + 8.0
 
 func meld_lane_content_rect(seat: int, meld_rect: Rect2, has_pager: bool, content_size: Vector2 = Vector2.ZERO) -> Rect2:
 	if not has_pager:
@@ -14314,6 +14322,7 @@ func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 		var visible_melds: Array = meld_list.slice(window_start, mini(meld_list.size(), window_start + lane_capacity))
 		var page_count := maxi(1, int(ceil(float(meld_list.size()) / float(maxi(1, lane_capacity)))))
 		var has_pager := page_count > 1
+		var pager_reserved_extent_px := meld_lane_pager_reserved_extent_px(seat, meld_rect, meld_content_size) if has_pager else 0.0
 		var content_rect := meld_lane_content_rect(seat, meld_rect, has_pager, meld_content_size)
 		var meld_render_signature := meld_lane_render_signature(seat, meld_list, meld_rect, content_rect, full_capacity, lane_capacity, window_start, page_count, has_pager, compact_melds, danger_compact_melds, meld_content_size, meld_viewport_snapshot)
 		var retained_entry = retained_battle_meld_lanes.get(seat, {})
@@ -14392,8 +14401,8 @@ func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 			# Spend the side lane height across one vertical group per row. This keeps
 			# every chi/peng/gang in the seat-facing lane instead of creating a second
 			# column that can drift into the river.
-			var lane_height_px := meld_content_size.y * float(meld_rect.size.y - meld_rect.position.y) - (56.0 if has_pager else 0.0)
-			var lane_width_px := meld_content_size.x * float(meld_rect.size.x - meld_rect.position.x) - (56.0 if has_pager else 0.0)
+			var lane_height_px := meld_content_size.y * float(meld_rect.size.y - meld_rect.position.y) - pager_reserved_extent_px
+			var lane_width_px := meld_content_size.x * float(meld_rect.size.x - meld_rect.position.x)
 			var group_rows := maxi(1, visible_melds.size())
 			var row_gap_px := float(maxi(0, group_rows - 1)) * 3.0
 			var group_height_px := maxf(32.0, (lane_height_px - row_gap_px) / float(group_rows))
@@ -14429,7 +14438,7 @@ func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 					horizontal_group_count += 1
 			if horizontal_tile_count > 0:
 				var lane_width_fraction := float(meld_rect.size.x - meld_rect.position.x)
-				var lane_width_px := meld_content_size.x * lane_width_fraction - (56.0 if has_pager else 0.0)
+				var lane_width_px := meld_content_size.x * lane_width_fraction - pager_reserved_extent_px
 				var lane_height_px := meld_content_size.y * float(meld_rect.size.y - meld_rect.position.y)
 				var group_padding_px := float(horizontal_group_count) * 6.0
 				var group_gap_px := float(maxi(0, horizontal_group_count - 1)) * 3.0
@@ -14452,7 +14461,7 @@ func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 		elif not vertical:
 			# Wide lanes should spend their actual pixel budget before falling
 			# back to the old fixed 20x28 face for four groups.
-			var wide_lane_width_px := meld_content_size.x * float(meld_rect.size.x - meld_rect.position.x) - (56.0 if has_pager else 0.0)
+			var wide_lane_width_px := meld_content_size.x * float(meld_rect.size.x - meld_rect.position.x) - pager_reserved_extent_px
 			var wide_lane_height_px := meld_content_size.y * float(meld_rect.size.y - meld_rect.position.y)
 			var wide_tile_count := 0
 			var wide_group_count := 0
