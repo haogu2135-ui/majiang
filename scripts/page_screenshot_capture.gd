@@ -60,7 +60,6 @@ const BATTLE_DIAGNOSTIC_OWNER_NAMES := [
 	"CenterWallCount",
 	"CenterLastDiscardLabel",
 	"CenterLastDiscardTile",
-	"CenterLastDiscardCompactFallback",
 	"CenterLastTileTrace",
 	"CenterLastDiscardFeedback",
 	"CenterWindLabel_东",

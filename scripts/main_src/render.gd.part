@@ -2404,18 +2404,15 @@ func draw_center(parent: Control) -> void:
 		# here because this preview uses an explicit centered pixel rect instead.
 		tile.custom_minimum_size = Vector2.ZERO
 		if not center_min_face_possible:
-			# Do not render a sub-minimum face into a clipped slot. The compact
-			# summary keeps the latest-discard fact readable and the full tile
-			# remains available through the tooltip and table river.
+			# Do not render a sub-minimum face into a clipped slot. Keep its tile
+			# identity in the existing summary lane and leave the wind slot clear.
 			tile.visible = false
-			var compact_face_fallback := make_label(center, "牌 %s" % str(last_discard_model.get("tile_label", "")), 8, Color(0.92, 0.86, 0.66), true)
-			compact_face_fallback.name = "CenterLastDiscardCompactFallback"
-			apply_rect(compact_face_fallback, rect_full(0.365, 0.640, 0.635, 0.745))
-			compact_face_fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			compact_face_fallback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			set_ui_full_text(compact_face_fallback, compact_face_fallback.text, "最后弃牌：" + str(last_discard_model.get("tile_label", "")) + "；中心空间不足以显示牌面，请看牌河")
-			configure_clipped_label(compact_face_fallback)
-			center.set_meta("center_last_discard_fallback", "readable_summary_instead_of_subminimum_face")
+			var compact_discard_label := "上·%s" % str(last_discard_model.get("tile_label", ""))
+			last_label.text = compact_discard_label
+			var compact_label_font_size := clampi(roundi(center_size_px.x * 0.055), 8, 12)
+			last_label.add_theme_font_size_override("font_size", compact_label_font_size)
+			set_ui_full_text(last_label, compact_discard_label, str(last_discard_model.get("accessible_text", compact_discard_label)) + "；牌面请看牌河")
+			center.set_meta("center_last_discard_fallback", "tile_identity_in_latest_discard_label")
 		# Compact labels consume real pixel height beyond their normalized anchor;
 		# reserve a measured reading gap before centering the face.
 		var label_gap_anchor := (float(last_label.get_theme_font_size("font_size")) + 5.0) / maxf(1.0, center_size_px.y) if compact_center else 0.0
