@@ -1,5 +1,5 @@
 extends SceneTree
-## Round 92: catastrophic thin-tenpai pressure must expose the hard guard.
+## Round 92: catastrophic low-value tenpai pressure must expose the hard guard.
 var failed := false
 
 
@@ -47,6 +47,23 @@ func run() -> void:
 	scene.ensure_ai_benchmark_players()
 	scene.ai_sim_trace_enabled = true
 
+	print("--- A) low-value seven-out tenpai folds catastrophic danger ---")
+	var paired_seed_trace: Dictionary = scene.sample_bot_strength_across_difficulties(3, 20260730, false, [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD])
+	var seven_out_guard_moves := 0
+	for hand_record in paired_seed_trace.get("hand_traces", []):
+		if typeof(hand_record) != TYPE_DICTIONARY:
+			continue
+		if int(hand_record.get("difficulty", -1)) != scene.AI_DIFFICULTY_HARD or int(hand_record.get("hand_index", -1)) != 2:
+			continue
+		var traced_result: Dictionary = hand_record.get("result", {})
+		for item in traced_result.get("discard_trace", []):
+			if typeof(item) != TYPE_DICTIONARY:
+				continue
+			if bool(item.get("hard_guard_moved", false)) and str(item.get("hard_guard_from_tile", "")) == "3W" and str(item.get("tile", "")) == "5T":
+				seven_out_guard_moves += 1
+	check(seven_out_guard_moves == 1, "hard folds the low-value seven-out 3W tenpai to the materially safer 5T")
+
+	print("--- B) naturally sampled catastrophic thin-tenpai pressure ---")
 	var result = run_hand(scene, 20260827, 1)
 	var trace: Array = result.get("discard_trace", [])
 	var thin_pressure_cases := 0
@@ -84,7 +101,7 @@ func run() -> void:
 	check(bool(result.get("ended", false)), "diagnostic hard hand completes")
 	check(guarded_cases == thin_pressure_cases, "every naturally sampled catastrophic thin-tenpai case carries the hard guard")
 
-	print("--- B) deterministic catastrophic thin-tenpai contract ---")
+	print("--- C) deterministic catastrophic thin-tenpai contract ---")
 	var catastrophe := {
 		"tile": "5W",
 		"score": 1240.0,
@@ -113,49 +130,6 @@ func run() -> void:
 	scene.apply_hard_danger_push_guard(reports, -1)
 	check(bool(catastrophe.get("hard_guard_catastrophe_tenpai", false)), "catastrophic thin tenpai activates the dedicated hard guard")
 	check(str(reports[0].get("tile", "")) == "E" and bool(reports[0].get("hard_guard_moved", false)), "hard guard moves the quality-bounded safer discard to the front")
-
-	print("--- C) low-value seven-out tenpai folds catastrophic danger ---")
-	var seven_out_result := run_hand(scene, 20260764, 2)
-	print("    seed result deal_in=%d winner=%d terminal=%s step=%d trace=%d" % [
-		int(seven_out_result.get("deal_in_seat", -1)),
-		int(seven_out_result.get("winner", -1)),
-		str(seven_out_result.get("terminal_tile", "")),
-		int(seven_out_result.get("terminal_trace_step", -1)),
-		(seven_out_result.get("discard_trace", []) as Array).size(),
-	])
-	var seven_out_guard_moves := 0
-	for item in seven_out_result.get("discard_trace", []):
-		if typeof(item) != TYPE_DICTIONARY:
-			continue
-		if bool(item.get("hard_guard_moved", false)) or (int(item.get("seat", -1)) == 0 and str(item.get("tile", "")) == "3W"):
-			print("    relevant trace step=%d seat=%d tile=%s risk=%.1f feed=%.1f sh=%d wait=%d/%d moved=%s from=%s" % [
-				int(item.get("step", -1)),
-				int(item.get("seat", -1)),
-				str(item.get("tile", "")),
-				float(item.get("risk", 0.0)),
-				float(item.get("feed", 0.0)),
-				int(item.get("shanten", -1)),
-				int(item.get("wait_best_points", 0)),
-				int(item.get("wait_total_remaining", 0)),
-				str(item.get("hard_guard_moved", false)),
-				str(item.get("hard_guard_from_tile", "")),
-			])
-		if int(item.get("step", -1)) >= 45 and int(item.get("step", -1)) <= 55:
-			print("    seed trace step=%d seat=%d tile=%s risk=%.1f feed=%.1f sh=%d wait=%d/%d moved=%s from=%s" % [
-				int(item.get("step", -1)),
-				int(item.get("seat", -1)),
-				str(item.get("tile", "")),
-				float(item.get("risk", 0.0)),
-				float(item.get("feed", 0.0)),
-				int(item.get("shanten", -1)),
-				int(item.get("wait_best_points", 0)),
-				int(item.get("wait_total_remaining", 0)),
-				str(item.get("hard_guard_moved", false)),
-				str(item.get("hard_guard_from_tile", "")),
-			])
-		if bool(item.get("hard_guard_moved", false)) and str(item.get("hard_guard_from_tile", "")) == "3W" and str(item.get("tile", "")) == "5T":
-			seven_out_guard_moves += 1
-	check(seven_out_guard_moves == 1, "hard folds the low-value seven-out 3W tenpai to the materially safer 5T")
 
 	scene.ai_sim_trace_enabled = false
 	scene.enable_offline_all_bot_mode(false, false)
