@@ -175,6 +175,7 @@ run_check "Rule variants" "all local rule profiles complete AI hands and score c
 run_godot_check "Scoring contract" 77 "advertised special hands score correctly"
 run_godot_check "Score integrity" 82 "all difficulties conserve table score"
 run_godot_check "Strategy quality" 288 "second-place AI chases the leader in late hands"
+run_godot_check "Strategy quality" 289 "cumulative match simulation exercises endgame chase"
 run_godot_check "Strategy quality" 87 "pure-suit route reward is counted once"
 run_godot_check "Strategy quality" 88 "each discard candidate owns its route plan"
 run_godot_check "Strength evidence" 68 "paired multi-seed strength pack passes"
