@@ -38,6 +38,24 @@ const SCREEN_NAMES := [
 	"33_telemetry_revoked",
 	"34_telemetry_exported",
 ]
+const BATTLE_DIAGNOSTIC_SCREENS := [
+	"03_offline_battle",
+	"27_online_game",
+	"28_online_game_pending",
+]
+const BATTLE_DIAGNOSTIC_OWNER_NAMES := [
+	"CenterConsole3DShell",
+	"CenterDicePlate",
+	"CenterDiceSimpleSeal",
+	"CenterWallStatusLabel",
+	"CenterWallCount",
+	"CenterLastDiscardLabel",
+	"CenterLastDiscardTile",
+	"CenterLastTileTrace",
+	"CenterLastDiscardFeedback",
+	"CenterWindLabel_西",
+]
+var battle_node_diagnostic_reports: Array[String] = []
 
 class ConnectedLobbyCaptureTransport:
 	extends RefCounted
@@ -108,6 +126,9 @@ func run() -> void:
 	await process_frame
 	await create_timer(0.06).timeout
 	await process_frame
+	if not battle_node_diagnostic_reports.is_empty() and not write_battle_node_diagnostics(output_dir_res):
+		quit(1)
+		return
 
 	if selected_screens.size() == 1 and selected_screens[0] == "03_offline_battle":
 		print("saved offline battle screenshot %dx%d: %s" % [viewport_size.x, viewport_size.y, output_dir])
@@ -274,6 +295,10 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		printerr("failed to save %s: viewport image is unavailable" % screen_name)
 		quit(1)
 		return
+	if requested_battle_node_diagnostics() and BATTLE_DIAGNOSTIC_SCREENS.has(screen_name):
+		var report := battle_node_diagnostic_report(scene, screen_name)
+		battle_node_diagnostic_reports.append(report)
+		print(report)
 
 	var output_path = ProjectSettings.globalize_path("%s/%s.png" % [output_dir_res, screen_name])
 	var err = image.save_png(output_path)
@@ -288,6 +313,106 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		scene.shutdown_runtime_tweens()
 	await process_frame
 	await process_frame
+
+func requested_battle_node_diagnostics() -> bool:
+	return OS.get_cmdline_user_args().has("--diagnose-battle-nodes")
+
+func battle_node_diagnostic_report(scene: Node, screen_name: String) -> String:
+	var lines := PackedStringArray()
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(root.size))
+	var window_position := DisplayServer.window_get_position()
+	var window_size := DisplayServer.window_get_size()
+	var root_layer := scene.get("root_layer") as Control
+	var root_inverse := Transform2D.IDENTITY
+	if root_layer != null and is_instance_valid(root_layer):
+		root_inverse = root_layer.get_global_transform().affine_inverse()
+	lines.append("[%s] viewport=%s window_position=%s window_size=%s" % [screen_name, format_rect(viewport_rect), window_position, window_size])
+	if root_layer != null and is_instance_valid(root_layer):
+		var root_global_rect := root_layer.get_global_rect()
+		lines.append("root_layer=%s global=%s root_relative=%s desktop=%s" % [root_layer.get_path(), format_rect(root_global_rect), format_rect(Rect2(Vector2.ZERO, root_layer.size)), format_rect(offset_rect(root_global_rect, window_position))])
+	else:
+		lines.append("root_layer=<missing>")
+	var all_controls := scene.find_children("*", "Control", true, false)
+	for owner_name in BATTLE_DIAGNOSTIC_OWNER_NAMES:
+		var matches: Array[Control] = []
+		for candidate in all_controls:
+			if candidate is Control and candidate.name == owner_name:
+				matches.append(candidate as Control)
+		lines.append("owner=%s instances=%d" % [owner_name, matches.size()])
+		for control in matches:
+			var global_rect := control.get_global_rect()
+			var root_relative_rect := global_rect
+			if root_layer != null and is_instance_valid(root_layer):
+				var node_to_root := root_inverse * control.get_global_transform()
+				root_relative_rect = transformed_rect_aabb(Rect2(Vector2.ZERO, control.size), node_to_root)
+			var effective_alpha := effective_canvas_alpha(control)
+			var z_chain := canvas_z_chain(control)
+			lines.append("  path=%s global=%s root_relative=%s desktop=%s size=%s visible_local=%s visible_tree=%s effective_alpha=%.3f z_index=%d z_as_relative=%s z_chain=%s" % [
+				control.get_path(),
+				format_rect(global_rect),
+				format_rect(root_relative_rect),
+				format_rect(offset_rect(global_rect, window_position)),
+				control.size,
+				control.visible,
+				control.is_visible_in_tree(),
+				effective_alpha,
+				control.z_index,
+				control.z_as_relative,
+				z_chain,
+			])
+	return "\n".join(lines)
+
+func write_battle_node_diagnostics(output_dir_res: String) -> bool:
+	var output_path := ProjectSettings.globalize_path("%s/battle_node_diagnostics.txt" % output_dir_res)
+	var file := FileAccess.open(output_path, FileAccess.WRITE)
+	if file == null:
+		printerr("failed to write battle node diagnostics: %s" % output_path)
+		return false
+	var report_blocks := PackedStringArray()
+	for report in battle_node_diagnostic_reports:
+		report_blocks.append(report)
+	file.store_string("\n\n".join(report_blocks) + "\n")
+	print("saved battle node diagnostics: %s" % output_path)
+	return true
+
+func format_rect(rect: Rect2) -> String:
+	return "[%.1f,%.1f,%.1f,%.1f]" % [rect.position.x, rect.position.y, rect.size.x, rect.size.y]
+
+func offset_rect(rect: Rect2, offset: Vector2) -> Rect2:
+	return Rect2(rect.position + offset, rect.size)
+
+func transformed_rect_aabb(rect: Rect2, transform: Transform2D) -> Rect2:
+	var points := [
+		transform * rect.position,
+		transform * Vector2(rect.end.x, rect.position.y),
+		transform * rect.end,
+		transform * Vector2(rect.position.x, rect.end.y),
+	]
+	var minimum: Vector2 = points[0]
+	var maximum: Vector2 = points[0]
+	for point in points:
+		minimum = minimum.min(point)
+		maximum = maximum.max(point)
+	return Rect2(minimum, maximum - minimum)
+
+func effective_canvas_alpha(item: CanvasItem) -> float:
+	var alpha := 1.0
+	var cursor: Node = item
+	while cursor is CanvasItem:
+		alpha *= (cursor as CanvasItem).modulate.a
+		cursor = cursor.get_parent()
+	alpha *= item.self_modulate.a
+	return alpha
+
+func canvas_z_chain(item: CanvasItem) -> String:
+	var chain: Array[String] = []
+	var cursor: Node = item
+	while cursor is CanvasItem:
+		var canvas_item := cursor as CanvasItem
+		chain.append("%s:%d(relative=%s)" % [canvas_item.name, canvas_item.z_index, canvas_item.z_as_relative])
+		cursor = cursor.get_parent()
+	chain.reverse()
+	return " > ".join(chain)
 
 func reset_update_fixture_state(scene: Node, screen_name: String) -> void:
 	if scene == null or screen_name == "18_update_dialog":
