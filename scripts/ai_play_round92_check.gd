@@ -114,6 +114,16 @@ func run() -> void:
 	check(bool(catastrophe.get("hard_guard_catastrophe_tenpai", false)), "catastrophic thin tenpai activates the dedicated hard guard")
 	check(str(reports[0].get("tile", "")) == "E" and bool(reports[0].get("hard_guard_moved", false)), "hard guard moves the quality-bounded safer discard to the front")
 
+	print("--- C) low-value seven-out tenpai folds catastrophic danger ---")
+	var seven_out_result := run_hand(scene, 20260764, 2)
+	var seven_out_guard_moves := 0
+	for item in seven_out_result.get("discard_trace", []):
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		if bool(item.get("hard_guard_moved", false)) and str(item.get("hard_guard_from_tile", "")) == "3W" and str(item.get("tile", "")) == "5T":
+			seven_out_guard_moves += 1
+	check(seven_out_guard_moves == 1, "hard folds the low-value seven-out 3W tenpai to the materially safer 5T")
+
 	scene.ai_sim_trace_enabled = false
 	scene.enable_offline_all_bot_mode(false, false)
 	scene.queue_free()
