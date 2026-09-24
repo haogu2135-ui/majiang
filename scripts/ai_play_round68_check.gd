@@ -27,10 +27,10 @@ func run() -> void:
 	scene.fx_enabled = false
 
 	print("--- A) multi-seed commercial strength pack ---")
-	# Keep resource use low: 2 hands/diff × easy/hard × 3 fixed seeds + 1 shuffled sample.
+	# Keep resource use bounded while improving confidence: 4 hands/diff × easy/hard × 3 fixed seeds + 1 shuffled sample.
 	var seeds: Array = [20260730, 20260811, 20260827]
 	var t0 = Time.get_ticks_msec()
-	var pack = scene.sample_ai_commercial_strength_pack(2, seeds, true)
+	var pack = scene.sample_ai_commercial_strength_pack(4, seeds, true)
 	var elapsed = Time.get_ticks_msec() - t0
 	print("    elapsed=%d ok=%s fixed_pass=%s/%s total_ms=%s" % [
 		elapsed,
