@@ -3124,8 +3124,6 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		"diffs_sampled": diff_list,
 		"by_diff": {},
 	}
-	if ai_sim_trace_enabled:
-		summary["hand_traces"] = []
 	var prev_diff = ai_difficulty
 	var prev_base_diff = ai_benchmark_base_difficulty
 	var prev_probe_seat = ai_benchmark_probe_seat
@@ -3175,13 +3173,6 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 				reset_ai_profile_seat_map()
 			var result = simulate_offline_bot_hand_sync(700)
 			ms_total += Time.get_ticks_msec() - t0
-			if ai_sim_trace_enabled:
-				(summary["hand_traces"] as Array).append({
-					"difficulty": int(diff),
-					"hand_index": h,
-					"wall_seed": wall_seed,
-					"result": result.duplicate(true),
-				})
 			danger_total += int(result.get("dangerous_discards", 0))
 			high_danger_total += int(result.get("high_danger_discards", 0))
 			avoidable_danger_total += int(result.get("avoidable_dangerous_discards", 0))

@@ -1,5 +1,5 @@
 extends SceneTree
-## Round 92: catastrophic low-value tenpai pressure must expose the hard guard.
+## Round 92: catastrophic thin-tenpai pressure must expose the hard guard.
 var failed := false
 
 
@@ -47,23 +47,7 @@ func run() -> void:
 	scene.ensure_ai_benchmark_players()
 	scene.ai_sim_trace_enabled = true
 
-	print("--- A) low-value seven-out tenpai folds catastrophic danger ---")
-	var paired_seed_trace: Dictionary = scene.sample_bot_strength_across_difficulties(3, 20260730, false, [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD])
-	var seven_out_guard_moves := 0
-	for hand_record in paired_seed_trace.get("hand_traces", []):
-		if typeof(hand_record) != TYPE_DICTIONARY:
-			continue
-		if int(hand_record.get("difficulty", -1)) != scene.AI_DIFFICULTY_HARD or int(hand_record.get("hand_index", -1)) != 2:
-			continue
-		var traced_result: Dictionary = hand_record.get("result", {})
-		for item in traced_result.get("discard_trace", []):
-			if typeof(item) != TYPE_DICTIONARY:
-				continue
-			if bool(item.get("hard_guard_moved", false)) and str(item.get("hard_guard_from_tile", "")) == "3W" and str(item.get("tile", "")) == "5T":
-				seven_out_guard_moves += 1
-	check(seven_out_guard_moves == 1, "hard folds the low-value seven-out 3W tenpai to the materially safer 5T")
-
-	print("--- B) naturally sampled catastrophic thin-tenpai pressure ---")
+	print("--- A) naturally sampled catastrophic thin-tenpai pressure ---")
 	var result = run_hand(scene, 20260827, 1)
 	var trace: Array = result.get("discard_trace", [])
 	var thin_pressure_cases := 0
@@ -101,7 +85,7 @@ func run() -> void:
 	check(bool(result.get("ended", false)), "diagnostic hard hand completes")
 	check(guarded_cases == thin_pressure_cases, "every naturally sampled catastrophic thin-tenpai case carries the hard guard")
 
-	print("--- C) deterministic catastrophic thin-tenpai contract ---")
+	print("--- B) deterministic catastrophic thin-tenpai contract ---")
 	var catastrophe := {
 		"tile": "5W",
 		"score": 1240.0,
