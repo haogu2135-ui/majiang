@@ -116,10 +116,43 @@ func run() -> void:
 
 	print("--- C) low-value seven-out tenpai folds catastrophic danger ---")
 	var seven_out_result := run_hand(scene, 20260764, 2)
+	print("    seed result deal_in=%d winner=%d terminal=%s step=%d trace=%d" % [
+		int(seven_out_result.get("deal_in_seat", -1)),
+		int(seven_out_result.get("winner", -1)),
+		str(seven_out_result.get("terminal_tile", "")),
+		int(seven_out_result.get("terminal_trace_step", -1)),
+		(seven_out_result.get("discard_trace", []) as Array).size(),
+	])
 	var seven_out_guard_moves := 0
 	for item in seven_out_result.get("discard_trace", []):
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
+		if bool(item.get("hard_guard_moved", false)) or (int(item.get("seat", -1)) == 0 and str(item.get("tile", "")) == "3W"):
+			print("    relevant trace step=%d seat=%d tile=%s risk=%.1f feed=%.1f sh=%d wait=%d/%d moved=%s from=%s" % [
+				int(item.get("step", -1)),
+				int(item.get("seat", -1)),
+				str(item.get("tile", "")),
+				float(item.get("risk", 0.0)),
+				float(item.get("feed", 0.0)),
+				int(item.get("shanten", -1)),
+				int(item.get("wait_best_points", 0)),
+				int(item.get("wait_total_remaining", 0)),
+				str(item.get("hard_guard_moved", false)),
+				str(item.get("hard_guard_from_tile", "")),
+			])
+		if int(item.get("step", -1)) >= 45 and int(item.get("step", -1)) <= 55:
+			print("    seed trace step=%d seat=%d tile=%s risk=%.1f feed=%.1f sh=%d wait=%d/%d moved=%s from=%s" % [
+				int(item.get("step", -1)),
+				int(item.get("seat", -1)),
+				str(item.get("tile", "")),
+				float(item.get("risk", 0.0)),
+				float(item.get("feed", 0.0)),
+				int(item.get("shanten", -1)),
+				int(item.get("wait_best_points", 0)),
+				int(item.get("wait_total_remaining", 0)),
+				str(item.get("hard_guard_moved", false)),
+				str(item.get("hard_guard_from_tile", "")),
+			])
 		if bool(item.get("hard_guard_moved", false)) and str(item.get("hard_guard_from_tile", "")) == "3W" and str(item.get("tile", "")) == "5T":
 			seven_out_guard_moves += 1
 	check(seven_out_guard_moves == 1, "hard folds the low-value seven-out 3W tenpai to the materially safer 5T")

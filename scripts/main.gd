@@ -3035,13 +3035,13 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		and best_risk >= AI_DANGER_RISK_HIGH + 26.0 \
 		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
 		and best_human_pressure >= 28.0
-	# 低价值薄听不应在灾难级危险下硬推：只在 2 番以内、最多四张待牌时
+	# 低价值听牌不应在灾难级危险下硬推：只在 2 番以内、最多八张待牌时
 	# 放宽到一向听的折返，避免把高番/厚听也错误折掉。
 	var catastrophe_tenpai = best_shanten <= 0 \
 		and best_risk >= AI_DANGER_RISK_HIGH + 22.0 \
 		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
 		and best_wait_points > 0 and best_wait_points <= score_points_for_fan(2) \
-		and best_wait_remaining > 0 and best_wait_remaining <= 4
+		and best_wait_remaining > 0 and best_wait_remaining <= 8
 	# 一向听仍有极端风险时，若同向听候选只损失极少效率却确实更安全，
 	# 不应被通用 14 分防守阈值卡住。该例外不允许增加向听。
 	var extreme_one_away = best_shanten == 1 \
