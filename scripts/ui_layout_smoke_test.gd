@@ -5056,8 +5056,9 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		check(str(wall_label.get_meta("content_slot", "")) == "wall_label" and str(wall_count.get_meta("layout_role", "")) == "center_wall_count" and str(last_label.get_meta("layout_role", "")) == "center_last_discard_label", "center console keeps stable semantic slot metadata at %s" % viewport_size)
 		check(screen_rect(wall_label).end.y <= screen_rect(wall_count).position.y + 1.0 and screen_rect(wall_count).end.y <= screen_rect(last_label).position.y + 1.0 and screen_rect(last_label).end.y <= screen_rect(last_tile).position.y + 1.0, "center console reading slots keep wall count and latest discard in order at %s (wall=%s count=%s label=%s tile=%s)" % [viewport_size, screen_rect(wall_label), screen_rect(wall_count), screen_rect(last_label), screen_rect(last_tile)])
 		check(center_rect.grow(4.0).encloses(screen_rect(last_tile)), "center console latest discard tile stays inside its reading surface at %s (center=%s tile=%s)" % [viewport_size, center_rect, screen_rect(last_tile)])
-	if dice_seal != null and wall_count != null and last_label != null:
-		check(not rects_overlap(screen_rect(dice_seal), screen_rect(wall_count)) and not rects_overlap(screen_rect(dice_seal), screen_rect(last_label)), "center dice/dealer mark clears wall count and latest-discard text at %s" % viewport_size)
+	var upper_wind := scene.find_child("CenterWindLabel_东", true, false) as Control
+	if dice_seal != null and wall_count != null and last_label != null and upper_wind != null:
+		check(not rects_overlap(screen_rect(dice_seal), screen_rect(wall_count)) and not rects_overlap(screen_rect(dice_seal), screen_rect(last_label)) and not rects_overlap(screen_rect(dice_seal), screen_rect(upper_wind)), "center dice/dealer mark clears wall count, latest-discard text, and top wind at %s" % viewport_size)
 	var lower_wind := scene.find_child("CenterWindLabel_西", true, false) as Control
 	if last_label != null and lower_wind != null:
 		check(not rects_overlap(screen_rect(last_label), screen_rect(lower_wind)), "latest-discard summary clears the lower wind label at %s" % viewport_size)

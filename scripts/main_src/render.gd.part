@@ -9485,7 +9485,7 @@ func draw_center_dice_plate(parent: Control) -> Control:
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(plate)
-	var simple_seal = make_gpt_gate(rect_full(0.390, 0.000, 0.610, 0.075), Color(0.86, 0.68, 0.34, 0.34))
+	var simple_seal = make_gpt_gate(rect_full(0.620, 0.000, 0.800, 0.075), Color(0.86, 0.68, 0.34, 0.34))
 	simple_seal.name = "CenterDiceSimpleSeal"
 	plate.add_child(simple_seal)
 	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.055), 6, 14)
