@@ -9485,11 +9485,11 @@ func draw_center_dice_plate(parent: Control) -> Control:
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(plate)
-	var simple_seal = make_gpt_gate(rect_full(0.620, 0.000, 0.800, 0.075), Color(0.86, 0.68, 0.34, 0.34))
+	var simple_seal = make_gpt_gate(rect_full(0.600, 0.000, 0.860, 0.105), Color(0.86, 0.68, 0.34, 0.42))
 	simple_seal.name = "CenterDiceSimpleSeal"
 	plate.add_child(simple_seal)
-	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.055), 6, 14)
-	var simple_glyph = make_label(simple_seal, "骰·庄", simple_glyph_font_size, Color(0.88, 0.76, 0.48, 0.82), true)
+	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.070), 8, 16)
+	var simple_glyph = make_label(simple_seal, "骰·庄", simple_glyph_font_size, Color(0.98, 0.90, 0.68, 0.98), true)
 	simple_glyph.name = "CenterDiceSimpleGlyph"
 	simple_glyph.set_meta("not_a_wind_position", true)
 	simple_glyph.set_meta("layout_role", "center_dice_dealer_fact")

@@ -5051,7 +5051,9 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 	var last_label := scene.find_child("CenterLastDiscardLabel", true, false) as Label
 	var last_tile := scene.find_child("CenterLastDiscardTile", true, false) as Control
 	var dice_seal := scene.find_child("CenterDiceSimpleSeal", true, false) as Control
+	var dice_glyph := scene.find_child("CenterDiceSimpleGlyph", true, false) as Label
 	check(wall_label != null and wall_count != null and last_label != null and last_tile != null, "center console exposes independent wall and latest-discard reading slots at %s" % viewport_size)
+	check(dice_glyph != null and dice_glyph.text == "骰·庄" and dice_glyph.get_theme_font_size("font_size") >= 8 and relative_luma(dice_glyph.get_theme_color("font_color")) >= 0.75, "center dice/dealer fact keeps readable type and contrast at %s" % viewport_size)
 	if wall_label != null and wall_count != null and last_label != null and last_tile != null:
 		check(str(wall_label.get_meta("content_slot", "")) == "wall_label" and str(wall_count.get_meta("layout_role", "")) == "center_wall_count" and str(last_label.get_meta("layout_role", "")) == "center_last_discard_label", "center console keeps stable semantic slot metadata at %s" % viewport_size)
 		check(screen_rect(wall_label).end.y <= screen_rect(wall_count).position.y + 1.0 and screen_rect(wall_count).end.y <= screen_rect(last_label).position.y + 1.0 and screen_rect(last_label).end.y <= screen_rect(last_tile).position.y + 1.0, "center console reading slots keep wall count and latest discard in order at %s (wall=%s count=%s label=%s tile=%s)" % [viewport_size, screen_rect(wall_label), screen_rect(wall_count), screen_rect(last_label), screen_rect(last_tile)])
