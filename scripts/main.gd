@@ -39252,6 +39252,7 @@ func _show_online_lobby_impl() -> void:
 	recover_audio_after_screen_change()
 	clear_screen()
 	var online_lobby_viewport_size := effective_viewport_size()
+	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED and (not online_waiting_for_server or was_online_lobby):
 		if was_online_lobby:
 			online_waiting_for_server = false
@@ -39564,6 +39565,7 @@ func _show_online_lobby_impl() -> void:
 	log_panel.add_child(log_readability_backplate)
 	var empty_state_backplate = make_gpt_center_crop_plate_rect(rect_full(0.090, 0.300, 0.910, 0.700), Color(0.018, 0.030, 0.030, 0.18), "ui_dark_scrim", 0.18)
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
+	empty_state_backplate.visible = not room_snapshot_visible
 	log_panel.add_child(empty_state_backplate)
 	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(18, 2), Color(0.98, 0.94, 0.82), true)
 	empty_state_title.name = "OnlineLobbyRoomOfflineTitle"
@@ -39605,7 +39607,6 @@ func _show_online_lobby_impl() -> void:
 	# Reserve a full touch lane between the room title and the room summary.
 	apply_rect(lobby_chat_button, rect_full(0.500, 0.015, 0.640, 0.135))
 	log_panel.add_child(lobby_chat_button)
-	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
 	var compact_room_badge := online_lobby_viewport_size.x <= 960.0
@@ -39640,12 +39641,16 @@ func _show_online_lobby_impl() -> void:
 	room_touch_target.visible = room_snapshot_visible
 	room_touch_target.disabled = not room_snapshot_visible
 	room_touch_target.mouse_filter = Control.MOUSE_FILTER_STOP if room_snapshot_visible else Control.MOUSE_FILTER_IGNORE
-	draw_online_lobby_room_art(log_panel)
-	draw_online_lobby_roster_panel(log_panel)
+	var room_art := draw_online_lobby_room_art(log_panel)
+	room_art.visible = room_snapshot_visible
+	var roster_panel := draw_online_lobby_roster_panel(log_panel)
+	roster_panel.visible = room_snapshot_visible
 	draw_online_lobby_log_stream_art(log_panel)
 	var log_list_panel = draw_online_lobby_log_list_panel(log_panel)
+	log_list_panel.visible = room_snapshot_visible
 	var room_offline_state = make_label(log_panel, "连接后显示房间、席位和日志", commercial_ui_font_size(16, 2), Color(0.82, 0.86, 0.78, 0.86), true)
 	room_offline_state.name = "OnlineLobbyRoomOfflineState"
+	room_offline_state.visible = not room_snapshot_visible
 	apply_rect(room_offline_state, rect_full(0.12, 0.42, 0.88, 0.58))
 	room_offline_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	configure_clipped_label(room_offline_state)

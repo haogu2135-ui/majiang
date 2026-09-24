@@ -1207,6 +1207,13 @@ func run() -> void:
 	if initial_connect_button != null:
 		initial_connect_button.release_focus()
 		await process_frame
+	scene._show_online_lobby_impl()
+	await settle(0.20)
+	var disconnected_room_art := scene.find_child("OnlineLobbyRoomArt", true, false) as Control
+	var disconnected_roster := scene.find_child("OnlineLobbyRosterPanel", true, false) as Control
+	var disconnected_logs := scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
+	var disconnected_empty_state := scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Control
+	check(disconnected_room_art != null and not disconnected_room_art.visible and disconnected_roster != null and not disconnected_roster.visible and disconnected_logs != null and not disconnected_logs.visible and disconnected_empty_state != null and disconnected_empty_state.visible, "reopened disconnected lobby shows only its empty state")
 
 	print("--- A) pointer hover and press drive the real lobby button ---")
 	var connect_button := first_button_with_text(scene, "连接")
