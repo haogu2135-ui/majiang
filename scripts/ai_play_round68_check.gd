@@ -31,9 +31,9 @@ func run() -> void:
 	var seeds: Array = [20260730, 20260811, 20260827, 20260908, 20260922]
 	var t0 = Time.get_ticks_msec()
 	var pack = scene.sample_ai_commercial_strength_pack(4, seeds, true)
-	var elapsed = Time.get_ticks_msec() - t0
+	var pack_elapsed = Time.get_ticks_msec() - t0
 	print("    elapsed=%d ok=%s fixed_pass=%s/%s total_ms=%s" % [
-		elapsed,
+		pack_elapsed,
 		str(pack.get("commercial_strength_ok", false)),
 		str(pack.get("fixed_pass_count", 0)),
 		str((pack.get("fixed_rows", []) as Array).size()),
@@ -98,10 +98,38 @@ func run() -> void:
 	check(bool(aggregate.get("score_conservation_all", false)), "combined aggregate retains total table score")
 	check(bool(aggregate.get("commercial_strength_ok", false)), "aggregate including shuffled sample passes commercial gate")
 	check(bool(pack.get("commercial_strength_ok", false)), "aggregate commercial strength pack is green")
-	check(elapsed < 180000, "multi-seed pack stays within low-resource serial budget")
+	check(pack_elapsed < 180000, "multi-seed pack stays within low-resource serial budget")
 	check(float(pack.get("total_elapsed_ms", 999999.0)) < 180000.0, "reported pack runtime stays low-resource")
 
-	print("--- B) durable evidence artifacts ---")
+	print("--- B) paired fixed-seed normal difficulty probes ---")
+	var normal_pass_count := 0
+	for seed_base in seeds:
+		var normal_sample: Dictionary = scene.sample_bot_strength_across_difficulties(1, int(seed_base), false, [scene.AI_DIFFICULTY_NORMAL])
+		var normal_by_diff: Dictionary = normal_sample.get("by_diff", {})
+		var normal_row: Dictionary = normal_by_diff.get(scene.AI_DIFFICULTY_NORMAL, {})
+		var normal_integrity := int(normal_row.get("integrity_passed", 0)) == 1 and bool(normal_row.get("integrity_ok", false))
+		var normal_score := int(normal_row.get("score_conserved_passed", 0)) == 1 and bool(normal_row.get("score_conserved", false))
+		var normal_finished := int(normal_row.get("ended", 0)) == 1
+		print("    normal seed=%s ended=%s integrity=%s score=%s high_danger=%.3f avoid=%.3f deal_in=%.2f" % [
+			str(seed_base),
+			str(normal_finished),
+			str(normal_integrity),
+			str(normal_score),
+			float(normal_row.get("high_danger_rate", 1.0)),
+			float(normal_row.get("avoidable_high_danger_rate", 1.0)),
+			float(normal_row.get("deal_in_rate", 1.0)),
+		])
+		check(normal_finished, "normal difficulty finishes paired seed %s" % str(seed_base))
+		check(normal_integrity, "normal difficulty preserves tiles on paired seed %s" % str(seed_base))
+		check(normal_score, "normal difficulty conserves score on paired seed %s" % str(seed_base))
+		if normal_finished and normal_integrity and normal_score:
+			normal_pass_count += 1
+	check(normal_pass_count == seeds.size(), "normal difficulty passes all five paired seeds")
+	var elapsed = Time.get_ticks_msec() - t0
+	print("    full_elapsed=%dms" % elapsed)
+	check(elapsed < 180000, "all difficulty evidence stays within low-resource serial budget")
+
+	print("--- C) durable evidence artifacts ---")
 	var written = scene.write_ai_commercial_strength_evidence_pack(pack)
 	print("    write ok=%s json=%s md=%s err=%s" % [
 		str(written.get("ok", false)),
