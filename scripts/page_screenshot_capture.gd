@@ -494,6 +494,14 @@ func validate_preview_meld_fixture(scene: Node, screen_name: String) -> bool:
 	if str(fixture.get("seed", "")) != expected_seed:
 		printerr("meld fixture seed mismatch for %s: got=%s expected=%s" % [screen_name, fixture.get("seed", ""), expected_seed])
 		return false
+	var expected_discard_counts: Array = []
+	var expected_flower_counts: Array = []
+	if screen_name == "03_offline_battle":
+		expected_discard_counts = [7, 6, 7, 5]
+		expected_flower_counts = [0, 1, 0, 1]
+	elif screen_name == "35_offline_battle_capacity":
+		expected_discard_counts = [35, 35, 35, 35]
+		expected_flower_counts = [8, 8, 8, 8]
 	if fixture.get("horizontal_seats", []) != [0, 2] or fixture.get("vertical_seats", []) != [1, 3]:
 		printerr("meld fixture seat contract mismatch: %s" % fixture)
 		return false
@@ -506,6 +514,12 @@ func validate_preview_meld_fixture(scene: Node, screen_name: String) -> bool:
 		var melds: Array = player.get("melds", [])
 		if melds.size() != int(expected_counts[seat]):
 			printerr("meld fixture group count mismatch at seat %d: got=%d expected=%d player=%s" % [seat, melds.size(), int(expected_counts[seat]), player])
+			return false
+		if not expected_discard_counts.is_empty() and player.get("discards", []).size() != int(expected_discard_counts[seat]):
+			printerr("battle fixture discard count mismatch at seat %d: got=%d expected=%d" % [seat, player.get("discards", []).size(), expected_discard_counts[seat]])
+			return false
+		if not expected_flower_counts.is_empty() and int(player.get("flowers", 0)) != int(expected_flower_counts[seat]):
+			printerr("battle fixture flower count mismatch at seat %d: got=%d expected=%d" % [seat, player.get("flowers", 0), expected_flower_counts[seat]])
 			return false
 		var expected_vertical := seat == 1 or seat == 3
 		if bool(scene.seat_meld_is_vertical(seat)) != expected_vertical:
@@ -945,13 +959,14 @@ func seed_preview_midgame_battle(scene: Node) -> void:
 		[],
 		["H2"],
 	]
+	var preview_scores := [26000, 25500, 25000, 23500]
 	for seat in range(4):
 		var player: Dictionary = scene.players[seat]
 		player["discards"] = preview_discards[seat].duplicate()
 		player["melds"] = preview_melds[seat].duplicate(true)
 		player["flower_tiles"] = preview_flower_tiles[seat].duplicate()
 		player["flowers"] = preview_flower_tiles[seat].size()
-		player["score"] = 25800 - seat * 450
+		player["score"] = preview_scores[seat]
 		if seat != 0:
 			player["hand_count"] = 13 - preview_melds[seat].size() * 3
 	scene.players[0]["hand"] = ["1W", "2W", "3W", "5W", "7W", "8W", "9W", "2T", "5T", "8T", "3B", "6B", "F", "F"]
