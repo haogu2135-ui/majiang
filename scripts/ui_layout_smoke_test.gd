@@ -5567,6 +5567,8 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var join_button = scene.find_child("OnlineLobbyJoinButton", true, false) as Button
 	var start_button := scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
 	var start_reason := scene.find_child("OnlineLobbyStartGateReason", true, false) as Label
+	var action_button_row := scene.find_child("OnlineLobbyActionButtonRow", true, false) as Control
+	var start_button_row := scene.find_child("OnlineLobbyStartButtonRow", true, false) as Control
 	var endpoint_badge = scene.find_child("OnlineLobbyServerEndpointBadge", true, false) as Control
 	var endpoint_label = scene.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
 	var state_badge = scene.find_child("OnlineLobbyConnectionStateBadge", true, false) as Control
@@ -5605,8 +5607,11 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		check(not rects_overlap(screen_rect(retry_button), screen_rect(state_badge)) and absf(screen_rect(retry_button).position.y - screen_rect(state_badge).end.y) <= viewport_size.y * 0.025, "disconnected lobby places retry CTA directly below the connection state at %s" % viewport_size)
 	var error_gate: Dictionary = scene.online_lobby_start_gate("异常")
 	check(str(error_gate.get("reason", "")).contains("连接异常") and str(error_gate.get("reason", "")).contains("点击") and str(error_gate.get("reason", "")).contains("重试"), "online lobby connection-error start gate names the nearby retry route at %s" % viewport_size)
-	if start_reason != null and start_button != null:
-		check(screen_rect(start_reason).end.y <= screen_rect(start_button).position.y + 2.0 and start_reason.tooltip_text.contains("开始游戏条件"), "online lobby start-gate reason stays adjacent to the primary action lane at %s" % viewport_size)
+	if start_reason != null and start_button != null and action_button_row != null and start_button_row != null:
+		var start_reason_rect := screen_rect(start_reason)
+		check(not start_reason_rect.intersects(screen_rect(action_button_row), true) and not start_reason_rect.intersects(screen_rect(start_button_row), true), "online lobby start-gate reason stays in a separate lane between both action rows at %s" % viewport_size)
+		check(screen_rect(action_button_row).end.y + 2.0 <= start_reason_rect.position.y and start_reason_rect.end.y + 2.0 <= screen_rect(start_button_row).position.y, "online lobby start-gate lane keeps visible clearance from both button rows at %s" % viewport_size)
+		check(start_reason.tooltip_text.contains("开始游戏条件") and str(start_reason.get_meta("layout_role", "")) == "gate_reason_between_action_lanes", "online lobby start-gate reason keeps full accessible copy in its own lane at %s" % viewport_size)
 	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
 	var log_list_texture = (log_list_panel as TextureRect).texture if log_list_panel is TextureRect else null
 	var roster_source = (roster_texture as AtlasTexture).atlas if roster_texture is AtlasTexture else roster_texture

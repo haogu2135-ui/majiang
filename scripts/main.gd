@@ -39143,8 +39143,9 @@ func refresh_online_lobby_action_states() -> void:
 	if start_reason != null:
 		var gate_reason := str(start_gate.get("reason", "等待服务器确认开局条件"))
 		var room_action_reason := "连接后可用" if not connected else ("输入房间号" if room_code == "" else "已就绪")
-		var visible_reason := "创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason]
-		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：" + visible_reason)
+		var room_action_summary := "未连接" if not connected else ("需房号" if room_code == "" else "房号已填")
+		var visible_reason := "建/入：%s · 开局：%s" % [room_action_summary, str(start_gate.get("text", "待连接"))]
+		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason])
 		start_reason.set_meta("disabled_action_reason_visible", true)
 	var form_feedback := find_control.call("OnlineLobbyFormFeedbackLabel") as Label
 	if form_feedback != null:
@@ -39472,7 +39473,7 @@ func _show_online_lobby_impl() -> void:
 	start_row.name = "OnlineLobbyStartButtonRow"
 	configure_passive_container(start_row)
 	start_row.add_theme_constant_override("separation", 10)
-	apply_rect(start_row, rect_full(0.060, 0.818, 0.940, 0.951))
+	apply_rect(start_row, rect_full(0.060, 0.850, 0.940, 0.985))
 	form_panel.add_child(start_row)
 	var action_cluster_backplate = make_layout_host(rect_full(0.045, 0.680, 0.955, 0.963))
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
@@ -39486,14 +39487,18 @@ func _show_online_lobby_impl() -> void:
 	var can_start_online := bool(start_gate.get("enabled", false))
 	var lobby_connected := lobby_connection_state_text() == "已连接"
 	var initial_room_action_reason := "连接后可用" if not lobby_connected else ("输入房间号" if bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH) == "" else "已就绪")
-	var start_reason_text := "创建/加入：%s · 开局：%s" % [initial_room_action_reason, str(start_gate.get("reason", "等待服务器确认开局条件"))]
+	var initial_room_action_summary := "未连接" if not lobby_connected else ("需房号" if bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH) == "" else "房号已填")
+	var start_reason_text := "建/入：%s · 开局：%s" % [initial_room_action_summary, str(start_gate.get("text", "待连接"))]
 	var start_reason := make_label(form_panel, start_reason_text, 11, Color(0.90, 0.86, 0.70), false)
 	start_reason.name = "OnlineLobbyStartGateReason"
-	apply_rect(start_reason, rect_full(0.060, 0.770, 0.720, 0.805))
+	apply_rect(start_reason, rect_full(0.060, 0.800, 0.720, 0.840))
 	start_reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	start_reason.tooltip_text = "创建/加入条件与开始游戏条件：" + start_reason_text
+	start_reason.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	start_reason.tooltip_text = "创建/加入条件与开始游戏条件：创建/加入：%s · 开局：%s" % [initial_room_action_reason, str(start_gate.get("reason", "等待服务器确认开局条件"))]
 	start_reason.set_meta("action_reason_owner", "OnlineLobbyCreateButton_and_OnlineLobbyJoinButton")
 	start_reason.set_meta("disabled_action_reason_visible", true)
+	start_reason.set_meta("layout_role", "gate_reason_between_action_lanes")
+	start_reason.set_meta("lane_clearance_px", 3.0)
 	configure_clipped_label(start_reason)
 	mark_ui_optimization(start_reason, "F-540")
 	var start_button_text := str(start_gate.get("text", "待连接"))
@@ -39911,8 +39916,9 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 		var live_room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 		var live_connected := lobby_connection_state_text() == "已连接"
 		var room_action_reason := "连接后可用" if not live_connected else ("输入房间号" if live_room_code == "" else "已就绪")
-		var visible_reason := "创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason]
-		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：" + visible_reason)
+		var room_action_summary := "未连接" if not live_connected else ("需房号" if live_room_code == "" else "房号已填")
+		var visible_reason := "建/入：%s · 开局：%s" % [room_action_summary, str(lobby_start_gate.get("text", "待连接"))]
+		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason])
 		start_reason.set_meta("disabled_action_reason_visible", true)
 	var return_button = find_control.call("OnlineLobbySecondaryReturnButton") as Button
 	if return_button != null:
