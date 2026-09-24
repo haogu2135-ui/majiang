@@ -44,9 +44,15 @@ const BATTLE_DIAGNOSTIC_SCREENS := [
 	"28_online_game_pending",
 ]
 const BATTLE_DIAGNOSTIC_OWNER_NAMES := [
+	"OfflineTable3DOuterShell",
+	"OfflineTable3DInnerSurface",
 	"CenterConsole3DShell",
+	"TopHud3DShell",
+	"TopHudTitle",
+	"TopHudStatus",
 	"CenterDicePlate",
 	"CenterDiceSimpleSeal",
+	"CenterDiceSimpleGlyph",
 	"CenterWallStatusLabel",
 	"CenterWallCount",
 	"CenterLastDiscardLabel",
@@ -54,6 +60,9 @@ const BATTLE_DIAGNOSTIC_OWNER_NAMES := [
 	"CenterLastTileTrace",
 	"CenterLastDiscardFeedback",
 	"CenterWindLabel_西",
+	"PendingClaimIllustration",
+	"PendingClaimResponseGrid",
+	"ActionButtonDock",
 ]
 var battle_node_diagnostic_reports: Array[String] = []
 
