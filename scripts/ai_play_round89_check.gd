@@ -27,10 +27,9 @@ func run() -> void:
 	scene.fx_enabled = false
 
 	print("--- A) independent fixed-player probe samples ---")
-	# Four unrelated base seeds with two paired hands each give the same 16
-	# easy/hard simulations as the main pack, without relying on a one-hand
-	# statistic that can be dominated by one forced tenpai discard.
-	var seeds: Array = [20260701, 20260753, 20260805, 20260857]
+	# Eight independent base seeds with two paired hands each provide 16 hands
+	# per difficulty without relying on one seed's forced tenpai discard.
+	var seeds: Array = [20260701, 20260714, 20260742, 20260753, 20260805, 20260819, 20260843, 20260857]
 	var hands_per_seed := 2
 	var t0 = Time.get_ticks_msec()
 	var aggregate = scene.empty_ai_strength_aggregate()
@@ -64,7 +63,7 @@ func run() -> void:
 			check(false, "seed row has the expected dictionary shape")
 			continue
 		var seed_row: Dictionary = row
-		print("    seed=%s probe=%s/%s ok=%s integrity=%s score=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f" % [
+		print("    seed=%s probe=%s/%s ok=%s integrity=%s score=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f humanRon=%.2f/%.2f" % [
 			str(seed_row.get("seed_base", 0)),
 			str(seed_row.get("fixed_probe_seat", -1)),
 			str(seed_row.get("fixed_probe_difficulty", -1)),
@@ -75,6 +74,10 @@ func run() -> void:
 			float(seed_row.get("hard_high_danger", 1.0)),
 			float(seed_row.get("easy_avoidable_high_danger", 1.0)),
 			float(seed_row.get("hard_avoidable_high_danger", 1.0)),
+			float(seed_row.get("easy_human_high_danger", 1.0)),
+			float(seed_row.get("hard_human_high_danger", 1.0)),
+			float(seed_row.get("easy_deal_in_to_human", 1.0)),
+			float(seed_row.get("hard_deal_in_to_human", 1.0)),
 		])
 		check(int(seed_row.get("fixed_probe_seat", -1)) == 0 and int(seed_row.get("fixed_probe_difficulty", -1)) == scene.AI_DIFFICULTY_NORMAL, "seed %s keeps seat0 at the normal player probe" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("paired_wall_seed", false)) and bool(seed_row.get("paired_profile_seed", false)), "seed %s keeps paired inputs" % str(seed_row.get("seed_base", 0)))
