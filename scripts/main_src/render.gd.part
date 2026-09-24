@@ -2408,12 +2408,12 @@ func draw_center(parent: Control) -> void:
 			# summary keeps the latest-discard fact readable and the full tile
 			# remains available through the tooltip and table river.
 			tile.visible = false
-			var compact_face_fallback := make_label(center, "牌面空间不足 · %s" % str(last_discard_model.get("tile_label", "")), 9, Color(0.92, 0.86, 0.66), true)
+			var compact_face_fallback := make_label(center, "牌 %s" % str(last_discard_model.get("tile_label", "")), 8, Color(0.92, 0.86, 0.66), true)
 			compact_face_fallback.name = "CenterLastDiscardCompactFallback"
-			apply_rect(compact_face_fallback, rect_full(0.365, 0.690, 0.635, 0.835))
+			apply_rect(compact_face_fallback, rect_full(0.365, 0.640, 0.635, 0.745))
 			compact_face_fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			compact_face_fallback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			set_ui_full_text(compact_face_fallback, compact_face_fallback.text, "最后弃牌：" + str(last_discard_model.get("tile_label", "")) + "；当前中心牌面空间不足，牌面请看牌河")
+			set_ui_full_text(compact_face_fallback, compact_face_fallback.text, "最后弃牌：" + str(last_discard_model.get("tile_label", "")) + "；中心空间不足以显示牌面，请看牌河")
 			configure_clipped_label(compact_face_fallback)
 			center.set_meta("center_last_discard_fallback", "readable_summary_instead_of_subminimum_face")
 		# Compact labels consume real pixel height beyond their normalized anchor;
@@ -2452,7 +2452,7 @@ func draw_center(parent: Control) -> void:
 		fit_label_font_size(wind, maxf(18.0, center_content_size.x * CENTER_PANEL_RECT.size.x * CENTER_WIND_RECTS[i].size.x * 0.82), 17, 10)
 		wind.set_meta("fit_rect_contract", "center_wind_rect_before_data_lane")
 
-	draw_center_dice_plate(center, center_current_seat)
+	draw_center_dice_plate(center)
 
 
 func register_battle_ui_round_contracts(root: Control) -> void:
@@ -9482,18 +9482,21 @@ func register_ui_round_1971_2030(root: Control) -> void:
 	root.set_meta("ui_round_1971_2030_registered_child_count", registration_child_count)
 
 
-func draw_center_dice_plate(parent: Control, current_seat: int = -1) -> Control:
+func draw_center_dice_plate(parent: Control) -> Control:
 	var plate = Control.new()
 	plate.name = "CenterDicePlate"
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(plate)
-	var simple_seal = make_gpt_gate(rect_full(0.390, 0.370, 0.610, 0.630), Color(0.86, 0.68, 0.34, 0.34))
+	var simple_seal = make_gpt_gate(rect_full(0.390, 0.000, 0.610, 0.075), Color(0.86, 0.68, 0.34, 0.34))
 	simple_seal.name = "CenterDiceSimpleSeal"
 	plate.add_child(simple_seal)
-	var resolved_current_seat := current_seat if current_seat >= 0 else get_current_seat()
-	var simple_glyph = make_label(simple_seal, CENTER_WIND_LABELS[clamp(resolved_current_seat, 0, CENTER_WIND_LABELS.size() - 1)], 18, Color(0.88, 0.76, 0.48, 0.34), true)
+	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.055), 6, 14)
+	var simple_glyph = make_label(simple_seal, "骰·庄", simple_glyph_font_size, Color(0.88, 0.76, 0.48, 0.82), true)
 	simple_glyph.name = "CenterDiceSimpleGlyph"
+	simple_glyph.set_meta("not_a_wind_position", true)
+	simple_glyph.set_meta("layout_role", "center_dice_dealer_fact")
+	simple_glyph.tooltip_text = "骰子与庄家信息"
 	apply_rect(simple_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
 	return plate
 

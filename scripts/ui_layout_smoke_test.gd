@@ -5050,11 +5050,18 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 	var wall_count := scene.find_child("CenterWallCount", true, false) as Label
 	var last_label := scene.find_child("CenterLastDiscardLabel", true, false) as Label
 	var last_tile := scene.find_child("CenterLastDiscardTile", true, false) as Control
+	var dice_seal := scene.find_child("CenterDiceSimpleSeal", true, false) as Control
+	var compact_last_discard := scene.find_child("CenterLastDiscardCompactFallback", true, false) as Control
 	check(wall_label != null and wall_count != null and last_label != null and last_tile != null, "center console exposes independent wall and latest-discard reading slots at %s" % viewport_size)
 	if wall_label != null and wall_count != null and last_label != null and last_tile != null:
 		check(str(wall_label.get_meta("content_slot", "")) == "wall_label" and str(wall_count.get_meta("layout_role", "")) == "center_wall_count" and str(last_label.get_meta("layout_role", "")) == "center_last_discard_label", "center console keeps stable semantic slot metadata at %s" % viewport_size)
 		check(screen_rect(wall_label).end.y <= screen_rect(wall_count).position.y + 1.0 and screen_rect(wall_count).end.y <= screen_rect(last_label).position.y + 1.0 and screen_rect(last_label).end.y <= screen_rect(last_tile).position.y + 1.0, "center console reading slots keep wall count and latest discard in order at %s (wall=%s count=%s label=%s tile=%s)" % [viewport_size, screen_rect(wall_label), screen_rect(wall_count), screen_rect(last_label), screen_rect(last_tile)])
 		check(center_rect.grow(4.0).encloses(screen_rect(last_tile)), "center console latest discard tile stays inside its reading surface at %s (center=%s tile=%s)" % [viewport_size, center_rect, screen_rect(last_tile)])
+	if dice_seal != null and wall_count != null and last_label != null:
+		check(not rects_overlap(screen_rect(dice_seal), screen_rect(wall_count)) and not rects_overlap(screen_rect(dice_seal), screen_rect(last_label)), "center dice/dealer mark clears wall count and latest-discard text at %s" % viewport_size)
+	var lower_wind := scene.find_child("CenterWindLabel_西", true, false) as Control
+	if compact_last_discard != null and lower_wind != null:
+		check(not rects_overlap(screen_rect(compact_last_discard), screen_rect(lower_wind)), "compact latest-discard fallback clears the lower wind label at %s" % viewport_size)
 	var active_wind_luma := -1.0
 	var inactive_wind_luma_max := -1.0
 	var current_wind_seat := int(scene.get_current_seat())
