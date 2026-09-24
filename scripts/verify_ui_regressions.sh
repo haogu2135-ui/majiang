@@ -122,7 +122,7 @@ capture_pages_for_size() {
 	export YUNZHUO_CAPTURE_RUNTIME_SOURCE_DIFF_FINGERPRINT="$RUNTIME_SOURCE_DIFF_FINGERPRINT"
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
-		--screens=01_menu,02_menu_settings,03_offline_battle,04_rules,05_stats || return 1
+		--screens=01_menu,02_menu_settings,03_offline_battle,04_rules,05_stats,35_offline_battle_capacity || return 1
 	run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/page_screenshot_capture.gd -- \
 		--size="$screen_size" \
 		--screens=06_achievements,07_shop,08_online_lobby,09_daily_login,10_loading,11_exit_confirm,12_toast,17_hand_tutorial || return 1

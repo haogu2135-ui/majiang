@@ -52,7 +52,22 @@ EXPECTED_SCREENS = [
     "32_telemetry_consented.png",
     "33_telemetry_revoked.png",
     "34_telemetry_exported.png",
+    "35_offline_battle_capacity.png",
 ]
+REQUIRED_BATTLE_SCREEN_CONTRACT = {
+    "03_offline_battle": {
+        "seed": "seed_preview_midgame_battle",
+        "meld_group_counts": [0, 1, 0, 1],
+        "discard_counts": [7, 6, 7, 5],
+        "flower_counts": [0, 1, 0, 1],
+    },
+    "35_offline_battle_capacity": {
+        "seed": "seed_preview_capacity_battle",
+        "meld_group_counts": [4, 4, 4, 4],
+        "discard_counts": [35, 35, 35, 35],
+        "flower_counts": [8, 8, 8, 8],
+    },
+}
 REQUIRED_INTERACTIVE_STATE_CONTRACTS = {
     "23_online_lobby_connected": {
         "fixture_seed": "seed_preview_online_lobby_connected",
@@ -296,6 +311,13 @@ def validate_capture_metadata(pages_dir: Path, expected_size: tuple[int, int]) -
         issues.append("interactive_state_contract is missing or not an object")
     else:
         issues.extend(validate_interactive_state_contract(contract))
+    battle_contract = metadata.get("battle_screenshot_contract")
+    if not isinstance(battle_contract, dict):
+        issues.append("battle_screenshot_contract is missing or not an object")
+    else:
+        for screen_name, expected_contract in REQUIRED_BATTLE_SCREEN_CONTRACT.items():
+            if battle_contract.get(screen_name) != expected_contract:
+                issues.append(f"battle_screenshot_contract.{screen_name} does not match the expected fixture")
     capture_batch_id = str(metadata.get("capture_batch_id", ""))
     expected_batch_id = os.environ.get("YUNZHUO_CAPTURE_BATCH_ID", "")
     if not capture_batch_id:

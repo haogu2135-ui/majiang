@@ -37,9 +37,11 @@ const SCREEN_NAMES := [
 	"32_telemetry_consented",
 	"33_telemetry_revoked",
 	"34_telemetry_exported",
+	"35_offline_battle_capacity",
 ]
 const BATTLE_DIAGNOSTIC_SCREENS := [
 	"03_offline_battle",
+	"35_offline_battle_capacity",
 	"27_online_game",
 	"28_online_game_pending",
 ]
@@ -198,11 +200,26 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 			"horizontal_seats": [0, 2],
 			"vertical_seats": [1, 3],
 			"meld_group_count_variants": {
+				"seed_preview_midgame_battle": [0, 1, 0, 1],
 				"seed_preview_discards": [4, 3, 3, 4],
 				"seed_preview_capacity_battle": [4, 4, 4, 4],
 			},
 			"compact_horizontal_tile_width_min": 18,
 			"orientation_rule": "top/bottom horizontal; left/right vertical; faces point to table center",
+		},
+		"battle_screenshot_contract": {
+			"03_offline_battle": {
+				"seed": "seed_preview_midgame_battle",
+				"meld_group_counts": [0, 1, 0, 1],
+				"discard_counts": [7, 6, 7, 5],
+				"flower_counts": [0, 1, 0, 1],
+			},
+			"35_offline_battle_capacity": {
+				"seed": "seed_preview_capacity_battle",
+				"meld_group_counts": [4, 4, 4, 4],
+				"discard_counts": [35, 35, 35, 35],
+				"flower_counts": [8, 8, 8, 8],
+			},
 		},
 		"interactive_state_contract": {
 			"11_exit_confirm": {"required_nodes": ["ExitConfirmDialog", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"], "default_focus": "ExitConfirmContinueButton", "state_text": "确认退出"},
@@ -282,8 +299,8 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		printerr("reset progress fixture contract failed for %s" % screen_name)
 		quit(1)
 		return
-	if ["03_offline_battle", "13_round_summary", "14_danger_discard", "15_pending_claim_full", "16_win_detail"].has(screen_name):
-		if not validate_preview_meld_fixture(scene):
+	if ["03_offline_battle", "13_round_summary", "14_danger_discard", "15_pending_claim_full", "16_win_detail", "35_offline_battle_capacity"].has(screen_name):
+		if not validate_preview_meld_fixture(scene, screen_name):
 			printerr("capture fixture contract failed for %s" % screen_name)
 			quit(1)
 			return
@@ -468,10 +485,14 @@ func validate_update_fixture(scene: Node, screen_name: String) -> bool:
 		return overlay != null and str(scene.update_state) != "idle"
 	return overlay == null and str(scene.update_state) == "idle"
 
-func validate_preview_meld_fixture(scene: Node) -> bool:
+func validate_preview_meld_fixture(scene: Node, screen_name: String) -> bool:
 	var fixture = scene.get_meta("ui_capture_meld_fixture", {})
 	if typeof(fixture) != TYPE_DICTIONARY:
 		printerr("meld fixture metadata is missing or not a Dictionary")
+		return false
+	var expected_seed := "seed_preview_midgame_battle" if screen_name == "03_offline_battle" else "seed_preview_capacity_battle" if screen_name == "35_offline_battle_capacity" else "seed_preview_discards"
+	if str(fixture.get("seed", "")) != expected_seed:
+		printerr("meld fixture seed mismatch for %s: got=%s expected=%s" % [screen_name, fixture.get("seed", ""), expected_seed])
 		return false
 	if fixture.get("horizontal_seats", []) != [0, 2] or fixture.get("vertical_seats", []) != [1, 3]:
 		printerr("meld fixture seat contract mismatch: %s" % fixture)
@@ -563,6 +584,12 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			scene.settings_panel_open = true
 			scene.refresh_current_screen()
 		"03_offline_battle":
+			scene.settings_panel_open = false
+			scene.start_offline(true)
+			seed_preview_midgame_battle(scene)
+			scene.render_game()
+			scene.clear_fx_overlays()
+		"35_offline_battle_capacity":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
 			seed_preview_capacity_battle(scene)
@@ -894,6 +921,57 @@ func seed_preview_capacity_battle(scene: Node) -> void:
 		"horizontal_seats": [0, 2],
 		"vertical_seats": [1, 3],
 		"meld_group_counts": [4, 4, 4, 4],
+		"compact_horizontal_tile_width_min": 18,
+		"orientation_rule": "top/bottom horizontal; left/right vertical; faces point to table center",
+	})
+
+
+func seed_preview_midgame_battle(scene: Node) -> void:
+	var preview_discards := [
+		["2W", "4W", "6W", "8W", "1T", "5T", "9T"],
+		["1B", "3B", "5B", "7B", "9B", "N"],
+		["2B", "4B", "6B", "8B", "E", "S", "P"],
+		["3W", "5W", "7W", "9W", "R"],
+	]
+	var preview_melds := [
+		[],
+		[["1W", "1W", "1W"]],
+		[],
+		[["2T", "3T", "4T"]],
+	]
+	var preview_flower_tiles := [
+		[],
+		["H1"],
+		[],
+		["H2"],
+	]
+	for seat in range(4):
+		var player: Dictionary = scene.players[seat]
+		player["discards"] = preview_discards[seat].duplicate()
+		player["melds"] = preview_melds[seat].duplicate(true)
+		player["flower_tiles"] = preview_flower_tiles[seat].duplicate()
+		player["flowers"] = preview_flower_tiles[seat].size()
+		player["score"] = 25800 - seat * 450
+		if seat != 0:
+			player["hand_count"] = 13 - preview_melds[seat].size() * 3
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "5W", "7W", "8W", "9W", "2T", "5T", "8T", "3B", "6B", "F", "F"]
+	scene.wall.resize(64)
+	scene.offline_phase = "await_discard"
+	scene.offline_pending_claim.clear()
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.offline_last_draw = {"seat": 0, "tile": "F", "source": "normal", "announce": false, "serial": 903}
+	scene.offline_self_draw_ready = {"seat": 0, "tile": "F", "serial": 903}
+	scene.last_discard = "R"
+	scene.last_discard_seat = 3
+	scene.table_logs.clear()
+	scene.add_log("第7巡：南家碰牌，牌墙剩余64张。")
+	scene.add_log("第7巡：轮到你出牌。")
+	scene.set_meta("ui_capture_meld_fixture", {
+		"seed": "seed_preview_midgame_battle",
+		"horizontal_seats": [0, 2],
+		"vertical_seats": [1, 3],
+		"meld_group_counts": [0, 1, 0, 1],
 		"compact_horizontal_tile_width_min": 18,
 		"orientation_rule": "top/bottom horizontal; left/right vertical; faces point to table center",
 	})
