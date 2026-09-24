@@ -4446,7 +4446,7 @@ func run() -> void:
 	var gang_threat_function_281 := gang_threat_source_281.substr(gang_threat_start_281, gang_threat_end_281 - gang_threat_start_281)
 	check(gang_threat_function_281.contains("var normalized_tile := normalize_tile_code(tile)"), "added-gang risk normalizes the tile once")
 	check(gang_threat_function_281.contains("var tile_index_snapshot := tile_index_normalized(normalized_tile)"), "added-gang risk resolves the tile index once")
-	check(gang_threat_function_281.contains("%d|%d|%s\" % [ai_state_revision, gang_seat, normalized_tile]"), "added-gang cache keys use the normalized tile")
+	check(gang_threat_function_281.contains("%d|%d|%s|%s\" % [ai_state_revision, gang_seat, normalized_tile, visible_tile_counts_state_cache_key()]"), "added-gang cache keys use the normalized tile and visible-state snapshot")
 	check(gang_threat_function_281.contains("visible_tile_count_from_counts(normalized_tile, visible_counts, tile_index_snapshot)"), "visible risk count consumes the captured index")
 	check(gang_threat_function_281.contains("single_opponent_deal_in_risk_components(normalized_tile, gang_seat, seat, visible, visible_counts, eval_context, tile_index_snapshot)"), "opponent risk branches consume the normalized snapshot")
 	var gang_threat_cache_before_281: int = scene.ai_rob_threat_cache.size()
