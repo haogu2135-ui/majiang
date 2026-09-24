@@ -1432,9 +1432,10 @@ func check_ui_round_1371_1430(scene, viewport_size: Vector2) -> void:
 	var recent_tile := scene.find_child("RecentDiscardTile_3", true, false) as Control
 	if recent_tile != null:
 		check(recent_tile.get_meta("discard_source_index", -1) >= 0 and recent_tile.get_meta("discard_tile_code", "") != "", "latest discard keeps source identity metadata at %s" % viewport_size)
-	var meld_badge := scene.find_child("MeldKindBadge_1_0", true, false) as Control
-	if meld_badge != null:
-		check(meld_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE and meld_badge.get_meta("kind", "") != "", "meld kind copy stays outside the tile face at %s" % viewport_size)
+	var meld_semantic_group := scene.find_child("MeldGroup_0_碰", true, false) as Control
+	if meld_semantic_group != null:
+		check(str(meld_semantic_group.get_meta("meld_semantic_label", "")).contains("碰") and meld_semantic_group.tooltip_text.contains("副露"), "meld kind remains available through semantic text at %s" % viewport_size)
+		check(controls_with_name_prefix(meld_semantic_group, "MeldKindBadge").is_empty(), "meld type cues do not cover tile faces at %s" % viewport_size)
 	var meld_pager := scene.find_child("MeldLaneArchiveButton_1", true, false) as Button
 	if meld_pager != null:
 		check(int(meld_pager.custom_minimum_size.y) >= 44 and meld_pager.get_meta("page_semantics", "").find("副露") >= 0, "meld pager keeps a labeled touch target at %s" % viewport_size)
@@ -5137,6 +5138,8 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 			var lane_orientation_ok: bool = bool(meld_tiles is VBoxContainer if expected_vertical else meld_tiles is HBoxContainer)
 			check(lane_orientation_ok and meld_tiles.get_child_count() >= 3, "battle meld group %d/%d keeps the seat-facing %s tile lane at %s" % [meld_seat, group_count, "vertical" if expected_vertical else "horizontal", viewport_size])
 			check(str(meld_group.get_meta("orientation", "")) == ("vertical" if expected_vertical else "horizontal") and int(meld_group.get_meta("tile_count", 0)) == meld_tiles.get_child_count(), "battle meld group %d/%d keeps its direction and tile-count metadata at %s" % [meld_seat, group_count, viewport_size])
+			check(controls_with_name_prefix(meld_group, "MeldKindBadge").is_empty(), "battle meld group %d/%d keeps type cues off tile faces at %s" % [meld_seat, group_count, viewport_size])
+			check(str(meld_group.get_meta("meld_semantic_label", "")) != "" and meld_group.tooltip_text.contains("副露"), "battle meld group %d/%d preserves its accessible type description at %s" % [meld_seat, group_count, viewport_size])
 			if meld_tiles != null:
 				for holder in meld_tiles.get_children():
 					if not (holder is Control) or holder.get_child_count() == 0:

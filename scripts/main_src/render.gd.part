@@ -14495,45 +14495,6 @@ func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 				meld_group.set_meta("pager_clearance_px", 8.0)
 				meld_group.set_meta("face_rotation", seat_meld_face_rotation(seat))
 				set_ui_full_text(meld_group, "%s · 第%d组 · %d张牌" % [meld_kind, window_start + meld_index + 1, meld_tiles.size()], "副露类型：" + meld_kind)
-				# One authored badge rail per lane is enough to establish the type cue;
-				# repeating the same texture behind every group only adds CanvasItems.
-				if meld_index == 0:
-					var meld_kind_badge_back := add_optional_gpt_center_crop_texture(meld_group, "ui_hand_tray_state_chip", rect_full(0.570, 0.030, 0.955, 0.320), 0.22, 0.14)
-					if meld_kind_badge_back != null:
-						meld_kind_badge_back.name = "MeldKindBadgeBack_%d_%s" % [window_start + meld_index, meld_kind]
-						meld_kind_badge_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				var meld_kind_badge := make_label(meld_group, meld_kind, 11, Color(1.0, 0.94, 0.68, 1.0), true)
-				meld_kind_badge.name = "MeldKindBadge_%d_%s" % [window_start + meld_index, meld_kind]
-				# Keep the type token inside the group after the face rotation. A
-				# small inward gutter prevents it from touching the neighboring tile.
-				var badge_font_size := accessibility_font_size(10)
-				var badge_budget_px := meld_tile_size.x if meld_tile_size.x > 0.0 else (24.0 if compact_melds else 30.0)
-				var badge_char_width := float(badge_font_size) * 1.15
-				var badge_text := meld_kind
-				# A badge is metadata, not a second tile surface. Measure it against
-				# the current face width and use a short token before it can cover a
-				# four-tile kong or a neighboring group.
-				if badge_text.length() * badge_char_width > maxf(18.0, badge_budget_px * 0.90):
-					badge_text = meld_kind.left(1)
-					meld_kind_badge.text = badge_text
-					meld_kind_badge.tooltip_text = "副露类型：" + meld_kind
-					meld_kind_badge.set_meta("badge_full_text", meld_kind)
-					meld_kind_badge.set_meta("badge_shortened", true)
-				var badge_rect := rect_full(0.080, 0.700, 0.920, 0.940) if vertical else rect_full(0.600, 0.060, 0.940, 0.300)
-				apply_rect(meld_kind_badge, badge_rect)
-				meld_kind_badge.add_theme_font_size_override("font_size", badge_font_size)
-				meld_kind_badge.set_meta("badge_measured_face_width", badge_budget_px)
-				meld_kind_badge.set_meta("badge_lane_policy", "face_width_measured_short_token")
-				meld_kind_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if vertical else HORIZONTAL_ALIGNMENT_RIGHT
-				meld_kind_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER if vertical else VERTICAL_ALIGNMENT_TOP
-				meld_kind_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				meld_kind_badge.set_meta("meld_kind", meld_kind)
-				meld_kind_badge.set_meta("accessible_name", "副露类型：" + meld_kind)
-				meld_kind_badge.set_meta("badge_orientation_policy", "seat_facing_inner_gutter")
-				mark_ui_optimization(meld_kind_badge, "F-424")
-				mark_ui_optimization(meld_kind_badge, "F-042")
-				meld_kind_badge.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.03, 0.96))
-				meld_kind_badge.add_theme_constant_override("outline_size", 4)
 				if vertical and compact_melds and not has_pager:
 					# The authored 2D faces remain at their minimum touch size, while
 					# the lane container owns the four-row height budget.
@@ -23502,7 +23463,7 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 	group.name = "MeldGroup_%s" % kind
 	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Holder dimensions account for the seat-facing rotation. Keep the group open
-	# so the compact type badge remains visible at the edge of a narrow group.
+	# so 2D faces remain unobstructed at the edge of a narrow group.
 	group.clip_contents = false
 	# Natural upright art size; rotation handles table-facing orientation.
 	var tile_size: Vector2 = tile_size_override if tile_size_override.x > 0.0 and tile_size_override.y > 0.0 else (Vector2(28, 38) if vertical else Vector2(26, 36))
@@ -23576,19 +23537,10 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 			else:
 				tile_view.position.x += 3.0
 		tiles.add_child(holder)
-	var kind_badge := make_gpt_gate(rect_full(0.68, 0.020, 0.985, 0.340), Color(accent.r, accent.g, accent.b, 0.46))
-	kind_badge.name = "MeldKindBadge"
-	kind_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	group.add_child(kind_badge)
-	var kind_label := make_label(kind_badge, kind, 11, Color(1.0, 0.95, 0.72, 1.0), true)
-	kind_label.name = "MeldKindBadgeLabel"
-	kind_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(kind_label, rect_full(0.0, 0.0, 1.0, 1.0))
-	kind_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.03, 0.96))
-	kind_label.add_theme_constant_override("outline_size", 4)
 	group.set_meta("meld_kind", kind)
 	group.set_meta("meld_semantic_label", "%s · %d张" % [kind, meld.size()])
-	group.set_meta("badge_clip_safe", true)
+	group.set_meta("meld_type_visual_policy", "tile_shape_without_overlaid_badge")
+	group.set_meta("accessible_name", "副露类型：%s · %d张牌" % [kind, meld.size()])
 	mark_ui_optimization(group, "F-424")
 	group.tooltip_text = "%s副露 · %d张牌" % [kind, meld.size()]
 	# Hidden structural markers keep offline smoke name probes stable while UI stays pure tiles.
