@@ -27,8 +27,8 @@ func run() -> void:
 	scene.fx_enabled = false
 
 	print("--- A) multi-seed commercial strength pack ---")
-	# Keep resource use bounded while improving confidence: 4 hands/diff × easy/hard × 3 fixed seeds + 1 shuffled sample.
-	var seeds: Array = [20260730, 20260811, 20260827]
+	# Keep resource use bounded while improving confidence: 4 hands/diff × easy/hard × 5 fixed seeds + 1 shuffled sample.
+	var seeds: Array = [20260730, 20260811, 20260827, 20260908, 20260922]
 	var t0 = Time.get_ticks_msec()
 	var pack = scene.sample_ai_commercial_strength_pack(4, seeds, true)
 	var elapsed = Time.get_ticks_msec() - t0
@@ -88,7 +88,7 @@ func run() -> void:
 			float(shuffled.get("hard_deal_in", 1.0)),
 			float(shuffled.get("avg_ms_hard", 0.0)),
 		])
-	check((pack.get("fixed_rows", []) as Array).size() == 3, "pack contains three fixed-profile seeds")
+	check((pack.get("fixed_rows", []) as Array).size() == 5, "pack contains five fixed-profile seeds")
 	check(bool(pack.get("paired_wall_seed", false)), "pack compares difficulties on paired wall seeds")
 	check(bool(pack.get("paired_profile_seed", false)), "pack compares difficulties on paired profile maps")
 	check(bool(fixed_aggregate.get("score_conservation_all", false)), "fixed-profile aggregate retains total table score")
