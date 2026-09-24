@@ -5532,6 +5532,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	var input_backplate = scene.find_child("OnlineLobbyInputGroupBackplate", true, false) as Control
 	var action_backplate = scene.find_child("OnlineLobbyActionClusterBackplate", true, false) as Control
 	var status_backplate = scene.find_child("OnlineLobbyStatusReadabilityBackplate", true, false) as Control
+	var start_reason_backplate := scene.find_child("OnlineLobbyStartReasonReadabilityBackplate", true, false) as Control
 	var status_label = scene.find_child("OnlineLobbyStatusLabel", true, false) as Label
 	var divider = scene.find_child("OnlineLobbySplitDivider", true, false) as Control
 	var feedback = scene.find_child("OnlineFeedbackArt", true, false) as Control
@@ -5579,7 +5580,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 	if page_plate != null:
 		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
 		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.35 and page_plate.self_modulate.a <= 0.60, "disconnected lobby uses a restrained low-frequency authored bitmap substrate at %s" % viewport_size)
-	check(input_backplate != null and action_backplate != null and status_backplate != null and status_label != null and divider != null, "online lobby exposes readability grouping backplates and status label at %s" % viewport_size)
+	check(input_backplate != null and action_backplate != null and status_backplate != null and start_reason_backplate != null and status_label != null and divider != null, "online lobby exposes separate form, action, and footer readability lanes at %s" % viewport_size)
 	check(room_status_art != null and room_summary_panel != null and room_summary_snapshot_status != null and roster_panel != null and log_list_panel != null and log_list_text != null and chat_button != null and log_latest_button != null and log_unread_label != null and room_badge_view_icon != null and room_badge_view_icon.texture != null, "online lobby exposes room summary roster chat log list latest-log controls and a visible room-view affordance at %s" % viewport_size)
 	check_focus_route(scene, [
 		"OnlineLobbyNameEdit",
@@ -5607,11 +5608,15 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		check(not rects_overlap(screen_rect(retry_button), screen_rect(state_badge)) and absf(screen_rect(retry_button).position.y - screen_rect(state_badge).end.y) <= viewport_size.y * 0.025, "disconnected lobby places retry CTA directly below the connection state at %s" % viewport_size)
 	var error_gate: Dictionary = scene.online_lobby_start_gate("异常")
 	check(str(error_gate.get("reason", "")).contains("连接异常") and str(error_gate.get("reason", "")).contains("点击") and str(error_gate.get("reason", "")).contains("重试"), "online lobby connection-error start gate names the nearby retry route at %s" % viewport_size)
-	if start_reason != null and start_button != null and action_button_row != null and start_button_row != null:
+	if start_reason != null and start_button != null and action_button_row != null and start_button_row != null and status_label != null and start_reason_backplate != null:
 		var start_reason_rect := screen_rect(start_reason)
-		check(not start_reason_rect.intersects(screen_rect(action_button_row), true) and not start_reason_rect.intersects(screen_rect(start_button_row), true), "online lobby start-gate reason stays in a separate lane between both action rows at %s" % viewport_size)
-		check(screen_rect(action_button_row).end.y + 2.0 <= start_reason_rect.position.y and start_reason_rect.end.y + 2.0 <= screen_rect(start_button_row).position.y, "online lobby start-gate lane keeps visible clearance from both button rows at %s" % viewport_size)
-		check(start_reason.tooltip_text.contains("开始游戏条件") and str(start_reason.get_meta("layout_role", "")) == "gate_reason_between_action_lanes", "online lobby start-gate reason keeps full accessible copy in its own lane at %s" % viewport_size)
+		var reason_plate_rect := screen_rect(start_reason_backplate)
+		check(not start_reason_rect.intersects(screen_rect(action_button_row), true) and not start_reason_rect.intersects(screen_rect(start_button_row), true), "online lobby start-gate reason stays outside both action rows at %s" % viewport_size)
+		check(start_reason_rect.position.y >= screen_rect(start_button_row).end.y + maxf(8.0, viewport_size.y * 0.012), "online lobby start-gate reason remains in the separate lower footer lane at %s" % viewport_size)
+		check(start_reason_rect.position.x >= screen_rect(status_label).end.x + maxf(8.0, viewport_size.x * 0.01), "online lobby status and start-gate reasons occupy distinct footer columns at %s" % viewport_size)
+		check(reason_plate_rect.grow(1.0).encloses(start_reason_rect) and not reason_plate_rect.intersects(screen_rect(status_backplate), true), "online lobby start-gate reason uses its own authored footer reading surface at %s" % viewport_size)
+		check(start_reason.tooltip_text.contains("开始游戏条件") and str(start_reason.get_meta("layout_role", "")) == "separate_footer_reason_lane", "online lobby start-gate reason keeps full accessible copy in its footer lane at %s" % viewport_size)
+		check(label_text_width(start_reason, str(start_reason.text)) <= start_reason_rect.size.x + 1.0, "online lobby visible start-gate reason fits without truncation at %s" % viewport_size)
 	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
 	var log_list_texture = (log_list_panel as TextureRect).texture if log_list_panel is TextureRect else null
 	var roster_source = (roster_texture as AtlasTexture).atlas if roster_texture is AtlasTexture else roster_texture

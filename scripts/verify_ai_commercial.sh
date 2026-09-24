@@ -187,6 +187,7 @@ run_godot_check "Strategy quality" 93 "avoidable all-opponent danger telemetry s
 run_godot_check "Strength evidence" 94 "all-opponent avoidable danger is mandatory for commercial PASS"
 run_godot_check "Strategy quality" 95 "exact-score discard ties preserve decision quality"
 run_godot_check "Strategy quality" 97 "exposed melds affect numeric route scoring"
+run_godot_check "Strategy quality" 287 "declined ron still evaluates legal meld claims"
 
 STATUS="PASS"
 if [ "$FAIL" -ne 0 ]; then

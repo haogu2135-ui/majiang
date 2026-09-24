@@ -1061,7 +1061,6 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 				}
 			# AI 主动留听也应进入同张过水；否则下一家重复同张可立刻绕过决策。
 			record_passed_win_tile(seat, normalized_tile)
-			continue
 		var claim_context = make_ai_claim_context(seat, visible_counts_snapshot, hand_counts, from_seat)
 		claim_context["claim_tile"] = normalized_tile
 		claim_context["claim_tile_index"] = tile_index_snapshot
@@ -16586,7 +16585,7 @@ func register_ui_round_2211_2270(root: Control) -> void:
 		["F-2255", "OnlineLobbyLogUnreadLabel", "lobby_unread_owner_v2", "unread count stays adjacent to latest log action"],
 		["F-2256", "OnlineLobbyLogRangeLabel", "lobby_range_owner_v2", "visible log range remains separate from retained total"],
 		["F-2257", "OnlineLobbyLogCountLabel", "lobby_count_owner_v2", "compact log count uses a short visible summary and full tooltip"],
-		["F-2258", "OnlineLobbyStartGateReason", "lobby_start_reason_owner_v3", "create join and start prerequisites appear before the disabled CTA"],
+		["F-2258", "OnlineLobbyStartGateReason", "lobby_start_reason_owner_v3", "create join and start prerequisites stay in a separate footer lane with full detail in the CTA tooltip"],
 		["F-2259", "OnlineLobbyPrimaryStartButton", "lobby_start_action_owner_v3", "start action follows the gate and preserves focus fallback"],
 		["F-2260", "OnlineLobbyConnectionStateLabel", "lobby_connection_owner_v3", "connection state is not mistaken for the endpoint value"],
 		["F-2261", "OnlineDisconnectedLobbyButton", "online_recovery_lobby_owner_v2", "return to lobby preserves resumable table context"],
@@ -17220,7 +17219,7 @@ func register_ui_round_2511_2570(root: Control) -> void:
 		["F-2547", "OnlineLobbyEndpointCopyButton", "lobby_endpoint_copy_owner_v2", "copy has a dedicated touch target and complete value"],
 		["F-2548", "OnlineLobbyConnectionRetryButton", "lobby_retry_unique_owner", "retry is the unique connection recovery action"],
 		["F-2549", "OnlineLobbyLogScroll", "lobby_log_range_owner", "empty and short logs do not expose a false scroll affordance"],
-		["F-2550", "OnlineLobbyStartGateReason", "lobby_start_gate_owner_v2", "start prerequisite reason stays adjacent to the CTA"],
+		["F-2550", "OnlineLobbyStartGateReason", "lobby_start_gate_owner_v2", "start prerequisite reason stays in the distinct footer lane outside both action rows"],
 		["F-2551", "ChatPanelMessageScroll", "chat_message_range_owner", "message range updates with content, not every frame"],
 		["F-2552", "ChatPanelMessageRangeLabel", "chat_range_status_owner", "chat status states visible range and unread context"],
 		["F-2553", "ChatInput", "chat_input_clear_gutter_owner", "chat input reserves clear and send gutters"],
@@ -18062,7 +18061,7 @@ func register_ui_round_1101_1130(root: Control) -> void:
 	var owners := [
 		["F-1101", "OnlineLobbyRoomSummarySnapshotStatus", "lobby_snapshot_transition_owner", "snapshot_age_and_connection_state_share_copy"],
 		["F-1102", "OnlineLobbyConnectionStateLabel", "lobby_connection_transition_owner", "connecting_retry_connected_words_are_explicit"],
-		["F-1103", "OnlineLobbyStartGateReason", "lobby_start_gate_owner", "start disabled reason sits beside primary action"],
+		["F-1103", "OnlineLobbyStartGateReason", "lobby_start_gate_owner", "start disabled reason stays in a separate readable footer lane"],
 		["F-1104", "OnlineLobbyEndpointCopyButton", "lobby_endpoint_copy_owner", "endpoint copy result stays beside action"],
 		["F-1105", "OnlineLobbyLogLatestButton", "lobby_log_latest_owner", "jump_latest action is distinct from log body"],
 		["F-1106", "OnlineLobbyLogCountLabel", "lobby_log_count_owner", "unread and total counts use one semantic lane"],
@@ -19294,7 +19293,7 @@ func register_ui_round_1431_1490(root: Control) -> void:
 		["F-1483", "OnlineLobbyLogLatestButton", "lobby_log_latest_action_owner_v2", "latest action restores the log viewport without changing room state"],
 		["F-1484", "OnlineLobbyFormFeedbackLabel", "lobby_form_feedback_owner_v2", "field feedback is one stable line above actions and carries the full reason"],
 		["F-1485", "OnlineLobbyPrimaryStartButton", "lobby_start_primary_owner_v2", "start action exposes its gate state and a valid focus fallback"],
-		["F-1486", "OnlineLobbyStartGateReason", "lobby_start_gate_copy_owner_v2", "blocked start reason names the missing prerequisite beside the CTA"],
+		["F-1486", "OnlineLobbyStartGateReason", "lobby_start_gate_copy_owner_v2", "blocked start reason names the missing prerequisite in the separate footer lane"],
 		["F-1487", "OnlineLobbySecondaryReturnButton", "lobby_return_action_owner", "return remains available when connection or room state cannot recover"],
 		["F-1488", "StatsRuleFilterButton", "stats_filter_control_owner_v2", "filter state is visible before metrics and preserves the current focus"],
 		["F-1489", "StatsCopyButton", "stats_copy_action_owner_v2", "copy scope and result stay attached to the current filtered summary"],
@@ -20662,7 +20661,7 @@ func register_ui_round_1731_1790(root: Control) -> void:
 		["F-1756", "TutorialEntrySubtitle", "tutorial_subtitle_wrap_owner", "tutorial entry subtitle wraps within a stable compact text lane"],
 		["F-1757", "OnlineLobbyConnectionRetryButton", "lobby_retry_form_clearance_owner", "disconnect retry keeps a separate lane above the form"],
 		["F-1758", "OnlineLobbyEndpointCopyButton", "lobby_endpoint_action_gap_owner", "endpoint copy and connection state retain a distinct touch gap"],
-		["F-1759", "OnlineLobbyStartGateReason", "lobby_start_gate_clearance_owner", "start prerequisite copy stays outside the primary start button row"],
+		["F-1759", "OnlineLobbyStartGateReason", "lobby_start_gate_clearance_owner", "start prerequisite copy stays below and clear of both action rows"],
 		["F-1760", "OnlineLobbyRoomOfflineState", "lobby_offline_log_clearance_owner", "offline recovery state never covers the scrollable room log"],
 		["F-1761", "OnlineLobbyEndpointLabel", "lobby_endpoint_min_readability_owner", "long endpoints preserve a readable visible value and complete copy route"],
 		["F-1762", "OnlineLobbyRoomBadge", "lobby_badge_icon_clearance_owner", "room badge text reserves an inset before its detail icon"],
@@ -20828,7 +20827,7 @@ func register_ui_round_1791_1850(root: Control) -> void:
 		["F-1817", "MenuTutorialStartButton", "tutorial_cta_owner_v2", "tutorial CTA names the next checkpoint and preserves focus"],
 		["F-1818", "OnlineLobbyLogUnreadLabel", "lobby_chat_unread_owner", "lobby chat unread count remains textual and actionable"],
 		["F-1819", "OnlineLobbyRosterRow_0", "lobby_roster_scan_owner_v2", "roster scan order is seat, name, readiness, connection"],
-		["F-1820", "OnlineLobbyStartGateReason", "lobby_start_reason_owner", "start prerequisite reason is adjacent to the blocked action"],
+		["F-1820", "OnlineLobbyStartGateReason", "lobby_start_reason_owner", "start prerequisite reason remains readable in a separate footer status lane"],
 		["F-1821", "OnlineLobbyRoomSummarySnapshotStatus", "lobby_room_snapshot_owner_v2", "room snapshot age is explicit before occupancy and ready counts"],
 		["F-1822", "OnlineLobbyLogLatestButton", "lobby_log_latest_position_owner", "latest-log action reports unread state and restores the prior focus"],
 		["F-1823", "SettingsSectionActiveMarker", "settings_active_marker_owner", "active settings section has a visible non-color marker"],
@@ -21013,7 +21012,7 @@ func register_ui_round_1851_1910(root: Control) -> void:
 		["F-1897", "OnlineLobbyConnectionRetryButton", "lobby_retry_focus_owner_v2", "retry focus remains reachable while the connection state changes"],
 		["F-1898", "OnlineLobbyEndpointCopyButton", "lobby_copy_feedback_owner", "endpoint copy result persists beside the endpoint and does not rely on toast"],
 		["F-1899", "OnlineLobbyNameEdit", "lobby_name_edit_owner", "name editing keeps clear, validation, and focus semantics distinct"],
-		["F-1900", "OnlineLobbyStartGateReason", "lobby_start_gate_text_owner", "start gate reason is readable before the disabled action"],
+		["F-1900", "OnlineLobbyStartGateReason", "lobby_start_gate_text_owner", "start gate reason is readable in the footer with full detail on the disabled action"],
 		["F-1901", "OnlineLobbyLogLatestButton", "lobby_latest_focus_owner_v2", "latest-log action restores the previous list position after use"],
 		["F-1902", "OnlineLobbyRosterPanel", "lobby_roster_keyboard_owner", "roster rows expose one predictable seat/name/readiness navigation order"],
 		["F-1903", "OnlineReconnectGameButton", "game_reconnect_focus_owner", "game reconnect is the first actionable recovery target after disconnect"],
@@ -39143,9 +39142,8 @@ func refresh_online_lobby_action_states() -> void:
 	if start_reason != null:
 		var gate_reason := str(start_gate.get("reason", "等待服务器确认开局条件"))
 		var room_action_reason := "连接后可用" if not connected else ("输入房间号" if room_code == "" else "已就绪")
-		var room_action_summary := "未连接" if not connected else ("需房号" if room_code == "" else "房号已填")
-		var visible_reason := "建/入：%s · 开局：%s" % [room_action_summary, str(start_gate.get("text", "待连接"))]
-		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason])
+		var visible_reason := "创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason]
+		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：" + visible_reason)
 		start_reason.set_meta("disabled_action_reason_visible", true)
 	var form_feedback := find_control.call("OnlineLobbyFormFeedbackLabel") as Label
 	if form_feedback != null:
@@ -39473,7 +39471,7 @@ func _show_online_lobby_impl() -> void:
 	start_row.name = "OnlineLobbyStartButtonRow"
 	configure_passive_container(start_row)
 	start_row.add_theme_constant_override("separation", 10)
-	apply_rect(start_row, rect_full(0.060, 0.850, 0.940, 0.985))
+	apply_rect(start_row, rect_full(0.060, 0.818, 0.940, 0.951))
 	form_panel.add_child(start_row)
 	var action_cluster_backplate = make_layout_host(rect_full(0.045, 0.680, 0.955, 0.963))
 	action_cluster_backplate.name = "OnlineLobbyActionClusterBackplate"
@@ -39487,18 +39485,20 @@ func _show_online_lobby_impl() -> void:
 	var can_start_online := bool(start_gate.get("enabled", false))
 	var lobby_connected := lobby_connection_state_text() == "已连接"
 	var initial_room_action_reason := "连接后可用" if not lobby_connected else ("输入房间号" if bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH) == "" else "已就绪")
-	var initial_room_action_summary := "未连接" if not lobby_connected else ("需房号" if bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH) == "" else "房号已填")
-	var start_reason_text := "建/入：%s · 开局：%s" % [initial_room_action_summary, str(start_gate.get("text", "待连接"))]
-	var start_reason := make_label(form_panel, start_reason_text, 11, Color(0.90, 0.86, 0.70), false)
+	var start_reason_text := "创建/加入：%s · 开局：%s" % [initial_room_action_reason, str(start_gate.get("reason", "等待服务器确认开局条件"))]
+	var start_reason_backplate := make_gpt_center_crop_plate_rect(rect_full(0.505, 0.886, 0.975, 0.946), Color(0.024, 0.036, 0.034, 0.12), "ui_dark_scrim", 0.20)
+	start_reason_backplate.name = "OnlineLobbyStartReasonReadabilityBackplate"
+	panel.add_child(start_reason_backplate)
+	var start_reason := make_label(panel, start_reason_text, 11, Color(0.90, 0.86, 0.70), false)
 	start_reason.name = "OnlineLobbyStartGateReason"
-	apply_rect(start_reason, rect_full(0.060, 0.800, 0.720, 0.840))
+	apply_rect(start_reason, rect_full(0.520, 0.896, 0.965, 0.936))
 	start_reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	start_reason.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	start_reason.tooltip_text = "创建/加入条件与开始游戏条件：创建/加入：%s · 开局：%s" % [initial_room_action_reason, str(start_gate.get("reason", "等待服务器确认开局条件"))]
+	start_reason.tooltip_text = "创建/加入条件与开始游戏条件：" + start_reason_text
 	start_reason.set_meta("action_reason_owner", "OnlineLobbyCreateButton_and_OnlineLobbyJoinButton")
 	start_reason.set_meta("disabled_action_reason_visible", true)
-	start_reason.set_meta("layout_role", "gate_reason_between_action_lanes")
-	start_reason.set_meta("lane_clearance_px", 3.0)
+	start_reason.set_meta("layout_role", "separate_footer_reason_lane")
+	start_reason.set_meta("lane_clearance_px", 8.0)
 	configure_clipped_label(start_reason)
 	mark_ui_optimization(start_reason, "F-540")
 	var start_button_text := str(start_gate.get("text", "待连接"))
@@ -39916,9 +39916,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 		var live_room_code := bounded_online_input(online_room_edit.text if is_instance_valid(online_room_edit) else selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 		var live_connected := lobby_connection_state_text() == "已连接"
 		var room_action_reason := "连接后可用" if not live_connected else ("输入房间号" if live_room_code == "" else "已就绪")
-		var room_action_summary := "未连接" if not live_connected else ("需房号" if live_room_code == "" else "房号已填")
-		var visible_reason := "建/入：%s · 开局：%s" % [room_action_summary, str(lobby_start_gate.get("text", "待连接"))]
-		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason])
+		var visible_reason := "创建/加入：%s · 开局：%s" % [room_action_reason, gate_reason]
+		set_dynamic_label_text(start_reason, visible_reason, "创建/加入条件与开始游戏条件：" + visible_reason)
 		start_reason.set_meta("disabled_action_reason_visible", true)
 	var return_button = find_control.call("OnlineLobbySecondaryReturnButton") as Button
 	if return_button != null:

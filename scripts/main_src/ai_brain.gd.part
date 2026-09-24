@@ -27,7 +27,6 @@ func choose_ai_claim(from_seat: int, tile: String) -> Dictionary:
 				}
 			# AI 主动留听也应进入同张过水；否则下一家重复同张可立刻绕过决策。
 			record_passed_win_tile(seat, normalized_tile)
-			continue
 		var claim_context = make_ai_claim_context(seat, visible_counts_snapshot, hand_counts, from_seat)
 		claim_context["claim_tile"] = normalized_tile
 		claim_context["claim_tile_index"] = tile_index_snapshot
