@@ -4848,6 +4848,8 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 
 func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	var panel = scene.find_child("RoundSummaryPanel", true, false) as Control
+	var input_shield = scene.find_child("RoundSummaryModalInputShield", true, false) as Control
+	var backdrop_scrim = scene.find_child("RoundSummaryBackdropScrim", true, false) as Control
 	var title = scene.find_child("RoundSummaryTitle", true, false) as Label
 	var body = scene.find_child("RoundSummaryBody", true, false) as Label
 	var top_status = scene.find_child("TopHudStatus", true, false) as Label
@@ -4868,6 +4870,18 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	if replay_button != null:
 		check(screen_rect(replay_button).size.y >= 44.0, "round summary replay-copy action keeps a usable touch target at %s" % viewport_size)
 	check(scene.find_child("ActionIntentDock", true, false) == null, "round summary omits the live action intent strip at %s" % viewport_size)
+	var backdrop_texture_path := ""
+	if backdrop_scrim is TextureRect and (backdrop_scrim as TextureRect).texture != null:
+		var backdrop_texture = (backdrop_scrim as TextureRect).texture
+		var backdrop_source = (backdrop_texture as AtlasTexture).atlas if backdrop_texture is AtlasTexture else backdrop_texture
+		backdrop_texture_path = str(backdrop_source.resource_path) if backdrop_source != null else ""
+	check(input_shield != null and input_shield.mouse_filter == Control.MOUSE_FILTER_STOP and backdrop_scrim != null and input_shield.is_ancestor_of(backdrop_scrim) and backdrop_scrim.mouse_filter == Control.MOUSE_FILTER_IGNORE and backdrop_texture_path.ends_with("/ui_dark_scrim.png") and backdrop_scrim.self_modulate.a >= 0.68, "round summary dims the background with one authored scrim below the reading panel at %s" % viewport_size)
+	if input_shield != null and backdrop_scrim != null:
+		var shield_rect := screen_rect(input_shield)
+		var backdrop_rect := screen_rect(backdrop_scrim)
+		check((backdrop_rect.position - shield_rect.position).length() <= 1.0 and backdrop_rect.size.distance_to(shield_rect.size) <= 1.0, "round summary scrim covers the full modal backdrop at %s" % viewport_size)
+	if panel != null and input_shield != null:
+		check(panel.z_index > input_shield.z_index, "round summary panel remains above the background scrim at %s" % viewport_size)
 	if top_status != null:
 		check(top_status.text == "本局结算 · 你自摸 8番 16分" and not top_status.text.contains("..."), "round summary top HUD uses a complete short settlement status at %s" % viewport_size)
 	var saved_summary_score: Dictionary = scene.last_win_score.duplicate(true)

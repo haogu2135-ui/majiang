@@ -28087,6 +28087,12 @@ func draw_round_summary(parent: Control) -> void:
 	modal_input_shield.set_meta("round_summary_viewport_snapshot", summary_viewport_snapshot)
 	modal_input_shield.set_meta("round_summary_content_size_snapshot", summary_content_size_snapshot)
 	modal_input_shield.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
+	var modal_backdrop_scrim := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.004, 0.010, 0.012, 0.68), "ui_dark_scrim", 0.13)
+	modal_backdrop_scrim.name = "RoundSummaryBackdropScrim"
+	modal_backdrop_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	modal_backdrop_scrim.set_meta("modal_backdrop_owner", "RoundSummaryPanel")
+	modal_backdrop_scrim.set_meta("backdrop_layer_count", 1)
+	modal_input_shield.add_child(modal_backdrop_scrim)
 	parent.add_child(modal_input_shield)
 	var panel = make_gpt_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color(0.006, 0.012, 0.010, 1.0), "ui_dark_scrim")
 	panel.name = "RoundSummaryPanel"

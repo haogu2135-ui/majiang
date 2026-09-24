@@ -702,14 +702,16 @@ func run() -> void:
 	scene.draw_round_summary(summary_root)
 	var first_summary_panel := summary_root.get_node_or_null("RoundSummaryPanel") as Control
 	var first_summary_shield := summary_root.get_node_or_null("RoundSummaryModalInputShield") as Control
+	var first_summary_scrim := summary_root.find_child("RoundSummaryBackdropScrim", true, false) as Control
 	var first_summary_rows := summary_root.find_children("RoundSummaryRankRow_*", "Control", true, false)
 	var first_summary_row := first_summary_rows[0] as Control if not first_summary_rows.is_empty() else null
 	var first_summary_preview := first_summary_panel.find_child("AnimationPreview_victory_sparkle", true, false) as Control if first_summary_panel != null else null
 	var first_summary_panel_id: int = first_summary_panel.get_instance_id() if first_summary_panel != null else 0
 	var first_summary_shield_id: int = first_summary_shield.get_instance_id() if first_summary_shield != null else 0
+	var first_summary_scrim_id: int = first_summary_scrim.get_instance_id() if first_summary_scrim != null else 0
 	check(scene.fx_enabled_effective(), "settlement test enables the runtime FX layer")
 	check(scene.animation_asset_spec("victory_sparkle").size() > 0, "settlement test can resolve the victory preview asset")
-	check(first_summary_panel != null and first_summary_shield != null and str(first_summary_panel.get_meta("round_summary_render_signature", "")) == scene.battle_round_summary_identity_signature() and str(first_summary_shield.get_meta("round_summary_render_signature", "")) == scene.battle_round_summary_identity_signature(), "production summary draw writes the paired modal retention signature")
+	check(first_summary_panel != null and first_summary_shield != null and first_summary_scrim != null and str(first_summary_panel.get_meta("round_summary_render_signature", "")) == scene.battle_round_summary_identity_signature() and str(first_summary_shield.get_meta("round_summary_render_signature", "")) == scene.battle_round_summary_identity_signature(), "production summary draw writes the paired modal retention signature")
 	check(scene.screen_tweens.size() > 0, "animated settlement registers transient screen work")
 	check(first_summary_row != null, "animated settlement includes a reusable rank row")
 	check(first_summary_preview != null, "animated settlement includes a reusable animation preview")
@@ -730,10 +732,11 @@ func run() -> void:
 	scene.draw_round_summary(summary_root)
 	var second_summary_panel := summary_root.get_node_or_null("RoundSummaryPanel") as Control
 	var second_summary_shield := summary_root.get_node_or_null("RoundSummaryModalInputShield") as Control
+	var second_summary_scrim := summary_root.find_child("RoundSummaryBackdropScrim", true, false) as Control
 	var second_summary_rows := summary_root.find_children("RoundSummaryRankRow_*", "Control", true, false)
 	var second_summary_row := second_summary_rows[0] as Control if not second_summary_rows.is_empty() else null
 	var second_summary_preview := second_summary_panel.find_child("AnimationPreview_victory_sparkle", true, false) as Control if second_summary_panel != null else null
-	check(second_summary_panel != null and second_summary_panel.get_instance_id() == first_summary_panel_id and second_summary_shield != null and second_summary_shield.get_instance_id() == first_summary_shield_id and scene.retained_battle_round_summary_panel == null and scene.retained_battle_round_summary_shield == null, "unchanged settlement redraw reuses the panel and its input shield")
+	check(second_summary_panel != null and second_summary_panel.get_instance_id() == first_summary_panel_id and second_summary_shield != null and second_summary_shield.get_instance_id() == first_summary_shield_id and second_summary_scrim != null and second_summary_scrim.get_instance_id() == first_summary_scrim_id and scene.retained_battle_round_summary_panel == null and scene.retained_battle_round_summary_shield == null, "unchanged settlement redraw reuses the panel, input shield, and backdrop scrim")
 	check(second_summary_panel != null and is_equal_approx(second_summary_panel.modulate.a, 1.0) and second_summary_panel.scale.is_equal_approx(Vector2.ONE), "retained settlement restores the panel transform")
 	check(second_summary_row != null and is_equal_approx(second_summary_row.modulate.a, 1.0) and is_equal_approx(second_summary_row.offset_left, 0.0) and is_equal_approx(second_summary_row.offset_right, 0.0), "retained settlement restores the rank row transform")
 	check(second_summary_preview != null and is_equal_approx(second_summary_preview.rotation, 0.0) and is_equal_approx(second_summary_preview.modulate.a, 1.0), "retained settlement restores the animation preview transform")
