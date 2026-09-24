@@ -34,12 +34,29 @@ func run() -> void:
 	var t0 = Time.get_ticks_msec()
 	var aggregate = scene.empty_ai_strength_aggregate()
 	var rows: Array = []
+	var easy_probe_wins := 0
+	var hard_probe_wins := 0
+	var easy_probe_score_delta := 0
+	var hard_probe_score_delta := 0
 	for seed_base in seeds:
 		# Keep seat 0 at normal difficulty so player-target risk is comparable;
 		# only the three opponents change between easy and hard.
 		var bench = scene.sample_ai_strength_benchmark(hands_per_seed, int(seed_base), false, false, 0, scene.AI_DIFFICULTY_NORMAL)
 		rows.append(bench)
 		scene.add_ai_strength_benchmark_to_aggregate(aggregate, bench)
+		var raw: Dictionary = bench.get("raw", {})
+		var by_diff: Dictionary = raw.get("by_diff", {})
+		var easy_stats: Dictionary = by_diff.get(scene.AI_DIFFICULTY_EASY, {})
+		var hard_stats: Dictionary = by_diff.get(scene.AI_DIFFICULTY_HARD, {})
+		var easy_wins: Array = easy_stats.get("wins_by_seat", [])
+		var hard_wins: Array = hard_stats.get("wins_by_seat", [])
+		var easy_score_delta: Array = easy_stats.get("score_delta_by_seat", [])
+		var hard_score_delta: Array = hard_stats.get("score_delta_by_seat", [])
+		if easy_wins.size() == 4 and hard_wins.size() == 4 and easy_score_delta.size() == 4 and hard_score_delta.size() == 4:
+			easy_probe_wins += int(easy_wins[0])
+			hard_probe_wins += int(hard_wins[0])
+			easy_probe_score_delta += int(easy_score_delta[0])
+			hard_probe_score_delta += int(hard_score_delta[0])
 	var elapsed = Time.get_ticks_msec() - t0
 	var summary = scene.finalize_ai_strength_aggregate(aggregate)
 	print("    elapsed=%d rows=%d ok=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD(raw/avoid)=%.3f/%.3f %.3f/%.3f humanRon=%.2f/%.2f (%d/%d hands)" % [
@@ -58,6 +75,13 @@ func run() -> void:
 		float(summary.get("hard_deal_in_to_human", 1.0)),
 		int(summary.get("easy_deal_ins_to_human", 0)),
 		int(summary.get("hard_deal_ins_to_human", 0)),
+	])
+	print("    fixed probe seat0 wins easy/hard=%d/%d score_delta easy/hard=%+d/%+d (%d paired hands each; telemetry only)" % [
+		easy_probe_wins,
+		hard_probe_wins,
+		easy_probe_score_delta,
+		hard_probe_score_delta,
+		seeds.size() * hands_per_seed,
 	])
 	check(rows.size() == seeds.size(), "all independent seeds produce a paired row")
 	for row in rows:
@@ -85,6 +109,22 @@ func run() -> void:
 		check(bool(seed_row.get("paired_wall_seed", false)) and bool(seed_row.get("paired_profile_seed", false)), "seed %s keeps paired inputs" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("integrity_all", false)), "seed %s preserves the physical tile ledger" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("score_conservation_all", false)), "seed %s preserves the score ledger" % str(seed_row.get("seed_base", 0)))
+		var raw: Dictionary = seed_row.get("raw", {})
+		var by_diff: Dictionary = raw.get("by_diff", {})
+		for diff in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
+			var diff_stats: Dictionary = by_diff.get(diff, {})
+			var wins_by_seat: Array = diff_stats.get("wins_by_seat", [])
+			var score_delta_by_seat: Array = diff_stats.get("score_delta_by_seat", [])
+			check(wins_by_seat.size() == 4, "seed %s difficulty %s reports wins by seat" % [str(seed_row.get("seed_base", 0)), str(diff)])
+			check(score_delta_by_seat.size() == 4, "seed %s difficulty %s reports score deltas by seat" % [str(seed_row.get("seed_base", 0)), str(diff)])
+			if wins_by_seat.size() == 4 and score_delta_by_seat.size() == 4:
+				var total_wins := 0
+				var total_score_delta := 0
+				for seat in range(4):
+					total_wins += int(wins_by_seat[seat])
+					total_score_delta += int(score_delta_by_seat[seat])
+				check(total_wins == int(diff_stats.get("wins", -1)), "seed %s difficulty %s seat wins reconcile" % [str(seed_row.get("seed_base", 0)), str(diff)])
+				check(total_score_delta == 0, "seed %s difficulty %s score deltas conserve" % [str(seed_row.get("seed_base", 0)), str(diff)])
 	check(bool(summary.get("finished_all", false)), "independent aggregate reaches terminal hands")
 	check(bool(summary.get("integrity_all", false)), "independent aggregate preserves the tile ledger")
 	check(bool(summary.get("score_conservation_all", false)), "independent aggregate preserves the score ledger")

@@ -3150,6 +3150,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		var score_conserved_total = 0
 		var steps_total = 0
 		var wins_total = 0
+		var wins_by_seat = [0, 0, 0, 0]
+		var score_delta_by_seat = [0, 0, 0, 0]
 		var ms_total = 0
 		for h in range(hands_per_diff):
 			enable_offline_all_bot_mode(true, true)
@@ -3192,8 +3194,13 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 				integrity_total += 1
 			if bool(result.get("score_conserved", false)):
 				score_conserved_total += 1
-			if int(result.get("winner", -1)) >= 0:
+			var winner = int(result.get("winner", -1))
+			if winner >= 0:
 				wins_total += 1
+				if winner < 4:
+					wins_by_seat[winner] = int(wins_by_seat[winner]) + 1
+			for seat in range(4):
+				score_delta_by_seat[seat] = int(score_delta_by_seat[seat]) + int(players[seat].get("score", MATCH_START_SCORE)) - MATCH_START_SCORE
 		var danger_rate = float(danger_total) / float(max(1, discard_total))
 		var high_danger_rate = float(high_danger_total) / float(max(1, discard_total))
 		var avoidable_danger_rate = float(avoidable_danger_total) / float(max(1, discard_total))
@@ -3233,6 +3240,8 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			"score_conserved_passed": score_conserved_total,
 			"score_conserved": score_conserved_total >= hands_per_diff,
 			"wins": wins_total,
+			"wins_by_seat": wins_by_seat,
+			"score_delta_by_seat": score_delta_by_seat,
 			"avg_steps": float(steps_total) / float(max(1, hands_per_diff)),
 			"avg_ms": float(ms_total) / float(max(1, hands_per_diff)),
 		}
