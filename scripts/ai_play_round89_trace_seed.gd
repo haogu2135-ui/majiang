@@ -41,6 +41,24 @@ func run() -> void:
 				int(result.get("deal_ins_to_human", 0)),
 				int(result.get("terminal_winner", -1)),
 			])
+			if difficulty == scene.AI_DIFFICULTY_HARD and hand_index == 0:
+				for trace_entry in result.get("discard_trace", []):
+					if typeof(trace_entry) != TYPE_DICTIONARY:
+						continue
+					print("trace step=%d seat=%d tile=%s sh=%d risk=%.2f feed=%.2f human=%.2f hrisk=%.2f score=%.2f best=%s safe=%s source=%s" % [
+						int(trace_entry.get("step", -1)),
+						int(trace_entry.get("seat", -1)),
+						str(trace_entry.get("tile", "")),
+						int(trace_entry.get("shanten", -1)),
+						float(trace_entry.get("risk", 0.0)),
+						float(trace_entry.get("feed", 0.0)),
+						float(trace_entry.get("human_pressure", 0.0)),
+						float(trace_entry.get("human_risk", 0.0)),
+						float(trace_entry.get("score", 0.0)),
+						str(trace_entry.get("best_tile", "")),
+						str(trace_entry.get("safest_tile", "")),
+						str(trace_entry.get("source", "")),
+					])
 			if int(result.get("deal_ins_to_human", 0)) <= 0:
 				continue
 			var terminal_step := int(result.get("terminal_trace_step", -1))
