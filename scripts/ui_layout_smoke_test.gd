@@ -5046,6 +5046,7 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		var dock_height_limit := viewport_size.y * (0.24 if scene.has_pending_claim_window() else 0.115) + 1.0
 		check(dock_rect.size.y <= dock_height_limit, "battle action dock remains within its one/two-row height budget at %s" % viewport_size)
 	var discard_rects = battle_discard_zone_screen_rects(scene)
+	var visible_wall_rects := battle_visible_wall_screen_rects(scene)
 	var root_rect = screen_rect(scene.root_layer)
 	var table_outer_anchor: Rect2 = scene.table_outer_rect_for_viewport()
 	var outer_rect = anchor_rect_in_parent(root_rect, table_outer_anchor)
@@ -5162,6 +5163,9 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 						continue
 					var tile_view := holder.get_child(0) as Control
 					check(tile_view != null and absf(tile_view.rotation - scene.seat_meld_face_rotation(meld_seat)) <= 0.001, "battle meld group %d/%d faces toward the table center at %s" % [meld_seat, group_count, viewport_size])
+					if tile_view != null:
+						for wall_rect in visible_wall_rects:
+							check(not rects_overlap(screen_rect(tile_view), wall_rect), "battle meld group %d/%d tile clears visible wall strips at %s" % [meld_seat, group_count, viewport_size])
 					if not expected_vertical and viewport_size.y <= 560.0 and tile_view != null:
 						check(tile_view.size.x >= 18.0, "compact horizontal meld group %d/%d keeps an 18px tile face minimum at %s" % [meld_seat, group_count, viewport_size])
 						check(float(lane_tile_size.y) <= meld_rect.size.y + 1.0, "compact horizontal meld group %d/%d fits its face height inside the lane at %s" % [meld_seat, group_count, viewport_size])
@@ -5231,6 +5235,18 @@ func battle_discard_zone_screen_rects(scene) -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	for zone in scene.DISCARD_ZONES:
 		rects.append(anchor_rect_in_parent(table_rect, zone[1]))
+	return rects
+
+func battle_visible_wall_screen_rects(scene) -> Array[Rect2]:
+	var table_surface = scene.find_child("OfflineTable3DInnerSurface", true, false) as Node
+	var wall_search_root: Node = table_surface if table_surface != null else scene
+	var rects: Array[Rect2] = []
+	for wall_node in wall_search_root.get_children():
+		if not str(wall_node.name).begins_with("WallBackStrip") or not wall_node is Control:
+			continue
+		var canvas_wall := wall_node as CanvasItem
+		if canvas_wall != null and canvas_wall.visible and canvas_wall.modulate.a > 0.01:
+			rects.append(screen_rect(wall_node as Control))
 	return rects
 
 func check_discard_tile_original_rgb(scene, viewport_size: Vector2) -> void:
