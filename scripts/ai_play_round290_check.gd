@@ -71,6 +71,16 @@ func run() -> void:
 	var fast_human_pressure: float = scene.fast_human_target_discard_pressure(1, "5B", 20.0, 2, {}, human_readiness, human_visible, human_tile_index)
 	var expected_fast_human_pressure: float = max(0.0, 20.0 - 10.0) * 0.36 + human_pattern_threat * 0.90 + human_readiness * 1.05
 	check(is_equal_approx(fast_human_pressure, expected_fast_human_pressure), "fast hard pressure includes the player's cached public hand-pattern threat")
+	scene.players[0]["discards"].append("5B")
+	var discarded_visible_counts: Array = scene.visible_tile_counts_shared()
+	var discarded_context: Dictionary = scene.make_ai_evaluation_context(1, discarded_visible_counts)
+	var discarded_readiness: float = float(discarded_context.get("discard_report_human_readiness", 0.0))
+	var discarded_fast_pressure: float = scene.fast_human_target_discard_pressure(1, "5B", 20.0, 2, discarded_context, discarded_readiness, scene.visible_tile_count("5B"), human_tile_index)
+	var expected_discarded_fast_pressure: float = max(0.0, 20.0 - 10.0) * 0.36 + discarded_readiness * 1.05
+	check(is_equal_approx(discarded_fast_pressure, expected_discarded_fast_pressure), "fast pressure ignores a player-discarded ron tile")
+	var discarded_full_pressure: float = scene.human_target_discard_pressure(1, "5B", 20.0, {}, 2, discarded_context, human_tile_index)
+	var expected_discarded_full_pressure: float = max(0.0, 20.0 - 10.0) * 0.35 + discarded_readiness * 1.15
+	check(is_equal_approx(discarded_full_pressure, expected_discarded_full_pressure), "full pressure ignores a player-discarded ron tile")
 
 	var high_risk_two_away: Dictionary = {
 		"tile": "3B",

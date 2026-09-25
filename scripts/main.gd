@@ -2399,7 +2399,11 @@ func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_re
 			human_feed = max(human_feed, float(item.get("score", 0.0)))
 	var visible_counts = ai_context_visible_counts(eval_context)
 	var visible = visible_tile_count_from_counts(tile, visible_counts, tile_index_snapshot)
-	var human_threat = opponent_pattern_threat_score(0, tile, visible, eval_context, tile_index_snapshot)
+	var threat_index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var threat_tile := str(TILE_CODES[threat_index]) if threat_index >= 0 and threat_index < TILE_CODES.size() else tile
+	var human_threat := 0.0
+	if opponent_discard_tile_count(0, threat_tile, eval_context) <= 0:
+		human_threat = opponent_pattern_threat_score(0, threat_tile, visible, eval_context, threat_index)
 	var readiness := float(eval_context.get("discard_report_human_readiness", -1.0)) if not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat else -1.0
 	if readiness < 0.0:
 		readiness = human_readiness_for_defense()
@@ -2443,7 +2447,10 @@ func fast_human_target_discard_pressure(seat: int, tile: String, risk: float, sh
 	var readiness = readiness_override if readiness_override >= 0.0 else human_readiness_for_defense()
 	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	var visible := visible_override if visible_override >= 0 else visible_tile_count(tile)
-	var human_threat := opponent_pattern_threat_score(0, tile, visible, eval_context, index)
+	var threat_tile := str(TILE_CODES[index]) if index >= 0 and index < TILE_CODES.size() else tile
+	var human_threat := 0.0
+	if opponent_discard_tile_count(0, threat_tile, eval_context) <= 0:
+		human_threat = opponent_pattern_threat_score(0, threat_tile, visible, eval_context, index)
 	if risk < AI_DANGER_RISK_SOFT and readiness < 8.0 and human_threat < 6.0:
 		return 0.0
 	var pen = max(0.0, risk - 10.0) * 0.36 + human_threat * 0.90 + readiness * 1.05
