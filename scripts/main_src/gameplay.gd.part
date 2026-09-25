@@ -2584,6 +2584,24 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 	var avoidable: Dictionary = _ai_sim_avoidable_danger_report(selected, reports) if not selected.is_empty() else {}
 	var guard_candidates = selected.get("hard_guard_candidate_trace", [])
 	var fast_candidates = selected.get("fast_candidate_trace", [])
+	var report_candidates: Array = []
+	for report in reports:
+		if typeof(report) != TYPE_DICTIONARY:
+			continue
+		var candidate: Dictionary = report
+		report_candidates.append({
+			"tile": str(candidate.get("tile", "")),
+			"score": float(candidate.get("score", 0.0)),
+			"shanten": int(candidate.get("shanten", -1)),
+			"risk": float(candidate.get("risk", 0.0)),
+			"feed": float(candidate.get("feed_risk", 0.0)),
+			"human_pressure": float(candidate.get("human_target_pressure", 0.0)),
+			"human_risk": float(candidate.get("human_target_risk", 0.0)),
+			"human_exposure": float(candidate.get("human_target_exposure", candidate.get("human_target_pressure", 0.0))),
+			"safety": str(candidate.get("safety_label", "")),
+			"wait_best_points": int(candidate.get("wait_best_points", 0)),
+			"wait_total_remaining": int(candidate.get("wait_total_remaining", 0)),
+		})
 	var entry := {
 		"step": step,
 		"seat": seat,
@@ -2631,6 +2649,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"hard_guard_from_tile": str(selected.get("hard_guard_from_tile", "")),
 		"hard_guard_candidates": guard_candidates.duplicate(true) if typeof(guard_candidates) == TYPE_ARRAY else [],
 		"fast_candidates": fast_candidates.duplicate(true) if typeof(fast_candidates) == TYPE_ARRAY else [],
+		"report_candidates": report_candidates,
 		"fast_safety_preserved": bool(selected.get("fast_safety_preserved", false)),
 	}
 	(ai_sim_stats.get("discard_trace", []) as Array).append(entry)
