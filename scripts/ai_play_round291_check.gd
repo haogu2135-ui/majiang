@@ -1,0 +1,118 @@
+extends SceneTree
+
+var failed := false
+
+
+func _initialize() -> void:
+	call_deferred("run")
+
+
+func check(condition: bool, message: String) -> void:
+	if condition:
+		print("  OK  | %s" % message)
+	else:
+		print("  FAIL| %s" % message)
+		failed = true
+
+
+func run_hand(scene, difficulty: int, seed_base: int, hand_index: int) -> Dictionary:
+	scene.enable_offline_all_bot_mode(true, true)
+	scene.ai_difficulty = difficulty
+	scene.ai_benchmark_base_difficulty = difficulty
+	scene.ai_benchmark_probe_seat = 0
+	scene.ai_benchmark_probe_difficulty = scene.AI_DIFFICULTY_NORMAL
+	scene.reset_ai_profile_seat_map()
+	seed(seed_base + hand_index * 17)
+	scene.offline_skip_ai_profile_reshuffle = true
+	scene.mode = "offline"
+	scene.offline_hand_number = 1
+	scene.dealer_seat = hand_index % 4
+	for seat in range(4):
+		scene.players[seat]["score"] = scene.MATCH_START_SCORE
+	scene.deal_offline_hand()
+	scene.reset_ai_profile_seat_map()
+	return scene.simulate_offline_bot_hand_sync(700)
+
+
+func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, result: Dictionary) -> void:
+	var trace: Array = result.get("discard_trace", [])
+	var terminal_step := int(result.get("terminal_trace_step", -1))
+	var terminal_tile := str(result.get("terminal_tile", ""))
+	var window: Array = []
+	for item in trace:
+		if typeof(item) == TYPE_DICTIONARY and int(item.get("step", -2)) >= terminal_step - 3 and int(item.get("step", -2)) <= terminal_step:
+			window.append(item)
+	print("    seed=%d diff=%d hand=%d deal_in=%d winner=%d tile=%s terminal_step=%d" % [
+		seed_base,
+		difficulty,
+		hand_index,
+		int(result.get("deal_in_seat", -1)),
+		int(result.get("terminal_winner", -1)),
+		terminal_tile,
+		terminal_step,
+	])
+	for item in window:
+		print("      step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f sh=%d safety=%s score=%.1f best=%s/%.1f/%.1f/sh%d safest=%s/%.1f/%.1f/h%.1f/sh%d avoid=%s gain=%.1f hard2=%s catastrophe=%s moved=%s fast_safe=%s" % [
+			int(item.get("step", -1)),
+			int(item.get("seat", -1)),
+			str(item.get("tile", "")),
+			float(item.get("risk", 0.0)),
+			float(item.get("feed", 0.0)),
+			float(item.get("human_pressure", 0.0)),
+			int(item.get("shanten", -1)),
+			str(item.get("safety", "")),
+			float(item.get("score", 0.0)),
+			str(item.get("best_tile", "")),
+			float(item.get("best_risk", 0.0)),
+			float(item.get("best_feed", 0.0)),
+			int(item.get("best_shanten", -1)),
+			str(item.get("safest_tile", "")),
+			float(item.get("safest_risk", 0.0)),
+			float(item.get("safest_feed", 0.0)),
+			float(item.get("safest_human_pressure", 0.0)),
+			int(item.get("safest_shanten", -1)),
+			str(item.get("avoidable_candidate_tile", "")),
+			float(item.get("avoidable_pressure_gain", 0.0)),
+			str(item.get("hard_guard_two_away", false)),
+			str(item.get("hard_guard_catastrophe_two_away", false)),
+			str(item.get("hard_guard_moved", false)),
+			str(item.get("fast_safety_preserved", false)),
+		])
+	check(not window.is_empty(), "seed %d diff %d hand %d records its terminal discard window" % [seed_base, difficulty, hand_index])
+
+
+func run() -> void:
+	print("=== ai_play_round291 check START ===")
+	var scene = load("res://scripts/main.gd").new()
+	root.add_child(scene)
+	await process_frame
+	scene.setup_tile_order()
+	scene.fast_mode_enabled = true
+	scene.sfx_enabled = false
+	scene.music_enabled = false
+	scene.fx_enabled = false
+	scene.ensure_ai_benchmark_players()
+	scene.ai_sim_trace_enabled = true
+	var seeds: Array[int] = [20260701, 20260753, 20260805, 20260819, 20260843]
+	var probe_rons := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
+	for seed_base in seeds:
+		for difficulty in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
+			for hand_index in range(2):
+				var result: Dictionary = run_hand(scene, difficulty, seed_base, hand_index)
+				check(bool(result.get("ended", false)), "seed %d diff %d hand %d terminates" % [seed_base, difficulty, hand_index])
+				if int(result.get("deal_ins_to_human", 0)) > 0:
+					probe_rons[difficulty] = int(probe_rons.get(difficulty, 0)) + 1
+					print_terminal_window(seed_base, difficulty, hand_index, result)
+	print("    replayed fixed-player rons easy/hard=%d/%d" % [
+		int(probe_rons.get(scene.AI_DIFFICULTY_EASY, 0)),
+		int(probe_rons.get(scene.AI_DIFFICULTY_HARD, 0)),
+	])
+	scene.ai_sim_trace_enabled = false
+	scene.enable_offline_all_bot_mode(false, false)
+	scene.queue_free()
+	if failed:
+		print("=== RESULT: FAIL ===")
+		quit(1)
+	else:
+		print("=== RESULT: OK ===")
+		quit(0)
