@@ -2454,7 +2454,7 @@ func human_target_discard_penalty_from_pressure(pressure: float, difficulty_snap
 	var difficulty := difficulty_snapshot if difficulty_snapshot >= AI_DIFFICULTY_EASY and difficulty_snapshot <= AI_DIFFICULTY_HARD else clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	match difficulty:
 		AI_DIFFICULTY_HARD:
-			pen *= 1.45
+			pen *= 1.8
 		AI_DIFFICULTY_EASY:
 			pen *= 0.55
 	return clamp(pen, 0.0, 220.0)
