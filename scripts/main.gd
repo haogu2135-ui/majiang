@@ -2644,6 +2644,22 @@ func human_claim_discipline_report(seat: int, claim: String, from_seat: int, bef
 	out["reason"] = reason
 	if decline and offline_sim_quiet:
 		ai_sim_stats["human_claim_declines"] = int(ai_sim_stats.get("human_claim_declines", 0)) + 1
+	if decline and ai_sim_trace_enabled:
+		var claim_trace: Array = ai_sim_stats.get("human_claim_trace", [])
+		claim_trace.append({
+			"seat": seat,
+			"claim": claim,
+			"from_seat": from_seat,
+			"reason": reason,
+			"before_shanten": before_shanten,
+			"after_shanten": after_shanten,
+			"shape_gain": shape_gain,
+			"readiness": readiness,
+			"feed_human": feed_human,
+			"forced_discard": forced_tile,
+			"forced_risk": forced_risk,
+			"forced_safety": forced_safety,
+		})
 	return out
 
 
@@ -9035,6 +9051,7 @@ func reset_ai_sim_stats() -> void:
 	}
 	if ai_sim_trace_enabled:
 		ai_sim_stats["discard_trace"] = []
+		ai_sim_stats["human_claim_trace"] = []
 
 
 func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Array, source: String) -> void:

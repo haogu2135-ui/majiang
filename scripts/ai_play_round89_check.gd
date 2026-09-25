@@ -94,7 +94,15 @@ func run() -> void:
 			check(false, "seed row has the expected dictionary shape")
 			continue
 		var seed_row: Dictionary = row
-		print("    seed=%s probe=%s/%s ok=%s integrity=%s score=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f humanRon=%.2f/%.2f" % [
+		var raw: Dictionary = seed_row.get("raw", {})
+		var by_diff: Dictionary = raw.get("by_diff", {})
+		var easy_stats: Dictionary = by_diff.get(scene.AI_DIFFICULTY_EASY, {})
+		var hard_stats: Dictionary = by_diff.get(scene.AI_DIFFICULTY_HARD, {})
+		var easy_wins: Array = easy_stats.get("wins_by_seat", [])
+		var hard_wins: Array = hard_stats.get("wins_by_seat", [])
+		var easy_score_delta: Array = easy_stats.get("score_delta_by_seat", [])
+		var hard_score_delta: Array = hard_stats.get("score_delta_by_seat", [])
+		print("    seed=%s probe=%s/%s ok=%s integrity=%s score=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f humanRon=%.2f/%.2f probeWins=%d/%d probeScore=%+d/%+d humanClaimDeclines=%d/%d" % [
 			str(seed_row.get("seed_base", 0)),
 			str(seed_row.get("fixed_probe_seat", -1)),
 			str(seed_row.get("fixed_probe_difficulty", -1)),
@@ -109,13 +117,17 @@ func run() -> void:
 			float(seed_row.get("hard_human_high_danger", 1.0)),
 			float(seed_row.get("easy_deal_in_to_human", 1.0)),
 			float(seed_row.get("hard_deal_in_to_human", 1.0)),
+			int(easy_wins[0]) if easy_wins.size() == 4 else -1,
+			int(hard_wins[0]) if hard_wins.size() == 4 else -1,
+			int(easy_score_delta[0]) if easy_score_delta.size() == 4 else 0,
+			int(hard_score_delta[0]) if hard_score_delta.size() == 4 else 0,
+			int(seed_row.get("easy_human_claim_declines", 0)),
+			int(seed_row.get("hard_human_claim_declines", 0)),
 		])
 		check(int(seed_row.get("fixed_probe_seat", -1)) == 0 and int(seed_row.get("fixed_probe_difficulty", -1)) == scene.AI_DIFFICULTY_NORMAL, "seed %s keeps seat0 at the normal player probe" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("paired_wall_seed", false)) and bool(seed_row.get("paired_profile_seed", false)), "seed %s keeps paired inputs" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("integrity_all", false)), "seed %s preserves the physical tile ledger" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("score_conservation_all", false)), "seed %s preserves the score ledger" % str(seed_row.get("seed_base", 0)))
-		var raw: Dictionary = seed_row.get("raw", {})
-		var by_diff: Dictionary = raw.get("by_diff", {})
 		for diff in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
 			var diff_stats: Dictionary = by_diff.get(diff, {})
 			var wins_by_seat: Array = diff_stats.get("wins_by_seat", [])

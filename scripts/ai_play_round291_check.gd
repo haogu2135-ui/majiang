@@ -174,6 +174,26 @@ func run() -> void:
 				if result_winner == 0:
 					probe_wins[difficulty] = int(probe_wins.get(difficulty, 0)) + 1
 				probe_score_delta[difficulty] = int(probe_score_delta.get(difficulty, 0)) + int(result.get("probe_score_delta", 0))
+				for claim_item in result.get("human_claim_trace", []):
+					if typeof(claim_item) != TYPE_DICTIONARY:
+						continue
+					print("    human_claim_decline seed=%d diff=%d hand=%d seat=%d claim=%s from=%d reason=%s shanten=%d>%d shape=%.1f readiness=%.1f feed=%.1f discard=%s risk=%.1f safety=%s" % [
+						seed_base,
+						difficulty,
+						hand_index,
+						int(claim_item.get("seat", -1)),
+						str(claim_item.get("claim", "")),
+						int(claim_item.get("from_seat", -1)),
+						str(claim_item.get("reason", "")),
+						int(claim_item.get("before_shanten", -1)),
+						int(claim_item.get("after_shanten", -1)),
+						float(claim_item.get("shape_gain", 0.0)),
+						float(claim_item.get("readiness", 0.0)),
+						float(claim_item.get("feed_human", 0.0)),
+						str(claim_item.get("forced_discard", "")),
+						float(claim_item.get("forced_risk", 0.0)),
+						str(claim_item.get("forced_safety", "")),
+					])
 				for trace_item in result.get("discard_trace", []):
 					if typeof(trace_item) != TYPE_DICTIONARY or not bool(trace_item.get("hard_guard_catastrophe_tenpai", false)):
 						continue

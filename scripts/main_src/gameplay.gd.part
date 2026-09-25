@@ -2558,6 +2558,7 @@ func reset_ai_sim_stats() -> void:
 	}
 	if ai_sim_trace_enabled:
 		ai_sim_stats["discard_trace"] = []
+		ai_sim_stats["human_claim_trace"] = []
 
 
 func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Array, source: String) -> void:
