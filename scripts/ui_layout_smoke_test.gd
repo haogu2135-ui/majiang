@@ -382,14 +382,23 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 		var expected_visible := mini(scene.get_discards(seat).size(), visible_capacity)
 		var real_tile_count := 0
 		var reserved_cell_count := 0
+		var owner_badge := scene.find_child("DiscardRiverOwnerBadge_%d" % seat, true, false) as Control
 		if grid != null:
 			for grid_child in grid.get_children():
 				if bool(grid_child.get_meta("archive_reserved", false)):
 					reserved_cell_count += 1
 				else:
 					real_tile_count += 1
+		var owner_clears_tiles := true
+		if owner_badge != null and owner_badge.visible and grid != null:
+			for grid_child in grid.get_children():
+				var river_tile := grid_child as Control
+				if river_tile != null and not bool(river_tile.get_meta("archive_reserved", false)) and rects_overlap(screen_rect(owner_badge), screen_rect(river_tile)):
+					owner_clears_tiles = false
 		check(grid != null and real_tile_count == expected_visible, "river %d exposes its full %d-tile visible window at %s" % [seat, expected_visible, viewport_size])
 		check(grid == null or reserved_cell_count == 0, "river %d does not add blank archive cells to the visible river grid at %s" % [seat, viewport_size])
+		check(owner_badge == null or owner_clears_tiles, "river %d ownership cue does not cover a visible discard face at %s" % [seat, viewport_size])
+		check(grid != null and str(grid.get_meta("river_owner_label", "")) == str(scene.discard_river_owner_text(seat)), "river %d keeps its owner identity in scene semantics at %s" % [seat, viewport_size])
 		var latest_start: int = int(scene.tail_window_start(scene.get_discards(seat).size(), visible_capacity))
 		var archive_button = scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
 		check(archive_button != null and int(archive_button.get_meta("hidden_count", -1)) == latest_start and archive_button.text == scene.discard_archive_button_text(scene.get_discards(seat).size(), latest_start, visible_capacity), "river %d exposes an accurate authored archive entry for %d older tiles at %s" % [seat, latest_start, viewport_size])
@@ -1422,7 +1431,7 @@ func check_ui_round_1371_1430(scene, viewport_size: Vector2) -> void:
 		check(int(latest_button.custom_minimum_size.y) >= 44 and latest_button.focus_mode != Control.FOCUS_NONE, "table log latest route remains reachable at %s" % viewport_size)
 	var owner_badge := scene.find_child("DiscardRiverOwnerBadge_0", true, false) as Control
 	if owner_badge != null:
-		check(owner_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE and owner_badge.get_meta("seat_label", "") != "", "river owner badge remains textual at %s" % viewport_size)
+		check(owner_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE and owner_badge.get_meta("seat_label", "") != "" and not owner_badge.visible, "river owner semantics remain available without painting over a discard at %s" % viewport_size)
 	var archive_label := scene.find_child("DiscardRiverArchiveLabel_0", true, false) as Label
 	if archive_label != null:
 		check(archive_label.get_meta("page_badge_text", "").find("页") >= 0 and archive_label.tooltip_text != "", "river archive range keeps short and full copy at %s" % viewport_size)

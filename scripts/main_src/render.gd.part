@@ -11431,6 +11431,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 	overlay.set_meta("ui_page_generation", ui_page_generation)
 	apply_rect(overlay, zone_rect)
 	owner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	owner.visible = false
 	owner.tooltip_text = "%s · 当前 %d-%d / %d" % [discard_river_owner_text(seat), visible_start + 1, visible_start + visible_count, discard_count]
 	owner.set_meta("window_start", visible_start)
 	owner.set_meta("window_end", window_end)
@@ -11893,6 +11894,7 @@ func draw_discards(parent: Control, render_context: Dictionary = {}) -> void:
 		grid.set_meta("latest_discard_gutter_px", 6.0)
 		grid.set_meta("latest_discard_page_state", latest_page_state)
 		grid.set_meta("latest_discard_source_seat", latest_discard_seat)
+		grid.set_meta("river_owner_label", discard_river_owner_text(seat))
 		grid.set_meta("river_overlay_contract", "final_grid_reserved_cell_and_latest_gutter")
 		grid.set_meta("discard_grid_render_signature", grid_signature)
 		var river_art = draw_discard_river_art(parent, seat, zone_rect, discards.size(), visible_start, visible_count, latest_discard_seat, river_viewport_size)
