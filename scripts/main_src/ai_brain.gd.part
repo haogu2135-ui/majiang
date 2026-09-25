@@ -1382,8 +1382,7 @@ func human_target_discard_pressure_report(seat: int, tile: String, risk: float, 
 		return {"pressure": 0.0, "exposure": 0.0, "human_risk": human_risk}
 	var pen = human_feed * 0.55 + human_threat * 0.90 + max(0.0, risk - 10.0) * 0.35
 	pen += readiness * 1.15
-	var exposure_pen = human_feed * 0.55 + human_threat * 0.90 + max(0.0, human_risk - 10.0) * 0.35
-	exposure_pen += readiness * 1.15
+	var exposure_pen = pen + max(0.0, human_risk - 10.0) * 0.20
 	var adjusted_pen: float = float(pen)
 	if shanten >= 3:
 		adjusted_pen *= 1.18

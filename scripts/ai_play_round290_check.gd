@@ -80,7 +80,10 @@ func run() -> void:
 	var discarded_human_risk := float(discarded_opponent_risks.get(0, -1.0))
 	check(is_equal_approx(discarded_human_risk, 0.0), "risk vector keeps the furiten player's individual ron risk at zero")
 	var targeted_exposure: Dictionary = scene.human_target_discard_pressure_report(1, "5B", 120.0, {}, 2, discarded_context, human_tile_index, -1.0, discarded_human_risk)
-	check(is_equal_approx(float(targeted_exposure.get("exposure", -1.0)), discarded_readiness * 1.15), "player exposure excludes danger assigned only to other opponents")
+	var baseline_exposure := max(0.0, 120.0 - 10.0) * 0.35 + discarded_readiness * 1.15
+	check(is_equal_approx(float(targeted_exposure.get("exposure", -1.0)), baseline_exposure), "player exposure retains table danger when the player is furiten")
+	var player_risk_exposure: Dictionary = scene.human_target_discard_pressure_report(1, "5B", 120.0, {}, 2, discarded_context, human_tile_index, -1.0, 30.0)
+	check(is_equal_approx(float(player_risk_exposure.get("exposure", -1.0)), baseline_exposure + 4.0), "player-specific danger gets an additional exposure premium")
 	var discarded_fast_pressure: float = scene.fast_human_target_discard_pressure(1, "5B", 20.0, 2, discarded_context, discarded_readiness, scene.visible_tile_count("5B"), human_tile_index)
 	var expected_discarded_fast_pressure: float = max(0.0, 20.0 - 10.0) * 0.36 + discarded_readiness * 1.05
 	check(is_equal_approx(discarded_fast_pressure, expected_discarded_fast_pressure), "fast pressure ignores a player-discarded ron tile")
