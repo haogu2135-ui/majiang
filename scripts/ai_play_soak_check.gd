@@ -1,7 +1,7 @@
 extends SceneTree
 ## Longer offline AI soak: independent seeds, paired easy/hard hands, and durable telemetry.
 
-const SEEDS: Array = [20260831, 20260917, 20261003, 20261019, 20261104]
+const SEEDS: Array = [20260831, 20260917, 20261003, 20261019, 20261104, 20261119, 20261205, 20261221, 20270107, 20270123]
 const HANDS_PER_SEED := 2
 const OUTPUT_DIR := "res://build/qa/ai_play_soak_evidence"
 var failed := false
@@ -46,7 +46,7 @@ func write_artifacts(scene: Node, summary: Dictionary, rows: Array, elapsed_ms: 
 	md_lines.append("Seeds: %d independent paired seeds; hands/seed: %d; total hands: %d" % [SEEDS.size(), HANDS_PER_SEED, SEEDS.size() * HANDS_PER_SEED * 2])
 	md_lines.append("Probe: seat 0 fixed at normal while easy/hard opponents are compared")
 	md_lines.append("Aggregate commercial gate: **%s**" % ("PASS" if bool(payload.get("commercial_strength_ok", false)) else "FAIL"))
-	md_lines.append("Per-seed strength flags are diagnostics only; two hands are too sparse for an independent difficulty claim.")
+	md_lines.append("Per-seed rates are diagnostics only; two hands per profile remain too sparse for an independent difficulty claim.")
 	md_lines.append("Elapsed ms: %d" % elapsed_ms)
 	md_lines.append("")
 	md_lines.append("## Aggregate")
@@ -55,11 +55,18 @@ func write_artifacts(scene: Node, summary: Dictionary, rows: Array, elapsed_ms: 
 	md_lines.append("- fixed-player high danger e/h=%.4f/%.4f; deal-in to player e/h=%.3f/%.3f" % [float(summary.get("easy_human_high_danger", 1.0)), float(summary.get("hard_human_high_danger", 1.0)), float(summary.get("easy_deal_in_to_human", 1.0)), float(summary.get("hard_deal_in_to_human", 1.0))])
 	md_lines.append("")
 	md_lines.append("## Seed Rows")
-	md_lines.append("| Seed | Strength diagnostic | Stability gate | Finished | Integrity | Score | Elapsed ms |")
+	md_lines.append("| Seed | Player high danger E/H (count/discards) | Avoidable player high danger E/H | Ron to player E/H | Strength | Stability | Elapsed ms |")
 	md_lines.append("|---:|:---:|:---:|:---:|:---:|:---:|---:|")
 	for row_value in rows:
 		var row: Dictionary = row_value
-		md_lines.append("| %d | %s | %s | %s | %s | %s | %d |" % [int(row.get("seed_base", 0)), str(row.get("commercial_strength_ok", false)), str(row.get("stability_ok", false)), str(row.get("finished_all", false)), str(row.get("integrity_all", false)), str(row.get("score_conservation_all", false)), int(row.get("elapsed_ms", 0))])
+		md_lines.append("| %d | %.3f (%d/%d) / %.3f (%d/%d) | %.3f/%.3f | %.3f/%.3f | %s | %s | %d |" % [
+			int(row.get("seed_base", 0)),
+			float(row.get("easy_human_high_danger", 1.0)), int(row.get("easy_human_high_danger_discards", 0)), int(row.get("easy_discards", 0)),
+			float(row.get("hard_human_high_danger", 1.0)), int(row.get("hard_human_high_danger_discards", 0)), int(row.get("hard_discards", 0)),
+			float(row.get("easy_human_avoidable_high_danger", 1.0)), float(row.get("hard_human_avoidable_high_danger", 1.0)),
+			float(row.get("easy_deal_in_to_human", 1.0)), float(row.get("hard_deal_in_to_human", 1.0)),
+			str(row.get("commercial_strength_ok", false)), str(row.get("stability_ok", false)), int(row.get("elapsed_ms", 0)),
+		])
 	var md_file := FileAccess.open(md_path, FileAccess.WRITE)
 	if md_file == null:
 		return {"ok": false, "error": "md_open"}
@@ -99,10 +106,18 @@ func run() -> void:
 			"paired_wall_seed": bool(bench.get("paired_wall_seed", false)),
 			"paired_profile_seed": bool(bench.get("paired_profile_seed", false)),
 			"hard_safer_human_avoidable_high_danger": bool(bench.get("hard_safer_human_avoidable_high_danger", false)),
+			"easy_human_high_danger": float(bench.get("easy_human_high_danger", 1.0)),
+			"hard_human_high_danger": float(bench.get("hard_human_high_danger", 1.0)),
+			"easy_human_high_danger_discards": int(easy.get("human_high_danger_discards", 0)),
+			"hard_human_high_danger_discards": int(hard.get("human_high_danger_discards", 0)),
+			"easy_human_avoidable_high_danger": float(bench.get("easy_human_avoidable_high_danger", 1.0)),
+			"hard_human_avoidable_high_danger": float(bench.get("hard_human_avoidable_high_danger", 1.0)),
 			"easy_high_danger": float(bench.get("easy_high_danger", 1.0)),
 			"hard_high_danger": float(bench.get("hard_high_danger", 1.0)),
 			"easy_avoidable_high_danger": float(bench.get("easy_avoidable_high_danger", 1.0)),
 			"hard_avoidable_high_danger": float(bench.get("hard_avoidable_high_danger", 1.0)),
+			"easy_discards": int(easy.get("discards", 0)),
+			"hard_discards": int(hard.get("discards", 0)),
 			"easy_deal_in_to_human": float(bench.get("easy_deal_in_to_human", 1.0)),
 			"hard_deal_in_to_human": float(bench.get("hard_deal_in_to_human", 1.0)),
 			"easy_finished": int(easy.get("ended", 0)),
@@ -114,7 +129,7 @@ func run() -> void:
 			and bool(row.get("paired_wall_seed", false)) \
 			and bool(row.get("paired_profile_seed", false))
 		rows.append(row)
-		print("    seed=%d pass=%s finished=%s integrity=%s score=%s hd=%.3f/%.3f elapsed=%dms" % [int(seed_base), str(row.get("commercial_strength_ok", false)), str(row.get("finished_all", false)), str(row.get("integrity_all", false)), str(row.get("score_conservation_all", false)), float(row.get("easy_high_danger", 1.0)), float(row.get("hard_high_danger", 1.0)), int(row.get("elapsed_ms", 0))])
+		print("    seed=%d pass=%s playerHD=%.3f/%.3f avoidable=%.3f/%.3f ron=%.3f/%.3f elapsed=%dms" % [int(seed_base), str(row.get("commercial_strength_ok", false)), float(row.get("easy_human_high_danger", 1.0)), float(row.get("hard_human_high_danger", 1.0)), float(row.get("easy_human_avoidable_high_danger", 1.0)), float(row.get("hard_human_avoidable_high_danger", 1.0)), float(row.get("easy_deal_in_to_human", 1.0)), float(row.get("hard_deal_in_to_human", 1.0)), int(row.get("elapsed_ms", 0))])
 		check(bool(row.get("stability_ok", false)), "seed %d finishes with physical and score integrity" % int(seed_base))
 		check(bool(row.get("paired_wall_seed", false)) and bool(row.get("paired_profile_seed", false)), "seed %d keeps paired wall/profile inputs" % int(seed_base))
 
