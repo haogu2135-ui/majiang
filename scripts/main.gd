@@ -45775,6 +45775,7 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	# Re-align after the deferred row heights settle. The selected index remains
 	# authoritative, so long wrapped events cannot scroll the selection out of view.
 	set_replay_timeline_selection(replay_timeline_selected_index if replay_timeline_selected_index >= 0 else 0, true)
+	update_replay_timeline_status(event_scroll)
 
 
 func configure_replay_timeline_focus_navigation(focus_first: bool = false) -> void:

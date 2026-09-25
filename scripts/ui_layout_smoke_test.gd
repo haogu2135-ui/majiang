@@ -3901,10 +3901,13 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 		if code_summary != null:
 			check(code_summary.text.contains("/") and code_summary.text.contains("字符") and code_summary.text.contains(input.text.left(8)), "replay import summary exposes the live length and stable prefix after paste at %s (summary=%s input_prefix=%s)" % [viewport_size, code_summary.text, input.text.left(8)])
 		scene.import_replay_from_input()
+		await process_frame
 		var event_list := scene.find_child("ReplayImportEventList", true, false) as VBoxContainer
 		var event_rows := controls_with_name_prefix(event_list, "ReplayImportEventRow_") if event_list != null else []
+		var timeline_position := scene.find_child("ReplayImportTimelinePosition", true, false) as Label
 		check(timeline_scroll != null and timeline_scroll.visible and timeline_scroll.modulate.a >= 0.99 and timeline_scroll.focus_mode == Control.FOCUS_ALL and timeline_scroll.mouse_filter == Control.MOUSE_FILTER_STOP, "replay timeline remains visible and reachable during deferred row measurement at %s" % viewport_size)
 		check(status.text.contains("校验通过") and scene.replay_import_payload.size() > 0 and event_list != null and event_rows.size() >= 2 and (event_rows[0] as Button).text.contains("弃牌") and (event_rows[1] as Button).text.contains("吃") and not (event_rows[0] as Button).text.contains("discard"), "replay import verifies the digest and renders localized event rows at %s" % viewport_size)
+		check(timeline_position != null and int(timeline_position.get_meta("timeline_visible_event_count", -1)) == event_rows.size() and int(timeline_position.get_meta("timeline_source_event_count", -1)) == event_rows.size() and timeline_position.text.contains("/ %d 条已验证事件" % event_rows.size()), "replay timeline count refreshes after deferred row measurement at %s" % viewport_size)
 		if not event_rows.is_empty():
 			var first_event_row := event_rows[0] as Button
 			check(first_event_row.focus_mode == Control.FOCUS_ALL and first_event_row.tooltip_text.contains("点击选择") and float(first_event_row.get_meta("timeline_min_touch_height", 0.0)) >= 44.0 and str(first_event_row.get_meta("timeline_text_slot", "")) == "measured_wrapped_row" and str(first_event_row.get_meta("ui_full_text", "")) != "", "replay timeline gives each event a keyboard-readable measured selection target at %s" % viewport_size)
