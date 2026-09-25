@@ -50,23 +50,18 @@ func run() -> void:
 
 	var quiet_reports: Array = scene.get_ai_discard_reports(1)
 	var quiet_choice := str(quiet_reports[0].get("tile", "")) if not quiet_reports.is_empty() else ""
-	for report in quiet_reports:
-		print("    quiet %s sh=%d risk=%.1f safety=%s ukeire=%d emergency=%.1f score=%.1f" % [
-			str(report.get("tile", "")),
-			int(report.get("shanten", -1)),
-			float(report.get("risk", 0.0)),
-			str(report.get("safety_label", "")),
-			int(report.get("ukeire", 0)),
-			float(report.get("emergency_defense", 0.0)),
-			float(report.get("score", 0.0)),
-		])
+	var quiet_winner: Dictionary = quiet_reports[0] if not quiet_reports.is_empty() else {}
 	scene.offline_sim_quiet = false
 	scene.clear_ai_report_cache()
 	var full_reports: Array = scene.get_ai_discard_reports(1)
 	var full_choice := str(full_reports[0].get("tile", "")) if not full_reports.is_empty() else ""
+	var full_winner: Dictionary = full_reports[0] if not full_reports.is_empty() else {}
 	check(quiet_reports.size() <= scene.AI_FAST_EVAL_PRESSURE_TOP_K, "quiet evaluation remains bounded in a pressure state")
 	check(not full_reports.is_empty() and full_choice == "4T", "full evaluation prefers the current-safe route-preserving discard")
 	check(quiet_choice == full_choice, "hard quiet pre-ranking retains the full scorer's emergency-safe choice")
+	check(bool(quiet_winner.get("fast_safety_preserved", false)), "quiet shortlist marks its preserved emergency-safe candidate")
+	check(int(quiet_winner.get("ukeire", 0)) == int(full_winner.get("ukeire", -1)), "quiet emergency-safe candidate gets a complete ukeire count")
+	check(is_equal_approx(float(quiet_winner.get("score", -INF)), float(full_winner.get("score", INF))), "quiet and full scores agree for the selected emergency-safe discard")
 
 	scene.queue_free()
 	if failed:

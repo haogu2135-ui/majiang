@@ -2623,6 +2623,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"hard_guard_safe_pressure_gain": float(selected.get("hard_guard_safe_pressure_gain", 0.0)),
 		"hard_guard_moved": bool(selected.get("hard_guard_moved", false)),
 		"hard_guard_from_tile": str(selected.get("hard_guard_from_tile", "")),
+		"fast_safety_preserved": bool(selected.get("fast_safety_preserved", false)),
 	}
 	(ai_sim_stats.get("discard_trace", []) as Array).append(entry)
 

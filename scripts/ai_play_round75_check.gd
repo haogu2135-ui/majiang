@@ -78,6 +78,7 @@ func run() -> void:
 	var seed_base = 20260811
 	var traced_deal_ins = 0
 	var hard_guard_moves = 0
+	var hard_fast_safety_moves = 0
 	for difficulty in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
 		for hand_index in range(2):
 			var result = run_hand(scene, difficulty, seed_base, hand_index)
@@ -85,7 +86,9 @@ func run() -> void:
 			check(bool(result.get("ended", false)), "difficulty %d hand %d completes" % [difficulty, hand_index])
 			check(not trace.is_empty(), "difficulty %d hand %d records compact choices" % [difficulty, hand_index])
 			for item in trace:
-				if difficulty == scene.AI_DIFFICULTY_HARD and typeof(item) == TYPE_DICTIONARY and bool(item.get("hard_guard_moved", false)):
+				if difficulty != scene.AI_DIFFICULTY_HARD or typeof(item) != TYPE_DICTIONARY:
+					continue
+				if bool(item.get("hard_guard_moved", false)):
 					hard_guard_moves += 1
 					print("    guard move hand=%d step=%d %s -> %s" % [
 						hand_index,
@@ -93,6 +96,8 @@ func run() -> void:
 						str(item.get("hard_guard_from_tile", "")),
 						str(item.get("tile", "")),
 					])
+				if bool(item.get("fast_safety_preserved", false)):
+					hard_fast_safety_moves += 1
 			if int(result.get("deal_ins", 0)) <= 0:
 				continue
 			traced_deal_ins += 1
@@ -137,7 +142,7 @@ func run() -> void:
 			check(str(terminal_entry.get("tile", "")) == terminal_tile, "terminal trace retains the committed tile")
 
 	check(traced_deal_ins > 0, "diagnostic seed exercises at least one terminal deal-in")
-	check(hard_guard_moves > 0, "hard seed executes a catastrophic two-away safety reroute")
+	check(hard_guard_moves + hard_fast_safety_moves > 0, "hard seed executes or preserves a catastrophic safety reroute")
 	scene.ai_sim_trace_enabled = false
 	scene.enable_offline_all_bot_mode(false, false)
 	scene.queue_free()

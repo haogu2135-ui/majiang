@@ -1944,6 +1944,7 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 					replace_index = j
 					replace_rank = kept_rank
 			if replace_index >= 0 and safest_rank + 4.0 < replace_rank:
+				safest_candidate["fast_safety_preserved"] = true
 				keep[replace_index] = safest_candidate
 		candidates = keep
 	for item in candidates:
@@ -1962,6 +1963,8 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) - 1
 		var fast_risk_vector: Dictionary = item.get("fast_risk_vector", {})
 		var report = build_ai_discard_report(seat, candidate, simulated, open_melds, visible_counts_snapshot, pressure_context, eval_context, simulated_counts, hand_counts, i, candidate_index, int(item.get("fast_shanten", -99)), fast_risk_vector, discard_shanten_memo)
+		if bool(item.get("fast_safety_preserved", false)):
+			report["fast_safety_preserved"] = true
 		reports.append(report)
 		simulated_counts[candidate_index] = int(simulated_counts[candidate_index]) + 1
 		simulated.insert(i, candidate)
