@@ -64,7 +64,7 @@ func run() -> void:
 			hard_probe_score_delta += int(hard_score_delta[0])
 	var elapsed = Time.get_ticks_msec() - t0
 	var summary = scene.finalize_ai_strength_aggregate(aggregate)
-	print("    elapsed=%d rows=%d ok=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD(raw/avoid)=%.3f/%.3f %.3f/%.3f humanRon=%.2f/%.2f (%d/%d hands)" % [
+	print("    elapsed=%d rows=%d ok=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD(raw/avoid)=%.3f/%.3f %.3f/%.3f ronToProbe=%.2f/%.2f (%d/%d hands)" % [
 		elapsed,
 		rows.size(),
 		str(summary.get("commercial_strength_ok", false)),
@@ -102,7 +102,7 @@ func run() -> void:
 		var hard_wins: Array = hard_stats.get("wins_by_seat", [])
 		var easy_score_delta: Array = easy_stats.get("score_delta_by_seat", [])
 		var hard_score_delta: Array = hard_stats.get("score_delta_by_seat", [])
-		print("    seed=%s probe=%s/%s ok=%s integrity=%s score=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f humanRon=%.2f/%.2f probeWins=%d/%d probeScore=%+d/%+d seatWins=%s/%s humanClaimDeclines=%d/%d" % [
+		print("    seed=%s probe=%s/%s ok=%s integrity=%s score=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f ronToProbe=%.2f/%.2f probeWins=%d/%d probeScore=%+d/%+d seatWins=%s/%s humanClaimDeclines=%d/%d" % [
 			str(seed_row.get("seed_base", 0)),
 			str(seed_row.get("fixed_probe_seat", -1)),
 			str(seed_row.get("fixed_probe_difficulty", -1)),
@@ -148,9 +148,9 @@ func run() -> void:
 	check(bool(summary.get("integrity_all", false)), "independent aggregate preserves the tile ledger")
 	check(bool(summary.get("score_conservation_all", false)), "independent aggregate preserves the score ledger")
 	check(bool(summary.get("hard_safer_human_avoidable_high_danger", false)), "hard avoids no fewer actionable player-pressure choices than easy")
-	var easy_human_ron_hands := int(summary.get("easy_deal_ins_to_human", 0))
-	var hard_human_ron_hands := int(summary.get("hard_deal_ins_to_human", 0))
-	check(hard_human_ron_hands <= easy_human_ron_hands + 1, "hard allows at most one additional ron against the fixed player probe")
+	var easy_ron_wins_for_probe := int(summary.get("easy_deal_ins_to_human", 0))
+	var hard_ron_wins_for_probe := int(summary.get("hard_deal_ins_to_human", 0))
+	check(hard_ron_wins_for_probe <= easy_ron_wins_for_probe + 1, "hard opponents yield at most one additional ron win to the fixed seat0 probe")
 	check(bool(summary.get("commercial_strength_ok", false)), "independent aggregate passes the commercial strength gate")
 	check(elapsed < 180000, "independent sample stays inside the serial low-resource budget")
 

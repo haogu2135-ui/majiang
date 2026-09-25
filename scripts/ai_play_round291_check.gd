@@ -45,7 +45,7 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 	for item in trace:
 		if typeof(item) == TYPE_DICTIONARY and int(item.get("step", -2)) >= terminal_step - 3 and int(item.get("step", -2)) <= terminal_step:
 			window.append(item)
-	print("    seed=%d diff=%d hand=%d deal_in=%d winner=%d self_draw=%s last_discard=%s terminal_step=%d" % [
+	print("    seed=%d diff=%d hand=%d from_seat=%d winner=%d self_draw=%s last_discard=%s terminal_step=%d" % [
 		seed_base,
 		difficulty,
 		hand_index,
