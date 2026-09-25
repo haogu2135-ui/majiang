@@ -178,6 +178,7 @@ run_godot_check "Strategy quality" 288 "second-place AI chases the leader in lat
 run_godot_check "Strategy quality" 289 "cumulative match simulation exercises endgame chase"
 run_godot_check "Strategy quality" 87 "pure-suit route reward is counted once"
 run_godot_check "Strategy quality" 88 "each discard candidate owns its route plan"
+run_godot_check "Endgame policy" 292 "hard two-away guard accepts a modest targeted exposure reduction"
 run_godot_check "Strength evidence" 68 "paired multi-seed strength pack passes"
 run_godot_check "Strength evidence" 89 "independent fixed-player pressure sample passes"
 run_godot_check "Strength evidence" 90 "only actionable danger counts against hard AI"

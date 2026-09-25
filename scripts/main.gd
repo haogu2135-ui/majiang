@@ -3170,7 +3170,9 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		return
 	if best_shanten <= 0 and not catastrophe_tenpai and not human_exposure_tenpai:
 		return
-	if best_risk < AI_DANGER_RISK_HIGH + 6.0 and best_feed < AI_DANGER_FEED_SOFT + 24.0:
+	if best_risk < AI_DANGER_RISK_HIGH + 6.0 \
+		and best_feed < AI_DANGER_FEED_SOFT + 24.0 \
+		and best_human_pressure < 34.0:
 		return
 	var best_score = float(best.get("score", 0.0))
 	var best_pressure = hard_danger_push_rank(best)
@@ -3235,6 +3237,14 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			minimum_pressure_gain = 10.0
 		if extreme_one_away and shanten_delta == 0:
 			minimum_pressure_gain = 2.0
+		var targeted_same_shanten_human_relief = two_away_emergency \
+			and shanten_delta == 0 \
+			and best_human_pressure >= 34.0 \
+			and candidate_human_exposure <= best_human_exposure - 10.0 \
+			and pressure_gain >= 3.0 \
+			and score_gap <= 180.0
+		if targeted_same_shanten_human_relief:
+			minimum_pressure_gain = 3.0
 		if rejection_reason.is_empty() and score_gap > max_gap:
 			rejection_reason = "score_gap"
 		if rejection_reason.is_empty() and pressure_gain < minimum_pressure_gain:
