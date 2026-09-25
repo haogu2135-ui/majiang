@@ -31,7 +31,9 @@ func run_hand(scene, difficulty: int, seed_base: int, hand_index: int) -> Dictio
 		scene.players[seat]["score"] = scene.MATCH_START_SCORE
 	scene.deal_offline_hand()
 	scene.reset_ai_profile_seat_map()
-	return scene.simulate_offline_bot_hand_sync(700)
+	var result: Dictionary = scene.simulate_offline_bot_hand_sync(700)
+	result["probe_score_delta"] = int(scene.players[0].get("score", scene.MATCH_START_SCORE)) - scene.MATCH_START_SCORE
+	return result
 
 
 func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, result: Dictionary) -> void:
@@ -159,11 +161,17 @@ func run() -> void:
 		for seed_argument in requested_seed_arguments:
 			seeds.append(int(seed_argument))
 	var probe_rons := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
+	var probe_wins := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
+	var probe_score_delta := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
 	for seed_base in seeds:
 		for difficulty in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
 			for hand_index in range(2):
 				var result: Dictionary = run_hand(scene, difficulty, seed_base, hand_index)
 				check(bool(result.get("ended", false)), "seed %d diff %d hand %d terminates" % [seed_base, difficulty, hand_index])
+				var result_winner := int(result.get("winner", -1))
+				if result_winner == 0:
+					probe_wins[difficulty] = int(probe_wins.get(difficulty, 0)) + 1
+				probe_score_delta[difficulty] = int(probe_score_delta.get(difficulty, 0)) + int(result.get("probe_score_delta", 0))
 				for trace_item in result.get("discard_trace", []):
 					if typeof(trace_item) != TYPE_DICTIONARY or not bool(trace_item.get("hard_guard_catastrophe_tenpai", false)):
 						continue
@@ -184,9 +192,24 @@ func run() -> void:
 				if int(result.get("deal_ins_to_human", 0)) > 0:
 					probe_rons[difficulty] = int(probe_rons.get(difficulty, 0)) + 1
 					print_terminal_window(seed_base, difficulty, hand_index, result)
+				print("    outcome seed=%d diff=%d hand=%d winner=%d probe_score=%+d ron_to_probe=%d" % [
+					seed_base,
+					difficulty,
+					hand_index,
+					result_winner,
+					int(result.get("probe_score_delta", 0)),
+					int(result.get("deal_ins_to_human", 0)),
+				])
 	print("    replayed fixed-player rons easy/hard=%d/%d" % [
 		int(probe_rons.get(scene.AI_DIFFICULTY_EASY, 0)),
 		int(probe_rons.get(scene.AI_DIFFICULTY_HARD, 0)),
+	])
+	print("    fixed-player outcomes easy/hard wins=%d/%d score_delta=%+d/%+d (%d paired hands each)" % [
+		int(probe_wins.get(scene.AI_DIFFICULTY_EASY, 0)),
+		int(probe_wins.get(scene.AI_DIFFICULTY_HARD, 0)),
+		int(probe_score_delta.get(scene.AI_DIFFICULTY_EASY, 0)),
+		int(probe_score_delta.get(scene.AI_DIFFICULTY_HARD, 0)),
+		seeds.size() * 2,
 	])
 	scene.ai_sim_trace_enabled = false
 	scene.enable_offline_all_bot_mode(false, false)
