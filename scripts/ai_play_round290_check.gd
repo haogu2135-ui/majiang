@@ -112,6 +112,7 @@ func run() -> void:
 		"risk": 46.7,
 		"feed_risk": 30.8,
 		"human_target_pressure": 23.0,
+		"human_target_exposure": 31.9,
 		"safety_label": "",
 	}
 	var emergency_reports: Array = [high_risk_two_away, safer_one_away]
