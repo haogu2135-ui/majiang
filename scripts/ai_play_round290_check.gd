@@ -127,6 +127,30 @@ func run() -> void:
 	var emergency_reports: Array = [high_risk_two_away, safer_one_away]
 	scene.apply_hard_danger_push_guard(emergency_reports, -1)
 	check(str(emergency_reports[0].get("tile", "")) == "6W", "hard two-away guard accepts the safer one-shanten line despite the existing 熟 cue")
+	var high_exposure_two_away: Dictionary = {
+		"tile": "7T",
+		"score": 354.6,
+		"shanten": 2,
+		"risk": 48.0,
+		"feed_risk": 9.4,
+		"human_target_pressure": 30.0,
+		"human_target_exposure": 44.0,
+		"safety_label": "熟",
+	}
+	var safer_improving_line: Dictionary = {
+		"tile": "5B",
+		"score": -57.3,
+		"shanten": 1,
+		"risk": 34.0,
+		"feed_risk": 20.9,
+		"human_target_pressure": 10.1,
+		"human_target_exposure": 24.0,
+		"human_target_risk": 6.1,
+		"safety_label": "熟",
+	}
+	var high_exposure_reports: Array = [high_exposure_two_away, safer_improving_line]
+	scene.apply_hard_danger_push_guard(high_exposure_reports, -1)
+	check(str(high_exposure_reports[0].get("tile", "")) == "5B", "hard two-away guard accepts a materially safer one-shanten improvement beyond the ordinary score-gap cap")
 	var dangerous_tenpai: Dictionary = {
 		"tile": "5T",
 		"score": 599.7,
