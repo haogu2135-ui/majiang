@@ -2435,15 +2435,18 @@ func human_target_discard_penalty(seat: int, tile: String, risk: float, feed_rep
 	return human_target_discard_penalty_from_pressure(human_target_discard_pressure(seat, tile, risk, feed_report, shanten, eval_context, tile_index_snapshot), difficulty)
 
 
-func fast_human_target_discard_pressure(seat: int, tile: String, risk: float, shanten: int, eval_context: Dictionary = {}, readiness_override: float = -1.0) -> float:
+func fast_human_target_discard_pressure(seat: int, tile: String, risk: float, shanten: int, eval_context: Dictionary = {}, readiness_override: float = -1.0, visible_override: int = -1, tile_index_snapshot: int = -2) -> float:
 	if seat <= 0 or seat >= players.size() or tile == "" or mode != "offline":
 		return 0.0
 	if (not offline_all_bot_mode) and is_ai_controlled_seat(0):
 		return 0.0
 	var readiness = readiness_override if readiness_override >= 0.0 else human_readiness_for_defense()
-	if risk < AI_DANGER_RISK_SOFT and readiness < 8.0:
+	var index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
+	var visible := visible_override if visible_override >= 0 else visible_tile_count(tile)
+	var human_threat := opponent_pattern_threat_score(0, tile, visible, eval_context, index)
+	if risk < AI_DANGER_RISK_SOFT and readiness < 8.0 and human_threat < 6.0:
 		return 0.0
-	var pen = max(0.0, risk - 10.0) * 0.36 + readiness * 1.05
+	var pen = max(0.0, risk - 10.0) * 0.36 + human_threat * 0.90 + readiness * 1.05
 	if shanten >= 3:
 		pen *= 1.10
 	elif shanten <= 0:
@@ -2917,7 +2920,7 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			var cheap = -float(shanten) * 760.0 - risk * defense_guess * risk_factor
 			var human_pressure = 0.0
 			if fast_human_guard:
-				human_pressure = fast_human_target_discard_pressure(seat, cand, risk, shanten, eval_context, fast_human_readiness)
+				human_pressure = fast_human_target_discard_pressure(seat, cand, risk, shanten, eval_context, fast_human_readiness, int(fast_risk_vector.get("visible", -1)), idx)
 				var human_pen = human_target_discard_penalty_from_pressure(human_pressure, diff)
 				cheap -= human_pen * 0.90
 				item["fast_human_pressure"] = human_pressure
