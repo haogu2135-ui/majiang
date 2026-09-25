@@ -3,6 +3,7 @@ extends SceneTree
 
 const SEEDS: Array = [20260831, 20260917, 20261003, 20261019, 20261104, 20261119, 20261205, 20261221, 20270107, 20270123, 20270139, 20270155, 20270210, 20270226]
 const HANDS_PER_SEED := 2
+const MAX_HUMAN_DEAL_IN_RATE_DELTA := 0.08
 const OUTPUT_DIR := "res://build/qa/ai_play_soak_evidence"
 var failed := false
 
@@ -135,13 +136,21 @@ func run() -> void:
 
 	var elapsed := Time.get_ticks_msec() - started
 	var summary: Dictionary = scene.finalize_ai_strength_aggregate(aggregate)
+	var easy_hands := int(summary.get("easy_hands", 0))
+	var hard_hands := int(summary.get("hard_hands", 0))
+	var easy_human_deal_ins := int(summary.get("easy_deal_ins_to_human", 0))
+	var hard_human_deal_ins := int(summary.get("hard_deal_ins_to_human", 0))
+	var hard_human_deal_in_delta_ok := easy_hands > 0 and hard_hands > 0 \
+		and float(hard_human_deal_ins) / float(hard_hands) <= float(easy_human_deal_ins) / float(easy_hands) + MAX_HUMAN_DEAL_IN_RATE_DELTA
+	summary["hard_safer_deal_in_to_human"] = hard_human_deal_in_delta_ok
+	summary["commercial_strength_ok"] = bool(summary.get("commercial_strength_ok", false)) and hard_human_deal_in_delta_ok
 	print("    aggregate rows=%d hands=%d/%d pass=%s finished=%s integrity=%s score=%s elapsed=%dms" % [int(summary.get("rows", 0)), int(summary.get("easy_hands", 0)), int(summary.get("hard_hands", 0)), str(summary.get("commercial_strength_ok", false)), str(summary.get("finished_all", false)), str(summary.get("integrity_all", false)), str(summary.get("score_conservation_all", false)), elapsed])
 	check(rows.size() == SEEDS.size(), "all independent soak seeds produce rows")
 	check(bool(summary.get("finished_all", false)), "soak aggregate reaches terminal hands")
 	check(bool(summary.get("integrity_all", false)), "soak aggregate preserves the physical tile ledger")
 	check(bool(summary.get("score_conservation_all", false)), "soak aggregate preserves the score ledger")
 	check(bool(summary.get("hard_safer_human_avoidable_high_danger", false)), "hard actionable player-pressure delta stays within 8 percentage points")
-	check(bool(summary.get("hard_safer_deal_in_to_human", false)), "hard deal-in-to-player delta stays within 34 percentage points")
+	check(hard_human_deal_in_delta_ok, "hard deal-in-to-player rate stays within 8 percentage points")
 	check(bool(summary.get("commercial_strength_ok", false)), "soak aggregate passes the commercial strength gate")
 	check(elapsed < 170000, "soak remains inside the serial 180-second budget")
 
