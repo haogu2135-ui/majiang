@@ -52,7 +52,7 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 		terminal_step,
 	])
 	for item in window:
-		print("      step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f sh=%d safety=%s score=%.1f best=%s/%.1f/%.1f/sh%d safest=%s/%.1f/%.1f/h%.1f/sh%d score=%.1f avoid=%s gain=%.1f hard2=%s safe=%s gap=%.1f gain=%.1f moved=%s fast_safe=%s" % [
+		print("      step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f sh=%d wait=%d/%d/%.1f thin_guard=%s safety=%s score=%.1f best=%s/%.1f/%.1f/sh%d safest=%s/%.1f/%.1f/h%.1f/sh%d score=%.1f avoid=%s gain=%.1f hard2=%s safe=%s gap=%.1f gain=%.1f moved=%s fast_safe=%s" % [
 			int(item.get("step", -1)),
 			int(item.get("seat", -1)),
 			str(item.get("tile", "")),
@@ -60,6 +60,10 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 			float(item.get("feed", 0.0)),
 			float(item.get("human_pressure", 0.0)),
 			int(item.get("shanten", -1)),
+			int(item.get("wait_best_points", 0)),
+			int(item.get("wait_total_remaining", 0)),
+			float(item.get("wait_value", 0.0)),
+			str(item.get("hard_guard_catastrophe_tenpai", false)),
 			str(item.get("safety", "")),
 			float(item.get("score", 0.0)),
 			str(item.get("best_tile", "")),
