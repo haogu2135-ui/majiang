@@ -81,6 +81,22 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 			str(item.get("hard_guard_moved", false)),
 			str(item.get("fast_safety_preserved", false)),
 		])
+		for guard_candidate in item.get("hard_guard_candidates", []):
+			if typeof(guard_candidate) != TYPE_DICTIONARY:
+				continue
+			print("        guard_candidate=%s sh_delta=%d risk=%.1f feed=%.1f human=%.1f safety=%s gap=%.1f/%.1f gain=%.1f/%.1f reject=%s" % [
+				str(guard_candidate.get("tile", "")),
+				int(guard_candidate.get("shanten_delta", 0)),
+				float(guard_candidate.get("risk", 0.0)),
+				float(guard_candidate.get("feed_risk", 0.0)),
+				float(guard_candidate.get("human_target_pressure", 0.0)),
+				str(guard_candidate.get("safety_label", "")),
+				float(guard_candidate.get("score_gap", 0.0)),
+				float(guard_candidate.get("max_score_gap", 0.0)),
+				float(guard_candidate.get("pressure_gain", 0.0)),
+				float(guard_candidate.get("minimum_pressure_gain", 0.0)),
+				str(guard_candidate.get("rejection_reason", "")),
+			])
 	check(not window.is_empty(), "seed %d diff %d hand %d records its terminal discard window" % [seed_base, difficulty, hand_index])
 
 

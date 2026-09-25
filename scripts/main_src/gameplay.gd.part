@@ -2582,6 +2582,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 			selected_rank = index
 	var best: Dictionary = reports[0] if not reports.is_empty() and typeof(reports[0]) == TYPE_DICTIONARY else {}
 	var avoidable: Dictionary = _ai_sim_avoidable_danger_report(selected, reports) if not selected.is_empty() else {}
+	var guard_candidates = selected.get("hard_guard_candidate_trace", [])
 	var entry := {
 		"step": step,
 		"seat": seat,
@@ -2623,6 +2624,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"hard_guard_safe_pressure_gain": float(selected.get("hard_guard_safe_pressure_gain", 0.0)),
 		"hard_guard_moved": bool(selected.get("hard_guard_moved", false)),
 		"hard_guard_from_tile": str(selected.get("hard_guard_from_tile", "")),
+		"hard_guard_candidates": guard_candidates.duplicate(true) if typeof(guard_candidates) == TYPE_ARRAY else [],
 		"fast_safety_preserved": bool(selected.get("fast_safety_preserved", false)),
 	}
 	(ai_sim_stats.get("discard_trace", []) as Array).append(entry)

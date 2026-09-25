@@ -3094,12 +3094,12 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 	var best_value = -INF
 	var trace_safest: Dictionary = {}
 	var trace_safest_rank = INF
-	for i in range(1, reports.size()):
-		var candidate: Dictionary = reports[i]
+	var trace_candidates: Array = []
+	for candidate_index in range(1, reports.size()):
+		var candidate: Dictionary = reports[candidate_index]
 		var candidate_shanten = int(candidate.get("shanten", 8))
 		var shanten_delta = candidate_shanten - best_shanten
-		if shanten_delta > 1:
-			continue
+		var rejection_reason := "shanten_delta" if shanten_delta > 1 else ""
 		var score_gap = best_score - float(candidate.get("score", 0.0))
 		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
 		pressure_gain += hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))
@@ -3111,12 +3111,13 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 				best["hard_guard_safe_tile"] = str(candidate.get("tile", ""))
 				best["hard_guard_safe_score_gap"] = score_gap
 				best["hard_guard_safe_pressure_gain"] = pressure_gain
-		if shanten_delta > 0:
+		if rejection_reason.is_empty() and shanten_delta > 0:
 			if best_human_pressure < 18.0 and not catastrophe_tenpai:
-				continue
-			var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
-			if candidate_human_pressure > best_human_pressure - 4.0 and not catastrophe_tenpai:
-				continue
+				rejection_reason = "human_pressure_gate"
+			else:
+				var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
+				if candidate_human_pressure > best_human_pressure - 4.0 and not catastrophe_tenpai:
+					rejection_reason = "human_pressure_not_improved"
 		var max_gap = 360.0 if best_shanten <= 0 else (520.0 if best_shanten == 1 else 300.0)
 		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
 			max_gap += 140.0
@@ -3129,23 +3130,49 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			max_gap = max(max_gap, 700.0)
 		if catastrophe_tenpai:
 			max_gap = max(max_gap, 800.0)
-		if score_gap > max_gap:
-			continue
 		# 三项同时失控的二向听只要求仍有明确净风险收益；常规局仍使用更高门槛。
 		var minimum_pressure_gain = 12.0 if catastrophe_two_away else 14.0
 		if extreme_one_away and shanten_delta == 0:
 			minimum_pressure_gain = 2.0
-		if pressure_gain < minimum_pressure_gain:
+		if rejection_reason.is_empty() and score_gap > max_gap:
+			rejection_reason = "score_gap"
+		if rejection_reason.is_empty() and pressure_gain < minimum_pressure_gain:
+			rejection_reason = "pressure_gain"
+		if ai_sim_trace_enabled and two_away_emergency:
+			trace_candidates.append({
+				"tile": str(candidate.get("tile", "")),
+				"shanten_delta": shanten_delta,
+				"risk": float(candidate.get("risk", 0.0)),
+				"feed_risk": float(candidate.get("feed_risk", 0.0)),
+				"human_target_pressure": float(candidate.get("human_target_pressure", 0.0)),
+				"safety_label": str(candidate.get("safety_label", "")),
+				"score_gap": score_gap,
+				"max_score_gap": max_gap,
+				"pressure_gain": pressure_gain,
+				"minimum_pressure_gain": minimum_pressure_gain,
+				"rejection_reason": rejection_reason if not rejection_reason.is_empty() else "eligible",
+			})
+		if not rejection_reason.is_empty():
 			continue
 		var value = pressure_gain - score_gap / 95.0 - float(max(0, shanten_delta)) * 2.4
 		if value > best_value:
 			best_value = value
-			best_index = i
+			best_index = candidate_index
+	if ai_sim_trace_enabled and two_away_emergency:
+		best["hard_guard_candidate_trace"] = trace_candidates
 	if best_index > 0:
 		var safer = reports[best_index]
 		if ai_sim_trace_enabled:
 			safer["hard_guard_moved"] = true
 			safer["hard_guard_from_tile"] = str(best.get("tile", ""))
+			safer["hard_guard_two_away"] = two_away_emergency
+			safer["hard_guard_catastrophe_two_away"] = catastrophe_two_away
+			safer["hard_guard_catastrophe_tenpai"] = catastrophe_tenpai
+			safer["hard_guard_extreme_one_away"] = extreme_one_away
+			safer["hard_guard_safe_tile"] = str(best.get("hard_guard_safe_tile", ""))
+			safer["hard_guard_safe_score_gap"] = float(best.get("hard_guard_safe_score_gap", 0.0))
+			safer["hard_guard_safe_pressure_gain"] = float(best.get("hard_guard_safe_pressure_gain", 0.0))
+			safer["hard_guard_candidate_trace"] = trace_candidates
 		reports.remove_at(best_index)
 		reports.insert(0, safer)
 
@@ -8937,6 +8964,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 			selected_rank = index
 	var best: Dictionary = reports[0] if not reports.is_empty() and typeof(reports[0]) == TYPE_DICTIONARY else {}
 	var avoidable: Dictionary = _ai_sim_avoidable_danger_report(selected, reports) if not selected.is_empty() else {}
+	var guard_candidates = selected.get("hard_guard_candidate_trace", [])
 	var entry := {
 		"step": step,
 		"seat": seat,
@@ -8978,6 +9006,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"hard_guard_safe_pressure_gain": float(selected.get("hard_guard_safe_pressure_gain", 0.0)),
 		"hard_guard_moved": bool(selected.get("hard_guard_moved", false)),
 		"hard_guard_from_tile": str(selected.get("hard_guard_from_tile", "")),
+		"hard_guard_candidates": guard_candidates.duplicate(true) if typeof(guard_candidates) == TYPE_ARRAY else [],
 		"fast_safety_preserved": bool(selected.get("fast_safety_preserved", false)),
 	}
 	(ai_sim_stats.get("discard_trace", []) as Array).append(entry)
