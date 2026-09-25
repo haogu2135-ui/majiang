@@ -147,6 +147,23 @@ func run() -> void:
 	var misleading_safety_reports: Array = [dangerous_tenpai.duplicate(true), higher_exposure_fold]
 	scene.apply_hard_danger_push_guard(misleading_safety_reports, -1)
 	check(str(misleading_safety_reports[0].get("tile", "")) == "5T", "hard tenpai guard rejects a lower aggregate-risk tile that raises player exposure")
+	var near_equal_exposure_fold: Dictionary = lower_exposure_fold.duplicate(true)
+	near_equal_exposure_fold["tile"] = "7B"
+	near_equal_exposure_fold["risk"] = 50.0
+	near_equal_exposure_fold["feed_risk"] = 5.0
+	near_equal_exposure_fold["human_target_exposure"] = 62.5
+	var near_equal_exposure_reports: Array = [dangerous_tenpai.duplicate(true), near_equal_exposure_fold]
+	scene.apply_hard_danger_push_guard(near_equal_exposure_reports, -1)
+	check(str(near_equal_exposure_reports[0].get("tile", "")) == "7B", "hard tenpai guard accepts a materially lower total-danger route at near-equal player exposure")
+	var valuable_tenpai: Dictionary = dangerous_tenpai.duplicate(true)
+	valuable_tenpai["score"] = 599.7
+	valuable_tenpai["wait_best_points"] = 6400
+	valuable_tenpai["wait_total_remaining"] = 6
+	var high_value_fold: Dictionary = lower_exposure_fold.duplicate(true)
+	high_value_fold["score"] = -612.6
+	var high_value_exposure_reports: Array = [valuable_tenpai, high_value_fold]
+	scene.apply_hard_danger_push_guard(high_value_exposure_reports, -1)
+	check(str(high_value_exposure_reports[0].get("tile", "")) == "4W", "hard tenpai guard can fold a valuable wait under extreme player exposure")
 
 	scene.queue_free()
 	if failed:

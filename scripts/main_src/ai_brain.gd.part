@@ -2087,6 +2087,10 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		and best_risk >= AI_DANGER_RISK_HIGH + 18.0 \
 		and best_feed >= AI_DANGER_FEED_SOFT + 24.0 \
 		and best_human_exposure >= 45.0
+	var extreme_human_tenpai = human_exposure_tenpai \
+		and best_risk >= AI_DANGER_RISK_HIGH + 40.0 \
+		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
+		and best_human_exposure >= 60.0
 	var thin_catastrophe_tenpai = best_shanten <= 0 \
 		and best_risk >= AI_DANGER_RISK_HIGH + 22.0 \
 		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
@@ -2139,8 +2143,11 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			if best_human_pressure < 18.0 and not catastrophe_tenpai and not human_exposure_tenpai:
 				rejection_reason = "human_pressure_gate"
 			else:
-				if human_exposure_tenpai and candidate_human_exposure > best_human_exposure - 8.0:
-					rejection_reason = "human_exposure_not_improved"
+				if human_exposure_tenpai:
+					var materially_safer = candidate_human_exposure <= best_human_exposure - 8.0
+					var near_equal_exposure = candidate_human_exposure <= best_human_exposure + 3.0 and pressure_gain >= 35.0
+					if not materially_safer and not near_equal_exposure:
+						rejection_reason = "human_exposure_not_improved"
 				elif not human_exposure_tenpai and float(candidate.get("human_target_pressure", 0.0)) > best_human_pressure - 4.0 and not catastrophe_tenpai:
 					rejection_reason = "human_pressure_not_improved"
 		var max_gap = 360.0 if best_shanten <= 0 else (520.0 if best_shanten == 1 else 300.0)
@@ -2157,6 +2164,8 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			max_gap = max(max_gap, 800.0)
 		if human_exposure_tenpai:
 			max_gap = max(max_gap, 600.0)
+		if extreme_human_tenpai:
+			max_gap = max(max_gap, 1300.0)
 		# 三项同时失控的二向听只要求仍有明确净风险收益；常规局仍使用更高门槛。
 		var minimum_pressure_gain = 12.0 if catastrophe_two_away else 14.0
 		if two_away_emergency and best_human_pressure >= 30.0:
@@ -2167,7 +2176,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			rejection_reason = "score_gap"
 		if rejection_reason.is_empty() and pressure_gain < minimum_pressure_gain:
 			rejection_reason = "pressure_gain"
-		if ai_sim_trace_enabled and two_away_emergency:
+		if ai_sim_trace_enabled and (two_away_emergency or human_exposure_tenpai):
 			trace_candidates.append({
 				"tile": str(candidate.get("tile", "")),
 				"shanten_delta": shanten_delta,
@@ -2188,7 +2197,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		if value > best_value:
 			best_value = value
 			best_index = candidate_index
-	if ai_sim_trace_enabled and two_away_emergency:
+	if ai_sim_trace_enabled and (two_away_emergency or human_exposure_tenpai):
 		best["hard_guard_candidate_trace"] = trace_candidates
 	if best_index > 0:
 		var safer = reports[best_index]
