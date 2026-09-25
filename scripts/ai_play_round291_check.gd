@@ -177,12 +177,15 @@ func run() -> void:
 				for claim_item in result.get("human_claim_trace", []):
 					if typeof(claim_item) != TYPE_DICTIONARY:
 						continue
-					print("    human_claim_decline seed=%d diff=%d hand=%d seat=%d claim=%s from=%d reason=%s shanten=%d>%d shape=%.1f readiness=%.1f feed=%.1f discard=%s risk=%.1f safety=%s" % [
+					print("    human_claim_decline seed=%d diff=%d hand=%d step=%d seat=%d claim=%s tile=%s needed=%s from=%d reason=%s shanten=%d>%d shape=%.1f readiness=%.1f feed=%.1f discard=%s risk=%.1f safety=%s" % [
 						seed_base,
 						difficulty,
 						hand_index,
+						int(claim_item.get("step", -1)),
 						int(claim_item.get("seat", -1)),
 						str(claim_item.get("claim", "")),
+						str(claim_item.get("claim_tile", "")),
+						str(claim_item.get("chi_needed", [])),
 						int(claim_item.get("from_seat", -1)),
 						str(claim_item.get("reason", "")),
 						int(claim_item.get("before_shanten", -1)),

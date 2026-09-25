@@ -1438,6 +1438,27 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	if declined_by_human:
 		allow = false
 		reason = str(human_discipline.get("reason", "防点玩家"))
+		if offline_sim_quiet:
+			ai_sim_stats["human_claim_declines"] = int(ai_sim_stats.get("human_claim_declines", 0)) + 1
+		if ai_sim_trace_enabled:
+			var claim_trace: Array = ai_sim_stats.get("human_claim_trace", [])
+			claim_trace.append({
+				"step": int(ai_sim_stats.get("steps", -1)),
+				"seat": seat,
+				"claim": claim,
+				"claim_tile": normalize_tile_code(tile),
+				"chi_needed": (chi_choice.get("needed", []) as Array).duplicate(),
+				"from_seat": from_seat,
+				"reason": reason,
+				"before_shanten": before_shanten,
+				"after_shanten": after_shanten,
+				"shape_gain": shape_gain,
+				"readiness": float(human_discipline.get("readiness", 0.0)),
+				"feed_human": float(human_discipline.get("feed_human", 0.0)),
+				"forced_discard": str(pressure_report.get("discard", "")),
+				"forced_risk": float(pressure_report.get("risk", 0.0)),
+				"forced_safety": str(pressure_report.get("safety", "")),
+			})
 	var wall_draw_discipline = wall_draw_claim_discipline_report(seat, claim, before_shanten, after_shanten, shape_gain, exposed_melds, claim_wall_count)
 	# 残墙查听拒绝独立记录；即便牌型收益已不足，也要暴露商用拒因。
 	var declined_by_wall_draw = bool(wall_draw_discipline.get("decline", false))
@@ -2642,24 +2663,6 @@ func human_claim_discipline_report(seat: int, claim: String, from_seat: int, bef
 			reason = "残局拒吃"
 	out["decline"] = decline
 	out["reason"] = reason
-	if decline and offline_sim_quiet:
-		ai_sim_stats["human_claim_declines"] = int(ai_sim_stats.get("human_claim_declines", 0)) + 1
-	if decline and ai_sim_trace_enabled:
-		var claim_trace: Array = ai_sim_stats.get("human_claim_trace", [])
-		claim_trace.append({
-			"seat": seat,
-			"claim": claim,
-			"from_seat": from_seat,
-			"reason": reason,
-			"before_shanten": before_shanten,
-			"after_shanten": after_shanten,
-			"shape_gain": shape_gain,
-			"readiness": readiness,
-			"feed_human": feed_human,
-			"forced_discard": forced_tile,
-			"forced_risk": forced_risk,
-			"forced_safety": forced_safety,
-		})
 	return out
 
 
