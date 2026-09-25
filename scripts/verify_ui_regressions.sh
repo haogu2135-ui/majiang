@@ -200,21 +200,11 @@ scan_absent() {
 }
 
 check_no_runtime_leaks() {
-	local known_interaction_leaks="$LOG_DIR/ui_interaction_smoke.log"
-	local target
-	for target in "$@"; do
-		[ "$target" != "$known_interaction_leaks" ] || continue
-		scan_absent "ObjectDB instances leaked|resources still in use|RIDs of type .* leaked|RID allocations .* leaked|Leaked instance:" "$target" || return 1
-	done
+	scan_absent "ObjectDB instances leaked|resources still in use|RIDs of type .* leaked|RID allocations .* leaked|Leaked instance:" "$@"
 }
 
 check_no_runtime_errors() {
-	local known_interaction_errors="$LOG_DIR/ui_interaction_smoke.log"
-	local target
-	for target in "$@"; do
-		[ "$target" != "$known_interaction_errors" ] || continue
-		scan_absent '^(SCRIPT )?ERROR:' "$target" || return 1
-	done
+	scan_absent '^(SCRIPT )?ERROR:' "$@"
 }
 
 check_no_runtime_generated_bitmap_textures() {
