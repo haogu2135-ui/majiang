@@ -2590,7 +2590,7 @@ func check_ui_round_2451_2510(scene, viewport_size: Vector2) -> void:
 		check(not rects_overlap(screen_rect(loading_rail), screen_rect(loading_version)), "loading footer rail clears the version lane at %s" % viewport_size)
 	var replay_scroll := scene.find_child("ReplayImportTimelineScroll", true, false) as ScrollContainer
 	if replay_scroll != null:
-		check(int(replay_scroll.get_meta("timeline_range_update_count", 0)) <= 1, "replay timeline updates its measured range at most once per import at %s" % viewport_size)
+		check(int(replay_scroll.get_meta("timeline_range_update_count", 0)) == 2, "replay timeline measures each of its two imported ranges once at %s" % viewport_size)
 	var diagnostic_scroll := scene.find_child("DiagnosticContentScroll", true, false) as ScrollContainer
 	if diagnostic_scroll != null:
 		check(str(diagnostic_scroll.get_meta("diagnostic_measurement_contract", "")).contains("one_normalize_pass"), "diagnostic content publishes one measured normalization pass at %s" % viewport_size)
@@ -3907,7 +3907,7 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 		var timeline_position := scene.find_child("ReplayImportTimelinePosition", true, false) as Label
 		check(timeline_scroll != null and timeline_scroll.visible and timeline_scroll.modulate.a >= 0.99 and timeline_scroll.focus_mode == Control.FOCUS_ALL and timeline_scroll.mouse_filter == Control.MOUSE_FILTER_STOP, "replay timeline remains visible and reachable during deferred row measurement at %s" % viewport_size)
 		check(status.text.contains("校验通过") and scene.replay_import_payload.size() > 0 and event_list != null and event_rows.size() >= 2 and (event_rows[0] as Button).text.contains("弃牌") and (event_rows[1] as Button).text.contains("吃") and not (event_rows[0] as Button).text.contains("discard"), "replay import verifies the digest and renders localized event rows at %s" % viewport_size)
-		check(timeline_position != null and int(timeline_position.get_meta("timeline_visible_event_count", -1)) == event_rows.size() and int(timeline_position.get_meta("timeline_source_event_count", -1)) == event_rows.size() and timeline_position.text.contains("/ %d 条已验证事件" % event_rows.size()), "replay timeline count refreshes after deferred row measurement at %s" % viewport_size)
+		check(timeline_position != null and int(timeline_position.get_meta("timeline_visible_event_count", -1)) == event_rows.size() and int(timeline_position.get_meta("timeline_source_event_count", -1)) == event_rows.size() and timeline_position.text.contains("/ %d 条已验证事件" % event_rows.size()) and timeline_position.text.contains("显示 1-"), "replay timeline count and first visible row refresh after deferred measurement at %s" % viewport_size)
 		if not event_rows.is_empty():
 			var first_event_row := event_rows[0] as Button
 			check(first_event_row.focus_mode == Control.FOCUS_ALL and first_event_row.tooltip_text.contains("点击选择") and float(first_event_row.get_meta("timeline_min_touch_height", 0.0)) >= 44.0 and str(first_event_row.get_meta("timeline_text_slot", "")) == "measured_wrapped_row" and str(first_event_row.get_meta("ui_full_text", "")) != "", "replay timeline gives each event a keyboard-readable measured selection target at %s" % viewport_size)
@@ -3923,11 +3923,21 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 			scene.record_round_event("draw", {"seat": event_index % 4})
 		scene.set_replay_import_input_text(scene.round_replay_share_code())
 		scene.import_replay_from_input()
+		await process_frame
 		var long_event_list := scene.find_child("ReplayImportEventList", true, false) as VBoxContainer
 		var long_event_rows := controls_with_name_prefix(long_event_list, "ReplayImportEventRow_") if long_event_list != null else []
 		var first_long_event := long_event_rows[0] as Button if not long_event_rows.is_empty() else null
 		var last_long_event := long_event_rows[long_event_rows.size() - 1] as Button if not long_event_rows.is_empty() else null
+		var long_timeline_position := scene.find_child("ReplayImportTimelinePosition", true, false) as Label
+		var long_row_ends: Array = long_event_list.get_meta("timeline_row_ends", []) if long_event_list != null else []
 		check(status.text.contains("180 条事件") and long_event_list != null and long_event_rows.size() == 180 and long_event_list.custom_minimum_size.y >= 3600.0 and first_long_event != null and last_long_event != null and first_long_event.text.contains("001  摸牌") and last_long_event.text.contains("180  摸牌"), "replay import keeps both ends of a 180-event row timeline available through its scroll child at %s" % viewport_size)
+		if timeline_scroll != null and long_timeline_position != null and long_row_ends.size() == long_event_rows.size():
+			timeline_scroll.scroll_vertical = int(long_row_ends[0])
+			scene.update_replay_timeline_status(timeline_scroll)
+			check(long_timeline_position.text.contains("显示 2-"), "replay visible range excludes row one when its end meets the viewport top at %s" % viewport_size)
+			timeline_scroll.scroll_vertical = 0
+			scene.update_replay_timeline_status(timeline_scroll)
+			check(long_timeline_position.text.contains("显示 1-"), "replay visible range includes row one when it intersects the viewport at %s" % viewport_size)
 		if last_long_event != null:
 			last_long_event.pressed.emit()
 			check(last_long_event.has_focus() and scene.replay_timeline_selected_index == 179, "replay timeline can select a late event without collapsing the row list at %s" % viewport_size)

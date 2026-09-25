@@ -7760,8 +7760,8 @@ func update_replay_timeline_status(event_scroll: ScrollContainer) -> void:
 	var row_ends: Array = event_list.get_meta("timeline_row_ends", []) if event_list != null else []
 	if row_starts.size() != total or row_ends.size() != total:
 		return
-	var first_index := archive_lower_bound(row_starts, viewport_top + 1.0)
-	var last_index := archive_upper_bound(row_ends, viewport_bottom - 1.0) - 1
+	var first_index := archive_upper_bound(row_ends, viewport_top)
+	var last_index := archive_lower_bound(row_starts, viewport_bottom) - 1
 	if first_index >= total or first_index > last_index:
 		first_index = clampi(archive_upper_bound(row_starts, viewport_top) - 1, 0, total - 1)
 		last_index = first_index
