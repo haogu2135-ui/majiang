@@ -47,38 +47,27 @@ func run() -> void:
 	scene.players[2]["melds"] = [["1W", "2W", "3W"], ["7W", "8W", "9W"]]
 	scene.players[2]["discards"] = ["1T", "2T", "3T", "4T", "5T", "6T"]
 	scene.offline_claim_counts[scene.claim_source_key(2, 1)] = 2
-	scene.reset_ai_sim_stats()
-	scene.ai_sim_trace_enabled = true
 
 	var quiet_reports: Array = scene.get_ai_discard_reports(1)
-	print("    quiet reports=%d" % quiet_reports.size())
+	var quiet_choice := str(quiet_reports[0].get("tile", "")) if not quiet_reports.is_empty() else ""
 	for report in quiet_reports:
-		print("    quiet %s sh=%d risk=%.1f feed=%.1f score=%.1f" % [
+		print("    quiet %s sh=%d risk=%.1f safety=%s ukeire=%d emergency=%.1f score=%.1f" % [
 			str(report.get("tile", "")),
 			int(report.get("shanten", -1)),
 			float(report.get("risk", 0.0)),
-			float(report.get("feed_risk", 0.0)),
+			str(report.get("safety_label", "")),
+			int(report.get("ukeire", 0)),
+			float(report.get("emergency_defense", 0.0)),
 			float(report.get("score", 0.0)),
 		])
-
 	scene.offline_sim_quiet = false
 	scene.clear_ai_report_cache()
 	var full_reports: Array = scene.get_ai_discard_reports(1)
-	print("    full reports=%d" % full_reports.size())
-	for report in full_reports:
-		print("    full  %s sh=%d risk=%.1f feed=%.1f score=%.1f moved=%s" % [
-			str(report.get("tile", "")),
-			int(report.get("shanten", -1)),
-			float(report.get("risk", 0.0)),
-			float(report.get("feed_risk", 0.0)),
-			float(report.get("score", 0.0)),
-			str(report.get("hard_guard_moved", false)),
-		])
-		if str(report.get("tile", "")) == "4T":
-			print("    full winner detail=%s" % report)
-	check(not quiet_reports.is_empty() and not full_reports.is_empty(), "both evaluation paths produce discard candidates")
+	var full_choice := str(full_reports[0].get("tile", "")) if not full_reports.is_empty() else ""
+	check(quiet_reports.size() <= scene.AI_FAST_EVAL_PRESSURE_TOP_K, "quiet evaluation remains bounded in a pressure state")
+	check(not full_reports.is_empty() and full_choice == "4T", "full evaluation prefers the current-safe route-preserving discard")
+	check(quiet_choice == full_choice, "hard quiet pre-ranking retains the full scorer's emergency-safe choice")
 
-	scene.ai_sim_trace_enabled = false
 	scene.queue_free()
 	if failed:
 		print("=== RESULT: FAIL ===")

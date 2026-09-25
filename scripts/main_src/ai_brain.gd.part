@@ -1898,7 +1898,16 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 				cheap -= (risk - 12.0) * 1.35
 			item["cheap_score"] = cheap
 			item["fast_risk"] = risk
-			var safety_rank = risk + human_pressure * 0.72
+			var fast_safety_value := 0.0
+			if diff == AI_DIFFICULTY_HARD:
+				var fast_safety := tile_safety_label(cand, seat, visible_counts_snapshot, eval_context, idx)
+				item["fast_safety_label"] = fast_safety
+				fast_safety_value = hard_safety_value(fast_safety)
+				if shanten > 1:
+					var fast_feed_report: Dictionary = discard_feed_risk_report(cand, seat, visible_counts_snapshot, eval_context, idx)
+					var fast_emergency_defense := emergency_defense_adjustment(seat, shanten, fast_safety, risk, float(fast_feed_report.get("score", 0.0)), pressure_context)
+					fast_safety_value += max(0.0, fast_emergency_defense) * 0.12
+			var safety_rank = risk + human_pressure * 0.72 - fast_safety_value
 			item["fast_safety_rank"] = safety_rank
 			var safest_index := int(safest_candidate.get("tile_index", -1))
 			# Fast candidates are canonical tile codes, so their captured indexes
@@ -2476,10 +2485,11 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	if diff_idx < AI_DIFFICULTY_EASY or diff_idx > AI_DIFFICULTY_HARD:
 		diff_idx = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	var human_pressure = human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context, candidate_tile_index_snapshot)
+	var emergency_defense = emergency_defense_adjustment(seat, shanten, safety, risk, feed_risk, pressure_context)
 	var needs_guard_ukeire = false
 	if offline_sim_quiet and diff_idx == AI_DIFFICULTY_HARD and shanten == 2:
 		if safety != "":
-			needs_guard_ukeire = risk >= AI_DANGER_RISK_SOFT or feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
+			needs_guard_ukeire = risk >= AI_DANGER_RISK_SOFT or feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0 or emergency_defense > 0.0
 		elif risk <= AI_DANGER_RISK_HIGH + 10.0:
 			needs_guard_ukeire = feed_risk >= AI_DANGER_FEED_SOFT or human_pressure >= 12.0
 	if needs_guard_ukeire and not effective_metrics_ready:
@@ -2490,7 +2500,6 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		effective_remaining = guard_metrics.get("remaining_by_tile", {})
 		effective_tile_indices = guard_metrics.get("tile_indices", {})
 	var safety_bonus = ai_safety_bonus(safety, defense, shanten)
-	var emergency_defense = emergency_defense_adjustment(seat, shanten, safety, risk, feed_risk, pressure_context)
 	var tenpai_bonus = 220.0 if shanten <= 0 else 0.0
 	var fold_push = tenpai_fold_adjustment(seat, shanten, ukeire, wait_best_points, wait_total_remaining, safety, risk, feed_risk, pressure_context, eval_context)
 	var midgame_push = midgame_danger_adjustment(seat, shanten, ukeire, safety, risk, feed_risk, pressure_context, eval_context)
