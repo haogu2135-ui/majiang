@@ -20,6 +20,12 @@ deal-ins to the fixed seat0 probe were 1/16 and 2/16. This meets the probe's
 one-additional-ron tolerance; it is not a statistical claim about overall win
 rate.
 
+A matched full-eight-seed trial with the hard player-target multiplier reduced
+to `1.45` produced 1/16 easy and 3/16 hard deal-ins and failed that tolerance.
+The baseline `1.8` run had 1/16 and 2/16; the extra hard ron came from seed
+`20260805` (0/2 to 1/2). Keep `1.8`; this probe is a narrow defense comparison,
+not evidence of overall win-rate improvement.
+
 ## Resource Impact
 
 The probe runs two hands per difficulty for each independent base seed, with no
