@@ -216,7 +216,7 @@ func run() -> void:
 					])
 				if int(result.get("deal_ins_to_human", 0)) > 0:
 					probe_rons[difficulty] = int(probe_rons.get(difficulty, 0)) + 1
-				if result_winner == 0:
+				if result_winner == 0 or int(result.get("deal_ins_to_human", 0)) > 0:
 					print_terminal_window(seed_base, difficulty, hand_index, result)
 				print("    outcome seed=%d diff=%d hand=%d winner=%d probe_score=%+d ron_to_probe=%d" % [
 					seed_base,
