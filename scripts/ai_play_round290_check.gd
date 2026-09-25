@@ -117,6 +117,35 @@ func run() -> void:
 	var emergency_reports: Array = [high_risk_two_away, safer_one_away]
 	scene.apply_hard_danger_push_guard(emergency_reports, -1)
 	check(str(emergency_reports[0].get("tile", "")) == "6W", "hard two-away guard accepts the safer one-shanten line despite the existing 熟 cue")
+	var dangerous_tenpai: Dictionary = {
+		"tile": "5T",
+		"score": 599.7,
+		"shanten": 0,
+		"risk": 83.1,
+		"feed_risk": 51.1,
+		"human_target_pressure": 25.9,
+		"human_target_exposure": 61.7,
+		"wait_best_points": 12800,
+		"wait_total_remaining": 6,
+	}
+	var lower_exposure_fold: Dictionary = {
+		"tile": "4W",
+		"score": 250.0,
+		"shanten": 1,
+		"risk": 59.3,
+		"feed_risk": 12.3,
+		"human_target_pressure": 16.5,
+		"human_target_exposure": 39.3,
+	}
+	var human_exposure_reports: Array = [dangerous_tenpai, lower_exposure_fold]
+	scene.apply_hard_danger_push_guard(human_exposure_reports, -1)
+	check(str(human_exposure_reports[0].get("tile", "")) == "4W", "hard tenpai guard folds to a materially lower human exposure under severe danger")
+	var higher_exposure_fold: Dictionary = lower_exposure_fold.duplicate(true)
+	higher_exposure_fold["tile"] = "7B"
+	higher_exposure_fold["human_target_exposure"] = 68.0
+	var misleading_safety_reports: Array = [dangerous_tenpai.duplicate(true), higher_exposure_fold]
+	scene.apply_hard_danger_push_guard(misleading_safety_reports, -1)
+	check(str(misleading_safety_reports[0].get("tile", "")) == "5T", "hard tenpai guard rejects a lower aggregate-risk tile that raises player exposure")
 
 	scene.queue_free()
 	if failed:

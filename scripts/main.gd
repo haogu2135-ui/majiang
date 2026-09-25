@@ -2381,13 +2381,17 @@ func human_readiness_for_defense(wall_count_snapshot: int = -1) -> float:
 	return score
 
 func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2, human_feed_snapshot: float = -1.0) -> float:
+	return float(human_target_discard_pressure_report(seat, tile, risk, feed_report, shanten, eval_context, tile_index_snapshot, human_feed_snapshot).get("pressure", 0.0))
+
+
+func human_target_discard_pressure_report(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2, human_feed_snapshot: float = -1.0) -> Dictionary:
 	# 难度无关的「喂玩家」威胁分：用于商用基准遥测，避免全 Bot 采样
 	# 中 seat0 也随难度变化导致实际和牌数污染防守评估。
 	if seat <= 0 or seat >= players.size() or tile == "" or mode != "offline":
-		return 0.0
+		return {"pressure": 0.0, "exposure": 0.0}
 	# 人机对局：seat0 非 AI；全 bot 采样仍把 seat0 当探针位
 	if (not offline_all_bot_mode) and is_ai_controlled_seat(0):
-		return 0.0
+		return {"pressure": 0.0, "exposure": 0.0}
 	var human_feed = human_feed_snapshot if human_feed_snapshot >= 0.0 else 0.0
 	if human_feed_snapshot < 0.0:
 		var details: Array = feed_report.get("details", []) if typeof(feed_report) == TYPE_DICTIONARY else []
@@ -2408,16 +2412,17 @@ func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_re
 	if readiness < 0.0:
 		readiness = human_readiness_for_defense()
 	if human_feed < 8.0 and human_threat < 6.0 and risk < AI_DANGER_RISK_SOFT and readiness < 8.0:
-		return 0.0
+		return {"pressure": 0.0, "exposure": 0.0}
 	var pen = human_feed * 0.55 + human_threat * 0.90 + max(0.0, risk - 10.0) * 0.35
 	pen += readiness * 1.15
+	var adjusted_pen: float = float(pen)
 	if shanten >= 3:
-		pen *= 1.18
+		adjusted_pen *= 1.18
 	elif shanten <= 0:
-		pen *= 0.42
+		adjusted_pen *= 0.42
 	elif shanten == 1:
-		pen *= 0.72
-	return clamp(pen, 0.0, 220.0)
+		adjusted_pen *= 0.72
+	return {"pressure": clamp(adjusted_pen, 0.0, 220.0), "exposure": clamp(pen, 0.0, 220.0)}
 
 
 func human_target_discard_penalty_from_pressure(pressure: float, difficulty_snapshot: int = -1) -> float:
@@ -3088,6 +3093,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 	var best_risk = float(best.get("risk", 0.0))
 	var best_feed = float(best.get("feed_risk", 0.0))
 	var best_human_pressure = float(best.get("human_target_pressure", 0.0))
+	var best_human_exposure = float(best.get("human_target_exposure", best_human_pressure))
 	var best_wait_points = int(best.get("wait_best_points", 0))
 	var best_wait_remaining = int(best.get("wait_total_remaining", 0))
 	# 通常只在听牌/一向听时允许折返；但二向听若同时出现灾难级放铳、
@@ -3111,6 +3117,10 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		and best_human_pressure >= 26.0 \
 		and best_wait_points > 0 and best_wait_points <= score_points_for_fan(2) \
 		and best_wait_remaining > 4 and best_wait_remaining <= 8
+	var human_exposure_tenpai = best_shanten <= 0 \
+		and best_risk >= AI_DANGER_RISK_HIGH + 18.0 \
+		and best_feed >= AI_DANGER_FEED_SOFT + 24.0 \
+		and best_human_exposure >= 45.0
 	var thin_catastrophe_tenpai = best_shanten <= 0 \
 		and best_risk >= AI_DANGER_RISK_HIGH + 22.0 \
 		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
@@ -3127,10 +3137,11 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		best["hard_guard_two_away"] = two_away_emergency
 		best["hard_guard_catastrophe_two_away"] = catastrophe_two_away
 		best["hard_guard_catastrophe_tenpai"] = catastrophe_tenpai
+		best["hard_guard_human_exposure_tenpai"] = human_exposure_tenpai
 		best["hard_guard_extreme_one_away"] = extreme_one_away
 	if best_shanten > 1 and not two_away_emergency:
 		return
-	if best_shanten <= 0 and not catastrophe_tenpai:
+	if best_shanten <= 0 and not catastrophe_tenpai and not human_exposure_tenpai:
 		return
 	if best_risk < AI_DANGER_RISK_HIGH + 6.0 and best_feed < AI_DANGER_FEED_SOFT + 24.0:
 		return
@@ -3145,6 +3156,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		var candidate: Dictionary = reports[candidate_index]
 		var candidate_shanten = int(candidate.get("shanten", 8))
 		var shanten_delta = candidate_shanten - best_shanten
+		var candidate_human_exposure = float(candidate.get("human_target_exposure", candidate.get("human_target_pressure", 0.0)))
 		var rejection_reason := "shanten_delta" if shanten_delta > 1 else ""
 		var score_gap = best_score - float(candidate.get("score", 0.0))
 		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
@@ -3158,11 +3170,12 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 				best["hard_guard_safe_score_gap"] = score_gap
 				best["hard_guard_safe_pressure_gain"] = pressure_gain
 		if rejection_reason.is_empty() and shanten_delta > 0:
-			if best_human_pressure < 18.0 and not catastrophe_tenpai:
+			if best_human_pressure < 18.0 and not catastrophe_tenpai and not human_exposure_tenpai:
 				rejection_reason = "human_pressure_gate"
 			else:
-				var candidate_human_pressure = float(candidate.get("human_target_pressure", 0.0))
-				if candidate_human_pressure > best_human_pressure - 4.0 and not catastrophe_tenpai:
+				if human_exposure_tenpai and candidate_human_exposure > best_human_exposure - 8.0:
+					rejection_reason = "human_exposure_not_improved"
+				elif not human_exposure_tenpai and float(candidate.get("human_target_pressure", 0.0)) > best_human_pressure - 4.0 and not catastrophe_tenpai:
 					rejection_reason = "human_pressure_not_improved"
 		var max_gap = 360.0 if best_shanten <= 0 else (520.0 if best_shanten == 1 else 300.0)
 		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
@@ -3176,6 +3189,8 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			max_gap = max(max_gap, 700.0)
 		if catastrophe_tenpai:
 			max_gap = max(max_gap, 800.0)
+		if human_exposure_tenpai:
+			max_gap = max(max_gap, 600.0)
 		# 三项同时失控的二向听只要求仍有明确净风险收益；常规局仍使用更高门槛。
 		var minimum_pressure_gain = 12.0 if catastrophe_two_away else 14.0
 		if extreme_one_away and shanten_delta == 0:
@@ -3191,6 +3206,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 				"risk": float(candidate.get("risk", 0.0)),
 				"feed_risk": float(candidate.get("feed_risk", 0.0)),
 				"human_target_pressure": float(candidate.get("human_target_pressure", 0.0)),
+				"human_target_exposure": candidate_human_exposure,
 				"safety_label": str(candidate.get("safety_label", "")),
 				"score_gap": score_gap,
 				"max_score_gap": max_gap,
@@ -3224,7 +3240,8 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 
 
 func hard_danger_push_rank(report: Dictionary) -> float:
-	return float(report.get("risk", 0.0)) + float(report.get("feed_risk", 0.0)) * 0.45 + float(report.get("human_target_pressure", 0.0)) * 0.60
+	var human_exposure = float(report.get("human_target_exposure", report.get("human_target_pressure", 0.0)))
+	return float(report.get("risk", 0.0)) + float(report.get("feed_risk", 0.0)) * 0.45 + human_exposure * 0.60
 
 
 func hard_safety_value(label: String) -> float:
@@ -3594,7 +3611,9 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var diff_idx = int(eval_context.get("discard_report_difficulty", -1)) if context_matches_seat else -1
 	if diff_idx < AI_DIFFICULTY_EASY or diff_idx > AI_DIFFICULTY_HARD:
 		diff_idx = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
-	var human_pressure = human_target_discard_pressure(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context, candidate_tile_index_snapshot)
+	var human_pressure_report: Dictionary = human_target_discard_pressure_report(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context, candidate_tile_index_snapshot)
+	var human_pressure = float(human_pressure_report.get("pressure", 0.0))
+	var human_exposure = float(human_pressure_report.get("exposure", human_pressure))
 	var emergency_defense = emergency_defense_adjustment(seat, shanten, safety, risk, feed_risk, pressure_context)
 	var needs_guard_ukeire = false
 	if offline_sim_quiet and diff_idx == AI_DIFFICULTY_HARD and shanten == 2:
@@ -3678,6 +3697,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		"stance": ai_stance_label(defense, shanten),
 		"defense": defense,
 		"human_target_pressure": human_pressure,
+		"human_target_exposure": human_exposure,
 		"human_target_penalty": human_pen,
 		"package_feed_pending": bool(package_report.get("pending", false)),
 		"package_feed_penalty": package_pen,
