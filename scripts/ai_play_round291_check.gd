@@ -40,16 +40,18 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 	var trace: Array = result.get("discard_trace", [])
 	var terminal_step := int(result.get("terminal_trace_step", -1))
 	var terminal_tile := str(result.get("terminal_tile", ""))
+	var terminal_self_draw := bool(result.get("terminal_self_draw", result.get("self_draw", false)))
 	var window: Array = []
 	for item in trace:
 		if typeof(item) == TYPE_DICTIONARY and int(item.get("step", -2)) >= terminal_step - 3 and int(item.get("step", -2)) <= terminal_step:
 			window.append(item)
-	print("    seed=%d diff=%d hand=%d deal_in=%d winner=%d tile=%s terminal_step=%d" % [
+	print("    seed=%d diff=%d hand=%d deal_in=%d winner=%d self_draw=%s last_discard=%s terminal_step=%d" % [
 		seed_base,
 		difficulty,
 		hand_index,
 		int(result.get("deal_in_seat", -1)),
 		int(result.get("terminal_winner", -1)),
+		str(terminal_self_draw),
 		terminal_tile,
 		terminal_step,
 	])
@@ -191,6 +193,7 @@ func run() -> void:
 					])
 				if int(result.get("deal_ins_to_human", 0)) > 0:
 					probe_rons[difficulty] = int(probe_rons.get(difficulty, 0)) + 1
+				if result_winner == 0:
 					print_terminal_window(seed_base, difficulty, hand_index, result)
 				print("    outcome seed=%d diff=%d hand=%d winner=%d probe_score=%+d ron_to_probe=%d" % [
 					seed_base,

@@ -30,6 +30,11 @@ func run() -> void:
 	# Eight independent base seeds with two paired hands each provide 16 hands
 	# per difficulty without relying on one seed's forced tenpai discard.
 	var seeds: Array = [20260701, 20260714, 20260742, 20260753, 20260805, 20260819, 20260843, 20260857]
+	var requested_seed_arguments := OS.get_cmdline_user_args()
+	if not requested_seed_arguments.is_empty():
+		seeds.clear()
+		for seed_argument in requested_seed_arguments:
+			seeds.append(int(seed_argument))
 	var hands_per_seed := 2
 	var t0 = Time.get_ticks_msec()
 	var aggregate = scene.empty_ai_strength_aggregate()

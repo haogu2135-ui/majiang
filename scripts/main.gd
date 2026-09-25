@@ -9388,14 +9388,15 @@ func _ai_sim_note_terminal_result(actor_seat: int) -> void:
 	ai_sim_stats["wins"] = int(ai_sim_stats.get("wins", 0)) + 1
 	ai_sim_stats["winner"] = winner
 	ai_sim_stats["self_draw"] = self_draw
-	if self_draw or actor_seat == winner:
-		return
-	ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
-	ai_sim_stats["deal_in_seat"] = actor_seat
 	if ai_sim_trace_enabled:
 		ai_sim_stats["terminal_trace_step"] = int(ai_sim_stats.get("steps", -1))
 		ai_sim_stats["terminal_tile"] = last_discard
 		ai_sim_stats["terminal_winner"] = winner
+		ai_sim_stats["terminal_self_draw"] = self_draw
+	if self_draw or actor_seat == winner:
+		return
+	ai_sim_stats["deal_ins"] = int(ai_sim_stats.get("deal_ins", 0)) + 1
+	ai_sim_stats["deal_in_seat"] = actor_seat
 	# R10: 点炮给玩家（seat0）单独计数，衡量人机防点炮。
 	if winner == 0:
 		ai_sim_stats["deal_ins_to_human"] = int(ai_sim_stats.get("deal_ins_to_human", 0)) + 1
