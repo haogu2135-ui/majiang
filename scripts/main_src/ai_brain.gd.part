@@ -1914,11 +1914,18 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			var safety_rank = risk + human_pressure * 0.72 - fast_safety_value
 			item["fast_safety_rank"] = safety_rank
 			if ai_sim_trace_enabled:
+				var trace_feed_report: Dictionary = discard_feed_risk_report(cand, seat, visible_counts_snapshot, eval_context, idx)
+				var trace_human_feed := 0.0
+				for feed_detail in trace_feed_report.get("details", []):
+					if typeof(feed_detail) == TYPE_DICTIONARY and int(feed_detail.get("opponent", -1)) == 0:
+						trace_human_feed = max(trace_human_feed, float(feed_detail.get("score", 0.0)))
 				fast_candidate_trace.append({
 					"tile": cand,
 					"shanten": shanten,
 					"risk": risk,
 					"human_pressure": human_pressure,
+					"feed_score": float(trace_feed_report.get("score", 0.0)),
+					"human_feed": trace_human_feed,
 					"safety": str(item.get("fast_safety_label", "")),
 					"safety_rank": safety_rank,
 					"cheap_score": cheap,
