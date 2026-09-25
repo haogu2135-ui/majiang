@@ -3119,11 +3119,11 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		and best_wait_remaining > 4 and best_wait_remaining <= 8
 	var human_exposure_tenpai = best_shanten <= 0 \
 		and best_risk >= AI_DANGER_RISK_HIGH + 18.0 \
-		and best_feed >= AI_DANGER_FEED_SOFT + 24.0 \
-		and best_human_exposure >= 45.0
+		and best_human_exposure >= 45.0 \
+		and (best_feed >= AI_DANGER_FEED_SOFT + 24.0 or best_human_exposure >= 75.0)
 	var extreme_human_tenpai = human_exposure_tenpai \
 		and best_risk >= AI_DANGER_RISK_HIGH + 40.0 \
-		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
+		and (best_feed >= AI_DANGER_FEED_SOFT + 32.0 or best_human_exposure >= 80.0) \
 		and best_human_exposure >= 60.0
 	var thin_catastrophe_tenpai = best_shanten <= 0 \
 		and best_risk >= AI_DANGER_RISK_HIGH + 22.0 \

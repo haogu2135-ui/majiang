@@ -164,6 +164,20 @@ func run() -> void:
 	var high_value_exposure_reports: Array = [valuable_tenpai, high_value_fold]
 	scene.apply_hard_danger_push_guard(high_value_exposure_reports, -1)
 	check(str(high_value_exposure_reports[0].get("tile", "")) == "4W", "hard tenpai guard can fold a valuable wait under extreme player exposure")
+	var low_feed_extreme_tenpai: Dictionary = dangerous_tenpai.duplicate(true)
+	low_feed_extreme_tenpai["tile"] = "6B"
+	low_feed_extreme_tenpai["score"] = -1429.9
+	low_feed_extreme_tenpai["risk"] = 145.7
+	low_feed_extreme_tenpai["feed_risk"] = 23.9
+	low_feed_extreme_tenpai["human_target_pressure"] = 35.5
+	low_feed_extreme_tenpai["human_target_exposure"] = 84.5
+	low_feed_extreme_tenpai["wait_best_points"] = 1600
+	low_feed_extreme_tenpai["wait_total_remaining"] = 2
+	var low_feed_safe_fold: Dictionary = lower_exposure_fold.duplicate(true)
+	low_feed_safe_fold["score"] = -1510.0
+	var low_feed_extreme_reports: Array = [low_feed_extreme_tenpai, low_feed_safe_fold]
+	scene.apply_hard_danger_push_guard(low_feed_extreme_reports, -1)
+	check(str(low_feed_extreme_reports[0].get("tile", "")) == "4W", "extreme player exposure activates the hard fold guard without meld-feed pressure")
 
 	scene.queue_free()
 	if failed:
