@@ -2071,7 +2071,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		var rejection_reason := "shanten_delta" if shanten_delta > 1 else ""
 		var score_gap = best_score - float(candidate.get("score", 0.0))
 		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
-		pressure_gain += hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))
+		pressure_gain += (hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))) * 0.5
 		if ai_sim_trace_enabled and shanten_delta == 0:
 			var candidate_rank = hard_danger_push_rank(candidate)
 			if trace_safest.is_empty() or candidate_rank < trace_safest_rank:
