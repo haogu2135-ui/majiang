@@ -1043,6 +1043,7 @@ func run() -> void:
 		check(scene.voice_streams.get(voice_key, null) != null, "bundled voice stream loads: " + str(voice_key))
 	check(scene.bgm_player != null and scene.sfx_player != null and scene.action_sfx_player != null and scene.find_child("BackgroundMusic", true, false) != null and scene.find_child("TileSfx", true, false) != null and scene.find_child("ActionSfx", true, false) != null, "audio players are initialized with named persistent nodes")
 	check(scene.audio_layer != null and scene.find_child("PersistentAudio", true, false) == scene.audio_layer and scene.audio_layer.process_mode == Node.PROCESS_MODE_ALWAYS and scene.bgm_player.get_parent() == scene.audio_layer, "persistent audio layer owns background music")
+	check(scene.bgm_player.stream == scene.audio_streams.get("bgm", null), "background music player binds its loaded stream during startup")
 	var audio_schedule_start := 100000
 	scene.next_audio_health_check_msec = 0
 	check(scene.audio_health_check_due(audio_schedule_start) and not scene.audio_health_check_due(audio_schedule_start + scene.AUDIO_HEALTH_CHECK_INTERVAL_MSEC - 1) and scene.audio_health_check_due(audio_schedule_start + scene.AUDIO_HEALTH_CHECK_INTERVAL_MSEC), "audio health checks use a monotonic millisecond interval instead of a frame-rate assumption")

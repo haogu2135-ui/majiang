@@ -12,7 +12,7 @@ func _ready() -> void:
 	# reloaded or launched from a fresh editor cache.
 	call_deferred("load_assets")
 	if not ui_capture_mode:
-		verify_audio_assets()
+		call_deferred("verify_audio_assets")
 	load_settings()
 	# UI capture runs in a low-resource virtual display. Keep it deterministic
 	# even when the user's persisted settings enable visual effects; otherwise
@@ -32,7 +32,7 @@ func _ready() -> void:
 	load_inventory()
 	load_currency()
 	if not ui_capture_mode:
-		setup_audio()
+		call_deferred("setup_audio")
 	ensure_fx_layer()
 	setup_update_downloader()
 	# v1.0.149: 移除立即播放，恢复用户交互触发
