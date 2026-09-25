@@ -75,6 +75,7 @@ func shutdown_runtime() -> void:
 
 
 func shutdown_runtime_visuals() -> void:
+	release_replay_archive_row_pool()
 	if ui_enhancements != null and is_instance_valid(ui_enhancements):
 		ui_enhancements.clear_all_effects()
 	if has_method("release_retained_battle_views"):

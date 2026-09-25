@@ -1093,7 +1093,7 @@ func clear_screen() -> void:
 		table_log_archive_open = false
 	if mode != "replay_import":
 		replay_archive_render_token = ""
-		replay_archive_row_pool.clear()
+		release_replay_archive_row_pool()
 	if mode != "rules":
 		rules_section_controls.clear()
 		rules_focus_controls_cache.clear()

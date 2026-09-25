@@ -87,6 +87,7 @@ func shutdown_runtime() -> void:
 
 
 func shutdown_runtime_visuals() -> void:
+	release_replay_archive_row_pool()
 	if ui_enhancements != null and is_instance_valid(ui_enhancements):
 		ui_enhancements.clear_all_effects()
 	if has_method("release_retained_battle_views"):
@@ -7589,7 +7590,7 @@ func clear_screen() -> void:
 		table_log_archive_open = false
 	if mode != "replay_import":
 		replay_archive_render_token = ""
-		replay_archive_row_pool.clear()
+		release_replay_archive_row_pool()
 	if mode != "rules":
 		rules_section_controls.clear()
 		rules_focus_controls_cache.clear()
@@ -45247,6 +45248,14 @@ func replay_archive_row_for_entry(entry: Dictionary) -> Control:
 	row.set_meta("archive_row_signature", signature)
 	replay_archive_row_pool[archive_id] = row
 	return row
+
+
+func release_replay_archive_row_pool() -> void:
+	for pooled_variant in replay_archive_row_pool.values():
+		var pooled_row := pooled_variant as Control
+		if pooled_row != null and is_instance_valid(pooled_row) and pooled_row.get_parent() == null and not pooled_row.is_queued_for_deletion():
+			pooled_row.free()
+	replay_archive_row_pool.clear()
 
 
 func configure_replay_archive_focus_if_changed(archive_pane: Control, entries: Array) -> void:

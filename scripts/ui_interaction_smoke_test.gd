@@ -2347,6 +2347,19 @@ func run() -> void:
 	scene.replay_delete_confirming = false
 	scene.replay_delete_target_id = ""
 	scene.save_replay_archive()
+	var detached_archive_rows: Array[Control] = []
+	for pooled_variant in scene.replay_archive_row_pool.values():
+		var pooled_row := pooled_variant as Control
+		if pooled_row != null and is_instance_valid(pooled_row) and pooled_row.get_parent() == null:
+			detached_archive_rows.append(pooled_row)
+	check(not detached_archive_rows.is_empty(), "replay archive retains deleted rows detached for reuse until the page closes")
+	scene.show_menu(true)
+	await settle(0.10)
+	var detached_archive_rows_released := true
+	for detached_row in detached_archive_rows:
+		if is_instance_valid(detached_row):
+			detached_archive_rows_released = false
+	check(scene.replay_archive_row_pool.is_empty() and detached_archive_rows_released, "leaving replay import frees detached archived rows")
 
 	print("--- Q) menu cards, quick entries, and settings use real input with focus recovery ---")
 	scene.show_menu(true)
@@ -2428,8 +2441,12 @@ func run() -> void:
 	scene.mode = "shutdown"
 	scene.offline_phase = "ended"
 	await settle(0.50)
+	var shutdown_archive_row := Control.new()
+	shutdown_archive_row.add_child(Button.new())
+	scene.replay_archive_row_pool["shutdown_probe"] = shutdown_archive_row
 	if scene.has_method("shutdown_runtime"):
 		scene.shutdown_runtime()
+	check(scene.replay_archive_row_pool.is_empty() and not is_instance_valid(shutdown_archive_row), "runtime shutdown frees detached replay archive rows")
 	# Let shutdown-emitted runtime timers resume their callers before freeing the
 	# scene. Godot 4.6 reports a leaked function state otherwise.
 	await settle(0.30)

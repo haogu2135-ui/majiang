@@ -6916,6 +6916,14 @@ func replay_archive_row_for_entry(entry: Dictionary) -> Control:
 	return row
 
 
+func release_replay_archive_row_pool() -> void:
+	for pooled_variant in replay_archive_row_pool.values():
+		var pooled_row := pooled_variant as Control
+		if pooled_row != null and is_instance_valid(pooled_row) and pooled_row.get_parent() == null and not pooled_row.is_queued_for_deletion():
+			pooled_row.free()
+	replay_archive_row_pool.clear()
+
+
 func configure_replay_archive_focus_if_changed(archive_pane: Control, entries: Array) -> void:
 	if archive_pane == null or not is_instance_valid(archive_pane):
 		return
