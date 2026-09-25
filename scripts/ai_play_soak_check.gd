@@ -1,7 +1,7 @@
 extends SceneTree
 ## Longer offline AI soak: independent seeds, paired easy/hard hands, and durable telemetry.
 
-const SEEDS: Array = [20260831, 20260917, 20261003, 20261019, 20261104, 20261119, 20261205, 20261221, 20270107, 20270123]
+const SEEDS: Array = [20260831, 20260917, 20261003, 20261019, 20261104, 20261119, 20261205, 20261221, 20270107, 20270123, 20270139, 20270155, 20270210, 20270226]
 const HANDS_PER_SEED := 2
 const OUTPUT_DIR := "res://build/qa/ai_play_soak_evidence"
 var failed := false

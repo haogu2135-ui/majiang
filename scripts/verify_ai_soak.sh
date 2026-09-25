@@ -54,7 +54,7 @@ REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unk
 	printf -- '- Git revision: `%s`\n' "$REVISION"
 	echo "- Result: **$STATUS**"
 	printf -- '- Godot: `%s` (`%s`)\n' "$GODOT_VERSION" "$GODOT_BIN"
-	echo "- Contract: 10 independent seeds, 2 paired easy/hard hands per seed, fixed normal player probe, per-seed terminal/tile/score integrity, and aggregate gates (8 pp actionable-pressure and 34 pp player deal-in tolerances)"
+	echo "- Contract: 14 independent seeds, 2 paired easy/hard hands per seed, fixed normal player probe, per-seed terminal/tile/score integrity, and aggregate gates (8 pp actionable-pressure and 34 pp player deal-in tolerances)"
 	echo "- Log: $LOG"
 	echo "- Durable artifacts: $REPORT_DIR/AI_SOAK_LATEST.json and $REPORT_DIR/AI_SOAK_LATEST.md"
 } >"$REPORT"
